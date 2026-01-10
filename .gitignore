@@ -1,0 +1,22 @@
+# Temporary files and generated reports
+.tmp/
+
+# Machine-specific settings
+settings.local.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.suo
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
