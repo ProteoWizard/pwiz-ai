@@ -44,11 +44,15 @@ function Test-BinaryFile {
 # Force CRLF
 foreach ($f in $files) {
   if (Test-Path $f) {
+    # Skip directories (including submodules)
+    if (Test-Path $f -PathType Container) {
+      continue
+    }
     # Skip binary files
     if (Test-BinaryFile -filePath $f) {
       continue
     }
-    
+
     $absolutePath = (Resolve-Path -LiteralPath $f).Path
     $text  = [System.IO.File]::ReadAllText($absolutePath, [System.Text.UTF8Encoding]::new($false))
     $fixed = [regex]::Replace($text, "`r?`n", "`r`n")
@@ -63,6 +67,10 @@ foreach ($f in $files) {
 $bad = @()
 foreach ($f in $files) {
   if (Test-Path $f) {
+    # Skip directories (including submodules)
+    if (Test-Path $f -PathType Container) {
+      continue
+    }
     # Skip binary files
     if (Test-BinaryFile -filePath $f) {
       continue
