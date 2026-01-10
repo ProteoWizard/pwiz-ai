@@ -351,7 +351,7 @@ Coverage files are saved to `ai\.tmp\`:
 
 ```powershell
 # Analyze using your coverage file list
-pwsh -File pwiz_tools/Skyline/ai/scripts/Analyze-Coverage.ps1 `
+pwsh -File ai/scripts/Skyline/scripts/Analyze-Coverage.ps1 `
   -CoverageJsonPath "ai/.tmp/coverage-{timestamp}.json" `
   -PatternsFile "ai/todos/active/TODO-{branch-name}-coverage.txt" `
   -ReportTitle "MY FEATURE CODE COVERAGE"
@@ -391,7 +391,7 @@ The analysis report shows:
 For backward compatibility, you can still use type name patterns:
 
 ```powershell
-pwsh -File pwiz_tools/Skyline/ai/scripts/Analyze-Coverage.ps1 `
+pwsh -File ai/scripts/Skyline/scripts/Analyze-Coverage.ps1 `
   -CoverageJsonPath "ai/.tmp/coverage-{timestamp}.json" `
   -Patterns "MyFeature","MyFeatureModel","MyFeatureService" `
   -ReportTitle "CUSTOM COVERAGE"
@@ -423,7 +423,7 @@ git diff --name-only --diff-filter=A $(git merge-base HEAD origin/master)..HEAD 
 pwiz_tools\Skyline\ai\Run-Tests.ps1 -UseTestList -Coverage
 
 # 3. Analyze coverage
-pwsh -File pwiz_tools/Skyline/ai/scripts/Analyze-Coverage.ps1 `
+pwsh -File ai/scripts/Skyline/scripts/Analyze-Coverage.ps1 `
   -CoverageJsonPath "ai/.tmp/coverage-20251207-224957.json" `
   -PatternsFile "ai/todos/active/TODO-myfeature-coverage.txt" `
   -ReportTitle "MY FEATURE CODE COVERAGE"
@@ -651,11 +651,11 @@ This validates:
 
 **Why recommended**: LLMs frequently create code that compiles but triggers ReSharper warnings or fails CodeInspection test, which can cause TeamCity failures.
 
-**See**: [../../pwiz_tools/Skyline/ai/PRE-COMMIT.md](../../pwiz_tools/Skyline/ai/PRE-COMMIT.md) for complete pre-commit workflow documentation.
+**See**: [../scripts/Skyline/PRE-COMMIT.md](../scripts/Skyline/PRE-COMMIT.md) for complete pre-commit workflow documentation.
 
 ## See Also
 
-- **[../../pwiz_tools/Skyline/ai/PRE-COMMIT.md](../../pwiz_tools/Skyline/ai/PRE-COMMIT.md)** - Recommended pre-commit validation workflow
+- **[../scripts/Skyline/PRE-COMMIT.md](../scripts/Skyline/PRE-COMMIT.md)** - Recommended pre-commit validation workflow
 - [../WORKFLOW.md](../WORKFLOW.md) - Git workflows and TODO system
 - [../TESTING.md](../TESTING.md) - Testing guidelines and patterns
 - [../CRITICAL-RULES.md](../CRITICAL-RULES.md) - Critical constraints

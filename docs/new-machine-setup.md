@@ -156,18 +156,13 @@ Test-Path C:\proj\pwiz\pwiz_tools\Skyline\Skyline.sln
 # Should be True
 ```
 
-### 1.10 Restart in Project Directory
+### 1.10 Note About AI Tooling
 
-**Important:** Claude Code works best when launched from the project root. Now that the repository is cloned and PowerShell 7 is installed:
-
-1. Exit Claude Code (type `exit` or `/exit`)
-2. Close the current terminal
-3. Open PowerShell 7: Press **Win+S**, type `pwsh`, press Enter
-4. Navigate to project: `cd C:\proj\pwiz`
-5. Start Claude: `claude`
-6. Tell Claude: *"Please read ai/docs/new-machine-setup.md - I'm at Phase 2. Please continue."*
-
-This ensures Claude has proper access to project files and configuration.
+> **Why is there no `ai/` folder yet?**
+>
+> After cloning, the `ai/` directory doesn't exist. This is intentional - the AI tooling lives in a Git submodule that gets initialized during the first build (Phase 4). The build also creates a `.claude/` junction that enables Claude Code's commands and skills.
+>
+> Continue with Phases 2-4 to complete the build. After the build succeeds, you'll restart Claude Code from the project directory to get full AI assistance.
 
 ---
 
@@ -369,6 +364,25 @@ If the build failed, check `C:\proj\pwiz\build64.log` for errors. Common issues:
 - Missing C++ tools: See Phase 2.3
 - NuGet errors: See Troubleshooting section
 
+### 4.5 Restart Claude Code in Project Directory
+
+**Important:** Now that the build has completed, the `ai/` submodule and `.claude/` junction exist. Restart Claude Code from the project directory to get full AI assistance:
+
+1. Exit Claude Code (type `exit` or `/exit`)
+2. Close the current terminal
+3. Open PowerShell 7: Press **Win+S**, type `pwsh`, press Enter
+4. Navigate to project: `cd C:\proj\pwiz`
+5. Start Claude: `claude`
+6. Tell Claude: *"Please read ai/docs/new-machine-setup.md - I'm at Phase 5. Please continue."*
+
+This enables Claude Code's skills and commands for the remaining setup phases.
+
+Verify the AI tooling is available:
+```powershell
+Test-Path C:\proj\pwiz\ai\CLAUDE.md         # Should be True
+Test-Path C:\proj\pwiz\.claude\commands     # Should be True (junction to ai/claude/commands)
+```
+
 ---
 
 ## Phase 5: Visual Studio Configuration
@@ -417,7 +431,7 @@ Tell the user:
 Verify the AI build scripts work correctly:
 ```powershell
 cd C:\proj\pwiz
-pwsh -Command "& './pwiz_tools/Skyline/ai/Build-Skyline.ps1'"
+pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
 ```
 
 This builds the entire Skyline solution using MSBuild (matching Visual Studio's Ctrl+Shift+B).
@@ -426,7 +440,7 @@ This builds the entire Skyline solution using MSBuild (matching Visual Studio's 
 
 Run the CodeInspection test to verify test execution works:
 ```powershell
-pwsh -Command "& './pwiz_tools/Skyline/ai/Run-Tests.ps1' -TestName CodeInspection"
+pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName CodeInspection"
 ```
 
 This validates that ReSharper code inspection passes. Success means the environment is fully working.

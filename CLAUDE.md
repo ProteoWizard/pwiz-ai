@@ -21,24 +21,24 @@ pwsh -Command "& './path/to/script.ps1'"
 The Bash tool in Claude Code does NOT correctly handle Windows-style paths with backslashes. Direct invocation fails:
 
 ```bash
-# WRONG - Path gets mangled to ".pwiz_toolsSkylineaiBuild-Skyline.ps1"
-.\pwiz_tools\Skyline\ai\Build-Skyline.ps1
+# WRONG - Path gets mangled to ".aiscriptsSkylineBuild-Skyline.ps1"
+.\ai\scripts\Skyline\Build-Skyline.ps1
 
 # WRONG - Same problem with -File parameter
-pwsh -File .\pwiz_tools\Skyline\ai\Build-Skyline.ps1
+pwsh -File .\ai\scripts\Skyline\Build-Skyline.ps1
 ```
 
 **Always use this pattern:**
 
 ```bash
 # CORRECT - Use -Command with quoted path and call operator
-pwsh -Command "& './pwiz_tools/Skyline/ai/Build-Skyline.ps1'"
+pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
 
 # CORRECT - With arguments
-pwsh -Command "& './pwiz_tools/Skyline/ai/Build-Skyline.ps1' -RunTests -TestName CodeInspection"
+pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1' -RunTests -TestName CodeInspection"
 
 # CORRECT - Run-Tests.ps1 with arguments
-pwsh -Command "& './pwiz_tools/Skyline/ai/Run-Tests.ps1' -TestName TestPanoramaDownloadFile"
+pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestPanoramaDownloadFile"
 ```
 
 ### Why This Works
@@ -52,22 +52,22 @@ pwsh -Command "& './pwiz_tools/Skyline/ai/Run-Tests.ps1' -TestName TestPanoramaD
 
 ```bash
 # Full solution build
-pwsh -Command "& './pwiz_tools/Skyline/ai/Build-Skyline.ps1'"
+pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
 
 # Build with tests
-pwsh -Command "& './pwiz_tools/Skyline/ai/Build-Skyline.ps1' -RunTests"
+pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1' -RunTests"
 
 # Build specific target
-pwsh -Command "& './pwiz_tools/Skyline/ai/Build-Skyline.ps1' -Target TestConnected"
+pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1' -Target TestConnected"
 
 # Run specific test
-pwsh -Command "& './pwiz_tools/Skyline/ai/Run-Tests.ps1' -TestName TestPanoramaDownloadFile"
+pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestPanoramaDownloadFile"
 
 # Run test with internet access
-pwsh -Command "& './pwiz_tools/Skyline/ai/Run-Tests.ps1' -TestName TestPanoramaDownloadFile -Internet"
+pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestPanoramaDownloadFile -Internet"
 
 # Run test with visible UI
-pwsh -Command "& './pwiz_tools/Skyline/ai/Run-Tests.ps1' -TestName TestSomeUITest -ShowUI"
+pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestSomeUITest -ShowUI"
 ```
 
 ## CRITICAL: File Editing on Windows
