@@ -2,6 +2,7 @@
 #
 # Usage: .\validate-bom-compliance.ps1
 # Returns: Exit code 0 if compliant, 1 if unexpected BOMs found
+# Scope: Processes both parent repo and ai/ submodule (pwiz-ai)
 #
 # This script is intended to be used in CI/commit hooks to prevent
 # unwanted BOM introduction.
@@ -27,20 +28,30 @@ $approvedBomFiles = @{
     "pwiz_tools/Bumbershoot/bumberdash/Tests/Data/AgilentTest.d/AcqData/acqmethod.xml" = "Agilent vendor data format"
 }
 
-Write-Host "Validating UTF-8 BOM compliance..." -ForegroundColor Cyan
-Write-Host ""
+# Function to get Git-tracked files from a directory
+function Get-GitTrackedFiles {
+    param([string]$workDir = ".")
 
-# Get all Git-tracked files
-$gitFiles = @(git ls-files)
-$filesWithBom = @()
+    Push-Location $workDir
+    try {
+        $files = @(git ls-files 2>$null)
+        return $files
+    } finally {
+        Pop-Location
+    }
+}
 
-foreach ($file in $gitFiles) {
-    # Convert forward slashes to backslashes for Windows
-    $filePath = $file.Replace('/', '\')
-    $fullPath = Join-Path (Get-Location) $filePath
+# Function to check if a file has BOM
+function Test-HasBom {
+    param(
+        [string]$filePath,
+        [string]$baseDir = "."
+    )
+
+    $fullPath = Join-Path $baseDir $filePath
 
     if (-not [System.IO.File]::Exists($fullPath)) {
-        continue
+        return $false
     }
 
     try {
@@ -50,14 +61,53 @@ foreach ($file in $gitFiles) {
         $bytesRead = $stream.Read($bytes, 0, 3)
         $stream.Close()
 
-        if ($bytesRead -ge 3 -and
+        return ($bytesRead -ge 3 -and
             $bytes[0] -eq $utf8Bom[0] -and
             $bytes[1] -eq $utf8Bom[1] -and
-            $bytes[2] -eq $utf8Bom[2]) {
-            $filesWithBom += $file
-        }
+            $bytes[2] -eq $utf8Bom[2])
     } catch {
-        # Skip files that can't be read
+        return $false
+    }
+}
+
+Write-Host "Validating UTF-8 BOM compliance..." -ForegroundColor Cyan
+Write-Host ""
+
+# Collect files from parent repo and ai/ submodule
+$allFiles = @()
+
+# Parent repo files
+$parentFiles = Get-GitTrackedFiles -workDir "."
+foreach ($f in $parentFiles) {
+    $allFiles += @{ RelPath = $f; BaseDir = (Get-Location).Path }
+}
+
+# ai/ submodule files (pwiz-ai)
+$repoRoot = git rev-parse --show-toplevel 2>$null
+if ($repoRoot) {
+    $aiPath = Join-Path $repoRoot "ai"
+    if (Test-Path $aiPath -PathType Container) {
+        $aiFiles = Get-GitTrackedFiles -workDir $aiPath
+        if ($aiFiles) {
+            Write-Host "Including ai/ submodule ($($aiFiles.Count) files)..." -ForegroundColor Cyan
+            foreach ($f in $aiFiles) {
+                $allFiles += @{ RelPath = "ai/$f"; BaseDir = $repoRoot }
+            }
+        }
+    }
+}
+
+$filesWithBom = @()
+
+foreach ($entry in $allFiles) {
+    $file = $entry.RelPath
+    $baseDir = $entry.BaseDir
+
+    # Convert forward slashes to backslashes for Windows
+    $filePath = $file.Replace('/', '\')
+
+    if (Test-HasBom -filePath $filePath -baseDir $baseDir) {
+        $filesWithBom += $file
     }
 }
 

@@ -3,6 +3,7 @@
 #
 # Usage: .\analyze-bom-git.ps1 [-OutputFile <path>]
 # Output: Console report + optional output file
+# Scope: Processes both parent repo and ai/ submodule (pwiz-ai)
 #
 # This script was created during the webclient_replacement work (Oct 2025)
 # when LLM tools were inadvertently removing BOMs from source files.
@@ -14,13 +15,82 @@ param(
 
 $utf8Bom = @(0xEF, 0xBB, 0xBF)
 
+# Function to get Git-tracked files from a directory
+function Get-GitTrackedFiles {
+    param([string]$workDir = ".")
+
+    Push-Location $workDir
+    try {
+        $files = @(git ls-files 2>$null)
+        return $files
+    } finally {
+        Pop-Location
+    }
+}
+
+# Function to check BOM for a single file
+function Test-FileBom {
+    param(
+        [string]$filePath,
+        [string]$baseDir = "."
+    )
+
+    $fullPath = Join-Path $baseDir $filePath
+
+    # Skip files that don't exist or can't be accessed
+    if (-not [System.IO.File]::Exists($fullPath)) {
+        return $null
+    }
+
+    try {
+        # Read first 3 bytes
+        $stream = [System.IO.File]::OpenRead($fullPath)
+        $bytes = New-Object byte[] 3
+        $bytesRead = $stream.Read($bytes, 0, 3)
+        $stream.Close()
+
+        if ($bytesRead -ge 3 -and
+            $bytes[0] -eq $utf8Bom[0] -and
+            $bytes[1] -eq $utf8Bom[1] -and
+            $bytes[2] -eq $utf8Bom[2]) {
+            return "bom"
+        } else {
+            return "no-bom"
+        }
+    } catch {
+        # Skip files that can't be read (likely binary or locked)
+        return "binary"
+    }
+}
+
 Write-Host "Scanning Git-tracked files for UTF-8 BOM usage..." -ForegroundColor Cyan
 Write-Host ""
 
-# Get all Git-tracked files
-$gitFiles = @(git ls-files)
-$totalFiles = $gitFiles.Count
+# Collect files from parent repo and ai/ submodule
+$allFiles = @()
 
+# Parent repo files
+$parentFiles = Get-GitTrackedFiles -workDir "."
+foreach ($f in $parentFiles) {
+    $allFiles += @{ RelPath = $f; BaseDir = (Get-Location).Path }
+}
+
+# ai/ submodule files (pwiz-ai)
+$repoRoot = git rev-parse --show-toplevel 2>$null
+if ($repoRoot) {
+    $aiPath = Join-Path $repoRoot "ai"
+    if (Test-Path $aiPath -PathType Container) {
+        $aiFiles = Get-GitTrackedFiles -workDir $aiPath
+        if ($aiFiles) {
+            Write-Host "Including ai/ submodule ($($aiFiles.Count) files)..." -ForegroundColor Cyan
+            foreach ($f in $aiFiles) {
+                $allFiles += @{ RelPath = "ai/$f"; BaseDir = $repoRoot }
+            }
+        }
+    }
+}
+
+$totalFiles = $allFiles.Count
 Write-Host "Found $totalFiles Git-tracked files to analyze" -ForegroundColor Cyan
 Write-Host ""
 
@@ -30,9 +100,11 @@ $binary = @()
 $processed = 0
 $lastPercent = -1
 
-foreach ($file in $gitFiles) {
+foreach ($entry in $allFiles) {
     $processed++
-    
+    $file = $entry.RelPath
+    $baseDir = $entry.BaseDir
+
     # Show progress every 5%
     $percent = [math]::Floor(($processed / $totalFiles) * 100)
     if ($percent -ne $lastPercent -and $percent % 5 -eq 0) {
@@ -43,36 +115,15 @@ foreach ($file in $gitFiles) {
         Write-Host ("{0,3}% complete - {1}" -f $percent, $currentDir) -ForegroundColor Gray
         $lastPercent = $percent
     }
-    
+
     # Convert forward slashes to backslashes for Windows
     $filePath = $file.Replace('/', '\')
-    
-    # Get full path
-    $fullPath = Join-Path (Get-Location) $filePath
-    
-    # Skip files that don't exist or can't be accessed
-    if (-not [System.IO.File]::Exists($fullPath)) {
-        continue
-    }
-    
-    try {
-        # Read first 3 bytes
-        $stream = [System.IO.File]::OpenRead($fullPath)
-        $bytes = New-Object byte[] 3
-        $bytesRead = $stream.Read($bytes, 0, 3)
-        $stream.Close()
-        
-        if ($bytesRead -ge 3 -and 
-            $bytes[0] -eq $utf8Bom[0] -and 
-            $bytes[1] -eq $utf8Bom[1] -and 
-            $bytes[2] -eq $utf8Bom[2]) {
-            $withBom += $file
-        } else {
-            $withoutBom += $file
-        }
-    } catch {
-        # Skip files that can't be read (likely binary or locked)
-        $binary += $file
+    $result = Test-FileBom -filePath $filePath -baseDir $baseDir
+
+    switch ($result) {
+        "bom" { $withBom += $file }
+        "no-bom" { $withoutBom += $file }
+        "binary" { $binary += $file }
     }
 }
 
