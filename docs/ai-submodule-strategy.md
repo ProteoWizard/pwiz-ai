@@ -2,7 +2,12 @@
 
 Strategy for managing all AI tooling as a Git submodule, replacing the ai-context branch workflow.
 
-**Status**: Proposed (not yet implemented)
+**Status**: Implemented (opt-in)
+
+**Key Design Decision**: The ai/ submodule is **opt-in** via the `--ai` build flag. This:
+- Eliminates transition pain for developers not using AI tooling
+- Keeps TeamCity builds simple (no AI tooling needed for CI)
+- Allows gradual adoption at each developer's pace
 
 ---
 
@@ -105,9 +110,9 @@ git submodule update --remote ai
 
 Claude Code requires `.claude/` at repo root. Solution: Windows junction (directory link) pointing to `ai/claude/`.
 
-### Automatic Creation via Boost Build
+### Opt-In via `--ai` Build Flag
 
-The junction is created automatically during the first build. In `pwiz_tools/Skyline/Jamfile.jam`:
+The ai/ submodule and .claude/ junction are **only** initialized when you pass `--ai` to the build. In `pwiz_tools/Skyline/Jamfile.jam`:
 
 ```jam
 if ! --incremental in [ modules.peek : ARGV ]
@@ -115,20 +120,27 @@ if ! --incremental in [ modules.peek : ARGV ]
    echo "Updating submodules for Hardklor etc..." ;
    SHELL "git submodule update --init --recursive" ;
 
-   # Create .claude junction if it doesn't exist
-   if ! [ path.exists $(PWIZ_ROOT_PATH)/.claude ]
+   # AI tooling is opt-in
+   if "--ai" in [ modules.peek : ARGV ]
    {
-      echo "Creating .claude junction to ai/claude..." ;
-      SHELL "mklink /J \"$(PWIZ_ROOT_PATH)/.claude\" \"$(PWIZ_ROOT_PATH)/ai/claude\"" ;
+      echo "Initializing AI tooling (--ai flag detected)..." ;
+      SHELL "git submodule update --init ai" ;
+
+      # Create .claude junction if it doesn't exist
+      if ! [ path.exists $(PWIZ_ROOT_PATH)/.claude ]
+      {
+         echo "Creating .claude junction to ai/claude..." ;
+         SHELL "mklink /J \"$(PWIZ_ROOT_PATH)/.claude\" \"$(PWIZ_ROOT_PATH)/ai/claude\"" ;
+      }
    }
 }
 ```
 
-**This integrates with the existing workflow:**
-- Submodules already initialized by Boost Build (not clone)
-- Junction created in same step
-- No changes needed to clone instructions
-- `new-machine-setup.md` workflow unchanged
+**Benefits of opt-in:**
+- TeamCity doesn't need AI tooling (no `--ai` flag)
+- Developers can adopt at their own pace
+- No transition pain for those not using Claude Code
+- Branch switching is clean (no ai/ folder collision)
 
 ### Junction Properties
 
@@ -141,17 +153,25 @@ if ! --incremental in [ modules.peek : ARGV ]
 
 ## New Machine Setup
 
-When cloning pwiz fresh, no special steps needed:
+When cloning pwiz fresh:
 
 ```bash
 git clone git@github.com:ProteoWizard/pwiz.git
 cd pwiz
-bs.bat   # Boost Build initializes submodules AND creates junction
+bs.bat   # Standard build (no AI tooling)
 ```
 
-The build automatically:
-1. Runs `git submodule update --init --recursive`
-2. Creates `.claude` junction pointing to `ai/claude/`
+**To enable AI tooling**, add `--ai` to your `b.bat`:
+
+```batch
+@call "%~dp0pwiz_tools\build-apps.bat" 64 --i-agree-to-the-vendor-licenses toolset=msvc-14.3 --ai %*
+```
+
+Then run `bs.bat` and the build will:
+1. Initialize the ai/ submodule (`git submodule update --init ai`)
+2. Create the `.claude` junction pointing to `ai/claude/`
+
+**For developers not using AI tooling**: No changes needed. The build works without `--ai`.
 
 ---
 
@@ -245,34 +265,22 @@ git pull  # Normal pull works!
 
 ## Transition Plan
 
-### Phase 1: Create pwiz-ai Repository
+### Phase 1: Create pwiz-ai Repository (DONE)
 
-1. Create `ProteoWizard/pwiz-ai` repo on GitHub
-2. Copy content with new structure:
+1. Created `ProteoWizard/pwiz-ai` repo on GitHub
+2. Content structured as:
    ```
-   ai/docs/          -> docs/
-   ai/mcp/           -> mcp/
-   ai/scripts/       -> scripts/        (existing utility scripts)
-   ai/todos/         -> todos/
-   ai/*.md           -> *.md            (root docs)
-   .claude/          -> claude/         (commands/skills)
-   pwiz_tools/Skyline/ai/              -> scripts/Skyline/
-   pwiz_tools/.../AutoQC/ai/           -> scripts/AutoQC/
-   pwiz_tools/.../SkylineBatch/ai/     -> scripts/SkylineBatch/
+   docs/             <- Documentation
+   mcp/              <- MCP servers
+   scripts/          <- Utility scripts
+   todos/            <- Work tracking
+   claude/           <- Commands/skills (for .claude/ junction)
+   *.md              <- Root docs (CLAUDE.md, MEMORY.md, etc.)
    ```
-3. Initial commit and push
 
-### Phase 2: Update Script Paths
+### Phase 2: Convert pwiz to Use Submodule (Opt-In)
 
-Scripts must update their relative path calculations:
-- `Build-Skyline.ps1`: Navigate from `ai/scripts/Skyline/` to `pwiz_tools/Skyline/`
-- Similar updates for AutoQC, SkylineBatch
-- Update all documentation references to new paths
-
-### Phase 3: Convert pwiz to Use Submodule
-
-1. Final ai-context sync to master
-2. Remove old locations:
+1. Remove all ai-related folders from pwiz:
    ```bash
    git rm -r ai/
    git rm -r .claude/
@@ -280,25 +288,29 @@ Scripts must update their relative path calculations:
    git rm -r pwiz_tools/Skyline/Executables/AutoQC/ai/
    git rm -r pwiz_tools/Skyline/Executables/SkylineBatch/ai/
    ```
-3. Add submodule:
+2. Add submodule (with `update = none` for opt-in):
    ```bash
    git submodule add https://github.com/ProteoWizard/pwiz-ai.git ai
+   git config -f .gitmodules submodule.ai.update none
    ```
-4. Update `pwiz_tools/Skyline/Jamfile.jam` to create junction (see above)
-5. Add `.claude` to `.gitignore` (junction shouldn't be tracked)
-6. Push to master
+3. Add `.claude` to `.gitignore` (junction shouldn't be tracked)
+4. Update `pwiz_tools/Skyline/Jamfile.jam` to handle `--ai` flag
+5. Apply to master and skyline_26_1
 
-### Phase 4: Update Documentation
-
-- `new-machine-setup.md`: Minimal changes (workflow unchanged, build creates junction)
-- `CLAUDE.md`: Update script path examples
-- Archive `ai-context-branch-strategy.md`
-- Update this document status to "Implemented"
-
-### Phase 5: Retire ai-context Branch
+### Phase 3: Retire ai-context Branch
 
 - Delete remote branch: `git push origin --delete ai-context`
 - Remove `/pw-aicontextsync`, `/pw-aicontextupdate` commands
+- Archive `ai-context-branch-strategy.md`
+
+### Transition Experience by Developer Type
+
+| Developer | Experience |
+|-----------|------------|
+| **Not using AI tooling** | Merge from master removes ai/ folders. Done. No friction. |
+| **Wants AI tooling** | Add `--ai` to b.bat, run build. Submodule + junction created. |
+| **TeamCity** | No changes. Builds work without `--ai`. |
+| **Existing PR authors** | Merge from master removes ai/ folders cleanly. |
 
 ---
 
@@ -306,13 +318,10 @@ Scripts must update their relative path calculations:
 
 | File | Change Needed |
 |------|---------------|
-| `pwiz_tools/Skyline/Jamfile.jam` | Add junction creation after submodule init |
-| `Build-Skyline.ps1` | Update `$skylineRoot` path calculation |
-| `Build-AutoQC.ps1` | Update `$autoQCRoot` path calculation |
-| `Build-SkylineBatch.ps1` | Update root path calculation |
-| `ai/CLAUDE.md` | Update script path examples |
-| `ai/docs/build-and-test-guide.md` | Update script path references |
-| `.gitignore` | Add `.claude` (junction) |
+| `pwiz_tools/Skyline/Jamfile.jam` | Add `--ai` flag handling for submodule init + junction |
+| `.gitmodules` | Add ai submodule with `update = none` |
+| `.gitignore` | Add `.claude` (junction shouldn't be tracked) |
+| `new-machine-setup.md` | Add `--ai` to b.bat instructions for AI adopters |
 
 ---
 
