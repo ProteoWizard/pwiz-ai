@@ -59,33 +59,54 @@ param(
     [Parameter(Mandatory=$false)]
     [ValidateSet("Solution", "Skyline", "Test", "TestData", "TestFunctional", "TestConnected", "TestTutorial", "TestPerf", "Clean", "Rebuild")]
     [string]$Target = "Solution",
-    
+
     [Parameter(Mandatory=$false)]
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Debug",
-    
+
     [Parameter(Mandatory=$false)]
     [switch]$RunTests = $false,
-    
+
     [Parameter(Mandatory=$false)]
     [string]$TestName = $null,  # Specific test to run (e.g., "CodeInspection")
-    
+
     [Parameter(Mandatory=$false)]
     [switch]$RunInspection = $false,  # Run ReSharper code inspection (full solution, ~20-25 min)
-    
+
     [Parameter(Mandatory=$false)]
     [switch]$QuickInspection = $false,  # Run quick inspection on modified projects only (~1-5 min)
-    
+
     [Parameter(Mandatory=$false)]
     [ValidateSet("quiet", "minimal", "normal", "detailed", "diagnostic")]
-    [string]$Verbosity = "minimal"
+    [string]$Verbosity = "minimal",
+
+    [Parameter(Mandatory=$false)]
+    [string]$SourceRoot = $null  # Path to pwiz root (auto-detected if not specified)
 )
 
 # Script location: ai/scripts/Skyline/
 # Target: pwiz_tools/Skyline/
 $scriptRoot = Split-Path -Parent $PSCommandPath
 $aiRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)  # ai/
-$pwizRoot = Split-Path -Parent $aiRoot  # pwiz root
+
+# Auto-detect pwiz root location
+if ($SourceRoot) {
+    $pwizRoot = $SourceRoot
+} else {
+    # Try sibling mode first: ai/ and pwiz/ are siblings under common parent
+    $siblingPath = Join-Path (Split-Path -Parent $aiRoot) 'pwiz'
+    # Then try submodule mode: ai/ is inside pwiz/
+    $submodulePath = Split-Path -Parent $aiRoot
+
+    if (Test-Path (Join-Path $siblingPath 'pwiz_tools')) {
+        $pwizRoot = $siblingPath
+    } elseif (Test-Path (Join-Path $submodulePath 'pwiz_tools')) {
+        $pwizRoot = $submodulePath
+    } else {
+        Write-Error "Cannot find pwiz_tools. Tried:`n  Sibling mode: $siblingPath`n  Submodule mode: $submodulePath`nUse -SourceRoot to specify the pwiz root directory."
+        exit 1
+    }
+}
 $skylineRoot = Join-Path $pwizRoot 'pwiz_tools/Skyline'
 $initialLocation = Get-Location
 

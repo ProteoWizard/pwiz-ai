@@ -14,7 +14,8 @@
 
 #>
 param(
-    [switch]$VerboseOutput = $false
+    [switch]$VerboseOutput = $false,
+    [string]$SourceRoot = $null  # Path to pwiz root (auto-detected if not specified)
 )
 
 Set-StrictMode -Version Latest
@@ -25,10 +26,30 @@ function Write-Change($msg) { Write-Host $msg -ForegroundColor Green }
 function Write-Skip($msg) { Write-Host $msg -ForegroundColor Yellow }
 function Write-ErrorLine($msg) { Write-Host $msg -ForegroundColor Red }
 
-# Resolve paths relative to script location
+# Script location: ai/scripts/Skyline/scripts/
 $scriptRoot = Split-Path -Parent $PSCommandPath
-# script is in pwiz_tools/Skyline/ai/scripts; baseline is one directory up + Skyline.sln.DotSettings
-$skylineRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)
+$aiRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $scriptRoot))  # ai/
+
+# Auto-detect pwiz root location
+if ($SourceRoot) {
+    $pwizRoot = $SourceRoot
+} else {
+    # Try sibling mode first: ai/ and pwiz/ are siblings under common parent
+    $siblingPath = Join-Path (Split-Path -Parent $aiRoot) 'pwiz'
+    # Then try submodule mode: ai/ is inside pwiz/
+    $submodulePath = Split-Path -Parent $aiRoot
+
+    if (Test-Path (Join-Path $siblingPath 'pwiz_tools')) {
+        $pwizRoot = $siblingPath
+    } elseif (Test-Path (Join-Path $submodulePath 'pwiz_tools')) {
+        $pwizRoot = $submodulePath
+    } else {
+        Write-ErrorLine "Cannot find pwiz_tools. Tried:`n  Sibling mode: $siblingPath`n  Submodule mode: $submodulePath`nUse -SourceRoot to specify the pwiz root directory."
+        exit 1
+    }
+}
+
+$skylineRoot = Join-Path $pwizRoot 'pwiz_tools/Skyline'
 $baselinePath = Join-Path $skylineRoot 'Skyline.sln.DotSettings'
 
 if (-not (Test-Path $baselinePath)) {

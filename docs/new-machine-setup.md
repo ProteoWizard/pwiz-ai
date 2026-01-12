@@ -72,7 +72,20 @@ If not found or version is below 7.0, install:
 winget install Microsoft.PowerShell --accept-source-agreements --accept-package-agreements
 ```
 
-After installation, **restart the terminal** and verify `pwsh --version` works.
+After installation:
+1. **Exit and restart Terminal** (close the window completely, then reopen)
+2. Click the **dropdown arrow (∨)** next to the tab bar → **Settings**
+3. Under "Startup", change **Default profile** to **PowerShell** (the PowerShell 7 profile, not "Windows PowerShell")
+4. Click **Save**
+5. Close and reopen Terminal
+
+The new terminal should show PowerShell 7 as the default:
+```
+PowerShell 7.5.0
+PS C:\Users\username>
+```
+
+Verify with `pwsh --version`.
 
 ### 1.4 Python
 
@@ -139,30 +152,47 @@ git config --global user.email "their-email@example.com"
 
 > **Tip:** The username shown in the SSH test output ("Hi username!") is their GitHub username.
 
-### 1.9 Clone the Repository
+### 1.9 Clone the Repositories
 
 ```powershell
 # Create project directory
 New-Item -ItemType Directory -Path C:\proj -Force
 cd C:\proj
 
+# Clone the AI tooling repository
+git clone https://github.com/ProteoWizard/pwiz-ai.git ai
+
+# Create .claude junction (enables Claude Code commands and skills)
+cmd /c mklink /J .claude ai\claude
+
 # Clone pwiz
 git clone git@github.com:ProteoWizard/pwiz.git
 ```
 
-This takes several minutes (large repository). Verify:
+The pwiz clone takes several minutes (large repository). Verify:
 ```powershell
-Test-Path C:\proj\pwiz\pwiz_tools\Skyline\Skyline.sln
-# Should be True
+Test-Path C:\proj\ai\CLAUDE.md                           # Should be True
+Test-Path C:\proj\.claude\commands                       # Should be True
+Test-Path C:\proj\pwiz\pwiz_tools\Skyline\Skyline.sln   # Should be True
 ```
 
-### 1.10 Note About AI Tooling
+### 1.10 About the Directory Structure
 
-> **Why is there no `ai/` folder yet?**
->
-> After cloning, the `ai/` directory doesn't exist. This is intentional - the AI tooling lives in a Git submodule that gets initialized during the first build (Phase 4). The build also creates a `.claude/` junction that enables Claude Code's commands and skills.
->
-> Continue with Phases 2-4 to complete the build. After the build succeeds, you'll restart Claude Code from the project directory to get full AI assistance.
+This setup uses **sibling mode** - the AI tooling (`ai/`) is a sibling to project checkouts (`pwiz/`):
+
+```
+C:\proj\                    <- Claude Code runs from here (and stays here)
+├── .claude/                <- Junction to ai/claude/
+├── ai/                     <- AI tooling repository (pwiz-ai)
+└── pwiz/                   <- Skyline source code
+```
+
+**Benefits of sibling mode:**
+- Claude Code stays in `C:\proj` throughout - no context loss from directory changes
+- Can assist across multiple project checkouts (e.g., `pwiz/`, `skyline_26_1/`, `scratch/`)
+- Simple setup - just clone, no submodule complexity
+
+> **Note:** An alternative "submodule mode" embeds `ai/` inside each pwiz checkout. See `ai/docs/ai-repository-strategy.md` for details. Sibling mode is recommended for most developers.
 
 ---
 
@@ -330,15 +360,13 @@ Once the user agrees to the licenses, create two batch files at `C:\proj\pwiz`:
 
 **b.bat** - General build script (single line):
 ```batch
-@call "%~dp0pwiz_tools\build-apps.bat" 64 --i-agree-to-the-vendor-licenses toolset=msvc-14.3 --ai %*
+@call "%~dp0pwiz_tools\build-apps.bat" 64 --i-agree-to-the-vendor-licenses toolset=msvc-14.3 %*
 ```
 
 **bs.bat** - Skyline-specific build:
 ```batch
 call "%~dp0b.bat" pwiz_tools\Skyline//Skyline.exe
 ```
-
-> **Note on `--ai`**: The `--ai` flag initializes the AI tooling submodule and creates the `.claude` junction. This is recommended for developers using Claude Code. Omit `--ai` if you don't need AI tooling.
 
 > **Note on toolset**: Use `toolset=msvc-14.3` for VS 2022 (recommended for nightly testing). Use `toolset=msvc-14.5` for VS 2026 (experimental).
 
@@ -367,25 +395,6 @@ If the build failed, check `C:\proj\pwiz\build64.log` for errors. Common issues:
 - Missing C++ tools: See Phase 2.3
 - NuGet errors: See Troubleshooting section
 
-### 4.5 Restart Claude Code in Project Directory
-
-**Important:** Now that the build has completed, the `ai/` submodule and `.claude/` junction exist. Restart Claude Code from the project directory to get full AI assistance:
-
-1. Exit Claude Code (type `exit` or `/exit`)
-2. Close the current terminal
-3. Open PowerShell 7: Press **Win+S**, type `pwsh`, press Enter
-4. Navigate to project: `cd C:\proj\pwiz`
-5. Start Claude: `claude`
-6. Tell Claude: *"Please read ai/docs/new-machine-setup.md - I'm at Phase 5. Please continue."*
-
-This enables Claude Code's skills and commands for the remaining setup phases.
-
-Verify the AI tooling is available:
-```powershell
-Test-Path C:\proj\pwiz\ai\CLAUDE.md         # Should be True
-Test-Path C:\proj\pwiz\.claude\commands     # Should be True (junction to ai/claude/commands)
-```
-
 ---
 
 ## Phase 5: Visual Studio Configuration
@@ -394,14 +403,22 @@ Test-Path C:\proj\pwiz\.claude\commands     # Should be True (junction to ai/cla
 
 Tell the user:
 1. Open Visual Studio
-2. File > Open > Project/Solution
-3. Navigate to: `C:\proj\pwiz\pwiz_tools\Skyline\Skyline.sln`
+2. On first launch, Visual Studio asks about keyboard shortcuts - recommend **IntelliJ** keybindings (the existing team preference)
+3. File > Open > Project/Solution
+4. Navigate to: `C:\proj\pwiz\pwiz_tools\Skyline\Skyline.sln`
 
-### 5.2 Configure Build Settings
+### 5.2 Configure ReSharper Menu
+
+Give ReSharper its own top-level menu (instead of being buried under Extensions):
 
 Tell the user:
-1. In the toolbar, change configuration from "Debug" to **"Release"**
-2. Change platform from "Any CPU" to **"x64"**
+1. Extensions menu > **Customize Menu...**
+2. In the "Menu items in the Extensions menu" list, **uncheck "ReSharper"**
+3. Click OK
+4. **Restart Visual Studio** (required for the change to take effect)
+5. Reopen the Skyline solution
+
+ReSharper should now appear as a top-level menu item.
 
 ### 5.3 Configure Test Settings
 
@@ -431,13 +448,12 @@ Tell the user:
 
 ### 6.1 Build with AI Scripts
 
-Verify the AI build scripts work correctly:
+Verify the AI build scripts work correctly (from `C:\proj`):
 ```powershell
-cd C:\proj\pwiz
 pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
 ```
 
-This builds the entire Skyline solution using MSBuild (matching Visual Studio's Ctrl+Shift+B).
+This builds the entire Skyline solution using MSBuild (matching Visual Studio's Ctrl+Shift+B). The script auto-detects the `pwiz/` folder as a sibling to `ai/`.
 
 ### 6.2 Run CodeInspection Test
 
@@ -465,15 +481,14 @@ Test-Path C:\proj\pwiz\pwiz_tools\Skyline\bin\x64\Release\TestRunner.exe  # Shou
 
 ---
 
-## Phase 7: AI Tooling (Optional)
+## Phase 7: AI Tooling Configuration
 
-Once the basic setup is complete, configure AI-assisted development tools. Prerequisites from earlier phases (PowerShell 7, Python, GitHub CLI, etc.) should already be installed.
+The AI tooling is already set up from Phase 1.9 (sibling mode). This phase configures optional integrations.
 
 ### 7.1 Verify Environment
 
-Run the verification script to check all AI tooling components:
+Run the verification script to check all AI tooling components (from `C:\proj`):
 ```powershell
-cd C:\proj\pwiz
 pwsh -Command "& './ai/scripts/Verify-Environment.ps1'"
 ```
 
@@ -502,7 +517,7 @@ To get an API key:
 
 Register the LabKey MCP server with Claude Code:
 ```powershell
-claude mcp add labkey -- python C:\proj\pwiz\ai\mcp\LabKeyMcp\server.py
+claude mcp add labkey -- python C:\proj\ai\mcp\LabKeyMcp\server.py
 ```
 
 For Gmail integration (optional, for automated reports):
@@ -521,11 +536,11 @@ claude mcp list
 
 Expected output shows both servers connected:
 ```
-labkey: python C:/proj/pwiz/ai/mcp/LabKeyMcp/server.py - ✓ Connected
+labkey: python C:/proj/ai/mcp/LabKeyMcp/server.py - ✓ Connected
 gmail: npx @gongrzhe/server-gmail-autoauth-mcp - ✓ Connected
 ```
 
-For full AI tooling documentation, see: `C:\proj\pwiz\ai\docs\developer-setup-guide.md`
+For full AI tooling documentation, see: `C:\proj\ai\docs\developer-setup-guide.md`
 
 ---
 
@@ -579,7 +594,7 @@ Nightly tests create and delete thousands of files. Real-time antivirus scanning
 3. Scroll to **Exclusions** → **Add or remove exclusions**
 4. Click **Add an exclusion** → **Folder**
 5. Add these folders:
-   - `C:\proj\pwiz` (source code)
+   - `C:\proj` (source code and AI tooling)
    - `<NightlyFolder>` (nightly tests)
 
 > **Security note:** These exclusions reduce protection for these folders. Only add them on development machines where you understand the trade-offs.
@@ -654,7 +669,7 @@ If tests fail randomly or builds are slow:
 1. Open Windows Security
 2. Virus & threat protection > Manage settings
 3. Scroll to Exclusions > Add or remove exclusions
-4. Add folder exclusion: `C:\proj\pwiz`
+4. Add folder exclusion: `C:\proj`
 
 **Note**: This requires admin privileges and the user should understand the security implications.
 

@@ -113,19 +113,35 @@ function Test-NoLFOnly {
 $allBad = @()
 $anyFiles = $false
 
-# Process parent repo
-$parentFiles = Get-ModifiedFiles -workDir "."
-if ($parentFiles) {
-  $anyFiles = $true
-  Convert-ToCRLF -files $parentFiles -baseDir "." | Out-Null
-  $allBad += Test-NoLFOnly -files $parentFiles -baseDir "."
+# Detect mode: sibling (ai/ is the repo) vs submodule (ai/ is inside pwiz/)
+$gitRoot = git rev-parse --show-toplevel 2>$null
+if (-not $gitRoot) {
+  Write-Host "Not in a git repository" -ForegroundColor Red
+  exit 1
 }
 
-# Process ai/ submodule explicitly (pwiz-ai)
-# Find the repo root to locate ai/
-$repoRoot = git rev-parse --show-toplevel 2>$null
-if ($repoRoot) {
-  $aiPath = Join-Path $repoRoot "ai"
+$isSiblingMode = (Split-Path $gitRoot -Leaf) -eq 'ai'
+
+if ($isSiblingMode) {
+  # Sibling mode: we're in the ai/ repo (pwiz-ai), process it directly
+  $aiFiles = Get-ModifiedFiles -workDir $gitRoot
+  if ($aiFiles) {
+    $anyFiles = $true
+    Write-Host "Processing ai/ repository (sibling mode)..." -ForegroundColor Cyan
+    Convert-ToCRLF -files $aiFiles -baseDir $gitRoot | Out-Null
+    $allBad += Test-NoLFOnly -files $aiFiles -baseDir $gitRoot
+  }
+} else {
+  # Submodule mode: process parent repo and ai/ submodule separately
+  $parentFiles = Get-ModifiedFiles -workDir "."
+  if ($parentFiles) {
+    $anyFiles = $true
+    Convert-ToCRLF -files $parentFiles -baseDir "." | Out-Null
+    $allBad += Test-NoLFOnly -files $parentFiles -baseDir "."
+  }
+
+  # Process ai/ submodule explicitly (pwiz-ai)
+  $aiPath = Join-Path $gitRoot "ai"
   if (Test-Path $aiPath -PathType Container) {
     $aiFiles = Get-ModifiedFiles -workDir $aiPath
     if ($aiFiles) {

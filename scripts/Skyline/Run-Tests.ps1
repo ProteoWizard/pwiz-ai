@@ -115,14 +115,35 @@ param(
     [switch]$Coverage = $false,  # Run with dotCover code coverage and export to JSON
 
     [Parameter(Mandatory=$false)]
-    [string]$CoverageOutputPath = ""  # Path for coverage JSON output (default: ai\.tmp\coverage-{timestamp}.json)
+    [string]$CoverageOutputPath = "",  # Path for coverage JSON output (default: ai\.tmp\coverage-{timestamp}.json)
+
+    [Parameter(Mandatory=$false)]
+    [string]$SourceRoot = $null  # Path to pwiz root (auto-detected if not specified)
 )
 
 # Script location: ai/scripts/Skyline/
 # Target: pwiz_tools/Skyline/
 $scriptRoot = Split-Path -Parent $PSCommandPath
 $aiRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)  # ai/
-$pwizRoot = Split-Path -Parent $aiRoot  # pwiz root
+
+# Auto-detect pwiz root location
+if ($SourceRoot) {
+    $pwizRoot = $SourceRoot
+} else {
+    # Try sibling mode first: ai/ and pwiz/ are siblings under common parent
+    $siblingPath = Join-Path (Split-Path -Parent $aiRoot) 'pwiz'
+    # Then try submodule mode: ai/ is inside pwiz/
+    $submodulePath = Split-Path -Parent $aiRoot
+
+    if (Test-Path (Join-Path $siblingPath 'pwiz_tools')) {
+        $pwizRoot = $siblingPath
+    } elseif (Test-Path (Join-Path $submodulePath 'pwiz_tools')) {
+        $pwizRoot = $submodulePath
+    } else {
+        Write-Error "Cannot find pwiz_tools. Tried:`n  Sibling mode: $siblingPath`n  Submodule mode: $submodulePath`nUse -SourceRoot to specify the pwiz root directory."
+        exit 1
+    }
+}
 $skylineRoot = Join-Path $pwizRoot 'pwiz_tools/Skyline'
 $initialLocation = Get-Location
 

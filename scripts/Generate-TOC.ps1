@@ -22,14 +22,24 @@ param()
 
 $ErrorActionPreference = "Stop"
 
-# Find repository root
-$repoRoot = git rev-parse --show-toplevel 2>$null
-if (-not $repoRoot) {
+# Find repository root and ai/ location
+$gitRoot = git rev-parse --show-toplevel 2>$null
+if (-not $gitRoot) {
     Write-Error "Not in a git repository"
     exit 1
 }
 
-$tocPath = Join-Path $repoRoot "ai/TOC.md"
+# Detect mode: sibling (ai/ is the repo) vs submodule (ai/ is inside pwiz/)
+if ((Split-Path $gitRoot -Leaf) -eq 'ai') {
+    # Sibling mode: ai/ is the git repo itself (pwiz-ai)
+    $aiRoot = $gitRoot
+    $repoRoot = $gitRoot  # For path calculations, treat ai/ as root
+} else {
+    # Submodule mode: ai/ is inside the pwiz repo
+    $aiRoot = Join-Path $gitRoot "ai"
+}
+
+$tocPath = Join-Path $aiRoot "TOC.md"
 
 # Parse existing TOC.md to preserve descriptions
 function Get-ExistingDescriptions {
@@ -178,21 +188,27 @@ Write-Host "Generating ai/TOC.md..."
 $existingDescriptions = Get-ExistingDescriptions -TocPath $tocPath
 
 # Scan all documentation locations
-$coreFiles = Get-ChildItem -Path (Join-Path $repoRoot "ai") -Filter "*.md" -File |
+$coreFiles = Get-ChildItem -Path $aiRoot -Filter "*.md" -File |
     Where-Object { $_.Name -ne "TOC.md" } |
     Select-Object -ExpandProperty FullName
 
-$guideFiles = Get-ChildItem -Path (Join-Path $repoRoot "ai/docs") -Filter "*.md" -File -ErrorAction SilentlyContinue |
+$guideFiles = Get-ChildItem -Path (Join-Path $aiRoot "docs") -Filter "*.md" -File -ErrorAction SilentlyContinue |
     Select-Object -ExpandProperty FullName
 
-$mcpFiles = Get-ChildItem -Path (Join-Path $repoRoot "ai/docs/mcp") -Filter "*.md" -File -ErrorAction SilentlyContinue |
+$mcpFiles = Get-ChildItem -Path (Join-Path $aiRoot "docs/mcp") -Filter "*.md" -File -ErrorAction SilentlyContinue |
     Select-Object -ExpandProperty FullName
 
-$skillFiles = Get-ChildItem -Path (Join-Path $repoRoot ".claude/skills") -Directory -ErrorAction SilentlyContinue |
+# .claude is at aiRoot/claude in sibling mode (junction), or repoRoot/.claude in submodule mode
+$claudeRoot = Join-Path $aiRoot "claude"
+if (-not (Test-Path $claudeRoot)) {
+    $claudeRoot = Join-Path $repoRoot ".claude"
+}
+
+$skillFiles = Get-ChildItem -Path (Join-Path $claudeRoot "skills") -Directory -ErrorAction SilentlyContinue |
     ForEach-Object { Join-Path $_.FullName "SKILL.md" } |
     Where-Object { Test-Path $_ }
 
-$commandFiles = Get-ChildItem -Path (Join-Path $repoRoot ".claude/commands") -Filter "*.md" -File -ErrorAction SilentlyContinue |
+$commandFiles = Get-ChildItem -Path (Join-Path $claudeRoot "commands") -Filter "*.md" -File -ErrorAction SilentlyContinue |
     Select-Object -ExpandProperty FullName
 
 # Generate TOC content

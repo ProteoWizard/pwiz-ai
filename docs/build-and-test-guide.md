@@ -9,18 +9,61 @@ Detailed reference for building, testing, and analyzing Skyline from LLM-assiste
 - Visual Studio 2022 Community/Professional installed
 - Initial full build completed with `bs.bat` (Boost.Build + native dependencies)
 
+## Script Location and Auto-Detection
+
+All build and test scripts are in `ai/scripts/Skyline/`:
+
+```
+ai/scripts/Skyline/
+├── Build-Skyline.ps1    # Main build script
+├── Run-Tests.ps1        # Test runner wrapper
+└── scripts/             # Helper scripts
+    ├── Analyze-Coverage.ps1
+    ├── Extract-TypeNames.ps1
+    └── Sync-DotSettings.ps1
+```
+
+### Auto-Detection of pwiz Root
+
+Scripts automatically detect the pwiz source location by checking:
+
+1. **Sibling mode** (recommended): `../pwiz/pwiz_tools` - when `ai/` and `pwiz/` are siblings
+2. **Submodule mode**: `../pwiz_tools` - when `ai/` is inside `pwiz/`
+
+This means scripts work without configuration in both setups:
+
+```powershell
+# From C:\proj (sibling mode) - auto-detects C:\proj\pwiz
+pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
+
+# From C:\proj\pwiz (submodule mode) - auto-detects C:\proj\pwiz
+pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
+```
+
+### Using -SourceRoot for Non-Standard Layouts
+
+If pwiz is in an unusual location, use `-SourceRoot`:
+
+```powershell
+# Explicit path to pwiz root
+pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1' -SourceRoot 'C:\other\location\pwiz'"
+
+# Useful for multiple checkouts with different names
+pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1' -SourceRoot './skyline_26_1'"
+```
+
 ## ⚠️ CRITICAL: Never Call MSBuild Directly
 
 **All builds MUST use the `Build-*.ps1` scripts**, never call `msbuild.exe` directly:
 
-- ✅ `.\pwiz_tools\Skyline\ai\Build-Skyline.ps1`
-- ✅ `.\pwiz_tools\Skyline\Executables\SkylineBatch\ai\Build-SkylineBatch.ps1`
-- ✅ `.\pwiz_tools\Skyline\Executables\AutoQC\ai\Build-AutoQC.ps1`
+- ✅ `ai/scripts/Skyline/Build-Skyline.ps1`
+- ✅ `ai/scripts/SkylineBatch/Build-SkylineBatch.ps1`
+- ✅ `ai/scripts/AutoQC/Build-AutoQC.ps1`
 - ❌ `msbuild.exe Skyline.sln ...` (NEVER DO THIS)
 
-**Why**: Build scripts handle working directory changes, find MSBuild automatically, fix line endings, and provide consistent output formatting.
+**Why**: Build scripts handle working directory changes, find MSBuild automatically, fix line endings, auto-detect source locations, and provide consistent output formatting.
 
-**Scripts work from any working directory** - they automatically change to the correct project directory, so you don't need to `Set-Location` first.
+**Scripts work from any working directory** - they automatically detect the pwiz root and change to the correct project directory.
 
 ## Quick Start (PowerShell Helper Script)
 
@@ -28,60 +71,60 @@ Detailed reference for building, testing, and analyzing Skyline from LLM-assiste
 
 ```powershell
 # Build entire solution (DEFAULT - recommended, matches Visual Studio Ctrl+Shift+B)
-# Works from ANY working directory - no need to cd first
-.\pwiz_tools\Skyline\ai\Build-Skyline.ps1
+# Works from ANY working directory - auto-detects pwiz location
+ai/scripts/Skyline/Build-Skyline.ps1
 
 # Pre-commit validation (recommended before committing)
-.\pwiz_tools\Skyline\ai\Build-Skyline.ps1 -RunInspection -RunTests -TestName CodeInspection
+ai/scripts/Skyline/Build-Skyline.ps1 -RunInspection -RunTests -TestName CodeInspection
 
 # Build, run ReSharper inspection
-.\pwiz_tools\Skyline\ai\Build-Skyline.ps1 -RunInspection
+ai/scripts/Skyline/Build-Skyline.ps1 -RunInspection
 
 # Build entire solution and run unit tests
-.\pwiz_tools\Skyline\ai\Build-Skyline.ps1 -RunTests
+ai/scripts/Skyline/Build-Skyline.ps1 -RunTests
 
 # Build and run specific test
-.\pwiz_tools\Skyline\ai\Build-Skyline.ps1 -RunTests -TestName CodeInspection
+ai/scripts/Skyline/Build-Skyline.ps1 -RunTests -TestName CodeInspection
 
 # Build specific project only
-.\pwiz_tools\Skyline\ai\Build-Skyline.ps1 -Target Skyline
-.\pwiz_tools\Skyline\ai\Build-Skyline.ps1 -Target Test
-.\pwiz_tools\Skyline\ai\Build-Skyline.ps1 -Target TestFunctional
+ai/scripts/Skyline/Build-Skyline.ps1 -Target Skyline
+ai/scripts/Skyline/Build-Skyline.ps1 -Target Test
+ai/scripts/Skyline/Build-Skyline.ps1 -Target TestFunctional
 
 # Clean build
-.\pwiz_tools\Skyline\ai\Build-Skyline.ps1 -Target Clean
+ai/scripts/Skyline/Build-Skyline.ps1 -Target Clean
 
 # Release build (entire solution)
-.\pwiz_tools\Skyline\ai\Build-Skyline.ps1 -Configuration Release
+ai/scripts/Skyline/Build-Skyline.ps1 -Configuration Release
 ```
 
 ### SkylineBatch
 
 ```powershell
 # Build solution (works from any directory)
-.\pwiz_tools\Skyline\Executables\SkylineBatch\ai\Build-SkylineBatch.ps1
+ai/scripts/SkylineBatch/Build-SkylineBatch.ps1
 
 # Build and run tests
-.\pwiz_tools\Skyline\Executables\SkylineBatch\ai\Build-SkylineBatch.ps1 -RunTests
+ai/scripts/SkylineBatch/Build-SkylineBatch.ps1 -RunTests
 
 # Build, inspect, and test
-.\pwiz_tools\Skyline\Executables\SkylineBatch\ai\Build-SkylineBatch.ps1 -RunInspection -RunTests
+ai/scripts/SkylineBatch/Build-SkylineBatch.ps1 -RunInspection -RunTests
 
 # Release build
-.\pwiz_tools\Skyline\Executables\SkylineBatch\ai\Build-SkylineBatch.ps1 -Configuration Release
+ai/scripts/SkylineBatch/Build-SkylineBatch.ps1 -Configuration Release
 ```
 
 ### AutoQC
 
 ```powershell
 # Build solution (works from any directory)
-.\pwiz_tools\Skyline\Executables\AutoQC\ai\Build-AutoQC.ps1
+ai/scripts/AutoQC/Build-AutoQC.ps1
 
 # Build and run tests
-.\pwiz_tools\Skyline\Executables\AutoQC\ai\Build-AutoQC.ps1 -RunTests
+ai/scripts/AutoQC/Build-AutoQC.ps1 -RunTests
 
 # Build, inspect, and test
-.\pwiz_tools\Skyline\Executables\AutoQC\ai\Build-AutoQC.ps1 -RunInspection -RunTests
+ai/scripts/AutoQC/Build-AutoQC.ps1 -RunInspection -RunTests
 ```
 
 **Key Features**:
@@ -133,23 +176,23 @@ This means **you can call the script from anywhere** without manually changing d
 
 ### Unit Tests (Test.dll - fast, no UI)
 ```powershell
-pwiz_tools\Skyline\ai\Run-Tests.ps1 -TestName Test.dll
+ai/scripts/Skyline/Run-Tests.ps1 -TestName Test.dll
 ```
 
 ### Unit Tests with Data (TestData.dll)
 ```powershell
-pwiz_tools\Skyline\ai\Run-Tests.ps1 -TestName TestData.dll
+ai/scripts/Skyline/Run-Tests.ps1 -TestName TestData.dll
 ```
 
 ### Functional Tests (UI tests - slower)
 ```powershell
-pwiz_tools\Skyline\ai\Run-Tests.ps1 -TestName TestFunctional.dll
+ai/scripts/Skyline/Run-Tests.ps1 -TestName TestFunctional.dll
 ```
 
 ### Run Specific Test
 ```powershell
 # Run single [TestMethod] from FastaImporterTest.cs (use the method name, not the file name)
-pwiz_tools\Skyline\ai\Run-Tests.ps1 -TestName TestFastaImport
+ai/scripts/Skyline/Run-Tests.ps1 -TestName TestFastaImport
 ```
 
 > ℹ️ **Tip:** If you only know the `.cs` file name, open it and search for `[TestMethod]` to get the method names. Passing the file name (e.g. `FastaImporterTest.cs`) will not work—the script passes method names through to TestRunner.
@@ -157,7 +200,7 @@ pwiz_tools\Skyline\ai\Run-Tests.ps1 -TestName TestFastaImport
 ### Run Tests with Visible UI
 ```powershell
 # Run test with UI on-screen (for visual inspection or PauseTest() breakpoints)
-pwiz_tools\Skyline\ai\Run-Tests.ps1 -TestName TestFilesTreeForm -ShowUI
+ai/scripts/Skyline/Run-Tests.ps1 -TestName TestFilesTreeForm -ShowUI
 ```
 
 > ℹ️ **Tip:** Use `-ShowUI` when:
@@ -171,7 +214,7 @@ pwiz_tools\Skyline\ai\Run-Tests.ps1 -TestName TestFilesTreeForm -ShowUI
 ```powershell
 # Comma-separate test method names and languages.
 # Example: run all FastaImporter tests in English, Chinese, and French.
-pwiz_tools\Skyline\ai\Run-Tests.ps1 `
+ai/scripts/Skyline/Run-Tests.ps1 `
     -TestName "TestBasicFastaImport,TestFastaImport,WebTestFastaImport" `
     -Language "en,zh-CHS,fr-FR"
 ```
@@ -186,14 +229,14 @@ Run-Tests.ps1 and SkylineTester share a test list file (`SkylineTester test list
 
 ```powershell
 # Run tests that developer selected in SkylineTester
-pwiz_tools\Skyline\ai\Run-Tests.ps1 -UseTestList
+ai/scripts/Skyline/Run-Tests.ps1 -UseTestList
 
 # Run tests from SkylineTester list in specific language(s)
-pwiz_tools\Skyline\ai\Run-Tests.ps1 -UseTestList -Language ja
-pwiz_tools\Skyline\ai\Run-Tests.ps1 -UseTestList -Language fr,tr
+ai/scripts/Skyline/Run-Tests.ps1 -UseTestList -Language ja
+ai/scripts/Skyline/Run-Tests.ps1 -UseTestList -Language fr,tr
 
 # Update test list and run (developer will see tests pre-checked in SkylineTester)
-pwiz_tools\Skyline\ai\Run-Tests.ps1 -TestName "TestA,TestB,TestC" -UpdateTestList
+ai/scripts/Skyline/Run-Tests.ps1 -TestName "TestA,TestB,TestC" -UpdateTestList
 ```
 
 ### Integration Workflows
@@ -242,11 +285,11 @@ Skyline uses JetBrains dotCover for code coverage tool integrated with ReSharper
 
 ```powershell
 # Run tests with code coverage enabled
-pwiz_tools\Skyline\ai\Run-Tests.ps1 -TestName TestFilesTreeForm -Coverage
+ai/scripts/Skyline/Run-Tests.ps1 -TestName TestFilesTreeForm -Coverage
 
 # Coverage output defaults to: ai\.tmp\coverage-{timestamp}.json
 # Custom output path:
-pwiz_tools\Skyline\ai\Run-Tests.ps1 -TestName TestFilesTreeForm -Coverage -CoverageOutputPath ".\coverage.json"
+ai/scripts/Skyline/Run-Tests.ps1 -TestName TestFilesTreeForm -Coverage -CoverageOutputPath ".\coverage.json"
 ```
 
 **Coverage Output**:
@@ -337,10 +380,10 @@ pwiz_tools/Skyline/Model/MyFeatureModel.cs
 
 ```powershell
 # Run your feature-specific tests with coverage enabled
-pwiz_tools\Skyline\ai\Run-Tests.ps1 -UseTestList -Coverage
+ai/scripts/Skyline/Run-Tests.ps1 -UseTestList -Coverage
 
 # Or run specific tests
-pwiz_tools\Skyline\ai\Run-Tests.ps1 -TestName "TestMyFeature,TestMyFeatureModel" -Coverage
+ai/scripts/Skyline/Run-Tests.ps1 -TestName "TestMyFeature,TestMyFeatureModel" -Coverage
 ```
 
 Coverage files are saved to `ai\.tmp\`:
@@ -420,7 +463,7 @@ git diff --name-only --diff-filter=A $(git merge-base HEAD origin/master)..HEAD 
 # Comment out test files and auto-generated files
 
 # 2. Run tests with coverage
-pwiz_tools\Skyline\ai\Run-Tests.ps1 -UseTestList -Coverage
+ai/scripts/Skyline/Run-Tests.ps1 -UseTestList -Coverage
 
 # 3. Analyze coverage
 pwsh -File ai/scripts/Skyline/scripts/Analyze-Coverage.ps1 `
@@ -544,7 +587,7 @@ When a test failure is believed to be intermittent or pre-existing:
 
 1. **Re-run the specific failing test** to verify it's truly intermittent:
    ```powershell
-   .\pwiz_tools\Skyline\ai\Run-Tests.ps1 -TestName FailingTestName
+   .\ai/scripts/Skyline/Run-Tests.ps1 -TestName FailingTestName
    ```
 
 2. **If the test fails consistently**, it is NOT intermittent—your changes may have made it repeatable, or the "known issue" memory is incorrect.
@@ -577,7 +620,7 @@ When a test failure is believed to be intermittent or pre-existing:
 
 ## Troubleshooting
 
-### "The term '.\ai\Build-*.ps1' is not recognized" or "cannot open file"
+### "The term 'ai/scripts/.../Build-*.ps1' is not recognized" or "cannot open file"
 
 **Symptom**: Build script fails with PowerShell errors about not recognizing the command or file not found.
 
@@ -586,9 +629,9 @@ When a test failure is believed to be intermittent or pre-existing:
 **Solution**: Use the **full relative path from repo root**:
 ```powershell
 # ✅ CORRECT - Works from any directory
-.\pwiz_tools\Skyline\ai\Build-Skyline.ps1
-.\pwiz_tools\Skyline\Executables\SkylineBatch\ai\Build-SkylineBatch.ps1
-.\pwiz_tools\Skyline\Executables\AutoQC\ai\Build-AutoQC.ps1
+ai/scripts/Skyline/Build-Skyline.ps1
+ai/scripts/SkylineBatch/Build-SkylineBatch.ps1
+ai/scripts/AutoQC/Build-AutoQC.ps1
 
 # ❌ WRONG - These patterns will fail
 ./ai/Build-Skyline.ps1                    # Wrong directory
@@ -639,7 +682,7 @@ Get-Process -Name 'SkylineTester','TestRunner','Skyline*' -ErrorAction SilentlyC
 **Before committing LLM-generated code**, it's recommended to run:
 
 ```powershell
-.\ai\Build-Skyline.ps1 -RunInspection -RunTests -TestName CodeInspection
+ai/scripts/Skyline/Build-Skyline.ps1 -RunInspection -RunTests -TestName CodeInspection
 ```
 
 This validates:
