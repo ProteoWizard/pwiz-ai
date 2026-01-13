@@ -64,7 +64,8 @@ $aiRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)  # ai/
 
 # Auto-detect pwiz root location
 if ($SourceRoot) {
-    $pwizRoot = $SourceRoot
+    # Resolve to absolute path (relative paths break after Set-Location)
+    $pwizRoot = (Resolve-Path $SourceRoot).Path
 } else {
     # Try sibling mode first: ai/ and pwiz/ are siblings under common parent
     $siblingPath = Join-Path (Split-Path -Parent $aiRoot) 'pwiz'
