@@ -29,13 +29,13 @@ if (-not $gitRoot) {
     exit 1
 }
 
-# Detect mode: sibling (ai/ is the repo) vs submodule (ai/ is inside pwiz/)
+# Detect mode: sibling (ai/ is the repo) vs child (ai/ is inside pwiz/)
 if ((Split-Path $gitRoot -Leaf) -eq 'ai') {
     # Sibling mode: ai/ is the git repo itself (pwiz-ai)
     $aiRoot = $gitRoot
     $repoRoot = $gitRoot  # For path calculations, treat ai/ as root
 } else {
-    # Submodule mode: ai/ is inside the pwiz repo
+    # Child mode: ai/ is inside the pwiz repo
     $aiRoot = Join-Path $gitRoot "ai"
 }
 
@@ -198,7 +198,7 @@ $guideFiles = Get-ChildItem -Path (Join-Path $aiRoot "docs") -Filter "*.md" -Fil
 $mcpFiles = Get-ChildItem -Path (Join-Path $aiRoot "docs/mcp") -Filter "*.md" -File -ErrorAction SilentlyContinue |
     Select-Object -ExpandProperty FullName
 
-# .claude is at aiRoot/claude in sibling mode (junction), or repoRoot/.claude in submodule mode
+# .claude is at aiRoot/claude in sibling mode (junction), or repoRoot/.claude in child mode
 $claudeRoot = Join-Path $aiRoot "claude"
 if (-not (Test-Path $claudeRoot)) {
     $claudeRoot = Join-Path $repoRoot ".claude"

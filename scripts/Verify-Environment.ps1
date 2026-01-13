@@ -21,7 +21,7 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $scriptRoot = Split-Path -Parent $PSCommandPath
-$repoRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)
+$aiRoot = Split-Path -Parent $scriptRoot  # pwiz-ai repo root
 
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "Skyline Development Environment Check" -ForegroundColor Cyan
@@ -268,14 +268,15 @@ if ((Test-Path $netrcPath) -or (Test-Path $netrcAltPath)) {
 # 11. LabKey MCP Server registration
 Write-Host "Checking LabKey MCP server..." -ForegroundColor Gray
 try {
-    $serverPath = Join-Path $repoRoot "ai\mcp\LabKeyMcp\server.py"
+    $serverPath = Join-Path $aiRoot "mcp\LabKeyMcp\server.py"
     $serverExists = Test-Path $serverPath
-    $mcpList = & claude mcp list 2>&1
+    $mcpListRaw = & claude mcp list 2>&1
+    $mcpList = $mcpListRaw -join "`n"  # Join array into single string
 
     # Parse the registered path from output like: "labkey: python C:/path/to/server.py - ✓ Connected"
     $registeredPath = $null
-    if ($mcpList -match 'labkey:\s*python\s+([^\s]+server\.py)') {
-        $registeredPath = $matches[1] -replace '/', '\'  # Normalize to backslashes
+    if ($mcpList -match 'labkey:\s*python\s+(.+?server\.py)') {
+        $registeredPath = $matches[1].Trim() -replace '/', '\'  # Normalize to backslashes
     }
 
     $isConnected = $mcpList -match 'labkey.*Connected'

@@ -2,7 +2,7 @@
 #
 # Usage: .\validate-bom-compliance.ps1
 # Returns: Exit code 0 if compliant, 1 if unexpected BOMs found
-# Scope: Processes both parent repo and ai/ submodule (pwiz-ai)
+# Scope: Processes both parent repo and ai/ clone (pwiz-ai)
 #
 # This script is intended to be used in CI/commit hooks to prevent
 # unwanted BOM introduction.
@@ -73,7 +73,7 @@ function Test-HasBom {
 Write-Host "Validating UTF-8 BOM compliance..." -ForegroundColor Cyan
 Write-Host ""
 
-# Collect files from parent repo and ai/ submodule
+# Collect files from parent repo and ai/ clone
 $allFiles = @()
 
 # Parent repo files
@@ -82,14 +82,14 @@ foreach ($f in $parentFiles) {
     $allFiles += @{ RelPath = $f; BaseDir = (Get-Location).Path }
 }
 
-# ai/ submodule files (pwiz-ai)
+# ai/ clone files (pwiz-ai)
 $repoRoot = git rev-parse --show-toplevel 2>$null
 if ($repoRoot) {
     $aiPath = Join-Path $repoRoot "ai"
     if (Test-Path $aiPath -PathType Container) {
         $aiFiles = Get-GitTrackedFiles -workDir $aiPath
         if ($aiFiles) {
-            Write-Host "Including ai/ submodule ($($aiFiles.Count) files)..." -ForegroundColor Cyan
+            Write-Host "Including ai/ clone ($($aiFiles.Count) files)..." -ForegroundColor Cyan
             foreach ($f in $aiFiles) {
                 $allFiles += @{ RelPath = "ai/$f"; BaseDir = $repoRoot }
             }

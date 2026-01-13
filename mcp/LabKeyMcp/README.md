@@ -12,10 +12,10 @@ pip install mcp labkey
 
 ### 2. Configure Authentication
 
-Create a personal `+claude` account for MCP access:
+Request a dedicated `+claude` account for MCP access:
 - **Team members**: `yourname+claude@proteinms.net`
 - **Interns/others**: `yourname+claude@gmail.com`
-- Ask a team lead to add your account to the "Agents" group on skyline.ms
+- **Ask an administrator** to create an account on skyline.ms for this email and add it to the **Site:Agents** group
 
 > **Important**: The `+claude` suffix only works with Gmail-backed email providers (@proteinms.net, @gmail.com). It will **not** work with @uw.edu or similar providers.
 
@@ -31,7 +31,7 @@ login yourname+claude@domain.com
 password your-password
 ```
 
-> **Why +claude accounts?** Individual accounts provide attribution for any edits made via Claude, while the Agents group restricts permissions to least-privilege access.
+> **Why +claude accounts?** Individual accounts provide attribution for any edits made via Claude, while the Site:Agents group has appropriate permissions for LLM agents.
 
 ### 3. Register with Claude Code
 

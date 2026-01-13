@@ -96,15 +96,15 @@ if ($SourceRoot) {
 } else {
     # Try sibling mode first: ai/ and pwiz/ are siblings under common parent
     $siblingPath = Join-Path (Split-Path -Parent $aiRoot) 'pwiz'
-    # Then try submodule mode: ai/ is inside pwiz/
-    $submodulePath = Split-Path -Parent $aiRoot
+    # Then try child mode: ai/ is inside pwiz/
+    $childPath = Split-Path -Parent $aiRoot
 
     if (Test-Path (Join-Path $siblingPath 'pwiz_tools')) {
         $pwizRoot = $siblingPath
-    } elseif (Test-Path (Join-Path $submodulePath 'pwiz_tools')) {
-        $pwizRoot = $submodulePath
+    } elseif (Test-Path (Join-Path $childPath 'pwiz_tools')) {
+        $pwizRoot = $childPath
     } else {
-        Write-Error "Cannot find pwiz_tools. Tried:`n  Sibling mode: $siblingPath`n  Submodule mode: $submodulePath`nUse -SourceRoot to specify the pwiz root directory."
+        Write-Error "Cannot find pwiz_tools. Tried:`n  Sibling mode: $siblingPath`n  Child mode: $childPath`nUse -SourceRoot to specify the pwiz root directory."
         exit 1
     }
 }

@@ -3,7 +3,7 @@
 #
 # Usage: .\analyze-bom-git.ps1 [-OutputFile <path>]
 # Output: Console report + optional output file
-# Scope: Processes both parent repo and ai/ submodule (pwiz-ai)
+# Scope: Processes both parent repo and ai/ clone (pwiz-ai)
 #
 # This script was created during the webclient_replacement work (Oct 2025)
 # when LLM tools were inadvertently removing BOMs from source files.
@@ -66,7 +66,7 @@ function Test-FileBom {
 Write-Host "Scanning Git-tracked files for UTF-8 BOM usage..." -ForegroundColor Cyan
 Write-Host ""
 
-# Collect files from parent repo and ai/ submodule
+# Collect files from parent repo and ai/ clone
 $allFiles = @()
 
 # Parent repo files
@@ -75,14 +75,14 @@ foreach ($f in $parentFiles) {
     $allFiles += @{ RelPath = $f; BaseDir = (Get-Location).Path }
 }
 
-# ai/ submodule files (pwiz-ai)
+# ai/ clone files (pwiz-ai)
 $repoRoot = git rev-parse --show-toplevel 2>$null
 if ($repoRoot) {
     $aiPath = Join-Path $repoRoot "ai"
     if (Test-Path $aiPath -PathType Container) {
         $aiFiles = Get-GitTrackedFiles -workDir $aiPath
         if ($aiFiles) {
-            Write-Host "Including ai/ submodule ($($aiFiles.Count) files)..." -ForegroundColor Cyan
+            Write-Host "Including ai/ clone ($($aiFiles.Count) files)..." -ForegroundColor Cyan
             foreach ($f in $aiFiles) {
                 $allFiles += @{ RelPath = "ai/$f"; BaseDir = $repoRoot }
             }

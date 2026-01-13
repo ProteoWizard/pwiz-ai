@@ -28,7 +28,7 @@ ai/scripts/Skyline/
 Scripts automatically detect the pwiz source location by checking:
 
 1. **Sibling mode** (recommended): `../pwiz/pwiz_tools` - when `ai/` and `pwiz/` are siblings
-2. **Submodule mode**: `../pwiz_tools` - when `ai/` is inside `pwiz/`
+2. **Child mode**: `../pwiz_tools` - when `ai/` is inside `pwiz/`
 
 This means scripts work without configuration in both setups:
 
@@ -36,7 +36,7 @@ This means scripts work without configuration in both setups:
 # From C:\proj (sibling mode) - auto-detects C:\proj\pwiz
 pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
 
-# From C:\proj\pwiz (submodule mode) - auto-detects C:\proj\pwiz
+# From C:\proj\pwiz (child mode) - auto-detects C:\proj\pwiz
 pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
 ```
 

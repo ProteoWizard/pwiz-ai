@@ -113,7 +113,7 @@ function Test-NoLFOnly {
 $allBad = @()
 $anyFiles = $false
 
-# Detect mode: sibling (ai/ is the repo) vs submodule (ai/ is inside pwiz/)
+# Detect mode: sibling (ai/ is the repo) vs child (ai/ is inside pwiz/)
 $gitRoot = git rev-parse --show-toplevel 2>$null
 if (-not $gitRoot) {
   Write-Host "Not in a git repository" -ForegroundColor Red
@@ -132,7 +132,7 @@ if ($isSiblingMode) {
     $allBad += Test-NoLFOnly -files $aiFiles -baseDir $gitRoot
   }
 } else {
-  # Submodule mode: process parent repo and ai/ submodule separately
+  # Child mode: process parent repo and ai/ clone separately
   $parentFiles = Get-ModifiedFiles -workDir "."
   if ($parentFiles) {
     $anyFiles = $true
@@ -140,13 +140,13 @@ if ($isSiblingMode) {
     $allBad += Test-NoLFOnly -files $parentFiles -baseDir "."
   }
 
-  # Process ai/ submodule explicitly (pwiz-ai)
+  # Process ai/ clone explicitly (pwiz-ai)
   $aiPath = Join-Path $gitRoot "ai"
   if (Test-Path $aiPath -PathType Container) {
     $aiFiles = Get-ModifiedFiles -workDir $aiPath
     if ($aiFiles) {
       $anyFiles = $true
-      Write-Host "`nProcessing ai/ submodule..." -ForegroundColor Cyan
+      Write-Host "`nProcessing ai/ clone..." -ForegroundColor Cyan
       Convert-ToCRLF -files $aiFiles -baseDir $aiPath | Out-Null
       $allBad += Test-NoLFOnly -files $aiFiles -baseDir $aiPath
     }

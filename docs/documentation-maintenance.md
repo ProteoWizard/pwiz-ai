@@ -424,7 +424,7 @@ The `ai/` folder is the living, growing, adapting LLM context. Commands and skil
 
 ### Why This Matters
 
-1. **Submodule separation**: If ai/ becomes a submodule, .claude/ stays in main repo. Keeping .claude/ minimal means it rarely needs updates.
+1. **Repository separation**: The .claude/ junction points to ai/claude/, but keeping .claude/ minimal means fewer cross-repo dependencies.
 2. **Single source of truth**: Documentation in ai/docs/ can be improved once, benefiting all commands that reference it.
 3. **Context limits**: Large commands consume token budget before the LLM even starts working.
 4. **Maintainability**: Embedded documentation drifts from the source of truth.

@@ -20,11 +20,13 @@ You are helping a developer set up a Windows machine for Skyline development. Fo
 
 ## Important Notes for the LLM Assistant
 
+- **Complete ALL phases**: Do not declare success until you have worked through every phase in this document. Phases marked "optional" should still be offered to the user.
 - **Ask before installing**: Always confirm with the user before running installers
 - **Verify each step**: Run verification commands to confirm success before moving on
 - **Handle existing installs**: Check if software is already installed and skip if so
 - **Guide GUI steps**: For Visual Studio and other GUI installers, tell the user exactly what to click
 - **Track progress**: Keep the user informed of what's done and what's next
+- **Final report required**: At the end, produce a comprehensive report covering ALL items (completed, skipped, and deferred). See "Final Report" section at the end of this document.
 
 ---
 
@@ -176,7 +178,39 @@ Test-Path C:\proj\.claude\commands                       # Should be True
 Test-Path C:\proj\pwiz\pwiz_tools\Skyline\Skyline.sln   # Should be True
 ```
 
-### 1.10 About the Directory Structure
+> **For LLM assistants:** Now that the repositories are cloned, the master copy of this setup guide is available locally at `ai\docs\new-machine-setup.md`. If you fetched this document from the web, you can now reference and even edit the local copy for improvements.
+
+### 1.10 Configure Claude Code Statusline (Optional)
+
+**For LLM assistants:** Offer to configure a statusline for Claude Code that shows the current project, git branch, model, and context usage. This is a personal preference setting.
+
+Example statusline output: `proj [main] | Opus | 36% used`
+
+To configure, run these commands directly (do NOT use the statusline-setup agent - it provides instructions but doesn't execute them):
+
+```bash
+# Copy the statusline script
+cp C:/proj/ai/scripts/statusline.ps1 ~/.claude/statusline.ps1
+```
+
+Then read `~/.claude/settings.json` and add the statusLine configuration, preserving any existing settings:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "pwsh -NoProfile -File C:\\Users\\USERNAME\\.claude\\statusline.ps1"
+  }
+}
+```
+
+Replace `USERNAME` with the actual username (e.g., from `$env:USERNAME` or `whoami`).
+
+After configuration, tell the user to restart Claude Code (`/exit` then `claude`) to activate the statusline.
+
+The user can decline if they prefer the default Claude Code display.
+
+### 1.11 About the Directory Structure
 
 This setup uses **sibling mode** - the AI tooling (`ai/`) is a sibling to project checkouts (`pwiz/`):
 
@@ -190,9 +224,9 @@ C:\proj\                    <- Claude Code runs from here (and stays here)
 **Benefits of sibling mode:**
 - Claude Code stays in `C:\proj` throughout - no context loss from directory changes
 - Can assist across multiple project checkouts (e.g., `pwiz/`, `skyline_26_1/`, `scratch/`)
-- Simple setup - just clone, no submodule complexity
+- Simple setup - just clone, no nested repos
 
-> **Note:** An alternative "submodule mode" embeds `ai/` inside each pwiz checkout. See `ai/docs/ai-repository-strategy.md` for details. Sibling mode is recommended for most developers.
+> **Note:** An alternative "child mode" embeds `ai/` inside a pwiz checkout (the pwiz `.gitignore` ignores the `ai/` folder). See `ai/docs/ai-repository-strategy.md` for details. Sibling mode is recommended for most developers.
 
 ---
 
@@ -273,7 +307,17 @@ After installation, restart Windows Explorer to enable TortoiseGit status icons:
 2. Find **Windows Explorer** in the list
 3. Right-click it → **Restart**
 4. Open File Explorer and navigate to `C:\proj\pwiz` - you should see green checkmarks on files indicating Git status
-5. Right-click on project root → Show more options → TortoiseGit → Settings. Select Network and set SSH client to "C:\Program Files\Git\usr\bin\ssh.exe"
+
+**IMPORTANT - Configure TortoiseGit SSH client:**
+
+This step is critical. Without it, TortoiseGit will fail to authenticate with GitHub when pushing or pulling.
+
+1. Right-click on `C:\proj\pwiz` → **Show more options** → **TortoiseGit** → **Settings**
+2. Select **Network** in the left panel
+3. Set **SSH client** to: `C:\Program Files\Git\usr\bin\ssh.exe`
+4. Click **OK**
+
+> **For LLM assistants:** Do not skip this verification. Ask the user to confirm they have set the SSH client path. A missing or incorrect setting will cause confusing authentication failures later.
 
 **Notepad++** - Lightweight text editor with syntax highlighting:
 ```powershell
@@ -290,19 +334,21 @@ winget install Notepad++.Notepad++ --accept-source-agreements --accept-package-a
 
 ### 3.2 Optional Utilities
 
-These are useful but not required. **Offer to install these for the user** - since they're quick winget installs, most developers will appreciate having them:
+These are useful but not required.
+
+> **For LLM assistants:** You MUST explicitly offer these to the user. Do not skip this section. Ask: "Would you like me to install the optional utilities (WinMerge, EmEditor, WinSCP)? They're quick winget installs and useful for development."
 
 **WinMerge** - File and folder comparison tool:
 ```powershell
 winget install WinMerge.WinMerge --accept-source-agreements --accept-package-agreements
 ```
 
-**EmEditor** - Text editor optimized for very large files (useful for large .sky XML files):
+**EmEditor** - Text editor optimized for very large files (useful for large .sky XML and .mzML files):
 ```powershell
 winget install Emurasoft.EmEditor --accept-source-agreements --accept-package-agreements
 ```
 
-**WinSCP** - SFTP/SCP client for file transfers:
+**WinSCP** - SFTP/SCP client for file transfers and WebDAV access to LabKey servers:
 ```powershell
 winget install WinSCP.WinSCP --accept-source-agreements --accept-package-agreements
 ```
@@ -496,22 +542,28 @@ This checks for all required tools and reports any missing components.
 
 ### 7.2 LabKey API Credentials
 
-The LabKey MCP server needs credentials for skyline.ms access. Create a `.netrc` file:
+The LabKey MCP server needs credentials for skyline.ms access.
+
+> **IMPORTANT - Use a dedicated +claude account, not your personal account:**
+> - Team members: `yourname+claude@proteinms.net`
+> - Interns/others: `yourname+claude@gmail.com`
+> - The `+claude` suffix only works with Gmail-backed providers (not @uw.edu)
+> - **Ask an administrator** to create an account on skyline.ms for this email and add it to the **Site:Agents** group
+>
+> **Why?** Individual +claude accounts provide attribution for any edits made via Claude, while the Site:Agents group has appropriate permissions for LLM agents.
+
+Once an administrator has created your +claude account, create a `.netrc` file:
 
 ```powershell
-# Create the file (replace YOUR_API_KEY with your actual key)
+# Template - fill in your +claude credentials
 @"
 machine skyline.ms
-login your.email@example.com
-password YOUR_API_KEY
+login yourname+claude@proteinms.net
+password your-password-here
 "@ | Out-File -FilePath "$env:USERPROFILE\.netrc" -Encoding ASCII
 ```
 
-To get an API key:
-1. Go to https://skyline.ms
-2. Log in with your account
-3. Click your username → API Keys
-4. Create a new API key
+For full LabKey MCP documentation, see: `ai/mcp/LabKeyMcp/README.md`
 
 ### 7.3 MCP Server Configuration
 
@@ -519,6 +571,12 @@ Register the LabKey MCP server with Claude Code:
 ```powershell
 claude mcp add labkey -- python C:\proj\ai\mcp\LabKeyMcp\server.py
 ```
+
+**After registering, restart Claude Code** to activate the MCP server:
+1. Exit Claude Code (`/exit`)
+2. Resume with `claude --continue`
+
+> **Note:** MCP servers require a Claude Code restart to become fully active, similar to how PATH updates require a terminal restart.
 
 For Gmail integration (optional, for automated reports):
 ```powershell
@@ -679,6 +737,41 @@ If `ssh -T git@github.com` fails:
 - Firewall may be blocking port 22
 - Try HTTPS instead: `git remote set-url origin https://github.com/ProteoWizard/pwiz.git`
 - User will need to set up a GitHub Personal Access Token for HTTPS auth
+
+---
+
+## Final Report
+
+**Before declaring setup complete, you MUST produce a comprehensive final report.**
+
+The report should be:
+1. Written to `ai\.tmp\new-machine-setup-<date>.md` (the `.tmp` folder serves as a communication conduit between Claude Code and the developer)
+2. Displayed to the user in a summary format
+
+### Report Requirements
+
+The report must cover EVERY item in this document, organized by phase:
+
+| Status | Meaning |
+|--------|---------|
+| DONE | Completed and verified |
+| SKIPPED | Not offered or intentionally bypassed by assistant |
+| DEFERRED | User chose to skip, should return to later |
+| NOT VERIFIED | Completed but verification step was missed |
+
+**Include these sections:**
+- Phase-by-phase breakdown with status for each step
+- List of deferred items (things the user may want to return to)
+- Any issues encountered during setup
+- Process notes (what went well, what could be improved)
+
+### After the Report
+
+After writing the report to `ai\.tmp`, ask the user:
+1. **Finish local config** - Continue resolving any remaining items (deferred, not verified, skipped)
+2. **Done for now** - User will review the report and return later if needed
+
+> **Note:** The `ai\.tmp\` folder is not tracked in git. It's a scratch space for session-specific notes, handoffs, and communication between the developer and Claude Code.
 
 ---
 

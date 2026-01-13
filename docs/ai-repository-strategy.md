@@ -13,7 +13,7 @@ All AI tooling lives in a separate repository (`ProteoWizard/pwiz-ai`) that can 
 | Mode | Setup | Best For |
 |------|-------|----------|
 | **Sibling Mode** | Clone `pwiz-ai` as `ai/` alongside `pwiz/` | Multi-project work, new developers, simpler setup |
-| **Submodule Mode** | `ai/` embedded inside `pwiz/` via submodule | Single-project focus, CI integration |
+| **Child Mode** | Clone `pwiz-ai` as `ai/` inside `pwiz/` | Single-project focus, simpler path structure |
 
 **Sibling mode is recommended for most developers.** It provides a simpler mental model and allows Claude Code to assist across multiple project checkouts without context loss.
 
@@ -36,7 +36,7 @@ C:\proj\                    <- Claude Code runs from here
 
 - **Cross-project assistance** - Claude Code sees all checkouts, can help across branches
 - **No context loss** - Stay in `C:\proj` throughout your session
-- **Simpler setup** - No submodule complexity, just `git clone`
+- **Simpler setup** - Just `git clone`, no nested repos
 - **Natural workflow** - "Work from context-rich parent, modify anywhere"
 
 ### Setup
@@ -90,40 +90,42 @@ Claude Code running from `C:\proj` can read/write files in any checkout. This en
 
 ---
 
-## Submodule Mode (Advanced)
+## Child Mode
 
-In submodule mode, `pwiz-ai` is embedded inside a pwiz checkout as a Git submodule:
+In child mode, `pwiz-ai` is cloned inside a pwiz checkout:
 
 ```
 C:\proj\pwiz\               <- Claude Code runs from here
 ├── .claude/                <- Junction to ai/claude/
-├── ai/                     <- pwiz-ai repo (submodule)
+├── ai/                     <- pwiz-ai repo (nested clone)
 └── pwiz_tools/...
 ```
 
-### When to Use Submodule Mode
+### When to Use Child Mode
 
-- **CI/TeamCity** - Reproducible builds with pinned AI tooling version
 - **Single-project focus** - Working exclusively in one checkout
+- **Simpler paths** - Everything under one root directory
 - **Isolated environments** - Each checkout has independent AI tooling
 
-### Setup via Build Flag
-
-Submodule mode is opt-in via the `--ai` build flag:
-
-**b.bat** (with AI tooling):
-```batch
-@call "%~dp0pwiz_tools\build-apps.bat" 64 --i-agree-to-the-vendor-licenses toolset=msvc-14.3 --ai %*
-```
-
-Running `bs.bat` will:
-1. Initialize the ai/ submodule (`git submodule update --init ai`)
-2. Create the `.claude` junction pointing to `ai/claude/`
-
-### Submodule Workflow
+### Setup
 
 ```bash
-# Enter the submodule
+cd C:\proj\pwiz
+
+# Clone AI repo inside pwiz
+git clone https://github.com/ProteoWizard/pwiz-ai.git ai
+
+# Create .claude junction
+mklink /J .claude ai\claude
+
+# Start Claude Code from the pwiz directory
+claude
+```
+
+### Child Mode Workflow
+
+```bash
+# Enter the ai repository
 cd ai
 
 # Make sure you're on main and up to date
@@ -139,23 +141,9 @@ git push origin main
 cd ..
 ```
 
-### Implementation Details
+### Note on .gitignore
 
-The `--ai` flag handling in `pwiz_tools/Skyline/Jamfile.jam`:
-
-```jam
-if "--ai" in [ modules.peek : ARGV ]
-{
-   echo "Initializing AI tooling (--ai flag detected)..." ;
-   SHELL "git submodule update --init ai" ;
-
-   if ! [ path.exists $(PWIZ_ROOT_PATH)/.claude ]
-   {
-      echo "Creating .claude junction to ai/claude..." ;
-      SHELL "mklink /J \"$(PWIZ_ROOT_PATH)/.claude\" \"$(PWIZ_ROOT_PATH)/ai/claude\"" ;
-   }
-}
-```
+The pwiz repository's `.gitignore` includes `ai/` and `.claude/`, so the nested clone won't appear as untracked files.
 
 ---
 
@@ -166,7 +154,7 @@ Both modes use a Windows junction to expose `ai/claude/` as `.claude/` at the ap
 | Mode | Junction Location | Points To |
 |------|------------------|-----------|
 | Sibling | `C:\proj\.claude` | `C:\proj\ai\claude` |
-| Submodule | `C:\proj\pwiz\.claude` | `C:\proj\pwiz\ai\claude` |
+| Child | `C:\proj\pwiz\.claude` | `C:\proj\pwiz\ai\claude` |
 
 Claude Code requires `.claude/` at the working directory root. The junction:
 - Works without admin rights
@@ -204,40 +192,46 @@ ai/
 
 ## Choosing a Mode
 
-| Consideration | Sibling Mode | Submodule Mode |
-|---------------|--------------|----------------|
-| Setup complexity | Simple (just clone) | Moderate (build flag + junction) |
+| Consideration | Sibling Mode | Child Mode |
+|---------------|--------------|------------|
+| Setup complexity | Simple (clone alongside) | Simple (clone inside) |
 | Cross-project work | Excellent | Limited to one checkout |
 | Context switching | No restart needed | Restart Claude for each checkout |
 | New developers | Recommended | After gaining experience |
-| CI/automated builds | Not applicable | Use without `--ai` flag |
+| Path structure | Separate ai/ and pwiz/ | All under pwiz/ |
 
-**Start with sibling mode.** Move to submodule mode if you have a specific need for isolated AI tooling per checkout.
+**Start with sibling mode.** Move to child mode if you prefer having everything under a single root directory.
 
 ---
 
 ## Transitioning Between Modes
 
-### Sibling to Submodule
+### Sibling to Child
 
-If you later want submodule mode for a specific checkout:
-
-1. Add `--ai` to that checkout's `b.bat`
-2. Run the build to initialize the submodule
-3. The checkout now has its own `ai/` and `.claude/`
-
-### Submodule to Sibling
-
-To convert a submodule-mode checkout to use sibling mode:
+If you later want child mode for a specific checkout:
 
 ```bash
-# Remove the submodule
-git submodule deinit ai
-git rm ai
-rm -rf .git/modules/ai
+cd C:\proj\pwiz
+
+# Clone AI repo inside pwiz
+git clone https://github.com/ProteoWizard/pwiz-ai.git ai
+
+# Create .claude junction
+mklink /J .claude ai\claude
+```
+
+### Child to Sibling
+
+To convert a child-mode checkout to use sibling mode:
+
+```bash
+cd C:\proj\pwiz
+
+# Remove the nested ai/ clone and junction
+rmdir /s ai
 rmdir .claude
 
-# Now use the parent's ai/ via sibling mode
+# Now use the parent's ai/ via sibling mode from C:\proj
 ```
 
 ---
@@ -255,6 +249,5 @@ The dedicated repository approach eliminates this complexity entirely.
 
 ## References
 
-- [Git Submodules Documentation](https://git-scm.com/book/en/v2/Git-Tools-Submodules)
 - [new-machine-setup.md](new-machine-setup.md) - Developer onboarding guide
 - GitHub Issue #3786 - Original repository proposal discussion
