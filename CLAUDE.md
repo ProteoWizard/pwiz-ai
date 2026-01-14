@@ -148,6 +148,10 @@ Before writing code, read these files:
 - **skyline-wiki** → For reading/updating wiki pages on skyline.ms
 - **ai-context-documentation** → For ai/ folder docs, TODOs, or .claude/ files
 
+## Debugging Behavior
+
+**Recognize guess-and-test failure**: If you've made 3 attempts to fix a bug without understanding the root cause (hypothesis → change → test → fail cycle), STOP. Load the debugging skill and systematically isolate the problem before attempting another fix.
+
 ## Developer Environment
 
 ### Screenshots and Clipboard Images
