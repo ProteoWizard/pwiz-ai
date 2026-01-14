@@ -62,7 +62,7 @@ def run_command(cmd: list[str], cwd: Optional[str] = None) -> Optional[str]:
         return None
 
 
-def get_git_status(directory: str) -> Optional[dict]:
+def get_git_status(directory: str, verbose: bool = False) -> Optional[dict]:
     """Get git status for a directory."""
     git_root = run_command(["git", "rev-parse", "--show-toplevel"], cwd=directory)
     if not git_root:
@@ -75,23 +75,33 @@ def get_git_status(directory: str) -> Optional[dict]:
     porcelain = run_command(["git", "status", "--porcelain"], cwd=directory) or ""
     lines = [line for line in porcelain.split("\n") if line]
 
-    modified = 0
-    staged = 0
-    untracked = 0
+    modified_count = 0
+    staged_count = 0
+    untracked_count = 0
+    modified_files = []
+    staged_files = []
+    untracked_files = []
 
     for line in lines:
         if len(line) < 2:
             continue
         index_status = line[0]
         worktree_status = line[1]
+        filename = line[3:]  # Skip status chars and space
 
         if index_status == "?" and worktree_status == "?":
-            untracked += 1
+            untracked_count += 1
+            if verbose:
+                untracked_files.append(filename)
         else:
             if index_status not in (" ", "?"):
-                staged += 1
+                staged_count += 1
+                if verbose:
+                    staged_files.append(filename)
             if worktree_status not in (" ", "?"):
-                modified += 1
+                modified_count += 1
+                if verbose:
+                    modified_files.append(filename)
 
     # Get ahead/behind count
     ahead = 0
@@ -108,29 +118,36 @@ def get_git_status(directory: str) -> Optional[dict]:
                 ahead = int(parts[0]) if parts[0].isdigit() else 0
                 behind = int(parts[1]) if parts[1].isdigit() else 0
 
-    return {
+    result = {
         "branch": branch,
         "remote": remote,
-        "modified": modified,
-        "staged": staged,
-        "untracked": untracked,
+        "modified": modified_count,
+        "staged": staged_count,
+        "untracked": untracked_count,
         "ahead": ahead,
         "behind": behind,
     }
 
+    if verbose:
+        result["modifiedFiles"] = modified_files
+        result["stagedFiles"] = staged_files
+        result["untrackedFiles"] = untracked_files
 
-def get_directory_status(directory: str) -> dict:
+    return result
+
+
+def get_directory_status(directory: str, verbose: bool = False) -> dict:
     """Get status for a single directory."""
     path = Path(directory)
     return {
         "path": str(path),
         "name": path.name,
-        "git": get_git_status(directory),
+        "git": get_git_status(directory, verbose=verbose),
     }
 
 
 @mcp.tool()
-def get_status(directories: Optional[list[str]] = None) -> str:
+def get_status(directories: Optional[list[str]] = None, verbose: bool = False) -> str:
     """Get current system status including timestamp and git info for one or more directories.
 
     Call this to get accurate time and repository context.
@@ -138,13 +155,14 @@ def get_status(directories: Optional[list[str]] = None) -> str:
     Args:
         directories: Directories to check (optional, defaults to cwd).
                     Example: ['C:/proj/ai', 'C:/proj/pwiz']
+        verbose: If True, include lists of modified/staged/untracked files (default: False)
     """
     now_utc = datetime.now(timezone.utc)
     now_local = datetime.now().astimezone()
     cwd = os.getcwd()
 
     dirs_to_check = directories if directories else [cwd]
-    directory_statuses = [get_directory_status(d) for d in dirs_to_check]
+    directory_statuses = [get_directory_status(d, verbose=verbose) for d in dirs_to_check]
 
     status = {
         "timestamp": now_utc.isoformat(),
