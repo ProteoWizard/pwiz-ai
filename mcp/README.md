@@ -4,9 +4,10 @@ This directory contains Model Context Protocol (MCP) servers that enable Claude 
 
 ## Available Servers
 
-| Server | Description |
-|--------|-------------|
-| [LabKeyMcp](LabKeyMcp/) | Access to skyline.ms LabKey server (exceptions, nightly tests, wiki, support board) |
+| Server | Language | Description |
+|--------|----------|-------------|
+| [LabKeyMcp](LabKeyMcp/) | Python | Access to skyline.ms LabKey server (exceptions, nightly tests, wiki, support board) |
+| [StatusMcp](StatusMcp/) | TypeScript | System status info (timestamp, git status, disk space) for Claude Code context |
 
 ## Purpose
 
@@ -17,6 +18,7 @@ MCP servers provide structured access to project resources that would otherwise 
 - Read and update wiki documentation
 - Monitor support board activity
 - Access file attachments
+- Get accurate system status (time, git branch, disk space) without guessing
 
 ## Adding New Servers
 

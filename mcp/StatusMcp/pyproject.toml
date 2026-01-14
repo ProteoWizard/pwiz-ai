@@ -1,0 +1,15 @@
+[project]
+name = "status-mcp"
+version = "1.0.0"
+description = "MCP server providing system status information for Claude Code"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+]
+
+[project.scripts]
+status-mcp = "server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
