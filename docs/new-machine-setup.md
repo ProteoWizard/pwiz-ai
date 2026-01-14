@@ -134,6 +134,9 @@ Verify:
 ```powershell
 git config --global core.autocrlf
 # Should output: true
+
+git config --global pull.rebase
+# Should output: false
 ```
 
 ### 1.6 SSH Key Setup
@@ -418,11 +421,13 @@ gh auth login     # If not authenticated
 **ReSharper CLI** - Code inspection from command line:
 ```powershell
 # Existing mode check:
-jb --version
+Get-Command jb -ErrorAction SilentlyContinue
 
 # Install if missing:
 dotnet tool install -g JetBrains.ReSharper.GlobalTools
 ```
+
+> **Note:** The `jb` command doesn't support `--version`. Use `dotnet tool list -g | Select-String jetbrains` to see installed versions.
 
 **dotCover CLI** - Code coverage analysis:
 ```powershell
@@ -863,6 +868,7 @@ The report must cover EVERY item in this document, organized by phase:
 - List of deferred items (things the user may want to return to)
 - Any issues encountered during setup
 - Process notes (what went well, what could be improved)
+- **Completion timestamp** - Call `mcp__status__get_status` and use the `localTimestamp` field in the report footer
 
 ### After the Report
 

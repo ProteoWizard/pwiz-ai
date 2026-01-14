@@ -139,16 +139,17 @@ def get_status(directories: Optional[list[str]] = None) -> str:
         directories: Directories to check (optional, defaults to cwd).
                     Example: ['C:/proj/ai', 'C:/proj/pwiz']
     """
-    now = datetime.now(timezone.utc)
+    now_utc = datetime.now(timezone.utc)
+    now_local = datetime.now().astimezone()
     cwd = os.getcwd()
-    local_tz = datetime.now().astimezone().tzinfo
 
     dirs_to_check = directories if directories else [cwd]
     directory_statuses = [get_directory_status(d) for d in dirs_to_check]
 
     status = {
-        "timestamp": now.isoformat(),
-        "timezone": str(local_tz),
+        "timestamp": now_utc.isoformat(),
+        "localTimestamp": now_local.strftime("%Y-%m-%d %H:%M:%S"),
+        "timezone": str(now_local.tzinfo),
         "platform": f"{platform.system()} {platform.machine()}",
         "pythonVersion": platform.python_version(),
         "directories": directory_statuses,
