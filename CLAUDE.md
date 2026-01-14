@@ -146,7 +146,7 @@ Before writing code, read these files:
 - **tutorial-documentation** → For tutorial HTML, tutorial tests (TestTutorial/), or screenshots
 - **skyline-screenshots** → For ImageComparer, screenshot diffs, or s-XX.png references
 - **skyline-wiki** → For reading/updating wiki pages on skyline.ms
-- **ai-context-documentation** → For ai/ folder docs, TODOs, .claude/ files, or ai-context branch work
+- **ai-context-documentation** → For ai/ folder docs, TODOs, or .claude/ files
 
 ## Developer Environment
 

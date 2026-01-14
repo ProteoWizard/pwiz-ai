@@ -54,13 +54,6 @@ Quick reference for all `pw-*` project-specific slash commands.
 | `/pw-configure` | Guide through agentic coding environment setup. |
 | `/pw-confightml` | Sync developer setup guide MD and HTML versions. |
 
-## AI Context Branch
-
-| Command | Description |
-|---------|-------------|
-| `/pw-aicontext` | Begin ai-context branch documentation work. |
-| `/pw-aicontextsync` | Weekly ai-context branch sync workflow (uses sync script). |
-
 ## Testing & Coverage
 
 | Command | Description |
@@ -116,4 +109,4 @@ Quick reference for all `pw-*` project-specific slash commands.
 - [STARTUP.md](../todos/STARTUP.md) - How to start work on a TODO
 - [WORKFLOW.md](../WORKFLOW.md) - Git workflows and TODO system
 - [CRITICAL-RULES.md](../CRITICAL-RULES.md) - Absolute constraints
-- [ai-context-branch-strategy.md](ai-context-branch-strategy.md) - Branch strategy for ai/ documentation
+- [ai-repository-strategy.md](ai-repository-strategy.md) - Repository strategy for ai/ documentation

@@ -4,11 +4,20 @@ description: Start work on a GitHub Issue
 
 # Start Work on GitHub Issue
 
-Begin work on a GitHub Issue, following the appropriate workflow based on issue labels.
+Begin work on a GitHub Issue, following the appropriate workflow based on the repository.
 
 ## Arguments
 
-$ARGUMENTS = GitHub Issue number (e.g., "3732")
+$ARGUMENTS = GitHub Issue number (e.g., "3732") or URL
+
+## Repository Structure
+
+| Repository | Issues For | Local Path |
+|------------|------------|------------|
+| `ProteoWizard/pwiz` | Skyline/ProteoWizard code changes | `pwiz/` |
+| `ProteoWizard/pwiz-ai` | AI tooling, documentation, MCP servers | `ai/` |
+
+**Key point**: Issues for AI tooling/documentation belong in the **pwiz-ai** repository's Issues, not pwiz.
 
 ## Workflow
 
@@ -18,38 +27,22 @@ $ARGUMENTS = GitHub Issue number (e.g., "3732")
 gh issue view $ARGUMENTS
 ```
 
-Review the issue scope and **check labels** to determine branching strategy.
+Review the issue scope and determine which repository it belongs to.
 
-### Step 2: Determine Branch Strategy
+### Step 2: Create Branch (pwiz issues only)
 
-**Check for `ai-context` label:**
-
-- **If `ai-context` label present** → Work directly on `ai-context` branch
-  - These are AI tooling/documentation issues
-  - No feature branch needed (single developer on ai-context currently)
-  - Future: may use branches when multiple developers work on ai-context
-
-- **If NO `ai-context` label** → Follow standard workflow (ai/WORKFLOW.md)
-  - Create feature branch: `Skyline/work/YYYYMMDD_<description>`
-  - Base branch is typically `master`
-  - PR back to master when complete
-
-### Step 3: Switch to Appropriate Branch
-
-**For ai-context issues:**
+**For pwiz repository issues:**
 ```bash
-git checkout ai-context
-git pull origin ai-context
-```
-
-**For other issues:**
-```bash
+cd pwiz
 git checkout master
 git pull origin master
 git checkout -b Skyline/work/YYYYMMDD_<description>
 ```
 
-### Step 4: Create TODO File
+**For pwiz-ai repository issues:**
+No branch needed - work directly on pwiz-ai master.
+
+### Step 3: Create TODO File
 
 Create `ai/todos/active/TODO-YYYYMMDD_<issue_title_slug>.md`:
 
@@ -57,10 +50,10 @@ Create `ai/todos/active/TODO-YYYYMMDD_<issue_title_slug>.md`:
 # <Issue Title>
 
 ## Branch Information
-- **Branch**: `ai-context` or `Skyline/work/YYYYMMDD_<description>`
-- **Base**: `ai-context` or `master`
+- **Branch**: `Skyline/work/YYYYMMDD_<description>` | `master` (pwiz-ai)
+- **Base**: `master`
 - **Created**: YYYY-MM-DD
-- **GitHub Issue**: https://github.com/ProteoWizard/pwiz/issues/$ARGUMENTS
+- **GitHub Issue**: <issue URL>
 
 ## Objective
 
@@ -77,32 +70,31 @@ Create `ai/todos/active/TODO-YYYYMMDD_<issue_title_slug>.md`:
 Starting work on this issue...
 ```
 
-### Step 5: Signal Ownership
+### Step 4: Signal Ownership
 
-**Git signal** - Commit and push TODO:
+**Commit TODO to pwiz-ai:**
 ```bash
-git add ai/todos/active/TODO-*.md
-git commit -m "Start work on #$ARGUMENTS - <brief description>"
-git push
+cd ai
+git add todos/active/TODO-*.md
+git commit -m "Start work on <issue> - <brief description>"
+git push origin master
 ```
 
-**GitHub signal** - Comment on the issue:
+**Comment on the issue:**
 ```bash
 gh issue comment $ARGUMENTS --body "Starting work.
-- Branch: \`<branch-name>\`
+- Branch: \`<branch-name>\` (or pwiz-ai master)
 - TODO: \`ai/todos/active/TODO-YYYYMMDD_<slug>.md\`"
 ```
 
-### Step 6: Load Context
+### Step 5: Load Context
 
-Based on issue labels, load appropriate skills:
-- `ai-context` label → Load skyline-development skill
-- `skyline` label → Load skyline-development skill
-- `tutorial` label → Load tutorial-documentation skill
+Based on issue type, load appropriate skills:
+- Code changes → Load skyline-development skill
+- Tutorial work → Load tutorial-documentation skill
+- AI tooling → Load ai-context-documentation skill
 
-Check for related documentation referenced in issue.
-
-### Step 7: Begin Work
+### Step 6: Begin Work
 
 With TODO created and ownership signaled, begin implementing the issue scope.
 
@@ -110,20 +102,19 @@ Reference the issue in commits: `See #$ARGUMENTS` or `Fixes #$ARGUMENTS`
 
 ## Completion
 
-**For ai-context issues:**
-1. Update TODO Progress Log
-2. Move TODO to `ai/todos/completed/`
-3. Commit and push to ai-context
+**For pwiz issues:**
+1. Update TODO Progress Log with completion summary
+2. Move TODO: `git mv todos/active/TODO-*.md todos/completed/`
+3. Commit to pwiz-ai master
+4. Create PR to pwiz master (use `Fixes #$ARGUMENTS` to auto-close issue)
+
+**For pwiz-ai issues:**
+1. Update TODO Progress Log with completion summary
+2. Move TODO: `git mv todos/active/TODO-*.md todos/completed/`
+3. Commit to pwiz-ai master
 4. Close issue: `gh issue close $ARGUMENTS --comment "Completed. See ai/todos/completed/TODO-*.md"`
-
-**For other issues:**
-1. Update TODO Progress Log
-2. Move TODO to `ai/todos/completed/`
-3. Create PR to master (follow ai/WORKFLOW.md)
-4. Issue closed when PR merges (use `Fixes #$ARGUMENTS` in PR)
-
-If work remains, create new GitHub Issues for remaining scope.
 
 ## Related
 
 - ai/WORKFLOW.md - Standard branching and TODO workflow
+- ai/docs/ai-repository-strategy.md - Two-repository structure

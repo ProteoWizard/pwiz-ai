@@ -34,7 +34,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - Maximum 10 lines total
 - No emojis, no markdown links
 
-**ai-context branch**: Omit TODO reference (no active TODO)
+**pwiz-ai repository (ai/)**: Omit TODO reference for documentation-only changes
 
 ## Branch Naming
 

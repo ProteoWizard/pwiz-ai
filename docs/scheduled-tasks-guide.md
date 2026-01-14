@@ -118,7 +118,7 @@ All outputs stay within the project under `ai/.tmp/`:
 ## The Daily Report Script
 
 The script `ai/scripts/Invoke-DailyReport.ps1` handles:
-- Pulling latest `ai-context` branch (ensures latest scripts/commands)
+- Pulling latest pwiz-ai master (ensures latest scripts/commands)
 - Running Claude Code with `/pw-daily`
 - Emailing results via Gmail MCP
 - Logging to `ai/.tmp/scheduled/`

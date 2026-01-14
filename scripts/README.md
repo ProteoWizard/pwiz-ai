@@ -256,12 +256,12 @@ Custom status line script for Claude Code showing project name, git branch, mode
 
 **Example output:**
 ```
-pwiz-ai [ai-context] | Opus | 36% used
+pwiz-ai [master] | Opus | 36% used
 ```
 
 **What it shows:**
 - Project directory name (e.g., `pwiz-ai`)
-- Current git branch (e.g., `[ai-context]`)
+- Current git branch (e.g., `[master]`)
 - Model name (e.g., `Opus`, `Sonnet`)
 - Context window usage percentage
 

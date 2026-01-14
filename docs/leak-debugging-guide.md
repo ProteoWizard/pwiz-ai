@@ -428,7 +428,7 @@ The current workflow requires a human to review nightly test results and select 
 
 - [x] Tooling for leak isolation (this guide)
 - [x] Handle reporting improvements (`-ReportHandles`, `-SortHandlesByCount`)
-- [ ] MCP server for LabKey integration (see `ai/todos/backlog/brendanx67/TODO-labkey_mcp_exception_triage.md` on ai-context branch)
+- [x] MCP server for LabKey integration (see `ai/mcp/LabKeyMcp/`)
 - [ ] `/pw-review-leaks` slash command
 - [ ] Autonomous investigation mode
 

@@ -130,7 +130,7 @@ To maximize coding context, consider maintaining **two separate checkouts**:
 
 | Directory | Branch | MCP Servers | Purpose |
 |-----------|--------|-------------|---------|
-| `C:\proj\pwiz-ai` | `ai-context` | LabKey + Gmail | Daily reports, documentation, scheduled tasks |
+| `C:\proj\ai` | `master` | LabKey + Gmail | Daily reports, documentation, scheduled tasks |
 | `C:\proj\pwiz` | `master` or feature | None | Active coding with maximum context |
 
 **Why this helps**:
@@ -139,7 +139,7 @@ To maximize coding context, consider maintaining **two separate checkouts**:
 - No context wasted on unused tools
 
 **Setup**:
-1. Keep existing `pwiz-ai` checkout with MCP servers for ai-context work
+1. Keep `ai/` checkout (pwiz-ai repo) with MCP servers for AI tooling and documentation work
 2. Use a separate checkout (e.g., `pwiz`, `pwiz-feature`) without MCP registration for coding
 3. The MCP servers are project-specific in `~/.claude.json`, so different directories can have different configurations
 

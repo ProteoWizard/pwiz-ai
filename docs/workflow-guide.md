@@ -2,31 +2,43 @@
 
 This document outlines the Git branch strategy and workflow for the Skyline project, including guidelines for LLM tools working on branches.
 
+## Repository Structure
+
+Development involves two repositories:
+
+| Repository | Local Path | Purpose |
+|------------|------------|---------|
+| `ProteoWizard/pwiz` | `pwiz/` | Skyline source code |
+| `ProteoWizard/pwiz-ai` | `ai/` | AI tooling, documentation, TODOs |
+
+**Key point**: The `ai/` directory is a separate git repository (`pwiz-ai`). Changes to anything under `ai/` are committed and pushed directly to `pwiz-ai` master - no feature branches needed.
+
+See [ai-repository-strategy.md](ai-repository-strategy.md) for setup details.
+
 ## Branch Strategy
 
-### Master Branch
+### Master Branch (pwiz)
 - **Purpose**: Stable releases for Skyline-daily builds
 - **Protection**: Direct pushes require review
 - **Merges**: Only from release branches or completed work branches
 - **Naming**: `master`
 
-### Release Branches
+### Release Branches (pwiz)
 - **Purpose**: Release preparation and stabilization
 - **Naming**: `Skyline/skyline_YY_N` (e.g., `Skyline/skyline_25_1`)
 - **Lifecycle**: Created from master, merged back to master after release
 - **Usage**: Bug fixes, release preparation, final testing
 
-### Work Branches
+### Work Branches (pwiz)
 - **Purpose**: Feature development, refactoring, bug fixes
 - **Naming**: `Skyline/work/YYYYMMDD_description` (e.g., `Skyline/work/20251010_webclient_replacement`)
 - **Lifecycle**: Created from master, merged to master when complete
 - **Usage**: All development work, including LLM-assisted changes
 
-### AI-Context Branch
-- **Purpose**: Rapid iteration on AI tooling and documentation
-- **Naming**: `ai-context`
-- **Lifecycle**: Long-lived branch, merges to master periodically
-- **Usage**: ai/ folder changes, MCP tools, skills, commands
+### pwiz-ai Repository
+- **Purpose**: AI tooling, documentation, TODOs
+- **Branch**: All work happens on `master` directly
+- **No feature branches needed**: Commit and push to master
 
 ## Backlog and TODO System
 
@@ -73,20 +85,19 @@ The file system IS the context. That's the key insight for LLM-assisted developm
 
 ### Where Work Lives
 
-| Stage | Location | Description |
-|-------|----------|-------------|
-| **Backlog** | GitHub Issues | All planned work items |
-| **Active** | `ai/todos/active/` | Work in progress (committed to branch) |
-| **Completed** | `ai/todos/completed/` | Historical record, archived to `completed/YYYY/` when folder grows |
+| Stage | Location | Repository |
+|-------|----------|------------|
+| **Backlog** | GitHub Issues | pwiz |
+| **Active TODOs** | `ai/todos/active/` | pwiz-ai |
+| **Completed TODOs** | `ai/todos/completed/` | pwiz-ai |
 
 ### GitHub Issue Labels
 
 #### Component Labels
-| Label | Description | Branch Strategy |
-|-------|-------------|-----------------|
-| `skyline` | Skyline application issues | Create Skyline/work branch from master |
-| `pwiz` | ProteoWizard/msconvert issues | Create Skyline/work branch from master |
-| `ai-context` | AI tooling and context | Work directly on ai-context branch |
+| Label | Description |
+|-------|-------------|
+| `skyline` | Skyline application issues |
+| `pwiz` | ProteoWizard/msconvert issues |
 
 #### Workflow Labels
 | Label | Description |
@@ -119,8 +130,8 @@ For files **in ai/todos/active/** (work in progress):
 # TODO-YYYYMMDD_<branch_specifier>.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/YYYYMMDD_<branch_specifier>` | `ai-context`
-- **Base**: `master` | `ai-context` | `Skyline/skyline_YY_N`
+- **Branch**: `Skyline/work/YYYYMMDD_<branch_specifier>`
+- **Base**: `master` | `Skyline/skyline_YY_N`
 - **Created**: YYYY-MM-DD
 - **Status**: In Progress | Completed
 - **GitHub Issue**: [#NNNN](https://github.com/ProteoWizard/pwiz/issues/NNNN)
@@ -221,78 +232,70 @@ When switching between LLM tools or sessions:
 
 ## Branch Lifecycle Workflows
 
-**IMPORTANT**: All TODO files in `ai/todos/` are Git-tracked. Always use Git commands (`git mv`, `git add`, `git commit`) when creating, moving, or modifying TODO files.
+**IMPORTANT**:
+- All TODO files in `ai/todos/` are Git-tracked in the **pwiz-ai repository**
+- Code changes go to **pwiz repository** feature branches
+- Always use Git commands (`git mv`, `git add`, `git commit`) when creating, moving, or modifying TODO files
 
 ### Workflow 1: Starting Work from GitHub Issue (/pw-startissue)
 
-Use `/pw-startissue <number>` for zero-prompt startup. The command reads the issue labels and determines the appropriate branch strategy.
+Use `/pw-startissue <number>` for zero-prompt startup.
 
-#### Step 1: Fetch Issue and Check Labels
-
+#### Step 1: Fetch Issue
 ```bash
 gh issue view <number> --json labels,title,body
 ```
 
-#### Step 2: Determine Branch Strategy
-
-**If `ai-context` label present** - Work directly on ai-context:
+#### Step 2: Create Feature Branch in pwiz
 ```bash
-git checkout ai-context
-git pull origin ai-context
-```
-
-**If NO `ai-context` label** - Create feature branch from master:
-```bash
+cd pwiz
 git checkout master
 git pull origin master
 git submodule update --init --recursive
 git checkout -b Skyline/work/YYYYMMDD_feature_name
 ```
 
-#### Step 3: Create TODO File
-
+#### Step 3: Create TODO File in pwiz-ai
 Create `ai/todos/active/TODO-YYYYMMDD_feature_name.md` with:
 - Branch Information populated
 - GitHub Issue linked
 - Scope from issue transferred to task checklist
 - Progress Log section started
 
-#### Step 4: Signal Ownership (CRITICAL)
-
-**Git signal** - Push TODO to ai-context (even if working on feature branch):
 ```bash
-git checkout ai-context
-git pull origin ai-context
-git add ai/todos/active/TODO-YYYYMMDD_feature_name.md
+cd ai
+git add todos/active/TODO-YYYYMMDD_feature_name.md
 git commit -m "Start work on #NNNN - feature name"
-git push origin ai-context
+git push origin master
 ```
 
-If working on feature branch, cherry-pick:
-```bash
-git checkout Skyline/work/YYYYMMDD_feature_name
-git cherry-pick <commit-hash>
-git push -u origin Skyline/work/YYYYMMDD_feature_name
-```
-
-**GitHub signal** - Comment on the issue:
+#### Step 4: Signal Ownership
+Comment on the GitHub issue:
 ```bash
 gh issue comment NNNN --body "Starting work.
-- Branch: \`Skyline/work/YYYYMMDD_feature_name\` (or \`ai-context\`)
+- Branch: \`Skyline/work/YYYYMMDD_feature_name\`
 - TODO: \`ai/todos/active/TODO-YYYYMMDD_feature_name.md\`"
 ```
 
 ### Workflow 2: Daily Development
 
+**Code changes** go to pwiz feature branch:
 ```bash
-# Make code changes
-# Update ai/todos/active/TODO-YYYYMMDD_description.md (mark tasks complete, update context)
+cd pwiz
 git add .
 git commit -m "Descriptive message of changes"
 git push
 ```
 
-**IMPORTANT**: Update the TODO file with **every commit** to track:
+**TODO updates** go directly to pwiz-ai master:
+```bash
+cd ai
+git add todos/active/TODO-*.md
+git commit -m "Update TODO progress"
+git push origin master
+```
+
+**IMPORTANT**: Update the TODO file with **every significant milestone** to track:
 - Which tasks were completed
 - Key decisions made
 - Files modified
@@ -328,22 +331,22 @@ See `ai/todos/active/TODO-YYYYMMDD_description.md` for complete details.
 
 ### Workflow 4: Completing Work and Merging
 
-#### Step 1: Final Updates to TODO
+#### Step 1: Final Updates to TODO (in pwiz-ai)
 ```bash
+cd ai
 # Add completion summary to TODO file
 # Document what was actually done, bugs found, follow-up work
-git add ai/todos/active/TODO-YYYYMMDD_description.md
+git add todos/active/TODO-YYYYMMDD_description.md
 git commit -m "Add completion summary to TODO"
-git push
+git push origin master
 ```
 
-#### Step 2: Create Pull Request
+#### Step 2: Create Pull Request (in pwiz)
 - Document all changes and testing in PR description
 - Reference the GitHub Issue: `Fixes #NNNN` or `Closes #NNNN`
 - Link to the active TODO file for full context
 
 #### Step 3: Add PR Reference to TODO
-
 ```markdown
 - **PR**: [#1234](https://github.com/ProteoWizard/pwiz/pull/1234)
 ```
@@ -354,32 +357,23 @@ git push
 - Mark all completed tasks as `[x]`
 - Remove or mark incomplete any tasks not done
 
-**Move TODO to completed:**
+**Move TODO to completed (in pwiz-ai):**
 ```bash
-git mv ai/todos/active/TODO-YYYYMMDD_description.md ai/todos/completed/
+cd ai
+git mv todos/active/TODO-YYYYMMDD_description.md todos/completed/
 git commit -m "Move TODO to completed - PR #1234 merged"
-git push
+git push origin master
 ```
 
-#### Step 5: Sync to ai-context (CRITICAL before merging)
-
+#### Step 5: After Merge to Master (in pwiz)
 ```bash
-git checkout ai-context
-git pull origin ai-context
-git cherry-pick <commit-hash-of-TODO-move>
-git push origin ai-context
-git checkout Skyline/work/YYYYMMDD_feature
-```
-
-#### Step 6: After Merge to Master
-
-```bash
+cd pwiz
 git checkout master
 git pull origin master
 git branch -d Skyline/work/YYYYMMDD_description  # Delete local branch
 ```
 
-#### Step 7: Close GitHub Issue with Completion Summary
+#### Step 6: Close GitHub Issue with Completion Summary
 
 Post a summary to the issue before closing (this serves as the "index" while the TODO file remains the detailed record):
 
@@ -404,8 +398,9 @@ gh issue close NNNN
 
 When fixing bugs in recently completed features (still in `ai/todos/completed/`):
 
-**Create bug-fix branch:**
+**Create bug-fix branch in pwiz:**
 ```bash
+cd pwiz
 git checkout master
 git pull origin master
 git checkout -b Skyline/work/YYYYMMDD_original-feature-name-fix
@@ -413,7 +408,7 @@ git checkout -b Skyline/work/YYYYMMDD_original-feature-name-fix
 
 **Branch naming pattern:** Use original feature name + `-fix` suffix with today's date
 
-**Update the original TODO** (don't create new one):
+**Update the original TODO in pwiz-ai** (don't create new one):
 ```markdown
 ## Bug Fixes
 
@@ -436,7 +431,7 @@ When inspiration strikes during development:
 ```bash
 gh issue create \
   --title "Brief description" \
-  --label "ai-context,todo,enhancement" \
+  --label "skyline,todo,enhancement" \
   --body "## Summary
 Brief description of the work.
 
@@ -553,9 +548,8 @@ If issues are discovered after merge:
 
 ```bash
 # List open issues by label
-gh issue list --label "ai-context"
+gh issue list --label "skyline"
 gh issue list --label "todo"
-gh issue list --label "ai-context,todo"
 
 # View issue details
 gh issue view 3732

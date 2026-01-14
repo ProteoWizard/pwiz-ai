@@ -51,7 +51,8 @@ $ErrorActionPreference = "Stop"
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Configuration
-$WorkDir = "C:\proj\pwiz-ai"
+# Sibling mode: C:\proj contains both ai/ (pwiz-ai) and pwiz/ subdirectories
+$WorkDir = "C:\proj"
 $LogDir = Join-Path $WorkDir "ai\.tmp\scheduled"
 $Timestamp = Get-Date -Format "yyyyMMdd-HHmm"
 $LogFile = Join-Path $LogDir "daily-$Timestamp.log"
@@ -120,7 +121,8 @@ $ClaudeArgs = @(
 if ($DryRun) {
     Write-Host "Would execute:" -ForegroundColor Cyan
     Write-Host "  Working directory: $WorkDir"
-    Write-Host "  Git pull: git pull origin ai-context"
+    Write-Host "  Git pull ai/: git pull origin master"
+    Write-Host "  Git pull pwiz/: git pull origin master"
     Write-Host "  Log file: $LogFile"
     Write-Host "  Command: claude $($ClaudeArgs -join ' ')"
     exit 0
@@ -130,16 +132,32 @@ if ($DryRun) {
 $StartTime = Get-Date
 "[$StartTime] Starting Claude Code daily report" | Out-File -FilePath $LogFile -Encoding UTF8
 
-# Pull latest ai-context branch
-"[$(Get-Date)] Pulling latest ai-context branch..." | Out-File -FilePath $LogFile -Append -Encoding UTF8
-Push-Location $WorkDir
+# Pull latest pwiz-ai (ai/) master
+"[$(Get-Date)] Pulling latest ai/ (pwiz-ai) master..." | Out-File -FilePath $LogFile -Append -Encoding UTF8
+Push-Location (Join-Path $WorkDir "ai")
 try {
-    $GitOutput = git pull origin ai-context 2>&1
+    $GitOutput = git pull origin master 2>&1
     $GitOutput | Out-File -FilePath $LogFile -Append -Encoding UTF8
     if ($LASTEXITCODE -ne 0) {
-        "[$(Get-Date)] WARNING: Git pull failed, continuing with existing version" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+        "[$(Get-Date)] WARNING: ai/ git pull failed, continuing with existing version" | Out-File -FilePath $LogFile -Append -Encoding UTF8
     } else {
-        "[$(Get-Date)] Git pull successful" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+        "[$(Get-Date)] ai/ git pull successful" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+    }
+}
+finally {
+    Pop-Location
+}
+
+# Pull latest pwiz master
+"[$(Get-Date)] Pulling latest pwiz/ master..." | Out-File -FilePath $LogFile -Append -Encoding UTF8
+Push-Location (Join-Path $WorkDir "pwiz")
+try {
+    $GitOutput = git pull origin master 2>&1
+    $GitOutput | Out-File -FilePath $LogFile -Append -Encoding UTF8
+    if ($LASTEXITCODE -ne 0) {
+        "[$(Get-Date)] WARNING: pwiz/ git pull failed, continuing with existing version" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+    } else {
+        "[$(Get-Date)] pwiz/ git pull successful" | Out-File -FilePath $LogFile -Append -Encoding UTF8
     }
 }
 finally {

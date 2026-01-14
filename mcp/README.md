@@ -7,7 +7,7 @@ This directory contains Model Context Protocol (MCP) servers that enable Claude 
 | Server | Language | Description |
 |--------|----------|-------------|
 | [LabKeyMcp](LabKeyMcp/) | Python | Access to skyline.ms LabKey server (exceptions, nightly tests, wiki, support board) |
-| [StatusMcp](StatusMcp/) | TypeScript | System status info (timestamp, git status, disk space) for Claude Code context |
+| [StatusMcp](StatusMcp/) | Python | System status info (timestamp, git status) for Claude Code context |
 
 ## Purpose
 
@@ -35,5 +35,5 @@ MCP servers are configured in the user's Claude Code settings. See [LabKeyMcp/RE
 
 ## Related Documentation
 
-- [ai-context-branch-strategy.md](../docs/ai-context-branch-strategy.md) - How AI infrastructure is managed
+- [ai-repository-strategy.md](../docs/ai-repository-strategy.md) - How AI infrastructure is managed
 - [development-guide.md](../docs/mcp/development-guide.md) - Patterns for MCP development
