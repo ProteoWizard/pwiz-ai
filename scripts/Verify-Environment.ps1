@@ -237,21 +237,24 @@ if (Test-Command "python") {
 Write-Host "Checking Python MCP packages..." -ForegroundColor Gray
 $labkeyInstalled = $false
 $mcpInstalled = $false
+$pillowInstalled = $false
 try {
-    $pipShow = & pip show labkey mcp 2>&1
+    $pipShow = & pip show labkey mcp Pillow 2>&1
     if ($pipShow -match 'Name: labkey') { $labkeyInstalled = $true }
     if ($pipShow -match 'Name: mcp') { $mcpInstalled = $true }
+    if ($pipShow -match 'Name: Pillow') { $pillowInstalled = $true }
 } catch {}
 
-if ($labkeyInstalled -and $mcpInstalled) {
-    Add-Result "Python packages (labkey, mcp)" "OK" "installed" $true
-} elseif ($labkeyInstalled -or $mcpInstalled) {
+if ($labkeyInstalled -and $mcpInstalled -and $pillowInstalled) {
+    Add-Result "Python packages (labkey, mcp, Pillow)" "OK" "installed" $true
+} elseif ($labkeyInstalled -or $mcpInstalled -or $pillowInstalled) {
     $missing = @()
     if (-not $labkeyInstalled) { $missing += "labkey" }
     if (-not $mcpInstalled) { $missing += "mcp" }
+    if (-not $pillowInstalled) { $missing += "Pillow" }
     Add-Result "Python packages" "PARTIAL" "Missing: $($missing -join ', '). Run: pip install $($missing -join ' ')" $false
 } else {
-    Add-Result "Python packages (labkey, mcp)" "MISSING" "Run: pip install mcp labkey" $false
+    Add-Result "Python packages (labkey, mcp, Pillow)" "MISSING" "Run: pip install mcp labkey Pillow" $false
 }
 
 # 10. netrc file for LabKey

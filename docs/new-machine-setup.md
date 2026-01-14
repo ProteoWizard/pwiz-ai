@@ -652,8 +652,11 @@ Register the MCP servers with Claude Code.
 > ```
 > Only register servers not already in the list.
 
-**StatusMcp** - System status, git info, active project tracking (supports statusline):
+**StatusMcp** - System status, git info, screenshot/clipboard capture, active project tracking:
 ```powershell
+# Install dependencies (Pillow for clipboard image capture)
+pip install mcp Pillow
+
 claude mcp add status -- python C:\proj\ai\mcp\StatusMcp\server.py
 ```
 

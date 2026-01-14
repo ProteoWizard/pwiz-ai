@@ -4,12 +4,13 @@ Provides system status information including:
 - Current timestamp with timezone
 - Git repository status for multiple directories
 - Active project tracking for statusline display
+- Screenshot retrieval (clipboard first, then Pictures/Screenshots)
 
 This is a lightweight server for basic system context. For LabKey/Panorama
 data access, use the LabKeyMcp server instead.
 
 Setup:
-    pip install mcp
+    pip install mcp Pillow
     claude mcp add status -- python C:/proj/ai/mcp/StatusMcp/server.py
 """
 
@@ -174,6 +175,91 @@ def get_status(directories: Optional[list[str]] = None, verbose: bool = False) -
     }
 
     return json.dumps(status, indent=2)
+
+
+def get_clipboard_image() -> Optional[Path]:
+    """Try to get an image from the Windows clipboard and save it.
+
+    Returns the path to the saved image, or None if no image in clipboard.
+    """
+    try:
+        from PIL import ImageGrab
+
+        # Try to grab image from clipboard
+        image = ImageGrab.grabclipboard()
+        if image is None:
+            return None
+
+        # Save to temp location
+        tmp_dir = Path("C:/proj/ai/.tmp/screenshots")
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = tmp_dir / f"clipboard_{timestamp}.png"
+        image.save(output_path, "PNG")
+
+        return output_path
+    except ImportError:
+        logger.warning("PIL not available for clipboard image capture")
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to get clipboard image: {e}")
+        return None
+
+
+@mcp.tool()
+def get_last_screenshot() -> str:
+    """Get the path to the most recent screenshot.
+
+    Checks the Windows default screenshot folder (Pictures/Screenshots)
+    and returns the path to the newest PNG file.
+
+    Use this when the user says "I took a screenshot" or similar.
+    Then use the Read tool to view the returned path.
+    """
+    # First, try to get image from clipboard
+    clipboard_path = get_clipboard_image()
+    if clipboard_path:
+        return json.dumps({
+            "path": str(clipboard_path),
+            "filename": clipboard_path.name,
+            "source": "clipboard",
+            "modified": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "size_bytes": clipboard_path.stat().st_size,
+            "instruction": "Use the Read tool to view this image file"
+        }, indent=2)
+
+    # Fall back to Screenshots folder
+    pictures = Path(os.path.expanduser("~/Pictures/Screenshots"))
+
+    if not pictures.exists():
+        return json.dumps({
+            "error": "No image in clipboard and screenshot folder not found",
+            "folder": str(pictures),
+            "suggestion": "Copy a screenshot to clipboard (PrintScreen, Win+Shift+S, or Snipping Tool)"
+        })
+
+    # Find all PNG files and sort by modification time
+    screenshots = list(pictures.glob("*.png"))
+    if not screenshots:
+        return json.dumps({
+            "error": "No image in clipboard and no PNG files in screenshot folder",
+            "folder": str(pictures),
+            "suggestion": "Copy a screenshot to clipboard (PrintScreen, Win+Shift+S, or Snipping Tool)"
+        })
+
+    # Get the most recent
+    latest = max(screenshots, key=lambda p: p.stat().st_mtime)
+    mtime = datetime.fromtimestamp(latest.stat().st_mtime)
+
+    return json.dumps({
+        "path": str(latest),
+        "filename": latest.name,
+        "source": "screenshots_folder",
+        "modified": mtime.strftime("%Y-%m-%d %H:%M:%S"),
+        "size_bytes": latest.stat().st_size,
+        "instruction": "Use the Read tool to view this image file"
+    }, indent=2)
 
 
 @mcp.tool()

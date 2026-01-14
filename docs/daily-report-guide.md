@@ -102,6 +102,57 @@ This report uses **two complementary data sources**:
 
 ---
 
+## Ignored Computers
+
+Some computers may be temporarily or permanently removed from the test pool (hardware failure, RMA, repurposing). These should be ignored in daily reports to avoid noise.
+
+### Configuration File
+
+**Location**: `ai/.tmp/history/computer-status.json`
+
+```json
+{
+  "_schema_version": 1,
+  "_last_updated": "2026-01-14",
+  "ignored_computers": {
+    "COMPUTER-NAME": {
+      "reason": "Why this computer is ignored",
+      "ignored_since": "2026-01-14",
+      "alarm_date": "2026-02-14",
+      "alarm_note": "Reminder text when alarm is due"
+    }
+  }
+}
+```
+
+### Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `reason` | Yes | Why the computer is being ignored |
+| `ignored_since` | Yes | Date when ignore started (YYYY-MM-DD) |
+| `alarm_date` | No | Date to remind about this computer (YYYY-MM-DD) |
+| `alarm_note` | No | Text to show when alarm is due |
+
+### Report Behavior
+
+When a computer is in `ignored_computers`:
+
+1. **Missing computers**: Do not include in "Missing" count or warnings
+2. **Failures/leaks**: Still collect data but filter from "Key Findings"
+3. **Alarms**: Check `alarm_date` at report start; if due/overdue, include reminder in email
+4. **Historical data**: Continue saving to daily-summary JSON for historical record
+
+### Managing Ignored Computers
+
+**To ignore a computer**: Add entry to `computer-status.json` with reason and optional alarm
+
+**To restore a computer**: Remove entry from `ignored_computers` object
+
+**To update alarm**: Edit the `alarm_date` and `alarm_note` fields
+
+---
+
 ## Default Date Logic
 
 Each report type has different day boundaries:
@@ -125,7 +176,22 @@ If no date provided, calculate defaults:
 - For exceptions: Yesterday's date
 - For support: 1 day lookback
 
-### Step 2: Read Inbox Emails
+### Step 2: Load Ignored Computers
+
+Read `ai/.tmp/history/computer-status.json` to get the list of ignored computers.
+
+```python
+# Pseudocode
+ignored_computers = load_json("ai/.tmp/history/computer-status.json")["ignored_computers"]
+# Check for due alarms
+for computer, config in ignored_computers.items():
+    if config.get("alarm_date") and config["alarm_date"] <= today:
+        due_alarms.append((computer, config["alarm_note"]))
+```
+
+If file doesn't exist, proceed with empty ignored list.
+
+### Step 3: Read Inbox Emails
 
 Search the Gmail inbox for today's notification emails:
 
@@ -157,7 +223,7 @@ For each email found, use `read_email(messageId)` to get full content.
 - Each exception entry with location, version, Installation ID, timestamp, stack trace
 - Group by Installation ID (same user hitting repeatedly vs different users)
 
-### Step 3: Generate MCP Reports
+### Step 4: Generate MCP Reports
 
 Run these three MCP calls:
 
@@ -174,7 +240,7 @@ Read generated reports from `ai/.tmp/`:
 - `exceptions-report-YYYYMMDD.md`
 - `support-report-YYYYMMDD.md`
 
-### Step 4: Fetch Failure Details and Fingerprints
+### Step 5: Fetch Failure Details and Fingerprints
 
 For each test failure, fetch detailed stack trace:
 
@@ -189,20 +255,31 @@ Extract: exception type, message, location, fingerprint.
 https://skyline.ms/home/development/{folder}/testresults-showFailures.view?end={MM}%2F{DD}%2F{YYYY}&failedTest={TestName}
 ```
 
-### Step 5: Check Computer Status and Alarms
+### Step 6: Check Computer Status and Alarms
+
+Check both MCP alarms and local ignored computer alarms:
 
 ```
+# MCP alarms (if available)
 check_computer_alarms()
+
+# Local alarms from Step 2
+for computer, note in due_alarms:
+    # Include in email: "Reminder: {computer} - {note}"
 ```
 
-Returns due/overdue alarms for computers that should be reactivated.
-
-For missing computers, check status:
-```
-list_computer_status(container_path="/home/development/Nightly x64")
+For missing computers, filter out ignored computers before reporting:
+```python
+missing = [c for c in mcp_missing if c not in ignored_computers]
 ```
 
-### Step 6: Analyze Patterns
+For failures/leaks, filter out ignored computers from Key Findings:
+```python
+key_failures = {test: computers for test, computers in failures.items()
+                if any(c not in ignored_computers for c in computers)}
+```
+
+### Step 7: Analyze Patterns
 
 **First, check release cycle context** by reading `ai/docs/release-cycle-guide.md`:
 - If FEATURE COMPLETE, both master and release branch run nightly tests
@@ -222,7 +299,7 @@ This detects:
 - **CHRONIC**: Intermittent spanning 30+ days
 - **EXTERNAL**: Involves external service (Koina, Panorama)
 
-### Step 7: Search PRs for Potential Fixes (Standard/Deep Mode)
+### Step 8: Search PRs for Potential Fixes (Standard/Deep Mode)
 
 For tests marked "Check PRs" (multi-day failure that stopped):
 
@@ -230,7 +307,7 @@ For tests marked "Check PRs" (multi-day failure that stopped):
 2. Search merged PRs: `gh pr list --state merged --search "TestName" --limit 5`
 3. Classify: "Likely fixed by PR#XXXX" or "No fix PR found - may be intermittent"
 
-### Step 8: Check for Already-Fixed Failures
+### Step 9: Check for Already-Fixed Failures
 
 Compare commit hashes from failing runs with current branch HEAD. A failure may be a "stale echo" from an older commit.
 
@@ -238,7 +315,7 @@ If a fix PR merged after the failing run's commit:
 - Note: "Already fixed by PR#XXXX, expect resolution tomorrow"
 - Skip further investigation
 
-### Step 9: Investigate True Regressions (Standard/Deep Mode)
+### Step 10: Investigate True Regressions (Standard/Deep Mode)
 
 For failures running on current HEAD:
 
@@ -247,7 +324,7 @@ For failures running on current HEAD:
 3. Cross-reference failure start date with commit dates
 4. Document: "TestFoo likely regressed by commit abc123"
 
-### Step 10: Save Daily Summary JSON
+### Step 11: Save Daily Summary JSON
 
 ```
 save_daily_summary(
@@ -263,19 +340,19 @@ save_daily_summary(
 )
 ```
 
-### Step 11: Archive Processed Emails
+### Step 12: Archive Processed Emails
 
 ```
 batch_modify_emails(messageIds=[...], removeLabelIds=["INBOX"])
 ```
 
-### Step 12: Self-Improvement Reflection (Required)
+### Step 13: Self-Improvement Reflection (Required)
 
 1. Read active TODO at `ai/todos/active/TODO-20251228_daily_report_improvements.md`
 2. Vote on 1-3 existing backlog items based on this session's experience
 3. Record observations and new improvement ideas
 
-### Step 13: Write Execution Log
+### Step 14: Write Execution Log
 
 Save to `ai/.tmp/logs/daily-session-YYYYMMDD.md`:
 - Effort level, duration, timestamps
@@ -302,24 +379,83 @@ draft_email(
 
 **Subject**: `Skyline Daily Summary - Month DD, YYYY`
 
-**Structure**:
+### Section Order
+
+The email has 3 major sections in this order (shortest/most urgent first):
+
+1. **Support Board** - Real users waiting for answers (highest priority)
+2. **Exceptions** - Bugs impacting real users
+3. **Nightly Testing** - Longest section, includes failures, leaks, and infrastructure
+
+### Email Structure
+
 ```
+## Summary
+[AI analysis of what's most important - patterns, action items, context]
+
 ## Quick Status
-- Nightly: [Err: X | Warn: X | Pass: X | Crashed: X | Missing: X] - N tests
-- Exceptions: X new (Y unique issues, Z users affected)
 - Support: X threads needing attention
+- Exceptions: X new (Y already fixed, Z users affected)
+- Nightly: Err: X | Warn: X | Pass: X | Missing: X | N tests
 
-## Key Findings
-[Prioritized list - early terminations are HIGH PRIORITY]
+[Ignored computers note if any - yellow banner]
 
-## Already Fixed (Stale Echoes)
-[Failures from old commits that have been fixed]
+## Support Board
+[Threads needing response, with linked titles]
 
-## Details
-[Expandable sections for each category]
+## Exceptions
+[Table: Issue (linked), Location, Version, Status]
 
-## Improvement Ideas
-[Votes and new ideas from self-reflection]
+## Nightly Testing
+### Test Failures (N)
+[Table: Test (linked), Computer, Issue]
+
+### Leaks (N)
+[Table: Test (linked), Computer, Type]
+
+### Missing Computers
+[List by folder]
+```
+
+### Summary Section Guidelines
+
+The Summary section provides AI analysis of the day's data. Include:
+
+1. **Infrastructure issues** - Ignored computers, crashed runs, missing machines
+2. **Patterns** - Multiple failures on same machine, related leaks, systemic issues
+3. **Action items** - Things that need human intervention (corrupt files, re-downloads)
+4. **Context** - Already-fixed exceptions, stale echoes from old commits
+5. **Priorities** - What should a developer look at first?
+
+Example:
+```html
+<div class="summary-box">
+<p><strong>Infrastructure:</strong> Two machines returning to Dell (i9-14800 damage).</p>
+<p><strong>BRENDANX-UW7:</strong> 3 failures today — may indicate machine-specific issues.</p>
+<p><strong>Action needed:</strong> WatersIMSImportTest needs zip file re-downloaded.</p>
+<p><strong>Already fixed:</strong> GetMedianPeak NullRef fixed by PR#3785.</p>
+</div>
+```
+
+### Required Links
+
+**Link test names directly** - no separate "View" column:
+```html
+<td><a href="https://skyline.ms/home/development/{FOLDER}/testresults-showFailures.view?end={MM}%2F{DD}%2F{YYYY}&failedTest={TEST_NAME}">{TEST_NAME}</a></td>
+```
+Where FOLDER is URL-encoded (e.g., `Nightly%20x64`, `Performance%20Tests`).
+
+The linked page has radio buttons for Failures/Leaks/Hangs views, plus date range expansion.
+
+**Exception links** (link the exception type):
+```html
+<td><a href="https://skyline.ms/home/issues/exceptions/announcements-thread.view?rowId={ROW_ID}">{ExceptionType}</a></td>
+```
+ROW_ID comes from the `row_id` field in exception reports (e.g., 73730).
+
+**Support thread links** (link the thread title):
+```html
+<a href="https://skyline.ms/home/support/announcements-thread.view?rowId={THREAD_ID}">{Thread Title}</a>
 ```
 
 ### Detecting Early Terminations
