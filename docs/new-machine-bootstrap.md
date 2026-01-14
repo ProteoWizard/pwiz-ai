@@ -92,6 +92,8 @@ Help me set up a Skyline development environment on this Windows machine.
 Fetch and follow the instructions at:
 https://skyline.ms/new-machine-setup.url
 
+This is a PRISTINE machine - I just completed the bootstrap steps (Git and Claude Code installed, nothing else).
+
 Guide me through each step, verifying success before moving on.
 Ask me before running any installers.
 ```

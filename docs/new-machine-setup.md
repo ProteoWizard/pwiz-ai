@@ -23,10 +23,27 @@ You are helping a developer set up a Windows machine for Skyline development. Fo
 - **Complete ALL phases**: Do not declare success until you have worked through every phase in this document. Phases marked "optional" should still be offered to the user.
 - **Ask before installing**: Always confirm with the user before running installers
 - **Verify each step**: Run verification commands to confirm success before moving on
-- **Handle existing installs**: Check if software is already installed and skip if so
 - **Guide GUI steps**: For Visual Studio and other GUI installers, tell the user exactly what to click
 - **Track progress**: Keep the user informed of what's done and what's next
 - **Final report required**: At the end, produce a comprehensive report covering ALL items (completed, skipped, and deferred). See "Final Report" section at the end of this document.
+
+---
+
+## Determine Setup Mode
+
+**Before starting, ask the developer which scenario applies:**
+
+> "What type of machine are we setting up?
+> 1. **Pristine machine** - Just completed new-machine-bootstrap.md (Git and Claude Code installed)
+> 2. **Existing development machine** - Already has Visual Studio, build environment, and other tools"
+
+**Based on their answer:**
+
+- **Pristine mode**: The developer followed `new-machine-bootstrap.md`, so Git and Claude Code are already installed and working. Proceed through each phase without checking for existing installations—install commands will run directly. Start at Phase 1.1 (Node.js).
+
+- **Existing mode**: The machine has a working Skyline development environment (via HowToBuildSkylineTip or prior setup). Check for each component before installing. Skip components already present. Many phases may be quick verifications rather than installations.
+
+Record their choice and reference it throughout setup.
 
 ---
 
@@ -49,6 +66,8 @@ winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agr
 After installation, **restart the terminal** to get node/npm in PATH.
 
 ### 1.2 Check for Git
+
+> **Pristine mode**: Skip this step—Git was installed during new-machine-bootstrap.md.
 
 ```powershell
 git --version
@@ -156,8 +175,16 @@ git config --global user.email "their-email@example.com"
 
 ### 1.9 Clone the Repositories
 
+> **Existing mode**: Check what's already present before cloning:
+> ```powershell
+> Test-Path C:\proj\ai\.git           # pwiz-ai already cloned?
+> Test-Path C:\proj\pwiz\.git         # pwiz already cloned?
+> Test-Path C:\proj\.claude           # .claude junction exists?
+> ```
+> Skip any steps for components that already exist.
+
 ```powershell
-# Create project directory
+# Create project directory (if needed)
 New-Item -ItemType Directory -Path C:\proj -Force
 cd C:\proj
 
@@ -184,29 +211,30 @@ Test-Path C:\proj\pwiz\pwiz_tools\Skyline\Skyline.sln   # Should be True
 
 **For LLM assistants:** Offer to configure a statusline for Claude Code that shows the current project, git branch, model, and context usage. This is a personal preference setting.
 
-Example statusline output: `proj [main] | Opus | 36% used`
+Example statusline output: `pwiz [Skyline/work/20260113_feature] | Opus | 36% used`
 
-To configure, run these commands directly (do NOT use the statusline-setup agent - it provides instructions but doesn't execute them):
+> **Existing mode**: Check if statusline is already configured:
+> ```powershell
+> Get-Content ~/.claude/settings.json | Select-String "statusLine"
+> ```
+> If already configured, skip this step unless the user wants to update it.
 
-```bash
-# Copy the statusline script
-cp C:/proj/ai/scripts/statusline.ps1 ~/.claude/statusline.ps1
-```
-
-Then read `~/.claude/settings.json` and add the statusLine configuration, preserving any existing settings:
+Read `~/.claude/settings.json` and add the statusLine configuration, preserving any existing settings:
 
 ```json
 {
   "statusLine": {
     "type": "command",
-    "command": "pwsh -NoProfile -File C:\\Users\\USERNAME\\.claude\\statusline.ps1"
+    "command": "pwsh -NoProfile -File C:\\proj\\ai\\scripts\\statusline.ps1"
   }
 }
 ```
 
-Replace `USERNAME` with the actual username (e.g., from `$env:USERNAME` or `whoami`).
+> **Note:** Reference the script directly from the pwiz-ai checkout (`C:\proj\ai\scripts\`) rather than copying it. This ensures you always have the latest version.
 
 After configuration, tell the user to restart Claude Code (`/exit` then `claude`) to activate the statusline.
+
+The statusline integrates with the StatusMcp server (configured in Phase 7.3) to show the active project's git branch in sibling mode setups.
 
 The user can decline if they prefer the default Claude Code display.
 
@@ -296,10 +324,16 @@ These tools are essential for productive Skyline development.
 
 ### 3.1 Essential Tools
 
-Install these core tools (all available via winget except ReSharper):
+Install these core tools (all available via winget except ReSharper).
+
+> **Existing mode**: Check each tool before installing. Winget will skip already-installed packages, but checking first provides clearer feedback.
 
 **TortoiseGit** - Windows Explorer integration for Git:
 ```powershell
+# Existing mode check:
+Test-Path "C:\Program Files\TortoiseGit\bin\TortoiseGitProc.exe"
+
+# Install if missing:
 winget install TortoiseGit.TortoiseGit --accept-source-agreements --accept-package-agreements
 ```
 After installation, restart Windows Explorer to enable TortoiseGit status icons:
@@ -321,10 +355,14 @@ This step is critical. Without it, TortoiseGit will fail to authenticate with Gi
 
 **Notepad++** - Lightweight text editor with syntax highlighting:
 ```powershell
+# Existing mode check:
+Test-Path "C:\Program Files\Notepad++\notepad++.exe"
+
+# Install if missing:
 winget install Notepad++.Notepad++ --accept-source-agreements --accept-package-agreements
 ```
 
-**ReSharper** - JetBrains code analysis extension for Visual Studio:
+**ReSharper** - JetBrains code analysis extension for Visual Studio (check in VS Extensions menu):
 1. Go to: https://www.jetbrains.com/resharper/download/
 2. Download and run the installer
 3. A JetBrains license is required (30-day trial available)
@@ -355,16 +393,23 @@ winget install WinSCP.WinSCP --accept-source-agreements --accept-package-agreeme
 
 ### 3.3 AI Development Tools
 
-These CLI tools support AI-assisted development workflows:
+These CLI tools support AI-assisted development workflows.
+
+> **Existing mode**: Check each tool with the verification command before installing.
 
 **GitHub CLI** - For PR creation, issue management:
 ```powershell
+# Existing mode check:
+gh --version
+
+# Install if missing:
 winget install GitHub.cli --accept-source-agreements --accept-package-agreements
 ```
 
-After installation, authenticate:
+After installation (or if already installed but not authenticated), authenticate:
 ```powershell
-gh auth login
+gh auth status    # Check if already authenticated
+gh auth login     # If not authenticated
 ```
 (Choose GitHub.com, HTTPS, authenticate with browser)
 
@@ -372,22 +417,41 @@ gh auth login
 
 **ReSharper CLI** - Code inspection from command line:
 ```powershell
+# Existing mode check:
+jb --version
+
+# Install if missing:
 dotnet tool install -g JetBrains.ReSharper.GlobalTools
 ```
 
 **dotCover CLI** - Code coverage analysis:
 ```powershell
+# Existing mode check:
+dotCover --version
+
+# Install if missing:
 dotnet tool install --global JetBrains.dotCover.CommandLineTools
 ```
 
 **Python packages** - For MCP servers and LabKey integration:
 ```powershell
+# Existing mode check:
+python -c "import mcp; import labkey; print('OK')"
+
+# Install if missing:
 pip install mcp labkey
 ```
 
 ---
 
 ## Phase 4: Initial Build
+
+> **Existing mode**: Check if build artifacts already exist:
+> ```powershell
+> Test-Path "C:\proj\pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline.exe"
+> Test-Path "C:\proj\pwiz\pwiz_tools\Skyline\bin\x64\Release\TestRunner.exe"
+> ```
+> If both exist and the user confirms the build is recent, skip to Phase 5.
 
 ### 4.1 Vendor License Agreement
 
@@ -544,6 +608,14 @@ This checks for all required tools and reports any missing components.
 
 The LabKey MCP server needs credentials for skyline.ms access.
 
+> **Existing mode**: Check if credentials are already configured:
+> ```powershell
+> Test-Path "$env:USERPROFILE\.netrc"
+> # If exists, verify it contains skyline.ms:
+> Get-Content "$env:USERPROFILE\.netrc" | Select-String "skyline.ms"
+> ```
+> If properly configured, skip to 7.3.
+
 > **IMPORTANT - Use a dedicated +claude account, not your personal account:**
 > - Team members: `yourname+claude@proteinms.net`
 > - Interns/others: `yourname+claude@gmail.com`
@@ -567,12 +639,25 @@ For full LabKey MCP documentation, see: `ai/mcp/LabKeyMcp/README.md`
 
 ### 7.3 MCP Server Configuration
 
-Register the LabKey MCP server with Claude Code:
+Register the MCP servers with Claude Code.
+
+> **Existing mode**: First check which servers are already registered:
+> ```powershell
+> claude mcp list
+> ```
+> Only register servers not already in the list.
+
+**StatusMcp** - System status, git info, active project tracking (supports statusline):
+```powershell
+claude mcp add status -- python C:\proj\ai\mcp\StatusMcp\server.py
+```
+
+**LabKey MCP** - Access to skyline.ms (nightly tests, exceptions, wiki, support):
 ```powershell
 claude mcp add labkey -- python C:\proj\ai\mcp\LabKeyMcp\server.py
 ```
 
-**After registering, restart Claude Code** to activate the MCP server:
+**After registering new servers, restart Claude Code** to activate them:
 1. Exit Claude Code (`/exit`)
 2. Resume with `claude --continue`
 
@@ -592,10 +677,11 @@ Check that MCP servers are connected:
 claude mcp list
 ```
 
-Expected output shows both servers connected:
+Expected output shows servers connected:
 ```
+status: python C:/proj/ai/mcp/StatusMcp/server.py - ✓ Connected
 labkey: python C:/proj/ai/mcp/LabKeyMcp/server.py - ✓ Connected
-gmail: npx @gongrzhe/server-gmail-autoauth-mcp - ✓ Connected
+gmail: npx @gongrzhe/server-gmail-autoauth-mcp - ✓ Connected (if configured)
 ```
 
 For full AI tooling documentation, see: `C:\proj\ai\docs\developer-setup-guide.md`
@@ -605,6 +691,19 @@ For full AI tooling documentation, see: `C:\proj\ai\docs\developer-setup-guide.m
 ## Phase 8: Nightly Test Setup (Optional)
 
 Set up this machine to run Skyline nightly tests. This downloads the latest test harness from TeamCity and configures a scheduled task.
+
+> **Existing mode**: Check if nightly tests are already configured:
+> ```powershell
+> # Check for existing scheduled task
+> Get-ScheduledTask -TaskName '*Skyline*' -ErrorAction SilentlyContinue
+> ```
+> If a SkylineNightly task exists, nightly tests are already configured. SkylineNightly is self-updating, so no further action is needed—skip this phase.
+>
+> If no task exists but the user has a preferred nightly folder, check if SkylineNightly is already downloaded:
+> ```powershell
+> Test-Path "<NightlyFolder>\SkylineNightly.exe"
+> ```
+> If present, skip to 8.4 (Configure Nightly Tests) to create the scheduled task.
 
 ### 8.1 Choose a Nightly Folder Location
 
