@@ -28,52 +28,60 @@ Generate a consolidated daily report covering nightly tests, exceptions, and sup
 - Exceptions: Yesterday
 - Support: 1 day lookback
 
-### 2. Read Inbox Emails
+### 2. Load Ignored Computers
+- Read `ai/.tmp/history/computer-status.json`
+- Check for due alarms
+
+### 3. Read Inbox Emails
 ```
 search_emails(query="in:inbox from:skyline@proteinms.net newer_than:2d")
 ```
 
-### 3. Generate MCP Reports (REQUIRED - must succeed)
+### 4. Generate MCP Reports (REQUIRED - must succeed)
 ```
 get_daily_test_summary(report_date="YYYY-MM-DD")
 save_exceptions_report(report_date="YYYY-MM-DD")
 get_support_summary(days=1)
 ```
 
-### 4. Check Computer Alarms
+### 5. Check Computer Alarms
 ```
 check_computer_alarms()
 ```
 
-### 5. Analyze Patterns
+### 6. Analyze Patterns
 ```
 analyze_daily_patterns(report_date="YYYY-MM-DD", days_back=7)
 ```
 
-### 6. Save Daily Summary JSON
+### 7. Save Daily Summary JSON
 ```
 save_daily_summary(report_date, nightly_summary, nightly_failures, ...)
 ```
 
-### 7. Send HTML Email
+### 8. Send HTML Email
 - Subject: `Skyline Daily Summary - Month DD, YYYY`
 - Use `mimeType="multipart/alternative"` with `htmlBody`
 - Recipient: brendanx@proteinms.net
+- **Section order**: Summary → Quick Status → Support → Exceptions → Nightly
+- **Summary section**: AI analysis of patterns, action items, priorities
+- **Link test names directly** (not separate "View" column)
+- **Ignored computers**: Show in yellow banner if any filtered
 
-### 8. Archive Processed Emails
+### 9. Archive Processed Emails
 ```
 batch_modify_emails(messageIds=[...], removeLabelIds=["INBOX"])
 ```
 
-### 9. Self-Improvement Reflection (Required)
+### 10. Self-Improvement Reflection (Required)
 - Read TODO at `ai/todos/active/TODO-20251228_daily_report_improvements.md`
 - Vote on 1-3 backlog items
 - Record in session log
 
-### 10. Write Execution Log
+### 11. Write Execution Log
 - Save to `ai/.tmp/logs/daily-session-YYYYMMDD.md`
 
-### 11. Exploration Phase (continues until limit)
+### 12. Exploration Phase (continues until limit)
 - Write findings to `ai/.tmp/suggested-actions-YYYYMMDD.md`
 
 ## Critical Validation
@@ -90,6 +98,7 @@ batch_modify_emails(messageIds=[...], removeLabelIds=["INBOX"])
 - `ai/.tmp/exceptions-report-YYYYMMDD.md`
 - `ai/.tmp/support-report-YYYYMMDD.md`
 - `ai/.tmp/history/daily-summary-YYYYMMDD.json`
+- `ai/.tmp/history/computer-status.json` (config, not per-day)
 - `ai/.tmp/logs/daily-session-YYYYMMDD.md`
 - `ai/.tmp/suggested-actions-YYYYMMDD.md`
 

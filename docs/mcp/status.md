@@ -20,8 +20,9 @@ This leads to:
 
 ## Solution
 
-A minimal MCP server with two tools:
+A minimal MCP server with three tools:
 - `get_status` - Returns timestamp and git info for one or more directories
+- `get_last_screenshot` - Gets screenshot from clipboard or Pictures/Screenshots folder
 - `set_active_project` - Sets the active project for statusline display
 
 ## Installation
@@ -29,7 +30,7 @@ A minimal MCP server with two tools:
 ### Prerequisites
 
 - Python 3.10+ installed
-- mcp package: `pip install mcp`
+- Required packages: `pip install mcp Pillow`
 
 No build step required - Python is interpreted.
 
@@ -90,6 +91,28 @@ Response:
 }
 ```
 
+### get_last_screenshot
+
+```
+Tool: get_last_screenshot
+Arguments: {}
+```
+
+Response:
+
+```json
+{
+  "path": "C:\\proj\\ai\\.tmp\\screenshots\\clipboard_20260114_153022.png",
+  "filename": "clipboard_20260114_153022.png",
+  "source": "clipboard",
+  "modified": "2026-01-14 15:30:22",
+  "size_bytes": 45678,
+  "instruction": "Use the Read tool to view this image file"
+}
+```
+
+This checks the clipboard first (works with Win+Shift+S, PrintScreen, Snipping Tool), then falls back to `~/Pictures/Screenshots/`. Clipboard images are saved to `ai/.tmp/screenshots/`.
+
 ### set_active_project
 
 ```
@@ -113,6 +136,12 @@ Claude should call `get_status` when:
 2. **Before creating timestamped files** - Get accurate time
 3. **Before git operations** - Verify branch and status
 4. **When uncertain about context** - Quick refresh
+
+Claude should call `get_last_screenshot` when:
+
+1. **User says "I took a screenshot"** - Retrieve and view it
+2. **User says "check the clipboard"** - Get clipboard image
+3. **User says "see this image"** - They likely copied something
 
 Claude should call `set_active_project` when:
 

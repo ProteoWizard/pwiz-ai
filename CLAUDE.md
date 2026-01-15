@@ -148,15 +148,31 @@ Before writing code, read these files:
 - **skyline-wiki** → For reading/updating wiki pages on skyline.ms
 - **ai-context-documentation** → For ai/ folder docs, TODOs, or .claude/ files
 
+## Debugging Behavior
+
+**Recognize guess-and-test failure**: If you've made 3 attempts to fix a bug without understanding the root cause (hypothesis → change → test → fail cycle), STOP. Load the debugging skill and systematically isolate the problem before attempting another fix.
+
 ## Developer Environment
 
-### Screenshot Location
+### Screenshots and Clipboard Images
 
-When a developer says "I saved a screenshot" without specifying a path, check the Windows default screenshot folder:
+When a developer says "I took a screenshot", "check the clipboard", or "see this image":
+
+1. **Use the MCP tool first**:
+   ```
+   mcp__status__get_last_screenshot()
+   ```
+   This checks clipboard first (Win+Shift+S, PrintScreen, Snipping Tool), then falls back to `~/Pictures/Screenshots/`.
+
+2. **Read the returned path** with the Read tool to view the image.
+
+**How it works**:
+- Clipboard images are saved to `ai/.tmp/screenshots/clipboard_YYYYMMDD_HHMMSS.png`
+- Windows 10: Win+Shift+S copies to clipboard only (no auto-save)
+- Windows 11: Win+Shift+S may auto-save to Pictures/Screenshots
+
+**If MCP tool unavailable**, check manually:
 ```
 ~/Pictures/Screenshots/
 ```
-
-Screenshots follow the naming pattern: `Screenshot YYYY-MM-DD HHMMSS.png`
-
-Use the most recent file by modification time.
+Screenshots follow the pattern: `Screenshot YYYY-MM-DD HHMMSS.png`

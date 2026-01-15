@@ -4,12 +4,13 @@ Provides system status information including:
 - Current timestamp with timezone
 - Git repository status for multiple directories
 - Active project tracking for statusline display
+- Screenshot retrieval (clipboard first, then Pictures/Screenshots)
 
 This is a lightweight server for basic system context. For LabKey/Panorama
 data access, use the LabKeyMcp server instead.
 
 Setup:
-    pip install mcp
+    pip install mcp Pillow
     claude mcp add status -- python C:/proj/ai/mcp/StatusMcp/server.py
 """
 
@@ -62,7 +63,7 @@ def run_command(cmd: list[str], cwd: Optional[str] = None) -> Optional[str]:
         return None
 
 
-def get_git_status(directory: str) -> Optional[dict]:
+def get_git_status(directory: str, verbose: bool = False) -> Optional[dict]:
     """Get git status for a directory."""
     git_root = run_command(["git", "rev-parse", "--show-toplevel"], cwd=directory)
     if not git_root:
@@ -75,23 +76,33 @@ def get_git_status(directory: str) -> Optional[dict]:
     porcelain = run_command(["git", "status", "--porcelain"], cwd=directory) or ""
     lines = [line for line in porcelain.split("\n") if line]
 
-    modified = 0
-    staged = 0
-    untracked = 0
+    modified_count = 0
+    staged_count = 0
+    untracked_count = 0
+    modified_files = []
+    staged_files = []
+    untracked_files = []
 
     for line in lines:
         if len(line) < 2:
             continue
         index_status = line[0]
         worktree_status = line[1]
+        filename = line[3:]  # Skip status chars and space
 
         if index_status == "?" and worktree_status == "?":
-            untracked += 1
+            untracked_count += 1
+            if verbose:
+                untracked_files.append(filename)
         else:
             if index_status not in (" ", "?"):
-                staged += 1
+                staged_count += 1
+                if verbose:
+                    staged_files.append(filename)
             if worktree_status not in (" ", "?"):
-                modified += 1
+                modified_count += 1
+                if verbose:
+                    modified_files.append(filename)
 
     # Get ahead/behind count
     ahead = 0
@@ -108,29 +119,36 @@ def get_git_status(directory: str) -> Optional[dict]:
                 ahead = int(parts[0]) if parts[0].isdigit() else 0
                 behind = int(parts[1]) if parts[1].isdigit() else 0
 
-    return {
+    result = {
         "branch": branch,
         "remote": remote,
-        "modified": modified,
-        "staged": staged,
-        "untracked": untracked,
+        "modified": modified_count,
+        "staged": staged_count,
+        "untracked": untracked_count,
         "ahead": ahead,
         "behind": behind,
     }
 
+    if verbose:
+        result["modifiedFiles"] = modified_files
+        result["stagedFiles"] = staged_files
+        result["untrackedFiles"] = untracked_files
 
-def get_directory_status(directory: str) -> dict:
+    return result
+
+
+def get_directory_status(directory: str, verbose: bool = False) -> dict:
     """Get status for a single directory."""
     path = Path(directory)
     return {
         "path": str(path),
         "name": path.name,
-        "git": get_git_status(directory),
+        "git": get_git_status(directory, verbose=verbose),
     }
 
 
 @mcp.tool()
-def get_status(directories: Optional[list[str]] = None) -> str:
+def get_status(directories: Optional[list[str]] = None, verbose: bool = False) -> str:
     """Get current system status including timestamp and git info for one or more directories.
 
     Call this to get accurate time and repository context.
@@ -138,23 +156,110 @@ def get_status(directories: Optional[list[str]] = None) -> str:
     Args:
         directories: Directories to check (optional, defaults to cwd).
                     Example: ['C:/proj/ai', 'C:/proj/pwiz']
+        verbose: If True, include lists of modified/staged/untracked files (default: False)
     """
-    now = datetime.now(timezone.utc)
+    now_utc = datetime.now(timezone.utc)
+    now_local = datetime.now().astimezone()
     cwd = os.getcwd()
-    local_tz = datetime.now().astimezone().tzinfo
 
     dirs_to_check = directories if directories else [cwd]
-    directory_statuses = [get_directory_status(d) for d in dirs_to_check]
+    directory_statuses = [get_directory_status(d, verbose=verbose) for d in dirs_to_check]
 
     status = {
-        "timestamp": now.isoformat(),
-        "timezone": str(local_tz),
+        "timestamp": now_utc.isoformat(),
+        "localTimestamp": now_local.strftime("%Y-%m-%d %H:%M:%S"),
+        "timezone": str(now_local.tzinfo),
         "platform": f"{platform.system()} {platform.machine()}",
         "pythonVersion": platform.python_version(),
         "directories": directory_statuses,
     }
 
     return json.dumps(status, indent=2)
+
+
+def get_clipboard_image() -> Optional[Path]:
+    """Try to get an image from the Windows clipboard and save it.
+
+    Returns the path to the saved image, or None if no image in clipboard.
+    """
+    try:
+        from PIL import ImageGrab
+
+        # Try to grab image from clipboard
+        image = ImageGrab.grabclipboard()
+        if image is None:
+            return None
+
+        # Save to temp location
+        tmp_dir = Path("C:/proj/ai/.tmp/screenshots")
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = tmp_dir / f"clipboard_{timestamp}.png"
+        image.save(output_path, "PNG")
+
+        return output_path
+    except ImportError:
+        logger.warning("PIL not available for clipboard image capture")
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to get clipboard image: {e}")
+        return None
+
+
+@mcp.tool()
+def get_last_screenshot() -> str:
+    """Get the path to the most recent screenshot.
+
+    Checks the Windows default screenshot folder (Pictures/Screenshots)
+    and returns the path to the newest PNG file.
+
+    Use this when the user says "I took a screenshot" or similar.
+    Then use the Read tool to view the returned path.
+    """
+    # First, try to get image from clipboard
+    clipboard_path = get_clipboard_image()
+    if clipboard_path:
+        return json.dumps({
+            "path": str(clipboard_path),
+            "filename": clipboard_path.name,
+            "source": "clipboard",
+            "modified": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "size_bytes": clipboard_path.stat().st_size,
+            "instruction": "Use the Read tool to view this image file"
+        }, indent=2)
+
+    # Fall back to Screenshots folder
+    pictures = Path(os.path.expanduser("~/Pictures/Screenshots"))
+
+    if not pictures.exists():
+        return json.dumps({
+            "error": "No image in clipboard and screenshot folder not found",
+            "folder": str(pictures),
+            "suggestion": "Copy a screenshot to clipboard (PrintScreen, Win+Shift+S, or Snipping Tool)"
+        })
+
+    # Find all PNG files and sort by modification time
+    screenshots = list(pictures.glob("*.png"))
+    if not screenshots:
+        return json.dumps({
+            "error": "No image in clipboard and no PNG files in screenshot folder",
+            "folder": str(pictures),
+            "suggestion": "Copy a screenshot to clipboard (PrintScreen, Win+Shift+S, or Snipping Tool)"
+        })
+
+    # Get the most recent
+    latest = max(screenshots, key=lambda p: p.stat().st_mtime)
+    mtime = datetime.fromtimestamp(latest.stat().st_mtime)
+
+    return json.dumps({
+        "path": str(latest),
+        "filename": latest.name,
+        "source": "screenshots_folder",
+        "modified": mtime.strftime("%Y-%m-%d %H:%M:%S"),
+        "size_bytes": latest.stat().st_size,
+        "instruction": "Use the Read tool to view this image file"
+    }, indent=2)
 
 
 @mcp.tool()

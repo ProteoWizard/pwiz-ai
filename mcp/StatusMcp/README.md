@@ -9,14 +9,15 @@ Claude Code lacks access to basic status information that would help it:
 - See **git status** without running commands
 - Track the **active project** in multi-repo setups
 
-This server provides two tools:
+This server provides three tools:
 - `get_status` - Returns timestamp and git info for one or more directories
+- `get_last_screenshot` - Gets screenshot from clipboard or Pictures/Screenshots folder
 - `set_active_project` - Sets the active project for statusline display
 
 ## Installation
 
 ```bash
-pip install mcp
+pip install mcp Pillow
 ```
 
 No build step required - Python is interpreted.
@@ -150,4 +151,45 @@ Tool: set_active_project
 Arguments: { "path": "C:/proj/pwiz" }
 ```
 
+### Get screenshot from clipboard
+
+```
+Tool: get_last_screenshot
+Arguments: {}
+```
+
 This eliminates the need to run `git status`, `date`, or other commands just to get context.
+
+## Tool: get_last_screenshot
+
+Retrieves the most recent screenshot, checking clipboard first then the Screenshots folder.
+
+### Parameters
+
+None.
+
+### Response
+
+```json
+{
+  "path": "C:\\proj\\ai\\.tmp\\screenshots\\clipboard_20260114_153022.png",
+  "filename": "clipboard_20260114_153022.png",
+  "source": "clipboard",
+  "modified": "2026-01-14 15:30:22",
+  "size_bytes": 45678,
+  "instruction": "Use the Read tool to view this image file"
+}
+```
+
+### Behavior
+
+1. **Clipboard first**: Checks Windows clipboard for an image (Win+Shift+S, PrintScreen, Snipping Tool)
+2. **Saves to temp**: Clipboard images are saved to `ai/.tmp/screenshots/clipboard_YYYYMMDD_HHMMSS.png`
+3. **Falls back**: If no clipboard image, checks `~/Pictures/Screenshots/` for the most recent PNG
+4. **Returns path**: Claude can then use the Read tool to view the image
+
+### Platform Notes
+
+- **Windows 10**: Win+Shift+S copies to clipboard only (no auto-save)
+- **Windows 11**: Win+Shift+S may auto-save to Pictures/Screenshots
+- **Requires Pillow**: `pip install Pillow` for clipboard image capture
