@@ -1,6 +1,6 @@
 ---
 name: skyline-tester
-description: Use when working with SkylineTester UI, running tests via the GUI, configuring test runs, or discussing SkylineTester tabs (Build, Tests, Tutorials, Forms, etc.). Activate when user mentions SkylineTester, the test list file, or asks about running tests through the GUI.
+description: Use this skill when working with SkylineTester or the test list file.
 ---
 
 # SkylineTester Context

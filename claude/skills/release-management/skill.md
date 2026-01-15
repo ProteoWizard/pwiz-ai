@@ -1,6 +1,6 @@
 ---
 name: release-management
-description: Use when discussing Skyline releases, version numbers, release notes, installers, or release preparation. Activate for questions about release versions, finding release tags, preparing releases, or understanding release history.
+description: Use this skill when working on releases, version numbers, or release preparation.
 ---
 
 # Release Management for Skyline

@@ -1,6 +1,6 @@
 ---
 name: skyline-exceptions
-description: Use when working with Skyline exception reports, triage, or the LabKey MCP server. Activate for querying exceptions from skyline.ms, analyzing crash reports, reviewing exception patterns, or discussing the exception triage system.
+description: Use this skill when looking at exception reports from skyline.ms.
 ---
 
 # Skyline Exception Triage

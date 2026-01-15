@@ -1,6 +1,6 @@
 ---
 name: version-control
-description: Use when performing Git or GitHub operations including commits, pushes, PRs, or branch creation. Activate BEFORE running git commit, git push, gh pr create, or similar commands.
+description: Use this skill before any git commit, push, or PR.
 ---
 
 # Version Control for Skyline/ProteoWizard

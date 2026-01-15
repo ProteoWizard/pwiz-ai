@@ -1,6 +1,6 @@
 ---
 name: skyline-screenshots
-description: Use when reviewing tutorial screenshots, using ImageComparer, analyzing screenshot diffs, or updating screenshots for releases. Activate for s-XX.png references in tutorial context.
+description: Use this skill when reviewing or updating tutorial screenshots.
 ---
 
 # Tutorial Screenshot Updates

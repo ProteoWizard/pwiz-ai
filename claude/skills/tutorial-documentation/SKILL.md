@@ -1,6 +1,6 @@
 ---
 name: tutorial-documentation
-description: Use when working on Skyline tutorial documentation, tutorial tests, or anything in Skyline/Documentation/Tutorials. Activate for writing or reviewing tutorial HTML, tutorial test code (TestTutorial/), screenshot capture, or questions about tutorial style conventions.
+description: Use this skill when working on Skyline tutorials or tutorial tests.
 ---
 
 # Skyline Tutorial Documentation

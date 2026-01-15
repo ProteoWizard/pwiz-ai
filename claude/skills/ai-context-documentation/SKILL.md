@@ -1,6 +1,6 @@
 ---
 name: ai-context-documentation
-description: Use when working on ai/ documentation (MEMORY.md, WORKFLOW.md, CRITICAL-RULES.md, etc.), TODOs (backlog planning, active work, completed records), or .claude/ files (skills, commands). Activate for creating or modifying documentation, planning new features via TODOs, or questions about documentation structure.
+description: Use this skill when editing files in ai/ or .claude/ folders.
 ---
 
 # AI Context Documentation

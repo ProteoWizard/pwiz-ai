@@ -1,6 +1,6 @@
 ---
 name: skyline-development
-description: Use when working on Skyline/ProteoWizard code, tests, builds, documentation, TODOs, or sprints. Activate for any C# code changes, test writing, PR preparation, starting a TODO or sprint, or questions about the codebase. Also activate when user mentions TODO files, backlog items, or ai/ documentation.
+description: Use this skill when working on Skyline code, tests, or builds.
 ---
 
 # Skyline Development Context

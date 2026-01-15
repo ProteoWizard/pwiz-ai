@@ -1,6 +1,6 @@
 ---
 name: skyline-wiki
-description: Use when working with Skyline wiki documentation on skyline.ms. Activate for reading or updating wiki pages, listing or downloading wiki attachments, or questions about wiki page structure and content.
+description: Use this skill when reading or updating wiki pages on skyline.ms.
 ---
 
 # Skyline Wiki Documentation

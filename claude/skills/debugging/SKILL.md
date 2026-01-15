@@ -1,6 +1,6 @@
 ---
 name: debugging
-description: Use when investigating bugs, failures, leaks, crashes, or unexpected behavior. Activate when user describes something not working as expected, provides error messages or stack traces, mentions nightly test failures, or asks "why is this happening?" This skill shifts Claude into debugging mode with systematic investigation techniques.
+description: Use this skill any time you need to debug something or figure out why a problem is happening.
 ---
 
 # Debugging Mode
