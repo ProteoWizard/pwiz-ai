@@ -334,30 +334,40 @@ batch_modify_emails(messageIds=[...], removeLabelIds=["INBOX"])
 
 ### Investigate Test Failures
 
-For **each test failure** in today's report:
+For **each test failure** with a stack trace:
 
-**A. Check failure history**
+**A. Get the failure details**
+```
+get_run_failures(run_id=XXXXX, container_path="...")
+```
+
+**B. Read the code** — Start at the stack trace
+
+- Read the test file to understand what it's testing
+- Read the production code where the exception was thrown
+- Understand what the test expected vs what happened
+
+**C. Git blame to find context**
+```bash
+git blame -L 100,120 pwiz_tools/path/to/TestFile.cs
+git log --oneline -10 -- "**/TestName*"
+```
+
+**D. Check failure history**
 ```
 query_test_history(test_name="TestName")
 ```
 - Is this NEW (first time ever)?
 - Is this RECURRING (seen before, came back)?
-- When did it start failing?
+- When did it start failing? (correlate with git log)
 
-**B. For crashed/short runs, get the log**
+**E. For crashed/short runs, get the log**
 ```
 save_run_log(run_id=XXXXX, part="testrunner")
-# Then read the last 100 lines to see what crashed
+# Read the last 100 lines to see what crashed
 ```
 
-**C. Search for related PRs**
-```bash
-gh pr list --state merged --search "TestName" --limit 10
-gh pr list --state merged --search "filename:TestName.cs" --limit 10
-git log --oneline -20 -- "**/TestName*"
-```
-
-**D. Questions to answer:**
+**F. Questions to answer:**
 - Is there a merged PR that might have caused this? (regression)
 - Is there a merged PR that might have fixed this? (stale echo)
 - Is it machine-specific? (hardware/config issue)
@@ -367,31 +377,87 @@ git log --oneline -20 -- "**/TestName*"
 
 ### Investigate Exceptions
 
-For **each exception** in today's report:
+For **each exception** with a stack trace (user-reported or nightly test failure):
 
-**A. Get full details**
+**A. Get the stack trace**
 ```
 get_exception_details(exception_id=XXXXX)
 ```
 
-**B. Check version distribution**
+**B. Read the code** — This is what developers do first. Always.
+
+Start at the top of the stack trace and read:
+```bash
+# Read the file where exception was thrown
+# Read the method, understand what it's trying to do
+# Read the exception class definition
+# Read nearby catch blocks that should have handled it
+```
+
+**C. Use git blame to understand context**
+```bash
+# Who touched this code recently? When?
+git blame -L 250,270 pwiz_tools/path/to/File.cs
+git log --oneline -10 -- pwiz_tools/path/to/File.cs
+```
+
+This often leads to:
+- A TODO file for work in progress
+- A recent PR that introduced/fixed something
+- The developer who knows this area
+
+**D. Follow the trail**
+```bash
+# If git blame shows recent work, find the TODO or PR
+grep -r "SomeFile.cs\|SomeException" ai/todos/
+gh pr list --state merged --search "filename:SomeFile.cs" --limit 10
+```
+
+**E. Check version distribution** (helps prioritize)
 - Only in old versions? → Likely already fixed
 - Only in newest version? → Recent regression
 - Across many versions? → Long-standing bug
 
-**C. Search for related PRs**
-```bash
-gh pr list --state merged --search "filename:ChromatogramCache.cs" --limit 10
-gh pr list --state merged --search "NullReferenceException GetMedianPeak" --limit 5
-```
+**F. Formulate root cause**
 
-**D. Questions to answer:**
-- Is this already fixed by a recent PR?
-- Should we record a fix? (use `record_exception_fix`)
-- Is this a new bug that needs a GitHub issue?
-- Does the user have contact info for follow-up?
+Not just "what failed" but "why":
+- Why wasn't this caught by existing error handling?
+- Are there similar exceptions that ARE handled correctly?
+- What pattern was used elsewhere that should apply here?
+
+**G. Draft a GitHub issue** if this is a real bug:
+- Clear title
+- Stack trace from exception report
+- Root cause analysis (the WHY)
+- Suggested fix with specific file/line references
 
 **→ Write findings to `suggested-actions-YYYYMMDD.md` immediately**
+
+#### Example: Good Exception Investigation
+
+```markdown
+## Exception: PanoramaImportErrorException (#73737)
+
+**Stack trace points to:** PanoramaClient.cs:262, PanoramaPublishUtil.cs:313
+
+**Code reading revealed:**
+- `PanoramaImportErrorException` inherits from `Exception` (line 580)
+- `ExceptionUtil.IsProgrammingDefect()` only recognizes `IOException` as user-actionable
+- Catch block at PanoramaPublishUtil.cs:329 checks `IsProgrammingDefect` BEFORE
+  checking for `PanoramaImportErrorException`
+
+**Git blame showed:** PanoramaUtil.cs recently modified by PR #3658
+
+**Following the trail:** PR #3658 fixed `PanoramaServerException` the same way
+(changed it to inherit from `IOException`), but missed `PanoramaImportErrorException`
+
+**Root cause:** `PanoramaImportErrorException` should inherit from `IOException`
+like `PanoramaServerException` does, so it's recognized as user-actionable.
+
+**Suggested fix:** Create `PanoramaException : IOException` base class
+
+**Action:** Create GitHub issue with root cause and suggested fix
+```
 
 ### Investigate Infrastructure Issues
 
@@ -603,22 +669,53 @@ Document findings in `ai/.tmp/suggested-actions-YYYYMMDD.md` under "Infrastructu
 ```markdown
 # Suggested Actions - YYYY-MM-DD
 
-## Exception Fixes to Record
-
-### 1. [Exception Name]
-**Fingerprint**: `abc123...`
-**Evidence**: [Why we think it's fixed]
-**Action**: `record_exception_fix(fingerprint="...", pr_number=XXXX)`
-
 ## GitHub Issues to Create
 
-### 1. [Test Name] Failure
-**Evidence**: [Correlation with PR, timing, etc.]
-**Draft issue body**: [Pre-written issue text]
+### 1. PanoramaImportErrorException shows crash dialog instead of friendly error
+
+**Exception ID**: 73737
+**Version**: 26.0.9.004
+
+**Root Cause Analysis**:
+`PanoramaImportErrorException` inherits from `Exception`, not `IOException`.
+This causes `ExceptionUtil.IsProgrammingDefect()` to return true, so the
+exception is re-thrown before reaching the user-friendly error handling
+at PanoramaPublishUtil.cs:332.
+
+**Evidence**:
+- `PanoramaServerException` was fixed the same way in PR #3658 (inherits from IOException)
+- `PanoramaImportErrorException` at PanoramaUtil.cs:580 still inherits from Exception
+- Catch block at PanoramaPublishUtil.cs:329 checks IsProgrammingDefect BEFORE
+  checking for PanoramaImportErrorException in InnerException
+
+**Suggested Fix**:
+Create `PanoramaException : IOException` base class, have both
+`PanoramaServerException` and `PanoramaImportErrorException` inherit from it.
+
+**Draft Issue Title**:
+PanoramaImportErrorException treated as programming defect instead of showing user-friendly error
+
+**Files to Change**:
+- pwiz_tools/Shared/PanoramaClient/PanoramaUtil.cs
+
+---
+
+## Exception Fixes to Record
+
+### 1. [Exception Name] - Already fixed by PR #XXXX
+**Fingerprint**: `abc123...`
+**Evidence**: PR #XXXX merged on YYYY-MM-DD, touches the exact line in stack trace
+**Action**: `record_exception_fix(fingerprint="...", pr_number="XXXX")`
+
+---
 
 ## Tests to Monitor
-[Low-priority items to watch]
+[Low-priority items - intermittent failures, watch for patterns]
 ```
+
+**Quality bar**: A good suggested-actions entry has root cause analysis that
+explains *why* something failed, not just *what* failed. The goal is GitHub-issue-quality
+analysis that a developer can review and act on.
 
 ### User Review Workflow
 

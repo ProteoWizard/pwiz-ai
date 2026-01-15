@@ -84,32 +84,51 @@ batch_modify_emails(messageIds=[...], removeLabelIds=["INBOX"])
 
 **Investigate Test Failures**
 
-For each test failure in today's report:
+For each test failure with a stack trace:
 ```
-query_test_history(test_name="TestName")
-save_run_log(run_id=XXXXX, part="testrunner")  # if crashed
-gh pr list --state merged --search "TestName" --limit 10
+get_run_failures(run_id=XXXXX, container_path="...")
 ```
 
-Questions to answer:
-- When did this test start failing? (NEW vs RECURRING)
-- Is there a merged PR that might have fixed it?
-- Is there a pattern (same machine, same time, same test file)?
+Then **read the code**:
+- Read the test file and production code at the stack trace
+- Understand what the test expected vs what happened
+
+Then **git blame** to find context:
+```bash
+git blame -L 100,120 pwiz_tools/path/to/File.cs
+git log --oneline -10 -- "**/TestName*"
+```
+
+Then check history and correlate:
+```
+query_test_history(test_name="TestName")
+```
+
+**Goal: Root cause → GitHub issue or "already fixed by PR#X"**
 
 → Write findings to `suggested-actions-YYYYMMDD.md`
 
 **Investigate Exceptions**
 
-For each exception fingerprint:
+For each exception with a stack trace:
 ```
 get_exception_details(exception_id=XXXXX)
-gh pr list --state merged --search "filename:SomeFile.cs" --limit 10
 ```
 
-Questions to answer:
-- Is this only affecting old versions? (already fixed)
-- Is there a PR that touched this code recently?
-- Does the user have contact info for follow-up?
+Then **read the code** (this is what developers do first):
+- Read the file/method at top of stack trace
+- Read the exception class definition
+- Read nearby catch blocks
+
+Then **git blame** to understand context:
+```bash
+git blame -L 250,270 pwiz_tools/path/to/File.cs
+git log --oneline -10 -- pwiz_tools/path/to/File.cs
+```
+
+This leads to TODOs, PRs, and the developer who knows the area.
+
+**Goal: Root cause → GitHub issue**
 
 → Write findings to `suggested-actions-YYYYMMDD.md`
 
