@@ -188,12 +188,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_CONTAINER,
     ) -> str:
-        """**DISCOVERY**: See available tables/queries. Use to propose schema documentation, not raw queries.
-
-        Args:
-            schema_name: Schema name (e.g., 'testresults', 'issues', 'wiki')
-            container_path: Container path (e.g., '/home/development/Nightly x64')
-        """
+        """[?] See available tables/queries. → development-guide.md"""
         try:
             result = discovery_request(
                 server,
@@ -238,21 +233,7 @@ def register_tools(mcp):
         container_path: str = DEFAULT_TEST_CONTAINER,
         params: dict = None,
     ) -> str:
-        """**EXPLORATION**: Fetch an authenticated LabKey page (HTML).
-
-        Use this to explore LabKey pages that developers view in browsers.
-        Returns raw HTML content which can be parsed for data.
-
-        Args:
-            view_name: Page to fetch (e.g., 'project-begin.view', 'testresults-showRun.view')
-            server: LabKey server hostname (default: skyline.ms)
-            container_path: Container path (e.g., '/home/development/Nightly x64')
-            params: Optional query parameters as dict (e.g., {'runId': 12345})
-
-        Examples:
-            fetch_labkey_page('project-begin.view', container_path='/home/development/Nightly x64')
-            fetch_labkey_page('testresults-showRun.view', params={'runId': 79500})
-        """
+        """[E] Fetch authenticated LabKey page (HTML). → development-guide.md"""
         try:
             # Build URL with proper encoding for paths with spaces
             encoded_path = quote(container_path, safe="/")

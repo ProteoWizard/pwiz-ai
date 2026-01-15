@@ -31,12 +31,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_SUPPORT_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: List attachments for a support post or wiki page.
-
-        Args:
-            parent_entity_id: EntityId from thread/wiki page
-            container_path: Container (default: /home/support)
-        """
+        """[D] List attachments for support post or wiki page. → support.md"""
         try:
             server_context = get_server_context(server, container_path)
 
@@ -94,13 +89,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_SUPPORT_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: Download attachment. Text returns content; binary saves to ai/.tmp/.
-
-        Args:
-            parent_entity_id: EntityId from list_attachments
-            filename: Attachment filename
-            container_path: Container (default: /home/support)
-        """
+        """[D] Download attachment. Text returns content; binary saves to ai/.tmp/. → support.md"""
         import base64
 
         try:

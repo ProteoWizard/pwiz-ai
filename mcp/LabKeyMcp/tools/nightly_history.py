@@ -173,14 +173,7 @@ def register_tools(mcp):
         since_date: str = None,
         server: str = DEFAULT_SERVER,
     ) -> str:
-        """Backfill nightly test history from skyline.ms.
-
-        One-time operation to populate history with past failures, leaks, and hangs.
-        Queries all 6 test folders and builds fingerprinted history.
-
-        Args:
-            since_date: Start date YYYY-MM-DD (default: 365 days ago)
-        """
+        """Backfill nightly test history from skyline.ms. → nightly-tests.md"""
         try:
             # Default to 1 year ago
             if not since_date:
@@ -348,13 +341,7 @@ def register_tools(mcp):
     async def query_test_history(
         test_name: str,
     ) -> str:
-        """Look up historical data for a specific test.
-
-        Returns failure rate, fingerprints, machines affected, and fix status.
-
-        Args:
-            test_name: Test name (e.g., "TestPeakPickingTutorial")
-        """
+        """Look up historical data for a specific test. → nightly-tests.md"""
         try:
             history = _load_nightly_history()
 
@@ -452,26 +439,7 @@ def register_tools(mcp):
         release_merge_date: str = None,
         notes: str = None,
     ) -> str:
-        """Record that a test failure, leak, or hang has been fixed.
-
-        Supports tracking fixes across multiple branches (master + release).
-        Cherry-picks to release branches create different commits, so we
-        track both the original PR and the cherry-pick.
-
-        Args:
-            test_name: Test name (e.g., "TestPeakPickingTutorial")
-            fix_type: Type of fix - "failure", "leak", or "hang"
-            pr_number: PR number on master (e.g., "PR#1234" or "1234")
-            fingerprint: For failures, the specific fingerprint being fixed (optional)
-            fixed_in_version: First version where fix appears (e.g., "25.1.0.250")
-            merge_date: Date PR was merged to master (YYYY-MM-DD)
-            commit: Commit hash of the fix on master
-            release_branch: Release branch name (e.g., "Skyline/skyline_26_1")
-            release_pr: Cherry-pick PR number on release branch
-            release_commit: Cherry-pick commit hash on release branch
-            release_merge_date: Date cherry-pick was merged (YYYY-MM-DD)
-            notes: Optional notes about the fix
-        """
+        """Record that a test failure, leak, or hang has been fixed. → nightly-tests.md"""
         try:
             history = _load_nightly_history()
 

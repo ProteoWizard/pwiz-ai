@@ -416,11 +416,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: Browse recent exceptions. Prefer save_exceptions_report for daily review.
-
-        Args:
-            days: Days back to query (default: 7)
-        """
+        """[D] Browse recent exceptions. Prefer save_exceptions_report. → exceptions.md"""
         try:
             server_context = get_server_context(server, container_path)
 
@@ -478,11 +474,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: Full stack trace for one exception.
-
-        Args:
-            exception_id: RowId from save_exceptions_report
-        """
+        """[D] Full stack trace for one exception. → exceptions.md"""
         try:
             server_context = get_server_context(server, container_path)
             filter_array = [QueryFilter("RowId", str(exception_id), "eq")]
@@ -523,15 +515,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_CONTAINER,
     ) -> str:
-        """**PRIMARY**: Daily exception report with full stack traces. Saves to ai/.tmp/exceptions-report-YYYYMMDD.md.
-
-        Groups exceptions by fingerprint to identify unique bugs.
-        Tracks Installation ID to distinguish "1 user hit 4x" from "4 users hit 1x".
-        Includes version info for known-fix correlation.
-
-        Args:
-            report_date: Date YYYY-MM-DD
-        """
+        """[P] Daily exception report with fingerprints. Saves to ai/.tmp/exceptions-report-YYYYMMDD.md. → exceptions.md"""
         try:
             # Parse report_date for the 24-hour window
             date_obj = datetime.strptime(report_date, "%Y-%m-%d")
@@ -796,27 +780,7 @@ def register_tools(mcp):
         release_merge_date: str = None,
         notes: str = None,
     ) -> str:
-        """Record that an exception fingerprint has been fixed.
-
-        Use this after a PR is merged to prevent future reports from
-        flagging this as a new issue.
-
-        Supports tracking fixes across multiple branches (master + release).
-        Cherry-picks to release branches create different commits, so we
-        track both the original PR and the cherry-pick.
-
-        Args:
-            fingerprint: The 16-char fingerprint from exception reports
-            pr_number: PR number on master (e.g., "PR#1234" or "1234")
-            fixed_in_version: First version where fix appears (e.g., "25.1.0.250")
-            merge_date: Date PR was merged to master (YYYY-MM-DD)
-            commit: Commit hash of the fix on master
-            release_branch: Release branch name (e.g., "Skyline/skyline_26_1")
-            release_pr: Cherry-pick PR number on release branch
-            release_commit: Cherry-pick commit hash on release branch
-            release_merge_date: Date cherry-pick was merged (YYYY-MM-DD)
-            notes: Optional notes about the fix
-        """
+        """Record that an exception fingerprint has been fixed. → exceptions.md"""
         try:
             history = _load_exception_history()
             exceptions_db = history.get('exceptions', {})
@@ -907,16 +871,7 @@ def register_tools(mcp):
         min_users: int = 1,
         show_fixed: bool = False,
     ) -> str:
-        """Query exception history to find high-priority bugs.
-
-        Use this to answer "what should I focus on?" across all tracked exceptions.
-        Schema v2: Uses reports list with row_ids for direct linking.
-
-        Args:
-            top_n: Number of top-priority exceptions to return (default: 10)
-            min_users: Minimum unique users to include (default: 1)
-            show_fixed: Include exceptions with known fixes (default: False)
-        """
+        """Query exception history for high-priority bugs. → exceptions.md"""
         try:
             history = _load_exception_history()
             exceptions_db = history.get('exceptions', {})
@@ -1021,18 +976,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_CONTAINER,
     ) -> str:
-        """Backfill exception history from skyline.ms.
-
-        One-time operation to populate history with past exceptions.
-        Queries all exceptions since the specified date (default: major release),
-        normalizes stack traces, and builds the history database.
-
-        Schema v2: Stores individual reports with row_id for direct linking.
-        Preserves fix annotations from existing history file.
-
-        Args:
-            since_date: Start date YYYY-MM-DD (default: current major release 2025-05-22)
-        """
+        """Backfill exception history from skyline.ms. → exceptions.md"""
         try:
             # Load existing history to preserve fix annotations
             old_history = _load_exception_history()

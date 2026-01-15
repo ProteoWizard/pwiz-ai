@@ -69,6 +69,26 @@ password <password>
 - Usage patterns and anti-patterns
 - When to propose new tools
 
+### Tool Docstring Format
+
+Tools use minimal docstrings with category markers and doc file references:
+
+```
+[P] Daily nightly test report. → nightly-tests.md
+```
+
+| Marker | Category | Purpose |
+|--------|----------|---------|
+| `[P]` | PRIMARY | Daily reports, main entry points - use these first |
+| `[D]` | DRILL-DOWN | Detailed queries for specific items |
+| `[A]` | ANALYSIS | Compare, analyze, or correlate data |
+| `[?]` | DISCOVERY | Explore schema structure |
+| `[E]` | EXPLORATION | Raw page fetching |
+
+The `→ docfile.md` reference points to detailed documentation. Read the doc file **once** when working with related tools - it covers multiple tools in that domain.
+
+**Why minimal docstrings**: Tool definitions consume context tokens at session start. Minimal docstrings (~2k tokens for 40+ tools) vs verbose (~9k tokens) saves context for actual work. Full documentation loads on-demand when needed.
+
 ## Development
 
 - [development-guide.md](development-guide.md) - Patterns for extending MCP capabilities
@@ -118,11 +138,13 @@ To list registered servers: `claude mcp list`
 
 | Component | Approximate Tokens |
 |-----------|-------------------|
-| LabKey MCP (25 tools) | ~18k tokens |
+| LabKey MCP (42 tools) | ~2k tokens (minimal docstrings) |
 | Gmail MCP (19 tools) | ~13k tokens |
-| **Total MCP overhead** | **~31k tokens (15% of 200k context)** |
+| **Total MCP overhead** | **~15k tokens (7.5% of 200k context)** |
 
 This overhead is incurred at the start of every session where MCP servers are enabled.
+
+**Note**: LabKey tools use minimal docstrings with doc file references to reduce token overhead. See "Tool Docstring Format" above.
 
 ### Recommended: Separate Directories for Different Workflows
 

@@ -32,12 +32,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_ISSUES_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: Browse issues. Prefer save_issues_report for overview.
-
-        Args:
-            status: 'open' or 'closed' (default: all)
-            issue_type: 'Defect' or 'Todo' (default: all)
-        """
+        """[D] Browse issues. Prefer save_issues_report. → issues-strategy.md"""
         try:
             server_context = get_server_context(server, container_path)
 
@@ -128,11 +123,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_ISSUES_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: Full issue with comments. Saves to ai/.tmp/issue-{id}.md.
-
-        Args:
-            issue_id: IssueId from query_issues
-        """
+        """[D] Full issue with comments. Saves to ai/.tmp/issue-{id}.md. → issues-strategy.md"""
         try:
             server_context = get_server_context(server, container_path)
 
@@ -282,11 +273,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_ISSUES_CONTAINER,
     ) -> str:
-        """**PRIMARY**: Issue tracker summary. Saves to ai/.tmp/issues-report-{status}-YYYYMMDD.md.
-
-        Args:
-            status: 'open' or 'closed' (default: 'open')
-        """
+        """[P] Issue tracker summary. Saves to ai/.tmp/issues-report-{status}-YYYYMMDD.md. → issues-strategy.md"""
         try:
             server_context = get_server_context(server, container_path)
 

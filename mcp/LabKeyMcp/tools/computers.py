@@ -175,18 +175,7 @@ def register_tools(mcp):
         container_path: str = DEFAULT_TEST_CONTAINER,
         server: str = DEFAULT_SERVER,
     ) -> str:
-        """Deactivate a computer from nightly test expectations.
-
-        When deactivated, the computer won't appear as "missing" in daily reports.
-        Optionally set an alarm date to remind about reactivation.
-
-        Args:
-            computer_name: Computer name (e.g., "BRENDANX-UW6")
-            reason: Why the computer is being deactivated (e.g., "Tutorial screenshot work")
-            alarm_date: Optional date (YYYY-MM-DD) to remind about reactivation
-            alarm_note: Optional note to show when alarm is due
-            container_path: Test folder (default: /home/development/Nightly x64)
-        """
+        """Deactivate computer from nightly expectations. → nightly-tests.md"""
         try:
             # Step 1: Get userId from computer name
             user_id = _get_user_id(computer_name, server, container_path)
@@ -261,15 +250,7 @@ def register_tools(mcp):
         container_path: str = DEFAULT_TEST_CONTAINER,
         server: str = DEFAULT_SERVER,
     ) -> str:
-        """Reactivate a computer for nightly test expectations.
-
-        The computer will again appear in "missing" warnings if it doesn't report.
-        Clears any alarm set for this computer.
-
-        Args:
-            computer_name: Computer name (e.g., "BRENDANX-UW6")
-            container_path: Test folder (default: /home/development/Nightly x64)
-        """
+        """Reactivate computer for nightly expectations. → nightly-tests.md"""
         try:
             # Step 1: Get userId from computer name
             user_id = _get_user_id(computer_name, server, container_path)
@@ -319,14 +300,7 @@ def register_tools(mcp):
         container_path: str = DEFAULT_TEST_CONTAINER,
         server: str = DEFAULT_SERVER,
     ) -> str:
-        """List all computers and their active status in a test folder.
-
-        Shows which computers are active (expected to report) and which
-        are deactivated (won't trigger "missing" warnings).
-
-        Args:
-            container_path: Test folder (default: /home/development/Nightly x64)
-        """
+        """List computers and active status. → nightly-tests.md"""
         try:
             server_context = get_server_context(server, container_path)
 
@@ -412,12 +386,7 @@ def register_tools(mcp):
 
     @mcp.tool()
     async def check_computer_alarms() -> str:
-        """Check for computer reactivation alarms that are due.
-
-        Returns any alarms with dates on or before today.
-        Use this during daily report generation to remind about computers
-        that should be reactivated.
-        """
+        """Check for reactivation alarms that are due. → nightly-tests.md"""
         try:
             history = _load_status_history()
             today = date.today()

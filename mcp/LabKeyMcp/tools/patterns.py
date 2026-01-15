@@ -259,24 +259,7 @@ def register_tools(mcp):
         report_date: str,
         days_back: int = 7,
     ) -> str:
-        """**PRIMARY**: Analyze patterns in daily test results compared to history.
-
-        Compares today's results against historical data to identify:
-        - NEW: Failures/leaks not seen yesterday
-        - RESOLVED: Issues fixed since yesterday
-        - SYSTEMIC: Issues affecting all machines (high priority)
-        - EXTERNAL: Issues involving external services (Koina, Panorama)
-        - RECURRING: Computers missing for multiple consecutive days
-        - CHRONIC: Intermittent failures spanning 30+ days (from nightly history)
-        - REGRESSION: Failures after a known fix (from nightly history)
-
-        Args:
-            report_date: Date to analyze in YYYY-MM-DD format
-            days_back: Number of days of history to consider (default: 7)
-
-        Returns:
-            Structured pattern analysis with prioritized action items.
-        """
+        """[P] Analyze patterns in daily test results. → nightly-tests.md"""
         # Load nightly history for enhanced context
         nightly_history = _load_nightly_history()
         has_nightly_history = bool(nightly_history and nightly_history.get('test_failures'))
@@ -552,25 +535,7 @@ def register_tools(mcp):
         exception_signatures: str = "{}",
         support_threads: int = 0,
     ) -> str:
-        """Save a daily summary JSON for pattern detection.
-
-        This tool creates the historical JSON that analyze_daily_patterns uses.
-        Call this at the end of each /pw-daily run to build history.
-
-        Args:
-            report_date: Date in YYYY-MM-DD format
-            nightly_summary: JSON string like {"errors": N, "warnings": N, "passed": N, "missing": N, "total_tests": N}
-            nightly_failures: JSON string like {"TestName": ["COMPUTER1", "COMPUTER2"]}
-            nightly_leaks: JSON string like {"TestName": ["COMPUTER1"]}
-            nightly_hangs: JSON string like {"TestName": ["COMPUTER1"]}
-            missing_computers: JSON string like ["COMPUTER1", "COMPUTER2"]
-            exception_count: Number of exceptions
-            exception_signatures: JSON string of exception signatures
-            support_threads: Number of support threads needing attention
-
-        Returns:
-            Confirmation with file path.
-        """
+        """Save daily summary JSON for pattern detection. → nightly-tests.md"""
         try:
             # Parse JSON inputs
             summary = json.loads(nightly_summary) if nightly_summary else {}

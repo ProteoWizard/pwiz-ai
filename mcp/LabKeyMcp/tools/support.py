@@ -30,11 +30,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_SUPPORT_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: Browse recent support threads. Prefer get_support_summary for daily review.
-
-        Args:
-            days: Days back to query (default: 30)
-        """
+        """[D] Browse recent support threads. Prefer get_support_summary. → support.md"""
         try:
             server_context = get_server_context(server, container_path)
 
@@ -83,11 +79,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_SUPPORT_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: Full thread with all posts. Saves to ai/.tmp/support-thread-{id}.md.
-
-        Args:
-            thread_id: RowId from get_support_summary
-        """
+        """[D] Full thread with all posts. Saves to ai/.tmp/support-thread-{id}.md. → support.md"""
         try:
             server_context = get_server_context(server, container_path)
 
@@ -184,11 +176,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_SUPPORT_CONTAINER,
     ) -> str:
-        """**PRIMARY**: Support board activity summary. Saves to ai/.tmp/support-report-YYYYMMDD.md.
-
-        Args:
-            days: Days back to query (default: 1)
-        """
+        """[P] Support board activity summary. Saves to ai/.tmp/support-report-YYYYMMDD.md. → support.md"""
         try:
             server_context = get_server_context(server, container_path)
 

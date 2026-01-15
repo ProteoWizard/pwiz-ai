@@ -177,12 +177,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_TEST_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: Browse test runs in a folder. Prefer get_daily_test_summary for daily review.
-
-        Args:
-            days: Days back to query (default: 7)
-            container_path: Test folder (default: Nightly x64)
-        """
+        """[D] Browse test runs. Prefer get_daily_test_summary. → nightly-tests.md"""
         try:
             server_context = get_server_context(server, container_path)
 
@@ -242,12 +237,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_TEST_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: Get stack traces for failed tests in a specific run.
-
-        Args:
-            run_id: Test run ID from get_daily_test_summary
-            container_path: Test folder (must match the run's folder)
-        """
+        """[D] Stack traces for failed tests in a run. → nightly-tests.md"""
         try:
             server_context = get_server_context(server, container_path)
             filter_array = [QueryFilter("testrunid", str(run_id), "eq")]
@@ -289,18 +279,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_TEST_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: Test run log, optionally by section. Saves to ai/.tmp/testrun-log-{run_id}[-{part}].txt.
-
-        Args:
-            run_id: Test run ID
-            part: Log section to extract:
-                - full: Entire log (default)
-                - git: Git clone/checkout output
-                - build: Boost Build (bjam.exe) output
-                - testrunner: TestRunner.exe output (includes command line, test output, crashes)
-                - failures: Extracted failure summaries (# prefix stripped for readability)
-            container_path: Test folder (must match the run's folder)
-        """
+        """[D] Test run log by section. Saves to ai/.tmp/testrun-log-{run_id}[-{part}].txt. → nightly-tests.md"""
         try:
             # URL-encode the container path for the URL
             encoded_path = quote(container_path, safe='/')
@@ -356,18 +335,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_TEST_CONTAINER,
     ) -> str:
-        """**ANALYSIS**: Get toolset versions used for a test run build.
-
-        Returns both the bjam toolset (used to build Boost.Build) and the
-        binaries toolset (used to build ProteoWizard). These can differ when
-        VS 2026 is installed alongside VS 2022.
-
-        Checks for cached build log in ai/.tmp first to avoid re-downloading.
-
-        Args:
-            run_id: Test run ID
-            container_path: Test folder (must match the run's folder)
-        """
+        """[A] Toolset versions for a run build. → nightly-tests.md"""
         try:
             output_dir = get_tmp_dir()
 
@@ -450,12 +418,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_TEST_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: Structured test results XML. Saves to ai/.tmp/testrun-xml-{run_id}.xml.
-
-        Args:
-            run_id: Test run ID
-            container_path: Test folder (must match the run's folder)
-        """
+        """[D] Structured test results XML. Saves to ai/.tmp/testrun-xml-{run_id}.xml. → nightly-tests.md"""
         try:
             # URL-encode the container path for the URL
             encoded_path = quote(container_path, safe='/')
@@ -501,12 +464,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_TEST_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: Get memory/handle leaks for a specific run.
-
-        Args:
-            run_id: Test run ID from get_daily_test_summary
-            container_path: Test folder (must match the run's folder)
-        """
+        """[D] Memory/handle leaks for a run. → nightly-tests.md"""
         try:
             server_context = get_server_context(server, container_path)
             filter_array = [QueryFilter("testrunid", str(run_id), "eq")]
@@ -563,11 +521,7 @@ def register_tools(mcp):
         report_date: str,
         server: str = DEFAULT_SERVER,
     ) -> str:
-        """**PRIMARY**: Daily nightly test report. Queries all 6 folders. Saves to ai/.tmp/nightly-report-YYYYMMDD.md.
-
-        Args:
-            report_date: Date YYYY-MM-DD (end of 8AM-8AM nightly window)
-        """
+        """[P] Daily nightly test report. Queries all 6 folders. Saves to ai/.tmp/nightly-report-YYYYMMDD.md. → nightly-tests.md"""
         # Parse report_date as the END of the nightly window
         # Nightly "day" runs from 8:01 AM day before to 8:00 AM report_date
         end_dt = datetime.strptime(report_date, "%Y-%m-%d")
@@ -982,14 +936,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_TEST_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: Compare stack traces for recurring failures. Saves to ai/.tmp/test-failures-{testname}.md.
-
-        Args:
-            test_name: Test name (e.g., "TestPanoramaDownloadFile")
-            start_date: Start date YYYY-MM-DD
-            end_date: End date YYYY-MM-DD (default: same as start_date)
-            container_path: Test folder to search
-        """
+        """[D] Compare stack traces for recurring failures. Saves to ai/.tmp/test-failures-{testname}.md. → nightly-tests.md"""
         # Use same date for start and end if not specified (single day query)
         if not end_date:
             end_date = start_date
@@ -1141,17 +1088,7 @@ def register_tools(mcp):
         report_date: str,
         server: str = DEFAULT_SERVER,
     ) -> str:
-        """**PRIMARY**: All test failures with stack traces for a date. Saves to ai/.tmp/failures-YYYYMMDD.md.
-
-        Queries all 6 test folders, normalizes stack traces, and groups by fingerprint
-        to identify unique bugs vs duplicate reports.
-
-        Args:
-            report_date: Date YYYY-MM-DD (end of 8AM-8AM nightly window)
-
-        Returns:
-            Summary with fingerprint groupings. Full details in saved file.
-        """
+        """[P] All failures with fingerprints. Saves to ai/.tmp/failures-YYYYMMDD.md. → nightly-tests.md"""
         # Parse report_date as the END of the nightly window
         # Nightly "day" runs from 8:01 AM day before to 8:00 AM report_date
         end_dt = datetime.strptime(report_date, "%Y-%m-%d")
@@ -1335,23 +1272,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_TEST_CONTAINER,
     ) -> str:
-        """**ANALYSIS**: Compare test durations between two runs. Saves to ai/.tmp/run-comparison-{before}-{after}.md.
-
-        Identifies tests that got slower, faster, were added, or were removed.
-        Essential for diagnosing why test counts or durations changed between runs.
-
-        Use case: When daily report shows a significant drop in test count or
-        anomalous duration, compare a "good" baseline run with the "changed" run
-        to identify which tests are responsible.
-
-        Args:
-            run_id_before: Baseline run ID (the "good" state)
-            run_id_after: Comparison run ID (the "changed" state)
-            container_path: Test folder (must match where the runs are located)
-
-        Returns:
-            Summary of timing differences with detailed breakdown in saved file.
-        """
+        """[A] Compare test durations between runs. Saves to ai/.tmp/run-comparison-{before}-{after}.md. → nightly-tests.md"""
         folder_name = container_path.split("/")[-1]
 
         try:

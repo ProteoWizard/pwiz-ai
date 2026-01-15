@@ -261,11 +261,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_WIKI_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: List wiki pages (names, titles, dates). Use get_wiki_page for content.
-
-        Args:
-            container_path: Wiki container (default: /home/software/Skyline)
-        """
+        """[D] List wiki pages. → wiki.md"""
         try:
             server_context = get_server_context(server, container_path)
 
@@ -306,12 +302,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_WIKI_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: Wiki page content. Saves to ai/.tmp/wiki-{page_name}.md.
-
-        Args:
-            page_name: Page name (e.g., 'tutorial_method_edit')
-            container_path: Wiki container (default: /home/software/Skyline)
-        """
+        """[D] Wiki page content. Saves to ai/.tmp/wiki-{page_name}.md. → wiki.md"""
         try:
             server_context = get_server_context(server, container_path)
 
@@ -387,13 +378,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_WIKI_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: Update wiki page content. CAUTION: Modifies live wiki on skyline.ms.
-
-        Args:
-            page_name: Page name (e.g., 'tutorial_method_edit')
-            new_body: New page content (HTML or text)
-            title: New title (optional, keeps existing if not provided)
-        """
+        """[D] Update wiki page. CAUTION: Modifies live wiki. → wiki.md"""
         try:
             # Step 1: Get current page metadata (also returns the session to reuse)
             logger.info(f"Getting metadata for wiki page: {page_name}")
@@ -476,11 +461,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_WIKI_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: List attachments for a wiki page.
-
-        Args:
-            page_name: Page name (e.g., 'NewMachineBootstrap')
-        """
+        """[D] List wiki page attachments. → wiki.md"""
         try:
             # Get entityId from wiki edit page
             metadata, _ = _get_wiki_page_metadata(page_name, server, container_path)
@@ -547,12 +528,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_WIKI_CONTAINER,
     ) -> str:
-        """**DRILL-DOWN**: Download wiki attachment. Text returns content; binary saves to ai/.tmp/.
-
-        Args:
-            page_name: Page name
-            filename: Attachment filename
-        """
+        """[D] Download wiki attachment. → wiki.md"""
         import base64
         from pathlib import Path
 
