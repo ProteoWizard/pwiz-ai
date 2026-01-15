@@ -684,6 +684,19 @@ labkey: python C:/proj/ai/mcp/LabKeyMcp/server.py - ✓ Connected
 gmail: npx @gongrzhe/server-gmail-autoauth-mcp - ✓ Connected (if configured)
 ```
 
+### 7.5 Browser Markdown Viewer (Recommended)
+
+The `ai/` folder contains extensive documentation in Markdown format. Install a browser extension for easy viewing:
+
+**Chrome or Edge:**
+1. Install [Markdown Reader](https://chromewebstore.google.com/detail/markdown-reader/medapdbncneneejhbgcjceippjlfkmkg)
+2. Click the Extensions icon (puzzle piece) → find Markdown Reader → click "⋮" → "Manage Extension"
+3. **Enable "Allow access to file URLs"** (critical - won't render local files without this)
+
+**Verify:** Open `C:\proj\ai\README.md` in Chrome/Edge - it should render with formatted headings, links, and code blocks.
+
+> **Tip:** On Windows 11, you can associate `.md` files with Chrome for one-click viewing. On Windows 10, drag-and-drop `.md` files from File Explorer into Chrome.
+
 For full AI tooling documentation, see: `C:\proj\ai\docs\developer-setup-guide.md`
 
 ---

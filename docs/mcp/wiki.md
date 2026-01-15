@@ -98,6 +98,32 @@ Text files are returned directly; binary files (PDF, images) are saved to `ai/.t
 - ❌ Delete pages or folders
 - ❌ Update pages with `<iframe>` or `<script>` (security restriction)
 
+## LabKey UI Operations
+
+Some wiki operations require the LabKey web UI and cannot be done via MCP:
+
+### Change Page Format (HTML ↔ Markdown)
+
+1. Navigate to the wiki page on skyline.ms
+2. Click **Edit** to enter edit mode
+3. Look in the **top-right corner** for the **Convert To...** button (next to "Delete Page")
+4. Select the desired format (HTML, Markdown, etc.)
+5. Save the page
+
+> **UX Note:** The format selector is not obvious. There's no visible "Format:" label or dropdown—the current format isn't displayed anywhere in the edit UI. The "Convert To..." button is the only way to see or change the format, and it applies to both new and existing pages. New pages in `/home/software/Skyline` default to HTML.
+>
+> **Tip:** Prefer Markdown for new pages—it's easier to maintain and matches our ai/docs files.
+
+### Rename a Page
+
+1. Navigate to the wiki page on skyline.ms
+2. Click **Manage** (opens the page management view)
+3. Click the **Rename** button
+4. Enter the new page name
+5. Confirm the rename
+
+> **Note:** Renaming preserves page history. Use this instead of delete+recreate when you need to archive an old page (e.g., rename to `PageName-archived`).
+
 ## Wiki-to-File Mappings
 
 Some wiki pages are kept in sync with files committed to the repository. The ai/docs files are the **source of truth**:
