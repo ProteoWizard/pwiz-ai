@@ -9,37 +9,25 @@ The daily report consolidates three data sources:
 2. **User-submitted exceptions** - Crash reports from skyline.ms
 3. **Support board activity** - Unanswered threads needing attention
 
-## Effort Levels
+## Session Goals
 
-| Level | Duration | Scope |
-|-------|----------|-------|
-| `quick` | ~1-2 min | Generate report, send email, minimal investigation |
-| `standard` | ~15-30 min | Report + investigate top issues, git blame for regressions, update TODO |
-| `deep` | Full session | Comprehensive analysis, follow every thread, learn from developer emails |
+The daily report session should:
 
-**Default is `standard`** - balance between quick reporting and meaningful investigation.
+1. **Send the email** — The minimum viable output (Phase 1-2)
+2. **Investigate everything** — Explore all failures and exceptions (Phase 3)
+3. **Document findings** — Write to `suggested-actions-YYYYMMDD.md`
 
-### Quick Mode
-- Read emails, generate MCP reports, send summary email
-- Archive processed emails
-- No investigation follow-up
+**There is no "quick mode".** Every session should investigate as much as possible. The email is just the checkpoint — the real value is the exploration phase.
 
-### Standard Mode (Default)
-- Everything in Quick, plus:
-- Investigate NEW failures (not in yesterday's data)
-- Git blame/log to identify commits that may have caused regressions
-- Check if known issues have fixes pending
-- Update TODO with improvement ideas
-- Write execution log
+### What "Done" Looks Like
 
-### Deep Mode
-- Everything in Standard, plus:
-- Review ALL failures, not just new ones
-- Historical regression analysis (when did each failing test start failing?)
-- Read and learn from forwarded developer emails
-- Cross-reference exception patterns with code changes
-- Propose actionable fixes, not just observations
-- Comprehensive execution log with reasoning
+A session ends when it hits the turn limit or runs out of things to investigate. A thorough session will have:
+- Investigated every test failure (checked history, searched PRs)
+- Investigated every exception (checked versions, searched for fixes)
+- Investigated every crashed/short run (pulled logs, identified cause)
+- Documented findings progressively in `suggested-actions-YYYYMMDD.md`
+
+The session should NOT end with a "wrap-up" step — it should be cut off mid-investigation.
 
 ---
 
@@ -167,6 +155,17 @@ Each report type has different day boundaries:
 
 ## Step-by-Step Instructions
 
+The daily report has **three phases**:
+1. **Data Collection** (Steps 1-4) — Gather all data from MCP and email
+2. **Analysis & Email** (Steps 5-9) — Analyze, send email, archive
+3. **Exploration** (no steps - keep going) — **MANDATORY** investigation until turn limit
+
+⚠️ **DO NOT END SESSION after sending email.** The exploration phase is the most valuable part. Keep investigating until you run out of things to look at or hit the turn limit.
+
+---
+
+### Phase 1: Data Collection
+
 ### Step 1: Determine Dates
 
 If user provided a date argument, use it for all reports.
@@ -240,6 +239,10 @@ Read generated reports from `ai/.tmp/`:
 - `exceptions-report-YYYYMMDD.md`
 - `support-report-YYYYMMDD.md`
 
+---
+
+### Phase 2: Analysis & Email
+
 ### Step 5: Fetch Failure Details and Fingerprints
 
 For each test failure, fetch detailed stack trace:
@@ -299,32 +302,7 @@ This detects:
 - **CHRONIC**: Intermittent spanning 30+ days
 - **EXTERNAL**: Involves external service (Koina, Panorama)
 
-### Step 8: Search PRs for Potential Fixes (Standard/Deep Mode)
-
-For tests marked "Check PRs" (multi-day failure that stopped):
-
-1. Query test history: `query_test_history(test_name="TestName")`
-2. Search merged PRs: `gh pr list --state merged --search "TestName" --limit 5`
-3. Classify: "Likely fixed by PR#XXXX" or "No fix PR found - may be intermittent"
-
-### Step 9: Check for Already-Fixed Failures
-
-Compare commit hashes from failing runs with current branch HEAD. A failure may be a "stale echo" from an older commit.
-
-If a fix PR merged after the failing run's commit:
-- Note: "Already fixed by PR#XXXX, expect resolution tomorrow"
-- Skip further investigation
-
-### Step 10: Investigate True Regressions (Standard/Deep Mode)
-
-For failures running on current HEAD:
-
-1. Find test file with grep
-2. Git blame recent commits to related files
-3. Cross-reference failure start date with commit dates
-4. Document: "TestFoo likely regressed by commit abc123"
-
-### Step 11: Save Daily Summary JSON
+### Step 8: Save Daily Summary JSON
 
 ```
 save_daily_summary(
@@ -340,27 +318,96 @@ save_daily_summary(
 )
 ```
 
-### Step 12: Archive Processed Emails
+### Step 9: Archive Processed Emails
 
 ```
 batch_modify_emails(messageIds=[...], removeLabelIds=["INBOX"])
 ```
 
-### Step 13: Self-Improvement Reflection (Required)
+---
 
-1. Read active TODO at `ai/todos/active/TODO-20251228_daily_report_improvements.md`
-2. Vote on 1-3 existing backlog items based on this session's experience
-3. Record observations and new improvement ideas
+### Phase 3: Exploration (MANDATORY)
 
-### Step 14: Write Execution Log
+⚠️ **DO NOT END SESSION AFTER EMAIL.** Keep investigating until you run out of things to look at or hit the turn limit. This is where the automated session provides real value.
 
-Save to `ai/.tmp/logs/daily-session-YYYYMMDD.md`:
-- Effort level, duration, timestamps
-- Data sources consulted
-- Key observations
-- Investigations performed
-- Conclusions
-- System improvement feedback (votes and new ideas)
+**Write findings progressively** to `ai/.tmp/suggested-actions-YYYYMMDD.md` after **each** investigation. The session may terminate at any moment — never accumulate findings in memory.
+
+### Investigate Test Failures
+
+For **each test failure** in today's report:
+
+**A. Check failure history**
+```
+query_test_history(test_name="TestName")
+```
+- Is this NEW (first time ever)?
+- Is this RECURRING (seen before, came back)?
+- When did it start failing?
+
+**B. For crashed/short runs, get the log**
+```
+save_run_log(run_id=XXXXX, part="testrunner")
+# Then read the last 100 lines to see what crashed
+```
+
+**C. Search for related PRs**
+```bash
+gh pr list --state merged --search "TestName" --limit 10
+gh pr list --state merged --search "filename:TestName.cs" --limit 10
+git log --oneline -20 -- "**/TestName*"
+```
+
+**D. Questions to answer:**
+- Is there a merged PR that might have caused this? (regression)
+- Is there a merged PR that might have fixed this? (stale echo)
+- Is it machine-specific? (hardware/config issue)
+- Is it time-specific? (intermittent/flaky)
+
+**→ Write findings to `suggested-actions-YYYYMMDD.md` immediately**
+
+### Investigate Exceptions
+
+For **each exception** in today's report:
+
+**A. Get full details**
+```
+get_exception_details(exception_id=XXXXX)
+```
+
+**B. Check version distribution**
+- Only in old versions? → Likely already fixed
+- Only in newest version? → Recent regression
+- Across many versions? → Long-standing bug
+
+**C. Search for related PRs**
+```bash
+gh pr list --state merged --search "filename:ChromatogramCache.cs" --limit 10
+gh pr list --state merged --search "NullReferenceException GetMedianPeak" --limit 5
+```
+
+**D. Questions to answer:**
+- Is this already fixed by a recent PR?
+- Should we record a fix? (use `record_exception_fix`)
+- Is this a new bug that needs a GitHub issue?
+- Does the user have contact info for follow-up?
+
+**→ Write findings to `suggested-actions-YYYYMMDD.md` immediately**
+
+### Investigate Infrastructure Issues
+
+For **missing computers** or **crashed runs**:
+
+**A. Check computer status**
+```
+list_computer_status(container_path="/home/development/Nightly x64")
+```
+
+**B. For crashed runs, analyze the pattern**
+- Same machine repeatedly? → Hardware issue
+- Same test causing crash? → Test bug
+- Same time of day? → External interference
+
+**→ Write findings to `suggested-actions-YYYYMMDD.md` immediately**
 
 ---
 
@@ -543,45 +590,15 @@ Document findings in `ai/.tmp/suggested-actions-YYYYMMDD.md` under "Infrastructu
 
 | Location | File | Purpose |
 |----------|------|---------|
-| `ai/.tmp/` | `nightly-report-YYYYMMDD.md` | Full test results |
-| `ai/.tmp/` | `exceptions-report-YYYYMMDD.md` | Exception details |
-| `ai/.tmp/` | `support-report-YYYYMMDD.md` | Support summary |
-| `ai/.tmp/history/` | `daily-summary-YYYYMMDD.json` | Structured data for trends |
-| `ai/.tmp/logs/` | `daily-session-YYYYMMDD.md` | Execution log |
-| `ai/.tmp/` | `suggested-actions-YYYYMMDD.md` | Pending actions for review |
+| `ai/.tmp/` | `nightly-report-YYYYMMDD.md` | MCP report - full test results |
+| `ai/.tmp/` | `exceptions-report-YYYYMMDD.md` | MCP report - exception details |
+| `ai/.tmp/` | `support-report-YYYYMMDD.md` | MCP report - support summary |
+| `ai/.tmp/history/` | `daily-summary-YYYYMMDD.json` | Structured data for pattern detection |
+| `ai/.tmp/` | `suggested-actions-YYYYMMDD.md` | **Investigation findings** (written progressively) |
 
 ---
 
-## Post-Email Exploration Phase
-
-**IMPORTANT**: The email is the critical checkpoint. Send it BEFORE starting exploration.
-
-After the email is sent and execution log written, the scheduled session should continue with deeper investigation until it runs out of ideas or hits the session limit.
-
-**IMPORTANT**: Write findings to `ai/.tmp/suggested-actions-YYYYMMDD.md` progressively after each investigation. The session may be terminated without warning at any turn limit, so never accumulate findings in memory to write at the end.
-
-### Exploration Workflow
-
-```
-1. EMAIL SENT (checkpoint - session can safely end after this)
-2. Begin exploration phase:
-   a. For each exception fingerprint:
-      - Check version distribution (only old versions?)
-      - Search for PRs touching the file/method since that version
-      - If potential fix found, add to suggested-actions.md
-   b. For each NEW or SYSTEMIC test failure:
-      - Query test history for failure start date
-      - Search git log for commits around that date
-      - Search merged PRs for test name or related code
-      - If correlation found, add to suggested-actions.md
-   c. For each "stopped failing" test:
-      - Search for merged PRs mentioning the test
-      - Add finding to suggested-actions.md
-3. Write findings to ai/.tmp/suggested-actions-YYYYMMDD.md
-4. Session ends (limit or complete)
-```
-
-### Suggested Actions File Format
+## Suggested Actions File Format
 
 ```markdown
 # Suggested Actions - YYYY-MM-DD
@@ -688,14 +705,11 @@ The `first_fixed_version` can be null initially and updated later when the fix i
 
 ## Scheduled Session Configuration
 
-**Prompt**: `/pw-daily standard` or `/pw-daily deep`
-
-**Session budget**:
-- Quick: ~$0.10-0.20
-- Standard: ~$0.50-2.00
-- Deep: ~$5.00-15.00
+**Prompt**: `/pw-daily`
 
 **Default recipient**: brendanx@proteinms.net
+
+**Expected behavior**: Send email, then investigate every issue found. Session should use available turns to explore — don't stop early.
 
 ---
 
