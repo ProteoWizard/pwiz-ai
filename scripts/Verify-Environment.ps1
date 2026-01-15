@@ -6,9 +6,25 @@
     Checks all prerequisites from ai/docs/developer-setup-guide.md and outputs
     a summary report. Use this to quickly validate your workstation setup.
 
+    Optional components can be explicitly skipped using the -Skip parameter.
+    The script will pass if the only missing items are those explicitly skipped.
+
+.PARAMETER Skip
+    Array of optional component names to skip. Valid values:
+    - netrc: Skip .netrc credentials check (LabKey API access)
+    - labkey: Skip LabKey MCP Server registration check
+
 .EXAMPLE
     .\Verify-Environment.ps1
     Run all environment checks and display status report
+
+.EXAMPLE
+    .\Verify-Environment.ps1 -Skip netrc
+    Run checks but skip .netrc credentials (deferred for later setup)
+
+.EXAMPLE
+    .\Verify-Environment.ps1 -Skip netrc,labkey
+    Skip both netrc and LabKey MCP Server checks
 
 .NOTES
     Author: LLM-assisted development
@@ -17,6 +33,12 @@
     MAINTENANCE: Keep this script in sync with ai/docs/developer-setup-guide.md.
     When prerequisites change in the documentation, update the checks here.
 #>
+
+param(
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("netrc", "labkey")]
+    [string[]]$Skip = @()
+)
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -35,13 +57,15 @@ function Add-Result {
         [string]$Component,
         [string]$Status,
         [string]$Details,
-        [bool]$Success
+        [bool]$Success,
+        [string]$SkipId = $null  # Optional ID for matching with -Skip parameter
     )
     $script:results += [PSCustomObject]@{
         Component = $Component
         Status = $Status
         Details = $Details
         Success = $Success
+        SkipId = $SkipId
     }
 }
 
@@ -263,49 +287,55 @@ $netrcPath = Join-Path $env:USERPROFILE ".netrc"
 $netrcAltPath = Join-Path $env:USERPROFILE "_netrc"
 if ((Test-Path $netrcPath) -or (Test-Path $netrcAltPath)) {
     $foundPath = if (Test-Path $netrcPath) { ".netrc" } else { "_netrc" }
-    Add-Result "netrc credentials" "OK" "$foundPath exists" $true
+    Add-Result "netrc credentials" "OK" "$foundPath exists" $true -SkipId "netrc"
+} elseif ($Skip -contains "netrc") {
+    Add-Result "netrc credentials" "SKIPPED" "Deferred (use -Skip netrc to acknowledge)" $true -SkipId "netrc"
 } else {
-    Add-Result "netrc credentials" "MISSING" "Create ~\.netrc with shared agent credentials (see developer-setup-guide.md)" $false
+    Add-Result "netrc credentials" "MISSING" "Create ~\.netrc with shared agent credentials (see developer-setup-guide.md)" $false -SkipId "netrc"
 }
 
 # 11. LabKey MCP Server registration
 Write-Host "Checking LabKey MCP server..." -ForegroundColor Gray
-try {
-    $serverPath = Join-Path $aiRoot "mcp\LabKeyMcp\server.py"
-    $serverExists = Test-Path $serverPath
-    $mcpListRaw = & claude mcp list 2>&1
-    $mcpList = $mcpListRaw -join "`n"  # Join array into single string
+if ($Skip -contains "labkey") {
+    Add-Result "LabKey MCP Server" "SKIPPED" "Deferred (use -Skip labkey to acknowledge)" $true -SkipId "labkey"
+} else {
+    try {
+        $serverPath = Join-Path $aiRoot "mcp\LabKeyMcp\server.py"
+        $serverExists = Test-Path $serverPath
+        $mcpListRaw = & claude mcp list 2>&1
+        $mcpList = $mcpListRaw -join "`n"  # Join array into single string
 
-    # Parse the registered path from output like: "labkey: python C:/path/to/server.py - ✓ Connected"
-    $registeredPath = $null
-    if ($mcpList -match 'labkey:\s*python\s+(.+?server\.py)') {
-        $registeredPath = $matches[1].Trim() -replace '/', '\'  # Normalize to backslashes
+        # Parse the registered path from output like: "labkey: python C:/path/to/server.py - ✓ Connected"
+        $registeredPath = $null
+        if ($mcpList -match 'labkey:\s*python\s+(.+?server\.py)') {
+            $registeredPath = $matches[1].Trim() -replace '/', '\'  # Normalize to backslashes
+        }
+
+        $isConnected = $mcpList -match 'labkey.*Connected'
+        $isRegistered = $null -ne $registeredPath
+
+        # Normalize expected path for comparison
+        $expectedPathNormalized = $serverPath -replace '/', '\'
+        $pathMatches = $isRegistered -and ($registeredPath -eq $expectedPathNormalized)
+
+        if ($isConnected -and $pathMatches) {
+            Add-Result "LabKey MCP Server" "OK" "registered and connected" $true -SkipId "labkey"
+        } elseif ($isRegistered -and -not $pathMatches) {
+            # Registered but pointing to wrong path
+            Add-Result "LabKey MCP Server" "WARN" "registered at wrong path. Run: claude mcp remove labkey && claude mcp add labkey -- python $serverPath" $false -SkipId "labkey"
+        } elseif ($isRegistered -and $pathMatches) {
+            # Registered at correct path, file exists, but not connected (normal when not in active session)
+            Add-Result "LabKey MCP Server" "WARN" "registered but not connected (normal outside active session)" $false -SkipId "labkey"
+        } elseif ($serverExists) {
+            # Server exists but not registered
+            Add-Result "LabKey MCP Server" "MISSING" "Run: claude mcp add labkey -- python $serverPath" $false -SkipId "labkey"
+        } else {
+            # Neither registered nor server file found
+            Add-Result "LabKey MCP Server" "ERROR" "server.py not found at $serverPath" $false -SkipId "labkey"
+        }
+    } catch {
+        Add-Result "LabKey MCP Server" "ERROR" "Could not check MCP status: $_" $false -SkipId "labkey"
     }
-
-    $isConnected = $mcpList -match 'labkey.*Connected'
-    $isRegistered = $null -ne $registeredPath
-
-    # Normalize expected path for comparison
-    $expectedPathNormalized = $serverPath -replace '/', '\'
-    $pathMatches = $isRegistered -and ($registeredPath -eq $expectedPathNormalized)
-
-    if ($isConnected -and $pathMatches) {
-        Add-Result "LabKey MCP Server" "OK" "registered and connected" $true
-    } elseif ($isRegistered -and -not $pathMatches) {
-        # Registered but pointing to wrong path
-        Add-Result "LabKey MCP Server" "WARN" "registered at wrong path. Run: claude mcp remove labkey && claude mcp add labkey -- python $serverPath" $false
-    } elseif ($isRegistered -and $pathMatches) {
-        # Registered at correct path, file exists, but not connected (normal when not in active session)
-        Add-Result "LabKey MCP Server" "WARN" "registered but not connected (normal outside active session)" $false
-    } elseif ($serverExists) {
-        # Server exists but not registered
-        Add-Result "LabKey MCP Server" "MISSING" "Run: claude mcp add labkey -- python $serverPath" $false
-    } else {
-        # Neither registered nor server file found
-        Add-Result "LabKey MCP Server" "ERROR" "server.py not found at $serverPath" $false
-    }
-} catch {
-    Add-Result "LabKey MCP Server" "ERROR" "Could not check MCP status: $_" $false
 }
 
 # 12. Git autocrlf (check effective value from any scope: system, global, or local)
@@ -361,6 +391,7 @@ foreach ($result in $results) {
         "PARTIAL" { "Yellow" }
         "INFO" { "Cyan" }
         "SKIP" { "Gray" }
+        "SKIPPED" { "Magenta" }
         default { "Red" }
     }
     $statusText = "[$($result.Status)]".PadRight($maxStatusLen + 2)
@@ -375,17 +406,41 @@ $okCount = ($results | Where-Object { $_.Status -eq "OK" }).Count
 $warnCount = ($results | Where-Object { $_.Status -in @("WARN", "PARTIAL") }).Count
 $missingCount = ($results | Where-Object { $_.Status -eq "MISSING" }).Count
 $errorCount = ($results | Where-Object { $_.Status -eq "ERROR" }).Count
+$skippedCount = ($results | Where-Object { $_.Status -eq "SKIPPED" }).Count
 
 Write-Host "`n----------------------------------------" -ForegroundColor Gray
-Write-Host "  OK: $okCount | Warnings: $warnCount | Missing: $missingCount | Errors: $errorCount" -ForegroundColor Gray
-
-if ($missingCount -eq 0 -and $errorCount -eq 0 -and $warnCount -eq 0) {
-    Write-Host "`n[OK] Environment is fully configured for LLM-assisted development" -ForegroundColor Green
-} elseif ($missingCount -eq 0 -and $errorCount -eq 0) {
-    Write-Host "`n[OK] Environment is ready (some optional items have warnings)" -ForegroundColor Yellow
+if ($skippedCount -gt 0) {
+    Write-Host "  OK: $okCount | Warnings: $warnCount | Skipped: $skippedCount | Missing: $missingCount | Errors: $errorCount" -ForegroundColor Gray
 } else {
-    Write-Host "`n[ACTION REQUIRED] Some components need configuration" -ForegroundColor Red
-    Write-Host "See: ai/docs/developer-setup-guide.md for installation instructions`n" -ForegroundColor Gray
+    Write-Host "  OK: $okCount | Warnings: $warnCount | Missing: $missingCount | Errors: $errorCount" -ForegroundColor Gray
 }
 
-exit ($missingCount + $errorCount)
+# Show which items were skipped
+if ($Skip.Count -gt 0) {
+    Write-Host "  Explicitly skipped: $($Skip -join ', ')" -ForegroundColor Magenta
+}
+
+if ($missingCount -eq 0 -and $errorCount -eq 0 -and $warnCount -eq 0) {
+    if ($skippedCount -gt 0) {
+        Write-Host "`n[PASS] Environment configured (with $skippedCount deferred item(s): $($Skip -join ', '))" -ForegroundColor Green
+    } else {
+        Write-Host "`n[PASS] Environment is fully configured for LLM-assisted development" -ForegroundColor Green
+    }
+    exit 0
+} elseif ($missingCount -eq 0 -and $errorCount -eq 0) {
+    if ($skippedCount -gt 0) {
+        Write-Host "`n[PASS] Environment ready with warnings (deferred: $($Skip -join ', '))" -ForegroundColor Yellow
+    } else {
+        Write-Host "`n[PASS] Environment is ready (some optional items have warnings)" -ForegroundColor Yellow
+    }
+    exit 0
+} else {
+    Write-Host "`n[FAIL] Some components need configuration" -ForegroundColor Red
+    Write-Host "See: ai/docs/developer-setup-guide.md for installation instructions" -ForegroundColor Gray
+    if ($missingCount -gt 0) {
+        $missingItems = $results | Where-Object { $_.Status -eq "MISSING" } | ForEach-Object { $_.Component }
+        Write-Host "Missing: $($missingItems -join ', ')" -ForegroundColor Gray
+    }
+    Write-Host ""
+    exit ($missingCount + $errorCount)
+}

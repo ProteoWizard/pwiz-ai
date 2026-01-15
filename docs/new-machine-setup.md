@@ -210,9 +210,11 @@ Test-Path C:\proj\pwiz\pwiz_tools\Skyline\Skyline.sln   # Should be True
 
 > **For LLM assistants:** Now that the repositories are cloned, the master copy of this setup guide is available locally at `ai\docs\new-machine-setup.md`. If you fetched this document from the web, you can now reference and even edit the local copy for improvements.
 
-### 1.10 Configure Claude Code Statusline (Optional)
+### 1.10 Configure Claude Code Statusline (Recommended)
 
-**For LLM assistants:** Offer to configure a statusline for Claude Code that shows the current project, git branch, model, and context usage. This is a personal preference setting.
+**For LLM assistants:** You MUST offer to configure the statusline. Do not skip this step silently. Ask: "Would you like me to configure the Claude Code statusline? It shows the current project, git branch, model, and context usage."
+
+This is a personal preference setting, but most developers find it useful.
 
 Example statusline output: `pwiz [Skyline/work/20260113_feature] | Opus | 36% used`
 
@@ -609,6 +611,17 @@ pwsh -Command "& './ai/scripts/Verify-Environment.ps1'"
 
 This checks for all required tools and reports any missing components.
 
+**The verification must PASS before proceeding.** If any items are missing:
+- Fix the missing items, OR
+- Use `-Skip` to explicitly defer optional components (netrc credentials for LabKey access)
+
+```powershell
+# Skip netrc if deferring LabKey API setup
+pwsh -Command "& './ai/scripts/Verify-Environment.ps1' -Skip netrc"
+```
+
+> **For LLM assistants:** You MUST achieve a passing verification (exit code 0) before continuing to Phase 8. If the user chooses to skip optional components, use the `-Skip` parameter explicitly. Do not proceed with MISSING or ERROR items.
+
 ### 7.2 LabKey API Credentials
 
 The LabKey MCP server needs credentials for skyline.ms access.
@@ -641,6 +654,8 @@ password your-password-here
 ```
 
 For full LabKey MCP documentation, see: `ai/mcp/LabKeyMcp/README.md`
+
+> **Deferring LabKey setup:** If you don't have a +claude account yet or want to set this up later, use `-Skip netrc` when running `Verify-Environment.ps1`. The LabKey MCP server will still be registered but will have limited functionality until credentials are configured.
 
 ### 7.3 MCP Server Configuration
 
