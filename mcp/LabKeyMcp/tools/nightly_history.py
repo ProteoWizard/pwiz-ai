@@ -40,6 +40,48 @@ TEST_FOLDERS = [
 FAILURE_URL_TEMPLATE = "https://skyline.ms{container}/testresults-showFailures.view?end={date}&failedTest={test_name}"
 
 
+def _get_fix_summary(fix_data: dict) -> dict:
+    """Extract summary info from fix data (handles both old and new schema).
+
+    Old schema (v1):
+        {'pr_number': 'PR#1234', 'merge_date': '...', 'fixed_in_version': '...', 'commit': '...'}
+
+    New schema (v2):
+        {'master': {'pr': 'PR#1234', 'commit': '...', 'merged': '...'},
+         'release': {'branch': '...', 'pr': '...', 'commit': '...', 'merged': '...'},
+         'first_fixed_version': '...'}
+
+    Returns dict with:
+        pr: Primary PR number (from master branch)
+        commit: Commit hash on master
+        merge_date: Date merged to master
+        version: First version containing the fix
+        release: Release branch info dict (if any)
+    """
+    if not fix_data:
+        return None
+
+    # New schema has 'master' key
+    if 'master' in fix_data:
+        master = fix_data['master']
+        return {
+            'pr': master.get('pr', 'Unknown PR'),
+            'commit': master.get('commit'),
+            'merge_date': master.get('merged', 'Unknown'),
+            'version': fix_data.get('first_fixed_version'),
+            'release': fix_data.get('release'),
+        }
+
+    # Old schema has 'pr_number' key
+    return {
+        'pr': fix_data.get('pr_number', 'Unknown PR'),
+        'commit': fix_data.get('commit'),
+        'merge_date': fix_data.get('merge_date', 'Unknown'),
+        'version': fix_data.get('fixed_in_version'),
+        'release': None,
+    }
+
+
 def _get_history_path():
     """Get path to nightly history file in ai/.tmp/history/."""
     history_dir = get_tmp_dir() / 'history'
@@ -331,7 +373,7 @@ def register_tools(mcp):
                     last_seen = fp_entry.get('last_seen', '?')
                     sig = fp_entry.get('signature', '(unknown)')
                     exc_type = fp_entry.get('exception_type', '')
-                    fix = fp_entry.get('fix')
+                    fix = _get_fix_summary(fp_entry.get('fix'))
 
                     lines.append(f"### Fingerprint `{fp}`")
                     lines.append("")
@@ -343,7 +385,11 @@ def register_tools(mcp):
                     lines.append(f"**First seen**: {first_seen} | **Last seen**: {last_seen}")
 
                     if fix:
-                        lines.append(f"✅ **Fixed in**: {fix.get('pr_number', '?')} ({fix.get('merge_date', '?')})")
+                        fix_text = f"✅ **Fixed in**: {fix['pr']} ({fix['merge_date']})"
+                        if fix.get('release'):
+                            rel = fix['release']
+                            fix_text += f" + {rel.get('pr', '?')} on {rel.get('branch', 'release')}"
+                        lines.append(fix_text)
 
                     lines.append("")
 
@@ -400,35 +446,72 @@ def register_tools(mcp):
         fixed_in_version: str = None,
         merge_date: str = None,
         commit: str = None,
+        release_branch: str = None,
+        release_pr: str = None,
+        release_commit: str = None,
+        release_merge_date: str = None,
         notes: str = None,
     ) -> str:
         """Record that a test failure, leak, or hang has been fixed.
 
+        Supports tracking fixes across multiple branches (master + release).
+        Cherry-picks to release branches create different commits, so we
+        track both the original PR and the cherry-pick.
+
         Args:
             test_name: Test name (e.g., "TestPeakPickingTutorial")
             fix_type: Type of fix - "failure", "leak", or "hang"
-            pr_number: PR number (e.g., "PR#1234" or "1234")
+            pr_number: PR number on master (e.g., "PR#1234" or "1234")
             fingerprint: For failures, the specific fingerprint being fixed (optional)
-            fixed_in_version: Version where fix appears (e.g., "25.1.0.250")
-            merge_date: Date PR was merged (YYYY-MM-DD)
-            commit: Commit hash of the fix
+            fixed_in_version: First version where fix appears (e.g., "25.1.0.250")
+            merge_date: Date PR was merged to master (YYYY-MM-DD)
+            commit: Commit hash of the fix on master
+            release_branch: Release branch name (e.g., "Skyline/skyline_26_1")
+            release_pr: Cherry-pick PR number on release branch
+            release_commit: Cherry-pick commit hash on release branch
+            release_merge_date: Date cherry-pick was merged (YYYY-MM-DD)
             notes: Optional notes about the fix
         """
         try:
             history = _load_nightly_history()
 
-            # Normalize PR number format
-            if pr_number and not pr_number.upper().startswith('PR'):
-                pr_number = f"PR#{pr_number}"
+            # Normalize PR number formats
+            def normalize_pr(pr):
+                if pr and not pr.upper().startswith('PR'):
+                    return f"PR#{pr}"
+                return pr
 
+            pr_number = normalize_pr(pr_number)
+            release_pr = normalize_pr(release_pr)
+
+            # Build the new multi-branch fix schema
             fix_info = {
-                'pr_number': pr_number,
-                'fixed_in_version': fixed_in_version,
-                'merge_date': merge_date or datetime.now().strftime("%Y-%m-%d"),
-                'commit': commit,
-                'notes': notes,
                 'recorded_date': datetime.now().strftime("%Y-%m-%d"),
             }
+
+            # Master branch info (required)
+            if pr_number:
+                fix_info['master'] = {
+                    'pr': pr_number,
+                    'commit': commit,
+                    'merged': merge_date or datetime.now().strftime("%Y-%m-%d"),
+                }
+
+            # Release branch info (optional)
+            if release_branch or release_pr:
+                fix_info['release'] = {
+                    'branch': release_branch,
+                    'pr': release_pr,
+                    'commit': release_commit,
+                    'merged': release_merge_date,
+                }
+
+            # Version tracking (may be null until tagged)
+            fix_info['first_fixed_version'] = fixed_in_version
+
+            # Notes
+            if notes:
+                fix_info['notes'] = notes
 
             if fix_type == "failure":
                 section = history.get('test_failures', {})
@@ -464,13 +547,30 @@ def register_tools(mcp):
             # Save updated history
             _save_nightly_history(history, datetime.now().strftime("%Y-%m-%d"))
 
-            return (
-                f"Recorded fix for {test_name} ({fix_type}):\n"
-                f"- PR: {pr_number}\n"
-                f"- Version: {fixed_in_version or 'Not specified'}\n"
-                f"- Merge date: {fix_info['merge_date']}\n\n"
-                f"Future reports will show this as a known fix."
-            )
+            # Build response
+            lines = [
+                f"Recorded fix for {test_name} ({fix_type}):",
+            ]
+
+            if 'master' in fix_info:
+                lines.append(f"- Master: {fix_info['master']['pr']}")
+                if fix_info['master'].get('commit'):
+                    lines.append(f"  - Commit: {fix_info['master']['commit'][:12]}...")
+                lines.append(f"  - Merged: {fix_info['master']['merged']}")
+
+            if 'release' in fix_info:
+                branch = fix_info['release'].get('branch', 'unknown')
+                lines.append(f"- Release ({branch}): {fix_info['release'].get('pr', 'N/A')}")
+                if fix_info['release'].get('commit'):
+                    lines.append(f"  - Commit: {fix_info['release']['commit'][:12]}...")
+                if fix_info['release'].get('merged'):
+                    lines.append(f"  - Merged: {fix_info['release']['merged']}")
+
+            lines.append(f"- First fixed version: {fixed_in_version or 'Not yet tagged'}")
+            lines.append("")
+            lines.append("Future reports will show this as a known fix.")
+
+            return "\n".join(lines)
 
         except Exception as e:
             logger.error(f"Error recording fix: {e}", exc_info=True)

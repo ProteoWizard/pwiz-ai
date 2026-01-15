@@ -458,6 +458,17 @@ ROW_ID comes from the `row_id` field in exception reports (e.g., 73730).
 <a href="https://skyline.ms/home/support/announcements-thread.view?rowId={THREAD_ID}">{Thread Title}</a>
 ```
 
+**PR fix links** (link the PR number in "FIXED by PR#XXXX"):
+```html
+<span class="fixed"><a href="https://github.com/ProteoWizard/pwiz/pull/{PR_NUMBER}">FIXED by PR#{PR_NUMBER}</a></span>
+```
+
+**Has email links** (link to the exception report that has the email):
+```html
+<span class="has-email"><a href="https://skyline.ms/home/issues/exceptions/announcements-thread.view?rowId={ROW_ID}">Has email</a></span>
+```
+ROW_ID is the specific report with the email contact, from `row_id` in exception history.
+
 ### Detecting Early Terminations
 
 Runs that terminate before their expected duration indicate crashes or infrastructure problems. The MCP report flags these in the Anomaly column as `short (N min)`.
@@ -610,7 +621,7 @@ When the user runs `/resume` on the scheduled session:
 |------|---------|
 | `analyze_daily_patterns(report_date)` | Compare with history |
 | `query_test_history(test_name)` | All failures/leaks for a test |
-| `record_test_fix(test_name, fix_type, pr_number)` | Record fix for regression detection |
+| `record_test_fix(test_name, fix_type, pr_number, ...)` | Record fix for regression detection |
 | `list_computer_status(container_path)` | Active/inactive computers |
 | `check_computer_alarms()` | Due reactivation reminders |
 | `save_test_failure_history(test_name, start_date)` | Historical failures |
@@ -635,6 +646,43 @@ Review `ai/.tmp/run-comparison-{before}-{after}.md` for:
 - NEW/REMOVED tests
 - SLOWDOWNS (>50% slower)
 - Top impacts on time
+
+### Recording Fixes with Multi-Branch Tracking
+
+When recording a fix, track both the master and release branch PRs. Cherry-picks create different commits, so we track both for accurate version correlation.
+
+**Finding cherry-pick PRs**:
+```bash
+# Find PRs that mention the original PR number
+gh pr list --state merged --search "3785"
+
+# Shows:
+# 3787  [cherry-pick] Fix exception when...  Skyline/skyline_26_1  MERGED
+# 3785  Fix exception when...                master                MERGED
+```
+
+**Recording with full tracking**:
+```python
+record_exception_fix(
+    fingerprint="abc123def456...",
+    pr_number="3785",
+    commit="a2a7f96a1f75bbd90dd3d11e85a0e3057efde325",
+    merge_date="2026-01-10",
+    release_branch="Skyline/skyline_26_1",
+    release_pr="3787",
+    release_commit="4381a5d39ef01968f9704a421d9c6d40cc2975ea",
+    release_merge_date="2026-01-10"
+)
+```
+
+**Finding first fixed version** (after release is tagged):
+```bash
+# Find which tags contain the release branch commit
+git tag --contains 4381a5d39ef01968f9704a421d9c6d40cc2975ea
+# Returns: 26.0.9.005 (or empty if not yet tagged)
+```
+
+The `first_fixed_version` can be null initially and updated later when the fix is included in a release.
 
 ---
 
