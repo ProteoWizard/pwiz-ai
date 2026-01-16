@@ -379,6 +379,39 @@ save_run_log(run_id=XXXXX, part="testrunner")
 
 For **each exception** with a stack trace (user-reported or nightly test failure):
 
+#### Exception Classification
+
+**Important**: Every exception that reaches the exception reporting form is a bug. There are no "user errors" in exception reports.
+
+If an exception appears to be caused by user action (missing file, network unavailable), it is **still a bug** because:
+1. The application failed to show a friendly error message to the user
+2. Instead, the user saw the exception reporting form (which they may perceive as a "crash")
+3. The application should have caught the exception and displayed helpful guidance
+
+**User-actionable exceptions** (should be caught and shown as friendly error):
+- `FileNotFoundException` for a template file → Should show: "Template file not found. Please select a valid file."
+- `IOException` for network path unavailable → Should show: "Cannot access network location. Check your connection."
+
+**Programming defects** (code bug to fix, not catch-and-display):
+- `ArgumentException`, `ArgumentOutOfRangeException` → Usually means calling code passed invalid value
+- `NullReferenceException`, `IndexOutOfBoundsException` → Code logic error
+- These require fixing the code that produced the invalid state, not adding error handling
+
+**The fix pattern for user-actionable exceptions** (from PR#3812):
+```csharp
+try
+{
+    // Operation that might fail due to external factors (file, network, etc.)
+}
+catch (Exception ex)
+{
+    ExceptionUtil.DisplayOrReportException(this, ex,
+        Resources.FriendlyErrorMessage_OperationFailed);
+}
+```
+
+This shows a friendly error for expected failures while still reporting unexpected exceptions.
+
 **A. Get the stack trace**
 ```
 get_exception_details(exception_id=XXXXX)
