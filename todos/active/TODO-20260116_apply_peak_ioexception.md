@@ -5,6 +5,7 @@
 - **Base**: `master`
 - **Created**: 2026-01-16
 - **GitHub Issue**: [#3811](https://github.com/ProteoWizard/pwiz/issues/3811)
+- **PR**: [#3812](https://github.com/ProteoWizard/pwiz/pull/3812)
 
 ## Objective
 
