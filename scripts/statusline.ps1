@@ -9,8 +9,8 @@
     - Context window usage percentage
 
     Example outputs:
-    - pwiz [Skyline/work/20260113_feature] | Opus | 36% used
-    - pwiz-ai [master] | Opus | 12% used
+    - pwiz [Skyline/work/20260113_feature] | Opus | 49% left
+    - pwiz-ai [master] | Opus | 73% left
 
     In sibling mode (multiple repos under C:\proj), Claude can set the active
     project via the StatusMcp's set_active_project tool. The statusline then
@@ -47,8 +47,8 @@
     - Set by: StatusMcp's set_active_project tool
     - Falls back to workspace.project_dir if not set
 
-    Context warning: Claude Code warns at ~10% remaining, so watching
-    "% used" helps you know when you're approaching that threshold.
+    Context calculation: Claude Code reserves ~15% for system overhead,
+    so "% left" shows remaining usable context (matches Claude's warnings).
 #>
 
 $input_json = $input | Out-String | ConvertFrom-Json
@@ -86,15 +86,18 @@ try {
     Pop-Location
 } catch { }
 
-# Calculate context percentage
+# Calculate context remaining (matching Claude Code's warnings)
+# Claude Code reserves ~15% for system overhead, so usable max is ~85%
 $ctx = ""
 if ($input_json.context_window.current_usage) {
     $usage = $input_json.context_window.current_usage
     $current = $usage.input_tokens + $usage.cache_creation_input_tokens + $usage.cache_read_input_tokens
     $size = $input_json.context_window.context_window_size
     if ($size -gt 0) {
-        $pct = [math]::Floor(($current * 100) / $size)
-        $ctx = " | $pct% used"
+        $usable_max_pct = 85
+        $used_pct = ($current * 100) / $size
+        $left = [math]::Max(0, [math]::Floor($usable_max_pct - $used_pct))
+        $ctx = " | $left% left"
     }
 }
 
