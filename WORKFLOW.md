@@ -62,6 +62,8 @@ See [ai/docs/ai-repository-strategy.md](docs/ai-repository-strategy.md) for setu
 - **PR**: [#NNNN](https://github.com/ProteoWizard/pwiz/pull/NNNN) | (pending)
 ```
 
+**Note**: GitHub Issue and PR references must be Markdown links in the format `[#NNNN](URL)`, not raw URLs.
+
 ## Key Workflows
 
 ### Workflow 1: Start Work from GitHub Issue (/pw-startissue)
