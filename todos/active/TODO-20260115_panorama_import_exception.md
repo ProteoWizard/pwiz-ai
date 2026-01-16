@@ -5,6 +5,7 @@
 - **Base**: `master`
 - **Created**: 2026-01-15
 - **GitHub Issue**: https://github.com/ProteoWizard/pwiz/issues/3808
+- **PR**: https://github.com/ProteoWizard/pwiz/pull/3809
 
 ## Objective
 
@@ -16,13 +17,36 @@ Fix `PanoramaImportErrorException` being treated as a programming defect instead
 
 ## Tasks
 
-- [ ] Add `PanoramaException` base class inheriting from `IOException`
-- [ ] Change `PanoramaServerException` to inherit from `PanoramaException`
-- [ ] Change `PanoramaImportErrorException` to inherit from `PanoramaException`
-- [ ] Run Panorama-related tests to verify fix
+- [x] Add `PanoramaException` base class inheriting from `IOException`
+- [x] Change `PanoramaServerException` to inherit from `PanoramaException`
+- [x] Change `PanoramaImportErrorException` to inherit from `PanoramaException`
+- [x] Run Panorama-related tests to verify fix
+- [x] Add unit test `TestPanoramaExceptionsUserActionable`
 
 ## Progress Log
 
 ### 2026-01-15 - Session Start
 
 Starting work on this issue. The fix is straightforward - introduce a `PanoramaException` base class that inherits from `IOException`, then have both `PanoramaServerException` and `PanoramaImportErrorException` inherit from it.
+
+### 2026-01-15 - Implementation Complete
+
+**Changes made:**
+
+1. **PanoramaUtil.cs** - Added `PanoramaException` base class:
+   - New class inheriting from `IOException`
+   - Provides constructors for message-only and message+innerException
+   - Updated `PanoramaServerException` to inherit from `PanoramaException`
+   - Updated `PanoramaImportErrorException` to inherit from `PanoramaException`
+
+2. **UtilTest.cs** - Added test `TestPanoramaExceptionsAreNotProgrammingDefects`:
+   - Verifies `ExceptionUtil.IsProgrammingDefect()` returns `false` for all Panorama exceptions
+   - This test would have failed before the fix (when `PanoramaImportErrorException` inherited from `Exception`)
+
+**Tests run:**
+- `TestPublishToPanorama` - PASSED
+- `TestPanoramaDownloadFile` - PASSED
+- `TestPanoramaDownloadFileWeb` - PASSED
+- `TestPanoramaExceptionsAreNotProgrammingDefects` - PASSED
+
+**Ready for commit and PR.**

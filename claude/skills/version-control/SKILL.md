@@ -36,6 +36,29 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 **pwiz-ai repository (ai/)**: Omit TODO reference for documentation-only changes
 
+## PR Description Format
+
+```
+## Summary
+
+* bullet point 1
+* bullet point 2
+
+Fixes #XXXX
+
+## Test plan
+
+- [x] TestName - description
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+```
+
+**Rules:**
+- Use `Co-Authored-By: Claude <noreply@anthropic.com>` at the end (not emoji "Generated with" lines)
+- Bullet points use `* ` prefix in Summary
+- Test plan uses `- [x]` checkboxes
+- No emojis
+
 ## Branch Naming
 
 `Skyline/work/YYYYMMDD_feature_name`
