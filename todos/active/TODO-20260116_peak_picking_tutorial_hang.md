@@ -5,6 +5,7 @@
 - **Base**: `master`
 - **Created**: 2026-01-16
 - **GitHub Issue**: [#3789](https://github.com/ProteoWizard/pwiz/issues/3789)
+- **Pull Request**: [#3822](https://github.com/ProteoWizard/pwiz/pull/3822)
 
 ## Objective
 
@@ -61,6 +62,12 @@ Updated `WaitForRegression()` to use `pane.IsComplete` instead of `!pane.IsCalcu
 3. **`pwiz_tools/Skyline/TestFunctional/NonLinearRegressionTest.cs`**
    - Changed 2 occurrences of `!pane.IsCalculating` to `pane.IsComplete`
 
+4. **`pwiz_tools/Skyline/TestFunctional/RunToRunAlignmentTest.cs`**
+   - Changed 2 occurrences of `!scoreToRunGraphPane.IsCalculating` to `scoreToRunGraphPane.IsComplete`
+
+5. **`pwiz_tools/Skyline/TestPerf/PeakBoundaryImputationDiaTutorial.cs`**
+   - Changed `WaitForRTRegressionComplete()` to use `scoreToRunGraphPane.IsComplete`
+
 ## Tasks
 
 - [x] Review PR #3730 changes to understand the background threading model
@@ -69,24 +76,18 @@ Updated `WaitForRegression()` to use `pane.IsComplete` instead of `!pane.IsCalcu
 - [x] Add `IsComplete` property to `RTLinearRegressionGraphPane`
 - [x] Update `WaitForRegression()` to use `IsComplete`
 - [x] Update `NonLinearRegressionTest` to use `IsComplete`
-- [ ] Consider updating other tests that use `!IsCalculating` directly
-- [ ] Build and run tests locally to verify fix
-- [ ] Create PR with fix
+- [x] Update `RunToRunAlignmentTest` to use `IsComplete`
+- [x] Update `PeakBoundaryImputationDiaTutorial` to use `IsComplete`
+- [x] Build and run tests locally to verify fix
+- [x] Create PR with fix
 
-## Remaining Work
+## Tests Verified
 
-### Must Do Before PR
-1. **Build the solution** to verify no compile errors
-2. **Run TestPeakPickingTutorial** locally to verify fix
-3. **Run NonLinearRegressionTest** locally to verify no regression
-
-### Consider Updating (Lower Priority)
-These tests use `!IsCalculating` but may not need `IsComplete`:
-
-- `RunToRunAlignmentTest.cs:95,100` - Uses `WaitForCondition(() => !scoreToRunGraphPane.IsCalculating)` but doesn't access pane data immediately after
-- `PeakBoundaryImputationDiaTutorial.cs:229` - Has `WaitForRTRegressionComplete()` helper that waits for `!IsCalculating`
-
-If these tests start failing after the fix, update them to use `IsComplete` as well.
+All 4 affected tests pass locally:
+- TestPeakPickingTutorial (the originally failing test)
+- TestNonlinearRegression
+- TestRunToRunAlignment
+- TestPeakBoundaryImputationDiaTutorial
 
 ## Progress Log
 
