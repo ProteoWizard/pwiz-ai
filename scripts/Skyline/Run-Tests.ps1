@@ -377,7 +377,9 @@ try {
     Push-Location $outputDir
     try {
         # Build full command line for display
-        $commonArgs = @("test=$testParam", "language=$languageParam", "offscreen=$offscreenParam", "log=$logFile")
+        # perftests=on ensures TestPerf tests are included (excluded by default)
+        # runsmallmoleculeversions=on ensures small molecule test variants run (skipped by default)
+        $commonArgs = @("test=$testParam", "language=$languageParam", "offscreen=$offscreenParam", "perftests=on", "runsmallmoleculeversions=on", "log=$logFile")
 
         # buildcheck forces loop=1, so don't use it when we want to loop multiple times
         if ($useBuildCheck -and ($Loop -eq 0 -or $Loop -eq 1)) {
