@@ -5,15 +5,17 @@
 - **Base**: `master`
 - **Created**: 2026-01-16
 - **GitHub Issue**: [#3824](https://github.com/ProteoWizard/pwiz/issues/3824)
-- **Pull Request**: [#3830](https://github.com/ProteoWizard/pwiz/pull/3830)
+- **Pull Request**: [#3830](https://github.com/ProteoWizard/pwiz/pull/3830) - MERGED
+- **Cherry-pick PR**: [#3831](https://github.com/ProteoWizard/pwiz/pull/3831) to `Skyline/skyline_26_1`
 
 ## Objective
 
 Fix the intermittent TestPeakAreaRelativeAbundanceGraph failures where the test expected `CachedNodeCount=0` after document reopen but intermittently saw `CachedNodeCount=125`.
 
-## Status: COMPLETE - PR #3830 Ready for Review
+## Status: COMPLETE - Merged to master and cherry-picked to release
 
-Test passed 500 times including hitting the race condition scenario that previously caused failures.
+- PR #3830 merged to master
+- PR #3831 created for cherry-pick to Skyline/skyline_26_1
 
 ## Root Cause Analysis
 
@@ -61,10 +63,13 @@ Updated test to:
 - [x] Handle parallel full calculation scenarios
 - [x] Test passed 500 times including race condition scenarios
 - [x] Create PR #3830
-- [ ] PR review and merge
+- [x] PR #3830 merged to master
+- [x] Cherry-pick PR #3831 created for release branch
+- [ ] PR #3831 review and merge
 
 ## Related PRs
 
 - PR #3822: Fixed TestPeakPickingTutorial (RTLinearRegressionGraphPane.IsComplete) - MERGED
 - PR #3825: Fixed IsComplete race condition - MERGED (didn't fully fix #3824)
-- PR #3830: Fixed test to handle multiple cached results - Ready for review
+- PR #3830: Fixed test to handle multiple cached results - MERGED
+- PR #3831: Cherry-pick to Skyline/skyline_26_1 - Ready for review
