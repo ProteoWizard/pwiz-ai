@@ -1,69 +1,70 @@
-# TestPeakAreaRelativeAbundanceGraph: IsComplete race condition fix
+# TestPeakAreaRelativeAbundanceGraph: Intermittent test failure fix
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260116_relative_abundance_race_fix`
 - **Base**: `master`
 - **Created**: 2026-01-16
 - **GitHub Issue**: [#3824](https://github.com/ProteoWizard/pwiz/issues/3824)
-- **Pull Request**: [#3825](https://github.com/ProteoWizard/pwiz/pull/3825)
+- **Pull Request**: [#3830](https://github.com/ProteoWizard/pwiz/pull/3830)
 
 ## Objective
 
-Fix the intermittent TestPeakAreaRelativeAbundanceGraph failures that started January 2, 2026 after PR #3730 was merged. Same root cause as #3789 (TestPeakPickingTutorial).
+Fix the intermittent TestPeakAreaRelativeAbundanceGraph failures where the test expected `CachedNodeCount=0` after document reopen but intermittently saw `CachedNodeCount=125`.
 
-## Status: STILL INVESTIGATING
+## Status: COMPLETE - PR #3830 Ready for Review
 
-Initial fix (PR #3825) was merged but test still fails intermittently after ~7 hours of looping.
-Now adding diagnostic instrumentation to capture more information when the failure occurs.
+Test passed 500 times including hitting the race condition scenario that previously caused failures.
 
-## Root Cause (Hypothesis)
+## Root Cause Analysis
 
-Multiple graph refreshes may be happening:
-- First refresh correctly does full calculation (CachedNodeCount=0)
-- Second refresh uses incremental update (CachedNodeCount=125)
-- Test sees the second refresh's data
+Opening a document triggers 3 DocumentChanged events (OpenFile, ChromatogramManager, LibraryManager). This can cause multiple graph calculations:
 
-## Current Work: Diagnostic Instrumentation
+1. **Parallel full calculations**: Multiple calculations start before any result is cached - all do full calculation (125 recalculated)
+2. **Incremental after full**: If one calculation completes and caches before another starts, subsequent calculations use incremental update (0 recalculated, 125 cached)
 
-Added diagnostic fields to `GraphData` class to track:
-- **RefreshSequence**: Unique ID for each GraphData created (global counter)
-- **WasFullCalculation**: True if CalcDataPositionsFull was called
-- **PriorRefreshSequence**: Sequence of prior data if incremental update
-- **DocumentIdHash**: RuntimeHelpers.GetHashCode(Document.Id) for identity comparison
-- **CreationTime**: When this GraphData was created
+The original test checked `pane.CachedNodeCount` on the final result, which could be an incremental update. This was the intermittent failure case.
 
-Added `GetDiagnosticInfo()` method and `GetGraphDataForDiagnostics()` accessor.
+## Solution
 
-Updated test to dump diagnostics when assertion fails.
+Added cache tracking to `ReplicateCachingReceiver`:
+- `TrackCaching` property enables tracking during test
+- `CachedSinceTracked` returns all cached results
 
-## Files Modified (Uncommitted)
+Updated test to:
+- Track all cached results during document reopen
+- Assert first result is full calculation (CachedNodeCount=0)
+- Allow subsequent results to be either full or incremental
+- Enforce invariant: once incremental seen, all remaining must be incremental
 
-1. **`pwiz_tools/Skyline/Controls/Graphs/SummaryRelativeAbundanceGraphPane.cs`**
-   - Added diagnostic fields to GraphData class
-   - Added GetDiagnosticInfo() method
-   - Added GetGraphDataForDiagnostics() accessor
-   - Updated constructor to populate diagnostic fields
-   - Added `using System.Threading;`
+## Files Modified
 
-2. **`pwiz_tools/Skyline/TestFunctional/PeakAreaRelativeAbundanceGraphTest.cs`**
-   - Added diagnostic dump before assertion
-   - Added `using System.Runtime.CompilerServices;`
+1. **`pwiz_tools/Skyline/Controls/Graphs/ReplicateCachingReceiver.cs`**
+   - Added cache tracking region with TrackCaching, CachedSinceTracked, TrackCachedResult()
+   - Called TrackCachedResult() when results are cached
+
+2. **`pwiz_tools/Skyline/Controls/Graphs/SummaryRelativeAbundanceGraphPane.cs`**
+   - Added WasFullCalculation property to GraphData
+   - Added GetDiagnosticInfo() method for assertion messages
+
+3. **`pwiz_tools/Skyline/TestFunctional/PeakAreaRelativeAbundanceGraphTest.cs`**
+   - Added using alias for GraphDataCachingReceiver
+   - Updated Test 6 to use cache tracking instead of checking final pane state
+   - Added logic to handle valid parallel calculation scenarios
 
 ## Tasks
 
 - [x] Analyze test failure history and stack traces
-- [x] Identify race condition (same pattern as #3789)
-- [x] Update `IsComplete` to verify `_graphData` is current (PR #3825)
-- [x] Build and run TestPeakAreaRelativeAbundanceGraph locally - PASSED
-- [x] Commit and create PR
-- [ ] **FIX STILL FAILING** - Test failed after 7 hours of looping
-- [x] Add diagnostic instrumentation to GraphData
-- [x] Update test to dump diagnostics on failure
-- [ ] Build and verify diagnostics compile
-- [ ] Run test with diagnostics and wait for failure
-- [ ] Analyze diagnostic output to understand true root cause
+- [x] Identify root cause (multiple DocumentChanged events during file open)
+- [x] Add cache tracking to ReplicateCachingReceiver
+- [x] Add WasFullCalculation and GetDiagnosticInfo to GraphData
+- [x] Update test to check first cached result instead of final pane state
+- [x] Handle parallel full calculation scenarios
+- [x] Test passed 500 times including race condition scenarios
+- [x] Create PR #3830
+- [ ] PR review and merge
 
 ## Related PRs
 
-- PR #3822: Fixed TestPeakPickingTutorial (RTLinearRegressionGraphPane.IsComplete) - MERGED, ~600 runs passed
-- PR #3825: Fixed TestPeakAreaRelativeAbundanceGraph (SummaryRelativeAbundanceGraphPane.IsComplete) - MERGED, still fails intermittently
+- PR #3822: Fixed TestPeakPickingTutorial (RTLinearRegressionGraphPane.IsComplete) - MERGED
+- PR #3825: Fixed IsComplete race condition - MERGED (didn't fully fix #3824)
+- PR #3830: Fixed test to handle multiple cached results - Ready for review
