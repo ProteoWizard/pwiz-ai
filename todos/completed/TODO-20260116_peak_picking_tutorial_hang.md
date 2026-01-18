@@ -4,8 +4,10 @@
 - **Branch**: `Skyline/work/20260116_peak_picking_tutorial_hang`
 - **Base**: `master`
 - **Created**: 2026-01-16
+- **Status**: Completed
 - **GitHub Issue**: [#3789](https://github.com/ProteoWizard/pwiz/issues/3789)
 - **Pull Request**: [#3822](https://github.com/ProteoWizard/pwiz/pull/3822)
+- **Cherry-pick PR**: [#3829](https://github.com/ProteoWizard/pwiz/pull/3829)
 
 ## Objective
 
@@ -80,6 +82,8 @@ Updated `WaitForRegression()` to use `pane.IsComplete` instead of `!pane.IsCalcu
 - [x] Update `PeakBoundaryImputationDiaTutorial` to use `IsComplete`
 - [x] Build and run tests locally to verify fix
 - [x] Create PR with fix
+- [x] Merge PR to master
+- [x] Cherry-pick to release branch (PR #3829)
 
 ## Tests Verified
 
@@ -105,6 +109,10 @@ Queried test failure history - found 11 failures since Jan 1, all NullReferenceE
 - Updated `WaitForRegression()` and `NonLinearRegressionTest` to use `IsComplete`
 - Changes ready for testing
 
-### 2026-01-16 - Session Handoff
+### 2026-01-16 - PR Merged
 
-Fix is implemented but not yet tested. Next steps: build, run affected tests, create PR.
+PR #3822 merged to master.
+
+### 2026-01-17 - Cherry-picked to Release
+
+PR #3829 cherry-picked fix to `Skyline/skyline_26_1` release branch and merged.
