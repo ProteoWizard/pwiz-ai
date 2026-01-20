@@ -30,7 +30,7 @@ Made both `Unlisten` and `AfterLastListenerRemoved` tolerant of missing entries:
 - [x] Fix `Unlisten` to handle missing entries gracefully
 - [x] Fix `AfterLastListenerRemoved` to handle missing dependency entries
 - [x] Verify build succeeds
-- [ ] Create PR
+- [x] Create PR: https://github.com/ProteoWizard/pwiz/pull/3839
 
 ## Files Modified
 
@@ -45,3 +45,5 @@ Made both `Unlisten` and `AfterLastListenerRemoved` tolerant of missing entries:
 - Created branch `Skyline/work/20260120_ProductionFacility_Unlisten`
 - Applied fix to make `Unlisten` and `AfterLastListenerRemoved` tolerant of missing entries
 - Build verified successful
+- TestPeakPickingTutorial passed 50+ consecutive runs
+- PR #3839 created, assigned to Nick, labeled for cherry-pick to release
