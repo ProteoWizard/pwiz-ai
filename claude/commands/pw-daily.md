@@ -22,7 +22,7 @@ Generate a consolidated daily report covering nightly tests, exceptions, and sup
 
 ## Quick Reference
 
-### Phase 1: Data Collection (Steps 1-4)
+### Phase 1: Data Collection (Steps 1-5)
 
 **1. Determine Dates**
 - Nightly: Today (if after 8 AM) or yesterday
@@ -45,24 +45,31 @@ save_exceptions_report(report_date="YYYY-MM-DD")
 get_support_summary(days=1)
 ```
 
-### Phase 2: Analysis & Email (Steps 5-9)
+**5. Backfill History Databases**
+```
+backfill_nightly_history()
+backfill_exception_history()
+```
+Keeps `nightly-history.json` and `exception-history.json` current for `query_test_history` and `record_*_fix`.
 
-**5. Check Computer Alarms**
+### Phase 2: Analysis & Email (Steps 6-10)
+
+**6. Check Computer Alarms**
 ```
 check_computer_alarms()
 ```
 
-**6. Analyze Patterns**
+**7. Analyze Patterns**
 ```
 analyze_daily_patterns(report_date="YYYY-MM-DD", days_back=7)
 ```
 
-**7. Save Daily Summary JSON**
+**8. Save Daily Summary JSON**
 ```
 save_daily_summary(report_date, nightly_summary, nightly_failures, ...)
 ```
 
-**8. Send HTML Email**
+**9. Send HTML Email**
 - Subject: `Skyline Daily Summary - Month DD, YYYY`
 - Use `mimeType="multipart/alternative"` with `htmlBody`
 - Recipient: brendanx@proteinms.net
@@ -71,7 +78,7 @@ save_daily_summary(report_date, nightly_summary, nightly_failures, ...)
 - **Link test names directly** (not separate "View" column)
 - **Ignored computers**: Show in yellow banner if any filtered
 
-**9. Archive Processed Emails**
+**10. Archive Processed Emails**
 ```
 batch_modify_emails(messageIds=[...], removeLabelIds=["INBOX"])
 ```

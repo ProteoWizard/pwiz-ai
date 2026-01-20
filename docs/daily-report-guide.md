@@ -239,11 +239,26 @@ Read generated reports from `ai/.tmp/`:
 - `exceptions-report-YYYYMMDD.md`
 - `support-report-YYYYMMDD.md`
 
+### Step 5: Backfill History Databases
+
+Run backfill tools to keep history databases current for `query_test_history`, `query_exception_history`, and `record_*_fix` operations:
+
+```
+backfill_nightly_history()
+backfill_exception_history()
+```
+
+These are additive and non-destructive - they merge new data into existing history files without losing prior records.
+
+**Output files updated:**
+- `ai/.tmp/history/nightly-history.json` - Test failures, leaks, hangs with fingerprints
+- `ai/.tmp/history/exception-history.json` - Exception fingerprints and fix tracking
+
 ---
 
 ### Phase 2: Analysis & Email
 
-### Step 5: Fetch Failure Details and Fingerprints
+### Step 6: Fetch Failure Details and Fingerprints
 
 For each test failure, fetch detailed stack trace:
 
@@ -258,7 +273,7 @@ Extract: exception type, message, location, fingerprint.
 https://skyline.ms/home/development/{folder}/testresults-showFailures.view?end={MM}%2F{DD}%2F{YYYY}&failedTest={TestName}
 ```
 
-### Step 6: Check Computer Status and Alarms
+### Step 7: Check Computer Status and Alarms
 
 Check both MCP alarms and local ignored computer alarms:
 
@@ -282,7 +297,7 @@ key_failures = {test: computers for test, computers in failures.items()
                 if any(c not in ignored_computers for c in computers)}
 ```
 
-### Step 7: Analyze Patterns
+### Step 8: Analyze Patterns
 
 **First, check release cycle context** by reading `ai/docs/release-cycle-guide.md`:
 - If FEATURE COMPLETE, both master and release branch run nightly tests
@@ -302,7 +317,7 @@ This detects:
 - **CHRONIC**: Intermittent spanning 30+ days
 - **EXTERNAL**: Involves external service (Koina, Panorama)
 
-### Step 8: Save Daily Summary JSON
+### Step 9: Save Daily Summary JSON
 
 ```
 save_daily_summary(
@@ -318,7 +333,7 @@ save_daily_summary(
 )
 ```
 
-### Step 9: Archive Processed Emails
+### Step 10: Archive Processed Emails
 
 ```
 batch_modify_emails(messageIds=[...], removeLabelIds=["INBOX"])
