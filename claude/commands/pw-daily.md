@@ -82,6 +82,12 @@ batch_modify_emails(messageIds=[...], removeLabelIds=["INBOX"])
 
 **Write findings progressively** to `ai/.tmp/suggested-actions-YYYYMMDD.md` after each investigation. The session may terminate at any moment.
 
+**Cross-Reference First** (before investigating any issue):
+```bash
+gh issue list --state all --limit 30 --json number,title,state,createdAt
+```
+Also check `ai/.tmp/suggested-actions-*.md` from recent days. Prior sessions may have already created GitHub issues or identified fixes.
+
 **Investigate Test Failures**
 
 For each test failure with a stack trace:

@@ -332,6 +332,36 @@ batch_modify_emails(messageIds=[...], removeLabelIds=["INBOX"])
 
 **Write findings progressively** to `ai/.tmp/suggested-actions-YYYYMMDD.md` after **each** investigation. The session may terminate at any moment — never accumulate findings in memory.
 
+### Cross-Reference Before Investigating
+
+**IMPORTANT**: Before investigating any issue, check if it's already tracked:
+
+**1. Check GitHub issues**
+```bash
+gh issue list --state all --limit 30 --json number,title,state,createdAt
+```
+Look for matching issue titles. Many findings from prior sessions become GitHub issues.
+
+**2. Check past suggested-actions files**
+```bash
+ls ai/.tmp/suggested-actions-*.md
+```
+Read recent files (last 3-5 days) to see what was previously identified and what action was taken.
+
+**3. Check exception/test history via MCP**
+```
+query_test_history(test_name="TestName")
+query_exception_history()
+```
+
+**Why this matters**: Prior sessions may have already:
+- Created a GitHub issue for the same bug
+- Identified a PR that fixes it
+- Documented root cause analysis
+- Recorded that a fix was merged
+
+If an issue is already tracked, note "Already tracked as GitHub #XXXX" in today's suggested-actions and move on to the next investigation.
+
 ### Investigate Test Failures
 
 For **each test failure** with a stack trace:
