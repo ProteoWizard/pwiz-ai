@@ -63,3 +63,18 @@ Addressed Copilot review feedback on PR #3851:
 2. **OnError race condition** - Moved `fsw.Path` and `e.GetException()` access inside `SafeInvokeFswHandler()` protection
 
 Design principle: Files view is auxiliary UI; its background processing should never interrupt user workflow with message boxes.
+
+### 2026-01-21 - Merged
+
+- PR #3851 merged to master (commit 9a9672e43795)
+
+## Resolution
+
+**Status**: Complete
+
+**Fix**: Added `SafeInvokeFswHandler()` helper method that:
+1. Checks `_isStopped` first (early exit before any work)
+2. Wraps the action in try-catch with `ExceptionUtil.IsProgrammingDefect()` to report real bugs while ignoring expected FSW exceptions
+3. Moved `_isStopped = true` to start of `StopWatching()` for proper ordering
+
+**Impact**: Prevents TestRunner.exe crashes from unhandled NullReferenceException on I/O completion port threads when FileSystemWatcher events arrive during cleanup.

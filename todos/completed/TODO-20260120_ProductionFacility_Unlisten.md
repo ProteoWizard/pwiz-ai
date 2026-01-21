@@ -70,3 +70,15 @@ public void Unlisten()
 - Created issue #3840 for broader background thread exception handling audit
   - 878 test failures over past year show ThreadExceptionDialog from unhandled exceptions
   - CommonActionUtil.RunAsync() lacks proper exception handling unlike ActionUtil.RunAsync()
+
+### 2026-01-20 - Merged
+
+- PR #3839 merged to master (commit 1d7b6da1d252)
+
+## Resolution
+
+**Status**: Complete
+
+**Fix**: Added `_isListening` flag with `Interlocked.Exchange` in `ReplicateCachingReceiver.CompletionListener.Unlisten()` to prevent double-unlisten from concurrent threads.
+
+**Impact**: Fixes race condition where background thread could attempt to unlisten after UI thread already cleaned up, causing `InvalidOperationException`.

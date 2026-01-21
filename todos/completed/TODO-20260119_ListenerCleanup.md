@@ -71,3 +71,18 @@ stash@{0}: On 20260118_SmallMolMethodDevCEOptTutorial_HandleLeak: Listen/Unliste
 - Ran 100+ iterations of TestRetentionTimeManager with 0 failures
 - Full parallel test run (3000+ tests) in 3 languages (en, zh, fr) passed
 - Created PR #3852
+
+### 2026-01-21 - Merged
+
+- PR #3852 merged to master (commit 4693c2ba248e)
+
+## Resolution
+
+**Status**: Complete
+
+**Changes**:
+1. `Skyline.cs`: Added `loader.Unregister(this)` in `OnClosed()` with `.ToList()` for safe enumeration; made `Listen()` explicit interface implementation
+2. `MemoryDocumentContainer.cs`: Added `loader.Unregister(this)` in `Dispose()`
+3. `RetentionTimeManagerTest.cs`: Removed unnecessary save/reopen that caused file locking
+
+**Impact**: Prevents potential event handler leaks when document containers are disposed, and fixes intermittent RetentionTimeManagerTest failures.
