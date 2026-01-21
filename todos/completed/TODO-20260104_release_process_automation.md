@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260104_release_process_automation`
 - **Base**: `master`
 - **Created**: 2026-01-04
-- **Completed**: (pending)
-- **Status**: 🚧 In Progress
-- **PR**: [#3757](https://github.com/ProteoWizard/pwiz/pull/3757)
+- **Completed**: 2026-01-07
+- **Status**: ✅ Complete
+- **PR**: [#3759](https://github.com/ProteoWizard/pwiz/pull/3759) (cherry-pick workflow), [#3768](https://github.com/ProteoWizard/pwiz/pull/3768) (UpgradeDlg fix)
 - **Objective**: Improve and automate Skyline release process with reproducible versioning
 
 ## Background
@@ -255,12 +255,25 @@ So the release branch (26.0.9) passes, but master (26.1.1) fails.
 - Master version stays at 25.1.1 until MAJOR release
 - MAJOR release updates format/schema/version together, then master can go to 26.1.1
 
-### Remaining Tasks
+### 2026-01-06/07 - Work Completed via Split PRs
 
-- [ ] Revert Jamfile.jam version commit from PR #3757 (keep other 2 commits)
-- [ ] Merge PR #3757 after review
-- [ ] Sync TODO to ai-context after merge
-- [ ] Move TODO to completed/ after merge
+PR #3757 was closed without merging because the changes were split into separate PRs:
+- **PR #3759**: Cherry-pick workflow update (merged 2026-01-06)
+- **PR #3768**: UpgradeDlg version display fix (merged 2026-01-07)
+
+The Jamfile.jam version update (25→26) was correctly reverted, as documented above.
+
+## Resolution
+
+**Status**: Complete
+
+All release process automation objectives achieved:
+1. ✅ Reproducible versioning (git commit date, not build date)
+2. ✅ Zero-padded day-of-year for sorting
+3. ✅ Comprehensive release guide documentation
+4. ✅ Cherry-pick workflow updated for new release branch
+5. ✅ UpgradeDlg fix for FEATURE COMPLETE version display
+6. ✅ 26.0.9.004 FEATURE COMPLETE release published
 
 ---
 
