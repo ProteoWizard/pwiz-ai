@@ -13,6 +13,7 @@ Quick reference for all `pw-*` project-specific slash commands.
 | `/pw-startup [TODO-file]` | Start work on a backlog item. Reads STARTUP.md and the specified TODO. |
 | `/pw-startfix [TODO-file]` | Start a bug fix for completed work (Workflow 3a). |
 | `/pw-uptodo` | Update current branch's TODO file with progress. |
+| `/pw-uptodos-complete` | Check active TODOs for merged PRs ready to complete. |
 | `/pw-wrap` | End-of-session summary and TODO update. |
 
 ## Documentation Review
