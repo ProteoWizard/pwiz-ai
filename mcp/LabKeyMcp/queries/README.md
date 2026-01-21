@@ -26,8 +26,8 @@ This directory documents custom queries on skyline.ms that the MCP server uses. 
 |-------|--------|-------------|---------|
 | testruns_detail | testresults | Extended test run info with date filtering | `get_daily_test_summary()` |
 | expected_computers | testresults | Computer baseline statistics for anomaly detection | `get_daily_test_summary()` |
-| failures_by_date | testresults | Test failures in date range | `get_daily_test_summary()`, `save_test_failure_history()` |
-| leaks_by_date | testresults | Memory/handle leaks in date range | `get_daily_test_summary()` |
+| failures_by_date | testresults | Test failures in timestamp window | `get_daily_test_summary()`, `save_test_failure_history()` |
+| leaks_by_date | testresults | Memory/handle leaks in timestamp window | `get_daily_test_summary()` |
 
 ### Announcement (shared across containers)
 | Query | Schema | Description |

@@ -531,7 +531,11 @@ def register_tools(mcp):
         window_start = start_dt.replace(hour=8, minute=1, second=0, microsecond=0)
         window_end = end_dt.replace(hour=8, minute=0, second=0, microsecond=0)
 
-        # Query both calendar dates from server (will filter by time later)
+        # Format timestamps for queries that support WindowStart/WindowEnd
+        window_start_str = window_start.strftime("%Y-%m-%d %H:%M:%S")
+        window_end_str = window_end.strftime("%Y-%m-%d %H:%M:%S")
+
+        # Calendar dates for testruns_detail query (filtered client-side by window)
         start_date = start_dt.strftime("%Y-%m-%d")
         end_date = end_dt.strftime("%Y-%m-%d")
 
@@ -666,7 +670,11 @@ def register_tools(mcp):
                         is_anomaly = True
                         anomaly_reason = f"short ({duration} min)"
 
-                    if failed > 0:
+                    # Count failures and leaks independently (a run can have both)
+                    has_failure = failed > 0
+                    has_leak = leaked > 0
+
+                    if has_failure:
                         fail_count += 1
                         runs_with_failures.append({
                             "run_id": run_id,
@@ -675,7 +683,7 @@ def register_tools(mcp):
                             "computer": computer,
                             "failed": failed
                         })
-                    elif leaked > 0:
+                    if has_leak:
                         leak_count += 1
                         runs_with_leaks.append({
                             "run_id": run_id,
@@ -684,10 +692,13 @@ def register_tools(mcp):
                             "computer": computer,
                             "leaked": leaked
                         })
-                    elif is_anomaly:
-                        anomaly_count += 1
-                    else:
-                        pass_count += 1
+
+                    # Classify for pass count (only if no failures, leaks, or anomalies)
+                    if not has_failure and not has_leak:
+                        if is_anomaly:
+                            anomaly_count += 1
+                        else:
+                            pass_count += 1
 
                     # Track hangs separately (a run can have both failures and hangs)
                     if hung_test:
@@ -793,7 +804,7 @@ def register_tools(mcp):
                         schema_name=TESTRESULTS_SCHEMA,
                         query_name="failures_by_date",
                         max_rows=100,
-                        parameters={"StartDate": start_date, "EndDate": end_date},
+                        parameters={"WindowStart": window_start_str, "WindowEnd": window_end_str},
                     )
                     if fail_result and fail_result.get("rows"):
                         for row in fail_result["rows"]:
@@ -809,7 +820,7 @@ def register_tools(mcp):
                         schema_name=TESTRESULTS_SCHEMA,
                         query_name="leaks_by_date",
                         max_rows=100,
-                        parameters={"StartDate": start_date, "EndDate": end_date},
+                        parameters={"WindowStart": window_start_str, "WindowEnd": window_end_str},
                     )
                     if leak_result and leak_result.get("rows"):
                         for row in leak_result["rows"]:
@@ -942,6 +953,10 @@ def register_tools(mcp):
             end_date = start_date
         folder_name = container_path.split("/")[-1]
 
+        # Convert dates to full-day timestamp window
+        window_start_str = f"{start_date} 00:00:00"
+        window_end_str = f"{end_date} 23:59:59"
+
         all_failures = []
 
         try:
@@ -953,7 +968,7 @@ def register_tools(mcp):
                 schema_name=TESTRESULTS_SCHEMA,
                 query_name="failures_by_date",
                 max_rows=500,
-                parameters={"StartDate": start_date, "EndDate": end_date},
+                parameters={"WindowStart": window_start_str, "WindowEnd": window_end_str},
             )
 
             if not fail_result or not fail_result.get("rows"):
