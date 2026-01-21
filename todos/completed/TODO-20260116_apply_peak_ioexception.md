@@ -55,7 +55,14 @@ Starting work on this issue. The fix is straightforward - wrap the long operatio
 **Also this session:**
 - Updated `ai/WORKFLOW.md` to clarify GitHub Issue/PR must be Markdown links
 
-**Next steps:**
-- Await PR review
-- After merge, cherry-pick to release branch (`/pw-cptorelease`)
-- Move TODO to completed/
+### 2026-01-16 - Merged
+
+- PR #3812 merged to master (commit f46eccf7ee9a)
+
+## Resolution
+
+**Status**: Complete
+
+**Fix**:
+1. Wrapped ApplyPeak long operation in try-catch with `ExceptionUtil.DisplayOrReportException()` to show user-friendly error for IOException
+2. Added TestRunner support for specifying test class names (bonus)
