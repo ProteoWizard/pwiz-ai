@@ -383,19 +383,62 @@ Pre-release stabilization period before official release.
       - Installation Folder URL: **empty**
       - Updates > Update location: **empty**
 
-      Click **Publish Now**, then:
-      - ZIP the published folder to `Skyline-daily-64_26_0_9_004.zip`
-      - Upload ZIP to skyline.ms FileContent module at `/home/software/Skyline/daily`
+      Click **Publish Now**, then create the ZIP:
+      ```powershell
+      # From M:\home\brendanx\tools\Skyline-daily\
+      Compress-Archive -Path 'Skyline-daily-64_26_0_9_004' -DestinationPath 'Skyline-daily-64_26_0_9_004.zip'
+      ```
 
-   c. **MSI to FileContent**:
-      - Rename `bin\x64\Skyline-daily-26.0.9.004-x86_64.msi` to `Skyline-Daily-Installer-64_26_0_9_004.msi` (historical naming convention)
-      - Upload to same FileContent location
+      **IMPORTANT**: The ZIP must contain the folder as the root entry (not just contents).
+      Verify by extracting - should create `Skyline-daily-64_26_0_9_004/` containing `setup.exe`.
 
-   d. **Update wiki download pages**:
-      - `install-disconnected-64` → point to new ZIP file
-      - `install-administrator-64` → point to new MSI file
+   c. **MSI preparation**:
+      - Copy `bin\x64\Skyline-daily-26.0.9.004-x86_64.msi` to `M:\home\brendanx\tools\Skyline-daily\`
+      - Rename to `Skyline-Daily-Installer-64_26_0_9_004.msi` (historical naming convention)
 
-   e. **Test all downloads** to verify files are correctly linked
+   d. **Upload to FileContent** (automated via MCP):
+      ```python
+      # Upload ZIP
+      upload_file(
+          local_file_path="M:/home/brendanx/tools/Skyline-daily/Skyline-daily-64_26_0_9_004.zip",
+          container_path="/home/software/Skyline/daily"
+      )
+
+      # Upload MSI
+      upload_file(
+          local_file_path="M:/home/brendanx/tools/Skyline-daily/Skyline-Daily-Installer-64_26_0_9_004.msi",
+          container_path="/home/software/Skyline/daily"
+      )
+      ```
+
+      Verify uploads with `list_files(container_path="/home/software/Skyline/daily")`.
+
+   e. **Update wiki download pages** (automated via MCP):
+
+      Fetch current pages, update the download URL version, then update:
+      ```python
+      # Get current page content
+      get_wiki_page("install-disconnected-64", container_path="/home/software/Skyline/daily")
+      get_wiki_page("install-administrator-64", container_path="/home/software/Skyline/daily")
+
+      # Update pages with new version (change _004 to _021 etc. in download URLs)
+      update_wiki_page("install-disconnected-64", container_path="/home/software/Skyline/daily", new_body=...)
+      update_wiki_page("install-administrator-64", container_path="/home/software/Skyline/daily", new_body=...)
+      ```
+
+   f. **VERIFY downloads before proceeding**:
+
+      **This step is critical** - verify the uploads and wiki updates worked correctly:
+
+      1. Open both wiki pages in a web browser:
+         - https://skyline.ms/home/software/Skyline/daily/wiki-page.view?name=install-disconnected-64
+         - https://skyline.ms/home/software/Skyline/daily/wiki-page.view?name=install-administrator-64
+
+      2. Click "I Agree" and then "Download" on each page
+
+      3. Verify both files download successfully and are the correct size
+
+      Only proceed to Docker deployment after confirming downloads work.
 
 13. **Publish Docker image** to DockerHub (see `/home/development/DeployToDockerHub` wiki):
    - For FEATURE COMPLETE (release candidates): [Skyline-release-daily](https://teamcity.labkey.org/buildConfiguration/ProteoWizard_ProteoWizardPublishDockerImageSkylineReleaseDaily)
@@ -412,6 +455,12 @@ Pre-release stabilization period before official release.
    from the Docker container build, not from a new build.
 
    - Verify at [DockerHub Tags](https://hub.docker.com/r/proteowizard/pwiz-skyline-i-agree-to-the-vendor-licenses/tags) after deployment
+
+   **Verify via API** (Claude can do this automatically):
+   ```bash
+   curl -s "https://hub.docker.com/v2/repositories/proteowizard/pwiz-skyline-i-agree-to-the-vendor-licenses/tags?page_size=5"
+   ```
+   Look for tag matching `skyline_daily_26.0.9.021-722d843` with recent `last_updated` timestamp.
 
    **Optional: Test Docker image locally** (requires Docker Desktop in Linux container mode):
    ```bash
@@ -590,6 +639,13 @@ Transform developer commit messages into brief (single line) past tense summarie
 - **First names only** for all attributions
 - **Look in commit body** for requester/reporter info (not in title)
 - **Link to tutorials/webinars** when a feature has associated documentation (e.g., `https://skyline.ms/webinar27.url`)
+- **Cherry-picked commits**: Look up the original PR to find the author:
+  ```bash
+  # Cherry-pick PR title shows original PR number
+  gh pr view 3841 --repo ProteoWizard/pwiz --json author,title
+  # If it's "Automatic cherry pick of #XXXX", look up the original:
+  gh pr view XXXX --repo ProteoWizard/pwiz --json author,title
+  ```
 
 ### GitHub ID to Name Mapping
 
@@ -663,6 +719,23 @@ release. This release contains the following improvements over Skyline 26.1:
 
 ...
 ```
+
+### Writing Release Notes to Temp File
+
+Write draft release notes to a temp file for easier editing:
+
+```python
+# Claude writes to temp file
+Write("C:/proj/ai/.tmp/release-notes-26.0.9.021.txt", content)
+```
+
+The developer can then:
+1. Open the file in a text editor
+2. Make edits (reorder items, adjust wording)
+3. Save and tell Claude to read it back
+4. Use the content for MailChimp and wiki announcement
+
+This avoids awkward copy-paste from the terminal.
 
 ### Querying Past Release Notes
 
