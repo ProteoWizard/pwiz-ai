@@ -797,13 +797,25 @@ analysis that a developer can review and act on.
 
 ### User Review Workflow
 
-When the user runs `/resume` on the scheduled session:
-1. Claude reads `ai/.tmp/suggested-actions-YYYYMMDD.md`
-2. Presents each suggested action for approval
-3. User can approve, modify, or skip each action
-4. Approved actions are executed (record_exception_fix, gh issue create, etc.)
+When the user reviews the daily report (interactively or via `/resume`):
 
-**Key principle**: The automated session does research and prepares actions. The human reviews and approves before any permanent changes.
+**Phase 1: Issue Creation (exhaust suggested-actions first)**
+1. Claude reads `ai/.tmp/suggested-actions-YYYYMMDD.md`
+2. For each finding requiring action:
+   - Create GitHub issue with full analysis and exception report link
+   - Record fixes for already-fixed exceptions (`record_exception_fix`)
+   - Update exception/test history as needed
+3. User approves/modifies each action before execution
+
+**Phase 2: Implementation (only after Phase 1 complete)**
+1. User may request swarm or sub-agents to address specific issues
+2. Each implementation task references its GitHub issue
+3. Implementation happens in separate sessions/branches
+
+**Key principle**: The automated session does research and prepares actions. Issues are created and tracked BEFORE any implementation begins. This ensures:
+- All findings are captured in GitHub for visibility
+- Implementation work is properly scoped and tracked
+- Multiple issues can be prioritized before diving into fixes
 
 ---
 
