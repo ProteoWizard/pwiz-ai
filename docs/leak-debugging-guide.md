@@ -393,6 +393,76 @@ New parameters:
 
 - Added `sorthandlesbycount` command-line argument (default: off)
 
+## Memory Profiling with dotMemory (January 2026)
+
+For **managed memory leaks** (as opposed to handle leaks), dotMemory profiling provides detailed object-level analysis that handle counts cannot reveal.
+
+### When to Use dotMemory
+
+Use dotMemory when:
+- Handle counts are stable but memory grows
+- You suspect managed object accumulation (cached objects, event handlers, etc.)
+- The leak involves .NET framework internals (timers, tasks, etc.)
+- You need to see object allocation patterns across test runs
+
+### TestRunner dotMemory Integration
+
+TestRunnerLib includes automatic snapshot support when running under dotMemory. This eliminates manual snapshot timing and enables comparison across test iterations.
+
+**How it works:**
+1. Run tests under dotMemory profiler
+2. TestRunner detects dotMemory and takes snapshots at configured intervals
+3. Snapshots are taken immediately after `RunTest.MemoryManagement.FlushMemory()` clears collectible garbage
+4. Compare snapshots in dotMemory to identify objects that accumulate
+
+**Configuration via command line:**
+```powershell
+# Take snapshots every 5 runs (default), starting after 2 warmup runs (default)
+TestRunner.exe ... dotmemorywaitruns=5
+
+# Take snapshots every 10 runs, starting after 5 warmup runs
+TestRunner.exe ... dotmemorywaitruns=10 dotmemorywarmup=5
+```
+
+**Using Run-Tests.ps1:**
+```powershell
+# Run with dotMemory profiling (requires launching from dotMemory)
+# Open dotMemory → Profile Application → TestRunner.exe
+# Add arguments: test=TestOlderProteomeDb loop=50 dotmemorywaitruns=5
+```
+
+### Case Study: Timer Leak in HttpClientWithProgress (January 2026)
+
+dotMemory profiling was critical in solving Issue #3855, where handle-based debugging failed:
+
+**Initial Investigation (handle counts):**
+- Handle counts showed no obvious leak pattern
+- GDI/User handles were stable
+- Yet memory grew consistently on i9 machines
+
+**dotMemory Analysis:**
+1. Ran TestOlderProteomeDb with `-Loop 5` under dotMemory, snapshot taken
+2. Ran with `-Loop 25`, compared snapshots
+3. Found 5x scaling in timer-related objects:
+   - `System.Threading.Timer` (12 per run)
+   - `System.Threading.TimerHolder`
+   - `System.Threading.TimerQueueTimer`
+   - `System.Threading.Tasks.Task+DelayPromise`
+
+**Root Cause:** `Task.Delay` in `ReadChunk()` created timers that weren't cancelled when reads completed. Each 15-second timer accumulated until timeout.
+
+**Fix:** Cancel the delay timer immediately when the read completes using `CancellationTokenSource.CreateLinkedTokenSource()`.
+
+**Verification:** 50 runs showed stable memory with no timer accumulation.
+
+### Best Practices for dotMemory Profiling
+
+1. **Use warmup runs**: Skip the first 2-3 runs to exclude startup allocation noise
+2. **Compare at intervals**: Snapshots at runs 5, 10, 15, etc. show accumulation patterns
+3. **Look for linear growth**: Objects that scale with run count are likely leaks
+4. **Focus on "new" objects**: dotMemory comparison highlights objects present in second snapshot but not first
+5. **Check .NET internals**: Leaks often hide in framework types (timers, tasks, delegates) rather than application types
+
 ## Future Vision: Automated Leak Detection Workflow
 
 The current workflow requires a human to review nightly test results and select the optimal test for investigation. A planned enhancement would automate Phase 1 through an MCP (Model Context Protocol) server integration.
