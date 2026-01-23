@@ -322,7 +322,7 @@ To regenerate this TOC:
 pwsh -File ./ai/scripts/Generate-TOC.ps1
 ```
 
-This is automatically run during `/pw-aicontextsync`.
+Run this after adding, removing, or renaming documentation files.
 
 ### When descriptions need updating
 

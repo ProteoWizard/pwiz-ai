@@ -32,7 +32,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_ISSUES_CONTAINER,
     ) -> str:
-        """[D] Browse issues. Prefer save_issues_report. → issues-strategy.md"""
+        """[D] Browse issues. Prefer save_issues_report. → issues.md"""
         try:
             server_context = get_server_context(server, container_path)
 
@@ -123,7 +123,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_ISSUES_CONTAINER,
     ) -> str:
-        """[D] Full issue with comments. Saves to ai/.tmp/issue-{id}.md. → issues-strategy.md"""
+        """[D] Full issue with comments. Saves to ai/.tmp/issue-{id}.md. → issues.md"""
         try:
             server_context = get_server_context(server, container_path)
 
@@ -273,7 +273,7 @@ def register_tools(mcp):
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_ISSUES_CONTAINER,
     ) -> str:
-        """[P] Issue tracker summary. Saves to ai/.tmp/issues-report-{status}-YYYYMMDD.md. → issues-strategy.md"""
+        """[P] Issue tracker summary. Saves to ai/.tmp/issues-report-{status}-YYYYMMDD.md. → issues.md"""
         try:
             server_context = get_server_context(server, container_path)
 
