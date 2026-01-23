@@ -24,7 +24,9 @@ Access skyline.ms data via the LabKey MCP server.
 | [support.md](support.md) | `/home/support` | Support board threads and user questions |
 | [exceptions.md](exceptions.md) | `/home/issues/exceptions` | User-reported crash reports |
 | [nightly-tests.md](nightly-tests.md) | `/home/development/Nightly x64` | Automated test results |
-| [issues-strategy.md](issues-strategy.md) | `/home/issues` | Issue tracking analysis |
+| [issues.md](issues.md) | `/home/issues` | LabKey issue tracker tools |
+| [files.md](files.md) | (multiple) | WebDAV file repository access |
+| [status.md](status.md) | (local) | StatusMcp tools for developer workflow |
 
 ## Architecture
 
