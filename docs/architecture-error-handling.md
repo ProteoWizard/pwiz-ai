@@ -209,6 +209,126 @@ ExceptionUtil.WrapAndThrowException(savedException);
 
 **Why this matters:** Direct re-throw (`throw ex;`) replaces the original stack trace with the current location, making debugging nearly impossible. Always use `throw new` with the original as `InnerException`, or use `WrapAndThrowException`.
 
+## BackgroundLoader Exception Handling
+
+### Overview
+
+Classes derived from `BackgroundLoader` perform long-running operations on background threads. These operations must report errors across two boundaries:
+
+1. **Threading boundary**: Background thread → Main (UI) thread
+2. **Model-View boundary**: Model classes (e.g., `Skyline\Model\*`) → GUI (`SkylineWindow`) or CLI (`CommandStatusWriter`)
+
+The `IProgressMonitor`/`IProgressStatus` pattern handles this marshalling.
+
+### Location Reference
+
+| File | Purpose |
+|------|---------|
+| `pwiz_tools/Skyline/Model/BackgroundLoader.cs` | Base class for background loaders |
+| `pwiz_tools/Shared/CommonUtil/SystemUtil/IProgressMonitor.cs` | Progress monitoring interface |
+| `pwiz_tools/Shared/CommonUtil/SystemUtil/ProgressStatus.cs` | Immutable progress state with error support |
+
+### The IProgressStatus.ChangeErrorException Pattern
+
+When a background loader encounters an error that should be reported to the user, it uses `IProgressStatus.ChangeErrorException()`:
+
+```csharp
+catch (Exception x)
+{
+    progressMonitor.UpdateProgress(
+        progressStatus.ChangeErrorException(x));
+}
+```
+
+The UI (or CLI) receives this status update and displays the error appropriately.
+
+### CRITICAL: IsProgrammingDefect in Background Loaders
+
+The base `BackgroundLoader.OnLoadBackground` method has a top-level catch that reports unhandled exceptions as programming defects:
+
+```csharp
+// BackgroundLoader.OnLoadBackground (simplified)
+try
+{
+    LoadBackground(container, document, docCurrent);
+}
+catch (Exception exception)
+{
+    Program.ReportException(exception);  // Bug report dialog
+}
+```
+
+**This means**: If a derived class's `LoadBackground` throws an unhandled exception, it will trigger the bug report dialog. This is correct for programming defects.
+
+### Correct Pattern: LibraryManager
+
+`LibraryManager.CallWithSettingsChangeMonitor` demonstrates the correct approach:
+
+```csharp
+try
+{
+    return changeFunc(settingsChangeMonitor);
+}
+catch (OperationCanceledException)
+{
+    // User cancelled - expected, just return
+    return docCurrent;
+}
+catch (Exception x)
+{
+    if (ExceptionUtil.IsProgrammingDefect(x))
+    {
+        throw;  // Let base class report as bug
+    }
+    // User-actionable error - report via progress
+    settingsChangeMonitor.ChangeProgress(s => s.ChangeErrorException(x));
+    return null;
+}
+```
+
+**Key points:**
+1. Check `IsProgrammingDefect(x)` before deciding how to handle
+2. **Re-throw** programming defects - let the base class's `ReportException` handle them
+3. **Report via ChangeErrorException** only for user-actionable errors
+
+### Problematic Pattern: Wrapping All Exceptions
+
+Some loaders incorrectly wrap ALL exceptions as user-actionable errors:
+
+```csharp
+// PROBLEMATIC - treats programming defects as user errors
+catch (Exception x)
+{
+    var message = new StringBuilder();
+    message.AppendLine($"Failed updating {name}");
+    message.Append(x.Message);
+    UpdateProgress(progressStatus.ChangeErrorException(
+        new IOException(message.ToString(), x)));  // Wraps NullReferenceException, etc.!
+    return null;
+}
+```
+
+**Problems with this approach:**
+- `NullReferenceException`, `ArgumentException`, etc. become user-facing messages
+- Programming defects never reach `Program.ReportException`
+- Bug reports are never submitted to skyline.ms
+- Development team loses visibility into code issues
+
+### BackgroundLoader Classes to Review
+
+| Class | File | Notes |
+|-------|------|-------|
+| `LibraryManager` | `Model/Lib/Library.cs` | Good example with IsProgrammingDefect |
+| `ChromatogramManager` | `Model/Results/Chromatogram.cs` | Uses IsProgrammingDefect |
+| `BackgroundProteomeManager` | `Model/Proteome/BackgroundProteomeManager.cs` | Review needed |
+| `ProteinMetadataManager` | `Model/Proteome/ProteinMetadataManager.cs` | Review needed |
+| `RetentionTimeManager` | `Model/RetentionTimes/RetentionTimeManager.cs` | Review needed |
+| `IrtDbManager` | `Model/Irt/IrtDbManager.cs` | Review needed |
+| `IonMobilityLibraryManager` | `Model/IonMobility/IonMobilityLibraryManager.cs` | Review needed |
+| `OptimizationDbManager` | `Model/Optimization/OptimizationDbManager.cs` | Review needed |
+| `MultiFileLoader` | `Model/MultiFileLoader.cs` | Review needed |
+| `AutoTrainManager` | `Model/Results/Scoring/AutoTrainManager.cs` | Review needed |
+
 ## Exception Text Formatting
 
 ### Use ToString(), Not Message + StackTrace
