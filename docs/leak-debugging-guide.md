@@ -415,21 +415,26 @@ TestRunnerLib includes automatic snapshot support when running under dotMemory. 
 3. Snapshots are taken immediately after `RunTest.MemoryManagement.FlushMemory()` clears collectible garbage
 4. Compare snapshots in dotMemory to identify objects that accumulate
 
-**Configuration via command line:**
-```powershell
-# Take snapshots every 5 runs (default), starting after 2 warmup runs (default)
-TestRunner.exe ... dotmemorywaitruns=5
+**Configuration:**
 
-# Take snapshots every 10 runs, starting after 5 warmup runs
-TestRunner.exe ... dotmemorywaitruns=10 dotmemorywarmup=5
+The snapshot behavior is controlled by properties on `RunTests`:
+- `DotMemoryWarmupRuns` - iterations before first snapshot (baseline)
+- `DotMemoryWaitRuns` - iterations between first and second snapshot (analysis period)
+- `DotMemoryCollectAllocations` - when true, enables allocation stack trace collection
+
+Currently these are set in code. For manual profiling sessions, modify the values in `RunTests.cs` or set them programmatically.
+
+**Using dotMemory:**
+```
+1. Open dotMemory → Profile Application → TestRunner.exe
+2. Add arguments: test=TestOlderProteomeDb loop=50
+3. Set DotMemoryWarmupRuns and DotMemoryWaitRuns in code before profiling
+4. Run and compare the two automatic snapshots
 ```
 
-**Using Run-Tests.ps1:**
-```powershell
-# Run with dotMemory profiling (requires launching from dotMemory)
-# Open dotMemory → Profile Application → TestRunner.exe
-# Add arguments: test=TestOlderProteomeDb loop=50 dotmemorywaitruns=5
-```
+**Allocation Stack Traces:**
+
+Set `DotMemoryCollectAllocations = true` to capture where leaked objects were allocated. This is enabled on the first snapshot, so the second snapshot shows allocation sites for objects created during the analysis period. This is invaluable for understanding *where* leaking objects originate.
 
 ### Case Study: Timer Leak in HttpClientWithProgress (January 2026)
 
@@ -499,7 +504,43 @@ The current workflow requires a human to review nightly test results and select 
 - [x] Tooling for leak isolation (this guide)
 - [x] Handle reporting improvements (`-ReportHandles`, `-SortHandlesByCount`)
 - [x] MCP server for LabKey integration (see `ai/mcp/LabKeyMcp/`)
+- [x] dotMemory snapshot integration in TestRunnerLib (January 2026)
+- [ ] Command-line arguments for dotMemory properties
 - [ ] `/pw-review-leaks` slash command
 - [ ] Autonomous investigation mode
 
 This represents a path toward having Claude Code proactively identify and fix handle leaks with minimal human intervention, transforming leak debugging from a reactive manual process to an automated continuous improvement system.
+
+### Future: Automated Memory Profiling with dotMemory CLI
+
+Similar to how dotCover provides command-line code coverage analysis, JetBrains dotMemory has a command-line interface (`dotMemory.exe`) that could enable fully automated memory profiling.
+
+**Near-term: Command-line argument support**
+
+Add TestRunner command-line arguments for the existing properties:
+```
+dotmemorywaitruns=20       # Iterations between snapshots (enables profiling)
+dotmemorywarmup=5          # Warmup iterations before first snapshot (default: 5)
+dotmemorycollectallocations=true  # Capture allocation stack traces (default: off)
+```
+
+When `dotmemorywaitruns` is set and `dotmemorywarmup` is not specified, warmup defaults to 5 runs.
+
+**Longer-term: Full CLI integration**
+
+```powershell
+# Hypothetical future command
+Run-Tests.ps1 -TestName TestOlderProteomeDb -Loop 25 -MemoryProfile
+```
+
+This would:
+1. Launch TestRunner under dotMemory CLI profiler
+2. Automatically capture snapshots at configured intervals
+3. Export snapshot comparison to a text/JSON format
+4. Allow Claude Code to analyze the output directly (no screenshots needed)
+
+**Benefits over current manual workflow:**
+- No human needed to launch dotMemory GUI and take screenshots
+- Results in a format Claude Code can parse and analyze
+- Enables autonomous memory leak investigation
+- Similar developer experience to `-Coverage` flag
