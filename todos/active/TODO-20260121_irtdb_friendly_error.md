@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260121_irtdb_friendly_error`
 - **Base**: `master`
 - **Created**: 2026-01-21
-- **Status**: In Progress
+- **Status**: In Progress - Approach Revised
 - **GitHub Issue**: [#3856](https://github.com/ProteoWizard/pwiz/issues/3856)
 - **PR**: (pending)
 
@@ -17,106 +17,215 @@ SQLiteException: SQL logic error or missing database - no such table: IrtLibrary
 
 This error occurs at `IrtDb.cs:190` in the `ReadPeptides()` method when NHibernate tries to query the `IrtLibrary` table which does not exist in the corrupted/incompatible database file.
 
-The current behavior shows a crash dialog instead of a user-friendly error message explaining that the file is corrupted or incompatible.
+## Initial Fix Attempt (Discarded)
 
-## Root Cause Analysis
+The initial approach added a friendly message in `IrtDb.GetIrtDb()` for "no such table" SQLite errors. This was **discarded** after deeper analysis revealed the root cause is elsewhere.
 
-1. `IrtDb.GetIrtDb()` method at line 538-600 handles database opening
-2. It catches `SQLiteException` at line 579-583 and provides a generic message
-3. The issue is that the generic message does not distinguish between:
-   - A file that is not a SQLite database at all
-   - A SQLite database that is missing required tables (corrupted/incompatible)
-4. The specific error "no such table: IrtLibrary" indicates the database is missing the required schema
-5. Users need a friendlier message explaining the file may be corrupted or from an incompatible version
+**Why the initial fix was wrong:**
+1. `IrtDb.GetIrtDb()` already has proper exception handling that wraps errors in `DatabaseOpeningException`
+2. When a `LoadMonitor` is passed, errors are reported through `IProgressMonitor.UpdateProgress(status.ChangeErrorException(x))`
+3. The real problem is that `IrtDbManager.LoadBackground()` doesn't catch exceptions properly, letting them bubble up to `BackgroundLoader.OnLoadBackground()` which sends ALL uncaught exceptions to `Program.ReportException()` (the crash dialog)
 
-## Planned Fix Approach
+## Root Cause Analysis (Revised)
 
-1. In the `SQLiteException` catch block, check if the error message contains "no such table"
-2. If yes, provide a more specific user-friendly message about corrupted/incompatible database
-3. Add a new resource string for the friendly error message
-4. Keep the generic "not a valid iRT database" message for other SQLite errors
+### Architecture Overview
 
-## Files Modified
+The Skyline background loading architecture has these layers:
 
-1. `pwiz_tools/Skyline/Model/Irt/IrtDb.cs` - Added specific error handling for "no such table" errors
-2. `pwiz_tools/Skyline/Model/Irt/IrtResources.resx` - Added new resource string
-3. `pwiz_tools/Skyline/Model/Irt/IrtResources.Designer.cs` - Added property for new string
+1. **BackgroundLoader.OnLoadBackground()** - Base class method that runs on background thread
+   - Has a catch-all: `catch (Exception) { Program.ReportException(exception); }`
+   - This means ANY unhandled exception becomes a crash dialog
+
+2. **IrtDbManager.LoadBackground()** - Override that loads iRT databases
+   - Currently has NO try-catch for most operations
+   - Calls `LoadCalculator()` which properly passes a `LoadMonitor` to `RCalcIrt.Initialize()`
+   - BUT also calls `IrtDb.GetIrtDb(path, null)` with `null` for the monitor in lines 122 and 129
+   - Other operations like `calc.GetDbIrtPeptides()` have no exception handling
+
+3. **IrtDb.GetIrtDb()** - Model layer database opening
+   - Has proper exception handling that converts errors to `DatabaseOpeningException`
+   - When `loadMonitor != null`: reports errors via `loadMonitor.UpdateProgress(status.ChangeErrorException(x))` and returns `null`
+   - When `loadMonitor == null`: throws `DatabaseOpeningException`
+   - The existing error messages are already user-friendly
+
+### The Real Bug
+
+The exception reaches the crash dialog because:
+1. `IrtDbManager.LoadBackground()` calls `IrtDb.GetIrtDb(path, null)` with null monitor
+2. `GetIrtDb()` throws `DatabaseOpeningException` (as designed when no monitor)
+3. No code catches this exception
+4. It bubbles up to `BackgroundLoader.OnLoadBackground()` catch-all
+5. `Program.ReportException()` shows the crash dialog
+
+### The Correct Pattern
+
+`LibraryManager.CallWithSettingsChangeMonitor()` shows the correct pattern:
+
+```csharp
+catch (Exception x)
+{
+    if (ExceptionUtil.IsProgrammingDefect(x))
+    {
+        throw;  // Let programming defects go to crash dialog for reporting
+    }
+    settingsChangeMonitor.ChangeProgress(s => s.ChangeErrorException(x));
+    return null;  // User-actionable errors reported through progress monitor
+}
+```
+
+`ExceptionUtil.IsProgrammingDefect()` returns `false` for user-actionable exceptions:
+- `InvalidDataException`, `IOException`, `OperationCanceledException`
+- `UnauthorizedAccessException`, `UserMessageException` (and subclasses)
+
+## Correct Fix Approach
+
+### 1. Wrap IrtDbManager.LoadBackground() in try-catch
+
+```csharp
+protected override bool LoadBackground(IDocumentContainer container, SrmDocument document, SrmDocument docCurrent)
+{
+    var loadMonitor = new LoadMonitor(this, container, document);
+    IProgressStatus status = new ProgressStatus(IrtResources.IrtDbManager_LoadBackground_Loading_iRT_calculator);
+
+    try
+    {
+        loadMonitor.UpdateProgress(status);
+
+        // ... existing code ...
+
+        loadMonitor.UpdateProgress(status.Complete());
+        return true;
+    }
+    catch (Exception x)
+    {
+        if (ExceptionUtil.IsProgrammingDefect(x))
+        {
+            throw;  // Programming defects should reach crash dialog
+        }
+        loadMonitor.UpdateProgress(status.ChangeErrorException(x));
+        EndProcessing(document);
+        return false;
+    }
+}
+```
+
+### 2. Pass LoadMonitor to all IrtDb.GetIrtDb() calls
+
+Lines 122 and 129 currently pass `null`:
+```csharp
+calc = calc.ChangeDatabase(IrtDb.GetIrtDb(calc.DatabasePath, null));
+```
+
+Should pass the loadMonitor and handle null return:
+```csharp
+var db = IrtDb.GetIrtDb(calc.DatabasePath, loadMonitor);
+if (db == null)
+{
+    EndProcessing(document);
+    return false;
+}
+calc = calc.ChangeDatabase(db);
+```
+
+### 3. Progress Reporting Design Consideration
+
+The current design has `IrtDb.GetIrtDb()` creating its own `ProgressStatus`:
+```csharp
+var status = new ProgressStatus(string.Format(IrtResources.IrtDb_GetIrtDb_Loading_iRT_database__0_, path));
+```
+
+This breaks the progress tracking chain because:
+- Each `ProgressStatus` has an `Id` property for identifying operations
+- You track the same operation via `ReferenceEquals` on the `Id`
+- Creating a new status loses the connection to the outer caller's progress tracking
+
+**Ideal fix**: `IrtDb.GetIrtDb()` should optionally accept an `IProgressStatus` parameter and advance it 0-100%. The outer caller can use `ChangeSegments()` to make that 0-100% represent only part of the overall operation.
+
+**Pragmatic fix**: For this issue, wrapping `LoadBackground()` in try-catch is sufficient. The progress reporting refinement can be a separate improvement.
+
+## Files to Modify
+
+1. `pwiz_tools/Skyline/Model/Irt/IrtDbManager.cs` - Add try-catch with `IsProgrammingDefect()` pattern
+2. `pwiz_tools/Skyline/Model/Irt/IrtResources.resx` - Add resource string for loading message (if needed)
 
 ## Progress
 
 - [x] Read and understand the codebase
 - [x] Create TODO file
-- [x] Add resource string for corrupted/incompatible database error
-- [x] Modify SQLiteException handling in GetIrtDb()
-- [x] Build and verify fix
-- [x] Create commit (29b23abb2)
-- [x] Run related iRT tests to verify normal code paths
+- [x] Initial fix attempt (adding message in GetIrtDb) - DISCARDED
+- [x] Deeper analysis of BackgroundLoader architecture
+- [x] Audit of all BackgroundLoader subclasses (see Future Work section)
+- [x] Reset branch to master (discarding initial fix)
+- [x] Document correct fix approach
+- [ ] Implement try-catch wrapper in IrtDbManager.LoadBackground()
+- [ ] Pass LoadMonitor to GetIrtDb() calls instead of null
+- [ ] Build and test
+- [ ] Create PR
 
-## Test Verification (2026-01-21)
+## Test Plan
 
-### Tests Run
-The following iRT-related tests were executed to verify the fix does not break normal functionality:
+1. **Existing iRT tests** - Must still pass:
+   - IrtCalibrationTest, MinimizeIrtTest, BlibIrtTest, AddIrtStandardsTest, AssayLibraryImportTest
 
-| Test Name | Result | Duration | Notes |
-|-----------|--------|----------|-------|
-| IrtCalibrationTest | PASS | 11.9s | Tests iRT calibration workflows |
-| MinimizeIrtTest | PASS | 6.2s | Tests IrtDb operations and minimization |
-| BlibIrtTest | PASS | 13.5s | Tests iRT library building |
-| AddIrtStandardsTest | PASS | 11.2s | Tests adding iRT standards |
-| AssayLibraryImportTest | PASS | 554.1s | Includes corrupted database test |
+2. **New test for corrupted database** - Add to IrtTest.cs:
+   - Create a valid SQLite database file with no tables
+   - Attempt to open it as an iRT calculator
+   - Verify user-friendly error is shown (not crash dialog)
+   - Verify error message contains the file path
 
-### Key Observations
+---
 
-1. **AssayLibraryImportTest** (lines 448-459) specifically tests opening a corrupted database file (`irtAll_corrupted.irtdb`). This test continues to pass because:
-   - The test file triggers a general `Exception` (not a `SQLiteException` with "no such table")
-   - The test expects the generic "could not be opened" message from line 590 of IrtDb.cs
-   - Our change only affects `SQLiteException` with "no such table" in the message
+## Future Work: BackgroundLoader Exception Handling Audit
 
-2. **Error Path Coverage**: The specific "no such table" error path added by this fix does not have direct test coverage because:
-   - Creating a test file that produces this exact error would require a valid SQLite database with missing tables
-   - The existing `irtAll_corrupted.irtdb` appears to be corrupted in a different way (not valid SQLite)
+A comprehensive audit of all 9 `BackgroundLoader.LoadBackground()` overrides revealed widespread inconsistency in exception handling. This should be addressed in a separate PR.
 
-3. **Normal Code Paths**: All normal iRT functionality tests pass, confirming the fix does not introduce regressions.
+### Summary Table
 
-### Test Coverage Analysis for New Error Path
+| Manager | File | Has Try-Catch | Uses IsProgrammingDefect | Status |
+|---------|------|---------------|--------------------------|--------|
+| IrtDbManager | Irt\IrtDbManager.cs | NO | NO | **NO HANDLING** |
+| IonMobilityLibraryManager | IonMobility\IonMobilityLibraryManager.cs | NO | NO | **NO HANDLING** |
+| LibraryManager | Lib\Library.cs | YES | YES | **CORRECT** |
+| OptimizationDbManager | Optimization\OptimizationDbManager.cs | NO | NO | **NO HANDLING** |
+| BackgroundProteomeManager | Proteome\BackgroundProteomeManager.cs | YES | NO | **INCORRECT** |
+| ProteinMetadataManager | Proteome\ProteinMetadataManager.cs | YES | NO | **INCORRECT** |
+| ChromatogramManager | Results\Chromatogram.cs | NO | NO | **NO HANDLING** |
+| RetentionTimeManager | RetentionTimes\RetentionTimeManager.cs | YES | NO | **INCORRECT** |
+| AutoTrainManager | Results\Scoring\AutoTrainManager.cs | YES | NO | **INCORRECT** |
 
-The new "corrupted or incompatible version" message is triggered when:
-- File is a valid SQLite database
-- SQLite query throws "no such table" error
-- This happens when required tables (IrtLibrary, RetentionTimes) are missing
+### Issue Categories
 
-To fully test this path would require:
-- Creating a SQLite database without the required iRT schema tables
-- Attempting to open it as an iRT database
-- Verifying the new error message appears
+**NO HANDLING (4 managers)**: Exceptions bubble up to crash dialog
+- IrtDbManager, IonMobilityLibraryManager, OptimizationDbManager, ChromatogramManager
+- User-actionable errors (corrupt files, locked files, etc.) show crash dialog
+- **Priority**: HIGH - these should be fixed
 
-**Recommendation**: The fix is low-risk since it only changes the error message shown to users for a specific error condition. The existing tests verify normal functionality still works.
+**INCORRECT (4 managers)**: Catch all exceptions without `IsProgrammingDefect()` check
+- BackgroundProteomeManager, ProteinMetadataManager, RetentionTimeManager, AutoTrainManager
+- Programming defects (NullReferenceException, etc.) are hidden from crash dialog
+- Makes debugging harder because defects aren't reported
+- **Priority**: MEDIUM - should be fixed for code health
 
-## Implementation Details
+**CORRECT (1 manager)**: LibraryManager
+- Uses `ExceptionUtil.IsProgrammingDefect()` to distinguish user errors from programming defects
+- User errors reported through progress monitor
+- Programming defects thrown to crash dialog for reporting
 
-### New Resource String
-Added `IrtDb_GetIrtDb_The_file__0__is_corrupted_or_from_an_incompatible_version`:
-> "The file {0} appears to be corrupted or from an incompatible version. The required database tables are missing."
+### Recommended Follow-up
 
-### Code Change
-In `IrtDb.GetIrtDb()` method, modified the SQLiteException catch block to detect "no such table" errors:
+1. Create GitHub issue for BackgroundLoader exception handling audit
+2. Fix all managers to use the correct pattern:
+   ```csharp
+   catch (Exception x)
+   {
+       if (ExceptionUtil.IsProgrammingDefect(x))
+           throw;
+       progressMonitor.UpdateProgress(status.ChangeErrorException(x));
+       return false;
+   }
+   ```
+3. Consider whether `CalculatorException` / `DatabaseOpeningException` should extend `UserMessageException` to be recognized by `IsProgrammingDefect()`
 
-```csharp
-catch (SQLiteException x)
-{
-    // Check for missing table error which indicates corrupted/incompatible database
-    if (x.Message.Contains(@"no such table"))
-        message = string.Format(IrtResources.IrtDb_GetIrtDb_The_file__0__is_corrupted_or_from_an_incompatible_version, path);
-    else
-        message = string.Format(IrtResources.IrtDb_GetIrtDb_The_file__0__is_not_a_valid_iRT_database_file, path);
-    xInner = x;
-}
-```
+### Full Audit Report
 
-## Remaining Work
-
-- [ ] Create PR (when ready)
-- [x] Review and test with actual corrupted database file
-  - Note: AssayLibraryImportTest covers corrupted file handling
-  - The specific "no such table" path targets a different corruption type (valid SQLite, missing schema)
-  - Normal iRT functionality verified with 5 passing tests
+See: `ai/.tmp/backgroundloader-exception-review.md`
