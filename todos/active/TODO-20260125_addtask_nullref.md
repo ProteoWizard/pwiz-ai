@@ -4,7 +4,8 @@
 - **Branch**: `Skyline/work/20260125_addtask_nullref`
 - **Base**: `master`
 - **Created**: 2026-01-25
-- **GitHub Issue**: https://github.com/ProteoWizard/pwiz/issues/3864
+- **GitHub Issue**: [#3864](https://github.com/ProteoWizard/pwiz/issues/3864)
+- **PR**: [#3872](https://github.com/ProteoWizard/pwiz/pull/3872)
 
 ## Objective
 
