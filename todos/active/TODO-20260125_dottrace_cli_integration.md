@@ -28,20 +28,23 @@ Test case: TODO-20260102_FilesViewPerfRegression.md
 ## Tasks
 
 ### Research
-- [ ] Document Reporter.exe capabilities and XML output format
-- [ ] Understand dotTrace CLI snapshot format (.dtp files)
-- [ ] Determine if pattern file is needed for useful reports
+- [x] Document Reporter.exe capabilities and XML output format
+- [x] Understand dotTrace CLI snapshot format (.dtp files)
+- [x] Determine if pattern file is needed for useful reports
 
 ### Implementation
-- [ ] Add `-PerformanceProfile` switch to Run-Tests.ps1
-- [ ] Add dotTrace CLI discovery (searches JetBrains installation paths)
-- [ ] Build dotTrace CLI command for profiling
-- [ ] Call Reporter.exe to generate XML report
-- [ ] Parse XML to extract hot spots / timing data
+- [x] Add `-PerformanceProfile` switch to Run-Tests.ps1
+- [x] Add dotTrace CLI discovery (uses .NET global tool)
+- [x] Add Reporter.exe discovery (searches JetBrains GUI installation)
+- [x] Build dotTrace CLI command for profiling
+- [x] Call Reporter.exe to generate XML report
+- [x] Parse XML to extract hot spots / timing data
+- [x] Display top 10 hot spots automatically
 
 ### Verification
+- [x] Test with AaantivirusTestExclusion - basic workflow works
+- [x] Verify XML output shows method timing data with call stacks
 - [ ] Test with TestImportHundredsOfReplicates (known perf-sensitive test)
-- [ ] Verify XML output shows method timing data
 - [ ] Compare before/after if regression is reintroduced
 
 ## Reporter.exe Capabilities

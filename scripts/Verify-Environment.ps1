@@ -79,64 +79,28 @@ function Test-Command {
     }
 }
 
-# 1. PowerShell Version
-Write-Host "Checking PowerShell..." -ForegroundColor Gray
-$psVersion = $PSVersionTable.PSVersion
-if ($psVersion.Major -ge 7) {
-    Add-Result "PowerShell" "OK" "$($psVersion.Major).$($psVersion.Minor).$($psVersion.Patch)" $true
-} else {
-    Add-Result "PowerShell" "WARN" "$($psVersion.Major).$($psVersion.Minor) (recommend 7+)" $false
-}
+# ===========================================
+# BOOTSTRAP PHASE (new-machine-bootstrap.md)
+# ===========================================
 
-# 2. Console Encoding
-Write-Host "Checking console encoding..." -ForegroundColor Gray
-$encoding = [Console]::OutputEncoding
-if ($encoding.CodePage -eq 65001) {
-    Add-Result "Console Encoding" "OK" "UTF-8 (CP65001)" $true
-} else {
-    Add-Result "Console Encoding" "WARN" "$($encoding.EncodingName) (CP$($encoding.CodePage)) - recommend UTF-8" $false
-}
-
-# 3. Node.js
-Write-Host "Checking Node.js..." -ForegroundColor Gray
-if (Test-Command "node") {
+# Git
+Write-Host "Checking Git..." -ForegroundColor Gray
+if (Test-Command "git") {
     try {
-        $nodeVersion = & node --version 2>$null
-        if ($nodeVersion -match 'v?(\d+\.\d+\.\d+)') {
-            $version = [version]$Matches[1]
-            if ($version -ge [version]"18.0.0") {
-                Add-Result "Node.js" "OK" $Matches[1] $true
-            } else {
-                Add-Result "Node.js" "WARN" "$($Matches[1]) (recommend 18+ LTS)" $false
-            }
+        $gitVersion = & git --version 2>$null
+        if ($gitVersion -match '(\d+\.\d+\.\d+)') {
+            Add-Result "Git" "OK" $Matches[1] $true
         } else {
-            Add-Result "Node.js" "OK" $nodeVersion $true
+            Add-Result "Git" "OK" $gitVersion $true
         }
     } catch {
-        Add-Result "Node.js" "ERROR" "node found but version check failed" $false
+        Add-Result "Git" "ERROR" "git found but version check failed" $false
     }
 } else {
-    Add-Result "Node.js" "MISSING" "Run: winget install OpenJS.NodeJS.LTS" $false
+    Add-Result "Git" "MISSING" "Run: winget install Git.Git" $false
 }
 
-# 4. npm
-Write-Host "Checking npm..." -ForegroundColor Gray
-if (Test-Command "npm") {
-    try {
-        $npmVersion = & npm --version 2>$null
-        if ($npmVersion -match '(\d+\.\d+\.\d+)') {
-            Add-Result "npm" "OK" $Matches[1] $true
-        } else {
-            Add-Result "npm" "OK" $npmVersion $true
-        }
-    } catch {
-        Add-Result "npm" "ERROR" "npm found but version check failed" $false
-    }
-} else {
-    Add-Result "npm" "MISSING" "Install Node.js: winget install OpenJS.NodeJS.LTS" $false
-}
-
-# 5. Claude Code CLI
+# Claude Code CLI
 Write-Host "Checking Claude Code CLI..." -ForegroundColor Gray
 try {
     $claudeVersion = & claude --version 2>$null
@@ -158,7 +122,171 @@ try {
     Add-Result "Claude Code CLI" "MISSING" "Run: npm install -g @anthropic-ai/claude-code" $false
 }
 
-# 4. ReSharper CLI (jb inspectcode)
+# ===========================================
+# PREREQUISITES (new-machine-setup.md Phase 1)
+# ===========================================
+
+# Node.js
+Write-Host "Checking Node.js..." -ForegroundColor Gray
+if (Test-Command "node") {
+    try {
+        $nodeVersion = & node --version 2>$null
+        if ($nodeVersion -match 'v?(\d+\.\d+\.\d+)') {
+            $version = [version]$Matches[1]
+            if ($version -ge [version]"18.0.0") {
+                Add-Result "Node.js" "OK" $Matches[1] $true
+            } else {
+                Add-Result "Node.js" "WARN" "$($Matches[1]) (recommend 18+ LTS)" $false
+            }
+        } else {
+            Add-Result "Node.js" "OK" $nodeVersion $true
+        }
+    } catch {
+        Add-Result "Node.js" "ERROR" "node found but version check failed" $false
+    }
+} else {
+    Add-Result "Node.js" "MISSING" "Run: winget install OpenJS.NodeJS.LTS" $false
+}
+
+# npm (comes with Node.js)
+Write-Host "Checking npm..." -ForegroundColor Gray
+if (Test-Command "npm") {
+    try {
+        $npmVersion = & npm --version 2>$null
+        if ($npmVersion -match '(\d+\.\d+\.\d+)') {
+            Add-Result "npm" "OK" $Matches[1] $true
+        } else {
+            Add-Result "npm" "OK" $npmVersion $true
+        }
+    } catch {
+        Add-Result "npm" "ERROR" "npm found but version check failed" $false
+    }
+} else {
+    Add-Result "npm" "MISSING" "Install Node.js: winget install OpenJS.NodeJS.LTS" $false
+}
+
+# PowerShell 7
+Write-Host "Checking PowerShell..." -ForegroundColor Gray
+$psVersion = $PSVersionTable.PSVersion
+if ($psVersion.Major -ge 7) {
+    Add-Result "PowerShell 7" "OK" "$($psVersion.Major).$($psVersion.Minor).$($psVersion.Patch)" $true
+} else {
+    Add-Result "PowerShell 7" "WARN" "$($psVersion.Major).$($psVersion.Minor) (recommend 7+)" $false
+}
+
+# Python
+Write-Host "Checking Python..." -ForegroundColor Gray
+if (Test-Command "python") {
+    try {
+        $pythonVersion = & python --version 2>$null
+        if ($pythonVersion -match '(\d+\.\d+\.\d+)') {
+            $version = [version]$Matches[1]
+            if ($version -ge [version]"3.10.0") {
+                Add-Result "Python" "OK" $Matches[1] $true
+            } else {
+                Add-Result "Python" "WARN" "$($Matches[1]) (recommend 3.10+)" $false
+            }
+        } else {
+            Add-Result "Python" "OK" $pythonVersion $true
+        }
+    } catch {
+        Add-Result "Python" "ERROR" "python found but version check failed" $false
+    }
+} else {
+    Add-Result "Python" "MISSING" "Install Python 3.10+" $false
+}
+
+# Git configuration
+Write-Host "Checking Git configuration..." -ForegroundColor Gray
+try {
+    $autocrlf = & git config core.autocrlf 2>$null
+    if ($autocrlf -eq "true") {
+        Add-Result "Git core.autocrlf" "OK" "true" $true
+    } elseif ($autocrlf) {
+        Add-Result "Git core.autocrlf" "WARN" "$autocrlf (recommend: true)" $false
+    } else {
+        Add-Result "Git core.autocrlf" "MISSING" "Run: git config --global core.autocrlf true" $false
+    }
+} catch {
+    Add-Result "Git core.autocrlf" "ERROR" "Could not check git config" $false
+}
+
+try {
+    $pullRebase = & git config pull.rebase 2>$null
+    if ($pullRebase -eq "false") {
+        Add-Result "Git pull.rebase" "OK" "false (merge)" $true
+    } elseif ($pullRebase -eq "true") {
+        Add-Result "Git pull.rebase" "INFO" "true (rebase) - consider 'false' for safer merges" $true
+    } elseif ($pullRebase) {
+        Add-Result "Git pull.rebase" "INFO" "$pullRebase" $true
+    } else {
+        Add-Result "Git pull.rebase" "INFO" "not set (defaults to merge)" $true
+    }
+} catch {
+    Add-Result "Git pull.rebase" "ERROR" "Could not check git config" $false
+}
+
+# 4. Visual Studio
+Write-Host "Checking Visual Studio..." -ForegroundColor Gray
+$vsVersions = @()
+$vs2022Path = "C:\Program Files\Microsoft Visual Studio\2022"
+$vs2026Path = "C:\Program Files\Microsoft Visual Studio\18"
+if (Test-Path $vs2022Path) {
+    $editions = Get-ChildItem $vs2022Path -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+    foreach ($edition in $editions) {
+        $vsVersions += "2022 $edition"
+    }
+}
+if (Test-Path $vs2026Path) {
+    $editions = Get-ChildItem $vs2026Path -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+    foreach ($edition in $editions) {
+        $vsVersions += "2026 $edition"
+    }
+}
+if ($vsVersions.Count -gt 0) {
+    Add-Result "Visual Studio" "OK" ($vsVersions -join ", ") $true
+} else {
+    Add-Result "Visual Studio" "MISSING" "Install from visualstudio.microsoft.com" $false
+}
+
+# 5. TortoiseGit
+Write-Host "Checking TortoiseGit..." -ForegroundColor Gray
+$tortoiseGitPath = "C:\Program Files\TortoiseGit\bin\TortoiseGitProc.exe"
+if (Test-Path $tortoiseGitPath) {
+    # Try to get version from file properties
+    try {
+        $version = (Get-Item $tortoiseGitPath).VersionInfo.ProductVersion
+        if ($version) {
+            Add-Result "TortoiseGit" "OK" $version $true
+        } else {
+            Add-Result "TortoiseGit" "OK" "installed" $true
+        }
+    } catch {
+        Add-Result "TortoiseGit" "OK" "installed" $true
+    }
+} else {
+    Add-Result "TortoiseGit" "MISSING" "Run: winget install TortoiseGit.TortoiseGit" $false
+}
+
+# Notepad++ (optional utility)
+Write-Host "Checking Notepad++..." -ForegroundColor Gray
+$notepadPlusPath = "C:\Program Files\Notepad++\notepad++.exe"
+if (Test-Path $notepadPlusPath) {
+    try {
+        $version = (Get-Item $notepadPlusPath).VersionInfo.ProductVersion
+        if ($version) {
+            Add-Result "Notepad++" "OK" $version $true
+        } else {
+            Add-Result "Notepad++" "OK" "installed" $true
+        }
+    } catch {
+        Add-Result "Notepad++" "OK" "installed" $true
+    }
+} else {
+    Add-Result "Notepad++" "INFO" "optional - Run: winget install Notepad++.Notepad++" $true
+}
+
+# ReSharper CLI (jb inspectcode)
 Write-Host "Checking ReSharper CLI tools..." -ForegroundColor Gray
 if (Test-Command "jb") {
     try {
@@ -201,7 +329,82 @@ if (Test-Command "dotCover") {
     Add-Result "dotCover CLI" "MISSING" "Run: dotnet tool install --global JetBrains.dotCover.CommandLineTools --version 2025.1.7" $false
 }
 
-# 6. GitHub CLI
+# dotMemory CLI (optional - for memory profiling)
+Write-Host "Checking dotMemory CLI..." -ForegroundColor Gray
+$dotMemoryPath = $null
+$dotMemoryBase = Join-Path $env:USERPROFILE ".claude-tools\dotMemory"
+if (Test-Path $dotMemoryBase) {
+    # Find dotMemory.exe in version subfolder (e.g., ~/.claude-tools/dotMemory/2025.3.1/tools/dotMemory.exe)
+    $versionDirs = Get-ChildItem $dotMemoryBase -Directory -ErrorAction SilentlyContinue
+    foreach ($versionDir in $versionDirs) {
+        $testPath = Join-Path $versionDir.FullName "tools\dotMemory.exe"
+        if (Test-Path $testPath) {
+            $dotMemoryPath = $testPath
+            break
+        }
+    }
+}
+if ($dotMemoryPath) {
+    try {
+        # Parse version from command output: "dotMemory Console Profiler 2025.3.1 build ..."
+        $output = & $dotMemoryPath help 2>&1 | Select-Object -First 1
+        if ($output -match 'dotMemory.*?(\d{4}\.\d+\.\d+)') {
+            Add-Result "dotMemory CLI" "OK" $Matches[1] $true
+        } else {
+            Add-Result "dotMemory CLI" "OK" "installed" $true
+        }
+    } catch {
+        Add-Result "dotMemory CLI" "OK" "installed" $true
+    }
+} else {
+    Add-Result "dotMemory CLI" "INFO" "optional - Run: pwsh -File ai/scripts/Install-DotMemory.ps1" $true
+}
+
+# 9. dotTrace CLI (optional - for performance profiling)
+Write-Host "Checking dotTrace CLI..." -ForegroundColor Gray
+if (Test-Command "dottrace") {
+    try {
+        $dotTraceOutput = & dottrace --version 2>&1 | Out-String
+        if ($dotTraceOutput -match '(\d+\.\d+\.\d+)') {
+            Add-Result "dotTrace CLI" "OK" $Matches[1] $true
+        } else {
+            Add-Result "dotTrace CLI" "OK" "installed" $true
+        }
+    } catch {
+        Add-Result "dotTrace CLI" "ERROR" "dottrace found but version check failed" $false
+    }
+} else {
+    Add-Result "dotTrace CLI" "INFO" "optional - Run: dotnet tool install --global JetBrains.dotTrace.GlobalTools" $true
+}
+
+# dotTrace Reporter.exe (optional - for automated XML reports)
+Write-Host "Checking dotTrace Reporter.exe..." -ForegroundColor Gray
+$reporterPath = $null
+$dotTraceInstalls = Get-ChildItem "$env:LOCALAPPDATA\JetBrains\Installations" -Directory -Filter "dotTrace*" -ErrorAction SilentlyContinue
+foreach ($install in $dotTraceInstalls) {
+    $testPath = Join-Path $install.FullName "Reporter.exe"
+    if (Test-Path $testPath) {
+        $reporterPath = $testPath
+        break
+    }
+}
+if ($reporterPath) {
+    try {
+        # Parse version from command output: "dotTrace Reporter 2025.3.1 build ..."
+        $output = & $reporterPath 2>&1 | Select-Object -First 1
+        if ($output -match 'dotTrace Reporter (\d{4}\.\d+\.\d+)') {
+            Add-Result "dotTrace Reporter" "OK" $Matches[1] $true
+        } else {
+            Add-Result "dotTrace Reporter" "OK" "installed" $true
+        }
+    } catch {
+        Add-Result "dotTrace Reporter" "OK" "installed" $true
+    }
+} else {
+    Add-Result "dotTrace Reporter" "INFO" "optional - requires dotTrace GUI (JetBrains)" $true
+}
+
+# 11. GitHub CLI
 Write-Host "Checking GitHub CLI..." -ForegroundColor Gray
 if (Test-Command "gh") {
     try {
@@ -235,29 +438,7 @@ if (Test-Command "gh") {
     Add-Result "GitHub CLI Auth" "SKIP" "gh not installed" $false
 }
 
-# 8. Python
-Write-Host "Checking Python..." -ForegroundColor Gray
-if (Test-Command "python") {
-    try {
-        $pythonVersion = & python --version 2>$null
-        if ($pythonVersion -match '(\d+\.\d+\.\d+)') {
-            $version = [version]$Matches[1]
-            if ($version -ge [version]"3.10.0") {
-                Add-Result "Python" "OK" $Matches[1] $true
-            } else {
-                Add-Result "Python" "WARN" "$($Matches[1]) (recommend 3.10+)" $false
-            }
-        } else {
-            Add-Result "Python" "OK" $pythonVersion $true
-        }
-    } catch {
-        Add-Result "Python" "ERROR" "python found but version check failed" $false
-    }
-} else {
-    Add-Result "Python" "MISSING" "Install Python 3.10+" $false
-}
-
-# 9. Python MCP packages
+# Python MCP packages
 Write-Host "Checking Python MCP packages..." -ForegroundColor Gray
 $labkeyInstalled = $false
 $mcpInstalled = $false
@@ -336,43 +517,6 @@ if ($Skip -contains "labkey") {
     } catch {
         Add-Result "LabKey MCP Server" "ERROR" "Could not check MCP status: $_" $false -SkipId "labkey"
     }
-}
-
-# 12. Git autocrlf (check effective value from any scope: system, global, or local)
-Write-Host "Checking Git configuration..." -ForegroundColor Gray
-try {
-    $autocrlf = & git config core.autocrlf 2>$null
-    if ($autocrlf -eq "true") {
-        # Show where it's set
-        $origin = & git config --show-origin core.autocrlf 2>$null
-        $scope = if ($origin -match 'file:.*gitconfig') { "(system)" }
-                 elseif ($origin -match '\.gitconfig') { "(global)" }
-                 else { "" }
-        Add-Result "Git core.autocrlf" "OK" "true $scope".Trim() $true
-    } elseif ($autocrlf) {
-        Add-Result "Git core.autocrlf" "WARN" "$autocrlf (recommend: true)" $false
-    } else {
-        Add-Result "Git core.autocrlf" "MISSING" "Run: git config --global core.autocrlf true" $false
-    }
-} catch {
-    Add-Result "Git core.autocrlf" "ERROR" "Could not check git config" $false
-}
-
-# 13. Git pull.rebase (check effective value from any scope)
-try {
-    $pullRebase = & git config pull.rebase 2>$null
-    if ($pullRebase -eq "false") {
-        Add-Result "Git pull.rebase" "OK" "false (merge)" $true
-    } elseif ($pullRebase -eq "true") {
-        Add-Result "Git pull.rebase" "INFO" "true (rebase) - consider 'false' for safer merges" $true
-    } elseif ($pullRebase) {
-        Add-Result "Git pull.rebase" "INFO" "$pullRebase" $true
-    } else {
-        # Not set means Git's default behavior (merge in most versions)
-        Add-Result "Git pull.rebase" "INFO" "not set (defaults to merge)" $true
-    }
-} catch {
-    Add-Result "Git pull.rebase" "ERROR" "Could not check git config" $false
 }
 
 # Print Summary

@@ -133,6 +133,16 @@ param(
     [switch]$MemoryProfileCollectAllocations = $false,  # Collect allocation stack traces
 
     [Parameter(Mandatory=$false)]
+    [switch]$PerformanceProfile = $false,  # Run under dotTrace CLI profiler
+
+    [Parameter(Mandatory=$false)]
+    [string]$PerformanceProfileOutputPath = "",  # Path for .dtp snapshot output (default: ai\.tmp\perf-{timestamp}.dtp)
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("Sampling", "Tracing", "Timeline")]
+    [string]$PerformanceProfileType = "Sampling",  # Profiling type (Sampling is fastest, Tracing most accurate)
+
+    [Parameter(Mandatory=$false)]
     [string]$SourceRoot = $null  # Path to pwiz root (auto-detected if not specified)
 )
 
@@ -415,6 +425,72 @@ if ($MemoryProfile) {
     Write-Host "   Warmup: $MemoryProfileWarmup, WaitRuns: $MemoryProfileWaitRuns" -ForegroundColor Gray
 }
 
+# Find dotTrace and Reporter.exe if performance profiling is requested
+$dotTraceExe = $null
+$reporterExe = $null
+if ($PerformanceProfile) {
+    # dotTrace CLI is available as a .NET global tool
+    $dotTraceExe = Get-Command "dottrace" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+
+    if (-not $dotTraceExe) {
+        Write-Host "❌ dottrace not found. Performance profiling requires JetBrains dotTrace CLI." -ForegroundColor Red
+        Write-Host "" -ForegroundColor Yellow
+        Write-Host "   Install as .NET global tool:" -ForegroundColor Cyan
+        Write-Host "     dotnet tool install --global JetBrains.dotTrace.GlobalTools" -ForegroundColor White
+        exit 1
+    }
+
+    # Find Reporter.exe in JetBrains GUI installation (required for XML export)
+    $jetBrainsInstallations = Join-Path $env:LOCALAPPDATA "JetBrains\Installations"
+    if (Test-Path $jetBrainsInstallations) {
+        # Look for dotTrace installation
+        $dotTraceDir = Get-ChildItem -Path $jetBrainsInstallations -Directory -Filter "dotTrace*" |
+                       Sort-Object Name -Descending | Select-Object -First 1
+        if ($dotTraceDir) {
+            $reporterPath = Join-Path $dotTraceDir.FullName "Reporter.exe"
+            if (Test-Path $reporterPath) {
+                $reporterExe = $reporterPath
+            }
+        }
+
+        # Also check ReSharper installations (includes Reporter.exe)
+        if (-not $reporterExe) {
+            $reSharperDirs = Get-ChildItem -Path $jetBrainsInstallations -Directory -Filter "ReSharperPlatform*" |
+                            Sort-Object Name -Descending
+            foreach ($dir in $reSharperDirs) {
+                $reporterPath = Join-Path $dir.FullName "Reporter.exe"
+                if (Test-Path $reporterPath) {
+                    $reporterExe = $reporterPath
+                    break
+                }
+            }
+        }
+    }
+
+    if (-not $reporterExe) {
+        Write-Host "⚠️ Reporter.exe not found. XML report generation will be skipped." -ForegroundColor Yellow
+        Write-Host "   Reporter.exe is included with dotTrace GUI or ReSharper installation." -ForegroundColor Gray
+    }
+
+    # Determine output paths
+    if ([string]::IsNullOrEmpty($PerformanceProfileOutputPath)) {
+        $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+        $aiRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+        $aiTmpDir = Join-Path $aiRoot ".tmp"
+        if (-not (Test-Path $aiTmpDir)) {
+            New-Item -ItemType Directory -Path $aiTmpDir -Force | Out-Null
+        }
+        $PerformanceProfileOutputPath = Join-Path $aiTmpDir "perf-$timestamp.dtp"
+    }
+
+    Write-Host "⚡ Performance profiling enabled - dotTrace: $dotTraceExe" -ForegroundColor Cyan
+    Write-Host "   Snapshot output: $PerformanceProfileOutputPath" -ForegroundColor Gray
+    Write-Host "   Profiling type: $PerformanceProfileType" -ForegroundColor Gray
+    if ($reporterExe) {
+        Write-Host "   Reporter.exe: $reporterExe (XML export available)" -ForegroundColor Gray
+    }
+}
+
 Write-Host "Running tests with TestRunner.exe" -ForegroundColor Cyan
 Write-Host "  Test: $TestName" -ForegroundColor Gray
 Write-Host "  Language(s): $languageParam" -ForegroundColor Gray
@@ -424,6 +500,7 @@ Write-Host "  Loop: $(if ($Loop -eq 0) { 'Forever' } else { "$Loop iterations" }
 Write-Host "  Diagnostics: Handles=$(if ($ReportHandles) { 'on' } else { 'off' }), Heaps=$(if ($ReportHeaps) { 'on' } else { 'off' })" -ForegroundColor Gray
 Write-Host "  Coverage: $(if ($Coverage) { 'Enabled' } else { 'Disabled' })" -ForegroundColor Gray
 Write-Host "  Memory Profile: $(if ($MemoryProfile) { "Enabled (warmup=$MemoryProfileWarmup, wait=$MemoryProfileWaitRuns)" } else { 'Disabled' })" -ForegroundColor Gray
+Write-Host "  Performance Profile: $(if ($PerformanceProfile) { "Enabled ($PerformanceProfileType)" } else { 'Disabled' })" -ForegroundColor Gray
 Write-Host "  TeamCity Cleanup: $(if ($TeamCityCleanup) { 'Enabled (DesiredCleanupLevel=all)' } else { 'Disabled' })" -ForegroundColor Gray
 Write-Host "  Log: $outputDir\$logFile`n" -ForegroundColor Gray
 
@@ -582,6 +659,22 @@ try {
             # Application path, then -- to separate dotMemory args from TestRunner args
             $testArguments = $dotMemoryOptions + @($testRunnerFullPath, "--") + $runnerArgs
         }
+        elseif ($PerformanceProfile) {
+            # Build dotTrace command - wrap TestRunner with dotTrace CLI
+            # Syntax: dottrace start [options] <executable> [-- <args>]
+            $testRunnerFullPath = (Resolve-Path ".\TestRunner.exe").Path
+            $testExecutable = $dotTraceExe
+
+            $dotTraceOptions = @(
+                "start",
+                "--profiling-type=$PerformanceProfileType",
+                "--save-to=$PerformanceProfileOutputPath",
+                "--overwrite",
+                "--propagate-exit-code"
+            )
+            # Application path, then -- to separate dotTrace args from TestRunner args
+            $testArguments = $dotTraceOptions + @($testRunnerFullPath, "--") + $runnerArgs
+        }
 
         $cmdLine = "$testExecutable " + ($testArguments -join ' ')
         Write-Host "Command: $cmdLine`n" -ForegroundColor Gray
@@ -691,6 +784,67 @@ try {
             Write-Host "   2. File > Open > Select the workspace file" -ForegroundColor Gray
             Write-Host "   3. Compare the two snapshots (warmup vs analysis)" -ForegroundColor Gray
             Write-Host "   4. Look for objects that grew between snapshots" -ForegroundColor Gray
+        }
+
+        # Report performance profile results if enabled
+        if ($PerformanceProfile -and (Test-Path $PerformanceProfileOutputPath)) {
+            Write-Host "`n⚡ Performance profile snapshot saved:" -ForegroundColor Green
+            Write-Host "   Snapshot: $PerformanceProfileOutputPath" -ForegroundColor Gray
+
+            # Generate XML report if Reporter.exe is available
+            if ($reporterExe) {
+                $aiRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+                $aiTmpDir = Join-Path $aiRoot ".tmp"
+                $patternFile = Join-Path $aiTmpDir "dottrace-pattern.xml"
+                $reportFile = $PerformanceProfileOutputPath -replace '\.dtp$', '-report.xml'
+
+                # Create pattern file if it doesn't exist
+                if (-not (Test-Path $patternFile)) {
+                    @"
+<Patterns>
+  <Pattern PrintCallstacks="Full">pwiz\..*</Pattern>
+  <Pattern PrintCallstacks="Full">TestRunner\..*</Pattern>
+  <Pattern PrintCallstacks="Full">TestRunnerLib\..*</Pattern>
+</Patterns>
+"@ | Out-File -FilePath $patternFile -Encoding UTF8
+                }
+
+                Write-Host "`n   Generating XML report..." -ForegroundColor Cyan
+                & $reporterExe report $PerformanceProfileOutputPath --pattern=$patternFile --save-to=$reportFile --overwrite 2>&1 | Out-Null
+
+                if (Test-Path $reportFile) {
+                    Write-Host "   Report: $reportFile" -ForegroundColor Gray
+
+                    # Parse and display top hot spots
+                    try {
+                        [xml]$report = Get-Content $reportFile
+                        $functions = $report.Report.Function |
+                            Where-Object { $_.FQN -like "pwiz.*" } |
+                            Sort-Object { [double]$_.TotalTime } -Descending |
+                            Select-Object -First 10
+
+                        if ($functions) {
+                            Write-Host "`n   Top 10 Hot Spots (pwiz.* methods by TotalTime):" -ForegroundColor Cyan
+                            Write-Host "   ─────────────────────────────────────────────────────────" -ForegroundColor Gray
+                            foreach ($fn in $functions) {
+                                $name = $fn.FQN -replace '^pwiz\.', ''
+                                $total = [math]::Round([double]$fn.TotalTime, 1)
+                                $own = [math]::Round([double]$fn.OwnTime, 1)
+                                Write-Host ("   {0,-50} Total: {1,8}ms  Own: {2,8}ms" -f $name, $total, $own) -ForegroundColor White
+                            }
+                        }
+                    }
+                    catch {
+                        Write-Host "   (Could not parse report: $($_.Exception.Message))" -ForegroundColor Yellow
+                    }
+                }
+            }
+            else {
+                Write-Host "`n   To analyze:" -ForegroundColor Cyan
+                Write-Host "   1. Open dotTrace GUI" -ForegroundColor Gray
+                Write-Host "   2. File > Open > Select the snapshot file" -ForegroundColor Gray
+                Write-Host "   3. Analyze hot spots and call tree" -ForegroundColor Gray
+            }
         }
 
         exit 0

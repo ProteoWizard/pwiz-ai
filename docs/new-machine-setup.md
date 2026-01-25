@@ -451,6 +451,17 @@ pwsh -File C:\proj\ai\scripts\Install-DotMemory.ps1
 
 > **Note:** Unlike dotCover, dotMemory is NOT a .NET global tool. The install script downloads and extracts the NuGet package to `~/.claude-tools/dotMemory/`. Use with `Run-Tests.ps1 -MemoryProfile`.
 
+**dotTrace CLI** - Performance profiling (optional, for performance investigation):
+```powershell
+# Existing mode check:
+dottrace --version
+
+# Install if missing:
+dotnet tool install --global JetBrains.dotTrace.GlobalTools
+```
+
+> **Note:** The dotTrace CLI is a .NET global tool for capturing performance snapshots. For XML report export (automated analysis), `Reporter.exe` from the dotTrace GUI installation is also required. Developers with the JetBrains All Products Pack already have this at `%LOCALAPPDATA%\JetBrains\Installations\dotTrace*\Reporter.exe`. Use with `Run-Tests.ps1 -PerformanceProfile`.
+
 **Python packages** - For MCP servers and LabKey integration:
 ```powershell
 # Existing mode check:
