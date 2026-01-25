@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260121_irtdb_friendly_error`
 - **Base**: `master`
 - **Created**: 2026-01-21
-- **Status**: In Progress - Approach Revised
+- **Status**: Complete - Merged to master (not cherry-picked to 26.1 release)
 - **GitHub Issue**: [#3856](https://github.com/ProteoWizard/pwiz/issues/3856)
-- **PR**: (pending)
+- **PR**: [#3867](https://github.com/ProteoWizard/pwiz/pull/3867)
 
 ## Problem Description
 
@@ -143,10 +143,14 @@ This breaks the progress tracking chain because:
 
 **Pragmatic fix**: For this issue, wrapping `LoadBackground()` in try-catch is sufficient. The progress reporting refinement can be a separate improvement.
 
-## Files to Modify
+## Files Modified
 
-1. `pwiz_tools/Skyline/Model/Irt/IrtDbManager.cs` - Add try-catch with `IsProgrammingDefect()` pattern
-2. `pwiz_tools/Skyline/Model/Irt/IrtResources.resx` - Add resource string for loading message (if needed)
+1. `pwiz_tools/Skyline/Model/Irt/IrtDbManager.cs` - Added try-catch with `IsProgrammingDefect()` pattern
+   - Extracted `LoadBackgroundInner()` for cleaner exception handling
+   - Pass `LoadMonitor` to `IrtDb.GetIrtDb()` calls instead of `null`
+   - Consolidated duplicate database loading into single load
+
+Note: No new resource strings needed - `IrtDb.GetIrtDb()` already has user-friendly messages.
 
 ## Progress
 
@@ -157,10 +161,17 @@ This breaks the progress tracking chain because:
 - [x] Audit of all BackgroundLoader subclasses (see Future Work section)
 - [x] Reset branch to master (discarding initial fix)
 - [x] Document correct fix approach
-- [ ] Implement try-catch wrapper in IrtDbManager.LoadBackground()
-- [ ] Pass LoadMonitor to GetIrtDb() calls instead of null
-- [ ] Build and test
-- [ ] Create PR
+- [x] Implement try-catch wrapper in IrtDbManager.LoadBackground()
+- [x] Thread IProgressStatus through call chain via ref parameter
+- [x] Add IrtDb.GetIrtDb() overloads with clear null-monitor semantics
+- [x] Consolidate duplicate database loading (load once, reuse for duplicate removal)
+- [x] Build and test locally (all iRT tests pass)
+- [x] Create PR #3867
+- [x] Address Copilot review comments
+- [x] TeamCity nightly testing
+- [x] Merge PR to master
+
+**Release notes**: Not cherry-picked to 26.1 release branch (too close to release). Will ship in next major release and begin testing in Skyline-daily after 26.1 ships.
 
 ## Test Plan
 
@@ -183,7 +194,7 @@ A comprehensive audit of all 9 `BackgroundLoader.LoadBackground()` overrides rev
 
 | Manager | File | Has Try-Catch | Uses IsProgrammingDefect | Status |
 |---------|------|---------------|--------------------------|--------|
-| IrtDbManager | Irt\IrtDbManager.cs | NO | NO | **NO HANDLING** |
+| IrtDbManager | Irt\IrtDbManager.cs | YES | YES | **FIXED (this PR)** |
 | IonMobilityLibraryManager | IonMobility\IonMobilityLibraryManager.cs | NO | NO | **NO HANDLING** |
 | LibraryManager | Lib\Library.cs | YES | YES | **CORRECT** |
 | OptimizationDbManager | Optimization\OptimizationDbManager.cs | NO | NO | **NO HANDLING** |
@@ -226,6 +237,6 @@ A comprehensive audit of all 9 `BackgroundLoader.LoadBackground()` overrides rev
    ```
 3. Consider whether `CalculatorException` / `DatabaseOpeningException` should extend `UserMessageException` to be recognized by `IsProgrammingDefect()`
 
-### Full Audit Report
+### Follow-up Issue
 
-See: `ai/.tmp/backgroundloader-exception-review.md`
+See: [#3871 - BackgroundLoader exception handling audit](https://github.com/ProteoWizard/pwiz/issues/3871)
