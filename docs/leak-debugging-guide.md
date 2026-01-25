@@ -505,26 +505,41 @@ The current workflow requires a human to review nightly test results and select 
 - [x] Handle reporting improvements (`-ReportHandles`, `-SortHandlesByCount`)
 - [x] MCP server for LabKey integration (see `ai/mcp/LabKeyMcp/`)
 - [x] dotMemory snapshot integration in TestRunnerLib (January 2026)
-- [ ] Command-line arguments for dotMemory properties
+- [x] Command-line arguments for dotMemory properties (January 2026)
 - [ ] `/pw-review-leaks` slash command
 - [ ] Autonomous investigation mode
 
 This represents a path toward having Claude Code proactively identify and fix handle leaks with minimal human intervention, transforming leak debugging from a reactive manual process to an automated continuous improvement system.
 
+### Command-Line Arguments for dotMemory (January 2026)
+
+TestRunner now supports command-line arguments to configure dotMemory snapshot behavior:
+
+```
+dotmemorywaitruns=N        # Iterations between snapshots (enables profiling)
+dotmemorywarmup=N          # Warmup iterations before first snapshot (default: 5)
+dotmemorycollectallocations=on  # Capture allocation stack traces (default: off)
+```
+
+**Usage:** Run TestRunner under dotMemory GUI profiler with these arguments:
+```
+TestRunner.exe test=TestOlderProteomeDb loop=20 dotmemorywaitruns=10 dotmemorywarmup=5 dotmemorycollectallocations=on
+```
+
+**What happens:**
+- Test runs for 5 iterations (warmup, allows JIT/caching to stabilize)
+- Snapshot #1 taken: `TestOlderProteomeDb_Warmup_After5`
+- Test runs 10 more iterations
+- Snapshot #2 taken: `TestOlderProteomeDb_Analysis_After15`
+- Compare snapshots in dotMemory GUI to identify leaking objects
+
+When `dotmemorywaitruns` is set and `dotmemorywarmup` is not specified, warmup defaults to 5 runs.
+
 ### Future: Automated Memory Profiling with dotMemory CLI
 
 Similar to how dotCover provides command-line code coverage analysis, JetBrains dotMemory has a command-line interface (`dotMemory.exe`) that could enable fully automated memory profiling.
 
-**Near-term: Command-line argument support**
-
-Add TestRunner command-line arguments for the existing properties:
-```
-dotmemorywaitruns=20       # Iterations between snapshots (enables profiling)
-dotmemorywarmup=5          # Warmup iterations before first snapshot (default: 5)
-dotmemorycollectallocations=true  # Capture allocation stack traces (default: off)
-```
-
-When `dotmemorywaitruns` is set and `dotmemorywarmup` is not specified, warmup defaults to 5 runs.
+**Limitation:** dotMemory CLI currently cannot export comparison reports to JSON/XML (only produces binary `.dmw` workspace files). A feature request has been submitted to JetBrains: [YouTrack DMRY](https://youtrack.jetbrains.com/issues/DMRY)
 
 **Longer-term: Full CLI integration**
 

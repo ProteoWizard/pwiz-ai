@@ -440,6 +440,17 @@ dotCover --version
 dotnet tool install --global JetBrains.dotCover.CommandLineTools
 ```
 
+**dotMemory CLI** - Memory profiling (optional, for leak investigation):
+```powershell
+# Existing mode check:
+Test-Path "$env:USERPROFILE\.claude-tools\dotMemory"
+
+# Install if missing:
+pwsh -File C:\proj\ai\scripts\Install-DotMemory.ps1
+```
+
+> **Note:** Unlike dotCover, dotMemory is NOT a .NET global tool. The install script downloads and extracts the NuGet package to `~/.claude-tools/dotMemory/`. Use with `Run-Tests.ps1 -MemoryProfile`.
+
 **Python packages** - For MCP servers and LabKey integration:
 ```powershell
 # Existing mode check:

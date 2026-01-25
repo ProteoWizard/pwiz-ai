@@ -118,6 +118,21 @@ param(
     [string]$CoverageOutputPath = "",  # Path for coverage JSON output (default: ai\.tmp\coverage-{timestamp}.json)
 
     [Parameter(Mandatory=$false)]
+    [switch]$MemoryProfile = $false,  # Run under dotMemory CLI profiler
+
+    [Parameter(Mandatory=$false)]
+    [string]$MemoryProfileOutputPath = "",  # Path for .dmw workspace output (default: ai\.tmp\memory-{timestamp}.dmw)
+
+    [Parameter(Mandatory=$false)]
+    [int]$MemoryProfileWarmup = 5,  # Warmup iterations before first snapshot
+
+    [Parameter(Mandatory=$false)]
+    [int]$MemoryProfileWaitRuns = 10,  # Iterations between first and second snapshot
+
+    [Parameter(Mandatory=$false)]
+    [switch]$MemoryProfileCollectAllocations = $false,  # Collect allocation stack traces
+
+    [Parameter(Mandatory=$false)]
     [string]$SourceRoot = $null  # Path to pwiz root (auto-detected if not specified)
 )
 
@@ -326,7 +341,9 @@ if ($Coverage) {
     # Determine coverage output path
     if ([string]::IsNullOrEmpty($CoverageOutputPath)) {
         $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-        $aiTmpDir = Join-Path (Split-Path -Parent (Split-Path -Parent $skylineRoot)) "ai\.tmp"
+        # Use $PSScriptRoot to find ai/ folder reliably (works in both child and sibling mode)
+        $aiRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+        $aiTmpDir = Join-Path $aiRoot ".tmp"
         if (-not (Test-Path $aiTmpDir)) {
             New-Item -ItemType Directory -Path $aiTmpDir -Force | Out-Null
         }
@@ -337,6 +354,67 @@ if ($Coverage) {
     Write-Host "   Coverage output: $CoverageOutputPath" -ForegroundColor Gray
 }
 
+# Find dotMemory if memory profiling is requested
+$dotMemoryExe = $null
+if ($MemoryProfile) {
+    # Search for dotMemory Console (separate download from JetBrains)
+    # Unlike dotCover/dotTrace, dotMemory is NOT a .NET global tool - it must be manually installed
+
+    # Check ~/.claude-tools/ (primary location for Claude Code tooling)
+    $claudeToolsPath = Join-Path $env:USERPROFILE ".claude-tools\dotMemory"
+    if (Test-Path $claudeToolsPath) {
+        $latestVersion = Get-ChildItem -Path $claudeToolsPath -Directory | Sort-Object Name -Descending | Select-Object -First 1
+        if ($latestVersion) {
+            $exePath = Join-Path $latestVersion.FullName "tools\dotMemory.exe"
+            if (Test-Path $exePath) {
+                $dotMemoryExe = $exePath
+            }
+        }
+    }
+
+    # Check NuGet global packages cache (if restored via PackageReference)
+    if (-not $dotMemoryExe) {
+        $nugetCache = Join-Path $env:USERPROFILE ".nuget\packages\jetbrains.dotmemory.console.windows-x64"
+        if (Test-Path $nugetCache) {
+            $latestVersion = Get-ChildItem -Path $nugetCache -Directory | Sort-Object Name -Descending | Select-Object -First 1
+            if ($latestVersion) {
+                $exePath = Join-Path $latestVersion.FullName "tools\dotMemory.exe"
+                if (Test-Path $exePath) {
+                    $dotMemoryExe = $exePath
+                }
+            }
+        }
+    }
+
+    if (-not $dotMemoryExe) {
+        Write-Host "❌ dotMemory.exe not found. Memory profiling requires JetBrains dotMemory Console." -ForegroundColor Red
+        Write-Host "" -ForegroundColor Yellow
+        Write-Host "   dotMemory is NOT a .NET global tool - it must be manually installed." -ForegroundColor Yellow
+        Write-Host "" -ForegroundColor Yellow
+        Write-Host "   Install to ~/.claude-tools/:" -ForegroundColor Cyan
+        Write-Host "     pwsh -File ai/scripts/Install-DotMemory.ps1" -ForegroundColor White
+        Write-Host "" -ForegroundColor Yellow
+        Write-Host "   Or download from: https://www.jetbrains.com/dotmemory/download/" -ForegroundColor Gray
+        exit 1
+    }
+
+    # Determine output path
+    if ([string]::IsNullOrEmpty($MemoryProfileOutputPath)) {
+        $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+        # Use $PSScriptRoot to find ai/ folder reliably (works in both child and sibling mode)
+        $aiRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+        $aiTmpDir = Join-Path $aiRoot ".tmp"
+        if (-not (Test-Path $aiTmpDir)) {
+            New-Item -ItemType Directory -Path $aiTmpDir -Force | Out-Null
+        }
+        $MemoryProfileOutputPath = Join-Path $aiTmpDir "memory-$timestamp.dmw"
+    }
+
+    Write-Host "🧠 Memory profiling enabled - dotMemory: $dotMemoryExe" -ForegroundColor Cyan
+    Write-Host "   Workspace output: $MemoryProfileOutputPath" -ForegroundColor Gray
+    Write-Host "   Warmup: $MemoryProfileWarmup, WaitRuns: $MemoryProfileWaitRuns" -ForegroundColor Gray
+}
+
 Write-Host "Running tests with TestRunner.exe" -ForegroundColor Cyan
 Write-Host "  Test: $TestName" -ForegroundColor Gray
 Write-Host "  Language(s): $languageParam" -ForegroundColor Gray
@@ -345,6 +423,7 @@ Write-Host "  Internet: $(if ($EnableInternet) { 'Enabled' } else { 'Disabled' }
 Write-Host "  Loop: $(if ($Loop -eq 0) { 'Forever' } else { "$Loop iterations" })" -ForegroundColor Gray
 Write-Host "  Diagnostics: Handles=$(if ($ReportHandles) { 'on' } else { 'off' }), Heaps=$(if ($ReportHeaps) { 'on' } else { 'off' })" -ForegroundColor Gray
 Write-Host "  Coverage: $(if ($Coverage) { 'Enabled' } else { 'Disabled' })" -ForegroundColor Gray
+Write-Host "  Memory Profile: $(if ($MemoryProfile) { "Enabled (warmup=$MemoryProfileWarmup, wait=$MemoryProfileWaitRuns)" } else { 'Disabled' })" -ForegroundColor Gray
 Write-Host "  TeamCity Cleanup: $(if ($TeamCityCleanup) { 'Enabled (DesiredCleanupLevel=all)' } else { 'Disabled' })" -ForegroundColor Gray
 Write-Host "  Log: $outputDir\$logFile`n" -ForegroundColor Gray
 
@@ -381,12 +460,20 @@ try {
         # runsmallmoleculeversions=on ensures small molecule test variants run (skipped by default)
         $commonArgs = @("test=$testParam", "language=$languageParam", "offscreen=$offscreenParam", "perftests=on", "runsmallmoleculeversions=on", "log=$logFile")
 
-        # buildcheck forces loop=1, so don't use it when we want to loop multiple times
-        if ($useBuildCheck -and ($Loop -eq 0 -or $Loop -eq 1)) {
+        # buildcheck forces loop=1, so don't use it when we want to loop multiple times or memory profiling
+        if ($useBuildCheck -and ($Loop -eq 0 -or $Loop -eq 1) -and -not $MemoryProfile) {
             $runnerArgs = @("buildcheck=1") + $commonArgs
         } else {
             # Use loop parameter if specified, otherwise default to 1 (run once)
+            # For memory profiling, need at least warmup + waitruns iterations
             $loopValue = if ($Loop -gt 0) { $Loop } else { 1 }
+            if ($MemoryProfile) {
+                $minLoops = $MemoryProfileWarmup + $MemoryProfileWaitRuns
+                if ($loopValue -lt $minLoops) {
+                    Write-Host "⚠️ Adjusting loop count from $loopValue to $minLoops for memory profiling (warmup=$MemoryProfileWarmup + wait=$MemoryProfileWaitRuns)" -ForegroundColor Yellow
+                    $loopValue = $minLoops
+                }
+            }
             $runnerArgs = @("loop=$loopValue") + $commonArgs
         }
 
@@ -408,6 +495,15 @@ try {
         
         if ($TeamCityCleanup) {
             $runnerArgs += "teamcitycleanup=on"
+        }
+
+        # Add dotMemory snapshot arguments if memory profiling is enabled
+        if ($MemoryProfile) {
+            $runnerArgs += "dotmemorywarmup=$MemoryProfileWarmup"
+            $runnerArgs += "dotmemorywaitruns=$MemoryProfileWaitRuns"
+            if ($MemoryProfileCollectAllocations) {
+                $runnerArgs += "dotmemorycollectallocations=on"
+            }
         }
 
         # Build dotCover command if coverage is enabled
@@ -467,7 +563,26 @@ try {
                 ) + $runnerArgs
             }
         }
-        
+        elseif ($MemoryProfile) {
+            # Build dotMemory command - wrap TestRunner with dotMemory CLI
+            # Syntax: dotMemory start [options] <application> [-- <app-args>]
+            $testRunnerFullPath = (Resolve-Path ".\TestRunner.exe").Path
+            $testExecutable = $dotMemoryExe
+
+            # dotMemory CLI start command with API trigger support
+            # Note: --collect-alloc is mutually exclusive with --use-api
+            # Allocation collection is controlled via MemoryProfiler.CollectAllocations API
+            # (set by TestRunner's dotmemorycollectallocations=on argument)
+            $dotMemoryOptions = @(
+                "start",
+                "--use-api",  # Enable JetBrains.Profiler.Api control for snapshots
+                "--save-to-file=$MemoryProfileOutputPath",
+                "--overwrite"
+            )
+            # Application path, then -- to separate dotMemory args from TestRunner args
+            $testArguments = $dotMemoryOptions + @($testRunnerFullPath, "--") + $runnerArgs
+        }
+
         $cmdLine = "$testExecutable " + ($testArguments -join ' ')
         Write-Host "Command: $cmdLine`n" -ForegroundColor Gray
 
@@ -566,7 +681,18 @@ try {
                 Write-Host "   Or try manual export: dotCover report --Source `"$coverageSnapshot`" --Output `"$CoverageOutputPath`" --ReportType JSON" -ForegroundColor Gray
             }
         }
-        
+
+        # Report memory profile workspace if enabled
+        if ($MemoryProfile -and (Test-Path $MemoryProfileOutputPath)) {
+            Write-Host "`n🧠 Memory profile workspace saved:" -ForegroundColor Green
+            Write-Host "   Workspace: $MemoryProfileOutputPath" -ForegroundColor Gray
+            Write-Host "`n   To analyze:" -ForegroundColor Cyan
+            Write-Host "   1. Open dotMemory GUI" -ForegroundColor Gray
+            Write-Host "   2. File > Open > Select the workspace file" -ForegroundColor Gray
+            Write-Host "   3. Compare the two snapshots (warmup vs analysis)" -ForegroundColor Gray
+            Write-Host "   4. Look for objects that grew between snapshots" -ForegroundColor Gray
+        }
+
         exit 0
     }
     finally {
