@@ -36,6 +36,21 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 **pwiz-ai repository (ai/)**: Omit TODO reference for documentation-only changes
 
+## Amending Commits
+
+**Nearly all PRs get squash-merged**, so multiple commits on a branch are fine.
+
+**When amending is appropriate:**
+- Immediately after creating a PR, before any review or interaction
+- Local commits not yet pushed
+
+**When amending is NOT appropriate:**
+- After a PR has been reviewed (even if just by Copilot)
+- After anyone has clicked "Update branch" on GitHub
+- After any merge commits from master
+
+**Instead of amending**, just create a new commit. The commits will be squashed on merge anyway.
+
 ## PR Description Format
 
 ```
