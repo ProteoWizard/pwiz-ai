@@ -27,7 +27,10 @@ $ARGUMENTS = GitHub Issue number (e.g., "3732") or URL
 gh issue view $ARGUMENTS
 ```
 
-Review the issue scope and determine which repository it belongs to.
+Review the issue and note:
+- **Labels**: Check for `skyline`, `pwiz`, `tutorial`, etc. (determines which skill to load in Step 5)
+- **Scope**: What work is described
+- **Repository**: pwiz (code changes) or pwiz-ai (AI tooling/docs)
 
 ### Step 2: Create Branch (pwiz issues only)
 
@@ -89,10 +92,28 @@ gh issue comment $ARGUMENTS --body "Starting work.
 
 ### Step 5: Load Context
 
-Based on issue type, load appropriate skills:
-- Code changes → Load skyline-development skill
-- Tutorial work → Load tutorial-documentation skill
-- AI tooling → Load ai-context-documentation skill
+**Check the issue labels** and load the appropriate skill:
+
+| Label | Skill to Load | Command |
+|-------|---------------|---------|
+| `skyline` | skyline-development | `/skyline-development` |
+| `tutorial` | tutorial-documentation | `/tutorial-documentation` |
+| `pwiz` | *(no skill yet)* | Read ai/CRITICAL-RULES.md, ai/MEMORY.md manually |
+
+**For `skyline`-labeled issues**: Always load the skyline-development skill:
+```
+/skyline-development
+```
+
+**For `pwiz`-labeled issues**: No dedicated skill exists yet. Manually read:
+- ai/CRITICAL-RULES.md - Absolute constraints
+- ai/MEMORY.md - Project context
+- ai/STYLEGUIDE.md - Coding conventions
+
+**For AI tooling (pwiz-ai repo issues)**:
+```
+/ai-context-documentation
+```
 
 ### Step 6: Begin Work
 
