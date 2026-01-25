@@ -47,3 +47,10 @@ Ran 4 Files view tests that exercise BackgroundActionService:
 - TestSkylineWindowEvents (0 sec) - Pass
 
 All tests passed. Ready for commit.
+
+### 2026-01-25 - Copilot Review Feedback
+
+Addressed Copilot review comments:
+1. Changed to catch `ObjectDisposedException` and `NullReferenceException` (the actual disposal cases)
+2. Set count to 0 instead of decrementing (avoids potential negative count issue)
+3. Removed `InvalidOperationException` (not thrown in this disposal path - `DoneAdding` doesn't call `CompleteAdding`)
