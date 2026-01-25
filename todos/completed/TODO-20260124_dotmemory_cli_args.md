@@ -4,7 +4,8 @@
 - **Branch**: `Skyline/work/20260124_dotmemory_cli_args`
 - **Base**: `master`
 - **Created**: 2026-01-24
-- **Status**: PR Created
+- **Completed**: 2026-01-25
+- **Status**: Completed (Merged)
 - **GitHub Issue**: (none)
 - **PR**: [#3870](https://github.com/ProteoWizard/pwiz/pull/3870)
 
@@ -88,3 +89,19 @@ When JetBrains adds JSON export to dotMemory CLI (feature request pending), exte
 - `ai/scripts/Skyline/Run-Tests.ps1` - Memory profiling integration
 - `ai/scripts/Install-DotMemory.ps1` - Installation script (new)
 - `ai/docs/leak-debugging-guide.md` - Documentation updates
+- `ai/docs/new-machine-setup.md` - Added dotMemory as optional tool
+
+## Completion Notes
+
+Successfully created a powerful memory leak investigation workflow:
+
+1. **Scripted profiling**: `Run-Tests.ps1 -MemoryProfile -MemoryProfileCollectAllocations`
+2. **Automatic snapshots**: Warmup snapshot + analysis snapshot at configurable intervals
+3. **Allocation stack traces**: Full call stacks for leaked objects in dotMemory GUI
+
+Validated by reproducing the HttpClientWithProgress timer leak - the allocation stack trace
+pointed directly to `Task.Delay` in `ReadChunk`, making diagnosis trivial compared to the
+hours spent on manual investigation.
+
+Key finding: dotMemory has no text export (unlike dotTrace), so GUI analysis is still required.
+This limitation is documented and a JetBrains feature request is recommended.
