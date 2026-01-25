@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260124_dotmemory_cli_args`
 - **Base**: `master`
 - **Created**: 2026-01-24
-- **Status**: Ready for Commit
+- **Status**: PR Created
 - **GitHub Issue**: (none)
-- **PR**: (pending)
+- **PR**: [#3870](https://github.com/ProteoWizard/pwiz/pull/3870)
 
 ## Objective
 
