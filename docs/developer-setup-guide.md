@@ -32,11 +32,11 @@ The Skyline team has standardized on **Claude Code** for AI-assisted development
 
 ### Option A: New Machine
 
-Follow the [NewMachineBootstrap](https://skyline.ms/wiki-page.view?name=NewMachineBootstrap) guide to install Git and Claude Code, then let Claude Code guide you through the rest.
+Follow the [NewMachineBootstrap](https://skyline.ms/home/software/Skyline/wiki-page.view?name=NewMachineBootstrap) guide to install Git and Claude Code, then let Claude Code guide you through the rest.
 
 ### Option B: Existing Development Machine
 
-If you already have a working Skyline build environment (via [HowToBuildSkylineTip](https://skyline.ms/wiki-page.view?name=HowToBuildSkylineTip)), you can add AI tooling by installing Claude Code and letting it configure the rest.
+If you already have a working Skyline build environment (via [HowToBuildSkylineTip](https://skyline.ms/home/software/Skyline/wiki-page.view?name=HowToBuildSkylineTip)), you can add AI tooling by installing Claude Code and letting it configure the rest.
 
 **Install Claude Code:**
 ```powershell
@@ -154,8 +154,8 @@ For viewing `ai/` documentation in a browser:
 
 ## Resources
 
-- **New machine setup**: [NewMachineBootstrap](https://skyline.ms/wiki-page.view?name=NewMachineBootstrap)
-- **Build environment**: [HowToBuildSkylineTip](https://skyline.ms/wiki-page.view?name=HowToBuildSkylineTip)
+- **New machine setup**: [NewMachineBootstrap](https://skyline.ms/home/software/Skyline/wiki-page.view?name=NewMachineBootstrap)
+- **Build environment**: [HowToBuildSkylineTip](https://skyline.ms/home/software/Skyline/wiki-page.view?name=HowToBuildSkylineTip)
 - **Claude Code documentation**: [docs.anthropic.com/claude-code](https://docs.anthropic.com/en/docs/claude-code)
 
 ---
