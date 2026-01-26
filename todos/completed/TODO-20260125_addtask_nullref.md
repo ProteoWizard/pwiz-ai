@@ -5,7 +5,8 @@
 - **Base**: `master`
 - **Created**: 2026-01-25
 - **GitHub Issue**: [#3864](https://github.com/ProteoWizard/pwiz/issues/3864)
-- **PR**: [#3872](https://github.com/ProteoWizard/pwiz/pull/3872)
+- **PR**: [#3872](https://github.com/ProteoWizard/pwiz/pull/3872) (merged)
+- **Cherry-pick PR**: [#3874](https://github.com/ProteoWizard/pwiz/pull/3874)
 
 ## Objective
 
@@ -54,3 +55,15 @@ Addressed Copilot review comments:
 1. Changed to catch `ObjectDisposedException` and `NullReferenceException` (the actual disposal cases)
 2. Set count to 0 instead of decrementing (avoids potential negative count issue)
 3. Removed `InvalidOperationException` (not thrown in this disposal path - `DoneAdding` doesn't call `CompleteAdding`)
+
+### 2026-01-25 - Final Fix
+
+After further analysis, fixed NRE at the source in `ProducerConsumerWorker.Add()`:
+- Used null-conditional operator: `_queue?.Add(item)`
+- Simplified `BackgroundActionService` catch to only `ObjectDisposedException`
+
+This is cleaner because NRE should be a programming error, not something to catch.
+
+### 2026-01-25 - Completed
+
+PR #3872 merged to master. Cherry-pick PR #3874 created for release branch.
