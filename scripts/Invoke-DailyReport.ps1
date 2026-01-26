@@ -83,15 +83,24 @@ Key points:
 "@
 
 # Build allowed tools list
-# - Read/Write/Glob/Grep: File operations for reports and TODO files
+# - Read/Write/Edit/Glob/Grep: File operations for reports and suggested-actions
+# - Bash: Granular permissions for git blame and gh read-only operations
 # - LabKey MCP tools: Test/exception/support data (wildcards don't work - must be explicit)
 # - Gmail MCP tools: Read inbox, send summary, archive processed emails
 $AllowedTools = @(
+    # File operations
     "Read",
     "Write",
+    "Edit",
     "Glob",
     "Grep",
-    # LabKey MCP - nightly tests, exceptions, support
+    # Bash - granular read-only operations for Phase 3 investigation
+    "Bash(git blame:*)",
+    "Bash(git log:*)",
+    "Bash(git show:*)",
+    "Bash(gh issue list:*)",
+    "Bash(gh pr list:*)",
+    # LabKey MCP - nightly tests (Phase 1-2)
     "mcp__labkey__check_computer_alarms",
     "mcp__labkey__get_daily_test_summary",
     "mcp__labkey__save_exceptions_report",
@@ -102,6 +111,13 @@ $AllowedTools = @(
     "mcp__labkey__analyze_daily_patterns",
     "mcp__labkey__save_daily_summary",
     "mcp__labkey__query_test_history",
+    # LabKey MCP - Phase 3 investigation
+    "mcp__labkey__backfill_nightly_history",
+    "mcp__labkey__backfill_exception_history",
+    "mcp__labkey__get_exception_details",
+    "mcp__labkey__save_run_log",
+    "mcp__labkey__query_test_runs",
+    "mcp__labkey__list_computer_status",
     # Gmail MCP - read notifications, send report, archive
     "mcp__gmail__search_emails",
     "mcp__gmail__read_email",
