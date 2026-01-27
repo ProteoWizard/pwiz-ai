@@ -50,7 +50,24 @@ You don't need to do anything special to record these. I'll take notes as we go 
 
 - **Pristine mode**: The developer followed `new-machine-bootstrap.md`, so Git and Claude Code are already installed and working. Proceed through each phase without checking for existing installations—install commands will run directly. Start at Phase 1.1 (Node.js).
 
-- **Existing mode**: The machine has a working Skyline development environment (via HowToBuildSkylineTip or prior setup). Check for each component before installing. Skip components already present. Many phases may be quick verifications rather than installations.
+- **Existing mode**: The machine has a working Skyline development environment (via HowToBuildSkylineTip or prior setup). **Before proceeding through the phases**, run the verification script to get a comprehensive status report:
+
+  ```powershell
+  pwsh -Command "& './ai/scripts/Verify-Environment.ps1'"
+  ```
+
+  This script checks all prerequisites and reports what's OK, missing, or needs attention. Use the output to:
+  - Skip phases where all components show OK
+  - Focus on phases with MISSING or ERROR items
+  - Note WARN items that may need user decision
+
+  > **For LLM assistants:** The verification script is your primary tool for existing machines. Run it first, share the summary with the user, then propose which phases to work through based on the results. This is much faster than checking each component individually.
+  >
+  > **Actively offer optional items:** Items showing `[INFO]` status are optional but should still be explicitly offered to the user with a brief explanation of what they're for. Don't just list them as "not required"—ask if the user wants to install them. For example:
+  > - **Pillow** (Python package): Enables clipboard image capture in StatusMcp. Critical on Windows 10 where screenshots aren't auto-saved. Less necessary on Windows 11 which saves Win+Shift+S screenshots to `~/Pictures/Screenshots`, but still useful for capturing images from other sources.
+  > - **dotMemory/dotTrace**: JetBrains profiling tools for investigating memory leaks and performance issues.
+  >
+  > Present these as choices, not afterthoughts.
 
 Record their choice and reference it throughout setup.
 
