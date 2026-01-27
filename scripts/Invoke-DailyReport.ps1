@@ -118,6 +118,7 @@ $AllowedTools = @(
     "mcp__labkey__save_run_log",
     "mcp__labkey__query_test_runs",
     "mcp__labkey__list_computer_status",
+    "mcp__labkey__save_run_metrics_csv",
     # Gmail MCP - read notifications, send report, archive
     "mcp__gmail__search_emails",
     "mcp__gmail__read_email",

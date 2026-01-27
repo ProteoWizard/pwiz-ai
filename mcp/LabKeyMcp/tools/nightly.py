@@ -1519,3 +1519,190 @@ def register_tools(mcp):
         except Exception as e:
             logger.error(f"Error comparing run timings: {e}", exc_info=True)
             return f"Error comparing run timings: {e}"
+
+    @mcp.tool()
+    async def save_run_metrics_csv(
+        start_date: str,
+        end_date: Optional[str] = None,
+        metrics: str = "memory,tests,duration",
+        granularity: Literal["run", "day"] = "run",
+        server: str = DEFAULT_SERVER,
+        container_path: str = DEFAULT_TEST_CONTAINER,
+    ) -> str:
+        """[P] Export run metrics to CSV for trend analysis. Saves to ai/.tmp/run-metrics-{folder}-{start}-{end}.csv. → nightly-tests.md
+
+        Args:
+            start_date: Start date (YYYY-MM-DD) or relative like "1y", "6m", "30d"
+            end_date: End date (YYYY-MM-DD), defaults to today
+            metrics: Comma-separated metrics: memory,tests,duration,failures,leaks
+            granularity: "run" for one row per run, "day" for daily means with run_count
+            server: LabKey server hostname
+            container_path: Test folder path (e.g., "/home/development/Nightly x64")
+        """
+        import csv
+        from io import StringIO
+
+        folder_name = container_path.split("/")[-1]
+
+        # Parse relative dates
+        today = datetime.now()
+        if end_date is None:
+            end_date = today.strftime("%Y-%m-%d")
+
+        if start_date.endswith("y"):
+            years = int(start_date[:-1])
+            start_dt = today - timedelta(days=years * 365)
+            start_date = start_dt.strftime("%Y-%m-%d")
+        elif start_date.endswith("m"):
+            months = int(start_date[:-1])
+            start_dt = today - timedelta(days=months * 30)
+            start_date = start_dt.strftime("%Y-%m-%d")
+        elif start_date.endswith("d"):
+            days = int(start_date[:-1])
+            start_dt = today - timedelta(days=days)
+            start_date = start_dt.strftime("%Y-%m-%d")
+
+        # Parse metrics list
+        requested_metrics = [m.strip().lower() for m in metrics.split(",")]
+        valid_metrics = {"memory", "tests", "duration", "failures", "leaks"}
+        invalid = set(requested_metrics) - valid_metrics
+        if invalid:
+            return f"Invalid metrics: {invalid}. Valid options: {valid_metrics}"
+
+        try:
+            server_context = get_server_context(server, container_path)
+
+            # Query all runs in date range
+            # Note: testruns_detail uses StartDate/EndDate parameters
+            result = labkey.query.select_rows(
+                server_context=server_context,
+                schema_name=TESTRESULTS_SCHEMA,
+                query_name="testruns_detail",
+                max_rows=10000,  # Up to ~27 years of daily runs
+                parameters={"StartDate": start_date, "EndDate": end_date},
+                sort="posttime",
+            )
+
+            if not result or not result.get("rows"):
+                return f"No runs found in {folder_name} from {start_date} to {end_date}"
+
+            rows = result["rows"]
+
+            # Build CSV based on granularity
+            output = StringIO()
+
+            if granularity == "run":
+                # One row per run with raw values
+                fieldnames = ["date", "computer"]
+                if "memory" in requested_metrics:
+                    fieldnames.append("memory_mb")
+                if "tests" in requested_metrics:
+                    fieldnames.append("tests")
+                if "duration" in requested_metrics:
+                    fieldnames.append("duration_min")
+                if "failures" in requested_metrics:
+                    fieldnames.append("failures")
+                if "leaks" in requested_metrics:
+                    fieldnames.append("leaks")
+
+                writer = csv.DictWriter(output, fieldnames=fieldnames)
+                writer.writeheader()
+
+                for row in rows:
+                    posttime = str(row.get("posttime", ""))[:10]  # YYYY-MM-DD
+                    csv_row = {
+                        "date": posttime,
+                        "computer": row.get("computer", "?"),
+                    }
+                    if "memory" in requested_metrics:
+                        csv_row["memory_mb"] = row.get("averagemem", 0)
+                    if "tests" in requested_metrics:
+                        csv_row["tests"] = row.get("passedtests", 0)
+                    if "duration" in requested_metrics:
+                        csv_row["duration_min"] = row.get("duration", 0)
+                    if "failures" in requested_metrics:
+                        csv_row["failures"] = row.get("failedtests", 0)
+                    if "leaks" in requested_metrics:
+                        csv_row["leaks"] = row.get("leakedtests", 0)
+                    writer.writerow(csv_row)
+
+            else:  # granularity == "day"
+                # Aggregate by date, compute means
+                from collections import defaultdict
+
+                daily_data = defaultdict(list)
+                for row in rows:
+                    posttime = str(row.get("posttime", ""))[:10]
+                    if posttime:
+                        daily_data[posttime].append({
+                            "memory": row.get("averagemem", 0) or 0,
+                            "tests": row.get("passedtests", 0) or 0,
+                            "duration": row.get("duration", 0) or 0,
+                            "failures": row.get("failedtests", 0) or 0,
+                            "leaks": row.get("leakedtests", 0) or 0,
+                        })
+
+                fieldnames = ["date", "run_count"]
+                if "memory" in requested_metrics:
+                    fieldnames.append("mean_memory_mb")
+                if "tests" in requested_metrics:
+                    fieldnames.append("mean_tests")
+                if "duration" in requested_metrics:
+                    fieldnames.append("mean_duration_min")
+                if "failures" in requested_metrics:
+                    fieldnames.append("mean_failures")
+                if "leaks" in requested_metrics:
+                    fieldnames.append("mean_leaks")
+
+                writer = csv.DictWriter(output, fieldnames=fieldnames)
+                writer.writeheader()
+
+                for date in sorted(daily_data.keys()):
+                    runs = daily_data[date]
+                    count = len(runs)
+                    csv_row = {
+                        "date": date,
+                        "run_count": count,
+                    }
+                    if "memory" in requested_metrics:
+                        csv_row["mean_memory_mb"] = round(sum(r["memory"] for r in runs) / count, 1)
+                    if "tests" in requested_metrics:
+                        csv_row["mean_tests"] = round(sum(r["tests"] for r in runs) / count, 0)
+                    if "duration" in requested_metrics:
+                        csv_row["mean_duration_min"] = round(sum(r["duration"] for r in runs) / count, 0)
+                    if "failures" in requested_metrics:
+                        csv_row["mean_failures"] = round(sum(r["failures"] for r in runs) / count, 2)
+                    if "leaks" in requested_metrics:
+                        csv_row["mean_leaks"] = round(sum(r["leaks"] for r in runs) / count, 2)
+                    writer.writerow(csv_row)
+
+            # Write to file
+            csv_content = output.getvalue()
+            output_dir = get_tmp_dir()
+
+            # Sanitize folder name for filename
+            safe_folder = folder_name.replace(" ", "-").replace("/", "-")
+            start_str = start_date.replace("-", "")
+            end_str = end_date.replace("-", "")
+            output_file = output_dir / f"run-metrics-{safe_folder}-{start_str}-{end_str}.csv"
+            output_file.write_text(csv_content, encoding="utf-8")
+
+            # Calculate summary stats
+            row_count = csv_content.count("\n") - 1  # Subtract header
+            date_range_days = (datetime.strptime(end_date, "%Y-%m-%d") - datetime.strptime(start_date, "%Y-%m-%d")).days
+
+            return (
+                f"Run metrics saved to: {output_file}\n"
+                f"\n"
+                f"**{folder_name}**: {start_date} to {end_date} ({date_range_days} days)\n"
+                f"  Granularity: {granularity}\n"
+                f"  Metrics: {', '.join(requested_metrics)}\n"
+                f"  Rows: {row_count}\n"
+                f"  Total runs queried: {len(rows)}\n"
+                f"\n"
+                f"Load in Excel or use Read tool to view."
+            )
+
+        except Exception as e:
+            logger.error(f"Error saving run metrics CSV: {e}", exc_info=True)
+            return f"Error saving run metrics CSV: {e}"
