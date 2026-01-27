@@ -38,7 +38,7 @@ Follow the [NewMachineBootstrap](https://skyline.ms/home/software/Skyline/wiki-p
 
 If you already have a working Skyline build environment (via [HowToBuildSkylineTip](https://skyline.ms/home/software/Skyline/wiki-page.view?name=HowToBuildSkylineTip)), you can add AI tooling by installing Claude Code and letting it configure the rest.
 
-**Note that the following commands must be executed in a PowerShell 7 terminal** - not in "cmd", and not in "PowerShell" (which, confusingly enough, is version 5). So be sure to install that first - you can find it [here](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5).
+**Note that the following commands must be executed in a PowerShell terminal** - not in "cmd".
 
 **Install Claude Code:**
 ```powershell
