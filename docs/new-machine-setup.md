@@ -26,6 +26,15 @@ You are helping a developer set up a Windows machine for Skyline development. Fo
 - **Guide GUI steps**: For Visual Studio and other GUI installers, tell the user exactly what to click
 - **Track progress**: Keep the user informed of what's done and what's next
 - **Final report required**: At the end, produce a comprehensive report covering ALL items (completed, skipped, and deferred). See "Final Report" section at the end of this document.
+- **Track improvements**: Keep notes on any issues, corrections, or friction points encountered during setup. After the final report, you will update this document with improvements.
+
+---
+
+## How This Guide Improves
+
+**For the developer:** As we work through this guide, simply mention any issues or confusion you encounter - things like unclear instructions, missing steps, commands that didn't work as expected, or anything that caused friction.
+
+You don't need to do anything special to record these. I'll take notes as we go and update the documentation at the end of the session. This is how the guide stays current: each setup session makes it a little better for the next person.
 
 ---
 
@@ -176,7 +185,36 @@ git config --global user.email "their-email@example.com"
 
 > **Tip:** The username shown in the SSH test output ("Hi username!") is their GitHub username.
 
-### 1.9 Clone the Repositories
+### 1.9 Choose Project Location
+
+**Ask the developer where they want to put their development folder.**
+
+This guide uses `C:\proj` as the project root. This is a recommendation, not a requirement. If the developer prefers a different location, substitute it throughout. Record their choice and use it consistently.
+
+**Why short paths are recommended:**
+
+| Factor | `C:\proj` | `C:\Users\brendanx\Documents\projects` |
+|--------|-----------|----------------------------------------|
+| Path length | 7 chars | 40 chars |
+| Windows indexing | Not indexed | Indexed by default |
+| OneDrive sync | Not synced | May be synced |
+
+**Non-C: drives are fine.** Examples: `D:\proj`, `E:\projects`, `E:\repos`. On many machines, C: is SSD and D:/E: are HDD - developing from an HDD works fine. The nightly test machines run 9-12 hours of stress testing from HDD drives without issues.
+
+**Path length matters** because some build tools and tests create deeply nested temporary paths. Windows has a 260-character path limit that can be exceeded with long root paths.
+
+**Spaces in usernames** (e.g., `C:\Users\Kaipo Tamura\...`) can break scripts that don't properly quote arguments. If the username contains spaces, a short root path like `C:\proj` or `D:\proj` avoids this entirely.
+
+**Windows indexing** is important for nightly testing. Windows Search indexes `Documents` by default, and this indexing competes with nightly tests for disk I/O. If the developer chooses a location under `Documents`, they must add an exclusion:
+1. Open **Indexing Options** (search for it in Start menu)
+2. Click **Modify**
+3. Uncheck the project folder or add it to excluded locations
+
+**OneDrive sync** can cause issues with large repositories and build artifacts. Ensure the project folder is not in a OneDrive-synced location.
+
+> **For LLM assistants:** If the developer chooses a non-standard location, note this in the final report. The examples in this guide use `C:\proj` - remind them to mentally substitute their chosen path.
+
+### 1.10 Clone the Repositories
 
 > **Existing mode**: Check what's already present before cloning:
 > ```powershell
@@ -210,7 +248,7 @@ Test-Path C:\proj\pwiz\pwiz_tools\Skyline\Skyline.sln   # Should be True
 
 > **For LLM assistants:** Now that the repositories are cloned, the master copy of this setup guide is available locally at `ai\docs\new-machine-setup.md`. If you fetched this document from the web, you can now reference and even edit the local copy for improvements.
 
-### 1.10 Configure Claude Code Statusline (Recommended)
+### 1.11 Configure Claude Code Statusline (Recommended)
 
 **For LLM assistants:** You MUST offer to configure the statusline. Do not skip this step silently. Ask: "Would you like me to configure the Claude Code statusline? It shows the current project, git branch, model, and context usage."
 
@@ -243,7 +281,7 @@ The statusline integrates with the StatusMcp server (configured in Phase 7.3) to
 
 The user can decline if they prefer the default Claude Code display.
 
-### 1.11 About the Directory Structure
+### 1.12 About the Directory Structure
 
 This setup uses **sibling mode** - the AI tooling (`ai/`) is a sibling to project checkouts (`pwiz/`):
 
@@ -930,6 +968,20 @@ After writing the report to `ai\.tmp`, ask the user:
 2. **Done for now** - User will review the report and return later if needed
 
 > **Note:** The `ai\.tmp\` folder is not tracked in git. It's a scratch space for session-specific notes, handoffs, and communication between the developer and Claude Code.
+
+### Update Documentation (Required)
+
+**Before ending the session**, review your notes from the setup process. If the user reported issues, corrections, or friction points:
+
+1. **Edit `ai/docs/new-machine-setup.md`** to address the issues
+2. **Commit the changes** to pwiz-ai (the `ai/` folder is the pwiz-ai repository - commit directly to master)
+3. **Tell the user** what improvements you made
+
+Even if the user reported no issues, consider whether any steps caused confusion or required extra explanation. Proactively improve unclear sections.
+
+If the setup was interrupted before `ai/` was cloned, note the improvements needed in the final report so a future session can apply them.
+
+> **Publishing reminder:** This file is also attached to the NewMachineBootstrap wiki page on skyline.ms. After committing improvements, remind the user (or a team admin) to re-upload the updated file to the wiki so web-fetched copies stay current.
 
 ---
 
