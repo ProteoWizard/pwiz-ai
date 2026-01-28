@@ -7,11 +7,9 @@
   Target audience: LLM assistants helping a human set up their development environment.
   Human-readable version: https://skyline.ms/wiki-page.view?name=HowToBuildSkylineTip
 
-  PUBLISHING: This file is attached to the NewMachineBootstrap wiki page on skyline.ms.
-  - Shortcut URL: https://skyline.ms/new-machine-setup.url
-  - Direct download: https://skyline.ms/home/software/Skyline/wiki-download.view?entityId=945040f8-bdf6-103e-9d4b-22f53556b982&name=new-machine-setup.md
+  FETCHED FROM: https://raw.githubusercontent.com/ProteoWizard/pwiz-ai/master/docs/new-machine-setup.md
 
-  When updating this file, re-upload it as an attachment to the wiki page.
+  Changes committed to this file are immediately available to new setup sessions.
 -->
 
 # Skyline Development Environment Setup
@@ -119,7 +117,10 @@ If not found or version is below 7.0, install:
 winget install Microsoft.PowerShell --accept-source-agreements --accept-package-agreements
 ```
 
-After installation:
+> **For LLM assistants:** After installing PowerShell 7, you MUST guide the user through configuring Windows Terminal to use it as the default. Do not skip these steps - they are required, not optional.
+
+**Configure Windows Terminal to use PowerShell 7 as default:**
+
 1. **Exit and restart Terminal** (close the window completely, then reopen)
 2. Click the **dropdown arrow (∨)** next to the tab bar → **Settings**
 3. Under "Startup", change **Default profile** to **PowerShell** (the PowerShell 7 profile, not "Windows PowerShell")
@@ -132,7 +133,7 @@ PowerShell 7.5.0
 PS C:\Users\username>
 ```
 
-Verify with `pwsh --version`.
+**Wait for the user to confirm** they see the PowerShell 7 prompt before proceeding.
 
 ### 1.4 Python
 
@@ -247,7 +248,7 @@ New-Item -ItemType Directory -Path C:\proj -Force
 cd C:\proj
 
 # Clone the AI tooling repository
-git clone https://github.com/ProteoWizard/pwiz-ai.git ai
+git clone git@github.com:ProteoWizard/pwiz-ai.git ai
 
 # Create .claude junction (enables Claude Code commands and skills)
 cmd /c mklink /J .claude ai\claude
@@ -265,7 +266,18 @@ Test-Path C:\proj\pwiz\pwiz_tools\Skyline\Skyline.sln   # Should be True
 
 > **For LLM assistants:** Now that the repositories are cloned, the master copy of this setup guide is available locally at `ai\docs\new-machine-setup.md`. If you fetched this document from the web, you can now reference and even edit the local copy for improvements.
 
-### 1.11 Configure Claude Code Statusline (Recommended)
+### 1.11 Restart Claude Code
+
+The `.claude` junction now points to project configuration (CLAUDE.md, skills, commands). Restart Claude Code to load this context:
+
+1. Run `/exit` in Claude Code
+2. In the terminal, run: `claude --continue`
+
+This resumes the same conversation but with full project context loaded. You should see a `<system-reminder>` with the contents of `CLAUDE.md` after your next tool use.
+
+> **For LLM assistants:** After the restart, you will have access to project-specific skills and commands. The setup continues from where you left off.
+
+### 1.12 Configure Claude Code Statusline (Recommended)
 
 **For LLM assistants:** You MUST offer to configure the statusline. Do not skip this step silently. Ask: "Would you like me to configure the Claude Code statusline? It shows the current project, git branch, model, and context usage."
 
@@ -292,13 +304,13 @@ Read `~/.claude/settings.json` and add the statusLine configuration, preserving 
 
 > **Note:** Reference the script directly from the pwiz-ai checkout (`C:\proj\ai\scripts\`) rather than copying it. This ensures you always have the latest version.
 
-After configuration, tell the user to restart Claude Code (`/exit` then `claude`) to activate the statusline.
+The statusline takes effect on the next Claude Code restart. Since the user just restarted in 1.11, no immediate restart is needed—the statusline will activate at the next natural restart point (e.g., after MCP server configuration in Phase 7).
 
 The statusline integrates with the StatusMcp server (configured in Phase 7.3) to show the active project's git branch in sibling mode setups.
 
 The user can decline if they prefer the default Claude Code display.
 
-### 1.12 About the Directory Structure
+### 1.13 About the Directory Structure
 
 This setup uses **sibling mode** - the AI tooling (`ai/`) is a sibling to project checkouts (`pwiz/`):
 
@@ -331,29 +343,38 @@ Expected output shows a version folder:
 - **VS 2022**: Folder named `2022`
 - **VS 2026**: Folder named `18`
 
-If no Visual Studio folder exists, guide the user to install **both** versions:
+If no Visual Studio folder exists, install **Visual Studio 2022 Community** (required for nightly testing).
+
+**Option A - Winget (recommended):**
+
+Install VS 2022 with required workloads in one command:
+```powershell
+winget install Microsoft.VisualStudio.2022.Community --source winget --override "--add Microsoft.VisualStudio.Workload.ManagedDesktop --add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.Net.Component.4.7.2.TargetingPack --passive"
+```
+
+This installs with:
+- .NET desktop development (`ManagedDesktop`)
+- Desktop development with C++ (`NativeDesktop`)
+- .NET Framework 4.7.2 targeting pack
+
+The `--passive` flag shows progress without requiring interaction.
+
+**Option B - Manual download:**
 
 1. Open browser to: https://visualstudio.microsoft.com/downloads/
-2. Download and install **Visual Studio 2022 Community** (required for nightly testing)
-3. Optionally install **Visual Studio 2026 Community** for ongoing compatibility testing
-
-> **Note on VS 2026:** While VS 2026 support is being developed, nightly testing currently requires VS 2022. VS 2026 builds have shown compatibility issues with some vendor DLLs (access violations). Use `toolset=msvc-14.3` (VS 2022) for production builds. Set environment variable `SKYLINE_BUILD_TOOLSET=msvc-14.5` to test with VS 2026.
-
-### 2.2 Required Workloads
-
-Tell the user to select these workloads in the Visual Studio Installer:
-- **.NET desktop development** (required)
-- **Desktop development with C++** (required)
-
-Also verify in "Individual components":
-- **.NET Framework 4.7.2 targeting pack** (should be included, but verify)
+2. Download and run **Visual Studio 2022 Community** installer
+3. Select these workloads:
+   - **.NET desktop development** (required)
+   - **Desktop development with C++** (required)
+4. Verify in "Individual components": **.NET Framework 4.7.2 targeting pack**
+5. Click Install and wait for completion
 
 If the targeting pack is not available in the VS installer, download the Developer Pack directly:
 - https://dotnet.microsoft.com/download/dotnet-framework/net472
 
-Tell user: "Click Install and wait for completion. This may take 15-30 minutes."
+> **Note on VS 2026:** Optionally install VS 2026 for compatibility testing. While VS 2026 support is being developed, nightly testing currently requires VS 2022. VS 2026 builds have shown compatibility issues with some vendor DLLs (access violations). Use `toolset=msvc-14.3` (VS 2022) for production builds. Set environment variable `SKYLINE_BUILD_TOOLSET=msvc-14.5` to test with VS 2026.
 
-### 2.3 Verify Installation
+### 2.2 Verify Installation
 
 After VS installation, verify the edition is installed:
 ```powershell
@@ -997,8 +1018,6 @@ After writing the report to `ai\.tmp`, ask the user:
 Even if the user reported no issues, consider whether any steps caused confusion or required extra explanation. Proactively improve unclear sections.
 
 If the setup was interrupted before `ai/` was cloned, note the improvements needed in the final report so a future session can apply them.
-
-> **Publishing reminder:** This file is also attached to the NewMachineBootstrap wiki page on skyline.ms. After committing improvements, remind the user (or a team admin) to re-upload the updated file to the wiki so web-fetched copies stay current.
 
 ---
 

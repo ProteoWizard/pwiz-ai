@@ -90,7 +90,7 @@ Once authenticated, paste this prompt into Claude Code:
 Help me set up a Skyline development environment on this Windows machine.
 
 Fetch and follow the instructions at:
-https://skyline.ms/new-machine-setup.url
+https://raw.githubusercontent.com/ProteoWizard/pwiz-ai/master/docs/new-machine-setup.md
 
 This is a PRISTINE machine - I just completed the bootstrap steps (Git and Claude Code installed, nothing else).
 
