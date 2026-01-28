@@ -4,11 +4,7 @@
   This document is published to the AIDevSetup wiki page on skyline.ms.
   Audience: Human developers adding AI tooling to their Skyline development environment.
 
-  PUBLISHING: This file is attached to the AIDevSetup wiki page on skyline.ms.
-  When updating this file, re-upload it as an attachment to the wiki page.
-
-  NOTE: Links use fully qualified URLs so they work whether viewing on the wiki
-  or locally on disk.
+  The wiki page body is synced from this file. Use /pw-upconfig to update.
 -->
 
 # AI-Assisted Development Setup
@@ -63,7 +59,7 @@ Once authenticated, paste this prompt:
 Help me configure AI tooling for Skyline development.
 
 Fetch and follow the instructions at:
-https://skyline.ms/new-machine-setup.url
+https://raw.githubusercontent.com/ProteoWizard/pwiz-ai/master/docs/new-machine-setup.md
 
 This is an EXISTING development machine - I already have Visual Studio, Git, and a working Skyline build environment.
 
