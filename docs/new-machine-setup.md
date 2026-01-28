@@ -751,15 +751,17 @@ The LabKey MCP server needs credentials for skyline.ms access.
 > ```
 > If properly configured, skip to 7.3.
 
-> **IMPORTANT - Use a dedicated +claude account, not your personal account:**
+> There needs to be a separate skyline.ms user account using a special "+claude" version of your current email address as the user name. An admin can help you with this.
+> **IMPORTANT - This uses a dedicated +claude skyline.ms account, not your personal account:**
 > - Team members: `yourname+claude@proteinms.net`
 > - Interns/others: `yourname+claude@gmail.com`
 > - The `+claude` suffix only works with Gmail-backed providers (not @uw.edu)
-> - **Ask an administrator** to create an account on skyline.ms for this email and add it to the **Site:Agents** group
+> - **Ask an administrator** to create an account on skyline.ms for this "+claude" email and have them add it to the **Site:Agents** group. You will then receive an email at your normal address asking you to set a password for the new account.
 >
-> **Why?** Individual +claude accounts provide attribution for any edits made via Claude, while the Site:Agents group has appropriate permissions for LLM agents.
+> **Why?** Individual +claude skyline.ms accounts provide attribution for any edits made via Claude, while the Site:Agents group has appropriate permissions for LLM agents.
+> To be clear, you aren't creating a new email address - Google ignores the +claude part for routing purposes. This is just a new user id for a new skyline.ms account. Any email it generates will go to your normal email address.
 
-Once an administrator has created your +claude account, create a `.netrc` file:
+Once an administrator has created your +claude account on skyline.ms, create a `.netrc` file:
 
 ```powershell
 # Template - fill in your +claude credentials
