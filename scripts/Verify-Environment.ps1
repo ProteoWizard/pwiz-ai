@@ -123,6 +123,87 @@ try {
 }
 
 # ===========================================
+# REPOSITORY STRUCTURE (new-machine-setup.md)
+# ===========================================
+
+# Determine project root (parent of ai folder)
+$projRoot = Split-Path -Parent $aiRoot
+
+# .claude junction
+Write-Host "Checking .claude junction..." -ForegroundColor Gray
+$claudeJunctionPath = Join-Path $projRoot ".claude"
+if (Test-Path $claudeJunctionPath) {
+    $item = Get-Item $claudeJunctionPath -Force
+    if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+        $target = $item.Target
+        if ($target -and ($target -replace '\\', '/') -match 'ai[/\\]claude$') {
+            Add-Result ".claude junction" "OK" "points to ai\claude" $true
+        } else {
+            Add-Result ".claude junction" "WARN" "exists but may point to wrong target: $target" $false
+        }
+    } else {
+        Add-Result ".claude junction" "WARN" "exists but is not a junction (is a regular folder)" $false
+    }
+} else {
+    Add-Result ".claude junction" "MISSING" "Run: cmd /c mklink /J .claude ai\claude (from project root)" $false
+}
+
+# CLAUDE.md stub
+Write-Host "Checking CLAUDE.md..." -ForegroundColor Gray
+$claudeMdPath = Join-Path $projRoot "CLAUDE.md"
+if (Test-Path $claudeMdPath) {
+    Add-Result "CLAUDE.md" "OK" "exists at project root" $true
+} else {
+    Add-Result "CLAUDE.md" "MISSING" "Create stub at project root (see new-machine-setup.md)" $false
+}
+
+# settings.local.json
+Write-Host "Checking Claude settings..." -ForegroundColor Gray
+$settingsPath = Join-Path $aiRoot "claude\settings.local.json"
+$defaultsPath = Join-Path $aiRoot "claude\settings-defaults.local.json"
+if (Test-Path $settingsPath) {
+    Add-Result "Claude settings.local.json" "OK" "configured" $true
+} elseif (Test-Path $defaultsPath) {
+    Add-Result "Claude settings.local.json" "MISSING" "Run: Copy-Item '$defaultsPath' '$settingsPath'" $false
+} else {
+    Add-Result "Claude settings.local.json" "MISSING" "create settings.local.json in ai\claude\" $false
+}
+
+# Discover git repositories in project root
+Write-Host "Discovering git repositories..." -ForegroundColor Gray
+$gitRepos = @()
+$dirs = Get-ChildItem $projRoot -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne '.claude' }
+foreach ($dir in $dirs) {
+    $gitDir = Join-Path $dir.FullName ".git"
+    if (Test-Path $gitDir) {
+        try {
+            Push-Location $dir.FullName
+            $branch = & git rev-parse --abbrev-ref HEAD 2>$null
+            $remoteUrl = & git remote get-url origin 2>$null
+            # Extract repo name from URL (e.g., "ProteoWizard/pwiz.git" -> "pwiz")
+            $repoName = if ($remoteUrl -match '/([^/]+?)(\.git)?$') { $Matches[1] } else { "unknown" }
+            $gitRepos += "$($dir.Name) -> $repoName ($branch)"
+            Pop-Location
+        } catch {
+            $gitRepos += "$($dir.Name) -> (error reading git info)"
+            if ((Get-Location).Path -ne $projRoot) { Pop-Location }
+        }
+    }
+}
+
+if ($gitRepos.Count -gt 0) {
+    # Check if 'ai' is among the repos (required)
+    $hasAi = $gitRepos | Where-Object { $_ -match '^ai ->' }
+    if ($hasAi) {
+        Add-Result "Git repositories" "OK" ($gitRepos -join "; ") $true
+    } else {
+        Add-Result "Git repositories" "WARN" "ai repo not found. Found: $($gitRepos -join '; ')" $false
+    }
+} else {
+    Add-Result "Git repositories" "MISSING" "No git repositories found in $projRoot" $false
+}
+
+# ===========================================
 # PREREQUISITES (new-machine-setup.md Phase 1)
 # ===========================================
 

@@ -252,13 +252,32 @@ git clone https://github.com/ProteoWizard/pwiz-ai.git ai
 # Create .claude junction (enables Claude Code commands and skills)
 cmd /c mklink /J .claude ai\claude
 
+# Create CLAUDE.md stub (tells Claude Code where to find documentation)
+@"
+# Claude Code Configuration
+
+**Run Claude Code from this directory** (the project root, e.g., ``C:\proj``).
+
+All Claude Code documentation lives in the **ai/** folder. See:
+- **ai/CLAUDE.md** - Critical configuration (PowerShell, paths, commands)
+- **ai/CRITICAL-RULES.md** - Absolute constraints
+- **ai/MEMORY.md** - Project context and gotchas
+
+The ``.claude/`` folder is a junction to ``ai/claude/``, providing access to
+commands, skills, and settings.
+"@ | Out-File -FilePath CLAUDE.md -Encoding utf8
+
+# Copy default Claude settings (pre-approved read operations)
+Copy-Item ai\claude\settings-defaults.local.json ai\claude\settings.local.json
+
 # Clone pwiz
 git clone git@github.com:ProteoWizard/pwiz.git
 ```
 
 The pwiz clone takes several minutes (large repository). Verify:
 ```powershell
-Test-Path C:\proj\ai\CLAUDE.md                           # Should be True
+Test-Path C:\proj\CLAUDE.md                              # Should be True (stub)
+Test-Path C:\proj\ai\CLAUDE.md                           # Should be True (full docs)
 Test-Path C:\proj\.claude\commands                       # Should be True
 Test-Path C:\proj\pwiz\pwiz_tools\Skyline\Skyline.sln   # Should be True
 ```
