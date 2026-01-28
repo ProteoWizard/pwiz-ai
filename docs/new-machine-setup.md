@@ -87,7 +87,7 @@ If not found, install Node.js LTS:
 winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
 ```
 
-After installation, **restart the terminal** to get node/npm in PATH.
+After installation, **restart the terminal** (type `exit`, then <kbd>Win</kbd>+<kbd>X</kbd>, <kbd>I</kbd>) to get node/npm in PATH.
 
 ### 1.2 Check for Git
 
@@ -102,7 +102,7 @@ If not found, install Git for Windows:
 winget install Git.Git --accept-source-agreements --accept-package-agreements
 ```
 
-After installation, **restart the terminal** to get git in PATH.
+After installation, **restart the terminal** (type `exit`, then <kbd>Win</kbd>+<kbd>X</kbd>, <kbd>I</kbd>) to get git in PATH.
 
 ### 1.3 PowerShell 7
 
@@ -148,7 +148,7 @@ If not found, install Python 3.12:
 winget install Python.Python.3.12 --accept-source-agreements --accept-package-agreements
 ```
 
-After installation, **restart the terminal** and verify `python --version` works.
+After installation, **restart the terminal** (type `exit`, then <kbd>Win</kbd>+<kbd>X</kbd>, <kbd>I</kbd>) and verify `python --version` works.
 
 ### 1.5 Configure Git Line Endings
 

@@ -8,9 +8,9 @@ This guide gets you from a pristine Windows machine to a working Skyline develop
 
 ## Step 1: Open PowerShell
 
-Press <kbd>Win</kbd> + <kbd>X</kbd>, then click **Windows PowerShell** (or **Terminal** on Windows 11).
+Press <kbd>Win</kbd>+<kbd>X</kbd>, then press <kbd>I</kbd> — this opens **Terminal** (Windows 11) or **Windows PowerShell** (Windows 10).
 
-*Note: You're using the built-in Windows PowerShell. We'll upgrade to PowerShell 7 later.*
+*Note: You're starting with the built-in Windows PowerShell. We'll upgrade to PowerShell 7 later in the setup process.*
 
 ## Step 2: Install Git
 
