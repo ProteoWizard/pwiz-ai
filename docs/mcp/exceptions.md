@@ -53,6 +53,10 @@ Claude Code
 | `save_exceptions_report(report_date)` | Generate daily report, save to `ai/.tmp/exceptions-report-YYYYMMDD.md` |
 | `query_exceptions(days, max_rows)` | Query recent exceptions, returns summary |
 | `get_exception_details(exception_id)` | Get full stack trace and details for one exception |
+| `record_exception_issue(fingerprint, issue_number)` | Record that a GitHub issue was created for a fingerprint |
+| `record_exception_fix(fingerprint, pr_number, ...)` | Record that a fingerprint was fixed by a PR |
+| `query_exception_history(top_n, min_users)` | Query exception history for high-priority bugs |
+| `backfill_exception_history(since_date)` | Backfill exception history from skyline.ms |
 | `list_schemas(container_path)` | Discover available schemas |
 | `list_queries(schema_name)` | List tables in a schema |
 | `list_containers(parent_path)` | Browse folder structure |

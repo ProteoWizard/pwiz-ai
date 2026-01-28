@@ -205,6 +205,18 @@ def _extract_fix_annotations(old_history: dict) -> dict:
     return fixes
 
 
+def _extract_issue_annotations(old_history: dict) -> dict:
+    """Extract issue annotations from old history.
+
+    Returns dict mapping fingerprint -> issue info.
+    """
+    issues = {}
+    for fp, entry in old_history.get('exceptions', {}).items():
+        if entry.get('issue'):
+            issues[fp] = entry['issue']
+    return issues
+
+
 def _apply_fix_annotations(history: dict, fixes: dict) -> int:
     """Apply fix annotations to history entries.
 
@@ -214,6 +226,19 @@ def _apply_fix_annotations(history: dict, fixes: dict) -> int:
     for fp, fix_info in fixes.items():
         if fp in history.get('exceptions', {}):
             history['exceptions'][fp]['fix'] = fix_info
+            applied += 1
+    return applied
+
+
+def _apply_issue_annotations(history: dict, issues: dict) -> int:
+    """Apply issue annotations to history entries.
+
+    Returns count of issues applied.
+    """
+    applied = 0
+    for fp, issue_info in issues.items():
+        if fp in history.get('exceptions', {}):
+            history['exceptions'][fp]['issue'] = issue_info
             applied += 1
     return applied
 
@@ -380,6 +405,13 @@ def _get_status_annotations(entry: dict, today_reports: int, today_users: int, r
     first_seen = entry.get('first_seen', report_date)
     if stats['unique_users'] > 1 or stats['total_reports'] > today_reports:
         annotations.append(f"👥 {stats['total_reports']} total reports from {stats['unique_users']} users since {first_seen}")
+
+    # Tracked issue?
+    issue = entry.get('issue')
+    if issue:
+        issue_num = issue.get('number', '?')
+        issue_url = issue.get('url', f"https://github.com/ProteoWizard/pwiz/issues/{issue_num}")
+        annotations.append(f"📋 TRACKED - GitHub [#{issue_num}]({issue_url})")
 
     # Known fix?
     fix_raw = entry.get('fix')
@@ -767,6 +799,70 @@ def register_tools(mcp):
             logger.error(f"Error generating exceptions report: {e}", exc_info=True)
             return f"Error generating exceptions report: {e}"
 
+    def _record_exception_tracking(fingerprint: str, property_name: str, tracking_data: dict):
+        """Common logic for recording issue or fix info for an exception fingerprint.
+
+        Returns:
+            (entry, stats, None) on success
+            (None, None, error_message) on failure
+        """
+        history = _load_exception_history()
+        exceptions_db = history.get('exceptions', {})
+
+        if fingerprint not in exceptions_db:
+            return None, None, f"Fingerprint `{fingerprint}` not found in history. Run save_exceptions_report first to populate history."
+
+        entry = exceptions_db[fingerprint]
+        entry[property_name] = tracking_data
+
+        _save_exception_history(history, datetime.now().strftime("%Y-%m-%d"))
+
+        stats = _get_entry_stats(entry)
+        return entry, stats, None
+
+    @mcp.tool()
+    async def record_exception_issue(
+        fingerprint: str,
+        issue_number: str,
+        notes: str = None,
+    ) -> str:
+        """Record that a GitHub issue has been created for an exception fingerprint. → exceptions.md"""
+        try:
+            # Validate issue number
+            issue_num = issue_number.lstrip('#')
+            if not issue_num.isdigit():
+                return f"Invalid issue number: {issue_number}. Expected a number like '3880' or '#3880'."
+
+            # Build issue data
+            issue_data = {
+                'number': int(issue_num),
+                'recorded_date': datetime.now().strftime("%Y-%m-%d"),
+                'url': f"https://github.com/ProteoWizard/pwiz/issues/{issue_num}",
+            }
+            if notes:
+                issue_data['notes'] = notes
+
+            # Record it
+            entry, stats, error = _record_exception_tracking(fingerprint, 'issue', issue_data)
+            if error:
+                return error
+
+            # Format response
+            sig = entry.get('signature', fingerprint)
+            return "\n".join([
+                f"Recorded GitHub issue for `{fingerprint}`:",
+                f"- Signature: {sig}",
+                f"- Issue: #{issue_num}",
+                f"- URL: {issue_data['url']}",
+                f"- Reports: {stats['total_reports']} from {stats['unique_users']} users",
+                "",
+                "Future reports will show this as a tracked issue.",
+            ])
+
+        except Exception as e:
+            logger.error(f"Error recording issue: {e}", exc_info=True)
+            return f"Error recording issue: {e}"
+
     @mcp.tool()
     async def record_exception_fix(
         fingerprint: str,
@@ -782,14 +878,6 @@ def register_tools(mcp):
     ) -> str:
         """Record that an exception fingerprint has been fixed. → exceptions.md"""
         try:
-            history = _load_exception_history()
-            exceptions_db = history.get('exceptions', {})
-
-            if fingerprint not in exceptions_db:
-                return f"Fingerprint `{fingerprint}` not found in history. Run save_exceptions_report first to populate history."
-
-            entry = exceptions_db[fingerprint]
-
             # Normalize PR number formats
             def normalize_pr(pr):
                 if pr and not pr.upper().startswith('PR'):
@@ -799,20 +887,17 @@ def register_tools(mcp):
             pr_number = normalize_pr(pr_number)
             release_pr = normalize_pr(release_pr)
 
-            # Build the new multi-branch fix schema
+            # Build fix data
             fix_data = {
                 'recorded_date': datetime.now().strftime("%Y-%m-%d"),
+                'first_fixed_version': fixed_in_version,
             }
-
-            # Master branch info (required)
             if pr_number:
                 fix_data['master'] = {
                     'pr': pr_number,
                     'commit': commit,
                     'merged': merge_date or datetime.now().strftime("%Y-%m-%d"),
                 }
-
-            # Release branch info (optional)
             if release_branch or release_pr:
                 fix_data['release'] = {
                     'branch': release_branch,
@@ -820,33 +905,25 @@ def register_tools(mcp):
                     'commit': release_commit,
                     'merged': release_merge_date,
                 }
-
-            # Version tracking (may be null until tagged)
-            fix_data['first_fixed_version'] = fixed_in_version
-
-            # Notes
             if notes:
                 fix_data['notes'] = notes
 
-            # Record the fix
-            entry['fix'] = fix_data
+            # Record it
+            entry, stats, error = _record_exception_tracking(fingerprint, 'fix', fix_data)
+            if error:
+                return error
 
-            # Save updated history
-            _save_exception_history(history, datetime.now().strftime("%Y-%m-%d"))
-
-            # Build response
+            # Format response
             sig = entry.get('signature', fingerprint)
             lines = [
                 f"Recorded fix for `{fingerprint}`:",
                 f"- Signature: {sig}",
             ]
-
             if 'master' in fix_data:
                 lines.append(f"- Master: {fix_data['master']['pr']}")
                 if fix_data['master'].get('commit'):
                     lines.append(f"  - Commit: {fix_data['master']['commit'][:12]}...")
                 lines.append(f"  - Merged: {fix_data['master']['merged']}")
-
             if 'release' in fix_data:
                 branch = fix_data['release'].get('branch', 'unknown')
                 lines.append(f"- Release ({branch}): {fix_data['release'].get('pr', 'N/A')}")
@@ -854,10 +931,11 @@ def register_tools(mcp):
                     lines.append(f"  - Commit: {fix_data['release']['commit'][:12]}...")
                 if fix_data['release'].get('merged'):
                     lines.append(f"  - Merged: {fix_data['release']['merged']}")
-
-            lines.append(f"- First fixed version: {fixed_in_version or 'Not yet tagged'}")
-            lines.append("")
-            lines.append("Future reports will show this as a known fix.")
+            lines.extend([
+                f"- First fixed version: {fixed_in_version or 'Not yet tagged'}",
+                "",
+                "Future reports will show this as a known fix.",
+            ])
 
             return "\n".join(lines)
 
@@ -952,6 +1030,13 @@ def register_tools(mcp):
                         fix_text += f" + {rel.get('pr', '?')} on {rel.get('branch', 'release')}"
                     lines.append(fix_text)
 
+                # Show tracked issue
+                issue = entry.get('issue')
+                if issue:
+                    issue_num = issue.get('number', '?')
+                    issue_url = issue.get('url', f"https://github.com/ProteoWizard/pwiz/issues/{issue_num}")
+                    lines.append(f"📋 **Tracked in**: [#{issue_num}]({issue_url})")
+
                 if stats['versions']:
                     lines.append(f"**Versions**: {', '.join(stats['versions'][:5])}")
 
@@ -978,11 +1063,14 @@ def register_tools(mcp):
     ) -> str:
         """Backfill exception history from skyline.ms. → exceptions.md"""
         try:
-            # Load existing history to preserve fix annotations
+            # Load existing history to preserve fix and issue annotations
             old_history = _load_exception_history()
             preserved_fixes = _extract_fix_annotations(old_history)
+            preserved_issues = _extract_issue_annotations(old_history)
             if preserved_fixes:
                 logger.info(f"Preserving {len(preserved_fixes)} fix annotations from existing history")
+            if preserved_issues:
+                logger.info(f"Preserving {len(preserved_issues)} issue annotations from existing history")
 
             server_context = get_server_context(server, container_path)
 
@@ -1146,8 +1234,9 @@ def register_tools(mcp):
 
                 entry['reports'].append(report_entry)
 
-            # Re-apply preserved fix annotations
+            # Re-apply preserved fix and issue annotations
             fixes_applied = _apply_fix_annotations(history, preserved_fixes)
+            issues_applied = _apply_issue_annotations(history, preserved_issues)
 
             # Save unparseable RowIds in history for investigation
             if unparseable_rows:
@@ -1191,6 +1280,8 @@ def register_tools(mcp):
 
             if fixes_applied > 0:
                 lines.append(f"**Fix annotations preserved**: {fixes_applied}")
+            if issues_applied > 0:
+                lines.append(f"**Issue annotations preserved**: {issues_applied}")
 
             lines.extend([
                 "",

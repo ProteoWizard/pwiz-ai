@@ -4,11 +4,7 @@
   This document is published to the AIDevSetup wiki page on skyline.ms.
   Audience: Human developers adding AI tooling to their Skyline development environment.
 
-  PUBLISHING: This file is attached to the AIDevSetup wiki page on skyline.ms.
-  When updating this file, re-upload it as an attachment to the wiki page.
-
-  NOTE: Links use fully qualified URLs so they work whether viewing on the wiki
-  or locally on disk.
+  The wiki page body is synced from this file. Use /pw-upconfig to update.
 -->
 
 # AI-Assisted Development Setup
@@ -38,6 +34,8 @@ Follow the [NewMachineBootstrap](https://skyline.ms/home/software/Skyline/wiki-p
 
 If you already have a working Skyline build environment (via [HowToBuildSkylineTip](https://skyline.ms/home/software/Skyline/wiki-page.view?name=HowToBuildSkylineTip)), you can add AI tooling by installing Claude Code and letting it configure the rest.
 
+**Note that the following commands must be executed in a PowerShell terminal** - not in "cmd".
+
 **Install Claude Code:**
 ```powershell
 irm https://claude.ai/install.ps1 | iex
@@ -61,14 +59,19 @@ Once authenticated, paste this prompt:
 Help me configure AI tooling for Skyline development.
 
 Fetch and follow the instructions at:
-https://skyline.ms/new-machine-setup.url
+https://raw.githubusercontent.com/ProteoWizard/pwiz-ai/master/docs/new-machine-setup.md
 
 This is an EXISTING development machine - I already have Visual Studio, Git, and a working Skyline build environment.
 
 Check each component and only install what's missing.
 ```
+**Note that there's an assumption that you have a copy of master checked out at c:\proj\pwiz.** That's pretty standard for the team, but if that's not how you work - for example if you work under d:\dev and you keep master in a folder d:\dev\master_clean - then add something like this to the prompt:
 
-Claude Code will check your environment and add only what's needed.
+```Note that I work in D:\dev, not C:\proj - and when I check out master, I put it in D:\dev\master_clean, not D:\dev\pwiz```
+
+Enter the prompt and Claude Code will check your environment and add only what's needed.
+
+Keep in mind that you aren't just running a simple script, so if things start to go sideways (e.g. Claude can't find python, or forgets the URL for pwiz-ai repo etc) just have a conversation with Claude and the two of you will get back on track eventually.
 
 ### Option C: Quick Verification
 
