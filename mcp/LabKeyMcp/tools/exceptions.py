@@ -799,6 +799,27 @@ def register_tools(mcp):
             logger.error(f"Error generating exceptions report: {e}", exc_info=True)
             return f"Error generating exceptions report: {e}"
 
+    def _record_exception_tracking(fingerprint: str, property_name: str, tracking_data: dict):
+        """Common logic for recording issue or fix info for an exception fingerprint.
+
+        Returns:
+            (entry, stats, None) on success
+            (None, None, error_message) on failure
+        """
+        history = _load_exception_history()
+        exceptions_db = history.get('exceptions', {})
+
+        if fingerprint not in exceptions_db:
+            return None, None, f"Fingerprint `{fingerprint}` not found in history. Run save_exceptions_report first to populate history."
+
+        entry = exceptions_db[fingerprint]
+        entry[property_name] = tracking_data
+
+        _save_exception_history(history, datetime.now().strftime("%Y-%m-%d"))
+
+        stats = _get_entry_stats(entry)
+        return entry, stats, None
+
     @mcp.tool()
     async def record_exception_issue(
         fingerprint: str,
@@ -807,20 +828,12 @@ def register_tools(mcp):
     ) -> str:
         """Record that a GitHub issue has been created for an exception fingerprint. → exceptions.md"""
         try:
-            history = _load_exception_history()
-            exceptions_db = history.get('exceptions', {})
-
-            if fingerprint not in exceptions_db:
-                return f"Fingerprint `{fingerprint}` not found in history. Run save_exceptions_report first to populate history."
-
-            entry = exceptions_db[fingerprint]
-
-            # Normalize issue number format
+            # Validate issue number
             issue_num = issue_number.lstrip('#')
             if not issue_num.isdigit():
                 return f"Invalid issue number: {issue_number}. Expected a number like '3880' or '#3880'."
 
-            # Record the issue
+            # Build issue data
             issue_data = {
                 'number': int(issue_num),
                 'recorded_date': datetime.now().strftime("%Y-%m-%d"),
@@ -829,15 +842,14 @@ def register_tools(mcp):
             if notes:
                 issue_data['notes'] = notes
 
-            entry['issue'] = issue_data
+            # Record it
+            entry, stats, error = _record_exception_tracking(fingerprint, 'issue', issue_data)
+            if error:
+                return error
 
-            # Save updated history
-            _save_exception_history(history, datetime.now().strftime("%Y-%m-%d"))
-
-            # Build response
+            # Format response
             sig = entry.get('signature', fingerprint)
-            stats = _get_entry_stats(entry)
-            lines = [
+            return "\n".join([
                 f"Recorded GitHub issue for `{fingerprint}`:",
                 f"- Signature: {sig}",
                 f"- Issue: #{issue_num}",
@@ -845,9 +857,7 @@ def register_tools(mcp):
                 f"- Reports: {stats['total_reports']} from {stats['unique_users']} users",
                 "",
                 "Future reports will show this as a tracked issue.",
-            ]
-
-            return "\n".join(lines)
+            ])
 
         except Exception as e:
             logger.error(f"Error recording issue: {e}", exc_info=True)
@@ -868,14 +878,6 @@ def register_tools(mcp):
     ) -> str:
         """Record that an exception fingerprint has been fixed. → exceptions.md"""
         try:
-            history = _load_exception_history()
-            exceptions_db = history.get('exceptions', {})
-
-            if fingerprint not in exceptions_db:
-                return f"Fingerprint `{fingerprint}` not found in history. Run save_exceptions_report first to populate history."
-
-            entry = exceptions_db[fingerprint]
-
             # Normalize PR number formats
             def normalize_pr(pr):
                 if pr and not pr.upper().startswith('PR'):
@@ -885,20 +887,17 @@ def register_tools(mcp):
             pr_number = normalize_pr(pr_number)
             release_pr = normalize_pr(release_pr)
 
-            # Build the new multi-branch fix schema
+            # Build fix data
             fix_data = {
                 'recorded_date': datetime.now().strftime("%Y-%m-%d"),
+                'first_fixed_version': fixed_in_version,
             }
-
-            # Master branch info (required)
             if pr_number:
                 fix_data['master'] = {
                     'pr': pr_number,
                     'commit': commit,
                     'merged': merge_date or datetime.now().strftime("%Y-%m-%d"),
                 }
-
-            # Release branch info (optional)
             if release_branch or release_pr:
                 fix_data['release'] = {
                     'branch': release_branch,
@@ -906,33 +905,25 @@ def register_tools(mcp):
                     'commit': release_commit,
                     'merged': release_merge_date,
                 }
-
-            # Version tracking (may be null until tagged)
-            fix_data['first_fixed_version'] = fixed_in_version
-
-            # Notes
             if notes:
                 fix_data['notes'] = notes
 
-            # Record the fix
-            entry['fix'] = fix_data
+            # Record it
+            entry, stats, error = _record_exception_tracking(fingerprint, 'fix', fix_data)
+            if error:
+                return error
 
-            # Save updated history
-            _save_exception_history(history, datetime.now().strftime("%Y-%m-%d"))
-
-            # Build response
+            # Format response
             sig = entry.get('signature', fingerprint)
             lines = [
                 f"Recorded fix for `{fingerprint}`:",
                 f"- Signature: {sig}",
             ]
-
             if 'master' in fix_data:
                 lines.append(f"- Master: {fix_data['master']['pr']}")
                 if fix_data['master'].get('commit'):
                     lines.append(f"  - Commit: {fix_data['master']['commit'][:12]}...")
                 lines.append(f"  - Merged: {fix_data['master']['merged']}")
-
             if 'release' in fix_data:
                 branch = fix_data['release'].get('branch', 'unknown')
                 lines.append(f"- Release ({branch}): {fix_data['release'].get('pr', 'N/A')}")
@@ -940,10 +931,11 @@ def register_tools(mcp):
                     lines.append(f"  - Commit: {fix_data['release']['commit'][:12]}...")
                 if fix_data['release'].get('merged'):
                     lines.append(f"  - Merged: {fix_data['release']['merged']}")
-
-            lines.append(f"- First fixed version: {fixed_in_version or 'Not yet tagged'}")
-            lines.append("")
-            lines.append("Future reports will show this as a known fix.")
+            lines.extend([
+                f"- First fixed version: {fixed_in_version or 'Not yet tagged'}",
+                "",
+                "Future reports will show this as a known fix.",
+            ])
 
             return "\n".join(lines)
 

@@ -298,6 +298,10 @@ query_table(
 | `get_run_failures(run_id)` | Get failed tests and stack traces for a run |
 | `get_run_leaks(run_id)` | Get memory and handle leaks for a run |
 | `fetch_labkey_page(view_name, container_path, params)` | Fetch any LabKey page (HTML), save to ai/.tmp/ |
+| `record_test_issue(test_name, fix_type, issue_number)` | Record that a GitHub issue was created for a test failure/leak/hang |
+| `record_test_fix(test_name, fix_type, pr_number, ...)` | Record that a test issue was fixed by a PR |
+| `query_test_history(test_name)` | Look up historical failure/leak/hang data for a test |
+| `backfill_nightly_history(since_date)` | Backfill nightly test history from skyline.ms |
 
 ### Daily Test Summary
 
@@ -428,6 +432,10 @@ To add new custom queries (like `handleleaks_by_computer`), see [MCP Development
 - `expected_computers` query - Stddev-based anomaly detection ✓
 - "Failures by Test" / "Leaks by Test" sections in daily report ✓
 - `fetch_labkey_page` - Fetch authenticated LabKey pages (HTML) for developer-level views ✓
+- `record_test_issue` - Track GitHub issues for test failures/leaks/hangs ✓
+- `record_test_fix` - Track PR fixes for test failures/leaks/hangs ✓
+- `query_test_history` - Look up historical data for a specific test ✓
+- `backfill_nightly_history` - Backfill nightly test history from skyline.ms ✓
 
 ## Related Documentation
 

@@ -424,6 +424,55 @@ def register_tools(mcp):
             logger.error(f"Error querying test history: {e}", exc_info=True)
             return f"Error querying test history: {e}"
 
+    def _record_test_tracking(
+        test_name: str,
+        fix_type: str,
+        property_name: str,
+        tracking_data: dict,
+        fingerprint: str = None,
+    ):
+        """Common logic for recording issue or fix info for a test.
+
+        Returns:
+            (updated_items_list, None) on success
+            (None, error_message) on failure
+        """
+        history = _load_nightly_history()
+        updated = []
+
+        # Map fix_type to section name
+        section_map = {
+            'failure': 'test_failures',
+            'leak': 'test_leaks',
+            'hang': 'test_hangs',
+        }
+        if fix_type not in section_map:
+            return None, f"Invalid fix_type: {fix_type}. Use 'failure', 'leak', or 'hang'."
+
+        section = history.get(section_map[fix_type], {})
+        if test_name not in section:
+            return None, f"Test '{test_name}' not found in {fix_type} history."
+
+        if fix_type == "failure":
+            # Failures have fingerprints
+            if fingerprint:
+                by_fp = section[test_name].get('by_fingerprint', {})
+                if fingerprint not in by_fp:
+                    return None, f"Fingerprint '{fingerprint}' not found for {test_name}."
+                by_fp[fingerprint][property_name] = tracking_data
+                updated.append(f"fingerprint `{fingerprint}`")
+            else:
+                for fp, fp_entry in section[test_name].get('by_fingerprint', {}).items():
+                    fp_entry[property_name] = tracking_data
+                    updated.append(f"fingerprint `{fp}`")
+        else:
+            # Leaks and hangs don't have fingerprints
+            section[test_name][property_name] = tracking_data
+            updated.append(f"{fix_type} entry")
+
+        _save_nightly_history(history, datetime.now().strftime("%Y-%m-%d"))
+        return updated, None
+
     @mcp.tool()
     async def record_test_fix(
         test_name: str,
@@ -441,8 +490,6 @@ def register_tools(mcp):
     ) -> str:
         """Record that a test failure, leak, or hang has been fixed. → nightly-tests.md"""
         try:
-            history = _load_nightly_history()
-
             # Normalize PR number formats
             def normalize_pr(pr):
                 if pr and not pr.upper().startswith('PR'):
@@ -452,97 +499,100 @@ def register_tools(mcp):
             pr_number = normalize_pr(pr_number)
             release_pr = normalize_pr(release_pr)
 
-            # Build the new multi-branch fix schema
-            fix_info = {
+            # Build fix data
+            fix_data = {
                 'recorded_date': datetime.now().strftime("%Y-%m-%d"),
+                'first_fixed_version': fixed_in_version,
             }
-
-            # Master branch info (required)
             if pr_number:
-                fix_info['master'] = {
+                fix_data['master'] = {
                     'pr': pr_number,
                     'commit': commit,
                     'merged': merge_date or datetime.now().strftime("%Y-%m-%d"),
                 }
-
-            # Release branch info (optional)
             if release_branch or release_pr:
-                fix_info['release'] = {
+                fix_data['release'] = {
                     'branch': release_branch,
                     'pr': release_pr,
                     'commit': release_commit,
                     'merged': release_merge_date,
                 }
-
-            # Version tracking (may be null until tagged)
-            fix_info['first_fixed_version'] = fixed_in_version
-
-            # Notes
             if notes:
-                fix_info['notes'] = notes
+                fix_data['notes'] = notes
 
-            if fix_type == "failure":
-                section = history.get('test_failures', {})
-                if test_name not in section:
-                    return f"Test '{test_name}' not found in failure history."
+            # Record it
+            updated, error = _record_test_tracking(test_name, fix_type, 'fix', fix_data, fingerprint)
+            if error:
+                return error
 
-                if fingerprint:
-                    # Fix specific fingerprint
-                    by_fp = section[test_name].get('by_fingerprint', {})
-                    if fingerprint not in by_fp:
-                        return f"Fingerprint '{fingerprint}' not found for {test_name}."
-                    by_fp[fingerprint]['fix'] = fix_info
-                else:
-                    # Fix all fingerprints for this test
-                    for fp_entry in section[test_name].get('by_fingerprint', {}).values():
-                        fp_entry['fix'] = fix_info
-
-            elif fix_type == "leak":
-                section = history.get('test_leaks', {})
-                if test_name not in section:
-                    return f"Test '{test_name}' not found in leak history."
-                section[test_name]['fix'] = fix_info
-
-            elif fix_type == "hang":
-                section = history.get('test_hangs', {})
-                if test_name not in section:
-                    return f"Test '{test_name}' not found in hang history."
-                section[test_name]['fix'] = fix_info
-
-            else:
-                return f"Invalid fix_type: {fix_type}. Use 'failure', 'leak', or 'hang'."
-
-            # Save updated history
-            _save_nightly_history(history, datetime.now().strftime("%Y-%m-%d"))
-
-            # Build response
-            lines = [
-                f"Recorded fix for {test_name} ({fix_type}):",
-            ]
-
-            if 'master' in fix_info:
-                lines.append(f"- Master: {fix_info['master']['pr']}")
-                if fix_info['master'].get('commit'):
-                    lines.append(f"  - Commit: {fix_info['master']['commit'][:12]}...")
-                lines.append(f"  - Merged: {fix_info['master']['merged']}")
-
-            if 'release' in fix_info:
-                branch = fix_info['release'].get('branch', 'unknown')
-                lines.append(f"- Release ({branch}): {fix_info['release'].get('pr', 'N/A')}")
-                if fix_info['release'].get('commit'):
-                    lines.append(f"  - Commit: {fix_info['release']['commit'][:12]}...")
-                if fix_info['release'].get('merged'):
-                    lines.append(f"  - Merged: {fix_info['release']['merged']}")
-
-            lines.append(f"- First fixed version: {fixed_in_version or 'Not yet tagged'}")
-            lines.append("")
-            lines.append("Future reports will show this as a known fix.")
+            # Format response
+            lines = [f"Recorded fix for {test_name} ({fix_type}):"]
+            if 'master' in fix_data:
+                lines.append(f"- Master: {fix_data['master']['pr']}")
+                if fix_data['master'].get('commit'):
+                    lines.append(f"  - Commit: {fix_data['master']['commit'][:12]}...")
+                lines.append(f"  - Merged: {fix_data['master']['merged']}")
+            if 'release' in fix_data:
+                branch = fix_data['release'].get('branch', 'unknown')
+                lines.append(f"- Release ({branch}): {fix_data['release'].get('pr', 'N/A')}")
+                if fix_data['release'].get('commit'):
+                    lines.append(f"  - Commit: {fix_data['release']['commit'][:12]}...")
+                if fix_data['release'].get('merged'):
+                    lines.append(f"  - Merged: {fix_data['release']['merged']}")
+            lines.extend([
+                f"- First fixed version: {fixed_in_version or 'Not yet tagged'}",
+                "",
+                "Future reports will show this as a known fix.",
+            ])
 
             return "\n".join(lines)
 
         except Exception as e:
             logger.error(f"Error recording fix: {e}", exc_info=True)
             return f"Error recording fix: {e}"
+
+    @mcp.tool()
+    async def record_test_issue(
+        test_name: str,
+        fix_type: str,
+        issue_number: str,
+        fingerprint: str = None,
+        notes: str = None,
+    ) -> str:
+        """Record that a GitHub issue has been created for a test failure, leak, or hang. → nightly-tests.md"""
+        try:
+            # Validate issue number
+            issue_num = issue_number.lstrip('#')
+            if not issue_num.isdigit():
+                return f"Invalid issue number: {issue_number}. Expected a number like '3878' or '#3878'."
+
+            # Build issue data
+            issue_data = {
+                'number': int(issue_num),
+                'recorded_date': datetime.now().strftime("%Y-%m-%d"),
+                'url': f"https://github.com/ProteoWizard/pwiz/issues/{issue_num}",
+            }
+            if notes:
+                issue_data['notes'] = notes
+
+            # Record it
+            updated, error = _record_test_tracking(test_name, fix_type, 'issue', issue_data, fingerprint)
+            if error:
+                return error
+
+            # Format response
+            return "\n".join([
+                f"Recorded GitHub issue for {test_name} ({fix_type}):",
+                f"- Issue: #{issue_num}",
+                f"- URL: {issue_data['url']}",
+                f"- Updated: {', '.join(updated)}",
+                "",
+                "Future reports will show this as a tracked issue.",
+            ])
+
+        except Exception as e:
+            logger.error(f"Error recording issue: {e}", exc_info=True)
+            return f"Error recording issue: {e}"
 
 
 def _process_failure_rows(history: dict, rows: list, folder_name: str):
