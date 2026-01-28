@@ -535,27 +535,42 @@ TestRunner.exe test=TestOlderProteomeDb loop=20 dotmemorywaitruns=10 dotmemorywa
 
 When `dotmemorywaitruns` is set and `dotmemorywarmup` is not specified, warmup defaults to 5 runs.
 
-### Future: Automated Memory Profiling with dotMemory CLI
+### Automated Memory Profiling with Run-Tests.ps1 (January 2026)
 
-Similar to how dotCover provides command-line code coverage analysis, JetBrains dotMemory has a command-line interface (`dotMemory.exe`) that could enable fully automated memory profiling.
-
-**Limitation:** dotMemory CLI currently cannot export comparison reports to JSON/XML (only produces binary `.dmw` workspace files). A feature request has been submitted to JetBrains: [YouTrack DMRY](https://youtrack.jetbrains.com/issues/DMRY)
-
-**Longer-term: Full CLI integration**
+The `-MemoryProfile` flag on `Run-Tests.ps1` provides fully automated memory profiling via dotMemory CLI:
 
 ```powershell
-# Hypothetical future command
-Run-Tests.ps1 -TestName TestOlderProteomeDb -Loop 25 -MemoryProfile
+# Basic profiling (10 warmup, 20 wait runs)
+Run-Tests.ps1 -TestName TestOlderProteomeDb -MemoryProfile -MemoryProfileWarmup 10 -MemoryProfileWaitRuns 20
+
+# With allocation stack traces (slower but shows where objects originate)
+Run-Tests.ps1 -TestName TestOlderProteomeDb -MemoryProfile -MemoryProfileWarmup 10 -MemoryProfileWaitRuns 20 -MemoryProfileCollectAllocations
+
+# Extended run for thread pool warm-up investigation
+Run-Tests.ps1 -TestName TestOlderProteomeDb -MemoryProfile -MemoryProfileWarmup 20 -MemoryProfileWaitRuns 50
 ```
 
-This would:
-1. Launch TestRunner under dotMemory CLI profiler
-2. Automatically capture snapshots at configured intervals
-3. Export snapshot comparison to a text/JSON format
-4. Allow Claude Code to analyze the output directly (no screenshots needed)
+**What happens:**
+1. Script launches TestRunner under dotMemory CLI profiler
+2. Test runs for warmup iterations (allows JIT/caching/thread pool to stabilize)
+3. Snapshot #1 taken automatically after warmup
+4. Test runs for wait iterations (analysis period)
+5. Snapshot #2 taken automatically
+6. Workspace saved to `ai/.tmp/memory-YYYYMMDD-HHMMSS.dmw`
 
-**Benefits over current manual workflow:**
-- No human needed to launch dotMemory GUI and take screenshots
-- Results in a format Claude Code can parse and analyze
-- Enables autonomous memory leak investigation
+**Interpreting results:**
+
+| Observation | Indicates |
+|-------------|-----------|
+| Managed heap stable, few new objects | No managed leak (investigate unmanaged) |
+| Objects growing linearly with runs | Managed memory leak - investigate in GUI |
+| Thread pool objects (WorkStealingQueue) | Runtime warm-up artifact, not a true leak |
+| Large object delta with short warmup | Increase warmup runs (e.g., 20 instead of 10) |
+
+**Limitation:** dotMemory CLI cannot export comparison reports to JSON/XML (only produces binary `.dmw` workspace files). Visual analysis in dotMemory GUI is required to drill down into specific object types and allocation stack traces.
+
+**Benefits over manual GUI workflow:**
+- No human needed to launch dotMemory GUI and manually take snapshots
+- Precise snapshot timing (immediately after GC, at stable memory points)
+- Reproducible methodology for comparing leak investigations
 - Similar developer experience to `-Coverage` flag

@@ -60,6 +60,7 @@ Quick reference for all `pw-*` project-specific slash commands.
 | Command | Description |
 |---------|-------------|
 | `/pw-cover` | Run code coverage analysis for current branch. |
+| `/pw-leakcheck <test>` | Run memory profiling on a test to investigate leaks. |
 
 ## Help
 
