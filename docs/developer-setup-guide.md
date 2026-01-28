@@ -69,8 +69,13 @@ This is an EXISTING development machine - I already have Visual Studio, Git, and
 
 Check each component and only install what's missing.
 ```
+**Note that there's an assumption that you have a copy of master checked out at c:\proj\pwiz.** That's pretty standard for the team, but if that's not how you work - for example if you work under d:\dev and you keep master in a folder d:\dev\master_clean - then add something like this to the prompt:
 
-Claude Code will check your environment and add only what's needed.
+```Note that I work in D:\dev, not C:\proj - and when I check out master, I put it in D:\dev\master_clean, not D:\dev\pwiz```
+
+Enter the prompt and Claude Code will check your environment and add only what's needed.
+
+Keep in mind that you aren't just running a simple script, so if things start to go sideways (e.g. Claude can't find python, or forgets the URL for pwiz-ai repo etc) just have a conversation with Claude and the two of you will get back on track eventually.
 
 ### Option C: Quick Verification
 
