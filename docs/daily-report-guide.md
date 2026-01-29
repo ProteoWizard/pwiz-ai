@@ -580,16 +580,19 @@ The email has 3 major sections in this order (shortest/most urgent first):
 
 ### Email Structure
 
+**IMPORTANT**: Keep the header and Quick Status extremely compact. The actionable content
+(Support, Exceptions, Test Failures) must be visible without scrolling. Do NOT use large
+cards, grids, or visual elements for Quick Status - use a single line of text.
+
 ```
-## Summary
-[AI analysis of what's most important - patterns, action items, context]
+## Header + Quick Status (ONE LINE)
+Skyline Daily Summary - January 28, 2026
+📊 21 runs | 3 failures | 1 leak | 2 exceptions | 188,071 tests
 
-## Quick Status
-- Support: X threads needing attention
-- Exceptions: X new (Y already fixed, Z users affected)
-- Nightly: Err: X | Warn: X | Pass: X | Missing: X | N tests
+[Ignored computers note if any - small yellow banner]
 
-[Ignored computers note if any - yellow banner]
+## Action Items (if any urgent items)
+[Bullet list of things needing immediate attention]
 
 ## Support Board
 [Threads needing response, with linked titles]
@@ -608,23 +611,28 @@ The email has 3 major sections in this order (shortest/most urgent first):
 [List by folder]
 ```
 
-### Summary Section Guidelines
+### Action Items Section
 
-The Summary section provides AI analysis of the day's data. Include:
+The Action Items section highlights things needing immediate attention. Keep it brief -
+only include items that require action. If nothing needs attention, omit the section.
 
-1. **Infrastructure issues** - Ignored computers, crashed runs, missing machines
-2. **Patterns** - Multiple failures on same machine, related leaks, systemic issues
-3. **Action items** - Things that need human intervention (corrupt files, re-downloads)
-4. **Context** - Already-fixed exceptions, stale echoes from old commits
-5. **Priorities** - What should a developer look at first?
+**IMPORTANT**: Each action item must include a link to the relevant page (test failure,
+exception report, etc.) so the reader can jump directly to details. Without links,
+action items are just references to content below and the reader must find the connection.
+
+Include when relevant:
+- **Urgent failures** - Tests that need investigation (not chronic/known issues)
+- **User contacts** - Exceptions where users provided email and are waiting for response
+- **Infrastructure** - Machines down, crashed runs, files needing re-download
+- **Patterns** - Multiple failures on same machine suggesting hardware issues
 
 Example:
 ```html
-<div class="summary-box">
-<p><strong>Infrastructure:</strong> Two machines returning to Dell (i9-14800 damage).</p>
-<p><strong>BRENDANX-UW7:</strong> 3 failures today — may indicate machine-specific issues.</p>
-<p><strong>Action needed:</strong> WatersIMSImportTest needs zip file re-downloaded.</p>
-<p><strong>Already fixed:</strong> GetMedianPeak NullRef fixed by PR#3785.</p>
+<div class="action-items">
+<ul>
+<li><a href="https://skyline.ms/.../testresults-showFailures.view?...&failedTest=TestFoo"><strong>TestFoo</strong></a> - 30-min timeout on MACHINE-X (potential hang)</li>
+<li><a href="https://skyline.ms/home/issues/exceptions/announcements-thread.view?rowId=12345"><strong>Report template crash</strong></a> - user provided contact, awaiting response</li>
+</ul>
 </div>
 ```
 
