@@ -570,6 +570,47 @@ draft_email(
 
 **Subject**: `Skyline Daily Summary - Month DD, YYYY`
 
+### CRITICAL: Inline Styles Only
+
+Gmail strips `<style>` blocks when printing, so **every element must use inline `style=""` attributes**. Never use `<style>` tags or CSS classes — they render in Gmail's web view but disappear in print, leaving tables without borders and badges without colors.
+
+```html
+<!-- WRONG - styles disappear in Gmail print -->
+<style>
+  table { border-collapse: collapse; }
+  td { padding: 6px 10px; border: 1px solid #ddd; }
+  .status-green { color: #2d7a2d; }
+</style>
+<table><tr><td class="status-green">Passed</td></tr></table>
+
+<!-- CORRECT - inline styles survive Gmail print -->
+<table style="border-collapse:collapse; width:100%; font-size:13px; margin:8px 0">
+<tr><th style="background:#f5f5f5; text-align:left; padding:6px 10px; border:1px solid #ddd; font-weight:600">Header</th></tr>
+<tr><td style="padding:6px 10px; border:1px solid #ddd">Data</td></tr>
+<tr><td style="padding:6px 10px; border:1px solid #ddd; background:#fafafa">Alternating row</td></tr>
+</table>
+```
+
+**Common inline style patterns:**
+
+| Element | Inline Style |
+|---------|-------------|
+| `<table>` | `style="border-collapse:collapse; width:100%; font-size:13px; margin:8px 0"` |
+| `<th>` | `style="background:#f5f5f5; text-align:left; padding:6px 10px; border:1px solid #ddd; font-weight:600"` |
+| `<td>` | `style="padding:6px 10px; border:1px solid #ddd"` |
+| `<td>` (alt row) | Add `background:#fafafa` |
+| Green text | `style="color:#2d7a2d; font-weight:600"` |
+| Yellow text | `style="color:#b8860b"` |
+| Red text | `style="color:#cc0000; font-weight:600"` |
+| NEW badge | `style="border:1px solid #e74c3c; color:#e74c3c; font-size:11px; padding:1px 6px; border-radius:3px; font-weight:600"` |
+| FIXED badge | `style="border:1px solid #27ae60; color:#27ae60; font-size:11px; padding:1px 6px; border-radius:3px; font-weight:600"` |
+| Has email badge | `style="border:1px solid #3498db; color:#3498db; font-size:11px; padding:1px 6px; border-radius:3px; font-weight:600"` |
+| Known text | `style="color:#888; font-size:12px"` |
+
+**Badge print safety:** Never use `background:color; color:white` for badges — Chrome print strips
+background colors by default, making white text invisible. Use `border:1px solid color; color:color`
+instead, which renders as outlined pills on screen and prints cleanly.
+
 ### Section Order
 
 The email has 3 major sections in this order (shortest/most urgent first):
