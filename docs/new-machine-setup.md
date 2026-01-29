@@ -9,6 +9,10 @@
 
   FETCHED FROM: https://raw.githubusercontent.com/ProteoWizard/pwiz-ai/master/docs/new-machine-setup.md
 
+  IMPORTANT: This document must be downloaded with curl (Bash tool), not WebFetch.
+  WebFetch processes content through a summarization model and returns a summary
+  instead of the full document, which loses critical details like exact commands.
+
   Changes committed to this file are immediately available to new setup sessions.
 -->
 
@@ -269,6 +273,9 @@ commands, skills, and settings.
 "@ | Out-File -FilePath CLAUDE.md -Encoding utf8
 
 # Copy default Claude settings (pre-approved read operations)
+# NOTE: settings-defaults.local.json must NOT contain $schema or $comment fields.
+# Claude Code validates settings files and rejects unrecognized top-level keys,
+# causing the entire file to be skipped with a "Settings Error".
 Copy-Item ai\claude\settings-defaults.local.json ai\claude\settings.local.json
 
 # Clone pwiz
@@ -789,13 +796,15 @@ Register the MCP servers with Claude Code.
 # Install dependencies (Pillow for clipboard image capture)
 pip install mcp Pillow
 
-claude mcp add status -- python C:\proj\ai\mcp\StatusMcp\server.py
+claude mcp add status -- python ./ai/mcp/StatusMcp/server.py
 ```
 
 **LabKey MCP** - Access to skyline.ms (nightly tests, exceptions, wiki, support):
 ```powershell
-claude mcp add labkey -- python C:\proj\ai\mcp\LabKeyMcp\server.py
+claude mcp add labkey -- python ./ai/mcp/LabKeyMcp/server.py
 ```
+
+> **Note:** Use relative paths with forward slashes (`./ai/mcp/...`), not absolute Windows paths. The `claude mcp add` command strips backslashes, turning `C:\proj\ai\...` into `C:projai...` which fails to connect.
 
 **After registering new servers, restart Claude Code** to activate them:
 1. Exit Claude Code (`/exit`)
