@@ -11,7 +11,11 @@ Compare the wiki pages on skyline.ms with their source files in ai/docs and upda
 | Wiki Page | Source File | Sync Pattern |
 |-----------|-------------|--------------|
 | AIDevSetup | ai/docs/developer-setup-guide.md | Body content (wiki body = file content) |
-| NewMachineBootstrap | ai/docs/new-machine-setup.md | Attachment (wiki has attachment of file) |
+| NewMachineBootstrap | ai/docs/new-machine-bootstrap.md | Body content (wiki body = file content) |
+
+Note: NewMachineBootstrap previously carried `new-machine-setup.md` as an attachment.
+That attachment was removed — the prompt now points directly to the GitHub raw URL,
+which is always current and avoids the extra manual sync step.
 
 ## Workflow
 
@@ -20,14 +24,13 @@ Compare the wiki pages on skyline.ms with their source files in ai/docs and upda
 ```
 mcp__labkey__get_wiki_page("AIDevSetup")
 mcp__labkey__get_wiki_page("NewMachineBootstrap")
-mcp__labkey__list_wiki_attachments("NewMachineBootstrap")
 ```
 
 ### Step 2: Read Source Files
 
 ```
 Read ai/docs/developer-setup-guide.md
-Read ai/docs/new-machine-setup.md
+Read ai/docs/new-machine-bootstrap.md
 ```
 
 ### Step 3: Compare and Report
@@ -39,14 +42,9 @@ For each page:
 
 ### Step 4: Update (with confirmation)
 
-**AIDevSetup** (body sync):
-- Strip HTML comment headers from developer-setup-guide.md before uploading
-- Use: `mcp__labkey__update_wiki_page("AIDevSetup", new_body=<file_content>)`
-
-**NewMachineBootstrap** (attachment sync):
-- Note: MCP server doesn't currently support attachment upload
-- Manual steps: Go to wiki page, delete old attachment, upload new file
-- Or: Document that file is newer than attachment
+For each page that needs updating:
+- Strip HTML comment headers from source file before uploading
+- Use: `mcp__labkey__update_wiki_page("<PageName>", new_body=<file_content>)`
 
 ## Important Notes
 
@@ -61,4 +59,4 @@ For each page:
 
 - [Wiki MCP Documentation](ai/docs/mcp/wiki.md) - Full MCP wiki tool reference
 - [Developer Setup Guide](ai/docs/developer-setup-guide.md) - Source for AIDevSetup
-- [New Machine Setup](ai/docs/new-machine-setup.md) - Source for NewMachineBootstrap attachment
+- [New Machine Bootstrap](ai/docs/new-machine-bootstrap.md) - Source for NewMachineBootstrap
