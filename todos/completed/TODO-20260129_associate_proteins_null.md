@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260129_associate_proteins_null`
 - **Base**: `master`
 - **Created**: 2026-01-29
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#3878](https://github.com/ProteoWizard/pwiz/issues/3878)
 - **PR**: [#3907](https://github.com/ProteoWizard/pwiz/pull/3907)
 
@@ -41,7 +41,7 @@ We don't fully understand why `_proteinAssociation` was null. Possible explanati
 - `pwiz_tools/Skyline/EditUI/AssociateProteinsDlg.cs` - NewTargetsFinalSync() at line 861
 
 ## Test Plan
-- [ ] TeamCity CI passes (assertions don't fire under normal conditions)
+- [x] TeamCity CI passes (assertions don't fire under normal conditions)
 
 ## Implementation Notes
 - Chose diagnostic assertions over silent null-coalescing because:

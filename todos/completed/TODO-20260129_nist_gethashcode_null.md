@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260129_nist_gethashcode_null`
 - **Base**: `master`
 - **Created**: 2026-01-29
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#3879](https://github.com/ProteoWizard/pwiz/issues/3879)
 - **PR**: [#3906](https://github.com/ProteoWizard/pwiz/pull/3906)
 
