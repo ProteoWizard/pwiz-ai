@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260128_DockPaneStrip_race_condition`
 - **Base**: `master`
 - **Created**: 2026-01-28
-- **Status**: In Progress
+- **Status**: Completed (Phase 1 - diagnostic deployed; Phase 2 pending next exception report)
 - **GitHub Issue**: [#3886](https://github.com/ProteoWizard/pwiz/issues/3886)
 - **PR**: [#3889](https://github.com/ProteoWizard/pwiz/pull/3889)
 
@@ -79,3 +79,11 @@ Changes:
 - Rebuilt DLL from maccoss-developers source
 - Full test pass (1020 English tests), ClickOnce publish verified
 - PR created: #3889
+
+### 2026-01-29 - Phase 1 complete, merged and cherry-picked
+
+- PR #3889 merged to master
+- Cherry-pick PR #3904 created targeting Skyline/skyline_26_1
+- Phase 1 complete: diagnostic deployed, awaiting next exception occurrence
+- When next exception report arrives with line numbers and diagnostic message,
+  reopen this TODO (move back to active/) and proceed with Phase 2 fix
