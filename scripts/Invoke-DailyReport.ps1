@@ -75,9 +75,10 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 # Configuration
 # Sibling mode: C:\proj contains both ai/ (pwiz-ai) and pwiz/ subdirectories
 $WorkDir = "C:\proj"
-$LogDir = Join-Path $WorkDir "ai\.tmp\scheduled"
-$Timestamp = Get-Date -Format "yyyyMMdd-HHmm"
-$LogFile = Join-Path $LogDir "daily-$Phase-$Timestamp.log"
+$DateFolder = Get-Date -Format "yyyy-MM-dd"
+$TimeStamp = Get-Date -Format "HHmm"
+$LogDir = Join-Path $WorkDir "ai\.tmp\daily\$DateFolder"
+$LogFile = Join-Path $LogDir "$Phase-$TimeStamp.log"
 
 # Ensure log directory exists
 if (-not (Test-Path $LogDir)) {
@@ -125,7 +126,8 @@ THEN: Read $CommandFile and follow those instructions to compose and send the da
 Email recipient: $Recipient
 
 Key points:
-- Read the research findings from ai/.tmp/ files (manifest + reports + suggested-actions)
+- Read research findings from ai/.tmp/daily/YYYY-MM-DD/ first (consolidated location)
+- Fall back to ai/.tmp/ flat files if consolidation hasn't run
 - If research files are missing, send what you can with a note about incomplete data
 - Use Gmail MCP tools to send the email and archive processed inbox emails
 - If data is completely missing, send an ERROR email as specified in the command file
@@ -351,6 +353,21 @@ try {
     $Duration = $EndTime - $StartTime
     "[$EndTime] Completed with exit code $ExitCode (duration: $($Duration.TotalMinutes.ToString('F1')) minutes)" | Out-File -FilePath $LogFile -Append -Encoding UTF8
 
+    # Consolidate MCP output into daily/YYYY-MM-DD/ folder
+    if ($Phase -eq "research" -or $Phase -eq "both") {
+        $ConsolidateScript = Join-Path $WorkDir "ai\scripts\Move-DailyReports.ps1"
+        if (Test-Path $ConsolidateScript) {
+            "[$(Get-Date)] Consolidating daily reports into $DateFolder/..." | Out-File -FilePath $LogFile -Append -Encoding UTF8
+            try {
+                & $ConsolidateScript 2>&1 | Out-File -FilePath $LogFile -Append -Encoding UTF8
+                "[$(Get-Date)] Consolidation complete" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+            }
+            catch {
+                "[$(Get-Date)] WARNING: Consolidation failed: $_" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+            }
+        }
+    }
+
     if ($ExitCode -ne 0) {
         Write-Error "Claude Code exited with code $ExitCode. See log: $LogFile"
     }
@@ -359,9 +376,10 @@ finally {
     Pop-Location
 }
 
-# Clean up old logs (keep 30 days)
-Get-ChildItem -Path $LogDir -Filter "*.log" |
-    Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) } |
-    Remove-Item -Force
+# Clean up old date folders (keep 30 days)
+$DailyRoot = Join-Path $WorkDir "ai\.tmp\daily"
+Get-ChildItem -Path $DailyRoot -Directory |
+    Where-Object { $_.Name -match '^\d{4}-\d{2}-\d{2}$' -and $_.Name -lt (Get-Date).AddDays(-30).ToString("yyyy-MM-dd") } |
+    Remove-Item -Recurse -Force
 
 exit $ExitCode

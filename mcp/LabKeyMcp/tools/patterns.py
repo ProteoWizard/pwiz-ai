@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from .common import get_tmp_dir
+from .common import get_daily_summaries_dir
 from .nightly_history import _load_nightly_history
 
 logger = logging.getLogger("labkey_mcp")
@@ -32,10 +32,8 @@ EXTERNAL_SERVICES = {
 
 
 def _get_history_dir() -> Path:
-    """Get the history directory for daily summaries."""
-    history_dir = get_tmp_dir() / "history"
-    history_dir.mkdir(exist_ok=True)
-    return history_dir
+    """Get the summaries directory for daily summary JSONs."""
+    return get_daily_summaries_dir()
 
 
 def _load_daily_summary(date_str: str) -> Optional[dict]:
@@ -270,7 +268,7 @@ def register_tools(mcp):
             return (
                 f"No daily summary found for {report_date}.\n\n"
                 f"Pattern detection requires historical JSON data.\n"
-                f"Run /pw-daily first to generate ai/.tmp/history/daily-summary-{report_date.replace('-', '')}.json"
+                f"Run /pw-daily first to generate ai/.tmp/daily/summaries/daily-summary-{report_date.replace('-', '')}.json"
             )
 
         # Load yesterday's data

@@ -19,6 +19,7 @@ from labkey.query import QueryFilter
 from .common import (
     get_server_context,
     get_tmp_dir,
+    get_daily_history_dir,
     DEFAULT_SERVER,
     DEFAULT_CONTAINER,
     EXCEPTION_SCHEMA,
@@ -164,10 +165,8 @@ def _parse_exception_body(body: str) -> dict:
 
 
 def _get_history_path():
-    """Get path to exception history file in ai/.tmp/history/."""
-    history_dir = get_tmp_dir() / 'history'
-    history_dir.mkdir(parents=True, exist_ok=True)
-    return history_dir / HISTORY_FILE
+    """Get path to exception history file in ai/.tmp/daily/history/."""
+    return get_daily_history_dir() / HISTORY_FILE
 
 
 def _load_exception_history() -> dict:

@@ -15,16 +15,26 @@ Read research findings from Phase 1, compose an enriched HTML email with investi
 
 ## Prerequisites
 
-The research phase (`/pw-daily-research`) should have run first and produced:
-- `ai/.tmp/daily-manifest-YYYYMMDD.json` — Manifest listing all output files
-- `ai/.tmp/nightly-report-YYYYMMDD.md` — Nightly test data
-- `ai/.tmp/exceptions-report-YYYYMMDD.md` — Exception data
-- `ai/.tmp/support-report-YYYYMMDD.md` — Support data
-- `ai/.tmp/suggested-actions-YYYYMMDD.md` — Investigation findings
-- `ai/.tmp/failures-YYYYMMDD.md` — Detailed failure data
-- `ai/.tmp/history/daily-summary-YYYYMMDD.json` — Summary data
+The research phase (`/pw-daily-research`) should have run first. After research, a consolidation step moves output into per-date folders. Files are found in this priority order:
 
-If the manifest is missing or incomplete, fall back to reading whatever files exist for today's date.
+**New location** (after consolidation into `daily/YYYY-MM-DD/`):
+- `ai/.tmp/daily/YYYY-MM-DD/manifest.json` — Manifest listing all output files
+- `ai/.tmp/daily/YYYY-MM-DD/nightly-report.md` — Nightly test data
+- `ai/.tmp/daily/YYYY-MM-DD/exceptions-report.md` — Exception data
+- `ai/.tmp/daily/YYYY-MM-DD/support-report.md` — Support data
+- `ai/.tmp/daily/YYYY-MM-DD/suggested-actions.md` — Investigation findings
+- `ai/.tmp/daily/YYYY-MM-DD/failures.md` — Detailed failure data
+- `ai/.tmp/daily/summaries/daily-summary-YYYYMMDD.json` — Summary data
+
+**Fallback** (if consolidation hasn't run):
+- `ai/.tmp/daily-manifest-YYYYMMDD.json`
+- `ai/.tmp/nightly-report-YYYYMMDD.md`
+- `ai/.tmp/exceptions-report-YYYYMMDD.md`
+- `ai/.tmp/support-report-YYYYMMDD.md`
+- `ai/.tmp/suggested-actions-YYYYMMDD.md`
+- `ai/.tmp/failures-YYYYMMDD.md`
+
+If neither location has files, fall back to reading whatever exists for today's date.
 
 ---
 
@@ -36,22 +46,25 @@ Same logic as research phase:
 
 ## Step 2: Read Manifest
 
-Try to read `ai/.tmp/daily-manifest-YYYYMMDD.json`.
+Try the consolidated location first, then fall back:
+
+1. Try `ai/.tmp/daily/YYYY-MM-DD/manifest.json` (new location)
+2. Fall back to `ai/.tmp/daily-manifest-YYYYMMDD.json` (old location)
 
 **If manifest exists:**
 - Check `research_completed` — if false, note which phases are missing
-- Read all files listed in `files` section
+- Read all files listed in `files` section (paths may point to either location)
 - Use `summary` for quick stats
 
 **If manifest is missing:**
 - Log a warning but continue
-- Try to read the standard output files for today's date:
-  - `ai/.tmp/nightly-report-YYYYMMDD.md`
-  - `ai/.tmp/exceptions-report-YYYYMMDD.md`
-  - `ai/.tmp/support-report-YYYYMMDD.md`
-  - `ai/.tmp/suggested-actions-YYYYMMDD.md`
-  - `ai/.tmp/failures-YYYYMMDD.md`
-  - `ai/.tmp/history/daily-summary-YYYYMMDD.json`
+- Try to read files from new location first, then old:
+  - `ai/.tmp/daily/YYYY-MM-DD/nightly-report.md` or `ai/.tmp/nightly-report-YYYYMMDD.md`
+  - `ai/.tmp/daily/YYYY-MM-DD/exceptions-report.md` or `ai/.tmp/exceptions-report-YYYYMMDD.md`
+  - `ai/.tmp/daily/YYYY-MM-DD/support-report.md` or `ai/.tmp/support-report-YYYYMMDD.md`
+  - `ai/.tmp/daily/YYYY-MM-DD/suggested-actions.md` or `ai/.tmp/suggested-actions-YYYYMMDD.md`
+  - `ai/.tmp/daily/YYYY-MM-DD/failures.md` or `ai/.tmp/failures-YYYYMMDD.md`
+  - `ai/.tmp/daily/summaries/daily-summary-YYYYMMDD.json`
 - If none of these exist, the research phase likely didn't run — send a minimal error email
 
 ## Step 3: Read Research Findings

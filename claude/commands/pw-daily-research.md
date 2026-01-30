@@ -15,8 +15,12 @@ This is Phase 1 of the two-phase daily report pipeline. **Do NOT send email.**
 
 ## Output
 
-All findings go to `ai/.tmp/` files. The final output is a manifest file:
-`ai/.tmp/daily-manifest-YYYYMMDD.json`
+All MCP tools write to `ai/.tmp/` with date-stamped filenames (e.g., `nightly-report-YYYYMMDD.md`).
+After this phase completes, `Invoke-DailyReport.ps1` runs a consolidation step that moves these
+files into `ai/.tmp/daily/YYYY-MM-DD/` with the date suffix stripped.
+
+The final output is a manifest file: `ai/.tmp/daily-manifest-YYYYMMDD.json`
+(consolidated to `ai/.tmp/daily/YYYY-MM-DD/manifest.json`)
 
 ---
 
@@ -41,7 +45,7 @@ Read these documents before starting. They provide the domain knowledge needed t
 - Support: 1 day lookback
 
 **2. Load Ignored Computers**
-- Read `ai/.tmp/history/computer-status.json`
+- Read `ai/.tmp/daily/history/computer-status.json`
 - Check for due alarms
 
 **3. Read Inbox Emails**
@@ -228,7 +232,7 @@ After all investigation is complete (or when approaching turn limit), write the 
     "exceptions_report": "ai/.tmp/exceptions-report-YYYYMMDD.md",
     "support_report": "ai/.tmp/support-report-YYYYMMDD.md",
     "daily_failures": "ai/.tmp/failures-YYYYMMDD.md",
-    "daily_summary": "ai/.tmp/history/daily-summary-YYYYMMDD.json",
+    "daily_summary": "ai/.tmp/daily/summaries/daily-summary-YYYYMMDD.json",
     "suggested_actions": "ai/.tmp/suggested-actions-YYYYMMDD.md"
   },
   "summary": {

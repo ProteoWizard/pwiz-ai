@@ -170,6 +170,51 @@ def get_tmp_dir() -> Path:
     return tmp_dir
 
 
+def get_daily_dir(date_str: str) -> Path:
+    """Get the ai/.tmp/daily/YYYY-MM-DD directory for a specific date.
+
+    Args:
+        date_str: Date as YYYY-MM-DD or YYYYMMDD
+
+    Returns:
+        Path to ai/.tmp/daily/YYYY-MM-DD directory (created if needed)
+    """
+    if len(date_str) == 8 and "-" not in date_str:
+        date_str = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+    daily_dir = get_tmp_dir() / "daily" / date_str
+    daily_dir.mkdir(parents=True, exist_ok=True)
+    return daily_dir
+
+
+def get_daily_history_dir() -> Path:
+    """Get the ai/.tmp/daily/history directory for persistent state files.
+
+    Contains accumulated state that cannot be regenerated from the LabKey
+    database: exception-history.json (with filed issues, recorded fixes),
+    nightly-history.json (with fix annotations), computer-status.json
+    (with deactivation records and alarms).
+
+    Returns:
+        Path to ai/.tmp/daily/history directory (created if needed)
+    """
+    history_dir = get_tmp_dir() / "daily" / "history"
+    history_dir.mkdir(parents=True, exist_ok=True)
+    return history_dir
+
+
+def get_daily_summaries_dir() -> Path:
+    """Get the ai/.tmp/daily/summaries directory for daily summary JSONs.
+
+    Contains daily-summary-YYYYMMDD.json files used by analyze_daily_patterns.
+
+    Returns:
+        Path to ai/.tmp/daily/summaries directory (created if needed)
+    """
+    summaries_dir = get_tmp_dir() / "daily" / "summaries"
+    summaries_dir.mkdir(parents=True, exist_ok=True)
+    return summaries_dir
+
+
 # =============================================================================
 # WebDAV File Operations
 # =============================================================================

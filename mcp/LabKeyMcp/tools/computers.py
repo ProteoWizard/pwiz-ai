@@ -27,7 +27,7 @@ import labkey
 
 from .common import (
     get_server_context,
-    get_tmp_dir,
+    get_daily_history_dir,
     DEFAULT_SERVER,
     TESTRESULTS_SCHEMA,
     DEFAULT_TEST_CONTAINER,
@@ -50,9 +50,7 @@ TEST_FOLDERS = [
 
 def _get_history_file() -> Path:
     """Get path to the computer status history file."""
-    history_dir = get_tmp_dir() / "history"
-    history_dir.mkdir(exist_ok=True)
-    return history_dir / "computer-status.json"
+    return get_daily_history_dir() / "computer-status.json"
 
 
 def _load_status_history() -> dict:

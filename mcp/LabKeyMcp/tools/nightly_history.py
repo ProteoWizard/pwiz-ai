@@ -14,7 +14,7 @@ from labkey.query import QueryFilter
 
 from .common import (
     get_server_context,
-    get_tmp_dir,
+    get_daily_history_dir,
     DEFAULT_SERVER,
 )
 from .stacktrace import normalize_stack_trace
@@ -83,10 +83,8 @@ def _get_fix_summary(fix_data: dict) -> dict:
 
 
 def _get_history_path():
-    """Get path to nightly history file in ai/.tmp/history/."""
-    history_dir = get_tmp_dir() / 'history'
-    history_dir.mkdir(parents=True, exist_ok=True)
-    return history_dir / HISTORY_FILE
+    """Get path to nightly history file in ai/.tmp/daily/history/."""
+    return get_daily_history_dir() / HISTORY_FILE
 
 
 def _load_nightly_history() -> dict:
