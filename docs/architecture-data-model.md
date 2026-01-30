@@ -123,6 +123,40 @@ Classes subclassing `BackgroundLoader` register as document change listeners. Pa
 
 Search for `BackgroundLoader` subclasses to see all implementations.
 
+## Results Arrays and Replicate Data
+
+Each level of the document tree has an immutable `Results` array that stores per-replicate statistics:
+
+- `PeptideGroupDocNode.Results` — protein-level statistics
+- `PeptideDocNode.Results` — peptide/molecule-level statistics
+- `TransitionGroupDocNode.Results` — precursor-level statistics (e.g., peak boundaries, areas)
+- `TransitionDocNode.Results` — transition-level statistics (e.g., mass error, retention time)
+
+### Positional Correspondence with Chromatograms
+
+The `Results` arrays correspond **positionally** to `SrmDocument.Settings.MeasuredResults.Chromatograms`. This is contractual and immutable — within a given document snapshot, every `Results` array at every level has exactly the same count as the `Chromatograms` list.
+
+To look up peak statistics for a specific DocNode in a specific replicate:
+
+1. Find the replicate by name in `SrmDocument.Settings.MeasuredResults.Chromatograms`
+2. Use its index in that list to access `docNode.Results[index]` at any level
+
+```csharp
+// Find replicate index by name
+var chromatograms = document.Settings.MeasuredResults.Chromatograms;
+int replicateIndex = chromatograms.IndexOf(c => c.Name == replicateName);
+
+// Access statistics at any level using the same index
+var proteinResults = peptideGroupDocNode.Results[replicateIndex];
+var peptideResults = peptideDocNode.Results[replicateIndex];
+var precursorResults = transitionGroupDocNode.Results[replicateIndex];
+var transitionResults = transitionDocNode.Results[replicateIndex];
+```
+
+### ChromInfoCalculator Classes
+
+The `*ChromInfoCalculator` classes handle computing per-replicate statistics and decorating DocNode instances with `Results` arrays of the expected dimensions. These calculators run during document modification (e.g., result import, peak integration changes) and produce the immutable `Results` arrays that are stored on each DocNode.
+
 ## Content Equality vs Reference Equality
 
 A fundamental concept in Skyline's immutable architecture:
