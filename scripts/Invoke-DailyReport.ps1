@@ -382,4 +382,10 @@ Get-ChildItem -Path $DailyRoot -Directory |
     Where-Object { $_.Name -match '^\d{4}-\d{2}-\d{2}$' -and $_.Name -lt (Get-Date).AddDays(-30).ToString("yyyy-MM-dd") } |
     Remove-Item -Recurse -Force
 
+# Clean up stale top-level transient files (keep 14 days)
+$CleanupScript = Join-Path $WorkDir "ai\scripts\Clean-TmpFiles.ps1"
+if (Test-Path $CleanupScript) {
+    & $CleanupScript
+}
+
 exit $ExitCode
