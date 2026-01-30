@@ -2,6 +2,46 @@
 
 Comprehensive guide for generating daily consolidated reports covering nightly tests, exceptions, and support activity.
 
+## Two-Task Architecture
+
+The daily report runs as two independent scheduled tasks:
+
+| Task | Schedule | Command | Turn Budget | Purpose |
+|------|----------|---------|-------------|---------|
+| **Research** | 8:05 AM | `/pw-daily-research` | 100 | Collect data, investigate, write findings |
+| **Email** | 9:00 AM | `/pw-daily-email` | 40 | Read findings, compose enriched email, send |
+
+**Why split?** The research phase is compute-heavy (MCP queries, code reading, git blame, GitHub lookups). The email phase is predictable (read files, format HTML, send). Splitting enables:
+- Independent failure recovery (email can send partial data if research fails)
+- Different tool permissions (research has no email send; email has no Bash/investigation)
+- Swarm-ready investigation (research describes independent work items)
+- Smaller email budget (predictable work = fewer turns needed)
+
+**For manual/interactive use**, run `/pw-daily` which does both phases in sequence.
+
+**Automation script**: `ai/scripts/Invoke-DailyReport.ps1 -Phase research|email|both`
+
+### Data Flow
+
+```
+Research (8:05 AM)                    Email (9:00 AM)
+─────────────────                     ────────────────
+MCP queries ─────┐                    Read manifest ──────┐
+Inbox reading ───┤                    Read reports ───────┤
+History backfill ┤                    Read suggested- ────┤
+Pattern analysis ├──► ai/.tmp/ ──────►  actions          ├──► HTML email
+Investigation ───┤    files           Read inbox ─────────┤
+GitHub lookups ──┤                    Compose email ──────┘
+                 │                    Archive inbox
+                 └──► manifest.json
+```
+
+### Manifest File
+
+The research phase writes `ai/.tmp/daily-manifest-YYYYMMDD.json` listing all output files and summary statistics. The email phase reads this manifest to compose the email. If the manifest is missing, the email phase falls back to reading whatever files exist for today's date.
+
+---
+
 ## Overview
 
 The daily report consolidates three data sources:
@@ -941,11 +981,22 @@ The `first_fixed_version` can be null initially and updated later when the fix i
 
 ## Scheduled Session Configuration
 
-**Prompt**: `/pw-daily`
+### Two-Task Schedule (Recommended)
+
+| Task | Time | Command | Script |
+|------|------|---------|--------|
+| Research | 8:05 AM | `/pw-daily-research` | `Invoke-DailyReport.ps1 -Phase research` |
+| Email | 9:00 AM | `/pw-daily-email` | `Invoke-DailyReport.ps1 -Phase email` |
+
+### Single-Task Schedule (Legacy)
+
+| Task | Time | Command | Script |
+|------|------|---------|--------|
+| Combined | 8:05 AM | `/pw-daily` | `Invoke-DailyReport.ps1` (or `-Phase both`) |
 
 **Default recipient**: brendanx@proteinms.net
 
-**Expected behavior**: Send email, then investigate every issue found. Session should use available turns to explore — don't stop early.
+**Expected behavior**: Research phase collects data and investigates everything. Email phase composes and sends the enriched email. Combined mode does both.
 
 ---
 

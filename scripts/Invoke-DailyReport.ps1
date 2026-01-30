@@ -3,9 +3,8 @@
     Runs Claude Code daily report and emails results.
 
 .DESCRIPTION
-    Invokes Claude Code in non-interactive mode to run /pw-daily,
-    which generates nightly test, exception, and support reports,
-    then emails a summary via Gmail MCP.
+    Invokes Claude Code in non-interactive mode to run the daily report.
+    Supports splitting into research and email phases for scheduled automation.
 
     Designed for Windows Task Scheduler automation.
 
@@ -16,14 +15,31 @@
     Claude model to use. Default: claude-opus-4-5-20251101
 
 .PARAMETER MaxTurns
-    Maximum agentic turns. Default: 100
+    Maximum agentic turns. Default varies by phase:
+    - research: 100
+    - email: 40
+    - both: 100
+
+.PARAMETER Phase
+    Which phase to run:
+    - research: Data collection, investigation, write findings (no email)
+    - email: Read findings, compose and send enriched email
+    - both: Run everything (backward compatible, default)
 
 .PARAMETER DryRun
     If set, prints the command without executing.
 
 .EXAMPLE
     .\Invoke-DailyReport.ps1
-    Runs the daily report with default settings.
+    Runs the full daily report with default settings.
+
+.EXAMPLE
+    .\Invoke-DailyReport.ps1 -Phase research
+    Runs research phase only (data collection + investigation, no email).
+
+.EXAMPLE
+    .\Invoke-DailyReport.ps1 -Phase email
+    Runs email phase only (reads research findings, sends email).
 
 .EXAMPLE
     .\Invoke-DailyReport.ps1 -Recipient "team@example.com"
@@ -35,12 +51,18 @@
 
 .NOTES
     See ai/docs/scheduled-tasks-guide.md for Task Scheduler setup.
+
+    Scheduled tasks:
+    - "Daily Report - Research" at 8:05 AM: -Phase research
+    - "Daily Report - Email" at 9:00 AM: -Phase email
 #>
 
 param(
     [string]$Recipient = "brendanx@uw.edu",
     [string]$Model = "claude-opus-4-5-20251101",
-    [int]$MaxTurns = 100,
+    [int]$MaxTurns = 0,
+    [ValidateSet("research", "email", "both")]
+    [string]$Phase = "both",
     [switch]$DryRun
 )
 
@@ -55,22 +77,68 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 $WorkDir = "C:\proj"
 $LogDir = Join-Path $WorkDir "ai\.tmp\scheduled"
 $Timestamp = Get-Date -Format "yyyyMMdd-HHmm"
-$LogFile = Join-Path $LogDir "daily-$Timestamp.log"
+$LogFile = Join-Path $LogDir "daily-$Phase-$Timestamp.log"
 
 # Ensure log directory exists
 if (-not (Test-Path $LogDir)) {
     New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 }
 
-# Build the prompt
-# Note: Slash commands (/pw-daily) and Skills don't work in -p mode.
-# Instead, we instruct Claude to read the command file and follow it directly.
-$Prompt = @"
+# Phase-specific defaults for MaxTurns
+if ($MaxTurns -eq 0) {
+    $MaxTurns = switch ($Phase) {
+        "research" { 100 }
+        "email"    { 40 }
+        "both"     { 100 }
+    }
+}
+
+# Build phase-specific prompt
+switch ($Phase) {
+    "research" {
+        $CommandFile = ".claude/commands/pw-daily-research.md"
+        $Prompt = @"
 You are running as a scheduled automation task. Slash commands and skills do not work in non-interactive mode.
 
 FIRST: Read ai/CLAUDE.md to understand project rules (especially: use pwsh not powershell, backslashes for file paths).
 
-THEN: Read .claude/commands/pw-daily.md and follow those instructions to generate the daily report.
+THEN: Read $CommandFile and follow those instructions to run the research phase of the daily report.
+
+Key points:
+- Use MCP tools directly (mcp__labkey__*, mcp__gmail__*) - they are pre-authorized
+- Use pwsh (not powershell) for any shell commands
+- The report date is the date in your environment info
+- Do NOT send email - only collect data and write findings to files
+- Write the manifest file at the end: ai/.tmp/daily-manifest-YYYYMMDD.json
+- If MCP tools fail, write a manifest with research_completed: false
+"@
+    }
+    "email" {
+        $CommandFile = ".claude/commands/pw-daily-email.md"
+        $Prompt = @"
+You are running as a scheduled automation task. Slash commands and skills do not work in non-interactive mode.
+
+FIRST: Read ai/CLAUDE.md to understand project rules (especially: use pwsh not powershell, backslashes for file paths).
+
+THEN: Read $CommandFile and follow those instructions to compose and send the daily report email.
+
+Email recipient: $Recipient
+
+Key points:
+- Read the research findings from ai/.tmp/ files (manifest + reports + suggested-actions)
+- If research files are missing, send what you can with a note about incomplete data
+- Use Gmail MCP tools to send the email and archive processed inbox emails
+- If data is completely missing, send an ERROR email as specified in the command file
+"@
+    }
+    "both" {
+        $CommandFile = ".claude/commands/pw-daily.md"
+        $Prompt = @"
+You are running as a scheduled automation task. Slash commands and skills do not work in non-interactive mode.
+
+FIRST: Read ai/CLAUDE.md to understand project rules (especially: use pwsh not powershell, backslashes for file paths).
+
+THEN: Read $CommandFile and follow those instructions to generate the daily report.
 
 Email recipient: $Recipient
 
@@ -81,58 +149,131 @@ Key points:
 - Include key findings in the email body
 - If MCP tools fail, send an ERROR email as specified in pw-daily.md
 "@
+    }
+}
 
-# Build allowed tools list
-# - Read/Write/Edit/Glob/Grep: File operations for reports and suggested-actions
-# - Bash: Granular permissions for git blame and gh read-only operations
-# - LabKey MCP tools: Test/exception/support data (wildcards don't work - must be explicit)
-# - Gmail MCP tools: Read inbox, send summary, archive processed emails
-$AllowedTools = @(
-    # File operations
-    "Read",
-    "Write",
-    "Edit",
-    "Glob",
-    "Grep",
-    # Bash - granular read-only operations for Phase 3 investigation
-    "Bash(git blame:*)",
-    "Bash(git log:*)",
-    "Bash(git show:*)",
-    "Bash(git -C:*)",
-    "Bash(grep:*)",
-    "Bash(gh issue list:*)",
-    "Bash(gh issue view:*)",
-    "Bash(gh pr list:*)",
-    "Bash(gh pr view:*)",
-    # LabKey MCP - nightly tests (Phase 1-2)
-    "mcp__labkey__check_computer_alarms",
-    "mcp__labkey__get_daily_test_summary",
-    "mcp__labkey__save_exceptions_report",
-    "mcp__labkey__get_support_summary",
-    "mcp__labkey__get_run_failures",
-    "mcp__labkey__get_run_leaks",
-    "mcp__labkey__save_test_failure_history",
-    "mcp__labkey__analyze_daily_patterns",
-    "mcp__labkey__save_daily_summary",
-    "mcp__labkey__query_test_history",
-    # LabKey MCP - Phase 3 investigation
-    "mcp__labkey__backfill_nightly_history",
-    "mcp__labkey__backfill_exception_history",
-    "mcp__labkey__get_exception_details",
-    "mcp__labkey__query_exception_history",
-    "mcp__labkey__record_exception_issue",
-    "mcp__labkey__get_support_thread",
-    "mcp__labkey__save_run_log",
-    "mcp__labkey__query_test_runs",
-    "mcp__labkey__list_computer_status",
-    "mcp__labkey__save_run_metrics_csv",
-    # Gmail MCP - read notifications, send report, archive
-    "mcp__gmail__search_emails",
-    "mcp__gmail__read_email",
-    "mcp__gmail__send_email",
-    "mcp__gmail__modify_email",
-    "mcp__gmail__batch_modify_emails"
-) -join ","
+# Build phase-specific allowed tools list
+# Wildcards don't work - each tool must be listed explicitly
+switch ($Phase) {
+    "research" {
+        # Research phase: All LabKey MCP, Bash (git/gh), Read/Write/Glob/Grep
+        # NO Gmail send/modify (inbox reading allowed for data collection)
+        $AllowedTools = @(
+            # File operations
+            "Read",
+            "Write",
+            "Edit",
+            "Glob",
+            "Grep",
+            # Bash - granular read-only operations for investigation
+            "Bash(git blame:*)",
+            "Bash(git log:*)",
+            "Bash(git show:*)",
+            "Bash(git -C:*)",
+            "Bash(grep:*)",
+            "Bash(gh issue list:*)",
+            "Bash(gh issue view:*)",
+            "Bash(gh issue create:*)",
+            "Bash(gh pr list:*)",
+            "Bash(gh pr view:*)",
+            # LabKey MCP - data collection
+            "mcp__labkey__check_computer_alarms",
+            "mcp__labkey__get_daily_test_summary",
+            "mcp__labkey__save_exceptions_report",
+            "mcp__labkey__get_support_summary",
+            "mcp__labkey__get_run_failures",
+            "mcp__labkey__get_run_leaks",
+            "mcp__labkey__save_test_failure_history",
+            "mcp__labkey__analyze_daily_patterns",
+            "mcp__labkey__save_daily_summary",
+            "mcp__labkey__save_daily_failures",
+            "mcp__labkey__query_test_history",
+            # LabKey MCP - investigation
+            "mcp__labkey__backfill_nightly_history",
+            "mcp__labkey__backfill_exception_history",
+            "mcp__labkey__get_exception_details",
+            "mcp__labkey__query_exception_history",
+            "mcp__labkey__record_exception_issue",
+            "mcp__labkey__record_test_issue",
+            "mcp__labkey__get_support_thread",
+            "mcp__labkey__save_run_log",
+            "mcp__labkey__query_test_runs",
+            "mcp__labkey__list_computer_status",
+            "mcp__labkey__save_run_metrics_csv",
+            # Gmail MCP - read-only (for inbox data collection)
+            "mcp__gmail__search_emails",
+            "mcp__gmail__read_email"
+        ) -join ","
+    }
+    "email" {
+        # Email phase: Gmail send/modify, Read/Glob for reading findings
+        # NO Bash, NO LabKey investigation tools
+        $AllowedTools = @(
+            # File operations (read-only + Glob for finding files)
+            "Read",
+            "Glob",
+            "Grep",
+            # Gmail MCP - read inbox, send report, archive
+            "mcp__gmail__search_emails",
+            "mcp__gmail__read_email",
+            "mcp__gmail__send_email",
+            "mcp__gmail__modify_email",
+            "mcp__gmail__batch_modify_emails"
+        ) -join ","
+    }
+    "both" {
+        # Full access - backward compatible
+        $AllowedTools = @(
+            # File operations
+            "Read",
+            "Write",
+            "Edit",
+            "Glob",
+            "Grep",
+            # Bash - granular read-only operations for Phase 3 investigation
+            "Bash(git blame:*)",
+            "Bash(git log:*)",
+            "Bash(git show:*)",
+            "Bash(git -C:*)",
+            "Bash(grep:*)",
+            "Bash(gh issue list:*)",
+            "Bash(gh issue view:*)",
+            "Bash(gh issue create:*)",
+            "Bash(gh pr list:*)",
+            "Bash(gh pr view:*)",
+            # LabKey MCP - nightly tests (Phase 1-2)
+            "mcp__labkey__check_computer_alarms",
+            "mcp__labkey__get_daily_test_summary",
+            "mcp__labkey__save_exceptions_report",
+            "mcp__labkey__get_support_summary",
+            "mcp__labkey__get_run_failures",
+            "mcp__labkey__get_run_leaks",
+            "mcp__labkey__save_test_failure_history",
+            "mcp__labkey__analyze_daily_patterns",
+            "mcp__labkey__save_daily_summary",
+            "mcp__labkey__save_daily_failures",
+            "mcp__labkey__query_test_history",
+            # LabKey MCP - Phase 3 investigation
+            "mcp__labkey__backfill_nightly_history",
+            "mcp__labkey__backfill_exception_history",
+            "mcp__labkey__get_exception_details",
+            "mcp__labkey__query_exception_history",
+            "mcp__labkey__record_exception_issue",
+            "mcp__labkey__record_test_issue",
+            "mcp__labkey__get_support_thread",
+            "mcp__labkey__save_run_log",
+            "mcp__labkey__query_test_runs",
+            "mcp__labkey__list_computer_status",
+            "mcp__labkey__save_run_metrics_csv",
+            # Gmail MCP - read notifications, send report, archive
+            "mcp__gmail__search_emails",
+            "mcp__gmail__read_email",
+            "mcp__gmail__send_email",
+            "mcp__gmail__modify_email",
+            "mcp__gmail__batch_modify_emails"
+        ) -join ","
+    }
+}
 
 # Build the command
 $ClaudeArgs = @(
@@ -144,17 +285,23 @@ $ClaudeArgs = @(
 
 if ($DryRun) {
     Write-Host "Would execute:" -ForegroundColor Cyan
+    Write-Host "  Phase: $Phase"
     Write-Host "  Working directory: $WorkDir"
+    Write-Host "  Command file: $CommandFile"
+    Write-Host "  Max turns: $MaxTurns"
     Write-Host "  Git pull ai/: git pull origin master"
     Write-Host "  Git pull pwiz/: git pull origin master"
     Write-Host "  Log file: $LogFile"
     Write-Host "  Command: claude $($ClaudeArgs -join ' ')"
+    Write-Host ""
+    Write-Host "Allowed tools:" -ForegroundColor Yellow
+    $AllowedTools -split "," | ForEach-Object { Write-Host "  - $_" }
     exit 0
 }
 
 # Log start
 $StartTime = Get-Date
-"[$StartTime] Starting Claude Code daily report" | Out-File -FilePath $LogFile -Encoding UTF8
+"[$StartTime] Starting Claude Code daily report (phase: $Phase)" | Out-File -FilePath $LogFile -Encoding UTF8
 
 # Pull latest pwiz-ai (ai/) master
 "[$(Get-Date)] Pulling latest ai/ (pwiz-ai) master..." | Out-File -FilePath $LogFile -Append -Encoding UTF8
@@ -193,7 +340,7 @@ Push-Location $WorkDir
 
 try {
     # Run Claude Code with real-time logging
-    "[$(Get-Date)] Starting Claude Code..." | Out-File -FilePath $LogFile -Append -Encoding UTF8
+    "[$(Get-Date)] Starting Claude Code (phase: $Phase, max-turns: $MaxTurns)..." | Out-File -FilePath $LogFile -Append -Encoding UTF8
     & claude @ClaudeArgs 2>&1 | ForEach-Object {
         $_ | Out-File -FilePath $LogFile -Append -Encoding UTF8
     }

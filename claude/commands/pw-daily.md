@@ -8,15 +8,26 @@ Generate a consolidated daily report covering nightly tests, exceptions, and sup
 
 **Read**: [ai/docs/daily-report-guide.md](../../ai/docs/daily-report-guide.md) for full instructions.
 
+## Architecture: Two-Phase Pipeline
+
+When run as scheduled automation, the daily report is split into two independent tasks:
+
+1. **Research phase** (`/pw-daily-research`, 8:05 AM) — Collect data, investigate exceptions/failures/leaks, write findings to files. No email. Higher turn budget.
+2. **Email phase** (`/pw-daily-email`, 9:00 AM) — Read findings, compose enriched HTML email, send. Smaller turn budget.
+
+**This command (`/pw-daily`) runs both phases in sequence** — use it for manual/interactive sessions. The scheduled tasks use the split commands via `Invoke-DailyReport.ps1 -Phase research|email`.
+
+See [ai/docs/scheduled-tasks-guide.md](../../ai/docs/scheduled-tasks-guide.md) for Task Scheduler configuration.
+
 ## Arguments
 
 - **Date**: YYYY-MM-DD (optional, defaults to auto-calculated)
 
 ## Expected Behavior
 
-1. **Send email** — The minimum checkpoint (Phase 1-2)
-2. **Investigate everything** — Every failure, exception, and anomaly (Phase 3)
-3. **Document findings** — Write to `suggested-actions-YYYYMMDD.md`
+1. **Collect data and investigate** — Research phase (Phase 1-3 from the guide)
+2. **Send email** — Email phase with enriched findings
+3. **Keep investigating** — Continue until turn limit
 
 **Don't stop after sending the email.** The exploration phase is where the real value is.
 
@@ -178,6 +189,8 @@ Questions to answer:
 ## Related
 
 - [ai/docs/daily-report-guide.md](../../ai/docs/daily-report-guide.md) - Full instructions
+- [pw-daily-research.md](pw-daily-research.md) - Research phase only (scheduled at 8:05 AM)
+- [pw-daily-email.md](pw-daily-email.md) - Email phase only (scheduled at 9:00 AM)
 - `/pw-nightly` - Nightly tests only
 - `/pw-exceptions` - Exceptions only
 - `/pw-support` - Support board only
