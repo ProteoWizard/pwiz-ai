@@ -28,6 +28,7 @@ Additionally, `EditRTDlg.UpdateCalculator` called `Initialize(null)` for bulk in
 - [x] Renamed `RCalcIrt.Initialize(IProgressMonitor, ref IProgressStatus)` to `InitializeIrt` to disambiguate from base virtual
 - [x] Wrapped bulk calculator initialization in `EditRTDlg.UpdateCalculator` with `LongWaitDlg` (was blocking UI with `Initialize(null)`)
 - [x] Fixed `EditRTDlg.ShowGraph` to call static Initialize in background, SetInitializedValue on UI thread
+- [x] Added `NextSegment()` and `UpdateProgress` in bulk Initialize loop (progress bar was not advancing between calculators)
 
 ## Files Modified
 - `pwiz_tools/Skyline/Model/DocSettings/Prediction.cs` - Base virtual method + backwards-compatible wrapper
@@ -44,4 +45,4 @@ Additionally, `EditRTDlg.UpdateCalculator` called `Initialize(null)` for bulk in
 - NOT cherry-picking to release — too much scope for a release this close. Goes into daily builds after 26.1.
 - The bulk Initialize in UpdateCalculator is best-effort: individual calculator failures (e.g. missing database) are silently handled. `CalculatorException` is caught per-calculator. With a non-null monitor, `RCalcIrt.InitializeIrt` reports missing files through progress status and returns null (vs throwing with null monitor). `SetInitializedValue` handles both paths: null returns are skipped, and `ReferenceEquals` catches unchanged calculators.
 - `LongWaitDlg` does not currently support cancellation for this operation — `IrtDb.Load` has no progress/cancellation support. But the infrastructure is now in place for future improvement.
-- Progress segmentation is set up in the bulk Initialize (one segment per calculator) for future use.
+- Progress segmentation advances via `NextSegment()` after each calculator in the bulk Initialize loop.
