@@ -4,7 +4,8 @@
 - **Branch**: `Skyline/work/20260129_apply_peak_null_chrominfo`
 - **Base**: `master`
 - **Created**: 2026-01-29
-- **Status**: In Progress
+- **Status**: Complete
+- **Release PR**: [#3913](https://github.com/ProteoWizard/pwiz/pull/3913) (cherry-picked to release branch)
 - **GitHub Issue**: [#3905](https://github.com/ProteoWizard/pwiz/issues/3905)
 - **PR**: [#3911](https://github.com/ProteoWizard/pwiz/pull/3911)
 
