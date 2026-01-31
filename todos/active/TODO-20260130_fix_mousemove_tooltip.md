@@ -4,11 +4,25 @@
 **PR**: [#3915](https://github.com/ProteoWizard/pwiz/pull/3915) - Fixed ArgumentOutOfRangeException in transition list protein tooltip
 **Exception**: [#73851](https://skyline.ms/home/issues/exceptions/announcements-thread.view?rowId=73851) - fingerprint `25731a8d5a02b8b1`
 
-## Status
+## Status: Complete
 
-PR #3915 (by bspratt via Claude Code) fixes the crash with a bounds check on `_proteinList` indexing. This is correct but incomplete — it doesn't fix the sorting bug described in #3914.
+Two commits on PR #3915:
 
-**This branch needs**: Replace the `_proteinList` parallel-list approach with `DataGridViewCell.Tag` storage, as described in #3914. The new test from PR #3915 (`TestMouseMoveToGridCell`) must still pass.
+1. **f39991b** (bspratt via Claude Code): Bounds check on `_proteinList` indexing + `TestMouseMoveToGridCell` test
+2. **21df832** (brendanx + Claude): Disabled column sorting on the preview grid
+
+## Resolution
+
+The Cell.Tag approach from issue #3914 was prototyped but discarded. While it correctly survived grid sorting, the Tag values did not actually travel with cells during DataGridView sort operations on a data-bound grid. More importantly, the refactoring required to thread protein data through `AssociateProteins` and `AddAssociatedProtein` was disproportionate to the benefit.
+
+Instead, sorting was disabled entirely by setting `DataGridViewColumnSortMode.NotSortable` on all columns in `DisplayData()`. This is the correct fix because:
+
+* The grid displays pasted transition data in paste order — sorting is not meaningful
+* Sorting broke the parallel `_proteinList` index assumption used for tooltip lookup
+* Sorting also caused other problems unrelated to tooltips
+* One line of code vs. a multi-method refactor
+
+With sorting disabled, the bounds check from the first commit correctly guards the `_proteinList` indexing for all reachable cases.
 
 ## What PR #3915 did
 
@@ -16,51 +30,13 @@ PR #3915 (by bspratt via Claude Code) fixes the crash with a bounds check on `_p
 2. Added bounds check: `proteinIndex >= 0 && proteinIndex < _proteinList.Count`
 3. Added `TestMouseMoveToGridCell` test helper and test in `InsertTest.TestMalformedTransitionListWithAssociateProteins`
 4. Drive-by: `"TransitionList"` -> `@"TransitionList"` (CodeInspectionTest fix)
+5. Disabled column sorting on all grid columns in `DisplayData()`
 
-## What still needs to be done
+## Files changed
 
-Replace the parallel `_proteinList` with `Cell.Tag` storage:
-
-1. **In `dataGrid_MouseMove`**: Read protein from cell Tag instead of `_proteinList`:
-   ```csharp
-   if (e.RowIndex >= 0 && e.ColumnIndex == 0 && isAssociated)
-   {
-       var protein = dataGrid.Rows[e.RowIndex].Cells[0].Tag as Protein;
-       if (protein != null)
-       {
-           var tipProvider = new ProteinTipProvider(protein);
-           // ...
-   ```
-
-2. **After `UpdateForm()` (~line 1625)**: Tag the protein name cells. The protein name cell text already comes from the Protein objects, so the Tag can be set at the same time. Alternatively, after `UpdateForm()` returns and the grid is populated, iterate and set tags from `_proteinList`, then clear/remove `_proteinList`.
-
-3. **Remove `_proteinList` field** if possible (it's only used for tooltip lookup — 4 references total: declaration at line 74, init at 293, add at 419, read at 1477).
-
-### Why Cell.Tag is better
-
-- Eliminates the off-by-one indexing entirely
-- Survives grid sorting (Tag travels with the cell)
-- No parallel data structure to keep in sync
-- The existing test (`TestMouseMoveToGridCell` on row 0 and last row) will pass because a null Tag simply skips the tooltip
-
-### Grid structure reminder
-
-- Row 0 in the DataGridView is a "..." placeholder row covered by combo box controls in `comboPanelInner`
-- Data rows start at row 1
-- `_proteinList[0]` corresponds to grid row 1 (hence the `- 1` offset)
-- When headers exist, `_proteinList[0]` is actually a null protein for the header line
-- Grid is data-bound to a DataTable (`dataGrid.DataSource = table`), so Tags must be set after binding
-
-## Files to change
-
-- `pwiz_tools/Skyline/FileUI/ImportTransitionListColumnSelectDlg.cs`
-  - `dataGrid_MouseMove` — read from Cell.Tag
-  - After `UpdateForm()` in associate proteins flow — set Cell.Tag
-  - `AddAssociatedProtein` — may still add to temp list, or refactor
-  - Remove `_proteinList` field if no longer needed
-
-## PR #3915 also needs
-
-- Reference to issue #3914 in the PR description
-- Labels: "skyline", "bug"
-- Assignee: brendanx67
+* `pwiz_tools/Skyline/FileUI/ImportTransitionListColumnSelectDlg.cs`
+  - `dataGrid_MouseMove` — bounds check on `_proteinList` indexing
+  - `DisplayData()` — `SortMode = NotSortable` on all columns
+  - `TestMouseMoveToGridCell` — test helper for mouse move events
+* `pwiz_tools/Skyline/TestFunctional/InsertTest.cs`
+  - `TestMalformedTransitionListWithAssociateProteins` — test coverage for row 0 and last row
