@@ -6,6 +6,7 @@
 - **Created**: 2026-01-30
 - **Status**: In Progress
 - **GitHub Issue**: [#3910](https://github.com/ProteoWizard/pwiz/issues/3910)
+- **PR**: [#3918](https://github.com/ProteoWizard/pwiz/pull/3918)
 
 ## Objective
 Fix ArgumentOutOfRangeException in SkylineWindow.PlacePane during graph arrangement.
@@ -25,15 +26,19 @@ The issue is long-standing (versions 21.2 through 26.0.9) and affects two call p
 - **Versions**: 21.2 through 26.0.9.021
 
 ## Changes Made
-- [x] Added bounds check at top of PlacePane: `if (row >= listTiles.Count || col >= listTiles[row].Count) return`
+- [x] Added bounds check for row and col against listTiles dimensions
+- [x] Extracted previousIndex (row-1 or col-1) and guarded against negative values
+- [x] Added cross-row column bounds check for Bottom alignment (previous row may have fewer columns)
+- [x] Refactored previousForm access to use previousIndex variable
 
 ## Files Modified
 - `pwiz_tools/Skyline/SkylineGraphs.cs` - PlacePane() at line 5926
 
 ## Test Plan
+- [x] ArrangeGraphsTest passes
 - [ ] TeamCity CI passes
 
 ## Implementation Notes
-- The `Bottom` alignment path always uses `col=0` (every row has at least 1 column), so the `previousForm` access at `listTiles[row-1][col]` is safe for normal calls
-- The `Right` alignment path uses `col-1` which is always >= 0 since the loop starts at j=1
-- The bounds check is defensive against re-entrant dock panel events, not against the normal calling patterns which are already bounded correctly
+- The calling loops bound their indices correctly, but .NET does not include the actual index in ArgumentOutOfRangeException messages, so the original exception report does not reveal which access failed
+- Three listTiles access patterns are guarded: direct row/col, previousIndex (row-1 or col-1), and cross-row column access for Bottom alignment
+- The Right alignment path accesses the same row at previousIndex, which is already bounds-checked, so no extra cross-row check is needed
