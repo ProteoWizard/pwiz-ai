@@ -21,9 +21,10 @@ Fix NullReferenceException in AreaReplicateGraphPane.GetDotProductResults when _
 ## Changes Made
 - [x] Coalesced null `normalizeOption` to `NormalizeOption.DEFAULT` at AreaGraphData constructor (per Copilot review)
 - [x] Guards all downstream accesses, not just GetDotProductResults
+- [x] Added `[MethodImpl(MethodImplOptions.NoOptimization)]` to `GetDotProductResults` (per Nick's review — JIT may report wrong line numbers)
 
 ## Files Modified
-- `pwiz_tools/Skyline/Controls/Graphs/AreaReplicateGraphPane.cs` - AreaGraphData constructor at line 1195
+- `pwiz_tools/Skyline/Controls/Graphs/AreaReplicateGraphPane.cs` - AreaGraphData constructor, GetDotProductResults
 
 ## Test Plan
 - [ ] TeamCity CI passes
@@ -31,3 +32,4 @@ Fix NullReferenceException in AreaReplicateGraphPane.GetDotProductResults when _
 ## Implementation Notes
 - Initial fix used null-conditional at call sites; Copilot correctly identified that `_normalizeOption` is also dereferenced in `NormalizedValueCalculator.NormalizationMethodForMolecule` and other paths
 - Coalescing to `NormalizeOption.DEFAULT` at the constructor is a single-point fix that protects all downstream code
+- Nick noted he couldn't find a code path where `_normalizeOption` is actually null — the NullReferenceException may be reported on the wrong line due to JIT optimization. `NoOptimization` will give accurate line numbers if the exception recurs
