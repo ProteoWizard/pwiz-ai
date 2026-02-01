@@ -468,6 +468,24 @@ dotMemory profiling was critical in solving Issue #3855, where handle-based debu
 4. **Focus on "new" objects**: dotMemory comparison highlights objects present in second snapshot but not first
 5. **Check .NET internals**: Leaks often hide in framework types (timers, tasks, delegates) rather than application types
 
+### Discounting WeakReference Accumulation
+
+WinForms maintains static `WeakRefCollection` instances to track all ToolStrips for input message routing. These collections accumulate `System.WeakReference` and `System.Windows.Forms.ClientUtils+WeakRefCollection+WeakRefObject` entries over time.
+
+**Key insight**: These weak references allow the actual ToolStrip objects to be GC'd, but the `WeakReference` wrapper objects themselves only get pruned when the collection is actively enumerated/accessed - not during GC cycles.
+
+When evaluating "Objects delta" in dotMemory snapshot comparisons, **subtract these types** - they don't represent actual memory leaks:
+
+| Objects Delta | Interpretation |
+|---------------|----------------|
+| 250 total (150 WeakReference + 100 WeakRefObject) | Effectively **0** real leak |
+| 250 total (actual domain objects) | Real leak to investigate |
+
+Common allocation stack traces for these (can be ignored):
+- `ToolStripMenuItem.CreateDefaultDropDown()` → accessing `DropDownItems` on menu items
+- `ToolStripOverflowButton.CreateDefaultDropDown()` → ToolStrip layout creating overflow buttons
+- Any `ToolStrip..ctor()` or `ToolStripDropDown..ctor()` path
+
 ## Future Vision: Automated Leak Detection Workflow
 
 The current workflow requires a human to review nightly test results and select the optimal test for investigation. A planned enhancement would automate Phase 1 through an MCP (Model Context Protocol) server integration.

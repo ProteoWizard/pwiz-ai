@@ -8,17 +8,43 @@ Profile a test with dotMemory to investigate memory or handle leaks reported in 
 
 **Argument**: Test name (required)
 
-## Quick Start
+## Step 1: Read the Methodology Guide
+
+**MANDATORY**: Before doing anything else, read the leak debugging guide:
+
+```
+Read ai/docs/leak-debugging-guide.md
+```
+
+This guide contains critical information including:
+- Handle leak investigation with `-ReportHandles`
+- Bisection techniques for isolating leaks
+- Case studies (AuditLogForm icon leak, FileSystemWatcher race condition, HttpClientWithProgress timer leak)
+- Interpreting dotMemory results
+
+## Step 2: Ask User for Profiling Parameters
+
+Use `AskUserQuestion` to ask the user:
+
+1. **Warmup runs** (default 10): Iterations before first snapshot to allow JIT/caching/thread pool to stabilize
+2. **Wait runs** (default 20): Iterations between snapshots (analysis period)
+3. **Collect allocations**: Whether to capture allocation stack traces (slower but shows where objects originate)
+
+Suggested options:
+- Warmup: 10 (standard), 20 (extended for thread pool investigation)
+- Wait: 20 (standard), 50 (extended)
+- Allocations: No (faster), Yes (shows allocation sites)
+
+## Step 3: Run Memory Profiling
+
+After user confirms parameters, run:
 
 ```powershell
-# Basic profiling (10 warmup, 20 wait, no stack traces)
-Run-Tests.ps1 -TestName <test> -MemoryProfile -MemoryProfileWarmup 10 -MemoryProfileWaitRuns 20
+# Without allocation tracking
+Run-Tests.ps1 -TestName <test> -MemoryProfile -MemoryProfileWarmup <warmup> -MemoryProfileWaitRuns <wait>
 
-# With allocation stack traces (slower but shows where objects are created)
-Run-Tests.ps1 -TestName <test> -MemoryProfile -MemoryProfileWarmup 10 -MemoryProfileWaitRuns 20 -MemoryProfileCollectAllocations
-
-# Extended run for thread pool warm-up investigation
-Run-Tests.ps1 -TestName <test> -MemoryProfile -MemoryProfileWarmup 20 -MemoryProfileWaitRuns 50
+# With allocation tracking
+Run-Tests.ps1 -TestName <test> -MemoryProfile -MemoryProfileWarmup <warmup> -MemoryProfileWaitRuns <wait> -MemoryProfileCollectAllocations
 ```
 
 Output: `ai/.tmp/memory-YYYYMMDD-HHMMSS.dmw` (open in dotMemory GUI to compare snapshots)
@@ -30,10 +56,3 @@ Output: `ai/.tmp/memory-YYYYMMDD-HHMMSS.dmw` (open in dotMemory GUI to compare s
 | Managed heap stable, few new objects | No managed leak (check unmanaged) |
 | Objects growing linearly with runs | Managed memory leak |
 | Thread pool objects (WorkStealingQueue) | Runtime warm-up, not a leak |
-
-## Reference
-
-See **ai/docs/leak-debugging-guide.md** for complete methodology including:
-- Handle leak investigation with `-ReportHandles`
-- Bisection techniques for isolating leaks
-- Case studies (AuditLogForm icon leak, FileSystemWatcher race condition, HttpClientWithProgress timer leak)
