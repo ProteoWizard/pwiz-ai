@@ -10,6 +10,7 @@ Modules:
 - wiki: Wiki page tools
 - support: Support board tools
 - attachments: Attachment handling tools
+- announcements: Announcement posting tools
 - issues: Issue tracking tools
 - patterns: Pattern detection for daily reports
 - computers: Computer status management (deactivate/reactivate)
@@ -25,6 +26,7 @@ from . import nightly
 from . import wiki
 from . import support
 from . import attachments
+from . import announcements
 from . import issues
 from . import patterns
 from . import computers
@@ -47,6 +49,7 @@ def register_all_tools(mcp):
 
     # DRILL-DOWN tools
     wiki.register_tools(mcp)
+    announcements.register_tools(mcp)  # post_announcement
     attachments.register_tools(mcp)
     computers.register_tools(mcp)    # deactivate_computer, reactivate_computer, etc.
 

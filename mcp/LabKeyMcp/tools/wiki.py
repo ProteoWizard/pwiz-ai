@@ -5,14 +5,12 @@ including the LabKey tutorial documentation.
 """
 
 import base64
-import http.cookiejar
-import json
 import logging
 import re
 import urllib.error
 import urllib.request
 from typing import Optional
-from urllib.parse import quote, unquote, urlencode
+from urllib.parse import quote, urlencode
 
 import labkey
 
@@ -20,152 +18,15 @@ from .common import (
     get_server_context,
     get_netrc_credentials,
     get_tmp_dir,
+    get_labkey_session,
+    encode_waf_body,
+    LabKeySession,
     DEFAULT_SERVER,
     DEFAULT_WIKI_CONTAINER,
     WIKI_SCHEMA,
 )
 
 logger = logging.getLogger("labkey_mcp")
-
-
-class LabKeySession:
-    """A simple session class for making authenticated LabKey requests with CSRF support.
-
-    Following the pattern from ReportErrorDlg.cs:313-342.
-    Uses urllib and http.cookiejar to maintain session cookies.
-    """
-
-    def __init__(self, server: str, login: str, password: str):
-        self.server = server
-        self.login = login
-        self.password = password
-        self.csrf_token = None
-
-        # Set up cookie jar for session management
-        self.cookie_jar = http.cookiejar.CookieJar()
-        self.opener = urllib.request.build_opener(
-            urllib.request.HTTPCookieProcessor(self.cookie_jar)
-        )
-
-        # Add basic auth header
-        credentials = base64.b64encode(f"{login}:{password}".encode()).decode()
-        self.auth_header = f"Basic {credentials}"
-
-    def _establish_session(self):
-        """GET to establish session and get CSRF token."""
-        url = f"https://{self.server}/project/home/begin.view?"
-        request = urllib.request.Request(url)
-        request.add_header("Authorization", self.auth_header)
-
-        with self.opener.open(request, timeout=30) as response:
-            # Extract CSRF token from cookies
-            for cookie in self.cookie_jar:
-                if cookie.name == "X-LABKEY-CSRF":
-                    self.csrf_token = cookie.value
-                    break
-
-        if not self.csrf_token:
-            raise Exception("CSRF token not found in session cookies")
-
-    def get(self, url: str, params: dict = None, headers: dict = None) -> dict:
-        """Make a GET request with session cookies."""
-        if params:
-            url = f"{url}?{urlencode(params)}"
-
-        request = urllib.request.Request(url)
-        request.add_header("Authorization", self.auth_header)
-        if self.csrf_token:
-            request.add_header("X-LABKEY-CSRF", self.csrf_token)
-        if headers:
-            for key, value in headers.items():
-                request.add_header(key, value)
-
-        with self.opener.open(request, timeout=30) as response:
-            return json.loads(response.read().decode())
-
-    def post_json(self, url: str, data: dict, headers: dict = None) -> tuple:
-        """Make a POST request with JSON body. Returns (status_code, response_data)."""
-        request = urllib.request.Request(url, method="POST")
-        request.add_header("Authorization", self.auth_header)
-        request.add_header("Content-Type", "application/json")
-        if self.csrf_token:
-            request.add_header("X-LABKEY-CSRF", self.csrf_token)
-        if headers:
-            for key, value in headers.items():
-                request.add_header(key, value)
-
-        json_data = json.dumps(data).encode("utf-8")
-        request.data = json_data
-
-        try:
-            with self.opener.open(request, timeout=30) as response:
-                return response.status, json.loads(response.read().decode())
-        except urllib.error.HTTPError as e:
-            return e.code, {"error": e.read().decode()[:500]}
-
-
-def _get_labkey_session(server: str) -> tuple:
-    """Create an authenticated session with CSRF token for LabKey POST requests.
-
-    Following the pattern from ReportErrorDlg.cs:313-342:
-    1. GET to /project/home/begin.view? to establish session
-    2. Extract X-LABKEY-CSRF cookie
-    3. Return session with CSRF token for use in POST requests
-
-    Args:
-        server: LabKey server hostname
-
-    Returns:
-        Tuple of (LabKeySession, csrf_token)
-    """
-    login, password = get_netrc_credentials(server)
-
-    # Create session and establish CSRF token
-    session = LabKeySession(server, login, password)
-    session._establish_session()
-
-    return session, session.csrf_token
-
-
-def _encode_waf_body(content: str) -> str:
-    """Encode wiki body content using LabKey's WAF (Web Application Firewall) format.
-
-    The format is: /*{{base64/x-www-form-urlencoded/wafText}}*/[base64-encoded-url-encoded-content]
-
-    Args:
-        content: The raw wiki page content (HTML or text)
-
-    Returns:
-        WAF-encoded string ready for the "body" field
-    """
-    # Step 1: URL-encode the content (encodes special chars like <, >, &, etc.)
-    url_encoded = quote(content, safe="")
-
-    # Step 2: Base64 encode the URL-encoded content
-    base64_encoded = base64.b64encode(url_encoded.encode("utf-8")).decode("ascii")
-
-    # Step 3: Prepend the WAF hint comment
-    return f"/*{{{{base64/x-www-form-urlencoded/wafText}}}}*/{base64_encoded}"
-
-
-def _decode_waf_body(waf_content: str) -> str:
-    """Decode wiki body content from LabKey's WAF format.
-
-    Args:
-        waf_content: WAF-encoded string from the "body" field
-
-    Returns:
-        The decoded wiki page content
-    """
-    # Check for WAF prefix
-    prefix = "/*{{base64/x-www-form-urlencoded/wafText}}*/"
-    if waf_content.startswith(prefix):
-        base64_content = waf_content[len(prefix):]
-        url_encoded = base64.b64decode(base64_content).decode("utf-8")
-        return unquote(url_encoded)
-
-    # If not WAF encoded, return as-is
-    return waf_content
 
 
 def _get_wiki_page_metadata(
@@ -191,7 +52,7 @@ def _get_wiki_page_metadata(
         entityId, rowId, pageVersionId, name, title, rendererType, parent
     """
     if session is None:
-        session, _ = _get_labkey_session(server)
+        session, _ = get_labkey_session(server)
 
     # Step 1: Query database for authoritative title and rendererType
     # These should NOT come from HTML parsing - they're database fields
@@ -401,7 +262,7 @@ def register_tools(mcp):
             normalized_body = new_body.replace("\r\n", "\n").replace("\r", "\n")
 
             # Encode the body using WAF format
-            encoded_body = _encode_waf_body(normalized_body)
+            encoded_body = encode_waf_body(normalized_body)
 
             # Use provided title or keep existing
             page_title = title if title is not None else metadata["title"]

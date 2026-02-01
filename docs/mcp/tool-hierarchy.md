@@ -49,6 +49,12 @@ Use these to investigate specific items found in primary reports.
 | `get_issue_details` | Full issue with comments |
 | `query_issues` | Browse issues |
 
+**Content Authoring:**
+| Tool | Purpose |
+|------|---------|
+| `post_announcement` | Post new announcement thread (triggers email notifications) |
+| `update_wiki_page` | Modify wiki page content |
+
 **Wiki:**
 | Tool | Purpose |
 |------|---------|
@@ -56,7 +62,6 @@ Use these to investigate specific items found in primary reports.
 | `list_wiki_pages` | Browse wiki pages |
 | `list_wiki_attachments` | List wiki attachments |
 | `get_wiki_attachment` | Download wiki attachment |
-| `update_wiki_page` | Modify wiki content |
 
 ### Limited Discovery (For Proposing Schema Documentation)
 

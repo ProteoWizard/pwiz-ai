@@ -28,11 +28,11 @@ import labkey
 from .common import (
     get_server_context,
     get_daily_history_dir,
+    get_labkey_session,
     DEFAULT_SERVER,
     TESTRESULTS_SCHEMA,
     DEFAULT_TEST_CONTAINER,
 )
-from .wiki import _get_labkey_session
 
 logger = logging.getLogger("labkey_mcp")
 
@@ -139,7 +139,7 @@ def _set_computer_active(
     """
     try:
         # Get authenticated session with CSRF token
-        session, csrf = _get_labkey_session(server)
+        session, csrf = get_labkey_session(server)
 
         # Build URL for setUserActive endpoint
         encoded_path = quote(container_path, safe="/")
