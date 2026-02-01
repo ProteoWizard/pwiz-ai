@@ -6,6 +6,7 @@
 - **Created**: 2026-02-01
 - **Status**: In Progress
 - **GitHub Issue**: [#3909](https://github.com/ProteoWizard/pwiz/issues/3909)
+- **PR**: [#3927](https://github.com/ProteoWizard/pwiz/pull/3927)
 
 ## Objective
 Fix IndexOutOfRangeException in MassErrorHistogram2DGraphPane.AddChromInfo histogram binning.
