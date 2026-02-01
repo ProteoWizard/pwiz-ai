@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260130_rtscorelistinit_thread_safety`
 - **Base**: `master`
 - **Created**: 2026-01-30
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#3908](https://github.com/ProteoWizard/pwiz/issues/3908)
 - **PR**: [#3916](https://github.com/ProteoWizard/pwiz/pull/3916)
 
@@ -39,7 +39,7 @@ Additionally, `EditRTDlg.UpdateCalculator` called `Initialize(null)` for bulk in
 
 ## Test Plan
 - [x] IrtFunctionalTest passes (exercises missing iRT database path through UpdateCalculator)
-- [ ] TeamCity CI passes
+- [x] TeamCity CI passes
 
 ## Implementation Notes
 - NOT cherry-picking to release — too much scope for a release this close. Goes into daily builds after 26.1.

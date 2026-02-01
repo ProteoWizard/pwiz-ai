@@ -4,9 +4,10 @@
 - **Branch**: `Skyline/work/20260130_placepane_bounds_check`
 - **Base**: `master`
 - **Created**: 2026-01-30
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#3910](https://github.com/ProteoWizard/pwiz/issues/3910)
 - **PR**: [#3918](https://github.com/ProteoWizard/pwiz/pull/3918)
+- **Cherry-pick PR**: [#3920](https://github.com/ProteoWizard/pwiz/pull/3920) to `Skyline/skyline_26_1`
 
 ## Objective
 Fix ArgumentOutOfRangeException in SkylineWindow.PlacePane during graph arrangement.
@@ -36,7 +37,7 @@ The issue is long-standing (versions 21.2 through 26.0.9) and affects two call p
 
 ## Test Plan
 - [x] ArrangeGraphsTest passes
-- [ ] TeamCity CI passes
+- [x] TeamCity CI passes
 
 ## Implementation Notes
 - The calling loops bound their indices correctly, but .NET does not include the actual index in ArgumentOutOfRangeException messages, so the original exception report does not reveal which access failed

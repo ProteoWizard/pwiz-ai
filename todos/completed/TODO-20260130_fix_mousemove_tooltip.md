@@ -2,9 +2,10 @@
 
 **Issue**: [#3914](https://github.com/ProteoWizard/pwiz/issues/3914) - ImportTransitionListColumnSelectDlg: protein tooltip crashes and shows wrong protein after sort
 **PR**: [#3915](https://github.com/ProteoWizard/pwiz/pull/3915) - Fixed ArgumentOutOfRangeException in transition list protein tooltip
+**Cherry-pick**: Manually cherry-picked to `Skyline/skyline_26_1` by bspratt (commit `03a6f5e2d`). Auto-cherry-pick failed ([#3919](https://github.com/ProteoWizard/pwiz/issues/3919)).
 **Exception**: [#73851](https://skyline.ms/home/issues/exceptions/announcements-thread.view?rowId=73851) - fingerprint `25731a8d5a02b8b1`
 
-## Status: Complete
+## Status: Complete (merged 2026-01-31)
 
 Two commits on PR #3915:
 

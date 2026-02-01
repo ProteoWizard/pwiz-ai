@@ -4,8 +4,10 @@
 - **Branch**: `Skyline/work/20260130_graphfullscan_zoomxaxis_null`
 - **Base**: `master`
 - **Created**: 2026-01-30
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#3888](https://github.com/ProteoWizard/pwiz/issues/3888)
+- **PR**: [#3917](https://github.com/ProteoWizard/pwiz/pull/3917)
+- **Cherry-pick PR**: [#3921](https://github.com/ProteoWizard/pwiz/pull/3921) to `Skyline/skyline_26_1`
 
 ## Objective
 Fix NullReferenceException in GraphFullScan.ZoomXAxis when _requestedRange not initialized.
@@ -31,7 +33,7 @@ Call paths that reach ZoomXAxis before data loads:
 - `pwiz_tools/Skyline/Controls/Graphs/GraphFullScan.cs` - ZoomXAxis() at line 1214
 
 ## Test Plan
-- [ ] TeamCity CI passes
+- [x] TeamCity CI passes
 
 ## Implementation Notes
 - When `_requestedRange` is null, there is no valid range data to display, so skipping the scale-setting is correct
