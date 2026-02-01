@@ -24,6 +24,7 @@
 | failures_by_date | Failures in timestamp window with computer info | failures_by_date.sql | `get_daily_test_summary()`, `save_test_failure_history()` |
 | failures_with_traces_by_date | Failures with stack traces for 8AM window | failures_with_traces_by_date.sql | `save_daily_failures()` |
 | leaks_by_date | Memory/handle leaks in timestamp window | leaks_by_date.sql | `get_daily_test_summary()` |
+| leakcheck_stats | Pass-1 leak detection iteration counts and time per test | leakcheck_stats.sql | `save_leakcheck_stats()` |
 
 ## Proposed Queries (Not Yet Used)
 

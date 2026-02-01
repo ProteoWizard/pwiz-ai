@@ -56,7 +56,9 @@ Create `ai/todos/active/TODO-YYYYMMDD_<issue_title_slug>.md`:
 - **Branch**: `Skyline/work/YYYYMMDD_<description>` | `master` (pwiz-ai)
 - **Base**: `master`
 - **Created**: YYYY-MM-DD
-- **GitHub Issue**: <issue URL>
+- **Status**: In Progress
+- **GitHub Issue**: [#NNNN](https://github.com/ProteoWizard/pwiz/issues/NNNN)
+- **PR**: (pending)
 
 ## Objective
 
@@ -72,6 +74,27 @@ Create `ai/todos/active/TODO-YYYYMMDD_<issue_title_slug>.md`:
 
 Starting work on this issue...
 ```
+
+**For exception/nightly-test issues**: Copy tracking fields from the GitHub issue into the Branch Information section so fixes can be recorded when the PR merges:
+
+```markdown
+## Branch Information
+...
+- **Exception Fingerprint**: `abc123def456...`
+- **Exception ID**: 73754
+```
+
+or for nightly test failures/leaks:
+
+```markdown
+## Branch Information
+...
+- **Test Name**: TestSomething
+- **Fix Type**: failure | leak | hang
+- **Failure Fingerprint**: `abc123def456...`
+```
+
+These fields are used by `record_exception_fix()` and `record_test_fix()` when the PR is merged. Without them, the fix cannot be tracked back to the original report.
 
 ### Step 4: Signal Ownership
 

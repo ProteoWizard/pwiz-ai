@@ -841,6 +841,7 @@ Document findings in `ai/.tmp/suggested-actions-YYYYMMDD.md` under "Infrastructu
 ### 1. PanoramaImportErrorException shows crash dialog instead of friendly error
 
 **Exception ID**: 73737
+**Fingerprint**: `a1b2c3d4e5f67890`
 **Version**: 26.0.9.004
 
 **Root Cause Analysis**:
@@ -883,6 +884,19 @@ PanoramaImportErrorException treated as programming defect instead of showing us
 **Quality bar**: A good suggested-actions entry has root cause analysis that
 explains *why* something failed, not just *what* failed. The goal is GitHub-issue-quality
 analysis that a developer can review and act on.
+
+### CRITICAL: Fingerprints Must Flow Through the Pipeline
+
+Exception and nightly test fingerprints are the keys used to record fixes via
+`record_exception_fix()` and `record_test_fix()`. They must be preserved at every stage:
+
+1. **Suggested-actions report** → Include `**Fingerprint**: \`hash\`` for every exception entry
+2. **GitHub Issue** → Include fingerprint in `## Exception Report` section (see pw-issue.md)
+3. **TODO file** → Copy fingerprint into Branch Information when starting work (see pw-startissue.md)
+4. **Fix recording** → Use fingerprint when PR merges to call `record_exception_fix()` or `record_test_fix()`
+
+Without the fingerprint at step 4, the fix cannot be correlated back to the original exception
+or nightly test report, and regression detection will not work.
 
 ### User Review Workflow
 

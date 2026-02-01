@@ -158,6 +158,13 @@ When no file/issue is specified, or a descriptive phrase is given:
 
    <description of the bug/exception>
 
+   ## Exception Report
+
+   **Fingerprint**: \`<fingerprint hash>\`
+   **Exception ID**: <skyline.ms exception ID>
+   **Reports**: <N> from <M> users
+   **Version**: <version string>
+
    ## Stack Trace
 
    \`\`\`
@@ -188,10 +195,11 @@ When no file/issue is specified, or a descriptive phrase is given:
 ### Exception-Specific Guidance
 
 When creating issues for unhandled exceptions:
-- Include the **fingerprint** (if known) in the issue body
-- Link to exception report if one was generated
-- Note the **user impact** (how many users affected, frequency)
-- Include version information if available
+- **REQUIRED**: Include the **fingerprint** hash in the issue body under `## Exception Report`. This is critical for tracking fixes back to exception reports. Without the fingerprint, `record_exception_fix()` cannot be called later when the fix is merged.
+- Include the **exception ID** (skyline.ms row ID) for linking to the original report
+- Note the **user impact** (how many users affected, frequency of reports)
+- Include version information
+- Link to exception report thread if one exists
 
 ## Rules
 
