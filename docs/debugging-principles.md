@@ -97,6 +97,9 @@ Common C# patterns for printf debugging:
 | Timestamps | `DateTime.Now.ToString("HH:mm:ss.fff")` |
 | Method entry/exit | `Console.WriteLine($"[DEBUG] Entering {nameof(MethodName)}")` |
 | Value inspection | `Console.WriteLine($"[DEBUG] {nameof(variable)} = {variable}")` |
+| Accurate line numbers | `[MethodImpl(MethodImplOptions.NoOptimization)]` on method |
+
+**NoOptimization for exception diagnostics:** JIT optimization can inline methods and reorder code, causing exception stack traces to report inaccurate line numbers. When an exception report points to a line that doesn't make sense (e.g., a null dereference where no null is possible), adding `[MethodImpl(MethodImplOptions.NoOptimization)]` to the method ensures the next occurrence reports the true source line. This is a low-cost, permanent instrumentation — it disables optimization for a single method while preserving it everywhere else. Requires `using System.Runtime.CompilerServices`.
 
 ### Bisection
 
