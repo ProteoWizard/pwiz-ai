@@ -19,14 +19,15 @@ Fix NullReferenceException in AreaReplicateGraphPane.GetDotProductResults when _
 - **Version**: 25.1.1.271
 
 ## Changes Made
-- [x] Changed `_normalizeOption.NormalizationMethod` to `_normalizeOption?.NormalizationMethod` in both occurrences in GetDotProductResults and the InitData caller
+- [x] Coalesced null `normalizeOption` to `NormalizeOption.DEFAULT` at AreaGraphData constructor (per Copilot review)
+- [x] Guards all downstream accesses, not just GetDotProductResults
 
 ## Files Modified
-- `pwiz_tools/Skyline/Controls/Graphs/AreaReplicateGraphPane.cs` - GetDotProductResults() at lines 1288 and 1318
+- `pwiz_tools/Skyline/Controls/Graphs/AreaReplicateGraphPane.cs` - AreaGraphData constructor at line 1195
 
 ## Test Plan
 - [ ] TeamCity CI passes
 
 ## Implementation Notes
-- The null-conditional causes `is NormalizationMethod.RatioToLabel` to fail the match when `_normalizeOption` is null, which correctly skips the ratio calculation — same behavior as `_expectedVisible == AreaExpectedValue.none` returning NaN
-- Both occurrences guarded: line 1288 (InitData path) and line 1318 (GetDotProductResults path)
+- Initial fix used null-conditional at call sites; Copilot correctly identified that `_normalizeOption` is also dereferenced in `NormalizedValueCalculator.NormalizationMethodForMolecule` and other paths
+- Coalescing to `NormalizeOption.DEFAULT` at the constructor is a single-point fix that protects all downstream code
