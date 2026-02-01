@@ -6,6 +6,7 @@
 - **Created**: 2026-01-31
 - **Status**: In Progress
 - **GitHub Issue**: [#3827](https://github.com/ProteoWizard/pwiz/issues/3827)
+- **PR**: [#3923](https://github.com/ProteoWizard/pwiz/pull/3923)
 
 ## Objective
 Fix NullReferenceException in AlignmentForm when RetentionTimeSource is null.

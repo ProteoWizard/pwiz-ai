@@ -6,6 +6,7 @@
 - **Created**: 2026-01-31
 - **Status**: In Progress
 - **GitHub Issue**: [#3887](https://github.com/ProteoWizard/pwiz/issues/3887)
+- **PR**: [#3922](https://github.com/ProteoWizard/pwiz/pull/3922)
 
 ## Objective
 Fix ArgumentNullException in SkylineViewContext.GetImageIndex when ViewSpec.RowSource is null.

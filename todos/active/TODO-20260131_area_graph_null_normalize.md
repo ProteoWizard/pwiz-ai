@@ -6,6 +6,7 @@
 - **Created**: 2026-01-31
 - **Status**: In Progress
 - **GitHub Issue**: [#3828](https://github.com/ProteoWizard/pwiz/issues/3828)
+- **PR**: [#3924](https://github.com/ProteoWizard/pwiz/pull/3924)
 
 ## Objective
 Fix NullReferenceException in AreaReplicateGraphPane.GetDotProductResults when _normalizeOption is null during import.
