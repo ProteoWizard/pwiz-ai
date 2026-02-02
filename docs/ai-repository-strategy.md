@@ -24,7 +24,7 @@ All AI tooling lives in a separate repository (`ProteoWizard/pwiz-ai`) that can 
 In sibling mode, `pwiz-ai` is cloned as a standalone repository alongside your pwiz checkouts:
 
 ```
-C:\proj\                    <- Claude Code runs from here
+<your project root>\        <- Claude Code runs from here (e.g., C:\Dev, D:\proj)
 ├── .claude/                <- Junction to ai/claude/
 ├── ai/                     <- pwiz-ai repo (standalone clone)
 ├── pwiz/                   <- Main development checkout
@@ -35,16 +35,16 @@ C:\proj\                    <- Claude Code runs from here
 ### Benefits
 
 - **Cross-project assistance** - Claude Code sees all checkouts, can help across branches
-- **No context loss** - Stay in `C:\proj` throughout your session
+- **No context loss** - Stay in your project root throughout your session
 - **Simpler setup** - Just `git clone`, no nested repos
 - **Natural workflow** - "Work from context-rich parent, modify anywhere"
 
 ### Setup
 
 ```bash
-# Create project directory
-mkdir C:\proj
-cd C:\proj
+# Create project directory (use your preferred location)
+mkdir C:\Dev
+cd C:\Dev
 
 # Clone the AI repository
 git clone https://github.com/ProteoWizard/pwiz-ai.git ai
@@ -55,20 +55,20 @@ mklink /J .claude ai\claude
 # Clone pwiz
 git clone git@github.com:ProteoWizard/pwiz.git
 
-# Start Claude Code from the parent directory
+# Start Claude Code from the project root
 claude
 ```
 
 ### Daily Workflow
 
 ```bash
-# From C:\proj - update AI content
+# From your project root - update AI content
 cd ai
 git pull origin main
 cd ..
 
 # Work on any project - Claude Code sees everything
-# Edit C:\proj\pwiz\..., C:\proj\skyline_26_1\..., etc.
+# Edit pwiz\..., skyline_26_1\..., etc.
 ```
 
 ### Working with Multiple Checkouts
@@ -76,14 +76,14 @@ cd ..
 All checkouts share the same `ai/` context:
 
 ```
-C:\proj\
+<your project root>\
 ├── ai/              <- Single source of AI tooling
 ├── pwiz/            <- Main work
 ├── skyline_26_1/    <- Release branch
 └── scratch/         <- Experiments
 ```
 
-Claude Code running from `C:\proj` can read/write files in any checkout. This enables:
+Claude Code running from your project root can read/write files in any checkout. This enables:
 - Comparing implementations across branches
 - Applying fixes to multiple checkouts
 - Understanding how code evolved between releases
@@ -95,7 +95,7 @@ Claude Code running from `C:\proj` can read/write files in any checkout. This en
 In child mode, `pwiz-ai` is cloned inside a pwiz checkout:
 
 ```
-C:\proj\pwiz\               <- Claude Code runs from here
+<your pwiz checkout>\       <- Claude Code runs from here
 ├── .claude/                <- Junction to ai/claude/
 ├── ai/                     <- pwiz-ai repo (nested clone)
 └── pwiz_tools/...
@@ -110,7 +110,7 @@ C:\proj\pwiz\               <- Claude Code runs from here
 ### Setup
 
 ```bash
-cd C:\proj\pwiz
+cd <your pwiz checkout>
 
 # Clone AI repo inside pwiz
 git clone https://github.com/ProteoWizard/pwiz-ai.git ai
@@ -153,8 +153,8 @@ Both modes use a Windows junction to expose `ai/claude/` as `.claude/` at the ap
 
 | Mode | Junction Location | Points To |
 |------|------------------|-----------|
-| Sibling | `C:\proj\.claude` | `C:\proj\ai\claude` |
-| Child | `C:\proj\pwiz\.claude` | `C:\proj\pwiz\ai\claude` |
+| Sibling | `<project root>\.claude` | `<project root>\ai\claude` |
+| Child | `<pwiz checkout>\.claude` | `<pwiz checkout>\ai\claude` |
 
 Claude Code requires `.claude/` at the working directory root. The junction:
 - Works without admin rights
@@ -211,7 +211,7 @@ ai/
 If you later want child mode for a specific checkout:
 
 ```bash
-cd C:\proj\pwiz
+cd <your pwiz checkout>
 
 # Clone AI repo inside pwiz
 git clone https://github.com/ProteoWizard/pwiz-ai.git ai
@@ -225,13 +225,13 @@ mklink /J .claude ai\claude
 To convert a child-mode checkout to use sibling mode:
 
 ```bash
-cd C:\proj\pwiz
+cd <your pwiz checkout>
 
 # Remove the nested ai/ clone and junction
 rmdir /s ai
 rmdir .claude
 
-# Now use the parent's ai/ via sibling mode from C:\proj
+# Now use the parent's ai/ via sibling mode from your project root
 ```
 
 ---

@@ -48,7 +48,7 @@ SQLite database containing resources from the last major release. Used to:
 
 **How to run**:
 ```cmd
-cd C:\proj\pwiz
+cd <your pwiz checkout>
 quickbuild.bat address-model=64 pwiz_tools/Skyline/Executables/DevTools/ResourcesOrganizer//IncrementalUpdateResxFiles
 ```
 
@@ -63,7 +63,7 @@ quickbuild.bat address-model=64 pwiz_tools/Skyline/Executables/DevTools/Resource
 
 **How to run**:
 ```cmd
-cd C:\proj\pwiz
+cd <your pwiz checkout>
 quickbuild.bat address-model=64 pwiz_tools/Skyline/Executables/DevTools/ResourcesOrganizer//FinalizeResxFiles
 ```
 
@@ -86,7 +86,7 @@ pwsh -Command "& './ai/scripts/revert-whitespace-only-files.ps1'"
 After running `FinalizeResxFiles`, generate CSV files for translators:
 
 ```cmd
-cd C:\proj\pwiz
+cd <your pwiz checkout>
 pwiz_tools\Skyline\Executables\DevTools\ResourcesOrganizer\scripts\GenerateLocalizationCsvFiles.bat
 ```
 
@@ -130,7 +130,7 @@ The generated CSVs contain an `Issue` column indicating why each string needs re
 After receiving translated CSVs back from translators:
 
 ```cmd
-cd C:\proj\pwiz\pwiz_tools\Skyline\Translation\Scratch
+cd <your pwiz checkout>\pwiz_tools\Skyline\Translation\Scratch
 
 # Import the CSV files into the database
 ..\Executables\DevTools\ResourcesOrganizer\scripts\exe\ResourcesOrganizer.exe importLocalizationCsv
@@ -138,8 +138,8 @@ cd C:\proj\pwiz\pwiz_tools\Skyline\Translation\Scratch
 # Export updated RESX files
 ..\Executables\DevTools\ResourcesOrganizer\scripts\exe\ResourcesOrganizer.exe exportResx resxFiles.zip
 
-# Extract to project root
-cd C:\proj\pwiz
+# Extract to pwiz checkout root
+cd <your pwiz checkout>
 libraries\7za.exe x -y pwiz_tools\Skyline\Translation\Scratch\resxFiles.zip
 ```
 

@@ -219,11 +219,11 @@ When an exception report or test failure occurs on a specific version:
 
 ### Release Folder Locations
 
-| Branch | Local Folder | Purpose |
+| Branch | Local Folder (relative to project root) | Purpose |
 |--------|-------------|---------|
-| `master` | `C:\proj\pwiz` | Ongoing development |
-| `Skyline/skyline_26_1` | `C:\proj\skyline_26_1` | Current release branch |
-| `Skyline/skyline_25_1` | `C:\proj\skyline_25_1` | Previous release (reference) |
+| `master` | `pwiz` | Ongoing development |
+| `Skyline/skyline_26_1` | `skyline_26_1` | Current release branch |
+| `Skyline/skyline_25_1` | `skyline_25_1` | Previous release (reference) |
 
 ## Updating This Document
 

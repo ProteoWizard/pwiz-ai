@@ -146,7 +146,7 @@ For each exception in today's report:
 ### Exception: [fingerprint] - [signature]
 - Exception ID: [id]
 - Report: exceptions-report-YYYYMMDD.md
-- Version: [version] — check code in C:\proj\skyline_25_1 or C:\proj\pwiz
+- Version: [version] — check code in the relevant pwiz checkout (release branch or master)
 - Steps:
   1. get_exception_details(exception_id=XXXXX)
   2. Read code at stack trace location

@@ -93,8 +93,9 @@ $ErrorActionPreference = "Stop"
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Configuration
-# Sibling mode: C:\proj contains both ai/ (pwiz-ai) and pwiz/ subdirectories
-$WorkDir = "C:\proj"
+# Derive project root from script location: ai/scripts/Invoke-DailyReport.ps1 -> ai/ -> root
+$aiRoot = Split-Path -Parent $PSScriptRoot
+$WorkDir = Split-Path -Parent $aiRoot
 
 # ─────────────────────────────────────────────────────────────
 # Task Scheduler registration

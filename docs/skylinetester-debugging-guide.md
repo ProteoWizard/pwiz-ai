@@ -28,7 +28,7 @@ pwsh -Command "Get-Process -Name '*TestRunner*','*Skyline*' -ErrorAction Silentl
 ./pwiz_tools/Skyline/ai/Build-Skyline.ps1
 
 # 3. Launch SkylineTester with auto-run
-pwsh -Command "Start-Process 'C:\proj\scratch\pwiz_tools\Skyline\bin\x64\Debug\SkylineTester.exe' -ArgumentList '--autorun'"
+pwsh -Command "Start-Process '<your pwiz checkout>\pwiz_tools\Skyline\bin\x64\Debug\SkylineTester.exe' -ArgumentList '--autorun'"
 ```
 
 ### Critical: Always Use Build-Skyline.ps1

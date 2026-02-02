@@ -217,14 +217,14 @@ Create one task:
 1. Trigger: Daily at 8:05 AM
 2. Action: Start a program
    - Program: `pwsh`
-   - Arguments: `-NoProfile -File C:\proj\ai\scripts\Invoke-DailyReport.ps1`
-   - Start in: `C:\proj`
+   - Arguments: `-NoProfile -File <project root>\ai\scripts\Invoke-DailyReport.ps1`
+   - Start in: `<your project root>`
 3. Settings: Allow start if on batteries, start when available
 
 ### Step 1: Test First
 
 ```powershell
-cd C:\proj
+cd <your project root>
 # Preview what will run
 pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -DryRun"
 

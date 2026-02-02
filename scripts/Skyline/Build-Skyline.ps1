@@ -118,7 +118,7 @@ try {
     $syncScript = Join-Path $scriptRoot 'scripts/Sync-DotSettings.ps1'
     if (Test-Path $syncScript) {
         Write-Host 'Synchronizing DotSettings...' -ForegroundColor Cyan
-        & $syncScript
+        & $syncScript -SourceRoot $pwizRoot
     } else {
         Write-Host 'Sync-DotSettings.ps1 not found; skipping settings sync.' -ForegroundColor Yellow
     }
