@@ -377,10 +377,16 @@ try {
             "--model", $Model
         )
 
+        # Use "Continue" for native command pipeline: claude writes status
+        # messages to stderr, and 2>&1 converts them to ErrorRecord objects.
+        # With "Stop", the first ErrorRecord terminates the entire script.
+        $SavedEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
         & claude @ClaudeArgs 2>&1 | ForEach-Object {
-            $_ | Out-File -FilePath $LogFile -Append -Encoding UTF8
+            "$_" | Out-File -FilePath $LogFile -Append -Encoding UTF8
         }
         $PhaseExitCode = $LASTEXITCODE
+        $ErrorActionPreference = $SavedEAP
 
         "[$(Get-Date)] Phase '$CurrentPhase' completed with exit code $PhaseExitCode" | Out-File -FilePath $LogFile -Append -Encoding UTF8
 
