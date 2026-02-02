@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "created": "2026-02-02T17:30:00Z",
+  "labkey_version": null,
+  "java_version": null,
+  "postgres_version": null,
+  "labkey_root": null,
+  "current_phase": 0,
+  "current_step": "0.1",
+  "completed": [],
+  "deferred": [],
+  "environment_check": {
+    "completed": false,
+    "missing_required": [],
+    "missing_optional": [],
+    "needs_update": []
+  },
+  "optional_tools": {
+    "notepad++": false,
+    "winmerge": false,
+    "tortoisegit": false,
+    "github_cli": false,
+    "claude_code": false
+  },
+  "notes": []
+}
