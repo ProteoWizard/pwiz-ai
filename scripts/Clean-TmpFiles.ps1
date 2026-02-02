@@ -39,7 +39,9 @@ param(
     [switch]$WhatIf
 )
 
-$TmpDir = "C:\proj\ai\.tmp"
+# Derive ai/ root from script location: ai/scripts/Clean-TmpFiles.ps1 -> ai/
+$aiRoot = Split-Path -Parent $PSScriptRoot
+$TmpDir = Join-Path $aiRoot '.tmp'
 
 # Files that must never be deleted
 $ProtectedFiles = @(

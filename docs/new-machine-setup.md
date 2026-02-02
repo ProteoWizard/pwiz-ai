@@ -224,13 +224,13 @@ git config --global user.email "their-email@example.com"
 
 **Ask the developer where they want to put their development folder.**
 
-This guide uses `C:\proj` as the project root. This is a recommendation, not a requirement. If the developer prefers a different location, substitute it throughout. Record their choice and use it consistently.
+Examples below use `C:\Dev` as the project root. This is just an example -- any short path works. If the developer prefers a different location (e.g., `D:\proj`, `E:\repos`), substitute it throughout. Record their choice and use it consistently.
 
 **Why short paths are recommended:**
 
-| Factor | `C:\proj` | `C:\Users\brendanx\Documents\projects` |
+| Factor | `C:\Dev` | `C:\Users\brendanx\Documents\projects` |
 |--------|-----------|----------------------------------------|
-| Path length | 7 chars | 40 chars |
+| Path length | 5 chars | 40 chars |
 | Windows indexing | Not indexed | Indexed by default |
 | OneDrive sync | Not synced | May be synced |
 
@@ -238,7 +238,7 @@ This guide uses `C:\proj` as the project root. This is a recommendation, not a r
 
 **Path length matters** because some build tools and tests create deeply nested temporary paths. Windows has a 260-character path limit that can be exceeded with long root paths.
 
-**Spaces in usernames** (e.g., `C:\Users\Kaipo Tamura\...`) can break scripts that don't properly quote arguments. If the username contains spaces, a short root path like `C:\proj` or `D:\proj` avoids this entirely.
+**Spaces in usernames** (e.g., `C:\Users\Kaipo Tamura\...`) can break scripts that don't properly quote arguments. If the username contains spaces, a short root path like `C:\Dev` or `D:\proj` avoids this entirely.
 
 **Windows indexing** is important for nightly testing. Windows Search indexes `Documents` by default, and this indexing competes with nightly tests for disk I/O. If the developer chooses a location under `Documents`, they must add an exclusion:
 1. Open **Indexing Options** (search for it in Start menu)
@@ -247,22 +247,22 @@ This guide uses `C:\proj` as the project root. This is a recommendation, not a r
 
 **OneDrive sync** can cause issues with large repositories and build artifacts. Ensure the project folder is not in a OneDrive-synced location.
 
-> **For LLM assistants:** If the developer chooses a non-standard location, note this in the final report. The examples in this guide use `C:\proj` - remind them to mentally substitute their chosen path.
+> **For LLM assistants:** If the developer chooses a different project root, note this in the final report. Remind them to substitute their chosen path wherever the guide shows example paths.
 
 ### 1.10 Clone the Repositories
 
-> **Existing mode**: Check what's already present before cloning:
+> **Existing mode**: Check what's already present before cloning (substitute your project root):
 > ```powershell
-> Test-Path C:\proj\ai\.git           # pwiz-ai already cloned?
-> Test-Path C:\proj\pwiz\.git         # pwiz already cloned?
-> Test-Path C:\proj\.claude           # .claude junction exists?
+> Test-Path ai\.git           # pwiz-ai already cloned?
+> Test-Path pwiz\.git         # pwiz already cloned?
+> Test-Path .claude           # .claude junction exists?
 > ```
 > Skip any steps for components that already exist.
 
 ```powershell
-# Create project directory (if needed)
-New-Item -ItemType Directory -Path C:\proj -Force
-cd C:\proj
+# Create project directory (if needed) - substitute your preferred location
+New-Item -ItemType Directory -Path C:\Dev -Force
+cd C:\Dev
 
 # Clone the AI tooling repository
 git clone git@github.com:ProteoWizard/pwiz-ai.git ai
@@ -274,7 +274,7 @@ cmd /c mklink /J .claude ai\claude
 @"
 # Claude Code Configuration
 
-**Run Claude Code from this directory** (the project root, e.g., ``C:\proj``).
+**Run Claude Code from this directory** (your project root).
 
 All Claude Code documentation lives in the **ai/** folder. See:
 - **ai/CLAUDE.md** - Critical configuration (PowerShell, paths, commands)
@@ -297,10 +297,10 @@ git clone git@github.com:ProteoWizard/pwiz.git
 
 The pwiz clone takes several minutes (large repository). Verify:
 ```powershell
-Test-Path C:\proj\CLAUDE.md                              # Should be True (stub)
-Test-Path C:\proj\ai\CLAUDE.md                           # Should be True (full docs)
-Test-Path C:\proj\.claude\commands                       # Should be True
-Test-Path C:\proj\pwiz\pwiz_tools\Skyline\Skyline.sln   # Should be True
+Test-Path CLAUDE.md                              # Should be True (stub)
+Test-Path ai\CLAUDE.md                           # Should be True (full docs)
+Test-Path .claude\commands                       # Should be True
+Test-Path pwiz\pwiz_tools\Skyline\Skyline.sln   # Should be True
 ```
 
 > **For LLM assistants:** Now that the repositories are cloned, the master copy of this setup guide is available locally at `ai\docs\new-machine-setup.md`. If you fetched this document from the web, you can now reference and even edit the local copy for improvements.
@@ -336,12 +336,12 @@ Read `~/.claude/settings.json` and add the statusLine configuration, preserving 
 {
   "statusLine": {
     "type": "command",
-    "command": "pwsh -NoProfile -File C:\\proj\\ai\\scripts\\statusline.ps1"
+    "command": "pwsh -NoProfile -File <project root>\\ai\\scripts\\statusline.ps1"
   }
 }
 ```
 
-> **Note:** Reference the script directly from the pwiz-ai checkout (`C:\proj\ai\scripts\`) rather than copying it. This ensures you always have the latest version.
+> **Note:** Replace `<project root>` with the actual path (e.g., `C:\\Dev`). Reference the script directly from the pwiz-ai checkout rather than copying it. This ensures you always have the latest version.
 
 The statusline takes effect on the next Claude Code restart. Since the user just restarted in 1.11, no immediate restart is needed—the statusline will activate at the next natural restart point (e.g., after MCP server configuration in Phase 7).
 
@@ -354,14 +354,14 @@ The user can decline if they prefer the default Claude Code display.
 This setup uses **sibling mode** - the AI tooling (`ai/`) is a sibling to project checkouts (`pwiz/`):
 
 ```
-C:\proj\                    <- Claude Code runs from here (and stays here)
+<your project root>\        <- Claude Code runs from here (and stays here)
 ├── .claude/                <- Junction to ai/claude/
 ├── ai/                     <- AI tooling repository (pwiz-ai)
 └── pwiz/                   <- Skyline source code
 ```
 
 **Benefits of sibling mode:**
-- Claude Code stays in `C:\proj` throughout - no context loss from directory changes
+- Claude Code stays in your project root throughout - no context loss from directory changes
 - Can assist across multiple project checkouts (e.g., `pwiz/`, `skyline_26_1/`, `scratch/`)
 - Simple setup - just clone, no nested repos
 
@@ -460,13 +460,13 @@ After installation, restart Windows Explorer to enable TortoiseGit status icons:
 1. Open **Task Manager** (Ctrl+Shift+Esc)
 2. Find **Windows Explorer** in the list
 3. Right-click it → **Restart**
-4. Open File Explorer and navigate to `C:\proj\pwiz` - you should see green checkmarks on files indicating Git status
+4. Open File Explorer and navigate to your pwiz checkout - you should see green checkmarks on files indicating Git status
 
 **IMPORTANT - Configure TortoiseGit SSH client:**
 
 This step is critical. Without it, TortoiseGit will fail to authenticate with GitHub when pushing or pulling.
 
-1. Right-click on `C:\proj\pwiz` → **Show more options** → **TortoiseGit** → **Settings**
+1. Right-click on your pwiz checkout folder → **Show more options** → **TortoiseGit** → **Settings**
 2. Select **Network** in the left panel
 3. Set **SSH client** to: `C:\Program Files\Git\usr\bin\ssh.exe`
 4. Click **OK**
@@ -561,7 +561,7 @@ dotnet tool install --global JetBrains.dotCover.CommandLineTools
 Test-Path "$env:USERPROFILE\.claude-tools\dotMemory"
 
 # Install if missing:
-pwsh -File C:\proj\ai\scripts\Install-DotMemory.ps1
+pwsh -File ai\scripts\Install-DotMemory.ps1
 ```
 
 > **Note:** Unlike dotCover, dotMemory is NOT a .NET global tool. The install script downloads and extracts the NuGet package to `~/.claude-tools/dotMemory/`. Use with `Run-Tests.ps1 -MemoryProfile`.
@@ -590,10 +590,10 @@ pip install mcp labkey
 
 ## Phase 4: Initial Build
 
-> **Existing mode**: Check if build artifacts already exist:
+> **Existing mode**: Check if build artifacts already exist (from your pwiz checkout):
 > ```powershell
-> Test-Path "C:\proj\pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline.exe"
-> Test-Path "C:\proj\pwiz\pwiz_tools\Skyline\bin\x64\Release\TestRunner.exe"
+> Test-Path "pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline.exe"
+> Test-Path "pwiz\pwiz_tools\Skyline\bin\x64\Release\TestRunner.exe"
 > ```
 > If both exist and the user confirms the build is recent, skip to Phase 5.
 
@@ -610,7 +610,7 @@ Before creating the build scripts, **ask the user to review the vendor licenses*
 
 ### 4.2 Create Build Scripts
 
-Once the user agrees to the licenses, create two batch files at `C:\proj\pwiz`:
+Once the user agrees to the licenses, create two batch files in the pwiz checkout root:
 
 **b.bat** - General build script (single line):
 ```batch
@@ -630,9 +630,9 @@ call "%~dp0b.bat" pwiz_tools\Skyline//Skyline.exe
 
 Tell the user:
 1. Open a **new Command Prompt or PowerShell window**
-2. Run:
+2. Run (from the pwiz checkout):
    ```cmd
-   cd C:\proj\pwiz
+   cd <your pwiz checkout>
    bs.bat
    ```
 3. Wait for the build to complete (10-20 minutes on first run)
@@ -642,10 +642,10 @@ Tell the user:
 
 After the user reports the build completed, verify:
 ```powershell
-Test-Path "C:\proj\pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline.exe"
+Test-Path "pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline.exe"
 ```
 
-If the build failed, check `C:\proj\pwiz\build64.log` for errors. Common issues:
+If the build failed, check `pwiz\build64.log` for errors. Common issues:
 - Missing C++ tools: See Phase 2.3
 - NuGet errors: See Troubleshooting section
 
@@ -659,7 +659,7 @@ Tell the user:
 1. Open Visual Studio
 2. On first launch, Visual Studio asks about keyboard shortcuts - recommend **IntelliJ** keybindings (the existing team preference)
 3. File > Open > Project/Solution
-4. Navigate to: `C:\proj\pwiz\pwiz_tools\Skyline\Skyline.sln`
+4. Navigate to: `<your pwiz checkout>\pwiz_tools\Skyline\Skyline.sln`
 
 ### 5.2 Configure ReSharper Menu
 
@@ -678,7 +678,7 @@ ReSharper should now appear as a top-level menu item.
 
 Tell the user:
 1. Test menu > Configure Run Settings > Select Solution Wide runsettings File
-2. Navigate to: `C:\proj\pwiz\pwiz_tools\Skyline\TestSettings_x64.runsettings`
+2. Navigate to: `<your pwiz checkout>\pwiz_tools\Skyline\TestSettings_x64.runsettings`
 
 ### 5.4 Disable "Just My Code"
 
@@ -702,7 +702,7 @@ Tell the user:
 
 ### 6.1 Build with AI Scripts
 
-Verify the AI build scripts work correctly (from `C:\proj`):
+Verify the AI build scripts work correctly (from your project root):
 ```powershell
 pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
 ```
@@ -725,12 +725,12 @@ Run these verification commands:
 # Git configured
 git config --global core.autocrlf  # Should be: true
 
-# Repository cloned
-Test-Path C:\proj\pwiz\pwiz_tools\Skyline\Skyline.sln  # Should be: True
+# Repository cloned (run from your project root)
+Test-Path pwiz\pwiz_tools\Skyline\Skyline.sln  # Should be: True
 
 # Build artifacts exist (from bs.bat in Phase 4)
-Test-Path C:\proj\pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline-daily.exe  # Should be: True
-Test-Path C:\proj\pwiz\pwiz_tools\Skyline\bin\x64\Release\TestRunner.exe  # Should be: True
+Test-Path pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline-daily.exe  # Should be: True
+Test-Path pwiz\pwiz_tools\Skyline\bin\x64\Release\TestRunner.exe  # Should be: True
 ```
 
 ---
@@ -741,7 +741,7 @@ The AI tooling is already set up from Phase 1.9 (sibling mode). This phase confi
 
 ### 7.1 Verify Environment
 
-Run the verification script to check all AI tooling components (from `C:\proj`):
+Run the verification script to check all AI tooling components (from your project root):
 ```powershell
 pwsh -Command "& './ai/scripts/Verify-Environment.ps1'"
 ```
@@ -771,15 +771,17 @@ The LabKey MCP server needs credentials for skyline.ms access.
 > ```
 > If properly configured, skip to 7.3.
 
-> **IMPORTANT - Use a dedicated +claude account, not your personal account:**
+> There needs to be a separate skyline.ms user account using a special "+claude" version of your current email address as the user name. An admin can help you with this.
+> **IMPORTANT - This uses a dedicated +claude skyline.ms account, not your personal account:**
 > - Team members: `yourname+claude@proteinms.net`
 > - Interns/others: `yourname+claude@gmail.com`
 > - The `+claude` suffix only works with Gmail-backed providers (not @uw.edu)
-> - **Ask an administrator** to create an account on skyline.ms for this email and add it to the **Site:Agents** group
+> - **Ask an administrator** to create an account on skyline.ms for this "+claude" email and have them add it to the **Site:Agents** group. You will then receive an email at your normal address asking you to set a password for the new account.
 >
-> **Why?** Individual +claude accounts provide attribution for any edits made via Claude, while the Site:Agents group has appropriate permissions for LLM agents.
+> **Why?** Individual +claude skyline.ms accounts provide attribution for any edits made via Claude, while the Site:Agents group has appropriate permissions for LLM agents.
+> To be clear, you aren't creating a new email address - Google ignores the +claude part for routing purposes. This is just a new user id for a new skyline.ms account. Any email it generates will go to your normal email address.
 
-Once an administrator has created your +claude account, create a `.netrc` file:
+Once an administrator has created your +claude account on skyline.ms, create a `.netrc` file:
 
 ```powershell
 # Template - fill in your +claude credentials
@@ -817,7 +819,7 @@ claude mcp add status -- python ./ai/mcp/StatusMcp/server.py
 claude mcp add labkey -- python ./ai/mcp/LabKeyMcp/server.py
 ```
 
-> **Note:** Use relative paths with forward slashes (`./ai/mcp/...`), not absolute Windows paths. The `claude mcp add` command strips backslashes, turning `C:\proj\ai\...` into `C:projai...` which fails to connect.
+> **Note:** Use relative paths with forward slashes (`./ai/mcp/...`), not absolute Windows paths. The `claude mcp add` command strips backslashes, turning absolute paths like `C:\Dev\ai\...` into `C:Devai...` which fails to connect.
 
 **After registering new servers, restart Claude Code** to activate them:
 1. Exit Claude Code (`/exit`)
@@ -841,8 +843,8 @@ claude mcp list
 
 Expected output shows servers connected:
 ```
-status: python C:/proj/ai/mcp/StatusMcp/server.py - ✓ Connected
-labkey: python C:/proj/ai/mcp/LabKeyMcp/server.py - ✓ Connected
+status: python ./ai/mcp/StatusMcp/server.py - ✓ Connected
+labkey: python ./ai/mcp/LabKeyMcp/server.py - ✓ Connected
 gmail: npx @gongrzhe/server-gmail-autoauth-mcp - ✓ Connected (if configured)
 ```
 
@@ -855,11 +857,11 @@ The `ai/` folder contains extensive documentation in Markdown format. Install a 
 2. Click the Extensions icon (puzzle piece) → find Markdown Reader → click "⋮" → "Manage Extension"
 3. **Enable "Allow access to file URLs"** (critical - won't render local files without this)
 
-**Verify:** Open `C:\proj\ai\README.md` in Chrome/Edge - it should render with formatted headings, links, and code blocks.
+**Verify:** Open `ai\README.md` (in your project root) in Chrome/Edge - it should render with formatted headings, links, and code blocks.
 
 > **Tip:** On Windows 11, you can associate `.md` files with Chrome for one-click viewing. On Windows 10, drag-and-drop `.md` files from File Explorer into Chrome.
 
-For full AI tooling documentation, see: `C:\proj\ai\docs\developer-setup-guide.md`
+For full AI tooling documentation, see: `ai/docs/developer-setup-guide.md`
 
 ---
 
@@ -926,7 +928,7 @@ Nightly tests create and delete thousands of files. Real-time antivirus scanning
 3. Scroll to **Exclusions** → **Add or remove exclusions**
 4. Click **Add an exclusion** → **Folder**
 5. Add these folders:
-   - `C:\proj` (source code and AI tooling)
+   - Your project root folder (source code and AI tooling)
    - `<NightlyFolder>` (nightly tests)
 
 > **Security note:** These exclusions reduce protection for these folders. Only add them on development machines where you understand the trade-offs.
@@ -1001,7 +1003,7 @@ If tests fail randomly or builds are slow:
 1. Open Windows Security
 2. Virus & threat protection > Manage settings
 3. Scroll to Exclusions > Add or remove exclusions
-4. Add folder exclusion: `C:\proj`
+4. Add folder exclusion for your project root
 
 **Note**: This requires admin privileges and the user should understand the security implications.
 
@@ -1066,8 +1068,8 @@ If the setup was interrupted before `ai/` was cloned, note the improvements need
 
 The setup is complete when:
 1. `git config --global core.autocrlf` returns `true`
-2. `C:\proj\pwiz\pwiz_tools\Skyline\Skyline.sln` exists
-3. `C:\proj\pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline.exe` exists
+2. `pwiz\pwiz_tools\Skyline\Skyline.sln` exists (relative to your project root)
+3. `pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline.exe` exists
 4. Visual Studio can build the solution without errors
 5. `TestRunner.exe test=TestA` passes
 

@@ -13,7 +13,7 @@ SkylineTester (`pwiz_tools/Skyline/SkylineTester/`) provides a graphical interfa
 
 ## Key File Paths
 
-All paths relative to project root (e.g., `C:\proj\pwiz` or wherever you cloned the repo).
+All paths relative to your pwiz checkout root (wherever you cloned the repo).
 
 | File | Relative Path |
 |------|---------------|

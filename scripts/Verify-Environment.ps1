@@ -530,6 +530,33 @@ try {
     if ($pipShow -match 'Name: mcp') { $mcpInstalled = $true }
     if ($pipShow -match 'Name: Pillow') { $pillowInstalled = $true }
 } catch {}
+# Fallback: try python -m pip, then search common Python locations
+# (handles cases where pip isn't in PATH, or python is the Microsoft Store stub)
+if (-not ($labkeyInstalled -and $mcpInstalled -and $pillowInstalled)) {
+    $pythonCandidates = @('python')
+    # Search common Windows Python installation paths
+    $pythonDirs = @(
+        "$env:LOCALAPPDATA\Programs\Python\Python3*",
+        "C:\Python3*",
+        "$env:ProgramFiles\Python3*"
+    )
+    foreach ($pattern in $pythonDirs) {
+        $found = Get-ChildItem $pattern -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending
+        foreach ($dir in $found) {
+            $candidate = Join-Path $dir.FullName "python.exe"
+            if (Test-Path $candidate) { $pythonCandidates += $candidate }
+        }
+    }
+    foreach ($py in $pythonCandidates) {
+        if ($labkeyInstalled -and $mcpInstalled -and $pillowInstalled) { break }
+        try {
+            $pipShow = & $py -m pip show labkey mcp Pillow 2>&1
+            if ($pipShow -match 'Name: labkey') { $labkeyInstalled = $true }
+            if ($pipShow -match 'Name: mcp') { $mcpInstalled = $true }
+            if ($pipShow -match 'Name: Pillow') { $pillowInstalled = $true }
+        } catch {}
+    }
+}
 
 if ($labkeyInstalled -and $mcpInstalled -and $pillowInstalled) {
     Add-Result "Python packages (labkey, mcp, Pillow)" "OK" "installed" $true
@@ -547,13 +574,14 @@ if ($labkeyInstalled -and $mcpInstalled -and $pillowInstalled) {
 Write-Host "Checking netrc credentials..." -ForegroundColor Gray
 $netrcPath = Join-Path $env:USERPROFILE ".netrc"
 $netrcAltPath = Join-Path $env:USERPROFILE "_netrc"
-if ((Test-Path $netrcPath) -or (Test-Path $netrcAltPath)) {
+$hasNetrc = (Test-Path $netrcPath) -or (Test-Path $netrcAltPath)
+if ($hasNetrc) {
     $foundPath = if (Test-Path $netrcPath) { ".netrc" } else { "_netrc" }
     Add-Result "netrc credentials" "OK" "$foundPath exists" $true -SkipId "netrc"
 } elseif ($Skip -contains "netrc") {
     Add-Result "netrc credentials" "SKIPPED" "Deferred (use -Skip netrc to acknowledge)" $true -SkipId "netrc"
 } else {
-    Add-Result "netrc credentials" "MISSING" "Create ~\.netrc with shared agent credentials (see developer-setup-guide.md)" $false -SkipId "netrc"
+    Add-Result "netrc credentials" "MISSING" "Needs a +claude account on skyline.ms (see new-machine-setup.md, search for +claude)" $false -SkipId "netrc"
 }
 
 # 11. LabKey MCP Server registration
@@ -568,8 +596,9 @@ if ($Skip -contains "labkey") {
         $mcpList = $mcpListRaw -join "`n"  # Join array into single string
 
         # Parse the registered path from output like: "labkey: python C:/path/to/server.py - ✓ Connected"
+        # Also handles full python paths like: "labkey: C:\...\python.exe C:/path/to/server.py - ✓ Connected"
         $registeredPath = $null
-        if ($mcpList -match 'labkey:\s*python\s+(.+?server\.py)') {
+        if ($mcpList -match 'labkey:\s*\S*python\S*\s+(.+?server\.py)') {
             $registeredPath = $matches[1].Trim() -replace '/', '\'  # Normalize to backslashes
             # Resolve relative paths (e.g., .\ai\mcp\...) to absolute for comparison
             if (-not [System.IO.Path]::IsPathRooted($registeredPath)) {
@@ -584,8 +613,10 @@ if ($Skip -contains "labkey") {
         $expectedPathNormalized = $serverPath -replace '/', '\'
         $pathMatches = $isRegistered -and ($registeredPath -eq $expectedPathNormalized)
 
-        if ($isConnected -and $pathMatches) {
+        if ($isConnected -and $pathMatches -and $hasNetrc) {
             Add-Result "LabKey MCP Server" "OK" "registered and connected" $true -SkipId "labkey"
+        } elseif ($isConnected -and $pathMatches -and -not $hasNetrc) {
+            Add-Result "LabKey MCP Server" "WARN" "connected but ~\.netrc missing - API calls will fail. Create a +claude account on skyline.ms (see new-machine-setup.md, search for +claude)" $false -SkipId "labkey"
         } elseif ($isRegistered -and -not $pathMatches) {
             # Registered but pointing to wrong path
             Add-Result "LabKey MCP Server" "WARN" "registered at wrong path. Run: claude mcp remove labkey && claude mcp add labkey -- python $serverPath" $false -SkipId "labkey"

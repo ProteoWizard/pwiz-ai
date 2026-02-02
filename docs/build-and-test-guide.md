@@ -33,10 +33,10 @@ Scripts automatically detect the pwiz source location by checking:
 This means scripts work without configuration in both setups:
 
 ```powershell
-# From C:\proj (sibling mode) - auto-detects C:\proj\pwiz
+# From your project root (sibling mode) - auto-detects sibling pwiz/
 pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
 
-# From C:\proj\pwiz (child mode) - auto-detects C:\proj\pwiz
+# From your pwiz checkout (child mode) - auto-detects pwiz_tools/
 pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
 ```
 
@@ -635,7 +635,7 @@ ai/scripts/AutoQC/Build-AutoQC.ps1
 
 # ❌ WRONG - These patterns will fail
 ./ai/Build-Skyline.ps1                    # Wrong directory
-c:\proj\...\Build-Skyline.ps1            # Absolute paths fail
+c:\path\to\...\Build-Skyline.ps1         # Absolute paths fail
 & "path\to\script"                        # Call operator fails with RemoteSigned policy
 ```
 

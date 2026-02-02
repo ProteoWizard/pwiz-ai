@@ -77,12 +77,14 @@ pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestSomeUITest -
 **When using Edit or MultiEdit tools on Windows, you MUST use backslashes (`\`) in file paths, NOT forward slashes (`/`).**
 
 ```
-# WRONG - Will cause errors
-Edit(file_path: "C:/proj/pwiz/pwiz_tools/Skyline/SomeFile.cs", ...)
+# WRONG - Will cause errors (forward slashes)
+Edit(file_path: "C:/YourProjectRoot/pwiz/pwiz_tools/Skyline/SomeFile.cs", ...)
 
-# CORRECT - Always works
-Edit(file_path: "C:\proj\pwiz\pwiz_tools\Skyline\SomeFile.cs", ...)
+# CORRECT - Always works (backslashes)
+Edit(file_path: "C:\YourProjectRoot\pwiz\pwiz_tools\Skyline\SomeFile.cs", ...)
 ```
+
+> **Note**: The paths above are illustrative. Replace `C:\YourProjectRoot` with your actual project root (e.g., `C:\Dev`, `D:\proj`, etc.).
 
 This applies to:
 - `Edit` tool

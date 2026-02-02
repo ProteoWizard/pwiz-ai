@@ -12,9 +12,9 @@
     - pwiz [Skyline/work/20260113_feature] | Opus | 49% left
     - pwiz-ai [master] | Opus | 73% left
 
-    In sibling mode (multiple repos under C:\proj), Claude can set the active
-    project via the StatusMcp's set_active_project tool. The statusline then
-    shows that project's branch regardless of which directory Claude Code
+    In sibling mode (multiple repos under a common root), Claude can set the
+    active project via the StatusMcp's set_active_project tool. The statusline
+    then shows that project's branch regardless of which directory Claude Code
     was started from.
 
 .SETUP
@@ -24,11 +24,11 @@
     Windows: %USERPROFILE%\.claude\settings.json
     macOS/Linux: ~/.claude/settings.json
 
-    Contents:
+    Contents (adjust path to match your ai/ checkout location):
     {
       "statusLine": {
         "type": "command",
-        "command": "pwsh -NoProfile -File C:\\proj\\ai\\scripts\\statusline.ps1"
+        "command": "pwsh -NoProfile -File <your-root>\\ai\\scripts\\statusline.ps1"
       }
     }
 
@@ -43,7 +43,7 @@
     - context_window.context_window_size: Total context window size
 
     Active project state file:
-    - Location: C:\proj\ai\.tmp\active-project.json
+    - Location: ai/.tmp/active-project.json (relative to project root)
     - Set by: StatusMcp's set_active_project tool
     - Falls back to workspace.project_dir if not set
 
@@ -54,7 +54,9 @@
 $input_json = $input | Out-String | ConvertFrom-Json
 
 # Check for active project state file (set by StatusMcp)
-$activeProjectFile = "C:\proj\ai\.tmp\active-project.json"
+# Derive ai/ root from script location: ai/scripts/statusline.ps1 -> ai/
+$aiRoot = Split-Path -Parent $PSScriptRoot
+$activeProjectFile = Join-Path $aiRoot '.tmp\active-project.json'
 $project_dir = $null
 $project_name = $null
 

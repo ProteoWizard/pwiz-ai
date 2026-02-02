@@ -17,13 +17,13 @@
     Language code: 'ja' or 'zh-CHS'
 
 .PARAMETER PwizRoot
-    Path to pwiz repository root (default: C:\proj\pwiz)
+    Path to pwiz repository root (auto-detected from script location if not specified)
 
 .EXAMPLE
-    .\Validate-TranslationCsvSync.ps1 -CsvPath "C:\proj\ai\.tmp\localization.ja.csv" -Language ja
+    .\Validate-TranslationCsvSync.ps1 -CsvPath "ai\.tmp\localization.ja.csv" -Language ja
 
 .EXAMPLE
-    .\Validate-TranslationCsvSync.ps1 -CsvPath "C:\proj\ai\.tmp\localization.zh-CHS.csv" -Language zh-CHS
+    .\Validate-TranslationCsvSync.ps1 -CsvPath "ai\.tmp\localization.zh-CHS.csv" -Language zh-CHS
 #>
 
 param(
@@ -34,10 +34,25 @@ param(
     [ValidateSet('ja', 'zh-CHS')]
     [string]$Language,
 
-    [string]$PwizRoot = "C:\proj\pwiz"
+    [string]$PwizRoot = $null
 )
 
 $ErrorActionPreference = "Stop"
+
+# Auto-detect pwiz root if not specified
+# Script location: ai/scripts/Skyline/scripts/ -> ai/ -> project root
+if (-not $PwizRoot) {
+    $aiRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+    $projectRoot = Split-Path -Parent $aiRoot
+    # Try sibling mode: look for pwiz/ next to ai/
+    $siblingPath = Join-Path $projectRoot 'pwiz'
+    if (Test-Path (Join-Path $siblingPath 'pwiz_tools')) {
+        $PwizRoot = $siblingPath
+    } else {
+        Write-Error "Cannot auto-detect pwiz root. Use -PwizRoot to specify the path."
+        exit 1
+    }
+}
 
 Write-Host "Validating translation CSV sync for $Language..." -ForegroundColor Cyan
 Write-Host "CSV: $CsvPath"

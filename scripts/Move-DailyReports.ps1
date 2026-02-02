@@ -38,7 +38,9 @@ param(
     [switch]$WhatIf
 )
 
-$TmpDir = "C:\proj\ai\.tmp"
+# Derive ai/ root from script location: ai/scripts/Move-DailyReports.ps1 -> ai/
+$aiRoot = Split-Path -Parent $PSScriptRoot
+$TmpDir = Join-Path $aiRoot '.tmp'
 $DailyDir = Join-Path $TmpDir "daily"
 
 # File patterns to move into daily/YYYY-MM-DD/ (date suffix stripped)
@@ -167,7 +169,7 @@ foreach ($group in $byDate) {
                     $prop = $manifest.files.PSObject.Properties[$key]
                     if ($prop -and $prop.Value -and $prop.Value -ne $fileMap[$key]) {
                         # Only update if the destination file actually exists
-                        $fullDest = Join-Path "C:\proj" $fileMap[$key]
+                        $fullDest = Join-Path (Split-Path -Parent $aiRoot) $fileMap[$key]
                         if (Test-Path $fullDest) {
                             $prop.Value = $fileMap[$key]
                             $changed = $true

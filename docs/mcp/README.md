@@ -107,11 +107,11 @@ See [Developer Setup Guide](../developer-setup-guide.md) for installation instru
 
 MCP servers are registered in **`~/.claude.json`** (your home directory). This single file stores all Claude Code configuration, including per-project MCP server definitions.
 
-The structure for MCP servers:
+The structure for MCP servers (the project key is your actual project root path):
 ```json
 {
   "projects": {
-    "C:/proj/pwiz-ai": {
+    "<your project root>": {
       "mcpServers": {
         "labkey": {
           "type": "stdio",
@@ -154,8 +154,8 @@ To maximize coding context, consider maintaining **two separate checkouts**:
 
 | Directory | Branch | MCP Servers | Purpose |
 |-----------|--------|-------------|---------|
-| `C:\proj\ai` | `master` | LabKey + Gmail | Daily reports, documentation, scheduled tasks |
-| `C:\proj\pwiz` | `master` or feature | None | Active coding with maximum context |
+| `<project root>\ai` | `master` | LabKey + Gmail | Daily reports, documentation, scheduled tasks |
+| `<project root>\pwiz` | `master` or feature | None | Active coding with maximum context |
 
 **Why this helps**:
 - Coding sessions get full 200k context for code, tests, and exploration

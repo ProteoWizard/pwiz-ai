@@ -119,13 +119,13 @@ These tests **skip** for FEATURE COMPLETE builds (Build=9) but **run** for daily
 
 ## Release Folder Setup
 
-Each major release uses a dedicated folder (e.g., `C:\proj\skyline_26_1`). This keeps release work separate from ongoing master development and maintains isolated build configurations.
+Each major release uses a dedicated folder (e.g., `skyline_26_1` in your project root). This keeps release work separate from ongoing master development and maintains isolated build configurations.
 
-**Folder naming convention**: `C:\proj\skyline_YY_N` (e.g., `skyline_26_1`, `skyline_25_1`)
+**Folder naming convention**: `skyline_YY_N` (e.g., `skyline_26_1`, `skyline_25_1`) as a sibling to `pwiz/` and `ai/`
 
 ### Why Separate Folders?
 
-- **Master stays development-ready**: `C:\proj\pwiz` remains on master for ongoing work
+- **Master stays development-ready**: Your `pwiz` checkout remains on master for ongoing work
 - **Isolated build artifacts**: Each release has its own intermediate files
 - **Preserved configuration**: Signing files, publish settings persist per-release
 - **Historical reference**: Keep 1-2 previous release folders for debugging old versions
@@ -134,7 +134,7 @@ Each major release uses a dedicated folder (e.g., `C:\proj\skyline_26_1`). This 
 
 **1. Clone the release branch:**
 ```bash
-cd C:\proj
+cd <your project root>
 git clone --branch Skyline/skyline_YY_N https://github.com/ProteoWizard/pwiz.git skyline_YY_N
 ```
 
@@ -186,11 +186,11 @@ clean.bat && bso.bat
 
 When starting FEATURE COMPLETE, set up the new release folder **before** making version changes:
 
-1. Create `C:\proj\skyline_YY_N` as described above
+1. Create `skyline_YY_N` in your project root as described above
 2. Do all release work from the new folder
-3. Keep `C:\proj\pwiz` on master for development
+3. Keep `pwiz` on master for development
 
-This way, `C:\proj\pwiz` is always ready for the next daily release after the major release.
+This way, your `pwiz` checkout is always ready for the next daily release after the major release.
 
 ## Release Workflows
 
@@ -234,7 +234,7 @@ Pre-release stabilization period before official release.
 
 2. **Copy tutorials for the new version** (can do immediately after branch creation):
    ```cmd
-   xcopy /E /I C:\proj\skyline_26_1\pwiz_tools\Skyline\Documentation\Tutorials T:\www\site\skyline.ms\html\tutorials\26-0-9
+   xcopy /E /I <release folder>\pwiz_tools\Skyline\Documentation\Tutorials T:\www\site\skyline.ms\html\tutorials\26-0-9
    ```
 
    This copies the tutorial HTML to a versioned directory on the web server (same T: drive used for ClickOnce publishing).
@@ -242,7 +242,7 @@ Pre-release stabilization period before official release.
 
 3. **Generate translation CSV files** and send to translators (time-sensitive):
    ```cmd
-   cd C:\proj\skyline_26_1
+   cd <release folder>
    b.bat pwiz_tools/Skyline/Executables/DevTools/ResourcesOrganizer//GenerateLocalizationCsvFiles
    ```
 
@@ -257,7 +257,7 @@ Pre-release stabilization period before official release.
 
    **When translations come back**, import them on the release branch:
    ```cmd
-   cd C:\proj\skyline_26_1
+   cd <release folder>
    # Place translated CSVs in pwiz_tools\Skyline\Translation\Scratch\
    # (keeping same filenames: localization.ja.csv, localization.zh-CHS.csv)
    b.bat pwiz_tools/Skyline/Executables/DevTools/ResourcesOrganizer//ImportLocalizationCsvFiles
@@ -767,7 +767,7 @@ release. This release contains the following improvements over Skyline 26.1:
 
 ```python
 # Claude writes draft to temp file
-Write("C:/proj/ai/.tmp/release-notes-26.0.9.021.md", content)
+Write("ai/.tmp/release-notes-26.0.9.021.md", content)
 ```
 
 The developer can then:
