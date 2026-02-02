@@ -11,7 +11,7 @@ data access, use the LabKeyMcp server instead.
 
 Setup:
     pip install mcp Pillow
-    claude mcp add status -- python C:/proj/ai/mcp/StatusMcp/server.py
+    claude mcp add status -- python ./ai/mcp/StatusMcp/server.py
 """
 
 import json
@@ -33,7 +33,9 @@ logging.basicConfig(
 logger = logging.getLogger("status_mcp")
 
 # State file for active project (read by statusline.ps1)
-STATE_DIR = Path("C:/proj/ai/.tmp")
+# Derive ai/ root from script location: ai/mcp/StatusMcp/server.py -> ai/
+_AI_ROOT = Path(__file__).resolve().parent.parent.parent
+STATE_DIR = _AI_ROOT / ".tmp"
 ACTIVE_PROJECT_FILE = STATE_DIR / "active-project.json"
 
 # Initialize FastMCP server

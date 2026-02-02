@@ -126,7 +126,7 @@ Sets the active project for statusline display in multi-repo setups.
 Active project set to: pwiz (C:/proj/pwiz)
 ```
 
-This writes to `C:/proj/ai/.tmp/active-project.json`, which is read by `statusline.ps1` to show the correct repository in Claude Code's status line.
+This writes to `ai/.tmp/active-project.json` (path derived from the server's script location), which is read by `statusline.ps1` to show the correct repository in Claude Code's status line.
 
 ## Usage Examples
 
