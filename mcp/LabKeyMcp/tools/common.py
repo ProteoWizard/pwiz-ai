@@ -3,6 +3,8 @@
 This module contains:
 - Constants for default server configuration
 - Shared helper functions (credentials, HTTP requests)
+- LabKeySession class for authenticated POST requests with CSRF support
+- WAF encoding/decoding for content fields
 - WebDAV file operations (list, upload, download)
 - Limited discovery (list_queries only - for proposing schema documentation)
 """
@@ -10,11 +12,12 @@ This module contains:
 import json
 import logging
 import base64
+import http.cookiejar
 import netrc
 import urllib.error
 import urllib.request
 from pathlib import Path
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, unquote, urlencode
 
 import labkey
 from labkey.query import ServerContext
@@ -168,6 +171,232 @@ def get_tmp_dir() -> Path:
     tmp_dir = Path(__file__).parent.parent.parent.parent / ".tmp"
     tmp_dir.mkdir(exist_ok=True)
     return tmp_dir
+
+
+def get_daily_dir(date_str: str) -> Path:
+    """Get the ai/.tmp/daily/YYYY-MM-DD directory for a specific date.
+
+    Args:
+        date_str: Date as YYYY-MM-DD or YYYYMMDD
+
+    Returns:
+        Path to ai/.tmp/daily/YYYY-MM-DD directory (created if needed)
+    """
+    if len(date_str) == 8 and "-" not in date_str:
+        date_str = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+    daily_dir = get_tmp_dir() / "daily" / date_str
+    daily_dir.mkdir(parents=True, exist_ok=True)
+    return daily_dir
+
+
+def get_daily_history_dir() -> Path:
+    """Get the ai/.tmp/daily/history directory for persistent state files.
+
+    Contains accumulated state that cannot be regenerated from the LabKey
+    database: exception-history.json (with filed issues, recorded fixes),
+    nightly-history.json (with fix annotations), computer-status.json
+    (with deactivation records and alarms).
+
+    Returns:
+        Path to ai/.tmp/daily/history directory (created if needed)
+    """
+    history_dir = get_tmp_dir() / "daily" / "history"
+    history_dir.mkdir(parents=True, exist_ok=True)
+    return history_dir
+
+
+def get_daily_summaries_dir() -> Path:
+    """Get the ai/.tmp/daily/summaries directory for daily summary JSONs.
+
+    Contains daily-summary-YYYYMMDD.json files used by analyze_daily_patterns.
+
+    Returns:
+        Path to ai/.tmp/daily/summaries directory (created if needed)
+    """
+    summaries_dir = get_tmp_dir() / "daily" / "summaries"
+    summaries_dir.mkdir(parents=True, exist_ok=True)
+    return summaries_dir
+
+
+# =============================================================================
+# Authenticated Session with CSRF Support
+# =============================================================================
+
+class LabKeySession:
+    """A simple session class for making authenticated LabKey requests with CSRF support.
+
+    Following the pattern from ReportErrorDlg.cs:313-342.
+    Uses urllib and http.cookiejar to maintain session cookies.
+    """
+
+    def __init__(self, server: str, login: str, password: str):
+        self.server = server
+        self.login = login
+        self.password = password
+        self.csrf_token = None
+
+        # Set up cookie jar for session management
+        self.cookie_jar = http.cookiejar.CookieJar()
+        self.opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(self.cookie_jar)
+        )
+
+        # Add basic auth header
+        credentials = base64.b64encode(f"{login}:{password}".encode()).decode()
+        self.auth_header = f"Basic {credentials}"
+
+    def _establish_session(self):
+        """GET to establish session and get CSRF token."""
+        url = f"https://{self.server}/project/home/begin.view?"
+        request = urllib.request.Request(url)
+        request.add_header("Authorization", self.auth_header)
+
+        with self.opener.open(request, timeout=30) as response:
+            # Extract CSRF token from cookies
+            for cookie in self.cookie_jar:
+                if cookie.name == "X-LABKEY-CSRF":
+                    self.csrf_token = cookie.value
+                    break
+
+        if not self.csrf_token:
+            raise Exception("CSRF token not found in session cookies")
+
+    def get(self, url: str, params: dict = None, headers: dict = None) -> dict:
+        """Make a GET request with session cookies."""
+        if params:
+            url = f"{url}?{urlencode(params)}"
+
+        request = urllib.request.Request(url)
+        request.add_header("Authorization", self.auth_header)
+        if self.csrf_token:
+            request.add_header("X-LABKEY-CSRF", self.csrf_token)
+        if headers:
+            for key, value in headers.items():
+                request.add_header(key, value)
+
+        with self.opener.open(request, timeout=30) as response:
+            return json.loads(response.read().decode())
+
+    def get_html(self, url: str, headers: dict = None) -> str:
+        """Make a GET request and return raw HTML response."""
+        request = urllib.request.Request(url)
+        request.add_header("Authorization", self.auth_header)
+        if self.csrf_token:
+            request.add_header("X-LABKEY-CSRF", self.csrf_token)
+        if headers:
+            for key, value in headers.items():
+                request.add_header(key, value)
+
+        with self.opener.open(request, timeout=30) as response:
+            return response.read().decode("utf-8")
+
+    def post_json(self, url: str, data: dict, headers: dict = None) -> tuple:
+        """Make a POST request with JSON body. Returns (status_code, response_data)."""
+        request = urllib.request.Request(url, method="POST")
+        request.add_header("Authorization", self.auth_header)
+        request.add_header("Content-Type", "application/json")
+        if self.csrf_token:
+            request.add_header("X-LABKEY-CSRF", self.csrf_token)
+        if headers:
+            for key, value in headers.items():
+                request.add_header(key, value)
+
+        json_data = json.dumps(data).encode("utf-8")
+        request.data = json_data
+
+        try:
+            with self.opener.open(request, timeout=30) as response:
+                return response.status, json.loads(response.read().decode())
+        except urllib.error.HTTPError as e:
+            return e.code, {"error": e.read().decode()[:500]}
+
+    def post_form(self, url: str, data: dict, headers: dict = None) -> tuple:
+        """Make a POST request with form-encoded body. Returns (status_code, response_text)."""
+        request = urllib.request.Request(url, method="POST")
+        request.add_header("Authorization", self.auth_header)
+        request.add_header("Content-Type", "application/x-www-form-urlencoded")
+        if self.csrf_token:
+            request.add_header("X-LABKEY-CSRF", self.csrf_token)
+        if headers:
+            for key, value in headers.items():
+                request.add_header(key, value)
+
+        form_data = urlencode(data).encode("utf-8")
+        request.data = form_data
+
+        try:
+            with self.opener.open(request, timeout=30) as response:
+                return response.status, response.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as e:
+            return e.code, e.read().decode("utf-8", errors="replace")[:500]
+
+
+def get_labkey_session(server: str) -> tuple:
+    """Create an authenticated session with CSRF token for LabKey POST requests.
+
+    Following the pattern from ReportErrorDlg.cs:313-342:
+    1. GET to /project/home/begin.view? to establish session
+    2. Extract X-LABKEY-CSRF cookie
+    3. Return session with CSRF token for use in POST requests
+
+    Args:
+        server: LabKey server hostname
+
+    Returns:
+        Tuple of (LabKeySession, csrf_token)
+    """
+    login, password = get_netrc_credentials(server)
+
+    # Create session and establish CSRF token
+    session = LabKeySession(server, login, password)
+    session._establish_session()
+
+    return session, session.csrf_token
+
+
+# =============================================================================
+# WAF Encoding/Decoding
+# =============================================================================
+
+def encode_waf_body(content: str) -> str:
+    """Encode content using LabKey's WAF (Web Application Firewall) format.
+
+    The format is: /*{{base64/x-www-form-urlencoded/wafText}}*/[base64-encoded-url-encoded-content]
+
+    Args:
+        content: The raw content (HTML, Markdown, or text)
+
+    Returns:
+        WAF-encoded string ready for body fields
+    """
+    # Step 1: URL-encode the content (encodes special chars like <, >, &, etc.)
+    url_encoded = quote(content, safe="")
+
+    # Step 2: Base64 encode the URL-encoded content
+    base64_encoded = base64.b64encode(url_encoded.encode("utf-8")).decode("ascii")
+
+    # Step 3: Prepend the WAF hint comment
+    return f"/*{{{{base64/x-www-form-urlencoded/wafText}}}}*/{base64_encoded}"
+
+
+def decode_waf_body(waf_content: str) -> str:
+    """Decode content from LabKey's WAF format.
+
+    Args:
+        waf_content: WAF-encoded string from a body field
+
+    Returns:
+        The decoded content
+    """
+    # Check for WAF prefix
+    prefix = "/*{{base64/x-www-form-urlencoded/wafText}}*/"
+    if waf_content.startswith(prefix):
+        base64_content = waf_content[len(prefix):]
+        url_encoded = base64.b64decode(base64_content).decode("utf-8")
+        return unquote(url_encoded)
+
+    # If not WAF encoded, return as-is
+    return waf_content
 
 
 # =============================================================================

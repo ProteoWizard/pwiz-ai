@@ -8,15 +8,28 @@ Generate a consolidated daily report covering nightly tests, exceptions, and sup
 
 **Read**: [ai/docs/daily-report-guide.md](../../ai/docs/daily-report-guide.md) for full instructions.
 
+## Architecture: Sequential Two-Phase Pipeline
+
+The daily report runs as two sequential Claude sessions with independent turn limits:
+
+1. **Research phase** (`/pw-daily-research`) — Collect data, investigate exceptions/failures/leaks, write findings to files. No email. 100-turn budget.
+2. **Email phase** (`/pw-daily-email`) — Read findings, compose enriched HTML email, send. 40-turn budget.
+
+This command (`/pw-daily`) runs both phases in sequence. Each phase has its own tool permissions — research cannot send email, email cannot query LabKey.
+
+The automation script `Invoke-DailyReport.ps1` orchestrates this as two `claude` invocations. Schedule with: `Invoke-DailyReport.ps1 -Schedule "8:05AM"`
+
+See [ai/docs/scheduled-tasks-guide.md](../../ai/docs/scheduled-tasks-guide.md) for Task Scheduler configuration.
+
 ## Arguments
 
 - **Date**: YYYY-MM-DD (optional, defaults to auto-calculated)
 
 ## Expected Behavior
 
-1. **Send email** — The minimum checkpoint (Phase 1-2)
-2. **Investigate everything** — Every failure, exception, and anomaly (Phase 3)
-3. **Document findings** — Write to `suggested-actions-YYYYMMDD.md`
+1. **Collect data and investigate** — Research phase (Phase 1-3 from the guide)
+2. **Send email** — Email phase with enriched findings
+3. **Keep investigating** — Continue until turn limit
 
 **Don't stop after sending the email.** The exploration phase is where the real value is.
 
@@ -178,6 +191,8 @@ Questions to answer:
 ## Related
 
 - [ai/docs/daily-report-guide.md](../../ai/docs/daily-report-guide.md) - Full instructions
+- [pw-daily-research.md](pw-daily-research.md) - Research phase only
+- [pw-daily-email.md](pw-daily-email.md) - Email phase only
 - `/pw-nightly` - Nightly tests only
 - `/pw-exceptions` - Exceptions only
 - `/pw-support` - Support board only

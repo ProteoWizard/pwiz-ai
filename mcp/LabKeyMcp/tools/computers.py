@@ -27,12 +27,12 @@ import labkey
 
 from .common import (
     get_server_context,
-    get_tmp_dir,
+    get_daily_history_dir,
+    get_labkey_session,
     DEFAULT_SERVER,
     TESTRESULTS_SCHEMA,
     DEFAULT_TEST_CONTAINER,
 )
-from .wiki import _get_labkey_session
 
 logger = logging.getLogger("labkey_mcp")
 
@@ -50,9 +50,7 @@ TEST_FOLDERS = [
 
 def _get_history_file() -> Path:
     """Get path to the computer status history file."""
-    history_dir = get_tmp_dir() / "history"
-    history_dir.mkdir(exist_ok=True)
-    return history_dir / "computer-status.json"
+    return get_daily_history_dir() / "computer-status.json"
 
 
 def _load_status_history() -> dict:
@@ -141,7 +139,7 @@ def _set_computer_active(
     """
     try:
         # Get authenticated session with CSRF token
-        session, csrf = _get_labkey_session(server)
+        session, csrf = get_labkey_session(server)
 
         # Build URL for setUserActive endpoint
         encoded_path = quote(container_path, safe="/")

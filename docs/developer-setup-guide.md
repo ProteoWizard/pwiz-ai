@@ -60,7 +60,7 @@ Once authenticated, paste this prompt:
 ```
 Help me configure AI tooling for Skyline development.
 
-Fetch and follow the instructions at:
+Use curl (Bash tool) to download this file, then read and follow the instructions:
 https://raw.githubusercontent.com/ProteoWizard/pwiz-ai/master/docs/new-machine-setup.md
 
 This is an EXISTING development machine - I already have Visual Studio, Git, and a working Skyline build environment.

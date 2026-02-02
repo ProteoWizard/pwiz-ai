@@ -600,6 +600,10 @@ if ($Skip -contains "labkey") {
         $registeredPath = $null
         if ($mcpList -match 'labkey:\s*\S*python\S*\s+(.+?server\.py)') {
             $registeredPath = $matches[1].Trim() -replace '/', '\'  # Normalize to backslashes
+            # Resolve relative paths (e.g., .\ai\mcp\...) to absolute for comparison
+            if (-not [System.IO.Path]::IsPathRooted($registeredPath)) {
+                $registeredPath = (Resolve-Path $registeredPath -ErrorAction SilentlyContinue).Path
+            }
         }
 
         $isConnected = $mcpList -match 'labkey.*Connected'

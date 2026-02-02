@@ -1,6 +1,4 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$comment": "Default permissions for new developers. Copy to settings.local.json during setup.",
   "permissions": {
     "allow": [
       "mcp__status__get_status",

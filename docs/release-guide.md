@@ -483,8 +483,49 @@ Pre-release stabilization period before official release.
    - Replace the tag with your actual release version
 
 14. **Post release notes**:
-   - Post to `/home/software/Skyline/daily` announcements (LabKey Wiki format with dashes)
-   - Email to Skyline-daily list via **MailChimp** (formatted with bullet points)
+
+   Two destinations — skyline.ms announcement (automated) and MailChimp email (manual):
+
+   **a. Post to skyline.ms** (automated via MCP):
+
+   After the developer approves the draft release notes (see "Writing Release Notes" below),
+   post directly using `post_announcement`:
+
+   ```python
+   # Skyline-daily and FEATURE COMPLETE releases
+   post_announcement(
+       title="Skyline-daily 26.0.9.021",
+       body=approved_release_notes,  # Markdown content
+       container_path="/home/software/Skyline/daily",
+   )
+   ```
+
+   For **major releases**, also mirror to `/home/software/Skyline/releases`:
+
+   ```python
+   # Major releases — post to both containers
+   post_announcement(
+       title="Skyline 26.1",
+       body=approved_release_notes,
+       container_path="/home/software/Skyline/daily",
+   )
+   post_announcement(
+       title="Skyline 26.1",
+       body=approved_release_notes,
+       container_path="/home/software/Skyline/releases",
+   )
+   ```
+
+   The `/releases` container was used for major release email archives through Skyline 24.1
+   (2024-07-17), before MailChimp took over email delivery. It is somewhat duplicative of the
+   Release Notes wiki page on `/home/software/Skyline`, but with automated posting it costs
+   nothing to maintain the archive.
+
+   This posts through LabKey's announcement controller, which sends email notifications
+   to subscribers of each container. The body should use Markdown format matching the
+   release notes templates below.
+
+   **b. Email via MailChimp** (manual — not yet automated):
 
    **Email list scope** (both are open signup, opt-in):
    - Major releases → entire active Skyline list (~23,500 users)
@@ -720,22 +761,32 @@ release. This release contains the following improvements over Skyline 26.1:
 ...
 ```
 
-### Writing Release Notes to Temp File
+### Writing and Posting Release Notes
 
-Write draft release notes to a temp file for easier editing:
+**Step 1: Draft to temp file** for developer review:
 
 ```python
-# Claude writes to temp file
-Write("C:/proj/ai/.tmp/release-notes-26.0.9.021.txt", content)
+# Claude writes draft to temp file
+Write("C:/proj/ai/.tmp/release-notes-26.0.9.021.md", content)
 ```
 
 The developer can then:
 1. Open the file in a text editor
 2. Make edits (reorder items, adjust wording)
 3. Save and tell Claude to read it back
-4. Use the content for MailChimp and wiki announcement
 
-This avoids awkward copy-paste from the terminal.
+**Step 2: Post to skyline.ms** after developer approval:
+
+```python
+# Claude reads back the approved file and posts
+post_announcement(
+    title="Skyline-daily 26.0.9.021",
+    body=approved_content,
+    container_path="/home/software/Skyline/daily",
+)
+```
+
+**Step 3: MailChimp email** — developer uses the same content manually in MailChimp (not yet automated).
 
 ### Querying Past Release Notes
 

@@ -1706,3 +1706,114 @@ def register_tools(mcp):
         except Exception as e:
             logger.error(f"Error saving run metrics CSV: {e}", exc_info=True)
             return f"Error saving run metrics CSV: {e}"
+
+    @mcp.tool()
+    async def save_leakcheck_stats(
+        start_date: str,
+        end_date: Optional[str] = None,
+        server: str = DEFAULT_SERVER,
+        container_path: str = DEFAULT_TEST_CONTAINER,
+    ) -> str:
+        """[P] Analyze pass-1 leak detection iterations per test. Saves to ai/.tmp/leakcheck-stats-{folder}-{start}-{end}.md. → nightly-tests.md
+
+        Args:
+            start_date: Start date (YYYY-MM-DD) or relative like "1y", "6m", "30d"
+            end_date: End date (YYYY-MM-DD), defaults to today
+            server: LabKey server hostname
+            container_path: Test folder path (e.g., "/home/development/Nightly x64")
+        """
+        folder_name = container_path.split("/")[-1]
+
+        # Parse relative dates
+        today = datetime.now()
+        if end_date is None:
+            end_date = today.strftime("%Y-%m-%d")
+
+        if start_date.endswith("y"):
+            years = int(start_date[:-1])
+            start_dt = today - timedelta(days=years * 365)
+            start_date = start_dt.strftime("%Y-%m-%d")
+        elif start_date.endswith("m"):
+            months = int(start_date[:-1])
+            start_dt = today - timedelta(days=months * 30)
+            start_date = start_dt.strftime("%Y-%m-%d")
+        elif start_date.endswith("d"):
+            days = int(start_date[:-1])
+            start_dt = today - timedelta(days=days)
+            start_date = start_dt.strftime("%Y-%m-%d")
+
+        try:
+            server_context = get_server_context(server, container_path)
+
+            result = labkey.query.select_rows(
+                server_context=server_context,
+                schema_name=TESTRESULTS_SCHEMA,
+                query_name="leakcheck_stats",
+                max_rows=10000,
+                parameters={"StartDate": start_date, "EndDate": end_date},
+            )
+
+            if not result or not result.get("rows"):
+                return f"No pass-1 leak check data found in {folder_name} from {start_date} to {end_date}"
+
+            rows = result["rows"]
+
+            # Build markdown report
+            lines = [
+                f"# Leak Check Stats: {folder_name}",
+                f"**Date range:** {start_date} to {end_date}",
+                f"**Tests:** {len(rows)}",
+                "",
+                "| Test | Runs | Avg Iters | Avg Duration (s) | Avg Time/Run (min) | Total Time (min) |",
+                "|------|------|-----------|-------------------|--------------------|------------------|",
+            ]
+
+            total_time_min = 0
+            for row in rows:
+                testname = row.get("testname", "?")
+                run_count = row.get("run_count", 0) or 0
+                avg_iters = row.get("avg_iterations_per_run", 0) or 0
+                avg_dur = row.get("avg_duration_sec", 0) or 0
+                avg_time_run = row.get("avg_time_per_run_min", 0) or 0
+                total_min = row.get("total_time_min", 0) or 0
+                total_time_min += total_min
+
+                lines.append(
+                    f"| {testname} | {run_count} | {avg_iters} | {avg_dur} | {avg_time_run} | {total_min} |"
+                )
+
+            lines.append("")
+            lines.append(f"**Total pass-1 time across all tests:** {round(total_time_min)} min ({round(total_time_min / 60, 1)} hrs)")
+
+            md_content = "\n".join(lines) + "\n"
+
+            # Save to file
+            output_dir = get_tmp_dir()
+            safe_folder = folder_name.replace(" ", "-").replace("/", "-")
+            start_str = start_date.replace("-", "")
+            end_str = end_date.replace("-", "")
+            output_file = output_dir / f"leakcheck-stats-{safe_folder}-{start_str}-{end_str}.md"
+            output_file.write_text(md_content, encoding="utf-8")
+
+            # Build summary for return (top 10 by avg iterations)
+            top_tests = rows[:10]
+            summary_lines = [
+                f"Leak check stats saved to: {output_file}",
+                "",
+                f"**{folder_name}**: {start_date} to {end_date}",
+                f"  Tests with pass-1 data: {len(rows)}",
+                f"  Total pass-1 time: {round(total_time_min)} min ({round(total_time_min / 60, 1)} hrs)",
+                "",
+                "**Top 10 by avg iterations per run** (24 = max/leaking, 8 = fast stabilize):",
+            ]
+            for row in top_tests:
+                testname = row.get("testname", "?")
+                avg_iters = row.get("avg_iterations_per_run", 0) or 0
+                avg_time_run = row.get("avg_time_per_run_min", 0) or 0
+                summary_lines.append(f"  {testname}: {avg_iters} iters, {avg_time_run} min/run")
+
+            return "\n".join(summary_lines)
+
+        except Exception as e:
+            logger.error(f"Error saving leakcheck stats: {e}", exc_info=True)
+            return f"Error saving leakcheck stats: {e}"

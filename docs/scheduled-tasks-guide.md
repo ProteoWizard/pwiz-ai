@@ -7,7 +7,7 @@ This guide covers running Claude Code automatically on a schedule using Windows 
 Claude Code can run non-interactively using the `-p` (print) flag:
 
 ```bash
-claude -p "Read .claude/commands/pw-daily.md and follow it"
+claude -p "Read .claude/commands/pw-daily-research.md and follow it"
 ```
 
 This enables automated daily reports without manual intervention.
@@ -70,11 +70,11 @@ When running Claude Code with `-p` (print/non-interactive mode), several feature
 
 | Feature | Works in `-p` mode? | Workaround |
 |---------|---------------------|------------|
-| Slash commands (`/pw-daily`) | ❌ No | Read the command file directly and follow instructions |
-| Skills (`Skill(name)`) | ❌ No | Include relevant documentation reading in the prompt |
-| Interactive approval | ❌ No | Pre-authorize tools in `.claude/settings.local.json` |
-| MCP wildcards | ❌ No | List each tool explicitly |
-| CLAUDE.md auto-loading | ⚠️ Partial | Explicitly instruct to read it in the prompt |
+| Slash commands (`/pw-daily`) | No | Read the command file directly and follow instructions |
+| Skills (`Skill(name)`) | No | Include relevant documentation reading in the prompt |
+| Interactive approval | No | Pre-authorize tools in `.claude/settings.local.json` |
+| MCP wildcards | No | List each tool explicitly |
+| CLAUDE.md auto-loading | Partial | Explicitly instruct to read it in the prompt |
 
 ### Prompt Design for Non-Interactive Mode
 
@@ -98,7 +98,7 @@ Key flags for scheduled tasks:
 
 | Flag | Purpose | Example |
 |------|---------|---------|
-| `-p "prompt"` | Run non-interactively | `claude -p "Read .claude/commands/pw-daily.md and follow it"` |
+| `-p "prompt"` | Run non-interactively | `claude -p "Read .claude/commands/pw-daily-research.md and follow it"` |
 | `--output-format json` | Structured output for parsing | |
 | `--allowedTools "..."` | Auto-approve specific tools | `--allowedTools "Read,Glob,Grep"` |
 | `--max-turns N` | Limit iterations | `--max-turns 20` |
@@ -108,30 +108,62 @@ Key flags for scheduled tasks:
 
 All outputs stay within the project under `ai/.tmp/`:
 
-| Type | Location | Pattern |
-|------|----------|---------|
-| Nightly report | `ai/.tmp/` | `nightly-report-YYYYMMDD.md` |
-| Exceptions report | `ai/.tmp/` | `exceptions-report-YYYYMMDD.md` |
-| Support report | `ai/.tmp/` | `support-report-YYYYMMDD.md` |
-| Automation logs | `ai/.tmp/scheduled/` | `daily-YYYYMMDD-HHMM.log` |
+| Type | Location | Pattern | Phase |
+|------|----------|---------|-------|
+| Nightly report | `ai/.tmp/` | `nightly-report-YYYYMMDD.md` | Research |
+| Exceptions report | `ai/.tmp/` | `exceptions-report-YYYYMMDD.md` | Research |
+| Support report | `ai/.tmp/` | `support-report-YYYYMMDD.md` | Research |
+| Daily failures | `ai/.tmp/` | `failures-YYYYMMDD.md` | Research |
+| Suggested actions | `ai/.tmp/` | `suggested-actions-YYYYMMDD.md` | Research |
+| Daily summary | `ai/.tmp/history/` | `daily-summary-YYYYMMDD.json` | Research |
+| Manifest | `ai/.tmp/` | `daily-manifest-YYYYMMDD.json` | Research |
+| Automation logs | `ai/.tmp/daily/YYYY-MM-DD/` | `{phase}-HHMM.log` | Both |
 
 ## The Daily Report Script
 
 The script `ai/scripts/Invoke-DailyReport.ps1` handles:
-- Pulling latest pwiz-ai master (ensures latest scripts/commands)
-- Running Claude Code with `/pw-daily`
-- Emailing results via Gmail MCP
-- Logging to `ai/.tmp/scheduled/`
+- Pulling latest pwiz-ai and pwiz master branches
+- Running Claude Code with the appropriate command file
+- Phase-specific tool permissions and turn budgets
+- Logging to `ai/.tmp/daily/YYYY-MM-DD/`
 - Auto-cleanup of logs older than 30 days
+- Self-scheduling via `-Schedule` parameter
+
+### Sequential Two-Phase Architecture
+
+When `-Phase both` (the default), the script runs two sequential Claude sessions:
+
+| Order | Phase | What It Does | Turn Budget |
+|-------|-------|-------------|-------------|
+| 1 | **Research** | Collect MCP data, investigate exceptions/failures/leaks, write findings | 100 |
+| 2 | **Email** | Read findings, compose enriched HTML email, send, archive inbox | 40 |
+
+The email session starts immediately after research completes. Each session has independent turn limits and tool permissions — research cannot send email, email cannot run LabKey queries.
+
+**Why sequential sessions?** The research phase is compute-heavy and benefits from a high turn budget. The email phase is predictable and needs fewer turns. Session isolation prevents research from consuming turns meant for email delivery. If research fails, email still runs and sends what it can.
+
+### Tool Permissions by Phase
+
+| Tool Category | Research | Email |
+|---------------|----------|-------|
+| Read/Write/Edit/Glob/Grep | Yes | Read/Glob/Grep only |
+| Bash (git/gh) | Yes | No |
+| LabKey MCP (data) | Yes | No |
+| LabKey MCP (investigation) | Yes | No |
+| Gmail read | Yes | Yes |
+| Gmail send/modify | No | Yes |
 
 ### Usage
 
 ```powershell
-# Run with defaults (emails to brendanx@uw.edu)
+# Run both phases sequentially (default)
 pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1'"
 
-# Different recipient
-pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Recipient 'team@example.com'"
+# Run research phase only (no email)
+pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Phase research"
+
+# Run email phase only (reads research findings)
+pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Phase email"
 
 # Preview without executing
 pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -DryRun"
@@ -142,67 +174,81 @@ pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -DryRun"
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `-Recipient` | `brendanx@uw.edu` | Email address for the report |
-| `-Model` | `claude-sonnet-4-20250514` | Claude model to use |
-| `-MaxTurns` | `30` | Maximum agentic turns |
+| `-Model` | `claude-opus-4-5-20251101` | Claude model to use |
+| `-MaxTurns` | Phase-dependent (100/40) | Maximum agentic turns per phase |
+| `-Phase` | `both` | `research`, `email`, or `both` |
+| `-Schedule` | (none) | Register as daily Task Scheduler task at given time |
 | `-DryRun` | (switch) | Print command without executing |
 
 ## Task Scheduler Setup
 
-### Step 1: Test the Script Manually
+### Option A: Self-Scheduling (Recommended)
+
+The script can register itself as a Windows Task Scheduler task. Run from an elevated (Administrator) PowerShell prompt:
 
 ```powershell
-cd C:\proj\pwiz-ai
-pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -DryRun"
+# Schedule default (both phases sequentially) at 8:05 AM
+pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Schedule '8:05AM'"
+
+# Schedule with custom recipient
+pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Schedule '8:05AM' -Recipient 'team@example.com'"
+
+# Schedule individual phases separately (if needed)
+pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Phase research -Schedule '8:05AM'"
+pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Phase email -Schedule '9:00AM'"
 ```
 
-Then run without `-DryRun` to verify it works.
+The `-Schedule` parameter:
+- Validates the time format
+- Requires elevation (errors if not admin)
+- Removes any existing task(s) covered by the phase before creating:
+  - `research` removes "Daily Report - Research"
+  - `email` removes "Daily Report - Email"
+  - `both` removes all three ("Daily Report - Research", "- Email", "- Both")
+- Creates a daily trigger at the specified time
+- Sets 3-hour execution time limit
+- Enables "start when available" for missed runs
 
-### Step 2: Create Scheduled Task
+### Option B: Task Scheduler GUI
 
-**Option A: PowerShell (recommended)**
+Create one task:
 
-Run as Administrator:
-
-```powershell
-$taskAction = New-ScheduledTaskAction `
-    -Execute "pwsh" `
-    -Argument "-NoProfile -File C:\proj\pwiz-ai\ai\scripts\Invoke-DailyReport.ps1" `
-    -WorkingDirectory "C:\proj\pwiz-ai"
-
-$taskTrigger = New-ScheduledTaskTrigger -Daily -At 8:30AM
-
-$taskSettings = New-ScheduledTaskSettingsSet `
-    -RunOnlyIfNetworkAvailable `
-    -StartWhenAvailable `
-    -AllowStartIfOnBatteries `
-    -DontStopIfGoingOnBatteries
-
-$task = New-ScheduledTask `
-    -Action $taskAction `
-    -Trigger $taskTrigger `
-    -Settings $taskSettings `
-    -Description "Daily Claude Code report: nightly tests, exceptions, support"
-
-Register-ScheduledTask `
-    -TaskName "Claude-Daily-Report" `
-    -InputObject $task `
-    -User "$env:USERNAME" `
-    -RunLevel Highest
-```
-
-**Option B: Task Scheduler GUI**
-
-1. Open "Task Scheduler" (search in Start menu)
-2. Click "Create Basic Task"
-3. Name: "Claude-Daily-Report"
-4. Trigger: Daily at 8:30 AM
-5. Action: Start a program
+**Task: "Daily Report - Both"**
+1. Trigger: Daily at 8:05 AM
+2. Action: Start a program
    - Program: `pwsh`
-   - Arguments: `-NoProfile -File C:\proj\pwiz-ai\ai\scripts\Invoke-DailyReport.ps1`
-   - Start in: `C:\proj\pwiz-ai`
-6. Finish, then edit task properties:
-   - Check "Run with highest privileges"
-   - Check "Run only when network is available"
+   - Arguments: `-NoProfile -File C:\proj\ai\scripts\Invoke-DailyReport.ps1`
+   - Start in: `C:\proj`
+3. Settings: Allow start if on batteries, start when available
+
+### Step 1: Test First
+
+```powershell
+cd C:\proj
+# Preview what will run
+pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -DryRun"
+
+# Run manually to verify
+pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1'"
+```
+
+### Migrating from Two-Task Setup
+
+If you have the old separate research and email tasks:
+
+```powershell
+# The -Schedule parameter with -Phase both handles this automatically:
+# it removes "Daily Report - Research", "Daily Report - Email", and "Daily Report - Both"
+pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Schedule '8:05AM'"
+```
+
+Or manually:
+
+```powershell
+Unregister-ScheduledTask -TaskName "Daily Report - Research" -Confirm:$false
+Unregister-ScheduledTask -TaskName "Daily Report - Email" -Confirm:$false
+# Then schedule the combined task
+```
 
 ## Configuration Options
 
@@ -211,35 +257,22 @@ Register-ScheduledTask `
 Pass the `-Recipient` parameter:
 
 ```powershell
-$taskAction = New-ScheduledTaskAction `
-    -Execute "pwsh" `
-    -Argument "-NoProfile -File C:\proj\pwiz-ai\ai\scripts\Invoke-DailyReport.ps1 -Recipient 'team@example.com'" `
-    -WorkingDirectory "C:\proj\pwiz-ai"
+pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Schedule '8:05AM' -Recipient 'team@example.com'"
 ```
 
 ### Change Schedule
 
-Modify the trigger time:
+Simply re-run with the new time — existing tasks are removed automatically:
 
 ```powershell
-$taskTrigger = New-ScheduledTaskTrigger -Daily -At 8:30AM
-```
-
-### Weekend Skip
-
-For weekday-only execution:
-
-```powershell
-$taskTrigger = New-ScheduledTaskTrigger -Weekly `
-    -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday `
-    -At 9:00AM
+pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Schedule '7:30AM'"
 ```
 
 ## Troubleshooting
 
 ### Task Runs but No Email
 
-1. Check log file in `ai/.tmp/scheduled/`
+1. Check log file in `ai/.tmp/daily/YYYY-MM-DD/`
 2. Verify Gmail MCP is configured: `claude mcp list`
 3. Test email manually: ask Claude to send a test email
 
@@ -263,12 +296,12 @@ $taskTrigger = New-ScheduledTaskTrigger -Weekly `
 
 ## Log Management
 
-The script auto-deletes logs older than 30 days. Logs are kept in `ai/.tmp/scheduled/` which is gitignored.
+The script auto-deletes daily folders older than 30 days. Logs are in `ai/.tmp/daily/YYYY-MM-DD/` which is gitignored.
 
 To view recent logs:
 
 ```powershell
-Get-ChildItem ai/.tmp/scheduled/*.log | Sort-Object LastWriteTime -Descending | Select-Object -First 5
+Get-ChildItem ai/.tmp/daily/*/*.log | Sort-Object LastWriteTime -Descending | Select-Object -First 5
 ```
 
 ## Security Considerations
@@ -280,9 +313,12 @@ Get-ChildItem ai/.tmp/scheduled/*.log | Sort-Object LastWriteTime -Descending | 
 
 ## Related
 
-- `ai/scripts/Invoke-DailyReport.ps1` - The automation script
+- `ai/scripts/Invoke-DailyReport.ps1` - The automation script (supports `-Phase research|email|both` and `-Schedule`)
+- `ai/docs/daily-report-guide.md` - Full daily report guide
 - `ai/docs/mcp/gmail.md` - Gmail MCP setup
 - `ai/docs/mcp/nightly-tests.md` - Nightly test data
 - `ai/docs/mcp/exceptions.md` - Exception triage
 - `ai/docs/mcp/support.md` - Support board access
-- `.claude/commands/pw-daily.md` - Daily report command
+- `.claude/commands/pw-daily.md` - Combined daily report command (interactive)
+- `.claude/commands/pw-daily-research.md` - Research phase command
+- `.claude/commands/pw-daily-email.md` - Email phase command

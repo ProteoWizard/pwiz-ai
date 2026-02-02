@@ -1,11 +1,9 @@
 # TODO-20260123_doc_cleanup.md
 
 ## Branch Information
-- **Branch**: `doc-cleanup-20260123`
-- **Base**: `master`
 - **Created**: 2026-01-23
 - **Status**: Complete
-- **PR**: (pending)
+- **Merged**: Pushed directly to pwiz-ai master (no PR needed)
 
 ## Objective
 
@@ -67,7 +65,7 @@ Key findings being addressed:
 - [x] issues.md created with LabKey issues tool documentation (131 lines)
 - [x] files.md updated with comprehensive WebDAV tool documentation (113 lines)
 - [x] status.md already exists with complete documentation (123 lines)
-- [x] All changes committed and ready for PR (commit 2f98475)
+- [x] All changes pushed to master
 
 ## Not In Scope (Future Work)
 
@@ -97,4 +95,4 @@ Key findings being addressed:
 - Added descriptions to TOC.md for new MCP documentation files
 - Fixed stale `/pw-aicontextsync` reference in Generate-TOC.ps1
 - All Phase 1 and Phase 2 tasks complete
-- Committed: 2bb909c
+- All changes pushed to master

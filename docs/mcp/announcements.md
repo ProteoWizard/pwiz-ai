@@ -8,7 +8,7 @@ The `announcement.Announcement` table is a general-purpose content table used th
 |-----------|---------|-----------|
 | `/home/support` | Support board | `query_support_threads`, `get_support_thread` |
 | `/home/issues/exceptions` | Exception tracking | `query_exceptions`, `get_exception_details` |
-| `/home/software/Skyline/daily` | Beta release notes | Use support tools with container_path override |
+| `/home/software/Skyline/daily` | Beta release notes | `post_announcement` (create), support tools (read) |
 | `/home/software/Skyline/releases` | Release email archives | Pre-MailChimp (through 2024) |
 | `/home/software/Skyline/events/*` | Event registration | Many sub-folders for courses, user groups |
 | `/home/software/Skyline/funding/*` | Funding appeals | NIH grants, vendor support |
@@ -68,6 +68,42 @@ git tag --contains 5828d20cc --sort=version:refname | head -1
 ## MailChimp Transition (2025)
 
 Release announcement emails were stored in `/home/software/Skyline/releases` through 2024. Starting 2025, emails are sent via MailChimp to handle scale and spam filtering. Archives should still be copied to the releases container for historical record.
+
+## MCP Tools
+
+### post_announcement
+
+Creates a new top-level announcement thread in any LabKey container. Uses the announcement controller (not SDK `insert_rows`) to ensure email notifications are sent to subscribers.
+
+**Parameters:**
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `title` | *(required)* | Thread title |
+| `body` | *(required)* | Thread body content |
+| `renderer_type` | `MARKDOWN` | Render format: MARKDOWN, HTML, TEXT_WITH_LINKS, RADEOX |
+| `server` | `skyline.ms` | LabKey server hostname |
+| `container_path` | `/home/software/Skyline/daily` | Target container |
+
+**Examples:**
+
+```python
+# Post Skyline-daily release notes
+post_announcement(
+    title="Skyline-daily 25.1.1.150",
+    body="## Changes\n- Feature X\n- Bug fix Y",
+    container_path="/home/software/Skyline/daily",
+)
+
+# Post to support board (if needed)
+post_announcement(
+    title="[TEST] Test post",
+    body="Testing announcement posting.",
+    container_path="/home/support",
+)
+```
+
+**Why form POST (not SDK insert_rows):** LabKey's announcement controller handles email notifications — immediate, per-thread, and daily digest subscriptions. Using `insert_rows()` would silently post without notifying subscribers. The form POST goes through the same controller as the web UI.
 
 ## Related Documentation
 

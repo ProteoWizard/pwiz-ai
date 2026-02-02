@@ -9,6 +9,10 @@
 
   FETCHED FROM: https://raw.githubusercontent.com/ProteoWizard/pwiz-ai/master/docs/new-machine-setup.md
 
+  IMPORTANT: This document must be downloaded with curl (Bash tool), not WebFetch.
+  WebFetch processes content through a summarization model and returns a summary
+  instead of the full document, which loses critical details like exact commands.
+
   Changes committed to this file are immediately available to new setup sessions.
 -->
 
@@ -48,7 +52,20 @@ You don't need to do anything special to record these. I'll take notes as we go 
 
 - **Pristine mode**: The developer followed `new-machine-bootstrap.md`, so Git and Claude Code are already installed and working. Proceed through each phase without checking for existing installations—install commands will run directly. Start at Phase 1.1 (Node.js).
 
-- **Existing mode**: The machine has a working Skyline development environment (via HowToBuildSkylineTip or prior setup). **Before proceeding through the phases**, run the verification script to get a comprehensive status report:
+- **Existing mode**: The machine has a working Skyline development environment (via HowToBuildSkylineTip or prior setup).
+
+  > **For LLM assistants — CRITICAL: Clone pwiz-ai FIRST.**
+  > The `ai/` repository is your highest priority. It provides:
+  > - `Verify-Environment.ps1` — comprehensive status check for all prerequisites
+  > - `CLAUDE.md`, `CRITICAL-RULES.md`, `MEMORY.md` — full project context for Claude Code
+  > - `.claude/` junction target — skills, commands, and settings
+  > - Build and test scripts, MCP servers, and all AI tooling
+  >
+  > **Without `ai/`, you have none of these tools** and will waste time checking components individually. Jump to Phase 1.10 first to clone pwiz-ai and set up the junction. Then come back here to run the verification script.
+  >
+  > Do NOT fall back to checking tools one by one. Clone `ai/` first.
+
+  **Once `ai/` is cloned**, run the verification script to get a comprehensive status report:
 
   ```powershell
   pwsh -Command "& './ai/scripts/Verify-Environment.ps1'"
@@ -59,7 +76,7 @@ You don't need to do anything special to record these. I'll take notes as we go 
   - Focus on phases with MISSING or ERROR items
   - Note WARN items that may need user decision
 
-  > **For LLM assistants:** The verification script is your primary tool for existing machines. Run it first, share the summary with the user, then propose which phases to work through based on the results. This is much faster than checking each component individually.
+  > **For LLM assistants:** The verification script is your primary tool for existing machines. Share the summary with the user, then propose which phases to work through based on the results. This is much faster than checking each component individually.
   >
   > **Actively offer optional items:** Items showing `[INFO]` status are optional but should still be explicitly offered to the user with a brief explanation of what they're for. Don't just list them as "not required"—ask if the user wants to install them. For example:
   > - **Pillow** (Python package): Enables clipboard image capture in StatusMcp. Critical on Windows 10 where screenshots aren't auto-saved. Less necessary on Windows 11 which saves Win+Shift+S screenshots to `~/Pictures/Screenshots`, but still useful for capturing images from other sources.
@@ -269,6 +286,9 @@ commands, skills, and settings.
 "@ | Out-File -FilePath CLAUDE.md -Encoding utf8
 
 # Copy default Claude settings (pre-approved read operations)
+# NOTE: settings-defaults.local.json must NOT contain $schema or $comment fields.
+# Claude Code validates settings files and rejects unrecognized top-level keys,
+# causing the entire file to be skipped with a "Settings Error".
 Copy-Item ai\claude\settings-defaults.local.json ai\claude\settings.local.json
 
 # Clone pwiz
@@ -791,13 +811,15 @@ Register the MCP servers with Claude Code.
 # Install dependencies (Pillow for clipboard image capture)
 pip install mcp Pillow
 
-claude mcp add status -- python C:\proj\ai\mcp\StatusMcp\server.py
+claude mcp add status -- python ./ai/mcp/StatusMcp/server.py
 ```
 
 **LabKey MCP** - Access to skyline.ms (nightly tests, exceptions, wiki, support):
 ```powershell
-claude mcp add labkey -- python C:\proj\ai\mcp\LabKeyMcp\server.py
+claude mcp add labkey -- python ./ai/mcp/LabKeyMcp/server.py
 ```
+
+> **Note:** Use relative paths with forward slashes (`./ai/mcp/...`), not absolute Windows paths. The `claude mcp add` command strips backslashes, turning `C:\proj\ai\...` into `C:projai...` which fails to connect.
 
 **After registering new servers, restart Claude Code** to activate them:
 1. Exit Claude Code (`/exit`)
