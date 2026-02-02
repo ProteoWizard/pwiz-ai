@@ -5,8 +5,10 @@
 .DESCRIPTION
     Invokes Claude Code in non-interactive mode to run the daily report.
     Supports splitting into research and email phases for scheduled automation.
+    When Phase is "both" (default), runs research then email as two sequential
+    Claude sessions with independent turn limits and tool permissions.
 
-    Designed for Windows Task Scheduler automation.
+    Can register itself as a Windows Task Scheduler task with -Schedule.
 
 .PARAMETER Recipient
     Email address to send the report to. Default: brendanx@uw.edu
@@ -15,23 +17,31 @@
     Claude model to use. Default: claude-opus-4-5-20251101
 
 .PARAMETER MaxTurns
-    Maximum agentic turns. Default varies by phase:
+    Maximum agentic turns per phase. Default varies by phase:
     - research: 100
     - email: 40
-    - both: 100
+    When Phase is "both", each phase uses its own default.
 
 .PARAMETER Phase
     Which phase to run:
     - research: Data collection, investigation, write findings (no email)
     - email: Read findings, compose and send enriched email
-    - both: Run everything (backward compatible, default)
+    - both: Run research then email sequentially (default)
+
+.PARAMETER Schedule
+    Register as a daily Windows Task Scheduler task at the specified time.
+    Requires an elevated (Administrator) PowerShell prompt.
+    Removes any existing task(s) covered by the selected phase before creating:
+    - research: removes existing "Daily Report - Research"
+    - email: removes existing "Daily Report - Email"
+    - both: removes all three ("Daily Report - Research", "- Email", "- Both")
 
 .PARAMETER DryRun
     If set, prints the command without executing.
 
 .EXAMPLE
     .\Invoke-DailyReport.ps1
-    Runs the full daily report with default settings.
+    Runs research then email sequentially with default settings.
 
 .EXAMPLE
     .\Invoke-DailyReport.ps1 -Phase research
@@ -40,6 +50,14 @@
 .EXAMPLE
     .\Invoke-DailyReport.ps1 -Phase email
     Runs email phase only (reads research findings, sends email).
+
+.EXAMPLE
+    .\Invoke-DailyReport.ps1 -Schedule "8:05AM"
+    Registers a daily task at 8:05 AM that runs both phases sequentially.
+
+.EXAMPLE
+    .\Invoke-DailyReport.ps1 -Phase research -Schedule "8:05AM"
+    Registers a daily task at 8:05 AM for research phase only.
 
 .EXAMPLE
     .\Invoke-DailyReport.ps1 -Recipient "team@example.com"
@@ -52,9 +70,10 @@
 .NOTES
     See ai/docs/scheduled-tasks-guide.md for Task Scheduler setup.
 
-    Scheduled tasks:
-    - "Daily Report - Research" at 8:05 AM: -Phase research
-    - "Daily Report - Email" at 9:00 AM: -Phase email
+    Recommended scheduled task:
+    - "Daily Report - Both" at 8:05 AM (default, runs research then email)
+
+    Individual phases can also be scheduled separately if needed.
 #>
 
 param(
@@ -63,6 +82,7 @@ param(
     [int]$MaxTurns = 0,
     [ValidateSet("research", "email", "both")]
     [string]$Phase = "both",
+    [string]$Schedule,
     [switch]$DryRun
 )
 
@@ -75,30 +95,74 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 # Configuration
 # Sibling mode: C:\proj contains both ai/ (pwiz-ai) and pwiz/ subdirectories
 $WorkDir = "C:\proj"
-$DateFolder = Get-Date -Format "yyyy-MM-dd"
-$TimeStamp = Get-Date -Format "HHmm"
-$LogDir = Join-Path $WorkDir "ai\.tmp\daily\$DateFolder"
-$LogFile = Join-Path $LogDir "$Phase-$TimeStamp.log"
 
-# Ensure log directory exists
-if (-not (Test-Path $LogDir)) {
-    New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
-}
+# ─────────────────────────────────────────────────────────────
+# Task Scheduler registration
+# ─────────────────────────────────────────────────────────────
 
-# Phase-specific defaults for MaxTurns
-if ($MaxTurns -eq 0) {
-    $MaxTurns = switch ($Phase) {
-        "research" { 100 }
-        "email"    { 40 }
-        "both"     { 100 }
+if ($Schedule) {
+    # Validate time format
+    try {
+        $ScheduleTime = [DateTime]::Parse($Schedule)
     }
+    catch {
+        Write-Error "Invalid time format: '$Schedule'. Use formats like '8:05AM', '08:05', '20:05'."
+        exit 1
+    }
+
+    # Require elevation
+    $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $isAdmin) {
+        Write-Error "Scheduling requires an elevated (Administrator) PowerShell prompt."
+        exit 1
+    }
+
+    # Task names to remove based on phase
+    $TaskPrefix = "Daily Report"
+    $TasksToRemove = switch ($Phase) {
+        "research" { @("$TaskPrefix - Research") }
+        "email"    { @("$TaskPrefix - Email") }
+        "both"     { @("$TaskPrefix - Research", "$TaskPrefix - Email", "$TaskPrefix - Both") }
+    }
+
+    foreach ($Name in $TasksToRemove) {
+        $Existing = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+        if ($Existing) {
+            Unregister-ScheduledTask -TaskName $Name -Confirm:$false
+            Write-Host "Removed existing task: $Name"
+        }
+    }
+
+    # Build and register new task
+    $PhaseCapitalized = (Get-Culture).TextInfo.ToTitleCase($Phase)
+    $TaskName = "$TaskPrefix - $PhaseCapitalized"
+    $ScriptPath = $PSCommandPath
+    $Arguments = "-NoProfile -WindowStyle Hidden -File `"$ScriptPath`" -Phase $Phase -Recipient `"$Recipient`" -Model `"$Model`""
+
+    $Action = New-ScheduledTaskAction -Execute "pwsh" -Argument $Arguments -WorkingDirectory $WorkDir
+    $Trigger = New-ScheduledTaskTrigger -Daily -At $ScheduleTime
+    $Settings = New-ScheduledTaskSettingsSet `
+        -AllowStartIfOnBatteries `
+        -DontStopIfGoingOnBatteries `
+        -StartWhenAvailable `
+        -ExecutionTimeLimit (New-TimeSpan -Hours 3)
+
+    Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger `
+        -Settings $Settings -Description "Claude Code daily report ($Phase phase)" | Out-Null
+
+    Write-Host "Created task: $TaskName at $($ScheduleTime.ToString('h:mm tt')) daily"
+    exit 0
 }
 
-# Build phase-specific prompt
-switch ($Phase) {
-    "research" {
-        $CommandFile = ".claude/commands/pw-daily-research.md"
-        $Prompt = @"
+# ─────────────────────────────────────────────────────────────
+# Phase configuration helpers
+# ─────────────────────────────────────────────────────────────
+
+function Get-PhasePrompt([string]$PhaseName) {
+    switch ($PhaseName) {
+        "research" {
+            $CommandFile = ".claude/commands/pw-daily-research.md"
+            @"
 You are running as a scheduled automation task. Slash commands and skills do not work in non-interactive mode.
 
 FIRST: Read ai/CLAUDE.md to understand project rules (especially: use pwsh not powershell, backslashes for file paths).
@@ -113,10 +177,10 @@ Key points:
 - Write the manifest file at the end: ai/.tmp/daily-manifest-YYYYMMDD.json
 - If MCP tools fail, write a manifest with research_completed: false
 "@
-    }
-    "email" {
-        $CommandFile = ".claude/commands/pw-daily-email.md"
-        $Prompt = @"
+        }
+        "email" {
+            $CommandFile = ".claude/commands/pw-daily-email.md"
+            @"
 You are running as a scheduled automation task. Slash commands and skills do not work in non-interactive mode.
 
 FIRST: Read ai/CLAUDE.md to understand project rules (especially: use pwsh not powershell, backslashes for file paths).
@@ -132,180 +196,133 @@ Key points:
 - Use Gmail MCP tools to send the email and archive processed inbox emails
 - If data is completely missing, send an ERROR email as specified in the command file
 "@
-    }
-    "both" {
-        $CommandFile = ".claude/commands/pw-daily.md"
-        $Prompt = @"
-You are running as a scheduled automation task. Slash commands and skills do not work in non-interactive mode.
-
-FIRST: Read ai/CLAUDE.md to understand project rules (especially: use pwsh not powershell, backslashes for file paths).
-
-THEN: Read $CommandFile and follow those instructions to generate the daily report.
-
-Email recipient: $Recipient
-
-Key points:
-- Use MCP tools directly (mcp__labkey__*, mcp__gmail__*) - they are pre-authorized
-- Use pwsh (not powershell) for any shell commands
-- The report date is the date in your environment info
-- Include key findings in the email body
-- If MCP tools fail, send an ERROR email as specified in pw-daily.md
-"@
+        }
     }
 }
 
-# Build phase-specific allowed tools list
-# Wildcards don't work - each tool must be listed explicitly
-switch ($Phase) {
-    "research" {
-        # Research phase: All LabKey MCP, Bash (git/gh), Read/Write/Glob/Grep
-        # NO Gmail send/modify (inbox reading allowed for data collection)
-        $AllowedTools = @(
-            # File operations
-            "Read",
-            "Write",
-            "Edit",
-            "Glob",
-            "Grep",
-            # Bash - granular read-only operations for investigation
-            "Bash(git blame:*)",
-            "Bash(git log:*)",
-            "Bash(git show:*)",
-            "Bash(git -C:*)",
-            "Bash(grep:*)",
-            "Bash(gh issue list:*)",
-            "Bash(gh issue view:*)",
-            "Bash(gh issue create:*)",
-            "Bash(gh pr list:*)",
-            "Bash(gh pr view:*)",
-            # LabKey MCP - data collection
-            "mcp__labkey__check_computer_alarms",
-            "mcp__labkey__get_daily_test_summary",
-            "mcp__labkey__save_exceptions_report",
-            "mcp__labkey__get_support_summary",
-            "mcp__labkey__get_run_failures",
-            "mcp__labkey__get_run_leaks",
-            "mcp__labkey__save_test_failure_history",
-            "mcp__labkey__analyze_daily_patterns",
-            "mcp__labkey__save_daily_summary",
-            "mcp__labkey__save_daily_failures",
-            "mcp__labkey__query_test_history",
-            # LabKey MCP - investigation
-            "mcp__labkey__backfill_nightly_history",
-            "mcp__labkey__backfill_exception_history",
-            "mcp__labkey__get_exception_details",
-            "mcp__labkey__query_exception_history",
-            "mcp__labkey__record_exception_issue",
-            "mcp__labkey__record_exception_fix",
-            "mcp__labkey__record_test_issue",
-            "mcp__labkey__record_test_fix",
-            "mcp__labkey__get_support_thread",
-            "mcp__labkey__save_run_log",
-            "mcp__labkey__query_test_runs",
-            "mcp__labkey__list_computer_status",
-            "mcp__labkey__save_run_metrics_csv",
-            # Gmail MCP - read-only (for inbox data collection)
-            "mcp__gmail__search_emails",
-            "mcp__gmail__read_email"
-        ) -join ","
-    }
-    "email" {
-        # Email phase: Gmail send/modify, Read/Glob for reading findings
-        # NO Bash, NO LabKey investigation tools
-        $AllowedTools = @(
-            # File operations (read-only + Glob for finding files)
-            "Read",
-            "Glob",
-            "Grep",
-            # Gmail MCP - read inbox, send report, archive
-            "mcp__gmail__search_emails",
-            "mcp__gmail__read_email",
-            "mcp__gmail__send_email",
-            "mcp__gmail__modify_email",
-            "mcp__gmail__batch_modify_emails"
-        ) -join ","
-    }
-    "both" {
-        # Full access - backward compatible
-        $AllowedTools = @(
-            # File operations
-            "Read",
-            "Write",
-            "Edit",
-            "Glob",
-            "Grep",
-            # Bash - granular read-only operations for Phase 3 investigation
-            "Bash(git blame:*)",
-            "Bash(git log:*)",
-            "Bash(git show:*)",
-            "Bash(git -C:*)",
-            "Bash(grep:*)",
-            "Bash(gh issue list:*)",
-            "Bash(gh issue view:*)",
-            "Bash(gh issue create:*)",
-            "Bash(gh pr list:*)",
-            "Bash(gh pr view:*)",
-            # LabKey MCP - nightly tests (Phase 1-2)
-            "mcp__labkey__check_computer_alarms",
-            "mcp__labkey__get_daily_test_summary",
-            "mcp__labkey__save_exceptions_report",
-            "mcp__labkey__get_support_summary",
-            "mcp__labkey__get_run_failures",
-            "mcp__labkey__get_run_leaks",
-            "mcp__labkey__save_test_failure_history",
-            "mcp__labkey__analyze_daily_patterns",
-            "mcp__labkey__save_daily_summary",
-            "mcp__labkey__save_daily_failures",
-            "mcp__labkey__query_test_history",
-            # LabKey MCP - Phase 3 investigation
-            "mcp__labkey__backfill_nightly_history",
-            "mcp__labkey__backfill_exception_history",
-            "mcp__labkey__get_exception_details",
-            "mcp__labkey__query_exception_history",
-            "mcp__labkey__record_exception_issue",
-            "mcp__labkey__record_exception_fix",
-            "mcp__labkey__record_test_issue",
-            "mcp__labkey__record_test_fix",
-            "mcp__labkey__get_support_thread",
-            "mcp__labkey__save_run_log",
-            "mcp__labkey__query_test_runs",
-            "mcp__labkey__list_computer_status",
-            "mcp__labkey__save_run_metrics_csv",
-            # Gmail MCP - read notifications, send report, archive
-            "mcp__gmail__search_emails",
-            "mcp__gmail__read_email",
-            "mcp__gmail__send_email",
-            "mcp__gmail__modify_email",
-            "mcp__gmail__batch_modify_emails"
-        ) -join ","
+function Get-PhaseTools([string]$PhaseName) {
+    switch ($PhaseName) {
+        "research" {
+            # Research phase: All LabKey MCP, Bash (git/gh), Read/Write/Glob/Grep
+            # NO Gmail send/modify (inbox reading allowed for data collection)
+            @(
+                # File operations
+                "Read",
+                "Write",
+                "Edit",
+                "Glob",
+                "Grep",
+                # Bash - granular read-only operations for investigation
+                "Bash(git blame:*)",
+                "Bash(git log:*)",
+                "Bash(git show:*)",
+                "Bash(git -C:*)",
+                "Bash(grep:*)",
+                "Bash(gh issue list:*)",
+                "Bash(gh issue view:*)",
+                "Bash(gh issue create:*)",
+                "Bash(gh pr list:*)",
+                "Bash(gh pr view:*)",
+                # LabKey MCP - data collection
+                "mcp__labkey__check_computer_alarms",
+                "mcp__labkey__get_daily_test_summary",
+                "mcp__labkey__save_exceptions_report",
+                "mcp__labkey__get_support_summary",
+                "mcp__labkey__get_run_failures",
+                "mcp__labkey__get_run_leaks",
+                "mcp__labkey__save_test_failure_history",
+                "mcp__labkey__analyze_daily_patterns",
+                "mcp__labkey__save_daily_summary",
+                "mcp__labkey__save_daily_failures",
+                "mcp__labkey__query_test_history",
+                # LabKey MCP - investigation
+                "mcp__labkey__backfill_nightly_history",
+                "mcp__labkey__backfill_exception_history",
+                "mcp__labkey__get_exception_details",
+                "mcp__labkey__query_exception_history",
+                "mcp__labkey__record_exception_issue",
+                "mcp__labkey__record_exception_fix",
+                "mcp__labkey__record_test_issue",
+                "mcp__labkey__record_test_fix",
+                "mcp__labkey__get_support_thread",
+                "mcp__labkey__save_run_log",
+                "mcp__labkey__query_test_runs",
+                "mcp__labkey__list_computer_status",
+                "mcp__labkey__save_run_metrics_csv",
+                # Gmail MCP - read-only (for inbox data collection)
+                "mcp__gmail__search_emails",
+                "mcp__gmail__read_email"
+            ) -join ","
+        }
+        "email" {
+            # Email phase: Gmail send/modify, Read/Glob for reading findings
+            # NO Bash, NO LabKey investigation tools
+            @(
+                # File operations (read-only + search)
+                "Read",
+                "Glob",
+                "Grep",
+                # Gmail MCP - read inbox, send report, archive
+                "mcp__gmail__search_emails",
+                "mcp__gmail__read_email",
+                "mcp__gmail__send_email",
+                "mcp__gmail__modify_email",
+                "mcp__gmail__batch_modify_emails"
+            ) -join ","
+        }
     }
 }
 
-# Build the command
-$ClaudeArgs = @(
-    "-p", $Prompt,
-    "--allowedTools", $AllowedTools,
-    "--max-turns", $MaxTurns,
-    "--model", $Model
-)
+function Get-PhaseMaxTurns([string]$PhaseName) {
+    switch ($PhaseName) {
+        "research" { 100 }
+        "email"    { 40 }
+    }
+}
+
+# ─────────────────────────────────────────────────────────────
+# Determine phases to run
+# ─────────────────────────────────────────────────────────────
+
+$PhasesToRun = if ($Phase -eq "both") { @("research", "email") } else { @($Phase) }
+
+$DateFolder = Get-Date -Format "yyyy-MM-dd"
+$TimeStamp = Get-Date -Format "HHmm"
+$LogDir = Join-Path $WorkDir "ai\.tmp\daily\$DateFolder"
+$LogFile = Join-Path $LogDir "$Phase-$TimeStamp.log"
+
+# ─────────────────────────────────────────────────────────────
+# Dry run
+# ─────────────────────────────────────────────────────────────
 
 if ($DryRun) {
     Write-Host "Would execute:" -ForegroundColor Cyan
     Write-Host "  Phase: $Phase"
     Write-Host "  Working directory: $WorkDir"
-    Write-Host "  Command file: $CommandFile"
-    Write-Host "  Max turns: $MaxTurns"
     Write-Host "  Git pull ai/: git pull origin master"
     Write-Host "  Git pull pwiz/: git pull origin master"
     Write-Host "  Log file: $LogFile"
-    Write-Host "  Command: claude $($ClaudeArgs -join ' ')"
     Write-Host ""
-    Write-Host "Allowed tools:" -ForegroundColor Yellow
-    $AllowedTools -split "," | ForEach-Object { Write-Host "  - $_" }
+    foreach ($P in $PhasesToRun) {
+        $Turns = if ($MaxTurns -gt 0) { $MaxTurns } else { Get-PhaseMaxTurns $P }
+        Write-Host "--- Phase: $P (max-turns: $Turns) ---" -ForegroundColor Yellow
+        Write-Host "  Command file: .claude/commands/pw-daily-$P.md"
+        Write-Host "  Allowed tools:"
+        (Get-PhaseTools $P) -split "," | ForEach-Object { Write-Host "    - $_" }
+        Write-Host ""
+    }
     exit 0
 }
 
-# Log start
+# ─────────────────────────────────────────────────────────────
+# Main execution
+# ─────────────────────────────────────────────────────────────
+
+# Ensure log directory exists
+if (-not (Test-Path $LogDir)) {
+    New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
+}
+
 $StartTime = Get-Date
 "[$StartTime] Starting Claude Code daily report (phase: $Phase)" | Out-File -FilePath $LogFile -Encoding UTF8
 
@@ -341,43 +358,63 @@ finally {
     Pop-Location
 }
 
-# Change to project directory
+# Run phases
 Push-Location $WorkDir
+$OverallExitCode = 0
 
 try {
-    # Run Claude Code with real-time logging
-    "[$(Get-Date)] Starting Claude Code (phase: $Phase, max-turns: $MaxTurns)..." | Out-File -FilePath $LogFile -Append -Encoding UTF8
-    & claude @ClaudeArgs 2>&1 | ForEach-Object {
-        $_ | Out-File -FilePath $LogFile -Append -Encoding UTF8
-    }
-    $ExitCode = $LASTEXITCODE
+    foreach ($CurrentPhase in $PhasesToRun) {
+        $PhasePrompt = Get-PhasePrompt $CurrentPhase
+        $PhaseTools = Get-PhaseTools $CurrentPhase
+        $PhaseTurns = if ($MaxTurns -gt 0) { $MaxTurns } else { Get-PhaseMaxTurns $CurrentPhase }
 
-    # Log completion
-    $EndTime = Get-Date
-    $Duration = $EndTime - $StartTime
-    "[$EndTime] Completed with exit code $ExitCode (duration: $($Duration.TotalMinutes.ToString('F1')) minutes)" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+        "[$(Get-Date)] Starting $CurrentPhase phase (max-turns: $PhaseTurns)..." | Out-File -FilePath $LogFile -Append -Encoding UTF8
 
-    # Consolidate MCP output into daily/YYYY-MM-DD/ folder
-    if ($Phase -eq "research" -or $Phase -eq "both") {
-        $ConsolidateScript = Join-Path $WorkDir "ai\scripts\Move-DailyReports.ps1"
-        if (Test-Path $ConsolidateScript) {
-            "[$(Get-Date)] Consolidating daily reports into $DateFolder/..." | Out-File -FilePath $LogFile -Append -Encoding UTF8
-            try {
-                & $ConsolidateScript 2>&1 | Out-File -FilePath $LogFile -Append -Encoding UTF8
-                "[$(Get-Date)] Consolidation complete" | Out-File -FilePath $LogFile -Append -Encoding UTF8
-            }
-            catch {
-                "[$(Get-Date)] WARNING: Consolidation failed: $_" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+        $ClaudeArgs = @(
+            "-p", $PhasePrompt,
+            "--allowedTools", $PhaseTools,
+            "--max-turns", $PhaseTurns,
+            "--model", $Model
+        )
+
+        & claude @ClaudeArgs 2>&1 | ForEach-Object {
+            $_ | Out-File -FilePath $LogFile -Append -Encoding UTF8
+        }
+        $PhaseExitCode = $LASTEXITCODE
+
+        "[$(Get-Date)] Phase '$CurrentPhase' completed with exit code $PhaseExitCode" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+
+        if ($PhaseExitCode -ne 0) {
+            $OverallExitCode = $PhaseExitCode
+        }
+
+        # Consolidate MCP output after research phase
+        if ($CurrentPhase -eq "research") {
+            $ConsolidateScript = Join-Path $WorkDir "ai\scripts\Move-DailyReports.ps1"
+            if (Test-Path $ConsolidateScript) {
+                "[$(Get-Date)] Consolidating daily reports into $DateFolder/..." | Out-File -FilePath $LogFile -Append -Encoding UTF8
+                try {
+                    & $ConsolidateScript 2>&1 | Out-File -FilePath $LogFile -Append -Encoding UTF8
+                    "[$(Get-Date)] Consolidation complete" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+                }
+                catch {
+                    "[$(Get-Date)] WARNING: Consolidation failed: $_" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+                }
             }
         }
-    }
-
-    if ($ExitCode -ne 0) {
-        Write-Error "Claude Code exited with code $ExitCode. See log: $LogFile"
     }
 }
 finally {
     Pop-Location
+}
+
+# Log completion
+$EndTime = Get-Date
+$Duration = $EndTime - $StartTime
+"[$EndTime] Completed (exit code: $OverallExitCode, duration: $($Duration.TotalMinutes.ToString('F1')) minutes)" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+
+if ($OverallExitCode -ne 0) {
+    Write-Error "One or more phases failed. See log: $LogFile"
 }
 
 # Clean up old date folders (keep 30 days)
@@ -392,4 +429,4 @@ if (Test-Path $CleanupScript) {
     & $CleanupScript
 }
 
-exit $ExitCode
+exit $OverallExitCode

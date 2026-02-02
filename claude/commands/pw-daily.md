@@ -8,14 +8,16 @@ Generate a consolidated daily report covering nightly tests, exceptions, and sup
 
 **Read**: [ai/docs/daily-report-guide.md](../../ai/docs/daily-report-guide.md) for full instructions.
 
-## Architecture: Two-Phase Pipeline
+## Architecture: Sequential Two-Phase Pipeline
 
-When run as scheduled automation, the daily report is split into two independent tasks:
+The daily report runs as two sequential Claude sessions with independent turn limits:
 
-1. **Research phase** (`/pw-daily-research`, 8:05 AM) — Collect data, investigate exceptions/failures/leaks, write findings to files. No email. Higher turn budget.
-2. **Email phase** (`/pw-daily-email`, 9:00 AM) — Read findings, compose enriched HTML email, send. Smaller turn budget.
+1. **Research phase** (`/pw-daily-research`) — Collect data, investigate exceptions/failures/leaks, write findings to files. No email. 100-turn budget.
+2. **Email phase** (`/pw-daily-email`) — Read findings, compose enriched HTML email, send. 40-turn budget.
 
-**This command (`/pw-daily`) runs both phases in sequence** — use it for manual/interactive sessions. The scheduled tasks use the split commands via `Invoke-DailyReport.ps1 -Phase research|email`.
+This command (`/pw-daily`) runs both phases in sequence. Each phase has its own tool permissions — research cannot send email, email cannot query LabKey.
+
+The automation script `Invoke-DailyReport.ps1` orchestrates this as two `claude` invocations. Schedule with: `Invoke-DailyReport.ps1 -Schedule "8:05AM"`
 
 See [ai/docs/scheduled-tasks-guide.md](../../ai/docs/scheduled-tasks-guide.md) for Task Scheduler configuration.
 
@@ -189,8 +191,8 @@ Questions to answer:
 ## Related
 
 - [ai/docs/daily-report-guide.md](../../ai/docs/daily-report-guide.md) - Full instructions
-- [pw-daily-research.md](pw-daily-research.md) - Research phase only (scheduled at 8:05 AM)
-- [pw-daily-email.md](pw-daily-email.md) - Email phase only (scheduled at 9:00 AM)
+- [pw-daily-research.md](pw-daily-research.md) - Research phase only
+- [pw-daily-email.md](pw-daily-email.md) - Email phase only
 - `/pw-nightly` - Nightly tests only
 - `/pw-exceptions` - Exceptions only
 - `/pw-support` - Support board only
