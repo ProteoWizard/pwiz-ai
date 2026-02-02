@@ -4,9 +4,10 @@
 - **Branch**: `Skyline/work/20260131_area_graph_null_normalize`
 - **Base**: `master`
 - **Created**: 2026-01-31
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#3828](https://github.com/ProteoWizard/pwiz/issues/3828)
 - **PR**: [#3924](https://github.com/ProteoWizard/pwiz/pull/3924)
+- **Cherry-pick**: [#3929](https://github.com/ProteoWizard/pwiz/pull/3929)
 
 ## Objective
 Fix NullReferenceException in AreaReplicateGraphPane.GetDotProductResults when _normalizeOption is null during import.
@@ -27,7 +28,7 @@ Fix NullReferenceException in AreaReplicateGraphPane.GetDotProductResults when _
 - `pwiz_tools/Skyline/Controls/Graphs/AreaReplicateGraphPane.cs` - AreaGraphData constructor, GetDotProductResults
 
 ## Test Plan
-- [ ] TeamCity CI passes
+- [x] TeamCity CI passes
 
 ## Implementation Notes
 - Initial fix used null-conditional at call sites; Copilot correctly identified that `_normalizeOption` is also dereferenced in `NormalizedValueCalculator.NormalizationMethodForMolecule` and other paths

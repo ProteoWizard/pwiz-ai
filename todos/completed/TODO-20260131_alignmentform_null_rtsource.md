@@ -4,9 +4,10 @@
 - **Branch**: `Skyline/work/20260131_alignmentform_null_rtsource`
 - **Base**: `master`
 - **Created**: 2026-01-31
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#3827](https://github.com/ProteoWizard/pwiz/issues/3827)
 - **PR**: [#3923](https://github.com/ProteoWizard/pwiz/pull/3923)
+- **Cherry-pick PR**: [#3925](https://github.com/ProteoWizard/pwiz/pull/3925) to `Skyline/skyline_26_1`
 
 ## Objective
 Fix NullReferenceException in AlignmentForm when RetentionTimeSource is null.
@@ -27,7 +28,7 @@ Fix NullReferenceException in AlignmentForm when RetentionTimeSource is null.
 - `pwiz_tools/Skyline/Controls/Graphs/AlignmentForm.cs` - GetRows()
 
 ## Test Plan
-- [ ] TeamCity CI passes
+- [x] TeamCity CI passes
 
 ## Implementation Notes
 - Returns empty DataRow array on null, same as the existing `!targetKey.HasValue` guard above

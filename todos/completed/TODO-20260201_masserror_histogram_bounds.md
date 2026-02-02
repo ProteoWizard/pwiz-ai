@@ -4,9 +4,10 @@
 - **Branch**: `Skyline/work/20260201_masserror_histogram_bounds`
 - **Base**: `master`
 - **Created**: 2026-02-01
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#3909](https://github.com/ProteoWizard/pwiz/issues/3909)
 - **PR**: [#3927](https://github.com/ProteoWizard/pwiz/pull/3927)
+- **Cherry-pick**: [#3930](https://github.com/ProteoWizard/pwiz/pull/3930)
 
 ## Objective
 Fix IndexOutOfRangeException in MassErrorHistogram2DGraphPane.AddChromInfo histogram binning.
@@ -33,13 +34,19 @@ The user reported: "The PRM RAW file was a trial run and only contained result f
 - [x] Extracted x-axis range into `xRange` variable, guard division by zero (use bin 0 when range is zero)
 - [x] Added `Math.Max(0, ...)` lower bound clamping for both x and y indices
 - [x] Separated index calculation from array access for clarity
+- [x] Added axis padding in Graph() when min == max so single data point renders visibly
+- [x] Added regression test that strips document to single iRT peptide, reproducing the degenerate case
 
 ## Files Modified
-- `pwiz_tools/Skyline/Controls/Graphs/MassErrorHistogram2DGraphPane.cs` - AddChromInfo binning logic
+- `pwiz_tools/Skyline/Controls/Graphs/MassErrorHistogram2DGraphPane.cs` - AddChromInfo binning logic, Graph axis padding
+- `pwiz_tools/Skyline/TestFunctional/MassErrorGraphsTest.cs` - Degenerate single-precursor test
 
 ## Test Plan
-- [ ] TeamCity CI passes
+- [x] MassErrorGraphsTest passes
+- [x] Test reproduces IndexOutOfRangeException without fix, passes with fix
+- [x] TeamCity CI passes
 
 ## Implementation Notes
 - The `_maxMass == _minMass` case (single mass error value) doesn't cause the same issue because `_binSizePpm` is a user setting (never zero)
 - The point rendering at line 207 divides `(_maxX - _minX)` by `xAxisBins` (constant 100), producing `binSizeX = 0` for degenerate data, which correctly places all points at `_minX`
+- ZedGraph renders a blank graph when axis min == max (zero range). Axis padding of ±1 (x) and ±_binSizePpm (y) ensures the single data point is visible
