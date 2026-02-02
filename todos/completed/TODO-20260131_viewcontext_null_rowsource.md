@@ -4,9 +4,10 @@
 - **Branch**: `Skyline/work/20260131_viewcontext_null_rowsource`
 - **Base**: `master`
 - **Created**: 2026-01-31
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#3887](https://github.com/ProteoWizard/pwiz/issues/3887)
 - **PR**: [#3922](https://github.com/ProteoWizard/pwiz/pull/3922)
+- **Cherry-pick**: [#3931](https://github.com/ProteoWizard/pwiz/pull/3931)
 
 ## Objective
 Fix ArgumentNullException in SkylineViewContext.GetImageIndex when ViewSpec.RowSource is null.
@@ -25,7 +26,7 @@ Fix ArgumentNullException in SkylineViewContext.GetImageIndex when ViewSpec.RowS
 - `pwiz_tools/Skyline/Controls/Databinding/SkylineViewContext.cs` - GetImageIndex()
 
 ## Test Plan
-- [ ] TeamCity CI passes
+- [x] TeamCity CI passes
 
 ## Implementation Notes
 - The base class `AbstractViewContext.GetImageIndex` returns -1 as default
