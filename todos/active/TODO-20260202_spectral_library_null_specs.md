@@ -6,23 +6,28 @@
 - **Created**: 2026-02-02
 - **Status**: In Progress
 - **GitHub Issue**: [#3932](https://github.com/ProteoWizard/pwiz/issues/3932)
-- **PR**: (pending)
+- **PR**: [#3941](https://github.com/ProteoWizard/pwiz/pull/3941)
 
 ## Objective
 
-Fix NullReferenceException in `SpectralLibrary.Create` when FilesTree debounce timer fires before `ConnectLibrarySpecs` has resolved all library spec entries.
+Fix NullReferenceException in `SpectralLibrary.Create` when `LibrarySpecs` contains null entries during FilesTree update.
 
 ## Root Cause
 
-`SkylineFile.BuildFromDocument()` iterates `peptideSettings.Libraries.LibrarySpecs` without filtering null entries. During XML deserialization, library specs can be null before `ConnectLibrarySpecs` resolves them. The FilesTree 100ms debounce timer creates a race window where the document has libraries but some specs are still null.
+`SkylineFile.BuildFromDocument()` iterates `peptideSettings.Libraries.LibrarySpecs` without filtering null entries. During XML deserialization, `PeptideLibraries.ReadXml()` creates complementary arrays where `librarySpecs[i]` is null when `libraries[i]` is a `Library` object and vice versa. Normally `ConnectLibrarySpecs` resolves all nulls before the document becomes active, but the exception report shows a null reaching `SpectralLibrary.Create` through an unknown path. The exact mechanism is unclear, but defensive null filtering matches existing patterns in `PeptideSettings.cs` (lines 2030, 2250, 2572).
 
 ## Tasks
 
 - [x] Create branch and TODO
-- [x] Filter null entries in `BuildFromDocument()` LibrarySpecs iteration
-- [ ] Build and verify
-- [ ] Create PR
+- [x] Filter null entries in `BuildFromDocument()` with `.Where(s => s != null)`
+- [x] Guard `else` branch with `librarySpecs.Count > 1` to skip empty results
+- [x] Build and verify
+
+## Notes
+
+- `SpectralLibrary.Create` depends on `LibrarySpec.Id` for `IdentityPath`, so we cannot fall back to the `Library` object's name for display
+- When null specs are filtered out, the FilesTree simply omits spectral libraries until a subsequent `DocumentChangedEvent` fires with fully-resolved specs
 
 ## Files Modified
 
-- `pwiz_tools/Skyline/Model/Files/SkylineFile.cs` - Filter nulls from LibrarySpecs with `.Where(s => s != null)`
+- `pwiz_tools/Skyline/Model/Files/SkylineFile.cs` - Filter nulls from LibrarySpecs, guard else branch with count > 1
