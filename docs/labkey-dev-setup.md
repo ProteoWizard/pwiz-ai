@@ -26,6 +26,12 @@ You are helping a developer set up a Windows machine for LabKey Server developme
 - **Verify each step**: Run verification commands to confirm success before moving on
 - **Guide GUI steps**: For IntelliJ and other GUI installers, tell the user exactly what to click
 - **UAC prompts**: Windows installers show a "User Account Control" dialog asking "Do you want to allow this app to make changes to your device?" - remind users to click **Yes** when this appears
+- **Pre-install briefing for interactive installers**: Before launching ANY interactive installer (one that opens a GUI), you MUST:
+  1. List the important choices or settings the user will encounter in the installer
+  2. Explain what to select for each choice and why
+  3. Ask the user to confirm they are ready before launching the installer
+
+  Do NOT launch the installer first and then describe the steps — the user may have already clicked past the relevant screens. The briefing must come BEFORE the install command.
 - **Show progress tracker**: After each phase, display a progress summary showing ALL phases with their status. Use colored indicators:
 
 ```
@@ -245,7 +251,19 @@ powershell.exe -Command "winget install Microsoft.PowerShell --source winget --a
 
 > Skip if environment check showed Java as [OK] with correct version
 
-Install the JDK for the LabKey version selected in Getting Started (GUI installer - tell user to watch for UAC prompt):
+**Before launching the installer, tell the user:**
+
+> The Java installer will open a GUI. Here's what to watch for:
+>
+> 1. **UAC prompt** — Click **Yes** to allow changes
+> 2. **Custom Setup screen** — This is the critical screen. Click the icons next to these features and select **"Will be installed on local hard drive"** (or ensure they are enabled):
+>    - **Set JAVA_HOME variable** — Required for LabKey's Gradle build to find Java
+>    - **Add to PATH** — Required so `java` works from the command line
+> 3. Click **Next** through the remaining screens and **Install**
+>
+> Are you ready to start the installer?
+
+**Wait for the user to confirm**, then run:
 
 ```bash
 # For LabKey 25.x - Java 17:
@@ -254,10 +272,6 @@ powershell.exe -Command "winget install EclipseAdoptium.Temurin.17.JDK --source 
 # For LabKey 26.x - Java 25:
 powershell.exe -Command "winget install EclipseAdoptium.Temurin.25.JDK --source winget --interactive --accept-source-agreements --accept-package-agreements"
 ```
-
-**During installation:**
-- **Enable "Set JAVA_HOME variable"** on the Custom Setup screen
-- Enable "Add to PATH" option
 
 ### 1.3 Install Git
 
@@ -435,7 +449,20 @@ powershell.exe -Command "[System.Environment]::GetEnvironmentVariable('GIT_ACCES
 pwsh -Command "Get-Service -Name 'postgresql*' -ErrorAction SilentlyContinue"
 ```
 
-If not found, install the appropriate version based on your LabKey version from Step 1:
+If not found, **brief the user before launching the installer:**
+
+> The PostgreSQL installer will open a GUI. Here's what you'll encounter:
+>
+> 1. **UAC prompt** — Click **Yes** to allow changes
+> 2. **Component Selection** — Keep all components selected (PostgreSQL Server, pgAdmin, Command Line Tools)
+> 3. **Password** — You will be asked to create a password for the `postgres` database superuser. **Choose a password and remember it** — you'll need it later when configuring LabKey's database connection
+> 4. **Port** — Keep the default **5432** (unless you know another PostgreSQL instance is using it)
+> 5. **Locale** — Keep the default locale
+> 6. **Stack Builder** — On the final screen, **uncheck "Launch Stack Builder"**. Stack Builder downloads optional extensions (PostGIS, etc.) that are not needed for LabKey development
+>
+> Are you ready to start the installer?
+
+**Wait for the user to confirm**, then run:
 
 ```bash
 # For LabKey 25.7.x and lower - install PostgreSQL 17:
@@ -455,13 +482,6 @@ pwsh -Command "winget install PostgreSQL.PostgreSQL.18 --source winget --interac
 # Ask user for version (e.g., "18.2-1"), then download and launch
 pwsh -Command "\$version = '18.2-1'; \$url = \"https://get.enterprisedb.com/postgresql/postgresql-\$version-windows-x64.exe\"; \$installer = \"\$env:TEMP\\postgresql-installer.exe\"; Invoke-WebRequest -Uri \$url -OutFile \$installer; Start-Process \$installer -Wait"
 ```
-
-**During installation:**
-- Select all components (PostgreSQL Server, pgAdmin, Command Line Tools)
-- **Set and remember the password** for the `postgres` user
-- Port: **5432** (keep default unless there's a conflict)
-- Locale: **Default locale** (keep default)
-- **Uncheck "Launch Stack Builder"** at the end - Stack Builder downloads additional extensions (PostGIS, etc.) which are not required for LabKey development. It can be run later from the Start menu if needed.
 
 ### 2.2 Verify PostgreSQL Installation
 
@@ -843,7 +863,7 @@ Tell the user to launch IntelliJ and open the project:
 
 > "Please launch IntelliJ IDEA from the Start menu, then:
 > 1. On the Welcome screen, click **Open** (or if already in a project: File > Open)
-> 2. Navigate to: `C:\labkey\labkeyEnlistment\server`
+> 2. Navigate to: `C:\labkey\labkeyEnlistment` (the **enlistment root**, not the `server` subfolder — the `ijConfigure` task creates the `.idea` folder and run configurations here)
 > 3. Click **OK**
 > 4. On the Trust dialog:
 >    - Check **'Trust all projects in the labkey folder'** (convenient for future projects)
@@ -899,6 +919,8 @@ Tell the user:
 5. The server is ready when you can access http://localhost:8080/ in a browser
 
 > **Note:** There may not be an explicit "Server started" message. Log warnings about missing schema metadata or skipped foreign keys are normal during module initialization.
+>
+> **IMPORTANT:** The server runs on **port 8080**. Always tell the user http://localhost:8080/ — do not guess other ports (3000, 3769, etc.).
 
 ### 7.2 Access LabKey Server
 
