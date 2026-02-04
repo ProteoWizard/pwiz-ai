@@ -549,6 +549,7 @@ Not just "what failed" but "why":
 
 **G. Draft a GitHub issue** if this is a real bug:
 - Clear title
+- **Link to source data on skyline.ms** (exception report, test run, or failure history page)
 - Stack trace from exception report
 - Root cause analysis (the WHY)
 - Suggested fix with specific file/line references
@@ -848,6 +849,7 @@ Document findings in `ai/.tmp/suggested-actions-YYYYMMDD.md` under "Infrastructu
 ### 1. PanoramaImportErrorException shows crash dialog instead of friendly error
 
 **Exception ID**: 73737
+**Report**: [#73737](https://skyline.ms/home/issues/exceptions/announcements-thread.view?rowId=73737)
 **Fingerprint**: `a1b2c3d4e5f67890`
 **Version**: 26.0.9.004
 
@@ -891,6 +893,19 @@ PanoramaImportErrorException treated as programming defect instead of showing us
 **Quality bar**: A good suggested-actions entry has root cause analysis that
 explains *why* something failed, not just *what* failed. The goal is GitHub-issue-quality
 analysis that a developer can review and act on.
+
+### CRITICAL: GitHub Issues Must Link to Source Data
+
+Every GitHub issue created from daily report findings **MUST** include a link to the original source data on skyline.ms. The reader should be able to click through to see the raw data on which the analysis is based.
+
+| Issue Source | Required Link |
+|-------------|---------------|
+| Exception report | `https://skyline.ms/home/issues/exceptions/announcements-thread.view?rowId={ROW_ID}` |
+| Test failure | `https://skyline.ms/home/development/{FOLDER}/testresults-showFailures.view?end={MM}%2F{DD}%2F{YYYY}&failedTest={TEST_NAME}` |
+| Test run (hang/crash) | `https://skyline.ms/home/development/{FOLDER}/testresults-showRun.view?runId={RUN_ID}` |
+| Support thread | `https://skyline.ms/home/support/announcements-thread.view?rowId={THREAD_ID}` |
+
+Include these in both the suggested-actions file entries and the GitHub issues created from them.
 
 ### CRITICAL: Fingerprints Must Flow Through the Pipeline
 

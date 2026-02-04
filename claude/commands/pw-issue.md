@@ -196,10 +196,12 @@ When no file/issue is specified, or a descriptive phrase is given:
 
 When creating issues for unhandled exceptions:
 - **REQUIRED**: Include the **fingerprint** hash in the issue body under `## Exception Report`. This is critical for tracking fixes back to exception reports. Without the fingerprint, `record_exception_fix()` cannot be called later when the fix is merged.
-- Include the **exception ID** (skyline.ms row ID) for linking to the original report
+- **REQUIRED**: Include a **link to the source data on skyline.ms** so the reader can get back to the original report. Every issue must link to the closest original data:
+  - Exception: `https://skyline.ms/home/issues/exceptions/announcements-thread.view?rowId={ROW_ID}`
+  - Test failure: `https://skyline.ms/home/development/{FOLDER}/testresults-showFailures.view?end={MM}%2F{DD}%2F{YYYY}&failedTest={TEST_NAME}`
+  - Test run (hang/crash): `https://skyline.ms/home/development/{FOLDER}/testresults-showRun.view?runId={RUN_ID}`
 - Note the **user impact** (how many users affected, frequency of reports)
 - Include version information
-- Link to exception report thread if one exists
 
 ## Rules
 
