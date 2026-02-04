@@ -160,9 +160,10 @@ For each exception in today's report:
 - Get stack trace via `get_exception_details`
 - Read the code at the stack trace location
 - Use `git blame` to understand context
-- Classify: user-actionable vs programming defect
+- Classify: user-actionable (catch + friendly error) vs programming defect (fix the logic)
+- **Both categories are bugs that need code changes and GitHub issues.** Never classify an exception as "user-environment / no code change needed." If a team member responded with a workaround, the code should show that same guidance automatically.
 - Formulate root cause
-- Create GitHub issue if warranted
+- Create GitHub issue
 
 #### Test Failure Work Items
 

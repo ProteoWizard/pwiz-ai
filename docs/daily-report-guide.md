@@ -466,18 +466,22 @@ For **each exception** with a stack trace (user-reported or nightly test failure
 
 #### Exception Classification
 
-**Important**: Every exception that reaches the exception reporting form is a bug. There are no "user errors" in exception reports.
+**Every exception that reaches the exception reporting form is a bug. Both categories below require code changes and a GitHub issue. There is no "user-environment / no code change needed" category.**
 
-If an exception appears to be caused by user action (missing file, network unavailable), it is **still a bug** because:
+If an exception appears to be caused by user action (missing file, network unavailable, security policy), it is **still a programming error** because:
 1. The application failed to show a friendly error message to the user
-2. Instead, the user saw the exception reporting form (which they may perceive as a "crash")
-3. The application should have caught the exception and displayed helpful guidance
+2. Instead, the user saw the exception reporting form (which they perceive as a software "crash")
+3. The user is encouraged to report it to us, as if there were a bug in the software
+4. The only real bug is not catching the exception and reporting it to the user in an actionable way
 
-**User-actionable exceptions** (should be caught and shown as friendly error):
+**NEVER classify an exception as "user-environment" or "no code change needed".** The fact that a team member responded to the user and explained the workaround does NOT mean no code change is needed. The code change is: catch the exception and show that same guidance automatically, so future users don't hit the crash dialog.
+
+**User-actionable exceptions** (catch and show friendly error — **still a bug, still needs a GitHub issue**):
+- `FileLoadException` for blocked DLL → Should show: "A security policy is blocking a required component. Try unblocking the installer .zip before extracting."
 - `FileNotFoundException` for a template file → Should show: "Template file not found. Please select a valid file."
-- `IOException` for network path unavailable → Should show: "Cannot access network location. Check your connection."
+- `IOException` for network path unavailable → Should show: "A network error occurred. Check your connection and try again."
 
-**Programming defects** (code bug to fix, not catch-and-display):
+**Programming defects** (code logic error to fix — **also needs a GitHub issue**):
 - `ArgumentException`, `ArgumentOutOfRangeException` → Usually means calling code passed invalid value
 - `NullReferenceException`, `IndexOutOfBoundsException` → Code logic error
 - These require fixing the code that produced the invalid state, not adding error handling
@@ -486,7 +490,7 @@ If an exception appears to be caused by user action (missing file, network unava
 ```csharp
 try
 {
-    // Operation that might fail due to external factors (file, network, etc.)
+    // Operation that might fail due to external factors (file, network, security, etc.)
 }
 catch (Exception ex)
 {
@@ -832,6 +836,9 @@ Document findings in `ai/.tmp/suggested-actions-YYYYMMDD.md` under "Infrastructu
 ---
 
 ## Suggested Actions File Format
+
+**Valid sections**: `GitHub Issues to Create`, `Exception Fixes to Record`, `Tests to Monitor`.
+**Never create** a section like "User-Environment Exceptions" or "No Code Changes Needed". Every unhandled exception is a bug — user-actionable exceptions go in `GitHub Issues to Create` with a suggested fix of catch + friendly error message.
 
 ```markdown
 # Suggested Actions - YYYY-MM-DD
