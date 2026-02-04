@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260202_spectral_library_null_specs`
 - **Base**: `master`
 - **Created**: 2026-02-02
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#3932](https://github.com/ProteoWizard/pwiz/issues/3932)
 - **PR**: [#3941](https://github.com/ProteoWizard/pwiz/pull/3941)
 
@@ -31,3 +31,16 @@ Fix NullReferenceException in `SpectralLibrary.Create` when `LibrarySpecs` conta
 ## Files Modified
 
 - `pwiz_tools/Skyline/Model/Files/SkylineFile.cs` - Filter nulls from LibrarySpecs, guard else branch with count > 1
+
+## Resolution
+
+- **Status**: Fixed
+- **PR**: [#3941](https://github.com/ProteoWizard/pwiz/pull/3941) — merged to master 2026-02-03 (commit `61a3ea5`)
+- **Release cherry-pick**: [#3943](https://github.com/ProteoWizard/pwiz/pull/3943) — merged to `Skyline/skyline_26_1` 2026-02-03 (commit `046082e`)
+- **Summary**: Added `.Where(s => s != null)` filter on `LibrarySpecs` in `BuildFromDocument()` and guarded the else branch with `librarySpecs.Count > 1` to prevent NRE when null entries are present during FilesTree update.
+
+## Progress Log
+
+### 2026-02-03 - Merged
+- PR #3941 merged to master (commit `61a3ea5`)
+- Cherry-pick PR #3943 merged to `Skyline/skyline_26_1` (commit `046082e`)

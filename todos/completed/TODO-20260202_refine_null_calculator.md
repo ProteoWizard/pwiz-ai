@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260202_refine_null_calculator`
 - **Base**: `master`
 - **Created**: 2026-02-02
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#3933](https://github.com/ProteoWizard/pwiz/issues/3933)
 - **PR**: [#3940](https://github.com/ProteoWizard/pwiz/pull/3940)
 
@@ -33,9 +33,22 @@ Enhancement [#3939](https://github.com/ProteoWizard/pwiz/issues/3939) tracks imp
 - [x] Add calculator name matching in `InstanceData` constructor
 - [x] Add test coverage in IrtTest for missing calculator scenario
 - [x] Build and verify
-- [ ] Create PR
+- [x] Create PR
 
 ## Files Modified
 
 - `pwiz_tools/Skyline/Model/RetentionTimes/RetentionTimeRegressionGraphData.cs` - Null guard in Refine, name matching in InstanceData constructor
 - `pwiz_tools/Skyline/TestFunctional/IrtTest.cs` - Test for missing calculator regression graph
+
+## Resolution
+
+- **Status**: Fixed
+- **PR**: [#3940](https://github.com/ProteoWizard/pwiz/pull/3940) — merged to master 2026-02-04 (commit `81e6113`)
+- **Release cherry-pick**: [#3945](https://github.com/ProteoWizard/pwiz/pull/3945) — open to `Skyline/skyline_26_1`
+- **Summary**: Added null guard in `Refine()` and calculator name matching in `InstanceData` constructor to prevent NRE when the named iRT calculator's database is unavailable.
+
+## Progress Log
+
+### 2026-02-04 - Merged
+- PR #3940 merged to master (commit `81e6113`)
+- Cherry-pick PR #3945 opened to `Skyline/skyline_26_1`
