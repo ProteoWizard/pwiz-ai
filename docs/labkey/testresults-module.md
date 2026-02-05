@@ -2,6 +2,44 @@
 
 The `testresults` module provides the nightly test results dashboard on skyline.ms, including run tracking, training data for anomaly detection, and email notifications.
 
+## Git Repository Structure
+
+The `MacCossLabModules` repository is a **separate Git repository** nested inside the LabKey enlistment (not a submodule):
+
+```
+labkeyEnlistment/                              ← Main repo (LabKey/server.git)
+└── server/modules/
+    └── MacCossLabModules/                     ← Separate repo (LabKey/MacCossLabModules.git)
+        └── testresults/                       ← This module
+```
+
+### Branch Naming Convention
+
+**LabKey requires branches to follow this naming scheme:**
+```
+{version}_fb_{feature-name}
+```
+
+Examples:
+- `25.11_fb_testresults-retrain-all` - Feature branch for 25.11 release
+- `26.3_fb_menu-improvements` - Feature branch for 26.3 release
+
+**Common mistake:** Using `feature/...` naming will be rejected by LabKey CI.
+
+### Build and Deploy
+
+```bash
+# From labkeyEnlistment directory
+./gradlew :server:modules:MacCossLabModules:testresults:deployModule
+
+# Full rebuild with Tomcat restart
+./gradlew stopTomcat
+./gradlew :server:modules:MacCossLabModules:testresults:deployModule
+./gradlew startTomcat
+```
+
+**Note:** JSP changes in included files (like `menu.jsp`) require a full module rebuild, not just a Tomcat restart, because static includes are compiled into the parent JSPs.
+
 ## Source Location
 
 ```
