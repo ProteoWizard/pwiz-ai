@@ -981,14 +981,24 @@ Review `ai/.tmp/run-comparison-{before}-{after}.md` for:
 When recording a fix, track both the master and release branch PRs. Cherry-picks create different commits, so we track both for accurate version correlation.
 
 **Finding cherry-pick PRs**:
+
+The automated cherry-pick bot creates PRs with a predictable naming convention:
+- **Title**: `Cherry pick of #NNNN (original title) from master to Skyline/skyline_26_1`
+- **Branch**: `backport-master-prNNNN-MMDDYY-Skyline/skyline_26_1`
+- **Body**: `An automated backport for #NNNN.`
+
+Use `--base` to search only the release branch:
 ```bash
-# Find PRs that mention the original PR number
-gh pr list --state merged --search "3785"
+# Precise: search release branch PRs for the cherry-pick of a specific PR
+gh pr list --state all --base Skyline/skyline_26_1 --search "Cherry pick of #3940" --json number,title,state,mergedAt
 
 # Shows:
-# 3787  [cherry-pick] Fix exception when...  Skyline/skyline_26_1  MERGED
-# 3785  Fix exception when...                master                MERGED
+# 3945  Cherry pick of #3940 (Fix NRE in...) from master to Skyline/skyline_26_1  MERGED
 ```
+
+**IMPORTANT**: When investigating an exception where the fix exists on master, always check
+whether the cherry-pick PR also exists and is merged. A fix is not fully deployed until it
+reaches the release branch (during FEATURE COMPLETE phase).
 
 **Recording with full tracking**:
 ```python

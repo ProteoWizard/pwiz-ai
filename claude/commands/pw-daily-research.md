@@ -152,7 +152,9 @@ For each exception in today's report:
   2. Read code at stack trace location
   3. git blame to understand context
   4. Check if already fixed on master (gh pr list --state merged --search "filename")
-  5. Write findings to ai/.tmp/suggested-actions-YYYYMMDD.md
+  5. If fixed on master, check cherry-pick to release branch:
+     gh pr list --state all --base Skyline/skyline_26_1 --search "Cherry pick of #NNNN" --json number,title,state,mergedAt
+  6. Write findings to ai/.tmp/suggested-actions-YYYYMMDD.md
 - Priority: [HIGH if user provided email, MEDIUM otherwise]
 ```
 
