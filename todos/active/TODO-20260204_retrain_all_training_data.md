@@ -1,101 +1,72 @@
-# Retrain All Training Data + LabKey Development Skill
+# Retrain All Training Data + Menu Styling
 
 ## Branch Information
-- **Branch**: `LabKey/work/20260204_retrain_all_training_data`
-- **Base**: `develop`
+- **Repository**: MacCossLabModules (nested in labkeyEnlistment)
+- **Branch**: `25.11_fb_testresults-retrain-all-and-menu-styling`
+- **Base**: `release25.11-SNAPSHOT`
+- **PR**: https://github.com/LabKey/MacCossLabModules/pull/599
 - **Created**: 2026-02-04
-- **Status**: Planning
+- **Status**: PR Open - Ready for Review
 - **Module**: MacCossLabModules/testresults
 
 ## Objective
 
-Add a "Retrain All" button to the Training Data page (`trainingdata.jsp`) that performs a clean-slate rebuild of training data for all active computers in the current container. Also create a `labkey-development` skill and `ai/docs/labkey/` documentation directory as the foundation for LabKey Server development knowledge.
+Add a "Retrain All" feature to the Training Data page with two modes:
+1. **Reset mode** - Clean-slate rebuild of training data for all computers
+2. **Incremental mode** - Rolling window to replace oldest runs with newer ones
 
-## Background
-
-The Training Data page shows per-computer baseline statistics used for anomaly detection in the nightly test email. Currently, training runs must be added/removed one at a time. The data is stale (last trained ~6 months ago) and includes inactive computers (e.g., SKYLINE-DEV0 trained in December 2021).
-
-### Key Tables
-- `testresults.trainruns` - Links run IDs to training set (id + runid FK to testruns)
-- `testresults.userdata` - Per-computer/container stats (userid, container, meantestsrun, meanmemory, stddevtestsrun, stddevmemory, active)
-- `testresults.testruns` - Run data (userid, container, duration, passedtests, failedtests, leakedtests, averagemem, posttime, flagged)
-- `testresults.hangs` - Hang records (testrunid FK to testruns)
-- `testresults.user` - Computer names (id, username)
-
-### Key Code
-- Controller: `testresults/src/org/labkey/testresults/TestResultsController.java`
-  - `TrainRunAction` (line 368) - existing single-run train/untrain endpoint
-  - `SetUserActive` (line 1003) - activate/deactivate computer
-  - `TrainingDataViewAction` (line 339) - page action
-- JSP: `testresults/src/org/labkey/testresults/view/trainingdata.jsp`
-- Schema: `testresults/src/org/labkey/testresults/TestResultsSchema.java`
-- User model: `testresults/src/org/labkey/testresults/model/User.java`
+Also improve menu styling with active tab highlighting.
 
 ## Tasks
 
 ### Part 1: Retrain All Feature
 - [x] Add `RetrainAllAction` to `TestResultsController.java`
-- [x] Add "Retrain All" button + JS handler to `trainingdata.jsp`
-- [x] Build and deploy testresults module
-- [ ] Test on local LabKey server
+- [x] Add "Retrain" option to Actions dropdown in `trainingdata.jsp`
+- [x] Add retrain form with Reset/Incremental radio buttons
+- [x] Add Max runs input field (default 20)
+- [x] Add Min runs input field (default 5)
+- [x] Implement 1.5x lookback period to filter out ancient data
+- [x] Implement Reset mode - rebuild from recent clean runs
+- [x] Implement Incremental mode - rolling window replacement
+- [x] Test Reset mode on Performance Tests container
+- [x] Verify lookback period filters correctly
+- [x] Verify partial data computers appear (>= minRuns but < maxRuns)
 
-### Part 2: LabKey Development Skill + Docs
-- [x] Create `ai/docs/labkey/` directory
+### Part 2: Menu Styling
+- [x] Add active tab highlighting with rounded corners
+- [x] Add gold hover color (#B8A506) matching UW branding
+- [x] Set activeTab request attribute in all parent JSPs
+- [x] Use CSS classes instead of inline styles
+- [x] Verify menu works on all pages
+
+### Part 3: Documentation
 - [x] Create `ai/docs/labkey/testresults-module.md` with module architecture
+- [x] Document LabKey branch naming convention: `{version}_fb_{feature-name}`
+- [x] Document build/deploy commands
 - [x] Create `.claude/skills/labkey-development/SKILL.md`
 
-## Plan
+## Implementation Details
 
-### RetrainAllAction Design
+### Files Modified (11 files, +428/-44 lines)
 
-**Location:** After `SetUserActive` (~line 1038) in TestResultsController.java
-**Annotation:** `@RequiresSiteAdmin`
-**Returns:** `ApiSimpleResponse` with `success`, `usersRetrained`, `totalTrainRuns`
+1. **TestResultsController.java** - Added `RetrainAllAction`
+   - `@RequiresSiteAdmin`, `MutatingApiAction`
+   - Parameters: `mode` (reset/incremental), `maxRuns` (1-100, default 20), `minRuns` (1-maxRuns, default 5)
+   - Lookback period: `1.5 * maxRuns` days (30 days for default)
+   - Returns: `{success, usersRetrained, totalTrainRuns, mode}`
 
-**Algorithm (single transaction):**
+2. **trainingdata.jsp** - UI changes
+   - Added "Retrain" option to Actions dropdown
+   - Added form with Mode radio buttons, Max/Min runs fields
+   - JavaScript handler for AJAX POST
 
-1. **Determine expected duration** from container path:
-   - Contains "Perf" (case-insensitive) -> 720 min
-   - Otherwise -> 540 min
+3. **menu.jsp** - Navigation styling
+   - Added CSS for active tab highlighting (rounded corners, semi-transparent)
+   - Gold hover color matching original UW branding
+   - Reads `activeTab` request attribute
 
-2. **Snapshot active user IDs:**
-   ```sql
-   SELECT userid FROM testresults.userdata
-   WHERE container = ? AND active = true
-   ```
-
-3. **Delete all trainruns for this container:**
-   ```sql
-   DELETE FROM testresults.trainruns
-   WHERE runid IN (SELECT id FROM testresults.testruns WHERE container = ?)
-   ```
-
-4. **Delete all userdata for this container:**
-   ```sql
-   DELETE FROM testresults.userdata WHERE container = ?
-   ```
-
-5. **For each active userId**, find up to 20 most recent clean runs:
-   ```sql
-   SELECT tr.id FROM testresults.testruns tr
-   WHERE tr.userid = ? AND tr.container = ?
-     AND tr.failedtests = 0 AND tr.leakedtests = 0
-     AND tr.passedtests > 0 AND tr.flagged = false
-     AND tr.duration >= ?
-     AND NOT EXISTS (SELECT 1 FROM testresults.hangs h WHERE h.testrunid = tr.id)
-   ORDER BY tr.posttime DESC LIMIT 20
-   ```
-
-6. **Insert runs** into `trainruns`
-
-7. **Calculate stats** and insert into `userdata` with `active = true`:
-   ```sql
-   INSERT INTO testresults.userdata
-     (userid, container, meantestsrun, meanmemory, stddevtestsrun, stddevmemory, active)
-   SELECT ?, ?, avg(passedtests), avg(averagemem),
-          stddev_pop(passedtests), stddev_pop(averagemem), true
-   FROM testresults.testruns WHERE id = ANY(?)
-   ```
+4. **All other JSPs** (rundown, user, runDetail, longTerm, flagged, errorFiles, failureDetail, multiFailureDetail)
+   - Each sets `activeTab` request attribute before including menu.jsp
 
 ### Clean Run Criteria
 
@@ -104,30 +75,59 @@ All must be true:
 - `leakedtests = 0` (no memory/handle leaks)
 - `passedtests > 0` (not uncached/empty)
 - `flagged = false` (not flagged)
-- `duration >= expectedDuration` (540 or 720 min, full run)
+- `duration >= expectedDuration` (540 min standard, 720 min for Perf)
 - No row in `hangs` table for that run
-- Belongs to current container
+- `posttime >= cutoffDate` (within lookback period)
 
-### JSP Changes
+### Reset vs Incremental Mode
 
-- Button HTML before `<table id="trainingdata">` (~line 116)
-- JS handler: confirm dialog, disable button, POST to RetrainAllAction with CSRF, show result, reload page
+**Reset Mode:**
+1. Delete all trainruns and userdata for container
+2. Query all unique users from recent testruns (within lookback period)
+3. For each user, find up to `maxRuns` most recent clean runs
+4. Skip users with fewer than `minRuns` clean runs
+5. Create trainruns and userdata (active only if runs >= maxRuns)
 
-### Edge Cases
+**Incremental Mode (Rolling Window):**
+1. Get existing trainruns for each user
+2. Find all clean runs within lookback period
+3. Combine both sets, sort by posttime descending
+4. Keep only the most recent `maxRuns`
+5. Remove trainruns that got "pushed out", add new ones
+6. Recalculate stats based on final set
 
-- **No active users**: Succeeds, deletes all, inserts nothing
-- **Active user with no clean runs**: Skipped, appears in "No Training Data"
-- **Transaction safety**: Single transaction, auto-rollback on failure
+## Progress Log
 
-### Future: Incremental Mode
+### 2026-02-04 - Session 1
+- Created initial `RetrainAllAction` with reset-only functionality
+- Added standalone "Retrain All" button to JSP
+- Created labkey-development skill and testresults-module.md docs
+- Restored production database (135GB) to local PostgreSQL for testing
 
-A separate `IncrementalTrainAction` could be added later that keeps existing trainruns and adds new clean runs, recalculating stats with the combined set.
+### 2026-02-04 - Session 2 (UI Refinement)
+- Moved Retrain to Actions dropdown
+- Added Reset/Incremental mode radio buttons
+- Added configurable target runs field
 
-## Verification
+### 2026-02-05 - Session 3 (Feature Complete)
+- Fixed form padding/alignment issues across all forms
+- Added menu active tab highlighting with rounded corners and gold hover
+- Updated all JSPs to set activeTab attribute
+- Discovered JSP static includes require module rebuild (not just Tomcat restart)
+- Created rebuild script: `ai/.tmp/rebuild-testresults.ps1`
+- Tested on Performance Tests container - found issues:
+  - Query only looked at userdata table (missed new computers)
+  - No time limit caused ancient data from 2018 to appear
+- Fixed: Query all users from testruns, added 1.5x lookback period
+- Added Min runs parameter (default 5) for partial training data
+- Implemented rolling window for Incremental mode
+- Created PR #599 to release25.11-SNAPSHOT
+- Documented LabKey branch naming convention
 
-1. Build: `gradlew :server:modules:MacCossLabModules:testresults:deployModule`
-2. Navigate to Training Data page, confirm button appears
-3. Click Retrain All on `/home/development/Nightly x64` container
-4. Verify page reloads with only active computers and recent clean runs
-5. Verify inactive computers (SKYLINE-DEV0 etc.) are gone
-6. Verify MCP `list_computer_status` still works correctly
+## LabKey Branch Naming Convention
+
+**Required format:** `{version}_fb_{feature-name}`
+
+Examples:
+- `25.11_fb_testresults-retrain-all` ✓
+- `feature/testresults-retrain-all` ✗ (rejected by CI)
