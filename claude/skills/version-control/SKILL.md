@@ -1,6 +1,6 @@
 ---
 name: version-control
-description: Use this skill before any git commit, push, or PR.
+description: ALWAYS load before git commit, push, or PR - team-specific commit format differs from standard conventions.
 ---
 
 # Version Control for Skyline/ProteoWizard
