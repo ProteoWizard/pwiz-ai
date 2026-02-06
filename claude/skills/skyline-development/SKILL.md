@@ -1,6 +1,6 @@
 ---
 name: skyline-development
-description: Use this skill when working on Skyline code, tests, or builds.
+description: ALWAYS load when working in pwiz_tools/Skyline, on GitHub issues labeled 'skyline', or TODOs referencing Skyline code.
 ---
 
 # Skyline Development Context
