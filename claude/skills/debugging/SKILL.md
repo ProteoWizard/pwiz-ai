@@ -1,6 +1,6 @@
 ---
 name: debugging
-description: Use this skill any time you need to debug something or figure out why a problem is happening.
+description: ALWAYS load when investigating bugs, failures, or unexpected behavior - ensures root cause analysis before attempting fixes.
 ---
 
 # Debugging Mode
