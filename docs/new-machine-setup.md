@@ -224,13 +224,13 @@ git config --global user.email "their-email@example.com"
 
 **Ask the developer where they want to put their development folder.**
 
-Examples below use `C:\Dev` as the project root. This is just an example -- any short path works. If the developer prefers a different location (e.g., `D:\proj`, `E:\repos`), substitute it throughout. Record their choice and use it consistently.
+Examples below use `C:\proj` as the project root. This is just an example -- any short path works. If the developer prefers a different location (e.g., `C:\Dev`, `D:\proj`, `E:\repos`), substitute it throughout. Record their choice and use it consistently.
 
 **Why short paths are recommended:**
 
-| Factor | `C:\Dev` | `C:\Users\brendanx\Documents\projects` |
+| Factor | `C:\proj` | `C:\Users\brendanx\Documents\projects` |
 |--------|-----------|----------------------------------------|
-| Path length | 5 chars | 40 chars |
+| Path length | 6 chars | 40 chars |
 | Windows indexing | Not indexed | Indexed by default |
 | OneDrive sync | Not synced | May be synced |
 
@@ -238,7 +238,7 @@ Examples below use `C:\Dev` as the project root. This is just an example -- any 
 
 **Path length matters** because some build tools and tests create deeply nested temporary paths. Windows has a 260-character path limit that can be exceeded with long root paths.
 
-**Spaces in usernames** (e.g., `C:\Users\Kaipo Tamura\...`) can break scripts that don't properly quote arguments. If the username contains spaces, a short root path like `C:\Dev` or `D:\proj` avoids this entirely.
+**Spaces in usernames** (e.g., `C:\Users\Kaipo Tamura\...`) can break scripts that don't properly quote arguments. If the username contains spaces, a short root path like `C:\proj` or `D:\proj` avoids this entirely.
 
 **Windows indexing** is important for nightly testing. Windows Search indexes `Documents` by default, and this indexing competes with nightly tests for disk I/O. If the developer chooses a location under `Documents`, they must add an exclusion:
 1. Open **Indexing Options** (search for it in Start menu)
@@ -261,8 +261,8 @@ Examples below use `C:\Dev` as the project root. This is just an example -- any 
 
 ```powershell
 # Create project directory (if needed) - substitute your preferred location
-New-Item -ItemType Directory -Path C:\Dev -Force
-cd C:\Dev
+New-Item -ItemType Directory -Path C:\proj -Force
+cd C:\proj
 
 # Clone the AI tooling repository
 git clone git@github.com:ProteoWizard/pwiz-ai.git ai
@@ -341,7 +341,7 @@ Read `~/.claude/settings.json` and add the statusLine configuration, preserving 
 }
 ```
 
-> **Note:** Replace `<project root>` with the actual path (e.g., `C:\\Dev`). Reference the script directly from the pwiz-ai checkout rather than copying it. This ensures you always have the latest version.
+> **Note:** Replace `<project root>` with the actual path (e.g., `C:\\proj`). Reference the script directly from the pwiz-ai checkout rather than copying it. This ensures you always have the latest version.
 
 The statusline takes effect on the next Claude Code restart. Since the user just restarted in 1.11, no immediate restart is needed—the statusline will activate at the next natural restart point (e.g., after MCP server configuration in Phase 7).
 
@@ -819,7 +819,7 @@ claude mcp add status -- python ./ai/mcp/StatusMcp/server.py
 claude mcp add labkey -- python ./ai/mcp/LabKeyMcp/server.py
 ```
 
-> **Note:** Use relative paths with forward slashes (`./ai/mcp/...`), not absolute Windows paths. The `claude mcp add` command strips backslashes, turning absolute paths like `C:\Dev\ai\...` into `C:Devai...` which fails to connect.
+> **Note:** Use relative paths with forward slashes (`./ai/mcp/...`), not absolute Windows paths. The `claude mcp add` command strips backslashes, turning absolute paths like `C:\proj\ai\...` into `C:projai...` which fails to connect.
 
 **After registering new servers, restart Claude Code** to activate them:
 1. Exit Claude Code (`/exit`)

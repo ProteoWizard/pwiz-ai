@@ -64,9 +64,9 @@ If successful, continue to Step 6.
 Before starting Claude Code, create the folder where you'll clone the ProteoWizard repository:
 
 ```powershell
-# Use your preferred project root (C:\Dev, D:\proj, etc.)
-New-Item -ItemType Directory -Path C:\Dev -Force
-cd C:\Dev
+# Use your preferred project root (C:\proj, C:\Dev, D:\proj, etc.)
+New-Item -ItemType Directory -Path C:\proj -Force
+cd C:\proj
 ```
 
 **Why this matters:** When Claude Code starts, it asks "Do you trust the files in this folder?" You want to answer this in an empty project folder--not your home directory, which may contain sensitive files like `.netrc`, `.ssh`, or other credentials.
