@@ -17,8 +17,8 @@ Follow-up items from the screenshot consistency sprint that were not critical fo
 - [ ] **Consider DDA Search output s-13** - "reading MS2 spectra into scan collection: {count}/81704" the count is not predictable
 - [x] **Fix LiveReports audit log screenshots (s-02, s-68, s-69)** - Added TestTimeProvider wrapper
 - [ ] **X-Axis Label Orientation Inconsistency (MS1Filtering s-21, ja/zh-CHS only)** - Labels flip between horizontal/vertical based on space
-- [x] **Fix tests ending up in accessibility mode** - Send WM_CHANGEUISTATE before each capture
-- [ ] **ImageComparer Diff Amplification Features** - Add diff-only view and amplification slider for 1-2px diffs
+- [x] **Fix tests ending up in accessibility mode** - Send WM_CHANGEUISTATE recursively to all controls
+- [x] **ImageComparer Diff Amplification Features** - Add diff-only view and amplification for 1-2px diffs
 - [ ] **Fix CleanupBorder Algorithm** - May have off-by-one error for Windows 11 curved corners
 - [ ] **Remove unused timeout parameter** - Clean up unused parameter from PauseFor*ScreenShot functions
 - [x] **Paint over ACG per-file progress bars** - Extended FillProgressBar to handle all visible file progress bars
@@ -80,3 +80,36 @@ capture to hide focus rectangles (`UISF_HIDEFOCUS`) and mnemonic underscores (`U
 2. `ScreenshotManager.cs` - Added `HideKeyboardCues()` method called from `HideSensitiveFocusDisplay()`
 
 **Tested**: Started test with F5, saw focus rectangles in UI during test, but none in screenshots.
+
+### 2026-02-08 - ImageComparer/ScreenshotPreviewForm diff amplification
+
+Added diff-only view and amplification features to both ImageComparer and ScreenshotPreviewForm:
+
+**New Features**:
+1. **Diff-only button** (blank.png icon, keyboard shortcut 'D') - Shows diff pixels on white background
+2. **Amp button** (text toggle, keyboard shortcut 'A') - Expands diff pixels to 5px radius squares
+3. **Image source popup menu** - Context menu with icons for Git HEAD, Web (and Disk in ScreenshotPreviewForm)
+
+**Technical Details**:
+- `ScreenshotDiff` class extended with `DiffOnlyImage` property and `CreateAmplifiedImage()`/`CreateAmplifiedDiffOnlyImage()` methods
+- Amplification uses `HashSet<Point>` to collect unique pixels, avoiding overlapping alpha darkening
+- When no diff exists: Amp does nothing, Diff-only shows white rectangle
+
+**Files Changed**:
+- `TestUtil/ScreenshotInfo.cs` - Added diff tracking and amplification methods
+- `TestUtil/ScreenshotPreviewForm.cs` - Added UI controls and GetDisplayImage() logic
+- `TestUtil/ScreenshotPreviewForm.Designer.cs` - Added toolbar buttons and context menu
+- `ImageComparer/ScreenshotInfo.cs` - Same changes as TestUtil version
+- `ImageComparer/ImageComparerWindow.cs` - Added UI controls and GetDisplayImage() logic
+- `ImageComparer/ImageComparerWindow.Designer.cs` - Added toolbar buttons and context menu
+
+### 2026-02-08 - Accessibility mode fix improvement
+
+Fixed issue where some forms (like ImportPeptideSearchDlg wizard pages) still showed focus rectangles
+and mnemonic underscores despite the WM_CHANGEUISTATE fix. The message wasn't propagating through
+TabControl/WizardPages containers.
+
+**Solution**: Changed `HideKeyboardCues()` to recursively send WM_CHANGEUISTATE to all descendant controls,
+not just the top-level form.
+
+**File**: `TestUtil/ScreenshotManager.cs` - Added `HideKeyboardCuesRecursive()` method
