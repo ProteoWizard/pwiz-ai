@@ -2,6 +2,14 @@
 
 **Goal**: Determine target LabKey version and assess current environment.
 
+## Step 0.0: Determine setup_root
+
+Extract `setup_root` from the path the user provided to README.md — it is the
+directory containing README.md (absolute path). This is needed for resume
+checkpoints so the user knows where to `cd` before running `claude --resume`.
+
+**Note:** Do not create state.json yet - wait until after the environment check in Step 0.3.
+
 ## Step 0.1: Determine Target Version
 
 Ask user which LabKey version they're developing for:
@@ -33,25 +41,31 @@ Enter 1, 2, 3, or 4:
 | 25.11.x | Java 17 (Temurin) | PostgreSQL 17 or 18 |
 | 26.x | Java 25 (Temurin) | PostgreSQL 18 |
 
-**Update state.json** with version choices:
-```json
-{
-  "labkey_version": "25",
-  "java_version": 17,
-  "postgres_version": 17
-}
-```
+**Remember these values** for state.json creation in Step 0.3. If the selected LabKey version supports
+multiple PostgreSQL versions (e.g. 25.11.x supports 17 or 18), leave postgres_version
+as null -- it will be set in Phase 2 after asking the user.
 
-## Step 0.2: Run Environment Check
+## Step 0.2: Determine Clone Directory
 
-Locate `Verify-LabKeyEnvironment.ps1` and run it:
+Ask the user where they want the LabKey repositories cloned. This is the
+enlistment root — it will contain `build.gradle`, `gradlew.bat`, and `server/`.
+
+**Ask user**: "Where should the LabKey repositories be cloned?"
+
+**Remember this value** for state.json creation in Step 0.3.
+
+## Step 0.3: Run Environment Check
+
+**IMPORTANT:** Run the environment check script BEFORE creating or updating state.json.
+
+Run the environment check script located at `<setup_root>/scripts/Verify-LabKeyEnvironment.ps1`:
 
 ```bash
 # For LabKey 25.x:
-powershell.exe -ExecutionPolicy Bypass -File "Verify-LabKeyEnvironment.ps1" -LabKeyVersion 25
+powershell.exe -ExecutionPolicy Bypass -File "<setup_root>\scripts\Verify-LabKeyEnvironment.ps1" -LabKeyVersion 25
 
 # For LabKey 26.x:
-powershell.exe -ExecutionPolicy Bypass -File "Verify-LabKeyEnvironment.ps1" -LabKeyVersion 26
+powershell.exe -ExecutionPolicy Bypass -File "<setup_root>\scripts\Verify-LabKeyEnvironment.ps1" -LabKeyVersion 26
 ```
 
 **Parse the output:**
@@ -60,7 +74,7 @@ powershell.exe -ExecutionPolicy Bypass -File "Verify-LabKeyEnvironment.ps1" -Lab
 - **[MISSING]** - Not installed, will install
 - **[WRONG]** - Wrong version, will install correct version
 
-**Update state.json** with findings:
+**Now create state.json** with all collected information (setup_root, versions from steps 0.0-0.2, and environment check results):
 ```json
 {
   "environment_check": {
@@ -72,8 +86,42 @@ powershell.exe -ExecutionPolicy Bypass -File "Verify-LabKeyEnvironment.ps1" -Lab
 }
 ```
 
+## Step 0.4: Show Results Table to User
+
+**Before displaying the table:**
+1. Output message to user: "Let me update the state file..."
+2. Complete ALL state.json writes:
+   - Create state.json with all collected data from steps 0.0-0.3
+   - Mark phase 0 as complete (update current_phase, current_step, and completed)
+
+After all state.json writes are done, display a summary table to the user
+showing every component, its status, and what will happen next. Example:
+
+```
+| Component        | Status  | Required | Action            |
+|------------------|---------|----------|-------------------|
+| Git              | OK      | Yes      | Skip              |
+| Git autocrlf     | OK      | Yes      | Skip              |
+| SSH Key          | MISSING | Yes      | Will generate     |
+| GitHub SSH       | MISSING | Yes      | Will configure    |
+| Java 17          | MISSING | Yes      | Will install      |
+| JAVA_HOME        | MISSING | Yes      | Will set          |
+| PostgreSQL       | MISSING | Yes      | Will install      |
+| IntelliJ IDEA    | MISSING | Yes      | Will install      |
+| GitHub CLI       | MISSING | No       | Ask later         |
+| Claude Code      | OK      | No       | Skip              |
+| Notepad++        | MISSING | No       | Ask later         |
+| WinMerge         | MISSING | No       | Ask later         |
+| TortoiseGit      | MISSING | No       | Ask later         |
+```
+
+Map statuses to actions:
+- OK / UPDATE → "Skip" (or "Update available" for UPDATE)
+- MISSING / WRONG (required) → "Will install" / "Will generate" / "Will set"
+- MISSING / WRONG (optional) → "Ask later"
+
 ## Completion
 
-Mark phase complete in state.json and show progress tracker.
+Show progress tracker after the summary table.
 
 **Next**: Phase 1 - Core Setup

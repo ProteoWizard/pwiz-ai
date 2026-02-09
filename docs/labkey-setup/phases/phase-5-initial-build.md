@@ -11,14 +11,14 @@
 
 **Check if JAVA_HOME is set:**
 ```bash
-pwsh -Command '$env:JAVA_HOME'
+powershell.exe -Command '$env:JAVA_HOME'
 ```
 
 **If output is empty or shows an error:**
-1. You need to restart your terminal for Java and PowerShell PATH updates to take effect
+1. You need to restart your terminal for Java PATH updates to take effect
 2. Close your current terminal
 3. Open a new terminal
-4. Run `claude --resume` to continue from this step
+4. Run: `cd "<setup_root>"; claude --resume`
 
 **If JAVA_HOME is set correctly (shows Java installation path):**
 - Continue to next step
@@ -32,10 +32,7 @@ pwsh -Command '$env:JAVA_HOME'
 
 **Update pg.properties with PostgreSQL password:**
 
-Read the existing `pg.properties` file:
-```bash
-cat server/configs/pg.properties
-```
+Read the existing `pg.properties` file using the Read tool on `<labkey_root>/server/configs/pg.properties`.
 
 The file should contain these settings. Update `jdbcPassword` with the postgres user password you set during installation:
 ```properties
@@ -48,7 +45,7 @@ Use the Edit tool to update the `jdbcPassword` line with the actual password.
 
 **Run pickPg** to copy settings to application.properties:
 ```bash
-cd <labkey_root>
+cd "<labkey_root>"
 ./gradlew pickPg
 ```
 
@@ -67,7 +64,7 @@ Expected output: Should complete successfully and show "BUILD SUCCESSFUL"
 
 **Ensure clean state**:
 ```bash
-cd <labkey_root>
+cd "<labkey_root>"
 ./gradlew --stop
 ```
 
@@ -78,15 +75,33 @@ cd <labkey_root>
 
 ## Step 5.3: Run Initial Build
 
-**Important**: This is a LONG-RUNNING task (15-30 minutes). User should run in separate terminal to see progress.
+**Important**: This is a LONG-RUNNING task (15-30 minutes).
 
-**Instruct user to run**:
-```powershell
-# In a new PowerShell terminal at server directory
-.\gradlew deployApp
-```
+**Choose how to run the build:**
 
-**What happens**:
+**Option 1: Run in a separate terminal (RECOMMENDED)**
+- You can see build progress in real-time
+- You can continue interacting with Claude during the build
+- Open a new PowerShell terminal and run:
+  ```powershell
+  cd "<labkey_root>"
+  .\gradlew deployApp
+  ```
+
+**Option 2: Have Claude run it**
+- Build output will be captured
+- You won't be able to interact with Claude until it completes (~15-30 minutes)
+- Claude will run:
+  ```bash
+  cd "<labkey_root>"
+  ./gradlew deployApp
+  ```
+
+**PROMPT: Ask the user which option they prefer before proceeding.**
+
+---
+
+**What happens during the build**:
 - Downloads Gradle dependencies
 - Compiles all modules
 - Builds web application
@@ -100,7 +115,7 @@ BUILD SUCCESSFUL in XXm XXs
 **If build fails**:
 1. Check error message
 2. Verify Java version: `java -version`
-3. Verify JAVA_HOME: `echo $env:JAVA_HOME`
+3. Verify JAVA_HOME: `powershell.exe -Command '$env:JAVA_HOME'`
 4. Try: `.\gradlew --stop` then retry
 5. Check reference/troubleshooting.md
 

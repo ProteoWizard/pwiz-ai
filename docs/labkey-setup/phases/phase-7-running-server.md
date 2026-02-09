@@ -9,7 +9,8 @@
   - Users of IntelliJ Community should select Run / Debug LabKey Embedded Tomcat Dev.
   - Users of IntelliJ Ultimate should select Run / Debug Spring Boot LabKey Embedded Tomcat Dev.
 2. You can also click the Run button (green play icon) or Debug button (bug icon) in the menu bar
-3. **Windows Security prompt:** If you see "Do you want to allow public and private network access to this app?" for OpenJDK Platform binary, click **Allow** (the server needs to accept connections on port 8080)
+3. **Windows Security prompts:** You may see "Do you want to allow public and private network access to this app?" 
+   for **OpenJDK Platform binary** and **IntelliJ IDEA**. Click **Allow** on both.
 4. Wait for the server to start (watch the console output for module initialization)
 5. The server is ready when you can access http://localhost:8080/ in a browser
 
@@ -21,6 +22,8 @@ Once the server is running:
 1. Open a browser to: http://localhost:8080/
 2. Follow the initial setup wizard if this is a fresh installation
 3. Create an admin account when prompted
+
+**IMPORTANT:** The server runs on **port 8080**. Always tell the user http://localhost:8080/ — do not guess other ports (3000, 3769, etc.).
 
 **Wait for user to confirm they have logged in before proceeding to Step 7.3.**
 

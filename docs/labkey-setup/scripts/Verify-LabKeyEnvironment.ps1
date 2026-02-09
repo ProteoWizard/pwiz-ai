@@ -76,36 +76,7 @@ if ($encoding.CodePage -eq 65001) {
     Add-Result "Console Encoding" "WARN" "$($encoding.EncodingName) (CP$($encoding.CodePage)) - recommend UTF-8 for international characters" -Required $false
 }
 
-# 2. PowerShell Version
-# Note: Check if pwsh is installed on the system, not what version is running this script
-# (This script may be run via powershell.exe even when pwsh is installed)
-Write-Host "Checking PowerShell..." -ForegroundColor Gray
-$pwshPath = Get-Command pwsh -ErrorAction SilentlyContinue
-if ($pwshPath) {
-    $pwshVersionOutput = & pwsh --version 2>&1
-    if ($pwshVersionOutput -match '(\d+\.\d+\.\d+)') {
-        $currentVersion = $Matches[1]
-        # Check latest version from winget
-        $wingetInfo = winget show Microsoft.PowerShell --source winget 2>&1 | Out-String
-        $latestVersion = $null
-        if ($wingetInfo -match "Version:\s*(\d+\.\d+\.\d+)") {
-            $latestVersion = $Matches[1]
-        }
-
-        if ($latestVersion -and ([version]$latestVersion -gt [version]$currentVersion)) {
-            Add-Result "PowerShell 7" "UPDATE" "$currentVersion → $latestVersion available: winget upgrade Microsoft.PowerShell --source winget"
-        } else {
-            Add-Result "PowerShell 7" "OK" "$currentVersion (latest)"
-        }
-    } else {
-        Add-Result "PowerShell 7" "WARN" "pwsh found but could not parse version: $pwshVersionOutput"
-    }
-} else {
-    $runningVersion = $PSVersionTable.PSVersion
-    Add-Result "PowerShell 7" "MISSING" "Found $($runningVersion.Major).$($runningVersion.Minor) - Run: winget install Microsoft.PowerShell --source winget"
-}
-
-# 3. Git
+# 2. Git
 Write-Host "Checking Git..." -ForegroundColor Gray
 if (Test-Command "git") {
     $gitVersionRaw = (git --version) -replace 'git version ', ''
@@ -128,7 +99,7 @@ if (Test-Command "git") {
     Add-Result "Git" "MISSING" "Run: winget install Git.Git --source winget"
 }
 
-# 4. Git core.autocrlf
+# 3. Git core.autocrlf
 Write-Host "Checking Git autocrlf..." -ForegroundColor Gray
 if (Test-Command "git") {
     $autocrlf = git config core.autocrlf 2>$null
@@ -141,7 +112,7 @@ if (Test-Command "git") {
     Add-Result "Git core.autocrlf" "SKIP" "Git not installed"
 }
 
-# 5. SSH Key
+# 4. SSH Key
 Write-Host "Checking SSH key..." -ForegroundColor Gray
 $sshKeyPath = Join-Path $env:USERPROFILE ".ssh\id_ed25519.pub"
 $sshKeyPathRsa = Join-Path $env:USERPROFILE ".ssh\id_rsa.pub"
@@ -152,7 +123,7 @@ if ((Test-Path $sshKeyPath) -or (Test-Path $sshKeyPathRsa)) {
     Add-Result "SSH Key" "MISSING" "Run: ssh-keygen -t ed25519 -C 'your-email@example.com'"
 }
 
-# 6. GitHub SSH Access
+# 5. GitHub SSH Access
 Write-Host "Checking GitHub SSH access..." -ForegroundColor Gray
 if (Test-Command "ssh") {
     $sshTest = ssh -T git@github.com 2>&1
@@ -165,7 +136,7 @@ if (Test-Command "ssh") {
     Add-Result "GitHub SSH" "SKIP" "SSH not available"
 }
 
-# 7. Java
+# 6. Java
 Write-Host "Checking Java..." -ForegroundColor Gray
 $javaHome = [System.Environment]::GetEnvironmentVariable('JAVA_HOME', 'Machine')
 if ($javaHome -and (Test-Path "$javaHome\bin\java.exe")) {
@@ -187,7 +158,7 @@ if ($javaHome -and (Test-Path "$javaHome\bin\java.exe")) {
     Add-Result "Java $requiredJavaVersion" "MISSING" "Run: winget install EclipseAdoptium.Temurin.$requiredJavaVersion.JDK --source winget --interactive"
 }
 
-# 8. JAVA_HOME
+# 7. JAVA_HOME
 Write-Host "Checking JAVA_HOME..." -ForegroundColor Gray
 if ($javaHome) {
     Add-Result "JAVA_HOME" "OK" $javaHome
@@ -195,7 +166,7 @@ if ($javaHome) {
     Add-Result "JAVA_HOME" "MISSING" "Set during JDK installation (enable 'Set JAVA_HOME variable')"
 }
 
-# 9. PostgreSQL
+# 8. PostgreSQL
 Write-Host "Checking PostgreSQL..." -ForegroundColor Gray
 $pgService = Get-Service -Name 'postgresql*' -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($pgService) {
@@ -232,7 +203,7 @@ if ($pgService) {
     }
 }
 
-# 10. IntelliJ IDEA
+# 9. IntelliJ IDEA
 Write-Host "Checking IntelliJ IDEA..." -ForegroundColor Gray
 $intellijPaths = @(
     "C:\Program Files\JetBrains\IntelliJ IDEA Community*",
@@ -255,7 +226,7 @@ if ($intellijFound) {
     Add-Result "IntelliJ IDEA" "MISSING" "Run: winget install JetBrains.IntelliJIDEA.Community --source winget"
 }
 
-# 11. GitHub CLI (optional - for Claude Code)
+# 10. GitHub CLI (optional - for Claude Code)
 Write-Host "Checking GitHub CLI..." -ForegroundColor Gray
 if (Test-Command "gh") {
     $ghVersion = (gh --version | Select-Object -First 1) -replace 'gh version ', ''
@@ -270,7 +241,7 @@ if (Test-Command "gh") {
     Add-Result "GitHub CLI" "MISSING" "Run: winget install GitHub.cli --source winget (optional, for Claude Code)" -Required $false
 }
 
-# 12. Claude Code (optional)
+# 11. Claude Code (optional)
 Write-Host "Checking Claude Code..." -ForegroundColor Gray
 if (Test-Command "claude") {
     $claudeVersion = claude --version 2>$null
@@ -279,7 +250,7 @@ if (Test-Command "claude") {
     Add-Result "Claude Code" "MISSING" "Run: irm https://claude.ai/install.ps1 | iex (optional)" -Required $false
 }
 
-# 13. Notepad++ (optional)
+# 12. Notepad++ (optional)
 Write-Host "Checking Notepad++..." -ForegroundColor Gray
 if (Test-Path 'C:\Program Files\Notepad++\notepad++.exe') {
     $nppVersion = (Get-Item 'C:\Program Files\Notepad++\notepad++.exe').VersionInfo.ProductVersion
@@ -288,7 +259,7 @@ if (Test-Path 'C:\Program Files\Notepad++\notepad++.exe') {
     Add-Result "Notepad++" "MISSING" "Run: winget install Notepad++.Notepad++ --source winget" -Required $false
 }
 
-# 14. WinMerge (optional)
+# 13. WinMerge (optional)
 Write-Host "Checking WinMerge..." -ForegroundColor Gray
 $winmergePath = if (Test-Path 'C:\Program Files\WinMerge\WinMergeU.exe') {
     'C:\Program Files\WinMerge\WinMergeU.exe'
@@ -304,7 +275,7 @@ if ($winmergePath) {
     Add-Result "WinMerge" "MISSING" "Run: winget install WinMerge.WinMerge --source winget" -Required $false
 }
 
-# 15. TortoiseGit (optional)
+# 14. TortoiseGit (optional)
 Write-Host "Checking TortoiseGit..." -ForegroundColor Gray
 if (Test-Path 'C:\Program Files\TortoiseGit\bin\TortoiseGitProc.exe') {
     $tgVersion = (Get-Item 'C:\Program Files\TortoiseGit\bin\TortoiseGitProc.exe').VersionInfo.ProductVersion

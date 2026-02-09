@@ -25,23 +25,25 @@ Enter 1 or 2:
 Install the selected edition:
 ```bash
 # For Community Edition (option 1):
-pwsh -Command "winget install JetBrains.IntelliJIDEA.Community --source winget --accept-source-agreements --accept-package-agreements"
+powershell.exe -Command 'winget install JetBrains.IntelliJIDEA.Community --source winget --accept-source-agreements --accept-package-agreements'
 
 # For Ultimate Edition (option 2):
-pwsh -Command "winget install JetBrains.IntelliJIDEA.Ultimate --source winget --accept-source-agreements --accept-package-agreements"
+powershell.exe -Command 'winget install JetBrains.IntelliJIDEA.Ultimate --source winget --accept-source-agreements --accept-package-agreements'
+```
 
-**User launches** IntelliJ after installation.
+**After installation completes**, notify the user:
+> IntelliJ IDEA installation complete. Now I'll configure the workspace before you launch IntelliJ.
 
 ## 6.2 Run IntelliJ Configuration Tasks
 
-Before opening in IntelliJ, run the setup tasks:
+Run the setup tasks to configure the workspace:
 
 ```bash
-pwsh -Command "cd $enlistmentPath; .\\gradlew ijWorkspaceSetup"
+powershell.exe -Command 'cd "<labkey_root>"; .\gradlew ijWorkspaceSetup'
 ```
 
 ```bash
-pwsh -Command "cd $enlistmentPath; .\\gradlew ijConfigure"
+powershell.exe -Command 'cd "<labkey_root>"; .\gradlew ijConfigure'
 ```
 
 ## Step 6.3: Open Project
@@ -52,13 +54,14 @@ pwsh -Command "cd $enlistmentPath; .\\gradlew ijConfigure"
 3. Navigate to `<labkey_root>`
 4. Select the `<labkey_root>` directory
 5. On the "Trust and Open Project..." dialog click "Trust Project"
-5. Click "OK"
-6. Wait for IntelliJ to finish indexing (progress bar in the status bar at bottom). This can take several minutes
+6. Click "OK"
+7. Wait for IntelliJ to finish indexing (progress bar in the status bar at bottom). This can take several minutes
+8. **UAC prompt** — Click **Yes** to allow changes
+
 
 **While indexing, ignore these messages:**
 - "Invalid Gradle JDK configuration found" in the console - we'll configure the JDK next
 - "NODE_PATH undefined" pop-up - not needed for LabKey development
-- "Configure Kotlin language settings" - dismiss or ignore
 
 **Wait for user to confirm indexing is complete before proceeding to Step 6.4.**
 
@@ -91,13 +94,15 @@ After setting the Project SDK, refresh the Gradle project to sync the run config
 
 **Wait for user to confirm Gradle sync is complete before proceeding.**
 
-## Step 6.5 (optional)
+## Step 6.6 (optional)
 You may also want to increase the number of open tabs IntelliJ will support. 
 The default is 10, and depending on your working process, you may see tabs disappear unexpectedly. 
 **User instructions**
 1. Select Window > Editor Tabs > Configure Editor Tabs.
 2. Scroll down to the "Closing Policy" section to increase the number of tabs you can have open in IntelliJ at one time.
-  
+
+**Wait for user to confirm or skip before proceeding**
+ 
  
 **Update state.json**:
 ```json

@@ -4,15 +4,14 @@
 
 ## Prerequisites
 - Repositories cloned
-- PostgreSQL running with labkey database
 
 ## Step 4.1: About Gradle Wrapper
 
 LabKey uses the Gradle wrapper (`gradlew.bat` on Windows) which automatically downloads the correct Gradle version. **Do not install Gradle separately.**
 
 Verify the wrapper exists:
-```powershell
-Test-Path $enlistmentPath\gradlew.bat  # Should be True
+```bash
+powershell.exe -Command 'Test-Path "<labkey_root>\gradlew.bat"'  # Should output True
 ```
 
 > **PowerShell vs Command Prompt:** The LabKey documentation shows `gradlew deployApp`, which works in Command Prompt (cmd). In PowerShell, you must prefix with `.\` to run executables in the current directory:
@@ -21,7 +20,6 @@ Test-Path $enlistmentPath\gradlew.bat  # Should be True
 > |-------|---------|
 > | Command Prompt (cmd) | `gradlew deployApp` |
 > | PowerShell | `.\gradlew deployApp` |
-```
 
 **Update state.json**:
 ```json
@@ -32,8 +30,8 @@ Test-Path $enlistmentPath\gradlew.bat  # Should be True
 
 **First, check if gradle.properties already exists:**
 
-```powershell
-Test-Path "$env:USERPROFILE\.gradle\gradle.properties"
+```bash
+powershell.exe -Command 'Test-Path "$env:USERPROFILE\.gradle\gradle.properties"'
 ```
 
 - If `True` → Skip to "Verify Artifactory properties" below
@@ -41,27 +39,28 @@ Test-Path "$env:USERPROFILE\.gradle\gradle.properties"
 
 **Create the global Gradle properties file from the template:**
 
-```powershell
-# Check and create .gradle directory if needed
+> **Note:** Single quotes around the PowerShell command are required — they prevent Git Bash from
+> stripping `$env:USERPROFILE` before PowerShell sees it.
+
+```bash
+powershell.exe -Command '
 if (-not (Test-Path "$env:USERPROFILE\.gradle")) {
     New-Item -ItemType Directory -Path "$env:USERPROFILE\.gradle" -Force
 }
-
-# Copy template (if it exists)
-$templatePath = "$enlistmentPath\gradle\global_gradle.properties_template"
+$templatePath = "<labkey_root>\gradle\global_gradle.properties_template"
 $targetPath = "$env:USERPROFILE\.gradle\gradle.properties"
-
 if (Test-Path $templatePath) {
     Copy-Item $templatePath $targetPath
     Write-Host "Copied template to $targetPath"
 } else {
     Write-Host "Template not found at $templatePath - creating minimal file"
 }
+'
 ```
 
 **Verify the file was copied:**
-```powershell
-Test-Path "$env:USERPROFILE\.gradle\gradle.properties"  # Should be True
+```bash
+powershell.exe -Command 'Test-Path "$env:USERPROFILE\.gradle\gradle.properties"'  # Should output True
 ```
 
 **Update state.json**:
@@ -71,23 +70,20 @@ Test-Path "$env:USERPROFILE\.gradle\gradle.properties"  # Should be True
 
 ## Step 4.3: Verify Artifactory properties
 
-**Important:** After copying the template, uncomment and set the Artifactory properties (even if empty):
+**Important:** After copying the template, uncomment and set the Artifactory properties (even if empty).
 
-```powershell
-notepad "$env:USERPROFILE\.gradle\gradle.properties"
-```
+**Read the gradle.properties file** using the Read tool on `$env:USERPROFILE\.gradle\gradle.properties`.
 
-Find these lines and uncomment them:
+**Update the file** using the Edit tool to uncomment these lines (remove the `#`):
 ```properties
 artifactory_user=
 artifactory_password=
 ```
 
+Leave them empty (empty values work for public modules with anonymous Artifactory access).
+
 > **Why?** The Gradle build requires these properties to be *defined*, even if empty. Empty values work for public modules (anonymous Artifactory access). Valid credentials are only needed for premium/private modules or publishing artifacts.
 
-Edit `~/.gradle/gradle.properties` and configure:
-- Set `systemProp.labkey.server=<build directory>` if you want builds outside the enlistment
-- Configure any proxy settings if behind a corporate firewall
 
 **Update state.json**:
 ```json

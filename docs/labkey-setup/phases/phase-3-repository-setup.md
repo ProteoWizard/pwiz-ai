@@ -4,37 +4,62 @@
 
 ## Prerequisites
 - GitHub SSH configured and tested
-- Working directory decided (default: `C:\labkey`)
+- `labkey_root` set in state.json (Phase 0)
 
-## Step 3.1: Choose Working Directory
+## Step 3.1: Prepare Working Directory
 
-**Ask user**:
-```
-Where should LabKey repositories be cloned?
-Default: C:\labkey
-Enter path or press Enter for default:
-```
-
-**Create directory**:
+Read `labkey_root` from state.json (set in Phase 0). Create the directory
+and navigate to it:
 ```bash
-mkdir -p /c/labkey  # Adjust path based on user input
-cd /c/labkey
-```
-
-**Update state.json**:
-```json
-{"labkey_root": "C:\\labkey"}
+mkdir -p "<labkey_root>"
+cd "<labkey_root>"
 ```
 
 ## Step 3.2: Clone LabKey Server
 
-**Note about branches**: For production LabKey development, use the appropriate release branch (e.g., `release25.11-SNAPSHOT`, `release25.7-SNAPSHOT`, `release26.3-SNAPSHOT`). Ask user which branch or use `develop` for latest.
-SNAPSHOT branches (e.g., `release25.11-SNAPSHOT`) are used for faster feature deployment before changes are merged to the stable release branch (e.g., `release25.11`).
+Read `labkey_version` from state.json (set in Phase 0) and construct the
+candidate branch names:
+- **SNAPSHOT**: `release<labkey_version>-SNAPSHOT`
+- **Stable**: `release<labkey_version>`
 
-**Clone**:
+Present the user with a branch choice. **Include `develop` only if
+`labkey_version` matches the latest release** (currently 26.x per the cached
+requirements in Phase 0).
+
+**For non-latest releases (e.g. 25.7, 25.11):**
+```
+Which branch would you like to clone?
+
+1. SNAPSHOT (release<version>-SNAPSHOT) — receives changes ahead of stable;
+   preferred for active development
+2. Stable (release<version>) — fully tested, production-ready
+3. A different branch (you will type the name)
+
+Enter 1, 2, or 3:
+```
+
+**For the latest release (currently 26.x):**
+```
+Which branch would you like to clone?
+
+1. SNAPSHOT (release<version>-SNAPSHOT) — receives changes ahead of stable;
+   preferred for active development
+2. Stable (release<version>) — fully tested, production-ready
+3. develop — leading edge; may include unreleased features
+4. A different branch (you will type the name)
+
+Enter 1, 2, 3, or 4:
+```
+
+**Store the chosen branch in state.json** for reuse in Steps 3.3 and 3.4:
+```json
+{"clone_branch": "<chosen-branch-name>"}
+```
+
+**Clone and checkout**:
 ```bash
 git clone git@github.com:LabKey/server.git .
-git checkout <branch-name>  # If not using develop
+git checkout <clone_branch>
 ```
 
 **Verify**:
@@ -62,7 +87,7 @@ cd server/modules
 ```bash
 git clone git@github.com:LabKey/platform.git
 cd platform
-git checkout <branch-name>  # Match server branch
+git checkout <clone_branch>  # From state.json (Step 3.2)
 cd ..
 ```
 
@@ -70,7 +95,7 @@ cd ..
 ```bash
 git clone git@github.com:LabKey/commonAssays.git
 cd commonAssays
-git checkout <branch-name>  # Match server branch
+git checkout <clone_branch>  # From state.json (Step 3.2)
 cd ..
 ```
 
@@ -78,7 +103,7 @@ cd ..
 ```bash
 git clone git@github.com:LabKey/targetedms.git
 cd targetedms
-git checkout <branch-name>  # Match server branch
+git checkout <clone_branch>  # From state.json (Step 3.2)
 cd ..
 ```
 
@@ -86,7 +111,7 @@ cd ..
 ```bash
 git clone git@github.com:LabKey/MacCossLabModules.git
 cd MacCossLabModules
-git checkout <branch-name>  # Match server branch
+git checkout <clone_branch>  # From state.json (Step 3.2)
 cd ..
 ```
 
@@ -103,10 +128,10 @@ Should show: `platform/`, `commonAssays/`, `targetedms/`, `MacCossLabModules/`
 
 **If yes**, navigate to `server/` (NOT `server/modules/`) and clone testAutomation there:
 ```bash
-cd <labkey_root>/server
+cd "<labkey_root>/server"
 git clone git@github.com:LabKey/testAutomation.git
 cd testAutomation
-git checkout <branch-name>  # Match server branch
+git checkout <clone_branch>  # From state.json (Step 3.2)
 cd ..
 ```
 
@@ -114,7 +139,7 @@ cd ..
 
 **Expected final structure**:
 ```
-C:\labkey\release25.11\    (or chosen directory)
+<labkey_root>\
 ├── build.gradle
 ├── gradlew.bat
 └── server\

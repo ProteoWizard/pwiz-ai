@@ -4,9 +4,10 @@
   "labkey_version": null,
   "java_version": null,
   "postgres_version": null,
+  "setup_root": null,
   "labkey_root": null,
   "current_phase": 0,
-  "current_step": "0.1",
+  "current_step": "0.0",
   "completed": [],
   "deferred": [],
   "environment_check": {
@@ -19,8 +20,7 @@
     "notepad++": false,
     "winmerge": false,
     "tortoisegit": false,
-    "github_cli": false,
-    "claude_code": false
+    "github_cli": false
   },
   "notes": []
 }

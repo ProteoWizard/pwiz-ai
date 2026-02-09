@@ -12,12 +12,12 @@ All tools in this phase are optional. Offer each to the user with explanation.
 
 **If yes**:
 ```bash
-powershell.exe -Command "winget install Notepad++.Notepad++ --source winget"
+powershell.exe -Command 'winget install Notepad++.Notepad++ --source winget'
 ```
 
 **Verify**:
 ```bash
-powershell.exe -Command "Test-Path 'C:\Program Files\Notepad++\notepad++.exe'"
+powershell.exe -Command 'Test-Path "C:\Program Files\Notepad++\notepad++.exe"'
 ```
 
 ## Tool 9.2: WinMerge
@@ -28,12 +28,12 @@ powershell.exe -Command "Test-Path 'C:\Program Files\Notepad++\notepad++.exe'"
 
 **If yes**:
 ```bash
-powershell.exe -Command "winget install WinMerge.WinMerge --source winget"
+powershell.exe -Command 'winget install WinMerge.WinMerge --source winget'
 ```
 
-**Verify**:
+**Verify** (winget installs WinMerge per-user, so check the registry):
 ```bash
-powershell.exe -Command "Test-Path 'C:\Program Files\WinMerge\WinMergeU.exe'"
+powershell.exe -Command 'Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\WinMergeU.exe" -ErrorAction SilentlyContinue'
 ```
 
 ## Tool 9.3: TortoiseGit
@@ -42,17 +42,25 @@ powershell.exe -Command "Test-Path 'C:\Program Files\WinMerge\WinMergeU.exe'"
 
 **Ask user**: "Install TortoiseGit? (Git GUI with Windows Explorer integration) [y/n]"
 
-**If yes**:
+**If yes, brief the user before launching the installer:**
+
+> The TortoiseGit installer will open a GUI. Here's what to do:
+>
+> 1. **UAC prompt** — Click **Yes** to allow changes
+> 2. Click **Next** through the installation screens, accepting the defaults
+> 3. **Important**: On the final screen, **uncheck "Run first start wizard"**
+> 4. Click **Finish**
+>
+> After installation, I'll help you configure the SSH client settings.
+>
+> Are you ready to start the installer?
+
+**Wait for confirmation**, then run:
 ```bash
-powershell.exe -Command "winget install TortoiseGit.TortoiseGit --source winget --interactive"
+powershell.exe -Command 'winget install TortoiseGit.TortoiseGit --source winget --interactive'
 ```
 
-**User must**:
-- Click through installer
-- Accept defaults
-- Restart Windows Explorer (or reboot)
-
-**Configure SSH client** (important):
+**After installation completes, configure SSH client** (important):
 1. Right-click on <labkey_root> → **Show more options** → **TortoiseGit** → **Settings**
 2. Select **Network** in the left panel
 3. Set **SSH client** to: `C:\Program Files\Git\usr\bin\ssh.exe`
@@ -67,7 +75,7 @@ By pointing TortoiseGit to Git's SSH client, it uses the same keys you already c
 
 **Verify**:
 ```bash
-powershell.exe -Command "Test-Path 'C:\Program Files\TortoiseGit\bin\TortoiseGitProc.exe'"
+powershell.exe -Command 'Test-Path "C:\Program Files\TortoiseGit\bin\TortoiseGitProc.exe"'
 ```
 
 ## Tool 9.4: GitHub CLI
@@ -78,7 +86,7 @@ powershell.exe -Command "Test-Path 'C:\Program Files\TortoiseGit\bin\TortoiseGit
 
 **If yes**:
 ```bash
-powershell.exe -Command "winget install GitHub.cli --source winget"
+powershell.exe -Command 'winget install GitHub.cli --source winget'
 ```
 
 **Restart terminal**, then authenticate:
@@ -94,32 +102,6 @@ gh --version
 gh auth status
 ```
 
-## Tool 9.5: Claude Code
-
-**Why**: AI assistant for development tasks (if not already installed).
-
-**Ask user**: "Install/verify Claude Code? [y/n]"
-
-**If yes**:
-```bash
-powershell.exe -Command "irm https://claude.ai/install.ps1 | iex"
-```
-
-**Add to PATH**:
-```bash
-powershell.exe -Command "\$claudePath = \"\$env:USERPROFILE\.local\bin\"; [Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + \";\$claudePath\", 'User')"
-```
-
-**Restart terminal** and verify:
-```bash
-claude --version
-```
-
-**Authenticate** if needed:
-```bash
-claude
-```
-
 ## Completion
 
 **Update state.json** with installed tools:
@@ -130,8 +112,7 @@ claude
     "notepad++": true,
     "winmerge": false,
     "tortoisegit": true,
-    "github_cli": true,
-    "claude_code": true
+    "github_cli": true
   }
 }
 ```
