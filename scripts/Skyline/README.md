@@ -122,7 +122,7 @@ CodeInspection
 This directory separates **project-specific LLM tooling** from **repository-wide LLM guidance** (located in `/ai/` at repository root).
 
 **Repository-wide** (`/ai/`): Rules, patterns, workflows, style guides  
-**Project-specific** (`pwiz_tools/Skyline/ai/`): Build scripts, test helpers, project automation
+**Project-specific** (`ai/scripts/Skyline/`): Build scripts, test helpers, project automation
 
 ## Pattern for Other Projects
 

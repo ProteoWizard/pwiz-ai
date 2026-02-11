@@ -23,7 +23,7 @@ Before running any tests, you MUST:
 
 4. **Analyze results** using the coverage file as the patterns file:
    ```powershell
-   pwsh -File pwiz_tools/Skyline/ai/scripts/Analyze-Coverage.ps1 `
+   pwsh -File ai/scripts/Skyline/scripts/Analyze-Coverage.ps1 `
      -CoverageJsonPath "ai/.tmp/coverage-{timestamp}.json" `
      -PatternsFile "ai/todos/active/TODO-{branch-name}-coverage.txt"
    ```

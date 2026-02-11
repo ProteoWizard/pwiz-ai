@@ -18,31 +18,31 @@ This directory contains all documentation for LLM-assisted development on the Sk
 
 These files are kept small (<200 lines each) for quick loading:
 
-- **[CRITICAL-RULES.md](CRITICAL-RULES.md)** (81 lines)
+- **[CRITICAL-RULES.md](CRITICAL-RULES.md)**
   - Bare constraints only, no explanations
   - File format, async patterns, testing rules, naming conventions
   - Absolute prohibitions (NEVER sections)
 
-- **[MEMORY.md](MEMORY.md)** (144 lines)
+- **[MEMORY.md](MEMORY.md)**
   - Project scale (900K LOC, 17 years, 8 devs)
   - Critical gotchas (async/await, resource strings, translation-proof testing)
   - Threading, DRY principles, build system
   - Project structure and testing overview
 
-- **[WORKFLOW.md](WORKFLOW.md)** (166 lines)
+- **[WORKFLOW.md](WORKFLOW.md)**
   - Git branch strategy (master, release, work branches)
   - TODO file system (backlog, active, completed, archive)
   - Key workflows (start work, daily dev, complete/merge)
   - LLM tool guidelines
 
-- **[STYLEGUIDE.md](STYLEGUIDE.md)** (162 lines)
+- **[STYLEGUIDE.md](STYLEGUIDE.md)**
   - C# coding conventions for Skyline
   - File format, naming, control flow
   - Resource strings (localization)
   - Async programming (NO async/await)
   - File headers and AI attribution
 
-- **[TESTING.md](TESTING.md)** (154 lines)
+- **[TESTING.md](TESTING.md)**
   - Test project selection (Test, TestFunctional, etc.)
   - Critical testing rules (translation-proof, structure)
   - Common patterns (functional tests, assertions)
@@ -153,18 +153,13 @@ See [CRITICAL-RULES.md](CRITICAL-RULES.md) for full list:
 
 ## File Size Targets
 
-- CRITICAL-RULES.md: 81 lines (target <100) ✅
-- MEMORY.md: 144 lines (target <200) ✅
-- WORKFLOW.md: 212 lines (target <200, slightly over) ⚠️
-- STYLEGUIDE.md: 162 lines (target <200) ✅
-- TESTING.md: 154 lines (target <200) ✅
-- **Total core files**: 753 lines (target <1000) ✅
+Each core file targets <200 lines, with a total target of <1000 lines across all core files. See [TOC.md](TOC.md) for current line counts.
 
 ## Build and Test Automation (Optional)
 
 For LLM-assisted IDEs that can execute PowerShell, build/test helper scripts are available:
 
-**Skyline project** - [pwiz_tools/Skyline/ai/](../pwiz_tools/Skyline/ai/):
+**Skyline project** - [scripts/Skyline/](scripts/Skyline/):
 - `Build-Skyline.ps1` - Automated builds, tests, and ReSharper inspection
 - `Run-Tests.ps1` - Test execution with locale support
 - See [WORKFLOW.md](WORKFLOW.md) for essential commands
@@ -172,11 +167,10 @@ For LLM-assisted IDEs that can execute PowerShell, build/test helper scripts are
 
 **Pre-commit validation** (recommended before committing):
 ```powershell
-cd pwiz_tools\Skyline
-.\ai\Build-Skyline.ps1 -RunInspection -RunTests -TestName CodeInspection
+pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1' -RunInspection -RunTests -TestName CodeInspection"
 ```
 
-See [pwiz_tools/Skyline/ai/PRE-COMMIT.md](../pwiz_tools/Skyline/ai/PRE-COMMIT.md) for complete workflow.
+See [scripts/Skyline/PRE-COMMIT.md](scripts/Skyline/PRE-COMMIT.md) for complete workflow.
 
 **Pattern**: Project-specific `ai/` directories contain **build scripts and automation**. Repository-wide `ai/` contains **rules, patterns, and workflows**. These scripts are helpers for LLM workflows - developers can continue using Visual Studio directly.
 
@@ -185,7 +179,7 @@ See [pwiz_tools/Skyline/ai/PRE-COMMIT.md](../pwiz_tools/Skyline/ai/PRE-COMMIT.md
 - **Root [README.md](../README.md)** - ProteoWizard project overview (for humans)
 - **Root [.cursorrules](../.cursorrules)** - Cursor IDE configuration
 - **[doc/](../doc/)** - ProteoWizard website and documentation (for humans)
-- **[pwiz_tools/Skyline/ai/](../pwiz_tools/Skyline/ai/)** - Skyline-specific LLM tooling
+- **[scripts/Skyline/](scripts/Skyline/)** - Skyline-specific build and test scripts
 
 ---
 

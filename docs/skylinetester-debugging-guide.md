@@ -25,7 +25,7 @@ The user may have unsaved work or other reasons to not want processes killed.
 pwsh -Command "Get-Process -Name '*TestRunner*','*Skyline*' -ErrorAction SilentlyContinue | Stop-Process -Force"
 
 # 2. Build using the proper script (NEVER call MSBuild directly!)
-./pwiz_tools/Skyline/ai/Build-Skyline.ps1
+./ai/scripts/Skyline/Build-Skyline.ps1
 
 # 3. Launch SkylineTester with auto-run
 pwsh -Command "Start-Process '<your pwiz checkout>\pwiz_tools\Skyline\bin\x64\Debug\SkylineTester.exe' -ArgumentList '--autorun'"
@@ -35,7 +35,7 @@ pwsh -Command "Start-Process '<your pwiz checkout>\pwiz_tools\Skyline\bin\x64\De
 
 **NEVER** call MSBuild directly. Always use:
 ```powershell
-./pwiz_tools/Skyline/ai/Build-Skyline.ps1
+./ai/scripts/Skyline/Build-Skyline.ps1
 ```
 
 The build script:
@@ -160,7 +160,7 @@ Once permission is granted, Claude can iterate on debugging:
 
 1. **Make code changes** (add diagnostics, try fixes)
 2. **Kill processes**: `Get-Process ... | Stop-Process -Force`
-3. **Build**: `./pwiz_tools/Skyline/ai/Build-Skyline.ps1`
+3. **Build**: `./ai/scripts/Skyline/Build-Skyline.ps1`
 4. **Launch**: `Start-Process ... -ArgumentList '--autorun'`
 5. **Wait** for tests to complete or hang (monitor log file)
 6. **Read log**: Check `SkylineTester.log` for results

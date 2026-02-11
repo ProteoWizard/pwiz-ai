@@ -1,346 +1,118 @@
 # Project-Wide Utility Scripts
 
-This directory contains PowerShell scripts for maintaining code quality and consistency across the ProteoWizard project, particularly useful for LLM-assisted development workflows.
+This directory contains PowerShell scripts for maintaining code quality, automating workflows, and supporting LLM-assisted development across the ProteoWizard project.
 
-## Scripts
+## Script Index
 
-### Line Ending Management
+### Code Quality
 
-#### `fix-crlf.ps1`
-Converts modified files in git working directory from LF to CRLF (Windows standard).
+| Script | Description |
+|--------|-------------|
+| `fix-crlf.ps1` | Convert modified files from LF to CRLF (Windows standard) |
+| `validate-bom-compliance.ps1` | Validate no unexpected UTF-8 BOMs in repository |
+| `analyze-bom-git.ps1` | Audit git-tracked files for UTF-8 BOMs |
+| `remove-bom.ps1` | Remove UTF-8 BOMs from specified files |
+| `revert-whitespace-only-files.ps1` | Revert files with only whitespace changes (e.g., tab-to-space in RESX) |
 
-**When to use:**
-- After LLM tools inadvertently change line endings from CRLF to LF
-- Before committing, if you notice unwanted line ending changes in `git diff`
+### Auditing
 
-**Usage:**
+| Script | Description |
+|--------|-------------|
+| `audit-docs.ps1` | Audit documentation file sizes (line/character counts) |
+| `audit-loc.ps1` | Audit lines of code using cloc, categorized by path and type |
+| `audit-skills.ps1` | Audit skill sizes to ensure <30K character limit |
+| `audit-skyline-testdata.ps1` | Audit test data file sizes to identify large files |
+
+### Documentation & TOC
+
+| Script | Description |
+|--------|-------------|
+| `Generate-TOC.ps1` | Generate `ai/TOC.md` — comprehensive table of contents with size metrics |
+
+### TODO & Report Management
+
+| Script | Description |
+|--------|-------------|
+| `Archive-CompletedTodos.ps1` | Archive old completed TODOs into year/month subfolders |
+| `Clean-TmpFiles.ps1` | Clean stale transient files from `ai/.tmp/` |
+| `Move-DailyReports.ps1` | Move daily report files into per-date folders under `ai/.tmp/daily/` |
+| `Invoke-DailyReport.ps1` | Run Claude Code daily report in non-interactive mode |
+
+### Environment & Setup
+
+| Script | Description |
+|--------|-------------|
+| `Verify-Environment.ps1` | Verify developer environment prerequisites |
+| `Install-DotMemory.ps1` | Install JetBrains dotMemory Console CLI tool |
+| `statusline.ps1` | Custom Claude Code status line (project, branch, model, context %) |
+
+### Analysis
+
+| Script | Description |
+|--------|-------------|
+| `analyze-http-json.ps1` | Analyze HTTP recording JSON files for request sizes |
+
+### Skyline/ — Build & Test
+
+| Script | Description |
+|--------|-------------|
+| `Skyline/Build-Skyline.ps1` | Build, test, and validate Skyline from LLM-assisted IDEs |
+| `Skyline/Run-Tests.ps1` | Test execution wrapper with locale support and SkylineTester integration |
+| `Skyline/scripts/Analyze-Coverage.ps1` | Analyze dotCover JSON results for code coverage |
+| `Skyline/scripts/Extract-TypeNames.ps1` | Extract namespace/type names from C# files for coverage |
+| `Skyline/scripts/Sync-DotSettings.ps1` | Synchronize ReSharper .DotSettings across solutions |
+| `Skyline/scripts/Validate-TranslationCsvSync.ps1` | Validate translation CSV strings exist in RESX files |
+
+See [Skyline/README.md](Skyline/README.md) for detailed Skyline build/test documentation.
+
+### AutoQC/ and SkylineBatch/
+
+| Script | Description |
+|--------|-------------|
+| `AutoQC/Build-AutoQC.ps1` | Build and test AutoQC.sln |
+| `SkylineBatch/Build-SkylineBatch.ps1` | Build and test SkylineBatch.sln |
+
+## Common Workflows
+
+### Before Committing LLM-Generated Code
+
 ```powershell
-.\ai\scripts\fix-crlf.ps1
+pwsh -Command "& './ai/scripts/fix-crlf.ps1'"                 # Fix line endings
+pwsh -Command "& './ai/scripts/validate-bom-compliance.ps1'"   # Check BOMs
 ```
 
-**Behavior:**
-- Only processes files shown in `git status` (modified/added)
-- Converts all `\n` to `\r\n` (CRLF)
-- Reports which files were converted
-- Validates that no bare LFs remain
+### If BOM Validation Fails
 
-**Example output:**
-```
-Converted: pwiz_tools/Skyline/SkylineResources.cs
-Converted: pwiz_tools/Shared/CommonUtil/SystemUtil/ProcessRunner.cs
-...
-All converted to CRLF.
-```
-
-**Background:**
-This script was created during webclient_replacement work (Oct 2025) when LLM tools (which prefer Linux-style LF) inadvertently changed line endings from Windows CRLF to LF-only, causing large Git diffs. The project standard is CRLF on Windows.
-
----
-
-### UTF-8 BOM Management
-
-The ProteoWizard project follows a strict **UTF-8 without BOM** policy for all source files, except for a small approved list of vendor-generated files.
-
-#### `validate-bom-compliance.ps1`
-Validates that no unexpected UTF-8 BOMs exist in the repository.
-
-**When to use:**
-- Before committing changes
-- As part of CI/CD validation
-- When investigating encoding issues
-
-**Usage:**
 ```powershell
-.\ai\scripts\validate-bom-compliance.ps1
+pwsh -Command "& './ai/scripts/remove-bom.ps1' -Execute"
 ```
 
-**Behavior:**
-- Scans all git-tracked files for UTF-8 BOM (bytes `EF BB BF`)
-- Reports approved BOMs (vendor files, COM type libraries)
-- **Fails (exit 1)** if unexpected BOMs are found
-- **Succeeds (exit 0)** if all BOMs are on approved list
+### Regenerate Documentation TOC
 
-**Example output:**
-```
-=== Approved BOMs (11) ===
-  [OK] pwiz_tools/Skyline/Executables/BuildMethod/BuildLTQMethod/ltmethod.tli
-       Reason: Visual Studio generated COM type library
-...
-
-=== VALIDATION PASSED ===
-All files with BOM are on the approved list.
-```
-
-**What to do if validation fails:**
-1. If files should NOT have BOM: use `remove-bom.ps1`
-2. If files MUST have BOM (vendor/generated): add to approved list in script
-
----
-
-#### `analyze-bom-git.ps1`
-Analyzes git-tracked files and generates a list of files with UTF-8 BOMs.
-
-**When to use:**
-- Initial BOM audit
-- Generating input for `remove-bom.ps1`
-
-**Usage:**
 ```powershell
-.\ai\scripts\analyze-bom-git.ps1
+pwsh -Command "& './ai/scripts/Generate-TOC.ps1'"
 ```
 
-**Behavior:**
-- Scans all git-tracked files
-- Writes list to `files-with-bom.txt`
-- Reports statistics
+## UTF-8 Output for PowerShell Scripts
 
-**Example output:**
-```
-Analyzing 15,432 files...
-Found 13 files with UTF-8 BOM
-Results written to: files-with-bom.txt
-```
-
----
-
-#### `remove-bom.ps1`
-Removes UTF-8 BOMs from specified files while preserving timestamps.
-
-**When to use:**
-- After `validate-bom-compliance.ps1` reports unexpected BOMs
-- When LLM tools add BOMs to source files (Visual Studio Code, Cursor, etc.)
-
-**Usage:**
-```powershell
-# Dry-run mode (shows what would be changed)
-.\ai\scripts\remove-bom.ps1
-
-# Actually remove BOMs
-.\ai\scripts\remove-bom.ps1 -Execute
-
-# Process specific files
-.\ai\scripts\remove-bom.ps1 -FileList custom-list.txt -Execute
-```
-
-**Behavior:**
-- Reads file list from `files-with-bom.txt` (or `-FileList` parameter)
-- **Dry-run by default** - use `-Execute` to make changes
-- Preserves file timestamps (creation, modification, access)
-- Validates BOM removal after writing
-- Excludes patterns like `*.tli`, `*.tlh` (COM type libraries)
-
-**Example output:**
-```
-UTF-8 BOM Removal Tool
-======================
-
-Processing 2 files...
-[1/2] REMOVED: pwiz_tools/Skyline/Skyline.sln.DotSettings
-[2/2] REMOVED: pwiz_tools/Skyline/Executables/AutoQC/AutoQC.sln.DotSettings
-
-=== Summary ===
-Total files processed: 2
-BOMs removed:          2
-```
-
-**Common workflow:**
-```powershell
-# 1. Find files with unexpected BOMs
-.\ai\scripts\validate-bom-compliance.ps1
-# (fails with list of unexpected BOMs)
-
-# 2. Create file list for removal
-echo "pwiz_tools/Skyline/Skyline.sln.DotSettings" > files-with-bom.txt
-
-# 3. Remove BOMs
-.\ai\scripts\remove-bom.ps1 -Execute
-
-# 4. Verify compliance
-.\ai\scripts\validate-bom-compliance.ps1
-# (passes)
-
-# 5. Commit changes
-git add .
-git commit -m "Remove unexpected UTF-8 BOMs"
-```
-
----
-
-### UTF-8 Output for PowerShell Scripts
-
-LLM-authored PowerShell scripts often emit Unicode status icons (`✅`, `❌`, etc.). To ensure these render correctly even if a developer forgets to switch their terminal to UTF-8, add the following guard near the top of every such script:
+LLM-authored PowerShell scripts often emit Unicode status icons. Add this guard near the top of every such script:
 
 ```powershell
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 ```
 
-This keeps the script self-contained and prevents `âœ…`-style mojibake in Cursor, VS Code, or other shells that default to a legacy code page.
-
----
-
-## Background & Rationale
+## Background
 
 ### Why CRLF (Windows line endings)?
 
-The ProteoWizard project is primarily developed on Windows and uses Windows-native build tools (MSBuild, Visual Studio). Using consistent CRLF line endings:
-
-1. **Avoids spurious diffs** - When LLM tools convert CRLF→LF, it creates noise in `git diff`
-2. **Matches tooling** - Visual Studio, MSBuild, and Windows scripts expect CRLF
-3. **Consistency** - Nearly all project files already use CRLF
-
-**Exception:** Shell scripts (`.sh`) and Jamfiles use LF (Unix standard) as specified in `.editorconfig`.
+The ProteoWizard project is primarily developed on Windows with Windows-native build tools. Consistent CRLF avoids spurious diffs when LLM tools convert to LF. **Exception:** Shell scripts (`.sh`) and Jamfiles use LF per `.editorconfig`.
 
 ### Why UTF-8 without BOM?
 
-UTF-8 BOMs are unnecessary for UTF-8 (which is byte-order independent) and can cause issues:
-
-1. **Build failures** - Some tools don't handle BOMs correctly
-2. **Parser errors** - JSON, XML, and other parsers may reject BOM
-3. **Version control noise** - BOMs create invisible diffs
-4. **Tooling inconsistency** - Some editors add BOMs, others don't
-
-**Modern best practice:** UTF-8 without BOM is the standard for cross-platform development.
-
-**Approved exceptions:**
-- Visual Studio COM type library files (`.tli`, `.tlh`) - auto-generated with BOM
-- Agilent vendor data files - represent real instrument output format
-
----
-
-## Configuration Files
-
-These scripts work in conjunction with:
-
-- **`.editorconfig`** - Enforces `end_of_line = crlf` for most files
-- **`.gitattributes`** - Git line ending normalization (if configured)
-- **`validate-bom-compliance.ps1`** - Maintains approved BOM list
-
----
-
-## For LLM-Assisted Development
-
-When working with LLMs (Cursor, GitHub Copilot, etc.):
-
-1. **Before committing:**
-   ```powershell
-   .\ai\scripts\fix-crlf.ps1              # Fix line endings
-   .\ai\scripts\validate-bom-compliance.ps1  # Check BOMs
-   ```
-
-2. **If validation fails:**
-   ```powershell
-   .\ai\scripts\remove-bom.ps1 -Execute
-   ```
-
-3. **Verify changes:**
-   ```powershell
-   git diff --stat  # Should show only meaningful changes
-   ```
-
-**Why these issues occur:**
-- Many LLM-powered editors (VS Code, Cursor) are built for cross-platform development
-- They may default to LF line endings and UTF-8 with BOM
-- When LLMs read/modify files, they may inadvertently change encoding
-
-**Prevention:**
-- Check Cursor/VS Code settings: `"files.eol": "\r\n"`
-- Ensure `.editorconfig` is respected: `"editorconfig.enable": true`
-- Run validation scripts before committing
-
----
-
-### Claude Code Configuration
-
-#### `statusline.ps1`
-Custom status line script for Claude Code showing project name, git branch, model, and context usage.
-
-**Example output:**
-```
-pwiz-ai [master] | Opus | 36% used
-```
-
-**What it shows:**
-- Project directory name (e.g., `pwiz-ai`)
-- Current git branch (e.g., `[master]`)
-- Model name (e.g., `Opus`, `Sonnet`)
-- Context window usage percentage
-
-**Setup:**
-This is a personal preference, not a project-wide setting. To enable:
-
-1. Copy the script to your personal Claude folder (optional, or reference it from `ai/scripts/`):
-   ```
-   Windows: %USERPROFILE%\.claude\statusline.ps1
-   macOS/Linux: ~/.claude/statusline.ps1
-   ```
-
-2. Create or edit your personal settings file:
-   ```
-   Windows: %USERPROFILE%\.claude\settings.json
-   macOS/Linux: ~/.claude/settings.json
-   ```
-
-3. Add the statusLine configuration:
-   ```json
-   {
-     "statusLine": {
-       "type": "command",
-       "command": "pwsh -NoProfile -File C:\\Users\\YourName\\.claude\\statusline.ps1"
-     }
-   }
-   ```
-
-   Or reference it directly from the project:
-   ```json
-   {
-     "statusLine": {
-       "type": "command",
-       "command": "pwsh -NoProfile -File C:\\proj\\pwiz\\ai\\scripts\\statusline.ps1"
-     }
-   }
-   ```
-
-**Why personal, not project-wide?**
-- Status line preference is personal (you likely want the same info for all projects)
-- The script works for any project (dynamically reads project directory)
-- Settings hierarchy: `~/.claude/settings.json` applies to all projects
-
-**Context usage note:**
-Claude Code warns when ~10% context remains. Watching "% used" helps you know when you're approaching that threshold and might want to start a fresh session.
-
----
+UTF-8 BOMs are unnecessary and can cause build failures, parser errors, and version control noise. **Approved exceptions:** Visual Studio COM type library files (`.tli`, `.tlh`) and Agilent vendor data files.
 
 ## Related Documentation
 
 - **[ai/STYLEGUIDE.md](../STYLEGUIDE.md)** - File headers, encoding guidelines
 - **[ai/WORKFLOW.md](../WORKFLOW.md)** - Git workflow, commit practices
 - **[ai/docs/build-and-test-guide.md](../docs/build-and-test-guide.md)** - Build/test automation
-
----
-
-## Troubleshooting
-
-**Q: `fix-crlf.ps1` reports files already have CRLF, but git shows them as modified?**
-
-A: This can happen if:
-- Files have mixed line endings (some CRLF, some LF)
-- `.gitattributes` is normalizing line endings differently
-- Git's `core.autocrlf` setting is interfering
-- Cursor has a pending “modified files” list that it keeps reapplying (see note below)
-
-Solution: Run `git diff <file>` to see exact changes.
-
-> **Cursor tip:** Cursor keeps its own “modified files” queue per workspace. If you ignore that queue, the editor may reapply those cached versions—often converting them to LF-only—when you reopen the workspace. Regularly accept/reject the queued files so Cursor doesn’t keep refreshing them with LF endings.
-
-**Q: `validate-bom-compliance.ps1` fails, but I didn't add any BOMs?**
-
-A: Common causes:
-- LLM tools modified files and added BOMs
-- Copy-pasting code from web browsers or other editors
-- `.DotSettings` files saved by ReSharper/JetBrains tools
-
-Solution: Use `remove-bom.ps1 -Execute` to fix.
-
-**Q: Should I add `.gitattributes` rules for line endings?**
-
-A: Not usually. The developer setup guide already instructs everyone to set `git config --global core.autocrlf true`, which keeps Windows checkouts in CRLF automatically. Combined with these scripts, that policy has worked well without additional project-level overrides. If a new third-party file truly needs different handling, document it in `.editorconfig` or the relevant script instead of broad `.gitattributes` changes.

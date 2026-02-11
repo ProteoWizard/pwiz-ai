@@ -50,12 +50,12 @@ Get-Content 'pwiz_tools/Skyline/SkylineTester.log' -Tail 50
 
 ### Run tests from shared test list
 ```powershell
-./pwiz_tools/Skyline/ai/Run-Tests.ps1 -UseTestList
+./ai/scripts/Skyline/Run-Tests.ps1 -UseTestList
 ```
 
 ### Update test list for SkylineTester
 ```powershell
-./pwiz_tools/Skyline/ai/Run-Tests.ps1 -TestName TestFoo -UpdateTestList
+./ai/scripts/Skyline/Run-Tests.ps1 -TestName TestFoo -UpdateTestList
 ```
 
 ## Related Documentation

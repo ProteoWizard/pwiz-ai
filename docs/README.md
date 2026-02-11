@@ -6,85 +6,59 @@ This directory contains comprehensive, detailed documentation for LLM-assisted d
 
 ## Available Guides
 
-### [documentation-maintenance.md](documentation-maintenance.md)
-**Guide for LLMs on maintaining this documentation system**
-- Decision tree: where does new content go?
-- Core file line limits and enforcement
-- Common mistakes and corrections
-- Validation checklist before commits
-- Red flags for documentation violations
+### Architecture
 
-**When to read:** Before creating/modifying any .md files in the ai/ system. **READ THIS FIRST** if you're adding documentation.
+- **[architecture-data-model.md](architecture-data-model.md)** - Core data model architecture (immutable SrmDocument)
+- **[architecture-error-handling.md](architecture-error-handling.md)** - Error handling patterns (user-actionable vs programming defects)
 
-### [build-and-test-guide.md](build-and-test-guide.md)
-**Comprehensive build and test command reference**
-- PowerShell Build-Skyline.ps1 usage
-- MSBuild commands for iterative builds
-- TestRunner.exe execution patterns
-- ReSharper code inspection workflows
-- Pre-commit validation procedures
-- Output interpretation and troubleshooting
+### Setup
 
-**When to read:** When building/testing from LLM-assisted IDEs, debugging build failures.
+- **[developer-setup-guide.md](developer-setup-guide.md)** - Developer environment setup for AI-assisted development
+- **[new-machine-bootstrap.md](new-machine-bootstrap.md)** - Quick start: pristine Windows to working dev environment
+- **[new-machine-setup.md](new-machine-setup.md)** - Detailed new machine setup for LLM assistants
+- **[new-machine-windows-install.md](new-machine-windows-install.md)** - Clean Windows installation and initial configuration
+- **[labkey-setup/](labkey-setup/)** - LabKey Server development environment setup
 
-### [project-context.md](project-context.md)
-**Full project context with detailed examples**
-- Complete DRY principle examples (with code samples)
-- Detailed threading patterns
-- Comprehensive exception handling patterns
-- Resource string workflow with examples
-- Translation-proof testing with detailed examples
-- Full architectural patterns
+### Development
 
-**When to read:** When you need deep understanding of project patterns and gotchas.
+- **[style-guide.md](style-guide.md)** - Comprehensive C# coding standards with full examples
+- **[testing-patterns.md](testing-patterns.md)** - Testing patterns, AssertEx API, dependency injection
+- **[build-and-test-guide.md](build-and-test-guide.md)** - Complete build and test command reference
+- **[project-context.md](project-context.md)** - Full project context with detailed examples and gotchas
+- **[debugging-principles.md](debugging-principles.md)** - Systematic debugging methodology
 
-### [style-guide.md](style-guide.md)
-**Comprehensive C# coding standards**
-- Complete control flow examples
-- Full naming convention details
-- ASCII vs Unicode guidance with examples
-- Debug.WriteLine patterns
-- File header templates with all variations
-- Resource string generation rules
-- UI guidelines with menu patterns
+### Workflow
 
-**When to read:** Before writing new code, when uncertain about style details.
+- **[workflow-guide.md](workflow-guide.md)** - Complete workflow guide with TODO templates and examples
+- **[version-control-guide.md](version-control-guide.md)** - Git commit, PR, and branch management conventions
+- **[release-guide.md](release-guide.md)** - Release management: versioning, workflows, automation
+- **[release-cycle-guide.md](release-cycle-guide.md)** - Quick reference for the Skyline release cycle
 
-### [workflow-guide.md](workflow-guide.md)
-**Complete workflow guide with all templates**
-- Full TODO file templates (backlog, active, completed)
-- All 5 workflows with detailed examples
-- TODO file structure templates
-- Handoff prompt templates
-- Emergency procedures (hotfixes, rollbacks)
-- CI/CD integration details
-- Best practices with examples
+### Tools
 
-**When to read:** When creating TODOs, planning work, completing PRs.
+- **[skylinetester-guide.md](skylinetester-guide.md)** - Comprehensive SkylineTester reference
+- **[skylinetester-debugging-guide.md](skylinetester-debugging-guide.md)** - Debugging hung tests, automated dev-build-test cycles
+- **[leak-debugging-guide.md](leak-debugging-guide.md)** - Identifying and fixing handle leaks
+- **[screenshot-update-workflow.md](screenshot-update-workflow.md)** - Tutorial screenshot review and update workflow
 
-### [testing-patterns.md](testing-patterns.md)
-**Comprehensive testing patterns and examples**
-- Full test project details with characteristics
-- Test execution tools (TestRunner, SkylineTester, SkylineNightly)
-- Complete dependency injection patterns with examples
-- Full AssertEx API reference
-- HttpClientTestHelper detailed usage
-- Translation-proof testing comprehensive guide
-- Test performance optimization with metrics
+### Tutorials
 
-**When to read:** Before writing tests, when implementing complex test patterns.
+- **[tutorial-doc-style-guide.md](tutorial-doc-style-guide.md)** - Style conventions for Skyline tutorial HTML
+- **[translation-guide.md](translation-guide.md)** - Updating localized RESX files and translation tables
 
-### [screenshot-update-workflow.md](screenshot-update-workflow.md)
-**Tutorial screenshot review and update workflow**
-- ImageComparer tool location and keyboard shortcuts
-- Decision categories: Accept, Revert, Fix
-- Bug documentation conventions (BUG-XXX)
-- LLM interaction conventions for efficient communication
-- Diff image saving to `ai\.tmp\` for analysis
-- Multi-language screenshot considerations
-- TODO file integration patterns
+### AI System
 
-**When to read:** When reviewing tutorial screenshots before releases, investigating screenshot differences.
+- **[ai-repository-strategy.md](ai-repository-strategy.md)** - Strategy for the dedicated pwiz-ai repository
+- **[documentation-maintenance.md](documentation-maintenance.md)** - Guide for maintaining this documentation system
+- **[daily-report-guide.md](daily-report-guide.md)** - Generating daily consolidated reports
+- **[scheduled-tasks-guide.md](scheduled-tasks-guide.md)** - Running Claude Code on a schedule via Task Scheduler
+
+### Subdirectories
+
+- **[mcp/](mcp/)** - MCP server documentation (LabKey, Gmail, status tools)
+- **[labkey/](labkey/)** - LabKey module documentation
+- **[labkey-setup/](labkey-setup/)** - LabKey Server setup guides and scripts
+- **[archive/](archive/)** - Archived older documentation versions
 
 ## Core vs Detailed Documentation
 
@@ -108,15 +82,6 @@ This directory contains comprehensive, detailed documentation for LLM-assisted d
 - **Git workflows?** → [../WORKFLOW.md](../WORKFLOW.md)
 - **Style rules?** → [../STYLEGUIDE.md](../STYLEGUIDE.md)
 - **Testing basics?** → [../TESTING.md](../TESTING.md)
-
-**Need detailed examples:**
-- **Doc maintenance?** → [documentation-maintenance.md](documentation-maintenance.md)
-- **Build/test commands?** → [build-and-test-guide.md](build-and-test-guide.md)
-- **Project patterns?** → [project-context.md](project-context.md)
-- **Style examples?** → [style-guide.md](style-guide.md)
-- **Workflow templates?** → [workflow-guide.md](workflow-guide.md)
-- **Testing patterns?** → [testing-patterns.md](testing-patterns.md)
-- **Screenshot updates?** → [screenshot-update-workflow.md](screenshot-update-workflow.md)
 
 ## Growth Strategy
 
