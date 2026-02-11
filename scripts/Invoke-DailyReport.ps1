@@ -78,7 +78,7 @@
 
 param(
     [string]$Recipient = "brendanx@uw.edu",
-    [string]$Model = "claude-opus-4-5-20251101",
+    [string]$Model = "claude-opus-4-6",
     [int]$MaxTurns = 0,
     [ValidateSet("research", "email", "both")]
     [string]$Phase = "both",
