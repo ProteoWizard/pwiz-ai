@@ -3,7 +3,7 @@
 ## Branch Information
 - **Branch**: N/A (direct to pwiz-ai master)
 - **Created**: 2026-02-11
-- **Status**: In Progress
+- **Status**: Complete
 
 ## Objective
 
@@ -18,7 +18,7 @@ Prepare the pwiz-ai repository for a blog post with Anthropic by cleaning up sta
 - [x] Update `ai/scripts/README.md` — document all 27 scripts (currently only 5)
 - [x] Fix stale `pwiz_tools/Skyline/ai/` references in 4 other files
 - [x] Regenerate `TOC.md` via `Generate-TOC.ps1`
-- [ ] Commit all changes to pwiz-ai master
+- [x] Commit all changes to pwiz-ai master
 
 ## Key Files
 
