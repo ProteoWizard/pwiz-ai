@@ -11,17 +11,27 @@
 
 Follow-up items from the screenshot consistency sprint that were not critical for achieving consistent ACG screenshots but would improve the overall screenshot testing infrastructure.
 
-## Tasks
+## Completed
 
-- [N/R] **Fix MethodRefinement s-09** - Does not reproduce; ran all 3 languages with no diffs
-- [ ] **Consider DDA Search output s-13** - "reading MS2 spectra into scan collection: {count}/81704" the count is not predictable
+- [x] **Fix MethodRefinement s-09** - Added JiggleSelection after RestoreViewOnScreen to force AutoZoomNone
 - [x] **Fix LiveReports audit log screenshots (s-02, s-68, s-69)** - Added TestTimeProvider wrapper
-- [ ] **X-Axis Label Orientation Inconsistency (MS1Filtering s-21, ja/zh-CHS only)** - Labels flip between horizontal/vertical based on space
 - [x] **Fix tests ending up in accessibility mode** - Send WM_CHANGEUISTATE recursively to all controls
 - [x] **ImageComparer Diff Amplification Features** - Add diff-only view and amplification for 1-2px diffs
-- [ ] **Fix CleanupBorder Algorithm** - May have off-by-one error for Windows 11 curved corners
-- [ ] **Remove unused timeout parameter** - Clean up unused parameter from PauseFor*ScreenShot functions
 - [x] **Paint over ACG per-file progress bars** - Extended FillProgressBar to handle all visible file progress bars
+- [x] **Fix SetScrollPos not scrolling content** - Post WM_HSCROLL/WM_VSCROLL after SetScrollPos
+- [x] **Fix MinimizeResultsDlg race condition** - IsComplete used stale stats; replaced properties with SetNoiseLimit()
+- [x] **Fix SmallMoleculeIMSLibraries s-10 zoom** - Used test helper ZoomXAxis() which forces Refresh()
+- [x] **Fix DIA-QE s-05 DIANN folder** - Deleted DIANN folder causing screenshot diff
+- [x] **Fix GroupedStudies s-18 Precursor Results** - Fixed list ordering
+- [x] **Committed 95 accepted tutorial screenshots** - Focus rects, ACG progress bars, chromatogram baselines, etc.
+
+## Not Addressed (low priority, no GitHub issue needed)
+
+- **DDA Search output s-13** - Progress count is unpredictable; would need to fake the value
+- **X-Axis Label Orientation (MS1Filtering s-21, ja/zh-CHS only)** - ZedGraph auto-layout; very niche
+- **CleanupBorder Algorithm** - Speculative off-by-one for Windows 11 curved corners; will surface when build machines upgrade
+- **Remove unused timeout parameter** - Minor cleanup of PauseFor*ScreenShot functions
+- **PeakBoundaryImputation-DIA s-01** - Minor splitter positioning issue
 
 ## Technical Notes
 
@@ -113,3 +123,73 @@ TabControl/WizardPages containers.
 not just the top-level form.
 
 **File**: `TestUtil/ScreenshotManager.cs` - Added `HideKeyboardCuesRecursive()` method
+
+### 2026-02-09 - SetScrollPos fix
+
+Win32 `SetScrollPos` only moves the scrollbar thumb — it doesn't scroll the control's content.
+Fixed `User32Extensions.SetScrollPos()` to also post `WM_HSCROLL`/`WM_VSCROLL` with
+`SB_THUMBPOSITION`, matching the pattern in `AutoScrollTextBox`. This fixed horizontal scroll
+positioning in CustomReports, GroupedStudies, DIA, and PRM tutorial tree views.
+
+**Files**: `User32.cs` (added `WM_HSCROLL`), `User32Extensions.cs` (post scroll message)
+
+### 2026-02-09 - MinimizeResultsDlg race condition fix
+
+`Ms1FullScanFilteringTutorial` s-44 showed inconsistent compression percentages (49% or 70% instead
+of correct 55%). Root cause: two bugs in the test interaction with MinimizeResultsDlg.
+
+1. **Stale IsComplete**: `_minStatistics` was not reset when Settings changed and a new background
+   worker started. `WaitForConditionUI(IsComplete)` could return true from the old worker's results.
+2. **Wrong NoiseTimeRange**: `LimitNoiseTime = true` fired `CheckedChanged` which parsed the textbox
+   (default "1" from resx) before `NoiseTimeRange = 2` set it. Worker computed with wrong value.
+
+**Fix**: Replaced `LimitNoiseTime`/`NoiseTimeRange` properties with `SetNoiseLimit(bool, double?)`
+that sets textbox before checkbox. Added `_minStatistics = null` reset in Settings setter.
+Added `PercentOfTotalCompression` property and assertion of expected 55% value.
+
+**Files**: `MinimizeResultsDlg.cs`, `Ms1FullScanFilteringTutorial.cs`, `PerfMinimizeResultsTest.cs`
+
+### 2026-02-09 - SmallMoleculeIMSLibraries s-10 zoom fix
+
+`GraphSpectrum.ZoomXAxis()` only sets axis scale properties without triggering a repaint.
+The test helper `AbstractFunctionalTestEx.ZoomXAxis()` additionally calls `ApplyState`,
+`SetScale`, and `Refresh()`. Switched the test to use the helper.
+
+### 2026-02-09 - Committed 95 screenshots, 12 deferred
+
+Ran full auto-screenshot suite. Reviewed all 106 changed PNGs, annotated in
+`ai/.tmp/screenshot-review-20260209.csv`. Committed 95 accepted + 6 C# files.
+
+**12 deferred PNGs** (remaining as unstaged modifications):
+- DIA-QE s-05 (en/ja/zh-CHS) - Fixed (DIANN folder deleted)
+- DIA-Umpire-TTOF s-13 (en) - DDA search output numbers unpredictable
+- GroupedStudies s-18 (en/ja/zh-CHS) - Fixed (Precursor Results ordering)
+- MethodRefine s-09 (en/ja/zh-CHS) - Fixed (JiggleSelection after RestoreViewOnScreen)
+- PeakBoundaryImputation-DIA s-01 (en) - Splitter change to lose border
+- SmallMoleculeIMSLibraries s-10 (en) - Fixed (used test helper ZoomXAxis)
+
+### 2026-02-09 - MethodRefine s-09 zoom fix
+
+Wrong zooming only reproduced in full auto-screenshot suite, not in isolation. `AutoZoomNone()` was
+called before `RestoreViewOnScreen()` which destroys and recreates all DockableForms. Added
+`JiggleSelection(up: true)` after `RestoreViewOnScreen` and `WaitForGraphs` to force the chromatogram
+graphs to redraw with the correct zoom setting. Also enhanced `JiggleSelection` to accept an `up`
+parameter (some contexts need to move up first to avoid going past the end of the tree).
+
+Revealed that the old committed screenshot had duplicate transitions in the legend.
+
+**Files**: `MethodRefinementTutorialTest.cs`, `TestFunctional.cs`
+
+### 2026-02-09 - Additional fixes for deferred screenshots
+
+* Fixed DIA-QE s-05: Delete DIANN folder before screenshot in `DiaSwathTutorialTest.cs`
+* Fixed GroupedStudies s-18: Set `TopNode` to ensure Precursor Results at top of filter tree
+* Fixed SmallMoleculeIMSLibraries s-10: Replaced `GraphSpectrum.ZoomXAxis()` (no repaint) with
+  `AbstractFunctionalTestEx.ZoomXAxis()` (includes Refresh). Exposed `ZedGraphControl` property.
+* Removed now-unused `GraphSpectrum.ZoomXAxis(double, double)` public method
+
+### 2026-02-13 - PR #3779 merged, TODO completed
+
+PR merged to master. Remaining low-priority items (DDA search output count, x-axis label orientation,
+CleanupBorder algorithm, unused timeout parameter, PeakBoundaryImputation splitter) deferred without
+GitHub issues — they're speculative, cosmetic, or will resurface naturally.
