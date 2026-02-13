@@ -32,7 +32,7 @@ multiple `DocumentChanged` events (same pattern as Test 6) or something else ent
 - [x] Assert exactly 1 cached result (dump diagnostic info if multiple)
 - [x] Verify incremental update pattern on the single result
 - [x] Build and test pass
-- [ ] Create PR
+- [x] Create PR - [#3973](https://github.com/ProteoWizard/pwiz/pull/3973)
 
 ## Files Modified
 
