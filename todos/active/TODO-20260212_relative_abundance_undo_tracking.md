@@ -6,7 +6,7 @@
 - **Created**: 2026-02-12
 - **Status**: In Progress
 - **GitHub Issue**: None (diagnostic improvement for intermittent nightly test failure)
-- **PR**: (pending)
+- **PR**: [#3973](https://github.com/ProteoWizard/pwiz/pull/3973)
 
 ## Objective
 
