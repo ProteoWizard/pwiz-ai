@@ -514,8 +514,8 @@ Write-Host "  Log: $outputDir\$logFile`n" -ForegroundColor Gray
 # log=...: Where to write output
 $offscreenParam = if ($ShowUI) { "off" } else { "on" }
 
-# Only use buildcheck for English-only runs (buildcheck forces language=en-US and loop=1)
-$useBuildCheck = ($languageParam -eq "en-US")
+# Only use buildcheck for English-only runs (buildcheck forces language=en-US, loop=1, AND offscreen=on)
+$useBuildCheck = ($languageParam -eq "en-US") -and -not $ShowUI
 
 try {
     Set-Location $skylineRoot
