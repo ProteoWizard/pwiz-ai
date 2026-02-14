@@ -193,3 +193,40 @@ Revealed that the old committed screenshot had duplicate transitions in the lege
 PR merged to master. Remaining low-priority items (DDA search output count, x-axis label orientation,
 CleanupBorder algorithm, unused timeout parameter, PeakBoundaryImputation splitter) deferred without
 GitHub issues — they're speculative, cosmetic, or will resurface naturally.
+
+## Bug Fixes
+
+### 2026-02-13 - MinimizeResultsDlg race condition in Ms1 tutorial
+
+- **Branch**: `Skyline/work/20260108_screenshot_followup-fix`
+- **PR**: [#3977](https://github.com/ProteoWizard/pwiz/pull/3977)
+
+Nightly tests failed with `Assert.AreEqual failed. Expected:<55>. Actual:<36>` in
+`Ms1FullScanFilteringTutorial` at the `PercentOfTotalCompression` assertion added in PR #3779.
+
+**Root causes identified (three issues):**
+
+1. **OnProgress race condition**: `MinimizeResultsDlg.OnProgress` unconditionally wrote `_minStatistics`
+   from any background worker, including stale ones. When the dialog opens, `StartStatisticsCollection()`
+   starts a worker with initial settings (no noise limit). Then `SetNoiseLimit(true, 2)` starts a new
+   worker. The stale worker could write its results (70%) to `_minStatistics`, and `WaitForConditionUI`
+   would see `PercentComplete=100` from the wrong worker.
+
+2. **Missing WaitForDocumentLoaded**: `SaveDocument(minimizedFile)` is a Save As to a new path, which
+   triggers reload of libraries and the .skyd from the new location. Without waiting, `DocumentChanged`
+   events fired while the minimize dialog was open, causing `GetChromCacheMinimizer(document)` to return
+   new instances and restart computation repeatedly.
+
+3. **Vendor-dependent compression ratio**: The mzML test files are truncated at 50 minutes while native
+   .wiff files extend to 118.8 minutes (confirmed with ProteoWizard SeeMS). The 2-minute noise trimming
+   produces 55% compression with .wiff data but only 36% with mzML. Nightly machines without AB SCIEX
+   vendor readers fall back to mzML, producing a fundamentally different cache.
+
+**Fixes:**
+- `OnProgress`: Early return when `!ReferenceEquals(_minimizeResults.StatisticsCollector, worker)`
+- Added `WaitForDocumentLoaded()` after `SaveDocument(minimizedFile)`
+- Made assertion vendor-aware: `PreferWiff ? 55 : 36`
+
+**Files**: `MinimizeResultsDlg.cs`, `Ms1FullScanFilteringTutorial.cs`
+
+**Validated**: 180 iterations including French with mzML (CanImportAbWiff=false).
