@@ -2,16 +2,18 @@
 
 Comprehensive guide for generating daily consolidated reports covering nightly tests, exceptions, and support activity.
 
-## Two-Task Architecture
+## Two-Phase Architecture
 
-The daily report runs as two independent scheduled tasks:
+A single scheduled task (`Invoke-DailyReport.ps1`) spawns two sequential Claude Code sessions:
 
-| Task | Schedule | Command | Turn Budget | Purpose |
-|------|----------|---------|-------------|---------|
-| **Research** | 8:05 AM | `/pw-daily-research` | 100 | Collect data, investigate, write findings |
-| **Email** | 9:00 AM | `/pw-daily-email` | 40 | Read findings, compose enriched email, send |
+| Phase | Command | Turn Budget | Purpose |
+|-------|---------|-------------|---------|
+| **Research** | `/pw-daily-research` | 100 | Collect data, investigate, write findings |
+| **Email** | `/pw-daily-email` | 40 | Read findings, compose enriched email, send |
 
-**Why split?** The research phase is compute-heavy (MCP queries, code reading, git blame, GitHub lookups). The email phase is predictable (read files, format HTML, send). Splitting enables:
+Both phases run in the same process at 8:05 AM — email immediately follows research.
+
+**Why split into two sessions?** The research phase is compute-heavy (MCP queries, code reading, git blame, GitHub lookups). The email phase is predictable (read files, format HTML, send). Splitting enables:
 - Independent failure recovery (email can send partial data if research fails)
 - Different tool permissions (research has no email send; email has no Bash/investigation)
 - Swarm-ready investigation (research describes independent work items)
@@ -19,13 +21,13 @@ The daily report runs as two independent scheduled tasks:
 
 **For manual/interactive use**, run `/pw-daily` which does both phases in sequence.
 
-**Automation script**: `ai/scripts/Invoke-DailyReport.ps1 -Phase research|email|both`
+**Automation script**: `ai/scripts/Invoke-DailyReport.ps1` (default `-Phase both`)
 
 ### Data Flow
 
 ```
-Research (8:05 AM)                    Email (9:00 AM)
-─────────────────                     ────────────────
+Research (session 1)                  Email (session 2)
+────────────────────                  ──────────────────
 MCP queries ─────┐                    Read manifest ──────┐
 Inbox reading ───┤                    Read reports ───────┤
 History backfill ┤                    Read suggested- ────┤
@@ -39,6 +41,14 @@ GitHub lookups ──┤                    Compose email ──────┘
 ### Manifest File
 
 The research phase writes `ai/.tmp/daily-manifest-YYYYMMDD.json` listing all output files and summary statistics. The email phase reads this manifest to compose the email. If the manifest is missing, the email phase falls back to reading whatever files exist for today's date.
+
+---
+
+## Time Awareness
+
+**IMPORTANT**: When discussing daily reports interactively, always check the current time first using `mcp__status__get_status()`. The user may review a report hours or even a day after it was generated. Without knowing the current time, you risk making incorrect statements about what "will happen" (already happened) or "just ran" (ran yesterday).
+
+For example, if research ran at 8:05 AM and the user reviews findings at 2:00 PM, the email was sent hours ago. If they review the next morning, today's report is about to run. Time-aware responses sound natural and correct; time-unaware ones sound disconnected.
 
 ---
 
@@ -1027,22 +1037,19 @@ The `first_fixed_version` can be null initially and updated later when the fix i
 
 ## Scheduled Session Configuration
 
-### Two-Task Schedule (Recommended)
+| Task | Time | Script |
+|------|------|--------|
+| Daily Report | 8:05 AM | `Invoke-DailyReport.ps1` (runs research then email sequentially) |
 
-| Task | Time | Command | Script |
-|------|------|---------|--------|
-| Research | 8:05 AM | `/pw-daily-research` | `Invoke-DailyReport.ps1 -Phase research` |
-| Email | 9:00 AM | `/pw-daily-email` | `Invoke-DailyReport.ps1 -Phase email` |
+Register with: `Invoke-DailyReport.ps1 -Schedule "8:05AM"`
 
-### Single-Task Schedule (Legacy)
+Individual phases can also be run separately if needed:
+- `Invoke-DailyReport.ps1 -Phase research` — research only
+- `Invoke-DailyReport.ps1 -Phase email` — email only
 
-| Task | Time | Command | Script |
-|------|------|---------|--------|
-| Combined | 8:05 AM | `/pw-daily` | `Invoke-DailyReport.ps1` (or `-Phase both`) |
+**Default recipient**: brendanx@uw.edu
 
-**Default recipient**: brendanx@proteinms.net
-
-**Expected behavior**: Research phase collects data and investigates everything. Email phase composes and sends the enriched email. Combined mode does both.
+**Expected behavior**: The script pulls latest `ai/` and `pwiz/` master, runs the research Claude session (100 turns), consolidates output files into `ai/.tmp/daily/YYYY-MM-DD/`, then runs the email Claude session (40 turns) which reads the research findings and sends the report.
 
 ---
 
