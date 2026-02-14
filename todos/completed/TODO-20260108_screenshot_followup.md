@@ -223,10 +223,16 @@ Nightly tests failed with `Assert.AreEqual failed. Expected:<55>. Actual:<36>` i
    vendor readers fall back to mzML, producing a fundamentally different cache.
 
 **Fixes:**
-- `OnProgress`: Early return when `!ReferenceEquals(_minimizeResults.StatisticsCollector, worker)`
+- `OnProgress`: Guard `_minStatistics` update with `ReferenceEquals` check for current
+  `StatisticsCollector`, while still allowing `IsMinimizingFile` progress/cancel to run
+- Extracted `UpdateLimitNoiseTime()` from `CheckedChanged` handler so `SetNoiseLimit` can
+  call it directly instead of using a toggle trick that briefly applies wrong settings
 - Added `WaitForDocumentLoaded()` after `SaveDocument(minimizedFile)`
-- Made assertion vendor-aware: `PreferWiff ? 55 : 36`
+- Made assertion vendor-aware with tolerance: `PreferWiff ? 55 : 36` (±1)
+- Fixed mouse-over tooltip exception in MinimizeResultsDlg
 
 **Files**: `MinimizeResultsDlg.cs`, `Ms1FullScanFilteringTutorial.cs`
 
-**Validated**: 180 iterations including French with mzML (CanImportAbWiff=false).
+**Validated**: 180+ iterations including French with mzML (CanImportAbWiff=false).
+
+PR #3977 merged 2026-02-13.
