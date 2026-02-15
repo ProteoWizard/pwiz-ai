@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260212_relative_abundance_undo_tracking`
 - **Base**: `master`
 - **Created**: 2026-02-12
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: None (diagnostic improvement for intermittent nightly test failure)
 - **PR**: [#3973](https://github.com/ProteoWizard/pwiz/pull/3973)
 
@@ -47,3 +47,9 @@ multiple `DocumentChanged` events (same pattern as Test 6) or something else ent
   cached results, revealing what triggered the extra calculation.
 - If there's only 1 calculation with wrong counts, `GetDiagnosticInfo()` on the single result
   reveals whether it was a full or incremental calculation and its cache state.
+
+## Progress Log
+
+### 2026-02-13 - Merged
+
+PR [#3973](https://github.com/ProteoWizard/pwiz/pull/3973) merged 2026-02-13.

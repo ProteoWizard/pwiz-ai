@@ -6,7 +6,7 @@
 - **Base**: `release25.11-SNAPSHOT`
 - **PR**: https://github.com/LabKey/MacCossLabModules/pull/599
 - **Created**: 2026-02-04
-- **Status**: PR Open - Ready for Review
+- **Status**: Completed
 - **Module**: MacCossLabModules/testresults
 
 ## Objective
@@ -123,6 +123,10 @@ All must be true:
 - Implemented rolling window for Incremental mode
 - Created PR #599 to release25.11-SNAPSHOT
 - Documented LabKey branch naming convention
+
+### 2026-02-06 - Merged
+
+PR [#599](https://github.com/LabKey/MacCossLabModules/pull/599) merged 2026-02-06.
 
 ## LabKey Branch Naming Convention
 
