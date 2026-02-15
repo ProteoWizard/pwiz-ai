@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260214_screenshot_override`
 - **Base**: `master`
 - **Created**: 2026-02-14
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none yet)
 - **PR**: [#3981](https://github.com/ProteoWizard/pwiz/pull/3981)
 
@@ -172,14 +172,15 @@ Claude reads the .png with the Read tool (multimodal), reviews the UI, removes t
 
 ## Tasks
 
-- [x] Add `_screenshotOverridePath` static field to AbstractFunctionalTest
-- [x] Add `ScreenShotOverride` nested class to AbstractFunctionalTest
+- [x] Add `NextScreenShotOverridePath` auto-property to AbstractFunctionalTest
 - [x] Add `TakeScreenShot` convenience method(s) to AbstractFunctionalTest
 - [x] Add override check in `PauseForScreenShotInternal` via `TakeOverrideScreenShot` helper
 - [x] Extract `ResolveScreenShotForm` and `CaptureScreenShot` helpers (DRY)
 - [x] Build and verify zero warnings
 - [x] Smoke test: added TakeScreenShot to MethodEditTutorialTest, ran with -ShowUI, verified .png captured
-- [ ] Run CodeInspection
+- [x] CodeInspection passed
+- [x] ReSharper code inspection clean
+- [x] Screenshot review mode (pause=-1) and auto-screenshot mode (pause=-3) verified via SkylineTester
 
 ## Future Enhancements (not this PR)
 
@@ -197,3 +198,7 @@ Explored screenshot infrastructure: ScreenshotManager, PauseForScreenShotInterna
 Implemented ScreenShotOverride, TakeScreenShot, and TakeOverrideScreenShot in TestFunctional.cs. Extracted ResolveScreenShotForm and CaptureScreenShot helpers to keep PauseForScreenShotInternal simple and DRY. Smoke tested with MethodEditTutorialTest - both ScreenShotOverride wrapping an existing PauseForScreenShot and bare TakeScreenShot produced valid .png files.
 
 Bug fix: Run-Tests.ps1 -ShowUI was broken because buildcheck=1 forces offscreen=true in TestRunner. Fixed by skipping buildcheck when -ShowUI is set.
+
+### 2026-02-15 - PR Review and Simplification
+
+Copilot flagged the static field and IDisposable pattern. Simplified: replaced ScreenShotOverride class and static backing field with a plain `NextScreenShotOverridePath { get; set; }` auto-property that gets consumed after use. PR merged.
