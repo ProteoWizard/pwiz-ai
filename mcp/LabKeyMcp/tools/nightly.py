@@ -1099,6 +1099,152 @@ def register_tools(mcp):
         )
 
     @mcp.tool()
+    async def save_test_leak_history(
+        test_name: str,
+        start_date: str,
+        end_date: Optional[str] = None,
+        server: str = DEFAULT_SERVER,
+        container_path: str = DEFAULT_TEST_CONTAINER,
+    ) -> str:
+        """[D] Leak history timeline for a test. Saves to ai/.tmp/test-leaks-{testname}.md. → nightly-tests.md"""
+        if not end_date:
+            end_date = start_date
+        folder_name = container_path.split("/")[-1]
+
+        # Convert dates to full-day timestamp window
+        window_start_str = f"{start_date} 00:00:00"
+        window_end_str = f"{end_date} 23:59:59"
+
+        try:
+            server_context = get_server_context(server, container_path)
+
+            # Query leaks_history - returns all leak events with bytes/handles/githash
+            result = labkey.query.select_rows(
+                server_context=server_context,
+                schema_name=TESTRESULTS_SCHEMA,
+                query_name="leaks_history",
+                max_rows=500,
+                parameters={"StartDate": window_start_str, "EndDate": window_end_str},
+            )
+
+            if not result or not result.get("rows"):
+                return f"No leaks found in '{folder_name}' for {start_date} to {end_date}."
+
+            # Filter for our specific test
+            all_leaks = []
+            for row in result["rows"]:
+                if row.get("testname") == test_name:
+                    run_date = str(row.get("run_date", "?"))[:10]
+                    githash = str(row.get("githash", "?"))[:9] if row.get("githash") else "?"
+                    leak_bytes = row.get("leak_bytes")
+                    leak_handles = row.get("leak_handles")
+
+                    # Format leak value
+                    if row.get("leak_type") == "memory":
+                        leak_value = f"{leak_bytes:,} bytes" if leak_bytes else "?"
+                    else:
+                        leak_value = f"{leak_handles} handles" if leak_handles else "?"
+
+                    all_leaks.append({
+                        "run_id": row.get("run_id", "?"),
+                        "computer": row.get("computer", "?"),
+                        "run_date": run_date,
+                        "githash": githash,
+                        "leak_type": row.get("leak_type", "?"),
+                        "leak_bytes": leak_bytes,
+                        "leak_handles": leak_handles,
+                        "leak_value": leak_value,
+                    })
+
+            if not all_leaks:
+                return f"No leaks found for test '{test_name}' in '{folder_name}' ({start_date} to {end_date})."
+
+            # Sort chronologically
+            all_leaks.sort(key=lambda x: (x["run_date"], x["computer"]))
+
+            # Identify first occurrence date
+            first_date = all_leaks[0]["run_date"]
+            first_githash = all_leaks[0]["githash"]
+
+            # Group by date for timeline
+            by_date = defaultdict(list)
+            for leak in all_leaks:
+                by_date[leak["run_date"]].append(leak)
+
+            # Group by computer for summary
+            by_computer = defaultdict(list)
+            for leak in all_leaks:
+                by_computer[leak["computer"]].append(leak)
+
+            # Build the report
+            lines = [
+                f"# Leak History: {test_name}",
+                "",
+                f"**Folder**: {folder_name}",
+                f"**Date range**: {start_date} to {end_date}",
+                f"**Total leak events**: {len(all_leaks)}",
+                f"**First seen**: {first_date} (git {first_githash})",
+                f"**Computers affected**: {', '.join(sorted(by_computer.keys()))}",
+                "",
+                "## Timeline",
+                "",
+            ]
+
+            for date in sorted(by_date.keys()):
+                leaks = by_date[date]
+                lines.append(f"### {date} ({len(leaks)} leaks)")
+                lines.append("")
+                lines.append("| Computer | Type | Value | Git Hash | Run ID |")
+                lines.append("|----------|------|-------|----------|--------|")
+                for leak in leaks:
+                    lines.append(
+                        f"| {leak['computer']} | {leak['leak_type']} | "
+                        f"{leak['leak_value']} | {leak['githash']} | {leak['run_id']} |"
+                    )
+                lines.append("")
+
+            # Computer summary
+            lines.extend([
+                "## By Computer",
+                "",
+                "| Computer | Total Leaks | Memory | Handle | First Seen |",
+                "|----------|-------------|--------|--------|------------|",
+            ])
+            for computer in sorted(by_computer.keys()):
+                leaks = by_computer[computer]
+                mem_count = sum(1 for l in leaks if l["leak_type"] == "memory")
+                handle_count = sum(1 for l in leaks if l["leak_type"] == "handle")
+                first = min(l["run_date"] for l in leaks)
+                lines.append(
+                    f"| {computer} | {len(leaks)} | {mem_count} | {handle_count} | {first} |"
+                )
+            lines.append("")
+
+            # Write to file
+            report_content = "\n".join(lines)
+            output_dir = get_tmp_dir()
+            safe_name = test_name.replace("/", "_").replace("\\", "_").replace(" ", "_")
+            output_file = output_dir / f"test-leaks-{safe_name}.md"
+            output_file.write_text(report_content, encoding="utf-8")
+
+            # Build brief summary
+            return (
+                f"Leak history saved to: {output_file}\n"
+                f"\n"
+                f"Summary for '{test_name}' in {folder_name} ({start_date} to {end_date}):\n"
+                f"  - Total leak events: {len(all_leaks)}\n"
+                f"  - First seen: {first_date} (git {first_githash})\n"
+                f"  - Dates with leaks: {len(by_date)}\n"
+                f"  - Computers affected: {', '.join(sorted(by_computer.keys()))}\n"
+                f"\n"
+                f"See {output_file} for full timeline."
+            )
+
+        except Exception as e:
+            logger.error(f"Error querying leak history: {e}", exc_info=True)
+            return f"Error querying leak history: {e}"
+
+    @mcp.tool()
     async def save_daily_failures(
         report_date: str,
         server: str = DEFAULT_SERVER,

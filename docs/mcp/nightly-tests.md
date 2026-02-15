@@ -292,6 +292,7 @@ query_table(
 |------|-------------|
 | `get_daily_test_summary(report_date)` | Query all 6 folders, save report to ai/.tmp/ |
 | `save_test_failure_history(test_name, start_date, container_path)` | Collect stack traces for a test, detect patterns |
+| `save_test_leak_history(test_name, start_date, container_path)` | Leak timeline for a test with bytes/handles and git hash |
 | `save_run_log(run_id, part)` | Save log section (full/git/build/testrunner/failures) to ai/.tmp/ |
 | `save_run_xml(run_id)` | Save structured XML test data to ai/.tmp/ for analysis |
 | `query_test_runs(days, max_rows)` | Query recent test runs with summaries |
@@ -372,6 +373,30 @@ Returns summary and saves to `ai/.tmp/test-failures-{testname}.md` with:
 - Pattern count (1 = same root cause, multiple = different issues)
 - Affected computers per pattern
 
+### Leak Timeline Analysis
+
+When a test shows leaks, use `save_test_leak_history` to determine if it's a recent regression or chronic:
+
+```
+save_test_leak_history(
+    test_name="IrtFunctionalTest",
+    start_date="2026-01-14",
+    end_date="2026-02-14",
+    container_path="/home/development/Performance Tests"
+)
+```
+
+Returns summary and saves to `ai/.tmp/test-leaks-{testname}.md` with:
+- Chronological timeline of leak events grouped by date
+- Leak values (bytes for memory, handles for handle leaks)
+- Git hash for each event (to identify which commit introduced the leak)
+- Per-computer breakdown with first-seen dates
+
+This is the leak equivalent of `save_test_failure_history` and answers questions like:
+- "When did this leak start?" (first-seen date and git hash)
+- "Is it getting worse?" (increasing frequency or leak size)
+- "Which machines are affected?" (per-computer summary)
+
 ## Usage Examples
 
 After MCP server setup, Claude Code can query test data directly:
@@ -418,7 +443,7 @@ To add new custom queries (like `handleleaks_by_computer`), see [MCP Development
 - Trend analysis across multiple runs
 - Flaky test identification (tests that pass/fail inconsistently)
 - Automatic correlation with git commits
-- `memoryleaks_by_computer` query for memory leak analysis
+- ~~`memoryleaks_by_computer` query for memory leak analysis~~ (covered by `save_test_leak_history`)
 
 ## Recently Implemented
 
@@ -436,6 +461,7 @@ To add new custom queries (like `handleleaks_by_computer`), see [MCP Development
 - `record_test_fix` - Track PR fixes for test failures/leaks/hangs ✓
 - `query_test_history` - Look up historical data for a specific test ✓
 - `backfill_nightly_history` - Backfill nightly test history from skyline.ms ✓
+- `save_test_leak_history` - Leak timeline with bytes/handles/githash per event ✓
 
 ## Related Documentation
 
