@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260205_hang_exception_dialog`
 - **Base**: `Skyline/work/20260205_DeleteAiFolder` (will rebase to master after parent merges)
 - **Created**: 2026-02-05
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#3955](https://github.com/ProteoWizard/pwiz/issues/3955)
-- **PR**: (pending)
+- **PR**: [#3957](https://github.com/ProteoWizard/pwiz/pull/3957)
 
 ## Objective
 
@@ -29,3 +29,7 @@ Capture ThreadExceptionDialog text content before writing thread dumps in hang d
 ### 2026-02-05 - Session Start
 
 Starting work on this issue. Need to explore the hang detection and exception dialog capture code paths.
+
+### 2026-02-06 - Merged
+
+PR [#3957](https://github.com/ProteoWizard/pwiz/pull/3957) merged 2026-02-06.
