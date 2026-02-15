@@ -6,7 +6,7 @@
 - **Created**: 2026-02-14
 - **Status**: In Progress
 - **GitHub Issue**: (none yet)
-- **PR**: (pending)
+- **PR**: [#3981](https://github.com/ProteoWizard/pwiz/pull/3981)
 
 ## Objective
 
