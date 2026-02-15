@@ -6,7 +6,7 @@
 - **Created**: 2024-12-24
 - **Status**: In Progress
 - **GitHub Issue**: (none)
-- **PR**: (pending)
+- **PR**: [#3968](https://github.com/ProteoWizard/pwiz/pull/3968)
 - **Objective**: Add Parquet export support for Skyline reports
 
 ## Background
