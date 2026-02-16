@@ -283,7 +283,8 @@ if ($RunTests -and $Target -ne "Clean") {
     # If specific test name provided, use it; otherwise run all tests in DLL
     $testParam = if ($TestName) { "test=$TestName" } else { "test=$testDll" }
     
-    $testLog = "$outputDir\$($testDll -replace '\.dll$', '.log')"
+    $testLogName = $testDll -replace '\.dll$', '.log'
+    $testLog = "$outputDir\$testLogName"
     
     if ($TestName) {
         Write-Host "`nRunning specific test: $TestName" -ForegroundColor Yellow
@@ -295,7 +296,7 @@ if ($RunTests -and $Target -ne "Clean") {
     Push-Location $outputDir
     try {
         $testStart = Get-Date
-        & .\TestRunner.exe log=$testLog buildcheck=1 $testParam
+        & .\TestRunner.exe log=$testLogName buildcheck=1 $testParam
         $testExitCode = $LASTEXITCODE
         $testDuration = (Get-Date) - $testStart
         
