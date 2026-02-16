@@ -12,14 +12,16 @@
 
 ## Objective
 
-Fix crash when FileSystemWatcher receives rename events for NTFS Alternate Data Stream paths (e.g., `file.zip:Zone.Identifier`). Also filter out `~SK` temp file prefix.
+Fix crash when FileSystemWatcher receives rename events for NTFS Alternate Data Stream paths (e.g., `file.zip:Zone.Identifier`).
 
 ## Tasks
 
 - [x] Add ADS path detection to `ShouldIgnoreFile` in FileSystemService.cs
-- [x] Add `~SK` temp file prefix to ignore logic in FileSystemService.cs
 - [x] Add defensive handling in FileSystemUtil.cs: `Normalize` returns original path on exception; null guards in `IsFileInDirectory` and `IsInOrSubdirectoryOf`
 - [x] Add regression tests to FilesTreeFormTest.cs
+- [x] Remove redundant `~SK` prefix check (covered by `.tmp` extension in ignore list)
+- [x] Replace hardcoded `~SK` test with FileSaver contract test
+- [x] Fix code inspection warning ("Expression is always true")
 
 ## Progress Log
 
@@ -37,4 +39,12 @@ Copilot review identified four issues, all addressed in follow-up commit:
 3. `FILE_EXTENSION_IGNORE_LIST` was case-sensitive (pre-existing) — added `StringComparer.OrdinalIgnoreCase`
 4. Missing extended-length path test — added
 
-All review threads replied to and resolved. Awaiting merge.
+All review threads replied to and resolved.
+
+### 2026-02-16 - Code inspection fix and ~SK prefix removal
+
+TeamCity code inspection flagged `fileName != null` as always true in `ShouldIgnoreFile`. Investigating further, the `~SK` prefix check was redundant: `FileSaver` uses Win32 `GetTempFileName` which always produces `.tmp` extension, and `.tmp` is already in the extension ignore list. Backup files use `.bak`, also in the list.
+
+Removed the prefix check entirely. Replaced the hardcoded `~SK1234.tmp` test assertion with a contract test that creates a real `FileSaver` and verifies its `SafeName` is ignored — so if `FileSaver` ever changes its naming, the test catches it.
+
+Awaiting merge.
