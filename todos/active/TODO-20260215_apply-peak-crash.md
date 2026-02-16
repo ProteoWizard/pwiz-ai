@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260215_apply-peak-crash`
 - **Base**: `master`
 - **Created**: 2026-02-15
-- **Status**: In Progress
+- **Status**: Review
 - **GitHub Issue**: [#3983](https://github.com/ProteoWizard/pwiz/issues/3983)
 - **PR**: [#3984](https://github.com/ProteoWizard/pwiz/pull/3984)
 - **Exception Fingerprint**: (from exception report #73976)
@@ -22,6 +22,8 @@ Fix crash in "Apply Peak to All" when some replicates don't have chromatogram da
 
 ## Progress Log
 
-### 2026-02-15 - Session Start
+### 2026-02-15 - Implementation
 
-Starting work on this issue...
+Wrapped `doc.ChangePeak()` in `PeakMatch.ChangePeak` (PeakMatcher.cs:437) with try-catch for `ArgumentOutOfRangeException`. On catch, returns `doc` unchanged to skip replicates without chromatogram data. ApplyPeakToAllTest passes.
+
+Copilot accepted the change. Awaiting merge (may add a regression test with data that triggers the exception).
