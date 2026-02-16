@@ -6,7 +6,7 @@
 - **Created**: 2026-02-15
 - **Status**: In Progress
 - **GitHub Issue**: [#3979](https://github.com/ProteoWizard/pwiz/issues/3979)
-- **PR**: (pending)
+- **PR**: [#3985](https://github.com/ProteoWizard/pwiz/pull/3985)
 - **Exception Fingerprint**: `cf66248972edb8a7`
 - **Exception ID**: 73974
 
@@ -16,10 +16,10 @@ Fix crash when FileSystemWatcher receives rename events for NTFS Alternate Data 
 
 ## Tasks
 
-- [ ] Add ADS path detection to `ShouldIgnoreFile` in FileSystemService.cs
-- [ ] Add `~SK` temp file prefix to ignore logic in FileSystemService.cs
-- [ ] Add defensive try/catch in FileSystemUtil.cs path methods (`IsFileInDirectory`, `IsInOrSubdirectoryOf`, `Normalize`)
-- [ ] Add regression tests to FilesTreeFormTest.cs
+- [x] Add ADS path detection to `ShouldIgnoreFile` in FileSystemService.cs
+- [x] Add `~SK` temp file prefix to ignore logic in FileSystemService.cs
+- [x] Add defensive try/catch in FileSystemUtil.cs path methods (`IsFileInDirectory`, `IsInOrSubdirectoryOf`, `Normalize`)
+- [x] Add regression tests to FilesTreeFormTest.cs
 
 ## Progress Log
 

@@ -6,7 +6,7 @@
 - **Created**: 2026-02-15
 - **Status**: In Progress
 - **GitHub Issue**: [#3983](https://github.com/ProteoWizard/pwiz/issues/3983)
-- **PR**: (pending)
+- **PR**: [#3984](https://github.com/ProteoWizard/pwiz/pull/3984)
 - **Exception Fingerprint**: (from exception report #73976)
 - **Exception ID**: 73976
 
@@ -16,9 +16,9 @@ Fix crash in "Apply Peak to All" when some replicates don't have chromatogram da
 
 ## Tasks
 
-- [ ] Wrap `doc.ChangePeak()` in `PeakMatch.ChangePeak` with try-catch for `ArgumentOutOfRangeException`
-- [ ] On catch, return `doc` unchanged (skip replicates without matching data)
-- [ ] Leave throws in `TransitionGroupDocNode.ChangePeak` and `SrmDocument.ChangePeak` as-is
+- [x] Wrap `doc.ChangePeak()` in `PeakMatch.ChangePeak` with try-catch for `ArgumentOutOfRangeException`
+- [x] On catch, return `doc` unchanged (skip replicates without matching data)
+- [x] Leave throws in `TransitionGroupDocNode.ChangePeak` and `SrmDocument.ChangePeak` as-is
 
 ## Progress Log
 
