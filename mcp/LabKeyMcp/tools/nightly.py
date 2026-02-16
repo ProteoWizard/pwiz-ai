@@ -25,6 +25,7 @@ from .common import (
     DEFAULT_TEST_CONTAINER,
     TESTRESULTS_SCHEMA,
 )
+from .nightly_history import _load_nightly_history
 from .stacktrace import normalize_stack_trace, group_by_fingerprint
 
 logger = logging.getLogger("labkey_mcp")
@@ -1325,11 +1326,60 @@ def register_tools(mcp):
                 "count": len(failures_in_group),
             }
 
-        # Sort by count (most common first)
+        # Load nightly history to check for recorded fixes/issues
+        nightly_history = _load_nightly_history()
+        failures_db = nightly_history.get('test_failures', {})
+
+        def _lookup_fingerprint_tracking(fingerprint, test_names):
+            """Look up fix/issue status for a fingerprint across test names."""
+            for test_name in test_names:
+                entry = failures_db.get(test_name, {})
+                by_fp = entry.get('by_fingerprint', {})
+                fp_entry = by_fp.get(fingerprint, {})
+                if fp_entry.get('fix') or fp_entry.get('issue'):
+                    return fp_entry
+            return {}
+
+        def _failure_needs_attention(fp_entry, report_date):
+            """Determine if a test failure needs attention.
+            Returns (needs_attention: bool, reason: str, detail: str).
+            """
+            fix = fp_entry.get('fix')
+            issue = fp_entry.get('issue')
+
+            if fix:
+                pr = fix.get('pr_number') or fix.get('master', {}).get('pr', 'Unknown PR')
+                merge_date = fix.get('merge_date') or fix.get('master', {}).get('merged', '')
+                if merge_date and merge_date >= report_date:
+                    return (True, 'regression', f"Failing AFTER fix in {pr} (merged {merge_date})")
+                detail = f"Fixed in {pr}"
+                if merge_date:
+                    detail += f" (merged {merge_date})"
+                return (False, 'fixed', detail)
+
+            if issue:
+                issue_num = issue.get('number', '?')
+                return (False, 'tracked', f"Tracked as GitHub #{issue_num}")
+
+            return (True, 'new', 'No fix or issue recorded')
+
+        # Classify fingerprints
         sorted_fingerprints = sorted(
             fingerprint_data.items(),
             key=lambda x: -x[1]["count"]
         )
+
+        attention_items = []
+        handled_items = []
+
+        for fingerprint, data in sorted_fingerprints:
+            tests = sorted(set(f["testname"] for f in data["failures"]))
+            fp_entry = _lookup_fingerprint_tracking(fingerprint, tests)
+            attention_info = _failure_needs_attention(fp_entry, report_date)
+            if attention_info[0]:
+                attention_items.append((fingerprint, data, attention_info))
+            else:
+                handled_items.append((fingerprint, data, attention_info))
 
         # Build the report
         lines = [
@@ -1338,26 +1388,29 @@ def register_tools(mcp):
             f"**Window**: {window_start_str} to {window_end_str}",
             f"**Total failures**: {len(all_failures)}",
             f"**Unique bugs (by fingerprint)**: {len(fingerprint_groups)}",
+            f"  - **{len(attention_items)} need attention**, {len(handled_items)} already handled",
             "",
             "## Summary by Fingerprint",
             "",
-            "| Fingerprint | Count | Tests | Computers | Signature |",
-            "|-------------|-------|-------|-----------|-----------|",
+            "| Fingerprint | Count | Tests | Computers | Status | Signature |",
+            "|-------------|-------|-------|-----------|--------|-----------|",
         ]
 
         for fingerprint, data in sorted_fingerprints:
             tests = sorted(set(f["testname"] for f in data["failures"]))
             computers = sorted(set(f["computer"] for f in data["failures"]))
             sig = " → ".join(data["signature"][:3]) if data["signature"] else "(no signature)"
+            # Determine status label
+            fp_entry = _lookup_fingerprint_tracking(fingerprint, tests)
+            attn = _failure_needs_attention(fp_entry, report_date)
+            status = attn[1].upper() if not attn[0] else "**INVESTIGATE**"
             lines.append(
                 f"| {fingerprint} | {data['count']} | {', '.join(tests[:2])}{'...' if len(tests) > 2 else ''} | "
-                f"{', '.join(computers[:3])}{'...' if len(computers) > 3 else ''} | {sig} |"
+                f"{', '.join(computers[:3])}{'...' if len(computers) > 3 else ''} | {status} | {sig} |"
             )
 
-        lines.extend(["", "## Details by Fingerprint", ""])
-
-        # Detailed section for each fingerprint
-        for fingerprint, data in sorted_fingerprints:
+        # Helper to render full detail
+        def _render_failure_detail(lines, fingerprint, data):
             tests = sorted(set(f["testname"] for f in data["failures"]))
             computers = sorted(set(f["computer"] for f in data["failures"]))
             folders_hit = sorted(set(f["folder"] for f in data["failures"]))
@@ -1390,6 +1443,27 @@ def register_tools(mcp):
                 "",
             ])
 
+        # Needs Attention section
+        lines.extend(["", f"## Needs Attention ({len(attention_items)} bugs)", ""])
+        if attention_items:
+            for fingerprint, data, _ in attention_items:
+                _render_failure_detail(lines, fingerprint, data)
+        else:
+            lines.append("No failures need attention today.")
+            lines.append("")
+
+        # Already Handled section
+        lines.extend([f"## Already Handled ({len(handled_items)} bugs)", ""])
+        if handled_items:
+            for fingerprint, data, attention_info in handled_items:
+                _, reason, detail = attention_info
+                tests = sorted(set(f["testname"] for f in data["failures"]))
+                sig = " → ".join(data["signature"][:2]) if data["signature"] else "(no sig)"
+                lines.append(f"- **{fingerprint}** ({data['count']}x) — {detail} | {', '.join(tests[:2])} | {sig}")
+        else:
+            lines.append("No already-handled failures today.")
+        lines.append("")
+
         # Write to file
         report_content = "\n".join(lines)
         output_dir = get_tmp_dir()
@@ -1397,30 +1471,28 @@ def register_tools(mcp):
         output_file = output_dir / f"failures-{date_str}.md"
         output_file.write_text(report_content, encoding="utf-8")
 
-        # Build brief summary
+        # Build brief summary with priority info
         brief_lines = [
             f"Daily failures saved to: {output_file}",
             "",
             f"**{report_date}** (8AM window): {len(all_failures)} failures, {len(fingerprint_groups)} unique bugs",
+            f"  - **{len(attention_items)} need attention**, {len(handled_items)} already handled",
             "",
         ]
 
-        if len(sorted_fingerprints) <= 5:
-            brief_lines.append("Fingerprints:")
-            for fingerprint, data in sorted_fingerprints:
+        if attention_items:
+            brief_lines.append("**Needs attention:**")
+            for fingerprint, data, attention_info in attention_items[:5]:
                 tests = sorted(set(f["testname"] for f in data["failures"]))
                 computers = sorted(set(f["computer"] for f in data["failures"]))
                 brief_lines.append(
                     f"  - {fingerprint}: {data['count']}x on {len(computers)} machines - {', '.join(tests[:2])}"
                 )
-        else:
-            brief_lines.append(f"Top fingerprints (of {len(sorted_fingerprints)}):")
-            for fingerprint, data in sorted_fingerprints[:5]:
-                tests = sorted(set(f["testname"] for f in data["failures"]))
-                computers = sorted(set(f["computer"] for f in data["failures"]))
-                brief_lines.append(
-                    f"  - {fingerprint}: {data['count']}x on {len(computers)} machines - {', '.join(tests[:2])}"
-                )
+            if len(attention_items) > 5:
+                brief_lines.append(f"  - ... and {len(attention_items) - 5} more")
+
+        if handled_items:
+            brief_lines.append(f"Already handled: {len(handled_items)} bugs (see report for details)")
 
         brief_lines.extend(["", f"See {output_file} for full details."])
 

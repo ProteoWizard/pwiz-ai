@@ -429,7 +429,9 @@ If an issue is already tracked, note "Already tracked as GitHub #XXXX" in today'
 
 ### Investigate Test Failures
 
-For **each test failure** with a stack trace:
+**Check report classification first.** The daily failures report classifies each fingerprint as "Needs Attention" or "Already Handled." Skip "Already Handled" items — they have recorded fixes or tracked GitHub issues. Only investigate "Needs Attention" items.
+
+For **each test failure in "Needs Attention"** with a stack trace:
 
 **A. Get the failure details**
 ```
@@ -472,7 +474,9 @@ save_run_log(run_id=XXXXX, part="testrunner")
 
 ### Investigate Exceptions
 
-For **each exception** with a stack trace (user-reported or nightly test failure):
+**Check report classification first.** The exception report classifies each bug as "Needs Attention" or "Already Handled." Skip "Already Handled" items — they have recorded fixes (all reports from pre-fix versions) or tracked GitHub issues. Only investigate "Needs Attention" items.
+
+For **each exception in "Needs Attention"** with a stack trace:
 
 #### Exception Classification
 

@@ -138,9 +138,13 @@ Otherwise, investigate sequentially by priority.
 
 **Build the work item list** from today's data. For each item, follow the structure below.
 
+**IMPORTANT: Skip already-handled items.** Both the exception report and failures report
+separate "Needs Attention" from "Already Handled." Only investigate items in "Needs Attention."
+"Already Handled" items have recorded fixes or tracked GitHub issues and need no further work.
+
 #### Exception Work Items
 
-For each exception in today's report:
+For each exception in the **"Needs Attention"** section of the exception report:
 
 ```markdown
 ### Exception: [fingerprint] - [signature]
@@ -169,7 +173,7 @@ For each exception in today's report:
 
 #### Test Failure Work Items
 
-For each test failure:
+For each test failure in the **"Needs Attention"** section of the failures report:
 
 ```markdown
 ### Test Failure: [test name] on [computer]

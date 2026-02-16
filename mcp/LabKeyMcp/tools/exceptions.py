@@ -65,6 +65,23 @@ def _get_exception_url(row_id: int) -> str:
     return EXCEPTION_URL_TEMPLATE.format(row_id=row_id)
 
 
+def _parse_version_tuple(version_str: str):
+    """Parse a Skyline version string into a tuple of ints for comparison.
+
+    Handles formats like "25.1.0.237", "25.1.0.237-7401c644b4" (with commit hash).
+    Returns None for unparseable versions.
+    """
+    if not version_str:
+        return None
+    # Strip commit hash suffix
+    base = version_str.split('-')[0]
+    parts = base.split('.')
+    try:
+        return tuple(int(p) for p in parts)
+    except (ValueError, TypeError):
+        return None
+
+
 def _get_fix_summary(fix_data: dict) -> dict:
     """Extract summary info from fix data (handles both old and new schema).
 
@@ -428,13 +445,68 @@ def _get_status_annotations(entry: dict, today_reports: int, today_users: int, r
 
         # Check for regression - if reports are from versions after fix
         if fixed_version and stats['versions']:
-            # Simple version comparison (could be improved)
-            for v in stats['versions']:
-                if v > fixed_version:  # String comparison works for semver-ish
-                    annotations.append(f"🔴 REGRESSION? Report from {v} (AFTER fix in {fixed_version})")
-                    break
+            fixed_tuple = _parse_version_tuple(fixed_version)
+            if fixed_tuple:
+                for v in stats['versions']:
+                    v_tuple = _parse_version_tuple(v)
+                    if v_tuple and v_tuple >= fixed_tuple:
+                        annotations.append(f"🔴 REGRESSION? Report from {v} (AFTER fix in {fixed_version})")
+                        break
 
     return annotations
+
+
+def _needs_attention(entry: dict, today_versions: list) -> tuple:
+    """Determine if an exception needs attention or is already handled.
+
+    Returns (needs_attention: bool, reason: str, detail: str).
+    """
+    fix_raw = entry.get('fix')
+    fix = _get_fix_summary(fix_raw)
+    issue = entry.get('issue')
+
+    # Check fix status first
+    if fix:
+        fixed_version = fix.get('version')
+        pr = fix.get('pr', 'Unknown PR')
+        merge_date = fix.get('merge_date', '')
+
+        if fixed_version:
+            # Compare today's report versions against fix version
+            fixed_tuple = _parse_version_tuple(fixed_version)
+            if fixed_tuple:
+                has_post_fix = False
+                for v in today_versions:
+                    v_tuple = _parse_version_tuple(v)
+                    if v_tuple and v_tuple >= fixed_tuple:
+                        has_post_fix = True
+                        break
+                if has_post_fix:
+                    return (True, 'regression', f"Reports from versions AFTER fix in {pr}")
+            # All versions are pre-fix (or unparseable)
+            detail = f"Fixed in {pr}"
+            if merge_date:
+                detail += f" (merged {merge_date})"
+            return (False, 'fixed', detail)
+        else:
+            # Fix recorded but no version — trust it
+            detail = f"Fixed in {pr}"
+            if merge_date:
+                detail += f" (merged {merge_date})"
+            return (False, 'fixed', detail)
+
+    # Check tracked issue
+    if issue:
+        issue_num = issue.get('number', '?')
+        return (False, 'tracked', f"Tracked as GitHub #{issue_num}")
+
+    # No fix, no issue — needs attention
+    stats = _get_entry_stats(entry)
+    if entry.get('first_seen') == entry.get('last_seen', ''):
+        return (True, 'new', 'First seen today')
+    if stats['emails']:
+        return (True, 'email', f"User email available ({len(stats['emails'])} contact(s))")
+    return (True, 'recurring', f"{stats['total_reports']} reports from {stats['unique_users']} users")
 
 
 def register_tools(mcp):
@@ -657,33 +729,40 @@ def register_tools(mcp):
             lines.append("---")
             lines.append("")
 
-            # Detailed sections by fingerprint
-            lines.append("## Exceptions by Bug (Fingerprint)")
-            lines.append("")
-
-            # Sort by priority (using history data)
+            # Classify each fingerprint as needs-attention or already-handled
             def get_sort_key(item):
                 fp, group = item
                 entry = history.get('exceptions', {}).get(fp, {})
                 return (-_get_priority_score(entry), -len(group))
 
+            attention_items = []  # (fp, group, annotations, attention_info)
+            handled_items = []    # (fp, group, annotations, attention_info)
+
             for fp, group in sorted(fingerprint_groups.items(), key=get_sort_key):
                 reports = len(group)
                 unique_users = len(set(e['installation_id'] for e in group
                                        if e['installation_id']))
-
-                # Get history entry for annotations
                 history_entry = history.get('exceptions', {}).get(fp, {})
                 annotations = _get_status_annotations(history_entry, reports, unique_users, report_date)
+                today_versions = [e['version'] for e in group if e['version']]
+                attention_info = _needs_attention(history_entry, today_versions)
 
-                # Signature frames for this bug
+                if attention_info[0]:
+                    attention_items.append((fp, group, annotations, attention_info))
+                else:
+                    handled_items.append((fp, group, annotations, attention_info))
+
+            # Helper to render a full bug detail section
+            def _render_bug_detail(lines, fp, group, annotations):
+                reports = len(group)
+                unique_users = len(set(e['installation_id'] for e in group
+                                       if e['installation_id']))
                 sig = group[0]['signature_frames']
                 sig_str = ' → '.join(sig) if sig else "(no signature frames)"
 
                 lines.append(f"### Bug `{fp}` ({reports} reports, {unique_users} users)")
                 lines.append("")
 
-                # Add status annotations
                 if annotations:
                     for ann in annotations:
                         lines.append(ann)
@@ -692,13 +771,11 @@ def register_tools(mcp):
                 lines.append(f"**Signature**: {sig_str}")
                 lines.append("")
 
-                # List versions affected
                 versions = sorted(set(e['version'] for e in group if e['version']))
                 if versions:
                     lines.append(f"**Versions**: {', '.join(versions)}")
                     lines.append("")
 
-                # Individual reports
                 lines.append("**Reports:**")
                 lines.append("")
 
@@ -710,13 +787,11 @@ def register_tools(mcp):
                     version = exc['version'] or 'Unknown'
                     email = exc.get('email')
 
-                    # Format time
                     if isinstance(created, str) and "T" in created:
                         time_str = created.split("T")[1][:8]
                     else:
                         time_str = str(created)
 
-                    # Include clickable URL for direct access
                     url = _get_exception_url(row_id)
                     lines.append(f"- [**#{row_id}**]({url}) at {time_str}")
                     user_info = f"User: `{install_id[:8]}...`"
@@ -726,7 +801,6 @@ def register_tools(mcp):
                     lines.append(f"  - Title: {title[:60]}{'...' if len(title) > 60 else ''}")
                     lines.append("")
 
-                # Show one full stack trace as reference
                 lines.append("<details>")
                 lines.append("<summary>Full stack trace (reference)</summary>")
                 lines.append("")
@@ -737,6 +811,35 @@ def register_tools(mcp):
                 lines.append("")
                 lines.append("---")
                 lines.append("")
+
+            # Needs Attention section
+            lines.append(f"## Needs Attention ({len(attention_items)} bugs)")
+            lines.append("")
+            if attention_items:
+                for fp, group, annotations, attention_info in attention_items:
+                    _render_bug_detail(lines, fp, group, annotations)
+            else:
+                lines.append("No exceptions need attention today.")
+                lines.append("")
+
+            # Already Handled section
+            lines.append(f"## Already Handled ({len(handled_items)} bugs)")
+            lines.append("")
+            if handled_items:
+                for fp, group, annotations, attention_info in handled_items:
+                    _, reason, detail = attention_info
+                    reports = len(group)
+                    sig = group[0]['signature_frames']
+                    sig_str = sig[0] if sig else "(no frames)"
+                    versions = sorted(set(e['version'] for e in group if e['version']))
+                    versions_str = ', '.join(versions[:3])
+
+                    row_id = group[0]['row_id']
+                    url = _get_exception_url(row_id)
+                    lines.append(f"- **`{fp}`** ({reports} reports) — {detail} | {sig_str} | Versions: {versions_str} | [#{row_id}]({url})")
+            else:
+                lines.append("No already-handled exceptions today.")
+            lines.append("")
 
             # Save to file
             content = "\n".join(lines)
@@ -754,6 +857,7 @@ def register_tools(mcp):
                 f"Updated exception history: {history_path}",
                 "",
                 f"**{report_date}**: {len(rows)} reports → {len(fingerprint_groups)} unique bugs",
+                f"  - **{len(attention_items)} need attention**, {len(handled_items)} already handled",
                 "",
             ]
 
@@ -765,32 +869,21 @@ def register_tools(mcp):
                 summary_lines.append(f"📊 History: {total_tracked} bugs tracked")
             summary_lines.append("")
 
-            # Highlight high-priority items
-            high_priority = []
-            for fp, group in fingerprint_groups.items():
-                entry = history.get('exceptions', {}).get(fp, {})
-                annotations = _get_status_annotations(entry, len(group),
-                    len(set(e['installation_id'] for e in group if e['installation_id'])),
-                    report_date)
-
-                # Flag items needing attention
-                if any('NEW' in a for a in annotations):
+            # Highlight items needing attention
+            if attention_items:
+                summary_lines.append("**Needs attention:**")
+                for fp, group, annotations, attention_info in attention_items[:5]:
+                    _, reason, detail = attention_info
                     sig = group[0]['signature_frames']
                     sig_str = sig[0] if sig else fp
-                    high_priority.append(f"🆕 `{fp}`: {sig_str}")
-                elif any('REGRESSION' in a for a in annotations):
-                    sig = group[0]['signature_frames']
-                    sig_str = sig[0] if sig else fp
-                    high_priority.append(f"🔴 `{fp}`: REGRESSION - {sig_str}")
-                elif any('email' in a.lower() for a in annotations):
-                    sig = group[0]['signature_frames']
-                    sig_str = sig[0] if sig else fp
-                    high_priority.append(f"📧 `{fp}`: Has contact info - {sig_str}")
-
-            if high_priority:
-                summary_lines.append("**Priority items:**")
-                for item in high_priority[:5]:  # Limit to top 5
-                    summary_lines.append(f"- {item}")
+                    if reason == 'regression':
+                        summary_lines.append(f"- 🔴 `{fp}`: REGRESSION - {sig_str}")
+                    elif reason == 'new':
+                        summary_lines.append(f"- 🆕 `{fp}`: {sig_str}")
+                    elif reason == 'email':
+                        summary_lines.append(f"- 📧 `{fp}`: {sig_str} - {detail}")
+                    else:
+                        summary_lines.append(f"- `{fp}`: {sig_str} - {detail}")
 
             return "\n".join(summary_lines)
 
