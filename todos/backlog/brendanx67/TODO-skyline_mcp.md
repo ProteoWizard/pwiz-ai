@@ -302,3 +302,11 @@ Design reviewed against ImageComparer MCP implementation (PR #3989). Key finding
 6. **Phase 5 (packaging) is premature** — deferred until format stabilizes
 
 See `ai/docs/mcp/development-guide.md` and `ai/docs/mcp/image-comparer.md` for implementation patterns.
+
+### Review session details
+
+- Explored full SkylineToolClient API surface (SkylineToolClient.cs, IToolService.cs, RemoteClient.cs, RemoteBase.cs)
+- Explored ExampleInteractiveTool connection pattern (tool-inf/, $(SkylineConnection) macro)
+- Explored SkylineCmd capabilities (231 command-line args, operates on .sky files directly)
+- Investigated protobuf history: adopted Feb-Mar 2017 for chromatogram compression and hybrid document format, added for Koina gRPC in 2024. Usage is central to data persistence but oriented toward binary density, not IPC.
+- Discussed serialization format with developer: JSON chosen over protobuf for wire protocol because it consolidates toward fewer formats, aligns with Panorama POCO cleanup direction, and is the clear trajectory for interchange protocols.
