@@ -102,7 +102,47 @@ async def save_large_data(query_params):
 - Data persists across conversation restarts
 - Multiple tools can build on the same file
 
-## LabKey Server Patterns
+## C# MCP Servers (.NET)
+
+The `ModelContextProtocol` NuGet package (0.8.0-preview.1, Anthropic + Microsoft) enables MCP servers in C#. See [image-comparer.md](image-comparer.md) for a working example.
+
+### Critical: stdio Transport Pitfalls
+
+MCP stdio servers communicate via stdin/stdout JSON-RPC. Three issues are unique to C#/.NET:
+
+**1. Disable default logging** — `Host.CreateApplicationBuilder` adds a console logger that writes to stdout, corrupting the JSON-RPC transport:
+```csharp
+var builder = Host.CreateApplicationBuilder(args);
+builder.Logging.ClearProviders();  // MUST be before AddMcpServer
+builder.Services.AddMcpServer().WithStdioServerTransport().WithToolsFromAssembly();
+```
+
+**2. Isolate child process stdin** — Any subprocess (git, etc.) inherits the MCP server's stdin, causing deadlocks. The child process reads from the JSON-RPC transport instead of having no input:
+```csharp
+var psi = new ProcessStartInfo("git", "status --porcelain")
+{
+    RedirectStandardInput = true,   // Prevent stdin inheritance
+    RedirectStandardOutput = true,
+    RedirectStandardError = true,
+    UseShellExecute = false,
+    CreateNoWindow = true
+};
+var process = Process.Start(psi);
+process.StandardInput.Close();  // Immediately close — equivalent to Python's stdin=subprocess.DEVNULL
+```
+Python equivalent (from StatusMcp): `subprocess.run(cmd, stdin=subprocess.DEVNULL, ...)`
+
+**3. Use forward slashes in path parameters** — JSON uses backslash as an escape character. Windows paths like `C:\proj` contain invalid JSON escapes (`\p`). Clients should pass `C:/proj/pwiz` instead. Windows APIs accept forward slashes natively.
+
+### Multi-targeting for Shared Libraries
+
+When sharing code between .NET Framework (e.g., 4.7.2 WinForms app) and .NET 8.0 (MCP server), multi-target the shared library:
+```xml
+<TargetFrameworks>net472;netstandard2.0</TargetFrameworks>
+```
+MSBuild automatically selects `net472` for Framework consumers and `netstandard2.0` for .NET 8.0+. Note: `netstandard2.0` requires C# 7.3 syntax (no `using var`, no nullable reference types).
+
+
 
 ### Schema-First Development
 

@@ -94,6 +94,9 @@ param(
     [switch]$ShowUI = $false,  # Run on-screen (offscreen=off) to see the UI
 
     [Parameter(Mandatory=$false)]
+    [switch]$TakeScreenshots = $false,  # Auto-capture tutorial screenshots (pause=-3, implies -ShowUI)
+
+    [Parameter(Mandatory=$false)]
     [switch]$EnableInternet = $false,
 
     [Parameter(Mandatory=$false)]
@@ -491,10 +494,16 @@ if ($PerformanceProfile) {
     }
 }
 
+# -TakeScreenshots implies -ShowUI (auto-screenshot mode requires visible UI)
+if ($TakeScreenshots) {
+    $ShowUI = $true
+}
+
 Write-Host "Running tests with TestRunner.exe" -ForegroundColor Cyan
 Write-Host "  Test: $TestName" -ForegroundColor Gray
 Write-Host "  Language(s): $languageParam" -ForegroundColor Gray
 Write-Host "  UI Mode: $(if ($ShowUI) { 'On-screen (visible)' } else { 'Offscreen (hidden)' })" -ForegroundColor Gray
+Write-Host "  Screenshots: $(if ($TakeScreenshots) { 'Auto-capture (pause=-3)' } else { 'Off' })" -ForegroundColor Gray
 Write-Host "  Internet: $(if ($EnableInternet) { 'Enabled' } else { 'Disabled' })" -ForegroundColor Gray
 Write-Host "  Loop: $(if ($Loop -eq 0) { 'Forever' } else { "$Loop iterations" })" -ForegroundColor Gray
 Write-Host "  Diagnostics: Handles=$(if ($ReportHandles) { 'on' } else { 'off' }), Heaps=$(if ($ReportHeaps) { 'on' } else { 'off' })" -ForegroundColor Gray
@@ -552,6 +561,10 @@ try {
                 }
             }
             $runnerArgs = @("loop=$loopValue") + $commonArgs
+        }
+
+        if ($TakeScreenshots) {
+            $runnerArgs += "pause=-3"
         }
 
         if ($EnableInternet) {

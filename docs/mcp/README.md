@@ -8,6 +8,8 @@ This folder contains documentation for MCP (Model Context Protocol) servers used
 |--------|---------|---------------|
 | LabKey | skyline.ms data access (wiki, support, exceptions, tests) | See sections below |
 | Gmail | Email sending for automated reports | [gmail.md](gmail.md) |
+| ImageComparer | Screenshot diff review for tutorials | [image-comparer.md](image-comparer.md) |
+| Status | System status, git info, active project | [status.md](status.md) |
 
 ---
 
