@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260216_imagecomparer_mcp`
 - **Base**: `master`
 - **Created**: 2026-02-16
-- **Status**: Ready for commit
+- **Status**: PR open, awaiting merge
 - **GitHub Issue**: (pending)
-- **PR**: (pending)
+- **PR**: [#3989](https://github.com/ProteoWizard/pwiz/pull/3989)
 
 ## Objective
 
@@ -84,7 +84,11 @@ See `ai/docs/mcp/development-guide.md` → "C# MCP Servers (.NET)" for full guid
 
 ## Progress Log
 
-### 2026-02-16 — All phases complete, ready for commit
+### 2026-02-16 (session 2) — PR created, Copilot review addressed
+
+Committed pwiz-ai docs/scripts to master. Committed pwiz code on branch, pushed, created PR #3989. Copilot reviewed with 12 comments — fixed 5 (BlendWithWhite DRY helper, hex validation, commented-out case, preview package comment, alpha2 rename), dismissed 7 with explanations. Strengthened no-amend-after-review guidance in version-control skill and guide. Wrote handoff file for next session: review of Skyline MCP server TODO.
+
+### 2026-02-16 (session 1) — All phases complete, ready for commit
 
 Built ImageComparer.Core (multi-target DLL) and ImageComparer.Mcp (MCP server with 4 tools). Discovered and fixed three critical C# MCP pitfalls: stdout logging, stdin inheritance, JSON path escaping. Added `-TakeScreenshots` to Run-Tests.ps1. Ran AbsoluteQuant tutorial generating 16 changed screenshots. All 5 MCP tools tested end-to-end via Claude Code. Fixed diff_only checkerboard artifact (alpha blending), GetAiTmpFolder path resolution, and UI SaveDiffImage to respect current view mode. Updated ImageComparer.sln with all 3 projects. GUI verified working with Core DLL refactoring.
 
