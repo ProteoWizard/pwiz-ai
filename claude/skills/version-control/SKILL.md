@@ -40,16 +40,18 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 **Nearly all PRs get squash-merged**, so multiple commits on a branch are fine.
 
-**When amending is appropriate:**
+**NEVER amend after a PR has been reviewed.** When addressing review feedback (from humans or Copilot), always create a NEW commit. This preserves the review history and makes it easy to see what changed in response to feedback. A commit message like "Addressed Copilot review suggestions" or "Fixed issues from code review" is appropriate.
+
+**When amending is acceptable:**
 - Immediately after creating a PR, before any review or interaction
 - Local commits not yet pushed
 
-**When amending is NOT appropriate:**
+**When amending is NOT acceptable:**
 - After a PR has been reviewed (even if just by Copilot)
 - After anyone has clicked "Update branch" on GitHub
 - After any merge commits from master
 
-**Instead of amending**, just create a new commit. The commits will be squashed on merge anyway.
+The commits will be squashed on merge anyway, so there is no cost to having multiple commits.
 
 ## PR Description Format
 

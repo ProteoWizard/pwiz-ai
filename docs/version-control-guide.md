@@ -101,18 +101,17 @@ git branch --show-current
 
 ## Amending Commits
 
-For small updates (TODO PR link, typo fix):
+**NEVER amend after a PR has been reviewed.** When addressing review feedback (from humans or Copilot), always create a NEW commit. This preserves the review history and makes it easy to see what changed in response to feedback. PRs are squash-merged, so extra commits have zero cost.
+
+Amending is only acceptable for:
+- Local commits not yet pushed
+- Small updates (TODO PR link, typo fix) immediately after creating a PR, before any review
 
 ```bash
 git add <files>
 git commit --amend --no-edit
 git push --force-with-lease
 ```
-
-Only amend if:
-- Commit was created by you in this session
-- Change is small
-- You will force-push immediately
 
 ## Slash Commands
 
