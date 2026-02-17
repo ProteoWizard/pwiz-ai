@@ -757,16 +757,35 @@ ROW_ID comes from the `row_id` field in exception reports (e.g., 73730).
 <a href="https://skyline.ms/home/support/announcements-thread.view?rowId={THREAD_ID}">{Thread Title}</a>
 ```
 
+**GitHub issue links** (link issue numbers to GitHub):
+```html
+<a href="https://github.com/ProteoWizard/pwiz/issues/{ISSUE_NUMBER}">#{ISSUE_NUMBER}</a>
+```
+
+**GitHub PR links** (link PR numbers to GitHub):
+```html
+<a href="https://github.com/ProteoWizard/pwiz/pull/{PR_NUMBER}">PR#{PR_NUMBER}</a>
+```
+
 **PR fix links** (link the PR number in "FIXED by PR#XXXX"):
 ```html
-<span class="fixed"><a href="https://github.com/ProteoWizard/pwiz/pull/{PR_NUMBER}">FIXED by PR#{PR_NUMBER}</a></span>
+<span style="border:1px solid #27ae60; color:#27ae60; font-size:11px; padding:1px 6px; border-radius:3px; font-weight:600"><a href="https://github.com/ProteoWizard/pwiz/pull/{PR_NUMBER}" style="color:#27ae60; text-decoration:none">FIXED by PR#{PR_NUMBER}</a></span>
+```
+
+**Tracked issue links** (link the issue number in "Tracked in #XXXX"):
+```html
+<span style="border:1px solid #3498db; color:#3498db; font-size:11px; padding:1px 6px; border-radius:3px; font-weight:600"><a href="https://github.com/ProteoWizard/pwiz/issues/{ISSUE_NUMBER}" style="color:#3498db; text-decoration:none">Tracked in #{ISSUE_NUMBER}</a></span>
 ```
 
 **Has email links** (link to the exception report that has the email):
 ```html
-<span class="has-email"><a href="https://skyline.ms/home/issues/exceptions/announcements-thread.view?rowId={ROW_ID}">Has email</a></span>
+<span style="border:1px solid #3498db; color:#3498db; font-size:11px; padding:1px 6px; border-radius:3px; font-weight:600"><a href="https://skyline.ms/home/issues/exceptions/announcements-thread.view?rowId={ROW_ID}" style="color:#3498db; text-decoration:none">Has email</a></span>
 ```
 ROW_ID is the specific report with the email contact, from `row_id` in exception history.
+
+**IMPORTANT**: Every issue number (#XXXX) and PR number (PR#XXXX) mentioned anywhere in the
+email MUST be a clickable link to GitHub. Never render a bare `#3979` or `PR#3985` without
+a hyperlink — the reader should be able to click through to see full details on GitHub.
 
 ### Detecting Early Terminations
 

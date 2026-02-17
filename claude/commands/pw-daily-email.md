@@ -134,6 +134,11 @@ Follow the existing format from daily-report-guide.md:
 - If a finding in suggested-actions matches an exception, add the root cause summary
 - If a GitHub issue was created, add the issue link
 - If marked as "already fixed", show the FIXED badge with PR link
+- If an exception has both a tracked issue AND a fix PR, show both (e.g., "Tracked in #3979, FIXED by PR#3985 + cherry-pick PR#3988")
+
+**CRITICAL: Link all issue and PR references to GitHub.** Every `#XXXX` must link to
+`https://github.com/ProteoWizard/pwiz/issues/XXXX` and every `PR#XXXX` must link to
+`https://github.com/ProteoWizard/pwiz/pull/XXXX`. Never render bare numbers without hyperlinks.
 
 ### Email Recipient
 
