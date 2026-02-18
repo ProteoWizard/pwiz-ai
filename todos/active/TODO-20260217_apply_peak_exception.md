@@ -30,8 +30,10 @@ Then when `PeakMatch.ChangePeak` called `SrmDocument.ChangePeak`, the `FindChrom
 called `TryLoadChromatogram` and failed because no chromatogram existed for this precursor in this
 replicate, throwing `ArgumentOutOfRangeException`.
 
-This is the same class of bug as PR #3646 - a code path that bypasses chromatogram existence
-verification that `SrmDocument.ChangePeak` relies on.
+Related to PR #3646 but a different mechanism. In #3646, passing `null` for `PeptideDocNode` to
+`TryLoadChromatogram` caused it to find the wrong chromatogram (first match by precursor m/z
+rather than the correct peptide's chromatogram). Here, the `referenceTarget == null` early return
+skips the `TryLoadChromatogram` call entirely.
 
 ### What PeakMatch(0, 0) means
 
@@ -63,7 +65,7 @@ to return `PeakMatch(0, 0)`.
 ### 2026-02-17 - Session 1
 
 * Analyzed exception report #73977 and GitHub issue #3996
-* Reviewed PR #3646 for precedent (same class of bug: different TryLoadChromatogram arguments)
+* Reviewed PR #3646 for context (different bug: wrong chromatogram from null PeptideDocNode)
 * Identified root cause: GetPeakMatch returns PeakMatch(0,0) without verifying chromatograms exist
 * Applied fix: reordered checks so chromatogram existence is verified before referenceTarget null return
 * Test TestRemovePeakFromAll passes
