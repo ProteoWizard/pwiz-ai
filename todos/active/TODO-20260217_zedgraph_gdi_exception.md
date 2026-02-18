@@ -7,7 +7,7 @@
 - **Created**: 2026-02-17
 - **Status**: In Progress
 - **GitHub Issue**: [#3950](https://github.com/ProteoWizard/pwiz/issues/3950)
-- **PR**: (pending)
+- **PR**: [#3998](https://github.com/ProteoWizard/pwiz/pull/3998)
 - **Exception Fingerprint**: `0c5af2c98e545893`
 - **Exception ID**: 73896
 
@@ -17,10 +17,10 @@ Catch `ExternalException` in `MasterPane.FindNearestPaneObject()` so GDI+ failur
 
 ## Tasks
 
-- [ ] Add try-catch for `ExternalException` in `MasterPane.FindNearestPaneObject()`
-- [ ] Return "nothing found" result on catch (same as existing no-match path)
-- [ ] Build and verify no errors
-- [ ] Create PR
+- [x] Add try-catch for `ExternalException` in `MasterPane.FindNearestPaneObject()`
+- [x] Return "nothing found" result on catch (same as existing no-match path)
+- [x] Build and verify no errors
+- [x] Create PR
 
 ## Progress Log
 
