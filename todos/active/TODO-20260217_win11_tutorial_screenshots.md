@@ -95,6 +95,23 @@ TestAcquisitionComparisonTutorial (6 min), TestDiaTtofTutorial (3 min), TestDdaT
 - [x] Review TestPerf diffs
 - [ ] Commit any accepted Win10 changes or code fixes (none needed — all deferred)
 
+### Win11 Machine Setup Requirements
+
+For consistent screenshots on Windows 11, the following settings are required:
+
+1. **Settings > Personalization > Colors > Transparency effects: OFF**
+   - Win11's Mica/acrylic material causes the active window titlebar to pick up a tint
+     from the desktop background color. With transparency ON and a red background, the
+     titlebar gets a visible pink/red hue. Turning this OFF eliminates the effect.
+   - This does NOT affect rounded corners (those are DWM geometry, not transparency).
+   - The `CleanupBorder11()` function handles rounded corner rendering independently.
+
+2. **Desktop background**: Any solid color is fine once transparency effects are OFF.
+
+3. **Settings > Personalization > Colors > Choose your mode: Light**
+
+4. **Display scaling**: 100% (96 DPI) — corner radii scale with DPI.
+
 ### Phase 2: Win11 Capture — COMPLETE
 
 - [x] Set up Win11 machine (BRENDANX-UW25, Win11 Enterprise build 26200)
@@ -132,7 +149,8 @@ Port color-tolerant comparison from PR #3861 (`ScreenshotInfo.ScreenshotDiff`) t
 - [x] Re-run DIA-Umpire-TTOF test (en only) to capture s-13 with FillProgressBar fix — verified
 - [x] Accept DIA/zh-CHS/s-16 (Targets highlighting — consistent across Win10/Win11, note for future)
 - [x] Commit all Win11 screenshots + code changes to branch (2 commits: code + 1,896 PNGs)
-- [ ] Re-run all tests on Win11 to verify reproducibility (near-zero diffs expected)
+- [ ] Verify transparency effects OFF, then re-run TestTutorial tests as validation subset
+- [ ] If validation passes, re-run full suite (TestTutorial + TestPerf) and commit updated screenshots
 - [ ] Document any remaining known differences
 - [x] Create PR — [#4002](https://github.com/ProteoWizard/pwiz/pull/4002)
 
