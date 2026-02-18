@@ -101,20 +101,15 @@ if (Test-Command "git") {
 }
 
 # Claude Code CLI
+# NOTE: Do NOT run "claude update" here. When this script runs inside an active
+# Claude Code session (via the Bash tool), "claude update" destroys all captured
+# output from the entire process — even Write-Host calls that ran before it.
+# This is a Claude Code bug discovered 2026-02-18. Just report the version.
 Write-Host "Checking Claude Code CLI..." -ForegroundColor Gray
 try {
     $claudeVersion = & claude --version 2>$null
     if ($claudeVersion -match '(\d+\.\d+\.\d+)') {
-        $version = $Matches[1]
-        # Check if update is available
-        $updateCheck = & claude update 2>&1 | Out-String
-        if ($updateCheck -match 'is up to date') {
-            Add-Result "Claude Code CLI" "OK" "$version (latest)" $true
-        } elseif ($updateCheck -match 'available|updating|updated') {
-            Add-Result "Claude Code CLI" "WARN" "$version (update available - run: claude update)" $false
-        } else {
-            Add-Result "Claude Code CLI" "OK" $version $true
-        }
+        Add-Result "Claude Code CLI" "OK" $Matches[1] $true
     } else {
         Add-Result "Claude Code CLI" "OK" $claudeVersion $true
     }
@@ -589,45 +584,52 @@ Write-Host "Checking LabKey MCP server..." -ForegroundColor Gray
 if ($Skip -contains "labkey") {
     Add-Result "LabKey MCP Server" "SKIPPED" "Deferred (use -Skip labkey to acknowledge)" $true -SkipId "labkey"
 } else {
+    # NOTE: Do NOT call "claude mcp list" or any "claude" subcommand here.
+    # When this script runs inside an active Claude Code session (via the Bash tool),
+    # any "claude" subcommand destroys all captured output from the entire process.
+    # Instead, read the MCP config directly from ~/.claude.json.
     try {
         $serverPath = Join-Path $aiRoot "mcp\LabKeyMcp\server.py"
         $serverExists = Test-Path $serverPath
-        $mcpListRaw = & claude mcp list 2>&1
-        $mcpList = $mcpListRaw -join "`n"  # Join array into single string
 
-        # Parse the registered path from output like: "labkey: python C:/path/to/server.py - ✓ Connected"
-        # Also handles full python paths like: "labkey: C:\...\python.exe C:/path/to/server.py - ✓ Connected"
-        $registeredPath = $null
-        if ($mcpList -match 'labkey:\s*\S*python\S*\s+(.+?server\.py)') {
-            $registeredPath = $matches[1].Trim() -replace '/', '\'  # Normalize to backslashes
-            # Resolve relative paths (e.g., .\ai\mcp\...) to absolute for comparison
-            if (-not [System.IO.Path]::IsPathRooted($registeredPath)) {
-                $registeredPath = (Resolve-Path $registeredPath -ErrorAction SilentlyContinue).Path
+        # Read MCP server config from ~/.claude.json
+        $claudeJsonPath = Join-Path $env:USERPROFILE ".claude.json"
+        $isRegistered = $false
+        $isDisabled = $false
+        $registeredArgs = $null
+
+        if (Test-Path $claudeJsonPath) {
+            $claudeConfig = Get-Content $claudeJsonPath -Raw | ConvertFrom-Json
+            # Normalize project root to forward-slash format used in .claude.json
+            $projKey = $projRoot -replace '\\', '/'
+            $projectConfig = $claudeConfig.projects.$projKey
+            if (-not $projectConfig) {
+                # Try with trailing slash or other variations
+                foreach ($key in $claudeConfig.projects.PSObject.Properties.Name) {
+                    if (($key -replace '[\\/]', '') -eq ($projKey -replace '[\\/]', '')) {
+                        $projectConfig = $claudeConfig.projects.$key
+                        break
+                    }
+                }
+            }
+            if ($projectConfig -and $projectConfig.mcpServers.labkey) {
+                $isRegistered = $true
+                $registeredArgs = $projectConfig.mcpServers.labkey.args -join ' '
+            }
+            if ($projectConfig -and $projectConfig.disabledMcpServers -contains 'labkey') {
+                $isDisabled = $true
             }
         }
 
-        $isConnected = $mcpList -match 'labkey.*Connected'
-        $isRegistered = $null -ne $registeredPath
-
-        # Normalize expected path for comparison
-        $expectedPathNormalized = $serverPath -replace '/', '\'
-        $pathMatches = $isRegistered -and ($registeredPath -eq $expectedPathNormalized)
-
-        if ($isConnected -and $pathMatches -and $hasNetrc) {
-            Add-Result "LabKey MCP Server" "OK" "registered and connected" $true -SkipId "labkey"
-        } elseif ($isConnected -and $pathMatches -and -not $hasNetrc) {
-            Add-Result "LabKey MCP Server" "WARN" "connected but ~\.netrc missing - API calls will fail. Create a +claude account on skyline.ms (see new-machine-setup.md, search for +claude)" $false -SkipId "labkey"
-        } elseif ($isRegistered -and -not $pathMatches) {
-            # Registered but pointing to wrong path
-            Add-Result "LabKey MCP Server" "WARN" "registered at wrong path. Run: claude mcp remove labkey && claude mcp add labkey -- python $serverPath" $false -SkipId "labkey"
-        } elseif ($isRegistered -and $pathMatches) {
-            # Registered at correct path, file exists, but not connected (normal when not in active session)
-            Add-Result "LabKey MCP Server" "WARN" "registered but not connected (normal outside active session)" $false -SkipId "labkey"
+        if ($isRegistered -and -not $isDisabled -and $hasNetrc) {
+            Add-Result "LabKey MCP Server" "OK" "registered ($registeredArgs)" $true -SkipId "labkey"
+        } elseif ($isRegistered -and $isDisabled) {
+            Add-Result "LabKey MCP Server" "WARN" "registered but disabled (enable via /mcp in Claude Code)" $false -SkipId "labkey"
+        } elseif ($isRegistered -and -not $hasNetrc) {
+            Add-Result "LabKey MCP Server" "WARN" "registered but ~\.netrc missing - API calls will fail" $false -SkipId "labkey"
         } elseif ($serverExists) {
-            # Server exists but not registered
             Add-Result "LabKey MCP Server" "MISSING" "Run: claude mcp add labkey -- python $serverPath" $false -SkipId "labkey"
         } else {
-            # Neither registered nor server file found
             Add-Result "LabKey MCP Server" "ERROR" "server.py not found at $serverPath" $false -SkipId "labkey"
         }
     } catch {
