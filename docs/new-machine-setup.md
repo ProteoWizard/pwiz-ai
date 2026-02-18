@@ -576,6 +576,8 @@ dotnet tool install --global JetBrains.dotTrace.GlobalTools
 ```
 
 > **Note:** The dotTrace CLI is a .NET global tool for capturing performance snapshots. For XML report export (automated analysis), `Reporter.exe` from the dotTrace GUI installation is also required. Developers with the JetBrains All Products Pack already have this at `%LOCALAPPDATA%\JetBrains\Installations\dotTrace*\Reporter.exe`. Use with `Run-Tests.ps1 -PerformanceProfile`.
+>
+> **Known issue (.NET 9):** dotTrace CLI 2025.3.x ships with a broken `runtimeconfig.json` that targets `net6.0` with `rollForward: Major`, but its assemblies require .NET 8. On machines with .NET 9 SDK, the tool rolls forward to .NET 9 and crashes with `FileLoadException: System.Runtime, Version=8.0.0.0`. Fix by editing both runtimeconfig files in `~/.dotnet/tools/.store/jetbrains.dottrace.globaltools/<version>/.../tools/net8.0/any/`: change `tfm` to `"net8.0"`, `rollForward` to `"LatestMinor"`, and framework version to `"8.0.0"` in both `dottrace.runtimeconfig.json` and `dottrace.runtimeconfig.win.json`.
 
 **Python packages** - For MCP servers and LabKey integration:
 ```powershell

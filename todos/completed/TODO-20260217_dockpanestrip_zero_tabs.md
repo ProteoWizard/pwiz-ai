@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260217_dockpanestrip_zero_tabs`
 - **Base**: `master`
 - **Created**: 2026-02-17
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#3978](https://github.com/ProteoWizard/pwiz/issues/3978)
-- **PR**: (pending)
+- **PR**: [#3997](https://github.com/ProteoWizard/pwiz/pull/3997)
 - **Exception Fingerprint**: `a28941ab620eb6fa`
 - **Exception ID**: 73964
 
@@ -21,7 +21,19 @@ Add early-return guards in `DrawTabStrip_ToolWindow` and `DrawTabStrip_Document`
 - [ ] Build and verify no compilation errors
 - [ ] Create PR
 
+## Resolution
+
+**Status**: Merged to master
+**PR**: [#3997](https://github.com/ProteoWizard/pwiz/pull/3997) — merged 2026-02-18
+**Merge commit**: `f3411662`
+
+Early-return guards added in `DrawTabStrip_ToolWindow` and `DrawTabStrip_Document` for `Tabs.Count == 0`. Cherry-pick PR #4007 open for release branch.
+
 ## Progress Log
+
+### 2026-02-18 - Merged
+
+PR #3997 merged to master (f3411662). Cherry-pick PR #4007 created for skyline_26_1.
 
 ### 2026-02-17 - Session Start
 

@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260216_imagecomparer_mcp`
 - **Base**: `master`
 - **Created**: 2026-02-16
-- **Status**: PR open, awaiting merge
+- **Status**: Completed
 - **GitHub Issue**: (pending)
 - **PR**: [#3989](https://github.com/ProteoWizard/pwiz/pull/3989)
 
@@ -91,6 +91,14 @@ Committed pwiz-ai docs/scripts to master. Committed pwiz code on branch, pushed,
 ### 2026-02-16 (session 1) — All phases complete, ready for commit
 
 Built ImageComparer.Core (multi-target DLL) and ImageComparer.Mcp (MCP server with 4 tools). Discovered and fixed three critical C# MCP pitfalls: stdout logging, stdin inheritance, JSON path escaping. Added `-TakeScreenshots` to Run-Tests.ps1. Ran AbsoluteQuant tutorial generating 16 changed screenshots. All 5 MCP tools tested end-to-end via Claude Code. Fixed diff_only checkerboard artifact (alpha blending), GetAiTmpFolder path resolution, and UI SaveDiffImage to respect current view mode. Updated ImageComparer.sln with all 3 projects. GUI verified working with Core DLL refactoring.
+
+## Resolution
+
+**Status**: Merged to master
+**PR**: [#3989](https://github.com/ProteoWizard/pwiz/pull/3989) — merged 2026-02-17
+**Merge commit**: `6c4073dc`
+
+ImageComparer MCP server with 4 tools (list_changed_screenshots, generate_diff_image, generate_diff_report, revert_screenshot) plus ImageComparer.Core shared library. Full C# MCP development guide written.
 
 ## Related
 

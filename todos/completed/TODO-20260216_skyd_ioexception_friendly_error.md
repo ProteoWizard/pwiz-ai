@@ -4,8 +4,9 @@
 - **Branch**: `Skyline/work/20260216_skyd_ioexception_friendly_error`
 - **Base**: `master`
 - **Created**: 2026-02-17
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#3946](https://github.com/ProteoWizard/pwiz/issues/3946)
+- **PR**: [#3994](https://github.com/ProteoWizard/pwiz/pull/3994)
 
 ## Objective
 Show friendly error instead of crash dialog when IOException occurs during peptide
@@ -47,6 +48,18 @@ by `ModifyDocument`. Testing showed:
 - [x] Use existing translated resource string for error context
 - [x] Build successfully
 - [x] Attempt manual reproduction and document findings
+
+## Resolution
+
+**Status**: Merged to master
+**PR**: [#3994](https://github.com/ProteoWizard/pwiz/pull/3994) — merged 2026-02-18
+**Merge commit**: `d4b487c2`
+
+Friendly error dialog shown instead of crash when IOException occurs during peptide search library import. Try-catch added in `BuildPeptideSearchLibrary()` using `ExceptionUtil.DisplayOrReportException`.
+
+### 2026-02-18 - Merged
+
+PR #3994 merged to master (d4b487c2).
 
 ## Files Modified
 - `pwiz_tools/Skyline/FileUI/PeptideSearch/ImportPeptideSearchDlg.cs`

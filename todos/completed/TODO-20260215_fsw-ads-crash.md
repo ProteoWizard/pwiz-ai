@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260215_fsw-ads-crash`
 - **Base**: `master`
 - **Created**: 2026-02-15
-- **Status**: Review
+- **Status**: Completed
 - **GitHub Issue**: [#3979](https://github.com/ProteoWizard/pwiz/issues/3979)
 - **PR**: [#3985](https://github.com/ProteoWizard/pwiz/pull/3985)
 - **Exception Fingerprint**: `cf66248972edb8a7`
@@ -47,4 +47,10 @@ TeamCity code inspection flagged `fileName != null` as always true in `ShouldIgn
 
 Removed the prefix check entirely. Replaced the hardcoded `~SK1234.tmp` test assertion with a contract test that creates a real `FileSaver` and verifies its `SafeName` is ignored — so if `FileSaver` ever changes its naming, the test catches it.
 
-Awaiting merge.
+## Resolution
+
+**Status**: Merged to master
+**PR**: [#3985](https://github.com/ProteoWizard/pwiz/pull/3985) — merged 2026-02-16
+**Merge commit**: `ef50cc6e`
+
+ADS path detection added to `ShouldIgnoreFile`, defensive handling in `FileSystemUtil.cs`, and regression tests in `FilesTreeFormTest.cs`.

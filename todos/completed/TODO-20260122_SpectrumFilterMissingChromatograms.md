@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260122_SpectrumFilterMissingChromatograms`
 - **Base**: `master`
 - **Created**: 2026-01-22
-- **Status**: In Progress
-- **GitHub Issue**: (none yet)
-- **PR**: (pending)
+- **Status**: Closed (won't fix)
+- **GitHub Issue**: (none)
+- **PR**: (none — fix committed on other feature branches)
 
 ## Objective
 
@@ -244,6 +244,10 @@ Unlikely since same raw file, but worth checking.
 - **TransitionList.csv**: Transition list with spectrum class filters for import into blank doc
 
 ## Progress Log
+
+### 2026-02-18 - Closed
+
+Closed per Nick Shulman — the fix was committed to other feature branches rather than as a standalone PR. No further work planned.
 
 ### 2026-01-22 - Session 1 (continued)
 - Confirmed issue is specific to WithTransitions.sky (not import order)
