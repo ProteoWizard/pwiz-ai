@@ -5,7 +5,7 @@
 - **Worktree**: `pwiz-work2`
 - **Base**: `master`
 - **Created**: 2026-02-17
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#3950](https://github.com/ProteoWizard/pwiz/issues/3950)
 - **PR**: [#3998](https://github.com/ProteoWizard/pwiz/pull/3998)
 - **Exception Fingerprint**: `0c5af2c98e545893`
@@ -24,6 +24,18 @@ Catch `ExternalException` in `MasterPane.FindNearestPaneObject()` so GDI+ failur
 
 ## Progress Log
 
+### 2026-02-18 - Merged
+
+PR #3998 merged to master (c84f7570).
+
 ### 2026-02-17 - Session Start
 
 Starting work on this issue. The fix wraps the hit-testing loop in FindNearestPaneObject with a catch for ExternalException.
+
+## Resolution
+
+**Status**: Merged to master
+**PR**: [#3998](https://github.com/ProteoWizard/pwiz/pull/3998) — merged 2026-02-18
+**Merge commit**: `c84f7570`
+
+Try-catch for `ExternalException` added in `MasterPane.FindNearestPaneObject()` so GDI+ failures during hit-testing return "nothing found" instead of crashing.

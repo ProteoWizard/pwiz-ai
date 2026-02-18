@@ -6,7 +6,7 @@
 - **Created**: 2026-02-17
 - **Status**: Completed
 - **GitHub Issue**: [#3996](https://github.com/ProteoWizard/pwiz/issues/3996)
-- **PR**: (pending)
+- **PR**: [#3999](https://github.com/ProteoWizard/pwiz/pull/3999)
 - **Exception ID**: 73977
 
 ## Objective
@@ -60,7 +60,19 @@ to return `PeakMatch(0, 0)`.
 
 - `pwiz_tools/Skyline/Model/PeakMatcher.cs` - Moved chromatogram checks before referenceTarget null check
 
+## Resolution
+
+**Status**: Merged to master
+**PR**: [#3999](https://github.com/ProteoWizard/pwiz/pull/3999) — merged 2026-02-18
+**Merge commit**: `a684fcda`
+
+Fixed by reordering checks in `PeakMatcher.GetPeakMatch()` so chromatogram existence is verified before the `referenceTarget == null` early return. Replicates without chromatogram data now return `null` (skip) instead of `PeakMatch(0, 0)`.
+
 ## Progress Log
+
+### 2026-02-18 - Merged
+
+PR #3999 merged to master (a684fcda).
 
 ### 2026-02-17 - Session 1
 

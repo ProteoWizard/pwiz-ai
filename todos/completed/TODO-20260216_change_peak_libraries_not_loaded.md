@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260216_change_peak_libraries_not_loaded`
 - **Base**: `master`
 - **Created**: 2026-02-16
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#3949](https://github.com/ProteoWizard/pwiz/issues/3949)
 - **PR**: [#3991](https://github.com/ProteoWizard/pwiz/pull/3991)
 
@@ -28,6 +28,14 @@ The `Assume.IsTrue(IsLoaded)` assertions in PeptideLibraries remain unchanged �
 - [x] Guard `graphChromatogram_PickedPeak` in SkylineGraphs.cs
 - [x] Guard `ApplyPeakWithLongWait` in EditMenu.cs
 - [x] Build successfully
+
+## Resolution
+
+**Status**: Merged to master
+**PR**: [#3991](https://github.com/ProteoWizard/pwiz/pull/3991) — merged 2026-02-18
+**Merge commit**: `abe1d02e`
+
+Added `EnsureLibrariesLoadedForPeakIntegration()` helper to SkylineWindow that shows a user-friendly message when libraries aren't loaded. Guards placed at `graphChromatogram_PickedPeak` and `ApplyPeakWithLongWait`.
 
 ## Files Modified
 - `pwiz_tools/Skyline/SkylineGraphs.cs` — helper method + guard in PickedPeak handler
