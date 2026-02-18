@@ -44,8 +44,7 @@ Test case: TODO-20260102_FilesViewPerfRegression.md
 ### Verification
 - [x] Test with AaantivirusTestExclusion - basic workflow works
 - [x] Verify XML output shows method timing data with call stacks
-- [ ] Test with TestImportHundredsOfReplicates (known perf-sensitive test)
-- [ ] Compare before/after if regression is reintroduced
+- [ ] Synthetic end-to-end validation (see Next Steps below)
 
 ## Reporter.exe Capabilities
 
@@ -68,6 +67,22 @@ Automated performance regression detection:
 
 - `ai/scripts/Skyline/Run-Tests.ps1` - Performance profiling integration
 - `ai/docs/leak-debugging-guide.md` - Add performance profiling section (or new doc)
+
+## Next Steps — Synthetic Validation
+
+The implementation is complete in `ai/scripts/Skyline/Run-Tests.ps1` (`-PerformanceProfile` flag).
+The original real-world test case (TestImportHundredsOfReplicates) is too large and slow.
+
+**Plan**: Use a small, fast unit test with an artificial hot spot to prove the tooling works end-to-end.
+
+1. Pick a short unit test (something that runs in <5 seconds normally)
+2. Temporarily add a busy-loop or `Thread.Sleep(5000)` to a method it calls
+3. Run with: `pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName <test> -PerformanceProfile"`
+4. Verify the artificial hot spot appears in the top 10 hot spots output
+5. Remove the artificial delay
+6. Close the TODO
+
+This validates: dotTrace CLI discovery, snapshot capture, Reporter.exe XML export, and hot spot parsing — all without needing a real performance regression.
 
 ## Related
 
