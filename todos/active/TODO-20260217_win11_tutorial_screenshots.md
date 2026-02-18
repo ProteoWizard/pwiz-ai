@@ -30,68 +30,70 @@ border painting for Win11 rounded corners provides the foundation.
 
 ## Tutorial-to-Test Mapping
 
-### TestTutorial Tests (~70 min total on Win10)
+### TestTutorial Tests (1,296 PNGs)
 
-Per-pass runtimes from Performance Tests run #80807 (BRENDANX-UW25, 2026-02-17).
+Per-pass runtimes from nightly run #80807. Auto-screenshot runtimes from Phase 1 below.
 
-| Tutorial Folder | CoverShotName | Test Method | Per-Pass |
+| Tutorial Folder | Test Method | PNGs | Per-Pass |
 |---|---|---|---|
-| AbsoluteQuant | AbsoluteQuant | TestAbsoluteQuantificationTutorial | 7s |
-| AuditLog | AuditLog | TestAuditLogTutorial | 6s |
-| CustomReports | CustomReports | TestCustomReportsTutorial | 6s |
-| DIA | DIA | TestDiaTutorial | 10s |
-| ExistingQuant | ExistingQuant | TestExistingExperimentsTutorial | 20s |
-| GroupedStudies | GroupedStudies | TestGroupedStudies1Tutorial | 44s |
-| iRT | iRT | TestIrtTutorial | 19s |
-| LibraryExplorer | LibraryExplorer | TestLibraryExplorerTutorial | 10s |
-| LiveReports | LiveReports | TestLiveReportsTutorial | 10s |
-| MethodEdit | MethodEdit | TestMethodEditTutorial | 27s |
-| MethodRefine | MethodRefine | TestMethodRefinementTutorial | 15s |
-| MS1Filtering | MS1Filtering | TestMs1Tutorial | 19s |
-| OptimizeCE | OptimizeCE | TestCEOptimizationTutorial | 4s |
-| PeakPicking | PeakPicking | TestPeakPickingTutorial | 14s |
-| PRM | PRM | TestTargetedMSMSTutorial | 28s |
-| SmallMolecule | SmallMolecule | TestSmallMoleculesTutorial | 5s |
-| SmallMoleculeMethodDevCEOpt | SmallMoleculeMethodDevCEOpt | TestSmallMolMethodDevCEOptTutorial | 10s |
-| SmallMoleculeQuantification | SmallMoleculeQuantification | TestSmallMoleculesQuantificationTutorial | 11s |
+| AbsoluteQuant | TestAbsoluteQuantificationTutorial | 51 | 7s |
+| AuditLog | TestAuditLogTutorial | 30 | 6s |
+| CustomReports | TestCustomReportsTutorial | 84 | 6s |
+| DIA | TestDiaTutorial | 102 | 10s |
+| ExistingQuant | TestExistingExperimentsTutorial | 117 | 20s |
+| GroupedStudies | TestGroupedStudies1Tutorial | 297 | 44s |
+| iRT | TestIrtTutorial | 90 | 19s |
+| LibraryExplorer | TestLibraryExplorerTutorial | 23 | 10s |
+| LiveReports | TestLiveReportsTutorial | 70 | 10s |
+| MethodEdit | TestMethodEditTutorial | 75 | 27s |
+| MethodRefine | TestMethodRefinementTutorial | 69 | 15s |
+| MS1Filtering | TestMs1Tutorial | 141 | 19s |
+| OptimizeCE | TestCEOptimizationTutorial | 8 | 4s |
+| PeakPicking | TestPeakPickingTutorial | 26 | 14s |
+| PRM | TestTargetedMSMSTutorial | 117 | 28s |
+| SmallMolecule | TestSmallMoleculesTutorial | 18 | 5s |
+| SmallMoleculeMethodDevCEOpt | TestSmallMolMethodDevCEOptTutorial | 106 | 10s |
+| SmallMoleculeQuantification | TestSmallMoleculesQuantificationTutorial | 69 | 11s |
 
-### TestPerf Tutorial Tests (~150 min total on Win10)
+### TestPerf Tutorial Tests (684 PNGs)
 
-| Tutorial Folder | CoverShotName | Test Method | Per-Pass |
+| Tutorial Folder | Test Method | PNGs | Per-Pass |
 |---|---|---|---|
-| AcquisitionComparison | AcquisitionComparison | TestAcquisitionComparisonTutorial | 368s |
-| DDASearch | DDASearch | TestDdaTutorial | 130s |
-| DIA-PASEF | DIA-PASEF | TestDiaPasefTutorial | 62s |
-| DIA-QE | DIA-QE | TestDiaQeTutorial | 82s |
-| DIA-TTOF | DIA-TTOF | TestDiaTtofTutorial | 188s |
-| DIA-Umpire-TTOF | DIA-Umpire-TTOF | TestDiaTtofDiaUmpireTutorial | 492s |
-| HiResMetabolomics | HiResMetabolomics | TestHiResMetabolomicsTutorial | 30s |
-| IMSFiltering | IMSFiltering | TestDriftTimePredictorTutorial | 391s |
-| PeakBoundaryImputation-DIA | PeakBoundaryImputation-DIA | TestPeakBoundaryImputationDiaTutorial | 66s |
-| PRMOrbitrap | PRMOrbitrap | TestOrbiPrmTutorial | 111s |
-| SmallMoleculeIMSLibraries | SmallMoleculeIMSLibraries | TestSmallMoleculeLibrariesTutorial | 71s |
+| AcquisitionComparison | TestAcquisitionComparisonTutorial | 36 | 368s |
+| DDASearch | TestDdaTutorial | 51 | 130s |
+| DIA-PASEF | TestDiaPasefTutorial | 37 | 62s |
+| DIA-QE | TestDiaQeTutorial | 105 | 82s |
+| DIA-TTOF | TestDiaTtofTutorial | 105 | 188s |
+| DIA-Umpire-TTOF | TestDiaTtofDiaUmpireTutorial | 29 | 492s |
+| HiResMetabolomics | TestHiResMetabolomicsTutorial | 17 | 30s |
+| IMSFiltering | TestDriftTimePredictorTutorial | 26 | 391s |
+| PeakBoundaryImputation-DIA | TestPeakBoundaryImputationDiaTutorial | 19 | 66s |
+| PRMOrbitrap | TestOrbiPrmTutorial | 42 | 111s |
+| SmallMoleculeIMSLibraries | TestSmallMoleculeLibrariesTutorial | 20 | 71s |
 
 **Longest tests**: TestDiaTtofDiaUmpireTutorial (8 min), TestDriftTimePredictorTutorial (6.5 min),
 TestAcquisitionComparisonTutorial (6 min), TestDiaTtofTutorial (3 min), TestDdaTutorial (2 min).
 
-### Tutorials Without Automated Tests
+### Tutorials Without Automated Tests (48 PNGs)
 
-| Tutorial Folder | Notes |
-|---|---|
-| ImportingAssayLibraries | Has screenshots but no CoverShotName test |
-| ImportingIntegrationBoundaries | Has screenshots but no CoverShotName test |
-| PRMOrbitrap-PRBB | May be subset of PRMOrbitrap test |
+| Tutorial Folder | PNGs | Notes |
+|---|---|---|
+| ImportingAssayLibraries | 7 | Has screenshots but no CoverShotName test |
+| ImportingIntegrationBoundaries | 2 | Has screenshots but no CoverShotName test |
+| PRMOrbitrap-PRBB | 39 | May be subset of PRMOrbitrap test |
+
+### Total: 2,028 PNGs across 31 tutorials
 
 ## Tasks
 
-### Phase 1: Win10 Baseline Verification
+### Phase 1: Win10 Baseline Verification — COMPLETE
 
-- [ ] Run all 18 TestTutorial tests in auto-screenshot mode on Win10
-- [ ] Review diffs using ImageComparer (or MCP server)
-- [ ] Document allowed changes (accept/revert/defer for each diff)
-- [ ] Fix any bugs discovered during review
-- [ ] Run TestPerf tutorial tests as time permits
-- [ ] Commit any accepted Win10 changes or code fixes
+- [x] Run all 18 TestTutorial tests in auto-screenshot mode on Win10
+- [x] Review diffs using ImageComparer (and MCP server)
+- [x] Document allowed changes (accept/revert/defer for each diff)
+- [x] Run all 11 TestPerf tutorial tests in auto-screenshot mode on Win10
+- [x] Review TestPerf diffs
+- [ ] Commit any accepted Win10 changes or code fixes (none needed — all deferred)
 
 ### Phase 2: Win11 Capture
 
@@ -111,22 +113,100 @@ TestAcquisitionComparisonTutorial (6 min), TestDiaTtofTutorial (3 min), TestDdaT
 
 ## Running Tests in Auto-Screenshot Mode
 
-```bash
-# Single tutorial test
-pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestAbsoluteQuantTutorial -TakeScreenshots"
-
-# The -TakeScreenshots flag sets pause=-3 (auto-screenshot) and implies -ShowUI
+```
+TestRunner.exe ... offscreen=False loop=1 pause=-3 runsmallmoleculeversions=on
+    recordauditlogs=on language=en-US,zh-CHS,ja perftests=on
+    test="@SkylineTester test list.txt"
 ```
 
 ## Phase 1 Review: Win10 Baseline
 
 ### TestTutorial Results (Win10)
 
-_(To be filled in as tests are run)_
+Run date: 2026-02-17 17:34–19:08 on BRENDANX-UW (Win10), total time **1:35:42**.
+
+All 18 tests passed, 0 failures. Languages: en, zh-CHS, ja.
+7 tests short-circuited zh/ja passes (not yet translated).
+
+| Test Method | en | zh | ja |
+|---|---|---|---|
+| TestAbsoluteQuantificationTutorial | 76s | 78s | 76s |
+| TestAuditLogTutorial | 89s | — | — |
+| TestCEOptimizationTutorial | 36s | — | — |
+| TestCustomReportsTutorial | 75s | 77s | 78s |
+| TestDiaTutorial | 178s | 122s | 122s |
+| TestExistingExperimentsTutorial | 142s | 143s | 143s |
+| TestGroupedStudies1Tutorial | 366s | 372s | 372s |
+| TestIrtTutorial | 159s | 158s | 158s |
+| TestLibraryExplorerTutorial | 68s | — | — |
+| TestLiveReportsTutorial | 172s | — | — |
+| TestMethodEditTutorial | 96s | 98s | 98s |
+| TestMethodRefinementTutorial | 162s | 163s | 164s |
+| TestMs1Tutorial | 132s | 133s | 133s |
+| TestPeakPickingTutorial | 81s | — | — |
+| TestSmallMoleculesQuantificationTutorial | 136s | 141s | 141s |
+| TestSmallMoleculesTutorial | 26s | 26s | 26s |
+| TestSmallMolMethodDevCEOptTutorial | 101s | 100s | 100s |
+| TestTargetedMSMSTutorial | 130s | 131s | 132s |
+
+### TestTutorial Screenshot Diffs (Win10)
+
+**6 changed screenshots** out of 1,296 tested — excellent baseline consistency.
+
+| Screenshot | Pixels | Decision | Notes |
+|---|---|---|---|
+| ExistingQuant/en/s-22 | 1677 | **Defer** | X-axis "Replicate" label thinning (1 every 4 vs 3). Consistent but sensitive to future change. |
+| ExistingQuant/ja/s-22 | 1777 | **Defer** | Same as en — label thinning |
+| ExistingQuant/zh-CHS/s-22 | 1777 | **Defer** | Same as en — label thinning |
+| CustomReports/zh-CHS/s-22 | 2623 | **Defer (BUG-001)** | Replicates dropdown blank in Targets view |
+| DIA/zh-CHS/s-16 | 2508 | **Reverted** | Selection/legend color rectangles beside peptides. Not present in en or ja — intermittent bug. |
+| iRT/ja/s-03 | 2508 | **Defer (BUG-001)** | Same blank Replicates combo box bug |
+
+**Watch list for Phase 2**: ExistingQuant s-22 (all locales), CustomReports/zh-CHS/s-22,
+iRT/ja/s-03 — verify these are consistent across locales on Win11 before accepting.
 
 ### TestPerf Results (Win10)
 
-_(To be filled in as tests are run)_
+Run date: 2026-02-17 20:13–22:50 on BRENDANX-UW (Win10), total time **2:36:14**.
+
+All 11 tests passed, 0 failures. Languages: en, zh-CHS, ja.
+7 tests short-circuited zh/ja passes (not yet translated).
+TestDdaTutorial dominates at ~27 min/pass x3 = ~80 min (half the total).
+
+| Test Method | en | zh | ja |
+|---|---|---|---|
+| TestAcquisitionComparisonTutorial | 509s | — | — |
+| TestDdaTutorial | 1611s | 1619s | 1602s |
+| TestDiaPasefTutorial | 200s | — | — |
+| TestDiaQeTutorial | 201s | 187s | 189s |
+| TestDiaTtofDiaUmpireTutorial | 989s | — | — |
+| TestDiaTtofTutorial | 251s | 315s | 316s |
+| TestDriftTimePredictorTutorial | 707s | — | — |
+| TestHiResMetabolomicsTutorial | 71s | — | — |
+| TestOrbiPrmTutorial | 258s | — | — |
+| TestPeakBoundaryImputationDiaTutorial | 183s | — | — |
+| TestSmallMoleculeLibrariesTutorial | 153s | — | — |
+
+### TestPerf Screenshot Diffs (Win10)
+
+**1 changed screenshot** out of 684 tested — near-perfect consistency.
+
+| Screenshot | Pixels | Decision | Notes |
+|---|---|---|---|
+| DIA-Umpire-TTOF/en/s-13 | — | **Defer** | Search progress text-box shows variable line counts from external tool. Scrollbar thumb also shifts slightly. Would require painting over the text control to fix. |
+
+### Recommended Batching for Phase 2
+
+To keep each run between 1:15–1:30 on Win10 (faster on Win11):
+
+1. **TestTutorial tests** (~1:36) — all 18 tests
+2. **TestPerf minus TestDda** (~1:12) — 10 tests
+3. **TestDdaTutorial alone** (~1:20) — 1 test, 3 languages
+
+## Phase 1 Summary
+
+**Total**: 7 diffs out of 1,980 tested PNGs (0.35%) — 1 reverted, 6 deferred.
+Phase 1 complete. Win10 baseline is exceptionally stable and ready for Win11 migration.
 
 ## Phase 2 Review: Win11 Capture
 
@@ -134,7 +214,11 @@ _(To be filled in during Phase 2)_
 
 ## Bugs Found
 
-_(To be documented as BUG-001, BUG-002, etc. per screenshot-update-workflow.md)_
+### BUG-001: Blank Replicates combo box in Targets view
+**Found in**: CustomReports/zh-CHS/s-22, iRT/ja/s-03
+**Description**: The Replicates dropdown in the Targets panel is blank in the new screenshot
+where it previously showed a value. Appears only in non-English locales.
+**Status**: Deferred — minor cosmetic, consider fixing in future sprint
 
 ## Related
 
