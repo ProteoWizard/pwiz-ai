@@ -155,6 +155,8 @@ All source files should include:
 
 **CRITICAL**: Comments should start with a capital letter (especially imperative sentences). True sentences should end with a period. Use `<see cref="ClassName">` for class references in XML docs.
 
+**CRITICAL**: Never use Unicode dashes (em dash, en dash) in comments or strings - always use a single ASCII hyphen `-`. These are visually indistinguishable in many UIs but cause encoding issues. Avoid all characters above ASCII 127 unless required by the domain.
+
 See [ai/docs/style-guide.md](docs/style-guide.md) for detailed guidelines and examples.
 
 ## User Interface Guidelines

@@ -6,7 +6,8 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 - Line endings: CRLF (`\r\n`) - Windows standard
 - Use spaces, not tabs
 - Blank lines must be completely empty (no spaces/tabs)
-- Prefer ASCII characters over Unicode
+- **NEVER** use Unicode dashes (em dash `U+2014`, en dash `U+2013`) - use ASCII hyphen `-`
+- Avoid all characters above ASCII 127 in code and comments unless required by the domain
 
 ## Asynchronous Programming
 - **NEVER** use `async`/`await` keywords in C# code
