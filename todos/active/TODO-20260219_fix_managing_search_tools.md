@@ -7,7 +7,7 @@
 - **Created**: 2026-02-19
 - **Status**: In Progress
 - **GitHub Issue**: [#4013](https://github.com/ProteoWizard/pwiz/issues/4013)
-- **PR**: (pending)
+- **PR**: [#4018](https://github.com/ProteoWizard/pwiz/pull/4018)
 - **Failure Fingerprint**: `e2632bfdbfabed24`
 - **Test Name**: TestManagingSearchTools
 - **Fix Type**: failure

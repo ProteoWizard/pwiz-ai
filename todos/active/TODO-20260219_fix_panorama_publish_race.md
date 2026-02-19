@@ -7,7 +7,7 @@
 - **Created**: 2026-02-19
 - **Status**: In Progress
 - **GitHub Issue**: [#3987](https://github.com/ProteoWizard/pwiz/issues/3987)
-- **PR**: (pending)
+- **PR**: [#4017](https://github.com/ProteoWizard/pwiz/pull/4017)
 - **Failure Fingerprint**: `8b3ee265ba8c38cd`
 - **Test Name**: TestPublishToPanorama
 - **Fix Type**: failure
