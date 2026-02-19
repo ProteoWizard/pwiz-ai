@@ -20,7 +20,7 @@ When SkylineNightly detects a hung test (TestRunner not responding for 1 hour), 
 - [x] Add ClrMD DLL and XML to SkylineNightly.zip artifact packaging (CreateZipInstallerWindow.cs)
 - [x] Build and verify
 - [ ] Verify TeamCity build produces SkylineNightly.zip with ClrMD DLL
-- [ ] Investigate partial line flushing (SkylineTester's `BeginOutputReadLine()` buffers until `\n`)
+- [ ] Future: Partial line flushing - SkylineTester CommandShell uses `BeginOutputReadLine()` which buffers until `\n`. Fix requires char-level `Read()` like `ProcessStreamReader` pattern, but that class also uses `ReadLine()`. Significant change to SkylineTester - separate PR.
 
 ## Key Reference
 
