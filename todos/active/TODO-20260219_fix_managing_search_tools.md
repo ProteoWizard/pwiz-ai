@@ -1,0 +1,34 @@
+# TestManagingSearchTools: Fix fragile CWD-relative path and silent exception swallowing
+
+## Branch Information
+- **Branch**: `Skyline/work/20260219_fix_managing_search_tools`
+- **Worktree**: `pwiz-work2`
+- **Base**: `master`
+- **Created**: 2026-02-19
+- **Status**: In Progress
+- **GitHub Issue**: [#4013](https://github.com/ProteoWizard/pwiz/issues/4013)
+- **PR**: (pending)
+- **Failure Fingerprint**: `e2632bfdbfabed24`
+- **Test Name**: TestManagingSearchTools
+- **Fix Type**: failure
+
+## Objective
+
+Fix intermittent TestManagingSearchTools failures caused by a CWD-relative expression-bodied property that silently changes resolved paths when CWD shifts, combined with silent exception swallowing in tool migration code.
+
+## Tasks
+
+- [ ] Change `oldEncyclopediaDir` from CWD-relative `=>` property to stable `=` field based on `GetToolsDirectory()`
+- [ ] Add logging to empty catch at `Program.cs:292` so migration failures are visible
+- [ ] Review path update logic in `CopyOldSearchTools` to not update paths on copy failure
+
+## Files
+
+- `pwiz_tools/Skyline/TestFunctional/ManagingSearchToolsTest.cs`
+- `pwiz_tools/Skyline/Program.cs`
+
+## Progress Log
+
+### 2026-02-19 - Session Start
+
+Starting work on this issue. Branch created, TODO filed.
