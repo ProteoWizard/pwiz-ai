@@ -308,6 +308,37 @@ These are additive and non-destructive - they merge new data into existing histo
 
 ### Phase 2: Analysis & Email
 
+### Step 5.5: Upgrade Tracked Issues to Fixed
+
+After reading the exception and failure reports, check all "Already Handled" items that
+show **"Tracked as GitHub #XXXX"** (not yet recorded as fixed). For each one:
+
+1. Check if the GitHub issue is closed:
+   ```bash
+   gh issue view XXXX --repo ProteoWizard/pwiz --json state,closedAt --jq '{state, closedAt}'
+   ```
+
+2. If closed, find the fixing PR via the timeline:
+   ```bash
+   gh api repos/ProteoWizard/pwiz/issues/XXXX/timeline --paginate \
+     --jq '.[] | select(.event == "cross-referenced") | .source.issue.number'
+   gh pr view NNNN --repo ProteoWizard/pwiz --json number,state,mergedAt,mergeCommit \
+     --jq '{number, state, mergedAt, mergeCommit: .mergeCommit.oid}'
+   ```
+
+3. If a merged PR is found, record the fix:
+   ```
+   record_exception_fix(fingerprint="...", pr_number="NNNN", commit="...", merge_date="...")
+   ```
+   Or for test failures:
+   ```
+   record_test_fix(test_name="...", fix_type="failure", pr_number="NNNN", ...)
+   ```
+
+**Why this matters**: Without this step, items stay as "Tracked" indefinitely even after the
+issue is closed and fixed. The email then says "Tracked in #XXXX" when it should say
+"FIXED by PR#NNNN" — a significant difference for the reader.
+
 ### Step 6: Fetch Failure Details and Fingerprints
 
 For each test failure, fetch detailed stack trace:

@@ -2,9 +2,33 @@
 
 This file contains critical information for Claude Code sessions working on this codebase.
 
-## PowerShell Script Execution
+## CRITICAL: Prefer `pwsh` for All Commands
 
-### CRITICAL: Use `pwsh`, Never `powershell`
+### The Bash Tool Runs Git Bash — Not PowerShell
+
+Claude Code's Bash tool uses **Git Bash** on Windows. Git Bash has limited access to
+Windows tools and .NET global tools, and can silently swallow output from some commands.
+
+**Route commands through `pwsh -Command` whenever possible:**
+
+```bash
+# Checking tool versions
+pwsh -Command 'dotnet tool list -g'
+pwsh -Command 'dottrace --version'
+
+# Environment checks
+pwsh -Command 'Get-ChildItem "$env:LOCALAPPDATA\JetBrains\Installations"'
+pwsh -Command '$env:PATH -split ";" | Select-String dotnet'
+
+# Running any .NET tool or Windows-native command
+pwsh -Command 'dotCover --version'
+pwsh -Command 'gh auth status'
+```
+
+**When Git Bash is fine:** Simple git commands (`git status`, `git diff`, `git log`),
+basic file operations (`ls`, `mkdir`), and unix utilities work directly in Git Bash.
+
+### Use `pwsh`, Never `powershell`
 
 This project requires **PowerShell 7** (`pwsh`), not Windows PowerShell 5.1 (`powershell`).
 
