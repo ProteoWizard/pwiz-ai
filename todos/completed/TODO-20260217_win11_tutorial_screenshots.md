@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260217_win11_tutorial_screenshots`
 - **Base**: `master`
 - **Created**: 2026-02-17
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: (pending)
 - **PR**: [#4002](https://github.com/ProteoWizard/pwiz/pull/4002)
 
@@ -436,3 +436,13 @@ where it previously showed a value. Appears only in non-English locales.
 - `ai/todos/completed/TODO-20260108_screenshot_followup.md` — Prior screenshot consistency work
 - `ai/todos/active/TODO-20260216_imagecomparer_mcp.md` — ImageComparer MCP server for automated review
 - `ai/todos/backlog/TODO-automated_screenshot_review.md` — Future automation vision
+
+## Progress Log (continued)
+
+### 2026-02-20 - Merged
+
+PR #4002 merged to master (commit ddc2b79c).
+
+## Resolution
+
+Migrated 1,896 tutorial screenshots from Win10 to Win11. Enhanced ImageComparer with color-tolerant diffing. All differences confirmed as expected OS-level rendering changes.

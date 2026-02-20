@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260205_ims_copy_data`
 - **Base**: `master`
 - **Created**: 2026-02-05
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#3953](https://github.com/ProteoWizard/pwiz/issues/3953)
 - **PR**: [#3954](https://github.com/ProteoWizard/pwiz/pull/3954)
 
@@ -38,3 +38,11 @@ Simplified output format:
 ### 2026-02-05 - Session Start
 
 Starting work on this issue. Need to locate the Copy Data implementation for the Full Scan viewer.
+
+### 2026-02-19 - Merged
+
+PR #3954 merged to master (commit 8c6eefb6).
+
+## Resolution
+
+Fixed "Copy Data" for IMS heatmap in Full Scan view to output clean 3-column format (m/z, 1/K0, intensity).

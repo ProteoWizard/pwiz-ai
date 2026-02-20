@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260218_clrmd_hung_test_stacktraces`
 - **Base**: `master`
 - **Created**: 2026-02-18
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#3850](https://github.com/ProteoWizard/pwiz/issues/3850)
 - **PR**: [#4011](https://github.com/ProteoWizard/pwiz/pull/4011)
 
@@ -48,3 +48,11 @@ Implemented ClrMD stack trace capture in 3 files:
 - `CreateZipInstallerWindow.cs` - Added DLL/XML to SkylineNightly.zip packaging
 
 PR #4011 created, Nick Shulman added as reviewer. Remaining: verify TeamCity artifact and investigate partial line flushing.
+
+### 2026-02-19 - Merged
+
+PR #4011 merged to master (commit 83a8f118).
+
+## Resolution
+
+Added ClrMD stack trace capture for hung tests in SkylineNightly. When a test hangs for 1 hour, managed thread stacks are captured from the TestRunner process before killing it and included in the hang alert email.

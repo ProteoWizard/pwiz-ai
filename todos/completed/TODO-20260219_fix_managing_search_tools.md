@@ -5,7 +5,7 @@
 - **Worktree**: `pwiz-work2`
 - **Base**: `master`
 - **Created**: 2026-02-19
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#4013](https://github.com/ProteoWizard/pwiz/issues/4013)
 - **PR**: [#4018](https://github.com/ProteoWizard/pwiz/pull/4018)
 - **Failure Fingerprint**: `e2632bfdbfabed24`
@@ -32,3 +32,11 @@ Fix intermittent TestManagingSearchTools failures caused by a CWD-relative expre
 ### 2026-02-19 - Session Start
 
 Starting work on this issue. Branch created, TODO filed.
+
+### 2026-02-20 - Merged
+
+PR #4018 merged to master (commit 5ac69ce6).
+
+## Resolution
+
+Changed `oldEncyclopediaDir` from a CWD-relative expression-bodied property to a `_oldEncyclopediaDir` private field initialized in the test method body using `GetToolsDirectory()`, ensuring the path is stable, unique per test+culture, and evaluated after `Program.UnitTest` is set. Program.cs changes (logging empty catch, guarding path updates) deferred to enhancement issue #4015.
