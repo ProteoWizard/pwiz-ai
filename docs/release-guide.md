@@ -132,6 +132,7 @@ These updates happen in two phases. See the "Skyline (release)" workflow for the
 | `Executables/Installer/FileList64-template.txt` | "Skyline-daily" → "Skyline" |
 | Other project files | Find-in-Files `*.*` for remaining "Skyline-daily" (skip items marked keep) |
 | `Skyline.ico` | Overwrite with `Skyline_Release.ico` (release icon) |
+| `Resources/Skyline.bmp` | Overwrite with `Resources/Skyline_Release.bmp` (About box image) |
 
 **Phase 3 — Master branch update** (after release is published):
 
@@ -625,8 +626,13 @@ release branch permanently — master continues as Skyline-daily.
    - Any other occurrences found by searching `*.*` (use Notepad++ for thorough sweep)
    - **Skip** items intentionally marked as "keep" (references to the daily product concept)
 
-7. **Swap the application icon**:
-   - Copy `Skyline_Release.ico` over `Skyline.ico`
+7. **Swap the application icon and About box image**:
+   - Copy `Skyline_Release.ico` over `Skyline.ico` (taskbar/window icon)
+   - Copy `Resources/Skyline_Release.bmp` over `Resources/Skyline.bmp` (Help > About image)
+
+   Both `Skyline.ico` and `Resources/Skyline.bmp` are normally identical to their
+   `_Daily` variants (red "daily" banner and white arrow on red background). For
+   release, they get replaced with the `_Release` variants (clean skyline image).
 
 8. **Update version in Skyline.csproj**:
    ```xml
