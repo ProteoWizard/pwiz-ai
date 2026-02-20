@@ -514,7 +514,7 @@ Pre-release stabilization period before official release.
    post directly using `post_announcement`:
 
    ```python
-   # Skyline-daily and FEATURE COMPLETE releases
+   # Skyline-daily and FEATURE COMPLETE — post to /daily container
    post_announcement(
        title="Skyline-daily 26.0.9.021",
        body=approved_release_notes,  # Markdown content
@@ -522,29 +522,10 @@ Pre-release stabilization period before official release.
    )
    ```
 
-   For **major releases**, also mirror to `/home/software/Skyline/releases`:
-
-   ```python
-   # Major releases — post to both containers
-   post_announcement(
-       title="Skyline 26.1",
-       body=approved_release_notes,
-       container_path="/home/software/Skyline/daily",
-   )
-   post_announcement(
-       title="Skyline 26.1",
-       body=approved_release_notes,
-       container_path="/home/software/Skyline/releases",
-   )
-   ```
-
-   The `/releases` container was used for major release email archives through Skyline 24.1
-   (2024-07-17), before MailChimp took over email delivery. It is somewhat duplicative of the
-   Release Notes wiki page on `/home/software/Skyline`, but with automated posting it costs
-   nothing to maintain the archive.
+   Note: Major releases use a different container — see the "Skyline (release)" workflow.
 
    This posts through LabKey's announcement controller, which sends email notifications
-   to subscribers of each container. The body should use Markdown format matching the
+   to subscribers of the container. The body should use Markdown format matching the
    release notes templates below.
 
    **b. Email via MailChimp** (manual — not yet automated):
@@ -813,9 +794,37 @@ Major release installers use **different paths** than Skyline-daily:
 25. **Update Release Notes wiki page** (`Release Notes` in `/home/software/Skyline`):
     - Add "Skyline v26.1" section at the top with the full feature list
 
-#### Phase 7: Master branch update (same day as release)
+#### Phase 7: Announcements (before first post-release daily)
 
-26. **Update master version** in Jamfile.jam:
+The release email goes out **before** updating master for the first post-release
+Skyline-daily. This ensures the major release announcement is the first thing users see.
+
+26. **Generate major release notes** — see "Generating Major Release Notes" below.
+    This aggregates all Skyline-daily announcements since the last major release,
+    removes attribution and cycle-internal fixes, and reorganizes by importance.
+
+27. **Post to skyline.ms** (automated via MCP):
+    ```python
+    # Major releases go to /releases container (NOT /daily)
+    post_announcement(
+        title="Skyline 26.1",
+        body=approved_release_notes,
+        container_path="/home/software/Skyline/releases",
+    )
+    ```
+
+28. **Update Release Notes wiki page** (`Release Notes` in `/home/software/Skyline`):
+    Add a "Skyline v26.1 Released on MM/DD/YYYY" section at the top.
+
+29. **MailChimp email** to the full Skyline list (~23,500 users):
+    - Major releases go to the **entire** Skyline list (not just the beta list)
+    - Copy previous major release email as template
+    - See MailChimp workflow in the Release Notes section below
+    - See "Release Notes Templates" for the major release template
+
+#### Phase 8: Master branch update and first Skyline-daily
+
+30. **Update master version** in Jamfile.jam:
     ```jam
     constant SKYLINE_YEAR : 26 ;
     constant SKYLINE_ORDINAL : 1 ;
@@ -825,7 +834,7 @@ Major release installers use **different paths** than Skyline-daily:
     This is now possible because the Format/Schema/SupportedForSharing changes from Phase 1
     were already cherry-picked to master. The version/format tests will pass.
 
-27. **First Skyline-daily 26.1.1.DDD** releases from master via the normal nightly build
+31. **First Skyline-daily 26.1.1.DDD** releases from master via the normal nightly build
     process. This should happen on the same day as the major release so Skyline-daily users
     see 26.1.1 as an upgrade containing new features accumulated during FEATURE COMPLETE,
     rather than switching to the nearly-identical 26.1.0.
@@ -834,30 +843,6 @@ Major release installers use **different paths** than Skyline-daily:
     - **Master** continues as the Skyline-daily development branch (26.1.1.DDD)
     - **Release branch** is used only for patch releases (26.1.0.DDD with new day numbers)
     - The bar for cherry-picks to the release branch goes up — critical bug fixes only
-
-#### Phase 8: Announcements
-
-28. **Post to skyline.ms** (automated via MCP):
-    ```python
-    # Post to both containers for major releases
-    post_announcement(
-        title="Skyline 26.1",
-        body=approved_release_notes,
-        container_path="/home/software/Skyline/daily",
-    )
-    post_announcement(
-        title="Skyline 26.1",
-        body=approved_release_notes,
-        container_path="/home/software/Skyline/releases",
-    )
-    ```
-
-29. **MailChimp email** to the full Skyline list (~23,500 users):
-    - Major releases go to the **entire** Skyline list (not just the beta list)
-    - Copy previous major release email as template
-    - See MailChimp workflow in the Release Notes section below
-
-30. **Send release email** — see "Release Notes Templates" for major release template.
 
 ### Skyline (patch)
 
@@ -1054,6 +1039,53 @@ Transform developer commit messages into brief (single line) past tense summarie
 - Fixed case where library m/z tolerance got multiplied improperly.
 ```
 
+### Generating Major Release Notes
+
+Major release notes are **not** built from git commits. They are aggregated from all
+Skyline-daily release announcements posted during the development cycle.
+
+**Step 1: Collect all Skyline-daily announcements since the last major release**
+
+```python
+# List all announcements since the last major release
+query_support_threads(container_path="/home/software/Skyline/daily", days=365)
+
+# Read each announcement to extract bullet points
+get_support_thread(thread_id=..., container_path="/home/software/Skyline/daily")
+```
+
+Gather every bullet point from every Skyline-daily and FEATURE COMPLETE release
+announcement since the previous major release (e.g., since Skyline 25.1).
+
+**Step 2: Remove items that don't belong in a major release announcement**
+
+1. **Remove all attribution** — no "(thanks to Nick)", "(reported by Philip)", etc.
+   The major release represents the whole team's work, not individual contributions.
+
+2. **Remove cycle-internal fixes** — fixes to new features being developed during
+   this cycle, or regressions introduced and fixed within the same cycle. These were
+   never in a released product, so users don't need to know about them.
+
+3. **Remove fixes already mentioned in patch releases** — check the `Release Notes`
+   wiki page in `/home/software/Skyline` for any patch release entries (e.g.,
+   "Skyline v25.1 Updated on 8/25/2025"). Those fixes were already communicated to
+   users and don't need repeating.
+
+**Step 3: Sort and organize**
+
+The order is different from Skyline-daily notes (which are roughly chronological):
+
+1. **`**New!**` items first** (2-5 items) — the most important new features that
+   headline the release. These should be the items most likely to excite users.
+2. **Other additions and improvements** — sorted by functional area (not chronologically).
+   Group related items together (e.g., all DIA improvements, all small molecule changes).
+3. **Fixes last** — bug fixes that survived from the previous major release.
+
+**Step 4: Review against the Release Notes wiki page**
+
+Check the existing `Release Notes` page to match the style and depth of previous
+major releases. The 25.1 entry is a good reference for scope and formatting.
+
 ### Release Notes Templates
 
 **FEATURE COMPLETE:**
@@ -1142,11 +1174,17 @@ release. This release contains the following improvements over Skyline 26.1:
 
 ### Writing and Posting Release Notes
 
+The workflow is the same for all release types: draft to a temp file, get developer
+approval, then post to the appropriate destinations.
+
 **Step 1: Draft to temp file** for developer review:
 
 ```python
-# Claude writes draft to temp file
+# Skyline-daily / FEATURE COMPLETE
 Write("ai/.tmp/release-notes-26.0.9.021.md", content)
+
+# Major release
+Write("ai/.tmp/release-notes-26.1.0.055.md", content)
 ```
 
 The developer can then:
@@ -1154,18 +1192,46 @@ The developer can then:
 2. Make edits (reorder items, adjust wording)
 3. Save and tell Claude to read it back
 
-**Step 2: Post to skyline.ms** after developer approval:
+**Step 2: Post announcement to skyline.ms** after developer approval:
+
+These are separate channels — Skyline-daily and major releases do **not** cross-post.
 
 ```python
-# Claude reads back the approved file and posts
+# Skyline-daily and FEATURE COMPLETE — daily container
 post_announcement(
     title="Skyline-daily 26.0.9.021",
     body=approved_content,
     container_path="/home/software/Skyline/daily",
 )
+
+# Major release and patches — releases container
+post_announcement(
+    title="Skyline 26.1",
+    body=approved_content,
+    container_path="/home/software/Skyline/releases",
+)
 ```
 
-**Step 3: MailChimp email** — developer uses the same content manually in MailChimp (not yet automated).
+**Step 3: Update the Release Notes wiki page** (major releases and patches only):
+
+```python
+# Fetch current page
+get_wiki_page("Release Notes", container_path="/home/software/Skyline")
+
+# Add new section at the top with the release date:
+#   <h2><a name="skyline_26_1"></a>Skyline v26.1 Released on MM/DD/YYYY</h2>
+#   <ul>
+#   <li>...</li>
+#   </ul>
+# Then update the page
+update_wiki_page("Release Notes", container_path="/home/software/Skyline", new_body=...)
+```
+
+The heading format follows previous entries (e.g., "Skyline v25.1 Released on 5/22/2025").
+Patch updates use "Skyline v25.1 Updated on 8/25/2025" with the patch items appended
+above the original release items.
+
+**Step 4: MailChimp email** — developer uses the same content manually in MailChimp (not yet automated).
 
 ### Querying Past Release Notes
 
