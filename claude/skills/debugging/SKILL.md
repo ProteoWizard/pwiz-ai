@@ -61,12 +61,22 @@ Console.WriteLine($"Instance: {RuntimeHelpers.GetHashCode(obj)}");
 // Thread identity
 Console.WriteLine($"Thread: {Thread.CurrentThread.ManagedThreadId}");
 
-// Call stack
-Console.WriteLine(Environment.StackTrace);
+// Call stack — add selectively to calls of interest (verbose)
+Console.WriteLine($"[DEBUG] Stack:\n{Environment.StackTrace}");
 
 // Method entry with context
 Console.WriteLine($"[DEBUG] {nameof(MethodName)}: param={value}");
 ```
+
+## Output-Driven Discipline
+
+Once you add instrumentation, **the log output is your primary source of truth**:
+
+1. **Use the log file**: `Run-Tests.ps1` writes to `bin\x64\Debug\TestName.log`. Use `Read` to examine it — don't just grep stdout
+2. **Read before changing**: After each run, read the full debug output before making any code change
+3. **Believe the output**: If output contradicts your theory, your theory is wrong
+4. **No guessing**: If the output doesn't answer your question, add more instrumentation — don't speculate
+5. **Stack traces selectively**: Start with lightweight logging to see how often code runs, then add `Environment.StackTrace` to the specific cases of interest. Use `StackTraceLogger` (`TestUtil/StackTraceLogger.cs`) for scoped logging that filters out expected callers
 
 ## Bisection Pattern
 
