@@ -85,6 +85,64 @@ Console.WriteLine($"[DEBUG] Instance: {RuntimeHelpers.GetHashCode(this)}");
 
 Run the test, read the output, understand the behavior. Repeat.
 
+### CRITICAL: Capturing and Analyzing Debug Output
+
+Once you add printf instrumentation, **the logged output becomes your primary source of truth**. Everything you do must be driven by what the output tells you.
+
+**Use the log file, not just console grep.** `Run-Tests.ps1` writes all test output to a log file at `bin\x64\Debug\TestName.log`. This is printed at the end of every run. Use the Read tool to examine the full log:
+
+```bash
+# Run the test
+pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestSomething"
+
+# Then READ the log file - don't just grep for fragments
+Read("C:\proj\pwiz\pwiz_tools\Skyline\bin\x64\Debug\TestSomething.log")
+```
+
+**Why Read instead of grep:** When you grep stdout for `[DEBUG]`, you only see your tagged lines in isolation. The log file shows them **interleaved with test framework output**, giving you the full sequence of events. You need this context to understand what happened when.
+
+**The discipline after each run:**
+1. Read the complete debug output from the log file
+2. Before making any code change, write down what the output tells you
+3. If the output doesn't answer your question, add more instrumentation — don't guess
+4. If the output contradicts your theory, **believe the output, not your theory**
+
+**Common failure mode:** You add good instrumentation, run the test, see the output, but then ignore it and make a guess-based code change anyway. This defeats the purpose. The output is telling you what happened — read it carefully and let it guide your next step.
+
+### Use Stack Traces to Understand Call Flow
+
+A debugger's greatest advantage over printf debugging is showing *how code was called*, not just *that it was called*. Stack traces close this gap — but they're verbose, so use them strategically.
+
+**Two-phase approach:**
+
+1. **Start with lightweight instrumentation** to understand *how often* and *in what contexts* code runs:
+   ```csharp
+   Console.WriteLine($"[DEBUG] CloseInapplicableForms: formCount={forms.Count}, listCount={listCount}");
+   ```
+
+2. **Add stack traces selectively** once you know which calls are interesting. If a method is called 50 times but only one call matters, gate the stack trace:
+   ```csharp
+   if (docIdChanged && listCount == 0)  // Only the case we care about
+       Console.WriteLine($"[DEBUG] Stack:\n{Environment.StackTrace}");
+   ```
+
+Stack traces tell you:
+- **Who called this method** — was it triggered by NewDocument, OpenFile, or something else?
+- **What thread you're on** — UI thread, background thread, or a BeginInvoke callback?
+- **Whether the call is synchronous or deferred** — is this inside the operation or queued for later?
+
+Without a stack trace, you'll waste cycles guessing whether a method is being called directly, via BeginInvoke, from a timer, or from an event handler. With a stack trace, one run answers all of these.
+
+**For scoped stack trace logging**, use `StackTraceLogger` (`TestUtil/StackTraceLogger.cs`). It logs stack traces only when the call does NOT come from an expected path — perfect for finding unexpected callers:
+
+```csharp
+// Log document changes NOT originating from ImportFasta
+using (new DocChangeLogger("SkylineWindow.ImportFasta"))
+{
+    SuspectedOperation();  // Only unexpected doc changes get logged with stack traces
+}
+```
+
 ### Diagnostic Output Toolkit
 
 Common C# patterns for printf debugging:
@@ -100,6 +158,20 @@ Common C# patterns for printf debugging:
 | Accurate line numbers | `[MethodImpl(MethodImplOptions.NoOptimization)]` on method |
 
 **NoOptimization for exception diagnostics:** JIT optimization can inline methods and reorder code, causing exception stack traces to report inaccurate line numbers. When an exception report points to a line that doesn't make sense (e.g., a null dereference where no null is possible), adding `[MethodImpl(MethodImplOptions.NoOptimization)]` to the method ensures the next occurrence reports the true source line. This is a low-cost, permanent instrumentation — it disables optimization for a single method while preserving it everywhere else. Requires `using System.Runtime.CompilerServices`.
+
+### Anti-Pattern: Reverting to Guess-and-Test
+
+The most dangerous failure mode in debugging is: you add good instrumentation, run the test, see the output — and then **ignore the output and start making speculative code changes**.
+
+Signs you've fallen into guess-and-test:
+- You're changing production code hoping to fix the test without understanding why the current code fails
+- You haven't read the full debug output from the last run
+- Your "fix" is based on a theory about timing, threading, or async behavior that you haven't proven with instrumentation
+- You're making multiple changes per cycle instead of one change to answer one question
+
+**When you catch yourself guessing, stop and ask:** "What does my debug output actually say?" If the output doesn't answer your question, add more instrumentation. If it does answer it, read it more carefully — the answer is often already there.
+
+**Concrete example:** If debug output shows `listCount=1` when you expected `listCount=0` after `NewDocument()`, don't hypothesize about `BeginInvoke` timing. The output is telling you the list genuinely exists. Investigate *why* the list exists, not why some cleanup mechanism "didn't fire fast enough."
 
 ### Bisection
 
