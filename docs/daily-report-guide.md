@@ -180,12 +180,13 @@ When a computer is in `ignored_computers`:
 2. **Failures/leaks**: Still collect data but filter from "Key Findings"
 3. **Alarms**: Check `alarm_date` at report start; if due/overdue, include reminder in email
 4. **Historical data**: Continue saving to daily-summary JSON for historical record
+5. **Auto-restore**: If an ignored computer reports test results for the current day, **remove it from `ignored_computers` automatically**. The machine is back online and should no longer be treated as missing or flagged with a reason banner. Log the removal in the suggested-actions file.
 
 ### Managing Ignored Computers
 
 **To ignore a computer**: Add entry to `computer-status.json` with reason and optional alarm
 
-**To restore a computer**: Remove entry from `ignored_computers` object
+**To restore a computer**: Remove entry from `ignored_computers` object (also happens automatically when the computer reports results — see Auto-restore above)
 
 **To update alarm**: Edit the `alarm_date` and `alarm_note` fields
 
