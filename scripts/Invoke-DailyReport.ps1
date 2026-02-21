@@ -424,6 +424,19 @@ if ($OverallExitCode -ne 0) {
     Write-Error "One or more phases failed. See log: $LogFile"
 }
 
+# Archive daily data to network drive before cleanup
+$ArchiveScript = Join-Path $WorkDir "ai\scripts\Archive-DailyReports.ps1"
+if (Test-Path $ArchiveScript) {
+    "[$(Get-Date)] Archiving daily reports to network drive..." | Out-File -FilePath $LogFile -Append -Encoding UTF8
+    try {
+        & $ArchiveScript 2>&1 | Out-File -FilePath $LogFile -Append -Encoding UTF8
+        "[$(Get-Date)] Archive complete" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+    }
+    catch {
+        "[$(Get-Date)] WARNING: Archive failed: $_ (continuing with cleanup)" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+    }
+}
+
 # Clean up old date folders (keep 30 days)
 $DailyRoot = Join-Path $WorkDir "ai\.tmp\daily"
 Get-ChildItem -Path $DailyRoot -Directory |
