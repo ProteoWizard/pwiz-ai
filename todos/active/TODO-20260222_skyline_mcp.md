@@ -1,4 +1,12 @@
-# TODO: Skyline MCP Server
+# TODO-20260222_skyline_mcp.md
+
+## Branch Information
+- **Branch**: `Skyline/work/20260222_skyline_mcp`
+- **Base**: `master`
+- **Created**: 2026-02-22
+- **Status**: In Progress
+- **GitHub Issue**: (pending)
+- **PR**: (pending)
 
 ## Overview
 
