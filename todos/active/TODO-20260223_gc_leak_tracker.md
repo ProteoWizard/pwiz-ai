@@ -5,102 +5,60 @@
 - **Base**: `master`
 - **Created**: 2026-02-23
 - **Status**: In Progress
-- **Related**: [PR #4032](https://github.com/ProteoWizard/pwiz/pull/4032) (Nick Shulman - MemoryLeaks fix), [PR #4033](https://github.com/ProteoWizard/pwiz/pull/4033) (ConnectionPool diagnostics)
+- **Related**: [PR #4032](https://github.com/ProteoWizard/pwiz/pull/4032) (Nick Shulman - MemoryLeaks fix, MERGED), [PR #4033](https://github.com/ProteoWizard/pwiz/pull/4033) (ConnectionPool diagnostics)
 - **PR**: (pending)
 
-## Problem
+## Current State (save point for context compaction)
 
-PR #4032 fixes memory leaks where static references kept `SkylineWindow` and
-`SrmDocument` alive after tests ended (PollingCancellationToken holding
-SrmDocument via delegate, RemoteSession/RemoteUrl holding SkylineWindow).
-We need a regression test to prevent silent re-introduction of such leaks.
+### What's done - committed on branch
+One commit `2e7f2e18a` rebased on top of master (which includes Nick's PR #4032):
 
-## Approach
+**Files changed (all paths relative to `pwiz_tools/Skyline/`):**
+- `TestRunnerLib/GarbageCollectionTracker.cs` - **New file**. Static class with `Register(Type, object)`, `CheckForLeaks()`, `Clear()`. Groups survivors by `Type.Name` with counts (e.g. `SrmDocument x5`).
+- `TestRunnerLib/TestRunnerLib.csproj` - Added Compile entry for new file
+- `TestRunnerLib/RunTests.cs` - After `FlushMemory()` (~line 500): if test passed, calls `CheckForLeaks()` and fails test on leak; if test already failed, calls `Clear()`. Uses `!!! GC-LEAK` prefix matching existing `!!! CRT-LEAKED` pattern.
+- `Program.cs` - Added `IGarbageCollectionTracker` interface (takes `Type type, object target`) and `static IGarbageCollectionTracker GcTracker` property (null in production)
+- `Skyline.cs` - SkylineWindow constructor calls `Program.GcTracker?.Register(typeof(SkylineWindow), this)`. `SetDocument()` calls `Program.GcTracker?.Register(typeof(SrmDocument), docNew)` after successful CAS swap - this tracks EVERY document that becomes active.
+- `TestUtil/TestFunctional.cs` - `RunFunctionalTestOrThrow()` sets `Program.GcTracker = new GcTrackerAdapter()`. Added `GcTrackerAdapter` internal class at end of file that bridges `IGarbageCollectionTracker` to TestRunnerLib's static `GarbageCollectionTracker.Register()`.
 
-A static tracker using weak references, inspired by a Java pattern of using
-weak-reference maps to assert that primary objects are properly released after
-each test. The tracker:
+### Test results
+1. **Against unfixed master (before Nick's PR):** Both `AlertDlgIconsTest` and `TestDiaSearchFixedWindows` correctly fail with `!!! GC-LEAK Objects not garbage collected after test: SkylineWindow, SrmDocument`
+2. **566 unit tests pass** - no false positives or NREs from the tracker
+3. **After rebasing on master with Nick's PR #4032 merged:** Tests STILL FAIL with same leak message. This means **Nick's fixes alone are not sufficient** to resolve all GC roots keeping SkylineWindow and SrmDocument alive.
 
-1. **Registers** objects expected to be GC'd (SkylineWindow, SrmDocument)
-2. **Verifies** they were collected after `FlushMemory()` does a full GC
-3. **Fails the test** if any survive, catching regressions immediately
+### What needs investigation
+Nick's PR fixed:
+- `PollingCancellationToken` thread now joins on Dispose (releases SrmDocument delegate)
+- `SkylineRemoteAccountServices` singleton replaces `RemoteUrl.RemoteAccountStorage = this` (breaks SkylineWindow static reference)
 
-## Files to Modify
+But `RemoteSession.RemoteAccountUserInteraction = this` is still set in SkylineWindow constructor (line 198). Nick's `OnClosed` handler nulls it, but the question is whether OnClosed runs reliably in test cleanup. There may be additional static reference chains.
 
-| File | Change |
-|------|--------|
-| `TestRunnerLib/GarbageCollectionTracker.cs` | **New** - static tracker class |
-| `TestRunnerLib/TestRunnerLib.csproj` | Add Compile entry |
-| `TestUtil/TestFunctional.cs` | Register objects in `EndTest()` |
-| `TestRunnerLib/RunTests.cs` | Check for leaks after `FlushMemory()` |
-
-All paths relative to `pwiz_tools/Skyline/`.
+**Next step:** Investigate which static references are still holding SkylineWindow alive after test cleanup. Check `RemoteSession.RemoteAccountUserInteraction`, and look for other statics that reference SkylineWindow. May need to use ConnectionPool tracking (PR #4033) or add diagnostic output to identify the GC root chain.
 
 ## Design
 
-### GarbageCollectionTracker (new file in TestRunnerLib)
+### Architecture (interface-based, as implemented)
 
-Static class with three methods:
+```
+Skyline project:
+  IGarbageCollectionTracker interface on Program
+  Program.GcTracker static property (null in production)
+  SkylineWindow constructor -> registers this
+  SetDocument -> registers every SrmDocument
 
-- **`Register(string name, object target)`** - Stores a `WeakReference` with a
-  descriptive name. No-op if target is null. Only a WeakReference is held, so
-  registration itself does not prevent collection.
-- **`CheckForLeaks()`** - Returns null if all tracked objects were collected, or
-  an error message listing survivors. Always clears the tracker.
-- **`Clear()`** - Clears tracked objects without checking. Used when a test has
-  already failed and leak checking would produce misleading noise.
+TestRunnerLib project:
+  GarbageCollectionTracker static class (Register, CheckForLeaks, Clear)
+  RunTests.Run() -> checks after FlushMemory
 
-Lives in TestRunnerLib (not CommonUtil) because the check point is in
-`RunTests.Run()`. Uses non-generic `WeakReference` since TestRunnerLib cannot
-reference Skyline types. Thread-safe via lock.
-
-### Registration in TestFunctional.EndTest()
-
-Insert after line 2733 (the early-return for null/disposed window), before
-the `try` block at line 2735:
-
-```csharp
-// Track primary objects for GC verification after test cleanup
-GarbageCollectionTracker.Register("SkylineWindow", skylineWindow);
-GarbageCollectionTracker.Register("SrmDocument", skylineWindow.Document);
+TestUtil project:
+  GcTrackerAdapter bridges IGarbageCollectionTracker to static GarbageCollectionTracker
+  RunFunctionalTestOrThrow -> sets Program.GcTracker = new GcTrackerAdapter()
 ```
 
-- After the null/disposed check, so we only track when a real window exists
-- Before `SwitchDocument` replaces the document
-- Uses `Document` (thread-safe) not `DocumentUI` (UI-thread only)
-- `using TestRunnerLib;` already present at line 67
-
-### Leak Check in RunTests.Run()
-
-Insert after `FlushMemory()` at line 499, before `_process.Refresh()`:
-
-```csharp
-// Check for GC leaks - objects registered by test code that should
-// have been collected after FlushMemory's full GC cycle
-if (exception != null)
-{
-    GarbageCollectionTracker.Clear();
-}
-else
-{
-    var leakMessage = GarbageCollectionTracker.CheckForLeaks();
-    if (leakMessage != null)
-    {
-        Log("!!! {0} GC-LEAK {1}\r\n", test.TestMethod.Name, leakMessage);
-        exception = new Exception(leakMessage);
-    }
-}
-```
-
-- FlushMemory has done `GC.Collect()` x2 + `WaitForPendingFinalizers()`
-- All test stack frames are gone (test method returned)
-- `Program.MainWindow` is null
-- Follows existing `!!! CRT-LEAKED` pattern (line 589)
-- Skips check when test already failed to avoid noise
-
-## Edge Cases
-
-- **Unit tests**: Never register anything, `CheckForLeaks()` returns null
-- **Test already failed**: `Clear()` resets without checking
-- **StartPage-only tests**: `EndTest()` early-returns before registration
-- **Stress testing loops**: `CheckForLeaks()` always clears after checking
+Key design decisions:
+- Interface in Skyline lets objects register themselves at the source
+- TestRunnerLib holds tracking logic (where FlushMemory and RunTests.Run live)
+- TestUtil bridges the two (references both assemblies)
+- `Type` parameter lets tracker decide naming (currently uses `Type.Name`)
+- Survivors grouped by type with counts for concise reporting
+- Non-generic `WeakReference` since TestRunnerLib can't reference Skyline types
