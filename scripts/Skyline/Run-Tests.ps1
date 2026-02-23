@@ -130,7 +130,7 @@ param(
     [int]$MemoryProfileWarmup = 5,  # Warmup iterations before first snapshot
 
     [Parameter(Mandatory=$false)]
-    [int]$MemoryProfileWaitRuns = 10,  # Iterations between first and second snapshot
+    [int]$MemoryProfileWaitRuns = 10,  # Iterations between first and second snapshot (0 = single snapshot only)
 
     [Parameter(Mandatory=$false)]
     [switch]$MemoryProfileCollectAllocations = $false,  # Collect allocation stack traces
@@ -551,12 +551,16 @@ try {
             $runnerArgs = @("buildcheck=1") + $commonArgs
         } else {
             # Use loop parameter if specified, otherwise default to 1 (run once)
-            # For memory profiling, need at least warmup + waitruns iterations
+            # For memory profiling, need at least warmup (+ waitruns if > 0) iterations
             $loopValue = if ($Loop -gt 0) { $Loop } else { 1 }
             if ($MemoryProfile) {
                 $minLoops = $MemoryProfileWarmup + $MemoryProfileWaitRuns
                 if ($loopValue -lt $minLoops) {
-                    Write-Host "⚠️ Adjusting loop count from $loopValue to $minLoops for memory profiling (warmup=$MemoryProfileWarmup + wait=$MemoryProfileWaitRuns)" -ForegroundColor Yellow
+                    if ($MemoryProfileWaitRuns -gt 0) {
+                        Write-Host "⚠️ Adjusting loop count from $loopValue to $minLoops for memory profiling (warmup=$MemoryProfileWarmup + wait=$MemoryProfileWaitRuns)" -ForegroundColor Yellow
+                    } else {
+                        Write-Host "⚠️ Adjusting loop count from $loopValue to $minLoops for memory profiling (warmup=$MemoryProfileWarmup, single snapshot)" -ForegroundColor Yellow
+                    }
                     $loopValue = $minLoops
                 }
             }
@@ -795,8 +799,12 @@ try {
             Write-Host "`n   To analyze:" -ForegroundColor Cyan
             Write-Host "   1. Open dotMemory GUI" -ForegroundColor Gray
             Write-Host "   2. File > Open > Select the workspace file" -ForegroundColor Gray
-            Write-Host "   3. Compare the two snapshots (warmup vs analysis)" -ForegroundColor Gray
-            Write-Host "   4. Look for objects that grew between snapshots" -ForegroundColor Gray
+            if ($MemoryProfileWaitRuns -gt 0) {
+                Write-Host "   3. Compare the two snapshots (warmup vs analysis)" -ForegroundColor Gray
+                Write-Host "   4. Look for objects that grew between snapshots" -ForegroundColor Gray
+            } else {
+                Write-Host "   3. Inspect the snapshot for retention paths" -ForegroundColor Gray
+            }
         }
 
         # Report performance profile results if enabled
