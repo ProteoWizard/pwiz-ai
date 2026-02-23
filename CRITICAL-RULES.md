@@ -32,6 +32,7 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 ## Testing - Translation-Proof
 - **NEVER** use English text literals in test assertions
 - **ALWAYS** use resource strings for expected text
+- **ALWAYS** prefer `AssertEx` over `Assert` — better diagnostics and consistency
 - **ALWAYS** use `AssertEx.Contains()` not `Assert.IsTrue(string.Contains())`
 - **ALWAYS** use `HttpClientTestHelper.GetExpectedMessage()` for network errors
 
