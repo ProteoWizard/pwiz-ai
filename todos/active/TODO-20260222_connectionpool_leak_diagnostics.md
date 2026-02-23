@@ -2,7 +2,8 @@
 
 **Created**: 2026-02-22
 **Branch**: `Skyline/work/20260222_connectionpool_leak_diagnostics`
-**Status**: Ready for PR
+**Status**: PR open
+**PR**: [#4033](https://github.com/ProteoWizard/pwiz/pull/4033)
 
 ## Goal
 
