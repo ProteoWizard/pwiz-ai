@@ -223,19 +223,53 @@ For each test failure in the **"Needs Attention"** section of the failures repor
 - Priority: [HIGH if NEW/REGRESSION, MEDIUM if RECURRING, LOW if CHRONIC]
 ```
 
-#### Leak Work Items
+#### Leak Work Items — Regression Detection First
 
-For each leak:
+**Before investigating individual leaks, triage the full leak picture.** Leaks that appear
+as a group are almost always a single regression, not many independent problems.
+
+##### Red Flags (any one of these = probable regression, Priority HIGH)
+
+1. **More than 2 leaks on any single machine** — A normal night has 0-2 sporadic leaks.
+   Three or more on one machine is abnormal.
+2. **Same tests leaking on multiple machines with the same git hash** — Chronic leaks are
+   machine-specific (hardware, drivers). When the same tests leak on 3+ machines running
+   the same commit, that's a code change causing it.
+3. **Extreme count** — 10+ distinct tests leaking at once is never chronic. Chronic leaks
+   affect 1-3 specific tests consistently over weeks.
+
+When any red flag is present:
+
+```markdown
+### LEAK REGRESSION: [N] tests leaking across [M] machines
+- Git hash: [hash from nightly report]
+- Machines affected: [list]
+- Steps:
+  1. Compare against previous day: did these tests leak yesterday?
+     query_test_runs(days=3, container_path="...")  — check leak counts on prior runs
+  2. Identify the causing commit range:
+     git log --oneline <previous_clean_hash>..<leaking_hash>
+  3. Look for PRs merged in that range:
+     gh pr list --state merged --search "merged:YYYY-MM-DD" --limit 20
+  4. Focus on PRs that touch test infrastructure, IDisposable, static fields, or
+     resource management — these are the most common leak regression sources
+  5. Write findings to ai/.tmp/suggested-actions-YYYYMMDD.md
+- Priority: HIGH — this blocks nightly signal quality until fixed
+```
+
+##### Chronic Leaks (no red flags)
+
+If leaks are 1-2 per machine, different tests on different machines, and
+`query_test_history` confirms they've been present for weeks:
 
 ```markdown
 ### Leak: [test name] on [computer]
 - Run ID: [id]
 - Steps:
   1. get_run_leaks(run_id=XXXXX)
-  2. query_test_history(test_name="TestName") — check if chronic
-  3. If new leak, read test code to identify resource handling
-  4. Write findings to ai/.tmp/suggested-actions-YYYYMMDD.md
-- Priority: [HIGH if NEW, LOW if CHRONIC]
+  2. query_test_history(test_name="TestName") — confirm chronic (30+ days)
+  3. Write findings to ai/.tmp/suggested-actions-YYYYMMDD.md
+- Priority: LOW (chronic, monitoring)
 ```
 
 #### Infrastructure Work Items

@@ -644,6 +644,66 @@ list_computer_status(container_path="/home/development/Nightly x64")
 
 **→ Write findings to `suggested-actions-YYYYMMDD.md` immediately**
 
+### Investigate Leaks
+
+**Triage the leak picture as a whole before investigating individual tests.**
+Leak regressions typically affect many tests at once because the root cause is in shared
+infrastructure (test framework, resource management, static state) rather than in individual
+test logic.
+
+#### Red Flags — Any One Means Regression
+
+| Signal | Normal Night | Regression |
+|--------|-------------|------------|
+| Leaks per machine | 0–2 sporadic | 3+ on any single machine |
+| Cross-machine pattern | Different tests on different machines | Same tests on multiple machines, same git hash |
+| Total leak count | 1–5 across all folders | 10+ distinct tests |
+
+These signals compound. On Feb 24, 2026, all three were present simultaneously — 93 tests
+leaking across 6 machines on the same git hash — and the root cause was a single static
+bool in ConnectionPool (PR #4033) that contaminated all unit tests after any functional test
+set it. The fix was 3 lines (PR #4037).
+
+#### When Red Flags Are Present
+
+This is **highest priority** — a leak regression drowns out all other leak signal.
+
+**A. Confirm it's new — compare to previous day**
+```
+query_test_runs(days=3, container_path="...")
+```
+Check leak counts on prior runs. If yesterday had 0 leaks and today has 30, that's definitive.
+
+**B. Identify the causing commits**
+```bash
+# Find the git hash range between clean and leaking runs
+git log --oneline <clean_hash>..<leaking_hash>
+```
+
+**C. Find the causing PR**
+```bash
+gh pr list --state merged --search "merged:YYYY-MM-DD" --limit 20 --json number,title,mergedAt
+```
+Focus on PRs touching:
+- Test infrastructure (`TestUtil/`, `TestRunnerLib/`, `AbstractUnitTest`, `AbstractFunctionalTest`)
+- Static fields, singletons, or global state
+- `IDisposable` implementations or resource management
+- Stream/connection pooling
+
+**D. Write findings immediately** — a leak regression is urgent because it masks real leaks
+until fixed.
+
+#### Chronic Leaks (No Red Flags)
+
+When leaks are 1–2 per machine, different tests on different machines, and
+`query_test_history` confirms they've been present for 30+ days:
+
+- Classify as **CHRONIC** with LOW priority
+- Note in suggested-actions but don't investigate further
+- Focus investigation time on failures and exceptions instead
+
+**→ Write findings to `suggested-actions-YYYYMMDD.md` immediately**
+
 ---
 
 ## Email Format
