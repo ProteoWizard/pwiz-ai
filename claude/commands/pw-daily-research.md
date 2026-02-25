@@ -158,6 +158,11 @@ gh issue list --state all --limit 30 --json number,title,state,createdAt
 
 **2. Check past suggested-actions files**
 Read recent files (last 3-5 days) to see what was previously identified.
+Check both locations (pre- and post-consolidation):
+```bash
+ls ai/.tmp/suggested-actions-*.md
+ls ai/.tmp/daily/*/suggested-actions.md
+```
 
 **3. Check exception/test history via MCP**
 ```
@@ -223,38 +228,66 @@ For each test failure in the **"Needs Attention"** section of the failures repor
 - Priority: [HIGH if NEW/REGRESSION, MEDIUM if RECURRING, LOW if CHRONIC]
 ```
 
-#### Leak Work Items — Regression Detection First
+#### Leak and Failure Regression Detection
 
-**Before investigating individual leaks, triage the full leak picture.** Leaks that appear
-as a group are almost always a single regression, not many independent problems.
+**Before investigating individual leaks or failures, check for regressions.**
 
-##### Red Flags (any one of these = probable regression, Priority HIGH)
+A regression introduced by one commit can cause dozens of tests to fail or leak.
+Once the fix merges, machines still running the old code produce **echoes** — failures
+or leaks that look new but are just the same regression on pre-fix runs.
 
-1. **More than 2 leaks on any single machine** — A normal night has 0-2 sporadic leaks.
-   Three or more on one machine is abnormal.
-2. **Same tests leaking on multiple machines with the same git hash** — Chronic leaks are
-   machine-specific (hardware, drivers). When the same tests leak on 3+ machines running
-   the same commit, that's a code change causing it.
-3. **Extreme count** — 10+ distinct tests leaking at once is never chronic. Chronic leaks
-   affect 1-3 specific tests consistently over weeks.
+For **failures**, echo detection is automatic: the fingerprint system groups by stack
+trace, so recording one fix covers all machines.
 
-When any red flag is present:
+For **leaks**, there are no fingerprints. Echo detection must be done by **git hash**:
+if the leaking runs are on a known regression hash and clean runs exist on the fix hash,
+ALL leaks on the regression hash are echoes. Do not investigate or record them individually.
 
+##### Red Flags (any one = probable regression, Priority HIGH)
+
+These apply to both leaks and failures:
+
+1. **More than 2 leaks on any single machine** — normal is 0-2 sporadic.
+2. **Same tests affected on multiple machines with the same git hash** — a code change
+   is the cause, not machine-specific issues.
+3. **Extreme count** — 10+ distinct tests affected at once is never chronic.
+
+##### When Red Flags Are Present
+
+**Step 1 — Check if these are echoes of a known regression.**
+Read the previous day's suggested-actions (`ai/.tmp/daily/YYYY-MM-DD/suggested-actions.md`).
+If it describes this regression with a fix PR already merged, compare git hashes:
+- Leaking runs on the regression hash (or between regression and fix) → echoes
+- Clean runs on the fix hash → fix confirmed
+
+If echoes:
+```markdown
+### REGRESSION ECHOES: [N] leaks across [M] machines — already FIXED
+- Regression: PR #NNNN ([causing_hash]) — identified [date]
+- Fix: PR #MMMM ([fix_hash]) — merged [date]
+- Echoes: [M] machines on [causing_hash] show [N] leaks (pre-fix runs)
+- Proof: [K] machines on [fix_hash] show 0 leaks
+- Status: Fix confirmed. All future runs expected clean.
+- Priority: RESOLVED — do not investigate individual tests
+```
+
+**Step 2 — If this is a new regression** (not in previous findings):
 ```markdown
 ### LEAK REGRESSION: [N] tests leaking across [M] machines
 - Git hash: [hash from nightly report]
 - Machines affected: [list]
 - Steps:
   1. Compare against previous day: did these tests leak yesterday?
-     query_test_runs(days=3, container_path="...")  — check leak counts on prior runs
-  2. Identify the causing commit range:
-     git log --oneline <previous_clean_hash>..<leaking_hash>
-  3. Look for PRs merged in that range:
+     query_test_runs(days=3, container_path="...")
+  2. Check if later runs in today's window are clean (fix already landed?)
+  3. Identify the causing commit range:
+     git log --oneline <clean_hash>..<leaking_hash>
+  4. Find the causing PR:
      gh pr list --state merged --search "merged:YYYY-MM-DD" --limit 20
-  4. Focus on PRs that touch test infrastructure, IDisposable, static fields, or
-     resource management — these are the most common leak regression sources
-  5. Write findings to ai/.tmp/suggested-actions-YYYYMMDD.md
-- Priority: HIGH — this blocks nightly signal quality until fixed
+  5. Focus on PRs touching test infrastructure, IDisposable, static fields,
+     or resource management
+  6. Write findings to ai/.tmp/suggested-actions-YYYYMMDD.md
+- Priority: HIGH — regression drowns out all other signal until fixed
 ```
 
 ##### Chronic Leaks (no red flags)
