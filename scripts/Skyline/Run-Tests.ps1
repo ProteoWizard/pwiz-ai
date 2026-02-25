@@ -554,6 +554,11 @@ try {
             # For memory profiling, need at least warmup (+ waitruns if > 0) iterations
             $loopValue = if ($Loop -gt 0) { $Loop } else { 1 }
             if ($MemoryProfile) {
+                # Single-snapshot mode (WaitRuns=0) is for PinSurvivors retention path analysis
+                # and only needs 1 warmup run. Multi-snapshot comparison needs more warmup.
+                if ($MemoryProfileWaitRuns -eq 0 -and $MemoryProfileWarmup -eq 5) {
+                    $MemoryProfileWarmup = 1
+                }
                 $minLoops = $MemoryProfileWarmup + $MemoryProfileWaitRuns
                 if ($loopValue -lt $minLoops) {
                     if ($MemoryProfileWaitRuns -gt 0) {

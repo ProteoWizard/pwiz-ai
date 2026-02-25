@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260224_connectionpool_unit_test_cleanup`
 - **Base**: `master`
 - **Created**: 2026-02-24
-- **Status**: In Review
+- **Status**: In Progress - all 6 GC leak failures fixed, awaiting TeamCity
 - **GitHub Issue**: (none - bug fix for PR #4033)
 - **PR**: #4038 (full cleanup), #4037 (minimal fix, merged)
 
@@ -21,34 +21,32 @@ set it, all subsequent unit tests accumulated `StackTrace` strings in `_history`
 - [x] Add ConnectionPool tracking init/cleanup to `AbstractUnitTest`
 - [x] Scope functional test tracking to `WaitForSkyline()` via `ScopedAction`
 - [x] Fix Quality tab Pass 1 skip bug (added `qualityonly` flag)
-- [x] Fix dotMemory snapshot regression from PR #4034
-- [x] Add `dotmemoryattests` feature for targeted memory snapshots
-- [x] Address Copilot review: move ScopedAction to cover EndTest()
-- [x] Address Nick's review: make TrackHistory an instance field
-- [x] Remove HasPooledStreams/ReportPooledStreams from IStreamManager interface
-- [x] Add StartTrackingHistory/EndTrackingHistory methods to ConnectionPool and FileStreamManager
-- [x] ReportPooledConnections returns null when no connections open
-- [x] Merge master after #4037 merged, resolve conflict
-- [x] Build, CodeInspection, and reproduction test all pass
+- [x] Fix GC leak tracker being disabled by default `dotmemorywarmup=5` (changed to `HasArg` check)
+- [x] Fix 6 GC leak tracker failures exposed by the above fix:
+  - [x] UpgradeErrorsFunctionalTest, UpgradeBasicFunctionalTest, UpgradeCancelFunctionalTest - TestDeployment IDisposable
+  - [x] TestPeakAreaRelativeAbundanceGraph - ReplicateCachingReceiver Start/EndTrackCaching
+  - [x] TestKoinaSkylineIntegration, TestEncyclopeDiaSearch - GraphSpectrum OnHandleDestroyed
+- [x] Fix Run-Tests.ps1 warmup default for PinSurvivors mode (WaitRuns=0 → warmup=1)
+- [ ] Run all 6 tests together on TeamCity to confirm (pushed, awaiting results)
+- [ ] Document GC leak tracker debugging workflow in leak-debugging-guide.md
 
-## Key Design Decisions
+## Root Cause Analysis
 
-1. **Two PRs**: #4037 (3-line minimal fix) merged immediately to fix nightly leaks.
-   #4038 (full cleanup) follows with all improvements.
-2. **TrackHistory as instance field**: Nick's review pointed out the static was the root
-   problem. Making it per-instance on ConnectionPool eliminates cross-test contamination
-   and makes FileStreamManager the clean interface for test code.
-3. **Rejected HistoryTracking IDisposable class**: Added complexity (fields, null checks,
-   split reporting paths) without clear benefit for test infrastructure code.
-4. **StartTrackingHistory/EndTrackingHistory**: Named methods with clear semantics.
-   Start clears stale history then enables. End disables then clears to free memory.
+PR #4034 added `GarbageCollectionTracker` to check that `SkylineWindow` and `SrmDocument`
+are garbage collected after each functional test. However, the default args string in
+`Program.cs` had `dotmemorywarmup=5`, and the condition `if (dotMemoryWarmup > 0)` was
+always true. This caused `PinSurvivors()` (silent) to be called instead of `CheckForLeaks()`
+(reports failures) for **every test**. The GC tracker was effectively disabled from the
+moment it was added.
 
-## Files Modified
-- `pwiz_tools/Skyline/Util/UtilIO.cs` - Instance TrackHistory, Start/End methods, null return
-- `pwiz_tools/Skyline/TestUtil/AbstractUnitTest.cs` - Init/cleanup through FileStreamManager
-- `pwiz_tools/Skyline/TestUtil/TestFunctional.cs` - ScopedAction with method groups
-- `pwiz_tools/Skyline/TestUtil/MemoryStreamManager.cs` - Removed unused members
-- `pwiz_tools/Skyline/Test/ConnectionPoolTest.cs` - Updated for new API
-- `pwiz_tools/Skyline/SkylineTester/TabQuality.cs` - qualityonly flag
-- `pwiz_tools/Skyline/TestRunner/Program.cs` - qualityonly, dotMemory fixes
-- `pwiz_tools/Skyline/TestRunnerLib/RunTests.cs` - dotmemoryattests feature
+Our branch changed the condition to `commandLineArgs.HasArg(...)` which only fires when
+the arg is explicitly passed on the command line, not just present in defaults. This
+enabled `CheckForLeaks()` for the first time, exposing 6 pre-existing leaks.
+
+## GC Leaks Fixed
+
+| Test | Root Cause | Fix |
+|------|-----------|-----|
+| Upgrade* (3 tests) | Static `UpgradeManager.AppDeployment` → `TestDeployment._completed` delegate → `UpgradeManager._parentWindow` → SkylineWindow | Made TestDeployment IDisposable, `using` pattern |
+| TestPeakAreaRelativeAbundanceGraph | Static `ReplicateCachingReceiver._cachedSinceTracked` list holding GraphData with SrmDocument | Replaced TrackCaching property with Start/EndTrackCaching methods |
+| TestKoinaSkylineIntegration, TestEncyclopeDiaSearch | `GraphSpectrum.UpdateManager` Timer → EventHandler → SkylineWindow | Added `OnHandleDestroyed` to dispose UpdateManager |
