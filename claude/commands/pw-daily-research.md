@@ -193,11 +193,17 @@ For each exception in the **"Needs Attention"** section of the exception report:
 - Version: [version] — check code in the relevant pwiz checkout (release branch or master)
 - Steps:
   1. get_exception_details(exception_id=XXXXX)
-  2. Read code at stack trace location
+  2. Read code at stack trace location — understand the actual failure mechanism,
+     not just the crashing line. Trace backward: what state causes this? What code
+     paths lead to that state? Check error paths (exceptions in event handlers,
+     failed background work) that could leave the program in this state.
   3. git blame to understand context
-  4. Check if already fixed on master (gh pr list --state merged --search "filename")
-  5. If fixed on master, check cherry-pick to release branch:
-     gh pr list --state all --base Skyline/skyline_26_1 --search "Cherry pick of #NNNN" --json number,title,state,mergedAt
+  4. **If old version**: verify bug still exists on master. Check PRs that touched
+     this code since the reported version:
+     git log --oneline <old_version_tag>..HEAD -- path/to/File.cs
+     Do NOT recommend a GitHub issue without confirming the bug is still present.
+  5. If confirmed on master, check cherry-pick to release branch:
+     gh pr list --state all --base Skyline/skyline_26_1 --search "Cherry pick of #NNNN"
   6. Write findings to ai/.tmp/suggested-actions-YYYYMMDD.md
 - Priority: [HIGH if user provided email, MEDIUM otherwise]
 ```
@@ -205,11 +211,16 @@ For each exception in the **"Needs Attention"** section of the exception report:
 **For each exception** — follow the investigation steps from [daily-report-guide.md](../../ai/docs/daily-report-guide.md):
 - Get stack trace via `get_exception_details`
 - Read the code at the stack trace location
+- Understand the actual failure mechanism — trace backward from the crash to understand
+  what state the program must be in. Don't guess at surface-level explanations.
 - Use `git blame` to understand context
+- **For old versions**: verify the bug still exists on current code before recommending action.
+  Check PRs that touched the file since the reported version. If you cannot confirm,
+  state that explicitly rather than assuming the bug persists.
 - Classify: user-actionable (catch + friendly error) vs programming defect (fix the logic)
-- **Both categories are bugs that need code changes and GitHub issues.** Never classify an exception as "user-environment / no code change needed." If a team member responded with a workaround, the code should show that same guidance automatically.
-- Formulate root cause
-- Create GitHub issue
+- **Both categories are bugs that need code changes and GitHub issues.** Never classify an exception as "user-environment / no code change needed."
+- Formulate root cause — the actual mechanism, not a surface-level guess
+- Create GitHub issue only if confirmed on current code
 
 #### Test Failure Work Items
 

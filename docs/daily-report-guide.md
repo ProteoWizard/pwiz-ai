@@ -584,22 +584,60 @@ gh pr list --state merged --search "filename:SomeFile.cs" --limit 10
 ```
 
 **E. Check version distribution** (helps prioritize)
-- Only in old versions? → Likely already fixed
+- Only in old versions? → **Verify against current code before proceeding** (see step F)
 - Only in newest version? → Recent regression
 - Across many versions? → Long-standing bug
 
-**F. Formulate root cause**
+**F. For old-version exceptions: verify the bug still exists**
 
-Not just "what failed" but "why":
+If the exception is from an older release (e.g., 24.1 when we're preparing 26.1), the
+code may have changed significantly since then. **Do not recommend a GitHub issue without
+verifying the bug still exists on master or the current release branch.**
+
+1. **Find the same code on master** — the line numbers will have shifted. Search for the
+   specific assertion, method name, or error message from the stack trace.
+2. **Understand the actual failure mechanism** — don't stop at the exception line. Trace
+   backward: what state must the program be in to reach this point? What code paths lead
+   to that state? Read the calling methods, not just the crashing line.
+3. **Check all code paths, including error paths** — exceptions in event handlers, failed
+   background operations, and swallowed errors often leave UI in inconsistent states. The
+   obvious explanation (race condition, null check) may not be the actual cause.
+4. **Check PRs that touched this code since the reported version:**
+   ```bash
+   git log --oneline <old_version_tag>..HEAD -- path/to/File.cs
+   ```
+   Read each PR description. Any of them may have fixed this as a primary goal or side effect.
+5. **Only recommend a GitHub issue if the bug is confirmed to still exist** on current code.
+   If you cannot confirm, say so: "Bug reported on 24.1. The code has changed since then
+   (PRs #XXXX, #YYYY). Unable to confirm whether the bug still reproduces on master."
+
+**Example of insufficient analysis** (Feb 24, 2026): An AssumptionException on version 24.1
+in `ImportTransitionListColumnSelectDlg.OkDialog` was initially attributed to a "UI race
+condition" and flagged as NEEDS GITHUB ISSUE. Deeper investigation showed:
+- The `Assume.IsTrue` fires when `isAssociated` is false but the checkbox is checked
+- The initial analysis assumed the user clicked OK during a background operation, but
+  `LongWaitDlg.PerformWork` is modal — the user cannot interact with the parent form
+- The actual cause: if `AssociateProteins` throws (e.g., corrupt proteome DB), the
+  exception propagates through the event handler, gets swallowed by WinForms, and
+  the checkbox remains checked while `isAssociated` stays false — an error path bug
+- Two PRs (#3814, #3914) had since touched this exact code area
+- The recommendation should have been to verify whether those PRs addressed the error
+  path, not to immediately file a new issue
+
+**G. Formulate root cause**
+
+Not just "what failed" but "why this state was reachable":
+- What state must the program be in to hit this exception?
+- What code path leads to that state? (Trace backward from the crash)
 - Why wasn't this caught by existing error handling?
-- Are there similar exceptions that ARE handled correctly?
-- What pattern was used elsewhere that should apply here?
+- Are there error paths (exceptions in event handlers, failed background work) that
+  could leave the program in this state?
 
-**G. Draft a GitHub issue** if this is a real bug:
+**H. Draft a GitHub issue** if the bug is confirmed on current code:
 - Clear title
 - **Link to source data on skyline.ms** (exception report, test run, or failure history page)
 - Stack trace from exception report
-- Root cause analysis (the WHY)
+- Root cause analysis (the WHY — the actual mechanism, not a surface-level guess)
 - Suggested fix with specific file/line references
 
 **→ Write findings to `suggested-actions-YYYYMMDD.md` immediately**
