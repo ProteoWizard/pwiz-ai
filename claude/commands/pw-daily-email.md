@@ -136,6 +136,23 @@ Follow the existing format from daily-report-guide.md:
 - If marked as "already fixed", show the FIXED badge with PR link
 - If an exception has both a tracked issue AND a fix PR, show both (e.g., "Tracked in #3979, FIXED by PR#3985 + cherry-pick PR#3988")
 
+### CRITICAL: Leak Categorization — Defer to Research Findings
+
+**Never independently categorize leaks.** The research phase analyzes leaks as a whole
+(comparing git hashes, checking test history, reading previous findings) and writes its
+categorization to `suggested-actions`. The email phase must use that categorization, not
+re-analyze the nightly report's leak list.
+
+Specifically:
+- If suggested-actions says "REGRESSION ECHOES" and lists specific tests, report ALL
+  of those tests as echoes — do not re-categorize based on test names
+- **Always include the fix PR** (e.g., "FIXED by PR #MMMM") when reporting echoes,
+  not just the git hash. The fix PR is the key information for the reader.
+- Test names do NOT indicate leak causes. Tests named "AgilentFormatsTest" can leak
+  due to shared infrastructure regressions, not Agilent-specific code. Never label
+  leaks as "chronic [vendor] leaks" based on the test name alone.
+- Only categorize a leak as "chronic" if the research phase explicitly says so
+
 **CRITICAL: Link all issue and PR references to GitHub.** Every `#XXXX` must link to
 `https://github.com/ProteoWizard/pwiz/issues/XXXX` and every `PR#XXXX` must link to
 `https://github.com/ProteoWizard/pwiz/pull/XXXX`. Never render bare numbers without hyperlinks.

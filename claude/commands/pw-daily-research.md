@@ -271,16 +271,31 @@ If it describes this regression with a fix PR already merged, compare git hashes
 - Leaking runs on the regression hash (or between regression and fix) → echoes
 - Clean runs on the fix hash → fix confirmed
 
-If echoes:
+**Step 1b — Confirm the fix PR from the test history database.**
+Query `query_test_history(test_name="...")` for at least one of the leaking tests.
+The fix PR should be recorded there (via `record_test_fix`). This provides independent
+confirmation of the fix PR number without relying solely on yesterday's suggested-actions.
+
+If echoes, write the report with **all of the following required elements**:
 ```markdown
-### REGRESSION ECHOES: [N] leaks across [M] machines — already FIXED
+### REGRESSION ECHOES: [N] leaks across [M] machines — already FIXED by PR #MMMM
 - Regression: PR #NNNN ([causing_hash]) — identified [date]
-- Fix: PR #MMMM ([fix_hash]) — merged [date]
+- Fix: **PR #MMMM** ([fix_hash]) — merged [date]
 - Echoes: [M] machines on [causing_hash] show [N] leaks (pre-fix runs)
 - Proof: [K] machines on [fix_hash] show 0 leaks
+- ALL leaking tests in today's report are echoes:
+  [list every test name from the nightly report's Leaks by Test section]
 - Status: Fix confirmed. All future runs expected clean.
 - Priority: RESOLVED — do not investigate individual tests
 ```
+
+**CRITICAL**: The echo report MUST include:
+1. **The fix PR number** — not just the git hash. The reader needs to know which PR
+   fixed the regression. Query `query_test_history` to confirm if not in yesterday's findings.
+2. **Every leaking test name** — list them explicitly so the email phase does not
+   independently re-categorize individual tests. ALL leaks on the regression hash are
+   echoes, regardless of test name (e.g., tests named "Agilent..." are not "chronic
+   Agilent leaks" — they are echoes of the same regression as every other test).
 
 **Step 2 — If this is a new regression** (not in previous findings):
 ```markdown

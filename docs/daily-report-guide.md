@@ -720,11 +720,23 @@ When today's report shows leaks or failures that might be echoes:
    identified causing and fix commits
 2. **Compare git hashes** — if leaking runs are on the regression hash (or between
    the regression and fix hashes), they are echoes
-3. **Look for proof the fix works** — runs on a later hash (at or after the fix commit)
+3. **Confirm the fix PR from test history** — query `query_test_history(test_name="...")`
+   for at least one of the leaking tests. The fix PR should be recorded via
+   `record_test_fix`. This confirms the fix PR number independently.
+4. **Look for proof the fix works** — runs on a later hash (at or after the fix commit)
    with 0 leaks/failures confirm the regression is resolved
-4. **Report as echoes** — state clearly: "N leaks across M machines are echoes of
-   [regression PR]. Fix [PR] merged [date]. K machines on [fix hash] show 0 leaks,
-   confirming fix works. All future runs expected clean."
+5. **Report as echoes with ALL required elements**:
+   - The **fix PR number** (not just the hash) — the reader needs "FIXED by PR #MMMM"
+   - **Every leaking test name** — list them explicitly so downstream consumers (email
+     phase) cannot independently re-categorize individual tests
+   - The causing PR, fix hash, proof (clean runs), and status
+
+**Why explicit test names matter**: A regression in shared infrastructure (e.g.,
+ConnectionPool, test framework) causes ALL tests to leak, regardless of what the test
+exercises. Tests named "AgilentFormatsTest" or "WatersLockmassChromatogramTest" are not
+leaking because of Agilent or Waters code — they leak because of the shared regression.
+Without an explicit list, downstream reporting may see vendor names in test names and
+incorrectly categorize them as chronic vendor-specific leaks.
 
 ### Investigate Leaks
 
@@ -754,6 +766,13 @@ This is **highest priority** — a leak regression drowns out all other leak sig
 a fix PR already merged, check if the leaking runs are on the pre-fix hash. If yes,
 classify ALL leaks on that hash as echoes (see "Recognizing echoes" above). Do not
 investigate individual tests.
+
+Also confirm the fix PR from the test history database:
+```
+query_test_history(test_name="AnyLeakingTestName")
+```
+The fix should be recorded there via `record_test_fix`. This provides the fix PR number
+independently, which is **required** in the echo report — not just the git hash.
 
 **B. Check if some runs in today's window are clean** — Look for runs on a LATER git hash
 with 0 leaks. This proves the fix works:
