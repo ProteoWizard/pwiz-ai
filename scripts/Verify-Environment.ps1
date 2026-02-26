@@ -13,6 +13,7 @@
     Array of optional component names to skip. Valid values:
     - netrc: Skip .netrc credentials check (LabKey API access)
     - labkey: Skip LabKey MCP Server registration check
+    - teamcity: Skip TeamCity MCP Server registration check
 
 .EXAMPLE
     .\Verify-Environment.ps1
@@ -23,8 +24,8 @@
     Run checks but skip .netrc credentials (deferred for later setup)
 
 .EXAMPLE
-    .\Verify-Environment.ps1 -Skip netrc,labkey
-    Skip both netrc and LabKey MCP Server checks
+    .\Verify-Environment.ps1 -Skip netrc,labkey,teamcity
+    Skip netrc, LabKey, and TeamCity MCP Server checks
 
 .NOTES
     Author: LLM-assisted development
@@ -36,7 +37,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("netrc", "labkey")]
+    [ValidateSet("netrc", "labkey", "teamcity")]
     [string[]]$Skip = @()
 )
 
@@ -634,6 +635,58 @@ if ($Skip -contains "labkey") {
         }
     } catch {
         Add-Result "LabKey MCP Server" "ERROR" "Could not check MCP status: $_" $false -SkipId "labkey"
+    }
+}
+
+# 12. TeamCity MCP Server registration (optional)
+Write-Host "Checking TeamCity MCP server..." -ForegroundColor Gray
+if ($Skip -contains "teamcity") {
+    Add-Result "TeamCity MCP Server" "SKIPPED" "Deferred (use -Skip teamcity to acknowledge)" $true -SkipId "teamcity"
+} else {
+    try {
+        $tcServerPath = Join-Path $aiRoot "mcp\TeamCityMcp\server.py"
+        $tcServerExists = Test-Path $tcServerPath
+        $tcConfigPath = Join-Path $env:USERPROFILE ".teamcity-mcp\config.json"
+        $hasTcConfig = Test-Path $tcConfigPath
+
+        # Check MCP registration in ~/.claude.json (same pattern as LabKey check)
+        $tcRegistered = $false
+        $tcDisabled = $false
+        if (Test-Path $claudeJsonPath) {
+            if (-not $projectConfig) {
+                $claudeConfig = Get-Content $claudeJsonPath -Raw | ConvertFrom-Json
+                $projKey = $projRoot -replace '\\', '/'
+                $projectConfig = $claudeConfig.projects.$projKey
+                if (-not $projectConfig) {
+                    foreach ($key in $claudeConfig.projects.PSObject.Properties.Name) {
+                        if (($key -replace '[\\/]', '') -eq ($projKey -replace '[\\/]', '')) {
+                            $projectConfig = $claudeConfig.projects.$key
+                            break
+                        }
+                    }
+                }
+            }
+            if ($projectConfig -and $projectConfig.mcpServers.teamcity) {
+                $tcRegistered = $true
+            }
+            if ($projectConfig -and $projectConfig.disabledMcpServers -contains 'teamcity') {
+                $tcDisabled = $true
+            }
+        }
+
+        if ($tcRegistered -and -not $tcDisabled -and $hasTcConfig) {
+            Add-Result "TeamCity MCP Server" "OK" "registered with config" $true -SkipId "teamcity"
+        } elseif ($tcRegistered -and $tcDisabled) {
+            Add-Result "TeamCity MCP Server" "WARN" "registered but disabled" $false -SkipId "teamcity"
+        } elseif ($tcRegistered -and -not $hasTcConfig) {
+            Add-Result "TeamCity MCP Server" "WARN" "registered but ~\.teamcity-mcp\config.json missing" $false -SkipId "teamcity"
+        } elseif ($tcServerExists -and -not $tcRegistered) {
+            Add-Result "TeamCity MCP Server" "MISSING" "See ai/docs/mcp/setup.md#teamcity-mcp" $false -SkipId "teamcity"
+        } else {
+            Add-Result "TeamCity MCP Server" "MISSING" "Optional - see ai/docs/mcp/setup.md#teamcity-mcp" $false -SkipId "teamcity"
+        }
+    } catch {
+        Add-Result "TeamCity MCP Server" "ERROR" "Could not check: $_" $false -SkipId "teamcity"
     }
 }
 

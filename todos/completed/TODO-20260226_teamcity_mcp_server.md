@@ -1,7 +1,9 @@
 # TODO-teamcity_mcp_server.md
 
-## Branch Information (Future)
+## Branch Information
 - **Branch**: Not applicable - Python MCP server lives in pwiz-ai (ai/) repo
+- **Created**: 2026-02-26
+- **Status**: Completed
 - **Objective**: Build a custom TeamCity MCP server for monitoring PR builds
 
 ## Background
@@ -88,36 +90,39 @@ This is why the Docker build shows "Expected — Waiting" on GitHub while bt209 
 ## Task Checklist
 
 ### Phase 1: Core Server
-- [ ] **Create `ai/mcp/TeamCityMcp/server.py`** — MCP server skeleton following LabKeyMcp patterns
+- [x] **Create `ai/mcp/TeamCityMcp/server.py`** — MCP server skeleton following LabKeyMcp patterns
   - stdio transport, Python `mcp` package
   - Auth via `~/.teamcity-mcp/config.json` (url + token)
   - Base HTTP client for TeamCity REST API with Bearer token auth
-- [ ] **`search_builds` tool** — Find builds by config ID, branch, state (running/finished), count
+- [x] **`search_builds` tool** — Find builds by config ID, branch, state (running/finished), count
   - Returns: build number, ID, status, state, branch, commit hash, start time, agent
-- [ ] **`get_build_status` tool** — Detailed status for a single build
+- [x] **`get_build_status` tool** — Detailed status for a single build
   - Returns: status, state, current step, percent complete, estimated time remaining
-- [ ] **`get_failed_tests` tool** — Structured test failure data for a build
+- [x] **`get_failed_tests` tool** — Structured test failure data for a build
   - Uses `/app/rest/testOccurrences?locator=build:(id:{buildId}),status:FAILURE`
   - Returns: test name, status, failure details/stack trace
   - This is the most important tool — replaces manual TeamCity browsing
+- [x] **`get_test_summary` tool** — Pass/fail/muted test counts for a build
+- [x] **`get_build_log` tool** — Search or tail build log (moved from Phase 2)
+  - Regex search with configurable context lines
+  - Tail last N lines
+  - Key for diagnosing failures where test results API lacks detail
 
-### Phase 2: PR Integration
+### Phase 2: PR Integration (Future)
 - [ ] **`check_pr_builds` tool** — All-in-one PR status check
   - Input: PR number (or auto-detect from current branch)
   - Maps PR-required check names to config IDs (hardcoded reference table)
   - Queries each config for builds on `pull/<PR#>` branch
   - Returns consolidated status: which checks passed, which are running, which failed
   - For failures, includes test names and failure summaries
-- [ ] **`get_build_log` tool** — Filtered build log access
-  - Filter by step, severity, or regex pattern
-  - Tail N lines option
-  - Useful for build failures (compile errors) vs test failures
 
 ### Phase 3: Documentation & Polish
-- [ ] **`ai/docs/mcp/team-city.md`** — Full documentation (replace current placeholder)
-- [ ] **Update `ai/docs/new-machine-setup.md`** — Add TeamCity MCP setup steps
+- [x] **`ai/docs/mcp/team-city.md`** — Full documentation
+- [x] **`ai/docs/mcp/setup.md`** — Consolidated MCP setup guide (extracted from new-machine-setup.md)
+- [x] **Update `ai/docs/new-machine-setup.md`** — Phase 7 now points to setup.md
+- [x] **Update `ai/scripts/Verify-Environment.ps1`** — TeamCity MCP check (optional, skippable)
+- [x] **Register command**: `claude mcp add teamcity -- python C:/proj/ai/mcp/TeamCityMcp/server.py`
 - [ ] **Add to `ai/claude/settings-defaults.local.json`** — Default permissions for TeamCity tools
-- [ ] **Register command**: `claude mcp add teamcity -- python C:/proj/ai/mcp/TeamCityMcp/server.py`
 
 ## Implementation Notes
 

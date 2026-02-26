@@ -761,94 +761,14 @@ pwsh -Command "& './ai/scripts/Verify-Environment.ps1' -Skip netrc"
 
 > **For LLM assistants:** You MUST achieve a passing verification (exit code 0) before continuing to Phase 8. If the user chooses to skip optional components, use the `-Skip` parameter explicitly. Do not proceed with MISSING or ERROR items.
 
-### 7.2 LabKey API Credentials
+### 7.2 MCP Server Setup
 
-The LabKey MCP server needs credentials for skyline.ms access.
+Follow the detailed instructions in **[ai/docs/mcp/setup.md](mcp/setup.md)** to configure:
 
-> **Existing mode**: Check if credentials are already configured:
-> ```powershell
-> Test-Path "$env:USERPROFILE\.netrc"
-> # If exists, verify it contains skyline.ms:
-> Get-Content "$env:USERPROFILE\.netrc" | Select-String "skyline.ms"
-> ```
-> If properly configured, skip to 7.3.
+- **Core servers** (required): StatusMcp, LabKey MCP
+- **Optional servers**: TeamCity MCP (PR build monitoring), Gmail (automated reports), ImageComparer (tutorial screenshots)
 
-> There needs to be a separate skyline.ms user account using a special "+claude" version of your current email address as the user name. An admin can help you with this.
-> **IMPORTANT - This uses a dedicated +claude skyline.ms account, not your personal account:**
-> - Team members: `yourname+claude@proteinms.net`
-> - Interns/others: `yourname+claude@gmail.com`
-> - The `+claude` suffix only works with Gmail-backed providers (not @uw.edu)
-> - **Ask an administrator** to create an account on skyline.ms for this "+claude" email and have them add it to the **Site:Agents** group. You will then receive an email at your normal address asking you to set a password for the new account.
->
-> **Why?** Individual +claude skyline.ms accounts provide attribution for any edits made via Claude, while the Site:Agents group has appropriate permissions for LLM agents.
-> To be clear, you aren't creating a new email address - Google ignores the +claude part for routing purposes. This is just a new user id for a new skyline.ms account. Any email it generates will go to your normal email address.
-
-Once an administrator has created your +claude account on skyline.ms, create a `.netrc` file:
-
-```powershell
-# Template - fill in your +claude credentials
-@"
-machine skyline.ms
-login yourname+claude@proteinms.net
-password your-password-here
-"@ | Out-File -FilePath "$env:USERPROFILE\.netrc" -Encoding ASCII
-```
-
-For full LabKey MCP documentation, see: `ai/mcp/LabKeyMcp/README.md`
-
-> **Deferring LabKey setup:** If you don't have a +claude account yet or want to set this up later, use `-Skip netrc` when running `Verify-Environment.ps1`. The LabKey MCP server will still be registered but will have limited functionality until credentials are configured.
-
-### 7.3 MCP Server Configuration
-
-Register the MCP servers with Claude Code.
-
-> **Existing mode**: First check which servers are already registered:
-> ```powershell
-> claude mcp list
-> ```
-> Only register servers not already in the list.
-
-**StatusMcp** - System status, git info, screenshot/clipboard capture, active project tracking:
-```powershell
-# Install dependencies (Pillow for clipboard image capture)
-pip install mcp Pillow
-
-claude mcp add status -- python ./ai/mcp/StatusMcp/server.py
-```
-
-**LabKey MCP** - Access to skyline.ms (nightly tests, exceptions, wiki, support):
-```powershell
-claude mcp add labkey -- python ./ai/mcp/LabKeyMcp/server.py
-```
-
-> **Note:** Use relative paths with forward slashes (`./ai/mcp/...`), not absolute Windows paths. The `claude mcp add` command strips backslashes, turning absolute paths like `C:\proj\ai\...` into `C:projai...` which fails to connect.
-
-**After registering new servers, restart Claude Code** to activate them:
-1. Exit Claude Code (`/exit`)
-2. Resume with `claude --continue`
-
-> **Note:** MCP servers require a Claude Code restart to become fully active, similar to how PATH updates require a terminal restart.
-
-For Gmail integration (optional, for automated reports):
-```powershell
-claude mcp add gmail -- npx @gongrzhe/server-gmail-autoauth-mcp
-```
-
-See `ai/docs/mcp/gmail.md` for Gmail OAuth setup instructions.
-
-### 7.4 Verify MCP Servers
-
-Check that MCP servers are connected:
-```powershell
-claude mcp list
-```
-
-Expected output shows servers connected:
-```
-status: python ./ai/mcp/StatusMcp/server.py - ✓ Connected
-labkey: python ./ai/mcp/LabKeyMcp/server.py - ✓ Connected
-gmail: npx @gongrzhe/server-gmail-autoauth-mcp - ✓ Connected (if configured)
-```
+The setup guide covers LabKey API credentials (`~/.netrc`), TeamCity API tokens (`~/.teamcity-mcp/config.json`), server registration commands, and verification steps.
 
 ### 7.5 Browser Markdown Viewer (Recommended)
 
