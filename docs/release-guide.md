@@ -121,7 +121,9 @@ These updates happen in two phases. See the "Skyline (release)" workflow for the
 | `Model/SkylineVersion.cs` | Add `V26_1` to `SupportedForSharing()` list |
 | `Alerts/AboutDlg.resx` | Update copyright year (e.g., "2008-2025" → "2008-2026") |
 | `Alerts/AboutDlg.ja.resx` | Update copyright year (Japanese) |
+| `Alerts/AboutDlg.zh-CHS.resx` | Update copyright year (Chinese) |
 | All `.resx` files | Find-replace "Skyline-daily" → "Skyline" (saves localization work) |
+| `Jamfile.jam` (master cherry-pick only) | Bump `SKYLINE_YEAR` to match new release (e.g., 25→26) |
 
 **Phase 2 — Release branch only** (NOT cherry-picked to master):
 
@@ -133,12 +135,6 @@ These updates happen in two phases. See the "Skyline (release)" workflow for the
 | Other project files | Find-in-Files `*.*` for remaining "Skyline-daily" (skip items marked keep) |
 | `Skyline.ico` | Overwrite with `Skyline_Release.ico` (release icon) |
 | `Resources/Skyline.bmp` | Overwrite with `Resources/Skyline_Release.bmp` (About box image) |
-
-**Phase 3 — Master branch update** (after release is published):
-
-| File | Change |
-|------|--------|
-| `Jamfile.jam` (master) | Set `SKYLINE_YEAR : 26`, `SKYLINE_ORDINAL : 1`, `SKYLINE_BRANCH : 1` |
 
 ## Release Folder Setup
 
@@ -598,27 +594,51 @@ branch via PR, then cherry-pick to master.
 
    - `Alerts/AboutDlg.resx`: Update "Copyright (c) 2008-20XX" to current year
    - `Alerts/AboutDlg.ja.resx`: Same update for Japanese localization
+   - `Alerts/AboutDlg.zh-CHS.resx`: Same update for Chinese localization
 
-3. **Find-in-Files "Skyline-daily" in all RESX files**, replace with "Skyline":
+3. **Replace "Skyline-daily" assembly references in all RESX files** with "Skyline":
 
+   ```bash
+   pwsh -Command "& 'ai/scripts/Skyline/Replace-SkylineDailyResx.ps1' -SkylineDir 'pwiz_tools/Skyline'"
+   ```
+
+   This replaces `Skyline-daily, Version=XX.X.X.XXX,` with `Skyline, Version=1.0.0.0,`
+   in all `.resx` files (excluding `Executables/AutoQC` and `Executables/SharedBatch` which
+   have intentional user-facing "Skyline-daily" references). Use `-DryRun` to preview.
    This prevents sending "Skyline-daily" strings to translators. Cherry-picking to master
    means both branches have clean strings.
 
 4. **Commit to release branch via PR**, then cherry-pick to master.
+
+5. **Bump `SKYLINE_YEAR` on the master cherry-pick branch** in Jamfile.jam:
+
+   When Phase 1 sets `DocumentFormat.CURRENT` to the new release version (e.g., 26.1),
+   master's Jamfile must also advance so `TestDocumentFormatCurrent` passes. This test
+   asserts that `DocumentFormat.CURRENT` matches the Skyline version derived from the
+   Jamfile. On master, change only `SKYLINE_YEAR` — leave `ORDINAL` and `BRANCH` as-is:
+   ```jam
+   constant SKYLINE_YEAR : 26 ;      # Was 25 — advance to match DocumentFormat 26.1
+   constant SKYLINE_ORDINAL : 1 ;    # Keep existing value
+   constant SKYLINE_BRANCH : 1 ;     # Keep as daily
+   ```
+   This produces version 26.1.1.DDD on master, which is within 0.1 of DocumentFormat 26.1.
+
+   > **Note**: This effectively moves the Phase 8 Jamfile update forward. Phase 8 no longer
+   > needs a separate Jamfile change — it just confirms the daily release is working.
 
 #### Phase 2: Release-only changes (release branch only — NOT cherry-picked to master)
 
 These changes transform the product from Skyline-daily to Skyline. They stay on the
 release branch permanently — master continues as Skyline-daily.
 
-5. **Set version on release branch** in Jamfile.jam:
+6. **Set version on release branch** in Jamfile.jam:
    ```jam
    constant SKYLINE_YEAR : 26 ;
    constant SKYLINE_ORDINAL : 1 ;   # First official release
    constant SKYLINE_BRANCH : 0 ;    # Release
    ```
 
-6. **Product rename — Find-in-Files "Skyline-daily" → "Skyline"** across the project tree:
+7. **Product rename — Find-in-Files "Skyline-daily" → "Skyline"** across the project tree:
 
    Key files to check:
    - `Skyline.csproj` — product name, assembly name
@@ -626,7 +646,7 @@ release branch permanently — master continues as Skyline-daily.
    - Any other occurrences found by searching `*.*` (use Notepad++ for thorough sweep)
    - **Skip** items intentionally marked as "keep" (references to the daily product concept)
 
-7. **Swap the application icon and About box image**:
+8. **Swap the application icon and About box image**:
    - Copy `Skyline_Release.ico` over `Skyline.ico` (taskbar/window icon)
    - Copy `Resources/Skyline_Release.bmp` over `Resources/Skyline.bmp` (Help > About image)
 
@@ -634,7 +654,7 @@ release branch permanently — master continues as Skyline-daily.
    `_Daily` variants (red "daily" banner and white arrow on red background). For
    release, they get replaced with the `_Release` variants (clean skyline image).
 
-8. **Update version in Skyline.csproj**:
+9. **Update version in Skyline.csproj**:
    ```xml
    <ApplicationRevision>DDD</ApplicationRevision>
    <ApplicationVersion>26.1.0.DDD</ApplicationVersion>
@@ -647,30 +667,30 @@ release branch permanently — master continues as Skyline-daily.
 
    **WARNING**: Never commit `<SignManifests>true</SignManifests>`. Always revert this line.
 
-9. **Update publish settings** in `Skyline.csproj.user`:
+10. **Update publish settings** in `Skyline.csproj.user`:
    - ClickOnce path: `T:\www\site\skyline.ms\html\software\Skyline-release-64_26_1\`
    - Installation URL: `https://skyline.gs.washington.edu/software/Skyline-release-64_26_1/`
 
 #### Phase 3: Build, test, verify
 
-10. **Build**: `clean.bat && bso.bat` from the release folder (e.g., `skyline_26_1`)
+11. **Build**: `clean.bat && bso.bat` from the release folder (e.g., `skyline_26_1`)
 
     **IMPORTANT**: Verify this is a **Release** build, not Debug.
 
     Verify version: `pwiz_tools\Skyline\bin\x64\Release\SkylineCmd --version`
     should show `Skyline (64-bit) 26.1.0.DDD` (note: "Skyline" not "Skyline-daily").
 
-11. **Test installation with upgrade from previous version**:
+12. **Test installation with upgrade from previous version**:
     - Install the previous release (e.g., Skyline 25.1)
     - Upgrade to the new 26.1 build
     - Verify the upgrade completes successfully
     - **Test Koina connection** — make sure it connects after upgrade
 
-12. **Commit** all release-only changes to the release branch via PR.
+13. **Commit** all release-only changes to the release branch via PR.
     **DO NOT cherry-pick to master.** These changes (product rename, icon, version) are
     release-branch-specific.
 
-13. **Tag the release**:
+14. **Tag the release**:
     ```bash
     git tag Skyline-26.1.0.DDD
     git push origin Skyline-26.1.0.DDD
@@ -685,7 +705,7 @@ Major release installers use **different paths** than Skyline-daily:
 - Uploads go to `/home/software/Skyline` container (not `/home/software/Skyline/daily`)
 - File names use `Skyline-64_` prefix (not `Skyline-daily-64_`)
 
-14. **ClickOnce to website** (Visual Studio Project Properties):
+15. **ClickOnce to website** (Visual Studio Project Properties):
 
     **Publish tab**:
     - Publishing Folder Location: `T:\www\site\skyline.ms\html\software\Skyline-release-64_26_1\`
@@ -706,7 +726,7 @@ Major release installers use **different paths** than Skyline-daily:
 
     Click **Publish Now**
 
-15. **ZIP to nexus server** (disk publish for disconnected install):
+16. **ZIP to nexus server** (disk publish for disconnected install):
 
     Change VS Publish settings for disk (no URLs):
     - Publishing Folder Location: `M:\home\brendanx\tools\Skyline\Skyline-64_26_1_0_DDD\`
@@ -721,11 +741,11 @@ Major release installers use **different paths** than Skyline-daily:
 
     **IMPORTANT**: The ZIP must contain the folder as the root entry (not just contents).
 
-16. **MSI preparation**:
+17. **MSI preparation**:
     - Copy `bin\x64\Skyline-26.1.0.DDD-x86_64.msi` to `M:\home\brendanx\tools\Skyline\`
     - Rename to `Skyline-Installer-64_26_1_0_DDD.msi`
 
-17. **Upload to FileContent** (automated via MCP):
+18. **Upload to FileContent** (automated via MCP):
     ```python
     # Upload ZIP — note: /home/software/Skyline (not /daily)
     upload_file(
@@ -744,7 +764,7 @@ Major release installers use **different paths** than Skyline-daily:
 
     Verify uploads with `list_files(container_path="/home/software/Skyline", subfolder="installers")`.
 
-18. **Update wiki download pages** in `/home/software/Skyline` (automated via MCP):
+19. **Update wiki download pages** in `/home/software/Skyline` (automated via MCP):
 
     Two pages need updating:
     ```python
@@ -759,7 +779,7 @@ Major release installers use **different paths** than Skyline-daily:
     update_wiki_page("install-administator-64", container_path="/home/software/Skyline", new_body=...)
     ```
 
-19. **VERIFY downloads** before proceeding:
+20. **VERIFY downloads** before proceeding:
 
     1. Open both wiki pages in a browser
     2. Click "I Agree" and then "Download"
@@ -767,26 +787,26 @@ Major release installers use **different paths** than Skyline-daily:
 
 #### Phase 5: Docker
 
-20. **Deploy Docker image** via TeamCity:
+21. **Deploy Docker image** via TeamCity:
     - Use [Skyline Release Branch publish](https://teamcity.labkey.org/viewType.html?buildTypeId=ProteoWizard_ProteoWizardPublishDockerAndSingularityImagesSkylineReleaseBranch) (not the daily one)
     - Verify at [DockerHub Tags](https://hub.docker.com/r/proteowizard/pwiz-skyline-i-agree-to-the-vendor-licenses/tags)
 
 #### Phase 6: Website and wiki updates
 
-21. **Create new install page** `SkylineInstall_64_26-1`:
+22. **Create new install page** `SkylineInstall_64_26-1`:
     - Copy content from the previous version's page (`SkylineInstall_64_25-1`)
     - Update all version references (25.1 → 26.1)
     - Update the ClickOnce install URL to the new `Skyline-release-64_26_1` path
 
-22. **Update the `default` (homepage) wiki page** in `/home/software/Skyline`:
+23. **Update the `default` (homepage) wiki page** in `/home/software/Skyline`:
     - Change install button link from `SkylineInstall_64_25-1` to `SkylineInstall_64_26-1`
     - Change button text (e.g., "Skyline 25.1 - 64 bit" → "Skyline 26.1")
 
-23. **Update short URL redirects**:
+24. **Update short URL redirects**:
     - `skyline64.url` must redirect to the new install page (`SkylineInstall_64_26-1`)
     - Check for any other short URLs containing old version numbers
 
-24. **Tutorial versioning**:
+25. **Tutorial versioning**:
     - Copy tutorials to release directory on the web server:
       ```cmd
       xcopy /E /I <release folder>\pwiz_tools\Skyline\Documentation\Tutorials T:\www\site\skyline.ms\html\tutorials\26-1
@@ -797,7 +817,7 @@ Major release installers use **different paths** than Skyline-daily:
       var tutorialAltVersion = '';           // Clear pre-release (no more 26-0-9)
       ```
 
-25. **Update Release Notes wiki page** (`Release Notes` in `/home/software/Skyline`):
+26. **Update Release Notes wiki page** (`Release Notes` in `/home/software/Skyline`):
     - Add "Skyline v26.1" section at the top with the full feature list
 
 #### Phase 7: Announcements (before first post-release daily)
@@ -805,11 +825,11 @@ Major release installers use **different paths** than Skyline-daily:
 The release email goes out **before** updating master for the first post-release
 Skyline-daily. This ensures the major release announcement is the first thing users see.
 
-26. **Generate major release notes** — see "Generating Major Release Notes" below.
+27. **Generate major release notes** — see "Generating Major Release Notes" below.
     This aggregates all Skyline-daily announcements since the last major release,
     removes attribution and cycle-internal fixes, and reorganizes by importance.
 
-27. **Post to skyline.ms** (automated via MCP):
+28. **Post to skyline.ms** (automated via MCP):
     ```python
     # Major releases go to /releases container (NOT /daily)
     post_announcement(
@@ -819,10 +839,10 @@ Skyline-daily. This ensures the major release announcement is the first thing us
     )
     ```
 
-28. **Update Release Notes wiki page** (`Release Notes` in `/home/software/Skyline`):
+29. **Update Release Notes wiki page** (`Release Notes` in `/home/software/Skyline`):
     Add a "Skyline v26.1 Released on MM/DD/YYYY" section at the top.
 
-29. **MailChimp email** to the full Skyline list (~23,500 users):
+30. **MailChimp email** to the full Skyline list (~23,500 users):
     - Major releases go to the **entire** Skyline list (not just the beta list)
     - Copy previous major release email as template
     - See MailChimp workflow in the Release Notes section below
@@ -830,17 +850,12 @@ Skyline-daily. This ensures the major release announcement is the first thing us
 
 #### Phase 8: Master branch update and first Skyline-daily
 
-30. **Update master version** in Jamfile.jam:
-    ```jam
-    constant SKYLINE_YEAR : 26 ;
-    constant SKYLINE_ORDINAL : 1 ;
-    constant SKYLINE_BRANCH : 1 ;    # Back to daily
-    ```
+31. **Verify master Jamfile is already at 26.1.1**: The Phase 1 cherry-pick to master
+    included bumping `SKYLINE_YEAR` (see Phase 1 step 5), so master should already be
+    producing version 26.1.1.DDD. Confirm with `gh pr checks` that the cherry-pick PR
+    passed all CI checks.
 
-    This is now possible because the Format/Schema/SupportedForSharing changes from Phase 1
-    were already cherry-picked to master. The version/format tests will pass.
-
-31. **First Skyline-daily 26.1.1.DDD** releases from master via the normal nightly build
+32. **First Skyline-daily 26.1.1.DDD** releases from master via the normal nightly build
     process. This should happen on the same day as the major release so Skyline-daily users
     see 26.1.1 as an upgrade containing new features accumulated during FEATURE COMPLETE,
     rather than switching to the nearly-identical 26.1.0.
@@ -877,7 +892,7 @@ branch using the same install paths as the major release.
    - Test upgrade from the previous patch (or initial release if first patch)
    - Test Koina connection
 5. **Commit and tag**: `Skyline-26.1.0.DDD` (new day number)
-6. **Publish installers**: Same paths as the major release (steps 14-19 above)
+6. **Publish installers**: Same paths as the major release (steps 15-20 above)
    - ClickOnce to `T:\...\Skyline-release-64_26_1\` (same folder, overwrites)
    - ZIP/MSI to `M:\...\Skyline\` with new version number
    - Upload to `/home/software/Skyline` container
