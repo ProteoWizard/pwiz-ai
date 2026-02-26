@@ -1,9 +1,11 @@
 """Build search and status tools for TeamCity MCP server."""
 
 import logging
+import re
 import urllib.parse
 
 from .common import (
+    tc_request,
     tc_request_xml,
     tc_request_json,
     parse_build_xml,
@@ -145,3 +147,100 @@ def register_tools(mcp):
         except Exception as e:
             logger.error(f"Error getting build status: {e}", exc_info=True)
             return f"Error getting build status: {e}"
+
+    @mcp.tool()
+    async def get_build_log(
+        build_id: int,
+        search: str = None,
+        context: int = 5,
+        tail: int = 0,
+    ) -> str:
+        """Search or tail the build log for a TeamCity build.
+
+        Use 'search' to find specific text (exceptions, errors, test names).
+        Use 'tail' to get the last N lines of the log.
+        If neither is specified, returns a summary with line count and
+        the last 30 lines.
+
+        For test failures, often the build log contains the real diagnostic
+        info (stack traces, assembly load errors) that the test results API
+        doesn't capture.
+
+        Args:
+            build_id: TeamCity build ID (numeric, e.g., 3867235)
+            search: Regex pattern to search for (e.g., 'Could not load|exception')
+            context: Number of context lines around each match (default 5)
+            tail: Return last N lines of the log (0 = disabled)
+
+        Returns:
+            Matching log lines with context, or tail of the log.
+        """
+        try:
+            data = tc_request(
+                f"/downloadBuildLog.html?buildId={build_id}",
+                accept="text/plain",
+                timeout=60,
+            )
+            log_text = data.decode("utf-8", errors="replace")
+            lines = log_text.split("\n")
+            total = len(lines)
+
+            if tail > 0:
+                # Return last N lines
+                start = max(0, total - tail)
+                result_lines = [f"Build {build_id} log — last {tail} of {total} lines:"]
+                result_lines.append("")
+                for i in range(start, total):
+                    result_lines.append(lines[i].rstrip())
+                return "\n".join(result_lines)
+
+            if search:
+                # Search with context
+                try:
+                    pattern = re.compile(search, re.IGNORECASE)
+                except re.error as e:
+                    return f"Invalid regex pattern: {e}"
+
+                matches = []
+                for i, line in enumerate(lines):
+                    if pattern.search(line):
+                        matches.append(i)
+
+                if not matches:
+                    return f"No matches for '{search}' in build {build_id} log ({total} lines)."
+
+                # Deduplicate overlapping context windows
+                result_lines = [
+                    f"Build {build_id} log — {len(matches)} match(es) "
+                    f"for '{search}' in {total} lines:"
+                ]
+                result_lines.append("")
+
+                shown = set()
+                for match_idx in matches:
+                    start = max(0, match_idx - context)
+                    end = min(total, match_idx + context + 1)
+                    if start in shown:
+                        continue
+                    if shown:
+                        result_lines.append("---")
+                    for j in range(start, end):
+                        marker = ">>>" if j == match_idx else "   "
+                        result_lines.append(f"{marker} {j}: {lines[j].rstrip()}")
+                        shown.add(j)
+
+                return "\n".join(result_lines)
+
+            # Default: summary + last 30 lines
+            result_lines = [f"Build {build_id} log — {total} lines total."]
+            result_lines.append("")
+            result_lines.append("Last 30 lines:")
+            result_lines.append("")
+            start = max(0, total - 30)
+            for i in range(start, total):
+                result_lines.append(lines[i].rstrip())
+            return "\n".join(result_lines)
+
+        except Exception as e:
+            logger.error(f"Error getting build log: {e}", exc_info=True)
+            return f"Error getting build log: {e}"
