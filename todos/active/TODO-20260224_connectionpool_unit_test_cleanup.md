@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260224_connectionpool_unit_test_cleanup`
 - **Base**: `master`
 - **Created**: 2026-02-24
-- **Status**: In Progress - all 6 GC leak failures fixed, awaiting TeamCity
+- **Status**: In Progress - snapshot-on-leak mode added, GraphSpectrum race fixed
 - **GitHub Issue**: (none - bug fix for PR #4033)
 - **PR**: #4038 (full cleanup), #4037 (minimal fix, merged)
 
@@ -26,9 +26,18 @@ set it, all subsequent unit tests accumulated `StackTrace` strings in `_history`
   - [x] UpgradeErrorsFunctionalTest, UpgradeBasicFunctionalTest, UpgradeCancelFunctionalTest - TestDeployment IDisposable
   - [x] TestPeakAreaRelativeAbundanceGraph - ReplicateCachingReceiver Start/EndTrackCaching
   - [x] TestKoinaSkylineIntegration, TestEncyclopeDiaSearch - GraphSpectrum OnHandleDestroyed
-- [x] Fix Run-Tests.ps1 warmup default for PinSurvivors mode (WaitRuns=0 → warmup=1)
+- [x] Fix Run-Tests.ps1 warmup default for PinSurvivors mode (WaitRuns=0 -> warmup=1)
+- [x] Add snapshot-on-leak mode: auto-snapshot when GC leak detected under dotMemory
+  - [x] Added MemoryProfiler.IsReady property
+  - [x] Consolidated all GC checking into GarbageCollectionTracker.CheckAfterTest()
+  - [x] Added CheckAndPinLeaks() for atomic check+pin+snapshot
+  - [x] Updated Run-Tests.ps1: -MemoryProfile without -MemoryProfileWarmup/-MemoryProfileWaitRuns defaults to snapshot-on-leak
+- [x] Fixed GraphSpectrum Timer race condition (intermittent GC leak in TestStandardType)
+  - [x] Added _disposed guard to UpdateManager.QueueUpdate() to prevent restart after Dispose()
+  - [x] Unhook Timer.Tick in Dispose() to break reference chain
+  - [x] Verified: 20-loop run under dotMemory with zero GC leaks
 - [ ] Run all 6 tests together on TeamCity to confirm (pushed, awaiting results)
-- [ ] Document GC leak tracker debugging workflow in leak-debugging-guide.md
+- [x] Document GC leak tracker debugging workflow in leak-debugging-guide.md
 
 ## Root Cause Analysis
 
@@ -49,4 +58,5 @@ enabled `CheckForLeaks()` for the first time, exposing 6 pre-existing leaks.
 |------|-----------|-----|
 | Upgrade* (3 tests) | Static `UpgradeManager.AppDeployment` → `TestDeployment._completed` delegate → `UpgradeManager._parentWindow` → SkylineWindow | Made TestDeployment IDisposable, `using` pattern |
 | TestPeakAreaRelativeAbundanceGraph | Static `ReplicateCachingReceiver._cachedSinceTracked` list holding GraphData with SrmDocument | Replaced TrackCaching property with Start/EndTrackCaching methods |
-| TestKoinaSkylineIntegration, TestEncyclopeDiaSearch | `GraphSpectrum.UpdateManager` Timer → EventHandler → SkylineWindow | Added `OnHandleDestroyed` to dispose UpdateManager |
+| TestKoinaSkylineIntegration, TestEncyclopeDiaSearch | `GraphSpectrum.UpdateManager` Timer -> EventHandler -> SkylineWindow | Added `OnHandleDestroyed` to dispose UpdateManager |
+| TestStandardType (intermittent) | Same Timer race: QueueUpdate() restarts timer after Dispose() | Added `_disposed` guard + unhook Tick event in Dispose() |
