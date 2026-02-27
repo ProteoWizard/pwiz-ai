@@ -441,8 +441,8 @@ Pre-release stabilization period before official release.
       get_wiki_page("install-administrator-64", container_path="/home/software/Skyline/daily")
 
       # Update pages with new version (change _004 to _021 etc. in download URLs)
-      update_wiki_page("install-disconnected-64", container_path="/home/software/Skyline/daily", new_body=...)
-      update_wiki_page("install-administrator-64", container_path="/home/software/Skyline/daily", new_body=...)
+      update_wiki_page("install-disconnected-64", container_path="/home/software/Skyline/daily", body_file="ai/.tmp/wiki-page-updated.html")
+      update_wiki_page("install-administrator-64", container_path="/home/software/Skyline/daily", body_file="ai/.tmp/wiki-page-updated.html")
       ```
 
    f. **VERIFY downloads before proceeding**:
@@ -519,7 +519,7 @@ Pre-release stabilization period before official release.
    # Skyline-daily and FEATURE COMPLETE — post to /daily container
    post_announcement(
        title="Skyline-daily 26.0.9.021",
-       body=approved_release_notes,  # Markdown content
+       body_file="ai/.tmp/release-notes-26.0.9.021.md",
        container_path="/home/software/Skyline/daily",
    )
    ```
@@ -776,12 +776,12 @@ Major release installers use **different paths** than Skyline-daily:
     # ZIP download page
     get_wiki_page("install-64-disconnected", container_path="/home/software/Skyline")
     # Update: title to "Skyline 26.1", download URL to new ZIP, add 25.1 to archive list
-    update_wiki_page("install-64-disconnected", container_path="/home/software/Skyline", new_body=...)
+    update_wiki_page("install-64-disconnected", container_path="/home/software/Skyline", body_file="ai/.tmp/wiki-page-updated.html")
 
     # MSI download page
     get_wiki_page("install-administator-64", container_path="/home/software/Skyline")
     # Update: title to "Skyline 26.1", download URL to new MSI
-    update_wiki_page("install-administator-64", container_path="/home/software/Skyline", new_body=...)
+    update_wiki_page("install-administator-64", container_path="/home/software/Skyline", body_file="ai/.tmp/wiki-page-updated.html")
     ```
 
 20. **VERIFY downloads** before proceeding:
@@ -806,6 +806,13 @@ Major release installers use **different paths** than Skyline-daily:
     - Copy content from the previous version's page (`SkylineInstall_64_25-1`)
     - Update all version references (25.1 → 26.1)
     - Update the ClickOnce install URL to the new `Skyline-release-64_26_1` path
+
+    **GOTCHA — Infinite refresh loop**: The install page contains JavaScript that
+    redirects to itself (e.g., `SkylineInstall_64_26-1&submit=false`). If you rename
+    the page but don't update the JavaScript self-references, the page enters an
+    infinite refresh loop. Search for ALL occurrences of the old version in the page
+    body — there are typically 5 references: 3 `SkylineInstall_64_` links and
+    2 `Skyline-release-64_` ClickOnce paths.
 
 23. **Update the `default` (homepage) wiki page** in `/home/software/Skyline`:
     - Change install button link from `SkylineInstall_64_25-1` to `SkylineInstall_64_26-1`
@@ -842,8 +849,8 @@ Skyline-daily. This ensures the major release announcement is the first thing us
     ```python
     # Major releases go to /releases container (NOT /daily)
     post_announcement(
-        title="Skyline 26.1",
-        body=approved_release_notes,
+        title="Skyline 26.1 Release",
+        body_file="ai/.tmp/release-notes-26.1.0.057.md",
         container_path="/home/software/Skyline/releases",
     )
     ```
@@ -1230,14 +1237,14 @@ These are separate channels — Skyline-daily and major releases do **not** cros
 # Skyline-daily and FEATURE COMPLETE — daily container
 post_announcement(
     title="Skyline-daily 26.0.9.021",
-    body=approved_content,
+    body_file="ai/.tmp/release-notes-26.0.9.021.md",
     container_path="/home/software/Skyline/daily",
 )
 
 # Major release and patches — releases container
 post_announcement(
-    title="Skyline 26.1",
-    body=approved_content,
+    title="Skyline 26.1 Release",
+    body_file="ai/.tmp/release-notes-26.1.0.057.md",
     container_path="/home/software/Skyline/releases",
 )
 ```
@@ -1254,7 +1261,7 @@ get_wiki_page("Release Notes", container_path="/home/software/Skyline")
 #   <li>...</li>
 #   </ul>
 # Then update the page
-update_wiki_page("Release Notes", container_path="/home/software/Skyline", new_body=...)
+update_wiki_page("Release Notes", container_path="/home/software/Skyline", body_file="ai/.tmp/wiki-page-updated.html")
 ```
 
 The heading format follows previous entries (e.g., "Skyline v25.1 Released on 5/22/2025").

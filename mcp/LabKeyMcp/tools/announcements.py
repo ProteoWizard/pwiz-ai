@@ -8,6 +8,7 @@ notifications are sent to subscribers — immediate, per-thread, and daily diges
 """
 
 import logging
+from pathlib import Path
 from urllib.parse import quote
 
 import labkey
@@ -29,25 +30,32 @@ def register_tools(mcp):
     @mcp.tool()
     async def post_announcement(
         title: str,
-        body: str,
+        body_file: str,
         renderer_type: str = "MARKDOWN",
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_ANNOUNCEMENT_CONTAINER,
     ) -> str:
         """[D] Post new announcement thread. CAUTION: Creates live content. → announcements.md"""
         try:
-            # Step 1: Establish authenticated session with CSRF token
+            # Step 1: Read body content from file
+            file_path = Path(body_file)
+            if not file_path.exists():
+                return f"body_file not found: {body_file}"
+            body = file_path.read_text(encoding="utf-8")
+            logger.info(f"Read {len(body)} chars from {body_file}")
+
+            # Step 2: Establish authenticated session with CSRF token
             logger.info(f"Establishing session for announcement in {container_path}")
             session, csrf_token = get_labkey_session(server)
 
-            # Step 2: Normalize line endings
+            # Step 3: Normalize line endings
             normalized_body = body.replace("\r\n", "\n").replace("\r", "\n")
 
-            # Step 3: Build the POST URL
+            # Step 4: Build the POST URL
             encoded_path = quote(container_path, safe="/")
             post_url = f"https://{server}{encoded_path}/announcements-insert.view"
 
-            # Step 4: Build form payload matching LabKey's announcement insert form
+            # Step 5: Build form payload matching LabKey's announcement insert form
             # Required fields: title, body, rendererType
             # Hidden fields: X-LABKEY-CSRF, cancelUrl, returnUrl, discussionSrcIdentifier
             payload = {
@@ -66,13 +74,13 @@ def register_tools(mcp):
                 "Referer": f"https://{server}{encoded_path}/announcements-insert.view",
             }
 
-            # Step 5: POST the form
+            # Step 6: POST the form
             logger.info(f"Posting announcement: {title}")
             status_code, response_text = session.post_form(
                 post_url, payload, headers=headers
             )
 
-            # Step 6: Check for errors
+            # Step 7: Check for errors
             if status_code not in (200, 302):
                 error_snippet = response_text[:500] if response_text else "(empty response)"
                 return (
@@ -80,7 +88,7 @@ def register_tools(mcp):
                     f"  Response: {error_snippet}"
                 )
 
-            # Step 7: Query for the newly created thread to get its RowId
+            # Step 8: Query for the newly created thread to get its RowId
             row_id = None
             try:
                 server_context = get_server_context(server, container_path)

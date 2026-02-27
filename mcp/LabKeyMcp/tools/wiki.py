@@ -235,23 +235,19 @@ def register_tools(mcp):
     @mcp.tool()
     async def update_wiki_page(
         page_name: str,
-        new_body: str = None,
-        body_file: str = None,
+        body_file: str,
         title: Optional[str] = None,
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_WIKI_CONTAINER,
     ) -> str:
         """[D] Update wiki page. CAUTION: Modifies live wiki. → wiki.md"""
         try:
-            # Resolve body content from either new_body or body_file
-            if body_file and not new_body:
-                file_path = Path(body_file)
-                if not file_path.exists():
-                    return f"body_file not found: {body_file}"
-                new_body = file_path.read_text(encoding="utf-8")
-                logger.info(f"Read {len(new_body)} chars from {body_file}")
-            elif not new_body:
-                return "Either new_body or body_file must be provided"
+            # Read body content from file
+            file_path = Path(body_file)
+            if not file_path.exists():
+                return f"body_file not found: {body_file}"
+            new_body = file_path.read_text(encoding="utf-8")
+            logger.info(f"Read {len(new_body)} chars from {body_file}")
 
             # Step 1: Get current page metadata (also returns the session to reuse)
             logger.info(f"Getting metadata for wiki page: {page_name}")

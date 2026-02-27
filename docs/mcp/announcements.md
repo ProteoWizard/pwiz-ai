@@ -80,7 +80,7 @@ Creates a new top-level announcement thread in any LabKey container. Uses the an
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `title` | *(required)* | Thread title |
-| `body` | *(required)* | Thread body content |
+| `body_file` | *(required)* | Path to local file containing body content |
 | `renderer_type` | `MARKDOWN` | Render format: MARKDOWN, HTML, TEXT_WITH_LINKS, RADEOX |
 | `server` | `skyline.ms` | LabKey server hostname |
 | `container_path` | `/home/software/Skyline/daily` | Target container |
@@ -88,18 +88,19 @@ Creates a new top-level announcement thread in any LabKey container. Uses the an
 **Examples:**
 
 ```python
-# Post Skyline-daily release notes
+# 1. Draft release notes to a file, review/edit with Edit tool
+# 2. Post from file — content is visible and reviewable before posting
 post_announcement(
-    title="Skyline-daily 25.1.1.150",
-    body="## Changes\n- Feature X\n- Bug fix Y",
+    title="Skyline-daily 26.1.1.058",
+    body_file="C:/proj/ai/.tmp/release-notes-26.1.1.058.md",
     container_path="/home/software/Skyline/daily",
 )
 
-# Post to support board (if needed)
+# Post to release archive
 post_announcement(
-    title="[TEST] Test post",
-    body="Testing announcement posting.",
-    container_path="/home/support",
+    title="Skyline 26.1 Release",
+    body_file="C:/proj/ai/.tmp/release-notes-26.1.0.057.md",
+    container_path="/home/software/Skyline/releases",
 )
 ```
 
