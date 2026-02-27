@@ -473,6 +473,11 @@ Pre-release stabilization period before official release.
    This is a double-check of work already verified in step 6. The Deploy button publishes
    from the Docker container build, not from a new build.
 
+   **Claude can also verify** using the TeamCity MCP (see [mcp/team-city.md](mcp/team-city.md)):
+   ```
+   search_builds(build_type_id="ProteoWizard_ProteoWizardAndSkylineReleaseBranchDockerContainerWineX8664", count=3)
+   ```
+
    - Verify at [DockerHub Tags](https://hub.docker.com/r/proteowizard/pwiz-skyline-i-agree-to-the-vendor-licenses/tags) after deployment
 
    **Verify via API** (Claude can do this automatically):
@@ -789,6 +794,10 @@ Major release installers use **different paths** than Skyline-daily:
 
 21. **Deploy Docker image** via TeamCity:
     - Use [Skyline Release Branch publish](https://teamcity.labkey.org/viewType.html?buildTypeId=ProteoWizard_ProteoWizardPublishDockerAndSingularityImagesSkylineReleaseBranch) (not the daily one)
+    - First verify the release branch Docker container build succeeded (in TeamCity UI or via MCP):
+      ```
+      search_builds(build_type_id="ProteoWizard_ProteoWizardAndSkylineReleaseBranchDockerContainerWineX8664", count=3)
+      ```
     - Verify at [DockerHub Tags](https://hub.docker.com/r/proteowizard/pwiz-skyline-i-agree-to-the-vendor-licenses/tags)
 
 #### Phase 6: Website and wiki updates
@@ -897,7 +906,7 @@ branch using the same install paths as the major release.
    - ZIP/MSI to `M:\...\Skyline\` with new version number
    - Upload to `/home/software/Skyline` container
    - Update `install-64-disconnected` and `install-administator-64` wiki pages
-7. **Deploy Docker image** via TeamCity (same config as major release)
+7. **Deploy Docker image** via TeamCity (same config as major release — see Phase 5 above)
 8. **Post release notes**: Smaller announcement — typically just the bug fixes
    - Post to `/home/software/Skyline/daily` (and optionally `/releases`)
    - Update the Release Notes wiki page

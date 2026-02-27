@@ -1,6 +1,6 @@
 # TeamCity MCP Server
 
-Monitors PR builds on `teamcity.labkey.org` — build search, test failure details, and build log search.
+Monitors builds on `teamcity.labkey.org` — PR builds, release branch builds, Docker publishing, test failures, and build logs.
 
 ## Setup
 
@@ -49,16 +49,40 @@ get_build_log(build_id=3867235, search="Could not load|Caught exception")
 
 The `get_failed_tests` tool returns what the TeamCity "Tests" tab shows. For failures where the test result is minimal (e.g., "Exit status: 1"), use `get_build_log` with a search pattern to find the actual diagnostic output in the surrounding log.
 
-## PR Check to Config ID Reference
+## Build Configuration Reference
 
-| GitHub Check Name | Config ID |
+### PR and Master Builds
+
+| Build Name | Config ID |
 |---|---|
+| Skyline Code Inspection | `ProteoWizard_WindowsX8664msvcProfessionalSkylineResharperChecks` |
 | Skyline master and PRs (Windows x86_64) | `bt209` |
+| Skyline master and PRs (Windows x86_64 debug, with code coverage) | `bt210` |
+| Skyline master and PRs TestConnected tests | `ProteoWizard_SkylineMasterAndPRsTestConnectedTests` |
+| Skyline PR Perf and Tutorial tests (Windows x86_64) | `ProteoWizard_SkylinePrPerfAndTutorialTestsWindowsX8664` |
+| ProteoWizard and Skyline Docker (Wine x86_64) | `ProteoWizardAndSkylineDockerContainerWineX8664` |
 | Core Windows x86_64 | `bt83` |
 | Core Linux x86_64 | `bt17` |
 | Core Windows x86_64 (no vendor DLLs) | `bt143` |
-| ProteoWizard and Skyline Docker (Wine x86_64) | `ProteoWizardAndSkylineDockerContainerWineX8664` |
-| Skyline master and PRs TestConnected tests | `ProteoWizard_SkylineMasterAndPRsTestConnectedTests` |
+
+### Release Branch and Docker Builds
+
+| Build Name | Config ID |
+|---|---|
+| ProteoWizard and Skyline (release branch) Docker container (Wine x86_64) | `ProteoWizard_ProteoWizardAndSkylineReleaseBranchDockerContainerWineX8664` |
+| Publish Docker image (Skyline-daily) | `ProteoWizard_ProteoWizardPublishDockerForSkylineDaily` |
+| Publish Docker image (Skyline Release Branch) | `ProteoWizard_ProteoWizardPublishDockerAndSingularityImagesSkylineReleaseBranch` |
+| Publish Docker image (Skyline-release-daily) | `ProteoWizard_ProteoWizardPublishDockerImageSkylineReleaseDaily` |
+
+**Docker publishing workflow** (see [release-guide.md](../release-guide.md)):
+- **Skyline-daily (beta)**: Use `ProteoWizard_ProteoWizardPublishDockerForSkylineDaily`
+- **Release candidates**: Use `ProteoWizard_ProteoWizardPublishDockerImageSkylineReleaseDaily`
+- **Patch releases**: Use `ProteoWizard_ProteoWizardPublishDockerAndSingularityImagesSkylineReleaseBranch`
+
+Before publishing, verify the release branch Docker container build succeeded:
+```
+search_builds(build_type_id="ProteoWizard_ProteoWizardAndSkylineReleaseBranchDockerContainerWineX8664", count=3)
+```
 
 ## Build Chain Dependencies
 
