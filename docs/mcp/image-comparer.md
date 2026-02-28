@@ -121,7 +121,8 @@ Lessons learned for building MCP servers in C#:
 1. **Clear all logging providers** — `Host.CreateApplicationBuilder` adds console logging to stdout by default, which corrupts the JSON-RPC transport
 2. **Isolate child process stdin** — Any subprocess (git, etc.) will inherit the MCP server's stdin. Set `RedirectStandardInput = true` and close it immediately
 3. **Forward slashes for paths** — JSON backslash escaping makes Windows paths problematic; accept forward slashes and normalize internally if needed
-4. **NuGet package**: `ModelContextProtocol` version 0.8.0-preview.1 (Anthropic + Microsoft joint effort)
+4. **`[JsonPropertyName]` on POCOs** — `System.Text.Json` is case-sensitive by default; snake_case JSON keys won't match PascalCase properties without explicit attributes
+5. **NuGet package**: `ModelContextProtocol` version 0.8.0-preview.1 (Anthropic + Microsoft joint effort)
 
 ## Source Files
 

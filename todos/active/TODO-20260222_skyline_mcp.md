@@ -1,320 +1,529 @@
-# TODO-20260222_skyline_mcp.md
+  ## Branch Information
+  - **Branch**: `Skyline/work/20260222_skyline_mcp`
+  - **Base**: `master`
+  - **Created**: 2026-02-22
+  - **Status**: In Progress
+  - **GitHub Issue**: (pending)
+  - **PR**: (pending)
 
-## Branch Information
-- **Branch**: `Skyline/work/20260222_skyline_mcp`
-- **Base**: `master`
-- **Created**: 2026-02-22
-- **Status**: In Progress
-- **GitHub Issue**: (pending)
-- **PR**: (pending)
+  ## Overview
 
-## Overview
+  Implement an MCP server that enables LLM applications (Claude Desktop, Claude Code) to interact with a running
+  Skyline instance through natural language. This builds on the architecture established in PR #3989 (C# .NET MCP
+  server) and Skyline's existing Interactive External Tool infrastructure.
 
-Implement an MCP server that enables LLM applications (Claude Desktop, Claude Code) to interact with a running Skyline instance through natural language. This builds on the architecture established in PR #3989 (C# .NET MCP server) and Skyline's existing Interactive External Tool infrastructure.
+  ## PR Scope
 
-## Architecture
+  Phase 1 (Connector) + Phase 2 (MCP Server) + Phase 3a (Read-Only Tools). This gives an end-to-end demo: user
+  launches connector from Skyline, then queries Skyline from Claude.
 
-```
-┌─────────────────┐          ┌─────────────────────────┐
-│ Claude Desktop  │──stdio──▶│ Skyline MCP Server      │
-│ or Claude Code  │◀─stdio───│ (.NET 8.0-windows)      │
-└─────────────────┘          └───────────┬─────────────┘
-                                         │
-                             reads ~/.skyline-mcp/connection.json
-                                         │
-                                         ▼
-                             ┌───────────────────────┐
-                             │ Named Pipe            │
-                             │ (SkylineConnection)   │
-                             └───────────┬───────────┘
-                                         │
-                                         ▼
-                             ┌───────────────────────┐
-                             │ Skyline.exe           │
-                             │ (running instance)    │
-                             └───────────────────────┘
-```
+  ## Architecture: Bridge Pattern
 
-### Two-Process Design
+  The Connector acts as a JSON-to-BinaryFormatter bridge, requiring **zero changes to Skyline core**. The wire
+  protocol modernization (SkylineTool.Core with JSON replacing BinaryFormatter) is deferred to a follow-up PR.
 
-The MCP server and the Skyline connector are separate processes with different lifecycles:
+  ```
+  Claude Code ──stdio──> SkylineMcpServer (.NET 8.0)
+                             │ JSON over named pipe
+                             v
+                         SkylineMcpConnector (.NET 4.7.2, bridge)
+                             │ BinaryFormatter over named pipe (existing SkylineToolClient)
+                             v
+                         Skyline.exe (running instance)
+  ```
 
-- **SkylineMcpConnector** — .NET Framework 4.7.2 WinForms app, launched by Skyline's External Tools menu. Writes connection info so the MCP server can find the named pipe.
-- **SkylineMcpServer** — .NET 8.0-windows console app, launched by Claude Code/Desktop as an MCP stdio server. Reads connection info, connects to Skyline via named pipe.
+  ### Why Bridge Instead of Direct JSON Wire Protocol
 
-This separation is necessary because Skyline External Tools are launched from the UI thread and must be .NET Framework apps, while the MCP server must be a long-lived .NET 8.0 stdio process.
+  - **No Skyline core changes** - lower risk, easier to merge
+  - **Uses existing SkylineToolClient** - proven, tested code for BinaryFormatter IPC
+  - **Faster to ship** - ASMS 2026 deadline is June
+  - **The connector is already long-lived** - it shows UI and manages connection lifecycle, so acting as a proxy is
+   a natural extension
+  - **Wire protocol change is independent** - can be done in a focused follow-up PR that replaces BinaryFormatter
+  in RemoteBase with JSON, then eliminates the bridge
 
-## Reference Materials
+  ### Three-Process Design
 
-- **PR #3989**: https://github.com/ProteoWizard/pwiz/pull/3989 (ImageComparer MCP — working C# MCP reference)
-- **C# MCP Pitfalls**: `ai/docs/mcp/development-guide.md` → "C# MCP Servers (.NET)" section
-- **ImageComparer MCP docs**: `ai/docs/mcp/image-comparer.md`
-- **Interactive Tool Support Doc**: https://skyline.ms/labkey/_webdav/home/software/Skyline/@files/docs/Skyline%20Interactive%20Tool%20Support-3_1.pdf
-- **Example Interactive Tool**: `pwiz/pwiz_tools/Skyline/Executables/Tools/ExampleInteractiveTool/`
-- **SkylineTool.dll**: `pwiz/pwiz_tools/Skyline/SkylineTool/` (provides SkylineToolClient)
+  | Process | Framework | Lifecycle | Role |
+  |---------|-----------|-----------|------|
+  | **Skyline.exe** | .NET Framework 4.7.2 | User-launched | Hosts RemoteService (BinaryFormatter named pipe
+  server) |
+  | **SkylineMcpConnector** | .NET Framework 4.7.2 | Launched from Skyline External Tools menu | Bridge: JSON pipe
+  server + BinaryFormatter pipe client via SkylineToolClient |
+  | **SkylineMcpServer** | .NET 8.0-windows | Launched by Claude Code/Desktop | MCP stdio server, connects to
+  connector's JSON pipe |
 
-## Wire Protocol: BinaryFormatter → JSON with POCOs
+  ## Reference Materials
 
-**SkylineTool.dll** targets .NET Framework 4.7.2 and uses `BinaryFormatter` for named pipe serialization (`RemoteBase.cs`). The MCP server targets .NET 8.0, where `BinaryFormatter` is **obsoleted and throws `PlatformNotSupportedException` by default**. This must be replaced.
+  - **PR #3989**: https://github.com/ProteoWizard/pwiz/pull/3989 (ImageComparer MCP - working C# MCP reference)
+  - **C# MCP Pitfalls**: `ai/docs/mcp/development-guide.md` -> "C# MCP Servers (.NET)" section
+  - **ImageComparer MCP docs**: `ai/docs/mcp/image-comparer.md`
+  - **ImageComparer MCP source**: `pwiz_tools/Skyline/Executables/DevTools/ImageComparer.Mcp/` (Program.cs pattern,
+   csproj, tool structure)
+  - **ImageComparer Core source**: `pwiz_tools/Skyline/Executables/DevTools/ImageComparer.Core/` (multi-target
+  netstandard2.0+net472 pattern)
+  - **Interactive Tool Support Doc**: https://skyline.ms/labkey/_webdav/home/software/Skyline/@files/docs/Skyline%2
+  0Interactive%20Tool%20Support-3_1.pdf
+  - **Example Interactive Tool**: `pwiz_tools/Skyline/Executables/Tools/ExampleInteractiveTool/` (tool-inf pattern,
+   SkylineToolClient usage, .csproj reference pattern)
+  - **SkylineTool.dll source**: `pwiz_tools/Skyline/SkylineTool/` (SkylineToolClient.cs, RemoteBase.cs,
+  RemoteClient.cs, RemoteService.cs, IToolService.cs)
 
-### Decision: JSON with System.Text.Json (POCOs)
+  ## C# MCP Implementation Notes
 
-Replace `BinaryFormatter` with JSON serialization using typed POCO models, following the same direction as the Panorama JSON cleanup (see `TODO-panorama_json_typed_models.md`).
+  All three pitfalls from ImageComparer MCP apply. See `ai/docs/mcp/development-guide.md`.
 
-**Why JSON over protobuf:**
-- The codebase already has many serialization formats (XML, protobuf, BinaryFormatter, SQLite/NHibernate, custom binary, JSON). Consolidating toward fewer paradigms is better than adding another protobuf usage area.
-- JSON is already used for LabKey Server communication and the test framework. Increasing exposure in another area builds team familiarity with a format we're already committed to.
-- `System.Text.Json` is built into .NET — zero new dependencies for either .NET Framework 4.7.2 (via NuGet) or .NET 8.0 (built-in).
-- Human-readable — invaluable for debugging named pipe communication issues.
-- The SkylineTool wire protocol is simple RPC (`RemoteInvoke { MethodName, Arguments }` → `RemoteResponse { ReturnValue, Exception }`), a natural fit for POCOs.
-- Protobuf's schema enforcement and performance advantages don't matter for a local named pipe RPC with simple request/response shapes.
+  1. **Clear logging providers** - `builder.Logging.ClearProviders()` before `AddMcpServer()`
+  2. **Isolate child process stdin** - If the MCP server ever shells out, use `RedirectStandardInput=true` +
+  `Close()`. Not needed for JSON pipe communication, but important if SkylineCmd integration is added later.
+  3. **Forward-slash paths** - `GetDocumentPath()` returns backslash paths. Any path returned to the MCP client
+  needs `path.Replace('\\', '/')`.
 
-**Implementation approach:**
-1. Create a multi-target `SkylineTool.Core` library (`net472;netstandard2.0`) with JSON-based `RemoteBase` replacement
-2. Define POCO classes for `RemoteInvoke` and `RemoteResponse` with `[JsonPropertyName]` attributes
-3. Both Skyline (server) and MCP server (client) reference SkylineTool.Core
-4. Existing `SkylineTool.dll` external tools continue to work during migration via backward compatibility or phased rollout
+  ## JSON Pipe Protocol
 
-**Related:** `ai/todos/backlog/brendanx67/TODO-panorama_json_typed_models.md` — same POCO pattern for Panorama JSON
+  Simple JSON-over-named-pipe protocol between the MCP server and the connector bridge.
 
-## C# MCP Implementation Notes
+  ### Message Framing
 
-All three pitfalls from ImageComparer MCP apply. See `ai/docs/mcp/development-guide.md`.
+  Uses `PipeTransmissionMode.Message` on Windows named pipes. Each JSON message is sent as UTF-8 bytes in a single
+  pipe message. The pipe handles message boundaries natively (via `IsMessageComplete`).
 
-1. **Clear logging providers** — `builder.Logging.ClearProviders()` before `AddMcpServer()`
-2. **Isolate child process stdin** — If the MCP server ever shells out (e.g., to SkylineCmd), use `RedirectStandardInput=true` + `Close()`. The SkylineToolClient itself uses named pipes (not subprocess), so this is less critical for Phase 3 but important for SkylineCmd integration.
-3. **Forward-slash paths** — `GetDocumentPath()` returns backslash paths. Any path returned to the MCP client needs `path.Replace('\\', '/')`. Accept forward slashes in path parameters and normalize with `NormalizePath()` at API boundary.
+  ### Request Format
 
-## Phase 1: Skyline Connector Tool (.NET Framework 4.7.2)
+  ```json
+  {"method": "GetDocumentPath", "args": []}
+  {"method": "GetReport", "args": ["Peak Area"]}
+  {"method": "GetSelectedElementLocator", "args": ["Molecule"]}
+  ```
 
-A minimal Skyline External Tool that writes the connection info for the MCP server.
+  ### Response Format
 
-### Tasks
+  ```json
+  {"result": "C:/path/to/document.sky"}
+  {"result": 12345}
+  {"result": null}
+  {"error": "Skyline is busy or showing a modal dialog"}
+  ```
 
-- [ ] Create new project in `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcpConnector/`
-- [ ] Target .NET Framework 4.7.2 (must match Skyline's runtime)
-- [ ] Reference `SkylineTool.dll`
-- [ ] Accept `$(SkylineConnection)` argument from Skyline (passed as `args[0]`)
-- [ ] Write connection file to `~/.skyline-mcp/connection.json`:
+  ### Dispatch Table (Connector)
+
+  | JSON method | SkylineToolClient call | Return type | JSON result type |
+  |-------------|----------------------|-------------|-----------------|
+  | `GetDocumentPath` | `GetDocumentPath()` | string | string (forward slashes) |
+  | `GetVersion` | `GetSkylineVersion()` | Version | string "Major.Minor.Build.Revision" |
+  | `GetDocumentLocationName` | `GetDocumentLocationName()` | string | string |
+  | `GetReplicateName` | `GetReplicateName()` | string | string |
+  | `GetProcessId` | `GetProcessId()` | int | number |
+  | `GetReport` | `GetReport(args[0])` | IReport | string (CSV: header + rows) |
+  | `GetReportFromDefinition` | `GetReportFromDefinition(args[0])` | IReport | string (CSV: header + rows) |
+  | `GetSelectedElementLocator` | `GetSelectedElementLocator(args[0])` | string | string |
+
+  ### IReport to CSV Conversion
+
+  The SkylineToolClient `GetReport()` returns an `IReport` with `ColumnNames` (string[]) and `Cells` (string[][]).
+  The connector converts to CSV:
+  - Header row: column names comma-separated
+  - Data rows: cell values comma-separated, quoted if containing commas
+  - The `SkylineToolClient.Report` class already has a `ReadDsvLine()` CSV parser, but for output we just need
+  simple CSV serialization
+
+  ---
+
+  ## Phase 1: SkylineMcpConnector
+
+  ### Project Location
+  `pwiz_tools/Skyline/Executables/Tools/SkylineMcpConnector/`
+
+  ### Files to Create
+
+  ```
+  SkylineMcpConnector/
+  +-- SkylineMcpConnector.sln
+  +-- SkylineMcpConnector.csproj       (net472 WinForms)
+  +-- Program.cs                        (entry point)
+  +-- MainForm.cs                       (UI + lifecycle)
+  +-- MainForm.Designer.cs              (designer)
+  +-- MainForm.resx                     (resources)
+  +-- ConnectionInfo.cs                 (POCO for connection.json)
+  +-- JsonPipeServer.cs                 (JSON named pipe server - bridge)
+  +-- Properties/
+  |   +-- AssemblyInfo.cs
+  +-- tool-inf/
+      +-- info.properties
+      +-- SkylineMcpConnector.properties
+  ```
+
+  ### Tasks
+
+  - [ ] Create `SkylineMcpConnector.csproj` - net472 WinForms, reference SkylineTool.dll from
+  `..\..\..\..\bin\$(Platform)\$(Configuration)\SkylineTool.dll`, NuGet reference `System.Text.Json` for JSON on
+  .NET 4.7.2. Follow ExampleInteractiveTool.csproj pattern for platform configs (x86, x64, AnyCPU).
+  - [ ] Create `Program.cs` - `[STAThread] Main(string[] args)`, standard WinForms Application.Run(new
+  MainForm(args))
+  - [ ] Create `ConnectionInfo.cs` - POCO with PipeName, ProcessId, ConnectedAt, SkylineVersion, DocumentPath.
+  Serialize with `System.Text.Json.JsonSerializer`.
+  - [ ] Create `MainForm.cs` - On load: create SkylineToolClient(args[0], "Skyline MCP Connector"), query metadata
+  (GetDocumentPath, GetSkylineVersion, GetProcessId), start JsonPipeServer, write connection.json. UI: "Connected
+  to Skyline" label, document path, version, "Disconnect" button. On close: stop server, delete connection.json,
+  dispose client.
+  - [ ] Create `JsonPipeServer.cs` - Background thread named pipe server. Creates `NamedPipeServerStream` with
+  message mode. Accepts connections in a loop. Reads JSON request, dispatches to SkylineToolClient method, writes
+  JSON response. The SkylineToolClient ref is passed in constructor. Method dispatch via switch on method name
+  string.
+  - [ ] Create `tool-inf/info.properties` and `tool-inf/SkylineMcpConnector.properties`
+  - [ ] Create `SkylineMcpConnector.sln`
+
+  ### Connection File
+
+  **Location**: `%LOCALAPPDATA%\Skyline\mcp\connection.json` (follows Skyline conventions)
+
   ```json
   {
-    "pipe_name": "SkylineTool-{GUID}",
+    "pipe_name": "SkylineMcpBridge-{GUID}",
     "process_id": 12345,
-    "connected_at": "2026-02-06T10:30:00Z",
+    "connected_at": "2026-02-22T10:30:00Z",
     "skyline_version": "24.2.0.0",
     "document_path": "C:/path/to/document.sky"
   }
   ```
-- [ ] Include `process_id` (from `SkylineToolClient.GetProcessId()`) for staleness detection
-- [ ] Include `document_path` (from `GetDocumentPath()`) for identification
-- [ ] Display simple UI with "Connected to Skyline" status and "Disconnect" button
-- [ ] On disconnect/close, delete the connection file
-- [ ] Create `tool-inf/` folder with tool definition (see ExampleInteractiveTool for pattern)
 
-### Connection Lifecycle Issues to Address
+  Note: `pipe_name` is the BRIDGE pipe (JSON protocol), NOT Skyline's BinaryFormatter pipe. The MCP server connects
+   to this bridge pipe.
 
-- **Stale files on crash**: If Skyline crashes, the connector doesn't clean up. MCP server should validate by checking if `process_id` is alive before attempting pipe connection.
-- **Multiple instances**: Current design overwrites connection.json. Future: use `connection-{GUID}.json` pattern and let MCP server list available instances.
-- **File location**: Consider `%LOCALAPPDATA%/Skyline/mcp/` instead of `~/.skyline-mcp/` to follow Skyline conventions.
+  ### Connection Lifecycle
 
-### Files to create
+  - **Stale files on crash**: If the connector crashes, connection.json remains. MCP server validates by checking
+  if `process_id` is alive before attempting pipe connection.
+  - **Multiple instances**: Current design overwrites connection.json. Future enhancement: use
+  `connection-{GUID}.json` pattern.
+  - **Cleanup**: On normal close/disconnect, delete connection.json.
 
-- `SkylineMcpConnector.csproj` (net472 WinForms)
-- `Program.cs` / `MainForm.cs`
-- `tool-inf/info.properties`
-- `tool-inf/SkylineMcpConnector.properties` (Arguments = `$(SkylineConnection)`)
+  ### tool-inf/info.properties
 
-## Phase 2: MCP Server Core (.NET 8.0-windows)
+  ```
+  Name = Skyline MCP Connector
+  Version = 1.0
+  Author = Brendan MacLean
+  Description = Connects Skyline to Claude AI via MCP protocol
+  Organization = MacCoss Lab, UW
+  Languages = C#
+  Provider = https://skyline.ms
+  Identifier = URN:LSID:proteome.gs.washington.edu:SkylineMcpConnector
+  ```
 
-Build the MCP server using ModelContextProtocol NuGet package, based on PR #3989 patterns.
+  ### tool-inf/SkylineMcpConnector.properties
 
-### Tasks
+  ```
+  Title = Connect to Claude
+  Command = SkylineMcpConnector.exe
+  Arguments = $(SkylineConnection)
+  ```
 
-- [ ] Create new project `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcpServer/`
-- [ ] Target `net8.0-windows` with `ModelContextProtocol` NuGet package
-- [ ] Clear logging providers (pitfall #1)
-- [ ] Read connection file on tool invocation
-- [ ] Connect to Skyline's named pipe using pipe name from connection file
-- [ ] Validate connection: check `process_id` is alive, attempt pipe with short timeout
-- [ ] Handle no connection file → return helpful error ("Launch 'Connect to Claude' from Skyline's External Tools menu")
-- [ ] Handle stale connection → return error with suggestion to reconnect
-- [ ] Handle pipe timeout → return error ("Skyline may be busy or showing a modal dialog")
-- [ ] Normalize all paths returned to client (backslash → forward slash)
-- [ ] Setup script in `ai/mcp/SkylineMcp/Setup-SkylineMcp.ps1`
+  ### Key Implementation Details
 
-### Wire Protocol Prerequisite
+  **SkylineTool.dll reference**: Same pattern as ExampleInteractiveTool - `HintPath` to
+  `..\..\..\..\bin\$(Platform)\$(Configuration)\SkylineTool.dll` with `SpecificVersion=False`.
 
-Requires the JSON wire protocol work (see "Wire Protocol: BinaryFormatter → JSON with POCOs" section above). The `SkylineTool.Core` multi-target library must be created first, replacing `BinaryFormatter` with `System.Text.Json` POCOs in `RemoteBase`.
+  **System.Text.Json on .NET 4.7.2**: Available as NuGet package `System.Text.Json` (version 8.0.x). Requires
+  `System.Memory`, `System.Buffers`, `System.Runtime.CompilerServices.Unsafe` as transitive dependencies. These are
+   handled automatically by NuGet.
 
-## Phase 3: MCP Tools
+  **JsonPipeServer threading**: The server runs on a background thread. Each client connection is handled on the
+  accepting thread (one at a time, since the MCP server makes sequential requests). Uses `NamedPipeServerStream`
+  with `PipeDirection.InOut`, `maxNumberOfServerInstances: 1`, `PipeTransmissionMode.Message`.
 
-### Phase 3a: Read-Only Tools
+  **SkylineToolClient thread safety**: SkylineToolClient methods dispatch to Skyline's UI thread via named pipe
+  RPC. The 1-second timeout applies. The JsonPipeServer can call SkylineToolClient methods directly from its
+  background thread - the named pipe handles the cross-process marshaling.
 
-These map directly to existing SkylineToolClient methods:
+  ---
 
-| Tool | SkylineToolClient Method | Notes |
-|------|-------------------------|-------|
-| `skyline_get_document_path` | `GetDocumentPath()` | Normalize path to forward slashes |
-| `skyline_get_version` | `GetSkylineVersion()` | Returns Version object |
-| `skyline_get_selection` | `GetDocumentLocationName()` | Current protein/peptide/precursor |
-| `skyline_get_replicate` | `GetReplicateName()` | Active replicate |
-| `skyline_get_report` | `GetReport(reportName)` | **Large data — use file-based pattern** |
-| `skyline_get_report_from_definition` | `GetReportFromDefinition(reportXml)` | **Large data — use file-based pattern** |
+  ## Phase 2: SkylineMcpServer
 
-**Report data volume**: Reports can return thousands of rows. Use file-based pattern from `development-guide.md`: save to `ai/.tmp/skyline-report-{name}.csv`, return summary + path.
+  ### Project Location
+  `pwiz_tools/Skyline/Executables/Tools/SkylineMcpServer/`
 
-### Phase 3b: Navigation Tools
+  ### Files to Create
 
-| Tool | Method | Notes |
-|------|--------|-------|
-| `skyline_select_element` | `SetDocumentLocation()` | Obsolete but functional |
+  ```
+  SkylineMcpServer/
+  +-- SkylineMcpServer.sln
+  +-- SkylineMcpServer.csproj          (net8.0-windows)
+  +-- Program.cs                        (MCP server setup)
+  +-- SkylineConnection.cs              (reads connection.json, JSON pipe client)
+  +-- Tools/
+      +-- SkylineTools.cs               (MCP tool implementations)
+  ```
 
-### Phase 3c: Document Modification Tools (Already Supported!)
+  Plus setup script: `ai/mcp/SkylineMcp/Setup-SkylineMcp.ps1`
 
-These are **already in the SkylineToolClient API** — no Skyline extensions needed:
+  ### Tasks
 
-| Tool | SkylineToolClient Method | Notes |
-|------|-------------------------|-------|
-| `skyline_import_fasta` | `ImportFasta(string textFasta)` | Add proteins from FASTA text |
-| `skyline_add_small_molecules` | `InsertSmallMoleculeTransitionList(string textCSV)` | CSV format transition list |
-| `skyline_add_spectral_library` | `AddSpectralLibrary(name, path)` | Path needs normalization |
-| `skyline_delete_elements` | `DeleteElements(string[] elementLocators)` | Delete proteins/peptides/etc. |
-| `skyline_import_peak_boundaries` | `ImportPeakBoundaries(string csv)` | Custom peak boundaries |
-| `skyline_import_properties` | `ImportProperties(string csv)` | Custom annotation properties |
+  - [ ] Create `SkylineMcpServer.csproj` - net8.0-windows, RuntimeIdentifier win-x64, NuGet ModelContextProtocol
+  0.8.0-preview.1 + Microsoft.Extensions.Hosting 8.0.1. Follow ImageComparer.Mcp.csproj pattern.
+  - [ ] Create `Program.cs` - ClearProviders, AddMcpServer, WithStdioServerTransport, WithToolsFromAssembly. Note:
+  `await` is acceptable here - this is a .NET 8.0 standalone app, NOT Skyline code (the no-async rule applies to
+  `pwiz_tools/Skyline/` Skyline code).
+  - [ ] Create `SkylineConnection.cs` - Reads `%LOCALAPPDATA%/Skyline/mcp/connection.json`, validates PID is alive,
+   connects to bridge pipe, provides `Call(method, args)` method that sends JSON request and returns parsed
+  response.
+  - [ ] Create `Tools/SkylineTools.cs` - MCP tool implementations for Phase 3a tools. Each tool creates/reuses a
+  SkylineConnection, calls the appropriate method, formats the response.
+  - [ ] Create `Setup-SkylineMcp.ps1` - Script to register MCP server with Claude Code: `claude mcp add skyline --
+  path/to/SkylineMcpServer.exe`
+  - [ ] Create `SkylineMcpServer.sln`
 
-**ASMS demo implication**: The stretch goals ("Add APOA1", "Add Acetyl-CoA") are achievable with existing API — no Skyline modifications needed.
+  ### SkylineConnection.cs Key Design
 
-### Phase 3d: SkylineCmd Integration (Future)
+  ```
+  static Connect() -> SkylineConnection
+    1. Determine path: %LOCALAPPDATA%/Skyline/mcp/connection.json
+    2. If file missing -> throw with "Launch 'Connect to Claude' from Skyline's External Tools menu"
+    3. Deserialize ConnectionInfo
+    4. Check Process.GetProcessById(processId) is alive -> if dead, throw "Skyline process {pid} is no longer
+  running. Please reconnect."
+    5. Create NamedPipeClientStream to pipe_name with 5-second timeout
+    6. Set ReadMode = PipeTransmissionMode.Message
+    7. Return SkylineConnection wrapping the pipe
 
-For operations not in the Interactive Tool API (import results, modify settings, save document), SkylineCmd offers 231 command-line arguments. Could expose as MCP tools that operate on .sky files directly without a running Skyline instance.
+  Call(string method, params string[] args) -> string
+    1. Serialize {"method": method, "args": args} to UTF-8 bytes
+    2. Write to pipe
+    3. Read response (using ReadAllBytes loop with IsMessageComplete)
+    4. Parse JSON response
+    5. If "error" field present, throw exception
+    6. Return "result" field as string
+  ```
 
-| Tool | SkylineCmd Args | Notes |
-|------|----------------|-------|
-| `skyline_import_results` | `--in file.sky --import-file data.raw --save` | Requires stdin isolation (pitfall #2) |
-| `skyline_refine` | `--in file.sky --refine-* --save` | 40+ refinement options |
-| `skyline_export_report` | `--in file.sky --report-name X --report-file out.csv` | Works without running Skyline |
+  ### Error Messages
 
-**Trade-off**: SkylineCmd operates on files, not the running instance. Changes won't be visible in Skyline until the document is reloaded.
+  | Condition | Message |
+  |-----------|---------|
+  | No connection.json | "Skyline is not connected. Launch 'Connect to Claude' from Skyline's External Tools menu."
+   |
+  | Stale PID | "Skyline process {pid} is no longer running. Launch 'Connect to Claude' from Skyline to reconnect."
+   |
+  | Pipe timeout | "Skyline is not responding. It may be busy processing data or showing a dialog. Try again in a
+  moment." |
+  | Pipe broken | "Connection to Skyline was lost. Launch 'Connect to Claude' from Skyline to reconnect." |
 
-## Full SkylineToolClient API Surface
+  ---
 
-Verified by reading source at `pwiz_tools/Skyline/SkylineTool/SkylineToolClient.cs`:
+  ## Phase 3a: Read-Only MCP Tools
 
-### Already Known (in original TODO)
-- `GetReport(string reportName)` → `IReport`
-- `GetReportFromDefinition(string reportDefinition)` → `IReport`
-- `GetDocumentLocation()` / `SetDocumentLocation()` — obsolete but functional
-- `GetReplicateName()` → `string`
-- `GetChromatograms(DocumentLocation)` → `Chromatogram[]` — obsolete
-- `GetDocumentPath()` → `string`
-- `GetSkylineVersion()` → `Version`
-- `DocumentChanged` / `SelectionChanged` events
+  ### Tool Implementations
 
-### Discovered During Review (not in original TODO)
-- `ImportFasta(string textFasta)` — **adds proteins from FASTA text**
-- `InsertSmallMoleculeTransitionList(string textCSV)` — **adds small molecules**
-- `AddSpectralLibrary(string libraryName, string libraryPath)` — adds spectral library
-- `DeleteElements(string[] elementLocators)` — deletes document elements
-- `GetSelectedElementLocator(string elementType)` → `string` — gets selection as locator
-- `ImportProperties(string propertiesCsv)` — imports custom properties
-- `ImportPeakBoundaries(string peakBoundariesCsv)` — imports peak boundaries
-- `GetProcessId()` → `int` — Skyline's PID (useful for connection validation)
-- `GetDocumentLocationName()` → `string` — non-obsolete selection accessor
+  All tools are in `Tools/SkylineTools.cs` as `[McpServerToolType]` class with `[McpServerTool]` methods.
 
-### Not in API (would need Skyline changes or SkylineCmd)
-- Importing results files
-- Modifying instrument/transition/full-scan settings
-- Saving document
-- Undo/redo operations
+  | MCP Tool | Description (for LLM) | Connector Method | Notes |
+  |----------|----------------------|-----------------|-------|
+  | `skyline_get_document_path` | "Get the file path of the currently open Skyline document" | `GetDocumentPath` |
+  Normalize backslash -> forward slash |
+  | `skyline_get_version` | "Get the version of the running Skyline instance" | `GetVersion` | Returns
+  "Major.Minor.Build.Revision" |
+  | `skyline_get_selection` | "Get the currently selected element in Skyline (protein, peptide, precursor, etc.)" |
+   `GetDocumentLocationName` | May be empty if nothing selected |
+  | `skyline_get_replicate` | "Get the name of the currently active replicate in Skyline" | `GetReplicateName` |
+  May be empty |
+  | `skyline_get_report` | "Run a named Skyline report and save results to CSV file. Returns row count, column
+  names, preview rows, and file path." | `GetReport` | **File-based pattern** |
+  | `skyline_get_report_from_definition` | "Run a custom Skyline report from XML definition and save results to CSV
+   file." | `GetReportFromDefinition` | **File-based pattern** |
 
-## Phase 4: Testing
+  ### File-Based Report Pattern
 
-### Manual Testing
+  Reports can return thousands of rows. Following `ai/docs/mcp/development-guide.md`:
 
-- [ ] Start Skyline, open a document
-- [ ] Launch SkylineMcpConnector from External Tools menu
-- [ ] Verify connection.json is written with pipe_name, process_id, document_path
-- [ ] Test MCP server with Claude Code: `claude mcp add skyline ...`
-- [ ] Verify read-only tools: "What document is open in Skyline?"
-- [ ] Verify reports: "Show me peak areas for all peptides" (check file-based output)
-- [ ] Verify navigation: "Go to peptide DIDISSPEFK"
-- [ ] Verify import: "Add APOA1 to the document" (LLM provides FASTA)
-- [ ] Verify small molecules: "Add Acetyl-CoA" (LLM provides CSV transition list)
-- [ ] Test stale connection: close Skyline, try a tool call
-- [ ] Test modal dialog: open a Skyline dialog, try a tool call (should timeout gracefully)
+  1. Call connector `GetReport(reportName)` -> returns CSV string
+  2. Save CSV to `ai/.tmp/skyline-report-{name}-{timestamp}.csv`
+  3. Parse first few rows for preview
+  4. Return to Claude:
+     ```
+     Report: {reportName}
+     Rows: {count}
+     Columns: {col1}, {col2}, {col3}, ...
 
-### Example Prompts to Validate
+     Preview (first 5 rows):
+     {col1}  {col2}  {col3}
+     val1    val2    val3
+     ...
 
-From the ASMS abstract:
+     Full data saved to: ai/.tmp/skyline-report-{name}-{timestamp}.csv
+     Use Read or Grep tools to explore the full dataset.
+     ```
 
-- "What document is open in Skyline?" → `skyline_get_document_path`
-- "What peptides are in this document?" → `skyline_get_report` with appropriate report
-- "Please add APOA1 to the document" → LLM provides FASTA, MCP calls `ImportFasta`
-- "Add Acetyl-CoA to the document" → LLM provides CSV, MCP calls `InsertSmallMoleculeTransitionList`
-- "Show peptides with CV above 20% in QC samples" → `skyline_get_report_from_definition` + LLM analysis
+  ### ai/.tmp Path Discovery
 
-## Phase 5: Packaging (Deferred)
+  The MCP server needs to find `ai/.tmp/`. Options:
+  - Environment variable (set by setup script)
+  - Hardcoded relative to known path
+  - Convention: look for `ai/.tmp/` relative to the Skyline document path (walking up)
 
-Desktop Extension packaging (`mcpb pack`, `manifest.json`) should be deferred until the format stabilizes. Focus on Claude Code registration via setup script for now.
+  **Decision**: Use environment variable `SKYLINE_MCP_TMP_DIR` set in the setup script, with fallback to
+  `%LOCALAPPDATA%/Skyline/mcp/tmp/`.
 
-## Notes
+  ---
 
-### Named Pipe Communication
+  ## Wire Protocol: BinaryFormatter -> JSON (Future PR)
 
-Skyline uses `NamedPipeClientStream` / `NamedPipeServerStream` in message mode with `BinaryFormatter` serialization. The `SkylineToolClient` class handles protocol details. Each RPC call opens a new pipe connection with a 1-second timeout.
+  Deferred to a follow-up PR. The plan from the original design is preserved here for reference.
 
-### Timeout and Threading Concerns
+  **SkylineTool.dll** targets .NET Framework 4.7.2 and uses `BinaryFormatter` for named pipe serialization
+  (`RemoteBase.cs`). The MCP server targets .NET 8.0, where `BinaryFormatter` is obsoleted and throws
+  `PlatformNotSupportedException` by default.
 
-- Named pipe default timeout is 1 second. If Skyline is busy (importing data, long operation), calls will fail.
-- SkylineToolClient dispatches to Skyline's UI thread via `Program.MainWindow.Invoke()`. A modal dialog will block indefinitely.
-- MCP tool implementations should wrap pipe calls with configurable timeouts and return user-friendly error messages.
+  ### Original Plan (deferred)
 
-### Event-Driven Updates
+  1. Create a multi-target `SkylineTool.Core` library (`net472;netstandard2.0`) with JSON-based `RemoteBase`
+  replacement
+  2. Define POCO classes for `RemoteInvoke` and `RemoteResponse` with `[JsonPropertyName]` attributes
+  3. Both Skyline (server) and MCP server (client) reference SkylineTool.Core
+  4. Existing `SkylineTool.dll` external tools continue to work during migration
 
-The API has `DocumentChanged` and `SelectionChanged` events. MCP is request/response (no server push). These events could be used for:
-- State invalidation (clear cached report data)
-- Logging (track document changes during a session)
-- Future: MCP notifications if the spec adds push support
+  ### Why Deferred
 
-### Connection Discovery Alternative
+  The bridge pattern in this PR avoids the wire protocol change entirely. The Connector (.NET 4.7.2) uses the
+  existing SkylineToolClient with BinaryFormatter to communicate with Skyline, and exposes a simple JSON pipe for
+  the MCP server. This eliminates the need to modify Skyline core or create SkylineTool.Core.
 
-Instead of file-based discovery, the MCP server could enumerate Windows named pipes matching `SkylineTool-*` and probe each with `GetDocumentPath()` to identify instances. This eliminates the connector tool entirely but adds complexity. Worth investigating if the file-based approach proves fragile.
+  When the wire protocol is modernized in a future PR:
+  - The bridge can be eliminated (MCP server connects directly to Skyline's JSON pipe)
+  - Or the bridge can remain as a useful isolation layer
 
-## Success Criteria for ASMS 2026 (June)
+  ### Wire Protocol Research Notes
 
-Minimum viable demo:
+  **Types flowing through BinaryFormatter** (from RemoteBase.cs analysis):
+  - `RemoteInvoke` [Serializable]: `string MethodName`, `object[] Arguments`
+  - `RemoteResponse` [Serializable]: `object ReturnValue`, `Exception Exception`
 
-1. User installs Claude Desktop + registers Skyline MCP server
-2. User opens Skyline document, clicks "Connect to Claude" in External Tools
-3. User asks Claude: "What peptides are in this document?"
-4. Claude queries Skyline via MCP and responds with peptide list
-5. User asks: "Show me which have CV > 20%"
-6. Claude generates report and interprets results
+  **Argument/return types in IToolService.cs**:
+  - Most methods use primitives: `string`, `int`, `string[]`
+  - `Version` [Serializable]: 4 ints (Major, Minor, Build, Revision)
+  - `DocumentLocation` [Serializable, Obsolete]: `IList<int>` IdPath, nullable ints
+  - `Chromatogram` [Serializable, Obsolete]: contains `System.Drawing.Color` (problematic for JSON)
+  - `IReport`: returned as string by SkylineToolClient (already converted to CSV internally)
 
-Stretch goals (now achievable without API extensions):
+  **Message framing**: `PipeTransmissionMode.Message` on Windows named pipes. `ReadAllBytes()` loops with 65KB
+  buffer until `IsMessageComplete`. No explicit length prefix needed.
 
-- "Add APOA1 to the document" → LLM provides FASTA sequence, `ImportFasta`
-- "Add Acetyl-CoA" → LLM provides formula/transition list, `InsertSmallMoleculeTransitionList`
-- Report visualization in Claude's response
-- Multi-turn workflow assistance
+  ---
 
-## Review Notes (2026-02-16)
+  ## Full SkylineToolClient API Surface
 
-Design reviewed against ImageComparer MCP implementation (PR #3989). Key findings:
+  Verified by reading source at `pwiz_tools/Skyline/SkylineTool/SkylineToolClient.cs`:
 
-1. **API gaps were overstated** — `ImportFasta`, `InsertSmallMoleculeTransitionList`, and 6 other methods were already in SkylineToolClient but not listed
-2. **BinaryFormatter must be replaced** — .NET 8.0 blocks it by default. Decision: JSON with POCOs via System.Text.Json, aligning with Panorama JSON cleanup direction. Nick suggested protobuf (already in codebase), but JSON consolidates the team toward fewer serialization paradigms and adds zero dependencies.
-3. **C# MCP pitfalls were not addressed** — all three from ImageComparer apply
-4. **Connection lifecycle needs hardening** — stale files, crash recovery, PID validation
-5. **Report data volume** — must use file-based pattern to avoid context overflow
-6. **Phase 5 (packaging) is premature** — deferred until format stabilizes
+  ### Methods Exposed via Bridge (this PR)
+  - `GetReport(string reportName)` -> IReport (converted to CSV string)
+  - `GetReportFromDefinition(string reportDefinition)` -> IReport (converted to CSV string)
+  - `GetDocumentLocationName()` -> string
+  - `GetReplicateName()` -> string
+  - `GetDocumentPath()` -> string
+  - `GetSkylineVersion()` -> Version (converted to string)
+  - `GetProcessId()` -> int
+  - `GetSelectedElementLocator(string elementType)` -> string
 
-See `ai/docs/mcp/development-guide.md` and `ai/docs/mcp/image-comparer.md` for implementation patterns.
+  ### Available for Future Phases (not in this PR)
+  - `ImportFasta(string textFasta)` - adds proteins from FASTA text
+  - `InsertSmallMoleculeTransitionList(string textCSV)` - adds small molecules
+  - `AddSpectralLibrary(string libraryName, string libraryPath)` - adds spectral library
+  - `DeleteElements(string[] elementLocators)` - deletes document elements
+  - `ImportProperties(string propertiesCsv)` - imports custom properties
+  - `ImportPeakBoundaries(string peakBoundariesCsv)` - imports peak boundaries
+  - `GetDocumentLocation()` / `SetDocumentLocation()` - obsolete but functional
+  - `GetChromatograms(DocumentLocation)` - obsolete
+  - `DocumentChanged` / `SelectionChanged` events
 
-### Review session details
+  ### Not in API (would need Skyline changes or SkylineCmd)
+  - Importing results files
+  - Modifying instrument/transition/full-scan settings
+  - Saving document
+  - Undo/redo operations
 
-- Explored full SkylineToolClient API surface (SkylineToolClient.cs, IToolService.cs, RemoteClient.cs, RemoteBase.cs)
-- Explored ExampleInteractiveTool connection pattern (tool-inf/, $(SkylineConnection) macro)
-- Explored SkylineCmd capabilities (231 command-line args, operates on .sky files directly)
-- Investigated protobuf history: adopted Feb-Mar 2017 for chromatogram compression and hybrid document format, added for Koina gRPC in 2024. Usage is central to data persistence but oriented toward binary density, not IPC.
-- Discussed serialization format with developer: JSON chosen over protobuf for wire protocol because it consolidates toward fewer formats, aligns with Panorama POCO cleanup direction, and is the clear trajectory for interchange protocols.
+  ---
+
+  ## Implementation Order
+
+  1. **SkylineMcpConnector scaffolding** - csproj, sln, Program.cs, AssemblyInfo.cs
+  2. **ConnectionInfo.cs** - POCO + JSON serialization
+  3. **MainForm** - UI, SkylineToolClient connection, connection file lifecycle
+  4. **JsonPipeServer** - Bridge: JSON pipe server dispatching to SkylineToolClient
+  5. **tool-inf/** - Tool metadata for Skyline External Tools menu
+  6. **SkylineMcpServer scaffolding** - csproj, sln, Program.cs
+  7. **SkylineConnection.cs** - Connection file reader + JSON pipe client
+  8. **SkylineTools.cs** - MCP tool implementations (Phase 3a)
+  9. **Setup-SkylineMcp.ps1** - Claude Code registration script
+
+  ---
+
+  ## Verification
+
+  ### Manual Test Flow
+  1. Build SkylineMcpConnector (`dotnet build` or VS)
+  2. Install as Skyline External Tool (add ZIP, or copy to Tools folder)
+  3. Open Skyline with a document, launch "Connect to Claude" from External Tools menu
+  4. Verify connection.json written to `%LOCALAPPDATA%/Skyline/mcp/`
+  5. Build SkylineMcpServer (`dotnet build`)
+  6. Register with Claude Code: `claude mcp add skyline -- C:/proj/pwiz/.../SkylineMcpServer.exe`
+  7. In Claude Code: "What document is open in Skyline?" -> should return forward-slash path
+  8. "What version of Skyline is running?" -> should return version string
+  9. "Show me a Peak Area report" -> should save CSV to ai/.tmp/ and return summary
+  10. Close Skyline -> try tool call -> should get "process no longer running" error
+  11. Without connector running -> try tool call -> should get "Launch Connect to Claude" error
+
+  ### Example Prompts to Validate (ASMS 2026 demo)
+
+  - "What document is open in Skyline?" -> `skyline_get_document_path`
+  - "What peptides are in this document?" -> `skyline_get_report` with appropriate report
+  - "What version of Skyline is running?" -> `skyline_get_version`
+  - "Show peptides with CV above 20% in QC samples" -> `skyline_get_report_from_definition` + LLM analysis
+
+  ### Future Phase Prompts (stretch goals, not this PR)
+  - "Please add APOA1 to the document" -> LLM provides FASTA, calls `ImportFasta`
+  - "Add Acetyl-CoA to the document" -> LLM provides CSV transition list, calls `InsertSmallMoleculeTransitionList`
+
+  ---
+
+  ## Success Criteria for ASMS 2026 (June)
+
+  Minimum viable demo (achievable with this PR):
+  1. User installs Claude Desktop + registers Skyline MCP server
+  2. User opens Skyline document, clicks "Connect to Claude" in External Tools
+  3. User asks Claude: "What peptides are in this document?"
+  4. Claude queries Skyline via MCP and responds with peptide list
+  5. User asks: "Show me which have CV > 20%"
+  6. Claude generates report and interprets results
+
+  ---
+
+  ## Session Log
+
+  ### 2026-02-22: Initial planning session
+  - Explored full API surface, wire protocol, ExampleInteractiveTool and ImageComparer.Mcp patterns
+  - Key decisions: Bridge pattern (no Skyline core changes), connection file at %LOCALAPPDATA%, JSON pipe protocol
+  - Created branch and TODO
+
+  ### 2026-02-27: Implementation session
+  - Reset branch to current master head (7b1a2a7bcb)
+  - Implemented all Phase 1 + Phase 2 + Phase 3a code:
+    - SkylineMcpConnector: SDK-style net472 csproj, Program.cs, MainForm, ConnectionInfo, JsonPipeServer, tool-inf
+    - SkylineMcpServer: net8.0-windows csproj, Program.cs, SkylineConnection, Tools/SkylineTools
+    - Setup script: ai/mcp/SkylineMcp/Setup-SkylineMcp.ps1
+  - Build issues resolved:
+    - Old-style csproj with PackageReference doesn't work with `dotnet build` — converted to SDK-style `net472`
+    - `SkylineTool.Version` vs `System.Version` ambiguity — use `var`
+    - .NET SDK 10 does not enable implicit usings — add explicit `using System;` etc.
+  - Both projects build cleanly with zero warnings
+  - Installed connector into Skyline via External Tools (ZIP package)
+  - Registered MCP server with Claude Code via setup script
+  - End-to-end test: connector writes connection.json, bridge pipe responds correctly
+  - **Bug found**: `System.Text.Json` case-sensitive deserialization — MCP server's `ConnectionInfo`
+    POCO lacked `[JsonPropertyName("pipe_name")]` attributes, so `PipeName` deserialized as empty string.
+    The connector writes snake_case JSON keys but the server expected PascalCase.
+    Fix applied but not yet rebuilt/tested (exe locked by running Claude Code process).
+
+  ### Next steps
+  - Rebuild SkylineMcpServer (requires Claude Code restart to release exe lock)
+  - Verify end-to-end: "What version of Skyline?" returns version string
+  - Remove temporary `skyline_ping` tool added during debugging
+  - Test remaining tools: get_document_path, get_selection, get_replicate, get_report
+  - Consider combining both projects into a shared .sln (like ImageComparer.sln)
