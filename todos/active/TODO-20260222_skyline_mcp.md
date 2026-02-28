@@ -17,41 +17,42 @@
   Phase 1 (Connector) + Phase 2 (MCP Server) + Phase 3a (Read-Only Tools). This gives an end-to-end demo: user
   launches connector from Skyline, then queries Skyline from Claude.
 
-  ## Architecture: Bridge Pattern
+  ## Architecture: Direct JSON Pipe (2-Tier)
 
-  The Connector acts as a JSON-to-BinaryFormatter bridge, requiring **zero changes to Skyline core**. The wire
-  protocol modernization (SkylineTool.Core with JSON replacing BinaryFormatter) is deferred to a follow-up PR.
+  Skyline hosts a JSON named pipe server (`JsonToolServer`) directly in the Skyline process,
+  eliminating the connector as a protocol bridge. The connector is now a thin UI shell that
+  reads `connection.json` and deploys the MCP server.
 
+  **Before (3-tier, sessions 1-4):**
+  ```
+  MCP Server <-> JSON pipe <-> Connector (bridge) <-> BinaryFormatter <-> Skyline
+  ```
+
+  **After (2-tier, session 5+):**
   ```
   Claude Code ──stdio──> SkylineMcpServer (.NET 8.0)
                              │ JSON over named pipe
                              v
-                         SkylineMcpConnector (.NET 4.7.2, bridge)
-                             │ BinaryFormatter over named pipe (existing SkylineToolClient)
-                             v
-                         Skyline.exe (running instance)
+                         Skyline.exe (JsonToolServer -> ToolService methods)
   ```
 
-  ### Why Bridge Instead of Direct JSON Wire Protocol
+  ### Why Direct Instead of Bridge
 
-  - **No Skyline core changes** - lower risk, easier to merge
-  - **Uses existing SkylineToolClient** - proven, tested code for BinaryFormatter IPC
-  - **Faster to ship** - ASMS 2026 deadline is June
-  - **The connector is already long-lived** - it shows UI and manages connection lifecycle, so acting as a proxy is
-   a natural extension
-  - **Wire protocol change is independent** - can be done in a focused follow-up PR that replaces BinaryFormatter
-  in RemoteBase with JSON, then eliminates the bridge
+  - **2 files per new method** instead of 5 (JsonToolServer.cs + SkylineTools.cs)
+  - **No SkylineTool.dll dependency** in connector - eliminates Release/Debug DLL mismatch
+  - **IToolService untouched** - reverted to master; MCP methods live exclusively in JsonToolServer
+  - **Direct access to Install.Version** - returns dots + git hash (e.g. `25.1.1.417-66d74a0772`)
+  - **Future: file-based reports** - JsonToolServer can write temp files directly from Skyline
+  - **ToolService keeps implementations** - RunCommand, settings list methods remain as public
+    non-interface methods callable by JsonToolServer
 
   ### Three-Process Design
 
   | Process | Framework | Lifecycle | Role |
   |---------|-----------|-----------|------|
-  | **Skyline.exe** | .NET Framework 4.7.2 | User-launched | Hosts RemoteService (BinaryFormatter named pipe
-  server) |
-  | **SkylineMcpConnector** | .NET Framework 4.7.2 | Launched from Skyline External Tools menu | Bridge: JSON pipe
-  server + BinaryFormatter pipe client via SkylineToolClient |
-  | **SkylineMcpServer** | .NET 8.0-windows | Launched by Claude Code/Desktop | MCP stdio server, connects to
-  connector's JSON pipe |
+  | **Skyline.exe** | .NET Framework 4.7.2 | User-launched | Hosts JsonToolServer (JSON pipe) + ToolService |
+  | **SkylineMcpConnector** | .NET Framework 4.7.2 | Launched from Skyline External Tools | UI shell: reads connection.json, deploys MCP server |
+  | **SkylineMcpServer** | .NET 8.0-windows | Launched by Claude Code/Desktop | MCP stdio server, connects to Skyline's JSON pipe |
 
   ## Reference Materials
 
@@ -105,27 +106,24 @@
   {"error": "Skyline is busy or showing a modal dialog"}
   ```
 
-  ### Dispatch Table (Connector)
+  ### Dispatch Table (JsonToolServer -> ToolService)
 
-  | JSON method | SkylineToolClient call | Return type | JSON result type |
-  |-------------|----------------------|-------------|-----------------|
+  | JSON method | ToolService call | Return type | JSON result type |
+  |-------------|-----------------|-------------|-----------------|
   | `GetDocumentPath` | `GetDocumentPath()` | string | string (forward slashes) |
-  | `GetVersion` | `GetSkylineVersion()` | Version | string "Major.Minor.Build.Revision" |
+  | `GetVersion` | `Install.Version` (direct) | string | string "25.1.1.417-hash" |
   | `GetDocumentLocationName` | `GetDocumentLocationName()` | string | string |
   | `GetReplicateName` | `GetReplicateName()` | string | string |
   | `GetProcessId` | `GetProcessId()` | int | number |
-  | `GetReport` | `GetReport(args[0])` | IReport | string (CSV: header + rows) |
-  | `GetReportFromDefinition` | `GetReportFromDefinition(args[0])` | IReport | string (CSV: header + rows) |
+  | `GetReport` | `GetReport("MCP", args[0])` | string | string (CSV directly) |
+  | `GetReportFromDefinition` | `GetReportFromDefinition(args[0])` | string | string (CSV directly) |
   | `GetSelectedElementLocator` | `GetSelectedElementLocator(args[0])` | string | string |
+  | `RunCommand` | `RunCommand(args[0])` | string | string |
+  | `GetSettingsListTypes` | `GetSettingsListTypes()` | string | string (TSV) |
+  | `GetSettingsListNames` | `GetSettingsListNames(args[0])` | string | string |
+  | `GetSettingsListItem` | `GetSettingsListItem(args[0], args[1])` | string | string (XML) |
 
-  ### IReport to CSV Conversion
-
-  The SkylineToolClient `GetReport()` returns an `IReport` with `ColumnNames` (string[]) and `Cells` (string[][]).
-  The connector converts to CSV:
-  - Header row: column names comma-separated
-  - Data rows: cell values comma-separated, quoted if containing commas
-  - The `SkylineToolClient.Report` class already has a `ReadDsvLine()` CSV parser, but for output we just need
-  simple CSV serialization
+  Note: ToolService.GetReport() already returns CSV as a string. No IReport-to-CSV conversion needed.
 
   ---
 
@@ -521,9 +519,431 @@
     The connector writes snake_case JSON keys but the server expected PascalCase.
     Fix applied but not yet rebuilt/tested (exe locked by running Claude Code process).
 
-  ### Next steps
-  - Rebuild SkylineMcpServer (requires Claude Code restart to release exe lock)
-  - Verify end-to-end: "What version of Skyline?" returns version string
-  - Remove temporary `skyline_ping` tool added during debugging
-  - Test remaining tools: get_document_path, get_selection, get_replicate, get_report
-  - Consider combining both projects into a shared .sln (like ImageComparer.sln)
+  ### 2026-02-27: End-to-end verification (session 2)
+  - Rebuilt SkylineMcpServer with JsonPropertyName fix
+  - **End-to-end working!** All basic tools verified:
+    - `skyline_get_version` → `26,1,0,57`
+    - `skyline_get_document_path` → returns full path with forward slashes
+    - `skyline_get_selection` → returns selected protein name
+    - `skyline_get_replicate` → returns active replicate name
+  - `skyline_get_report` fails with generic error — needs debugging (deferred)
+  - **Architecture discussion**: Reports should NOT flow through the named pipe as escaped JSON.
+    Skyline should write reports directly to disk (CSV or parquet), returning only the file path
+    through the pipe. Current pipe-based approach works as proof of concept but won't scale.
+    Nick's parquet export support makes this even more compelling.
+  - **Deployment architecture decision**: The tool must be self-contained for Tool Store users.
+    The `ai/mcp/SkylineMcp/Setup-SkylineMcp.ps1` pattern is wrong — that's for developer tools.
+    SkylineMcp targets Skyline users who never get the pwiz repo. Single .sln, single tool ZIP,
+    connector handles MCP server deployment to `~/.skyline-mcp/`.
+
+  ### 2026-02-27: Phase 4 reorganization (session 3)
+  - Restructured into single `SkylineMcp/` parent with `SkylineMcp.sln`
+  - Added `McpServerDeployer.cs` — copies MCP server from `mcp-server/` to `~/.skyline-mcp/`
+  - Updated connector UI: "Claude Code Setup" section with copyable `claude mcp add` command
+  - Added MSBuild `PackageToolZip` target — builds both projects, stages into `SkylineMcp/` dir
+    under `bin/`, zips to `SkylineMcp.zip` (developer can also manually zip the staging dir)
+  - Deleted `ai/mcp/SkylineMcp/Setup-SkylineMcp.ps1` (wrong pattern for user-facing tool)
+  - End-to-end verified: install ZIP → launch connector → deploy MCP server → register → query Skyline
+  - Initial commit pushed to branch
+
+  ### 2026-02-28: RunCommand and --help sections (session 4)
+  - **RunCommand implemented end-to-end** across all layers:
+    - `IToolService.cs`: Added `string RunCommand(string args)` to interface
+    - `ToolService.cs`: Implementation uses `CommandLine.ParseArgs()` + `CommandLine.Run()` with
+      a TeeTextWriter that captures output AND echoes to Immediate Window
+    - `CommandLine.cs`: Added optional `SrmDocument doc` parameter to constructor so the
+      currently open document can be passed in (avoids "Use --in" error)
+    - `CommandStatusWriter.cs`: Added `Write(string)` override — was missing, causing
+      text to go through `Write(char)` which TextBoxStreamWriter couldn't handle
+    - `SkylineToolClient.cs`: Added `RunCommand(string args)` wrapper
+    - `JsonPipeServer.cs`: Added `RunCommand` dispatch case
+    - `SkylineTools.cs`: Added `skyline_run_command` MCP tool
+  - **Threading**: RunCommand runs on the pipe server background thread (not UI thread).
+    Immediate Window echoing uses `Invoke` for initial show/echo (must complete before
+    accessing Writer), then TeeWriter handles cross-thread writes via TextBoxStreamWriter's
+    built-in BeginInvoke. UI stays responsive during long commands.
+  - **Immediate Window audit trail**: Commands are echoed as if the user typed them,
+    followed by output. Users can copy command lines into `--batch-commands` files
+    for reproducibility.
+  - **--help=sections**: Lists all 27 ArgumentGroup titles (compact for LLM context)
+  - **--help=<section-name>**: Shows matching section(s) using case-insensitive substring
+    match with ASCII table formatting. E.g. `--help=report` shows "Exporting reports" section.
+    - Added `HasValueChecking = true` to `ARG_HELP` so arbitrary section names pass validation
+    - Added resource string for "no section found" error message
+    - Uses `ARG_VALUE_ASCII` formatting for section help (Unicode box chars don't display
+      in Immediate Window, but ASCII `+|-` borders do). Note: Immediate Window uses
+      proportional font so tables still don't look great — consider `no-borders` instead.
+  - **Connector bug**: `SkylineToolClient.Dispose()` throws `IOException` when Skyline is
+    killed. Added try/catch in `MainForm.Cleanup()` to handle broken pipe gracefully.
+  - **Verified working**: `--version`, `--report-name="Precursor Areas" --report-file=...`,
+    `--help=sections`, `--help=report`, `--help=foobar` (error message)
+
+  #### Remaining issues from this session
+  - Immediate Window uses proportional font — ASCII table borders don't align well.
+    Consider using `no-borders` format, or making section help just list args without tables.
+  - CommandLine `_doc` is set from `SkylineWindow.Document` for read-only operations.
+    Write operations (import, refine, etc.) need `IDocumentContainer` integration so
+    `ModifyDocument()` flows through `SkylineWindow.ModifyDocument()` for proper
+    audit log and undo/redo. This is a future enhancement.
+  - The connector IOException fix needs rebuilding and testing.
+  - Not yet committed — all changes are uncommitted on the branch.
+
+  ### 2026-02-28: Rearchitect to 2-tier direct JSON pipe (session 5)
+  - **Major architecture change**: Moved JSON pipe server from connector into Skyline process
+  - Created `JsonToolServer.cs` in `ToolsUI/` - hosts JSON named pipe directly in Skyline,
+    dispatches to ToolService methods without BinaryFormatter serialization
+  - Reverted `IToolService.cs` and `SkylineToolClient.cs` to master HEAD - no MCP methods
+    on the external tool interface. RunCommand, settings list methods stay as public
+    non-interface methods on ToolService, callable by JsonToolServer directly.
+  - Simplified connector `MainForm.cs` - now just reads connection.json and deploys MCP server.
+    Removed SkylineToolClient, JsonPipeServer, and SkylineTool.dll dependency entirely.
+  - `Program.cs` creates/disposes JsonToolServer alongside ToolService in Start/StopToolService()
+  - **Version improvement**: GetVersion now returns `Install.Version` directly (dots + git hash,
+    e.g. `25.1.1.417-66d74a0772`) instead of comma-separated `SkylineTool.Version.ToString()`
+  - **connection.json lifecycle**: JsonToolServer writes on Start(), deletes on Dispose().
+    Connector also cleans up on exit as a safety net.
+  - Both Skyline and SkylineMcp solutions build cleanly
+  - All MCP tools verified working end-to-end through the new direct pipe
+  - **Design discussion**: Reports (GetReport, GetReportFromDefinition) should be redesigned
+    for MCP. Current in-memory pipe approach doesn't scale. Next round will:
+    1. Make reports write to files natively in JsonToolServer
+    2. Add report field documentation access (like --help=sections for CLI)
+    3. Design a simplified JSON query format for LLMs (abstraction over XML report format)
+  - Deleted stale `TODO-20260222_skyline_mcp-revised.md`
+
+  #### Key files changed
+  - NEW: `pwiz_tools/Skyline/ToolsUI/JsonToolServer.cs`
+  - REVERTED: `pwiz_tools/Skyline/SkylineTool/IToolService.cs` (master HEAD)
+  - REVERTED: `pwiz_tools/Skyline/SkylineTool/SkylineToolClient.cs` (master HEAD)
+  - MODIFIED: `pwiz_tools/Skyline/Program.cs` (JsonToolServer lifecycle)
+  - MODIFIED: `pwiz_tools/Skyline/Skyline.csproj` (added JsonToolServer.cs)
+  - MODIFIED: `SkylineMcpConnector/MainForm.cs` (simplified, no more bridge)
+  - MODIFIED: `SkylineMcpConnector/SkylineMcpConnector.csproj` (removed SkylineTool.dll ref)
+  - DELETED: `SkylineMcpConnector/JsonPipeServer.cs` (moved into Skyline as JsonToolServer)
+
+  ---
+
+  ## Phase 4: Project Reorganization and Deployment
+
+  ### Problem
+
+  Current structure has two separate .sln files and requires a developer setup script
+  (`ai/mcp/SkylineMcp/Setup-SkylineMcp.ps1`) to register the MCP server. This works for a
+  developer with the pwiz repo, but fails completely for the target audience: a Skyline user
+  who downloads the tool from the Skyline Tool Store and has never seen the pwiz repository.
+
+  ### Goal
+
+  A Skyline user installs from Tool Store, clicks **Tools > Connect to Claude**, and gets
+  guided through the complete setup. No scripts, no repo, no manual file copying.
+
+  ### New Folder Structure
+
+  ```
+  pwiz_tools/Skyline/Executables/Tools/SkylineMcp/
+  ├── SkylineMcp.sln                          (single solution, both projects)
+  ├── SkylineMcpConnector/
+  │   ├── SkylineMcpConnector.csproj          (net472 WinForms)
+  │   ├── Program.cs
+  │   ├── MainForm.cs                         (updated: deployment + setup UI)
+  │   ├── MainForm.Designer.cs
+  │   ├── MainForm.resx
+  │   ├── ConnectionInfo.cs
+  │   ├── JsonPipeServer.cs
+  │   └── tool-inf/
+  │       ├── info.properties
+  │       └── SkylineMcpConnector.properties
+  └── SkylineMcpServer/
+      ├── SkylineMcpServer.csproj             (net8.0-windows)
+      ├── Program.cs
+      ├── SkylineConnection.cs
+      └── Tools/
+          └── SkylineTools.cs
+  ```
+
+  ### Tasks
+
+  #### 4.1: Restructure folders
+  - [ ] Create `SkylineMcp/` parent directory
+  - [ ] Move `SkylineMcpConnector/` and `SkylineMcpServer/` under it
+  - [ ] Delete individual `.sln` files from each project
+  - [ ] Create `SkylineMcp.sln` containing both projects
+  - [ ] Verify both projects build from the new .sln
+  - [ ] Update SkylineMcpConnector.csproj `HintPath` for SkylineTool.dll (relative path changes)
+
+  #### 4.2: MCP server deployment logic in connector
+  - [ ] On startup, connector deploys MCP server to `~/.skyline-mcp/`:
+    - Determine MCP server source: same directory as connector exe (Skyline installs
+      the tool ZIP contents to its tools folder, so the MCP server binaries will be there)
+    - Target: `%USERPROFILE%/.skyline-mcp/` (following `.gmail-mcp`, `.teamcity-mcp` pattern)
+    - Copy `SkylineMcpServer.exe` + all its dependencies to the target directory
+    - Only copy if missing or version differs (compare file dates or assembly version)
+  - [ ] The MCP server binaries must be included in the tool ZIP alongside the connector.
+    This means the build/package step needs to collect both sets of outputs.
+
+  #### 4.3: Update connector UI for setup help
+  - [ ] Add MCP registration status detection:
+    - Check if `~/.claude.json` or `~/.claude/` contains a skyline MCP entry
+    - Or simply show the registration command always with a note
+  - [ ] Add a "Setup" section to the UI:
+    - Copyable command: `claude mcp add skyline -- C:/Users/{user}/.skyline-mcp/SkylineMcpServer.exe`
+    - "Copy to Clipboard" button
+    - Brief instructions: "Paste this command in your terminal, then restart Claude Code"
+  - [ ] Future: When MCP installation file format ships, generate/point to that file instead
+
+  #### 4.4: Tool ZIP packaging
+  - [ ] The tool ZIP for Skyline Tool Store must contain:
+    ```
+    tool-inf/
+        info.properties
+        SkylineMcpConnector.properties
+    SkylineMcpConnector.exe           (net472)
+    SkylineMcpConnector.exe.config
+    SkylineTool.dll
+    System.Text.Json.dll              (+ transitive deps for net472)
+    mcp-server/                       (subfolder for net8.0 binaries)
+        SkylineMcpServer.exe
+        SkylineMcpServer.dll
+        SkylineMcpServer.deps.json
+        SkylineMcpServer.runtimeconfig.json
+        ModelContextProtocol.dll
+        Microsoft.Extensions.*.dll
+        ... (all net8.0 dependencies)
+    ```
+  - [ ] The `mcp-server/` subfolder keeps the two runtimes' DLLs from colliding
+    (both have System.Text.Json but different versions for net472 vs net8.0)
+  - [ ] Connector's deployment logic copies from `mcp-server/` subfolder to `~/.skyline-mcp/`
+
+  #### 4.5: Clean up old artifacts
+  - [ ] Delete `ai/mcp/SkylineMcp/Setup-SkylineMcp.ps1` (wrong pattern for user-facing tool)
+  - [ ] Delete old `SkylineMcpConnector.zip` and `_package/` from working tree
+  - [ ] Remove `SkylineMcpConnector.sln` and `SkylineMcpServer.sln` (replaced by SkylineMcp.sln)
+
+  #### 4.6: Update info.properties for new packaging
+  - [ ] Consider renaming the tool identifier to reflect the combined package
+  - [ ] Update version, description as needed
+
+  ### Deployment Flow (User Perspective)
+
+  ```
+  1. User finds "Skyline MCP Connector" in Skyline Tool Store
+  2. User clicks Install → Skyline downloads ZIP, extracts to tools directory
+  3. User sees "Connect to Claude" in Tools > External Tools menu
+  4. User clicks "Connect to Claude":
+     a. Connector launches, connects to Skyline via SkylineToolClient
+     b. Connector deploys MCP server to ~/.skyline-mcp/ (first time or update)
+     c. Connector starts JSON bridge pipe, writes connection.json
+     d. UI shows: "Connected to Skyline" + version + document
+     e. UI shows: "MCP Setup" section with copy-paste command for Claude Code
+  5. User copies the `claude mcp add` command, pastes in terminal
+  6. User restarts Claude Code
+  7. User asks Claude: "What document is open in Skyline?" → works!
+  ```
+
+  ### Open Questions
+
+  - **Tool Store packaging**: How are Tool Store ZIPs built today? Is there an existing build
+    target or script, or do we just create the ZIP manually? Need to understand the current
+    process.
+  - **MCP server prerequisites**: The MCP server requires .NET 8.0 runtime. Should the
+    connector check for this and give a helpful message if missing? Or will the MCP server
+    exe itself give a good enough error?
+  - **Self-contained publish**: Should we publish the MCP server as self-contained
+    (`dotnet publish -r win-x64 --self-contained`) to avoid the .NET 8.0 runtime dependency?
+    This increases the ZIP size (~60-80MB) but eliminates the user needing .NET 8.0.
+    An alternative is a trimmed self-contained publish which could be much smaller.
+  - **Multiple Skyline instances**: Current design uses a single `connection.json`. If the
+    user has multiple Skyline instances, only one can connect. Future: use
+    `connection-{GUID}.json` pattern and let the MCP server discover/list them.
+
+  ---
+
+  ## Phase 5: Report Architecture (Future)
+
+  ### Problem
+
+  Current report flow pipes entire CSV through the JSON named pipe as an escaped string
+  attribute. For a 100K-row report, this means:
+  1. Skyline builds IReport in memory
+  2. SkylineToolClient serializes via BinaryFormatter over pipe
+  3. Connector deserializes, converts to CSV string in memory
+  4. CSV gets JSON-escaped and sent over JSON pipe as `{"result": "...giant CSV..."}`
+  5. MCP server receives, unescapes, saves to disk
+
+  The entire report exists in memory multiple times. This won't scale.
+
+  ### Solution
+
+  Add a bridge command that tells Skyline to write the report directly to a file:
+  - Bridge command: `ExportReport(reportName, filePath, format)`
+  - Skyline writes progressively to disk (never fully in memory)
+  - Pipe response: just `{"result": "C:/Users/.../report.csv"}` (the path)
+  - MCP server returns the path to Claude, which reads it with the Read tool
+  - Formats: CSV initially, parquet when Nick's export is available
+
+  This requires either:
+  - A new SkylineToolClient API method (needs Skyline core change), or
+  - Using SkylineCmd as an alternative for report export (already supports file output)
+
+  ### Temporary Path Convention
+
+  Reports should be written to `ai/.tmp/` when running from a dev environment, or to a
+  user-configurable location. The MCP tool should accept an optional output path parameter,
+  defaulting to `~/.skyline-mcp/tmp/` for Tool Store users.
+
+  ---
+
+  ## Phase 6: SkylineToolClient API Expansion
+
+  The existing SkylineToolClient API is limited to specific methods (GetReport, ImportFasta, etc.).
+  Three new capabilities would massively expand what the MCP server can do.
+
+  ### 6.1: RunCommand — Full CLI access
+
+  Add `RunCommand(string commandLine)` to `IToolService`/`SkylineToolClient`.
+
+  **How it works**: The Immediate Window (`ImmediateWindow.cs`) already does this:
+  ```csharp
+  string[] args = CommandLine.ParseArgs(lineText);
+  CommandLine commandLine = new CommandLine(new CommandStatusWriter(writer));
+  commandLine.Run(args, true);
+  ```
+  The `CommandLine` class (`CommandLine.cs`) processes the full CLI argument set — the same
+  1,371-line help output from `SkylineCmd --help`. This includes imports, exports, settings
+  changes, refinement, report-to-file, everything.
+
+  **Key design points**:
+  - Output should stream back progressively (progress, errors, completion)
+  - The `CommandStatusWriter` captures all output as text
+  - The `--report-name --report-file` CLI args solve report-to-file natively
+  - No `--in` needed since the document is already open in the running instance
+  - The Immediate Window proves this pattern works against a running Skyline with live UI
+
+  **Reference files**:
+  - `pwiz_tools/Skyline/Controls/ImmediateWindow.cs` — `RunLine()` method
+  - `pwiz_tools/Skyline/CommandLine.cs` — `Run()`, `ProcessDocument()`, `ParseArgs()`
+  - `pwiz_tools/Skyline/CommandArgs.cs` — all argument definitions (28+ groups)
+  - `ai/.tmp/skylinecmd-help.txt` — full CLI help output captured for reference
+
+  ### 6.2: GetSettingsListNames — Query named settings
+
+  Add `GetSettingsListNames(string listType)` → `string[]` to `IToolService`.
+
+  Skyline stores ~28 `SettingsList<T>` types in `Settings.Default`. All items implement
+  `IKeyContainer<string>` so `item.GetKey()` returns the name. The `listType` parameter
+  is just the class name (e.g., "ReportSpecList", "EnzymeList").
+
+  **Known list types** (from Settings.cs):
+  - `ReportSpecList` — report definitions (most important for MCP)
+  - `EnzymeList` — enzymes (Trypsin, etc.)
+  - `SpectralLibraryList` — loaded spectral libraries
+  - `StaticModList` / `HeavyModList` — modifications
+  - `PeakScoringModelList` — mProphet models
+  - `AnnotationDefList` — custom annotation definitions
+  - `ToolList` — external tools
+  - `ServerList` — Panorama servers
+  - `CollisionEnergyList`, `RetentionTimeList`, `MeasuredIonList`, etc.
+  - ~28 total, all following the same pattern
+
+  **Implementation**: Look up the property on `Settings.Default` by class name,
+  iterate the list, return `item.GetKey()` for each.
+
+  ### 6.3: GetSettingsListItem — Inspect items as XML
+
+  Add `GetSettingsListItem(string listType, string name)` → `string` (XML).
+
+  Since every item implements `IXmlSerializable`, serialize it and return XML text.
+  Claude can inspect report definitions, enzyme rules, modification definitions, etc.
+
+  **Future extension**: `AddSettingsListItem(string listType, string xml)` — parse XML,
+  validate, add to the list. Claude could create custom reports, add modifications, etc.
+
+  ### 6.4: Keep GetReportFromDefinition — Ad-hoc query power
+
+  The existing `GetReportFromDefinition(string xml)` API should be maintained and improved,
+  not replaced by RunCommand. It is essentially a **query language** over the SrmDocument —
+  Claude constructs XML on the fly to query anything Skyline has in memory.
+
+  **Report definition XML format** (modern format):
+  ```xml
+  <views>
+    <view name="MyQuery"
+          rowsource="pwiz.Skyline.Model.Databinding.Entities.Transition"
+          sublist="Results!*">
+      <column name="Precursor.Peptide.Protein.Name" />
+      <column name="Precursor.Peptide.ModifiedSequence" />
+      <column name="Results!*.Value.Area" />
+      <filter column="Results!*.Value.Area" opname="isnotnullorblank" />
+    </view>
+  </views>
+  ```
+
+  **Queryable root types** (rowsource):
+  - `pwiz.Skyline.Model.Databinding.Entities.Protein`
+  - `pwiz.Skyline.Model.Databinding.Entities.Peptide`
+  - `pwiz.Skyline.Model.Databinding.Entities.Precursor`
+  - `pwiz.Skyline.Model.Databinding.Entities.Transition`
+  - `pwiz.Skyline.Model.Databinding.Entities.Replicate`
+  - Also: `ProteinResult`, `PeptideResult`, `PrecursorResult`, `TransitionResult`
+
+  **Property paths**: Dot notation with `!*` for collections:
+  - `Precursor.Peptide.Protein.Name` — navigate hierarchy
+  - `Results!*.Value.Area` — expand across replicates
+  - `Files!*.FileName` — expand across result files
+
+  **User-facing field documentation**: https://skyline.ms/tips/docs/25-1/Help/en/Reports.html
+  (Nick's Live Reports framework — very fast materialization of SrmDocument into tabular data)
+
+  **Vision**: Claude queries Skyline data on the fly, writes CSV, then generates R/Python
+  scripts with ggplot2 visualizations — same pattern already proven with LabKey Server data.
+
+  ### Implementation Order
+
+  1. ~~`RunCommand` — highest impact, unlocks entire CLI including report-to-file~~ **DONE (session 4)**
+     - Read-only operations working. Write operations need IDocumentContainer integration.
+  2. `GetSettingsListNames` — enables discovery (what reports exist? what enzymes?)
+  3. `GetSettingsListItem` — enables inspection (what does this report query?)
+  4. Improve `GetReportFromDefinition` — file-based output, not pipe-based
+
+  With the 2-tier architecture, new methods only need JsonToolServer.cs + SkylineTools.cs (2 files).
+
+  ### Extensibility Mechanism
+
+  The `RemoteService` dispatch uses **reflection** (`GetType().GetMethod(remoteInvoke.MethodName)`)
+  — NOT interface-based dispatch. This means:
+  - **Adding new methods is safe** — old tools never call them, new tools find them by name
+  - **No versioned interfaces needed** (no IToolService2, etc.)
+  - Just add the method to `IToolService`, implement in `ToolService`, add wrapper in `SkylineToolClient`
+  - If a new tool calls a method on an old Skyline, `GetMethod()` returns null → catch and
+    show "please update Skyline" message
+  - **Never change existing method signatures** — that would break reflection lookup
+
+  ---
+
+  ## Session Log
+
+  ### 2026-02-28: LLM documentation access tools (session 8)
+  - **4 new MCP tools** for LLM-friendly documentation access:
+    - `skyline_get_cli_help_sections` — lists CLI help section names
+    - `skyline_get_cli_help(section)` — detailed help for a section with `--help=no-borders`
+    - `skyline_get_report_doc_topics` — lists report entity types (21 topics)
+    - `skyline_get_report_doc_topic(topic)` — column docs (name, description, type) for an entity
+  - **Silent RunCommand**: Added `RunCommandSilent` pipe method and `silent` parameter to
+    `ToolService.RunCommand()`. CLI help tools use silent mode so documentation queries
+    don't pop up the Immediate Window or echo commands.
+  - **Report doc implementation**: `GenerateReportDocHtml()` reuses `DocumentationGenerator`
+    with `IncludeHidden = false`. HTML is parsed with regex to extract sections and converted
+    to tab-separated plain text for LLM consumption.
+  - **Two-pass topic matching**: Exact match on qualified type name or display name first,
+    then partial substring match. Space normalization allows "Transition Result" to match
+    "TransitionResult".
+  - **DirectoryEx.CreateForFilePath()**: New helper in `UtilIO.cs` that validates
+    `Path.GetDirectoryName()` is non-null before creating directory. Fixes ReSharper warning
+    in report export methods.
+
+  #### Files changed
+  - `SkylineMcpServer/Tools/SkylineTools.cs` — 4 new MCP tool methods
+  - `ToolsUI/JsonToolServer.cs` — `RunCommandSilent`, `GetReportDocTopics`, `GetReportDocTopic`
+    dispatch + helpers, `DirectoryEx.CreateForFilePath()` fix
+  - `ToolsUI/ToolService.cs` — `RunCommand(args, silent)` parameter
+  - `Util/UtilIO.cs` — `DirectoryEx.CreateForFilePath()` helper
