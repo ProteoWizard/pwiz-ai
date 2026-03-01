@@ -1195,7 +1195,7 @@
   - [x] Add to JsonToolServer AVAILABLE_METHODS and dispatch
   - [x] Add MCP tool with format documentation in description
   - [x] Wire through SkylineConnection
-  - [ ] Test with lipid transition list from conversation
+  - [x] Test with lipid transition list from conversation
 
   #### 8.2: ImportFasta
 
@@ -1211,7 +1211,7 @@
   - [x] Add to JsonToolServer
   - [x] Add MCP tool
   - [x] Wire through SkylineConnection
-  - [ ] Test with protein FASTA from conversation
+  - [x] Test with protein FASTA from conversation
 
   #### 8.3: ImportProperties
 
@@ -1225,9 +1225,9 @@
   is an ElementLocator (from report export), remaining columns are annotation names with
   values. The LLM should first export a report to learn the document structure and locators.
 
-  - [ ] Add to JsonToolServer
-  - [ ] Add MCP tool
-  - [ ] Wire through SkylineConnection
+  - [x] Add to JsonToolServer
+  - [x] Add MCP tool
+  - [x] Wire through SkylineConnection
   - [ ] Test with annotation workflow from conversation
 
   #### 8.4: Error handling pattern
@@ -1240,3 +1240,35 @@
   - On failure: return the exception message so the LLM can fix headers and retry
   - The retry loop is natural for LLMs — send CSV, get error about unknown header,
     fix the header name, resend
+
+  ### Session 9 — Phase 8 implementation (2026-03-01)
+
+  Implemented all three document-modifying MCP tools. Each follows the same pattern:
+  JsonToolServer dispatches to SkylineWindow methods on the UI thread via `InvokeOnUiThread`
+  helper, which catches exceptions and returns OK or error message for LLM retry.
+
+  **Tested successfully:**
+  - Inserted 3 cholesteryl esters (CE 16:0, CE 18:1, CE 18:2) as [M+NH4]+ with C27H45 product
+  - Imported insulin FASTA — produced 1 peptide (GIVEQCCTSICSLYQLENYCN) with y11 fragment
+  - Imported APOA1 FASTA — produced 12 peptides with multiple y-ion transitions
+  - ImportProperties wired but deferred testing pending supporting tools
+
+  **Bugs found and fixed during deployment testing:**
+  - Deploy script (`Deploy-SkylineMcp.ps1`) was copying to `~/.skyline-mcp/` instead of
+    `~/.skyline-mcp/server/` — files never reached the running MCP server
+  - `McpServerDeployer` timestamp-only check missed updates when ZIP extraction preserved
+    original timestamps — added file size comparison
+  - `MainForm.DeployMcpServer()` swallowed IOException into `Debug.WriteLine` when DLL was
+    locked by running MCP server — now kills SkylineMcpServer processes and retries, shows
+    MessageBox on final failure
+  - Changed unsaved document display from "(none)" to "(unsaved)" in both connector UI and
+    MCP tool response
+
+  #### Files changed
+  - `ToolsUI/JsonToolServer.cs` — 3 methods in AVAILABLE_METHODS, 3 case handlers, InvokeOnUiThread helper
+  - `SkylineMcpServer/SkylineConnection.cs` — 3 CallSkyline convenience methods
+  - `SkylineMcpServer/Tools/SkylineTools.cs` — 3 [McpServerTool] methods, fixed "(unsaved)" text
+  - `SkylineMcpConnector/MainForm.cs` — deploy retry with process kill, "(unsaved)" text
+  - `SkylineMcpConnector/McpServerDeployer.cs` — file size check in Deploy()
+  - `SkylineMcpConnector/SkylineMcpConnector.ico` — updated icon
+  - `ai/scripts/Skyline/Deploy-SkylineMcp.ps1` — fixed target path to server/ subdirectory

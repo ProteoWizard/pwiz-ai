@@ -25,7 +25,7 @@ $ErrorActionPreference = 'Stop'
 
 $buildDir = Join-Path $PSScriptRoot '..\..\..\pwiz\pwiz_tools\Skyline\Executables\Tools\SkylineMcp\SkylineMcpServer\bin\Debug\net8.0-windows\win-x64'
 $buildDir = (Resolve-Path $buildDir).Path
-$deployDir = Join-Path $HOME '.skyline-mcp'
+$deployDir = Join-Path $HOME '.skyline-mcp' 'server'
 
 if (-not (Test-Path $buildDir)) {
     Write-Error "Build output not found at: $buildDir`nRun 'dotnet build' first."
