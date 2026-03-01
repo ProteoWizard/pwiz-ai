@@ -1272,3 +1272,34 @@
   - `SkylineMcpConnector/McpServerDeployer.cs` — file size check in Deploy()
   - `SkylineMcpConnector/SkylineMcpConnector.ico` — updated icon
   - `ai/scripts/Skyline/Deploy-SkylineMcp.ps1` — fixed target path to server/ subdirectory
+
+  ## Phase 9: Document Status and Settings Tools + Connector Lifecycle
+
+  ### Session 10 — Phase 9 implementation (2026-03-01)
+
+  Added 3 lightweight MCP tools for document inspection without running full reports,
+  plus connector lifecycle improvements.
+
+  **New tools:**
+  - `skyline_get_document_status` — returns doc type, target counts, replicate count, file path
+  - `skyline_get_document_settings` — exports current settings XML (stripped of MeasuredResults)
+  - `skyline_get_default_settings` — exports default settings XML for comparison
+
+  **Utility improvements:**
+  - Added `PathEx.ToForwardSlashPath()` extension method in CommonUtil to replace scattered
+    `Replace('\\', '/')` calls — used in 5 places in JsonToolServer.cs
+  - Added `SerializeSettingsToFile()` helper using XmlSerializer + FileSaver pattern
+
+  **Connector lifecycle:**
+  - Added Skyline process monitor: 2-second timer polls Process.GetProcessById(), closes
+    connector when Skyline exits (Phase 7.1 was previously dropped, now restored)
+  - Added MessageBox notification when MCP server is killed during deployment update,
+    telling user to restart Claude Code/Desktop
+  - Removed stale "restart Claude Desktop" status label (Desktop config is now edited only
+    when Desktop is stopped)
+
+  #### Files changed
+  - `Shared/CommonUtil/SystemUtil/PathEx.cs` — added ToForwardSlashPath() extension method
+  - `ToolsUI/JsonToolServer.cs` — 3 new methods, SerializeSettingsToFile helper, ToForwardSlashPath usage
+  - `SkylineMcpServer/Tools/SkylineTools.cs` — 3 new MCP tools, GetTempSettingsPath helper
+  - `SkylineMcpConnector/MainForm.cs` — Skyline process monitor timer, deploy update MessageBox
