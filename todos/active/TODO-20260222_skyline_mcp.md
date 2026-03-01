@@ -947,3 +947,184 @@
     dispatch + helpers, `DirectoryEx.CreateForFilePath()` fix
   - `ToolsUI/ToolService.cs` — `RunCommand(args, silent)` parameter
   - `Util/UtilIO.cs` — `DirectoryEx.CreateForFilePath()` helper
+
+  ---
+
+  ## Phase 7: Connector Lifecycle, Deploy Layout, and Chat App Registration
+
+  ### 7.1: ~~Auto-close when Skyline exits~~ DROPPED
+
+  **Dropped.** Lifecycle timer was over-engineered. Stale connection.json is already
+  handled by consumers: MCP server checks `Process.GetProcessById()` before connecting
+  and gives a clear error. JsonToolServer.Dispose() cleans up when Skyline exits normally.
+  No background process needed just to remove a JSON entry.
+
+  ### 7.2: Deploy directory reorganization
+
+  Move server files to `server/` subdirectory and connection.json to `~/.skyline-mcp/`.
+
+  **New layout:**
+  ```
+  ~/.skyline-mcp/
+    connection.json
+    server/
+      SkylineMcpServer.exe
+      ... (all dependencies)
+  ```
+
+  - [x] `McpServerDeployer.cs`: Add `ServerDir` property, deploy files to `server/`
+  - [x] `ConnectionInfo.cs`: Delegate to `McpServerDeployer.DeployDir` (no duplicate path)
+  - [x] `SkylineConnection.cs`: Update path with constants
+  - [x] `JsonToolServer.cs`: Update path with constants
+  - [x] String literal discipline: each magic string appears exactly once as a constant per assembly
+
+  ### 7.3: Main form redesign - compact + setup expander
+
+  **Compact state (~145px):** Status labels + two buttons (Setup >>, Close)
+  **Expanded state (~290px):** Setup panel with chat app registration checkboxes
+
+  - [x] Compact layout with Setup >> and Close buttons
+  - [x] Setup >> / << Setup toggle expands/collapses form
+  - [x] Close just closes the form (no lifecycle timer, no Hide vs Close confusion)
+  - [x] Dropped Quit/Disconnect button — single Close is sufficient
+
+  ### 7.4: Chat app registration via direct JSON editing
+
+  **Dropped the .mcpb bundle approach.** Claude Desktop does not yet support MCPB manifest
+  version 1 on Windows. More importantly, the user journey starts in Skyline (Tool Store),
+  not in the chat app's extension store, so running code to directly edit config JSON is
+  both simpler and more reliable.
+
+  **UI design:** Checkboxes for each chat app, plus a status label.
+
+  ```
+  |  Register Skyline MCP server with:           |
+  |                                              |
+  |  [ ] Claude Desktop                          |
+  |  [x] Claude Code                             |
+  |                                              |
+  |  Claude Code: Registered successfully.       |
+  |  Restart Claude Code to activate.            |
+  ```
+
+  **Detection/registration logic** (new `ChatAppRegistry.cs`):
+  - For each app: detect installation, check if skyline MCP is registered, add/remove
+  - **Claude Desktop**: Direct JSON edit of `%APPDATA%\Claude\claude_desktop_config.json`,
+    key `mcpServers.skyline` with `command` pointing to deployed exe
+  - **Claude Code**: Delegates to `claude mcp add/remove -s user skyline` CLI.
+    User-scope registration (top-level `mcpServers` in `~/.claude.json`) makes Skyline
+    available in all projects. Detection reads top-level `mcpServers.skyline` from JSON.
+  - Checkbox checked = add entry. Unchecked = remove entry.
+  - Status label shows feedback after action. Disabled + "(not installed)" when app missing.
+
+  **Tasks:**
+  - [x] Create `ChatAppRegistry.cs` — detect/add/remove for Claude Desktop (JSON) and Claude Code (CLI)
+  - [x] Replace tab control in setup panel with checkbox UI + status label
+  - [x] Delete `McpBundleBuilder.cs` and compression references from .csproj
+  - [x] Wire checkbox CheckedChanged events to registry add/remove
+  - [x] On expand, probe system and set initial checkbox/status state
+  - [x] Handle JSON parsing gracefully (file missing, empty, malformed)
+  - [x] Suppress CheckedChanged during probe to avoid spurious add/remove
+
+  ### 7.5: Clean up
+
+  - [ ] Remove old flat files from `~/.skyline-mcp/` (DLLs at top level from pre-server/ layout)
+  - [ ] Verify McpServerDeployer only deploys to `server/` subdirectory
+
+  ---
+
+  ### 2026-03-01: Connector lifecycle, deploy layout, and chat app registration (session 9)
+
+  **Deploy directory reorganization:**
+  - Server files now deploy to `~/.skyline-mcp/server/`
+  - connection.json moved from `%LOCALAPPDATA%\Skyline\mcp\` to `~/.skyline-mcp/`
+  - All 4 files with path references updated. String literals consolidated to constants.
+  - `ConnectionInfo` delegates path to `McpServerDeployer.DeployDir` (no duplicate computation)
+
+  **Main form redesign (3 iterations):**
+  1. First: tabs (Claude Desktop / Claude Code) + Close/Quit/Setup buttons + lifecycle timer
+  2. MCPB bundle tested — Claude Desktop error "does not support MCPB manifest version 1"
+  3. Final: checkboxes + status label, single Close button, no lifecycle timer
+
+  **Key design decisions:**
+  - **Dropped .mcpb bundle** — user journey starts in Skyline Tool Store, not chat app store.
+    Direct JSON/CLI registration is simpler and more reliable.
+  - **Dropped lifecycle timer** — stale connection.json handled by consumers (MCP server
+    checks process ID). No background process needed just to clean up a JSON entry.
+  - **Dropped Close vs Quit** — single Close button. No Hide behavior. Form just closes.
+  - **Claude Code uses CLI** — `claude mcp add/remove -s user` for user-scope registration.
+    Discovered that user-scope MCPs go in top-level `mcpServers` in `~/.claude.json`,
+    separate from per-project entries. This is the right scope for Skyline.
+  - **Claude Desktop uses direct JSON edit** — simple flat `mcpServers` object in
+    `%APPDATA%\Claude\claude_desktop_config.json`.
+
+  **ChatAppRegistry.cs** — new static class:
+  - `IsClaudeDesktopInstalled()` / `IsRegisteredInClaudeDesktop()` / `Add` / `Remove`
+  - `IsClaudeCodeInstalled()` / `IsRegisteredInClaudeCode()` / `Add` / `Remove`
+  - Claude Desktop: `JsonNode` manipulation of config file
+  - Claude Code: `Process.Start("claude", "mcp add/remove -s user skyline -- <path>")`
+
+  #### Files changed
+  - `SkylineMcpConnector/MainForm.cs` — expand/collapse, checkbox handlers, no lifecycle timer
+  - `SkylineMcpConnector/MainForm.Designer.cs` — compact layout, checkboxes, Setup + Close buttons
+  - `SkylineMcpConnector/McpServerDeployer.cs` — `ServerDir`, deploy to `server/` subdir
+  - `SkylineMcpConnector/ConnectionInfo.cs` — delegate path to McpServerDeployer.DeployDir
+  - NEW `SkylineMcpConnector/ChatAppRegistry.cs` — detect/add/remove for Claude Desktop and Code
+  - `SkylineMcpServer/SkylineConnection.cs` — updated connection.json path with constants
+  - `ToolsUI/JsonToolServer.cs` — updated connection.json path with constants
+  - DELETED `SkylineMcpConnector/McpBundleBuilder.cs` — .mcpb approach dropped
+
+  #### Remaining work (from session 9)
+  - [x] Test end-to-end: deploy from Skyline, checkbox registration for both apps
+  - [ ] Clean up old flat DLLs from `~/.skyline-mcp/` top level (pre-server/ layout)
+  - [x] Update existing `skyline` MCP entry in `C:/proj` project scope (currently points
+    to old flat path `~/.skyline-mcp/SkylineMcpServer.exe`, needs `server/` prefix)
+  - [ ] Consider: should connector also update connection.json `command` path for
+    existing Claude Code project-scope registrations? Or just let user re-register?
+
+  ### 2026-03-01: Claude Desktop process management and UI polish (session 10)
+
+  **E2E testing results:**
+  - Claude Code: checkbox registration works perfectly, MCP server connects to running
+    Skyline session on first use. Confirmed user-scope registration via `claude mcp add -s user`.
+  - Claude Desktop (Chat mode): works after config written while app is fully stopped.
+    Successfully ran Skyline reports and exported data from Chat tab.
+  - Claude Desktop (Cowork mode): connection errors during initial testing, but Chat mode
+    validates the config format is correct.
+
+  **Critical discovery: Claude Desktop overwrites config on exit.**
+  The app keeps `claude_desktop_config.json` in memory and writes it back on shutdown,
+  erasing any external edits. All 8 WindowsApps processes must be stopped before writing.
+  Distinguished from Claude Code processes (`.local\bin\`, `AppData\Roaming\Claude\claude-code\`)
+  by checking for `\WindowsApps\` in the executable path.
+
+  **New process management in ChatAppRegistry.cs:**
+  - `IsClaudeDesktopRunning()` — filters `claude.exe` processes by WindowsApps path
+  - `StopClaudeDesktop()` — kills all Claude Desktop processes
+  - `GetClaudeDesktopProcesses()` — private helper using `Process.MainModule.FileName`
+
+  **MainForm: two-stage dialog before writing config:**
+  1. "Please close Claude Desktop, then click OK" (user tries manual close)
+  2. Re-check; if still running: "Would you like to stop it now?" (force kill)
+  3. Reverts checkbox if user cancels at either stage
+
+  **UI polish (by Brendan):**
+  - Replaced panel with GroupBox titled "Register Skyline MCP server with:"
+  - Form designed at expanded size for designer usability, collapsed on init
+  - Format string placeholders in labels ("Version: {0}", "Document: {0}")
+  - Mnemonics: &Setup, &Desktop, &Code
+  - Dynamic height calculation from control positions (DPI-safe)
+  - CancelButton = buttonClose (Escape to close)
+  - Extracted `RevertCheckbox()` helper
+
+  #### Files changed
+  - `SkylineMcpConnector/ChatAppRegistry.cs` — added process detection/kill for Desktop
+  - `SkylineMcpConnector/MainForm.cs` — EnsureClaudeDesktopStopped dialog flow, UI polish
+  - `SkylineMcpConnector/MainForm.Designer.cs` — GroupBox, mnemonics, designer-friendly layout
+
+  #### Remaining work
+  - [ ] Clean up old flat DLLs from `~/.skyline-mcp/` top level (pre-server/ layout)
+  - [ ] Form icon (16x16 corner + taskbar size) — currently default Windows icon
+  - [ ] Tool Store icon for Skyline MCP
+  - [ ] Consider renaming menu text to "Connect to Chat" (less Claude-specific)
+  - [ ] Test Cowork mode more thoroughly (Chat mode works, Cowork had connection issues)
