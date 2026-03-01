@@ -1128,3 +1128,115 @@
   - [ ] Tool Store icon for Skyline MCP
   - [ ] Consider renaming menu text to "Connect to Chat" (less Claude-specific)
   - [ ] Test Cowork mode more thoroughly (Chat mode works, Cowork had connection issues)
+
+  ## Phase 8: Document-Modifying MCP Tools
+
+  ### Motivation
+
+  Enable LLMs to add targets to a Skyline document through conversation, replacing manual
+  workflows that currently require specialized tools (LipidCreator), external spreadsheets
+  (glycan formula calculation), copy-paste from databases (UniProt FASTA), or external LLM
+  sessions (ChatGPT for chemical formulas). The LLM's domain knowledge bridges the format
+  gap — the user says what they want to measure, and the LLM generates the right format.
+
+  **Demo target:** 4-day lipidomics course (2026-03-05). Show adding cholesteryl esters to
+  Skyline by conversation, replacing the LipidCreator workflow from the PRM tutorial.
+
+  ### Use cases
+
+  1. **Small molecules / lipids / glycans** via `InsertSmallMoleculeTransitionList`:
+     - "Add CE 16:0, CE 18:1, CE 18:2, CE 20:4, CE 22:6 as ammoniated adducts for PRM"
+     - LLM generates CSV with headers: MoleculeGroup, PrecursorName, PrecursorFormula,
+       PrecursorAdduct, PrecursorMz, ProductMz, ProductName, etc.
+     - Skyline parses headers and inserts — same as Edit > Insert > Transition List paste
+
+  2. **Proteins / peptides** via `ImportFasta`:
+     - "Add human insulin and glucagon to my document"
+     - LLM generates FASTA text from knowledge or constructs it
+     - Skyline digests with current enzyme settings and adds peptides/transitions
+
+  3. **Annotations / sample properties** via `ImportProperties`:
+     - "Label the first 9 replicates as 'control' and the rest as 'treatment'"
+     - LLM exports a report to understand document structure, then constructs columnar
+       text with Location specifiers to set annotations on targets or replicates
+
+  ### Implementation plan
+
+  All three follow the same pattern as existing read-only tools: add method to JsonToolServer,
+  wire the named pipe call in SkylineConnection, expose as MCP tool in SkylineTools.
+
+  **Key difference from read-only tools:** These methods modify the document and are called
+  via `Program.MainWindow.Invoke()` to run on the UI thread. The named pipe call must wait
+  for the Invoke to complete before returning. The existing `ToolService` implementations
+  are void methods, so our JsonToolServer wrappers should return a success/error message
+  rather than void, giving the LLM feedback to retry with corrected input.
+
+  #### 8.1: InsertSmallMoleculeTransitionList (highest demo priority)
+
+  **JsonToolServer.cs:**
+  - Add `InsertSmallMoleculeTransitionList` to `AVAILABLE_METHODS`
+  - Handler receives CSV text as the parameter
+  - Calls `_skylineWindow.InsertSmallMoleculeTransitionList(textCSV, description)` via Invoke
+  - Returns success message or error text
+
+  **SkylineConnection.cs / SkylineTools.cs:**
+  - Add `InsertSmallMoleculeTransitionList(string textCSV)` pipe call
+  - MCP tool `skyline_insert_small_molecule_transition_list` with description documenting
+    the CSV format and available column headers
+
+  **Column headers for tool description** (from `SmallMoleculeTransitionListColumnHeaders`):
+  ```
+  MoleculeGroup, PrecursorName, ProductName, PrecursorFormula, ProductFormula,
+  PrecursorMz, ProductMz, PrecursorCharge, ProductCharge, PrecursorAdduct,
+  ProductAdduct, PrecursorRT, PrecursorRTWindow, LabelType, CAS, InChiKey,
+  InChi, HMDB, SMILES, Note, PrecursorNote, MoleculeNote, MoleculeListNote
+  ```
+
+  - [x] Add to JsonToolServer AVAILABLE_METHODS and dispatch
+  - [x] Add MCP tool with format documentation in description
+  - [x] Wire through SkylineConnection
+  - [ ] Test with lipid transition list from conversation
+
+  #### 8.2: ImportFasta
+
+  **JsonToolServer.cs:**
+  - Add `ImportFasta` to `AVAILABLE_METHODS`
+  - Handler receives FASTA text as the parameter
+  - Calls ToolService-style logic via Invoke
+  - Returns success message or error text
+
+  **MCP tool:** `skyline_import_fasta` — description explains standard FASTA format
+  (>header lines followed by sequence lines)
+
+  - [x] Add to JsonToolServer
+  - [x] Add MCP tool
+  - [x] Wire through SkylineConnection
+  - [ ] Test with protein FASTA from conversation
+
+  #### 8.3: ImportProperties
+
+  **JsonToolServer.cs:**
+  - Add `ImportProperties` to `AVAILABLE_METHODS`
+  - Handler receives CSV text with Location column + annotation columns
+  - Calls `_skylineWindow.ImportAnnotations()` via Invoke
+  - Returns success message or error text
+
+  **MCP tool:** `skyline_import_properties` — description explains the format: first column
+  is an ElementLocator (from report export), remaining columns are annotation names with
+  values. The LLM should first export a report to learn the document structure and locators.
+
+  - [ ] Add to JsonToolServer
+  - [ ] Add MCP tool
+  - [ ] Wire through SkylineConnection
+  - [ ] Test with annotation workflow from conversation
+
+  #### 8.4: Error handling pattern
+
+  The existing ToolService methods are void — they throw on failure but return nothing on
+  success. For the MCP tools, we need the LLM to know whether its input was accepted:
+
+  - Wrap the Invoke call in try/catch
+  - On success: return "Successfully inserted N molecules" or similar (if we can count)
+  - On failure: return the exception message so the LLM can fix headers and retry
+  - The retry loop is natural for LLMs — send CSV, get error about unknown header,
+    fix the header name, resend
