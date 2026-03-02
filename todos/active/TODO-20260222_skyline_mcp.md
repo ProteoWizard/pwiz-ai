@@ -1403,8 +1403,39 @@
   - `ToolsUI/JsonToolServer.cs` — ex.ToString() in HandleRequest, result.SublistId.IsRoot
   - `SkylineMcpServer/Tools/SkylineTools.cs` — Invoke wrapper, ErrorDetail enum, all tools wrapped
 
-  #### Remaining work
-  - [x] Test `skyline_add_report` end-to-end (add report, verify it appears in Skyline's list)
-  - [x] Clean up old flat DLLs from `~/.skyline-mcp/` top level (pre-server/ layout)
-  - [x] Form icon (16x16 corner + taskbar size)
-  - [x] Tool Store icon for Skyline MCP
+  ### Session 13 — RunCommand document apply-back with undo and audit logging (2026-03-02)
+
+  Made `RunCommand()` apply document-modifying commands back to SkylineWindow as a single undo
+  record with proper audit logging. Previously, commands like `--import-fasta` or settings changes
+  via RunCommand would modify a local CommandLine document copy but never update the running UI.
+
+  #### CommandLine.ModifyDocumentWithLogging fix
+  - When audit logging is off, the method toggles it on/off around `ModifyDocument()`. If the
+    inner modification was a no-op, the toggle left `_doc` pointing to a different reference,
+    breaking reference equality checks. Fixed by saving `docOriginal` before any toggle, checking
+    if `ModifyDocument` actually changed `_doc`, and restoring `docOriginal` on no-op.
+
+  #### ToolService.RunCommand apply-back
+  - Saves `docBefore` reference before creating CommandLine
+  - After `commandLine.Run()`, checks `ReferenceEquals(commandLine.Document, docBefore)`
+  - If changed, applies via `SkylineWindow.ModifyDocument()` on the UI thread
+  - Single undo record covers all operations in the command (settings + import + etc.)
+  - Both CommandLine's detailed audit entries and the RunCommand wrapper entry are preserved
+
+  #### New audit log message type
+  - Added `ran_command_line` to `MessageType` enum with format string `"Ran command: {0}"`
+  - The undo description is `"Run command"` (shown in Edit > Undo menu)
+
+  #### Verified working
+  - Settings change (`--tran-precursor-ion-charges=1,2,3`): updates UI, single undo, audit log
+    shows both "Ran command: ..." wrapper and detailed "Precursor charges changed" entries
+  - FASTA import (`--import-fasta=...`): proteins appear in targets tree, single undo
+  - Combined operation (3 settings changes + FASTA import + report export): all in one command,
+    one undo record, Ctrl+Z reverts everything
+
+  #### Files changed
+  - `CommandLine.cs` — ModifyDocumentWithLogging no-op fix (docOriginal/docBefore pattern)
+  - `ToolsUI/ToolService.cs` — RunCommand apply-back with ModifyDocument + audit entry
+  - `Model/AuditLog/LogMessage.cs` — ran_command_line enum entry
+  - `Model/AuditLog/AuditLogStrings.resx` + `.Designer.cs` — format string
+  - `ToolsUI/ToolsUIResources.resx` + `.Designer.cs` — undo description string
