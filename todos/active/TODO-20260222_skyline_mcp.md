@@ -1028,8 +1028,8 @@
 
   ### 7.5: Clean up
 
-  - [ ] Remove old flat files from `~/.skyline-mcp/` (DLLs at top level from pre-server/ layout)
-  - [ ] Verify McpServerDeployer only deploys to `server/` subdirectory
+  - [x] Remove old flat files from `~/.skyline-mcp/` (DLLs at top level from pre-server/ layout)
+  - [x] Verify McpServerDeployer only deploys to `server/` subdirectory
 
   ---
 
@@ -1076,7 +1076,7 @@
 
   #### Remaining work (from session 9)
   - [x] Test end-to-end: deploy from Skyline, checkbox registration for both apps
-  - [ ] Clean up old flat DLLs from `~/.skyline-mcp/` top level (pre-server/ layout)
+  - [x] Clean up old flat DLLs from `~/.skyline-mcp/` top level (pre-server/ layout)
   - [x] Update existing `skyline` MCP entry in `C:/proj` project scope (currently points
     to old flat path `~/.skyline-mcp/SkylineMcpServer.exe`, needs `server/` prefix)
   - [ ] Consider: should connector also update connection.json `command` path for
@@ -1123,9 +1123,9 @@
   - `SkylineMcpConnector/MainForm.Designer.cs` — GroupBox, mnemonics, designer-friendly layout
 
   #### Remaining work
-  - [ ] Clean up old flat DLLs from `~/.skyline-mcp/` top level (pre-server/ layout)
-  - [ ] Form icon (16x16 corner + taskbar size) — currently default Windows icon
-  - [ ] Tool Store icon for Skyline MCP
+  - [x] Clean up old flat DLLs from `~/.skyline-mcp/` top level (pre-server/ layout)
+  - [x] Form icon (16x16 corner + taskbar size) — currently default Windows icon
+  - [x] Tool Store icon for Skyline MCP
   - [ ] Consider renaming menu text to "Connect to Chat" (less Claude-specific)
   - [ ] Test Cowork mode more thoroughly (Chat mode works, Cowork had connection issues)
 
@@ -1303,3 +1303,108 @@
   - `ToolsUI/JsonToolServer.cs` — 3 new methods, SerializeSettingsToFile helper, ToForwardSlashPath usage
   - `SkylineMcpServer/Tools/SkylineTools.cs` — 3 new MCP tools, GetTempSettingsPath helper
   - `SkylineMcpConnector/MainForm.cs` — Skyline process monitor timer, deploy update MessageBox
+
+  ## Phase 10: JSON-Based Report Definitions
+
+  ### Session 11 — JSON report API + ColumnResolver + LlmInstruction (2026-03-02)
+
+  Replaced the XML-based `ExportReportFromDefinition` with a JSON-based API where the LLM
+  just lists column display names and the server infers row source, sublist, and property paths.
+
+  **JSON format:**
+  ```json
+  {"name": "optional name", "select": ["ProteinName", "PrecursorMz", "Area"]}
+  ```
+
+  **New types introduced:**
+
+  - `ColumnResolver` (`Model/Databinding/ColumnResolver.cs`) — public class that maps invariant
+    column display names to PropertyPaths by traversing ColumnDescriptor trees. Tries row sources
+    shallowest first (Protein, Peptide, Precursor, Transition), falls back to Replicate. Throws
+    `UnresolvedColumnsException` with structured data (column name + suggestions per column).
+
+  - `LlmInstruction` (`Util/Extensions/Text.cs`) — readonly struct marking text intended as
+    instruction for an LLM consumer, not for direct display to end users. Distinguished from
+    user-facing text (must be in .resx) and debug text (developer-only). Implicit conversion
+    to string. Future seam for LLM prompt localization.
+
+  - `TextUtil.SingleQuote()` (`Util/Extensions/Text.cs`) — extension method complementing
+    existing `Quote()`, wraps text in single quotes for identifier formatting in error messages.
+
+  **New MCP tool:**
+  - `skyline_add_report` — saves a JSON report definition to the user's PersistedViews so it
+    appears in Skyline's report list. `name` field required. Uses same ColumnResolver as export.
+
+  **Row source resolution bug fix:**
+  When ALL resolved paths go through `Results!*` (e.g., `{"select": ["ReplicateName"]}`), the
+  resolver was picking Protein as the shallowest match, producing a pivoted cross-join instead
+  of one row per replicate. Fixed by deferring to the Replicate row source when all paths are
+  Results-only. The target match is kept as fallback if Replicate can't resolve all columns.
+
+  **Build dependency fix:**
+  `SkylineMcpConnector.csproj` had no build dependency on `SkylineMcpServer`. The `PackageToolZip`
+  post-build target copied from the server's output directory, but MSBuild didn't know to build
+  the server first. Added a `BuildMcpServer` target using `<MSBuild>` task (cross-targeting
+  prevents normal `<ProjectReference>` from net472 to net8.0).
+
+  **Architectural decisions:**
+  - ColumnResolver lives in `Model.Databinding` (general-purpose, near RowFactories) not in
+    JsonToolServer (API layer). Returns structured errors; formatting is the API layer's job.
+  - LlmInstruction lives in TextUtil.cs (small type, Skyline-only scope). Not in Common
+    (no consumer outside Skyline). English for now but marked distinctly for future localization.
+  - String formatting uses positional replacement (`string.Format(@"..{0}..", arg)`) not
+    concatenation, per project convention for .resx migration readiness.
+
+  #### Files changed
+  - `Model/Databinding/ColumnResolver.cs` — NEW: column resolution algorithm + structured errors
+  - `Skyline.csproj` — added ColumnResolver.cs Compile entry
+  - `Util/Extensions/Text.cs` — LlmInstruction struct, SingleQuote() method
+  - `ToolsUI/JsonToolServer.cs` — ExportJsonDefinitionReport, AddJsonDefinitionReport,
+    ResolveJsonReportDefinition, FormatUnresolvedColumnsError; removed nested ColumnResolver
+  - `SkylineMcpServer/Tools/SkylineTools.cs` — JSON parameter for report_from_definition,
+    new skyline_add_report tool
+  - `SkylineMcpConnector/SkylineMcpConnector.csproj` — BuildMcpServer target
+
+  #### Remaining work (from session 11)
+  - [x] Fix `0` prefix in column headers for paths through indexed collections (session 12)
+  - [x] Verify `Results!*` sublist detection works for cross-level queries (session 12)
+  - [x] Test `skyline_add_report` end-to-end (add report, verify it appears in Skyline's list)
+  - [x] Clean up old flat DLLs from `~/.skyline-mcp/` top level (pre-server/ layout)
+  - [x] Form icon (16x16 corner + taskbar size)
+  - [x] Tool Store icon for Skyline MCP
+
+  ### Session 12 — SublistId fix + error handling (2026-03-02)
+
+  Fixed the "0" prefix in column headers and added consistent error handling to MCP tools.
+
+  #### SublistId fix (ColumnResolver)
+  - Replaced hard-coded `Results!*` string check with general `FindDeepestSublist()` algorithm
+  - Uses same approach as `ReportSpecConverter`: walks each PropertyPath up to find the deepest
+    unbound collection lookup (`!*`), takes the deepest across all paths as SublistId
+  - `ResolveResult` now carries `PropertyPath SublistId` instead of `bool NeedsResultsSublist`
+  - Renamed `AllPathsThroughResults` to `AllPathsThroughCollection` — checks `IsUnboundLookup`
+    instead of string-matching `Results!*`
+  - `JsonToolServer.ResolveJsonReportDefinition` uses `result.SublistId.IsRoot` check
+  - Tested: `{"select": ["ReplicateName", "FilePath"]}` now produces clean headers (42 rows,
+    SublistId=`Files!*`), cross-level queries like ProteinName+Area work (32K rows,
+    SublistId=`Results!*`), custom annotations resolve correctly
+
+  #### Error handling
+  - `JsonToolServer.HandleRequest`: changed `ex.Message` to `ex.ToString()` for full stack traces
+  - `SkylineTools`: wrapped every MCP tool in `Invoke(Func<string>)` that catches exceptions
+    and returns them as text so the LLM always sees error details instead of generic framework error
+  - Added `ErrorDetail` enum (Message, Full) with `ErrorDetailLevel` property defaulting to Full
+  - Verified: unknown column "PeptideModifiedSequence" now returns full stack trace with
+    "Did you mean" suggestions instead of opaque "An error occurred invoking..."
+
+  #### Files changed
+  - `Model/Databinding/ColumnResolver.cs` — FindDeepestSublist, AllPathsThroughCollection,
+    PathContainsCollection, ResolveResult.SublistId
+  - `ToolsUI/JsonToolServer.cs` — ex.ToString() in HandleRequest, result.SublistId.IsRoot
+  - `SkylineMcpServer/Tools/SkylineTools.cs` — Invoke wrapper, ErrorDetail enum, all tools wrapped
+
+  #### Remaining work
+  - [x] Test `skyline_add_report` end-to-end (add report, verify it appears in Skyline's list)
+  - [x] Clean up old flat DLLs from `~/.skyline-mcp/` top level (pre-server/ layout)
+  - [x] Form icon (16x16 corner + taskbar size)
+  - [x] Tool Store icon for Skyline MCP
