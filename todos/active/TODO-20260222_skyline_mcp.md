@@ -14,8 +14,8 @@
 
   ## PR Scope
 
-  Phase 1 (Connector) + Phase 2 (MCP Server) + Phase 3a (Read-Only Tools). This gives an end-to-end demo: user
-  launches connector from Skyline, then queries Skyline from Claude.
+  Phase 1 (Connector) + Phase 2 (MCP Server) + Phase 3a (Read-Only Tools) + multi-app support. This gives an
+  end-to-end demo: user launches connector from Skyline, registers with any AI app, then queries Skyline.
 
   ## Architecture: Direct JSON Pipe (2-Tier)
 
@@ -1439,3 +1439,51 @@
   - `Model/AuditLog/LogMessage.cs` — ran_command_line enum entry
   - `Model/AuditLog/AuditLogStrings.resx` + `.Designer.cs` — format string
   - `ToolsUI/ToolsUIResources.resx` + `.Designer.cs` — undo description string
+
+  ### Session 14 — Renamed to AI Connector, added Gemini/VS Code/Cursor support (2026-03-02)
+
+  Broadened the SkylineMcpConnector from Claude-only to support all major MCP-capable AI apps.
+  Renamed UI from "Connect to Claude" to "Connect to AI" / "AI Connector". Added registration
+  support for Gemini CLI, VS Code (GitHub Copilot), and Cursor alongside existing Claude Desktop
+  and Claude Code. Also added a Skyline version check using the legacy ToolService pipe API so
+  older Skyline versions get a clear error instead of silently failing.
+
+  #### ChatAppRegistry refactoring
+  - Extracted shared `AddToJsonConfig`, `RemoveFromJsonConfig`, `IsRegisteredInJsonConfig` helpers
+  - Refactored Claude Desktop to use shared helpers
+  - Added `BuildServerEntry()` (shared) and `BuildVSCodeServerEntry()` (adds `"type": "stdio"`)
+  - Gemini CLI: `~/.gemini/settings.json`, key `mcpServers`
+  - VS Code: `%APPDATA%/Code/User/mcp.json`, key `servers` (unique — not `mcpServers`)
+  - Cursor: `~/.cursor/mcp.json`, key `mcpServers`
+
+  #### UI changes
+  - 3 new checkboxes: Gemini CLI, VS Code (Copilot), Cursor
+  - GroupBox expanded from 125px to 200px to fit 5 checkboxes
+  - Each checkbox probes installation and registration state
+  - Form title: "AI Connector", menu title: "Connect to AI"
+  - info.properties: Name "AI Connector", updated description
+
+  #### Version check via legacy ToolService
+  - Added SkylineTool project reference for `RemoteClient` access
+  - `CheckSkylineVersion()` calls `GetVersion()` via legacy named pipe
+  - Minimum version: 26.1.1.061 (when JsonToolServer was introduced)
+  - Old Skyline: shows "does not support AI connections", hides document label, disables Setup
+  - Also calls `GetProcessId()` to monitor Skyline process even on version failure
+
+  #### Tested working
+  - Claude Desktop: connected successfully
+  - Claude Code (VS Code extension): connected successfully
+  - VS Code Copilot: registered and ran successful query
+  - Cursor: registered and confirmed version/document queries
+  - Gemini CLI: registered (could not test query without token purchase)
+  - Gemini CLI not installed: checkbox correctly disabled with "(not installed)"
+  - Old Skyline (26.1.0.57): showed version error, form auto-closed with Skyline
+
+  #### Files changed
+  - `SkylineMcp.sln` — Added SkylineTool project
+  - `SkylineMcpConnector.csproj` — Added SkylineTool ProjectReference
+  - `ChatAppRegistry.cs` — Shared JSON helpers, Gemini/VSCode/Cursor methods
+  - `MainForm.Designer.cs` — 3 new checkboxes, expanded layout
+  - `MainForm.cs` — Checkbox handlers, probe logic, version check with process monitor
+  - `tool-inf/SkylineMcpConnector.properties` — Title "Connect to AI"
+  - `tool-inf/info.properties` — Name "AI Connector", updated description
