@@ -98,7 +98,9 @@
 
   ### Near-term (phase 2)
 
-  - [ ] Implement sorting and filtering in report definitions for get and add report by definition
+  - [x] Implement filtering in report definitions (filter array with 12 operations, "did you mean" errors)
+  - [x] Implement sorting in get_report_from_definition (via RowFilter.ColumnSort, query-time only)
+  - [x] Implement pivotReplicate and pivotIsotopeLabel flags in report definitions
   - [ ] Implement `get_open_graphs` (available open graphs), `get_graph_data`, and `get_graph_screenshot`
     - Future? `get_available_graphs` and `open_graph`?
   - [ ] Implement `get_available_tutorials` and `get_tutorial_url`
@@ -118,3 +120,18 @@
   ## Session Log
 
   (Continued from phase 1, session 16)
+
+  ### Session 17 (2026-03-03) - Filtering, sorting, and pivot support
+
+  Added filtering, sorting, and pivot support to JSON report definitions:
+  - **Filtering**: ParseFilterSpecs resolves columns against ColumnResolver.ResolveResult.ColumnIndex,
+    validates ops via FilterOperations.GetOperation, builds FilterSpec/FilterPredicate. Filters can
+    reference any column in the data model, not just selected ones. Part of ViewSpec (persisted).
+  - **Sorting**: ParseSortSpecs builds RowFilter.ColumnSort objects applied via BindingListSource.RowFilter
+    in ExportJsonDefinitionReport. Sort is query-time only (not part of report definition) because
+    Skyline report definitions don't support persisted sort order.
+  - **Pivot Replicate**: pivotReplicate=true sets SublistId to Root; false sets to replicate sublist.
+  - **Pivot Isotope Label**: Delegates to PivotReplicateAndIsotopeLabelWidget.PivotIsotopeLabel().
+  - ColumnResolver.ResolveResult now exposes ColumnIndex for filter column resolution.
+  - ColumnResolver.FindSuggestions changed from private to internal for reuse in filter errors.
+  - RowFactories.ExportReport gained overloads accepting IList<RowFilter.ColumnSort>.
