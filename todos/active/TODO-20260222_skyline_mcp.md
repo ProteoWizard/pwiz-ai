@@ -103,7 +103,18 @@
   - [x] Implement pivotReplicate and pivotIsotopeLabel flags in report definitions
   - [ ] Implement `get_open_graphs` (available open graphs), `get_graph_data`, and `get_graph_screenshot`
     - Future? `get_available_graphs` and `open_graph`?
-  - [ ] Implement `get_available_tutorials` and `get_tutorial_url`
+  - [x] Sync StartPage tutorial list to match wiki page exactly (see Session 18 design)
+  - [x] Implement `get_available_tutorials`, `get_tutorial`, and `get_tutorial_image` (see Sessions 18-20)
+    - [x] Created TutorialCatalog.cs as single master definition (section/tutorial list, pure data)
+    - [x] Created JsonTutorialCatalog.cs in ToolsUI/ (MCP/JSON layer: FormatCatalog, FetchTutorial, FetchTutorialImage, ConvertHtmlToMarkdown)
+    - [x] Refactored StartPage.PopulateTutorialPanel() to iterate TutorialCatalog (removed ~380 lines of per-tutorial boilerplate)
+    - [x] Added GetAvailableTutorials/GetTutorial/GetTutorialImage thin delegates in JsonToolServer.cs
+    - [x] Added skyline_get_available_tutorials, skyline_get_tutorial, skyline_get_tutorial_image MCP tools in SkylineTools.cs
+    - [x] Added TutorialCatalogTest.cs (resource validation, format check, HTML-to-markdown)
+    - [x] Fixed pre-existing .resx typos: PRMOrbitraip→PRMOrbitrap, DDSearch→DDASearch
+    - [x] Fixed image resource name mismatches: GroupedStudies→GroupedStudy, PRM→TargetedMSMS
+    - [x] Added missing DIA_TTOF text/image resources
+    - [x] All 3 TutorialCatalog tests pass, end-to-end MCP tests verified
   - [ ] Implement unit tests of at least the Skyline side of the API
   - [ ] Test ImportProperties end-to-end with annotation workflow from conversation
   - [ ] Create PR
@@ -135,3 +146,237 @@
   - ColumnResolver.ResolveResult now exposes ColumnIndex for filter column resolution.
   - ColumnResolver.FindSuggestions changed from private to internal for reuse in filter errors.
   - RowFactories.ExportReport gained overloads accepting IList<RowFilter.ColumnSort>.
+
+### Session 18 (2026-03-03) - Tutorial tools design
+
+Design discussion about how the Skyline MCP can help LLMs find and use tutorials.
+
+#### Decision: GitHub raw content, served through MCP, file-based output
+
+- **Source**: GitHub `raw.githubusercontent.com` with git hash from `skyline_get_version`
+- **Why not skyline.ms wiki**: Tutorial pages use `<iframe>` + JS content population, fragile to extract
+- **Why MCP fetches content**: Users can't be expected to have web fetch tools. Claude Desktop,
+  Gemini CLI, Cursor don't guarantee web access. The Skyline MCP must be the gateway.
+- **URL pattern**: `https://raw.githubusercontent.com/ProteoWizard/pwiz/{hash}/pwiz_tools/Skyline/Documentation/Tutorials/{name}/{lang}/index.html`
+- **File-based output**: Large content written to temp file (like `skyline_get_report`), reducing
+  context cost and network roundtrips. LLM reads sections from file with offset/limit as needed.
+- **Version pinning**: The git hash in `skyline_get_version` (e.g., `26.1.1.061-6c3244bc0a`)
+  ensures tutorial content always matches the user's Skyline version.
+
+#### Prerequisite: Sync StartPage to wiki tutorials page
+
+The wiki tutorials page (skyline.ms/...?name=tutorials) has 28 tutorials in 6 sections.
+The StartPage currently has 26 tutorials in 5 sections. Differences:
+
+**Wiki has but StartPage doesn't:**
+- **Section**: "Introduction to Full-Scan Acquisition Data" (wiki has this as a separate section)
+  - AcquisitionComparison ("Comparing PRM, DIA, and DDA") — entirely missing from StartPage
+  - PRMOrbitrap and DIA are in this section on wiki, but in "Full-Scan" section in StartPage
+- **Tutorial**: PeakBoundaryImputation-DIA ("Peak Boundary Imputation for DIA") — in wiki's
+  Full-Scan section, missing from StartPage
+
+**Tutorials on GitHub but NOT on wiki (stale, not for MCP):**
+- ImportingAssayLibraries, ImportingIntegrationBoundaries, PRMOrbitrap-PRBB
+
+**Changes needed:**
+1. Add `Section_Intro_Full_Scan` to TutorialTextResources.resx
+2. Add AcquisitionComparison entries to all 3 .resx files (Text, Link, Image)
+3. Add PeakBoundaryImputation-DIA entries to all 3 .resx files
+4. Restructure StartPage.cs `PopulateTutorialPanel()`:
+   - Introductory (4): MethodEdit, MethodRefine, GroupedStudy, ExistingQuant
+   - Intro Full-Scan (3): AcquisitionComparison, PRMOrbitrap, DIA
+   - Full-Scan (7): MS1Filtering, DDASearch, TargetedMSMS, DIA_SWATH, DIA_PASEF, DIA_Umpire_TTOF, PeakBoundaryImputation
+   - Small Molecules (5): SmallMolecule, SmallMoleculeMethodDevCEOpt, SmallMoleculeQuantification, HiResMetabolomics, SmallMolLibraries
+   - Reports (2): CustomReports, LiveReports
+   - Advanced (7): AbsoluteQuant, PeakPicking, iRT, OptimizeCE, IMSFiltering, LibraryExplorer, AuditLog
+5. Commit to keeping StartPage and wiki in sync going forward
+
+#### Tool 1: `skyline_get_available_tutorials`
+
+Returns structured catalog from Skyline's .resx resources. No network needed.
+
+**Parameters:** none
+
+**Returns** (tab-separated, like other enumeration tools):
+```
+Category\tName\tTitle\tDescription\tWikiUrl\tZipUrl
+Introductory\tMethodEdit\tTargeted Method Editing\t...\thttps://...\thttps://...
+...
+```
+
+**Source data** (all in `Controls/Startup/`):
+- `TutorialTextResources` — captions, descriptions, section names
+- `TutorialLinkResources` — zip URLs, wiki URLs
+- `StartPage.PopulateTutorialPanel()` — ordering and section grouping
+
+**Implementation**: New method `GetAvailableTutorials()` in JsonToolServer.cs.
+Build catalog from .resx resources. The ordering and section assignment should be
+defined in a static data structure (array of tutorial descriptors) rather than
+duplicating the StartPage's UI construction code.
+
+#### Tool 2: `skyline_get_tutorial`
+
+Fetches tutorial content from GitHub, converts HTML to markdown, writes to file.
+
+**Parameters:**
+- `name` (required) — tutorial folder name (e.g., "MethodEdit")
+- `language` (optional, default "en")
+
+**Behavior:**
+1. Extract git hash from `Install.Version` (after the `-`)
+2. Construct URL: `https://raw.githubusercontent.com/ProteoWizard/pwiz/{hash}/pwiz_tools/Skyline/Documentation/Tutorials/{name}/{lang}/index.html`
+3. Fetch HTML via `WebClient` (sync, runs on pipe thread)
+4. Convert HTML → markdown (see conversion spec below)
+5. Write markdown to temp file
+6. Parse headings to build table of contents with line numbers
+7. Return: JSON with `file_path`, `title`, `toc` (array of {heading, level, line})
+
+**LLM workflow:**
+1. Call `get_available_tutorials` → browse catalog, recommend tutorials
+2. Call `get_tutorial("MethodEdit")` → get file path + TOC
+3. Use `Read` tool with offset/limit to read specific sections as needed
+4. Guide user through steps, answer questions about specific sections
+
+#### HTML-to-markdown conversion spec
+
+Tutorial HTML is well-structured (no dynamic content, JS is presentational only):
+
+| HTML | Markdown |
+|------|----------|
+| `<h1 class="document-title">` | `# Title` |
+| `<h1>` | `# Section` |
+| `<h2>` | `## Subsection` |
+| `<p>` | paragraph with blank line |
+| `<ol>/<li>` | `1. numbered list` |
+| `<ul>/<li>` | `- bullet list` |
+| `<table>` | markdown table |
+| `<img src="s-01.png">` | `[Screenshot: s-01.png]` |
+| `<b>/<strong>` | `**bold**` |
+| `<i>/<em>` | `*italic*` |
+| `<a href="...">text</a>` | `[text](url)` |
+| `<style>, <script>` | dropped |
+| `<br>` | newline |
+
+Implementation: Regex-based converter in JsonToolServer.cs. The existing `StripHtmlTags()`
+helper handles simple cases; extend with a more structured `ConvertHtmlToMarkdown()` method.
+No external dependencies needed — tutorial HTML is regular enough for regex.
+
+#### Graceful degradation
+
+If GitHub is unreachable (no internet, corporate firewall):
+- Return error with wiki URL and zip URL as fallbacks
+- LLM can direct user to those URLs for manual access
+
+#### Future potential (post-PR)
+
+- **Lesson plans**: LLM creates structured learning paths from tutorial catalog based on
+  user's experience level and goals (professor use case)
+- **Section-level Q&A**: User asks about a concept, LLM finds relevant tutorial section
+- **Tutorial-guided workflows**: LLM reads tutorial steps and helps execute them in Skyline
+  using other MCP tools (e.g., "set up like step 3 of the Method Editing tutorial")
+- **Localized tutorials**: `language` parameter already supports ja, zh-CHS
+
+### Session 19 (2026-03-03) - Tutorial tools implementation
+
+Implemented `get_available_tutorials` and `get_tutorial` MCP tools with a shared
+`TutorialCatalog` class as the single authoritative tutorial definition.
+
+#### Architecture: TutorialCatalog as single source of truth
+
+Brendan pointed out the initial approach duplicated the tutorial list across StartPage.cs
+and JsonToolServer.cs. Refactored to a shared `TutorialCatalog` class in Controls/Startup/:
+
+- **`TutorialCatalog.cs`** — Master tutorial list (28 tutorials, 6 sections), shared helpers:
+  - `TutorialInfo` struct: Section (resource key), ResourcePrefix, FolderName
+  - `TutorialInfo` properties: Caption, Description, ZipUrl, WikiUrl, SkyFileInZip, Icon
+    (all via ResourceManager lookups from .resx files)
+  - `SectionOrder` array defining section display order
+  - `GetSectionDisplayName()` — localized section name (with `Assume.IsNotNull` validation)
+  - `GetSectionDisplayNameInvariant()` — English section name for LLM consumers
+  - `FormatCatalog()` — tab-separated catalog using invariant strings (for MCP)
+  - `FetchTutorial(name, language)` — GitHub fetch + HTML-to-markdown + file output
+  - `ConvertHtmlToMarkdown(html)` — regex-based converter for tutorial HTML
+
+- **StartPage.cs** — Refactored `PopulateTutorialPanel()` from ~380 lines of per-tutorial
+  boilerplate down to ~50 lines iterating `TutorialCatalog.Tutorials`. Section ordering
+  (proteomic vs small molecule mode) preserved via dictionary of section controls.
+
+- **JsonToolServer.cs** — Thin 2-line delegates: `GetAvailableTutorials()` and
+  `GetTutorial(name, language)` both call into TutorialCatalog.
+
+- **SkylineTools.cs** — MCP tool definitions with descriptions, parameter docs, and
+  friendly formatting of the GetTutorial JSON result (shows TOC with line numbers).
+
+#### Localization considerations
+
+- Section constants use .resx resource keys (e.g., `Section_Introductory`), not display text
+- `GetSectionDisplayName()` returns localized name (for StartPage UI)
+- `GetSectionDisplayNameInvariant()` returns English name (for MCP/LLM output)
+- `FormatCatalog()` uses invariant culture for all lookups — LLMs work best in English
+- Missing resource keys fail with `Assume.IsNotNull` rather than silent fallback
+
+#### Test coverage
+
+- `TutorialCatalogTest.cs` validates all resource entries exist for every tutorial:
+  captions, descriptions, zip/pdf URLs, start icons, section membership, no duplicates
+- `TestTutorialCatalogFormat()` validates FormatCatalog produces correct tab-separated structure
+- `TestConvertHtmlToMarkdown()` validates HTML-to-markdown conversion for key patterns
+
+#### New/modified files
+- **New**: `Controls/Startup/TutorialCatalog.cs`, `Test/TutorialCatalogTest.cs`
+- **Modified**: `StartPage.cs` (major refactor), `JsonToolServer.cs` (+11 lines),
+  `SkylineTools.cs` (+64 lines), `Skyline.csproj`, `Test.csproj`
+
+### Session 20 (2026-03-04) - Tutorial resource fixes, image tool, end-to-end testing
+
+#### .resx resource fixes (pre-existing bugs found by TutorialCatalogTest)
+
+Fixed 3 typos and 5 missing resources that prevented the test from passing:
+
+- **Typos**: `PRMOrbitraip_Description` → `PRMOrbitrap_Description` (all 3 locales + Designer),
+  `DDSearch_Description` → `DDASearch_Description` (all 3 locales + Designer),
+  `DDSearch_pdf` → `DDASearch_pdf` (link resources + Designer)
+- **Image name mismatches**: Renamed `GroupedStudies_start` → `GroupedStudy_start`,
+  `PRM_start` → `TargetedMSMS_start` (to match ResourcePrefix convention)
+- **Missing resources**: Added `DIA_TTOF_Caption`, `DIA_TTOF_Description`, `DIA_TTOF_start`
+
+#### Tutorial image tool (`skyline_get_tutorial_image`)
+
+Added third tutorial MCP tool for downloading screenshot images referenced in tutorial
+markdown (e.g., `[Screenshot: s-01.png]`). Uses same GitHub raw URL pattern as get_tutorial.
+
+- `TutorialCatalog.FetchTutorialImage()` — validates filename (path traversal prevention),
+  downloads image to temp or caller-specified path
+- Images stored in `{tmpDir}/images/{tutorial}/{lang}/` subdirectory structure
+- All 3 tutorial tools accept optional `filePath` parameter (matching report/settings pattern)
+
+#### WebClient → HttpClientWithProgress migration
+
+Replaced deprecated `WebClient` with `HttpClientWithProgress` (co-authored by Claude) in both
+FetchTutorial and FetchTutorialImage. Better error reporting for network failures.
+
+#### End-to-end testing
+
+All 3 MCP tools verified working against running Skyline:
+- `get_available_tutorials` — 28 tutorials, 6 sections, correct captions/descriptions/URLs
+- `get_tutorial("DIA-TTOF")` — fetched HTML, converted to 833-line markdown, TOC extracted
+- `get_tutorial_image("DIA-TTOF", "s-01.png")` — downloaded screenshot, viewable by Claude
+- Custom `filePath` tested: `ai/.tmp/s-01.png` saves to approved location (no manual approval needed)
+
+#### TutorialCatalog → JsonTutorialCatalog refactoring
+
+Separated MCP/JSON concerns from pure catalog data:
+- **`Controls/Startup/TutorialCatalog.cs`** — Pure data only: TutorialInfo struct, Tutorials[],
+  SectionOrder[], section constants, GetSectionDisplayName/Invariant, FindTutorial. No JSON, HTTP,
+  or temp file code. Consumed by StartPage UI.
+- **`ToolsUI/JsonTutorialCatalog.cs`** (NEW) — MCP serialization layer: FormatCatalog,
+  FetchTutorial, FetchTutorialImage, ConvertHtmlToMarkdown, GitHub URL construction, temp file
+  management. Wraps TutorialCatalog. Consumed by JsonToolServer.
+- Updated JsonToolServer.cs to call JsonTutorialCatalog (removed Controls.Startup import)
+- Updated TutorialCatalogTest.cs to reference JsonTutorialCatalog for format/markdown tests
+
+#### New/modified files
+- **New**: `TutorialCatalog.cs`, `JsonTutorialCatalog.cs`, `TutorialCatalogTest.cs`
+- **Modified**: `StartPage.cs` (major refactor), `JsonToolServer.cs` (+delegates),
+  `SkylineTools.cs` (+3 MCP tools), `Skyline.csproj`, `Test.csproj`,
+  9 .resx/.Designer.cs files (typo fixes + missing resources)
