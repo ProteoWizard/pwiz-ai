@@ -1487,3 +1487,96 @@
   - `MainForm.cs` — Checkbox handlers, probe logic, version check with process monitor
   - `tool-inf/SkylineMcpConnector.properties` — Title "Connect to AI"
   - `tool-inf/info.properties` — Name "AI Connector", updated description
+
+  ### Session 15 — Reflection dispatch refactor + SetSelection/SetReplicate (2026-03-03)
+
+  Refactored JsonToolServer dispatch from hardcoded switch to reflection, added two new
+  navigation methods (SetSelectedElement, SetReplicate), and moved branch-added code out of
+  the legacy ToolService into JsonToolServer.
+
+  #### JsonToolServer reflection dispatch
+  - Removed `AVAILABLE_METHODS` static array and `Dispatch` switch statement
+  - Added `Dictionary<string, MethodInfo> _methods` built in constructor via reflection
+  - Convention: public methods returning `string` with only `string` parameters are
+    auto-discovered as dispatchable methods
+  - `QueryAvailableMethods` returns dynamically from `_methods.Keys`
+  - `TargetInvocationException` unwrapped at the error reporting site in `HandleRequest`
+    (not re-thrown, which would lose stack trace)
+  - Eliminates need to update dispatch code when adding new methods — just add a public method
+
+  #### Converted switch cases to public methods
+  - Each case in the old switch became a `public string MethodName(...)` method
+  - Methods with substantial logic (GetDocumentStatus, GetReportDocTopics, GetReportDocTopic,
+    AddReportFromDefinition) are now the public API methods directly — no wrapper indirection
+  - Simple ToolService forwards (GetDocumentPath, GetVersion, etc.) remain as one-line
+    delegations to pre-existing legacy ToolService methods
+  - Consistent use of normal method bodies (not expression-bodied members) for anything
+    beyond a single-line forward
+
+  #### New navigation methods
+  - `SetSelectedElement(string)` — navigates to a document element using the proven
+    `SkylineWindow.SelectElement(ElementRefs.FromObjectReference(ElementLocator.Parse(...)))`
+    pattern from test code
+  - `SetReplicate(string)` — sets active replicate by name, with validation
+  - MCP tools `skyline_set_selection` and `skyline_set_replicate` added to SkylineTools.cs
+
+  #### ToolService cleanup
+  - Moved branch-added code out of ToolService.cs back into JsonToolServer: RunCommand,
+    TeeTextWriter, GetSettingsListTypes, GetSettingsListNames, GetSettingsListItem, and all
+    their private helpers (IsSettingsListBase, GetPersistedViewNames, GetPersistedViewItem,
+    SerializeViewSpec, SerializeSettingsItem)
+  - ToolService.cs now has zero diff against master — no longer expanding the legacy API
+  - JsonToolServer is the first-class implementation; it only delegates to ToolService for
+    methods that already existed there pre-branch (GetDocumentPath, GetDocumentLocationName,
+    GetReplicateName, GetProcessId, GetSelectedElementLocator)
+
+  #### Export culture arg preserved
+  - `ExportReport` and `ExportReportFromDefinition` kept as 3-arg methods (reportName,
+    filePath, culture) so the MCP client's `invariant: false` option still works
+  - `ParseCulture(string)` helper restored
+
+  #### Files changed
+  - `JsonToolServer.cs` — Reflection dispatch, all switch cases converted to public methods,
+    SetSelectedElement, SetReplicate, RunCommand/TeeTextWriter/settings list code moved in
+  - `SkylineTools.cs` — New MCP tools skyline_set_selection, skyline_set_replicate
+  - `ToolService.cs` — Reverted to master (removed branch-added methods and imports)
+
+  ### Session 16 — Selection symmetry, multi-selection, navigation aids (2026-03-03)
+
+  Made get_selection/set_selection symmetric, added multi-selection support, and added
+  lightweight navigation aids so the LLM can discover document contents without report exports.
+
+  #### GetSelection symmetry fix
+  - Renamed `GetDocumentLocationName` to `GetSelectionText` (still auto-discovered, calls
+    legacy ToolService method that returns TreeView display text)
+  - Added `GetSelection()` — returns ElementLocator strings via `ElementRefs.GetNodeRef`,
+    making get_selection/set_selection round-trippable
+  - Added `InvokeOnUiThread(Func<string>)` overload for methods that need to return a value
+    from the UI thread (vs. the existing `Action` overload that returns "OK"/error)
+  - MCP tool `skyline_get_selection` now calls `GetSelection` (locator-based) instead of
+    `GetDocumentLocationName` (display text)
+
+  #### Multi-selection support
+  - `SetSelectedElement` now accepts optional `additionalLocators` parameter
+  - Primary locator navigates via `SelectElement` (handles bookmarks, replicates, scrolling)
+  - Additional locators resolved to `IdentityPath` via `NodeRef.ToIdentityPath`, then
+    `SequenceTree.SelectedPaths` set to full list
+  - `GetSelection` returns all selected paths (one locator per line, primary first)
+  - `Dispatch` updated to support optional parameters via `HasDefaultValue`/`DefaultValue`
+
+  #### Navigation aids
+  - `GetReplicateNames()` — returns all replicate names, one per line (no report export needed)
+  - `GetLocations(level, rootLocator)` — enumerates document tree elements at a specified level
+    (group/molecule/precursor/transition), optionally scoped to a parent element
+  - Returns tab-separated `Name\tLocator` per line, consistent with other tab-separated output
+  - Supports level-skipping: e.g. `level="precursor"` with no root returns all precursors
+  - Recursive `EnumerateAtDepth` helper traverses the tree to the requested depth
+  - Both tools accept "list" or "group" as aliases for the MoleculeGroup level
+
+  #### Files changed
+  - `JsonToolServer.cs` — `GetSelectionText`, `GetSelection`, `GetReplicateNames`,
+    `GetLocations`+`EnumerateAtDepth`, `SetSelectedElement` multi-selection,
+    `InvokeOnUiThread(Func<string>)`, `Dispatch` optional param support
+  - `SkylineTools.cs` — Updated `skyline_get_selection`, new `skyline_get_replicate_names`,
+    new `skyline_get_locations`, updated `skyline_set_selection` with `additionalLocators`
+  - Add InvokeOnUiThread(Func<string>) overload for methods returning data from UI thread
