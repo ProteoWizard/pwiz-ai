@@ -274,7 +274,11 @@ cmd /c mklink /J .claude ai\claude
 @"
 # Claude Code Configuration
 
-**Run Claude Code from this directory** (your project root).
+**Run Claude Code from this directory** (the project root).
+
+This directory is not a git repository. It contains sibling checkouts
+(``ai/``, ``pwiz/``, etc.) that are each their own git repo. Use
+``mcp__status__get_status`` to check git status of subdirectories.
 
 All Claude Code documentation lives in the **ai/** folder. See:
 - **ai/CLAUDE.md** - Critical configuration (PowerShell, paths, commands)
