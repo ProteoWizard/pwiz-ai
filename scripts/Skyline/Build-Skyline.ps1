@@ -84,6 +84,9 @@ param(
     [string]$SourceRoot = $null  # Path to pwiz root (auto-detected if not specified)
 )
 
+# Ensure UTF-8 output for status symbols (must be set before any Write-Host)
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 # Script location: ai/scripts/Skyline/
 # Target: pwiz_tools/Skyline/
 $scriptRoot = Split-Path -Parent $PSCommandPath
@@ -122,9 +125,6 @@ try {
     } else {
         Write-Host 'Sync-DotSettings.ps1 not found; skipping settings sync.' -ForegroundColor Yellow
     }
-
-# Ensure UTF-8 output for status symbols regardless of terminal settings
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Fix line endings in modified files (CRLF is project standard, but LLM tools may introduce LF-only)
 # This is fast because it only processes files in 'git status' (modified/added)
