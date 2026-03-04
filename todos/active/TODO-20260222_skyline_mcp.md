@@ -118,12 +118,30 @@
     - [x] Fixed image resource name mismatches: GroupedStudies→GroupedStudy, PRM→TargetedMSMS
     - [x] Added missing DIA_TTOF text/image resources
     - [x] All 3 TutorialCatalog tests pass, end-to-end MCP tests verified
+  - [x] Implement `get_form_image` MCP tool with screen capture and redaction (see Sessions 22-23)
+    - [x] Extracted ScreenCapture.cs from TestUtil/ScreenshotManager.cs (DRY refactor)
+    - [x] Added ScreenCapturePermissionDlg with session + persistent permission flow
+    - [x] Added AllowMcpScreenCapture user setting
+    - [x] PInvoke additions: Gdi32.GetDeviceCaps, User32.SetForegroundWindow, EnumWindows
+    - [x] Redaction: enumerates non-Skyline windows above target in z-order via EnumWindows
+    - [x] ScreenshotManager delegates to ScreenCapture for all shared methods
+  - [x] Refactor form IDs from index-based (`graph:0`, `form:1`) to `TypeName:Title` format
+  - [x] Add dialog support to `get_open_forms` and `get_form_image` (non-docked visible forms)
+  - [x] Screen capture: fix DPI scaling for redaction (foreign window rects now scaled to physical pixels)
+  - [x] Screen capture: change redaction color from gray to cyan for visibility
+  - [x] Screen capture: add Thread.Sleep after permission dialog dismissal
   - [ ] Implement unit tests of at least the Skyline side of the API
   - [ ] Test ImportProperties end-to-end with annotation workflow from conversation
   - [ ] Create PR
 
   ### Future enhancements (post-PR)
 
+  - [ ] FloatingWindow composite capture: individual docked forms in a floating container all
+    resolve to the full container rectangle via `GetDockedFormBounds`. Need to either return
+    just the pane's bounds or document this as expected behavior.
+  - [ ] Multi-form screenshot: Accept a list of form IDs and capture the union bounding box
+    with redaction. Useful for capturing a dialog alongside its parent, or multiple related panels.
+    The redaction infrastructure already handles non-Skyline content in the gaps.
   - [ ] Multiple Skyline instances: `connection-{GUID}.json` pattern
   - [ ] Self-contained publish for MCP server (eliminates .NET 8.0 runtime dependency)
   - [ ] Wire protocol modernization (replace BinaryFormatter in SkylineTool.dll)
@@ -439,3 +457,119 @@ is only allowed when the body is a single line.
   `ToolsUI/JsonTutorialCatalog.cs` (shared tmp dir, ToForwardSlashPath, TSV separator),
   `SkylineMcpServer/Tools/SkylineTools.cs` (+3 MCP tools),
   `Skyline.csproj` (+JsonUiService.cs), `ai/STYLEGUIDE.md` (braceless if rule)
+
+### Session 22 (2026-03-04) - Form ID refactor, dialog support, screen capture fixes
+
+Refactored form identifiers from fragile index-based (`graph:0`, `form:1`, `dialog:2`)
+to stable `TypeName:Title` format (e.g., `GraphSummary:Peak Areas - Replicate Comparison`,
+`PeptideSettingsUI:Peptide Settings`). Added dialog visibility and fixed screen capture bugs.
+
+#### Form ID refactor (JsonUiService.cs)
+
+- Added `GetFormTitle(Form)` — returns display title using Text, TabText, or type name fallback
+- Added `GetFormId(Form)` — returns `TypeName:Title` format
+- Replaced `FindGraphForm(string)` and `FindForm(string)` with unified `FindFormById(string)`
+  that parses `TypeName:Title`, searches docked forms then non-docked dialogs
+- `GetGraphData`/`GetGraphImage` now cast `FindFormById` result to `DockableFormEx` with
+  null check for graph validation (cleaner error: "Not a graph form")
+- `GetFormImage` uses `GetFormTitle(form)` for file path instead of `form.Text ?? form.TabText`
+- Added `using System.Windows.Forms` (needed for explicit `Form` type references)
+
+#### Dialog support
+
+- `GetOpenForms` dialog loop now uses `GetFormId()` instead of `dialog:N` indexing
+- `FindFormById` searches both docked forms and `FormUtil.OpenForms` dialogs
+- Dialogs shown with DockState=Dialog (e.g., `PeptideSettingsUI:Peptide Settings`,
+  `EditEnzymeDlg:Edit Enzyme`, `EditListDlg`2:Edit Enzymes`)
+- `FloatingWindow` containers also appear — kept for now, future work to handle composites
+
+#### Screen capture: DPI scaling fix
+
+- **Bug**: `GetWindowRectangle` scales capture rect to physical pixels, but `GetWindowRect`
+  (Win32 API) returns logical coordinates. At 125% scaling, foreign window rects were
+  misaligned, causing redaction in wrong positions.
+- **Fix**: Added `var scalingFactor = GetScalingFactor()` in `GetForeignWindowRects`, applied
+  `rect.Rectangle * scalingFactor` to each foreign window rect before intersection.
+
+#### Screen capture: redaction color
+
+- Changed from `Color.FromArgb(0xF0, 0xF0, 0xF0)` (near-white gray) to `Color.Cyan`
+- Gray was indistinguishable from dialog background, making redaction invisible
+- Cyan makes redaction obvious and unmistakable
+
+#### Screen capture: permission dialog delay
+
+- Added `out bool wasFirstPrompt` to `EnsurePermission()` to report whether dialog was shown
+- Added `Thread.Sleep(1000)` after `ActivateForm` when permission dialog was just dismissed
+- Prevents the permission dialog from appearing in the first screenshot of a session
+
+#### MCP tool descriptions (SkylineTools.cs)
+
+- Updated all four tool descriptions with `TypeName:Title` format examples
+- `skyline_get_open_forms`: mentions Dialog dock state
+- `skyline_get_graph_data`/`get_graph_image`: example `'GraphSummary:Peak Areas - ...'`
+- `skyline_get_form_image`: examples `'SequenceTreeForm:Targets'`, `'PeptideSettingsUI:...'`
+
+#### Observations for future work
+
+- **FloatingWindow composites**: When multiple graphs are docked into a single floating
+  container, each `GraphSummary` resolves to the full container rect via `GetDockedFormBounds`
+  (because `Pane.Parent` is the container). The `FloatingWindow` entry captures the same rect.
+  Need to either return individual pane bounds or accept this as container-level capture.
+- **Multi-form screenshots**: A list of form IDs with union bounding box + redaction would
+  cleanly solve the composite case and enable parent+dialog captures.
+
+#### Modified files
+- **`ToolsUI/JsonUiService.cs`**: Form ID refactor, dialog support, permission delay
+- **`Util/ScreenCapture.cs`**: DPI scaling fix, cyan redaction, EnsurePermission out param
+- **`SkylineMcpServer/Tools/SkylineTools.cs`**: Updated descriptions and examples
+
+### Session 23 (2026-03-04) - Screen capture implementation (initial session)
+
+Implemented the `get_form_image` MCP tool with screen capture and non-Skyline window
+redaction. This session created the initial implementation; Session 22 (a parallel session)
+then refined the form ID format and fixed DPI/color issues.
+
+#### New files
+- **`Util/ScreenCapture.cs`** — Production capture class extracted from ScreenshotManager:
+  PointFactor, PointAdditive, GetWindowRectangle, GetDockedFormBounds, GetFramedWindowBounds,
+  FindParent, GetScalingFactor, CaptureScreen, CaptureAndRedact, ActivateForm, SaveToFile,
+  EnsurePermission (session + persistent permission flow)
+- **`Alerts/ScreenCapturePermissionDlg.cs/.Designer.cs`** — Permission dialog with
+  Allow/Deny buttons, "Do not ask me again" checkbox, strings in AlertsResources.resx
+
+#### PInvoke additions
+- **Gdi32.cs**: Added `DeviceCap` enum and `GetDeviceCaps` (replaces test-only `Gdi32Test`)
+- **User32.cs**: Added `SetForegroundWindow`, `EnumWindows`/`EnumWindowsProc`
+
+#### Redaction approach (evolved during session)
+1. **v1**: Excluded Skyline form rects from capture rect — no-op for form screenshots
+   (the capture IS a Skyline form, so nothing gets redacted)
+2. **v2**: Enumerated all non-Skyline windows via `EnumWindows` — over-redacted because
+   maximized background windows still report as "visible"
+3. **v3 (final)**: Walk windows in z-order (EnumWindows returns top-to-bottom), stop at
+   target Skyline window via `FormUtil.FindTopLevelOwner`. Only foreign windows ABOVE
+   target in z-order are redacted. Diagnostic `.log` file written alongside `.png`.
+
+#### ScreenshotManager refactor (DRY)
+- Replaced duplicated implementations with delegates to ScreenCapture
+- PointFactor/PointAdditive subclass ScreenCapture versions for backward compat
+- ActiveWindowShot/RectangleShot use ScreenCapture.GetWindowRectangle/GetScalingFactor
+- SaveToFile delegates to ScreenCapture.SaveToFile
+- Removed `using TestRunnerLib.PInvoke` for Gdi32Test (now uses production Gdi32)
+- Kept `using TestRunnerLib.PInvoke` for SetForegroundWindow/HideCaret extension methods
+
+#### Settings and resources
+- Added `AllowMcpScreenCapture` bool setting (user-scoped, default false)
+- Added 5 AlertsResources strings for permission dialog
+
+#### Modified files
+- **`Shared/CommonUtil/SystemUtil/PInvoke/Gdi32.cs`**: +DeviceCap, +GetDeviceCaps
+- **`Shared/CommonUtil/SystemUtil/PInvoke/User32.cs`**: +SetForegroundWindow, +EnumWindows
+- **`Alerts/AlertsResources.resx/.Designer.cs`**: +5 ScreenCapturePermissionDlg strings
+- **`Properties/Settings.settings/.Designer.cs`**: +AllowMcpScreenCapture
+- **`ToolsUI/JsonUiService.cs`**: +GetFormImage, +FindForm (later refactored in Session 22)
+- **`ToolsUI/JsonToolServer.cs`**: +GetFormImage thin wrapper
+- **`SkylineMcpServer/Tools/SkylineTools.cs`**: +skyline_get_form_image MCP tool
+- **`TestUtil/ScreenshotManager.cs`**: Delegates to ScreenCapture, removed duplication
+- **`Skyline.csproj`**: +ScreenCapture.cs, +ScreenCapturePermissionDlg.cs/.Designer.cs
