@@ -101,7 +101,10 @@
   - [x] Implement filtering in report definitions (filter array with 12 operations, "did you mean" errors)
   - [x] Implement sorting in get_report_from_definition (via RowFilter.ColumnSort, query-time only)
   - [x] Implement pivotReplicate and pivotIsotopeLabel flags in report definitions
-  - [ ] Implement `get_open_graphs` (available open graphs), `get_graph_data`, and `get_graph_screenshot`
+  - [x] Implement `get_open_forms`, `get_graph_data`, and `get_graph_image` MCP tools
+    - Extracted JsonUiService.cs from JsonToolServer (UI interaction service layer)
+    - Three abstraction levels: primitives, UI patterns, complete operations
+    - Shared temp dir/file path infrastructure (consolidated with tutorial tools)
     - Future? `get_available_graphs` and `open_graph`?
   - [x] Sync StartPage tutorial list to match wiki page exactly (see Session 18 design)
   - [x] Implement `get_available_tutorials`, `get_tutorial`, and `get_tutorial_image` (see Sessions 18-20)
@@ -380,3 +383,59 @@ Separated MCP/JSON concerns from pure catalog data:
 - **Modified**: `StartPage.cs` (major refactor), `JsonToolServer.cs` (+delegates),
   `SkylineTools.cs` (+3 MCP tools), `Skyline.csproj`, `Test.csproj`,
   9 .resx/.Designer.cs files (typo fixes + missing resources)
+
+### Session 21 (2026-03-04) - Graph MCP tools and JsonUiService extraction
+
+Implemented three new graph-related MCP tools and extracted a JsonUiService static class
+from JsonToolServer to separate UI interaction concerns.
+
+#### JsonUiService.cs (NEW)
+
+Extracted UI interaction code into a dedicated static service class, following the same
+pattern as JsonTutorialCatalog. Three abstraction levels:
+
+1. **Primitives**: `InvokeOnUiThread(Action)` and `InvokeOnUiThread(Func<string>)` — UI
+   thread marshaling with error capture
+2. **UI patterns**: `CreateImmediateWindowTee()` — tees output to capture writer + Immediate
+   Window. `TeeTextWriter` private class moved here from JsonToolServer.
+3. **Complete operations**: `GetSelection`, `SetSelection`, `SetReplicate`, `GetOpenForms`,
+   `GetGraphData`, `GetGraphImage`
+
+Shared infrastructure consolidated from duplicate code in JsonTutorialCatalog:
+- `GetMcpTmpDir()` — respects `SKYLINE_MCP_TMP_DIR` env var, public static
+- `GetMcpTmpFilePath(prefix, title, extension)` — timestamped file path generation
+- JsonTutorialCatalog updated to use `JsonUiService.GetMcpTmpDir()` (removed duplicate)
+- `ToForwardSlashPath()` extension method used consistently (replaced manual `Replace('\\', '/')`)
+
+#### Graph MCP tools
+
+- **`skyline_get_open_forms`**: Enumerates all visible docked forms via `DockPanel.Contents`.
+  Reports form type, title, ZedGraph presence, dock state, and stable identifier.
+- **`skyline_get_graph_data`**: Extracts tab-separated data via
+  `CopyGraphDataToolStripMenuItem.GetGraphData(MasterPane)`. Saves to file (TSV) for
+  ggplot2/matplotlib publication-quality plot workflow.
+- **`skyline_get_graph_image`**: Renders PNG via `MasterPane.GetImage()`. Uses `FileSaver`
+  for atomic writes.
+
+Form-specific `ZedGraphControl` access via `TryGetZedGraphControl()` switch:
+GraphSummary.GraphControl, GraphChromatogram.GraphControl, GraphSpectrum.ZedGraphControl,
+GraphFullScan.ZedGraphControl, CalibrationForm.ZedGraphControl.
+
+#### Style cleanup
+
+Fixed 14 braceless multi-line `if` bodies across JsonUiService.cs (2) and
+JsonToolServer.cs (12). Updated ai/STYLEGUIDE.md to document the rule: braceless `if`
+is only allowed when the body is a single line.
+
+#### DRY improvements
+
+- Replaced tab character literals with `TextUtil.SEPARATOR_TSV` in JsonTutorialCatalog
+- Added `EXT_PNG` and `GRAPH_FILE_PREFIX` constants
+- Used `TextUtil.EXT_TSV` for graph data file extension
+
+#### New/modified files
+- **New**: `ToolsUI/JsonUiService.cs` (~380 lines)
+- **Modified**: `ToolsUI/JsonToolServer.cs` (extracted UI code to thin wrappers, braces cleanup),
+  `ToolsUI/JsonTutorialCatalog.cs` (shared tmp dir, ToForwardSlashPath, TSV separator),
+  `SkylineMcpServer/Tools/SkylineTools.cs` (+3 MCP tools),
+  `Skyline.csproj` (+JsonUiService.cs), `ai/STYLEGUIDE.md` (braceless if rule)
