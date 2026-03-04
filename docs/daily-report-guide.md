@@ -440,8 +440,10 @@ gh issue list --state all --limit 30 --json number,title,state,createdAt
 Look for matching issue titles. Many findings from prior sessions become GitHub issues.
 
 **2. Check past suggested-actions files**
+Check both pre-consolidation and consolidated locations:
 ```bash
 ls ai/.tmp/suggested-actions-*.md
+ls ai/.tmp/daily/*/suggested-actions.md
 ```
 Read recent files (last 3-5 days) to see what was previously identified and what action was taken.
 
@@ -582,22 +584,60 @@ gh pr list --state merged --search "filename:SomeFile.cs" --limit 10
 ```
 
 **E. Check version distribution** (helps prioritize)
-- Only in old versions? → Likely already fixed
+- Only in old versions? → **Verify against current code before proceeding** (see step F)
 - Only in newest version? → Recent regression
 - Across many versions? → Long-standing bug
 
-**F. Formulate root cause**
+**F. For old-version exceptions: verify the bug still exists**
 
-Not just "what failed" but "why":
+If the exception is from an older release (e.g., 24.1 when we're preparing 26.1), the
+code may have changed significantly since then. **Do not recommend a GitHub issue without
+verifying the bug still exists on master or the current release branch.**
+
+1. **Find the same code on master** — the line numbers will have shifted. Search for the
+   specific assertion, method name, or error message from the stack trace.
+2. **Understand the actual failure mechanism** — don't stop at the exception line. Trace
+   backward: what state must the program be in to reach this point? What code paths lead
+   to that state? Read the calling methods, not just the crashing line.
+3. **Check all code paths, including error paths** — exceptions in event handlers, failed
+   background operations, and swallowed errors often leave UI in inconsistent states. The
+   obvious explanation (race condition, null check) may not be the actual cause.
+4. **Check PRs that touched this code since the reported version:**
+   ```bash
+   git log --oneline <old_version_tag>..HEAD -- path/to/File.cs
+   ```
+   Read each PR description. Any of them may have fixed this as a primary goal or side effect.
+5. **Only recommend a GitHub issue if the bug is confirmed to still exist** on current code.
+   If you cannot confirm, say so: "Bug reported on 24.1. The code has changed since then
+   (PRs #XXXX, #YYYY). Unable to confirm whether the bug still reproduces on master."
+
+**Example of insufficient analysis** (Feb 24, 2026): An AssumptionException on version 24.1
+in `ImportTransitionListColumnSelectDlg.OkDialog` was initially attributed to a "UI race
+condition" and flagged as NEEDS GITHUB ISSUE. Deeper investigation showed:
+- The `Assume.IsTrue` fires when `isAssociated` is false but the checkbox is checked
+- The initial analysis assumed the user clicked OK during a background operation, but
+  `LongWaitDlg.PerformWork` is modal — the user cannot interact with the parent form
+- The actual cause: if `AssociateProteins` throws (e.g., corrupt proteome DB), the
+  exception propagates through the event handler, gets swallowed by WinForms, and
+  the checkbox remains checked while `isAssociated` stays false — an error path bug
+- Two PRs (#3814, #3914) had since touched this exact code area
+- The recommendation should have been to verify whether those PRs addressed the error
+  path, not to immediately file a new issue
+
+**G. Formulate root cause**
+
+Not just "what failed" but "why this state was reachable":
+- What state must the program be in to hit this exception?
+- What code path leads to that state? (Trace backward from the crash)
 - Why wasn't this caught by existing error handling?
-- Are there similar exceptions that ARE handled correctly?
-- What pattern was used elsewhere that should apply here?
+- Are there error paths (exceptions in event handlers, failed background work) that
+  could leave the program in this state?
 
-**G. Draft a GitHub issue** if this is a real bug:
+**H. Draft a GitHub issue** if the bug is confirmed on current code:
 - Clear title
 - **Link to source data on skyline.ms** (exception report, test run, or failure history page)
 - Stack trace from exception report
-- Root cause analysis (the WHY)
+- Root cause analysis (the WHY — the actual mechanism, not a surface-level guess)
 - Suggested fix with specific file/line references
 
 **→ Write findings to `suggested-actions-YYYYMMDD.md` immediately**
@@ -641,6 +681,127 @@ list_computer_status(container_path="/home/development/Nightly x64")
 - Same machine repeatedly? → Hardware issue
 - Same test causing crash? → Test bug
 - Same time of day? → External interference
+
+**→ Write findings to `suggested-actions-YYYYMMDD.md` immediately**
+
+### Regression Echoes
+
+When a regression is introduced by a commit and later fixed, there is a window where
+nightly machines are still running the broken code. Runs that started before the fix
+was available will still show failures or leaks. These are **echoes** — not new problems.
+
+Before the daily report was automated, developers would email: *"The leaks are just echoes
+of the regression that got fixed at 7 PM yesterday. Should be gone tomorrow."* The
+automated report must make the same assessment.
+
+#### How echoes work for failures vs leaks
+
+**Failures have automatic echo detection.** The fingerprint system groups failures by
+stack trace. Once `record_test_fix(fingerprint=X, pr_number=N)` is called, ALL failures
+with that fingerprint are marked "Already Handled" regardless of machine or date. One
+recording covers all echoes.
+
+**Leaks have NO automatic echo detection.** Leaks are recorded as just "test X leaked on
+machine Y" — there is no fingerprint, no stack trace, no grouping. Calling `record_test_fix`
+for one test name only covers that one test. A regression that causes 93 tests to leak
+would require 93 separate recordings to mark as handled — impractical.
+
+**Therefore, leak echoes must be identified by git hash.** If a regression was introduced
+by commit A and fixed by commit B, then ANY leak on a run with a hash between A and B
+(inclusive of A, exclusive of B) is an echo. The research session must recognize this
+pattern and classify all such leaks as echoes in a single group, without investigating
+or recording them individually.
+
+#### Recognizing echoes in today's report
+
+When today's report shows leaks or failures that might be echoes:
+
+1. **Read previous days' suggested-actions files** — look for known regressions with
+   identified causing and fix commits
+2. **Compare git hashes** — if leaking runs are on the regression hash (or between
+   the regression and fix hashes), they are echoes
+3. **Confirm the fix PR from test history** — query `query_test_history(test_name="...")`
+   for at least one of the leaking tests. The fix PR should be recorded via
+   `record_test_fix`. This confirms the fix PR number independently.
+4. **Look for proof the fix works** — runs on a later hash (at or after the fix commit)
+   with 0 leaks/failures confirm the regression is resolved
+5. **Report as echoes with ALL required elements**:
+   - The **fix PR number** (not just the hash) — the reader needs "FIXED by PR #MMMM"
+   - **Every leaking test name** — list them explicitly so downstream consumers (email
+     phase) cannot independently re-categorize individual tests
+   - The causing PR, fix hash, proof (clean runs), and status
+
+**Why explicit test names matter**: A regression in shared infrastructure (e.g.,
+ConnectionPool, test framework) causes ALL tests to leak, regardless of what the test
+exercises. Tests named "AgilentFormatsTest" or "WatersLockmassChromatogramTest" are not
+leaking because of Agilent or Waters code — they leak because of the shared regression.
+Without an explicit list, downstream reporting may see vendor names in test names and
+incorrectly categorize them as chronic vendor-specific leaks.
+
+### Investigate Leaks
+
+**Triage the leak picture as a whole before investigating individual tests.**
+
+#### Red Flags — Any One Means Regression
+
+| Signal | Normal Night | Regression |
+|--------|-------------|------------|
+| Leaks per machine | 0–2 sporadic | 3+ on any single machine |
+| Cross-machine pattern | Different tests on different machines | Same tests on multiple machines, same git hash |
+| Total leak count | 1–5 across all folders | 10+ distinct tests |
+
+These signals compound. On Feb 24, 2026, all three were present simultaneously — 93 tests
+leaking across 6 machines on the same git hash — and the root cause was a single static
+bool in ConnectionPool (PR #4033) that contaminated all unit tests after any functional test
+set it. The fix was 3 lines (PR #4037). On Feb 25, the same leaks appeared on machines
+still running the pre-fix hash, while machines on the fix hash showed 0 leaks — classic
+echoes.
+
+#### When Red Flags Are Present
+
+This is **highest priority** — a leak regression drowns out all other leak signal.
+
+**A. Check if these are echoes** — Read the previous day's suggested-actions
+(`ai/.tmp/daily/YYYY-MM-DD/suggested-actions.md`). If it describes this regression with
+a fix PR already merged, check if the leaking runs are on the pre-fix hash. If yes,
+classify ALL leaks on that hash as echoes (see "Recognizing echoes" above). Do not
+investigate individual tests.
+
+Also confirm the fix PR from the test history database:
+```
+query_test_history(test_name="AnyLeakingTestName")
+```
+The fix should be recorded there via `record_test_fix`. This provides the fix PR number
+independently, which is **required** in the echo report — not just the git hash.
+
+**B. Check if some runs in today's window are clean** — Look for runs on a LATER git hash
+with 0 leaks. This proves the fix works:
+```bash
+git log --oneline <leaking_hash>..<clean_hash>
+```
+
+**C. If this is a genuinely new regression** (not echoes of a known regression):
+1. Confirm it's new — compare leak counts against prior day's runs
+2. Identify the causing commit range:
+   ```bash
+   git log --oneline <clean_hash>..<leaking_hash>
+   ```
+3. Find the causing PR:
+   ```bash
+   gh pr list --state merged --search "merged:YYYY-MM-DD" --limit 20 --json number,title,mergedAt
+   ```
+   Focus on PRs touching test infrastructure, static fields, `IDisposable`, or pooling.
+
+**D. Write findings immediately.**
+
+#### Chronic Leaks (No Red Flags)
+
+When leaks are 1–2 per machine, different tests on different machines, and
+`query_test_history` confirms they've been present for 30+ days:
+
+- Classify as **CHRONIC** with LOW priority
+- Note in suggested-actions but don't investigate further
+- Focus investigation time on failures and exceptions instead
 
 **→ Write findings to `suggested-actions-YYYYMMDD.md` immediately**
 

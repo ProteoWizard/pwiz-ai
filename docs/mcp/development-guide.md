@@ -108,7 +108,7 @@ The `ModelContextProtocol` NuGet package (0.8.0-preview.1, Anthropic + Microsoft
 
 ### Critical: stdio Transport Pitfalls
 
-MCP stdio servers communicate via stdin/stdout JSON-RPC. Three issues are unique to C#/.NET:
+MCP stdio servers communicate via stdin/stdout JSON-RPC. Four issues are unique to C#/.NET:
 
 **1. Disable default logging** — `Host.CreateApplicationBuilder` adds a console logger that writes to stdout, corrupting the JSON-RPC transport:
 ```csharp
@@ -133,6 +133,21 @@ process.StandardInput.Close();  // Immediately close — equivalent to Python's 
 Python equivalent (from StatusMcp): `subprocess.run(cmd, stdin=subprocess.DEVNULL, ...)`
 
 **3. Use forward slashes in path parameters** — JSON uses backslash as an escape character. Windows paths like `C:\proj` contain invalid JSON escapes (`\p`). Clients should pass `C:/proj/pwiz` instead. Windows APIs accept forward slashes natively.
+
+**4. Use `[JsonPropertyName]` on all JSON POCOs** — `System.Text.Json` is **case-sensitive by default**. If a JSON file uses `snake_case` keys (`"pipe_name"`) but the C# POCO has `PascalCase` properties (`PipeName`), deserialization silently fails — properties get their default values (empty string, 0, etc.) with no error. Always add `[JsonPropertyName("snake_case")]` attributes to match the JSON keys exactly:
+```csharp
+using System.Text.Json.Serialization;
+
+class ConnectionInfo
+{
+    [JsonPropertyName("pipe_name")]
+    public string PipeName { get; set; } = string.Empty;
+
+    [JsonPropertyName("process_id")]
+    public int ProcessId { get; set; }
+}
+```
+Alternatively, configure a global naming policy: `new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower }`. But explicit attributes are safer — they survive refactoring and make the expected JSON format visible in the code.
 
 ### Multi-targeting for Shared Libraries
 

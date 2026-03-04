@@ -524,6 +524,7 @@ The current workflow requires a human to review nightly test results and select 
 - [x] MCP server for LabKey integration (see `ai/mcp/LabKeyMcp/`)
 - [x] dotMemory snapshot integration in TestRunnerLib (January 2026)
 - [x] Command-line arguments for dotMemory properties (January 2026)
+- [x] Snapshot-on-leak mode for intermittent GC leaks (February 2026)
 - [ ] `/pw-review-leaks` slash command
 - [ ] Autonomous investigation mode
 
@@ -592,3 +593,273 @@ Run-Tests.ps1 -TestName TestOlderProteomeDb -MemoryProfile -MemoryProfileWarmup 
 - Precise snapshot timing (immediately after GC, at stable memory points)
 - Reproducible methodology for comparing leak investigations
 - Similar developer experience to `-Coverage` flag
+
+## GC Leak Tracker: Object Lifecycle Verification (February 2026)
+
+The **GarbageCollectionTracker** (PR #4034) verifies that key objects (`SkylineWindow`,
+`SrmDocument`) are garbage collected after each functional test. This catches a different
+class of leaks than handle counting: managed object retention via static references,
+undisposed timers, cached collections, and delegate chains.
+
+### How It Works
+
+1. **Registration**: Skyline registers objects via `Program.GcTracker.Register<T>(target)`,
+   which stores a `WeakReference` in the static tracker
+2. **After test**: `RunTests.Run` calls `FlushMemory()` (full GC), then `CheckForLeaks()`
+3. **Verification**: If any WeakReference is still alive, the tracked object was retained
+   by a strong reference chain — a GC leak
+4. **Reporting**: Test fails with `"Objects not garbage collected after test: SkylineWindow, SrmDocument"`
+
+### PinSurvivors Mode for dotMemory Analysis
+
+When a GC leak is detected, you need to find the **retention path** — the chain of
+references preventing garbage collection. dotMemory can show this, but only if the
+objects exist as strong references (WeakReferences are invisible to retention analysis).
+
+**PinSurvivors mode** bridges this gap:
+- Instead of failing the test, promotes surviving WeakReferences to strong references
+  in a static `_pinnedSurvivors` list
+- Takes a dotMemory snapshot while these objects are pinned
+- The snapshot shows the original retention paths that prevented GC
+
+### Workflow: Investigating a GC Leak
+
+#### Step 1: Confirm the leak exists
+
+```powershell
+# Run the failing test normally
+Run-Tests.ps1 -TestName TestEncyclopeDiaSearch
+# Expected: "Objects not garbage collected after test: SkylineWindow, SrmDocument"
+```
+
+#### Step 2: Profile with PinSurvivors mode
+
+```powershell
+# -MemoryProfileWaitRuns 0 enables PinSurvivors mode (single snapshot, no failure)
+Run-Tests.ps1 -TestName TestEncyclopeDiaSearch -MemoryProfile -MemoryProfileWaitRuns 0
+```
+
+This produces a `.dmw` workspace file in `ai/.tmp/`.
+
+#### Step 3: Analyze retention paths in dotMemory GUI
+
+1. Open the `.dmw` file in dotMemory GUI
+2. Open the snapshot → find `SkylineWindow` (or `SrmDocument`) in type list
+3. Click through to **Key Retention Paths** tab
+4. The retention paths show exactly what's holding the object alive
+
+**What to look for in the retention paths:**
+- The `GarbageCollectionTracker._pinnedSurvivors` path is the pinning reference itself — ignore it
+- Other paths are the actual leaks to fix
+- Common patterns: static fields, undisposed Timers, delegate chains, cached collections
+
+#### Step 4: Fix and verify
+
+Fix the retention chain, then verify both ways:
+
+```powershell
+# Verify no more pinned objects in dotMemory
+Run-Tests.ps1 -TestName TestEncyclopeDiaSearch -MemoryProfile -MemoryProfileWaitRuns 0
+
+# Verify GC tracker passes (no failure message)
+Run-Tests.ps1 -TestName TestEncyclopeDiaSearch
+```
+
+#### Step 5: Negative test (recommended)
+
+Comment out the fix and confirm the test fails again. This is important because the
+GC tracker was accidentally disabled for months (see case study below) — an absence
+of failure alone is not sufficient proof.
+
+### Case Study: GraphSpectrum Timer Leak (February 2026)
+
+**Detection**: After fixing the GC tracker's `DotMemoryWarmupRuns` default bug,
+`TestKoinaSkylineIntegration` and `TestEncyclopeDiaSearch` failed with
+`"Objects not garbage collected after test: SkylineWindow, SrmDocument"`.
+
+**PinSurvivors profiling** revealed 4 retention paths to SkylineWindow:
+1. `GarbageCollectionTracker._pinnedSurvivors` → SkylineWindow (the pin — ignore)
+2. `FilesTreeForm` → `ControlAccessibleObject` → weak handle (benign)
+3. `SequenceTree` → `ControlAccessibleObject` → weak handle (benign)
+4. `GraphSpectrum._stateProvider` → `UpdateManager._target` → `EventHandler` →
+   `Timer.onTimer` → **Regular handle** ← THE LEAK
+
+The Timer in GraphSpectrum's UpdateManager kept a strong reference chain alive via
+its event handler delegate, which captured the GraphSpectrum instance, which held
+`_stateProvider` (SkylineWindow).
+
+**Initial fix**: Added `OnHandleDestroyed` override to GraphSpectrum:
+```csharp
+protected override void OnHandleDestroyed(EventArgs e)
+{
+    _updateManager.Dispose();
+    _documentContainer.UnlistenUI(OnDocumentUIChanged);
+    base.OnHandleDestroyed(e);
+}
+```
+
+**Why OnHandleDestroyed?** The existing `OnVisibleChanged` cleanup only fires when
+visibility changes, but `Dispose()` (via Designer) only disposes `components`. The
+`UpdateManager` with its Timer was never cleaned up. `OnHandleDestroyed` fires
+reliably during form teardown.
+
+**Race condition discovered**: The initial fix resolved most occurrences but
+`TestStandardType` still showed intermittent GC leaks (SkylineWindow + SrmDocument).
+Snapshot-on-leak profiling (see below) revealed the Timer was still alive after
+`Dispose()`. The race: `QueueUpdate()` could be called via `BeginInvoke`/queued
+message after `OnHandleDestroyed` disposed the timer, and `_timer.Start()` in
+`QueueUpdate` re-created the native timer's GC handle.
+
+**Complete fix** (three changes to UpdateManager):
+```csharp
+private bool _disposed;
+
+public void QueueUpdate(bool isUserAction)
+{
+    if (_disposed)           // Guard: prevent restart after dispose
+        return;
+    _timer.Stop();
+    _timer.Interval = 100;
+    _timer.Tag = isUserAction;
+    _timer.Start();
+}
+
+public void Dispose()
+{
+    _disposed = true;        // Set flag before stopping
+    _timer.Stop();
+    _timer.Tick -= DoUpdate; // Break reference chain
+    _timer.Dispose();
+}
+```
+
+**Verification**: 20-loop run with snapshot-on-leak profiling showed zero GC leaks
+and zero snapshots taken.
+
+**Lesson**: `Timer.Dispose()` stops the timer but does NOT unhook event handlers.
+If any code path can restart a disposed timer (via `Start()`), the native timer
+handle is re-created and becomes a GC root. Always add a `_disposed` guard AND
+unhook events in `Dispose()` to be robust against post-dispose calls.
+
+### Snapshot-on-Leak Mode (February 2026)
+
+**Problem**: PinSurvivors mode requires knowing in advance which test will leak.
+For intermittent leaks (like TestStandardType), you'd need to loop many times
+with PinSurvivors taking a snapshot every iteration, producing many useless
+snapshots before the leak occurs.
+
+**Solution**: Snapshot-on-leak mode automatically detects GC leaks and takes a
+dotMemory snapshot only when a leak is found. All GC leak checking logic is
+consolidated in `GarbageCollectionTracker.CheckAfterTest()`.
+
+**How it works:**
+1. After `FlushMemory()`, `CheckAfterTest()` checks `MemoryProfiler.IsReady`
+2. If dotMemory is attached (but no explicit warmup/wait args), enters snapshot-on-leak mode
+3. Calls `CheckAndPinLeaks()` which atomically checks for leaks AND pins survivors
+4. If leak found: logs a message, takes snapshot named `{TestName}_GC_LEAK`, returns error
+5. If no leak: returns null, test continues to next iteration
+
+**Usage:**
+```powershell
+# Snapshot-on-leak (default when no warmup/wait specified)
+Run-Tests.ps1 -TestName TestStandardType -MemoryProfile -Loop 100
+
+# Explicit PinSurvivors mode (snapshot every run)
+Run-Tests.ps1 -TestName TestStandardType -MemoryProfile -MemoryProfileWaitRuns 0
+
+# Explicit comparison mode (warmup + analysis snapshots)
+Run-Tests.ps1 -TestName TestStandardType -MemoryProfile -MemoryProfileWarmup 5 -MemoryProfileWaitRuns 10
+```
+
+**Decision logic in `CheckAfterTest()`:**
+
+| Condition | Action |
+|-----------|--------|
+| `dotMemoryWarmupRuns > 0` | PinSurvivors (explicit profiling) |
+| `exception != null` | Clear tracked objects (test already failed) |
+| `MemoryProfiler.IsReady` | CheckAndPinLeaks + snapshot if leak found |
+| Otherwise | Normal CheckForLeaks |
+
+**Advantages over PinSurvivors mode:**
+- No wasted snapshots on clean iterations
+- No minimum loop count required (snapshot-on-leak doesn't need warmup)
+- Automatic: just add `-MemoryProfile` and loop until it catches the leak
+- The snapshot captures the exact state when the leak occurred
+
+### Case Study: GC Tracker Accidentally Disabled (February 2026)
+
+**Symptom**: GC tracker (PR #4034) was added to detect leaks, but no tests ever
+failed — even tests with known retention issues. The tracker appeared to work in
+dotMemory profiling mode but never reported failures in normal runs.
+
+**Root cause**: The default args string in `Program.cs` included `dotmemorywarmup=5`.
+The condition `if (dotMemoryWarmup > 0)` was always true, causing
+`GarbageCollectionTracker.PinSurvivors()` (silent) to be called instead of
+`CheckForLeaks()` (reports failures) for every test.
+
+**Fix** (PR #4038): Changed the condition to
+`if (commandLineArgs.HasArg("dotmemorywarmup") || commandLineArgs.HasArg("dotmemorywaitruns"))`
+which only fires when the arg is explicitly passed on the command line.
+
+**Lesson**: Default argument values that enable profiling modes can silently disable
+production code paths. Test new detection mechanisms by verifying they catch a known
+failure — don't assume "no failures" means "working correctly".
+
+### Common GC Leak Patterns
+
+| Pattern | Example | Fix |
+|---------|---------|-----|
+| Undisposed Timer | `UpdateManager` in `GraphSpectrum` | Dispose in `OnHandleDestroyed` |
+| Static delegate chain | `UpgradeManager.AppDeployment` → delegates → SkylineWindow | Make holder IDisposable, `using` pattern |
+| Static tracking list | `ReplicateCachingReceiver._cachedSinceTracked` holding GraphData | Start/End pattern that nulls the list |
+| Event handler subscription | Component subscribes to long-lived event source | Unsubscribe in Dispose/OnHandleDestroyed |
+
+### The Start/End Tracking Pattern
+
+When test infrastructure uses static state to track results (for assertions), use
+paired Start/End methods that fit into `ScopedAction`:
+
+```csharp
+// In production code:
+public static void StartTrackCaching()
+{
+    _cachedSinceTracked = new List<TResult>();
+    _trackCaching = true;
+}
+
+public static void EndTrackCaching()
+{
+    _trackCaching = false;
+    _cachedSinceTracked = null;  // Release references!
+}
+
+// In test code:
+List<ResultType> results;
+using (new ScopedAction(
+           CachingReceiver.StartTrackCaching,
+           CachingReceiver.EndTrackCaching))
+{
+    // ... trigger the operation ...
+    results = CachingReceiver.CachedSinceTracked.ToList();  // Capture before End
+}
+// Assert on results outside the scope
+```
+
+**Key principles:**
+- Start clears stale data AND enables tracking
+- End disables tracking AND releases references (nulls collections)
+- Capture results into local variables BEFORE End runs
+- Method groups (`StartTrackCaching`, `EndTrackCaching`) fit cleanly into `ScopedAction`
+
+### Limitations: dotMemory GUI Required
+
+Currently, retention path analysis requires the dotMemory GUI:
+1. Claude runs snapshot-on-leak or PinSurvivors profiling → produces `.dmw` file
+2. Human opens `.dmw` in dotMemory GUI
+3. Human navigates to Key Retention Paths for the `*_GC_LEAK` snapshot
+4. Human takes screenshot → Claude reads it and identifies the retention chain
+
+With snapshot-on-leak mode, Claude can autonomously loop until the leak is caught,
+but the retention path analysis still requires the human step. A command-line tool
+that could query retention paths from a `.dmw` file and output JSON would enable
+fully autonomous GC leak investigation.

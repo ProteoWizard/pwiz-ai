@@ -80,7 +80,7 @@ foreach ($t in $targets) {
         if ($t.ApplyOverrides) {
             foreach ($ov in $overrides) { $newContent = [Regex]::Replace($newContent, $ov.Pattern, $ov.Replacement) }
         }
-        $newContent | Set-Content -LiteralPath $targetPath -Encoding UTF8
+        [System.IO.File]::WriteAllText($targetPath, $newContent)
         Write-Change "Created $name DotSettings"
         continue
     }
@@ -96,10 +96,8 @@ foreach ($t in $targets) {
         continue
     }
 
-    $backupPath = "$targetPath.bak"
-    $current | Set-Content -LiteralPath $backupPath -Encoding UTF8
-    $desired | Set-Content -LiteralPath $targetPath -Encoding UTF8
-    Write-Change "Updated $name DotSettings (backup saved: $backupPath)"
+    [System.IO.File]::WriteAllText($targetPath, $desired)
+    Write-Change "Updated $name DotSettings"
 
     if ($VerboseOutput) {
         # Simple diff summary: count differing lines

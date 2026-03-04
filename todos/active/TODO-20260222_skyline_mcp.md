@@ -1,320 +1,575 @@
-# TODO-20260222_skyline_mcp.md
+  ## Branch Information
+  - **Branch**: `Skyline/work/20260222_skyline_mcp`
+  - **Base**: `master`
+  - **Created**: 2026-02-22
+  - **Status**: In Progress
+  - **GitHub Issue**: (pending)
+  - **PR**: (pending)
 
-## Branch Information
-- **Branch**: `Skyline/work/20260222_skyline_mcp`
-- **Base**: `master`
-- **Created**: 2026-02-22
-- **Status**: In Progress
-- **GitHub Issue**: (pending)
-- **PR**: (pending)
+  ## Overview
 
-## Overview
+  Implement an MCP server that enables LLM applications (Claude Desktop, Claude Code, VS Code
+  Copilot, Cursor, Gemini CLI) to interact with a running Skyline instance through natural
+  language. Uses Skyline's Interactive External Tool infrastructure with a direct JSON named
+  pipe from the MCP server to JsonToolServer hosted in the Skyline process.
 
-Implement an MCP server that enables LLM applications (Claude Desktop, Claude Code) to interact with a running Skyline instance through natural language. This builds on the architecture established in PR #3989 (C# .NET MCP server) and Skyline's existing Interactive External Tool infrastructure.
+  ## Phase 1 History
 
-## Architecture
+  See [TODO-20260222_skyline_mcp-phase1.md](TODO-20260222_skyline_mcp-phase1.md) for full
+  design, architecture, session logs, and implementation details from sessions 1-16
+  (2026-02-22 through 2026-03-03).
 
-```
-┌─────────────────┐          ┌─────────────────────────┐
-│ Claude Desktop  │──stdio──▶│ Skyline MCP Server      │
-│ or Claude Code  │◀─stdio───│ (.NET 8.0-windows)      │
-└─────────────────┘          └───────────┬─────────────┘
-                                         │
-                             reads ~/.skyline-mcp/connection.json
-                                         │
-                                         ▼
-                             ┌───────────────────────┐
-                             │ Named Pipe            │
-                             │ (SkylineConnection)   │
-                             └───────────┬───────────┘
-                                         │
-                                         ▼
-                             ┌───────────────────────┐
-                             │ Skyline.exe           │
-                             │ (running instance)    │
-                             └───────────────────────┘
-```
+  ## Architecture Summary (from phase 1)
 
-### Two-Process Design
-
-The MCP server and the Skyline connector are separate processes with different lifecycles:
-
-- **SkylineMcpConnector** — .NET Framework 4.7.2 WinForms app, launched by Skyline's External Tools menu. Writes connection info so the MCP server can find the named pipe.
-- **SkylineMcpServer** — .NET 8.0-windows console app, launched by Claude Code/Desktop as an MCP stdio server. Reads connection info, connects to Skyline via named pipe.
-
-This separation is necessary because Skyline External Tools are launched from the UI thread and must be .NET Framework apps, while the MCP server must be a long-lived .NET 8.0 stdio process.
-
-## Reference Materials
-
-- **PR #3989**: https://github.com/ProteoWizard/pwiz/pull/3989 (ImageComparer MCP — working C# MCP reference)
-- **C# MCP Pitfalls**: `ai/docs/mcp/development-guide.md` → "C# MCP Servers (.NET)" section
-- **ImageComparer MCP docs**: `ai/docs/mcp/image-comparer.md`
-- **Interactive Tool Support Doc**: https://skyline.ms/labkey/_webdav/home/software/Skyline/@files/docs/Skyline%20Interactive%20Tool%20Support-3_1.pdf
-- **Example Interactive Tool**: `pwiz/pwiz_tools/Skyline/Executables/Tools/ExampleInteractiveTool/`
-- **SkylineTool.dll**: `pwiz/pwiz_tools/Skyline/SkylineTool/` (provides SkylineToolClient)
-
-## Wire Protocol: BinaryFormatter → JSON with POCOs
-
-**SkylineTool.dll** targets .NET Framework 4.7.2 and uses `BinaryFormatter` for named pipe serialization (`RemoteBase.cs`). The MCP server targets .NET 8.0, where `BinaryFormatter` is **obsoleted and throws `PlatformNotSupportedException` by default**. This must be replaced.
-
-### Decision: JSON with System.Text.Json (POCOs)
-
-Replace `BinaryFormatter` with JSON serialization using typed POCO models, following the same direction as the Panorama JSON cleanup (see `TODO-panorama_json_typed_models.md`).
-
-**Why JSON over protobuf:**
-- The codebase already has many serialization formats (XML, protobuf, BinaryFormatter, SQLite/NHibernate, custom binary, JSON). Consolidating toward fewer paradigms is better than adding another protobuf usage area.
-- JSON is already used for LabKey Server communication and the test framework. Increasing exposure in another area builds team familiarity with a format we're already committed to.
-- `System.Text.Json` is built into .NET — zero new dependencies for either .NET Framework 4.7.2 (via NuGet) or .NET 8.0 (built-in).
-- Human-readable — invaluable for debugging named pipe communication issues.
-- The SkylineTool wire protocol is simple RPC (`RemoteInvoke { MethodName, Arguments }` → `RemoteResponse { ReturnValue, Exception }`), a natural fit for POCOs.
-- Protobuf's schema enforcement and performance advantages don't matter for a local named pipe RPC with simple request/response shapes.
-
-**Implementation approach:**
-1. Create a multi-target `SkylineTool.Core` library (`net472;netstandard2.0`) with JSON-based `RemoteBase` replacement
-2. Define POCO classes for `RemoteInvoke` and `RemoteResponse` with `[JsonPropertyName]` attributes
-3. Both Skyline (server) and MCP server (client) reference SkylineTool.Core
-4. Existing `SkylineTool.dll` external tools continue to work during migration via backward compatibility or phased rollout
-
-**Related:** `ai/todos/backlog/brendanx67/TODO-panorama_json_typed_models.md` — same POCO pattern for Panorama JSON
-
-## C# MCP Implementation Notes
-
-All three pitfalls from ImageComparer MCP apply. See `ai/docs/mcp/development-guide.md`.
-
-1. **Clear logging providers** — `builder.Logging.ClearProviders()` before `AddMcpServer()`
-2. **Isolate child process stdin** — If the MCP server ever shells out (e.g., to SkylineCmd), use `RedirectStandardInput=true` + `Close()`. The SkylineToolClient itself uses named pipes (not subprocess), so this is less critical for Phase 3 but important for SkylineCmd integration.
-3. **Forward-slash paths** — `GetDocumentPath()` returns backslash paths. Any path returned to the MCP client needs `path.Replace('\\', '/')`. Accept forward slashes in path parameters and normalize with `NormalizePath()` at API boundary.
-
-## Phase 1: Skyline Connector Tool (.NET Framework 4.7.2)
-
-A minimal Skyline External Tool that writes the connection info for the MCP server.
-
-### Tasks
-
-- [ ] Create new project in `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcpConnector/`
-- [ ] Target .NET Framework 4.7.2 (must match Skyline's runtime)
-- [ ] Reference `SkylineTool.dll`
-- [ ] Accept `$(SkylineConnection)` argument from Skyline (passed as `args[0]`)
-- [ ] Write connection file to `~/.skyline-mcp/connection.json`:
-  ```json
-  {
-    "pipe_name": "SkylineTool-{GUID}",
-    "process_id": 12345,
-    "connected_at": "2026-02-06T10:30:00Z",
-    "skyline_version": "24.2.0.0",
-    "document_path": "C:/path/to/document.sky"
-  }
+  **2-tier direct JSON pipe:**
   ```
-- [ ] Include `process_id` (from `SkylineToolClient.GetProcessId()`) for staleness detection
-- [ ] Include `document_path` (from `GetDocumentPath()`) for identification
-- [ ] Display simple UI with "Connected to Skyline" status and "Disconnect" button
-- [ ] On disconnect/close, delete the connection file
-- [ ] Create `tool-inf/` folder with tool definition (see ExampleInteractiveTool for pattern)
+  AI App ──stdio──> SkylineMcpServer (.NET 8.0)
+                        │ JSON over named pipe
+                        v
+                    Skyline.exe (JsonToolServer -> ToolService methods)
+  ```
 
-### Connection Lifecycle Issues to Address
+  **Three processes:**
+  | Process | Framework | Role |
+  |---------|-----------|------|
+  | **Skyline.exe** | .NET Framework 4.7.2 | Hosts JsonToolServer (JSON pipe) + ToolService |
+  | **SkylineMcpConnector** | .NET Framework 4.7.2 | UI shell: reads connection.json, deploys MCP server, registers with AI apps |
+  | **SkylineMcpServer** | .NET 8.0-windows | MCP stdio server, connects to Skyline's JSON pipe |
 
-- **Stale files on crash**: If Skyline crashes, the connector doesn't clean up. MCP server should validate by checking if `process_id` is alive before attempting pipe connection.
-- **Multiple instances**: Current design overwrites connection.json. Future: use `connection-{GUID}.json` pattern and let MCP server list available instances.
-- **File location**: Consider `%LOCALAPPDATA%/Skyline/mcp/` instead of `~/.skyline-mcp/` to follow Skyline conventions.
+  **Source location:** `pwiz_tools/Skyline/Executables/Tools/SkylineMcp/`
 
-### Files to create
+  ## What's Working (end of phase 1)
 
-- `SkylineMcpConnector.csproj` (net472 WinForms)
-- `Program.cs` / `MainForm.cs`
-- `tool-inf/info.properties`
-- `tool-inf/SkylineMcpConnector.properties` (Arguments = `$(SkylineConnection)`)
+  ### MCP Tools (25 tools)
 
-## Phase 2: MCP Server Core (.NET 8.0-windows)
+  **Read-only:**
+  - `skyline_get_document_path`, `skyline_get_version`, `skyline_get_document_status`
+  - `skyline_get_selection`, `skyline_get_replicate`, `skyline_get_replicate_names`
+  - `skyline_get_report` (named reports, file-based), `skyline_get_report_from_definition` (JSON)
+  - `skyline_add_report` (save JSON report definition to Skyline's report list)
+  - `skyline_get_document_settings`, `skyline_get_default_settings`
+  - `skyline_get_settings_list_types`, `skyline_get_settings_list_names`, `skyline_get_settings_list_item`
+  - `skyline_get_cli_help_sections`, `skyline_get_cli_help`
+  - `skyline_get_report_doc_topics`, `skyline_get_report_doc_topic`
+  - `skyline_get_locations` (document tree enumeration)
 
-Build the MCP server using ModelContextProtocol NuGet package, based on PR #3989 patterns.
+  **Navigation:**
+  - `skyline_set_selection` (with multi-selection support)
+  - `skyline_set_replicate`
 
-### Tasks
+  **Document-modifying:**
+  - `skyline_insert_small_molecule_transition_list` (CSV with column headers)
+  - `skyline_import_fasta` (standard FASTA format)
+  - `skyline_import_properties` (annotations via ElementLocator CSV)
+  - `skyline_run_command` (full SkylineCmd CLI with undo + audit logging)
 
-- [ ] Create new project `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcpServer/`
-- [ ] Target `net8.0-windows` with `ModelContextProtocol` NuGet package
-- [ ] Clear logging providers (pitfall #1)
-- [ ] Read connection file on tool invocation
-- [ ] Connect to Skyline's named pipe using pipe name from connection file
-- [ ] Validate connection: check `process_id` is alive, attempt pipe with short timeout
-- [ ] Handle no connection file → return helpful error ("Launch 'Connect to Claude' from Skyline's External Tools menu")
-- [ ] Handle stale connection → return error with suggestion to reconnect
-- [ ] Handle pipe timeout → return error ("Skyline may be busy or showing a modal dialog")
-- [ ] Normalize all paths returned to client (backslash → forward slash)
-- [ ] Setup script in `ai/mcp/SkylineMcp/Setup-SkylineMcp.ps1`
+  ### Connector Features
+  - Deploys MCP server to `~/.skyline-mcp/server/`
+  - One-click registration for 5 AI apps: Claude Desktop, Claude Code, VS Code, Cursor, Gemini CLI
+  - Skyline version check (minimum 26.1.1.061)
+  - Auto-close when Skyline exits
 
-### Wire Protocol Prerequisite
+  ### Key Architectural Decisions
+  - Reflection-based dispatch in JsonToolServer (auto-discovers public string methods)
+  - ColumnResolver for JSON report definitions (maps display names to PropertyPaths)
+  - LlmInstruction type for text intended for LLM consumers
+  - RunCommand applies changes back to SkylineWindow with single undo record
+  - ToolService.cs has zero diff against master (all MCP code in JsonToolServer)
 
-Requires the JSON wire protocol work (see "Wire Protocol: BinaryFormatter → JSON with POCOs" section above). The `SkylineTool.Core` multi-target library must be created first, replacing `BinaryFormatter` with `System.Text.Json` POCOs in `RemoteBase`.
+  ### Commits (14 on branch)
+  ```
+  e150430 Added SkylineMcp bridge for Claude Code integration with running Skyline
+  4963875 Added RunCommand MCP tool and --help=sections for LLM-friendly CLI access
+  5e62bec Add settings list enumeration to Skyline MCP server
+  5275725 Moved MCP JSON pipe server from connector into Skyline process
+  bb35e58 Replaced pipe-based report export with file-based export in JsonToolServer
+  60a9dd1 Added LLM documentation tools for CLI help and report columns
+  9b1ff2a Added chat app registration UI and Claude Desktop process management
+  338be46 Add icon for SkylineMcpConnector tool
+  65f74a1 Added document-modifying MCP tools and fixed server deployment
+  934ce6b Added document status and settings MCP tools with connector lifecycle monitor
+  6f35824 Added JSON report definitions, ColumnResolver, and MCP error handling
+  6c3244b Added RunCommand document apply-back with undo and audit logging
+  6de7c4d Renamed to AI Connector and added Gemini CLI, VS Code, Cursor support
+  9f215ce Added reflection dispatch, selection symmetry, and document navigation aids
+  ```
 
-## Phase 3: MCP Tools
+  ## Remaining Work
 
-### Phase 3a: Read-Only Tools
+  ### Near-term (phase 2)
 
-These map directly to existing SkylineToolClient methods:
+  - [x] Implement filtering in report definitions (filter array with 12 operations, "did you mean" errors)
+  - [x] Implement sorting in get_report_from_definition (via RowFilter.ColumnSort, query-time only)
+  - [x] Implement pivotReplicate and pivotIsotopeLabel flags in report definitions
+  - [x] Implement `get_open_forms`, `get_graph_data`, and `get_graph_image` MCP tools
+    - Extracted JsonUiService.cs from JsonToolServer (UI interaction service layer)
+    - Three abstraction levels: primitives, UI patterns, complete operations
+    - Shared temp dir/file path infrastructure (consolidated with tutorial tools)
+    - Future? `get_available_graphs` and `open_graph`?
+  - [x] Sync StartPage tutorial list to match wiki page exactly (see Session 18 design)
+  - [x] Implement `get_available_tutorials`, `get_tutorial`, and `get_tutorial_image` (see Sessions 18-20)
+    - [x] Created TutorialCatalog.cs as single master definition (section/tutorial list, pure data)
+    - [x] Created JsonTutorialCatalog.cs in ToolsUI/ (MCP/JSON layer: FormatCatalog, FetchTutorial, FetchTutorialImage, ConvertHtmlToMarkdown)
+    - [x] Refactored StartPage.PopulateTutorialPanel() to iterate TutorialCatalog (removed ~380 lines of per-tutorial boilerplate)
+    - [x] Added GetAvailableTutorials/GetTutorial/GetTutorialImage thin delegates in JsonToolServer.cs
+    - [x] Added skyline_get_available_tutorials, skyline_get_tutorial, skyline_get_tutorial_image MCP tools in SkylineTools.cs
+    - [x] Added TutorialCatalogTest.cs (resource validation, format check, HTML-to-markdown)
+    - [x] Fixed pre-existing .resx typos: PRMOrbitraip→PRMOrbitrap, DDSearch→DDASearch
+    - [x] Fixed image resource name mismatches: GroupedStudies→GroupedStudy, PRM→TargetedMSMS
+    - [x] Added missing DIA_TTOF text/image resources
+    - [x] All 3 TutorialCatalog tests pass, end-to-end MCP tests verified
+  - [x] Implement `get_form_image` MCP tool with screen capture and redaction (see Sessions 22-23)
+    - [x] Extracted ScreenCapture.cs from TestUtil/ScreenshotManager.cs (DRY refactor)
+    - [x] Added ScreenCapturePermissionDlg with session + persistent permission flow
+    - [x] Added AllowMcpScreenCapture user setting
+    - [x] PInvoke additions: Gdi32.GetDeviceCaps, User32.SetForegroundWindow, EnumWindows
+    - [x] Redaction: enumerates non-Skyline windows above target in z-order via EnumWindows
+    - [x] ScreenshotManager delegates to ScreenCapture for all shared methods
+  - [x] Refactor form IDs from index-based (`graph:0`, `form:1`) to `TypeName:Title` format
+  - [x] Add dialog support to `get_open_forms` and `get_form_image` (non-docked visible forms)
+  - [x] Screen capture: fix DPI scaling for redaction (foreign window rects now scaled to physical pixels)
+  - [x] Screen capture: change redaction color from gray to cyan for visibility
+  - [x] Screen capture: add Thread.Sleep after permission dialog dismissal
+  - [ ] Implement unit tests of at least the Skyline side of the API
+  - [ ] Test ImportProperties end-to-end with annotation workflow from conversation
+  - [ ] Create PR
 
-| Tool | SkylineToolClient Method | Notes |
-|------|-------------------------|-------|
-| `skyline_get_document_path` | `GetDocumentPath()` | Normalize path to forward slashes |
-| `skyline_get_version` | `GetSkylineVersion()` | Returns Version object |
-| `skyline_get_selection` | `GetDocumentLocationName()` | Current protein/peptide/precursor |
-| `skyline_get_replicate` | `GetReplicateName()` | Active replicate |
-| `skyline_get_report` | `GetReport(reportName)` | **Large data — use file-based pattern** |
-| `skyline_get_report_from_definition` | `GetReportFromDefinition(reportXml)` | **Large data — use file-based pattern** |
+  ### Future enhancements (post-PR)
 
-**Report data volume**: Reports can return thousands of rows. Use file-based pattern from `development-guide.md`: save to `ai/.tmp/skyline-report-{name}.csv`, return summary + path.
+  - [ ] FloatingWindow composite capture: individual docked forms in a floating container all
+    resolve to the full container rectangle via `GetDockedFormBounds`. Need to either return
+    just the pane's bounds or document this as expected behavior.
+  - [ ] Multi-form screenshot: Accept a list of form IDs and capture the union bounding box
+    with redaction. Useful for capturing a dialog alongside its parent, or multiple related panels.
+    The redaction infrastructure already handles non-Skyline content in the gaps.
+  - [ ] Multiple Skyline instances: `connection-{GUID}.json` pattern
+  - [ ] Self-contained publish for MCP server (eliminates .NET 8.0 runtime dependency)
+  - [ ] Wire protocol modernization (replace BinaryFormatter in SkylineTool.dll)
+  - [ ] RunCommand write operations need IDocumentContainer integration for full ModifyDocument flow
+  - [ ] Immediate Window font: ASCII table borders don't align (proportional font)
+  - [ ] Tool Store packaging and submission
 
-### Phase 3b: Navigation Tools
+  ## Session Log
 
-| Tool | Method | Notes |
-|------|--------|-------|
-| `skyline_select_element` | `SetDocumentLocation()` | Obsolete but functional |
+  (Continued from phase 1, session 16)
 
-### Phase 3c: Document Modification Tools (Already Supported!)
+  ### Session 17 (2026-03-03) - Filtering, sorting, and pivot support
 
-These are **already in the SkylineToolClient API** — no Skyline extensions needed:
+  Added filtering, sorting, and pivot support to JSON report definitions:
+  - **Filtering**: ParseFilterSpecs resolves columns against ColumnResolver.ResolveResult.ColumnIndex,
+    validates ops via FilterOperations.GetOperation, builds FilterSpec/FilterPredicate. Filters can
+    reference any column in the data model, not just selected ones. Part of ViewSpec (persisted).
+  - **Sorting**: ParseSortSpecs builds RowFilter.ColumnSort objects applied via BindingListSource.RowFilter
+    in ExportJsonDefinitionReport. Sort is query-time only (not part of report definition) because
+    Skyline report definitions don't support persisted sort order.
+  - **Pivot Replicate**: pivotReplicate=true sets SublistId to Root; false sets to replicate sublist.
+  - **Pivot Isotope Label**: Delegates to PivotReplicateAndIsotopeLabelWidget.PivotIsotopeLabel().
+  - ColumnResolver.ResolveResult now exposes ColumnIndex for filter column resolution.
+  - ColumnResolver.FindSuggestions changed from private to internal for reuse in filter errors.
+  - RowFactories.ExportReport gained overloads accepting IList<RowFilter.ColumnSort>.
 
-| Tool | SkylineToolClient Method | Notes |
-|------|-------------------------|-------|
-| `skyline_import_fasta` | `ImportFasta(string textFasta)` | Add proteins from FASTA text |
-| `skyline_add_small_molecules` | `InsertSmallMoleculeTransitionList(string textCSV)` | CSV format transition list |
-| `skyline_add_spectral_library` | `AddSpectralLibrary(name, path)` | Path needs normalization |
-| `skyline_delete_elements` | `DeleteElements(string[] elementLocators)` | Delete proteins/peptides/etc. |
-| `skyline_import_peak_boundaries` | `ImportPeakBoundaries(string csv)` | Custom peak boundaries |
-| `skyline_import_properties` | `ImportProperties(string csv)` | Custom annotation properties |
+### Session 18 (2026-03-03) - Tutorial tools design
 
-**ASMS demo implication**: The stretch goals ("Add APOA1", "Add Acetyl-CoA") are achievable with existing API — no Skyline modifications needed.
+Design discussion about how the Skyline MCP can help LLMs find and use tutorials.
 
-### Phase 3d: SkylineCmd Integration (Future)
+#### Decision: GitHub raw content, served through MCP, file-based output
 
-For operations not in the Interactive Tool API (import results, modify settings, save document), SkylineCmd offers 231 command-line arguments. Could expose as MCP tools that operate on .sky files directly without a running Skyline instance.
+- **Source**: GitHub `raw.githubusercontent.com` with git hash from `skyline_get_version`
+- **Why not skyline.ms wiki**: Tutorial pages use `<iframe>` + JS content population, fragile to extract
+- **Why MCP fetches content**: Users can't be expected to have web fetch tools. Claude Desktop,
+  Gemini CLI, Cursor don't guarantee web access. The Skyline MCP must be the gateway.
+- **URL pattern**: `https://raw.githubusercontent.com/ProteoWizard/pwiz/{hash}/pwiz_tools/Skyline/Documentation/Tutorials/{name}/{lang}/index.html`
+- **File-based output**: Large content written to temp file (like `skyline_get_report`), reducing
+  context cost and network roundtrips. LLM reads sections from file with offset/limit as needed.
+- **Version pinning**: The git hash in `skyline_get_version` (e.g., `26.1.1.061-6c3244bc0a`)
+  ensures tutorial content always matches the user's Skyline version.
 
-| Tool | SkylineCmd Args | Notes |
-|------|----------------|-------|
-| `skyline_import_results` | `--in file.sky --import-file data.raw --save` | Requires stdin isolation (pitfall #2) |
-| `skyline_refine` | `--in file.sky --refine-* --save` | 40+ refinement options |
-| `skyline_export_report` | `--in file.sky --report-name X --report-file out.csv` | Works without running Skyline |
+#### Prerequisite: Sync StartPage to wiki tutorials page
 
-**Trade-off**: SkylineCmd operates on files, not the running instance. Changes won't be visible in Skyline until the document is reloaded.
+The wiki tutorials page (skyline.ms/...?name=tutorials) has 28 tutorials in 6 sections.
+The StartPage currently has 26 tutorials in 5 sections. Differences:
 
-## Full SkylineToolClient API Surface
+**Wiki has but StartPage doesn't:**
+- **Section**: "Introduction to Full-Scan Acquisition Data" (wiki has this as a separate section)
+  - AcquisitionComparison ("Comparing PRM, DIA, and DDA") — entirely missing from StartPage
+  - PRMOrbitrap and DIA are in this section on wiki, but in "Full-Scan" section in StartPage
+- **Tutorial**: PeakBoundaryImputation-DIA ("Peak Boundary Imputation for DIA") — in wiki's
+  Full-Scan section, missing from StartPage
 
-Verified by reading source at `pwiz_tools/Skyline/SkylineTool/SkylineToolClient.cs`:
+**Tutorials on GitHub but NOT on wiki (stale, not for MCP):**
+- ImportingAssayLibraries, ImportingIntegrationBoundaries, PRMOrbitrap-PRBB
 
-### Already Known (in original TODO)
-- `GetReport(string reportName)` → `IReport`
-- `GetReportFromDefinition(string reportDefinition)` → `IReport`
-- `GetDocumentLocation()` / `SetDocumentLocation()` — obsolete but functional
-- `GetReplicateName()` → `string`
-- `GetChromatograms(DocumentLocation)` → `Chromatogram[]` — obsolete
-- `GetDocumentPath()` → `string`
-- `GetSkylineVersion()` → `Version`
-- `DocumentChanged` / `SelectionChanged` events
+**Changes needed:**
+1. Add `Section_Intro_Full_Scan` to TutorialTextResources.resx
+2. Add AcquisitionComparison entries to all 3 .resx files (Text, Link, Image)
+3. Add PeakBoundaryImputation-DIA entries to all 3 .resx files
+4. Restructure StartPage.cs `PopulateTutorialPanel()`:
+   - Introductory (4): MethodEdit, MethodRefine, GroupedStudy, ExistingQuant
+   - Intro Full-Scan (3): AcquisitionComparison, PRMOrbitrap, DIA
+   - Full-Scan (7): MS1Filtering, DDASearch, TargetedMSMS, DIA_SWATH, DIA_PASEF, DIA_Umpire_TTOF, PeakBoundaryImputation
+   - Small Molecules (5): SmallMolecule, SmallMoleculeMethodDevCEOpt, SmallMoleculeQuantification, HiResMetabolomics, SmallMolLibraries
+   - Reports (2): CustomReports, LiveReports
+   - Advanced (7): AbsoluteQuant, PeakPicking, iRT, OptimizeCE, IMSFiltering, LibraryExplorer, AuditLog
+5. Commit to keeping StartPage and wiki in sync going forward
 
-### Discovered During Review (not in original TODO)
-- `ImportFasta(string textFasta)` — **adds proteins from FASTA text**
-- `InsertSmallMoleculeTransitionList(string textCSV)` — **adds small molecules**
-- `AddSpectralLibrary(string libraryName, string libraryPath)` — adds spectral library
-- `DeleteElements(string[] elementLocators)` — deletes document elements
-- `GetSelectedElementLocator(string elementType)` → `string` — gets selection as locator
-- `ImportProperties(string propertiesCsv)` — imports custom properties
-- `ImportPeakBoundaries(string peakBoundariesCsv)` — imports peak boundaries
-- `GetProcessId()` → `int` — Skyline's PID (useful for connection validation)
-- `GetDocumentLocationName()` → `string` — non-obsolete selection accessor
+#### Tool 1: `skyline_get_available_tutorials`
 
-### Not in API (would need Skyline changes or SkylineCmd)
-- Importing results files
-- Modifying instrument/transition/full-scan settings
-- Saving document
-- Undo/redo operations
+Returns structured catalog from Skyline's .resx resources. No network needed.
 
-## Phase 4: Testing
+**Parameters:** none
 
-### Manual Testing
+**Returns** (tab-separated, like other enumeration tools):
+```
+Category\tName\tTitle\tDescription\tWikiUrl\tZipUrl
+Introductory\tMethodEdit\tTargeted Method Editing\t...\thttps://...\thttps://...
+...
+```
 
-- [ ] Start Skyline, open a document
-- [ ] Launch SkylineMcpConnector from External Tools menu
-- [ ] Verify connection.json is written with pipe_name, process_id, document_path
-- [ ] Test MCP server with Claude Code: `claude mcp add skyline ...`
-- [ ] Verify read-only tools: "What document is open in Skyline?"
-- [ ] Verify reports: "Show me peak areas for all peptides" (check file-based output)
-- [ ] Verify navigation: "Go to peptide DIDISSPEFK"
-- [ ] Verify import: "Add APOA1 to the document" (LLM provides FASTA)
-- [ ] Verify small molecules: "Add Acetyl-CoA" (LLM provides CSV transition list)
-- [ ] Test stale connection: close Skyline, try a tool call
-- [ ] Test modal dialog: open a Skyline dialog, try a tool call (should timeout gracefully)
+**Source data** (all in `Controls/Startup/`):
+- `TutorialTextResources` — captions, descriptions, section names
+- `TutorialLinkResources` — zip URLs, wiki URLs
+- `StartPage.PopulateTutorialPanel()` — ordering and section grouping
 
-### Example Prompts to Validate
+**Implementation**: New method `GetAvailableTutorials()` in JsonToolServer.cs.
+Build catalog from .resx resources. The ordering and section assignment should be
+defined in a static data structure (array of tutorial descriptors) rather than
+duplicating the StartPage's UI construction code.
 
-From the ASMS abstract:
+#### Tool 2: `skyline_get_tutorial`
 
-- "What document is open in Skyline?" → `skyline_get_document_path`
-- "What peptides are in this document?" → `skyline_get_report` with appropriate report
-- "Please add APOA1 to the document" → LLM provides FASTA, MCP calls `ImportFasta`
-- "Add Acetyl-CoA to the document" → LLM provides CSV, MCP calls `InsertSmallMoleculeTransitionList`
-- "Show peptides with CV above 20% in QC samples" → `skyline_get_report_from_definition` + LLM analysis
+Fetches tutorial content from GitHub, converts HTML to markdown, writes to file.
 
-## Phase 5: Packaging (Deferred)
+**Parameters:**
+- `name` (required) — tutorial folder name (e.g., "MethodEdit")
+- `language` (optional, default "en")
 
-Desktop Extension packaging (`mcpb pack`, `manifest.json`) should be deferred until the format stabilizes. Focus on Claude Code registration via setup script for now.
+**Behavior:**
+1. Extract git hash from `Install.Version` (after the `-`)
+2. Construct URL: `https://raw.githubusercontent.com/ProteoWizard/pwiz/{hash}/pwiz_tools/Skyline/Documentation/Tutorials/{name}/{lang}/index.html`
+3. Fetch HTML via `WebClient` (sync, runs on pipe thread)
+4. Convert HTML → markdown (see conversion spec below)
+5. Write markdown to temp file
+6. Parse headings to build table of contents with line numbers
+7. Return: JSON with `file_path`, `title`, `toc` (array of {heading, level, line})
 
-## Notes
+**LLM workflow:**
+1. Call `get_available_tutorials` → browse catalog, recommend tutorials
+2. Call `get_tutorial("MethodEdit")` → get file path + TOC
+3. Use `Read` tool with offset/limit to read specific sections as needed
+4. Guide user through steps, answer questions about specific sections
 
-### Named Pipe Communication
+#### HTML-to-markdown conversion spec
 
-Skyline uses `NamedPipeClientStream` / `NamedPipeServerStream` in message mode with `BinaryFormatter` serialization. The `SkylineToolClient` class handles protocol details. Each RPC call opens a new pipe connection with a 1-second timeout.
+Tutorial HTML is well-structured (no dynamic content, JS is presentational only):
 
-### Timeout and Threading Concerns
+| HTML | Markdown |
+|------|----------|
+| `<h1 class="document-title">` | `# Title` |
+| `<h1>` | `# Section` |
+| `<h2>` | `## Subsection` |
+| `<p>` | paragraph with blank line |
+| `<ol>/<li>` | `1. numbered list` |
+| `<ul>/<li>` | `- bullet list` |
+| `<table>` | markdown table |
+| `<img src="s-01.png">` | `[Screenshot: s-01.png]` |
+| `<b>/<strong>` | `**bold**` |
+| `<i>/<em>` | `*italic*` |
+| `<a href="...">text</a>` | `[text](url)` |
+| `<style>, <script>` | dropped |
+| `<br>` | newline |
 
-- Named pipe default timeout is 1 second. If Skyline is busy (importing data, long operation), calls will fail.
-- SkylineToolClient dispatches to Skyline's UI thread via `Program.MainWindow.Invoke()`. A modal dialog will block indefinitely.
-- MCP tool implementations should wrap pipe calls with configurable timeouts and return user-friendly error messages.
+Implementation: Regex-based converter in JsonToolServer.cs. The existing `StripHtmlTags()`
+helper handles simple cases; extend with a more structured `ConvertHtmlToMarkdown()` method.
+No external dependencies needed — tutorial HTML is regular enough for regex.
 
-### Event-Driven Updates
+#### Graceful degradation
 
-The API has `DocumentChanged` and `SelectionChanged` events. MCP is request/response (no server push). These events could be used for:
-- State invalidation (clear cached report data)
-- Logging (track document changes during a session)
-- Future: MCP notifications if the spec adds push support
+If GitHub is unreachable (no internet, corporate firewall):
+- Return error with wiki URL and zip URL as fallbacks
+- LLM can direct user to those URLs for manual access
 
-### Connection Discovery Alternative
+#### Future potential (post-PR)
 
-Instead of file-based discovery, the MCP server could enumerate Windows named pipes matching `SkylineTool-*` and probe each with `GetDocumentPath()` to identify instances. This eliminates the connector tool entirely but adds complexity. Worth investigating if the file-based approach proves fragile.
+- **Lesson plans**: LLM creates structured learning paths from tutorial catalog based on
+  user's experience level and goals (professor use case)
+- **Section-level Q&A**: User asks about a concept, LLM finds relevant tutorial section
+- **Tutorial-guided workflows**: LLM reads tutorial steps and helps execute them in Skyline
+  using other MCP tools (e.g., "set up like step 3 of the Method Editing tutorial")
+- **Localized tutorials**: `language` parameter already supports ja, zh-CHS
 
-## Success Criteria for ASMS 2026 (June)
+### Session 19 (2026-03-03) - Tutorial tools implementation
 
-Minimum viable demo:
+Implemented `get_available_tutorials` and `get_tutorial` MCP tools with a shared
+`TutorialCatalog` class as the single authoritative tutorial definition.
 
-1. User installs Claude Desktop + registers Skyline MCP server
-2. User opens Skyline document, clicks "Connect to Claude" in External Tools
-3. User asks Claude: "What peptides are in this document?"
-4. Claude queries Skyline via MCP and responds with peptide list
-5. User asks: "Show me which have CV > 20%"
-6. Claude generates report and interprets results
+#### Architecture: TutorialCatalog as single source of truth
 
-Stretch goals (now achievable without API extensions):
+Brendan pointed out the initial approach duplicated the tutorial list across StartPage.cs
+and JsonToolServer.cs. Refactored to a shared `TutorialCatalog` class in Controls/Startup/:
 
-- "Add APOA1 to the document" → LLM provides FASTA sequence, `ImportFasta`
-- "Add Acetyl-CoA" → LLM provides formula/transition list, `InsertSmallMoleculeTransitionList`
-- Report visualization in Claude's response
-- Multi-turn workflow assistance
+- **`TutorialCatalog.cs`** — Master tutorial list (28 tutorials, 6 sections), shared helpers:
+  - `TutorialInfo` struct: Section (resource key), ResourcePrefix, FolderName
+  - `TutorialInfo` properties: Caption, Description, ZipUrl, WikiUrl, SkyFileInZip, Icon
+    (all via ResourceManager lookups from .resx files)
+  - `SectionOrder` array defining section display order
+  - `GetSectionDisplayName()` — localized section name (with `Assume.IsNotNull` validation)
+  - `GetSectionDisplayNameInvariant()` — English section name for LLM consumers
+  - `FormatCatalog()` — tab-separated catalog using invariant strings (for MCP)
+  - `FetchTutorial(name, language)` — GitHub fetch + HTML-to-markdown + file output
+  - `ConvertHtmlToMarkdown(html)` — regex-based converter for tutorial HTML
 
-## Review Notes (2026-02-16)
+- **StartPage.cs** — Refactored `PopulateTutorialPanel()` from ~380 lines of per-tutorial
+  boilerplate down to ~50 lines iterating `TutorialCatalog.Tutorials`. Section ordering
+  (proteomic vs small molecule mode) preserved via dictionary of section controls.
 
-Design reviewed against ImageComparer MCP implementation (PR #3989). Key findings:
+- **JsonToolServer.cs** — Thin 2-line delegates: `GetAvailableTutorials()` and
+  `GetTutorial(name, language)` both call into TutorialCatalog.
 
-1. **API gaps were overstated** — `ImportFasta`, `InsertSmallMoleculeTransitionList`, and 6 other methods were already in SkylineToolClient but not listed
-2. **BinaryFormatter must be replaced** — .NET 8.0 blocks it by default. Decision: JSON with POCOs via System.Text.Json, aligning with Panorama JSON cleanup direction. Nick suggested protobuf (already in codebase), but JSON consolidates the team toward fewer serialization paradigms and adds zero dependencies.
-3. **C# MCP pitfalls were not addressed** — all three from ImageComparer apply
-4. **Connection lifecycle needs hardening** — stale files, crash recovery, PID validation
-5. **Report data volume** — must use file-based pattern to avoid context overflow
-6. **Phase 5 (packaging) is premature** — deferred until format stabilizes
+- **SkylineTools.cs** — MCP tool definitions with descriptions, parameter docs, and
+  friendly formatting of the GetTutorial JSON result (shows TOC with line numbers).
 
-See `ai/docs/mcp/development-guide.md` and `ai/docs/mcp/image-comparer.md` for implementation patterns.
+#### Localization considerations
 
-### Review session details
+- Section constants use .resx resource keys (e.g., `Section_Introductory`), not display text
+- `GetSectionDisplayName()` returns localized name (for StartPage UI)
+- `GetSectionDisplayNameInvariant()` returns English name (for MCP/LLM output)
+- `FormatCatalog()` uses invariant culture for all lookups — LLMs work best in English
+- Missing resource keys fail with `Assume.IsNotNull` rather than silent fallback
 
-- Explored full SkylineToolClient API surface (SkylineToolClient.cs, IToolService.cs, RemoteClient.cs, RemoteBase.cs)
-- Explored ExampleInteractiveTool connection pattern (tool-inf/, $(SkylineConnection) macro)
-- Explored SkylineCmd capabilities (231 command-line args, operates on .sky files directly)
-- Investigated protobuf history: adopted Feb-Mar 2017 for chromatogram compression and hybrid document format, added for Koina gRPC in 2024. Usage is central to data persistence but oriented toward binary density, not IPC.
-- Discussed serialization format with developer: JSON chosen over protobuf for wire protocol because it consolidates toward fewer formats, aligns with Panorama POCO cleanup direction, and is the clear trajectory for interchange protocols.
+#### Test coverage
+
+- `TutorialCatalogTest.cs` validates all resource entries exist for every tutorial:
+  captions, descriptions, zip/pdf URLs, start icons, section membership, no duplicates
+- `TestTutorialCatalogFormat()` validates FormatCatalog produces correct tab-separated structure
+- `TestConvertHtmlToMarkdown()` validates HTML-to-markdown conversion for key patterns
+
+#### New/modified files
+- **New**: `Controls/Startup/TutorialCatalog.cs`, `Test/TutorialCatalogTest.cs`
+- **Modified**: `StartPage.cs` (major refactor), `JsonToolServer.cs` (+11 lines),
+  `SkylineTools.cs` (+64 lines), `Skyline.csproj`, `Test.csproj`
+
+### Session 20 (2026-03-04) - Tutorial resource fixes, image tool, end-to-end testing
+
+#### .resx resource fixes (pre-existing bugs found by TutorialCatalogTest)
+
+Fixed 3 typos and 5 missing resources that prevented the test from passing:
+
+- **Typos**: `PRMOrbitraip_Description` → `PRMOrbitrap_Description` (all 3 locales + Designer),
+  `DDSearch_Description` → `DDASearch_Description` (all 3 locales + Designer),
+  `DDSearch_pdf` → `DDASearch_pdf` (link resources + Designer)
+- **Image name mismatches**: Renamed `GroupedStudies_start` → `GroupedStudy_start`,
+  `PRM_start` → `TargetedMSMS_start` (to match ResourcePrefix convention)
+- **Missing resources**: Added `DIA_TTOF_Caption`, `DIA_TTOF_Description`, `DIA_TTOF_start`
+
+#### Tutorial image tool (`skyline_get_tutorial_image`)
+
+Added third tutorial MCP tool for downloading screenshot images referenced in tutorial
+markdown (e.g., `[Screenshot: s-01.png]`). Uses same GitHub raw URL pattern as get_tutorial.
+
+- `TutorialCatalog.FetchTutorialImage()` — validates filename (path traversal prevention),
+  downloads image to temp or caller-specified path
+- Images stored in `{tmpDir}/images/{tutorial}/{lang}/` subdirectory structure
+- All 3 tutorial tools accept optional `filePath` parameter (matching report/settings pattern)
+
+#### WebClient → HttpClientWithProgress migration
+
+Replaced deprecated `WebClient` with `HttpClientWithProgress` (co-authored by Claude) in both
+FetchTutorial and FetchTutorialImage. Better error reporting for network failures.
+
+#### End-to-end testing
+
+All 3 MCP tools verified working against running Skyline:
+- `get_available_tutorials` — 28 tutorials, 6 sections, correct captions/descriptions/URLs
+- `get_tutorial("DIA-TTOF")` — fetched HTML, converted to 833-line markdown, TOC extracted
+- `get_tutorial_image("DIA-TTOF", "s-01.png")` — downloaded screenshot, viewable by Claude
+- Custom `filePath` tested: `ai/.tmp/s-01.png` saves to approved location (no manual approval needed)
+
+#### TutorialCatalog → JsonTutorialCatalog refactoring
+
+Separated MCP/JSON concerns from pure catalog data:
+- **`Controls/Startup/TutorialCatalog.cs`** — Pure data only: TutorialInfo struct, Tutorials[],
+  SectionOrder[], section constants, GetSectionDisplayName/Invariant, FindTutorial. No JSON, HTTP,
+  or temp file code. Consumed by StartPage UI.
+- **`ToolsUI/JsonTutorialCatalog.cs`** (NEW) — MCP serialization layer: FormatCatalog,
+  FetchTutorial, FetchTutorialImage, ConvertHtmlToMarkdown, GitHub URL construction, temp file
+  management. Wraps TutorialCatalog. Consumed by JsonToolServer.
+- Updated JsonToolServer.cs to call JsonTutorialCatalog (removed Controls.Startup import)
+- Updated TutorialCatalogTest.cs to reference JsonTutorialCatalog for format/markdown tests
+
+#### New/modified files
+- **New**: `TutorialCatalog.cs`, `JsonTutorialCatalog.cs`, `TutorialCatalogTest.cs`
+- **Modified**: `StartPage.cs` (major refactor), `JsonToolServer.cs` (+delegates),
+  `SkylineTools.cs` (+3 MCP tools), `Skyline.csproj`, `Test.csproj`,
+  9 .resx/.Designer.cs files (typo fixes + missing resources)
+
+### Session 21 (2026-03-04) - Graph MCP tools and JsonUiService extraction
+
+Implemented three new graph-related MCP tools and extracted a JsonUiService static class
+from JsonToolServer to separate UI interaction concerns.
+
+#### JsonUiService.cs (NEW)
+
+Extracted UI interaction code into a dedicated static service class, following the same
+pattern as JsonTutorialCatalog. Three abstraction levels:
+
+1. **Primitives**: `InvokeOnUiThread(Action)` and `InvokeOnUiThread(Func<string>)` — UI
+   thread marshaling with error capture
+2. **UI patterns**: `CreateImmediateWindowTee()` — tees output to capture writer + Immediate
+   Window. `TeeTextWriter` private class moved here from JsonToolServer.
+3. **Complete operations**: `GetSelection`, `SetSelection`, `SetReplicate`, `GetOpenForms`,
+   `GetGraphData`, `GetGraphImage`
+
+Shared infrastructure consolidated from duplicate code in JsonTutorialCatalog:
+- `GetMcpTmpDir()` — respects `SKYLINE_MCP_TMP_DIR` env var, public static
+- `GetMcpTmpFilePath(prefix, title, extension)` — timestamped file path generation
+- JsonTutorialCatalog updated to use `JsonUiService.GetMcpTmpDir()` (removed duplicate)
+- `ToForwardSlashPath()` extension method used consistently (replaced manual `Replace('\\', '/')`)
+
+#### Graph MCP tools
+
+- **`skyline_get_open_forms`**: Enumerates all visible docked forms via `DockPanel.Contents`.
+  Reports form type, title, ZedGraph presence, dock state, and stable identifier.
+- **`skyline_get_graph_data`**: Extracts tab-separated data via
+  `CopyGraphDataToolStripMenuItem.GetGraphData(MasterPane)`. Saves to file (TSV) for
+  ggplot2/matplotlib publication-quality plot workflow.
+- **`skyline_get_graph_image`**: Renders PNG via `MasterPane.GetImage()`. Uses `FileSaver`
+  for atomic writes.
+
+Form-specific `ZedGraphControl` access via `TryGetZedGraphControl()` switch:
+GraphSummary.GraphControl, GraphChromatogram.GraphControl, GraphSpectrum.ZedGraphControl,
+GraphFullScan.ZedGraphControl, CalibrationForm.ZedGraphControl.
+
+#### Style cleanup
+
+Fixed 14 braceless multi-line `if` bodies across JsonUiService.cs (2) and
+JsonToolServer.cs (12). Updated ai/STYLEGUIDE.md to document the rule: braceless `if`
+is only allowed when the body is a single line.
+
+#### DRY improvements
+
+- Replaced tab character literals with `TextUtil.SEPARATOR_TSV` in JsonTutorialCatalog
+- Added `EXT_PNG` and `GRAPH_FILE_PREFIX` constants
+- Used `TextUtil.EXT_TSV` for graph data file extension
+
+#### New/modified files
+- **New**: `ToolsUI/JsonUiService.cs` (~380 lines)
+- **Modified**: `ToolsUI/JsonToolServer.cs` (extracted UI code to thin wrappers, braces cleanup),
+  `ToolsUI/JsonTutorialCatalog.cs` (shared tmp dir, ToForwardSlashPath, TSV separator),
+  `SkylineMcpServer/Tools/SkylineTools.cs` (+3 MCP tools),
+  `Skyline.csproj` (+JsonUiService.cs), `ai/STYLEGUIDE.md` (braceless if rule)
+
+### Session 22 (2026-03-04) - Form ID refactor, dialog support, screen capture fixes
+
+Refactored form identifiers from fragile index-based (`graph:0`, `form:1`, `dialog:2`)
+to stable `TypeName:Title` format (e.g., `GraphSummary:Peak Areas - Replicate Comparison`,
+`PeptideSettingsUI:Peptide Settings`). Added dialog visibility and fixed screen capture bugs.
+
+#### Form ID refactor (JsonUiService.cs)
+
+- Added `GetFormTitle(Form)` — returns display title using Text, TabText, or type name fallback
+- Added `GetFormId(Form)` — returns `TypeName:Title` format
+- Replaced `FindGraphForm(string)` and `FindForm(string)` with unified `FindFormById(string)`
+  that parses `TypeName:Title`, searches docked forms then non-docked dialogs
+- `GetGraphData`/`GetGraphImage` now cast `FindFormById` result to `DockableFormEx` with
+  null check for graph validation (cleaner error: "Not a graph form")
+- `GetFormImage` uses `GetFormTitle(form)` for file path instead of `form.Text ?? form.TabText`
+- Added `using System.Windows.Forms` (needed for explicit `Form` type references)
+
+#### Dialog support
+
+- `GetOpenForms` dialog loop now uses `GetFormId()` instead of `dialog:N` indexing
+- `FindFormById` searches both docked forms and `FormUtil.OpenForms` dialogs
+- Dialogs shown with DockState=Dialog (e.g., `PeptideSettingsUI:Peptide Settings`,
+  `EditEnzymeDlg:Edit Enzyme`, `EditListDlg`2:Edit Enzymes`)
+- `FloatingWindow` containers also appear — kept for now, future work to handle composites
+
+#### Screen capture: DPI scaling fix
+
+- **Bug**: `GetWindowRectangle` scales capture rect to physical pixels, but `GetWindowRect`
+  (Win32 API) returns logical coordinates. At 125% scaling, foreign window rects were
+  misaligned, causing redaction in wrong positions.
+- **Fix**: Added `var scalingFactor = GetScalingFactor()` in `GetForeignWindowRects`, applied
+  `rect.Rectangle * scalingFactor` to each foreign window rect before intersection.
+
+#### Screen capture: redaction color
+
+- Changed from `Color.FromArgb(0xF0, 0xF0, 0xF0)` (near-white gray) to `Color.Cyan`
+- Gray was indistinguishable from dialog background, making redaction invisible
+- Cyan makes redaction obvious and unmistakable
+
+#### Screen capture: permission dialog delay
+
+- Added `out bool wasFirstPrompt` to `EnsurePermission()` to report whether dialog was shown
+- Added `Thread.Sleep(1000)` after `ActivateForm` when permission dialog was just dismissed
+- Prevents the permission dialog from appearing in the first screenshot of a session
+
+#### MCP tool descriptions (SkylineTools.cs)
+
+- Updated all four tool descriptions with `TypeName:Title` format examples
+- `skyline_get_open_forms`: mentions Dialog dock state
+- `skyline_get_graph_data`/`get_graph_image`: example `'GraphSummary:Peak Areas - ...'`
+- `skyline_get_form_image`: examples `'SequenceTreeForm:Targets'`, `'PeptideSettingsUI:...'`
+
+#### Observations for future work
+
+- **FloatingWindow composites**: When multiple graphs are docked into a single floating
+  container, each `GraphSummary` resolves to the full container rect via `GetDockedFormBounds`
+  (because `Pane.Parent` is the container). The `FloatingWindow` entry captures the same rect.
+  Need to either return individual pane bounds or accept this as container-level capture.
+- **Multi-form screenshots**: A list of form IDs with union bounding box + redaction would
+  cleanly solve the composite case and enable parent+dialog captures.
+
+#### Modified files
+- **`ToolsUI/JsonUiService.cs`**: Form ID refactor, dialog support, permission delay
+- **`Util/ScreenCapture.cs`**: DPI scaling fix, cyan redaction, EnsurePermission out param
+- **`SkylineMcpServer/Tools/SkylineTools.cs`**: Updated descriptions and examples
+
+### Session 23 (2026-03-04) - Screen capture implementation (initial session)
+
+Implemented the `get_form_image` MCP tool with screen capture and non-Skyline window
+redaction. This session created the initial implementation; Session 22 (a parallel session)
+then refined the form ID format and fixed DPI/color issues.
+
+#### New files
+- **`Util/ScreenCapture.cs`** — Production capture class extracted from ScreenshotManager:
+  PointFactor, PointAdditive, GetWindowRectangle, GetDockedFormBounds, GetFramedWindowBounds,
+  FindParent, GetScalingFactor, CaptureScreen, CaptureAndRedact, ActivateForm, SaveToFile,
+  EnsurePermission (session + persistent permission flow)
+- **`Alerts/ScreenCapturePermissionDlg.cs/.Designer.cs`** — Permission dialog with
+  Allow/Deny buttons, "Do not ask me again" checkbox, strings in AlertsResources.resx
+
+#### PInvoke additions
+- **Gdi32.cs**: Added `DeviceCap` enum and `GetDeviceCaps` (replaces test-only `Gdi32Test`)
+- **User32.cs**: Added `SetForegroundWindow`, `EnumWindows`/`EnumWindowsProc`
+
+#### Redaction approach (evolved during session)
+1. **v1**: Excluded Skyline form rects from capture rect — no-op for form screenshots
+   (the capture IS a Skyline form, so nothing gets redacted)
+2. **v2**: Enumerated all non-Skyline windows via `EnumWindows` — over-redacted because
+   maximized background windows still report as "visible"
+3. **v3 (final)**: Walk windows in z-order (EnumWindows returns top-to-bottom), stop at
+   target Skyline window via `FormUtil.FindTopLevelOwner`. Only foreign windows ABOVE
+   target in z-order are redacted. Diagnostic `.log` file written alongside `.png`.
+
+#### ScreenshotManager refactor (DRY)
+- Replaced duplicated implementations with delegates to ScreenCapture
+- PointFactor/PointAdditive subclass ScreenCapture versions for backward compat
+- ActiveWindowShot/RectangleShot use ScreenCapture.GetWindowRectangle/GetScalingFactor
+- SaveToFile delegates to ScreenCapture.SaveToFile
+- Removed `using TestRunnerLib.PInvoke` for Gdi32Test (now uses production Gdi32)
+- Kept `using TestRunnerLib.PInvoke` for SetForegroundWindow/HideCaret extension methods
+
+#### Settings and resources
+- Added `AllowMcpScreenCapture` bool setting (user-scoped, default false)
+- Added 5 AlertsResources strings for permission dialog
+
+#### Modified files
+- **`Shared/CommonUtil/SystemUtil/PInvoke/Gdi32.cs`**: +DeviceCap, +GetDeviceCaps
+- **`Shared/CommonUtil/SystemUtil/PInvoke/User32.cs`**: +SetForegroundWindow, +EnumWindows
+- **`Alerts/AlertsResources.resx/.Designer.cs`**: +5 ScreenCapturePermissionDlg strings
+- **`Properties/Settings.settings/.Designer.cs`**: +AllowMcpScreenCapture
+- **`ToolsUI/JsonUiService.cs`**: +GetFormImage, +FindForm (later refactored in Session 22)
+- **`ToolsUI/JsonToolServer.cs`**: +GetFormImage thin wrapper
+- **`SkylineMcpServer/Tools/SkylineTools.cs`**: +skyline_get_form_image MCP tool
+- **`TestUtil/ScreenshotManager.cs`**: Delegates to ScreenCapture, removed duplication
+- **`Skyline.csproj`**: +ScreenCapture.cs, +ScreenCapturePermissionDlg.cs/.Designer.cs

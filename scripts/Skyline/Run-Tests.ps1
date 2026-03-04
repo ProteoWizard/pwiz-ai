@@ -130,7 +130,7 @@ param(
     [int]$MemoryProfileWarmup = 5,  # Warmup iterations before first snapshot
 
     [Parameter(Mandatory=$false)]
-    [int]$MemoryProfileWaitRuns = 10,  # Iterations between first and second snapshot
+    [int]$MemoryProfileWaitRuns = 10,  # Iterations between first and second snapshot (0 = single snapshot only)
 
     [Parameter(Mandatory=$false)]
     [switch]$MemoryProfileCollectAllocations = $false,  # Collect allocation stack traces
@@ -369,6 +369,7 @@ if ($Coverage) {
 
 # Find dotMemory if memory profiling is requested
 $dotMemoryExe = $null
+$explicitMemoryProfileMode = $false
 if ($MemoryProfile) {
     # Search for dotMemory Console (separate download from JetBrains)
     # Unlike dotCover/dotTrace, dotMemory is NOT a .NET global tool - it must be manually installed
@@ -423,9 +424,19 @@ if ($MemoryProfile) {
         $MemoryProfileOutputPath = Join-Path $aiTmpDir "memory-$timestamp.dmw"
     }
 
-    Write-Host "🧠 Memory profiling enabled - dotMemory: $dotMemoryExe" -ForegroundColor Cyan
-    Write-Host "   Workspace output: $MemoryProfileOutputPath" -ForegroundColor Gray
-    Write-Host "   Warmup: $MemoryProfileWarmup, WaitRuns: $MemoryProfileWaitRuns" -ForegroundColor Gray
+    # Determine profiling mode: explicit (snapshot-at-iteration) vs snapshot-on-leak
+    $explicitMemoryProfileMode = $PSBoundParameters.ContainsKey('MemoryProfileWarmup') -or
+                                  $PSBoundParameters.ContainsKey('MemoryProfileWaitRuns')
+
+    if ($explicitMemoryProfileMode) {
+        Write-Host "🧠 Memory profiling enabled (explicit) - dotMemory: $dotMemoryExe" -ForegroundColor Cyan
+        Write-Host "   Workspace output: $MemoryProfileOutputPath" -ForegroundColor Gray
+        Write-Host "   Warmup: $MemoryProfileWarmup, WaitRuns: $MemoryProfileWaitRuns" -ForegroundColor Gray
+    } else {
+        Write-Host "🧠 Memory profiling enabled (snapshot-on-leak) - dotMemory: $dotMemoryExe" -ForegroundColor Cyan
+        Write-Host "   Workspace output: $MemoryProfileOutputPath" -ForegroundColor Gray
+        Write-Host "   Snapshots taken automatically when GC leaks are detected" -ForegroundColor Gray
+    }
 }
 
 # Find dotTrace and Reporter.exe if performance profiling is requested
@@ -508,7 +519,7 @@ Write-Host "  Internet: $(if ($EnableInternet) { 'Enabled' } else { 'Disabled' }
 Write-Host "  Loop: $(if ($Loop -eq 0) { 'Forever' } else { "$Loop iterations" })" -ForegroundColor Gray
 Write-Host "  Diagnostics: Handles=$(if ($ReportHandles) { 'on' } else { 'off' }), Heaps=$(if ($ReportHeaps) { 'on' } else { 'off' })" -ForegroundColor Gray
 Write-Host "  Coverage: $(if ($Coverage) { 'Enabled' } else { 'Disabled' })" -ForegroundColor Gray
-Write-Host "  Memory Profile: $(if ($MemoryProfile) { "Enabled (warmup=$MemoryProfileWarmup, wait=$MemoryProfileWaitRuns)" } else { 'Disabled' })" -ForegroundColor Gray
+Write-Host "  Memory Profile: $(if ($MemoryProfile) { if ($explicitMemoryProfileMode) { "Explicit (warmup=$MemoryProfileWarmup, wait=$MemoryProfileWaitRuns)" } else { 'Snapshot-on-leak' } } else { 'Disabled' })" -ForegroundColor Gray
 Write-Host "  Performance Profile: $(if ($PerformanceProfile) { "Enabled ($PerformanceProfileType)" } else { 'Disabled' })" -ForegroundColor Gray
 Write-Host "  TeamCity Cleanup: $(if ($TeamCityCleanup) { 'Enabled (DesiredCleanupLevel=all)' } else { 'Disabled' })" -ForegroundColor Gray
 Write-Host "  Log: $outputDir\$logFile`n" -ForegroundColor Gray
@@ -551,12 +562,22 @@ try {
             $runnerArgs = @("buildcheck=1") + $commonArgs
         } else {
             # Use loop parameter if specified, otherwise default to 1 (run once)
-            # For memory profiling, need at least warmup + waitruns iterations
+            # For memory profiling, need at least warmup (+ waitruns if > 0) iterations
             $loopValue = if ($Loop -gt 0) { $Loop } else { 1 }
-            if ($MemoryProfile) {
+            if ($MemoryProfile -and $explicitMemoryProfileMode) {
+                # Explicit mode: enforce minimum loop count for warmup/wait snapshots
+                # Single-snapshot mode (WaitRuns=0) is for PinSurvivors retention path analysis
+                # and only needs 1 warmup run. Multi-snapshot comparison needs more warmup.
+                if ($MemoryProfileWaitRuns -eq 0 -and $MemoryProfileWarmup -eq 5) {
+                    $MemoryProfileWarmup = 1
+                }
                 $minLoops = $MemoryProfileWarmup + $MemoryProfileWaitRuns
                 if ($loopValue -lt $minLoops) {
-                    Write-Host "⚠️ Adjusting loop count from $loopValue to $minLoops for memory profiling (warmup=$MemoryProfileWarmup + wait=$MemoryProfileWaitRuns)" -ForegroundColor Yellow
+                    if ($MemoryProfileWaitRuns -gt 0) {
+                        Write-Host "⚠️ Adjusting loop count from $loopValue to $minLoops for memory profiling (warmup=$MemoryProfileWarmup + wait=$MemoryProfileWaitRuns)" -ForegroundColor Yellow
+                    } else {
+                        Write-Host "⚠️ Adjusting loop count from $loopValue to $minLoops for memory profiling (warmup=$MemoryProfileWarmup, single snapshot)" -ForegroundColor Yellow
+                    }
                     $loopValue = $minLoops
                 }
             }
@@ -589,8 +610,13 @@ try {
 
         # Add dotMemory snapshot arguments if memory profiling is enabled
         if ($MemoryProfile) {
-            $runnerArgs += "dotmemorywarmup=$MemoryProfileWarmup"
-            $runnerArgs += "dotmemorywaitruns=$MemoryProfileWaitRuns"
+            if ($explicitMemoryProfileMode) {
+                # Explicit mode: pass warmup/wait for snapshot-at-iteration behavior
+                $runnerArgs += "dotmemorywarmup=$MemoryProfileWarmup"
+                $runnerArgs += "dotmemorywaitruns=$MemoryProfileWaitRuns"
+            }
+            # Snapshot-on-leak mode (default): no warmup/wait args needed -
+            # GarbageCollectionTracker.CheckAfterTest detects dotMemory via MemoryProfiler.IsReady
             if ($MemoryProfileCollectAllocations) {
                 $runnerArgs += "dotmemorycollectallocations=on"
             }
@@ -795,8 +821,15 @@ try {
             Write-Host "`n   To analyze:" -ForegroundColor Cyan
             Write-Host "   1. Open dotMemory GUI" -ForegroundColor Gray
             Write-Host "   2. File > Open > Select the workspace file" -ForegroundColor Gray
-            Write-Host "   3. Compare the two snapshots (warmup vs analysis)" -ForegroundColor Gray
-            Write-Host "   4. Look for objects that grew between snapshots" -ForegroundColor Gray
+            if (-not $explicitMemoryProfileMode) {
+                Write-Host "   3. Look for snapshot(s) named *_GC_LEAK with pinned survivors" -ForegroundColor Gray
+                Write-Host "   4. Inspect retention paths to find what's holding leaked objects" -ForegroundColor Gray
+            } elseif ($MemoryProfileWaitRuns -gt 0) {
+                Write-Host "   3. Compare the two snapshots (warmup vs analysis)" -ForegroundColor Gray
+                Write-Host "   4. Look for objects that grew between snapshots" -ForegroundColor Gray
+            } else {
+                Write-Host "   3. Inspect the snapshot for retention paths" -ForegroundColor Gray
+            }
         }
 
         # Report performance profile results if enabled

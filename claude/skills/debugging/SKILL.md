@@ -19,9 +19,7 @@ Read these files before investigating:
    - Diagnostic output toolkit
 
 2. **ai/docs/leak-debugging-guide.md** - Handle/memory leak specifics
-   - Handle types and their causes
-   - TestRunner flags (`-ReportHandles`, `-SortHandlesByCount`)
-   - Case studies with detailed bisection examples
+   - For leak-specific workflows, load the **leak-debugging** skill instead
 
 ## The First Questions
 
@@ -97,6 +95,7 @@ Repeat to isolate.
 
 ## Related Skills
 
+- **leak-debugging** - Handle leaks, memory leaks, GC leak tracker failures
 - **skyline-nightlytests** - Query nightly test data, find affected computers
 - **skyline-exceptions** - Query exception reports from skyline.ms
 - **skyline-development** - For implementing fixes after isolation

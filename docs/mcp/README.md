@@ -7,6 +7,7 @@ This folder contains documentation for MCP (Model Context Protocol) servers used
 | Server | Purpose | Documentation |
 |--------|---------|---------------|
 | LabKey | skyline.ms data access (wiki, support, exceptions, tests) | See sections below |
+| TeamCity | PR build monitoring, test failures, build logs | [team-city.md](team-city.md) |
 | Gmail | Email sending for automated reports | [gmail.md](gmail.md) |
 | ImageComparer | Screenshot diff review for tutorials | [image-comparer.md](image-comparer.md) |
 | Status | System status, git info, active project | [status.md](status.md) |
@@ -101,7 +102,7 @@ The `→ docfile.md` reference points to detailed documentation. Read the doc fi
 
 ## Setup
 
-See [Developer Setup Guide](../developer-setup-guide.md) for installation instructions.
+See [setup.md](setup.md) for installation instructions (all MCP servers).
 
 ## MCP Server Registration
 

@@ -9,6 +9,7 @@ import logging
 import re
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Optional
 from urllib.parse import quote, urlencode
 
@@ -234,13 +235,20 @@ def register_tools(mcp):
     @mcp.tool()
     async def update_wiki_page(
         page_name: str,
-        new_body: str,
+        body_file: str,
         title: Optional[str] = None,
         server: str = DEFAULT_SERVER,
         container_path: str = DEFAULT_WIKI_CONTAINER,
     ) -> str:
         """[D] Update wiki page. CAUTION: Modifies live wiki. → wiki.md"""
         try:
+            # Read body content from file
+            file_path = Path(body_file)
+            if not file_path.exists():
+                return f"body_file not found: {body_file}"
+            new_body = file_path.read_text(encoding="utf-8")
+            logger.info(f"Read {len(new_body)} chars from {body_file}")
+
             # Step 1: Get current page metadata (also returns the session to reuse)
             logger.info(f"Getting metadata for wiki page: {page_name}")
             metadata, session = _get_wiki_page_metadata(page_name, server, container_path)
@@ -390,8 +398,6 @@ def register_tools(mcp):
         container_path: str = DEFAULT_WIKI_CONTAINER,
     ) -> str:
         """[D] Download wiki attachment. → wiki.md"""
-        import base64
-        from pathlib import Path
 
         try:
             # Get entityId from wiki edit page

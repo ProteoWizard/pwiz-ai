@@ -158,6 +158,11 @@ gh issue list --state all --limit 30 --json number,title,state,createdAt
 
 **2. Check past suggested-actions files**
 Read recent files (last 3-5 days) to see what was previously identified.
+Check both locations (pre- and post-consolidation):
+```bash
+ls ai/.tmp/suggested-actions-*.md
+ls ai/.tmp/daily/*/suggested-actions.md
+```
 
 **3. Check exception/test history via MCP**
 ```
@@ -188,11 +193,17 @@ For each exception in the **"Needs Attention"** section of the exception report:
 - Version: [version] — check code in the relevant pwiz checkout (release branch or master)
 - Steps:
   1. get_exception_details(exception_id=XXXXX)
-  2. Read code at stack trace location
+  2. Read code at stack trace location — understand the actual failure mechanism,
+     not just the crashing line. Trace backward: what state causes this? What code
+     paths lead to that state? Check error paths (exceptions in event handlers,
+     failed background work) that could leave the program in this state.
   3. git blame to understand context
-  4. Check if already fixed on master (gh pr list --state merged --search "filename")
-  5. If fixed on master, check cherry-pick to release branch:
-     gh pr list --state all --base Skyline/skyline_26_1 --search "Cherry pick of #NNNN" --json number,title,state,mergedAt
+  4. **If old version**: verify bug still exists on master. Check PRs that touched
+     this code since the reported version:
+     git log --oneline <old_version_tag>..HEAD -- path/to/File.cs
+     Do NOT recommend a GitHub issue without confirming the bug is still present.
+  5. If confirmed on master, check cherry-pick to release branch:
+     gh pr list --state all --base Skyline/skyline_26_1 --search "Cherry pick of #NNNN"
   6. Write findings to ai/.tmp/suggested-actions-YYYYMMDD.md
 - Priority: [HIGH if user provided email, MEDIUM otherwise]
 ```
@@ -200,11 +211,16 @@ For each exception in the **"Needs Attention"** section of the exception report:
 **For each exception** — follow the investigation steps from [daily-report-guide.md](../../ai/docs/daily-report-guide.md):
 - Get stack trace via `get_exception_details`
 - Read the code at the stack trace location
+- Understand the actual failure mechanism — trace backward from the crash to understand
+  what state the program must be in. Don't guess at surface-level explanations.
 - Use `git blame` to understand context
+- **For old versions**: verify the bug still exists on current code before recommending action.
+  Check PRs that touched the file since the reported version. If you cannot confirm,
+  state that explicitly rather than assuming the bug persists.
 - Classify: user-actionable (catch + friendly error) vs programming defect (fix the logic)
-- **Both categories are bugs that need code changes and GitHub issues.** Never classify an exception as "user-environment / no code change needed." If a team member responded with a workaround, the code should show that same guidance automatically.
-- Formulate root cause
-- Create GitHub issue
+- **Both categories are bugs that need code changes and GitHub issues.** Never classify an exception as "user-environment / no code change needed."
+- Formulate root cause — the actual mechanism, not a surface-level guess
+- Create GitHub issue only if confirmed on current code
 
 #### Test Failure Work Items
 
@@ -223,19 +239,96 @@ For each test failure in the **"Needs Attention"** section of the failures repor
 - Priority: [HIGH if NEW/REGRESSION, MEDIUM if RECURRING, LOW if CHRONIC]
 ```
 
-#### Leak Work Items
+#### Leak and Failure Regression Detection
 
-For each leak:
+**Before investigating individual leaks or failures, check for regressions.**
+
+A regression introduced by one commit can cause dozens of tests to fail or leak.
+Once the fix merges, machines still running the old code produce **echoes** — failures
+or leaks that look new but are just the same regression on pre-fix runs.
+
+For **failures**, echo detection is automatic: the fingerprint system groups by stack
+trace, so recording one fix covers all machines.
+
+For **leaks**, there are no fingerprints. Echo detection must be done by **git hash**:
+if the leaking runs are on a known regression hash and clean runs exist on the fix hash,
+ALL leaks on the regression hash are echoes. Do not investigate or record them individually.
+
+##### Red Flags (any one = probable regression, Priority HIGH)
+
+These apply to both leaks and failures:
+
+1. **More than 2 leaks on any single machine** — normal is 0-2 sporadic.
+2. **Same tests affected on multiple machines with the same git hash** — a code change
+   is the cause, not machine-specific issues.
+3. **Extreme count** — 10+ distinct tests affected at once is never chronic.
+
+##### When Red Flags Are Present
+
+**Step 1 — Check if these are echoes of a known regression.**
+Read the previous day's suggested-actions (`ai/.tmp/daily/YYYY-MM-DD/suggested-actions.md`).
+If it describes this regression with a fix PR already merged, compare git hashes:
+- Leaking runs on the regression hash (or between regression and fix) → echoes
+- Clean runs on the fix hash → fix confirmed
+
+**Step 1b — Confirm the fix PR from the test history database.**
+Query `query_test_history(test_name="...")` for at least one of the leaking tests.
+The fix PR should be recorded there (via `record_test_fix`). This provides independent
+confirmation of the fix PR number without relying solely on yesterday's suggested-actions.
+
+If echoes, write the report with **all of the following required elements**:
+```markdown
+### REGRESSION ECHOES: [N] leaks across [M] machines — already FIXED by PR #MMMM
+- Regression: PR #NNNN ([causing_hash]) — identified [date]
+- Fix: **PR #MMMM** ([fix_hash]) — merged [date]
+- Echoes: [M] machines on [causing_hash] show [N] leaks (pre-fix runs)
+- Proof: [K] machines on [fix_hash] show 0 leaks
+- ALL leaking tests in today's report are echoes:
+  [list every test name from the nightly report's Leaks by Test section]
+- Status: Fix confirmed. All future runs expected clean.
+- Priority: RESOLVED — do not investigate individual tests
+```
+
+**CRITICAL**: The echo report MUST include:
+1. **The fix PR number** — not just the git hash. The reader needs to know which PR
+   fixed the regression. Query `query_test_history` to confirm if not in yesterday's findings.
+2. **Every leaking test name** — list them explicitly so the email phase does not
+   independently re-categorize individual tests. ALL leaks on the regression hash are
+   echoes, regardless of test name (e.g., tests named "Agilent..." are not "chronic
+   Agilent leaks" — they are echoes of the same regression as every other test).
+
+**Step 2 — If this is a new regression** (not in previous findings):
+```markdown
+### LEAK REGRESSION: [N] tests leaking across [M] machines
+- Git hash: [hash from nightly report]
+- Machines affected: [list]
+- Steps:
+  1. Compare against previous day: did these tests leak yesterday?
+     query_test_runs(days=3, container_path="...")
+  2. Check if later runs in today's window are clean (fix already landed?)
+  3. Identify the causing commit range:
+     git log --oneline <clean_hash>..<leaking_hash>
+  4. Find the causing PR:
+     gh pr list --state merged --search "merged:YYYY-MM-DD" --limit 20
+  5. Focus on PRs touching test infrastructure, IDisposable, static fields,
+     or resource management
+  6. Write findings to ai/.tmp/suggested-actions-YYYYMMDD.md
+- Priority: HIGH — regression drowns out all other signal until fixed
+```
+
+##### Chronic Leaks (no red flags)
+
+If leaks are 1-2 per machine, different tests on different machines, and
+`query_test_history` confirms they've been present for weeks:
 
 ```markdown
 ### Leak: [test name] on [computer]
 - Run ID: [id]
 - Steps:
   1. get_run_leaks(run_id=XXXXX)
-  2. query_test_history(test_name="TestName") — check if chronic
-  3. If new leak, read test code to identify resource handling
-  4. Write findings to ai/.tmp/suggested-actions-YYYYMMDD.md
-- Priority: [HIGH if NEW, LOW if CHRONIC]
+  2. query_test_history(test_name="TestName") — confirm chronic (30+ days)
+  3. Write findings to ai/.tmp/suggested-actions-YYYYMMDD.md
+- Priority: LOW (chronic, monitoring)
 ```
 
 #### Infrastructure Work Items

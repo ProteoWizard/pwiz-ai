@@ -23,6 +23,7 @@ See [ai/CRITICAL-RULES.md](CRITICAL-RULES.md) for the full list. Key rules:
 ### Translation-Proof Testing
 - **NEVER** use English text literals in test assertions
 - **ALWAYS** use resource strings from production code
+- **ALWAYS** prefer `AssertEx` over `Assert` — better diagnostics and consistency
 - **ALWAYS** use `AssertEx.Contains()` instead of `Assert.IsTrue(string.Contains())`
 - **ALWAYS** use `HttpClientTestHelper.GetExpectedMessage()` for network errors
 

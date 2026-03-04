@@ -55,7 +55,7 @@ get_wiki_page("DeployToDockerHub", container_path="/home/development")
 |------|-------------|
 | `list_wiki_pages(container_path)` | List all pages with metadata (no body) |
 | `get_wiki_page(page_name)` | Get full page content, save to `ai/.tmp/wiki-{name}.md` |
-| `update_wiki_page(page_name, new_body, title)` | Update page content (optional title change) |
+| `update_wiki_page(page_name, body_file, title)` | Update page content from local file (optional title change) |
 | `list_wiki_attachments(page_name)` | List attachments for a wiki page |
 | `get_wiki_attachment(page_name, filename)` | Download attachment from wiki page |
 
@@ -74,7 +74,12 @@ Returns metadata and saves full content to `ai/.tmp/wiki-tutorial_method_edit.md
 
 **Update a wiki page:**
 ```
-update_wiki_page("AIDevSetup", "<html>New content here</html>")
+# 1. Download current page
+get_wiki_page("AIDevSetup")  # saves to ai/.tmp/wiki-AIDevSetup.md
+
+# 2. Copy to working file (strip markdown header), apply edits with Edit tool
+# 3. Upload from file
+update_wiki_page("AIDevSetup", body_file="C:/proj/ai/.tmp/wiki-AIDevSetup-updated.html")
 ```
 
 > **Note:** Pages with `<iframe>` or `<script>` elements (tutorial wrappers) require "Allow Iframes and Scripts" permission, which the Agents group now has.
@@ -142,10 +147,14 @@ Some wiki pages are kept in sync with files committed to the repository. The ai/
 
 For pages that can be edited (simple HTML without iframes/scripts):
 
-1. **Read current content**: `get_wiki_page("PageName")` → saved to `ai/.tmp/wiki-PageName.md`
-2. **Review and modify**: Edit the content as needed
-3. **Update page**: `update_wiki_page("PageName", new_content)`
-4. **Verify**: Check the live page at `https://skyline.ms/home/software/Skyline/wiki-page.view?name=PageName`
+1. **Download current content**: `get_wiki_page("PageName")` → saved to `ai/.tmp/wiki-PageName.md`
+2. **Copy to working file**: Strip the markdown header (first 9 lines) to get raw HTML:
+   ```bash
+   tail -n +10 ai/.tmp/wiki-PageName.md > ai/.tmp/wiki-PageName-updated.html
+   ```
+3. **Apply edits**: Use the Edit tool to make changes — diffs are visible and reviewable
+4. **Upload from file**: `update_wiki_page("PageName", body_file="ai/.tmp/wiki-PageName-updated.html")`
+5. **Verify**: Check the live page at `https://skyline.ms/home/software/Skyline/wiki-page.view?name=PageName`
 
 The wiki maintains full version history, so changes can be reverted if needed.
 

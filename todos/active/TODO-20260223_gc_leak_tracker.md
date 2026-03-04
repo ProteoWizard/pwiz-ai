@@ -4,61 +4,59 @@
 - **Branch**: `Skyline/work/20260223_gc_leak_tracker`
 - **Base**: `master`
 - **Created**: 2026-02-23
-- **Status**: In Progress
-- **Related**: [PR #4032](https://github.com/ProteoWizard/pwiz/pull/4032) (Nick Shulman - MemoryLeaks fix, MERGED), [PR #4033](https://github.com/ProteoWizard/pwiz/pull/4033) (ConnectionPool diagnostics)
+- **Status**: Ready for PR
+- **Related**: [PR #4032](https://github.com/ProteoWizard/pwiz/pull/4032) (Nick Shulman - MemoryLeaks fix, MERGED)
 - **PR**: (pending)
 
-## Current State (save point for context compaction)
+## Summary
 
-### What's done - committed on branch
-One commit `2e7f2e18a` rebased on top of master (which includes Nick's PR #4032):
+Added a WeakReference-based GC leak tracker that verifies SkylineWindow and SrmDocument
+are garbage collected after each functional test. During development, discovered and fixed
+two real leaks: `DuplicatedPeptideFinder._lastSearchedDocument` (static cache holding strong
+reference to SrmDocument) and test-side audit log entry caches holding undo closures that
+captured SkylineWindow.
 
-**Files changed (all paths relative to `pwiz_tools/Skyline/`):**
-- `TestRunnerLib/GarbageCollectionTracker.cs` - **New file**. Static class with `Register(Type, object)`, `CheckForLeaks()`, `Clear()`. Groups survivors by `Type.Name` with counts (e.g. `SrmDocument x5`).
-- `TestRunnerLib/TestRunnerLib.csproj` - Added Compile entry for new file
-- `TestRunnerLib/RunTests.cs` - After `FlushMemory()` (~line 500): if test passed, calls `CheckForLeaks()` and fails test on leak; if test already failed, calls `Clear()`. Uses `!!! GC-LEAK` prefix matching existing `!!! CRT-LEAKED` pattern.
-- `Program.cs` - Added `IGarbageCollectionTracker` interface (takes `Type type, object target`) and `static IGarbageCollectionTracker GcTracker` property (null in production)
-- `Skyline.cs` - SkylineWindow constructor calls `Program.GcTracker?.Register(typeof(SkylineWindow), this)`. `SetDocument()` calls `Program.GcTracker?.Register(typeof(SrmDocument), docNew)` after successful CAS swap - this tracks EVERY document that becomes active.
-- `TestUtil/TestFunctional.cs` - `RunFunctionalTestOrThrow()` sets `Program.GcTracker = new GcTrackerAdapter()`. Added `GcTrackerAdapter` internal class at end of file that bridges `IGarbageCollectionTracker` to TestRunnerLib's static `GarbageCollectionTracker.Register()`.
+## Changes
 
-### Test results
-1. **Against unfixed master (before Nick's PR):** Both `AlertDlgIconsTest` and `TestDiaSearchFixedWindows` correctly fail with `!!! GC-LEAK Objects not garbage collected after test: SkylineWindow, SrmDocument`
-2. **566 unit tests pass** - no false positives or NREs from the tracker
-3. **After rebasing on master with Nick's PR #4032 merged:** Tests STILL FAIL with same leak message. This means **Nick's fixes alone are not sufficient** to resolve all GC roots keeping SkylineWindow and SrmDocument alive.
+### Production code fix
+- `Model/Find/DuplicatedPeptideFinder.cs` - Changed `_lastSearchedDocument` from `SrmDocument`
+  to `WeakReference<SrmDocument>` to prevent static `Finders.LST_FINDERS` from holding documents
+  indefinitely. This was the root cause of 11 of 12 initially failing tests.
 
-### What needs investigation
-Nick's PR fixed:
-- `PollingCancellationToken` thread now joins on Dispose (releases SrmDocument delegate)
-- `SkylineRemoteAccountServices` singleton replaces `RemoteUrl.RemoteAccountStorage = this` (breaks SkylineWindow static reference)
+### Test infrastructure (already committed in initial tracker commit)
+- `TestRunnerLib/GarbageCollectionTracker.cs` - Static tracker class with Register, CheckForLeaks,
+  Clear, and PinSurvivors methods
+- `Program.cs` - IGarbageCollectionTracker interface and Program.GcTracker static property
+- `Skyline.cs` - SkylineWindow and SrmDocument registration
+- `TestUtil/TestFunctional.cs` - GcTrackerAdapter bridge + audit log cleanup
+- `TestRunnerLib/RunTests.cs` - GC leak check after FlushMemory, dotMemory integration
 
-But `RemoteSession.RemoteAccountUserInteraction = this` is still set in SkylineWindow constructor (line 198). Nick's `OnClosed` handler nulls it, but the question is whether OnClosed runs reliably in test cleanup. There may be additional static reference chains.
+### Additional fixes in this commit
+- `TestRunnerLib/RunTests.cs` - `_testObject` as instance field for proper nulling before GC;
+  dotMemory single-snapshot support (WaitRuns=0); PinSurvivors for dotMemory inspection
+- `TestRunnerLib/GarbageCollectionTracker.cs` - Enhanced diagnostics (total/collected counts,
+  Target type names); PinSurvivors for dotMemory retention path analysis
+- `TestUtil/TestFunctional.cs` - CleanupAuditLogs() clears `_setSeenEntries` and
+  `_lastLoggedEntries` to break reference chain from test -> AuditLogEntry -> undo closure -> SkylineWindow
+- `TestFunctional/RetentionTimeManagerTest.cs` - `_documents.Clear()` at end of DoTest
+- `TestRunner/Program.cs` - Fixed dotMemory config to activate on warmup > 0 (not waitruns > 0)
 
-**Next step:** Investigate which static references are still holding SkylineWindow alive after test cleanup. Check `RemoteSession.RemoteAccountUserInteraction`, and look for other statics that reference SkylineWindow. May need to use ConnectionPool tracking (PR #4033) or add diagnostic output to identify the GC root chain.
+### Script changes (not committed to pwiz repo)
+- `ai/scripts/Skyline/Run-Tests.ps1` - Single-snapshot support with `-MemoryProfileWaitRuns 0`
 
-## Design
+## Root cause analysis
 
-### Architecture (interface-based, as implemented)
+### Primary leak: DuplicatedPeptideFinder (static cache)
+`Finders.LST_FINDERS` (static) -> `DuplicatedPeptideFinder` -> `_lastSearchedDocument` (strong ref)
+-> SrmDocument -> AuditLog -> AuditLogEntry._undoAction closure -> SkylineWindow
 
-```
-Skyline project:
-  IGarbageCollectionTracker interface on Program
-  Program.GcTracker static property (null in production)
-  SkylineWindow constructor -> registers this
-  SetDocument -> registers every SrmDocument
+Every SrmDocument created through ModifyDocument carries an AuditLogEntry with an undo closure
+(Skyline.cs:876) that captures `this` (SkylineWindow). So any strong reference to an SrmDocument
+transitively holds SkylineWindow alive.
 
-TestRunnerLib project:
-  GarbageCollectionTracker static class (Register, CheckForLeaks, Clear)
-  RunTests.Run() -> checks after FlushMemory
+### Secondary leaks: test-side caches
+- `_setSeenEntries` / `_lastLoggedEntries` in TestFunctional held AuditLogEntry objects
+- `RetentionTimeManagerTest._documents` accumulated SrmDocuments during test
 
-TestUtil project:
-  GcTrackerAdapter bridges IGarbageCollectionTracker to static GarbageCollectionTracker
-  RunFunctionalTestOrThrow -> sets Program.GcTracker = new GcTrackerAdapter()
-```
-
-Key design decisions:
-- Interface in Skyline lets objects register themselves at the source
-- TestRunnerLib holds tracking logic (where FlushMemory and RunTests.Run live)
-- TestUtil bridges the two (references both assemblies)
-- `Type` parameter lets tracker decide naming (currently uses `Type.Name`)
-- Survivors grouped by type with counts for concise reporting
-- Non-generic `WeakReference` since TestRunnerLib can't reference Skyline types
+## Test results
+- 395 TestFunctional tests: **ALL PASS** (full English run, serial + parallel validation)

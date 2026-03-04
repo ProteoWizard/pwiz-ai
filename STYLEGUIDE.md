@@ -27,7 +27,7 @@ See [ai/CRITICAL-RULES.md](CRITICAL-RULES.md) for full list. Key style rules:
 // ❌ BAD - single-line if
 if (condition) DoThing();
 
-// ✅ GOOD - separate lines
+// ✅ GOOD - separate lines, single-line body
 if (condition)
     DoThing();
 
@@ -36,7 +36,22 @@ if (condition)
 {
     DoThing();
 }
+
+// ❌ BAD - multi-line body without braces
+if (condition)
+    throw new ArgumentException(
+        string.Format(@"Message: {0}", value));
+
+// ✅ GOOD - braces required when body spans multiple lines
+if (condition)
+{
+    throw new ArgumentException(
+        string.Format(@"Message: {0}", value));
+}
 ```
+
+**Rule**: Braceless `if`/`else` is only allowed when the body is a single line.
+If the body expression wraps to multiple lines, always add braces.
 
 ### File and Member Ordering
 

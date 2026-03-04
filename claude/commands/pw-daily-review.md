@@ -44,7 +44,9 @@ For each item in `suggested-actions.md`:
 
 **GitHub Issues to Create:**
 - Present the analysis to the reviewer
-- On approval, create the issue with `gh issue create`
+- Ask the reviewer who to assign the issue to (common assignees: nickshulman, bspratt, chambm, brendanx67)
+- On approval, create the issue with `gh issue create --label bug --label skyline --assignee <handle>`
+- Always include both `bug` and `skyline` labels by default
 - Record the issue tracking with `record_exception_issue()` or `record_test_issue()`
 
 **Exception Fixes to Record:**
