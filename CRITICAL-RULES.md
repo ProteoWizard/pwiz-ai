@@ -46,6 +46,7 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 - Extract helpers when duplication exceeds 3 lines
 - 17-year-old project - duplication is maintenance burden
 - Place helpers after public methods that use them
+- Isolate PInvoke calls in one place to reduce duplication and simplify usage of Win32 APIs (e.g. pwiz.Common.SystemUtil.PInvoke.Kernel32)
 
 ## Control Flow
 - If statements must not be single-line
@@ -71,7 +72,7 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 5. public methods/properties
 6. **private helper methods AFTER public methods that use them**
 
-**CRITICAL**: Helpers go LAST, not first. C# is not C/C++ - no forward declarations needed.
+**CRITICAL**: Helpers go LAST, not first. C# is not C - no forward declarations needed.
 - ✅ Main method first → helper methods below
 - ❌ Helper methods first → main method last (old C style)
 
