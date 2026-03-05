@@ -798,3 +798,46 @@ Goal: establish coverage baseline, expand tests toward 80%, fix bugs found by te
 - **Modified**: `ToolsUI/JsonUiService.cs` (INSERT_NODE_LOCATOR, GetSelection/SetSelection)
 - **Modified**: `SkylineFiles.cs` (keepEmptyProteins only, reverted insertPath)
 - **Modified**: `ToolsUI/JsonToolServer.cs` (reverted insertPath changes)
+
+### Session 28 (2026-03-05): Coverage push to 82.1%, dispatch testing, race condition fix
+
+#### Coverage target achieved: 82.1% (1553/1892)
+- Started at 76.6%, needed ~65 more statements for 80%
+- Added tests in 3 areas to reach 82.1%
+
+#### TestDispatch — HandleRequest/Dispatch path testing
+- Made `HandleRequest` public for testing (was private)
+- Tests simulate MCP server JSON requests over the named pipe protocol
+- Exercises: `HandleRequest` (15 stmts), `ParseArgs` (13), `Dispatch` (19),
+  `SerializeResult` (4), plus error handling paths
+- Cases: successful 0-arg call, 1-arg call, `QueryAvailableMethods`,
+  unknown method error, too few args error, malformed JSON, null args array
+
+#### PersistedViews coverage
+- Added `GetSettingsListNames("PersistedViews")` — exercises `GetPersistedViewNames` (17 stmts)
+- Added `GetSettingsListItem("PersistedViews", ...)` — exercises `GetPersistedViewItem` (7)
+  + `SerializeViewSpec` (10)
+- Added error case for nonexistent persisted view
+
+#### Report definition filter/sort coverage
+- Sort ascending ("asc" path in `ParseSortDirection`)
+- Unary filter ("isnotnullorblank" path in `ParseFilterSpecs`)
+- Invalid JSON error (`ParseJsonDefinition` catch path)
+- Unknown filter column, unknown filter op, missing value for binary op,
+  invalid sort direction error paths
+
+#### Race condition fix: ProteinMetadataManager
+- `AssertEx.DocumentCloned` was failing intermittently because
+  `ProteinMetadataManager` resolves protein metadata on a background thread
+- After FASTA import, one document could have `accession`/`preferred_name`/
+  `websearch_status` attributes while the other didn't yet
+- Fix: `WaitForProteinMetadataBackgroundLoaderCompletedUI()` after both
+  `ImportFasta` and `RunCommand("--import-fasta")` calls
+- Confirmed stable across 6+ passes in all 5 languages (en, zh, fr, ja, tr)
+
+#### Remaining uncovered (acceptable)
+- Pipe infrastructure: `ServerLoop` (32), `Start` (4), `ReadAllBytes` (12),
+  connection file I/O (24) — require real named pipe
+- `ScreenCapture` (79) — offscreen test limitations
+- `RowFactories` (36) — report export overloads not on critical path
+- `JsonUiService` (41) — UI operations not exercised by current test document
