@@ -157,9 +157,8 @@
     - [x] Added `GetImmediateWindowText()` helper for Immediate Window content assertions
     - [x] Added `keepEmptyProteins` parameter to ImportFasta API and SkylineWindow.ImportFasta
     - [x] Fixed TestImportFasta: tests both keepEmptyProteins=true and false paths
-    - [ ] Build currently failing — needs debugging (SkylineFiles.cs change)
-    - [ ] Remaining gap: JsonToolServer 67.9%, ScreenCapture 55.1%
-    - [ ] Target: run coverage after build fix to measure progress
+    - [x] Coverage after Session 28: 82.1% (1553/1892 statements)
+    - [x] Coverage after Session 29: 82.4% (1561/1895 statements)
   - [ ] Update testing-patterns.md documentation (partially done)
   - [ ] Create PR
 
@@ -171,7 +170,7 @@
   - [ ] Multi-form screenshot: Accept a list of form IDs and capture the union bounding box
     with redaction. Useful for capturing a dialog alongside its parent, or multiple related panels.
     The redaction infrastructure already handles non-Skyline content in the gaps.
-  - [ ] Multiple Skyline instances: `connection-{GUID}.json` pattern
+  - [x] Multiple Skyline instances: per-instance `connection-{pipeName}.json` files
   - [ ] Self-contained publish for MCP server (eliminates .NET 8.0 runtime dependency)
   - [ ] Wire protocol modernization (replace BinaryFormatter in SkylineTool.dll)
   - [ ] RunCommand write operations need IDocumentContainer integration for full ModifyDocument flow
@@ -841,3 +840,67 @@ Goal: establish coverage baseline, expand tests toward 80%, fix bugs found by te
 - `ScreenCapture` (79) — offscreen test limitations
 - `RowFactories` (36) — report export overloads not on critical path
 - `JsonUiService` (41) — UI operations not exercised by current test document
+
+### Session 29 (2026-03-05): Resilient MCP server, multi-instance support
+
+Goal: MCP server survives Skyline restarts without requiring Claude Code restart.
+
+#### Resilient connection architecture
+- `SkylineConnection.Connect()` (threw exceptions) replaced with `TryConnect()` returning
+  `(connection, error)` tuple — returns helpful message when not connected instead of throwing
+- `SkylineTools.Invoke()` changed from `Func<string>` to `Func<SkylineConnection, string>` —
+  connection established per-call and disposed after each call
+- Broken pipe (`IOException`) caught specially with reconnect-friendly message
+- `GetConnectionStatus()` added for lightweight status checks
+
+#### Per-instance connection files
+- Single `connection.json` replaced with `connection-{pipeName}.json` per Skyline instance
+- `FindConnectionFiles()` scans `connection-*.json` + legacy `connection.json`
+- Sorts by `connected_at` descending to prefer most recent instance
+- `CleanupStaleFiles()` removes connection files for dead Skyline processes
+- `IsProcessAlive()` validates process IDs before attempting pipe connection
+
+#### Connector as gatekeeper (design correction)
+- Moved connection file writing from `JsonToolServer.Start()` to the Connector —
+  only explicit user action (Tools > AI Connector) advertises Skyline to MCP clients
+- Previously any `$(SkylineConnection)` tool (XLTCalc, LipidCreator, etc.) would
+  trigger connection file creation via `StartToolService()`
+- JSON pipe name derived from legacy ToolService GUID: `"SkylineMcpJson-" + guid.Replace("-", "")`
+  — both sides use same convention, no IToolService changes needed
+- `JsonToolServer.Dispose()` still deletes connection file (safety net on Skyline exit)
+- Connector `ConnectionInfo.Save()` writes the file; `Delete()` can remove it
+
+#### Live document path in Connector
+- Connector queries `GetDocumentPath` via legacy `RemoteClient` on timer tick (every 2s)
+- Shows live document path instead of static value from connection file
+- Label says "Document: path" or "Document: (unsaved)", updates as user opens files
+
+#### UI and metadata improvements
+- Menu title changed: "Connect to AI" to "AI Connector" (consistent with title bar)
+- Version label changed: "Version: {0}" to "Skyline Version: {0}" (unambiguous)
+- `info.properties` description expanded with full feature list
+- `GetDocumentStatus` labels now mode-dependent: proteomic shows "Proteins/Lists" + "Peptides",
+  small_molecules shows "Lists" + "Molecules", mixed shows "Proteins/Lists" + "Peptides/Molecules"
+
+#### Manual integration testing (verified end-to-end)
+- Start Skyline + AI Connector → MCP tools work
+- Close Connector → MCP tools still work (connection file persists)
+- Close Skyline → "No Skyline instance is connected" message (no crash)
+- Reopen Skyline + AI Connector → MCP tools reconnect without restarting Claude Code
+- Two Skyline instances → two connection files, MCP connects to most recent
+- Close one instance → stale file cleaned up, MCP falls through to remaining instance
+
+#### Coverage: 82.4% (1561/1895)
+- Slight increase from 82.1% due to new `GetDocumentStatus` mode-labeling code
+
+#### Modified files
+- **Modified**: `ToolsUI/JsonToolServer.cs` (derived pipe name, removed WriteConnectionInfo)
+- **Modified**: `Program.cs` (pass legacyToolServiceName to JsonToolServer)
+- **Modified**: `TestFunctional/JsonToolServerTest.cs` (updated constructor call)
+- **Modified**: `SkylineMcpServer/SkylineConnection.cs` (complete rewrite: TryConnect, multi-instance)
+- **Modified**: `SkylineMcpServer/Tools/SkylineTools.cs` (Invoke takes connection, IOException handling)
+- **Modified**: `SkylineMcpConnector/ConnectionInfo.cs` (Save, Delete, Create, Load multi-instance)
+- **Modified**: `SkylineMcpConnector/MainForm.cs` (writes connection file, live doc path, RemoteClient)
+- **Modified**: `SkylineMcpConnector/MainForm.Designer.cs` (Skyline Version label)
+- **Modified**: `SkylineMcpConnector/tool-inf/SkylineMcpConnector.properties` (AI Connector title)
+- **Modified**: `SkylineMcpConnector/tool-inf/info.properties` (expanded description)
