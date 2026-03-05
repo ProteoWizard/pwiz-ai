@@ -493,7 +493,8 @@ These helper methods internally use `RunUI` or similar mechanisms, so you don't 
 - `ShowDialog<T>(Action)` - Shows dialog on UI thread
 - `RunDlg<T>(Action, Action<T>)` - Shows, configures, dismisses, **waits for completion**
 - `RunLongDlg<T>(Action, Action<T>)` - Like `RunDlg` but with longer timeout
-- `OkDialog(Form, Action)` - Dismisses dialog on UI thread (**does not wait for processing**)
+- `OkDialog(Form)` / `OkDialog(Form, Action)` - Clicks `AcceptButton`, waits for close
+- `CancelDialog(Form)` / `CancelDialog(Form, Action)` - Clicks `CancelButton`, waits for close
 - `WaitForConditionUI(Func<bool>)` - Polls condition on UI thread
 - `WaitForDocumentChange(SrmDocument)` - Waits until document reference changes
 - `WaitForDocumentLoaded()` - Waits for all `BackgroundLoader` tasks
@@ -556,6 +557,126 @@ protected void TestFilesView()
     Assert.AreEqual(3, folder.Nodes.Count);
 }
 ```
+
+### Exposing Dialog Controls for Testing
+
+Dialog controls (buttons, checkboxes, text boxes, combo boxes) are generated as `private`
+fields by the Windows Forms Designer. Tests need to read and write these controls, but
+shouldn't access them via reflection or `Controls.Find()`. Instead, expose public
+properties on the dialog class.
+
+**Convention:** Add a `#region Test support` section at the bottom of the dialog class
+(before the closing brace) with public get/set properties that wrap the private controls.
+
+```csharp
+public partial class MySettingsDlg : FormEx
+{
+    // ... dialog logic ...
+
+    #region Test support
+
+    public bool RememberChoice
+    {
+        get { return cbRememberChoice.Checked; }
+        set { cbRememberChoice.Checked = value; }
+    }
+
+    public string FilterText
+    {
+        get { return textFilter.Text; }
+        set { textFilter.Text = value; }
+    }
+
+    public int SelectedIndex
+    {
+        get { return comboOptions.SelectedIndex; }
+        set { comboOptions.SelectedIndex = value; }
+    }
+
+    #endregion
+}
+```
+
+**Guidelines:**
+- Properties should be simple get/set wrappers — no logic, no side effects
+- Name the property after the concept, not the control (e.g., `RememberChoice` not `CbRememberChoiceChecked`)
+- The `DoNotAskAgain` property on `ScreenCapturePermissionDlg` is a good example
+- Many existing dialogs already follow this pattern — check before adding new ones
+- `Form.AcceptButton` and `Form.CancelButton` are already public (set in Designer via
+  `this.AcceptButton = this.btnOk`), so `OkDialog()`/`CancelDialog()` work automatically
+
+**When to add test support properties:**
+- When a test needs to read or write a control's value
+- When a test needs to verify the initial state of a control
+- Do NOT add properties speculatively — only when a test actually needs them
+
+### Resetting Static State for Tests
+
+Some features use static fields for session-level state (e.g., "remember this choice for
+the session"). Tests that exercise these features need to reset the state between test
+scenarios. Add a public static reset method:
+
+```csharp
+public static class ScreenCapture
+{
+    private static bool _sessionPermissionGranted;
+
+    /// <summary>
+    /// Resets the session-level screen capture permission. Used by tests.
+    /// </summary>
+    public static void ResetSessionPermission()
+    {
+        _sessionPermissionGranted = false;
+    }
+}
+```
+
+For `Settings.Default` properties (persisted user settings), tests can set them directly:
+
+```csharp
+RunUI(() =>
+{
+    Settings.Default.AllowMcpScreenCapture = false;
+    ScreenCapture.ResetSessionPermission();
+});
+```
+
+Always clean up modified settings at the end of the test to avoid affecting other tests.
+
+### Testing Accept and Cancel Paths
+
+When a dialog can be accepted or cancelled, test both paths. `RunDlg<T>()` always calls
+`OkDialog` internally, so for cancel paths use `ShowDialog<T>()` + `CancelDialog()`:
+
+```csharp
+// Test the cancel/deny path
+string result = null;
+var dlg = ShowDialog<ConfirmActionDlg>(
+    () => result = DoSomethingThatShowsDialog());
+CancelDialog(dlg);
+WaitForConditionUI(() => result != null);
+Assert.AreEqual("cancelled", result);
+
+// Test the accept/allow path
+result = null;
+dlg = ShowDialog<ConfirmActionDlg>(
+    () => result = DoSomethingThatShowsDialog());
+RunUI(() => dlg.SomeOption = true);  // Configure before accepting
+OkDialog(dlg);
+WaitForConditionUI(() => result != null);
+Assert.AreEqual("success", result);
+```
+
+**Key points:**
+- `ShowDialog<T>(Action)` posts the action to the UI thread via `SkylineBeginInvoke`,
+  then waits for the form to appear — the test thread is NOT blocked
+- The action runs on the UI thread. If it calls `ShowDialog()` internally (as many
+  permission/confirmation flows do), the message pump keeps running, allowing
+  `WaitForOpenForm<T>()` inside `ShowDialog<T>` to find the dialog
+- After `OkDialog`/`CancelDialog` closes the dialog, use `WaitForConditionUI` to wait
+  for the original action to complete and set its result
+- `OkDialog(dlg)` clicks `AcceptButton`; `CancelDialog(dlg)` clicks `CancelButton`
+- Both wait for the form to close before returning
 
 ### Test Structure Best Practices
 

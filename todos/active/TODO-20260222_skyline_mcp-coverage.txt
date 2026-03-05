@@ -1,0 +1,38 @@
+# TESTS TO RUN FOR COVERAGE
+# TestJsonToolServer - exercises JsonToolServer, JsonUiService, JsonTutorialCatalog, ColumnResolver
+# TestStartPageCheckActionBoxes - exercises TutorialCatalog via StartPage (requires internet)
+#
+# Run with:
+#   pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName 'TestJsonToolServer,TestStartPageCheckActionBoxes' -Coverage -EnableInternet"
+#
+# Analyze with:
+#   pwsh -Command "& './ai/scripts/Skyline/scripts/Analyze-Coverage.ps1' -CoverageJsonPath 'ai/.tmp/coverage-TIMESTAMP.json' -PatternsFile 'ai/todos/active/TODO-20260222_skyline_mcp-coverage.txt'"
+
+# Core MCP API (primary targets)
+pwiz_tools/Skyline/ToolsUI/JsonToolServer.cs
+pwiz_tools/Skyline/ToolsUI/JsonUiService.cs
+pwiz_tools/Skyline/ToolsUI/JsonTutorialCatalog.cs
+
+# Report infrastructure
+pwiz_tools/Skyline/Model/Databinding/ColumnResolver.cs
+pwiz_tools/Skyline/Model/Databinding/RowFactories.cs
+
+# Tutorial catalog
+pwiz_tools/Skyline/Controls/Startup/TutorialCatalog.cs
+
+# Screen capture
+pwiz_tools/Skyline/Util/ScreenCapture.cs
+pwiz_tools/Skyline/Alerts/ScreenCapturePermissionDlg.cs
+
+# Excluded: Pre-existing large files with minimal branch changes
+# pwiz_tools/Skyline/Util/Extensions/Text.cs - 467 statements, mostly pre-existing
+# pwiz_tools/Skyline/CommandArgs.cs - 2532 statements, mostly pre-existing
+# pwiz_tools/Skyline/CommandLine.cs - 3366 statements, mostly pre-existing
+
+# Excluded from measurement:
+# pwiz_tools/Skyline/Controls/Startup/StartPage.cs - UI construction, tested by TestStartPageCheckActionBoxes but not new code
+# pwiz_tools/Skyline/Program.cs - App-level, not testable in functional tests
+# pwiz_tools/Skyline/Model/AuditLog/LogMessage.cs - Minor change
+# pwiz_tools/Skyline/Util/UtilIO.cs - Minor change
+# pwiz_tools/Skyline/Properties/Settings.settings - Generated
+# pwiz_tools/Skyline/Executables/Tools/SkylineMcp/ - Separate process, out-of-proc MCP server
