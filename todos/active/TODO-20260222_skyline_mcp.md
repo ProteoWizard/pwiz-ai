@@ -130,8 +130,37 @@
   - [x] Screen capture: fix DPI scaling for redaction (foreign window rects now scaled to physical pixels)
   - [x] Screen capture: change redaction color from gray to cyan for visibility
   - [x] Screen capture: add Thread.Sleep after permission dialog dismissal
-  - [ ] Implement unit tests of at least the Skyline side of the API
-  - [ ] Test ImportProperties end-to-end with annotation workflow from conversation
+  - [x] Implement unit tests of at least the Skyline side of the API
+    - [x] Created JsonToolServerTest.cs functional test in TestFunctional/
+    - [x] Tests 17 tool groups: document info, selection, locations, replicates, settings lists,
+      report documentation, named reports, report definitions (filter/sort/pivot), document settings,
+      tutorials catalog, CLI help, open forms, add report, small molecule insert, import properties,
+      import FASTA, run command
+    - [x] Uses FilesTreeFormTest.data (Rat_plasma.sky with 42 replicates) - no new test data needed
+  - [ ] Expand test coverage to 80%+ (see Sessions 25-26)
+    - [x] Created coverage file: `ai/todos/active/TODO-20260222_skyline_mcp-coverage.txt`
+    - [x] Baseline coverage: 64.3% (1103/1716 statements)
+    - [x] Added ScreenCapturePermissionDlg tests (deny, allow, allow+persist)
+    - [x] Added ScreenCapturePermissionDlg.ResetSessionPermission() for test support
+    - [x] Added DoNotAskAgain get/set property on ScreenCapturePermissionDlg
+    - [x] Added GetFormImage test (capture, auto-path, error cases)
+    - [x] Added graph data/image tests (GetGraphData, GetGraphImage, error cases)
+    - [x] Added tutorial fetch tests using HttpClientTestHelper with real repo HTML
+    - [x] Added tutorial error tests (404, DNS failure, cancellation, path traversal)
+    - [x] Fixed ConvertHtmlToMarkdown bug: `@"\n"` (literal) → `NL` constant (real newline)
+    - [x] Added ScreenCapturePermissionDlg to TestRunnerFormLookup.csv
+    - [x] Removed CommandArgs.cs, CommandLine.cs, Text.cs from coverage file (large pre-existing files)
+    - [x] Coverage after Session 25: 74.2% (1391/1874 core statements)
+    - [x] Added GetSelectionText and GetSelectedElementLocator tests
+    - [x] Expanded TestRunCommand: --version, report export, refine, FASTA import via CLI
+    - [x] Added Immediate Window content verification using resource strings
+    - [x] Added `GetImmediateWindowText()` helper for Immediate Window content assertions
+    - [x] Added `keepEmptyProteins` parameter to ImportFasta API and SkylineWindow.ImportFasta
+    - [x] Fixed TestImportFasta: tests both keepEmptyProteins=true and false paths
+    - [ ] Build currently failing — needs debugging (SkylineFiles.cs change)
+    - [ ] Remaining gap: JsonToolServer 67.9%, ScreenCapture 55.1%
+    - [ ] Target: run coverage after build fix to measure progress
+  - [ ] Update testing-patterns.md documentation (partially done)
   - [ ] Create PR
 
   ### Future enhancements (post-PR)
@@ -573,3 +602,199 @@ then refined the form ID format and fixed DPI/color issues.
 - **`SkylineMcpServer/Tools/SkylineTools.cs`**: +skyline_get_form_image MCP tool
 - **`TestUtil/ScreenshotManager.cs`**: Delegates to ScreenCapture, removed duplication
 - **`Skyline.csproj`**: +ScreenCapture.cs, +ScreenCapturePermissionDlg.cs/.Designer.cs
+
+### Session 24 (2026-03-04) - JsonToolServer functional test
+
+Created comprehensive functional test for JsonToolServer handler methods, calling them
+directly without the named pipe transport layer.
+
+#### Test architecture
+- Constructs `ToolService` + `JsonToolServer` in the test, calls handler methods directly
+- Uses `FilesTreeFormTest.data/Rat_plasma.sky` (42 replicates, proteins, peptides, results)
+- Single `[TestMethod]` with 17 private helper methods (Skyline test convention)
+
+#### Tools tested (17 groups)
+- **Document info**: GetDocumentPath, GetVersion, GetDocumentStatus, GetProcessId
+- **Selection**: GetSelection, SetSelectedElement (with locator navigation)
+- **Locations**: GetLocations at group/molecule/precursor/transition levels, scoped enumeration
+- **Replicates**: GetReplicateName, GetReplicateNames, SetReplicate (+ error case)
+- **Settings lists**: GetSettingsListTypes, GetSettingsListNames, GetSettingsListItem (using EnzymeList.GetDefault())
+- **Report documentation**: GetReportDocTopics, GetReportDocTopic (+ case-insensitive matching)
+- **Named reports**: ExportReport with JSON metadata validation
+- **Report definitions**: ExportReportFromDefinition with filter (PrecursorMz > 500 verified per-row), sort (descending order verified), pivotReplicate (column expansion verified), error suggestions
+- **Document/default settings**: GetDocumentSettings, GetDefaultSettings (XML comparison)
+- **Tutorials**: GetAvailableTutorials (catalog format, field count)
+- **CLI help**: RunCommandSilent
+- **Open forms**: GetOpenForms (SequenceTreeForm presence)
+- **Add report**: AddReportFromDefinition (persisted to PersistedViews)
+- **Small molecule insert**: InsertSmallMoleculeTransitionList (group count increase)
+- **Import properties**: ImportProperties with annotation definition + ElementLocator CSV
+- **Run command**: RunCommand with report export (file creation verified)
+
+#### Code quality patterns applied
+- Constants for repeated strings: LEVEL_GROUP, COL_PROTEIN_NAME, CULTURE_INVARIANT, etc.
+- `nameof(EnzymeList)` instead of string literals for settings list types
+- `BuildSelectJson()` / `BuildSelectPivotJson()` helpers for JSON report definitions
+- `GetRowCount()` helper for metadata parsing
+- `Helpers.CountLinesInString()`, `TextUtil.ReadLines()`, `.ParseDsvFields()` instead of manual splits
+- `EnzymeList.GetDefault()` for invariant enzyme assertions
+- Exact row count assertions instead of `> 0`
+
+#### ImportFasta test (commented out)
+ImportFasta requires the SequenceTree insert node to be selected and has UI thread
+complications when called through the ToolService path. Needs further investigation.
+
+#### New/modified files
+- **New**: `TestFunctional/JsonToolServerTest.cs` (~525 lines)
+- **Modified**: `TestFunctional/TestFunctional.csproj` (+1 Compile Include)
+
+### Session 25 (2026-03-05) - Code coverage and test expansion
+
+Goal: establish coverage baseline, expand tests toward 80%, fix bugs found by tests.
+
+#### Coverage infrastructure
+- Created `ai/todos/active/TODO-20260222_skyline_mcp-coverage.txt` listing 11 production
+  files to measure coverage for
+- Baseline coverage: **64.3%** (1103/1716 statements) across core MCP files
+
+#### ScreenCapturePermissionDlg tests
+- Added `DoNotAskAgain` get/set property (was get-only expression body)
+- Added `ScreenCapture.ResetSessionPermission()` to reset static session state for tests
+- Added `ScreenCapturePermissionDlg` to `TestRunnerFormLookup.csv`
+- Tests three flows: deny (CancelDialog), allow (OkDialog), allow+DoNotAskAgain (persist)
+- Tests session permission caching (no dialog on subsequent calls after allow)
+
+#### GetFormImage tests
+- Pre-grants `AllowMcpScreenCapture` to test capture without dialog
+- Verifies file creation, non-zero size, valid image dimensions
+- Tests auto-generated path (null filePath parameter)
+- Tests error case: invalid form ID
+
+#### Graph data/image tests
+- Finds GraphSummary from GetOpenForms (Rat_plasma.sky opens with graphs)
+- Tests GetGraphData: TSV export, file creation, auto-generated path
+- Tests GetGraphImage: PNG export, valid image verification
+- Tests error cases: invalid graph ID, non-graph form ID
+
+#### Tutorial fetch tests (HttpClientTestHelper, no network)
+- Reads real tutorial HTML from `Documentation/Tutorials/MethodEdit/en/index.html`
+- Serves via `HttpClientTestHelper.SimulateSuccessfulDownload()` — exercises full
+  FetchTutorial pipeline without network access
+- Verifies JSON metadata (tutorial name, language, TOC entries, line count)
+- Verifies markdown output (headings, screenshot placeholders)
+- Tests FetchTutorialImage with real PNG from repo served via HttpClientTestHelper
+- Error tests: unknown tutorial (ArgumentException), HTTP 404 (IOException),
+  network failure (IOException), user cancellation (IOException),
+  path traversal prevention (ArgumentException for `../` and `\` in filenames)
+
+#### Bug fix: ConvertHtmlToMarkdown literal `\n`
+- **Bug**: All regex replacements used `@"\n"` (verbatim string = literal backslash + n)
+  instead of actual newline characters. Headings, list items, paragraphs, and table rows
+  all got literal `\n` instead of real newlines.
+- **Impact**: TOC extraction found zero headings because no lines started with `# `.
+  The end-to-end MCP test coincidentally worked because the original HTML already has
+  real newlines between tags, making the literal `\n` invisible noise.
+- **Fix**: Added `private const string NL = "\n"` constant, replaced all `@"\n"`
+  replacement strings with `NL` throughout `ConvertHtmlToMarkdown`.
+
+#### Documentation updates
+- Updated `ai/docs/testing-patterns.md` with three new subsections:
+  - "Exposing Dialog Controls for Testing" — `#region Test support` convention,
+    public get/set properties wrapping private controls
+  - "Resetting Static State for Tests" — pattern for session-level state reset methods
+  - "Testing Accept and Cancel Paths" — `ShowDialog<T>()` + `CancelDialog()`/`OkDialog()`
+    pattern for testing both accept and deny flows
+- Updated method listing to include `CancelDialog(Form)` alongside `OkDialog(Form)`
+
+### Session 26 (2026-03-05): Test expansion, ImportFasta API, Immediate Window verification
+
+#### Test cleanup and coverage baseline
+- Fixed null file path cleanup: auto-generated paths wrapped in try/finally with `FileEx.SafeDelete()`
+- Added null guards to prevent `FileEx.SafeDelete(null)` crash
+- Error cases now pass `TestFilesDir.GetTestPath()` paths instead of null
+- Removed CommandArgs.cs, CommandLine.cs, Text.cs from coverage file (large pre-existing,
+  not worth including — they dragged coverage from 74.7% down to 31.6%)
+- Confirmed core coverage baseline: **74.2%** (1391/1874 statements)
+
+#### New test coverage
+- **GetSelectionText**: Tests human-readable location name from selection
+- **GetSelectedElementLocator**: Tests getting locator for selected element by type ("Molecule")
+- **TestRunCommand expanded** with 4 operations:
+  - `--version` via RunCommandSilent: verifies both parts of version string match GetVersion()
+  - Report export via RunCommand: verifies file creation and Immediate Window output
+  - Refine (`--refine-min-peptides=100`): verifies document modification, Undo with `Assert.AreSame`
+  - FASTA import (`--import-fasta` + `--keep-empty-proteins`): verifies ALBU_BOVIN protein
+    added by name, Undo with `Assert.AreSame`
+- **Immediate Window verification**: All RunCommand calls verify IW content using localized
+  resource strings (SkylineResources/Resources) — translation-proof assertions
+- **GetImmediateWindowText() helper**: Reads `SkylineWindow.ImmediateWindow.TextContent`
+  on UI thread (reads the actual textbox, not the TextBoxStreamWriterHelper.Text property)
+
+#### ImportFasta API enhancement
+- **Problem**: `ImportFasta` via SkylineWindow.ImportFasta() shows `EmptyProteinsDlg` when
+  imported proteins have no peptides matching document filter criteria — blocks LLM usage
+- **Solution**: Added `bool? keepEmptyProteins = null` optional parameter to
+  `SkylineWindow.ImportFasta()` in SkylineFiles.cs
+  - When specified: bypasses `HandleEmptyPeptideGroups` dialog, directly keeps or removes
+    empty proteins using `ImportPeptideSearch.RemoveProteinsByPeptideCount()`
+  - When null: preserves existing behavior (shows dialog)
+  - Preserves LongWaitDlg progress UI for large FASTA imports
+- Added `keepEmptyProteins` string parameter to `JsonToolServer.ImportFasta()` (optional,
+  parsed to bool via dispatch)
+- **TestImportFasta re-enabled**: Tests both keepEmptyProteins=true (protein present) and
+  keepEmptyProteins=false (empty protein removed), with `Assert.AreSame` after Undo
+
+#### Key decisions
+- **Coverage file trimmed**: CommandArgs (2532 stmts), CommandLine (3366 stmts), Text (467 stmts)
+  are pre-existing files with minimal branch changes — not worth measuring
+- **Immediate Window assertions use resource strings**: `SkylineResources.CommandLine_ExportLiveReport_*`,
+  `Resources.CommandLine_RefineDocument_*`, `Resources.CommandLine_ImportFasta_*` — won't break
+  on zh-CHS/ja test runs
+- **ImportFasta uses SkylineWindow path, not RunCommand**: Preserves LongWaitDlg progress UI
+  instead of using silent command-line path (which loses progress and requires temp file)
+
+#### Build status
+- Build and tests passing after all changes
+
+#### Coverage results (end of session 26)
+- **76.6%** (1449/1892 statements)
+- JsonToolServer: 70.3%, JsonUiService: 87.1%, JsonTutorialCatalog: 88.4%
+- ColumnResolver: 92.8%, RowFactories: 73.3%, ScreenCapture: 55.1%
+
+### Session 27 (2026-03-05): Selection API expansion, insertion node support
+
+#### Selection API improvements
+- **Insertion node support**: Added `INSERT_NODE_LOCATOR` (`"/Insert"`) constant to
+  `JsonUiService` for representing the SequenceTree insertion point
+- `GetSelection()` now outputs `"/Insert"` when the insertion node is selected
+- `SetSelection()` now handles `"/Insert"` as primary or additional locator
+- This enables LLMs to select the insertion point before operations like ImportFasta
+
+#### TestSelection expanded
+- **Multi-selection**: Tests selecting 3 molecules simultaneously via `SetSelectedElement`
+  with `additionalLocators` parameter, verifies `GetSelection()` returns all 3
+- **Insertion node round-trip**: `SetSelectedElement("/Insert")` → `GetSelection()`
+  returns `"/Insert"`, proving API can represent the insertion point
+
+#### TestImportFasta updated
+- Uses `server.SetSelectedElement(JsonUiService.INSERT_NODE_LOCATOR)` before importing
+  to ensure FASTA appends at end (matching `--import-fasta` command-line behavior)
+- Removed previous `insertPath` approach from SkylineFiles.cs — selection is the correct
+  way to control insertion position, and now the API supports it
+
+#### Reverted from session 26
+- Removed `IdentityPath insertPath` parameter from `SkylineWindow.ImportFasta()` —
+  not needed now that SetSelection supports the insertion node
+- Removed `Controls` using from `JsonToolServer.cs` — no longer needed
+
+#### Coverage: 76.6% (1449/1892)
+- Need ~65 more covered statements to reach 80%
+- Easy wins identified: `GetPersistedViewNames` (17), `GetPersistedViewItem` (7),
+  `SerializeViewSpec` (10), `Dispatch` (19), `HandleRequest` (15), `ParseArgs` (13)
+- Hard/infra: `ServerLoop` (32), `Start` (4), pipe I/O — require real pipe connection
+
+#### Modified files
+- **Modified**: `TestFunctional/JsonToolServerTest.cs` (expanded TestSelection, TestImportFasta)
+- **Modified**: `ToolsUI/JsonUiService.cs` (INSERT_NODE_LOCATOR, GetSelection/SetSelection)
+- **Modified**: `SkylineFiles.cs` (keepEmptyProteins only, reverted insertPath)
+- **Modified**: `ToolsUI/JsonToolServer.cs` (reverted insertPath changes)
