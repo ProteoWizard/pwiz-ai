@@ -6,7 +6,7 @@
 - **Created**: 2026-03-05
 - **Status**: In Progress
 - **GitHub Issue**: [#4053](https://github.com/ProteoWizard/pwiz/issues/4053)
-- **PR**: (pending)
+- **PR**: [#4054](https://github.com/ProteoWizard/pwiz/pull/4054)
 
 ## Objective
 
