@@ -6,7 +6,7 @@
 - **Created**: 2026-03-06
 - **Status**: In Progress
 - **GitHub Issue**: [#4057](https://github.com/ProteoWizard/pwiz/issues/4057)
-- **PR**: (pending)
+- **PR**: [#4058](https://github.com/ProteoWizard/pwiz/pull/4058)
 
 ## Objective
 
@@ -17,8 +17,9 @@ open until the GC finalizer thread runs (non-deterministically).
 
 ## Tasks
 
-- [ ] Add `System::GC::Collect()` + `System::GC::WaitForPendingFinalizers()` to `MidacDataImpl::~MidacDataImpl()`
-      in `pwiz_aux/msrc/utility/vendor_api/Agilent/MidacData.cpp`
+- [x] Add `System::GC::Collect()` + `System::GC::WaitForPendingFinalizers()` to `MidacDataImpl::~MidacDataImpl()`
+      in `pwiz_aux/msrc/utility/vendor_api/Agilent/MidacData.cpp`; also null out `imsReader_`
+      and `imsCcsReader_` gcroots first so managed objects are eligible for collection
 
 ## Progress Log
 
