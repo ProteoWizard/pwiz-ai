@@ -9,9 +9,10 @@ Claude Code lacks access to basic status information that would help it:
 - See **git status** without running commands
 - Track the **active project** in multi-repo setups
 
-This server provides three tools:
+This server provides four tools:
 - `get_status` - Returns timestamp and git info for one or more directories
-- `get_last_screenshot` - Gets screenshot from clipboard or Pictures/Screenshots folder
+- `get_last_screenshot` - Gets recent Win+Shift+S screenshot(s), with multi-screenshot support
+- `get_clipboard_image` - Gets image from clipboard (for editor/browser copies)
 - `set_active_project` - Sets the active project for statusline display
 
 ## Installation
@@ -151,45 +152,64 @@ Tool: set_active_project
 Arguments: { "path": "C:/proj/pwiz" }
 ```
 
-### Get screenshot from clipboard
+### Get latest screenshot
 
 ```
 Tool: get_last_screenshot
 Arguments: {}
 ```
 
-This eliminates the need to run `git status`, `date`, or other commands just to get context.
+### Get multiple screenshots at once
+
+```
+Tool: get_last_screenshot
+Arguments: { "count": 3 }
+```
+
+### Get image from clipboard
+
+```
+Tool: get_clipboard_image
+Arguments: {}
+```
 
 ## Tool: get_last_screenshot
 
-Retrieves the most recent screenshot, checking clipboard first then the Screenshots folder.
+Retrieves the most recent Win+Shift+S screenshot(s) from `~/Pictures/Screenshots`.
+
+### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `count` | int | No | 1 | Number of most recent screenshots to retrieve |
+
+### Behavior
+
+1. **Checks `~/Pictures/Screenshots`** for PNG files (Windows 11 saves Win+Shift+S here)
+2. **Filters by recency**: Only screenshots newer than 1 hour AND newer than the most recently moved screenshot (prevents walking backwards through old files)
+3. **Moves** matching files into `ai/.tmp/screenshots/sessions/` (avoids permission prompts for out-of-project paths)
+4. **Falls back to clipboard** if `~/Pictures/Screenshots` doesn't exist (Windows 10)
+5. **Returns path(s)**: Claude uses the Read tool to view the image(s)
+
+### Platform Notes
+
+- **Windows 11**: Win+Shift+S saves to `~/Pictures/Screenshots` AND clipboard. This tool uses the file path (more reliable, supports `count > 1`)
+- **Windows 10**: Win+Shift+S copies to clipboard only. Falls back to clipboard via Pillow
+
+## Tool: get_clipboard_image
+
+Retrieves an image from the Windows clipboard — for images copied from editors, browsers, or other apps (not Win+Shift+S).
 
 ### Parameters
 
 None.
 
-### Response
-
-```json
-{
-  "path": "C:\\proj\\ai\\.tmp\\screenshots\\clipboard_20260114_153022.png",
-  "filename": "clipboard_20260114_153022.png",
-  "source": "clipboard",
-  "modified": "2026-01-14 15:30:22",
-  "size_bytes": 45678,
-  "instruction": "Use the Read tool to view this image file"
-}
-```
-
 ### Behavior
 
-1. **Clipboard first**: Checks Windows clipboard for an image (Win+Shift+S, PrintScreen, Snipping Tool)
-2. **Saves to temp**: Clipboard images are saved to `ai/.tmp/screenshots/clipboard_YYYYMMDD_HHMMSS.png`
-3. **Falls back**: If no clipboard image, checks `~/Pictures/Screenshots/` for the most recent PNG
-4. **Returns path**: Claude can then use the Read tool to view the image
+1. **Checks clipboard** via Pillow's `ImageGrab.grabclipboard()`
+2. **Saves** to `ai/.tmp/screenshots/sessions/clipboard_YYYYMMDD_HHMMSS.png`
+3. **Returns path** or error with install instructions if Pillow is missing
 
-### Platform Notes
+### Requirements
 
-- **Windows 10**: Win+Shift+S copies to clipboard only (no auto-save)
-- **Windows 11**: Win+Shift+S may auto-save to Pictures/Screenshots
-- **Requires Pillow**: `pip install Pillow` for clipboard image capture
+- **Pillow**: `pip install Pillow` (clipboard capture requires this package)

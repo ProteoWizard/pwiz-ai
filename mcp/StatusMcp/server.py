@@ -4,7 +4,8 @@ Provides system status information including:
 - Current timestamp with timezone
 - Git repository status for multiple directories
 - Active project tracking for statusline display
-- Screenshot retrieval (clipboard first, then Pictures/Screenshots)
+- Screenshot retrieval (Win+Shift+S from Pictures/Screenshots, with clipboard fallback)
+- Clipboard image retrieval (for images copied from editors, not Win+Shift+S)
 
 This is a lightweight server for basic system context. For LabKey/Panorama
 data access, use the LabKeyMcp server instead.
@@ -179,89 +180,172 @@ def get_status(directories: Optional[list[str]] = None, verbose: bool = False) -
     return json.dumps(status, indent=2)
 
 
-def get_clipboard_image() -> Optional[Path]:
-    """Try to get an image from the Windows clipboard and save it.
+def _get_session_dir() -> Path:
+    """Get the session screenshots directory, creating it if needed."""
+    session_dir = _AI_ROOT / ".tmp" / "screenshots" / "sessions"
+    session_dir.mkdir(parents=True, exist_ok=True)
+    return session_dir
 
-    Returns the path to the saved image, or None if no image in clipboard.
+
+def _move_screenshots(screenshots: list[Path], session_dir: Path) -> list[dict]:
+    """Move screenshots from ~/Pictures/Screenshots into the project folder.
+
+    Returns list of result dicts with path, filename, source, modified, size_bytes.
     """
+    import shutil
+    results = []
+    for src in screenshots:
+        mtime = datetime.fromtimestamp(src.stat().st_mtime)
+        dest = session_dir / src.name
+        try:
+            shutil.move(str(src), str(dest))
+            result_path = dest
+            source = "screenshots_folder_moved"
+        except Exception as e:
+            logger.warning(f"Failed to move screenshot to project folder: {e}")
+            result_path = src
+            source = "screenshots_folder"
+        results.append({
+            "path": str(result_path),
+            "filename": result_path.name,
+            "source": source,
+            "modified": mtime.strftime("%Y-%m-%d %H:%M:%S"),
+            "size_bytes": result_path.stat().st_size,
+        })
+    return results
+
+
+@mcp.tool()
+def get_last_screenshot(count: int = 1) -> str:
+    """Get the most recent Win+Shift+S screenshot(s) from Windows.
+
+    On Windows 11, Win+Shift+S saves screenshots to ~/Pictures/Screenshots.
+    This tool finds the most recent one(s), moves them into the project folder
+    (ai/.tmp/screenshots/sessions/) to avoid permission prompts, and returns
+    the path(s) for Claude to read.
+
+    Use count > 1 when the user says "grab my last 3 screenshots" or wants
+    to show multiple images (e.g., A vs B comparison).
+
+    Falls back to clipboard if ~/Pictures/Screenshots doesn't exist (Windows 10).
+
+    For clipboard images from an image editor (not Win+Shift+S), use
+    get_clipboard_image instead.
+
+    Args:
+        count: Number of most recent screenshots to retrieve (default: 1)
+    """
+    pictures = Path(os.path.expanduser("~/Pictures/Screenshots"))
+
+    if pictures.exists():
+        screenshots = sorted(pictures.glob("*.png"),
+                             key=lambda p: p.stat().st_mtime, reverse=True)
+        if screenshots:
+            # Filter: no older than 1 hour, and no older than the most recent
+            # file already moved to sessions/ (prevents walking backwards)
+            now = datetime.now().timestamp()
+            one_hour_ago = now - 3600
+
+            session_dir = _get_session_dir()
+            existing = sorted(session_dir.glob("*.png"),
+                              key=lambda p: p.stat().st_mtime, reverse=True)
+            last_moved_time = existing[0].stat().st_mtime if existing else 0
+
+            cutoff = max(one_hour_ago, last_moved_time)
+            recent = [s for s in screenshots if s.stat().st_mtime > cutoff]
+
+            if not recent:
+                return json.dumps({
+                    "error": "No new screenshots found",
+                    "suggestion": "Take a new screenshot with Win+Shift+S (rectangle mode)"
+                })
+
+            to_move = recent[:count]
+            results = _move_screenshots(to_move, session_dir)
+
+            if count == 1:
+                return json.dumps({
+                    **results[0],
+                    "instruction": "Use the Read tool to view this image file"
+                }, indent=2)
+            else:
+                return json.dumps({
+                    "screenshots": results,
+                    "count": len(results),
+                    "instruction": "Use the Read tool to view each image file"
+                }, indent=2)
+
+    # Fall back to clipboard (Windows 10 — no ~/Pictures/Screenshots)
+    clipboard_result = _try_clipboard()
+    if clipboard_result:
+        return clipboard_result
+
+    return json.dumps({
+        "error": "No screenshots found in ~/Pictures/Screenshots and no image on clipboard",
+        "suggestion": "Take a screenshot with Win+Shift+S, or copy an image to clipboard"
+    })
+
+
+@mcp.tool()
+def get_clipboard_image() -> str:
+    """Get an image from the Windows clipboard and save it.
+
+    Use this when the user has copied an image from an image editor, browser,
+    or other application — NOT for Win+Shift+S screenshots (use get_last_screenshot
+    for those).
+
+    Requires the Pillow package: pip install Pillow
+    """
+    result = _try_clipboard()
+    if result:
+        return result
+
+    return json.dumps({
+        "error": "Could not retrieve clipboard image",
+        "pillow_installed": _is_pillow_available(),
+        "suggestion": "Install Pillow for clipboard support: pip install Pillow"
+            if not _is_pillow_available()
+            else "No image found on the clipboard. Copy an image first.",
+    })
+
+
+def _is_pillow_available() -> bool:
+    """Check if Pillow is installed."""
+    try:
+        from PIL import ImageGrab  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _try_clipboard() -> Optional[str]:
+    """Try to get an image from clipboard. Returns JSON string or None."""
     try:
         from PIL import ImageGrab
 
-        # Try to grab image from clipboard
         image = ImageGrab.grabclipboard()
         if image is None:
             return None
 
-        # Save to temp location
-        tmp_dir = Path("C:/proj/ai/.tmp/screenshots")
-        tmp_dir.mkdir(parents=True, exist_ok=True)
-
+        session_dir = _get_session_dir()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = tmp_dir / f"clipboard_{timestamp}.png"
+        output_path = session_dir / f"clipboard_{timestamp}.png"
         image.save(output_path, "PNG")
 
-        return output_path
+        return json.dumps({
+            "path": str(output_path),
+            "filename": output_path.name,
+            "source": "clipboard",
+            "modified": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "size_bytes": output_path.stat().st_size,
+            "instruction": "Use the Read tool to view this image file"
+        }, indent=2)
     except ImportError:
         logger.warning("PIL not available for clipboard image capture")
         return None
     except Exception as e:
         logger.warning(f"Failed to get clipboard image: {e}")
         return None
-
-
-@mcp.tool()
-def get_last_screenshot() -> str:
-    """Get the path to the most recent screenshot.
-
-    Checks the Windows default screenshot folder (Pictures/Screenshots)
-    and returns the path to the newest PNG file.
-
-    Use this when the user says "I took a screenshot" or similar.
-    Then use the Read tool to view the returned path.
-    """
-    # First, try to get image from clipboard
-    clipboard_path = get_clipboard_image()
-    if clipboard_path:
-        return json.dumps({
-            "path": str(clipboard_path),
-            "filename": clipboard_path.name,
-            "source": "clipboard",
-            "modified": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "size_bytes": clipboard_path.stat().st_size,
-            "instruction": "Use the Read tool to view this image file"
-        }, indent=2)
-
-    # Fall back to Screenshots folder
-    pictures = Path(os.path.expanduser("~/Pictures/Screenshots"))
-
-    if not pictures.exists():
-        return json.dumps({
-            "error": "No image in clipboard and screenshot folder not found",
-            "folder": str(pictures),
-            "suggestion": "Copy a screenshot to clipboard (PrintScreen, Win+Shift+S, or Snipping Tool)"
-        })
-
-    # Find all PNG files and sort by modification time
-    screenshots = list(pictures.glob("*.png"))
-    if not screenshots:
-        return json.dumps({
-            "error": "No image in clipboard and no PNG files in screenshot folder",
-            "folder": str(pictures),
-            "suggestion": "Copy a screenshot to clipboard (PrintScreen, Win+Shift+S, or Snipping Tool)"
-        })
-
-    # Get the most recent
-    latest = max(screenshots, key=lambda p: p.stat().st_mtime)
-    mtime = datetime.fromtimestamp(latest.stat().st_mtime)
-
-    return json.dumps({
-        "path": str(latest),
-        "filename": latest.name,
-        "source": "screenshots_folder",
-        "modified": mtime.strftime("%Y-%m-%d %H:%M:%S"),
-        "size_bytes": latest.stat().st_size,
-        "instruction": "Use the Read tool to view this image file"
-    }, indent=2)
 
 
 @mcp.tool()

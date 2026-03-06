@@ -22,7 +22,8 @@ This leads to:
 
 A minimal MCP server with three tools:
 - `get_status` - Returns timestamp and git info for one or more directories
-- `get_last_screenshot` - Gets screenshot from clipboard or Pictures/Screenshots folder
+- `get_last_screenshot` - Gets recent Win+Shift+S screenshot(s) from Pictures/Screenshots
+- `get_clipboard_image` - Gets image from clipboard (for editor/browser copies)
 - `set_active_project` - Sets the active project for statusline display
 
 ## Installation
@@ -93,8 +94,56 @@ Response:
 
 ### get_last_screenshot
 
+Retrieves the most recent Win+Shift+S screenshot(s). On Windows 11, these are saved to
+`~/Pictures/Screenshots` — this tool moves them into `ai/.tmp/screenshots/sessions/` to
+avoid permission prompts.
+
 ```
 Tool: get_last_screenshot
+Arguments: {}
+
+# Or grab multiple screenshots at once:
+Arguments: { "count": 3 }
+```
+
+Response (single):
+
+```json
+{
+  "path": "C:\\proj\\ai\\.tmp\\screenshots\\sessions\\Screenshot 2026-03-06 171609.png",
+  "filename": "Screenshot 2026-03-06 171609.png",
+  "source": "screenshots_folder_moved",
+  "modified": "2026-03-06 17:16:10",
+  "size_bytes": 44128,
+  "instruction": "Use the Read tool to view this image file"
+}
+```
+
+Response (multiple):
+
+```json
+{
+  "screenshots": [
+    { "path": "...", "filename": "...", "source": "screenshots_folder_moved", "modified": "...", "size_bytes": 0 },
+    { "path": "...", "filename": "...", "source": "screenshots_folder_moved", "modified": "...", "size_bytes": 0 }
+  ],
+  "count": 2,
+  "instruction": "Use the Read tool to view each image file"
+}
+```
+
+**Filtering**: Only screenshots newer than 1 hour and newer than the most recently moved
+screenshot are returned. This prevents walking backwards through old screenshots.
+
+On Windows 10 (no `~/Pictures/Screenshots`), falls back to clipboard via Pillow.
+
+### get_clipboard_image
+
+Retrieves an image from the Windows clipboard — for images copied from editors, browsers,
+or other apps (not Win+Shift+S). Requires `pip install Pillow`.
+
+```
+Tool: get_clipboard_image
 Arguments: {}
 ```
 
@@ -102,16 +151,14 @@ Response:
 
 ```json
 {
-  "path": "C:\\proj\\ai\\.tmp\\screenshots\\clipboard_20260114_153022.png",
-  "filename": "clipboard_20260114_153022.png",
+  "path": "C:\\proj\\ai\\.tmp\\screenshots\\sessions\\clipboard_20260306_171501.png",
+  "filename": "clipboard_20260306_171501.png",
   "source": "clipboard",
-  "modified": "2026-01-14 15:30:22",
-  "size_bytes": 45678,
+  "modified": "2026-03-06 17:15:01",
+  "size_bytes": 12383,
   "instruction": "Use the Read tool to view this image file"
 }
 ```
-
-This checks the clipboard first (works with Win+Shift+S, PrintScreen, Snipping Tool), then falls back to `~/Pictures/Screenshots/`. Clipboard images are saved to `ai/.tmp/screenshots/`.
 
 ### set_active_project
 
@@ -140,8 +187,13 @@ Claude should call `get_status` when:
 Claude should call `get_last_screenshot` when:
 
 1. **User says "I took a screenshot"** - Retrieve and view it
-2. **User says "check the clipboard"** - Get clipboard image
-3. **User says "see this image"** - They likely copied something
+2. **User says "grab my last N screenshots"** - Use `count` parameter
+3. **User wants to show A vs B comparison** - Grab multiple at once
+
+Claude should call `get_clipboard_image` when:
+
+1. **User says "check the clipboard"** - They copied from an editor or browser
+2. **User says "see this image"** - They likely copied something (not Win+Shift+S)
 
 Claude should call `set_active_project` when:
 

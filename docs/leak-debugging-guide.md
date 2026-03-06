@@ -393,48 +393,139 @@ New parameters:
 
 - Added `sorthandlesbycount` command-line argument (default: off)
 
-## Memory Profiling with dotMemory (January 2026)
+## Memory Profiling with dotMemory
 
-For **managed memory leaks** (as opposed to handle leaks), dotMemory profiling provides detailed object-level analysis that handle counts cannot reveal.
+For **managed memory leaks** (as opposed to handle leaks), dotMemory profiling provides
+detailed object-level analysis that handle counts cannot reveal.
 
 ### When to Use dotMemory
 
 Use dotMemory when:
 - Handle counts are stable but memory grows
+- You see `GC-LEAK Objects not garbage collected after test:` failures
 - You suspect managed object accumulation (cached objects, event handlers, etc.)
 - The leak involves .NET framework internals (timers, tasks, etc.)
 - You need to see object allocation patterns across test runs
 
-### TestRunner dotMemory Integration
+### CRITICAL: Claude's Role and Limitations
 
-TestRunnerLib includes automatic snapshot support when running under dotMemory. This eliminates manual snapshot timing and enables comparison across test iterations.
+**dotMemory has no text interface.** Claude cannot read `.dmw` workspace files directly.
+The collaboration model is:
 
-**How it works:**
-1. Run tests under dotMemory profiler
-2. TestRunner detects dotMemory and takes snapshots at configured intervals
-3. Snapshots are taken immediately after `RunTest.MemoryManagement.FlushMemory()` clears collectible garbage
-4. Compare snapshots in dotMemory to identify objects that accumulate
+1. **Claude runs profiling** — launches `Run-Tests.ps1 -MemoryProfile` to produce a `.dmw` file
+2. **Developer opens `.dmw` in dotMemory GUI** — this is a visual-only tool
+3. **Developer screenshots key screens** — especially retention paths for leaked objects
+4. **Claude reads the screenshot** via `mcp__status__get_last_screenshot()` and analyzes the retention chain
+5. **Claude proposes and implements a fix** based on what the retention path reveals
 
-**Configuration:**
+**Do NOT guess retention paths.** The answer is one screenshot away. Ask the developer
+to open the `.dmw` file, navigate to the leaked type, and screenshot the Key Retention
+Paths view. This is faster and more reliable than reasoning about code statically.
 
-The snapshot behavior is controlled by properties on `RunTests`:
-- `DotMemoryWarmupRuns` - iterations before first snapshot (baseline)
-- `DotMemoryWaitRuns` - iterations between first and second snapshot (analysis period)
-- `DotMemoryCollectAllocations` - when true, enables allocation stack trace collection
+### How to Run: `Run-Tests.ps1 -MemoryProfile`
 
-Currently these are set in code. For manual profiling sessions, modify the values in `RunTests.cs` or set them programmatically.
+The `ai/scripts/Skyline/Run-Tests.ps1` script wraps dotMemory CLI for automated profiling:
 
-**Using dotMemory:**
+```powershell
+# Basic profiling (5 warmup, 10 analysis runs)
+Run-Tests.ps1 -TestName TestOlderProteomeDb -MemoryProfile
+
+# Custom warmup and analysis period
+Run-Tests.ps1 -TestName TestOlderProteomeDb -MemoryProfile -MemoryProfileWarmup 10 -MemoryProfileWaitRuns 20
+
+# With allocation stack traces (slower but shows where objects originate)
+Run-Tests.ps1 -TestName TestOlderProteomeDb -MemoryProfile -MemoryProfileWarmup 10 -MemoryProfileWaitRuns 20 -MemoryProfileCollectAllocations
+
+# Extended run for thread pool warm-up investigation
+Run-Tests.ps1 -TestName TestOlderProteomeDb -MemoryProfile -MemoryProfileWarmup 20 -MemoryProfileWaitRuns 50
 ```
-1. Open dotMemory → Profile Application → TestRunner.exe
-2. Add arguments: test=TestOlderProteomeDb loop=50
-3. Set DotMemoryWarmupRuns and DotMemoryWaitRuns in code before profiling
-4. Run and compare the two automatic snapshots
+
+**Parameters:**
+
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| `-MemoryProfile` | — | Enable dotMemory CLI profiling |
+| `-MemoryProfileWarmup` | 5 | Warmup iterations before first snapshot (JIT/caching stabilization) |
+| `-MemoryProfileWaitRuns` | 10 | Iterations between snapshots (analysis period). Set to `0` for PinSurvivors mode |
+| `-MemoryProfileCollectAllocations` | off | Capture allocation stack traces (slower, shows where objects originate) |
+| `-MemoryProfileOutputPath` | `ai/.tmp/memory-YYYYMMDD-HHMMSS.dmw` | Custom output path for workspace file |
+
+**What happens:**
+1. Script launches TestRunner under dotMemory CLI profiler
+2. Test runs for warmup iterations (JIT/caching/thread pool stabilization)
+3. Snapshot #1 taken automatically after warmup
+4. Test runs for wait iterations (analysis period)
+5. Snapshot #2 taken automatically
+6. Workspace saved to `ai/.tmp/memory-YYYYMMDD-HHMMSS.dmw`
+
+### Three Profiling Modes
+
+#### Comparison Mode (default)
+
+Compares two snapshots to find objects that accumulate over time:
+
+```powershell
+Run-Tests.ps1 -TestName TestOlderProteomeDb -MemoryProfile -MemoryProfileWarmup 10 -MemoryProfileWaitRuns 20
 ```
 
-**Allocation Stack Traces:**
+Best for: general memory leak investigation where you don't know what's leaking.
 
-Set `DotMemoryCollectAllocations = true` to capture where leaked objects were allocated. This is enabled on the first snapshot, so the second snapshot shows allocation sites for objects created during the analysis period. This is invaluable for understanding *where* leaking objects originate.
+#### PinSurvivors Mode (for GC-LEAK failures)
+
+Takes a single snapshot with GC-leaked objects pinned as strong references, making
+their retention paths visible in dotMemory:
+
+```powershell
+# -MemoryProfileWaitRuns 0 enables PinSurvivors mode
+Run-Tests.ps1 -TestName TestEncyclopeDiaSearch -MemoryProfile -MemoryProfileWaitRuns 0
+```
+
+Best for: investigating `GC-LEAK Objects not garbage collected after test:` failures.
+See the [GC Leak Workflow](#workflow-investigating-a-gc-leak) below.
+
+#### Snapshot-on-Leak Mode (for intermittent GC leaks)
+
+Loops until a GC leak occurs, then automatically takes a snapshot:
+
+```powershell
+# No warmup/wait args + -Loop = snapshot-on-leak mode
+Run-Tests.ps1 -TestName TestStandardType -MemoryProfile -Loop 100
+```
+
+Best for: intermittent GC leaks that don't fail every run.
+
+### Interpreting Results
+
+After profiling completes, tell the developer the `.dmw` file location and ask them to
+open it in the dotMemory GUI.
+
+| Observation in dotMemory | Indicates |
+|--------------------------|-----------|
+| Managed heap stable, few new objects | No managed leak (check unmanaged handles instead) |
+| Objects growing linearly with runs | Managed memory leak — drill into growing types |
+| Thread pool objects (WorkStealingQueue) | Runtime warm-up artifact, not a true leak |
+| Large object delta with short warmup | Increase warmup runs (e.g., 20 instead of 10) |
+
+#### Discounting WeakReference Accumulation
+
+WinForms maintains static `WeakRefCollection` instances to track all ToolStrips. These
+accumulate `System.WeakReference` and `WeakRefCollection+WeakRefObject` entries that are
+only pruned when enumerated — not during GC. **Subtract these types** from "Objects delta"
+comparisons; they don't represent actual leaks.
+
+| Objects Delta | Interpretation |
+|---------------|----------------|
+| 250 total (150 WeakReference + 100 WeakRefObject) | Effectively **0** real leak |
+| 250 total (actual domain objects) | Real leak to investigate |
+
+### Best Practices
+
+1. **Use warmup runs**: Skip the first 2-3 runs to exclude startup allocation noise
+2. **Compare at intervals**: Snapshots at runs 5, 10, 15, etc. show accumulation patterns
+3. **Look for linear growth**: Objects that scale with run count are likely leaks
+4. **Focus on "new" objects**: dotMemory comparison highlights objects present in second snapshot but not first
+5. **Check .NET internals**: Leaks often hide in framework types (timers, tasks, delegates) rather than application types
+6. **Ask for screenshots**: Never guess — ask the developer for Key Retention Paths screenshots
 
 ### Case Study: Timer Leak in HttpClientWithProgress (January 2026)
 
@@ -460,31 +551,43 @@ dotMemory profiling was critical in solving Issue #3855, where handle-based debu
 
 **Verification:** 50 runs showed stable memory with no timer accumulation.
 
-### Best Practices for dotMemory Profiling
+### Implementation Details
 
-1. **Use warmup runs**: Skip the first 2-3 runs to exclude startup allocation noise
-2. **Compare at intervals**: Snapshots at runs 5, 10, 15, etc. show accumulation patterns
-3. **Look for linear growth**: Objects that scale with run count are likely leaks
-4. **Focus on "new" objects**: dotMemory comparison highlights objects present in second snapshot but not first
-5. **Check .NET internals**: Leaks often hide in framework types (timers, tasks, delegates) rather than application types
+<details>
+<summary>TestRunner internals (for modifying profiling infrastructure)</summary>
 
-### Discounting WeakReference Accumulation
+#### TestRunner dotMemory Integration
 
-WinForms maintains static `WeakRefCollection` instances to track all ToolStrips for input message routing. These collections accumulate `System.WeakReference` and `System.Windows.Forms.ClientUtils+WeakRefCollection+WeakRefObject` entries over time.
+TestRunnerLib includes automatic snapshot support when running under dotMemory. Snapshots
+are taken immediately after `RunTest.MemoryManagement.FlushMemory()` clears collectible garbage.
 
-**Key insight**: These weak references allow the actual ToolStrip objects to be GC'd, but the `WeakReference` wrapper objects themselves only get pruned when the collection is actively enumerated/accessed - not during GC cycles.
+The snapshot behavior is controlled by properties on `RunTests`:
+- `DotMemoryWarmupRuns` - iterations before first snapshot (baseline)
+- `DotMemoryWaitRuns` - iterations between first and second snapshot (analysis period)
+- `DotMemoryCollectAllocations` - when true, enables allocation stack trace collection
 
-When evaluating "Objects delta" in dotMemory snapshot comparisons, **subtract these types** - they don't represent actual memory leaks:
+#### TestRunner Command-Line Arguments
 
-| Objects Delta | Interpretation |
-|---------------|----------------|
-| 250 total (150 WeakReference + 100 WeakRefObject) | Effectively **0** real leak |
-| 250 total (actual domain objects) | Real leak to investigate |
+TestRunner.exe accepts dotMemory arguments directly (used by Run-Tests.ps1 internally):
 
-Common allocation stack traces for these (can be ignored):
-- `ToolStripMenuItem.CreateDefaultDropDown()` → accessing `DropDownItems` on menu items
-- `ToolStripOverflowButton.CreateDefaultDropDown()` → ToolStrip layout creating overflow buttons
-- Any `ToolStrip..ctor()` or `ToolStripDropDown..ctor()` path
+```
+dotmemorywaitruns=N        # Iterations between snapshots (enables profiling)
+dotmemorywarmup=N          # Warmup iterations before first snapshot (default: 5)
+dotmemorycollectallocations=on  # Capture allocation stack traces (default: off)
+```
+
+#### Snapshot-on-Leak Decision Logic
+
+In `GarbageCollectionTracker.CheckAfterTest()`:
+
+| Condition | Action |
+|-----------|--------|
+| `dotMemoryWarmupRuns > 0` | PinSurvivors (explicit profiling) |
+| `exception != null` | Clear tracked objects (test already failed) |
+| `MemoryProfiler.IsReady` | CheckAndPinLeaks + snapshot if leak found |
+| Otherwise | Normal CheckForLeaks |
+
+</details>
 
 ## Future Vision: Automated Leak Detection Workflow
 
@@ -510,13 +613,6 @@ The current workflow requires a human to review nightly test results and select 
    - Recommend which test to investigate first
    - Optionally begin autonomous investigation
 
-### Benefits
-
-- **Faster response**: Leaks detected and investigated within hours of nightly run
-- **Consistent methodology**: Same bisection approach applied systematically
-- **Reduced manual overhead**: Human only needed to review and approve fixes
-- **Complete audit trail**: All investigation steps documented in TODO files
-
 ### Implementation Status
 
 - [x] Tooling for leak isolation (this guide)
@@ -527,72 +623,6 @@ The current workflow requires a human to review nightly test results and select 
 - [x] Snapshot-on-leak mode for intermittent GC leaks (February 2026)
 - [ ] `/pw-review-leaks` slash command
 - [ ] Autonomous investigation mode
-
-This represents a path toward having Claude Code proactively identify and fix handle leaks with minimal human intervention, transforming leak debugging from a reactive manual process to an automated continuous improvement system.
-
-### Command-Line Arguments for dotMemory (January 2026)
-
-TestRunner now supports command-line arguments to configure dotMemory snapshot behavior:
-
-```
-dotmemorywaitruns=N        # Iterations between snapshots (enables profiling)
-dotmemorywarmup=N          # Warmup iterations before first snapshot (default: 5)
-dotmemorycollectallocations=on  # Capture allocation stack traces (default: off)
-```
-
-**Usage:** Run TestRunner under dotMemory GUI profiler with these arguments:
-```
-TestRunner.exe test=TestOlderProteomeDb loop=20 dotmemorywaitruns=10 dotmemorywarmup=5 dotmemorycollectallocations=on
-```
-
-**What happens:**
-- Test runs for 5 iterations (warmup, allows JIT/caching to stabilize)
-- Snapshot #1 taken: `TestOlderProteomeDb_Warmup_After5`
-- Test runs 10 more iterations
-- Snapshot #2 taken: `TestOlderProteomeDb_Analysis_After15`
-- Compare snapshots in dotMemory GUI to identify leaking objects
-
-When `dotmemorywaitruns` is set and `dotmemorywarmup` is not specified, warmup defaults to 5 runs.
-
-### Automated Memory Profiling with Run-Tests.ps1 (January 2026)
-
-The `-MemoryProfile` flag on `Run-Tests.ps1` provides fully automated memory profiling via dotMemory CLI:
-
-```powershell
-# Basic profiling (10 warmup, 20 wait runs)
-Run-Tests.ps1 -TestName TestOlderProteomeDb -MemoryProfile -MemoryProfileWarmup 10 -MemoryProfileWaitRuns 20
-
-# With allocation stack traces (slower but shows where objects originate)
-Run-Tests.ps1 -TestName TestOlderProteomeDb -MemoryProfile -MemoryProfileWarmup 10 -MemoryProfileWaitRuns 20 -MemoryProfileCollectAllocations
-
-# Extended run for thread pool warm-up investigation
-Run-Tests.ps1 -TestName TestOlderProteomeDb -MemoryProfile -MemoryProfileWarmup 20 -MemoryProfileWaitRuns 50
-```
-
-**What happens:**
-1. Script launches TestRunner under dotMemory CLI profiler
-2. Test runs for warmup iterations (allows JIT/caching/thread pool to stabilize)
-3. Snapshot #1 taken automatically after warmup
-4. Test runs for wait iterations (analysis period)
-5. Snapshot #2 taken automatically
-6. Workspace saved to `ai/.tmp/memory-YYYYMMDD-HHMMSS.dmw`
-
-**Interpreting results:**
-
-| Observation | Indicates |
-|-------------|-----------|
-| Managed heap stable, few new objects | No managed leak (investigate unmanaged) |
-| Objects growing linearly with runs | Managed memory leak - investigate in GUI |
-| Thread pool objects (WorkStealingQueue) | Runtime warm-up artifact, not a true leak |
-| Large object delta with short warmup | Increase warmup runs (e.g., 20 instead of 10) |
-
-**Limitation:** dotMemory CLI cannot export comparison reports to JSON/XML (only produces binary `.dmw` workspace files). Visual analysis in dotMemory GUI is required to drill down into specific object types and allocation stack traces.
-
-**Benefits over manual GUI workflow:**
-- No human needed to launch dotMemory GUI and manually take snapshots
-- Precise snapshot timing (immediately after GC, at stable memory points)
-- Reproducible methodology for comparing leak investigations
-- Similar developer experience to `-Coverage` flag
 
 ## GC Leak Tracker: Object Lifecycle Verification (February 2026)
 
@@ -643,15 +673,22 @@ This produces a `.dmw` workspace file in `ai/.tmp/`.
 
 #### Step 3: Analyze retention paths in dotMemory GUI
 
-1. Open the `.dmw` file in dotMemory GUI
-2. Open the snapshot → find `SkylineWindow` (or `SrmDocument`) in type list
-3. Click through to **Key Retention Paths** tab
-4. The retention paths show exactly what's holding the object alive
+This step requires the developer — dotMemory has no text interface.
+
+1. Open the `.dmw` file in dotMemory GUI (double-click or File → Open)
+2. Open the snapshot → find `SkylineWindow` (or `SrmDocument`) in the type list
+3. Click through to the **Key Retention Paths** tab
+4. Use **Win+Shift+S** (rectangle mode) to screenshot just the retention path graph
+5. Tell Claude "I took a screenshot" — Claude will retrieve it via
+   `mcp__status__get_last_screenshot()` and read the image to analyze the retention chain
 
 **What to look for in the retention paths:**
 - The `GarbageCollectionTracker._pinnedSurvivors` path is the pinning reference itself — ignore it
 - Other paths are the actual leaks to fix
 - Common patterns: static fields, undisposed Timers, delegate chains, cached collections
+
+**Tip:** Rectangle-clip just the graph — full window screenshots of dotMemory include
+unnecessary chrome. Claude only needs the retention path tree to identify the leak.
 
 #### Step 4: Fix and verify
 

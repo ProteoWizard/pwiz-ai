@@ -81,7 +81,7 @@ claude mcp add imagecomparer -- C:/proj/pwiz/pwiz_tools/Skyline/Executables/DevT
    ```
    generate_diff_image(screenshotPath="C:/proj/pwiz/pwiz_tools/Skyline/Documentation/Tutorials/AbsoluteQuant/en/s-01.png")
    ```
-   Diff images are saved to `ai/.tmp/` with descriptive filenames including pixel count.
+   Diff images are saved to `ai/.tmp/screenshots/compare/` with descriptive filenames including pixel count.
 
 4. **Review the diff image:** Claude reads the saved PNG to visually inspect changes.
 

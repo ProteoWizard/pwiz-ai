@@ -182,23 +182,10 @@ Before writing code, read these files:
 
 ### Screenshots and Clipboard Images
 
-When a developer says "I took a screenshot", "check the clipboard", or "see this image":
+Two tools for two sources:
 
-1. **Use the MCP tool first**:
-   ```
-   mcp__status__get_last_screenshot()
-   ```
-   This checks clipboard first (Win+Shift+S, PrintScreen, Snipping Tool), then falls back to `~/Pictures/Screenshots/`.
+- **"I took a screenshot"** → `mcp__status__get_last_screenshot()` — Win+Shift+S screenshots
+- **"Check the clipboard"** → `mcp__status__get_clipboard_image()` — images copied from editors/browsers
 
-2. **Read the returned path** with the Read tool to view the image.
-
-**How it works**:
-- Clipboard images are saved to `ai/.tmp/screenshots/clipboard_YYYYMMDD_HHMMSS.png`
-- Windows 10: Win+Shift+S copies to clipboard only (no auto-save)
-- Windows 11: Win+Shift+S may auto-save to Pictures/Screenshots
-
-**If MCP tool unavailable**, check manually:
-```
-~/Pictures/Screenshots/
-```
-Screenshots follow the pattern: `Screenshot YYYY-MM-DD HHMMSS.png`
+Use `count` parameter to grab multiple screenshots at once (e.g., `count=3` for a series).
+Read the returned path(s) with the Read tool to view the image(s).
