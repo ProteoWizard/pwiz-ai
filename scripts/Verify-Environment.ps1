@@ -144,13 +144,20 @@ if (Test-Path $claudeJunctionPath) {
     Add-Result ".claude junction" "MISSING" "Run: cmd /c mklink /J .claude ai\claude (from project root)" $false
 }
 
-# CLAUDE.md stub
+# CLAUDE.md (synced from ai/root-CLAUDE.md)
 Write-Host "Checking CLAUDE.md..." -ForegroundColor Gray
 $claudeMdPath = Join-Path $projRoot "CLAUDE.md"
-if (Test-Path $claudeMdPath) {
-    Add-Result "CLAUDE.md" "OK" "exists at project root" $true
+$rootClaudeMdSource = Join-Path $aiRoot "root-CLAUDE.md"
+if (Test-Path $rootClaudeMdSource) {
+    if (-not (Test-Path $claudeMdPath) -or
+        (Get-Item $rootClaudeMdSource).LastWriteTime -gt (Get-Item $claudeMdPath).LastWriteTime) {
+        Copy-Item $rootClaudeMdSource $claudeMdPath -Force
+        Add-Result "CLAUDE.md" "OK" "synced from ai/root-CLAUDE.md" $true
+    } else {
+        Add-Result "CLAUDE.md" "OK" "up to date" $true
+    }
 } else {
-    Add-Result "CLAUDE.md" "MISSING" "Create stub at project root (see new-machine-setup.md)" $false
+    Add-Result "CLAUDE.md" "WARN" "ai/root-CLAUDE.md not found (git pull ai repo?)" $false
 }
 
 # settings.local.json

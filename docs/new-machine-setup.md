@@ -270,24 +270,8 @@ git clone git@github.com:ProteoWizard/pwiz-ai.git ai
 # Create .claude junction (enables Claude Code commands and skills)
 cmd /c mklink /J .claude ai\claude
 
-# Create CLAUDE.md stub (tells Claude Code where to find documentation)
-@"
-# Claude Code Configuration
-
-**Run Claude Code from this directory** (the project root).
-
-This directory is not a git repository. It contains sibling checkouts
-(``ai/``, ``pwiz/``, etc.) that are each their own git repo. Use
-``mcp__status__get_status`` to check git status of subdirectories.
-
-All Claude Code documentation lives in the **ai/** folder. See:
-- **ai/CLAUDE.md** - Critical configuration (PowerShell, paths, commands)
-- **ai/CRITICAL-RULES.md** - Absolute constraints
-- **ai/MEMORY.md** - Project context and gotchas
-
-The ``.claude/`` folder is a junction to ``ai/claude/``, providing access to
-commands, skills, and settings.
-"@ | Out-File -FilePath CLAUDE.md -Encoding utf8
+# Create root CLAUDE.md (copied from ai/root-CLAUDE.md, auto-updated by StatusMcp)
+Copy-Item ai\root-CLAUDE.md CLAUDE.md
 
 # Copy default Claude settings (pre-approved read operations)
 # NOTE: settings-defaults.local.json must NOT contain $schema or $comment fields.

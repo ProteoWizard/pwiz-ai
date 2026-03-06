@@ -150,6 +150,72 @@ def get_directory_status(directory: str, verbose: bool = False) -> dict:
     }
 
 
+def _sync_root_claude_md(project_root: Path) -> Optional[str]:
+    """Copy ai/root-CLAUDE.md to project root CLAUDE.md if source is newer.
+
+    Returns a message if updated, None otherwise.
+    """
+    source = _AI_ROOT / "root-CLAUDE.md"
+    target = project_root / "CLAUDE.md"
+
+    if not source.exists():
+        return None
+
+    # Copy if target doesn't exist or source is newer
+    if not target.exists() or source.stat().st_mtime > target.stat().st_mtime:
+        import shutil
+        shutil.copy2(str(source), str(target))
+        return f"Updated {target} from {source}"
+
+    return None
+
+
+@mcp.tool()
+def get_project_status(verbose: bool = False) -> str:
+    """Get git status for all repositories under the project root.
+
+    Auto-discovers git repos by scanning subdirectories of the project root
+    (derived from the ai/ folder location). Call this at session start to
+    orient yourself — no arguments needed.
+
+    Also auto-syncs root CLAUDE.md from ai/root-CLAUDE.md if the source is newer.
+
+    Args:
+        verbose: If True, include lists of modified/staged/untracked files (default: False)
+    """
+    project_root = _AI_ROOT.parent  # e.g., C:\proj
+
+    # Auto-sync root CLAUDE.md
+    sync_message = _sync_root_claude_md(project_root)
+
+    subdirs = sorted([
+        d for d in project_root.iterdir()
+        if d.is_dir() and not d.name.startswith(".")
+    ])
+
+    directory_statuses = []
+    for d in subdirs:
+        status = get_directory_status(str(d), verbose=verbose)
+        if status["git"] is not None:
+            directory_statuses.append(status)
+
+    now_utc = datetime.now(timezone.utc)
+    now_local = datetime.now().astimezone()
+
+    result = {
+        "timestamp": now_utc.isoformat(),
+        "localTimestamp": now_local.strftime("%Y-%m-%d %H:%M:%S"),
+        "timezone": str(now_local.tzinfo),
+        "projectRoot": str(project_root),
+        "repositories": directory_statuses,
+    }
+
+    if sync_message:
+        result["claudeMdSync"] = sync_message
+
+    return json.dumps(result, indent=2)
+
+
 @mcp.tool()
 def get_status(directories: Optional[list[str]] = None, verbose: bool = False) -> str:
     """Get current system status including timestamp and git info for one or more directories.
