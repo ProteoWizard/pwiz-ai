@@ -4,9 +4,10 @@
 - **Branch**: `Skyline/work/20260306_agilent_ims_file_locks`
 - **Base**: `master`
 - **Created**: 2026-03-06
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4057](https://github.com/ProteoWizard/pwiz/issues/4057)
 - **PR**: [#4058](https://github.com/ProteoWizard/pwiz/pull/4058)
+- **Merged**: 2026-03-06 (`bc140a8c9aec75ae0a9df7371d56dd9161f49140`)
 
 ## Objective
 
@@ -27,3 +28,10 @@ open until the GC finalizer thread runs (non-deterministically).
 
 Starting work on this issue. Fix is a 2-line change to the destructor, mirroring the existing
 pattern in `MassHunterDataImpl::~MassHunterDataImpl()` for DAD files.
+
+### 2026-03-06 - Completed
+
+PR #4058 merged to master. Fix nulls out `imsReader_` and `imsCcsReader_` gcroots before calling
+`GC::Collect()` + `WaitForPendingFinalizers()` so managed objects are eligible for collection in
+the same GC cycle, ensuring file handles are fully released before the rename check in the test
+harness.
