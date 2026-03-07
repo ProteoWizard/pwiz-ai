@@ -100,7 +100,7 @@
 
   - [x] Implement filtering in report definitions (filter array with 12 operations, "did you mean" errors)
   - [x] Implement sorting in get_report_from_definition (via RowFilter.ColumnSort, query-time only)
-  - [x] Implement pivotReplicate and pivotIsotopeLabel flags in report definitions
+  - [x] Implement pivot_replicate and pivot_isotope_label flags in report definitions
   - [x] Implement `get_open_forms`, `get_graph_data`, and `get_graph_image` MCP tools
     - Extracted JsonUiService.cs from JsonToolServer (UI interaction service layer)
     - Three abstraction levels: primitives, UI patterns, complete operations
@@ -160,6 +160,26 @@
     - [x] Coverage after Session 28: 82.1% (1553/1892 statements)
     - [x] Coverage after Session 29: 82.4% (1561/1895 statements)
   - [ ] Update testing-patterns.md documentation (partially done)
+  - [ ] Add "Configure Skyline to connect at startup" auto-connect feature (see Sessions 30-31)
+    - [x] Added `EnableMcpAutoConnect` setting to Settings.Default
+    - [x] Added `StartMcpConnection(string)` method to ToolService (single API: writes connection file + sets auto-connect)
+    - [x] Added `WriteConnectionInfo()` to JsonToolServer (JObject-based, Skyline owns connection file lifecycle)
+    - [x] Added auto-connect startup logic in Program.cs (starts ToolService + writes connection file when setting enabled)
+    - [x] Added `checkAutoConnect` checkbox to MainForm (between document label and buttons)
+    - [x] Connector now calls `StartMcpConnection` via RemoteClient instead of writing connection file directly
+    - [x] Replaced hand-built JSON strings with JObject construction throughout JsonToolServer, JsonTutorialCatalog, tests
+    - [x] Added `enum JSON` to JsonToolServer for protocol/connection/report property names (nameof-based access)
+    - [x] Added `enum JSON` to JsonTutorialCatalog for tutorial-specific property names
+    - [x] Added string constants (`LEVEL_*`, `CULTURE_*`, `SORT_*`, `DEFAULT_REPORT_NAME`) to JsonToolServer
+    - [x] Test updated: `BuildSelectJson`/`BuildSelectPivotJson` use JObject, all property access via `nameof(JSON.xxx)`
+    - [x] Create `IJsonToolService` interface + `JsonToolConstants` static class in SkylineTool project
+    - [x] Move all enums and constants from JsonToolServer/JsonTutorialCatalog to `JsonToolConstants`
+    - [x] Add `IJsonToolService` with all method signatures; `JsonToolServer` implements it
+    - [x] Linked-compile `IJsonToolService.cs` into SkylineMcpServer (bridges .NET 4.7.2 → 8.0)
+    - [x] Replace `connection.Call("GetVersion")` → `connection.Call(nameof(IJsonToolService.GetVersion))` throughout SkylineTools.cs
+    - [x] Consolidate duplicated connection file path logic (ConnectionInfo, SkylineConnection) into JsonToolConstants
+    - [x] Replace report/tutorial JSON property strings in SkylineTools.cs with `nameof()` on shared enums
+    - [x] Rename camelCase enum members to snake_case: autoConnect→auto_connect, pivotReplicate→pivot_replicate, pivotIsotopeLabel→pivot_isotope_label
   - [ ] Create PR
 
   ### Future enhancements (post-PR)
@@ -190,7 +210,7 @@
   - **Sorting**: ParseSortSpecs builds RowFilter.ColumnSort objects applied via BindingListSource.RowFilter
     in ExportJsonDefinitionReport. Sort is query-time only (not part of report definition) because
     Skyline report definitions don't support persisted sort order.
-  - **Pivot Replicate**: pivotReplicate=true sets SublistId to Root; false sets to replicate sublist.
+  - **Pivot Replicate**: pivot_replicate=true sets SublistId to Root; false sets to replicate sublist.
   - **Pivot Isotope Label**: Delegates to PivotReplicateAndIsotopeLabelWidget.PivotIsotopeLabel().
   - ColumnResolver.ResolveResult now exposes ColumnIndex for filter column resolution.
   - ColumnResolver.FindSuggestions changed from private to internal for reuse in filter errors.
@@ -904,3 +924,140 @@ Goal: MCP server survives Skyline restarts without requiring Claude Code restart
 - **Modified**: `SkylineMcpConnector/MainForm.Designer.cs` (Skyline Version label)
 - **Modified**: `SkylineMcpConnector/tool-inf/SkylineMcpConnector.properties` (AI Connector title)
 - **Modified**: `SkylineMcpConnector/tool-inf/info.properties` (expanded description)
+
+### Session 30 (2026-03-06) - Auto-connect checkbox + JSON cleanup
+
+Designed and partially implemented "Configure Skyline to connect at startup" feature and
+a major refactor to eliminate hand-built JSON strings across the codebase.
+
+#### Auto-connect design
+- User checks a checkbox in AI Connector → Skyline saves `EnableMcpAutoConnect` setting
+- On next Skyline startup, if enabled: `StartToolService()` + `WriteConnectionInfo()` automatically
+- Single new `ToolService.StartMcpConnection(string alwaysAtStartup)` method handles both:
+  writing the connection file (idempotent) and setting the auto-connect preference
+- Returns JSON `{"status":"started","autoConnect":true/false}` via JObject (not hand-built strings)
+- Connection file writing moved back into Skyline (JsonToolServer.WriteConnectionInfo) —
+  Skyline now owns full lifecycle (write on connect, delete on Dispose)
+
+#### JSON string cleanup
+- Added `enum JSON` to `JsonToolServer` with all protocol/connection/report property names
+- Added `enum JSON` to `JsonTutorialCatalog` with tutorial-specific property names
+- Replaced all `[@"property"]` string literals with `nameof(JSON.xxx)` — compile-time checked
+- Replaced all hand-built JSON (`string.Format(@"{{""prop"":""{0}""}}")`) with `JObject` construction
+- Added string constants for shared API values: `LEVEL_*`, `CULTURE_*`, `SORT_*`, `DEFAULT_REPORT_NAME`
+- Test refactored: `BuildSelectJson`/`BuildSelectPivotJson` now use `JObject` + `nameof()`,
+  filter/sort/pivot test JSON all constructed as JObject trees
+
+#### Architecture discussion → plan for Session 31
+- Identified that enums and constants should live in SkylineTool project (shared by all 3 processes)
+- Designed `IJsonToolService` interface (method contract) + `JsonToolConstants` static class (enums/constants)
+- Both in single file `IJsonToolService.cs` in SkylineTool/
+- SkylineMcpServer (NET 8.0) uses linked compile (`<Compile Include="..." Link="..." />`) to avoid
+  cross-framework DLL reference
+- `IJsonToolService` enables `nameof(IJsonToolService.GetVersion)` for all `connection.Call()` strings
+- Plan written to `C:\Users\brend\.claude\plans\hidden-pondering-sundae.md`
+
+#### Modified files (uncommitted)
+- **Modified**: `Properties/Settings.settings` (added EnableMcpAutoConnect)
+- **Modified**: `Properties/Settings.Designer.cs` (added EnableMcpAutoConnect property)
+- **Modified**: `ToolsUI/JsonToolServer.cs` (enum JSON, WriteConnectionInfo, nameof throughout)
+- **Modified**: `ToolsUI/JsonTutorialCatalog.cs` (own enum JSON, nameof throughout)
+- **Modified**: `ToolsUI/ToolService.cs` (StartMcpConnection method, JObject return)
+- **Modified**: `Program.cs` (auto-connect at startup)
+- **Modified**: `TestFunctional/JsonToolServerTest.cs` (JObject construction, nameof, shared constants)
+- **Modified**: `SkylineMcpConnector/MainForm.cs` (checkAutoConnect handler, ParseAutoConnect, removed direct connection file writing)
+- **Modified**: `SkylineMcpConnector/MainForm.Designer.cs` (checkAutoConnect checkbox, layout adjustments)
+
+### Session 31 (2026-03-06) - IJsonToolService + JsonToolConstants shared contract
+
+Implemented the shared contract designed in Session 30, eliminating all duplicated string
+literals across the 3-process architecture.
+
+#### IJsonToolService.cs (NEW in SkylineTool/)
+
+Single file containing both `IJsonToolService` interface and `JsonToolConstants` static class:
+
+- **`IJsonToolService`**: Contract with all 28 `public string` methods matching
+  `JsonToolServer`'s reflection-based dispatch filter. Enables `nameof(IJsonToolService.GetVersion)`
+  for compile-time checked method names in `SkylineTools.cs` Call() strings.
+- **`JsonToolConstants`**: Three enum types (`JSON`, `REPORT`, `TUTORIAL`) for JSON property
+  names via `nameof()`, API value constants (`LEVEL_*`, `CULTURE_*`, `SORT_*`), and connection
+  file infrastructure (`GetJsonPipeName`, `GetConnectionDirectory`, `GetConnectionFilePath`).
+
+#### Linked compile for .NET 8.0
+
+SkylineMcpServer.csproj uses `<Compile Include="..\..\..\..\SkylineTool\IJsonToolService.cs" Link="..." />`
+to share the file across the .NET 4.7.2 → 8.0 boundary without a cross-framework DLL reference.
+
+#### Constants consolidated (removed duplication)
+
+| Constant | Previously duplicated in | Now in |
+|----------|------------------------|--------|
+| `JSON_PIPE_PREFIX` | JsonToolServer, ConnectionInfo (Connector), SkylineConnection (Server) | `JsonToolConstants.JSON_PIPE_PREFIX` |
+| `DEPLOY_FOLDER_NAME` | JsonToolServer, McpServerDeployer, SkylineConnection | `JsonToolConstants.DEPLOY_FOLDER_NAME` |
+| `CONNECTION_FILE_PREFIX/EXT` | JsonToolServer, ConnectionInfo, SkylineConnection | `JsonToolConstants` |
+| `GetJsonPipeName()` | JsonToolServer, ConnectionInfo | `JsonToolConstants.GetJsonPipeName()` |
+| `GetConnectionDirectory()` | JsonToolServer, McpServerDeployer, SkylineConnection | `JsonToolConstants.GetConnectionDirectory()` |
+| `GetConnectionFilePath()` | JsonToolServer, ConnectionInfo | `JsonToolConstants.GetConnectionFilePath()` |
+| `LEVEL_*`, `CULTURE_*`, `SORT_*` | JsonToolServer (used by tests, SkylineTools via strings) | `JsonToolConstants` |
+
+#### Enum naming: camelCase → snake_case
+
+Renamed 3 enum members to follow CRITICAL-RULES convention (no backward compatibility concern
+since this API has only been used on the development machine):
+- `autoConnect` → `auto_connect`
+- `pivotReplicate` → `pivot_replicate`
+- `pivotIsotopeLabel` → `pivot_isotope_label`
+
+Updated all `nameof()` references and MCP tool description strings.
+
+#### Files changed
+
+- **New**: `SkylineTool/IJsonToolService.cs`
+- **Modified**: `SkylineTool/SkylineTool.csproj` (+Compile Include)
+- **Modified**: `SkylineMcpServer/SkylineMcpServer.csproj` (+linked Compile)
+- **Modified**: `ToolsUI/JsonToolServer.cs` (implements IJsonToolService, removed local enums/constants/path methods, using aliases for JSON/REPORT)
+- **Modified**: `ToolsUI/JsonTutorialCatalog.cs` (removed local enum, using alias for TUTORIAL)
+- **Modified**: `ToolsUI/ToolService.cs` (JsonToolConstants.JSON.auto_connect)
+- **Modified**: `SkylineMcpConnector/ConnectionInfo.cs` (removed duplicated constants/methods, uses JsonToolConstants)
+- **Modified**: `SkylineMcpConnector/McpServerDeployer.cs` (DeployDir delegates to JsonToolConstants.GetConnectionDirectory)
+- **Modified**: `SkylineMcpServer/SkylineConnection.cs` (removed duplicated constants/methods, uses JsonToolConstants, nameof(JSON.error/result))
+- **Modified**: `SkylineMcpServer/Tools/SkylineTools.cs` (all Call() strings use nameof(IJsonToolService.xxx), report/tutorial property access via nameof(REPORT/TUTORIAL.xxx), culture/report constants)
+- **Modified**: `SkylineMcpConnector/MainForm.cs` (nameof(JsonToolConstants.JSON.auto_connect))
+- **Modified**: `TestFunctional/JsonToolServerTest.cs` (using aliases JSON/REPORT/TUTORIAL, all constants via JsonToolConstants)
+
+#### Design discussion: future POCO marshalling layer
+
+User noted that `IJsonToolService` with all-string parameters/returns "screams out a lack
+of strong typing." Future evolution: a marshalling layer that hides JSON entirely, with
+POCOs that get serialized/deserialized by the layer. The current `IJsonToolService` is a
+stepping stone — it eliminates string duplication today while enabling incremental evolution
+toward typed contracts.
+
+#### Build and test status
+- Skyline solution builds with zero errors
+- JsonToolServerTest passes
+
+#### Manual integration testing (auto-connect checkbox)
+
+Full end-to-end testing session (context was rewound to make room for TODO update):
+
+1. **Checkbox state persistence within Skyline instance**: Checked the auto-connect checkbox
+   in AI Connector, closed Connector, reopened it — checkbox state persisted correctly
+   (read back from `EnableMcpAutoConnect` setting via `StartMcpConnection` response)
+2. **Checkbox state persistence across Skyline instances**: Closed Skyline entirely,
+   restarted — checkbox state persisted (setting saved to user config)
+3. **Auto-connect without Connector**: With checkbox enabled, started Skyline without
+   opening AI Connector — MCP server connected successfully via Claude Code's skyline
+   tools. Program.cs auto-connect logic works: starts ToolService, writes connection file
+4. **Disabling auto-connect**: Unchecked the checkbox, closed AI Connector, closed Skyline —
+   Claude Code got "No Skyline instance is connected" message (connection file cleaned up
+   on JsonToolServer.Dispose, and no auto-connect on next start)
+5. **Restart without auto-connect**: Restarted Skyline without opening AI Connector —
+   confirmed Claude Code still could not connect (auto-connect disabled, no connection file)
+6. **Manual reconnect via AI Connector**: Opened AI Connector — connection restored
+   immediately, MCP tools working again
+
+All scenarios behaved exactly as designed. The MCP server's resilient connection architecture
+(TryConnect with helpful messages, per-call connection lifecycle) provided clear feedback
+throughout.
