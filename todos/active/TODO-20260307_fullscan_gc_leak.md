@@ -6,7 +6,7 @@
 - **Created**: 2026-03-07
 - **Status**: In Progress
 - **GitHub Issue**: [#4060](https://github.com/ProteoWizard/pwiz/issues/4060)
-- **PR**: (pending)
+- **PR**: [#4061](https://github.com/ProteoWizard/pwiz/pull/4061)
 - **Fix Type**: failure
 - **Test Name**: TestFullScanProperties
 
