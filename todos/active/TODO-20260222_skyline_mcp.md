@@ -47,7 +47,7 @@
 
   ## What's Working (end of phase 2)
 
-  ### MCP Tools (34 tools)
+  ### MCP Tools (35 tools)
 
   **Document info:**
   - `skyline_get_document_path`, `skyline_get_version`, `skyline_get_document_status`
@@ -74,8 +74,8 @@
   **Tutorials:**
   - `skyline_get_available_tutorials`, `skyline_get_tutorial`, `skyline_get_tutorial_image`
 
-  **Multi-instance:**
-  - `skyline_get_instances`, `skyline_set_instance`
+  **Multi-instance & diagnostics:**
+  - `skyline_get_instances`, `skyline_set_instance`, `skyline_set_logging`
 
   **Document-modifying:**
   - `skyline_add_report`, `skyline_import_fasta`, `skyline_import_properties`
@@ -131,6 +131,13 @@
 
   ### Known Issues
 
+  - **Report export streaming bypasses pivot processing** (UPSTREAM):
+    `RowFactories.ExportReport` streaming path skips `BindingListSource` when layout has no
+    RowTransforms and columnSorts is null/empty, even when `viewSpec.HasTotals`. Affects
+    File > Export > Report and named-report API. Document Grid UI unaffected. Our
+    `ExportJsonDefinitionReport` has a workaround (inject sort on first GroupBy column).
+    Filed as [#4062](https://github.com/ProteoWizard/pwiz/issues/4062), assigned to Nick.
+    Pick up fix into our branch before merge.
   - **Report definition pivoting** (FIXED): `ColumnResolver` now tries all row sources and
     prefers the one with the shallowest SublistId. `IndexColumn` helper prefers paths with
     fewer collection steps. `IsCheckableParent` indexes AnnotatedDouble parent types.
@@ -317,3 +324,30 @@
   - `JsonToolServer.cs` — Rewrote GetReportDocTopics/GetReportDocTopic, removed dead code
   - `JsonToolServerTest.cs` — Updated TestReportDocumentation with group-based tests
   - `Text.cs` — Added FlattenToSingleLine extension method
+
+  ### Session 37 (2026-03-08): Added diagnostic logging infrastructure
+
+  - **ToolLog class** in JsonToolServer: request-scoped log accumulator with elapsed-ms
+    timestamps. Created only when `"log": true` in request JSON; zero overhead otherwise.
+  - **`Log()` protected method**: no-op null check when logging off, safe to call from
+    any tool method unconditionally.
+  - **HandleRequest lifecycle**: creates ToolLog per-request, clears in finally block.
+    SerializeResult/SerializeError include log content when present.
+  - **`log` added to JSON enum** in IJsonToolService.cs (shared contract).
+  - **SkylineConnection**: `LoggingEnabled` and `LastLog` static properties. `Call()` sends
+    `"log": true` when enabled and extracts log field from response.
+  - **`skyline_set_logging` MCP tool**: toggle for enabling/disabling logging.
+  - **`Invoke()` in SkylineTools**: appends `--- Diagnostic Log ---` section to tool
+    results when log content is present.
+  - **Log calls added to**: `ResolveJsonReportDefinition` (column names, resolution result,
+    filters, pivot settings), `AddReportFromDefinition` (save), `ExportNamedReport` (entry),
+    `ExportJsonDefinitionReport` (pivot sort injection, export).
+  - **Test**: `TestDiagnosticLogging` covers log absent when not requested, absent when no
+    Log() calls, and present with content for ExportReportFromDefinition.
+  - **nameof() cleanup**: Replaced string literal method names in TestDispatch and
+    TestDiagnosticLogging with `nameof(IJsonToolService.MethodName)`.
+  - **Manual MCP testing**: Verified with live Skyline instance — logging shows timing for
+    column resolution, pivot application, filter application, and export.
+  - **Filed [#4062](https://github.com/ProteoWizard/pwiz/issues/4062)**: Report export
+    streaming path in RowFactories bypasses pivot processing (affects File > Export > Report
+    and named-report API). Assigned to Nick.
