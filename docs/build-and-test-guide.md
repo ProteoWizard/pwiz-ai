@@ -726,6 +726,8 @@ Ensure you're running TestRunner.exe from the output directory (`bin\x64\Debug`)
 Get-Process -Name 'SkylineTester','TestRunner','Skyline*' -ErrorAction SilentlyContinue | Stop-Process -Force
 ```
 
+**WARNING: MCP server sessions** - The `Skyline*` glob above also matches `SkylineMcpServer.exe`. If a Claude Code session is connected to Skyline via the MCP server, killing `SkylineMcpServer.exe` will break that connection. When working with MCP, prefer killing only the specific Skyline instance (e.g., by process ID from `skyline_get_process_id`) or use `'Skyline-daily'` instead of `'Skyline*'` to avoid killing `SkylineMcpServer.exe`.
+
 **Note**: During an established dev-build-test loop (like debugging with SkylineTester --autorun), the developer may grant blanket permission to stop test processes as needed. See [skylinetester-debugging-guide.md](skylinetester-debugging-guide.md) for automated debugging workflows.
 
 ## Pre-Commit Validation (Recommended)

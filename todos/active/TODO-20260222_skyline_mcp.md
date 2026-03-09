@@ -124,9 +124,10 @@
     - **Needs commit** and code coverage check (connection file I/O likely uncovered)
   - [x] Fix ColumnResolver row source selection and path preference for report definitions
   - [ ] Add unit tests for multi-instance connection file writing/cleanup
-  - [ ] Audit LlmInstruction usage: review all string literals in JsonToolServer.cs and
+  - [x] Audit LlmInstruction usage: review all string literals in JsonToolServer.cs and
     SkylineMcpServer tools for consistency — error messages meant for LLM consumption
     should use `LlmInstruction()` wrapper, not bare string literals
+  - [x] Add LlmName attribute for user-friendly settings list names
   - [ ] Create PR
 
   ### Known Issues
@@ -402,3 +403,42 @@
   - `JsonToolServer.cs` — uimode handling in ResolveJsonReportDefinition
   - `JsonToolServerTest.cs` — VerifyRowSource helper, 4 row source selection assertions
   - `ai/docs/build-and-test-guide.md` — Interactive MCP Testing workflow section
+
+  ### Session 39 (2026-03-09): Added LlmName attribute and LlmInstruction cleanup
+
+  - **Added `[LlmName]` attribute** to `IJsonToolService.cs` (shared contract): simple
+    `[AttributeUsage(AttributeTargets.Class)]` attribute providing culture-invariant,
+    user-friendly names for settings list classes (e.g., "Isotope Modifications" for
+    `HeavyModList`)
+  - **Applied `[LlmName("...")]`** to all 30 settings list classes: 25 in Settings.cs,
+    plus ListDefList, GroupComparisonDefList, RemoteAccountList, MetadataRuleSetList,
+    and PersistedViews
+  - **Rewrote `GetSettingsListTypes()`**: returns sorted single-column LlmName values
+    instead of tab-separated property name + localized title
+  - **Updated `GetSettingsListNames()`/`GetSettingsListItem()`**: accept LlmName as
+    `listType` parameter, fall back to property name for backward compatibility
+  - **Added `GetSettingsListName<T>()`**: public static helper for test code to get
+    LlmName from type without string literals
+  - **LlmInstruction cleanup** across JsonToolServer, JsonTutorialCatalog, JsonUiService:
+    wrapped all bare LLM-facing string literals in error messages and return values,
+    used new static helpers (`LlmInstruction.Format()`, `.SpaceSeparate()`,
+    `.TabSeparate()`) to replace verbose `new LlmInstruction(string.Format(...))` patterns
+  - **Build script safety**: excluded `SkylineMcpServer` from process detection and
+    suggested kill command to avoid breaking active MCP sessions during builds
+  - **Updated `build-and-test-guide.md`**: warning about `Skyline*` glob matching
+    `SkylineMcpServer.exe`
+
+  **Files changed:**
+  - `IJsonToolService.cs` — LlmNameAttribute class
+  - `Settings.cs` — [LlmName] on 25 classes
+  - `ListDefList.cs`, `GroupComparisonDefList.cs`, `RemoteAccountList.cs`,
+    `MetadataRuleSetList.cs` — [LlmName] attributes
+  - `PersistedViews.cs` — [LlmName("Reports")]
+  - `JsonToolServer.cs` — BuildLlmNameMap, ResolveLlmListType, GetSettingsListName<T>,
+    sorted output, LlmInstruction cleanup
+  - `JsonTutorialCatalog.cs` — LlmInstruction cleanup
+  - `JsonUiService.cs` — LlmInstruction.Format cleanup
+  - `Text.cs` — LlmInstruction.Format, SpaceSeparate, TabSeparate static helpers
+  - `JsonToolServerTest.cs` — Updated for LlmName-based API, backward compat tests
+  - `Build-Skyline.ps1` — Exclude SkylineMcpServer from process kill
+  - `build-and-test-guide.md` — MCP server warning

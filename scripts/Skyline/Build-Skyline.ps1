@@ -150,7 +150,9 @@ if ($repoRoot) {
 
 # Check for running test processes that would block the build
 # Only block on processes running from THIS build directory (not other installations like D:\Nightly)
-$testProcesses = Get-Process -Name 'SkylineTester', 'TestRunner', 'Skyline*' -ErrorAction SilentlyContinue
+# Exclude SkylineMcpServer - it does not lock build outputs and killing it breaks active MCP sessions
+$testProcesses = Get-Process -Name 'SkylineTester', 'TestRunner', 'Skyline*' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -ne 'SkylineMcpServer' }
 $blockingProcesses = @()
 $skylineRootNormalized = $skylineRoot.Replace('/', '\').TrimEnd('\').ToLower()
 
@@ -184,7 +186,7 @@ if ($blockingProcesses) {
     Write-Host "Ask the developer: 'May I stop $processNames to proceed with the build?'" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "If approved, run:" -ForegroundColor Gray
-    Write-Host "  Get-Process -Name 'SkylineTester','TestRunner','Skyline*' -ErrorAction SilentlyContinue | Stop-Process -Force" -ForegroundColor White
+    Write-Host "  Get-Process -Name 'SkylineTester','TestRunner','Skyline*' -ErrorAction SilentlyContinue | Where-Object { `$_.Name -ne 'SkylineMcpServer' } | Stop-Process -Force" -ForegroundColor White
     Write-Host ""
     exit 2  # Special exit code indicating process block (not build failure)
 }
