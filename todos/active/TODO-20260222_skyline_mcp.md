@@ -2,9 +2,9 @@
   - **Branch**: `Skyline/work/20260222_skyline_mcp`
   - **Base**: `master`
   - **Created**: 2026-02-22
+  - **Work started**: 2026-02-27
   - **Status**: In Progress
-  - **GitHub Issue**: (pending)
-  - **PR**: (pending)
+  - **PR**: [#4065](https://github.com/ProteoWizard/pwiz/pull/4065)
 
   ## Overview
 
@@ -128,7 +128,7 @@
     SkylineMcpServer tools for consistency — error messages meant for LLM consumption
     should use `LlmInstruction()` wrapper, not bare string literals
   - [x] Add LlmName attribute for user-friendly settings list names
-  - [ ] Create PR
+  - [x] Create PR — [#4065](https://github.com/ProteoWizard/pwiz/pull/4065)
 
   ### Known Issues
 
@@ -162,8 +162,7 @@
     returned as "invariant" are actually mode-dependent. Low priority since column resolution
     works correctly for the current mode, but the doc topics may confuse an LLM that sees
     molecule-mode names when the user is in proteomic mode or vice versa.
-  - **CV Histogram title**: View > Peak Areas > CV Histogram shows "Peak Areas - Histogram"
-    instead of "Peak Areas - CV Histogram" (cosmetic, low priority)
+  - ~~CV Histogram title~~ (Filed as [#4064](https://github.com/ProteoWizard/pwiz/issues/4064), not related to this branch)
   - ~~NormalizedArea column name~~ (FIXED in session 35)
 
   ### Future enhancements (post-PR)
