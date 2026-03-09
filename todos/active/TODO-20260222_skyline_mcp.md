@@ -123,7 +123,7 @@
     - Manually tested with two Skyline instances — working
     - **Needs commit** and code coverage check (connection file I/O likely uncovered)
   - [x] Fix ColumnResolver row source selection and path preference for report definitions
-  - [ ] Add unit tests for multi-instance connection file writing/cleanup
+  - [x] Clean up stale connection files and fix shutdown cleanup
   - [x] Audit LlmInstruction usage: review all string literals in JsonToolServer.cs and
     SkylineMcpServer tools for consistency — error messages meant for LLM consumption
     should use `LlmInstruction()` wrapper, not bare string literals
@@ -442,3 +442,34 @@
   - `JsonToolServerTest.cs` — Updated for LlmName-based API, backward compat tests
   - `Build-Skyline.ps1` — Exclude SkylineMcpServer from process kill
   - `build-and-test-guide.md` — MCP server warning
+
+  ### Session 40 (2026-03-09): Cleaned up stale connection files and fixed shutdown cleanup
+
+  - **Moved stale cleanup into `FindConnectionFiles()`** in SkylineConnection.cs: checks each
+    file's PID with `IsSkylineProcess()` as it's loaded, only returns files with live Skyline
+    processes, deletes the rest. Every code path (TryConnect, GetAvailableInstances,
+    GetConnectionStatus) now cleans up stale files automatically.
+  - **Replaced `IsProcessAlive()` with `IsSkylineProcess()`**: checks both that the PID exists
+    AND that the process name starts with "Skyline" (case-insensitive). Handles Windows PID
+    reuse where a stale file's PID gets recycled to a non-Skyline process.
+  - **Removed `CleanupStaleFiles()` method**: no longer needed since FindConnectionFiles handles it.
+  - **Simplified callers**: removed stale-tracking lists from TryConnect (~10 lines),
+    GetAvailableInstances (~5 lines), and GetConnectionStatus (complete rewrite to 4 lines).
+  - **Removed legacy `connection.json` handling**: no legacy files exist (pre-PR branch code).
+  - **Added `CleanupStaleConnectionFiles()` to JsonToolServer.cs**: called at end of
+    `WriteConnectionInfo()`, so Skyline instances clean up stale files from dead instances at
+    startup even when no MCP server is running. Duplicates `IsSkylineProcess` (different runtimes).
+  - **Diagnosed shutdown cleanup failure**: used printf debugging to trace form lifecycle.
+    Found `SkylineWindow.OnHandleDestroyed` calls `Process.GetCurrentProcess().Kill()` — a
+    legacy hack to avoid "invalid string binding" errors from native vendor DLLs. This kills
+    the process before `Application.Run()` returns, so `StopToolService()` in Program.Main
+    never executed.
+  - **Moved `StopToolService()` call** from after `Application.Run()` in Program.cs to
+    `OnHandleDestroyed` in Skyline.cs, before the `Process.Kill()` hack. Added clear comments
+    warning that code after `Application.Run()` will never run.
+
+  **Files changed:**
+  - `SkylineConnection.cs` — IsSkylineProcess, TryDeleteFile, simplified callers, removed legacy
+  - `JsonToolServer.cs` — CleanupStaleConnectionFiles, IsSkylineProcess
+  - `Program.cs` — Removed StopToolService call, added warning comments
+  - `Skyline.cs` — Added StopToolService call in OnHandleDestroyed, improved HACK comment
