@@ -540,6 +540,57 @@ cd bin\x64\Debug
 .\TestRunner.exe log=Test.log buildcheck=1 test=Test.dll
 ```
 
+### Workflow: Interactive MCP Testing with a Running Skyline Instance
+
+When developing MCP server features or testing report definitions interactively,
+you can launch Skyline with a document and interact with it through the MCP tools.
+This requires the developer to have run `SkylineMcpConnector` and checked
+"Configure Skyline to connect at startup".
+
+**Launch command** (use `--opendoc` to bypass the StartPage):
+```bash
+"C:/proj/pwiz/pwiz_tools/Skyline/bin/x64/Debug/Skyline-daily.exe" --opendoc "path/to/document.sky"
+```
+
+Run in the background so the Claude session remains responsive:
+```bash
+# Launch Skyline in the background
+Bash(run_in_background=true):
+  "C:/proj/pwiz/pwiz_tools/Skyline/bin/x64/Debug/Skyline-daily.exe" --opendoc "path/to/document.sky"
+```
+
+Wait a few seconds for Skyline to finish loading, then use MCP tools
+(`skyline_set_logging`, `skyline_add_report`, `skyline_get_settings_list_item`, etc.)
+to interact with the running instance.
+
+**Stop Skyline** when done testing or before rebuilding:
+```bash
+taskkill //IM Skyline-daily.exe //F
+```
+
+**Full edit-build-test cycle**:
+
+```
+1. Edit code
+2. Stop Skyline (if running)     <-- MUST stop before building
+3. Build
+4. [Optional] Run automated tests
+5. Launch Skyline with --opendoc
+6. Test interactively via MCP tools
+7. If fixes needed, go to step 1
+```
+
+**Critical**: Always stop Skyline **before** building. The running process holds
+file locks on the DLLs and EXEs that MSBuild needs to overwrite. If you forget,
+the build will fail with file-in-use errors. The correct sequence is:
+stop -> build -> launch, never build -> stop -> launch.
+
+**Useful MCP tools for interactive testing**:
+- `skyline_set_logging` - Enable diagnostic logs to see resolution details
+- `skyline_add_report` - Add a report definition from JSON
+- `skyline_get_settings_list_item` - Inspect saved report XML definitions
+- `skyline_get_report_from_definition` - Test a report without saving it
+
 ## Output Interpretation
 
 ### Build Output (verbosity:minimal)

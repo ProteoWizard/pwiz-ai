@@ -139,10 +139,12 @@
     Filed as [#4062](https://github.com/ProteoWizard/pwiz/issues/4062), assigned to Nick.
     Pick up fix into our branch before merge.
   - **Report definition pivoting** (FIXED): `ColumnResolver` now tries all row sources and
-    prefers the one with the shallowest SublistId. `IndexColumn` helper prefers paths with
-    fewer collection steps. `IsCheckableParent` indexes AnnotatedDouble parent types.
-    Result: `["PeptideSequence", "ReplicateName", "NormalizedAreaRaw"]` now correctly
-    produces Peptide row source with `Results!*` sublist (546 rows, 3 columns).
+    picks the one that minimizes total collection steps across all resolved paths. This
+    matches `DocumentViewTransformer.ConvertFromDocumentView` which picks the deepest entity
+    level any column touches. E.g., `[PeptideModifiedSequence, PrecursorMz, Area]` now
+    correctly resolves to Transition (1 collection step for Results!*) instead of Peptide
+    (4 collection steps through Precursors!*.Transitions!*.Results!*). Replicate row source
+    is still preferred when all paths go through collections (replicate-centric queries).
   - **NormalizedArea column name** (FIXED): `NormalizedArea` now resolves. Root cause was
     that `IsNestedColumn` (ChildDisplayName attribute) took priority over `IsCheckableParent`
     in `TraverseColumns`, so the parent was never indexed. Fixed by checking both.
@@ -151,6 +153,14 @@
     is null/empty, bypassing BindingListSource which processes PivotKey/PivotValue. Fix:
     when `viewSpec.HasTotals`, inject a sort on the first GroupBy column to force the
     BindingListSource path. See session 36.
+  - **Report doc topics use MemoryDataSchema, not SkylineWindow UI mode**: `GetReportDocTopics`
+    and `GetReportDocTopic` create a `MemoryDataSchema` with `DataSchemaLocalizer.INVARIANT`,
+    which doesn't have a `SkylineWindow` reference. The `DefaultUiMode` falls through to
+    `mixed` regardless of the actual window mode. This means topic names and column counts
+    don't change when switching between Proteomics/Molecule/Mixed modes. The column names
+    returned as "invariant" are actually mode-dependent. Low priority since column resolution
+    works correctly for the current mode, but the doc topics may confuse an LLM that sees
+    molecule-mode names when the user is in proteomic mode or vice versa.
   - **CV Histogram title**: View > Peak Areas > CV Histogram shows "Peak Areas - Histogram"
     instead of "Peak Areas - CV Histogram" (cosmetic, low priority)
   - ~~NormalizedArea column name~~ (FIXED in session 35)
@@ -351,3 +361,44 @@
   - **Filed [#4062](https://github.com/ProteoWizard/pwiz/issues/4062)**: Report export
     streaming path in RowFactories bypasses pivot processing (affects File > Export > Report
     and named-report API). Assigned to Nick.
+
+  ### Session 38 (2026-03-09): Fixed ColumnResolver row source selection to match ViewEditor
+
+  - **Rewrote row source selection algorithm** in `ColumnResolver.Resolve()`:
+    - Old: tried row sources shallowest-first, early-returned on first non-all-collection
+      match, or preferred shallowest SublistId for all-collection matches
+    - New: tries all row sources and picks the one minimizing total collection steps across
+      all resolved paths. Ties broken by first (shallowest) match. Replicate still preferred
+      when all paths go through collections.
+    - This matches `DocumentViewTransformer.ConvertFromDocumentView` which checks deepest
+      entity level first. From the correct row source, entity columns resolve via navigation
+      up (no collections), only result columns traverse Results!*.
+    - Example: `[PeptideModifiedSequence, PrecursorMz, Area]` now resolves to Transition
+      (1 step: Results!*) instead of Peptide (4 steps: Precursors!*.Transitions!*.Results!*)
+  - **Added `TotalCollectionSteps()` helper**: sums `CountCollectionSteps` across all paths.
+  - **Added `uimode` support for saved reports**:
+    - Added `uimode` to `REPORT` enum in `IJsonToolService.cs`
+    - `ResolveJsonReportDefinition` now sets `ViewSpec.UiMode` from explicit JSON `uimode`
+      parameter, or defaults to `UiModes.FromDocumentType(Program.MainWindow.ModeUI)`
+    - Reports created via JSON now get correct `uimode` attribute, matching ViewEditor
+  - **Added row source selection tests** in `JsonToolServerTest.cs`:
+    - `VerifyRowSource` helper method
+    - Tests: Area->Transition, TotalArea->Precursor, PeptideModifiedSequence->Peptide,
+      ProteinName+ProteinDescription->Protein
+  - **MCP validation** with ABSciex CalCurve document (8 reports at all entity levels):
+    - All row sources correct (Protein, Peptide, Precursor, Transition)
+    - All column paths use navigation up (short paths), no downward collection traversal
+    - All sublists shallow (Results!* or empty)
+    - XML definitions match UI-created reports (verified Peptide and Precursor levels)
+  - **Discovered**: `MemoryDataSchema` doesn't reflect `SkylineWindow.ModeUI` for report
+    doc topics. Topic names and counts don't change between modes. Recorded as known issue.
+  - **Updated `ai/docs/build-and-test-guide.md`**: Added "Interactive MCP Testing" workflow
+    section documenting the --opendoc launch, edit-build-test cycle, and the critical rule
+    to stop Skyline before building.
+
+  **Files changed** (uncommitted):
+  - `ColumnResolver.cs` — TotalCollectionSteps, rewrote Resolve() selection algorithm
+  - `IJsonToolService.cs` — Added uimode to REPORT enum
+  - `JsonToolServer.cs` — uimode handling in ResolveJsonReportDefinition
+  - `JsonToolServerTest.cs` — VerifyRowSource helper, 4 row source selection assertions
+  - `ai/docs/build-and-test-guide.md` — Interactive MCP Testing workflow section
