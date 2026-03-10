@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260307_fullscan_gc_leak`
 - **Base**: `master`
 - **Created**: 2026-03-07
-- **Status**: In Progress
+- **Status**: Merged
 - **GitHub Issue**: [#4060](https://github.com/ProteoWizard/pwiz/issues/4060)
 - **PR**: [#4061](https://github.com/ProteoWizard/pwiz/pull/4061)
 - **Fix Type**: failure
@@ -18,10 +18,18 @@ survive GC after TestFullScanProperties. Root cause is in GraphFullScan.OnClosed
 
 ## Tasks
 
-- [ ] Add `base.OnClosed(e)` call to `GraphFullScan.OnClosed`
-- [ ] Clear `PropertiesSheet.SelectedObject = null` in `GraphFullScan.OnClosed` to break
+- [x] Add `base.OnClosed(e)` call to `GraphFullScan.OnClosed`
+- [x] Clear `PropertiesSheet.SelectedObject = null` in `GraphFullScan.OnClosed` to break
       COM/accessibility chain from PropertyGrid through to SkylineWindow
-- [ ] Verify fix by running TestFullScanProperties in stress/loop mode
+- [x] Verify fix by running TestFullScanProperties in stress/loop mode
+
+## Resolution
+
+- **Status**: Fixed and merged
+- **Merge commit**: `c139a3a05c8c01ed0ecad68a0f17e0da755582ef`
+- **Fix summary**: Added `base.OnClosed(e)` call and `PropertiesSheet.SelectedObject = null`
+  in `GraphFullScan.OnClosed` to break the COM/accessibility retain cycle that kept
+  SkylineWindow and SrmDocument alive past GC after the test.
 
 ## Progress Log
 
@@ -34,3 +42,9 @@ Two candidates for the leak:
    _documentContainer → SkylineWindow alive past the FlushMemory GC passes
 
 Fix: clear SelectedObject and call base in GraphFullScan.OnClosed.
+
+### 2026-03-10 - Merged
+
+PR [#4061](https://github.com/ProteoWizard/pwiz/pull/4061) merged to master.
+Merge commit: `c139a3a05c8c01ed0ecad68a0f17e0da755582ef`
+Branch `Skyline/work/20260307_fullscan_gc_leak` deleted.
