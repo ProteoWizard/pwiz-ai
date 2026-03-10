@@ -6,10 +6,10 @@ For detailed release procedures, see `ai/docs/release-guide.md`.
 
 ## Current State
 
-**Phase**: FEATURE COMPLETE (Release Candidate)
+**Phase**: POST-RELEASE PATCH (Major release shipped)
 **Release Branch**: `Skyline/skyline_26_1`
-**Release Version**: 26.0.9.xxx
-**Master Version**: 26.1.1.xxx
+**Released Version**: Skyline 26.1.0.057 (Feb 26, 2026)
+**Master Version**: 26.1.1.xxx (daily builds)
 **Branch Created**: 2026-01-04
 
 ## Release Cycle Phases
@@ -46,15 +46,28 @@ For detailed release procedures, see `ai/docs/release-guide.md`.
 
 **Current release branch**: `Skyline/skyline_26_1`
 
-### 3. Post-Release Patch Mode
+### 3. Post-Release Patch Mode ← CURRENT PHASE
 
 **When**: Major release shipped, critical fixes may be needed
 
-- Release branch used only for critical bug fixes
-- Master continues normal development
-- Cherry-picks are rare (critical fixes only)
+- Release branch used only for **critical** bug fixes (crashes, data loss, security)
+- Master continues normal development — most PRs go here only
+- Cherry-picks are **rare** and require justification
+- The release branch diverges increasingly from master over time
 
-**Cherry-pick policy**: Only critical bug fixes affecting released users
+**Cherry-pick policy**:
+- **Default is NO cherry-pick** — do not add the label unless criteria below are met
+- Only cherry-pick if ALL of these are true:
+  1. The bug affects **released users** (not just daily/master users)
+  2. The bug is **critical** (crash, data loss, corruption, security, or blocks a common workflow)
+  3. The **code being fixed exists on the release branch** — verify with:
+     ```bash
+     git log Skyline/skyline_26_1 -- path/to/file.cs | head -3
+     ```
+     If the file or code path was added after the release branch was created, it is
+     master-only code and cherry-picking makes no sense
+- New features, refactoring, and non-critical bugs: **master only** (no label)
+- When in doubt, do NOT add the label — ask the team lead
 
 ### 4. Release Branch Dormant
 
@@ -66,16 +79,30 @@ For detailed release procedures, see `ai/docs/release-guide.md`.
 
 ## Quick Decision Tree: Should I Cherry-Pick?
 
+### During FEATURE COMPLETE (pre-release)
 ```
-Is there an active release branch in RC/patch mode?
-├── No → Just merge to master
-└── Yes → Is this a bug fix?
-    ├── No (feature/refactor) → Master only
-    └── Yes → Add "Cherry pick to release" label
-        └── Is it critical/blocking?
-            ├── Yes → Consider direct commit to release branch
-            └── No → Label is sufficient, auto-cherry-pick on merge
+Is this a bug fix?
+├── No (feature/refactor) → Master only
+└── Yes → Add "Cherry pick to release" label
+    └── Is it critical/blocking?
+        ├── Yes → Consider direct commit to release branch
+        └── No → Label is sufficient, auto-cherry-pick on merge
 ```
+
+### During POST-RELEASE PATCH (current phase)
+```
+Is this a bug fix?
+├── No → Master only (no label)
+└── Yes → Is it critical (crash, data loss, security, blocks common workflow)?
+    ├── No → Master only (no label)
+    └── Yes → Does the affected code exist on the release branch?
+        ├── No (code was added after branch point) → Master only (no label)
+        └── Yes → Add "Cherry pick to release" label
+```
+
+**Important**: As time passes after a major release, master and the release branch
+diverge significantly. Code added to master after the branch point does NOT exist
+on the release branch. Always verify before labeling.
 
 ## Cherry-Pick Label Gotchas
 
