@@ -597,7 +597,6 @@ clickAndWait(Locator.linkWithText("My Settings Page"));
 
 `DataRegionTable` (`org.labkey.test.util.DataRegionTable`) wraps LabKey Data Region grids — any `<table>` with a `data-region-name` attribute.
 
-**Construction:**
 ```java
 // By data-region-name attribute
 DataRegionTable table = new DataRegionTable("MyTable", getDriver());
@@ -606,49 +605,9 @@ DataRegionTable table = new DataRegionTable("MyTable", getDriver());
 DataRegionTable table = DataRegionTable.findDataRegionWithinWebpart(this, "My Webpart");
 ```
 
-**Reading data:**
-```java
-int rowCount = table.getDataRowCount();
-String value = table.getDataAsText(0, "ColumnName");
-int rowIdx = table.getRowIndex("ColumnName", "expected value");
-WebElement link = table.link(0, "ColumnName");
-String href = table.getHref(0, "ColumnName");
-```
+Supports reading data by row/column, row selection, filtering, sorting, column management, and pagination — see the `DataRegionTable` source for the full API.
 
-**Row selection:**
-```java
-table.checkAllOnPage();
-table.uncheckAllOnPage();
-table.checkCheckbox(0);
-table.checkCheckboxByPrimaryKey("123");
-```
-
-**Filtering and sorting:**
-```java
-table.setFilter("ColumnName", "Equals", "value");
-table.clearFilter("ColumnName");
-table.clearAllFilters();
-table.setSort("ColumnName", SortDirection.ASC);
-```
-
-**Column management:**
-```java
-table.ensureColumnPresent("ColumnName");
-table.ensureColumnsPresent("Col1", "Col2", "Col3");
-int colIdx = table.getColumnIndex("ColumnName");       // Returns -1 if not found
-int colIdx = table.getColumnIndexStrict("ColumnName");  // Throws if not found
-```
-
-**Pagination:**
-```java
-table.pageFirst();
-table.pageNext();
-table.pageLast();
-table.setPageSize(100);
-table.showAll();
-```
-
-**Note:** `DataRegionTable` only works with LabKey DataRegion tables (those with `data-region-name`). For plain HTML tables rendered by JSPs without a DataRegion, use `Locator.xpath()` to locate cells directly.
+**Note:** Only works with LabKey DataRegion tables (those with `data-region-name`). For plain HTML tables rendered by JSPs without a DataRegion, use `Locator.xpath()` to locate cells directly.
 
 ### Remote API Commands for Selenium Tests
 

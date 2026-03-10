@@ -14,6 +14,8 @@
 - Feature branches targeting a release should be created from `releaseXX.Y-SNAPSHOT`, not from `releaseXX.Y` directly
 - Feature branches should never be merged directly to `releaseXX.Y` — they go through the SNAPSHOT branch
 
+**Common mistake:** Using `feature/...` naming will be rejected by LabKey CI.
+
 ## Before merging
 - All features and tests complete
 - All tests passing

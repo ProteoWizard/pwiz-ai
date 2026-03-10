@@ -15,16 +15,9 @@ labkeyEnlistment/                              ← Main repo (LabKey/server.git)
 
 ### Branch Naming Convention
 
-**LabKey requires branches to follow this naming scheme:**
-```
-{version}_fb_{feature-name}
-```
-
-Examples:
-- `25.11_fb_testresults-retrain-all` - Feature branch for 25.11 release
-- `26.3_fb_menu-improvements` - Feature branch for 26.3 release
-
-**Common mistake:** Using `feature/...` naming will be rejected by LabKey CI.
+See [labkey-feature-branch-workflow.md](labkey-feature-branch-workflow.md) for naming rules and merge process. Module-specific examples:
+- `25.11_fb_testresults-retrain-all`
+- `26.3_fb_menu-improvements`
 
 ### Build and Deploy
 
