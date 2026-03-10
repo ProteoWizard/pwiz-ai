@@ -472,3 +472,75 @@
   - `JsonToolServer.cs` — CleanupStaleConnectionFiles, IsSkylineProcess
   - `Program.cs` — Removed StopToolService call, added warning comments
   - `Skyline.cs` — Added StopToolService call in OnHandleDestroyed, improved HACK comment
+
+  ### Session 41 (2026-03-10): Document-level operations via IDocumentOperations
+
+  - **Added `IDocumentOperations` interface** (`CommandLine.cs`): three methods —
+    `OpenDocument`, `NewDocument`, `SaveDocument` — abstracting document-level file
+    operations so they can be overridden for SkylineWindow-hosted execution.
+  - **`CommandLine` implements `IDocumentOperations`** directly: default implementation
+    wraps existing `OpenSkyFile`, `NewSkyFile`, and `SaveDocument` methods. Constructor
+    sets `DocumentOperations = this`. No separate nested class needed.
+  - **`SkylineWindowDocumentOperations`** in `JsonToolServer.cs`: overrides that delegate
+    to `SkylineWindow.OpenFile()`, `NewDocument(true)`, and `SaveDocument()` via
+    `Invoke()` on the UI thread. Shows LongWaitDlg progress, properly updates
+    `DocumentFilePath` and `_savedVersion` (clean state).
+  - **Refactored `RunInner` and `ProcessDocument`**: always delegate through
+    `DocumentOperations` — no if/else branching. Output messages ("Opening file...",
+    "File saved.") moved to callers so both implementations get identical output.
+  - **`RunCommandImpl` updated**: passes `DocumentFilePath` as initial `_skylineFile` to
+    `CommandLine` constructor. Apply-back check skips when host already has the current
+    doc (from `SkylineWindowDocumentOperations`).
+  - **`--save` null path fix**: `SkylineWindowDocumentOperations.SaveDocument` falls
+    back to `Program.MainWindow.SaveDocument()` (no-arg) when `saveFile` is null, which
+    uses the window's current `DocumentFilePath`. Previously caused a hang by passing
+    null to `FileSaver`.
+  - **CLI synonyms** (`CommandArgs.cs`): `--open` (synonym for `--in`) and `--save-as`
+    (synonym for `--out`) with resource strings in `CommandArgUsage.resx/.Designer.cs`.
+    Visible in `--help` output for LLM discoverability.
+  - **`--opendoc=path` syntax** (`Program.cs`, `Skyline.cs`): now supports both
+    `--opendoc path` (space-separated) and `--opendoc=path` (equals-separated).
+  - **Added `Saved` field to `GetDocumentStatus`**: shows `yes` or `no (unsaved changes)`
+    based on `SkylineWindow.Dirty`, placed after the Document path line.
+  - **Added `TestDocumentOperations`** in `JsonToolServerTest.cs`: exercises `--new`,
+    `--save`, `--save-as`, `--open`, `--in`, and combined `--open + --refine + --out`.
+    Verifies DocumentFilePath updates, dirty state, round-trip data integrity.
+  - **MCP-tested interactively**: all operations produce correct output, update
+    DocumentFilePath, and set clean state properly.
+
+  **Known issue (minor)**: `--new` followed by its implicit `--save` shows
+  `Saved: no (unsaved changes)` immediately after. Likely `NewDocument(true)` sets
+  `_savedVersion`, then `SaveDocument` applies the doc via `ModifyDocument` which
+  increments `UserRevisionIndex` before saving. Not a blocker — file is actually saved.
+
+  ### Session 42 (2026-03-10): Test fixes and code style cleanup
+
+  - **Fixed path quoting in tests**: `ParseArgs` splits on spaces, so test paths
+    containing spaces (SkylineTester directories) must be `.Quote()`d when passed
+    through `Argument + value` operator.
+  - **Fixed `NewDocument` not setting `DocumentFilePath`**: `SkylineWindowDocumentOperations
+    .NewDocument` now calls `SaveDocument(skylineFile)` after `NewDocument(true)` so
+    that `DocumentFilePath` is set for subsequent `--save` commands.
+  - **Stronger test assertion**: `TestDocumentOperations` saves original document
+    first (`--save`) so on-disk state matches in-memory, enabling exact group count
+    assertion when re-opening with `--in`.
+  - **Refactored `TestRunCommand` to use `CommandArgs.ARG_*` constants**:
+    replaced raw string literals (`@"--version"`, `@"--refine-min-peptides=100"`, etc.)
+    with `CommandArgs.ARG_VERSION.ArgumentText`, `CommandArgs.ARG_REFINE_MIN_PEPTIDES + value`,
+    `TextUtil.SpaceSeparate()` — consistent style with `TestDocumentOperations`.
+  - **Tests passing**: `JsonToolServerTest` (16s) and all 44 `CommandLineTest` tests (60s).
+
+  **Files changed** (10 files, +285 −41):
+  - `CommandLine.cs` — IDocumentOperations interface, CommandLine implements it,
+    refactored RunInner/ProcessDocument, constructor accepts skylineFile, moved
+    output messages to callers
+  - `CommandArgs.cs` — ARG_OPEN, ARG_SAVE_AS synonyms
+  - `CommandArgUsage.resx` — _open, _save_as descriptions
+  - `CommandArgUsage.Designer.cs` — _open, _save_as properties
+  - `JsonToolServer.cs` — SkylineWindowDocumentOperations, updated RunCommandImpl,
+    Saved field in GetDocumentStatus
+  - `JsonToolServerTest.cs` — TestDocumentOperations, refactored TestRunCommand
+  - `Program.cs` — --opendoc=path support
+  - `Skyline.cs` — --opendoc=path parsing
+  - `IJsonToolService.cs` — using System.IO cleanup
+  - `JsonUiService.cs` — removed unused using, simplified cast
