@@ -544,3 +544,57 @@
   - `Skyline.cs` — --opendoc=path parsing
   - `IJsonToolService.cs` — using System.IO cleanup
   - `JsonUiService.cs` — removed unused using, simplified cast
+
+  ### Session 43 (2026-03-11): Tool Store improvements and getting-started documentation
+
+  - **Tool Store download URL fix**: `ToolStoreItem` now stores `DownloadUrl` from the
+    JSON API response. `GetToolZipFileWithProgress` uses server-provided URL when available,
+    falling back to LSID-based URL construction. Fixes download failures when Tool Store
+    container path doesn't match hardcoded URL.
+  - **Windows Store Claude Desktop detection**: `ClaudeDesktopConfigPath` now checks both
+    standard `%APPDATA%\Claude\` and Windows Store sandbox path
+    `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\`.
+  - **Auto-expand setup panel**: `MainForm` auto-expands the AI client registration panel
+    on first launch when no clients are registered (`ChatAppRegistry.AnyClientRegistered()`).
+  - **Getting-started documentation**: Created `tool-inf/docs/` with `index.html` (12 screenshots)
+    covering installation from Tool Store, AI client registration, connection verification,
+    and first interaction via Claude Desktop.
+  - **LabKey SkylineToolsStore fix**: Wrapped `recordToolDownload` in `ignoreSqlUpdates()`
+    to fix dev-mode mutating SQL assertion on GET download action.
+
+  **Files changed:**
+  - `ChatAppRegistry.cs` — Windows Store config path, AnyClientRegistered()
+  - `MainForm.cs` — Auto-expand setup panel
+  - `ToolStoreDlg.cs` — DownloadUrl property, server-provided download URL support
+  - `ToolUpdatesDlg.cs` — Updated IToolUpdateHelper signature
+  - `ToolStoreDlgTest.cs`, `ToolUpdatesTest.cs` — Updated test implementations
+  - `tool-inf/docs/` — index.html, SkylineStyles.css, 12 screenshots (s-01 through s-12)
+
+  ### Session 44 (2026-03-11): Tool description, .NET 8 prereq check, document loading fix
+
+  - **Expanded `info.properties` description**: Rewrote as a 3-paragraph abstract of the
+    getting-started documentation: what it is and how to set up, capabilities list, and
+    prerequisites. Uses `\` line continuation following the MSstats pattern.
+  - **Added .NET 8.0 Desktop Runtime prerequisite check**: `McpServerDeployer.IsDotNet8Installed()`
+    checks for `Microsoft.WindowsDesktop.App 8.*` in `%ProgramFiles%\dotnet\shared\`.
+    `MainForm.DeployMcpServer()` checks before deploying and offers to open the download page
+    if missing, preventing a confusing failure when the server can't start.
+  - **Fixed RunCommand creating spurious undo entries on --open/--new**: Root cause was
+    `SkylineWindowDocumentOperations.OpenDocument()`/`NewDocument()` returning before
+    background loaders finished. By the time `RunCommandImpl` compared `commandLine.Document`
+    against `Program.MainWindow.Document`, background loading had advanced the MainWindow
+    document past the returned snapshot, causing `ModifyDocument` to push a stale document
+    back and create a dirty state with an undo entry. Fix: added `WaitForDocumentLoaded()`
+    that subscribes to `SkylineWindow.DocumentChangedEvent` and waits until
+    `Document.IsLoaded` before returning, matching the contract of the command-line
+    `IDocumentOperations` implementation. Also fixes potential data correctness issues
+    with compound commands like `--open --import-file`.
+  - **Known issue resolved**: The `--new` dirty state issue noted in Session 41 (line 511-514)
+    is fixed by the same `WaitForDocumentLoaded()` change.
+  - **Tests**: `JsonToolServerTest` passes (10s).
+
+  **Files changed:**
+  - `McpServerDeployer.cs` — IsDotNet8Installed(), DotNetDownloadUrl
+  - `MainForm.cs` — .NET 8.0 check in DeployMcpServer()
+  - `JsonToolServer.cs` — WaitForDocumentLoaded() in SkylineWindowDocumentOperations
+  - `info.properties` — Expanded description
