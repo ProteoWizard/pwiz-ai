@@ -100,6 +100,48 @@ def tc_request(
         raise
 
 
+def tc_post(
+    endpoint: str,
+    body: str,
+    content_type: str = "application/xml",
+    accept: str = "application/json",
+    timeout: int = 30,
+) -> bytes:
+    """Make an authenticated POST request to the TeamCity REST API.
+
+    Args:
+        endpoint: REST API path (e.g., '/app/rest/buildQueue')
+        body: Request body string
+        content_type: Content-Type header value
+        accept: Accept header value
+        timeout: Request timeout in seconds
+
+    Returns:
+        Response body as bytes
+    """
+    config = get_config()
+    url = f"{config['url']}{endpoint}"
+
+    request = urllib.request.Request(url, data=body.encode("utf-8"), method="POST")
+    request.add_header("Authorization", f"Bearer {config['token']}")
+    request.add_header("Content-Type", content_type)
+    request.add_header("Accept", accept)
+
+    logger.info(f"POST {url}")
+
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.read()
+    except urllib.error.HTTPError as e:
+        body_text = ""
+        try:
+            body_text = e.read().decode("utf-8", errors="replace")[:500]
+        except Exception:
+            pass
+        logger.error(f"HTTP {e.code} {e.reason}: {body_text}")
+        raise
+
+
 def tc_request_json(endpoint: str, timeout: int = 30) -> dict:
     """Make an authenticated GET request and return parsed JSON."""
     data = tc_request(endpoint, accept="application/json", timeout=timeout)

@@ -1,11 +1,13 @@
 """Build search and status tools for TeamCity MCP server."""
 
+import json
 import logging
 import re
 import urllib.parse
 
 from .common import (
     tc_request,
+    tc_post,
     tc_request_xml,
     tc_request_json,
     parse_build_xml,
@@ -244,3 +246,128 @@ def register_tools(mcp):
         except Exception as e:
             logger.error(f"Error getting build log: {e}", exc_info=True)
             return f"Error getting build log: {e}"
+
+    @mcp.tool()
+    async def trigger_build(
+        build_type_id: str,
+        branch: str = None,
+        agent_name: str = None,
+    ) -> str:
+        """Trigger a new build on TeamCity.
+
+        Common build configuration IDs:
+        - bt209: Skyline master and PRs (Windows x86_64)
+        - bt210: Skyline master and PRs (Windows x86_64 debug, with code coverage)
+        - ProteoWizard_SkylinePrPerfAndTutorialTestsWindowsX8664: Skyline PR Perf and Tutorial tests
+        - ProteoWizard_SkylineMasterAndPRsTestConnectedTests: TestConnected tests
+        - ProteoWizard_WindowsX8664msvcProfessionalSkylineResharperChecks: Code Inspection
+        - ProteoWizard_ZSkylineSingleTestTroubleshooting: Single test troubleshooting
+        - bt83: Core Windows x86_64
+
+        Args:
+            build_type_id: Build configuration ID (e.g., 'bt209')
+            branch: Branch name (e.g., 'Skyline/work/20260123_feature' or 'pull/3861').
+                    For named branches, 'refs/heads/' is prepended automatically.
+                    For PR branches like 'pull/NNN', they are used as-is.
+                    If not specified, the build uses its default branch.
+            agent_name: Agent name to run on (e.g., 'MacCoss TeamCity Agent 1').
+                        The agent ID is resolved automatically by name lookup.
+                        If not specified, TeamCity assigns an available agent.
+
+        Returns:
+            Build queue info with ID and URL for monitoring.
+        """
+        try:
+            # Build the JSON payload
+            payload = {
+                "buildType": {"id": build_type_id},
+            }
+
+            if branch:
+                # PR branches (pull/NNN) are used as-is; named branches get refs/heads/ prefix
+                if branch.startswith("pull/"):
+                    payload["branchName"] = branch
+                else:
+                    payload["branchName"] = f"refs/heads/{branch}"
+
+            if agent_name:
+                # Look up agent ID by name
+                encoded_name = urllib.parse.quote(agent_name)
+                agent_data = tc_request_json(
+                    f"/app/rest/agents?locator=name:{encoded_name}"
+                )
+                agents = agent_data.get("agent", [])
+                if not agents:
+                    return f"Agent not found: '{agent_name}'"
+                payload["agent"] = {"id": agents[0]["id"]}
+
+            body = json.dumps(payload)
+            data = tc_post(
+                "/app/rest/buildQueue", body,
+                content_type="application/json",
+            )
+            result = json.loads(data.decode("utf-8"))
+
+            build_id = result.get("id", "?")
+            web_url = result.get("webUrl", "")
+            state = result.get("state", "queued")
+            branch_name = result.get("branchName", branch or "default")
+            build_type_name = result.get("buildType", {}).get("name", build_type_id)
+
+            lines = [
+                f"Build triggered successfully!",
+                f"",
+                f"Configuration: {build_type_name}",
+                f"Branch: {branch_name}",
+                f"State: {state}",
+                f"Build ID: {build_id}",
+            ]
+            if agent_name:
+                lines.append(f"Agent: {agent_name} (id: {payload['agent']['id']})")
+            if web_url:
+                lines.append(f"URL: {web_url}")
+
+            return "\n".join(lines)
+
+        except Exception as e:
+            logger.error(f"Error triggering build: {e}", exc_info=True)
+            return f"Error triggering build: {e}"
+
+    @mcp.tool()
+    async def cancel_build(
+        build_id: int,
+        comment: str = "Cancelled via MCP",
+    ) -> str:
+        """Cancel a queued or running build on TeamCity.
+
+        Args:
+            build_id: TeamCity build ID (numeric, e.g., 3886466)
+            comment: Optional cancellation comment
+
+        Returns:
+            Confirmation of cancellation.
+        """
+        try:
+            body = json.dumps({
+                "comment": comment,
+                "readdIntoQueue": False,
+            })
+            data = tc_post(
+                f"/app/rest/builds/id:{build_id}", body,
+                content_type="application/json",
+            )
+            result = json.loads(data.decode("utf-8"))
+
+            state = result.get("state", "unknown")
+            status = result.get("status", "")
+            build_number = result.get("number", "?")
+
+            return (
+                f"Build #{build_number} (ID: {build_id}) cancelled.\n"
+                f"State: {state}\n"
+                f"Status: {status}"
+            )
+
+        except Exception as e:
+            logger.error(f"Error cancelling build: {e}", exc_info=True)
+            return f"Error cancelling build: {e}"

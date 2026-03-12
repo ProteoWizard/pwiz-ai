@@ -12,6 +12,8 @@ See [setup.md](setup.md#teamcity-mcp) for installation instructions.
 
 | Tool | Description |
 |------|-------------|
+| `trigger_build` | Trigger a new build, optionally on a specific agent and branch |
+| `cancel_build` | Cancel a queued or running build by ID |
 | `search_builds` | Find builds by config ID, branch, state (running/finished/queued) |
 | `get_build_status` | Detailed status for a single build (progress, step, agent) |
 | `get_failed_tests` | Structured test failures with names and stack traces |
@@ -48,6 +50,30 @@ get_build_log(build_id=3867235, search="Could not load|Caught exception")
 ```
 
 The `get_failed_tests` tool returns what the TeamCity "Tests" tab shows. For failures where the test result is minimal (e.g., "Exit status: 1"), use `get_build_log` with a search pattern to find the actual diagnostic output in the surrounding log.
+
+## Triggering and Cancelling Builds
+
+### Trigger a perftest build on a specific agent
+
+```
+trigger_build(
+    build_type_id="ProteoWizard_SkylinePrPerfAndTutorialTestsWindowsX8664",
+    branch="pull/3861",
+    agent_name="MacCoss TeamCity Agent 1"
+)
+```
+
+- **PR branches** like `pull/3861` are used as-is
+- **Named branches** like `Skyline/work/20260123_feature` get `refs/heads/` prepended automatically
+- **Agent name** is resolved to an agent ID via REST API lookup; use the exact name from the TeamCity UI
+- If `agent_name` is omitted, TeamCity assigns an available agent
+
+### Cancel a queued or running build
+
+```
+cancel_build(build_id=3886470)
+cancel_build(build_id=3886470, comment="Wrong branch")
+```
 
 ## Build Configuration Reference
 

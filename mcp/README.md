@@ -6,8 +6,10 @@ This directory contains Model Context Protocol (MCP) servers that enable Claude 
 
 | Server | Language | Description |
 |--------|----------|-------------|
+| [ImageComparerMcp](ImageComparerMcp/) | C# | Screenshot diff tools for reviewing tutorial screenshot changes |
 | [LabKeyMcp](LabKeyMcp/) | Python | Access to skyline.ms LabKey server (exceptions, nightly tests, wiki, support board) |
 | [StatusMcp](StatusMcp/) | Python | System status info (timestamp, git status) for Claude Code context |
+| [TeamCityMcp](TeamCityMcp/) | Python | TeamCity CI build management (trigger, cancel, monitor builds) |
 
 ## Purpose
 
@@ -19,6 +21,8 @@ MCP servers provide structured access to project resources that would otherwise 
 - Monitor support board activity
 - Access file attachments
 - Get accurate system status (time, git branch, disk space) without guessing
+- Trigger, cancel, and monitor TeamCity CI builds
+- Compare and review tutorial screenshot changes
 
 ## Adding New Servers
 
