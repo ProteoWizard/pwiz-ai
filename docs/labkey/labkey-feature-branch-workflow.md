@@ -22,6 +22,13 @@
 - Manual acceptance testing done
 - Code-reviewed pull request
 
+## PR target branch
+
+- Branches named `fb_<label>` (no version prefix) → target **`develop`**
+- Branches named `XX.Y_fb_<label>` (with version prefix) → target **`releaseXX.Y-SNAPSHOT`**, **not** `develop`
+
+**Example:** `25.11_fb_pubmed-publication-notification` must target `release25.11-SNAPSHOT`, not `develop`.
+
 ## Merge rules
 - **Update feature branch from upstream:** `git pull --rebase` for your own changes, standard merge (not rebase) when pulling `develop` into the feature branch.
 - **Merge to develop:** Use **Squash and Merge** via the GitHub PR UI.
