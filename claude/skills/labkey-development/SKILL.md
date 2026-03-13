@@ -11,9 +11,29 @@ When working on LabKey Server modules, consult these documentation files.
 
 1. **ai/docs/labkey/labkey-feature-branch-workflow.md** - Feature branch naming rules and merge process
 
-## Ask Which Module First
+## Ask These Questions First
 
-**Ask the user which module they are working on**, then read the appropriate doc(s):
+Ask the user the following questions upfront (can be combined into one message):
+
+1. **Which module** are you working on?
+2. **Do you need to create a feature branch?** If yes:
+   - Ask: **Which release are you targeting?** (e.g. `25.11`)
+   - Check the current branch: `cd C:/proj/labkeyEnlistment && git branch --show-current`
+   - If not already on the correct `releaseXX.Y-SNAPSHOT` branch, **tell the user which branch is currently checked out and which one is needed, and ask for confirmation before switching**. Only proceed after the user confirms:
+     ```bash
+     cd C:/proj/labkeyEnlistment
+     git checkout release25.11-SNAPSHOT
+     git pull
+     ```
+   - Then create the feature branch:
+     ```bash
+     git checkout -b 25.11_fb_<label>
+     ```
+   - **Never create a version-prefixed feature branch from `develop`** — the PR will show a massive diff of unrelated commits.
+
+## Module-Specific Docs
+
+Based on the module the user is working on, read the appropriate doc(s):
 
 | Module | Doc(s) to read |
 |---|---|
@@ -61,6 +81,27 @@ gradlew :server:modules:MacCossLabModules:testresults:deployModule
 cd C:/proj/labkeyEnlistment
 gradlew :server:modules:targetedms:deployModule
 ```
+
+```bash
+# Build and deploy any MacCossLabModules module (replace <moduleName> with e.g. skylinetoolsstore, panoramapublic)
+cd C:/proj/labkeyEnlistment
+gradlew :server:modules:MacCossLabModules:<moduleName>:deployModule
+```
+
+```bash
+# Build and deploy all modules (use when changes span multiple modules)
+cd C:/proj/labkeyEnlistment
+./gradlew deployApp
+```
+
+## MANDATORY: Always Build Before Committing
+
+**After making any code changes, always build before committing.** A successful build confirms there are no compilation errors (e.g. references to deleted classes or JSP files).
+
+- **Single module changed** → run `deployModule` for that module (see commands above)
+- **Multiple modules changed** → run `./gradlew deployApp`
+
+This is critical because JSP files are compiled at build time, not by the IDE — compilation errors in JSPs will not be caught by the IDE and will only surface during a build.
 
 ## Key Patterns
 
