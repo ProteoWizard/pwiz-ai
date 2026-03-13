@@ -36,8 +36,11 @@ This project requires **PowerShell 7** (`pwsh`), not Windows PowerShell 5.1 (`po
 # WRONG - Windows PowerShell 5.1
 powershell -File .\script.ps1
 
-# CORRECT - PowerShell 7
-pwsh -Command "& './path/to/script.ps1'"
+# CORRECT - PowerShell 7 (scripts)
+pwsh -File './path/to/script.ps1'
+
+# CORRECT - PowerShell 7 (commands)
+pwsh -Command 'Get-ChildItem "$env:LOCALAPPDATA\JetBrains"'
 ```
 
 ### CRITICAL: Script Path Syntax
@@ -48,50 +51,63 @@ The Bash tool in Claude Code does NOT correctly handle Windows-style paths with 
 # WRONG - Path gets mangled to ".aiscriptsSkylineBuild-Skyline.ps1"
 .\ai\scripts\Skyline\Build-Skyline.ps1
 
-# WRONG - Same problem with -File parameter
+# WRONG - Same problem with backslash paths
 pwsh -File .\ai\scripts\Skyline\Build-Skyline.ps1
 ```
 
 **Always use this pattern:**
 
 ```bash
-# CORRECT - Use -Command with quoted path and call operator
-pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
+# CORRECT - pwsh -File with forward slashes (no arguments)
+pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1'
 
-# CORRECT - With arguments
-pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1' -RunTests -TestName CodeInspection"
+# CORRECT - pwsh -File with arguments
+pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1' -RunTests -TestName CodeInspection
 
 # CORRECT - Run-Tests.ps1 with arguments
-pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestPanoramaDownloadFile"
+pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestPanoramaDownloadFile
+```
+
+### CRITICAL: Do NOT Use `&` (Call Operator)
+
+**Never prefix script paths with `&` in pwsh commands.** The `&` breaks Claude Code's allowed tools permissions matching, causing commands that should be auto-approved to require manual approval.
+
+```bash
+# WRONG - & breaks permissions check
+pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
+
+# CORRECT - use -File instead (supports arguments too)
+pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1'
+pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName SomeTest
 ```
 
 ### Why This Works
 
-1. `pwsh -Command` executes PowerShell commands directly
-2. The `&` (call operator) invokes the script
-3. Forward slashes (`/`) work in PowerShell and don't get mangled
-4. Single quotes inside double quotes preserve the path as a single argument
+1. `pwsh -File` runs scripts directly and supports arguments after the script path
+2. `pwsh -Command` is for inline PowerShell commands (not script files)
+3. Forward slashes (`/`) work in PowerShell and don't get mangled by Git Bash
+4. Using `-File` instead of `-Command "& ..."` avoids `&` which breaks permissions matching
 
 ## Common Build and Test Commands
 
 ```bash
 # Full solution build
-pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
+pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1'
 
 # Build with tests
-pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1' -RunTests"
+pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1' -RunTests
 
 # Build specific target
-pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1' -Target TestConnected"
+pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1' -Target TestConnected
 
 # Run specific test
-pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestPanoramaDownloadFile"
+pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestPanoramaDownloadFile
 
 # Run test with internet access
-pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestPanoramaDownloadFile -Internet"
+pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestPanoramaDownloadFile -Internet
 
 # Run test with visible UI
-pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestSomeUITest -ShowUI"
+pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestSomeUITest -ShowUI
 ```
 
 ## CRITICAL: File Editing on Windows
