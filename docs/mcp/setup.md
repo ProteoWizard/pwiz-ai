@@ -45,8 +45,9 @@ Monitors PR builds on `teamcity.labkey.org` — build status, test failures, bui
 
 1. **Create a TeamCity API token:**
    - Go to `https://teamcity.labkey.org`
-   - Click your profile (top-right) > **Access Tokens** > **Create access token**
+   - Click your profile icon (lower-left) > **Profile** > **Access Tokens** (top-left sidebar) > **Create access token**
    - Name it "Claude Code MCP" (read-only permissions are sufficient)
+   - **Save the token immediately** — once you dismiss the dialog, TeamCity won't show it again. Store it in a password manager (e.g., LastPass password notes).
 
 2. **Store the token:**
    ```powershell

@@ -22,6 +22,20 @@
 - Manual acceptance testing done
 - Code-reviewed pull request
 
+## Creating a version-prefixed feature branch
+
+Branches named `XX.Y_fb_<label>` must be created from `releaseXX.Y-SNAPSHOT`, **not** from `develop`:
+
+```bash
+git checkout release25.11-SNAPSHOT
+git pull
+git checkout -b 25.11_fb_toolstore-fix-mutating-sql
+```
+
+**Why this matters:** If the branch is created from `develop` (which is ahead of the release branches), a PR targeting `release25.11-SNAPSHOT` will show a large diff containing all the commits that exist in `develop` but not in the release branch — far more than just your changes.
+
+The developer setup should have the correct release branch checked out. If you accidentally branched from `develop`, you will need to rebase your changes onto `release25.11-SNAPSHOT`.
+
 ## PR target branch
 
 - Branches named `fb_<label>` (no version prefix) → target **`develop`**

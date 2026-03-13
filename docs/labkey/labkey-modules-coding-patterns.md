@@ -398,6 +398,19 @@ All mutating requests (POST) must include a CSRF token. GET requests must **neve
 | Java DOM builder | Use `DOM.LK.FORM` for CSRF-aware forms |
 | HTTP header | Send `X-LABKEY-CSRF` header (LabKey client APIs do this automatically) |
 
+## Incidental Writes on GET Actions
+
+In dev mode, LabKey throws `IllegalStateException: MUTATING SQL executed as part of handling action: GET` if a GET action executes mutating SQL. For legitimate incidental writes (counters, audit logs, "last accessed" timestamps), wrap the write in `ignoreSqlUpdates()`:
+
+```java
+try (var ignored = SpringActionController.ignoreSqlUpdates())
+{
+    SkylineToolsStoreManager.get().recordToolDownload(tool);
+}
+```
+
+Do **not** use this to paper over writes that belong in a `MutatingApiAction` or `FormHandlerAction`.
+
 ## Permission Annotations
 
 Permission annotations on action classes control what permissions a user must have in the request's container to invoke the action. LabKey URLs encode the container path: `http://<hostname>/path/to/container/controllername-actionname.view`. The framework resolves the container from the URL and checks the annotated permission against the user's roles in that container before the action executes.
@@ -412,28 +425,23 @@ Permission annotations on action classes control what permissions a user must ha
 
 ### Schema Migration
 
-Migration scripts live in `resources/schemas/dbscripts/postgresql/` and follow the naming convention `<module>-<from>-<to>.sql`. Version numbers are decimal (e.g. `25.001`, `25.002`):
+Scripts live in `resources/schemas/dbscripts/postgresql/` named `<module>-<from>-<to>.sql`. Version numbers follow `YY.NNN` (e.g. `25.000`, `25.001`), bumping at the start of each year.
 
-```sql
--- resources/schemas/dbscripts/postgresql/mymodule-25.003-25.004.sql
-ALTER TABLE mymodule.MyTable ADD COLUMN NewField TEXT;
-```
+**To add a migration script:**
+1. Name it `<module>-<from>-<new>.sql` where `<from>` >= the stored schema version (i.e. the to-version of the last script that ran). Use the current `getSchemaVersion()` value as `<from>` for clarity.
+2. Bump `getSchemaVersion()` in the module class to `<new>`.
 
-### Schema Version in Module Class
-
-When you add a new migration script, you must bump the schema version returned by `getSchemaVersion()` in your module class to match the target version of your latest script. LabKey compares this version against what's recorded in the database to determine which migration scripts need to run:
+Gaps in the version sequence are expected and fine — the code selects scripts where `fromVersion >= storedVersion`, so a script named `25.000-25.001` will run even if the stored version is `16.2`.
 
 ```java
 @Override
 public @Nullable Double getSchemaVersion()
 {
-    return 25.005;  // Must match the target version of the latest migration script
+    return 25.001;  // to-version of the latest migration script
 }
 ```
-
-If you add `mymodule-25.004-25.005.sql`, then `getSchemaVersion()` must return `25.005` or higher.
-
 See the [LabKey SQL Scripts documentation](https://www.labkey.org/Documentation/wiki-page.view?name=sqlScripts) for more details on module schema versioning and upgrade scripts.
+
 
 ### Schema XML Column Definitions
 
