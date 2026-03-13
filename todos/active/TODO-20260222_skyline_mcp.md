@@ -169,7 +169,10 @@
 
   - [ ] Immediate Window font: ASCII table borders don't align (proportional font)
   - [ ] Tool Store packaging and submission
-  - [ ] POCO marshalling layer: typed parameters/return values instead of all-string IJsonToolService
+  - [x] POCO marshalling layer: typed parameters/return values instead of all-string IJsonToolService
+    - Phase 1 (Foundation) and Phase 2 (Reports) completed in session 45
+    - Phase 3 (Version mismatch errors) and Phase 4 (Tutorial methods) completed in session 46
+  - [ ] Phase 5: Structured list methods (`GetLocations` -> `LocationEntry[]`, `GetOpenForms` -> `FormInfo[]`)
 
   ### Potential further future enhancements (post-PR)
   - [ ] FloatingWindow composite capture: individual docked forms in a floating container all
@@ -598,3 +601,90 @@
   - `MainForm.cs` — .NET 8.0 check in DeployMcpServer()
   - `JsonToolServer.cs` — WaitForDocumentLoaded() in SkylineWindowDocumentOperations
   - `info.properties` — Expanded description
+
+  ### Session 45 (2026-03-12): Typed POCO interface — Phase 1 (Foundation) & Phase 2 (Reports)
+
+  Implemented the typed POCO marshalling layer for IJsonToolService, replacing the all-string
+  pattern with typed parameters and return values. JSON remains the wire format; the dispatch
+  layer handles serialization/deserialization automatically.
+
+  **Phase 1 — Foundation:**
+  - **`JsonToolModels.cs`** — New file with POCOs: `ReportMetadata`, `ReportDefinition`,
+    `ReportFilter`, `ReportSort`, `TutorialMetadata`, `TocEntry`, `TutorialImageMetadata`.
+    PascalCase properties mapped to snake_case JSON via naming policies. Link-compiled into
+    both .NET 4.7.2 (SkylineTool.csproj) and .NET 8.0 (SkylineMcpServer.csproj).
+  - **`JsonToolServer.cs`** — Added `_snakeCaseSerializer` (Newtonsoft SnakeCaseNamingStrategy).
+    Method discovery changed from `this.GetType()` to `typeof(IJsonToolService)`. `Dispatch()`
+    handles typed params via `DeserializeArg()`. `SerializeResult()` handles typed returns via
+    `JToken.FromObject()`.
+  - **`SkylineConnection.cs`** — `Call()` handles structured results (Object/Array → GetRawText).
+    Added `CallTyped<T>()` with `_snakeCaseOptions` (System.Text.Json SnakeCaseLower).
+
+  **Phase 2 — Report methods:**
+  - **`IJsonToolService.cs`** — `ExportReport` and `ExportReportFromDefinition` return
+    `ReportMetadata`. `ExportReportFromDefinition` and `AddReportFromDefinition` take
+    `ReportDefinition` parameter.
+  - **`JsonToolServer.cs`** — `BuildReportMetadata` returns POCO. `ResolveJsonReportDefinition`
+    consumes `ReportDefinition` POCO directly (no JObject parsing). `ParseFilterSpecs` and
+    `ParseSortSpecs` consume typed arrays.
+  - **`SkylineTools.cs`** — `GetReport` and `GetReportFromDefinition` use `CallTyped<ReportMetadata>`.
+    `FormatReportResult` takes typed POCO with direct property access.
+  - **`JsonToolServerTest.cs`** — All report tests updated for typed API.
+
+  ### Session 46 (2026-03-13): Typed POCO interface — Phase 3 (Version errors) & Phase 4 (Tutorials)
+
+  **Phase 3 — Version mismatch error enrichment:**
+  - **`JsonToolServer.cs:129`** — Changed `Install.Version` to `Install.ProgramNameAndVersion`
+    in `WriteConnectionInfo()`. Connection file now contains rich identity string (e.g.,
+    "Skyline-daily (64-bit) 26.1.1.238 (6c3244bc0a)") instead of bare version.
+  - **`SkylineConnection.cs`** — Added `SkylineVersion` property on connection instance,
+    populated from connection file during `TryConnectToInstance()`. Readable after Dispose
+    for error enrichment.
+  - **`SkylineTools.cs`** — Restructured `Invoke()` to declare `connection` outside try block.
+    Added catch logic detecting "Unknown method:" errors from Skyline and enriching with the
+    Skyline identity string: "This method is not available in {skylineVersion}. A newer
+    version of Skyline may be required."
+
+  **Phase 4 — Tutorial methods:**
+  - **`IJsonToolService.cs`** — `GetTutorial` returns `TutorialMetadata`, `GetTutorialImage`
+    returns `TutorialImageMetadata`.
+  - **`JsonTutorialCatalog.cs`** — `FetchTutorial` returns `TutorialMetadata` POCO (builds
+    `List<TocEntry>` instead of JArray). `FetchTutorialImage` returns `TutorialImageMetadata`.
+    Removed `Newtonsoft.Json.Linq` dependency entirely.
+  - **`JsonToolServer.cs`** — Updated delegate methods to match new return types.
+  - **`SkylineTools.cs`** — Tutorial tools use `CallTyped<TutorialMetadata>` and
+    `CallTyped<TutorialImageMetadata>` with direct property access. Added `FormatTutorialResult`
+    helper. Removed unused `System.Text.Json`, `REPORT`, and `TUTORIAL` imports.
+  - **`JsonToolServerTest.cs`** — Updated tutorial test assertions to use typed POCO properties
+    instead of `JObject.Parse`/indexer access. Removed unused `TUTORIAL` alias.
+  - **Build**: Both projects (Skyline .NET 4.7.2 + SkylineMcpServer .NET 8.0) build clean.
+  - **Tests**: `TestJsonToolServer` passes (35s).
+
+  **Files changed** (committed as c7719d59):
+  - `IJsonToolService.cs` — Typed tutorial return types
+  - `JsonToolModels.cs` — POCOs (new file from session 45)
+  - `SkylineTool.csproj` — JsonToolModels.cs added
+  - `SkylineMcpServer.csproj` — JsonToolModels.cs link-compiled
+  - `JsonToolServer.cs` — _snakeCaseSerializer, typed dispatch, ProgramNameAndVersion
+  - `JsonTutorialCatalog.cs` — POCO returns, removed JObject dependency
+  - `SkylineConnection.cs` — SkylineVersion, CallTyped<T>, structured result handling
+  - `SkylineTools.cs` — Typed tutorial/report calls, version error enrichment, FormatTutorialResult
+
+  ### Session 47 (2026-03-13): Fixed InvokeOnUiThread threading and intermittent test failure
+
+  Fixed an intermittent `Win32Exception: The handle is invalid` in `TestScreenCapturePermissionDlg`
+  caused by calling `InvokeOnUiThread` from the UI thread. The test used `ShowDialog<T>` which
+  runs the action via `SkylineBeginInvoke` (UI thread), but `InvokeOnUiThread` is designed for
+  background-thread callers only (pipe server thread in production).
+
+  - **`JsonUiService.cs`** — Added `Assume.IsTrue(Program.MainWindow.InvokeRequired)` to
+    `InvokeOnUiThread`. Catches misuse immediately rather than producing a transient
+    `Win32Exception` that manifests as a `ThreadExceptionDialog` and 360s test timeout.
+  - **`JsonToolServerTest.cs`** — Fixed 6 call sites that ran server methods on the UI thread:
+    - 3 `ShowDialog<ScreenCapturePermissionDlg>` calls replaced with `ActionUtil.RunAsync` +
+      `WaitForOpenForm` — matches real-world threading (pipe server thread → UI marshal)
+    - 3 `WaitForConditionUI` calls with server methods replaced with `WaitForCondition` —
+      server calls must not run on the UI thread
+  - **`JsonToolModels.cs`** — Converted floating XML doc comment (not attached to any type)
+    to regular comments, fixing ReSharper warning on TeamCity.
+  - **Tests**: `TestJsonToolServer` passes (45s).
