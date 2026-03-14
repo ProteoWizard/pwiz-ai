@@ -277,6 +277,33 @@ TestProteomeDb
 
 Lines starting with `#` are comments. When `-UpdateTestList` is used, the existing file is backed up with a timestamp before being overwritten.
 
+### Running TestRunner.exe Directly (Docker Parallel Testing)
+
+When `Run-Tests.ps1` is insufficient (e.g. multi-language Docker parallel testing), the developer
+may use SkylineTester to configure and run a more complex TestRunner.exe invocation. Claude can
+take over the full build-test cycle by reading the TestRunner command-line from `SkylineTester.log`:
+
+1. Read the first few lines of `pwiz_tools/Skyline/SkylineTester.log` for the TestRunner.exe command
+2. Extract the command-line arguments (everything after the `.exe` path)
+3. Run TestRunner.exe directly with those arguments
+
+**Example from SkylineTester.log:**
+```
+> "C:\proj\pwiz\pwiz_tools\Skyline\bin\x64\Debug\TestRunner.exe" status=on results="C:\proj\pwiz\pwiz_tools\Skyline\SkylineTester Results" offscreen=True loop=1 runsmallmoleculeversions=on language=en-US,zh-CHS perftests=on parallelmode=server workercount=8 test="@C:\proj\pwiz\pwiz_tools\Skyline\SkylineTester test list.txt"
+```
+
+**Key parameters:**
+- `parallelmode=server` - host runs en-US, Docker containers run other languages
+- `language=en-US,zh-CHS` - test in multiple languages
+- `test="@...test list.txt"` - reads test names from the shared test list file
+
+This enables a fully automated debug loop: edit code, build, run the exact same multi-language
+Docker test that the developer was using, read the results - all without the developer needing
+to manually re-run SkylineTester or copy command-line arguments.
+
+**Important:** Close SkylineTester before running TestRunner.exe directly to avoid port conflicts
+on the worker communication port (default 9810).
+
 ## Code Coverage Analysis
 
 Skyline uses JetBrains dotCover for code coverage tool integrated with ReSharper, to measure test coverage.

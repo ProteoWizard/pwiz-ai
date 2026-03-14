@@ -83,6 +83,11 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 - All tests must pass before commit
 - ReSharper must show green (no inspections)
 
+## Bash Tool: Avoid Compound Commands for Directory Changes
+- **NEVER** use `cd /path && command` — the shell working directory persists between Bash tool calls
+- `cd` once, then run subsequent commands individually
+- This avoids unnecessary "compound command" permission prompts
+
 ## NEVER
 - Use `async`/`await` keywords
 - Use English text literals in test assertions

@@ -36,7 +36,7 @@
   | Process | Framework | Role |
   |---------|-----------|------|
   | **Skyline.exe** | .NET Framework 4.7.2 | Hosts JsonToolServer (JSON pipe) + ToolService |
-  | **SkylineMcpConnector** | .NET Framework 4.7.2 | UI shell: connects to Skyline, deploys MCP server, registers with AI apps |
+  | **SkylineAiConnector** | .NET Framework 4.7.2 | UI shell: connects to Skyline, deploys MCP server, registers with AI apps |
   | **SkylineMcpServer** | .NET 8.0-windows | MCP stdio server, connects to Skyline's JSON pipe |
 
   **Shared contract:** `SkylineTool/IJsonToolService.cs` contains `IJsonToolService` (28-method
@@ -139,21 +139,9 @@
     `ExportJsonDefinitionReport` has a workaround (inject sort on first GroupBy column).
     Filed as [#4062](https://github.com/ProteoWizard/pwiz/issues/4062), assigned to Nick.
     Pick up fix into our branch before merge.
-  - **Report definition pivoting** (FIXED): `ColumnResolver` now tries all row sources and
-    picks the one that minimizes total collection steps across all resolved paths. This
-    matches `DocumentViewTransformer.ConvertFromDocumentView` which picks the deepest entity
-    level any column touches. E.g., `[PeptideModifiedSequence, PrecursorMz, Area]` now
-    correctly resolves to Transition (1 collection step for Results!*) instead of Peptide
-    (4 collection steps through Precursors!*.Transitions!*.Results!*). Replicate row source
-    is still preferred when all paths go through collections (replicate-centric queries).
-  - **NormalizedArea column name** (FIXED): `NormalizedArea` now resolves. Root cause was
-    that `IsNestedColumn` (ChildDisplayName attribute) took priority over `IsCheckableParent`
-    in `TraverseColumns`, so the parent was never indexed. Fixed by checking both.
-  - **Isotope label pivot not working in MCP export** (FIXED): Root cause was
-    `RowFactories.ExportReport` uses a streaming path when layout is null and sortSpecs
-    is null/empty, bypassing BindingListSource which processes PivotKey/PivotValue. Fix:
-    when `viewSpec.HasTotals`, inject a sort on the first GroupBy column to force the
-    BindingListSource path. See session 36.
+  - ~~Report definition pivoting~~ (FIXED in session 38)
+  - ~~NormalizedArea column name~~ (FIXED in session 35)
+  - ~~Isotope label pivot not working in MCP export~~ (FIXED in session 36, upstream issue [#4062](https://github.com/ProteoWizard/pwiz/issues/4062))
   - **Report doc topics use MemoryDataSchema, not SkylineWindow UI mode**: `GetReportDocTopics`
     and `GetReportDocTopic` create a `MemoryDataSchema` with `DataSchemaLocalizer.INVARIANT`,
     which doesn't have a `SkylineWindow` reference. The `DefaultUiMode` falls through to
@@ -163,16 +151,24 @@
     works correctly for the current mode, but the doc topics may confuse an LLM that sees
     molecule-mode names when the user is in proteomic mode or vice versa.
   - ~~CV Histogram title~~ (Filed as [#4064](https://github.com/ProteoWizard/pwiz/issues/4064), not related to this branch)
-  - ~~NormalizedArea column name~~ (FIXED in session 35)
 
   ### Future enhancements (post-PR)
 
   - [ ] Immediate Window font: ASCII table borders don't align (proportional font)
-  - [ ] Tool Store packaging and submission
+  - [x] Tool Store packaging and submission (sessions 43-47: download URL fix, getting-started
+    docs, info.properties description, version stamping, ZIP renamed to SkylineAiConnector.zip;
+    deployment awaits LabKey PR merge and skyline.ms deployment)
   - [x] POCO marshalling layer: typed parameters/return values instead of all-string IJsonToolService
     - Phase 1 (Foundation) and Phase 2 (Reports) completed in session 45
     - Phase 3 (Version mismatch errors) and Phase 4 (Tutorial methods) completed in session 46
   - [ ] Phase 5: Structured list methods (`GetLocations` -> `LocationEntry[]`, `GetOpenForms` -> `FormInfo[]`)
+  - [ ] LlmMessages constants class: centralize all LLM-facing text strings (currently inline
+    `LlmInstruction` literals) into a static class with named constants (e.g.
+    `LlmMessages.ScreenCaptureDenied`). This gives the "reference by ID" benefit of .resx
+    (single source of truth, exact-match test assertions, refactor-safe via ReSharper rename)
+    without the localization machinery overhead. Unlike .resx, a standalone .cs file won't be
+    mistakenly queued for translation. Tests would assert `Assert.AreEqual(result, LlmMessages.X)`
+    instead of `AssertEx.Contains(result, @"snippet")`.
 
   ### Potential further future enhancements (post-PR)
   - [ ] FloatingWindow composite capture: individual docked forms in a floating container all
@@ -688,3 +684,75 @@
   - **`JsonToolModels.cs`** — Converted floating XML doc comment (not attached to any type)
     to regular comments, fixing ReSharper warning on TeamCity.
   - **Tests**: `TestJsonToolServer` passes (45s).
+
+  ### Session 47 (2026-03-14): Renamed SkylineMcpConnector to SkylineAiConnector, added versioning
+
+  - **Renamed SkylineMcpConnector → SkylineAiConnector**: folder, csproj, ico, namespace
+    (all 6 .cs files), tool-inf properties/png, LSID identifier, solution file
+  - **Added Skyline version scheme**: Jamfile.jam generates AssemblyInfo.cs for both
+    SkylineAiConnector and SkylineMcpServer via `generate-skyline-AssemblyInfo.cs`
+  - **Disabled auto-generated assembly info**: SkylineAiConnector uses `GenerateAssemblyInfo=false`,
+    SkylineMcpServer uses individual attribute suppressions to preserve `[TargetPlatform]`
+    (fixes CA1416 warnings about PipeTransmissionMode.Message and WaitForPipeDrain)
+  - **Automated info.properties version**: build reads version string from AssemblyInfo.cs
+    (preserving leading zeros like 070) and stamps `${version}` placeholder in staged
+    info.properties before zipping
+  - **Renamed ZIP output**: SkylineMcp.zip → SkylineAiConnector.zip
+  - **Added AssemblyInfo.cs paths to .gitignore**
+
+  **Files changed:**
+  - `SkylineAiConnector/` — renamed from SkylineMcpConnector/, namespace → SkylineAiConnector
+  - `SkylineAiConnector.csproj` — RootNamespace, AssemblyName, ApplicationIcon, GenerateAssemblyInfo,
+    version stamping via AssemblyInfo.cs parsing, ZIP renamed to SkylineAiConnector.zip
+  - `SkylineMcpServer.csproj` — individual GenerateAssembly*Attribute=false (preserves TargetPlatform)
+  - `SkylineMcp.sln` — updated project name and path
+  - `tool-inf/info.properties` — LSID → SkylineAiConnector, Version → ${version} placeholder
+  - `tool-inf/SkylineAiConnector.properties` — Command → SkylineAiConnector.exe
+  - `Jamfile.jam` — two generate-skyline-AssemblyInfo.cs calls
+  - `.gitignore` — two new AssemblyInfo.cs paths
+
+  ### Session 48 (2026-03-14): Fixed Docker parallel test failure (CopyFromScreen crash)
+
+  **Root cause**: `Graphics.CopyFromScreen()` crashes in Docker containers (no desktop session),
+  corrupting the WinForms window handle and causing subsequent `Control.Invoke()` calls to fail
+  with "The handle is invalid" (`Win32Exception 0x80004005`).
+
+  **Bisection** (6 iterations, ~1 min cycle time each, fully automated build+test):
+  1. Skip all screen capture → PASS (confirms screen capture is the problem)
+  2. Keep ActivateForm + GetWindowRectangle, skip CaptureAndRedact → PASS
+  3. Keep everything, add CaptureScreen (CopyFromScreen) → FAIL
+  4. Keep GetWindowRectangle only, skip CaptureScreen → PASS
+  5. Decomposed CaptureScreen with handle diagnostics → log shows handle looks valid
+     (`IsHandleCreated=True`) but `post-CopyFromScreen` log line never written in Docker
+     (crash inside `CopyFromScreen`)
+  6. Try-catch around CopyFromScreen → PASS (exception is catchable)
+
+  **Fix**: Added `ScreenCapture.IsDesktopAvailable()` — probes with 1x1 `CopyFromScreen` in
+  try-catch. `GetFormImage` checks this before attempting capture and returns a descriptive
+  `LlmInstruction` error message explaining the desktop is unavailable (Docker container,
+  disconnected Remote Desktop, locked workstation). Tests use `IsDesktopAvailable()` to
+  validate either the captured image (desktop present) or the error message (headless).
+
+  **Pattern from tutorial code**: `ScreenshotManager.CaptureFromScreen()` already wraps
+  `CopyFromScreen` in try-catch with `while (!CaptureFromScreen(g, shotRect)) { Thread.Sleep(1000); }`
+  for Remote Desktop disconnections. Our MCP case differs: we return an error to the LLM
+  rather than pausing.
+
+  **Also this session**:
+  - Added "Avoid Compound Bash Commands" rule to `ai/CRITICAL-RULES.md` (was only in CLAUDE.md)
+  - Shortened `root-CLAUDE.md`/`CLAUDE.md` to one-line reference to CRITICAL-RULES.md
+  - Added TestRunner.exe direct invocation docs to `ai/docs/build-and-test-guide.md` —
+    Claude can read SkylineTester.log for the command-line and run the full Docker parallel
+    test cycle autonomously
+  - Added `LlmMessages` constants class as future enhancement in TODO
+  - Wrapped screen capture messages in `LlmInstruction` for consistency
+
+  **Files changed:**
+  - `ScreenCapture.cs` — `IsDesktopAvailable()` method
+  - `JsonUiService.cs` — desktop check in `GetFormImage`, `LlmInstruction` wrapping,
+    removed debug instrumentation
+  - `JsonToolServerTest.cs` — `TestScreenCapturePermissionDlg` and `TestFormImage` handle
+    both desktop-available and headless environments
+  - `ai/CRITICAL-RULES.md` — "Bash Tool: Avoid Compound Commands" section
+  - `ai/root-CLAUDE.md` — shortened compound-command section
+  - `ai/docs/build-and-test-guide.md` — TestRunner.exe direct invocation section

@@ -17,3 +17,6 @@ All Claude Code documentation lives in the **ai/** folder. See:
 
 The `.claude/` folder is a junction to `ai/claude/`, providing access to
 commands, skills, and settings.
+
+**CRITICAL**: Never use `cd /path && command` — `cd` once, then run simple
+commands. See **ai/CRITICAL-RULES.md** for details.
