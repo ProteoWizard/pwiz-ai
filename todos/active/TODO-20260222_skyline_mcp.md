@@ -756,3 +756,30 @@
   - `ai/CRITICAL-RULES.md` — "Bash Tool: Avoid Compound Commands" section
   - `ai/root-CLAUDE.md` — shortened compound-command section
   - `ai/docs/build-and-test-guide.md` — TestRunner.exe direct invocation section
+
+  ### Session 49 (2026-03-14): Added AddSettingsListItem to MCP server
+
+  Implemented `AddSettingsListItem(listType, itemXml, overwrite)` — LLMs can now add new items
+  to any Skyline settings list (enzymes, modifications, collision energies, etc.) via XML.
+
+  **Design**: Uses reflection to call each item type's `static Deserialize(XmlReader)` method,
+  the same pattern used throughout Skyline for XML deserialization. MappedList handles upsert
+  (removes existing key before inserting). PersistedViews excluded — redirects to `skyline_add_report`.
+
+  **Error handling layers**:
+  - Non-XML input caught early with "Expected XML content" message
+  - Invalid attribute values caught by Skyline's own XML validation (e.g., `sense="Z"`)
+  - Duplicate names rejected unless `overwrite=true`
+
+  **Test coverage**: `TestAddSettingsListItem` in `JsonToolServerTest` — typed roundtrip with
+  `AssertEx.Cloned()`, XML roundtrip with `AssertEx.NoDiff()`, duplicate rejection, overwrite,
+  invalid XML, PersistedViews redirect, unknown list type, second list type (StaticMod).
+
+  **Live MCP testing**: Verified all paths against running Skyline instance.
+
+  **Files changed:**
+  - `IJsonToolService.cs` — added `AddSettingsListItem` to interface (3-arg section)
+  - `JsonToolServer.cs` — `AddSettingsListItem()`, `GetSettingsListItemType()`,
+    `DeserializeSettingsItem()` helpers
+  - `SkylineTools.cs` — `skyline_add_settings_list_item` MCP tool
+  - `JsonToolServerTest.cs` — `TestAddSettingsListItem` method
