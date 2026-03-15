@@ -146,7 +146,10 @@ param(
     [string]$PerformanceProfileType = "Sampling",  # Profiling type (Sampling is fastest, Tracing most accurate)
 
     [Parameter(Mandatory=$false)]
-    [string]$SourceRoot = $null  # Path to pwiz root (auto-detected if not specified)
+    [string]$SourceRoot = $null,  # Path to pwiz root (auto-detected if not specified)
+
+    [Parameter(Mandatory=$false)]
+    [switch]$Summary = $false  # Show only errors and final result (suppresses verbose test output)
 )
 
 # Script location: ai/scripts/Skyline/
@@ -719,8 +722,12 @@ try {
         Write-Host "Command: $cmdLine`n" -ForegroundColor Gray
 
         $testStart = Get-Date
-        & $testExecutable $testArguments
-        
+        if ($Summary) {
+            & $testExecutable $testArguments > $null 2>&1
+        } else {
+            & $testExecutable $testArguments
+        }
+
         $exitCode = $LASTEXITCODE
         $duration = (Get-Date) - $testStart
         
@@ -758,12 +765,19 @@ try {
         
         if ($exitCode -ne 0) {
             Write-Host "`n❌ Tests FAILED (exit code: $exitCode) in $($duration.TotalSeconds.ToString('F1'))s" -ForegroundColor Red
-            Write-Host "`nLog file: $outputDir\$logFile" -ForegroundColor Gray
-            
-            # Show last 30 lines of log for quick diagnosis
-            Write-Host "`nLast 30 lines of log:" -ForegroundColor Yellow
-            Get-Content $logFile -Tail 30 | ForEach-Object { Write-Host "  $_" }
-            
+            Write-Host "Log file: $outputDir\$logFile" -ForegroundColor Gray
+
+            if ($Summary) {
+                # Show only failure lines and first exception from log
+                $logLines = Get-Content $logFile
+                $logLines | Where-Object { $_ -match 'FAILED|Exception:|Assert\.' } |
+                    Select-Object -First 10 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+            } else {
+                # Show last 30 lines of log for quick diagnosis
+                Write-Host "`nLast 30 lines of log:" -ForegroundColor Yellow
+                Get-Content $logFile -Tail 30 | ForEach-Object { Write-Host "  $_" }
+            }
+
             exit $exitCode
         }
         

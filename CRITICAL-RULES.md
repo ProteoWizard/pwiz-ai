@@ -83,10 +83,13 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 - All tests must pass before commit
 - ReSharper must show green (no inspections)
 
-## Bash Tool: Avoid Compound Commands for Directory Changes
+## Bash Tool: Avoid Compound Commands
 - **NEVER** use `cd /path && command` — the shell working directory persists between Bash tool calls
 - `cd` once, then run subsequent commands individually
-- This avoids unnecessary "compound command" permission prompts
+- **NEVER** pipe build/test script output through `grep`, `tail`, `head` etc.
+- Use `-Summary` flag on `Build-Skyline.ps1` and `Run-Tests.ps1` instead
+- Use `Build-Skyline.ps1 -RunTests -TestName X -Summary` for build+test in one command
+- Piped commands trigger compound-command permission prompts, blocking unattended iteration
 
 ## NEVER
 - Use `async`/`await` keywords

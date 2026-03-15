@@ -815,3 +815,49 @@
   - `ToolsUI/JsonToolServer.cs` — same `IsSkylineProcess` fix for Skyline side
   - `TestFunctional/SkylineMcpTest.cs` — new end-to-end test
   - `TestFunctional/TestFunctional.csproj` — added `SkylineMcpTest.cs`
+
+  ### Session 51 (2026-03-15): Added GetSettingsListSelectedItems / SelectSettingsListItems
+
+  Implemented document-level settings list selection — LLMs can now get and set which items
+  from settings lists are active in the document (enzyme, modifications, annotations, etc.).
+
+  **Architecture: `ISettingsListDocumentSelection` interface** on settings list classes.
+  Each list class implements `GetSelectedItems(SrmSettings)` and `SetSelectedItems(SrmSettings, keys)`,
+  keeping the wiring knowledge colocated with the list type. `JsonToolServer` discovers
+  implementations via interface check — no registry needed.
+
+  **Helper methods on `SettingsListBase<T>`**: `ResolveKey(keys)` (single-select),
+  `ResolveKeys(keys)` (multi-select), `GetKeys(items)` — shared by all implementations,
+  making each list's implementation a concise one-liner.
+
+  **12 list types implemented** (5 single-select, 7 multi-select):
+  - Single: EnzymeList, BackgroundProteomeList, PeakScoringModelList
+  - Multi (PeptideSettings/TransitionSettings): StaticModList, HeavyModList, MeasuredIonList,
+    SpectralLibraryList, PeptideExcludeList
+  - Multi (DataSettings): AnnotationDefList, GroupComparisonDefList, ListDefList, MetadataRuleSetList
+
+  **Bug fix: ColumnResolver UI mode** — `SkylineDataSchema.MemoryDataSchema()` now accepts
+  optional `modeUI` parameter. `JsonToolServer` passes `Program.MainWindow.ModeUI` so column
+  resolution matches the ViewEditor behavior regardless of document content.
+
+  **Test split**: Moved settings list tests from `JsonToolServerTest` (requires Rat_plasma.sky,
+  ~19s) into new `JsonToolServerSettingsTest` (blank document, ~4s). Comprehensive test uses
+  reflection to discover all `ISettingsListDocumentSelection` implementations and systematically
+  tests each one: get → select different → verify document changed → restore.
+
+  **Also**: Made `GetKey()` non-explicit on `MetadataRuleSet` and `ListData` for consistency.
+  Added `-Summary` flag to `Build-Skyline.ps1` and `Run-Tests.ps1` for concise build/test output.
+
+  **Files changed:**
+  - `IJsonToolService.cs` — added `GetSettingsListSelectedItems`, `SelectSettingsListItems`
+  - `JsonToolServer.cs` — `GetSettingsListSelectedItems()`, `SelectSettingsListItems()`,
+    `ResolveDocumentSelector()`, pass ModeUI to MemoryDataSchema
+  - `SkylineTools.cs` — two new MCP tools + `System.Text.Json` import
+  - `Settings.cs` — `ISettingsListDocumentSelection` interface, `SettingsListItemNotFoundException`,
+    `ResolveKey`/`ResolveKeys`/`GetKeys` helpers, implementations on 9 list classes
+  - `GroupComparisonDefList.cs`, `ListDefList.cs`, `MetadataRuleSetList.cs` — implementations
+  - `SkylineDataSchema.cs` — `_modeUIOverride` field, `MemoryDataSchema` modeUI parameter
+  - `MetadataRuleSet.cs`, `ListData.cs` — `GetKey()` made non-explicit
+  - `JsonToolServerTest.cs` — moved settings tests out, removed 5 methods
+  - `JsonToolServerSettingsTest.cs` — new comprehensive settings test class
+  - `TestFunctional.csproj` — added new test file

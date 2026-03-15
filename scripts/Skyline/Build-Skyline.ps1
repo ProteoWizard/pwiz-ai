@@ -81,7 +81,10 @@ param(
     [string]$Verbosity = "minimal",
 
     [Parameter(Mandatory=$false)]
-    [string]$SourceRoot = $null  # Path to pwiz root (auto-detected if not specified)
+    [string]$SourceRoot = $null,  # Path to pwiz root (auto-detected if not specified)
+
+    [Parameter(Mandatory=$false)]
+    [switch]$Summary = $false  # Show only errors and final result (suppresses verbose build output)
 )
 
 # Ensure UTF-8 output for status symbols (must be set before any Write-Host)
@@ -248,11 +251,20 @@ Write-Host "Command: & `"$msbuild`" $($buildArgs -join ' ')`n" -ForegroundColor 
 
 # Execute build
 $buildStart = Get-Date
-& $msbuild $buildArgs
-$buildExitCode = $LASTEXITCODE
+if ($Summary) {
+    $buildOutput = & $msbuild $buildArgs 2>&1
+    $buildExitCode = $LASTEXITCODE
+} else {
+    & $msbuild $buildArgs
+    $buildExitCode = $LASTEXITCODE
+}
 $buildDuration = (Get-Date) - $buildStart
 
 if ($buildExitCode -ne 0) {
+    if ($Summary) {
+        # Show only error lines from captured output
+        $buildOutput | Where-Object { $_ -match 'error\s+(CS|MSB)|Build FAILED' } | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+    }
     Write-Host "`n❌ Build FAILED (exit code: $buildExitCode) in $($buildDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Red
     exit $buildExitCode
 }
@@ -298,16 +310,25 @@ if ($RunTests -and $Target -ne "Clean") {
     Push-Location $outputDir
     try {
         $testStart = Get-Date
-        & .\TestRunner.exe log=$testLogName buildcheck=1 $testParam
+        if ($Summary) {
+            & .\TestRunner.exe log=$testLogName buildcheck=1 $testParam > $null 2>&1
+        } else {
+            & .\TestRunner.exe log=$testLogName buildcheck=1 $testParam
+        }
         $testExitCode = $LASTEXITCODE
         $testDuration = (Get-Date) - $testStart
-        
+
         if ($testExitCode -ne 0) {
             Write-Host "`n❌ Tests FAILED (exit code: $testExitCode) in $($testDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Red
-            Write-Host "See log: $testLog" -ForegroundColor Gray
+            Write-Host "Log file: $testLog" -ForegroundColor Gray
+            if ($Summary) {
+                # Show only failure lines and first exception from log
+                Get-Content $testLogName | Where-Object { $_ -match 'FAILED|Exception:|Assert\.' } |
+                    Select-Object -First 10 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+            }
             exit $testExitCode
         }
-        
+
         Write-Host "`n✅ All tests passed in $($testDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
     }
     finally {
