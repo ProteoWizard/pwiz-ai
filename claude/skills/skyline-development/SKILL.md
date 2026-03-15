@@ -17,7 +17,7 @@ When starting a new TODO or sprint, read **ai/todos/STARTUP.md** first. It provi
 ## Continuing Work on Current Branch
 
 When asked to continue work on the current branch or its TODO:
-1. Run `git branch --show-current` to get branch name (e.g., `Skyline/work/20251126_files_view`)
+1. Call `mcp__status__get_project_status()` to get branch name (e.g., `Skyline/work/20251126_files_view`)
 2. Extract date and feature name from branch (e.g., `20251126_files_view`)
 3. Read the TODO file at `ai/todos/active/TODO-{date}_{feature}.md`
 4. The TODO contains: objective, PR link, completed tasks, remaining work, and context

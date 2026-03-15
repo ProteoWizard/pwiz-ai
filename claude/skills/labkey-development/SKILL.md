@@ -18,7 +18,7 @@ Ask the user the following questions upfront (can be combined into one message):
 1. **Which module** are you working on?
 2. **Do you need to create a feature branch?** If yes:
    - Ask: **Which release are you targeting?** (e.g. `25.11`)
-   - Check the current branch: `cd C:/proj/labkeyEnlistment && git branch --show-current`
+   - Check the current branch: call `mcp__status__get_project_status()` and find the labkeyEnlistment repo
    - If not already on the correct `releaseXX.Y-SNAPSHOT` branch, **tell the user which branch is currently checked out and which one is needed, and ask for confirmation before switching**. Only proceed after the user confirms:
      ```bash
      cd C:/proj/labkeyEnlistment
