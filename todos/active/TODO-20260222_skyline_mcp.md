@@ -154,7 +154,8 @@
 
   ### Future enhancements (post-PR)
 
-  - [ ] Immediate Window font: ASCII table borders don't align (proportional font)
+  - [x] Immediate Window font: switched to Consolas 9pt monospaced font, fixed missing
+    newline on Enter (session 51)
   - [x] Tool Store packaging and submission (sessions 43-47: download URL fix, getting-started
     docs, info.properties description, version stamping, ZIP renamed to SkylineAiConnector.zip;
     deployment awaits LabKey PR merge and skyline.ms deployment)
