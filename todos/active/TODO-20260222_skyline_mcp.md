@@ -783,3 +783,35 @@
     `DeserializeSettingsItem()` helpers
   - `SkylineTools.cs` — `skyline_add_settings_list_item` MCP tool
   - `JsonToolServerTest.cs` — `TestAddSettingsListItem` method
+
+  ### Session 50 (2026-03-14): End-to-end functional test for SkylineMcpServer
+
+  Added `TestSkylineMcp` - a functional test that exercises the full pipeline:
+  tool installation from ZIP, MCP JSON-RPC protocol, and Skyline document operations
+  driven through the MCP server.
+
+  **ZIP output to project root**: Changed `_ToolZipPath` in `SkylineAiConnector.csproj`
+  to output directly to the project directory (consistent with MSstats.zip pattern).
+  Developers just build and commit.
+
+  **FunctionalTest mode**: Added `Program.FunctionalTest` to `SkylineMcpServer` (set via
+  `SKYLINE_MCP_TEST=1` env var). Relaxes `IsSkylineProcess()` in both `SkylineConnection.cs`
+  (MCP server side) and `JsonToolServer.cs` (Skyline side) to skip process name checks
+  when running under TestRunner.exe.
+
+  **Test flow** (starts from blank document, no test data ZIP needed):
+  1. Install tool from `SkylineAiConnector.zip` via `ConfigureToolsDlg`
+  2. Create `JsonToolServer` + connection file, launch `SkylineMcpServer.exe`
+  3. MCP initialize + tools/list (35 tools)
+  4. `get_version` (matches `Install.Version`), `get_document_path` (unsaved = "(unsaved)")
+  5. `import_fasta` (short insulin sequence), verify document state from Skyline side
+  6. `get_report_from_definition` (ProteinName, ProteinDescription, ProteinSequence)
+  7. `run_command --save-as`, verify `get_document_path` returns saved path
+
+  **Files changed:**
+  - `SkylineAiConnector.csproj` — ZIP output path to project root
+  - `SkylineMcpServer/Program.cs` — `FunctionalTest` property, explicit `Main` method
+  - `SkylineMcpServer/SkylineConnection.cs` — relaxed `IsSkylineProcess` for test mode
+  - `ToolsUI/JsonToolServer.cs` — same `IsSkylineProcess` fix for Skyline side
+  - `TestFunctional/SkylineMcpTest.cs` — new end-to-end test
+  - `TestFunctional/TestFunctional.csproj` — added `SkylineMcpTest.cs`
