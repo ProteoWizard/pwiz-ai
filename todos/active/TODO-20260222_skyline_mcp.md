@@ -862,3 +862,98 @@
   - `JsonToolServerTest.cs` — moved settings tests out, removed 5 methods
   - `JsonToolServerSettingsTest.cs` — new comprehensive settings test class
   - `TestFunctional.csproj` — added new test file
+
+  ### Sessions 52-53 (2026-03-16): ReportDefinitionReader — Report API rework attempt
+
+  **Goal**: Replace our `ColumnResolver.cs` with Nick Shulman's `ReportDefinitionReader.cs`
+  (provided in `ai/.tmp/ReportDefinitionReader.cs`). Nick's design uses a SkylineDocument-rooted
+  column index with `DocumentViewTransformer.UntransformView()` for canonical row source selection,
+  plus explicit reporting scopes (document_grid, audit_log, group_comparisons, candidate_peaks).
+
+  **What was implemented:**
+  - **Scope framework**: `ReportDefinitionReader` with named scopes, auto-detect (try all
+    resolvers), `ColumnResolver` base class for non-Document-Grid scopes
+  - **Wire protocol**: `Scope` property on `ReportDefinition` POCO, plumbed through
+    `IJsonToolService`, `JsonToolServer`, and MCP tools
+  - **Non-Document-Grid resolvers**: AuditLog, GroupComparisons, CandidatePeaks as separate
+    scopes with their own column namespaces via Nick's single-root approach
+  - **Deleted `ColumnResolver.cs`**, added `ReportDefinitionReader.cs` to `Skyline.csproj`
+
+  **Critical discovery: Nick's SkylineDocument-rooted approach produces wrong column names.**
+
+  The core issue: column names depend on the `ChildDisplayNameAttribute` chain along the
+  column descriptor path. From entity roots (e.g., Precursor), the path
+  `Precursor.Peptide.ModifiedSequence.MonoisotopicMasses` chains correctly through
+  `[ChildDisplayName("PeptideModifiedSequence{0}")]` to produce the user-visible name
+  `PeptideModifiedSequenceMonoisotopicMasses`. But from SkylineDocument, the path goes
+  through collection elements (`Proteins!*.Peptides!*.ModifiedSequence.MonoisotopicMasses`)
+  which lack the same `ChildDisplayNameAttribute` chain, producing
+  `ModifiedSequenceMonoisotopicMasses` (missing "Peptide" prefix).
+
+  This caused auto-detect to fall through Document Grid to CandidatePeakGroup scope
+  (which resolved all columns from `PrecursorResult` paths), producing 829 rows instead
+  of 13. Additionally, properties like `TotalArea` (a `PrecursorResult` property)
+  resolved at the Transition level because Nick's DFS visits `Transition.Results` before
+  `Precursor.Results`, and the first-found-wins indexing kept the deeper path.
+
+  **Resolution**: Rewrote `DocumentGridColumnResolver` to use per-entity-root column
+  indexing (the same approach as the original `ColumnResolver`) instead of Nick's
+  SkylineDocument-rooted approach. This is functionally a copy of the old `ColumnResolver`
+  code within the new scope framework.
+
+  **Net result after two sessions:**
+  - **Gained**: Scope parameter support, non-Document-Grid resolvers (AuditLog,
+    GroupComparisons, CandidatePeaks), auto-detect across scopes, cleaner separation
+    of concerns
+  - **Lost/rebuilt**: `DocumentGridColumnResolver` reproduces the original `ColumnResolver`
+    almost entirely — same per-entity traversal, same `IsCheckableParent`, same
+    `IndexEntityColumn` with prefer-fewer-collection-steps, same `TryResolveAll`/
+    `FindDeepestSublist`, same topic discovery from entity roots
+  - **Wasted effort**: ~90% of debugging time was spent discovering that Nick's
+    SkylineDocument-rooted column index produces different column names than what
+    users see in the ViewEditor — a fundamental incompatibility that required reverting
+    to the original column indexing approach
+
+  **All 3 tests pass**: TestJsonToolServer (11s), TestJsonToolServerSettings (2s),
+  TestSkylineMcp (3s).
+
+  ### Session 54 (2026-03-16): Restored ColumnResolver and eliminated duplication
+
+  Followed through on session 52-53's recommendation to restore `ColumnResolver.cs` and
+  make `ReportDefinitionReader` delegate to it instead of duplicating its code.
+
+  **Approach**: Kept types (`TopicInfo`, `ColumnInfo`, `UnresolvedColumn`,
+  `UnresolvedColumnsException`, `ResolveResult`) in `ColumnResolver` where they originated.
+  `ReportDefinitionReader` uses them via `using` aliases.
+
+  **Changes to `ColumnResolver.cs`** (minimal, from committed baseline):
+  - Added `public DataSchema` property (needed by `DocumentGridResolver`)
+  - Changed `UnresolvedColumnsException` base from `Exception` to `ArgumentException`
+    (allows `ReportDefinitionReader.FormatAutoDetectError` to return it as `ArgumentException`)
+  - Enhanced `FormatMessage` with LLM-friendly per-column suggestions instead of bare
+    comma-separated name list (moved from `JsonToolServer.FormatUnresolvedColumnsError`)
+
+  **Rewrote `ReportDefinitionReader.cs`** (575 lines, down from 1113):
+  - Renamed nested `ColumnResolver` to `ScopeColumnResolver` to avoid name collision
+  - `DocumentGridResolver` holds a `ColumnResolver` instance and delegates `Resolve()`
+    and `GetTopics()`, then applies scope-specific logic (UI mode, pivots, filters)
+  - Extracted `IScopeResolver` interface for polymorphism across scope types
+  - Removed ~500 lines of duplicated per-entity traversal code
+
+  **`JsonToolServer.cs`** (net -155 lines): `ResolveReportDefinition` reduced from
+  ~145 lines (inline column resolution, filter parsing, pivot logic, error formatting)
+  to ~8 lines delegating to `ReportDefinitionReader.CreateViewSpec()`.
+
+  **All 3 tests pass**: TestJsonToolServer (12s), TestJsonToolServerSettings (2s),
+  TestSkylineMcp (3s).
+
+  **Files changed (uncommitted):**
+  - `ReportDefinitionReader.cs` — **New**: scope framework, `ScopeColumnResolver`,
+    `DocumentGridResolver` (delegates to `ColumnResolver`), `IScopeResolver` interface
+  - `ColumnResolver.cs` — public `DataSchema`, `ArgumentException` base, LLM error messages
+  - `Skyline.csproj` — added `ReportDefinitionReader.cs` (ColumnResolver stays)
+  - `JsonToolServer.cs` — delegates to `ReportDefinitionReader`, removed inline resolution
+  - `IJsonToolService.cs` — scope parameter on `GetReportDocTopics`/`GetReportDocTopic`
+  - `JsonToolModels.cs` — `Scope` on `ReportDefinition`
+  - `SkylineTools.cs` — scope parameter on MCP tools
+  - `JsonToolServerTest.cs` — scope-aware assertions, restored `VerifyRowSource` tests
