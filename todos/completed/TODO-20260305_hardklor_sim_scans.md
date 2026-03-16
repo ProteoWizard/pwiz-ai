@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260305_hardklor_sim_scans`
 - **Base**: `master`
 - **Created**: 2026-03-05
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4053](https://github.com/ProteoWizard/pwiz/issues/4053)
-- **PR**: [#4054](https://github.com/ProteoWizard/pwiz/pull/4054)
+- **PR**: [#4054](https://github.com/ProteoWizard/pwiz/pull/4054) — merged
 
 ## Objective
 
@@ -23,8 +23,10 @@ to be fragmented or dropped entirely.
 - [x] Mirror all changes in `BullseyeSharp/CKronik2.cs`
 - [x] Commit submodule changes on `Skyline/work/20260305_hardklor_sim_scans` in Hardklor and BullseyeSharp
 - [x] Commit submodule pointer updates in main pwiz repo
-- [ ] Push all three repos
-- [ ] Create PR
+- [x] Push all three repos
+- [x] Create PR
+- [x] Add `PerfFeatureDetectionSIMscansTest` perf test
+- [x] Merge PR and delete branch
 
 ## Progress Log
 
@@ -32,4 +34,9 @@ to be fragmented or dropped entirely.
 
 Code changes already implemented in both Hardklor (C++) and BullseyeSharp (C#) submodules.
 Branches created and changes committed locally in all three repos. Issue #4053 created.
-Ready to push and open PR.
+
+### 2026-03-16 - Completed
+
+PR #4054 merged to master. All three repos (pwiz, Hardklor, BullseyeSharp) updated.
+Perf test `PerfFeatureDetectionSIMscansTest` added with expected counts (1451 features,
+1959 transition groups, 5877 transitions) and chromatogram extraction verification.
