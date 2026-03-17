@@ -5,7 +5,7 @@
 - **Worktree**: `pwiz-work1`
 - **Base**: `master`
 - **Created**: 2026-02-19
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#3987](https://github.com/ProteoWizard/pwiz/issues/3987)
 - **PR**: [#4017](https://github.com/ProteoWizard/pwiz/pull/4017)
 - **Failure Fingerprint**: `8b3ee265ba8c38cd`
@@ -35,3 +35,16 @@ Fix intermittent TestPublishToPanorama failures caused by a TOCTOU race conditio
 ### 2026-02-19 - Session Start
 
 Starting work on this issue. Branch created, TODO filed.
+
+### 2026-02-20 - Merged
+
+PR #4017 merged. Added duplicate form detection via `FindOpenForm<T>()` diagnostics
+and renamed test server constant to `panorama.test.invalid:8080` per RFC 2606.
+
+## Resolution
+
+- **Status**: Fixed
+- **PR**: [#4017](https://github.com/ProteoWizard/pwiz/pull/4017) — merged 2026-02-20
+- **Issue**: [#3987](https://github.com/ProteoWizard/pwiz/issues/3987) — closed
+- **Summary**: Fixed TOCTOU race condition in TestPublishToPanorama where a late MessageDlg
+  from cancel sub-test leaked into the no-network sub-test, causing watchdog timeout.

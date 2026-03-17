@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260223_gc_leak_tracker`
 - **Base**: `master`
 - **Created**: 2026-02-23
-- **Status**: Ready for PR
+- **Status**: Completed
 - **Related**: [PR #4032](https://github.com/ProteoWizard/pwiz/pull/4032) (Nick Shulman - MemoryLeaks fix, MERGED)
-- **PR**: (pending)
+- **PR**: [#4034](https://github.com/ProteoWizard/pwiz/pull/4034)
 
 ## Summary
 
@@ -60,3 +60,15 @@ transitively holds SkylineWindow alive.
 
 ## Test results
 - 395 TestFunctional tests: **ALL PASS** (full English run, serial + parallel validation)
+
+### 2026-02-24 - Merged
+
+PR #4034 merged.
+
+## Resolution
+
+- **Status**: Fixed
+- **PR**: [#4034](https://github.com/ProteoWizard/pwiz/pull/4034) — merged 2026-02-24
+- **Summary**: Added WeakReference-based GarbageCollectionTracker to verify SkylineWindow
+  and SrmDocument are GC'd after each functional test. Fixed DuplicatedPeptideFinder static
+  cache leak (WeakReference) and test-side audit log entry caches.

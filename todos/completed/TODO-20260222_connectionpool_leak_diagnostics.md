@@ -2,7 +2,7 @@
 
 **Created**: 2026-02-22
 **Branch**: `Skyline/work/20260222_connectionpool_leak_diagnostics`
-**Status**: PR open
+**Status**: Completed
 **PR**: [#4033](https://github.com/ProteoWizard/pwiz/pull/4033)
 
 ## Goal
@@ -98,3 +98,12 @@ Four layers, implemented incrementally:
 
 * 2026-02-22: Created TODO, wrote architecture-files.md documentation
 * 2026-02-22: Implemented all 4 layers, unit test, full smoke test passed
+* 2026-02-23: PR #4033 merged
+
+## Resolution
+
+- **Status**: Fixed
+- **PR**: [#4033](https://github.com/ProteoWizard/pwiz/pull/4033) — merged 2026-02-23
+- **Summary**: Added 4-layer ConnectionPool diagnostic infrastructure: improved ToString()
+  with file paths, reordered EndTest() cleanup, added connection tracking with stack traces,
+  and automated leak assertions in EndTest().

@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260221_fix_duplicate_heatmapgraph`
 - **Base**: `master`
 - **Created**: 2026-02-21
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4022](https://github.com/ProteoWizard/pwiz/issues/4022)
 - **PR**: [#4030](https://github.com/ProteoWizard/pwiz/pull/4030)
 
@@ -48,3 +48,16 @@ utility for test diagnostics.
 
 Debugging revealed that NewDocument() preserves lists with data, so CloseInapplicableForms
 only fires when opening a truly different document. Test exercises both paths.
+
+### 2026-02-23 - Merged
+
+PR #4030 merged.
+
+## Resolution
+
+- **Status**: Fixed
+- **PR**: [#4030](https://github.com/ProteoWizard/pwiz/pull/4030) — merged 2026-02-23
+- **Issue**: [#4022](https://github.com/ProteoWizard/pwiz/issues/4022) — closed
+- **Summary**: Two-pronged fix — close DataboundGraph/ListGridForm in LoadLayoutLocked()
+  before layout deserialization, and add CloseInapplicableForms() in UpdateGraphUI() for
+  documents without the expected list.

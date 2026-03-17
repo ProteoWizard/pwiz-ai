@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260224_connectionpool_unit_test_cleanup`
 - **Base**: `master`
 - **Created**: 2026-02-24
-- **Status**: In Progress - snapshot-on-leak mode added, GraphSpectrum race fixed
+- **Status**: Completed
 - **GitHub Issue**: (none - bug fix for PR #4033)
 - **PR**: #4038 (full cleanup), #4037 (minimal fix, merged)
 
@@ -60,3 +60,21 @@ enabled `CheckForLeaks()` for the first time, exposing 6 pre-existing leaks.
 | TestPeakAreaRelativeAbundanceGraph | Static `ReplicateCachingReceiver._cachedSinceTracked` list holding GraphData with SrmDocument | Replaced TrackCaching property with Start/EndTrackCaching methods |
 | TestKoinaSkylineIntegration, TestEncyclopeDiaSearch | `GraphSpectrum.UpdateManager` Timer -> EventHandler -> SkylineWindow | Added `OnHandleDestroyed` to dispose UpdateManager |
 | TestStandardType (intermittent) | Same Timer race: QueueUpdate() restarts timer after Dispose() | Added `_disposed` guard + unhook Tick event in Dispose() |
+
+### 2026-02-25 - PR #4037 merged
+
+Scoped ConnectionPool.TrackHistory to functional test lifetime.
+
+### 2026-02-26 - PR #4038 merged
+
+Full cleanup: improved ConnectionPool leak diagnostics and TestRunner fixes including
+snapshot-on-leak mode and GraphSpectrum Timer race condition fix.
+
+## Resolution
+
+- **Status**: Fixed
+- **PRs**: [#4037](https://github.com/ProteoWizard/pwiz/pull/4037) (merged 2026-02-25),
+  [#4038](https://github.com/ProteoWizard/pwiz/pull/4038) (merged 2026-02-26)
+- **Summary**: Scoped ConnectionPool tracking to functional test lifetime, fixed 6 GC leak
+  tracker failures (TestDeployment IDisposable, ReplicateCachingReceiver, GraphSpectrum
+  OnHandleDestroyed/Timer race), added snapshot-on-leak mode for dotMemory.
