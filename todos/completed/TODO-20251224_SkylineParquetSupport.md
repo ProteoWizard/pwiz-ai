@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20251224_SkylineParquetSupport`
 - **Base**: `master`
 - **Created**: 2024-12-24
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none)
 - **PR**: [#3968](https://github.com/ProteoWizard/pwiz/pull/3968)
 - **Objective**: Add Parquet export support for Skyline reports
@@ -56,13 +56,13 @@ This feature adds the ability to export Skyline reports directly to Parquet form
 - [x] Create `ResultMap` class for efficient result lookups
 - [x] Add `RowItemEnumerator.Take()` method
 
-### Phase 5: Testing (In Progress)
+### Phase 5: Testing (Completed)
 
 - [x] Create `ParquetRowItemExporterTest` for unit testing
 - [x] Create `ExportHugeParquetReportTest` for large-scale testing
 - [x] Fix `ConsoleReportExportTest` and `AuditLogTest`
-- [ ] Run full test suite
-- [ ] Performance benchmarking with large documents
+- [x] Run full test suite
+- [x] Performance benchmarking with large documents
 
 ## Key Files Modified
 
@@ -129,11 +129,11 @@ The `.parquet` extension automatically selects Parquet format.
 
 ## Remaining Tasks
 
-- [ ] Run full test suite to verify all tests pass
-- [ ] Performance benchmarking with large documents
-- [ ] Update documentation if needed
-- [ ] Create PR for review
-- [ ] Address review feedback
+- [x] Run full test suite to verify all tests pass
+- [x] Performance benchmarking with large documents
+- [x] Update documentation if needed
+- [x] Create PR for review - [#3968](https://github.com/ProteoWizard/pwiz/pull/3968)
+- [x] Address review feedback
 
 ## Usage Examples
 
