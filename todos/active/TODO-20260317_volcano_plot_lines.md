@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260317_volcano_plot_lines`
 - **Base**: `master`
 - **Created**: 2026-03-17
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4052](https://github.com/ProteoWizard/pwiz/issues/4052)
-- **PR**: (pending)
+- **PR**: [#4075](https://github.com/ProteoWizard/pwiz/pull/4075)
 
 ## Summary
 
@@ -18,33 +18,39 @@ makes any adjustment (e.g. toggles the log checkbox).
 
 - [x] Add repro assertion to `GroupComparisonVolcanoPlotTest.DoTest()` after
       the log-checkbox `OpenVolcanoPlotProperties` block
-- [ ] Run the test locally to confirm it fails (reproduces the bug)
-- [ ] Investigate root cause in `FoldChangeVolcanoPlot.UpdateGraph()` /
-      `VolcanoPlotPropertiesDlg.FormClosing`
-- [ ] Fix the root cause
-- [ ] Confirm test passes after fix
-- [ ] Create PR
+- [x] Run the test locally to confirm it fails (reproduces the bug)
+- [x] Investigate root cause in `FoldChangeVolcanoPlot.UpdateGraph()`
+- [x] Fix the root cause
+- [x] Confirm test passes after fix
+- [x] Create PR
+
+## Root Cause
+
+`FoldChangeVolcanoPlot.UpdateGraph()` rebuilds the curve list and creates new
+reference line `LineItem`s with placeholder coordinates `(Y=[0,0]` for
+fold-change lines, `X=[0,0]` for the p-value line). `AdjustLocations()` is
+responsible for setting real axis-spanning coordinates, but it was only invoked
+via `AxisChange()` inside the `if (_dataChanged)` block. When only cutoff
+settings changed (not the underlying data), `_dataChanged` was `false`,
+`AxisChange()` was skipped, `AdjustLocations()` was never called, and the
+reference lines remained as invisible zero-length segments.
+
+## Fix
+
+Added an `else` branch in `FoldChangeVolcanoPlot.UpdateGraph()` to call
+`AdjustLocations(zedGraphControl.GraphPane)` directly when `_dataChanged` is
+`false`:
+
+```csharp
+else
+{
+    // Only cutoff settings changed; AxisChange() was not called so reposition
+    // the reference lines manually to span the current axis range (issue #4052).
+    AdjustLocations(zedGraphControl.GraphPane);
+}
+```
 
 ## Key Files
 
-- `pwiz_tools/Skyline/TestFunctional/GroupComparisonVolcanoPlotTest.cs` — repro test
-- `pwiz_tools/Skyline/Controls/GroupComparison/FoldChangeVolcanoPlot.cs` — plot logic
-- `pwiz_tools/Skyline/Controls/GroupComparison/VolcanoPlotPropertiesDlg.cs` — settings dialog
-
-## Technical Notes
-
-The repro assertion was inserted after line 86 (end of log-checkbox toggle block):
-
-```csharp
-// Repro for issue #4052: after modifying settings the dotted reference lines must
-// still be visible. CurveCount == 5 means fold-change and p-value cutoff lines are present.
-WaitForVolcanoPlotPointCount(grid, 125);
-RunUI(() => AssertVolcanoPlotCorrect(volcanoPlot, true, 1, 42, 82));
-```
-
-`AssertVolcanoPlotCorrect(volcanoPlot, showingBounds=true, ...)` checks
-`Assert.AreEqual(5, curveCounts.CurveCount)` — the 3 cutoff lines must be present.
-
-`UpdateGraph()` only adds reference lines when `CutoffSettings.FoldChangeCutoffValid` /
-`PValueCutoffValid` — suspect the dialog's `FormClosing` triggers `UpdateGraph(bool filter)`
-which under some condition defers the full redraw, leaving `CurveList` cleared.
+- `pwiz_tools/Skyline/TestFunctional/GroupComparisonVolcanoPlotTest.cs` — repro test (`AssertCutoffLinesVisible`)
+- `pwiz_tools/Skyline/Controls/GroupComparison/FoldChangeVolcanoPlot.cs` — fix location: `UpdateGraph()`, after the `if (_dataChanged)` block
