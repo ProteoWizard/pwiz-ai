@@ -2,9 +2,8 @@
   - **Branch**: `Skyline/work/20260222_skyline_mcp`
   - **Base**: `master`
   - **Created**: 2026-02-22
-  - **Status**: In Progress
-  - **GitHub Issue**: (pending)
-  - **PR**: (pending)
+  - **Status**: Completed
+  - **PR**: [#4065](https://github.com/ProteoWizard/pwiz/pull/4065)
 
   ## Overview
 

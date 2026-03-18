@@ -3,7 +3,7 @@
   - **Base**: `master`
   - **Created**: 2026-02-22
   - **Work started**: 2026-02-27
-  - **Status**: In Progress
+  - **Status**: Completed
   - **PR**: [#4065](https://github.com/ProteoWizard/pwiz/pull/4065)
 
   ## Overview
@@ -957,3 +957,16 @@
   - `JsonToolModels.cs` — `Scope` on `ReportDefinition`
   - `SkylineTools.cs` — scope parameter on MCP tools
   - `JsonToolServerTest.cs` — scope-aware assertions, restored `VerifyRowSource` tests
+
+  ### 2026-03-18 - Merged
+
+  PR #4065 squash-merged (74 commits → 1). 54 sessions over 3 weeks.
+
+  ## Resolution
+
+  - **Status**: Fixed
+  - **PR**: [#4065](https://github.com/ProteoWizard/pwiz/pull/4065) — merged 2026-03-18
+  - **Summary**: Added MCP server enabling AI applications (Claude Desktop, Claude Code,
+    VS Code, Cursor, Gemini CLI) to interact with running Skyline instances. 2-tier
+    architecture with 35 MCP tools, POCO marshalling, multi-instance support, screen
+    capture, auto-connect, Tool Store packaging, and 82.4% test coverage.
