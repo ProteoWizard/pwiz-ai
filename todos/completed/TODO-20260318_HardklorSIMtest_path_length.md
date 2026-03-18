@@ -11,7 +11,7 @@ type: project
 - **Base**: `master`
 - **Repo**: `C:\Dev\master_clean`
 - **Created**: 2026-03-18
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4079](https://github.com/ProteoWizard/pwiz/issues/4079)
 - **PR**: [#4080](https://github.com/ProteoWizard/pwiz/pull/4080)
 - **Test Name**: TestFeatureDetectionSIMscans
