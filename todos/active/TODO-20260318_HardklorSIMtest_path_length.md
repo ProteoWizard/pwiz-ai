@@ -13,7 +13,7 @@ type: project
 - **Created**: 2026-03-18
 - **Status**: In Progress
 - **GitHub Issue**: [#4079](https://github.com/ProteoWizard/pwiz/issues/4079)
-- **PR**: (pending)
+- **PR**: [#4080](https://github.com/ProteoWizard/pwiz/pull/4080)
 - **Test Name**: TestFeatureDetectionSIMscans
 - **Fix Type**: failure
 
@@ -26,8 +26,8 @@ shortening the TestDirectoryName in the test.
 ## Tasks
 
 - [x] Shorten `TestDirectoryName` from `"FeatureDetectionSIMscansTest"` to `"HardklorSIMtest"` in `PerfFeatureDetectionSIMscansTest.cs`
-- [ ] Commit and push branch
-- [ ] Create PR
+- [x] Commit and push branch
+- [x] Create PR
 
 ## Progress Log
 
