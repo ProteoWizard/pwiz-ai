@@ -116,6 +116,7 @@ See [ai/TESTING.md](TESTING.md) for testing guidelines.
 - Always read `ai/todos/active/TODO-YYYYMMDD_*.md` for current branch context
 - Update TODO file with every commit
 - Follow branch naming: `Skyline/work/YYYYMMDD_description`
+- Call `mcp__status__set_active_project` at session start and whenever the working repo changes — don't wait for the user to notice the statusline is stale
 
 ### Code Quality
 - Match surrounding file style exactly
