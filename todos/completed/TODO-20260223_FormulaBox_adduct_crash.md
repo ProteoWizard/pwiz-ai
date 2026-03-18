@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260223_FormulaBox_adduct_crash`
 - **Base**: `master`
 - **Created**: 2026-02-23
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4009](https://github.com/ProteoWizard/pwiz/issues/4009)
 - **PR**: (pending)
 - **Exception Fingerprint**: `0e95385b5da1fab2`
@@ -27,7 +27,7 @@ Fix unhandled `InvalidChemicalModificationException` in FormulaBox when typing a
 - [x] Run relevant tests (AdductTest, EditCustomMoleculeDlgTest)
 - [x] Manual test - tooltip shows on hover over invalid formula
 - [x] Manual test - OK blocked for negative atom count formulas
-- [ ] Create PR
+- [x] Create PR
 
 ## Progress Log
 
