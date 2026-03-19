@@ -33,68 +33,77 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$completedDir = Join-Path $PSScriptRoot '..' 'todos' 'completed'
-$completedDir = (Resolve-Path $completedDir).Path
+$aiRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$completedDir = Join-Path $aiRoot 'todos' 'completed'
 
-# Calculate the cutoff: first day of (current month - KeepMonths + 1)
-# Files with dates before this get archived
-$now = Get-Date
-$cutoffMonth = $now.AddMonths(-($KeepMonths - 1))
-$cutoff = Get-Date -Year $cutoffMonth.Year -Month $cutoffMonth.Month -Day 1
+# Work from the ai/ repo root so git commands work correctly
+$initialLocation = Get-Location
+Set-Location $aiRoot
 
-Write-Host "Archive cutoff: files before $($cutoff.ToString('yyyy-MM-dd')) will be archived"
-Write-Host "Scanning $completedDir ..."
+try {
+    # Calculate the cutoff: first day of (current month - KeepMonths + 1)
+    # Files with dates before this get archived
+    $now = Get-Date
+    $cutoffMonth = $now.AddMonths(-($KeepMonths - 1))
+    $cutoff = Get-Date -Year $cutoffMonth.Year -Month $cutoffMonth.Month -Day 1
 
-# Find TODO files at root level (not in subdirectories)
-$files = Get-ChildItem -Path $completedDir -File | Where-Object {
-    $_.Name -match '^TODO-(\d{4})(\d{2})(\d{2})_'
-}
+    Write-Host "Archive cutoff: files before $($cutoff.ToString('yyyy-MM-dd')) will be archived"
+    Write-Host "Scanning $completedDir ..."
 
-$archived = 0
-$skipped = 0
+    # Find TODO files at root level (not in subdirectories)
+    $files = Get-ChildItem -Path $completedDir -File | Where-Object {
+        $_.Name -match '^TODO-(\d{4})(\d{2})(\d{2})_'
+    }
 
-foreach ($file in $files) {
-    if ($file.Name -match '^TODO-(\d{4})(\d{2})(\d{2})_') {
-        $year = $Matches[1]
-        $month = $Matches[2]
-        $day = $Matches[3]
-        $fileDate = Get-Date -Year $year -Month $month -Day $day
+    $archived = 0
+    $skipped = 0
 
-        if ($fileDate -lt $cutoff) {
-            $targetDir = Join-Path $completedDir $year $month
+    foreach ($file in $files) {
+        if ($file.Name -match '^TODO-(\d{4})(\d{2})(\d{2})_') {
+            $year = $Matches[1]
+            $month = $Matches[2]
+            $day = $Matches[3]
+            $fileDate = Get-Date -Year $year -Month $month -Day $day
 
-            if ($DryRun) {
-                Write-Host "  [DRY RUN] $($file.Name) -> $year/$month/"
+            if ($fileDate -lt $cutoff) {
+                $targetDir = Join-Path $completedDir $year $month
+
+                if ($DryRun) {
+                    Write-Host "  [DRY RUN] $($file.Name) -> $year/$month/"
+                }
+                else {
+                    if (-not (Test-Path $targetDir)) {
+                        New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+                    }
+                    # Use git mv for tracked history
+                    $relativeSrc = "todos/completed/$($file.Name)"
+                    $relativeDst = "todos/completed/$year/$month/$($file.Name)"
+                    git mv $relativeSrc $relativeDst
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Warning "git mv failed for $($file.Name), trying filesystem move"
+                        Move-Item $file.FullName (Join-Path $targetDir $file.Name)
+                    }
+                    Write-Host "  Archived: $($file.Name) -> $year/$month/"
+                }
+                $archived++
             }
             else {
-                if (-not (Test-Path $targetDir)) {
-                    New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
-                }
-                # Use git mv for tracked history
-                $relativeSrc = "todos/completed/$($file.Name)"
-                $relativeDst = "todos/completed/$year/$month/$($file.Name)"
-                git -C (Join-Path $PSScriptRoot '..' '..') mv $relativeSrc $relativeDst
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Warning "git mv failed for $($file.Name), trying filesystem move"
-                    Move-Item $file.FullName (Join-Path $targetDir $file.Name)
-                }
-                Write-Host "  Archived: $($file.Name) -> $year/$month/"
+                $skipped++
             }
-            $archived++
-        }
-        else {
-            $skipped++
         }
     }
-}
 
-Write-Host ""
-if ($DryRun) {
-    Write-Host "Dry run complete: $archived would be archived, $skipped kept at root"
-}
-else {
-    Write-Host "Done: $archived archived, $skipped kept at root"
-    if ($archived -gt 0) {
-        Write-Host "Run 'git status' to review, then commit the moves."
+    Write-Host ""
+    if ($DryRun) {
+        Write-Host "Dry run complete: $archived would be archived, $skipped kept at root"
     }
+    else {
+        Write-Host "Done: $archived archived, $skipped kept at root"
+        if ($archived -gt 0) {
+            Write-Host "Run 'git status' to review, then commit the moves."
+        }
+    }
+}
+finally {
+    Set-Location $initialLocation
 }
