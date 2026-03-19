@@ -27,7 +27,7 @@ to resolve an open CVE against the previously bundled HDF5 version. Update
 - [x] Update `vendor_api_Mobilion.7z` with new SDK files (MBI_SDK.dll v1.12.5.10441)
 - [ ] Build with new SDK
 - [ ] Verify MOBILion reader tests pass
-- [ ] Commit and create PR
+- [x] Commit and create PR
 
 ## Progress Log
 
@@ -36,3 +36,5 @@ to resolve an open CVE against the previously bundled HDF5 version. Update
 User downloaded MBI SDK 1.12.5 and updated `vendor_api_Mobilion.7z` before starting
 the session. The DLL in the extracted directory is already v1.12.5.10441. Created
 branch `Skyline/work/20260318_update_MBI_SDK_to_1_12_5` and GitHub issue #4081.
+
+Reader_Mobilion_Test passed. PR #4082 created.
