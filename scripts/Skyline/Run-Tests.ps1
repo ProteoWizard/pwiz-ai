@@ -146,6 +146,12 @@ param(
     [string]$PerformanceProfileType = "Sampling",  # Profiling type (Sampling is fastest, Tracing most accurate)
 
     [Parameter(Mandatory=$false)]
+    [int]$ParallelWorkers = 0,  # Number of parallel Docker workers (0 = off, e.g. 4 = 1 host + 3 Docker)
+
+    [Parameter(Mandatory=$false)]
+    [switch]$KeepWorkerLogs = $false,  # Persist individual logs from each Docker worker
+
+    [Parameter(Mandatory=$false)]
     [string]$SourceRoot = $null,  # Path to pwiz root (auto-detected if not specified)
 
     [Parameter(Mandatory=$false)]
@@ -524,6 +530,7 @@ Write-Host "  Diagnostics: Handles=$(if ($ReportHandles) { 'on' } else { 'off' }
 Write-Host "  Coverage: $(if ($Coverage) { 'Enabled' } else { 'Disabled' })" -ForegroundColor Gray
 Write-Host "  Memory Profile: $(if ($MemoryProfile) { if ($explicitMemoryProfileMode) { "Explicit (warmup=$MemoryProfileWarmup, wait=$MemoryProfileWaitRuns)" } else { 'Snapshot-on-leak' } } else { 'Disabled' })" -ForegroundColor Gray
 Write-Host "  Performance Profile: $(if ($PerformanceProfile) { "Enabled ($PerformanceProfileType)" } else { 'Disabled' })" -ForegroundColor Gray
+Write-Host "  Parallel: $(if ($ParallelWorkers -gt 0) { "$ParallelWorkers workers (1 host + $($ParallelWorkers - 1) Docker)" } else { 'Off' })" -ForegroundColor Gray
 Write-Host "  TeamCity Cleanup: $(if ($TeamCityCleanup) { 'Enabled (DesiredCleanupLevel=all)' } else { 'Disabled' })" -ForegroundColor Gray
 Write-Host "  Log: $outputDir\$logFile`n" -ForegroundColor Gray
 
@@ -609,6 +616,14 @@ try {
         
         if ($TeamCityCleanup) {
             $runnerArgs += "teamcitycleanup=on"
+        }
+
+        if ($ParallelWorkers -gt 0) {
+            $runnerArgs += "parallelmode=server"
+            $runnerArgs += "workercount=$ParallelWorkers"
+            if ($KeepWorkerLogs) {
+                $runnerArgs += "keepworkerlogs=on"
+            }
         }
 
         # Add dotMemory snapshot arguments if memory profiling is enabled
