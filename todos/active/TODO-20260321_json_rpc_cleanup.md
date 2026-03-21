@@ -80,16 +80,17 @@ SkylineTools (MCP tool methods)
 - [x] Build and test (TestJsonToolServer + TestJsonToolServerSettings pass)
 
 ### Phase 3 Batch 2: POCO Return Types + RunCommand Parameter
-- [ ] GetAvailableTutorials: string -> TutorialListItem[] (Category, Name, Title, Description, WikiUrl, ZipUrl)
-- [ ] GetReportDocTopics: string -> ReportDocTopicSummary[] (Name, ColumnCount)
-- [ ] GetOpenForms: string -> FormInfo[] (Type, Title, HasGraph, DockState, Id)
-- [ ] GetLocations: string -> LocationEntry[] (Name, Locator)
-- [ ] RunCommand: string commandArgs -> string[] args (match Main(string[] args) pattern)
-- [ ] RunCommandSilent: string commandArgs -> string[] args (same)
-- [ ] Define POCOs in JsonToolModels.cs
-- [ ] Update all layers: JsonToolServer, SkylineJsonToolClient, SkylineConnection, SkylineTools
-- [ ] Update tests
-- [ ] Build and test
+- [x] GetAvailableTutorials: string -> TutorialListItem[] (Category, Name, Title, Description, WikiUrl, ZipUrl)
+- [x] GetReportDocTopics: string -> ReportDocTopicSummary[] (Name, ColumnCount)
+- [x] GetOpenForms: string -> FormInfo[] (Type, Title, HasGraph, DockState, Id)
+- [x] GetLocations: string -> LocationEntry[] (Name, Locator)
+- [x] RunCommand: string commandArgs -> string[] args (match Main(string[] args) pattern)
+- [x] RunCommandSilent: string commandArgs -> string[] args (same)
+- [x] Defined POCOs in JsonToolModels.cs: TutorialListItem, ReportDocTopicSummary, FormInfo, LocationEntry
+- [x] Updated all layers: JsonToolServer, JsonTutorialCatalog, JsonUiService, SkylineJsonToolClient, SkylineConnection, SkylineTools
+- [x] Consistent TSV header rows in all MCP tool outputs
+- [x] Updated tests (JsonToolServerTest, TutorialCatalogTest, added SkylineTool ref to Test.csproj)
+- [x] Build and test (all 4 test suites pass)
 
 ### Future Work (not this sprint)
 - [ ] GetDocumentStatus: string -> DocumentStatus POCO
@@ -117,3 +118,11 @@ SkylineTools (MCP tool methods)
   - Removed presentation headers from data layer (moved to MCP formatting)
 - All tests pass: TestJsonToolServer, TestJsonToolServerSettings
 - TestSkylineMcp requires SkylineAiConnector.zip rebuild
+- Completed Phase 3 Batch 2: POCO return types + RunCommand string[] args
+  - Four new POCOs: TutorialListItem, ReportDocTopicSummary, FormInfo, LocationEntry
+  - GetAvailableTutorials, GetReportDocTopics, GetOpenForms, GetLocations return typed arrays
+  - RunCommand/RunCommandSilent take string[] args (no more command-line parsing on server)
+  - Made InvokeOnUiThread generic (was string-only)
+  - Consistent TSV header rows in all MCP tool outputs
+  - Updated TutorialCatalogTest, added SkylineTool reference to Test.csproj
+- All tests pass: TestJsonToolServer, TestJsonToolServerSettings, TestTutorialCatalog, TestSkylineMcp
