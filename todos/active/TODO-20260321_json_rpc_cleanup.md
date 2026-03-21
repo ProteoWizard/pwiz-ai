@@ -11,7 +11,7 @@ Solidify the JSON tool service transport layer before the first release of
 SkylineAiConnector and SkylineMcpServer. Replace the custom wire protocol with
 JSON-RPC 2.0, eliminate all JObject/JToken property lookup in production code,
 create SkylineJsonToolClient as the reusable typed IJsonToolService client,
-and begin converting string return types to typed arrays.
+and convert IJsonToolService to a fully typed interface.
 
 This continues the IJsonToolService cleanup from PR #4065. Nick wants
 IJsonToolService to eventually replace the legacy IToolService which uses
@@ -38,7 +38,7 @@ SkylineTools (MCP tool methods)
 **Key files:**
 - `pwiz_tools/Skyline/SkylineTool/IJsonToolService.cs` - shared contract + JSON_RPC enum
 - `pwiz_tools/Skyline/SkylineTool/JsonToolModels.cs` - POCO models
-- `pwiz_tools/Skyline/SkylineTool/SkylineJsonToolClient.cs` - reusable JSON-RPC client (NEW)
+- `pwiz_tools/Skyline/SkylineTool/SkylineJsonToolClient.cs` - reusable JSON-RPC client
 - `pwiz_tools/Skyline/ToolsUI/JsonToolServer.cs` - server implementation
 - `pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/SkylineConnection.cs` - MCP wrapper
 - `pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/Tools/SkylineTools.cs` - MCP tools
@@ -69,16 +69,32 @@ SkylineTools (MCP tool methods)
 - [x] SkylineTools: replaced Call(nameof(...)) with direct interface method calls
 - [x] Build and test Phase 2 (all 3 test suites pass)
 
-### Phase 3 Batch 1: string[] Return Types
-- [ ] IJsonToolService: change GetReplicateNames return to string[]
-- [ ] IJsonToolService: change GetSettingsListTypes return to string[]
-- [ ] IJsonToolService: change GetSettingsListNames return to string[]
-- [ ] IJsonToolService: change GetSettingsListSelectedItems return to string[]
-- [ ] JsonToolServer: update implementations to return string[]
-- [ ] SkylineJsonToolClient: update proxy methods to use CallTyped<string[]>
-- [ ] SkylineTools: format string[] results for MCP display
-- [ ] Tests: update assertions for array return types
-- [ ] Build and test Phase 3
+### Phase 3 Batch 1: string[] Return Types + groupName Parameter
+- [x] GetReplicateNames: string -> string[]
+- [x] GetSettingsListTypes: string -> string[]
+- [x] GetSettingsListNames: string -> string[], added groupName parameter for PersistedViews
+- [x] GetSettingsListSelectedItems: string -> string[]
+- [x] Removed "# Main" / "# External Tools" headers from GetPersistedViewNames data
+- [x] Updated all layers: JsonToolServer, SkylineJsonToolClient, SkylineConnection, SkylineTools
+- [x] Updated tests for array return types
+- [x] Build and test (TestJsonToolServer + TestJsonToolServerSettings pass)
+
+### Phase 3 Batch 2: POCO Return Types + RunCommand Parameter
+- [ ] GetAvailableTutorials: string -> TutorialListItem[] (Category, Name, Title, Description, WikiUrl, ZipUrl)
+- [ ] GetReportDocTopics: string -> ReportDocTopicSummary[] (Name, ColumnCount)
+- [ ] GetOpenForms: string -> FormInfo[] (Type, Title, HasGraph, DockState, Id)
+- [ ] GetLocations: string -> LocationEntry[] (Name, Locator)
+- [ ] RunCommand: string commandArgs -> string[] args (match Main(string[] args) pattern)
+- [ ] RunCommandSilent: string commandArgs -> string[] args (same)
+- [ ] Define POCOs in JsonToolModels.cs
+- [ ] Update all layers: JsonToolServer, SkylineJsonToolClient, SkylineConnection, SkylineTools
+- [ ] Update tests
+- [ ] Build and test
+
+### Future Work (not this sprint)
+- [ ] GetDocumentStatus: string -> DocumentStatus POCO
+- [ ] GetSelection: string -> SelectionInfo POCO
+- [ ] GetReportDocTopic: string -> ReportDocTopicDetail with ColumnDefinition[]
 
 ## Session Log
 
@@ -95,4 +111,9 @@ SkylineTools (MCP tool methods)
   - Future replacement for legacy SkylineToolClient (BinaryFormatter)
   - SkylineConnection now delegates to SkylineJsonToolClient
   - SkylineTools uses typed interface methods (compile-time safe)
-- All tests pass: TestJsonToolServer, TestJsonToolServerSettings, TestSkylineMcp
+- Completed Phase 3 Batch 1: string[] return types
+  - Four methods return string[] instead of formatted strings
+  - Added groupName parameter to GetSettingsListNames for PersistedViews groups
+  - Removed presentation headers from data layer (moved to MCP formatting)
+- All tests pass: TestJsonToolServer, TestJsonToolServerSettings
+- TestSkylineMcp requires SkylineAiConnector.zip rebuild
