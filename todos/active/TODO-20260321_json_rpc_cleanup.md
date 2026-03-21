@@ -102,6 +102,16 @@ SkylineTools (MCP tool methods)
 - [x] MCP tools craft their own confirmation messages
 - [x] Build and test (all 4 test suites pass)
 
+### Phase 4: Developer-Facing Cleanup
+- [ ] Add SkylineJsonToolClient.cs to SkylineTool.csproj (compiled, not Build Action = None)
+- [ ] Add System.Text.Json NuGet to SkylineTool.csproj
+- [ ] Split IJsonToolService.cs: move protocol internals (JSON_RPC enum, error codes, pipe
+      name helpers) to a separate file so tool developers see only the clean interface
+- [ ] Add XML doc comments to SkylineJsonToolClient with usage examples for both
+      .NET 4.7.2 (reference SkylineTool.dll) and .NET 8.0 (link-compile) tool developers
+- [ ] Verify SkylineAiConnector still builds (references SkylineTool.csproj)
+- [ ] Build and test all 4 test suites
+
 ## Session Log
 
 ### Session 1 (2026-03-21)
