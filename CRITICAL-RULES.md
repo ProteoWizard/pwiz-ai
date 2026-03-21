@@ -91,6 +91,13 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 - Use `Build-Skyline.ps1 -RunTests -TestName X -Summary` for build+test in one command
 - Piped commands trigger compound-command permission prompts, blocking unattended iteration
 
+## Commits Require Build and Test Verification
+- **NEVER** commit code that has not been built and tested
+- Before offering to commit, confirm that the code compiles and tests pass
+- If the LLM has not built/tested the code itself, ask the developer: "Has this been built and tested?"
+- This applies after every round of changes, including review feedback fixes
+- A commit that does not build breaks the entire team - treat this as a hard gate
+
 ## NEVER
 - Use `async`/`await` keywords
 - Use English text literals in test assertions

@@ -13,6 +13,16 @@ Before any Git or GitHub operation, read the relevant documentation:
 - **ai/docs/release-cycle-guide.md** - Current release phase, cherry-pick policy
 - **ai/WORKFLOW.md** - Git workflows, TODO system, branch lifecycle
 
+## Pre-Commit Gate: Build and Test
+
+**NEVER commit code that has not been built and tested.** This is a hard gate.
+
+Before staging and committing, verify:
+1. The code compiles without errors
+2. Relevant tests pass
+
+If the LLM has not built/tested the code itself, ask the developer: "Has this been built and tested since the last change?" Do not skip this step even for small fixes - even a small change can introduce a build error or break a test.
+
 ## Commit Message Format
 
 ```
