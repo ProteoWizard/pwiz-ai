@@ -3,7 +3,7 @@
 - **Base**: `master`
 - **Created**: 2026-03-21
 - **Status**: In Progress
-- **PR**: (pending)
+- **PR**: [#4088](https://github.com/ProteoWizard/pwiz/pull/4088)
 
 ## Overview
 
@@ -35,15 +35,22 @@ SkylineTools (MCP tool methods)
             -> JsonToolServer (Skyline process, named pipe server)
 ```
 
-**Key files:**
-- `pwiz_tools/Skyline/SkylineTool/IJsonToolService.cs` - shared contract + JSON_RPC enum
-- `pwiz_tools/Skyline/SkylineTool/JsonToolModels.cs` - POCO models
-- `pwiz_tools/Skyline/SkylineTool/SkylineJsonToolClient.cs` - reusable JSON-RPC client
-- `pwiz_tools/Skyline/ToolsUI/JsonToolServer.cs` - server implementation
-- `pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/SkylineConnection.cs` - MCP wrapper
-- `pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/Tools/SkylineTools.cs` - MCP tools
-- `pwiz_tools/Skyline/TestFunctional/JsonToolServerTest.cs` - tests
-- `pwiz_tools/Skyline/TestFunctional/JsonToolServerSettingsTest.cs` - settings tests
+**Key files (SkylineTool/ - shared contract, link-compiled into SkylineMcpServer):**
+- `SkylineTool/IJsonToolService.cs` - developer-facing interface with XML doc
+- `SkylineTool/JsonToolModels.cs` - POCO models for typed parameters and returns
+- `SkylineTool/JsonToolConstants.cs` - protocol internals (JSON_RPC enum, LlmNameAttribute)
+- `SkylineTool/SkylineJsonToolClient.cs` - JSON-RPC 2.0 named pipe client
+
+**Key files (Skyline server + MCP layer):**
+- `ToolsUI/JsonToolServer.cs` - server-side IJsonToolService implementation
+- `ToolsUI/JsonUiService.cs` - UI thread marshalling helpers
+- `SkylineMcp/SkylineMcpServer/SkylineConnection.cs` - MCP instance management wrapper
+- `SkylineMcp/SkylineMcpServer/Tools/SkylineTools.cs` - MCP tool methods (LLM presentation)
+
+**Tests:**
+- `TestFunctional/JsonToolServerTest.cs` - dispatch, typed returns, void actions, RunCommand
+- `TestFunctional/JsonToolServerSettingsTest.cs` - settings list operations
+- `Test/TutorialCatalogTest.cs` - tutorial catalog
 
 ## Tasks
 
