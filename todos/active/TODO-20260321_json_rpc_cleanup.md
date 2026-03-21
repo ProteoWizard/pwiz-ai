@@ -162,3 +162,10 @@ SkylineTools (MCP tool methods)
   - SkylineJsonToolClient has usage examples for both .NET 4.7.2 and .NET 8.0 tools
   - Added SkylineMcp.sln.DotSettings via Sync-DotSettings.ps1 (shared ReSharper settings)
   - Zero ReSharper warnings, all 4 test suites pass
+- Addressed Copilot review suggestions
+  - Added ERROR_PARSE (-32700) and ERROR_INVALID_REQUEST (-32600) constants
+  - HandleRequest validates request/method before dispatch
+  - Map ArgumentException/FormatException to ERROR_INVALID_PARAMS
+  - Preserve ArgumentException.ParamName when re-wrapping in InvokeOnUiThread
+  - Added Install.BareVersion property (encapsulates Version.Split('-')[0])
+  - Added TestVersionMismatchError in TestSkylineMcp (pipe-level unknown method + version check)
