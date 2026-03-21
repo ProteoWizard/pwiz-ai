@@ -60,7 +60,8 @@ if (-not (Test-Path $baselinePath)) {
 
 $targets = @(
     @{ Name = 'SkylineBatch'; Path = Join-Path $skylineRoot 'Executables/SkylineBatch/SkylineBatch.sln.DotSettings'; ApplyOverrides = $true },
-    @{ Name = 'AutoQC';       Path = Join-Path $skylineRoot 'Executables/AutoQC/AutoQC.sln.DotSettings';             ApplyOverrides = $true }
+    @{ Name = 'AutoQC';       Path = Join-Path $skylineRoot 'Executables/AutoQC/AutoQC.sln.DotSettings';             ApplyOverrides = $true },
+    @{ Name = 'SkylineMcp';   Path = Join-Path $skylineRoot 'Executables/Tools/SkylineMcp/SkylineMcp.sln.DotSettings'; ApplyOverrides = $true }
 )
 
 # Map of overrides (regex pattern => replacement) applied only when ApplyOverrides = $true

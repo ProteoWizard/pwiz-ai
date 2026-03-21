@@ -103,14 +103,14 @@ SkylineTools (MCP tool methods)
 - [x] Build and test (all 4 test suites pass)
 
 ### Phase 4: Developer-Facing Cleanup
-- [ ] Add SkylineJsonToolClient.cs to SkylineTool.csproj (compiled, not Build Action = None)
-- [ ] Add System.Text.Json NuGet to SkylineTool.csproj
-- [ ] Split IJsonToolService.cs: move protocol internals (JSON_RPC enum, error codes, pipe
-      name helpers) to a separate file so tool developers see only the clean interface
-- [ ] Add XML doc comments to SkylineJsonToolClient with usage examples for both
-      .NET 4.7.2 (reference SkylineTool.dll) and .NET 8.0 (link-compile) tool developers
-- [ ] Verify SkylineAiConnector still builds (references SkylineTool.csproj)
-- [ ] Build and test all 4 test suites
+- [x] Added SkylineJsonToolClient.cs to SkylineTool.csproj (compiled into SkylineTool.dll)
+- [x] Added System.Text.Json NuGet to SkylineTool.csproj (PackageReference with RestoreProjectStyle)
+- [x] Split IJsonToolService.cs: moved JsonToolConstants + LlmNameAttribute to JsonToolConstants.cs
+- [x] IJsonToolService.cs reorganized by category with XML doc comments on every method
+- [x] SkylineJsonToolClient.cs has XML doc with usage examples for .NET 4.7.2 and .NET 8.0
+- [x] Added SkylineMcp to Sync-DotSettings.ps1 for shared ReSharper settings
+- [x] Zero ReSharper warnings in both Skyline.sln and SkylineMcp.sln
+- [x] Build and test all 4 test suites pass
 
 ## Session Log
 
@@ -148,3 +148,10 @@ SkylineTools (MCP tool methods)
   - InvokeOnUiThread(Action) propagates exceptions via WrapAndThrowException
   - MCP tools craft their own confirmation messages
 - All tests pass: TestJsonToolServer, TestJsonToolServerSettings, TestSkylineMcp
+- Completed Phase 4: developer-facing cleanup
+  - SkylineJsonToolClient compiled into SkylineTool.dll with System.Text.Json NuGet
+  - Split IJsonToolService.cs: JsonToolConstants + LlmNameAttribute moved to JsonToolConstants.cs
+  - IJsonToolService.cs is now clean developer-facing API with XML doc on every method
+  - SkylineJsonToolClient has usage examples for both .NET 4.7.2 and .NET 8.0 tools
+  - Added SkylineMcp.sln.DotSettings via Sync-DotSettings.ps1 (shared ReSharper settings)
+  - Zero ReSharper warnings, all 4 test suites pass
