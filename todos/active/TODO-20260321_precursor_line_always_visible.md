@@ -6,7 +6,7 @@
 - **Created**: 2026-03-21
 - **Status**: In Progress
 - **GitHub Issue**: [#4086](https://github.com/ProteoWizard/pwiz/issues/4086)
-- **PR**: (pending)
+- **PR**: [#4087](https://github.com/ProteoWizard/pwiz/pull/4087)
 
 ## Objective
 
@@ -24,9 +24,9 @@ is always at least 1 pixel wide regardless of zoom level.
 
 - [x] Investigate root cause
 - [x] Add `LineObj` at `transition.ProductMz` in extraction box loop (`GraphFullScan.cs`)
-- [ ] Build and verify visually
-- [ ] Commit and push
-- [ ] Create PR
+- [x] Build and verify visually
+- [x] Commit and push
+- [x] Create PR
 
 ## Progress Log
 
