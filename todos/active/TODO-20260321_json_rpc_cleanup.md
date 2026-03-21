@@ -92,10 +92,15 @@ SkylineTools (MCP tool methods)
 - [x] Updated tests (JsonToolServerTest, TutorialCatalogTest, added SkylineTool ref to Test.csproj)
 - [x] Build and test (all 4 test suites pass)
 
-### Future Work (not this sprint)
-- [ ] GetDocumentStatus: string -> DocumentStatus POCO
-- [ ] GetSelection: string -> SelectionInfo POCO
-- [ ] GetReportDocTopic: string -> ReportDocTopicDetail with ColumnDefinition[]
+### Phase 3 Batch 3: Remaining POCOs + Void Actions + Scope Rename
+- [x] GetDocumentStatus: string -> DocumentStatus POCO
+- [x] GetSelection: string -> SelectionInfo POCO
+- [x] GetReportDocTopic: string -> ReportDocTopicDetail with ColumnDefinition[]
+- [x] Renamed ReportDefinition.Scope to DataSource throughout (Nick feedback)
+- [x] 8 action methods changed from string to void (decouple LLM presentation from service)
+- [x] InvokeOnUiThread(Action) now propagates exceptions via WrapAndThrowException
+- [x] MCP tools craft their own confirmation messages
+- [x] Build and test (all 4 test suites pass)
 
 ## Session Log
 
@@ -126,3 +131,10 @@ SkylineTools (MCP tool methods)
   - Consistent TSV header rows in all MCP tool outputs
   - Updated TutorialCatalogTest, added SkylineTool reference to Test.csproj
 - All tests pass: TestJsonToolServer, TestJsonToolServerSettings, TestTutorialCatalog, TestSkylineMcp
+- Completed Phase 3 Batch 3: remaining POCOs + void actions + Scope rename
+  - DocumentStatus, SelectionInfo, ReportDocTopicDetail + ColumnDefinition POCOs
+  - Renamed Scope -> DataSource throughout (ReportDefinition, GetReportDocTopics, GetReportDocTopic)
+  - 8 action methods changed to void: LLM presentation decoupled from IJsonToolService
+  - InvokeOnUiThread(Action) propagates exceptions via WrapAndThrowException
+  - MCP tools craft their own confirmation messages
+- All tests pass: TestJsonToolServer, TestJsonToolServerSettings, TestSkylineMcp
