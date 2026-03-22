@@ -62,15 +62,17 @@ Methods with typed parameters that currently double-encode:
 
 ## Tasks
 
-- [ ] JsonToolServer: change JsonRpcRequest.Params from string[] to JToken[] or object[]
-- [ ] JsonToolServer: update Dispatch to handle non-string params (deserialize from JToken)
-- [ ] SkylineJsonToolClient: stop pre-serializing ReportDefinition, string[], bool params
-- [ ] SkylineJsonToolClient: send typed objects directly in params array
-- [ ] Tests: update request construction and verify typed params round-trip
-- [ ] Build and test all 4 test suites
-- [ ] Rebuild SkylineAiConnector.zip and run TestSkylineMcp
+- [x] JsonToolServer: changed JsonRpcRequest.Params from string[] to JToken[]
+- [x] JsonToolServer: replaced DeserializeArg with ConvertArg handling mixed JToken types
+- [x] SkylineJsonToolClient: Call/CallTyped take object[] instead of string[]
+- [x] SkylineJsonToolClient: typed params (ReportDefinition, string[], bool) passed directly
+- [x] Tests: updated request construction to send objects, not JSON strings
+- [x] Build and test all 4 test suites pass
+- [x] Rebuilt SkylineAiConnector.zip and TestSkylineMcp passes
 
 ## Session Log
 
 ### Session 1 (2026-03-22)
 - Created branch and TODO
+- Implemented typed params: eliminated double JSON serialization
+- All 4 test suites pass
