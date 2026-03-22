@@ -2,7 +2,7 @@
 - **Branch**: `Skyline/work/20260321_json_rpc_cleanup`
 - **Base**: `master`
 - **Created**: 2026-03-21
-- **Status**: In Progress
+- **Status**: Completed
 - **PR**: [#4088](https://github.com/ProteoWizard/pwiz/pull/4088)
 
 ## Overview
