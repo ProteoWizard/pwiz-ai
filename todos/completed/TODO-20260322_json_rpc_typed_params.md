@@ -2,8 +2,8 @@
 - **Branch**: `Skyline/work/20260322_json_rpc_typed_params`
 - **Base**: `master`
 - **Created**: 2026-03-22
-- **Status**: In Progress
-- **PR**: (pending)
+- **Status**: Complete
+- **PR**: [#4091](https://github.com/ProteoWizard/pwiz/pull/4091)
 
 ## Overview
 
@@ -76,3 +76,12 @@ Methods with typed parameters that currently double-encode:
 - Created branch and TODO
 - Implemented typed params: eliminated double JSON serialization
 - All 4 test suites pass
+
+### 2026-03-23 - Merged
+
+PR #4091 merged (commit `264e3686`).
+
+## Resolution
+
+**Status**: Merged
+**Summary**: Eliminated double JSON serialization in JSON-RPC transport. Typed parameters (ReportDefinition, string[], bool) are now embedded directly as JSON objects in the params array instead of being pre-serialized to strings. Final wire format change before first SkylineMcpServer release.

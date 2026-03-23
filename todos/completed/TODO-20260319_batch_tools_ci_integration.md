@@ -10,9 +10,9 @@ type: project
 - **Branch**: `Skyline/work/20260319_batch_tools_ci_integration`
 - **Base**: `master`
 - **Created**: 2026-03-19
-- **Status**: In Progress
+- **Status**: Complete
 - **Prior PR**: [#3697](https://github.com/ProteoWizard/pwiz/pull/3697) (to be closed - stale branch from 2025-12-04)
-- **PR**: (pending)
+- **PR**: [#4085](https://github.com/ProteoWizard/pwiz/pull/4085)
 
 ## Objective
 
@@ -66,10 +66,10 @@ Enable CI to build and test AutoQC via Jamfile targets, following the existing S
 - [x] Verify: bjam AutoQCTest passes (15 local tests)
 - [x] Verify: VS tests pass without ACCESS_INTERNET
 - [x] Verify: VS tests pass with ACCESS_INTERNET=True
-- [ ] Commit and create PR
+- [x] Commit and create PR
 - [ ] Close old PR #3697
 - [ ] Coordinate with TeamCity admin for server configuration
-- [ ] Merge after verification
+- [x] Merge after verification
 
 ## Known Issues
 
@@ -82,3 +82,12 @@ Enable CI to build and test AutoQC via Jamfile targets, following the existing S
 - SkylineBatch CI pattern in Jamfile.jam
 - Skyline's `Install.cs` (pwiz_tools/Skyline/Util/Install.cs) - version parsing model
 - `AutoQCTest/TestUtils.cs` for credential and internet access documentation
+
+### 2026-03-23 - Merged
+
+PR #4085 merged (commit `8494701d`).
+
+## Resolution
+
+**Status**: Merged
+**Summary**: AutoQC build and test targets added to Jamfile.jam for TeamCity CI. Connected tests excluded via TestCategory filter. Version handling refactored to follow Skyline's Install pattern. Old PR #3697 still needs closing; TeamCity admin configuration pending.
