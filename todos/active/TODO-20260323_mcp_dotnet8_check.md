@@ -6,7 +6,7 @@
 - **Created**: 2026-03-23
 - **Status**: In Progress
 - **GitHub Issue**: [#4092](https://github.com/ProteoWizard/pwiz/issues/4092)
-- **PR**: (pending)
+- **PR**: [#4093](https://github.com/ProteoWizard/pwiz/pull/4093)
 - **Test Name**: TestSkylineMcp
 - **Fix Type**: failure
 - **Failure Fingerprint**: `5e096c9cf516077f`
@@ -17,11 +17,13 @@ Fix silent failure of `SkylineMcpServer.exe` when .NET 8 Desktop Runtime is not 
 
 ## Tasks
 
-- [ ] SkylineAiConnector: Add .NET 8 runtime check at install/launch time with clear error message
-- [ ] TestSkylineMcp: Capture stderr and exit code on failure, include in assert message
+- [x] SkylineAiConnector: .NET 8 runtime check already implemented in McpServerDeployer.IsDotNet8Installed() and MainForm.DeployMcpServer() - manually verified shows correct dialog
+- [x] TestSkylineMcp: Capture stderr and exit code on failure, include in assert message
 
 ## Progress Log
 
-### 2026-03-23 - Session Start
+### 2026-03-23 - Implementation
 
-Starting work on this issue...
+- SkylineAiConnector already had the .NET 8 runtime check (IsDotNet8Installed + dialog in DeployMcpServer). Manually verified it shows the expected message.
+- Updated TestSkylineMcp to capture stderr and exit code when MCP server exits unexpectedly: threaded mcpProcess through McpCall/McpToolCall/ReadJsonRpcResponse so the failure message now includes exit code and stderr content instead of the opaque "Unexpected end of MCP server output".
+- Build succeeded, TestSkylineMcp passes.
