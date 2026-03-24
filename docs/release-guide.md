@@ -1399,23 +1399,23 @@ Note: The short `.url` redirects (e.g., `/tutorial_method_edit.url`) don't prese
 
 This would ensure users on Skyline 25.1 always see tutorials matching their UI, even after newer tutorials are published. The `ver=` parameter already works - only the .resx URLs would need updating per release.
 
-## Future Automation: `/pw-release` Command
+## `/pw-release` Command
 
-**Vision**: A guided slash command that walks through release workflows step-by-step.
+Guided slash command that walks through release workflows step-by-step.
+
+**Usage**: `/pw-release <type> [folder]`
 
 | Type | Purpose | Documentation Status |
 |------|---------|---------------------|
+| `daily` | Skyline-daily release from master | **Fully documented** |
 | `complete` | FEATURE COMPLETE release - create branch, publish, announce | **Fully documented** |
+| `rc` | Release candidate (repeat of complete workflow on existing branch) | **Fully documented** |
 | `major` | Official stable release (e.g., 26.1.0) | **Fully documented** |
 | `patch` | Bug fix to existing release | **Fully documented** |
-| `rc` | Release candidate (repeat of complete workflow on existing branch) | Placeholder - expand when performed |
 
-**Note**: `daily` builds are automated nightly from master and don't need a command.
-
-**`rc`** (release candidate):
-- Similar to `complete` but on existing branch
-- Incremental testing cycle
-- May have multiple RCs before major release
+**Active release folders** (in project root):
+- `daily` — Skyline-daily builds (master)
+- `skyline_26_1` — Skyline patches (current stable release)
 
 ## Related Documentation
 
