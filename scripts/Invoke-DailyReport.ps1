@@ -28,6 +28,10 @@
     - email: Read findings, compose and send enriched email
     - both: Run research then email sequentially (default)
 
+.PARAMETER Date
+    Report date in YYYY-MM-DD or YYYYMMDD format. Default: today.
+    Use this to backfill reports for missed days.
+
 .PARAMETER Schedule
     Register as a daily Windows Task Scheduler task at the specified time.
     Requires an elevated (Administrator) PowerShell prompt.
@@ -60,6 +64,10 @@
     Registers a daily task at 8:05 AM for research phase only.
 
 .EXAMPLE
+    .\Invoke-DailyReport.ps1 -Date 2026-03-11
+    Backfill the report for March 11, 2026.
+
+.EXAMPLE
     .\Invoke-DailyReport.ps1 -Recipient "team@example.com"
     Sends the report to a different recipient.
 
@@ -82,6 +90,7 @@ param(
     [int]$MaxTurns = 0,
     [ValidateSet("research", "email", "both")]
     [string]$Phase = "both",
+    [string]$Date,
     [string]$Schedule,
     [switch]$DryRun
 )
@@ -96,6 +105,26 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 # Derive project root from script location: ai/scripts/Invoke-DailyReport.ps1 -> ai/ -> root
 $aiRoot = Split-Path -Parent $PSScriptRoot
 $WorkDir = Split-Path -Parent $aiRoot
+
+# ─────────────────────────────────────────────────────────────
+# Resolve report date
+# ─────────────────────────────────────────────────────────────
+
+if ($Date) {
+    # Validate and normalize the date
+    try {
+        $ParsedDate = [DateTime]::ParseExact($Date, [string[]]@("yyyy-MM-dd", "yyyyMMdd"), [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None)
+    }
+    catch {
+        Write-Error "Invalid date format: '$Date'. Use YYYY-MM-DD or YYYYMMDD."
+        exit 1
+    }
+    $DateFolder = $ParsedDate.ToString("yyyy-MM-dd")
+    $DateCompact = $ParsedDate.ToString("yyyyMMdd")
+} else {
+    $DateFolder = Get-Date -Format "yyyy-MM-dd"
+    $DateCompact = Get-Date -Format "yyyyMMdd"
+}
 
 # ─────────────────────────────────────────────────────────────
 # Task Scheduler registration
@@ -173,9 +202,9 @@ THEN: Read $CommandFile and follow those instructions to run the research phase 
 Key points:
 - Use MCP tools directly (mcp__labkey__*, mcp__gmail__*) - they are pre-authorized
 - Use pwsh (not powershell) for any shell commands
-- The report date is the date in your environment info
+- The report date is $DateFolder (use $DateCompact for filenames)
 - Do NOT send email - only collect data and write findings to files
-- Write the manifest file at the end: ai/.tmp/daily-manifest-YYYYMMDD.json
+- Write the manifest file at the end: ai/.tmp/daily-manifest-$DateCompact.json
 - If MCP tools fail, write a manifest with research_completed: false
 "@
         }
@@ -191,10 +220,12 @@ THEN: Read $CommandFile and follow those instructions to compose and send the da
 Email recipient: $Recipient
 
 Key points:
-- Read research findings from ai/.tmp/daily/YYYY-MM-DD/ first (consolidated location)
-- Fall back to ai/.tmp/ flat files if consolidation hasn't run
+- The report date is $DateFolder
+- Read research findings from ai/.tmp/daily/$DateFolder/ first (consolidated location)
+- Fall back to ai/.tmp/ flat files with suffix $DateCompact if consolidation hasn't run
 - If research files are missing, send what you can with a note about incomplete data
-- Use Gmail MCP tools to send the email and archive processed inbox emails
+- Use Gmail MCP tools to send the email
+- Only archive inbox emails if the report date is today; skip archiving for backfill runs
 - If data is completely missing, send an ERROR email as specified in the command file
 "@
         }
@@ -287,7 +318,6 @@ function Get-PhaseMaxTurns([string]$PhaseName) {
 
 $PhasesToRun = if ($Phase -eq "both") { @("research", "email") } else { @($Phase) }
 
-$DateFolder = Get-Date -Format "yyyy-MM-dd"
 $TimeStamp = Get-Date -Format "HHmm"
 $LogDir = Join-Path $WorkDir "ai\.tmp\daily\$DateFolder"
 $LogFile = Join-Path $LogDir "$Phase-$TimeStamp.log"
@@ -299,6 +329,7 @@ $LogFile = Join-Path $LogDir "$Phase-$TimeStamp.log"
 if ($DryRun) {
     Write-Host "Would execute:" -ForegroundColor Cyan
     Write-Host "  Phase: $Phase"
+    Write-Host "  Date: $DateFolder"
     Write-Host "  Working directory: $WorkDir"
     Write-Host "  Git pull ai/: git pull origin master"
     Write-Host "  Git pull pwiz/: git pull origin master"
@@ -401,7 +432,7 @@ try {
             if (Test-Path $ConsolidateScript) {
                 "[$(Get-Date)] Consolidating daily reports into $DateFolder/..." | Out-File -FilePath $LogFile -Append -Encoding UTF8
                 try {
-                    & $ConsolidateScript 2>&1 | Out-File -FilePath $LogFile -Append -Encoding UTF8
+                    & $ConsolidateScript -Date $DateCompact 2>&1 | Out-File -FilePath $LogFile -Append -Encoding UTF8
                     "[$(Get-Date)] Consolidation complete" | Out-File -FilePath $LogFile -Append -Encoding UTF8
                 }
                 catch {
