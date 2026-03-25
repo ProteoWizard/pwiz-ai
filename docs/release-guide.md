@@ -392,9 +392,27 @@ Pre-release stabilization period before official release.
       - Certificate: University of Washington (DigiCert, expires 2/28/2027)
       - "Sign the assembly" - **unchecked**
 
+      **CRITICAL — Manifest signing verification**: The "Sign the ClickOnce manifests"
+      checkbox in VS corresponds to `<SignManifests>true</SignManifests>` in `Skyline.csproj`.
+      Publishing without signing produces unsigned installers that Windows will warn about.
+
+      **Claude can verify before publishing**: Check that signing is enabled:
+      ```bash
+      grep SignManifests pwiz_tools/Skyline/Skyline.csproj
+      # Must show: <SignManifests>true</SignManifests>
+      ```
+
+      If it shows `false`, remind the developer to enable it in VS (Signing tab) before
+      publishing. After all publishing is complete, the developer must revert it to `false`
+      before committing — `SignManifests` requires a certificate that only exists on the
+      release machine and would break builds elsewhere.
+
       Click **Publish Now**
 
    b. **ZIP to nexus server** (disk publish for disconnected install):
+
+      The ZIP publish also uses manifest signing — the same `SignManifests` setting applies.
+      **Do not turn off signing between ClickOnce and ZIP publishes.**
 
       Change VS Publish settings for disk (no URLs):
       - Publishing Folder Location: `M:\home\brendanx\tools\Skyline-daily\Skyline-daily-64_26_0_9_004\`
@@ -458,6 +476,18 @@ Pre-release stabilization period before official release.
       3. Verify both files download successfully and are the correct size
 
       Only proceed to Docker deployment after confirming downloads work.
+
+   g. **Turn off manifest signing** after all publishing is complete:
+
+      Uncheck "Sign the ClickOnce manifests" in VS (Signing tab) so that
+      `<SignManifests>false</SignManifests>` is restored in `Skyline.csproj`.
+      **Claude should remind the developer** and verify:
+      ```bash
+      grep SignManifests pwiz_tools/Skyline/Skyline.csproj
+      # Must show: <SignManifests>false</SignManifests>
+      ```
+      This setting must never be committed as `true` — it requires a certificate
+      that only exists on the release machine and will break all other builds.
 
 13. **Publish Docker image** to DockerHub (see `/home/development/DeployToDockerHub` wiki):
 
