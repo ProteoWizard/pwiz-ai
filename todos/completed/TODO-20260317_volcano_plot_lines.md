@@ -24,6 +24,21 @@ makes any adjustment (e.g. toggles the log checkbox).
 - [x] Confirm test passes after fix
 - [x] Create PR
 
+## Progress Log
+
+### 2026-03-25 - Merged
+
+PR [#4075](https://github.com/ProteoWizard/pwiz/pull/4075) merged into master.
+Merge commit: `5e2b54817b8014249bf7c535bc4f7cf9ffbac8b5`
+
+## Resolution
+
+**Status**: Merged 2026-03-25
+
+Fixed volcano plot reference lines disappearing after opening `VolcanoPlotPropertiesDlg`.
+Root cause was `AdjustLocations()` only being called inside the `if (_dataChanged)` block;
+added an `else` branch to call it directly when only cutoff settings changed.
+
 ## Root Cause
 
 `FoldChangeVolcanoPlot.UpdateGraph()` rebuilds the curve list and creates new
