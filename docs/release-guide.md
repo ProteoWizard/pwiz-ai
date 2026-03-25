@@ -460,21 +460,25 @@ Pre-release stabilization period before official release.
       Only proceed to Docker deployment after confirming downloads work.
 
 13. **Publish Docker image** to DockerHub (see `/home/development/DeployToDockerHub` wiki):
-   - For FEATURE COMPLETE (release candidates): [Skyline-release-daily](https://teamcity.labkey.org/buildConfiguration/ProteoWizard_ProteoWizardPublishDockerImageSkylineReleaseDaily)
-   - For final release: [Skyline Release Branch](https://teamcity.labkey.org/viewType.html?buildTypeId=ProteoWizard_ProteoWizardPublishDockerAndSingularityImagesSkylineReleaseBranch)
 
-   **Before clicking Deploy**: Check Settings > Dependencies to verify dependency builds:
-   - ProteoWizard and Skyline (release branch) Docker container (Wine x86_64) - **the actual Docker image**
+   Three separate TeamCity configs for three release types:
 
-   This config depends on:
-   - Core Windows x86_64 (Skyline release branch)
-   - Skyline Release Branch x86_64
+   | Release Type | Deploy Config | Dependency (Docker container build) |
+   |---|---|---|
+   | **Skyline-daily (master)** | [Publish Docker image (Skyline-daily)](https://teamcity.labkey.org/buildConfiguration/ProteoWizard_ProteoWizardPublishDockerForSkylineDaily) | [Docker container (Wine x86_64)](https://teamcity.labkey.org/viewType.html?buildTypeId=ProteoWizardAndSkylineDockerContainerWineX8664) — master branch |
+   | **FEATURE COMPLETE (RC)** | [Publish Docker image (Skyline-release-daily)](https://teamcity.labkey.org/buildConfiguration/ProteoWizard_ProteoWizardPublishDockerImageSkylineReleaseDaily) | [Docker container (release branch)](https://teamcity.labkey.org/viewType.html?buildTypeId=ProteoWizard_ProteoWizardAndSkylineReleaseBranchDockerContainerWineX8664) |
+   | **Major/Patch release** | [Publish Docker image (Skyline Release Branch)](https://teamcity.labkey.org/viewType.html?buildTypeId=ProteoWizard_ProteoWizardPublishDockerAndSingularityImagesSkylineReleaseBranch) | Same release branch Docker container |
 
-   This is a double-check of work already verified in step 6. The Deploy button publishes
-   from the Docker container build, not from a new build.
+   **Before clicking Deploy**: Verify the dependency Docker container build succeeded with
+   the correct commit. The Deploy button publishes from the last successful container build,
+   not from a new build.
 
-   **Claude can also verify** using the TeamCity MCP (see [mcp/team-city.md](mcp/team-city.md)):
+   **Claude can verify** using the TeamCity MCP (see [mcp/team-city.md](mcp/team-city.md)):
    ```
+   # Master branch (Skyline-daily)
+   search_builds(build_type_id="ProteoWizardAndSkylineDockerContainerWineX8664", count=3)
+
+   # Release branch (FEATURE COMPLETE, major, patch)
    search_builds(build_type_id="ProteoWizard_ProteoWizardAndSkylineReleaseBranchDockerContainerWineX8664", count=3)
    ```
 
@@ -952,6 +956,18 @@ Note: The page names differ slightly between daily and release (different word o
 different spelling of "administrator").
 
 ## Build Commands
+
+### Pre-Build: Sync Submodules
+
+**Always sync submodules before building a release.** The release folder may have stale
+submodule checkouts if commits updated submodule references since the last build.
+
+```bash
+git submodule update --init --recursive
+```
+
+Without this, you risk building against old versions of Hardklor, BullseyeSharp, or other
+submodules — the build will succeed but ship incorrect code.
 
 ### Full Release Build
 
