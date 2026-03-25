@@ -1,4 +1,10 @@
-# TODO: MailChimp MCP Server
+# TODO-20260323_mailchimp_mcp.md
+
+## Branch Information
+- **Branch**: N/A (ai/ repository - direct to master)
+- **Base**: `master`
+- **Created**: 2026-03-23
+- **Status**: Completed
 
 ## Overview
 Build a Python MCP server for MailChimp Marketing API integration, focused on automating Skyline daily release email campaigns. The server should follow the same patterns established in the existing LabKey Server and TeamCity MCP servers.
@@ -162,8 +168,38 @@ Auth: HTTP Basic — username: any string, password: API key
 | `/campaigns/{id}/actions/test` | POST | Send test email |
 | `/campaigns/{id}/actions/send` | POST | Send campaign |
 
-## Key Design Decisions to Make
-- [ ] Official SDK (`mailchimp-marketing`) vs. direct HTTP (`httpx`) — SDK is stale (2022) but functional; direct HTTP is cleaner and more maintainable
-- [ ] Whether the markdown-to-HTML conversion needs any custom processing beyond the standard `markdown` library output
-- [ ] Whether to support both `template.sections` content injection AND raw `html` body modes
-- [ ] How to name/title campaigns for easy identification in the MailChimp UI
+## Key Design Decisions Made
+- [x] **Direct HTTP via `urllib.request`** (stdlib) — follows TeamCity MCP pattern, no external HTTP dependency
+- [x] **Read-only MCP server** — MailChimp's new editor API does not support content injection (see below)
+- [x] **Claude generates paste-ready HTML** — developer pastes into MailChimp designer code view
+
+## What We Learned About MailChimp API
+
+MailChimp's Marketing API v3 cannot inject content into campaigns created with the
+new email editor:
+- Template sections (`mc:edit`) only work with the deprecated "Classic" builder
+- Writing raw HTML via PUT corrupts campaigns in the new editor (uneditable in UI)
+- Replicating campaigns + modifying content also corrupts the editor view
+
+**Solution**: Claude generates HTML formatted for paste into MailChimp's code tab.
+MCP server is read-only (query audiences, templates, past campaigns for context).
+See `ai/docs/mcp/mailchimp.md` for full details.
+
+## Progress
+
+### 2026-03-23 - Implementation
+- [x] Project scaffolding: `ai/mcp/MailChimpMcp/` with pyproject.toml, server.py
+- [x] Config loading from `~/.mailchimp-mcp/config.json` (TeamCity pattern)
+- [x] HTTP client with Basic auth (`tools/common.py`)
+- [x] Discovery tools (`tools/discovery.py`): ping, list_audiences, list_templates, list_campaigns, get_campaign
+- [x] Attempted full campaign creation/send tools — removed after MailChimp API limitations found
+- [x] Stripped to read-only server with 5 discovery tools
+- [x] API key generated, server registered, connectivity verified
+- [x] Discovered MailChimp resources: audience ID, segment ID, template IDs
+- [x] Created "Blank Release" template and "Skyline Daily Release" segment in MailChimp
+- [x] Tested HTML generation from git commits — paste into code tab works correctly
+- [x] Test email to Claude Gmail verified content renders correctly
+- [x] Updated `ai/docs/release-guide.md` with full MailChimp workflow (Step 4)
+- [x] Created `ai/docs/mcp/mailchimp.md` documenting why read-only
+- [x] Updated `ai/mcp/README.md` and `ai/docs/mcp/README.md`
+- **Status**: Complete

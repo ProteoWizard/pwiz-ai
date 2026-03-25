@@ -1268,7 +1268,60 @@ The heading format follows previous entries (e.g., "Skyline v25.1 Released on 5/
 Patch updates use "Skyline v25.1 Updated on 8/25/2025" with the patch items appended
 above the original release items.
 
-**Step 4: MailChimp email** — developer uses the same content manually in MailChimp (not yet automated).
+**Step 4: MailChimp email** — Claude generates the HTML, developer pastes it into MailChimp.
+
+The MailChimp API does not support content injection into campaigns created with the
+new email editor (only the deprecated "Classic" builder supports `mc:edit` sections).
+Instead, Claude generates a paste-ready HTML file that the developer copies into the
+MailChimp designer's code view.
+
+**Generate the HTML file:**
+
+Using the same release notes content from Step 1, generate an HTML file formatted for
+MailChimp's email template. Each text element must be wrapped in
+`<span style="font-size: 13px">` inside `<p>` tags, and list items use
+`<li><p><span>` nesting to match the established email style:
+
+```python
+# Generate from the approved release-notes markdown
+Write("ai/.tmp/release-notes-26.1.1.082-email.html.txt", html_content)
+```
+
+The HTML file should follow this exact structure:
+
+```html
+<p><span style="font-size: 13px">Dear Skyline-daily Users,</span></p>
+<p><span style="font-size: 13px">I have just released Skyline-daily 26.1.1.082. This release contains the following improvements over the last release:</span></p>
+<ul>
+  <li>
+    <p><span style="font-size: 13px"><b>New!</b> Description of new feature.</span></p>
+  </li>
+  <li>
+    <p><span style="font-size: 13px">Description of change. (thanks to Developer)</span></p>
+  </li>
+</ul>
+<p></p>
+<p><span style="font-size: 13px">Skyline-daily should ask to update automatically when you next restart or use Help &gt; Check for Updates.</span></p>
+<p></p>
+<p><span style="font-size: 13px">Thanks for using Skyline-daily and reporting the issues you find.</span></p>
+<p></p>
+<p><span style="font-size: 13px">--Brendan</span></p>
+```
+
+**Developer workflow in MailChimp:**
+
+1. Go to **Campaigns > Email templates** and click **"Blank Release" > "Create email"**
+2. Set the subject line and preview text (e.g. "Skyline-daily 26.1.1.082")
+3. Set the audience to the **"Skyline Daily Release"** segment (~5,190 members)
+4. In the designer, click **"body-content"** text block
+5. On the left panel under **"Text"**, click **"Code"**
+6. Replace `<p>body-content</p>` with the generated HTML
+7. Review in the visual editor
+8. **Send test email to Claude** (`claude.c.skyline@gmail.com`) for review before
+   sending to the full segment. Claude can read the test email via Gmail MCP and
+   verify: correct version numbers, no leftover content, proper attributions,
+   subject line matches body content
+9. Send to the full segment
 
 ### Querying Past Release Notes
 

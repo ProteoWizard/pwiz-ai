@@ -1,0 +1,15 @@
+[project]
+name = "mailchimp-mcp"
+version = "0.1.0"
+description = "MCP server for read-only MailChimp campaign queries"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+]
+
+[project.scripts]
+mailchimp-mcp = "server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
