@@ -182,6 +182,13 @@ Setup complete when:
 - Server accessible at http://localhost:8080/
 - MacCoss modules visible in Module Information
 
+## Reference Docs
+
+- [switching-versions.md](reference/switching-versions.md) — Moving an existing environment to a different LabKey version
+- [gradle-commands.md](reference/gradle-commands.md) — Common Gradle commands
+- [troubleshooting.md](reference/troubleshooting.md) — Common issues and fixes
+- [modules.md](reference/modules.md) — Module structure reference
+
 ## Resources
 
 - [LabKey Developer Docs](https://www.labkey.org/Documentation/wiki-page.view?name=devMachine)

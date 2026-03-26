@@ -685,6 +685,72 @@ protected void doCleanup(boolean afterTest) throws TestTimeoutException
 }
 ```
 
+## File System Patterns
+
+### Prefer NIO over `java.io.File`
+
+Use `java.nio.file.Path` and `Files` instead of `File` for new code. `FileContentService.getFileRootPath()` already returns a `Path` — avoid calling `.toFile()` on it.
+
+```java
+// Get container file root as Path
+Path fileRoot = FileContentService.get().getFileRootPath(container, FileContentService.ContentType.files);
+
+// File existence check
+Files.exists(fileRoot.resolve("docs/index.html"))
+
+// Directory listing
+try (var stream = Files.list(localToolDir))
+{
+    stream.map(p -> p.getFileName().toString())
+          .filter(name -> !name.startsWith("."))
+          .forEach(results::add);
+}
+
+// Recursive directory copy (LabKey utility — takes Path, not File)
+FileUtil.copyDirectory(srcPath, destPath);
+```
+
+### WebDAV URL Construction
+
+Use `WebdavService.getPath()` to build WebDAV URLs rather than hardcoding `/_webdav`. This respects server configuration and handles path encoding:
+
+```java
+org.labkey.api.util.Path path = WebdavService.getPath()
+        .append(container.getParsedPath())
+        .append(FileContentService.FILES_LINK)
+        .append(new org.labkey.api.util.Path("subdir", "file.html"));
+String url = AppProps.getInstance().getContextPath() + path.encode();
+```
+
+Note: `container.getParsedPath()` returns `org.labkey.api.util.Path` (LabKey's path type), not `java.nio.file.Path`. Use the fully qualified name if both are imported.
+
+In JSPs, `h(url)` on a URL produced by `path.encode()` is correct — `h()` HTML-escapes while `encode()` URL-encodes, and they operate on different character sets without double-encoding.
+
+### Zip Extraction with Zip-Slip Protection
+
+```java
+try (ZipFile zf = new ZipFile(zipPath.toFile()))
+{
+    Enumeration<? extends ZipEntry> entries = zf.entries();
+    while (entries.hasMoreElements())
+    {
+        ZipEntry entry = entries.nextElement();
+        if (entry.isDirectory()) continue;
+        Path destPath = destDir.resolve(entry.getName()).normalize();
+        // Zip-slip protection — normalize() resolves ".." components
+        if (!destPath.startsWith(destDir.normalize()))
+            throw new IOException("Zip entry outside target directory: " + entry.getName());
+        Files.createDirectories(destPath.getParent());
+        try (InputStream in = zf.getInputStream(entry))
+        {
+            Files.copy(in, destPath, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+}
+```
+
+`Path.startsWith()` compares path components (not characters), so a sibling path like `destExtra/` cannot falsely match `dest/`.
+
 ---
 
 For information about feature branch workflow, branch naming conventions, and merge rules, see [labkey-feature-branch-workflow.md](labkey-feature-branch-workflow.md).
