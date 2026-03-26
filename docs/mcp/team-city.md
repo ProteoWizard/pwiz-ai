@@ -19,6 +19,7 @@ See [setup.md](setup.md#teamcity-mcp) for installation instructions.
 | `get_failed_tests` | Structured test failures with names and stack traces |
 | `get_test_summary` | Pass/fail/muted test counts for a build |
 | `get_build_log` | Search or tail the build log (regex search with context) |
+| `get_code_inspections` | ReSharper inspection results from a build (errors, warnings, suggestions) |
 
 ## PR Build Monitoring Workflow
 
@@ -74,6 +75,26 @@ trigger_build(
 cancel_build(build_id=3886470)
 cancel_build(build_id=3886470, comment="Wrong branch")
 ```
+
+## Code Inspection Workflow
+
+The `get_code_inspections` tool downloads and parses the ReSharper `inspectcode_report.xml` artifact from a Skyline Code Inspection build.
+
+### Step 1: Find the inspection build
+
+```
+search_builds(build_type_id="ProteoWizard_WindowsX8664msvcProfessionalSkylineResharperChecks", branch="pull/4038", count=1)
+```
+
+### Step 2: Get inspection results
+
+```
+get_code_inspections(build_id=3899165)
+```
+
+The default `build_type_id` is the Skyline ReSharper Checks config, so you only need to pass `build_id` for standard PR inspection builds.
+
+Results are grouped by severity (ERRORS, WARNINGS, SUGGESTIONS) with file paths, line numbers, inspection type IDs, and messages.
 
 ## Build Configuration Reference
 
