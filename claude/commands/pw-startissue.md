@@ -32,9 +32,23 @@ Review the issue and note:
 - **Scope**: What work is described
 - **Repository**: pwiz (code changes) or pwiz-ai (AI tooling/docs)
 
-### Step 2: Create Branch (pwiz issues only)
+### Step 2: Prepare Repositories
 
-**For pwiz repository issues:**
+**Pull pwiz-ai first** to avoid conflicts with TODOs already moved by other sessions:
+```bash
+cd ai
+git pull origin master
+```
+
+**For pwiz repository issues — check if the worktree is free:**
+
+If pwiz is on a feature branch (not master), check whether that branch's PR has already been merged:
+```bash
+gh pr list --repo ProteoWizard/pwiz --head <current-branch-name> --state merged
+```
+
+If the PR is merged, the worktree is free — discard any leftover staged/modified files and switch to master. If the PR is NOT merged, the worktree has active work; use a different worktree or ask the user.
+
 ```bash
 cd pwiz
 git checkout master
