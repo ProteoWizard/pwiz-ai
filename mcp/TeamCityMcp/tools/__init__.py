@@ -7,14 +7,17 @@ Modules:
 - common: Shared utilities (config loading, HTTP client, config ID reference)
 - builds: Build search and status tools
 - tests: Test failure retrieval tools
+- inspections: Code inspection result tools
 """
 
 from . import common
 from . import builds
 from . import tests
+from . import inspections
 
 
 def register_all_tools(mcp):
     """Register all tools from all modules."""
     builds.register_tools(mcp)
     tests.register_tools(mcp)
+    inspections.register_tools(mcp)
