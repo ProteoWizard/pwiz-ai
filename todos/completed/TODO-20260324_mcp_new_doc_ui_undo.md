@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260324_mcp_new_doc_ui_undo`
 - **Base**: `master`
 - **Created**: 2026-03-24
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#4090](https://github.com/ProteoWizard/pwiz/issues/4090)
-- **PR**: (pending)
+- **PR**: [#4102](https://github.com/ProteoWizard/pwiz/pull/4102) (merged 2026-03-26)
 
 ## Objective
 
