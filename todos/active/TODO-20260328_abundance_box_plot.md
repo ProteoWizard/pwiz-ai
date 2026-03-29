@@ -210,10 +210,47 @@ translations can be placeholder copies initially).
 - [x] Raw whisker values (no log10/pow10 round-trip) for precise outlier boundaries
 - [x] Order and Group By context menus via `AddReplicateOrderAndGroupByMenuItems`
 
+- [x] Shared data pipeline: box plot consumes same `Producer`/`ReplicateCachingReceiver`
+      as RA dot-plot via `AreaRelativeAbundanceGraphPane.SharedProducer`
+- [x] Background computation with progress bar (throttled 300ms/100ms)
+- [x] Stale-while-revalidate: shows previous data while recalculating
+- [x] `ExtractReplicateValues` pivots `GraphPointData.ReplicateAreas` for box stats
+- [x] Empty graph initialization: replicate labels and default Y range before data
+- [x] Fixed default pane appearance for all summary graphs (see session notes below)
+- [x] Added `InitializeForFirstPaint` infrastructure in `SummaryGraphPane`
+- [x] RA dot-plot `InitializeEmptyGraph` with axis labels and log scale default range
+
+### Session Notes: Shared Data Pipeline (2026-03-29)
+
+**Approach**: The box plot registers its own `Receiver` on the same static `Producer`
+singleton used by the RA dot-plot (`AreaRelativeAbundanceGraphPane.SharedProducer`).
+Each graph has its own `ReplicateCachingReceiver` with separate cache. The box plot
+always requests cache key -1 (all replicates) since it needs all boxes simultaneously.
+
+**Data flow**: The shared `GraphData` contains `GraphPointData` objects, each with
+`ReplicateAreas` (`ILookup<int, double>`) keyed by replicate index. The box plot
+extracts these into per-replicate lists via `ExtractReplicateValues`, then computes
+box plot statistics on the UI thread (~100ms for 47K peptides x 6 replicates).
+
+**Changes to existing code were minimal**: Added `internal static SharedProducer`
+property on `AreaRelativeAbundanceGraphPane` (1 line) and changed
+`CleanCacheForIncrementalUpdates` to `internal static` (1 word).
+
+**Initial paint fix**: Investigated why all summary graphs (RA dot-plot, RT regression,
+etc.) painted with ZedGraph defaults ("Title"/"Y Axis"/"X Axis") on first display.
+Root cause: debounced timer in `SkylineWindow.UpdateGraphPanes` delays `UpdateGraph`,
+but WinForms paints the control immediately during DockPanel layout. Attempted fixes:
+1. `VisibleChanged` handler -- fires only with `Visible=False` during DockPanel
+   deserialization, never with `Visible=True`
+2. Calling `OnUpdateGraph` in constructor -- NRE because `StateProvider` not ready
+   during layout deserialization
+3. **Working fix**: Clear the default `GraphPane` from `MasterPane.PaneList` in the
+   `GraphSummary` constructor so the ZedGraph control paints blank/gray until the
+   real pane is created. Combined with `InitializeForFirstPaint` virtual method on
+   `SummaryGraphPane` so each pane type can set up axes on its first `Draw` call.
+
 ### Remaining
-- [ ] Refactor to share `ReplicateCachingReceiver` data pipeline with
-      `SummaryRelativeAbundanceGraphPane` (background computation, incremental updates)
-- [ ] Implement Normalize support (via shared data pipeline)
+- [ ] Implement Normalize support (graph-level normalization for box plot)
 - [ ] Tooltips on outlier hover (NodeTip)
 - [ ] Create functional test
 - [ ] All tests pass
