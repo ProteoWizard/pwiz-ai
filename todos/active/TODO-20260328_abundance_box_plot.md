@@ -200,11 +200,21 @@ translations can be placeholder copies initially).
 - [x] HideOnClose forms correctly restore to remembered position
 - [x] Build succeeds
 
+- [x] Implement Group By support with colored boxes and legend
+- [x] Implement replicate ordering (document, acquired time, annotation)
+- [x] Clickable outlier dots: select protein/peptide and activate replicate
+- [x] Outliers rendered as LineItem on hidden linear X2Axis for correct positioning
+      (text axis forces ordinal positioning on LineItems; X2Axis bypasses this)
+- [x] X-axis labels clickable to select replicate
+- [x] Hand cursor on hover for bars, outliers, and labels
+- [x] Raw whisker values (no log10/pow10 round-trip) for precise outlier boundaries
+- [x] Order and Group By context menus via `AddReplicateOrderAndGroupByMenuItems`
+
 ### Remaining
 - [ ] Refactor to share `ReplicateCachingReceiver` data pipeline with
       `SummaryRelativeAbundanceGraphPane` (background computation, incremental updates)
-- [ ] Implement Group By support (replicate annotations)
 - [ ] Implement Normalize support (via shared data pipeline)
+- [ ] Tooltips on outlier hover (NodeTip)
 - [ ] Create functional test
 - [ ] All tests pass
 - [ ] Run CodeInspection
