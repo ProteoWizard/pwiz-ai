@@ -180,40 +180,46 @@ translations can be placeholder copies initially).
 - [x] Assessed salvageable vs. needs-rework code
 - [x] Created new branch from master (`Skyline/work/20260328_abundance_box_plot`)
 - [x] Created this TODO with feature specification
+- [x] Port `BoxPlotBarItem` rendering code from PR #3603 (clean up naming, imports)
+- [x] Port `BoxPlotDataUtil` statistics code (renamed to `BoxPlotStatistics`, PascalCase)
+- [x] Add `GraphTypeSummary.abundance_comparison` enum value
+- [x] Create `AreaAbundanceComparisonGraphPane` (POC - synchronous UI-thread computation)
+- [x] Register in `AreaGraphController.OnUpdateGraph()`
+- [x] Add View > Peak Areas > Relative Abundance Comparison menu item
+- [x] Add context menu integration via `BuildAreaGraphMenu()`
+- [x] Add localization strings to `GraphsResources.resx`, `Skyline.resx`, `ViewMenu.resx`
+- [x] Implement Copy Data handler (`BoxPlotBarItemDataHandler`)
+- [x] Log-space statistics for symmetric outlier detection on log-normal abundance data
+- [x] Log/linear scale toggle (shares `RelativeAbundanceLogScale` setting with dot-plot)
+- [x] Y-axis anchored at zero in linear mode (via `Draw()` override)
+- [x] Null safety during document loading
+- [x] Context menu cleanup (removed inapplicable items, CV Values from RA dot-plot)
+- [x] Fixed graph relocation bug: existing visible graphs now just Activate() instead
+      of being relocated to another pane
+- [x] Sibling co-location: abundance graphs prefer each other when newly created
+- [x] HideOnClose forms correctly restore to remembered position
+- [x] Build succeeds
 
 ### Remaining
-- [ ] Port `BoxPlotBarItem` rendering code from PR #3603 (clean up naming, imports)
-- [ ] Port `BoxPlotDataUtil` statistics code (rename to PascalCase)
-- [ ] Add `GraphTypeSummary.abundance_comparison` enum value
-- [ ] Create `SummaryAbundanceComparisonGraphPane` sharing data pipeline with
-      `SummaryRelativeAbundanceGraphPane` (reuse `GraphData`, `ReplicateCachingReceiver`)
-- [ ] Implement all-replicate computation: kick off background calculations for every
-      replicate, update graph progressively as results arrive
-- [ ] Add box plot aggregation: compute Q1/median/Q3/whiskers from pre-sorted
-      abundance values in `GraphData` (O(1) quartiles, O(n) outliers)
-- [ ] Register in `AreaGraphController.OnUpdateGraph()`
-- [ ] Add View > Peak Areas > Relative Abundance Comparison menu item
-- [ ] Add context menu integration via `BuildAreaGraphMenu()`
-- [ ] Add localization strings to `GraphsResources.resx`
-- [ ] Implement Group By support
-- [ ] Implement Normalize support (inherited from shared data pipeline)
-- [ ] Implement Copy Data handler
+- [ ] Refactor to share `ReplicateCachingReceiver` data pipeline with
+      `SummaryRelativeAbundanceGraphPane` (background computation, incremental updates)
+- [ ] Implement Group By support (replicate annotations)
+- [ ] Implement Normalize support (via shared data pipeline)
 - [ ] Create functional test
-- [ ] Build succeeds
 - [ ] All tests pass
 - [ ] Run CodeInspection
 - [ ] Create PR
 
 ## Key Files
 - `pwiz_tools/Skyline/Controls/Graphs/BoxPlotBarItem.cs` (new - port from PR #3603)
-- `pwiz_tools/Skyline/Controls/Graphs/SummaryAbundanceComparisonGraphPane.cs` (new)
-- `pwiz_tools/Skyline/Controls/Graphs/SummaryRelativeAbundanceGraphPane.cs` (shared data pipeline)
-- `pwiz_tools/Skyline/Controls/Graphs/ReplicateCachingReceiver.cs` (shared caching)
-- `pwiz_tools/Skyline/Controls/Graphs/GraphSummary.cs` (add enum value)
-- `pwiz_tools/Skyline/Controls/Graphs/GraphsResources.resx` (add strings)
+- `pwiz_tools/Skyline/Controls/Graphs/AreaAbundanceComparisonGraphPane.cs` (new)
+- `pwiz_tools/Skyline/Controls/Graphs/GraphSummary.cs` (enum value, CustomToString)
+- `pwiz_tools/Skyline/Controls/Graphs/GraphsResources.resx` (localization strings)
 - `pwiz_tools/Skyline/Controls/Graphs/AreaGraphController.cs` (register pane)
-- `pwiz_tools/Skyline/SkylineGraphs.cs` (menu item, show method)
-- `pwiz_tools/Skyline/Menus/ViewMenu.cs` (menu click handler)
+- `pwiz_tools/Skyline/SkylineGraphs.cs` (menu, show method, co-location, context menu)
+- `pwiz_tools/Skyline/Menus/ViewMenu.cs` (menu click handler, checked state)
+- `pwiz_tools/Skyline/Skyline.Designer.cs` (context menu item)
+- `pwiz_tools/Skyline/Skyline.resx` (context menu text)
 
 ## Related TODOs
 - `ai/todos/completed/2025/12/TODO-20251221_relative_abundance_perf.md` - 12-phase
