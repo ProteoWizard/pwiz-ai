@@ -1,0 +1,50 @@
+# Coverage File List for Abundance Box Plot
+# Branch: Skyline/work/20260328_abundance_box_plot
+#
+# This file lists production .cs files added/modified by this branch for coverage analysis.
+# The Analyze-Coverage.ps1 script extracts fully-qualified type names from uncommented
+# .cs files and measures coverage for those exact types.
+#
+# Total files: 4 production code files (new classes only)
+#
+# ============================================================================
+# TESTS TO RUN FOR COVERAGE (copy to SkylineTester test list.txt)
+# ============================================================================
+# TestPeakAreaAbundanceComparisonGraph       (~4 sec) - box plot graph functional test
+# TestPeakBoundaryImputationDiaTutorial  (~120 sec) - perf/stress test with large document
+#
+# ============================================================================
+# PRODUCTION CODE - INCLUDED IN COVERAGE ANALYSIS (4 files)
+# ============================================================================
+
+# NEW - Box plot graph pane (610 lines)
+pwiz/pwiz_tools/Skyline/Controls/Graphs/AreaAbundanceComparisonGraphPane.cs
+
+# NEW - ZedGraph box plot rendering, statistics, and Copy Data handler (200 lines)
+pwiz/pwiz_tools/Skyline/Controls/Graphs/BoxPlotBarItem.cs
+
+# ============================================================================
+# EXCLUDED FROM COVERAGE (small changes, auto-generated, or test files)
+# ============================================================================
+# pwiz_tools/Skyline/TestFunctional/PeakAreaAbundanceComparisonGraphTest.cs  # Test file
+# pwiz_tools/Skyline/Controls/Graphs/AreaGraphController.cs                  # 7-line registration only
+# pwiz_tools/Skyline/Controls/Graphs/AreaRelativeAbundanceGraphPane.cs       # 6-line SharedProducer property
+# pwiz_tools/Skyline/Controls/Graphs/GraphSummary.cs                         # 9-line enum + CustomToString
+# pwiz_tools/Skyline/Controls/Graphs/GraphsResources.designer.cs             # Auto-generated
+# pwiz_tools/Skyline/Controls/Graphs/SummaryRelativeAbundanceGraphPane.cs    # 46-line visibility change
+# pwiz_tools/Skyline/Menus/ViewMenu.Designer.cs                              # Auto-generated
+# pwiz_tools/Skyline/Menus/ViewMenu.cs                                       # 5-line menu handler
+# pwiz_tools/Skyline/Skyline.Designer.cs                                     # Auto-generated
+# pwiz_tools/Skyline/SkylineGraphs.cs                                        # 95-line integration (menu, context menu)
+
+# ============================================================================
+# NOTES
+# ============================================================================
+# Key new code to cover:
+# - AreaAbundanceComparisonGraphPane: UpdateGraph, ExtractReplicateValues,
+#   ComputeBoxPlotForReplicate, GetOrderedReplicateIndices, group-by logic,
+#   outlier rendering, click handling, progress tracking
+# - BoxPlotBarItem: Draw (whiskers, caps, median), MakePointPair
+# - BoxPlotStatistics: ComputeBoxPlot (Q1/Q3/IQR/whiskers/outliers)
+# - BoxPlotBarItemDataHandler: AddColumns (Copy Data output)
+# - BoxPlotTag: data structure for box plot statistics

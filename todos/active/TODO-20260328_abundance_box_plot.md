@@ -6,7 +6,7 @@
 - **Created**: 2026-03-28
 - **Status**: In Progress
 - **GitHub Issue**: (pending)
-- **PR**: (pending)
+- **PR**: [#4116](https://github.com/ProteoWizard/pwiz/pull/4116)
 - **Prior Work**: [PR #3603](https://github.com/ProteoWizard/pwiz/pull/3603) by Eduardo (no longer on team)
 
 ## Objective
@@ -249,11 +249,27 @@ but WinForms paints the control immediately during DockPanel layout. Attempted f
    real pane is created. Combined with `InitializeForFirstPaint` virtual method on
    `SummaryGraphPane` so each pane type can set up axes on its first `Draw` call.
 
+- [x] Create functional test (`TestPeakAreaAbundanceComparisonGraph`)
+      - Basic display: graph type, pane type, axis titles (resource strings), legend
+      - Box plot data: curve count, point count = replicate count, Min<=Q1<=Median<=Q3<=Max
+      - Outliers: LineItem with Circle symbol on X2Axis, positive values
+      - Log/linear scale toggle: both directions, axis type + title verification
+      - Order By: document vs time ordering, outlier values stay with correct replicate
+      - Group By Condition: 2 groups, different colors, non-missing = total replicates
+      - Group By SubjectId: 14 groups, unique colors
+      - Copy Data: structure, row count, statistical ordering in output
+      - Reuses existing `PeakAreaRelativeAbundanceGraphTest.zip` (Rat_plasma.sky, 42 reps)
+      - Changed `AreaAbundanceComparisonGraphPane` from `internal` to `public` for test access
+- [x] Build succeeds, test passes (4.3s)
+- [x] Added `IsComplete` property to `AreaAbundanceComparisonGraphPane` (matches RA dot-plot pattern)
+- [x] Added box plot stress test to `TestPeakBoundaryImputationDiaTutorial` (large document)
+- [x] 200 iterations across 5 languages - no failures
+- [x] Code coverage baseline: 84.3% (on-screen), remaining gaps are mouse handlers
+
 ### Remaining
 - [ ] Implement Normalize support (graph-level normalization for box plot)
 - [ ] Tooltips on outlier hover (NodeTip)
-- [ ] Create functional test
-- [ ] All tests pass
+- [ ] All tests pass (run full test suite)
 - [ ] Run CodeInspection
 - [ ] Create PR
 
@@ -267,6 +283,7 @@ but WinForms paints the control immediately during DockPanel layout. Attempted f
 - `pwiz_tools/Skyline/Menus/ViewMenu.cs` (menu click handler, checked state)
 - `pwiz_tools/Skyline/Skyline.Designer.cs` (context menu item)
 - `pwiz_tools/Skyline/Skyline.resx` (context menu text)
+- `pwiz_tools/Skyline/TestFunctional/PeakAreaAbundanceComparisonGraphTest.cs` (new - functional test)
 
 ## Related TODOs
 - `ai/todos/completed/2025/12/TODO-20251221_relative_abundance_perf.md` - 12-phase

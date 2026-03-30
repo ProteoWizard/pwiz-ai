@@ -33,6 +33,7 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 - **NEVER** use English text literals in test assertions
 - **ALWAYS** use resource strings for expected text
 - Prefer `AssertEx` over `Assert` in LLM-generated code — supports debugger-break-on-fail
+- **Exception**: Use `Assert.IsNotNull()` not `AssertEx.IsNotNull()` — ReSharper only recognizes `Assert.IsNotNull` as a null-guard, so `AssertEx.IsNotNull` leaves subsequent dereferences flagged as possible NRE warnings
 - **ALWAYS** use `AssertEx.Contains()` not `Assert.IsTrue(string.Contains())`
 - **ALWAYS** use `HttpClientTestHelper.GetExpectedMessage()` for network errors
 
