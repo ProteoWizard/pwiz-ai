@@ -6,7 +6,7 @@
 - **Created**: 2026-03-30
 - **Status**: In Progress
 - **GitHub Issue**: [#4098](https://github.com/ProteoWizard/pwiz/issues/4098)
-- **PR**: (pending)
+- **PR**: [#4119](https://github.com/ProteoWizard/pwiz/pull/4119)
 - **Exception Fingerprint**: `bef5650fea50a402`, `54623034b73cd258`
 
 ## Objective
