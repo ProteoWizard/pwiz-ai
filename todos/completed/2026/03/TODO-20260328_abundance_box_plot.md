@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260328_abundance_box_plot`
 - **Base**: `master`
 - **Created**: 2026-03-28
-- **Status**: In Progress
-- **GitHub Issue**: (pending)
+- **Status**: Complete (merged 2026-03-30)
+- **GitHub Issue**: (none)
 - **PR**: [#4116](https://github.com/ProteoWizard/pwiz/pull/4116)
 - **Prior Work**: [PR #3603](https://github.com/ProteoWizard/pwiz/pull/3603) by Eduardo (no longer on team)
 
@@ -266,12 +266,24 @@ but WinForms paints the control immediately during DockPanel layout. Attempted f
 - [x] 200 iterations across 5 languages - no failures
 - [x] Code coverage baseline: 84.3% (on-screen), remaining gaps are mouse handlers
 
-### Remaining
-- [ ] Implement Normalize support (graph-level normalization for box plot)
-- [ ] Tooltips on outlier hover (NodeTip)
-- [ ] All tests pass (run full test suite)
-- [ ] Run CodeInspection
-- [ ] Create PR
+- [x] Outlier NodeTips showing peptide/protein, replicate, peak area (scientific), log peak area
+- [x] Normalization-aware Y axis titles for box plot, RA dot-plot, and RA empty graph
+- [x] AxisLabelScaler for x-axis labels (font sizing + repeat removal matching other panes)
+- [x] Removed hardcoded tick/font settings, using base class defaults
+- [x] Fixed Y axis minimum floor (Math.Max(1,...)) breaking ratio normalization display
+- [x] Scientific notation for peak area in tooltips (both RA dot-plot and box plot)
+- [x] Fixed test for Japanese locale (GraphValues.AnnotateLogAxisTitle vs TextUtil.SpaceSeparate)
+- [x] Removed colon from box plot tooltip Replicate label (consistency with other tip fields)
+- [x] Added Replicate field to RA dot-plot tooltip (shows replicate name or "All")
+- [x] Removed Replicates context menu from box plot (inapplicable - always shows all)
+- [x] Separate `AbundanceComparisonGroupByAnnotation` setting for box plot Group By
+- [x] Refactored `AddReplicateOrderAndGroupByMenuItems` to share code via parameterization
+- [x] Filed #4117 for tooltip test coverage pattern (assigned to Rita)
+- [x] Stable OrderBy for annotation sorting (Nick's review feedback)
+- [x] Annotation order test verifying stable sort preserves document order
+- [x] All tests pass on TeamCity (2026-03-30)
+- [x] CodeInspection + ReSharper inspectcode pass
+- [x] PR #4116 squash-merged to master (2026-03-30)
 
 ## Key Files
 - `pwiz_tools/Skyline/Controls/Graphs/BoxPlotBarItem.cs` (new - port from PR #3603)
