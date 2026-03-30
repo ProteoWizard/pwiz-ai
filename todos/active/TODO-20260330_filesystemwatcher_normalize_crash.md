@@ -11,18 +11,25 @@
 
 ## Objective
 
-Fix `FileSystemUtil.Normalize()` to return `null` instead of the original invalid path when `Path.GetFullPath()` throws `ArgumentException` or `NotSupportedException`. The current behavior causes downstream crashes in `IsFileInDirectory` when `Path.GetDirectoryName()` is called on the invalid path.
+Fix `FileSystemUtil.Normalize()` to return `null` instead of the original invalid path when `Path.GetFullPath()` throws `ArgumentException`. The current behavior causes downstream crashes in `IsFileInDirectory` when `Path.GetDirectoryName()` is called on the invalid path.
+
+Note: `NotSupportedException` (thrown for ADS paths with colons) keeps returning `path` because `Path.GetDirectoryName()` handles those fine.
 
 ## Tasks
 
-- [ ] Change `catch (NotSupportedException)` to return `null` instead of `path`
-- [ ] Change `catch (ArgumentException)` to return `null` instead of `path`
-- [ ] Verify existing null checks in `IsFileInDirectory` and `IsInOrSubdirectoryOf` handle null correctly
-- [ ] Add unit test for `Normalize` with invalid paths
+- [x] Change `catch (ArgumentException)` to return `null` instead of `path`
+- [x] Verify existing null checks in `IsFileInDirectory` and `IsInOrSubdirectoryOf` handle null correctly
+- [x] Add tests for `Normalize` with invalid paths and downstream graceful degradation
+- [x] Build and test pass (FilesTreeFormTest)
+- [ ] Create PR
 - [ ] Cherry-pick fix to `Skyline/skyline_26_1` release branch
 
 ## Progress Log
 
-### 2026-03-30 - Session Start
+### 2026-03-30 - Implementation
 
-Starting work on this issue. Bug affects release version 26.1.0.057 with 15 reports from 6 users.
+- Changed `catch (ArgumentException)` in `Normalize` to return `null` instead of `path`
+- Kept `catch (NotSupportedException)` returning `path` — ADS paths (e.g. `file.zip:Zone.Identifier`) throw this but are handled fine by downstream `Path.GetDirectoryName()`
+- Added tests in `FilesTreeFormTest.TestFileSystemHelpers()` for invalid paths with `<`, `>`, `|` characters
+- Verified `IsFileInDirectory` and `IsInOrSubdirectoryOf` return `false` (no crash) for invalid paths
+- FilesTreeFormTest passes
