@@ -16,12 +16,15 @@ Method export fails for the Excedion Pro Orbitrap because the installed instrume
 
 ## Tasks
 
-- [ ] Add OrbitrapExcedionPro as a recognized instrument type
-- [ ] Build and test
+- [x] Add OrbitrapExcedionPro as a recognized instrument type
+- [x] Build and test (ThermoDllFinderTest passes)
 - [ ] Create PR
 
 ## Progress Log
 
-### 2026-03-30 - Session Start
+### 2026-03-30 - Implementation
 
-Starting work on this issue.
+- Added `THERMO_EXCEDION_PRO` / `THERMO_EXCEDION_PRO_REG` constants
+- Added to METHOD_TYPE_EXTENSIONS, THERMO_TYPE_TO_INSTALLATION_TYPE, IsFullScanInstrumentType, and SureQuant export switch case
+- Not added to METHOD_TYPES — users select "Thermo" and instrument is auto-detected from registry
+- Added DllFinder test case for OrbitrapExcedionPro registry key
