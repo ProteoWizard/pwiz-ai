@@ -8,7 +8,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4118](https://github.com/ProteoWizard/pwiz/issues/4118)
 - **Support Request**: [skyline.ms thread 74243](https://skyline.ms/announcements/home/support/thread.view?rowId=74243)
-- **PR**: (pending)
+- **PR**: [#4121](https://github.com/ProteoWizard/pwiz/pull/4121)
 
 ## Objective
 
