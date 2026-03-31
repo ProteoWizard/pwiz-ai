@@ -15,15 +15,22 @@ Normalize thread initialization and exception handling between `CommonActionUtil
 
 ## Tasks
 
-- [ ] Enhance CommonActionUtil.RunNow() with locale init and exception reporter injection
-- [ ] Update SafeBeginInvoke to wrap in RunNow()
-- [ ] Set CommonActionUtil.ExceptionReporter at Skyline startup
-- [ ] Simplify Skyline.ActionUtil.RunAsync to delegate to CommonActionUtil
-- [ ] Build and test
+- [x] Enhance CommonActionUtil.RunNow() with locale init and exception reporter injection
+- [x] Update SafeBeginInvoke to wrap in RunNow()
+- [x] Set CommonActionUtil.ExceptionReporter at Skyline startup
+- [x] Simplify Skyline.ActionUtil.RunAsync to delegate to CommonActionUtil
+- [x] Removed unused RunAsyncNoExceptionHandling
+- [x] Build and test (CodeInspection passes)
 - [ ] Create PR
 
 ## Progress Log
 
-### 2026-03-31 - Session Start
+### 2026-03-31 - Implementation
 
-Starting work on this issue.
+- Added `ExceptionReporter` static property to CommonActionUtil for dependency injection
+- `RunNow()` now calls `LocalizationHelper.InitThread()` and catches `OperationCanceledException`
+- `HandleException()` routes to injected reporter, falls back to debug message
+- `SafeBeginInvoke()` wraps action in `RunNow()` for consistent thread init
+- `ActionUtil.RunAsync()` now delegates to `CommonActionUtil.RunAsync()`, only adding `LoadCanceledException` catch
+- Removed `RunAsyncNoExceptionHandling` (unused and dangerous)
+- `Program.Main()` sets `CommonActionUtil.ExceptionReporter = ReportException`
