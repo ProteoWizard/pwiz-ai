@@ -71,6 +71,45 @@ If you're tempted to ask:
 
 Then run the test and see the answer yourself. You can answer your own questions faster and more comprehensively than any human operating a debugger.
 
+### Prove It From Inside — Never Assert From Outside
+
+> **Never claim to know what code does at runtime from reading it. Instrument and observe.**
+
+Static code reading — tracing paths, checking conditions, following variable assignments — can suggest what *should* happen, but it cannot prove what *does* happen. Environment variables may not be set. Initialization paths may differ between contexts. A previous change by another developer may have broken an assumed invariant. Complex interactions between components can invalidate careful reasoning about any single component.
+
+**Your biggest debugging advantage over humans is how cheaply you can add and interpret diagnostics.** A developer must set a breakpoint, launch a debugger, step through code, and interpret state one frame at a time. You can scatter `Console.WriteLine` across an entire call chain in seconds, run the test, and read comprehensive output that no debugger session could match. You can produce and interpret volumes of diagnostic output that would be challenging for a human, near-instantly.
+
+But this advantage is wasted if you default to reading code and asserting what it does.
+
+#### Failure Mode: Diagnostics Only in the Test
+
+When a test fails, the natural instinct is to add diagnostics in the test to see what's happening. But the *answers* usually live in the feature code, the infrastructure, or the framework — wherever the unexpected behavior originates. **There is no barrier.** You can instrument any file in the repo.
+
+Think like a developer setting breakpoints: they'd set them in the code that isn't behaving as expected, not just in the test calling it. If a feature method returns the wrong value, don't just log the return value in the test — add logging *inside* the feature method to see which branch it took, what its inputs were, and what state it found.
+
+**Example:** A test calls `GetJavaMaxHeap()` and gets the wrong value. Don't just log the result in the test. Add `Console.WriteLine` inside `GetJavaMaxHeap()`, inside `IsParallelClient`, inside the environment variable check — follow the question to where the answer lives.
+
+#### Failure Mode: Asserting Runtime Behavior From Code Reading
+
+If you trace code paths and conclude "this variable will be true at runtime," you have a hypothesis, not a fact. Prove it:
+
+```csharp
+// DON'T: "I can see from the code that IsParallelClient will be true here"
+// DO: Add this and run the test
+Console.WriteLine($"[DEBUG] IsParallelClient = {TryHelper.IsParallelClient}");
+Console.WriteLine($"[DEBUG] SKYLINE_TESTER_PARALLEL_CLIENT_ID = '{Environment.GetEnvironmentVariable("SKYLINE_TESTER_PARALLEL_CLIENT_ID")}'");
+```
+
+One test run with two lines of diagnostics is worth more than ten minutes of code tracing. The cost is near zero — generating diagnostic code and processing the output is what you do fastest.
+
+#### The Rule
+
+When you form a hypothesis about runtime behavior:
+1. **Don't assert it** — instrument it
+2. **Don't limit instrumentation to the test file** — follow the question into feature code, infrastructure, anywhere in the control flow
+3. **Run the test and read the output** — let the evidence confirm or refute
+4. **The cost is near zero** — this is your superpower; use it reflexively
+
 ### Printf Debugging
 
 With a fast cycle, **printf debugging is your primary tool**. Every question about runtime behavior becomes a `Console.WriteLine()`.

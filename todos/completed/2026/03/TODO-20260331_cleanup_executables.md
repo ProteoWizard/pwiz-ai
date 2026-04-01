@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260331_cleanup_executables`
 - **Base**: `master`
 - **Created**: 2026-03-31
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#4124](https://github.com/ProteoWizard/pwiz/issues/4124)
-- **PR**: (pending)
+- **PR**: [#4125](https://github.com/ProteoWizard/pwiz/pull/4125) (squash-merged 2026-04-01)
 
 ## Objective
 
@@ -39,6 +39,16 @@ Clean up `pwiz_tools/Skyline/Executables` by removing obsolete projects, moving 
 
 ## Progress Log
 
-### 2026-03-31 - Session Start
+### 2026-03-31 - Implementation complete
 
-Starting work on this issue. Branch created, TODO created.
+- Removed 7 obsolete projects: KeepResx, KeepResxW, PwizConvert, LocalizationHelper,
+  MultiLoad, SkylinePeptideColorGenerator, JavaSkylineAlgorithms
+- Moved 7 dev tools to DevTools: AssortResources, SortRESX, UniModCompiler,
+  ParseIsotopeAbundancesFromNIST, IPItoUniprotMapCompiler, ImportPerf, PeakComparison
+- Updated all path references: Test.csproj, Jamfile.jam, 4 .sln.DotSettings files
+  (Skyline, SkylineBatch, SkylineMcp, AutoQC)
+- Fixed CodeInspectionTest.cs: inlined the non-localized file exclusion list that was
+  previously parsed from the deleted KeepResx/Program.cs at runtime. Updated sentinel
+  check to use DevTools/ directory existence instead of KeepResx file.
+- Added 18 README.md files across all Executables and DevTools projects
+- Build succeeded, CodeInspection test passes

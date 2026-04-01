@@ -50,6 +50,16 @@ When cycle time is fast:
 
 You can answer your own questions faster and more comprehensively than any human operating a debugger.
 
+## Critical Principle: Prove It From Inside — Never Assert From Outside
+
+> **Never claim to know what code does at runtime from reading it. Instrument and observe.**
+
+See **ai/docs/debugging-principles.md** → "Prove It From Inside" for the full methodology, failure modes, and examples. Key points:
+
+- **Don't assert** runtime behavior from code reading — instrument and run
+- **Don't limit diagnostics to the test file** — instrument feature code, infrastructure, anywhere in the control flow
+- **The cost is near zero** — generating diagnostic code and processing the output is what you do fastest
+
 ## Diagnostic Toolkit
 
 ```csharp
