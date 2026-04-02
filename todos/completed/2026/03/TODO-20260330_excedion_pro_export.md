@@ -5,10 +5,11 @@
 - **Base**: `master`
 - **Worktree**: `pwiz-work2`
 - **Created**: 2026-03-30
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#4118](https://github.com/ProteoWizard/pwiz/issues/4118)
 - **Support Request**: [skyline.ms thread 74243](https://skyline.ms/announcements/home/support/thread.view?rowId=74243)
 - **PR**: [#4121](https://github.com/ProteoWizard/pwiz/pull/4121)
+- **Cherry-pick PR**: [#4123](https://github.com/ProteoWizard/pwiz/pull/4123)
 
 ## Objective
 
@@ -18,7 +19,7 @@ Method export fails for the Excedion Pro Orbitrap because the installed instrume
 
 - [x] Add OrbitrapExcedionPro as a recognized instrument type
 - [x] Build and test (ThermoDllFinderTest passes)
-- [ ] Create PR
+- [x] Create PR — merged
 
 ## Progress Log
 

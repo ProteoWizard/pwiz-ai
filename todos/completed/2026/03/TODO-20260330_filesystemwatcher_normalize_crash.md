@@ -4,9 +4,10 @@
 - **Branch**: `Skyline/work/20260330_filesystemwatcher_normalize_crash`
 - **Base**: `master`
 - **Created**: 2026-03-30
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#4098](https://github.com/ProteoWizard/pwiz/issues/4098)
 - **PR**: [#4119](https://github.com/ProteoWizard/pwiz/pull/4119)
+- **Cherry-pick PR**: [#4122](https://github.com/ProteoWizard/pwiz/pull/4122)
 - **Exception Fingerprint**: `bef5650fea50a402`, `54623034b73cd258`
 
 ## Objective
@@ -21,8 +22,8 @@ Note: `NotSupportedException` (thrown for ADS paths with colons) keeps returning
 - [x] Verify existing null checks in `IsFileInDirectory` and `IsInOrSubdirectoryOf` handle null correctly
 - [x] Add tests for `Normalize` with invalid paths and downstream graceful degradation
 - [x] Build and test pass (FilesTreeFormTest)
-- [ ] Create PR
-- [ ] Cherry-pick fix to `Skyline/skyline_26_1` release branch
+- [x] Create PR — merged
+- [x] Cherry-pick fix to `Skyline/skyline_26_1` release branch (via "Cherry pick to release" label)
 
 ## Progress Log
 

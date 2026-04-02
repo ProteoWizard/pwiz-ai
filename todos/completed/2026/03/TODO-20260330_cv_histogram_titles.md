@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260330_cv_histogram_titles`
 - **Base**: `master`
 - **Created**: 2026-03-30
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#4064](https://github.com/ProteoWizard/pwiz/issues/4064)
 - **PR**: [#4120](https://github.com/ProteoWizard/pwiz/pull/4120)
 
@@ -21,7 +21,7 @@ Fix CV Histogram graph titles to include "CV" prefix:
 - [x] Add localized resource strings (en, ja, zh-CHS) matching menu text
 - [x] Add histogram/histogram2d sibling co-location (like abundance pair)
 - [x] Build and test (AreaCVHistogramTest passes)
-- [ ] Create PR
+- [x] Create PR — merged
 
 ## Progress Log
 
