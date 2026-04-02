@@ -324,12 +324,12 @@ Read `~/.claude/settings.json` and add the statusLine configuration, preserving 
 {
   "statusLine": {
     "type": "command",
-    "command": "pwsh -NoProfile -File <project root>\\ai\\scripts\\statusline.ps1"
+    "command": "pwsh -NoProfile -File C:/proj/ai/scripts/statusline.ps1"
   }
 }
 ```
 
-> **Note:** Replace `<project root>` with the actual path (e.g., `C:\\proj`). Reference the script directly from the pwiz-ai checkout rather than copying it. This ensures you always have the latest version.
+> **Note:** Replace `C:/proj` with the actual project root. Use **forward slashes** — double-backslash escaping (`C:\\proj\\...`) stopped working in recent Claude Code versions. Reference the script directly from the pwiz-ai checkout rather than copying it. This ensures you always have the latest version.
 
 The statusline takes effect on the next Claude Code restart. Since the user just restarted in 1.11, no immediate restart is needed—the statusline will activate at the next natural restart point (e.g., after MCP server configuration in Phase 7).
 
