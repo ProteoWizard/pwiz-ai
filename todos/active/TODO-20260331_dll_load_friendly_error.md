@@ -16,15 +16,16 @@ When Windows Application Control (WDAC/AppLocker) blocks pwiz_data_cli.dll, show
 
 ## Tasks
 
-- [ ] Add startup check that verifies pwiz_data_cli.dll can load
-- [ ] Add installation type detection (ClickOnce, MSI, ZIP)
-- [ ] Show friendly error dialog with troubleshooting info
-- [ ] Create wiki troubleshooting page
-- [ ] Build and test
+- [x] Add startup check that verifies pwiz_data_cli.dll can load
+- [x] Show friendly error dialog with troubleshooting info and wiki link
+- [x] Build and test (CodeInspection passes, manual test with renamed DLL)
 - [ ] Create PR
 
 ## Progress Log
 
-### 2026-03-31 - Session Start
+### 2026-03-31 - Implementation
 
-Starting work on this issue.
+- Added `CheckNativeLibraries()` with `[NoInlining]` to isolate JIT trigger for pwiz_data_cli.dll
+- Shows `AlertLinkDlg` with friendly message and link to `tip_recover_install` wiki page
+- Skipped during `FunctionalTest` to avoid interfering with test infrastructure
+- Manually tested by renaming pwiz_data_cli.dll — dialog displays correctly
