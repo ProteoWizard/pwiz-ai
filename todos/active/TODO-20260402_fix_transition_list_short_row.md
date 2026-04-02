@@ -6,7 +6,7 @@
 - **Created**: 2026-04-02
 - **Status**: In Progress
 - **GitHub Issue**: [#4133](https://github.com/ProteoWizard/pwiz/issues/4133)
-- **PR**: (pending)
+- **PR**: [#4134](https://github.com/ProteoWizard/pwiz/pull/4134)
 - **Exception Fingerprint**: `6deacab65c4dc8d4`
 - **Exception ID**: 74264
 
@@ -20,10 +20,12 @@ validation so the user gets a meaningful error message instead of a raw exceptio
 
 - [x] Investigate root cause in Import.cs CalcTransitionInfo
 - [x] Write failing unit test (MassListShortRowTest in MassListIonsTest.cs)
-- [ ] Add bounds validation in NextRow or CalcTransitionInfo
-- [ ] Add resource string for user-friendly error message
-- [ ] Verify test passes with fix
-- [ ] Verify existing MassListSpecialIonsTest still passes
+- [x] Add IsProgrammingDefect guard to DoImport catch block
+- [x] Add bounds validation in NextRow with MaxColumnIndex check
+- [x] Add resource string for user-friendly error message
+- [x] Add ColumnIndices.MaxColumnIndex property and GetColumnProperties() helper
+- [x] Verify MassListShortRowTest passes with fix
+- [x] Verify existing MassListSpecialIonsTest still passes
 - [ ] Create PR
 
 ## Progress Log
@@ -38,4 +40,19 @@ Starting work on this issue. Root cause fully analyzed during daily report revie
 - On master, `DoImport` has a `catch (Exception)` that prevents crash but produces
   raw exception text "Index was outside the bounds of the array" as the error message
 - Failing test written and verified: `MassListShortRowTest` in `MassListIonsTest.cs`
-  (currently stashed on master)
+
+### 2026-04-02 - Fix implemented
+
+Two fixes applied:
+
+1. Added `when (!ExceptionUtil.IsProgrammingDefect(exception))` to the catch block
+   in `DoImport` so genuine programming errors (like IndexOutOfRangeException) are
+   not silently swallowed as user-facing error messages
+2. Added bounds validation in `NextRow` using new `ColumnIndices.MaxColumnIndex`
+   property to check that the row has enough fields before calling `CalcTransitionInfo`.
+   Returns user-friendly error "Row has N fields but M are required"
+
+Also refactored `ColumnIndices` to extract `GetColumnProperties()` helper, DRYing up
+the reflection query used by both the constructor and `MaxColumnIndex`.
+
+Both `MassListShortRowTest` and `MassListSpecialIonsTest` pass.
