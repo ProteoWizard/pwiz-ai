@@ -5,7 +5,7 @@
 - **Base**: `master`
 - **Worktree**: `pwiz-work2`
 - **Created**: 2026-03-31
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#3863](https://github.com/ProteoWizard/pwiz/issues/3863)
 - **PR**: [#4135](https://github.com/ProteoWizard/pwiz/pull/4135)
 - **Exception Fingerprint**: (from issue)
@@ -19,7 +19,7 @@ When Windows Application Control (WDAC/AppLocker) blocks pwiz_data_cli.dll, show
 - [x] Add startup check that verifies pwiz_data_cli.dll can load
 - [x] Show friendly error dialog with troubleshooting info and wiki link
 - [x] Build and test (CodeInspection passes, manual test with renamed DLL)
-- [ ] Create PR
+- [x] Create PR — merged
 
 ## Progress Log
 

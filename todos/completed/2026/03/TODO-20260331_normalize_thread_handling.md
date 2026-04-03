@@ -5,7 +5,7 @@
 - **Base**: `master`
 - **Worktree**: `pwiz`
 - **Created**: 2026-03-31
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#3842](https://github.com/ProteoWizard/pwiz/issues/3842)
 - **PR**: [#4126](https://github.com/ProteoWizard/pwiz/pull/4126)
 
@@ -21,7 +21,7 @@ Normalize thread initialization and exception handling between `CommonActionUtil
 - [x] Simplify Skyline.ActionUtil.RunAsync to delegate to CommonActionUtil
 - [x] Removed unused RunAsyncNoExceptionHandling
 - [x] Build and test (CodeInspection passes)
-- [ ] Create PR
+- [x] Create PR — merged
 
 ## Progress Log
 
