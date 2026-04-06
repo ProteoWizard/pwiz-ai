@@ -26,6 +26,26 @@ public static class MyAction extends SimpleViewAction<MyForm>
 }
 ```
 
+### Page title requirement
+
+Every `SimpleViewAction` must set a page title via `addNavTrail`. Without it, the LabKey test framework logs a warning that becomes a **test failure on TeamCity**:
+
+```
+Action doesn't define a page title: mymodule-myAction
+```
+
+The page `<title>` is derived from the last child added to the nav trail — **not** from `view.setTitle()` (that only sets the webpart frame header). The fix is always in `addNavTrail`:
+
+```java
+@Override
+public void addNavTrail(NavTree root)
+{
+    root.addChild("My Page Title");
+}
+```
+
+`view.setTitle()` can optionally also be set on the `JspView` to control the webpart frame header, but it does not satisfy the test framework's title check.
+
 ### FormViewAction — GET form + POST handler
 
 Use when a page needs to both display a form (GET) and process its submission (POST). This is the most commonly used action type for interactive pages. On GET, `getView()` renders the form. On POST, `validateCommand()` and `handlePost()` process the submission. If validation fails or `handlePost()` returns false, `getView()` is called again with `reshow=true` so the form can redisplay with error messages.
@@ -118,6 +138,62 @@ LabKey uses Spring parameter binding to automatically populate form bean propert
 - Type conversion is automatic (String → int, etc.)
 - Form values survive reshowing after validation errors (the form bean is passed back to `getView()`)
 
+### Disallowed parameter names
+
+LabKey's Spring binding framework blocks certain parameter names from being bound to form properties. The disallowed names are defined in `HasAllowBindParameter` (`server/modules/platform/api/src/org/labkey/api/action/HasAllowBindParameter.java`):
+
+```
+class, container, containerid, request, response, user, viewcontext
+```
+
+The check is **case-insensitive**. If a form property matches any of these names, the setter will never be called and the field will remain `null` — with no error or warning.
+
+This is a security measure to prevent request parameters from overwriting framework properties (e.g., the authenticated `User` object returned by `getUser()` on the action class).
+
+**If you need a parameter with one of these names, rename it.** For example, use `username` instead of `user`:
+
+```java
+// WRONG — "user" is disallowed; _user will always be null
+private String _user;
+public String getUser() { return _user; }
+public void setUser(String user) { _user = user; }
+
+// RIGHT — "username" is not disallowed
+private String _username;
+public String getUsername() { return _username; }
+public void setUsername(String username) { _username = username; }
+```
+
+This does not affect `request.getParameter()` — only Spring form binding. Code that previously used `request.getParameter("user")` worked because it bypassed Spring binding entirely. When refactoring from manual parameter reads to form classes, watch for this.
+
+### Use `Integer`/`Boolean` for optional parameters
+
+Use wrapper types (`Integer`, `Boolean`) instead of primitives (`int`, `boolean`) for form fields that may be absent from the request. Primitives silently default to `0`/`false`, making it impossible to distinguish "not provided" from an explicit value. Wrapper types remain `null` when the parameter is missing, allowing proper validation:
+
+```java
+// WRONG — missing runId silently becomes 0
+private int _runId;
+
+// RIGHT — missing runId is null, can be validated
+private Integer _runId;
+
+// In the action:
+if (form.getRunId() == null)
+{
+    response.put("success", false);
+    response.put("cause", "runId is required");
+    return response;
+}
+```
+
+Use primitives only when a parameter is truly required and has no meaningful null state (e.g., a boolean toggle that always has a default).
+
+### Prefer `org.apache.commons.lang3.StringUtils`
+
+Use `org.apache.commons.lang3.StringUtils` (already a dependency) instead of `org.springframework.util.StringUtils`. The commons-lang3 version avoids coupling to Spring internals. Key equivalences:
+- `StringUtils.isEmpty()` — same in both
+- `StringUtils.isNotBlank()` — equivalent to Spring's `StringUtils.hasText()`
+
 ### Plain bean forms
 
 The simplest form is a plain Java bean with no superclass. Spring binding works on any POJO — no framework base class is required:
@@ -127,7 +203,7 @@ public static class MySettingsForm
 {
     private String _name;
     private String _password;
-    private int _maxRetries;
+    private Integer _maxRetries;
 
     public String getName() { return _name; }
     public void setName(String name) { _name = name; }
@@ -135,8 +211,8 @@ public static class MySettingsForm
     public String getPassword() { return _password; }
     public void setPassword(String password) { _password = password; }
 
-    public int getMaxRetries() { return _maxRetries; }
-    public void setMaxRetries(int maxRetries) { _maxRetries = maxRetries; }
+    public Integer getMaxRetries() { return _maxRetries; }
+    public void setMaxRetries(Integer maxRetries) { _maxRetries = maxRetries; }
 }
 ```
 
@@ -453,6 +529,187 @@ Column definitions in `resources/schemas/<module>.xml` must match the actual dat
 </column>
 ```
 
+## UserSchema — Exposing Module Tables to the Query API
+
+### DbSchema vs UserSchema
+
+**`DbSchema`** is a low-level wrapper around a raw database schema. It knows about tables and columns via the database catalog (and optionally a schema XML file), but it has no concept of LabKey containers, users, or permissions. It is used internally by actions and managers to execute SQL.
+
+**`UserSchema`** is the higher-level abstraction that plugs into the LabKey query system. It is scoped to a `(User, Container)` pair and is what makes tables accessible via:
+- The Query Schema Browser UI
+- `SelectRowsCommand` / `UpdateRowsCommand` in Selenium tests and remote API clients
+- Custom queries, saved views, and cross-folder lookups
+
+Without a `UserSchema` registration, a module's DB tables are invisible to the query API even if they are visible in the Schema Administration page (which lists raw DB schemas, not query schemas).
+
+### Registering a UserSchema
+
+The standard pattern, used by `PanoramaPublicSchema`, `TargetedMSSchema`, and others:
+
+**1. Make the schema class extend `UserSchema`:**
+
+```java
+public class MyModuleSchema extends UserSchema
+{
+    public static final String SCHEMA_NAME = "mymodule";
+
+    public MyModuleSchema(User user, Container container)
+    {
+        super(SCHEMA_NAME, "MyModule data", user, container, getSchema());
+    }
+
+    public static void register(Module module)
+    {
+        DefaultSchema.registerProvider(SCHEMA_NAME, new DefaultSchema.SchemaProvider(module)
+        {
+            @Override
+            public QuerySchema createSchema(DefaultSchema schema, Module module)
+            {
+                return new MyModuleSchema(schema.getUser(), schema.getContainer());
+            }
+        });
+    }
+
+    public static DbSchema getSchema()
+    {
+        return DbSchema.get(SCHEMA_NAME, DbSchemaType.Module);
+    }
+
+    @Override
+    public @Nullable TableInfo createTable(@NotNull String name, @NotNull ContainerFilter cf)
+    {
+        // See below for how to expose columns
+    }
+
+    @Override
+    public @NotNull Set<String> getTableNames()
+    {
+        return Set.of("mytable", "anothertable");
+    }
+
+    // Static accessors used by controller/manager code — unchanged
+    public static TableInfo getTableInfoMyTable() { return getSchema().getTable("mytable"); }
+}
+```
+
+**2. Call `register()` from the module's `init()` method:**
+
+```java
+@Override
+protected void init()
+{
+    addController("mymodule", MyModuleController.class);
+    MyModuleSchema.register(this);
+}
+```
+
+The `SchemaProvider` base class only makes the schema available in containers where the module is active (checked via `schema.getContainer().getActiveModules().contains(module)`).
+
+### Exposing Columns with `wrapAllColumns()`
+
+`createTable()` must return a `TableInfo`. For simple read-only access to all DB columns, use `FilteredTable` and call `wrapAllColumns(true)`:
+
+```java
+@Override
+public @Nullable TableInfo createTable(@NotNull String name, @NotNull ContainerFilter cf)
+{
+    TableInfo dbTable = switch (name.toLowerCase())
+    {
+        case "mytable"      -> getTableInfoMyTable();
+        case "anothertable" -> getTableInfoAnotherTable();
+        default             -> null;
+    };
+    if (dbTable == null)
+        return null;
+    FilteredTable<MyModuleSchema> table = new FilteredTable<>(dbTable, this, cf);
+    table.wrapAllColumns(true);
+    return table;
+}
+```
+
+`wrapAllColumns(true)` copies all columns from the underlying `DbSchema` table into the `FilteredTable`, making them visible in the Query Browser and queryable via the API. Without this call, the table appears in the schema tree but shows no columns.
+
+For tables that need custom column configuration (lookups, hidden columns, display formats), create a dedicated `TableInfo` subclass instead (as `PanoramaPublicSchema` does for its tables).
+
+### Defining foreign key lookups
+
+Foreign key lookups (the "Lookup" column in the Query Schema Browser) require **two things**:
+
+**1. Schema XML** — defines the FK at the `DbSchema` level (`resources/schemas/<schemaname>.xml`):
+
+```xml
+<column columnName="userid">
+    <fk>
+        <fkDbSchema>testresults</fkDbSchema>
+        <fkTable>user</fkTable>
+        <fkColumnName>id</fkColumnName>
+    </fk>
+</column>
+```
+
+**2. Resolve FKs to `UserSchema` level in `createTable()`** — the schema XML FK alone is not enough. `FilteredTable.wrapAllColumns()` propagates the `DbSchema`-level FK, but the target schema shows up as `undefined` in the Query Schema Browser because the FK has no `UserSchema` context. A `UserSchema`-level FK (built with `QueryForeignKey`) is required for the hyperlink to render and for navigation to the target query grid to work.
+
+Rather than hardcoding each FK column individually, walk all columns after `wrapAllColumns()` and convert any FK that targets this schema automatically:
+
+```java
+private void resolveSchemaForeignKeys(FilteredTable<MyModuleSchema> table, ContainerFilter cf)
+{
+    for (ColumnInfo col : table.getColumns())
+    {
+        ForeignKey fk = col.getFk();
+        if (fk == null)
+            continue;
+        String fkTable  = fk.getLookupTableName();
+        String fkCol    = fk.getLookupColumnName();
+        String fkSchema = fk.getLookupSchemaName();
+        // Replace FKs targeting this schema (schema comes through as null or SCHEMA_NAME
+        // from the DbSchema XML). Skip FKs targeting other schemas (e.g. "core").
+        if (fkTable != null && (fkSchema == null || SCHEMA_NAME.equalsIgnoreCase(fkSchema)))
+        {
+            var mutableCol = table.getMutableColumn(col.getName());
+            if (mutableCol != null)
+                mutableCol.setFk(QueryForeignKey.from(this, cf).to(fkTable, fkCol, null));
+        }
+    }
+}
+```
+
+Call this after `wrapAllColumns()` in `createTable()`:
+
+```java
+FilteredTable<MyModuleSchema> table = new FilteredTable<>(dbTable, this, cf);
+table.wrapAllColumns(true);
+resolveSchemaForeignKeys(table, cf);
+return table;
+```
+
+`QueryForeignKey.from(this, cf).to(tableName, pkColumn, displayColumn)` — pass `null` as `displayColumn` to let LabKey use the first non-PK text column in the target table automatically.
+
+### Reserved column names with automatic lookups
+
+LabKey recognizes certain column names by convention and applies lookups or special handling automatically — no `<fk>` element needed in the schema XML:
+
+| Column name | Auto-applied behavior |
+|---|---|
+| `container` | FK to `core.Containers.EntityId` → displays container path/name |
+| `createdby` | FK to `core.UsersData.UserId` → displays user display name |
+| `modifiedby` | FK to `core.UsersData.UserId` → displays user display name |
+| `created` | Treated as a date/time column |
+| `modified` | Treated as a date/time column |
+
+Custom FK columns (e.g. `userid` pointing to a module's own table) are not recognized by convention and require an explicit `<fk>` definition.
+
+### External Schemas vs UserSchema
+
+LabKey administrators can manually register an "External Schema" via Schema Administration → New External Schema, which wraps a raw DB schema and exposes it in the Query Browser for a specific folder. This is a quick workaround but carries caveats:
+
+- It bypasses LabKey security and integrity checks (LabKey warns about this in the UI)
+- It is fragile across upgrades (the schema page notes queries may stop working)
+- It is folder-specific, not tied to the module lifecycle
+- It requires manual admin setup on each server
+
+If a module registers its own `UserSchema` via code, the code-level registration takes precedence over any External Schema with the same name in containers where the module is active. Existing saved queries and custom views continue to work (same schema and table names). After deploying the module update, delete the External Schema via Schema Administration to remove the now-dead manual registration.
+
 ## Unit Tests
 
 Unit tests live as `public static class TestCase extends Assert` inner classes within the class being tested. They are registered in the module class's `getUnitTests()`.
@@ -528,48 +785,9 @@ The page renders test results inline in HTML. Key patterns to grep for:
 
 ## Selenium Tests
 
-### Class hierarchy
+For comprehensive Selenium testing patterns, methods, locators, assertions, and DRY practices, see **[labkey-selenium-testing-guide.md](labkey-selenium-testing-guide.md)**.
 
-- **`BaseWebDriverTest`** (BWDT) — handles browser launch, login, screenshots on failure. Parent classes `LabKeySiteWrapper` and `WebDriverWrapper` provide LabKey-specific and general browser functionality.
-- **Module-specific base classes** extend BWDT and add module helpers.
-- **Helper classes** — high-level tasks spanning many steps (e.g. `APIContainerHelper`, `APIUserHelper`, `ApiPermissionsHelper`).
-- **Page classes** — encapsulate a single page/action. Methods return the same page for chaining; navigation methods return the target page class.
-- **Component classes** — encapsulate smaller UI components (data region, combo box, window).
-
-Prefer helper, page, and component classes over directly interacting with WebDriver.
-
-### Base class pattern
-
-Selenium-based tests live in `test/src/`. They typically extend a module-specific base test class (which extends `BaseWebDriverTest` or a further subclass).
-
-```java
-@Category({External.class, MacCossLabModules.class})
-@BaseWebDriverTest.ClassTimeout(minutes = 7)
-public class MyTest extends MyModuleBaseTest
-{
-    private static final String USER1 = "user1@test.example";
-
-    @Test
-    public void testFeature()
-    {
-        // Test implementation
-    }
-
-    @Override
-    protected void doCleanup(boolean afterTest) throws TestTimeoutException
-    {
-        _userHelper.deleteUsers(false, USER1);
-        super.doCleanup(afterTest);
-    }
-}
-```
-
-### Navigating to action pages
-
-```java
-beginAt(WebTestHelper.buildURL("mymodule", getCurrentContainerPath(),
-        "actionName", Map.of("id", String.valueOf(entityId))));
-```
+This section covers LabKey-specific patterns not covered in the general testing guide.
 
 ### Impersonation
 
@@ -606,84 +824,11 @@ clickAndWait(Locator.linkWithText("My Settings Page"));
 `DataRegionTable` (`org.labkey.test.util.DataRegionTable`) wraps LabKey Data Region grids — any `<table>` with a `data-region-name` attribute.
 
 ```java
-// By data-region-name attribute
 DataRegionTable table = new DataRegionTable("MyTable", getDriver());
-
-// Find within a specific webpart
 DataRegionTable table = DataRegionTable.findDataRegionWithinWebpart(this, "My Webpart");
 ```
 
-Supports reading data by row/column, row selection, filtering, sorting, column management, and pagination — see the `DataRegionTable` source for the full API.
-
 **Note:** Only works with LabKey DataRegion tables (those with `data-region-name`). For plain HTML tables rendered by JSPs without a DataRegion, use `Locator.xpath()` to locate cells directly.
-
-### Remote API Commands for Selenium Tests
-
-**Calling controller actions from tests:**
-```java
-Connection connection = createDefaultConnection();
-SimpleGetCommand command = new SimpleGetCommand("mymodule", "actionName");
-CommandResponse response = command.execute(connection, "/");
-Object value = response.getProperty("propertyName");
-```
-
-**Querying table rows:**
-```java
-Connection connection = createDefaultConnection();
-SelectRowsCommand selectCmd = new SelectRowsCommand("mymodule", "MyTable");
-selectCmd.setColumns(List.of("Id", "Name"));
-SelectRowsResponse selectResp = selectCmd.execute(connection, containerPath);
-for (Map<String, Object> row : selectResp.getRows())
-{
-    // row.get("Id"), row.get("Name"), etc.
-}
-```
-
-**Updating table rows:**
-```java
-Connection connection = createDefaultConnection();
-UpdateRowsCommand updateCmd = new UpdateRowsCommand("mymodule", "MyTable");
-Map<String, Object> row = new HashMap<>();
-row.put("Id", entityId);           // primary key (required)
-row.put("FieldName", "newValue");  // field to update
-updateCmd.addRow(row);
-SaveRowsResponse updateResp = updateCmd.execute(connection, containerPath);
-assertEquals(1, updateResp.getRowsAffected().intValue());
-```
-
-### Test design guidelines
-
-- Each `@Test` method should be independent and not interfere with other tests.
-- Use `@BeforeClass` (static methods only) for one-time setup before all tests.
-- **Do not use `@AfterClass`** — it interferes with post-test cleanup and failure handling in the LabKey test harness.
-- **Do not do cleanup in catch blocks.**
-
-### Test cleanup: `@After` vs `doCleanup()`
-
-**`doCleanup()`** — the standard LabKey cleanup mechanism. The harness runs it before the test class starts (to clean up from a previous failed run) and once at the end if the test passes. Cleanup is skipped for failed tests to allow investigation. Use it only for idempotent cleanup that's safe to run before the test (deleting users, deleting projects).
-
-**`@After`** — runs after every test method, guaranteed by JUnit. Use it for restoring state that was modified during the test (mock services, settings). Note that `doCleanup()` runs before instance fields are set, so conditional cleanup like `if (_usedMockService)` won't trigger there — use `@After` instead.
-
-```java
-@After
-public void afterTest()
-{
-    // Restore state modified during the test
-    if (_modifiedSettings)
-    {
-        restoreOriginalSettings();
-    }
-    super.afterTest();
-}
-
-@Override
-protected void doCleanup(boolean afterTest) throws TestTimeoutException
-{
-    // Only idempotent cleanup here — runs at startup too
-    _userHelper.deleteUsers(false, USER1, USER2);
-    super.doCleanup(afterTest);
-}
-```
 
 ## File System Patterns
 

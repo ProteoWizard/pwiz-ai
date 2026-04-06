@@ -45,7 +45,8 @@ Also read `ai/docs/labkey-setup/README.md` if environment setup is needed.
 
 ## Read On Demand
 
-- **ai/docs/labkey/labkey-modules-coding-patterns.md** - Full coding patterns reference (action types, forms, DOM builder, unit tests, Selenium tests). Read when writing or modifying code — the Key Patterns section below covers the common cases.
+- **ai/docs/labkey/labkey-modules-coding-patterns.md** - Full coding patterns reference (action types, forms, DOM builder, unit tests). Read when writing or modifying code — the Key Patterns section below covers the common cases.
+- **ai/docs/labkey/labkey-selenium-testing-guide.md** - Selenium test patterns, commonly used methods, locators, assertions, and DRY practices. Read when writing or modifying Selenium tests.
 
 ---
 
