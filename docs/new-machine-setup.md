@@ -146,7 +146,7 @@ winget install Microsoft.PowerShell --accept-source-agreements --accept-package-
 
 The new terminal should show PowerShell 7 as the default:
 ```
-PowerShell 7.5.0
+PowerShell 7.6.0
 PS C:\Users\username>
 ```
 
