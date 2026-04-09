@@ -133,6 +133,80 @@ for integration and reuse.
 - **Carafe**: grad student project (MacCoss + Noble labs), Java + Python, PR #3549 on pwiz
   — integration point, not port target
 
+## Handoff Notes (from 2026-04-09 session)
+
+### Building and running Osprey (the Rust reference oracle)
+
+The Rust toolchain is installed but **not on the default Git Bash PATH**. Every
+`cargo` invocation needs these exports:
+```bash
+export VCPKG_ROOT="$USERPROFILE/vcpkg"
+export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/CMake/bin:$USERPROFILE/vcpkg/installed/x64-windows/bin:$PATH"
+```
+The last PATH entry (`vcpkg/.../bin`) is for `openblas.dll` at runtime. Without it,
+`osprey.exe` fails with "cannot open shared object file: openblas.dll".
+
+Build + test:
+```bash
+cd C:/proj/osprey
+cargo build --release    # ~4 min first time, ~30s incremental
+cargo test --release     # 335 pass, 2 ignored, ~10s
+```
+
+### Windows build gotchas discovered this session
+
+1. **Osprey README says `OPENBLAS_PATH`; CI uses vcpkg.** The README's "set
+   OPENBLAS_PATH" instructions don't work on Windows — `openblas-src` 0.10's
+   `system` feature uses vcpkg, not a custom env var. The CI workflow
+   (`.github/workflows/ci.yml:46`) is the source of truth. Potential upstream
+   README fix to propose to Mike.
+
+2. **`set -o pipefail` isn't enough for exit codes.** It only handles piped
+   commands. For sequential commands (`cmd1; cmd2`), capture the exit code
+   explicitly: `cmd1; RESULT=$?; echo "EXIT=$RESULT"; exit $RESULT`.
+
+3. **DIA-NN `.tsv.speclib` is binary, not TSV.** Despite the extension, this is
+   DIA-NN's proprietary binary library format (magic bytes `fd ff ff ff`).
+   Osprey only reads plain-text DIA-NN TSV exports (from `--out-lib`).
+
+### Mike's test data — what to expect
+
+- Downloading from Panorama: `osprey-testfiles` folder
+- **Stellar dataset** = faster, unit resolution (`--resolution unit`). Best
+  first target on this 32GB laptop.
+- **Astral dataset** = bigger, ~1.5M peptide library, high-resolution (default ppm).
+  Better for desktop/server.
+- Library: `hela-filtered-SkylineAI_spectral_library.tsv` (actual DIA-NN text TSV)
+- Mike's exact commands are in the Context section below.
+- Mike says **protein-level FDR "still needs work"** but peptide/precursor FDR
+  is good. Don't expect perfect protein-level results.
+- Mike says output is **"very verbose right now"** with plans to add verbosity
+  levels. We don't need to replicate that verbosity in OspreySharp.
+
+### pwiz_tools/ layout (for scaffolding)
+
+Existing siblings at `pwiz_tools/`:
+```
+BiblioSpec/      ← blib tools (BlibBuild.exe, BlibFilter.exe) — reuse for I/O
+Bumbershoot/     ← myrimatch, idpicker — precedent for tool suites
+Shared/          ← common deps (SQLite, etc.) — reference from OspreySharp
+Skyline/         ← main application
+Topograph/       ← another standalone tool
+```
+OspreySharp goes at same level: `pwiz_tools/OspreySharp/`.
+
+### What the failed smoke test proved
+
+The PROCAL smoke test (Tutorial_DIA.blib + DIA_100fmol.mzML) produced 0 detections
+because the library (45,044 proteome peptides) didn't match the sample (PROCAL
+synthetic standard, ~40 peptides). This is a **library mismatch, not an Osprey bug**.
+The pipeline ran correctly end-to-end in 17 seconds: loaded library, parsed mzML,
+scored 89,168 entries, ran Percolator 3-fold CV, wrote Parquet + TSV. The diagnostic
+"target_mean=0.839, decoy_mean=0.839" (identical distributions) confirms targets
+weren't present in the data.
+
+Don't re-attempt this combination. Wait for Mike's matched test data.
+
 ## Decisions
 
 - **Location**: `pwiz_tools/OspreySharp/` (not standalone repo). Provides BiblioSpec,
