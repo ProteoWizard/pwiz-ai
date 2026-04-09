@@ -58,8 +58,9 @@ for integration and reuse.
 - [x] Download Mike's test data from Panorama (Astral + Stellar datasets, HeLa library)
 - [x] Rebuild Osprey with latest changes and rerun tests (335 pass)
 - [x] Fix parquet_index bug in Osprey's second-pass FDR (see below)
-- [x] Run Osprey on Stellar dataset (29,916 precursors, 26,523 peptides, 4,995 proteins at 1% FDR)
-- [ ] Run Osprey on Astral dataset (in progress, ~1.5M peptide library)
+- [x] Fix parquet_index initialization bug in fresh scoring path (see Session 3 below)
+- [x] Run Osprey on Stellar dataset (36,783 precursors, 33,966 peptides, 5,604 proteins at 1% FDR)
+- [x] Run Osprey on Astral dataset (143,622 precursors, 125,609 peptides, 13,482 proteins at 1% FDR)
 - [ ] Scaffold `pwiz_tools/OspreySharp/` solution structure
 
 ## Remaining Tasks
@@ -265,3 +266,64 @@ streaming Phase 2 (training subset) and Phase 4 (scoring all entries) paths.
 - Run both datasets on desktop (i9, 64 GB) and NUMA server (72 cores, 512 GB)
 - PR the parquet_index fix to Mike
 - Begin scaffolding `pwiz_tools/OspreySharp/`
+
+### 2026-04-09 Session 3 (desktop, i9 + 64 GB RAM)
+
+**Environment setup**: Installed Rust 1.94.1, vcpkg + OpenBLAS 0.3.29, cloned
+`brendanx67/osprey` to `C:\proj\osprey`. VS 18 (Community) is too new for vcpkg's
+bundled CMake -- requires `CMAKE_GENERATOR=Ninja` and Ninja on PATH from VS install.
+Build time: 1m19s (vs 3m55s on laptop). All 335 tests pass.
+
+**Second parquet_index bug found**: `to_fdr_entry()` sets `parquet_index: 0` with
+comment "populated by caller after Parquet write" but the caller at pipeline.rs:2522
+never populated it. After the first fix (dfe5f9e) switched feature lookup to use
+`parquet_index` instead of positional index, every entry loaded row 0's features,
+destroying all SVM discriminative signal. This caused 0 detections on fresh runs
+(the bug was masked when reusing cached Parquet files because `load_fdr_stubs_from_parquet`
+correctly sets `parquet_index` from the Parquet row).
+
+**Diagnosis**: Compared `main` vs `fix/parquet-index-lookup` on Stellar data:
+- `main`: first-pass streaming found 49,704 precursors (using `local_idx`), then panicked
+  in second-pass direct path (the original parquet_index bug)
+- `fix`: first-pass streaming found 0 targets (using `parquet_index` which was always 0)
+- Root cause confirmed: "Best initial feature: xcorr (10,752 at 1% FDR)" on `main` vs
+  "median_polish_cosine (1 at 1% FDR)" on fix -- identical features for all entries
+
+**Fix**: One-line change -- set `parquet_index = i` during FdrEntry stub creation at
+the call site (pipeline.rs:2522). Committed as 2812401.
+
+**Mike is independently working on a fix** via his own Claude Code session after
+reproducing the bug. Merge of his fix and ours may be needed.
+
+**Stellar results** (3 files, unit resolution, hela-filtered library):
+- 36,783 precursors, 33,966 peptides, 5,604 protein groups at 1% FDR
+- 4 minutes 39 seconds (vs 7m22s on laptop first-pass only)
+- Substantially better than laptop (29,916 precursors) because second-pass
+  reconciliation now works correctly
+
+**Astral results** (3 files, hram resolution, ~1.5M peptide library):
+- 143,622 precursors, 125,609 peptides, 13,482 protein groups at 1% FDR
+- 1 hour 9 minutes (vs 3h19m with 0 results on laptop)
+- This is the first successful Astral run -- proves the streaming path works
+
+**Validation oracle established**: Both datasets produce strong results on desktop.
+These numbers serve as the reference for OspreySharp C# port validation:
+- Stellar: ~37K precursors, ~34K peptides, ~5.6K proteins (statistically equivalent)
+- Astral: ~144K precursors, ~126K peptides, ~13.5K proteins (statistically equivalent)
+
+**Desktop build environment** (`C:\proj\osprey`):
+```bash
+export VCPKG_ROOT="$USERPROFILE/vcpkg"
+export CMAKE_GENERATOR=Ninja
+export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja:$USERPROFILE/vcpkg/installed/x64-windows/bin:$PATH"
+```
+Also: `openblas.dll` copied to `target/release/` to avoid DLL search issues in Git Bash.
+
+**Test data locations** (desktop):
+- Stellar: `D:\test\osprey-runs\stellar\` (3 mzML + hela-filtered library)
+- Astral: `D:\test\osprey-runs\astral\` (3 mzML + SkylineAI library)
+
+**Next steps**:
+- Coordinate with Mike on merging parquet_index fixes
+- Begin scaffolding `pwiz_tools/OspreySharp/` solution structure
+- Port Phase 2 (core types) as first C# implementation milestone
