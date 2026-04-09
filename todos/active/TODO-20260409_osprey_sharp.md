@@ -244,14 +244,24 @@ streaming Phase 2 (training subset) and Phase 4 (scoring all entries) paths.
 - 29,916 precursors, 26,523 peptides, 4,995 protein groups at 1% FDR
 - 7 minutes 22 seconds on laptop (32 GB RAM)
 
-**Astral run**: In progress at session end (larger library ~1.5M peptides, hram resolution).
+**Astral results** (3 files, hram resolution, ~1.5M peptide library):
+- 0 detections at 1% FDR despite calibration LDA finding ~5K peptides per file
+- 3 hours 19 minutes on laptop (32 GB RAM)
+- Used streaming Percolator path (4.6M entries > 600K threshold)
+- Training subset had skewed target/decoy ratio (203K targets vs 97K decoys) — likely
+  a separate streaming-path bug where target-decoy pairing breaks at scale
+- Needs further investigation on more powerful hardware with diagnostics
 
 **Test infrastructure created** (`C:\test\osprey-runs\`):
 - `clean-run.ps1` - wipe Osprey runtime caches from a test data folder
 - `clean-build.ps1` - cargo clean + full rebuild + test
 
+**Osprey fork**: `brendanx67/osprey`, branch `fix/parquet-index-lookup`
+- Fix committed and pushed, ready for PR to `maccoss/osprey`
+- Other machines: `git clone git@github.com:brendanx67/osprey.git && git checkout fix/parquet-index-lookup`
+
 **Next steps**:
-- Complete Astral run and record results
+- Investigate Astral 0-detection issue (streaming path target/decoy pairing)
 - Run both datasets on desktop (i9, 64 GB) and NUMA server (72 cores, 512 GB)
 - PR the parquet_index fix to Mike
 - Begin scaffolding `pwiz_tools/OspreySharp/`
