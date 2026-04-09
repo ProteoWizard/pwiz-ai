@@ -55,9 +55,11 @@ for integration and reuse.
 
 ## In Progress
 
-- [ ] Download Mike's test data from Panorama (Astral + Stellar datasets, HeLa library)
-- [ ] Rebuild Osprey with latest changes and rerun tests
-- [ ] Run Osprey on Mike's test data with his exact command lines
+- [x] Download Mike's test data from Panorama (Astral + Stellar datasets, HeLa library)
+- [x] Rebuild Osprey with latest changes and rerun tests (335 pass)
+- [x] Fix parquet_index bug in Osprey's second-pass FDR (see below)
+- [x] Run Osprey on Stellar dataset (29,916 precursors, 26,523 peptides, 4,995 proteins at 1% FDR)
+- [ ] Run Osprey on Astral dataset (in progress, ~1.5M peptide library)
 - [ ] Scaffold `pwiz_tools/OspreySharp/` solution structure
 
 ## Remaining Tasks
@@ -217,3 +219,39 @@ Don't re-attempt this combination. Wait for Mike's matched test data.
   (`System.Numerics.Vector<float>`) for hot inner loops in batch scoring.
 - **Mokapot**: dropped from scope (Osprey's built-in Percolator SVM is the default).
 - **Numerical tolerance**: match Osprey statistically, not bit-for-bit.
+
+## Progress Log
+
+### 2026-04-09 Session 2 (laptop)
+
+**Test data**: Downloaded from Panorama to `C:\test\osprey-testfiles\{astral,stellar}`.
+Each has 3 mzML files, a DIA-NN TSV library, a fasta, and a readme with Mike's exact command.
+
+**Bug found and fixed**: `run_percolator_fdr_direct()` and the streaming scoring path
+in `pipeline.rs` assumed positional correspondence between `fdr_entries` and Parquet rows.
+After first-pass FDR compaction, `fdr_entries` is shorter than the Parquet cache, causing:
+1. Panic (slice index out of bounds) in the second-pass direct path
+2. Targets receiving decoy features (or vice versa) in the first-pass, because the
+   Parquet stores targets and decoys interleaved but `fdr_entries` order may differ
+
+**Fix**: Use `fdr_entry.parquet_index` (which preserves the original Parquet row) instead
+of positional index. Fixed in three places in `run_percolator_fdr_direct()` and the
+streaming Phase 2 (training subset) and Phase 4 (scoring all entries) paths.
+
+**Branch**: `brendanx67/fix-parquet-index-lookup` on `maccoss/osprey`
+
+**Stellar results** (3 files, unit resolution, hela-filtered library):
+- 29,916 precursors, 26,523 peptides, 4,995 protein groups at 1% FDR
+- 7 minutes 22 seconds on laptop (32 GB RAM)
+
+**Astral run**: In progress at session end (larger library ~1.5M peptides, hram resolution).
+
+**Test infrastructure created** (`C:\test\osprey-runs\`):
+- `clean-run.ps1` - wipe Osprey runtime caches from a test data folder
+- `clean-build.ps1` - cargo clean + full rebuild + test
+
+**Next steps**:
+- Complete Astral run and record results
+- Run both datasets on desktop (i9, 64 GB) and NUMA server (72 cores, 512 GB)
+- PR the parquet_index fix to Mike
+- Begin scaffolding `pwiz_tools/OspreySharp/`

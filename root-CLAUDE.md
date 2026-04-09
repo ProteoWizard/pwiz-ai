@@ -20,3 +20,14 @@ commands, skills, and settings.
 
 **CRITICAL**: Never use `cd /path && command` — `cd` once, then run simple
 commands. See **ai/CRITICAL-RULES.md** for details.
+
+## Language and Tone
+
+**Banned phrases**: Do not use "smoking gun" or similar dramatic detective/crime
+idioms. We are engineers doing root cause analysis, not crime scene investigators.
+
+When you find decisive evidence, use analytical language:
+- "That confirms it" / "That explains the failure"
+- "The root cause is clear now"
+- "Found the mismatch" / "Found the discrepancy"
+- "This accounts for the behavior we saw"
