@@ -61,7 +61,7 @@ for integration and reuse.
 - [x] Fix parquet_index initialization bug in fresh scoring path (see Session 3 below)
 - [x] Run Osprey on Stellar dataset (36,783 precursors, 33,966 peptides, 5,604 proteins at 1% FDR)
 - [x] Run Osprey on Astral dataset (143,622 precursors, 125,609 peptides, 13,482 proteins at 1% FDR)
-- [ ] Scaffold `pwiz_tools/OspreySharp/` solution structure
+- [x] Scaffold `pwiz_tools/OspreySharp/` solution structure
 
 ## Remaining Tasks
 
