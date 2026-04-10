@@ -66,25 +66,24 @@ for integration and reuse.
 ## Remaining Tasks
 
 ### Phase 1: Project Setup
-- [ ] Create `pwiz_tools/OspreySharp/` .NET solution mirroring Osprey's 7-crate layout:
-  - `OspreySharp.Core` ← `osprey-core` (types, config, errors)
-  - `OspreySharp.IO` ← `osprey-io` (mzML, blib, library loaders)
-  - `OspreySharp.Chromatography` ← `osprey-chromatography` (peak detection, calibration)
-  - `OspreySharp.Scoring` ← `osprey-scoring` (feature extraction, decoys, batch scoring)
-  - `OspreySharp.FDR` ← `osprey-fdr` (Percolator SVM, TDC, protein parsimony)
-  - `OspreySharp.ML` ← `osprey-ml` (linear SVM, matrix ops, PEP, q-values)
-  - `OspreySharp` ← `osprey` (CLI + pipeline orchestration)
+- [x] Create `pwiz_tools/OspreySharp/` .NET solution mirroring Osprey's 7-crate layout
 - [ ] Set up project references to Shared, BiblioSpec, pwiz_data_cli
 - [ ] Developer setup doc (`docs/dev-setup.md`) — Rust reference oracle + C# build
 
 ### Phase 2: Core Types & Infrastructure
-- [ ] Port `osprey-core/src/types.rs` → core types (LibraryEntry, Spectrum, FdrEntry, etc.)
-- [ ] Port `osprey-core/src/config.rs` → OspreyConfig + YAML deserialization
-- [ ] Port `osprey-ml/src/svm.rs` → LinearSvmClassifier
-- [ ] Port `osprey-ml/src/matrix.rs` → matrix operations
-- [ ] Set up Math.NET Numerics + MKL provider for BLAS
+- [x] Port `osprey-core/src/types.rs` → core types (20 files, 14 tests)
+- [x] Port `osprey-core/src/config.rs` → OspreyConfig + config types (5 files, 7 tests)
+- [x] Port `osprey-ml` → SVM, Matrix, PEP, Q-values, LDA (7 files, 39 tests)
+- [ ] Set up Math.NET Numerics + MKL provider for BLAS (deferred to perf phase)
 
 ### Phase 3: I/O (leverage existing pwiz infrastructure)
+**REVIEW GATE**: Before writing I/O code, survey and wire up existing pwiz infrastructure.
+Do NOT straight-port the Rust I/O — wrap existing pwiz_tools/Shared libraries instead.
+
+- [ ] **Pre-I/O review**: Add project references to CommonUtil, BiblioSpec, ProteowizardWrapper
+- [ ] **Chemistry integration**: Replace IsotopeEnvelope with Shared/CommonUtil/Chemistry
+  (Molecule, AminoAcidFormulas, MassDistribution). OspreySharp MUST calculate masses
+  and isotope distributions identically to Skyline — use the same code, not a port.
 - [ ] DIA-NN TSV library reader (port `osprey-io/src/library/diann.rs`)
 - [ ] elib library reader (port `osprey-io/src/library/elib.rs`)
 - [ ] blib library reader (reuse BiblioSpec / port `osprey-io/src/library/blib.rs`)
@@ -104,6 +103,8 @@ for integration and reuse.
 - [ ] Protein parsimony + picked-protein FDR (port `osprey-fdr/src/protein.rs`)
 
 ### Phase 5: Pipeline & CLI
+- [ ] **Pre-pipeline review**: Verify threading patterns (ActionUtil.RunAsync),
+  progress reporting, and cancellation follow Skyline conventions
 - [ ] Pipeline orchestration (port `osprey/src/pipeline.rs`)
 - [ ] CLI entry point (port `osprey/src/main.rs`)
 - [ ] End-to-end validation vs Osprey on Mike's test data
@@ -112,6 +113,8 @@ for integration and reuse.
 - [ ] Benchmark C# vs Rust on Astral + Stellar datasets
 - [ ] Profile hot paths (batch scoring, BLAS, mzML parsing)
 - [ ] Validate on larger experiments (100+ file) on desktop/server hardware
+- [ ] **Skyline integration review**: Check for duplicated utilities from pwiz.Common,
+  patterns that conflict with Skyline integration, naming consistency
 - [ ] Evaluate Skyline integration: standalone EXE vs pull pieces into Skyline
 
 ## Context
@@ -220,6 +223,15 @@ Don't re-attempt this combination. Wait for Mike's matched test data.
   (`System.Numerics.Vector<float>`) for hot inner loops in batch scoring.
 - **Mokapot**: dropped from scope (Osprey's built-in Percolator SVM is the default).
 - **Numerical tolerance**: match Osprey statistically, not bit-for-bit.
+- **Chemistry/mass calculation**: MUST use `Shared/CommonUtil/Chemistry/` (Molecule,
+  AminoAcidFormulas, MassDistribution) for all mass calculations and isotope distributions.
+  Do NOT port Rust's binomial isotope approximation. OspreySharp must produce identical
+  masses and isotope patterns as Skyline. Current IsotopeEnvelope.cs is a placeholder
+  that will be replaced when CommonUtil project reference is added in Phase 3.
+- **pwiz infrastructure review gates**: Phase 3 (I/O) and Phase 5 (pipeline) each
+  require a review step before coding. At I/O: wire up CommonUtil, BiblioSpec,
+  ProteowizardWrapper and design around them rather than porting Rust I/O directly.
+  At pipeline: verify threading/progress/cancellation follow Skyline conventions.
 
 ## Progress Log
 
