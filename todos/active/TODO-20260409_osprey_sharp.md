@@ -84,12 +84,15 @@ Do NOT straight-port the Rust I/O — wrap existing pwiz_tools/Shared libraries 
 - [ ] **Chemistry integration**: Replace IsotopeEnvelope with Shared/CommonUtil/Chemistry
   (Molecule, AminoAcidFormulas, MassDistribution). OspreySharp MUST calculate masses
   and isotope distributions identically to Skyline — use the same code, not a port.
-- [ ] DIA-NN TSV library reader (port `osprey-io/src/library/diann.rs`)
-- [ ] elib library reader (port `osprey-io/src/library/elib.rs`)
-- [ ] blib library reader (reuse BiblioSpec / port `osprey-io/src/library/blib.rs`)
-- [ ] mzML reader (wrap pwiz_data_cli.dll via ProteoWizardWrapper)
-- [ ] blib writer with Osprey extension tables (reuse BiblioSpec + `osprey-io/src/output/blib.rs`)
-- [ ] Parquet caching (Parquet.NET + ZSTD, SHA-256 metadata per `osprey/docs/12-intermediate-files.md`)
+- [x] DIA-NN TSV library reader (column variants, mod parsing, grouping, 2 tests)
+- [x] elib library reader (two schema variants, SQLite, bracket notation)
+- [x] blib library reader (zlib decompression, mod identification, 2 tests)
+- [ ] mzML reader (wrap pwiz_data_cli.dll via ProteoWizardWrapper — deferred to pipeline)
+- [x] blib writer (full schema, peak compression, mods, proteins, RTs, 8 tests)
+- [x] Library deduplication (best-per-precursor, sequential IDs, 4 tests)
+- [x] Library binary cache (round-trip, versioning, 3 tests)
+- [x] Spectra binary cache (MS1+MS2, round-trip, 2 tests)
+- [ ] Parquet caching (deferred — evaluate need for C# port vs direct file I/O)
 
 ### Phase 4: Algorithms
 - [x] LOESS regression (port, 8 tests — placeholder for Shared/Common/LoessInterpolator)
@@ -339,3 +342,57 @@ Also: `openblas.dll` copied to `target/release/` to avoid DLL search issues in G
 - Coordinate with Mike on merging parquet_index fixes
 - Begin scaffolding `pwiz_tools/OspreySharp/` solution structure
 - Port Phase 2 (core types) as first C# implementation milestone
+
+### 2026-04-10 Session 4 (desktop, i9 + 64 GB RAM)
+
+**OspreySharp C# port — Phases 1-4 + partial Phase 3 completed in single session.**
+
+**Approach**: Straight port of Rust code to establish a validated baseline. Shared/Common
+integration (LOESS, Chemistry, MedianPolish, etc.) deferred to a separate branch so we
+can diff the numerical impact of each substitution. The Rust-derived tests become
+regression tests validating the Skyline implementations produce equivalent results.
+
+**Phase 1**: Scaffolded 8-project .NET Framework 4.7.2 solution (7 libraries + 1 test),
+old-style .csproj matching pwiz conventions. All build clean with zero warnings.
+
+**Phase 2** (Core Types + ML):
+- 23 type files in OspreySharp.Core: LibraryEntry, FdrEntry, CoelutionFeatureSet (47 fields),
+  IsolationWindow, IsotopeEnvelope, MS1Spectrum, Spectrum, BinConfig, OspreyConfig,
+  FragmentToleranceConfig, RTCalibrationConfig, all enums
+- 7 files in OspreySharp.ML: LinearSvmClassifier (dual CD), Matrix, PepEstimator,
+  QValueCalculator, LinearDiscriminant, GaussSolver, XorShift64 PRNG
+- 60 tests passing (21 core + 39 ML)
+- XorShift64 verified to produce identical output as Rust implementation
+
+**Phase 4** (Algorithms):
+- OspreySharp.Chromatography: CWT peak detection (Mexican Hat, consensus median),
+  LOESS regression, RT calibration (outlier removal, local tolerance), mass calibration,
+  calibration JSON I/O via Newtonsoft.Json — 30 tests
+- OspreySharp.Scoring: DecoyGenerator (enzyme-aware reversal), SpectralScorer (XCorr,
+  LibCosine), BatchScorer, CalibrationScorer (LDA), PearsonCorrelation — 18 tests
+- OspreySharp.FDR: FdrController (target-decoy competition), PercolatorFdr (3-fold CV,
+  grid search, dual-level q-values, PEP), ProteinFdr (parsimony, subset elimination,
+  picked-protein FDR) — 26 tests
+
+**Phase 3** (I/O — partial):
+- DIA-NN TSV reader, BiblioSpec blib reader/writer, EncyclopeDIA elib reader
+- Library deduplication, binary library cache, spectra binary cache
+- 27 tests; all use System.Data.SQLite from pwiz libraries/
+- mzML reader deferred (needs ProteowizardWrapper for pipeline integration)
+- Parquet caching deferred (evaluate need vs direct file I/O)
+
+**Existing pwiz_tools/Shared code identified for integration** (on a separate branch):
+- `Common/DataAnalysis/LoessInterpolator.cs` — replaces our LoessRegression.cs
+- `CommonUtil/Chemistry/` (Molecule, AminoAcidFormulas, MassDistribution) — replaces
+  IsotopeEnvelope.cs. CRITICAL: masses and isotope distributions must be identical to
+  Skyline. 17 years of validation behind the Shared chemistry code.
+- `Common/DataAnalysis/MedianPolish.cs` — reuse directly for scoring features
+- `Common/DataAnalysis/Matrices/ImmutableMatrix.cs` — evaluate overlap with Matrix.cs
+
+**Total**: 54 source files, 161 tests passing, 0.58s test runtime.
+
+**Next steps**:
+- Phase 5: Pipeline orchestration + mzML reading via ProteowizardWrapper
+- End-to-end validation on Stellar/Astral datasets
+- Branch for Shared integration: swap LoessInterpolator, Chemistry, MedianPolish
+  and validate that all 161 tests still pass
