@@ -92,15 +92,15 @@ Do NOT straight-port the Rust I/O — wrap existing pwiz_tools/Shared libraries 
 - [ ] Parquet caching (Parquet.NET + ZSTD, SHA-256 metadata per `osprey/docs/12-intermediate-files.md`)
 
 ### Phase 4: Algorithms
-- [ ] LOESS regression (port `osprey-chromatography/src/calibration/rt.rs`)
-- [ ] CWT peak detection (port `osprey-chromatography/src/cwt.rs`)
-- [ ] RT/mass calibration (port `osprey-chromatography/src/calibration/`)
-- [ ] Decoy generation (port `osprey-scoring/src/lib.rs` DecoyGenerator)
-- [ ] Feature extraction — 21-feature CoelutionFeatureSet (port `osprey-scoring/src/batch.rs`)
-- [ ] Batch XCorr/cosine scoring (port `osprey-scoring/src/batch.rs` + `lib.rs`)
-- [ ] Percolator-style SVM FDR (port `osprey-fdr/src/percolator.rs`)
-- [ ] Target-decoy competition + q-values (port `osprey-fdr/src/lib.rs`)
-- [ ] Protein parsimony + picked-protein FDR (port `osprey-fdr/src/protein.rs`)
+- [x] LOESS regression (port, 8 tests — placeholder for Shared/Common/LoessInterpolator)
+- [x] CWT peak detection (Mexican Hat, consensus median, 13 tests)
+- [x] RT/mass calibration (LOESS fitting, outlier removal, mz stats, JSON I/O, 17 tests)
+- [x] Decoy generation (enzyme-aware reversal, cycle fallback, 8 tests)
+- [x] Spectral scoring: XCorr, LibCosine, BatchScorer, CalibrationScorer (10 tests)
+- [x] Pearson correlation, coelution sum helpers (5 tests)
+- [x] FdrController: target-decoy competition, q-values, filtering (11 tests)
+- [x] Percolator SVM FDR: 3-fold CV, grid search, dual-level q-values (7 tests)
+- [x] Protein parsimony + picked-protein FDR (8 tests)
 
 ### Phase 5: Pipeline & CLI
 - [ ] **Pre-pipeline review**: Verify threading patterns (ActionUtil.RunAsync),
