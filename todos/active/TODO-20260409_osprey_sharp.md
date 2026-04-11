@@ -631,3 +631,174 @@ target — but only meaningful once upstream divergences are fixed.
 - `C:\proj\pwiz\pwiz_tools\OspreySharp\OspreySharp.Scoring\TukeyMedianPolish.cs`
   Direct port of Rust median polish algorithm
 - Commits to study: 849ea7f69 (bisection baseline), e06ce878e (first match)
+
+### 2026-04-11 Session 7 (desktop) — Pass-1 calibration bit-identical
+
+**Goal**: Walk downstream from the proven calibration-sample match point
+(Session 6) and get to bit-identical pass-1 per-entry features against Rust.
+
+**Final result**: All 192,289 calibration matches bit-identical on all 6
+feature columns (apex_rt, correlation, libcosine, top6, xcorr, snr) at
+f64 rounding noise (max |d| ≤ 5e-10; 90.72% exact bit-equal). Pass-2 XIC
+extraction bit-identical on entry 0 (same 46 candidates, 276 XIC rows
+within 1e-10). Pass-1 XIC bit-identical too (earlier in session, max
+|d|=1e-10 at F10 precision).
+
+**Bisection walk (what was proven in order)**:
+1. Pass-1 chromatograms (XICs): identical within 1e-10 rounding noise on
+   all 2198 records of entry 0. Format fix: F10 (up from F6) to avoid
+   banker's-vs-half-up formatting diffs.
+2. Pass-1 per-entry features diff (OSPREY_DUMP_CAL_MATCH): started with
+   xcorr at 0% text-equal (max diff 116), snr at 3% (max diff 4.6e7),
+   apex_rt at 72.8% (max diff 0.66 min). Root causes:
+   - **XCorr algorithm was wrong**: C#'s ComputeXcorrForSpectrum used
+     max-bin instead of sum-bin, was missing Comet MakeCorrData windowing
+     normalization, and did a library-intensity-weighted dot product
+     instead of Comet's "sum at fragment positions" form.
+   - **SNR input was wrong**: C# computed SNR on compositeXic (sum of
+     all fragment XICs), Rust uses ref_xic (single reference fragment).
+   - **Apex selection was wrong**: C# required top-6 match constraint
+     and used composite argmax, Rust uses plain argmax of ref_xic within
+     peak bounds.
+   - **Tie-break direction was wrong**: C# used strict `>` (first-wins),
+     Rust's Iterator::max_by returns last-wins on ties. Changed to `>=`.
+3. After the above fixes, cal_match diff improved to: libcosine/snr/top6
+   100% match, apex_rt 90.73% text-equal (1e-10 max = rounding only),
+   xcorr 4.2e-6 f32/f64 drift (Rust was f32, C# f64). **Flipped Rust
+   xcorr pipeline from Vec<f32> to Vec<f64>** (preprocess_*, apply_*,
+   xcorr_from_preprocessed, plus Vec<Vec<f32>>→Vec<Vec<f64>> call sites
+   in batch.rs and pipeline.rs). This brought xcorr to bit-identical.
+4. Match count gap: Rust 192,289 vs C# 186,271 (6018 delta). Two causes:
+   - **Missing CWT fallback**: Rust falls back to detect_all_xic_peaks
+     on ref_xic when CWT returns empty; C# only had CWT. Ported
+     detect_all_xic_peaks + SmoothSavitzkyGolay + WalkBoundaryLeft/Right
+     + ComputeAsymmetricHalfWidths to C# PeakDetector.cs. Wired as
+     fallback in ScoreCalibrationEntry. List.Sort → LINQ
+     OrderByDescending (stable, matches Rust sort_by).
+   - **MIN_COELUTION_SPECTRA constant mismatch**: Rust = 3, C# = 5.
+     Changed C# to 3.
+   Final gap: 0 (192,289 = 192,289).
+
+**Two-pass RT calibration refinement also landed** (was pass-2 missing
+entirely in C#): extracted RunCalibrationScoringPass helper, added pass-2
+branch with MAD-based refined tolerance (clamp(mad*1.4826*3, [min,max]))
+and LOESS-predicted expected_rt, accept-iff-R²-doesn't-degrade-1% gate.
+ScoreCalibrationEntry takes RTCalibration param; uses Predict() on pass 2.
+ABSOLUTE_MIN_CALIBRATION_POINTS = 50 for pass-2 LOESS floor.
+
+**Rich diagnostic dumps** now in place in both tools:
+- `OSPREY_DIAG_XIC_ENTRY_ID=<id>` + `OSPREY_DIAG_XIC_PASS={1,2}` —
+  per-entry dump with PASS CALCULATIONS block (library_rt, expected_rt,
+  tolerance, rt_window_lo/hi, rt_slope, rt_intercept) and on pass 2 a
+  LOESS MODEL block (n_points, r_squared, residual_sd, mad, percentiles),
+  followed by CANDIDATES + TOP-6 + XICS tables. F10 precision throughout.
+  Exits immediately after write.
+- `OSPREY_DUMP_CAL_MATCH=1` + `OSPREY_CAL_MATCH_ONLY=1` — 11-column
+  cal_match dump (entry_id, is_decoy, charge, has_match, scan, apex_rt,
+  correlation, libcosine, top6, xcorr, snr), F10 precision, sorted by
+  entry_id for stable diff.
+
+**Proof of final match** (Stellar file 20, cal_match diff):
+```
+matched: rust=192289  cs=192289  delta=0
+matched by Rust only: 0
+matched by C#   only: 0
+max abs diffs:
+  |d apex_rt|    = 1.0e-10   (f64 rounding noise)
+  |d correlation|= 1.0e-10
+  |d libcosine|  = 1.0e-10
+  |d xcorr|      = 1.0e-10
+  |d snr|        = 5.2e-10
+exact bit-equal on all 6 columns: 174449/192289 (90.72%)
+```
+
+**Pass-2 XIC check** (entry 0, AAAAAAAAAAAAAAAGAGAGAK z=2):
+```
+rust candidates: 46, cs candidates: 46, overlap: 46
+rust-only scans: [], cs-only scans: []
+max |dRT| on overlap       = 1.0e-10
+max |dIntensity| on overlap = 1.0e-10
+```
+
+**Remaining Session 7 discrepancies** (all small, don't affect pass-2 XIC):
+1. **LOESS input count drift**: Rust 6423 points vs C# 6409 (−14) survive
+   LDA+S/N filter into the pass-2 LOESS fit. Hypothesis: ULP-level drift
+   in LDA discriminant scores on the 1% FDR cutoff boundary, ping-ponging
+   ~14 entries. Does not affect pass-2 expected_rt enough to change
+   candidate selection on entry 0. Next bisection candidate if we want
+   100% LOESS alignment: dump per-entry LDA discriminant + q-value from
+   both tools and diff.
+2. **9.28% of cal_match rows differ by 1 ULP** on one or more feature
+   columns — f64 sum non-associativity (different accumulation orders
+   for terms that are mathematically equal but bit-drift by 1 ULP).
+   Not fixable without forcing strict iteration order and no SIMD.
+
+**Commits**:
+- pwiz `Skyline/work/20260409_osprey_sharp`: **d832476ef** — "Fixed C#
+  pass-1 calibration features to match Rust bit-for-bit" (3 files
+  changed, 815 insertions, 153 deletions: SpectralScorer.cs,
+  AnalysisPipeline.cs, PeakDetector.cs).
+- osprey `fix/parquet-index-lookup`: **2577e61** — "Flipped XCorr
+  pipeline to f64 for cross-impl bit-identical alignment" (3 files,
+  442 insertions, 34 deletions: lib.rs, pipeline.rs, batch.rs with
+  scratch diagnostics).
+- **Not pushed** — local commits only.
+
+**Fast iteration commands** (still work from Session 6; now for pass-2
+bisection):
+```bash
+cd /d/test/osprey-runs/stellar
+
+# Per-entry XIC dump, pass 1 (default)
+rm -f *.scores.parquet *.calibration.json *.spectra.bin *.fdr_scores.bin
+OSPREY_DIAG_XIC_ENTRY_ID=0 /c/proj/osprey/target/release/osprey.exe \
+  -i Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML \
+  -l hela-filtered-SkylineAI_spectral_library.tsv \
+  -o rust-output.blib --resolution unit
+OSPREY_DIAG_XIC_ENTRY_ID=0 \
+  /c/proj/pwiz/pwiz_tools/OspreySharp/OspreySharp/bin/x64/Release/pwiz.OspreySharp.exe \
+  -i Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML \
+  -l hela-filtered-SkylineAI_spectral_library.tsv \
+  -o cs-output.blib --resolution unit
+
+# Per-entry XIC dump, pass 2
+OSPREY_DIAG_XIC_ENTRY_ID=0 OSPREY_DIAG_XIC_PASS=2 ...
+
+# Cal_match per-entry feature dump (early exit after scoring)
+OSPREY_DUMP_CAL_MATCH=1 OSPREY_CAL_MATCH_ONLY=1 ...
+
+# Diff after normalizing line endings
+diff <(tr -d '\r' < rust_cal_match.txt) <(tr -d '\r' < cs_cal_match.txt) | wc -l
+```
+
+**Next bisection candidates** (when time to resume):
+1. Drill into LDA (14-point LOESS delta): dump per-entry discriminant
+   scores + q-values from both tools, find the 14 entries at the cutoff,
+   confirm ULP drift hypothesis.
+2. Move downstream to main first-pass search — compare the 21 PIN
+   features per entry. Now that pass-1 calibration features and pass-2
+   XIC extraction are bit-identical, downstream features should now
+   differ only by f64 rounding noise.
+3. Check if the same Rust-side f32→f64 flip is needed in any other
+   scoring paths (hyperscore? mass error accumulation? isotope cosine?).
+
+**Session 7 takeaways (add to Session 6 principles)**:
+- **Use LINQ OrderBy for stable sorts** when porting from Rust. .NET
+  List<T>.Sort is unstable (introsort); Rust Iterator::sort_by is
+  stable. Matters for tie-breaking in argmax/argmin loops.
+- **Tie-break direction matters** even for f64 values — ties DO occur
+  in practice (zero intensities in XIC tails, equal correlation sums
+  on short peaks). `>` gives first-wins, `>=` gives last-wins. Rust
+  max_by gives last-wins; match with `>=`.
+- **f32 vs f64 intermediate buffers cause ~4e-6 drift** in algorithms
+  that accumulate hundreds of sqrt'd values through sliding windows.
+  When comparing tools bit-for-bit, align the intermediate precision
+  (either side works; f64 is often the right call for a C# port since
+  C# is naturally f64).
+- **Constants matter**: a one-line MIN_COELUTION_SPECTRA=3 vs =5
+  difference accounted for ~6000 of 192,289 match-count delta. When
+  two tools have the same algorithm but different match counts, check
+  the constants first.
+- **Text format traps**: %.6f half-way rounding (banker's vs
+  round-half-up) produces thousands of text diffs on numerically
+  identical values. Use F10 (or hex bits) to avoid.
