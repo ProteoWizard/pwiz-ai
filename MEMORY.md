@@ -53,6 +53,17 @@ AssertEx.Contains(message, Resources.ErrorMessage_FileNotFound);
 - Duplication is maintenance burden in long-lived codebases
 - See [ai/docs/project-context.md](docs/project-context.md) for detailed examples
 
+### Cross-Implementation Bisection (Ports, Refactors, Reference Comparisons)
+When debugging why a port, refactor, or optimized implementation produces
+different results than a reference implementation (e.g., Rust->C#, old->new,
+scalar->SIMD), **do not start by comparing high-level counts or statistics**.
+The methodology is fundamentally different from single-codebase debugging:
+bisect from the first selection/randomized step downstream, prove match via
+`diff` (not counts), and never compare downstream values before upstream is
+proven identical. See [ai/docs/debugging-principles.md#cross-implementation-bisection](docs/debugging-principles.md#cross-implementation-bisection)
+for the full protocol, including env-var-gated early-exit diagnostic dumps
+and bit-preserving numeric formats for cross-language comparison.
+
 ## Threading Guidelines
 
 - **UI thread only** for WinForms operations

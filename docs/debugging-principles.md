@@ -329,6 +329,250 @@ Claude Code should recognize it's in debugging mode when:
 
 **The mode shift:** Stop thinking "how do I implement this?" and start thinking "how do I observe and isolate this?"
 
+## Cross-Implementation Bisection
+
+A distinct class of debugging problem arises when **two implementations are
+supposed to produce identical output but don't**. Examples:
+
+- Porting Rust code to C# (OspreySharp vs Osprey) and trying to match results
+- Refactoring a Skyline module and comparing output against the old version
+- Comparing a new optimized algorithm against a reference slow implementation
+- Validating a GPU or SIMD port against a scalar baseline
+
+This is not "find the bug in one codebase." It is **"find the first point at
+which two valid-in-isolation implementations disagree."** The methodology is
+different from single-codebase bisection and deserves its own discipline.
+
+### The First Rule: Measure Primitives, Not Outcomes
+
+When the user reports "this port produces 26,000 results and the reference
+produces 33,000", the natural temptation is to start comparing output counts,
+percentages, pass rates at various thresholds. **Don't.** Those are outcomes,
+and two different pipelines can produce similar-looking outcomes from wildly
+different intermediate state.
+
+This parallels the MacCoss lab's principle for mass-spec troubleshooting:
+don't measure spectrum IDs at 1% FDR — measure peak shape, peak area, mass
+error, MS1-to-MS2 ratio. The *primitives* are the signal; the *outcomes* are
+noisy aggregates of many primitives.
+
+In cross-implementation debugging:
+
+| Outcome (don't start here) | Primitive (start here) |
+|----------------------------|------------------------|
+| "Both tools found ~100K results" | "Both tools' output files diff with 0 lines different" |
+| "The residual SD is close enough" | "rt_min is bit-identical, rt_bin_width is bit-identical" |
+| "Feature values look similar" | "All 23,106 grid cells contain identical target IDs" |
+| "The algorithm clearly works" | "The scalar dump shows the same n_occupied count" |
+
+### The Second Rule: Bisect From the First Selection Step Downstream
+
+In single-codebase bisection, you put a `return;` in the middle of a test and
+see if the bug still reproduces. In cross-implementation bisection, you bisect
+along the **data flow** of both implementations, starting at the **first step
+where a randomized or selected choice occurs**.
+
+**Why the first selection step?** Before any selection or random choice, the
+two implementations *must* produce identical output if they are correct. Any
+divergence before that point is a trivial bug (wrong constant, off-by-one).
+At and after the first selection step, the two implementations can legitimately
+diverge — and every downstream computation inherits that divergence. Comparing
+anything downstream of the first disagreement is meaningless: the two
+implementations are operating on different data.
+
+**Example from OspreySharp vs Osprey:**
+
+The pipeline has these stages:
+
+1. Library load + dedup — should be bit-identical (no randomness)
+2. Decoy generation — should be bit-identical (deterministic reversal)
+3. **Calibration peptide sampling** — *first selection step* (picks 100K from 242K)
+4. Calibration scoring — depends on stage 3
+5. RT calibration LOESS fit — depends on stage 4
+6. Per-entry coelution scoring — depends on stage 5
+7. Peak picking — depends on stage 6
+8. Feature computation at peak — depends on stage 7
+9. FDR / Percolator — depends on stage 8
+10. Output counts — depends on stage 9
+
+Early in the investigation, ~2 hours were wasted comparing PIN feature values
+(stage 8 output) between the two tools, trying to find feature-specific bugs.
+The features were divergent — but they were computed for *different peaks* in
+the two tools (stage 7 had picked different peaks because stage 5 had fit
+different LOESS curves because stage 4 had different inputs because stage 3
+had sampled different peptides).
+
+**The fix was at stage 2.** C# was keeping 4 targets whose reversed decoys
+collided with other target sequences; Rust excluded them. That changed stage
+3's input (242,841 → 242,837 targets), which changed grid bin assignments,
+which changed the 100K sample (20 different entries), which cascaded all the
+way to the output counts. Comparing stage 8 output told us nothing until
+stage 2 was fixed.
+
+**The rule:** When facing a cross-implementation divergence, always begin
+at the earliest stage where a choice is made, prove that stage matches, and
+only then move downstream. Do not try to match downstream values before
+upstream matches are proven.
+
+### The Third Rule: Proof Requires `diff`, Not Counts
+
+"Both tools sampled 100,000 targets" is a statistic. "The two sample files
+have zero differing lines after sorting and normalizing line endings" is
+proof. Use `diff`, not `wc -l`.
+
+**What counts as proof:**
+```
+grid diff count (should be 0 for 100% match): 0
+sample diff count: 0
+```
+
+**What does not count as proof:**
+- "Count matches" — two implementations can produce matching counts over
+  completely disjoint sets of entries.
+- "Values are close" — 13-decimal-place numerical agreement on one feature
+  does not prove anything about the other 20 features, or about the peak
+  that feature was computed on.
+- "Results statistically similar" — see outcome-vs-primitive above.
+
+### Diagnostic Infrastructure: Env-Var-Gated Early-Exit Dumps
+
+Both implementations need coordinated diagnostic output at the same stage,
+exiting after the dump so you're not running the full pipeline for every
+iteration. The pattern:
+
+**Add to both implementations:**
+```csharp
+if (Environment.GetEnvironmentVariable("MY_TOOL_DUMP_STAGE_N") == "1")
+{
+    // Dump scalars to a file with a known name
+    using (var w = new StreamWriter("stage_n_scalars.txt"))
+    {
+        w.WriteLine("param1\t" + param1.ToString("R"));  // "R" preserves bits
+        w.WriteLine("param2\t" + param2.ToString("R"));
+    }
+
+    // Dump intermediate state (cell contents, lookup tables, etc.)
+    using (var w = new StreamWriter("stage_n_state.txt"))
+    {
+        // Sorted for stable comparison
+        foreach (var item in stateItems.OrderBy(...))
+            w.WriteLine(...);
+    }
+
+    // Dump final output of this stage
+    using (var w = new StreamWriter("stage_n_output.txt"))
+    {
+        foreach (var entry in output.OrderBy(e => e.Id))
+            w.WriteLine(entry.Id + "\t" + entry.Field1 + "\t" + entry.Field2);
+    }
+
+    if (Environment.GetEnvironmentVariable("MY_TOOL_STAGE_N_ONLY") == "1")
+        Environment.Exit(0);
+}
+```
+
+```rust
+if std::env::var("MY_TOOL_DUMP_STAGE_N").is_ok() {
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::File::create("rust_stage_n_scalars.txt") {
+        writeln!(f, "param1\t{:.17}", param1).ok();  // 17 digits = full bits
+        writeln!(f, "param2\t{:.17}", param2).ok();
+    }
+    // ... intermediate and output dumps ...
+
+    if std::env::var("MY_TOOL_STAGE_N_ONLY").is_ok() {
+        std::process::exit(0);
+    }
+}
+```
+
+**Why early exit matters:** Without it, a full pipeline run is 3-10 minutes.
+With it, a targeted iteration cycle is 20-60 seconds. At the early stages,
+the only work done is loading library + generating decoys + sampling — which
+should take under a minute even on big data.
+
+### Bit-Preserving Number Formats
+
+Cross-implementation comparison fails if the numbers are bit-identical but
+format differently. Text-diff will report false differences on the formatting,
+hiding the fact that the underlying values are equal.
+
+| Language | Format that preserves all bits |
+|----------|-------------------------------|
+| C#       | `"R"` (round-trip format)      |
+| C++      | `std::setprecision(17)` with `std::fixed` |
+| Rust     | `{:.17}`                       |
+| Python   | `repr(x)` or `f"{x:.17g}"`     |
+
+**Always dump scalars with one of these formats** when comparing across
+implementations. Then, when `diff` reports a difference in a scalar, you
+know it's a real numerical difference, not formatting noise.
+
+**Verifying a format diff is only cosmetic:** If `1.6` and
+`1.60000000000000009` both parse to the same `double`, the values agree.
+Confirm either by (a) parsing both back to doubles and comparing bits, or
+(b) checking that all downstream values computed from them match. If the
+bin widths, cell assignments, and final output all match, the formatting
+difference is definitionally cosmetic.
+
+### Cross-Implementation Bisection Protocol
+
+1. **Identify the pipeline stages.** List the stages in order, with each
+   stage's input and output. Mark which stages involve randomization or
+   selection (sampling, shuffling, seeding, choice from multiple candidates).
+2. **Find the first selection stage.** This is your initial bisection anchor.
+3. **Add diagnostic dumps to both tools at the end of that stage.** Scalars,
+   intermediate state, final output. Gate behind an env var. Add a second
+   env var for early exit after dump.
+4. **Build both tools, run both with early-exit env vars set.** Aim for
+   under-60-second iteration cycles.
+5. **`diff` the outputs.** Normalize line endings first (`tr -d '\r'`).
+   Start with scalars — they usually catch the issue quickly. Then
+   intermediate state. Then final output.
+6. **If diffs are non-zero:** investigate the specific differences. Scalars
+   usually point directly at a missing filter, off-by-one, or different
+   constant. Intermediate state differences often indicate different input
+   to the current stage — which means the divergence is actually at an
+   earlier stage you missed.
+7. **When `diff` is zero everywhere:** commit your fix, update the TODO with
+   the proof, and move the anchor to the next stage downstream.
+8. **Repeat for each downstream stage in turn.** Never skip ahead — every
+   stage depends on its predecessors matching.
+
+**Don't proliferate commented-out code while bisecting.** The goal is to
+match at one stage, commit, and move forward. The commits, the TODO log,
+and the diagnostic dumps are the record of what was tried — not a trail of
+`// BISECT:` comments in the source.
+
+### Anti-Patterns Specific to Cross-Implementation Debugging
+
+**Comparing downstream values before upstream is proven.** If the two
+implementations have diverged at stage 3, comparing stage 8 output is
+meaningless because the inputs to stage 8 are different. This is the most
+common wasted effort.
+
+**Trusting that "the algorithm is a direct port."** Even a direct port can
+have subtle differences: off-by-one in loop bounds, different floating-point
+order of operations, different handling of edge cases (zeros, NaNs,
+collisions), different defaults for missing fields. The code *looks* right
+until the diagnostics prove it isn't.
+
+**Iterating on the high-level output instead of the primitives.** "The final
+count is closer now" is not progress — a closer count can come from
+compensating errors. Progress is "one more stage's diagnostic dump now has
+zero differences."
+
+**Not exiting early.** Running the full pipeline when you only need the
+first stage's output wastes the cycle-time reduction that early-exit gives
+you. A 20-second targeted cycle is 10x more valuable than a 3-minute full run
+when you're iterating on a single diagnostic.
+
+**Relying on "numbers look close" tables in the TODO.** A table like "C# 26K,
+Rust 33K (1.3x off)" tells you nothing about root cause. It should be
+replaced with "Stage 3 sample: 0 diff lines; Stage 4 scoring: 192,469 vs
+192,289 (180 diff lines, investigating)". Prove match at each stage; record
+the proof.
+
 ## Integration with Other Resources
 
 - **Handle/Memory Leaks**: See [leak-debugging-guide.md](leak-debugging-guide.md) for specialized techniques
