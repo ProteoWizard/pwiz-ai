@@ -782,6 +782,121 @@ diff <(tr -d '\r' < rust_cal_match.txt) <(tr -d '\r' < cs_cal_match.txt) | wc -l
 3. Check if the same Rust-side f32→f64 flip is needed in any other
    scoring paths (hyperscore? mass error accumulation? isotope cosine?).
 
+**Codebase size comparison (ran 2026-04-11 at end of Session 7)**:
+
+Ran `cloc` on both projects to get a size snapshot at the point where pass-1
+calibration features are bit-identical. Script: `ai/scripts/audit-loc.ps1`
+(used for methodology; this run was per-project via direct cloc invocation
+since OspreySharp has its own project structure).
+
+Overall:
+```
+                    Files   Blank  Comment    Code
+OspreySharp (C#)      77    2,759   3,244   16,466
+Osprey (Rust)         45    4,416   6,432   29,466
+```
+
+Per-project (code lines only):
+| OspreySharp project    | C#     | Rust crate            | Rust   | C#/Rust |
+|------------------------|-------:|------------------------|-------:|--------:|
+| Core                   |    808 | osprey-core           |  1,854 |   44%   |
+| IO                     |  2,910 | osprey-io             |  3,618 |   80%   |
+| ML                     |    923 | osprey-ml             |  1,719 |   54%   |
+| Chromatography         |  1,773 | osprey-chromatography |  3,597 |   49%   |
+| Scoring                |  1,478 | osprey-scoring        |  6,946 |   21%*  |
+| FDR                    |  1,800 | osprey-fdr            |  4,251 |   42%   |
+| OspreySharp (CLI+pipe) |  3,128 | osprey                |  7,481 |   42%   |
+| Non-test subtotal      | 12,820 |                       | 29,466 |   43%   |
+| .Test (separate proj)  |  3,646 | (inline in .rs)       |    —   |    —    |
+
+*Scoring ratio isn't apples-to-apples: in C# the main pass-1 scoring
+orchestration is in `AnalysisPipeline.cs` (under the OspreySharp project),
+while in Rust it's in `osprey-scoring/src/batch.rs`. Combining Scoring +
+CLI/pipeline gives C# 4,606 vs Rust 14,427 = 32%.
+
+Rust tests live inline under `#[cfg(test)] mod tests`, counted as
+production code by cloc. Extracting `#[cfg(test)]`-onwards lines gives
+~7,180 test-code lines (after applying the overall blank/comment ratio):
+
+| Metric                | C# (OspreySharp) | Rust (Osprey) | Ratio |
+|-----------------------|-----------------:|--------------:|------:|
+| Non-test code         |           12,820 |        ~22,286 | 57.5% |
+| Test code (approx)    |            3,646 |         ~7,180 |  51%  |
+
+**Takeaways**:
+- OspreySharp is ~55-60% the size of Osprey for both production and tests.
+- Some reduction is real (Rust has verbose doc comments, more explicit
+  error handling, the scoring crate packs multiple search path variants).
+- Some reduction is because C# leverages existing pwiz infrastructure
+  (mzML via ProteowizardWrapper, Chemistry via Shared/CommonUtil planned).
+- Some reduction is still missing functionality: multi-charge consensus,
+  reconciliation, second-pass FDR — not yet ported. Expected to add
+  ~1,500-2,500 lines when done.
+- **Estimated size at feature-complete**: ~15,000 non-test lines + ~4,500
+  test lines ≈ 20K total, vs Osprey's ~30K total. ~65-70% size ratio.
+- OspreySharp.IO (80% of osprey-io) is surprisingly close — reader/writer
+  ports are 1:1 because the formats (DIA-NN TSV, blib, elib) are rigid.
+
+**Performance comparison (ran 2026-04-11 at end of Session 7)**:
+
+Measured wall clock to pass-1 calibration exit (the point where both tools
+produce 192289/192289 bit-identical cal_match output). Same command both
+tools: `OSPREY_DUMP_CAL_MATCH=1 OSPREY_CAL_MATCH_ONLY=1`. Input: Stellar
+file 20 (Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML, 97500 MS2 + 780 MS1
+spectra). Library: hela-filtered-SkylineAI_spectral_library.tsv (242841
+entries). Cold caches before each run (rm .scores.parquet .calibration.json
+.spectra.bin .fdr_scores.bin .mzML.spectra.bin). One warm-up run then
+min-of-3 timed runs. Release builds for both tools.
+
+Wall clock (min of 3 runs):
+| Tool | Run 1  | Run 2  | Run 3  | Min     |
+|------|-------:|-------:|-------:|--------:|
+| Rust | 16.93s | 17.06s | 17.30s | **17.0s** |
+| C#   | 40.56s | 41.30s | 40.73s | **40.6s** |
+| C#/Rust ratio |        |        |        | **2.39x** |
+
+Per-phase breakdown (from single-run stderr logs):
+
+| Phase                       |  Rust |    C# | C#/Rust |
+|-----------------------------|------:|------:|--------:|
+| Library load + decoys       |   ~0s |  8.4s |   (∞)   |
+| mzML parse                  |   ~6s | 14.2s |  2.37x  |
+| Calibration sampling        |   ~0s | 0.06s |    —    |
+| Pass 1 scoring              |   ~4s | 15.7s |  3.93x  |
+| Match dump + post-processing|   ~6s | ~1.6s |  0.27x  |
+
+Observations:
+- **Library load (0s vs 8.4s)**: Rust uses a binary library cache
+  (`.libcache` file, persistent across runs). C# re-parses the TSV every
+  time. C# has `LibraryBinaryCache.cs` in OspreySharp.IO but it's not
+  wired into the pipeline yet.
+- **mzML parse (~6s vs 14.2s)**: C# uses ProteowizardWrapper (native COM
+  bridge + managed wrapper). Rust uses the `mzdata` crate (pure Rust).
+  The 2.4x ratio is typical wrapper/interop overhead and probably not
+  worth optimizing — reusing pwiz's reader was a scaffolding decision.
+- **Pass 1 scoring (~4s vs 15.7s, 3.93x slower)**: this is the primary
+  perf target for C#. Per-entry CWT peak detection + apex selection +
+  4-feature computation over 200K entries in parallel. Both tools
+  parallelize (Rust rayon, C# Parallel.ForEach). The gap is likely
+  from: (a) f64 managed math loops vs Rust's LLVM auto-vectorization
+  and (b) ndarray/BLAS dot products in Rust's XCorr (we flipped to
+  f64 in Session 7 so it's now ddot, but C# uses plain managed loops).
+- **Match dump (6s vs 1.6s)**: Rust is SLOWER here because of a post-
+  scoring deduplication step — Rust iterates per (entry, window) pair
+  and keeps the best match via HashMap dedup. C# scores each entry
+  once (single window lookup) so no dedup needed. This is not a C#
+  win to celebrate — it's that C# skips a step Rust does for
+  multi-window precursors.
+
+**Net**: C# at 99.9% fidelity point runs at ~2.4x Rust wall clock on this
+benchmark. The primary scoring loop is ~4x slower; library load and
+mzML parse contribute the rest. Expected improvement targets:
+1. Wire up `LibraryBinaryCache` — saves ~8s on every run.
+2. Hot-path SIMD / vectorize the CWT convolution and per-entry
+   feature computation — primary target for closing the 4x scoring
+   gap.
+3. Accept mzML parse as fixed (ProteowizardWrapper dependency).
+
 **Session 7 takeaways (add to Session 6 principles)**:
 - **Use LINQ OrderBy for stable sorts** when porting from Rust. .NET
   List<T>.Sort is unstable (introsort); Rust Iterator::sort_by is
