@@ -396,3 +396,238 @@ old-style .csproj matching pwiz conventions. All build clean with zero warnings.
 - End-to-end validation on Stellar/Astral datasets
 - Branch for Shared integration: swap LoessInterpolator, Chemistry, MedianPolish
   and validate that all 161 tests still pass
+
+### 2026-04-10 Session 5 (desktop) — Pipeline, feature fixes, start of bisection
+
+**Phase 5 completed end-to-end** (CLI, pipeline orchestration, mzML reader,
+ParquetNet score cache, blib writer optimizations). End-to-end run on Stellar
+file 20 works: parses mzML, calibrates, scores, runs Percolator, writes blib.
+
+**Key optimizations landed**:
+- `BlibWriter` prepared statements + transactions (1209s → 3.5s, 345x speedup)
+- Percolator parallel-folds (Parallel.For over 3 folds — matches Rust par_iter)
+- Best-per-precursor subsampling before Percolator training (was treating N files
+  x same precursor as N independent observations, inflating separation)
+- `Matrix.WrapNoClone` + Array.Copy in ExtractRows to avoid double allocation
+- LDA-based RT calibration (replaced naive LibCosine + score>0.3 threshold)
+
+**Feature accuracy work** — iterative, converged on real values:
+- Full 21-feature PIN vector computed in ScoreCandidate (was: only coelution_sum)
+- Tukey median polish ported (TukeyMedianPolish.cs) — features 15, 16, 19, 20
+- SG-weighted XCorr/cosine ported (features 17, 18)
+- ExtractFragmentXics now top-6 by intensity + closest peak by m/z + all-zero
+  fragments included (match Rust extract_fragment_xics exactly)
+- Candidate peak ranking by mean pairwise fragment correlation (was: first CWT peak)
+
+**Stellar 3-file timing** (final state of session 5):
+  File processing:  150s   (3 files in sequence, ~50s/file)
+  Percolator FDR:   100s   (parallel folds)
+  Blib output:      3.5s
+  Total:            ~290s vs Rust ~279s (1.04x)
+
+But detection counts still don't match Rust. This triggered Session 6's bisection.
+
+### 2026-04-10/11 Session 6 — Rigorous bisection for accuracy parity
+
+**Lesson learned (MAJOR, apply going forward)**:
+
+When two tools produce different outputs but both "look right" at a high level,
+**stop measuring statistics and start measuring primitives**. This is the MacCoss
+lab mass-spec troubleshooting principle: don't measure spectrum IDs at 1% FDR,
+measure peak shape, peak area, mass error, ratio between MS1 and MS2. Same
+here: don't measure "N precursors at 1% FDR", measure the intermediate values
+at each pipeline stage.
+
+The bisection **must start at the very first randomized/selected step** and
+walk downstream, proving match at each point with hard diff data (not
+statistical similarity). Going downstream first (comparing features in PIN
+files) was wasted effort because the features were computed for different
+peaks — the divergence had already happened upstream.
+
+**Bisection protocol** (worked, use this pattern):
+1. Identify the first randomized/sampled step (calibration sampling in this case)
+2. Add DIAGNOSTIC DUMPS to both tools that exit after the dump (env var
+   guarded). Dump EVERYTHING that could differ: scalars (min/max/bin widths/
+   counts), full intermediate state (grid cell contents), final output.
+3. Build both with dumps, run with early-exit (~30s cycle, not 3 minutes).
+4. `diff` the outputs. If zero lines differ → prove match and move to next
+   stage. If differences → drill in on the differing data specifically.
+5. For scalars: use format that preserves all bits (Rust `{:.17}`, C# `"R"`).
+   Compare numerically, not textually, since format may differ.
+
+**First proven match point — calibration sampling**:
+
+Started by dumping the calibration sample (100,000 targets) from both tools
+to sorted TSV files. Initial diff showed 10 entries in each direction different
+(99.99% match). Added scalar + full-grid dumps to both tools.
+
+Scalar diff revealed the root cause: **Rust n_targets = 242,837 vs C# n_targets
+= 242,841** (4 extra targets in C#).
+
+**Root cause**: Rust's `DecoyGenerator.generate_all_with_collision_detection`
+excludes targets whose reversed sequence matches ANOTHER target's stripped
+sequence. C#'s `DecoyGenerator.Generate()` only checked the palindromic case
+(reversed == original), missing the cross-target collision case. For the
+242,841-target HeLa library, exactly 4 targets fall into this category.
+
+**Fix** (committed e06ce878e):
+- `AnalysisPipeline.GenerateDecoys` now builds HashSet of target sequences,
+  tries reversal first, falls back to cycling lengths 1..10, excludes
+  target+decoy pairs with no collision-free option, returns `validTargets`
+  list alongside decoys.
+- `AnalysisPipeline.Run` replaces `library` with `validTargets` before
+  appending decoys (matches Rust `library = valid_targets; library.extend(decoys)`).
+- `DecoyGenerator.RemapModificationsStatic`, `RecalculateFragmentsStatic`:
+  public static wrappers so pipeline can build collision-checked decoys while
+  reusing the remap logic.
+
+**Hard proof of match after fix** (single Stellar file 20):
+```
+n_targets:     242837 = 242837  (was 242837 vs 242841)
+n_decoys:      242837 = 242837
+bins_per_axis: 159 = 159
+rt_min/max, mz_min/max, bin_widths: bit-identical
+n_occupied:    23106 = 23106
+per_cell:      4 = 4
+Grid cells:    0 diff lines (all 23106 cells contain identical target IDs)
+Final sample:  0 diff lines (all 100000 targets identical by id, modseq,
+               charge, mz, rt)
+```
+
+Sample and grid files compared with `diff` after normalizing line endings.
+This is what "proven match" looks like.
+
+**Infrastructure for continuing bisection**:
+
+Both tools now support diagnostic dumps via env vars:
+- `OSPREY_DUMP_CAL_SAMPLE=1` — dump calibration sample + scalars + grid
+- `OSPREY_CAL_SAMPLE_ONLY=1` — exit after calibration sample dump (fast cycle)
+
+C# dump locations (relative to input mzML directory):
+- `{file}.cs_cal_sample.txt` — sorted targets (id, modseq, charge, mz, rt)
+- `cs_cal_scalars.txt` — rt_min, rt_max, mz_min, mz_max, bin widths, n_occupied, per_cell
+- `cs_cal_grid.txt` — rt_bin, mz_bin, count, sorted target_ids per non-empty cell
+
+Rust equivalents:
+- `rust_cal_sample.txt`
+- `rust_cal_scalars.txt`
+- `rust_cal_grid.txt`
+
+Rust diagnostic code lives in `C:\proj\osprey\crates\osprey-scoring\src\batch.rs`
+at the end of `sample_library_for_calibration`. **Not committed to Rust repo**
+(was an uncommitted scratch edit on branch `fix/parquet-index-lookup`).
+
+**IMPORTANT**: If a future session continues bisection, the Rust diagnostic
+code is still in place in `batch.rs` (check `git status` in `/c/proj/osprey`).
+If lost, the pattern to re-add is:
+1. Check for `OSPREY_DUMP_CAL_SAMPLE` env var
+2. Write scalars to `rust_cal_scalars.txt` and grid to `rust_cal_grid.txt`
+3. Write final sample to `rust_cal_sample.txt`
+4. Check for `OSPREY_CAL_SAMPLE_ONLY` env var and `std::process::exit(0)` if set
+
+**Fast iteration commands** (no full pipeline run):
+```bash
+cd /d/test/osprey-runs/stellar
+
+# Clean rust caches so calibration actually runs
+rm -f *.parquet *.calibration.json *.spectra.bin *.fdr_scores.bin 2>/dev/null
+
+# Rust with early exit (~20s after build)
+OSPREY_DUMP_CAL_SAMPLE=1 OSPREY_CAL_SAMPLE_ONLY=1 \
+  /c/proj/osprey/target/release/osprey.exe \
+  -i Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML \
+  -l hela-filtered-SkylineAI_spectral_library.tsv \
+  -o rust-output.blib --resolution unit
+
+# C# with early exit (~20s after build)
+OSPREY_DUMP_CAL_SAMPLE=1 OSPREY_CAL_SAMPLE_ONLY=1 \
+  /c/proj/pwiz/pwiz_tools/OspreySharp/OspreySharp/bin/x64/Release/pwiz.OspreySharp.exe \
+  -i Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML \
+  -l hela-filtered-SkylineAI_spectral_library.tsv \
+  -o cs-output.blib --resolution unit
+
+# Diff (should all be empty for proven match)
+diff <(tr -d '\r' < rust_cal_sample.txt) <(tr -d '\r' < Ste-...20.cs_cal_sample.txt) | wc -l
+diff <(tr -d '\r' < rust_cal_grid.txt) <(tr -d '\r' < cs_cal_grid.txt) | wc -l
+```
+
+**Next bisection point — Calibration LDA scoring** (not yet proven):
+
+The 100,000 calibration targets are now identical between the two tools.
+The next step in the pipeline is `ScoreCalibrationEntry` (per-entry 4-feature
+computation: correlation, libcosine, top6_matched, xcorr) followed by
+`CalibrationScorer.TrainAndScoreCalibration` (LDA over those features).
+
+Current state (before fix was applied):
+- Rust LDA winners at 1% FDR: 16,509
+- C# LDA winners at 1% FDR: 9,158 (55% of Rust)
+
+**Need to verify**: With the calibration sample now matching, does C# produce
+the same 192,289 per-entry scores? If not, the per-entry scoring is still
+divergent. If yes, the LDA is divergent (less likely — LinearDiscriminant is
+a direct port).
+
+**Bisection plan for next session**:
+1. Add diagnostic dump to both tools: for each calibration entry
+   (after `ScoreCalibrationEntry`), write id, correlation, libcosine, top6, xcorr
+   to a sorted TSV. Early-exit after the dump.
+2. Diff the two files.
+3. If 0 diff lines → LDA is the problem.
+4. If N diff lines → per-entry scoring has issues; isolate which feature
+   differs first by comparing column-by-column.
+
+**Downstream from calibration**: Once calibration sample + scoring + LDA all
+match, C#'s RT calibration LOESS fit should produce bit-identical coefficients
+to Rust. Then RT calibration output (expected_rt for each library entry) can
+be diffed. Then coelution scoring (per-entry features), etc.
+
+**Current `--write-pin` feature dump in C#** (for later, when upstream matches):
+`AnalysisPipeline.WriteFeatureDump` writes `.cs_features.tsv` with the 21
+PIN features per entry after ProcessFile. This is the downstream comparison
+target — but only meaningful once upstream divergences are fixed.
+
+**Remaining known issues (not yet bisected)**:
+1. RT calibration quality: residual SD 0.85 min vs Rust's 0.28 min.
+   Probably fixes itself when calibration scoring matches.
+2. Detection count mismatch: C# ~26K per file vs Rust ~33K per file after
+   all session 5 + 6 work. Should converge as upstream divergences are fixed.
+3. Missing peak detection fallbacks (CWT → median polish profile → ref XIC).
+   Rust has 3; C# only has CWT. Accounts for some under-detection.
+4. Multi-charge consensus + inter-replicate reconciliation + second-pass
+   FDR — all TODO in AnalysisPipeline. These are post-first-pass refinements
+   Rust does but C# doesn't yet.
+
+**Session 6 takeaways for future bisection work**:
+
+1. **Measure primitives, not outcomes**. "26K vs 33K precursors at 1% FDR"
+   is an outcome. "(id, libcosine, xcorr) per calibration entry" is a
+   primitive.
+
+2. **Start at the first selection step, walk downstream**. Never try to match
+   from the end. The feature values in a PIN file are meaningless if the two
+   tools picked different peaks.
+
+3. **Prove match, don't infer it**. "Both tools sampled 100K targets" is not
+   proof. "All 100K IDs identical via diff, 0 lines different" is proof.
+
+4. **Dump everything, then drill in**. Scalars + intermediate state + final
+   output. Format numerical values with precision that preserves all bits
+   (C# `"R"`, Rust `{:.17}`). Compare with `diff` on normalized line endings.
+
+5. **Use env-var-guarded early exits for fast cycles**. Don't run the full
+   pipeline (3+ minutes) when you only need the output of one stage (20s).
+
+6. **Don't proliferate commented-out code when bisecting**. Get to match at
+   one stage, commit, move to next stage. The session log is the record of
+   what we tried.
+
+**File pointers for future sessions**:
+- `C:\proj\pwiz\pwiz_tools\OspreySharp\OspreySharp\AnalysisPipeline.cs`
+  lines ~265-380: GenerateDecoys + BuildDecoyFromSequence
+  lines ~800-960: SampleLibraryForCalibration (2D grid, stride sampling)
+  lines ~960+: ScoreCalibrationEntry (next bisection target)
+- `C:\proj\osprey\crates\osprey-scoring\src\batch.rs`
+  line ~1450: sample_library_for_calibration (has diag dumps, uncommitted)
+- `C:\proj\pwiz\pwiz_tools\OspreySharp\OspreySharp.Scoring\TukeyMedianPolish.cs`
+  Direct port of Rust median polish algorithm
+- Commits to study: 849ea7f69 (bisection baseline), e06ce878e (first match)
