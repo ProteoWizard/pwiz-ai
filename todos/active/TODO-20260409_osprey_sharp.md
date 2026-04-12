@@ -419,3 +419,8 @@ calibration phase (Stage 3) is essentially complete -- all upstream
 stages through pass-1 LOESS are bit-identical, and pass-2 entry 0 is
 confirmed. Remaining calibration work is a confidence-building
 exercise across more entries.
+
+**Session 9 handoff**: For detailed startup protocol (skills to load,
+commit verification, approach for Stage 4, test data paths, build
+commands, diagnostic env vars, gotchas), read
+`ai/.tmp/handoff-20260411-osprey-sharp-session8.md` before starting work.

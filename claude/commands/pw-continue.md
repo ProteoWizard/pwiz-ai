@@ -51,6 +51,17 @@ Read the **Progress Log** section of the TODO, focusing on the most recent entri
 - Any blockers or next steps noted
 - Decisions made that affect remaining work
 
+### Step 5a: Check for Handoff File
+
+If the most recent progress log entry contains a **handoff pointer** (a
+line like `**Next session handoff**: ... read ai/.tmp/handoff-*.md ...`),
+read that handoff file. It contains the detailed startup protocol from the
+previous session: skills to load, commits to verify, approach for the next
+target, test data paths, build commands, diagnostic env vars, and gotchas.
+
+**Follow the handoff's Session Start Protocol** if it has one, including
+loading any skills it specifies, before proceeding to Step 6.
+
 ### Step 6: Summarize and Begin
 
 Present a brief summary to the user:

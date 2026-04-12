@@ -13,7 +13,21 @@ Prepare a complete handoff for the next session to continue this work.
    - The branch name suffix (e.g., `handoff-20260116_peak_picking_tutorial_hang.md`)
    - Or the date if working on master (e.g., `handoff-20260116.md`)
 
-3. **Display a brief summary** to the user
+3. **Add a handoff pointer to the TODO file** so that `/pw-continue` in
+   the next session naturally discovers the handoff. Append a line like:
+
+   ```
+   **Next session handoff**: For detailed startup protocol, read
+   `ai/.tmp/handoff-{descriptor}.md` before starting work.
+   ```
+
+   to the end of the most recent progress log entry in the TODO. This
+   closes the loop: `/pw-continue` reads the TODO, finds the pointer,
+   and the new session loads the handoff with full startup instructions.
+
+4. **Commit and push** the TODO update (ai repo) so the pointer is durable.
+
+5. **Display a brief summary** to the user
 
 ## Handoff File Template
 
