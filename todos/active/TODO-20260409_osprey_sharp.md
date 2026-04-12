@@ -83,8 +83,30 @@ When touching the Rust side:
     Fixes applied: global RT tolerance (was per-entry), scan boundary order,
     MS2 calibrated fragment tolerance (3*SD), MS2 m/z offset correction.
 
+16. Main-search PIN features (Session 9, partial):
+    Fixed peak_apex/area/sharpness (was using composite XIC, now ref XIC
+    with trapezoidal area + slope-based sharpness  -  matches Rust).
+    Fixed xcorr fragment bin dedup (C# double-counted shared bins  -  12.6%
+    -> 1.2% divergence). But jumped too far: feature comparison showed ~20%
+    entries diverge across MANY features (coelution, ms1, median_polish),
+    indicating the inputs to feature calculation differ  -  specifically
+    CWT peak boundaries (start/end/apex). Must back up and validate
+    peak detection before feature comparison is meaningful.
+
+**Corrected bisection order** (Session 9 lesson):
+XICs (proven) -> **CWT peak boundaries (NOT YET PROVEN)** -> features
+
+The ~20% feature divergence and ~30% unmatched entries are both
+explained by CWT peak detection/selection differences. Must prove:
+1. CWT consensus peaks: same number, same boundaries for identical XICs
+2. Peak correlation ranking: same best-peak selection
+3. CWT fallback paths (C# only has primary CWT; Rust has 3 fallbacks)
+Only after peak boundaries match should features be compared.
+
 **Not yet proven** (next downstream targets):
-- Main first-pass search (21 PIN features per entry)
+- CWT peak detection (same peaks from identical XICs)
+- Peak selection (same best-peak from same candidates)
+- Main first-pass search features (after peak boundaries proven)
 - First-pass Percolator SVM FDR
 - Second-pass reconciliation + boundary overrides
 - Final blib output
