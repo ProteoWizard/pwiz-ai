@@ -554,6 +554,11 @@ osprey -i *.mzML -l hela-filtered-SkylineAI_spectral_library.tsv \
   - `ca96b65` - Added OspreySharp build, test, and run scripts
   - `13892ee` - Session 9: all 21 PIN features matched
 
+**Session 10 handoff**: For detailed startup protocol (upstream merge
+plan, regression test approach, build commands, diagnostic env vars),
+read `ai/.tmp/handoff-20260412-osprey-sharp-session9.md` before
+starting work.
+
 ## Next Sprint: Upstream Merge + Regression Tests
 
 ### Priority 1: Merge upstream maccoss/osprey into our fork
