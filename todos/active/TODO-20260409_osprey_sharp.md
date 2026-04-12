@@ -135,9 +135,8 @@ After LDA passes, continue the Session 6/7 methodology:
       `OSPREY_DIAG_SEARCH_ENTRY_IDS`  -  0/2,269 XIC values differ >0.01
       (Session 9). Required: global RT tolerance, scan boundary fix,
       MS2 calibrated fragment tolerance, MS2 m/z offset correction.
-- [ ] Main first-pass search features  -  `.cs_features.tsv` via
-      `AnalysisPipeline.WriteFeatureDump` vs matching Rust dump; 21 PIN
-      features per entry
+- [x] Main first-pass search features  -  all 21 PIN features at 0.00%
+      divergence across 311K entries with shared calibration (Session 9)
 - [ ] First-pass Percolator SVM  -  discriminant scores + q-values per
       precursor (expect ULP drift here too  -  SVM training is similar to LDA)
 - [ ] Second-pass reconciliation  -  boundary overrides, re-scored features at
@@ -246,7 +245,9 @@ against the pre-fix implementation of each bug class, so future ports do not
 repeat the same mistakes.
 
 - [ ] Write regression tests (each must be fast, no full Stellar dataset)
-      for the following Session 5-8 lessons:
+      for the following Session 5-9 lessons:
+
+  **Session 5-8 bugs (calibration phase)**:
   - [ ] **XCorr windowing normalization**  -  max-bin vs sum-bin, missing
         Comet MakeCorrData windowing, library-intensity-weighted vs
         sum-at-fragment-positions. Fixture: synthetic spectrum + known
@@ -274,6 +275,41 @@ repeat the same mistakes.
         `TrainAndScoreCalibration` on a small synthetic match set with
         known scores and verify it selects the iteration with the best
         training-set 1% FDR count, not the last iteration.
+
+  **Session 9 bugs (main search features, 10 fixes)**:
+  - [ ] **Peak shape from ref XIC**  -  peak_apex, peak_area, peak_sharpness
+        must use the reference XIC (highest total intensity), not composite
+        sum of all fragments. Fixture: 3-fragment XIC where ref XIC apex
+        differs from composite apex.
+  - [ ] **Trapezoidal area**  -  peak_area must use trapezoidal integration
+        with RT values, not rectangular sum. Fixture: 5-point XIC with
+        non-uniform RT spacing and known hand-computed trapezoidal area.
+  - [ ] **Peak sharpness as slope**  -  mean of left and right slopes
+        (intensity/time), not intensity ratio. Fixture: asymmetric peak.
+  - [ ] **XCorr fragment bin dedup**  -  two fragments mapping to the same
+        1-Th bin must contribute once, not twice. Fixture: library with
+        2 fragments within 0.5 Th of each other + synthetic spectrum.
+  - [ ] **n_coeluting_fragments mean-positive**  -  fragment counts as
+        coeluting only if its mean pairwise correlation > 0, not if any
+        pair is positive. Fixture: 4-fragment XIC where one fragment has
+        mixed positive/negative pairwise correlations that average < 0.
+  - [ ] **MS1 features HRAM-only**  -  ms1_precursor_coelution and
+        ms1_isotope_cosine must be 0.0 for unit resolution. Fixture:
+        config with ResolutionMode.UnitResolution.
+  - [ ] **Fragment matching closest-by-mz**  -  explained_intensity and
+        mass_accuracy must match the closest peak by m/z, not the most
+        intense. Fixture: spectrum with two peaks within tolerance of a
+        fragment, one closer and one more intense.
+  - [ ] **Median polish convergence**  -  max_change must be computed as
+        max|new_residual - old_residual| after BOTH sweeps, not
+        incrementally per-sweep. Fixture: 4x6 matrix that converges at
+        different iterations under the two methods.
+  - [ ] **MS2 calibrated tolerance**  -  main search must use 3*SD
+        tolerance (not default 0.5 Th) and apply m/z offset correction.
+        Fixture: verify tolerance computation from known error stats.
+  - [ ] **Scan boundary order**  -  upper bound break must occur before
+        endScan update to prevent off-by-one. Fixture: sorted RT array
+        where last value equals expectedRt + tolerance exactly.
 
 ### Documentation (new  -  Phase 2 addition)
 - [ ] Create `pwiz_tools/OspreySharp/README.md` with:
@@ -503,6 +539,62 @@ osprey -i *.mzML -l hela-filtered-SkylineAI_spectral_library.tsv \
 `D:\test\osprey-runs\stellar\` (working). Upstream test data at
 `D:\test\osprey-mm\stellar\`.
 
-**Next**: Pop the stashed changes (RT tolerance fix + search XIC
-diagnostic), rebuild both tools with `--resolution unit` in the test
-commands, and resume the main-search XIC fidelity walk.
+**Session 9 commits**:
+- pwiz `Skyline/work/20260409_osprey_sharp`:
+  - `263f15123` - Aligned main-search XIC extraction with Rust
+  - `0cc5161b2` - Fixed peak shape features and xcorr bin double-counting
+  - `91515db2a` - Matched all 21 PIN features with Rust
+  - `ef1802c27` - Updated workflow figure: Stages 1-4 all green
+- osprey `fix/parquet-index-lookup`:
+  - `10c42cc` - Added OSPREY_DIAG_SEARCH_ENTRY_IDS diagnostic
+  - `97a369d` - Added median polish diagnostic dump and peak boundary data
+- ai `master`:
+  - `70448ce` - Updated Session 9 progress
+  - `bc0ebc0` - Corrected bisection order
+  - `ca96b65` - Added OspreySharp build, test, and run scripts
+  - `13892ee` - Session 9: all 21 PIN features matched
+
+## Next Sprint: Upstream Merge + Regression Tests
+
+### Priority 1: Merge upstream maccoss/osprey into our fork
+
+Mike has improved the upstream Osprey implementation (likely downstream
+of our validated phases) and implemented his own fix for the parquet
+indexing bug that started our fork.
+
+- [ ] **Diff our fork vs upstream**: compare `brendanx67/osprey`
+      `fix/parquet-index-lookup` against `maccoss/osprey` HEAD (`1302c90`,
+      v26.1.2). Identify which changes are ours (diagnostics, f64 flip,
+      LOESS toggle, parquet fix) vs upstream improvements.
+- [ ] **Merge upstream into fork**: rebase or merge `maccoss/osprey` HEAD
+      into our branch. Resolve conflicts (parquet_index fix will conflict
+      since both repos fixed it independently).
+- [ ] **Re-test Stellar 3-file**: run with `--resolution unit
+      --protein-fdr 0.01` and verify ~36K precursors. Any regression from
+      upstream changes must be investigated before proceeding.
+- [ ] **Re-verify calibration phase**: run cal_match + LDA dumps on
+      Stellar file 20 and confirm the Session 7-8 proofs still hold after
+      the merge.
+- [ ] **Re-verify PIN features**: run with `--write-pin` and compare all
+      21 features against C# (using OSPREY_LOAD_CALIBRATION).
+
+### Priority 2: Regression unit tests (OspreySharp C#)
+
+Write fast unit tests for every bug found in Sessions 5-9 (see the
+regression test checklist above). Each test:
+- Uses synthetic data (no Stellar dataset dependency)
+- Would have FAILED against the pre-fix implementation
+- Runs in < 100ms
+- Covers both the correct and incorrect behavior
+Target: ~18 new tests covering all items in the checklist.
+
+### Priority 3: Regression tests for Rust Osprey
+
+Give back to Mike: contribute Rust unit tests that guard the same
+code paths, particularly:
+- [ ] XCorr bin dedup (fragments sharing a bin)
+- [ ] Median polish convergence criterion
+- [ ] Fragment matching closest-by-mz consistency
+- [ ] n_coeluting mean-positive definition
+- [ ] Calibrated tolerance computation from MzCalibration stats
+These can be submitted as a PR to maccoss/osprey after the merge.
