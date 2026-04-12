@@ -59,22 +59,13 @@ When touching the Rust side:
    max |d| <= 5e-10, 90.72% exact-bit-equal on all columns (Session 7)
 8. Apex scan number in cal_match dump (Session 8)
 9. Pass-2 XIC extraction on entry 0 (46 candidates, 276 XIC rows <= 1e-10)
+10. Pass-1 LDA discriminant + q-value (Session 8, after iterative port):
+    192,289 rows, 192,288/192,289 discriminants bit-equal (max |d| = 1e-10),
+    all 192,289 q-values bit-equal, target 1% FDR pass 11,937 = 11,937
+    (delta 0), full set overlap.
 
-**Confirmed divergent  -  immediate Phase 2 target**:
-- **Pass-1 LDA scoring**: C#'s `CalibrationScorer.TrainAndScoreCalibration`
-  is a simplified non-iterative port of Rust's
-  `train_lda_with_nonnegative_cv` (calibration_ml.rs:272-552). Rust performs
-  **Percolator-style iterative refinement**: 3-fold stratified CV grouped by
-  peptide, positive-training-set selection (high-confidence targets only via
-  current scores), non-negative weight clipping, consensus averaging across
-  folds, best-iteration tracking with early stopping. C# does a single LDA
-  fit on all data. Target 1% FDR passing: **Rust 11,937 vs C# 11,776 (-161)**,
-  overlap 11,494, Rust-only 443, C#-only 282. Session 8 proof dumped via
-  OSPREY_DUMP_LDA_SCORES: all 192,289 discriminant scores differ (max |d| =
-  0.67, not ULP drift). See Session 8 entry in the Progress Log below.
-
-**Not yet proven** (downstream of the LDA port):
-- Pass-1 LOESS fit coefficients (depends on LDA fix above)
+**Not yet proven** (next downstream targets):
+- Pass-1 LOESS fit coefficients (should now match after LDA parity)
 - Pass-2 XIC extraction on other entries (only entry 0 tested)
 - Main first-pass search (21 PIN features per entry)
 - First-pass Percolator SVM FDR
@@ -83,21 +74,22 @@ When touching the Rust side:
 
 ## Phase 2 Remaining Tasks
 
-### Immediate: Port iterative LDA refinement
-- [ ] Port `create_stratified_folds_by_peptide` (3-fold CV grouped by peptide)
-- [ ] Port `count_passing_targets` (paired target-decoy competition -> q-values)
-- [ ] Port `select_positive_training_set` (Percolator-style positive selection
+### Immediate: Port iterative LDA refinement  -  DONE (Session 8)
+- [x] Port `create_stratified_folds_by_peptide` (3-fold CV grouped by peptide)
+- [x] Port `count_passing_targets` (paired target-decoy competition -> q-values)
+- [x] Port `select_positive_training_set` (Percolator-style positive selection
       with `MIN_POSITIVE_EXAMPLES = 50`)
-- [ ] Port `average_weights` (mean of N weight vectors)
-- [ ] Port the main iteration loop in `train_lda_with_nonnegative_cv` with
+- [x] Port `average_weights` (mean of N weight vectors)
+- [x] Port the main iteration loop in `train_lda_with_nonnegative_cv` with
       best-iteration tracking and 2-consecutive-no-improve early stopping
-- [ ] Extend `CalibrationScorer.TrainAndScoreCalibration` signature to accept
-      `sequences: string[]` for peptide-based fold grouping
-- [ ] Run LDA dump verification:
-      `diff rust_lda_scores.txt cs_lda_scores.txt` should show max |d| <= 1e-10
-      on discriminant and q_value, with 11,937 pass-1 FDR targets matching
-- [ ] Re-verify cal_match remains bit-identical (no regression on features)
-- [ ] Commit C# port (pwiz)
+- [x] (Not needed) signature change: sequences are pulled from `matches[i].Sequence`
+      inside `TrainAndScoreCalibration`, matching Rust's extraction pattern
+- [x] LDA dump verification: 192,288/192,289 discriminants bit-equal
+      (max |d| = 1e-10), 192,289/192,289 q-values bit-equal, target 1% FDR
+      pass 11,937 = 11,937, full set overlap
+- [x] Re-verified cal_match features unchanged (no regression)
+- [x] Commit: pwiz `2704aa1ef` "Ported iterative non-negative CV LDA
+      refinement to CalibrationScorer"
 
 ### Fidelity walk continuation
 After LDA passes, continue the Session 6/7 methodology:
@@ -313,18 +305,57 @@ resolved fmt (~14 blocks in `batch.rs` + `pipeline.rs`), a
 `needless_range_loop` clippy error in the grid dump, and a broken test
 (`f32 -> f64` type annotation in `lib.rs`) left over from the f64 flip.
 
-**Commits**:
-- pwiz `Skyline/work/20260409_osprey_sharp`:
-  - `4328eb6de`  -  "Added apex scan number to cal_match diagnostic dump"
-  - `a8d2b6ab7`  -  "Added per-entry LDA scores diagnostic dump"
-- osprey `fix/parquet-index-lookup`:
-  - `225f9db`  -  "Formatted and linted Session 7 scratch diagnostics"
-  - `260852c`  -  "Added per-entry LDA scores diagnostic dump"
-
 **Rolled phase**: Copied end-of-session TODO content to
 `TODO-20260409_osprey_sharp-phase1.md` and replaced the main file with
 this Phase 2 version. Future sessions should update this file's Progress
 Log and leave phase1.md frozen.
 
-**Next**: Port Rust's iterative LDA refinement to C# (see Phase 2
-Remaining Tasks -> Immediate).
+**Iterative LDA port (continuation, same session)**: Rewrote
+`CalibrationScorer.TrainAndScoreCalibration` to match Rust's
+`train_lda_with_nonnegative_cv` line-for-line: baseline best-single-feature
+selection, 3-fold stratified CV by peptide, positive training set selection
+(`SelectPositiveTrainingSet` with Percolator-style FDR-relaxation cascade
+at 5%/10%/25%/50%), consensus fold weight averaging with non-negative
+clipping, best-iteration tracking across up to 3 iterations with
+2-consecutive-no-improve early stopping. Added `Matrix.ExtractRows(int[])`
+to `OspreySharp.ML/Matrix.cs`. Replaced local `CalculateQValues` helper
+with canonical `QValueCalculator.ComputeQValues`. Fixed
+`CompeteCalibrationPairs` sort tiebreak to match Rust (score desc, then
+base_id ascending) - previously only primary score sort, which let
+HashMap iteration order pollute winner ordering.
+
+**LDA parity results** (after port, Stellar file 20):
+```
+discriminant   max |d| = 1.000e-10   bit-equal 192288/192289 (99.9995%)
+q_value        max |d| = 0.000e+00   bit-equal 192289/192289 (100.0000%)
+target 1% FDR  rust=11937  cs=11937  delta=0  full overlap (rust-only=0, cs-only=0)
+```
+Single ULP discriminant drift on one row is f64 sum non-associativity in
+either `LinearDiscriminant.Fit` or `Predict` - not a real algorithmic gap.
+cal_match features remain unchanged (regression check passed). All 167
+OspreySharp unit tests still pass including the existing
+`TestCompeteCalibrationPairs` (the base_id tiebreak change doesn't alter
+its behavior - the test data has no score ties).
+
+**LDA timing shift**: C# LDA went from 0.10s (single-pass) to 1.06s
+(iterative 3 iterations x 3 folds). This is expected - Rust does the
+same iterative work. The 10x step slowdown adds ~1s to the C#
+wall-clock, not a showstopper for the Session 7 ~2.39x total gap.
+
+**Commits**:
+- pwiz `Skyline/work/20260409_osprey_sharp`:
+  - `4328eb6de` - "Added apex scan number to cal_match diagnostic dump"
+  - `a8d2b6ab7` - "Added per-entry LDA scores diagnostic dump"
+  - `2704aa1ef` - "Ported iterative non-negative CV LDA refinement
+    to CalibrationScorer"
+- osprey `fix/parquet-index-lookup`:
+  - `225f9db` - "Formatted and linted Session 7 scratch diagnostics"
+  - `260852c` - "Added per-entry LDA scores diagnostic dump"
+- ai `master`:
+  - `a9ccf58` - "Rolled osprey_sharp TODO to phase 1 archive and
+    started phase 2"
+
+**Next**: Walk downstream from LDA to pass-1 LOESS fit. Extend the
+pass-2 XIC diagnostic to include LOESS predictions across a sampled
+RT range and diff against Rust - expectation is bit-identicality
+since pass-1 LDA (upstream) is now matching.
