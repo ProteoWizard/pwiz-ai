@@ -46,7 +46,7 @@ When touching the Rust side:
   diagnostics commit skipped both and left three files of debt for Session 8
   to clean up).
 
-## Current State (end of Phase 1, start of Phase 2)
+## Current State (updated Session 8 continuation)
 
 **Proven bit-identical** (walking downstream from library sampling):
 1. Library sampling (Session 6)
@@ -63,10 +63,22 @@ When touching the Rust side:
     192,289 rows, 192,288/192,289 discriminants bit-equal (max |d| = 1e-10),
     all 192,289 q-values bit-equal, target 1% FDR pass 11,937 = 11,937
     (delta 0), full set overlap.
+11. Pass-1 S/N quality filter: 6,423 = 6,423 input points to LOESS
+    (was 6,409 in Session 7 due to LDA drift; now matches after iterative
+    LDA port). Verified via OSPREY_DUMP_LOESS_INPUT diagnostic: 6,423/6,423
+    lib_rt bit-equal, 6,422/6,423 measured_rt bit-equal (1 row at 2 ULP).
+12. Pass-1 LOESS fit (Session 8 continuation): all 10 LOESS MODEL stats
+    bit-identical at F10 precision (r_squared, residual_sd, mean_residual,
+    max_residual, p20/p80_abs_residual, mad, expected_rt, tolerance).
+    Root cause of prior divergence: Rust computes robust-iteration residuals
+    ONCE from initial fit; C# was refreshing per iteration (classical mode).
+    Fixed C# to match Rust. Both tools now also support the classical mode
+    via OSPREY_LOESS_CLASSICAL_ROBUST=1 env var for potential upstream fix.
+13. Pass-2 LOESS MODEL on entry 0 bit-identical (all stats match, verified
+    via OSPREY_DIAG_XIC_ENTRY_ID=0 OSPREY_DIAG_XIC_PASS=2).
 
 **Not yet proven** (next downstream targets):
-- Pass-1 LOESS fit coefficients (should now match after LDA parity)
-- Pass-2 XIC extraction on other entries (only entry 0 tested)
+- Pass-2 XIC on broader entries (only entry 0 tested so far)
 - Main first-pass search (21 PIN features per entry)
 - First-pass Percolator SVM FDR
 - Second-pass reconciliation + boundary overrides
@@ -355,7 +367,55 @@ wall-clock, not a showstopper for the Session 7 ~2.39x total gap.
   - `a9ccf58` - "Rolled osprey_sharp TODO to phase 1 archive and
     started phase 2"
 
-**Next**: Walk downstream from LDA to pass-1 LOESS fit. Extend the
-pass-2 XIC diagnostic to include LOESS predictions across a sampled
-RT range and diff against Rust - expectation is bit-identicality
-since pass-1 LDA (upstream) is now matching.
+**LOESS walk-forward (continuation, same session)**:
+
+Added OSPREY_DUMP_LOESS_INPUT diagnostic to both tools (writes sorted
+(lib_rt, measured_rt) pairs at full-precision). Verified LOESS inputs
+are bit-identical: 6,423/6,423 lib_rt 100% equal, 6,422/6,423
+measured_rt bit-equal (1 row at 2 ULP -- noise floor).
+
+**LOESS root cause found**: Inputs match, but LOESS fit stats diverged
+by 1.7e-4 in r_squared (Rust 0.9577 vs C# 0.9576). Root cause:
+Rust's `RTCalibrator::fit` captures residuals ONCE from the initial
+fit and reuses them unchanged across all robustness iterations,
+producing a single refinement. C#'s `LoessRegression.Fit` was
+refreshing residuals per iteration (classical Cleveland 1979 robust
+LOESS), producing a genuinely different 2-pass refinement. Fixed C#
+to match Rust (residuals computed once) -> bit-identical on all 10
+LOESS MODEL stats.
+
+**LOESS classical-robust toggle added**: Both tools now support
+`OSPREY_LOESS_CLASSICAL_ROBUST=1` env var to switch to classical mode
+(residuals refreshed per iteration). This lets both tools be validated
+against each other in EITHER mode, and the classical mode could be
+proposed upstream to maccoss/osprey as a fix if the improvement is
+deemed significant. Added `RTCalibratorConfig.ClassicalRobustIterations`
+field (default false) plumbed through to `LoessRegression.Fit` in C# and
+`RTCalibrator::fit` in Rust, set from the env var in both pipelines.
+
+**Stable sort fix**: Switched `LoessRegression.Fit` and
+`RTCalibrator.Fit` internal sorts from `Array.Sort` (introsort,
+unstable) to LINQ `OrderBy` (stable), matching Rust's
+`slice::sort_by`. Didn't change behavior on Stellar data (no
+duplicate lib_rt values in the 6,423-point set), but is the correct
+defensive pattern for data with multi-charge peptides that share a
+library RT.
+
+**Additional commits** (Session 8 continuation):
+- pwiz `Skyline/work/20260409_osprey_sharp`:
+  - `773791a4b` - "Added OspreySharp README.md and workflow HTML figure"
+  - `b3855fb96` - "Matched Rust LOESS robust iteration + added input
+    diagnostic"
+  - `8cc3f86fb` - "Added classical robust LOESS toggle
+    (OSPREY_LOESS_CLASSICAL_ROBUST)"
+- osprey `fix/parquet-index-lookup`:
+  - `f1da6da` - "Added LOESS input pair diagnostic dump"
+  - `3a3efbd` - "Added classical robust LOESS toggle
+    (OSPREY_LOESS_CLASSICAL_ROBUST)"
+
+**Next**: Verify broader pass-2 XIC (multiple entries), then move to
+Stage 4 (main first-pass search, 21 PIN features per entry). The
+calibration phase (Stage 3) is essentially complete -- all upstream
+stages through pass-1 LOESS are bit-identical, and pass-2 entry 0 is
+confirmed. Remaining calibration work is a confidence-building
+exercise across more entries.
