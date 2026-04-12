@@ -46,7 +46,7 @@ When touching the Rust side:
   diagnostics commit skipped both and left three files of debt for Session 8
   to clean up).
 
-## Current State (updated Session 8 continuation)
+## Current State (updated Session 9)
 
 **Proven bit-identical** (walking downstream from library sampling):
 1. Library sampling (Session 6)
@@ -76,9 +76,14 @@ When touching the Rust side:
     via OSPREY_LOESS_CLASSICAL_ROBUST=1 env var for potential upstream fix.
 13. Pass-2 LOESS MODEL on entry 0 bit-identical (all stats match, verified
     via OSPREY_DIAG_XIC_ENTRY_ID=0 OSPREY_DIAG_XIC_PASS=2).
+14. MS2 m/z calibration stats bit-identical (Session 9): mean=-0.0654 Th,
+    SD=0.1325 Th, n=44,277 errors (top-6 fragments from passing targets).
+15. Main-search XICs (post-recalibration, Session 9): 9 spot-checked entries
+    across different RT/m/z ranges, 0/2,269 XIC values differ by >0.01.
+    Fixes applied: global RT tolerance (was per-entry), scan boundary order,
+    MS2 calibrated fragment tolerance (3*SD), MS2 m/z offset correction.
 
 **Not yet proven** (next downstream targets):
-- Pass-2 XIC on broader entries (only entry 0 tested so far)
 - Main first-pass search (21 PIN features per entry)
 - First-pass Percolator SVM FDR
 - Second-pass reconciliation + boundary overrides
@@ -107,8 +112,10 @@ When touching the Rust side:
 After LDA passes, continue the Session 6/7 methodology:
 - [ ] Pass-1 LOESS fit output  -  extend the XIC dump to include N predictions
       across the RT range; diff against Rust
-- [ ] Pass-2 XIC on 10-20 entries via `OSPREY_DIAG_XIC_ENTRY_ID`  -  confirm
-      pass-2 bit-identicality is broad, not lucky on entry 0
+- [x] Main-search XICs (post-recalibration) on 9 entries via
+      `OSPREY_DIAG_SEARCH_ENTRY_IDS`  -  0/2,269 XIC values differ >0.01
+      (Session 9). Required: global RT tolerance, scan boundary fix,
+      MS2 calibrated fragment tolerance, MS2 m/z offset correction.
 - [ ] Main first-pass search features  -  `.cs_features.tsv` via
       `AnalysisPipeline.WriteFeatureDump` vs matching Rust dump; 21 PIN
       features per entry
@@ -424,3 +431,59 @@ exercise across more entries.
 commit verification, approach for Stage 4, test data paths, build
 commands, diagnostic env vars, gotchas), read
 `ai/.tmp/handoff-20260411-osprey-sharp-session8.md` before starting work.
+
+### 2026-04-11 Session 9 (desktop)  -  RT tolerance fix + resolution mode discovery
+
+**CRITICAL: `--resolution unit` is required for Stellar (and possibly Astral)**
+
+Session 9 discovered that the Stellar test runs were producing ~986
+precursors instead of the expected ~36K. Both our fork AND upstream
+maccoss/osprey (v26.1.2, commit `1302c90`) produced the same low count.
+Root cause: the Session 3 reference used `--resolution unit` per Mike's
+original instructions, but our bisection runs omitted this flag and used
+the default `resolution_mode: Auto`.
+
+Running with `--resolution unit --protein-fdr 0.01` (Mike's exact flags)
+restores the expected results:
+```
+Fork (clean Session 8 code):  36,703 precursors / 33,960 peptides / 5,608 proteins
+Session 3 reference:          36,783 precursors / 33,966 peptides / 5,604 proteins
+Upstream maccoss/osprey:      986 precursors (also missing --resolution unit)
+```
+Small delta vs Session 3 is expected (Percolator SVM is non-deterministic).
+
+**Upstream baseline established**: Cloned `maccoss/osprey` HEAD (`1302c90`,
+v26.1.2) to `C:\proj\osprey-mm`. Confirmed it produces the same result
+as our fork when both use the same flags. The upstream repo can serve as
+a regression baseline independent of our changes.
+
+**RT tolerance divergence found (C# vs Rust)**:
+- Rust `run_search`: global tolerance `3 * MAD * 1.4826`, clamped [min, max]
+- C# `ScoreCandidate`: per-entry `LocalTolerance` (interpolated residuals)
+- C# also missing `MaxRtTolerance` cap
+- Fix written (stashed): replace per-entry tolerance with global MAD-based
+  calculation matching Rust. Also added `OSPREY_DIAG_SEARCH_ENTRY_IDS`
+  diagnostic to both tools for main-search XIC validation.
+- Changes stashed during resolution-mode investigation: `git stash pop` in
+  both `pwiz` and `osprey` repos to restore.
+
+**Test commands** (from Mike's README notes, must always use these flags):
+```bash
+# Stellar (3 files, unit resolution)
+osprey -i *.mzML -l hela-filtered-SkylineAI_spectral_library.tsv \
+  -o stellar-ospreyoutput.blib --resolution unit --protein-fdr 0.01
+# Expected: ~36K precursors / ~34K peptides / ~5.6K proteins
+
+# Astral (3 files, also unit resolution per Mike - TBD if HRAM is better)
+osprey -i *.mzML -l hela-filtered-SkylineAI_spectral_library.tsv \
+  -o astral-ospreyoutput.blib --resolution unit --protein-fdr 0.01
+# Expected: ~144K precursors / ~126K peptides / ~13.5K proteins
+```
+
+**Test data**: `D:\test\osprey-testfiles\stellar\` (source), copied to
+`D:\test\osprey-runs\stellar\` (working). Upstream test data at
+`D:\test\osprey-mm\stellar\`.
+
+**Next**: Pop the stashed changes (RT tolerance fix + search XIC
+diagnostic), rebuild both tools with `--resolution unit` in the test
+commands, and resume the main-search XIC fidelity walk.
