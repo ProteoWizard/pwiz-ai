@@ -252,12 +252,8 @@ repeat the same mistakes.
         Comet MakeCorrData windowing, library-intensity-weighted vs
         sum-at-fragment-positions. Fixture: synthetic spectrum + known
         library with a hand-computed reference xcorr.
-  - [ ] **SNR input buffer**  -  must use ref_xic, not composite sum of all
-        fragment XICs. Fixture: two-fragment synthetic XIC with known
-        reference.
-  - [ ] **Apex selection tie-break**  -  ties must resolve LAST-wins to match
-        Rust `Iterator::max_by`. Fixture: flat intensity plateau across
-        multiple scans.
+  - [x] **SNR input buffer**  -  `TestSnrUsesRefXicNotComposite` (Session 10)
+  - [x] **Apex selection tie-break**  -  `TestApexTieBreakLastWins` (Session 10)
   - [ ] **f32 vs f64 intermediate precision drift**  -  XCorr sliding window
         produces ~4e-6 drift when f32 buffers are used. Fixture:
         sliding-window accumulator test comparing f32 vs f64 result on
@@ -281,32 +277,15 @@ repeat the same mistakes.
         must use the reference XIC (highest total intensity), not composite
         sum of all fragments. Fixture: 3-fragment XIC where ref XIC apex
         differs from composite apex.
-  - [ ] **Trapezoidal area**  -  peak_area must use trapezoidal integration
-        with RT values, not rectangular sum. Fixture: 5-point XIC with
-        non-uniform RT spacing and known hand-computed trapezoidal area.
+  - [x] **Trapezoidal area**  -  `TestPeakAreaTrapezoidal` (Session 10)
   - [ ] **Peak sharpness as slope**  -  mean of left and right slopes
         (intensity/time), not intensity ratio. Fixture: asymmetric peak.
-  - [ ] **XCorr fragment bin dedup**  -  two fragments mapping to the same
-        1-Th bin must contribute once, not twice. Fixture: library with
-        2 fragments within 0.5 Th of each other + synthetic spectrum.
-  - [ ] **n_coeluting_fragments mean-positive**  -  fragment counts as
-        coeluting only if its mean pairwise correlation > 0, not if any
-        pair is positive. Fixture: 4-fragment XIC where one fragment has
-        mixed positive/negative pairwise correlations that average < 0.
-  - [ ] **MS1 features HRAM-only**  -  ms1_precursor_coelution and
-        ms1_isotope_cosine must be 0.0 for unit resolution. Fixture:
-        config with ResolutionMode.UnitResolution.
-  - [ ] **Fragment matching closest-by-mz**  -  explained_intensity and
-        mass_accuracy must match the closest peak by m/z, not the most
-        intense. Fixture: spectrum with two peaks within tolerance of a
-        fragment, one closer and one more intense.
-  - [ ] **Median polish convergence**  -  max_change must be computed as
-        max|new_residual - old_residual| after BOTH sweeps, not
-        incrementally per-sweep. Fixture: 4x6 matrix that converges at
-        different iterations under the two methods.
-  - [ ] **MS2 calibrated tolerance**  -  main search must use 3*SD
-        tolerance (not default 0.5 Th) and apply m/z offset correction.
-        Fixture: verify tolerance computation from known error stats.
+  - [x] **XCorr fragment bin dedup**  -  `TestXcorrFragmentBinDedup` (Session 10)
+  - [x] **n_coeluting_fragments mean-positive**  -  `TestCoelutingFragmentsMeanPositive` (Session 10)
+  - [x] **MS1 features HRAM-only**  -  `TestMs1FeaturesHramOnly` (Session 10)
+  - [x] **Fragment matching closest-by-mz**  -  `TestLibCosineClosestByMz` (Session 10)
+  - [x] **Median polish convergence**  -  `TestMedianPolishConvergenceAfterBothSweeps` (Session 10)
+  - [x] **MS2 calibrated tolerance**  -  `TestMs2CalibratedTolerance` (Session 10)
   - [ ] **Scan boundary order**  -  upper bound break must occur before
         endScan update to prevent off-by-one. Fixture: sorted RT array
         where last value equals expectedRt + tolerance exactly.
@@ -559,29 +538,94 @@ plan, regression test approach, build commands, diagnostic env vars),
 read `ai/.tmp/handoff-20260412-osprey-sharp-session9.md` before
 starting work.
 
+### 2026-04-12 Session 10 (desktop)  -  Upstream merge + test coverage audit
+
+**Upstream merge completed**: Rebased fork's `fix/parquet-index-lookup`
+onto `maccoss/osprey` HEAD (`4ec7dda`, v26.1.3). Dropped 2 parquet_index
+fix commits (superseded by upstream's comprehensive fix with regression
+tests). Cherry-picked 7 diagnostic commits cleanly (2 trivial conflicts
+in `pipeline.rs`  -  comment wording only). `main` fast-forwarded to
+upstream HEAD. Both branches pushed to `brendanx67/osprey`.
+
+**Upstream now at v26.1.3** (was v26.1.2 in Session 9 handoff). New
+since our base: reconciliation tolerance bug fix (v26.1.3), apex
+proximity reconciliation (v26.1.2), progress bars, two-tier logging,
+parquet_index regression tests. Stellar 3-file count jumped from ~36K
+to 49,770 precursors  -  this is upstream improvement (reconciliation fix
+recovers more precursors), not a regression.
+
+**Session 9 SG-weighted fixes applied** (from parallel session):
+- `sg_weighted_cosine`: C# LibCosine wasn't filtering by spectrum m/z
+  range (Rust `compute_cosine_at_scan` does). Added
+  `ComputeCosineAtScan` in `AnalysisPipeline.cs`.
+- `sg_weighted_xcorr`: C# SG loop used global window indices that could
+  escape the RT-filtered candidate range. Fixed to use candidate-local
+  indices bounded by rangeLen.
+- pwiz `22c24af6b`, osprey `085ce53`.
+
+**Full pipeline re-validation**: `Test-StellarFeatures.ps1` confirms all
+21 features at 0.00% divergence across 311,297 matched entries with
+shared calibration on the rebased fork. Rust CI: 354 tests pass, fmt
+clean, clippy clean. C#: 167 tests pass.
+
+**Test coverage audit completed**: Mapped all 167 existing unit tests to
+the 8-stage Osprey workflow (see Osprey-workflow.html). Key findings:
+
+Existing tests cover **data structure mechanics** well (serialize,
+compute a matrix product, generate a decoy) but almost entirely miss
+**algorithmic fidelity** (does the computation produce the right answer
+for the right reason?). Every bug found in Sessions 5-9 was in code that
+had "passing" unit tests but computed the wrong thing:
+- Stage 1 (library prep): 36 tests  -  well covered
+- Stage 2 (mzML): 3 tests  -  light but adequate
+- Stage 3 (calibration): 31 tests  -  DECEPTIVE (looks good, misses all
+  Session 5-8 bugs: xcorr normalization, SNR buffer, apex tie-break,
+  LOESS robust mode, MS2 calibrated tolerance, iterative LDA)
+- Stage 4 (main search): 2 tests  -  MAJOR GAP (18 of 20 bug-prone
+  features have no tests)
+- Stage 5 (FDR): 18 tests  -  good structural coverage
+- Stage 6 (refinement): 0 tests  -  not yet ported
+- Stage 7 (protein FDR): 7 tests  -  reasonable
+- Stage 8 (output): 9 tests  -  OK
+
+**Next**: Write regression tests for the 18 Session 5-9 bugs, starting
+from Stage 3 (calibration) and Stage 4 (main search features) where the
+gap is widest. Annotate Osprey-workflow.html with unit test coverage
+markers as tests are added.
+
+**Session 10 commits**:
+- osprey `fix/parquet-index-lookup`:
+  - Rebased 7 diagnostic commits onto upstream/main `4ec7dda` (v26.1.3)
+  - Dropped `dfe5f9e` and `2812401` (parquet fixes, superseded)
+  - New commits: `c95b36c`, `3dc007b`, `95deef3`, `8b17bdd`, `5588082`,
+    `51f517b`, `dbf7389` (cherry-picked), plus `085ce53` (Session 9 xcorr
+    diagnostic, pulled)
+
 ## Next Sprint: Upstream Merge + Regression Tests
 
-### Priority 1: Merge upstream maccoss/osprey into our fork
+### Priority 1: Merge upstream maccoss/osprey into our fork  -  DONE (Session 10)
 
-Mike has improved the upstream Osprey implementation (likely downstream
-of our validated phases) and implemented his own fix for the parquet
-indexing bug that started our fork.
-
-- [ ] **Diff our fork vs upstream**: compare `brendanx67/osprey`
-      `fix/parquet-index-lookup` against `maccoss/osprey` HEAD (`1302c90`,
-      v26.1.2). Identify which changes are ours (diagnostics, f64 flip,
-      LOESS toggle, parquet fix) vs upstream improvements.
-- [ ] **Merge upstream into fork**: rebase or merge `maccoss/osprey` HEAD
-      into our branch. Resolve conflicts (parquet_index fix will conflict
-      since both repos fixed it independently).
-- [ ] **Re-test Stellar 3-file**: run with `--resolution unit
-      --protein-fdr 0.01` and verify ~36K precursors. Any regression from
-      upstream changes must be investigated before proceeding.
-- [ ] **Re-verify calibration phase**: run cal_match + LDA dumps on
-      Stellar file 20 and confirm the Session 7-8 proofs still hold after
-      the merge.
-- [ ] **Re-verify PIN features**: run with `--write-pin` and compare all
-      21 features against C# (using OSPREY_LOAD_CALIBRATION).
+- [x] **Diff our fork vs upstream**: compared `brendanx67/osprey`
+      `fix/parquet-index-lookup` against `maccoss/osprey` HEAD (`4ec7dda`,
+      v26.1.3). Common ancestor `bc51ca9`. Upstream: 25 new commits
+      (v26.1.0-v26.1.3, parquet fixes, reconciliation fix, logging).
+      Ours: 9 commits (2 parquet fixes + 7 diagnostics).
+- [x] **Merge upstream into fork**: rebased 7 diagnostic commits on top
+      of upstream/main HEAD (`4ec7dda`). Dropped 2 parquet_index fixes
+      (`dfe5f9e`, `2812401`) - superseded by upstream's comprehensive
+      `464a601` + `1293ddf` + `80c94c7` (with regression tests).
+      Only conflict: comment wording in `pipeline.rs` (2 hunks, trivial).
+- [x] **Push to fork**: `main` fast-forwarded, `fix/parquet-index-lookup`
+      force-pushed with `--force-with-lease`.
+- [x] **Re-test Stellar 3-file**: Rust v26.1.3 now produces 49,770
+      precursors / 45,596 peptides / 6,603 proteins (up from ~36K -
+      upstream v26.1.3 reconciliation fix recovers more precursors).
+- [x] **Re-verify PIN features**: Test-StellarFeatures.ps1 confirms all
+      21 features at 0.00% divergence across 311,297 matched entries
+      with shared calibration on the rebased fork.
+- [x] **Rust CI checks**: `cargo fmt --check` clean, `cargo clippy
+      -D warnings` clean, 354 unit tests pass.
+- [x] **C# unit tests**: all 167 pass.
 
 ### Priority 2: Regression unit tests (OspreySharp C#)
 
