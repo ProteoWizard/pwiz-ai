@@ -200,44 +200,58 @@ data, not just the intermediate diagnostic dumps.
 
 ### Performance parity (hard Phase 2 goal, not optional)
 
-**Session 10 ground-truth benchmark** (Stellar file 20, `--resolution unit`,
-median of 3 iterations, `Bench-Scoring.ps1`):
+**Session 10 performance optimization** (Stellar file 20, `--resolution unit`,
+`Bench-Scoring.ps1`, median of 2-3 iterations):
 
 ```
-                          Stage 1  Stage 1  Stage 2  Stage 3  Stage 4  Stg 1-4
-Implementation            Library   Cached     mzML  Calibr.   Search    Total
-Upstream Rust (v26.1.3)    15.0s     ~1.5s     6.0s     9.0s     6.0s    22.0s
-Fork Rust                  20.2s     ~5.0s     5.0s     9.0s     6.0s    24.0s
-OspreySharp (C#)            9.1s      2.1s    16.2s    30.7s    30.7s    79.3s
-C# / Fork ratio             0.5x     0.4x     3.2x     3.4x     5.1x     3.3x
+Session start (3.3x):
+  Fork Rust      5.0s    5.0s     9.0s     6.0s    24.0s
+  OspreySharp    2.1s   16.2s    30.7s    30.7s    79.3s   3.3x
+
+After all optimizations (1.6x):
+  Fork Rust      4.5s    5.0s     9.0s     6.0s    24.5s
+  OspreySharp    2.2s    8.4s    18.0s    10.5s    39.0s   1.6x
+  C#/Rust       0.5x    1.7x     2.0x     1.8x     1.6x
 ```
 
-Stage 1 is solved (C# is faster than Rust with library cache). **The entire
-gap is in Stages 2-4: C# 77.2s vs Rust 20s = 3.9x.** Target: under 2x.
+Optimizations applied in Session 10 (total: 3.3x -> 1.6x = 2x speedup):
+- [x] **Library binary cache** (`6877858cd`): 9.1s cold -> 2.1s cached
+- [x] **Parallel decoy generation** (`6877858cd`): 1.7s -> 0.9s
+- [x] **Pre-preprocessed XCorr per window** (`ea8cba515`): Stage 4
+      30.7s -> 9.6s (3.2x speedup). Spectrum binning+windowing+sliding
+      done once per window, O(n_frags) bin lookups per candidate.
+- [x] **Calibration XCorr cache** (`38b86c488`, `2d5177be6`): Stage 3
+      30.7s -> 19.3s. Fixed window key resolution for neighbour fallback.
+- [x] **Calibration prefilter optimization** (`3ecd576fa`): replaced
+      LINQ OrderByDescending+Take+ToList with HasTopNFragmentMatch
+      (binary search, no alloc). 25.8s -> 19.3s.
+- [x] **Cached top-6 fragment m/z** (`38a4578cb`): ConcurrentDictionary
+      caches top-6 fragment m/z per entry ID. Eliminated prefilter sort.
+      19.8s -> 18.0s.
+- [x] **Parallel mzML decompression** (`5c70d657e`): two-phase parse +
+      Parallel.For decode. 14.9s -> 9.5s.
+- [x] **Producer-consumer mzML pipeline** (`ded71b5a3`): XML parse
+      overlaps with decompression via BlockingCollection. 9.5s -> 8.1s.
+      Note: Skyline CommonUtil.ProducerConsumerWorker should be used in
+      future integration.
+- [x] **dotTrace profiling** (3 runs): identified hot spots, drove each
+      optimization. Script: `ai/scripts/OspreySharp/Profile-OspreySharp.ps1`.
 
-- [x] **Wire `LibraryBinaryCache.cs` into the pipeline** (Session 10):
-      Stage 1 drops from 9.1s cold to 2.1s cached. Includes parallel
-      decoy generation (Parallel.For, 0.9s vs 1.7s serial).
-- [ ] **Profile Stages 2-4 hot loops** with dotTrace to identify the
-      3.9x gap. Script: `ai/scripts/OspreySharp/Profile-OspreySharp.ps1`.
-      Likely contributors: managed f64 math without SIMD, per-entry CWT
-      convolution, XCorr preprocessing, mzML COM bridge overhead.
+Remaining optimization targets (to reach 1.5x = ~37s):
+- [ ] **Stage 3 calibration XIC extraction** (55s own across threads):
+      `ExtractTopNFragmentXics` does 6 fragments x ~100 spectra x binary
+      search per entry. Rust uses batch matrix scoring instead of per-entry
+      XIC extraction. Options: (a) implement batch matrix scoring,
+      (b) precompute fragment-to-bin index per window, (c) SIMD binary search.
+- [ ] **Stage 2 mzML further optimization**: use Skyline's
+      ProducerConsumerWorker from CommonUtil for production integration.
+      Buffer pooling for base64/zlib allocations.
 - [ ] **SIMD / vectorize CWT convolution** via `System.Numerics.Vector<T>`
       or `System.Runtime.Intrinsics` (AVX2/AVX-512 where available).
 - [ ] **Math.NET Numerics + MKL provider for LDA/SVM training**
-      (see Core port carry-over)  -  replaces managed dense-matrix loops in
-      LinearDiscriminantAnalysis / LinearSvmClassifier with MKL-backed
-      routines equivalent to Rust's ndarray + BLAS.
-- [ ] **Parallel preprocessing** match: verify OspreySharp's
-      `Parallel.ForEach` window-processing loop has the same parallelism
-      grain as Rust's `par_iter`. Both parallelize at per-window level
-      (125 windows, 32 threads). Within-window candidate scoring is
-      sequential in both.
-- [ ] **Evaluate mzML parse path**: 3.2x slower is ProteoWizard COM
-      bridge overhead (pwiz_data_cli). Not worth optimizing until
-      scoring is within target.
-- [ ] **Re-run `Bench-Scoring.ps1`** after each major performance change.
-      Target: Stages 2-4 under 40s (currently 77.2s).
+      (see Core port carry-over).
+- [ ] **mzML reader**: already native C# XmlReader (not COM bridge).
+      Rust is faster due to quick-xml + mzdata ConcurrentLoader.
 
 ### Regression test coverage (new  -  Phase 2 addition)
 
@@ -604,18 +618,36 @@ with `Bench-Scoring.ps1` (warmup + 3 iterations, median, consistency
 check). C# Stages 2-4: 77.2s vs Rust 20s = 3.9x. Target: under 2x.
 dotTrace profiling script ready at `ai/scripts/OspreySharp/Profile-OspreySharp.ps1`.
 
-**Final perf table** (Session 10, 2 iterations, fork Rust with early exit):
+**Final perf table** (Session 10, after all optimizations):
 
 ```
-                          Stage 1  Stage 1  Stage 2  Stage 3  Stage 4  Stg 1-4
-                          Library   Cached     mzML  Calibr.   Search    Total
-Fork Rust                  20.2s     5.0s     5.0s     9.0s     6.0s    24.0s
-OspreySharp (C#)            9.1s     2.1s    16.2s    30.7s    30.7s    79.3s
-C# / Rust ratio             0.5x     0.4x     3.2x     3.4x     5.1x     3.3x
+                          Stage 1  Stage 2  Stage 3  Stage 4  Stg 1-4
+                          Cached     mzML  Calibr.   Search    Total
+Fork Rust                   4.5s     5.0s     9.0s     6.0s    24.5s
+OspreySharp (C#)            2.2s     8.4s    18.0s    10.5s    39.0s
+C# / Rust ratio             0.5x     1.7x     2.0x     1.8x     1.6x
 ```
 
-**Next**: Profile C# Stages 2-4 hot loops with dotTrace to identify
-optimization targets. Stage 4 (5.1x) is the biggest gap.
+Session 10 brought the C#/Rust ratio from **3.3x to 1.6x** (2x speedup).
+All stages except Stage 3 are below 2.0x. The mzML reader is native C#
+(not COM bridge as previously assumed). Stage 3 calibration is the
+remaining target  -  Rust uses batch matrix scoring while C# does per-entry
+XIC extraction. Further gains need either batch scoring or SIMD.
+
+**Session 10 pwiz commits** (performance optimization):
+- `abdd60b9a` - CWT fallback peak detection + signal prefilter
+- `6877858cd` - Library binary cache + parallel decoy generation
+- `ea8cba515` - Pre-preprocessed XCorr per window (Stage 4: 30.7s -> 9.6s)
+- `38b86c488` - Calibration XCorr cache
+- `3ecd576fa` - Calibration prefilter optimization (LINQ -> binary search)
+- `2d5177be6` - Fixed calibration XCorr cache window key resolution
+- `010ce1b4d` - Updated workflow figure with badges
+- `5c70d657e` - Parallel mzML decompression
+- `ded71b5a3` - Producer-consumer mzML pipeline
+- `38a4578cb` - Cached top-6 fragment m/z per entry
+
+**Next session**: Stage 3 calibration optimization (batch matrix scoring
+or SIMD), then Stages 5-8 port.
 
 ## Next Sprint: Upstream Merge + Regression Tests
 
