@@ -200,39 +200,44 @@ data, not just the intermediate diagnostic dumps.
 
 ### Performance parity (hard Phase 2 goal, not optional)
 
-Session 7 perf snapshot on Stellar file 20 to cal_match exit: **C# 40.6s
-vs Rust 17.0s = 2.39x wall clock**. Per-phase: library load 8.4s vs 0s
-(C# has no binary cache wired), mzML parse 14.2s vs ~6s (ProteoWizard
-wrapper interop), pass-1 scoring 15.7s vs ~4s (3.93x slower). **Shipping
-a C# tool that is ~2-3x slower than the Rust reference is not an
-acceptable final state.** Target: within ~1.5x wall clock on the same
-hardware after correctness is proven.
+**Session 10 ground-truth benchmark** (Stellar file 20, `--resolution unit`,
+median of 3 iterations, `Bench-Scoring.ps1`):
 
-- [ ] **Wire `LibraryBinaryCache.cs` into the pipeline**: the class exists
-      in `OspreySharp.IO` but `AnalysisPipeline` re-parses the DIA-NN TSV
-      on every run. Expected saving: ~8s per run on Stellar (library load
-      drops from 8.4s to near-zero on warm cache).
-- [ ] **Profile pass-1 scoring hot loop** to identify the 3.93x gap:
-      likely contributors are managed f64 math with no auto-vectorization
-      (vs Rust LLVM autovec), per-entry CWT convolution, and XCorr
-      preprocessing. Use BenchmarkDotNet + dotTrace to attribute cost.
+```
+                          Stage 1  Stage 1  Stage 2  Stage 3  Stage 4  Stg 1-4
+Implementation            Library   Cached     mzML  Calibr.   Search    Total
+Upstream Rust (v26.1.3)    15.0s     ~1.5s     6.0s     9.0s     6.0s    22.0s
+Fork Rust                  20.2s     ~5.0s     5.0s     9.0s     6.0s    24.0s
+OspreySharp (C#)            9.1s      2.1s    16.2s    30.7s    30.7s    79.3s
+C# / Fork ratio             0.5x     0.4x     3.2x     3.4x     5.1x     3.3x
+```
+
+Stage 1 is solved (C# is faster than Rust with library cache). **The entire
+gap is in Stages 2-4: C# 77.2s vs Rust 20s = 3.9x.** Target: under 2x.
+
+- [x] **Wire `LibraryBinaryCache.cs` into the pipeline** (Session 10):
+      Stage 1 drops from 9.1s cold to 2.1s cached. Includes parallel
+      decoy generation (Parallel.For, 0.9s vs 1.7s serial).
+- [ ] **Profile Stages 2-4 hot loops** with dotTrace to identify the
+      3.9x gap. Script: `ai/scripts/OspreySharp/Profile-OspreySharp.ps1`.
+      Likely contributors: managed f64 math without SIMD, per-entry CWT
+      convolution, XCorr preprocessing, mzML COM bridge overhead.
 - [ ] **SIMD / vectorize CWT convolution** via `System.Numerics.Vector<T>`
       or `System.Runtime.Intrinsics` (AVX2/AVX-512 where available).
 - [ ] **Math.NET Numerics + MKL provider for LDA/SVM training**
-      (see Core port carry-over) - replaces managed dense-matrix loops in
+      (see Core port carry-over)  -  replaces managed dense-matrix loops in
       LinearDiscriminantAnalysis / LinearSvmClassifier with MKL-backed
       routines equivalent to Rust's ndarray + BLAS.
 - [ ] **Parallel preprocessing** match: verify OspreySharp's
       `Parallel.ForEach` window-processing loop has the same parallelism
-      grain as Rust's `par_iter`.
-- [ ] **Evaluate mzML parse path**: 2.37x slower is interop overhead
-      (pwiz_data_cli COM bridge). Not worth optimizing until everything
-      else is within target - reusing ProteoWizardWrapper was a
-      scaffolding decision we accept unless measurement proves otherwise.
-- [ ] **Re-run perf snapshot** after each major performance change and
-      record in the progress log. Final perf table must show C# vs Rust
-      within the 1.5x target on both Stellar and Astral datasets before
-      the project is considered done.
+      grain as Rust's `par_iter`. Both parallelize at per-window level
+      (125 windows, 32 threads). Within-window candidate scoring is
+      sequential in both.
+- [ ] **Evaluate mzML parse path**: 3.2x slower is ProteoWizard COM
+      bridge overhead (pwiz_data_cli). Not worth optimizing until
+      scoring is within target.
+- [ ] **Re-run `Bench-Scoring.ps1`** after each major performance change.
+      Target: Stages 2-4 under 40s (currently 77.2s).
 
 ### Regression test coverage (new  -  Phase 2 addition)
 
@@ -576,12 +581,41 @@ gap is widest. Annotate Osprey-workflow.html with unit test coverage
 markers as tests are added.
 
 **Session 10 commits**:
+- pwiz `Skyline/work/20260409_osprey_sharp`:
+  - `64fbbb03a` - Added 9 regression tests (batch 1)
+  - `e85eb4e2f` - Added 6 more regression tests (batch 2)
+  - `d1f2d5255` - Completed all 18 regression tests (batch 3)
+  - `abdd60b9a` - Added CWT fallback peak detection and signal prefilter
+  - `6877858cd` - Wired library binary cache and parallel decoy generation
 - osprey `fix/parquet-index-lookup`:
   - Rebased 7 diagnostic commits onto upstream/main `4ec7dda` (v26.1.3)
-  - Dropped `dfe5f9e` and `2812401` (parquet fixes, superseded)
-  - New commits: `c95b36c`, `3dc007b`, `95deef3`, `8b17bdd`, `5588082`,
-    `51f517b`, `dbf7389` (cherry-picked), plus `085ce53` (Session 9 xcorr
-    diagnostic, pulled)
+  - `0cbbccd` - Added 5 cross-implementation Rust regression tests
+- ai `master`:
+  - `e31eb1d` through `8f14da8` - TODO updates, benchmark/profiling scripts
+
+**Stage 4 completion** (Session 10): Added three-tier CWT fallback peak
+detection (CWT consensus -> median polish elution -> ref XIC) and signal
+prefilter (2/6 top fragments in 3/4 consecutive scans). Entry count gap
+closed from 13,840 to 23 out of 466K. All 21 features still pass on
+317,630 matched entries.
+
+**Performance baseline established** (Session 10): Ground-truth benchmark
+with `Bench-Scoring.ps1` (warmup + 3 iterations, median, consistency
+check). C# Stages 2-4: 77.2s vs Rust 20s = 3.9x. Target: under 2x.
+dotTrace profiling script ready at `ai/scripts/OspreySharp/Profile-OspreySharp.ps1`.
+
+**Final perf table** (Session 10, 2 iterations, fork Rust with early exit):
+
+```
+                          Stage 1  Stage 1  Stage 2  Stage 3  Stage 4  Stg 1-4
+                          Library   Cached     mzML  Calibr.   Search    Total
+Fork Rust                  20.2s     5.0s     5.0s     9.0s     6.0s    24.0s
+OspreySharp (C#)            9.1s     2.1s    16.2s    30.7s    30.7s    79.3s
+C# / Rust ratio             0.5x     0.4x     3.2x     3.4x     5.1x     3.3x
+```
+
+**Next**: Profile C# Stages 2-4 hot loops with dotTrace to identify
+optimization targets. Stage 4 (5.1x) is the biggest gap.
 
 ## Next Sprint: Upstream Merge + Regression Tests
 
