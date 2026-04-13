@@ -261,34 +261,24 @@ repeat the same mistakes.
   - [ ] **Constant mismatches**  -  regression test that detects when shared
         named constants in Osprey and OspreySharp diverge
         (`MIN_COELUTION_SPECTRA` was the Session 7 example).
-  - [ ] **Stable sort on apex ranking**  -  `List<T>.Sort` is unstable;
-        LINQ `OrderBy`/`OrderByDescending` is stable. Fixture: inputs with
-        many ties; compare against Rust `sort_by` result recorded inline.
-  - [ ] **Decoy collision exclusion**  -  targets whose reversed sequence
-        matches another target must be excluded. Fixture: tiny library
-        with 1 known cross-target collision.
+  - [x] **Stable sort on apex ranking**  -  `TestStableSortOnApexRanking` (Session 10)
+  - [x] **Decoy collision exclusion**  -  `TestDecoyCollisionExclusion` (Session 10)
   - [ ] **Iterative LDA refinement vs single-pass**  -  run
         `TrainAndScoreCalibration` on a small synthetic match set with
         known scores and verify it selects the iteration with the best
         training-set 1% FDR count, not the last iteration.
 
   **Session 9 bugs (main search features, 10 fixes)**:
-  - [ ] **Peak shape from ref XIC**  -  peak_apex, peak_area, peak_sharpness
-        must use the reference XIC (highest total intensity), not composite
-        sum of all fragments. Fixture: 3-fragment XIC where ref XIC apex
-        differs from composite apex.
+  - [x] **Peak shape from ref XIC**  -  `TestPeakShapeFromRefXicNotComposite` (Session 10)
   - [x] **Trapezoidal area**  -  `TestPeakAreaTrapezoidal` (Session 10)
-  - [ ] **Peak sharpness as slope**  -  mean of left and right slopes
-        (intensity/time), not intensity ratio. Fixture: asymmetric peak.
+  - [x] **Peak sharpness as slope**  -  `TestPeakSharpnessIsSlope` (Session 10)
   - [x] **XCorr fragment bin dedup**  -  `TestXcorrFragmentBinDedup` (Session 10)
   - [x] **n_coeluting_fragments mean-positive**  -  `TestCoelutingFragmentsMeanPositive` (Session 10)
   - [x] **MS1 features HRAM-only**  -  `TestMs1FeaturesHramOnly` (Session 10)
   - [x] **Fragment matching closest-by-mz**  -  `TestLibCosineClosestByMz` (Session 10)
   - [x] **Median polish convergence**  -  `TestMedianPolishConvergenceAfterBothSweeps` (Session 10)
   - [x] **MS2 calibrated tolerance**  -  `TestMs2CalibratedTolerance` (Session 10)
-  - [ ] **Scan boundary order**  -  upper bound break must occur before
-        endScan update to prevent off-by-one. Fixture: sorted RT array
-        where last value equals expectedRt + tolerance exactly.
+  - [x] **Scan boundary order**  -  `TestScanBoundaryOrder` (Session 10)
 
 ### Documentation (new  -  Phase 2 addition)
 - [ ] Create `pwiz_tools/OspreySharp/README.md` with:
