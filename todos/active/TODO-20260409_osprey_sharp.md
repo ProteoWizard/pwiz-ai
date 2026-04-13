@@ -244,29 +244,21 @@ sense of security**. Phase 2 adds targeted regression tests designed to fail
 against the pre-fix implementation of each bug class, so future ports do not
 repeat the same mistakes.
 
-- [ ] Write regression tests (each must be fast, no full Stellar dataset)
-      for the following Session 5-9 lessons:
+- [x] Write regression tests (each must be fast, no full Stellar dataset)
+      for the following Session 5-9 lessons (18/18 done, Session 10):
 
   **Session 5-8 bugs (calibration phase)**:
-  - [ ] **XCorr windowing normalization**  -  max-bin vs sum-bin, missing
-        Comet MakeCorrData windowing, library-intensity-weighted vs
-        sum-at-fragment-positions. Fixture: synthetic spectrum + known
-        library with a hand-computed reference xcorr.
+  - [x] **XCorr windowing normalization**  -  `TestXcorrWindowingNormalization` +
+        `TestXcorrFullPipeline` (Session 10)
   - [x] **SNR input buffer**  -  `TestSnrUsesRefXicNotComposite` (Session 10)
   - [x] **Apex selection tie-break**  -  `TestApexTieBreakLastWins` (Session 10)
-  - [ ] **f32 vs f64 intermediate precision drift**  -  XCorr sliding window
-        produces ~4e-6 drift when f32 buffers are used. Fixture:
-        sliding-window accumulator test comparing f32 vs f64 result on
-        deterministic input.
+  - [x] **f32 vs f64 intermediate precision drift**  -  `TestXcorrF64VsF32PrecisionDrift` (Session 10)
   - [ ] **Constant mismatches**  -  regression test that detects when shared
         named constants in Osprey and OspreySharp diverge
         (`MIN_COELUTION_SPECTRA` was the Session 7 example).
   - [x] **Stable sort on apex ranking**  -  `TestStableSortOnApexRanking` (Session 10)
   - [x] **Decoy collision exclusion**  -  `TestDecoyCollisionExclusion` (Session 10)
-  - [ ] **Iterative LDA refinement vs single-pass**  -  run
-        `TrainAndScoreCalibration` on a small synthetic match set with
-        known scores and verify it selects the iteration with the best
-        training-set 1% FDR count, not the last iteration.
+  - [x] **Iterative LDA refinement vs single-pass**  -  `TestIterativeLdaRefinement` (Session 10)
 
   **Session 9 bugs (main search features, 10 fixes)**:
   - [x] **Peak shape from ref XIC**  -  `TestPeakShapeFromRefXicNotComposite` (Session 10)
