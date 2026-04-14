@@ -618,21 +618,36 @@ with `Bench-Scoring.ps1` (warmup + 3 iterations, median, consistency
 check). C# Stages 2-4: 77.2s vs Rust 20s = 3.9x. Target: under 2x.
 dotTrace profiling script ready at `ai/scripts/OspreySharp/Profile-OspreySharp.ps1`.
 
-**Final perf table** (Session 10, after all optimizations):
+**Final perf table** (Session 10, with server GC + parallel files):
 
 ```
+Single file (server GC):
                           Stage 1  Stage 2  Stage 3  Stage 4  Stg 1-4
-                          Cached     mzML  Calibr.   Search    Total
-Fork Rust                   4.5s     5.0s     9.0s     6.0s    24.5s
-OspreySharp (C#)            2.2s     8.4s    18.0s    10.5s    39.0s
-C# / Rust ratio             0.5x     1.7x     2.0x     1.8x     1.6x
+Fork Rust                   4.5s     5.0s     9.0s     5.0s    24.5s
+OspreySharp (C#)            0.7s     5.5s    10.4s     4.0s    21.9s
+C# / Rust ratio             0.2x     1.1x     1.2x     0.8x     0.9x
+
+3-file parallel (server GC):
+Fork Rust (sequential)                                          93.5s
+OspreySharp (Parallel.For)                                      51.5s
+C# / Rust ratio                                                 0.55x
 ```
 
-Session 10 brought the C#/Rust ratio from **3.3x to 1.6x** (2x speedup).
-All stages except Stage 3 are below 2.0x. The mzML reader is native C#
-(not COM bridge as previously assumed). Stage 3 calibration is the
-remaining target  -  Rust uses batch matrix scoring while C# does per-entry
-XIC extraction. Further gains need either batch scoring or SIMD.
+Session 10 brought C# from **3.3x slower to 0.9x faster** (single file)
+and **0.55x on 3-file parallel** (C# is 1.8x faster than Rust).
+
+Key findings:
+- Server GC (`gcServer enabled="true"`) nearly halved every stage
+  vs workstation GC  -  the single biggest performance factor
+- Rust calibration uses the SAME per-entry XIC approach (not batch
+  matrix scoring as assumed)  -  the `run_windowed_calibration_scoring`
+  batch path exists but is unused by the pipeline
+- mzML reader is native C# XmlReader (not ProteoWizard COM bridge)
+- Rust file processing is sequential  -  parallel files is a feature to
+  PR upstream to maccoss/osprey (needs loop body extraction + rayon)
+- Skyline's `MultiFileLoader.GetBalancedThreadCount` algorithm
+  optimizes file parallelism: half physical cores, reduce to avoid
+  idle threads in final batch, cap at 12 (server GC) or 3 (workstation)
 
 **Session 10 pwiz commits** (performance optimization):
 - `abdd60b9a` - CWT fallback peak detection + signal prefilter
@@ -646,8 +661,13 @@ XIC extraction. Further gains need either batch scoring or SIMD.
 - `ded71b5a3` - Producer-consumer mzML pipeline
 - `38a4578cb` - Cached top-6 fragment m/z per entry
 
-**Next session**: Stage 3 calibration optimization (batch matrix scoring
-or SIMD), then Stages 5-8 port.
+**Session 10 additional pwiz commits** (performance + parallel):
+- `947a1dbe8` - Parallel file processing + server GC (0.9x single, 0.55x 3-file)
+
+**Next session**: Stages 5-8 port (Percolator SVM FDR, reconciliation,
+protein FDR, blib output). Rust parallel file processing PR to
+maccoss/osprey (extract loop body, rayon, balanced thread count).
+Consider Skyline CommonUtil integration (ProducerConsumerWorker).
 
 ## Next Sprint: Upstream Merge + Regression Tests
 
