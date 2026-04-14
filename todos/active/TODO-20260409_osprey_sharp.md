@@ -664,10 +664,9 @@ Key findings:
 **Session 10 additional pwiz commits** (performance + parallel):
 - `947a1dbe8` - Parallel file processing + server GC (0.9x single, 0.55x 3-file)
 
-**Next session**: Stages 5-8 port (Percolator SVM FDR, reconciliation,
-protein FDR, blib output). Rust parallel file processing PR to
-maccoss/osprey (extract loop body, rayon, balanced thread count).
-Consider Skyline CommonUtil integration (ProducerConsumerWorker).
+**Next session handoff**: For detailed startup protocol (build commands,
+perf baselines, Rust parallel files plan, Stages 5-8 approach), read
+`ai/.tmp/handoff-20260413-osprey-sharp-session10.md` before starting work.
 
 ## Next Sprint: Upstream Merge + Regression Tests
 
