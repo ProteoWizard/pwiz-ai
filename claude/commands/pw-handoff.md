@@ -7,11 +7,20 @@ Prepare a complete handoff for the next session to continue this work.
 
 ## Steps
 
-1. **Update the TODO file** with current progress (mark completed items, add notes)
+1. **Update the TODO file** with current progress (mark completed items, add notes).
+   The TODO is the durable record of the sprint - all important context,
+   decisions, and findings belong here. It gets committed and pushed.
 
 2. **Write handoff file** to `ai/.tmp/handoff-{descriptor}.md` where descriptor is either:
    - The branch name suffix (e.g., `handoff-20260116_peak_picking_tutorial_hang.md`)
    - Or the date if working on master (e.g., `handoff-20260116.md`)
+
+   **CRITICAL**: The handoff file is a TEMPORAL document - ephemeral startup
+   instructions for the next session (skills to load, build commands to run,
+   verification steps). It lives in `ai/.tmp/` which is gitignored.
+   **NEVER commit or `git add` anything in `ai/.tmp/`.**
+   The handoff file is NOT a substitute for the TODO - any information that
+   matters beyond the next session belongs in the TODO file instead.
 
 3. **Add a handoff pointer to the TODO file** so that `/pw-continue` in
    the next session naturally discovers the handoff. Append a line like:
@@ -25,7 +34,8 @@ Prepare a complete handoff for the next session to continue this work.
    closes the loop: `/pw-continue` reads the TODO, finds the pointer,
    and the new session loads the handoff with full startup instructions.
 
-4. **Commit and push** the TODO update (ai repo) so the pointer is durable.
+4. **Commit and push** the TODO update only (ai repo). Do NOT add or
+   commit the handoff file - it stays local in `ai/.tmp/`.
 
 5. **Display a brief summary** to the user
 

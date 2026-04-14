@@ -99,6 +99,14 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 - This applies after every round of changes, including review feedback fixes
 - A commit that does not build breaks the entire team - treat this as a hard gate
 
+## ai/.tmp is NEVER committed
+- `ai/.tmp/` is gitignored - it holds local working files (handoffs,
+  profiling snapshots, diagnostic dumps, MCP tool output)
+- **NEVER** `git add` anything in `ai/.tmp/`, even with `-f`
+- Handoff files (`ai/.tmp/handoff-*.md`) are temporal session-to-session
+  instructions, NOT durable project records
+- All durable sprint context belongs in `ai/todos/active/TODO-*.md`
+
 ## NEVER
 - Use `async`/`await` keywords
 - Use English text literals in test assertions
@@ -108,3 +116,4 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 - Reformat unrelated code
 - Mix tabs and spaces
 - Use Unicode when ASCII alternative exists
+- Commit anything in `ai/.tmp/` to Git
