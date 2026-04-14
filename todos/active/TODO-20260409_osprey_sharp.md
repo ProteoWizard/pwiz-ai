@@ -786,11 +786,96 @@ by two separate bugs (Rust xcorr dedup + C# banker's rounding).
 - ai `master`: (this TODO + Test-Features/Run-Osprey/Dataset-Config
   rename + Bench-Scoring generalization + README)
 
-**Next**: (a) repeat the pipeline walk on Astral HRAM data now that the
-crash is fixed and Stellar parity is restored, (b) PR the xcorr dedup
-fix upstream to `maccoss/osprey`, (c) add a regression test for the
-banker's-vs-away-from-zero percentile rounding so future C#/Rust ports
-catch this reflexively.
+### 2026-04-14 Session 11 (continued)  -  Astral pre-main-search walk
+
+After Stellar bit-identical, the same walk on Astral HRAM data exposed
+two more bugs that the shared-calibration testing had hidden. The
+"big jump from cal scores matching to feature scores matching" the user
+called out turned into: stop and walk every intermediate stage, no
+matter how confident the prior work seemed.
+
+**Bug 1 (C#): per-fragment Da tolerance in HasTopNFragmentMatch**.
+The C# prefilter was computing one Da tolerance from the entry's
+precursor m/z and applying it to every fragment. Rust computes the
+Da window per-fragment (`lib_mz * ppm / 1e6`). For HRAM with ppm
+tolerance and fragments at varying m/z, the single-tolerance
+shortcut admitted ~10K extra spectra to the calibration scorer (C# 120,532
+matches vs Rust 110,055 on Astral file 49). Stellar uses Da tolerance
+so the bug never surfaced there. Refactored
+`HasTopNFragmentMatch(LibraryEntry, double[] mzs, double tolDa)` to
+`HasTopNFragmentMatch(LibraryEntry, double[] mzs, FragmentToleranceConfig)`
+and updated both prefilter call sites. Astral cal_match: 110,055 =
+110,055 after the fix.
+
+**Bug 2 (Rust): isolation window bounds truncated to 0.1 m/z grid**.
+After bug 1 fixed, cal_match still showed 1 Rust-only and 1 C#-only
+entry (out of 110,055). The XIC diagnostic with a new
+iso_lower/iso_upper column made the cause visible: for entry 843200
+at precursor m/z 874.6048, Rust placed it in window
+[874.6, 877.6] (truncated bounds) but the real isolation bounds were
+[874.6475, 877.6488] - which does NOT contain 874.6048. The entry
+should have been in [871.6461, 874.6475], which is where C# put it.
+
+Root cause in `osprey-scoring/src/batch.rs:group_spectra_by_isolation_window`:
+a HashMap was keyed on `(lower * 10) as i64` to dedup floating-point
+noise on identical windows, but the truncated keys were also used as
+the actual window bounds for filtering. Two windows that share a
+boundary at 874.6475 both lie within the truncated bucket
+(874.6, 877.6). The 0.002% of entries whose precursor m/z falls in
+[874.6, 874.6475] were assigned to the wrong (higher-m/z) window and
+silently scored against unrelated MS2 spectra.
+
+Fixed by storing full-precision bounds alongside the truncated key
+(`HashMap<(i64, i64), ((f64, f64), Vec<usize>)>`). Filtering uses the
+preserved bounds. **Worth PRing upstream to maccoss/osprey** - same
+bug affects every DIA dataset whose isolation windows aren't aligned
+to the 0.1 m/z grid (i.e., basically all real instruments).
+
+**Diagnostic-output formatting fixes** (small but the user's policy: no
+"oh that's just formatting" excuses):
+- Cast `float` to `double` in topfrag dump - .NET Framework's boxed
+  `float.ToString("F10")` uses shortest-round-trip and hides f32 noise
+  that Rust's `{:.10}` shows. Casting widens before formatting.
+- Added `F10(double)` helper that pre-rounds with banker's rounding
+  before formatting. .NET Framework's F10 default is round-half-away-
+  from-zero; Rust's `{:.10}` uses round-half-to-even. Different on
+  exact .5 boundaries (e.g. 4271.60400390625 -> 63 vs 62).
+- Added `iso_lower`/`iso_upper` to per-entry XIC candidate diagnostic
+  (both tools) so future window-assignment bugs are visible immediately.
+
+**Astral pre-main-search walk - all stages bit-identical**:
+
+| Stage | Divergence (own calibration, HRAM) |
+|-------|------------------------------------|
+| Cal sample (library targets) | 0 |
+| Cal match: matched counts | 110055 = 110055 (was 120532 vs 110055) |
+| Cal match: all 7 columns | 0 / max 5e-10 ULP |
+| LDA scores + q_values | 0 (was 99.8% differ before window fix) |
+| LOESS input (2966 pairs) | max 3.6e-15 (machine epsilon) |
+| Pass-2 LOESS model (10 stats) | 0 |
+
+**Performance observation** (deferred - correctness first): C# Astral
+main search uses ~14% CPU sustained while Rust spikes to ~100% then
+~50% before completing. Spiky low-utilization C# pattern is classic
+LOH GC pressure - HRAM inline XCorr allocates `double[100001]` =
+~800KB per call, all going to the LOH (>85KB threshold). .NET Framework
+LOH only collects in gen-2 GCs. Fix candidates: thread-local scratch
+buffer, ArrayPool, or a smarter HRAM scoring strategy that doesn't
+re-allocate per call. Rust Astral Stage 1-4 took 879s on the same
+hardware, so absolute wall time isn't catastrophic - but the GC
+pattern is worth fixing before the main-search walk.
+
+**Session 11 commits (continued)**:
+- osprey `fix/parquet-index-lookup`:
+  - `a07aae6` - Fixed isolation window bounds truncation in DIA grouping
+- pwiz `Skyline/work/20260409_osprey_sharp`:
+  - `407a825ef` - Per-fragment Da tolerance and faithful diagnostic
+    dump formatting
+
+**Next**: (a) main-search XICs and 21 PIN features on Astral
+(checkpoint for that walk), (b) PR the two Rust bugs (xcorr dedup +
+window bounds truncation) upstream to maccoss/osprey, (c) address
+the HRAM LOH allocation pattern in C#.
 
 ## Next Sprint: Upstream Merge + Regression Tests
 
