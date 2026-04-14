@@ -3,11 +3,19 @@
     Profile OspreySharp with dotTrace to identify performance hot spots.
 
 .DESCRIPTION
-    Runs OspreySharp under JetBrains dotTrace CLI profiler on Stellar file 20,
-    captures a performance snapshot (.dtp), generates an XML report, and
+    Runs OspreySharp under JetBrains dotTrace CLI profiler on Stellar or Astral
+    data, captures a performance snapshot (.dtp), generates an XML report, and
     displays the top hot spots by own time and total time.
 
-    Uses OSPREY_EXIT_AFTER_SCORING=1 to profile only Stages 1-4.
+    -Stage controls the early-exit gate (matches Bench-Scoring.ps1):
+      Calibration (1-3) | Scoring (1-4) | Full
+
+.PARAMETER Dataset
+    Which test dataset: Stellar or Astral (default: Stellar)
+
+.PARAMETER Stage
+    Pipeline stages to profile: Calibration (Stage 1-3),
+    Scoring (Stage 1-4, default), or Full pipeline.
 
 .PARAMETER ProfilingType
     dotTrace profiling type: Sampling (default, low overhead) or Timeline (detailed)
@@ -18,35 +26,48 @@
 .PARAMETER TopN
     Number of top hot spots to display (default: 20)
 
-.PARAMETER FullPipeline
-    Profile the full pipeline instead of Stages 1-4 only
-
 .EXAMPLE
     .\Profile-OspreySharp.ps1
-    Profile Stages 1-4 with sampling, show top 20 hot spots
+    Profile Stellar Stages 1-4 with sampling, show top 20 hot spots
+
+.EXAMPLE
+    .\Profile-OspreySharp.ps1 -Dataset Astral -Stage Calibration
+    Profile Astral Stages 1-3 (calibration only)
 
 .EXAMPLE
     .\Profile-OspreySharp.ps1 -ProfilingType Timeline -TopN 30
     Timeline profiling with top 30 hot spots
 #>
 param(
+    [ValidateSet("Stellar", "Astral")]
+    [string]$Dataset = "Stellar",
+
+    [ValidateSet("Calibration", "Scoring", "Full")]
+    [string]$Stage = "Scoring",
+
     [ValidateSet("Sampling", "Timeline")]
     [string]$ProfilingType = "Sampling",
 
     [string]$OutputPath = "",
 
-    [int]$TopN = 20,
-
-    [switch]$FullPipeline = $false
+    [int]$TopN = 20
 )
 
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-# Paths
-$testDir = "D:\test\osprey-runs\stellar"
-$mzml = Join-Path $testDir "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML"
-$library = Join-Path $testDir "hela-filtered-SkylineAI_spectral_library.tsv"
+# Load dataset configuration for parity with Bench-Scoring.ps1
+. "$PSScriptRoot\Dataset-Config.ps1"
+$ds = Get-DatasetConfig $Dataset
+
+$testDir = $ds.TestDir
+if (-not (Test-Path $testDir)) {
+    Write-Error "Test data directory not found: $testDir"
+    exit 1
+}
+
+$mzml = Join-Path $testDir $ds.SingleFile
+$library = Join-Path $testDir $ds.Library
 $tempBlib = Join-Path $testDir "_profile_output.blib"
 $csharpBin = "C:\proj\pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\pwiz.OspreySharp.exe"
 
@@ -97,8 +118,10 @@ foreach ($p in $patterns) {
 
 # Set up environment
 $env:RUST_LOG = "info"
-if (-not $FullPipeline) {
-    $env:OSPREY_EXIT_AFTER_SCORING = "1"
+switch ($Stage) {
+    "Calibration" { $env:OSPREY_EXIT_AFTER_CALIBRATION = "1" }
+    "Scoring"     { $env:OSPREY_EXIT_AFTER_SCORING = "1" }
+    # "Full" sets neither
 }
 
 # Clear diagnostic env vars
@@ -109,7 +132,7 @@ $diagVars = @('OSPREY_DUMP_CAL_MATCH','OSPREY_CAL_MATCH_ONLY','OSPREY_DUMP_LDA_S
 foreach ($v in $diagVars) { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
 
 # Build dotTrace command
-$appArgs = @("-i", $mzml, "-l", $library, "-o", $tempBlib, "--resolution", "unit")
+$appArgs = @("-i", $mzml, "-l", $library, "-o", $tempBlib, "--resolution", $ds.Resolution)
 
 $dotTraceArgs = @(
     "start",
@@ -121,10 +144,17 @@ $dotTraceArgs = @(
     "--"
 ) + $appArgs
 
+$scopeLabel = switch ($Stage) {
+    "Calibration" { "Stages 1-3 (calibration only)" }
+    "Scoring"     { "Stages 1-4 (calibration + main search)" }
+    "Full"        { "Full pipeline" }
+}
+
 Write-Host ""
 Write-Host "OspreySharp Performance Profile" -ForegroundColor Yellow
+Write-Host "  Dataset: $($ds.Name) ($($ds.Resolution))" -ForegroundColor Gray
 Write-Host "  Profiling type: $ProfilingType" -ForegroundColor Gray
-Write-Host "  Scope: $(if ($FullPipeline) { 'Full pipeline' } else { 'Stages 1-4 only' })" -ForegroundColor Gray
+Write-Host "  Scope: $scopeLabel" -ForegroundColor Gray
 Write-Host "  Snapshot: $OutputPath" -ForegroundColor Gray
 Write-Host ""
 
@@ -141,6 +171,7 @@ Set-Location $savedLoc
 
 # Cleanup
 Remove-Item Env:OSPREY_EXIT_AFTER_SCORING -ErrorAction SilentlyContinue
+Remove-Item Env:OSPREY_EXIT_AFTER_CALIBRATION -ErrorAction SilentlyContinue
 Remove-Item Env:RUST_LOG -ErrorAction SilentlyContinue
 if (Test-Path $tempBlib) { Remove-Item $tempBlib -Force -ErrorAction SilentlyContinue }
 

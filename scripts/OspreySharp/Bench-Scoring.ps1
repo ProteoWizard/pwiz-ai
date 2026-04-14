@@ -38,6 +38,8 @@ param(
     [string]$Dataset = "Stellar",
     [ValidateSet("Single", "All")]
     [string]$Files = "Single",
+    [ValidateSet("Calibration", "Scoring")]
+    [string]$Stage = "Scoring",
     [int]$Iterations = 3,
     [switch]$SkipUpstream = $false
 )
@@ -120,7 +122,12 @@ function Run-Once {
     Set-Location $testDir
     Clear-DiagEnv
     $env:RUST_LOG = "info"
-    if ($EarlyExit) { $env:OSPREY_EXIT_AFTER_SCORING = "1" }
+    if ($EarlyExit) {
+        switch ($Stage) {
+            "Calibration" { $env:OSPREY_EXIT_AFTER_CALIBRATION = "1" }
+            "Scoring"     { $env:OSPREY_EXIT_AFTER_SCORING = "1" }
+        }
+    }
 
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $output = & $Binary @ToolArgs 2>&1
@@ -128,6 +135,7 @@ function Run-Once {
     $sw.Stop()
 
     Remove-Item Env:OSPREY_EXIT_AFTER_SCORING -ErrorAction SilentlyContinue
+    Remove-Item Env:OSPREY_EXIT_AFTER_CALIBRATION -ErrorAction SilentlyContinue
     Set-Location $savedLoc
 
     $lines = @($output | ForEach-Object { $_.ToString() })
