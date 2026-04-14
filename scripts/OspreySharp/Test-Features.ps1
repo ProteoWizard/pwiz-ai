@@ -1,16 +1,34 @@
 <#
 .SYNOPSIS
-    End-to-end feature parity test: OspreySharp vs Rust Osprey on Stellar data
+    Feature parity + Stages 1-4 perf test: OspreySharp vs Rust Osprey
 
 .DESCRIPTION
-    Runs both tools on Stellar file 20 with shared calibration and compares
-    all 21 PIN features. Reports pass/fail for each feature at configurable
-    thresholds. This is the automated version of the Session 9 bisection walk.
+    Runs both tools on a single file through Stage 4 (scoring) only, using
+    each tool's own calibration, and compares all 21 PIN features.
+    Reports pass/fail for each feature at configurable thresholds and shows
+    wall-clock timings for apples-to-apples perf comparison.
 
-    Requires: both binaries built, Stellar test data at TestDataDir.
+    Both tools exit after Stage 4 via OSPREY_EXIT_AFTER_SCORING=1, skipping
+    Mokapot FDR, reconciliation, and blib output. This keeps the cycle fast
+    and makes the wall-clock timings directly comparable.
+
+    Each tool computes its own calibration -- this catches real drift. If
+    you need to isolate feature differences from calibration noise (like
+    the Session 9 bisection), set -SharedCalibration to force C# to load
+    Rust's calibration JSON.
+
+    Supports Stellar and Astral datasets via the -Dataset parameter.
+    Requires: both binaries built, test data in place.
+
+.PARAMETER Dataset
+    Which test dataset: Stellar or Astral (default: Stellar)
 
 .PARAMETER Threshold
     Maximum allowed absolute difference per feature value (default: 1e-6)
+
+.PARAMETER SharedCalibration
+    Force C# to load Rust's calibration JSON to isolate feature divergence
+    from calibration drift. Off by default; use for bisection only.
 
 .PARAMETER DiagXicEntryIds
     Enable search XIC diagnostic for specific entry IDs (comma-separated)
@@ -24,29 +42,33 @@
 .PARAMETER SkipRust
     Skip the Rust run (reuse existing PIN + calibration from a previous run)
 
-.PARAMETER TestDataDir
-    Path to Stellar test data (default: D:\test\osprey-runs\stellar)
+.EXAMPLE
+    .\Test-Features.ps1
+    Run Stellar comparison with each tool computing its own calibration
 
 .EXAMPLE
-    .\Test-StellarFeatures.ps1
-    Run full comparison with default 1e-6 threshold
+    .\Test-Features.ps1 -Dataset Astral
+    Run Astral comparison
 
 .EXAMPLE
-    .\Test-StellarFeatures.ps1 -Threshold 0.001
-    Run with relaxed threshold (useful for quick sanity checks)
+    .\Test-Features.ps1 -SharedCalibration
+    Isolate feature divergence from calibration drift (bisection mode)
 
 .EXAMPLE
-    .\Test-StellarFeatures.ps1 -DiagXcorrScan 52954
-    Run with xcorr diagnostic enabled for scan 52954
-
-.EXAMPLE
-    .\Test-StellarFeatures.ps1 -SkipRust
+    .\Test-Features.ps1 -SkipRust
     Reuse Rust output from previous run (faster iteration on C# changes)
 #>
 
 param(
     [Parameter(Mandatory=$false)]
+    [ValidateSet("Stellar", "Astral")]
+    [string]$Dataset = "Stellar",
+
+    [Parameter(Mandatory=$false)]
     [double]$Threshold = 1e-6,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$SharedCalibration = $false,
 
     [Parameter(Mandatory=$false)]
     [string]$DiagXicEntryIds = $null,
@@ -58,14 +80,21 @@ param(
     [string]$DiagXcorrScan = $null,
 
     [Parameter(Mandatory=$false)]
-    [switch]$SkipRust = $false,
-
-    [Parameter(Mandatory=$false)]
-    [string]$TestDataDir = "D:\test\osprey-runs\stellar"
+    [switch]$SkipRust = $false
 )
 
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+# Load dataset configuration
+. "$PSScriptRoot\Dataset-Config.ps1"
+$ds = Get-DatasetConfig $Dataset
+
+$testDir = $ds.TestDir
+if (-not (Test-Path $testDir)) {
+    Write-Error "Test data directory not found: $testDir"
+    exit 1
+}
 
 # Auto-detect paths
 $scriptRoot = Split-Path -Parent $PSCommandPath
@@ -74,11 +103,14 @@ $projRoot = Split-Path -Parent $aiRoot
 
 $rustBinary = Join-Path $projRoot "osprey\target\release\osprey.exe"
 $csharpBinary = Join-Path $projRoot "pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\pwiz.OspreySharp.exe"
-$library = Join-Path $TestDataDir "hela-filtered-SkylineAI_spectral_library.tsv"
-$mzml = Join-Path $TestDataDir "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML"
-$calJson = Join-Path $TestDataDir "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.calibration.json"
-$rustPin = Join-Path $TestDataDir "mokapot\Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.pin"
-$csharpFeatures = Join-Path $TestDataDir "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.cs_features.tsv"
+$library = Join-Path $testDir $ds.Library
+$mzml = Join-Path $testDir $ds.SingleFile
+
+# Derive file stem for output paths (e.g. "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20")
+$fileStem = [System.IO.Path]::GetFileNameWithoutExtension($ds.SingleFile)
+$calJson = Join-Path $testDir "$fileStem.calibration.json"
+$rustPin = Join-Path $testDir "mokapot\$fileStem.pin"
+$csharpFeatures = Join-Path $testDir "$fileStem.cs_features.tsv"
 
 # Validate prerequisites
 foreach ($path in @($library, $mzml)) {
@@ -99,14 +131,14 @@ $initialLocation = Get-Location
 $totalStart = Get-Date
 
 try {
-    Set-Location $TestDataDir
+    Set-Location $testDir
 
     # ================================================================
     # Step 1: Run Rust (produces calibration JSON + PIN)
     # ================================================================
     if (-not $SkipRust) {
         Write-Host ""
-        Write-Host "Step 1: Running Rust Osprey..." -ForegroundColor Cyan
+        Write-Host "Step 1: Running Rust Osprey on $($ds.Name) $($ds.FileLabel.Single)..." -ForegroundColor Cyan
 
         # Clean caches
         foreach ($pattern in @("*.scores.parquet", "*.calibration.json", "*.spectra.bin", "*.fdr_scores.bin")) {
@@ -114,17 +146,19 @@ try {
         }
 
         $env:RUST_LOG = "info"
+        $env:OSPREY_EXIT_AFTER_SCORING = "1"
         if ($DiagXicEntryIds) { $env:OSPREY_DIAG_SEARCH_ENTRY_IDS = $DiagXicEntryIds }
         if ($DiagMpScan) { $env:OSPREY_DIAG_MP_SCAN = $DiagMpScan }
         if ($DiagXcorrScan) { $env:OSPREY_DIAG_XCORR_SCAN = $DiagXcorrScan }
 
         $rustStart = Get-Date
-        & $rustBinary -i $mzml -l $library -o "_temp_rust.blib" --resolution unit --write-pin 2>&1 | Out-Null
+        & $rustBinary -i $mzml -l $library -o "_temp_rust.blib" --resolution $ds.Resolution --protein-fdr 0.01 --write-pin 2>&1 | Out-Null
         $rustExit = $LASTEXITCODE
         $rustDuration = (Get-Date) - $rustStart
 
         # Clean env vars
         Remove-Item Env:RUST_LOG -ErrorAction SilentlyContinue
+        Remove-Item Env:OSPREY_EXIT_AFTER_SCORING -ErrorAction SilentlyContinue
         Remove-Item Env:OSPREY_DIAG_SEARCH_ENTRY_IDS -ErrorAction SilentlyContinue
         Remove-Item Env:OSPREY_DIAG_MP_SCAN -ErrorAction SilentlyContinue
         Remove-Item Env:OSPREY_DIAG_XCORR_SCAN -ErrorAction SilentlyContinue
@@ -151,12 +185,14 @@ try {
     }
 
     # ================================================================
-    # Step 2: Run C# with shared calibration
+    # Step 2: Run C# (own calibration by default, or shared if requested)
     # ================================================================
     Write-Host ""
-    Write-Host "Step 2: Running OspreySharp (C#) with shared calibration..." -ForegroundColor Cyan
+    $modeLabel = if ($SharedCalibration) { "with shared calibration (bisection mode)" } else { "with own calibration" }
+    Write-Host "Step 2: Running OspreySharp (C#) $modeLabel..." -ForegroundColor Cyan
 
-    $env:OSPREY_LOAD_CALIBRATION = $calJson
+    $env:OSPREY_EXIT_AFTER_SCORING = "1"
+    if ($SharedCalibration) { $env:OSPREY_LOAD_CALIBRATION = $calJson }
     if ($DiagXicEntryIds) { $env:OSPREY_DIAG_SEARCH_ENTRY_IDS = $DiagXicEntryIds }
     if ($DiagMpScan) { $env:OSPREY_DIAG_MP_SCAN = $DiagMpScan }
     if ($DiagXcorrScan) { $env:OSPREY_DIAG_XCORR_SCAN = $DiagXcorrScan }
@@ -165,11 +201,12 @@ try {
     if (Test-Path $csharpFeatures) { Remove-Item $csharpFeatures -Force }
 
     $csStart = Get-Date
-    & $csharpBinary -i $mzml -l $library -o "_temp_cs.blib" --resolution unit --write-pin 2>&1 | Out-Null
+    & $csharpBinary -i $mzml -l $library -o "_temp_cs.blib" --resolution $ds.Resolution --protein-fdr 0.01 --write-pin 2>&1 | Out-Null
     $csExit = $LASTEXITCODE
     $csDuration = (Get-Date) - $csStart
 
     # Clean env vars
+    Remove-Item Env:OSPREY_EXIT_AFTER_SCORING -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_LOAD_CALIBRATION -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_DIAG_SEARCH_ENTRY_IDS -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_DIAG_MP_SCAN -ErrorAction SilentlyContinue
@@ -210,6 +247,17 @@ try {
     $rustHeader = (Get-Content $rustPin -TotalCount 1) -split "`t"
     $csHeader = (Get-Content $csharpFeatures -TotalCount 1) -split "`t"
 
+    # Find the peptide and scan columns dynamically
+    $rustPepIdx = [Array]::IndexOf($rustHeader, "Peptide") + 1
+    $rustScanIdx = [Array]::IndexOf($rustHeader, "ScanNr") + 1
+    $csPepIdx = [Array]::IndexOf($csHeader, "Peptide") + 1
+    $csScanIdx = [Array]::IndexOf($csHeader, "ScanNr") + 1
+
+    if ($rustPepIdx -le 0 -or $csPepIdx -le 0) {
+        Write-Host "Could not find Peptide column in PIN/features headers" -ForegroundColor Red
+        exit 1
+    }
+
     $allPassed = $true
     $nMatched = 0
     $results = @()
@@ -225,11 +273,12 @@ try {
         }
 
         # Use awk to join on (Peptide_ScanNr) and compare
+        # Rust PIN Peptide column has flanking chars (e.g. K.PEPTIDE.R) - strip them
         $awkScript = @"
 NR==1{next}
-NR==FNR{pep=`$30; gsub(/^[^.]*\./,"",pep); gsub(/\.[^.]*$/,"",pep); key=pep"_"`$3; r[key]=`$$rIdx; next}
+NR==FNR{pep=`$$rustPepIdx; gsub(/^[^.]*\./,"",pep); gsub(/\.[^.]*$/,"",pep); key=pep"_"`$$rustScanIdx; r[key]=`$$rIdx; next}
 FNR==1{next}
-{key=`$26"_"`$3; if(key in r){n++; d=r[key]-`$$cIdx; if(d<0)d=-d; if(d>$Threshold)nd++; if(d>maxd)maxd=d}}
+{key=`$$csPepIdx"_"`$$csScanIdx; if(key in r){n++; d=r[key]-`$$cIdx; if(d<0)d=-d; if(d>$Threshold)nd++; if(d>maxd)maxd=d}}
 END{printf "%d %d %.4e", n, nd, maxd}
 "@
 
@@ -247,8 +296,8 @@ END{printf "%d %d %.4e", n, nd, maxd}
             $color = if ($nDiff -eq 0) { "Green" } else { "Red" }
 
             # Known acceptable deviations:
-            # - consecutive_ions: 191 entries differ (algorithmic edge case)
-            # - peak_sharpness: 1 entry at 2.6e-6 (FP noise on ~6.4e7 value)
+            # - consecutive_ions: small number of entries differ (algorithmic edge case)
+            # - peak_sharpness: rare FP noise on large values
             if ($feat -eq "consecutive_ions" -and $nDiff -le 200) {
                 $status = "PASS (known: $nDiff)"
                 $color = "Yellow"
@@ -271,9 +320,18 @@ END{printf "%d %d %.4e", n, nd, maxd}
     # ================================================================
     $totalDuration = (Get-Date) - $totalStart
     Write-Host ""
+    Write-Host ("Dataset:         {0}" -f $ds.Name) -ForegroundColor Gray
+    Write-Host ("Calibration:     {0}" -f ($(if ($SharedCalibration) { "shared (Rust's JSON)" } else { "each tool computes its own" }))) -ForegroundColor Gray
     Write-Host ("Matched entries: {0}" -f $nMatched) -ForegroundColor Gray
-    Write-Host ("Threshold: {0}" -f $Threshold) -ForegroundColor Gray
-    Write-Host ("Total time: {0:F1}s" -f $totalDuration.TotalSeconds) -ForegroundColor Gray
+    Write-Host ("Threshold:       {0}" -f $Threshold) -ForegroundColor Gray
+    if (-not $SkipRust) {
+        $ratio = if ($rustDuration.TotalSeconds -gt 0.01) { $csDuration.TotalSeconds / $rustDuration.TotalSeconds } else { 0.0 }
+        Write-Host ("Rust Stg 1-4:    {0:F1}s" -f $rustDuration.TotalSeconds) -ForegroundColor Gray
+        Write-Host ("C#   Stg 1-4:    {0:F1}s ({1:F2}x Rust)" -f $csDuration.TotalSeconds, $ratio) -ForegroundColor Gray
+    } else {
+        Write-Host ("C#   Stg 1-4:    {0:F1}s" -f $csDuration.TotalSeconds) -ForegroundColor Gray
+    }
+    Write-Host ("Total time:      {0:F1}s" -f $totalDuration.TotalSeconds) -ForegroundColor Gray
     Write-Host ""
 
     if ($allPassed) {

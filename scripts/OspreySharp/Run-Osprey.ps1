@@ -1,19 +1,20 @@
 <#
 .SYNOPSIS
-    Run OspreySharp or Rust Osprey on Stellar test data
+    Run OspreySharp or Rust Osprey on test data (Stellar or Astral)
 
 .DESCRIPTION
-    Runs either the C# (OspreySharp) or Rust (Osprey) implementation on the
-    Stellar test dataset. Handles cache cleaning, diagnostic env vars, and
-    common flags (--resolution unit is always applied for Stellar).
+    Runs either the C# (OspreySharp) or Rust (Osprey) implementation on a
+    test dataset. Handles cache cleaning, diagnostic env vars, and
+    dataset-specific flags (resolution, library, file names).
 
-    Test data: D:\test\osprey-runs\stellar\
+.PARAMETER Dataset
+    Which test dataset: Stellar or Astral (default: Stellar)
 
 .PARAMETER Tool
     Which tool to run: CSharp or Rust (default: CSharp)
 
 .PARAMETER Files
-    Which mzML files: Single (file 20 only) or All (files 20-22). Default: Single
+    Which mzML files: Single (first file only) or All (all 3). Default: Single
 
 .PARAMETER Clean
     Clean cached files before running (parquet, calibration, spectra caches)
@@ -45,31 +46,31 @@
 .PARAMETER ExtraArgs
     Additional arguments to pass to the tool (e.g. "--protein-fdr 0.01")
 
-.PARAMETER TestDataDir
-    Path to the Stellar test data directory (default: D:\test\osprey-runs\stellar)
+.PARAMETER Summary
+    Show only key output lines (timing, calibration, results)
 
 .EXAMPLE
-    .\Run-Stellar.ps1
-    Run C# on single file (file 20)
+    .\Run-Osprey.ps1
+    Run C# on Stellar single file
 
 .EXAMPLE
-    .\Run-Stellar.ps1 -Tool Rust -Files All -Clean
-    Clean caches and run Rust on all 3 files
+    .\Run-Osprey.ps1 -Dataset Astral -Tool Rust -Files All -Clean
+    Clean caches and run Rust on all 3 Astral files
 
 .EXAMPLE
-    .\Run-Stellar.ps1 -Clean -WritePin
-    Clean and run C# with feature dump
+    .\Run-Osprey.ps1 -Dataset Astral -Clean -WritePin
+    Clean and run C# on Astral with feature dump
 
 .EXAMPLE
-    .\Run-Stellar.ps1 -DiagEntryIds "0,1080,5765,28988"
-    Run C# with search XIC diagnostic for specific entries
-
-.EXAMPLE
-    .\Run-Stellar.ps1 -Tool Rust -DiagCalMatch -DiagCalMatchOnly
-    Run Rust, dump cal_match features, and exit
+    .\Run-Osprey.ps1 -DiagEntryIds "0,1080,5765,28988"
+    Run C# on Stellar with search XIC diagnostic for specific entries
 #>
 
 param(
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("Stellar", "Astral")]
+    [string]$Dataset = "Stellar",
+
     [Parameter(Mandatory=$false)]
     [ValidateSet("CSharp", "Rust")]
     [string]$Tool = "CSharp",
@@ -109,18 +110,19 @@ param(
     [switch]$DiagLoessOnly = $false,
 
     [Parameter(Mandatory=$false)]
-    [string]$ExtraArgs = $null,
-
-    [Parameter(Mandatory=$false)]
-    [string]$TestDataDir = "D:\test\osprey-runs\stellar"
+    [string]$ExtraArgs = $null
 )
 
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-# Validate test data directory
-if (-not (Test-Path $TestDataDir)) {
-    Write-Error "Test data directory not found: $TestDataDir"
+# Load dataset configuration
+. "$PSScriptRoot\Dataset-Config.ps1"
+$ds = Get-DatasetConfig $Dataset
+
+$testDir = $ds.TestDir
+if (-not (Test-Path $testDir)) {
+    Write-Error "Test data directory not found: $testDir"
     exit 1
 }
 
@@ -140,7 +142,7 @@ if (-not (Test-Path $binary)) {
 }
 
 # Library
-$library = Join-Path $TestDataDir "hela-filtered-SkylineAI_spectral_library.tsv"
+$library = Join-Path $testDir $ds.Library
 if (-not (Test-Path $library)) {
     Write-Error "Library not found: $library"
     exit 1
@@ -148,13 +150,9 @@ if (-not (Test-Path $library)) {
 
 # mzML files
 $mzmlFiles = if ($Files -eq "Single") {
-    @(Join-Path $TestDataDir "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML")
+    @(Join-Path $testDir $ds.SingleFile)
 } else {
-    @(
-        (Join-Path $TestDataDir "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML"),
-        (Join-Path $TestDataDir "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_21.mzML"),
-        (Join-Path $TestDataDir "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_22.mzML")
-    )
+    $ds.AllFiles | ForEach-Object { Join-Path $testDir $_ }
 }
 foreach ($f in $mzmlFiles) {
     if (-not (Test-Path $f)) {
@@ -166,7 +164,7 @@ foreach ($f in $mzmlFiles) {
 $initialLocation = Get-Location
 
 try {
-    Set-Location $TestDataDir
+    Set-Location $testDir
 
     # Clean caches if requested
     if ($Clean) {
@@ -174,13 +172,13 @@ try {
         $patterns = @("*.scores.parquet", "*.calibration.json", "*.spectra.bin",
                       "*.fdr_scores.bin", "*.mzML.spectra.bin")
         foreach ($pattern in $patterns) {
-            Get-ChildItem -Path $TestDataDir -Filter $pattern -ErrorAction SilentlyContinue |
+            Get-ChildItem -Path $testDir -Filter $pattern -ErrorAction SilentlyContinue |
                 Remove-Item -Force
         }
         # Also clean diagnostic dumps
-        Get-ChildItem -Path $TestDataDir -Filter "rust_search_xic_entry_*.txt" -ErrorAction SilentlyContinue |
+        Get-ChildItem -Path $testDir -Filter "rust_search_xic_entry_*.txt" -ErrorAction SilentlyContinue |
             Remove-Item -Force
-        Get-ChildItem -Path $TestDataDir -Filter "cs_search_xic_entry_*.txt" -ErrorAction SilentlyContinue |
+        Get-ChildItem -Path $testDir -Filter "cs_search_xic_entry_*.txt" -ErrorAction SilentlyContinue |
             Remove-Item -Force
         Write-Host "Caches cleaned" -ForegroundColor Green
     }
@@ -221,33 +219,35 @@ try {
     }
 
     # Build command arguments
-    $args = @()
+    $toolArgs = @()
     foreach ($f in $mzmlFiles) {
-        $args += "-i"
-        $args += $f
+        $toolArgs += "-i"
+        $toolArgs += $f
     }
-    $args += "-l"
-    $args += $library
-    $args += "-o"
-    # Use temp file for output (NUL doesn't work for SQLite blib writes)
-    $tempBlib = Join-Path $TestDataDir "_temp_output.blib"
-    $args += $tempBlib
-    $args += "--resolution"
-    $args += "unit"
+    $toolArgs += "-l"
+    $toolArgs += $library
+    $toolArgs += "-o"
+    $tempBlib = Join-Path $testDir "_temp_output.blib"
+    $toolArgs += $tempBlib
+    $toolArgs += "--resolution"
+    $toolArgs += $ds.Resolution
+    $toolArgs += "--protein-fdr"
+    $toolArgs += "0.01"
     if ($WritePin) {
-        $args += "--write-pin"
+        $toolArgs += "--write-pin"
     }
 
     # Parse and add extra args
     if ($ExtraArgs) {
-        $args += $ExtraArgs.Split(' ', [StringSplitOptions]::RemoveEmptyEntries)
+        $toolArgs += $ExtraArgs.Split(' ', [StringSplitOptions]::RemoveEmptyEntries)
     }
 
     # Display what we're running
-    $fileLabel = if ($Files -eq "Single") { "file 20" } else { "files 20-22" }
+    $fileLabel = $ds.FileLabel[$Files]
     Write-Host ""
-    Write-Host "Running $Tool on Stellar $fileLabel" -ForegroundColor Cyan
+    Write-Host "Running $Tool on $($ds.Name) $fileLabel" -ForegroundColor Cyan
     Write-Host "Binary: $binary" -ForegroundColor Gray
+    Write-Host "Resolution: $($ds.Resolution)" -ForegroundColor Gray
     if ($envVarsSet.Count -gt 0) {
         Write-Host "Env: $($envVarsSet -join ', ')" -ForegroundColor Gray
     }
@@ -257,7 +257,7 @@ try {
 
     if ($Summary) {
         # Capture output and filter to key lines
-        $output = & $binary @args 2>&1
+        $output = & $binary @toolArgs 2>&1
         $exitCode = $LASTEXITCODE
         $patterns = @(
             '\[BISECT\]', '\[TIMING\]', 'calibrated frag', 'Coelution search RT',
@@ -276,7 +276,7 @@ try {
             }
         }
     } else {
-        & $binary @args
+        & $binary @toolArgs
         $exitCode = $LASTEXITCODE
     }
 

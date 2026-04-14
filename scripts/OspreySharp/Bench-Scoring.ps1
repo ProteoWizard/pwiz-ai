@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
     Ground-truth Stages 1-4 scoring benchmark for Osprey performance optimization.
-    Compares upstream Rust, fork Rust, and OspreySharp C# on Stellar file 20.
+    Compares upstream Rust, fork Rust, and OspreySharp C# on Stellar or Astral data.
 
 .DESCRIPTION
     For each implementation:
       1. Warmup run (creates library cache, not timed)
-      2. Three timed iterations (clean score caches between runs, keep library cache)
+      2. N timed iterations (clean score caches between runs, keep library cache)
       3. Report median per-stage timing with consistency check
 
     Fork Rust and C# exit after Stage 4 via OSPREY_EXIT_AFTER_SCORING.
@@ -15,6 +15,18 @@
     C# does not have a binary library cache. Its Stage 1 always includes TSV parsing.
     Rust Stage 1 uses the library cache after warmup.
 
+    In multi-file mode (-Files All), all 3 mzML files are passed to each tool.
+    C# processes files in parallel (Parallel.For); Rust processes them sequentially.
+    Per-stage breakdowns are not shown in multi-file mode because C# overlaps stages
+    across files. Only wall-clock total and entries are reported.
+
+.PARAMETER Dataset
+    Which test dataset: Stellar or Astral (default: Stellar)
+
+.PARAMETER Files
+    Which mzML files to benchmark: Single (first file only) or All (all 3).
+    Default: Single. Use All to measure parallel file processing.
+
 .PARAMETER Iterations
     Number of timed iterations per tool (default: 3)
 
@@ -22,6 +34,10 @@
     Skip the upstream Rust benchmark (saves ~6 min)
 #>
 param(
+    [ValidateSet("Stellar", "Astral")]
+    [string]$Dataset = "Stellar",
+    [ValidateSet("Single", "All")]
+    [string]$Files = "Single",
     [int]$Iterations = 3,
     [switch]$SkipUpstream = $false
 )
@@ -29,16 +45,43 @@ param(
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$testDir = "D:\test\osprey-runs\stellar"
-$mzml = Join-Path $testDir "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML"
-$library = Join-Path $testDir "hela-filtered-SkylineAI_spectral_library.tsv"
+# Load dataset configuration
+. "$PSScriptRoot\Dataset-Config.ps1"
+$ds = Get-DatasetConfig $Dataset
+
+$testDir = $ds.TestDir
+if (-not (Test-Path $testDir)) {
+    Write-Error "Test data directory not found: $testDir"
+    exit 1
+}
+
+$library = Join-Path $testDir $ds.Library
 $tempBlib = Join-Path $testDir "_bench_output.blib"
 
 $upstreamBin = "C:\proj\osprey-mm\target\release\osprey.exe"
 $forkBin = "C:\proj\osprey\target\release\osprey.exe"
 $csharpBin = "C:\proj\pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\pwiz.OspreySharp.exe"
 
-$commonArgs = @("-i", $mzml, "-l", $library, "-o", $tempBlib, "--resolution", "unit")
+# Build mzML file list based on -Files parameter
+$mzmlFiles = if ($Files -eq "Single") {
+    @(Join-Path $testDir $ds.SingleFile)
+} else {
+    $ds.AllFiles | ForEach-Object { Join-Path $testDir $_ }
+}
+foreach ($f in $mzmlFiles) {
+    if (-not (Test-Path $f)) {
+        Write-Error "mzML file not found: $f"
+        exit 1
+    }
+}
+$multiFile = $Files -eq "All"
+$fileCount = $mzmlFiles.Count
+
+# Build common args: -i file1 [-i file2 -i file3] -l library -o output --resolution <res>
+$commonArgs = @()
+foreach ($f in $mzmlFiles) { $commonArgs += @("-i", $f) }
+$commonArgs += @("-l", $library, "-o", $tempBlib, "--resolution", $ds.Resolution,
+                 "--protein-fdr", "0.01")
 
 function Clean-ScoreCaches {
     # Clean score/calibration caches but NOT library cache (.libcache)
@@ -92,7 +135,25 @@ function Run-Once {
 }
 
 function Parse-RustStages {
-    param([string[]]$Lines, [double]$WallClock = 0)
+    param([string[]]$Lines, [double]$WallClock = 0, [bool]$MultiFile = $false)
+
+    if ($MultiFile) {
+        # Multi-file: just collect total entries and wall clock
+        $totalEntries = 0
+        foreach ($line in $Lines) {
+            if ($line -match 'Scored (\d+) entries') {
+                $totalEntries += [int]$Matches[1]
+            }
+        }
+        if ($totalEntries -eq 0) { return $null }
+        return @{
+            S1 = 0; S2 = 0; S3 = 0; S4 = 0
+            Thru4 = $WallClock
+            Entries = $totalEntries
+        }
+    }
+
+    # Single-file: parse per-stage timestamps
     $t = @{}
     foreach ($line in $Lines) {
         if ($line -match '^\[(\d+):(\d+)\]\s+(.+)') {
@@ -124,7 +185,26 @@ function Parse-RustStages {
 }
 
 function Parse-CSharpStages {
-    param([string[]]$Lines)
+    param([string[]]$Lines, [double]$WallClock = 0, [bool]$MultiFile = $false)
+
+    if ($MultiFile) {
+        # Multi-file: C# runs files in parallel, so per-stage times overlap.
+        # Sum entries across files, use wall clock for total.
+        $totalEntries = 0
+        foreach ($line in $Lines) {
+            if ($line -match '\[TIMING\]\s+Coelution scoring:\s+[\d.]+s.*\((\d+) candidates') {
+                $totalEntries += [int]$Matches[1]
+            }
+        }
+        if ($totalEntries -eq 0) { return $null }
+        return @{
+            S1 = 0; S2 = 0; S3 = 0; S4 = 0
+            Thru4 = $WallClock
+            Entries = $totalEntries
+        }
+    }
+
+    # Single-file: parse per-stage timing
     $p = @{}
     foreach ($line in $Lines) {
         if ($line -match '\[TIMING\]\s+Library loading \+ decoys:\s+([\d.]+)s')             { $p['s1'] = [double]$Matches[1] }
@@ -162,10 +242,14 @@ function Run-Benchmark {
         Write-Host " FAILED (exit $($coldRun.Exit))" -ForegroundColor Red
         return $null
     }
-    $coldStages = if ($Type -eq "Rust") { Parse-RustStages $coldRun.Lines $coldRun.WallSec }
-                  else { Parse-CSharpStages $coldRun.Lines }
-    $coldS1 = if ($null -ne $coldStages) { $coldStages.S1 } else { 0 }
-    Write-Host " $($coldRun.WallSec.ToString('F1'))s (S1_cold=$($coldS1.ToString('F1')))" -ForegroundColor Gray
+    $coldStages = if ($Type -eq "Rust") { Parse-RustStages $coldRun.Lines $coldRun.WallSec $multiFile }
+                  else { Parse-CSharpStages $coldRun.Lines $coldRun.WallSec $multiFile }
+    $coldS1 = if ($null -ne $coldStages -and -not $multiFile) { $coldStages.S1 } else { 0 }
+    if ($multiFile) {
+        Write-Host " $($coldRun.WallSec.ToString('F1'))s" -ForegroundColor Gray
+    } else {
+        Write-Host " $($coldRun.WallSec.ToString('F1'))s (S1_cold=$($coldS1.ToString('F1')))" -ForegroundColor Gray
+    }
 
     # Timed iterations (library cache warm after cold run)
     $runs = @()
@@ -178,15 +262,19 @@ function Run-Benchmark {
             continue
         }
 
-        $stages = if ($Type -eq "Rust") { Parse-RustStages $result.Lines $result.WallSec }
-                  else { Parse-CSharpStages $result.Lines }
+        $stages = if ($Type -eq "Rust") { Parse-RustStages $result.Lines $result.WallSec $multiFile }
+                  else { Parse-CSharpStages $result.Lines $result.WallSec $multiFile }
         if ($null -eq $stages) {
             Write-Host " parse error" -ForegroundColor Red
             continue
         }
         $stages['Wall'] = $result.WallSec
         $runs += $stages
-        Write-Host " $($result.WallSec.ToString('F1'))s (S1=$($stages.S1) S2=$($stages.S2) S3=$($stages.S3.ToString('F1')) S4=$($stages.S4.ToString('F1')))" -ForegroundColor Gray
+        if ($multiFile) {
+            Write-Host " $($result.WallSec.ToString('F1'))s ($($stages.Entries.ToString('N0')) entries)" -ForegroundColor Gray
+        } else {
+            Write-Host " $($result.WallSec.ToString('F1'))s (S1=$($stages.S1) S2=$($stages.S2) S3=$($stages.S3.ToString('F1')) S4=$($stages.S4.ToString('F1')))" -ForegroundColor Gray
+        }
     }
 
     if ($runs.Count -lt 2) {
@@ -197,7 +285,7 @@ function Run-Benchmark {
     # Compute medians
     $med = @{
         Label = $Label
-        S1Cold = $coldS1
+        S1Cold = if ($multiFile) { $coldRun.WallSec } else { $coldS1 }
         S1 = Median ($runs | ForEach-Object { $_.S1 })
         S2 = Median ($runs | ForEach-Object { $_.S2 })
         S3 = Median ($runs | ForEach-Object { $_.S3 })
@@ -209,7 +297,8 @@ function Run-Benchmark {
     }
 
     # Consistency check: flag if max/min ratio > 1.20 for any stage
-    foreach ($key in @('S1','S2','S3','S4','Thru4')) {
+    $checkKeys = if ($multiFile) { @('Thru4') } else { @('S1','S2','S3','S4','Thru4') }
+    foreach ($key in $checkKeys) {
         $vals = @($runs | ForEach-Object { $_[$key] })
         $mn = ($vals | Measure-Object -Minimum).Minimum
         $mx = ($vals | Measure-Object -Maximum).Maximum
@@ -222,9 +311,13 @@ function Run-Benchmark {
 }
 
 # ===========================================================================
+$dsFileLabel = $ds.FileLabel[$Files]
+$fileLabel = if ($multiFile) { "$($ds.Name) $fileCount files ($dsFileLabel)" } else { "$($ds.Name) $dsFileLabel" }
+$modeLabel = if ($multiFile) { "C# parallel, Rust sequential" } else { "per-stage breakdown" }
 Write-Host ""
 Write-Host "Osprey Scoring Benchmark: Stages 1-4" -ForegroundColor Yellow
-Write-Host "Stellar file 20 | --resolution unit | $Iterations iterations | median reported" -ForegroundColor Gray
+Write-Host "$fileLabel | --resolution unit | $Iterations iterations | median reported" -ForegroundColor Gray
+Write-Host "Mode: $modeLabel" -ForegroundColor Gray
 Write-Host "Library cache: warm (Rust), cold (C# - no binary cache)" -ForegroundColor Gray
 Write-Host ""
 
@@ -246,47 +339,83 @@ Write-Host "  MEDIAN Stages 1-4 Timing ($Iterations iterations each)" -Foregroun
 Write-Host ("=" * 90) -ForegroundColor Yellow
 Write-Host ""
 
-$fmt = "{0,-24} {1,8} {2,8} {3,8} {4,8} {5,8}   {6,8} {7,10}"
-Write-Host ($fmt -f "", "Stage 1", "Stage 1", "Stage 2", "Stage 3", "Stage 4", "Stg 1-4", "Entries")
-Write-Host ($fmt -f "Implementation", "Library", "Cached", "mzML", "Calibr.", "Search", "Total", "Scored")
-Write-Host ("{0,-24} {1} {2} {3} {4} {5}   {6} {7}" -f ("-"*24), ("-"*8), ("-"*8), ("-"*8), ("-"*8), ("-"*8), ("-"*8), ("-"*10))
+if ($multiFile) {
+    # Multi-file table: wall clock + entries only (per-stage not meaningful with parallel C#)
+    $fmtM = "{0,-40} {1,10} {2,10} {3,12}"
+    Write-Host ($fmtM -f "Implementation", "Cold", "Warm", "Entries")
+    Write-Host ("{0,-40} {1} {2} {3}" -f ("-"*40), ("-"*10), ("-"*10), ("-"*12))
 
-foreach ($r in $results) {
-    if ($null -eq $r) { continue }
-    $s1cf = "$($r.S1Cold.ToString('F1'))s"
-    $s1wf = if ($r.HasLibCache) { "$($r.S1.ToString('F1'))s" } else { "n/a" }
-    $s2f = "$($r.S2.ToString('F1'))s"
-    $s3f = "$($r.S3.ToString('F1'))s"
-    $s4f = "$($r.S4.ToString('F1'))s"
-    $thf = "$($r.Thru4.ToString('F1'))s"
-    $ent = $r.Entries.ToString("N0")
-    Write-Host ($fmt -f $r.Label, $s1cf, $s1wf, $s2f, $s3f, $s4f, $thf, $ent)
-}
+    foreach ($r in $results) {
+        if ($null -eq $r) { continue }
+        $coldf = "$($r.S1Cold.ToString('F1'))s"
+        $warmf = "$($r.Thru4.ToString('F1'))s"
+        $ent = $r.Entries.ToString("N0")
+        Write-Host ($fmtM -f $r.Label, $coldf, $warmf, $ent)
+    }
 
-# Ratio row (C# vs first Rust result)
-$rustRef = $results | Where-Object { $_ -ne $null -and $_.Label -match "Upstream|Fork" } | Select-Object -First 1
-$csharp = $results | Where-Object { $_ -ne $null -and $_.Label -match "C#" } | Select-Object -First 1
-if ($rustRef -and $csharp) {
-    $shortName = $rustRef.Label -replace '\s*\(.*',''
-    $ratioLabel = "C# / $shortName ratio"
-    $r1c = "$( ($csharp.S1Cold / [Math]::Max($rustRef.S1Cold, 0.5)).ToString('F1') )x"
-    $r1w = if ($rustRef.HasLibCache) { "n/a" } else { "n/a" }
-    $r2 = "$( ($csharp.S2 / [Math]::Max($rustRef.S2, 0.5)).ToString('F1') )x"
-    $r3 = "$( ($csharp.S3 / [Math]::Max($rustRef.S3, 0.5)).ToString('F1') )x"
-    $r4 = "$( ($csharp.S4 / [Math]::Max($rustRef.S4, 0.5)).ToString('F1') )x"
-    $rt = "$( ($csharp.Thru4 / [Math]::Max($rustRef.Thru4, 0.5)).ToString('F1') )x"
+    # Ratio row
+    $rustRef = $results | Where-Object { $_ -ne $null -and $_.Label -match "Upstream|Fork" } | Select-Object -First 1
+    $csharp = $results | Where-Object { $_ -ne $null -and $_.Label -match "C#" } | Select-Object -First 1
+    if ($rustRef -and $csharp) {
+        $shortName = $rustRef.Label -replace '\s*\(.*',''
+        $ratioLabel = "C# / $shortName ratio"
+        $rc = "$( ($csharp.S1Cold / [Math]::Max($rustRef.S1Cold, 0.5)).ToString('F2') )x"
+        $rw = "$( ($csharp.Thru4 / [Math]::Max($rustRef.Thru4, 0.5)).ToString('F2') )x"
+        Write-Host ""
+        Write-Host ($fmtM -f $ratioLabel, $rc, $rw, "")
+    }
+
     Write-Host ""
-    Write-Host ($fmt -f $ratioLabel, $r1c, $r1w, $r2, $r3, $r4, $rt, "")
-}
+    Write-Host "Notes:" -ForegroundColor Gray
+    Write-Host "  Cold: no library cache, all tools parse TSV from scratch" -ForegroundColor Gray
+    Write-Host "  Warm: library cache present (.libcache for Rust)" -ForegroundColor Gray
+    Write-Host "  C# processes $fileCount files in parallel (Parallel.For); Rust is sequential" -ForegroundColor Gray
+    Write-Host "  All times are wall clock (per-stage not shown - C# overlaps stages across files)" -ForegroundColor Gray
+    Write-Host ""
+} else {
+    # Single-file table: full per-stage breakdown
+    $fmt = "{0,-40} {1,8} {2,8} {3,8} {4,8} {5,8}   {6,8} {7,10}"
+    Write-Host ($fmt -f "", "Stage 1", "Stage 1", "Stage 2", "Stage 3", "Stage 4", "Stg 1-4", "Entries")
+    Write-Host ($fmt -f "Implementation", "Library", "Cached", "mzML", "Calibr.", "Search", "Total", "Scored")
+    Write-Host ("{0,-40} {1} {2} {3} {4} {5}   {6} {7}" -f ("-"*40), ("-"*8), ("-"*8), ("-"*8), ("-"*8), ("-"*8), ("-"*8), ("-"*10))
 
-Write-Host ""
-Write-Host "Notes:" -ForegroundColor Gray
-Write-Host "  Stage 1 'Library': cold (no .libcache), all tools parse TSV from scratch" -ForegroundColor Gray
-Write-Host "  Stage 1 'Cached': warm (.libcache present); n/a = no binary cache implemented" -ForegroundColor Gray
-Write-Host "  Stg 1-4 Total = wall clock for fork/C# (early exit); timestamp-derived for upstream" -ForegroundColor Gray
-Write-Host "  Rust S1 derived from wall_clock - (S2+S3+S4) for sub-second accuracy" -ForegroundColor Gray
-Write-Host "  Rust S2/S3/S4 have +/-0.5s rounding (1s timestamp resolution)" -ForegroundColor Gray
-Write-Host ""
+    foreach ($r in $results) {
+        if ($null -eq $r) { continue }
+        $s1cf = "$($r.S1Cold.ToString('F1'))s"
+        $s1wf = if ($r.HasLibCache) { "$($r.S1.ToString('F1'))s" } else { "n/a" }
+        $s2f = "$($r.S2.ToString('F1'))s"
+        $s3f = "$($r.S3.ToString('F1'))s"
+        $s4f = "$($r.S4.ToString('F1'))s"
+        $thf = "$($r.Thru4.ToString('F1'))s"
+        $ent = $r.Entries.ToString("N0")
+        Write-Host ($fmt -f $r.Label, $s1cf, $s1wf, $s2f, $s3f, $s4f, $thf, $ent)
+    }
+
+    # Ratio row (C# vs first Rust result)
+    $rustRef = $results | Where-Object { $_ -ne $null -and $_.Label -match "Upstream|Fork" } | Select-Object -First 1
+    $csharp = $results | Where-Object { $_ -ne $null -and $_.Label -match "C#" } | Select-Object -First 1
+    if ($rustRef -and $csharp) {
+        $shortName = $rustRef.Label -replace '\s*\(.*',''
+        $ratioLabel = "C# / $shortName ratio"
+        $r1c = "$( ($csharp.S1Cold / [Math]::Max($rustRef.S1Cold, 0.5)).ToString('F1') )x"
+        $r1w = if ($rustRef.HasLibCache) { "n/a" } else { "n/a" }
+        $r2 = "$( ($csharp.S2 / [Math]::Max($rustRef.S2, 0.5)).ToString('F1') )x"
+        $r3 = "$( ($csharp.S3 / [Math]::Max($rustRef.S3, 0.5)).ToString('F1') )x"
+        $r4 = "$( ($csharp.S4 / [Math]::Max($rustRef.S4, 0.5)).ToString('F1') )x"
+        $rt = "$( ($csharp.Thru4 / [Math]::Max($rustRef.Thru4, 0.5)).ToString('F1') )x"
+        Write-Host ""
+        Write-Host ($fmt -f $ratioLabel, $r1c, $r1w, $r2, $r3, $r4, $rt, "")
+    }
+
+    Write-Host ""
+    Write-Host "Notes:" -ForegroundColor Gray
+    Write-Host "  Stage 1 'Library': cold (no .libcache), all tools parse TSV from scratch" -ForegroundColor Gray
+    Write-Host "  Stage 1 'Cached': warm (.libcache present); n/a = no binary cache implemented" -ForegroundColor Gray
+    Write-Host "  Stg 1-4 Total = wall clock for fork/C# (early exit); timestamp-derived for upstream" -ForegroundColor Gray
+    Write-Host "  Rust S1 derived from wall_clock - (S2+S3+S4) for sub-second accuracy" -ForegroundColor Gray
+    Write-Host "  Rust S2/S3/S4 have +/-0.5s rounding (1s timestamp resolution)" -ForegroundColor Gray
+    Write-Host ""
+}
 
 # Cleanup
 Clean-ScoreCaches

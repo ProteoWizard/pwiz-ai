@@ -668,6 +668,130 @@ Key findings:
 perf baselines, Rust parallel files plan, Stages 5-8 approach), read
 `ai/.tmp/handoff-20260413-osprey-sharp-session10.md` before starting work.
 
+### 2026-04-14 Session 11 (desktop)  -  HRAM unblock, XCorr dedup bug, honest validation
+
+**HRAM/Astral crash root cause**: C# calibration was hanging for minutes
+on Astral's single file (204K MS2 spectra). Root cause: Session 10's
+XCorr per-window pre-preprocessing optimization allocates `double[NBins]`
+per spectrum. For unit resolution (NBins=2,000) that's ~16 KB/spectrum =
+~3 GB total and fine. For HRAM (NBins=100,001) it's ~800 KB/spectrum =
+**~160 GB total**, causing catastrophic allocation pressure.
+
+Fix: introduced `IResolutionStrategy` in `OspreySharp.Scoring` with
+`UnitStrategy` (keeps pre-preprocessing) and `HramStrategy` (returns null;
+XCorr falls back to inline `XcorrAtScan` per scan). Also added
+`ScoringContext` bundling `(Config, Resolution, FileName)` per-file so
+pipeline methods never need to check `ResolutionMode` directly again.
+All 185 OspreySharp unit tests still pass; Stellar Stage 1-4 perf
+unchanged at ~0.99x Rust. Astral calibration pass 1 now completes in
+88s (was unbounded).
+
+**MS1 feature port** (continuation of pre-session work on HRAM): ported
+`osprey-core/src/isotope.rs` as `IsotopeDistribution.cs` (polynomial
+expansion over C/H/N/O/S natural abundance), replaced the averagine
+approximation. `ComputeMs1Features` rewritten to use the reference XIC
+(not summed fragment XIC) for coelution, apply MS1 calibrated tolerance
+via `reverse_calibrate_mz`, and gate isotope cosine on `envelope.has_m0()`
+-- all matching Rust pipeline.rs:5362-5404.
+
+**Test-Features.ps1 honest-validation rewrite**: previous default used
+shared calibration (C# loading Rust's `calibration.json` via
+`OSPREY_LOAD_CALIBRATION`), which short-circuited calibration scoring.
+Useful as a Session 9 bisection tool but **hid all divergence in the
+calibration phase from Sessions 9-10 testing**. Rewrote defaults:
+- Each tool computes its own calibration (honest).
+- Both tools exit after Stage 4 via `OSPREY_EXIT_AFTER_SCORING=1`
+  (apples-to-apples wall-clock timing; skips Mokapot/blib).
+- `-SharedCalibration` opt-in flag preserves the old bisection mode.
+
+Added `OSPREY_EXIT_AFTER_SCORING` env var to Rust to match
+(pipeline.rs: returns after per-file scoring loop, before FDR).
+
+**XCorr dedup bug in Rust**: pipeline walk with each tool's own
+calibration revealed the `xcorr` column in `cal_match` dumps had
+23,238/192,289 entries diverging by >1e-6 (max |d|=0.81) while every
+other column was bit-identical at 1e-10 ULP. Traced to Rust having
+**two inconsistent XCorr code paths**:
+
+- `SpectralScorer::xcorr_from_preprocessed` (used by coelution
+  `best_xcorr` via `preprocess_library_for_xcorr` setting
+  `binned[bin] = 1.0`): implicit dedup, correct.
+- `SpectralScorer::xcorr()` + `xcorr_at_scan()` (used by `cal_match`
+  diagnostic dump's `xcorr_score` field and several other callers):
+  sums preprocessed values at every fragment bin position. Two
+  fragments hitting the same bin double-counts.
+
+Session 9's `0cc5161b2` added `visitedBins` dedup to C#'s
+`XcorrFromPreprocessed` (the correct Comet-style behavior). The Rust
+side was never updated. Shared-calibration testing never exercised
+`scorer.xcorr()`, so this went undetected.
+
+Fixed both Rust methods to dedup. After fix: cal_match ALL 7 columns
+bit-identical at 1e-10 ULP (Session 7's claim restored). Downstream
+(LDA scores, LOESS input) also bit-identical.
+
+**Upstream candidate**: this dedup fix is worth sending to
+`maccoss/osprey`. Jimmy Eng (original XCorr author, same building at UW)
+should weigh in -- the non-deduped `scorer.xcorr()` is in a module
+comment claiming to "match Comet exactly", but Comet's theoretical
+spectrum uses unit intensity per bin, not accumulated per-fragment.
+
+**Remaining drift root cause: Math.Round banker's rounding in
+PercentileValue**. After the xcorr dedup fix the pipeline walk showed
+pass-2 LOESS stats all bit-identical EXCEPT MAD (9e-5 drift), which
+cascaded to tolerance (4e-4 drift), then to expected_rt (~6e-4 drift),
+then to every downstream `mass_accuracy` and `rt_deviation`. Root cause
+was a one-line rounding-mode mismatch:
+
+- Rust `percentile_value`: `(p * (n-1)).round()` -- round half away
+  from zero (IEEE 754 `f64::round()`).
+- C# `PercentileValue`: `Math.Round(p * (n-1))` -- banker's rounding
+  (round half to even) by default.
+
+For n=6398 and p=0.50: 3198.5 rounds to 3199 in Rust, 3198 in C# --
+picking adjacent sorted absolute residuals that differed by 9e-5.
+p20 (idx 1279.4) and p80 (idx 5117.6) don't hit the .5 boundary so they
+both stayed bit-identical, which is why the drift was so narrow. Fixed
+C# to `MidpointRounding.AwayFromZero`.
+
+**Pipeline walk status after Session 11** (Stellar, own calibration,
+all stages bit-identical at ULP):
+
+| Stage | Divergence |
+|-------|------------|
+| Cal sample (library targets) | 0 |
+| Cal scalars / grid | 0 (formatting only) |
+| Cal match (all 7 columns) | max 5e-10 (ULP) |
+| LDA scores | max 1e-10 (ULP) |
+| LOESS input | max 9e-16 (machine epsilon) |
+| Pass-2 LOESS model (all 10 stats) | 0 (bit-equal) |
+| Main search `expected_rt` | 0 (bit-equal) |
+| 21 PIN features | all PASS at 1e-6 threshold, max drift <1e-14 |
+
+The `Test-Features.ps1 -Dataset Stellar` honest validation (own
+calibration, Stage 1-4 only) now returns ALL 21 FEATURES PASSED with
+max divergence 1e-11 on `rt_deviation` and 0 on `mass_accuracy`. This
+is the Session 7-level bit-identical parity that was always the
+target; shared-calibration testing was masking real drift introduced
+by two separate bugs (Rust xcorr dedup + C# banker's rounding).
+
+**Session 11 commits**:
+- osprey `fix/parquet-index-lookup`:
+  - `4db625c` - Fixed XCorr fragment bin dedup and added scoring-only
+    early exit
+- pwiz `Skyline/work/20260409_osprey_sharp`:
+  - Single amended commit adding IResolutionStrategy, ScoringContext,
+    HRAM pre-preprocessing skip, MS1 calibration load, sequence-based
+    isotope cosine, and PercentileValue rounding-mode fix
+- ai `master`: (this TODO + Test-Features/Run-Osprey/Dataset-Config
+  rename + Bench-Scoring generalization + README)
+
+**Next**: (a) repeat the pipeline walk on Astral HRAM data now that the
+crash is fixed and Stellar parity is restored, (b) PR the xcorr dedup
+fix upstream to `maccoss/osprey`, (c) add a regression test for the
+banker's-vs-away-from-zero percentile rounding so future C#/Rust ports
+catch this reflexively.
+
 ## Next Sprint: Upstream Merge + Regression Tests
 
 ### Priority 1: Merge upstream maccoss/osprey into our fork  -  DONE (Session 10)
