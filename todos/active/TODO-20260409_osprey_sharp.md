@@ -872,10 +872,124 @@ pattern is worth fixing before the main-search walk.
   - `407a825ef` - Per-fragment Da tolerance and faithful diagnostic
     dump formatting
 
+### 2026-04-14 Session 11 (continued)  -  Stage 1-3 perf parity on Astral
+
+**Goal**: bring Astral Stage 1-3 wall-clock parity with Rust before
+attempting the main-search walk. C# was 2.4x slower (146.7s vs 60.7s)
+with most of the gap in calibration scoring (73s vs 12s).
+
+**Root cause of cal-scoring gap: HRAM 100K-bin XCorr on .NET Framework's
+LOH**. Each `XcorrAtScan` call in HRAM mode allocated three
+`double[100001]` (~800 KB) which all went to the large object heap
+(>85 KB threshold). With ~200K cal entries × 1 apex XCorr call each =
+600K LOH allocations per file, .NET Framework's gen-2-only LOH
+collection ran constantly. Task Manager showed 41 GB peak memory and
+14% sustained CPU (mostly waiting on GC).
+
+**Failed attempt: window-centric refactor**. First idea was to mirror
+Rust's `run_coelution_calibration_scoring` window-centric loop:
+preprocess all 1300 spectra in a window once (~1 GB per concurrent
+window), score all entries in that window, drop. Memory thrashed -
+32 threads × 1 GB = 32 GB peak, .NET Framework LOH never compacts so
+fragmentation grew across windows. Process hit 41 GB and stalled.
+Reverted (no commit retained).
+
+**Working fix: unit-resolution bins for calibration XCorr**.
+Re-reading Rust closer found `run_xcorr_calibration_scoring` (an
+unused-by-pipeline function) with the comment "Always use unit
+resolution bins for calibration XCorr (fast: 2001 bins vs 100K for
+HRAM)". Mike's intent was clear; it just hadn't made it into
+`run_coelution_calibration_scoring`. Applied the same idea in both
+tools simultaneously to keep cross-impl parity:
+
+- C# `AnalysisPipeline.s_calXcorrScorer`: static
+  `SpectralScorer(BinConfig.UnitResolution())`. Cal pre-preprocessing
+  and apex XCorr both use it regardless of resolution mode. Main
+  search XCorr still uses the resolution-mode bins via
+  IResolutionStrategy.
+- Rust `pipeline.rs` lines 397-407: cal `xcorr_scorer` constructed
+  with `SpectralScorer::new()` (unit bins) for both unit and HRAM
+  paths instead of `SpectralScorer::hram()`. Fragment tolerance
+  (ppm/Da) preserved per resolution mode for the LibCosine etc. that
+  depends on it.
+
+**Astral Stage 1-3 perf result** (median of 2-3 iterations, fork
+Rust vs C#, single Astral file 49 with HRAM):
+
+| Stage | Rust | C# (before) | C# (after) | C# / Rust |
+|-------|------|------|------|------|
+| Library load + decoys | ~3s | 4.2s | 4.0s | 1.3x |
+| mzML parsing | 22-24s | 38.7s | 38.2s | 1.7x |
+| Calibration sampling | ~22s | 0.2s | 0.2s | 100x faster (C#) |
+| Cal pass 1 scoring | ~12s | **73.3s** | **6.9s** | 1.7x faster (C#) |
+| Other (LDA, LOESS, pass 2, MS2 cal) | ~5s | ~30s | ~15s | ~3x |
+| **Total Stage 1-3** | **60.7s** | **146.7s** | **64.6s** | **1.06x** |
+
+Cal pass 1 scoring went from 73.3s to 6.9s (10.6x faster). C# is
+now ahead of Rust on cal scoring itself (~7s vs 12s) and on
+calibration sampling (0.2s vs 22s, ~100x faster - need to investigate
+why Rust is so slow on sampling, possibly a separate Rust win).
+
+**Cross-impl parity preserved**: Astral cal_match still bit-identical
+on 6 of 7 columns at ULP, with one decoy entry's xcorr diverging by
+0.001 - a coarser-bin border case (1.0005 m/z bins vs HRAM 0.02 m/z)
+expose one fragment that lands in a different unit bin between the
+tools. LDA scores are 99.99% bit-identical (1/110055 discriminant
+differs by 1e-4, 4/110055 q_values by 1e-5). Stellar 21 PIN features
+all PASS at 1e-6 threshold.
+
+**dotTrace before/after** (cumulative parallel CPU time):
+- ApplySlidingWindow: 1,090s -> 3.1s (~350x reduction)
+- XcorrAtScan: 901s -> 0 (path no longer hit in cal)
+- ApplyWindowingNormalization: 430s -> 1.8s (~240x)
+- Total RunCalibrationScoringPass: 2,852s -> 243s (11.7x)
+
+**New top hot spot**: `HasTopNFragmentMatch` at 141s parallel
+(prefilter, per-fragment binary search). Across 32 threads ~4.4s wall.
+Roughly matches what Rust does here.
+
+**Remaining gap: mzML parsing (1.7x slower on C#)**. Investigated:
+- 16 MB FileStream buffer (was 1 MB) - no measurable change
+- FileOptions.SequentialScan - tried then reverted (Windows hint
+  *discards* pages after read, would hurt cache reuse on rerun)
+- Both tools read 6 GB Astral file in 38-40s wall (C#) vs 22-24s
+  (Rust). C# reads at 159 MB/s (HDD sustained), Rust at 280 MB/s
+  (above HDD physical sustained, so reading from OS file cache).
+- `System.Xml.XmlReader` is slower than Rust's `quick-xml`/`mzdata`
+  XML parser, and .NET's `DeflateStream` is slower than Rust's
+  `flate2` for the per-spectrum zlib decode.
+
+**Idea for future session: `MemoryMappedFile` for mzML reader**. Rust
+likely uses `mmap`-style access through `mzdata` so the kernel pages
+in via demand paging and reuses the page cache efficiently across
+runs. Switching C# to `System.IO.MemoryMappedFiles.MemoryMappedFile`
++ `MemoryMappedViewStream` could let the OS cache the whole 6 GB file
+in RAM after the first read, making subsequent runs and stage-by-stage
+debugging dramatically faster. Bigger lift than buffer tuning since
+the existing FileStream-based XmlReader code path needs to wrap a
+view stream and the stream is read-only (mostly fine for our use).
+Defer to a dedicated mzML perf session.
+
+**Session 11 commits (continued, 2nd checkpoint)**:
+- osprey `fix/parquet-index-lookup`:
+  - `2d4a8ad` - Used unit-resolution bins for calibration XCorr scorer
+- pwiz `Skyline/work/20260409_osprey_sharp`:
+  - `129108b54` - Calibration XCorr unit bins and 16 MB mzML read buffer
+- ai `master`:
+  - (this TODO update + handoff)
+
 **Next**: (a) main-search XICs and 21 PIN features on Astral
-(checkpoint for that walk), (b) PR the two Rust bugs (xcorr dedup +
-window bounds truncation) upstream to maccoss/osprey, (c) address
-the HRAM LOH allocation pattern in C#.
+(checkpoint for that walk; expect HRAM LOH GC issue to resurface on
+the per-candidate apex XCorr in main search where bin resolution
+matters), (b) PR the three Rust bugs upstream to maccoss/osprey
+(xcorr dedup, window bounds truncation, unit-bin cal scorer),
+(c) consider MemoryMappedFile for the mzML reader if mzML perf
+becomes the dominant cost.
+
+**Next session handoff**: For detailed startup protocol (skills to
+load, build/verification commands, parity baselines, main-search walk
+plan, gotchas), read `ai/.tmp/handoff-20260409_osprey_sharp.md`
+before starting work.
 
 ## Next Sprint: Upstream Merge + Regression Tests
 
