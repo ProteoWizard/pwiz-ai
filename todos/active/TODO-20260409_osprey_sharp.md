@@ -40,6 +40,77 @@ already bit-identical at ULP. The remaining work is the main-search
 walk and any perf fixes needed to make the main search complete in a
 reasonable time on Astral.
 
+## Session 13 (2026-04-15): Astral main-search faster than Rust
+
+End-to-end Astral wall-clock now **0.64x Rust** (568.6s vs 884.6s). All
+21 PIN features still bit-identical at ULP on both Stellar and Astral.
+
+### Profiling infrastructure
+
+- Added `pwiz.OspreySharp.ProfilerHooks` wrapping JetBrains.Profiler.
+  Api MeasureProfiler with try/catch in non-inlineable helpers (matches
+  Skyline `TestRunnerLib.MemoryProfiler`). `RunCoelutionScoring` now
+  brackets the parallel loop with `StartMeasure` / `SaveAndStopMeasure`
+  + per-stage memory logging. No-op when no profiler is attached.
+- Added `OSPREY_MAX_SCORING_WINDOWS` env var capping the windows
+  scored in Stage 4 — Astral profile cycle ~15 min -> ~2 min.
+- `Profile-OspreySharp.ps1` gained `-ScopeToMainSearch` (passes
+  `--use-api --collect-data-from-start=off` to dotTrace) and
+  `-MaxWindows N` to drive the new gate.
+
+### HRAM pre-preprocess per-window cache
+
+- The first 4-window Astral profile (post Session 12 pool fix) showed
+  `ApplySlidingWindow` + `ApplyWindowingNormalization` taking 79% of
+  Stage 4: every candidate × every scan was re-running the full
+  preprocessing. Rust `pipeline.rs:5954-5957` pre-preprocesses all
+  window spectra ONCE and then scores each candidate via the
+  O(n_fragments) `xcorr_from_preprocessed` fast path.
+- Implemented the matching `HramStrategy.PreprocessWindowSpectra`
+  using a new `XcorrScratchPool.RentBins` / `ReturnBins` /
+  `ReturnBinsArray` API for bare `double[NBins]` arrays. Per window
+  we rent one scratch (intermediates) + N output buffers; on window
+  exit `ScoreWindow.finally` returns all rented bins. Each candidate
+  now scores via `XcorrFromPreprocessed` (O(n_fragments) bin lookup
+  with dedup), matching the Rust HRAM fast path.
+- `HramStrategy.ScoreXcorr` checks `preprocessed[spectrumIndex]` and
+  routes to the fast path if available; falls back to inline scratch
+  scoring when no per-window cache (e.g. calibration).
+
+### Astral single-file Stage 1-4 progression
+
+| Stage | C# wall | Ratio vs Rust (884.6s) |
+|--------|---------|------------------------|
+| Session 11 baseline (xcorr bugs fixed) | 4341.9s | 4.93x |
+| Session 12 + XcorrScratchPool | 964.0s | 1.09x |
+| Session 13 + HRAM pre-preprocess per window | **568.6s** | **0.64x** |
+
+Stellar single-file Stage 1-4 still at parity (~1x; noisy at small
+wall-clock).
+
+### Next: 3-file parallel and memory budget
+
+- Per-window preprocessed cache (HRAM): 1 `double[NBins]` per spectrum
+  (~800 KB). Astral has ~1222 spectra/window; with 32 active windows
+  in parallel that's ~31 GB of pool arrays. Single-file Astral peak
+  working set saw ~25 GB after HRAM change — within 64 GB budget.
+- For 3-file parallel runs (matching the Stellar 0.55x evidence in
+  the workflow HTML), we likely need:
+  1. **`float[]` preprocessed cache** instead of `double[]` (halves
+     pool memory; matches upstream maccoss/osprey which is f32 in
+     `osprey-scoring/src/lib.rs:2258-2378`. Our fork flipped to f64
+     in commit `c95b36c` purely for cross-impl bit-identical
+     comparison. With both sides on f32 we get the memory win and
+     the change is upstream-friendly).
+  2. **`OSPREY_SCORING_MAX_PARALLEL`** env var to cap
+     MaxDegreeOfParallelism for the main-search Parallel.ForEach,
+     so 3-file parallel can run 8 threads/file instead of 32.
+  3. **Library/decoy load-once** across files (the current pipeline
+     loads the library + generates decoys per file; would save
+     ~3 GB for 3 parallel files).
+- Bench `Bench-Scoring.ps1 -Dataset Astral -Files All` after each of
+  the above lands.
+
 ## Session 12 (2026-04-15): Astral main-search bit-identical + LOH pool
 
 End-to-end Astral parity achieved at 1.09x Rust wall-clock. All 21 PIN
