@@ -26,6 +26,17 @@
 .PARAMETER TopN
     Number of top hot spots to display (default: 20)
 
+.PARAMETER MaxWindows
+    Cap the number of isolation windows scored in Stage 4. Sets
+    OSPREY_MAX_SCORING_WINDOWS. Use small values (1-2) for fast iteration
+    on Astral profiling cycles.
+
+.PARAMETER ScopeToMainSearch
+    Drive dotTrace via the API so the .dtp snapshot contains only the
+    main-search loop (bracketed by ProfilerHooks.Start/SaveAndStop).
+    Requires OspreySharp to be built with the JetBrains.Profiler.Api
+    reference.
+
 .EXAMPLE
     .\Profile-OspreySharp.ps1
     Profile Stellar Stages 1-4 with sampling, show top 20 hot spots
@@ -33,6 +44,11 @@
 .EXAMPLE
     .\Profile-OspreySharp.ps1 -Dataset Astral -Stage Calibration
     Profile Astral Stages 1-3 (calibration only)
+
+.EXAMPLE
+    .\Profile-OspreySharp.ps1 -Dataset Astral -ScopeToMainSearch -MaxWindows 2
+    Profile Astral main-search with API-controlled scope, only 2 windows
+    (fast iteration for Stage 4 bottleneck hunting).
 
 .EXAMPLE
     .\Profile-OspreySharp.ps1 -ProfilingType Timeline -TopN 30
@@ -50,7 +66,18 @@ param(
 
     [string]$OutputPath = "",
 
-    [int]$TopN = 20
+    [int]$TopN = 20,
+
+    # Cap the number of isolation windows scored in Stage 4. When > 0,
+    # sets OSPREY_MAX_SCORING_WINDOWS so Astral profiling doesn't need the
+    # full ~15 min wall-clock to produce a representative snapshot.
+    [int]$MaxWindows = 0,
+
+    # When set, drives dotTrace via the API: the profiler attaches but
+    # does not start collecting until OspreySharp's ProfilerHooks.Start-
+    # Measure bracket around the main-search loop. Produces a snapshot
+    # that contains only Stage 4, not calibration + setup.
+    [switch]$ScopeToMainSearch
 )
 
 $ErrorActionPreference = "Stop"
@@ -123,6 +150,7 @@ switch ($Stage) {
     "Scoring"     { $env:OSPREY_EXIT_AFTER_SCORING = "1" }
     # "Full" sets neither
 }
+if ($MaxWindows -gt 0) { $env:OSPREY_MAX_SCORING_WINDOWS = "$MaxWindows" }
 
 # Clear diagnostic env vars
 $diagVars = @('OSPREY_DUMP_CAL_MATCH','OSPREY_CAL_MATCH_ONLY','OSPREY_DUMP_LDA_SCORES',
@@ -139,10 +167,15 @@ $dotTraceArgs = @(
     "--profiling-type=$ProfilingType",
     "--save-to=$OutputPath",
     "--overwrite",
-    "--propagate-exit-code",
-    $csharpBin,
-    "--"
-) + $appArgs
+    "--propagate-exit-code"
+)
+if ($ScopeToMainSearch) {
+    # Use API mode: OspreySharp's ProfilerHooks.StartMeasure /
+    # SaveAndStopMeasure brackets the main-search loop, so the .dtp
+    # snapshot contains only Stage 4 timing.
+    $dotTraceArgs += @("--use-api", "--collect-data-from-start=off")
+}
+$dotTraceArgs += @($csharpBin, "--") + $appArgs
 
 $scopeLabel = switch ($Stage) {
     "Calibration" { "Stages 1-3 (calibration only)" }
@@ -172,6 +205,7 @@ Set-Location $savedLoc
 # Cleanup
 Remove-Item Env:OSPREY_EXIT_AFTER_SCORING -ErrorAction SilentlyContinue
 Remove-Item Env:OSPREY_EXIT_AFTER_CALIBRATION -ErrorAction SilentlyContinue
+Remove-Item Env:OSPREY_MAX_SCORING_WINDOWS -ErrorAction SilentlyContinue
 Remove-Item Env:RUST_LOG -ErrorAction SilentlyContinue
 if (Test-Path $tempBlib) { Remove-Item $tempBlib -Force -ErrorAction SilentlyContinue }
 
