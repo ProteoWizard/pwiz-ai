@@ -40,6 +40,95 @@ already bit-identical at ULP. The remaining work is the main-search
 walk and any perf fixes needed to make the main search complete in a
 reasonable time on Astral.
 
+## Session 12 (2026-04-15): Astral main-search bit-identical + LOH pool
+
+End-to-end Astral parity achieved at 1.09x Rust wall-clock. All 21 PIN
+features pass at ULP on both Stellar (0.98x Rust) and Astral
+(1.09x Rust).
+
+### Cross-impl fixes (this session)
+
+- **C# `AnalysisPipeline.RunCalibration`**: added MS1 mass calibration
+  alongside MS2. Extracts M+0 observed m/z from apex MS1 of each cal-
+  sample peptide; feeds `MzCalibration.CalculateSingleLevel`. Without
+  this, each-tool-own-cal mode on Astral diverged on ms1_precursor_
+  coelution (21.87%, max diff 2.0) and ms1_isotope_cosine (13.68%,
+  max diff 1.0) because C#'s main-search MS1 features used raw
+  precursor m/z at 10 ppm tolerance instead of the reverse-calibrated
+  m/z at `max(3*SD, 1.0)` ppm tolerance.
+- **C# `ComputeApexMatchFeatures`**: returns calibrated fragment
+  tolerance as abs_mass_error when no fragments match, matching Rust
+  `compute_mass_accuracy` `(0.0, tolerance, tolerance)` sentinel.
+  Closed 8 outliers (max diff 5.97).
+- **Rust `longest_consecutive_ions`**: previously reverse-looked-up the
+  library by m/z and broke on first hit, silently dropping one
+  fragment's ordinal on m/z collisions. `FragmentMatch` now carries
+  the ordinal directly; function uses it. Closed 290 Astral divergences.
+- **Rust `lib_cosine` norm gate**: previously returned
+  `SpectralScore::default()` when `lib_norm` or `obs_norm` < 1e-10,
+  zeroing the counting features (consecutive_ions, explained_intensity)
+  alongside the undefined cosine. Counting features are independent
+  of the cosine norms — decoupled so cosine/Pearson/Spearman zero out
+  on the gate while presence counters still populate. Closed 59
+  short-/low-signal Astral rows.
+
+### Perf fix (the big one)
+
+- **C# `XcorrScratchPool`**: new `OspreySharp.Scoring.XcorrScratchPool`
+  with a `ConcurrentBag<XcorrScratch>` that holds per-spectrum 4-buffer
+  scratch sets (binned, windowed, prefix, preprocessed — all `double[
+  NBins]`, plus `bool[NBins]` visitedBins). `SpectralScorer.XcorrAtScan`
+  has a pool-aware overload that writes into rented buffers. On HRAM
+  (`NBins ~100K`, 800 KB per array), per-call allocation was hitting
+  LOH on every scan × every candidate × every window, driving gen-2 GC
+  that accounted for the vast majority of main-search time. Pool grows
+  organically to NThreads sets, then reuses for the full run — gen-2
+  holds the arrays; no more LOH churn.
+
+**Astral end-to-end Stage 1-4** (single Astral file 49, HRAM, all 21
+PIN features ULP-identical):
+
+| Config | C# wall-clock | Ratio vs Rust (886.9s) |
+|--------|---------------|------------------------|
+| Pre-pool (session 11, xcorr bugs fixed) | 4341.9s | 4.93x |
+| Post-pool (session 12) | **964.0s** | **1.09x** |
+
+Stellar end-to-end dropped 1.28x → 0.98x over the same change.
+
+### Remaining perf headroom (~9% / 77s gap)
+
+1. **mzML parsing**: C# ~38.7s vs Rust 22-24s from Phase 2 (HDD-bound
+   for C#; Rust uses mzdata's OS-cache-friendly access). Accounts for
+   roughly 16s of the 77s deficit. `MemoryMappedFile + MemoryMapped-
+   ViewStream` in `MzmlReader.cs` deferred as its own task.
+2. **Other hot paths not yet pooled**: XIC extraction, MS1 isotope
+   envelope, Tukey median polish. Unit-res pool win (1.28x → 0.98x)
+   hints there's still small-allocation churn outside XCorr.
+3. **Inner-loop vectorization**: Rust's windowing/sliding-window may
+   auto-vectorize better than the C# explicit for-loops.
+
+## Next sprint: profile + measure peak memory
+
+Now that the edit-build-test loop is viable (Astral in ~16 min end-to-
+end; Stellar in ~2 min), profile the scoring phase with dotTrace to
+find the remaining 9%. Proposed approach:
+
+- **Short-circuit env var** `OSPREY_MAX_SCORING_WINDOWS=N` in
+  `AnalysisPipeline.RunCoelutionScoring` (around line ~2443, before
+  `Parallel.ForEach(isolationWindows, ...)`) — caps Astral's ~130
+  windows to 1-2 for rapid iteration.
+- **dotTrace API hooks** mirroring `Skyline/Util/DotTraceProfile.cs`:
+  dynamic load of `JetBrains\dotTrace\v5.3\Bin\JetBrains.Profiler.Core
+  .Api.dll` (so the project doesn't hard-link), `Start()/Stop()/
+  EndSave()` around the main-search loop. `Profile-OspreySharp.ps1`
+  already supports `-Stage Scoring` but uses command-line dotTrace;
+  switching to API mode isolates Stage 4 profile.
+- **Peak memory**: add `Process.PeakWorkingSet64` and `GC.GetGC-
+  MemoryInfo().HeapSizeBytes` logging at end of run. The 4341.9s run
+  peaked at ~17 GB working set / ~26 GB private; post-pool expected
+  to be similar since pool holds the same NThreads * NBins * 8 bytes
+  in gen-2 rather than churning LOH.
+
 ## Current State (entering Phase 3)
 
 **Astral pre-main-search parity** (single Astral file 49, HRAM):
@@ -75,47 +164,26 @@ or RT-sliding cache) will be needed if main search is too slow.
 
 ## Remaining Tasks
 
-### Priority 1: Main-search Astral walk (correctness)
+### Priority 1: Main-search Astral walk (correctness)  -  DONE
 
-Walk the same way we did calibration:
+- [x] Main-search parity: all 21 PIN features bit-identical between
+      Rust and C# on Astral with each tool's own calibration (session
+      12). Session 11-12 fixes: MS1 mass calibration in C#;
+      per-fragment mass-error sentinel; Rust `longest_consecutive_
+      ions` ordinal attribution; Rust `lib_cosine` norm-gate
+      decoupling; C# `XcorrScratchPool`.
 
-- [ ] **Main-search XICs (post-recalibration)**: pick a few entry IDs
-      from passing targets, set `OSPREY_DIAG_SEARCH_ENTRY_IDS=...`,
-      compare per-fragment XIC values across tools.
-- [ ] Note: this diagnostic does NOT early-exit; it collects across the
-      full main search. Astral Stage 1-4 in Rust took 879s when last
-      run end-to-end. Consider adding an "exit after these IDs are
-      dumped" gate before running, OR pick IDs and accept the wait.
-- [ ] **CWT peak boundaries**: extend the search XIC dump to also
-      write start/apex/end indices and pairwise correlation scores per
-      CWT candidate. Compare across tools.
-- [ ] **21 PIN features with own calibration**:
-      `pwsh -File ./ai/scripts/OspreySharp/Test-Features.ps1 -Dataset Astral`
-      Both tools run Stage 1-4 in full. Expect long wait + the LOH GC
-      issue from Session 11 to resurface in C# main search.
+### Priority 2: HRAM main-search perf  -  DONE (1.09x Rust)
 
-### Priority 2: HRAM main-search perf (likely required to finish Priority 1)
-
-If C# main search is impractically slow (the prior end-to-end Astral
-attempt was killed mid-run after 20+ minutes at ~14% CPU), apply the
-analogous fix used for cal:
-
-- [ ] Profile C# Astral with `Profile-OspreySharp.ps1 -Dataset Astral
-      -Stage Scoring`. Expect XcorrFromPreprocessed/XcorrAtScan at the
-      top with HRAM 100K-bin allocations again.
-- [ ] Decide approach:
-      - **Per-window HRAM pre-preprocessing** with capped parallelism
-        (the Session 11 attempt at this thrashed memory at 32 threads ×
-        1 GB; would need MaxDegreeOfParallelism limit, e.g. 8, to fit
-        in 64 GB RAM)
-      - **RT-sliding window cache** (Skyline pattern) - sort targets by
-        expected RT, hold preprocessed spectra only for the active RT
-        window, drop as targets pass
-      - **Thread-local scratch buffer** with HRAM 100K-bin arrays
-        reused across calls (no LOH churn but still does the per-call
-        bin/window/slide compute)
-- [ ] Implement chosen approach in BOTH tools to keep cross-impl
-      parity. Verify Stellar still bit-identical.
+- [x] Short-term fix: `XcorrScratchPool` with `ConcurrentBag` holds
+      per-spectrum 4-buffer scratch sets across the whole scoring run.
+      Organic high-water (NThreads sets). Brought Astral 4.93x Rust →
+      1.09x Rust (964s vs 887s).
+- [ ] Next sprint (see "Remaining perf headroom" above): profile with
+      dotTrace + short-circuit env var, measure peak memory, attack
+      the residual 9%. Possible follow-ups: pre-preprocess window
+      spectra once per window on HRAM too (Unit-res already does this;
+      HRAM was blocked by allocation cost — now viable with pool).
 
 ### Priority 3: Upstream the three Rust bug fixes
 
@@ -233,8 +301,10 @@ and library files; each writes its own `.calibration.json`,
 
 ## Next session handoff
 
-For detailed Session-12 startup protocol (skills to load, build/
-verification commands to confirm parity baselines before changing
-anything, the main-search walk plan in step-by-step form, and
-gotchas), read `ai/.tmp/handoff-20260409_osprey_sharp.md` before
-starting work.
+Session 12 wrapped Astral main-search parity + pool fix. For the
+**session-13 startup protocol** (dotTrace API wire-in, short-circuit
+env var, peak-memory logging), see the "Next sprint" section above.
+
+The phase-2 handoff at `ai/.tmp/handoff-20260409_osprey_sharp.md` is
+superseded by the Session 12 entry above. Don't rely on the older
+parity tables in that handoff - they're pre-Astral-main-search.
