@@ -41,7 +41,11 @@ param(
     [ValidateSet("Calibration", "Scoring")]
     [string]$Stage = "Scoring",
     [int]$Iterations = 3,
-    [switch]$SkipUpstream = $false
+    [switch]$SkipUpstream = $false,
+    [switch]$SkipRust = $false,
+    # 1 = strictly sequential, N>1 = up to N files at once, 0 = default.
+    # Applies only to C# (Rust always sequential).
+    [int]$MaxParallelFiles = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -116,7 +120,7 @@ function Clear-DiagEnv {
 }
 
 function Run-Once {
-    param([string]$Binary, [string[]]$ToolArgs, [bool]$EarlyExit)
+    param([string]$Binary, [string[]]$ToolArgs, [bool]$EarlyExit, [bool]$IsCSharp = $false)
 
     $savedLoc = Get-Location
     Set-Location $testDir
@@ -128,6 +132,10 @@ function Run-Once {
             "Scoring"     { $env:OSPREY_EXIT_AFTER_SCORING = "1" }
         }
     }
+    # File-level parallelism override (C# only).
+    if ($IsCSharp -and $MaxParallelFiles -gt 0) {
+        $env:OSPREY_MAX_PARALLEL_FILES = "$MaxParallelFiles"
+    }
 
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $output = & $Binary @ToolArgs 2>&1
@@ -136,6 +144,7 @@ function Run-Once {
 
     Remove-Item Env:OSPREY_EXIT_AFTER_SCORING -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_EXIT_AFTER_CALIBRATION -ErrorAction SilentlyContinue
+    Remove-Item Env:OSPREY_MAX_PARALLEL_FILES -ErrorAction SilentlyContinue
     Set-Location $savedLoc
 
     $lines = @($output | ForEach-Object { $_.ToString() })
@@ -236,6 +245,7 @@ function Median { param([double[]]$Values) $s = $Values | Sort-Object; $s[[int](
 
 function Run-Benchmark {
     param([string]$Label, [string]$Binary, [bool]$EarlyExit, [string]$Type)
+    $isCSharp = ($Type -ne "Rust")
 
     Write-Host ""
     Write-Host ("=" * 78) -ForegroundColor Cyan
@@ -245,7 +255,7 @@ function Run-Benchmark {
     # Cold run: no library cache, measures true Stage 1 cold time
     Write-Host "  Cold (no lib cache)..." -ForegroundColor Gray -NoNewline
     Clean-AllCaches
-    $coldRun = Run-Once $Binary $commonArgs $EarlyExit
+    $coldRun = Run-Once $Binary $commonArgs $EarlyExit $isCSharp
     if ($coldRun.Exit -ne 0) {
         Write-Host " FAILED (exit $($coldRun.Exit))" -ForegroundColor Red
         return $null
@@ -264,7 +274,7 @@ function Run-Benchmark {
     for ($iter = 1; $iter -le $Iterations; $iter++) {
         Write-Host "  Run $iter/$Iterations (warm cache)..." -ForegroundColor Gray -NoNewline
         Clean-ScoreCaches
-        $result = Run-Once $Binary $commonArgs $EarlyExit
+        $result = Run-Once $Binary $commonArgs $EarlyExit $isCSharp
         if ($result.Exit -ne 0) {
             Write-Host " FAILED" -ForegroundColor Red
             continue
@@ -331,10 +341,12 @@ Write-Host ""
 
 $results = @()
 
-if (-not $SkipUpstream) {
+if (-not $SkipUpstream -and -not $SkipRust) {
     $results += Run-Benchmark "Upstream Rust (maccoss/osprey v26.1.3)" $upstreamBin $false "Rust"
 }
-$results += Run-Benchmark "Fork Rust (brendanx67/osprey)" $forkBin $true "Rust"
+if (-not $SkipRust) {
+    $results += Run-Benchmark "Fork Rust (brendanx67/osprey)" $forkBin $true "Rust"
+}
 $results += Run-Benchmark "OspreySharp (C#)" $csharpBin $true "CSharp"
 
 # ===========================================================================
