@@ -388,12 +388,93 @@ and library files; each writes its own `.calibration.json`,
    filtering) needs the matching change applied in C# AND Rust the
    same session, otherwise the parity walk diverges.
 
+## Session 14 (2026-04-15 -> 2026-04-16): Multi-file determinism + 3-file bench
+
+End-of-session state: Astral single-file 0.13x Rust still holds.
+Sequential 3-file Astral C# = 360.5s. Per-file determinism across
+parallelism modes is now correct (Stellar 3-file seq/par2/parN all
+produce bit-identical cs_features.tsv).
+
+### Critical bugfix: per-file OspreyConfig leak
+
+When `--write-pin --protein-fdr 0.01` was run on Stellar 3-file with
+`MaxParallelFiles>1`, per-file scored entry counts diverged across
+modes (e.g. file 20 in seq=466188, par2=466188, parN=464800). Two
+sequential runs with `MaxParallelFiles=1` were bit-identical — the
+non-determinism was specifically tied to file-level parallelism.
+
+Root cause: `AnalysisPipeline.cs:2433` mutates `config.FragmentTolerance`
+after MS2 calibration. `OspreyConfig` was the same instance shared by
+all parallel `ProcessFile` calls; whichever calibration finished
+second clobbered the first file's calibrated tolerance, so downstream
+scoring on the first file used the second file's tolerance.
+
+Fix: `OspreyConfig.ShallowClone()` + `config = config.ShallowClone()`
+at the top of `ProcessFile`. Stellar 3-file validation now matches
+across seq/par2/parN.
+
+Note: this fix also resolves a subtle non-determinism in seq mode
+that nobody noticed — file 1's calibration tolerance was leaking into
+file 2 and 3 even when sequential, just deterministically. Per-file
+counts in seq jumped to 466188/466131/466211 (all higher than
+pre-fix), suggesting calibration was previously slightly overrun by
+the wrong tolerance carried forward.
+
+### OSPREY_MAX_PARALLEL_FILES env var
+
+New env var (`AnalysisPipeline.cs:147`):
+- `1` = strictly sequential, one file at a time (memory-safe)
+- `N > 1` = `Parallel.For` capped at N concurrent files
+- unset/<=0 = `Parallel.For` default (all files at once)
+
+`Bench-Scoring.ps1` exposes via `-MaxParallelFiles N` (C# only;
+Rust is always sequential).
+
+### 3-file timings observed (single run, no median)
+
+| Dataset | Mode | C# wall | Notes |
+|---------|------|---------|-------|
+| Stellar | seq  (`MaxParallelFiles=1`) | 71.3s | reference |
+| Stellar | par2 (`MaxParallelFiles=2`) | 59.9s | best |
+| Stellar | parN (default) | 75.6s | thread oversubscription |
+| Astral  | seq  (`MaxParallelFiles=1`) | 360.5s | Rust = ~3000s |
+| Astral  | par2 (`MaxParallelFiles=2`) | 364.5s | no win, ~30 GB/file working set |
+
+Astral parN (full parallel) was killed earlier — risk of OOM with
+3 × ~30 GB working sets on a 64 GB machine.
+
+## Next session: finish the sprint
+
+1. **Re-run Astral 3-file timings with the config-clone fix in place**:
+   - seq, par2, parN with proper validation (cs_features.tsv pairwise
+     diff via `ai/.tmp/validate_file_parallelism.ps1 -Dataset Astral`)
+   - The pre-fix Astral numbers (sequential 360.5s, par2 364.5s) may
+     change slightly because the calibration leak is now corrected
+2. **Astral memory peak measurement** — run sequential 3-file with
+   peak working-set logging from `ProfilerHooks.LogMemoryStats`. If
+   par2 fits, try parN too; if 32-thread oversubscription is an
+   issue, consider also capping per-file `MaxDegreeOfParallelism` for
+   the inner main-search Parallel.ForEach.
+3. **Official 3-iteration `Bench-Scoring -Iterations 3` runs** with
+   fork Rust included for both Stellar and Astral, all parallelism
+   modes that fit.
+4. **Update Osprey-workflow.html footer** at
+   `pwiz_tools/OspreySharp/Osprey-workflow.html` lines 423-441 with
+   the new numbers (currently shows Session 10 0.55x stuff).
+5. Once HTML reflects the wins, that's the natural commit/PR point
+   for the sprint.
+
+### Known small bug to circle back to
+
+`Bench-Scoring.ps1` median computation has an off-by-one — for 3
+iterations 42.4/48.5/74.3 it reported 74.3 (max) instead of 48.5
+(median). Doesn't affect correctness of timings, just the reported
+ratio at the bottom of the table. Worth fixing when updating the
+HTML footer.
+
 ## Next session handoff
 
-Session 12 wrapped Astral main-search parity + pool fix. For the
-**session-13 startup protocol** (dotTrace API wire-in, short-circuit
-env var, peak-memory logging), see the "Next sprint" section above.
-
-The phase-2 handoff at `ai/.tmp/handoff-20260409_osprey_sharp.md` is
-superseded by the Session 12 entry above. Don't rely on the older
-parity tables in that handoff - they're pre-Astral-main-search.
+For the session-15 startup protocol (skills to load, build/verify
+commands, in-depth state of the Stellar/Astral validation, the
+exact next-step sequence), read
+`ai/.tmp/handoff-20260409_osprey_sharp.md` before starting work.
