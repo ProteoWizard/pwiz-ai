@@ -262,9 +262,21 @@ try {
     $nMatched = 0
     $results = @()
 
+    # Per-feature threshold overrides. HRAM xcorr / sg_weighted_xcorr use
+    # an f32 preprocessed cache (matches Rust upstream, halves pool
+    # memory); cumulative summation across ~20 fragment bins drifts at
+    # ~5e-6 max because Rust may auto-vectorize/FMA the inner loops
+    # while .NET Framework does not. Unit resolution (Stellar) stays on
+    # f64, so this relaxed threshold only matters on HRAM data.
+    $featThresholds = @{
+        "xcorr"             = 1e-5
+        "sg_weighted_xcorr" = 1e-5
+    }
+
     foreach ($feat in $features) {
         $rIdx = [Array]::IndexOf($rustHeader, $feat) + 1  # 1-based for awk
         $cIdx = [Array]::IndexOf($csHeader, $feat) + 1
+        $featThreshold = if ($featThresholds.ContainsKey($feat)) { $featThresholds[$feat] } else { $Threshold }
 
         if ($rIdx -le 0 -or $cIdx -le 0) {
             Write-Host ("  {0,-42} COLUMN NOT FOUND (rust={1} cs={2})" -f $feat, $rIdx, $cIdx) -ForegroundColor Red
@@ -278,7 +290,7 @@ try {
 NR==1{next}
 NR==FNR{pep=`$$rustPepIdx; gsub(/^[^.]*\./,"",pep); gsub(/\.[^.]*$/,"",pep); key=pep"_"`$$rustScanIdx; r[key]=`$$rIdx; next}
 FNR==1{next}
-{key=`$$csPepIdx"_"`$$csScanIdx; if(key in r){n++; d=r[key]-`$$cIdx; if(d<0)d=-d; if(d>$Threshold)nd++; if(d>maxd)maxd=d}}
+{key=`$$csPepIdx"_"`$$csScanIdx; if(key in r){n++; d=r[key]-`$$cIdx; if(d<0)d=-d; if(d>$featThreshold)nd++; if(d>maxd)maxd=d}}
 END{printf "%d %d %.4e", n, nd, maxd}
 "@
 

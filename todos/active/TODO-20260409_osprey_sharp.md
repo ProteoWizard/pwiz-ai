@@ -77,13 +77,32 @@ End-to-end Astral wall-clock now **0.64x Rust** (568.6s vs 884.6s). All
   routes to the fast path if available; falls back to inline scratch
   scoring when no per-window cache (e.g. calibration).
 
+### f32 HRAM cache + visitedBins pooling
+
+- Narrowed the per-window preprocessed cache from `double[NBins]` to
+  `float[NBins]` for HRAM only. Calibration and unit-res stay f64 to
+  preserve bit-identical parity through calibration (the earlier
+  full-f32 attempt cascaded through calibration LDA → different RT
+  calibration → different apex picks → 18 divergent entries). HRAM
+  main-search cache uses f32 with `WindowXcorrCache` wrapper holding
+  typed arrays per strategy.
+- Pooled `bool[NBins]` visitedBins in `XcorrFromPreprocessed` via the
+  `WindowXcorrCache`. Was 66M × 100 KB = 6.6 TB gen-0 churn per
+  Astral run; now reused per window with O(n_frags) selective clear
+  instead of O(NBins) Array.Clear. This was the remaining allocation
+  hotspot (zero gen-2 collections during main search after the fix).
+- Added pool diagnostic logging: `[POOL] scratch_allocs=N, bins_allocs=N`
+  at end of main search.
+
 ### Astral single-file Stage 1-4 progression
 
-| Stage | C# wall | Ratio vs Rust (884.6s) |
+| Stage | C# wall | Ratio vs Rust (~900s) |
 |--------|---------|------------------------|
 | Session 11 baseline (xcorr bugs fixed) | 4341.9s | 4.93x |
 | Session 12 + XcorrScratchPool | 964.0s | 1.09x |
-| Session 13 + HRAM pre-preprocess per window | **568.6s** | **0.64x** |
+| Session 13 + HRAM pre-preprocess per window | 568.6s | 0.64x |
+| + f32 HRAM cache only | 361.9s | 0.42x |
+| **+ visitedBins pooling** | **120.9s** | **0.13x** |
 
 Stellar single-file Stage 1-4 still at parity (~1x; noisy at small
 wall-clock).
@@ -180,9 +199,8 @@ Stellar end-to-end dropped 1.28x → 0.98x over the same change.
 
 ## Next sprint: profile + measure peak memory
 
-Now that the edit-build-test loop is viable (Astral in ~16 min end-to-
-end; Stellar in ~2 min), profile the scoring phase with dotTrace to
-find the remaining 9%. Proposed approach:
+Now that Astral single-file is 0.13x Rust (120.9s vs 911.6s), next
+sprint targets 3-file parallel within the 64 GB memory budget:
 
 - **Short-circuit env var** `OSPREY_MAX_SCORING_WINDOWS=N` in
   `AnalysisPipeline.RunCoelutionScoring` (around line ~2443, before
