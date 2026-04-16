@@ -241,7 +241,13 @@ function Parse-CSharpStages {
     }
 }
 
-function Median { param([double[]]$Values) $s = $Values | Sort-Object; $s[[int]($s.Count / 2)] }
+function Median {
+    param([double[]]$Values)
+    # Floor-based index: PowerShell's [int] uses banker's rounding
+    # (1.5 -> 2), which picks the max for length-3 instead of the middle.
+    $s = $Values | Sort-Object
+    $s[[int][Math]::Floor($s.Count / 2)]
+}
 
 function Run-Benchmark {
     param([string]$Label, [string]$Binary, [bool]$EarlyExit, [string]$Type)

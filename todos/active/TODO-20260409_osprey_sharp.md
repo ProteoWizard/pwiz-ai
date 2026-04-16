@@ -443,38 +443,98 @@ Rust is always sequential).
 Astral parN (full parallel) was killed earlier — risk of OOM with
 3 × ~30 GB working sets on a 64 GB machine.
 
-## Next session: finish the sprint
+## Session 15 (2026-04-16): Stellar perf locked in + variance solved
 
-1. **Re-run Astral 3-file timings with the config-clone fix in place**:
-   - seq, par2, parN with proper validation (cs_features.tsv pairwise
-     diff via `ai/.tmp/validate_file_parallelism.ps1 -Dataset Astral`)
-   - The pre-fix Astral numbers (sequential 360.5s, par2 364.5s) may
-     change slightly because the calibration leak is now corrected
-2. **Astral memory peak measurement** — run sequential 3-file with
-   peak working-set logging from `ProfilerHooks.LogMemoryStats`. If
-   par2 fits, try parN too; if 32-thread oversubscription is an
-   issue, consider also capping per-file `MaxDegreeOfParallelism` for
-   the inner main-search Parallel.ForEach.
-3. **Official 3-iteration `Bench-Scoring -Iterations 3` runs** with
-   fork Rust included for both Stellar and Astral, all parallelism
-   modes that fit.
-4. **Update Osprey-workflow.html footer** at
-   `pwiz_tools/OspreySharp/Osprey-workflow.html` lines 423-441 with
-   the new numbers (currently shows Session 10 0.55x stuff).
-5. Once HTML reflects the wins, that's the natural commit/PR point
-   for the sprint.
+End-of-session state: Stellar 3-file par-3 = 49.5s median with ~5%
+variance. HTML diagram fully updated with Session 14 numbers across
+header subtitle, Stage 4 parity blurb, four per-stage badges, and
+footer. Natural commit point for the Stellar half of the sprint.
 
-### Known small bug to circle back to
+### Perf fixes (this session)
 
-`Bench-Scoring.ps1` median computation has an off-by-one — for 3
-iterations 42.4/48.5/74.3 it reported 74.3 (max) instead of 48.5
-(median). Doesn't affect correctness of timings, just the reported
-ratio at the bottom of the table. Worth fixing when updating the
-HTML footer.
+- **`OspreyConfig.EffectiveFileParallelism`** (new property) +
+  per-file thread scaling in `ProcessFile`: when N files run in
+  parallel, each file's main-search `Parallel.ForEach` gets
+  `NThreads / N` threads instead of the full `ProcessorCount`.
+  Eliminates the 3 x 32 = 96 thread oversubscription on the
+  32-core box. Par-3 median dropped from 89.9s -> 56.6s.
+- **`s_mzmlReadGate` `SemaphoreSlim(1,1)`** in `AnalysisPipeline`:
+  serializes the `MzmlReader.LoadAllSpectra` call across concurrent
+  `ProcessFile` invocations. The producer inside `LoadAllSpectra`
+  is a sequential `XmlReader` over a `FileStream`, so 3 parallel
+  reads fight for the same disk scan - 45-95s wall-time jitter.
+  Gating collapses the disk-bound portion to one stream at a time
+  while main-search scoring overlaps freely. Par-3 median dropped
+  from 56.6s -> 49.5s; variance collapsed from 60% to ~5%. Gate is
+  only engaged when `EffectiveFileParallelism > 1` so single-file
+  and sequential runs are uncontested.
+- **Rust fork build fix**: `crates/osprey/src/pipeline.rs:5292` was
+  summing an `&Vec<f32>` into an `f64` (compile error after the
+  Session 13 f32 HRAM narrow). Added explicit `|&v| v as f64` cast.
+- **`Bench-Scoring.ps1` median off-by-one fixed**: PowerShell's
+  `[int]` uses banker's rounding, so `[int](3/2) = 2` picked the max
+  instead of the middle for 3-iteration runs. Replaced with
+  `[Math]::Floor`.
+
+### Experiment that did not pan out
+
+Capping `MzmlReader`'s internal decompression `Parallel.ForEach` at
+`config.NThreads` (instead of `Environment.ProcessorCount`) was
+tried as an alternative to the read gate. Did not help - median
+went 56.6s -> 60.7s and variance rose to 85%. The decompression
+pool is brief and TPL's default scheduler was handling it fine;
+throttling it just starved work. Reverted.
+
+### Stellar perf (final)
+
+| Mode | Median | Spread | vs Rust |
+|------|-------:|-------:|--------:|
+| Fork Rust (seq)          | 83.4s | ±3% | 1.00x |
+| C# sequential            | 63.9s | ±3% | 0.77x |
+| C# parallel-3            | 49.5s | ±5% | 0.59x |
+
+Single-file Stellar (per-stage, median of 3): C# 22.7s vs Rust
+23.2s = 1.0x (tied). S1 lib-load warm 0.7s (0.1x), S2 mzML 5.8s
+(1.2x), S3 calibration 11.7s (1.5x), S4 main-search 4.5s (0.9x).
+
+### `Osprey-workflow.html` updated
+
+- Header subtitle: Session 14, 21 features ULP on Stellar + pass on
+  Astral, 0.59x 3-file parallel.
+- Stage 4 parity blurb reflects both datasets and the f32 cache
+  note.
+- Per-stage badges: S1 0.7s / S2 5.8s / S3 11.7s / S4 4.5s.
+- Footer: Session 14 medians, Astral single-file 0.13x, full
+  optimization stack including per-file thread scaling and mzML
+  read gate.
+
+## Next session: Astral same-level analysis
+
+Same playbook as Stellar, but on Astral data:
+
+1. **Astral 3-file with the Session 15 fixes in place**: run par-1
+   (seq), par-2, and par-3 (if memory permits). Pre-fix par-1
+   was 360.5s, par-2 was 364.5s. With per-file thread scaling and
+   the read gate, par-2 and par-3 should improve meaningfully.
+   Need to verify with `validate_file_parallelism.ps1 -Dataset Astral`
+   that the per-file `cs_features.tsv` is still bit-identical
+   across modes (the `ShallowClone()` fix already covers this but
+   trust but verify).
+2. **Memory peak**: `[MEM pre/post-main-search]` logs + mid-run
+   `ai/.tmp/mem_check.ps1` snapshots. Astral single-file peaks
+   ~30 GB; par-2 was ~60 GB pre-fix; par-3 risks OOM on the 64 GB
+   box. Per-file thread scaling might shrink per-file working set
+   slightly (fewer in-flight windows per file).
+3. **Official `Bench-Scoring -Dataset Astral -Iterations 3`** for
+   each parallelism mode that fits memory.
+4. **Update `Osprey-workflow.html`** with Astral 3-file numbers
+   if competitive (currently only mentions single-file 0.13x).
+5. Fresh commit + push when HTML reflects all the wins; that is
+   the natural PR point for the full sprint.
 
 ## Next session handoff
 
-For the session-15 startup protocol (skills to load, build/verify
-commands, in-depth state of the Stellar/Astral validation, the
-exact next-step sequence), read
+For the session-16 startup protocol read
 `ai/.tmp/handoff-20260409_osprey_sharp.md` before starting work.
+That file will be rewritten to focus on Astral analysis when
+Session 15 commits land.
