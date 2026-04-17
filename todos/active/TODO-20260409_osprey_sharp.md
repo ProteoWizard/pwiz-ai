@@ -755,9 +755,83 @@ including the regression-test authoring + failure verification.
   quick-xml" explanation (see Session 16's mzML perf
   considerations).
 
+## Session 18 (2026-04-16): Project review + cleanup sprint
+
+Pivoted from Stage 2 prep to a structured project-health review and
+cleanup pass. With Stage 1 PRs in front of Mike and core parity +
+perf locked in, this is the natural checkpoint before continued
+LLM-assisted development drifts the project's internal shape.
+
+### Review findings (health-score snapshot)
+
+Eight-project layout (Core / ML / IO / Chromatography / Scoring /
+FDR / main / Test) is cleanly decomposed by subject area; namespace
+and folder organization align perfectly; no public mutable fields;
+disciplined `[InternalsVisibleTo]` use; MSTest discipline
+throughout. The 8-project split already delivers most of what a
+review would otherwise recommend.
+
+| Dimension | Grade | Notes |
+|---|---|---|
+| Modularity (cross-project) | A | Clean decomposition by subject area |
+| Modularity (within-project) | C | `AnalysisPipeline.cs` = 4,721 LOC god class; `PercolatorFdr.cs` = 1,521 LOC |
+| DRY | B- | 17+ scattered env-var reads; repeated dump/exit scaffolding; `BlibLoader`/`ElibLoader` SQLite-open duplication |
+| Encapsulation | A- | All private; 3 mutable statics in `AnalysisPipeline` deserve scrutiny (`_top6MzCache` grows unbounded across files) |
+| Separation of concerns | C+ | Pipeline stages cleanly split across projects, but inside `AnalysisPipeline` orchestration + feature extraction + diagnostics + IO routing are interleaved |
+
+### Cleanup in scope this session
+
+- Copy `Skyline.sln.DotSettings` to `OspreySharp.sln.DotSettings`
+  (pruning Skyline-only excluded paths).
+- Add `-RunInspection` switch to
+  `ai/scripts/OspreySharp/Build-OspreySharp.ps1`, modeled on the
+  Skyline `-RunInspection` design but self-contained.
+- Zero compiler + ReSharper warnings on `OspreySharp.sln`.
+- Apply Apache-2.0 license headers to all ~71 non-generated .cs
+  files under `pwiz_tools/OspreySharp/`, per `ai/STYLEGUIDE.md`
+  §"File Headers and AI Attribution" — original author Brendan
+  MacLean, AI assistance Claude Code, "Based on" credit to
+  maccoss/osprey.
+- Extract `OspreyEnvironment` static helper to centralize the 17+
+  env-var reads and dump/exit scaffolding. Behavior-preserving;
+  add unit tests.
+- Add local `pwiz_tools/OspreySharp/Jamfile.jam` (modeled on
+  `pwiz_tools/SeeMS/Jamfile.jam`) with explicit `OspreySharp` and
+  `OspreySharpTest` targets for `quickbuild.bat` / TeamCity
+  integration. Both `explicit` so OspreySharp opts in rather than
+  breaking default Skyline builds.
+
+### Deferred — Phase 4 cleanup follow-ups
+
+Recommended refactoring items intentionally NOT in this session.
+Each deserves its own focused sprint with parity + perf regression
+guards:
+
+1. **Extract `FeatureExtractor`** from `AnalysisPipeline.cs` —
+   ~1,500 lines of feature math (`ComputeCoelutionStats`,
+   `ComputePeakShapeFeatures`, `ComputeApexMatchFeatures`,
+   `ComputeMs1Features`, XIC extraction) moved into a dedicated
+   class in `OspreySharp.Scoring`. Biggest modularity win.
+2. **Stage-class split** — `LibraryLoadingStage`, `CalibrationStage`,
+   `MainSearchStage`, `FdrStage`, `OutputStage`. Reduces
+   `AnalysisPipeline.cs` from 4,721 LOC to a ~400-line thin
+   orchestrator.
+3. **Split `PercolatorFdr.cs` (1,521 LOC)** — separate PIN format
+   writer from LDA.
+4. **`SQLiteLibraryLoaderBase`** — extract shared
+   `SQLiteConnection` open + `TableExists` helpers from
+   `BlibLoader` / `ElibLoader` (`pwiz.OspreySharp.IO`).
+5. **`AnalysisCache`** — wrap `_top6MzCache` (currently a raw
+   run-lifetime `ConcurrentDictionary`) with a cache object
+   cleared per-file to bound memory on long runs.
+6. **Extend regression test coverage** — the 18-test bug-class
+   regression suite (Phase 2 Priority 5) is ready to extend with
+   main-search era bug classes now that parity is locked in.
+
 ## Next session handoff
 
-For the session-18 startup protocol, the natural move is to check
-the maccoss/osprey PR tracker for any open comments on #4-#8,
-then either respond or start Stage 2 prep. No handoff file is
-needed -- state is captured in this TODO and the open PRs.
+For the session-19 startup protocol, pick up whichever of
+Session 18 cleanup has not completed, then either respond to any
+pending Mike comments on maccoss/osprey#4-#8 or start Stage 2 prep.
+No handoff file is needed -- state is captured in this TODO and the
+open PRs.

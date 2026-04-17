@@ -12,6 +12,13 @@
 .PARAMETER RunTests
     Run OspreySharp.Test unit tests after building
 
+.PARAMETER RunInspection
+    Run ReSharper code inspection (jb inspectcode) on OspreySharp.sln
+    after building. Requires JetBrains.ReSharper.GlobalTools (install with:
+    dotnet tool install -g JetBrains.ReSharper.GlobalTools). Full-solution
+    inspection on OspreySharp takes roughly 1-3 minutes. Non-zero exit if
+    any warnings are found.
+
 .PARAMETER TestName
     Specific test method name to run (optional, runs all tests if not specified)
 
@@ -39,6 +46,10 @@
 .EXAMPLE
     .\Build-OspreySharp.ps1 -Configuration Debug -RunTests -Summary
     Debug build + tests with minimal output
+
+.EXAMPLE
+    .\Build-OspreySharp.ps1 -Configuration Debug -RunInspection
+    Build and run ReSharper inspection; non-zero exit on any warnings
 #>
 
 param(
@@ -48,6 +59,9 @@ param(
 
     [Parameter(Mandatory=$false)]
     [switch]$RunTests = $false,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$RunInspection = $false,
 
     [Parameter(Mandatory=$false)]
     [string]$TestName = $null,
@@ -141,6 +155,124 @@ try {
     $buildDuration = (Get-Date) - $buildStart
     Write-Host ""
     Write-Host "Build succeeded in $($buildDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
+
+    # Run ReSharper code inspection if requested
+    if ($RunInspection) {
+        Write-Host ""
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host "Running ReSharper code inspection" -ForegroundColor Cyan
+        Write-Host "========================================" -ForegroundColor Cyan
+
+        $jbPath = & where.exe jb 2>$null
+        if (-not $jbPath) {
+            Write-Host ""
+            Write-Host "ReSharper command-line tools (jb) not installed" -ForegroundColor Red
+            Write-Host "Install with: dotnet tool install -g JetBrains.ReSharper.GlobalTools" -ForegroundColor Yellow
+            exit 1
+        }
+
+        $tmpDir = Join-Path $aiRoot '.tmp'
+        if (-not (Test-Path $tmpDir)) {
+            New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+        }
+        $cacheDir = Join-Path $tmpDir '.inspectcode-cache'
+        if (-not (Test-Path $cacheDir)) {
+            New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+        }
+        $inspectionOutput = Join-Path $tmpDir 'OspreyInspect.xml'
+        $dotSettings = Join-Path $ospreyRoot 'OspreySharp.sln.DotSettings'
+
+        if (-not (Test-Path $dotSettings)) {
+            Write-Host "OspreySharp.sln.DotSettings not found at: $dotSettings" -ForegroundColor Red
+            exit 1
+        }
+
+        Write-Host "Inspecting OspreySharp.sln (typically 1-3 minutes)..." -ForegroundColor Cyan
+        $inspectStart = Get-Date
+
+        # Inspection args match TeamCity configuration:
+        # --severity WARNING: report warnings and errors only
+        # --no-swea: disable solution-wide analysis
+        # --no-build: solution already built by MSBuild above
+        # --caches-home: persistent cache for faster subsequent runs
+        $inspectArgs = @(
+            "inspectcode", $slnPath,
+            "--profile=$dotSettings",
+            "--output=$inspectionOutput",
+            "--format=Xml",
+            "--severity=WARNING",
+            "--no-swea",
+            "--no-build",
+            "--caches-home=$cacheDir",
+            "--properties=Configuration=$Configuration",
+            "--verbosity=WARN"
+        )
+        & jb $inspectArgs
+        $inspectDuration = (Get-Date) - $inspectStart
+
+        if (-not (Test-Path $inspectionOutput)) {
+            Write-Host "Inspection output not found: $inspectionOutput" -ForegroundColor Red
+            exit 1
+        }
+
+        # Parse XML results
+        [xml]$xml = Get-Content $inspectionOutput
+        $issueTypes = $xml.GetElementsByTagName("IssueType")
+        $severities = @{}
+        foreach ($issueType in $issueTypes) {
+            $severities[$issueType.Id] = $issueType.Severity
+        }
+
+        $allIssues = @()
+        $projects = $xml.GetElementsByTagName("Project")
+        foreach ($project in $projects) {
+            foreach ($issue in $project.ChildNodes) {
+                if ($issue.Name -eq "Issue") {
+                    $severity = $severities[$issue.TypeId]
+                    if ($severity -eq "WARNING" -or $severity -eq "ERROR") {
+                        $allIssues += [PSCustomObject]@{
+                            File = $issue.File
+                            Line = $issue.Line
+                            TypeId = $issue.TypeId
+                            Message = $issue.Message
+                            Severity = $severity
+                        }
+                    }
+                }
+            }
+        }
+
+        $errors = @($allIssues | Where-Object { $_.Severity -eq "ERROR" })
+        $warnings = @($allIssues | Where-Object { $_.Severity -eq "WARNING" })
+
+        Write-Host ""
+        Write-Host "Inspection completed in $($inspectDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Cyan
+        Write-Host "  Errors:   $($errors.Count)" -ForegroundColor Gray
+        Write-Host "  Warnings: $($warnings.Count)" -ForegroundColor Gray
+
+        if ($allIssues.Count -gt 0) {
+            Write-Host ""
+            Write-Host "Top 20 issue types (count / rule):" -ForegroundColor Cyan
+            $allIssues | Group-Object TypeId | Sort-Object Count -Descending | Select-Object -First 20 | ForEach-Object {
+                "{0,5}  {1}" -f $_.Count, $_.Name | Write-Host -ForegroundColor Yellow
+            }
+
+            Write-Host ""
+            Write-Host "Top 20 files (count / file):" -ForegroundColor Cyan
+            $allIssues | Group-Object File | Sort-Object Count -Descending | Select-Object -First 20 | ForEach-Object {
+                "{0,5}  {1}" -f $_.Count, $_.Name | Write-Host -ForegroundColor Yellow
+            }
+
+            Write-Host ""
+            Write-Host "Full details: $inspectionOutput" -ForegroundColor Gray
+            Write-Host ""
+            Write-Host "Code inspection FAILED - $($allIssues.Count) issue(s) found" -ForegroundColor Red
+            exit 1
+        } else {
+            Write-Host ""
+            Write-Host "Code inspection passed - zero warnings/errors" -ForegroundColor Green
+        }
+    }
 
     # Run tests if requested
     if ($RunTests) {

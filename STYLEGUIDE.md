@@ -84,6 +84,35 @@ using pwiz.Skyline.Model;
 
 **ReSharper setting**: "Place 'System.*' and 'Windows.*' namespaces first when sorting 'using' directives" is enabled.
 
+### Array Literal Type Inference
+
+**Prefer `new[] { ... }` over `new T[] { ... }`** when the element type can be
+inferred from the initializer. ReSharper flags the explicit form as
+`RedundantExplicitArrayCreation`.
+
+```csharp
+// ❌ Avoid - redundant explicit type
+var mzs = new double[] { 500.25, 600.37, 700.48 };
+var ids = new int[] { 1, 2, 3 };
+var scores = new float[] { 0.9f, 0.8f, 0.7f };
+
+// ✅ Prefer - inferred element type
+var mzs = new[] { 500.25, 600.37, 700.48 };
+var ids = new[] { 1, 2, 3 };
+var scores = new[] { 0.9f, 0.8f, 0.7f };
+```
+
+**Only keep the explicit type when needed**:
+- Type cannot be inferred (e.g. mixed numeric types that must widen):
+  `new double[] { 1, 2.5 }` keeps the `double[]` so `1` is not treated as `int`.
+- Array element type must differ from the inferred type (covariance, interface):
+  `new IFoo[] { concreteFoo }`.
+- Empty array literals: `new int[0]` or `Array.Empty<int>()`.
+
+**Why this matters for tests**: expected-value arrays (`new double[] { ... }`)
+are especially common in unit tests; the redundant form spreads quickly across
+a test suite if not caught early.
+
 ## Resource Strings (Localization)
 
 **CRITICAL**: ALL user-facing text must be in .resx files.
