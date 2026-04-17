@@ -15,6 +15,22 @@ Development involves two repositories:
 
 See [ai/docs/ai-repository-strategy.md](docs/ai-repository-strategy.md) for setup details.
 
+## Product-Specific TODOs
+
+TODO files prefixed with a product abbreviation
+(`TODO-{product}-YYYYMMDD_*.md`) indicate non-mainline work where
+different workflow rules may apply. When working on a product-prefixed
+TODO, consult the product guide first — commit-message format,
+build/test commands, review process, and even shell/line-ending rules
+may differ from the Skyline defaults in this file.
+
+| Prefix | Product | Primary guide |
+|--------|---------|---------------|
+| *(none)* | Skyline | This document |
+| `LK` | LabKey Server | [ai/docs/labkey/](docs/labkey/) |
+| `OR` | Osprey Rust | [ai/docs/osprey-development-guide.md](docs/osprey-development-guide.md) |
+| `PW` | ProteoWizard C++ | [ai/docs/proteowizard-development-guide.md](docs/proteowizard-development-guide.md) *(future)* |
+
 ## Branch Strategy
 
 **For pwiz repository:**
