@@ -3,6 +3,7 @@
 ## Branch Information
 - **Branch**: `Skyline/work/20260416_spectrumSequenceRuler`
 - **Base**: `master`
+- **Repo**: `pwiz1`
 - **Created**: 2026-04-16
 - **Status**: In Progress
 - **GitHub Issue**: (pending)
