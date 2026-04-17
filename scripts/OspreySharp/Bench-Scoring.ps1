@@ -66,7 +66,7 @@ $tempBlib = Join-Path $testDir "_bench_output.blib"
 
 $upstreamBin = "C:\proj\osprey-mm\target\release\osprey.exe"
 $forkBin = "C:\proj\osprey\target\release\osprey.exe"
-$csharpBin = "C:\proj\pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\pwiz.OspreySharp.exe"
+$csharpBin = "C:\proj\pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\OspreySharp.exe"
 
 # Build mzML file list based on -Files parameter
 $mzmlFiles = if ($Files -eq "Single") {

@@ -102,7 +102,7 @@ $aiRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)
 $projRoot = Split-Path -Parent $aiRoot
 
 $rustBinary = Join-Path $projRoot "osprey\target\release\osprey.exe"
-$csharpBinary = Join-Path $projRoot "pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\pwiz.OspreySharp.exe"
+$csharpBinary = Join-Path $projRoot "pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\OspreySharp.exe"
 $library = Join-Path $testDir $ds.Library
 $mzml = Join-Path $testDir $ds.SingleFile
 

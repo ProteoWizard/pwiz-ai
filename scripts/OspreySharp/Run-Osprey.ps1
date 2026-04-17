@@ -132,7 +132,7 @@ $aiRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)
 $projRoot = Split-Path -Parent $aiRoot
 
 # Tool binaries
-$csharpBinary = Join-Path $projRoot "pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\pwiz.OspreySharp.exe"
+$csharpBinary = Join-Path $projRoot "pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\OspreySharp.exe"
 $rustBinary = Join-Path $projRoot "osprey\target\release\osprey.exe"
 
 $binary = if ($Tool -eq "CSharp") { $csharpBinary } else { $rustBinary }

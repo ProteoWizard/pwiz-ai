@@ -96,7 +96,7 @@ if (-not (Test-Path $testDir)) {
 $mzml = Join-Path $testDir $ds.SingleFile
 $library = Join-Path $testDir $ds.Library
 $tempBlib = Join-Path $testDir "_profile_output.blib"
-$csharpBin = "C:\proj\pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\pwiz.OspreySharp.exe"
+$csharpBin = "C:\proj\pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\OspreySharp.exe"
 
 $scriptRoot = Split-Path -Parent $PSCommandPath
 $aiRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)
