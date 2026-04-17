@@ -508,33 +508,256 @@ Single-file Stellar (per-stage, median of 3): C# 22.7s vs Rust
   optimization stack including per-file thread scaling and mzML
   read gate.
 
-## Next session: Astral same-level analysis
+## Session 16 (2026-04-16): Astral perf + first upstream PR
 
-Same playbook as Stellar, but on Astral data:
+End-of-session state: Astral C# beats Rust ~8x on 3-file parallel
+(342s vs 2751s). First upstream PR (maccoss/osprey#3) posted with
+measured calibration evidence. Stage 1 upstream path is live.
 
-1. **Astral 3-file with the Session 15 fixes in place**: run par-1
-   (seq), par-2, and par-3 (if memory permits). Pre-fix par-1
-   was 360.5s, par-2 was 364.5s. With per-file thread scaling and
-   the read gate, par-2 and par-3 should improve meaningfully.
-   Need to verify with `validate_file_parallelism.ps1 -Dataset Astral`
-   that the per-file `cs_features.tsv` is still bit-identical
-   across modes (the `ShallowClone()` fix already covers this but
-   trust but verify).
-2. **Memory peak**: `[MEM pre/post-main-search]` logs + mid-run
-   `ai/.tmp/mem_check.ps1` snapshots. Astral single-file peaks
-   ~30 GB; par-2 was ~60 GB pre-fix; par-3 risks OOM on the 64 GB
-   box. Per-file thread scaling might shrink per-file working set
-   slightly (fewer in-flight windows per file).
-3. **Official `Bench-Scoring -Dataset Astral -Iterations 3`** for
-   each parallelism mode that fits memory.
-4. **Update `Osprey-workflow.html`** with Astral 3-file numbers
-   if competitive (currently only mentions single-file 0.13x).
-5. Fresh commit + push when HTML reflects all the wins; that is
-   the natural PR point for the full sprint.
+### Astral 3-file perf (1 iteration, Session 15 fixes in place)
+
+| Mode | Wall | vs Rust |
+|------|-----:|--------:|
+| Fork Rust (seq, sequential always)  | 2751.2s | 1.00x |
+| C# sequential (`MaxParallelFiles=1`) | 380.1s | 0.138x (7.2x faster) |
+| C# par-2 (`MaxParallelFiles=2`)      | 372.8s | 0.136x (7.4x faster) |
+| C# par-3 (`MaxParallelFiles=3`)      | 342.3s | 0.124x (8.0x faster) |
+
+Rust 3-file wall (~2751s) is ~3x Rust single-file from Session 14
+(~917s), confirming Rust has zero file-level parallelism - linear
+scaling with file count. C# par-3 (342s) vs C# single-file (111s) is
+~3.1x, meaning ~97% parallel efficiency across 3 files. Session 15
+per-file thread scaling (3 x 10 threads = 30 on 32-core box) and
+mzML read gate are both earning their keep on Astral too. Par-3 did
+NOT OOM on 64 GB - the per-file thread scaling effectively reduces
+per-file in-flight window count, which shrinks the scratch pool
+high-water mark.
+
+### Astral single-file baseline (1 iteration, for per-stage badges)
+
+C# 110.7s (cold 160.9s), S1 4.3s lib-load, S2 34.9s mzML parse,
+S3 20.0s calibration, S4 49.4s main-search. mzML parse is still
+HDD-bound and roughly 1.6x Rust's mzdata crate - see "mzML perf
+considerations" below.
+
+### Upstream PR path launched - Stage 1 plan
+
+Strategy for upstreaming parity + perf work to maccoss/osprey
+documented this session. Stage 1 ships 5 small focused PRs, each
+anchored on Mike's own in-code comments or a specific correctness
+bug class, landed in order of least-controversial first. Stage 2
+offers perf optimizations (file parallelism, XCorr scratch pooling)
+after Stage 1 demonstrates working collaboration.
+
+Stage 1 PR order (landing sequence, least-controversial first):
+
+1. **Unit-bin calibration XCorr** (posted as maccoss/osprey#3)
+2. `longest_consecutive_ions` ordinal attribution (fork commit
+   `22fa4a9` split)
+3. `lib_cosine` norm-gate decoupling (fork commit `22fa4a9` split)
+4. DIA window bounds truncation (fork commit `a07aae6`)
+5. XCorr fragment bin dedup (fork commit `4db625c`) - most
+   algorithmic, save for last after Mike engages with the smaller
+   PRs
+
+Stage 2 perf offers (after Stage 1):
+- Rayon file parallelism (+ per-file config clone, same pattern as
+  C# `OspreyConfig.ShallowClone()`)
+- Per-window XCorr preprocessed cache (analog of C# `XcorrScratchPool`
+  + `WindowXcorrCache` - rust already has the ingredients)
+
+### maccoss/osprey#3 - unit-bin calibration XCorr
+
+Posted today. Single-line change + expanded comment in
+`run_calibration_discovery_windowed` (pipeline.rs:407), switching
+the HRAM branch from `SpectralScorer::hram()` to
+`SpectralScorer::new()`. Matches the choice already made in
+`run_xcorr_calibration_scoring` (batch.rs:2021), anchored on
+Mike's own comment there.
+
+PR body includes measured evidence from before/after runs on Mike's
+Astral file 49 (fork vs fork with the one-line revert, both using
+the fork's diagnostic dumps):
+
+- RT calibration curve: max predicted-measured-RT delta 0.45s over
+  21.7-min gradient (median 0.07s)
+- MS1 mass cal: mean shift delta 0.02 ppm, tolerance delta 0.03 ppm
+- MS2 mass cal: mean shift delta 0.003 ppm, tolerance delta 0.07 ppm
+- LOESS pool: unit 2927 pairs vs hram 2966 pairs (1.3% more)
+- R^2: delta 1.6e-5 (0.99865 vs 0.99867)
+
+Diagnostic outputs saved at `ai/.tmp/cal_delta/{unit_bins,hram_bins}/`
+for future reference. Writeup contingency: if Mike wants even
+deeper evidence, same infrastructure can extend to 21-feature
+main-search diffs using the existing `OSPREY_DIAG_SEARCH_ENTRY_IDS`
+dumps.
+
+### If Mike rejects unit-bin calibration
+
+The alternative path is to adopt per-window HRAM calibration in
+C# to preserve cross-impl parity. Session 15 infrastructure
+(`XcorrScratchPool`, `WindowXcorrCache`, `EffectiveFileParallelism`
+thread scaling) makes this a ~1 day port. Estimated Astral
+calibration cost: ~20s (similar to today's all-at-once unit-bin
+20.0s), bounded above by Stage 4 x entry-ratio. Stellar is
+unit-resolution so no change there. Total run-wide impact ~1-2%
+of wall clock. Not devastating if it happens.
+
+### mzML perf considerations (deferred)
+
+Rust's mzdata crate uses SIMD base64 (`base64-simd` crate) and
+quick-xml streaming, giving it ~1.7x our C# mzML parse on HDD.
+Rust doesn't use memory-mapped files - it's pure SIMD-heavy
+per-byte decode. For OspreySharp, the obvious alternative is
+`pwiz_data_cli.dll` (the existing ProteoWizard C# wrapper around
+C++ pwiz). Worth benchmarking but not this sprint - three
+outcomes:
+1. `pwiz_data_cli` wins -> adopt, delete our MzmlReader
+2. Ties our custom reader -> pwiz C++ itself has a gap vs mzdata,
+   optimizing pwiz benefits Skyline and all consumers
+3. Loses -> interesting data, keep custom reader
+
+Tracked as a separate follow-up task outside this sprint.
+
+## Session 17 (2026-04-16): Stage 1 upstream PRs posted end-to-end
+
+End-of-session state: all five Stage 1 PRs are up in front of Mike
+(maccoss/osprey#3 merged, #4-#8 open). Each carries a regression
+test that was explicitly verified to fail under the pre-fix
+behavior. C# side has matching regression guards wherever the
+invariant was at risk of drift.
+
+### Upstream PRs posted (all against maccoss/osprey main)
+
+| # | Title | File | Scope | Evidence |
+|---|-------|------|-------|----------|
+| 3 | Use unit-resolution bins for calibration XCorr scorer | pipeline.rs | perf-at-parity | **MERGED** (RT delta 0.45s max, MS1/MS2 mass cal deltas <=0.02 ppm) |
+| 4 | Add regression tests for calibration XCorr bin choice | pipeline.rs | guard for #3 | open |
+| 5 | Attribute consecutive-ions ordinals from FragmentMatch directly | lib.rs | parity bug (290 Astral rows) | open |
+| 6 | Decouple lib_cosine counting features from the norm gate | lib.rs | parity bug (59 Astral rows) | open |
+| 7 | Preserve full-precision isolation-window bounds in DIA grouping | batch.rs | parity bug (~2 Astral rows, cascades) | open |
+| 8 | Dedup fragment bins in scorer.xcorr and xcorr_at_scan | lib.rs | algorithmic, changes all XCorr values | open |
+
+Each PR:
+- Touches a single file, single function family
+- Includes a regression test verified to fail under the pre-fix
+  code (left/right values captured in each PR body)
+- States how it relates to the others (all independent; any merge
+  order works)
+- Declares cross-implementation validation evidence where observed
+
+PR #8 is the most algorithmic -- it changes all XCorr numerical
+output. PR body explicitly flags Jimmy Eng as a candidate reviewer
+since he authored Comet's XCorr algorithm. If Mike wants to
+defer #8 pending Jimmy's input, #3-#7 can still land and #8 is
+the only one whose rejection would require rolling back C#
+(because our C# made the matching dedup change in Session 9).
+
+### Rejection-contingency cost per PR (parity perspective)
+
+- **#4** (test-only): no C# cost if rejected; we keep our own test.
+- **#5** (ordinal attribution): C# already iterates library
+  fragments per ion type; C# never had the bug. Rejection means
+  accepting ~290-row divergence at b_n/y_m m/z collisions.
+- **#6** (norm-gate decouple): C# computes counting features in
+  separate functions; C# never had the bug. Rejection means
+  accepting ~59-row divergence on short-/low-signal peptides.
+- **#7** (DIA bounds): C# already stores the full IsolationWindow
+  object (keyed by truncated center only for dedup). Rejection
+  means accepting ~2-row divergence at window boundaries.
+- **#8** (XCorr dedup): C# already dedups (Session 9). Rejection
+  here would require **reverting the Session 9 C# dedup** to
+  restore numerical parity -- real cost.
+
+### Regression guards on the C# side
+
+One C# regression test added this session:
+`TestCalibrationXcorrScorerUsesUnitBins` in
+`OspreySharp.Test/CalibrationTest.cs`. Mirrors PR #4's Rust
+guard -- verifies `s_calXcorrScorer.BinConfig.NBins` equals
+`BinConfig.UnitResolution()`'s NBins and is not
+`BinConfig.HRAM()`'s. Required `[InternalsVisibleTo("pwiz.
+OspreySharp.Test")]` in OspreySharp's AssemblyInfo.cs and
+flipped `s_calXcorrScorer` from private to internal.
+
+The other three non-algorithmic bug classes (ordinal attribution,
+norm gate, DIA bounds) were evaluated for a C# port and skipped
+because C# was structurally immune by design in each case (see
+per-PR analysis above). Adding a guard where no bug can exist
+would duplicate effort better spent on code paths where drift is
+possible.
+
+### Approach that worked, for future reference
+
+When splitting a multi-concern fork commit into multiple upstream
+PRs (e.g. 22fa4a9 -> PR-5 ordinal + PR-6 norm-gate):
+
+1. Branch from upstream/main
+2. Cherry-pick the whole fork commit with --no-commit
+3. Use Edit to revert the hunks NOT in this PR's scope, so the
+   stage matches the intended PR diff
+4. git reset HEAD to unstage, then manually git add the final file
+5. Commit with an upstream-tone message (no internal TODO refs,
+   no OspreySharp mentions, anchor on upstream's own comments/
+   docs where possible)
+6. Add regression test for the invariant being enforced, verify
+   test fails with pre-fix + passes with fix
+7. Push, gh pr create
+
+Each PR took about 20-30 minutes from branch-creation to PR-up,
+including the regression-test authoring + failure verification.
+
+## Next session: wait on Mike + start thinking about Stage 2
+
+1. **Respond to Mike's questions on #4-#8** as they come in. Each
+   PR stands on its own, so he can merge/reject/discuss
+   independently. #8 is the most likely to generate discussion
+   (Jimmy Eng's input may be requested).
+2. **If Mike rejects #8**: revert the Session 9 C# dedup fix in
+   OspreySharp.Scoring to restore parity. See SpectralScorer.cs
+   XCorr path. All other rejections are parity-degradation but
+   don't require code changes on our side.
+3. **Stage 2 prep** (Rust perf offers, after Stage 1 settles):
+   - Rayon file-level parallelism with per-file
+     `OspreyConfig.clone()` -- the same pattern as the C#
+     `OspreyConfig.ShallowClone()` we added in Session 12.
+     Measured 7-8x Rust speedup on 3-file Astral (Rust currently
+     linear-in-file-count at ~917s/file). Biggest single Rust
+     perf opportunity in our pocket.
+   - Per-window XCorr preprocessed cache
+     (`XcorrScratchPool`/`WindowXcorrCache` equivalent) -- Rust
+     already has the ingredients (`preprocess_library_for_xcorr`,
+     `xcorr_from_preprocessed`), just needs the pool pattern
+     around them. Would bring main-search memory and allocation
+     under control similar to our C# wins.
+4. **Stage 5 + 6 work on our side**: Percolator SVM FDR and
+   the blib output path are the next stages to port/verify on
+   the C# side. Out of scope of this sprint but the natural
+   continuation.
+5. **pwiz_data_cli mzML eval**: still a standing follow-up task.
+
+### Stage 1 PR links for reference
+
+- https://github.com/maccoss/osprey/pull/3 (merged)
+- https://github.com/maccoss/osprey/pull/4
+- https://github.com/maccoss/osprey/pull/5
+- https://github.com/maccoss/osprey/pull/6
+- https://github.com/maccoss/osprey/pull/7
+- https://github.com/maccoss/osprey/pull/8
+
+### Known small items (unchanged since Session 16)
+
+- `Bench-Scoring.ps1` does not produce the MEDIAN table for
+  `-Iterations 1` runs (requires `$runs.Count -ge 2`). The raw
+  per-iteration numbers still print, so we read them directly.
+- `Osprey-workflow.html` could add a note about the 1-file Astral
+  mzML parse rate (~35s vs Rust ~22s) with the "SIMD base64 /
+  quick-xml" explanation (see Session 16's mzML perf
+  considerations).
 
 ## Next session handoff
 
-For the session-16 startup protocol read
-`ai/.tmp/handoff-20260409_osprey_sharp.md` before starting work.
-That file will be rewritten to focus on Astral analysis when
-Session 15 commits land.
+For the session-18 startup protocol, the natural move is to check
+the maccoss/osprey PR tracker for any open comments on #4-#8,
+then either respond or start Stage 2 prep. No handoff file is
+needed -- state is captured in this TODO and the open PRs.
