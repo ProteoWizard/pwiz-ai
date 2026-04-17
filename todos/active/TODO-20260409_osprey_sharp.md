@@ -828,10 +828,61 @@ guards:
    regression suite (Phase 2 Priority 5) is ready to extend with
    main-search era bug classes now that parity is locked in.
 
+### Session 18 results (end-of-session, 2026-04-17)
+
+Full sprint landed in 7 focused commits on the branch:
+
+1. `c55b32a1e` OspreySharp cleanup: inspection support, warnings,
+   license headers (DotSettings copy + 74 Apache-2.0 headers + 157
+   ReSharper warnings taken to zero; MLTest type-inference regression
+   caught and fixed)
+2. `6cb02278f` Fixed STYLEGUIDE.md violations in OspreySharp (117
+   single-line ifs split, 25 non-ASCII -> ASCII)
+3. `3f8334d6c` Cleaned up OspreySharp assembly naming and enum file
+   layout (drop `pwiz.` prefix from 8 assembly names, copyright
+   2026, 7 enum files merged into related class files)
+4. `9f0c0c76a` Extracted OspreyEnvironment for control/throttling env
+   vars (6 env vars cached as readonly statics)
+5. `672b8612e` Extracted OspreyDiagnostics for cross-impl bisection
+   dumps (~350 lines out of AnalysisPipeline; 9 checkpoint methods
+   + F10 formatter; byte-identical output preserved)
+6. `27f915572` Added OspreySharp Jamfile for quickbuild integration
+   (explicit OspreySharp / OspreySharpTest targets; parent Jamfile
+   picks up via build-project-if-exists)
+
+Plus the ai/ scripts companion commit `ad1fe6b` for the renamed
+binary/DLL names.
+
+### Validation gates passed
+
+- **Unit tests**: 186/186 pass
+- **ReSharper + compiler warnings**: 0
+- **Non-ASCII characters in .cs files**: 0
+- **Stellar parity**: 21/21 features bit-identical at 1E-06
+  (317,536 entries; C# 26.0s vs Rust 26.5s = 0.98x)
+- **Astral parity**: 21/21 features bit-identical at 1E-06
+  (945,354 entries; C# 143.1s vs Rust 976.8s = 0.147x, 6.8x faster)
+- **Stellar perf bench**: C# 24.4s vs Rust 25.2s = 1.0x
+  (Stage 1-4 breakdown clean; no regression introduced by the
+  OspreyDiagnostics indirection)
+
+### Deferred to follow-up sprints
+
+- **Mirror OspreyDiagnostics on the Rust side** (new follow-up): same
+  checkpoint API in `osprey` (our fork) so the bisection infrastructure
+  stays symmetric and can be upstreamed cleanly to maccoss/osprey for
+  long-term cross-impl consistency testing.
+- Findings #1-#6 from the Phase 4 review (FeatureExtractor,
+  stage-class split, PercolatorFdr split, SQLiteLibraryLoaderBase,
+  AnalysisCache, regression-test suite extension) remain deferred.
+- Astral perf bench (3-iteration median run) skipped per user
+  direction; Astral single-file timing captured indirectly via the
+  parity test is sufficient for regression check.
+
 ## Next session handoff
 
-For the session-19 startup protocol, pick up whichever of
-Session 18 cleanup has not completed, then either respond to any
-pending Mike comments on maccoss/osprey#4-#8 or start Stage 2 prep.
-No handoff file is needed -- state is captured in this TODO and the
-open PRs.
+For the session-19 startup protocol, respond to any pending Mike
+comments on maccoss/osprey#4-#8, then either start Stage 2 prep
+(Rayon file-level parallelism, per-window XCorr cache) or the
+mirrored Rust diagnostics extraction. No handoff file is needed --
+state is captured in this TODO and the open PRs.
