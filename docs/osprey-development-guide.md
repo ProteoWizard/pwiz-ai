@@ -26,15 +26,76 @@ as workspace members.
 
 | Path | Remote | Purpose |
 |---|---|---|
-| `C:\proj\osprey-upstream` *(create when needed)* | `maccoss/osprey` | Primary working tree for new PRs. Brendan has push access (collaborator). |
-| `C:\proj\osprey-mm` | `maccoss/osprey` | Read-only clone of upstream `main`. Used as Rust baseline in `Bench-Scoring.ps1`. |
+| `C:\proj\osprey-mm` | `maccoss/osprey` (SSH) | **Primary working tree.** Branches for new PRs live here. Also serves as upstream baseline for `Bench-Scoring.ps1` when checked out to `main`. Brendan has push access (collaborator, added 2026-04-17). |
 | `C:\proj\osprey` | `brendanx67/osprey` | **Historical fork.** Branches preserved as archive; do not extend. |
 
 New work goes to branches on `maccoss/osprey` directly, never to
 the fork. Push directly; create PR with
 `gh pr create --repo maccoss/osprey`.
 
+**Bench-Scoring discipline**: `osprey-mm` is shared between active
+branch work and `Bench-Scoring.ps1`'s upstream-baseline role. Before
+running a benchmark, check out `main` (`git checkout main`) so the
+baseline measurement isn't polluted by in-progress changes.
+
+**Intended rename** (Brendan, 2026-04-17): once the three Stage 2
+upstream PRs land and the fork is truly dormant, `osprey-mm` →
+`osprey` and current `osprey` → `osprey-fork`. Future Rust work
+continues at `C:\proj\osprey`.
+
 ## Build and test commands
+
+**Use the wrapper scripts under `ai/scripts/OspreySharp/`**, not raw
+`cargo` commands. Wrappers enforce a consistent build environment
+across developer machines (independent of which Visual Studio version
+happens to be installed), and also serve as the single place to thread
+new knobs like `-OspreyRoot` through every caller.
+
+The wrappers set:
+
+- `CMAKE_GENERATOR = "Ninja"` -- avoids the `cmake` crate's
+  auto-detected "Visual Studio NN YYYY" generator string, which will
+  not match the `cmake.exe` on PATH once a developer installs a newer
+  VS than the bundled `cmake.exe` knows about.
+- `VCPKG_ROOT = "$env:USERPROFILE\vcpkg"` -- required by
+  `openblas-src` and friends to locate prebuilt BLAS.
+
+**One-time setup: Ninja must be on PATH.** Visual Studio installs
+bundle a Ninja binary. Add the VS 2022 Community copy to the User
+PATH once, then restart your shell:
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+    "Path",
+    "$([Environment]::GetEnvironmentVariable('Path','User'));C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja",
+    "User"
+)
+```
+
+Prefer the VS 2022 path over VS 2026 preview -- the 2026 folder may
+be renamed as the preview evolves. If VS is installed under a
+non-Community edition (Professional, Enterprise), substitute the
+edition name.
+
+Raw `cargo build`/`test`/`clippy` works only if the developer happens
+to have both of these set (e.g. in a shell profile) *and* the machine's
+installed `cmake.exe` understands the `cmake` crate's picked generator.
+That's fragile across machines; the wrapper is authoritative.
+
+**Primary wrapper**:
+
+```bash
+# Build release (default is C:\proj\osprey; pass -OspreyRoot for osprey-mm)
+pwsh -File ./ai/scripts/OspreySharp/Build-OspreyRust.ps1
+
+# Build a different tree (e.g. the upstream-tracking clone)
+pwsh -File ./ai/scripts/OspreySharp/Build-OspreyRust.ps1 -OspreyRoot C:/proj/osprey-mm
+
+# With format check and lint
+pwsh -File ./ai/scripts/OspreySharp/Build-OspreyRust.ps1 -Fmt -Clippy
+```
+
+**Raw cargo reference** (for understanding what the wrappers run):
 
 ```bash
 cargo build --workspace --release
@@ -46,6 +107,25 @@ cargo test -p osprey-scoring                   # single crate
 
 Targets **Rust 1.75+** (see workspace `rust-version`). Check
 `rustup show` if you get toolchain-related compile errors.
+
+**If the wrappers don't cover your task** (e.g. full-workspace
+test + clippy for a baseline sanity check, or running the binary from
+a non-default tree): extend the existing script. See "Running against
+a non-fork tree" below for script-by-script parameterization status.
+
+### Running against a non-fork tree
+
+These scripts were originally written for the fork path
+(`C:\proj\osprey`). Parameterization is uneven:
+
+| Script | Accepts alternate tree? | Notes |
+|---|---|---|
+| `Build-OspreyRust.ps1` | `-OspreyRoot` param, default `C:\proj\osprey` | Works on any tree |
+| `Bench-Scoring.ps1` | Hardcoded `upstream` (`osprey-mm`) + `fork` (`osprey`) paths | Compares both; both trees must exist |
+| `Run-Osprey.ps1` | No -- hardcodes the fork binary path | Extend with `-RustTree Upstream/Fork` or `-OspreyRoot` before running against a non-fork tree |
+
+When extending, follow the `Bench-Scoring.ps1` naming: `upstream` =
+`osprey-mm` (= `maccoss/osprey`), `fork` = `osprey` (= `brendanx67/osprey`).
 
 ## Test data locations
 

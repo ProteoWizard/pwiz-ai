@@ -1,36 +1,72 @@
 <#
 .SYNOPSIS
-    Build the Rust Osprey reference binary (our fork)
+    Build the Rust Osprey reference binary (fork or upstream tree)
 
 .DESCRIPTION
-    Builds the Rust Osprey binary from C:\proj\osprey for use as the reference
-    implementation in cross-implementation bisection work.
+    Builds the Rust Osprey binary from the specified tree (default
+    C:\proj\osprey = brendanx67 fork). Pass -OspreyRoot C:\proj\osprey-mm to
+    build the maccoss/osprey upstream tree instead. Used for both the
+    fork-as-reference bisection workflow and upstream PR development.
+
+    Sets CMAKE_GENERATOR=Ninja and VCPKG_ROOT so the build works on any
+    developer machine independent of which Visual Studio version is installed.
+
+.PARAMETER OspreyRoot
+    Path to the osprey Cargo workspace (default: C:\proj\osprey)
 
 .PARAMETER Fmt
     Run cargo fmt before building
 
+.PARAMETER Workspace
+    Build the full workspace (cargo build --workspace) instead of just the
+    osprey binary crate (cargo build -p osprey). Needed for a complete
+    baseline sanity check.
+
+.PARAMETER RunTests
+    Run cargo test --workspace after building. Implies -Workspace.
+
 .PARAMETER Clippy
-    Run cargo clippy after building
+    Run cargo clippy --all-targets --all-features -- -D warnings after
+    building.
 
 .EXAMPLE
     .\Build-OspreyRust.ps1
-    Build Rust Osprey in release mode
+    Build Rust Osprey (fork) in release mode
+
+.EXAMPLE
+    .\Build-OspreyRust.ps1 -OspreyRoot C:\proj\osprey-mm
+    Build the upstream-tracking tree in release mode
+
+.EXAMPLE
+    .\Build-OspreyRust.ps1 -OspreyRoot C:\proj\osprey-mm -Workspace -RunTests -Clippy
+    Full baseline sanity check against upstream: workspace build, test, lint
 
 .EXAMPLE
     .\Build-OspreyRust.ps1 -Fmt -Clippy
-    Format, build, and lint
+    Format, build fork, and lint
 #>
 
 param(
     [Parameter(Mandatory=$false)]
+    [string]$OspreyRoot = "C:\proj\osprey",
+
+    [Parameter(Mandatory=$false)]
     [switch]$Fmt = $false,
 
     [Parameter(Mandatory=$false)]
-    [switch]$Clippy = $false,
+    [switch]$Workspace = $false,
 
     [Parameter(Mandatory=$false)]
-    [string]$OspreyRoot = "C:\proj\osprey"
+    [switch]$RunTests = $false,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$Clippy = $false
 )
+
+# -RunTests needs the workspace built
+if ($RunTests) {
+    $Workspace = $true
+}
 
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -60,10 +96,15 @@ try {
         Write-Host ""
     }
 
-    Write-Host "Building Osprey (release)..." -ForegroundColor Cyan
+    $buildScope = if ($Workspace) { "workspace" } else { "osprey" }
+    Write-Host "Building Osprey ($buildScope, release)..." -ForegroundColor Cyan
     $buildStart = Get-Date
 
-    cargo build --release -p osprey
+    if ($Workspace) {
+        cargo build --workspace --release
+    } else {
+        cargo build --release -p osprey
+    }
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Build failed with exit code $LASTEXITCODE" -ForegroundColor Red
         exit $LASTEXITCODE
@@ -71,6 +112,19 @@ try {
 
     $buildDuration = (Get-Date) - $buildStart
     Write-Host "Build succeeded in $($buildDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
+
+    if ($RunTests) {
+        Write-Host ""
+        Write-Host "Running cargo test --workspace..." -ForegroundColor Cyan
+        $testStart = Get-Date
+        cargo test --workspace
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Tests failed with exit code $LASTEXITCODE" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+        $testDuration = (Get-Date) - $testStart
+        Write-Host "Tests passed in $($testDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
+    }
 
     if ($Clippy) {
         Write-Host ""

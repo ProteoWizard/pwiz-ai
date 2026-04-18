@@ -42,6 +42,11 @@
 .PARAMETER SkipRust
     Skip the Rust run (reuse existing PIN + calibration from a previous run)
 
+.PARAMETER RustTree
+    Which Rust tree's binary to run: Fork (C:\proj\osprey, default) or Upstream
+    (C:\proj\osprey-mm = maccoss/osprey). Use Upstream to validate a port
+    against C# OspreySharp.
+
 .EXAMPLE
     .\Test-Features.ps1
     Run Stellar comparison with each tool computing its own calibration
@@ -80,7 +85,11 @@ param(
     [string]$DiagXcorrScan = $null,
 
     [Parameter(Mandatory=$false)]
-    [switch]$SkipRust = $false
+    [switch]$SkipRust = $false,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("Fork", "Upstream")]
+    [string]$RustTree = "Fork"
 )
 
 $ErrorActionPreference = "Stop"
@@ -101,7 +110,10 @@ $scriptRoot = Split-Path -Parent $PSCommandPath
 $aiRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)
 $projRoot = Split-Path -Parent $aiRoot
 
-$rustBinary = Join-Path $projRoot "osprey\target\release\osprey.exe"
+# Bench-Scoring.ps1 naming: upstream = osprey-mm (maccoss/osprey), fork = osprey (brendanx67)
+$rustForkBinary = Join-Path $projRoot "osprey\target\release\osprey.exe"
+$rustUpstreamBinary = Join-Path $projRoot "osprey-mm\target\release\osprey.exe"
+$rustBinary = if ($RustTree -eq "Upstream") { $rustUpstreamBinary } else { $rustForkBinary }
 $csharpBinary = Join-Path $projRoot "pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\OspreySharp.exe"
 $library = Join-Path $testDir $ds.Library
 $mzml = Join-Path $testDir $ds.SingleFile

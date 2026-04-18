@@ -13,6 +13,10 @@
 .PARAMETER Tool
     Which tool to run: CSharp or Rust (default: CSharp)
 
+.PARAMETER RustTree
+    When -Tool Rust, which tree to run: Fork (C:\proj\osprey, default) or
+    Upstream (C:\proj\osprey-mm, = maccoss/osprey). Ignored for CSharp.
+
 .PARAMETER Files
     Which mzML files: Single (first file only) or All (all 3). Default: Single
 
@@ -42,6 +46,37 @@
 
 .PARAMETER DiagLoessOnly
     Set OSPREY_LOESS_INPUT_ONLY=1 to exit after LOESS input dump
+
+.PARAMETER DiagCalSample
+    Set OSPREY_DUMP_CAL_SAMPLE=1 to dump calibration sample entries/scalars/grid
+
+.PARAMETER DiagCalSampleOnly
+    Set OSPREY_CAL_SAMPLE_ONLY=1 to exit after cal_sample dump
+
+.PARAMETER DiagCalWindows
+    Set OSPREY_DUMP_CAL_WINDOWS=1 to dump per-entry calibration window info
+
+.PARAMETER DiagCalWindowsOnly
+    Set OSPREY_CAL_WINDOWS_ONLY=1 to exit after cal_windows dump
+
+.PARAMETER DiagCalPrefilter
+    Set OSPREY_DUMP_CAL_PREFILTER=1 to dump pre-filter candidates (Rust-only)
+
+.PARAMETER DiagCalPrefilterOnly
+    Set OSPREY_CAL_PREFILTER_ONLY=1 to exit after cal_prefilter dump
+
+.PARAMETER DiagXicEntryId
+    Set OSPREY_DIAG_XIC_ENTRY_ID=<id> for per-entry calibration XIC diagnostic.
+    Exits after writing.
+
+.PARAMETER DiagXicPass
+    Set OSPREY_DIAG_XIC_PASS=<1|2> to select calibration pass (use with DiagXicEntryId)
+
+.PARAMETER DiagMpScan
+    Set OSPREY_DIAG_MP_SCAN=<scan> for median polish diagnostic at a specific scan
+
+.PARAMETER DiagXcorrScan
+    Set OSPREY_DIAG_XCORR_SCAN=<scan> for xcorr diagnostic at a specific scan
 
 .PARAMETER ExtraArgs
     Additional arguments to pass to the tool (e.g. "--protein-fdr 0.01")
@@ -74,6 +109,10 @@ param(
     [Parameter(Mandatory=$false)]
     [ValidateSet("CSharp", "Rust")]
     [string]$Tool = "CSharp",
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("Fork", "Upstream")]
+    [string]$RustTree = "Fork",
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("Single", "All")]
@@ -110,6 +149,36 @@ param(
     [switch]$DiagLoessOnly = $false,
 
     [Parameter(Mandatory=$false)]
+    [switch]$DiagCalSample = $false,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$DiagCalSampleOnly = $false,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$DiagCalWindows = $false,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$DiagCalWindowsOnly = $false,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$DiagCalPrefilter = $false,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$DiagCalPrefilterOnly = $false,
+
+    [Parameter(Mandatory=$false)]
+    [string]$DiagXicEntryId = $null,
+
+    [Parameter(Mandatory=$false)]
+    [string]$DiagXicPass = $null,
+
+    [Parameter(Mandatory=$false)]
+    [string]$DiagMpScan = $null,
+
+    [Parameter(Mandatory=$false)]
+    [string]$DiagXcorrScan = $null,
+
+    [Parameter(Mandatory=$false)]
     [string]$ExtraArgs = $null
 )
 
@@ -131,9 +200,11 @@ $scriptRoot = Split-Path -Parent $PSCommandPath
 $aiRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)
 $projRoot = Split-Path -Parent $aiRoot
 
-# Tool binaries
+# Tool binaries (Bench-Scoring.ps1 naming: upstream = osprey-mm, fork = osprey)
 $csharpBinary = Join-Path $projRoot "pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\OspreySharp.exe"
-$rustBinary = Join-Path $projRoot "osprey\target\release\osprey.exe"
+$rustForkBinary = Join-Path $projRoot "osprey\target\release\osprey.exe"
+$rustUpstreamBinary = Join-Path $projRoot "osprey-mm\target\release\osprey.exe"
+$rustBinary = if ($RustTree -eq "Upstream") { $rustUpstreamBinary } else { $rustForkBinary }
 
 $binary = if ($Tool -eq "CSharp") { $csharpBinary } else { $rustBinary }
 if (-not (Test-Path $binary)) {
@@ -212,6 +283,46 @@ try {
     if ($DiagLoessOnly) {
         $env:OSPREY_LOESS_INPUT_ONLY = "1"
         $envVarsSet += "OSPREY_LOESS_INPUT_ONLY=1"
+    }
+    if ($DiagCalSample) {
+        $env:OSPREY_DUMP_CAL_SAMPLE = "1"
+        $envVarsSet += "OSPREY_DUMP_CAL_SAMPLE=1"
+    }
+    if ($DiagCalSampleOnly) {
+        $env:OSPREY_CAL_SAMPLE_ONLY = "1"
+        $envVarsSet += "OSPREY_CAL_SAMPLE_ONLY=1"
+    }
+    if ($DiagCalWindows) {
+        $env:OSPREY_DUMP_CAL_WINDOWS = "1"
+        $envVarsSet += "OSPREY_DUMP_CAL_WINDOWS=1"
+    }
+    if ($DiagCalWindowsOnly) {
+        $env:OSPREY_CAL_WINDOWS_ONLY = "1"
+        $envVarsSet += "OSPREY_CAL_WINDOWS_ONLY=1"
+    }
+    if ($DiagCalPrefilter) {
+        $env:OSPREY_DUMP_CAL_PREFILTER = "1"
+        $envVarsSet += "OSPREY_DUMP_CAL_PREFILTER=1"
+    }
+    if ($DiagCalPrefilterOnly) {
+        $env:OSPREY_CAL_PREFILTER_ONLY = "1"
+        $envVarsSet += "OSPREY_CAL_PREFILTER_ONLY=1"
+    }
+    if ($DiagXicEntryId) {
+        $env:OSPREY_DIAG_XIC_ENTRY_ID = $DiagXicEntryId
+        $envVarsSet += "OSPREY_DIAG_XIC_ENTRY_ID=$DiagXicEntryId"
+    }
+    if ($DiagXicPass) {
+        $env:OSPREY_DIAG_XIC_PASS = $DiagXicPass
+        $envVarsSet += "OSPREY_DIAG_XIC_PASS=$DiagXicPass"
+    }
+    if ($DiagMpScan) {
+        $env:OSPREY_DIAG_MP_SCAN = $DiagMpScan
+        $envVarsSet += "OSPREY_DIAG_MP_SCAN=$DiagMpScan"
+    }
+    if ($DiagXcorrScan) {
+        $env:OSPREY_DIAG_XCORR_SCAN = $DiagXcorrScan
+        $envVarsSet += "OSPREY_DIAG_XCORR_SCAN=$DiagXcorrScan"
     }
     if ($Tool -eq "Rust") {
         $env:RUST_LOG = "info"
@@ -304,6 +415,16 @@ finally {
     Remove-Item Env:OSPREY_LDA_SCORES_ONLY -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_DUMP_LOESS_INPUT -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_LOESS_INPUT_ONLY -ErrorAction SilentlyContinue
+    Remove-Item Env:OSPREY_DUMP_CAL_SAMPLE -ErrorAction SilentlyContinue
+    Remove-Item Env:OSPREY_CAL_SAMPLE_ONLY -ErrorAction SilentlyContinue
+    Remove-Item Env:OSPREY_DUMP_CAL_WINDOWS -ErrorAction SilentlyContinue
+    Remove-Item Env:OSPREY_CAL_WINDOWS_ONLY -ErrorAction SilentlyContinue
+    Remove-Item Env:OSPREY_DUMP_CAL_PREFILTER -ErrorAction SilentlyContinue
+    Remove-Item Env:OSPREY_CAL_PREFILTER_ONLY -ErrorAction SilentlyContinue
+    Remove-Item Env:OSPREY_DIAG_XIC_ENTRY_ID -ErrorAction SilentlyContinue
+    Remove-Item Env:OSPREY_DIAG_XIC_PASS -ErrorAction SilentlyContinue
+    Remove-Item Env:OSPREY_DIAG_MP_SCAN -ErrorAction SilentlyContinue
+    Remove-Item Env:OSPREY_DIAG_XCORR_SCAN -ErrorAction SilentlyContinue
     Remove-Item Env:RUST_LOG -ErrorAction SilentlyContinue
     Set-Location $initialLocation
 }

@@ -107,6 +107,18 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
   instructions, NOT durable project records
 - All durable sprint context belongs in `ai/todos/active/TODO-*.md`
 
+## ai/.tmp is the ONLY temp/working folder
+- Use `C:\proj\ai\.tmp\` for all temp files created while working in
+  `C:\proj`: measurement scripts, saved binaries, log captures, diffs,
+  baselines, whatever
+- Do NOT use `/tmp/` (Git Bash maps it to `$env:TEMP`, invisible to
+  PowerShell), `C:\tmp\`, `C:\Users\...\AppData\Local\Temp\`, or any
+  other ad-hoc location
+- If a tool needs a scratch directory, create a subfolder under
+  `ai/.tmp/` (e.g. `ai/.tmp/memtest/`, `ai/.tmp/diag-before/`)
+- Keeping everything under `ai/.tmp/` keeps the paths consistent
+  between Git Bash and PowerShell, and between sessions
+
 ## NEVER
 - Use `async`/`await` keywords
 - Use English text literals in test assertions

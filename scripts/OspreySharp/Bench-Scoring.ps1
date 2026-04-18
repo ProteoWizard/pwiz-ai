@@ -1,16 +1,23 @@
 <#
 .SYNOPSIS
-    Ground-truth Stages 1-4 scoring benchmark for Osprey performance optimization.
-    Compares upstream Rust, fork Rust, and OspreySharp C# on Stellar or Astral data.
+    Ground-truth Stages 1-4 scoring benchmark for Osprey performance and
+    memory. Compares upstream Rust, fork Rust, and OspreySharp C# on Stellar
+    or Astral data.
 
 .DESCRIPTION
     For each implementation:
-      1. Warmup run (creates library cache, not timed)
+      1. Warmup / cold run (no library cache, not timed in medians)
       2. N timed iterations (clean score caches between runs, keep library cache)
-      3. Report median per-stage timing with consistency check
+      3. Report median per-stage timing AND median peak RSS with consistency check
+
+    Peak RSS is reported on every run (polled 500 ms via Process.WorkingSet64).
+    Timing and memory are always shown together: a "faster" implementation that
+    pays for its speed with ballooning memory is not actually faster.
 
     Fork Rust and C# exit after Stage 4 via OSPREY_EXIT_AFTER_SCORING.
-    Upstream Rust runs full pipeline; Stage 1-4 timing extracted from log timestamps.
+    Upstream Rust runs full pipeline; Stage 1-4 timing extracted from log
+    timestamps (memory peak is from the full pipeline, which is usually
+    dominated by the scoring stage anyway).
 
     C# does not have a binary library cache. Its Stage 1 always includes TSV parsing.
     Rust Stage 1 uses the library cache after warmup.
@@ -18,7 +25,11 @@
     In multi-file mode (-Files All), all 3 mzML files are passed to each tool.
     C# processes files in parallel (Parallel.For); Rust processes them sequentially.
     Per-stage breakdowns are not shown in multi-file mode because C# overlaps stages
-    across files. Only wall-clock total and entries are reported.
+    across files. Only wall-clock total, peak RSS, and entries are reported.
+
+    An optional -BaselineBin adds a 4th measurement row, labeled with
+    -BaselineLabel, for A/B comparison (e.g. origin/main vs a proposed branch
+    during PR validation).
 
 .PARAMETER Dataset
     Which test dataset: Stellar or Astral (default: Stellar)
@@ -31,7 +42,27 @@
     Number of timed iterations per tool (default: 3)
 
 .PARAMETER SkipUpstream
-    Skip the upstream Rust benchmark (saves ~6 min)
+    Skip the upstream Rust (osprey-mm) benchmark.
+
+.PARAMETER SkipFork
+    Skip the fork Rust (osprey) benchmark.
+
+.PARAMETER SkipRust
+    Skip both Rust benchmarks (C# and optional baseline still run).
+
+.PARAMETER SkipCSharp
+    Skip the OspreySharp (C#) run. Useful when comparing two Rust binaries
+    (PR validation) and C# numbers aren't needed in the same session.
+
+.PARAMETER BaselineBin
+    Optional extra binary to measure (for A/B comparison). Empty = skip.
+
+.PARAMETER BaselineLabel
+    Label for the -BaselineBin row (default: "Baseline")
+
+.PARAMETER BaselineType
+    Rust or CSharp. Determines how the baseline output is parsed and whether
+    library cache is available. Default: Rust.
 #>
 param(
     [ValidateSet("Stellar", "Astral")]
@@ -42,10 +73,16 @@ param(
     [string]$Stage = "Scoring",
     [int]$Iterations = 3,
     [switch]$SkipUpstream = $false,
+    [switch]$SkipFork = $false,
     [switch]$SkipRust = $false,
+    [switch]$SkipCSharp = $false,
     # 1 = strictly sequential, N>1 = up to N files at once, 0 = default.
     # Applies only to C# (Rust always sequential).
-    [int]$MaxParallelFiles = 0
+    [int]$MaxParallelFiles = 0,
+    [string]$BaselineBin = "",
+    [string]$BaselineLabel = "Baseline",
+    [ValidateSet("Rust", "CSharp")]
+    [string]$BaselineType = "Rust"
 )
 
 $ErrorActionPreference = "Stop"
@@ -137,10 +174,37 @@ function Run-Once {
         $env:OSPREY_MAX_PARALLEL_FILES = "$MaxParallelFiles"
     }
 
+    # Start-Process gives us a Process handle to poll WorkingSet64 in real
+    # time. Stdout and stderr are redirected to temp files so the output
+    # survives for Parse-*Stages. Using ai/.tmp keeps the scratch under the
+    # project-conventional temp dir.
+    $tmpOut = [System.IO.Path]::GetTempFileName()
+    $tmpErr = [System.IO.Path]::GetTempFileName()
+
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $output = & $Binary @ToolArgs 2>&1
-    $exitCode = $LASTEXITCODE
+    $proc = Start-Process -FilePath $Binary `
+        -ArgumentList $ToolArgs `
+        -PassThru -NoNewWindow `
+        -RedirectStandardOutput $tmpOut `
+        -RedirectStandardError $tmpErr
+
+    $maxRss = 0L
+    while (-not $proc.HasExited) {
+        try {
+            $proc.Refresh()
+            $rss = $proc.WorkingSet64
+            if ($rss -gt $maxRss) { $maxRss = $rss }
+        } catch {}
+        Start-Sleep -Milliseconds 500
+    }
+    $proc.WaitForExit()
     $sw.Stop()
+
+    # Merge stdout + stderr for the parsers (RUST_LOG output goes to stderr).
+    $output = @()
+    $output += Get-Content $tmpOut -ErrorAction SilentlyContinue
+    $output += Get-Content $tmpErr -ErrorAction SilentlyContinue
+    Remove-Item $tmpOut, $tmpErr -Force -ErrorAction SilentlyContinue
 
     Remove-Item Env:OSPREY_EXIT_AFTER_SCORING -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_EXIT_AFTER_CALIBRATION -ErrorAction SilentlyContinue
@@ -148,7 +212,13 @@ function Run-Once {
     Set-Location $savedLoc
 
     $lines = @($output | ForEach-Object { $_.ToString() })
-    return @{ Lines = $lines; WallSec = $sw.Elapsed.TotalSeconds; Exit = $exitCode }
+    $peakMB = [int][math]::Round($maxRss / 1MB, 0)
+    return @{
+        Lines   = $lines
+        WallSec = $sw.Elapsed.TotalSeconds
+        Exit    = $proc.ExitCode
+        PeakMB  = $peakMB
+    }
 }
 
 function Parse-RustStages {
@@ -179,7 +249,7 @@ function Parse-RustStages {
             if ($msg -match 'Total library size:')          { $t['s1'] = $sec }
             if ($msg -match 'Loaded \d+ MS2 spectra')       { $t['s2'] = $sec }
             if ($msg -match 'Calibration: \d+ peptides')    { $t['s3'] = $sec }
-            if ($msg -match 'Scored (\d+) entries.*for Ste') {
+            if ($msg -match 'Scored (\d+) entries\s+\(.*\)\s+for\s+') {
                 $t['s4'] = $sec
                 $t['entries'] = [int]$Matches[1]
             }
@@ -270,9 +340,9 @@ function Run-Benchmark {
                   else { Parse-CSharpStages $coldRun.Lines $coldRun.WallSec $multiFile }
     $coldS1 = if ($null -ne $coldStages -and -not $multiFile) { $coldStages.S1 } else { 0 }
     if ($multiFile) {
-        Write-Host " $($coldRun.WallSec.ToString('F1'))s" -ForegroundColor Gray
+        Write-Host " $($coldRun.WallSec.ToString('F1'))s peak=$($coldRun.PeakMB)MB" -ForegroundColor Gray
     } else {
-        Write-Host " $($coldRun.WallSec.ToString('F1'))s (S1_cold=$($coldS1.ToString('F1')))" -ForegroundColor Gray
+        Write-Host " $($coldRun.WallSec.ToString('F1'))s peak=$($coldRun.PeakMB)MB (S1_cold=$($coldS1.ToString('F1')))" -ForegroundColor Gray
     }
 
     # Timed iterations (library cache warm after cold run)
@@ -293,16 +363,17 @@ function Run-Benchmark {
             continue
         }
         $stages['Wall'] = $result.WallSec
+        $stages['PeakMB'] = $result.PeakMB
         $runs += $stages
         if ($multiFile) {
-            Write-Host " $($result.WallSec.ToString('F1'))s ($($stages.Entries.ToString('N0')) entries)" -ForegroundColor Gray
+            Write-Host " $($result.WallSec.ToString('F1'))s peak=$($result.PeakMB)MB ($($stages.Entries.ToString('N0')) entries)" -ForegroundColor Gray
         } else {
-            Write-Host " $($result.WallSec.ToString('F1'))s (S1=$($stages.S1) S2=$($stages.S2) S3=$($stages.S3.ToString('F1')) S4=$($stages.S4.ToString('F1')))" -ForegroundColor Gray
+            Write-Host " $($result.WallSec.ToString('F1'))s peak=$($result.PeakMB)MB (S1=$($stages.S1) S2=$($stages.S2) S3=$($stages.S3.ToString('F1')) S4=$($stages.S4.ToString('F1')))" -ForegroundColor Gray
         }
     }
 
-    if ($runs.Count -lt 2) {
-        Write-Host "  Not enough successful runs" -ForegroundColor Red
+    if ($runs.Count -lt 1) {
+        Write-Host "  No successful runs" -ForegroundColor Red
         return $null
     }
 
@@ -316,6 +387,8 @@ function Run-Benchmark {
         S4 = Median ($runs | ForEach-Object { $_.S4 })
         Thru4 = Median ($runs | ForEach-Object { $_.Thru4 })
         Wall = Median ($runs | ForEach-Object { $_.Wall })
+        PeakColdMB = $coldRun.PeakMB
+        PeakMB = [int](Median ([double[]]($runs | ForEach-Object { $_.PeakMB })))
         Entries = $runs[0].Entries
         HasLibCache = ($Type -eq "Rust")
     }
@@ -348,12 +421,21 @@ Write-Host ""
 $results = @()
 
 if (-not $SkipUpstream -and -not $SkipRust) {
-    $results += Run-Benchmark "Upstream Rust (maccoss/osprey v26.1.3)" $upstreamBin $false "Rust"
+    $results += Run-Benchmark "Upstream Rust (maccoss/osprey)" $upstreamBin $true "Rust"
 }
-if (-not $SkipRust) {
+if (-not $SkipFork -and -not $SkipRust) {
     $results += Run-Benchmark "Fork Rust (brendanx67/osprey)" $forkBin $true "Rust"
 }
-$results += Run-Benchmark "OspreySharp (C#)" $csharpBin $true "CSharp"
+if ($BaselineBin) {
+    if (Test-Path $BaselineBin) {
+        $results += Run-Benchmark $BaselineLabel $BaselineBin $true $BaselineType
+    } else {
+        Write-Host "BaselineBin not found: $BaselineBin" -ForegroundColor Yellow
+    }
+}
+if (-not $SkipCSharp) {
+    $results += Run-Benchmark "OspreySharp (C#)" $csharpBin $true "CSharp"
+}
 
 # ===========================================================================
 # Results table
@@ -366,17 +448,18 @@ Write-Host ("=" * 90) -ForegroundColor Yellow
 Write-Host ""
 
 if ($multiFile) {
-    # Multi-file table: wall clock + entries only (per-stage not meaningful with parallel C#)
-    $fmtM = "{0,-40} {1,10} {2,10} {3,12}"
-    Write-Host ($fmtM -f "Implementation", "Cold", "Warm", "Entries")
-    Write-Host ("{0,-40} {1} {2} {3}" -f ("-"*40), ("-"*10), ("-"*10), ("-"*12))
+    # Multi-file table: wall clock + peak RSS + entries only (per-stage not meaningful with parallel C#)
+    $fmtM = "{0,-40} {1,10} {2,10} {3,10} {4,12}"
+    Write-Host ($fmtM -f "Implementation", "Cold", "Warm", "Peak RSS", "Entries")
+    Write-Host ("{0,-40} {1} {2} {3} {4}" -f ("-"*40), ("-"*10), ("-"*10), ("-"*10), ("-"*12))
 
     foreach ($r in $results) {
         if ($null -eq $r) { continue }
         $coldf = "$($r.S1Cold.ToString('F1'))s"
         $warmf = "$($r.Thru4.ToString('F1'))s"
+        $peakf = "$($r.PeakMB) MB"
         $ent = $r.Entries.ToString("N0")
-        Write-Host ($fmtM -f $r.Label, $coldf, $warmf, $ent)
+        Write-Host ($fmtM -f $r.Label, $coldf, $warmf, $peakf, $ent)
     }
 
     # Ratio row
@@ -387,23 +470,25 @@ if ($multiFile) {
         $ratioLabel = "C# / $shortName ratio"
         $rc = "$( ($csharp.S1Cold / [Math]::Max($rustRef.S1Cold, 0.5)).ToString('F2') )x"
         $rw = "$( ($csharp.Thru4 / [Math]::Max($rustRef.Thru4, 0.5)).ToString('F2') )x"
+        $rm = "$( ($csharp.PeakMB / [Math]::Max($rustRef.PeakMB, 1.0)).ToString('F2') )x"
         Write-Host ""
-        Write-Host ($fmtM -f $ratioLabel, $rc, $rw, "")
+        Write-Host ($fmtM -f $ratioLabel, $rc, $rw, $rm, "")
     }
 
     Write-Host ""
     Write-Host "Notes:" -ForegroundColor Gray
     Write-Host "  Cold: no library cache, all tools parse TSV from scratch" -ForegroundColor Gray
     Write-Host "  Warm: library cache present (.libcache for Rust)" -ForegroundColor Gray
+    Write-Host "  Peak RSS: max Process.WorkingSet64, polled at 500 ms (median across warm runs)" -ForegroundColor Gray
     Write-Host "  C# processes $fileCount files in parallel (Parallel.For); Rust is sequential" -ForegroundColor Gray
     Write-Host "  All times are wall clock (per-stage not shown - C# overlaps stages across files)" -ForegroundColor Gray
     Write-Host ""
 } else {
-    # Single-file table: full per-stage breakdown
-    $fmt = "{0,-40} {1,8} {2,8} {3,8} {4,8} {5,8}   {6,8} {7,10}"
-    Write-Host ($fmt -f "", "Stage 1", "Stage 1", "Stage 2", "Stage 3", "Stage 4", "Stg 1-4", "Entries")
-    Write-Host ($fmt -f "Implementation", "Library", "Cached", "mzML", "Calibr.", "Search", "Total", "Scored")
-    Write-Host ("{0,-40} {1} {2} {3} {4} {5}   {6} {7}" -f ("-"*40), ("-"*8), ("-"*8), ("-"*8), ("-"*8), ("-"*8), ("-"*8), ("-"*10))
+    # Single-file table: full per-stage breakdown + peak memory
+    $fmt = "{0,-40} {1,8} {2,8} {3,8} {4,8} {5,8}   {6,8} {7,10} {8,10}"
+    Write-Host ($fmt -f "", "Stage 1", "Stage 1", "Stage 2", "Stage 3", "Stage 4", "Stg 1-4", "Peak RSS", "Entries")
+    Write-Host ($fmt -f "Implementation", "Library", "Cached", "mzML", "Calibr.", "Search", "Total", "(MB)", "Scored")
+    Write-Host ("{0,-40} {1} {2} {3} {4} {5}   {6} {7} {8}" -f ("-"*40), ("-"*8), ("-"*8), ("-"*8), ("-"*8), ("-"*8), ("-"*8), ("-"*10), ("-"*10))
 
     foreach ($r in $results) {
         if ($null -eq $r) { continue }
@@ -413,8 +498,9 @@ if ($multiFile) {
         $s3f = "$($r.S3.ToString('F1'))s"
         $s4f = "$($r.S4.ToString('F1'))s"
         $thf = "$($r.Thru4.ToString('F1'))s"
+        $peakf = "$($r.PeakMB)"
         $ent = $r.Entries.ToString("N0")
-        Write-Host ($fmt -f $r.Label, $s1cf, $s1wf, $s2f, $s3f, $s4f, $thf, $ent)
+        Write-Host ($fmt -f $r.Label, $s1cf, $s1wf, $s2f, $s3f, $s4f, $thf, $peakf, $ent)
     }
 
     # Ratio row (C# vs first Rust result)
@@ -429,8 +515,9 @@ if ($multiFile) {
         $r3 = "$( ($csharp.S3 / [Math]::Max($rustRef.S3, 0.5)).ToString('F1') )x"
         $r4 = "$( ($csharp.S4 / [Math]::Max($rustRef.S4, 0.5)).ToString('F1') )x"
         $rt = "$( ($csharp.Thru4 / [Math]::Max($rustRef.Thru4, 0.5)).ToString('F1') )x"
+        $rm = "$( ($csharp.PeakMB / [Math]::Max($rustRef.PeakMB, 1.0)).ToString('F2') )x"
         Write-Host ""
-        Write-Host ($fmt -f $ratioLabel, $r1c, $r1w, $r2, $r3, $r4, $rt, "")
+        Write-Host ($fmt -f $ratioLabel, $r1c, $r1w, $r2, $r3, $r4, $rt, $rm, "")
     }
 
     Write-Host ""
@@ -438,6 +525,7 @@ if ($multiFile) {
     Write-Host "  Stage 1 'Library': cold (no .libcache), all tools parse TSV from scratch" -ForegroundColor Gray
     Write-Host "  Stage 1 'Cached': warm (.libcache present); n/a = no binary cache implemented" -ForegroundColor Gray
     Write-Host "  Stg 1-4 Total = wall clock for fork/C# (early exit); timestamp-derived for upstream" -ForegroundColor Gray
+    Write-Host "  Peak RSS: max Process.WorkingSet64 polled at 500 ms (MB, median across warm runs)" -ForegroundColor Gray
     Write-Host "  Rust S1 derived from wall_clock - (S2+S3+S4) for sub-second accuracy" -ForegroundColor Gray
     Write-Host "  Rust S2/S3/S4 have +/-0.5s rounding (1s timestamp resolution)" -ForegroundColor Gray
     Write-Host ""
