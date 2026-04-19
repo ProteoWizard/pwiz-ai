@@ -78,6 +78,15 @@
 .PARAMETER DiagXcorrScan
     Set OSPREY_DIAG_XCORR_SCAN=<scan> for xcorr diagnostic at a specific scan
 
+.PARAMETER ExitAfterCalibration
+    Set OSPREY_EXIT_AFTER_CALIBRATION=1 to exit after Stage 3 (produces the
+    full calibration.json + spectra cache; skips main search and FDR).
+
+.PARAMETER ExitAfterScoring
+    Set OSPREY_EXIT_AFTER_SCORING=1 to exit after Stage 4 (produces the
+    scores.parquet; skips FDR / reconciliation / blib output). Matches
+    what Test-Features.ps1 and Bench-Scoring.ps1 use internally.
+
 .PARAMETER ExtraArgs
     Additional arguments to pass to the tool (e.g. "--protein-fdr 0.01")
 
@@ -181,6 +190,12 @@ param(
 
     [Parameter(Mandatory=$false)]
     [string]$DiagXcorrScan = $null,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$ExitAfterCalibration = $false,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$ExitAfterScoring = $false,
 
     [Parameter(Mandatory=$false)]
     [string]$ExtraArgs = $null,
@@ -331,6 +346,14 @@ try {
         $env:OSPREY_DIAG_XCORR_SCAN = $DiagXcorrScan
         $envVarsSet += "OSPREY_DIAG_XCORR_SCAN=$DiagXcorrScan"
     }
+    if ($ExitAfterCalibration) {
+        $env:OSPREY_EXIT_AFTER_CALIBRATION = "1"
+        $envVarsSet += "OSPREY_EXIT_AFTER_CALIBRATION=1"
+    }
+    if ($ExitAfterScoring) {
+        $env:OSPREY_EXIT_AFTER_SCORING = "1"
+        $envVarsSet += "OSPREY_EXIT_AFTER_SCORING=1"
+    }
     if ($Tool -eq "Rust") {
         $env:RUST_LOG = "info"
         $envVarsSet += "RUST_LOG=info"
@@ -416,6 +439,8 @@ finally {
     }
     # Clean up env vars
     Remove-Item Env:OSPREY_DIAG_SEARCH_ENTRY_IDS -ErrorAction SilentlyContinue
+    Remove-Item Env:OSPREY_EXIT_AFTER_CALIBRATION -ErrorAction SilentlyContinue
+    Remove-Item Env:OSPREY_EXIT_AFTER_SCORING -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_DUMP_CAL_MATCH -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_CAL_MATCH_ONLY -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_DUMP_LDA_SCORES -ErrorAction SilentlyContinue
