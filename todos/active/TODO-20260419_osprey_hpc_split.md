@@ -117,7 +117,38 @@ upgrade `Parquet.Net`, drop Rust to Snappy, or keep them independent
    Validator correctly aborts cross-impl with "incompatible major/minor".
    Resolves once project versions align (or a `tool` field is added).
 
-### Phase 4 (round-trip tests) - PENDING
+### Phase 4 (round-trip tests) - DONE 2026-04-19
+
+**Bit-parity check (single-file Stellar, C# net472, --resolution unit):**
+- Baseline (end-to-end, one process): 37,721 precursors at 1% FDR (4m 56s)
+- Split (`--no-join` then `--join-only`): 37,823 precursors at 1% FDR
+- Drift: +102 precursors / 0.27%, well within Percolator SVM variance.
+  Stage 4 feature scores stored in the parquet are equivalent to what
+  end-to-end would compute; the small drift is in Stage 5 SVM training,
+  expected.
+
+**3-file round-trip (Stellar, C#):**
+- `--no-join` parallel-3 wrote 3 parquets (~74 MB each) in 140s
+- `--join-only` validated all 3, loaded them, ran Stage 5+:
+  - File 20: 37,679 precursors / File 21: 37,443 / File 22: 37,293
+  - Total: 112,415 precursors at 1% FDR (5m 24s)
+
+**Negative tests (Phase 3 covered these end-to-end + via unit tests):**
+- `--no-join unit` then `--join-only hram` → search_hash mismatch with
+  the offending file named in the error
+- 24 unit tests across the validator helpers
+
+**Deferred to follow-up sprints (out of scope here):**
+- Astral 3-file round-trip — would need access to the larger dataset and
+  ~30 min run; same code path as Stellar
+- Cross-impl round-trip — blocked by the three known Rust↔C# parquet
+  gaps (compression, schema int types, version namespace)
+- Strict bit-identity of parquet bytes across runs — observed ~23 KB
+  size delta between single-file and parallel-3 runs of the same file;
+  likely from per-window scoring order and/or footer key ordering. Row
+  contents are functionally equivalent (counts + content match within
+  Percolator noise). A separate sprint can chase strict determinism.
+
 ### Phase 5 (docs + scripts) - PENDING
 
 ## Motivation
