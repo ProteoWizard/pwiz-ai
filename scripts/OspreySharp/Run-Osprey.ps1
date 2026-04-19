@@ -201,7 +201,11 @@ param(
     [string]$ExtraArgs = $null,
 
     [Parameter(Mandatory=$false)]
-    [string]$TestBaseDir = $null
+    [string]$TestBaseDir = $null,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("net472", "net8.0")]
+    [string]$TargetFramework = "net472"
 )
 
 $ErrorActionPreference = "Stop"
@@ -223,7 +227,7 @@ $aiRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)
 $projRoot = Split-Path -Parent $aiRoot
 
 # Tool binaries (Bench-Scoring.ps1 naming: upstream = osprey-mm, fork = osprey)
-$csharpBinary = Join-Path $projRoot "pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\OspreySharp.exe"
+$csharpBinary = Join-Path $projRoot "pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\$TargetFramework\OspreySharp.exe"
 $rustForkBinary = Join-Path $projRoot "osprey\target\release\osprey.exe"
 $rustUpstreamBinary = Join-Path $projRoot "osprey-mm\target\release\osprey.exe"
 $rustBinary = if ($RustTree -eq "Upstream") { $rustUpstreamBinary } else { $rustForkBinary }

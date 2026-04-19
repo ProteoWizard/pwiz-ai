@@ -82,7 +82,9 @@ param(
     [string]$BaselineBin = "",
     [string]$BaselineLabel = "Baseline",
     [ValidateSet("Rust", "CSharp")]
-    [string]$BaselineType = "Rust"
+    [string]$BaselineType = "Rust",
+    [ValidateSet("net472", "net8.0")]
+    [string]$TargetFramework = "net472"
 )
 
 $ErrorActionPreference = "Stop"
@@ -103,7 +105,7 @@ $tempBlib = Join-Path $testDir "_bench_output.blib"
 
 $upstreamBin = "C:\proj\osprey-mm\target\release\osprey.exe"
 $forkBin = "C:\proj\osprey\target\release\osprey.exe"
-$csharpBin = "C:\proj\pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\OspreySharp.exe"
+$csharpBin = "C:\proj\pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\$TargetFramework\OspreySharp.exe"
 
 # Build mzML file list based on -Files parameter
 $mzmlFiles = if ($Files -eq "Single") {

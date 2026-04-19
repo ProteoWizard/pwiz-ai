@@ -92,7 +92,11 @@ param(
     [string]$RustTree = "Fork",
 
     [Parameter(Mandatory=$false)]
-    [string]$TestBaseDir = $null
+    [string]$TestBaseDir = $null,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("net472", "net8.0")]
+    [string]$TargetFramework = "net472"
 )
 
 $ErrorActionPreference = "Stop"
@@ -117,7 +121,7 @@ $projRoot = Split-Path -Parent $aiRoot
 $rustForkBinary = Join-Path $projRoot "osprey\target\release\osprey.exe"
 $rustUpstreamBinary = Join-Path $projRoot "osprey-mm\target\release\osprey.exe"
 $rustBinary = if ($RustTree -eq "Upstream") { $rustUpstreamBinary } else { $rustForkBinary }
-$csharpBinary = Join-Path $projRoot "pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\OspreySharp.exe"
+$csharpBinary = Join-Path $projRoot "pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\$TargetFramework\OspreySharp.exe"
 $library = Join-Path $testDir $ds.Library
 $mzml = Join-Path $testDir $ds.SingleFile
 

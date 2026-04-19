@@ -74,7 +74,11 @@ param(
     [string]$Verbosity = "minimal",
 
     [Parameter(Mandatory=$false)]
-    [string]$SourceRoot = $null
+    [string]$SourceRoot = $null,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("net472", "net8.0")]
+    [string]$TargetFramework = "net472"
 )
 
 $ErrorActionPreference = "Stop"
@@ -104,7 +108,7 @@ if ($SourceRoot) {
 $Platform = "x64"
 $ospreyRoot = Join-Path $pwizRoot 'pwiz_tools/OspreySharp'
 $slnPath = Join-Path $ospreyRoot 'OspreySharp.sln'
-$testDll = Join-Path $ospreyRoot "OspreySharp.Test/bin/$Platform/$Configuration/OspreySharp.Test.dll"
+$testDll = Join-Path $ospreyRoot "OspreySharp.Test/bin/$Platform/$Configuration/$TargetFramework/OspreySharp.Test.dll"
 $initialLocation = Get-Location
 
 if (-not (Test-Path $slnPath)) {

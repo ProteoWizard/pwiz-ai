@@ -77,7 +77,10 @@ param(
     # does not start collecting until OspreySharp's ProfilerHooks.Start-
     # Measure bracket around the main-search loop. Produces a snapshot
     # that contains only Stage 4, not calibration + setup.
-    [switch]$ScopeToMainSearch
+    [switch]$ScopeToMainSearch,
+
+    [ValidateSet("net472", "net8.0")]
+    [string]$TargetFramework = "net472"
 )
 
 $ErrorActionPreference = "Stop"
@@ -96,7 +99,7 @@ if (-not (Test-Path $testDir)) {
 $mzml = Join-Path $testDir $ds.SingleFile
 $library = Join-Path $testDir $ds.Library
 $tempBlib = Join-Path $testDir "_profile_output.blib"
-$csharpBin = "C:\proj\pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\OspreySharp.exe"
+$csharpBin = "C:\proj\pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\$TargetFramework\OspreySharp.exe"
 
 $scriptRoot = Split-Path -Parent $PSCommandPath
 $aiRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)
