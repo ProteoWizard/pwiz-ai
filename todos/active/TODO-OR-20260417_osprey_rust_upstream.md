@@ -19,17 +19,25 @@
 - **Branches pushed to**: `maccoss/osprey` (Brendan is a
   collaborator as of 2026-04-17)
 - **Created**: 2026-04-17
-- **Status (end of 2026-04-18 session)**: **Batch 1 shipped as PR #9
-  on `maccoss/osprey`** (https://github.com/maccoss/osprey/pull/9).
-  Scope was reduced mid-session from the original plan — see the
-  Progress log for the full story. The PR is **purely additive**
-  (+1,129 lines, 0 deletions across 11 files); no algorithmic
-  changes, no production-type changes, no feature-parity delta.
-  Stellar 21/21 at 1e-6, Astral perf + memory essentially equal
-  to `origin/main` (all deltas within cold-run variance).
-  Batches 2a and 2b remain open; two smaller follow-up PRs
-  (f32→f64 calibration paired with `XcorrScratchPool`;
-  cross-implementation regression tests) are queued for later.
+- **Status (end of 2026-04-18 extended session)**: **Three PRs open
+  on `maccoss/osprey`**, all MERGEABLE, all Copilot threads resolved,
+  awaiting Mike's review.
+  - PR #9 `diagnostics-port`: Batch 1 (cross-impl bisection
+    infrastructure). +1,129/0, purely additive.
+    https://github.com/maccoss/osprey/pull/9
+  - PR #10 `loess-classical-robust`: Cleveland 1979 robust LOESS
+    toggle behind `OSPREY_LOESS_CLASSICAL_ROBUST=1` (strict `==1`).
+    +~60/5, two new regression tests.
+    https://github.com/maccoss/osprey/pull/10
+  - PR #11 `cross-impl-regression-tests`: Five cross-impl tests.
+    +331/0, test-only.
+    https://github.com/maccoss/osprey/pull/11
+  Batches 2a and 2b remain open — next session's work.
+- **Fork retirement unblocked**: With PRs #9/#10/#11 merged,
+  `brendanx67/osprey` has no unique content. OspreySharp migrated to
+  pure f32 (pwiz commit `03b19c221` on
+  `Skyline/work/20260409_osprey_sharp`), so the fork's `c95b36c` f64
+  alignment flip is obsolete. Fork can be abandoned once Mike merges.
 
 ## Objective
 
@@ -592,26 +600,20 @@ Commit message and PR body are in `ai/.tmp/` for reference:
 - `diagnostics-port-commit-msg.txt`
 - `diagnostics-port-pr-body.md`
 
-#### Follow-up PRs (not in this TODO yet — create new TODOs)
+#### Follow-up PRs (status as of 2026-04-18 extended session)
 
-1. **f32 → f64 calibration scoring**, paired with
-   `XcorrScratchPool`. The fork's dump parity depends on this
-   but the perf story requires Batch 2a first. Plausibly a
-   single PR bundled with Batch 2a.
-2. **Cross-implementation regression tests**:
-   `test_xcorr_fragment_bin_dedup`,
-   `test_libcosine_closest_by_mz`,
-   `test_median_polish_convergence_after_both_sweeps`,
-   `test_xcorr_windowing_normalization`,
-   `test_xcorr_f64_vs_f32_precision_drift`. Tests-only PR is
-   easy to review.
-3. **`OSPREY_LOESS_CLASSICAL_ROBUST` toggle**. Separate PR, needs
-   its own "improved LOESS default" argument. OspreySharp already
-   has two LOESS implementations; the default on both sides
-   passes parity with origin/main today.
-4. **Batch 2a** (XcorrScratchPool) — still in this TODO.
-5. **Batch 2b** (Rayon file-level parallelism) — still in this
-   TODO.
+1. **`OSPREY_LOESS_CLASSICAL_ROBUST` toggle** — shipped as PR #10.
+2. **Cross-implementation regression tests** — shipped as PR #11.
+3. **f32 → f64 calibration scoring** — **OBSOLETE**. The extended
+   session proved OspreySharp can migrate to pure f32 to match
+   upstream Rust's native f32 path (instead of dragging Rust up to
+   f64 to match C#'s f64). The fork's `c95b36c` flip was solving the
+   wrong direction.
+
+#### Still open (next session)
+
+- **Batch 2a** (XcorrScratchPool) — next priority.
+- **Batch 2b** (Rayon file-level parallelism) — after 2a.
 
 #### End-of-session artifacts (safe to delete after PR merges)
 
@@ -624,6 +626,140 @@ Commit message and PR body are in `ai/.tmp/` for reference:
 - `ai/.tmp/measure-astral-cold.ps1` (one-shot helper, superseded
   by `Bench-Scoring.ps1 -SkipFork -SkipCSharp`)
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260418-osprey-diagnostics-pr9-shipped.md`
-before starting work.
+**Next session handoff (superseded)**: the 2026-04-18 handoff at
+`ai/.tmp/handoff-20260418-osprey-diagnostics-pr9-shipped.md` is now
+stale; see the newer entry below.
+
+### 2026-04-18 (continued) — PR #9 rebase, f32 spike, PRs #10 + #11
+
+Picked up from the earlier 2026-04-18 session. Output: three PRs open
+on `maccoss/osprey` (all MERGEABLE, all Copilot threads resolved),
+OspreySharp migrated to pure f32 upstream-equivalent, fork retirement
+unblocked.
+
+#### PR #9 rebase + Copilot review
+
+v26.3.0 landed on `maccoss/osprey:main` between PR #9 posting and
+review, producing a merge conflict in `pipeline.rs` and a type
+mismatch (upstream's `scored_candidates` in main-search is now a
+3-tuple with RT-penalized score, added in `dba7f4e`). Rebased onto
+`7f7fcbf`; `dump_peaks` signature updated to accept the new tuple
+(emits the raw coelution_score; ordering reflects upstream's
+RT-penalized sort).
+
+Copilot posted 9 inline comments. All addressed in commit `5e5d5f4`:
+removed a hardcoded `DECOY_ALQFAQWWK` filter in `dump_mp_diag`,
+dropped workspace-only `ai/scripts/DIAGNOSTICS.md` doc links, fixed
+broken intradoc link, switched bare `{}` to `{:.10}` in
+`dump_xcorr_scan`, relaxed the `osprey-core` module doc, noted the
+`cal_match` scan column is a Rust-only extension, and added a
+length-mismatch warn + header line to `dump_loess_input`. PR #9
+head: `5e5d5f4`.
+
+#### f32/f64 spike — key finding
+
+The 2026-04-09/10 session chose f64-everywhere-in-Rust to match C#
+OspreySharp's natural f64 (Math.Sqrt is double). That decision was
+reasoned abstractly, not benchmarked the other direction. It caused
+the Astral S4 regression that motivated the "Batch 2a + f64
+calibration" follow-up plan. **The other direction was never
+tested: make OspreySharp match upstream Rust's pure f32.**
+
+Spike: flip OspreySharp's XCorr preprocess to pure f32 using
+`(float)Math.Sqrt((double)x)` as the f32-sqrt proxy
+(`MathF.Sqrt(float)` is .NET Core 2.0+ / not available in
+OspreySharp's .NET Framework 4.7.2 target). Result on Stellar
+`cal_match`:
+
+| | Before (C# f64) | After (C# f32) |
+|---|---:|---:|
+| xcorr max \|d\| vs Rust f32 | 4.195e-6 | **1.000e-10** |
+| rows bit-equal / 192,289 | 35 (0.02%) | 192,283 (99.997%) |
+
+`(float)Math.Sqrt((double)x)` is bit-equivalent to Rust's native
+`f32::sqrt` on this workload — zero ULP drift across 192K matches.
+The 4e-6 drift was entirely from f64-compute-then-narrow in C#;
+sqrt, bisquare weights, and transcendentals were never the issue.
+
+#### OspreySharp f32 migration (productionized)
+
+Three call sites flipped to pure f32 in pwiz commit `03b19c221` on
+`Skyline/work/20260409_osprey_sharp`:
+
+1. `SpectralScorer.cs::PreprocessSpectrumForXcorrInto` — HRAM
+   main-search cache, now f32 throughout (was f64-compute-then-
+   narrow). New public `PreprocessSpectrumForXcorrF32` helper.
+2. `ResolutionStrategy.cs::UnitStrategy.PreprocessWindowSpectra` —
+   unit-res main-search cache, f32 compute with lossless widen to
+   double[] for downstream `XcorrFromPreprocessed(double[], ...)`.
+3. `AnalysisPipeline.cs:1176` — calibration preprocess loop, same
+   widen-to-double[] pattern.
+
+Private helpers `ApplyWindowingNormalizationF` /
+`ApplySlidingWindowF` added to `SpectralScorer`. Pwiz branch is
+7 commits ahead of origin. ReSharper clean, 186 unit tests pass.
+
+**Test-Features against upstream Rust (not fork)**:
+- Stellar: **21/21 PASS** at 1e-6 (xcorr max 2.3e-7, sg_weighted 1.9e-7)
+- Astral: **21/21 PASS** at 1e-6 (xcorr max 3.3e-7, sg_weighted 3.0e-7)
+
+Astral wall-clock: Rust upstream 628.7–727.5s vs C# 125.5–215.2s
+(single file, Stage 1-4 only). The 3-5x C# lead is exactly the gap
+Batches 2a + 2b would close by porting C#'s pool + parallelism.
+
+#### PR #10 — LOESS classical robust toggle
+
+Ported from fork commit `5588082`. Default unchanged (historical
+residual reuse); `OSPREY_LOESS_CLASSICAL_ROBUST=1` enables classical
+Cleveland 1979 residual refresh per iteration. Strict
+`== Ok("1")` env-var parsing matches OspreySharp's `IsOne` helper —
+the earlier `is_ok()` had a latent cross-impl bug where
+`OSPREY_LOESS_CLASSICAL_ROBUST=0` would silently enable the feature
+in Rust but disable it in C#.
+
+Copilot review (3 comments) addressed in commit `e5c749f`: strict
+env-var parsing, clarified config docstring (crate doesn't read env
+vars; the `osprey` binary maps), added two regression tests
+(`test_loess_default_mode_is_iteration_invariant`,
+`test_loess_classical_mode_diverges_from_default`). All threads
+resolved. PR #10 head: `e5c749f`.
+
+#### PR #11 — Cross-impl regression tests
+
+Ported from fork commit `0cbbccd`. Five tests guard algorithmic
+fidelity across implementations. My first port had a bug in
+`test_median_polish_convergence_after_both_sweeps`: dropped the
+`+ result.residuals[f_idx][s_idx]` term and the `.exp()` conversion,
+which made the assertion fail on log-space output. Fixed in commit
+`a21a19f` (mass-preservation identity:
+`(overall + row + col + residuals).exp() == value`).
+
+Copilot review (2 comments) addressed in commit `256ad1f`: rewrote
+`test_xcorr_fragment_bin_dedup` to call
+`preprocess_library_for_xcorr` + `xcorr_from_preprocessed` directly
+(previous version deduplicated via `HashSet` inside the test,
+making the assertion self-fulfilling). All threads resolved. PR #11
+head: `256ad1f`.
+
+#### Bench-Scoring.ps1 / Test-Features.ps1 defaults (suggested)
+
+Once PRs land, flip `-RustTree` default from `Fork` to `Upstream` in
+both scripts. Fork stays on disk as archive but is no longer the
+baseline. Also consider auditing any remaining `C:\proj\osprey`
+references in the AI scripts to ensure `C:\proj\osprey-mm` is the
+primary path.
+
+#### Batch 2a scope — audit still needed
+
+Upstream has evolved since the TODO was written. Before porting,
+next session should audit whether upstream's `pipeline.rs`
+main-search already has a per-window preprocessed XCorr cache
+(the `ctx.preprocessed_xcorr` parameter suggests yes), which
+determines whether Batch 2a is pure pool-addition (small PR) or
+pool + cache-wrapper addition (larger PR).
+
+**Next session handoff**: read
+`ai/.tmp/handoff-20260419-batch2a-xcorr-pool.md` before starting
+work. The stale 2026-04-18 handoff at
+`ai/.tmp/handoff-20260418-osprey-diagnostics-pr9-shipped.md` is
+superseded.
