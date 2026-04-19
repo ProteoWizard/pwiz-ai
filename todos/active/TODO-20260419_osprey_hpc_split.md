@@ -78,8 +78,45 @@ round-trips (Rust→Rust, C#→C#) both work. Options for Phase 4:
 upgrade `Parquet.Net`, drop Rust to Snappy, or keep them independent
 (operator picks one tool for the whole experiment).
 
-### Phase 3 (parquet group validation) - PENDING
-### Phase 3 (parquet group validation) - PENDING
+### Phase 3 (parquet group validation) - DONE 2026-04-19
+
+- **Rust** (`crates/osprey/src/pipeline.rs`): added `validate_scores_parquet_group`
+  IO wrapper plus pure helpers `parse_version` and `check_parquet_metadata`.
+  Wired in at the top of the `--join-only` branch. 12 unit tests target
+  the pure helpers (mutex / version drift / missing fields / hash
+  mismatches / unparseable version).
+- **C#** (`OspreySharp.IO/ParquetScoreCache.cs`): mirror -- added
+  `LoadFooterMetadata`, `TryParseVersion`, `CheckParquetMetadata`, and
+  `ValidateScoresParquetGroup`. Wired into `AnalysisPipeline.Run` at
+  the top of the `joinOnly` branch via `Program.VERSION`. 12 matching
+  unit tests in `ProgramTests.cs`. Total OspreySharp tests now **214**
+  (was 202).
+- **C#** added `OspreyConfig.LibraryIdentityHash()` (mirror of Rust's
+  `library_identity_hash`: SHA-256 over `path:`, `size:`, `mtime:`).
+- **C# fix** found during smoke testing: `ProcessFile` shallow-clones the
+  config and mutates `FragmentTolerance` during MS2 calibration, so
+  computing `SearchParameterHash()` inside `ProcessFile` produced a hash
+  the validator couldn't match later. Fixed by pre-computing the
+  metadata dictionary once at the top of `Run()` against the un-mutated
+  outer config and threading it down to `ProcessFile`. Rust does not
+  have this bug because its per-file loop does not clone+mutate config.
+
+**Stellar smoke tests (both impls, single file):**
+- Rust positive (unit -> unit): "validated 1 parquet(s) against current
+  config (search_hash=de620a21...)" -> 35,120 precursors at 1% FDR.
+- Rust negative (unit -> hram): "search_hash mismatch: parquet was
+  scored with search_hash=de620a21... but current config hashes to
+  f7ad4558..." (file named in error).
+- C# positive: 37,764 precursors. C# negative: identical mismatch format.
+
+**Cross-impl gaps now visible** (all Phase 4 follow-ups, not regressions):
+1. Compression: Rust ZSTD, C# Parquet.Net 3.x Snappy.
+2. Schema types: Rust uses UInt32/UInt8 for entry_id/charge; C# uses
+   Int32. Rust panics if it tries to load a C# parquet (downcast fail).
+3. Version namespace: C# `Program.VERSION = "0.1.0"`, Rust `26.3.0`.
+   Validator correctly aborts cross-impl with "incompatible major/minor".
+   Resolves once project versions align (or a `tool` field is added).
+
 ### Phase 4 (round-trip tests) - PENDING
 ### Phase 5 (docs + scripts) - PENDING
 
