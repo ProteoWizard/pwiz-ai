@@ -308,3 +308,33 @@ pwsh -File './ai/scripts/OspreySharp/Test-Features.ps1' -Dataset Stellar
 
 - 2026-04-18, Session 0: TODO drafted after pre-port feasibility
   scan; branch not yet created.
+- 2026-04-18, Session 1: POC branch cut, Phase 1 done + Phase 2 walked.
+  - `Skyline/work/20260418_osprey_sharp_net8` at 2393da7332.
+  - 8 csproj files migrated to SDK-style net8.0; 186/186 unit tests
+    pass under `dotnet test`; `Test-Features.ps1 -Dataset Stellar`
+    runs in 69.6s (vs Rust 83.9s = 0.83x).
+  - With `-SharedCalibration`, all 21 PIN features bit-identical on
+    .NET 8 (the main-search / Stage 4 code is fully portable). Drift
+    is in own-calibration mode only.
+  - Invested in tooling: `Compare-Diagnostic.ps1` driver + `-TestBaseDir`
+    parameter on all entry points + format-parity cleanup of the
+    diag dumps (committed to ai/ master `442a5cc`).
+  - Routine bisection walk on Stellar (Rust vs C#/net8):
+    CalSample ID / CalWindows 0.87% (pre-existing; also diverges on
+    net472, not POC-caused) / CalMatch ID / LdaScores ID /
+    LoessInput ID (after F17 fix). So through LOESS pass-1 INPUT
+    the .NET 8 build is fully bit-identical to Rust.
+  - Two small diag-dump format fixes (R -> F17) landed on POC as
+    `bda9add0e5` and `2393da7332`; dump-only, no pipeline effect.
+    These should be upstreamed to the parent branch later.
+  - Known pre-existing divergence: 1732/199691 Stellar cal_windows
+    entries have Rust upper-bound = mzML-precise vs C# =
+    center+width/2. Worth a separate cleanup TODO; not POC scope.
+  - Next session picks up at the drift point *after* LOESS pass-1
+    input: add diag dumps for pass-1 LOESS output (fitted curve or
+    expected_rt predictions), MS2 mass calibration parameters, and
+    pass-2 cal_match / lda_scores / loess_input. Alternative quick
+    probe: diff the final `{stem}.calibration.json` between Rust
+    and C#/net8 full runs -- the JSON has pass-2 LOESS stats, MS2
+    mass offset+tolerance, and RT params, so divergence localizes
+    there.
