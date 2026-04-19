@@ -389,3 +389,72 @@ pwsh -File './ai/scripts/OspreySharp/Test-Features.ps1' -Dataset Stellar
        (pre-existing; not POC scope).
     5. Separate cleanup TODO for 1732/199691 Stellar cal_windows
        upper-bound precision drift (pre-existing; noted session 1).
+- 2026-04-19, Session 3: SaveCalibration landed + Phase 3 Linux parity.
+  - POC branch at `f29a5bd725`. Parent branch at `b3f0d79b0c`
+    (SaveCalibration cherry-picked; now both runtimes emit cal JSON).
+  - Sanity re-ran `Test-Features.ps1 -Dataset Stellar`:
+    * Parent net472: 21/21 PASS, 317536 matched entries, max dev ULP
+    * POC net8: 21/21 PASS, 317536 matched entries, max dev ULP
+    * Session 1's "19/21 divergent on net8" finding was a stale-Rust-
+      binary artifact (osprey.exe was Apr 9 pre-bugfix commits). After
+      rebuilding Rust to Apr 18, both C# builds match it perfectly.
+  - Implemented `CalibrationIO.SaveCalibration` wire-up in
+    `AnalysisPipeline.cs` via `MzCalibrationJson.FromResult` and
+    `RTCalibrationJson.FromRTCalibration` factories on
+    `CalibrationParams.cs`. Both runtimes now emit a full
+    `{stem}.calibration.json` matching Rust's schema at Stage 3 exit.
+  - Verified round-trips:
+    * C# self-roundtrip (save -> load -> re-score): bit-identical
+      199 MB `cs_features.tsv` via SHA256
+    * Rust loads C#-saved JSON (log: "Loaded calibration from:
+      ...cs_cal_savedbycs.json"); schema is cross-tool compatible
+  - Phase 3 WSL2 Linux parity: PASS.
+    * Installed Ubuntu via `wsl --install -d Ubuntu`
+    * `dotnet publish -c Release -r linux-x64 --self-contained true`
+      produces portable linux-x64 ELF binary (~200 MB dir with
+      .NET 8 runtime bundled)
+    * Ran against same Stellar mzML + library under WSL2
+    * Max feature delta Windows net8 vs Linux net8: 2.2e-13 across
+      466187 rows, 24 feature columns -- 7 orders of magnitude below
+      the 1e-6 parity threshold. ZERO columns have any row above 1e-6.
+    * Wall: 176s on WSL2 (vs ~70s native Windows) -- expected due to
+      reading mzML from /mnt/c/ NTFS. Not a correctness concern.
+  - Phase 4 (real Linux VM): DEFERRED. WSL2 already runs a mainline
+    Linux kernel (6.6.87.2) with standard Ubuntu glibc, so the 2.2e-13
+    drift is tied to libm math paths common to any Linux distro.
+    Real-VM validation would reproduce this result; mark as optional.
+
+## POC OUTCOME: all success criteria met
+
+  | Criterion | Result |
+  |---|---|
+  | `dotnet build` clean on Windows net8 | 0 warnings, 0 errors |
+  | `dotnet test` all 186 tests | 186/186 pass |
+  | Stellar 21 PIN features vs Rust (Windows net8) | 21/21 bit-identical, 317536 entries |
+  | Stellar Windows net8 vs Linux net8 | 2.2e-13 max dev, 0 rows above 1e-6 |
+  | Perf within 10% of net472 | 69.9s / 66.4s = 0.95x |
+  | Cal JSON reusable across runtimes | C# emits schema-compatible JSON both tools can load |
+
+## Integration decision (end of session 3)
+
+The POC branch holds only one unique commit (`cf822ae35b` csproj
+migration). All four other commits (F17 x 2, cal summary, Save-
+Calibration) have been cherry-picked to parent. The POC goal is met.
+
+Recommendation: **merge to parent as full migration to net8.0**, not
+multi-target. Parent branch is standalone (zero net472 dependencies),
+Matt's upcoming `pwiz_data_cli` is net8, and multi-target would double
+the build matrix for no benefit.
+
+Integration plan (next session):
+  1. On parent: cherry-pick `cf822ae35b` (the one POC-unique commit)
+  2. Clean bin/obj, `dotnet build`, `dotnet test` (expect 186/186)
+  3. Run `Test-Features.ps1 -Dataset Stellar` (expect 21/21 PASS)
+  4. Push parent
+  5. Delete POC branch (local + remote)
+
+Follow-up TODOs (not POC scope):
+  - MS1 18 vs 190 pre-existing cross-impl drift (Rust side)
+  - 1732/199691 Stellar cal_windows upper-bound precision drift
+  - Stage 4 amplification hunt (not needed now that POC passes, but
+    useful for future Astral validation)
