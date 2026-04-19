@@ -1,10 +1,40 @@
 # TODO: Osprey / OspreySharp HPC-friendly scoring split
 
-**Status**: Backlog
+**Status**: Active
 **Priority**: High (enables cluster deployment)
 **Complexity**: Small (wiring + CLI; infrastructure already in place)
 **Created**: 2026-04-18
+**Started**: 2026-04-19
+**Branches**:
+- pwiz: `Skyline/work/20260419_osprey_hpc_split` (off `Skyline/work/20260409_osprey_sharp` @ `f14cb74b2a`)
+- osprey: `feat/no-join-cli` (off `maccoss/osprey` `main` @ `ad9a57a`, fork abandoned 2026-04-19)
 **Scope**: Both `C:\proj\osprey` (Rust) and `C:\proj\pwiz\pwiz_tools\OspreySharp` (C#) in lock-step
+
+## Progress
+
+### Phase 1 (config + CLI) - DONE 2026-04-19
+
+- Added `no_join: bool` and `input_scores: Option<Vec<PathBuf>>` to `OspreyConfig`
+  on both sides (`osprey-core/src/config.rs`, `OspreySharp.Core/OspreyConfig.cs`).
+- Added the three CLI flags `--no-join`, `--join-only`, `--input-scores` to
+  both parsers. Multi-value `--input-scores` mirrors the existing `--input`
+  pattern (space-separated, consume until next flag); single-directory arg
+  triggers a non-recursive `*.scores.parquet` scan.
+- Extracted `validate_hpc_args` (Rust) and `Program.ValidateArgs` (C#) as
+  pure helpers so the mutex + required-companion checks can be unit-tested.
+- Tests: 14 in `crates/osprey/src/main.rs::tests`; 16 in
+  `OspreySharp.Test/ProgramTests.cs`. Cover validation errors and happy
+  paths, `resolve_input_scores` directory expansion, and config defaults.
+- Full-suite regression: 406+ Rust tests pass; OspreySharp.sln 202/202 pass
+  (was 186 + 16 new = 202).
+- `OSPREY_EXIT_AFTER_SCORING` env var: already gone from upstream Rust;
+  C# removal deferred to Phase 2 (the env-var check is the seam where the
+  pipeline split lands).
+
+### Phase 2 (pipeline split) - PENDING
+### Phase 3 (parquet group validation) - PENDING
+### Phase 4 (round-trip tests) - PENDING
+### Phase 5 (docs + scripts) - PENDING
 
 ## Motivation
 
