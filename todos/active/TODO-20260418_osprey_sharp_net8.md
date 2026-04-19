@@ -423,6 +423,38 @@ pwsh -File './ai/scripts/OspreySharp/Test-Features.ps1' -Dataset Stellar
     Linux kernel (6.6.87.2) with standard Ubuntu glibc, so the 2.2e-13
     drift is tied to libm math paths common to any Linux distro.
     Real-VM validation would reproduce this result; mark as optional.
+- 2026-04-19, Session 4: multi-target migration to parent branch.
+  - Converted all 8 csproj to SDK-style multi-target
+    `<TargetFrameworks>net472;net8.0</TargetFrameworks>` on parent
+    branch `Skyline/work/20260409_osprey_sharp` (commit `f14cb74b2a`).
+    Both runtimes build from the same source; neither can drift from
+    the other.
+  - Preserved server GC on both runtimes:
+    * net472: trimmed `OspreySharp/app.config` to just gcServer +
+      gcConcurrent (old HintPath-era binding redirects removed since
+      NuGet autogenerates those now)
+    * net8: `<ServerGarbageCollection>true</ServerGarbageCollection>`
+      and `<ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>`
+      in `Directory.Build.props` -> flows into auto-generated
+      runtimeconfig.json
+  - `Test-Features.ps1 -Dataset Stellar` passes 21/21 bit-identical
+    on net472 AND net8 (single test dir, two TFM outputs).
+    `dotnet test` passes 186/186 on both TFMs.
+  - ai/ scripts updated with `-TargetFramework net472|net8.0` switch
+    (default net472 to preserve existing behavior). Affected:
+    Build-OspreySharp, Test-Features, Run-Osprey, Bench-Scoring,
+    Profile-OspreySharp. Binary path now includes TFM:
+    `bin/x64/Release/{tfm}/OspreySharp.exe`. ai/ master `b65b6c1`.
+  - **Perf validation pending on workstation (i9, 64 GB RAM)**:
+    Laptop wall-clock isn't a reliable check for GC-mode regression.
+    Before retiring the POC branch, run `Bench-Scoring.ps1 -Dataset
+    Stellar -Files All` on both TFMs on the workstation and confirm
+    net472 doesn't regress vs the legacy baseline and that net8 is
+    at least equivalent. Also verify peak RSS didn't grow.
+  - **POC branch retirement**: deferred until perf validation passes.
+    Branch `Skyline/work/20260418_osprey_sharp_net8` remains as a
+    safety net; once workstation bench confirms no regression it's
+    safe to delete local + remote.
 
 ## POC OUTCOME: all success criteria met
 
