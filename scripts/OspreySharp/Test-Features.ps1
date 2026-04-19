@@ -89,7 +89,10 @@ param(
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("Fork", "Upstream")]
-    [string]$RustTree = "Fork"
+    [string]$RustTree = "Fork",
+
+    [Parameter(Mandatory=$false)]
+    [string]$TestBaseDir = $null
 )
 
 $ErrorActionPreference = "Stop"
@@ -97,7 +100,7 @@ $ErrorActionPreference = "Stop"
 
 # Load dataset configuration
 . "$PSScriptRoot\Dataset-Config.ps1"
-$ds = Get-DatasetConfig $Dataset
+$ds = Get-DatasetConfig $Dataset -TestBaseDir $TestBaseDir
 
 $testDir = $ds.TestDir
 if (-not (Test-Path $testDir)) {

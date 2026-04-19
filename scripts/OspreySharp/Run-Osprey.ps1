@@ -84,6 +84,10 @@
 .PARAMETER Summary
     Show only key output lines (timing, calibration, results)
 
+.PARAMETER TestBaseDir
+    Override the test data base directory. Defaults to
+    $env:OSPREY_TEST_BASE_DIR if set, otherwise "D:\test\osprey-runs".
+
 .EXAMPLE
     .\Run-Osprey.ps1
     Run C# on Stellar single file
@@ -179,7 +183,10 @@ param(
     [string]$DiagXcorrScan = $null,
 
     [Parameter(Mandatory=$false)]
-    [string]$ExtraArgs = $null
+    [string]$ExtraArgs = $null,
+
+    [Parameter(Mandatory=$false)]
+    [string]$TestBaseDir = $null
 )
 
 $ErrorActionPreference = "Stop"
@@ -187,7 +194,7 @@ $ErrorActionPreference = "Stop"
 
 # Load dataset configuration
 . "$PSScriptRoot\Dataset-Config.ps1"
-$ds = Get-DatasetConfig $Dataset
+$ds = Get-DatasetConfig $Dataset -TestBaseDir $TestBaseDir
 
 $testDir = $ds.TestDir
 if (-not (Test-Path $testDir)) {
