@@ -879,10 +879,46 @@ binary/DLL names.
   direction; Astral single-file timing captured indirectly via the
   parity test is sufficient for regression check.
 
+## Session 19 (2026-04-19): Peak-selection alignment with maccoss/osprey v26.3.0
+
+Discovered mid-session while preparing upstream Batch 2a
+(`XcorrScratchPool`) on `hram-xcorr-pool` that Test-Features was
+reporting ~330/280K FAIL entries per peak-dependent feature on
+Stellar against `origin/main`, despite the 03b19c221 commit message
+claiming 21/21. Bisection against `dba7f4e^` (parent of the commit
+that landed Gaussian RT penalty in v26.3.0) produced a clean 21/21,
+isolating the drift source.
+
+**Root cause**: `maccoss/osprey` v26.3.0 introduced `dba7f4e "Added
+Gaussian RT penalty to CWT peak selection"` which multiplies each
+CWT candidate's coelution score by `exp(-dt^2 / (2*sigma^2))` before
+ranking (`rtSigma = max(3*MAD*1.4826, 0.1 min)`). OspreySharp's
+`ScoreCandidate` was still ranking by raw pairwise correlation and
+tipped different peaks on ~330 borderline entries.
+
+**Fix (commit 4b030f5b8)**:
+- `AnalysisPipeline.ScoreCandidate` now multiplies pairwise-
+  correlation score by the Gaussian RT penalty before ranking;
+  `rtSigmaGlobal` computed once in `RunCoelutionScoring` and
+  threaded through `ScoreWindow` -> `ScoreCandidate`.
+- `ComputePeakShapeFeatures` apex loop flipped to `>=` so flat-top
+  intensity ties pick the LAST scan, matching Rust
+  `Iterator::max_by` (std::cmp::max_by returns v2 on Equal). Without
+  this, 3 Astral entries had peak_sharpness diverging by up to
+  1.77e4 after the RT-penalty fix restored all other features.
+
+**Validation**: 186 unit tests pass, ReSharper clean. Test-Features
+21/21 at 1e-6 on Stellar (xcorr max 2.3e-7) and Astral (xcorr max
+3.3e-7) vs `maccoss/osprey:main` (7f7fcbf).
+
+This was a prerequisite for Batch 2a upstream work -- the parity
+check is the gate that any XCorr pool optimization must pass.
+
 ## Next session handoff
 
-For the session-19 startup protocol, respond to any pending Mike
-comments on maccoss/osprey#4-#8, then either start Stage 2 prep
-(Rayon file-level parallelism, per-window XCorr cache) or the
-mirrored Rust diagnostics extraction. No handoff file is needed --
-state is captured in this TODO and the open PRs.
+Return to `C:\proj\osprey-mm` branch `hram-xcorr-pool`, pop the two
+stashes (`pool-wiring`, `lib-refactor`), re-run Test-Features to
+confirm the pool changes are still bit-identical now that OspreySharp
+matches, then benchmark Astral against `origin/main` for the pool
+speedup. Respond to any pending Mike comments on
+maccoss/osprey#9-#11 first if review activity has arrived.

@@ -763,3 +763,56 @@ pool + cache-wrapper addition (larger PR).
 work. The stale 2026-04-18 handoff at
 `ai/.tmp/handoff-20260418-osprey-diagnostics-pr9-shipped.md` is
 superseded.
+
+### 2026-04-19 — Batch 2a started, paused for OspreySharp parity fix
+
+Checked out `C:\proj\osprey-mm` on `main` (7f7fcbf) and branched
+`hram-xcorr-pool`. Batch 2a audit confirmed upstream already has the
+per-window `preprocessed_xcorr: Vec<Vec<f32>>` cache
+(pipeline.rs:5998-6001), so the pool work is pool-only (small PR).
+
+**Pool implementation (stashed)**:
+- New `crates/osprey-scoring/src/xcorr_pool.rs`:
+  `XcorrScratch` (binned/windowed/prefix) + `XcorrScratchPool`
+  (Mutex-backed bags for scratch bundles + `NBins`-sized output
+  buffers). 5 unit tests pass.
+- `SpectralScorer::preprocess_spectrum_for_xcorr_into` written
+  alongside the existing `preprocess_spectrum_for_xcorr` (which
+  now delegates via an unpooled `XcorrScratch`). Same applies to
+  `apply_windowing_normalization_into` and
+  `apply_sliding_window_into`. Output bit-identical (confirmed by
+  stash-and-retest producing identical `cs_cal_match` -> PIN diff
+  with and without the refactor).
+- `crates/osprey/src/pipeline.rs`: one `XcorrScratchPool` created
+  per search (keyed off `scorer.num_bins()`); window closure rents
+  one scratch + N output buffers, fills them via the `_into` API,
+  and recycles everything at the end of the window via
+  `recycle_bins_all`.
+- fmt / clippy / 79 workspace tests clean.
+
+**Pause reason**: `Test-Features` reported ~330/280K FAIL entries
+per peak-dependent feature on Stellar against `origin/main`, before
+any pool changes landed. Bisection against `dba7f4e^` (parent of
+v26.3.0's Gaussian RT penalty commit) produced clean 21/21,
+confirming the drift was upstream `dba7f4e` + unaligned OspreySharp
+peak selection. Not caused by the pool -- confirmed by stash-and-
+retest showing identical FAIL counts with and without the pool
+changes.
+
+**Parity restored by pwiz commit 4b030f5b8** on branch
+`Skyline/work/20260409_osprey_sharp`: OspreySharp's `ScoreCandidate`
+now mirrors the upstream Gaussian RT penalty, and
+`ComputePeakShapeFeatures` apex loop picks LAST on ties to match
+Rust `Iterator::max_by`. Test-Features 21/21 at 1e-6 on both Stellar
+and Astral vs `maccoss/osprey:main`.
+
+**Next steps on this TODO**:
+1. Pop stashes (`stash@{0}` = lib-refactor, `stash@{1}` = pool-
+   wiring) onto `hram-xcorr-pool`.
+2. Rebuild, re-run Test-Features 21/21 gate as the pre-condition.
+3. Run `Bench-Scoring.ps1 -Dataset Astral -BaselineBin
+   (path-to-main-build) -SkipFork -SkipCSharp` to measure the
+   pool's Astral single-file wall-clock drop (C# evidence: 4.5x
+   from pool alone).
+4. Commit + push + PR to maccoss/osprey as the `hram-xcorr-pool`
+   branch.
