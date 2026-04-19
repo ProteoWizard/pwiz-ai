@@ -338,3 +338,54 @@ pwsh -File './ai/scripts/OspreySharp/Test-Features.ps1' -Dataset Stellar
     and C#/net8 full runs -- the JSON has pass-2 LOESS stats, MS2
     mass offset+tolerance, and RT params, so divergence localizes
     there.
+- 2026-04-18, Session 2: cal-summary probe at Stage 3 exit.
+  - POC branch at `c647da8bf3`. Parent branch (net472) has 3
+    cherry-picks locally at `64d0dc2acf` (not yet pushed).
+  - Added `OspreyDiagnostics.WriteCalibrationSummary` (POC commit
+    `c647da8bf3`; cherry-picked to parent `64d0dc2acf`): 11-scalar
+    dump at Stage 3 exit (MS1/MS2 mean/sd/count/tolerance + RT
+    n_points/r_squared/residual_sd, all F17). Enables direct diff
+    against Rust's final calibration.json.
+  - Added `-ExitAfterCalibration` / `-ExitAfterScoring` switches
+    to `Run-Osprey.ps1` (ai/ master `6805d88`) so the probe can
+    be driven without hand-rolling env vars.
+  - Findings from diffing Rust cal JSON vs C#/net8 vs C#/net472:
+    * **MS1 count 18 (Rust) vs 190 (C#)** -- identical on both
+      net472 and net8, confirming PRE-EXISTING; neither POC-caused
+      nor propagating to main-search MS1 features (both MS1
+      features pass bit-identical in Test-Features). Deserves its
+      own cleanup issue; not this POC.
+    * **MS2 / RT: ~1e-14 to 1e-16 drift on both builds**, with
+      net472 and net8 drifting from Rust by the SAME order of
+      magnitude. Yet net472 cascades to ULP-identical 21 PIN
+      features while net8 cascades to 19 divergent features.
+      Implication: the cal-stat drift alone doesn't explain the
+      feature-level divergence; amplification happens downstream
+      (Stage 4 main-search application of the cal).
+  - Schema note (answers a question from session 2): C# has
+    `CalibrationIO.SaveCalibration` and reads Rust's JSON schema
+    correctly, but `AnalysisPipeline.cs` never calls Save. Only
+    the load path is wired up. ~30-50 lines of glue to construct
+    a `CalibrationParams` from in-memory state and emit the full
+    JSON -- worth its own follow-up TODO because it enables HPC
+    "compute cal once, reuse on another node" and symmetric
+    bisection.
+  - Deferred to next session:
+    1. Push parent cherry-picks (22c77f3d9b, 1052184333,
+       64d0dc2acf) after user review.
+    2. Hunt Stage-4 amplification point. Recommended probes:
+       (a) dump per-fragment calibrated Delta-m/z for the
+       top-divergent entries from Test-Features, comparing
+       net472 vs net8 under own cal (isolates cal-application
+       drift from cal-computation drift);
+       (b) run both C# builds with `OSPREY_LOAD_CALIBRATION`
+       pointing at Rust's JSON and dump main-search intermediate
+       values -- if they still differ, it's pure main-search FP
+       drift in C#.
+    3. Wire up `CalibrationIO.SaveCalibration` in
+       `AnalysisPipeline.cs` as its own small TODO (enables HPC
+       cal-reuse + symmetric cross-impl bisection).
+    4. Separate cleanup TODO for MS1 18 vs 190 selection drift
+       (pre-existing; not POC scope).
+    5. Separate cleanup TODO for 1732/199691 Stellar cal_windows
+       upper-bound precision drift (pre-existing; noted session 1).
