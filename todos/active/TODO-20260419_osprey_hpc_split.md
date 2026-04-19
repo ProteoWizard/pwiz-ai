@@ -31,7 +31,54 @@
   C# removal deferred to Phase 2 (the env-var check is the seam where the
   pipeline split lands).
 
-### Phase 2 (pipeline split) - PENDING
+### Phase 2 (pipeline split) - DONE 2026-04-19
+
+Approach: minimal seam-only changes, NOT the full extraction the spec
+called for. `run_analysis` (Rust) and `AnalysisPipeline.Run` (C#) stay
+monolithic; the `--no-join` / `--join-only` modes branch around the
+existing per-file loop. A separate sprint can refactor for clarity.
+
+- **Rust** (`crates/osprey/src/pipeline.rs`): added a `--join-only`
+  branch that loads `FdrEntry` stubs (and FDR sidecars + calibration
+  JSON, best-effort) directly from the `--input-scores` parquets;
+  `--no-join` short-circuits at the existing exit-after-scoring seam
+  with a clear log message. Helper `synthetic_input_from_parquet`
+  lets the existing path-derivation helpers (sidecars, calibration)
+  be reused without duplicating them.
+- **C# pipeline** (`OspreySharp/AnalysisPipeline.cs`): added the
+  matching `joinOnly` branch (loads stubs + 21 PIN features in
+  lockstep via existing `LoadFdrStubsFromParquet` +
+  `LoadPinFeaturesFromParquet`); `--no-join` short-circuits at the
+  same seam.
+- **C# parquet writer** (`OspreySharp.IO/ParquetScoreCache.cs`):
+  added `WriteScoresParquet(string, List<FdrEntry>, ...)` overload
+  (~70 LOC). Wired into `ProcessFile` to fire only when
+  `config.NoJoin == true` — no behavior change for the default
+  path. Was a deferred item from the active osprey_sharp TODO
+  Phase 4 cleanup; landed here because `--no-join` needs it.
+- `OSPREY_EXIT_AFTER_SCORING` env var: kept alongside `--no-join`
+  during Phase 2 to avoid breaking bench scripts mid-sprint.
+  Removal moves to Phase 5 in lockstep with the script updates.
+
+**Stellar smoke test (C# net472, single file, unit resolution)**:
+- `--no-join`: 466,187 entries scored, wrote 74 MB Snappy parquet (37 s)
+- `--join-only`: loaded 466K stubs+features, 37,659 precursors at 1% FDR,
+  17.7 MB blib (3 min, including Percolator + protein parsimony +
+  blib write)
+
+**Stellar smoke test (Rust release, same file)**:
+- `--no-join`: 466,187 entries scored, wrote 280 MB ZSTD parquet (36 s)
+- `--join-only`: 35,120 precursors at 1% FDR, 25 MB blib (1 min 56 s)
+
+**Cross-impl asymmetry to resolve in Phase 4**: Rust writes ZSTD
+compression; C# `Parquet.Net` reads/writes Snappy only. So
+`Rust --no-join` → `C# --join-only` (and vice versa) currently
+fails with "reader for compression 'ZSTD' is not supported". Same-impl
+round-trips (Rust→Rust, C#→C#) both work. Options for Phase 4:
+upgrade `Parquet.Net`, drop Rust to Snappy, or keep them independent
+(operator picks one tool for the whole experiment).
+
+### Phase 3 (parquet group validation) - PENDING
 ### Phase 3 (parquet group validation) - PENDING
 ### Phase 4 (round-trip tests) - PENDING
 ### Phase 5 (docs + scripts) - PENDING
