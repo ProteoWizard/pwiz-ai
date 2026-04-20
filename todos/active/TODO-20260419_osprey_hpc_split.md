@@ -149,6 +149,46 @@ upgrade `Parquet.Net`, drop Rust to Snappy, or keep them independent
   contents are functionally equivalent (counts + content match within
   Percolator noise). A separate sprint can chase strict determinism.
 
+### Phase 6 (cross-impl Snappy interop) - DONE 2026-04-19
+
+Added on top of the original 5-phase scope as a follow-up. Goal: enable
+Rust <-> C# parquet handoff so both impls can start Stage 5 from
+identical scoring data.
+
+- **Rust**: added `--parquet-compression {zstd,snappy}` CLI flag,
+  `ParquetCompression` enum on `OspreyConfig`, threaded through 3
+  parquet write call sites. Default stays Zstd (no production behavior
+  change). When Snappy is selected, dictionary encoding is also disabled
+  -- Parquet.Net 3.x can't decode RLE_DICTIONARY.
+- **C#** schema alignment with Rust:
+  - Switched `entry_id`/`scan_number` to UInt32 and `charge` to UInt8
+    so Rust's strict downcast doesn't panic.
+  - Added 6 simple columns missing from C# (`sequence`, `precursor_mz`,
+    `protein_ids`, `bounds_area`, `bounds_snr`, `file_name`) populated
+    from the FdrEntry + library lookup.
+  - Added 5 nullable Binary columns (`cwt_candidates`, `fragment_mzs`,
+    `fragment_intensities`, `reference_xic_rts`, `reference_xic_intensities`)
+    as schema placeholders written as NULL. These are needed only by
+    Stage 6 reconciliation / Stage 7 gap-fill, which are out of scope.
+  - Bumped `Program.VERSION` from `0.1.0` to `26.3.0` to align the
+    version namespace with Rust (the Phase 3 validator requires same
+    major.minor).
+- **Cross-impl hash bit-equivalence**: discovered two serialization
+  mismatches by smoke-testing on Stellar; fixed both:
+  - Bools: Rust prints `true`/`false`, C# default `bool.ToString()`
+    is `True`/`False`. Now C# explicitly lower-cases.
+  - mtime: Rust used `format!("{:?}", SystemTime)` (debug format), C#
+    used ISO 8601. Both switched to **Unix seconds** as a portable
+    integer. Same `library_identity_hash` on both impls now.
+
+**Stellar cross-impl smoke (single file, --resolution unit, both Snappy):**
+- C# --no-join (74 MB parquet) -> Rust --join-only -> 5,736 protein groups (2:19)
+- Rust --no-join --parquet-compression snappy (320 MB, dict-disabled)
+  -> C# --join-only -> 34,627 precursors at 1% FDR (5:05)
+
+Production-default behavior (Rust without `--parquet-compression`)
+unchanged: writes ZSTD with dictionary encoding, ~280 MB on Stellar.
+
 ### Phase 5 (docs + scripts) - DONE 2026-04-19
 
 - Migrated four ps1 scripts (`Bench-Scoring.ps1`,
