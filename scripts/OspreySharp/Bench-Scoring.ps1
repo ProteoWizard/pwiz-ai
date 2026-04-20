@@ -14,7 +14,7 @@
     Timing and memory are always shown together: a "faster" implementation that
     pays for its speed with ballooning memory is not actually faster.
 
-    Fork Rust and C# exit after Stage 4 via OSPREY_EXIT_AFTER_SCORING.
+    Fork Rust and C# exit after Stage 4 via the --no-join CLI flag.
     Upstream Rust runs full pipeline; Stage 1-4 timing extracted from log
     timestamps (memory peak is from the full pipeline, which is usually
     dominated by the scoring stage anyway).
@@ -154,7 +154,7 @@ function Clear-DiagEnv {
     $vars = @('OSPREY_DUMP_CAL_MATCH','OSPREY_CAL_MATCH_ONLY','OSPREY_DUMP_LDA_SCORES',
         'OSPREY_LDA_SCORES_ONLY','OSPREY_DUMP_LOESS_INPUT','OSPREY_LOESS_INPUT_ONLY',
         'OSPREY_DIAG_SEARCH_ENTRY_IDS','OSPREY_DIAG_MP_SCAN','OSPREY_DIAG_XCORR_SCAN',
-        'OSPREY_LOAD_CALIBRATION','OSPREY_EXIT_AFTER_SCORING')
+        'OSPREY_LOAD_CALIBRATION')
     foreach ($v in $vars) { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
 }
 
@@ -165,10 +165,14 @@ function Run-Once {
     Set-Location $testDir
     Clear-DiagEnv
     $env:RUST_LOG = "info"
+    # Stage gating: Calibration uses an env var (no CLI analog yet),
+    # Scoring uses the new --no-join CLI flag (replaces the retired
+    # OSPREY_EXIT_AFTER_SCORING env var).
+    $extraArgs = @()
     if ($EarlyExit) {
         switch ($Stage) {
             "Calibration" { $env:OSPREY_EXIT_AFTER_CALIBRATION = "1" }
-            "Scoring"     { $env:OSPREY_EXIT_AFTER_SCORING = "1" }
+            "Scoring"     { $extraArgs += "--no-join" }
         }
     }
     # File-level parallelism override (C# only).
@@ -185,7 +189,7 @@ function Run-Once {
 
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $proc = Start-Process -FilePath $Binary `
-        -ArgumentList $ToolArgs `
+        -ArgumentList ($ToolArgs + $extraArgs) `
         -PassThru -NoNewWindow `
         -RedirectStandardOutput $tmpOut `
         -RedirectStandardError $tmpErr
@@ -208,7 +212,6 @@ function Run-Once {
     $output += Get-Content $tmpErr -ErrorAction SilentlyContinue
     Remove-Item $tmpOut, $tmpErr -Force -ErrorAction SilentlyContinue
 
-    Remove-Item Env:OSPREY_EXIT_AFTER_SCORING -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_EXIT_AFTER_CALIBRATION -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_MAX_PARALLEL_FILES -ErrorAction SilentlyContinue
     Set-Location $savedLoc

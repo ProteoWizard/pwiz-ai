@@ -149,7 +149,22 @@ upgrade `Parquet.Net`, drop Rust to Snappy, or keep them independent
   contents are functionally equivalent (counts + content match within
   Percolator noise). A separate sprint can chase strict determinism.
 
-### Phase 5 (docs + scripts) - PENDING
+### Phase 5 (docs + scripts) - DONE 2026-04-19
+
+- Migrated four ps1 scripts (`Bench-Scoring.ps1`,
+  `Profile-OspreySharp.ps1`, `Test-Features.ps1`, `Run-Osprey.ps1`) from
+  the `OSPREY_EXIT_AFTER_SCORING` env var to the `--no-join` CLI flag.
+- Removed `OSPREY_EXIT_AFTER_SCORING` from both implementations
+  (`osprey-core/src/diagnostics.rs::should_exit_after_scoring` and
+  `OspreySharp/OspreyEnvironment.cs::ExitAfterScoring`) and their call
+  sites in `pipeline.rs` and `AnalysisPipeline.cs`.
+  `OSPREY_EXIT_AFTER_CALIBRATION` (Stage 3) stays -- no production CLI
+  analog.
+- Added a brief HPC note at the Stage 4 -> Stage 5 seam in
+  `Osprey-workflow.html`.
+- Skipped (out of scope of this minimal sprint): full doc rewrite of
+  `osprey/docs/12-intermediate-files.md` and a release-notes entry.
+  Both are mechanical follow-ups suitable for a separate PR.
 
 ## Motivation
 

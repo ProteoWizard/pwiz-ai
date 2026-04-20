@@ -83,9 +83,10 @@
     full calibration.json + spectra cache; skips main search and FDR).
 
 .PARAMETER ExitAfterScoring
-    Set OSPREY_EXIT_AFTER_SCORING=1 to exit after Stage 4 (produces the
-    scores.parquet; skips FDR / reconciliation / blib output). Matches
-    what Test-Features.ps1 and Bench-Scoring.ps1 use internally.
+    Pass --no-join to exit after Stage 4 (produces the scores.parquet;
+    skips FDR / reconciliation / blib output). Matches what
+    Test-Features.ps1 and Bench-Scoring.ps1 use internally. Replaces the
+    retired OSPREY_EXIT_AFTER_SCORING env var.
 
 .PARAMETER ExtraArgs
     Additional arguments to pass to the tool (e.g. "--protein-fdr 0.01")
@@ -354,10 +355,7 @@ try {
         $env:OSPREY_EXIT_AFTER_CALIBRATION = "1"
         $envVarsSet += "OSPREY_EXIT_AFTER_CALIBRATION=1"
     }
-    if ($ExitAfterScoring) {
-        $env:OSPREY_EXIT_AFTER_SCORING = "1"
-        $envVarsSet += "OSPREY_EXIT_AFTER_SCORING=1"
-    }
+    # ExitAfterScoring is wired below as --no-join in $toolArgs.
     if ($Tool -eq "Rust") {
         $env:RUST_LOG = "info"
         $envVarsSet += "RUST_LOG=info"
@@ -380,6 +378,9 @@ try {
     $toolArgs += "0.01"
     if ($WritePin) {
         $toolArgs += "--write-pin"
+    }
+    if ($ExitAfterScoring) {
+        $toolArgs += "--no-join"
     }
 
     # Parse and add extra args
@@ -444,7 +445,6 @@ finally {
     # Clean up env vars
     Remove-Item Env:OSPREY_DIAG_SEARCH_ENTRY_IDS -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_EXIT_AFTER_CALIBRATION -ErrorAction SilentlyContinue
-    Remove-Item Env:OSPREY_EXIT_AFTER_SCORING -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_DUMP_CAL_MATCH -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_CAL_MATCH_ONLY -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_DUMP_LDA_SCORES -ErrorAction SilentlyContinue

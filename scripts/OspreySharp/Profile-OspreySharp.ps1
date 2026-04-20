@@ -148,10 +148,12 @@ foreach ($p in $patterns) {
 
 # Set up environment
 $env:RUST_LOG = "info"
+# Calibration uses an env var (no CLI analog yet); Scoring uses --no-join
+# (replaces the retired OSPREY_EXIT_AFTER_SCORING env var). Full sets neither.
+$extraAppArgs = @()
 switch ($Stage) {
     "Calibration" { $env:OSPREY_EXIT_AFTER_CALIBRATION = "1" }
-    "Scoring"     { $env:OSPREY_EXIT_AFTER_SCORING = "1" }
-    # "Full" sets neither
+    "Scoring"     { $extraAppArgs += "--no-join" }
 }
 if ($MaxWindows -gt 0) { $env:OSPREY_MAX_SCORING_WINDOWS = "$MaxWindows" }
 
@@ -163,7 +165,7 @@ $diagVars = @('OSPREY_DUMP_CAL_MATCH','OSPREY_CAL_MATCH_ONLY','OSPREY_DUMP_LDA_S
 foreach ($v in $diagVars) { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
 
 # Build dotTrace command
-$appArgs = @("-i", $mzml, "-l", $library, "-o", $tempBlib, "--resolution", $ds.Resolution)
+$appArgs = @("-i", $mzml, "-l", $library, "-o", $tempBlib, "--resolution", $ds.Resolution) + $extraAppArgs
 
 $dotTraceArgs = @(
     "start",
@@ -206,7 +208,6 @@ $sw.Stop()
 Set-Location $savedLoc
 
 # Cleanup
-Remove-Item Env:OSPREY_EXIT_AFTER_SCORING -ErrorAction SilentlyContinue
 Remove-Item Env:OSPREY_EXIT_AFTER_CALIBRATION -ErrorAction SilentlyContinue
 Remove-Item Env:OSPREY_MAX_SCORING_WINDOWS -ErrorAction SilentlyContinue
 Remove-Item Env:RUST_LOG -ErrorAction SilentlyContinue

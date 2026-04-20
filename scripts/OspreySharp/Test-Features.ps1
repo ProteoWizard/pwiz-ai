@@ -8,7 +8,7 @@
     Reports pass/fail for each feature at configurable thresholds and shows
     wall-clock timings for apples-to-apples perf comparison.
 
-    Both tools exit after Stage 4 via OSPREY_EXIT_AFTER_SCORING=1, skipping
+    Both tools exit after Stage 4 via the --no-join CLI flag, skipping
     Mokapot FDR, reconciliation, and blib output. This keeps the cycle fast
     and makes the wall-clock timings directly comparable.
 
@@ -165,19 +165,20 @@ try {
         }
 
         $env:RUST_LOG = "info"
-        $env:OSPREY_EXIT_AFTER_SCORING = "1"
         if ($DiagXicEntryIds) { $env:OSPREY_DIAG_SEARCH_ENTRY_IDS = $DiagXicEntryIds }
         if ($DiagMpScan) { $env:OSPREY_DIAG_MP_SCAN = $DiagMpScan }
         if ($DiagXcorrScan) { $env:OSPREY_DIAG_XCORR_SCAN = $DiagXcorrScan }
 
+        # --no-join replaces the retired OSPREY_EXIT_AFTER_SCORING env var:
+        # writes the per-file scores parquet and exits before Stage 5.
+        # --output is omitted (--no-join doesn't write a blib).
         $rustStart = Get-Date
-        & $rustBinary -i $mzml -l $library -o "_temp_rust.blib" --resolution $ds.Resolution --protein-fdr 0.01 --write-pin 2>&1 | Out-Null
+        & $rustBinary --no-join -i $mzml -l $library --resolution $ds.Resolution --protein-fdr 0.01 --write-pin 2>&1 | Out-Null
         $rustExit = $LASTEXITCODE
         $rustDuration = (Get-Date) - $rustStart
 
         # Clean env vars
         Remove-Item Env:RUST_LOG -ErrorAction SilentlyContinue
-        Remove-Item Env:OSPREY_EXIT_AFTER_SCORING -ErrorAction SilentlyContinue
         Remove-Item Env:OSPREY_DIAG_SEARCH_ENTRY_IDS -ErrorAction SilentlyContinue
         Remove-Item Env:OSPREY_DIAG_MP_SCAN -ErrorAction SilentlyContinue
         Remove-Item Env:OSPREY_DIAG_XCORR_SCAN -ErrorAction SilentlyContinue
@@ -210,7 +211,6 @@ try {
     $modeLabel = if ($SharedCalibration) { "with shared calibration (bisection mode)" } else { "with own calibration" }
     Write-Host "Step 2: Running OspreySharp (C#) $modeLabel..." -ForegroundColor Cyan
 
-    $env:OSPREY_EXIT_AFTER_SCORING = "1"
     if ($SharedCalibration) { $env:OSPREY_LOAD_CALIBRATION = $calJson }
     if ($DiagXicEntryIds) { $env:OSPREY_DIAG_SEARCH_ENTRY_IDS = $DiagXicEntryIds }
     if ($DiagMpScan) { $env:OSPREY_DIAG_MP_SCAN = $DiagMpScan }
@@ -219,13 +219,14 @@ try {
     # Remove old features file
     if (Test-Path $csharpFeatures) { Remove-Item $csharpFeatures -Force }
 
+    # --no-join replaces the retired OSPREY_EXIT_AFTER_SCORING env var:
+    # writes the per-file scores parquet and exits before Stage 5.
     $csStart = Get-Date
-    & $csharpBinary -i $mzml -l $library -o "_temp_cs.blib" --resolution $ds.Resolution --protein-fdr 0.01 --write-pin 2>&1 | Out-Null
+    & $csharpBinary --no-join -i $mzml -l $library --resolution $ds.Resolution --protein-fdr 0.01 --write-pin 2>&1 | Out-Null
     $csExit = $LASTEXITCODE
     $csDuration = (Get-Date) - $csStart
 
     # Clean env vars
-    Remove-Item Env:OSPREY_EXIT_AFTER_SCORING -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_LOAD_CALIBRATION -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_DIAG_SEARCH_ENTRY_IDS -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_DIAG_MP_SCAN -ErrorAction SilentlyContinue
