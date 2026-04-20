@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260115_LabelLayoutOptimization`
 - **Base**: `master`
 - **Created**: 2026-01-15
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: (none)
-- **PR**: [#3847](https://github.com/ProteoWizard/pwiz/pull/3847)
+- **PR**: [#3847](https://github.com/ProteoWizard/pwiz/pull/3847) (merged 2026-04-13, commit `0783ec5`)
 - **Developer**: Rita Chupalov
 
 ## Objective
@@ -69,3 +69,17 @@ Spatial acceleration structure dividing the chart into cells (sized to minimum l
 ## Related
 - Design review TODO (overall UI consistency)
 - Relative Abundance performance TODO (large document handling)
+
+## Progress Log
+
+### 2026-04-13 - Merged
+
+PR #3847 merged to `master` as commit `0783ec56810626af7888a80d7b32fb3e47d02d52`.
+
+## Resolution
+
+Rita's simulated annealing label layout landed as described in the Approach
+section. Scatter plot label placement (Relative Abundance, Volcano Plot) now
+runs the annealer on a BackgroundWorker with cancellation and throttled
+progress updates, manual drags are preserved, and layout state is persisted
+as JSON across refreshes.

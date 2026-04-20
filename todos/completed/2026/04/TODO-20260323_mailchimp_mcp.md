@@ -203,3 +203,23 @@ See `ai/docs/mcp/mailchimp.md` for full details.
 - [x] Created `ai/docs/mcp/mailchimp.md` documenting why read-only
 - [x] Updated `ai/mcp/README.md` and `ai/docs/mcp/README.md`
 - **Status**: Complete
+
+## Resolution
+
+Shipped a read-only MailChimp MCP server at `ai/mcp/MailChimpMcp/` with five
+discovery tools (`ping`, `list_audiences`, `list_templates`, `list_campaigns`,
+`get_campaign`) committed directly to `ai/master`.
+
+The originally planned campaign creation / send tools were dropped after
+discovering that MailChimp's v3 API cannot inject content into campaigns
+created with the new email editor: `mc:edit` template sections only work
+with the deprecated Classic builder, and raw-HTML `PUT` corrupts
+new-editor campaigns so they become uneditable in the UI.
+
+Workaround instead of API send: Claude generates paste-ready HTML from the
+release notes, and the developer pastes it into MailChimp's code tab. The
+MCP server now supports that workflow by exposing audiences, templates, and
+prior-campaign content for reference during release composition.
+
+See `ai/docs/mcp/mailchimp.md` for the full rationale and
+`ai/docs/release-guide.md` Step 4 for the updated release workflow.

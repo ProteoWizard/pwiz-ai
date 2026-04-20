@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260402_FixTransitionListShortRow`
 - **Base**: `master`
 - **Created**: 2026-04-02
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#4133](https://github.com/ProteoWizard/pwiz/issues/4133)
-- **PR**: [#4134](https://github.com/ProteoWizard/pwiz/pull/4134)
+- **PR**: [#4134](https://github.com/ProteoWizard/pwiz/pull/4134) (merged 2026-04-03, commit `91cc2f7`)
 - **Exception Fingerprint**: `6deacab65c4dc8d4`
 - **Exception ID**: 74264
 
@@ -26,7 +26,7 @@ validation so the user gets a meaningful error message instead of a raw exceptio
 - [x] Add ColumnIndices.MaxColumnIndex property and GetColumnProperties() helper
 - [x] Verify MassListShortRowTest passes with fix
 - [x] Verify existing MassListSpecialIonsTest still passes
-- [ ] Create PR
+- [x] Create PR — merged
 
 ## Progress Log
 
@@ -56,3 +56,22 @@ Also refactored `ColumnIndices` to extract `GetColumnProperties()` helper, DRYin
 the reflection query used by both the constructor and `MaxColumnIndex`.
 
 Both `MassListShortRowTest` and `MassListSpecialIonsTest` pass.
+
+### 2026-04-03 - Merged
+
+PR #4134 merged to `master` as commit `91cc2f7479f2da7dd03cdeedaaebb9daa9b5504a`.
+
+## Resolution
+
+Root cause: `GeneralRowReader.CalcTransitionInfo()` indexed `Fields[]` directly
+for protein and peptide columns without bounds checks, and the `catch
+(Exception)` in `DoImport` swallowed the resulting `IndexOutOfRangeException`
+as an opaque user-facing error.
+
+Fix: added `when (!ExceptionUtil.IsProgrammingDefect(exception))` to the
+`DoImport` catch so genuine programming defects are no longer masked, and
+added bounds validation in `NextRow` using a new
+`ColumnIndices.MaxColumnIndex` property, producing a user-friendly
+"Row has N fields but M are required" message. Extracted
+`GetColumnProperties()` helper to DRY the reflection query shared by the
+constructor and `MaxColumnIndex`.

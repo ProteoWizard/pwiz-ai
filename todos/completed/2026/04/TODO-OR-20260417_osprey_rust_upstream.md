@@ -19,9 +19,8 @@
 - **Branches pushed to**: `maccoss/osprey` (Brendan is a
   collaborator as of 2026-04-17)
 - **Created**: 2026-04-17
-- **Status (end of 2026-04-18 extended session)**: **Three PRs open
-  on `maccoss/osprey`**, all MERGEABLE, all Copilot threads resolved,
-  awaiting Mike's review.
+- **Status**: Complete. All four PRs merged to `maccoss/osprey:main`
+  (Batch 1 + follow-ups + Batch 2a). Batch 2b moved to backlog.
   - PR #9 `diagnostics-port`: Batch 1 (cross-impl bisection
     infrastructure). +1,129/0, purely additive.
     https://github.com/maccoss/osprey/pull/9
@@ -871,11 +870,14 @@ sparse path; below 1e-6 threshold).
 
 ### Status summary
 
-- [x] Batch 1 (diagnostics port): PR #9 merged to main 2026-04-19.
-- [x] Follow-up PR #10 (classical-robust LOESS toggle): merged.
-- [x] Follow-up PR #11 (cross-impl regression tests): merged.
+- [x] Batch 1 (diagnostics port): PR #9 merged to main 2026-04-19,
+      commit `80b69b5`.
+- [x] Follow-up PR #10 (classical-robust LOESS toggle): merged
+      2026-04-19, commit `5796724`.
+- [x] Follow-up PR #11 (cross-impl regression tests): merged
+      2026-04-19, commit `ad9a57a`.
 - [x] Batch 2a (HRAM XCorr scratch pool + sparse XCorr): PR #12
-      open on maccoss/osprey, awaiting Mike's review.
+      merged 2026-04-20, commit `9e45e28`.
 - [ ] Batch 2b (Rayon file-level parallelism): **moved to backlog**
       as `ai/todos/backlog/brendanx67/TODO-osprey_rust_parallel_file_processing.md`.
       Not being pursued this cycle; Rust single-file HRAM is now
@@ -894,3 +896,39 @@ experiments; C# already does it).
 (`phase1`/`phase2`) that are already in active but predate the
 OR namespace. If Mike requests changes on PR #12, address inline
 and do not start new work here.
+
+### 2026-04-20 - Merged
+
+PR #12 merged to `maccoss/osprey:main` as commit `9e45e28`. Stop condition
+met; this TODO is moving to `completed/2026/04/`. Batch 2b remains in the
+backlog at `ai/todos/backlog/brendanx67/TODO-osprey_rust_parallel_file_processing.md`.
+
+## Resolution
+
+All four upstream PRs merged to `maccoss/osprey:main`:
+
+| PR | Title | Merged | Commit |
+|----|-------|--------|--------|
+| #9  | Add cross-implementation bisection diagnostics | 2026-04-19 | `80b69b5` |
+| #10 | Add classical Cleveland 1979 robust LOESS toggle | 2026-04-19 | `5796724` |
+| #11 | Add cross-implementation regression tests for port fidelity | 2026-04-19 | `ad9a57a` |
+| #12 | Added sparse XCorr scoring path and pooled preprocessing scratch | 2026-04-20 | `9e45e28` |
+
+Final Astral 3-iter warm-cache median (PR #12 vs `origin/main`):
+
+- Stage 4 Main Search: 49.0s vs 516.0s — **10.5x**
+- Stages 1-4 total: 100.0s vs 560.0s — **5.6x**
+- Peak RSS: 34.1 GB vs 32.7 GB
+
+Rust upstream went from 2.63x slower than OspreySharp on Astral S4 to 2.76x
+faster, at 42% less peak RSS. Parity verified at 21/21 PIN features below
+1e-6 against OspreySharp on both Stellar (unit-res) and Astral (HRAM).
+
+Batch 2b (Rayon file-level parallelism) was deferred: Rust single-file HRAM
+is now fast enough (~100s Stages 1-4) that the expected 3x wall-clock win on
+3-file experiments is no longer the critical bottleneck. Carried forward in
+the backlog.
+
+Fork-retirement side effect: with #9/#10/#11/#12 merged and OspreySharp
+already on pure f32, `brendanx67/osprey` has no unique content and can be
+abandoned. Everything cross-impl now lives on `maccoss/osprey:main`.
