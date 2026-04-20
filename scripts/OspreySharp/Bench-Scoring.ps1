@@ -258,17 +258,22 @@ function Parse-RustStages {
         }
     }
     if (-not $t.ContainsKey('s1') -or -not $t.ContainsKey('s4')) { return $null }
-    # Rust timestamps have 1s resolution. S2/S3/S4 are derived from timestamp diffs.
-    # S1 is derived from wall clock minus S2+S3+S4 for sub-second accuracy.
+    # All durations are derived from 1-second stage markers. S1 = timestamp of
+    # the first library-size marker (start of Stage 2 begins here). S2/S3/S4
+    # are inter-marker durations.
+    # Stg 1-4 Total is ALWAYS the Stage 4 marker timestamp -- never wall
+    # clock -- so that tools which don't honor OSPREY_EXIT_AFTER_SCORING
+    # (running S5 FDR + reconciliation + blib after S4) still report the
+    # correct Stage 1-4 time. The caller can compare Thru4 to Wall to detect
+    # that the tool did not early-exit (post-S4 overhead).
+    $s1 = [double]$t['s1']
     $s2 = [double]($t['s2'] - $t['s1'])
     $s3 = [double]($t['s3'] - $t['s2'])
     $s4 = [double]($t['s4'] - $t['s3'])
-    $s234 = $s2 + $s3 + $s4
-    $s1 = if ($WallClock -gt 0) { [Math]::Max($WallClock - $s234, 0.0) } else { [double]$t['s1'] }
     return @{
         S1 = $s1
         S2 = $s2; S3 = $s3; S4 = $s4
-        Thru4 = if ($WallClock -gt 0) { $WallClock } else { [double]$t['s4'] }
+        Thru4 = [double]$t['s4']
         Entries = $t['entries']
     }
 }
@@ -345,6 +350,20 @@ function Run-Benchmark {
         Write-Host " $($coldRun.WallSec.ToString('F1'))s peak=$($coldRun.PeakMB)MB" -ForegroundColor Gray
     } else {
         Write-Host " $($coldRun.WallSec.ToString('F1'))s peak=$($coldRun.PeakMB)MB (S1_cold=$($coldS1.ToString('F1')))" -ForegroundColor Gray
+    }
+
+    # Early-exit sanity check: if OSPREY_EXIT_AFTER_SCORING was requested
+    # but wall clock is materially longer than the Stage 4 marker, this
+    # binary didn't honor the exit env var (older main, pre-PR#9). Warn so
+    # the user rebuilds with the 1-line patch -- without it the Stg 1-4
+    # Total still reports correctly (from the S4 marker) but the wall-clock
+    # tail skews any bench that uses WallSec for anything (e.g. a custom
+    # harness that ignores Parse-RustStages).
+    if ($EarlyExit -and $Type -eq "Rust" -and $null -ne $coldStages -and -not $multiFile) {
+        $tail = $coldRun.WallSec - $coldStages.Thru4
+        if ($tail -gt 10.0) {
+            Write-Host "  WARNING: binary ran $($tail.ToString('F1'))s past Stage 4 marker -- OSPREY_EXIT_AFTER_SCORING ignored (rebuild with PR#9 or the 1-line exit patch for clean comparisons)" -ForegroundColor Yellow
+        }
     }
 
     # Timed iterations (library cache warm after cold run)
@@ -526,10 +545,10 @@ if ($multiFile) {
     Write-Host "Notes:" -ForegroundColor Gray
     Write-Host "  Stage 1 'Library': cold (no .libcache), all tools parse TSV from scratch" -ForegroundColor Gray
     Write-Host "  Stage 1 'Cached': warm (.libcache present); n/a = no binary cache implemented" -ForegroundColor Gray
-    Write-Host "  Stg 1-4 Total = wall clock for fork/C# (early exit); timestamp-derived for upstream" -ForegroundColor Gray
+    Write-Host "  Stg 1-4 Total = Stage 4 marker timestamp (not wall clock) -- correct even if" -ForegroundColor Gray
+    Write-Host "    the binary ignores OSPREY_EXIT_AFTER_SCORING and continues into S5+" -ForegroundColor Gray
     Write-Host "  Peak RSS: max Process.WorkingSet64 polled at 500 ms (MB, median across warm runs)" -ForegroundColor Gray
-    Write-Host "  Rust S1 derived from wall_clock - (S2+S3+S4) for sub-second accuracy" -ForegroundColor Gray
-    Write-Host "  Rust S2/S3/S4 have +/-0.5s rounding (1s timestamp resolution)" -ForegroundColor Gray
+    Write-Host "  All Rust per-stage times have +/-0.5s rounding (1s timestamp resolution)" -ForegroundColor Gray
     Write-Host ""
 }
 

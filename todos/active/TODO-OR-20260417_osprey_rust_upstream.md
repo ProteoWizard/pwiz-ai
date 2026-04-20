@@ -816,3 +816,81 @@ and Astral vs `maccoss/osprey:main`.
    from pool alone).
 4. Commit + push + PR to maccoss/osprey as the `hram-xcorr-pool`
    branch.
+
+### 2026-04-19 (continued) -- PR #12 shipped
+
+**PR #12**: https://github.com/maccoss/osprey/pull/12
+HEAD: `91ec0e5` "Added sparse XCorr scoring path and pooled
+preprocessing scratch"
+
+Files (3 total, +400/-36):
+
+    crates/osprey-scoring/src/lib.rs        (_into variants + xcorr_sparse)
+    crates/osprey-scoring/src/xcorr_pool.rs (NEW, ~200 lines)
+    crates/osprey/src/pipeline.rs           (pool wiring + env var + sparse branching)
+
+Default-on sparse path. `OSPREY_XCORR_SPARSE=0` falls back to the
+dense path, retained for the xcorr_scan diagnostic dump and parity
+verification.
+
+**Mid-session pivot from Batch 2a to "Batch 2a + sparse XCorr"**:
+the original Batch 2a scope was just `XcorrScratchPool` + per-
+window preprocess cache recycling. Initial A/B on `hram-xcorr-pool`
+gave ~38% Astral S4 speedup (516 -> 316s) -- real but nowhere near
+the 4.5x C# evidence promised. Profiling-by-intuition: the
+`preprocess_library_for_xcorr` call at each candidate was
+allocating a 400 KB `Vec<f32>` and running a 100K-element `sdot`
+whose result depended on ~30 fragment bins. Skipping the dense
+library preprocess by iterating fragment bins directly
+(`xcorr_sparse`) collapsed that cost entirely.
+
+**Final Astral 3-iter warm-cache median** (pool + sparse):
+
+| | This PR | origin/main | OspreySharp C# |
+|---|---:|---:|---:|
+| S4 Main Search | 49.0s | 516.0s | 135.1s |
+| Stg 1-4 Total | 100.0s | 560.0s | 220.7s |
+| Peak RSS | 34.1 GB | 32.7 GB | 59.4 GB |
+
+- vs origin/main: **10.5x on S4**, **5.6x on Stg 1-4**
+- vs OspreySharp: **2.76x faster on S4** at **42% less peak RSS**
+
+Rust went from 2.63x SLOWER than C# on Astral S4 (before this PR)
+to 2.76x FASTER. The full Astral Stage 1-4 dropped from ~10 minutes
+to ~100 seconds warm-cache.
+
+Stellar (unit resolution, NBins ~2K) is neutral-to-marginal because
+the dense dot is already cheap there (2K ops, 8 KB alloc). The
+sparse + pool combo is HRAM-specific; Stellar still runs in ~19s
+total, roughly same as origin/main.
+
+Parity: 21/21 PIN features at 1e-6 against OspreySharp on both
+datasets. Stellar xcorr max 5.1e-7; Astral xcorr max 8.6e-7
+(slightly higher than dense's 3.3e-7 due to summation order in the
+sparse path; below 1e-6 threshold).
+
+### Status summary
+
+- [x] Batch 1 (diagnostics port): PR #9 merged to main 2026-04-19.
+- [x] Follow-up PR #10 (classical-robust LOESS toggle): merged.
+- [x] Follow-up PR #11 (cross-impl regression tests): merged.
+- [x] Batch 2a (HRAM XCorr scratch pool + sparse XCorr): PR #12
+      open on maccoss/osprey, awaiting Mike's review.
+- [ ] Batch 2b (Rayon file-level parallelism): **moved to backlog**
+      as `ai/todos/backlog/brendanx67/TODO-osprey_rust_parallel_file_processing.md`.
+      Not being pursued this cycle; Rust single-file HRAM is now
+      fast enough (~100s Stg 1-4) that the parallel-files win is
+      no longer the critical bottleneck for Astral testing.
+
+### Stop condition
+
+This TODO is done pending PR #12 merge. Batch 2b is carried
+forward in the backlog when a future session wants to pick up
+parallel-file processing (expected 3x wall-clock win on 3-file
+experiments; C# already does it).
+
+**Next session handoff**: when PR #12 merges, move this TODO to
+`ai/todos/completed/2026/04/` along with the two phase files
+(`phase1`/`phase2`) that are already in active but predate the
+OR namespace. If Mike requests changes on PR #12, address inline
+and do not start new work here.

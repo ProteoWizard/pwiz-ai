@@ -108,6 +108,8 @@ if ($SourceRoot) {
 $Platform = "x64"
 $ospreyRoot = Join-Path $pwizRoot 'pwiz_tools/OspreySharp'
 $slnPath = Join-Path $ospreyRoot 'OspreySharp.sln'
+# Multi-targeted projects (f14cb74b2) place outputs under a TFM subdirectory:
+# bin/x64/Release/net472/ and bin/x64/Release/net8.0/.
 $testDll = Join-Path $ospreyRoot "OspreySharp.Test/bin/$Platform/$Configuration/$TargetFramework/OspreySharp.Test.dll"
 $initialLocation = Get-Location
 
