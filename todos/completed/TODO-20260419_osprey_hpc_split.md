@@ -1,13 +1,17 @@
 # TODO: Osprey / OspreySharp HPC-friendly scoring split
 
-**Status**: Active
+**Status**: Completed
 **Priority**: High (enables cluster deployment)
 **Complexity**: Small (wiring + CLI; infrastructure already in place)
 **Created**: 2026-04-18
 **Started**: 2026-04-19
-**Branches**:
-- pwiz: `Skyline/work/20260419_osprey_hpc_split` (off `Skyline/work/20260409_osprey_sharp` @ `f14cb74b2a`)
-- osprey: `feat/no-join-cli` (off `maccoss/osprey` `main` @ `ad9a57a`, fork abandoned 2026-04-19)
+**Completed**: 2026-04-19
+**Branches** (both merged + deleted):
+- pwiz: `Skyline/work/20260419_osprey_hpc_split` -> fast-forward merged
+  into `Skyline/work/20260409_osprey_sharp` at `dedbfda1da`; sub-branch
+  deleted local + remote
+- osprey: `feat/no-join-cli` -> merged via maccoss/osprey PR #13
+  (`7abe6bf`); local branch deleted
 **Scope**: Both `C:\proj\osprey` (Rust) and `C:\proj\pwiz\pwiz_tools\OspreySharp` (C#) in lock-step
 
 ## Progress
