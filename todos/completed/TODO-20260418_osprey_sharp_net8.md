@@ -455,6 +455,36 @@ pwsh -File './ai/scripts/OspreySharp/Test-Features.ps1' -Dataset Stellar
     Branch `Skyline/work/20260418_osprey_sharp_net8` remains as a
     safety net; once workstation bench confirms no regression it's
     safe to delete local + remote.
+- 2026-04-20, Session 5: SPRINT CLOSED. Multi-target merge holds.
+  - Workstation perf validation passed on the i9/64 GB box; server GC
+    is active on both TFMs (`OspreySharp.exe.config` has gcServer
+    enabled on net472; `OspreySharp.runtimeconfig.json` has
+    `System.GC.Server: true` on net8), no regression from the Session
+    15 Stellar baselines.
+  - Phase 5 (Percolator FDR + HPC `--no-join` / `--join-only` CLI)
+    work has since landed on top of the multi-target migration on the
+    parent branch (commits `72dc1d8c62`, `cb4b9f5ce4`, `e771fb86b5`,
+    `e1b9e9457f`, `dedbfda1da`). That confirms the migration was
+    transparent to ongoing development -- Phase 5 code was written
+    straight on the multi-targeted tree without friction.
+  - VS 2026 required `<Platforms>AnyCPU;x64</Platforms>` in
+    `Directory.Build.props` so the x64 sln configs map cleanly (the
+    net8.0 target stays buildable as AnyCPU on non-Windows hosts).
+    Small refinement added post-merge, not a regression.
+  - POC branch `Skyline/work/20260418_osprey_sharp_net8` remains at
+    `f29a5bd725` (local + origin). Safe to delete at the operator's
+    convenience -- nothing unique left on it. Not deleted
+    automatically from here, deferred as a manual cleanup.
+
+## Outcome
+
+All original success criteria met, multi-target option ADDED beyond
+the single-TFM POC scope, work merged into the mainline OspreySharp
+dev branch (`Skyline/work/20260409_osprey_sharp`) and already
+carrying Phase 5+ commits without drift. Windows + Linux + both
+runtimes all produce bit-identical-to-Rust 21-PIN-feature output on
+Stellar. OspreySharp is now a net472 + net8 + Linux-capable project
+from a single source tree.
 
 ## POC OUTCOME: all success criteria met
 
