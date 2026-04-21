@@ -3,13 +3,12 @@
 ## Branch Information
 
 - **pwiz branch**: `Skyline/work/20260421_osprey_gauss_solver`
-  (to be created off `master` post-#4155-merge — that merge already
-  landed as commit `f1db9f635` on 2026-04-21)
+  (created off `master` at `f1db9f635`, no commits yet)
 - **Base**: `master`
 - **Working directory**: `C:\proj\pwiz\pwiz_tools\OspreySharp\`
 - **Created**: 2026-04-21
-- **Status**: Planning (Rust branch scaffolded; OspreySharp branch
-  pending)
+- **Status**: Ready to start (both branches scaffolded, zero commits
+  on either; no changes staged)
 - **GitHub Issue**: (none — addresses Copilot review threads on
   [ProteoWizard/pwiz#4155](https://github.com/ProteoWizard/pwiz/pull/4155))
 - **PR (pwiz)**: (pending)
