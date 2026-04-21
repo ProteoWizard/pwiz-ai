@@ -5,9 +5,10 @@
 - **Base**: `master`
 - **Created**: 2026-04-09
 - **Phase 3 started**: 2026-04-14 (end of Session 11)
-- **Status**: In Progress
-- **GitHub Issue**: (pending)
-- **PR**: (pending)
+- **Status**: Complete
+- **GitHub Issue**: (none)
+- **PR**: [#4155](https://github.com/ProteoWizard/pwiz/pull/4155)
+  (squash-merged 2026-04-21 as commit `f1db9f635`)
 
 ## Phase History
 
@@ -914,11 +915,183 @@ tipped different peaks on ~330 borderline entries.
 This was a prerequisite for Batch 2a upstream work -- the parity
 check is the gate that any XCorr pool optimization must pass.
 
-## Next session handoff
+## Session 20 (2026-04-20 -> 2026-04-21): Parity restoration against v26.4.0, Copilot review response, PR merge
 
-Return to `C:\proj\osprey-mm` branch `hram-xcorr-pool`, pop the two
-stashes (`pool-wiring`, `lib-refactor`), re-run Test-Features to
-confirm the pool changes are still bit-identical now that OspreySharp
-matches, then benchmark Astral against `origin/main` for the pool
-speedup. Respond to any pending Mike comments on
-maccoss/osprey#9-#11 first if review activity has arrived.
+End-of-session state: pwiz PR #4155 squash-merged to master as
+commit `f1db9f635` on 2026-04-21. OspreySharp now lives at
+`pwiz_tools/OspreySharp/` on master, parity-clean against upstream
+maccoss/osprey v26.4.0 on both datasets.
+
+### Parity drift discovered and fixed
+
+Between Session 19 baseline (`7f7fcbf`, v26.3.0) and current
+maccoss/osprey:main (`bd15572`, v26.4.0), upstream added four
+algorithmic changes OspreySharp hadn't picked up. Test-Features on
+Stellar went from 21/21 to 19/21 FAIL once upstream advanced. Ports
+landed this session:
+
+- Enabled classical Cleveland 1979 robust LOESS by default
+  (`OspreyEnvironment.LoessClassicalRobust` semantic flip, default
+  `ClassicalRobustIterations=true` in `RTCalibratorConfig`) -- matches
+  upstream commit `3551668`.
+- Widened RT penalty sigma from 3x to 5x MAD while keeping 3x for
+  the scan-window tolerance -- decoupled `rtSigmaGlobal` from
+  `rtToleranceGlobal` in `AnalysisPipeline.ScoreCandidate`, matches
+  `2db5f1c`.
+- Added intensity tiebreaker (`ln(1 + apex_intensity)`) to CWT peak
+  ranking, matches `4d0119d`.
+- Widened the XIC extraction window to `rtTolerance + max(rtTolerance, 0.1)`
+  with an apex-acceptance filter that rejects peaks whose apex lands
+  outside `rtTolerance` of `expectedRt`, matches `885339b`.
+
+After these four ports, Stellar went to 21/21 and Astral went to
+17/21 -- 4 cases where C# picked a different peak than Rust.
+
+### Signed-zero tie-break root cause
+
+Diagnostic bisection on DELERVR scan 36972 (one of the 4 failing
+Astral entries):
+
+1. Calibration pipeline bit-identical through LOESS input (2927
+   pairs, max numeric delta 0.0, verified via Compare-Diagnostic
+   dumps + awk reparse).
+2. CWT intermediates bit-identical through local-maxima (sigma,
+   kernel, 684 convolution coefficients, 114 consensus values,
+   24 local maxima -- all exactly equal).
+3. "C# 5 peaks vs Rust 2" was an apples-to-oranges dump artifact
+   (C# dumped pre-apex-filter count, Rust dumped post-filter).
+4. Rank-trace diagnostic proved the divergence:
+   - peak at apex=52: `coel=-0.098, rt_pen=0.998, intW=0,
+     rank=0x8000000000000000 (-0.0)`
+   - peak at apex=50: `coel=+0.065, rt_pen=0.994, intW=0,
+     rank=0x0000000000000000 (+0.0)`
+5. Root cause: Rust's `scored_candidates.sort_by(|a, b|
+   b.2.total_cmp(&a.2))` uses `f64::total_cmp` (IEEE 754-2008 total
+   order) which distinguishes `-0.0 < +0.0`. OspreySharp's
+   `if (rankScore > bestRankScore)` used standard IEEE ordered
+   compare which treats `-0.0 == +0.0`. Tie fell back to iteration
+   order, producing a different winner on the 4 entries whose
+   reference fragment had zero intensity at every in-tolerance
+   apex (forcing all ranks to +/- 0.0).
+
+Fix: `TotalOrderGreater(a, b)` helper (bit-flip monotonic mapping)
+replacing `>` in the peak-ranking tie-break. One-line call site
+change + ~10-line helper. Astral returned to 21/21 at 1e-6.
+
+Failed-fix detour: tried `Double.CompareTo` first; .NET's
+`Double.CompareTo` also uses standard `<`/`>`/`==`, so treats
+signed zeros as equal. Re-ran the rank-trace diagnostic, saw the
+hex bits were still 0x8... and 0x0..., built the bit-flip
+`TotalOrderGreater`, verified. Mantra: prove from inside, not
+from assumption -- the CompareTo "fix" would have silently shipped
+without the diagnostic.
+
+### Copilot PR review response
+
+Copilot posted 13 inline comments on PR #4155. Replied to all 13
+and resolved all threads via REST + GraphQL. Disposition:
+
+- **Fixed in commit `d35d5184b`** (10 of 13): LDA single-class
+  guard, `classeMeansArray` typo rename, SpectraCache EOF
+  validation (throws `InvalidDataException` on short reads),
+  LibraryDeduplicator precomputed total intensities for sort
+  comparator, Matrix.Get XML doc reflects `IndexOutOfRangeException`,
+  unused `TOLERANCE` constant removed, `nameof()` for argument
+  names in CalibrationIO.
+- **Deferred** (3 of 13): GaussSolver partial-pivoting signed-vs-abs,
+  `LeftSolved` exact-equality tolerance, GaussSolver unit tests.
+  All three are parity-affecting: Rust upstream has the same
+  signed/exact comparisons, so changing only OspreySharp produces
+  bit-level divergence. Tracked in a new phase 4 TODO
+  (`TODO-20260421_osprey_gauss_solver.md`) with a plan to land
+  matching Rust + C# PRs together.
+
+### Upstream Rust PR status
+
+maccoss/osprey PR #14 (LDA single-class guard) posted this session
+as the only parity-safe Rust counterpart. The LDA issue in Rust is
+distinct from C#'s shape-mismatch crash -- Rust's current behavior
+silently returns `None` via Gauss-solve failing on NaN. The guard
+makes the failure mode visible in the log. Test asserts `None` on
+single-class input but doesn't assert on the warning message (would
+require a log-capture test utility; deferred as an infrastructure
+PR). The other Rust parallels (SpectraCache `read_exact`, dedup
+sort pattern) are clean or behavior-preserving optimizations.
+
+### TeamCity and commits
+
+Three commits pushed to PR #4155 branch after Astral 21/21
+confirmed:
+
+1. `90e9470bb` Restored OspreySharp parity with maccoss/osprey v26.4.0
+2. `733d501c2` Added OspreySharp AssemblyInfo.cs paths to .gitignore
+   (unblocks `bt143` / Core Windows no-vendor-DLLs)
+3. `d35d5184b` Addressed Copilot PR #4155 review: parity-safe fixes
+   and cleanups
+
+TeamCity Bumbershoot Linux infrastructure timeout (agent timeout,
+not code) resolved on retry. Core Windows (no vendor DLLs)
+previously failed the "untracked files" check because OspreySharp's
+Jamfile generates per-project `Properties/AssemblyInfo.cs` the same
+way SeeMS and MSConvertGUI do; the one-line `.gitignore` addition
+matches that existing pattern.
+
+### Stop condition
+
+pwiz PR #4155 merged, parity restored, Copilot review addressed.
+Phase 3 is complete. Gauss solver parity-affecting work is the next
+phase and moves to its own TODO.
+
+**Next session handoff**: see
+`ai/todos/active/TODO-20260421_osprey_gauss_solver.md` for the
+two-tool coordinated GaussSolver PR work (Rust branch
+`gauss-abs-pivot-tolerance` already scaffolded locally at
+`C:\proj\osprey`; OspreySharp branch to be created off the new
+master state that includes `pwiz_tools/OspreySharp/`).
+
+## Resolution
+
+**Status**: Complete. pwiz PR [#4155](https://github.com/ProteoWizard/pwiz/pull/4155)
+squash-merged to master as commit
+[`f1db9f635`](https://github.com/ProteoWizard/pwiz/commit/f1db9f635)
+on 2026-04-21.
+
+Final scope: 86 files / ~30,730 LOC added purely under
+`pwiz_tools/OspreySharp/` (8-project .NET solution covering library
+loading, mzML parsing, calibration, main-search coelution scoring,
+FDR, and output), plus one `build-project-if-exists` line in
+`pwiz_tools/Jamfile.jam` and one `.gitignore` entry for generated
+`AssemblyInfo.cs` files. No existing pwiz file touched outside
+those three additions. OspreySharp is explicit-only in the Jamfile,
+so the default pwiz build is unaffected; TeamCity configs that enumerate
+target subdirectories (Core Windows no-vendor-DLLs, Core Linux)
+build it automatically via `dotnet`.
+
+Pipeline Stages 1-4 (library loading, mzML parsing, calibration,
+main-search coelution scoring) produce 21 PIN features bit-identical
+at 1e-6 against upstream `maccoss/osprey:main` v26.4.0 on both
+Stellar (317,842 entries, unit resolution) and Astral (1,051,741
+entries, HRAM). Session 14-16 perf: Stellar 3-file parallel at 0.59x
+Rust wall-clock, Astral single-file at 0.13x Rust, Astral 3-file
+parallel at 0.12x Rust (8x faster) thanks to `XcorrScratchPool` +
+f32 HRAM cache + pooled `visitedBins` + per-file thread scaling +
+mzML read gate.
+
+Development exercise drove 10 upstream PRs to maccoss/osprey
+(#3-#12, all merged):
+
+- **#3** Unit-resolution bins for calibration XCorr scorer
+- **#4** Regression tests for calibration XCorr bin choice
+- **#5** Attribute consecutive-ions ordinals from FragmentMatch
+- **#6** Decouple lib_cosine counting features from norm gate
+- **#7** Preserve full-precision isolation-window bounds in DIA grouping
+- **#8** Dedup fragment bins in scorer.xcorr and xcorr_at_scan
+- **#9** Cross-implementation bisection diagnostics
+- **#10** Cleveland 1979 robust LOESS toggle (env var)
+- **#11** Cross-implementation regression tests
+- **#12** Sparse XCorr scoring path and pooled preprocessing scratch
+  (10.5x HRAM Stage 4 speedup on Astral)
+
+OspreySharp has no Skyline integration yet; this PR preserves the
+work and positions it for Phase 4's Stage 5-8 parity walk (first-pass
+FDR via Percolator SVM, refinement, protein FDR, .blib output).

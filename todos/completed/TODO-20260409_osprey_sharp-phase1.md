@@ -4,9 +4,12 @@
 - **Branch**: `Skyline/work/20260409_osprey_sharp`
 - **Base**: `master`
 - **Created**: 2026-04-09
-- **Status**: In Progress
-- **GitHub Issue**: (pending)
-- **PR**: (pending)
+- **Status**: Complete (rolled up into Phase 3 PR)
+- **GitHub Issue**: (none)
+- **PR**: [#4155](https://github.com/ProteoWizard/pwiz/pull/4155)
+  (squash-merged 2026-04-21 as commit `f1db9f635`; this phase's
+  work is part of that single squashed commit alongside Phases 2
+  and 3)
 
 ## Objective
 
