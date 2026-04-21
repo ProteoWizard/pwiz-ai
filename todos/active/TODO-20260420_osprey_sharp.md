@@ -189,12 +189,14 @@ pwsh -File './ai/scripts/OspreySharp/Test-Features.ps1' -Dataset Astral
 - `--join-only --input-scores <path>` — resume from an external Parquet
 
 **Repos**:
-- `C:\proj\pwiz` — OspreySharp C#, branch `Skyline/work/20260420_osprey_sharp`
-  (off `master` post-#4155 merge)
-- `C:\proj\osprey-mm` — upstream `maccoss/osprey:main` baseline
-- `C:\proj\osprey` — our Rust fork; post-merge of PRs #9-#12 it's
-  essentially mothballed. Check for any fork-only changes before starting
-  Step 1.
+- `C:\proj\pwiz-work1` — OspreySharp C#, branch
+  `Skyline/work/20260420_osprey_sharp` (off `master` at `f1db9f63`, the
+  PR #4155 merge commit). pwiz/ is occupied by `osprey_gauss_solver`.
+- `C:\proj\osprey` — upstream `maccoss/osprey:main` baseline (the current
+  canonical Rust we test against).
+- `C:\proj\osprey-fork` — our legacy `brendanx67/osprey` fork; mothballed
+  post-merge of PRs #9-#12. Check for any fork-only changes before
+  starting Step 1 (per memory: fork is being retired).
 
 **Test data**: `D:\test\osprey-runs\{stellar,astral}\` (same as Phase 1-3).
 
