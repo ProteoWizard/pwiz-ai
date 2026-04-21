@@ -13,12 +13,13 @@
 
 ## Branch Information
 
-- **Branch**: `Skyline/work/20260420_osprey_sharp` (created off `master`
-  after PR #4155 merges)
+- **Branch**: `Skyline/work/20260420_osprey_sharp` (created 2026-04-21 off
+  `master` at `f1db9f63`, the merge commit for PR #4155)
 - **Base**: `master`
-- **Working directory**: `C:\proj\pwiz\pwiz_tools\OspreySharp\`
+- **Working directory**: `C:\proj\pwiz-work1\pwiz_tools\OspreySharp\`
+  (pwiz/ is occupied by `Skyline/work/20260421_osprey_gauss_solver`)
 - **Created**: 2026-04-20
-- **Status**: Planning (work begins after PR #4155 merges)
+- **Status**: In Progress (started 2026-04-21)
 - **GitHub Issue**: (none — isolated tool work, no Skyline integration yet)
 - **PR**: (pending)
 
@@ -217,4 +218,14 @@ pwsh -File './ai/scripts/OspreySharp/Test-Features.ps1' -Dataset Astral
 
 ## Progress Log
 
-(Starts on first session against this TODO, after PR #4155 merges.)
+### 2026-04-21 — Session 1: Phase 4 kickoff
+
+- PR #4155 merged at 2026-04-21T15:58 UTC (merge commit `f1db9f63`),
+  dropping OspreySharp onto pwiz master. Phase 4 unblocked.
+- Branch `Skyline/work/20260420_osprey_sharp` created off `f1db9f63` in
+  `C:\proj\pwiz-work1` (pwiz/ worktree is on an unrelated
+  `osprey_gauss_solver` branch, so Phase 4 is running out of pwiz-work1).
+- No GitHub issue for this work — tracked via this TODO only.
+- Next: Priority 1 / Step 1 — catalog `maccoss/osprey:main` commits since
+  the Session 19 baseline (`7f7fcbf` or later) and write the disposition
+  dump to `ai/.tmp/stage5_upstream_delta.md` before any forward-walk work.
