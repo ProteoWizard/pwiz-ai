@@ -11,10 +11,8 @@
   on either; no changes staged)
 - **GitHub Issue**: (none — addresses Copilot review threads on
   [ProteoWizard/pwiz#4155](https://github.com/ProteoWizard/pwiz/pull/4155))
-- **PR (pwiz)**: (pending)
-- **PR (maccoss/osprey)**: (pending — local branch
-  `gauss-abs-pivot-tolerance` already scaffolded on
-  `C:\proj\osprey`)
+- **PR (pwiz)**: [#4156](https://github.com/ProteoWizard/pwiz/pull/4156)
+- **PR (maccoss/osprey)**: [#15](https://github.com/maccoss/osprey/pull/15)
 
 ## Objective
 
@@ -239,4 +237,84 @@ link.
 
 ## Progress Log
 
-(Starts on first session against this TODO.)
+### Session 1 (2026-04-21)
+
+**Strategy**: Switched from Option A (land Rust first) to **Option B**
+(land both PRs in unison with cross-references). Both branches carry
+the symmetric fix, verified locally before committing, so CI green
+on both is the only remaining gate before merge.
+
+**Rust changes** (`C:\proj\osprey`, branch `gauss-abs-pivot-tolerance`):
+
+- `crates/osprey-ml/src/gauss.rs::echelon()` — pivot selection now
+  tracks largest `abs()` value, zero-guard uses `abs() < EPS` with
+  `EPS = 1E-12`.
+- `crates/osprey-ml/src/gauss.rs::left_solved()` — diagonal check
+  uses `(x - 1).abs() > TOL && x.abs() > TOL`, off-diagonal uses
+  `x.abs() > TOL`, with `TOL = 1E-8`.
+- Added `#[cfg(test)] mod tests` with two regression tests:
+  - `gauss_negative_pivot` — left `[[-4, 2], [0, 3]]`, right `[1, 6]`,
+    verified via `solve_inner(eps=0)` → `[0.75, 2]` exactly. Signed
+    pivoting picks the zero over -4 and returns `None` through the
+    entire eps ladder (confirmed by temporarily reverting the fix).
+  - `gauss_near_singular_returns_none` — rank-1 matrix `[[1, 2], [2, 4]]`
+    with `eps=0` must return `None` (both fixed and old code agree on
+    this — complementary regression coverage for rank deficiency).
+- `cargo fmt` clean, `cargo clippy --all-targets --all-features -- -D warnings`
+  clean, `cargo test --workspace` passes (all 400+ tests).
+
+**OspreySharp changes** (`C:\proj\pwiz`, branch
+`Skyline/work/20260421_osprey_gauss_solver`):
+
+- `pwiz_tools/OspreySharp/OspreySharp.ML/GaussSolver.cs` — added
+  `using System;` (needed for `Math.Abs`), mirrored the abs-pivot +
+  tolerance changes with constants `EPS = 1E-12` and `TOL = 1E-8`.
+- Promoted `SolveInner` from `private` to `internal` for symmetry
+  with Rust's `pub fn solve_inner` (both tools now expose the same
+  surface for testing).
+- Added two parallel tests to
+  `pwiz_tools/OspreySharp/OspreySharp.Test/MLTest.cs` under a new
+  "Gauss Solver Tests" region with identical numeric inputs to the
+  Rust tests (drift between suites is easy to spot).
+- `Build-OspreySharp.ps1 -RunInspection -RunTests` clean (216 tests
+  pass, ReSharper inspection green).
+- Temporarily reverted C# `Echelon` to signed-max + exact zero-guard;
+  `TestGaussNegativePivot` failed as expected. Fix re-applied.
+
+**Cross-tool parity verified** (each tool computes its own calibration):
+
+- `Test-Features.ps1 -Dataset Stellar` — 21/21 PASS at 1e-6
+  (317 842 matched entries; Rust 29.8 s, C# 29.4 s).
+- `Test-Features.ps1 -Dataset Astral` — 21/21 PASS at 1e-6
+  (1 051 741 matched entries; Rust 202.0 s, C# 292.9 s).
+
+**Fix impact measurement** (stashed C# fix, re-ran parity against
+patched Rust via `-SkipRust`):
+
+- Stellar: 21/21 PASS at 1e-6 (unpatched C# vs. patched Rust).
+- Astral: 21/21 PASS at 1e-6 (unpatched C# vs. patched Rust).
+
+Both datasets are bit-identical through Stage 4 PIN features with
+the fix applied to only one tool. Because calibration runs before
+scoring and uses Gauss-solver in LDA training, bit-identical PIN
+features imply bit-identical LDA output on these inputs — so no
+real-world call into `Gauss::solve` on Stellar or Astral hits a
+matrix where signed-max vs. abs-max pivoting diverges, and no
+solve's `left_solved` verdict flips between exact and tolerance
+checks. The fix is defensive hygiene for corner cases outside the
+production test sets (mattering most when matrices are near-
+singular or have large-magnitude negative entries). This also
+resolves the retrospective on Session 20: the Stellar parity
+failure observed during PR #4155 work was misattributed to this
+change and must have had a different cause.
+
+**PRs opened in unison** (each cross-references the other):
+
+- Rust: [maccoss/osprey#15](https://github.com/maccoss/osprey/pull/15)
+  (branch `gauss-abs-pivot-tolerance`, commit `9dfe862`).
+- OspreySharp: [ProteoWizard/pwiz#4156](https://github.com/ProteoWizard/pwiz/pull/4156)
+  (branch `Skyline/work/20260421_osprey_gauss_solver`, commit `fe43b5099`).
+
+**Next**: Wait for both CIs, then merge together. After merge,
+follow up on the three Copilot threads on pwiz#4155 with links to
+the merged PRs (Priority 3 tasks).
