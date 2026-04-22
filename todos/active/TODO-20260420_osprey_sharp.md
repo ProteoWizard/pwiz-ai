@@ -409,3 +409,68 @@ begins. Hash-joined compare finds the earliest cascading divergence:
 
 Estimated ~150 LOC: new env vars + dump fn in both tools + extending
 Compare-Percolator.ps1 to handle the second TSV.
+
+### 2026-04-21 — Session-end commits pushed
+
+All Stage-5-end diagnostic work pushed to remote branches. Feature
+branches in each repo are ready to become PRs once cross-impl parity
+lands:
+
+- **osprey** `feat/stage5-percolator-dump` @ `cb42a2d` — two commits:
+  - `286d225` Fixed PEP non-determinism in first-pass FDR
+  - `cb42a2d` Added Stage 5 Percolator diagnostic dump
+- **pwiz** `Skyline/work/20260420_osprey_sharp` @ `1b7918d2e` —
+  two commits on top of PR #4155 merge:
+  - `2aaf83449` Synced OspreySharp with maccoss/osprey head (VERSION + C grid)
+  - `1b7918d2e` Added Stage 5 Percolator diagnostic dump
+- **pwiz-ai** `master` @ `e82d569` — two commits:
+  - `c589e2a` Prepared Test-Features.ps1 for cross-tool Parquet parity
+  - `e82d569` Added Compare-Percolator.ps1 for cross-impl Stage 5 diff
+
+Pre-commit gates all green (OspreySharp 214/214 tests + inspection
+clean, Rust fmt+clippy clean, workspace tests pass).
+
+### 2026-04-21 — Next dump design: subsample + fold assignment
+
+Direct algorithm inspection of `subsample_by_peptide_group` /
+`SubsampleByPeptideGroup` (percolator.rs:1439 / PercolatorFdr.cs:1449)
+and `create_stratified_folds_by_peptide` /
+`CreateStratifiedFoldsByPeptide` (percolator.rs:1381 /
+PercolatorFdr.cs:1344) confirmed both algorithms are **line-for-line
+identical** — same HashMap→sorted-Vec→Fisher-Yates-with-xorshift64
+pattern, same Ordinal string sort, same round-robin fold assignment.
+
+So if input arrays (labels, peptides, entry_ids) are in identical
+order on both sides, outputs MUST match. If the cross-tool diff
+reveals subsample or fold drift, it's upstream — the two tools
+populate the per-precursor arrays in different orders. That, too, is
+diagnosable.
+
+Design for the next dump:
+
+- `OSPREY_DUMP_SUBSAMPLE=1` + `OSPREY_SUBSAMPLE_ONLY=1` (mirror the
+  existing `OSPREY_*_ONLY` convention)
+- Files: `rust_stage5_subsample.tsv` / `cs_stage5_subsample.tsv`
+- Columns: `entry_id, native_position, charge, modified_sequence,
+  is_decoy, base_id, in_subsample, fold_id`
+  - `native_position`: the entry's index in the best-per-precursor
+    array — catches input-order drift
+  - `in_subsample`: bool; `fold_id`: 0/1/2 if in subsample, -1 if not
+- Sort by `entry_id` (stable numeric order, independent of input
+  ordering)
+- Insertion: after `fold_assignments` returned, before SVM training
+  starts (percolator.rs ~line 244, AnalysisPipeline.cs ~line 303)
+
+Compare-Percolator.ps1 will be extended (or a sibling
+Compare-Subsample.ps1 added) to diff the new TSV on
+`(file_name, entry_id)` hash-join, with separate checks for:
+(a) native_position mismatches (→ input-order drift),
+(b) in_subsample mismatches (→ subsample selection drift),
+(c) fold_id mismatches on common subsampled entries (→ fold-assignment
+drift).
+
+Next session start: implement the dump in both tools, smoke-test
+self-parity on Stellar, run cross-tool compare, then either (if
+subsample/fold match) drill into SVM training internals (per-fold
+initial state, per-iteration weights), or (if they mismatch) port the
+upstream ordering and re-test end-of-Stage-5 dump.
