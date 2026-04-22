@@ -796,6 +796,97 @@ Until one of those lands, the options are unchanged: Path A
 (force bit-parity), Path B (accept ~0.04 % tolerance), Path C
 (shared kernel).
 
+### 2026-04-22 — Stage 5 cross-impl parity: PASSED (no switch)
+
+Built out a `OSPREY_CSHARP_SCALAR_SVM` parity switch as planned,
+empirically confirming it got Stage 5 to byte-match. Then audited for
+minimality per the debugging discipline: "now that the switch
+toggles broken vs non-broken, make the replacement as minimal as
+possible; prefer fixing a real bug on either side over a switch that
+becomes technical debt."
+
+Finding: the switch was doing 3 things but only 1 actually moved the
+needle:
+
+| Switch component | Effect on parity |
+|---|---|
+| `fit_csharp_scalar` (scalar SVM with black_box fences) | none — Rust fit already numerically stable |
+| Alternate `decision_function` scalar path | none — same |
+| Non-conservative count in `count_passing_targets_svm` | **the whole fix** |
+
+And the count change revealed a real Rust-internal inconsistency:
+
+- `count_passing_targets_svm` (grid-search counting) used the
+  **conservative** formula `(n_decoy+1)/n_target` inline.
+- `compute_qvalues` (used by `select_positive_training_set` on the
+  same iteration path) used the **non-conservative** formula
+  `n_decoy/n_target`.
+- Two sibling internal heuristics on the same code path, disagreeing
+  by design.
+
+OspreySharp was internally consistent: both `CountPassing` and
+`SelectPositiveTrainingSet` call `ComputeQvalues` (non-conservative).
+
+**Minimal correct fix**: rewrite `count_passing_targets_svm` to use
+the non-conservative formula with a backward monotonicity pass,
+matching both `compute_qvalues` and OspreySharp. ~20 LOC change.
+Dropped the entire parity-switch work (fit_csharp_scalar,
+decision_function alternate path, nonconservative sibling,
+OSPREY_CSHARP_SCALAR_SVM env var). No switch, no debt.
+
+**Cross-impl parity verification** (no env var, fresh runs):
+
+| Column | max_diff | divergent rows |
+|---|---|---|
+| score | 0 | 0 / 462,802 |
+| pep | 0 | 0 / 462,802 |
+| run_precursor_q | 0 | 0 / 462,802 |
+| run_peptide_q | 0 | 0 / 462,802 |
+| experiment_precursor_q | 0 | 0 / 462,802 |
+| experiment_peptide_q | 0 | 0 / 462,802 |
+
+Both tools report 34,158 precursors at 1 % run-level FDR on Stellar
+(30,712 peptides). Grid-search per-C counts, fold assignments,
+subsample membership, standardizer stats, and the 11-column
+Stage-5 end dump all byte-match across Rust and OspreySharp.
+
+Committed as osprey `c4dd4c9` "Fixed count_passing_targets_svm
+internal inconsistency" on `feat/stage5-percolator-dump`. This is the
+upstream-worthy fix Mike would almost certainly want — two sibling
+helpers on the same path now use the same FDR formula.
+
+### 2026-04-22 — Goal 1 DONE. Next: Stages 6-8 forward walk.
+
+Phase 4 Goal 1 (Stage 5 end-of-stage cross-impl parity) achieved.
+Stage 5 diagnostic dump infrastructure (subsample+fold, standardizer,
+SVM weights, train trace, grid search) stays committed — it's the
+harness that will catch any future Stage-5 drift as Stages 6-8
+changes land upstream.
+
+Next session picks up at **Stage 6 (refinement)**:
+
+- Multi-charge consensus
+- Cross-run RT reconciliation
+- Second-pass re-score at locked boundaries
+- Re-trained Percolator SVM
+
+Single-file Stellar currently tolerates no reconciliation (only one
+file), so the first useful Stage 6 cross-impl test will need the
+3-file dataset. Plan: extend the Parquet parity harness to the
+3-file case (Step 2 had the single-file flow; Step 4 in the
+original TODO was the multi-file walk), then add stage-boundary
+dumps for reconciliation inputs / outputs. Same bisection discipline
+as Stage 5 — start with the coarsest end-of-stage dump, drill down
+only where divergence surfaces.
+
+Parity switches still deployed (both are debt items, each targeted at
+a specific cross-tool gap):
+
+1. `--parquet-compression snappy` on Rust (Rust default Zstd; Snappy
+   bridges to OspreySharp's Parquet.Net 3.x). Retires when C# grows
+   Zstd support.
+2. *(no others — `OSPREY_CSHARP_SCALAR_SVM` replaced with a real fix)*
+
 ### 2026-04-22 — Strategy: steel-thread parity via Rust-side parity switches
 
 Guiding doctrine for the rest of Phase 4: **pursue exact bit-level
