@@ -228,6 +228,184 @@ pwsh -File './ai/scripts/OspreySharp/Test-Features.ps1' -Dataset Astral
   `C:\proj\pwiz-work1` (pwiz/ worktree is on an unrelated
   `osprey_gauss_solver` branch, so Phase 4 is running out of pwiz-work1).
 - No GitHub issue for this work — tracked via this TODO only.
-- Next: Priority 1 / Step 1 — catalog `maccoss/osprey:main` commits since
-  the Session 19 baseline (`7f7fcbf` or later) and write the disposition
-  dump to `ai/.tmp/stage5_upstream_delta.md` before any forward-walk work.
+- Surveyed upstream `maccoss/osprey:main` delta since Session 19's
+  `7f7fcbf`: head is `bd15572` (v26.4.0). ~40 commits. Parity-critical
+  candidates include `06905be` (protein FDR always-on), `f03f162` /
+  `778460e` (reconciliation changes), `3551668` / `0cc5731` (classical
+  LOESS), `2db5f1c` (RT penalty sigma 3x→5x), `91ec0e5` (sparse XCorr +
+  pooled scratch), `4d0119d` (CWT intensity tiebreaker), `885339b`
+  (peak-boundary truncation fix). Flags infrastructure (`f91c41f`,
+  `623093c`, `b5b0860`, `a8c39ac`, `1a2eeb3`) must work end-to-end for
+  Step 2. (`osprey-fork` ignored per decision 2026-04-21.)
+
+- **Strategy pivot** (user decision 2026-04-21): do not pre-catalog
+  upstream drift. Go straight to `--no-join` Parquet parity (Step 2) and
+  then the Stage-5 walk (Goal 1). When parity fails, port the upstream
+  commit(s) responsible and keep a running disposition log in
+  `ai/.tmp/stage5_upstream_delta.md`. Rationale: drift is expected given
+  the gap between OspreySharp's initial Rust alignment and its Stage 1-4
+  bit-parity completion; the cheapest way to surface it is to run the
+  parity tests.
+- Next: investigate existing Phase 3 `--no-join` infrastructure and
+  build the two parity tests.
+
+### 2026-04-21 — Session 1 progress
+
+**Step 2 done** (both datasets: Stellar validated; Astral deferred until
+Stage 5 diagnostics land per user direction).
+
+- `Test-Features.ps1` edits: dropped obsolete `-RustTree Fork/Upstream`
+  split (upstream = `osprey-mm` no longer exists), added `-CsharpRoot`
+  with auto-detection across `pwiz-work1` / `pwiz` / `pwiz-work2`, added
+  `--parquet-compression snappy` to the Rust `--no-join` invocation (C#
+  defaults to Snappy via Parquet.Net 3.x), and rotated each tool's
+  `{stem}.scores.parquet` to a distinct `.rust.parquet` / `.cs.parquet`
+  suffix so the C# run doesn't overwrite Rust's output (blocks Step 3.5).
+- Rebuild required: `pwiz-work1` needed `dotnet restore OspreySharp.sln`
+  before MSBuild could resolve `project.assets.json`. Build wrapper
+  doesn't do this today — possible future enhancement.
+- `Program.VERSION` bumped `26.3.0` → `26.4.0` to match `maccoss/osprey`
+  head; otherwise the cross-impl Parquet validator aborts on minor
+  mismatch per HPC Phase 3 / Phase 6 contract. Touches parquet footer
+  metadata + blib osprey_version tag only.
+- Stellar PIN parity: **21/21 passing** at 1e-6 (xcorr/sg_weighted_xcorr
+  at 1e-5), 317,842 matched entries, Rust 24.6 s / C# 28.4 s.
+- Canonical Rust Stellar Parquet seeded at
+  `D:\test\osprey-runs\stage5\stellar\rust_scores.parquet` (315 MB,
+  Snappy, dict-disabled).
+
+**Step 3.5 smoke tests** — both tools can consume the canonical Rust
+Parquet via `--join-only`:
+
+| Run | Time | Precursors @ 1% FDR | Protein groups |
+|---|---|---|---|
+| Rust self-consume | 1 m 5 s | 34,349 | 5,471 |
+| C# from Rust Parquet (cross-impl) | 2 m 17 s | 33,160 | 5,445 |
+
+The 1,189-precursor delta (3.4 %) is Stage 5 drift — exactly what Goal 1
+will attack. Confirms the Snappy cross-impl interop contract holds and
+that the divergence is algorithmic, not a Parquet-format issue.
+
+Lesson: `library_identity_hash` includes `lib_path.display()`, so a
+path argument formatted as `/d/test/...` (Bash-style) hashes differently
+from `D:\test\...` (Windows-style). Invoke join-only smoke tests via
+`pwsh` with Windows-native absolute paths to match what Test-Features.ps1
+used when producing the Parquet. (Same canonical-path hazard applies to
+any cross-machine Parquet handoff — a separate concern.)
+
+### 2026-04-21 — Goal 1 design: Stage 5 diagnostic dump
+
+Full design in `ai/.tmp/stage5_dump_design.md`.
+
+Summary: new `OSPREY_DUMP_PERCOLATOR=1` / `OSPREY_PERCOLATOR_ONLY=1` env
+vars (consistent with existing `OSPREY_*_ONLY` Phase 1-3 pattern). Dumps
+a TSV with 11 columns at end-of-Stage-5 (after first-pass
+`run_percolator_fdr` returns, before first-pass protein FDR + compaction).
+Columns: `file_name, entry_id, charge, modified_sequence, is_decoy,
+score, pep, run_precursor_q, run_peptide_q, experiment_precursor_q,
+experiment_peptide_q`. Join key `(file_name, entry_id)`. Compared via
+new `Compare-Percolator.ps1` that hash-joins on the composite key
+(Compare-Diagnostic does row-wise diff, which bit us in Phase 1-3 — per
+user).
+
+Insertion points:
+- Rust: `pipeline.rs` after `run_percolator_fdr(...)` (~line 2986)
+  and `log_fdr_qvalues(...)` (~line 3011), before the first-pass
+  protein-FDR block (~line 3025) and compaction (~line 3079).
+- C#: `AnalysisPipeline.cs` after the `RunPercolatorFdr(...)` call
+  (line 3997), before the C# equivalent of protein FDR.
+
+Initial dump covers the coarsest Stage 5 summary. If it doesn't match,
+which specific column diverges first (score vs q-values) tells us
+whether SVM training or TDC q-value computation is the culprit;
+finer-grained dumps (per-fold SVM weights, stratified fold assignment,
+per-iteration residuals) added only when the first comparison demands.
+
+### 2026-04-21 — Goal 1 implementation landed
+
+**Rust dump** — `diagnostics::dump_stage5_percolator` writes
+`rust_stage5_percolator.tsv` with 11 columns sorted by `(file_name,
+entry_id)`. Insertion point: `pipeline.rs` after `run_percolator_fdr(...)`
+returns and the first-pass FDR log, before first-pass protein FDR and
+compaction. Gated by `OSPREY_DUMP_PERCOLATOR=1` /
+`OSPREY_PERCOLATOR_ONLY=1`. 2 new unit tests.
+
+**Rust determinism fixes** (found during self-parity validation — two
+non-determinism leaks into PEP values):
+
+1. `percolator.rs::compute_fdr_from_stubs` — previously iterated the
+   `targets` / `decoys` `HashMap` in Rust's randomized iteration order
+   when building `winner_scores` for the PEP fitter. Fixed by
+   constructing a union of base_ids from both maps, sorting, then
+   iterating in sorted order.
+2. `osprey-ml/src/pep.rs::Kde::pdf` — used
+   `par_iter().fold().sum()` for the KDE sum; Rayon's work-stealing
+   reduction tree is non-deterministic, so float non-associativity made
+   PEP values drift by ~1 ULP run-to-run. Converted to serial
+   `iter().fold()`. Perf impact negligible (~0.5 s over the whole
+   ~1 min Percolator pass; PEP fit called once per Stage 5).
+
+After both fixes Rust Stage 5 dump is **byte-identical** across
+consecutive runs (SHA-256 `b68ffa6c...`). 34,349 precursors @ 1% FDR
+unchanged — no behavior regression.
+
+**C# dump** — `OspreyDiagnostics.WriteStage5PercolatorDump` writes
+`cs_stage5_percolator.tsv` with the same 11-column schema. G17 float
+format (17-digit roundtrippable, avoids .NET Framework's historical R
+format bugs). Call site in `AnalysisPipeline.cs` after the Percolator
+FDR log, before reconciliation/protein-FDR. C# was **already
+self-parity deterministic** — PepEstimator has no Parallel.For, and
+`CompeteFromIndices` already sorts winners by `(score desc, base_id
+asc)` before handing them to the PEP fitter. SHA-256 `c506089e...`
+identical across consecutive runs, first try. 33,160 precursors @ 1 %
+FDR (unchanged).
+
+**Cross-impl compare** — new `ai/scripts/OspreySharp/Compare-Percolator.ps1`
+hash-joins on `(file_name, entry_id)` (sort-order-agnostic, unlike
+`Compare-Diagnostic.ps1`). Reports per-column max-abs-diff and
+divergent-row count. Threshold 1e-9 on all 6 numeric columns.
+
+**First cross-tool diff result**:
+
+| Metric | Value |
+|---|---|
+| Common keys | 462,802 / 462,802 (row sets match exactly) |
+| score divergence | **100 %** of rows, max_diff = 8.33 |
+| pep divergence | 52 % of rows, max_diff = 0.98 |
+| run_precursor_q divergence | 53 %, max_diff = 0.996 |
+| run_peptide_q divergence | 63 %, max_diff = 0.996 |
+| experiment_precursor_q | 53 %, max_diff = 0.996 |
+| experiment_peptide_q | 63 %, max_diff = 0.996 |
+
+Every SVM score differs → Stage 5 SVM produces materially different
+classifiers on the two sides. q-values cascade from that.
+
+**Config-default audit** landed one drift port:
+- Rust C grid: `[0.001, 0.01, 0.1, 1.0, 10.0, 100.0]` (6 values)
+- C# C grid was: `[0.01, 0.1, 1.0, 10.0, 100.0]` (5 values)
+- Ported the `0.001` into `PercolatorFdr.cs:79`. Verified: **zero
+  impact** on the dump — the grid search doesn't select `C=0.001` for
+  any fold on Stellar. Red herring for this divergence but kept (real
+  drift, correct to match upstream).
+
+All other `PercolatorConfig` defaults match exactly
+(`train_fdr=test_fdr=0.01`, `max_iterations=10`, `n_folds=3`, `seed=42`,
+`max_train_size=300000`).
+
+**Next session — sub-Stage-5 bisection dump**:
+
+Candidate: a `stage5_subsample_folds.tsv` dump with columns
+`(file_name, entry_id, in_subsample, fold_id)` before SVM training
+begins. Hash-joined compare finds the earliest cascading divergence:
+
+- If subsample membership differs, the two tools train on different
+  ~300 K subsets — port whichever selection algorithm is upstream.
+- If subsample matches but fold assignment differs, the
+  3-fold-stratified-by-peptide assignment has diverged — port.
+- If both match, the divergence is inside the iterative SVM itself
+  (weights per fold, convergence, C grid selection with identical
+  inputs). Next dump after that: per-fold final weights (22 floats per
+  fold × 3 folds).
+
+Estimated ~150 LOC: new env vars + dump fn in both tools + extending
+Compare-Percolator.ps1 to handle the second TSV.
