@@ -665,10 +665,90 @@ per-C CV scores.
   - `8e15a3c` Added Stage 5 feature standardizer dump
   - `4cf7c4c` Fixed grid_search_c tie-break to match its own comment
   - `dbdd69b` Added Stage 5 per-iteration train trace dump
+  - `ce5f541` Added Stage 5 grid-search per-C count dump
 - **pwiz** `Skyline/work/20260420_osprey_sharp`:
   - `edf4af8c` Added Stage 5 subsample + fold-assignment diagnostic dump
   - `d1a72dac` Added Stage 5 per-fold SVM weights dump
   - `5d5563dd` Added Stage 5 feature standardizer dump
   - `54ecc33e` Added Stage 5 per-iteration train trace dump
+  - `412f79b5` Added Stage 5 grid-search per-C count dump
 
 All pushed.
+
+### 2026-04-21 — Grid-search per-C dump: drift pinned to LinearSvm::fit
+
+Fold 0 iteration 1 per-C `count_passing` dump on Stellar:
+
+| C | Rust | C# | Δ |
+|---|---|---|---|
+| 0.001 | 7172 | 7173 | +1 |
+| 0.01 | 7192 | 7192 | 0 |
+| 0.1 | 7199 | 7201 | +2 |
+| 1 | 7203 | 7203 | 0 |
+| 10 | 7204 | 7207 | +3 |
+| 100 | **7205** ← selected | 7205 | 0 |
+
+C# selects C=10 (7207 max). Rust selects C=100 (7205 max). Drift of
+1-3 targets per C value on identical inputs means **`LinearSvm::fit`
+produces slightly different models on the two implementations for
+some C values, despite identical seed / Xorshift64 / inputs**.
+
+Quantitatively: ~0.04 % drift in count_passing at the inner-CV test
+level. Small — but at the boundary between two similarly-scoring C
+values it flips the grid-search winner, which cascades into very
+different SVM weights on the outer fold and into the end-of-Stage-5
+q-value divergence.
+
+**Most likely cause**: numerical order-of-operations differences
+inside the coordinate-descent loop. Rust release builds auto-vectorize
+and emit FMA on modern x86_64; .NET Framework 4.7.2's JIT does
+neither. Multiply-accumulate patterns therefore produce ULP-level
+drift per operation, accumulating across ~200 iterations × ~7000
+samples × 21 features.
+
+### Strategic decision needed before next bisection leg
+
+**Path A — Force bit-identical `LinearSvm::fit`**
+
+- Audit every f64 op in Rust coordinate descent for FMA / auto-vec
+  sensitivity. Options:
+  - Disable FMA (`-C target-feature=-fma` or explicit `mul_add`
+    avoidance) — affects perf.
+  - Rewrite inner loops in a shape the compiler cannot vectorize
+    (deliberate serial accumulation with `black_box` fences).
+  - Use compensated / Kahan summation on both sides for the key
+    reductions.
+- Audit the C# side for any source of non-determinism too.
+- Re-run the grid-search dump until per-C counts match exactly.
+
+**Path B — Accept near-parity with documented tolerance**
+
+- Declare Stage 5 "parity within ~0.05 % of test counts" done.
+- Loosen Compare-Percolator.ps1 thresholds for `score` / `pep` /
+  q-values to match observed drift.
+- Proceed to Stage 6 (refinement) and Stage 7 (protein FDR).
+- Document the non-determinism in the OspreySharp README as a known
+  cross-impl nuance.
+
+**Path C — Shared reference kernel**
+
+- Factor the coordinate-descent inner loop into a small, numerically
+  strict kernel that both tools use (e.g., bundled as a native DLL or
+  reimplemented in a way both Rust and .NET can call bit-compatibly).
+- Much larger engineering effort; only makes sense if strict parity
+  is a long-term product requirement.
+
+Path A is cheapest if a specific FMA / vectorization site is the
+culprit. Path B is the pragmatic move if strict parity isn't worth
+the complexity; the end-user impact of a 0.04 % drift in passing
+targets is negligible. Path C is the Right Thing™ but probably
+overkill for Phase 4.
+
+### Next-session lead
+
+Before deciding A vs B, try a **one-shot experiment**: rebuild Rust
+with `RUSTFLAGS="-C target-feature=-fma -C target-cpu=x86-64"` (no
+FMA, baseline x86-64 SIMD), re-run the grid-search dump. If per-C
+counts now match C# exactly, the drift is purely FMA; add this flag
+to the Cargo profile and we're done with Path A. If counts still
+drift, it's deeper and Path B or C becomes the answer.
