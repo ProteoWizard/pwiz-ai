@@ -591,3 +591,84 @@ Requires widening `train_fold`'s return type from
 `(LinearSvm, usize)` to `(LinearSvm, usize, Vec<IterSnapshot>)` and
 plumbing the snapshot collection through the iteration loop on both
 sides.
+
+### 2026-04-21 — Intra-train_fold trace landed; one Rust bug ported
+
+**Per-iteration train trace dump** (`OSPREY_DUMP_TRAIN_TRACE`
+/ `OSPREY_TRAIN_TRACE_ONLY`).
+
+- Rust: widened `train_fold` return type to
+  `(LinearSvm, usize, Vec<TrainIterSnapshot>)`; new
+  `dump_stage5_train_trace` writes `rust_stage5_train_trace.tsv` at
+  end of all-folds training.
+- C#: widened `TrainFold` with `out List<TrainIterSnapshot> iterTrace`
+  parameter; new `WriteStage5TrainTraceDump` writes
+  `cs_stage5_train_trace.tsv`.
+- Columns: `fold, iteration, best_c, n_selected_targets, n_passing`.
+  Up to 30 rows (3 folds × 10 iters); early-stopped iterations are
+  simply absent.
+
+**First read of the trace revealed:**
+
+| Fold | Iter 1 Rust (C, passing) | Iter 1 C# (C, passing) |
+|---|---|---|
+| 0 | (100, 9432) | (10, 9847) |
+| 1 | (1, 10159) | (1, 10159) ✓ |
+| 2 | (10, 9395) | (1, 10569) |
+
+`n_selected_targets` on iteration 1 matches exactly across all folds
+(7227, 6820, 6752) — so `select_positive_training_set` produces the
+same positive set. Fold 1 agrees on `(best_c=1, n_passing=10159)`
+exactly. Folds 0 and 2 disagree on both `best_c` and `n_passing`.
+
+**Tie-break bug found and fixed in Rust**: `grid_search_c`'s comment
+says "first C as tiebreaker" but code used `Iterator::max_by_key`,
+which per stdlib docs returns the **last** tied element. C#
+`GridSearchC` uses strict `>`, which keeps first-tied. Fixed Rust to
+match its comment with a manual scan. Behavior change on fold 1:
+Rust now picks C=0.1 instead of C=1 (a tie flip, both at 10,810
+passing). Behavior unchanged on folds 0 and 2.
+
+**But Rust fold 0 still picks C=100 while C# picks C=10**, meaning
+for at least one of those C values the two tools compute **different
+count_passing on identical inputs**. The tie-break bug wasn't the
+only (or even the dominant) driver — there's a deeper numerical
+divergence inside `grid_search_c` that the trace dump doesn't yet
+pin down: we see the selected `best_c` per iteration but not the
+per-C CV scores.
+
+### Next-session leads
+
+1. **Per-C CV score dump inside `grid_search_c`** — widen
+   `grid_search_c` to return `(f64, Vec<usize>)` (best_c + per-C
+   counts) and plumb through `train_fold` into the train-trace dump.
+   6 extra columns per row. If Rust and C# disagree on per-C counts
+   with identical inputs, divergence is in `LinearSvm::fit` itself
+   (likely numerical FMA / SIMD / order-of-operations inside
+   coordinate descent — .NET Framework does not auto-vectorize like
+   Rust release does).
+2. **SVM input parity check** — dump the pre-fit svm_features matrix
+   for fold 0 iteration 1 in both tools. If the matrices are
+   bit-identical, fit itself drifts. If they drift, look upstream at
+   how the svm_indices subset is built.
+3. If `LinearSvm::fit` proves to be numerically drifting, the parity
+   bar on Stage 5 softens from bit to a tolerance. Either (a) write
+   a deterministic reference implementation both tools share, or (b)
+   accept near-parity with documented ULP tolerance and move to
+   Stage 6/7/8.
+
+### Commits this session
+
+- **osprey** `feat/stage5-percolator-dump`:
+  - `600f80c` Added Stage 5 subsample + fold-assignment diagnostic dump
+  - `5687b7f` Added Stage 5 per-fold SVM weights dump
+  - `8e15a3c` Added Stage 5 feature standardizer dump
+  - `4cf7c4c` Fixed grid_search_c tie-break to match its own comment
+  - `dbdd69b` Added Stage 5 per-iteration train trace dump
+- **pwiz** `Skyline/work/20260420_osprey_sharp`:
+  - `edf4af8c` Added Stage 5 subsample + fold-assignment diagnostic dump
+  - `d1a72dac` Added Stage 5 per-fold SVM weights dump
+  - `5d5563dd` Added Stage 5 feature standardizer dump
+  - `54ecc33e` Added Stage 5 per-iteration train trace dump
+
+All pushed.
