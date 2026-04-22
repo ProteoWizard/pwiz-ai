@@ -42,10 +42,10 @@
 .PARAMETER SkipRust
     Skip the Rust run (reuse existing PIN + calibration from a previous run)
 
-.PARAMETER RustTree
-    Which Rust tree's binary to run: Fork (C:\proj\osprey, default) or Upstream
-    (C:\proj\osprey-mm = maccoss/osprey). Use Upstream to validate a port
-    against C# OspreySharp.
+.PARAMETER CsharpRoot
+    Path to the pwiz checkout whose OspreySharp binary should be used. When
+    omitted, auto-detects: tries pwiz-work1, pwiz, pwiz-work2 in order and
+    picks the first one with a built OspreySharp.exe for -TargetFramework.
 
 .EXAMPLE
     .\Test-Features.ps1
@@ -88,8 +88,7 @@ param(
     [switch]$SkipRust = $false,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Fork", "Upstream")]
-    [string]$RustTree = "Fork",
+    [string]$CsharpRoot = $null,
 
     [Parameter(Mandatory=$false)]
     [string]$TestBaseDir = $null,
@@ -117,11 +116,31 @@ $scriptRoot = Split-Path -Parent $PSCommandPath
 $aiRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)
 $projRoot = Split-Path -Parent $aiRoot
 
-# Bench-Scoring.ps1 naming: upstream = osprey-mm (maccoss/osprey), fork = osprey (brendanx67)
-$rustForkBinary = Join-Path $projRoot "osprey\target\release\osprey.exe"
-$rustUpstreamBinary = Join-Path $projRoot "osprey-mm\target\release\osprey.exe"
-$rustBinary = if ($RustTree -eq "Upstream") { $rustUpstreamBinary } else { $rustForkBinary }
-$csharpBinary = Join-Path $projRoot "pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\$TargetFramework\OspreySharp.exe"
+# Rust binary: canonical maccoss/osprey:main checkout at $projRoot\osprey.
+$rustBinary = Join-Path $projRoot "osprey\target\release\osprey.exe"
+
+# C# binary: auto-detect which pwiz worktree has a built OspreySharp.exe for
+# the requested -TargetFramework. Override with -CsharpRoot.
+$csharpRelBin = "pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\$TargetFramework\OspreySharp.exe"
+if ($CsharpRoot) {
+    $csharpBase = $CsharpRoot
+} else {
+    $csharpBase = $null
+    foreach ($candidate in @("pwiz-work1", "pwiz", "pwiz-work2")) {
+        $candidatePath = Join-Path $projRoot $candidate
+        if (Test-Path (Join-Path $candidatePath $csharpRelBin)) {
+            $csharpBase = $candidatePath
+            break
+        }
+    }
+    if (-not $csharpBase) {
+        # Nothing built yet -- default to pwiz so the missing-binary error points
+        # somewhere predictable.
+        $csharpBase = Join-Path $projRoot "pwiz"
+    }
+}
+$csharpBinary = Join-Path $csharpBase $csharpRelBin
+Write-Host ("C# root: {0}" -f $csharpBase) -ForegroundColor DarkGray
 $library = Join-Path $testDir $ds.Library
 $mzml = Join-Path $testDir $ds.SingleFile
 
@@ -130,6 +149,13 @@ $fileStem = [System.IO.Path]::GetFileNameWithoutExtension($ds.SingleFile)
 $calJson = Join-Path $testDir "$fileStem.calibration.json"
 $rustPin = Join-Path $testDir "mokapot\$fileStem.pin"
 $csharpFeatures = Join-Path $testDir "$fileStem.cs_features.tsv"
+
+# Both tools write to "{stem}.scores.parquet" by default -- the C# run would
+# otherwise overwrite the Rust parquet. Rotate each run's output to a distinct
+# suffix so both are preserved for downstream --join-only smoke tests.
+$defaultParquet = Join-Path $testDir "$fileStem.scores.parquet"
+$rustParquet    = Join-Path $testDir "$fileStem.scores.rust.parquet"
+$csParquet      = Join-Path $testDir "$fileStem.scores.cs.parquet"
 
 # Validate prerequisites
 foreach ($path in @($library, $mzml)) {
@@ -159,8 +185,8 @@ try {
         Write-Host ""
         Write-Host "Step 1: Running Rust Osprey on $($ds.Name) $($ds.FileLabel.Single)..." -ForegroundColor Cyan
 
-        # Clean caches
-        foreach ($pattern in @("*.scores.parquet", "*.calibration.json", "*.spectra.bin", "*.fdr_scores.bin")) {
+        # Clean caches (including the .rust./.cs. suffixed parquets from previous runs)
+        foreach ($pattern in @("*.scores.parquet", "*.scores.rust.parquet", "*.scores.cs.parquet", "*.calibration.json", "*.spectra.bin", "*.fdr_scores.bin")) {
             Get-ChildItem -Filter $pattern -ErrorAction SilentlyContinue | Remove-Item -Force
         }
 
@@ -169,11 +195,13 @@ try {
         if ($DiagMpScan) { $env:OSPREY_DIAG_MP_SCAN = $DiagMpScan }
         if ($DiagXcorrScan) { $env:OSPREY_DIAG_XCORR_SCAN = $DiagXcorrScan }
 
-        # --no-join replaces the retired OSPREY_EXIT_AFTER_SCORING env var:
-        # writes the per-file scores parquet and exits before Stage 5.
+        # --no-join writes the per-file scores parquet and exits before Stage 5.
+        # --parquet-compression snappy is required for cross-impl interop:
+        # Parquet.Net 3.x (OspreySharp) only reads Snappy. Rust also disables
+        # dictionary encoding automatically when Snappy is selected.
         # --output is omitted (--no-join doesn't write a blib).
         $rustStart = Get-Date
-        & $rustBinary --no-join -i $mzml -l $library --resolution $ds.Resolution --protein-fdr 0.01 --write-pin 2>&1 | Out-Null
+        & $rustBinary --no-join --parquet-compression snappy -i $mzml -l $library --resolution $ds.Resolution --protein-fdr 0.01 --write-pin 2>&1 | Out-Null
         $rustExit = $LASTEXITCODE
         $rustDuration = (Get-Date) - $rustStart
 
@@ -187,6 +215,10 @@ try {
         if ($rustExit -ne 0) {
             Write-Host "Rust failed with exit code $rustExit" -ForegroundColor Red
             exit 1
+        }
+        # Rotate the Rust parquet so the C# run doesn't overwrite it.
+        if (Test-Path $defaultParquet) {
+            Move-Item -Path $defaultParquet -Destination $rustParquet -Force
         }
         Write-Host "  Rust completed in $($rustDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
     } else {
@@ -236,6 +268,10 @@ try {
     if ($csExit -ne 0) {
         Write-Host "  C# failed with exit code $csExit" -ForegroundColor Red
         exit 1
+    }
+    # Rotate the C# parquet so both tools' outputs are side-by-side.
+    if (Test-Path $defaultParquet) {
+        Move-Item -Path $defaultParquet -Destination $csParquet -Force
     }
     Write-Host "  C# completed in $($csDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
 
