@@ -752,3 +752,46 @@ FMA, baseline x86-64 SIMD), re-run the grid-search dump. If per-C
 counts now match C# exactly, the drift is purely FMA; add this flag
 to the Cargo profile and we're done with Path A. If counts still
 drift, it's deeper and Path B or C becomes the answer.
+
+### 2026-04-21 — FMA experiment: ruled out
+
+Rebuilt Rust with `RUSTFLAGS="-C target-feature=-fma"` via the wrapper
+(raw cargo breaks on this machine per memory — cmake / VS 2026
+preview mismatch; wrapper sets `CMAKE_GENERATOR=Ninja`). Re-ran
+grid-search dump.
+
+Result: **the no-FMA Rust dump is byte-identical to the FMA Rust
+dump.** Per-C counts on fold 0 iter 1:
+
+| C | Rust FMA off | Rust FMA on | C# |
+|---|---|---|---|
+| 0.001 | 7172 | 7172 | 7173 |
+| 0.01 | 7192 | 7192 | 7192 |
+| 0.1 | 7199 | 7199 | 7201 |
+| 1 | 7203 | 7203 | 7203 |
+| 10 | 7204 | 7204 | 7207 |
+| 100 | 7205 | 7205 | 7205 |
+
+FMA is not the cause. Either the coordinate-descent hot path isn't
+using FMA to begin with, or the drift sits in a non-FMA code path
+(SSE2/AVX non-FMA add+mul pairs, `Vec::iter().sum()` auto-vec,
+genuine algorithmic difference between Rust `LinearSvm::fit` and C#
+`LinearSvmClassifier.Train`).
+
+Next candidate experiments (cheapest first):
+1. Rebuild Rust with `RUSTFLAGS="-C target-cpu=x86-64 -C opt-level=2 -C
+   codegen-units=1"` — baseline, no AVX at all, sequential codegen.
+   If counts now match C#, the drift is SIMD-induced.
+2. Side-by-side diff of `LinearSvm::fit` vs
+   `LinearSvmClassifier.Train` for any non-obvious algorithmic
+   difference — order of coordinate visits, alpha init, bias
+   feature handling, diagonal cache, projected-gradient sign
+   convention.
+3. Dump SVM weights after each of the 200 inner coordinate-descent
+   iterations (not outer train_fold iterations), per fold iter 1.
+   If they start drifting at iteration K, we can inspect that
+   specific step.
+
+Until one of those lands, the options are unchanged: Path A
+(force bit-parity), Path B (accept ~0.04 % tolerance), Path C
+(shared kernel).
