@@ -474,3 +474,120 @@ self-parity on Stellar, run cross-tool compare, then either (if
 subsample/fold match) drill into SVM training internals (per-fold
 initial state, per-iteration weights), or (if they mismatch) port the
 upstream ordering and re-test end-of-Stage-5 dump.
+
+### 2026-04-21 — Intra-Stage-5 bisection: 3 sub-stage dumps landed
+
+Instead of handing off, kept going. Three new cross-impl diagnostic
+dumps implemented + pushed in lockstep:
+
+**Subsample + fold assignment dump**
+(`OSPREY_DUMP_SUBSAMPLE` / `OSPREY_SUBSAMPLE_ONLY`)
+
+- Rust `dump_stage5_subsample` in `osprey-fdr/src/percolator.rs`; C#
+  inline `WriteStage5SubsampleDump` in `PercolatorFdr.cs` (inlined
+  because `OspreySharp.FDR` cannot reference the main OspreySharp
+  assembly).
+- Columns: `entry_id, native_position, charge, modified_sequence,
+  is_decoy, base_id, in_subsample, fold_id`. 462,802 rows.
+- Rust self-parity byte-identical (SHA `11cc6eb8`); C# self-parity
+  byte-identical (SHA `f91b6455` initially; after LF-newline fix
+  aligned with Rust SHA `11cc6eb8`).
+- **Cross-impl: BYTE-IDENTICAL** (SHA `11cc6eb8`) — both tools agree
+  on subsample membership, fold assignment, AND native array order.
+  So the Stage 5 divergence is downstream of fold assignment.
+- Fixed `StreamWriter.NewLine = "\n"` on both C# dumps so byte
+  comparison is meaningful across tools (C# defaulted to CRLF, Rust
+  writes LF).
+
+**Per-fold SVM weights dump**
+(`OSPREY_DUMP_SVM_WEIGHTS` / `OSPREY_SVM_WEIGHTS_ONLY`)
+
+- Rust `dump_stage5_svm_weights`; C# inline `WriteStage5SvmWeightsDump`.
+- Columns: `fold, weight_idx, feature_name, value, fold_iterations`.
+  21 feature weights + 1 bias per fold × 3 folds = 66 rows.
+- **Cross-impl: DIVERGES.** Fold 0 weights ~1.4x off between Rust
+  and C# (e.g., `fragment_coelution_sum`: Rust 0.342, C# 0.245;
+  `bias`: Rust -4.40, C# -3.08). Folds 1 and 2 close but not
+  identical. All folds used full 10 iterations on both sides (so no
+  convergence / early-stop drift). Very suggestive of per-fold
+  grid-search C selection differences.
+
+**Feature standardizer dump**
+(`OSPREY_DUMP_STANDARDIZER` / `OSPREY_STANDARDIZER_ONLY`)
+
+- Rust `dump_stage5_standardizer` + added `means()` / `stds()`
+  accessors on `FeatureStandardizer` in `osprey-ml/src/svm.rs`.
+- C# inline `WriteStage5StandardizerDump` in `PercolatorFdr.cs`.
+- Columns: `feature_idx, feature_name, mean, std`. 21 rows.
+- Text diff fails because Rust `{}` emits ryu shortest-roundtrippable
+  while C# `G17` emits 17 digits always; but **every feature matches
+  numerically within 1e-12** on both mean and std.
+- So the feature matrix going INTO SVM training is identical between
+  the two tools.
+
+**Current Stage 5 pipeline state**:
+
+| Sub-stage | Cross-impl match? |
+|---|---|
+| Feature extraction (Parquet load, `entries: &[PercolatorEntry]`) | assumed match (native_position in subsample dump matches) |
+| Feature standardization | numeric match (< 1e-12) |
+| Best-per-precursor dedup | match (462,802 on both; identity on single-file) |
+| Subsample selection (300 K) | byte-identical |
+| Stratified fold assignment | byte-identical |
+| Initial feature pick | match ("xcorr, 10,380 passing" on both) |
+| Per-fold SVM training + grid-search-C | **DIVERGES** |
+| Granholm cross-fold calibration | unknown (downstream of SVM) |
+| TDC q-values (precursor / peptide) | unknown (downstream) |
+
+The drift is isolated to `train_fold`'s iteration loop (Rust
+percolator.rs:614, C# `TrainFold`). Each iteration runs
+`grid_search_c` (inner 3-fold CV over the selected training set) to
+pick `best_c`, then calls `LinearSvm::fit(features, labels, best_c,
+seed)`. Candidate divergence sources:
+
+1. `grid_search_c` — inner CV over the 6 C values. If the inner CV's
+   tie-breaking or score-tally differs, `best_c` could differ per
+   iteration, cascading through the model.
+2. `LinearSvm::fit` coordinate descent — already uses the identical
+   Xorshift64 seed and Fisher-Yates shuffle on both sides (verified
+   in the determinism-fix commit). But the inner loops could still
+   differ if ordering depends on something other than RNG.
+3. `select_positive_training_set` — per-iteration selection of the
+   training targets (top `n_passing` targets by current score, plus
+   all decoys). If the selected target set differs, training data
+   differs, and so does the trained weight vector.
+
+### 2026-04-21 — Commits this continuation
+
+- **osprey** `feat/stage5-percolator-dump`:
+  - `600f80c` Added Stage 5 subsample + fold-assignment diagnostic dump
+  - `5687b7f` Added Stage 5 per-fold SVM weights dump
+  - `8e15a3c` Added Stage 5 feature standardizer dump
+- **pwiz** `Skyline/work/20260420_osprey_sharp`:
+  - `edf4af8c` Added Stage 5 subsample + fold-assignment diagnostic dump
+  - `d1a72dac` Added Stage 5 per-fold SVM weights dump
+  - `5d5563dd` Added Stage 5 feature standardizer dump
+
+All pushed.
+
+### Next-session leads — inside `train_fold`
+
+Candidate dump (cheapest first):
+
+1. **Per-iteration `best_c` + `n_passing`** per fold — a small TSV:
+   `fold, iteration, best_c, n_selected_targets, n_passing`. 30 rows
+   (3 folds × 10 iters). If `best_c` diverges on any iteration,
+   grid-search is the root cause; if it matches but `n_passing`
+   diverges, SVM fit itself is drifting.
+2. **Per-iteration weights snapshot** per fold — 22 floats × 10
+   iters × 3 folds = 660 rows. Expensive but shows exactly which
+   iteration first diverges.
+3. **`select_positive_training_set` output** per iteration — the set
+   of entry_ids used as positive training examples in that iteration.
+   If target sets diverge, training data diverges mechanically.
+
+Starting with (1) — smallest, highest-information-per-LOC ratio.
+Requires widening `train_fold`'s return type from
+`(LinearSvm, usize)` to `(LinearSvm, usize, Vec<IterSnapshot>)` and
+plumbing the snapshot collection through the iteration loop on both
+sides.
