@@ -795,3 +795,99 @@ Next candidate experiments (cheapest first):
 Until one of those lands, the options are unchanged: Path A
 (force bit-parity), Path B (accept ~0.04 % tolerance), Path C
 (shared kernel).
+
+### 2026-04-22 — Strategy: steel-thread parity via Rust-side parity switches
+
+Guiding doctrine for the rest of Phase 4: **pursue exact bit-level
+parity through the entire scoring pipeline, even if that requires
+adding one or more switches in the Rust implementation that are not
+intended as the default production behavior**. The goal is a complete
+"steel thread" from Parquet input to Stage 8 .blib output where every
+stage's diagnostic dump byte-matches cross-impl.
+
+Precedent: Brendan used this exact pattern in his first published
+mass-spec paper (Keller et al. 2006, PMC). K-score was implemented in
+X! Tandem as a plug-in scoring function, and bit-level parity with
+the then-proprietary Comet (née SEQUEST) was held under a
+`#ifdef COMET_EXACT` in a personal branch. That switch disabled
+X! Tandem extras (e.g. N-terminal Glu special scoring) that Comet did
+not do, so the two implementations produced byte-identical results on
+shared datasets. When Comet finally open-sourced c. 2009, the
+steel-thread harness let the open-source version replace the binary
+without loss of confidence.
+
+We have already used this pattern once in this sprint: the
+`--parquet-compression snappy` switch in Rust (normally Zstd) exists
+solely to accommodate OspreySharp's Parquet.Net 3.x reader, which
+doesn't support Zstd. The production default stays Zstd; Snappy is
+an interop affordance used during cross-impl parity work. Later work
+on the OspreySharp side (adding Zstd support) will retire the need
+for that switch, and Rust's default will become the only option.
+
+We now need a second switch of the same shape for Stage 5 SVM
+training. Rust `LinearSvm::fit` and C# `LinearSvmClassifier.Train`
+produce ~0.04 % different `count_passing` on identical inputs — small,
+but enough to flip grid-search `best_c` on boundary cases and
+cascade through Stage 5. Rather than chase the numerical difference
+(which could be SIMD vectorization, order-of-operations in sum
+reductions, or a genuine small algorithmic divergence), we add a
+Rust-side switch — e.g. `OSPREY_CSHARP_SCALAR_SVM=1` or a Cargo
+feature like `parity_csharp_svm` — that replaces the Rust coordinate
+descent with a port of the C# scalar loop, ordered exactly like
+OspreySharp. With the switch on, the two tools produce byte-identical
+SVM weights, and we can complete Stage 5 parity and proceed to
+Stages 6, 7, 8.
+
+The switch is a debt item, not a solution. The production Rust path
+stays fast. When we later revisit the underlying numerical
+difference (perhaps with Kahan summation on both sides, or a direct
+scalar path that both impls agree on), we retire the switch the same
+way we'll retire `--parquet-compression snappy` once OspreySharp
+grows Zstd support.
+
+**Mechanics for the SVM parity switch**:
+
+- Env var `OSPREY_CSHARP_SCALAR_SVM=1` (runtime, matches the
+  existing `OSPREY_*_ONLY` / `OSPREY_DUMP_*` / `OSPREY_LOAD_*`
+  convention). Cheaper than a cargo feature to iterate on.
+- Log the choice loudly when the env var is set ("[PARITY]
+  CSharp-matching scalar SVM active — not for production"). Hard to
+  miss in logs, obvious in bisect runs.
+- Implementation: add a second `fit_csharp_scalar(...)` constructor
+  on `LinearSvm` that ports the C# inner loop in the exact ordering
+  OspreySharp uses. Dispatch to it from `train_fold` when the env
+  var is set.
+- Keep both paths tested. The `parity_csharp_svm` path must:
+  - produce byte-identical weights for given (features, labels, c,
+    seed) inputs to what OspreySharp produces for the same inputs;
+  - be covered by a new Rust unit test that hard-codes a few
+    (input, expected-weight-vector) tuples taken directly from an
+    OspreySharp run.
+
+**Stage 5 steel-thread milestone** (what we're chasing):
+
+1. `OSPREY_CSHARP_SCALAR_SVM=1` set on the Rust run only.
+2. Grid-search per-C counts match cross-impl byte-for-byte (our
+   existing grid-search dump stays green as the gate).
+3. Per-fold SVM weights match byte-for-byte.
+4. End-of-Stage-5 dump (score, pep, 4 q-values) matches numerically
+   (same tolerances we already use in Compare-Percolator.ps1 — the
+   existing drifts were cascading from SVM, so with SVM parity they
+   should evaporate).
+5. Commit the switch with a README note explaining what it's for
+   and that it's not the production default.
+
+### Next-session lead — build the steel thread
+
+Do a line-by-line comparison of Rust `LinearSvm::fit`
+(osprey-ml/src/svm.rs:40-160) vs C# `LinearSvmClassifier.Train`
+(OspreySharp.ML/LinearSvmClassifier.cs:203-340). Identify the
+smallest code unit where the numerical order of operations differs.
+Port that exact ordering behind an env-var-gated alternate path in
+Rust. Re-run the grid-search dump and confirm byte match on at least
+fold 0 iter 1 per-C counts.
+
+The switch stays in the codebase as a parity aid for ongoing Stage
+6/7/8 work, with a docstring/comment pointing at this TODO entry and
+tagging it as a debt item to revisit once Stages 1-8 are fully
+aligned.
