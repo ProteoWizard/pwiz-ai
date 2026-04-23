@@ -1,4 +1,4 @@
-# TODO-20260420_osprey_sharp.md — Phase 4: Stages 6-8 parity walk
+# TODO-20260423_osprey_sharp.md — Phase 4: Stages 6-8 parity walk
 
 > **Pipeline diagram**:
 > [`pwiz_tools/OspreySharp/Osprey-workflow.html`](../../../pwiz/pwiz_tools/OspreySharp/Osprey-workflow.html)
@@ -17,15 +17,15 @@
 
 ## Branch Information
 
-- **Branch**: TBD. Will create a new `Skyline/work/YYYYMMDD_*`
-  branch (pwiz) + matching `feat/*` branches (osprey) once the five
-  Stage 5 diagnostics PRs merge and master reflects the aligned
-  baseline.
-- **Base**: `master` (pwiz) / `main` (maccoss/osprey), post-merge
-  of the Stage 5 sub-sprint.
-- **Created**: 2026-04-20 (original); rescoped 2026-04-22 after
-  Stage 5 split.
-- **Status**: Planning — starts when the five Stage 5 PRs merge.
+- **Branch**: TBD. Will create a new `Skyline/work/20260423_*`
+  branch (pwiz) + matching `feat/*` branch (osprey) at the start of
+  the Step 1 upstream resync catalog.
+- **Base**: `master` (pwiz) / `main` (maccoss/osprey). Both are
+  aligned as of 2026-04-23 post-merge of the Stage 5 sub-sprint +
+  Gauss fix.
+- **Created**: 2026-04-20 (original planning); rescoped 2026-04-22
+  after Stage 5 split; renamed + started 2026-04-23.
+- **Status**: Active — Phase 4 (Stages 6-8) begins 2026-04-23.
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
 
 ## Phase History
@@ -41,10 +41,15 @@ HPC split. Full session-by-session history in:
 
 (Moved to `ai/todos/completed/` on 2026-04-21 after PR #4155 merged.)
 
-Phase 4's Stage 5 sub-sprint (2026-04-21/22) shipped Stage 5
-cross-impl bit-parity on single-file Stellar + the diagnostic
-harness. See **TODO-20260422_ospreysharp_stage5_diagnostics.md** for
-the complete log. Key outcomes feeding this TODO:
+Phase 4's Stage 5 sub-sprint (2026-04-21/22, merged 2026-04-23)
+shipped Stage 5 cross-impl bit-parity on single-file Stellar + the
+diagnostic harness. See
+**ai/todos/completed/TODO-20260422_ospreysharp_stage5_diagnostics.md**
+for the complete log (osprey #16/#17/#18 + pwiz #4159/#4160, all
+merged 2026-04-23). The coordinated Gauss-solver robustness fix
+(osprey #15 + pwiz #4156, same day) also landed; see
+**ai/todos/completed/TODO-20260421_osprey_gauss_solver.md**. Key
+outcomes feeding this TODO:
 
 - `D:\test\osprey-runs\stage5\stellar\rust_scores.parquet` is the
   canonical Rust-generated Stage 4 output, ready as input for
@@ -284,9 +289,11 @@ Canonical Stage 5 inputs:
   conventions vs. Skyline.
 - `C:\proj\osprey\CLAUDE.md` — Rust-side project overview and
   critical invariants.
-- `ai/todos/active/TODO-20260422_ospreysharp_stage5_diagnostics.md`
-  — sibling TODO, Stage 5 parity + diagnostic harness. Moves to
-  `completed/` when its five PRs merge.
+- `ai/todos/completed/TODO-20260422_ospreysharp_stage5_diagnostics.md`
+  — sibling TODO, Stage 5 parity + diagnostic harness. Completed
+  2026-04-23 (all five PRs merged).
+- `ai/todos/active/TODO-20260423_osprey_sharp_stage6.md` — Stage 6
+  sub-sprint (Priorities 1-3 of this umbrella). Created 2026-04-23.
 - `ai/todos/active/TODO-OR-20260417_osprey_rust_upstream.md` —
   staged sprint to upstream Rust diagnostics + perf.
 - `ai/scripts/OspreySharp/` — harness scripts: `Test-Features.ps1`,
@@ -308,3 +315,23 @@ PRs merge. Expected first step: Priority 1 (upstream resync delta
 check), then Priority 2 (multi-file Stage 5 validation) to confirm
 the 3-file case inherits single-file parity before moving to Stage
 6 refinement.
+
+### 2026-04-23 — Renamed and unblocked
+
+Renamed from `TODO-20260420_osprey_sharp.md` to
+`TODO-20260423_osprey_sharp.md` to reflect the actual Phase 4
+start date. All blockers cleared 2026-04-23:
+
+- Stage 5 diagnostics sub-sprint merged (osprey #16/#17/#18, pwiz
+  #4159/#4160). `main`/`master` now carry the aligned baseline.
+- Gauss-solver robustness coordinated fix merged (osprey #15, pwiz
+  #4156). Stellar + Astral `Test-Features.ps1` still 21/21 @ 1e-6.
+- A stale WIP on `feat/stage5-diagnostics` in `C:\proj\osprey` that
+  looked like it might be un-committed cleanup turned out to be an
+  unrelated experimental revert; discarded and the repo is now on
+  `main` at `2b73ba8`.
+
+Ready to start Priority 1: re-scan `maccoss/osprey:main` for any
+commits landed since the 2026-04-22 delta catalog attempt and
+disposition each (parity-critical port vs. out-of-scope). Dump
+findings to `ai/.tmp/stage6_upstream_delta.md`.

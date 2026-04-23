@@ -597,10 +597,10 @@ EOF
   dataset-specific workflow)
 - `ai/todos/active/TODO-OR-20260417_osprey_rust_upstream.md` --
   staged sprint to upstream diagnostics + perf to `maccoss/osprey`
-- `ai/todos/active/TODO-20260420_osprey_sharp.md` -- OspreySharp
-  Phase 4 sprint (Stage 5-8 cross-impl parity walk). Bisection
-  methodology + Stage 5 resolution documented in the 2026-04-22
-  progress log.
+- `ai/todos/active/TODO-20260423_osprey_sharp.md` -- OspreySharp
+  Phase 4 sprint (Stages 6-8 cross-impl parity walk). Bisection
+  methodology + Stage 5 resolution documented in
+  `ai/todos/completed/TODO-20260422_ospreysharp_stage5_diagnostics.md`.
 - `ai/scripts/OspreySharp/` -- cross-impl test tooling (C# side):
   `Test-Features.ps1` (Stages 1-4 parity), `Compare-Diagnostic.ps1`
   (row-wise dump diff), `Compare-Percolator.ps1` (hash-joined

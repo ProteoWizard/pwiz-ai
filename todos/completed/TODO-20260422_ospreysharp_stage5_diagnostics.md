@@ -1,7 +1,9 @@
 # OspreySharp Stage 5 diagnostics + cross-impl parity
 
-> Companion to **TODO-20260420_osprey_sharp.md** (now scoped to
-> Stages 6-8). This TODO captures the Stage 5 diagnostic
+> Companion to **TODO-20260423_osprey_sharp.md** (Phase 4, Stages
+> 6-8; originally created 2026-04-20 and renamed on 2026-04-23 to
+> reflect the actual start date). This TODO captures the Stage 5
+> diagnostic
 > infrastructure + the three Rust-side fixes + the one C# sync that
 > together establish Stage 5 cross-impl bit-parity on single-file
 > Stellar. Moves to `ai/todos/completed/` when the five PRs below
@@ -132,14 +134,31 @@ Picked up along the way, already in PR #4160's diagnostic work:
 
 ## Completion
 
-Ready to move to `ai/todos/completed/` when all five PRs above
-merge. At that point:
+All five PRs merged 2026-04-23:
 
-- Update `pwiz_tools/OspreySharp/Osprey-workflow.html` if any
-  further Stage 5 progress (multi-file evidence) has landed; the
-  2026-04-22 update already marked Stage 5 single-file as done.
-- Next-session work continues in **TODO-20260420_osprey_sharp.md**,
-  scoped to Stages 6-8.
+| Repo | PR | Merge SHA | Merged at (UTC) |
+|---|---|---|---|
+| osprey | #16 (fix/pep-nondeterminism) | `a9bf4a1d` | 2026-04-23T03:53Z |
+| osprey | #17 (fix/grid-search-crossimpl-parity) | `ac420f71` | 2026-04-23T04:04Z |
+| osprey | #18 (feat/stage5-diagnostics) | `fecda95d` | 2026-04-23T04:12Z |
+| pwiz | #4159 (stage5_sync) | `af520124` | 2026-04-23T12:36Z |
+| pwiz | #4160 (stage5_diagnostics) | `b536026a` | 2026-04-23T12:48Z |
+
+Copilot review addressed on both pwiz PRs with follow-up commits
+before merge:
+- #4159: `ProgramTests` now tracks `Program.VERSION` via a
+  `DriftVersion(major, minor, patch)` helper so the happy-path /
+  patch-drift / minor-drift / major-drift tests stay meaningful
+  after future upstream version bumps.
+- #4160: Class-level `OspreyDiagnostics` XML doc reconciles F10
+  (Stages 1-4) vs G17 (Stage 5, with a "do not switch to F10" note)
+  and four `R# UsingStatementResourceInitialization` sites were
+  fixed by assigning `StreamWriter.NewLine = "\n"` inside the using
+  block instead of in the object initializer.
+
+Next-session work continues in **TODO-20260423_osprey_sharp.md**
+(Phase 4, Stages 6-8), renamed from the original 2026-04-20
+filename to reflect the actual start date.
 
 ## Copilot review round (2026-04-22)
 
@@ -165,7 +184,8 @@ Brief notes for posterity — all addressed, comments resolved:
 - Full pre-split history, bisection log, and diagnostic-decision
   audit: the 2026-04-21 and 2026-04-22 progress entries in the prior
   single-file `TODO-20260420_osprey_sharp.md` (now trimmed to
-  Stages 6-8).
+  Stages 6-8; renamed to `TODO-20260423_osprey_sharp.md` on
+  2026-04-23).
 - Debugging doctrine (classical "find a switch that toggles
   broken vs non-broken, then audit for minimality"): applied here to
   convert a 240-LOC parity switch into a 20-LOC fix. Documented in

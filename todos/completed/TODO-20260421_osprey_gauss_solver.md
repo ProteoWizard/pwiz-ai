@@ -318,3 +318,21 @@ change and must have had a different cause.
 **Next**: Wait for both CIs, then merge together. After merge,
 follow up on the three Copilot threads on pwiz#4155 with links to
 the merged PRs (Priority 3 tasks).
+
+### Session 2 (2026-04-23) — Completion
+
+Both PRs merged 2026-04-23:
+
+| Repo | PR | Merge SHA | Merged at (UTC) |
+|---|---|---|---|
+| osprey | #15 (gauss-abs-pivot-tolerance) | `2b73ba8a` | 2026-04-23T05:12Z |
+| pwiz | #4156 (20260421_osprey_gauss_solver) | `b83de5ab` | 2026-04-23T12:49Z |
+
+Stellar + Astral `Test-Features.ps1` remain at 21/21 @ 1e-6 on both
+datasets with the symmetric fix in place. The coordinated Option-B
+strategy (both PRs open at once, Rust merged first) held up.
+
+Copilot thread followups on pwiz#4155 (Priority 3) are still worth
+posting as a courtesy but don't block TODO completion — the
+deferral note on each thread already points at this TODO, and the
+actual merged PRs are now discoverable via the commit log.
