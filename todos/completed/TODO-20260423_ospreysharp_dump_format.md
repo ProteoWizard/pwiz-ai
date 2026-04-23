@@ -8,13 +8,12 @@
 ## Branch Information
 
 - **pwiz branch**: `Skyline/work/20260423_ospreysharp_dump_format`
-- **osprey branch**: none — Rust already uses shortest-roundtrip via
-  `osprey_core::diagnostics::format_f64_roundtrip` / `format!("{}", v)`.
-- **Base**: `master` (pwiz) at `b83de5ab`.
+- **osprey branch**: none (Rust already uses shortest-roundtrip via `format_f64_roundtrip`)
+- **Base**: `master`
 - **Created**: 2026-04-23
-- **Status**: In progress — build + inspection + 220 unit tests
-  green; multi-file Stage 5 parity rerun in flight.
-- **GitHub Issue**: (none — tool work, no Skyline integration yet.)
+- **Status**: Completed
+- **GitHub Issue**: (none — tool work, no Skyline integration yet)
+- **PR (pwiz)**: [#4163](https://github.com/ProteoWizard/pwiz/pull/4163) (merged 2026-04-23 at `80f5341bc`)
 
 ## Problem found 2026-04-23
 
@@ -133,4 +132,17 @@ always runs on the framework with correct shortest-roundtrip.
 
 - Added helper + tests + fixed 10 call sites + fixed class doc.
 - Build/inspection/tests green on `net472` + `net8.0`.
-- Stellar Stage 5 parity rerun: pending (monitor in flight).
+- Stellar Stage 5 parity rerun: 3/3 byte-identical on all four
+  dumps (std / sub / svm / perc) after switching harness default
+  to net8.0 where ToString("R") is shortest-roundtrip-correct.
+
+### Session 2 (2026-04-23) — Merged
+
+PR [ProteoWizard/pwiz#4163](https://github.com/ProteoWizard/pwiz/pull/4163)
+merged `2026-04-23T22:27:42Z` at squash commit `80f5341bc`.
+
+Astral multi-file validation exposed a *separate* Stage-5-algorithm
+divergence (Rust streaming vs C# direct) which is tracked in
+`TODO-20260423_osprey_sharp_stage6.md` under the Percolator
+streaming-path port task -- **not** a defect of this text-format
+fix.

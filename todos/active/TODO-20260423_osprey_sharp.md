@@ -17,16 +17,13 @@
 
 ## Branch Information
 
-- **Branch**: TBD. Will create a new `Skyline/work/20260423_*`
-  branch (pwiz) + matching `feat/*` branch (osprey) at the start of
-  the Step 1 upstream resync catalog.
-- **Base**: `master` (pwiz) / `main` (maccoss/osprey). Both are
-  aligned as of 2026-04-23 post-merge of the Stage 5 sub-sprint +
-  Gauss fix.
-- **Created**: 2026-04-20 (original planning); rescoped 2026-04-22
-  after Stage 5 split; renamed + started 2026-04-23.
-- **Status**: Active — Phase 4 (Stages 6-8) begins 2026-04-23.
+- **Branch**: umbrella (sub-sprint branches live under
+  `TODO-20260423_osprey_sharp_stage{6,7,8}.md`)
+- **Base**: `master` (pwiz) / `main` (maccoss/osprey)
+- **Created**: 2026-04-20 (renamed from `TODO-20260420_` on 2026-04-23)
+- **Status**: In Progress
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
+- **PR**: (umbrella — see sub-sprints)
 
 ## Phase History
 
