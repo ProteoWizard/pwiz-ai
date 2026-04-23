@@ -30,10 +30,14 @@ groups). Returns the set of distinct non-none units implied by the document.
 Zero = unknown, one = deduced, more than one = ambiguous (do not silently
 pick - FAIMS and TIMS must never be confused).
 
-**Grid setter** at `Precursor.ExplicitIonMobility` now deduces units at set
-time when the current units are `none`, applies value and units atomically,
-and rejects the cell edit with a friendly `InvalidDataException` when
-deduction yields zero or multiple candidates.
+**Grid setter** at `Precursor.ExplicitIonMobility` silently applies a
+deduced unit along with the value when the document unambiguously implies
+a single one. When deduction is empty or ambiguous, accepts the value with
+units=none rather than blocking the edit - the user may be setting the
+Units column next, or may not have it visible in their current grid view
+at all (it is configurable separately from the IM value column). Transient
+invalid state is allowed; the safety net at consumption time catches any
+unresolved state with a clear error.
 
 **Safety net** at `SrmSettings.GetIonMobilityFilter` attempts the same
 deduction for legacy documents already in the bad state. A new optional
@@ -47,7 +51,7 @@ to the wrong semantics.
 
 - [x] Build deducer helper (`GetSettingsIonMobilityUnits`, `GetDocumentIonMobilityUnits`)
 - [x] Add `PeptideLibraries.GetDistinctIonMobilityUnits(LibKey[])` helper
-- [x] Wire deducer into `Precursor.ExplicitIonMobility` setter (deduce + atomic set; reject on ambiguity)
+- [x] Wire deducer into `Precursor.ExplicitIonMobility` setter (silent deduce when unambiguous; accept value-before-units entry otherwise)
 - [x] Add safety net in `SrmSettings.GetIonMobilityFilter` with deduction + export-target fallback + friendly error
 - [x] Wire Bruker timsTOF exporter to pass `inverse_K0_Vsec_per_cm2` as export target fallback
 - [x] Unit test `TestIonMobilityUnitsDeduction` covering empty/single/conflict/none-filtered scenarios
@@ -75,8 +79,8 @@ to the wrong semantics.
 Worked through the email thread with Brian. Key design decisions:
 
 - **Root cause is at the grid setter**, not just a downstream crash. The
-  proper fix is to prevent the invalid state from being written. Downstream
-  guard remains as a safety net for legacy documents.
+  setter helps invisibly when it can (unambiguous deduction) but does not
+  block the user when it can't - downstream guard is the enforcement point.
 - **Ambiguity must never silently resolve** - FAIMS (compensation_V) vs TIMS
   (inverse_K0) vs drift_time_msec are semantically incompatible. Mixed-unit
   documents are legitimate; guessing would silently mis-export.
@@ -87,5 +91,11 @@ Worked through the email thread with Brian. Key design decisions:
 - **Spectral library support** added (`GetDistinctIonMobilityUnits` on
   `PeptideLibraries`) so pre-import users with library-based targets get
   deduction coverage too.
+- **Grid setter initially rejected the edit on ambiguity**, but Brian pointed
+  out this was hostile UX: users naturally enter value-then-units, and the
+  Document Grid can be configured to show the IM value column without the
+  Units column. Relaxed to silent deduce + accept - safety net handles the
+  unresolved case at consumption time.
 
-Build green, unit test passes, all existing IM tests still pass.
+Build green, regression test verified to fail on pre-fix code (same
+`InvalidOperationException` as exception 74341) and pass on post-fix.
