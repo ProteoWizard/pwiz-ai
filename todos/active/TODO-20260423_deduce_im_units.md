@@ -6,7 +6,7 @@
 - **Created**: 2026-04-23
 - **Status**: In Progress
 - **GitHub Issue**: (none - reported via email from Nick Shulman)
-- **PR**: (pending)
+- **PR**: [#4162](https://github.com/ProteoWizard/pwiz/pull/4162)
 - **Exception ID**: 74341 (skyline.ms/home/issues/exceptions, reported by Todd M. Greco 2026-04-20)
 
 ## Objective
@@ -54,7 +54,8 @@ to the wrong semantics.
 - [x] Resource strings localized in DocSettingsResources and EntitiesResources
 - [ ] Decide whether to wire other exporters (Waters, Agilent, FAIMS) with their native units
 - [ ] Decide whether to add legacy-doc auto-repair on load (`DocumentReader`) or leave safety net as sufficient
-- [ ] Create PR
+- [x] Create PR
+- [x] Regression test reproducing exception 74341 (verified: fails on pre-fix code with the same InvalidOperationException, passes on post-fix)
 
 ## Files Modified
 
