@@ -26,22 +26,21 @@ as workspace members.
 
 | Path | Remote | Purpose |
 |---|---|---|
-| `C:\proj\osprey-mm` | `maccoss/osprey` (SSH) | **Primary working tree.** Branches for new PRs live here. Also serves as upstream baseline for `Bench-Scoring.ps1` when checked out to `main`. Brendan has push access (collaborator, added 2026-04-17). |
-| `C:\proj\osprey` | `brendanx67/osprey` | **Historical fork.** Branches preserved as archive; do not extend. |
+| `C:\proj\osprey` | `maccoss/osprey` (SSH) | **Primary working tree.** Branches for new PRs live here. Also serves as upstream baseline for `Bench-Scoring.ps1` when checked out to `main`. Brendan has push access. |
+| `C:\proj\osprey-fork` | `brendanx67/osprey` | **Retired fork.** Preserved as archive; do not extend. Several session's scripts still reference it for legacy but new work ignores it. |
+
+(Rename from `osprey-mm`/`osprey` to `osprey`/`osprey-fork` completed
+2026-04-21. Any remaining scripts or docs that mention `osprey-mm`
+should be updated to `osprey` when touched.)
 
 New work goes to branches on `maccoss/osprey` directly, never to
 the fork. Push directly; create PR with
 `gh pr create --repo maccoss/osprey`.
 
-**Bench-Scoring discipline**: `osprey-mm` is shared between active
-branch work and `Bench-Scoring.ps1`'s upstream-baseline role. Before
-running a benchmark, check out `main` (`git checkout main`) so the
-baseline measurement isn't polluted by in-progress changes.
-
-**Intended rename** (Brendan, 2026-04-17): once the three Stage 2
-upstream PRs land and the fork is truly dormant, `osprey-mm` →
-`osprey` and current `osprey` → `osprey-fork`. Future Rust work
-continues at `C:\proj\osprey`.
+**Bench-Scoring discipline**: `C:\proj\osprey` is shared between
+active branch work and `Bench-Scoring.ps1`'s upstream-baseline role.
+Before running a benchmark, check out `main` (`git checkout main`)
+so the baseline measurement isn't polluted by in-progress changes.
 
 ## Build and test commands
 
@@ -85,15 +84,24 @@ That's fragile across machines; the wrapper is authoritative.
 **Primary wrapper**:
 
 ```bash
-# Build release (default is C:\proj\osprey; pass -OspreyRoot for osprey-mm)
+# Build release (default is C:\proj\osprey = maccoss/osprey primary)
 pwsh -File ./ai/scripts/OspreySharp/Build-OspreyRust.ps1
 
-# Build a different tree (e.g. the upstream-tracking clone)
-pwsh -File ./ai/scripts/OspreySharp/Build-OspreyRust.ps1 -OspreyRoot C:/proj/osprey-mm
+# Build a different tree (rare; e.g. the retired fork at C:\proj\osprey-fork)
+pwsh -File ./ai/scripts/OspreySharp/Build-OspreyRust.ps1 -OspreyRoot C:/proj/osprey-fork
 
-# With format check and lint
-pwsh -File ./ai/scripts/OspreySharp/Build-OspreyRust.ps1 -Fmt -Clippy
+# With format + lint + tests (mirrors what CI runs -- use before every push)
+pwsh -File ./ai/scripts/OspreySharp/Build-OspreyRust.ps1 -Fmt -Clippy -RunTests
 ```
+
+**CI parity check**: the `maccoss/osprey` GitHub Actions workflow
+runs `cargo fmt --check`, `cargo clippy --all-targets --all-features
+-- -D warnings`, and `cargo test` on Linux/macOS/Windows. Running
+the wrapper with `-Fmt -Clippy -RunTests` exercises the same gates
+locally. A few lints are CI-only flavored (e.g.
+`clippy::items-after-test-module` — test modules must be the last
+item in the file, not sandwiched between pub items); check CI on the
+first push of every new branch to catch these early.
 
 **Raw cargo reference** (for understanding what the wrappers run):
 
@@ -113,19 +121,21 @@ test + clippy for a baseline sanity check, or running the binary from
 a non-default tree): extend the existing script. See "Running against
 a non-fork tree" below for script-by-script parameterization status.
 
-### Running against a non-fork tree
+### Running against a non-default tree
 
-These scripts were originally written for the fork path
-(`C:\proj\osprey`). Parameterization is uneven:
+Under the post-2026-04-21 layout, `C:\proj\osprey` is the single
+primary tree (what was previously `osprey-mm`). Scripts have
+residual parameterization from the dual-tree era:
 
 | Script | Accepts alternate tree? | Notes |
 |---|---|---|
 | `Build-OspreyRust.ps1` | `-OspreyRoot` param, default `C:\proj\osprey` | Works on any tree |
-| `Bench-Scoring.ps1` | Hardcoded `upstream` (`osprey-mm`) + `fork` (`osprey`) paths | Compares both; both trees must exist |
-| `Run-Osprey.ps1` | No -- hardcodes the fork binary path | Extend with `-RustTree Upstream/Fork` or `-OspreyRoot` before running against a non-fork tree |
+| `Bench-Scoring.ps1` | Hardcoded two-tree comparison (historical) | May need updating once the legacy fork references are swept out |
+| `Run-Osprey.ps1` | Check before invoking on a non-default tree | Older script; may still hardcode a path |
+| `Test-Features.ps1` | `-CsharpRoot` param with auto-detect across `pwiz-work1` / `pwiz` / `pwiz-work2` | The Rust side always uses `C:\proj\osprey` |
 
-When extending, follow the `Bench-Scoring.ps1` naming: `upstream` =
-`osprey-mm` (= `maccoss/osprey`), `fork` = `osprey` (= `brendanx67/osprey`).
+When extending these scripts, the canonical Rust root is
+`C:\proj\osprey`. Do not reintroduce the `osprey-mm` name.
 
 ## Test data locations
 
@@ -166,6 +176,35 @@ pwsh -File ./ai/scripts/OspreySharp/Bench-Scoring.ps1 -Dataset Stellar -Files Si
 Compares upstream Rust (`osprey-mm`), our fork Rust (`osprey`), and
 OspreySharp. `-SkipUpstream` skips the upstream Rust run.
 
+## HPC split CLI flags
+
+Since the 2026-04-19 HPC split sprint, both tools expose CLI flags
+that break the pipeline at Stage 4 / Stage 5 so workers can score in
+parallel and a merge node runs FDR + .blib output:
+
+| Flag | Behavior |
+|---|---|
+| `--no-join` | Run Stages 1-4 on the given `--input` mzML(s). Write per-file `.scores.parquet`. **Do NOT run Stage 5 FDR or write a blib.** Replaces the retired `OSPREY_EXIT_AFTER_SCORING` env var. |
+| `--join-only` | Skip Stages 1-4. Read Parquet inputs via `--input-scores`, run Stage 5+ (Percolator FDR, reconciliation, protein FDR), write blib at `--output`. Mutually exclusive with `--no-join`/`--input`. |
+| `--input-scores <PATH...>` | One or more `.scores.parquet` files (or a directory; non-recursive glob). Required when `--join-only` is set. |
+| `--parquet-compression {zstd,snappy}` | Write the scores Parquet with the requested codec. Rust default is `zstd`; use `snappy` when the output must be read back by OspreySharp (Parquet.Net 3.x on .NET Framework supports Snappy only). Production default stays Zstd; Snappy is a cross-impl interop affordance. |
+
+Parquet interop gotchas:
+
+- **Version lock**: the Parquet footer validator aborts on a `major.minor`
+  mismatch between the writer's `osprey.version` and the reader's.
+  Rust and OspreySharp must share the same `major.minor` for a
+  cross-impl Parquet to round-trip. When Rust bumps to a new minor
+  (e.g., `26.4.0`), bump OspreySharp's `Program.VERSION` in lockstep.
+- **Path-dependent library hash**: `library_identity_hash` hashes
+  `lib_path.display()` verbatim, so passing `/d/test/...` (Bash-style)
+  hashes differently from `D:\test\...` (Windows-style) even when
+  the file is the same. Invoke cross-impl parity runs via `pwsh`
+  with Windows-native paths so the hash matches across tools.
+- **Snappy disables dictionary encoding** in Rust (RLE_DICTIONARY
+  isn't supported by Parquet.Net 3.x). Expect ~3x larger files on
+  the Snappy path compared to the default Zstd.
+
 ## Environment variable reference
 
 ### Control / throttling
@@ -173,10 +212,13 @@ OspreySharp. `-SkipUpstream` skips the upstream Rust run.
 | Name | Purpose |
 |---|---|
 | `OSPREY_EXIT_AFTER_CALIBRATION` | Exit after Stage 3; skip main search |
-| `OSPREY_EXIT_AFTER_SCORING` | Exit after Stage 4; skip FDR + blib |
 | `OSPREY_LOAD_CALIBRATION` | Path to `.calibration.json` to load instead of running Stage 3 |
 | `OSPREY_LOESS_CLASSICAL_ROBUST` | `1` = Cleveland (1979) robust LOESS; default matches Rust |
 | `OSPREY_MAX_SCORING_WINDOWS` | Cap main-search windows for fast iteration under profilers |
+| `OSPREY_TRACE_PEPTIDE` | Modified-sequence filter for the per-peptide diagnostic trace (`[trace]` log lines across Stages 3-7). Comma-separated for multiple. Paired decoys auto-matched. |
+
+`OSPREY_EXIT_AFTER_SCORING` (retired 2026-04-19) was replaced by the
+`--no-join` CLI flag; bench/profile scripts have migrated.
 
 ### Diagnostic dumps (cross-impl bisection)
 
@@ -192,14 +234,25 @@ side and `rust_` on the Rust side.
 | `OSPREY_DUMP_CAL_MATCH` + `_MATCH_ONLY` | `cs_cal_match.txt` | Per-entry calibration match |
 | `OSPREY_DUMP_LDA_SCORES` + `_SCORES_ONLY` | `cs_lda_scores.txt` | LDA discriminant + q-value |
 | `OSPREY_DUMP_LOESS_INPUT` + `_INPUT_ONLY` | `cs_loess_input.txt` | LOESS input pairs |
+| `OSPREY_DUMP_STANDARDIZER` + `_STANDARDIZER_ONLY` | `*_stage5_standardizer.tsv` | Per-feature mean/std from `FeatureStandardizer` (Stage 5 boundary) |
+| `OSPREY_DUMP_SUBSAMPLE` + `_SUBSAMPLE_ONLY` | `*_stage5_subsample.tsv` | Stage 5 best-per-precursor subsample membership + fold assignment per entry |
+| `OSPREY_DUMP_SVM_WEIGHTS` + `_SVM_WEIGHTS_ONLY` | `*_stage5_svm_weights.tsv` | Per-fold final SVM weights + bias + iteration count |
+| `OSPREY_DUMP_PERCOLATOR` + `_PERCOLATOR_ONLY` | `*_stage5_percolator.tsv` | End-of-Stage-5 per-FdrEntry dump: score, pep, 4 q-values |
 | `OSPREY_DIAG_XIC_ENTRY_ID` + `OSPREY_DIAG_XIC_PASS` | `cs_xic_entry_<ID>.txt` | Per-entry cal XIC (exits after dump) |
 | `OSPREY_DIAG_SEARCH_ENTRY_IDS` | `cs_search_xic_entry_<ID>.txt` | Main-search XIC for specific entries (no exit) |
 | `OSPREY_DIAG_MP_SCAN` | `cs_mp_diag.txt` | Median polish for a specific scan |
 | `OSPREY_DIAG_XCORR_SCAN` | `cs_xcorr_scan.txt` *(Rust-only)* | XCorr detail at a specific scan |
 
-The C# side consolidates these in `pwiz.OspreySharp.OspreyDiagnostics`.
-The Rust equivalent is staged in
-`TODO-OR-20260417_osprey_rust_upstream.md` Batch 1.
+Stage 5 dumps all land via `osprey-fdr/src/percolator.rs` (Rust) and
+`pwiz.OspreySharp.FDR.PercolatorFdr` (C#); the end-of-stage
+Percolator dump also uses the main-crate `osprey/src/diagnostics.rs`.
+Floats route through `osprey_core::diagnostics::format_f64_roundtrip`
+(normalizes `-0.0` to `0`, stable for `NaN`/`inf`).
+
+The C# side consolidates cal-phase dumps in
+`pwiz.OspreySharp.OspreyDiagnostics`; Stage 5 dumps are inlined in
+`PercolatorFdr.cs` (the `OspreySharp.FDR` assembly cannot reference
+main-crate helpers due to a circular-dep risk).
 
 ## Cross-impl bisection methodology
 
@@ -214,15 +267,49 @@ compare downstream values before upstream is proven identical.
 Walk the checkpoints in sequence; advance only after the previous
 one matches:
 
+**Stages 1-4 (calibration + scoring):**
+
 1. **Calibration sample** (`OSPREY_DUMP_CAL_SAMPLE=1 + OSPREY_CAL_SAMPLE_ONLY=1`)
 2. **Calibration match** (`OSPREY_DUMP_CAL_MATCH=1 + OSPREY_CAL_MATCH_ONLY=1`)
 3. **LDA scores + q_values** (`OSPREY_DUMP_LDA_SCORES=1 + OSPREY_LDA_SCORES_ONLY=1`)
 4. **LOESS input** (`OSPREY_DUMP_LOESS_INPUT=1 + OSPREY_LOESS_INPUT_ONLY=1`)
 5. **Main-search XICs** (`OSPREY_DIAG_SEARCH_ENTRY_IDS=id1,id2,...`)
-6. **21 PIN features** (via `Test-Features.ps1`)
+6. **21 PIN features** (via `Test-Features.ps1` — Stellar + Astral must pass at ULP)
+
+**Stage 5 (Percolator FDR) via `--join-only` on a canonical Rust
+Parquet input** — the Stage 5 bisection uses the `OSPREY_DUMP_*`
+dumps added by PR #18 (osprey) / the OspreySharp mirror PR:
+
+7. **Feature standardizer** (`OSPREY_DUMP_STANDARDIZER=1 + OSPREY_STANDARDIZER_ONLY=1`)
+   → per-feature mean + std. Divergence means feature extraction or
+   standardizer math differs.
+8. **Subsample + fold assignment** (`OSPREY_DUMP_SUBSAMPLE=1 + OSPREY_SUBSAMPLE_ONLY=1`)
+   → per-entry `in_subsample` + `fold_id` + `native_position`.
+   Divergence means input-array ordering or the stratified CV
+   selection differs.
+9. **Per-fold SVM weights** (`OSPREY_DUMP_SVM_WEIGHTS=1 + OSPREY_SVM_WEIGHTS_ONLY=1`)
+   → 21 feature weights + bias per fold, plus iteration count. Isolates
+   SVM training drift from Granholm calibration.
+10. **End-of-Stage-5 Percolator** (`OSPREY_DUMP_PERCOLATOR=1 + OSPREY_PERCOLATOR_ONLY=1`)
+    → per-FdrEntry `score, pep, run_precursor_q, run_peptide_q,
+    experiment_precursor_q, experiment_peptide_q`. The acceptance
+    gate. Compared via `ai/scripts/OspreySharp/Compare-Percolator.ps1`
+    (hash-joins on `(file_name, entry_id)`, sort-order-agnostic —
+    not the row-wise `diff` that `Compare-Diagnostic.ps1` uses).
 
 Diff the SORTED output at each stage. Look for structural patterns
 (all decoys? all short peptides? all charge-3?), not aggregate stats.
+
+**Tool support**:
+
+- `ai/scripts/OspreySharp/Compare-Diagnostic.ps1` — row-wise `diff`
+  with context, drives Stages 1-4 dumps. Fails if the two tools
+  render rows in different orders even when values match; invest in
+  stable sort on both sides before diffing.
+- `ai/scripts/OspreySharp/Compare-Percolator.ps1` — hash-joined
+  per-column numeric compare with per-column thresholds; drives the
+  Stage 5 Percolator dump. Extendable to other Stage 5+ dumps with
+  `(file_name, entry_id)` keys.
 
 ### Numeric formatting is NOT just noise
 
@@ -276,6 +363,88 @@ Never use unseeded randoms in the scoring pipeline. .NET's
 thread time. The calibration sampler uses seed 43 deliberately
 (matches Rust's `42 + attempt=1` on first attempt). Always pass an
 explicit seed.
+
+**Custom `Xorshift64` PRNG**: both sides implement `Xorshift64`
+(not stdlib `Random` / `thread_rng`) for fold-assignment shuffles
+and SVM coordinate descent. `OspreySharp.ML.LinearSvmClassifier.cs`
+has a unit test verifying byte-parity of the Rust and C# outputs at
+`seed=42` (`MLTest.TestXorShiftMatchesRust`). Don't swap one side to
+a different PRNG without the matching swap on the other.
+
+### Determinism: sorted iteration + serial reduction
+
+HashMap iteration in Rust is randomized per process; `.NET
+Dictionary<,>` is insertion-ordered but not stable across logically
+equivalent inserts. Any pipeline step that iterates a HashMap and
+then feeds the output into a float accumulation has a per-process
+drift risk that shows up as 1-ULP differences across runs.
+
+Patterns the pipeline now relies on:
+
+- **Sort the union of base_ids** before building competition
+  winners in `compute_fdr_from_stubs` (`osprey-fdr/src/percolator.rs`).
+  Don't iterate `targets.iter().chain(decoys.iter())` directly —
+  that leaks HashMap order into `PepEstimator::fit_default`.
+- **Serial `iter().fold()`** for the KDE `pdf` sum in
+  `osprey-ml/src/pep.rs`. Rayon's `par_iter().sum()` is non-deterministic
+  across calls; serial accumulation is left-to-right and
+  deterministic for a fixed input (it is still order-dependent
+  across different input permutations — same-input reproducibility is
+  the invariant the downstream pipeline requires).
+- **Deterministic tie-break** in `grid_search_c` (first-C wins on
+  ties; matches the comment "first C as tiebreaker" that the Rust
+  code didn't originally implement). `Iterator::max_by_key` returns
+  the *last* tied element per stdlib docs — don't use it for
+  tie-sensitive selection. Manual scan with strict `>` is what both
+  tools now use.
+- **Non-conservative FDR formula `n_decoy / n_target`** for
+  internal grid-search counting in
+  `count_passing_targets_svm` — matches `compute_qvalues` on the
+  same path and `OspreySharp.FDR.PercolatorFdr.ComputeQvalues`. The
+  conservative `(n_decoy + 1) / n_target` formula is reserved for
+  final reported q-values (`ComputeConservativeQvalues`), not for
+  hyperparameter-tuning heuristics.
+- **`-0.0` normalized to `"0"`** in
+  `osprey_core::diagnostics::format_f64_roundtrip`. Rust's default
+  `{}` emits `-0` for `-0.0`; .NET's G17 emits `0`. Without
+  normalization the two texts disagree even when the values are
+  numerically equal. Route every float in a cross-impl dump
+  through the shared formatter.
+
+### Steel-thread parity doctrine
+
+Cross-impl parity projects stall when a small bit-level gap blocks
+the rest of the pipeline (a compression codec, a numerical
+ordering, etc.). The working discipline, proven in Brendan's
+K-score / Comet effort (Keller et al. 2006):
+
+1. Establish bit-parity gates at every stage boundary (dumps + a
+   compare script).
+2. When a single stage won't close, add the **smallest possible
+   switch** (env var, Cargo feature, or runtime flag) that lets the
+   "non-default" side match the other for end-to-end testing. Keep
+   the production default fast/correct.
+3. Ship the switch as a **debt item** — always retire it by fixing
+   the underlying gap, not by making it the default.
+
+Active steel-thread switches:
+
+- `--parquet-compression snappy` (Rust default Zstd; Snappy bridges
+  to OspreySharp's Parquet.Net 3.x reader). Retires when OspreySharp
+  grows Zstd support.
+
+Historical (retired the same session they were introduced):
+
+- `OSPREY_CSHARP_SCALAR_SVM` — was planned as a scalar-SVM shim;
+  the root cause turned out to be a formula mismatch in
+  `count_passing_targets_svm`, not the SVM math. Switch was removed
+  before it landed upstream; see the TODO for the audit.
+
+When proposing a new switch, ask: **is the underlying difference
+worth fixing on one side instead?** If so, fix it and skip the
+switch. The session where Stage 5 parity landed ended up replacing a
+fully-drafted `OSPREY_CSHARP_SCALAR_SVM` switch with a 20-LOC fix in
+`count_passing_targets_svm` once the switch had localized the gap.
 
 ### Stable vs unstable sort
 
@@ -419,6 +588,8 @@ EOF
 
 ## See also
 
+- `C:\proj\osprey\CLAUDE.md` -- project overview (architecture, CI,
+  critical invariants). Read this first when joining the Rust side.
 - `ai/WORKFLOW.md` -- Skyline-mainline conventions (different
   product, different rules)
 - `ai/docs/debugging-principles.md` -- "Cross-implementation
@@ -426,11 +597,18 @@ EOF
   dataset-specific workflow)
 - `ai/todos/active/TODO-OR-20260417_osprey_rust_upstream.md` --
   staged sprint to upstream diagnostics + perf to `maccoss/osprey`
+- `ai/todos/active/TODO-20260420_osprey_sharp.md` -- OspreySharp
+  Phase 4 sprint (Stage 5-8 cross-impl parity walk). Bisection
+  methodology + Stage 5 resolution documented in the 2026-04-22
+  progress log.
 - `ai/scripts/OspreySharp/` -- cross-impl test tooling (C# side):
-  `Test-Features.ps1` (parity), `Bench-Scoring.ps1` (perf),
+  `Test-Features.ps1` (Stages 1-4 parity), `Compare-Diagnostic.ps1`
+  (row-wise dump diff), `Compare-Percolator.ps1` (hash-joined
+  Stage 5 compare), `Bench-Scoring.ps1` (perf),
   `Profile-OspreySharp.ps1` (C# profiling)
 - `pwiz_tools/OspreySharp/OspreySharp/OspreyDiagnostics.cs` --
-  C# reference implementation for the diagnostic extraction Batch 1
-  will mirror in Rust
+  C# diagnostic constants + cal-phase dump methods
+- `pwiz_tools/OspreySharp/OspreySharp.FDR/PercolatorFdr.cs` -- C#
+  Stage 5 implementation with the four inlined dumps
 - `pwiz_tools/OspreySharp/OspreySharp.Scoring/XcorrScratchPool.cs`
   -- per-window buffer reuse pattern Batch 2a will mirror
