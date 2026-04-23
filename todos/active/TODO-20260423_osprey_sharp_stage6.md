@@ -6,11 +6,11 @@
 
 ## Branch Information
 
-- **pwiz branch**: `Skyline/work/20260423_osprey_sharp_stage6`
+- **pwiz branch**: `Skyline/work/20260423_osprey_sharp_stage6` (not yet created — branch fresh off `master` when Stage 6 walk starts, after the streaming-port PR merges)
 - **osprey branch**: TBD (created only if a parity-critical upstream port needs landing)
-- **Base**: `master` (pwiz at `80f5341bc`) / `main` (maccoss/osprey at `2b73ba8`)
+- **Base**: `master` (pwiz) / `main` (maccoss/osprey)
 - **Created**: 2026-04-23
-- **Status**: In Progress
+- **Status**: Pending (prerequisites shipping; Stage 6 walk starts in next session)
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
 - **PR**: (pending)
 
@@ -62,66 +62,30 @@ dump byte-identical) must still hold.
 
 ## Progress log
 
-### Session 1 (2026-04-23) — Kickoff + Percolator streaming port
+### Session 1 (2026-04-23) — Pre-requisites shipped; Stage 6 not yet started
 
-**Priority 1 (upstream delta catalog)**: shipped as
-`ai/.tmp/stage6_upstream_delta.md`. Eight commits from
-`885339b..2b73ba8`; no outstanding ports other than the reconciliation
-gate broadening (Stage 6 work, handled natively when we write the
-Stage 6 port).
+Session focused on getting everything lined up for a clean Stage 6
+kickoff in a new session. Three pre-requisite PRs landed or are in
+review:
 
-**Priority 2 (multi-file Stage 5 validation)**: partial. After
-shipping the Stage 5 dump-text-format fix (pwiz #4163, merged
-`80f5341bc`):
-- Stellar 3/3 files byte-identical on all four Stage 5 dumps.
-- Astral 0/3 files — structural divergence (Rust subsample dump has
-  300,000 rows all `in_subsample=true`; C# has 1,683,779 rows with
-  300,000 `true` + 1,383,778 `false`). Root-caused to a missing C#
-  code path, not a regression. Details below.
+1. **Stage 5 dump text format** (merged pwiz #4163, commit
+   `80f5341bc`). See
+   `ai/todos/completed/TODO-20260423_ospreysharp_dump_format.md`.
+2. **Upstream resync delta catalog**: shipped to
+   `ai/.tmp/stage6_upstream_delta.md`. Eight commits from
+   `885339b..2b73ba8`; no outstanding ports other than the reconciliation
+   gate broadening which is natural Stage 6 walk work.
+3. **Percolator streaming path port**: required for Astral byte-
+   parity. Split into its own branch + TODO because it is not
+   Stage 6 itself, just the last Stage 5 prerequisite. See
+   `ai/todos/active/TODO-20260423_ospreysharp_percolator_streaming.md`.
+   When that PR merges, Stellar + Astral are both 3/3 byte-identical
+   on all four Stage 5 dumps and Stage 6 can begin.
 
-**Root cause of Astral divergence — Percolator streaming path**
-
-Rust's `osprey/src/pipeline.rs::run_percolator_fdr` has two branches
-gated by `total_entries > max_train * 2` (i.e. > 600K entries):
-- **Direct**: all entries to `run_percolator`, Percolator itself
-  subsamples to `max_train = 300K` for training. Stellar (462K)
-  uses this; OspreySharp uses it unconditionally.
-- **Streaming**: best-per-precursor dedupe of all entries across
-  all files (~500K for Astral single-file), peptide-grouped
-  subsample to 300K, train `run_percolator(subset, train_only=true)`,
-  then score ALL entries via the averaged fold models + standardizer
-  and compute q-values on that flat score array.
-
-Committed by Mike 2026-03-25 (commit `1d4a9a0e`), which predates
-OspreySharp's Phase 1-3 port. The optimization is what mokapot
-does too on large datasets — train on deduped per-precursor, avoid
-training-set correlation. OspreySharp never had the streaming path;
-Stellar never triggered it so the gap was latent.
-
-**Port plan**
-
-Add a streaming branch to `OspreySharp.AnalysisPipeline.RunPercolatorFdr`
-mirroring the Rust phases:
-
-| Phase | Rust src | C# work | Notes |
-|---|---|---|---|
-| Best-per-precursor dedup | `pipeline.rs:4256-4296` | new `SelectBestPerPrecursor` helper | two `Dictionary<uint, (int fi, int li, double score)>`; `base_id = entry.EntryId & 0x7FFFFFFF` |
-| Peptide-grouped subsample | `pipeline.rs:4300-4360` | new `SubsamplePeptideGroups` helper | XOR-shift RNG seeded at `config.seed = 42`; constants 13/7/17; sort groups by peptide key before shuffle |
-| Train-only Percolator | `pipeline.rs:4447-4460` | extend `PercolatorConfig.TrainOnly` flag; split `PercolatorFdr.RunPercolator` | returns `FoldWeights` + `Standardizer` + `IterationsPerFold` only, no scoring |
-| Score all entries | `pipeline.rs:4460-4620` | new `ScoreAllEntriesWithModel` | apply standardizer -> averaged SVM weights; score = dot + bias |
-| Q-values + PEP | `pipeline.rs:4620-4800` | wire existing `PercolatorFdr.ComputeQValues` + `PepEstimator` into streaming finish | per-file + experiment-level |
-
-Byte-parity risks:
-- XOR-shift RNG must use identical seed + constants + call order.
-- Dict iteration order: Rust sorts `HashMap.keys().copied()` before
-  use; C# must call `.OrderBy` explicitly (C# Dictionary iteration
-  is insertion-order on .NET Core, but Rust's is randomized).
-- Peptide-group sort key: byte-ordinal peptide string.
-- Float reductions during scoring stay serial.
-
-**Branch**: `Skyline/work/20260423_osprey_sharp_stage6` (pwiz-work1).
-**Gate**: `Compare-Stage5-AllFiles.ps1` 3/3 PASS on Stellar (regression
-check) AND 3/3 PASS on Astral (new parity).
+**Actual Stage 6 walk (Priority 3 of the umbrella) has not started
+in this session.** The branch `Skyline/work/20260423_osprey_sharp_stage6`
+should be (re-)created fresh off `master` once the streaming port
+PR merges. The next session picks up from there.
 
 **Path-normalization follow-up** (`LibraryIdentityHash` slash-
 direction issue): deferred to a later PR; hitting it only when the
