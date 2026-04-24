@@ -13,9 +13,9 @@
 - **osprey branch**: none (porting existing Rust behaviour to OspreySharp)
 - **Base**: `master` (pwiz at `80f5341bc`)
 - **Created**: 2026-04-23
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
-- **PR**: (pending)
+- **PR (pwiz)**: [#4164](https://github.com/ProteoWizard/pwiz/pull/4164) (merged 2026-04-24 at `edc5e0251`)
 
 ## Problem
 
@@ -111,4 +111,35 @@ time, masking the gap.
   ascending (matching Rust `compute_fdr_from_stubs`).
 - Final state: 6/6 files across both datasets byte-identical on all
   four Stage 5 dumps.
-- Commit + PR pending.
+
+### Session 2 (2026-04-23/24) — Review + merge
+
+PR [ProteoWizard/pwiz#4164](https://github.com/ProteoWizard/pwiz/pull/4164)
+opened, reviewed, merged `2026-04-24T00:50:33Z` at squash commit
+`edc5e0251`.
+
+Three Copilot inline review comments, two addressed pre-merge, one
+deferred:
+
+1. **XML doc adjacency** (AnalysisPipeline.cs) — `RunPercolatorStreaming`
+   was inserted between `BuildBasicFeatures`'s existing `<summary>`
+   and its signature, which detached `BuildBasicFeatures` from its
+   doc. **Fixed** by moving `RunPercolatorStreaming` to land after
+   `BuildBasicFeatures` (commit `bf30ede50`).
+2. **Missing `pwiz_tools/OspreySharp` entry** in
+   `scripts/misc/vcs_trigger_and_paths_config.py` (new gate from
+   pwiz #4161). **Fixed** by adding
+   `("pwiz_tools/OspreySharp/.*", {})` per Matt Chambers's guidance
+   -- OspreySharp has no dedicated TeamCity build config yet, so the
+   empty target set silences the gate without firing unrelated builds
+   (commit `ac5ecd66a`). Follow-up: when OspreySharp gets wired into
+   Skyline's TC build (Matt offered) or its own config, map the entry
+   to the appropriate targets.
+3. **Missing unit tests** for `PercolatorConfig.TrainOnly` early
+   return and `PercolatorFdr.ScorePopulationAndComputeFdr`.
+   **Deferred** -- integration-level parity is proven by
+   `Compare-Stage5-AllFiles.ps1` running both Stellar + Astral at
+   6/6 byte-identical across all four Stage 5 dumps, and
+   constructing unit-test fixtures large enough to trigger the
+   streaming path (>600K synthetic entries) is non-trivial. Worth a
+   follow-up issue if the logic ever needs refactoring.
