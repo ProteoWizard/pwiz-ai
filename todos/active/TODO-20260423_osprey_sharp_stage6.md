@@ -6,11 +6,11 @@
 
 ## Branch Information
 
-- **pwiz branch**: `Skyline/work/20260423_osprey_sharp_stage6` (not yet created — branch fresh off `master` when Stage 6 walk starts, after the streaming-port PR merges)
+- **pwiz branch**: `Skyline/work/20260423_osprey_sharp_stage6` (created 2026-04-23 off master at `edc5e0251`, pushed to origin, zero commits of its own yet)
 - **osprey branch**: TBD (created only if a parity-critical upstream port needs landing)
-- **Base**: `master` (pwiz) / `main` (maccoss/osprey)
+- **Base**: `master` (pwiz at `edc5e0251`) / `main` (maccoss/osprey at `2b73ba8`)
 - **Created**: 2026-04-23
-- **Status**: Pending (prerequisites shipping; Stage 6 walk starts in next session)
+- **Status**: Pending (prerequisites done; Stage 6 walk starts in the next session)
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
 - **PR**: (pending)
 
@@ -83,11 +83,16 @@ review:
    on all four Stage 5 dumps and Stage 6 can begin.
 
 **Actual Stage 6 walk (Priority 3 of the umbrella) has not started
-in this session.** The branch `Skyline/work/20260423_osprey_sharp_stage6`
-should be (re-)created fresh off `master` once the streaming port
-PR merges. The next session picks up from there.
+in this session.** Streaming port PR #4164 merged at `edc5e0251`
+2026-04-24; Stage 6 branch `Skyline/work/20260423_osprey_sharp_stage6`
+created off that commit and pushed to origin at end of session
+(zero Stage 6 commits of its own yet). The next session picks up
+from there.
 
 **Path-normalization follow-up** (`LibraryIdentityHash` slash-
 direction issue): deferred to a later PR; hitting it only when the
 CLI is invoked with mixed slash styles, so Compare-Stage5 is
 unaffected.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260423_osprey_sharp_stage6.md` before starting work.
