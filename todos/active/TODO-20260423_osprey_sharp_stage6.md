@@ -282,6 +282,57 @@ unaffected.
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260423_osprey_sharp_stage6.md` before starting work.
 
+### Session 5b (2026-04-25 evening) — First-pass protein FDR before Stage 6
+
+Closed the highest-leverage remaining gap from Session 5. pwiz commit
+`6836aed33` adds `RunFirstPassProteinFdr` to the pipeline at the same
+position Rust runs first-pass picked-protein FDR (immediately after
+the Stage 5 percolator dump, before any Stage 6 work):
+
+- Detected-peptide gate uses `run_peptide_qvalue <= config.run_fdr`,
+  matching Rust pipeline.rs:3048 exactly. The existing Stage 8
+  `RunProteinFdr` used `EffectiveRunQvalue(FdrLevel.Both)`, which
+  differs at the gate.
+- Picked-protein FDR gate is `config.RunFdr` (Savitski 2015's first-pass
+  convention), not the 2x relaxed gate the post-output Stage 8
+  protein FDR uses.
+- `PropagateProteinQvalues` called with `setRun: true,
+  setExperiment: false` so Stage 8 protein FDR can later overwrite
+  experiment q-values without disturbing first-pass values.
+
+**Compare-Stage6-Planning result on Stellar:**
+- `stage5_percolator`: PASS (1,388,872 rows, byte-identical)
+- `consensus`: 47,148 differing rows (down from 48,718) — all
+  remaining diffs are ULP-level floating point in
+  `consensus_library_rt` and `apex_library_rt_mad`. The
+  AAAEAAVPR n_runs_detected gap (1 vs 2) closed; protein-rescue
+  paths now agree.
+- `multicharge`: still failing on entry_idx — Rust uses post-compaction
+  Vec position; C# (no compaction) uses pre-compaction. The (apex,
+  start, end) values agree row-for-row by entry_id; only the index
+  column diverges.
+- `refit`: `n_points` matches per file (43589/43611/43585); ULP
+  differences in `r_squared`, `residual_sd`, `mad`. Same
+  floating-point math root cause as consensus.
+
+Stage 5 single-file parity gate re-verified green (3/3 byte-identical
+on Stellar) — the new first-pass protein FDR runs after the Stage 5
+percolator dump, so it can't affect dump contents.
+
+**Path-to-4/4 from here is all floating-point math:**
+
+1. Sigmoid weighting in consensus uses `Math.Exp` / `Math.Log` —
+   Rust's `f64::exp` and .NET's `Math.Exp` agree on most inputs but
+   diverge by 1 ULP on a small subset. Could try alternative
+   formulations (avoid catastrophic cancellation in the sigmoid),
+   but this is deep and may require accepting a tolerance.
+2. LOESS residual stats in refit (`residual_sd`, `mad`) involve
+   accumulation order over many points; small differences compound.
+3. Multicharge dump is structural (same data, different index space).
+   Easiest fix: change both dumps to emit `entry_id` instead of
+   `entry_idx` so the comparison key is stable across compaction
+   models. That's a 5-line edit on each side.
+
 ### Session 5 (2026-04-25) — Stage 5 multi-file fix + Stage 6 planning checkpoint wired
 
 Pivoted from "stack up commits in isolation" to "wire the planning
