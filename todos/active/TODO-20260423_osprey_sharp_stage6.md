@@ -282,6 +282,110 @@ unaffected.
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260423_osprey_sharp_stage6.md` before starting work.
 
+### Session 5 (2026-04-25) — Stage 5 multi-file fix + Stage 6 planning checkpoint wired
+
+Pivoted from "stack up commits in isolation" to "wire the planning
+checkpoint into the pipeline and prove cross-impl parity at each
+phase, even if we don't yet reach end-of-Stage-6". Built the
+Compare-Stage6-Planning harness to byte-compare three new dumps on
+each side, plus a 3-file Stage 5 percolator dump as the precondition.
+
+What the harness exposed and what landed:
+
+1. **3-file Stage 5 was NOT byte-identical.** The single-file Stage 5
+   parity that shipped in PR #4160 didn't exercise multi-file
+   experiment-level FDR propagation. C#'s
+   `ComputeExperimentPrecursorQvalues` only assigned the q-value to
+   the target-decoy competition winner per base_id; non-winning
+   per-file observations stayed at `q = 1.0`, while Rust's
+   `base_id_exp_prec_q` HashMap (`osprey-fdr/src/percolator.rs:2168`)
+   propagated to all observations sharing the same base_id (target
+   AND decoy sides). Fix: pwiz commit `a2972ab6d` adds the same
+   propagation. Also fixed a CLI parsing gap where C# discarded all
+   but the last value across repeated `--input-scores` flags. Result:
+   `cs_stage5_percolator.tsv` byte-identical with Rust on 3-file
+   Stellar (1,388,872 rows).
+
+2. **Stage 6 planning wired into the pipeline.** pwiz commit
+   `379fa92e2` replaces the TODO stub at `AnalysisPipeline.cs:404`
+   with the planning-checkpoint flow: per-file
+   `MultiChargeConsensus.SelectRescoreTargets`, cross-run
+   `ConsensusRts.Compute`, per-file `CalibrationRefit.Refit`. The
+   pipeline harvests live `RTCalibration` objects via a new
+   `ConcurrentDictionary` parameter on `ProcessFile`, and the
+   `--join-only` path best-effort-loads each parquet's calibration
+   JSON sibling so multi-file `--input-scores` runs can drive
+   Stage 6 planning. The Stage 6 gate is now
+   `perFileEntries.Count > 1` (was `InputFiles.Count > 1`) so
+   `--join-only` correctly enters the block.
+
+3. **Three new diagnostic dumps on both sides.** pwiz commit
+   `379fa92e2` adds `OSPREY_DUMP_CONSENSUS` /
+   `OSPREY_DUMP_MULTICHARGE` / `OSPREY_DUMP_REFIT` (with `_ONLY`
+   early-exits) writing `cs_stage6_*.tsv`, mirroring osprey commit
+   `d7636ba` on `feature/stage6-planning-diagnostics` which adds
+   `dump_stage6_consensus` / `dump_stage6_multicharge` /
+   `dump_stage6_refit` writing `rust_stage6_*.tsv`. Numeric columns
+   use `format_f64_roundtrip` / `Diagnostics.FormatF64Roundtrip` so
+   the text format is byte-comparable.
+
+4. **Rust gate fix on the same osprey branch.** Rust's
+   `reconciliation_enabled` previously read `config.input_files.len()
+   > 1`, which is zero on `--join-only` runs (input arrives via
+   `--input-scores`). osprey commit `d7636ba` switches both
+   occurrences to `per_file_entries.len() > 1` so multi-file
+   join-only runs enter Stage 6.
+
+**Compare-Stage6-Planning result on Stellar (1/4 PASS):**
+
+- `stage5_percolator`: PASS (1,388,872 rows)
+- `consensus`: FAIL (87,343 rows, 48,718 differ)
+- `multicharge`: FAIL (31,270 rows, mostly index-vs-data divergence)
+- `refit`: FAIL (3 rows, n_points matches; r²/sd/mad differ at ULP)
+
+**Remaining gaps to drive parity to 4/4:**
+
+1. **First-pass protein FDR before Stage 6 in C#.** Rust runs
+   protein parsimony + picked-protein FDR after Stage 5 and BEFORE
+   compaction (`pipeline.rs:3060-3083`), populating
+   `run_protein_qvalue` on every entry. C# only runs protein FDR as
+   "Stage 8" after blib output, so all `RunProteinQvalue` values are
+   1.0 at Stage 6 time. This breaks the protein-rescue gate in
+   `Qualifies` and produces fewer detections per peptide (e.g.,
+   `AAAEAAVPR` has `n_runs_detected = 1` in C# vs `2` in Rust).
+   Fix: add a first-pass protein FDR call right after the Stage 5
+   percolator dump and before the Stage 6 planning block.
+2. **Multicharge dump uses entry_idx; index space differs.** Rust
+   indexes into the post-compaction `Vec<FdrEntry>` while C# (no
+   compaction) indexes into the pre-compaction list. The (apex,
+   start, end) values agree row-for-row when same-keyed; only the
+   entry_idx column diverges. Fix: change both dumps to emit
+   `entry_id` instead of `entry_idx`, and resolve idx → entry_id at
+   dump time. Or: implement compaction in C# pre-Stage 6.
+3. **ULP-level LOESS divergence in refit.** `n_points` matches
+   exactly per file, but `r_squared` / `residual_sd` / `mad` differ
+   at the last 1-2 decimal places. Likely `Math.Exp` / `Math.Log` /
+   accumulation-order differences between .NET and Rust f64 math.
+   Stage 5 single-file LOESS was already known to be sensitive to
+   this; the fix lives in the calibration code and is independent
+   of Stage 6.
+4. **ULP-level consensus differences (sigmoid weighting).** ~56% of
+   consensus rows differ at the last decimal of
+   `consensus_library_rt` or `apex_library_rt_mad`. Expected from
+   `Math.Exp` differences in the sigmoid weight; worth bisecting
+   whether a different formulation (e.g., `1 / (1 + Math.Exp(-x))`
+   vs an explicit branch on x's sign) makes the result agree.
+
+Stage 5 parity gate (`Compare-Stage5-AllFiles.ps1`) re-verified
+green on Stellar (3/3 byte-identical on all four Stage 5 dumps)
+after the propagation fix.
+
+Library-path-normalization in `LibraryIdentityHash` was discussed
+but reverted: dropping the path component would invalidate every
+existing `.scores.rust.parquet`'s stored library_hash, requiring
+~6 hours to regenerate the test parquets. Worth doing as a
+coordinated change later, separate from Stage 6 work.
+
 ### Session 4 (2026-04-23 night) — Commit 5 landed (search-engine override path)
 
 5. `16bc080f8` **OspreySharp: Stage 6 boundary-overrides path through
