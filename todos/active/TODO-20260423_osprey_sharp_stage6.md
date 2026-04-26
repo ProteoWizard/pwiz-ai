@@ -282,6 +282,67 @@ unaffected.
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260423_osprey_sharp_stage6.md` before starting work.
 
+### Session 5c (2026-04-25 late) — First-pass compaction + multicharge bit-parity
+
+Closed the second highest-leverage gap from Session 5b. pwiz commit
+`3ab11102f` adds first-pass compaction at the same point Rust does
+(`pipeline.rs:3094-3132`): right after first-pass protein FDR, before
+the Stage 6 planning block. Drops entries whose base_id (entry_id with
+the high decoy bit masked) doesn't pass either the peptide-q gate
+(config.RunFdr) or the protein-q gate (config.ProteinFdr). Targets
+and paired decoys share base_id so they're kept or dropped together.
+
+Same commit changes the multi-charge dump key from per-file Vec
+position (`entry_idx`) to the stable library entry id (`entry_id`)
+on both Rust and C# sides (osprey commit `e3a6ae3` for the matching
+Rust signature change). The Vec position only agreed cross-impl when
+both sides had compacted; the entry_id key is invariant and is also
+a more meaningful key for operator inspection.
+
+**Compare-Stage6-Planning result on Stellar (now 2/4 PASS):**
+- `stage5_percolator`: PASS (1,388,872 rows)
+- `consensus`: FAIL (still ULP-level — tracking to InversePredict)
+- `multicharge`: **PASS** (31,270 rows byte-identical)
+- `refit`: FAIL (n_points matches; r²/sd/mad differ at ULP)
+
+**Hypothesis for the remaining 2/4 ULP gap:**
+
+`median_peak_width` byte-matches between Rust and C# even though it
+uses the same sigmoid-weighted-median algorithm as
+`consensus_library_rt`. The only difference between the two columns:
+`median_peak_width` reads `entry.EndRt - entry.StartRt` directly,
+while `consensus_library_rt` reads `cal.InversePredict(entry.ApexRt)`
+first. **`InversePredict` is the divergent code path** — and Stage 5
+dumps don't exercise it (Stage 5 only goes through forward `predict`,
+which Stage 4 calibration scoring confirms is byte-identical).
+
+Rust `inverse_predict` and C# `LoessModel.InversePredict` look
+expression-for-expression identical, including the `(y1 - y0).abs() <
+1e-12` near-tie branch. Possible ULP sources to investigate next
+session:
+
+1. Binary search behavior on tied `_fittedY` values: `Array.BinarySearch`
+   and `binary_search_by(total_cmp)` may pick different indices among
+   equal entries; if the tie spans `library_rts` values that aren't
+   identical, the interpolation result differs.
+2. `entry.ApexRt` (stored in Parquet) decoded differently by
+   Parquet.Net vs the Rust `parquet` crate — Stage 5 dumps don't
+   include ApexRt so this hasn't been verified byte-identical.
+3. `Math.Exp` vs Rust `f64::exp` 1-ULP divergence in the sigmoid
+   weight (although `median_peak_width` uses the same weights and
+   matches, suggesting weights are NOT the divergent value).
+
+**Suggested next-session bisection plan:**
+- Add a per-detection dump (`OSPREY_DUMP_CONSENSUS_DETAIL` style)
+  that emits `(file_name, entry_id, modified_sequence, apex_rt,
+  library_rt)` rows on both sides. `library_rt` is
+  `InversePredict(apex_rt)`; `apex_rt` is the loaded Parquet value.
+  Diff isolates whether divergence is in Parquet load or
+  InversePredict.
+- If apex_rt diverges → fix Parquet f64 decode; close the gap.
+- If only library_rt diverges → focused bisection inside
+  InversePredict (binary search idx, y0/y1 selection, formula).
+
 ### Session 5b (2026-04-25 evening) — First-pass protein FDR before Stage 6
 
 Closed the highest-leverage remaining gap from Session 5. pwiz commit
