@@ -120,11 +120,56 @@ convenience methods that call `parseDate()` and throw `ParseException`.
 - [x] `./gradlew :server:modules:MacCossLabModules:testresults:deployModule` — clean build
 - [x] Commit following team conventions
 
-## Phase 6: Post-Deploy on Production (skyline.ms "Nightly x64" folder)
+## Phase 6: PR Review Follow-ups
+
+PR review surfaced several items beyond the original Spring-binding scope. Done in this
+branch as a follow-up to the original refactor.
+
+### Copilot review comments (automated)
+
+- [x] **#1** Parse PostAction response as JSON instead of substring match (TestResultsTest)
+- [x] **#2** Datepicker navigation: start at the test date via URL, then use prev/next day links
+- [x] **#3** SelectRowsCommand container path — verified both forms work; dismissed
+- [x] **#4** TrainRunAction: validate `train` param is `true`/`false`/`force` instead of accepting any string
+- [x] **#5** `toLowerCase(Locale.ROOT)` — dismissed (US-locale server, ASCII table names)
+
+### Josh Eckels review comments
+
+- [x] **J1** Extract `"Success"` to `KEY_SUCCESS` constant
+- [x] **J2** `SendEmailNotificationAction` was `@RequiresNoPermission` (open relay) — locked down to
+      `@RequiresPermission(AdminOperationsPermission.class)`. Possible dead code; dead-code review
+      tracked in `TODO-LK-20260403_testresults-bugs.md`.
+- [x] **J3** `FlagRunAction`: replaced `getArray()[0]` with `getObject()` + null check
+- [ ] **J4** Schema tables without container column → split into separate PR (branch
+      `26.3_fb_testresults-container-filter`, commit `b2b2d82`). Not included in this PR.
+- [x] **J5** `ShowUserAction`: pass form values via bean so `user.jsp` doesn't read from request
+
+### Container filtering for child tables (J4)
+
+Split into a separate PR — branch `26.3_fb_testresults-container-filter` (commit
+`b2b2d82`), based on the tip of this branch. Different review concern than the
+Spring-binding refactor. Covers schema-level filter overrides on `TestResultsSchema`
+plus a fix to `TestResultsController.getUsers()` so the User-tab dropdown and Training
+Data tab list only users with runs in the current folder. Full design notes in
+`TODO-LK-20260403_testresults-bugs.md`.
+
+### Misc cleanup made in this branch
+
+- [x] **NavTree breadcrumbs**: extracted `addModuleNavTrail()` helper so all actions
+      share a single "TestResults" breadcrumb. Tabs identify the page; breadcrumb just
+      anchors back to the module home.
+- [x] **WebPartView frame**: replaced ad-hoc `view.setTitle(...)` calls with
+      `view.setFrame(WebPartView.FrameType.PORTAL)` so views render with the standard
+      LabKey portal frame.
+
+## Phase 7: Post-Deploy on Production (skyline.ms "Nightly x64" folder)
 
 `TestResultsSchema` is now registered via code (`DefaultSchema.registerProvider()`), which
 shadows the manually created External Schema that has existed since 2018. The code-level
 registration takes precedence, so all saved queries and custom views continue to work.
+
+Pre-prod verification of the shadowing behavior is done on a dev-machine mirror — see
+`TODO-LK-20260425_testresults-schema-shadow-test.md` for the full checklist.
 
 - [ ] Verify `testresults` schema and tables are accessible in the "Nightly x64" folder
       (Query UI, any custom queries) after deploying the updated module
