@@ -364,6 +364,9 @@ has the matching reconciliation port + dumps. Worth opening as a
 companion-PR pair once Astral 3-file is also verified, even with
 the 1-row residual diff documented as a follow-up.
 
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260423_osprey_sharp_stage6.md` before starting work.
+
 ### Session 5c (2026-04-25 late) — First-pass compaction + multicharge bit-parity
 
 Closed the second highest-leverage gap from Session 5b. pwiz commit
