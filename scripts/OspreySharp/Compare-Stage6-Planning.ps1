@@ -92,6 +92,8 @@ $dumpSpecs = @(
     # agrees byte-for-byte. The dump filename uses the Stage 5 prefix
     # (rust_stage5_percolator.tsv / cs_stage5_percolator.tsv).
     @{ Name = "stage5_percolator"; DumpVar = "OSPREY_DUMP_PERCOLATOR"; OnlyVar = "OSPREY_PERCOLATOR_ONLY"; FilePrefix = "stage5_percolator" },
+    @{ Name = "calibration";       DumpVar = "OSPREY_DUMP_CALIBRATION";OnlyVar = "OSPREY_CALIBRATION_ONLY"; FilePrefix = "stage6_calibration" },
+    @{ Name = "inv_predict";       DumpVar = "OSPREY_DUMP_INV_PREDICT";OnlyVar = "OSPREY_INV_PREDICT_ONLY"; FilePrefix = "stage6_inv_predict" },
     @{ Name = "consensus";         DumpVar = "OSPREY_DUMP_CONSENSUS";  OnlyVar = "OSPREY_CONSENSUS_ONLY";   FilePrefix = "stage6_consensus" },
     @{ Name = "multicharge";       DumpVar = "OSPREY_DUMP_MULTICHARGE";OnlyVar = "OSPREY_MULTICHARGE_ONLY"; FilePrefix = "stage6_multicharge" },
     @{ Name = "refit";             DumpVar = "OSPREY_DUMP_REFIT";      OnlyVar = "OSPREY_REFIT_ONLY";       FilePrefix = "stage6_refit" }
