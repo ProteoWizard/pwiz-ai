@@ -6,13 +6,13 @@
 
 ## Branch Information
 
-- **pwiz branch**: `Skyline/work/20260423_osprey_sharp_stage6` (created 2026-04-23 off master at `edc5e0251`, pushed to origin, zero commits of its own yet)
-- **osprey branch**: TBD (created only if a parity-critical upstream port needs landing)
-- **Base**: `master` (pwiz at `edc5e0251`) / `main` (maccoss/osprey at `2b73ba8`)
+- **pwiz branch**: `Skyline/work/20260423_osprey_sharp_stage6` (off master at `edc5e0251`, pushed through 5d session at `29e944a10`; Session 6 work uncommitted)
+- **osprey branch**: `feature/stage6-planning-diagnostics` (last pushed at `b7904d9`, Session 6 work uncommitted)
+- **Base**: `master` (pwiz) / `main` (maccoss/osprey)
 - **Created**: 2026-04-23
-- **Status**: Pending (prerequisites done; Stage 6 walk starts in the next session)
+- **Status**: Cross-run reconciliation closed (Session 6, 2026-04-27). Ready for 4-PR split; see "PR split plan" in progress log.
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
-- **PR**: (pending)
+- **PR**: (pending — see PR split plan)
 
 ## Scope
 
@@ -246,6 +246,219 @@ Pre-commit for every OspreySharp commit:
   critical invariants.
 
 ## Progress log
+
+### Session 6 (2026-04-27) — Cross-run reconciliation closed; ready for PR split
+
+Closed both gaps from the prior session's handoff. Cross-run reconciliation
+is now byte-identical with Rust on Stellar 3-file (8/8 dumps) and Astral
+3-file (7/8 — protein_fdr / consensus / inv_predict / multicharge /
+calibration / loess_fit / refit all PASS; only `stage5_percolator` shows
+a 1-ULP gap on losing entries' `experiment_precursor_q` in file 49, see
+known-issues below). Stage 5 single-file parity gate
+(`Compare-Stage5-AllFiles.ps1`) re-verified GREEN on both datasets
+(Stellar 3/3 × 4 dumps, Astral 3/3 × 4 dumps).
+
+**Step 1 (consensus + inv_predict closure) — picked-protein FDR port:**
+
+The C# `ComputeProteinFdr` was implementing **DIA-NN-style composite
+scoring** (sum of per-peptide log-likelihoods + max best-peptide quality,
+two parallel q-value sweeps, take min) -- the v26.1.2 algorithm that the
+Rust `CLAUDE.md` "Critical Invariants" section explicitly forbids:
+*"Do NOT revert to single-pass or composite scoring."* The diff between
+the new `OSPREY_DUMP_PROTEIN_FDR` dumps showed 23,149 of ~171,000
+peptide rows differing -- pervasive, not a tie-break. Replaced
+`ComputeProteinFdr` body with the picked-protein algorithm (~100 lines
+in/out), keeping `BuildProteinParsimony` / `CollectBestPeptideScores` /
+`PropagateProteinQvalues` untouched. Also dropped the unused
+`ComputeProteinQvaluesDiann` + `BinarySearchLeft` helpers, removed the
+`GroupPep` field from `ProteinFdrResult` (Rust intentionally doesn't
+compute protein PEP), and the `using pwiz.OspreySharp.ML` (no longer
+needed). Closed `consensus` PASS + drove `protein_fdr` from 23K rows
+divergent to byte-identical.
+
+Also fixed `CollectBestPeptideScores` to read `RunPeptideQvalue` for
+the gate field, not `RunPrecursorQvalue` (Rust's `collect_best_peptide_scores`
+explicitly says "uses peptide_qvalue, not precursor q-value, because
+picked-protein gates on peptide-level FDR per Savitski 2015"). The C#
+side had been doc'd as precursor-q.
+
+`inv_predict` was data-equivalent (same SHA256 when sorted) but FAILed
+strict byte-parity due to **sort instability** on rows where the same
+peptide had multiple charge-state detections in one file (tied on the
+`(is_decoy, modseq, file_name)` sort key). Added apex_rt + library_rt
+tiebreaks to the sort on both sides so the order is deterministic
+regardless of `List<T>.Sort` (unstable in .NET) vs
+`Vec::sort_by` (stable in Rust) AND the input-order divergence between
+HashMap and Dictionary iteration.
+
+**Step 2 (refit closure) — LOESS divergences:**
+
+Built `OSPREY_DUMP_LOESS_FIT` on both sides (per-point library_rt +
+fitted_value + abs_residual triples from each refit RTCalibration).
+Diff showed ALL 130,785 rows differing at ~0.0002 magnitude (4-5
+decimal places off, NOT ULP) — the smoother itself diverging, not the
+stats computation.
+
+**Root cause #1: `classical_robust_iterations` had opposite defaults.**
+Rust `RTCalibratorConfig::default()` sets it `false`; C#
+`RTCalibratorConfig` constructor sets it `true`. Stage 4 (initial
+calibration) reads `OSPREY_LOESS_CLASSICAL_ROBUST` (default = on) on
+both sides explicitly, so Stage 4 has byte parity. Stage 6 refit on
+both sides used `RTCalibrator::new()` / `new RTCalibrator(new
+RTCalibratorConfig{...})` without setting the flag → got Rust default
+false vs C# default true → different LOESS algorithm. Aligned both
+sides to read the env-var the same way Stage 4 does. After this fix,
+divergence dropped from ~0.0002 to 1-2 ULP.
+
+**Root cause #2: bisquare weight `Math.Pow` vs `powi`.**
+C# `LoessRegression.Fit` computed bisquare via `Math.Pow(1.0 - u*u, 2)`.
+.NET's `Math.Pow(x, 2)` routes through `exp(2*log(x))` and famously
+diverges from `x*x` at the last ULP. Rust's `(1.0 - u*u).powi(2)` is
+just `x*x`. Replaced with `t*t`. After this fix, refit + loess_fit are
+both byte-identical.
+
+**OspreyEnvironment migration to OspreySharp.Core:**
+
+`OspreyEnvironment` (the env-var wrapper) lived in the main `OspreySharp`
+project but the `CalibrationRefit` fix needed to read
+`LoessClassicalRobust` from `OspreySharp.FDR`, which can't reference the
+main project (would create a cycle). Moved `OspreyEnvironment.cs` from
+`OspreySharp/` to `OspreySharp.Core/` (project at the bottom of the
+dependency graph). Added a section to
+`ai/docs/osprey-development-guide.md` codifying the rule: *"When a
+class defined in one OspreySharp component is needed by another, push
+it down to OspreySharp.Core."*
+
+**Harness speedup:**
+
+`Compare-Stage6-Planning.ps1` now supports `-Dump <list>` (run only the
+specified dumps instead of all 8) and `-Clean` (force re-stage), and uses
+a shared per-dataset workdir so Rust's `.1st-pass.fdr_scores.bin`
+sidecars persist between dump invocations (skipping Percolator SVM
+training on subsequent runs). Iteration speed: full 8-dump Stellar run
+~23 min; single-dump iteration ~5-7 min including reuse.
+
+**Files changed (uncommitted at end of session):**
+
+pwiz worktree:
+- `OspreySharp.FDR/ProteinFdr.cs` -- picked-protein algorithm port,
+  drop GroupPep / ComputeProteinQvaluesDiann / BinarySearchLeft / EPSILON,
+  drop `using pwiz.OspreySharp.ML`, peptide-q gate fix in
+  `CollectBestPeptideScores`, `ProteinWinner` private struct
+- `OspreySharp.FDR/Reconciliation/CalibrationRefit.cs` --
+  `ClassicalRobustIterations = OspreyEnvironment.LoessClassicalRobust`
+- `OspreySharp.FDR/Reconciliation/ConsensusRts.cs` -- inspection cleanup
+  (XML doc for `invPredictTrace` parameter)
+- `OspreySharp.Chromatography/LoessRegression.cs` --
+  `Math.Pow(t,2)` -> `t*t` in bisquare weight
+- `OspreySharp.Core/OspreyEnvironment.cs` -- new file (moved from main project)
+- `OspreySharp/OspreyEnvironment.cs` -- DELETED (moved to Core)
+- `OspreySharp/OspreyDiagnostics.cs` -- new
+  `OSPREY_DUMP_PROTEIN_FDR` / `OSPREY_DUMP_LOESS_FIT` flags + dump
+  methods + inv_predict sort tiebreak + inspection cleanup (redundant
+  `System.IO.` qualifier)
+- `OspreySharp/AnalysisPipeline.cs` -- protein_fdr + loess_fit dump
+  call wiring after `RunFirstPassProteinFdr` and after `CalibrationRefit.Refit`
+
+osprey worktree:
+- `crates/osprey/src/diagnostics.rs` -- `dump_stage6_protein_fdr` +
+  `dump_stage6_loess_fit` + inv_predict sort tiebreak
+- `crates/osprey/src/pipeline.rs` -- dump call wiring
+- `crates/osprey/src/reconciliation.rs` -- `refit_calibration_with_consensus`
+  reads `OSPREY_LOESS_CLASSICAL_ROBUST` env-var (default on) and applies
+  to refit calibrator config
+
+ai worktree (master):
+- `scripts/OspreySharp/Compare-Stage6-Planning.ps1` -- `-Dump` filter,
+  `-Clean` switch, shared per-dataset workdir, `protein_fdr` +
+  `loess_fit` dump specs
+- `docs/osprey-development-guide.md` -- new "OspreySharp project
+  layering" section codifying the push-down-to-Core rule
+
+**Pending before PR (this is the goal of the next session):**
+
+1. `pwiz_tools/OspreySharp/Osprey-workflow.html` -- flip Cross-run
+   reconciliation box from `st-partial` to `st-done`, drop "ReconciliationPlanner
+   not yet wired" from its description (deferred to the third-box / Second-pass
+   re-score sprint per umbrella plan), rewrite the description to reflect
+   byte parity. "YOU ARE HERE" arrow placement to be decided before that PR.
+2. PR split (see below).
+
+### PR split plan
+
+Four PRs total, split by concern. Diagnostics-only PRs land first
+(no behavior change, easy review). Fix PRs land paired across pwiz +
+osprey because both sides change algorithm behavior together.
+
+Suffix convention: `<base-branch>-diagnostics` and `<base-branch>-fixes`.
+Cherry-pick from the integration branches
+(`Skyline/work/20260423_osprey_sharp_stage6` on pwiz,
+`feature/stage6-planning-diagnostics` on osprey) to the suffixed PR
+branches.
+
+**PR 1 — pwiz diagnostics-only:**
+Branch: `Skyline/work/20260423_osprey_sharp_stage6-diagnostics`
+- `OspreyDiagnostics.cs`: `OSPREY_DUMP_PROTEIN_FDR` +
+  `OSPREY_DUMP_LOESS_FIT` flags + dump methods + inv_predict
+  sort tiebreak + inspection cleanups
+- `AnalysisPipeline.cs`: dump call wiring
+- `OspreySharp.FDR/Reconciliation/ConsensusRts.cs`: XML doc inspection
+  cleanup (only)
+
+ai/ companion commit (master):
+- `scripts/OspreySharp/Compare-Stage6-Planning.ps1` -- `-Dump`/`-Clean`/shared
+  workdir + new dump specs
+
+**PR 2 — osprey diagnostics-only:**
+Branch: `feature/stage6-planning-diagnostics-dumps` (off
+`feature/stage6-planning-diagnostics`)
+- `crates/osprey/src/diagnostics.rs`: new
+  `dump_stage6_protein_fdr` + `dump_stage6_loess_fit` + inv_predict
+  sort tiebreak
+- `crates/osprey/src/pipeline.rs`: dump call wiring
+
+**PR 3 — pwiz fixes (paired with PR 4):**
+Branch: `Skyline/work/20260423_osprey_sharp_stage6-fixes`
+- Move `OspreyEnvironment.cs` from `OspreySharp/` to `OspreySharp.Core/`
+- `OspreySharp.FDR/ProteinFdr.cs`: picked-protein port,
+  peptide-q gate fix in `CollectBestPeptideScores`,
+  drop GroupPep / composite helpers / unused using
+- `OspreySharp.FDR/Reconciliation/CalibrationRefit.cs`:
+  `ClassicalRobustIterations = OspreyEnvironment.LoessClassicalRobust`
+- `OspreySharp.Chromatography/LoessRegression.cs`: `Math.Pow(t,2)` ->
+  `t*t` in bisquare weight
+- `pwiz_tools/OspreySharp/Osprey-workflow.html`: Cross-run reconciliation
+  -> `st-done`, description rewrite
+
+ai/ companion commit (master):
+- `docs/osprey-development-guide.md` -- "OspreySharp project layering"
+  section
+
+**PR 4 — osprey fix (paired with PR 3):**
+Branch: `feature/stage6-refit-classical-robust` (off
+`feature/stage6-planning-diagnostics`)
+- `crates/osprey/src/reconciliation.rs::refit_calibration_with_consensus`
+  reads `OSPREY_LOESS_CLASSICAL_ROBUST` env-var with the same default
+  semantics Stage 4 uses (default on).
+
+**Merge order:**
+1. PR 1 (pwiz diag) + PR 2 (osprey diag) -- can land independently in
+   either order, both are pure additions
+2. PR 3 (pwiz fix) + PR 4 (osprey fix) -- must land roughly together
+   for the harness to PASS on the post-merge state. PR 4 is a 5-line
+   change so easy to review.
+
+### Known issues / follow-ups
+
+- **Astral 3-file experiment_precursor_q ULP gap.** 168 rows in file 49
+  show 1-ULP divergence in the `experiment_precursor_q` column of the
+  `stage5_percolator` dump (e.g. `0.09775161743164063` Rust vs
+  `...62` C#). All affected rows are losing entries (q ~ 0.0977 >> any
+  FDR threshold) so downstream behavior is identical -- every Stage 6
+  dump PASSes. Single-file Stage 5 gate is GREEN. The divergence is in
+  the experiment-level q-value computation across multiple files, not
+  in any data path Stage 6 work touched. Defer as a separate
+  investigation; not blocking Cross-run reconciliation PR.
 
 ### Session 1 (2026-04-23) — Pre-requisites shipped; Stage 6 not yet started
 
