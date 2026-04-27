@@ -282,6 +282,88 @@ unaffected.
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260423_osprey_sharp_stage6.md` before starting work.
 
+### Session 5d (2026-04-26) — serde_json parser fix, consensus 99.999% bit-parity
+
+The InversePredict ULP source documented at the end of Session 5c
+turned out **not** to be in the LOESS arithmetic at all — it was in
+Rust's JSON parser. `serde_json`'s default fast number parser is not
+correctly rounded for full-precision f64 values: the decimal
+`"1.9140296182650374"` (a fitted_value written by ryu in the
+calibration JSON) parses to `0x3FFE9FDD85606113` under
+`f64::from_str` and under .NET's `double.Parse` / Newtonsoft.Json on
+.NET 8, but to `0x3FFE9FDD85606114` (= `1.9140296182650376`,
+1 ULP higher) under `serde_json`'s default parser. C# was correct;
+Rust was 1 ULP off on every full-precision fitted_value.
+
+Bisection discipline: built a calibration-array dump
+(`OSPREY_DUMP_CALIBRATION` / `OSPREY_CALIBRATION_ONLY`) on both sides
+and compared the loaded `library_rts` + `fitted_values` arrays
+directly. 7,186 / 22,207 rows differed under the original parser.
+Same library_rt (input decimal short like `1.74`) matched
+byte-for-byte; long full-precision fitted_value lines diverged by
+1-2 ULP.
+
+osprey commit `b7904d9` adds a custom serde deserializer for the
+three `Vec<f64>` fields in `RTModelParams` (library_rts, fitted_rts,
+abs_residuals). It captures each element via `serde_json::value::RawValue`
+and re-parses through `f64::from_str`. The `serde_json/raw_value`
+feature is enabled at the workspace level. pwiz commit `9b7dc76b7`
+wires the matching cross-impl dumps + bisection trace on the
+OspreySharp side.
+
+**Compare-Stage6-Planning result on Stellar 3-file (4/6 PASS, 2 nearly):**
+
+- `stage5_percolator`: PASS (1,388,872 rows)
+- `calibration`: PASS (22,207 rows — newly verified)
+- `multicharge`: PASS (31,270 rows)
+- `inv_predict`: 99.99966% identical — sorted diff of 292,512 rows
+  has exactly **one** extra row in C#: file 21
+  `SQC[UniMod:4]LQVPER` target qualifies in C# but not in Rust.
+  Stage 5 dump shows file 21 SQC has `run_precursor_q=0.0096`
+  (passes hard gate) and `run_peptide_q=0.0107` (fails peptide gate),
+  so the protein-rescue branch is the deciding factor. C#'s
+  first-pass `run_protein_qvalue` ≤ 0.01 for this peptide; Rust's is
+  > 0.01. This is **a different bug** in first-pass protein FDR
+  (parsimony group assignment or picked-protein TDC tie-break at the
+  borderline q ≈ 0.01).
+- `consensus`: 99.9989% identical — same root cause as inv_predict;
+  sorted diff is exactly **one row** (`SQC[UniMod:4]LQVPER`,
+  `n_runs_detected = 1` in Rust vs `2` in C#). All other 87,342
+  consensus_library_rt and apex_library_rt_mad values are now
+  byte-identical thanks to the parser fix.
+- `refit`: `n_points` byte-identical (43589 / 43611 / 43585) but
+  `r_squared` / `residual_sd` / `mad` differ at 1-3 ULP. **A
+  separate LOESS-fit divergence**: the consensus pairs input to the
+  refit are now byte-identical, so the residual-stats divergence
+  must come from the LOESS computation itself. Stage 4 PIN features
+  used F10 tolerance and may have masked 1-3 ULP all along.
+
+**Highest-leverage remaining gaps for full Stage-6-planning bit-parity:**
+
+1. **First-pass protein FDR borderline**. Build a per-(modseq,
+   group_id, q-value) dump on both sides, gated by an
+   `OSPREY_DUMP_PROTEIN_FDR` env-var, and find the SQC peptide's
+   protein-group computation. Likely a tie-break in greedy parsimony
+   or picked-protein TDC at exactly q = 1%. Fixing closes the last
+   row of consensus + inv_predict.
+2. **LOESS-fit residual stats**. Add a per-fit dump capturing the
+   final fitted_values + residuals from `RTCalibrator::fit` and diff
+   cross-impl. If the fitted_values match but the stats computation
+   differs, fix is local. If fitted_values diverge, the LOESS
+   smoother itself has a cross-impl ULP path that wasn't visible
+   under Stage 4's F10 tolerance.
+
+The two fixes are independent. With both, all 6 Stage-6-planning
+dumps (including refit) become bit-identical.
+
+**PR readiness:** Multi-charge consensus is fully bit-identical
+end-to-end. Cross-run reconciliation is 99.999% bit-identical (one
+borderline peptide). The osprey side has one logically clean PR
+(the serde_json parser fix + Stage 6 planning dumps); the pwiz side
+has the matching reconciliation port + dumps. Worth opening as a
+companion-PR pair once Astral 3-file is also verified, even with
+the 1-row residual diff documented as a follow-up.
+
 ### Session 5c (2026-04-25 late) — First-pass compaction + multicharge bit-parity
 
 Closed the second highest-leverage gap from Session 5b. pwiz commit
