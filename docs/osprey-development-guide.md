@@ -22,6 +22,54 @@ in `ai/WORKFLOW.md`.
 Workspace manifest: `Cargo.toml` at the repo root lists all seven
 as workspace members.
 
+## OspreySharp project layering
+
+The C# port at `pwiz_tools/OspreySharp/` mirrors the Rust crate split
+with seven `.csproj`s:
+
+| Project | Role |
+|---|---|
+| `OspreySharp.Core` | Data types, configs, enums, env-var wrapper (`OspreyEnvironment`). **Bottom of the dependency graph -- everything else depends on Core.** |
+| `OspreySharp.IO` | Library loaders, parquet readers/writers, blib writer |
+| `OspreySharp.ML` | Machine learning (SVM, PEP, matrix) |
+| `OspreySharp.Chromatography` | RT calibration (`RTCalibrator`), peak detection |
+| `OspreySharp.Scoring` | XCorr, cosine, batch scoring |
+| `OspreySharp.FDR` | Percolator, protein FDR, reconciliation |
+| `OspreySharp` (main) | Pipeline orchestration, CLI, diagnostics |
+
+### Sharing rule: push down to Core
+
+When a class defined in one component is needed by another, **push it
+down into `OspreySharp.Core`**. Don't reference across siblings (cycles
+are impossible on Core's level; everywhere else, cross-references either
+fail to compile or invite hidden coupling), and don't duplicate the
+logic (DRY -- see `ai/CRITICAL-RULES.md`).
+
+The default move when a new cross-component need surfaces is "move the
+existing class down to Core" (one file move + namespace change + caller
+using-statement updates), not "create a new project". Reserve a new
+project (e.g. a hypothetical `OspreySharp.Util`) for when multiple
+shared utilities accumulate enough to justify the project boilerplate.
+
+### No direct env-var reads in business code
+
+Production code MUST NOT call `System.Environment.GetEnvironmentVariable`
+inline. Env-var-derived settings live in dedicated wrapper classes:
+
+- `OspreyEnvironment` (in `OspreySharp.Core`) for production / throttling
+  / algorithm-variant flags read by the pipeline.
+- `OspreyDiagnostics` (in `OspreySharp` main) for cross-impl bisection
+  dump flags.
+
+Both expose env vars as `static readonly` fields read once at process
+start, so call sites stay clean and the env-var contract is documented
+in one place. The same Rust convention applies in `osprey-core`'s
+`diagnostics` module (`is_dump_enabled`, `exit_if_only`).
+
+When a new env var is needed in a project that the wrapper class doesn't
+yet live in, push the wrapper down to Core first (see "Sharing rule"
+above), then add the new field.
+
 ## Repositories
 
 | Path | Remote | Purpose |
