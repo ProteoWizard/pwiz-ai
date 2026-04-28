@@ -6,13 +6,23 @@
 
 ## Branch Information
 
-- **pwiz branch**: `Skyline/work/20260423_osprey_sharp_stage6` (off master at `edc5e0251`, pushed through 5d session at `29e944a10`; Session 6 work uncommitted)
-- **osprey branch**: `feature/stage6-planning-diagnostics` (last pushed at `b7904d9`, Session 6 work uncommitted)
+- **pwiz integration**: `Skyline/work/20260423_osprey_sharp_stage6` (pushed through Session 6 at `068700918`)
+- **pwiz PR branches**: `-diagnostics` at `408cb3fba` (#4167); `-fixes` at `f6ff1a0ca` with the inspection-cleanup commit (#4168)
+- **osprey integration**: `feature/stage6-planning-diagnostics` (pushed through Session 6 at `a0051d0`)
+- **osprey PR branches**: `-dumps` at `deebbdc` (#19); `-refit-classical-robust` at `d27a91d` (#20)
 - **Base**: `master` (pwiz) / `main` (maccoss/osprey)
 - **Created**: 2026-04-23
-- **Status**: Cross-run reconciliation closed (Session 6, 2026-04-27). Ready for 4-PR split; see "PR split plan" in progress log.
+- **Status**: Cross-run reconciliation closed (Session 6, 2026-04-27). 4 PRs open (see "PR list" below).
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
-- **PR**: (pending — see PR split plan)
+
+### PR list
+
+- pwiz #4167 (diagnostics): https://github.com/ProteoWizard/pwiz/pull/4167
+- pwiz #4168 (fixes): https://github.com/ProteoWizard/pwiz/pull/4168
+- osprey #19 (diagnostics): https://github.com/maccoss/osprey/pull/19
+- osprey #20 (refit fix): https://github.com/maccoss/osprey/pull/20
+
+Each PR carries the prior session's still-unmerged commits (13 prior on pwiz, 3 prior on osprey) plus the new Session 6 work; bundling was intentional. After the diagnostics PRs (#4167, #19) squash-merge, the fix PRs (#4168, #20) need to be rebased onto post-merge master/main to drop the now-duplicated commits.
 
 ## Scope
 
