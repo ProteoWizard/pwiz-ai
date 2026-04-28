@@ -211,4 +211,15 @@ Once Priorities 1-3 are byte-identical on both datasets:
 
 ## Progress log
 
-(empty — sprint starts when picked up)
+### Session 0 (2026-04-28) — Sprint scaffolding
+
+- Branch `Skyline/work/20260428_osprey_sharp_stage6` created in
+  `C:\proj\pwiz` off master at `40c73cf1f` (the merge commit for
+  pwiz #4169) and pushed to origin.
+- Prior sprint TODO moved to `ai/todos/completed/`. Worktree
+  `C:\proj\pwiz-work1` is now idle (its branch is merged).
+- This sprint's TODO created with 7-priority plan and full file
+  inventory. No code committed yet.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260428_osprey_sharp_stage6.md` before starting work.
