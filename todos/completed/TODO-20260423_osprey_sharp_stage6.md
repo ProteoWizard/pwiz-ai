@@ -6,23 +6,24 @@
 
 ## Branch Information
 
-- **pwiz integration**: `Skyline/work/20260423_osprey_sharp_stage6` (pushed through Session 6 at `068700918`)
-- **pwiz PR branches**: `-diagnostics` at `408cb3fba` (#4167); `-fixes` at `f6ff1a0ca` with the inspection-cleanup commit (#4168)
-- **osprey integration**: `feature/stage6-planning-diagnostics` (pushed through Session 6 at `a0051d0`)
-- **osprey PR branches**: `-dumps` at `deebbdc` (#19); `-refit-classical-robust` at `d27a91d` (#20)
+- **pwiz**: `Skyline/work/20260423_osprey_sharp_stage6` -> merged to master via #4169 on 2026-04-28.
+- **osprey**: PR #19 (`feature/stage6-planning-diagnostics-dumps`) merged to main on 2026-04-28. PR #21 (`feature/stage6-fixes`) merged to main on 2026-04-28. PR #22 (`feature/stage6-copilot-followups`) opened 2026-04-28 with the post-merge Copilot review fixes.
 - **Base**: `master` (pwiz) / `main` (maccoss/osprey)
 - **Created**: 2026-04-23
-- **Status**: Cross-run reconciliation closed (Session 6, 2026-04-27). 4 PRs open (see "PR list" below).
+- **Status**: COMPLETE — all PRs merged or queued for merge. Cross-run reconciliation byte-identical with Rust on Stellar + Astral 3-file. Continuation of Stage 6 work tracked in `TODO-20260428_osprey_sharp_stage6.md` (Second-pass re-score box + close-out items).
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
 
-### PR list
+### PR list (final)
 
-- pwiz #4167 (diagnostics): https://github.com/ProteoWizard/pwiz/pull/4167
-- pwiz #4168 (fixes): https://github.com/ProteoWizard/pwiz/pull/4168
-- osprey #19 (diagnostics): https://github.com/maccoss/osprey/pull/19
-- osprey #20 (refit fix): https://github.com/maccoss/osprey/pull/20
+- ProteoWizard/pwiz #4169 — merged 2026-04-28. Cross-run reconciliation byte parity with Rust. Three Copilot review items deferred to next pwiz PR (see continuation TODO).
+- maccoss/osprey #19 — merged 2026-04-28. Diagnostic dumps for Stage 6 cross-impl bisection (`OSPREY_DUMP_PROTEIN_FDR`, `_LOESS_FIT`, plus inv_predict tiebreak).
+- maccoss/osprey #21 — merged 2026-04-28. Three production fixes: f64::from_str parser, reconciliation_enabled gate, refit env-var honor.
+- maccoss/osprey #22 — opened 2026-04-28. Post-merge Copilot follow-ups (comment fix + DRY type alias + borderline-f64 regression test).
 
-Each PR carries the prior session's still-unmerged commits (13 prior on pwiz, 3 prior on osprey) plus the new Session 6 work; bundling was intentional. After the diagnostics PRs (#4167, #19) squash-merge, the fix PRs (#4168, #20) need to be rebased onto post-merge master/main to drop the now-duplicated commits.
+Closed (superseded during PR restructure):
+
+- pwiz #4167 / #4168 — split diagnostics-vs-fixes; consolidated into #4169.
+- maccoss/osprey #20 — split-but-bundled fixes; replaced by #21 with a clean diagnostics-vs-fixes line.
 
 ## Scope
 
@@ -394,69 +395,71 @@ ai worktree (master):
    byte parity. "YOU ARE HERE" arrow placement to be decided before that PR.
 2. PR split (see below).
 
-### PR split plan
+### PR plan (final, after Session 6 restructure on 2026-04-27 evening)
 
-Four PRs total, split by concern. Diagnostics-only PRs land first
-(no behavior change, easy review). Fix PRs land paired across pwiz +
-osprey because both sides change algorithm behavior together.
+Three PRs total. Initially split into 4 (diagnostics + fixes per side),
+then consolidated to one PR on the pwiz side (small enough that
+splitting created more cross-PR coordination cost than it saved) plus
+two PRs on the osprey side (cleanly split diagnostics-vs-fixes after
+extracting the bundled parser fix and `reconciliation_enabled` gate
+broadening from the original diagnostics branch into a new fixes
+branch off main).
 
-Suffix convention: `<base-branch>-diagnostics` and `<base-branch>-fixes`.
-Cherry-pick from the integration branches
-(`Skyline/work/20260423_osprey_sharp_stage6` on pwiz,
-`feature/stage6-planning-diagnostics` on osprey) to the suffixed PR
-branches.
-
-**PR 1 — pwiz diagnostics-only:**
-Branch: `Skyline/work/20260423_osprey_sharp_stage6-diagnostics`
-- `OspreyDiagnostics.cs`: `OSPREY_DUMP_PROTEIN_FDR` +
-  `OSPREY_DUMP_LOESS_FIT` flags + dump methods + inv_predict
-  sort tiebreak + inspection cleanups
-- `AnalysisPipeline.cs`: dump call wiring
-- `OspreySharp.FDR/Reconciliation/ConsensusRts.cs`: XML doc inspection
-  cleanup (only)
-
-ai/ companion commit (master):
-- `scripts/OspreySharp/Compare-Stage6-Planning.ps1` -- `-Dump`/`-Clean`/shared
-  workdir + new dump specs
-
-**PR 2 — osprey diagnostics-only:**
-Branch: `feature/stage6-planning-diagnostics-dumps` (off
-`feature/stage6-planning-diagnostics`)
-- `crates/osprey/src/diagnostics.rs`: new
-  `dump_stage6_protein_fdr` + `dump_stage6_loess_fit` + inv_predict
-  sort tiebreak
-- `crates/osprey/src/pipeline.rs`: dump call wiring
-
-**PR 3 — pwiz fixes (paired with PR 4):**
-Branch: `Skyline/work/20260423_osprey_sharp_stage6-fixes`
-- Move `OspreyEnvironment.cs` from `OspreySharp/` to `OspreySharp.Core/`
-- `OspreySharp.FDR/ProteinFdr.cs`: picked-protein port,
-  peptide-q gate fix in `CollectBestPeptideScores`,
-  drop GroupPep / composite helpers / unused using
+**pwiz — single PR off `Skyline/work/20260423_osprey_sharp_stage6`:**
+Carries all OspreySharp work for Cross-run reconciliation closure.
+Earlier `-diagnostics` (#4167) and `-fixes` (#4168) PR branches are
+closed; the integration branch already has the consolidated history.
+Contents include:
+- `OspreyDiagnostics.cs`: new `OSPREY_DUMP_PROTEIN_FDR` and
+  `OSPREY_DUMP_LOESS_FIT` flags + dump methods + inv_predict sort
+  tiebreak + inspection cleanups (`System.IO.File` redundant qualifier,
+  `ConsensusRts.cs` XML doc).
+- `AnalysisPipeline.cs`: dump call wiring at first-pass protein FDR
+  and at refit.
+- `OspreySharp.FDR/ProteinFdr.cs`: picked-protein algorithm port (replaces
+  composite scoring), peptide-q gate fix in `CollectBestPeptideScores`,
+  drop GroupPep / composite helpers / unused `pwiz.OspreySharp.ML` using.
 - `OspreySharp.FDR/Reconciliation/CalibrationRefit.cs`:
-  `ClassicalRobustIterations = OspreyEnvironment.LoessClassicalRobust`
+  `ClassicalRobustIterations = OspreyEnvironment.LoessClassicalRobust`.
 - `OspreySharp.Chromatography/LoessRegression.cs`: `Math.Pow(t,2)` ->
-  `t*t` in bisquare weight
+  `t*t` in bisquare weight.
+- `OspreySharp.Core/OspreyEnvironment.cs`: moved from main project to Core.
 - `pwiz_tools/OspreySharp/Osprey-workflow.html`: Cross-run reconciliation
-  -> `st-done`, description rewrite
+  -> `st-done`.
 
-ai/ companion commit (master):
+ai/ companion commits (master):
+- `scripts/OspreySharp/Compare-Stage6-Planning.ps1` -- `-Dump`/`-Clean`/
+  shared workdir + new dump specs.
 - `docs/osprey-development-guide.md` -- "OspreySharp project layering"
-  section
+  section codifying the push-down-to-Core rule.
 
-**PR 4 — osprey fix (paired with PR 3):**
-Branch: `feature/stage6-refit-classical-robust` (off
-`feature/stage6-planning-diagnostics`)
-- `crates/osprey/src/reconciliation.rs::refit_calibration_with_consensus`
-  reads `OSPREY_LOESS_CLASSICAL_ROBUST` env-var with the same default
-  semantics Stage 4 uses (default on).
+**osprey #19 — diagnostics-only, branch `feature/stage6-planning-diagnostics-dumps`:**
+- `crates/osprey/src/diagnostics.rs`: original Stage 6 planning dumps
+  (consensus / multicharge / refit / calibration / inv_predict) plus
+  new `dump_stage6_protein_fdr` and `dump_stage6_loess_fit`. Inv_predict
+  sort tiebreak (apex_rt + library_rt). Multicharge dump entry_id key.
+- `crates/osprey/src/pipeline.rs`: dump call wiring.
+- `crates/osprey/src/reconciliation.rs`: dump-trace block in
+  `compute_consensus_rts` for `OSPREY_DUMP_INV_PREDICT`.
+
+**osprey #21 — fixes-only, branch `feature/stage6-fixes` (off main directly):**
+- `f64::from_str` for RT calibration JSON to match .NET BCL parser
+  (`Cargo.toml` + `crates/osprey-chromatography/src/calibration/mod.rs`).
+- Broaden Stage 6 `reconciliation_enabled` gate so `--join-only`
+  multi-file invocations driven by `--input-scores` enter Stage 6
+  (`crates/osprey/src/pipeline.rs`).
+- Refit honors `OSPREY_LOESS_CLASSICAL_ROBUST` (default on) so Stage 6
+  refit and Stage 4 calibration agree on the LOESS robustness algorithm
+  (`crates/osprey/src/reconciliation.rs`).
 
 **Merge order:**
-1. PR 1 (pwiz diag) + PR 2 (osprey diag) -- can land independently in
-   either order, both are pure additions
-2. PR 3 (pwiz fix) + PR 4 (osprey fix) -- must land roughly together
-   for the harness to PASS on the post-merge state. PR 4 is a 5-line
-   change so easy to review.
+- pwiz PR can merge independently of either osprey PR.
+- osprey #19 + osprey #21 must merge together for the
+  `Compare-Stage6-Planning.ps1` harness to PASS post-merge: #19 adds the
+  dumps that the harness invokes; #21 has the gate broadening that makes
+  Stage 6 run on `--join-only` (otherwise the dumps don't fire) and the
+  refit + parser fixes that make the dumps byte-identical with the C#
+  side.
 
 ### Known issues / follow-ups
 
