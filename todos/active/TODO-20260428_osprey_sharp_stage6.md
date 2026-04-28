@@ -8,11 +8,11 @@
 
 ## Branch Information
 
-- **pwiz branch**: TBD (create off master at the post-merge head — `40c73cf1f` or later — under `Skyline/work/20260428_osprey_sharp_stage6`)
-- **osprey branch**: TBD (create off main at the post-PR-22 head)
+- **pwiz branch**: `Skyline/work/20260428_osprey_sharp_stage6` (created 2026-04-28 off master at `40c73cf1f`, pushed to origin, zero commits of its own yet). Worktree: `C:\proj\pwiz` (the `pwiz-work1` worktree from the prior sprint is now idle).
+- **osprey branch**: TBD (create off main when this sprint's Rust-side changes start; the post-PR-22 main head is the base)
 - **Base**: `master` (pwiz) / `main` (maccoss/osprey)
 - **Created**: 2026-04-28
-- **Status**: Pending (third Stage 6 box not yet started)
+- **Status**: Pending (third Stage 6 box not yet started; pwiz branch staged, no commits yet)
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
 
 ## Scope
