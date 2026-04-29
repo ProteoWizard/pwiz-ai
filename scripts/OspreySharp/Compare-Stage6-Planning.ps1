@@ -172,7 +172,8 @@ $dumpSpecs = @(
     @{ Name = "consensus";         DumpVar = "OSPREY_DUMP_CONSENSUS";  OnlyVar = "OSPREY_CONSENSUS_ONLY";   FilePrefix = "stage6_consensus" },
     @{ Name = "multicharge";       DumpVar = "OSPREY_DUMP_MULTICHARGE";OnlyVar = "OSPREY_MULTICHARGE_ONLY"; FilePrefix = "stage6_multicharge" },
     @{ Name = "loess_fit";         DumpVar = "OSPREY_DUMP_LOESS_FIT";  OnlyVar = "OSPREY_LOESS_FIT_ONLY";   FilePrefix = "stage6_loess_fit" },
-    @{ Name = "refit";             DumpVar = "OSPREY_DUMP_REFIT";      OnlyVar = "OSPREY_REFIT_ONLY";       FilePrefix = "stage6_refit" }
+    @{ Name = "refit";             DumpVar = "OSPREY_DUMP_REFIT";      OnlyVar = "OSPREY_REFIT_ONLY";       FilePrefix = "stage6_refit" },
+    @{ Name = "reconciliation";    DumpVar = "OSPREY_DUMP_RECONCILIATION"; OnlyVar = "OSPREY_RECONCILIATION_ONLY"; FilePrefix = "stage6_reconciliation" }
 )
 
 function Invoke-Stage6Dump {
