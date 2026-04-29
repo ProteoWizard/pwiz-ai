@@ -308,7 +308,18 @@ class LabKeySession:
             with self.opener.open(request, timeout=30) as response:
                 return response.status, json.loads(response.read().decode())
         except urllib.error.HTTPError as e:
-            return e.code, {"error": e.read().decode()[:500]}
+            # If the error body is itself JSON (LabKey's standard error response),
+            # parse and return it so callers can read fields like `exception`
+            # directly. Fall back to wrapping the raw body under `error` for
+            # non-JSON responses.
+            body = e.read().decode()
+            try:
+                parsed = json.loads(body)
+                if isinstance(parsed, dict):
+                    return e.code, parsed
+            except (ValueError, json.JSONDecodeError):
+                pass
+            return e.code, {"error": body[:500]}
 
     def post_form(self, url: str, data: dict, headers: dict = None) -> tuple:
         """Make a POST request with form-encoded body. Returns (status_code, response_text)."""
