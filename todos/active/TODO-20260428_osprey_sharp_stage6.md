@@ -221,5 +221,76 @@ Once Priorities 1-3 are byte-identical on both datasets:
 - This sprint's TODO created with 7-priority plan and full file
   inventory. No code committed yet.
 
+### Session 1 (2026-04-28) — Priority 4 + Priority 6 closed
+
+**Priority 4 (Copilot follow-ups from #4169)** — committed at
+`3bf5acd1f` on `Skyline/work/20260428_osprey_sharp_stage6`:
+
+- `Osprey-workflow.html` Stage 6 paragraph rewritten to describe the
+  post-merge state (8 of 8 planning dumps byte-identical on Stellar,
+  7 of 8 on Astral with one documented 1-ULP gap, second-pass
+  re-score noted as the remaining substage).
+- `AnalysisPipeline.cs` extracted `private const uint BASE_ID_MASK
+  = 0x7FFFFFFFu` near `NUM_PIN_FEATURES`; lines 494/502 now use it.
+  (Used `const` not the PercolatorFdr.cs `static readonly` form
+  since it's a literal — deliberate cleanup, per developer call.)
+- `AnalysisPipeline.cs:277-280` --join-only calibration comment
+  rewritten — fileName already had `.scores` stripped above; the
+  old comment described an obsolete flow.
+
+**Validation of prior sprint claims** — osprey switched from
+`feature/stage6-copilot-followups` to `main` @ `a175311` (PR #22
+still open and untouched). Re-ran `Compare-Stage6-Planning.ps1`
+on both datasets:
+
+- Stellar: 8 of 8 PASS (29:11). All dump pairs byte-identical.
+- Astral: 7 of 8 PASS (45:55). Only `stage5_percolator` failed,
+  with exactly the documented Priority 6 shape: 168 rows in file 49
+  + 55 + 60 (fairly evenly distributed across all three files,
+  not file-49-specific as the prior TODO suggested), 1-ULP gap in
+  `experiment_precursor_q` at q approximately 0.0977.
+
+**Priority 6 closed (formatter ambiguity, not a real divergence)**
+— committed at `7dd43c2` on `pwiz-ai`:
+
+Bisection added a temporary `OSPREY_DEBUG_EXP_PREC=1`-gated dump on
+both Rust and C# sides at three layers — post-CompeteAll winners,
+post-`compute_conservative_qvalues` q-array, and per-FdrEntry
+`experiment_precursor_qvalue` after assignment. All three layers
+proved byte-identical between Rust and C# across all 1.4M+ winners
+and 5M+ entries. Re-parsing the 168 differing stage5_percolator
+cells back to f64 and bit-comparing showed zero real bit
+divergences — every "1-ULP gap" was the same f64 (e.g.,
+`0x3fb9064000000000` = 0.097751617431640625 exactly) for which
+Rust ryu emits `0.09775161743164063` and .NET 8 `R` emits
+`0.09775161743164062`, both valid shortest-roundtrip forms.
+
+Attempted to canonicalize the C# output by trim-to-shortest +
+bump-up-on-tie. The trim worked, but the bump-up regressed
+previously-passing dumps because Rust ryu's tie-break is
+algorithm-driven (sometimes higher, sometimes lower) — no simple
+post-process matches it everywhere. Reverted that attempt.
+
+Final fix: `Compare-Stage6-Planning.ps1` now falls back from the
+SHA-256 byte-equality check to a `Compare-DumpsNumerically` walk
+when bytes differ. For each cell that differs textually, both
+sides are parsed to f64 and bit-compared. PASS if every
+difference is text-only (formatter tie-break); FAIL on any real
+bit divergence. Re-ran Astral after the harness change: 8 of 8
+PASS, with `stage5_percolator` now reporting "168 cell(s) differ
+in text only (bit-equal; ryu/R tie-break)".
+
+Temporary instrumentation reverted on both sides; only the harness
+change is in pwiz-ai. Production Rust and C# are unchanged from
+the P4 baseline.
+
+**Status update on the priority list**:
+
+- Priority 4: done (committed).
+- Priority 6: closed (Astral 8 of 8 via harness, not by source-side
+  fix). Documented in this progress entry; no source change needed.
+- Priority 1, 2, 3, 5, 7: unchanged from the original plan; ready
+  to start Priority 1 next.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260428_osprey_sharp_stage6.md` before starting work.
