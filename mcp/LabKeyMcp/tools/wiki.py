@@ -22,6 +22,7 @@ from .common import (
     get_labkey_session,
     encode_waf_body,
     LabKeySession,
+    _scheme,
     DEFAULT_SERVER,
     DEFAULT_WIKI_CONTAINER,
     WIKI_SCHEMA,
@@ -78,7 +79,7 @@ def _get_wiki_page_metadata(
     # These aren't exposed in the wiki schema but are required for the save API
     encoded_path = quote(container_path, safe="/")
     encoded_name = quote(page_name, safe="")
-    url = f"https://{server}{encoded_path}/wiki-edit.view?name={encoded_name}"
+    url = f"{_scheme()}://{server}{encoded_path}/wiki-edit.view?name={encoded_name}"
 
     request = urllib.request.Request(url)
     request.add_header("Authorization", session.auth_header)
@@ -263,7 +264,7 @@ def register_tools(mcp):
 
             # Step 3: Build the save request
             encoded_path = quote(container_path, safe="/")
-            save_url = f"https://{server}{encoded_path}/wiki-saveWiki.view"
+            save_url = f"{_scheme()}://{server}{encoded_path}/wiki-saveWiki.view"
 
             # Normalize line endings to LF-only
             # LabKey adds its own CR before each LF, so sending CRLF results in CR CR LF
@@ -294,8 +295,8 @@ def register_tools(mcp):
 
             headers = {
                 "X-Requested-With": "XMLHttpRequest",
-                "Origin": f"https://{server}",
-                "Referer": f"https://{server}{container_path}/wiki-edit.view?name={page_name}",
+                "Origin": f"{_scheme()}://{server}",
+                "Referer": f"{_scheme()}://{server}{container_path}/wiki-edit.view?name={page_name}",
             }
 
             logger.info(f"Saving wiki page: {page_name}")
@@ -311,10 +312,15 @@ def register_tools(mcp):
                     f"  old_version: {old_version}\n"
                     f"  new_version: {new_version}\n"
                     f"  title: {page_title}\n"
-                    f"\nView at: https://{server}{container_path}/wiki-page.view?name={page_name}"
+                    f"\nView at: {_scheme()}://{server}{container_path}/wiki-page.view?name={page_name}"
                 )
             else:
-                error_msg = result.get("error", str(result)[:500])
+                # LabKey's standard error response uses `exception`; fall back to
+                # `error` and finally to a truncated dump of the raw response.
+                if isinstance(result, dict):
+                    error_msg = result.get("exception") or result.get("error") or str(result)[:500]
+                else:
+                    error_msg = str(result)[:500]
                 return (
                     f"Wiki update failed with status {status_code}:\n"
                     f"  Response: {error_msg}"
@@ -412,7 +418,7 @@ def register_tools(mcp):
             # Build download URL (encode filename for spaces and special chars)
             login, password = get_netrc_credentials(server)
             encoded_filename = quote(filename, safe="")
-            download_url = f"https://{server}{container_path}/wiki-download.view?entityId={entity_id}&name={encoded_filename}"
+            download_url = f"{_scheme()}://{server}{container_path}/wiki-download.view?entityId={entity_id}&name={encoded_filename}"
 
             # Create authenticated request
             request = urllib.request.Request(download_url)
