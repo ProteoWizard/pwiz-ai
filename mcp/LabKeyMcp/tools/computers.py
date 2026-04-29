@@ -21,7 +21,7 @@ import logging
 from datetime import datetime, date
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 
 import labkey
 
@@ -143,18 +143,30 @@ def _set_computer_active(
 
         # Build URL for setUserActive endpoint
         encoded_path = quote(container_path, safe="/")
-        params = urlencode({"active": str(active).lower(), "userId": user_id})
-        url = f"https://{server}{encoded_path}/testresults-setUserActive.view?{params}"
+        url = f"https://{server}{encoded_path}/testresults-setUserActive.view"
 
-        # POST request (empty body, params in URL)
+        # SetUserActive is a MutatingApiAction. When Content-Type is application/json
+        # (as `post_json` sets), BaseApiAction.populateForm() reads form fields from
+        # the JSON body and ignores URL query params — so userId/active must be in the
+        # body, not the URL.
         logger.info(f"Setting computer active={active} for userId={user_id} in {container_path}")
-        status_code, result = session.post_json(url, {})
+        status_code, result = session.post_json(url, {"userId": user_id, "active": active})
 
-        if status_code == 200:
-            return True, f"Successfully set active={active}"
-        else:
-            error = result.get("error", str(result)[:200])
+        result_dict = result if isinstance(result, dict) else {}
+
+        if status_code != 200:
+            # Framework errors come under `exception` (permission denials, CSRF);
+            # custom actions sometimes use `error`.
+            error = result_dict.get("exception") or result_dict.get("error") or str(result)[:200]
             return False, f"HTTP {status_code}: {error}"
+
+        # 200 doesn't mean success — SetUserActive returns errors in `Message`
+        # (e.g. "User not found id=99"). Only "Success" is success.
+        message = result_dict.get("Message", "")
+        if message != "Success":
+            return False, f"Action returned: {message or '(no message)'}"
+
+        return True, f"Successfully set active={active}"
 
     except Exception as e:
         logger.error(f"Error setting computer active status: {e}", exc_info=True)
