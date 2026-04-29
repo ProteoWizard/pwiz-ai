@@ -138,6 +138,34 @@ currently operates; option (a) is the "right" fix but is bigger
 scope and only matters if production users invoke `--join-only`
 end-to-end (which Skyline integration does not yet do).
 
+### Open question — Stage 1-4 ULP-level divergence surfaced by CWT capture
+
+While wiring the CWT capture (Priority 1.1 foundations), the new
+cross-impl parity test `TestCwtCandidateCrossImplParity` surfaced two
+pre-existing Stage 1-4 divergences that the existing harness masks
+because it loads Rust-written `.scores.parquet` for both impls via
+`--input-scores`:
+
+- **Row count gap, ~0.5%.** Stellar file 20 produces 462,802 FdrEntry
+  stubs from the C# pipeline vs 464,953 from Rust (2,151-row delta).
+  The two pipelines accept slightly different sets of entries through
+  the CWT detection / apex-tolerance gates. `Test-Features.ps1` only
+  compares matched entries (317,842 targets) so this gap stayed
+  invisible.
+- **Value drift, ~2% of both-CWT entries.** Per-CWT-candidate fields
+  (notably `area`) show ULP-level diffs (e.g. entry 4094 candidate 2,
+  area 0x4094a86882c14be0 vs ...be3, a 3-ULP gap). This is the same
+  drift `Test-Features.ps1` already accepts at 1e-6: `peak_area` max
+  diff is 4.4e-9 today, well inside the gate but not bit-identical.
+
+Workflow HTML calls Stage 1-4 "bit-identical" but the actual gate is
+`Test-Features.ps1` at 1e-6 absolute tolerance. The two are not the
+same. Open question: chase `peak_area` to bit-identity (root-cause
+the accumulation order or ref-XIC selection drift), or update the
+workflow prose to say "within 1e-6" and accept the drift. Deferred
+to a future sprint -- Stage 6 reconciliation parity in the harness
+is unaffected because both impls read the same Rust-written parquet.
+
 ### Priority 6 — Address Astral 3-file experiment_precursor_q 1-ULP gap
 
 168 rows in the Astral 3-file `stage5_percolator` dump (file 49,
