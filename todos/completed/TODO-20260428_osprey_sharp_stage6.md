@@ -12,7 +12,7 @@
 - **osprey branch**: TBD (create off main when this sprint's Rust-side changes start; the post-PR-22 main head is the base)
 - **Base**: `master` (pwiz) / `main` (maccoss/osprey)
 - **Created**: 2026-04-28
-- **Status**: Pending (third Stage 6 box not yet started; pwiz branch staged, no commits yet)
+- **Status**: **Completed** — squash-merged 2026-04-29 as pwiz `1c78d32ba` (PR #4173) + osprey `b0435b0`/`c0c8059` (PR #23) + osprey `36efcb8`/`2277f5b` (PR #24)
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
 
 ## Scope
