@@ -155,8 +155,8 @@ def _set_computer_active(
         result_dict = result if isinstance(result, dict) else {}
 
         if status_code != 200:
-            # Framework errors come under `exception` (permission denials, CSRF);
-            # custom actions sometimes use `error`.
+            # LabKey's standard error response uses `exception`; fall back to
+            # `error` and finally to a truncated dump of the raw response.
             error = result_dict.get("exception") or result_dict.get("error") or str(result)[:200]
             return False, f"HTTP {status_code}: {error}"
 
