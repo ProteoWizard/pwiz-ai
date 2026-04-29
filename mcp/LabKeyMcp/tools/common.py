@@ -33,7 +33,7 @@ logger = logging.getLogger("labkey_mcp")
 # local LabKey (e.g. LABKEY_SERVER=localhost:8080, LABKEY_USE_SSL=false)
 # without code changes. Defaults to skyline.ms.
 DEFAULT_SERVER = os.environ.get("LABKEY_SERVER", "skyline.ms")
-USE_SSL = os.environ.get("LABKEY_USE_SSL", "true").lower() != "false"
+USE_SSL = os.environ.get("LABKEY_USE_SSL", "true").strip().lower() != "false"
 
 
 def _scheme() -> str:

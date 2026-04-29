@@ -293,10 +293,11 @@ def register_tools(mcp):
                 "useVisualEditor": False,
             }
 
+            encoded_page_name = quote(page_name, safe="")
             headers = {
                 "X-Requested-With": "XMLHttpRequest",
                 "Origin": f"{_scheme()}://{server}",
-                "Referer": f"{_scheme()}://{server}{container_path}/wiki-edit.view?name={page_name}",
+                "Referer": f"{_scheme()}://{server}{container_path}/wiki-edit.view?name={encoded_page_name}",
             }
 
             logger.info(f"Saving wiki page: {page_name}")
@@ -312,7 +313,7 @@ def register_tools(mcp):
                     f"  old_version: {old_version}\n"
                     f"  new_version: {new_version}\n"
                     f"  title: {page_title}\n"
-                    f"\nView at: {_scheme()}://{server}{container_path}/wiki-page.view?name={page_name}"
+                    f"\nView at: {_scheme()}://{server}{container_path}/wiki-page.view?name={encoded_page_name}"
                 )
             else:
                 # LabKey's standard error response uses `exception`; fall back to
