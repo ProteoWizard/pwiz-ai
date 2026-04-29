@@ -625,6 +625,28 @@ EOF
 | Review gate | Brendan / Nick | Mike (maccoss) |
 | Resource strings | Required for user text | N/A -- `log::info!` and CLI output are plain |
 
+## Glossary
+
+- **CWT** -- Continuous Wavelet Transform. A signal-processing technique
+  for finding peaks in noisy 1-D data by convolving with wavelets
+  (typically Mexican Hat / Ricker) at multiple scales. Osprey uses CWT
+  for chromatographic peak detection: given an extracted ion chromatogram
+  (XIC) -- intensity vs RT for one fragment -- CWT returns a list of peak
+  candidates with start / apex / end indices. The `cwt_consensus_peaks`
+  function in Rust and `CwtPeakDetector.DetectConsensusPeaks` in C# are
+  the entry points; both produce the `CwtCandidate` records that Stage 6
+  reconciliation reads to choose alternate peak boundaries.
+- **ULP** -- Unit in the Last Place. The gap between two adjacent
+  representable f64 values at a given magnitude. Around 0.1, ULP is
+  about 1.4e-17; around 1000, about 1.1e-13. "1-ULP difference" means
+  two doubles' bit patterns differ by exactly 1 (the smallest possible
+  non-zero difference at that precision). The natural unit for measuring
+  cross-impl numeric closeness: 0 ULP = bit-identical, 1 ULP = one
+  rounding step apart, etc. Distinct from the `Test-Features.ps1`
+  absolute-tolerance gate of 1e-6 -- a value can be within 1e-6 yet
+  hundreds of ULPs apart in the high-precision range, or bit-identical
+  yet drift to 1 ULP if a downstream `min` or `max` chooses differently.
+
 ## Critical rules
 
 - **Byte-identical dump preservation** when touching diagnostic
