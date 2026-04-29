@@ -200,3 +200,6 @@ These were surfaced during the 2026-04-28 sprint and deferred:
 - Prior sprint TODO moved to `ai/todos/completed/`.
 - This sprint's TODO created with 3-priority plan and full file
   inventory. No code committed yet.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260429_osprey_sharp_stage6.md` before starting work.
