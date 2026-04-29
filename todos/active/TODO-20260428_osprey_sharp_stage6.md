@@ -38,11 +38,14 @@ re-scoring block (~lines 3400-3700).
 
 1. **Wire `ReconciliationPlanner.Plan`** into `AnalysisPipeline.Run`
    right after `CalibrationRefit.Refit` produces the refined
-   per-file calibrations. Plan returns a per-(file, entry)
-   `ReconcileAction` (Keep / UseCwtPeak / ForcedIntegration). The
-   Cross-run reconciliation box description in the workflow HTML
-   says "ReconciliationPlanner deferred to second-pass re-score
-   sprint" — that note disappears when this lands.
+   per-file calibrations. **DONE in Session 2** (`pwiz 95b044f66`).
+   Loads CWT candidates from each `.scores.parquet` via the new
+   `LoadCwtCandidatesFromParquet`. Cross-impl byte parity proven by
+   the new `OSPREY_DUMP_RECONCILIATION` dump (Stellar 172,548 rows
+   match between C# and Rust). The Cross-run reconciliation box
+   description in the workflow HTML says "ReconciliationPlanner
+   deferred to second-pass re-score sprint" — update that note when
+   the workflow HTML close-out (Priority 7) lands.
 2. **Per-file re-scoring loop**. For each file, build a
    `ScoringContext.BoundaryOverrides` map from the planner output
    (entry_id -> (apex, start, end)) and re-invoke the search-engine
@@ -70,11 +73,13 @@ Per the umbrella plan, mirror the Stage 5 dump idiom:
 
 - `OSPREY_DUMP_RECONCILIATION` / `_ONLY` — per-(file, entry)
   `ReconcileAction` dump (action variant + apex/start/end/half_width
-  fields). Bisects ReconciliationPlanner output cross-impl.
+  fields). **DONE in Session 2** (`osprey 36efcb8` + `pwiz 95b044f66`).
+  Stellar full-harness PASS at 172,548 rows.
 - `OSPREY_DUMP_REFINED_FDR` / `_ONLY` — end-of-Stage-6 Percolator
   dump with the same six-column schema as the Stage 5 percolator
   dump. Lets `Compare-Stage6-Planning.ps1` (or a Stage-6-end variant)
-  validate full-Stage-6 parity.
+  validate full-Stage-6 parity. **STILL PENDING** — needs the
+  second-pass FDR (Priority 1.4) to land first.
 
 Both numeric formats use `Diagnostics.FormatF64Roundtrip` (C#) /
 `format_f64_roundtrip` (Rust).
@@ -137,6 +142,46 @@ Recommended start: option (b) is faster and matches how the harness
 currently operates; option (a) is the "right" fix but is bigger
 scope and only matters if production users invoke `--join-only`
 end-to-end (which Skyline integration does not yet do).
+
+### Session 2 (2026-04-28..29) — P1.1 + Priority 2 done
+
+**P1.1 (ReconciliationPlanner.Plan wired) + Priority 2 (cross-impl
+reconciliation dump) shipped end-to-end with byte parity proven on
+Stellar.**
+
+Five commits across three repos:
+
+1. `osprey b0435b0` — `library_identity_hash`: drop directory portion,
+   keep file name only. The full path was brittle (HPC node paths, drive
+   letter case, slash direction); file_name + size + mtime is the
+   right identity for cross-impl handoff. Mirrors the
+   `reconciliation_parameter_hash` precedent.
+2. `pwiz 298a17b93` — `LibraryIdentityHash`: paired drop-directory
+   change so C# and Rust produce bit-identical hashes for the same
+   library file. Side benefit: existing parquets can now flow either
+   direction through `--no-join` / `--join-only`.
+3. `osprey 36efcb8` — `dump_stage6_reconciliation` +
+   `OSPREY_DUMP_RECONCILIATION` / `_ONLY` env-var pair, wired into
+   `pipeline.rs` after `plan_reconciliation`. Emits non-Keep actions
+   sorted by (file_name, entry_id).
+4. `pwiz 95b044f66` — Stage 6 reconciliation planning + cross-impl dump.
+   `AnalysisPipeline` calls `ReconciliationPlanner.Plan` after
+   `CalibrationRefit.Refit`, loading per-file CWT candidates from each
+   `.scores.parquet` via the new `LoadCwtCandidatesFromParquet`. New
+   `OspreyDiagnostics.WriteStage6ReconciliationDump` mirrors the Rust
+   format. Per-file rescore + gap-fill + second-pass FDR still pending.
+5. `pwiz-ai TBD` (this commit) — `Compare-Stage6-Planning.ps1` adds the
+   reconciliation pair to `$dumpSpecs`. Stellar full re-stage (9 dumps)
+   PASS, with reconciliation dump byte-identical at 172,548 rows.
+
+**Foundations landed earlier in this session** (committed before the
+five above):
+
+- `pwiz 56c9dcede` — `CwtCandidate` codec + `Parquet` round-trip
+  (encoder + decoder + round-trip + Rust-parquet decode tests).
+- `pwiz 191e56af7` — `ScoreCandidate` captures top-N CWT candidates;
+  populates `FdrEntry.CwtCandidates` (with documented 1e-6 tolerance
+  on cross-impl `area` field via Stage 1-4 divergence note below).
 
 ### Open question — Stage 1-4 ULP-level divergence surfaced by CWT capture
 
