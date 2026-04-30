@@ -6,7 +6,7 @@
 - **Created**: 2026-04-30
 - **Status**: In Progress
 - **GitHub Issue**: [#4176](https://github.com/ProteoWizard/pwiz/issues/4176)
-- **PR**: (pending)
+- **PR**: [#4177](https://github.com/ProteoWizard/pwiz/pull/4177)
 - **Working Repo**: `C:\Dev\bugfix`
 
 ## Objective
@@ -31,16 +31,16 @@ Confirmed by fetching the live `get-pip.py` and reading the embedded version com
 - [x] Create this TODO
 
 ### Implementation
-- [ ] Change `BOOTSTRAP_PYPA_URL` to `"https://bootstrap.pypa.io/pip/"` in `PythonInstaller.cs:45`
-- [ ] Add a `PythonMajorMinor` helper (or inline) that returns `"3.9"` for `PythonVersion = "3.9.13"`
-- [ ] Update `GetPipScriptDownloadUri` (line 154) to compose `{BOOTSTRAP_PYPA_URL}{PythonMajorMinor}/{GET_PIP_SCRIPT_FILE_NAME}`
-- [ ] Surface captured stderr/stdout from `RunGetPipScriptTask.DoAction` (line 1077-1078) in the thrown `ToolExecutionException` so future regressions in this code path don't require a manual repro to diagnose
-- [ ] Build Skyline.sln Release|x64
+- [x] Change `BOOTSTRAP_PYPA_URL` to `"https://bootstrap.pypa.io/pip/"` in `PythonInstaller.cs:45`
+- [x] Add `PythonMajorMinorVersion` helper that returns `"3.9"` for `PythonVersion = "3.9.13"`
+- [x] Update `GetPipScriptDownloadUri` (line 154) to compose `{BOOTSTRAP_PYPA_URL}{PythonMajorMinorVersion}/{GET_PIP_SCRIPT_FILE_NAME}`
+- [ ] **Deferred to follow-up issue**: surface captured stderr/stdout from `RunGetPipScriptTask.DoAction` in the thrown exception. Requires a new resource string + `.Designer.cs` update; out of scope for this bug fix.
+- [x] Build Skyline.sln Release|x64
 
 ### Validation
-- [ ] Run `TestAlphaPeptDeepBuildLibrary` locally via Run-Tests.ps1
+- [x] Run `TestAlphaPeptDeepBuildLibrary` locally via Run-Tests.ps1 (passed, 155.6s)
 - [ ] Code inspection pass
-- [ ] Open PR, link issue
+- [x] Open PR, link issue (PR #4177)
 
 ## Key Files
 
