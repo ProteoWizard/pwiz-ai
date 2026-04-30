@@ -152,7 +152,7 @@ $csharpFeatures = Join-Path $testDir "$fileStem.cs_features.tsv"
 
 # Both tools write to "{stem}.scores.parquet" by default -- the C# run would
 # otherwise overwrite the Rust parquet. Rotate each run's output to a distinct
-# suffix so both are preserved for downstream --join-only smoke tests.
+# suffix so both are preserved for downstream --join-at-pass=1 smoke tests.
 $defaultParquet = Join-Path $testDir "$fileStem.scores.parquet"
 $rustParquet    = Join-Path $testDir "$fileStem.scores.rust.parquet"
 $csParquet      = Join-Path $testDir "$fileStem.scores.cs.parquet"

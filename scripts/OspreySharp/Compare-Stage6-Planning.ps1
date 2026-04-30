@@ -3,7 +3,7 @@
     Cross-impl Stage 6 planning-checkpoint byte-parity gate.
 
 .DESCRIPTION
-    Runs both Rust osprey and OspreySharp in --join-only mode against all
+    Runs both Rust osprey and OspreySharp in --join-at-pass=1 mode against all
     pre-generated .scores.rust.parquet files in a dataset, with each of
     three Stage 6 planning dump env-vars set in turn:
 
@@ -196,7 +196,7 @@ function Invoke-Stage6Dump {
     $sw = [Diagnostics.Stopwatch]::StartNew()
     Push-Location $WorkDir
     try {
-        & $Binary --join-only @inputArgs -l $Library --output $outBlib `
+        & $Binary --join-at-pass=1 @inputArgs -l $Library --output $outBlib `
             --resolution $Resolution --protein-fdr 0.01 2>&1 | Out-Null
         $exit = $LASTEXITCODE
     } finally { Pop-Location }

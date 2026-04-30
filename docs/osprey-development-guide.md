@@ -230,11 +230,20 @@ Since the 2026-04-19 HPC split sprint, both tools expose CLI flags
 that break the pipeline at Stage 4 / Stage 5 so workers can score in
 parallel and a merge node runs FDR + .blib output:
 
+The pipeline alternates per-file fan-out phases (Stages 1-4 scoring,
+Stage 6 per-file rescore) with join phases (Stage 5 first-pass FDR
++ reconciliation planning, Stages 7-8 second-pass Percolator +
+protein FDR + .blib). The CLI exposes two orthogonal axes: an
+**entry-point selector** (`--join-at-pass=<N>`) and a **phase-shape
+modifier** (`--no-join` runs only the per-file fan-out from the
+entry; `--join-only` runs only the join from the entry).
+
 | Flag | Behavior |
 |---|---|
-| `--no-join` | Run Stages 1-4 on the given `--input` mzML(s). Write per-file `.scores.parquet`. **Do NOT run Stage 5 FDR or write a blib.** Replaces the retired `OSPREY_EXIT_AFTER_SCORING` env var. |
-| `--join-only` | Skip Stages 1-4. Read Parquet inputs via `--input-scores`, run Stage 5+ (Percolator FDR, reconciliation, protein FDR), write blib at `--output`. Mutually exclusive with `--no-join`/`--input`. |
-| `--input-scores <PATH...>` | One or more `.scores.parquet` files (or a directory; non-recursive glob). Required when `--join-only` is set. |
+| `--no-join` (modifier) | Run only the per-file fan-out from the entry point. With `-i ...` (Stage 1 entry), runs Stages 1-4 — per-file `.scores.parquet` written next to each input mzML, no FDR, no blib. With `--join-at-pass=<N>`, runs only the per-file phase that follows that join (PR 2 wires this for `--join-at-pass=1`). |
+| `--join-only` (modifier) | Run only the join phase at the entry point, stopping before the per-file fan-out that follows. Used when an HPC coordinator wants to ship plan files to N worker nodes. Requires `--join-at-pass=<N>`; not valid alone. (PR 2 wires this for `--join-at-pass=1`.) |
+| `--join-at-pass=<N>` | Enter the pipeline at a specific join checkpoint, consuming per-file Parquet score files via `--input-scores`. `1` = post-Stage-4 (raw scoring) → run Stages 5-8. `2` = post-Stage-6 (reconciled scoring) → run Stages 7-8. Mutually exclusive with `--input`. |
+| `--input-scores <PATH...>` | One or more `.scores.parquet` files (or a directory; non-recursive glob). Required when `--join-at-pass` is set. |
 | `--parquet-compression {zstd,snappy}` | Write the scores Parquet with the requested codec. Rust default is `zstd`; use `snappy` when the output must be read back by OspreySharp (Parquet.Net 3.x on .NET Framework supports Snappy only). Production default stays Zstd; Snappy is a cross-impl interop affordance. |
 
 Parquet interop gotchas:
@@ -324,8 +333,8 @@ one matches:
 5. **Main-search XICs** (`OSPREY_DIAG_SEARCH_ENTRY_IDS=id1,id2,...`)
 6. **21 PIN features** (via `Test-Features.ps1` — Stellar + Astral must pass at ULP)
 
-**Stage 5 (Percolator FDR) via `--join-only` on a canonical Rust
-Parquet input** — the Stage 5 bisection uses the `OSPREY_DUMP_*`
+**Stage 5 (Percolator FDR) via `--join-at-pass=1` on a canonical
+Rust Parquet input** — the Stage 5 bisection uses the `OSPREY_DUMP_*`
 dumps added by PR #18 (osprey) / the OspreySharp mirror PR:
 
 7. **Feature standardizer** (`OSPREY_DUMP_STANDARDIZER=1 + OSPREY_STANDARDIZER_ONLY=1`)
@@ -571,6 +580,43 @@ time stays small (Astral ~15 min -> ~2 min with `-MaxWindows 2`).
 
 Rust equivalent: `cargo flamegraph` or `perf record / perf report`
 with `OSPREY_MAX_SCORING_WINDOWS` equally applicable.
+
+## Validation before pushing to a PR
+
+**Cross-impl parity tests are not gated by CI on either side.** The
+`maccoss/osprey` GitHub Actions workflow runs only the basic unit
+tests (`cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`).
+ProteoWizard/pwiz has **no CI applied at all** for OspreySharp.
+
+The cross-impl harnesses (`Test-Features.ps1`,
+`Compare-Stage5-AllFiles.ps1`, `Compare-Stage6-Planning.ps1`) are
+the only thing that catches divergences between Rust and OspreySharp,
+and they run only when a developer (or Claude) invokes them locally.
+Treat them as *required* gates — not optional checks.
+
+**Before opening or updating a PR**, run the parity harness for the
+stage(s) the change touches. For Stage 4 / scoring changes, run
+`Test-Features.ps1` on both Stellar and Astral. For Stage 5 / FDR
+changes, add `Compare-Stage5-AllFiles.ps1`. For Stage 6 / consensus
++ reconciliation changes, add `Compare-Stage6-Planning.ps1`.
+
+**Be especially careful with late changes** — every commit pushed
+into an existing PR (e.g. addressing review feedback) needs the
+appropriate harness re-run before merge. A real incident:
+PR #4173 (OspreySharp Stage 6 planner) passed 9-of-9 dumps before
+the Copilot review, then a "minor" follow-up commit (`f964cc45e`)
+added a `cwtRows.Count == kvp.Value.Count` defensive guard from
+Copilot's *first* of two suggested checks. The first was wrong
+(post-compaction stubs are smaller than the parquet's raw Stage-4
+rows by design); the second (`>= max ParquetIndex+1`) was correct.
+Without re-running the Stage 6 harness on the post-review commit,
+the regression slipped through merge and only surfaced when the
+next sprint tried to start from a green baseline. Lesson: re-run
+the harness after every push to an open PR, not just on the first
+push.
+
+The `Compare-*` harnesses are the project's substitute for CI; the
+discipline that they get re-run is on us.
 
 ## Commit and PR conventions
 

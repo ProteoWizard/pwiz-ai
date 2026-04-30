@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     For each file in $ds.AllFiles, runs both Rust osprey and OspreySharp
-    in --join-only mode against the pre-generated .scores.rust.parquet
+    in --join-at-pass=1 mode against the pre-generated .scores.rust.parquet
     with all four Stage 5 dump env vars set:
 
         OSPREY_DUMP_STANDARDIZER = 1
@@ -102,7 +102,7 @@ function Invoke-StageFiveDump {
     $sw = [Diagnostics.Stopwatch]::StartNew()
     Push-Location $WorkDir
     try {
-        & $Binary --join-only --input-scores $Parquet -l $Library --output $outBlib `
+        & $Binary --join-at-pass=1 --input-scores $Parquet -l $Library --output $outBlib `
             --resolution $Resolution --protein-fdr 0.01 2>&1 | Out-Null
         $exit = $LASTEXITCODE
     } finally { Pop-Location }
