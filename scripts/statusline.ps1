@@ -47,8 +47,14 @@
     - Set by: StatusMcp's set_active_project tool
     - Falls back to workspace.project_dir if not set
 
-    Context calculation: Claude Code reserves ~15% for system overhead,
-    so "% left" shows remaining usable context (matches Claude's warnings).
+    Context calculation: "% left" models when Claude Code will begin
+    its auto-compact warning. Calibrated for the 1M-context tier
+    (the default for the MacCoss / Skyline team on Max 20x) -- the
+    usable headroom hits 0% around ~97% consumed, matching Claude's
+    warning point. On the smaller 200K tier the threshold is looser
+    than Claude's actual warning, so rely on Claude's own warnings
+    when running on a 200K plan; the statusline's "% left" remains
+    a useful monotone indicator.
 #>
 
 $input_json = $input | Out-String | ConvertFrom-Json
@@ -88,15 +94,23 @@ try {
     Pop-Location
 } catch { }
 
-# Calculate context remaining (matching Claude Code's warnings)
-# Claude Code reserves ~15% for system overhead, so usable max is ~85%
+# Calculate context remaining (modelling Claude Code's auto-compact
+# warning threshold). Calibrated for the 1M-context tier that the
+# MacCoss / Skyline team uses on Max 20x plans — Claude Code rides
+# close to the full window before warning, so the statusline's "0%
+# left" lines up with actual warning time around ~97% consumed.
+#
+# On the 200K tier (where the overhead fraction is larger) this
+# threshold is looser than the actual warning point; the statusline
+# will keep showing a couple of percent left while Claude itself
+# starts warning. That's fine — Claude's own warning is authoritative.
 $ctx = ""
 if ($input_json.context_window.current_usage) {
     $usage = $input_json.context_window.current_usage
     $current = $usage.input_tokens + $usage.cache_creation_input_tokens + $usage.cache_read_input_tokens
     $size = $input_json.context_window.context_window_size
     if ($size -gt 0) {
-        $usable_max_pct = 85
+        $usable_max_pct = 97
         $used_pct = ($current * 100) / $size
         $left = [math]::Max(0, [math]::Floor($usable_max_pct - $used_pct))
         $ctx = " | $left% left"

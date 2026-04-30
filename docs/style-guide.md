@@ -87,6 +87,41 @@ using System.Collections.Generic;
 - AI tools may sort alphabetically by default, which conflicts with this convention
 - Consistent ordering makes code reviews easier and matches developer expectations
 
+## Array literal type inference
+
+Prefer `new[] { ... }` over `new T[] { ... }` when the element type can be
+inferred from the initializer. ReSharper flags the explicit form as
+`RedundantExplicitArrayCreation`.
+
+```csharp
+// Avoid - redundant explicit element type
+var mzs = new double[] { 500.25, 600.37, 700.48 };
+var ids = new int[] { 1, 2, 3 };
+var scores = new float[] { 0.9f, 0.8f, 0.7f };
+
+// Prefer - inferred element type
+var mzs = new[] { 500.25, 600.37, 700.48 };
+var ids = new[] { 1, 2, 3 };
+var scores = new[] { 0.9f, 0.8f, 0.7f };
+```
+
+Keep the explicit type only when it is load-bearing:
+- Mixed numeric literals that must widen:
+  `new double[] { 1, 2.5 }` forces `1` to `double`. `new[] { 1, 2.5 }` is
+  also `double[]` because the compiler picks the best common type, but the
+  explicit form documents the intent and survives later edits that remove
+  the `2.5` literal.
+- Element type must differ from the inferred type (covariance, interface):
+  `new IFoo[] { concreteFoo }`.
+- Empty literals: use `Array.Empty<int>()` (allocates nothing) or
+  `new int[0]`.
+
+**Why this matters for tests**: expected-value arrays
+(`new double[] { ... }`) are especially common in unit tests, and the
+redundant form spreads quickly across a test suite if not caught early.
+Leave ReSharper's `RedundantExplicitArrayCreation` inspection at
+warning severity so the pattern is rejected at review time.
+
 ## General guidelines
 - Match surrounding file style (indentation, spacing, line breaks).
 - Prefer focused edits; do not reformat unrelated code.

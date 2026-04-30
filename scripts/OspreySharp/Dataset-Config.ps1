@@ -8,21 +8,42 @@
 
     Supported datasets: Stellar, Astral
 
+    The test data root is resolved in this order:
+      1. -TestBaseDir parameter (explicit, highest priority)
+      2. $env:OSPREY_TEST_BASE_DIR (persistent per-machine config)
+      3. "D:\test\osprey-runs" (hardcoded fallback)
+
 .EXAMPLE
     . "$PSScriptRoot\Dataset-Config.ps1"
     $ds = Get-DatasetConfig "Stellar"
-    $ds.TestDir    # D:\test\osprey-runs\stellar
+    $ds.TestDir    # D:\test\osprey-runs\stellar (or override)
     $ds.Resolution # unit
+
+.EXAMPLE
+    $ds = Get-DatasetConfig "Stellar" -TestBaseDir "C:\test\osprey-runs"
+    $ds.TestDir    # C:\test\osprey-runs\stellar
 #>
 
 function Get-DatasetConfig {
     param(
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory=$true, Position=0)]
         [ValidateSet("Stellar", "Astral")]
-        [string]$Dataset
+        [string]$Dataset,
+
+        [Parameter(Mandatory=$false)]
+        [string]$TestBaseDir = $null
     )
 
-    $baseDir = "D:\test\osprey-runs"
+    # Precedence: explicit -TestBaseDir, then env var, then hardcoded default.
+    if ([string]::IsNullOrEmpty($TestBaseDir)) {
+        if ($env:OSPREY_TEST_BASE_DIR) {
+            $baseDir = $env:OSPREY_TEST_BASE_DIR
+        } else {
+            $baseDir = "D:\test\osprey-runs"
+        }
+    } else {
+        $baseDir = $TestBaseDir
+    }
 
     switch ($Dataset) {
         "Stellar" {

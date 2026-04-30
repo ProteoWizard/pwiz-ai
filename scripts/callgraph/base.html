@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mandelbrot Call Graph Evolution</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #fff;
+      color: #333;
+      overflow: hidden;
+    }
+    #container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      height: 100dvh; /* Dynamic viewport height for mobile */
+    }
+    #header {
+      padding: 12px 20px;
+      background: #f5f5f5;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    h1 {
+      font-size: 18px;
+      font-weight: 500;
+    }
+    #stats {
+      font-size: 14px;
+      color: #666;
+    }
+    #graph-container {
+      flex: 1;
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+    }
+    svg {
+      width: 100%;
+      height: 100%;
+    }
+    .node {
+      cursor: pointer;
+    }
+    .node circle {
+      stroke: #333;
+      stroke-width: 1.5px;
+      transition: r 0.3s ease;
+    }
+    .node.class circle {
+      stroke-width: 2.5px;
+    }
+    .node.mixin circle {
+      stroke-width: 2.5px;
+      stroke-dasharray: 3,3;
+    }
+    .node.method circle {
+      stroke-dasharray: 2,2;
+    }
+    .node text {
+      font-size: 9px;
+      fill: #333;
+      pointer-events: none;
+    }
+    .node.new circle {
+      animation: pulse 0.5s ease-out;
+    }
+    @keyframes pulse {
+      0% { r: 0; opacity: 0; }
+      50% { opacity: 1; }
+      100% { r: 6; opacity: 1; }
+    }
+    .link {
+      stroke: #666;
+      stroke-opacity: 0.5;
+      stroke-width: 1.5px;
+      fill: none;
+    }
+    .link.extends {
+      stroke: #e94560;
+      stroke-width: 2px;
+      stroke-opacity: 0.8;
+    }
+    .link.contains {
+      stroke: #555;
+      stroke-width: 1.2px;
+      stroke-opacity: 0.65;
+      stroke-dasharray: 2,4;
+    }
+    .link.samescript {
+      stroke: none;
+      stroke-width: 0;
+      stroke-opacity: 0;
+    }
+    .link.mixin-base {
+      stroke: #e94560;
+      stroke-width: 2px;
+      stroke-opacity: 0.8;
+    }
+    .link.mixin {
+      stroke: #e94560;
+      stroke-width: 1.5px;
+      stroke-opacity: 0.6;
+      stroke-dasharray: 4,2;
+    }
+    .link.reference {
+      stroke: #666;
+      stroke-width: 1px;
+      stroke-opacity: 0.4;
+      stroke-dasharray: 1,3;
+    }
+    .link.new {
+      animation: fadeIn 0.3s ease-out;
+    }
+    @keyframes fadeIn {
+      from { stroke-opacity: 0; }
+      to { stroke-opacity: 0.6; }
+    }
+    #controls {
+      padding: 15px 20px;
+      background: #f5f5f5;
+      border-top: 1px solid #ddd;
+      flex-shrink: 0;
+    }
+    #timeline-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #transport {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+    #transport button {
+      background: transparent;
+      border: none;
+      color: #333;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      border-radius: 4px;
+      min-width: 32px;
+    }
+    #transport button:hover { background: rgba(0,0,0,0.08); }
+    #transport button:active { background: rgba(0,0,0,0.14); }
+    #transport #play-btn {
+      background: #e94560;
+      color: white;
+      font-size: 14px;
+      min-width: 38px;
+      padding: 6px 12px;
+    }
+    #transport #play-btn:hover { background: #ff6b6b; }
+    #transport #speed-btn {
+      font-size: 12px;
+      font-weight: 600;
+      min-width: 40px;
+      color: #666;
+    }
+    #timeline {
+      flex: 1;
+      height: 8px;
+      -webkit-appearance: none;
+      background: #ddd;
+      border-radius: 4px;
+      outline: none;
+    }
+    #timeline::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      background: #e94560;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    /* -------- Playback overlays (initial play-to-start + summary) ------- */
+    #play-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.55);
+      cursor: pointer;
+      transition: opacity 0.25s ease-out;
+      z-index: 10;
+    }
+    #play-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #play-overlay .play-button {
+      width: 96px; height: 96px;
+      border-radius: 50%;
+      background: #e94560;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+      transition: transform 0.15s ease-out;
+    }
+    #play-overlay:hover .play-button { transform: scale(1.06); }
+    #play-overlay .play-button::after {
+      content: '';
+      border-left: 28px solid white;
+      border-top: 18px solid transparent;
+      border-bottom: 18px solid transparent;
+      margin-left: 8px;
+    }
+    #play-overlay .hint {
+      position: absolute;
+      bottom: 24px; left: 0; right: 0;
+      text-align: center;
+      color: #555; font-size: 13px;
+      pointer-events: none;
+    }
+
+    /* -------- Group-name overlays (faded in during playback) ---------- */
+    #group-overlays {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .group-label {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      color: rgba(0,0,0,0.72);
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.8s ease-in;
+      /* Pill-ish background keeps the text readable over dense clusters. */
+      background: rgba(255,255,255,0.85);
+      padding: 3px 10px;
+      border-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .group-label.visible { opacity: 1; }
+
+    /* -------- Persistent stats panel (upper-right of graph) ----------- */
+    /* Always visible; each frame updates its rows. The final frame is the
+       natural "punchline" — no separate popup to dismiss. */
+    #stats-panel {
+      position: absolute;
+      top: 16px; right: 16px;
+      background: rgba(255,255,255,0.88);
+      padding: 12px 18px;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      min-width: 180px;
+      font-size: 13px;
+      color: #333;
+      z-index: 6;
+      line-height: 1.5;
+      pointer-events: none;
+      backdrop-filter: blur(2px);
+    }
+    #stats-panel .panel-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: #777;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    #stats-panel .panel-headline {
+      font-size: 24px;
+      font-weight: 700;
+      color: #e94560;
+      margin: 2px 0 10px 0;
+      letter-spacing: 0.01em;
+    }
+    #stats-panel .panel-rows .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      font-variant-numeric: tabular-nums;
+    }
+    #stats-panel .panel-rows .row .label { color: #888; }
+    #stats-panel .panel-rows .row .value { font-weight: 600; }
+    #commit-info {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #666;
+      display: flex;
+      justify-content: space-between;
+    }
+    #date {
+      color: #e94560;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    #date:hover { text-decoration: underline; }
+    #message {
+      flex: 1;
+      margin-left: 20px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: pointer;
+    }
+    #message:hover { text-decoration: underline; }
+    #hash {
+      cursor: pointer;
+      font-family: monospace;
+    }
+    #hash:hover { text-decoration: underline; }
+    .coauthor-icon {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      margin-right: 4px;
+      vertical-align: middle;
+      opacity: 0.9;
+    }
+    .coauthor-icon svg {
+      width: 100%;
+      height: 100%;
+    }
+    .coauthor-icon + .coauthor-icon {
+      margin-left: 2px;
+    }
+    .tooltip {
+      position: absolute;
+      background: rgba(240,240,240,0.95);
+      color: #333;
+      padding: 8px 12px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-size: 12px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="header">
+      <h1><a href="../" style="color: inherit; text-decoration: none;">Mandelbrot</a> <a href="https://github.com/davidbau/mandelbrot/commits/main" style="color: inherit; text-decoration: none;">Call Graph Evolution</a> <a href="https://github.com/davidbau/mandelbrot#readme" style="color: inherit; text-decoration: none;" title="View source on GitHub"><svg viewBox="0 0 512 512" style="width:14px;height:14px;vertical-align:-1px"><circle cx="256" cy="256" r="256" fill="#181717"/><path fill="#fff" d="M335 499c-13 0-16-6-16-12l1-70c0-24-8-40-18-48 57-6 117-28 117-126 0-28-10-51-26-69 3-6 11-32-3-67 0 0-21-7-70 26-42-12-86-12 -128 0-49-33-70-26-70-26-14 35-6 61-3 67-16 18-26 41-26 69 0 98 59 120 116 126-7 7-14 18-16 35-15 6-52 17-74-22 0 0-14-24-40-26 0 0-25 0-1 16 0 0 16 7 28 37 0 0 15 50 86 34l1 44c0 6-3 12-16 12-14 0-12 17-12 17H347s2 -17-12-17Z"/></svg></a></h1>
+      <div id="stats">Loading...</div>
+    </div>
+    <div id="graph-container">
+      <svg></svg>
+      <div class="tooltip"></div>
+      <div id="group-overlays"></div>
+      <div id="play-overlay" title="Play from the start">
+        <div class="play-button"></div>
+        <div class="hint">Click to watch the history animate · Space / ⏮ / ⏭ / drag the timeline</div>
+      </div>
+      <div id="stats-panel">
+        <div class="panel-title"></div>
+        <div class="panel-headline"></div>
+        <div class="panel-rows"></div>
+      </div>
+    </div>
+    <div id="controls">
+      <div id="timeline-container">
+        <div id="transport">
+          <button id="refresh-btn" title="Refresh — reload from the start as if first landing on the page">↻</button>
+          <button id="jump-start" title="Jump to start">⏮</button>
+          <button id="play-btn" title="Play (Space)">▶</button>
+          <button id="jump-end" title="Jump to end">⏭</button>
+          <button id="speed-btn" title="Playback speed (click to cycle)">1×</button>
+        </div>
+        <input type="range" id="timeline" min="0" max="100" value="0">
+      </div>
+      <div id="commit-info">
+        <span id="date">-</span>
+        <span id="message">-</span>
+        <span id="hash">-</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let timeline = [];
+    let currentIndex = 0;
+    let isPlaying = false;
+    let playInterval = null;
+    let simulation = null;
+    let zoomBehavior = null;
+    let overcrowdCheckTimeout = null;
+
+    // Playback-speed cycle: persists selection across play/pause.
+    const PLAYBACK_SPEEDS = [0.5, 1, 2, 4];
+    let playbackSpeedIdx = 1;  // 1× default
+    // Current interval in ms — needed so the post-frame "release fx/fy"
+    // timeout can scale with speed. At 4× the frame interval is 50 ms;
+    // the old hard-coded 100 ms delay never fired before the next frame,
+    // so nodes stayed pinned and appeared frozen.
+    let currentIntervalMs = 200;
+
+    // Chunked loading state
+    let chunkManifest = null;
+    let loadedChunks = new Map(); // chunkIndex -> data array
+    let chunksRemaining = 0;
+
+    // Claude badge SVG for co-authored commits
+    const claudeBadge = `<span class="coauthor-icon claude-icon" title="Co-authored with Claude">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="#D97706">
+        <path d="m3.127 10.604 3.135-1.76.053-.153-.053-.085H6.11l-.525-.032
+          -1.791-.048-1.554-.065-1.505-.08-.38-.081L0 7.832l.036-.234.32-.214
+          .455.04 1.009.069 1.513.105 1.097.064 1.626.17h.259l.036-.105-.089
+          -.065-.068-.064-1.566-1.062-1.695-1.121-.887-.646-.48-.327-.243-.306
+          -.104-.67.435-.48.585.04.15.04.593.456 1.267.981 1.654 1.218.242.202
+          .097-.068.012-.049-.109-.181-.9-1.626-.96-1.655-.428-.686-.113-.411a2
+          2 0 0 1-.068-.484l.496-.674L4.446 0l.662.089.279.242.411.94.666
+          1.48 1.033 2.014.302.597.162.553.06.17h.105v-.097l.085-1.134.157
+          -1.392.154-1.792.052-.504.25-.605.497-.327.387.186.319.456-.045.294
+          -.19 1.23-.37 1.93-.243 1.29h.142l.161-.16.654-.868 1.097-1.372.484
+          -.545.565-.601.363-.287h.686l.505.751-.226.775-.707.895-.585.759
+          -.839 1.13-.524.904.048.072.125-.012 1.897-.403 1.024-.186 1.223-.21
+          .553.258.06.263-.218.536-1.307.323-1.533.307-2.284.54-.028.02.032
+          .04 1.029.098.44.024h1.077l2.005.15.525.346.315.424-.053.323-.807
+          .411-3.631-.863-.872-.218h-.12v.073l.726.71 1.331 1.202 1.667 1.55
+          .084.383-.214.302-.226-.032-1.464-1.101-.565-.497-1.28-1.077h-.084v
+          .113l.295.432 1.557 2.34.08.718-.112.234-.404.141-.444-.08-.911-1.28
+          -.94-1.44-.759-1.291-.093.053-.448 4.821-.21.246-.484.186-.403-.307
+          -.214-.496.214-.98.258-1.28.21-1.016.19-1.263.112-.42-.008-.028-.092
+          .012-.953 1.307-1.448 1.957-1.146 1.227-.274.109-.477-.247.045-.44
+          .266-.39 1.586-2.018.956-1.25.617-.723-.004-.105h-.036l-4.212 2.736
+          -.75.096-.324-.302.04-.496.154-.162 1.267-.871z"/>
+      </svg></span>`;
+    const geminiBadge = `<span class="coauthor-icon gemini-icon" title="Co-authored with Gemini">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#4285F4">
+        <path d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/>
+      </svg></span>`;
+    const codexBadge = `<span class="coauthor-icon codex-icon" title="Co-authored with Codex">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#000000">
+        <path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/>
+      </svg></span>`;
+
+    // Persistent node positions across timeline scrubbing
+    const nodePositions = new Map();
+
+    // Color scale for nodes based on when they were added
+    const colorScale = d3.scaleSequential(d3.interpolateViridis);
+
+    // Platform-specific modifier key hint
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const modifierHint = isMac ? '⌘-click' : 'Ctrl-click';
+
+    // URL hash handling for shareable links.
+    // Default lands at frame 0 so a fresh page invites the user to press Play;
+    // a specific commit or index in the URL jumps directly there (and the
+    // initial Play overlay is dismissed).
+    function getIndexFromURL() {
+      const hash = window.location.hash.slice(1);
+      const params = new URLSearchParams(hash);
+
+      if (params.has('i')) {
+        const idx = parseInt(params.get('i'));
+        if (idx >= 0 && idx < timeline.length) return idx;
+      }
+
+      if (params.has('c')) {
+        const commitHash = params.get('c');
+        const idx = timeline.findIndex(s => s.hash === commitHash || s.hash.startsWith(commitHash));
+        if (idx >= 0) return idx;
+      }
+
+      return 0;
+    }
+
+    function hasExplicitURLTarget() {
+      const hash = window.location.hash.slice(1);
+      const params = new URLSearchParams(hash);
+      return params.has('i') || params.has('c');
+    }
+
+    function dismissPlayOverlay() {
+      const ov = document.getElementById('play-overlay');
+      if (ov) ov.classList.add('hidden');
+    }
+
+    function shouldAutoPlay() {
+      const hash = window.location.hash.slice(1);
+      return hash === 'play' || hash.startsWith('play&') || hash.includes('&play');
+    }
+
+    function renderCoauthorBadges(snapshot) {
+      const badges = [];
+      if (snapshot.claudeCoauthored) badges.push(claudeBadge);
+      if (snapshot.geminiCoauthored) badges.push(geminiBadge);
+      if (snapshot.codexCoauthored) badges.push(codexBadge);
+      return badges.join('');
+    }
+
+    function updateURL(index) {
+      const hash = timeline[index]?.hash;
+      if (hash) {
+        history.replaceState(null, '', `#c=${hash}`);
+      }
+    }
+
+    // JSONP callback for manifest - tells us how many chunks to load
+    function loadCallgraphManifest(manifest) {
+      chunkManifest = manifest;
+      chunksRemaining = manifest.chunkCount;
+      document.getElementById('stats').textContent = `Loading ${manifest.chunkCount} data files...`;
+
+      // Dynamically load each chunk file
+      manifest.files.forEach((filename, index) => {
+        const script = document.createElement('script');
+        script.src = filename;
+        script.onerror = () => {
+          document.getElementById('stats').textContent = `Error loading ${filename}`;
+        };
+        document.head.appendChild(script);
+      });
+    }
+
+    // JSONP callback for each chunk
+    function loadCallgraphChunk(chunkIndex, data) {
+      loadedChunks.set(chunkIndex, data);
+      chunksRemaining--;
+
+      // Update loading progress
+      const loaded = chunkManifest.chunkCount - chunksRemaining;
+      document.getElementById('stats').textContent = `Loading ${loaded}/${chunkManifest.chunkCount} data files...`;
+
+      // When all chunks loaded, combine and initialize
+      if (chunksRemaining === 0) {
+        // Combine chunks in order
+        timeline = [];
+        for (let i = 0; i < chunkManifest.chunkCount; i++) {
+          const chunk = loadedChunks.get(i);
+          if (chunk) {
+            timeline.push(...chunk);
+          }
+        }
+        loadedChunks.clear(); // Free memory
+        requestAnimationFrame(() => requestAnimationFrame(() => initWithData()));
+      }
+    }
+
+    // Legacy JSONP callback - for backward compatibility with single-file format
+    function loadCallgraphData(data) {
+      timeline = data;
+      // Wait for layout to complete before initializing
+      requestAnimationFrame(() => requestAnimationFrame(() => initWithData()));
+    }
+
+    // Initialize after data loads
+    function initWithData() {
+      if (timeline.length === 0) {
+        document.getElementById('stats').textContent = 'No data found';
+        return;
+      }
+      // Per-frame stats live in the upper-right panel; clear the header
+      // loading text so it doesn't linger as "Loading N/N..." forever.
+      document.getElementById('stats').textContent = '';
+
+      // Track when each node first appeared
+      const nodeFirstSeen = new Map();
+      timeline.forEach((snapshot, idx) => {
+        snapshot.nodes.forEach(node => {
+          if (!nodeFirstSeen.has(node.id)) {
+            nodeFirstSeen.set(node.id, idx);
+          }
+        });
+      });
+
+      // Attach first-seen index to all nodes
+      timeline.forEach(snapshot => {
+        snapshot.nodes.forEach(node => {
+          node.firstSeen = nodeFirstSeen.get(node.id);
+        });
+      });
+
+      // Setup timeline slider
+      const slider = document.getElementById('timeline');
+      slider.max = timeline.length - 1;
+      // Track whether playback was active before scrubbing so we can resume.
+      let resumeAfterScrub = false;
+      slider.addEventListener('pointerdown', () => {
+        dismissPlayOverlay();
+        if (isPlaying) { resumeAfterScrub = true; pausePlayback(); }
+      });
+      slider.addEventListener('pointerup', () => {
+        // After a manual scrub, re-fit the viewport to the new frame's
+        // size — otherwise backward scrubs leave the zoom-out from a
+        // later, busier frame in place.
+        resetZoom();
+        if (resumeAfterScrub) { resumeAfterScrub = false; startPlayback(); }
+      });
+      slider.addEventListener('input', (e) => {
+        currentIndex = parseInt(e.target.value);
+        updateGraph(currentIndex);
+        updateURL(currentIndex);
+      });
+
+      // Transport buttons
+      document.getElementById('play-btn').addEventListener('click', togglePlay);
+      document.getElementById('jump-start').addEventListener('click', () => {
+        dismissPlayOverlay();
+        pausePlayback();
+        setCurrentIndex(0);
+      });
+      document.getElementById('jump-end').addEventListener('click', () => {
+        dismissPlayOverlay();
+        pausePlayback();
+        setCurrentIndex(timeline.length - 1);
+      });
+      document.getElementById('speed-btn').addEventListener('click', cycleSpeed);
+      // Full reload, no URL hash — drops any `#c=<sha>` left from prior
+      // navigation so the page lands at frame 0 with the Play overlay
+      // showing, exactly like a fresh visit.
+      document.getElementById('refresh-btn').addEventListener('click', () => {
+        window.location.replace(window.location.pathname + window.location.search);
+      });
+
+      // Big centered Play overlay — first click starts playback from 0.
+      document.getElementById('play-overlay').addEventListener('click', () => {
+        dismissPlayOverlay();
+        currentIndex = 0;
+        slider.value = 0;
+        updateGraph(0);
+        startPlayback();
+      });
+
+      // Keyboard: space = play/pause, arrows = step.
+      document.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (e.code === 'Space') {
+          e.preventDefault();
+          dismissPlayOverlay();
+          togglePlay();
+        } else if (e.code === 'ArrowLeft') {
+          e.preventDefault();
+          dismissPlayOverlay();
+          pausePlayback();
+          setCurrentIndex(Math.max(0, currentIndex - 1));
+        } else if (e.code === 'ArrowRight') {
+          e.preventDefault();
+          dismissPlayOverlay();
+          pausePlayback();
+          setCurrentIndex(Math.min(timeline.length - 1, currentIndex + 1));
+        }
+      });
+
+
+      // Setup commit info click handlers
+      document.getElementById('hash').addEventListener('click', () => {
+        const hash = timeline[currentIndex]?.hash;
+        if (hash) window.open(`https://github.com/davidbau/mandelbrot/commit/${hash}`, '_blank');
+      });
+      document.getElementById('message').addEventListener('click', () => {
+        const hash = timeline[currentIndex]?.hash;
+        if (hash) window.open(`https://github.com/davidbau/mandelbrot/commit/${hash}`, '_blank');
+      });
+      document.getElementById('date').addEventListener('click', () => {
+        const hash = timeline[currentIndex]?.hash;
+        if (hash) window.open(`https://github.com/davidbau/mandelbrot/blob/${hash}/index.html`, '_blank');
+      });
+
+      // Initialize SVG
+      setupSVG();
+
+      // Read initial position from URL hash, or start at 0.
+      const autoPlay = shouldAutoPlay();
+      currentIndex = autoPlay ? 0 : getIndexFromURL();
+      slider.value = currentIndex;
+      updateGraph(currentIndex);
+
+      // If the URL targets a specific frame, skip the "press Play" overlay —
+      // the user arrived via a share link expecting that state.
+      if (hasExplicitURLTarget() && !autoPlay) {
+        dismissPlayOverlay();
+      }
+
+      // Start playback if #play is in URL.
+      if (autoPlay) {
+        dismissPlayOverlay();
+        setTimeout(startPlayback, 100);
+      }
+    }
+
+    function setCurrentIndex(idx) {
+      currentIndex = idx;
+      document.getElementById('timeline').value = idx;
+      resetZoom();
+      updateGraph(idx);
+      updateURL(idx);
+    }
+
+    // Snap the viewport back to identity so a scrub backwards re-fits the
+    // smaller graph (the force sim expands the surviving nodes to fill it).
+    // Playback-time auto-zoom-out is handled separately by
+    // adjustViewIfOvercrowded — we don't touch it during play.
+    function resetZoom() {
+      const svg = d3.select('#graph-container svg');
+      if (svg.empty() || !zoomBehavior) return;
+      svg.transition().duration(350).call(zoomBehavior.transform, d3.zoomIdentity);
+    }
+
+    function setupSVG() {
+      const container = document.getElementById('graph-container');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      // Use centered coordinate system: (0,0) is at center of viewport
+      const svg = d3.select('#graph-container svg')
+        .attr('viewBox', [-width / 2, -height / 2, width, height]);
+
+      // Add zoom behavior
+      const g = svg.append('g');
+      zoomBehavior = d3.zoom()
+        .scaleExtent([0.1, 4])
+        .on('zoom', (event) => g.attr('transform', event.transform));
+      svg.call(zoomBehavior);
+
+      // Add arrow marker for directed edges
+      svg.append('defs').append('marker')
+        .attr('id', 'arrowhead')
+        .attr('viewBox', '-0 -5 10 10')
+        .attr('refX', 16)
+        .attr('refY', 0)
+        .attr('orient', 'auto')
+        .attr('markerWidth', 5)
+        .attr('markerHeight', 5)
+        .append('path')
+        .attr('d', 'M 0,-5 L 10,0 L 0,5')
+        .attr('fill', '#666');
+
+      g.append('g').attr('class', 'links');
+      g.append('g').attr('class', 'nodes');
+
+      // Create simulation with elliptical bias matching viewport aspect ratio
+      // Forces center at (0,0) since we use centered coordinate system
+      const aspectRatio = width / height;
+      const totalStrength = 0.14;
+      const xStrength = totalStrength / (1 + aspectRatio);
+      const yStrength = totalStrength * aspectRatio / (1 + aspectRatio);
+
+      simulation = d3.forceSimulation()
+        .force('link', d3.forceLink().id(d => d.id).distance(50).strength(d => Math.min(1, 3 / (Math.max(d.source.degree || 1, d.target.degree || 1) + 1))))
+        .force('charge', d3.forceManyBody().strength(-80))
+        .force('center', d3.forceCenter(0, 0))
+        .force('x', d3.forceX(0).strength(xStrength))
+        .force('y', d3.forceY(0).strength(yStrength))
+        .force('collision', d3.forceCollide().radius(15))
+        .alphaDecay(0.01)      // Slower cooling (default 0.0228)
+        .velocityDecay(0.3);   // More momentum (default 0.4)
+    }
+
+    function updateGraph(index) {
+      const snapshot = timeline[index];
+      if (!snapshot) return;
+
+      const container = document.getElementById('graph-container');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      // Update UI
+      const classCount = snapshot.nodes.filter(n => n.type === 'class').length;
+      const mixinCount = snapshot.nodes.filter(n => n.type === 'mixin').length;
+      const methodCount = snapshot.nodes.filter(n => n.type === 'method').length;
+      const funcCount = snapshot.nodes.filter(n => n.type === 'function').length;
+      const lineCount = snapshot.lineCount || 0;
+      const testCount = snapshot.testCount || 0;
+      const parts = [`${lineCount.toLocaleString()} lines`];
+      if (classCount > 0) parts.push(`${classCount} classes`);
+      if (mixinCount > 0) parts.push(`${mixinCount} mixins`);
+      if (methodCount > 0) parts.push(`${methodCount} methods`);
+      if (funcCount > 0) parts.push(`${funcCount} functions`);
+      if (testCount > 0) parts.push(`${testCount} tests`);
+      document.getElementById('stats').textContent = parts.join(', ');
+      document.getElementById('date').textContent = snapshot.date;
+      const msgEl = document.getElementById('message');
+      const escaped = snapshot.message.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      msgEl.innerHTML = renderCoauthorBadges(snapshot) + escaped;
+      document.getElementById('hash').textContent = snapshot.hash;
+
+      const svg = d3.select('#graph-container svg');
+      const g = svg.select('g');
+
+      // Save current node positions before updating
+      if (simulation) {
+        simulation.nodes().forEach(n => {
+          if (n.x !== undefined && n.y !== undefined) {
+            nodePositions.set(n.id, { x: n.x, y: n.y });
+          }
+        });
+      }
+
+      // Calculate total degree (indegree + outdegree) for this snapshot
+      const degree = new Map();
+      snapshot.edges.forEach(e => {
+        degree.set(e.source, (degree.get(e.source) || 0) + 1);
+        degree.set(e.target, (degree.get(e.target) || 0) + 1);
+      });
+
+      // Prepare data with positions preserved from previous frame
+      const nodes = snapshot.nodes.map(n => {
+        const pos = nodePositions.get(n.id);
+        const isNew = n.firstSeen === index;
+        const nodeData = { 
+          ...n, 
+          isNew, 
+          degree: degree.get(n.id) || 0 
+        };
+        
+        if (pos) {
+          // Existing node: restore position, fix it initially
+          return { ...nodeData, x: pos.x, y: pos.y, fx: pos.x, fy: pos.y };
+        } else {
+          // New node: position near center (0,0) with small random offset
+          return {
+            ...nodeData,
+            x: (Math.random() - 0.5) * 100,
+            y: (Math.random() - 0.5) * 100
+          };
+        }
+      });
+
+      const edges = snapshot.edges.map(e => ({
+        source: e.source,
+        target: e.target,
+        type: e.type || 'calls'
+      }));
+
+      // Add invisible "contains" links between classes and their methods
+      const nodeIds = new Set(nodes.map(n => n.id));
+      nodes.forEach(n => {
+        if (n.type === 'method' && n.id.includes('.')) {
+          const className = n.id.split('.')[0];
+          if (nodeIds.has(className)) {
+            edges.push({ source: className, target: n.id, type: 'contains' });
+          }
+        }
+      });
+
+      // Add invisible "same-script" links between nodes in the same script element
+      // Group nodes by script
+      const byScript = new Map();
+      nodes.forEach(n => {
+        if (n.script !== undefined) {
+          if (!byScript.has(n.script)) byScript.set(n.script, []);
+          byScript.get(n.script).push(n.id);
+        }
+      });
+      // Create edges between nodes in same script (limit to avoid O(n^2) explosion)
+      byScript.forEach(nodeList => {
+        if (nodeList.length > 1 && nodeList.length <= 50) {
+          // Connect each node to a "hub" (first node) to create star topology
+          const hub = nodeList[0];
+          for (let i = 1; i < nodeList.length; i++) {
+            edges.push({ source: hub, target: nodeList[i], type: 'samescript' });
+          }
+        }
+      });
+
+      // Release the initial fx/fy pin so the simulation can settle nodes.
+      // Delay scales with playback speed: at 4× the frame interval is 50 ms,
+      // so a 100 ms release never fired before the next frame and nodes
+      // stayed frozen in place.
+      const releaseDelay = Math.min(100, Math.max(15, currentIntervalMs * 0.4));
+      setTimeout(() => {
+        nodes.forEach(n => { n.fx = null; n.fy = null; });
+        simulation.alpha(0.5).restart();
+      }, releaseDelay);
+
+      // Color scale: older nodes are cooler colors, newer are warmer
+      // Use current index as max so colors are relative to project age at this commit
+      const maxIdx = index || 1; // Avoid division by zero at index 0
+
+      // Update links
+      const link = g.select('.links')
+        .selectAll('path')
+        .data(edges, d => `${d.source}-${d.target}`);
+
+      link.exit().remove();
+
+      const linkEnter = link.enter()
+        .append('path')
+        .attr('class', d => 'link new ' + (d.type || 'calls'))
+        .attr('marker-end', d => ['contains', 'samescript'].includes(d.type) ? null : 'url(#arrowhead)');
+
+      const linkMerge = linkEnter.merge(link)
+        .classed('new', false);
+
+      // Update nodes
+      const node = g.select('.nodes')
+        .selectAll('.node')
+        .data(nodes, d => d.id);
+
+      node.exit().remove();
+
+      const nodeEnter = node.enter()
+        .append('g')
+        .attr('class', d => 'node ' + (d.type || 'function') + (d.isNew ? ' new' : ''))
+        .call(d3.drag()
+          .on('start', dragstarted)
+          .on('drag', dragged)
+          .on('end', dragended));
+
+      nodeEnter.append('circle')
+        .attr('r', d => (d.type === 'class' || d.type === 'mixin') ? 10 : 6);
+
+      nodeEnter.append('text')
+        .attr('dx', 10)
+        .attr('dy', 3);
+
+      const nodeMerge = nodeEnter.merge(node);
+
+      nodeMerge.select('circle')
+        .attr('fill', d => {
+          const t = d.firstSeen / maxIdx;
+          // Offset to avoid dark colors, use brighter range (0.4 to 1.0)
+          return d3.interpolateTurbo(0.15 + t * 0.7);
+        });
+
+      nodeMerge.select('text')
+        .text(d => {
+          // For methods, strip class prefix (show full name on hover)
+          let label = d.type === 'method' && d.id.includes('.') ? d.id.split('.').pop() : d.id;
+          return label.length > 20 ? label.slice(0, 20) + '...' : label;
+        });
+
+      // Update simulation with forces scaled by node count and viewport aspect ratio
+      // Fewer nodes = larger collision radius to spread out, but keep elliptical bias constant
+      // Forces center at (0,0) since we use centered coordinate system
+      const forceScale = Math.max(0.33, Math.min(1, nodes.length / 200));
+      const collisionRadius = 15 + 30 * (1 - forceScale); // 15 at full, 45 at sparse
+      const aspectRatio = width / height;
+      // Keep elliptical centering at full strength so aspect ratio is always visible
+      const totalStrength = 0.14;
+      const xStrength = totalStrength / (1 + aspectRatio);
+      const yStrength = totalStrength * aspectRatio / (1 + aspectRatio);
+      simulation.force('charge').strength(-80);
+      simulation.force('x').x(0).strength(xStrength);
+      simulation.force('y').y(0).strength(yStrength);
+      simulation.force('collision').radius(collisionRadius);
+
+      simulation.nodes(nodes);
+      simulation.force('link').links(edges);
+      simulation.alpha(0.3).restart();
+      simulation.on('end', () => adjustViewIfOvercrowded(width, height));
+      if (!overcrowdCheckTimeout) {
+        overcrowdCheckTimeout = setTimeout(() => {
+          overcrowdCheckTimeout = null;
+          adjustViewIfOvercrowded(width, height);
+        }, 600);
+      }
+
+      simulation.on('tick', () => {
+        linkMerge.attr('d', d => {
+          if (d.source.id === d.target.id) {
+            const x = d.source.x;
+            const y = d.source.y;
+            // Draw a circular self-loop to the left
+            return `M${x},${y} C${x-30},${y-25} ${x-30},${y+25} ${x},${y}`;
+          }
+          const dx = d.target.x - d.source.x;
+          const dy = d.target.y - d.source.y;
+          return `M${d.source.x},${d.source.y}L${d.target.x},${d.target.y}`;
+        });
+
+        nodeMerge.attr('transform', d => `translate(${d.x},${d.y})`);
+      });
+
+      // Tooltip and click handlers
+      const tooltip = d3.select('.tooltip');
+      nodeMerge
+        .on('mouseover', (event, d) => {
+          tooltip
+            .style('opacity', 1)
+            .style('left', (event.pageX + 10) + 'px')
+            .style('top', (event.pageY - 10) + 'px')
+            .html(`<strong>${d.id}</strong><br>Type: ${d.type || 'function'}<br>Added: ${timeline[d.firstSeen]?.date || 'unknown'}` +
+                  (d.line ? `<br>Lines: ${d.line}-${d.endLine}` : '') +
+                  `<br><em>${modifierHint} to view on GitHub</em>`);
+        })
+        .on('mouseout', () => {
+          tooltip.style('opacity', 0);
+        })
+        .on('click', (event, d) => {
+          // Command-click (Mac) or Ctrl-click (Windows/Linux) opens GitHub
+          if (event.metaKey || event.ctrlKey) {
+            event.preventDefault();
+            const hash = snapshot.hash;
+            const lineRange = d.line && d.endLine ? `#L${d.line}-L${d.endLine}` : '';
+            const url = `https://github.com/davidbau/mandelbrot/blob/${hash}/index.html${lineRange}`;
+            window.open(url, '_blank');
+          }
+        });
+    }
+
+    // Play/pause are split so keyboard, jump buttons, and scrubbing can
+    // all drive state cleanly without toggling each other.
+    function togglePlay() {
+      if (isPlaying) pausePlayback();
+      else startPlayback();
+    }
+
+    function pausePlayback() {
+      if (!isPlaying) return;
+      isPlaying = false;
+      document.getElementById('play-btn').textContent = '▶';
+      clearInterval(playInterval);
+      updateURL(currentIndex);
+    }
+
+    function startPlayback() {
+      if (isPlaying) return;
+      // Any path that starts playback also dismisses the centered Play
+      // overlay — covers the bottom transport button, the keyboard,
+      // `#play` auto-start, and speed cycling that passes through here.
+      dismissPlayOverlay();
+      const slider = document.getElementById('timeline');
+      isPlaying = true;
+      document.getElementById('play-btn').textContent = '❚❚';
+
+      // Play-after-end rewinds to the start (standard video-player behavior,
+      // which is why we skip a dedicated loop button).
+      if (currentIndex >= timeline.length - 1) {
+        currentIndex = 0;
+        slider.value = 0;
+        updateGraph(0);
+      }
+
+      currentIntervalMs = Math.round(200 / PLAYBACK_SPEEDS[playbackSpeedIdx]);
+      playInterval = setInterval(() => {
+        currentIndex++;
+        if (currentIndex >= timeline.length) {
+          currentIndex = timeline.length - 1;
+          pausePlayback();
+          onPlaybackReachedEnd();
+          return;
+        }
+        slider.value = currentIndex;
+        updateGraph(currentIndex);
+      }, currentIntervalMs);
+    }
+
+    function cycleSpeed() {
+      playbackSpeedIdx = (playbackSpeedIdx + 1) % PLAYBACK_SPEEDS.length;
+      document.getElementById('speed-btn').textContent =
+        PLAYBACK_SPEEDS[playbackSpeedIdx] + '×';
+      // Reset the interval so the new speed takes effect immediately.
+      if (isPlaying) { pausePlayback(); startPlayback(); }
+    }
+
+    // Hook fired when playback runs through the final frame. Delegates to
+    // whatever the injection registers — summary overlay by default.
+    function onPlaybackReachedEnd() {
+      if (window._summaryShower) window._summaryShower();
+    }
+
+    function dragstarted(event, d) {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+      d.fx = event.x;
+      d.fy = event.y;
+    }
+
+    function dragended(event, d) {
+      if (!event.active) simulation.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    }
+
+    // If stable nodes settle outside the viewport, gently zoom out.
+    // Also ease the view back towards center if off-center. Runs after any
+    // frame change — playback or manual nav — so jumps/arrow keys stay
+    // well-framed too (combined with the resetZoom on nav, this means
+    // manual backs snap to identity and the sim then re-fits if needed).
+    function adjustViewIfOvercrowded(width, height) {
+      if (!zoomBehavior || !simulation) return;
+      const nodes = simulation.nodes();
+      if (!nodes || nodes.length === 0) return;
+      const svg = d3.select('#graph-container svg');
+      const transform = d3.zoomTransform(svg.node());
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      let hasStable = false;
+      nodes.forEach(n => {
+        if (n.isNew) return; // ignore nodes still flying in
+        hasStable = true;
+        const x = transform.applyX(n.x);
+        const y = transform.applyY(n.y);
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      });
+      if (!hasStable) return;
+      const halfW = width / 2;
+      const halfH = height / 2;
+      const marginX = halfW;
+      const marginY = halfH;
+      const overflow = (minX < -marginX) || (maxX > marginX) || (minY < -marginY) || (maxY > marginY);
+
+      // Calculate center of stable nodes in screen coords
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      const offCenter = Math.abs(centerX) > 50 || Math.abs(centerY) > 50;
+
+      if (overflow || offCenter) {
+        let targetTransform = transform;
+        if (overflow) {
+          // Zoom out by 5%
+          targetTransform = transform.scale(0.95);
+        }
+        if (offCenter) {
+          // Ease 20% back towards center
+          const newX = transform.x - centerX * 0.2;
+          const newY = transform.y - centerY * 0.2;
+          targetTransform = d3.zoomIdentity.translate(newX, newY).scale(targetTransform.k);
+        }
+        svg.transition().duration(3000).ease(d3.easeSinOut).call(zoomBehavior.transform, targetTransform);
+      }
+    }
+
+    // Handle resize/orientation change
+    function handleResize() {
+      const container = document.getElementById('graph-container');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      // Skip if dimensions are invalid (layout not ready)
+      if (width === 0 || height === 0) return;
+
+      // Update centered viewBox - graph stays centered automatically
+      d3.select('#graph-container svg').attr('viewBox', [-width / 2, -height / 2, width, height]);
+
+      // Update force strengths for new aspect ratio
+      const aspectRatio = width / height;
+      const totalStrength = 0.14;
+      const xStrength = totalStrength / (1 + aspectRatio);
+      const yStrength = totalStrength * aspectRatio / (1 + aspectRatio);
+
+      simulation.force('x').strength(xStrength);
+      simulation.force('y').strength(yStrength);
+
+      // Gentle restart to adapt to new aspect ratio
+      simulation.alpha(0.1).restart();
+    }
+
+    window.addEventListener('resize', handleResize);
+
+    // Mobile orientation change - dimensions update after a delay on iOS
+    window.addEventListener('orientationchange', () => {
+      setTimeout(handleResize, 100);
+    });
+  </script>
+  <!-- JSONP data load - works with file:// URLs -->
+  <!-- Load manifest first, which then triggers loading of chunk files -->
+  <script src="callgraph-manifest.js" onerror="document.getElementById('stats').textContent='Run: npm run callgraph'"></script>
+</body>
+</html>

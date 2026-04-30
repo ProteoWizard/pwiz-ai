@@ -91,35 +91,65 @@ by Bench-Scoring.ps1 for Stages 1-4 timing.
 
 ## Usage Patterns
 
-```bash
-# Compare calibration features (fast cycle)
-OSPREY_DUMP_CAL_MATCH=1 OSPREY_CAL_MATCH_ONLY=1 osprey ...
-OSPREY_DUMP_CAL_MATCH=1 OSPREY_CAL_MATCH_ONLY=1 pwiz.OspreySharp.exe ...
-diff <(tr -d '\r' < rust_cal_match.txt) <(tr -d '\r' < cs_cal_match.txt)
+Prefer `Compare-Diagnostic.ps1` for routine bisection -- it runs both
+tools, normalizes filenames, and diffs for you. Walk from earliest to
+latest stage until you find the first divergence:
 
-# Compare LDA scores
-OSPREY_DUMP_LDA_SCORES=1 OSPREY_LDA_SCORES_ONLY=1 osprey ...
-OSPREY_DUMP_LDA_SCORES=1 OSPREY_LDA_SCORES_ONLY=1 pwiz.OspreySharp.exe ...
+```powershell
+# The canonical bisection walk - stop at the first DIVERGENCE
+pwsh -File './ai/scripts/OspreySharp/Compare-Diagnostic.ps1' -Stage CalSample
+pwsh -File './ai/scripts/OspreySharp/Compare-Diagnostic.ps1' -Stage CalWindows
+pwsh -File './ai/scripts/OspreySharp/Compare-Diagnostic.ps1' -Stage CalMatch
+pwsh -File './ai/scripts/OspreySharp/Compare-Diagnostic.ps1' -Stage LdaScores
+pwsh -File './ai/scripts/OspreySharp/Compare-Diagnostic.ps1' -Stage LoessInput
 
-# Share Rust calibration for main-search feature comparison
-osprey -i file.mzML -l lib.tsv -o rust.blib --resolution unit --write-pin
-OSPREY_LOAD_CALIBRATION=file.calibration.json pwiz.OspreySharp.exe \
-  -i file.mzML -l lib.tsv -o cs.blib --resolution unit --write-pin
+# Iterate faster on C# changes by reusing Rust's dumps
+pwsh -File './ai/scripts/OspreySharp/Compare-Diagnostic.ps1' -Stage CalMatch -SkipRust
 
-# Benchmark Stages 1-4 only
-OSPREY_EXIT_AFTER_SCORING=1 pwiz.OspreySharp.exe ...
+# On Astral, or a different test-dir layout
+pwsh -File './ai/scripts/OspreySharp/Compare-Diagnostic.ps1' -Dataset Astral -Stage CalSample
+pwsh -File './ai/scripts/OspreySharp/Compare-Diagnostic.ps1' -Stage CalSample -TestBaseDir 'C:\test\osprey-runs'
 ```
+
+For ad-hoc dumps (single tool, specific entries, benchmarking), use
+`Run-Osprey.ps1` directly:
+
+```powershell
+# Share Rust calibration for main-search feature comparison
+pwsh -File './ai/scripts/OspreySharp/Run-Osprey.ps1' -Tool Rust  -Clean -WritePin
+pwsh -File './ai/scripts/OspreySharp/Run-Osprey.ps1' -Tool CSharp -WritePin `
+     -ExtraArgs "--load-calibration file.calibration.json"
+
+# Benchmark Stages 1-4 only (uses OSPREY_EXIT_AFTER_SCORING internally)
+pwsh -File './ai/scripts/OspreySharp/Bench-Scoring.ps1' -Dataset Stellar
+```
+
+Only hand-craft env vars when extending the scripts -- the script
+parameters below are the supported interface.
 
 ## Script Integration
 
-The `Run-Osprey.ps1` script exposes many of these via parameters:
+`Run-Osprey.ps1` exposes each env var through a named switch:
 
 | Parameter | Env Var |
 |-----------|---------|
 | `-DiagEntryIds` | `OSPREY_DIAG_SEARCH_ENTRY_IDS` |
+| `-DiagCalSample` | `OSPREY_DUMP_CAL_SAMPLE` |
+| `-DiagCalSampleOnly` | `OSPREY_CAL_SAMPLE_ONLY` |
+| `-DiagCalWindows` | `OSPREY_DUMP_CAL_WINDOWS` |
+| `-DiagCalWindowsOnly` | `OSPREY_CAL_WINDOWS_ONLY` |
+| `-DiagCalPrefilter` | `OSPREY_DUMP_CAL_PREFILTER` |
+| `-DiagCalPrefilterOnly` | `OSPREY_CAL_PREFILTER_ONLY` |
 | `-DiagCalMatch` | `OSPREY_DUMP_CAL_MATCH` |
 | `-DiagCalMatchOnly` | `OSPREY_CAL_MATCH_ONLY` |
 | `-DiagLdaScores` | `OSPREY_DUMP_LDA_SCORES` |
 | `-DiagLdaOnly` | `OSPREY_LDA_SCORES_ONLY` |
 | `-DiagLoessInput` | `OSPREY_DUMP_LOESS_INPUT` |
 | `-DiagLoessOnly` | `OSPREY_LOESS_INPUT_ONLY` |
+| `-DiagXicEntryId` | `OSPREY_DIAG_XIC_ENTRY_ID` |
+| `-DiagXicPass` | `OSPREY_DIAG_XIC_PASS` |
+| `-DiagMpScan` | `OSPREY_DIAG_MP_SCAN` |
+| `-DiagXcorrScan` | `OSPREY_DIAG_XCORR_SCAN` |
+
+`Compare-Diagnostic.ps1` layers on top of these with a single
+`-Stage {CalSample|CalWindows|CalMatch|LdaScores|LoessInput}` switch.

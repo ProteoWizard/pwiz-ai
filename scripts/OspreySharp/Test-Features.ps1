@@ -8,7 +8,7 @@
     Reports pass/fail for each feature at configurable thresholds and shows
     wall-clock timings for apples-to-apples perf comparison.
 
-    Both tools exit after Stage 4 via OSPREY_EXIT_AFTER_SCORING=1, skipping
+    Both tools exit after Stage 4 via the --no-join CLI flag, skipping
     Mokapot FDR, reconciliation, and blib output. This keeps the cycle fast
     and makes the wall-clock timings directly comparable.
 
@@ -41,6 +41,11 @@
 
 .PARAMETER SkipRust
     Skip the Rust run (reuse existing PIN + calibration from a previous run)
+
+.PARAMETER CsharpRoot
+    Path to the pwiz checkout whose OspreySharp binary should be used. When
+    omitted, auto-detects: tries pwiz-work1, pwiz, pwiz-work2 in order and
+    picks the first one with a built OspreySharp.exe for -TargetFramework.
 
 .EXAMPLE
     .\Test-Features.ps1
@@ -80,7 +85,17 @@ param(
     [string]$DiagXcorrScan = $null,
 
     [Parameter(Mandatory=$false)]
-    [switch]$SkipRust = $false
+    [switch]$SkipRust = $false,
+
+    [Parameter(Mandatory=$false)]
+    [string]$CsharpRoot = $null,
+
+    [Parameter(Mandatory=$false)]
+    [string]$TestBaseDir = $null,
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("net472", "net8.0")]
+    [string]$TargetFramework = "net472"
 )
 
 $ErrorActionPreference = "Stop"
@@ -88,7 +103,7 @@ $ErrorActionPreference = "Stop"
 
 # Load dataset configuration
 . "$PSScriptRoot\Dataset-Config.ps1"
-$ds = Get-DatasetConfig $Dataset
+$ds = Get-DatasetConfig $Dataset -TestBaseDir $TestBaseDir
 
 $testDir = $ds.TestDir
 if (-not (Test-Path $testDir)) {
@@ -101,8 +116,31 @@ $scriptRoot = Split-Path -Parent $PSCommandPath
 $aiRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)
 $projRoot = Split-Path -Parent $aiRoot
 
+# Rust binary: canonical maccoss/osprey:main checkout at $projRoot\osprey.
 $rustBinary = Join-Path $projRoot "osprey\target\release\osprey.exe"
-$csharpBinary = Join-Path $projRoot "pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\pwiz.OspreySharp.exe"
+
+# C# binary: auto-detect which pwiz worktree has a built OspreySharp.exe for
+# the requested -TargetFramework. Override with -CsharpRoot.
+$csharpRelBin = "pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\$TargetFramework\OspreySharp.exe"
+if ($CsharpRoot) {
+    $csharpBase = $CsharpRoot
+} else {
+    $csharpBase = $null
+    foreach ($candidate in @("pwiz-work1", "pwiz", "pwiz-work2")) {
+        $candidatePath = Join-Path $projRoot $candidate
+        if (Test-Path (Join-Path $candidatePath $csharpRelBin)) {
+            $csharpBase = $candidatePath
+            break
+        }
+    }
+    if (-not $csharpBase) {
+        # Nothing built yet -- default to pwiz so the missing-binary error points
+        # somewhere predictable.
+        $csharpBase = Join-Path $projRoot "pwiz"
+    }
+}
+$csharpBinary = Join-Path $csharpBase $csharpRelBin
+Write-Host ("C# root: {0}" -f $csharpBase) -ForegroundColor DarkGray
 $library = Join-Path $testDir $ds.Library
 $mzml = Join-Path $testDir $ds.SingleFile
 
@@ -111,6 +149,13 @@ $fileStem = [System.IO.Path]::GetFileNameWithoutExtension($ds.SingleFile)
 $calJson = Join-Path $testDir "$fileStem.calibration.json"
 $rustPin = Join-Path $testDir "mokapot\$fileStem.pin"
 $csharpFeatures = Join-Path $testDir "$fileStem.cs_features.tsv"
+
+# Both tools write to "{stem}.scores.parquet" by default -- the C# run would
+# otherwise overwrite the Rust parquet. Rotate each run's output to a distinct
+# suffix so both are preserved for downstream --join-at-pass=1 smoke tests.
+$defaultParquet = Join-Path $testDir "$fileStem.scores.parquet"
+$rustParquet    = Join-Path $testDir "$fileStem.scores.rust.parquet"
+$csParquet      = Join-Path $testDir "$fileStem.scores.cs.parquet"
 
 # Validate prerequisites
 foreach ($path in @($library, $mzml)) {
@@ -140,25 +185,28 @@ try {
         Write-Host ""
         Write-Host "Step 1: Running Rust Osprey on $($ds.Name) $($ds.FileLabel.Single)..." -ForegroundColor Cyan
 
-        # Clean caches
-        foreach ($pattern in @("*.scores.parquet", "*.calibration.json", "*.spectra.bin", "*.fdr_scores.bin")) {
+        # Clean caches (including the .rust./.cs. suffixed parquets from previous runs)
+        foreach ($pattern in @("*.scores.parquet", "*.scores.rust.parquet", "*.scores.cs.parquet", "*.calibration.json", "*.spectra.bin", "*.fdr_scores.bin")) {
             Get-ChildItem -Filter $pattern -ErrorAction SilentlyContinue | Remove-Item -Force
         }
 
         $env:RUST_LOG = "info"
-        $env:OSPREY_EXIT_AFTER_SCORING = "1"
         if ($DiagXicEntryIds) { $env:OSPREY_DIAG_SEARCH_ENTRY_IDS = $DiagXicEntryIds }
         if ($DiagMpScan) { $env:OSPREY_DIAG_MP_SCAN = $DiagMpScan }
         if ($DiagXcorrScan) { $env:OSPREY_DIAG_XCORR_SCAN = $DiagXcorrScan }
 
+        # --no-join writes the per-file scores parquet and exits before Stage 5.
+        # --parquet-compression snappy is required for cross-impl interop:
+        # Parquet.Net 3.x (OspreySharp) only reads Snappy. Rust also disables
+        # dictionary encoding automatically when Snappy is selected.
+        # --output is omitted (--no-join doesn't write a blib).
         $rustStart = Get-Date
-        & $rustBinary -i $mzml -l $library -o "_temp_rust.blib" --resolution $ds.Resolution --protein-fdr 0.01 --write-pin 2>&1 | Out-Null
+        & $rustBinary --no-join --parquet-compression snappy -i $mzml -l $library --resolution $ds.Resolution --protein-fdr 0.01 --write-pin 2>&1 | Out-Null
         $rustExit = $LASTEXITCODE
         $rustDuration = (Get-Date) - $rustStart
 
         # Clean env vars
         Remove-Item Env:RUST_LOG -ErrorAction SilentlyContinue
-        Remove-Item Env:OSPREY_EXIT_AFTER_SCORING -ErrorAction SilentlyContinue
         Remove-Item Env:OSPREY_DIAG_SEARCH_ENTRY_IDS -ErrorAction SilentlyContinue
         Remove-Item Env:OSPREY_DIAG_MP_SCAN -ErrorAction SilentlyContinue
         Remove-Item Env:OSPREY_DIAG_XCORR_SCAN -ErrorAction SilentlyContinue
@@ -167,6 +215,10 @@ try {
         if ($rustExit -ne 0) {
             Write-Host "Rust failed with exit code $rustExit" -ForegroundColor Red
             exit 1
+        }
+        # Rotate the Rust parquet so the C# run doesn't overwrite it.
+        if (Test-Path $defaultParquet) {
+            Move-Item -Path $defaultParquet -Destination $rustParquet -Force
         }
         Write-Host "  Rust completed in $($rustDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
     } else {
@@ -191,7 +243,6 @@ try {
     $modeLabel = if ($SharedCalibration) { "with shared calibration (bisection mode)" } else { "with own calibration" }
     Write-Host "Step 2: Running OspreySharp (C#) $modeLabel..." -ForegroundColor Cyan
 
-    $env:OSPREY_EXIT_AFTER_SCORING = "1"
     if ($SharedCalibration) { $env:OSPREY_LOAD_CALIBRATION = $calJson }
     if ($DiagXicEntryIds) { $env:OSPREY_DIAG_SEARCH_ENTRY_IDS = $DiagXicEntryIds }
     if ($DiagMpScan) { $env:OSPREY_DIAG_MP_SCAN = $DiagMpScan }
@@ -200,13 +251,14 @@ try {
     # Remove old features file
     if (Test-Path $csharpFeatures) { Remove-Item $csharpFeatures -Force }
 
+    # --no-join replaces the retired OSPREY_EXIT_AFTER_SCORING env var:
+    # writes the per-file scores parquet and exits before Stage 5.
     $csStart = Get-Date
-    & $csharpBinary -i $mzml -l $library -o "_temp_cs.blib" --resolution $ds.Resolution --protein-fdr 0.01 --write-pin 2>&1 | Out-Null
+    & $csharpBinary --no-join -i $mzml -l $library --resolution $ds.Resolution --protein-fdr 0.01 --write-pin 2>&1 | Out-Null
     $csExit = $LASTEXITCODE
     $csDuration = (Get-Date) - $csStart
 
     # Clean env vars
-    Remove-Item Env:OSPREY_EXIT_AFTER_SCORING -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_LOAD_CALIBRATION -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_DIAG_SEARCH_ENTRY_IDS -ErrorAction SilentlyContinue
     Remove-Item Env:OSPREY_DIAG_MP_SCAN -ErrorAction SilentlyContinue
@@ -216,6 +268,10 @@ try {
     if ($csExit -ne 0) {
         Write-Host "  C# failed with exit code $csExit" -ForegroundColor Red
         exit 1
+    }
+    # Rotate the C# parquet so both tools' outputs are side-by-side.
+    if (Test-Path $defaultParquet) {
+        Move-Item -Path $defaultParquet -Destination $csParquet -Force
     }
     Write-Host "  C# completed in $($csDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
 

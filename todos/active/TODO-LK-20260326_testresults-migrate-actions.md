@@ -120,16 +120,95 @@ convenience methods that call `parseDate()` and throw `ParseException`.
 - [x] `./gradlew :server:modules:MacCossLabModules:testresults:deployModule` — clean build
 - [x] Commit following team conventions
 
-## Phase 6: Post-Deploy on Production (skyline.ms "Nightly x64" folder)
+## Phase 6: PR Review Follow-ups
+
+PR review surfaced several items beyond the original Spring-binding scope. Done in this
+branch as a follow-up to the original refactor.
+
+### Copilot review comments (automated)
+
+- [x] **#1** Parse PostAction response as JSON instead of substring match (TestResultsTest)
+- [x] **#2** Datepicker navigation: start at the test date via URL, then use prev/next day links
+- [x] **#3** SelectRowsCommand container path — verified both forms work; dismissed
+- [x] **#4** TrainRunAction: validate `train` param is `true`/`false`/`force` instead of accepting any string
+- [x] **#5** `toLowerCase(Locale.ROOT)` — dismissed (US-locale server, ASCII table names)
+
+### Josh Eckels review comments
+
+- [x] **J1** Extract `"Success"` to `KEY_SUCCESS` constant
+- [x] **J2** `SendEmailNotificationAction` was `@RequiresNoPermission` (open relay) — locked down to
+      `@RequiresPermission(AdminOperationsPermission.class)`. Possible dead code; dead-code review
+      tracked in `TODO-LK-20260403_testresults-bugs.md`.
+- [x] **J3** `FlagRunAction`: replaced `getArray()[0]` with `getObject()` + null check
+- [ ] **J4** Schema tables without container column → split into separate PR (branch
+      `26.3_fb_testresults-container-filter`, commit `b2b2d82`). Not included in this PR.
+- [x] **J5** `ShowUserAction`: pass form values via bean so `user.jsp` doesn't read from request
+
+### Container filtering for child tables (J4)
+
+Split into a separate PR — branch `26.3_fb_testresults-container-filter` (commit
+`b2b2d82`), based on the tip of this branch. Different review concern than the
+Spring-binding refactor. Covers schema-level filter overrides on `TestResultsSchema`
+plus a fix to `TestResultsController.getUsers()` so the User-tab dropdown and Training
+Data tab list only users with runs in the current folder. Full design notes in
+`TODO-LK-20260403_testresults-bugs.md`.
+
+### Misc cleanup made in this branch
+
+- [x] **NavTree breadcrumbs**: extracted `addModuleNavTrail()` helper so all actions
+      share a single "TestResults" breadcrumb. Tabs identify the page; breadcrumb just
+      anchors back to the module home.
+- [x] **WebPartView frame**: replaced ad-hoc `view.setTitle(...)` calls with
+      `view.setFrame(WebPartView.FrameType.PORTAL)` so views render with the standard
+      LabKey portal frame.
+
+## Phase 7: Post-Deploy on Production (skyline.ms "Nightly x64" folder)
 
 `TestResultsSchema` is now registered via code (`DefaultSchema.registerProvider()`), which
 shadows the manually created External Schema that has existed since 2018. The code-level
 registration takes precedence, so all saved queries and custom views continue to work.
 
-- [ ] Verify `testresults` schema and tables are accessible in the "Nightly x64" folder
-      (Query UI, any custom queries) after deploying the updated module
-- [ ] Delete the External Schema via **Admin → Schema Administration → testresults → DELETE**
-      to remove the now-dead manual registration
+Shadow-test verification done on a dev-machine mirror restored from a production DB dump —
+**passed** (see `TODO-LK-20260425_testresults-schema-shadow-test.md`). All 13 read-only
+MCP nightly tools produced byte-identical output across all three states (External schema-only,
+External+UserSchema coexist, UserSchema-only). Both write tools (`deactivate_computer`,
+`reactivate_computer`) work post-refactor after MCP-side fixes (see "Companion MCP-side
+fixes" below).
+
+### Deployment steps
+
+- [ ] Deploy the updated `testresults` module to skyline.ms.
+- [ ] Verify `testresults` schema and tables are accessible in `/home/development/Nightly x64`
+      (Query UI, any custom queries) after deploy. The 14 saved queries should resolve
+      via the now-active UserSchema.
+- [ ] **Enable the `TestResults` module in `/home/development`** (parent container)
+      *before* deleting the External Schema there. Reasoning: the saved queries are
+      stored in `query.querydef` with `container = /home/development`, and sub-folders
+      see them via parent-chain inheritance. With the External Schema gone, the parent
+      container has no `testresults` schema unless the module is enabled there. Read
+      paths (e.g., the MCP) continue to work because LabKey resolves the schema in the
+      leaf-folder context where the module is enabled, but the Schema Browser's
+      Jump-to-Definition / saved-query editing UI shows "Missing Schema" from
+      sub-folders. Discovered in shadow-test Phase 3.
+- [ ] Delete the External Schema via **Admin → Schema Administration → testresults → DELETE**.
+      **Important:** the External Schema is registered in **7 containers** on prod —
+      `/home/development` plus the 6 test sub-folders (`Nightly x64`, `Release Branch`,
+      `Release Branch Performance Tests`, `Performance Tests`, `Integration`,
+      `Integration with Perf Tests`). Delete must be repeated per container — it does
+      not propagate from the parent.
+
+### Companion MCP-side fixes
+
+Three MCP-side regressions caused by this refactor's contract changes were caught
+by the shadow test. **Production deployment of the testresults module is not safe
+for MCP consumers until they land alongside.**
+
+- Tracked in `TODO-20260428_labkey_mcp_shadow-fixes.md`. Covers:
+  `runid` → `runId` URL params, JSON-body + Message-check on `SetUserActive`,
+  and `exception`-over-`error` non-200 extraction.
+- Sibling PR `TODO-20260428_labkey_mcp_dev-target.md` adds env-var dev-target
+  switching to the MCP. Not blocking for the testresults deployment, but
+  provides the mechanism that caught these regressions.
 
 ## Known Bugs (out of scope)
 
