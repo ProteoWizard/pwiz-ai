@@ -608,24 +608,25 @@ if ($Skip -contains "labkey") {
 
         if (Test-Path $claudeJsonPath) {
             $claudeConfig = Get-Content $claudeJsonPath -Raw | ConvertFrom-Json
-            # Normalize project root to forward-slash format used in .claude.json
-            $projKey = $projRoot -replace '\\', '/'
-            $projectConfig = $claudeConfig.projects.$projKey
-            if (-not $projectConfig) {
-                # Try with trailing slash or other variations
-                foreach ($key in $claudeConfig.projects.PSObject.Properties.Name) {
-                    if (($key -replace '[\\/]', '') -eq ($projKey -replace '[\\/]', '')) {
-                        $projectConfig = $claudeConfig.projects.$key
-                        break
+            # Normalize project root to forward-slash for comparison
+            $projKeyBase = ($projRoot -replace '\\', '/').TrimEnd('/')
+
+            # Search all project entries under this workspace root (handles the case where
+            # MCP servers were registered from a subdirectory, e.g. pwiz1/, rather than
+            # the workspace root itself)
+            foreach ($key in $claudeConfig.projects.PSObject.Properties.Name) {
+                $normalizedKey = ($key -replace '\\', '/').TrimEnd('/')
+                if ($normalizedKey -eq $projKeyBase -or $normalizedKey.StartsWith($projKeyBase + '/')) {
+                    $pc = $claudeConfig.projects.$key
+                    if ($pc.mcpServers.labkey -and -not $isRegistered) {
+                        $isRegistered = $true
+                        $registeredArgs = $pc.mcpServers.labkey.args -join ' '
+                        $projectConfig = $pc  # expose for TeamCity check below
+                    }
+                    if ($pc.disabledMcpServers -contains 'labkey') {
+                        $isDisabled = $true
                     }
                 }
-            }
-            if ($projectConfig -and $projectConfig.mcpServers.labkey) {
-                $isRegistered = $true
-                $registeredArgs = $projectConfig.mcpServers.labkey.args -join ' '
-            }
-            if ($projectConfig -and $projectConfig.disabledMcpServers -contains 'labkey') {
-                $isDisabled = $true
             }
         }
 
@@ -656,28 +657,21 @@ if ($Skip -contains "teamcity") {
         $tcConfigPath = Join-Path $env:USERPROFILE ".teamcity-mcp\config.json"
         $hasTcConfig = Test-Path $tcConfigPath
 
-        # Check MCP registration in ~/.claude.json (same pattern as LabKey check)
+        # Check MCP registration in ~/.claude.json (same scan-all-subdirs pattern as LabKey check)
         $tcRegistered = $false
         $tcDisabled = $false
         if (Test-Path $claudeJsonPath) {
-            if (-not $projectConfig) {
+            if (-not $claudeConfig) {
                 $claudeConfig = Get-Content $claudeJsonPath -Raw | ConvertFrom-Json
-                $projKey = $projRoot -replace '\\', '/'
-                $projectConfig = $claudeConfig.projects.$projKey
-                if (-not $projectConfig) {
-                    foreach ($key in $claudeConfig.projects.PSObject.Properties.Name) {
-                        if (($key -replace '[\\/]', '') -eq ($projKey -replace '[\\/]', '')) {
-                            $projectConfig = $claudeConfig.projects.$key
-                            break
-                        }
-                    }
+            }
+            $projKeyBase = ($projRoot -replace '\\', '/').TrimEnd('/')
+            foreach ($key in $claudeConfig.projects.PSObject.Properties.Name) {
+                $normalizedKey = ($key -replace '\\', '/').TrimEnd('/')
+                if ($normalizedKey -eq $projKeyBase -or $normalizedKey.StartsWith($projKeyBase + '/')) {
+                    $pc = $claudeConfig.projects.$key
+                    if ($pc.mcpServers.teamcity) { $tcRegistered = $true }
+                    if ($pc.disabledMcpServers -contains 'teamcity') { $tcDisabled = $true }
                 }
-            }
-            if ($projectConfig -and $projectConfig.mcpServers.teamcity) {
-                $tcRegistered = $true
-            }
-            if ($projectConfig -and $projectConfig.disabledMcpServers -contains 'teamcity') {
-                $tcDisabled = $true
             }
         }
 
