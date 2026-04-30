@@ -34,17 +34,25 @@ Confirmed by fetching the live `get-pip.py` and reading the embedded version com
 - [x] Change `BOOTSTRAP_PYPA_URL` to `"https://bootstrap.pypa.io/pip/"` in `PythonInstaller.cs:45`
 - [x] Add `PythonMajorMinorVersion` helper that returns `"3.9"` for `PythonVersion = "3.9.13"`
 - [x] Update `GetPipScriptDownloadUri` (line 154) to compose `{BOOTSTRAP_PYPA_URL}{PythonMajorMinorVersion}/{GET_PIP_SCRIPT_FILE_NAME}`
-- [ ] **Deferred to follow-up issue**: surface captured stderr/stdout from `RunGetPipScriptTask.DoAction` in the thrown exception. Requires a new resource string + `.Designer.cs` update; out of scope for this bug fix.
+- [x] Surface captured stderr/stdout from process-runner failures in the thrown exception
+  - Promoted `TeeTextWriter` from `JsonUiService` (private inner) to public `Util/UtilIO.cs`
+  - Added `RunProcessOrThrow` static helper in `PythonInstaller` that tees `Writer` + capture and throws with output
+  - Refactored all 5 `RunProcess` call sites in `PythonInstaller.cs` (EnableWindowsLongPaths, PipInstall, RunPythonModule, RunGetPipScriptTask, SetupNvidiaLibrariesTask) to use the helper
+  - Added new resource string `PythonInstaller_Failed_to_execute_command____0____Output____1__`
+  - Verified by temporarily reverting the URL fix; new exception now includes pip's actual `"This script does not work on Python 3.9..."` message
 - [x] Build Skyline.sln Release|x64
 
 ### Validation
-- [x] Run `TestAlphaPeptDeepBuildLibrary` locally via Run-Tests.ps1 (passed, 155.6s)
+- [x] Run `TestAlphaPeptDeepBuildLibrary` locally via Run-Tests.ps1 (passed, 150.9s after both commits)
 - [ ] Code inspection pass
 - [x] Open PR, link issue (PR #4177)
 
 ## Key Files
 
-- `pwiz_tools/Skyline/Model/Tools/PythonInstaller.cs` — URL constant, `GetPipScriptDownloadUri`, `RunGetPipScriptTask.DoAction` error reporting
+- `pwiz_tools/Skyline/Model/Tools/PythonInstaller.cs` — URL fix + `RunProcessOrThrow` helper + 5 call site refactor
+- `pwiz_tools/Skyline/Util/UtilIO.cs` — public `TeeTextWriter` (promoted from JsonUiService)
+- `pwiz_tools/Skyline/ToolsUI/JsonUiService.cs` — removed duplicate inner `TeeTextWriter`
+- `pwiz_tools/Skyline/Model/Tools/ToolsResources.resx` + `.Designer.cs` — new "Failed... Output: ..." string
 - `pwiz_tools/Skyline/TestPerf/AlphapeptdeepBuildLibraryTest.cs` — the failing test (no expected change; just verify it passes)
 
 ## Out of Scope (Track Separately)
