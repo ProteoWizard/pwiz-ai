@@ -196,11 +196,9 @@ exercised against either server by setting `LABKEY_SERVER` accordingly.
 
 ### Already verified via the testresults shadow test
 
-During the shadow test, the MCP was pointed at a local LabKey (with the
-two-env-var precursor `LABKEY_SERVER=localhost:8080 LABKEY_USE_SSL=false`,
-since collapsed into the single URL form `LABKEY_SERVER=http://localhost:8080`)
-and 13 read-only nightly tools plus 2 write tools ran end-to-end against
-it. That run covers:
+During the shadow test, the MCP was pointed at a local LabKey
+(`LABKEY_SERVER=http://localhost:8080`) and 13 read-only nightly tools
+plus 2 write tools ran end-to-end against it. That run covers:
 
 - **`common.py`** — the env var is read at startup and applied to every
   URL the MCP builds; `current_target` returned the configured URL;
