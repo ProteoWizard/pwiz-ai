@@ -373,20 +373,32 @@ since there's only one reconciliation in the pipeline.
    (`ProteoWizard/pwiz:Skyline/work/20260430_stage5_boundary`,
    commit `b3b18ef0b`). New `FdrScoresSidecar` class in
    `OspreySharp.IO`.
-3. ✅ Cross-impl byte parity hand-verified: same hardcoded test
-   inputs on both sides → SHA-256-identical 176-byte sidecars
-   (`OSPREY_CROSS_IMPL_FDR_SIDECAR_OUT` test hook).
-4. ⬜ `<stem>.reconciliation.json` serializer/deserializer on both
-   sides (sorted keys, pretty 2-space, full-precision f64 to keep
-   cross-impl byte parity feasible despite JSON's whitespace
-   wiggle room).
-5. ⬜ Wire `--join-at-pass=1 --join-only`: write both sidecars at
+3. ✅ Cross-impl byte parity for `.fdr_scores.bin` hand-verified:
+   same hardcoded test inputs on both sides → SHA-256-identical
+   176-byte sidecars (`OSPREY_CROSS_IMPL_FDR_SIDECAR_OUT` test hook).
+4. ✅ `<stem>.reconciliation.json` envelope on Rust side
+   (`maccoss/osprey:feature/stage5-boundary-persistence`,
+   commit `fae0b0e`). New `reconciliation_io` module with
+   serde-backed read+write; non-Keep actions split into two
+   homogeneous arrays (`use_cwt_peak_actions` +
+   `forced_integration_actions`) keyed by entry_id; gap-fill
+   targets; refined RT calibration (LOESS model parameters).
+   Alphabetical field order at every nesting level.
+5. ✅ `<stem>.reconciliation.json` on C# side
+   (`ProteoWizard/pwiz:Skyline/work/20260430_stage5_boundary`,
+   commit `45a886a86`). New `ReconciliationFile` class in
+   `OspreySharp.IO` using Newtonsoft.Json; CRLF normalized to LF
+   so cross-impl byte parity holds.
+6. ✅ Cross-impl byte parity for `.reconciliation.json`
+   hand-verified: identical 1070 bytes
+   (`OSPREY_CROSS_IMPL_RECONCILIATION_OUT` test hook).
+7. ⬜ Wire `--join-at-pass=1 --join-only`: write both sidecars at
    end of Stage 5 + reconciliation planning, then exit (mode
    currently errors as "not yet implemented").
-6. ⬜ Wire `--join-at-pass=1 --no-join`: read both sidecars, run
+8. ⬜ Wire `--join-at-pass=1 --no-join`: read both sidecars, run
    Stage 6 only, exit (currently also errors as "not yet
    implemented").
-7. ⬜ Stage 6-rescore harness mode that exercises the boundary on
+9. ⬜ Stage 6-rescore harness mode that exercises the boundary on
    real data — single-file + 3-file Stellar.
 
 PRs are not opened yet — both branches stay in "checkpoint" mode
