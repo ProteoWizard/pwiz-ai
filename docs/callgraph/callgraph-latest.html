@@ -347,6 +347,9 @@
       opacity: 0;
       transition: opacity 0.2s;
       box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      /* Above group-overlays (z:5) and stats-panel (z:6) so a hover tip
+         on a node beneath a group label remains readable. */
+      z-index: 10;
     }
 
     #legend {
