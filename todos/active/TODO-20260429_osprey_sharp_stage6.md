@@ -392,14 +392,31 @@ since there's only one reconciliation in the pipeline.
 6. ✅ Cross-impl byte parity for `.reconciliation.json`
    hand-verified: identical 1070 bytes
    (`OSPREY_CROSS_IMPL_RECONCILIATION_OUT` test hook).
-7. ⬜ Wire `--join-at-pass=1 --join-only`: write both sidecars at
-   end of Stage 5 + reconciliation planning, then exit (mode
-   currently errors as "not yet implemented").
-8. ⬜ Wire `--join-at-pass=1 --no-join`: read both sidecars, run
-   Stage 6 only, exit (currently also errors as "not yet
-   implemented").
-9. ⬜ Stage 6-rescore harness mode that exercises the boundary on
-   real data — single-file + 3-file Stellar.
+7. ✅ Wire `--join-at-pass=1 --join-only` to write both sidecars
+   and exit (Rust `feature/stage5-boundary-persistence` commit
+   `ca9676a`; pwiz `Skyline/work/20260430_stage5_boundary` commit
+   `f3dd424ca`). Per-record `entry_id` added to fdr_scores.bin v2
+   (record size 48 → 52 bytes) so a Stage 6 worker can join
+   parquet stubs against the sidecar set. Pre-compaction format
+   matches Rust's existing `persist_fdr_scores` semantics.
+8. ✅ Cross-impl harness `Compare-Stage5-Boundary.ps1`. Runs both
+   tools, snapshots outputs to `rust_outputs/` + `cs_outputs/`
+   subdirs, and SHA-256-compares each pair. Stellar 3-file run
+   today: **3/6 PASS** — all 3 fdr_scores.bin pairs byte-identical;
+   all 3 reconciliation.json pairs differ ONLY on
+   `gap_fill_targets` (with-it-stripped JSON is structurally
+   identical). PR 2 lockdown bar = 6/6 PASS.
+9. ⬜ Port `IdentifyGapFillTargets` to C# (~150 LOC; mirror of
+   Rust `osprey/crates/osprey/src/reconciliation.rs:860-1023`)
+   so the C# side computes the same gap-fill targets and writes
+   them into `reconciliation.json`. Once this lands and the
+   harness reports 6/6 PASS, PR 2 is ready to be filed and
+   merged. **This is the next-session unlock.**
+10. ⬜ Wire `--join-at-pass=1 --no-join`: read both sidecars, run
+    Stage 6 only, exit (currently also errors as "not yet
+    implemented"). PR 3 work, after PR 2 lands.
+11. ⬜ Stage 6-rescore harness mode that exercises the boundary on
+    real data — single-file + 3-file Stellar. PR 3 work.
 
 PRs are not opened yet — both branches stay in "checkpoint" mode
 until item 7 closes the cross-impl validation loop.
