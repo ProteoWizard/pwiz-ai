@@ -419,7 +419,8 @@ since there's only one reconciliation in the pipeline.
     real data — single-file + 3-file Stellar. PR 3 work.
 
 PRs are not opened yet — both branches stay in "checkpoint" mode
-until item 7 closes the cross-impl validation loop.
+until item 9 (the C# `IdentifyGapFillTargets` port) closes the
+cross-impl validation loop and the harness reports 6/6 PASS.
 
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260429_osprey_sharp_stage6.md` before starting work.
+`ai/.tmp/handoff-20260430_stage5_boundary.md` before starting work.
