@@ -68,6 +68,15 @@ class ProjectConfig:
     # to MCP's own anchor. The centroid is read from a persistent cache so
     # bulk moves that temporarily empty the source still spawn correctly.
     spawn_from_group: Optional[dict] = None
+    # Path-prefix → source-group mapping for nodes whose `group` has no
+    # entry in spawn_from_group (typically structural `folder` nodes whose
+    # group is the generic "folders"). Each key is matched as a string
+    # prefix against the node id; the first match wins. Same value shape
+    # as spawn_from_group: a source-group name or {from, dx, dy}. Useful
+    # for nested archive directories — e.g., "todos/completed/" spawns
+    # any subfolder there from the todos-completed centroid so its
+    # contains-edges don't pull child files toward the viewport center.
+    spawn_from_path: Optional[dict] = None
     # JS function body for `commitRepoBase(snapshot) { ... }`.
     # Default returns config.github_base.
     commit_repo_base_js: Optional[str] = None
@@ -359,6 +368,15 @@ def patch_html(base_html: str, config: ProjectConfig) -> str:
     group_y_bias_body = _make_group_bias_body(config.group_y_bias, "height")
     group_labels_js = json.dumps(config.group_labels) if config.group_labels else "null"
     spawn_from_js = json.dumps(config.spawn_from_group) if config.spawn_from_group else "null"
+    # Stable order: longer prefixes first so e.g. "todos/completed/2026/" wins
+    # over "todos/completed/" if both are configured.
+    if config.spawn_from_path:
+        spawn_path_items = sorted(
+            config.spawn_from_path.items(), key=lambda kv: -len(kv[0])
+        )
+        spawn_from_path_js = json.dumps(spawn_path_items)
+    else:
+        spawn_from_path_js = "null"
     summary_title = config.summary_title or config.display_name
     stats_rows_body = config.stats_rows_js or _DEFAULT_STATS_ROWS_JS
 
@@ -366,6 +384,7 @@ def patch_html(base_html: str, config: ProjectConfig) -> str:
         group_colors_js=group_colors_js,
         group_labels_js=group_labels_js,
         spawn_from_js=spawn_from_js,
+        spawn_from_path_js=spawn_from_path_js,
         commit_repo_base_body=commit_repo_body,
         label_transform_body=label_body,
         group_x_bias_body=group_x_bias_body,
@@ -531,13 +550,13 @@ def patch_html(base_html: str, config: ProjectConfig) -> str:
         "          // (live or cached) + optional direction offset; else\n"
         "          // near viewport center. Bulk archival events clearing\n"
         "          // the source still work thanks to the centroid cache.\n"
-        "          const sourceGroup = spawnSourceFor(n.group);\n"
+        "          const sourceGroup = spawnSourceFor(n.group, n.id);\n"
         "          let sx = 0, sy = 0, sourced = false;\n"
         "          if (sourceGroup) {\n"
         "            const c = groupCentroids.get(sourceGroup)\n"
         "                   || window._groupCentroidCache.get(sourceGroup);\n"
         "            if (c) { sx = c.x; sy = c.y; sourced = true; }\n"
-        "            const offset = spawnOffsetFor(n.group, width, height);\n"
+        "            const offset = spawnOffsetFor(n.group, n.id, width, height);\n"
         "            sx += offset.dx; sy += offset.dy;\n"
         "          }\n"
         "          const jitter = sourced ? 40 : 100;\n"
@@ -682,19 +701,38 @@ _INJECTION_TEMPLATE = r"""
     //   {{"from": "sourceGroup", "dx": fraction, "dy": fraction}}
     // See ProjectConfig.spawn_from_group for the rationale.
     const SPAWN_FROM_GROUP = {spawn_from_js};
+    // Path-prefix → spawn spec, sorted longest-prefix-first. Used when a
+    // node's group has no entry in SPAWN_FROM_GROUP — typically structural
+    // folder nodes whose generic "folders" group can't carry per-folder
+    // spawn intent. Without this, e.g. a new `todos/completed/2026/01/`
+    // folder spawns at the viewport center and its contains-edges drag
+    // its archive-TODO children leftward.
+    const SPAWN_FROM_PATH = {spawn_from_path_js};
     // Persistent centroid cache — the last *known* centroid for each group.
     // Keeps spawn-from-group reliable through bulk moves that temporarily
     // empty the source group (e.g., an archival wave clearing Completed):
     // the cache remembers where Completed *was* a moment ago.
     window._groupCentroidCache = new Map();
-    // Helpers to normalize the two spawn-spec shapes.
-    function spawnSourceFor(group) {{
-      const spec = SPAWN_FROM_GROUP && SPAWN_FROM_GROUP[group];
+    // Helpers to normalize the two spawn-spec shapes. Group-based rules
+    // win over path-based ones — paths are a fallback for nodes whose
+    // group has no rule.
+    function spawnSpecFor(group, id) {{
+      const groupSpec = SPAWN_FROM_GROUP && SPAWN_FROM_GROUP[group];
+      if (groupSpec) return groupSpec;
+      if (SPAWN_FROM_PATH && id) {{
+        for (const [prefix, spec] of SPAWN_FROM_PATH) {{
+          if (id.startsWith(prefix)) return spec;
+        }}
+      }}
+      return null;
+    }}
+    function spawnSourceFor(group, id) {{
+      const spec = spawnSpecFor(group, id);
       if (!spec) return null;
       return typeof spec === 'string' ? spec : spec.from;
     }}
-    function spawnOffsetFor(group, width, height) {{
-      const spec = SPAWN_FROM_GROUP && SPAWN_FROM_GROUP[group];
+    function spawnOffsetFor(group, id, width, height) {{
+      const spec = spawnSpecFor(group, id);
       if (!spec || typeof spec === 'string') return {{dx: 0, dy: 0}};
       return {{
         dx: (spec.dx || 0) * width,
@@ -768,7 +806,9 @@ _INJECTION_TEMPLATE = r"""
       window._groupLabelEls.set(label, el);
       return el;
     }}
-    function updateGroupLabels() {{
+    // `snap` skips position smoothing — used by mouse zoom/pan so labels
+    // track the viewport 1:1 instead of lagging behind the drag.
+    function updateGroupLabels(snap) {{
       if (!simulation) return;
       const container = document.getElementById('graph-container');
       if (!container) return;
@@ -799,9 +839,10 @@ _INJECTION_TEMPLATE = r"""
           const screenX = transform.applyX(cx) + width / 2;
           const screenY = transform.applyY(cy) + height / 2;
           // Exponential smoothing so the label doesn't jitter with the sim.
+          // `snap` mode (mouse zoom/pan) bypasses it for instant tracking.
           const prev = window._groupLabelPos.get(lbl);
-          const smX = prev ? prev.x * 0.8 + screenX * 0.2 : screenX;
-          const smY = prev ? prev.y * 0.8 + screenY * 0.2 : screenY;
+          const smX = (prev && !snap) ? prev.x * 0.8 + screenX * 0.2 : screenX;
+          const smY = (prev && !snap) ? prev.y * 0.8 + screenY * 0.2 : screenY;
           window._groupLabelPos.set(lbl, {{x: smX, y: smY}});
           el.style.left = smX + 'px';
           el.style.top  = smY + 'px';

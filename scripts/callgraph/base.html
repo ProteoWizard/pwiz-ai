@@ -720,7 +720,14 @@
       const g = svg.append('g');
       zoomBehavior = d3.zoom()
         .scaleExtent([0.1, 4])
-        .on('zoom', (event) => g.attr('transform', event.transform));
+        .on('zoom', (event) => {
+          g.attr('transform', event.transform);
+          // Group labels live in an HTML overlay layered over the SVG, so the
+          // SVG's zoom transform doesn't move them on its own. `snap` mode
+          // bypasses the simulation-tick smoothing that would otherwise make
+          // labels lag behind the user's drag.
+          if (typeof updateGroupLabels === 'function') updateGroupLabels(true);
+        });
       svg.call(zoomBehavior);
 
       // Add arrow marker for directed edges
