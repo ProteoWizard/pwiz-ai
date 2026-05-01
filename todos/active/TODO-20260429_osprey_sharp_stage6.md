@@ -339,5 +339,58 @@ The original 3-priority list still applies with renamed scope:
 - HPC worker plumbing (`--phase=rescore` consuming plan files)
 - Stage 8 (protein FDR + .blib output) cross-impl bit-parity
 
+### Session 2 (2026-04-30) — PR 1 merged, PR 2 started
+
+**PR 1 (CLI rename) merged.** `--join-at-pass=<1|2>` is now the
+canonical entry-point flag on both sides; `--no-join` and
+`--join-only` are repurposed as orthogonal phase-shape modifiers.
+Sprint branch rebased onto post-merge masters; the CLI rename pieces
+folded into base, leaving only the genuine sprint diffs (workflow
+HTML restructure + `RescorePerFile` orchestrator + planner-gate fix).
+
+**PR 2 design agreed.** Schema for the Stage 5 → Stage 6 boundary:
+
+| File | Format | Content |
+|---|---|---|
+| `<stem>.<phase>-pass.fdr_scores.bin` | binary, versioned | SVM score + 4 q-values + PEP per entry |
+| `<stem>.reconciliation.json` | JSON, pretty | per-(file, entry) actions + gap-fill targets + refined RT cal |
+
+Naming refined: stayed with the existing `.fdr_scores.bin` family
+(extending the format rather than adding a `_qvalues.bin` sibling)
+because Storey-Tibshirani q-value estimation is what makes the
+calibrated value a true FDR score in the first place — the
+uncalibrated SVM discriminant and the calibrated outputs belong
+together. Reconciliation envelope drops the `1st-pass.` prefix
+since there's only one reconciliation in the pipeline.
+
+**PR 2 work in progress (uncommitted PRs; checkpoint commits only):**
+
+1. ✅ v2 binary format for `.fdr_scores.bin` on Rust side
+   (`maccoss/osprey:feature/stage5-boundary-persistence`,
+   commit `7eef9e9`). 32-byte header + 48-byte records (SVM score +
+   4 q-values + PEP), positional + post-compaction.
+2. ✅ v2 binary format on C# side
+   (`ProteoWizard/pwiz:Skyline/work/20260430_stage5_boundary`,
+   commit `b3b18ef0b`). New `FdrScoresSidecar` class in
+   `OspreySharp.IO`.
+3. ✅ Cross-impl byte parity hand-verified: same hardcoded test
+   inputs on both sides → SHA-256-identical 176-byte sidecars
+   (`OSPREY_CROSS_IMPL_FDR_SIDECAR_OUT` test hook).
+4. ⬜ `<stem>.reconciliation.json` serializer/deserializer on both
+   sides (sorted keys, pretty 2-space, full-precision f64 to keep
+   cross-impl byte parity feasible despite JSON's whitespace
+   wiggle room).
+5. ⬜ Wire `--join-at-pass=1 --join-only`: write both sidecars at
+   end of Stage 5 + reconciliation planning, then exit (mode
+   currently errors as "not yet implemented").
+6. ⬜ Wire `--join-at-pass=1 --no-join`: read both sidecars, run
+   Stage 6 only, exit (currently also errors as "not yet
+   implemented").
+7. ⬜ Stage 6-rescore harness mode that exercises the boundary on
+   real data — single-file + 3-file Stellar.
+
+PRs are not opened yet — both branches stay in "checkpoint" mode
+until item 7 closes the cross-impl validation loop.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260429_osprey_sharp_stage6.md` before starting work.
