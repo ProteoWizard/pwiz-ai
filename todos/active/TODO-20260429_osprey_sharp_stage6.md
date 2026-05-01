@@ -406,21 +406,139 @@ since there's only one reconciliation in the pipeline.
    all 3 reconciliation.json pairs differ ONLY on
    `gap_fill_targets` (with-it-stripped JSON is structurally
    identical). PR 2 lockdown bar = 6/6 PASS.
-9. ⬜ Port `IdentifyGapFillTargets` to C# (~150 LOC; mirror of
-   Rust `osprey/crates/osprey/src/reconciliation.rs:860-1023`)
-   so the C# side computes the same gap-fill targets and writes
-   them into `reconciliation.json`. Once this lands and the
-   harness reports 6/6 PASS, PR 2 is ready to be filed and
-   merged. **This is the next-session unlock.**
+9. ✅ Ported `IdentifyGapFillTargets` to C# (Session 3, 2026-05-01).
+   `OspreySharp.FDR.Reconciliation.GapFillTargetIdentifier` plus
+   algorithm POCO `GapFillTarget` (mirroring the Rust
+   `reconciliation.rs` / `reconciliation_io.rs` split). Wired
+   into `WriteReconciliationFiles` with `lib_lookup` +
+   `lib_precursor_mz` built from `fullLibrary` (decoy convention
+   `target_id | 0x80000000`). Per-file isolation-window m/z
+   filter is plumbed through but not yet populated on the C#
+   side (Stellar/Astral don't surface `isolation_scheme` in
+   `calibration.json` today, so the filter is a no-op and Rust
+   matches; future GPF/HRMS datasets will need
+   `IsolationSchemeJson` extended with the `windows` array).
 10. ⬜ Wire `--join-at-pass=1 --no-join`: read both sidecars, run
     Stage 6 only, exit (currently also errors as "not yet
     implemented"). PR 3 work, after PR 2 lands.
 11. ⬜ Stage 6-rescore harness mode that exercises the boundary on
     real data — single-file + 3-file Stellar. PR 3 work.
 
-PRs are not opened yet — both branches stay in "checkpoint" mode
-until item 9 (the C# `IdentifyGapFillTargets` port) closes the
-cross-impl validation loop and the harness reports 6/6 PASS.
+### Session 3 (2026-05-01) — PR 2 filed, Stage 5 boundary locked
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260430_stage5_boundary.md` before starting work.
+**6/6 byte parity achieved on both Stellar and Astral.**
+`Compare-Stage5-Boundary.ps1` now reports 6/6 sidecar pairs
+byte-identical on Stellar (3 files, 03:39 total) and on Astral
+(3 files, 08:50 total). The Stage 5 → Stage 6 boundary is locked
+down; the future PR-3 worker can be developed against frozen
+reference outputs.
+
+**Two distinct issues had to land for 6/6**, only one of which
+the Session-2 handoff anticipated:
+
+1. **Anticipated — port `IdentifyGapFillTargets`** (item 9 above).
+   First C# run with the port: gap_fill_targets counts matched
+   Rust exactly (Stellar 280/264/278) and per-entry JSON values
+   were structurally identical. Algorithm correctness validated.
+   But the harness was still 3/6 — pointing at the second issue.
+
+2. **Unanticipated — JSON f64 format mismatch.** With
+   `gap_fill_targets` no longer the dominant diff,
+   `refined_rt_calibration.abs_residuals` exposed a
+   Newtonsoft-vs-`ryu` threshold disagreement: Newtonsoft's
+   default flips to scientific at `< 1e-4` while Rust `ryu`
+   flips at `< 1e-5`, so a value like `4.583863410978495e-5`
+   was emitted as `4.583863410978495E-05` (C#) vs
+   `0.00004583863410978495` (Rust). The Session-2 handoff had
+   flagged this as an Astral risk, but it actually fired on
+   Stellar too — the previous "structurally identical" check
+   had been a parse-and-re-serialize comparison, not byte-level,
+   which hid the format divergence behind the more visible
+   `gap_fill_targets` count diff.
+
+   Fix: route every JSON f64 through
+   `osprey_core::diagnostics::format_f64_roundtrip` /
+   `OspreySharp.Core.Diagnostics.FormatF64Roundtrip` on both
+   sides — the same shortest-roundtrip helper that's already
+   the canonical formatter for cross-impl TSV diagnostic dumps.
+   Always-decimal, no scientific notation, byte-identical across
+   runtimes regardless of magnitude. Implemented as:
+   - **Rust**: `RoundtripPrettyFormatter` wrapping
+     `serde_json::ser::PrettyFormatter`, overriding `write_f64`
+     and delegating layout (incl. `end_object_value` for the
+     PrettyFormatter `has_value` tracking — easy gotcha;
+     missing it makes every object collapse to `<value>}` with
+     no indent).
+   - **C#**: `RoundtripDoubleConverter : JsonConverter<double>`
+     calling `Diagnostics.FormatF64Roundtrip` via
+     `WriteRawValue`; wired into `ReconciliationFile.Save`.
+
+   This establishes a new project invariant: **every f64 in
+   cross-impl JSON files routes through `format_f64_roundtrip`
+   on both sides**. Future Stage-N boundary envelopes inherit
+   the property.
+
+**PRs filed and pushed:**
+
+- maccoss/osprey #27 (`feature/stage5-boundary-persistence` →
+  `main`): https://github.com/maccoss/osprey/pull/27
+  - 4 commits: fdr_scores v2; reconciliation_io module; CLI
+    wire-up; RoundtripPrettyFormatter.
+- ProteoWizard/pwiz #4181
+  (`Skyline/work/20260430_stage5_boundary` → `master`):
+  https://github.com/ProteoWizard/pwiz/pull/4181
+  - 4 commits: FdrScoresSidecar v2; ReconciliationFile JSON I/O;
+    boundary writes + workflow.html restructure;
+    GapFillTargetIdentifier + RoundtripDoubleConverter.
+
+PRs cross-link each other in their bodies. Both will squash-merge.
+
+### Sprint plan (post-PR-2)
+
+**Priority 1 — finish Stage 6 (per-file rescore)**, status updates:
+1. ✅ `RescorePerFile` orchestrator — landed in Session 1; still
+   stashed on the sprint branch (`Skyline/work/20260429_osprey_sharp_stage6`),
+   to be replayed onto post-PR-2 master.
+2. ⬜ Wire `synthetic_input_from_parquet` through into
+   `config.input_files` in the `--join-at-pass=1` branch (both
+   Rust + C#) so Stage 6 rescore can run without explicit
+   `--input-files`.
+3. ✅ `IdentifyGapFillTargets` ported to C# (Session 3 above) —
+   ready for Stage 6 to consume from `reconciliation.json` directly.
+4. ⬜ Add gap-fill two-pass to `RescorePerFile` (CWT pass with
+   `PrefilterEnabled=false`, then forced pass with overrides).
+5. ⬜ Append gap-fill stubs with `parquet_index = uint.MaxValue`;
+   assign real `ParquetIndex` after write-back.
+6. ⬜ Parquet write-back: replace re-scored rows by
+   `parquet_index`, append gap-fill, write `osprey.reconciled =
+   "true"` + `osprey.reconciliation_hash` metadata.
+7. ⬜ Validation: parquet diff (cs vs rust reconciled parquets,
+   project + sort + diff), or new `OSPREY_DUMP_REFINED_RESCORE`
+   TSV bridge for fast iteration.
+8. ⬜ Workflow HTML: flip Stage 6 boxes to st-done; advance
+   "YOU ARE HERE" into Stage 7.
+
+**Priority 3 — Stage 7 (second-pass Percolator)**: unchanged.
+
+**New follow-up surfaced this session**: extend C#
+`IsolationSchemeJson` to carry the `windows` array (matching
+the Rust struct field). Today the C# side has only summary
+stats (`num_windows`, `mz_min`, `mz_max`, `typical_width`,
+`uniform_width`); the Rust side serializes the full `(center,
+width)` pairs into `calibration.json` when the mzML extracts
+isolation windows. Stellar/Astral happen to omit
+`isolation_scheme` from their calibration.json today (probably
+because the calibration code doesn't populate it), so the
+gap-fill m/z filter is a no-op for both sides on those
+datasets and parity holds. But for GPF datasets where the
+filter MUST fire (per the Rust comment at
+`reconciliation.rs:917-924`), C# would have to silently emit
+extra gap-fill targets that don't satisfy the m/z constraint.
+Track this when the first GPF dataset is added to the harness.
+
+**Next session handoff**: PR 3 — `--join-at-pass=1 --no-join`.
+Sprint branch (`Skyline/work/20260429_osprey_sharp_stage6`) has
+the `RescorePerFile` orchestrator stashed; rebase on post-PR-2
+master and `git stash pop`. The Stage 6 worker reads both
+sidecars (`*.1st-pass.fdr_scores.bin` + `*.reconciliation.json`),
+runs Stage 6 only, exits.
