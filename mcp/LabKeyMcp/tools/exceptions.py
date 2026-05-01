@@ -24,7 +24,7 @@ from .common import (
     DEFAULT_CONTAINER,
     EXCEPTION_SCHEMA,
     EXCEPTION_QUERY,
-    _scheme,
+    _server_url,
 )
 from .stacktrace import normalize_stack_trace
 
@@ -59,7 +59,7 @@ MAJOR_RELEASE_DATE = "2025-05-22"
 
 def _get_exception_url(row_id: int) -> str:
     """Generate URL to view exception details on the active LabKey target."""
-    return f"{_scheme()}://{DEFAULT_SERVER}/home/issues/exceptions/announcements-thread.view?rowId={row_id}"
+    return f"{_server_url(DEFAULT_SERVER)}/home/issues/exceptions/announcements-thread.view?rowId={row_id}"
 
 
 def _parse_version_tuple(version_str: str):

@@ -29,7 +29,7 @@ from .common import (
     get_server_context,
     get_daily_history_dir,
     get_labkey_session,
-    _scheme,
+    _server_url,
     DEFAULT_SERVER,
     TESTRESULTS_SCHEMA,
     DEFAULT_TEST_CONTAINER,
@@ -145,7 +145,7 @@ def _set_computer_active(
         # Build URL for setUserActive endpoint
         encoded_path = quote(container_path, safe="/")
         params = urlencode({"active": str(active).lower(), "userId": user_id})
-        url = f"{_scheme()}://{server}{encoded_path}/testresults-setUserActive.view?{params}"
+        url = f"{_server_url(server)}{encoded_path}/testresults-setUserActive.view?{params}"
 
         # POST request (empty body, params in URL)
         logger.info(f"Setting computer active={active} for userId={user_id} in {container_path}")

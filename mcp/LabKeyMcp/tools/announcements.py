@@ -16,7 +16,7 @@ import labkey
 from .common import (
     get_labkey_session,
     get_server_context,
-    _scheme,
+    _server_url,
     DEFAULT_SERVER,
 )
 
@@ -54,7 +54,7 @@ def register_tools(mcp):
 
             # Step 4: Build the POST URL
             encoded_path = quote(container_path, safe="/")
-            post_url = f"{_scheme()}://{server}{encoded_path}/announcements-insert.view"
+            post_url = f"{_server_url(server)}{encoded_path}/announcements-insert.view"
 
             # Step 5: Build form payload matching LabKey's announcement insert form
             # Required fields: title, body, rendererType
@@ -71,8 +71,8 @@ def register_tools(mcp):
 
             headers = {
                 "X-Requested-With": "XMLHttpRequest",
-                "Origin": f"{_scheme()}://{server}",
-                "Referer": f"{_scheme()}://{server}{encoded_path}/announcements-insert.view",
+                "Origin": _server_url(server),
+                "Referer": f"{_server_url(server)}{encoded_path}/announcements-insert.view",
             }
 
             # Step 6: POST the form
@@ -112,7 +112,7 @@ def register_tools(mcp):
                 logger.warning(f"Could not query for new announcement RowId: {e}")
 
             if row_id:
-                view_url = f"{_scheme()}://{server}{container_path}/announcements-thread.view?rowId={row_id}"
+                view_url = f"{_server_url(server)}{container_path}/announcements-thread.view?rowId={row_id}"
                 return (
                     f"Announcement posted successfully:\n"
                     f"  title: {title}\n"
@@ -122,7 +122,7 @@ def register_tools(mcp):
                     f"\nView at: {view_url}"
                 )
             else:
-                list_url = f"{_scheme()}://{server}{container_path}/announcements-begin.view"
+                list_url = f"{_server_url(server)}{container_path}/announcements-begin.view"
                 return (
                     f"Announcement posted successfully:\n"
                     f"  title: {title}\n"

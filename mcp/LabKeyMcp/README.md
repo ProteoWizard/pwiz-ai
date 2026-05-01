@@ -130,20 +130,19 @@ Once registered, Claude Code can use these tools:
 ## Pointing at a non-production LabKey server
 
 By default the MCP targets `https://skyline.ms`. To point it at a dev or test
-instance (e.g. a local LabKey on `localhost:8080`), set environment variables
-when launching the server — no code changes required:
+instance (e.g. a local LabKey on `localhost:8080`), set the `LABKEY_SERVER`
+environment variable when launching the server — no code changes required:
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `LABKEY_SERVER` | `skyline.ms` | Hostname (and optional `:port`) for all requests. |
-| `LABKEY_USE_SSL` | `true` | Set to `false` to use `http://` instead of `https://`. |
+| `LABKEY_SERVER` | `skyline.ms` | Target server. Accepts a URL (`http://localhost:8080`, `https://panoramaweb.org`) or a bare hostname (`skyline.ms`); a bare hostname defaults to `https://`. |
 
 Example via the Claude Code CLI:
 
 ```bash
 # Switch to a local dev instance
 claude mcp remove labkey -s local
-claude mcp add labkey -e LABKEY_SERVER=localhost:8080 -e LABKEY_USE_SSL=false \
+claude mcp add labkey -e LABKEY_SERVER=http://localhost:8080 \
   -- python <repo-root>/mcp/LabKeyMcp/server.py
 
 # Switch back to prod
@@ -153,7 +152,7 @@ claude mcp add labkey -- python <repo-root>/mcp/LabKeyMcp/server.py
 
 After either, **fully restart Claude Code** — `/mcp` reconnect alone re-spawns
 the server with the launch parameters cached at session start, so the new env
-vars are ignored. The startup banner logs the active target:
+var is ignored. The startup banner logs the active target:
 
 ```
 INFO - labkey_mcp - Starting LabKey MCP server — target: http://localhost:8080
@@ -162,16 +161,21 @@ INFO - labkey_mcp - Starting LabKey MCP server — target: http://localhost:8080
 To confirm at any time, call the `current_target` MCP tool — it returns the
 configured URL (`https://skyline.ms` or `http://localhost:8080`).
 
+Each tool also accepts a per-call `server` argument in the same URL form, so
+a session pointed at `http://localhost:8080` can still reach
+`https://panoramaweb.org` for one-off queries by passing
+`server="https://panoramaweb.org"`.
+
 > **Two-session caveat:** the registration is project-local, so two sessions
 > launched after the same `claude mcp add` will agree on the target. But each
 > session caches its launch parameters independently. If you flip the
 > registration between launching session A and session B, A keeps its old
 > target until restarted. When in doubt, call `current_target` per-session.
 
-> **netrc note:** the MCP strips any `:port` from `LABKEY_SERVER` before the
-> netrc lookup (matching the `requests` library's behavior), so a local dev
-> setup needs `machine localhost` — not `machine localhost:8080`. The port
-> is only for URL building, not credential lookup.
+> **netrc note:** the MCP strips any `scheme://` prefix and `:port` suffix
+> before the netrc lookup, so a local dev setup needs `machine localhost` —
+> not `machine localhost:8080`. The port is only for URL building, not
+> credential lookup.
 
 ## Data Locations on skyline.ms
 
