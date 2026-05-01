@@ -542,3 +542,33 @@ the `RescorePerFile` orchestrator stashed; rebase on post-PR-2
 master and `git stash pop`. The Stage 6 worker reads both
 sidecars (`*.1st-pass.fdr_scores.bin` + `*.reconciliation.json`),
 runs Stage 6 only, exits.
+
+### Session 4 (2026-05-01) — Copilot review feedback addressed
+
+Copilot posted 9 inline review comments on pwiz #4181 (osprey #27
+got 0 inline comments). All 9 were valid; an audit of the Rust
+side found 5 of them mirrored on Rust too. Both sides got a
+follow-up commit:
+
+- **osprey** `feature/stage5-boundary-persistence` `59634e6`
+- **pwiz** `Skyline/work/20260430_stage5_boundary` `7aa56c75c`
+
+Coverage:
+
+| Comment | Fix on each side |
+|---|---|
+| #1 single-file `--join-at-pass=1 --join-only` writes nothing | Validate file count >= 2 + reconciliation enabled — file count goes in CLI parsing (`validate_hpc_args` / `ValidateArgs`), reconciliation-enabled in pipeline-entry (`run_analysis` / start of `Run`). Errors fast instead of silently producing nothing. **No empty-placeholder envelopes** (per user guidance: error rather than write incorrect values that pass through and create confusing results) |
+| #2 `RoundtripDoubleConverter.ReadJson` accepts null/non-numeric | C#-only — added `JsonSerializationException` on bad token (Rust serde_json is strict by default) |
+| #3, #5 atomic-rename comment overclaim | Both sides — softened doc to acknowledge the delete-then-rename pattern is not strictly atomic on overwrite |
+| #4 `pass` byte ignored on read | Both sides — `load_fdr_scores_sidecar` / `TryRead` now take an expected pass and reject mismatches; new `pass_mismatch_rejected` test added on each side |
+| #6 stale `NormalizeHpcArgs` doc | C#-only — Rust `normalize_hpc_args` doc was already current |
+| #7 silent partial-success on `StopAfterStage5` | Both sides — write loops return failure counts; on `stop_after_stage5` mode any failure escalates to a fatal config error (Rust) / non-zero exit + LogError (C#) instead of a misleading "boundary files written" success log |
+| #8 O(files × actions) action filtering | Both sides — pre-group `reconciliation_actions` by file once before the per-file emit loop. Rust adds `from_planner_output_pre_grouped`; C# `BuildReconciliationFile` signature simplified to take pre-grouped slice |
+| #9 pre- vs post-compaction class doc | Both sides — same defect on both. Doc now describes the actual pre-compaction semantics and positional load (vs the speculative post-compaction-with-entry_id-join story the Session 2 v2 format leftover) |
+
+**Validation after the review-fix commits:**
+- Rust: `Build-OspreyRust.ps1 -Fmt -Clippy -RunTests` clean
+- C#: `Build-OspreySharp.ps1 -RunInspection -RunTests` clean (3 new tests added: `TestValidateJoinOnlyModifierRejectsSingleFile`, `TestValidateJoinOnlyModifierRequiresReconciliationEnabled`, `TestValidateJoinOnlyPlainAcceptsSingleFile`, `TestFdrScoresSidecarPassMismatchRejected`)
+- Stellar harness: still **6/6 byte-identical** (3:37) — fixes didn't regress the lockdown
+
+PRs ready for re-review.
