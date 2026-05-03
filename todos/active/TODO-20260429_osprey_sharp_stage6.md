@@ -1178,7 +1178,12 @@ silently using lossy-parsed cal coefficients in Stage 6.
 
 1. **Commit `Compare-Baseline.ps1` + this TODO update on `pwiz-ai`** so Mike can reproduce the regression check.
 2. **Push `feature/stage6-worker` to `maccoss/osprey`** (3 commits since `1a18bc8`).
-3. **File the PR** at maccoss/osprey: `cli: --join-at-pass=1 --no-join Stage 6 rescore worker`. Body covers the three fixes (sidecar v3 + persist call-site move; worker compaction + reconciliation_actions re-keying; serde_json `float_roundtrip`), the bisection methodology, and the validation matrix above. Open question for Mike: keep three commits to preserve the methodology trail, or squash to one?
+3. **PR filed**: https://github.com/maccoss/osprey/pull/28
+   (`cli: --join-at-pass=1 --no-join Stage 6 rescore worker`).
+   Body covers the three fixes, the bisection methodology, the
+   validation matrix, and the reproduction steps. Open question for
+   Mike: keep three commits to preserve the methodology trail, or
+   squash to one?
 4. **Begin C# port** on parked `pwiz:Skyline/work/20260429_osprey_sharp_stage6`, smallest validatable segment first:
    1. Newtonsoft.Json f64 round-trip unit test (does it have the same bug as serde_json default? if so, find the equivalent fix or write a custom converter).
    2. `FdrScoresSidecar` v2 → v3 (add `RunProteinQvalue`, bump version, writer + reader). Validate via existing `OSPREY_CROSS_IMPL_FDR_SIDECAR_OUT` cross-impl byte parity test against Rust v3 output.
