@@ -702,3 +702,377 @@ divergence in one shot.
 parquets that pass downstream metadata checks); it just isn't
 proven byte-identical to in-process yet, so we won't ship
 without the bisection result.
+
+### Session 5 — Bisection finding (ROOT CAUSE IDENTIFIED)
+
+Added `OSPREY_DUMP_MP_INPUTS=<path>` diagnostic dump in
+`crates/osprey/src/diagnostics.rs::dump_mp_inputs` and wired it
+into `pipeline.rs` at the per-entry `tukey_median_polish` call
+site. The dump captures `(entry_id, apex_scan, frag_pos,
+frag_idx, scan_idx, rt, intensity)` for every median-polish
+input, thread-safe append behind a `Mutex<File>`, gated by env
+var so it's a no-op in production runs.
+
+Ran in-process and worker on Stellar 3-file with the dump
+enabled and diffed:
+
+**Result of the bisection:**
+
+- For the 89,555 entry_ids scored on BOTH sides, the median-
+  polish inputs are byte-identical (**0 differences across
+  7,488,834 dump rows**).
+- The worker scores **926 additional entry_ids** that the
+  in-process flow doesn't (89,555 shared + 926 worker-only =
+  90,481 worker total; 0 in-process-only).
+- The 324 file_20 output rows that diverge in `median_polish_*`
+  / `sg_weighted_*` are precisely entries from the 926 extra
+  set — their parquet rows have Stage-4-original values in
+  the in-process output (because in-process never re-scored
+  them) and Stage-6-recomputed values in the worker output
+  (because the worker re-scored them).
+
+**Why the worker scores extras:** `pipeline.rs:3835-3873` runs
+a compaction step BEFORE Stage 6 in the in-process flow:
+`per_file_entries.retain(|e| first_pass_base_ids.contains(&(e.entry_id & 0x7FFF_FFFF)))`
+where `first_pass_base_ids` = base_ids of targets passing
+EITHER `e.run_peptide_qvalue <= reconciliation_compaction_fdr`
+(default 0.01) OR `e.run_protein_qvalue <= config.protein_fdr`
+(default 0.01). Compaction drops ~462k → ~130k entries. The
+worker skips this step and runs Stage 6 on all ~462k
+pre-compaction entries hydrated from the parquet.
+
+**This is a worker bug, not an in-process bug.** Those
+non-passing entries can't make it into the blib (failed
+peptide-level FDR), so re-scoring them is wasted work AND it
+overwrites their Stage 4 features in the parquet, producing
+the 324-row divergence.
+
+### Required fix: compaction in the worker (next session)
+
+The fix has two parts; both are needed to achieve parity:
+
+**(A) Peptide-level compaction** — Apply
+`e.run_peptide_qvalue <= reconciliation_compaction_fdr`
+filter to hydrated `per_file_entries` before calling
+`rescore_per_file_loop`. The `.fdr_scores.bin` v2 sidecar
+already carries `run_peptide_qvalue`, so no schema change for
+this branch.
+
+**(B) Protein-rescue compaction** — The compaction predicate
+is `(peptide OR protein-rescue)`. The protein-rescue branch
+needs `run_protein_qvalue`, which is **NOT in the v2
+sidecar**. Sidecar v2 has only the 4 q-values
+(run/experiment × precursor/peptide) + SVM score + PEP +
+entry_id. Need to **extend to v3** by adding
+`run_protein_qvalue` (one extra f64 per record → record size
+52 → 60 bytes) so the worker can apply the same protein-
+rescue logic.
+
+Extending the sidecar format means:
+- Bump `FDR_SIDECAR_VERSION` to 3 in
+  `crates/osprey/src/pipeline.rs` (Rust) and
+  `OspreySharp.IO/FdrScoresSidecar.cs` (C# — to be touched
+  later when porting to OspreySharp).
+- Update writer to include `run_protein_qvalue` between PEP
+  and end-of-record.
+- Update reader to consume the new field.
+- Update header comment + class doc on both sides.
+- Update tests (round-trip + pass-mismatch tests already in
+  place; add a v3-format test that exercises the new field).
+- Re-run cross-impl byte parity for the existing
+  `OSPREY_CROSS_IMPL_FDR_SIDECAR_OUT` test hook.
+
+Per the user's framing: **this is exactly what the
+"rename-the-folder" portability test was designed to catch — a
+gap in what the sidecar persists that prevents the rehydrated
+path from reproducing the in-memory path.** The protein
+q-value is the gap; v3 closes it.
+
+**After the fix lands**, expected validation result:
+`Compare-Stage6-Worker.ps1 -Dataset Stellar` should produce
+3/3 byte-identical reconciled parquets between Phase A
+(in-process) and Phase C (renamed-folder worker). Same for
+Astral.
+
+### Diagnostic infrastructure preserved
+
+`OSPREY_DUMP_MP_INPUTS=<path>` is now a permanent bisection
+tool in the codebase. Future Stage 7+ cross-impl divergences
+can use the same pattern (declare the in-memory state at the
+seam, dump it via env var, sort + diff, find first byte that
+differs). Workflow is documented in the dump function's
+module-level comment.
+
+### Session 5 — Both compaction fixes landed (uncommitted)
+
+**Sidecar v3.** `crates/osprey/src/pipeline.rs` —
+`FDR_SIDECAR_VERSION` 2 → 3, `FDR_SIDECAR_RECORD_LEN` 52 → 60
+bytes (added `run_protein_qvalue` f64 in `[52..60]`). Writer +
+reader updated. The `persist_fdr_scores` call in `run_analysis`
+moved from the bottom of the first-pass FDR block to **after**
+the first-pass protein FDR + `propagate_protein_qvalues` call,
+so the persisted sidecar carries real protein q-values rather
+than the default `1.0`. Existing test
+`fdr_scores_sidecar_v2_round_trip` renamed to
+`fdr_scores_sidecar_v3_round_trip`; added distinct
+`run_protein_qvalue` values per entry to catch any writer that
+drops the new field. Cross-impl byte-parity test hook
+(`OSPREY_CROSS_IMPL_FDR_SIDECAR_OUT`) still in place; the C#
+side will need the same v3 update when we port.
+
+**Worker compaction.** `crates/osprey/src/rescore.rs::run_rescore`
+— after `hydrate_for_rescore` returns, build
+`first_pass_base_ids` using the same predicate the in-process
+pipeline uses
+(`run_peptide_qvalue <= reconciliation_compaction_fdr` OR
+`run_protein_qvalue <= protein_fdr`), retain entries by
+`base_id`, and **re-key** `reconciliation_actions` from the
+hydration's pre-compaction `(file, vec_idx)` keys to
+post-compaction `(file, new_vec_idx)` keys (via an
+intermediate `(file, entry_id)` round-trip).
+
+### Bisection re-run after fixes — MP inputs now byte-identical
+
+Reran `OSPREY_DUMP_MP_INPUTS=<path>` for both in-process
+(`--join-at-pass=1`, no modifier) and worker
+(`--join-at-pass=1 --no-join`) against the same Stage 4
+parquets + boundary file pair. Results:
+
+| Metric | Before fixes | After fixes |
+|---|---|---|
+| inproc dump rows | 7,488,835 | **7,488,835** |
+| worker dump rows | 7,535,149 | **7,488,835** |
+| inproc entry_ids | 89,555 | **89,555** |
+| worker entry_ids | 90,481 | **89,555** |
+| sorted-dump SHA-256 match | NO (worker had 926 extras) | **YES** (identical) |
+
+The two dumps are now byte-identical when sorted by
+`(entry_id, apex_scan, frag_pos, scan_idx)`. Tukey's median
+polish receives the SAME inputs in BOTH code paths.
+
+Common SHA-256:
+`d488e2c8dae7e2e5ffde94934e4dfae0fb641f140a435b87a7a8dc6d14062277`
+
+Implication: every value computed downstream of
+`tukey_median_polish` from these inputs (`median_polish_*` +
+the `sg_weighted_*` features that depend on them) should now
+also match between the two paths. Verification still needed at
+the parquet content layer.
+
+### Next steps
+
+1. **Content-diff the reconciled parquets** between in-process
+   and worker. If 0 columns differ at the value level: bit
+   parity of the worker is achieved at the algorithmic layer,
+   and any remaining file-size differences (~25-40 bytes per
+   parquet seen post-fix) are parquet/ZSTD compression
+   non-determinism unrelated to our scoring. If a non-zero
+   column diff remains: add the next bisection diagnostic at
+   the next layer down (e.g., where `sg_weighted_*` is
+   computed, or in second-pass FDR if compaction-time decoy
+   pairing is involved).
+2. **Address parquet compression non-determinism** if the
+   25-40 byte file-size delta blocks the harness from
+   reporting PASS. Likely a ZSTD multi-thread block layout
+   thing; deterministic compression knob may need to be set
+   in `WriterProperties`. Worth deferring until content-diff
+   shows we're otherwise clean.
+3. **Commit both fixes** (Sidecar v3 + worker compaction +
+   MP-inputs diagnostic) once content-diff confirms parity.
+4. **Then port to C#** (Sidecar v3 reader/writer in
+   `OspreySharp.IO.FdrScoresSidecar`, hydration + compaction
+   in OspreySharp's worker). Worker C# port was always
+   planned; parity validation on the Rust side first.
+
+### Files modified this session (uncommitted on `feature/stage6-worker`)
+
+- `crates/osprey/src/diagnostics.rs` — added
+  `dump_mp_inputs(...)` + module-level workflow comment
+- `crates/osprey/src/pipeline.rs` — sidecar v3 (header doc,
+  consts, writer, reader, test renamed); moved
+  `persist_fdr_scores` call to after first-pass protein FDR;
+  added `crate::diagnostics::dump_mp_inputs(...)` call right
+  before each `tukey_median_polish` invocation
+- `crates/osprey/src/rescore.rs` — worker compaction +
+  reconciliation_actions re-keying after hydrate
+
+### Content-diff result after compaction fix
+
+Reconciled `.scores.parquet` byte-comparison
+(in-process Phase A vs worker Phase C) on file_20:
+
+| Column family | Pre-fix | Post-fix |
+|---|---|---|
+| Identity (entry_id, modseq, charge, …) | 0 differ | **0 differ** |
+| Peak boundaries (apex_rt, start_rt, end_rt) | 0 differ | **0 differ** |
+| Single-scan scoring (xcorr, peak_*, mass_accuracy_*, ms1_*) | 0 differ | **0 differ** |
+| `median_polish_*` family | 324 differ | **0 differ** |
+| `sg_weighted_*` family | 324 differ | **0 differ** |
+| `median_polish_min_fragment_r2` | 50 differ | **0 differ** |
+| `median_polish_residual_correlation` | 321 differ | **0 differ** |
+| `rt_deviation` / `abs_rt_deviation` | 0 differ | **13,400 differ** (ULP only) |
+
+So 38 of 40 columns are now bit-identical. The only remaining
+divergence is `rt_deviation` / `abs_rt_deviation`, and it is
+**1-ULP-level floating-point noise**:
+- max abs delta: **7.1e-15**
+- median abs delta: **1.8e-15** (literally 1 ULP at f64
+  precision)
+- 95th percentile abs delta: 3.6e-15
+
+Sample:
+```
+entry_id=29
+  inproc rt_dev=0.120818237147187
+  worker rt_dev=0.120818237147184
+  delta       =3.553e-15
+```
+
+Functionally identical; only the last decimal place
+flickers.
+
+### Open question for next session
+
+`rt_deviation = peak.apex_rt - ctx.expected_rt`. `apex_rt`
+matches bit-exactly across all 463k rows. `expected_rt =
+rt_calibration.predict(entry.retention_time)`. The
+in-process flow uses the live `RTCalibration` object built by
+Stage 5 LOESS refit; the worker reconstructs it from the
+JSON envelope via `RTCalibration::from_model_params(params,
+residual_sd)`.
+
+`predict()` only touches `library_rts` + `fitted_values`
+arrays (verified by reading the function); both are
+serialized as `library_rts` / `fitted_rts` in the JSON
+envelope using `format_f64_roundtrip`, which is supposed to
+preserve f64 bits exactly. So in theory predict's inputs
+should be bit-identical between the two paths.
+
+**Next step**: add a diagnostic dump at `predict()` entry
+(or where rt_deviation is computed) capturing
+`(library_rt_input, library_rts_array_hash,
+fitted_values_array_hash, predicted_output)` and find which
+of those drifts. If `library_rts` / `fitted_values` arrays
+differ bit-wise → JSON round-trip isn't truly lossless for
+some values → fix the serialization. If arrays match but
+output differs → some HIDDEN state in `RTCalibration` is
+affecting `predict()` in ways the codebase doesn't suggest.
+
+This is a much smaller investigation than the median-polish
+one. Once it's resolved, parquet content-diff should be 0
+columns differing across all 40, and remaining file-size
+delta of 25-40 bytes is parquet/ZSTD encoding non-determinism
+(separate concern, may be deterministic with the right
+WriterProperties knob).
+
+### Session 5 — rt_deviation root cause + fix
+
+Bisection diagnostic added in `crates/osprey/src/diagnostics.rs`
+(gated by `OSPREY_DUMP_PREDICT_RT=<path>`):
+- `dump_predict_rt_arrays` — once per file, writes the cal's
+  `library_rts` and `fitted_values` arrays.
+- `dump_predict_rt_call` — every `cal.predict()` call, writes
+  `(entry_id, library_rt_input, expected_rt_output)`.
+
+Wired into the rescore search path right at the
+`expected_rt = cal.predict(entry.retention_time)` call site
+(`pipeline.rs` ~7000), and at the top of the rescore per-file
+loop (where `rt_cal` is selected).
+
+Diff between in-process and worker dumps showed:
+- **Cal arrays differ**: 79,598 lines differ between the two
+  dumps. Specifically, `fitted_values[1012]` for file_20 was
+  `3.1575921556296254` in-process vs `3.157592155629626` in
+  the worker — a 1-ULP difference.
+- **Predict outputs differ**: 81,428 lines (consistent with
+  arrays differing).
+
+Wrote a focused round-trip test
+(`crates/osprey/src/bin/rt_roundtrip_test.rs`) to confirm
+where the lossy step is. Found:
+
+> `serde_json::from_str("3.1575921556296254")` returns
+> `0x400942bfad144878` (off by 1 ULP) while
+> `f64::from_str("3.1575921556296254")` returns the correct
+> `0x400942bfad144877`.
+
+So serde_json's default f64 parser is *not* correctly rounded.
+Our `RoundtripPrettyFormatter` writes the correct shortest
+round-trip string (via Rust ryu's `format!("{}", v)`), and
+`f64::from_str` reads it back exactly — but **serde_json's
+default parser doesn't**.
+
+**Fix.** Enabled the `float_roundtrip` feature on serde_json
+in the workspace `Cargo.toml`:
+
+```toml
+serde_json = { version = "1.0", features = ["raw_value", "float_roundtrip"] }
+```
+
+The serde_json docs describe this exactly: *"Use sufficient
+precision when parsing fixed precision floats from JSON to
+ensure that they maintain accuracy when round-tripped through
+JSON."* Approximately 2x slower for f64 parsing, which is fine
+— our hot paths don't parse JSON.
+
+After re-running `rt_roundtrip_test`: all six test values
+round-trip bit-exactly through serde_json. Fix confirmed at
+the unit level.
+
+### Stellar portability gate: 3/3 PASS
+
+After the float_roundtrip fix:
+
+```
+$ pwsh Compare-Stage6-Worker.ps1 -Dataset Stellar -Clean
+
+Phase A: in-process Stages 5-8 (--join-at-pass=1)         162s
+Phase B: persist boundary (--join-at-pass=1 --join-only)   75s
+Phase C: rename folder, run worker (--no-join)             19s
+Comparing reconciled .scores.parquet (A vs C)...
+
+Stellar Ste-...20  PASS   267002094 bytes
+Stellar Ste-...21  PASS   267332776 bytes
+Stellar Ste-...22  PASS   267832763 bytes
+
+3/3 reconciled parquets byte-identical between in-process and
+worker (post-rename).  Total: 04:50
+
+Stage 6 worker output is portable: hydrate-from-disk after a
+folder rename produces byte-identical reconciled parquets to
+an in-process Stage 6. HPC fan-out unblocked.
+```
+
+Full content-diff also clean (40/40 columns match, 0 rows
+differ). SHA-256:
+`6f7cfe9808c04a0237975734f516e36f2a91e30e36c455a246cba794e50b422d`
+on both Phase A and Phase C parquets for file_20.
+
+### Status summary
+
+- ✅ Hydration end-to-end (Sidecar v3, reconciliation.json,
+  calibration.json, parquet stubs)
+- ✅ Worker invocation drives in-process `rescore_per_file_loop`
+- ✅ HPC portability verified (folder rename works)
+- ✅ Worker is deterministic (5/5 byte-identical reruns)
+- ✅ In-process is deterministic (2/2 byte-identical reruns)
+- ✅ Median-polish-input bisection: byte-identical
+- ✅ All scoring feature columns (40/40): 0 rows differ
+- ✅ Stellar `Compare-Stage6-Worker.ps1`: **3/3 PASS** (folder
+  rename portability + content + bytes all clean)
+- ⏸ Astral `Compare-Stage6-Worker.ps1` (next, larger dataset
+  + GPF-style; expected to PASS now that the fundamentals
+  hold)
+- ⏸ Regression test against `osprey-mm` clone at `main` HEAD
+  (cloned to `C:\proj\osprey-mm` for end-to-end comparison —
+  ensure our changes don't perturb the in-process pipeline's
+  output for runs that don't use the worker)
+- ⏸ Clean up + commit + push (uncommitted on
+  `feature/stage6-worker`: float_roundtrip Cargo.toml,
+  predict + MP-inputs diagnostics, sidecar v3, worker
+  compaction + re-keying, rt_roundtrip_test bin)
+- ⏸ C# port (deferred until full Rust parity validated;
+  C# will need same Sidecar v3 read/write + JSON
+  float_roundtrip equivalent — Newtonsoft.Json's f64 parser
+  may have the same bug, worth checking when we get there)
+- ⏸ PR for Mike's review
