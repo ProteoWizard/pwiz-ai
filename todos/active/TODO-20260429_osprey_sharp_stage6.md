@@ -572,3 +572,133 @@ Coverage:
 - Stellar harness: still **6/6 byte-identical** (3:37) — fixes didn't regress the lockdown
 
 PRs ready for re-review.
+
+### Session 5 (2026-05-02) — Stage 6 worker hydration + rescore engine
+
+Picked up after the Stage 5 → Stage 6 boundary PRs merged. Goal:
+the `--join-at-pass=1 --no-join` worker that reads the boundary
+files + parquet from disk and produces reconciled
+`.scores.parquet` files matching what an in-process Stage 6 run
+would produce. Working only on `maccoss/osprey` for this sprint;
+**`ProteoWizard/pwiz` deliberately untouched** until Rust-side
+behavior is validated and ready for Mike's review.
+
+**Branches:**
+- `osprey` `feature/stage6-worker` (off `main` at `1a18bc8`)
+- `pwiz` `Skyline/work/20260429_osprey_sharp_stage6` set up but
+  empty (parked at master HEAD; will pick up the C# port after
+  the Rust side passes its tests)
+
+**What landed (osprey):**
+
+`ca97eca` — Per-file rescore worker hydration layer:
+- New `crates/osprey/src/rescore.rs` module with
+  `RescoreInputs` + `hydrate_for_rescore()` + `hydrate_and_log()`.
+  Loads stubs from parquet via `load_fdr_stubs_from_parquet`,
+  overlays SVM scores + 4 q-values + PEP from
+  `.1st-pass.fdr_scores.bin` via `load_fdr_scores_sidecar` (with
+  `expected_pass=1`), parses `.reconciliation.json` into
+  `HashMap<(file, vec_idx), ReconcileAction>` (entry_id → vec_idx
+  join from the loaded stubs) + `Vec<GapFillTarget>` per file +
+  refined `RTCalibration` per file via `from_model_params`.
+- CLI/validate plumbing: `--join-at-pass=1 --no-join` is wired
+  past the previous "not yet implemented" bail; new tests for
+  the precondition checks (require `--input-scores`, reject
+  `--input`, require `--library` + `--output`).
+- New `pub mod rescore` in lib.rs.
+- Visibility bumps to `pub(crate)` on
+  `load_fdr_stubs_from_parquet`, `load_fdr_scores_sidecar`,
+  `synthetic_input_from_parquet`, `fdr_scores_path_pass1`.
+
+`e14fe55` — Worker invocation + extracted rescore loop:
+- `config.input_files` is synthesized from `--input-scores` at
+  the top of `run_analysis` (idempotent); fixes the pre-existing
+  no-op behavior where `--join-at-pass=1` skipped Stage 6
+  entirely because `file_name_to_idx` was empty.
+- The inline per-file rescore + gap-fill + parquet write-back
+  block (~280 lines) is lifted into
+  `pub(crate) rescore_per_file_loop` in `pipeline.rs` with no
+  body changes; the original call site becomes a one-line call.
+- `crate::rescore::run_rescore` hydrates state +
+  loads `per_file_calibrations` from sibling
+  `.calibration.json` + builds `file_name_to_idx` +
+  `per_file_cache_paths` + calls `rescore_per_file_loop`.
+  Worker writes reconciled per-file `.scores.parquet` ready for
+  a downstream `--join-at-pass=2` second join.
+
+**Validation harness:**
+
+New `pwiz-ai/scripts/OspreySharp/Compare-Stage6-Worker.ps1`
+implements an HPC-portability gate. Three phases per dataset:
+
+1. **Phase A — In-process baseline.** Stage 4 parquets + mzML +
+   library staged in `_stage6_worker/<dataset>_A/`. Run osprey
+   `--join-at-pass=1` (no modifier) to do Stages 5-8 in one
+   process; snapshot the SHA-256 of each reconciled
+   `.scores.parquet`.
+2. **Phase B — Persist Stage 5 boundary.** Restore Stage 4
+   parquets in `_A/`. Run `--join-at-pass=1 --join-only` to
+   write boundary files sibling to each parquet.
+3. **Phase C — Worker on RENAMED folder.** Restore Stage 4
+   parquets in `_A/`. **Rename `_A/` → `_B/`** (different
+   absolute path). Run `--join-at-pass=1 --no-join` from `_B/`.
+   Worker reads relocated boundary + parquet + sibling mzML /
+   calibration JSON / spectra cache, runs Stage 6, writes
+   reconciled `.scores.parquet` in place at `_B/`. Snapshot
+   hashes.
+
+PASS criterion: Phase A reconciled parquets are byte-identical
+to Phase C reconciled parquets. Catches absolute-path leaks,
+host-name dependencies, and any in-memory-vs-disk-rehydrate
+divergence in one shot.
+
+**Findings (validation OPEN — root cause not yet identified):**
+
+- **Both flows are individually deterministic.** 5 consecutive
+  worker runs against the same boundary + parquet are
+  byte-identical; 2 consecutive in-process runs are byte-identical.
+- **In-process vs worker diverge on a small subset of rows.**
+  Out of 463362 rows in the file_20 reconciled parquet, 324
+  rows differ in their `median_polish_*` and `sg_weighted_*`
+  feature values (~0.07%). Peak boundaries (`apex_rt`,
+  `start_rt`, `end_rt`), single-scan scoring features (`xcorr`,
+  `peak_*`, `mass_accuracy_*`, `ms1_*`), and entry identity
+  columns are byte-identical across all 463362 rows.
+- The differences look like real value drift — not ULP noise —
+  e.g. `median_polish_cosine` of `0.964` vs `0.983` for the
+  same `entry_id`.
+- Confirmed input-layer divergence: `per_file_entries` going
+  into `rescore_per_file_loop` is ~462k pre-compaction stubs
+  in the worker but ~130k post-compaction stubs in the
+  in-process flow (compaction at `pipeline.rs:3852` drops
+  non-FDR-passing entries before Stage 6). Both produce the
+  same final 463k-row parquet because the loop's
+  `load_scores_parquet → overlay → write` pattern uses the
+  original parquet as the row template.
+- The differences cluster on multi-scan features specifically.
+  Not yet known how the entry-list-size difference propagates
+  into multi-scan scoring of those 324 entries.
+
+**Next steps (next session):**
+
+1. **Bisect the divergence.** Add diagnostic dumps to both
+   flows at points along the multi-scan feature path
+   (`tukey_median_polish` inputs, `extract_fragment_xics`
+   outputs, `sg_weighted_*` intermediate state) and find the
+   first computation where in-process and worker disagree on
+   the 324 entries. This is the methodology that worked for
+   Stage 5 cross-impl bisection — same approach here.
+2. **Set up `osprey_mm` clone** at `C:\proj\osprey_mm` for
+   `maccoss/osprey:main` — the historical baseline for
+   bit-parity comparisons.
+3. **Once bisection finds root cause + fix lands and worker is
+   bit-identical to in-process**, port hydration to C#
+   (currently parked) and add a corresponding harness pass.
+4. **PR for Mike's review** once both sides pass the
+   portability gate (`Compare-Stage6-Worker.ps1` 3/3 PASS on
+   Stellar + same on Astral).
+
+**Worker is functional today** (writes valid reconciled
+parquets that pass downstream metadata checks); it just isn't
+proven byte-identical to in-process yet, so we won't ship
+without the bisection result.
