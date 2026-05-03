@@ -1079,3 +1079,116 @@ on both Phase A and Phase C parquets for file_20.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260502_stage6_worker.md` before starting work.
+
+### Session 6 (2026-05-03) — Astral worker portability + osprey-mm baseline regression
+
+Picked up after the Stellar Stage 6 worker portability gate locked.
+Goal: close the remaining validation gates so the Rust PR can ship.
+
+**Astral Stage 6 worker portability — 3/3 PASS** (24:51 wall-clock).
+`Compare-Stage6-Worker.ps1 -Dataset Astral -Clean -Threads 16`. All
+three reconciled `.scores.parquet` files are byte-identical between
+Phase A (in-process) and Phase C (renamed-folder worker), including
+the largest at 815 MB. The fundamentals that locked Stellar (sidecar
+v3, worker compaction, serde_json `float_roundtrip`) hold on the
+larger GPF-style dataset without further fixes.
+
+| Dataset | File | Bytes | Status |
+|---|---|---|---|
+| Astral | Ast-...49 | 795,656,065 | PASS |
+| Astral | Ast-...55 | 815,174,283 | PASS |
+| Astral | Ast-...60 | 774,734,630 | PASS |
+
+**Rust full build gate clean.** `Build-OspreyRust.ps1 -Fmt -Clippy
+-RunTests` on `feature/stage6-worker`: fmt clean, all 463 unit tests
+pass across 14 test binaries, clippy clean at `-D warnings`. CI on
+the maccoss/osprey side will reproduce the same gate.
+
+**osprey-mm baseline regression — new harness +
+hypothesis-driven validation.**
+
+The handoff called for an end-to-end regression vs `osprey-mm @ main
+1a18bc8` to prove that the changes in `feature/stage6-worker` do not
+perturb the in-process pipeline output. Wrote
+`ai/scripts/OspreySharp/Compare-Baseline.ps1` (companion to
+`Compare-Stage6-Worker.ps1`): stages mzML + library into two parallel
+work dirs, runs each binary `osprey -i mzML -l lib -o blib`
+end-to-end, byte-compares produced `.scores.parquet`. The harness
+catches any cross-tree drift in Stage 5-8 output for users who run
+without the worker.
+
+Stellar end-to-end regression: **3/3 PASS** in 9:13 (no extra fixes
+needed; both binaries produce byte-identical reconciled parquets on
+all three Stellar files).
+
+Astral end-to-end regression first attempt: **2/3 PASS** in 51:11.
+File `Ast-...49` diverged. `Ast-...55` and `Ast-...60` byte-identical.
+
+Bisection via `parquet_diff.py` (Session 5 content-diff tool):
+- Row count identical (1,690,708 / 40 columns).
+- 39 of 40 columns byte-identical, including all peak boundaries,
+  all single-scan scoring, all multi-scan rescoring features, and
+  even `mass_accuracy_deviation_mean` (signed mean) byte-identical.
+- One column differed: `abs_mass_accuracy_deviation_mean` on 4,873
+  rows (0.29% of total), every difference exactly 1 ULP at f64
+  precision (e.g., `5.8849676905429815` vs `5.884967690542981`).
+
+Hypothesis: the divergence comes from `pipeline.rs:2890-2897`'s
+`load_calibration` call inside `rescore_per_file_loop`, which reads
+`.calibration.json` back from disk in BOTH end-to-end and worker
+modes (shared code path). Baseline reads with serde_json's default
+f64 parser, which is 1-ULP-off on shortest-roundtrip strings;
+feature reads with `float_roundtrip` enabled, which is bit-exact.
+The 1-ULP drift in the cal coefficients ripples into mass m/z
+corrections and shows up in `abs_mass_accuracy_deviation_mean` (the
+sum of absolute errors accumulates the per-fragment ε without
+cancellation, while the signed sum sees ε terms cancel to within 1
+ULP and round to byte-identical).
+
+Hypothesis test: enabled `float_roundtrip` in `osprey-mm/Cargo.toml`
+(diagnostic-only working-tree edit, not committed), rebuilt
+`osprey-mm` release, re-ran the harness.
+
+Astral end-to-end regression second attempt: **3/3 PASS** in 47:14.
+All three files byte-identical. Hypothesis confirmed.
+
+| Dataset | File | Status |
+|---|---|---|
+| Astral | Ast-...49 | PASS |
+| Astral | Ast-...55 | PASS |
+| Astral | Ast-...60 | PASS |
+
+The reverted `osprey-mm` clone is back to clean tracking
+`maccoss/osprey:main` at `1a18bc8`. The diagnostic was confirmation
+that the only cross-tree drift is the serde_json fix, NOT any
+algorithmic change in feature/stage6-worker. Reasonable due
+diligence: feature/stage6-worker is *more correct* than baseline for
+end-to-end runs that hit the cal JSON round-trip path; baseline was
+silently using lossy-parsed cal coefficients in Stage 6.
+
+**Validation matrix (final):**
+
+| Gate | Stellar | Astral | Status |
+|---|---|---|---|
+| Stage 6 worker portability (`Compare-Stage6-Worker.ps1`) | 3/3 PASS | 3/3 PASS | locked |
+| End-to-end baseline regression (`Compare-Baseline.ps1`, after enabling `float_roundtrip` on baseline) | 3/3 PASS | 3/3 PASS | locked |
+| Rust fmt + clippy + 463 unit tests (`Build-OspreyRust.ps1 -Fmt -Clippy -RunTests`) | clean | n/a | locked |
+
+### Next steps
+
+1. **Commit `Compare-Baseline.ps1` + this TODO update on `pwiz-ai`** so Mike can reproduce the regression check.
+2. **Push `feature/stage6-worker` to `maccoss/osprey`** (3 commits since `1a18bc8`).
+3. **File the PR** at maccoss/osprey: `cli: --join-at-pass=1 --no-join Stage 6 rescore worker`. Body covers the three fixes (sidecar v3 + persist call-site move; worker compaction + reconciliation_actions re-keying; serde_json `float_roundtrip`), the bisection methodology, and the validation matrix above. Open question for Mike: keep three commits to preserve the methodology trail, or squash to one?
+4. **Begin C# port** on parked `pwiz:Skyline/work/20260429_osprey_sharp_stage6`, smallest validatable segment first:
+   1. Newtonsoft.Json f64 round-trip unit test (does it have the same bug as serde_json default? if so, find the equivalent fix or write a custom converter).
+   2. `FdrScoresSidecar` v2 → v3 (add `RunProteinQvalue`, bump version, writer + reader). Validate via existing `OSPREY_CROSS_IMPL_FDR_SIDECAR_OUT` cross-impl byte parity test against Rust v3 output.
+   3. C# hydration helper mirroring `rescore.rs::hydrate_for_rescore`. Validate by adding a small new diagnostic test hook that dumps in-memory state at the seam.
+   4. Worker compaction + `reconciliation_actions` re-keying (mirror `rescore::run_rescore`). Validate via `OSPREY_DUMP_MP_INPUTS` cross-impl byte-identity check.
+   5. Wire `--join-at-pass=1 --no-join` into `AnalysisPipeline`. Validate via `Compare-Stage6-Worker.ps1` Stellar 3/3 PASS for the C# binary.
+
+**Files added/modified this session:**
+
+- `ai/scripts/OspreySharp/Compare-Baseline.ps1` (NEW) — end-to-end baseline regression harness. Runs both binaries `osprey -i mzML -l lib -o blib` from clean staged work dirs, byte-compares reconciled `.scores.parquet`. Designed for ongoing cross-tree regression coverage; pairs with `Compare-Stage6-Worker.ps1` to cover both worker portability and in-process unperturbed-ness.
+- `ai/todos/active/TODO-20260429_osprey_sharp_stage6.md` (this file) — Session 6 progress log entry.
+
+No code changes on `osprey/feature/stage6-worker` this session.
