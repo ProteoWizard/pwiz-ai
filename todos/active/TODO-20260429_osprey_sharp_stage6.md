@@ -1076,3 +1076,6 @@ on both Phase A and Phase C parquets for file_20.
   float_roundtrip equivalent — Newtonsoft.Json's f64 parser
   may have the same bug, worth checking when we get there)
 - ⏸ PR for Mike's review
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260502_stage6_worker.md` before starting work.
