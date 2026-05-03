@@ -15,7 +15,14 @@
     Path to the osprey Cargo workspace (default: C:\proj\osprey)
 
 .PARAMETER Fmt
-    Run cargo fmt before building
+    Run `cargo fmt -- --check` before building. Fails fast (non-zero
+    exit) if any file would be reformatted, matching the upstream CI
+    gate. Use this to catch fmt drift before committing.
+
+.PARAMETER FmtFix
+    Run `cargo fmt` (in-place reformat) before building. Use this to
+    apply fmt changes to the working tree. Mutually exclusive with
+    -Fmt; if both are passed, -Fmt wins.
 
 .PARAMETER Workspace
     Build the full workspace (cargo build --workspace) instead of just the
@@ -43,7 +50,13 @@
 
 .EXAMPLE
     .\Build-OspreyRust.ps1 -Fmt -Clippy
-    Format, build fork, and lint
+    Check formatting (fail-fast), build fork, and lint. Use this
+    before committing.
+
+.EXAMPLE
+    .\Build-OspreyRust.ps1 -FmtFix
+    Reformat working tree in place via `cargo fmt`. Use this to
+    apply rustfmt changes after -Fmt fails.
 #>
 
 param(
@@ -52,6 +65,9 @@ param(
 
     [Parameter(Mandatory=$false)]
     [switch]$Fmt = $false,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$FmtFix = $false,
 
     [Parameter(Mandatory=$false)]
     [switch]$Workspace = $false,
@@ -86,13 +102,23 @@ try {
     $env:CMAKE_GENERATOR = "Ninja"
 
     if ($Fmt) {
-        Write-Host "Running cargo fmt..." -ForegroundColor Cyan
+        Write-Host "Running cargo fmt -- --check..." -ForegroundColor Cyan
+        cargo fmt -- --check
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "cargo fmt --check failed: working tree differs from rustfmt output." -ForegroundColor Red
+            Write-Host "Run with -FmtFix to reformat in place, then re-run with -Fmt." -ForegroundColor Yellow
+            exit $LASTEXITCODE
+        }
+        Write-Host "Format check passed" -ForegroundColor Green
+        Write-Host ""
+    } elseif ($FmtFix) {
+        Write-Host "Running cargo fmt (in-place)..." -ForegroundColor Cyan
         cargo fmt
         if ($LASTEXITCODE -ne 0) {
             Write-Host "cargo fmt failed" -ForegroundColor Red
             exit $LASTEXITCODE
         }
-        Write-Host "Format check passed" -ForegroundColor Green
+        Write-Host "Reformatted working tree" -ForegroundColor Green
         Write-Host ""
     }
 
