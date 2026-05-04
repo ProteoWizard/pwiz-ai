@@ -1,54 +1,62 @@
 <#
 .SYNOPSIS
-    Cross-impl Stage 6 worker (--join-at-pass=1 --no-join) byte-parity gate.
+    Per-iteration cross-impl Stage 6 worker (--join-at-pass=1 --no-join)
+    byte-parity gate. Operates against a frozen fixture built once by
+    Build-Stage6Fixture.ps1.
 
 .DESCRIPTION
     Companion to:
-      - Compare-Stage5-AllFiles.ps1   (Rust v C# in-process Stage 5)
-      - Compare-Stage6-Planning.ps1   (Rust v C# in-process Stage 6 planning)
-      - Compare-Stage6-Worker.ps1     (Rust-only portability gate)
+      - Build-Stage6Fixture.ps1            (one-time fixture build)
+      - Compare-Stage5-AllFiles.ps1        (Rust v C# in-process Stage 5)
+      - Compare-Stage6-Planning.ps1        (Rust v C# in-process Stage 6 planning)
+      - Compare-Stage6-Worker.ps1          (Rust-only portability gate)
+      - Compare-Percolator.ps1             (Stage 5 Percolator dump diff)
 
-    This script closes the missing matrix cell: Rust v C# at the
-    Stage 6 worker (--join-at-pass=1 --no-join) entry point. Drives
-    both binaries against the same Stage 4 parquets + boundary file
-    pair, captures the Stage 5 Percolator dump from each, and compares
-    via Compare-Percolator.ps1.
+    This script is the FAST iteration loop for Stage 6 development.
+    Build-Stage6Fixture.ps1 produces a frozen test fixture once: Stage
+    1-4 Snappy parquets + verified-identical Stage 5 sidecars + spectra
+    cache + library. Every Stage 6 code change re-runs this script,
+    which copies the fixture into a fresh per-iteration workdir and
+    runs only --join-at-pass=1 --no-join on each binary against
+    byte-identical inputs.
 
-    Workflow per dataset:
+    Per-iteration flow:
 
-      Phase A — Stage:
-        Stage Stage 4 parquets (from Generate-AllScoresParquet.ps1
-        outputs), mzML, calibration JSON, spectra cache, library +
-        libcache into _stage6_crossimpl\<Dataset>\.
+      Stage A — Materialize workdir
+        Copy <testDir>/_stage6_fixture/<dataset>/ to a fresh
+        <testDir>/_stage6_iter/<dataset>_<tool>/ for each tool. Each
+        tool gets its own private workdir so output writes don't
+        collide.
 
-      Phase B — Write boundary (Rust --join-at-pass=1 --join-only):
-        Generate the .1st-pass.fdr_scores.bin v3 + .reconciliation.json
-        sibling to each parquet. Both workers will consume these in
-        Phase C / D.
+      Stage B — Run Rust worker
+        osprey --join-at-pass=1 --no-join from the Rust workdir, with
+        OSPREY_DUMP_PERCOLATOR=1. Captures rust_stage5_percolator.tsv
+        plus (when Phases 2+3 of the C# port land) reconciled
+        .scores.parquet output.
 
-      Phase C — Rust worker:
-        Restore Stage 4 parquets (in case any prior phase touched
-        them). Run osprey --join-at-pass=1 --no-join with
-        OSPREY_DUMP_PERCOLATOR=1; capture rust_stage5_percolator.tsv.
+      Stage C — Run C# worker
+        OspreySharp.exe with the same flags + env from the C# workdir.
 
-      Phase D — C# worker:
-        Restore Stage 4 parquets. Run OspreySharp.exe with the same
-        flags + env; capture cs_stage5_percolator.tsv.
+      Stage D — Compare
+        Hand off to Compare-Percolator.ps1 for the post-hydration
+        per-precursor q-value / score / PEP diff. PASS iff every
+        numeric column is within its threshold and the (file_name,
+        entry_id) row sets match.
 
-      Phase E — Compare:
-        Invoke Compare-Percolator.ps1 on the two TSVs. PASS iff every
-        numeric column is within its threshold and every (file_name,
-        entry_id) row appears on both sides.
+    Future extensions (post-Phase 3 parquet write-back):
+      - Add a parquet content-diff phase after Compare-Percolator
+        passes, to validate end-of-Stage-6 reconciled .scores.parquet
+        byte parity.
 
-    Today the C# worker stops after hydration + compaction (the
-    per-file rescore engine isn't ported), so the dump is the only
-    signal at this seam. Once the rescore engine lands on both
-    sides, additional dump pairs (median-polish inputs, predict_rt,
-    reconciled parquet content) can be folded into the same Phase E
-    invocation.
+    Per-iteration runtime: ~30s on Stellar (no Stage 5 work, just
+    Stage 6 hydrate + compact + rescore). Stage 5 boundary parity is
+    locked when Build-Stage6Fixture.ps1 succeeds, so we don't pay for
+    it on every Stage 6 iteration.
 
 .PARAMETER Dataset
-    Stellar | Astral | Both (default Stellar).
+    Stellar | Astral | Both (default Stellar). The fixture for the
+    requested dataset must already exist (run Build-Stage6Fixture.ps1
+    first).
 
 .PARAMETER TestBaseDir
     Override test data root.
@@ -63,11 +71,9 @@
     --threads value passed to osprey (default 16). Held constant
     across both binaries.
 
-.PARAMETER Clean
-    Force a fresh staged work dir.
-
 .EXAMPLE
-    .\Compare-Stage6-Crossimpl.ps1 -Dataset Stellar -Clean
+    # Tight per-iteration loop after a C# Stage 6 code change.
+    .\Compare-Stage6-Crossimpl.ps1 -Dataset Stellar
 #>
 
 param(
@@ -82,9 +88,7 @@ param(
     [ValidateSet("net472", "net8.0")]
     [string]$TargetFramework = "net8.0",
 
-    [int]$Threads = 16,
-
-    [switch]$Clean
+    [int]$Threads = 16
 )
 
 $ErrorActionPreference = "Stop"
@@ -132,12 +136,10 @@ function Invoke-Worker {
         [string[]]$ParquetNames,
         [string]$LibraryName,
         [string]$Resolution,
-        [int]$Threads,
-        [bool]$JoinOnly  # true = --join-only (Phase B), false = --no-join (Phase C/D)
+        [int]$Threads
     )
     $outBlib = Join-Path $WorkDir ("_discard_{0}.blib" -f $Tool.ToLower())
-    $args = @("--join-at-pass=1")
-    if ($JoinOnly) { $args += "--join-only" } else { $args += "--no-join" }
+    $args = @("--join-at-pass=1", "--no-join")
     foreach ($p in $ParquetNames) { $args += "--input-scores"; $args += $p }
     $args += @("-l", $LibraryName, "--output", $outBlib,
                "--resolution", $Resolution, "--protein-fdr", "0.01",
@@ -155,47 +157,16 @@ function Invoke-Worker {
     }
 }
 
-function Stage-WorkDir {
-    param([string]$WorkDir, [string[]]$RustParquets, [string]$TestDir, [string]$Library)
+function Materialize-Workdir {
+    param([string]$FixtureDir, [string]$WorkDir)
+    if (Test-Path $WorkDir) { Remove-Item $WorkDir -Recurse -Force }
     New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
-    foreach ($srcParquet in $RustParquets) {
-        $stem = ([IO.Path]::GetFileNameWithoutExtension($srcParquet)) -replace '\.scores\.rust$', ''
-        Copy-Item -Path $srcParquet -Destination (Join-Path $WorkDir "$stem.scores.parquet")
-        foreach ($ext in @("mzML", "calibration.json", "spectra.bin")) {
-            $src = Join-Path $TestDir "$stem.$ext"
-            if (Test-Path $src) {
-                Copy-Item -Path $src -Destination (Join-Path $WorkDir "$stem.$ext")
-            }
-        }
-    }
-    Copy-Item -Path (Join-Path $TestDir $Library) -Destination (Join-Path $WorkDir $Library)
-    $libcache = Join-Path $TestDir ($Library + ".libcache")
-    if (Test-Path $libcache) {
-        Copy-Item -Path $libcache -Destination (Join-Path $WorkDir ($Library + ".libcache"))
-    }
+    # Copy contents (not the .fixture-version stamp file).
+    Get-ChildItem -Path $FixtureDir -File | Where-Object { $_.Name -ne ".fixture-version" } |
+        ForEach-Object { Copy-Item -Path $_.FullName -Destination $WorkDir -Force }
 }
 
-function Snapshot-Stage4Parquets {
-    param([string]$WorkDir, [string[]]$Stems)
-    $snapDir = Join-Path $WorkDir ".stage4_snapshot"
-    if (Test-Path $snapDir) { Remove-Item $snapDir -Recurse -Force }
-    New-Item -ItemType Directory -Path $snapDir -Force | Out-Null
-    foreach ($stem in $Stems) {
-        Copy-Item -Path (Join-Path $WorkDir "$stem.scores.parquet") `
-                  -Destination (Join-Path $snapDir "$stem.scores.parquet") -Force
-    }
-    return $snapDir
-}
-
-function Restore-Stage4Parquets {
-    param([string]$SnapDir, [string]$WorkDir, [string[]]$Stems)
-    foreach ($stem in $Stems) {
-        Copy-Item -Path (Join-Path $SnapDir "$stem.scores.parquet") `
-                  -Destination (Join-Path $WorkDir "$stem.scores.parquet") -Force
-    }
-}
-
-# Phases --------------------------------------------------------------
+# Per-dataset loop ----------------------------------------------------
 
 foreach ($dsName in $datasets) {
     $ds = Get-DatasetConfig $dsName -TestBaseDir $TestBaseDir
@@ -204,106 +175,80 @@ foreach ($dsName in $datasets) {
 
     Write-Host ("=== {0} (TestDir: {1}) ===" -f $ds.Name, $testDir) -ForegroundColor Cyan
 
-    $rustParquets = @()
-    foreach ($stem in $stems) {
-        $rustParquet = Join-Path $testDir "$stem.scores.rust.parquet"
-        if (-not (Test-Path $rustParquet)) {
-            Write-Host ("  missing rust parquet for {0} -- run Generate-AllScoresParquet.ps1 first" -f $stem) -ForegroundColor Red
-            continue
+    $fixtureDir = Join-Path $testDir ("_stage6_fixture\{0}" -f $ds.Name)
+    if (-not (Test-Path (Join-Path $fixtureDir ".fixture-version"))) {
+        Write-Host ("  Missing fixture at {0}" -f $fixtureDir) -ForegroundColor Red
+        Write-Host "  Run Build-Stage6Fixture.ps1 first." -ForegroundColor Red
+        $allResults += [PSCustomObject]@{
+            Dataset = $ds.Name; Status = "FIXTURE_MISSING"
         }
-        $rustParquets += $rustParquet
-    }
-    if ($rustParquets.Count -ne $stems.Count) {
-        Write-Host "  skipping dataset (incomplete parquet inputs)" -ForegroundColor Red
         continue
     }
 
-    $workDir = Join-Path $testDir ("_stage6_crossimpl\{0}" -f $ds.Name)
-    if ($Clean -and (Test-Path $workDir)) {
-        Write-Host ("  -Clean: removing {0}" -f $workDir) -ForegroundColor DarkGray
-        Remove-Item $workDir -Recurse -Force
-    }
-    $stagedMarker = Join-Path $workDir ".staged"
-    if (-not (Test-Path $stagedMarker)) {
-        Write-Host ("  Phase A: staging {0} parquet(s) + mzML + cal JSON + spectra cache + library into {1}" `
-            -f $rustParquets.Count, $workDir) -ForegroundColor Yellow
-        Stage-WorkDir -WorkDir $workDir -RustParquets $rustParquets -TestDir $testDir -Library $ds.Library
-        Set-Content -Path $stagedMarker -Value (Get-Date -Format o)
-    } else {
-        Write-Host ("  Phase A: reusing staged dir {0}" -f $workDir) -ForegroundColor DarkGray
-    }
+    $rustWorkDir = Join-Path $testDir ("_stage6_iter\{0}_rust" -f $ds.Name)
+    $csWorkDir   = Join-Path $testDir ("_stage6_iter\{0}_cs"   -f $ds.Name)
+
+    # Stage A: materialize per-tool workdirs from the fixture.
+    Write-Host "  Stage A: materializing workdirs from fixture..." -ForegroundColor Yellow
+    $matStart = [Diagnostics.Stopwatch]::StartNew()
+    Materialize-Workdir -FixtureDir $fixtureDir -WorkDir $rustWorkDir
+    Materialize-Workdir -FixtureDir $fixtureDir -WorkDir $csWorkDir
+    $matStart.Stop()
+    Write-Host ("    Stage A: {0:F1}s" -f $matStart.Elapsed.TotalSeconds)
 
     $parquetNames = $stems | ForEach-Object { "$_.scores.parquet" }
-    $stage4Snap = Snapshot-Stage4Parquets -WorkDir $workDir -Stems $stems
 
-    # Phase B: write boundary via Rust --join-only
-    Write-Host "  Phase B: write boundary (Rust --join-at-pass=1 --join-only)..." -ForegroundColor Yellow
-    $phaseB = Invoke-Worker -Tool "RustJoinOnly" -Binary $rustBinary -WorkDir $workDir `
-        -ParquetNames $parquetNames -LibraryName $ds.Library `
-        -Resolution $ds.Resolution -Threads $Threads -JoinOnly $true
-    Write-Host ("    Phase B: {0}s (exit {1})" -f $phaseB.ElapsedSec, $phaseB.ExitCode)
-    if ($phaseB.ExitCode -ne 0) {
-        Write-Host "  Phase B failed; cannot continue." -ForegroundColor Red
-        $allResults += [PSCustomObject]@{ Dataset = $ds.Name; Status = "PHASE_B_FAIL" }
-        continue
-    }
-
-    # Phase C: Rust worker with dump
-    Restore-Stage4Parquets -SnapDir $stage4Snap -WorkDir $workDir -Stems $stems
-    $rustDump = Join-Path $workDir "rust_stage5_percolator.tsv"
-    $csDump   = Join-Path $workDir "cs_stage5_percolator.tsv"
-    if (Test-Path $rustDump) { Remove-Item $rustDump -Force }
-    if (Test-Path $csDump)   { Remove-Item $csDump   -Force }
-
-    Write-Host "  Phase C: Rust worker (--no-join + OSPREY_DUMP_PERCOLATOR=1)..." -ForegroundColor Yellow
+    # Stage B: Rust worker with OSPREY_DUMP_PERCOLATOR=1.
+    Write-Host "  Stage B: Rust worker..." -ForegroundColor Yellow
     $env:OSPREY_DUMP_PERCOLATOR = "1"
     try {
-        $phaseC = Invoke-Worker -Tool "RustWorker" -Binary $rustBinary -WorkDir $workDir `
+        $rustRun = Invoke-Worker -Tool "Rust" -Binary $rustBinary -WorkDir $rustWorkDir `
             -ParquetNames $parquetNames -LibraryName $ds.Library `
-            -Resolution $ds.Resolution -Threads $Threads -JoinOnly $false
-    } finally {
-        Remove-Item Env:\OSPREY_DUMP_PERCOLATOR -ErrorAction Ignore
-    }
-    Write-Host ("    Phase C: {0}s (exit {1})" -f $phaseC.ElapsedSec, $phaseC.ExitCode)
+            -Resolution $ds.Resolution -Threads $Threads
+    } finally { Remove-Item Env:\OSPREY_DUMP_PERCOLATOR -ErrorAction Ignore }
+    Write-Host ("    Stage B: {0}s (exit {1})" -f $rustRun.ElapsedSec, $rustRun.ExitCode)
 
-    # Phase D: C# worker with dump
-    Restore-Stage4Parquets -SnapDir $stage4Snap -WorkDir $workDir -Stems $stems
-
-    Write-Host "  Phase D: C# worker (--no-join + OSPREY_DUMP_PERCOLATOR=1)..." -ForegroundColor Yellow
+    # Stage C: C# worker with OSPREY_DUMP_PERCOLATOR=1.
+    Write-Host "  Stage C: C# worker..." -ForegroundColor Yellow
     $env:OSPREY_DUMP_PERCOLATOR = "1"
     try {
-        $phaseD = Invoke-Worker -Tool "CsWorker" -Binary $csharpBinary -WorkDir $workDir `
+        $csRun = Invoke-Worker -Tool "Cs" -Binary $csharpBinary -WorkDir $csWorkDir `
             -ParquetNames $parquetNames -LibraryName $ds.Library `
-            -Resolution $ds.Resolution -Threads $Threads -JoinOnly $false
-    } finally {
-        Remove-Item Env:\OSPREY_DUMP_PERCOLATOR -ErrorAction Ignore
-    }
-    Write-Host ("    Phase D: {0}s (exit {1})" -f $phaseD.ElapsedSec, $phaseD.ExitCode)
-    # Note: C# worker exits non-zero today (rescore engine stub) AFTER
-    # writing the dump. That's fine for parity — the dump is the only
-    # output we compare here.
+            -Resolution $ds.Resolution -Threads $Threads
+    } finally { Remove-Item Env:\OSPREY_DUMP_PERCOLATOR -ErrorAction Ignore }
+    Write-Host ("    Stage C: {0}s (exit {1})" -f $csRun.ElapsedSec, $csRun.ExitCode)
+    # Note: the C# worker exits non-zero today (rescore engine stub
+    # after Phase 1) AFTER writing the dump. That's fine for parity —
+    # the dump is what we compare here.
+
+    $rustDump = Join-Path $rustWorkDir "rust_stage5_percolator.tsv"
+    $csDump   = Join-Path $csWorkDir   "cs_stage5_percolator.tsv"
 
     if (-not (Test-Path $rustDump)) {
         Write-Host ("  Missing dump: {0}" -f $rustDump) -ForegroundColor Red
-        $allResults += [PSCustomObject]@{ Dataset = $ds.Name; Status = "RUST_DUMP_MISSING" }
+        $allResults += [PSCustomObject]@{
+            Dataset = $ds.Name; Status = "RUST_DUMP_MISSING"
+        }
         continue
     }
     if (-not (Test-Path $csDump)) {
         Write-Host ("  Missing dump: {0}" -f $csDump) -ForegroundColor Red
-        $allResults += [PSCustomObject]@{ Dataset = $ds.Name; Status = "CS_DUMP_MISSING" }
+        $allResults += [PSCustomObject]@{
+            Dataset = $ds.Name; Status = "CS_DUMP_MISSING"
+        }
         continue
     }
 
-    # Phase E: compare via the existing Compare-Percolator.ps1 harness
-    Write-Host "  Phase E: Compare-Percolator.ps1..." -ForegroundColor Yellow
+    # Stage D: compare via the existing Compare-Percolator.ps1 harness.
+    Write-Host "  Stage D: Compare-Percolator.ps1..." -ForegroundColor Yellow
     $compareScript = Join-Path $scriptRoot "Compare-Percolator.ps1"
     & pwsh -File $compareScript -RustTsv $rustDump -CsTsv $csDump
     $compareExit = $LASTEXITCODE
     $allResults += [PSCustomObject]@{
         Dataset = $ds.Name
         Status = if ($compareExit -eq 0) { "PASS" } else { "FAIL" }
-        RustSec = $phaseC.ElapsedSec
-        CsSec = $phaseD.ElapsedSec
+        RustSec = $rustRun.ElapsedSec
+        CsSec = $csRun.ElapsedSec
     }
 
     Write-Host ""
