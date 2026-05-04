@@ -1197,3 +1197,121 @@ silently using lossy-parsed cal coefficients in Stage 6.
 - `ai/todos/active/TODO-20260429_osprey_sharp_stage6.md` (this file) — Session 6 progress log entry.
 
 No code changes on `osprey/feature/stage6-worker` this session.
+
+### Session 7 (2026-05-03) — C# port of the Stage 6 worker foundation + Copilot follow-up
+
+**Rust PR #28 review feedback addressed.** Copilot posted six inline
+comments; one was a real bug (`--input-scores` was accepted without
+`--join-at-pass=1`, would silently route end-to-end runs into the
+join path), four were doc/comment drift between the codebase and the
+docstrings, one was a perf nit (O(num_actions × num_files) in the
+worker compaction re-key — cheap to fix as a `file_name → entries`
+hashmap, runtime impact negligible at observed file counts since the
+loop is dominated by spectra I/O). All six addressed in
+`feature/stage6-worker @ 4599a4f` with a regression test for the CLI
+guard. CI green on macOS / Ubuntu / Windows after a fmt fixup
+(`a9c6c06`) — the original three commits had been pushed without a
+local `cargo fmt` run; root-caused to `Build-OspreyRust.ps1 -Fmt`
+silently in-place reformatting via `cargo fmt` instead of failing
+fast via `cargo fmt --check`. Fixed in pwiz-ai master `3c76585`:
+`-Fmt` now runs `cargo fmt -- --check` (matches CI) and a new
+`-FmtFix` flag does the in-place reformat for the rare case it's
+wanted.
+
+**C# port: foundation pieces (segments 1-5) on parked branch
+`pwiz:Skyline/work/20260429_osprey_sharp_stage6`** — local commits,
+not yet pushed:
+
+| Segment | Commit | Validation |
+|---|---|---|
+| 1. Newtonsoft.Json f64 round-trip test | `27e8735cd` | `TestNewtonsoftJsonF64RoundtripIsBitExact` proves .NET's `double.Parse` is correctly rounded for the same six tricky values that broke serde_json's default parser. **No fix needed for the C# port** — Newtonsoft is bit-exact. |
+| 2. `FdrScoresSidecar` v2 → v3 | `a0f08edf2` | Cross-impl byte parity verified via the existing `OSPREY_CROSS_IMPL_FDR_SIDECAR_OUT` test hook: same hardcoded inputs (entry_id 100/101/102, run_protein_qvalue 0.0042/0.0123/0.95) on both sides → SHA-256-identical 212-byte file `f42b4ab2…c3037`. |
+| 3. Hydration helper (`RescoreHydration.HydrateForRescore`) | `ccce64dde` | `TestRescoreHydrationRoundTrip` writes a synthetic boundary triple (parquet + sidecar + reconciliation.json), hydrates it, asserts every field round-trips. `TestRescoreHydrationRejectsActionEntryIdNotInStubs` covers the parquet-drift error path. |
+| 4. Worker compaction + `reconciliation_actions` re-keying (`RescoreCompaction.Apply`) | `0a0f03c18` | `TestRescoreCompactionRekeysActionsAndDropsNonpassing` covers the full predicate path (peptide pass + protein-rescue + decoy-by-base_id retention + action re-keying + dropped-action accounting); `TestRescoreCompactionWithoutProteinFdrSkipsRescue` covers the protein-fdr-disabled branch. |
+| 5. Wire `--join-at-pass=1 --no-join` through to a worker entry point (`RescoreWorker.Run`) | `8c7a975bb` | `Program.NormalizeHpcArgs` no longer rejects the flag combination; `Program.ValidateArgs` grew a new branch under `config.NoJoin && hasInputScores` requiring `--library` + `--output`; `Main` dispatches to `RescoreWorker.Run`. The worker today does hydration + compaction only and exits with a clear "rescore engine not yet ported" message. All 298 OspreySharp tests still pass; inspection clean (0 warnings, 0 errors). |
+
+The per-file rescore engine itself (boundary-overrides search +
+gap-fill two-pass + reconciled parquet write-back) is **not yet
+ported**. The in-process pipeline at `AnalysisPipeline.Run` also
+stubs that out with the same "Stage 6 per-file rescore: not yet
+implemented" message. Both sides will lift together once the C#
+rescore engine port lands (future sprint).
+
+**Hydration + compaction validation against Rust on real Stellar
+data** (work dir
+`D:\test\osprey-runs\stellar\_stage6_worker\Stellar_B`):
+
+| Metric | Rust worker | C# worker | Match? |
+|---|---|---|---|
+| Pre-compaction stubs | 1,388,872 | 1,388,872 | ✅ |
+| Reconciliation actions hydrated | 172,548 | 172,548 | ✅ |
+| Gap-fill candidates hydrated | 822 | 822 | ✅ |
+| Refined RT calibrations | 3 | 3 | ✅ |
+| Post-compaction entries | 391,180 | **397,198** | ❌ +6,018 |
+| Surviving base_ids | 66,727 | **67,737** | ❌ +1,010 |
+| Reconciliation actions retained | 172,548 | 172,548 | ✅ |
+
+Hydration is bit-identical at the cardinality level (file count,
+stub count, action count, gap-fill count, cal count). Compaction
+diverges by 6,018 entries / 1,010 base_ids (C# retains MORE).
+Predicate on paper is identical: `RunPeptideQvalue ≤ peptideGate
+OR (proteinGate.HasValue AND RunProteinQvalue ≤ proteinGate.Value)`,
+where both gates are 0.01 by default and were 0.01 in the test
+invocation (`--protein-fdr 0.01`).
+
+**Bisection plan** (Session 8 — using existing `OSPREY_DUMP_PERCOLATOR`
+diagnostic, the same one Mike's PR validated against in-process):
+
+1. Wired `OspreyDiagnostics.WriteStage5PercolatorDump` into
+   `RescoreWorker.Run` immediately after hydration. The C# worker
+   under `OSPREY_DUMP_PERCOLATOR=1` now writes
+   `cs_stage5_percolator.tsv` (file_name, entry_id, charge,
+   modified_sequence, is_decoy, score, pep, run_precursor_q,
+   run_peptide_q, experiment_precursor_q, experiment_peptide_q —
+   one row per hydrated stub).
+2. Need to wire `dump_stage5_percolator` into Rust
+   `rescore::run_rescore` in the same way (it currently fires only
+   from in-process `pipeline.rs` post-Percolator, before the
+   sidecar is even written). Then run BOTH workers with
+   `OSPREY_DUMP_PERCOLATOR=1` against the same boundary files →
+   diff `rust_stage5_percolator.tsv` vs `cs_stage5_percolator.tsv`.
+3. **If the diff is empty**, hydration is bit-identical and the
+   compaction divergence is in the predicate or the gates. Likely
+   suspects: `RunFdr` is not the same value used by Rust's
+   `reconciliation_compaction_fdr` (the Rust field doesn't have a C#
+   equivalent yet); some signed/unsigned conversion in the base_id
+   mask; an `IsDecoy` flag that's true on one side and false on the
+   other.
+4. **If the diff is non-empty**, hydration is wrong somewhere.
+   Likely suspects: `FdrScoresSidecar.TryRead` is reading
+   `RunProteinQvalue` from the wrong byte offset (unlikely — the
+   round-trip cross-impl test caught this kind of bug); the
+   `LoadFdrStubsFromParquet` order doesn't match what the sidecar
+   expects (the sidecar TryRead validates this with per-position
+   `EntryId` checks, and would have failed loud).
+5. The bisection methodology that worked for the Rust side also
+   applies here: dump intermediate state at successively narrower
+   seams using the existing `format_f64_roundtrip` formatter and
+   `Compare-Percolator.ps1`-style diff.
+
+**Files added/modified this session:**
+
+- `pwiz_tools/OspreySharp/OspreySharp.Test/IOTest.cs` —
+  `TestNewtonsoftJsonF64RoundtripIsBitExact`,
+  `TestRescoreHydrationRoundTrip`,
+  `TestRescoreHydrationRejectsActionEntryIdNotInStubs`,
+  `TestRescoreCompactionRekeysActionsAndDropsNonpassing`,
+  `TestRescoreCompactionWithoutProteinFdrSkipsRescue`,
+  plus the v3 round-trip changes in `TestFdrScoresSidecarRoundTrip`.
+- `pwiz_tools/OspreySharp/OspreySharp.IO/FdrScoresSidecar.cs` — v2 → v3.
+- `pwiz_tools/OspreySharp/OspreySharp/RescoreHydration.cs` (NEW).
+- `pwiz_tools/OspreySharp/OspreySharp/RescoreCompaction.cs` (NEW).
+- `pwiz_tools/OspreySharp/OspreySharp/RescoreWorker.cs` (NEW).
+- `pwiz_tools/OspreySharp/OspreySharp/Program.cs` — CLI dispatch +
+  `ValidateArgs` worker-mode branch.
+- `pwiz_tools/OspreySharp/OspreySharp.Test/ProgramTests.cs` — test
+  rename + two new worker-mode validation tests.
+- `crates/osprey/src/{diagnostics.rs,main.rs,pipeline.rs,rescore.rs}`
+  on `osprey/feature/stage6-worker` — Copilot review fixes.
+- `ai/scripts/OspreySharp/Build-OspreyRust.ps1` on `pwiz-ai/master` —
+  `-Fmt` now `--check`, new `-FmtFix` for the rare in-place case.
