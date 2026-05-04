@@ -198,55 +198,82 @@ foreach ($dsName in $datasets) {
 
     $parquetNames = $stems | ForEach-Object { "$_.scores.parquet" }
 
-    # Stage B: Rust worker with OSPREY_DUMP_PERCOLATOR=1.
+    # Stage B: Rust worker with both dumps enabled.
     Write-Host "  Stage B: Rust worker..." -ForegroundColor Yellow
     $env:OSPREY_DUMP_PERCOLATOR = "1"
+    $env:OSPREY_DUMP_RESCORED   = "1"
     try {
         $rustRun = Invoke-Worker -Tool "Rust" -Binary $rustBinary -WorkDir $rustWorkDir `
             -ParquetNames $parquetNames -LibraryName $ds.Library `
             -Resolution $ds.Resolution -Threads $Threads
-    } finally { Remove-Item Env:\OSPREY_DUMP_PERCOLATOR -ErrorAction Ignore }
+    } finally {
+        Remove-Item Env:\OSPREY_DUMP_PERCOLATOR -ErrorAction Ignore
+        Remove-Item Env:\OSPREY_DUMP_RESCORED   -ErrorAction Ignore
+    }
     Write-Host ("    Stage B: {0}s (exit {1})" -f $rustRun.ElapsedSec, $rustRun.ExitCode)
 
-    # Stage C: C# worker with OSPREY_DUMP_PERCOLATOR=1.
+    # Stage C: C# worker with both dumps enabled.
     Write-Host "  Stage C: C# worker..." -ForegroundColor Yellow
     $env:OSPREY_DUMP_PERCOLATOR = "1"
+    $env:OSPREY_DUMP_RESCORED   = "1"
     try {
         $csRun = Invoke-Worker -Tool "Cs" -Binary $csharpBinary -WorkDir $csWorkDir `
             -ParquetNames $parquetNames -LibraryName $ds.Library `
             -Resolution $ds.Resolution -Threads $Threads
-    } finally { Remove-Item Env:\OSPREY_DUMP_PERCOLATOR -ErrorAction Ignore }
+    } finally {
+        Remove-Item Env:\OSPREY_DUMP_PERCOLATOR -ErrorAction Ignore
+        Remove-Item Env:\OSPREY_DUMP_RESCORED   -ErrorAction Ignore
+    }
     Write-Host ("    Stage C: {0}s (exit {1})" -f $csRun.ElapsedSec, $csRun.ExitCode)
     # Note: the C# worker exits non-zero today (rescore engine stub
-    # after Phase 1) AFTER writing the dump. That's fine for parity —
-    # the dump is what we compare here.
+    # after Phase 1) AFTER writing the dumps. That's fine for parity —
+    # the dumps are what we compare here.
 
-    $rustDump = Join-Path $rustWorkDir "rust_stage5_percolator.tsv"
-    $csDump   = Join-Path $csWorkDir   "cs_stage5_percolator.tsv"
-
-    if (-not (Test-Path $rustDump)) {
-        Write-Host ("  Missing dump: {0}" -f $rustDump) -ForegroundColor Red
-        $allResults += [PSCustomObject]@{
-            Dataset = $ds.Name; Status = "RUST_DUMP_MISSING"
-        }
-        continue
-    }
-    if (-not (Test-Path $csDump)) {
-        Write-Host ("  Missing dump: {0}" -f $csDump) -ForegroundColor Red
-        $allResults += [PSCustomObject]@{
-            Dataset = $ds.Name; Status = "CS_DUMP_MISSING"
-        }
-        continue
-    }
-
-    # Stage D: compare via the existing Compare-Percolator.ps1 harness.
-    Write-Host "  Stage D: Compare-Percolator.ps1..." -ForegroundColor Yellow
+    # Stage D: two-pass compare via Compare-Percolator.ps1.
+    #   D.1 — post-hydration (stage5_percolator): proves the boundary
+    #         file pair was hydrated identically on both binaries.
+    #   D.2 — post-rescore (stage6_rescored): proves the rescore loop
+    #         (consensus + reconciliation overlay + future gap-fill)
+    #         produced identical Score/PEP/q-values on both binaries.
     $compareScript = Join-Path $scriptRoot "Compare-Percolator.ps1"
-    & pwsh -File $compareScript -RustTsv $rustDump -CsTsv $csDump
-    $compareExit = $LASTEXITCODE
+
+    $rustHydration = Join-Path $rustWorkDir "rust_stage5_percolator.tsv"
+    $csHydration   = Join-Path $csWorkDir   "cs_stage5_percolator.tsv"
+    $rustRescored  = Join-Path $rustWorkDir "rust_stage6_rescored.tsv"
+    $csRescored    = Join-Path $csWorkDir   "cs_stage6_rescored.tsv"
+
+    $hydrationStatus = "MISSING"
+    $rescoredStatus  = "MISSING"
+
+    if ((Test-Path $rustHydration) -and (Test-Path $csHydration)) {
+        Write-Host "  Stage D.1: Compare-Percolator (post-hydration)..." -ForegroundColor Yellow
+        & pwsh -File $compareScript -RustTsv $rustHydration -CsTsv $csHydration
+        $hydrationStatus = if ($LASTEXITCODE -eq 0) { "PASS" } else { "FAIL" }
+    } else {
+        Write-Host "  Stage D.1 skipped (post-hydration dump missing)" -ForegroundColor Red
+    }
+
+    if ((Test-Path $rustRescored) -and (Test-Path $csRescored)) {
+        Write-Host "  Stage D.2: Compare-Percolator (post-rescore)..." -ForegroundColor Yellow
+        & pwsh -File $compareScript -RustTsv $rustRescored -CsTsv $csRescored
+        $rescoredStatus = if ($LASTEXITCODE -eq 0) { "PASS" } else { "FAIL" }
+    } else {
+        Write-Host "  Stage D.2 skipped (post-rescore dump missing)" -ForegroundColor Red
+    }
+
+    $overallStatus = if ($hydrationStatus -eq "PASS" -and $rescoredStatus -eq "PASS") {
+        "PASS"
+    } elseif ($hydrationStatus -eq "FAIL" -or $rescoredStatus -eq "FAIL") {
+        "FAIL"
+    } else {
+        "PARTIAL"
+    }
+
     $allResults += [PSCustomObject]@{
         Dataset = $ds.Name
-        Status = if ($compareExit -eq 0) { "PASS" } else { "FAIL" }
+        Hydration = $hydrationStatus
+        Rescored = $rescoredStatus
+        Status = $overallStatus
         RustSec = $rustRun.ElapsedSec
         CsSec = $csRun.ElapsedSec
     }
@@ -258,7 +285,7 @@ $totalStart.Stop()
 
 Write-Host "--- Summary ---" -ForegroundColor Cyan
 Write-Host ""
-$allResults | Format-Table -AutoSize Dataset, Status, RustSec, CsSec
+$allResults | Format-Table -AutoSize Dataset, Hydration, Rescored, Status, RustSec, CsSec
 
 $pass = ($allResults | Where-Object { $_.Status -eq "PASS" }).Count
 $total = $allResults.Count

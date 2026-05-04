@@ -1315,3 +1315,196 @@ diagnostic, the same one Mike's PR validated against in-process):
   on `osprey/feature/stage6-worker` — Copilot review fixes.
 - `ai/scripts/OspreySharp/Build-OspreyRust.ps1` on `pwiz-ai/master` —
   `-Fmt` now `--check`, new `-FmtFix` for the rare in-place case.
+
+### Session 8 (2026-05-03) — C# Stage 6 rescore engine: Phase 1 + Phase 2 byte-identical to Rust
+
+PR #28 merged to `maccoss/osprey:main`; tagged v26.5.0. Bumped
+OspreySharp `VERSION` to 26.5.0 (`c5f555ae7`) after auditing the
+v26.5.0 release notes against C# state — every format-affecting
+change (sidecar v3, reconciliation.json, dump column adds,
+Gauss-Jordan tolerance, PEP non-determinism, RT cal JSON
+round-trip, library_identity_hash file-name-only,
+OSPREY_LOESS_CLASSICAL_ROBUST in Stage 6 refit, etc.) was already
+mirrored in C# from prior PRs; only the version string needed the
+bump.
+
+**Cross-impl harness restructured for tight Stage 6 iteration:**
+
+- `Build-Stage6Fixture.ps1` (NEW) — one-time-per-version-bump
+  fixture build. Confirms Stage 4 Snappy parquets exist, runs
+  `Compare-Stage5-Boundary.ps1` to verify Stage 5 byte parity at
+  current binary versions (refuses if drifted), snapshots the
+  verified-good state into `<testDir>/_stage6_fixture/<dataset>/`,
+  stamps `.fixture-version`. Stellar fixture: 9 GB, ~5 min build.
+- `Compare-Stage6-Crossimpl.ps1` (RESTRUCTURED) — per-iteration
+  loop. Materializes a fresh per-tool workdir from the fixture,
+  runs only `--join-at-pass=1 --no-join` on each binary against
+  byte-identical inputs, hands off to `Compare-Percolator.ps1`.
+  Stellar iteration: ~6 min wall-clock, ~3 min of which is the
+  2x9 GB workdir copy; Rust worker 79s, C# worker 25s.
+
+**Phase 1 + Phase 2 of the C# Stage 6 rescore engine ported:**
+
+- `AnalysisPipeline.Stage6Rescore.cs` (NEW partial class file).
+  - `RescoreStats` POCO mirroring Rust's struct.
+  - `RunWorker(config)`: top-level entry point for the worker —
+    synthesizes `config.InputFiles` from `--input-scores`, loads
+    the spectral library + decoys, calls
+    `RescoreHydration.HydrateForRescore`, applies
+    `RescoreCompaction.Apply`, computes per-file multi-charge
+    consensus targets via `MultiChargeConsensus.SelectRescoreTargets`,
+    builds the per-file original RT cal map by loading each
+    sibling `.calibration.json`, then dispatches to
+    `ExecuteStage6Rescore`. Mirrors Rust `rescore::run_rescore`.
+  - `ExecuteStage6Rescore`: per-file rescore loop. Pre-groups
+    reconciliation actions by file, merges consensus +
+    reconciliation (reconciliation wins), builds boundary_overrides
+    + entry_id->idx + subset_library, loads spectra (cache or mzML
+    fallback) + sibling .calibration.json mass cals, picks
+    refined-or-original RT cal, calls `RunCoelutionScoring` with
+    override-aware `ScoringContext`, overlays results back to
+    `fdr_entries` by `entry_id` while preserving `ParquetIndex`.
+    Phase 2 (gap-fill two-pass) runs after the existing-entry
+    overlay: builds `gap_fill_library` from each gap-fill target's
+    `TargetEntryId + DecoyEntryId`; CWT pass with
+    `PrefilterEnabled=false` and no boundary overrides; tracks
+    `cwtHitIds`; appends CWT results as new stubs with
+    `ParquetIndex = uint.MaxValue`; forced pass for entries CWT
+    missed (target or decoy) at `expected_rt +/- half_width`;
+    appends forced results the same way.
+  - **Score-reset on overlay** (mirrors Rust `to_fdr_entry`
+    semantics): post-rescore stubs carry default Score (0.0),
+    q-values (1.0), Pep (1.0); Stage 7 second-pass Percolator
+    recomputes them from the new Features. Without this reset the
+    OspreySharp `ScoreCandidate`'s `Score = coelutionSum`
+    initializer (AnalysisPipeline.cs ~line 4088) bled through and
+    produced 173k rows of post-rescore divergence vs the Rust
+    worker.
+
+- `AnalysisPipeline.cs` — Stage 6 stub at line 803 replaced with
+  a real `ExecuteStage6Rescore` call. `LoadLibrary` and
+  `GenerateDecoys` promoted `private` -> `internal` so the partial
+  Stage6Rescore file can call them. `partial` keyword added.
+- `RescoreWorker.cs` — collapsed from a 75-line implementation to
+  a thin facade that instantiates `AnalysisPipeline` and delegates
+  to `RunWorker`. Keeps `Program.Main`'s dispatch unchanged.
+
+**Cross-impl bisection diagnostic ladder:**
+
+- `dump_stage5_percolator` / `WriteStage5PercolatorDump`: extended
+  to include `run_protein_q` column. Wired into `rescore::run_rescore`
+  (Rust) and `RescoreWorker.Run` (C#) so both produce
+  `*_stage5_percolator.tsv` for the post-hydration parity check.
+- `dump_stage6_rescored` / `WriteStage6RescoredDump`: NEW high-level
+  dump fired AFTER the rescore loop completes. Same column shape
+  as Stage 5 percolator dump so `Compare-Percolator.ps1` reuses
+  for the diff. Wired from BOTH in-process Run + worker RunWorker
+  on both languages. Catches Stage 6 output divergence at the
+  high-level seam before drilling into the inner-loop ladder.
+- `OSPREY_DUMP_MP_INPUTS` and `OSPREY_DUMP_PREDICT_RT` (Rust-only
+  v26.5.0 additions for the rescore inner-loop bisection): NOT
+  yet mirrored in C#. Tracked for the pre-PR cleanup.
+
+**One real bug caught and fixed during Phase 1+2 validation:**
+
+`WriteStage6RescoredDump` originally used `List<T>.Sort` which is
+UNSTABLE. Rust `Vec::sort_by` is stable. With duplicate
+`(file_name, EntryId)` keys (a decoy paired with a target that
+already passed first-pass FDR — so the post-compaction stub AND the
+gap-fill stub end up in the dump), unstable sort shuffled the
+dup-pair non-deterministically, and the last-write-wins comparator
+in `Compare-Percolator.ps1` showed 116 false-positive divergences.
+Switched to LINQ `OrderBy().ThenBy()` (stable). Rust order
+preserved end-to-end.
+
+**Validation matrix (Stellar 3-file fixture, locked at v26.5.0):**
+
+| Seam | Rust v C# |
+|---|---|
+| Stage 5 boundary file pair (`Compare-Stage5-Boundary`) | 6/6 PASS |
+| Post-hydration / pre-compaction dump (`OSPREY_DUMP_PERCOLATOR`) | 7/7 cols x 1,388,872 rows max_diff=0 |
+| Post-rescore dump (`OSPREY_DUMP_RESCORED`) | 7/7 cols x 392,029 rows max_diff=0 |
+
+**Runtimes (Stellar):**
+
+- C# worker hydrate + compact + rescore + gap-fill: ~25 s
+- Rust worker hydrate + compact + rescore + gap-fill + parquet
+  write-back: ~80 s (includes Phase 3 not yet ported in C#)
+
+**Open work to reach end-of-Stage-6 byte parity:**
+
+1. **Phase 3 — reconciled `.scores.parquet` write-back.** After
+   gap-fill appends complete, reload the original parquet, replace
+   re-scored rows by `ParquetIndex` (NOT vec position; post-
+   compaction Vec position diverges from Parquet row), append
+   gap-fill rows, reassign gap-fill `ParquetIndex` to actual row,
+   write back via `WriteScoresParquet` with reconciliation metadata
+   (`osprey.reconciled = "true"` + `osprey.reconciliation_hash`).
+   Validation gate: extend `Compare-Stage6-Crossimpl.ps1` with a
+   parquet content-diff phase; PASS = byte-identical reconciled
+   `.scores.parquet`.
+
+2. **B (pre-PR) — mirror `OSPREY_DUMP_MP_INPUTS` +
+   `OSPREY_DUMP_PREDICT_RT` in C#.** Drill-down ladder for any
+   future divergence that the high-level `OSPREY_DUMP_RESCORED`
+   gate might surface. Not blocking the per-iteration loop, but
+   Mike will reasonably want the matched bisection plumbing on
+   both sides before merging the C# Stage 6 PR.
+
+3. **Astral validation pass.** After Phase 3 lands, re-run
+   `Build-Stage6Fixture` + `Compare-Stage6-Crossimpl` for Astral
+   (GPF-style, ~3-4x larger). Expected to PASS without further
+   fixes if Stellar passes.
+
+4. **PR for Mike.** Single PR against `maccoss/osprey:main` for
+   the Rust-side dump column extension + new dump
+   (`feature/stage5-percolator-dump-protein-q`). Single PR against
+   `ProteoWizard/pwiz` master for the C# port + harness updates.
+
+**Files added/modified this session:**
+
+Rust on `feature/stage5-percolator-dump-protein-q`:
+- `crates/osprey/src/diagnostics.rs` — `dump_stage6_rescored` added;
+  `dump_stage5_percolator` extended with `run_protein_q` column.
+- `crates/osprey/src/pipeline.rs` — `dump_stage5_percolator` +
+  `dump_stage6_rescored` calls in `run_analysis`'s Stage 6 block.
+- `crates/osprey/src/rescore.rs` — same dump calls in
+  `rescore::run_rescore` for the worker entry point.
+
+OspreySharp on `pwiz/Skyline/work/20260429_osprey_sharp_stage6`:
+- `pwiz_tools/OspreySharp/OspreySharp/Program.cs` — VERSION
+  26.4.0 -> 26.5.0.
+- `pwiz_tools/OspreySharp/OspreySharp/AnalysisPipeline.cs` —
+  partial; LoadLibrary/GenerateDecoys promoted to internal; Stage 6
+  stub replaced with `ExecuteStage6Rescore` call + post-rescore
+  dump call.
+- `pwiz_tools/OspreySharp/OspreySharp/AnalysisPipeline.Stage6Rescore.cs`
+  (NEW) — `RescoreStats`, `RunWorker`, `ExecuteStage6Rescore`,
+  `LoadSpectraForRescore`, `LoadMassCalibrations`,
+  `LoadOriginalRtCalibration`, `AddIfNotNull`. Phases 1 + 2.
+- `pwiz_tools/OspreySharp/OspreySharp/RescoreCompaction.cs` —
+  decoy-skip in predicate (matches Rust `!is_decoy &&`).
+- `pwiz_tools/OspreySharp/OspreySharp/RescoreWorker.cs` — thin
+  facade (delegates to `AnalysisPipeline.RunWorker`).
+- `pwiz_tools/OspreySharp/OspreySharp/OspreyDiagnostics.cs` —
+  `WriteStage5PercolatorDump` +1 column;
+  `WriteStage6RescoredDump` (NEW); LINQ stable sort.
+- `pwiz_tools/OspreySharp/OspreySharp.Test/IOTest.cs` — new
+  `TestRescoreCompactionSkipsDecoysInPredicate` regression test.
+
+pwiz-ai master:
+- `ai/scripts/OspreySharp/Build-Stage6Fixture.ps1` (NEW).
+- `ai/scripts/OspreySharp/Compare-Stage6-Crossimpl.ps1` —
+  restructured; uses fixture; runs only Stage 6; two-pass diff
+  (post-hydration + post-rescore).
+- `ai/scripts/OspreySharp/Compare-Percolator.ps1` —
+  `run_protein_q` added to numeric column list.
+- `ai/scripts/OspreySharp/Compare-Stage5-AllFiles.ps1` (no change
+  but referenced from documentation in this session).
+
+**Next session handoff**: continue with Phase 3 (reconciled
+parquet write-back) on `pwiz/Skyline/work/20260429_osprey_sharp_stage6`.
+The fixture at `D:\test\osprey-runs\stellar\_stage6_fixture\Stellar\`
+is locked; per-iteration loop is `Compare-Stage6-Crossimpl.ps1
+-Dataset Stellar`. After Phase 3 + Astral validation + B, file
+the two PRs.
