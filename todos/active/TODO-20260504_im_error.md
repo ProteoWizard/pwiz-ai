@@ -42,34 +42,45 @@ conversion needs the mass spec file present, which is not safe to assume at repo
 
 ## Implementation Plan
 
-### Phase 1 - Accumulation
-- [ ] Decide: extend `IntensityAccumulator` to track IM weighted mean alongside m/z, or add a parallel `IonMobilityErrorAccumulator`
-- [ ] Add `MeanIonMobilityError` (and CCS counterpart) accumulation per the Welford pattern at `IntensityAccumulator.cs:48-56`
-- [ ] Wire `imsArray[iNext]` (already present at `SpectrumFilterPair.cs:378`) into the new accumulator
-- [ ] Resolve target IM: comes from the IM filter window center on the filter pair
+### Phase 1 - Accumulation [DONE]
+- [x] Extended `IntensityAccumulator` with `MeanIonMobilityError` mirroring the Welford weighted-mean pattern from mass error
+- [x] Wired `imsArray[iNext]` from `SpectrumFilterPair.cs:378` into accumulator
+- [x] Target IM = midpoint of `MinIonMobilityValue` / `MaxIonMobilityValue`
+- [x] Gated on non-FAIMS and IM filter present
+- [x] Commit: `d83da9ecd`
 
-### Phase 2 - Per-spectrum delivery
-- [ ] Extend `ExtractedSpectrum` to carry parallel IM-error and CCS-error arrays alongside `MassErrors`
-- [ ] Update `SpectrumFilterPair` extraction path (`SpectrumFilterPair.cs:348-393`) to populate them
+### Phase 2 - Per-spectrum delivery [DONE]
+- [x] Extended `ExtractedSpectrum` with `IonMobilityErrors` array (CCS arrays deferred — plumbed at peak detection instead, see below)
+- [x] `SpectrumFilterPair.FilterSpectrumList` populates the array; converts mean delta to % IM error per target
+- [x] Commit: `d83da9ecd`
 
-### Phase 3 - Persistence
-- [ ] Add `IonMobilityErrors` (and CCS errors) to `ChromCollector`, parallel to `MassErrors` (`ChromCollector.cs:40-50`)
-- [ ] Add fields on `ChromPeak` (`DocNodeChromInfo.cs:329-334`) and `TransitionChromInfo` (`DocNodeChromInfo.cs:629-645`), scaled-short like mass error
-- [ ] Bump cache format v19 -> v20; add migration path (zero/null for old caches)
-- [ ] Update `TimeIntensities` and serialization
+### Phase 3 - Persistence [PARTIAL - per-time-point IM done; per-peak ChromPeak fields TODO]
+- [x] `ChromCollector` accepts optional `hasIonMobilityErrors` / `hasCcsErrors`, with parallel `BlockedList<float>` storage
+- [x] `TimeIntensities` carries `IonMobilityErrors` and `CcsErrors` immutable lists; `Truncate`, `Interpolate`, `InterpolateTime` preserve them
+- [x] `SpectraChromDataProvider.ProcessExtractedSpectrum` plumbs IM error into `ChromCollector.AddPoint`
+- [x] Cache format bumped v19 -> v20 (`CacheFormatVersion.Twenty`)
+- [x] `ChromGroupHeaderInfo.FlagValues.has_ion_mobility_errors = 0x200` + `HasIonMobilityErrors` getter
+- [x] `ChromTransition.FlagValues.missing_ion_mobility_errors = 0x08` + `MissingIonMobilityErrors` for partial-merge cases
+- [x] `RawTimeIntensities` (protobuf) and `InterpolatedTimeIntensities` (legacy stream) round-trip IM errors
+- [x] `ChromDataSet.GetFlagValues` sets the IM error flag
+- [x] `ChromCacheBuilder` marks transitions missing IM errors
+- [x] Commits: `9dab2d0a2`, `1740ebb79`, `9e558710f`
+- [ ] **TODO: Per-peak `ChromPeak.IonMobilityErrorPercent` and `CcsErrorPercent`** (scaled-short, struct size change)
+- [ ] **TODO: Per-peak `TransitionChromInfo` fields**
+- [ ] **TODO: CCS computation at peak detection** in `ChromCacheBuilder` using `IIonMobilityFunctionsProvider.CCSFromIonMobility(centroidIm, mz, charge)`; charge from `TransitionGroupDocNode.PrecursorCharge`
 
-### Phase 4 - Reporting
+### Phase 4 - Reporting [PENDING]
 - [ ] Surface `IonMobilityErrorPercent` on `TransitionResult` (`TransitionResult.cs:85` is the mass-error analog)
 - [ ] Surface `CcsErrorPercent` on `TransitionResult`
 - [ ] Add column captions and tooltips (`ColumnCaptions.Designer.cs`, `ColumnToolTips.Designer.cs`)
 
-### Phase 5 - Tests
+### Phase 5 - Tests [PENDING]
 - [ ] Unit test: weighted-mean accumulator for IM/CCS error
 - [ ] Functional test: extraction over a known IM dataset (drift time + 1/K0), verify % IM error and % CCS error in document grid
 - [ ] Cache compatibility test: load a v19 cache, confirm IM-error columns are null, save as v20
 - [ ] FAIMS CV check: ensure no spurious values when filter window is empty / FAIMS
 
-### Phase 6 - Release notes
+### Phase 6 - Release notes [PENDING]
 - [ ] Add to release notes
 
 ## Key Files (from initial code map)
@@ -105,6 +116,8 @@ conversion needs the mass spec file present, which is not safe to assume at repo
 - **2026-05-04**: Algorithm = intensity-weighted mean of `(im - im_target)` across extraction band, expressed as % error. Aligns with mass-error treatment, not RT-error treatment.
 - **2026-05-04**: Compute % CCS error during extraction (not at report time), because CCS conversion requires the mass spec file to be present.
 - **2026-05-04**: Defer graph panes — add to "deferred" section above; revisit after data path lands.
+- **2026-05-04**: CCS computation pivoted from per-spectrum (in `SpectrumFilterPair`) to per-peak (in `ChromCacheBuilder` at peak detection). Reason: `PrecursorTextId` doesn't carry charge; pushing charge through to that layer would touch hundreds of call sites, while `TransitionGroupDocNode.PrecursorCharge` is naturally available at peak detection. Cache build still has the file present, so the user's "compute during extraction" constraint still holds.
+- **2026-05-04**: `ChromCollector` and `TimeIntensities` retain (latent) `CcsErrors` array support for future graph panes — zero runtime cost when not allocated.
 
 ## Notes
 
