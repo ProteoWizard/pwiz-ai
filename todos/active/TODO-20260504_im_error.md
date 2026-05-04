@@ -54,7 +54,7 @@ conversion needs the mass spec file present, which is not safe to assume at repo
 - [x] `SpectrumFilterPair.FilterSpectrumList` populates the array; converts mean delta to % IM error per target
 - [x] Commit: `d83da9ecd`
 
-### Phase 3 - Persistence [PARTIAL - per-time-point IM done; per-peak ChromPeak fields TODO]
+### Phase 3 - Persistence [DONE for IM; CCS computation still pending]
 - [x] `ChromCollector` accepts optional `hasIonMobilityErrors` / `hasCcsErrors`, with parallel `BlockedList<float>` storage
 - [x] `TimeIntensities` carries `IonMobilityErrors` and `CcsErrors` immutable lists; `Truncate`, `Interpolate`, `InterpolateTime` preserve them
 - [x] `SpectraChromDataProvider.ProcessExtractedSpectrum` plumbs IM error into `ChromCollector.AddPoint`
@@ -64,15 +64,24 @@ conversion needs the mass spec file present, which is not safe to assume at repo
 - [x] `RawTimeIntensities` (protobuf) and `InterpolatedTimeIntensities` (legacy stream) round-trip IM errors
 - [x] `ChromDataSet.GetFlagValues` sets the IM error flag
 - [x] `ChromCacheBuilder` marks transitions missing IM errors
-- [x] Commits: `9dab2d0a2`, `1740ebb79`, `9e558710f`
-- [ ] **TODO: Per-peak `ChromPeak.IonMobilityErrorPercent` and `CcsErrorPercent`** (scaled-short, struct size change)
-- [ ] **TODO: Per-peak `TransitionChromInfo` fields**
-- [ ] **TODO: CCS computation at peak detection** in `ChromCacheBuilder` using `IIonMobilityFunctionsProvider.CCSFromIonMobility(centroidIm, mz, charge)`; charge from `TransitionGroupDocNode.PrecursorCharge`
+- [x] Per-peak `ChromPeak.IonMobilityError` + `CcsError` (scaled-short fields, struct 52 -> 56 bytes for v20, flag bits 0x0100 / 0x0200)
+- [x] Per-peak `ChromPeak` constructor computes weighted-mean % IM error across the peak window
+- [x] Per-peak `TransitionChromInfo.IonMobilityError` + `CcsError` (scaled-short fields, flags HasIonMobilityError / HasCcsError); ChangePeak propagates both
+- [x] `ChromPeak.WithCcsError(double?)` helper for applying CCS after construction
+- [x] Commits: `9dab2d0a2`, `1740ebb79`, `9e558710f`, `470ff66c5`
+- [ ] **TODO: CCS computation at peak detection in `ChromCacheBuilder.WriteLoop`** (line ~1399, just before `ChromPeakSerializer().WriteItems`). Available there: `chromDataSet.NodeGroups[0].Item2` (TransitionGroupDocNode → PrecursorAdduct.AdductCharge), `chromDataSet.PrecursorMz`, `_currentFileInfo` (file/converter access). Pattern:
+  ```
+  centroidIm = targetIm * (1 + peak.IonMobilityError / 100)
+  centroidCcs = converter.CCSFromIonMobility(centroidIm, mz, charge, ctx)
+  ccsErrorPct = 100 * (centroidCcs - targetCcs) / targetCcs
+  peak = peak.WithCcsError(ccsErrorPct)
+  ```
 
-### Phase 4 - Reporting [PENDING]
-- [ ] Surface `IonMobilityErrorPercent` on `TransitionResult` (`TransitionResult.cs:85` is the mass-error analog)
-- [ ] Surface `CcsErrorPercent` on `TransitionResult`
-- [ ] Add column captions and tooltips (`ColumnCaptions.Designer.cs`, `ColumnToolTips.Designer.cs`)
+### Phase 4 - Reporting [DONE for column surface; lacks CCS values until Phase 3 finishes]
+- [x] `TransitionResult.IonMobilityErrorPercent` and `CcsErrorPercent` on the entity, formatted like `MassErrorPPM`
+- [x] Column captions in `ColumnCaptions.resx` + Designer.cs (English; ja/zh-CHS handled by translators)
+- [x] Tooltips in `ColumnToolTips.resx` + Designer.cs
+- [x] Commit: `288a9ff32`
 
 ### Phase 5 - Tests [PENDING]
 - [ ] Unit test: weighted-mean accumulator for IM/CCS error
