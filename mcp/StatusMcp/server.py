@@ -421,6 +421,10 @@ def set_active_project(path: str) -> str:
     Call this when switching focus between repositories
     (e.g., pwiz, pwiz-ai, skyline_26_1).
 
+    Per-session state is keyed by the Claude Code process's PID (this server's
+    parent process), which the statusline also reads, so concurrent Claude Code
+    sessions do not overwrite each other's status display.
+
     Args:
         path: Path to the project directory. Example: 'C:/proj/pwiz'
     """
@@ -433,9 +437,24 @@ def set_active_project(path: str) -> str:
         "setAt": datetime.now(timezone.utc).isoformat(),
     }
 
-    ACTIVE_PROJECT_FILE.write_text(json.dumps(active, indent=2), encoding="utf-8")
+    payload = json.dumps(active, indent=2)
+    target = _per_session_active_project_file() or ACTIVE_PROJECT_FILE
+    target.write_text(payload, encoding="utf-8")
 
     return f"Active project set to: {active['name']} ({active['path']})"
+
+
+def _per_session_active_project_file() -> Optional[Path]:
+    """Path to this Claude Code session's active-project file, or None if the
+    parent PID can't be determined (in which case callers should fall back to
+    the legacy global file)."""
+    try:
+        ppid = os.getppid()
+    except OSError:
+        return None
+    if not ppid:
+        return None
+    return STATE_DIR / f"active-project-{ppid}.json"
 
 
 def main():

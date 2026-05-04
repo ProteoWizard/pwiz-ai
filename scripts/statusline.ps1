@@ -43,9 +43,13 @@
     - context_window.context_window_size: Total context window size
 
     Active project state file:
-    - Location: ai/.tmp/active-project.json (relative to project root)
+    - Per-session: ai/.tmp/active-project-<ppid>.json (preferred)
+    - Legacy global: ai/.tmp/active-project.json (fallback)
+    - The PPID is the Claude Code process that spawned both this statusline
+      and the StatusMcp server, so they share an identity without needing a
+      session_id channel that Claude Code does not expose to MCP servers.
     - Set by: StatusMcp's set_active_project tool
-    - Falls back to workspace.project_dir if not set
+    - Falls back to workspace.project_dir if no active project is set
 
     Context calculation: "% left" models when Claude Code will begin
     its auto-compact warning. Calibrated for the 1M-context tier
@@ -59,19 +63,34 @@
 
 $input_json = $input | Out-String | ConvertFrom-Json
 
-# Check for active project state file (set by StatusMcp)
+# Check for active project state file (set by StatusMcp).
 # Derive ai/ root from script location: ai/scripts/statusline.ps1 -> ai/
 $aiRoot = Split-Path -Parent $PSScriptRoot
-$activeProjectFile = Join-Path $aiRoot '.tmp\active-project.json'
+$tmpDir = Join-Path $aiRoot '.tmp'
+
+# The Claude Code process that spawned us is also the parent of any StatusMcp
+# server it launched, so the parent PID is a stable session identity shared
+# between the two without needing a session_id channel.
+$ppid = $null
+try {
+    $ppid = (Get-CimInstance Win32_Process -Filter "ProcessId = $PID" -ErrorAction Stop).ParentProcessId
+} catch { }
+
+$perSessionFile = if ($ppid) { Join-Path $tmpDir "active-project-$ppid.json" } else { $null }
+$legacyFile = Join-Path $tmpDir 'active-project.json'
+
 $project_dir = $null
 $project_name = $null
 
-if (Test-Path $activeProjectFile) {
-    try {
-        $active = Get-Content $activeProjectFile -Raw | ConvertFrom-Json
-        $project_dir = $active.path
-        $project_name = $active.name
-    } catch { }
+foreach ($candidate in @($perSessionFile, $legacyFile)) {
+    if ($candidate -and (Test-Path $candidate)) {
+        try {
+            $active = Get-Content $candidate -Raw | ConvertFrom-Json
+            $project_dir = $active.path
+            $project_name = $active.name
+            break
+        } catch { }
+    }
 }
 
 # Fall back to workspace project directory if no active project set

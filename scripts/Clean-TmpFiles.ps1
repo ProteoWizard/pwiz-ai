@@ -8,7 +8,7 @@
     files older than a retention period.
 
     Protected items (never deleted):
-    - active-project.json (live MCP status tool state)
+    - active-project.json and active-project-<ppid>.json (live MCP status state)
     - daily/ directory tree (managed by Move-DailyReports.ps1 and Invoke-DailyReport.ps1)
     - plots/, plots-outliers/, screenshots/ directories
 
@@ -61,6 +61,17 @@ foreach ($file in $allFiles) {
     if ($ProtectedFiles -contains $file.Name) {
         $protected += $file
         continue
+    }
+
+    # Per-session active-project files are protected only while their Claude
+    # Code process is still alive; orphan files left over from killed sessions
+    # age out under the normal retention rules.
+    if ($file.Name -match '^active-project-(\d+)\.json$') {
+        $sessionPid = [int]$Matches[1]
+        if (Get-Process -Id $sessionPid -ErrorAction SilentlyContinue) {
+            $protected += $file
+            continue
+        }
     }
 
     if ($file.LastWriteTime -lt $Cutoff) {
