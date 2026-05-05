@@ -284,7 +284,7 @@ def register_tools(mcp):
         try:
             # URL-encode the container path for the URL
             encoded_path = quote(container_path, safe='/')
-            log_url = f"https://{server}{encoded_path}/testresults-viewLog.view?runid={run_id}"
+            log_url = f"https://{server}{encoded_path}/testresults-viewLog.view?runId={run_id}"
 
             logger.info(f"Fetching log from: {log_url}")
 
@@ -360,7 +360,7 @@ def register_tools(mcp):
             if not build_content:
                 logger.info(f"Downloading build log for run {run_id}")
                 encoded_path = quote(container_path, safe='/')
-                log_url = f"https://{server}{encoded_path}/testresults-viewLog.view?runid={run_id}"
+                log_url = f"https://{server}{encoded_path}/testresults-viewLog.view?runId={run_id}"
 
                 response_bytes = make_authenticated_request(server, log_url, timeout=120)
                 response_text = response_bytes.decode("utf-8")
@@ -423,7 +423,7 @@ def register_tools(mcp):
         try:
             # URL-encode the container path for the URL
             encoded_path = quote(container_path, safe='/')
-            xml_url = f"https://{server}{encoded_path}/testresults-viewXml.view?runid={run_id}"
+            xml_url = f"https://{server}{encoded_path}/testresults-viewXml.view?runId={run_id}"
 
             logger.info(f"Fetching XML from: {xml_url}")
 
