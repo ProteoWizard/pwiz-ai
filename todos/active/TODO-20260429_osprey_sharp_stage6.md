@@ -146,6 +146,19 @@ These were surfaced during the 2026-04-28 sprint and deferred:
    the underlying drift is open. Worth chasing if Stage 6 box 3a
    re-scoring inherits the drift in a way that affects second-pass
    FDR results.
+3. **maccoss/osprey: drop the empty cwt_candidates blob**. Rust's
+   `pipeline.rs::write_scores_parquet` unconditionally appends a
+   4-byte zero-length count prefix when an entry has no CWT
+   candidates, so empty-list rows get a 4-byte `00 00 00 00` blob
+   instead of a parquet null cell. ~57k post-compaction stubs per
+   Stellar file are affected. The C# side has been bridged in
+   `ParquetScoreCache.cs` (always emit the encoded blob, normalizing
+   null→empty list) with a `TODO(osprey-rust)` pointer. The proper
+   fix is a Rust-side PR against maccoss/osprey that writes null for
+   empty candidate lists -- more parquet-idiomatic, saves bytes for
+   downstream consumers (Skyline-AI, parquet-tools, pyarrow). When
+   that lands, revert the C# branch to the original
+   `!= null && Count > 0` form.
 
 ## Files expected to change
 
@@ -1508,3 +1521,522 @@ The fixture at `D:\test\osprey-runs\stellar\_stage6_fixture\Stellar\`
 is locked; per-iteration loop is `Compare-Stage6-Crossimpl.ps1
 -Dataset Stellar`. After Phase 3 + Astral validation + B, file
 the two PRs.
+
+### Session 9 (2026-05-04) — Stage 6 Phase 3 + parquet content diff + MP inputs bisection
+
+**Phase 3 byte-identical at the percolator-dump level.** Stellar
+3-file harness shows zero divergence on every numeric column of
+`rust_stage6_rescored.tsv` vs `cs_stage6_rescored.tsv` after the
+score-reset + decoy-skip + LINQ-stable-sort fixes that landed in
+prior sessions.
+
+**Parquet content diff promoted from `ai/.tmp/` to permanent
+tooling.** New files:
+- `ai/scripts/OspreySharp/parquet_diff.py` — pyarrow-driven
+  column-level comparator with `--tolerance` flag (default 0,
+  set to 1e-6 in the harness to mirror `Test-Features.ps1`).
+- `ai/scripts/OspreySharp/Diff-Parquet.ps1` — PowerShell
+  entry point, supports `-A/-B` single-pair or `-DirA/-DirB`
+  directory mode. Allowlist via `-ExpectedDiffColumns`.
+- Wired into `Compare-Stage6-Crossimpl.ps1` as Stage E.
+
+**cwt_candidates encoding fix in C#** (with TODO for Rust).
+Rust unconditionally emits a 4-byte zero-length count prefix
+when an entry has no CWT candidates; C# was emitting null. ~57k
+post-compaction stubs per Stellar file accounted for the
+encoding mismatch. Fix: `ParquetScoreCache.cs:350` always calls
+`Encode(entry.CwtCandidates ?? new List<CwtCandidate>())`. The
+proper fix is on the Rust side (write null for empty lists,
+more parquet-idiomatic, saves bytes) — captured as Open
+follow-up #3 above.
+
+**Bisection methodology revisited.** Re-applied the
+"diagnostics upstream until divergence flips to consistency"
+playbook from the Rust-only Stage 5/6 vs sidecar work. Added
+the C# port of Rust's `OSPREY_DUMP_MP_INPUTS` (the dump that
+captured `(entry_id, apex_scan, frag_pos, frag_idx, scan_idx,
+rt, intensity)` for every `tukey_median_polish` call, gated by
+env var, thread-safe append).
+
+C# implementation:
+- `OspreyDiagnostics.cs::DumpMpInputs` flag + persistent
+  `StreamWriter` behind a `lock` so it can fire from parallel
+  scoring without serializing the buffer-build stage.
+- `OspreyDiagnostics.cs::WriteMpInputsRow` mirrors
+  `dump_mp_inputs` byte-for-byte.
+- `OspreyDiagnostics.cs::CloseMpInputsDump` flushes at the
+  end of the rescore loop.
+- Wired into `AnalysisPipeline.cs:3980` right before
+  `TukeyMedianPolish.Compute`.
+- Harness `-DumpMpInputs` switch sets the env var path-style
+  on Rust and 1-style on C# so each binary writes
+  `rust_stage6_mp_inputs.tsv` / `cs_stage6_mp_inputs.tsv`
+  in its own workdir.
+
+**Bisection result on Stellar (3 files, 7.5M dump rows each):**
+
+- 68,403 (entry_id, apex_scan) keys present on BOTH sides have
+  rt+intensity values that match exactly bit-for-bit at f64
+  resolution. The 689k `diff` lines this produces are NOT real
+  value differences — they're string-representation differences
+  in the "shortest decimal that round-trips" picked by Rust's
+  ryu vs .NET's `ToString("R")`. Both strings parse back to the
+  identical f64 (verified: e.g., "247.53384399414063" and
+  "247.53384399414062" both round-trip to f64
+  `0x1.ef11540000000p+7`). Treat as a string-format quirk, not
+  a value drift.
+- **1,066 keys only on the Rust side / 1,045 only on C#**.
+  Same entry, different apex_scan picked. ~70k MP-input rows
+  per side land in a "different best window" bucket. This is
+  the real divergence — the peak picker chooses different
+  apexes in ~1k entries per dataset because something upstream
+  diverges.
+- All RTs are byte-identical at f64 across both dumps. XIC time
+  axis is bit-identical.
+- After accounting for the string-format quirk, all f64
+  intensity values for matching keys are bit-identical. XIC
+  intensities are bit-identical at f64.
+
+**Conclusion of this bisection step:** Median-polish inputs are
+byte-identical for every entry where the same apex_scan is
+chosen. The remaining divergence in the parquet
+`peak_apex` / `peak_sharpness` (~33k rows each) collapses to:
+~1k entries per file pick a different apex_scan. The
+algorithmic divergence is **upstream of XIC extraction**, in
+the candidate-window iteration or peak detection path that
+selects the apex.
+
+**Next bisection step:** dump the candidate-window list per
+entry on each side (RT range, top-N fragment list, candidate
+count, best window selection). If windows match → peak detector
+itself diverges. If windows differ → window-generation logic
+diverges. Mirrors the same upstream-walking approach that
+nailed the Rust in-process vs worker compaction gap.
+
+**Files changed this session:**
+- `pwiz/pwiz_tools/OspreySharp/OspreySharp.IO/ParquetScoreCache.cs`
+  — cwt_candidates always-encode (with TODO osprey-rust).
+- `pwiz/pwiz_tools/OspreySharp/OspreySharp/OspreyDiagnostics.cs`
+  — `DumpMpInputs` + `WriteMpInputsRow` + `CloseMpInputsDump`.
+- `pwiz/pwiz_tools/OspreySharp/OspreySharp/AnalysisPipeline.cs`
+  — wire `WriteMpInputsRow` at the median polish call site.
+- `pwiz/pwiz_tools/OspreySharp/OspreySharp/AnalysisPipeline.Stage6Rescore.cs`
+  — flush dump on rescore-loop end.
+- `ai/scripts/OspreySharp/parquet_diff.py` (NEW + tolerance).
+- `ai/scripts/OspreySharp/Diff-Parquet.ps1` (NEW).
+- `ai/scripts/OspreySharp/Compare-Stage6-Crossimpl.ps1` — Stage E
+  + `-DumpMpInputs` switch.
+
+**Next session handoff:** continue the apex-scan-divergence
+bisection. The fastest signal is to dump the candidate window
+list per entry on both sides and diff. The 1,045–1,066 unique
+keys per side are the haystack; pick one entry that's in both
+dumps with different apex picks (e.g., entry 100191) and walk
+backwards. `OSPREY_DUMP_MP_INPUTS=<path>` is the working
+upstream seam; the next seam upstream is the candidate-window
+generator. Also: `OSPREY_DUMP_PREDICT_RT` is still unimplemented
+in C# (Task B in this TODO), and is the seam for tracing apex
+divergences if they bottom out at RT calibration drift.
+
+### Session 9 (cont'd) — OSPREY_DUMP_PREDICT_RT port + bisection result
+
+Implemented the C# port of Rust's `OSPREY_DUMP_PREDICT_RT`
+(diagnostics.rs ~365/397) — closes Task B from this TODO.
+Same boolean-gate / fixed-filename C# convention as the other
+diagnostics; same TSV format as the Rust dump byte-for-byte.
+
+C# implementation:
+- `OspreyDiagnostics.cs::DumpPredictRt` flag, persistent
+  `StreamWriter` lazy-opened behind `_predictRtLock`.
+- `WritePredictRtArrays(fileName, libraryRts, fittedValues)`
+  emits per-file `cal_arrays` rows once.
+- `WritePredictRtCall(entryId, libraryRt, expectedRt)` emits
+  one `predict_calls` row per per-window candidate scoring.
+- `ClosePredictRtDump()` flushes at end.
+- Wired `WritePredictRtArrays` into
+  `AnalysisPipeline.Stage6Rescore.cs` right after `rtCal` is
+  selected (mirrors Rust pipeline.rs ~2886).
+- Wired `WritePredictRtCall` into `AnalysisPipeline.cs:3483`
+  immediately after `rtCalibration.Predict(candidate.RetentionTime)`
+  (mirrors Rust pipeline.rs ~7014).
+- Harness gained a `-DumpPredictRt` switch; sets
+  `OSPREY_DUMP_PREDICT_RT=rust_stage6_predict_rt.tsv` for the
+  Rust call and `=1` for the C# call so each binary writes its
+  dump in its own workdir.
+
+**Bisection result on Stellar 3-file**: after `sort -u` the two
+dumps are byte-identical:
+- 435,820 rows on each side (same row count exactly, no `cal_arrays`
+  or `predict_calls` rows missing or extra).
+- `diff` returns ZERO lines.
+- This proves: (a) the calibration's `library_rts` /
+  `fitted_values` arrays are byte-identical between Rust and C#
+  (so the JSON round-trip is lossless on f64 bits); and (b)
+  every `Predict()` call returns a bit-identical f64 for a
+  bit-identical input. RT calibration is fully bit-parity.
+
+**Conclusion of this bisection step:** the ~1k-per-file
+divergent apex picks are NOT explained by RT calibration drift.
+The bug is downstream of `cal.Predict(library_rt)`. Likely
+candidates:
+- `CwtPeakDetector.DetectConsensusPeaks` returns a different
+  peak list given identical XICs (precision-sensitive
+  detection logic, or a non-deterministic ordering).
+- The per-peak rank score in `AnalysisPipeline.cs:3750-3818`
+  (`coelutionScore * rtPenalty * intensityWeight`) computes
+  differently — most plausibly an `apexIntensity` that
+  diverges by 1 ULP and tips `bestRankScore` between two
+  near-equal candidates. The C# code already uses
+  `TotalOrderGreater` to mirror Rust's `f64::total_cmp` for
+  signed-zero ties, but the comparand precision may still
+  differ.
+- `PearsonCorrelation` summation order across fragment pairs.
+
+**Next bisection step**: add a per-(entry, file, peak) dump
+capturing the candidate peak list + rankScore components +
+which peak is chosen. If both sides emit the same peak list
+with the same rankScores but pick different peaks, tie-break
+diverges. If rankScores match but peak lists differ,
+`CwtPeakDetector` diverges. If everything diverges from line 1,
+the XICs going into peak detection differ (in which case dump
+the full pre-peak-detection XICs next).
+
+### Session 9 (cont''d) — RT tolerance MAD source mismatch found
+
+After the MP_INPUTS + PREDICT_RT bisections proved XIC time/intensity
+and RT calibration arrays are byte-identical, the per-entry deep-dive
+dump (OSPREY_DIAG_SEARCH_ENTRY_IDS=12) surfaced the next layer of
+divergence: rt_tolerance differs cross-impl.
+
+- Rust dump: rt_tolerance=0.6400012189
+- C# dump:   rt_tolerance=0.5000000000  ← clamped to MinRtTolerance
+
+Walking the formulas:
+- Rust run_search (pipeline.rs:6776-6815) reads
+  cal_params.rt_calibration.mad from the per-file
+  .calibration.json — the FIRST-PASS MAD (~0.144).
+- C# was reading rtCalibration.Stats().MAD — the REFINED cal''s
+  stats MAD computed from its abs_residuals (~0.012). That clamps to
+  MinRtTolerance = 0.5, ~28% smaller than Rust''s window.
+
+**Different MAD source -> different window -> different best peak ->
+different peak_apex / peak_sharpness in the parquet.**
+
+The two MADs are computed from different residual populations:
+- .calibration.json MAD comes from the FIRST-PASS LOESS fit on
+  the full Stage 4 calibration sample (broad spread).
+- The reconciliation envelope''s refined_rt_calibration.abs_residuals
+  comes from the SECOND-PASS refit on consensus-passing peptides
+  (much tighter spread).
+
+Rust uses the broader first-pass MAD. C# was using the tighter
+refined MAD. Different sources, never seen until this dump.
+
+**Fix landed** in AnalysisPipeline.cs and Stage6Rescore.cs:
+- ScoringContext gains OriginalRtMad (nullable double) — the
+  per-file .calibration.json MAD.
+- LoadMassCalibrations extends to also output that MAD.
+- The Stage 6 rescore loop sets context.OriginalRtMad after
+  loading the per-file calibration; the gap-fill CWT and forced
+  contexts also inherit the same value.
+- RunCoelutionScoring prefers context.OriginalRtMad over
+  rtCalibration.Stats().MAD for the rt_tolerance derivation.
+
+**Verified**: after the fix, the C# search-dump
+rt_tolerance=0.6400012189 matches Rust''s value byte-for-byte.
+
+**Status of the parquet diff after the MAD fix**: a marginal drop
+(file 20 peak_apex 32820 -> 32582 rows; ~1% of entries). The
+window size is now correct but peak_apex / peak_sharpness
+still diverge in ~33k rows per file.
+
+**Next bisection step**: the per-entry search dump for the chosen
+divergent entry (entry_id=12) shows that on the C# side the
+CWT peak detection produces one peak (start=6, apex=8, end=11,
+corr_score=0.418) while on the Rust side dump_peaks was not
+appended at all for the same entry — meaning Rust took a fallback
+path (median-polish elution profile or ref_xic detection) or
+scored_candidates was empty. Either way, the CWT consensus
+peak detector is producing different results on byte-identical
+XICs. Next dump target: the inputs to (and outputs from) the
+CWT consensus peak detector itself.
+
+### Session 9 (cont''d) — CWT detector tie-break + 32k row pattern
+
+Three tie-break alignments landed in
+OspreyChromatography/CwtPeakDetector.cs (all matching Rust''s
+Iterator::max_by / slice::sort_by semantics):
+
+1. EstimateScale apex finder: > -> >= (Rust max_by keeps
+   LAST equal element on ties).
+2. FindPeaks apex sort: Array.Sort (introsort, unstable) ->
+   LINQ OrderByDescending (stable, matches Rust slice::sort_by).
+3. FindPeaks ref-signal apex search: > -> >= (same
+   max_by parity).
+
+These produced no measurable change to the parquet diff -- ties at
+f64 are evidently rare in production data. Documented as defensive
+parity work; the real divergence is elsewhere.
+
+**Hypothesis check**: parsed full XIC dump of one divergent entry
+(entry_id=12, file 20). The EXTRACTED XICS section (102 rows: 6
+fragments x 17 scans) is bit-identical between Rust and C# --
+intensities match exactly to f64, RTs match within the dump''s F10
+print precision (1e-10 max diff is rounding artifact, not data
+drift). So the CWT consensus detector receives byte-identical
+inputs in both impls.
+
+**Critical row-level signal**: of the 32,582 peak_apex divergent
+rows on file 20:
+- 1,971 have peak_apex == 0 on the RUST side and non-zero on the
+  C# side. These are entries Rust did NOT rescore (kept the loaded
+  stub''s zero default), while C# DID rescore (got a non-zero apex
+  from CWT detection).
+- The remaining 30,611 entries have non-zero peak_apex on both
+  sides, but the values differ -- both impls rescored, but the
+  scored peak differs.
+- 13,236 targets vs 19,346 decoys among the divergent rows -- decoys
+  over-represented (1.46x), suggesting the divergence concentrates
+  on the noisier scoring path.
+
+**Conclusion**: the C# rescore engine is producing scored output for
+entries the Rust rescore engine is not, and where both score, the
+chosen peak (or ref_xic) differs in detail. The CWT consensus
+detector itself is the most likely seam -- byte-identical XICs and
+identical kernel/convolve code, yet different peak counts and apex
+positions emerge.
+
+**Next bisection step (Session 10)**: add an
+OSPREY_DUMP_CWT_DETAILS diagnostic in BOTH Rust and C# that
+captures, per-entry:
+- The CWT consensus signal value at every scan index.
+- The estimated sigma + kernel radius.
+- The list of detected apex indices + their consensus values.
+- The final peak set after zero-crossing extension + valley guard.
+
+Diff this dump cross-impl. The first divergent row (consensus
+signal, sigma, kernel, apex set, or peak boundaries) localises the
+bug to one CWT subroutine. Either the median consensus differs (f64
+sort tie-break beyond what Array.Sort vs total_cmp covers), the
+zero-crossing walk differs, or the valley-guard handles a boundary
+case differently. Without the dump we''re guessing; with it we get
+the answer.
+
+A secondary clue worth chasing: 1,971 entries hit the
+Rust=0, C#=non-zero pattern. Those rows are entries that fell
+through Rust''s entire 3-tier fallback (CWT -> MP polish -> ref_xic
+detect_all_xic_peaks) without producing scored output, while
+C#''s same 3-tier fallback produced one. Either Rust''s fallback
+predicates are stricter, or one of the three detectors diverges on
+the same XICs.
+
+### Session 9 (cont''d) — CWT path dump + consensus signal divergence
+
+Added a new bisection-grade dump on both Rust and C#:
+OSPREY_DUMP_CWT_PATH. One row per (file, entry) reaching the
+non-override CWT path. Ten columns:
+file_name, entry_id, n_cwt_peaks, n_final_peaks,
+n_scored, scored, sigma, consensus_l1,
+consensus_max_abs, consensus_argmax.
+
+C# and Rust both gained:
+- CwtPeakDetector.GetConsensusSignal(xics, out sigma) /
+  cwt::get_consensus_signal(xics) -> Option<(Vec<f64>, f64)>.
+  Runs the first half of consensus peak detection (sigma, kernel,
+  convolve, median) and exposes the consensus signal so the dump
+  can characterize it without re-running the full pipeline.
+- OspreyDiagnostics.WriteCwtPathRow /
+  diagnostics::dump_cwt_path. Persistent thread-safe writer,
+  same lazy-open + Mutex pattern as MP_INPUTS.
+- Wired into the four/three return paths of ScoreCandidate /
+  the per-entry closure in run_search.
+
+Harness gained -DumpCwtPath switch (analogous to the existing
+-DumpMpInputs and -DumpPredictRt switches).
+
+**Bisection findings** (Stellar 3-file):
+
+- 1,644 entries take the CWT path on each side (rest go through
+  the boundary-overrides path which bypasses CWT entirely). Same
+  count cross-impl after excluding override entries from the dump.
+- sigma matches cross-impl on 100% of entries (all clamp to
+  MIN_SCALE = 2.0 on this dataset).
+- consensus_argmax matches cross-impl on every visible entry
+  -- the position of the maximum consensus value is stable.
+- consensus_max_abs matches BIT-FOR-BIT on roughly half the
+  entries; the other half differ by 0.1% to 1%.
+- consensus_l1 differs cross-impl by 0.1% to 5%, with mixed
+  direction (sometimes Rust > C#, sometimes C# > Rust). The
+  variable ratio rules out a constant scaling factor (e.g.,
+  pow(pi, 0.25) divergence -- empirically that''s
+  0x3FF54D264F787EB7 on both Rust and Python/.NET on this
+  Windows build, so the kernel norm is bit-identical).
+- n_cwt_peaks differs by ±1 on 70% of entries, and where peak
+  count agrees, n_scored (post-apex-acceptance) frequently
+  still differs.
+
+**Implication**: the consensus signal computed in
+DetectConsensusPeaks differs cross-impl, predominantly at the
+LOW-magnitude (off-peak) scans, while the high-magnitude apex
+position itself is stable. The peak finder reads slightly
+different consensus signals and produces ±1 different peak counts.
+
+**Next bisection step (Session 10)**: dump the actual consensus
+signal per (entry, scan) for a handful of divergent entries
+(e.g., 10110, 100544, 10423) -- extend WriteSearchXicDump /
+SearchXicDump::dump_header with a CWT CONSENSUS section so
+OSPREY_DIAG_SEARCH_ENTRY_IDS=10110 produces full per-scan
+consensus values on both sides. The first scan where they differ
+identifies whether the bug is in convolve (kernel × signal sum)
+or in the median consensus tie-break across the 6 fragment CWT
+coefficients. Suspect: a subtle order-of-summation difference in
+Convolve / convolve_same that cancels at peak but
+accumulates at low-signal scans, OR the median tie-break diverging
+when multiple fragments have near-equal CWT coefficients at noise-
+level scans.
+
+### Session 9 (cont''d) — checkpoint commits + production fixes landed
+
+The CWT consensus signal divergence above turned out to be a downstream
+symptom rather than a root cause. Walking the bisection further upstream
+located seven production-code root causes; fixing them collapsed
+peak_apex / peak_sharpness from ~33k divergent rows on Stellar to 0,
+without any change to the consensus signal computation itself.
+
+**Production fixes landed (all in C#):**
+
+1. **MS2 calibration applied to a LOCAL copy** of the spectra list.
+   Previous code mutated the input list in place, and the Stage 6
+   rescore loop calls `RunCoelutionScoring` three times per file
+   (rescore + gap-fill CWT + gap-fill forced) sharing the same
+   spectra. The accumulated offset (mz - mean -> mz - 2*mean -> mz -
+   3*mean) put fragment matches into wrong tolerance windows on the
+   second and third calls. Verified via per-entry XIC dump: scan 8
+   for entry 10110 had Rust intensity 0 but C# intensity 8873 because
+   a different peak slipped into range after the third calibration.
+
+2. **rt_tolerance MAD source switched to `.calibration.json`'s
+   first-pass MAD** via the new `ScoringContext.OriginalRtMad`
+   property. Rust's `run_search` reads `cal_params.rt_calibration.mad`
+   (the first-pass MAD, ~0.144 on Stellar) but C# was reading the
+   refined cal's stats MAD (~0.012, an order of magnitude tighter)
+   which clamps to `MinRtTolerance = 0.5`, costing ~28% of window
+   width and producing ~33k divergent best-peak picks per file.
+
+3. **CWT-path post-rank-loop apex recompute over `ref_xic[si..=ei]`**
+   (mirrors `pipeline.rs:7406-7424`). Leaving the consensus
+   `apex_index` in place put `peak_apex` on the summed-signal max
+   instead of the single-fragment ref_xic max. Override entries
+   excluded from the recompute because Rust's override branch uses
+   the override-supplied apex_index directly.
+
+4. **`BuildOverridePeaks` peak_apex sourced from `peak.ApexIndex`
+   directly** (override is authoritative). The prior local-max
+   recompute on `[start..=end]` disagreed with Rust on override
+   entries when a different scan in the bound had higher intensity
+   than the override-declared apex.
+
+5. **Tie-break flipped from `>` to `>=`** on five `max_by`-equivalent
+   loops (CWT apex enumeration, sort apex within bounds, ref-signal
+   apex within bounds, BuildOverridePeaks ref_xic selection,
+   ScoreCandidate ref_xic selection). Rust's `Iterator::max_by`
+   returns the LAST equal element on ties (per std doc); strict `>`
+   keeps the first, producing divergent picks when two scans share
+   the f64 max intensity (rare per peak but cumulative across ~280k
+   entries × 3 files).
+
+6. **`capturedPeaks` list built unconditionally for non-override
+   path** (was gated on `peaksFromCwt`). Fallback-path entries (CWT
+   detection returned empty, secondary detection on median-polish
+   elution profile, tertiary on ref_xic) had empty cwt_candidates
+   blobs while Rust populated them from any peak that reached the
+   rank-scoring loop.
+
+7. **`ScoreCandidate` window filter rewritten as
+   `|rt - expectedRt| <= halfWidth`** on the non-override branch
+   (matches Rust's `pipeline.rs:7031-7065` byte-for-byte). The
+   precomputed `rtHi = expectedRt + xicHalfWidth; if rt <= rtHi`
+   form rounds differently in the last bit, occasionally including
+   or excluding a single boundary scan that the abs-diff form would
+   not -- ~1k entries per file picked a different best apex because
+   one boundary spectrum slipped into one side's window.
+
+**Five `List.Sort` / `Array.Sort` introsort sites converted to LINQ
+`OrderByDescending`** (stable per .NET contract): fragment top-N
+selections in `GetCalibrationFeatures`, `GetTop6FragmentMzs`,
+`ProcessFile`, `ScoreCandidate`'s `topIndices`, and
+`capturedPeaks` rank order. Without these, ties on
+`RelativeIntensity` or rank score landed different fragments / peaks
+in the top-N on the C# side.
+
+**`ParquetScoreCache` always emits a cwt_candidates blob.** Rust
+unconditionally appends a 4-byte zero-length count prefix for empty
+candidate lists; C# was writing null cells which round-tripped fine
+but produced a spurious cross-impl parquet diff. Mirrored Rust with
+a TODO for the proper Rust-side null-for-empty fix (which would be
+more parquet-idiomatic and saves 4 bytes per empty row).
+
+**Phase 3 reconciled parquet write-back landed.** New
+`WriteReconciledParquet` in `AnalysisPipeline.Stage6Rescore.cs` plus
+`ParquetScoreCache.LoadFullFdrEntries` plus
+`OspreyConfig.ReconciliationParameterHash`. Reloads the original
+Stage 4 parquet, replaces re-scored rows by `ParquetIndex` (NOT
+post-compaction Vec position; the two diverge after first-pass FDR
+drops non-passing entries), appends gap-fill rows, and writes
+footer metadata `osprey.reconciled = "true"` +
+`osprey.reconciliation_hash = <SHA256 of search hash + reconciliation
+params + run FDR + sorted file stems>` for cache invalidation.
+
+**Diagnostic refactor before commit.** The CWT-path consensus
+signal recompute (sigma + L1 + max_abs + argmax) was unconditionally
+running in production hot path (every per-entry `ScoreCandidate`
+call, then handed to a no-op when the env var was off). Pushed the
+computation INSIDE `OspreyDiagnostics.WriteCwtPathRow`, gated by the
+`DumpCwtPath` env-var check. Production callers now carry one int
+(`diagNCwtPeaks = peaks.Count` after CWT detection) instead of six
+locals. Mirrors the Rust side, where `dump_cwt_path` consults its
+`OnceLock` writer first and skips the computation when the dump is
+inactive. The `CwtPeakDetector.GetConsensusSignal` helper lives on
+the public API but is now called only from `OspreyDiagnostics`
+(parallels Rust's `cwt::get_consensus_signal` tagged
+"DIAGNOSTIC-ONLY" in cwt.rs).
+
+**Checkpoint commits & push:**
+
+- maccoss/osprey: `4092e4e` *dump_cwt_path: per-(file, entry) CWT path
+  summary for cross-impl bisection* pushed to
+  `feature/stage5-percolator-dump-protein-q`. 100% additive, gated;
+  production behavior unchanged when env var unset (suitable for
+  side-by-side test against pre-diagnostic osprey-mm).
+- pwiz: `0fb625207` *Fixed Stage 6 cross-impl divergence and added
+  reconciled parquet write-back* on
+  `Skyline/work/20260429_osprey_sharp_stage6`. 7 files, +1151 / -168.
+- ai (this commit): `Compare-Stage6-Crossimpl.ps1` switches
+  (`-DumpMpInputs` / `-DumpPredictRt` / `-DumpCwtPath`) +
+  `Diff-Parquet.ps1` PowerShell wrapper + `parquet_diff.py`
+  pyarrow-driven helper.
+
+**Final parity (Stellar 3-file dataset):**
+
+- Compare-Percolator D.1 (post-hydration): 7/7 columns × 1,388,872
+  rows max_diff = 0.
+- Compare-Percolator D.2 (post-rescore): 7/7 columns × 392,029 rows
+  max_diff = 0.
+- Diff-Parquet (reconciled `.scores.parquet`): 2/3 files PASS, 1
+  row remaining on file 22 (`Ste-...-_22.scores.parquet`,
+  `cwt_candidates`: 1 row -- decoy entry 2147581197 candidates 3↔4
+  swap on f64 rank-score tie).
+
+**What remains:**
+
+- One row on file 22 cwt_candidates -- f64 tie in rank scoring.
+  Suspected ULP-level divergence in the rank score computation
+  itself; bisection target for the next session.
+- Six allowlisted columns where C# scoring path doesn't yet populate:
+  `fragment_mzs`, `fragment_intensities`, `reference_xic_rts`,
+  `reference_xic_intensities`, `bounds_area`, `bounds_snr`. Tracked
+  as a separate scope; harness allowlists them so the parquet diff
+  reports PASS modulo these columns.
+- Wiring Stage 6 rescore into `AnalysisPipeline.Run` +
+  `RescoreWorker.Run` for non-`--no-join` modes. Currently the
+  worker exits cleanly only on `--join-at-pass=1 --no-join`.

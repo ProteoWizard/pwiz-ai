@@ -4,6 +4,10 @@
 # Machine-specific settings
 settings.local.json
 
+# Claude Code per-session lock files (e.g. scheduled_tasks.lock from
+# the /bg dynamic-loop EAP — process-local state, not for sharing)
+claude/*.lock
+
 # Python
 __pycache__/
 *.pyc
