@@ -24,6 +24,7 @@ from .common import (
     DEFAULT_CONTAINER,
     EXCEPTION_SCHEMA,
     EXCEPTION_QUERY,
+    _server_url,
 )
 from .stacktrace import normalize_stack_trace
 
@@ -56,13 +57,9 @@ HISTORY_SCHEMA_VERSION = 2  # v2: stores individual reports with row_ids
 MAJOR_RELEASE_VERSION = "25.1"
 MAJOR_RELEASE_DATE = "2025-05-22"
 
-# URL format for exception details
-EXCEPTION_URL_TEMPLATE = "https://skyline.ms/home/issues/exceptions/announcements-thread.view?rowId={row_id}"
-
-
 def _get_exception_url(row_id: int) -> str:
-    """Generate URL to view exception details on skyline.ms."""
-    return EXCEPTION_URL_TEMPLATE.format(row_id=row_id)
+    """Generate URL to view exception details on the active LabKey target."""
+    return f"{_server_url(DEFAULT_SERVER)}/home/issues/exceptions/announcements-thread.view?rowId={row_id}"
 
 
 def _parse_version_tuple(version_str: str):

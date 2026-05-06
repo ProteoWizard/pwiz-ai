@@ -36,8 +36,6 @@ TEST_FOLDERS = [
     "/home/development/Integration with Perf",
 ]
 
-# URL templates
-FAILURE_URL_TEMPLATE = "https://skyline.ms{container}/testresults-showFailures.view?end={date}&failedTest={test_name}"
 
 
 def _get_fix_summary(fix_data: dict) -> dict:
@@ -142,25 +140,6 @@ def _extract_fix_annotations(history: dict, section: str) -> dict:
             elif entry.get('fix'):
                 fixes[key] = entry['fix']
     return fixes
-
-
-def _get_failure_url(container: str, test_name: str, date: str) -> str:
-    """Generate URL to view failure details on skyline.ms."""
-    # Format date as MM/DD/YYYY for URL
-    try:
-        dt = datetime.strptime(date, "%Y-%m-%d")
-        date_str = dt.strftime("%m/%d/%Y")
-    except ValueError:
-        date_str = date
-
-    # URL encode the container path
-    container_encoded = container.replace(" ", "%20")
-
-    return FAILURE_URL_TEMPLATE.format(
-        container=container_encoded,
-        date=date_str.replace("/", "%2F"),
-        test_name=test_name
-    )
 
 
 def register_tools(mcp):
