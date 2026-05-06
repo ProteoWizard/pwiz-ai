@@ -2040,3 +2040,134 @@ the public API but is now called only from `OspreyDiagnostics`
 - Wiring Stage 6 rescore into `AnalysisPipeline.Run` +
   `RescoreWorker.Run` for non-`--no-join` modes. Currently the
   worker exits cleanly only on `--join-at-pass=1 --no-join`.
+
+### Session 10 (2026-05-05/06) — Astral parity, Mode A bisection, lib_cosine fix
+
+Picked up from Stellar 3/3 PASS. Three goals: bisect the file-22
+cwt_candidates 1-row swap, run Astral end-to-end, and PR-ready
+checkpoint commits.
+
+**File 22 fix (pwiz `58d0ed63d`)**. Stellar's last divergent row was
+the `capturedPeaks` sort using LINQ `OrderByDescending` with the
+default `Comparer<double>`, which treats `-0.0 == +0.0` while the
+co-located `bestPeak` selection used `TotalOrderGreater` (IEEE 754
+total_cmp). Two CWT peaks with `intensityWeight = 0` (ref_xic
+intensity at apex = 0) collapsed to a signed zero whose sign came
+from `coelutionScore`; Rust orders them by sign, C# tied them and
+fell back to input order. Fix: introduced `TotalOrderComparer`
+reusing the same total-order logic and applied to the
+`OrderByDescending` so the two sort sites use the same compare.
+Stellar harness now 3/3 PASS end-to-end.
+
+**Astral fixture rebuild**. Pre-existing Astral inputs were at
+osprey v26.4.0; current binary is v26.5.0 → version-check rejected
+them. Regenerated Stage 1-4 with `Generate-AllScoresParquet.ps1`
+(Snappy compression — `Run-Osprey.ps1` doesn't pass
+`--parquet-compression snappy`, so its output was Zstd which
+OspreySharp's Parquet.Net 3.x can't read; tracked: PR #4172
+upgrades Parquet.Net to 4.25.0 with Zstd default, retires the Snappy
+dance). Rebuilt Stage 6 fixture: 6/6 byte-identical at the Stage 5
+boundary on Astral.
+
+**Astral Mode A divergence (3 columns × 6 rows)**. Initial Astral
+Stage 6 harness:
+
+- `consecutive_ions`, `explained_intensity`: 1+2+3 rows across files
+  49/55/60 (rust=0, cs=non-zero — both decoys)
+- `abs_mass_accuracy_deviation_mean`: 2+27+36 rows (rust=tolerance
+  ~5.88, cs=0)
+
+**Mode B (~65 abs_mass_accuracy rows)** root-caused: C#
+`ComputeApexMatchFeatures` early-returned with all-zero out-params
+when apex spectrum or fragments were empty, bypassing the existing
+`nMatched==0` fallback at the bottom that returns calibrated
+tolerance. Same anti-pattern as Phase 1's "zero is a terrible
+default for mass error". Fix: drop early return; null-guard the
+inner loops. Committed as pwiz `bbb569ed7`. Astral
+abs_mass_accuracy then PASS.
+
+**Mode A (6 rows on consecutive_ions / explained_intensity)** —
+the deeper one. Bisection chain via the new `OSPREY_DIAG_SEARCH_ENTRY_IDS`-
+gated `dump_fragment_match` (Rust `8f16884`, C# diag was reverted
+before commit) localized the divergence to a Rust bug.
+
+The dump showed BOTH impls agree on `match_fragments` output for
+decoy 2148665086 at apex scan 20284: Y2 fragment matched, observed
+peak at m/z 331.21995 with intensity 575.31. Yet the parquet showed
+Rust `consecutive_ions=0`, C# `consecutive_ions=1`. Contradictory.
+
+Root cause: `osprey-scoring/src/lib.rs::lib_cosine` had an early
+`return SpectralScore::default()` when fewer than 2 library
+fragments fall in the spectrum's m/z range, zeroing all counting
+features (`n_matched`, `consecutive_ions`, `explained_intensity`,
+`fragment_coverage`, `sequence_coverage`, `base_peak_rank`,
+`top6_matches`). The cosine-norm gate at the same site already
+addressed this exact pattern; the `<2` gate was missed and silently
+dropped them alongside the (correctly undefined) cosine.
+
+For decoy 2148665086 (target HGCQAQFPRR): five fragment m/z values
+were {69.5, 88.1, 138.1, 175.1, 331.2}. Only Y2 (331.2) was in the
+DIA detector's m/z range; `match_fragments` correctly found a peak
+at 331.21995. But `lib_preprocessed.len() == 1 < 2` → early return
+→ counting features zeroed.
+
+C# `CountConsecutiveIons` and `ComputeApexMatchFeatures` don't have
+this bail (independent code paths, not a port of the Rust function),
+so they correctly reported `consecutive_ions=1` and
+`explained_intensity=3.29e-04`.
+
+**Fix (osprey `ef85224`)**: merge the in-range count into the
+existing `cosine_ok` flag so cosine / Pearson / Spearman gate
+uniformly with the norm check, and drop the early return. Counting
+features now compute via the existing fall-through path.
+`cosine_topn_*` and `lib_cosine_smz` already have their own `<2` /
+empty guards downstream. Added regression test
+`lib_cosine_counting_features_survive_few_in_range_fragments`
+mirroring the existing `..._zero_norm` companion.
+
+**Full validation after the fix** (both Stellar and Astral):
+
+- Stage 5 boundary: 6/6 byte-identical sidecars (Stellar) and 6/6
+  (Astral)
+- Compare-Percolator D.1 (post-hydration): 7/7 cols × 1.39M rows
+  (Stellar) and 5.06M rows (Astral) max_diff = 0
+- Compare-Percolator D.2 (post-rescore): 7/7 × 392k (Stellar) and
+  800k (Astral) max_diff = 0
+- Diff-Parquet (reconciled `.scores.parquet`): 3/3 PASS (Stellar)
+  and 3/3 PASS (Astral) modulo the 6 allowlisted unimplemented
+  columns
+
+**Harness improvement**: added `-OnlyFiles 49` (or comma-separated
+suffixes) parameter to `Compare-Stage6-Crossimpl.ps1`. Single-file
+mode runs in ~5-10 min vs ~30 min for the full 3-file harness — a
+massive iteration speedup for any future Mode-A-style bisection.
+
+**Checkpoint commits going to PRs after this session**:
+
+- pwiz (`Skyline/work/20260429_osprey_sharp_stage6`):
+  - `93bb75ab8` Stage 6 C# port: gap-fill two-pass + post-rescore
+    parity dump
+  - `0fb625207` Fixed Stage 6 cross-impl divergence and added
+    reconciled parquet write-back
+  - `58d0ed63d` Fixed file 22 cwt_candidates 1-row swap via
+    total-order sort
+  - `bbb569ed7` Fixed Mode B abs_mass_accuracy zero-default by
+    dropping early return
+- osprey (`feature/stage5-percolator-dump-protein-q`):
+  - `ef85224` lib_cosine: counting features survive <2 in-range
+    fragments — single-commit cherry-pick PR for Mike
+  - `8f16884` dump_fragment_match: per-(entry, apex_spectrum) match
+    dump for cross-impl bisection — joins the existing diagnostic-
+    bundle PR alongside `4092e4e`, `6f7daae`, `6d2ebb8`
+- ai (`master`):
+  - Compare-Stage6-Crossimpl `-OnlyFiles` switch
+  - This TODO update
+  - `TODO-osprey_pipeline_task_rearchitecture.md` (backlog)
+
+**Open follow-up after this PR cycle**:
+
+- Implement the 6 allowlisted scoring-path columns in C# (bigger
+  scope; tracked as task #17)
+- Wire Stage 6 rescore into non-`--no-join` modes (task #12)
+- Box 3b: single second-pass Percolator SVM (TODO Priority 2)
+- Astral / Stellar second-pass FDR (Stage 7) cross-impl validation

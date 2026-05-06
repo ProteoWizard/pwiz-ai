@@ -90,6 +90,16 @@ param(
 
     [int]$Threads = 16,
 
+    # Restrict the run to a subset of files (comma-separated). Each token
+    # matches either the full stem or the trailing numeric suffix after
+    # the last underscore. Examples:
+    #   -OnlyFiles 49           => Ast-...._49 only
+    #   -OnlyFiles 49,55        => files 49 and 55
+    #   -OnlyFiles Ste-...._22  => exact stem match
+    # Use for tight bisection iteration on a specific divergent file.
+    # Stage E parquet diff is restricted to the same subset.
+    [string]$OnlyFiles = $null,
+
     # On-demand bisection: enable OSPREY_DUMP_MP_INPUTS on both binaries
     # so each emits its tukey_median_polish input matrix per entry.
     # Adds ~800 MB per workdir to dump volume but lets us verify whether
@@ -205,6 +215,24 @@ foreach ($dsName in $datasets) {
     $ds = Get-DatasetConfig $dsName -TestBaseDir $TestBaseDir
     $testDir = $ds.TestDir
     $stems = $ds.AllFiles | ForEach-Object { [IO.Path]::GetFileNameWithoutExtension($_) }
+
+    if ($OnlyFiles) {
+        $tokens = $OnlyFiles -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+        $allStems = $stems
+        $stems = @($stems | Where-Object {
+            $stem = $_
+            $suffix = ($stem -split '_')[-1]
+            foreach ($t in $tokens) { if ($t -eq $stem -or $t -eq $suffix) { return $true } }
+            return $false
+        })
+        if ($stems.Count -eq 0) {
+            Write-Host ("  -OnlyFiles '{0}' matched no files in dataset {1}; available: {2}" -f
+                $OnlyFiles, $ds.Name, ($allStems -join ', ')) -ForegroundColor Red
+            continue
+        }
+        Write-Host ("  -OnlyFiles filter: {0} of {1} files ({2})" -f
+            $stems.Count, $allStems.Count, ($stems -join ', ')) -ForegroundColor Yellow
+    }
 
     Write-Host ("=== {0} (TestDir: {1}) ===" -f $ds.Name, $testDir) -ForegroundColor Cyan
 
@@ -343,9 +371,23 @@ foreach ($dsName in $datasets) {
     # In-process invocation (not `pwsh -File`): array-typed parameters
     # like -ExpectedDiffColumns survive bind across script boundaries
     # only when the call stays inside one PowerShell host.
-    & $diffParquetScript -DirA $rustWorkDir -DirB $csWorkDir `
-        -ExpectedDiffColumns $expectedDiff -Quiet
-    $parquetStatus = if ($LASTEXITCODE -eq 0) { "PASS" } else { "FAIL" }
+    if ($OnlyFiles) {
+        # Single-file mode: only the file(s) we actually rescored matter.
+        # The other parquets in the workdir are stale Stage-4 fixture
+        # snapshots and would just add noise to the diff output.
+        $parquetStatus = "PASS"
+        foreach ($stem in $stems) {
+            $a = Join-Path $rustWorkDir "$stem.scores.parquet"
+            $b = Join-Path $csWorkDir   "$stem.scores.parquet"
+            & $diffParquetScript -A $a -B $b `
+                -ExpectedDiffColumns $expectedDiff -Quiet
+            if ($LASTEXITCODE -ne 0) { $parquetStatus = "FAIL" }
+        }
+    } else {
+        & $diffParquetScript -DirA $rustWorkDir -DirB $csWorkDir `
+            -ExpectedDiffColumns $expectedDiff -Quiet
+        $parquetStatus = if ($LASTEXITCODE -eq 0) { "PASS" } else { "FAIL" }
+    }
 
     $stages = @($hydrationStatus, $rescoredStatus, $parquetStatus)
     $overallStatus = if ($stages -contains "FAIL") {
