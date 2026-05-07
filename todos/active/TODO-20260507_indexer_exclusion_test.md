@@ -5,6 +5,7 @@
 - **Base**: `master`
 - **Created**: 2026-05-07
 - **Status**: In Progress
+- **GitHub Issue**: [#4190](https://github.com/ProteoWizard/pwiz/issues/4190)
 - **PR**: (pending)
 
 ## Motivation
