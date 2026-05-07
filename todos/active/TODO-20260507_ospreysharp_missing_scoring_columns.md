@@ -1,11 +1,13 @@
 # TODO: OspreySharp missing scoring path columns (6 allowlisted in Stage 6 parity harness)
 
-**Status**: Backlog
+**Status**: Active
+**Branch**: `Skyline/work/20260507_ospreysharp_missing_scoring_columns`
 **Priority**: Medium (Stage 7 second-pass Percolator can proceed without these; downstream consumers like Skyline blib output benefit from them being populated)
 **Complexity**: Medium (data exists in C# at scoring time; need to plumb through `FdrEntry` and the `WriteScoresParquet(FdrEntry)` overload)
 **Created**: 2026-05-06
+**Started**: 2026-05-07
 **Scope**: `C:\proj\pwiz\pwiz_tools\OspreySharp\` (OspreySharp port, C#)
-**Predecessor**: `ai/todos/active/TODO-20260429_osprey_sharp_stage6.md` — Stage 6 cross-impl byte-parity landed end-to-end on Stellar + Astral with these six columns in the harness allowlist.
+**Predecessor**: `ai/todos/completed/TODO-20260429_osprey_sharp_stage6.md` — Stage 6 cross-impl byte-parity landed end-to-end on Stellar + Astral with these six columns in the harness allowlist (squash-merged as ProteoWizard/pwiz#4187 commit `a0f784deb`).
 
 ## Motivation
 
