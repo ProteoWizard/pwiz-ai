@@ -515,3 +515,82 @@ G17-trim algorithm broke many cases the existing path was getting
 right. Reverted. The user's instinct here was correct: we already
 solved cross-impl text matching at the Stage 5/6 boundary by
 *comparing numerically*, not by byte-matching ryu output.
+
+### 2026-05-07 — Session 6 (Copilot review polish + Astral Stage 7 PASS)
+
+**Copilot follow-ups landed on both PRs.**
+
+- pwiz #4192 commit `5dac93d` (3 review comments addressed):
+  - `FormatF64Roundtrip` XML doc rewritten to describe the actual
+    bounded `G1..G17` shortest-roundtrip search (was still describing
+    the older "trim from G17" approach left over from an earlier
+    aborted attempt).
+  - `detectedPeptides` HashSet initialized with `StringComparer.Ordinal`
+    to match the convention already used at lines 973 and 5683 of the
+    same file.
+  - `WriteStage7ProteinFdrDump`: collapsed the redundant
+    `ContainsKey` + `TryGetValue` for `GroupQvalues[g.Id]` into a
+    single `TryGetValue` so `is_target_winner` and `group_qvalue` can
+    no longer drift apart.
+
+- maccoss/osprey #31 commit `49241ae` (3 review comments addressed):
+  - `--join-at-pass=2` `ValidFirstPass` error message broadened to
+    cover both reasons `validate_scores_cache` returns `ValidFirstPass`:
+    a Stage-4 raw parquet, OR a reconciled parquet whose stored
+    `osprey.reconciliation_hash` no longer matches the current config.
+    Previously the message claimed Stage-4-raw even when the input
+    was reconciled-but-stale, sending users to the wrong fix.
+  - `dump_stage7_protein_fdr` doc comment now matches the
+    implementation (column list + sort key both omit the
+    HashMap-iteration-order-dependent `group_id`; sort is by
+    `accessions` for cross-impl stability).
+  - `validate_hpc_args`'s `join_only` block now derives the actual
+    pass from `args.join_at_pass` and uses `--join-at-pass={N}` in
+    error text instead of hardcoding `=1`. After `normalize_hpc_args`,
+    `args.join_only` is true for both `--join-at-pass=1` and
+    `--join-at-pass=2`, so a misconfigured `--join-at-pass=2`
+    invocation was previously surfacing diagnostics that quoted
+    `--join-at-pass=1`.
+
+All non-algorithmic. No CLI test referenced the literal Rust error
+text. pwiz: 299/299 OspreySharp.Test pass + ReSharper inspection
+clean. osprey: `cargo fmt --check` + `cargo clippy -D warnings` +
+`cargo test --workspace` all green.
+
+**Astral Stage 7 cross-impl validation: PASS.**
+
+Setup mirrored Stellar:
+- `D:\test\osprey-runs\astral\_stage7_test\{run_rust, run_cs_from_rust}\`
+- Inputs staged from `_stage6_iter\Astral_rust\` (3 reconciled
+  `.scores.parquet` + 1st-pass FDR sidecars + reconciliation.json +
+  calibration.json + empty-mzML placeholders). 49/55/60 file IDs.
+- Both runs `--join-at-pass=1 --input-scores ... --resolution hram
+  --protein-fdr 0.01`; both wrote `OSPREY_DUMP_STAGE7_PROTEIN_FDR=1`
+  and exited via `OSPREY_STAGE7_PROTEIN_FDR_ONLY=1`.
+- C# total runtime ~12 min (vs Rust ~2:35) — Astral's Stage 6
+  reconciliation is non-trivial (125548 target + 89986 decoy
+  consensus peptides, 4662 entries needing re-scoring) where
+  Stellar was a no-op (0+0). C# Stage 6 rescore has clear
+  performance headroom vs Rust; tracked for future work, not on
+  the Stage 7 critical path.
+
+| Column                | Status | max_abs_diff | n_diverg / 11779 |
+|-----------------------|--------|--------------|------------------|
+| `best_peptide_score`  | PASS   | 1.776e-15    | 0                |
+| `group_qvalue`        | PASS   | 0.000e+00    | 0                |
+| `n_unique`            | PASS   | (exact)      | 0                |
+| `n_shared`            | PASS   | (exact)      | 0                |
+| `is_target_winner`    | PASS   | (exact)      | 0                |
+
+Key-set overlap: 11779 / 11779 on both sides. 11761 target groups at
+1% FDR; 18 decoy winners (calibrated picked-protein null distribution).
+Upstream peptide-level gates align: 114050 detected peptides at 1%
+experiment FDR (precursor-level) on both sides.
+
+**Stage 7 sub-sprint exit gate: GREEN on Stellar (6204 groups) AND
+Astral (11779 groups), both at 1e-9 absolute tolerance.** The 1e-9
+tolerance is itself on the punch list for the user's eventual
+end-of-pipeline parity review (per the project-wide bit-parity
+memory): cross-impl gates that adopt numeric tolerance to absorb
+ryu-vs-.NET-G16 rendering differences and sub-1e-15 SVM-training
+drift will be revisited there.
