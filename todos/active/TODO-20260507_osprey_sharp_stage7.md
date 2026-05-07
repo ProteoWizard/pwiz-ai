@@ -369,18 +369,85 @@ gap. **Known invariants matching across impls**: the first-pass
 passing base_ids count (66727) and the C# `detectedPeptides` count
 (39953) align with what Rust's parsimony input would be.
 
-**Open question for next session**: which upstream stage's drift is
-producing the C# decoy-null sparseness? The bisection candidates
-(in priority order) are:
+### 2026-05-07 — Session 4 (closed structural cross-impl gaps)
 
-  1. Stage 6 reconciliation overlay producing different scores for
-     the same entries (run `Compare-Stage6-Crossimpl.ps1` first to
-     check),
-  2. Compaction selecting different decoys (compare per-file
-     `cs/rust_stage5_percolator.tsv` for the post-compaction
-     ranks), and
-  3. Stage 5 SVM training producing different first-pass scores on
-     identical inputs (run `Compare-Percolator.ps1`).
+Followed the Stage 6 playbook (feed both impls Rust's reference
+inputs, diff dumps, find first divergence, fix, advance). The
+"C# decoy-null sparseness" called out at the end of Session 3
+turned out to be three distinct gaps stacked on top of each other,
+each masking the next.
 
-Tasks queued: `#29 Stage 7 cross-impl: bisect Rust vs C# divergence
-at second-pass`.
+**Diagnostic infrastructure first**: enabled both
+`OSPREY_DUMP_PROTEIN_FDR=1` (peptide-level) and
+`OSPREY_DUMP_STAGE7_PROTEIN_FDR=1` (protein-group-level) on Rust
+and C# simultaneously, both runs starting from identical Stage 4
+raw parquets (no upstream variable). Three findings, each one
+unblocking the next:
+
+**Gap 1: C# default `FdrLevel = Both`, Rust default = `Precursor`.**
+Rust's `osprey-core/src/config.rs` has
+`FdrLevel::default() = Precursor`. C# defaulted to `Both` -- a
+strictly tighter `max(precursor, peptide)` gate that silently
+narrowed every downstream q-value-gated step. The Stage 7
+`detected_peptides` filter dropped from 41397 (Rust) to 39953
+(C#) and the parsimony group count from 6204 to 6084. **Fixed**
+in `OspreyConfig.cs` -- changed default to `FdrLevel.Precursor`
+to match Rust. The previous `Both` default had no documented
+intent; matching Rust is the right floor for cross-impl.
+
+**Gap 2: `detectedPeptides` filter used wrong q-value scope.** Was
+filtering on `EffectiveRunQvalue(config.FdrLevel) <= RunFdr`;
+Rust uses
+`effective_experiment_qvalue(peptide_gate_level) <= experiment_fdr`.
+**Fixed** in `AnalysisPipeline.RunProteinFdr`. Combined with Gap
+1, the C# detected-peptides count converged to Rust's 41397
+exactly, and the parsimony group count converged to 6204. Decoy
+winners climbed from ~0 to 6, matching Rust.
+
+**Gap 3: `FormatF64Roundtrip` produced longer strings than ryu.**
+.NET Framework 4.7.2's `"R"` formatter round-trips correctly for
+most values but typically emits one digit more than Rust's ryu
+(e.g. ryu emits `12.50611897910133`, `"R"` emits
+`12.506118979101331`). **Fixed** in `Diagnostics.cs`: replaced
+the conditional `R + G17` fallback with a bounded
+`G1..G17`-and-parse-check loop returning the first precision that
+round-trips. Bypasses the .NET-Framework `"R"` bug entirely.
+
+**Stage 7 dump diff progression on Stellar 3-file**:
+
+| State | Diff lines | Rows | Decoy winners | Notes |
+|---|---|---|---|---|
+| Pre-fixes | 9664 | 6205 vs 6084 | 6 vs 0 | Different proteins, structural collapse |
+| After Gaps 1+2 | 184 | 6205 vs 6205 | 6 vs 6 | Same proteins, ULP score drift only |
+| After Gap 3 | 184 | 6205 vs 6205 | 6 vs 6 | (same — Gap 3 helped some rows but not the underlying ULP drift) |
+
+**Remaining 46 row differences** (out of 6205, 0.74 %):
+
+Mix of two patterns, each of about half the differences:
+
+- **1-ULP value drift** (same digit count, last digit differs by 1,
+  e.g. `9.616126014576531` vs `...532`). Real cross-impl
+  divergence in `best_peptide_score`. Two paralogs TP4A1 and TP4A2
+  share the same peptide and both differ by EXACTLY 1 ULP --
+  confirms a single upstream peptide score is the source.
+- **Shortest-roundtrip algorithm choice** (different digit counts,
+  same f64 value, e.g. `13.521201650610431` vs
+  `13.52120165061043`). Rust ryu and C#'s G&lt;p&gt;-loop pick
+  different "shortest" decimal representations for some values.
+  Both round-trip; both are valid. Format-only.
+
+The 1-ULP drift is the same kind of upstream-bisection-required
+work Stage 5/6 went through. The shortest-roundtrip variation is
+a true ryu port to C# (or accept format-only diffs and use a
+numeric-aware diff tool for the harness gate). Tasks queued:
+`#30 Stage 7 last-mile: 46 ULP/format diffs out of 6205 rows`.
+
+**Code changes pushed** to
+`Skyline/work/20260507_osprey_sharp_stage7` (commit `5085ad719`):
+- `OspreyConfig.cs`: default `FdrLevel = Precursor` (matches Rust)
+- `AnalysisPipeline.cs`: detected-peptides filter aligned with Rust
+- `Diagnostics.cs`: `FormatF64Roundtrip` always-shortest-search
+
+Companion to maccoss/osprey commits `6da8509` (Stage 7 dump),
+`0d13198` (--join-at-pass=2 rehydration), `daee7d0` (CI clippy
+fix), all on PR [#31](https://github.com/maccoss/osprey/pull/31).
