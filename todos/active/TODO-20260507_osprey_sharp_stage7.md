@@ -11,8 +11,9 @@
 - **Base**: `master` (pwiz) / `main` (maccoss/osprey)
 - **Created**: 2026-05-07
 - **Started**: 2026-05-07
-- **Status**: In progress — Rust dump landed locally; C# port not yet started.
+- **Status**: In progress — Rust dump + `--join-at-pass=2` rehydration landed (PR #31 open). C# port begins next.
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
+- **Upstream PR**: [maccoss/osprey#31](https://github.com/maccoss/osprey/pull/31) — `--join-at-pass=2` rehydration + Stage 7 dump (open, awaiting review)
 
 ### Predecessors
 
@@ -255,5 +256,74 @@ Next-session work:
 
 ### Discovered tasks (from kickoff)
 
-- [ ] Implement `--join-at-pass=2` in Rust osprey (a prerequisite,
-      not part of the C# port itself; ship as its own osprey PR).
+- [x] Implement `--join-at-pass=2` in Rust osprey
+      (prerequisite, not part of the C# port itself).
+      **Done 2026-05-07** — PR [maccoss/osprey#31](https://github.com/maccoss/osprey/pull/31) open.
+
+### 2026-05-07 — Session 2 (Rust rehydration + bit-parity gate)
+
+Drove the Rust-side `--join-at-pass=2` work to bit-parity with a
+straight-through `--join-at-pass=1` pipeline run on Stellar 3-file.
+Five wiring fixes landed in osprey commit `0d13198`:
+
+1. **Strict reconciled-input gate.** `expect_reconciled_input` config
+   field; pipeline asserts every `--input-scores` parquet has
+   `META_RECONCILED = "true"` via `validate_scores_cache`.
+2. **`META_RECONCILED` written on zero-overlay rescore.** Stellar 3-file
+   produces 0 reconciliation actions (consensus + gap-fill both empty),
+   which prior to this PR left the parquet flagged as `ValidFirstPass`
+   and broke the strict gate above on the operator's own output.
+3. **First-pass protein FDR + protein-aware compaction now run in the
+   `can_skip_fdr=true` path** when `expect_reconciled_input` is set.
+   Pre-existing skip-Percolator optimization gated both behind
+   `if !can_skip_fdr`, leaving `run_protein_qvalue=1.0` and shifting
+   the second-pass picked-protein pool by ~330 protein groups
+   (~6500 vs ~6200 on Stellar). Note this exposed a pre-existing but
+   masked invariant: the skip-Percolator path was already producing
+   different Stage 7 results than the straight-through pipeline.
+4. **FDR sidecar load order inverted** for `--join-at-pass=2`: 1st-pass
+   first (so first-pass protein FDR + compaction see the right
+   scoring pass), then reload 2nd-pass after compaction.
+5. **`compute_fdr_from_stubs` skipped entirely** when
+   `expect_reconciled_input` is true. The v3 sidecar carries
+   persisted q-values directly; recomputing drifts vs the
+   straight-through pipeline (which skips second-pass FDR via
+   `total_rescored == 0` on zero-action datasets).
+
+Stage 7 dump format adjusted for cross-impl stability: dropped
+non-deterministic `group_id` column, final sort tiebreak on
+sorted-accessions string. `parsimony.groups` iteration order is
+HashMap-random; joining on `accessions` keeps the dump diff-stable.
+
+**Bit-parity gate**: new
+`ai/scripts/OspreySharp/Compare-Stage7-Rehydration.ps1` runs the
+pipeline twice on the same data and SHA-256-compares the Stage 7
+dump:
+
+| Run | Mode | Time | Stage 7 SHA-256 |
+|---|---|---|---|
+| A | `--join-at-pass=1` (full Stages 5-8) | 1:27 | `BD7D86F94EDFE149...836B63EDE` |
+| B | `--join-at-pass=2` (Stages 7-8 only) | **0:07** | `BD7D86F94EDFE149...836B63EDE` |
+
+PASS: byte-identical. The cached Stage 6 boundary fully captures
+what Stage 7 needs.
+
+The tight `--join-at-pass=2` cycle (~12× faster than
+straight-through) is now the per-iteration test loop for the
+upcoming C# parsimony + picked-protein TDC port.
+
+**Next session — begin C# port:**
+
+1. Port `build_protein_parsimony` to
+   `pwiz_tools/OspreySharp/OspreySharp.FDR/`. Deterministic and
+   standalone (no scoring loop), so first parity target is structural:
+   `accessions, n_unique, n_shared` columns of the dump match
+   byte-for-byte.
+2. Port `compute_protein_fdr` (picked-protein TDC). Bit-parity
+   target: full Stage 7 dump matches between Rust and OspreySharp.
+3. Mirror the Stage 7 dump on the C# side (file name
+   `cs_stage7_protein_fdr.tsv`, identical schema).
+4. Extend `Compare-Stage7-Rehydration.ps1` (or write a sibling
+   `Compare-Stage7-Crossimpl.ps1`) to compare Rust vs C# on Stellar
+   3-file. The Rust-vs-Rust gate already passes; cross-impl is the
+   next gate.
