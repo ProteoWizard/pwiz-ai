@@ -327,3 +327,60 @@ upcoming C# parsimony + picked-protein TDC port.
    `Compare-Stage7-Crossimpl.ps1`) to compare Rust vs C# on Stellar
    3-file. The Rust-vs-Rust gate already passes; cross-impl is the
    next gate.
+
+### 2026-05-07 — Session 3 (C# Stage 7 dump + gate alignment)
+
+The C# `BuildProteinParsimony` and `ComputeProteinFdr` already exist
+in `pwiz_tools/OspreySharp/OspreySharp.FDR/ProteinFdr.cs` (ported
+during the original parsimony work). What was missing for Stage 7
+cross-impl bisection was (a) the Stage 7 dump, and (b) two gate
+divergences from Rust that surfaced when running both sides
+side-by-side. Both landed in pwiz commit `d6575b993` (pushed to
+`Skyline/work/20260507_osprey_sharp_stage7`).
+
+- **`OspreyDiagnostics.WriteStage7ProteinFdrDump`** mirrors Rust's
+  `dump_stage7_protein_fdr` schema exactly: `accessions, n_unique,
+  n_shared, best_peptide_score, group_qvalue, is_target_winner`,
+  sorted by `(is_target_winner DESC, group_qvalue ASC, accessions ASC)`.
+  `OSPREY_DUMP_STAGE7_PROTEIN_FDR=1` activates the dump;
+  `OSPREY_STAGE7_PROTEIN_FDR_ONLY=1` exits after writing.
+
+- **Picked-protein gate corrected from `RunFdr * 2.0` to `RunFdr` (1×)**
+  in `RunProteinFdr` — matches Rust pipeline.rs:4389 (Savitski's
+  convention). The 2× was a stealth divergence that admitted weaker
+  target peptides into picked-protein scoring than the upstream
+  pipeline ever does.
+
+- **`detectedPeptides` filter switched from RUN to EXPERIMENT-level**
+  peptide q-value. Rust uses
+  `effective_experiment_qvalue(peptide_gate_level) <= experiment_fdr`;
+  the prior C# filter was `effective_run_qvalue(...) <= run_fdr`,
+  which let single-replicate-passing peptides into the second-pass
+  parsimony graph that the upstream pipeline excludes.
+
+**Cross-impl test result**: Stellar 3-file Stage 7 dumps still differ
+(6205 Rust rows vs 6084 C# rows; ~6 vs ~1 decoy winners). The C#
+decoy null distribution is too sparse, indicating upstream
+divergence -- either Stage 5 SVM/q-value training drift, Stage 6
+reconciliation drift, or a difference in which entries pass
+compaction. The schema infrastructure is in place; the next session
+needs a Stage 5 + Stage 6 cross-impl re-run to find the upstream
+gap. **Known invariants matching across impls**: the first-pass
+passing base_ids count (66727) and the C# `detectedPeptides` count
+(39953) align with what Rust's parsimony input would be.
+
+**Open question for next session**: which upstream stage's drift is
+producing the C# decoy-null sparseness? The bisection candidates
+(in priority order) are:
+
+  1. Stage 6 reconciliation overlay producing different scores for
+     the same entries (run `Compare-Stage6-Crossimpl.ps1` first to
+     check),
+  2. Compaction selecting different decoys (compare per-file
+     `cs/rust_stage5_percolator.tsv` for the post-compaction
+     ranks), and
+  3. Stage 5 SVM training producing different first-pass scores on
+     identical inputs (run `Compare-Percolator.ps1`).
+
+Tasks queued: `#29 Stage 7 cross-impl: bisect Rust vs C# divergence
+at second-pass`.
