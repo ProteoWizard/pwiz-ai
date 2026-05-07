@@ -357,8 +357,8 @@ the patched build in `pwiz_tools/Shared/Lib/Parquet/ParquetNet.dll`,
 source fork in `maccoss-developers/skylinedev/Parquet.Net/`, upstream
 PR filed as
 [aloneguid/parquet-dotnet#747](https://github.com/aloneguid/parquet-dotnet/pull/747).
-Sprint captured in `ai/todos/active/TODO-20260428_parquet_zstd.md`
-(pwiz #4172 awaiting squash-merge).
+Sprint captured in `ai/todos/completed/TODO-20260428_parquet_zstd.md`
+(pwiz #4172 squash-merged 2026-05-07).
 
 Stage 7 sub-sprint scaffolded as
 `ai/todos/active/TODO-20260507_osprey_sharp_stage7.md`. First step

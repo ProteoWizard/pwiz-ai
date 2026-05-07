@@ -19,7 +19,7 @@
 |---|---|
 | `ai/todos/completed/TODO-20260429_osprey_sharp_stage6.md` | Stage 6 end-to-end byte parity on Stellar + Astral (pwiz #4187) |
 | `ai/todos/completed/TODO-20260507_ospreysharp_missing_scoring_columns.md` | Six previously-allowlisted scoring columns now round-trip byte-for-byte (pwiz #4188) |
-| `ai/todos/active/TODO-20260428_parquet_zstd.md` | Cross-tool Parquet compatibility with Zstd-only output (pwiz #4172) — pending squash-merge |
+| `ai/todos/completed/TODO-20260428_parquet_zstd.md` | Cross-tool Parquet compatibility with Zstd-only output (pwiz #4172, squash-merged 2026-05-07) |
 
 Stage 6 is "fully done without caveats": empty allowlist removed
 from `Compare-Stage6-Crossimpl.ps1`; Stages 1-4 + Stage 5 + Stage 6
