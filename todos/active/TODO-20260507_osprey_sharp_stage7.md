@@ -6,11 +6,12 @@
 
 ## Branch Information
 
-- **pwiz**: TBD (suggested `Skyline/work/20260507_osprey_sharp_stage7`)
-- **osprey**: TBD (suggested `feature/stage7-protein-fdr`)
+- **pwiz**: `Skyline/work/20260507_osprey_sharp_stage7` (created 2026-05-07, off pwiz/master `7cedd0dfa`)
+- **osprey**: `feature/stage7-protein-fdr` (created 2026-05-07, off maccoss/osprey/main `ae96e97`)
 - **Base**: `master` (pwiz) / `main` (maccoss/osprey)
 - **Created**: 2026-05-07
-- **Status**: Not started — Stage 6 closed cleanly, ZSTD-by-default validated end-to-end (see `Predecessors`).
+- **Started**: 2026-05-07
+- **Status**: In progress — Rust dump landed locally; C# port not yet started.
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
 
 ### Predecessors
@@ -163,4 +164,96 @@ empty allowlist that landed in pwiz #4187 / #4188.
 
 ## Progress log
 
-(empty — sprint not yet started)
+### 2026-05-07 — Session 1 (kickoff: Rust dump + sprint planning)
+
+Reviewed `ai/docs/osprey-development-guide.md` + `C:\proj\osprey\CLAUDE.md` +
+`crates/osprey-fdr/src/protein.rs` (1747 lines) +
+`crates/osprey/docs/16-protein-parsimony.md`. Key invariants confirmed:
+
+- Single best peptide per protein (Savitski 2015), NOT sum.
+- Pairwise picked-protein TDC; only target winners exposed externally.
+- Ranking by raw SVM discriminant (q-value and PEP both collapse the
+  decoy null distribution — see `compute_protein_fdr` doc).
+- Target side gated by peptide q-value `<= run_fdr`; **decoy side NOT
+  gated** (would create survivorship bias).
+- Two-pass architecture: first pass before compaction (Stage 6
+  reconciliation rescue gate), second pass after compaction +
+  reconciliation (authoritative `experiment_protein_qvalue`). The
+  Stage 7 sprint owns the second-pass parity walk.
+- Razor mode: iterative greedy set cover with explicit determinism
+  hooks (sort shared peptides alphabetically, tiebreak by lowest
+  group ID, sort claims per round).
+
+**Upstream resync delta** dumped to
+`ai/.tmp/stage7_upstream_delta.md`. No parity-critical Rust changes
+landed since the Stage 6 close-out (only `ae96e97` and `073a5c5`,
+both originating from this Skyline-side sprint and already accounted
+for). Stage 7 starts from a known-green baseline.
+
+**Rust-side Stage 7 dump landed** (locally on
+`feature/stage7-protein-fdr`, not yet pushed):
+
+- `crates/osprey/src/diagnostics.rs`: new
+  `dump_stage7_protein_fdr(parsimony, fdr_result)` writes
+  `rust_stage7_protein_fdr.tsv` with columns `group_id, accessions,
+  n_unique, n_shared, best_peptide_score, group_qvalue,
+  is_target_winner`. Sort order
+  `(is_target_winner DESC, group_qvalue ASC, group_id ASC)` keeps
+  target winners at the top for fast first-failure inspection.
+  Gated by `OSPREY_DUMP_STAGE7_PROTEIN_FDR=1` with
+  `OSPREY_STAGE7_PROTEIN_FDR_ONLY=1` early-exit.
+- `crates/osprey/src/pipeline.rs`: dump call wired into the
+  second-pass protein FDR block (line ~4395), fires AFTER
+  `compute_protein_fdr` returns, BEFORE `propagate_protein_qvalues`
+  writes to FdrEntry stubs. The dump captures the picked-protein
+  computation in isolation.
+
+CI gates green: `cargo fmt --check` + `cargo clippy -D warnings`
+both pass; `cargo test --workspace` 465/465 (112 osprey + 27 main
++ 69 chromatography + 33 core + 65 fdr + 31 io + 38 ml + 85
+scoring + assorted integration).
+
+**Discovery: `--join-at-pass=2` is not yet implemented.**
+`crates/osprey/src/main.rs:289-293` errors out with "not yet
+implemented" when `--join-at-pass=2` is set. The dev guide table
+already advertises this entry point as "post-Stage-6 (reconciled
+parquets) → run Stages 7-8" but the wiring was deferred to "until
+the Stage 6 → Stage 7 path lands". That landing IS this sprint.
+
+The user's stated goal of "starting from cached Stellar Stage 6
+ZSTD output for a tight Stage 7 edit-build-test cycle" requires
+this entry path to actually work. Until then, Stage 7 validation
+runs use the slower `--join-at-pass=1 --input-scores
+<Stage 4 parquet>` path that re-runs Stages 5-6 on every cycle
+(~5-6 min per Stellar 3-file run, vs an estimated ~20-30 sec if
+we could skip directly to Stage 7).
+
+Next-session work:
+
+1. **Implement `--join-at-pass=2`** (task #26 in the session task
+   list). Prerequisite for the tight cycle and a foundation for
+   Stage 7 worker-mode HPC use. Reads reconciled `.scores.parquet`
+   (preserved post-compaction `parquet_index` makes this
+   row-addressable), entries already carry the second-pass-scoring
+   placeholders Stage 7 reads. Skip Stages 1-6, run Stages 7-8
+   (second-pass FDR + parsimony + protein FDR + protein report +
+   blib output).
+2. Run `osprey --join-at-pass=2 --input-scores
+   D:/test/osprey-runs/stellar/_stage6_iter/Stellar_rust/*.scores.parquet
+   -l <library> -o <blib>
+   OSPREY_DUMP_STAGE7_PROTEIN_FDR=1` on Stellar to capture the
+   ground-truth dump. Sanity-check counts (decoy-winner fraction,
+   target groups at 1% FDR).
+3. **Begin C# port**: parsimony first
+   (`crates/osprey-fdr/src/protein.rs::build_protein_parsimony`
+   → `pwiz_tools/OspreySharp/OspreySharp.FDR/`). Deterministic and
+   standalone; no scoring loop. Bisection target: `(group_id,
+   accessions, n_unique, n_shared)` columns of the dump match
+   byte-for-byte after both-side sort.
+4. **C# port**: picked-protein TDC
+   (`compute_protein_fdr`). Bisection target: full dump matches.
+
+### Discovered tasks (from kickoff)
+
+- [ ] Implement `--join-at-pass=2` in Rust osprey (a prerequisite,
+      not part of the C# port itself; ship as its own osprey PR).
