@@ -11,9 +11,10 @@
 - **Base**: `master` (pwiz) / `main` (maccoss/osprey)
 - **Created**: 2026-05-07
 - **Started**: 2026-05-07
-- **Status**: In progress — Rust dump + `--join-at-pass=2` rehydration landed (PR #31 open). C# port begins next.
+- **Status**: Cross-impl gate green on Stellar 3-file via `Compare-Stage7-Crossimpl.ps1` (1e-9 numeric tolerance, max abs diff `1.776e-15`). Both PRs open and awaiting review.
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
 - **Upstream PR**: [maccoss/osprey#31](https://github.com/maccoss/osprey/pull/31) — `--join-at-pass=2` rehydration + Stage 7 dump (open, awaiting review)
+- **Skyline PR**: [ProteoWizard/pwiz#4192](https://github.com/ProteoWizard/pwiz/pull/4192) — Stage 7 dump + structural gap fixes + cross-impl numeric-parity gate (open, awaiting review)
 
 ### Predecessors
 
