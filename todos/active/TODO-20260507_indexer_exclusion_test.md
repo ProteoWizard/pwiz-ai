@@ -42,15 +42,29 @@ otherwise the user's actual Downloads folder. We deliberately do NOT check that 
 `SKYLINE_DOWNLOAD_PATH` is unset, it's the user's Downloads folder and reasonable to leave
 un-excluded.
 
+## Warn-only mode
+
+The new checks (cloud placeholder, OneDrive, Search index) and the EICAR check on the new
+download subfolders all produce **warnings** rather than test failures for now, since these
+conditions were formerly tolerated and the rest of the nightly fleet hasn't been brought
+up to spec. The original AV-on-cwd check stays a hard `Assert.Fail`. Failures (when they
+happen) are accumulated across all checks/dirs and reported in a single `Assert.Fail` at
+the end of the test, so a problem on dir A doesn't hide a problem on dir B.
+
+The `warnOnly: true` flags in `AaantivirusTestExclusion` should flip to `false` once every
+nightly machine is configured.
+
 ## Verification
 
-Each new check must demonstrably fail when its predicate is true. Verified via
-`ai/.tmp/Verify-AntivirusExclusionTest.ps1` (one-shot harness, not committed):
-- Probe 1 (cloud placeholder): `attrib +O` build dir → expect failure → revert.
-- Probe 2 (OneDrive): fake `HKCU:\...\OneDrive\Accounts\__Probe\UserFolder` → expect failure → remove.
-- Probe 3 (Search index): manually tick build dir in Indexing Options → expect failure → untick.
+Each new check must demonstrably fire when its predicate is true. Verified via
+`ai/.tmp/Verify-AntivirusExclusionTest.ps1` (one-shot harness, not committed). Each probe
+sets up a failing condition, runs the test, asserts that a `# WARNING` line with the
+expected substring appears, and tears down:
+- Probe 1 (cloud placeholder): `attrib +O` build dir → expect warning → revert.
+- Probe 2 (OneDrive): fake `HKCU:\...\OneDrive\Accounts\__Probe\UserFolder` → expect warning → remove.
+- Probe 3 (Search index): manually tick build dir in Indexing Options → expect warning → untick.
 
-Run the test on a clean machine and confirm it passes (no false positives).
+Run the test on a clean machine and confirm it passes (no false positives, no warnings).
 
 ## Out of scope
 
