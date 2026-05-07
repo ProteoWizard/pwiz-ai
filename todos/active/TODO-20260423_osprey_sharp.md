@@ -289,8 +289,12 @@ Canonical Stage 5 inputs:
 - `ai/todos/completed/TODO-20260422_ospreysharp_stage5_diagnostics.md`
   — sibling TODO, Stage 5 parity + diagnostic harness. Completed
   2026-04-23 (all five PRs merged).
-- `ai/todos/active/TODO-20260423_osprey_sharp_stage6.md` — Stage 6
-  sub-sprint (Priorities 1-3 of this umbrella). Created 2026-04-23.
+- `ai/todos/completed/TODO-20260429_osprey_sharp_stage6.md` —
+  Stage 6 sub-sprint (Priorities 1-3 of this umbrella). Created
+  2026-04-23, completed 2026-05-07 (pwiz #4187 + #4188).
+- `ai/todos/active/TODO-20260507_osprey_sharp_stage7.md` —
+  Stage 7 sub-sprint (Priority 4 of this umbrella). Created
+  2026-05-07.
 - `ai/todos/active/TODO-OR-20260417_osprey_rust_upstream.md` —
   staged sprint to upstream Rust diagnostics + perf.
 - `ai/scripts/OspreySharp/` — harness scripts: `Test-Features.ps1`,
@@ -332,3 +336,31 @@ Ready to start Priority 1: re-scan `maccoss/osprey:main` for any
 commits landed since the 2026-04-22 delta catalog attempt and
 disposition each (parity-critical port vs. out-of-scope). Dump
 findings to `ai/.tmp/stage6_upstream_delta.md`.
+
+### 2026-05-07 — Stage 6 closed; ZSTD-by-default validated; Stage 7 sub-sprint queued
+
+Stage 6 is now "fully done without caveats". The six previously-
+allowlisted scoring columns (`fragment_mzs`, `fragment_intensities`,
+`reference_xic_rts`, `reference_xic_intensities`, `bounds_area`,
+`bounds_snr`) round-trip byte-for-byte on Stellar + Astral; the
+empty allowlist was removed from `Compare-Stage6-Crossimpl.ps1`.
+Sprint captured in
+`ai/todos/completed/TODO-20260507_ospreysharp_missing_scoring_columns.md`
+(squash-merged as pwiz #4188).
+
+Cross-tool ZSTD compatibility validated end-to-end: Stages 1-4 +
+Stage 5 + Stage 6 all green on Stellar with both Rust and
+OspreySharp emitting Zstd-compressed parquet (no Snappy fallback in
+the cross-tool path). Required a one-line fix in Parquet.Net's
+`ThriftCompactProtocolReader.SkipField(Struct)` recursion; vendored
+the patched build in `pwiz_tools/Shared/Lib/Parquet/ParquetNet.dll`,
+source fork in `maccoss-developers/skylinedev/Parquet.Net/`, upstream
+PR filed as
+[aloneguid/parquet-dotnet#747](https://github.com/aloneguid/parquet-dotnet/pull/747).
+Sprint captured in `ai/todos/active/TODO-20260428_parquet_zstd.md`
+(pwiz #4172 awaiting squash-merge).
+
+Stage 7 sub-sprint scaffolded as
+`ai/todos/active/TODO-20260507_osprey_sharp_stage7.md`. First step
+is the upstream-resync delta catalog, same template as the Stage 6
+sub-sprint's first step.

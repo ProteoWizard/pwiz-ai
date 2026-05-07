@@ -1,16 +1,27 @@
 # TODO: OspreySharp missing scoring path columns (6 allowlisted in Stage 6 parity harness)
 
-**Status**: Active (implementation complete; PR pending)
-**Branch**: `Skyline/work/20260507_ospreysharp_missing_scoring_columns`
+**Status**: COMPLETE (squash-merged as ProteoWizard/pwiz#4188 on 2026-05-07)
+**Branch**: `Skyline/work/20260507_ospreysharp_missing_scoring_columns` (deleted on merge)
 **Priority**: Medium (Stage 7 second-pass Percolator can proceed without these; downstream consumers like Skyline blib output benefit from them being populated)
 **Complexity**: Medium (data exists in C# at scoring time; need to plumb through `FdrEntry` and the `WriteScoresParquet(FdrEntry)` overload)
 **Created**: 2026-05-06
 **Started**: 2026-05-07
 **Implemented**: 2026-05-07
+**Merged**: 2026-05-07 (PR #4188 squash-merged; 4 Copilot review comments addressed in follow-up commit `f0712479d8`)
 **Scope**: `C:\proj\pwiz\pwiz_tools\OspreySharp\` (OspreySharp port, C#)
 **Predecessor**: `ai/todos/completed/TODO-20260429_osprey_sharp_stage6.md` — Stage 6 cross-impl byte-parity landed end-to-end on Stellar + Astral with these six columns in the harness allowlist (squash-merged as ProteoWizard/pwiz#4187 commit `a0f784deb`).
 
 ## Progress log
+
+### 2026-05-07 — PR #4188 merged
+
+Squash-merged with 4 Copilot review fixes (zero-length guard on the
+reference XIC slice, allocation-free `Buffer.BlockCopy` for the f32
+encode/decode path, plus reasoned-decline replies on two `.resx`
+suggestions matching the existing file's hardcoded technical-error
+convention). Cross-impl harness 0/0 on Stellar + Astral confirms the
+six previously-allowlisted columns now round-trip byte-for-byte
+between Rust and OspreySharp.
 
 ### 2026-05-07 — implementation complete on Stellar + Astral
 
