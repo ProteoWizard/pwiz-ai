@@ -351,10 +351,9 @@ foreach ($dsName in $datasets) {
     }
 
     # Stage E: column-level content diff of the reconciled .scores.parquet
-    # outputs. Allowlisted columns are the ones the C# scoring path
-    # doesn't yet populate (tracked in the Stage 6 TODO under
-    # "implement missing scores"). Real divergences are NOT allowlisted
-    # — they're bisected upstream via diagnostic dumps until root cause
+    # outputs. The allowlist is empty as of 2026-05-07: full byte-parity
+    # is achieved on every column on Stellar + Astral. Real divergences
+    # are bisected upstream via diagnostic dumps until root cause
     # surfaces (the same methodology that nailed the Stage 5/6 vs.
     # sidecar-rehydrate split).
     #
@@ -362,11 +361,7 @@ foreach ($dsName in $datasets) {
     # ULP-level Stage 1-4 drift (TODO open follow-up #2) so it doesn't
     # pollute Stage 6 output here.
     $diffParquetScript = Join-Path $scriptRoot "Diff-Parquet.ps1"
-    $expectedDiff = @(
-        'fragment_mzs', 'fragment_intensities',
-        'reference_xic_rts', 'reference_xic_intensities',
-        'bounds_area', 'bounds_snr'
-    )
+    $expectedDiff = @()
     Write-Host "  Stage E: Diff-Parquet (reconciled .scores.parquet)..." -ForegroundColor Yellow
     # In-process invocation (not `pwsh -File`): array-typed parameters
     # like -ExpectedDiffColumns survive bind across script boundaries

@@ -1,13 +1,47 @@
 # TODO: OspreySharp missing scoring path columns (6 allowlisted in Stage 6 parity harness)
 
-**Status**: Active
+**Status**: Active (implementation complete; PR pending)
 **Branch**: `Skyline/work/20260507_ospreysharp_missing_scoring_columns`
 **Priority**: Medium (Stage 7 second-pass Percolator can proceed without these; downstream consumers like Skyline blib output benefit from them being populated)
 **Complexity**: Medium (data exists in C# at scoring time; need to plumb through `FdrEntry` and the `WriteScoresParquet(FdrEntry)` overload)
 **Created**: 2026-05-06
 **Started**: 2026-05-07
+**Implemented**: 2026-05-07
 **Scope**: `C:\proj\pwiz\pwiz_tools\OspreySharp\` (OspreySharp port, C#)
 **Predecessor**: `ai/todos/completed/TODO-20260429_osprey_sharp_stage6.md` — Stage 6 cross-impl byte-parity landed end-to-end on Stellar + Astral with these six columns in the harness allowlist (squash-merged as ProteoWizard/pwiz#4187 commit `a0f784deb`).
+
+## Progress log
+
+### 2026-05-07 — implementation complete on Stellar + Astral
+
+Six fields added to `OspreySharp.Core.FdrEntry` (`FragmentMzs`,
+`FragmentIntensities`, `ReferenceXicRts`, `ReferenceXicIntensities`,
+`BoundsArea`, `BoundsSnr`); populated at the FdrEntry construction
+site in `AnalysisPipeline.ScoreCandidate`; encoded as little-endian
+byte blobs (no count prefix; bytes / sizeof(element) recovers the
+length on read) by new `EncodeF64Blob` / `EncodeF32Blob` helpers in
+`ParquetScoreCache`; round-tripped via matching `DecodeF64Blob` /
+`DecodeF32Blob` in `LoadFullFdrEntries`.
+
+While bisecting an initial 560-row `bounds_area` divergence (with
+`peak_area` matching at zero rows), discovered Rust's CWT path at
+`pipeline.rs:7433-7444` RECOMPUTES `peak.area` and
+`peak.signal_to_noise` from `ref_xic[si..=ei]` after the post-rank
+apex pick — the prior C# implementation preserved the original CWT
+detection's values from the consensus-signal boundary. Mirroring
+Rust's recompute via `PeakDetector.TrapezoidalArea` + `ComputeSnr`
+in `ScoreCandidate`'s post-rank apex block fixed the remaining
+560/546 divergences.
+
+**Cross-impl harness final state (2026-05-07)**:
+
+| Dataset | DiffCols | AllowedDiffs |
+|---|---|---|
+| Stellar | 0 | 0 |
+| Astral  | 0 | 0 |
+
+Empty allowlist now removed from `Compare-Stage6-Crossimpl.ps1`
+(`$expectedDiff = @()`).
 
 ## Motivation
 
