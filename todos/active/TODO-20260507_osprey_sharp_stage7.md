@@ -451,3 +451,66 @@ numeric-aware diff tool for the harness gate). Tasks queued:
 Companion to maccoss/osprey commits `6da8509` (Stage 7 dump),
 `0d13198` (--join-at-pass=2 rehydration), `daee7d0` (CI clippy
 fix), all on PR [#31](https://github.com/maccoss/osprey/pull/31).
+
+### 2026-05-07 — Session 5 (Stage 7 cross-impl PASS via numeric-tolerance comparator)
+
+The Session 4 "46 ULP/format diffs out of 6205 rows" framing was
+based on a raw `cmp` byte comparison of the two TSVs. That is the
+wrong gate for cross-impl Stage 7: the established pattern for
+every prior cross-impl stage (Compare-Percolator.ps1 for Stage 5,
+the parquet content diff for Stage 6) uses **per-column numeric
+tolerance** at `1e-9` absolute, not strict byte equality. The
+SHA-256 gate is reserved for Rust ↔ Rust rehydration
+(Compare-Stage7-Rehydration.ps1), where bit parity is the right
+invariant because both sides are the same code.
+
+Categorising the 46 distinct diff rows confirmed the gate
+mismatch: 42 rows had **identical f64 bits** (0 ULP) but rendered
+differently because Rust ryu and .NET Framework 4.7.2's `G16`
+banker rounding pick different equally-valid shortest-roundtrip
+strings for the same f64 (e.g. `9.885143613847386` vs
+`9.885143613847387`, both parse back to the same f64). The other
+4 were genuine 1-ULP drift in `best_peptide_score` from the
+second-pass SVM training producing slightly different scores under
+.NET BLAS vs Rust BLAS — sub-1e-15 absolute diffs that 1e-9 easily
+absorbs. This is the same "self-pattern-matched f64 rendering"
+behaviour Stage 5 / Stage 6 already accept under their own
+numeric-tolerance gates.
+
+**Comparator landed**: `ai/scripts/OspreySharp/Compare-Stage7-Crossimpl.ps1`
+modeled on Compare-Percolator.ps1. Joins on `accessions`,
+compares `best_peptide_score` and `group_qvalue` at 1e-9, and
+checks `n_unique` / `n_shared` / `is_target_winner` for exact
+string equality.
+
+**Stage 7 cross-impl gate result on Stellar 3-file** (C# fed
+Rust's reconciled Stage 6 parquets):
+
+| Column                | Status | max_abs_diff | n_diverg / 6204 |
+|-----------------------|--------|--------------|-----------------|
+| `best_peptide_score`  | PASS   | 1.776e-15    | 0               |
+| `group_qvalue`        | PASS   | 0.000e+00    | 0               |
+| `n_unique`            | PASS   | (exact)      | 0               |
+| `n_shared`            | PASS   | (exact)      | 0               |
+| `is_target_winner`    | PASS   | (exact)      | 0               |
+
+Key-set overlap: 6204 / 6204 on both sides. **OVERALL: PASS**.
+
+Tasks #27 (`build_protein_parsimony` port), #28 (`compute_protein_fdr`
+port — picked-protein TDC), and #30 (Stage 7 last-mile)
+all completed: the prior parsimony + FDR ports plus the Session 4
+structural fixes (FdrLevel default, detected-peptides filter
+scope) leave Stage 7 cross-impl numerically equivalent at 1e-9
+absolute on every row. No code change needed in this session —
+the comparator delta closes the gate.
+
+**Aborted side-quest**: an attempt to extend `FormatF64Roundtrip`
+with a G17-trim + round-up algorithm to match Rust ryu byte-for-byte
+made things worse (184 → 812 raw `cmp` lines diverging) because
+.NET Framework 4.7.2's `G<p>` formatter for `p < 17` interacts
+with `double.Parse` in a way that already yields a shortest-
+roundtrip string for most values; replacing it with a generic
+G17-trim algorithm broke many cases the existing path was getting
+right. Reverted. The user's instinct here was correct: we already
+solved cross-impl text matching at the Stage 5/6 boundary by
+*comparing numerically*, not by byte-matching ryu output.
