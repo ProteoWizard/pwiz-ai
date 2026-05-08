@@ -586,3 +586,67 @@ multiple progress logs).
 **Astral validation queued for next session** (re-run on
 the Astral 3-file fixture to confirm the Stellar gate
 generalizes).
+
+### 2026-05-08 — Session 1 (FINAL: Astral also PASSes; both PRs queued)
+
+**Both Stellar AND Astral now OVERALL: PASS.** Required two
+matching changes — one on each side of the cross-impl boundary:
+
+1. **C# (pwiz)**: `OspreySharp.IO.BlibWriter.CompressBytes`
+   uses DotNetZip's Ionic.Zlib via the `ZlibStream` wrapper at
+   level 6. Same library Skyline's `BlibData` writer has used
+   since 2009 (`Skyline/Util/Extensions/UtilDB.Compress`).
+   Replaces `System.IO.Compression.DeflateStream` which produces
+   non-stock-zlib output on small inputs.
+
+2. **Rust (osprey)**: `crates/osprey/Cargo.toml` switched
+   `flate2` from default backend (`miniz_oxide` pure Rust) to
+   `default-features = false, features = ["zlib-default"]`
+   (vendored stock zlib via `libz-sys`). miniz_oxide's
+   huffman-table / end-of-block choices don't match Ionic.Zlib
+   on a handful of small-input edge cases (Astral: 13/129352
+   blobs differed). Stock zlib via libz-sys matches Ionic.Zlib
+   bit-for-bit on every blob tested.
+
+The C# side direction (Skyline / Ionic.Zlib) is canonical because
+ProteoWizard owns the BLIB format. The convergence point matters
+for the longer-term plan to share C# BLIB-writing code (Skyline's
+`Model/Lib/BlibData` -> `Shared/BiblioSpec`, or a future C# port
+of `pwiz_tools/BiblioSpec`).
+
+**Final Compare-Blib-Crossimpl results:**
+
+| Dataset | Result |
+|---|---|
+| Stellar 3-file (45153 RefSpectra) | OVERALL: PASS |
+| Astral 3-file (129352 RefSpectra) | OVERALL: PASS |
+
+Every per-table SQL row+column matches: RefSpectra (precursorMZ,
+RTs, score, copies, charges, sequences), RefSpectraPeaks (peakMZ +
+peakIntensity blob bytes byte-identical), Modifications, Proteins,
+RefSpectraProteins, RetentionTimes (per-file rows + NULL ID-line
+semantics + RT bounds + scores), OspreyExperimentScores,
+OspreyRunScores, OspreyPeakBoundaries, OspreyMetadata,
+SpectrumSourceFiles. Numeric tolerance gate at 1e-9 absolute; exact
+equality for string + integer columns; binary equality for blobs.
+
+**File-level SHA-256 still differs** (Rust ~39MB / C# ~38.8MB on
+Stellar; Rust ~105MB / C# ~104MB on Astral) due to SQLite engine
+internal differences between rusqlite (Rust) and System.Data.SQLite
+(C#) — page layout, autoincrement counters, index ordering. These
+are SQLite-internal details outside our written content. Every byte
+we own at the SQL row+column level matches.
+
+**PRs queued for review:**
+
+* maccoss/osprey `feature/blib-stock-zlib` (commit `959c0f0` on
+  remote): the one-line `Cargo.toml` change selecting the
+  `zlib-default` flate2 backend.
+* ProteoWizard/pwiz `Skyline/work/20260507_osprey_sharp_stage8`
+  (12 commits + docstring update): all the OspreySharp .blib
+  writing fixes from this sub-sprint, including the Ionic.Zlib
+  switch.
+
+The two PRs are companion landings — neither produces full byte
+parity in isolation, but both together close the gate on Stellar
++ Astral 3-file.
