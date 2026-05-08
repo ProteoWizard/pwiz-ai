@@ -11,7 +11,7 @@
     Can register itself as a Windows Task Scheduler task with -Schedule.
 
 .PARAMETER Recipient
-    Email address to send the report to. Default: brendanx@uw.edu
+    Email address to send the report to. Default: skyline-dev@proteinms.net
 
 .PARAMETER Model
     Claude model to use. Default: claude-opus-4-5-20251101
@@ -85,7 +85,7 @@
 #>
 
 param(
-    [string]$Recipient = "brendanx@uw.edu",
+    [string]$Recipient = "skyline-dev@proteinms.net",
     [string]$Model = "claude-opus-4-6",
     [int]$MaxTurns = 0,
     [ValidateSet("research", "email", "both")]
