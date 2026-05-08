@@ -341,6 +341,25 @@ yet ported).
 
 ## Progress log
 
-(none yet — sprint queued behind pwiz #4195 + maccoss/osprey #32
-merge, and behind the user's `/clear` + `/pw-continue`
-session-start ritual)
+### 2026-05-08 — Session 0 (setup; no audit work yet)
+
+Both predecessor PRs are merged:
+- ProteoWizard/pwiz#4195 → master `764d0a557` (Stage 7 .blib
+  end-to-end cross-impl parity).
+- maccoss/osprey#32 → main `b90800f41` (flate2 zlib-default
+  backend).
+
+Branches synced and the audit branch is created in `C:\proj\pwiz`
+off pwiz/master:HEAD per WORKFLOW.md (NOT in pwiz-work2 — see
+`feedback_pwiz_worktree_preference.md`). osprey on main, ready for
+a feature branch when a Rust-side change is needed.
+
+`mcp__status__set_active_project` set to `C:\proj\pwiz` so
+`/pw-continue` and the statusline pick up the right worktree.
+
+No audit work yet — picking up at Priority 1 (bit-parity audit
+catalog) in the next session.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260508_osprey_sharp_audit.md` before starting
+work.
