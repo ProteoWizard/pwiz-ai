@@ -534,3 +534,55 @@ encoding differences — the **f64 m/z and f32 intensity arrays decode
 identically** on both sides. Semantic parity: PASS. Byte parity: held
 by C#'s DeflateStream choice, fixable when Skyline's BlibData moves
 to Shared/BiblioSpec (or pwiz_tools/BiblioSpec gets ported to C#).
+
+### 2026-05-08 — Session 1 (final: switch C# to Ionic.Zlib — OVERALL PASS)
+
+**Skyline already uses Ionic.Zlib (DotNetZip) for blib peak compression.**
+`pwiz.Skyline.Util.Extensions.UtilDB.Compress` at
+`Skyline/Util/Extensions/UtilDB.cs:109-200` uses
+`Ionic.Zlib.ZlibCodec` at compression level 6 — has done since 2009.
+Skyline's BlibData (which already writes valid `.blib` files Skyline
+itself reads) uses this routine. So OspreySharp.IO.BlibWriter was
+the **outlier in the C# ecosystem** for using
+`System.IO.Compression.DeflateStream` instead of the
+ProteoWizard-canonical Ionic.Zlib path.
+
+Switched OspreySharp's `CompressBytes` to use the same
+Ionic.Zlib level-6 path as Skyline. Added a `Reference Include="DotNetZip"`
+to `OspreySharp.IO.csproj` pointing at the already-vendored
+`pwiz_tools/Shared/Lib/DotNetZip/DotNetZip.dll` — the same DLL
+Skyline references.
+
+**Compare-Blib-Crossimpl on Stellar 3-file:**
+
+  OVERALL: PASS - .blib cross-impl row + content parity within tolerance.
+
+Every per-table content column matches at the SQL row+column level:
+RefSpectra (all numeric + exact + blob via byte-identical peakMZ /
+peakIntensity), Modifications, Proteins, RefSpectraProteins,
+RetentionTimes (per-file rows + NULL retentionTime semantics),
+OspreyExperimentScores, OspreyRunScores, OspreyPeakBoundaries,
+OspreyMetadata, SpectrumSourceFiles, ScoreTypes, LibInfo,
+IonMobilityTypes.
+
+**File-level SHA-256 still differs** (Rust 39 MB / C# 38.8 MB) due
+to SQLite engine page-layout differences between rusqlite (Rust)
+and System.Data.SQLite (C#) — these are SQLite-internal page
+structure / autoincrement / index-ordering details, not logical
+content. Every byte we own at the SQL row+column level matches.
+The right gate for cross-impl semantic parity is the row+column
+comparator we built (Compare-Blib-Crossimpl.ps1), not raw file
+bytes — for the same reason the Stage 5/6/7 gates use numeric
+tolerance rather than `cmp`.
+
+**Sprint exit gate: GREEN on Stellar 3-file.** Ten pwiz commits
+on `Skyline/work/20260507_osprey_sharp_stage8` (4 missing tables;
+two-stage admission filter; RetentionTimes propagation;
+protein-FDR gate + metadata; best-by-run + 4 secondary;
+diagnostic seam; precursor-q score; shared peak boundaries;
+zlib threshold; DotNetZip switch). Three ai/ commits (comparator,
+multiple progress logs).
+
+**Astral validation queued for next session** (re-run on
+the Astral 3-file fixture to confirm the Stellar gate
+generalizes).
