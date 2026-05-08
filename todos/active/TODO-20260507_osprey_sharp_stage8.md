@@ -395,3 +395,87 @@ diff via the new `Compare-Blib-Crossimpl.ps1`:
 per-column PASS/FAIL with first-divergent-row sample. New diagnostic
 seams (env-var-gated TSV dumps from `AnalysisPipeline.WriteBlibOutput`)
 can be re-added at any time on the `OSPREY_DUMP_BLIB_*` namespace.
+
+### 2026-05-08 — Session 1 (extended even further: down to 109 blob diffs)
+
+Continuing in same session, the three deferred FAILs all chased.
+
+**Bisection found that RefSpectra.score wasn't a `max(precursor, peptide)`
+mismatch — Rust's .blib stores experiment_PRECURSOR_qvalue.** Used the
+new `OSPREY_DUMP_BLIB_QVALUES` diagnostic to dump per-bestByPrecursor
+q-values and joined externally against Rust's persisted
+`.1st-pass.fdr_scores.bin` sidecars. Result: every C# entry's q-values
+match Rust's sidecar exactly (45153/45153 within 1e-9). So C#'s
+COMPUTATION was correct. The bug was at the .blib WRITE site: C# was
+calling `EffectiveExperimentQvalue(FdrLevel.Both)` (`max(precursor,
+peptide)`), but Rust's `BlibPlanEntry.experiment_qvalue` (line
+pipeline.rs:4795) actually uses `best_exp_q.get(...)` which is built
+at pipeline.rs:4670-4683 from `e.experiment_precursor_qvalue` only —
+the minimum across all observations of each (modseq, charge), NOT
+the Both-level value. The misleading `LightFdr.experiment_qvalue =
+effective_experiment_qvalue(Both)` at pipeline.rs:4705 is a memory
+cache for the fallback branch only. Fixed in pwiz commit `a7645ec14`.
+
+**Shared peak boundaries across charge states.** Ported Rust's
+`build_shared_boundaries_from_plan` (pipeline.rs:6020-6063) to C#
+WriteBlibOutput. Closes the 1-1.4 minute RT spreads on
+RefSpectra/RetentionTimes/OspreyPeakBoundaries. Fixed in pwiz commit
+`a12bf85c9`.
+
+**Zlib threshold mismatch.** C# DeflateStream produces 3-4 fewer
+bytes of deflate overhead than Rust's flate2 on small fragment-
+array inputs (~160 bytes). With the original "any savings ->
+compress" rule, Rust falls back to raw on inputs where C# still
+compresses, splitting the .blib blob bytes. Tightened C# threshold
+to require >4 bytes of savings (`compressed.Length + 4 >=
+raw.Length -> return raw`). Fixed 71%/95% of the blob diffs. Fixed
+in pwiz commit `6ae307e7f`.
+
+| Sprint slice (Session 1 extended) | Status | pwiz commit |
+|---|---|---|
+| Diagnostic: OSPREY_DUMP_BLIB_QVALUES (kept) | LANDED | `4434c81ec` |
+| RefSpectra.score = experiment_PRECURSOR_q | CLOSED 42247->0 | `a7645ec14` |
+| Shared peak boundaries cross-charge | CLOSED 2963/11232/etc->0 | `a12bf85c9` |
+| Zlib threshold (raw fallback margin) | CLOSED 71%-95% | `6ae307e7f` |
+
+**Stellar 3-file Compare-Blib-Crossimpl.ps1 final state:**
+
+| Table | Status |
+|---|---|
+| RefSpectra | PASS all columns |
+| RefSpectraPeaks.peakMZ | FAIL 90/45153 (0.20%) |
+| RefSpectraPeaks.peakIntensity | FAIL 19/45153 (0.04%) |
+| Modifications | PASS |
+| Proteins | PASS |
+| RefSpectraProteins | PASS |
+| RetentionTimes | PASS all columns |
+| OspreyExperimentScores | PASS all columns |
+| OspreyRunScores | PASS all columns |
+| OspreyPeakBoundaries | PASS all columns |
+| OspreyCoefficients | PASS (empty both sides) |
+| OspreyMetadata | PASS |
+| SpectrumSourceFiles | PASS |
+
+**Total content gap: 109 blob bytes out of 45153 entries (0.24%).**
+
+The 109 residual cases are all where BOTH sides compress but C#
+produces a 4-byte shorter deflate stream than Rust for the same
+input. Pattern is fundamental flate2-vs-DeflateStream micro-difference
+at the deflate-block-format level (huffman-table choice,
+end-of-block encoding). Closing the rest needs either:
+
+1. A flate2-compatible deflate in C# (port flate2 logic, find a
+   third-party C# zlib that matches, or pre-encode blobs identically).
+2. A DeflateStream-compatible deflate in Rust (configure flate2 for
+   matching output, or switch to a different deflate crate).
+3. Accept the 0.24% as a known semantic-equivalence diff (the
+   decoded f64 m/z and f32 intensity arrays match exactly when
+   uncompressed; only the encoded bytes differ).
+
+Recommended path for the next session: option 1 — explore third-party
+C# zlib libraries (e.g., DotNetZip, ZLibPort) that produce flate2-
+compatible output, or hand-roll a deflate that matches flate2's
+huffman-table strategy on small inputs.
+
+**Astral Stellar validation**: deferred to next session pending
+the residual 109 fix.
