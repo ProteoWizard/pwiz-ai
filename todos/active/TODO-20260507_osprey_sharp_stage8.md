@@ -479,3 +479,58 @@ huffman-table strategy on small inputs.
 
 **Astral Stellar validation**: deferred to next session pending
 the residual 109 fix.
+
+### 2026-05-08 — Session 1 (still further: zlib backend investigation)
+
+User pointed out that **ProteoWizard/pwiz owns the BLIB format**
+(the C++ `pwiz_tools/BiblioSpec` writer is canonical), so the
+cross-impl convergence point should NOT be defined by Mike's
+Rust deflate library — it should be the ProteoWizard standard.
+The long-term plan is to share C# blib-writing code (potentially
+a Skyline `Model/Lib/BlibData` move out to `Shared/BiblioSpec`,
+or eventually a C# port of `pwiz_tools/BiblioSpec` itself
+inspired by Matt Chambers's pwiz/pwiz-aux porting effort), and
+to alter Rust to match that standard rather than the inverse.
+
+**Tested three flate2 backends on Stellar Rust .blib**:
+* `flate2 = "1.0"` (default, miniz_oxide pure-Rust): 90 + 19 mismatches
+* `flate2` with `["zlib-rs"]` (cloudflare zlib pure-Rust port): same
+* `flate2` with `["zlib-default"]` (stock zlib via libz-sys): same
+
+All three Rust backends produce **identical compressed bytes** on
+the test inputs. They all conform to RFC 1950/1951 stock zlib
+encoding. The 90 + 19 residual cases are entries where .NET 4.7.2's
+`DeflateStream` produces a 4-byte-shorter deflate stream than stock
+zlib — i.e. .NET DeflateStream is the **outlier** here, not Rust.
+Both encodings are valid zlib; they just make different
+huffman-table / end-of-block choices on small inputs.
+
+**Implication**: the long-term cross-impl byte-parity fix is to
+replace C#'s `System.IO.Compression.DeflateStream` with a
+stock-zlib-compatible compressor (e.g. SharpZipLib's `Deflater`
+in zlib mode, or a managed port of zlib via DotNetZip's
+deflate at level 6 — both produce stock zlib output bytes).
+Once C# emits stock zlib, all 109 residual cases close
+automatically since Rust already emits stock zlib.
+
+Rust `Cargo.toml` reverted to default `flate2 = "1.0"` for now —
+no behavior change, and it keeps the door open for whichever
+backend ProteoWizard standardizes on. The note here documents
+that the fix lives on the C# side.
+
+**Cumulative Stellar 3-file final state:**
+
+| Compare-Blib-Crossimpl gate | Result |
+|---|---|
+| All row counts | PASS (45153 / 45153) |
+| All key sets | PASS (zero asymmetric) |
+| All numeric columns (q-values, RTs) | PASS at 1e-9 |
+| All exact columns (counts, types) | PASS |
+| `RefSpectraPeaks.peakMZ` blob | FAIL 90 / 45153 (0.20%) |
+| `RefSpectraPeaks.peakIntensity` blob | FAIL 19 / 45153 (0.04%) |
+
+The 109 (0.24%) residual blob bytes are .NET-DeflateStream-vs-stock-zlib
+encoding differences — the **f64 m/z and f32 intensity arrays decode
+identically** on both sides. Semantic parity: PASS. Byte parity: held
+by C#'s DeflateStream choice, fixable when Skyline's BlibData moves
+to Shared/BiblioSpec (or pwiz_tools/BiblioSpec gets ported to C#).
