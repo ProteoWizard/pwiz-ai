@@ -7,17 +7,16 @@
 
 ## Branch Information
 
-- **Branch**: `Skyline/work/20260508_osprey_sharp_audit` (to be
-  created in `C:\proj\pwiz` after pwiz #4195 merges, off
-  pwiz/master:HEAD)
+- **Branch**: `Skyline/work/20260508_osprey_sharp_audit` (created
+  in `C:\proj\pwiz` 2026-05-08, off pwiz/master `764d0a5577` —
+  the Stage 7 .blib end-to-end-parity squash-merge)
 - **Companion Rust branch**: TBD (likely
   `feature/perf-audit-stage6-rescore` or per-fix branches as
-  needed; created in `C:\proj\osprey` after maccoss/osprey #32
-  merges, off maccoss/osprey/main:HEAD)
+  needed; create in `C:\proj\osprey` off main `b90800f` — the
+  flate2 zlib-default merge — when a Rust-side change is needed)
 - **Base**: `master` (pwiz) / `main` (maccoss/osprey)
 - **Created**: 2026-05-08
-- **Status**: Queued — waiting on pwiz #4195 + maccoss/osprey #32
-  to merge before branch creation
+- **Status**: In Progress — branches synced and ready
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
 - **PR**: (pending)
 
