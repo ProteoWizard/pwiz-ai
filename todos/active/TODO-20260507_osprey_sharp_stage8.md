@@ -298,3 +298,52 @@ into one bisection.
    alongside the writer fixes — start with row-count + key-set
    diff per table, then numeric-tolerance compare on float
    columns once row counts align.
+
+**Session 1 outcomes (continued):**
+
+| Sprint slice | Status | pwiz commit |
+|---|---|---|
+| Gap 1 — 4 missing Osprey tables | CLOSED | `b835c2f9e` |
+| Gap 3 — RefSpectra +483 over | CLOSED to within 27 | `c230c11d9` |
+| Gap 2 — RetentionTimes 44194 missing | CLOSED to within 81 | `8908a3d4f` |
+
+Stellar 3-file row counts after Session 1:
+
+| Table                       | rust | cs | delta |
+|-----------------------------|------|----|-------|
+| RefSpectra                  | 45153 | 45126 | 27 |
+| RefSpectraPeaks             | 45153 | 45126 | 27 |
+| Modifications               | 8710 | 8704 | 6 |
+| Proteins                    | 6986 | 6980 | 6 |
+| RefSpectraProteins          | 49289 | 49262 | 27 |
+| RetentionTimes              | 135115 | 135034 | 81 (= 27 × 3 files) |
+| OspreyMetadata              | 4 | 3 | 1 |
+| OspreyPeakBoundaries        | 45153 | 45126 | 27 |
+| OspreyRunScores             | 45153 | 45126 | 27 |
+| OspreyExperimentScores      | 45153 | 45126 | 27 |
+| OspreyCoefficients          | 0 | 0 | 0 |
+
+`.blib` size: cs 38.3 MB vs rust 39 MB (was 27 MB before the
+sprint started — most of the 12 MB gap closed).
+
+**Remaining work:**
+
+- **Bisect the 27-row RefSpectra under-inclusion** (Rust admits
+  these, C# doesn't). Probably a subtle Stage 1/Stage 2 fallback
+  edge case — three sampled only-in-Rust precursors all have
+  `experiment_qvalue` ≈ 0.001-0.003 (well below 0.01 threshold)
+  and charge=2, so they should pass Stage 2 outright. Hypothesis:
+  the C# `perFileEntries` arriving at `WriteBlibOutput` doesn't
+  include these 27 — they got filtered out by a Stage 5 / Stage 6
+  upstream step in C# that Rust doesn't filter. Bisection target
+  is the C# pipeline's earlier compaction / FDR phase, not
+  `WriteBlibOutput`. Likely cascade-fixes Modifications -6 +
+  Proteins -6 + RefSpectraProteins -27.
+- **OspreyMetadata -1.** Rust writes 4 keys; C# writes 3. Inspect
+  Rust's metadata write to find the missing one (likely
+  `protein_fdr` value or similar config item).
+- **Build `Compare-Blib-Crossimpl.ps1`.** With row counts
+  effectively aligned, can now move to per-column numeric
+  tolerance + exact-equality gate.
+- **Astral validation.** Re-run on Astral 3-file once Stellar
+  is at row-count parity and the comparator exists.
