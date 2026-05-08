@@ -203,9 +203,98 @@ Astral 11779).
 
 ## Progress log
 
-### 2026-05-07 — Session 1 (sprint kickoff)
+### 2026-05-07 — Session 1 (sprint kickoff + structural-gap inventory)
 
 Branch off `pwiz/master:a6997be6e` (Stage 7 squash-merge).
-Stages 1-7-first-two-substeps cross-impl parity confirmed via the
-preceding Stage 7 close-out. `.blib` substep work begins next
-session.
+Upstream resync delta (Step 1): zero new commits on
+`maccoss/osprey:main` since the Stage 7 close-out `17e8ba4`. Clean
+baseline; no parity-critical ports needed before starting.
+
+**Inventory pass on existing `.blib` files** from the Stage 7
+test fixture (Stellar 3-file, both produced before
+`OSPREY_STAGE7_PROTEIN_FDR_ONLY=1` was added so they were
+written end-to-end):
+
+- Rust: `D:\test\osprey-runs\stellar\_stage7_test\run_rust\output.blib` (39 MB)
+- C#:   `D:\test\osprey-runs\stellar\_stage7_test\run_cs_from_rust\output.blib` (27 MB)
+
+Probed via `System.Data.SQLite.dll` shipped with the Skyline
+Debug build. Findings are not subtle — material structural deltas
+that need code, not just a comparator.
+
+**Gap 1: C# is missing 4 Osprey extension tables.** The Rust
+`.blib` schema has these tables; the C# `BlibWriter.cs` doesn't
+declare or populate them at all:
+
+| Table                       | Rust rows | Schema |
+|-----------------------------|-----------|--------|
+| `OspreyCoefficients`        | 0         | (RefSpectraID, FileName, ScanNumber, RT, Coefficient) — empty for this dataset, table reserved |
+| `OspreyExperimentScores`    | 45153     | (RefSpectraID, ExperimentQValue, NRunsDetected, NRunsSearched) |
+| `OspreyPeakBoundaries`      | 45153     | (RefSpectraID, FileName, StartRT, EndRT, ApexRT, ApexIntensity, IntegratedArea) |
+| `OspreyRunScores`           | 45153     | (RefSpectraID, FileName, RunQValue, DiscriminantScore, PosteriorErrorProb) |
+
+Three of the four are 1-row-per-RefSpectra in this dataset. They
+account for most of the 12 MB size delta (`39 MB - 27 MB`).
+Adding the schemas to `BlibWriter.cs` is straightforward;
+populating them needs the right C# data plumbing (run/experiment
+q-values + peak boundaries are already on `FdrEntry`, so the
+write step should be a join + projection).
+
+**Gap 2: RetentionTimes cross-file propagation.** Rust emits
+`135115` rows; C# emits `90921`. With ~45k passing RefSpectra and
+3 input files, Rust's `135115 ≈ 3 * 45k` matches the documented
+"one row per (passing RefSpectra, file)" semantic from
+`docs/08-blib-output-schema.md`. C#'s `90921 ≈ 2 * 45k` suggests
+it's emitting a row for the ID-line file + one cross-replicate
+copy, **not** the full cross-replicate fan-out with NULL
+`retentionTime` for runs that don't pass run-level FDR but
+pass experiment-level via another replicate. This is the exact
+NULL-vs-populated gate flagged in this TODO's Step 3 — it is now
+definitely a real gap, not a hypothetical concern.
+
+**Gap 3: RefSpectra row-count delta in the OPPOSITE direction
+(unusual).** Rust 45153, C# **45636** (C# emits 483 MORE
+spectra). Plausible causes (none yet bisected):
+
+- C# is admitting some experiment-level-but-not-run-level passing
+  precursors that Rust dedups out of RefSpectra.
+- Different "passing" gate at the precursor level (FdrLevel
+  default-related? — checked: that landed in Stage 7 fix already).
+- Different best-per-precursor selection criterion in the
+  `BlibPlanEntry` build.
+
+Worth bisecting independently — the direction (C# bigger) means
+this isn't a missing-output gap, it's a different inclusion rule.
+
+**Other small deltas** (all tracked, lower priority):
+
+| Table | rust | cs | delta |
+|---|---|---|---|
+| `Modifications` | 8710 | 8805 | -95 (C# has 95 more) |
+| `Proteins` | 6986 | 6980 | +6 (Rust has 6 more) |
+| `RefSpectraProteins` | 49289 | 49797 | -508 (C# has 508 more) |
+| `OspreyMetadata` | 4 | 3 | +1 (C# missing one key — likely `protein_fdr` or similar) |
+
+The Modifications / RefSpectraProteins deltas correlate with the
+Gap 3 RefSpectra delta (C# RefSpectra has 483 more; protein
+mappings + modifications scale with that), so likely all roll up
+into one bisection.
+
+**Plan for the next sessions:**
+
+1. **Add the 4 missing tables to `BlibWriter.cs`** (additive,
+   doesn't disturb what's already there). Schemas mirror Rust
+   exactly. Populate from existing `FdrEntry` / per-file
+   observations data. This closes Gap 1 and gives the comparator
+   real data to diff against on those tables.
+2. **Fix RetentionTimes cross-replicate propagation.** Emit
+   one row per (passing-RefSpectra, file) with NULL
+   `retentionTime` for runs that don't pass run-level FDR but
+   pass experiment-level via another replicate. Closes Gap 2.
+3. **Bisect Gap 3** (C# RefSpectra +483 vs Rust). Likely fix
+   one place that cascades to Modifications +95 and
+   RefSpectraProteins +508.
+4. **`Compare-Blib-Crossimpl.ps1`** built incrementally
+   alongside the writer fixes — start with row-count + key-set
+   diff per table, then numeric-tolerance compare on float
+   columns once row counts align.
