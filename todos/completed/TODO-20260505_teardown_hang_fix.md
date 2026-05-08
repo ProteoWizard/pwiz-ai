@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260505_teardown_hang_fix`
 - **Base**: `master`
 - **Created**: 2026-05-05
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#4184](https://github.com/ProteoWizard/pwiz/issues/4184)
-- **PR**: [#4185](https://github.com/ProteoWizard/pwiz/pull/4185)
+- **PR**: [#4185](https://github.com/ProteoWizard/pwiz/pull/4185) (merged 2026-05-06)
 
 ## Problem
 
@@ -105,3 +105,20 @@ and the test fails with logged context instead of hanging.
   the original exception that opens the first `ThreadExceptionDialog`.
   Skipped for this fix to keep scope tight; can be added when the next
   nightly catches a recurrence.
+
+## Progress Log
+
+### 2026-05-06 - Merged
+
+PR [#4185](https://github.com/ProteoWizard/pwiz/pull/4185) "Guarded test teardown against modal-dialog hang" merged to `master` as commit `2a20cfb`. Closes issue #4184.
+
+## Resolution
+
+**Status**: Complete (PR #4185 merged 2026-05-06)
+
+Both pieces of the design landed:
+
+* `CloseOpenForm` in `TestFunctional.cs` now pre-checks `IsDisposed`, catches `ObjectDisposedException` / `InvalidOperationException` explicitly, and dismisses any `ThreadExceptionDialog` via `DialogResult = Cancel` (PostMessage) rather than synchronous `Form.Close()` — closing the race window that triggered the hang.
+* New `ThreadExceptionDialogCanceler` runs as a background watchdog during the test, polling `FormUtil.OpenForms` every 500 ms; any `ThreadExceptionDialog` is logged into `Program.TestExceptions` and dismissed, so a stray modal dialog now causes a logged test failure instead of a 30-minute hang.
+
+Underlying `ObjectDisposedException` on `EventWaitHandle.Set` during teardown is not addressed by this PR — the failure mode is now safe, but the root-cause race is still in the codebase. Optional `FirstChanceException` follow-up was deferred per the Notes above.
