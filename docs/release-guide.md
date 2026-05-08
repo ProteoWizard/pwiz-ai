@@ -341,9 +341,13 @@ Pre-release stabilization period before official release.
 
    **Skyline.csproj**:
    ```xml
-   <ApplicationRevision>4</ApplicationRevision>
+   <ApplicationRevision>004</ApplicationRevision>
    <ApplicationVersion>26.0.9.004</ApplicationVersion>
    ```
+
+   Note: `ApplicationRevision` is zero-padded to **3 digits** to match the DDD
+   portion of `ApplicationVersion` (e.g., Jan 1 → `001`, Apr 7 → `097`). This
+   is the convention in the file's commit history — follow it.
 
    **WARNING**: Never commit `<SignManifests>true</SignManifests>`. This requires
    special certificate configuration and would break builds on other machines.
@@ -1073,7 +1077,7 @@ Transform developer commit messages into brief (single line) past tense summarie
 **Include:**
 - Added features ("Added support for X")
 - Updated functionality ("Updated method export for Thermo instruments")
-- Fixed bugs ("Fixed crash when importing large files")
+- Fixed bugs ("Fixed unexpected error when importing large files")
 - Performance improvements (visible to users)
 
 **Exclude:**
@@ -1081,6 +1085,28 @@ Transform developer commit messages into brief (single line) past tense summarie
 - Test changes
 - Infrastructure/build improvements
 - Anything invisible to users
+- **Internal-only errors** — fixes to errors that only surface in nightly tests or
+  developer tooling (e.g., TestRunner connectivity, parallel test harness limits)
+  are not user-visible and do not belong in release notes.
+
+**Terminology — no "crash" or exception class names**
+
+User-facing release notes and announcements must **never** say "crash" or name an
+exception class (e.g., `IndexOutOfRangeException`, "unhandled exception"). Always
+use **"unexpected error"** instead.
+
+- ❌ "Fixed crash when importing transition list with short rows"
+- ❌ "Fixed IndexOutOfRangeException in peak imputation"
+- ❌ "Fixed unhandled exception exporting report to locked file"
+- ✅ "Fixed unexpected error importing transition list with short rows"
+- ✅ "Fixed unexpected error in peak imputation when encountering invalid values"
+- ✅ "Fixed unexpected error exporting a report to a locked file"
+
+Users don't know what exceptions are, and Skyline rarely truly crashes in the
+sense of the app going away and losing work. When something goes wrong users
+usually just see a large stack-trace form that asks them to post it for
+evaluation. Calling it a "crash" overstates the severity and misleads users
+about what happened. This convention also applies to UI error messages.
 
 **Step 3: Format each item**
 
