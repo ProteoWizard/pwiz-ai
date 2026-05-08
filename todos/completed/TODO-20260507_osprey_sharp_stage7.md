@@ -11,10 +11,10 @@
 - **Base**: `master` (pwiz) / `main` (maccoss/osprey)
 - **Created**: 2026-05-07
 - **Started**: 2026-05-07
-- **Status**: Cross-impl gate green on Stellar 3-file via `Compare-Stage7-Crossimpl.ps1` (1e-9 numeric tolerance, max abs diff `1.776e-15`). Both PRs open and awaiting review.
+- **Status**: COMPLETED 2026-05-07. Both PRs squash-merged.
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
-- **Upstream PR**: [maccoss/osprey#31](https://github.com/maccoss/osprey/pull/31) — `--join-at-pass=2` rehydration + Stage 7 dump (open, awaiting review)
-- **Skyline PR**: [ProteoWizard/pwiz#4192](https://github.com/ProteoWizard/pwiz/pull/4192) — Stage 7 dump + structural gap fixes + cross-impl numeric-parity gate (open, awaiting review)
+- **Upstream PR**: [maccoss/osprey#31](https://github.com/maccoss/osprey/pull/31) — `--join-at-pass=2` rehydration + Stage 7 dump — **MERGED** as `17e8ba4`
+- **Skyline PR**: [ProteoWizard/pwiz#4192](https://github.com/ProteoWizard/pwiz/pull/4192) — Stage 7 dump + structural gap fixes + cross-impl numeric-parity gate — **MERGED** as `a6997be6e`
 
 ### Predecessors
 
@@ -594,3 +594,42 @@ end-of-pipeline parity review (per the project-wide bit-parity
 memory): cross-impl gates that adopt numeric tolerance to absorb
 ryu-vs-.NET-G16 rendering differences and sub-1e-15 SVM-training
 drift will be revisited there.
+
+### 2026-05-07 — Session 7 (close-out: PRs merged, stages 7&8 collapsed)
+
+Both PRs squash-merged:
+
+- maccoss/osprey #31 → main as `17e8ba4 cli: --join-at-pass=2 enters
+  at the post-Stage-6 boundary (#31)`. Squash absorbed the Stage 7
+  dump commit (`6da8509`) and the Copilot-feedback fixes (`49241ae`).
+- ProteoWizard/pwiz #4192 → master as `a6997be6e OspreySharp Stage 7
+  (protein FDR): cross-impl numeric parity on Stellar and Astral
+  3-file (#4192)`. Squash absorbed the Stage 7 dump commit
+  (`d6575b9`), the structural-gap fixes (`5085ad7`), the
+  TestDefaultConfig companion (`780c6e5`), the Copilot-feedback fixes
+  (`5dac93d`), and the Osprey-workflow.html update (`7f08a02`).
+
+**Architectural finding: Stage 7 and Stage 8 collapsed into one
+Stage 7 in the workflow diagram.** The user observed that there is
+no per-file fan-out and no sidecar / rehydration boundary between
+second-pass Percolator (formerly "Stage 7"), protein FDR (parsimony
++ picked-protein TDC, formerly "Stage 8 first half"), and the
+.blib SQLite output (formerly "Stage 8 second half"). All three run
+on the merge node in a single process, sharing in-memory state. The
+2nd-pass FDR sidecar that gets written after second-pass Percolator
+is for re-run skip-fdr optimization, not a Stage 7→8 handoff. There
+is no `--join-at-pass=3`. Mirrors the way Stage 5 already absorbs
+many sub-steps (first-pass Percolator, experiment-level FDR,
+first-pass protein FDR, reconciliation planning) under the
+first-join phase. Workflow.html now shows a single Stage 7 with
+three sub-bars; "Stage 8" no longer exists in the architectural
+diagram. The user kept the `TODO-20260507_osprey_sharp_stage8.md`
+file name as the operational sprint identifier for the .blib
+substep, but the document tracks "the .blib substep of Stage 7's
+merge-node phase", not an architecturally-separate stage.
+
+**Successor sprint**:
+`ai/todos/active/TODO-20260507_osprey_sharp_stage8.md` — .blib
+output cross-impl row-level parity (final substep of Stage 7,
+final cross-impl validation gate before Stage 7 itself is fully
+green).
