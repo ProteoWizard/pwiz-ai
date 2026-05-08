@@ -23,10 +23,10 @@
 - **Base**: `master` (pwiz) / `main` (maccoss/osprey)
 - **Created**: 2026-05-07
 - **Started**: 2026-05-07
-- **Status**: COMPLETED 2026-05-08. Both PRs open and awaiting review.
+- **Status**: COMPLETED 2026-05-08. Skyline PR merged; upstream PR open.
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
-- **Skyline PR**: [ProteoWizard/pwiz#4195](https://github.com/ProteoWizard/pwiz/pull/4195) — Stage 7 .blib end-to-end cross-impl parity (14 commits).
-- **Upstream PR**: [maccoss/osprey#32](https://github.com/maccoss/osprey/pull/32) — `flate2` zlib-default backend switch (single commit).
+- **Skyline PR**: [ProteoWizard/pwiz#4195](https://github.com/ProteoWizard/pwiz/pull/4195) — **MERGED** as `764d0a557` (2026-05-08). 16 commits squashed, including responses to Copilot (3 items) and `/review` (6 items, 2 of the higher-impact ones addressed: tuple keys + prepared SQLiteCommands).
+- **Upstream PR**: [maccoss/osprey#32](https://github.com/maccoss/osprey/pull/32) — `flate2` zlib-default backend switch (single commit, CI green, awaiting maintainer review).
 - **Milestone**: First end-to-end OspreySharp port at full cross-impl parity. Stages 1-7 all GREEN on Stellar + Astral 3-file.
 
 ### Predecessors
