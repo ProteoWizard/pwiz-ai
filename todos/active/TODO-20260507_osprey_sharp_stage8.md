@@ -326,24 +326,72 @@ Stellar 3-file row counts after Session 1:
 `.blib` size: cs 38.3 MB vs rust 39 MB (was 27 MB before the
 sprint started — most of the 12 MB gap closed).
 
-**Remaining work:**
+**Session 1 outcomes (continued — second half of session):**
 
-- **Bisect the 27-row RefSpectra under-inclusion** (Rust admits
-  these, C# doesn't). Probably a subtle Stage 1/Stage 2 fallback
-  edge case — three sampled only-in-Rust precursors all have
-  `experiment_qvalue` ≈ 0.001-0.003 (well below 0.01 threshold)
-  and charge=2, so they should pass Stage 2 outright. Hypothesis:
-  the C# `perFileEntries` arriving at `WriteBlibOutput` doesn't
-  include these 27 — they got filtered out by a Stage 5 / Stage 6
-  upstream step in C# that Rust doesn't filter. Bisection target
-  is the C# pipeline's earlier compaction / FDR phase, not
-  `WriteBlibOutput`. Likely cascade-fixes Modifications -6 +
-  Proteins -6 + RefSpectraProteins -27.
-- **OspreyMetadata -1.** Rust writes 4 keys; C# writes 3. Inspect
-  Rust's metadata write to find the missing one (likely
-  `protein_fdr` value or similar config item).
-- **Build `Compare-Blib-Crossimpl.ps1`.** With row counts
-  effectively aligned, can now move to per-column numeric
-  tolerance + exact-equality gate.
-- **Astral validation.** Re-run on Astral 3-file once Stellar
-  is at row-count parity and the comparator exists.
+| Sprint slice | Status | pwiz commit |
+|---|---|---|
+| 27-row RefSpectra under-inclusion | CLOSED — was protein-FDR gate | `3c6c58aca` |
+| OspreyMetadata key-set alignment | CLOSED — 4 Rust keys written | `3c6c58aca` |
+| Compare-Blib-Crossimpl.ps1 | LANDED on `ai/master` | `e7e2fe2` |
+| best-by-run-qvalue + 4 column fixes | CLOSED | `03662386a` |
+
+**Bisection method that found the protein-FDR gate**: added a temporary
+`OSPREY_DUMP_BLIB_ADMISSION` env-var to write three TSVs from
+`WriteBlibOutput` — the (modseq, charge) sets at three points in the
+admission filter (entries-in-perFileEntries, Stage-1 passingPeptides,
+Stage-2 passingPrecursors). Joined externally against the 27 only-in-Rust
+list. 22 of 27 were in `passingPrecursors` but didn't make it to the
+final write (post-Stage-2 protein-FDR gate dropped them); the other 5
+were missing from `perFileEntries` itself. The "5 cys-peptide pattern"
+turned out to be coincidence — when the protein-FDR gate was lifted,
+all 27 came through, including the 5 cys-peptides. Diagnostic was
+removed in `3c6c58aca` after it served its purpose.
+
+**Stellar 3-file row-count gate: PASS, EVERY TABLE.** Per-column
+diff via the new `Compare-Blib-Crossimpl.ps1`:
+
+  rows: all 14 tables match exactly (RefSpectra 45153, RetentionTimes
+        135115, Modifications 8710, etc.).
+  key-set diff: zero asymmetric keys on every table.
+  PASSing columns: RefSpectra (precursorMZ, ionMobility, peptideSeq,
+        prevAA, nextAA, copies, numPeaks, scoreType),
+        Modifications.mass, RetentionTimes (score, bestSpectrum),
+        OspreyExperimentScores (NRunsDetected, NRunsSearched),
+        OspreyRunScores (RunQValue, DiscriminantScore,
+        PosteriorErrorProb), OspreyPeakBoundaries (ApexIntensity,
+        IntegratedArea), OspreyMetadata, SpectrumSourceFiles,
+        Proteins, RefSpectraProteins, OspreyCoefficients.
+
+**Remaining FAILs (deferred to next session):**
+
+- **`RefSpectra.score` + `OspreyExperimentScores.ExperimentQValue`**
+  — both 42247/45153 differ. C#'s
+  `EffectiveExperimentQvalue(FdrLevel.Both) = max(precursor, peptide)`
+  returns 1.0 because `ExperimentPeptideQvalue` defaults to 1.0
+  for entries where C#'s `ComputeExperimentPeptideQvalues` (in
+  `PercolatorFdr.cs`) doesn't find the peptide in its
+  `peptideQvalue` map. Rust populates this on every entry; C# has
+  a gap. Bisection target is `ComputeExperimentPeptideQvalues` —
+  the `BestPrecursorPerPeptide` aggregation may be returning a
+  smaller peptide set than Rust's equivalent.
+
+- **`RetentionTimes.retentionTime/startTime/endTime` + same on
+  `RefSpectra` + `OspreyPeakBoundaries`** — 1-1.3 min spread,
+  2963-11232 rows. Rust shares peak boundaries across charge
+  states of the same peptide via the `shared_bounds` HashMap
+  (pipeline.rs:6219). C# emits per-charge-state boundaries.
+  Port the shared-bounds logic to C# `WriteBlibOutput`.
+
+- **`RefSpectraPeaks.peakMZ/peakIntensity`** — 307/345 rows
+  differ binary. Fragment-array serialization or order. Likely
+  a zlib-vs-no-zlib compression toggle, or fragment sort order
+  difference. Targeted blob diff would localize.
+
+- **Astral validation** — re-run on Astral 3-file once the above
+  three are closed.
+
+**Bisection helper retained**: `Compare-Blib-Crossimpl.ps1` runs in
+~5 seconds against a Rust + C# .blib pair, prints per-table /
+per-column PASS/FAIL with first-divergent-row sample. New diagnostic
+seams (env-var-gated TSV dumps from `AnalysisPipeline.WriteBlibOutput`)
+can be re-added at any time on the `OSPREY_DUMP_BLIB_*` namespace.
