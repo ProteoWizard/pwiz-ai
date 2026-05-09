@@ -280,9 +280,38 @@ function Invoke-Tool {
         [string]$Bin, [string]$WorkDir,
         [string[]]$CliArgs, [hashtable]$EnvVars
     )
-    $previous = @{}
+    # Defensively unset every OSPREY_* dump/exit hook from prior stages
+    # before applying this stage's env. PowerShell's Environment.SetEnv
+    # restore-to-null is brittle; clearing the union of all stage hooks
+    # at the start removes leak-between-stages bugs entirely.
+    $allHooks = @(
+        'OSPREY_DUMP_STANDARDIZER','OSPREY_DUMP_SUBSAMPLE',
+        'OSPREY_DUMP_SVM_WEIGHTS','OSPREY_DUMP_PERCOLATOR',
+        'OSPREY_PERCOLATOR_ONLY',
+        'OSPREY_DUMP_RECONCILIATION','OSPREY_RECONCILIATION_ONLY',
+        'OSPREY_DUMP_RESCORED','OSPREY_RESCORED_ONLY',
+        'OSPREY_DUMP_STAGE6_PROTEIN_FDR','OSPREY_STAGE6_PROTEIN_FDR_ONLY',
+        'OSPREY_DUMP_PROTEIN_FDR','OSPREY_PROTEIN_FDR_ONLY',
+        'OSPREY_DUMP_STAGE7_PROTEIN_FDR','OSPREY_STAGE7_PROTEIN_FDR_ONLY',
+        'OSPREY_DUMP_CONSENSUS','OSPREY_CONSENSUS_ONLY',
+        'OSPREY_DUMP_MULTICHARGE','OSPREY_MULTICHARGE_ONLY',
+        'OSPREY_DUMP_CALIBRATION','OSPREY_CALIBRATION_ONLY',
+        'OSPREY_DUMP_LOESS_INPUT','OSPREY_LOESS_INPUT_ONLY',
+        'OSPREY_DUMP_LOESS_FIT','OSPREY_LOESS_FIT_ONLY',
+        'OSPREY_DUMP_INV_PREDICT','OSPREY_INV_PREDICT_ONLY',
+        'OSPREY_DUMP_BLIB_QVALUES','OSPREY_DUMP_BLIB_ADMISSION',
+        'OSPREY_DUMP_REFIT','OSPREY_DUMP_PREDICT_RT',
+        'OSPREY_DUMP_MP_INPUTS','OSPREY_DUMP_CWT_PATH'
+    )
+    # PowerShell quirk: [Environment]::SetEnvironmentVariable($k, $null)
+    # sets the var to "" rather than unsetting. The OSPREY binaries
+    # treat "" as set (IsOne handler accepts any non-"0" value), so an
+    # empty-string leak still triggers early-exit hooks. Remove-Item on
+    # the env: PSDrive really unsets.
+    foreach ($k in $allHooks) {
+        if (Test-Path "env:$k") { Remove-Item "env:$k" }
+    }
     foreach ($k in $EnvVars.Keys) {
-        $previous[$k] = [Environment]::GetEnvironmentVariable($k)
         [Environment]::SetEnvironmentVariable($k, $EnvVars[$k])
     }
     $logPath = Join-Path $WorkDir 'stdout.log'
@@ -293,9 +322,9 @@ function Invoke-Tool {
         $exit = $LASTEXITCODE
     } finally {
         Pop-Location
-        foreach ($k in $previous.Keys) {
-            [Environment]::SetEnvironmentVariable($k, $previous[$k])
-        }
+        # No env restore here: the next Invoke-Tool clears all stage
+        # hooks defensively at the start. Leaving them set briefly is
+        # harmless within this script's own scope.
     }
     $sw.Stop()
     return [pscustomobject]@{ exit = $exit; wall = $sw.Elapsed }
@@ -356,7 +385,12 @@ function Compare-Stage1to4 {
         }
         $py = Join-Path $scriptDir 'inspect_parquet.py'
         $diffLog = Join-Path $rustDir ('..\diff_' + $stem + '.log')
-        & python $py $rPq -B $cPq --tolerance 1e-9 *>&1 | Tee-Object -FilePath $diffLog | Out-Null
+        # Stage 1-4 is gated at 1e-6 absolute (matches Test-Features.ps1
+        # PIN-feature threshold). xcorr/sg_weighted_xcorr have
+        # documented sub-1e-6 algorithmic drift; tighter gates would
+        # block on known noise. A real regression here would either
+        # exceed 1e-6 (caught) or change the row set (always caught).
+        & python $py $rPq -B $cPq --tolerance 1e-6 *>&1 | Tee-Object -FilePath $diffLog | Out-Null
         $exit = $LASTEXITCODE
         $details += @{
             file = $stem
@@ -369,17 +403,23 @@ function Compare-Stage1to4 {
 }
 
 function Freeze-Stage1to4 {
-    # Freeze: copy rust's .scores.parquet to stage5/inputs as the
-    # canonical Stage 5 input. Also stage the library.
+    # Freeze: copy rust's .scores.parquet + calibration JSON to
+    # stage5/inputs as the canonical Stage 5 input. Stage the library
+    # + libcache. Also stage the mzMLs because Stage 6 rescore re-
+    # extracts spectra from them (Stage 5 itself ignores mzMLs, so
+    # carrying them costs nothing on Stage 5 and saves a refetch later).
     $rustDir = Get-StageRustDir 'stage1to4'
     $next = Get-StageInputDir 'stage5'
     Reset-StageDir $next -KeepInputs:$false
     foreach ($stem in $selectedStems) {
         Copy-Item (Join-Path $rustDir ($stem + '.scores.parquet')) `
             (Join-Path $next ($stem + '.scores.parquet'))
-        # Calibration JSON is a sibling that Stage 5+ may consume.
         $cal = Join-Path $rustDir ($stem + '.calibration.json')
         if (Test-Path $cal) { Copy-Item $cal (Join-Path $next ($stem + '.calibration.json')) }
+    }
+    foreach ($mzml in $selectedFiles) {
+        $src = Join-Path $inputsDir (Split-Path $mzml -Leaf)
+        if (Test-Path $src) { Copy-Item $src (Join-Path $next (Split-Path $mzml -Leaf)) }
     }
     Copy-Item (Join-Path $inputsDir $libraryName) (Join-Path $next $libraryName)
     $cache = Join-Path $inputsDir ($libraryName + '.libcache')

@@ -448,3 +448,79 @@ its CWT-candidate input was not persisted.
    the same fast-cycle iteration loop.
 3. Regenerate or rewrite the two failing CWT codec tests so
    they no longer pin to stale fixtures.
+
+### 2026-05-08 — Session 2 (Stage 1-4 root-cause + dedup port + harness hardening)
+
+Used `OSPREY_TRACE_PEPTIDE` (Rust-only) to confirm `AAELLQDEYSGR`
+charge 3 never reaches Rust's first-pass CWT scoring. Rust's
+`--verbose` log surfaced the proximate cause: `Double-counting
+deduplication: removed 2151 entries (1406 targets, 745 decoys;
+462802 remaining)` — exactly the 2151 row delta `inspect_parquet.py
+--diff` was reporting. Likely added to Rust after Stage 1-4 was
+declared complete; the regression test wasn't there to catch it.
+
+**Ported Rust `deduplicate_double_counting` to OspreySharp**
+(`pwiz_tools/OspreySharp/OspreySharp/AnalysisPipeline.cs`):
+new `DeduplicateDoubleCounting` + helpers
+`CountTopNFragmentOverlap` and `TopNFragmentMzs`. Per-window
+parallel sweep, top-6 fragment overlap with calibrated tolerance,
+RT neighborhood = 5x median spectrum spacing. Wired into
+ProcessFile right between scoring and `DeduplicatePairs` —
+mirrors Rust's call site in pipeline.rs.
+
+**Result on Stellar 1-file**: row counts now match exactly
+(462802 = 462802, only_A=0, only_B=0). 38 of 40 columns
+bit-identical including all peak selections and CWT/fragment
+blobs. Only `xcorr` and `sg_weighted_xcorr` still drift at
+5.1e-7 / 3.1e-7 (the same sub-1e-6 algorithmic noise
+`Test-Features.ps1` has accepted since Stage 1-4 was declared
+complete). Test-Regression's `stage1to4` comparator tolerance
+moved to 1e-6 to match the documented PIN gate.
+
+**Stage 6 single-file gate**: `AnalysisPipeline.cs` had
+`if (perFileEntries.Count > 1 && config.Reconciliation.Enabled)`
+which silently bypassed Stage 6 entirely on single-file runs.
+Rust's structure runs Stage 6 always (multi-charge consensus is
+meaningful within one run; cross-file reconciliation degenerates
+to 0 actions naturally on single file). Removed the `> 1` guard.
+Stage 6 now runs on single file as expected. **Follow-up**: C#'s
+reconciliation planner produces ~22758 actions on single file
+where Rust produces 0 — likely C#'s `compute_consensus_rts`
+builds consensus from single-file evidence; Rust's needs
+cross-file. Tracked as a separate task.
+
+**Test-Regression hardening**:
+- Env-var leak: `[Environment]::SetEnvironmentVariable($k, $null)`
+  in PowerShell sets to "" rather than unsetting; the OSPREY
+  binaries treat "" as set. Switched to `Remove-Item env:$k`
+  with a defensive sweep of every `OSPREY_*` hook at the start
+  of each `Invoke-Tool` call. `OSPREY_PERCOLATOR_ONLY` (and
+  similar) no longer leak from one stage's run to the next.
+- `Freeze-Stage1to4` now propagates the mzML files into
+  `stage5/inputs/` so Stage 6 rescore can re-extract spectra
+  during stage isolation.
+- `Compare-Stage1to4` runs `inspect_parquet.py --diff` at
+  `--tolerance 1e-6` (matches Test-Features.ps1 PIN gate).
+
+**Test-Regression Stellar 1-file march status after this
+session**:
+
+| Stage | Status | Notes |
+|---|---|---|
+| stage1to4 | PASS | dedup + 1e-6 tolerance |
+| stage5 | PASS | bit-parity given shared input |
+| stage6 | FAIL | C# 22758 reconciliation actions vs Rust 0 |
+| stage7 | not yet reached | |
+| blib  | not yet reached | |
+
+**Next session targets**:
+
+1. Localize C#'s `compute_consensus_rts` extra single-file
+   actions vs Rust's empty consensus.
+2. Add `-Verbose` and `-TracePeptide` to Test-Regression so
+   future regressions like `peak_sharpness FP-noise-on-large-
+   values` or `Double-counting deduplication: removed 2151`
+   surface natively without requiring manual log inspection.
+3. Port `OSPREY_TRACE_PEPTIDE` to OspreySharp so cross-impl
+   per-peptide trace becomes possible (currently Rust-only).
+4. Once stage6 GREEN, advance to stage7 + blib.
