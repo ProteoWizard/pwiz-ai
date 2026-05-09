@@ -793,11 +793,29 @@ freeze policy, env-var leak) was localized in one or two
 iteration cycles thanks to the per-stage dump-and-exit env vars
 and the now-fast `--join-at-pass=2` rehydration path.
 
+### 2026-05-08 — Session 7 (Astral 1-file: ALL FIVE STAGES PASS)
+
+Ran `Test-Regression -Dataset Astral` clean. Zero divergences.
+
+| Stage | Status | rust + cs wall |
+|---|---|---|
+| stage1to4 | PASS | 2:35 + 3:01 |
+| stage5 | PASS | 1:38 + 1:40 |
+| stage6 | PASS | 3:22 + 3:54 |
+| stage7 | PASS | 0:10 + 0:43 |
+| blib | PASS | 0:27 + 0:52 |
+
+Total full march ~18 min. The Stellar 1-file fixes ported
+cleanly to the HRAM path — `--join-at-pass=2` rehydration,
+sidecar paths, fallback semantics, the dedup port — all
+correct on Astral too. No HRAM-specific drift surfaced.
+
+Tight per-stage cycle on Astral: stage7 cs-only ~43s,
+blib cs-only ~52s. Same iteration shape as Stellar.
+
 **Next session targets**:
 
-1. **Astral 1-file march**. Repeat the Stellar 1-file walk on
-   Astral. Likely uncovers per-feature drift specific to the
-   high-resolution path. Same harness, just `-Dataset Astral`.
+1. ~~Astral 1-file march.~~ DONE.
 2. **3-file Stellar / Astral**. Multi-file scenarios exercise
    cross-run reconciliation and the consensus + 2nd-pass
    sidecar write paths — the only places Rust takes a
