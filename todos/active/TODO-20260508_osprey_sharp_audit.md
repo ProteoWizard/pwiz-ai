@@ -937,3 +937,99 @@ end of this checkpoint.
    ~5x gap on Astral 3-file rescore mentioned in the
    sprint Step 5).
 4. 3-file Astral regression after Stellar completes.
+
+### 2026-05-09 — Session 8.5 (3-file Stellar bug surfaced + closed)
+
+**3-file Stellar full march on the night-time HEAD**:
+stage1to4 + stage5 PASS byte-identical. Stage 6 sub-dumps
+`multicharge`, `consensus`, `reconciliation` PASS byte-
+identical. Stage 6 `rescored.tsv` FAIL: 1644 rows present
+in rust, 0 in cs (rust 392825 rows; cs 391181 rows). Cs
+faster than rust (3:08 vs 5:40) — under-rescoring, not
+parallelism.
+
+**Root cause: gap-fill never executed in the in-process
+Stage 6 path.** The gap-fill planner (`GapFillTargetIdentifier
+.Identify`) IS called inside `WriteReconciliationFiles` and
+the per-file results land in `.reconciliation.json`. But the
+in-process call to `ExecuteStage6Rescore` at
+AnalysisPipeline.cs:1083 hard-coded `perFileGapFill: null`,
+with the comment "Gap-fill two-pass + reconciled .scores
+.parquet write-back are the next porting phases." That
+"next phase" never landed before Test-Regression went
+honest. Single-file runs produce 0 gap-fill plans (no inter-
+replicate consensus possible), which masked the bug.
+
+Multi-file impact (Stellar 3-file): rust gap-fills 1641 CWT
++ 3 forced = 1644 entries (560 + 528 + 556 per file —
+matches the 1644-row delta exactly).
+
+**Fix 1: Wired gap-fill through to in-process rescore**
+(AnalysisPipeline.cs).
+- `WriteReconciliationFiles` now exposes `gapFillByFileOut`
+  via out param. The planner's `IReadOnlyDictionary<string,
+  IReadOnlyList<GapFillTarget>>` result is converted to
+  `Dictionary<string, List<GapFillTarget>>` (matches the
+  `ExecuteStage6Rescore.perFileGapFill` parameter type used
+  by both the in-process path and the worker).
+- The Stage 6 rescore call at line 1083 now passes
+  `perFileGapFillForRescore` instead of null.
+- Stale comment "Gap-fill two-pass + reconciled .scores
+  .parquet write-back are the next porting phases" deleted.
+
+After this fix, `cs_stage6_rescored.tsv` ALMOST matched
+rust's, but stage7 then failed with: "1st-pass sidecar
+failed to load (magic / version / pass-byte / count / size
+mismatch)". The sidecar loader's strict header-count check
+was wrong for multi-file:
+
+- 1st-pass sidecar is written PRE-gap-fill (Stage 5 boundary
+  has no gap-fill stubs yet). Count = pre-gap-fill.
+- Reconciled parquet is written POST-gap-fill (Stage 6
+  appends gap-fill stubs at end of parquet). Count = pre-
+  gap-fill + gap-fill.
+- Sidecar loader required `headerCount == entries.Count`
+  → fails when caller's stub list is the post-gap-fill
+  parquet load.
+
+**Fix 2: Sidecar loader now matches by entry_id**
+(`FdrScoresSidecar.cs`).
+- TryRead builds a `Dictionary<entry_id, index>` over the
+  caller's entries and applies sidecar records by entry_id
+  lookup, NOT by position.
+- Caller may pass a SUPERSET (gap-fill stubs in entries
+  with no sidecar record stay at their default Score=0,
+  q=1 — exactly the post-gap-fill parquet entry case).
+- Strict check preserved: every sidecar record MUST find
+  its entry_id in the caller's entries. A stale or wrong-
+  parquet sidecar (none of its records match) returns
+  false. Detects corruption.
+- Single-file degenerates to 1:1 dict lookup — no
+  semantic change for the existing fast path.
+
+**Tests updated** (`OspreySharp.Test/IOTest.cs`,
+`ProgramTests.cs`):
+- Removed `TestFdrScoresSidecarCountMismatchRejected` (the
+  count-mismatch was the bug, not the contract). Replaced
+  by `TestFdrScoresSidecarSupersetEntries` (gap-fill
+  superset case) and `TestFdrScoresSidecarStaleRecordRejected`
+  (truly unrelated sidecar still rejected).
+- `TestNormalizeJoinAtPass2ErrorsUntilImplemented` was
+  stale post-Session-5 (--join-at-pass=2 is now wired up).
+  Replaced by `TestNormalizeJoinAtPass2InProcessSucceeds`
+  (in-process should succeed) and
+  `TestNormalizeJoinAtPass2NoJoinNotImplemented` (worker
+  mode still errors).
+
+**Stage 6 wall on 3-file Stellar with the fix**: cs 3:07
+(unchanged). Gap-fill work is small relative to the rescore
+loop, so wall is unaffected. Correctness restored at no
+perf cost.
+
+**Test status after the fixes**: 299 / 301 unit tests
+PASS. Remaining 2 failures are the pre-existing CWT codec
+stale-fixture tests documented in Session 1.
+
+**Re-running 3-file Stellar march** to confirm
+end-to-end on multi-file. Result will land in the next
+session-8 entry below.
