@@ -1033,3 +1033,33 @@ stale-fixture tests documented in Session 1.
 **Re-running 3-file Stellar march** to confirm
 end-to-end on multi-file. Result will land in the next
 session-8 entry below.
+
+### 2026-05-09 — Session 8.6 (skip RunFirstPassProteinFdr on --join-at-pass=2)
+
+The original Astral 1-file dotTrace already showed
+`RunFirstPassProteinFdr` at 17s TOTAL on the Stage 7 cs
+isolation. With `--join-at-pass=2` rehydration, the 1st-
+pass FDR sidecar already carries `RunProteinQvalue` from
+the original straight-through run. Re-running
+`ComputeProteinFdr` on the same inputs produces the same
+output (it's a deterministic graph algorithm) — the work
+is just overwriting the loaded values with identical
+numbers. **Skipping it on `ExpectReconciledInput`** saves
+~17s of CPU on Astral 1-file Stage 7+blib (and similar on
+multi-file scaled by entry count).
+
+**Fix landed** (`AnalysisPipeline.cs:590-599`): the
+guard `if (config.ProteinFdr.HasValue && perFileEntries
+.Count > 0 && !config.ExpectReconciledInput)`. The sidecar
+loaded earlier already provides `RunProteinQvalue`; no need
+to recompute. The downstream compaction predicate (`run_
+peptide_qvalue ≤ 0.01 OR run_protein_qvalue ≤ 0.01`)
+reads `RunProteinQvalue` directly from the sidecar values
+and works the same as if `RunFirstPassProteinFdr` had run.
+
+**Validation**: end-to-end via the in-flight Stellar 3-
+file regression. Stage 7 + blib must still produce byte-
+identical TSV/blib vs Rust. If RunFirstPassProteinFdr's
+output differs from the sidecar's stored RunProteinQvalue
+(it shouldn't — but bisection seam is honest), the gates
+will catch the divergence.
