@@ -739,3 +739,75 @@ needs to rehydrate.
    `osprey.reconciled = "true"` even on 0-action runs. Already
    reviewed in Session 4 work and looked correct, but worth a
    targeted unit test.
+
+### 2026-05-08 — Session 6 (closed Stage 7 + blib; ALL FIVE STAGES GREEN)
+
+Resolved the Stage 7 fixture chicken-and-egg + 2nd-pass sidecar
+puzzle. Three fixes landed:
+
+1. **Moved 2nd-pass FDR sidecar write to BEFORE `RunProteinFdr`**
+   in `AnalysisPipeline.cs`. The sidecar's contents (Score,
+   run/experiment q-values, Pep, RunProteinQvalue) are NOT
+   modified by `RunProteinFdr` — that only sets
+   ExperimentProteinQvalue, which the sidecar doesn't carry.
+   Writing earlier means the `OSPREY_STAGE7_PROTEIN_FDR_ONLY=1`
+   early exit (used by stage6 isolation) leaves the 2nd-pass
+   sidecar on disk for `--join-at-pass=2` rehydration. No need
+   to pay for blib write.
+2. **`--join-at-pass=2` 2nd-pass sidecar fallback to 1st-pass**
+   when 2nd-pass missing. Mirrors Rust's pipeline.rs:3482
+   "prefer 2nd-pass, fall back to 1st-pass" semantic. Rust
+   skips 2nd-pass sidecar write on single-file runs (gated by
+   `input_files.len() > 1` at pipeline.rs:4489) so single-file
+   `--join-at-pass=2` needs the fallback to work at all. C#
+   now matches.
+3. **Sidecar paths derive from input file stem, not parquet
+   stem.** `FdrScoresSidecar.Pass1Path()` /
+   `FdrScoresSidecar.Pass2Path()` build
+   `<dir>/<stem>.{1st,2nd}-pass.fdr_scores.bin`; passing a
+   parquet path (`*.scores.parquet`) produced
+   `*.scores.{1st,2nd}-pass.fdr_scores.bin` (with spurious
+   `.scores`). Fixed by using `config.InputFiles` (synthesized
+   from --input-scores stems via
+   `RescoreHydration.SyntheticInputFromParquet`).
+
+**Test-Regression Stellar 1-file march status — FINAL**:
+
+| Stage | Status | Wall (rust + cs) | Notes |
+|---|---|---|---|
+| stage1to4 | PASS | 0:26 + 0:36 | dedup port + 1e-6 PIN tolerance |
+| stage5 | PASS | 1:19 + 1:43 | 4 sub-dumps byte-identical |
+| stage6 | PASS | 1:39 + 2:01 | 4 sub-dumps byte-identical (multicharge / consensus / reconciliation / rescored) |
+| stage7 | **PASS** | 0:02 + 0:10 | --join-at-pass=2 entry; tight cycle |
+| blib | **PASS** | 0:04 + 0:14 | --join-at-pass=2 entry; cs uses sidecar fallback |
+
+Total full-march wall ≈ 9 minutes. Tight per-stage iteration
+cycle when re-running a single failing stage with `-Side cs`:
+**~10-30 seconds** for any post-Stage-4 stage.
+
+**The pipeline now stands on its own end-to-end on Stellar 1-file.**
+Both binaries produce byte-identical artifacts at every gated
+stage. The diagnostic infrastructure carried this entire arc:
+every divergence today (sidecar path, sidecar fallback,
+freeze policy, env-var leak) was localized in one or two
+iteration cycles thanks to the per-stage dump-and-exit env vars
+and the now-fast `--join-at-pass=2` rehydration path.
+
+**Next session targets**:
+
+1. **Astral 1-file march**. Repeat the Stellar 1-file walk on
+   Astral. Likely uncovers per-feature drift specific to the
+   high-resolution path. Same harness, just `-Dataset Astral`.
+2. **3-file Stellar / Astral**. Multi-file scenarios exercise
+   cross-run reconciliation and the consensus + 2nd-pass
+   sidecar write paths — the only places Rust takes a
+   different code branch. The bit-parity claims previously
+   "shipped" for these need re-verification under the now-
+   honest test harness.
+3. **`-Verbose` + `-TracePeptide` switches** on Test-Regression
+   (still pending; modest convenience for next bisection
+   sprint).
+4. **CI integration** for Test-Regression. Per the original
+   intent ("It should get run again and again ... possibly
+   even become part of our CI"). Stellar 1-file is fast
+   enough (~9 min full march) to gate every PR.

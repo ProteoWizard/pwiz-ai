@@ -446,7 +446,14 @@ $stageConfig = @{
             OSPREY_DUMP_CONSENSUS      = '1'
             OSPREY_DUMP_RECONCILIATION = '1'
             OSPREY_DUMP_RESCORED       = '1'
-            OSPREY_RESCORED_ONLY       = '1'
+            # Exit after Stage 7 protein FDR dump (well before blib
+            # write). The 2nd-pass FDR sidecar is written by the binary
+            # BEFORE this exit point (AnalysisPipeline.cs writes it just
+            # before RunProteinFdr — q-value fields it captures are not
+            # mutated by Stage 7 protein FDR). Stage 6 isolation thus
+            # leaves stage6/rust/ with: reconciled parquet, 1st-pass +
+            # 2nd-pass sidecars, no unwanted blib output.
+            OSPREY_STAGE7_PROTEIN_FDR_ONLY = '1'
         }
         # Compared in pipeline order: multi-charge consensus targets,
         # cross-file consensus RTs, reconciliation actions, rescored
@@ -460,10 +467,26 @@ $stageConfig = @{
             OSPREY_STAGE7_PROTEIN_FDR_ONLY = '1'
         }
         compareDumps = @()  # uses Compare-Stage7-Crossimpl.ps1 (TSV-aware)
+        # Stage 7 isolation runs --join-at-pass=2: reconciled parquet +
+        # 1st-pass + 2nd-pass FDR sidecars in the stage7/inputs/ dir
+        # (overlaid from stage6/rust/ by Freeze-PostStage4). The binary
+        # validates osprey.reconciled = "true" and rehydrates Stage 7
+        # without re-running Stages 5-6. Cycle target ~10s/side once
+        # the fixture is staged. Mirrors osprey commit 0d13198.
+        useJoinAtPass2 = $true
     }
     'blib' = @{
         envVars = @{}
         compareDumps = @()  # uses Compare-Blib-Crossimpl.ps1
+        # blib stage receives the post-Stage-6 reconciled parquet +
+        # FDR sidecars (frozen from stage7/rust/). --join-at-pass=2
+        # gates both binaries on the same entry point: skip Stages
+        # 5-6, run Stage 7 protein FDR, write blib. Without this,
+        # Rust uses its CacheValidity::ValidReconciled fast path
+        # (~7s) while C# (no cache-validity check yet) re-runs the
+        # whole pipeline (~2 min) — same input, different work,
+        # different blib outputs.
+        useJoinAtPass2 = $true
     }
 }
 
@@ -475,7 +498,17 @@ function Run-PostStage4 {
     foreach ($f in (Get-ChildItem $sIn -File)) {
         Copy-Item $f.FullName (Join-Path $sOut $f.Name)
     }
-    $cliArgs = @('--join-at-pass=1')
+    # Pick the join-at-pass entry point based on stage config:
+    # most stages enter at the post-Stage-4 boundary (--join-at-pass=1
+    # against a raw Stage 4 parquet); Stage 7 enters at the post-
+    # Stage-6 boundary (--join-at-pass=2 against a reconciled parquet
+    # + the per-file FDR sidecars). Mirrors Rust's pipeline.rs entry-
+    # point switch. The binary validates the parquet metadata against
+    # the chosen entry point (osprey.reconciled = "true" required for
+    # --join-at-pass=2) and errors loudly on mismatch.
+    $useJP2 = $stageConfig[$Stage].useJoinAtPass2
+    $entry = if ($useJP2) { '--join-at-pass=2' } else { '--join-at-pass=1' }
+    $cliArgs = @($entry)
     foreach ($stem in $selectedStems) {
         $cliArgs += '--input-scores'
         $cliArgs += ($stem + '.scores.parquet')
@@ -568,29 +601,34 @@ function Compare-Blib-Wrap {
 
 function Freeze-PostStage4 {
     param([string]$FromStage, [string]$ToStage)
-    # Propagate the prior stage's INPUTS forward unchanged. Every
-    # post-Stage-4 stage in the regression test runs from the same
-    # canonical Stage 4 parquet (frozen by Freeze-Stage1to4 into
-    # stage5/inputs and chained through). Both binaries process that
-    # parquet from scratch through the target stage and compare per-
-    # stage dumps — the same model Compare-Stage7-Crossimpl.ps1 uses.
-    #
-    # Why NOT use the prior stage's rust/ output (which contains the
-    # Stage-6 rewritten parquet): C# does not yet implement the
-    # CacheValidity / "skip-Stages-5-6 because parquet is already
-    # reconciled" detection that Rust has. Handing C# a reconciled
-    # parquet causes it to re-apply Stage 6 reconciliation on top of
-    # already-reconciled data, producing divergent stage7 output that
-    # is an artifact of the test harness, not a real cross-impl bug.
-    # Once OspreySharp gains the cache-validity check (see TODO
-    # follow-up: implement --join-at-pass=2 + osprey.reconciled
-    # parquet metadata validation), this freeze can switch to the
-    # rewritten-parquet model and exercise the skip path.
+    # Propagate the prior stage's inputs forward, then OVERLAY any
+    # rewritten artifacts from the prior stage's rust/ output dir.
+    # Stage 6 rewrites the .scores.parquet in place (post-rescore)
+    # and writes per-file .{1st,2nd}-pass.fdr_scores.bin sidecars;
+    # downstream stages must see those rewritten artifacts to enter
+    # at the right pipeline checkpoint. Stage 7 specifically uses
+    # --join-at-pass=2 which validates osprey.reconciled = "true"
+    # in the parquet footer — wrong-stage parquets fail loudly at
+    # the binary, not silently in the test harness.
     $next = Get-StageInputDir $ToStage
     Reset-StageDir $next -KeepInputs:$false
     $prev = Get-StageInputDir $FromStage
     foreach ($f in (Get-ChildItem $prev -File)) {
         Copy-Item $f.FullName (Join-Path $next $f.Name)
+    }
+    # Overlay rewritten / new artifacts from the prior stage's rust
+    # output. Patterns: rewritten parquet, both FDR sidecars, the
+    # reconciliation.json envelope.
+    $prevRust = Get-StageRustDir $FromStage
+    if (Test-Path $prevRust) {
+        foreach ($pattern in @('*.scores.parquet',
+                               '*.1st-pass.fdr_scores.bin',
+                               '*.2nd-pass.fdr_scores.bin',
+                               '*.reconciliation.json')) {
+            foreach ($f in (Get-ChildItem $prevRust -Filter $pattern -File -ErrorAction SilentlyContinue)) {
+                Copy-Item $f.FullName (Join-Path $next $f.Name) -Force
+            }
+        }
     }
 }
 
