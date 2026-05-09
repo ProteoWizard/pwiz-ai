@@ -68,13 +68,28 @@ $input_json = $input | Out-String | ConvertFrom-Json
 $aiRoot = Split-Path -Parent $PSScriptRoot
 $tmpDir = Join-Path $aiRoot '.tmp'
 
-# The Claude Code process that spawned us is also the parent of any StatusMcp
-# server it launched, so the parent PID is a stable session identity shared
-# between the two without needing a session_id channel.
+# Find the Claude Code process by walking up the parent chain. The
+# direct parent on Windows is often a bash.exe / pwsh.exe wrapper that
+# Claude Code spawns per-tick — its PID is transient and doesn't
+# correlate to the StatusMcp server (which has Claude Code as its own
+# direct parent). Walking up to the first process named claude.exe
+# gives a stable per-session identity both sides can compute. Capped
+# at 16 levels to bound runtime if the chain is somehow corrupted.
+function Find-ClaudeCodePid {
+    $cur = $PID
+    $d = 0
+    while ($cur -and $cur -ne 0 -and $d -lt 16) {
+        $proc = Get-CimInstance Win32_Process -Filter "ProcessId = $cur" -ErrorAction SilentlyContinue
+        if (-not $proc) { return $null }
+        if ($proc.Name -match '^claude') { return [int]$proc.ProcessId }
+        $cur = $proc.ParentProcessId
+        $d++
+    }
+    return $null
+}
+
 $ppid = $null
-try {
-    $ppid = (Get-CimInstance Win32_Process -Filter "ProcessId = $PID" -ErrorAction Stop).ParentProcessId
-} catch { }
+try { $ppid = Find-ClaudeCodePid } catch { }
 
 $perSessionFile = if ($ppid) { Join-Path $tmpDir "active-project-$ppid.json" } else { $null }
 $legacyFile = Join-Path $tmpDir 'active-project.json'
@@ -136,10 +151,8 @@ if ($input_json.context_window.current_usage) {
 
         # Cache the snapshot so the StatusMcp's get_context_usage tool
         # can serve Claude the same number the user sees here. Keyed by
-        # PPID like the active-project file, so concurrent Claude Code
-        # sessions stay independent. Writing only when the calculation
-        # succeeded avoids serving stale snapshots from a turn where
-        # Claude Code didn't pass usage data.
+        # the Claude Code PID found above; the StatusMcp does the same
+        # walk so both sides land on the same file.
         if ($ppid) {
             try {
                 if (-not (Test-Path $tmpDir)) {
@@ -167,5 +180,28 @@ if ($input_json.context_window.current_usage) {
         }
     }
 }
+
+# Sweep orphan context-state files: any whose PID is no longer running
+# is from a Claude Code session that has exited. Cheap (a few file stat
+# calls per tick); keeps ai/.tmp/ tidy without a separate cron / cleanup
+# script. The matching active-project files get the same treatment.
+try {
+    Get-ChildItem (Join-Path $tmpDir 'context-state-*.json') -ErrorAction SilentlyContinue | ForEach-Object {
+        if ($_.Name -match 'context-state-(\d+)\.json') {
+            $orphanPid = [int]$Matches[1]
+            if (-not (Get-Process -Id $orphanPid -ErrorAction SilentlyContinue)) {
+                Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    Get-ChildItem (Join-Path $tmpDir 'active-project-*.json') -ErrorAction SilentlyContinue | ForEach-Object {
+        if ($_.Name -match 'active-project-(\d+)\.json') {
+            $orphanPid = [int]$Matches[1]
+            if (-not (Get-Process -Id $orphanPid -ErrorAction SilentlyContinue)) {
+                Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+} catch { }
 
 Write-Host "$project_name$git_info | $model$ctx"

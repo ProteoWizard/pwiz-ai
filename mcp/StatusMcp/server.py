@@ -444,29 +444,83 @@ def set_active_project(path: str) -> str:
     return f"Active project set to: {active['name']} ({active['path']})"
 
 
-def _per_session_active_project_file() -> Optional[Path]:
-    """Path to this Claude Code session's active-project file, or None if the
-    parent PID can't be determined (in which case callers should fall back to
-    the legacy global file)."""
+# Cache the Claude Code PID across all calls in this server's lifetime.
+# Claude Code doesn't relocate; one walk-up is enough.
+_CLAUDE_PID_CACHE: Optional[int] = None
+
+
+def _find_claude_code_pid() -> Optional[int]:
+    """Walk up the process tree from this server until we find a process
+    named 'claude' (case-insensitive). The same walk in statusline.ps1
+    converges on the same PID, so files keyed by it are sharable.
+
+    On Windows the StatusMcp's direct parent IS claude.exe (so the walk
+    terminates after one step), but the statusline is launched via a
+    short-lived bash/pwsh wrapper, so it has to walk further. Both sides
+    use the same algorithm to ensure agreement.
+
+    Implementation shells out to pwsh once (cached) so we don't add a
+    psutil dependency. ~150ms one-time cost, negligible relative to
+    server lifetime.
+    """
+    global _CLAUDE_PID_CACHE
+    if _CLAUDE_PID_CACHE is not None:
+        return _CLAUDE_PID_CACHE
+
+    cmd = (
+        f"$cur = {os.getpid()}; "
+        "$d = 0; "
+        "while ($cur -and $cur -ne 0 -and $d -lt 16) { "
+        "  $p = Get-CimInstance Win32_Process -Filter \"ProcessId = $cur\" -ErrorAction SilentlyContinue; "
+        "  if (-not $p) { break } "
+        "  if ($p.Name -match '^claude') { Write-Host $p.ProcessId; exit 0 } "
+        "  $cur = $p.ParentProcessId; $d++ "
+        "}"
+    )
     try:
-        ppid = os.getppid()
+        result = subprocess.run(
+            ["pwsh", "-NoProfile", "-Command", cmd],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5,
+        )
+        out = result.stdout.strip()
+        if out.isdigit():
+            _CLAUDE_PID_CACHE = int(out)
+            logger.info(f"Found Claude Code PID via process-tree walk: {_CLAUDE_PID_CACHE}")
+            return _CLAUDE_PID_CACHE
+    except Exception as e:
+        logger.warning(f"Failed to find Claude Code PID: {e}")
+
+    # Fallback: use direct parent. On Windows that's already claude.exe
+    # in the StatusMcp's case (the walk would have found it at depth 0
+    # if pwsh didn't error), so this is harmless on the happy path.
+    try:
+        _CLAUDE_PID_CACHE = os.getppid()
     except OSError:
         return None
-    if not ppid:
+    return _CLAUDE_PID_CACHE
+
+
+def _per_session_active_project_file() -> Optional[Path]:
+    """Path to this Claude Code session's active-project file. Keyed by
+    the Claude Code PID (walked up the process tree) so the statusline
+    and StatusMcp share the same identity."""
+    pid = _find_claude_code_pid()
+    if not pid:
         return None
-    return STATE_DIR / f"active-project-{ppid}.json"
+    return STATE_DIR / f"active-project-{pid}.json"
 
 
 def _per_session_context_state_file() -> Optional[Path]:
     """Path to this Claude Code session's context-usage snapshot file. The
     statusline writes it on every tick; this server reads it on demand."""
-    try:
-        ppid = os.getppid()
-    except OSError:
+    pid = _find_claude_code_pid()
+    if not pid:
         return None
-    if not ppid:
-        return None
-    return STATE_DIR / f"context-state-{ppid}.json"
+    return STATE_DIR / f"context-state-{pid}.json"
 
 
 @mcp.tool()
