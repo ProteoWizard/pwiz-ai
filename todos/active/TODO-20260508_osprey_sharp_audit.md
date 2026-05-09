@@ -524,3 +524,73 @@ session**:
 3. Port `OSPREY_TRACE_PEPTIDE` to OspreySharp so cross-impl
    per-peptide trace becomes possible (currently Rust-only).
 4. Once stage6 GREEN, advance to stage7 + blib.
+
+### 2026-05-08 — Session 3 (Stage 6 single-file consensus + rescore drill)
+
+Used the full stage6 dump set (`OSPREY_DUMP_MULTICHARGE`,
+`OSPREY_DUMP_CONSENSUS`, `OSPREY_DUMP_RECONCILIATION`,
+`OSPREY_DUMP_RESCORED`) under Test-Regression to bisect the
+single-file Stage 6 divergence in pipeline order. Multi-charge
+consensus targets came out **byte-identical** in one shot
+(`rust=cs=D898F1518662`, 917139 bytes), localizing the gap
+strictly downstream — exactly the kind of forced-bisection the
+existing dump-and-exit-only env vars were built for.
+
+**Cross-file consensus-emptiness gate**: Rust's
+`pipeline.rs:4146` defines `reconciliation_enabled = ...
+per_file_entries.len() > 1`, so single-file runs never compute
+cross-file consensus. C# was computing it unconditionally on
+single-file (59618 entries, all `n_runs_detected = 1`) which
+poisoned the planner into emitting 22758 spurious `use_cwt_peak`
+actions where Rust had 0. Wrapped `ConsensusRts.Compute(...)` in
+a `perFileEntries.Count > 1` guard returning empty — mirrors
+Rust exactly. Reconciliation TSV now byte-identical between
+sides at 89 bytes (header only).
+
+**Stage 6 status after this session (Stellar 1-file)**:
+
+| Sub-dump | Rust | C# | Result |
+|---|---|---|---|
+| multicharge | 917139 | 917139 | **PASS** |
+| reconciliation | 89 (header) | 89 (header) | **PASS** |
+| rescored | 13456256 | 14554330 | FAIL — see below |
+
+**Remaining `rescored.tsv` divergence**: Same row count (90579)
+on both sides, same header. Spot-check on entry_id 21
+(`AAAAALSQQQSLQER` charge 3, original apex 8.559) shows: Rust
+writes `score=0  pep=1  q=1` (rescore returned "no peak" at
+the multi-charge consensus apex 8.054), C# writes real
+`score=-0.127  pep=0.123  q=0.026`. So Rust's rescore is
+silently returning failure for some multi-charge consensus
+targets while C#'s rescore succeeds. About 8% of the rescored
+file's content is this one class of divergence. Next session's
+target.
+
+**Test-Regression diagnostic enhancements landed**:
+- Stage6 envVars now include `OSPREY_DUMP_MULTICHARGE` and
+  `OSPREY_DUMP_CONSENSUS`, comparing in pipeline order. The
+  first divergent dump localizes Stage 6 to a sub-block within
+  one round.
+- Cycle time on `-StartStage stage6 -StopAfterStage stage6
+  -Side cs`: ~2 min. Tight enough for iterate-on-Stage6 work.
+
+**Open follow-ups (for next session)**:
+
+1. Localize the rescored.tsv divergence — likely Rust's
+   rescore at the consensus boundary applies a stricter
+   peak-detection check that C# is missing.
+2. Add `-Verbose` + `-TracePeptide` to Test-Regression
+   (already on the list; would have nailed this session's
+   bug faster).
+3. Once stage6 GREEN, advance to stage7 + blib.
+
+**Test-Regression Stellar 1-file march status after this
+session** (replaces prior session's table):
+
+| Stage | Status |
+|---|---|
+| stage1to4 | PASS |
+| stage5 | PASS |
+| stage6 | FAIL (rescored.tsv only; 2 of 3 sub-dumps now PASS) |
+| stage7 | not yet reached |
+| blib | not yet reached |

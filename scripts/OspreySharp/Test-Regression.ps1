@@ -442,10 +442,17 @@ $stageConfig = @{
     }
     'stage6' = @{
         envVars = @{
-            OSPREY_DUMP_RECONCILIATION = '1'; OSPREY_DUMP_RESCORED = '1'
-            OSPREY_RESCORED_ONLY = '1'
+            OSPREY_DUMP_MULTICHARGE    = '1'
+            OSPREY_DUMP_CONSENSUS      = '1'
+            OSPREY_DUMP_RECONCILIATION = '1'
+            OSPREY_DUMP_RESCORED       = '1'
+            OSPREY_RESCORED_ONLY       = '1'
         }
-        compareDumps = @('reconciliation','rescored')
+        # Compared in pipeline order: multi-charge consensus targets,
+        # cross-file consensus RTs, reconciliation actions, rescored
+        # per-precursor state. The first divergent dump localizes
+        # exactly where Stage 6 starts to differ.
+        compareDumps = @('multicharge','consensus','reconciliation','rescored')
     }
     'stage7' = @{
         envVars = @{
