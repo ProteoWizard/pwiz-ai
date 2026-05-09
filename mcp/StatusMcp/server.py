@@ -457,6 +457,73 @@ def _per_session_active_project_file() -> Optional[Path]:
     return STATE_DIR / f"active-project-{ppid}.json"
 
 
+def _per_session_context_state_file() -> Optional[Path]:
+    """Path to this Claude Code session's context-usage snapshot file. The
+    statusline writes it on every tick; this server reads it on demand."""
+    try:
+        ppid = os.getppid()
+    except OSError:
+        return None
+    if not ppid:
+        return None
+    return STATE_DIR / f"context-state-{ppid}.json"
+
+
+@mcp.tool()
+def get_context_usage() -> str:
+    """Get the current Claude Code session's context-window usage.
+
+    Returns the same numbers the statusline displays — same model,
+    same calibration (97% consumed = 0% left, matching Claude Code's
+    auto-compact warning point on the 1M-context tier). The snapshot
+    is refreshed by the statusline every tick, so it lags the live
+    state by at most one turn.
+
+    Use this BEFORE suggesting end-of-session, handoff, or compact —
+    don't estimate from feel. Many users are comfortable pushing
+    sessions into single-digit percentages remaining; suggesting a
+    handoff at 40% wastes their session.
+
+    Returns JSON with:
+      model                       — display name of current model
+      context_window_size         — total tokens (e.g. 1000000 for Opus 4.7-1m)
+      input_tokens                — non-cached input tokens this turn
+      cache_creation_input_tokens — tokens entering the cache
+      cache_read_input_tokens     — tokens served from cache
+      used_tokens                 — sum of the three above
+      used_pct                    — used / window * 100 (raw)
+      left_pct                    — usable headroom % (97% - used_pct, floored to 0)
+      usable_max_pct              — calibration ceiling (97 for the 1M tier)
+      calibrated_at               — UTC timestamp of the snapshot
+
+    On a fresh session before the statusline has run once, returns an
+    empty/error payload — that itself signals "very early in session,
+    plenty of context."
+    """
+    state_file = _per_session_context_state_file()
+    if not state_file or not state_file.exists():
+        return json.dumps({
+            "error": "Context state file not found",
+            "expected_path": str(state_file) if state_file else None,
+            "hint": (
+                "The statusline writes this file on every tick. If you "
+                "are seeing this, either the session just started (no "
+                "tick yet) or the statusline isn't configured. Either "
+                "way, plenty of context is almost certainly available."
+            ),
+        }, indent=2)
+
+    try:
+        payload = state_file.read_text(encoding="utf-8")
+    except OSError as e:
+        return json.dumps({
+            "error": f"Failed to read context state: {e}",
+            "path": str(state_file),
+        }, indent=2)
+
+    return payload
+
+
 def main():
     """Run the MCP server."""
     logger.info("Starting Status MCP server")

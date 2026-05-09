@@ -133,6 +133,38 @@ if ($input_json.context_window.current_usage) {
         $used_pct = ($current * 100) / $size
         $left = [math]::Max(0, [math]::Floor($usable_max_pct - $used_pct))
         $ctx = " | $left% left"
+
+        # Cache the snapshot so the StatusMcp's get_context_usage tool
+        # can serve Claude the same number the user sees here. Keyed by
+        # PPID like the active-project file, so concurrent Claude Code
+        # sessions stay independent. Writing only when the calculation
+        # succeeded avoids serving stale snapshots from a turn where
+        # Claude Code didn't pass usage data.
+        if ($ppid) {
+            try {
+                if (-not (Test-Path $tmpDir)) {
+                    New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+                }
+                $snapshot = [ordered]@{
+                    model                       = $model
+                    context_window_size         = [int]$size
+                    input_tokens                = [int]$usage.input_tokens
+                    cache_creation_input_tokens = [int]$usage.cache_creation_input_tokens
+                    cache_read_input_tokens     = [int]$usage.cache_read_input_tokens
+                    used_tokens                 = [int]$current
+                    used_pct                    = [math]::Round($used_pct, 2)
+                    left_pct                    = [int]$left
+                    usable_max_pct              = $usable_max_pct
+                    calibrated_at               = (Get-Date).ToUniversalTime().ToString('o')
+                }
+                $statePath = Join-Path $tmpDir "context-state-$ppid.json"
+                $snapshot | ConvertTo-Json | Set-Content -Path $statePath -Encoding UTF8
+            } catch {
+                # State file is best-effort. Statusline display must not
+                # break if the cache write fails (read-only filesystem,
+                # etc.); the user-visible % is the primary deliverable.
+            }
+        }
     }
 }
 

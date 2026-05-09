@@ -10,6 +10,13 @@ repos, their branches, and dirty state — one call, no arguments needed.
 Use `mcp__status__get_status` for targeted checks on specific directories.
 Do NOT use `git` commands or `gh` to discover branches when status MCP can do it.
 
+**Before suggesting handoff, end-of-session, or `/compact`**, call
+`mcp__status__get_context_usage` first — never estimate from feel.
+NEVER mention a next session when context is above 20%, and know that
+many users are comfortable pushing into single digits. The tool returns
+the same number the statusline shows the user, so we share a consistent
+picture of remaining headroom.
+
 All Claude Code documentation lives in the **ai/** folder. See:
 - **ai/CLAUDE.md** - Critical configuration (PowerShell, paths, commands)
 - **ai/CRITICAL-RULES.md** - Absolute constraints
