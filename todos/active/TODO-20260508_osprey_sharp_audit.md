@@ -1168,3 +1168,118 @@ rehydration through real multi-file behavior.
 regression. The HRAM path may surface different
 behavior (more entries, more gap-fill targets, larger
 parquets). Same diagnostic + iteration toolkit applies.
+
+### 2026-05-09 — Session 8 cumulative summary (overnight wrap)
+
+**Headlines for the morning user**:
+
+1. **Multi-file `--join-at-pass=2` was systemically broken**
+   in BOTH cs and rust. The strict `header_count ==
+   entries.len()` sidecar guard fell through to retraining
+   Percolator on the WRONG input set whenever a reconciled
+   parquet had gap-fill rows. Fixed in cs (commit fdbd9064)
+   AND rust (`feature/sidecar-entry-id-keyed-loader`
+   branch, commit 2fb83ef). Stage 7 rust wall on Stellar
+   3-file dropped from 1:11 to 0:04 (~17x).
+2. **Gap-fill never executed in-process** in cs — the in-
+   process Stage 6 rescore call hardcoded
+   `perFileGapFill: null`. Closed 1644-row stage6
+   divergence on Stellar 3-file (commit fdbd9064).
+3. **Three `--join-at-pass=2` perf wins in cs** total ~70s
+   wall savings on Astral 1-file Stage 7+blib: skip
+   GenerateDecoys (~46s), skip RunFirstPassProteinFdr
+   (~17s), skip 1st-pass sidecar re-write (~6s).
+   Commits 9470ee10, 5ebfd33e, 0d13a850.
+4. **Test-Regression `-Profile`** (per-stage dotTrace
+   integration) shipped (commit 2efa0d2 in ai). Models
+   `Run-Tests.ps1` -PerformanceProfile pattern. The
+   profile of Astral 1-file Stage 7 cs surfaced
+   GenerateDecoys as the headline hotspot, leading to fix #3
+   above.
+
+**Branches at session end**:
+- `C:\proj\pwiz` on `Skyline/work/20260508_osprey_sharp_audit`,
+  4 session-8 commits.
+- `C:\proj\osprey` on `feature/sidecar-entry-id-keyed-loader`,
+  1 session-8 commit. Maintainer-PR ready.
+- `C:\proj\ai` on `master`, 5 session-8 commits.
+
+**Stellar 3-file regression at session end**: ALL FIVE
+STAGES PASS (table above in Session 8.8).
+
+**Astral 3-file regression at session end**: in flight.
+Result will be appended below as Session 8.9 entry once
+the march completes.
+
+**Pre-existing test failures still open** (NOT introduced
+by this sprint):
+- `OspreySharp.Test/CwtCandidateCodecTest.cs`:
+  `TestCwtCandidateCrossImplParity` and
+  `TestCsScoringPopulatesCwtCandidates` pinned to a stale
+  May-7 fixture in `_stage5_3file/`. Documented in Session 1.
+
+**Recommended next-session targets**:
+
+1. **Push the rust `feature/sidecar-entry-id-keyed-loader`
+   branch + open a PR against maccoss/osprey**. The fix is
+   independent of cs and benefits any rust user of
+   `--join-at-pass=2` with multi-file gap-fill. Branch is
+   on the local `C:\proj\osprey` checkout.
+2. **Profile Stage 5 / Stage 6 cs cleanly** with the new
+   `-Profile` switch. Percolator first-pass at ~99s on
+   3-file Stellar is now the new headline cost; could be
+   a target for further optimization.
+3. **Larger-experiment regression** (≥6 files). The
+   current 3-file cap exercises gap-fill but not the
+   24+ file Astral runs in the original Phase 5 sprint.
+4. **CI integration** for Stellar 1-file (~9 min) and
+   3-file (~20-25 min after fixes). Manifest.json carries
+   structured pass/fail per stage.
+5. **Blib write parallelization** for the cs side. Per-
+   spectrum compression is sequential; pre-compressing
+   blobs in parallel before SQLite INSERT could close
+   most of the cs/rust blib wall gap (~25s on Astral 1-
+   file). Non-trivial refactor.
+6. **Regenerate stale CWT codec test fixtures**. Two
+   pre-existing test failures pinned to a May-7 fixture
+   that no longer matches current parquet content (per
+   Session 1 note).
+
+### Tooling reference (Session 8 deliverables)
+
+**Per-stage dotTrace profiling**:
+
+```
+pwsh -File ./Test-Regression.ps1 -Dataset Astral \
+    -StartStage stage6 -StopAfterStage stage6 -Side cs -Profile
+
+# Snapshot at <workdir>/stage6/cs/profile.dtp
+# XML report at <workdir>/stage6/cs/profile-report.xml
+# Top hotspots printed at end of stage cs run
+# Add -ProfilingType Timeline for I/O / thread analysis
+# Add -ProfileTopN 50 for more hotspot lines
+```
+
+**Tight cs-only iteration cycle on a populated workdir**:
+
+```
+# After a full march runs once, re-iterate any single stage
+# in ~10-200s wall time:
+pwsh -File ./Test-Regression.ps1 -StartStage stage7 \
+    -StopAfterStage stage7 -Side cs
+
+# Stage 7 + blib are now extremely fast on multi-file post-
+# fix (~10-20s each on Astral 3-file expected).
+```
+
+**Build commands**:
+
+```
+# C# build + tests + inspection (~30s):
+pwsh -File C:/proj/ai/scripts/OspreySharp/Build-OspreySharp.ps1 \
+    -Configuration Release -RunTests -RunInspection
+
+# Rust build + fmt + clippy + tests (~45s):
+pwsh -File C:/proj/ai/scripts/OspreySharp/Build-OspreyRust.ps1 \
+    -Fmt -Clippy -RunTests
+```
