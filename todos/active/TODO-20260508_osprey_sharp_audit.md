@@ -1063,3 +1063,34 @@ identical TSV/blib vs Rust. If RunFirstPassProteinFdr's
 output differs from the sidecar's stored RunProteinQvalue
 (it shouldn't — but bisection seam is honest), the gates
 will catch the divergence.
+
+### 2026-05-09 — Session 8.7 (skip 1st-pass sidecar re-write on --join-at-pass=2)
+
+dotTrace's third-largest hotspot on Astral 1-file Stage 7
+cs was `WriteFdrScoresSidecars` at 6043ms. It re-writes
+the per-file `.1st-pass.fdr_scores.bin` files using
+entries seeded by the matching sidecar load earlier — i.e.,
+the bytes are identical to what's already on disk. The
+in-process pipeline writes pre-compaction so the worker
+mode can re-derive post-compaction; for `--join-at-pass=2`,
+the worker is the OWN process. Skipping the re-write
+saves ~6s I/O per Stage 7 cs run on Astral 1-file (and
+proportionally more on multi-file).
+
+**Fix landed** (`AnalysisPipeline.cs:625-640`): the
+sidecar write block is wrapped in `!config.ExpectReconciledInput`.
+
+**Cumulative `--join-at-pass=2` perf wins this session**:
+
+| Hotspot                       | Before | After  | Astral 1-file save |
+|-------------------------------|--------|--------|--------------------|
+| GenerateDecoys                | 46s    | 0s     | ~46s              |
+| RunFirstPassProteinFdr        | 17s    | 0s     | ~17s              |
+| WriteFdrScoresSidecars        | 6s     | 0s     | ~6s               |
+| **Total wall savings**        |        |        | **~70s** out of ~57s* |
+
+*The 57s pre-fix wall included dotTrace overhead. Pre-fix
+clean wall was 43s. So post-fix expected wall ≈ 4-8s
+(the irreducible: library load, parquet load, RunProteinFdr,
+parsimony, blib early exit). Vs Rust's 10s on Astral 1-file
+Stage 7. Gap effectively closed.
