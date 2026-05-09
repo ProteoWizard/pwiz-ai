@@ -568,32 +568,29 @@ function Compare-Blib-Wrap {
 
 function Freeze-PostStage4 {
     param([string]$FromStage, [string]$ToStage)
+    # Propagate the prior stage's INPUTS forward unchanged. Every
+    # post-Stage-4 stage in the regression test runs from the same
+    # canonical Stage 4 parquet (frozen by Freeze-Stage1to4 into
+    # stage5/inputs and chained through). Both binaries process that
+    # parquet from scratch through the target stage and compare per-
+    # stage dumps — the same model Compare-Stage7-Crossimpl.ps1 uses.
+    #
+    # Why NOT use the prior stage's rust/ output (which contains the
+    # Stage-6 rewritten parquet): C# does not yet implement the
+    # CacheValidity / "skip-Stages-5-6 because parquet is already
+    # reconciled" detection that Rust has. Handing C# a reconciled
+    # parquet causes it to re-apply Stage 6 reconciliation on top of
+    # already-reconciled data, producing divergent stage7 output that
+    # is an artifact of the test harness, not a real cross-impl bug.
+    # Once OspreySharp gains the cache-validity check (see TODO
+    # follow-up: implement --join-at-pass=2 + osprey.reconciled
+    # parquet metadata validation), this freeze can switch to the
+    # rewritten-parquet model and exercise the skip path.
     $next = Get-StageInputDir $ToStage
     Reset-StageDir $next -KeepInputs:$false
-
-    # Stages that REWRITE the .scores.parquet in place (Stage 6 rescore
-    # writes back updated scores per AnalysisPipeline.Stage6Rescore.cs:
-    # 439 — Rust mirrors this) need to publish the rewritten parquet
-    # to the next stage's inputs. For those, prefer the prior stage's
-    # rust/ output dir over the prior stage's inputs/ dir. For non-
-    # rewriting stages (Stage 5 only emits dumps), the inputs/ dir's
-    # parquet is identical to the rust/ output's parquet; prefer
-    # rust/ uniformly so the policy is one-line clear.
-    $prevRust = Get-StageRustDir $FromStage
-    $prevIn   = Get-StageInputDir $FromStage
-
-    # First copy non-parquet support files (mzML, library, libcache,
-    # calibration JSON) from the prior stage's inputs/ — they're stable
-    # across stage runs and the rust/ dir may not have copies.
-    foreach ($f in (Get-ChildItem $prevIn -File)) {
-        Copy-Item $f.FullName (Join-Path $next $f.Name) -ErrorAction SilentlyContinue
-    }
-    # Then OVERWRITE any .scores.parquet from the rust/ output so
-    # downstream stages see the rewritten Stage 6 (or later) results.
-    if (Test-Path $prevRust) {
-        foreach ($f in (Get-ChildItem $prevRust -Filter '*.scores.parquet' -File)) {
-            Copy-Item $f.FullName (Join-Path $next $f.Name) -Force
-        }
+    $prev = Get-StageInputDir $FromStage
+    foreach ($f in (Get-ChildItem $prev -File)) {
+        Copy-Item $f.FullName (Join-Path $next $f.Name)
     }
 }
 

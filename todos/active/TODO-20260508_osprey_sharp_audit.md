@@ -674,3 +674,68 @@ session** (replaces prior session's table):
 | stage6 | **PASS** | multicharge + reconciliation + rescored all byte-identical |
 | stage7 | FAIL | best_peptide_score max diff 18.29; needs --join-at-pass=2 port + investigation |
 | blib | not yet reached | |
+
+### 2026-05-08 — Session 5 (--join-at-pass=2 port to OspreySharp)
+
+The user surfaced that `--join-at-pass=2` was a documented requirement
+of the Stage 7 sprint (per `TODO-20260507_osprey_sharp_stage7.md`,
+upstream PR maccoss/osprey#31 + commit `0d13198`) but never landed in
+OspreySharp. The C# entry-point error message at `Program.cs:606`
+explicitly read "is not yet implemented." The intended HPC use case
+(per the Stage 7 TODO) is exporting reconciled parquets + sidecars
+across compute-node boundaries and rehydrating Stage 7-8 from them.
+Without this entry path, every Stage 7 edit-build-test cycle re-ran
+Stages 5-6 (~1:27 vs the ~0:07 Rust achieves with the rehydration
+path). That dropped requirement is what made the prior session's
+Test-Regression stage7 isolation slow + functionally wrong.
+
+**Ported the four-fix-pattern from the Rust commit**:
+
+1. **CLI accepts `--join-at-pass=2`** (Program.cs): drops the
+   "not yet implemented" error, sets `joinOnlyFlag=true` so the
+   pipeline routes through the existing `--input-scores` branch.
+2. **`OspreyConfig.ExpectReconciledInput`** field; Program.cs
+   sets it when `--join-at-pass=2`. Mirrors Rust main.rs:613.
+3. **`ParquetScoreCache.ValidateScoresParquetGroup`** errors
+   clearly when any `--input-scores` parquet has
+   `osprey.reconciled != "true"`. Tested:
+   ```
+   --join-at-pass=2 requires a reconciled (post-Stage-6)
+   parquet, but X has osprey.reconciled = 'false'. Either it
+   is a Stage 4 (raw) parquet — in which case use
+   --join-at-pass=1 — or run a full pipeline first to produce
+   reconciled parquets.
+   ```
+4. **`AnalysisPipeline.Run`** wiring: under
+   `ExpectReconciledInput`, load 1st-pass sidecar
+   pre-compaction onto stubs → skip first-pass Percolator →
+   run first-pass protein FDR + compaction → reload 2nd-pass
+   sidecar after compaction by entry_id → skip Stage 6
+   entirely → run Stage 7 protein FDR → blib.
+
+**`AnalysisPipeline.cs` also gained 2nd-pass sidecar write**
+(after RunProteinFdr) so a normal `--join-at-pass=1` end-to-end
+run produces both sidecars. Pairs with the existing 1st-pass
+sidecar write at compaction time — a single end-to-end run now
+produces all artifacts a subsequent `--join-at-pass=2` invocation
+needs to rehydrate.
+
+**Open follow-ups (next session)**:
+
+1. **Update Test-Regression stage7 to use `--join-at-pass=2`**
+   with the reconciled fixture from a prior end-to-end run.
+   Resolve the fixture chicken-and-egg (stage7 needs the
+   reconciled parquet + both sidecars; today only stage6
+   isolation produces them, and only via `OSPREY_RESCORED_ONLY`
+   exit — so 2nd-pass sidecar write is bypassed). Either drop
+   `OSPREY_RESCORED_ONLY` from stage6 (let it run RunProteinFdr
+   too) or add a separate fixture-build phase.
+2. **Investigate the actual Stage 7 protein FDR divergence**
+   (`best_peptide_score` max diff 18.29 from prior session).
+   With `--join-at-pass=2` working, the iteration cycle drops
+   to ~10s/side and the bisection becomes tractable.
+3. Consider porting Rust fix #2 ("META_RECONCILED written on
+   zero-overlay rescore") — verify C#'s Stage6Rescore writes
+   `osprey.reconciled = "true"` even on 0-action runs. Already
+   reviewed in Session 4 work and looked correct, but worth a
+   targeted unit test.
