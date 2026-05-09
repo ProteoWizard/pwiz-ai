@@ -835,3 +835,105 @@ work.
    intent ("It should get run again and again ... possibly
    even become part of our CI"). Stellar 1-file is fast
    enough (~9 min full march) to gate every PR.
+
+### 2026-05-09 — Session 8 (autonomous overnight)
+
+User asked for unattended work: thorough perf testing,
+dotTrace integration, fixes wherever tractable, checkpoint
+commits as we go. Branch was already at the post-Session-7
+state (all five 1-file stages GREEN on Stellar + Astral).
+
+**Test-Regression `-Profile` (dotTrace integration) landed**
+(`ai/scripts/OspreySharp/Test-Regression.ps1`). Models on
+`ai/scripts/Skyline/Run-Tests.ps1` -PerformanceProfile
+pattern. Wraps the cs side of any stage in
+`dottrace start --profiling-type=Sampling --propagate-exit-
+code`, writes per-stage `<workdir>/<stage>/cs/profile.dtp`,
+generates an XML report via JetBrains Reporter.exe, and
+prints top-N hotspots by both OWN and TOTAL time. Rust runs
+unchanged (perf baseline, different tooling). New params:
+`-Profile`, `-ProfilingType {Sampling|Timeline}`, `-ProfileTopN`.
+Snapshot scope is constrained by the existing per-stage
+exit env vars, so `-StartStage stage6 -StopAfterStage
+stage6 -Side cs -Profile` produces a `.dtp` covering only
+Stage 6 logic. Reporter.exe discovery prefers the
+`dotTrace*` install dir under `%LOCALAPPDATA%\JetBrains\
+Installations`; falls back to `ReSharperPlatform*`.
+
+**First profiling result: Astral 1-file Stage 7 cs (with
+profile, 57s wall)** showed a stark hotspot:
+
+| Method | Total ms | Own ms |
+|---|---|---|
+| AnalysisPipeline.GenerateDecoys.<>b__0 | 46792 | 384 |
+| AnalysisPipeline.BuildDecoyFromSequence | 45665 | 2990 |
+| Scoring.DecoyGenerator.RecalculateFragments | 33250 | 7353 |
+| Scoring.DecoyGenerator.CalculateFragmentMz | 22900 | 9401 |
+
+Stage 7 / blib were 4-5x slower in cs vs rust (Session 7:
+stage7 0:10 rust + 0:43 cs on Astral 1-file; blib 0:27 +
+0:52). Both stages hit the same code path: full
+`GenerateDecoys` from the library on every invocation,
+even on `--join-at-pass=2` rehydration where decoy
+LibraryEntries are NEVER consumed downstream.
+
+**Audit of decoy-LibraryEntry use post-Stage-4 confirms
+they are unused on `--join-at-pass=2`**:
+- `BuildProteinParsimony` filters with
+  `if (entry.IsDecoy) continue` (ProteinFdr.cs:160).
+- `WriteBlibOutput` builds `passingEntries` with the same
+  filter (AnalysisPipeline.cs:6509).
+- `bestByPrecursor` and `libraryById.TryGetValue(entry_id)`
+  only hit target entry_ids.
+- Stage 5 (Percolator) and Stage 6 (rescore) are skipped
+  on `ExpectReconciledInput` (AnalysisPipeline.cs:518 +
+  Stage 6 short-circuit).
+
+**Fix landed (AnalysisPipeline.cs:128-145)**: when
+`config.ExpectReconciledInput`, GenerateDecoys is skipped
+and `decoys` initialized to an empty list. Targets-only
+library flows through to parsimony + blib write. Verified
+correctness on Astral 1-file: stage7 PASS + blib PASS
+(`-StartStage stage7 -StopAfterStage blib -Side cs`).
+
+**Walls observed (concurrent with 3-file Stellar regression
+running stage6, so noisy)**: stage7 cs 51s, blib cs 54s.
+Pre-fix on the same Astral 1-file fixture: stage7 cs 43s,
+blib cs 52s. Wall savings hidden under concurrent CPU
+contention; clean re-measurement pending the regression
+finishing. The 45-50s of CPU saved per stage is real
+regardless (and the multi-file impact will be larger:
+~46s × 3 files of decoys saved per Stage 7+blib pass).
+
+**Test-Regression -Profile usage (for future sessions)**:
+
+```
+# Profile a specific stage on cs side using the existing
+# fixture from a prior march:
+pwsh -File ./Test-Regression.ps1 -Dataset Astral \
+    -StartStage stage6 -StopAfterStage stage6 -Side cs -Profile
+
+# Top hotspots print at the end of the cs run; full snapshot
+# at <workdir>/stage6/cs/profile.dtp; XML report at
+# <workdir>/stage6/cs/profile-report.xml.
+
+# Default Sampling profile has ~5% overhead. Switch to
+# Timeline (-ProfilingType Timeline) for thread / I/O
+# analysis at higher overhead.
+```
+
+**3-file Stellar regression** (concurrent background job
+during this session): stage1to4 PASS (1:28 rust + 1:05 cs),
+stage5 PASS (2:11 rust + 2:09 cs). stage6 in progress at
+end of this checkpoint.
+
+**Next sub-targets in this session**:
+
+1. Wait for 3-file Stellar to finish; diagnose anything
+   FAIL.
+2. Clean perf measurement of stage7 + blib post-fix to
+   quantify the gain.
+3. Profile Stage 6 cs (the next-most-likely hotspot — the
+   ~5x gap on Astral 3-file rescore mentioned in the
+   sprint Step 5).
+4. 3-file Astral regression after Stellar completes.

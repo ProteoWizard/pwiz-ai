@@ -90,6 +90,24 @@
 .PARAMETER TestBaseDir
     Override dataset root.
 
+.PARAMETER Profile
+    Run the C# side of each stage under JetBrains dotTrace CLI sampling.
+    A .dtp snapshot + XML report are written to <stage>/cs/. Top hotspots
+    by own time and total time are printed for each stage. Rust runs
+    are not profiled (perf baseline; rust tooling differs). Stage exit
+    env vars constrain the snapshot to the requested stage (e.g. stage6
+    cs run with -Profile produces a .dtp covering only Stage 6 logic
+    bounded by OSPREY_STAGE7_PROTEIN_FDR_ONLY=1).
+
+.PARAMETER ProfilingType
+    dotTrace profiling type: Sampling (default, ~5% overhead) or
+    Timeline (detailed event capture, ~30% overhead). Sampling is the
+    right default for hotspot work; Timeline is for thread / I-O
+    analysis.
+
+.PARAMETER ProfileTopN
+    Number of top hotspots to print per stage (default 20).
+
 .OUTPUTS
     Exit code: 0 = all requested stages PASS; 1 = at least one FAIL;
     2 = setup error.
@@ -132,7 +150,14 @@ param(
 
     [string]$Tag = 'main',
 
-    [string]$TestBaseDir = $null
+    [string]$TestBaseDir = $null,
+
+    [switch]$Profile,
+
+    [ValidateSet('Sampling','Timeline')]
+    [string]$ProfilingType = 'Sampling',
+
+    [int]$ProfileTopN = 20
 )
 
 $ErrorActionPreference = 'Stop'
@@ -193,6 +218,40 @@ $rustSha = (Get-FileHash $rustBin -Algorithm SHA256).Hash.ToLower()
 $csSha   = (Get-FileHash $csBin -Algorithm SHA256).Hash.ToLower()
 
 # ----------------------------------------------------------------------
+# dotTrace tool discovery (only when -Profile is set)
+# ----------------------------------------------------------------------
+
+$dotTraceExe = $null
+$reporterExe = $null
+if ($Profile) {
+    $dotTraceCmd = Get-Command 'dottrace' -ErrorAction SilentlyContinue
+    if (-not $dotTraceCmd) {
+        Write-Host "[Test-Regression] -Profile requested but 'dottrace' not found." -ForegroundColor Red
+        Write-Host "  Install: dotnet tool install --global JetBrains.dotTrace.GlobalTools" -ForegroundColor Yellow
+        exit 2
+    }
+    $dotTraceExe = $dotTraceCmd.Source
+
+    # Reporter.exe is bundled with the JetBrains dotTrace GUI (or the
+    # ReSharperPlatform install). Required for XML report -> hotspot
+    # extraction. Fallback path: snapshot is written but no top-hotspot
+    # summary is printed.
+    $jetBrainsDir = Join-Path $env:LOCALAPPDATA 'JetBrains\Installations'
+    if (Test-Path $jetBrainsDir) {
+        $candidates = @()
+        $candidates += Get-ChildItem $jetBrainsDir -Directory -Filter 'dotTrace*' -ErrorAction SilentlyContinue |
+            Sort-Object Name -Descending | Select-Object -First 1
+        $candidates += Get-ChildItem $jetBrainsDir -Directory -Filter 'ReSharperPlatform*' -ErrorAction SilentlyContinue |
+            Sort-Object Name -Descending | Select-Object -First 1
+        foreach ($d in $candidates) {
+            if (-not $d) { continue }
+            $rp = Join-Path $d.FullName 'Reporter.exe'
+            if (Test-Path $rp) { $reporterExe = $rp; break }
+        }
+    }
+}
+
+# ----------------------------------------------------------------------
 # Workdir
 # ----------------------------------------------------------------------
 
@@ -241,6 +300,12 @@ Write-Host ("Range:      {0} -> {1}{2}" -f $StartStage, $StopAfterStage,
     $(if ($Continue) { '  (continue on fail)' } else { '  (stop on first fail)' }))
 Write-Host ("Rust:       sha {0}" -f $rustSha.Substring(0,12))
 Write-Host ("C#:         sha {0}" -f $csSha.Substring(0,12))
+if ($Profile) {
+    Write-Host ("Profile:    cs runs under dotTrace ({0})" -f $ProfilingType) -ForegroundColor DarkCyan
+    if (-not $reporterExe) {
+        Write-Host "            Reporter.exe not found; hotspot extraction disabled." -ForegroundColor DarkYellow
+    }
+}
 Write-Host ""
 
 # ----------------------------------------------------------------------
@@ -278,7 +343,11 @@ function Reset-StageDir {
 function Invoke-Tool {
     param(
         [string]$Bin, [string]$WorkDir,
-        [string[]]$CliArgs, [hashtable]$EnvVars
+        [string[]]$CliArgs, [hashtable]$EnvVars,
+        # When set, run $Bin under dotTrace CLI sampling. Snapshot
+        # written to <WorkDir>/profile.dtp. Caller is responsible for
+        # post-processing (XML report + hotspot extraction).
+        [switch]$WithProfile
     )
     # Defensively unset every OSPREY_* dump/exit hook from prior stages
     # before applying this stage's env. PowerShell's Environment.SetEnv
@@ -318,8 +387,28 @@ function Invoke-Tool {
     $sw = [Diagnostics.Stopwatch]::StartNew()
     Push-Location $WorkDir
     try {
-        & $Bin @CliArgs *>&1 | Tee-Object -FilePath $logPath | Out-Null
-        $exit = $LASTEXITCODE
+        if ($WithProfile) {
+            # Wrap binary in dotTrace CLI. Sampling profiling type so
+            # overhead stays low (~5%). --propagate-exit-code means a
+            # binary failure still surfaces here. The exit env vars
+            # already constrain what runs to the requested stage, so
+            # the snapshot scopes itself.
+            $dtpPath = Join-Path $WorkDir 'profile.dtp'
+            $dotTraceArgs = @(
+                'start',
+                "--profiling-type=$ProfilingType",
+                "--save-to=$dtpPath",
+                '--overwrite',
+                '--propagate-exit-code',
+                $Bin,
+                '--'
+            ) + $CliArgs
+            & $dotTraceExe @dotTraceArgs *>&1 | Tee-Object -FilePath $logPath | Out-Null
+            $exit = $LASTEXITCODE
+        } else {
+            & $Bin @CliArgs *>&1 | Tee-Object -FilePath $logPath | Out-Null
+            $exit = $LASTEXITCODE
+        }
     } finally {
         Pop-Location
         # No env restore here: the next Invoke-Tool clears all stage
@@ -328,6 +417,87 @@ function Invoke-Tool {
     }
     $sw.Stop()
     return [pscustomobject]@{ exit = $exit; wall = $sw.Elapsed }
+}
+
+function Report-Profile {
+    param([string]$Stage, [string]$WorkDir)
+    # Generate XML report from the snapshot at <WorkDir>/profile.dtp
+    # using JetBrains Reporter.exe, then print top hotspots by own +
+    # total time. No-ops gracefully if Reporter.exe wasn't found.
+    $dtpPath = Join-Path $WorkDir 'profile.dtp'
+    if (-not (Test-Path $dtpPath)) {
+        Write-Host ("    [profile] no snapshot at {0}" -f $dtpPath) -ForegroundColor DarkYellow
+        return
+    }
+    $sizeMB = [math]::Round(((Get-Item $dtpPath).Length / 1MB), 1)
+    Write-Host ("    [profile] snapshot {0} ({1} MB)" -f $dtpPath, $sizeMB) -ForegroundColor DarkGray
+    if (-not $reporterExe) {
+        Write-Host "    [profile] Reporter.exe not found; skipping hotspot extraction." -ForegroundColor DarkYellow
+        Write-Host "             Open $dtpPath in dotTrace GUI to analyze." -ForegroundColor DarkGray
+        return
+    }
+    $patternFile = Join-Path $WorkDir 'profile-pattern.xml'
+    if (-not (Test-Path $patternFile)) {
+        @"
+<Patterns>
+  <Pattern PrintCallstacks="Full">pwiz\.OspreySharp\..*</Pattern>
+  <Pattern PrintCallstacks="Full">pwiz\.OspreySharp\.Scoring\..*</Pattern>
+  <Pattern PrintCallstacks="Full">pwiz\.OspreySharp\.Chromatography\..*</Pattern>
+  <Pattern PrintCallstacks="Full">pwiz\.OspreySharp\.ML\..*</Pattern>
+  <Pattern PrintCallstacks="Full">pwiz\.OspreySharp\.FDR\..*</Pattern>
+  <Pattern PrintCallstacks="Full">pwiz\.OspreySharp\.IO\..*</Pattern>
+  <Pattern PrintCallstacks="Full">pwiz\.OspreySharp\.Core\..*</Pattern>
+  <Pattern PrintCallstacks="Full">pwiz\.OspreySharp\.BiblioSpec\..*</Pattern>
+  <Pattern PrintCallstacks="Full">pwiz\.OspreySharp\.Stage6\..*</Pattern>
+</Patterns>
+"@ | Out-File -FilePath $patternFile -Encoding UTF8
+    }
+    $reportFile = Join-Path $WorkDir 'profile-report.xml'
+    & $reporterExe report $dtpPath --pattern=$patternFile --save-to=$reportFile --overwrite *>&1 | Out-Null
+    if (-not (Test-Path $reportFile)) {
+        Write-Host "    [profile] Reporter.exe failed to generate report." -ForegroundColor Yellow
+        return
+    }
+    try {
+        [xml]$report = Get-Content $reportFile
+        $allFn = $report.Report.Function
+        $byOwn = $allFn |
+            Where-Object { $_.FQN -like "pwiz.OspreySharp*" } |
+            Sort-Object { [double]$_.OwnTime } -Descending |
+            Select-Object -First $ProfileTopN
+        if ($byOwn) {
+            Write-Host ""
+            Write-Host ("    Top {0} hotspots by OWN time ({1} cs):" -f $ProfileTopN, $Stage) -ForegroundColor Yellow
+            Write-Host ("    {0,-72} {1,10} {2,10}" -f "Method", "Own (ms)", "Total (ms)") -ForegroundColor DarkGray
+            Write-Host ("    {0,-72} {1,10} {2,10}" -f ('-'*72), ('-'*10), ('-'*10)) -ForegroundColor DarkGray
+            foreach ($fn in $byOwn) {
+                $name = $fn.FQN -replace '^pwiz\.OspreySharp\.', ''
+                if ($name.Length -gt 72) { $name = $name.Substring(0, 69) + '...' }
+                $own = [math]::Round([double]$fn.OwnTime, 0)
+                $total = [math]::Round([double]$fn.TotalTime, 0)
+                Write-Host ("    {0,-72} {1,10} {2,10}" -f $name, $own, $total)
+            }
+        }
+        $byTotal = $allFn |
+            Where-Object { $_.FQN -like "pwiz.OspreySharp*" } |
+            Sort-Object { [double]$_.TotalTime } -Descending |
+            Select-Object -First $ProfileTopN
+        if ($byTotal) {
+            Write-Host ""
+            Write-Host ("    Top {0} hotspots by TOTAL time ({1} cs):" -f $ProfileTopN, $Stage) -ForegroundColor Yellow
+            Write-Host ("    {0,-72} {1,10} {2,10}" -f "Method", "Total (ms)", "Own (ms)") -ForegroundColor DarkGray
+            Write-Host ("    {0,-72} {1,10} {2,10}" -f ('-'*72), ('-'*10), ('-'*10)) -ForegroundColor DarkGray
+            foreach ($fn in $byTotal) {
+                $name = $fn.FQN -replace '^pwiz\.OspreySharp\.', ''
+                if ($name.Length -gt 72) { $name = $name.Substring(0, 69) + '...' }
+                $own = [math]::Round([double]$fn.OwnTime, 0)
+                $total = [math]::Round([double]$fn.TotalTime, 0)
+                Write-Host ("    {0,-72} {1,10} {2,10}" -f $name, $total, $own)
+            }
+        }
+    } catch {
+        Write-Host ("    [profile] Could not parse report: {0}" -f $_.Exception.Message) -ForegroundColor Yellow
+    }
 }
 
 # ----------------------------------------------------------------------
@@ -364,9 +534,11 @@ function Run-Stage1to4 {
                   '--protein-fdr', '0.01', '--threads', '16',
                   '--no-join')
     $env = @{}  # no per-stage dumps needed; we compare the parquet directly
-    $r = Invoke-Tool -Bin $Bin -WorkDir $sOut -CliArgs $cliArgs -EnvVars $env
+    $useProfile = ($Profile -and $SideName -eq 'cs')
+    $r = Invoke-Tool -Bin $Bin -WorkDir $sOut -CliArgs $cliArgs -EnvVars $env -WithProfile:$useProfile
     Write-Host ("  [run] {0,-4} stage1to4  exit={1} wall={2:mm\:ss}" -f $SideName, $r.exit, $r.wall) `
         -ForegroundColor $(if ($r.exit -eq 0) { 'DarkGreen' } else { 'DarkRed' })
+    if ($useProfile -and ($r.exit -eq 0)) { Report-Profile -Stage 'stage1to4' -WorkDir $sOut }
     return $r
 }
 
@@ -517,9 +689,11 @@ function Run-PostStage4 {
                   '--resolution', $resolution,
                   '--protein-fdr', '0.01', '--threads', '16')
     $env = $stageConfig[$Stage].envVars
-    $r = Invoke-Tool -Bin $Bin -WorkDir $sOut -CliArgs $cliArgs -EnvVars $env
+    $useProfile = ($Profile -and $SideName -eq 'cs')
+    $r = Invoke-Tool -Bin $Bin -WorkDir $sOut -CliArgs $cliArgs -EnvVars $env -WithProfile:$useProfile
     Write-Host ("  [run] {0,-4} {1,-9} exit={2} wall={3:mm\:ss}" -f $SideName, $Stage, $r.exit, $r.wall) `
         -ForegroundColor $(if ($r.exit -eq 0) { 'DarkGreen' } else { 'DarkRed' })
+    if ($useProfile -and ($r.exit -eq 0)) { Report-Profile -Stage $Stage -WorkDir $sOut }
     return $r
 }
 
