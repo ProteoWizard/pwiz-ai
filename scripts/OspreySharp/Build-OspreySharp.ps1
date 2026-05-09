@@ -146,6 +146,7 @@ try {
 
     $buildArgs = @(
         $slnPath,
+        "/restore",
         "/p:Configuration=$Configuration",
         "/p:Platform=$Platform",
         "/nologo",

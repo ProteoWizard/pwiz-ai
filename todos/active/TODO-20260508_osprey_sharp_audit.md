@@ -363,3 +363,88 @@ catalog) in the next session.
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260508_osprey_sharp_audit.md` before starting
 work.
+
+### 2026-05-08 — Session 1 (audit + Test-Regression.ps1)
+
+The "Phase 5: hardening" framing was wrong: a skeptical audit
+showed that every Stage 5/6/7/.blib parity claim from prior
+sprints was conditional on shared Rust Stage 1-4 input via
+`--input-scores`. Each stage had been declared bit-parity
+against the previous stage's locked fixture, masking the
+genuine end-to-end divergence. Stage 6 reconciliation in
+particular silently no-op'd on every end-to-end run because
+its CWT-candidate input was not persisted.
+
+**What landed (across pwiz and ai)**:
+
+- `pwiz_tools/OspreySharp/OspreySharp/AnalysisPipeline.cs`:
+  always build `noJoinMetadata` and populate
+  `perFileParquetPaths` outside `--input-scores` mode, so
+  Stage 6 reconciliation finds CWT candidates end-to-end.
+  Stellar 1-file goes from 0 reconciliation actions to ~57k
+  (matches Rust's ~57k).
+- `pwiz_tools/OspreySharp/OspreySharp/Program.cs`: corrected
+  `--fdr-level` help text default (`precursor`, not `both` —
+  matches `OspreyConfig.cs:100` and `CoreTypesTest.cs:395`).
+- `ai/scripts/OspreySharp/Build-OspreySharp.ps1`: pass
+  `/restore` to MSBuild so the script doesn't fail on a clean
+  package cache.
+- `ai/scripts/OspreySharp/Test-Regression.ps1`: new end-to-end
+  cross-impl regression test. Marches stage1to4 -> 5 -> 6 ->
+  7 -> blib, fail-fast, freezes per-stage inputs for tight
+  bisection cycles. Subsumes the per-stage Compare-* gates
+  for the most-common regression workflow. Default cycle on
+  Stellar 1-file: ~1 min stage1to4 (`--no-join` end-to-end on
+  both sides), ~30s for any single re-iterated stage.
+- `ai/scripts/OspreySharp/inspect_parquet.py`: parquet
+  inspector + diff helper; aligns rows by `entry_id` and
+  reports per-column max abs diff with row-set deltas
+  (handles row-count mismatches that `Diff-Parquet.ps1`
+  silently passes).
+
+**What Test-Regression.ps1 surfaces today (Stellar 1-file)**:
+
+- `stage1to4`: FAIL. C# admits 2151 (precursor, charge) pairs
+  Rust does not score (0.46% of all entries). Sample:
+  entry_id 531 = `AAELLQDEYSGR`, charge 3, target,
+  `xcorr=-0.02` (weak peak Rust rejects pre-scoring).
+  `xcorr` and `sg_weighted_xcorr` also drift on ~90% of rows
+  at max diff 5.1e-7 / 3.1e-7 (well under the 1e-6 PIN gate;
+  same drift `Test-Features.ps1` already catalogs). Every
+  other column of `.scores.parquet` is bit-identical (38 of
+  40 columns, including all CWT/fragment blobs and peak
+  selections).
+- Stage 5 logic: bit-parity given identical input (verified
+  earlier in this session via the now-superseded
+  `Audit-Stage5.ps1`). All 4 sub-dumps (standardizer,
+  subsample, svm_weights, percolator) byte-identical.
+- Stage 6 reconciliation: now runs with ~175k actions per
+  side, but the breakdown differs (Rust 36k use_cwt + 22k
+  forced; C# 1-4k use_cwt + 56k forced). Likely a planner
+  CWT-acceptance criterion difference, not a CWT-data
+  difference (C# now populates CWT on 100% of rows).
+
+**Pre-existing test failures (kept after this session)**:
+
+- `TestCwtCandidateCrossImplParity` and
+  `TestCsScoringPopulatesCwtCandidates` in
+  `OspreySharp.Test/CwtCandidateCodecTest.cs` — both depend
+  on a stale May-7 `.scores.cs.parquet` fixture in
+  `_stage5_3file/`. With this session's fix, a freshly-built
+  `.scores.parquet` has CWT candidates on 100% of rows; the
+  failing tests are pinned to the stale fixture and
+  effectively test for a bug that no longer exists. Either
+  regenerate the fixture or rewrite the tests to drive a
+  fresh parquet through `Test-Regression.ps1` style
+  end-to-end.
+
+**Next session targets (Test-Regression-driven)**:
+
+1. Drill into the 2151 only-in-C# entries. Trace
+   `AAELLQDEYSGR` charge 3 with `OSPREY_TRACE_PEPTIDE` on
+   both binaries to localize where Rust rejects it.
+2. Once stage1to4 is GREEN, advance the regression to
+   stage5/6/7/blib and address each stage's first FAIL with
+   the same fast-cycle iteration loop.
+3. Regenerate or rewrite the two failing CWT codec tests so
+   they no longer pin to stale fixtures.
