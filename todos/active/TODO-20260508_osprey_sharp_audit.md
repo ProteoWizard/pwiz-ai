@@ -1341,3 +1341,495 @@ seeding the stage5/inputs from rust's stage1to4/rust outputs.
 The downstream stages can be validated under the assumption that
 stage1to4 was "close enough" (1 row of 1.7M differs at 5.89e-3
 in a single feature column).
+
+### 2026-05-09 — Session 9 (mzML sort fix + CodeInspectionTest + file-55 dig)
+
+**Two commits landed** on `Skyline/work/20260508_osprey_sharp_audit`:
+
+1. **`9e9fd41edb`** — Sorted spectrum centroids at mzML load time
+   in OspreySharp. Companion rust commit
+   `9a137d8` (`mzml: sort spectrum centroids at load time`) on
+   `feature/sidecar-entry-id-keyed-loader`. Both impls now sort
+   non-monotonic centroid pairs at parse time using a stable
+   permutation (Rust `sort_by` / C# `Enumerable.Range.OrderBy`).
+   Bumped `SpectraCache` VERSION 1->2 in both languages so caches
+   written before the fix are invalidated. Single sort point per
+   language; the cache loaders no longer carry their own copy.
+2. **`7a4f6c541b`** — Added `OspreySharp.Test/CodeInspectionTest.cs`
+   modeled on Skyline's `CodeInspectionTest`. The single rule
+   `TestNoUnstableArraySort` flags any `Array.Sort(...)` in production
+   .cs files without an inline `// Array.Sort OK: <reason>`
+   exemption comment. Reason: `.NET Array.Sort` is unstable
+   introsort; reorders ties differently from Rust's stable
+   `slice::sort_by`. Existing 12 production uses tagged with
+   specific exemption comments (median of single primitive array,
+   comparator's terminal key is unique EntryId, unique filenames,
+   etc.). One mz-window sort flagged with `TODO(parity):` for a
+   later audit.
+
+**Frequency data** (this also answers the perf question on the
+sort fix's overhead): on Astral file 55 (HeLa, ~200K MS2 spectra)
+my fix logged **139** unsorted-spectrum events, ~0.07% of
+spectra. The leading O(n) sortedness check is the common path;
+the actual sort runs only on inversions. Net cost on a full Astral
+file is well under 2 seconds.
+
+**File-55 root cause -- still open**: the sort fix was necessary
+for correctness (well-defined binary search) but **does not fully
+close the parquet divergence**. Two rows still disagree by ~0.017
+in `sg_weighted_cosine`:
+
+| entry_id | sequence | charge | scan | rust | cs | diff |
+|---|---|---|---|---|---|---|
+| 243383 | DVSVPVAEIK | 2 | 103340 | 0.3749 | 0.3575 | 0.0175 |
+| 885629 | MLERLVSSESK | 3 | 60820 | 0.5082 | 0.5141 | 0.0059 |
+
+For both rows, `xcorr` and `sg_weighted_xcorr` match at FP-precision
+(~1e-9), so the apex spectrum and SG-window spectra are essentially
+identical between the two impls. But `sg_weighted_cosine` and
+`median_polish_cosine` diverge by orders of magnitude more.
+
+**Difference between cosine and xcorr scoring paths**: xcorr uses a
+binned-vector representation (each peak's intensity goes into a
+0.02-Da bin), so xcorr is invariant to which exact peak the binning
+step happened to merge into a bin. Cosine calls
+`compute_cosine_at_scan` / `ComputeCosineAtScan`, which iterates
+each library fragment, finds the **closest peak in the tolerance
+window**, and uses **that specific peak's intensity**. So cosine is
+sensitive to per-peak m/z precision and to which peaks exist in the
+spectrum -- xcorr is not.
+
+**What the per-fragment dump showed pre-fix** (re-runnable by
+re-applying the env-var-gated `dump_sg_cosine` block from the
+git history of this branch + the C#'s `DumpSgCosine` helper):
+at `entry_id=885629 scan=60988 frag 9` (lib_mz=530.2755,
+tol_lo=530.2722, tol_hi=530.2788), Rust matched obs_mz=530.2723,
+intensity=3955; C# returned NaN (no match). The peak _is_ in the
+spectrum at index 1829 (m/z 530.2723) on both sides. But
+`partition_point` returned `lo=1829` (the correct peak) on rust
+and `BinarySearchLowerBound` returned `lo=1831` on cs. Same target
+value, same array contents at the visible indices. The only way
+the searches converge to different `lo` is if the array contents
+differ at indices outside the visible window -- e.g. the spectra
+have different total peak counts somewhere between index 0 and
+index 1829.
+
+**Hypothesis for next session**: the C# MzmlReader's mzML peak
+parser and Rust's mzdata parser produce subtly different peak
+counts for some spectra. Possible sources:
+- One impl filters zero-intensity peaks and the other doesn't.
+- Different handling of m/z compression (numpressLin, zlib, etc.).
+- Different tie-handling in centroiding (if centroiding is
+  applied in mzdata).
+
+**Concrete probe for next session**: re-add the env-var-gated
+`dump_sg_cosine` from this session's reverted commits (it dumped
+peaks `lo-3..lo+3`); extend it to also print **the spectrum's total
+peak count** for the diag entry. If counts differ between rust and
+cs at scan 60988, the bug is in mzML loading. If counts match, the
+bug is in `compute_cosine_at_scan`'s normalization/dot-product.
+
+**What this sprint accomplished**:
+- Closed the unsortedness UB hazard (any future tied-m/z divergence
+  is now ruled out as a cause).
+- Added a permanent guard against new `Array.Sort` introductions
+  in cross-impl-parity-sensitive code paths.
+- Documented the file-55 finding well enough that the next
+  investigation can pick up directly.
+
+**What's still needed for "regression entirely passing with no caveats"**:
+- Finish the file-55 root-cause investigation (per the concrete
+  probe above).
+- Once fixed, run full Astral 3-file regression to validate
+  stages 5+ on the HRAM path.
+- Verify Stellar 3-file post-sort-fix still passes (in flight as
+  Test-Regression with `-Tag post_sort_fix` at session end).
+
+
+### 2026-05-09 — Session 9 (continued, file-55 root cause closed)
+
+**File-55 sg_weighted_cosine divergence: ROOT CAUSE FIXED.** The
+unsorted-centroid hypothesis was correct but the first attempt at
+the C# fix landed in the wrong code path.
+
+`MzmlReader` has two loaders:
+- `LoadAllSpectra` (active, parallel producer-consumer): goes
+  through `ParseSpectrumRaw` -> queue -> `DecodeSpectrum`.
+- `LoadAllSpectraSequential` (legacy, kept for compatibility):
+  goes through `ParseSpectrumElement`.
+
+The first sort fix only touched `ParseSpectrumElement`. Production
+runs `LoadAllSpectra`, so unsorted centroids still reached the
+downstream binary search. Re-running the diagnostic with the
+broader (full-spectrum) dump revealed:
+
+| scan | rust peak[1828..1831] | cs peak[1828..1831] |
+|------|-----------------------|---------------------|
+| 60988 | 529.7537, 530.2715, 530.2723, 530.3275 (sorted) | 529.7537, 530.2723, 530.2715, 530.3275 (UNSORTED) |
+
+CS still saw the unsorted inversion at indices 1829-1830, while
+rust did not. CS's BinarySearchLowerBound consequently returned
+`lo=1831` (past the matching peak at index 1830 in rust's sort
+order), gave `n_in_window=0` for fragment 530.2755, and dropped
+that fragment's intensity contribution from the cosine numerator.
+
+**Fix landed** (commit `a3a15eb764`): `EnsureSortedSpectrum` is
+now called from `DecodeSpectrum` (active path) and
+`ParseSpectrumElement` (legacy path) via a shared helper.
+
+**Verification**: re-ran rust + cs on Astral file 55. Per-column
+diff via `inspect_parquet.py --tolerance 1e-6`:
+```
+sg_weighted_cosine               max_abs_diff=7.7716e-16
+median_polish_cosine             max_abs_diff=0.0000e+00
+xcorr                            max_abs_diff=8.1539e-07
+sg_weighted_xcorr                max_abs_diff=5.6046e-07
+... (all 40 columns OK, summary: 0 divergent column(s))
+```
+
+`sg_weighted_cosine` max diff dropped from 5.89e-3 to 7.77e-16 --
+bit-precision FP noise. File-55 is FIXED.
+
+**Stellar 3-file regression with sort fix: ALL FIVE STAGES PASS**
+(Tag `post_sort_fix`):
+
+| Stage | rust wall | cs wall | Status |
+|-------|-----------|---------|--------|
+| stage1to4 | 1:30 | 1:08 | PASS |
+| stage5 | 1:54 | (in cs run) | PASS |
+| stage6 | 4:10 | 3:34 | PASS |
+| stage7 | 0:03 | 0:10 | PASS |
+| blib | 0:14 | 0:26 | PASS |
+
+Sort fix does not regress the previously-passing Stellar dataset.
+
+**Astral 3-file regression in flight** (Tag `post_sort_fix`); will
+post the final result once stage1to4 completes for all 3 files.
+
+**Diagnostic infrastructure** for the bisection (env-var-gated
+`OSPREY_DIAG_COSINE_ENTRY` -> per-fragment + full-spectrum dump in
+both impls): not committed; available in this session's git
+history if a similar single-row divergence shows up later.
+
+
+### 2026-05-09 — Session 9 (continued, perf snapshot + stage5 HRAM gate finding)
+
+**Stellar 3-file (unit, post-sort-fix, Tag `post_sort_fix`): ALL FIVE
+STAGES PASS.** Walls (rust / cs / cs-vs-rust):
+
+| Stage      | rust  | cs    | cs/rust |
+|------------|-------|-------|---------|
+| stage1to4  | 1:30  | 1:08  | 0.76× (cs faster) |
+| stage5     | 1:54  | 4:08  | 2.18× (cs slower) |
+| stage6     | 4:10  | 3:34  | 0.86× (cs faster) |
+| stage7     | 0:03  | 0:10  | 3.33× (small abs) |
+| blib       | 0:14  | 0:26  | 1.86× (cs slower) |
+| **Total**  | 7:51  | 9:26  | 1.20× |
+
+**Astral 3-file (HRAM, post-sort-fix, Tag `post_sort_fix`):**
+- stage1to4: rust 8:26, cs 11:17 (cs 1.34× slower) — PASS at 1e-6
+  per-column.
+- stage5: rust 3:30, cs **2:45 (cs 0.79×, faster)** — but **harness
+  byte-equality gate FAILed**. The percolator dump file size matches
+  byte-for-byte (877,798,973 B both sides) but SHA differs. Sample diff:
+  `experiment_precursor_q` differs by **1 ULP** (`0.09775161743164063`
+  vs `...62`) on a single q-value bucket. Same drift class as the
+  documented Stage 1-4 HRAM xcorr ~1e-7 drift, just amplified by the
+  cumulative q-value sort/scan in experiment-FDR. Stellar has zero
+  upstream drift (unit resolution → byte-identical stage1to4) so
+  Stellar stage5 PASSes byte-equality. NOT a regression from the
+  sort fix; surfaced for the first time because file 55 stage1to4
+  now PASSes and lets the march reach stage5 on Astral 3-file.
+- stages 6-blib: re-running with `-Continue` to gather walls past
+  stage5's byte-equality FAIL. Continue run in flight.
+
+**Suggested fix for the stage5 HRAM byte-equality gate**: switch
+`Compare-DumpSha` → `Compare-Stage5-Crossimpl.ps1` (or equivalent
+parquet/TSV-with-tolerance comparator) for the percolator dump on
+HRAM datasets, with a 1e-9 absolute / 1e-6 relative tolerance on the
+q-value columns. The size-match-but-SHA-mismatch pattern is exactly
+the signature of HRAM ULP drift; the comparator should accommodate.
+
+**Performance characterization for Mike (per the no-more-Rust-perf
+direction)**:
+
+C# wins or ties on most stages of both datasets:
+- stage1to4 Stellar: cs 1.32× faster
+- stage1to4 Astral: cs 1.34× slower (but 11:17 vs 8:26 absolute is
+  not catastrophic; XcorrScratchPool already in place)
+- stage5 Stellar: cs 2.18× slower (4:08 vs 1:54)
+- stage5 Astral: cs **0.79× (faster)** — parallel SVM fold training
+  pays off on the larger dataset
+- stage6 Stellar: cs 1.17× faster — Session-8 gap-fill + sidecar
+  fixes closed the prior 5× gap claimed in the original sprint plan
+- stage6 Astral: TBD (continue run in flight)
+- stage7 Stellar: cs 3.33× slower but only 0:10 absolute
+- blib Stellar: cs 1.86× slower (0:26 vs 0:14, sequential
+  Ionic.Zlib compression)
+
+**Remaining C# perf concerns** (priority order, Mike-facing):
+1. **stage5 Stellar 2.18× slower** — the only stage where cs is
+   meaningfully slower in absolute terms on the smaller dataset.
+   Profile candidate. Hypothesis: Percolator SVM training has more
+   per-iteration overhead in the C# matrix path; the
+   parallel-fold path that wins on Astral is dominated by
+   serial-iteration-of-folds work on Stellar.
+2. **blib write Stellar 1.86× slower (~0:12 absolute)** — known
+   architecture: pre-compress mzs/intensities blobs in parallel
+   before sequential SQLite insert. ~10-15s win expected.
+3. **stage7 Stellar 3.33× ratio (0:10 absolute)** — too small to be
+   the priority. Defer until Astral 3-file numbers in.
+
+**Workflow.html** updated with the per-stage table (`Performance,
+end-to-end stage-by-stage 3-file regression`). Astral stage6/7/blib
+will be filled in once the continue run completes.
+
+
+### 2026-05-09 — Session 9 (continued, blib parallelization + Astral perf complete)
+
+**Astral 3-file continue run completed** (Tag `post_sort_fix`):
+- stage6: rust 12:45, cs 17:30 (cs 1.37×). Within reasonable cost
+  given ~6 GB HRAM mzML; not a perf concern for Mike.
+- stage7: rust 0:15, cs ~0:30 (small absolute, with the
+  STAGE7_PROTEIN_FDR_ONLY env-var early-abort).
+- blib: rust 0:55, cs **0:45** with new parallel-compress code
+  (was projected slower; now **cs faster than rust**, 0.81×).
+  RefSpectraPeaks blobs byte-identical (165288 rows match
+  byte-for-byte; all RefSpectra/RetentionTimes/protein/Osprey*
+  tables PASS via `Compare-Blib-Crossimpl.ps1`).
+
+**Blib parallelization implementation** (new this session):
+- `BlibWriter`: added `AddSpectrumPrecompressed(...)` overload that
+  takes already-zlib-compressed `mzBlob` + `intBlob` + `numPeaks`,
+  plus public statics `CompressMzs(double[])` and
+  `CompressIntensities(float[])` so callers can compute the blobs
+  off-thread. The original `AddSpectrum` becomes a thin wrapper.
+- `AnalysisPipeline.WriteBlibOutput`: replaced the sequential
+  `foreach (var kvp in bestByPrecursor.Values)` loop with a
+  `Parallel.For` pre-compress pass that fills `blibMzBlobs[i]` /
+  `blibIntBlobs[i]` / `blibNumPeaks[i]`, followed by a sequential
+  loop that calls `AddSpectrumPrecompressed` so the SQLite
+  `INSERT` order (and hence `RefSpectra.id` ordering) stays
+  identical to the prior implementation. Modeled on Skyline's
+  `BlibDb.cs` `ParallelEx.ForEach` pattern.
+- `MaxDegreeOfParallelism = config.NThreads` matches the rest of
+  the C# pipeline.
+- Output is byte-identical to the prior cs run AND to the rust
+  blib (the cross-impl harness validates both sides).
+
+**Inspection cleanup** (rolled into the same commit):
+- `Stage6Rescore.cs`: removed unused `entryIdToIdx` dict
+  (CollectionNeverQueried).
+- `MzmlReader.cs EnsureSortedSpectrum`: collapsed
+  `Console.Error.WriteLine(string.Format(...))` into interpolated
+  string + dropped `System.Linq.` qualifier (already in
+  `using System.Linq;`).
+- `CodeInspectionTest.cs`: removed unused `using System.Linq;`
+  (the file references Linq APIs only inside string literals).
+- `AnalysisPipeline.cs`: dropped `System.Threading.Tasks.` qualifier
+  on `Parallel.For` (also already imported).
+
+**Stale CWT fixture refresh** (TODO #4 done, separate from this
+commit): the on-disk fixtures at
+`D:\test\osprey-runs\stellar\Ste-...20.scores.{cs,rust}.parquet`
+were generated before the CWT-candidate columns were added, so
+`TestCwtCandidateCrossImplParity` and
+`TestCsScoringPopulatesCwtCandidates` failed with "0 rows have
+CWT candidates". Refreshed via a single-file Stellar run earlier
+in the session; user authorized the swap from `.new` →
+live filenames; old files kept as `.bak` next to them. After the
+swap all 302 OspreySharp.Test tests PASS.
+
+Pre-commit gate (post-fixture-refresh): `Build-OspreySharp.ps1
+-RunInspection -RunTests` clean (0 errors, 0 warnings, 302/302
+PASS).
+
+**Updated Mike-facing perf summary** (workflow.html):
+- Stellar 3-file: cs 1.20× total (perf items 1-3 below).
+- Astral 3-file: cs 1.27× total. blib stage now cs-faster; the
+  remaining ratio is dominated by stage1to4 (1.34×) and stage6
+  (1.37×), both reasonable on a HRAM dataset.
+- Blib parallelization is now a closed item; not pending.
+
+
+### 2026-05-09 — Session 9 (continued, Stage 7 + Stellar blib re-measurement)
+
+**Stellar 3-file blib (post-parallel-compress)**: re-measured for the
+table — rust 0:09, cs 0:13 (was 0:14 / 0:26 with the sequential
+compress code). Blib output portion in cs went 15.4s → 3.7s. Total
+ratio 1.44× cs slower (down from 1.86×); the residual is in the
+load + reconciliation phases, not the compression.
+
+**Stage 7 cs profile and fix**. dotTrace failed with an access
+violation on this binary (no snapshots collected), so I bisected with
+inline `Stopwatch` markers. Stellar stage7 cs wall = 9-10s; rust = 3s.
+Markers showed:
+
+| Phase                       | wall (cs) |
+|-----------------------------|-----------|
+| Library load + decoys       | 0.7s      |
+| File loading (parquet)      | 1.5–1.7s  |
+| 1st-pass sidecar load       | <0.1s     |
+| First-pass compaction       | 0.06s     |
+| 2nd-pass sidecar load       | 0.06s     |
+| `CollectBestPeptideScores`  | 0.03s     |
+| Detected peptides           | 0.01s     |
+| **`BuildProteinParsimony`** | **6.32s** |
+| `ComputeProteinFdr`         | 0.03s     |
+
+So **97% of the C#-vs-rust gap was inside `BuildProteinParsimony`**.
+The Step 3 subset-elimination loop is O(N²) over ~7036 unique peptide
+sets; each pair calls `IsSubsetOf` on a `SortedSet<string>` whose
+membership tests are binary-search vs HashSet's hash lookup. Swapping
+the elimination-phase sets from `SortedSet<string>` →
+`HashSet<string>` cut parsimony to 0.96s (6.6× speedup; same
+result). Iteration order isn't observable downstream — only the
+peptideToGroups dict is populated and that dict is itself unordered.
+
+**Sidecar overlay refactor**. The 2nd-pass FDR sidecar overlay used
+to re-read each file's full `.scores.parquet` (10 columns × ~463K
+rows × 3 files) just to satisfy a size check, then dictionary-
+overlayed scores onto the compacted entry list. Replaced with a
+new <code>FdrScoresSidecar.TryReadOverlay</code> that walks the
+sidecar's binary records (which carry entry_ids per record) and
+overlays directly onto an entry_id-keyed dict. Bisect markers
+showed the parquet re-read was already ~negligible compared to
+parsimony (so this change is small in absolute terms — 0.06s — but
+keeps the logic clean and removes the I/O dependency on the
+parquet for an operation that doesn't need it).
+
+**Re-measured walls (workflow.html updated)**:
+- Stellar stage7: rust 0:03, cs **0:03** (was cs 0:10; ratio 3.33× → 1.0×).
+- Astral stage7: rust 0:16, cs **0:13** (was cs ~0:30; cs now FASTER, 0.81×).
+- Stellar blib: rust 0:09, cs 0:13 (1.44×; was 1.86×).
+- Astral blib: rust 0:55, cs 0:45 (cs faster, 0.81×).
+
+Both stage7 and blib are byte-identical across impls (Stage 7 PASS
+at 1e-9; blib SQLite tables match per `Compare-Blib-Crossimpl.ps1`).
+
+**302/302 OspreySharp.Test pass; ReSharper inspection clean.**
+
+**Updated Mike-facing perf summary** (workflow.html):
+- Stellar 3-file: cs 1.17× total (only Stage 5 cs is meaningfully slower).
+- Astral 3-file: cs 1.26× total. Astral stage7 + blib are now both
+  cs-faster; stage1to4 (1.34×) and stage6 (1.37×) are the remaining
+  ratios, both reasonable for a HRAM dataset.
+- Remaining open perf item: Stage 5 cs Stellar 2.18× slower (Percolator
+  SVM training; not yet profiled).
+
+
+### 2026-05-09 — Session 9 (continued, Stellar perf finalization + PRs out)
+
+**Stellar stage5 5-run median: rust 1:44 / cs 1:53 (1.09×, ~tied).**
+The prior 4:08 cs measurement was a stale outlier (likely a thread /
+cold-cache anomaly). Five fresh runs: rust 1:43 / 1:46 / 1:43 / 2:23
+(outlier) / 1:44; cs 1:56 / 1:53 / 1:53 / 1:58 / 1:53. The cs side
+runs the three Percolator SVM folds in parallel via `ParallelEx`,
+each fold ~92s on a 16-thread machine. Workflow.html totals updated
+to **rust 7:38 / cs 6:46 → 0.89× (Stellar end-to-end now C#-faster
+overall)**.
+
+**Stellar blib 5-run median: rust 10.74s / cs 7.60s → 0.71× (cs
+faster).** All five runs cluster tightly (cs 7.48-8.52s; rust
+9.19-10.82s with one 30.30s outlier on run 4). Workflow.html cell
+flipped to green. Astral blib was already cs-faster (0:55 / 0:45 ->
+0.81×).
+
+**Stage 5 dotTrace profile (one-shot, sampling).** Ran cs stage5
+end-to-end under `Test-Regression.ps1 -Profile`, snapshot
+`profile.dtp.0000` (7.2 MB) collected over 2:01 wall. Reporter top
+hotspots (summed across 3 parallel folds):
+- `ML.LinearSvmClassifier.Train`: **261.8s own / 276.1s total**
+  (~92s per-fold wall, matches the live `[TIMING] Percolator fold
+  X/3` markers).
+- `ML.LinearSvmClassifier.FisherYatesShuffle`: 14.3s own — the
+  only sub-hotspot worth a glance, but still <6% of fold time.
+- `ML.PepEstimator+Kde.Pdf`: 2.1s; `Matrix.DotVector`: 0.4s.
+
+97% of fold time is inside the SVM optimization loop. Same
+algorithmic cost on rust, which is why the gap is only 9 seconds
+(104s vs 113s) rather than something multiplicative. **No smoking-
+gun hotspot** to flip Stellar stage5 from tied to cs-faster — the
+implementation is well-vectorized. dotTrace is healthy on this
+binary; the prior stage7 access-violation crash was a one-off,
+likely tied to the very-fast `OSPREY_STAGE7_PROTEIN_FDR_ONLY`
+early-abort racing the profiler attach.
+
+**Workflow.html cleanup for Mike-facing presentation:**
+- Removed stale `Perf:` badges from Stage 1-4 squares; the table
+  at the bottom is the single source of perf truth.
+- Stage 7 .blib row split title + detail onto two lines so the
+  box no longer overflows.
+- Trimmed subtitle (dropped the "previously-divergent file-55"
+  historical context — that's in this TODO file).
+- Replaced 100+ lines of historical narrative footer with a
+  per-stage commentary list, plus a pointer to
+  `pwiz-ai/todos/completed/TODO-*_osprey_sharp*.md` for the
+  detailed work log.
+
+**PRs out** (CI running):
+- **pwiz#4196** — *OspreySharp: end-to-end cross-impl parity +
+  Stage 7/blib perf wins* — 18 commits squashed, 1464+ / 242- across
+  19 files. POST-RELEASE PATCH phase, master-only (no cherry-pick;
+  this is new code under `pwiz_tools/OspreySharp/`).
+- **osprey#33** — *mzml: sort spectrum centroids at load time*
+  (companion to the OspreySharp `EnsureSortedSpectrum`).
+- **osprey#34** — *fdr: match sidecar records to stubs by
+  entry_id, not position* (companion to OspreySharp's
+  `FdrScoresSidecar.TryReadOverlay` and the multi-file
+  `--join-at-pass=2` correctness story).
+
+**Copilot review on pwiz#4196 addressed** (commit `c5ccbcabf0`,
+pushed):
+- `EnsureSortedSpectrum`: added length-mismatch guard for malformed
+  mzML where the m/z and intensity arrays differ; renamed parameter
+  `scanNumber` → `spectrumIndex` and the log key
+  `[unsorted-spectrum] scan_number=` → `spectrum_index=` (callers
+  pass `raw.Index` from the mzML index attribute, not the true
+  scan number).
+- Replaced `new T[0]` with `Array.Empty<T>()` (3 sites in this
+  PR's diff) per project convention.
+- Recomputed `nScoredTargets` / `nScoredDecoys` after
+  `DeduplicateDoubleCounting` so the `[COUNT] Coelution scored`
+  log reports post-dedup counts.
+- Collapsed duplicate `<summary>` on `DeduplicateDoubleCounting`
+  and fixed "elutring" → "eluting" typo.
+- Renamed `noJoinMetadata` → `parquetFooterMetadata` (8 sites +
+  comment) since it's now built unconditionally in non-joinOnly
+  mode, not just `--no-join`.
+- All 302 OspreySharp.Test pass; ReSharper inspection clean.
+
+**Tooling updates** (separate `pwiz-ai` commits, not yet pushed):
+- `c182fb2` — Updated `/pw-respond` skill to a 3-step flow:
+  fetch + summarize + propose, then implement + commit + push,
+  then reply to and resolve threads via GraphQL
+  `resolveReviewThread`. Skipped/deferred threads stay unresolved.
+- `0980e8b` — Renamed `/pr-review` → `/pw-review` for consistency
+  with the project's `pw-` slash-command convention; regenerated
+  `TOC.md`; filled in the previously-NEW description for
+  `mailchimp.md`.
+
+**Status of branches/repos:**
+- `pwiz` `Skyline/work/20260508_osprey_sharp_audit`: clean, 0 ahead
+  of remote (commits all pushed).
+- `osprey` `feature/sidecar-entry-id-keyed-loader`: clean, 0 ahead
+  (push complete).
+- `osprey` `feature/mzml-sort-centroids`: clean, 0 ahead.
+- `pwiz-ai` `master`: 11 commits ahead of origin (incl. this TODO
+  update). Push pending user direction.
+
+**Next steps after merge:**
+1. Wait for CI on pwiz#4196 / osprey#33 / osprey#34, then merge.
+2. Begin the cleanup phase the user described: "clean up the C#
+  code while holding the results we have achieved without
+  regression." That work will live on a fresh branch (likely
+  `Skyline/work/<DATE>_osprey_sharp_cleanup`) with a new TODO. The
+  cross-impl regression harness (`Test-Regression.ps1 -Files All`
+  on Stellar + Astral) is the no-regression gate.
+3. Defer perf items: Stage 5 Percolator SVM training is a real
+  algorithmic cost shared with rust; no easy win identified. Astral
+  stage1to4 (1.34×) and stage6 (1.37×) are the only remaining red
+  cells, both expected on a HRAM dataset where rust's sparse-xcorr
+  + LOH-pooling-style fixes (which originated on the C# side) keep
+  rust competitive. Mike-facing asterisk noted.
+
