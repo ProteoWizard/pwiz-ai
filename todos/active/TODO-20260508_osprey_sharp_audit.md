@@ -813,6 +813,12 @@ correct on Astral too. No HRAM-specific drift surfaced.
 Tight per-stage cycle on Astral: stage7 cs-only ~43s,
 blib cs-only ~52s. Same iteration shape as Stellar.
 
+**Next session handoff**: For detailed startup protocol (current
+state, tight-cycle commands, per-stage entry-point map, build
+commands, known acceptable drift, failing tests to ignore), read
+`ai/.tmp/handoff-20260508_osprey_sharp_audit.md` before starting
+work.
+
 **Next session targets**:
 
 1. ~~Astral 1-file march.~~ DONE.
