@@ -1283,3 +1283,61 @@ pwsh -File C:/proj/ai/scripts/OspreySharp/Build-OspreySharp.ps1 \
 pwsh -File C:/proj/ai/scripts/OspreySharp/Build-OspreyRust.ps1 \
     -Fmt -Clippy -RunTests
 ```
+
+### 2026-05-09 — Session 8.9 (Astral 3-file: stage1to4 single-row outlier)
+
+Astral 3-file regression FAILED at stage1to4 on file 55:
+
+| File | Status | Notes |
+|---|---|---|
+| Ast-...49 | PASS | byte-identical |
+| Ast-...55 | **FAIL** | 1 row of 1,723,113 differs in `sg_weighted_cosine` by 5.89e-3 |
+| Ast-...60 | PASS | byte-identical |
+
+Walls: rust 7:59 + cs 12:27 (cs ~1.56x; expected for HRAM scaling).
+
+**Diff details for file 55** (from inspect_parquet --tolerance 1e-6
+log at `stage1to4/diff_Ast-...55.log`):
+- All 40 other columns: byte-identical or within 1e-6 PIN gate
+- `xcorr` max_abs_diff=8.15e-7 (within gate)
+- `sg_weighted_xcorr` max_abs_diff=5.60e-7 (within gate)
+- `sg_weighted_cosine` n_diff=1, max_abs_diff=5.89e-3 (EXCEEDS gate)
+- 0 only-A entries, 0 only-B entries (row sets identical)
+
+**Hypothesis**: single-row FP edge case in median polish or sg-
+weighted cosine computation. The other two files PASS, suggesting
+this is data-dependent (specific sequence of fragment intensities
+that converges differently in cs vs rust). Per
+`feedback_bit_parity_tolerance.md` not loosening the gate
+unilaterally — user sign-off needed if a tolerance comparator is
+the right call.
+
+**Next-session investigation path**:
+1. Identify the divergent entry_id via inspect_parquet:
+   ```
+   python C:/proj/ai/scripts/OspreySharp/inspect_parquet.py \
+     'D:/test/osprey-runs/astral/_test_regression_main/stage1to4/rust/Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_55.scores.parquet' \
+     -B 'D:/test/osprey-runs/astral/_test_regression_main/stage1to4/cs/Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_55.scores.parquet' \
+     --tolerance 1e-6
+   ```
+   The script's --diff mode prints the divergent row's entry_id.
+2. Trace that peptide on both binaries with `OSPREY_TRACE_PEPTIDE`
+   (rust) plus the cs equivalent (still pending port — see
+   "pending follow-ups" in Session 4 of this TODO).
+3. Likely the sg_weighted_cosine numerator/denominator loop has a
+   peptide-specific FP-summation-order edge case.
+
+**Stages 5+ on Astral 3-file NOT YET VALIDATED**: stage1to4 is
+a hard prerequisite, so the script halted. Stage7 + blib post-fix
+walls on the HRAM 3-file path remain unmeasured. The session-8
+fixes were all validated on Stellar 3-file (which PASS'd
+end-to-end), and on Astral 1-file (which PASS'd in Session 7
+pre-fix; should still PASS post-fix). The file-55 single-row
+outlier is the only Astral 3-file open issue.
+
+**Suggested workaround for next-session continuation**: run with
+`-Tag astral_3file_partial -StartStage stage5` after manually
+seeding the stage5/inputs from rust's stage1to4/rust outputs.
+The downstream stages can be validated under the assumption that
+stage1to4 was "close enough" (1 row of 1.7M differs at 5.89e-3
+in a single feature column).
