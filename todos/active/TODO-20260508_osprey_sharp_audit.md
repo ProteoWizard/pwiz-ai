@@ -594,3 +594,83 @@ session** (replaces prior session's table):
 | stage6 | FAIL (rescored.tsv only; 2 of 3 sub-dumps now PASS) |
 | stage7 | not yet reached |
 | blib | not yet reached |
+
+### 2026-05-08 — Session 4 (closed Stage 6; reached Stage 7)
+
+Drilled the rescored.tsv divergence with the existing dump-and-
+exit env vars in Test-Regression. Bisection: rust 9956 rows had
+score=0/q=1; C# had 0. Trace: C#'s Stage 6 rescore log said
+"Stage 6 rescore: 0 entries re-scored" — the rescore loop was
+silently skipping all files because it couldn't find them in
+config.InputFiles (which is empty in --input-scores mode).
+
+**Three pwiz fixes landed**:
+
+1. **Synthesize InputFiles from --input-scores in
+   AnalysisPipeline.Run()** (was only done in RescoreWorker).
+   Mirrors Rust's `run_analysis` idempotent synthesis at
+   pipeline.rs ~3144.
+2. **Reset existing fdrEntries[idx] for every consensus target,
+   not just rescore-loop-returned ones.** Without this, multi-
+   charge consensus targets where RunCoelutionScoring returned no
+   entry (no peak at the override boundary) kept their first-pass
+   Percolator scores instead of the score=0/q=1 placeholders Rust
+   writes.
+3. **Skip cs_stage6_consensus.tsv dump on empty consensus** to
+   match Rust's dump_stage6_consensus elision semantic. Without
+   this, single-file C# emitted a header-only consensus.tsv and
+   Test-Regression flagged it as asymmetric absence.
+
+**Result on Stellar 1-file**:
+- stage1to4 PASS, stage5 PASS, **stage6 PASS** (all 3 dumps
+  byte-identical: multicharge / reconciliation / rescored).
+- The Rust binary's stage6 rescored.tsv (sha 430D1192CC86) and
+  C#'s now hash-equal — full bit parity on Stage 6 outputs at
+  --input-scores Stage 4 boundary.
+
+**Test-Regression hardening**:
+- `Compare-DumpSha` treats symmetric absence (both sides skipped
+  writing a particular dump) as PASS rather than MISSING.
+- `Freeze-PostStage4` now overlays the prior stage's `rust/`
+  `.scores.parquet` over the inputs/ copy. Stage 6 rewrites the
+  parquet in place, so downstream stages must see the rewritten
+  version. Without this, stage7 was reading the pre-Stage-6
+  parquet and re-deriving everything (8 of 8 protein FDR
+  columns wildly divergent).
+
+**Stage 7 reached, FAILs at protein FDR**: 5444 rust rows vs
+5445 cs rows. `best_peptide_score` max_diff = 18.29 on 5434 of
+5444 common rows; `group_qvalue` max_diff = 0.999 on 3791 rows.
+Underlying cause is unconfirmed but a likely contributor: the
+test harness compensates for input-stage mismatch in the freeze
+step (publishing post-Stage-6 parquet as stage7 input), but the
+**binary itself doesn't validate that --join-at-pass=1 was given
+the right kind of parquet**. Rust has `--join-at-pass=2 +
+expect_reconciled_input` which errors clearly when the wrong
+stage's parquet is supplied; OspreySharp does not implement
+`--join-at-pass=2` yet (Program.cs:548-551 explicitly notes it
+as not-yet-implemented). The right next-session move:
+
+1. Port `--join-at-pass=2` to OspreySharp with the
+   `osprey.reconciled` metadata validation Rust does at
+   pipeline.rs:3313-3344.
+2. Update Test-Regression's stage7 invocation to use
+   `--join-at-pass=2` so wrong-stage-parquet errors loudly
+   instead of silently re-running.
+3. Once the input semantics are guaranteed, characterize the
+   remaining stage7 protein-FDR divergence (best_peptide_score
+   18.29 max diff). Multi-charge consensus + reconciliation are
+   bit-identical at this point, so Stage 7 must be picking
+   different peptides per protein OR running second-pass
+   Percolator differently.
+
+**Test-Regression Stellar 1-file march status after this
+session** (replaces prior session's table):
+
+| Stage | Status | Notes |
+|---|---|---|
+| stage1to4 | PASS | dedup port + 1e-6 PIN tolerance |
+| stage5 | PASS | bit-parity given shared input |
+| stage6 | **PASS** | multicharge + reconciliation + rescored all byte-identical |
+| stage7 | FAIL | best_peptide_score max diff 18.29; needs --join-at-pass=2 port + investigation |
+| blib | not yet reached | |

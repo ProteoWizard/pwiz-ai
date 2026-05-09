@@ -501,8 +501,18 @@ function Compare-DumpSha {
         $rustFile = $null; $csFile = $null
         $flatRust = Get-ChildItem $rustDir -Filter ("rust_*_{0}.tsv" -f $tag) -File -ErrorAction SilentlyContinue
         $flatCs   = Get-ChildItem $csDir   -Filter ("cs_*_{0}.tsv"   -f $tag) -File -ErrorAction SilentlyContinue
+        # Symmetric absence (both sides skipped writing this dump) is
+        # equivalent agreement. Treated as PASS so single-file Stage 6
+        # (which never produces a consensus dump) doesn't FAIL the
+        # gate. Asymmetric absence (one side wrote it, the other did
+        # not) is real divergence.
+        if (-not $flatRust -and -not $flatCs) {
+            $details += @{ tag=$tag; status='PASS'; note='symmetric absence' }
+            continue
+        }
         if (-not $flatRust -or -not $flatCs) {
-            $details += @{ tag=$tag; status='MISSING' }
+            $details += @{ tag=$tag; status='MISSING';
+                rust_present=([bool]$flatRust); cs_present=([bool]$flatCs) }
             $allOk = $false
             continue
         }
@@ -558,15 +568,32 @@ function Compare-Blib-Wrap {
 
 function Freeze-PostStage4 {
     param([string]$FromStage, [string]$ToStage)
-    # By default, freeze rust's outputs as the next stage's inputs.
     $next = Get-StageInputDir $ToStage
     Reset-StageDir $next -KeepInputs:$false
-    # Copy from prior stage's inputs (the .scores.parquet that fed
-    # both sides) — those are the canonical Stage 4 outputs and
-    # downstream stages re-use them at every step.
-    $prev = Get-StageInputDir $FromStage
-    foreach ($f in (Get-ChildItem $prev -File)) {
-        Copy-Item $f.FullName (Join-Path $next $f.Name)
+
+    # Stages that REWRITE the .scores.parquet in place (Stage 6 rescore
+    # writes back updated scores per AnalysisPipeline.Stage6Rescore.cs:
+    # 439 — Rust mirrors this) need to publish the rewritten parquet
+    # to the next stage's inputs. For those, prefer the prior stage's
+    # rust/ output dir over the prior stage's inputs/ dir. For non-
+    # rewriting stages (Stage 5 only emits dumps), the inputs/ dir's
+    # parquet is identical to the rust/ output's parquet; prefer
+    # rust/ uniformly so the policy is one-line clear.
+    $prevRust = Get-StageRustDir $FromStage
+    $prevIn   = Get-StageInputDir $FromStage
+
+    # First copy non-parquet support files (mzML, library, libcache,
+    # calibration JSON) from the prior stage's inputs/ — they're stable
+    # across stage runs and the rust/ dir may not have copies.
+    foreach ($f in (Get-ChildItem $prevIn -File)) {
+        Copy-Item $f.FullName (Join-Path $next $f.Name) -ErrorAction SilentlyContinue
+    }
+    # Then OVERWRITE any .scores.parquet from the rust/ output so
+    # downstream stages see the rewritten Stage 6 (or later) results.
+    if (Test-Path $prevRust) {
+        foreach ($f in (Get-ChildItem $prevRust -Filter '*.scores.parquet' -File)) {
+            Copy-Item $f.FullName (Join-Path $next $f.Name) -Force
+        }
     }
 }
 
