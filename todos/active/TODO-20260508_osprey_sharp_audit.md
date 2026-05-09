@@ -1094,3 +1094,77 @@ clean wall was 43s. So post-fix expected wall ≈ 4-8s
 (the irreducible: library load, parquet load, RunProteinFdr,
 parsimony, blib early exit). Vs Rust's 10s on Astral 1-file
 Stage 7. Gap effectively closed.
+
+### 2026-05-09 — Session 8.8 (3-file Stellar regression FULL PASS — rust sidecar bug + port)
+
+End-to-end run with cs's gap-fill + sidecar fixes surfaced
+ANOTHER cross-impl bug: `cs_stage7_protein_fdr.tsv`
+diverged from `rust_stage7_protein_fdr.tsv` (cs 6533 protein
+groups vs rust 6311). Drilled with the per-side stage7
+stdout logs and found the root cause:
+
+**Rust `load_fdr_scores_sidecar` had the SAME strict
+`header_count == entries.len()` guard cs's TryRead used to
+have**, written at `crates/osprey/src/pipeline.rs:1392`.
+On multi-file `--join-at-pass=2`, the reconciled parquet
+has gap-fill rows the 1st-pass sidecar (written pre-gap-
+fill) doesn't have, so rust's loader silently rejected
+both sidecars and fell through to RE-TRAINING Percolator
+from scratch on the wrong input set (post-rescore parquet,
+not the post-compaction subset the original 2nd-pass
+scored). Walls confirmed the issue: rust stage7 took 1:11
+on this run vs cs stage7 0:09 (cs loaded sidecars
+successfully and skipped Percolator). The rust pipeline
+then computed Stage 7 protein FDR from re-trained scores
+that DIVERGED from the original straight-through pipeline.
+
+**Cs is correct here; rust was buggy.** The cs side
+already had the fix (the entry_id-keyed loader from
+Session 8.5). Ported the same algorithm to rust:
+
+- `crates/osprey/src/pipeline.rs:1391-1435`: replace the
+  strict count check with a `HashMap<u32, usize>` lookup
+  on `entries` so records overlay matching entry_ids
+  regardless of ordering or count. Caller may pass a
+  SUPERSET; sidecar records with no matching entry_id
+  STILL produce `false` (so a stale or wrong-parquet
+  sidecar still surfaces).
+- Tests: `fdr_scores_sidecar_count_mismatch_rejected`
+  replaced by `fdr_scores_sidecar_superset_entries_accepted`
+  + `fdr_scores_sidecar_stale_record_rejected`.
+- Branch: `feature/sidecar-entry-id-keyed-loader` in
+  `C:\proj\osprey`. Maintainer-PR ready (no
+  Co-Authored-By per the rust commit convention; descriptive
+  body with the multi-file context).
+- `cargo fmt --check`, `cargo clippy -D warnings`, and
+  `cargo test` all green.
+
+**Re-running stage7 + blib with the new rust binary +
+post-fix cs binary**: ALL FIVE STAGES NOW PASS on Stellar
+3-file end-to-end.
+
+| Stage      | Rust wall | C# wall  | Status |
+|------------|-----------|----------|--------|
+| stage1to4  | 1:26      | 1:03     | PASS   |
+| stage5     | 1:49      | 1:59     | PASS   |
+| stage6     | 3:18      | 3:06     | PASS   |
+| stage7     | **0:04**  | **0:10** | PASS   |
+| blib       | **0:08**  | **0:15** | PASS   |
+
+Stage 7 + blib walls dropped dramatically vs the broken
+rust path (rust stage7 1:11 → 0:04, ~17x faster). The
+test-regression harness was unintentionally measuring
+how slow rust's degraded path was.
+
+**Bit-parity verification status (Stellar 3-file)**:
+every stage is byte-identical or within 1e-6 PIN
+tolerance. The bit-parity end-to-end claim that
+Session 8 entry 1 challenged is restored, on a now-
+honest test harness that exercises gap-fill,
+reconciliation actions, and `--join-at-pass=2`
+rehydration through real multi-file behavior.
+
+**Next sub-target this session**: 3-file Astral
+regression. The HRAM path may surface different
+behavior (more entries, more gap-fill targets, larger
+parquets). Same diagnostic + iteration toolkit applies.
