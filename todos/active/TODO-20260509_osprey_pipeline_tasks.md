@@ -33,6 +33,28 @@ Phases now:
 - **Phase C** — parallelism polish, optional follow-up.
 - ~~Phase D — Rust port.~~ Dropped.
 
+### Phase 0 status: COMPLETE (2026-05-10)
+
+Snapshot regression harness is green end-to-end on both datasets.
+
+| Dataset | Files | Capture | Round-trip verify |
+|---------|-------|---------|-------------------|
+| Stellar | Single | PASS    | PASS              |
+| Stellar | All    | PASS    | PASS              |
+| Astral  | Single | PASS    | PASS              |
+| Astral  | All    | PASS    | PASS              |
+
+All 5 stages PASS at every gate (stage1to4 / stage5 / stage6 /
+stage7 / blib). 302/302 OspreySharp unit tests also pass against
+the patched binaries.
+
+Snapshots live at:
+- `D:\test\osprey-runs\stellar\_snapshots\main\` (Stellar 3-file)
+- `D:\test\osprey-runs\astral\_snapshots\main\` (Astral 3-file)
+
+Both manifests record source commit `a309d286ea` and binary
+SHA-256 `30772211f51c...`.
+
 ### Phase 0 progress (2026-05-09)
 
 Phase 0 surfaced two latent OspreySharp bugs that the Rust↔C#
