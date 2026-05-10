@@ -447,13 +447,24 @@ function Run-Stage1to4 {
     return $r
 }
 
-# Stage 1-4 comparator: SHA-256 byte equality on .scores.parquet.
-# Same-impl removes the documented Rust<->C# xcorr / sg_weighted_xcorr
-# ~1e-7 drift, so we expect exact byte equality and any divergence
-# is a real regression to root-cause.
+# Stage 1-4 comparator: row-aligned content equality via
+# inspect_parquet.py --diff at tolerance 0. Byte-level equality on
+# the full parquet file is unreliable: Parquet.Net's ZSTD
+# compression path (IronCompress + ZstdSharp) is non-deterministic
+# at the byte level for at least the boolean is_decoy column —
+# same logical data compresses to subtly different bytes across
+# same-binary runs (a one-byte page-size shift cascades across
+# every subsequent column). The LOGICAL data is fully deterministic
+# (verified column-by-column), so an exact-tolerance diff over the
+# decoded columns is the right gate: catches every regression in
+# stored values without flagging compression noise. Row order is
+# deterministic because RunCoelutionScoring writes per-window
+# results into a pre-allocated array indexed by window position,
+# then flattens in window-index order (AnalysisPipeline.cs ~line 3592).
 function Compare-Stage1to4-Snapshot {
     $csDir   = Get-StageCsDir 'stage1to4'
     $snapDir = Get-StageSnapshotDir 'stage1to4'
+    $py = Join-Path $scriptDir 'inspect_parquet.py'
     $allOk = $true
     $details = @()
     foreach ($stem in $selectedStems) {
@@ -464,12 +475,12 @@ function Compare-Stage1to4-Snapshot {
             $allOk = $false
             continue
         }
-        $cSha = (Get-FileHash $cPq -Algorithm SHA256).Hash
-        $sSha = (Get-FileHash $sPq -Algorithm SHA256).Hash
-        $st = if ($cSha -eq $sSha) { 'PASS' } else { 'FAIL' }
+        $diffLog = Join-Path $csDir ('diff_' + $stem + '.log')
+        & python $py $sPq -B $cPq --tolerance 0 *>&1 | Tee-Object -FilePath $diffLog | Out-Null
+        $exit = $LASTEXITCODE
+        $st = if ($exit -eq 0) { 'PASS' } else { 'FAIL' }
         if ($st -eq 'FAIL') { $allOk = $false }
-        $details += @{ file=$stem; status=$st;
-            cs_sha=$cSha.Substring(0,12); snap_sha=$sSha.Substring(0,12);
+        $details += @{ file=$stem; status=$st; log=$diffLog;
             cs_size=(Get-Item $cPq).Length; snap_size=(Get-Item $sPq).Length }
     }
     return [pscustomobject]@{ ok = $allOk; details = $details }
@@ -550,18 +561,50 @@ function Compare-DumpSha-Snapshot {
     return [pscustomobject]@{ ok = $allOk; details = $details }
 }
 
-# Stage 6 also rewrites the .scores.parquet in place and emits FDR
-# sidecars + reconciliation.json. Compare those by byte equality too —
-# they're the canonical Stage 6 artifacts that downstream stages
-# consume, so any drift here propagates.
+# Stage 6 rewrites .scores.parquet (content-equality via
+# inspect_parquet.py to absorb ZSTD compression noise — see
+# Compare-Stage1to4-Snapshot for the rationale) and emits FDR
+# sidecars (.1st-pass.fdr_scores.bin, .2nd-pass.fdr_scores.bin) plus
+# .reconciliation.json. The sidecars and JSON have shown stable
+# byte equality across runs (no compression on those paths), so
+# SHA-256 stays appropriate for them.
 function Compare-Stage6-Artifacts {
     $csDir   = Get-StageCsDir 'stage6'
     $snapDir = Get-StageSnapshotDir 'stage6'
+    $py = Join-Path $scriptDir 'inspect_parquet.py'
     $allOk = $true
     $details = @()
     foreach ($stem in $selectedStems) {
-        foreach ($suffix in @('.scores.parquet','.1st-pass.fdr_scores.bin',
-                              '.2nd-pass.fdr_scores.bin','.reconciliation.json')) {
+        # .scores.parquet: content-equality via inspect_parquet.py
+        $name = $stem + '.scores.parquet'
+        $cPath = Join-Path $csDir   $name
+        $sPath = Join-Path $snapDir $name
+        if ((Test-Path $cPath) -and (Test-Path $sPath))
+        {
+            $diffLog = Join-Path $csDir ('diff_' + $stem + '.parquet.log')
+            & python $py $sPath -B $cPath --tolerance 0 *>&1 | Tee-Object -FilePath $diffLog | Out-Null
+            $exit = $LASTEXITCODE
+            $st = if ($exit -eq 0) { 'PASS' } else { 'FAIL' }
+            if ($st -eq 'FAIL') { $allOk = $false }
+            $details += @{ file=$name; status=$st; log=$diffLog }
+        }
+        else
+        {
+            $cExists = Test-Path $cPath
+            $sExists = Test-Path $sPath
+            if (-not $cExists -and -not $sExists) {
+                $details += @{ file=$name; status='PASS'; note='symmetric absence' }
+            } else {
+                $details += @{ file=$name; status='MISSING';
+                    cs_present=$cExists; snap_present=$sExists }
+                $allOk = $false
+            }
+        }
+
+        # FDR sidecars + reconciliation.json: SHA-256 byte equality
+        foreach ($suffix in @('.1st-pass.fdr_scores.bin',
+                              '.2nd-pass.fdr_scores.bin',
+                              '.reconciliation.json')) {
             $name = $stem + $suffix
             $cPath = Join-Path $csDir   $name
             $sPath = Join-Path $snapDir $name
@@ -739,8 +782,23 @@ for ($i = $startIdx; $i -le $stopIdx; $i++) {
         Stage-Inputs-Stage1to4
     }
 
-    if ($stage -eq 'stage1to4') { Run-Stage1to4 | Out-Null }
-    else                         { Run-PostStage4 -Stage $stage | Out-Null }
+    $runResult = if ($stage -eq 'stage1to4') { Run-Stage1to4 } else { Run-PostStage4 -Stage $stage }
+
+    if ($runResult.exit -ne 0) {
+        # Binary failed. Don't capture or freeze — the outputs are
+        # incomplete and propagating them would silently corrupt the
+        # snapshot and any downstream stage.
+        Write-Host ("  [run-fail] {0} exited with code {1}; see {2}\stage{3}\cs\stdout.log" -f `
+            $stage, $runResult.exit, $workRoot, $stage) -ForegroundColor Red
+        $results += @{ stage = $stage; status = 'RUN_FAIL'; exit = $runResult.exit }
+        $fail = $true
+        if (-not $Continue) {
+            Write-Host ""
+            Write-Host ("STOP: {0} run failed; halting." -f $stage) -ForegroundColor Yellow
+            break
+        }
+        continue
+    }
 
     if ($CreateSnapshot) {
         # Capture mode: write cs outputs to snapshot dir, no comparison.

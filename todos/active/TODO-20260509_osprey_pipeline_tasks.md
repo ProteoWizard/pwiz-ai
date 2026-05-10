@@ -33,6 +33,51 @@ Phases now:
 - **Phase C** — parallelism polish, optional follow-up.
 - ~~Phase D — Rust port.~~ Dropped.
 
+### Phase 0 progress (2026-05-09)
+
+Phase 0 surfaced two latent OspreySharp bugs that the Rust↔C#
+Test-Regression flow had been masking. Both fixed on this branch
+before any rearchitecture work:
+
+1. **Stage 6 rewrite stamps mutated-config search_hash.**
+   `ExecuteStage6Rescore` (`AnalysisPipeline.Stage6Rescore.cs`)
+   created `ScoringContext` instances with the outer `OspreyConfig`
+   instead of a per-file clone. `RunCoelutionScoring` reassigns
+   `config.FragmentTolerance` to the MS2-calibrated tolerance during
+   the search (`AnalysisPipeline.cs` ~line 3552). The mutated outer
+   config then fed `WriteReconciledParquet`'s
+   `config.SearchParameterHash()` call, stamping a hash that no
+   fresh-config recomputation reproduces. Stage 7
+   (`--join-at-pass=2`) rejected the parquet with a
+   `search_hash mismatch` error. **Fix:** clone outer config at the
+   top of the per-file loop; use the clone for all in-loop
+   ScoringContexts; keep the unmutated outer for
+   WriteReconciledParquet's metadata stamp. Mirrors the per-file
+   clone pattern in ProcessFile.
+
+2. **RunCoelutionScoring window-result order non-deterministic.**
+   `Parallel.ForEach` over isolation windows accumulated each
+   window's entries into a shared list in completion order. Same
+   row SET, different row ORDER across runs — and hence different
+   parquet bytes. **Fix:** index by window position
+   (`windowResults[wIdx]`) and flatten in window-index order
+   (`AnalysisPipeline.cs` ~line 3592).
+
+After the deterministic-windows fix, TSV dumps, FDR bin sidecars
+(`.{1st,2nd}-pass.fdr_scores.bin`), `.reconciliation.json`, and
+the blib output are all byte-stable across runs.
+
+The `.scores.parquet` files themselves still have intermittent
+1-byte-shifts on the `is_decoy` column when written through
+Parquet.Net's IronCompress + ZstdSharp path — same logical data,
+different ZSTD-compressed bytes. The data is fully deterministic at
+the column level. The snapshot harness uses a content-equality
+gate (`inspect_parquet.py --diff --tolerance 0`) for parquets and
+SHA-256 byte equality for everything else, which catches every
+logical regression while absorbing third-party compression noise.
+The ZSTD non-determinism is tracked as a follow-up (not on this
+branch's critical path).
+
 ### Phase 0 design decisions (locked 2026-05-09)
 
 1. **New script, not a modification.** `Test-Regression.ps1` (rust ≡
