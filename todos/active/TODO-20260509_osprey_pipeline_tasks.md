@@ -16,10 +16,121 @@ Rationale: the OspreySharp folder has a single owner, so merge risk
 is low. If the work stretches to weeks, that's a signal the original
 pipeline design was worse than expected, not a sign to split.
 
-Phase A (mechanical extraction of all 9 tasks) lands on this branch
-as a single PR. Phase B (resume semantics + FileSaver-backed atomic
-writes) and Phase C/D (parallelism, Rust port) remain follow-ups in
-their own branches.
+**Decision 2026-05-09: Rust mirror dropped.** The project plans to
+move primary work to OspreySharp and eventually retire Rust osprey.
+Phase D (mirror task structure in `crates/osprey/src/tasks/`) is
+removed. On-disk validity-key formats no longer need cross-impl
+symmetry; we can pick whatever fits OspreySharp.
+
+Phases now:
+
+- **Phase 0** — new `Test-Snapshot.ps1` script: "snapshot ≡ current
+  C#" regression gate. Mandatory prerequisite to Phase A.
+- **Phase A** — mechanical extraction. Lands on this branch as a
+  single PR.
+- **Phase B** — resume semantics + FileSaver-backed atomic writes,
+  follow-up branch.
+- **Phase C** — parallelism polish, optional follow-up.
+- ~~Phase D — Rust port.~~ Dropped.
+
+### Phase 0 design decisions (locked 2026-05-09)
+
+1. **New script, not a modification.** `Test-Regression.ps1` (rust ≡
+   cs) stays untouched. New `Test-Snapshot.ps1` is a copy-and-modify
+   sibling under `ai/scripts/OspreySharp/`. When Rust osprey is
+   eventually retired, `git rm Test-Regression.ps1` + the
+   Compare-*-Crossimpl.ps1 family deletes cleanly.
+2. **Snapshot location**: `$datasetRoot/_snapshots/<tag>/<stage>/`,
+   parallel to the existing `_test_regression_<tag>/` workdir. Local
+   only, never committed (data files are too big). Manifest at the
+   snapshot root records the OspreySharp commit SHA and binary
+   SHA-256.
+3. **Stage1to4 tolerance: bit-exact** (SHA-256 on the per-file
+   `.scores.parquet`). Same-impl removes the documented Rust↔C#
+   xcorr/sg_weighted_xcorr ~1e-7 drift.
+4. **Two modes via `-CreateSnapshot` switch**:
+   - default: run cs end-to-end, compare each stage against the
+     snapshot dir. Freeze step copies snapshot outputs to the next
+     stage's inputs.
+   - `-CreateSnapshot`: run cs end-to-end, copy outputs into the
+     snapshot dir as the new baseline. Then the freeze step pulls
+     from the just-written snapshot, matching the regression flow.
+5. **Sharing with Test-Regression.ps1**: deliberately none. The
+   scripts are siblings with overlapping helpers; the duplication is
+   intentional so the eventual Rust-mode deletion is one `git rm`,
+   not a refactor.
+
+## Task Boundary Doctrine
+
+`Osprey-workflow.html` (refreshed 2026-04-30) frames the pipeline by
+HPC fan-out / join boundaries, not by stage numbers. The boundaries
+that matter for distribution are the same boundaries the existing
+CLI flags already expose:
+
+| Phase | CLI entry point | Shape |
+|-------|-----------------|-------|
+| Stages 1-4 | (default) `--no-join` exits here | per-file fan-out |
+| Stage 5    | `--join-at-pass=1 --join-only` exits here | first join (all-file) |
+| Stage 6    | `--join-at-pass=1` continues here | second per-file fan-out |
+| Stage 7    | `--join-at-pass=2 --input-scores …` enters here | merge-node join (2nd-pass FDR + protein FDR + .blib) |
+
+These four boundaries are the **primary** Task boundaries. Finer-
+grained sub-tasks are useful for in-process resume / test isolation
+but should compose under the four super-tasks, not violate them.
+
+## Phase A Stage-to-Task Mapping
+
+`AnalysisPipeline.cs` is 7,054 lines (TODO sketch underestimated at
+~5K), `AnalysisPipeline.Stage6Rescore.cs` is 1,122 lines. Region
+boundaries already align with the proposed split. The master `Run()`
+method spans lines 104-1211 and is the orchestrator that becomes the
+new `Pipeline.Execute()` driver.
+
+Confirmed task list = **7 tasks**, not 9. Three deviations from the
+original sketch (decided 2026-05-09):
+
+- **SpectraCacheTask dropped.** Current `LoadSpectra()` writes no
+  `.spectra.bin` artifact; folded into CalibrationTask/ScoringTask
+  (whichever needs spectra first). A standalone task awaits the
+  Phase B checkpoint write.
+- **SecondPassFdrTask dropped.** No second-pass PSM-FDR call exists
+  in current code; rescored SVM scores feed `RunProteinFdr` directly.
+  Adding one would be a semantic change (Phase B+ scope).
+- **FirstPassFdrTask stays run-wide.** Sketch listed it per-file,
+  but `RunFdr` is called once across all files at line 542; per-file
+  Percolator training would change FDR results.
+
+Final mapping:
+
+| # | Task | Granularity | Current code |
+|---|------|-------------|--------------|
+| 1 | CalibrationTask | per-file | `LoadSpectra` 2108, `RunCalibration` 2202 |
+| 2 | ScoringTask | per-file | `RunCoelutionScoring` 3405 + features + dedup, `WriteFdrScoresSidecars` 1721 |
+| 3 | FirstPassFdrTask | run-wide | `RunFdr` 5884, `RunFirstPassProteinFdr` 6309 |
+| 4 | ReconciliationPlanTask | run-wide planner, per-file outputs | Stage 6 planning lines 768-1080, `WriteReconciliationFiles` 1771 |
+| 5 | RescoreTask | per-file | `ExecuteStage6Rescore` (Stage6Rescore.cs) |
+| 6 | ProteinFdrTask | run-wide | `RunProteinFdr` 6366 |
+| 7 | BlibWriteTask | run-wide | `WriteBlibOutput` 6461 |
+
+Stage 1 library loading (`LoadLibrary` + `GenerateDecoys`,
+lines 1218 + 1302) stays in the driver as pre-pipeline setup, not a
+Task. It produces no per-file artifact and is the input to the
+PipelineContext rather than a pipeline step.
+
+Pipeline execution order interleaves per-file and run-wide:
+
+```
+Setup     LoadLibrary + GenerateDecoys
+Per-file  CalibrationTask, ScoringTask    (parallel across files)
+Run-wide  FirstPassFdrTask
+Run-wide  ReconciliationPlanTask
+Per-file  RescoreTask                     (parallel across files)
+Run-wide  ProteinFdrTask
+Run-wide  BlibWriteTask
+```
+
+Each per-file task's `Run()` handles its own across-files fanout;
+the Pipeline driver just iterates Tasks sequentially.
 
 ## Summary
 
