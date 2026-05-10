@@ -76,6 +76,13 @@ to shrink AnalysisPipeline.cs further; that would let
 PerFileScoringTask and PerFileRescoreTask both be self-contained
 without `_pipeline` back-references.
 
+**Cross-dataset confirmation (2026-05-10):** snapshot regression
+PASS at every stage on both Stellar 3-file AND Astral 3-file after
+all body moves. The mechanical extraction preserves byte-exact
+output on TSV / FDR / blib artifacts and content-equal output on
+the parquet (subject to Parquet.Net ZSTD compression noise on the
+boolean columns).
+
 All four super-tasks corresponding to the
 Osprey-workflow.html HPC fan-out / join boundaries are in place.
 AnalysisPipeline.Run is a thin driver that constructs the four
