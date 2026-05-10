@@ -83,6 +83,44 @@ output on TSV / FDR / blib artifacts and content-equal output on
 the parquet (subject to Parquet.Net ZSTD compression noise on the
 boolean columns).
 
+### Phase A++ : AbstractScoringTask base class (2026-05-10 evening)
+
+Subsequent refactor extracted the SHARED scoring engine off
+AnalysisPipeline into a new `AbstractScoringTask` abstract base in
+`OspreySharp/Tasks/AbstractScoringTask.cs` (3006 lines). All four
+concrete tasks now inherit from it; AnalysisPipeline.cs collapses
+to 242 lines (96.6% reduction from origin/master's 7054).
+
+| Step | Commit |
+|------|--------|
+| AbstractScoringTask + inheritance + AnalysisPipeline shortcut | `ea80d789db` |
+| Rename Stage6Rescore.cs → AnalysisPipeline.PostReconciliationRescore.cs + ExecuteStage6Rescore → ExecuteRescore | (this commit) |
+
+Pragmatic shortcut: AnalysisPipeline ALSO inherits AbstractScoringTask
+(public-public chain, with NotSupportedException stubs for the
+abstract Run/Name overrides) so the partial methods in
+AnalysisPipeline.PostReconciliationRescore.cs (RunWorker,
+ExecuteRescore, WriteReconciledParquet, LoadSpectraForRescore,
+LoadMassCalibrations) can reach inherited engine methods.
+PerFileRescoreTask.Run plants its `_ctx` onto its `_pipeline`
+back-reference before invoking ExecuteRescore so inherited engine
+methods see a non-null _ctx through `this`. RunWorker initializes
+its own `_ctx` from the worker's config + the static log sinks.
+
+The `internal PipelineContext _ctx;` field on AbstractScoringTask
+is shared by all subclasses; the access modifier is `internal`
+rather than `protected` so cross-instance assignment
+(`_pipeline._ctx = ctx`) compiles.
+
+Follow-ups still TODO:
+- Move ExecuteRescore + helpers + RunWorker from
+  AnalysisPipeline.PostReconciliationRescore.cs into
+  PerFileRescoreTask. Once that lands, AnalysisPipeline drops the
+  AbstractScoringTask inheritance shortcut.
+- Rename the WriteStage6* diagnostic methods in OspreyDiagnostics
+  (the cs_stage6_*.tsv dump filenames stay the same to keep the
+  snapshot regression valid).
+
 All four super-tasks corresponding to the
 Osprey-workflow.html HPC fan-out / join boundaries are in place.
 AnalysisPipeline.Run is a thin driver that constructs the four
