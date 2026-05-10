@@ -66,11 +66,34 @@ ProcessFile all stay where they were — only the orchestration
 moved.
 
 FileSaver (atomic temp-file-then-rename helper) ported from
-SharedBatch/FileSaver.cs into OspreySharp.IO/FileSaver.cs, ready
-for wiring into the per-file artifact writes (.scores.parquet,
-.calibration.json, .reconciliation.json,
-.{1st,2nd}-pass.fdr_scores.bin, output.blib) when Phase B resume
-semantics arrive.
+SharedBatch/FileSaver.cs into OspreySharp.IO/FileSaver.cs, with
+two callers wired through it tonight:
+
+| Write path | Wired commit |
+|------------|--------------|
+| FdrScoresSidecar.Write (.{1st,2nd}-pass.fdr_scores.bin) | `34a329c582` |
+| ReconciliationFile.Save (.reconciliation.json) | `9a601f788b` |
+
+Two FileSaver hardening fixes shipped alongside the FdrScoresSidecar
+wiring:
+
+- The constructor now resolves the destination via
+  Path.GetFullPath so a relative bare-filename argument doesn't
+  dead-end inside Path.GetDirectoryName -> Win32 GetTempFileName
+  with empty path.
+- Commit deletes a pre-existing destination before File.Move so
+  re-runs on the same dataset don't throw on overwrite (the common
+  case for OspreySharp's per-file artifacts), and now throws on
+  failure instead of swallowing through Trace.TraceWarning so the
+  caller's try/catch sees the real error.
+
+Still on the wiring backlog (deferred to user-supervised session):
+
+| Write path | Reason |
+|------------|--------|
+| CalibrationIO.SaveCalibration (.calibration.json) | Adding the FileSaver dependency requires Chromatography -> IO project reference; arch decision worth reviewing. |
+| BlibWriter (output.blib) | SQLite write path is more involved; blib output is the final artifact and should stay non-atomic only with care. |
+| ParquetScoreCache.WriteScoresParquet (.scores.parquet) | Already does an ad-hoc temp-file-then-rename, but should be aligned with FileSaver for consistency. |
 
 ### Phase 0 status: COMPLETE (2026-05-10)
 
