@@ -33,16 +33,48 @@ Phases now:
 - **Phase C** — parallelism polish, optional follow-up.
 - ~~Phase D — Rust port.~~ Dropped.
 
-### Phase A status: 4 of 4 super-tasks extracted (2026-05-10)
+### Phase A status: 4 of 4 super-tasks extracted + bodies moved (2026-05-10)
 
-| Task                | Status      | Commit       |
-|---------------------|-------------|--------------|
-| Tasks scaffolding   | LANDED      | `7f2a42bcfe` |
-| MergeNodeTask       | LANDED      | `1eb518f4c5` |
-| PerFileRescoreTask  | LANDED      | `eda5ca0ea2` |
-| FirstJoinTask       | LANDED      | `73170bbfeb` |
-| FileSaver helper    | LANDED      | `59ca270c7b` |
-| PerFileScoringTask  | LANDED      | (this session) |
+| Task                | Orchestration | Body move | Latest commit |
+|---------------------|---------------|-----------|---------------|
+| Tasks scaffolding   | LANDED        | n/a       | `7f2a42bcfe`  |
+| MergeNodeTask       | LANDED        | LANDED    | `6a72150829`  |
+| PerFileRescoreTask  | LANDED        | n/a (Stage6Rescore.cs already separate) | `eda5ca0ea2` |
+| FirstJoinTask       | LANDED        | LANDED    | `ce217bc0a9`  |
+| FileSaver helper    | LANDED        | + 2 wirings | `34a329c582` / `9a601f788b` |
+| PerFileScoringTask  | LANDED        | LANDED    | `c378187bbe`  |
+
+`AnalysisPipeline.cs` is now 3131 lines (down from 7054 originally
+— a 56% reduction). The four task files total 4433 lines:
+
+| File                  | Lines |
+|-----------------------|-------|
+| AnalysisPipeline.cs   | 3131  |
+| FirstJoinTask.cs      | 1497  |
+| MergeNodeTask.cs      |  780  |
+| PerFileRescoreTask.cs |  126  |
+| PerFileScoringTask.cs | 2030  |
+
+What stays on `AnalysisPipeline.cs`:
+- `Run()` itself (the thin task-pipeline driver)
+- The shared scoring engine (RunCoelutionScoring + ScoreWindow +
+  ScoreCandidate + all the feature-compute helpers like
+  ComputeMs1Features, ComputePeakShapeFeatures, etc.) — used by
+  PerFileScoringTask AND by Stage6Rescore (rescore loop)
+- Library helpers (LoadLibrary, GenerateDecoys, BuildDecoyFromSequence,
+  ExtractIsolationWindows) — used by both PerFileScoringTask AND
+  RunWorker (Stage 6 worker mode entry)
+- Stage6Rescore.cs partial (RunWorker, ExecuteStage6Rescore, +
+  helpers) — unchanged
+- Top-level static fields (SG_WEIGHTS, s_calXcorrScorer,
+  s_mzmlReadGate) — promoted to internal where the moved methods
+  needed cross-class access
+
+A future cleanup pass could extract the shared scoring engine into
+its own class (e.g. `SearchEngine` or move into `OspreySharp.Scoring`)
+to shrink AnalysisPipeline.cs further; that would let
+PerFileScoringTask and PerFileRescoreTask both be self-contained
+without `_pipeline` back-references.
 
 All four super-tasks corresponding to the
 Osprey-workflow.html HPC fan-out / join boundaries are in place.
