@@ -33,31 +33,44 @@ Phases now:
 - **Phase C** — parallelism polish, optional follow-up.
 - ~~Phase D — Rust port.~~ Dropped.
 
-### Phase A status: 2 of 4 super-tasks extracted (2026-05-10)
+### Phase A status: 4 of 4 super-tasks extracted (2026-05-10)
 
 | Task                | Status      | Commit       |
 |---------------------|-------------|--------------|
 | Tasks scaffolding   | LANDED      | `7f2a42bcfe` |
 | MergeNodeTask       | LANDED      | `1eb518f4c5` |
 | PerFileRescoreTask  | LANDED      | `eda5ca0ea2` |
-| FirstJoinTask       | not started | -            |
-| PerFileScoringTask  | not started | -            |
+| FirstJoinTask       | LANDED      | `73170bbfeb` |
+| FileSaver helper    | LANDED      | `59ca270c7b` |
+| PerFileScoringTask  | LANDED      | (this session) |
 
-The two extracted tasks each pass Stellar 3-file AND Astral 3-file
-snapshot regression at every stage (stage1to4 / stage5 / stage6 /
-stage7 / blib). Cross-dataset confirmation done. The
-remaining two are larger by line count (FirstJoinTask ≈ 553 lines
-of `Run()` body, PerFileScoringTask ≈ 415 lines) and were left for
-the next session to scope and extract with real-time review.
+All four super-tasks corresponding to the
+Osprey-workflow.html HPC fan-out / join boundaries are in place.
+AnalysisPipeline.Run is a thin driver that constructs the four
+tasks in order and threads outputs from each into the next via
+instance properties. Mid-extraction the framework picked up a
+boolean-return early-exit pattern (mirroring
+pwiz_tools/Skyline/CommandLine.cs) so tasks can short-circuit
+the pipeline without throwing — the dropped/StopAfterStage5/--no-join
+exits all flow through OspreyTask.Run returning false and
+PipelineContext.ExitCode carrying the requested process code.
 
-The two completed extractions follow the same pattern: thin task
-class in `pwiz_tools/OspreySharp/OspreySharp/Tasks/`, takes the
-needed local-state arguments via constructor, calls back into the
-existing private (now `internal`) AnalysisPipeline methods. Bodies
-of `RunProteinFdr`, `WriteBlibOutput`, `ExecuteStage6Rescore`
-all stay where they were — only the orchestration moved. The next
-phase (or Phase B with resume semantics) can move method bodies
-into the task files when the framework shape feels right.
+All four extractions follow the same pattern: thin task class in
+pwiz_tools/OspreySharp/OspreySharp/Tasks/, takes the needed
+inputs via constructor, calls back into the existing private (now
+internal) AnalysisPipeline methods. Bodies of RunProteinFdr,
+WriteBlibOutput, ExecuteStage6Rescore, RunFdr,
+RunFirstPassProteinFdr, WriteFdrScoresSidecars,
+WriteReconciliationFiles, LoadLibrary, GenerateDecoys, and
+ProcessFile all stay where they were — only the orchestration
+moved.
+
+FileSaver (atomic temp-file-then-rename helper) ported from
+SharedBatch/FileSaver.cs into OspreySharp.IO/FileSaver.cs, ready
+for wiring into the per-file artifact writes (.scores.parquet,
+.calibration.json, .reconciliation.json,
+.{1st,2nd}-pass.fdr_scores.bin, output.blib) when Phase B resume
+semantics arrive.
 
 ### Phase 0 status: COMPLETE (2026-05-10)
 
