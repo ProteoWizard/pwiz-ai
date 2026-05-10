@@ -1,4 +1,25 @@
-# TODO-osprey_pipeline_task_rearchitecture.md
+# TODO-20260509_osprey_pipeline_tasks.md
+
+## Branch Information
+- **Branch**: `Skyline/work/20260509_osprey_pipeline_tasks`
+- **Base**: `master`
+- **Created**: 2026-05-09
+- **Status**: In Progress
+- **GitHub Issue**: (none - internal refactor)
+- **PR**: (pending)
+
+## Sprint Plan
+
+User has scoped this as one medium-sized sprint on a single branch
+(not the multi-week, ~7-PR cadence the original write-up sketched).
+Rationale: the OspreySharp folder has a single owner, so merge risk
+is low. If the work stretches to weeks, that's a signal the original
+pipeline design was worse than expected, not a sign to split.
+
+Phase A (mechanical extraction of all 9 tasks) lands on this branch
+as a single PR. Phase B (resume semantics + FileSaver-backed atomic
+writes) and Phase C/D (parallelism, Rust port) remain follow-ups in
+their own branches.
 
 ## Summary
 
