@@ -583,3 +583,6 @@ upstream after the C# version has shipped at least one release.
   C# proves the design
 - `pwiz_tools/OspreySharp/OspreySharp/AnalysisPipeline.cs` +
   `AnalysisPipeline.Stage6Rescore.cs` — current C# monoliths
+
+
+**AbstractScoringTask Astral 3-file confirmation (2026-05-10):** PASS at every stage. Cross-dataset confidence in the new base-class extraction.
