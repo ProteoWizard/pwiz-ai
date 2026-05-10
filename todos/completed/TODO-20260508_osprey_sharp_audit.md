@@ -16,9 +16,12 @@
   flate2 zlib-default merge — when a Rust-side change is needed)
 - **Base**: `master` (pwiz) / `main` (maccoss/osprey)
 - **Created**: 2026-05-08
-- **Status**: In Progress — branches synced and ready
+- **Status**: COMPLETED 2026-05-09 — all 3 PRs squashed and merged
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
-- **PR**: (pending)
+- **PRs**:
+  - [pwiz#4196](https://github.com/ProteoWizard/pwiz/pull/4196) — OspreySharp: end-to-end cross-impl parity + Stage 7/blib perf wins
+  - [maccoss/osprey#33](https://github.com/maccoss/osprey/pull/33) — mzml: sort spectrum centroids at load time
+  - [maccoss/osprey#34](https://github.com/maccoss/osprey/pull/34) — fdr: match sidecar records to stubs by entry_id, not position
 
 ### Predecessors
 
@@ -1832,4 +1835,63 @@ pushed):
   cells, both expected on a HRAM dataset where rust's sparse-xcorr
   + LOH-pooling-style fixes (which originated on the C# side) keep
   rust competitive. Mike-facing asterisk noted.
+
+
+### 2026-05-09 — Completed (all 3 PRs squashed and merged)
+
+**pwiz#4196** merged to master. Ships:
+- End-to-end OspreySharp cross-impl parity through Stage 7 + .blib
+  on Stellar + Astral 3-file.
+- `--join-at-pass=2` reconciled-parquet entry point with sidecar
+  rehydration (1st-pass loaded pre-compaction, 2nd-pass overlaid
+  by entry_id post-compaction; Stage 5/6 skipped).
+- mzML sort-on-load (`EnsureSortedSpectrum`) + `SpectraCache`
+  VERSION bump for cache invalidation.
+- Stage 6 multi-file gap-fill wired into in-process rescore;
+  `DeduplicateDoubleCounting` ported from rust; single-file
+  consensus / reconciliation paths bit-identical.
+- Stage 7 + .blib perf wins: `BlibWriter.AddSpectrumPrecompressed`
+  + `Parallel.For` pre-compress; `BuildProteinParsimony` subset
+  elimination on `HashSet<string>`; `FdrScoresSidecar.TryReadOverlay`
+  bypasses the parquet re-read.
+- Hardening: checked arithmetic in sidecar size check,
+  `InvalidDataException` on NaN m/z, rate-limited
+  `[unsorted-spectrum]` log.
+- `CodeInspectionTest.TestNoUnstableArraySort` blocks future
+  `Array.Sort` regressions (12 legitimate uses tagged with
+  `// Array.Sort OK: <reason>` exemption comments).
+- `Osprey-workflow.html` refreshed for Mike-facing presentation:
+  per-stage timing table is the single source of perf truth, plus
+  per-stage commentary list and pointer to
+  `pwiz-ai/todos/completed/TODO-*_osprey_sharp*.md` for the
+  detailed work log.
+
+**maccoss/osprey#33** merged to main. Companion to OspreySharp's
+`EnsureSortedSpectrum`: rust `parser.rs::ensure_sorted` sorts
+non-monotonic centroids at load time, with a length-mismatch
+guard added in response to Copilot review and four unit tests
+covering the fast path, single inversion, equal-mz stability,
+and length-mismatch skip.
+
+**maccoss/osprey#34** merged to main. Companion to OspreySharp's
+`FdrScoresSidecar.TryReadOverlay`: rust
+`load_fdr_scores_sidecar` matches by `entry_id` instead of
+position, supports the post-compaction sidecar-superset case,
+and uses `checked_mul` / `checked_add` for the size check
+(addressing Copilot's overflow concern).
+
+**Final perf picture** (3-file regression, post-merge medians):
+- Stellar: rust 7:38 / cs 6:46 (cs **0.89×**, faster overall).
+- Astral: rust 25:51 / cs 32:35 (cs 1.26×, dominated by
+  stage1to4 + stage6 on HRAM where Mike's parity-from-C# fixes
+  keep rust competitive).
+- Every blib + stage7 cell green on both datasets.
+
+**Cross-impl regression harness**: passing on both datasets at
+every stage gate. The harness is the no-regression contract for
+the next phase (C# code cleanup while holding parity).
+
+**Next phase**: a fresh feature branch
+(`Skyline/work/<DATE>_osprey_sharp_cleanup` or similar) starts
+the C# cleanup work. New TODO will be opened then.
 
