@@ -43,8 +43,9 @@ Phases now:
 | FirstJoinTask       | not started | -            |
 | PerFileScoringTask  | not started | -            |
 
-The two extracted tasks each pass Stellar 3-file snapshot regression
-at every stage (stage1to4 / stage5 / stage6 / stage7 / blib). The
+The two extracted tasks each pass Stellar 3-file AND Astral 3-file
+snapshot regression at every stage (stage1to4 / stage5 / stage6 /
+stage7 / blib). Cross-dataset confirmation done. The
 remaining two are larger by line count (FirstJoinTask ≈ 553 lines
 of `Run()` body, PerFileScoringTask ≈ 415 lines) and were left for
 the next session to scope and extract with real-time review.
