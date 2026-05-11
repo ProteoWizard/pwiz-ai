@@ -1,4 +1,4 @@
-# TODO-20260511_osprey_pipeline_tasks.md — Phase B follow-up
+# TODO-20260511_osprey_pipeline_tasks.md — Phase B (resume) + Phase C (worker convergence)
 
 > Continuation of **[TODO-20260509_osprey_pipeline_tasks.md](../completed/TODO-20260509_osprey_pipeline_tasks.md)**
 > (Phase 0 snapshot regression + Phase A task-based pipeline
@@ -43,12 +43,57 @@ Stellar AND Astral 3-file snapshot regression PASS at every stage
 
 ## Plan
 
-Three workstreams, ordered by dependency. Each is a separate
-commit gated by Stellar + Astral snapshot regression PASS; whether
-they bundle into one PR or split is a sprint-end decision based on
-size.
+Phase B (resume capability) ships first. Worker convergence (Phase
+C) becomes a follow-up branch because it requires a non-trivial
+lazy-rehydrate accessor refactor that's separable from the resume
+mechanism.
 
-### 1. Pass 2 — worker convergence via lazy rehydrate
+### Phase B status: LANDED (2026-05-11)
+
+Resume-on-restart shipped in four commits on
+`Skyline/work/20260511_osprey_pipeline_tasks`:
+
+| Commit | Subject |
+|--------|---------|
+| `778628dd86` | Addressed post-merge /review feedback on PR #4197 (stale comments + GetPerFileEntries null-safety) |
+| `83957ce86e` | Phase B framework surface: Inputs / Outputs / ValidityKey on OspreyTask + TaskValiditySidecar |
+| `70f8a578c3` | Phase B per-task Inputs / Outputs / ValidityKey overrides on each concrete task |
+| `6c0711496e` | Wired skip-if-outputs-valid into RunTask with --input-scores CLI flag gate |
+
+Mechanism:
+
+- Each task declares its `Inputs(ctx)`, `Outputs(ctx)`, and
+  `ValidityKey(ctx)`. The base default `ValidityKey` covers
+  `SearchParameterHash` + `LibraryIdentityHash`; tasks whose
+  output also depends on reconciliation parameters
+  (FirstJoinTask, PerFileRescoreTask, MergeNodeTask) override and
+  append the `ReconciliationParameterHash`.
+- `RunTask` (driver helper on AnalysisPipeline) checks each
+  output exists with a `.osprey.task` sidecar matching the
+  current `ValidityKey` before invoking `Run`. If so, log
+  `[task] X: skipping (outputs valid)` and return true without
+  executing. After successful Run, fresh sidecars are written
+  next to each output.
+- CLI-flag gate: when `config.InputScores` is set (worker /
+  cross-impl invocations), the entire validity-key dance is
+  bypassed. The existing parquet `osprey.search_hash` metadata
+  check still enforces cross-impl correctness in that path.
+- Sidecar naming includes the task name
+  (`<output>.<TaskName>.osprey.task`) so tasks that write to
+  the same output (PerFileScoringTask + PerFileRescoreTask both
+  write to `<stem>.scores.parquet`) don't trample each other's
+  validity records.
+
+Validated: build green; 303/303 unit tests pass; Stellar 3-file
+snapshot regression PASS at every stage on the latest commit.
+
+### Phase C — worker convergence via lazy rehydrate (follow-up branch)
+
+Deferred from Phase B because the lazy-rehydrate accessor pattern
+requires a non-trivial cross-task refactor that's separable from
+the resume mechanism. The hand-off is clean: Phase B's framework
+surface (Inputs / Outputs / ValidityKey + sidecar I/O) is exactly
+what Phase C builds on.
 
 Each producer task's `Get*` accessor learns to lazy-hydrate from
 disk when its `Run` has not executed (the worker entry path).
