@@ -89,34 +89,55 @@ Subsequent refactor extracted the SHARED scoring engine off
 AnalysisPipeline into a new `AbstractScoringTask` abstract base in
 `OspreySharp/Tasks/AbstractScoringTask.cs` (3006 lines). All four
 concrete tasks now inherit from it; AnalysisPipeline.cs collapses
-to 242 lines (96.6% reduction from origin/master's 7054).
+to 220 lines (96.9% reduction from origin/master's 7054).
 
 | Step | Commit |
 |------|--------|
 | AbstractScoringTask + inheritance + AnalysisPipeline shortcut | `ea80d789db` |
-| Rename Stage6Rescore.cs → AnalysisPipeline.PostReconciliationRescore.cs + ExecuteStage6Rescore → ExecuteRescore | (this commit) |
+| Rename Stage6Rescore.cs → AnalysisPipeline.PostReconciliationRescore.cs + ExecuteStage6Rescore → ExecuteRescore | `07af36bac5` |
+| Move rescore engine into PerFileRescoreTask + drop AnalysisPipeline inheritance | `4e2d84be79` |
 
-Pragmatic shortcut: AnalysisPipeline ALSO inherits AbstractScoringTask
-(public-public chain, with NotSupportedException stubs for the
-abstract Run/Name overrides) so the partial methods in
-AnalysisPipeline.PostReconciliationRescore.cs (RunWorker,
-ExecuteRescore, WriteReconciledParquet, LoadSpectraForRescore,
-LoadMassCalibrations) can reach inherited engine methods.
-PerFileRescoreTask.Run plants its `_ctx` onto its `_pipeline`
-back-reference before invoking ExecuteRescore so inherited engine
-methods see a non-null _ctx through `this`. RunWorker initializes
-its own `_ctx` from the worker's config + the static log sinks.
+### Phase A+++ : rescore engine fully self-contained (2026-05-10 late evening)
 
-The `internal PipelineContext _ctx;` field on AbstractScoringTask
-is shared by all subclasses; the access modifier is `internal`
-rather than `protected` so cross-instance assignment
-(`_pipeline._ctx = ctx`) compiles.
+The rescore engine — `RunWorker`, `ExecuteRescore`,
+`WriteReconciledParquet`, `LoadSpectraForRescore`,
+`LoadMassCalibrations`, `LoadOriginalRtCalibration`, `AddIfNotNull`,
+and `RescoreStats` — has been moved out of the
+`AnalysisPipeline.PostReconciliationRescore.cs` partial and into
+`PerFileRescoreTask.cs` (1181 lines). The partial file is deleted.
 
-Follow-ups still TODO:
-- Move ExecuteRescore + helpers + RunWorker from
-  AnalysisPipeline.PostReconciliationRescore.cs into
-  PerFileRescoreTask. Once that lands, AnalysisPipeline drops the
-  AbstractScoringTask inheritance shortcut.
+`PerFileRescoreTask` now has two constructors: the multi-arg one
+for in-process invocation through `Pipeline.Execute`, and a
+parameterless one for the `--join-at-pass=1 --no-join` worker
+entry. `RescoreWorker.Run` switches to constructing the task
+directly:
+
+```csharp
+var task = new PerFileRescore.PerFileRescoreTask();
+return task.RunWorker(config);
+```
+
+With the engine self-contained, `AnalysisPipeline` no longer needs
+the `AbstractScoringTask` inheritance shortcut. The base class +
+`Name` + `Run(ctx)` stubs are removed; the `partial` keyword is
+dropped (single-part now); AnalysisPipeline.cs is a plain class
+(220 lines) that drives the four task-pipeline phases
+(PerFileScoring → FirstJoin → PerFileRescore → MergeNode) and owns
+the thin shared logging sinks + `FormatDuration` helper.
+
+Inside the moved methods, the static `LogInfo` / `LogWarning` /
+`Program.LogX` call sites have been switched to `_ctx.LogInfo` /
+`_ctx.LogWarning` / `_ctx.LogError`. Since `_ctx`'s callbacks
+delegate to the same `Program.LogX` sinks, output is identical.
+The only test-side ripple was a one-line rename in
+`CalibrationTest.cs`:
+`AnalysisPipeline.s_calXcorrScorer` → `AbstractScoringTask.s_calXcorrScorer`.
+
+Snapshot regression: Stellar 3-file AND Astral 3-file PASS at
+every stage (stage1to4 / stage5 / stage6 / stage7 / blib).
+303/303 OspreySharp unit tests pass.
+
+Remaining follow-up:
 - Rename the WriteStage6* diagnostic methods in OspreyDiagnostics
   (the cs_stage6_*.tsv dump filenames stay the same to keep the
   snapshot regression valid).
