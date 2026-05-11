@@ -146,6 +146,35 @@ Remaining follow-up:
   reading non-diagnostic code does not require understanding
   Osprey-workflow.html.
 
+### Phase A+++++ : task registry on PipelineContext (2026-05-10, evening)
+
+Follow-up `f3236b6245`. Replaces upstream-task constructor params
+with `ctx.GetTask<T>()` lookups.
+
+- `PipelineContext` now holds an ordered task list keyed by `Type`.
+  `ctx.GetTask<T>()` returns the registered task or throws
+  `UnknownTaskException` (programming defect; fail fast).
+- Each concrete task is parameterless-constructed. Downstream tasks
+  read upstream-produced state via
+  `ctx.GetTask<UpstreamTask>().GetX()` rather than through the
+  constructor; producer tasks own typed `Get*` accessors for their
+  outputs.
+- `PerFileRescoreTask` self-gates on `FirstJoinTask.DidPlan`
+  (returns true as a no-op when planning was skipped) and exposes
+  `GetPerFileEntries()` as the post-rescore producer
+  (ownership-transfer mutation contract; `MergeNodeTask` consumes
+  the post-rescore version through this accessor, not through
+  `PerFileScoringTask`).
+- `AnalysisPipeline.Run` constructs the task list once, hands it to
+  the context, and iterates a flat `foreach` — no per-phase
+  conditional dispatch in the driver.
+- Worker mode (`PerFileRescoreTask.RunWorker`) still builds state
+  in-method for now; Pass 2 will move that hydration onto the
+  upstream producers' accessors.
+
+Stellar 3-file PASS at every stage; 303/303 unit tests pass.
+Astral cross-dataset confirmation in flight.
+
 ### Phase A++++ : task orchestration simplification (2026-05-10, later)
 
 Follow-up cleanup commit `c612037c70`:
