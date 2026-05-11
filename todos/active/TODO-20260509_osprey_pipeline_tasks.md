@@ -175,6 +175,57 @@ with `ctx.GetTask<T>()` lookups.
 Stellar 3-file PASS at every stage; 303/303 unit tests pass.
 Astral cross-dataset confirmation in flight.
 
+#### Pass 2 plan (worker convergence via lazy rehydrate)
+
+Each producer task's `Get*` accessor learns to lazy-hydrate from
+disk when its `Run` has not executed (the worker entry path).
+`RescoreWorker.Run` becomes:
+
+```csharp
+var ctx = new PipelineContext(config, new OspreyTask[]
+{
+    new PerFileScoringTask(),
+    new FirstJoinTask(),
+    new PerFileRescoreTask(),
+}, Program.LogInfo, Program.LogWarning, Program.LogError);
+return RunTask(ctx.GetTask<PerFileRescoreTask>(), ctx) ? 0 : ctx.ExitCode;
+```
+
+`PerFileRescoreTask.RunWorker` and the parameterless `RunWorker`
+path go away. The lazy chain pulls upstream state from disk on
+first accessor call.
+
+Hydration responsibilities per producer:
+
+| Producer | Accessor | Worker rehydrate |
+|----------|----------|------------------|
+| PerFileScoringTask | GetFullLibrary | LoadLibrary(config) + GenerateDecoys (skip when DecoysInLibrary) |
+| PerFileScoringTask | GetLibraryById | Derive from GetFullLibrary |
+| PerFileScoringTask | GetPerFileEntries | RescoreHydration.HydrateForRescore(config.InputScores) + RescoreCompaction.Apply |
+| PerFileScoringTask | GetPerFileCalibrations | Load sibling .calibration.json per file |
+| PerFileScoringTask | GetPerFileParquetPaths | Build from config.InputScores |
+| FirstJoinTask | DidPlan | true after Hydrate populates outputs |
+| FirstJoinTask | GetPerFileConsensusTargets | MultiChargeConsensus.SelectRescoreTargets per file (computed from perFileEntries) |
+| FirstJoinTask | GetReconciliationActions | From RescoreHydration result (shared with PerFileScoringTask via... a shared hydrate cache?) |
+| FirstJoinTask | GetRefinedCalibrations | From RescoreHydration result |
+| FirstJoinTask | GetPerFileGapFillForRescore | From RescoreHydration result |
+
+Open design Qs for Pass 2:
+- `RescoreHydration.HydrateForRescore` produces a `RescoreInputs`
+  bundle that PerFileScoringTask (entries) AND FirstJoinTask
+  (reconciliation actions, refined cals, gap-fill) both need.
+  Should the bundle live on... one task that exposes the relevant
+  bits and the other task queries through it? Or run hydration
+  twice (once per task)? Cheapest: PerFileScoringTask owns the
+  bundle and exposes both its own outputs AND a way for
+  FirstJoinTask to read the FirstJoin-owned bits. Or: a shared
+  hydrate helper that both call lazily, memoized once at the
+  config-level.
+- Sentinel for "not yet computed" — null for reference types,
+  bool flag for value types (DidPlan). Today the fields default
+  to non-null empty collections; Pass 2 needs to change that to
+  null so the accessor can detect "must hydrate."
+
 ### Phase A++++ : task orchestration simplification (2026-05-10, later)
 
 Follow-up cleanup commit `c612037c70`:
