@@ -95,6 +95,30 @@ public static int Run(OspreyConfig config) => new AnalysisPipeline().Run(config)
 The CLI parser is what makes it work (it sets
 `config.StartAtTask = typeof(PerFileRescoreTask)` etc.).
 
+**Canonical pipeline lives in one place.** With the invariant
+pipeline, no caller should construct a `new OspreyTask[] { ... }`
+list naming all four tasks — that would be re-stating the canonical
+definition. The single source of truth is a static factory on
+`AnalysisPipeline`:
+
+```csharp
+internal static OspreyTask[] CanonicalPipeline() => new OspreyTask[]
+{
+    new PerFileScoringTask(),
+    new FirstJoinTask(),
+    new PerFileRescoreTask(),
+    new MergeNodeTask(),
+};
+```
+
+`AnalysisPipeline.Run` is the only caller. `RescoreWorker.Run` is
+literally `return new AnalysisPipeline().Run(config);` — it never
+sees a task list. (`PipelineContext` itself can't own the factory
+because the four task classes live in `OspreySharp` and
+`PipelineContext` lives in `OspreySharp.Tasks` — making
+`OspreySharp.Tasks` reference `OspreySharp` would create a project
+cycle. `AnalysisPipeline` is on the correct side of that boundary.)
+
 ### 2. Lazy-rehydrate accessors on producer tasks
 
 When `MergeNodeTask` runs in `--join-at-pass=2` mode, it queries
@@ -213,7 +237,8 @@ snapshot regression. Astral cross-dataset PASS gates the PR open.
 
 ### Commit 5 — worker convergence
 
-- `RescoreWorker.Run` becomes `return new AnalysisPipeline().Run(config);`.
+- Introduce `AnalysisPipeline.CanonicalPipeline()` static factory if commits 2-4 haven't already. The canonical 4-task list lives only here.
+- `RescoreWorker.Run` becomes `return new AnalysisPipeline().Run(config);` — no task list, no `PipelineContext` construction.
 - Delete `PerFileRescoreTask.RunWorker` body and the parameterless ctor's worker-mode special-case (the parameterless ctor stays; it's used by the registry).
 - Delete any remaining CLI-mode branches inside task `Run`s now that the StartAt mechanism handles all dispatch.
 - Validation: cross-impl Test-Regression flow (Rust outputs → C# stage 5+) still works; Stellar + Astral regression PASS.
