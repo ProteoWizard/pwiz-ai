@@ -8,10 +8,10 @@
 
 ## Branch Information
 
-- **Branch**: (none yet — to be created from master)
+- **Branch**: `Skyline/work/20260511_osprey_pipeline_tasks` (created 2026-05-11 from `origin/master` at `12825485a9` — the squash-merge of #4197)
 - **Base**: `master`
 - **Created**: 2026-05-11
-- **Status**: Planning
+- **Status**: In progress
 - **PR**: (pending)
 
 ## Predecessor: Phase 0 + Phase A — merged
