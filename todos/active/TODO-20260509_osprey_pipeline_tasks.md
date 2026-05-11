@@ -138,9 +138,38 @@ every stage (stage1to4 / stage5 / stage6 / stage7 / blib).
 303/303 OspreySharp unit tests pass.
 
 Remaining follow-up:
-- Rename the WriteStage6* diagnostic methods in OspreyDiagnostics
-  (the cs_stage6_*.tsv dump filenames stay the same to keep the
-  snapshot regression valid).
+- Decided 2026-05-10: the WriteStage6* diagnostic names in
+  OspreyDiagnostics stay — those dumps exist specifically to debug
+  maccoss/osprey ↔ OspreySharp diffs with heavy reference to
+  Osprey-workflow.html, so the Stage N language is load-bearing
+  there. The naming was kept out of the rest of the code so that
+  reading non-diagnostic code does not require understanding
+  Osprey-workflow.html.
+
+### Phase A++++ : task orchestration simplification (2026-05-10, later)
+
+Follow-up cleanup commit `c612037c70`:
+
+- Replaced the `Pipeline` class with a private `RunTask` helper on
+  `AnalysisPipeline` since every call site was
+  `new Pipeline(singleTask).Execute(ctx)`. Deleted
+  `OspreySharp.Tasks/Pipeline.cs`.
+- Consolidated four near-identical `new PipelineContext(...)`
+  constructions in `AnalysisPipeline.Run` into a single shared
+  context — matches the design intent documented on
+  `PipelineContext`.
+- Moved all four concrete task classes into the
+  `pwiz.OspreySharp.Tasks` namespace (was per-task sub-namespaces);
+  ReSharper-driven cleanup of redundant usings + doc-comment crefs
+  across the task files + FileSaver.
+- `OspreySharp.Tasks` project now exposes just `OspreyTask` +
+  `PipelineContext` — the shared framework boundary used by the
+  four task subclasses.
+
+Snapshot regression PASS at every stage on Stellar 3-file;
+303/303 unit tests pass. Inspection: 0 errors, 3 pre-existing
+InvalidXmlDocComment warnings (down from 55 before the AnalysisPipeline
+extraction work started).
 
 All four super-tasks corresponding to the
 Osprey-workflow.html HPC fan-out / join boundaries are in place.
