@@ -1,18 +1,29 @@
-# TODO-20260511_osprey_pipeline_tasks.md — Phase B (resume) + Phase C (worker convergence)
+# TODO-20260511_osprey_pipeline_tasks.md — Phase B: resume + worker convergence (unified design)
 
 > Continuation of **[TODO-20260509_osprey_pipeline_tasks.md](../completed/TODO-20260509_osprey_pipeline_tasks.md)**
 > (Phase 0 snapshot regression + Phase A task-based pipeline
 > rearchitecture, merged 2026-05-11 via ProteoWizard/pwiz #4197).
-> That TODO has the full Phase 0 / Phase A history and design
-> decisions; this file is forward-looking only.
+> Phase 0 / Phase A history and design decisions live there; this
+> file describes the Phase B design and remaining implementation
+> work.
 
 ## Branch Information
 
 - **Branch**: `Skyline/work/20260511_osprey_pipeline_tasks` (created 2026-05-11 from `origin/master` at `12825485a9` — the squash-merge of #4197)
 - **Base**: `master`
-- **Created**: 2026-05-11
-- **Status**: In progress
+- **Status**: framework surface + per-task declarative metadata landed; skip mechanism + StartAt + lazy rehydrate + per-file skip + worker convergence pending
 - **PR**: (pending)
+
+## Current branch state (commits already on branch)
+
+| Commit | Subject | Status |
+|--------|---------|--------|
+| `778628dd86` | `/review` cleanup from PR #4197 (stale FdrScoresSidecar comment, PerFileRescoreTask doc, `GetPerFileEntries` null guard) | KEEP — independent value |
+| `9430e41a34` | Framework surface: `Inputs` / `Outputs` / `ValidityKey` virtuals on `OspreyTask` + `TaskValiditySidecar` JSON reader/writer | KEEP — exactly the foundation the unified design needs |
+| `70f8a578c3` | Per-task `Inputs` / `Outputs` / `ValidityKey` overrides on each concrete task | KEEP — declarative metadata stays |
+| `e7763c490e` | Revert of an earlier RunTask skip-wiring commit | (revert; nothing to do) |
+
+The earlier `RunTask` skip-wiring (with an `IsWorkerMode(ctx) = config.InputScores.Count > 0` gate) was reverted because the gate is the wrong abstraction in the unified design. The skip mechanism returns in a different shape; see the design below.
 
 ## Predecessor: Phase 0 + Phase A — merged
 
@@ -21,208 +32,245 @@ ProteoWizard/pwiz #4197 (merged 2026-05-11, squash):
 - `AnalysisPipeline.cs` went from 7,054 lines to 220 lines (96.9%
   reduction). Four task classes
   (`PerFileScoringTask`, `FirstJoinTask`, `PerFileRescoreTask`,
-  `MergeNodeTask`) align with the HPC fan-out / join boundaries from
-  `Osprey-workflow.html`.
-- `AbstractScoringTask` base class holds the shared scoring engine
-  (RunCoelutionScoring + feature compute + library prep + dedup +
-  static utilities).
+  `MergeNodeTask`) align with the HPC fan-out / join boundaries
+  from `Osprey-workflow.html`.
+- `AbstractScoringTask` base class holds the shared scoring engine.
 - `PipelineContext` is a typed task registry; consumers reach
-  upstream producers via `ctx.GetTask<T>().GetX()` (no constructor
-  threading). Fail-fast `UnknownTaskException` on miss.
-- `OspreySharp.IO/FileSaver.cs` is the atomic-write helper, with
-  cross-platform `Path.GetRandomFileName` + `FileStream(CreateNew)`
-  unique-name allocation (no kernel32 P/Invoke). Wired into
-  `FdrScoresSidecar.Write` + `ReconciliationFile.Save`.
+  upstream producers via `ctx.GetTask<T>().GetX()`.
+- `OspreySharp.IO/FileSaver.cs` (cross-platform atomic writes) is
+  wired into `FdrScoresSidecar.Write` + `ReconciliationFile.Save`.
 - `Test-Snapshot.ps1` is the same-impl byte-equality regression
-  harness; baselines live at
+  harness; baselines at
   `D:\test\osprey-runs\{stellar,astral}\_snapshots\main\`.
 
-Validated end-to-end at merge: 303/303 OspreySharp unit tests pass;
-Stellar AND Astral 3-file snapshot regression PASS at every stage
-(stage1to4 / stage5 / stage6 / stage7 / blib).
+## Phase B unified design
 
-## Plan
+The user's HPC scenario: a pipeline run processing 1000 mass-spec
+files. The orchestration server crashes after file 487 has been
+scored. The user re-invokes the same CLI. The pipeline should
+fast-forward through every completed file's work and pick up where
+the crash left off — *not* re-score the 487 already-scored files.
 
-Phase B (resume capability) ships first. Worker convergence (Phase
-C) becomes a follow-up branch because it requires a non-trivial
-lazy-rehydrate accessor refactor that's separable from the resume
-mechanism.
+Three mechanisms together produce that behavior:
 
-### Phase B status: LANDED (2026-05-11)
+### 1. Single canonical pipeline, with `StartAt` / `StopAfter`
 
-Resume-on-restart shipped in four commits on
-`Skyline/work/20260511_osprey_pipeline_tasks`:
+The pipeline definition is invariant: always
+`[PerFileScoringTask, FirstJoinTask, PerFileRescoreTask, MergeNodeTask]`,
+in order. CLI flags do **not** change which tasks are in the
+pipeline. They map to two new properties on `PipelineContext`:
 
-| Commit | Subject |
-|--------|---------|
-| `778628dd86` | Addressed post-merge /review feedback on PR #4197 (stale comments + GetPerFileEntries null-safety) |
-| `83957ce86e` | Phase B framework surface: Inputs / Outputs / ValidityKey on OspreyTask + TaskValiditySidecar |
-| `70f8a578c3` | Phase B per-task Inputs / Outputs / ValidityKey overrides on each concrete task |
-| `6c0711496e` | Wired skip-if-outputs-valid into RunTask with --input-scores CLI flag gate |
+- `StartAtTask` (`Type`, default `typeof(PerFileScoringTask)`)
+- `StopAfterTask` (`Type`, default `typeof(MergeNodeTask)`)
 
-Mechanism:
+The driver iterates `ctx.Tasks`:
 
-- Each task declares its `Inputs(ctx)`, `Outputs(ctx)`, and
-  `ValidityKey(ctx)`. The base default `ValidityKey` covers
-  `SearchParameterHash` + `LibraryIdentityHash`; tasks whose
-  output also depends on reconciliation parameters
-  (FirstJoinTask, PerFileRescoreTask, MergeNodeTask) override and
-  append the `ReconciliationParameterHash`.
-- `RunTask` (driver helper on AnalysisPipeline) checks each
-  output exists with a `.osprey.task` sidecar matching the
-  current `ValidityKey` before invoking `Run`. If so, log
-  `[task] X: skipping (outputs valid)` and return true without
-  executing. After successful Run, fresh sidecars are written
-  next to each output.
-- CLI-flag gate: when `config.InputScores` is set (worker /
-  cross-impl invocations), the entire validity-key dance is
-  bypassed. The existing parquet `osprey.search_hash` metadata
-  check still enforces cross-impl correctness in that path.
-- Sidecar naming includes the task name
-  (`<output>.<TaskName>.osprey.task`) so tasks that write to
-  the same output (PerFileScoringTask + PerFileRescoreTask both
-  write to `<stem>.scores.parquet`) don't trample each other's
-  validity records.
+- Tasks **before** `StartAt`: `Run` is never called. They sit in
+  the registry; their accessors lazy-rehydrate from disk if a
+  downstream task queries them.
+- Tasks **from `StartAt` through `StopAfter`**: normal flow —
+  skip-if-outputs-valid check, then run otherwise, write sidecars
+  on success.
+- Tasks **after** `StopAfter`: not reached.
 
-Validated: build green; 303/303 unit tests pass; Stellar 3-file
-snapshot regression PASS at every stage on the latest commit.
+CLI → StartAt/StopAfter mapping (CLI parser populates these from
+existing flags; no new CLI surface):
 
-### Phase C — worker convergence via lazy rehydrate (follow-up branch)
+| CLI | StartAt | StopAfter |
+|-----|---------|-----------|
+| (default) | `PerFileScoringTask` | `MergeNodeTask` |
+| `--no-join` | `PerFileScoringTask` | `PerFileScoringTask` |
+| `--join-at-pass=1 --join-only` (no `--input-scores`) | `PerFileScoringTask` | `FirstJoinTask` |
+| `--join-at-pass=1 --join-only --input-scores ...` | `FirstJoinTask` | `FirstJoinTask` |
+| `--join-at-pass=1 --no-join --input-scores ...` (rescore worker) | `PerFileRescoreTask` | `PerFileRescoreTask` |
+| `--join-at-pass=2 --input-scores ...` | `MergeNodeTask` | `MergeNodeTask` |
 
-Deferred from Phase B because the lazy-rehydrate accessor pattern
-requires a non-trivial cross-task refactor that's separable from
-the resume mechanism. The hand-off is clean: Phase B's framework
-surface (Inputs / Outputs / ValidityKey + sidecar I/O) is exactly
-what Phase C builds on.
-
-Each producer task's `Get*` accessor learns to lazy-hydrate from
-disk when its `Run` has not executed (the worker entry path).
-`RescoreWorker.Run` becomes:
+This collapses the worker entry path onto the standard pipeline.
+`RescoreWorker.Run` becomes one line:
 
 ```csharp
-var ctx = new PipelineContext(config, new OspreyTask[]
-{
-    new PerFileScoringTask(),
-    new FirstJoinTask(),
-    new PerFileRescoreTask(),
-}, Program.LogInfo, Program.LogWarning, Program.LogError);
-return RunTask(ctx.GetTask<PerFileRescoreTask>(), ctx) ? 0 : ctx.ExitCode;
+public static int Run(OspreyConfig config) => new AnalysisPipeline().Run(config);
 ```
 
-`PerFileRescoreTask.RunWorker` and the parameterless `RunWorker`
-path go away. The lazy chain pulls upstream state from disk on
-first accessor call.
+The CLI parser is what makes it work (it sets
+`config.StartAtTask = typeof(PerFileRescoreTask)` etc.).
 
-Hydration responsibilities per producer:
+### 2. Lazy-rehydrate accessors on producer tasks
 
-| Producer | Accessor | Worker rehydrate |
-|----------|----------|------------------|
-| PerFileScoringTask | GetFullLibrary | LoadLibrary(config) + GenerateDecoys (skip when DecoysInLibrary) |
-| PerFileScoringTask | GetLibraryById | Derive from GetFullLibrary |
-| PerFileScoringTask | GetPerFileEntries | RescoreHydration.HydrateForRescore(config.InputScores) + RescoreCompaction.Apply |
-| PerFileScoringTask | GetPerFileCalibrations | Load sibling .calibration.json per file |
-| PerFileScoringTask | GetPerFileParquetPaths | Build from config.InputScores |
-| FirstJoinTask | DidPlan | true after Hydrate populates outputs |
-| FirstJoinTask | GetPerFileConsensusTargets | MultiChargeConsensus.SelectRescoreTargets per file (from perFileEntries) |
-| FirstJoinTask | GetReconciliationActions | From RescoreHydration result |
-| FirstJoinTask | GetRefinedCalibrations | From RescoreHydration result |
-| FirstJoinTask | GetPerFileGapFillForRescore | From RescoreHydration result |
+When `MergeNodeTask` runs in `--join-at-pass=2` mode, it queries
+`ctx.GetTask<PerFileScoringTask>().GetFullLibrary()`. The
+`PerFileScoringTask`'s `Run` was skipped (it's before `StartAt`)
+so its field is null. The accessor detects null and lazy-loads
+from disk:
 
-Open design Qs (decide as we go; both feel reasonable today):
+| Task / Accessor | Lazy rehydrate |
+|-----------------|----------------|
+| `PerFileScoringTask.GetFullLibrary` | `LoadLibrary(config) + GenerateDecoys` (skip decoys when `DecoysInLibrary`) |
+| `PerFileScoringTask.GetLibraryById` | derive from `GetFullLibrary` |
+| `PerFileScoringTask.GetPerFileEntries` | `RescoreHydration.HydrateForRescore(config.InputScores)` + `RescoreCompaction.Apply` (mirrors today's `RunWorker` body) |
+| `PerFileScoringTask.GetPerFileCalibrations` | load each `.calibration.json` sibling |
+| `PerFileScoringTask.GetPerFileParquetPaths` | build from `config.InputScores` or `config.InputFiles` |
+| `FirstJoinTask.DidPlan` | `true` once `_perFileGapFillForRescore` is hydrated |
+| `FirstJoinTask.GetPerFileConsensusTargets` | `MultiChargeConsensus.SelectRescoreTargets` per file (from perFileEntries) |
+| `FirstJoinTask.GetReconciliationActions` | from `RescoreHydration` result |
+| `FirstJoinTask.GetRefinedCalibrations` | from `RescoreHydration` result |
+| `FirstJoinTask.GetPerFileGapFillForRescore` | from `RescoreHydration` result |
 
-- **Where the `RescoreHydration` bundle lives.** It produces a
-  `RescoreInputs` object that PerFileScoringTask needs (entries) AND
-  FirstJoinTask needs (reconciliation actions, refined cals,
-  gap-fill). Cheapest: PerFileScoringTask owns the bundle and
-  exposes the FirstJoin-owned bits through accessor methods that
-  FirstJoinTask delegates to. Cleaner: a memoized helper on
-  `RescoreHydration` itself that both tasks call lazily.
-- **Sentinel for "not yet computed".** Today the producer-task
-  output fields default to non-null empty collections so accessor
-  callers never NPE before Run completes. Pass 2 needs to switch
-  to a null sentinel (or a `_hydrated` bool) so the accessor can
-  detect "must hydrate." Worth confirming the null route is
-  consistent with Pass 1's defaults before flipping.
+**Shared hydration seam.** `PerFileScoringTask.GetPerFileEntries`
+and the four `FirstJoinTask` accessors that pull from
+`RescoreHydration` share an internal bundle (the existing
+`RescoreInputs` type). To avoid double-loading, one of these tasks
+owns the bundle. Suggested split: `PerFileScoringTask` owns
+`_rescoreInputs`, exposes both its own bits AND a
+`GetRescoreInputs()` that `FirstJoinTask`'s rehydration calls.
+Alternative: a memoized cache on `RescoreHydration` itself.
+Implementer's call — both work.
 
-### 2. Phase B — validity-key resume layer
+Once the lazy-rehydrate path exists, every CLI-mode-aware branch
+inside the four task `Run` methods becomes dead code and can be
+deleted (e.g. the `if (config.ExpectReconciledInput)` blocks in
+`PerFileScoringTask.Run` and `FirstJoinTask.Run`). The task's
+`Run` only handles the case where its own `Run` is actually
+invoked (i.e. when it's at-or-after `StartAt`).
 
-The bigger architectural step that the task framework was built to
-support. Build on Pass 2's lazy-rehydrate accessors:
+### 3. Per-file skip inside `PerFileScoringTask.Run`
 
-- Add `ValidityKey(PipelineContext)` virtual method to
-  `OspreyTask`. Returns a hash of (search_hash + library_hash +
-  version + task-specific inputs). Default impl reads
-  `config.SearchParameterHash` + `config.LibraryIdentityHash` +
-  `Program.VERSION`; tasks with extra-state can override.
-- Add `Inputs(ctx)` + `Outputs(ctx)` virtuals returning the
-  per-file artifact paths the task reads / writes. The driver
-  walks Outputs and asks "do these exist and does their sidecar
-  `.osprey.task` ValidityKey match?" If yes, skip Run; the
-  accessors lazy-rehydrate from those existing artifacts.
-- Sidecar format: `.osprey.task` JSON next to each output, carrying
-  `{"task": "...", "version": "26.5.0", "validity_key": "...",
-  "inputs": [...], "outputs": [...]}`. Trivial to inspect by hand;
-  survives format evolution.
-- The existing `--no-join` / `--join-at-pass=1` / `--join-only` /
-  `--join-at-pass=2` CLI flags become aliases for "force start at
-  task N" / "stop after task N". Mid-run crash resume happens
-  automatically on next invocation against the same dataset.
+Task-level skip on `PerFileScoringTask` is all-or-nothing: if 999
+of 1000 outputs exist with valid sidecars, the task still
+re-runs and the inner `foreach (var inputFile in config.InputFiles)`
+re-scores every file. To fix:
 
-### 3. Minor cleanups (deferred from /review feedback)
+- At the top of the per-file loop in `PerFileScoringTask.Run`, check
+  the file's `.scores.parquet.PerFileScoring.osprey.task` sidecar.
+- If valid: load the existing parquet into `_perFileEntries` (same
+  code path the lazy-rehydrate accessor uses), populate
+  `_perFileCalibrations` from the sibling `.calibration.json`, log
+  `[file] X: skipping (outputs valid)`, and continue to the next
+  file.
+- Else: score the file as today.
 
-Three items from the post-merge `/review`:
+Same pattern applies to `MergeNodeTask`'s 2nd-pass FDR sidecar
+loop. The 2nd-pass sidecars are per-file outputs; per-file skip
+keeps the loop fast on re-runs.
 
-- **Stale comment** in `OspreySharp.IO/FdrScoresSidecar.cs:181`.
-  Still says "allocated by Win32 GetTempFileName so parallel
-  writers can never collide on the same temp path." After PR
-  #4197's portability fix, allocation is `Path.GetRandomFileName`
-  + `CreateNew` retry; tighten the comment to match.
-- **Stale doc-comment** on `PerFileRescoreTask.cs` class header.
-  Says "Two entry shapes: In-process: construct via the multi-arg
-  constructor with the assembled state produced upstream
-  (FirstJoinTask)" — but the registry refactor dropped the
-  multi-arg constructor. Rewrite for the registry model.
-- **`PerFileRescoreTask.GetPerFileEntries()` returns null**
-  pre-Run, inconsistent with the project's fail-fast posture
-  (`UnknownTaskException` elsewhere). Either initialize to an
-  empty list (consistent with `PerFileScoringTask`'s defaults) or
-  throw a clear "called before producer Run" exception. Pass 2's
-  null-sentinel decision (above) probably governs this.
+### Skip-if-outputs-valid mechanism (the part that returns)
 
-## Backlog (out of scope this branch but tracked)
+The `RunTask` driver helper (on `AnalysisPipeline`) still does:
 
-| Item | Reason |
-|------|--------|
-| `CalibrationIO.SaveCalibration` (.calibration.json) wiring through `FileSaver` | Adding the `FileSaver` dependency requires Chromatography → IO project reference; arch decision worth a sub-discussion |
-| `BlibWriter` (output.blib) wiring through `FileSaver` | SQLite write path is more involved; blib is the final artifact, deserves care |
-| `ParquetScoreCache.WriteScoresParquet` (.scores.parquet) alignment with `FileSaver` | Already does ad-hoc temp-file-then-rename, but should match the rest |
-| Unit test for `FileSaver` itself | End-to-end snapshot regression exercises it indirectly; a small `FileSaverTest` would lock Commit / Dispose-without-Commit / collision-retry contracts |
-| Phase C parallelism polish | Per-file tasks run across files concurrently rather than via per-stage `Parallel.ForEach` loops. Mostly no-op in performance terms today; the value is uniformity in how the driver schedules work |
+1. Before invoking `task.Run`: enumerate `task.Outputs(ctx)`; if
+   every output exists with a `.osprey.task` sidecar whose
+   `validity_key` matches `task.ValidityKey(ctx)`, log
+   `[task] X: skipping (outputs valid)` and return `true` without
+   executing.
+2. Delete stale sidecars for this task before running (mid-Run
+   crash protection).
+3. Run the task. On success, write fresh sidecars next to each
+   declared output.
 
-## Validation gate
+What changes vs. the earlier (reverted) wiring:
 
-Each commit on this branch must pass:
+- **No `IsWorkerMode(ctx)` CLI flag gate.** The gate's purpose was
+  to bypass the validity check in worker / cross-impl mode. The
+  StartAt mechanism subsumes this: in `--join-at-pass=2 --input-scores`
+  mode, `StartAt = MergeNodeTask`, so upstream tasks never reach
+  `RunTask` and never check their sidecars. The flag-gate
+  abstraction is gone.
+- The existing parquet `osprey.search_hash` metadata check on
+  `--input-scores` parquets stays untouched. It's a separate
+  cross-impl correctness gate and the user wants it preserved
+  (Light posture; see TODO-20260509 for the discussion).
 
-- `pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -RunTests`
-  (303+/303+ tests pass)
+## Implementation plan
+
+Five commits, each gated by build + 303/303 unit tests + Stellar
+snapshot regression. Astral cross-dataset PASS gates the PR open.
+
+### Commit 1 — `StartAt` / `StopAfter` on `PipelineContext`
+
+- Add `public Type StartAtTask { get; }` and `public Type StopAfterTask { get; }` to `PipelineContext`. Constructor takes them with sensible defaults (`PerFileScoringTask` and `MergeNodeTask`).
+- Map CLI flags to the two properties in the parser (probably `Program.ConfigureFromArgs`). Use the table above.
+- No behavior change yet — the driver still iterates `ctx.Tasks` ignoring these properties. Validation: build + 303 tests pass; Stellar regression PASS (no skip behavior yet).
+
+### Commit 2 — driver respects `StartAt` / `StopAfter`
+
+- `RunTask` in `AnalysisPipeline` (or the surrounding `Run` loop): for each task, decide whether it's before StartAt, in-range, or after StopAfter. Before: skip silently. After: don't reach.
+- Reintroduce the skip-if-outputs-valid check from the reverted commit, but only for in-range tasks. Same pattern: check sidecars, run otherwise, write sidecars after success. No CLI gate.
+- Validation: Stellar regression PASS for every CLI mode (default, `--no-join`, `--join-at-pass=1 --join-only`, `--join-at-pass=2 --input-scores`).
+
+### Commit 3 — lazy-rehydrate accessors
+
+- `PerFileScoringTask`: each `Get*` accessor detects null/empty and hydrates from disk using the table above. Choose the shared hydration seam (probably `_rescoreInputs` on `PerFileScoringTask` with `GetRescoreInputs()` exposed for `FirstJoinTask`).
+- `FirstJoinTask`: same pattern for its four hydrated outputs + `DidPlan`.
+- `MergeNodeTask` doesn't have downstream consumers, so no rehydrate needed there.
+- Delete CLI-mode branches inside task `Run` methods that lazy-rehydrate now subsumes (the `ExpectReconciledInput` branches).
+- Validation: Stellar regression PASS; Astral regression PASS.
+
+### Commit 4 — per-file skip inside `PerFileScoringTask.Run`
+
+- At the top of the per-file `foreach`, check the per-file sidecar; if valid, load the existing parquet into `_perFileEntries` and skip the scoring.
+- Apply the same pattern to `MergeNodeTask`'s 2nd-pass FDR sidecar loop.
+- Validation: Stellar regression PASS on fresh run; **manual crash-resume verification** — invoke the full pipeline against a small dataset, delete one file's `.scores.parquet`, re-invoke, confirm only that file is re-scored and the other tasks skip.
+
+### Commit 5 — worker convergence
+
+- `RescoreWorker.Run` becomes `return new AnalysisPipeline().Run(config);`.
+- Delete `PerFileRescoreTask.RunWorker` body and the parameterless ctor's worker-mode special-case (the parameterless ctor stays; it's used by the registry).
+- Delete any remaining CLI-mode branches inside task `Run`s now that the StartAt mechanism handles all dispatch.
+- Validation: cross-impl Test-Regression flow (Rust outputs → C# stage 5+) still works; Stellar + Astral regression PASS.
+
+## Validation gates
+
+Every commit must pass:
+
+- `pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -RunTests` (303+/303+ tests pass)
 - `pwsh -File ./ai/scripts/OspreySharp/Test-Snapshot.ps1 -Dataset Stellar -Files All`
-- `pwsh -File ./ai/scripts/OspreySharp/Test-Snapshot.ps1 -Dataset Astral -Files All`
 
-The worker entry path is the riskiest seam to exercise; once Pass
-2 lands, validate `--join-at-pass=1 --no-join` end-to-end on both
-datasets before opening the PR.
+PR-open gates:
 
-## Open questions for sprint-end review
+- Astral regression PASS at every stage
+- Manual crash-resume verification (after commit 4)
+- Cross-impl Test-Regression with Mike's Rust osprey still passes (after commit 5)
 
-- **PR shape**: bundle Pass 2 + Phase B + cleanups into one PR, or
-  split (e.g. Pass 2 alone first, Phase B as the headline of a
-  second PR)? Probably one PR — Phase B builds directly on Pass
-  2's rehydrate accessors, and the cleanups are tiny.
-- **`OspreyConfig` mutation tightening**: Pass 1 documented the
-  actual contract (hash-affecting fields stable; pipeline-populated
-  fields fair game). Worth promoting to compile-time guarantees
-  (e.g. an immutable `IConfigCore` interface for the
-  hash-feeding fields, with `OspreyConfig` implementing both that
-  and a mutable per-pipeline-run wrapper)? Probably not yet — solve
-  the resume layer first; revisit if Phase B surfaces mutation
-  bugs.
+## Open implementation Qs
+
+- **Shared hydration seam for `RescoreHydration` bundle.** Both
+  `PerFileScoringTask.GetPerFileEntries` and the
+  `FirstJoinTask.GetReconciliationActions` /
+  `GetRefinedCalibrations` / `GetPerFileGapFillForRescore` paths
+  load from the same `RescoreInputs` bundle. Two options:
+  (a) `PerFileScoringTask` owns the bundle; `FirstJoinTask` calls
+  `ctx.GetTask<PerFileScoringTask>().GetRescoreInputs()` — modest
+  coupling between the two tasks.
+  (b) `RescoreHydration.HydrateForRescore` itself memoizes its
+  result keyed on `config.InputScores` — no inter-task coupling
+  but adds a static cache.
+  Recommend (a) — less hidden state.
+- **CLI parser location.** `Program.ConfigureFromArgs` probably
+  owns the StartAt/StopAfter mapping. May benefit from a small
+  table-driven helper. Look at the existing CLI flag handling for
+  `--no-join` / `--join-only` etc. as the model.
+- **Sentinel for "not yet computed."** Today the producer-task
+  output fields default to non-null empty collections. Switch to
+  null sentinels OR add `_hydrated` booleans so the accessor can
+  detect "must hydrate." Null sentinels are simpler if the
+  consumer doesn't need to distinguish "empty result" from "not
+  yet run."
+- **Sidecar deletion on validity-key mismatch.** Today the
+  reverted skip wiring deleted sidecars *unconditionally* at
+  run-start. With StartAt, an upstream task whose Run is skipped
+  doesn't run that cleanup — but its sidecars also aren't being
+  written. Consider: at the very start of `AnalysisPipeline.Run`,
+  iterate every task and delete sidecars whose validity_key
+  doesn't match — but ONLY for tasks at-or-after StartAt. This
+  protects against config-change-without-output-rewrite.
+
+## Phase B success criteria
+
+A 1000-mzML pipeline crash on file 487 → user re-invokes same CLI →
+files 1-486 skip via per-file sidecar check; file 487 onward are
+scored. Worker mode invocations (`--join-at-pass=2 --input-scores
+...`) work without any code that mentions "worker mode" — they're
+just the same pipeline with `StartAt = MergeNodeTask`.
+
+Cross-impl testing with Mike's Rust osprey continues to work
+unchanged. The parquet `osprey.search_hash` metadata check stays.
