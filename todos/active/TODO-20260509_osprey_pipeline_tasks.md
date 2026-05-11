@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260509_osprey_pipeline_tasks`
 - **Base**: `master`
 - **Created**: 2026-05-09
-- **Status**: In Progress
+- **Status**: PR open, awaiting CI / review
 - **GitHub Issue**: (none - internal refactor)
-- **PR**: (pending)
+- **PR**: https://github.com/ProteoWizard/pwiz/pull/4197 (opened 2026-05-10)
 
 ## Sprint Plan
 
