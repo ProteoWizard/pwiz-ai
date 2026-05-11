@@ -172,8 +172,8 @@ with `ctx.GetTask<T>()` lookups.
   in-method for now; Pass 2 will move that hydration onto the
   upstream producers' accessors.
 
-Stellar 3-file PASS at every stage; 303/303 unit tests pass.
-Astral cross-dataset confirmation in flight.
+Stellar 3-file AND Astral 3-file PASS at every stage; 303/303
+unit tests pass.
 
 #### Pass 2 plan (worker convergence via lazy rehydrate)
 
