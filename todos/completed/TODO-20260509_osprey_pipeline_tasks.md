@@ -1,12 +1,12 @@
 # TODO-20260509_osprey_pipeline_tasks.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260509_osprey_pipeline_tasks`
+- **Branch**: `Skyline/work/20260509_osprey_pipeline_tasks` — merged to master via #4197 on 2026-05-11 (squash).
 - **Base**: `master`
 - **Created**: 2026-05-09
-- **Status**: PR open, awaiting CI / review
+- **Status**: COMPLETE — Phase 0 (snapshot regression harness + the two latent bug fixes it surfaced) and Phase A (four super-tasks + AbstractScoringTask base + FileSaver atomic-write helper + task registry on PipelineContext) merged. Continuation in [TODO-20260511_osprey_pipeline_tasks.md](../active/TODO-20260511_osprey_pipeline_tasks.md) (Pass 2 worker convergence + Phase B validity-key resume + minor cleanups).
 - **GitHub Issue**: (none - internal refactor)
-- **PR**: https://github.com/ProteoWizard/pwiz/pull/4197 (opened 2026-05-10)
+- **PR**: https://github.com/ProteoWizard/pwiz/pull/4197 — merged 2026-05-11 (squash). CodeQL + Ubuntu build CI green; Copilot review feedback addressed in-line before merge (FileSaver cross-platform GetTempFileName, cs_features.tsv NewLine, ProcessFile libraryById reuse, PipelineContext doc).
 
 ## Sprint Plan
 
