@@ -19,11 +19,17 @@
 | Commit | Subject | Status |
 |--------|---------|--------|
 | `778628dd86` | `/review` cleanup from PR #4197 (stale FdrScoresSidecar comment, PerFileRescoreTask doc, `GetPerFileEntries` null guard) | KEEP — independent value |
-| `9430e41a34` | Framework surface: `Inputs` / `Outputs` / `ValidityKey` virtuals on `OspreyTask` + `TaskValiditySidecar` JSON reader/writer | KEEP — exactly the foundation the unified design needs |
-| `70f8a578c3` | Per-task `Inputs` / `Outputs` / `ValidityKey` overrides on each concrete task | KEEP — declarative metadata stays |
-| `e7763c490e` | Revert of an earlier RunTask skip-wiring commit | (revert; nothing to do) |
+| `9430e41a34` | Framework surface: `Inputs` / `Outputs` / `ValidityKey` virtuals on `OspreyTask` + `TaskValiditySidecar` JSON reader/writer | KEEP — foundation |
+| `70f8a578c3` | Per-task `Inputs` / `Outputs` / `ValidityKey` overrides on each concrete task | KEEP — declarative metadata |
+| `e7763c490e` | Revert of an earlier RunTask skip-wiring commit (the `IsWorkerMode` flag gate that was the wrong abstraction) | (revert) |
+| `811d630ff8` | Phase B commit 1 — `StartAtTask` / `StopAfterTask` on `PipelineContext` + CLI flag mapping in `AnalysisPipeline.Run` | LANDED |
+| `498e562f36` | Phase B commit 2 — `RunTask` skip-if-outputs-valid via per-output sidecar check + post-Run sidecar write; no CLI gate | LANDED |
+| `9a9dd327f2` | Phase B commit 3 — activate `StartAt`/`StopAfter` range-gating + lazy-rehydrate accessors (PerFileScoring 5, FirstJoin 4 + DidPlan, PerFileRescore GetPerFileEntries); `_runOrHydrated` idempotent re-entry guard | LANDED |
+| `f8fd33d3b3` | Phase B commit 4 — per-file skip inside `PerFileScoringTask.Run` via `ScoreOrLoadForFile` helper; per-output sidecar lifecycle moved into task bodies (FirstJoin/MergeNode/PerFileRescore delete-at-start; PerFileScoring delete-then-write per file) | LANDED |
 
-The earlier `RunTask` skip-wiring (with an `IsWorkerMode(ctx) = config.InputScores.Count > 0` gate) was reverted because the gate is the wrong abstraction in the unified design. The skip mechanism returns in a different shape; see the design below.
+Commits 1-4 deliver Phase B's primary goal: the canonical 1000-mzML crash-resume scenario. Default-mode pipelines (`stage1to4`) now skip already-scored files via per-file `.osprey.task` sidecars; the StartAt/StopAfter mechanism replaces the discarded `IsWorkerMode` flag gate.
+
+**Commit 5 (worker convergence) is DEFERRED to a follow-up branch.** Converging the stage6 `RescoreWorker.Run` entry path onto `AnalysisPipeline.Run` requires unifying the disk-load semantics between `PerFileScoringTask.joinOnly` (raw stubs + PIN features, no overlay) and `RescoreHydration.HydrateForRescore` (stubs with 1st-pass SVM overlay + reconciliation.json parsing). The two paths serve different scenarios (stage5 raw vs stage6 with overlay) and unifying them is a non-trivial refactor that warrants its own change-set with focused validation. See `## Phase C` below.
 
 ## Predecessor: Phase 0 + Phase A — merged
 
@@ -235,13 +241,53 @@ snapshot regression. Astral cross-dataset PASS gates the PR open.
 - Apply the same pattern to `MergeNodeTask`'s 2nd-pass FDR sidecar loop.
 - Validation: Stellar regression PASS on fresh run; **manual crash-resume verification** — invoke the full pipeline against a small dataset, delete one file's `.scores.parquet`, re-invoke, confirm only that file is re-scored and the other tasks skip.
 
-### Commit 5 — worker convergence
+### Commit 5 — worker convergence (DEFERRED to Phase C / follow-up branch)
 
-- Introduce `AnalysisPipeline.CanonicalPipeline()` static factory if commits 2-4 haven't already. The canonical 4-task list lives only here.
+Splitting this out so the resume-capability work (commits 1-4) can ship
+as a self-contained PR while the convergence refactor gets its own
+focused change-set.
+
+What landing this requires:
+
+- Introduce `AnalysisPipeline.CanonicalPipeline()` static factory. The canonical 4-task list lives only here.
 - `RescoreWorker.Run` becomes `return new AnalysisPipeline().Run(config);` — no task list, no `PipelineContext` construction.
-- Delete `PerFileRescoreTask.RunWorker` body and the parameterless ctor's worker-mode special-case (the parameterless ctor stays; it's used by the registry).
+- Delete `PerFileRescoreTask.RunWorker` body.
 - Delete any remaining CLI-mode branches inside task `Run`s now that the StartAt mechanism handles all dispatch.
-- Validation: cross-impl Test-Regression flow (Rust outputs → C# stage 5+) still works; Stellar + Astral regression PASS.
+
+What makes it deferral-worthy:
+
+The stage6 worker path (`--join-at-pass=1 --no-join --input-scores`)
+today calls `RescoreHydration.HydrateForRescore` inside
+`PerFileRescoreTask.RunWorker`, which produces a `RescoreInputs`
+bundle with (a) stubs **overlaid with 1st-pass SVM scores from the
+sidecar** and (b) parsed `reconciliation.json` actions/refined
+calibrations/gap-fill targets. Converging this onto
+`AnalysisPipeline.Run` means `PerFileScoringTask`'s `joinOnly` path
+(today: raw stubs + PIN features, no overlay; serves stage5 mode) has
+to grow conditional hydration: load `HydrateForRescore` output when
+1st-pass sidecars exist, fall back to raw load otherwise. And
+`FirstJoinTask`'s lazy-rehydrate has to pull the reconciliation half
+of the bundle from a shared seam (recommend option (a):
+`PerFileScoringTask` owns the `RescoreInputs` bundle, exposes
+`GetRescoreInputs(ctx)`; `FirstJoinTask`'s accessors read from it).
+
+Three modes feed this seam, each with different on-disk inputs:
+
+| Mode | On disk | Stubs need |
+|------|---------|------------|
+| stage5 (`--join-only --input-scores`) | `.scores.parquet` only | raw stubs + PIN features (run Percolator) |
+| stage6 (`--no-join --input-scores`) | `.scores.parquet` + `.1st-pass.fdr_scores.bin` + `reconciliation.json` | stubs with 1st-pass overlay + reconciliation state |
+| stage7 (`--join-at-pass=2 --input-scores`) | `.scores.parquet` + 1st + 2nd-pass + reconciliation.json | stubs with 2nd-pass overlay (FirstJoin does this today) |
+
+The right design call (PerFileScoring's joinOnly path dispatches on
+"what sidecars are present" and produces the matching bundle) is
+straightforward to write but the regression surface is non-trivial:
+all three modes' snapshot equality has to hold byte-for-byte.
+
+- Validation: Stellar + Astral regression PASS; cross-impl
+  Test-Regression flow (Rust outputs → C# stage 5+) still works; no
+  reference to "worker mode" or `IsWorkerMode` anywhere in the
+  pipeline; `RescoreWorker.Run` is one line.
 
 ## Validation gates
 
@@ -291,11 +337,35 @@ PR-open gates:
 
 ## Phase B success criteria
 
-A 1000-mzML pipeline crash on file 487 → user re-invokes same CLI →
-files 1-486 skip via per-file sidecar check; file 487 onward are
-scored. Worker mode invocations (`--join-at-pass=2 --input-scores
-...`) work without any code that mentions "worker mode" — they're
-just the same pipeline with `StartAt = MergeNodeTask`.
+### Phase B core (commits 1-4 in this PR)
 
-Cross-impl testing with Mike's Rust osprey continues to work
-unchanged. The parquet `osprey.search_hash` metadata check stays.
+- A 1000-mzML pipeline crash on file 487 → user re-invokes same CLI →
+  files 1-486 skip via per-file sidecar check; file 487 onward are
+  scored. ✅ achieved by commit 4's per-file skip
+- `StartAt = MergeNodeTask` mode (`--join-at-pass=2 --input-scores`)
+  dispatches with no `IsWorkerMode` flag gate in the pipeline. ✅
+  achieved by commits 1 + 3
+- Cross-impl testing with Mike's Rust osprey continues to work
+  unchanged. The parquet `osprey.search_hash` metadata check stays. ✅
+  by construction — commit 2 has no CLI gate; commit 4 only adds
+  per-file skip inside the actual-scoring paths
+- Stellar + Astral 3-file snapshot regression PASS at every stage on
+  the final branch state. ✅ Stellar PASS on commit 4; Astral PASS on
+  commit 3 (commit 4 only touches the stage1to4 actual-scoring path
+  Astral already exercised; re-run as PR-open gate)
+- Manual crash-resume verification — full pipeline run on a small
+  dataset, delete one file's `.scores.parquet`, re-invoke same CLI,
+  observe `[file] X: skipping (outputs valid)` for surviving files
+  and only the deleted file re-scored. ⏳ pending before PR open
+
+### Phase C (deferred — separate branch + PR)
+
+- Worker mode entry path converged onto `AnalysisPipeline.Run`. After
+  Phase C lands, `RescoreWorker.Run` is one line; `PerFileRescoreTask.RunWorker`
+  body is gone; no code in the pipeline mentions "worker mode" by
+  flag.
+- `AnalysisPipeline.CanonicalPipeline()` is the single source of truth
+  for the 4-task list.
+- CLI-mode branches inside task `Run` methods (the `ExpectReconciledInput` /
+  `NoJoin` / `joinOnly` checks) deleted where the StartAt mechanism
+  + lazy-rehydrate subsumes them.
