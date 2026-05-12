@@ -20,8 +20,8 @@ its own PR. Approach priority (user-confirmed 2026-05-12):
 
 ## Progress
 
-- [x] Item 2: `.sky.zip` open via `--in=` (uncommitted on branch)
-- [ ] Item 1: Report-from-definition pivot bug
+- [x] Item 2: `.sky.zip` open via `--in=` (committed on branch)
+- [x] Item 1: Report-from-definition pivot bug (uncommitted on branch)
 - [ ] Items 3/7: File-path variants for FASTA/CSV
 - [ ] Item 8: RunCommand discoverability
 - [ ] Item 4: Save document clarity
@@ -44,6 +44,43 @@ MoleculeGroupCount round-trip. Test passes under `TestJsonToolServer`.
 
 Files modified:
 - `pwiz/pwiz_tools/Skyline/ToolsUI/JsonToolServer.cs`
+- `pwiz/pwiz_tools/Skyline/TestFunctional/JsonToolServerTest.cs`
+
+### Item 1 - completed 2026-05-12
+
+Root cause: with select `[ProteinName, PeptideModifiedSequence,
+ReplicateName, TotalArea]`, `ColumnResolver` resolved row source to
+`Precursor` but picked **different** Results dictionaries for the two
+result columns:
+- `ReplicateName -> Peptide.Results!*.Key.ReplicateName` (Peptide's dict)
+- `TotalArea -> Results!*.Value.TotalArea` (Precursor's dict)
+
+`FindDeepestSublist` then chose `Peptide.Results!*` as the SublistId
+(deepest collection lookup), but `Results!*` does not start with
+`Peptide.Results!*`, so `TotalArea` stayed pivoted across the
+Precursor's Results dictionary while `ReplicateName` correctly
+iterated. With `pivot_replicate: false` the failure mirrored: SublistId
+overridden to `Results!*` and `ReplicateName` got pivoted instead.
+
+Both paths had 1 collection step, so the existing `IndexColumn`
+preference for "fewer collection steps" couldn't disambiguate. The
+first-found-wins tie-breaker happened to register the longer
+`Peptide.Results!*.Key.ReplicateName` path before the shorter
+`Results!*.Key.ReplicateName` from the row source itself.
+
+Fix: tie-break `IndexColumn` on `PropertyPath.Length` (shorter wins)
+when collection step counts are equal. This keeps related result
+columns rooted in the same `Results!*` dictionary, matching what the
+GUI Report Editor generates when the user clicks columns within the
+same PrecursorResult / PeptideResult section.
+
+Regression test added in `TestReportFromDefinition`: select includes
+`ReplicateName` + `TotalArea`, asserts exactly the 4 selected columns
+appear (no per-replicate suffixes) and row count is
+`peptides * replicates`. Covers both default and `pivot_replicate: false`.
+
+Files modified:
+- `pwiz/pwiz_tools/Skyline/Model/Databinding/ColumnResolver.cs`
 - `pwiz/pwiz_tools/Skyline/TestFunctional/JsonToolServerTest.cs`
 
 ## Purpose
