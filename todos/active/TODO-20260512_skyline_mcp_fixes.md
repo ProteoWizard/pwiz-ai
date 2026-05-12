@@ -1,4 +1,31 @@
-# Skyline MCP Server and JsonToolServer — Follow-up Fixes
+# TODO-20260512_skyline_mcp_fixes.md
+
+## Branch Information
+- **Branch**: `Skyline/work/20260512_skyline_mcp_fixes`
+- **Base**: `master`
+- **Created**: 2026-05-12
+- **Status**: In Progress
+- **PR**: (multiple - each item lands as its own PR cherry-picked from this branch)
+
+Umbrella TODO covering 6 independent fixes from the 2026-05-12 Seattle Claude Code
+Meetup demo. Each item will be cherry-picked to a short-lived branch and land as
+its own PR. Approach priority (user-confirmed 2026-05-12):
+
+1. **Item 2** - `.sky.zip` open via `--in=` (highest priority, user-facing bug)
+2. **Item 1** - Report-from-definition pivot bug ("appeared so broken we couldn't use them")
+3. **Items 3/7** - File-path variants for FASTA/CSV inline-text tools
+4. **Item 8** - RunCommand discoverability (after 3/7 so cross-references are consistent)
+5. **Item 4** - Save document clarity
+6. **Item 5** - Multi-Skyline-install support (new feature)
+
+## Progress
+
+- [ ] Item 2: `.sky.zip` open via `--in=`
+- [ ] Item 1: Report-from-definition pivot bug
+- [ ] Items 3/7: File-path variants for FASTA/CSV
+- [ ] Item 8: RunCommand discoverability
+- [ ] Item 4: Save document clarity
+- [ ] Item 5: Multi-Skyline-install support
 
 ## Purpose
 
