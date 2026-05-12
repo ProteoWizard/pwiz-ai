@@ -4,30 +4,33 @@
 - **Branch**: `Skyline/work/20260512_skyline_mcp_fixes`
 - **Base**: `master`
 - **Created**: 2026-05-12
-- **Status**: In Progress
-- **PR**: (multiple - each item lands as its own PR cherry-picked from this branch)
+- **Status**: Completed
+- **PR**: [#4201](https://github.com/ProteoWizard/pwiz/pull/4201)
 
-Umbrella TODO covering 6 independent fixes from the 2026-05-12 Seattle Claude Code
-Meetup demo. Each item will be cherry-picked to a short-lived branch and land as
-its own PR. Approach priority (user-confirmed 2026-05-12):
+Umbrella TODO covering five fixes from the 2026-05-12 Seattle Claude Code
+Meetup demo. All five landed as separate commits on the feature branch
+and ship together in PR #4201. The original priority ordering was
+preserved.
 
 1. **Item 2** - `.sky.zip` open via `--in=` (highest priority, user-facing bug)
 2. **Item 1** - Report-from-definition pivot bug ("appeared so broken we couldn't use them")
-3. **Items 3/7** - File-path variants for FASTA/CSV inline-text tools
-4. **Item 8** - RunCommand discoverability (after 3/7 so cross-references are consistent)
-5. **Item 4** - Save document clarity
-6. **Item 5** - Multi-Skyline-install support (new feature)
+3. **Items 3/7** - File-path replacement for FASTA/CSV inline-text tools
+4. **Item 8** - RunCommand discoverability
+5. **Item 4** - `skyline_save_document` (combined with Item 8)
 
 ## Progress
 
-- [x] Item 2: `.sky.zip` open via `--in=` (committed on branch)
-- [x] Item 1: Report-from-definition pivot bug (committed on branch)
-- [x] Items 3/7: File-path replacement for FASTA/CSV (committed on branch)
-- [x] Item 8: RunCommand discoverability (uncommitted on branch)
-- [x] Item 4: Save document clarity (uncommitted on branch)
-- [ ] Item 5: Multi-Skyline-install support
-- [ ] Item 9 (new): JsonServer MessageDlg capture (record to buffer, return to caller)
-- [ ] Item 10 (new): CI for SkylineMcp.sln (currently only Skyline.sln is built by CI)
+- [x] Item 2: `.sky.zip` open via `--in=`
+- [x] Item 1: Report-from-definition pivot bug
+- [x] Items 3/7: File-path replacement for FASTA/CSV
+- [x] Item 8: RunCommand discoverability
+- [x] Item 4: Save document clarity
+
+Followup items (rolled to `ai/todos/backlog/brendanx67/TODO-skyline_mcp_followups.md`):
+
+- Item 5: Multi-Skyline-install support (new feature, deferred)
+- Item 9 (new): JsonServer MessageDlg / AlertDlg capture
+- Item 10 (new): CI for SkylineMcp.sln (caught ReorderElements interface drift)
 
 ### Item 2 - completed 2026-05-12
 
@@ -163,34 +166,9 @@ Files modified:
 - `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineAiConnector/SkylineAiConnector.zip` (rebuilt)
 - `pwiz/pwiz_tools/Skyline/TestFunctional/SkylineMcpTest.cs`
 
-### Item 9 (new): Capture MessageDlg / AlertDlg shown during a JsonServer request
+---
 
-When an `IJsonToolService` call shows a `MessageDlg` or `AlertDlg`
-(e.g., a domain-level error that the existing API renders to the
-user instead of throwing), the message is invisible to the caller.
-Today the human has to copy/paste the dialog into the LLM
-conversation, which loses stack-trace context if an exception drove
-the dialog.
-
-Proposed enhancement: while a JsonServer request is in flight,
-intercept alert dialogs and append their text (and any associated
-exception/stack) to a request-scoped buffer that is returned to the
-caller in the JSON-RPC response (probably alongside the `_log` field,
-or as a `_alerts` field). The dialog should still appear to the
-user, but the caller no longer needs the human as a copy/paste
-courier.
-
-### Item 10 (new): CI for SkylineMcp.sln
-
-Currently CI only builds the ProteoWizard core and `Skyline.sln`.
-`SkylineMcp.sln` (and its dependencies on `SkylineTool.csproj` via
-`SkylineMcpServer`) is not built in CI. The `IJsonToolService`
-interface drift that broke `SkylineConnection` could have been caught
-at the commit that added `ReorderElements` if CI built this solution.
-Add a CI step that runs `MSBuild SkylineMcp.sln /p:Configuration=Release /restore`.
-Note: `dotnet build` chokes on `SkylineTool.csproj`'s mix of old
-`ProjectStyle` plus `PackageReference` for `System.Text.Json` 8.0.5;
-MSBuild resolves the package correctly.
+## Original problem statement (for historical reference)
 
 ## Purpose
 
@@ -328,29 +306,6 @@ functionality gap.
 
 Recommend doing both — option 1 is essentially free, option 2 makes the LLM's
 first-pass tool search succeed.
-
----
-
-## 5. Multi-Skyline-install support
-
-**Need.** Today the LLM cannot:
-
-- Enumerate which Skyline releases are installed (Skyline, Skyline-daily,
-  Skyline Administrator at `C:\Program Files\Skyline`).
-- Launch a new Skyline instance from MCP. The demo required the human to
-  manually open a third Skyline window for the "new instance arrives" beat.
-
-**Suggested new tools.**
-
-- `skyline_list_installed()` — return name, version, executable path, and
-  install scope (user / system / Administrator) for each detected install.
-- `skyline_start_instance(release: string)` — launch a new instance of the
-  named release, return the new process ID once it connects.
-
-**Design note.** The connection-file scan logic
-(`~/.skyline-mcp/connection-*.json`) already enumerates running instances; the
-"installed but not running" enumeration is a separate Windows-registry /
-filesystem walk. Plan accordingly.
 
 ---
 
