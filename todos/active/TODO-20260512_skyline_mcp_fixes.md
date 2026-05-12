@@ -21,11 +21,13 @@ its own PR. Approach priority (user-confirmed 2026-05-12):
 ## Progress
 
 - [x] Item 2: `.sky.zip` open via `--in=` (committed on branch)
-- [x] Item 1: Report-from-definition pivot bug (uncommitted on branch)
-- [ ] Items 3/7: File-path variants for FASTA/CSV
+- [x] Item 1: Report-from-definition pivot bug (committed on branch)
+- [x] Items 3/7: File-path replacement for FASTA/CSV (uncommitted on branch)
 - [ ] Item 8: RunCommand discoverability
 - [ ] Item 4: Save document clarity
 - [ ] Item 5: Multi-Skyline-install support
+- [ ] Item 9 (new): JsonServer MessageDlg capture (record to buffer, return to caller)
+- [ ] Item 10 (new): CI for SkylineMcp.sln (currently only Skyline.sln is built by CI)
 
 ### Item 2 - completed 2026-05-12
 
@@ -82,6 +84,76 @@ appear (no per-replicate suffixes) and row count is
 Files modified:
 - `pwiz/pwiz_tools/Skyline/Model/Databinding/ColumnResolver.cs`
 - `pwiz/pwiz_tools/Skyline/TestFunctional/JsonToolServerTest.cs`
+
+### Items 3/7 - completed 2026-05-12
+
+First place the MCP tool surface intentionally diverges from the
+underlying `IJsonToolService` API. The interface keeps the in-memory
+text form (`InsertSmallMoleculeTransitionList(string textCsv)`,
+`ImportFasta(string textFasta, ...)`) - other programmatic consumers
+already have their payloads in memory and shouldn't have to write a
+temp file. The MCP tools now take file paths instead, because for an
+LLM the cost is in tokens, not memory:
+
+- `skyline_import_fasta(fastaPath)` -> internally calls
+  `RunCommand("--import-fasta=" + fastaPath)`.
+- `skyline_insert_small_molecule_transition_list(csvPath)` -> internally
+  calls `RunCommand("--import-transition-list=" + csvPath)`.
+
+Routing through `RunCommand` (rather than reading the file inside the
+MCP server and forwarding to the existing API) is deliberate: parse
+errors flow through Skyline's Immediate Window, which the JsonServer
+already tees back to the tool response. The LLM sees errors as text in
+the tool result instead of as a modal MessageDlg the user has to copy
+out for it. The new tool descriptions explicitly mention which CLI flag
+is used so the LLM can reason about discrepancies if any appear.
+
+Tests updated:
+- `SkylineMcpTest.cs`: writes the test FASTA to a temp file and passes
+  the path via the new `fastaPath` MCP parameter.
+- `JsonToolServerTest.cs`: unchanged - still exercises the in-memory
+  `ImportFasta(textFasta, ...)` and `InsertSmallMoleculeTransitionList`
+  paths, proving the underlying API remains intact.
+
+Also folded in: `SkylineConnection.cs` was missing
+`ReorderElements(string[])`, an interface member that Nick Shulman
+added to `IJsonToolService` more recently. The `SkylineMcp.sln` build
+had been broken since that commit landed; this surfaces Item 10
+(CI gap) below.
+
+Files modified:
+- `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/Tools/SkylineTools.cs`
+- `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/SkylineConnection.cs`
+- `pwiz/pwiz_tools/Skyline/TestFunctional/SkylineMcpTest.cs`
+
+### Item 9 (new): Capture MessageDlg / AlertDlg shown during a JsonServer request
+
+When an `IJsonToolService` call shows a `MessageDlg` or `AlertDlg`
+(e.g., a domain-level error that the existing API renders to the
+user instead of throwing), the message is invisible to the caller.
+Today the human has to copy/paste the dialog into the LLM
+conversation, which loses stack-trace context if an exception drove
+the dialog.
+
+Proposed enhancement: while a JsonServer request is in flight,
+intercept alert dialogs and append their text (and any associated
+exception/stack) to a request-scoped buffer that is returned to the
+caller in the JSON-RPC response (probably alongside the `_log` field,
+or as a `_alerts` field). The dialog should still appear to the
+user, but the caller no longer needs the human as a copy/paste
+courier.
+
+### Item 10 (new): CI for SkylineMcp.sln
+
+Currently CI only builds the ProteoWizard core and `Skyline.sln`.
+`SkylineMcp.sln` (and its dependencies on `SkylineTool.csproj` via
+`SkylineMcpServer`) is not built in CI. The `IJsonToolService`
+interface drift that broke `SkylineConnection` could have been caught
+at the commit that added `ReorderElements` if CI built this solution.
+Add a CI step that runs `MSBuild SkylineMcp.sln /p:Configuration=Release /restore`.
+Note: `dotnet build` chokes on `SkylineTool.csproj`'s mix of old
+`ProjectStyle` plus `PackageReference` for `System.Text.Json` 8.0.5;
+MSBuild resolves the package correctly.
 
 ## Purpose
 
