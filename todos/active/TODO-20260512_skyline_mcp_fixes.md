@@ -20,12 +20,31 @@ its own PR. Approach priority (user-confirmed 2026-05-12):
 
 ## Progress
 
-- [ ] Item 2: `.sky.zip` open via `--in=`
+- [x] Item 2: `.sky.zip` open via `--in=` (uncommitted on branch)
 - [ ] Item 1: Report-from-definition pivot bug
 - [ ] Items 3/7: File-path variants for FASTA/CSV
 - [ ] Item 8: RunCommand discoverability
 - [ ] Item 4: Save document clarity
 - [ ] Item 5: Multi-Skyline-install support
+
+### Item 2 - completed 2026-05-12
+
+`SkylineWindowDocumentOperations.OpenDocument` in `JsonToolServer.cs` now
+calls the existing `SkylineWindow.LoadFile(path)` (Skyline.cs:363) instead
+of `OpenFile(path)`. `LoadFile` already dispatches to `OpenSharedFile`
+(.zip/.sky.zip), `OpenSkypFile` (.skyp), or `OpenFile` (.sky) by extension,
+and additionally handles URI/UNC paths and `.skyd` -> `.sky` mapping. This
+is the same entry point StartPage and Skyline command-line startup use,
+so the MCP path now matches the rest of the application.
+
+Regression test added to `JsonToolServerTest.TestDocumentOperations`:
+shares the open document as `.sky.zip`, calls `--in=<that.sky.zip>`, and
+verifies the extracted `.sky` path is opened with the correct
+MoleculeGroupCount round-trip. Test passes under `TestJsonToolServer`.
+
+Files modified:
+- `pwiz/pwiz_tools/Skyline/ToolsUI/JsonToolServer.cs`
+- `pwiz/pwiz_tools/Skyline/TestFunctional/JsonToolServerTest.cs`
 
 ## Purpose
 
