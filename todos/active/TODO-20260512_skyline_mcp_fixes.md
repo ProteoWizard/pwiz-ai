@@ -22,9 +22,9 @@ its own PR. Approach priority (user-confirmed 2026-05-12):
 
 - [x] Item 2: `.sky.zip` open via `--in=` (committed on branch)
 - [x] Item 1: Report-from-definition pivot bug (committed on branch)
-- [x] Items 3/7: File-path replacement for FASTA/CSV (uncommitted on branch)
-- [ ] Item 8: RunCommand discoverability
-- [ ] Item 4: Save document clarity
+- [x] Items 3/7: File-path replacement for FASTA/CSV (committed on branch)
+- [x] Item 8: RunCommand discoverability (uncommitted on branch)
+- [x] Item 4: Save document clarity (uncommitted on branch)
 - [ ] Item 5: Multi-Skyline-install support
 - [ ] Item 9 (new): JsonServer MessageDlg capture (record to buffer, return to caller)
 - [ ] Item 10 (new): CI for SkylineMcp.sln (currently only Skyline.sln is built by CI)
@@ -124,6 +124,43 @@ had been broken since that commit landed; this surfaces Item 10
 Files modified:
 - `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/Tools/SkylineTools.cs`
 - `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/SkylineConnection.cs`
+- `pwiz/pwiz_tools/Skyline/TestFunctional/SkylineMcpTest.cs`
+
+### Items 8 + 4 - completed 2026-05-12
+
+All in SkylineMcpServer (no JsonToolServer change). Audited
+JsonToolServer.cs for any methods accidentally routed through
+RunCommandImpl - clean, only the four legitimate RunCommand /
+RunCommandSilent entry points exist there.
+
+**Item 4 - `skyline_save_document(filePath = null)`**: new MCP tool that
+wraps `skyline_run_command` with `--save` (in-place) or `--out=PATH`
+(save-as). Matches the LLM's mental model of "there's a tool for this
+verb." Description explicitly names the underlying RunCommand flags so
+the LLM can fall back to `skyline_run_command` for richer save flows.
+
+**Item 8 - RunCommand discoverability**: rewrote
+`skyline_run_command`'s description to:
+- Surface that it is the entire SkylineCmd CLI surface (over 100 flags)
+- Enumerate which other MCP tools are thin wrappers around it
+  (`skyline_save_document`, `skyline_import_fasta`,
+  `skyline_insert_small_molecule_transition_list`,
+  `skyline_new_document`)
+- Point to `skyline_get_cli_help_sections` and `skyline_get_cli_help`
+  as the discovery path
+- Give 4 examples spanning report, open, refine, save flows
+
+Every wrapper that delegates to RunCommand now explicitly names the
+flags it wraps in its description, so the LLM understands the
+inheritance.
+
+Test: `TestSkylineMcp` exercises both forms of `skyline_save_document`
+(in-place and save-as) and verifies the document path round-trips.
+`EXPECTED_TOOL_COUNT` bumped 43 -> 44.
+
+Files modified:
+- `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/Tools/SkylineTools.cs`
+- `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineAiConnector/SkylineAiConnector.zip` (rebuilt)
 - `pwiz/pwiz_tools/Skyline/TestFunctional/SkylineMcpTest.cs`
 
 ### Item 9 (new): Capture MessageDlg / AlertDlg shown during a JsonServer request
