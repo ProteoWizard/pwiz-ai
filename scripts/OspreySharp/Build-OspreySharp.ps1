@@ -121,6 +121,27 @@ if (-not (Test-Path $slnPath)) {
 try {
     Set-Location $ospreyRoot
 
+    # Fix line endings in modified files (CRLF is project standard, but LLM tools may introduce LF-only).
+    # Fast because it only processes files in 'git status' (modified/added). Run from pwiz repo root
+    # so git status sees pwiz's modified files. The fix-crlf.ps1 script lives in the sibling ai/ tree.
+    $fixCrlfScript = Join-Path $aiRoot 'scripts\fix-crlf.ps1'
+    if (Test-Path $fixCrlfScript) {
+        if (-not $Summary) {
+            Write-Host "Checking line endings in modified files..." -ForegroundColor Cyan
+        }
+        Push-Location $pwizRoot
+        try {
+            & $fixCrlfScript
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "`n[WARN] Line ending fix failed - some files may still have LF-only line endings" -ForegroundColor Yellow
+                Write-Host "This may cause large Git diffs. Consider running: $fixCrlfScript`n" -ForegroundColor Gray
+            }
+        }
+        finally {
+            Pop-Location
+        }
+    }
+
     # Find MSBuild
     $vswherePath = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
     if (-not (Test-Path $vswherePath)) {
