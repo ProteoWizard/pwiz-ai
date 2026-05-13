@@ -79,6 +79,26 @@ See ai/todos/active/TODO-YYYYMMDD_feature_name.md
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
+## Pre-Review Workflow
+
+Before requesting human review, a PR should clear these AI review passes:
+
+1. **GitHub Copilot review** — request a Copilot review on the PR and address
+   its comments. Iterate until Copilot has nothing substantive to flag.
+2. **Claude `/review`** — run `/review <PR#>` and iterate the same way.
+3. **GitHub Copilot re-review** — once Claude is clean, request Copilot again
+   so it can weigh in on anything that changed during the Claude round. If
+   Copilot raises new substantive issues, fix them and loop back to step 2
+   until both reviewers are quiet on the latest commit.
+
+Address each round in a NEW commit (see "Amending Commits" below); PRs are
+squash-merged, so extra commits cost nothing and preserve the review history.
+Only after both AI reviewers are clean on the same commit should you request
+human review.
+
+The goal is to spend reviewers' time on judgment calls, not on issues the AI
+passes would have caught.
+
 ## Branch Naming Convention
 
 **Format**: `Skyline/work/YYYYMMDD_feature_name`
