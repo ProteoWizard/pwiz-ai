@@ -5,9 +5,9 @@
 - **Branch**: `Skyline/work/20260513_skyline_save_document_overwrite`
 - **Base**: `master`
 - **Created**: 2026-05-13
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4205](https://github.com/ProteoWizard/pwiz/issues/4205)
-- **PR**: (pending)
+- **PR**: [#4206](https://github.com/ProteoWizard/pwiz/pull/4206) (merged 2026-05-13 as `35773d586f`)
 - **Test Name**: TestSkylineMcp
 - **Fix Type**: failure
 - **Failure Fingerprint**: `2ca33b43531f349c`
@@ -36,7 +36,8 @@ which **turned out to be wrong**. The real cause and fix are below.
 - [x] Expose the overwrite behavior on the MCP tool so the LLM can confirm
   with the user before clobbering files
 - [x] Verify with 5-iteration loop: all pass
-- [ ] Commit, push, open PR
+- [x] Commit, push, open PR
+- [x] PR #4206 squash-merged to master 2026-05-13
 
 ## Progress Log
 
@@ -111,6 +112,10 @@ the round trip correctly.
 5-iteration loop (`Run-Tests.ps1 -TestName TestSkylineMcp -Loop 5`): all
 passes succeed. 4 save operations × 5 iterations = 20 save operations with
 zero failures.
+
+### 2026-05-13 - Completed
+
+PR #4206 squash-merged to `master` as commit `35773d586f`. Closes #4205.
 
 ## Related
 
