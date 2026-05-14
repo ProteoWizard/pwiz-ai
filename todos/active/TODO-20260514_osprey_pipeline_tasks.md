@@ -353,3 +353,75 @@ before /clear. Branch not yet created; pwiz on master at `a8d9111c5b`
 - Stellar 3-file snapshot regression PASS at every stage.
 - Resolves Copilot thread #3221935440 from #4199 review.
 - Commit `e35f928a55`. Branch pushed.
+
+### 2026-05-14 — Commit 2 landed: CanonicalPipeline factory
+
+- Extracted the 4-task array out of `AnalysisPipeline.Run` into a
+  static `CanonicalPipeline()` factory. Pure refactor; no behavior
+  change.
+- Stellar 3-file snapshot regression PASS at every stage.
+- Commit `8363baff9b`.
+
+### 2026-05-14 — Commit 3 landed: hydration unification
+
+- Added `RescoreHydration.HydrateReconciliationOverlay` so the same
+  per-file 1st-pass overlay + reconciliation.json parse can run
+  from already-loaded stubs.
+- `PerFileScoringTask` exposes the new `RescoreInputs` bundle via
+  `GetRescoreInputs`; populated whenever the joinOnly probe finds
+  every parquet's `.1st-pass.fdr_scores.bin` and `reconciliation.json`
+  siblings on disk.
+- `FirstJoinTask` reconciliation accessors fall back to the bundle
+  when planning did not run; consensus targets computed lazily from
+  the post-compaction stubs.
+- 2nd-pass overlay's location stayed in `FirstJoinTask` for this
+  commit (post-compaction constraint); gate migration deferred to
+  commit 5.
+- Stellar 3-file snapshot regression PASS at every stage.
+- Commit `ad23f6356a`.
+
+### 2026-05-14 — Commit 4 landed: worker entry-path collapse
+
+- `Program.Main` no longer dispatches NoJoin+InputScores to a
+  separate worker; the canonical pipeline's StartAt/StopAfter +
+  lazy-rehydrate handle stage6.
+- `RescoreWorker.Run` is a one-liner that calls
+  `new AnalysisPipeline().Run(config)`.
+- Deleted `PerFileRescoreTask.RunWorker` and its helpers
+  (`AddIfNotNull`, `LoadOriginalRtCalibration`); 415 lines removed.
+- `FirstJoinTask` Stage 5 + Stage 6 planning gates migrated from
+  `!ExpectReconciledInput` to `bundle == null`.
+- Bundle-path compaction in `FirstJoinTask` delegates to
+  `RescoreCompaction.Apply` so reconciliation actions re-key to
+  post-compaction indices.
+- `PerFileScoringTask.joinOnly` clears PIN features after the
+  bundle hydration so `WriteReconciledParquet`'s "rescored marker"
+  (`Features != null`) survives.
+- Added per-file resume inside `PerFileRescoreTask.ExecuteRescore`:
+  files whose reconciled parquet already has a valid
+  `.PerFileRescore.osprey.task` sidecar are skipped; each file
+  writes its own sidecar after `WriteReconciledParquet`.
+- 309/309 unit tests pass; Stellar 3-file snapshot regression PASS
+  at every stage.
+- Commit `a20c2c1626`.
+
+### 2026-05-14 — Commit 5 landed: probe-the-disk dispatch cleanup
+
+- `FirstJoinTask` 2nd-pass overlay gate, `MergeNodeTask` 2nd-pass
+  sidecar write gate, and `PerFileRescoreTask` self-gate all
+  migrated from `ExpectReconciledInput` to a probe-the-disk check
+  for 2nd-pass sidecar presence. ExpectReconciledInput now only
+  survives in the routing (DeriveStartAtTask / DeriveStopAfterTask)
+  and the decoy-generation skip optimization, per the TODO scope.
+- Log messages and error strings updated to mechanism-driven
+  wording.
+- 309/309 unit tests pass; Stellar 3-file snapshot regression PASS
+  at every stage.
+- Commit `d577c53542`.
+
+### 2026-05-14 — PR-open gates running
+
+- Astral 3-file snapshot regression: running in background.
+- Stellar cross-impl Test-Regression: pending (will follow Astral).
+- Manual stage6 worker crash-resume verification: pending (manual
+  test per handoff recipe).
