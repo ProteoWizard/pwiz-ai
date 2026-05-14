@@ -6,7 +6,7 @@
 - **Created**: 2026-05-13
 - **Status**: In Progress
 - **Source Thread**: [skyline.ms support #74557](https://skyline.ms/home/support/announcements-thread.view?rowId=74557)
-- **PR**: (pending)
+- **PR**: [#4207](https://github.com/ProteoWizard/pwiz/pull/4207)
 
 ## Objective
 
