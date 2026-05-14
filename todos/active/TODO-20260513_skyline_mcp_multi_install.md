@@ -11,23 +11,26 @@
 ## Purpose
 
 Item 5 from `TODO-skyline_mcp_followups.md` (Seattle Claude Code Meetup
-demo follow-ups). Today the LLM cannot:
+demo follow-ups). Today the LLM cannot enumerate which Skyline releases
+are installed on this machine — Skyline, Skyline-daily, and their
+administrative installs at `C:\Program Files\Skyline[-daily]`.
 
-- Enumerate which Skyline releases are installed on this machine
-  (Skyline, Skyline-daily, plus their administrative installs at
-  `C:\Program Files\Skyline[-daily]`).
-- Launch a new Skyline GUI instance from MCP. The demo required the
-  human to manually open a third Skyline window for the "new instance
-  arrives" beat.
+This TODO adds one MCP tool:
 
-This TODO adds two MCP tools:
+- `skyline_list_installed()` — return a structured list with enough
+  info to either launch the GUI (`GuiPath`) or invoke the CLI
+  (`CliPath`) for each detected install.
 
-- `skyline_list_installed()` — enumerate installs with name, release,
-  version, install scope, and executable path.
-- `skyline_start_instance(release)` — launch the GUI for the named
-  release, snapshot existing connection files, poll
-  `~/.skyline-mcp/connection-*.json` for the new PID with a ~30 s
-  timeout, return full instance info on success.
+The bigger motivation, surfaced during design discussion: with
+`CliPath` in hand, an LLM can write shell or Python scripts to run
+SkylineCmd in batch — exactly the workflow Skyline Batch was built to
+serve but that struggled to land with users unfamiliar with batch
+scripting. LLMs flip that ergonomic gap.
+
+`skyline_start_instance` was dropped from this PR — once
+`skyline_list_installed` returns `GuiPath`, the LLM can launch via its
+own shell. If "launch + wait for connection file" turns into a
+recurring pattern, add it back as a generalized helper in a follow-up.
 
 Items 9 (JsonServer alert capture) and 10 (CI for SkylineMcp.sln) stay
 in the brendanx67 backlog file for separate PRs.
@@ -36,25 +39,18 @@ in the brendanx67 backlog file for separate PRs.
 
 - [ ] New `SkylineInstallation.cs` in `SkylineMcpServer` — POCO +
       static `FindAll()` mirroring `SharedBatch/SkylineInstallations`
-      discovery logic without taking a project reference. Returns:
+      discovery logic without taking a project reference. POCO:
       `Name`, `Release` (Skyline | Skyline-daily), `Version`,
-      `InstallScope` (user_clickonce | system_admin), `ExecutablePath`.
-- [ ] New `LaunchAndWaitForConnection(release, timeoutSeconds)` helper
-      in `SkylineConnection` (or sibling class) — snapshot existing
-      connection file PIDs, launch via `Process.Start(exePath)` for
-      admin installs or shell-execute the `.appref-ms` for ClickOnce,
-      poll `FindConnectionFiles()` for a new PID, return the new
-      `InstanceInfo` or a timeout message.
+      `InstallScope` (user_clickonce | system_admin),
+      `GuiPath`, `CliPath`.
 - [ ] New `skyline_list_installed` MCP tool in
       `SkylineMcpServer/Tools/SkylineTools.cs` — tab-separated output
-      matching existing enumeration tools.
-- [ ] New `skyline_start_instance` MCP tool in same file.
-- [ ] Bump `EXPECTED_TOOL_COUNT` in `SkylineMcpTest.cs` (44 → 46).
-- [ ] `TestSkylineMcp` coverage:
-  - List-installed: verify the running instance's release (Skyline
-    or Skyline-daily) shows up with a parseable version.
-  - Start-instance: skipped by default unless explicitly enabled —
-    launching a second Skyline mid-test may not be safe in CI.
+      with all POCO columns, matching existing enumeration tools.
+- [ ] Bump `EXPECTED_TOOL_COUNT` in `SkylineMcpTest.cs` (44 → 45).
+- [ ] `TestSkylineMcp` coverage: verify at least one install entry
+      with non-empty `GuiPath` is returned on a developer machine
+      (since the test runs inside Skyline, the running release must
+      be installed).
 - [ ] Rebuild `SkylineAiConnector.zip` per round-1 pattern.
 
 ## Design Notes
@@ -66,56 +62,76 @@ logic but returns a `List<SkylineInstallation>` POCO instead of writing
 `Settings.Default`. SkylineMcpServer stays self-contained — no project
 reference to `SharedBatch/`.
 
-### Launch semantics (decision)
+### What gets reported per install (decision)
 
-Launch + poll for connection, with a ~30 s timeout. The auto-connect
-preference (`Settings.Default.EnableMcpAutoConnect` inside Skyline) is
-per-user-per-release config; we can't query it from outside the new
-Skyline process. So:
+**Administrative installs** (`C:\Program Files\Skyline\` and
+`C:\Program Files\Skyline-daily\`):
 
-- If the user has enabled auto-connect for the chosen release, the new
-  instance writes its connection file on startup and we return its full
-  `InstanceInfo` within seconds.
-- If auto-connect is off, the poll times out and we return the PID plus
-  a hint: "If the AI Connector is not enabled at startup, click
-  Tools > AI Connector in the new Skyline window."
+- `GuiPath` = `Skyline.exe` / `Skyline-daily.exe` in the install dir
+- `CliPath` = `SkylineCmd.exe` in the same dir
+- `Version` = `FileVersionInfo.ProductVersion` on the exe
+- `InstallScope` = `system_admin`
 
-This matches the existing `skyline_get_instances` behavior and reuses
-`SkylineConnection.FindConnectionFiles()` (already private — may need
-to expose).
+**ClickOnce installs** (detected via `.appref-ms` shortcuts under
+`%AppData%\Microsoft\Windows\Start Menu\Programs\MacCoss Lab, UW\` or
+`Programs\<AppName>\`):
+
+- `GuiPath` = the `.appref-ms` (shell-execute it to launch)
+- `CliPath` = `null` in this PR (see Settings Context caveat below)
+- `Version` = parsed from deployment URL inside the `.appref-ms` if
+  present; otherwise `"ClickOnce (auto-update)"`
+- `InstallScope` = `user_clickonce`
+
+If both a ClickOnce and an administrative install of the same release
+are present, both entries are returned. The LLM picks which to use.
+
+### Settings context caveat (documented in tool description)
+
+`SkylineCmd.exe` (admin) and `Skyline.exe` (admin or ClickOnce) use
+**separate `user.config` files**. Custom report definitions, default
+settings presets, and similar UI-created configuration live in the GUI
+Skyline's `user.config` and are not visible to `SkylineCmd.exe` until
+the user runs `SkylineCmd --ui` once to populate that config.
+
+`SkylineRunner.exe` / `SkylineDailyRunner.exe` (small shims) avoid the
+caveat by proxying to the user's installed Skyline.exe in its own
+settings context. Bundling those shims with the MCP server's
+`SkylineAiConnector.zip` would let ClickOnce installs expose a working
+`CliPath` — deferred to a follow-up PR. For now, `CliPath = null` for
+ClickOnce and the LLM has to fall back to the GUI MCP tools (or ask
+the user to install the admin variant) for batch-style CLI use of a
+ClickOnce-only Skyline.
+
+The tool description spells the caveat out so an LLM writing a batch
+script for a user knows when to expect missing reports.
 
 ### ClickOnce version reporting
 
-For administrative installs, `FileVersionInfo.ProductVersion` on
-`Skyline.exe` / `SkylineCmd.exe` gives the version directly.
-
-For ClickOnce installs (`.appref-ms` shortcuts in
-`%AppData%\Microsoft\Windows\Start Menu\Programs\MacCoss Lab, UW\` or
-`Programs\<AppName>\`), the deployment URL embedded in the .appref-ms
-file usually contains the version (e.g.
+The `.appref-ms` file contains a deployment URL that usually carries
+the version (e.g.
 `.../skyline-23.1.0.380/Skyline.application`). Parse the version out
-of that URL when available; otherwise label "ClickOnce (auto-update)".
+of the URL when present; otherwise label `"ClickOnce (auto-update)"`.
+ClickOnce paths are user-readable text (with a UTF-16 BOM in some
+cases) — read with `File.ReadAllText` and a `Encoding.Unicode` fallback.
 
-Launching ClickOnce installs uses `Process.Start` with
-`UseShellExecute = true` on the `.appref-ms` path — the spawned process
-PID is not directly available, so the connection-file poll is what
-identifies the new instance.
+### Decisions deferred to keep this PR small
 
-### Open scope decisions for review
-
-- Should `skyline_list_installed` also flag which install is the
-  *running* MCP-connected one? Probably yes — show an `[ACTIVE]` tag
-  like `skyline_get_instances` does. Decide during impl.
-- Should `skyline_start_instance` accept a document path to open?
-  Useful, but matches what `skyline_run_command --in=...` already
-  does on the *current* instance. Start without that, add later if
-  needed.
+- **No `[ACTIVE]` flag** mapping installs to running connected
+  instances. There can be many running instances per install; a clean
+  representation would need both a list of installs and a separate
+  pointer to "current target." Leaving the correlation to the LLM
+  (using `skyline_get_instances` alongside `skyline_list_installed`)
+  avoids designing a structure we'd have to redo later.
+- **No `skyline_start_instance`.** LLM launches via Bash using the
+  returned `GuiPath`. Add a generalized launch+wait helper later if
+  the pattern recurs.
+- **No bundled SkylineRunner shims.** Future PR. Tracked here so the
+  ClickOnce-CliPath gap doesn't get forgotten.
 
 ## Files Expected to Change
 
 - `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/SkylineInstallation.cs` (new)
-- `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/SkylineConnection.cs` (extend with launch + poll)
-- `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/Tools/SkylineTools.cs` (two new tools)
+- `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/Tools/SkylineTools.cs` (one new tool)
 - `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineAiConnector/SkylineAiConnector.zip` (regenerated)
 - `pwiz/pwiz_tools/Skyline/TestFunctional/SkylineMcpTest.cs` (EXPECTED_TOOL_COUNT bump + coverage)
 
