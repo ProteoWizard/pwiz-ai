@@ -42,10 +42,19 @@ in the brendanx67 backlog file for separate PRs.
       discovery logic without taking a project reference. POCO:
       `Name`, `Release` (Skyline | Skyline-daily), `Version`,
       `InstallScope` (user_clickonce | system_admin),
-      `GuiPath`, `CliPath`.
+      `GuiPath`, `CliPath`, `RunnerPath`.
+- [ ] Bundle `SkylineRunner.exe` + `SkylineDailyRunner.exe` (13.8 KB
+      each, the same pre-built shims AutoQC and SkylineBatch ship) as
+      `Content` files in `SkylineMcpServer.csproj` with
+      `CopyToOutputDirectory=Always`. They flow into the
+      `mcp-server/` folder of `SkylineAiConnector.zip` via the
+      existing `PackageToolZip` target — no zip-packaging changes
+      needed. MCP discovery code resolves their path via
+      `AppContext.BaseDirectory`.
 - [ ] New `skyline_list_installed` MCP tool in
       `SkylineMcpServer/Tools/SkylineTools.cs` — tab-separated output
-      with all POCO columns, matching existing enumeration tools.
+      with all POCO columns. Description explains the CliPath vs
+      RunnerPath choice and the `SkylineCmd --ui` escape hatch.
 - [ ] Bump `EXPECTED_TOOL_COUNT` in `SkylineMcpTest.cs` (44 → 45).
 - [ ] `TestSkylineMcp` coverage: verify at least one install entry
       with non-empty `GuiPath` is returned on a developer machine
@@ -64,46 +73,58 @@ reference to `SharedBatch/`.
 
 ### What gets reported per install (decision)
 
-**Administrative installs** (`C:\Program Files\Skyline\` and
-`C:\Program Files\Skyline-daily\`):
-
-- `GuiPath` = `Skyline.exe` / `Skyline-daily.exe` in the install dir
-- `CliPath` = `SkylineCmd.exe` in the same dir
-- `Version` = `FileVersionInfo.ProductVersion` on the exe
-- `InstallScope` = `system_admin`
-
-**ClickOnce installs** (detected via `.appref-ms` shortcuts under
-`%AppData%\Microsoft\Windows\Start Menu\Programs\MacCoss Lab, UW\` or
-`Programs\<AppName>\`):
-
-- `GuiPath` = the `.appref-ms` (shell-execute it to launch)
-- `CliPath` = `null` in this PR (see Settings Context caveat below)
-- `Version` = parsed from deployment URL inside the `.appref-ms` if
-  present; otherwise `"ClickOnce (auto-update)"`
-- `InstallScope` = `user_clickonce`
+| Field | Admin install | ClickOnce install |
+|---|---|---|
+| `GuiPath` | `…\Skyline[-daily]\Skyline[-daily].exe` | `…\Skyline[-daily].appref-ms` |
+| `CliPath` | `…\Skyline[-daily]\SkylineCmd.exe` | `null` |
+| `RunnerPath` | `null` | bundled `…\mcp-server\Skyline[Daily]Runner.exe` |
+| `Version` | `FileVersionInfo.ProductVersion` on the exe | parsed from `.appref-ms` deployment URL, else `"ClickOnce (auto-update)"` |
+| `InstallScope` | `system_admin` | `user_clickonce` |
 
 If both a ClickOnce and an administrative install of the same release
 are present, both entries are returned. The LLM picks which to use.
 
-### Settings context caveat (documented in tool description)
+### CliPath vs RunnerPath — when to use each (documented in tool description)
 
-`SkylineCmd.exe` (admin) and `Skyline.exe` (admin or ClickOnce) use
-**separate `user.config` files**. Custom report definitions, default
-settings presets, and similar UI-created configuration live in the GUI
-Skyline's `user.config` and are not visible to `SkylineCmd.exe` until
-the user runs `SkylineCmd --ui` once to populate that config.
+Every install has at least one CLI path; admin installs use
+`SkylineCmd.exe`, ClickOnce installs use the bundled runner shim.
 
-`SkylineRunner.exe` / `SkylineDailyRunner.exe` (small shims) avoid the
-caveat by proxying to the user's installed Skyline.exe in its own
-settings context. Bundling those shims with the MCP server's
-`SkylineAiConnector.zip` would let ClickOnce installs expose a working
-`CliPath` — deferred to a follow-up PR. For now, `CliPath = null` for
-ClickOnce and the LLM has to fall back to the GUI MCP tools (or ask
-the user to install the admin variant) for batch-style CLI use of a
-ClickOnce-only Skyline.
+- **`CliPath` (admin installs only).** `SkylineCmd.exe` lives in the
+  same folder as `Skyline.exe` and is the modern direct CLI entry
+  point. Caveat: it uses a **separate `user.config`** from the GUI
+  Skyline. Custom reports, default settings presets, and similar
+  UI-saved state are not visible to `SkylineCmd.exe` until that
+  config is populated. The LLM-friendly way to populate it: add the
+  reports / tools / settings the script needs as CLI arguments and
+  include `--save-settings`, which persists the in-memory
+  `Settings.Default` at the end of the run so subsequent runs see the
+  same state. (`SkylineCmd --ui` is the human escape hatch — opens a
+  GUI the user can configure and close, persisting whatever they
+  set.)
+- **`RunnerPath` (ClickOnce installs only).** The bundled
+  `SkylineRunner.exe` / `SkylineDailyRunner.exe` shims (13.8 KB each)
+  find the user's ClickOnce-deployed `Skyline.exe`, launch it in
+  headless CMD mode, and pipe stdout/stderr through. Because they go
+  through the user's GUI Skyline binary, they share the GUI's
+  `user.config` — custom reports etc. are visible. Note: the shims
+  only know how to find ClickOnce installs; for admin installs the
+  user should use `CliPath` (`SkylineCmd.exe`) directly.
 
-The tool description spells the caveat out so an LLM writing a batch
-script for a user knows when to expect missing reports.
+The tool description spells this out so an LLM writing a batch script
+picks the right path and explains the tradeoffs to its user.
+
+### Runner-shim bundling
+
+The 13.8 KB pre-built `SkylineRunner.exe` and `SkylineDailyRunner.exe`
+binaries are already checked into the repo (last updated 2024-10-01)
+and shipped with AutoQC and SkylineBatch via `Content Include`. This
+PR copies them into `SkylineMcpServer/` and references them the same
+way, so they land in `bin/<config>/net8.0-windows/win-x64/` alongside
+`SkylineMcpServer.exe`. The existing `PackageToolZip` target in
+`SkylineAiConnector.csproj` already globs `*.exe` from that bin dir
+into `mcp-server/` of the zip, so no zip-packaging changes are needed.
+At runtime, `SkylineInstallation.FindAll()` resolves the shim path via
+`AppContext.BaseDirectory`.
 
 ### ClickOnce version reporting
 
@@ -125,12 +146,18 @@ cases) — read with `File.ReadAllText` and a `Encoding.Unicode` fallback.
 - **No `skyline_start_instance`.** LLM launches via Bash using the
   returned `GuiPath`. Add a generalized launch+wait helper later if
   the pattern recurs.
-- **No bundled SkylineRunner shims.** Future PR. Tracked here so the
-  ClickOnce-CliPath gap doesn't get forgotten.
+- **No MCP-internal headless-CLI tool.** Considered absorbing
+  SkylineRunner's pipe protocol into the MCP server itself, but the
+  more useful pattern is having the LLM write user-runnable scripts
+  (cron, CI, other machines) that reference real EXE paths. The
+  bundled runner shims serve that use case directly.
 
 ## Files Expected to Change
 
 - `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/SkylineInstallation.cs` (new)
+- `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/SkylineMcpServer.csproj` (Content Include for both shims)
+- `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/SkylineRunner.exe` (added, pre-built shim from AutoQC)
+- `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/SkylineDailyRunner.exe` (added, pre-built shim from AutoQC)
 - `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/Tools/SkylineTools.cs` (one new tool)
 - `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineAiConnector/SkylineAiConnector.zip` (regenerated)
 - `pwiz/pwiz_tools/Skyline/TestFunctional/SkylineMcpTest.cs` (EXPECTED_TOOL_COUNT bump + coverage)
