@@ -21,24 +21,11 @@ Items are independent. Each can land on its own PR.
 
 ## 5. Multi-Skyline-install support
 
-**Need.** Today the LLM cannot:
-
-- Enumerate which Skyline releases are installed (Skyline, Skyline-daily,
-  Skyline Administrator at `C:\Program Files\Skyline`).
-- Launch a new Skyline instance from MCP. The demo required the human to
-  manually open a third Skyline window for the "new instance arrives" beat.
-
-**Suggested new tools.**
-
-- `skyline_list_installed()` - return name, version, executable path, and
-  install scope (user / system / Administrator) for each detected install.
-- `skyline_start_instance(release: string)` - launch a new instance of the
-  named release, return the new process ID once it connects.
-
-**Design note.** The connection-file scan logic
-(`~/.skyline-mcp/connection-*.json`) already enumerates running instances; the
-"installed but not running" enumeration is a separate Windows-registry /
-filesystem walk. Plan accordingly.
+**Split into its own active TODO 2026-05-13:**
+`ai/todos/active/TODO-20260513_skyline_mcp_multi_install.md`. Two new
+MCP tools land there: `skyline_list_installed()` and
+`skyline_start_instance(release)`. Items 9 and 10 below remain in
+this backlog file for separate PRs.
 
 ---
 
@@ -113,6 +100,5 @@ just verifies the build succeeds.
 - **Item 9** unlocks better LLM error feedback across the entire
   `IJsonToolService` surface, not just the RunCommand-routed tools.
   Medium effort.
-- **Item 5** is a feature, larger scope (Windows registry walk, process
-  launch + connect wait). Lowest priority among the three but solves a
-  real demo gap.
+- **Item 5** has been split into its own active TODO
+  (`TODO-20260513_skyline_mcp_multi_install.md`).
