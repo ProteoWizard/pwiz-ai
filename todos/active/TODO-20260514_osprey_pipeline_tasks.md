@@ -12,9 +12,10 @@
 
 ## Branch Information
 
-- **Branch**: (not yet created) — will be `Skyline/work/20260514_osprey_pipeline_tasks` when work starts
+- **Branch**: `Skyline/work/20260514_osprey_pipeline_tasks`
 - **Base**: `master` (post-#4199 squash, currently at `a8d9111c5b`)
-- **Status**: design settled; ready to start
+- **Created**: 2026-05-14
+- **Status**: In Progress
 - **PR**: (pending)
 
 ## Phase B core (what #4199 shipped) — short version
@@ -108,6 +109,13 @@ resolved here so the next session can start coding.
    duplicate that contract. The orchestrator (NextFlow — see below)
    checks for the `.PerFileRescore.osprey.task` sidecar's existence
    to decide whether a worker task is done.
+4. **Per-file skip inside `PerFileRescoreTask.Run`: include it
+   (folded into commit 4 or 5).** Mirrors Phase B's `ScoreOrLoadForFile`
+   in `PerFileScoringTask`, so a single
+   `OspreySharp --no-join --input-scores f1 f2 f3` invocation resumes
+   mid-fan-in. Keeps the per-file mechanism symmetric across both
+   loop-based tasks even though typical NextFlow fan-out is
+   one-file-per-process.
 
 ## Implementation plan
 
@@ -183,6 +191,11 @@ stage between this commit and the next.
 - `PerFileRescoreTask.RunWorker` body deleted; method body becomes
   a one-line stub that throws (or the method is removed entirely if
   no caller references it).
+- Add per-file skip inside `PerFileRescoreTask.Run`'s loop, mirroring
+  `PerFileScoringTask.ScoreOrLoadForFile`: probe the per-file
+  `.PerFileRescore.osprey.task` sidecar's validity_key; on match,
+  skip rescoring that file and load its outputs from disk. This is
+  what the manual stage6 crash-resume gate exercises.
 
 Stage6 (`--no-join --input-scores`) now routes through
 `AnalysisPipeline.Run` with `StartAt = StopAfter = PerFileRescoreTask`,
@@ -319,3 +332,24 @@ before /clear. Branch not yet created; pwiz on master at `a8d9111c5b`
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260514_osprey_pipeline_tasks.md` before starting work.
+
+### 2026-05-14 — Sprint start
+
+- Per-file-skip-in-`PerFileRescoreTask.Run` decision: include it,
+  fold into commit 4. Reasoning: keeps the per-file mechanism
+  symmetric with `PerFileScoringTask` and makes the manual
+  3-file crash-resume gate exercise a single-process invocation
+  rather than three separate ones.
+- Branch `Skyline/work/20260514_osprey_pipeline_tasks` created
+  from master at `a8d9111c5b`.
+
+### 2026-05-14 — Commit 1 landed: TaskValiditySidecar unit tests
+
+- 6 new tests in `OspreySharp.Test/IOTest.cs` (region
+  `TaskValiditySidecar Tests`): round-trip, JSON escapes,
+  missing-sidecar, malformed (4 shapes), per-task naming
+  collision, Delete contract.
+- 309/309 OspreySharp unit tests pass (was 303 before this commit).
+- Stellar 3-file snapshot regression PASS at every stage.
+- Resolves Copilot thread #3221935440 from #4199 review.
+- Commit `e35f928a55`. Branch pushed.
