@@ -6,7 +6,7 @@
 - **Created**: 2026-05-13
 - **Status**: Ready for review
 - **GitHub Issue**: (none yet — split from `ai/todos/backlog/brendanx67/TODO-skyline_mcp_followups.md` Item 5)
-- **PR**: (pending)
+- **PR**: [#4212](https://github.com/ProteoWizard/pwiz/pull/4212)
 
 ## Commits
 
