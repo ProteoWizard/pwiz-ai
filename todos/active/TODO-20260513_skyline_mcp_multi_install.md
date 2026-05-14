@@ -4,9 +4,14 @@
 - **Branch**: `Skyline/work/20260513_skyline_mcp_multi_install`
 - **Base**: `master`
 - **Created**: 2026-05-13
-- **Status**: In Progress
+- **Status**: Ready for review
 - **GitHub Issue**: (none yet — split from `ai/todos/backlog/brendanx67/TODO-skyline_mcp_followups.md` Item 5)
 - **PR**: (pending)
+
+## Commits
+
+- `e8c04d949e` Centralized SkylineRunner shims under Executables/SkylineRunner/Binaries
+- `0bf55ea45a` Added skyline_list_installed MCP tool for multi-install support
 
 ## Purpose
 
@@ -37,13 +42,13 @@ in the brendanx67 backlog file for separate PRs.
 
 ## Scope
 
-- [ ] New `SkylineInstallation.cs` in `SkylineMcpServer` — POCO +
+- [x] New `SkylineInstallation.cs` in `SkylineMcpServer` — POCO +
       static `FindAll()` mirroring `SharedBatch/SkylineInstallations`
       discovery logic without taking a project reference. POCO:
       `Name`, `Release` (Skyline | Skyline-daily), `Version`,
       `InstallScope` (user_clickonce | system_admin),
       `GuiPath`, `CliPath`, `RunnerPath`.
-- [ ] Centralize the pre-built runner shims at
+- [x] Centralize the pre-built runner shims at
       `pwiz/pwiz_tools/Skyline/Executables/SkylineRunner/Binaries/`.
       Today the same `SkylineRunner.exe` + `SkylineDailyRunner.exe`
       (13.8 KB each, bit-identical hashes verified) are checked into
@@ -53,23 +58,23 @@ in the brendanx67 backlog file for separate PRs.
       `SkylineMcpServer.csproj`) to reference them with relative
       `Content Include` + `<Link>` so they still appear at each
       project's output root via `CopyToOutputDirectory=Always`.
-- [ ] In `SkylineMcpServer.csproj`, reference the centralized shims so
+- [x] In `SkylineMcpServer.csproj`, reference the centralized shims so
       they land in `bin/<config>/net8.0-windows/win-x64/` alongside
       `SkylineMcpServer.exe`. The existing `PackageToolZip` target
       already globs `*.exe` from there into `mcp-server/` of the zip —
       no zip-packaging changes needed. At runtime,
       `SkylineInstallation.FindAll()` resolves the shim path via
       `AppContext.BaseDirectory`.
-- [ ] New `skyline_list_installed` MCP tool in
+- [x] New `skyline_list_installed` MCP tool in
       `SkylineMcpServer/Tools/SkylineTools.cs` — tab-separated output
       with all POCO columns. Description explains the CliPath vs
       RunnerPath choice and the `SkylineCmd --ui` escape hatch.
-- [ ] Bump `EXPECTED_TOOL_COUNT` in `SkylineMcpTest.cs` (44 → 45).
-- [ ] `TestSkylineMcp` coverage: verify at least one install entry
+- [x] Bump `EXPECTED_TOOL_COUNT` in `SkylineMcpTest.cs` (44 → 45).
+- [x] `TestSkylineMcp` coverage: verify at least one install entry
       with non-empty `GuiPath` is returned on a developer machine
       (since the test runs inside Skyline, the running release must
       be installed).
-- [ ] Rebuild `SkylineAiConnector.zip` per round-1 pattern.
+- [x] Rebuild `SkylineAiConnector.zip` per round-1 pattern.
 
 ## Design Notes
 
