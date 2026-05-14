@@ -43,13 +43,22 @@ in the brendanx67 backlog file for separate PRs.
       `Name`, `Release` (Skyline | Skyline-daily), `Version`,
       `InstallScope` (user_clickonce | system_admin),
       `GuiPath`, `CliPath`, `RunnerPath`.
-- [ ] Bundle `SkylineRunner.exe` + `SkylineDailyRunner.exe` (13.8 KB
-      each, the same pre-built shims AutoQC and SkylineBatch ship) as
-      `Content` files in `SkylineMcpServer.csproj` with
-      `CopyToOutputDirectory=Always`. They flow into the
-      `mcp-server/` folder of `SkylineAiConnector.zip` via the
-      existing `PackageToolZip` target — no zip-packaging changes
-      needed. MCP discovery code resolves their path via
+- [ ] Centralize the pre-built runner shims at
+      `pwiz/pwiz_tools/Skyline/Executables/SkylineRunner/Binaries/`.
+      Today the same `SkylineRunner.exe` + `SkylineDailyRunner.exe`
+      (13.8 KB each, bit-identical hashes verified) are checked into
+      both `AutoQC/AutoQC/` and `SkylineBatch/SkylineBatch/`. This PR
+      moves them to one central location and updates all three
+      consumers (`AutoQC.csproj`, `SkylineBatch.csproj`, and the new
+      `SkylineMcpServer.csproj`) to reference them with relative
+      `Content Include` + `<Link>` so they still appear at each
+      project's output root via `CopyToOutputDirectory=Always`.
+- [ ] In `SkylineMcpServer.csproj`, reference the centralized shims so
+      they land in `bin/<config>/net8.0-windows/win-x64/` alongside
+      `SkylineMcpServer.exe`. The existing `PackageToolZip` target
+      already globs `*.exe` from there into `mcp-server/` of the zip —
+      no zip-packaging changes needed. At runtime,
+      `SkylineInstallation.FindAll()` resolves the shim path via
       `AppContext.BaseDirectory`.
 - [ ] New `skyline_list_installed` MCP tool in
       `SkylineMcpServer/Tools/SkylineTools.cs` — tab-separated output
@@ -113,18 +122,34 @@ Every install has at least one CLI path; admin installs use
 The tool description spells this out so an LLM writing a batch script
 picks the right path and explains the tradeoffs to its user.
 
-### Runner-shim bundling
+### Runner-shim bundling (centralized in this PR)
 
 The 13.8 KB pre-built `SkylineRunner.exe` and `SkylineDailyRunner.exe`
-binaries are already checked into the repo (last updated 2024-10-01)
-and shipped with AutoQC and SkylineBatch via `Content Include`. This
-PR copies them into `SkylineMcpServer/` and references them the same
-way, so they land in `bin/<config>/net8.0-windows/win-x64/` alongside
-`SkylineMcpServer.exe`. The existing `PackageToolZip` target in
-`SkylineAiConnector.csproj` already globs `*.exe` from that bin dir
-into `mcp-server/` of the zip, so no zip-packaging changes are needed.
-At runtime, `SkylineInstallation.FindAll()` resolves the shim path via
-`AppContext.BaseDirectory`.
+binaries are already checked in (last updated 2024-10-01). They live
+in two places today (`AutoQC/AutoQC/` and `SkylineBatch/SkylineBatch/`)
+with bit-identical hashes — a known minor duplication.
+
+Rather than adding a third copy under `SkylineMcpServer/`, this PR
+centralizes the shims at:
+
+```
+pwiz/pwiz_tools/Skyline/Executables/SkylineRunner/Binaries/
+  SkylineRunner.exe
+  SkylineDailyRunner.exe
+```
+
+The three consumers (`AutoQC.csproj`, `SkylineBatch.csproj`,
+`SkylineMcpServer.csproj`) each get a `Content Include` with a
+relative path to that central location plus `<Link>` so the file
+appears in each project's output root unchanged. The two duplicate
+copies are `git rm`'d.
+
+For SkylineMcpServer the relative path is
+`..\..\..\..\SkylineRunner\Binaries\Skyline[Daily]Runner.exe` (the
+project is nested deeper under `Tools/SkylineMcp/SkylineMcpServer/`).
+At runtime `SkylineInstallation.FindAll()` resolves the shim path via
+`AppContext.BaseDirectory`, which works regardless of how the file
+got there.
 
 ### ClickOnce version reporting
 
@@ -154,10 +179,21 @@ cases) — read with `File.ReadAllText` and a `Encoding.Unicode` fallback.
 
 ## Files Expected to Change
 
+Runner-shim centralization (3 csproj edits + binary moves):
+
+- `pwiz/pwiz_tools/Skyline/Executables/SkylineRunner/Binaries/SkylineRunner.exe` (new, moved from AutoQC)
+- `pwiz/pwiz_tools/Skyline/Executables/SkylineRunner/Binaries/SkylineDailyRunner.exe` (new, moved from AutoQC)
+- `pwiz/pwiz_tools/Skyline/Executables/AutoQC/AutoQC/SkylineRunner.exe` (removed; csproj now references central)
+- `pwiz/pwiz_tools/Skyline/Executables/AutoQC/AutoQC/SkylineDailyRunner.exe` (removed; csproj now references central)
+- `pwiz/pwiz_tools/Skyline/Executables/AutoQC/AutoQC/AutoQC.csproj` (Content paths)
+- `pwiz/pwiz_tools/Skyline/Executables/SkylineBatch/SkylineBatch/SkylineRunner.exe` (removed)
+- `pwiz/pwiz_tools/Skyline/Executables/SkylineBatch/SkylineBatch/SkylineDailyRunner.exe` (removed)
+- `pwiz/pwiz_tools/Skyline/Executables/SkylineBatch/SkylineBatch/SkylineBatch.csproj` (Content paths)
+
+MCP-server feature work:
+
 - `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/SkylineInstallation.cs` (new)
-- `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/SkylineMcpServer.csproj` (Content Include for both shims)
-- `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/SkylineRunner.exe` (added, pre-built shim from AutoQC)
-- `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/SkylineDailyRunner.exe` (added, pre-built shim from AutoQC)
+- `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/SkylineMcpServer.csproj` (Content Include for both centralized shims)
 - `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineMcpServer/Tools/SkylineTools.cs` (one new tool)
 - `pwiz/pwiz_tools/Skyline/Executables/Tools/SkylineMcp/SkylineAiConnector/SkylineAiConnector.zip` (regenerated)
 - `pwiz/pwiz_tools/Skyline/TestFunctional/SkylineMcpTest.cs` (EXPECTED_TOOL_COUNT bump + coverage)
