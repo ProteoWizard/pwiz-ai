@@ -33,8 +33,9 @@ Workaround offered in thread was deleting evidence.txt; this fix removes the nee
 
 ## Cherry-pick
 
-Bug exists verbatim on `Skyline/skyline_26_1`. PR #4207 was labeled `Cherry pick to release`;
-the auto-cherry-pick PR to the release branch should appear after merge — verify it lands.
+Bug exists verbatim on `Skyline/skyline_26_1`. PR #4207 was initially labeled
+`Cherry pick to release`, but the team decided **not** to cherry-pick (2026-05-14).
+Label removed; fix ships in master only.
 
 ## Test plan
 
