@@ -9,10 +9,11 @@
 
 ## Branch Information
 
-- **Branch**: `Skyline/work/20260511_osprey_pipeline_tasks` (created 2026-05-11 from `origin/master` at `12825485a9` — the squash-merge of #4197)
+- **Branch**: `Skyline/work/20260511_osprey_pipeline_tasks` — merged to master via #4199 on 2026-05-14 (squash).
 - **Base**: `master`
-- **Status**: framework surface + per-task declarative metadata landed; skip mechanism + StartAt + lazy rehydrate + per-file skip + worker convergence pending
-- **PR**: (pending)
+- **Created**: 2026-05-11 from `origin/master` at `12825485a9` (the squash-merge of #4197).
+- **Status**: COMPLETE — Phase B core (resume-on-restart capability via per-(output, task) `.osprey.task` sidecars, StartAt/StopAfter routing, lazy-rehydrate accessors, and per-file skip in `PerFileScoringTask`) merged. Continuation in [TODO-20260514_osprey_pipeline_tasks.md](../active/TODO-20260514_osprey_pipeline_tasks.md) (Phase C worker convergence + post-Phase-B cleanups).
+- **PR**: https://github.com/ProteoWizard/pwiz/pull/4199 — merged 2026-05-14 (squash). All CI checks PASS (CodeQL, TeamCity Skyline PR Perf + Tutorial, Skyline master+PRs, code inspection, Wine container, debug build). Copilot review feedback addressed in commit `dd21ca3a4d` (6 of 7 threads resolved; the TaskValiditySidecar unit-test thread is left as a tracker for Phase C). Claude `/review` surfaced 6 prioritized follow-ups (P1-P3); all rolled forward into the Phase C TODO.
 
 ## Current branch state (commits already on branch)
 
@@ -241,53 +242,9 @@ snapshot regression. Astral cross-dataset PASS gates the PR open.
 - Apply the same pattern to `MergeNodeTask`'s 2nd-pass FDR sidecar loop.
 - Validation: Stellar regression PASS on fresh run; **manual crash-resume verification** — invoke the full pipeline against a small dataset, delete one file's `.scores.parquet`, re-invoke, confirm only that file is re-scored and the other tasks skip.
 
-### Commit 5 — worker convergence (DEFERRED to Phase C / follow-up branch)
+### Commit 5 — worker convergence (deferred)
 
-Splitting this out so the resume-capability work (commits 1-4) can ship
-as a self-contained PR while the convergence refactor gets its own
-focused change-set.
-
-What landing this requires:
-
-- Introduce `AnalysisPipeline.CanonicalPipeline()` static factory. The canonical 4-task list lives only here.
-- `RescoreWorker.Run` becomes `return new AnalysisPipeline().Run(config);` — no task list, no `PipelineContext` construction.
-- Delete `PerFileRescoreTask.RunWorker` body.
-- Delete any remaining CLI-mode branches inside task `Run`s now that the StartAt mechanism handles all dispatch.
-
-What makes it deferral-worthy:
-
-The stage6 worker path (`--join-at-pass=1 --no-join --input-scores`)
-today calls `RescoreHydration.HydrateForRescore` inside
-`PerFileRescoreTask.RunWorker`, which produces a `RescoreInputs`
-bundle with (a) stubs **overlaid with 1st-pass SVM scores from the
-sidecar** and (b) parsed `reconciliation.json` actions/refined
-calibrations/gap-fill targets. Converging this onto
-`AnalysisPipeline.Run` means `PerFileScoringTask`'s `joinOnly` path
-(today: raw stubs + PIN features, no overlay; serves stage5 mode) has
-to grow conditional hydration: load `HydrateForRescore` output when
-1st-pass sidecars exist, fall back to raw load otherwise. And
-`FirstJoinTask`'s lazy-rehydrate has to pull the reconciliation half
-of the bundle from a shared seam (recommend option (a):
-`PerFileScoringTask` owns the `RescoreInputs` bundle, exposes
-`GetRescoreInputs(ctx)`; `FirstJoinTask`'s accessors read from it).
-
-Three modes feed this seam, each with different on-disk inputs:
-
-| Mode | On disk | Stubs need |
-|------|---------|------------|
-| stage5 (`--join-only --input-scores`) | `.scores.parquet` only | raw stubs + PIN features (run Percolator) |
-| stage6 (`--no-join --input-scores`) | `.scores.parquet` + `.1st-pass.fdr_scores.bin` + `reconciliation.json` | stubs with 1st-pass overlay + reconciliation state |
-| stage7 (`--join-at-pass=2 --input-scores`) | `.scores.parquet` + 1st + 2nd-pass + reconciliation.json | stubs with 2nd-pass overlay (FirstJoin does this today) |
-
-The right design call (PerFileScoring's joinOnly path dispatches on
-"what sidecars are present" and produces the matching bundle) is
-straightforward to write but the regression surface is non-trivial:
-all three modes' snapshot equality has to hold byte-for-byte.
-
-- Validation: Stellar + Astral regression PASS; cross-impl
-  Test-Regression flow (Rust outputs → C# stage 5+) still works; no
-  reference to "worker mode" or `IsWorkerMode` anywhere in the
-  pipeline; `RescoreWorker.Run` is one line.
+Carved off into [TODO-20260514_osprey_pipeline_tasks.md](../active/TODO-20260514_osprey_pipeline_tasks.md). The hydration-unification rationale, the three-mode table for stage5/6/7, and the implementation plan all live there.
 
 ## Validation gates
 
@@ -304,36 +261,7 @@ PR-open gates:
 
 ## Open implementation Qs
 
-- **Shared hydration seam for `RescoreHydration` bundle.** Both
-  `PerFileScoringTask.GetPerFileEntries` and the
-  `FirstJoinTask.GetReconciliationActions` /
-  `GetRefinedCalibrations` / `GetPerFileGapFillForRescore` paths
-  load from the same `RescoreInputs` bundle. Two options:
-  (a) `PerFileScoringTask` owns the bundle; `FirstJoinTask` calls
-  `ctx.GetTask<PerFileScoringTask>().GetRescoreInputs()` — modest
-  coupling between the two tasks.
-  (b) `RescoreHydration.HydrateForRescore` itself memoizes its
-  result keyed on `config.InputScores` — no inter-task coupling
-  but adds a static cache.
-  Recommend (a) — less hidden state.
-- **CLI parser location.** `Program.ConfigureFromArgs` probably
-  owns the StartAt/StopAfter mapping. May benefit from a small
-  table-driven helper. Look at the existing CLI flag handling for
-  `--no-join` / `--join-only` etc. as the model.
-- **Sentinel for "not yet computed."** Today the producer-task
-  output fields default to non-null empty collections. Switch to
-  null sentinels OR add `_hydrated` booleans so the accessor can
-  detect "must hydrate." Null sentinels are simpler if the
-  consumer doesn't need to distinguish "empty result" from "not
-  yet run."
-- **Sidecar deletion on validity-key mismatch.** Today the
-  reverted skip wiring deleted sidecars *unconditionally* at
-  run-start. With StartAt, an upstream task whose Run is skipped
-  doesn't run that cleanup — but its sidecars also aren't being
-  written. Consider: at the very start of `AnalysisPipeline.Run`,
-  iterate every task and delete sidecars whose validity_key
-  doesn't match — but ONLY for tasks at-or-after StartAt. This
-  protects against config-change-without-output-rewrite.
+Rolled forward into [TODO-20260514_osprey_pipeline_tasks.md](../active/TODO-20260514_osprey_pipeline_tasks.md) — Phase B's open Qs about the shared `RescoreInputs` hydration seam, the CLI parser location for StartAt/StopAfter wiring, the "not yet computed" sentinel choice, and validity-key-mismatch sidecar cleanup are all Phase C concerns now.
 
 ## Phase B success criteria
 
@@ -353,19 +281,9 @@ PR-open gates:
   the final branch state. ✅ Stellar PASS on commit 4; Astral PASS on
   commit 3 (commit 4 only touches the stage1to4 actual-scoring path
   Astral already exercised; re-run as PR-open gate)
-- Manual crash-resume verification — full pipeline run on a small
-  dataset, delete one file's `.scores.parquet`, re-invoke same CLI,
-  observe `[file] X: skipping (outputs valid)` for surviving files
-  and only the deleted file re-scored. ⏳ pending before PR open
-
-### Phase C (deferred — separate branch + PR)
-
-- Worker mode entry path converged onto `AnalysisPipeline.Run`. After
-  Phase C lands, `RescoreWorker.Run` is one line; `PerFileRescoreTask.RunWorker`
-  body is gone; no code in the pipeline mentions "worker mode" by
-  flag.
-- `AnalysisPipeline.CanonicalPipeline()` is the single source of truth
-  for the 4-task list.
-- CLI-mode branches inside task `Run` methods (the `ExpectReconciledInput` /
-  `NoJoin` / `joinOnly` checks) deleted where the StartAt mechanism
-  + lazy-rehydrate subsumes them.
+- Manual crash-resume verification — full Stellar 3-file pipeline
+  run (5:38), simulated mid-PerFileScoring crash by deleting file
+  20's `.scores.parquet` + downstream outputs, re-invoked same CLI,
+  observed `[file] 2/3 ...21: skipping (outputs valid)` +
+  `[file] 3/3 ...22: skipping (outputs valid)`, file 20 re-scored,
+  pipeline completed in 4:28 (~70s saved on per-file skip). ✅
