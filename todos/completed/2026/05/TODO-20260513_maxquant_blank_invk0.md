@@ -4,9 +4,10 @@
 - **Branch**: `Skyline/work/20260513_maxquant_blank_invk0`
 - **Base**: `master`
 - **Created**: 2026-05-13
-- **Status**: In Progress
+- **Completed**: 2026-05-14
+- **Status**: Merged
 - **Source Thread**: [skyline.ms support #74557](https://skyline.ms/home/support/announcements-thread.view?rowId=74557)
-- **PR**: [#4207](https://github.com/ProteoWizard/pwiz/pull/4207)
+- **PR**: [#4207](https://github.com/ProteoWizard/pwiz/pull/4207) (merged 2026-05-14)
 
 ## Objective
 
@@ -32,7 +33,8 @@ Workaround offered in thread was deleting evidence.txt; this fix removes the nee
 
 ## Cherry-pick
 
-Bug exists verbatim on `Skyline/skyline_26_1` — label PR `Cherry pick to release`.
+Bug exists verbatim on `Skyline/skyline_26_1`. PR #4207 was labeled `Cherry pick to release`;
+the auto-cherry-pick PR to the release branch should appear after merge — verify it lands.
 
 ## Test plan
 
