@@ -292,3 +292,30 @@ glue. The contract this PR creates with that orchestrator:
 - All Phase B success criteria still hold (Stellar + Astral + cross-impl
   + per-file resume).
 - Stage6 worker crash-resume verified manually.
+
+## Progress Log
+
+### 2026-05-14 — Design session, pre-work
+
+Phase C scope and approach settled in a design-discussion session
+before /clear. Branch not yet created; pwiz on master at `a8d9111c5b`
+(post-#4199 squash).
+
+- 5-commit plan agreed: TaskValiditySidecar tests → CanonicalPipeline
+  factory → hydration unification → worker entry collapse →
+  CLI-mode branch deletion. See "Implementation plan" above.
+- Three design questions resolved: `RescoreInputs` ownership (option
+  (a): PerFileScoringTask owns and exposes `GetRescoreInputs(ctx)`);
+  hydration shape dispatch (probe-the-disk on sidecar presence, no
+  CLI-mode enum); stage6-completion marker (none — the existing
+  `.PerFileRescore.osprey.task` sidecar is the orchestrator's
+  done-signal).
+- NextFlow identified as the likely consumer; success criteria
+  framed around the idempotence + per-file-resume contract that
+  consumer needs.
+- Trivial P3 follow-ups from the #4199 review listed as fold-in
+  candidates rather than required commits. Style / DRY cleanup
+  deferred to a separate post-Phase-C pass.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260514_osprey_pipeline_tasks.md` before starting work.
