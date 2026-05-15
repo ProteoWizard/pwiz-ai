@@ -129,7 +129,7 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet('Stellar','Astral')]
+    [ValidateSet('Stellar','Astral','AstralLibraryDecoy')]
     [string]$Dataset = 'Stellar',
 
     [string]$Files = 'Single',

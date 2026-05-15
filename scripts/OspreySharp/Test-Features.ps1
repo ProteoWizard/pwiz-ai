@@ -66,7 +66,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Stellar", "Astral")]
+    [ValidateSet("Stellar", "Astral", "AstralLibraryDecoy")]
     [string]$Dataset = "Stellar",
 
     [Parameter(Mandatory=$false)]
