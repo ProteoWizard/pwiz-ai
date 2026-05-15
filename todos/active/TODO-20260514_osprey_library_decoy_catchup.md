@@ -611,3 +611,50 @@ starting work.
     (`d23d496`)
   - `6f3258f6d2` -- version bump 26.5.0 -> 26.6.0 for cross-impl
     parity
+
+### 2026-05-15 -- Post-PR review pass
+
+- Copilot review landed within ~5 min of `gh pr create`. Two
+  inline comments: (a) the `nLibraryDecoys == 0` early bail defeats
+  the manifest-authoritative path; (b) `SearchParameterHash`
+  doesn't Rust-debug-escape the manifest path, so Windows
+  backslashes diverge cross-impl. Both addressed in commit
+  `b5c48f6309`; threads resolved.
+- Fresh-context Agent review (via Agent tool, general-purpose
+  subagent) launched on top of Copilot. Five Concern-level
+  findings:
+  1. **Reverted** the Copilot-suggested deferral of the
+     "no library decoys" check (commit `3bbc0fe5ea`): the agent
+     correctly noticed it diverged from Rust v26.6.0 pipeline.rs
+     ordering, breaking the cross-impl byte-parity claim. Now
+     matches Rust exactly; added TODO(brendanmaclean,maccoss)
+     comment to discuss with Mike whether the upstream ordering
+     should be relaxed -- if so, the fix lands first in Rust then
+     ports here.
+  2. **Fixed** `ParseDecoyFlag` to use ASCII-only lowercasing
+     (Rust `to_ascii_lowercase`), not `ToLowerInvariant` (Unicode
+     case-folding). New `AsciiLowerInvariant` helper. Test pins
+     this with negative cases on Turkish dotted-I and fullwidth
+     digit 1.
+  3. **Tested** `DecoyPairMinFraction` non-round-double hash
+     stability with `1.0/3.0` (and a tiny perturbation). Catches
+     future runtime/formatter drift that would silently break
+     cross-impl cache compat on user-supplied thresholds.
+  4. **Tested** UTF-8 BOM handling in `DecoyPairingManifest.FromTsv`
+     to pin StreamReader's BOM-stripping behavior.
+  5. **Tested** last-write-wins on duplicate sequence rows in
+     manifest (explicit `m.Count == 2` assertion).
+- Agent's two Suggestion-level items deferred: pre-sized tuple
+  allocation in `LibraryDecoyPairing` (perf, no correctness
+  impact) and `LibraryEntry` setter visibility tightening
+  (structural; existing surface, scope creep).
+- Updated `/version-control` skill: documented post-PR review
+  chain (Copilot → `/pw-respond` → `/pw-self-review` → optional
+  `/ultrareview`) and added the `/pw-self-review` command for
+  fresh-context agent reviews on top of Copilot. Both committed to
+  `ai/` master (`fd3bb56`).
+- Astral same-impl snapshot now captured at v26.6.0
+  (`b5c48f6309`); cross-impl Test-Regression already PASSed in the
+  prior session.
+- All PR-open gates green; PR-review chain complete; PR ready for
+  developer sign-off.
