@@ -404,12 +404,17 @@ $stageConfig = @{
 
 # Artifacts that downstream stages need to enter at the right pipeline
 # checkpoint. Same patterns as Freeze-PostStage4 in Test-Regression.ps1.
+# .osprey.task validity sidecars are included so the resume-aware
+# gates in PerFileScoring / FirstJoin / PerFileRescore / MergeNode see
+# their per-task signals at the next stage boundary instead of seeing
+# bare binaries with no metadata to validate.
 $downstreamArtifactPatterns = @(
     '*.scores.parquet',
     '*.calibration.json',
     '*.1st-pass.fdr_scores.bin',
     '*.2nd-pass.fdr_scores.bin',
-    '*.reconciliation.json'
+    '*.reconciliation.json',
+    '*.osprey.task'
 )
 
 # ----------------------------------------------------------------------
