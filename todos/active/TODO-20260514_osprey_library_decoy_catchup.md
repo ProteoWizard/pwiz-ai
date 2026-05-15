@@ -556,3 +556,21 @@ starting work.
 - Stellar cross-impl `Test-Regression.ps1` and Astral
   `Test-Snapshot.ps1` + `Test-Regression.ps1` still to run before
   opening the PR.
+
+#### 2026-05-15 -- gate progress
+
+- Local `/c/proj/osprey` was 28 commits behind `maccoss/osprey`
+  origin/main; brought to `bcd7249` (Rust v26.6.0) and rebuilt.
+- First Stellar `Test-Regression.ps1 -Force` against the new Rust
+  binary failed at stage5 with osprey major/minor version mismatch
+  (parquet stamped 26.6.0, C# said 26.5.0). Bumped
+  `OspreySharp/Program.cs` `VERSION` to `26.6.0` (matching Rust
+  release that contains the same 5 commits we just ported) plus the
+  doc/test references in `TaskValiditySidecar.cs` and `IOTest.cs`.
+  Landed as commit `6f3258f6d2`.
+- Second Stellar `Test-Regression.ps1 -Force`: ALL 5 stages
+  (`stage1to4`, `stage5`, `stage6`, `stage7`, `blib`) PASS at byte
+  equality vs Rust v26.6.0.
+- Astral `Test-Snapshot.ps1 -Files All` + `Test-Regression.ps1
+  -Force` running sequentially in background (`bxxpfde2j`); 25 min
+  + 25 min wall.
