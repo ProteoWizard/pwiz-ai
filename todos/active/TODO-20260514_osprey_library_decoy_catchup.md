@@ -406,3 +406,38 @@ starting work.
     commits 2-5 validate against the new (Rust-aligned) baseline.
 - Commit pending: stage CRLF normalisation done, all files clean,
   ready to commit + push.
+- **Landed**: commit `dede958de6` on
+  `Skyline/work/20260514_osprey_library_decoy_catchup`.
+
+### 2026-05-15 -- Commit 2 landed (composition pairing, a8ae4a1)
+
+- Implementation:
+  - `OspreySharp.Core/LibraryDecoyPairing.cs` (new) --
+    `PairLibraryDecoysByComposition` + `PairingStats`; deterministic
+    `(sequence, id)` zip within each
+    `(accession, charge, sorted-AA)` bucket. Strips configured prefix
+    to recover target accession; honors charge; shared-peptide
+    fallthrough across sorted accessions.
+  - `OspreyConfig.DecoyPairMinFraction = 0.80`; folded into
+    `SearchParameterHash` (Rust folds it together with
+    `decoy_pairing_manifest`; we add the manifest field in commit 3).
+  - `PerFileScoringTask` runs the pairer after marking, logs
+    paired/unpaired stats, hard error if below threshold.
+- Cross-impl-parity note: had to add an inline `// Array.Sort OK:`
+  exemption for the single `Array.Sort(char[])` in `SortedAa` (canonical
+  AA composition is a single primitive array; ties are byte-identical
+  so stability is irrelevant). `TestNoUnstableArraySort` would
+  otherwise refuse production use of `Array.Sort`.
+- ResSharper picked up a `MemberHidesStaticFromOuterClass` on
+  `TargetKey.SortedAa` hiding the outer-class method; renamed the field
+  to `TargetKey.Composition`.
+- Tests: 8 Rust composition-pairing tests ported to
+  `LibraryDecoyPairingTest`; 324 OspreySharp tests pass total.
+- Inspection: still 4 pre-existing baseline warnings in untouched
+  files; no new warnings from commit 2.
+- Snapshot: commit 2's hash bump (added `decoy_pair_min_fraction` to
+  the search hash, matching Rust) invalidates the post-commit-1
+  baseline. Re-capture in progress on a separate process
+  (`b9fegwujg`); commit 3 work proceeds in parallel.
+- **Landed**: commit `fe76fc0120` on
+  `Skyline/work/20260514_osprey_library_decoy_catchup`.
