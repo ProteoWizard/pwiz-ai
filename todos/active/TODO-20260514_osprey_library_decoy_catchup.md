@@ -366,3 +366,43 @@ the implementation matches Rust but the end-to-end gate is a follow-up.
 starting work.
 
 ### (Agent: append per-commit updates here)
+
+### 2026-05-14 / 2026-05-15 overnight -- Commit 1 in flight
+
+- Skills loaded: `osprey-development`, `skyline-development`.
+- Read Rust diff for `6630ab1` (config.rs, types.rs, main.rs,
+  pipeline.rs).
+- Implementation:
+  - `OspreySharp.Core/LibraryEntry.cs` -- added
+    `DECOY_ID_BIT = 0x80000000u` const and `LooksLikeLibraryDecoy`
+    instance method.
+  - `OspreySharp.IO/LibraryDecoyMarker.cs` (new) --
+    `ApplyLibraryDecoyMarking(library, prefixes, out MarkingStats)`
+    + `MarkingStats` (NViaPrefix for now; commit 4 extends with
+    NViaColumn).
+  - `OspreySharp.Core/OspreyConfig.cs` -- added `DecoyPrefixes`
+    property (default `DECOY_`, `rev_`, `decoy_`); included in
+    `SearchParameterHash()` sorted+lowercased (matches Rust
+    `format!("decoy_prefixes:{:?}\n", ...)`).
+  - `OspreySharp/Tasks/PerFileScoringTask.cs` -- treats
+    `DecoyMethod.FromLibrary` as synonym for `DecoysInLibrary`;
+    calls `ApplyLibraryDecoyMarking` after `LoadLibrary`; hard
+    error when library-supplies-decoys but no entries match.
+- Tests: 7 Rust tests translated to
+  `OspreySharp.Test/LibraryDecoyMarkerTest.cs` (case-insensitivity,
+  prefix-position, empty inputs, any-protein, marking sets
+  bit+flag, idempotency).
+- Gates:
+  - Build + RunTests: 316 tests pass, 0 errors.
+  - Inspection: 4 pre-existing warnings in untouched files
+    (RescoreWorker, FileSaver, PerFileRescoreTask); no new warnings
+    introduced by this commit.
+  - Stellar snapshot: commit 1's intentional hash bump
+    (`decoy_prefixes` in search hash, matching Rust) invalidates
+    the old `_snapshots/main` baseline. Stage1to4 still PASSed
+    column-wise (no scoring change), but stage5+ refused the
+    frozen parquets due to `search_hash mismatch`. **Re-captured
+    the Stellar `main` snapshot** with the post-commit-1 build so
+    commits 2-5 validate against the new (Rust-aligned) baseline.
+- Commit pending: stage CRLF normalisation done, all files clean,
+  ready to commit + push.
