@@ -18,9 +18,22 @@
 
 Translate Mike MacCoss's 5-commit library-decoy FDR control fix arc from
 maccoss/osprey (Rust) to OspreySharp (C#), with **cross-impl unit-test
-parity** as the per-step gate. After this sprint, OspreySharp produces
-the same decoy preparation behavior as `maccoss/osprey:origin/main` at
-SHA `bcd7249` for the cases Mike's tests cover.
+parity** for the new code paths and **continued Stellar + Astral
+end-to-end bit parity** for the existing reverse-decoy mode. After this
+sprint, OspreySharp produces the same decoy preparation behavior as
+`maccoss/osprey:origin/main` at SHA `bcd7249` for the cases Mike's
+tests cover, AND the existing Stellar / Astral cross-impl
+Test-Regression runs continue to pass at byte parity vs Rust HEAD.
+
+**What we cannot verify tonight**: library-decoy end-to-end parity on
+real Stellar / Astral data. Mike has the Astral library + pairing
+manifest but hasn't sent them yet, and he hasn't generated the
+Stellar pairing manifest at all -- both arrive tomorrow. Mike's note:
+*"It can still do it the old way but the FDR control doesn't work
+anywhere near as well."* So OspreySharp must still run the existing
+reverse-decoy flow on Stellar / Astral with byte-identical output;
+the new library-decoy code paths just need to compile, pass their
+unit tests, and stay dormant when `decoys_in_library` is unset.
 
 ## Strategic context
 
@@ -222,7 +235,15 @@ After EACH commit before advancing:
    pwsh -File './ai/scripts/OspreySharp/Test-Snapshot.ps1' -Dataset Stellar -Files All
    ```
    Stellar uses `DecoyMethod.Reverse` (generates decoys, not from
-   library), so existing behavior must not change.
+   library), so existing behavior must not change. **Commit 4
+   (`fe7c7c1`, DIA-NN loader `Decoy` column) is the highest-risk
+   for reverse-decoy regression** — that change fires on every load,
+   not just when `decoys_in_library: true`. If Stellar's library TSV
+   has a `Decoy` column, the loader change could alter behavior. The
+   agent should inspect Stellar's library header before/after
+   commit 4 and confirm parity holds. If it doesn't, the C# loader
+   needs to be gated on `DecoysInLibrary` to match Rust's expected
+   no-op behavior in reverse-decoy mode.
 
 3. **Cross-impl unit-test parity for the translated tests** — every
    Rust test translated to C# in this commit produces a behaviorally
@@ -230,20 +251,70 @@ After EACH commit before advancing:
    against Rust source manually; no automated check, but the agent
    should verify each test it writes against the Rust test it ports.
 
+### On any gate failure: load the `debugging` skill
+
+Any per-commit or PR-open gate failure triggers root-cause analysis
+before any fix. **Load the `debugging` skill immediately** -- it
+enforces "diagnose before patch" and references the cross-impl
+bisection methodology. Required reading on first failure:
+
+- `pwiz_tools/OspreySharp/Osprey-workflow.html` -- the DIA pipeline
+  conceptual reference (Stages 1-4 fan-out, Stage 5 first-join,
+  Stage 6 reconciliation, Stage 7 protein FDR, blib write).
+- `ai/docs/osprey-development-guide.md` section *"Cross-impl
+  bisection methodology"*.
+
+`Test-Regression.ps1` is the bisection harness: it marches
+stage1to4 -> stage5 -> stage6 -> stage7 -> blib, stops at the first
+FAIL, and prints the exact tight-iteration command for re-running
+just the failing stage on the C# side. The handoff file
+(`ai/.tmp/handoff-20260514_osprey_library_decoy_catchup.md`) has
+the full debug-loop protocol; consult it before improvising.
+
 ## PR-open gates (after all 5 commits)
 
-- All five per-commit gates pass.
-- Astral 3-file snapshot regression PASS at every stage:
-  ```
-  pwsh -File './ai/scripts/OspreySharp/Test-Snapshot.ps1' -Dataset Astral -Files All
-  ```
-- Stellar cross-impl Test-Regression PASS at every stage (no regression
-  in the reverse-decoy case):
-  ```
-  pwsh -File './ai/scripts/OspreySharp/Test-Regression.ps1' -Dataset Stellar -Force
-  ```
-- Unit-test count: at least +30 new unit tests across the 5 commits.
-- ReSharper green on touched files.
+The PR opens only when ALL of these pass:
+
+1. **Build + unit tests clean.** 0 errors, 0 warnings, all unit
+   tests pass. At least +30 new C# unit tests over the 5 commits
+   (rough count -- exact number depends on what Mike's Rust tests
+   actually contain).
+
+2. **Stellar end-to-end bit parity (reverse-decoy mode)**:
+   ```
+   pwsh -File './ai/scripts/OspreySharp/Test-Snapshot.ps1' -Dataset Stellar -Files All
+   pwsh -File './ai/scripts/OspreySharp/Test-Regression.ps1' -Dataset Stellar -Force
+   ```
+   Both PASS at every stage. The cross-impl Test-Regression is the
+   stronger gate (byte-equality vs Rust HEAD at `bcd7249`).
+
+3. **Astral end-to-end bit parity (reverse-decoy mode)**:
+   ```
+   pwsh -File './ai/scripts/OspreySharp/Test-Snapshot.ps1' -Dataset Astral -Files All
+   pwsh -File './ai/scripts/OspreySharp/Test-Regression.ps1' -Dataset Astral -Force
+   ```
+   Both PASS at every stage. Astral cross-impl Test-Regression is
+   added as a PR-open gate this sprint (Phase B/C only required
+   Stellar cross-impl); given we cannot yet verify library-decoy E2E
+   parity, the strongest available reverse-decoy parity gate is
+   Stellar + Astral both green.
+
+4. **ReSharper green** on touched files.
+
+## Deferred to follow-up (waiting on Mike's test files)
+
+- **Library-decoy end-to-end parity**: real Stellar / Astral runs
+  with `decoys_in_library: true` + a real FDRBench manifest. Mike
+  has the Astral library + manifest and will send tomorrow; Stellar
+  manifest doesn't exist yet (Mike will generate tomorrow).
+- **Library-decoy parity gate**: add a third dataset shape to
+  `Test-Snapshot.ps1` and `Test-Regression.ps1` that runs the
+  library-decoy flow once Mike's fixtures arrive.
+
+These are explicitly out of scope for the overnight sprint. Document
+that the PR title is *"...library-decoy FDR catch-up"* not
+*"...library-decoy FDR catch-up + parity-tested"* so reviewers know
+the implementation matches Rust but the end-to-end gate is a follow-up.
 
 ## Out of scope (do NOT do)
 
