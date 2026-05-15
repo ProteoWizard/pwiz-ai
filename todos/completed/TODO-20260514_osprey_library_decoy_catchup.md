@@ -10,9 +10,9 @@
 - **Branch**: `Skyline/work/20260514_osprey_library_decoy_catchup`
 - **Base**: `master` (post-#4213 squash, currently at `d348697df2`)
 - **Created**: 2026-05-14
-- **Status**: In Progress
+- **Status**: Completed (2026-05-15)
 - **GitHub Issue**: (none)
-- **PR**: (pending)
+- **PR**: [#4214](https://github.com/ProteoWizard/pwiz/pull/4214) merged as `230a08a3ba`
 
 ## Mission
 

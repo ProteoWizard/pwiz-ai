@@ -6,11 +6,12 @@ description: Spawn a fresh-context Claude agent to independently review the PR f
 # Self Review (Fresh-Context Agent Pass)
 
 Launch a Claude agent in a fresh context window to independently review
-a PR. Complements rather than replaces Copilot's automated review:
-Copilot tends to catch idiomatic / API / language issues; a Claude
-agent tends to catch logic / cross-impl / spec-conformance issues.
-Recommended sequence is Copilot first (via `/pw-respond`), then this
-command, optionally followed by `/ultrareview` for maximum rigor.
+a PR. Required gate alongside Copilot — not optional. Copilot tends to
+catch idiomatic / API / language issues; a Claude agent tends to catch
+logic / cross-impl / spec-conformance issues, and it can read source
+repos outside the PR (e.g. Rust upstream for ports) that Copilot has
+no access to. Standard sequence: Copilot review → `/pw-respond` →
+`/pw-self-review` → optional `/ultrareview` for maximum rigor.
 
 ## Step 1 — Identify the PR
 

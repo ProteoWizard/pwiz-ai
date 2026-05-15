@@ -15,8 +15,8 @@
 - **Branch**: `Skyline/work/20260514_osprey_pipeline_tasks`
 - **Base**: `master` (post-#4199 squash, currently at `a8d9111c5b`)
 - **Created**: 2026-05-14
-- **Status**: In Progress
-- **PR**: [#4213](https://github.com/ProteoWizard/pwiz/pull/4213)
+- **Status**: Completed
+- **PR**: [#4213](https://github.com/ProteoWizard/pwiz/pull/4213) (squash-merged 2026-05-14)
 
 ## Phase B core (what #4199 shipped) — short version
 
@@ -446,3 +446,64 @@ Branch ready for PR. Five commits on
 | `ad23f6356a` | Unified post-Stage-5 hydration in PerFileScoringTask.joinOnly |
 | `a20c2c1626` | Collapsed stage6 worker entry path into the canonical pipeline |
 | `d577c53542` | Replaced CLI-flag dispatch with probe-the-disk on 2nd-pass sidecars |
+
+### 2026-05-14 — Review round 1 + architectural follow-ups
+
+Copilot review surfaced three inline comments on the probe-the-disk
+dispatch commit. All three addressed:
+
+- **`5a80284a` (Copilot autofix)** — replaced the literal U+0001
+  control char in the TaskValiditySidecar JSON-escape test with the
+  `` escape sequence. Comment thread #3245893898 auto-resolved.
+- **`532a83718a` Addressed Copilot review feedback on PR #4213**:
+  - `MergeNodeTask`: replaced the all-or-nothing 2nd-pass-sidecar
+    write gate with a per-file probe (`File.Exists(pass2Path)`)
+    inside the loop, so partial-state crash-resume can heal missing
+    sidecars instead of skipping all writes. Comment #3245893862
+    resolved.
+  - `FirstJoinTask`: first attempt at validity-key-checked 2nd-pass
+    overlay gate (strict). Subsequently relaxed -- see follow-up
+    below. Comment #3245893884 resolved.
+- **`2d5bd42cb4` Wrote MergeNode validity sidecars inline next to each
+  2nd-pass binary**: architectural follow-up after stage7 snapshot
+  failed under the strict gate. `MergeNodeTask` now writes its
+  `.MergeNode.osprey.task` validity sidecar inline alongside each
+  `.2nd-pass.fdr_scores.bin` so the per-file resume contract survives
+  `OspreyDiagnostics.ExitAfterDump`'s `Environment.Exit` (used by
+  Test-Snapshot's stage7 isolation). `FirstJoinTask`'s gate relaxed
+  to "binary present + sidecar matches WHEN present"; the
+  absent-sidecar leg stays a trusted boundary so Test-Regression's
+  Rust -> C# freeze (Rust never writes `.osprey.task` -- it's a
+  C#-specific resume contract) keeps passing. Net effect: production
+  per-file resume is stronger; both Test-Snapshot and Test-Regression
+  still pass.
+- **`aede1244` (ai/) Propagated `*.osprey.task` sidecars through
+  Test-Snapshot stage freezes**: companion fix on the ai/ side so
+  same-impl boundaries propagate the validity sidecars MergeNode now
+  writes (`$downstreamArtifactPatterns += '*.osprey.task'`).
+- **`c0509f13a` Added LOC audit table to Osprey-workflow.html**:
+  per-module C# / Rust executable code counts measured 2026-05-14
+  via `ai/scripts/OspreySharp/Audit-Loc.ps1`. OspreySharp tracks
+  Osprey at 0.81x production-only / 0.75x including tests.
+
+### 2026-05-14 — Squash-merged
+
+Squash-merged to `master`. Five design commits plus the review-fix
+arc were squashed into a single landed commit titled *"Collapsed
+OspreySharp stage6 worker into the canonical pipeline"*. The branch
+`Skyline/work/20260514_osprey_pipeline_tasks` can be deleted.
+
+Phase C closes the OspreySharp pipeline-task rearchitecture begun
+in Phase B (#4199): the worker entry path is folded into the
+canonical pipeline, post-Stage-5 hydration is unified into a single
+probe-the-disk dispatch on `PerFileScoringTask.joinOnly`, and the
+2nd-pass overlay / sidecar-write / rescore self-gate are all
+mechanism-driven (probe-the-disk) rather than CLI-flag-driven.
+`ExpectReconciledInput` survives only in the routing
+(`DeriveStartAt/StopAfterTask`) and the perf-only decoy-generation
+skip. Per-file resume is sturdier across all four tasks now that
+`MergeNodeTask` writes its validity sidecar inline.
+
+Follow-up sprint: catch OspreySharp up to maccoss/osprey's
+library-decoy FDR fix arc (Mike's 2026-05-10..05-13 commits) -- see
+`TODO-20260514_osprey_library_decoy_catchup.md`.
