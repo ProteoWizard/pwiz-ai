@@ -482,3 +482,36 @@ starting work.
   background (`bqwsijdip`); commit 4 prep proceeds in parallel.
 - **Landed**: commit `0e3c3cb5de` on
   `Skyline/work/20260514_osprey_library_decoy_catchup`.
+
+### 2026-05-15 -- Commit 4 landed (DIA-NN Decoy column, fe7c7c1)
+
+- Implementation:
+  - `OspreySharp.IO/DiannTsvLoader.cs`: added `Decoy` / `IsDecoy` /
+    `Is.Decoy` column to `ColumnIndices` plus a `ParseDecoyFlag` helper
+    matching Rust (truthy values 1, true, yes, y, t case-insensitive;
+    everything else target). Loader sets `LibraryEntry.IsDecoy` at
+    load time; precursor-level OR across rows is defensive against
+    inconsistent loaders.
+  - `OspreySharp.IO/LibraryDecoyMarker.cs`: split `MarkingStats` into
+    `NViaColumn` + `NViaPrefix`; `ApplyLibraryDecoyMarking`
+    canonicalises `DECOY_ID_BIT` on loader-flagged entries (and
+    counts them) before doing the prefix scan. Idempotent across
+    repeat calls.
+  - `PerFileScoringTask` log shows the new column/prefix breakdown.
+- Tests: 4 new (`ParseDecoyFlag`, `LoaderReadsDecoyColumn`,
+  `LoaderNoDecoyColumnDefaultsToTarget`,
+  `ApplyLibraryDecoyMarkingCanonicalisesLoaderFlaggedDecoys`);
+  updated `ApplyLibraryDecoyMarkingIsIdempotent` for the new stats
+  shape. 334 tests pass.
+- Reverse-decoy regression risk: verified Stellar's
+  `hela-filtered-SkylineAI_spectral_library.tsv` and Astral's
+  `SkylineAI_spectral_library.tsv` both have a `Decoy` column with
+  every row = 0. Loader change is a true no-op for these datasets;
+  reverse-decoy parity is preserved. Search hash unchanged (no new
+  config fields).
+- Inspection: 4 baseline warnings (untouched files); no new.
+- Stellar snapshot compare-mode regression launched in background
+  (`b3h0h4knr`) -- expected PASS without re-capture since no hash
+  bump.
+- **Landed**: commit `6b2a3f9ad5` on
+  `Skyline/work/20260514_osprey_library_decoy_catchup`.
