@@ -419,9 +419,30 @@ before /clear. Branch not yet created; pwiz on master at `a8d9111c5b`
   at every stage.
 - Commit `d577c53542`.
 
-### 2026-05-14 — PR-open gates running
+### 2026-05-14 — PR-open gates ALL PASS
 
-- Astral 3-file snapshot regression: running in background.
-- Stellar cross-impl Test-Regression: pending (will follow Astral).
-- Manual stage6 worker crash-resume verification: pending (manual
-  test per handoff recipe).
+- Astral 3-file snapshot regression: PASS at every stage
+  (stage1to4 / stage5 / stage6 / stage7 / blib).
+- Stellar cross-impl Test-Regression: PASS at every stage
+  (Rust vs C# byte-equality).
+- Manual stage6 worker crash-resume verification: PASS.
+  - Run 1 on clean stage6 inputs: 3 reconciled parquets +
+    3 `.PerFileRescore.osprey.task` sidecars written. Exit 0.
+  - Deleted file 21's parquet + sidecar; restored its pre-rescore
+    `.scores.parquet` from stage5/cs to simulate mid-rescore crash.
+  - Run 2: log shows
+    `[file] 1/3 ...20: skipping (outputs valid)`,
+    `Re-scoring file 2/3 ...21`,
+    `[file] 3/3 ...22: skipping (outputs valid)`. Exit 0.
+  - All 3 PerFileRescore sidecars present after Run 2.
+
+Branch ready for PR. Five commits on
+`Skyline/work/20260514_osprey_pipeline_tasks`:
+
+| Commit | Title |
+|--------|-------|
+| `e35f928a55` | Added TaskValiditySidecar unit tests |
+| `8363baff9b` | Extracted AnalysisPipeline.CanonicalPipeline() factory |
+| `ad23f6356a` | Unified post-Stage-5 hydration in PerFileScoringTask.joinOnly |
+| `a20c2c1626` | Collapsed stage6 worker entry path into the canonical pipeline |
+| `d577c53542` | Replaced CLI-flag dispatch with probe-the-disk on 2nd-pass sidecars |
