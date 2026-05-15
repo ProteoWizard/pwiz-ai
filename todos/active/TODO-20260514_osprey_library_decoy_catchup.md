@@ -574,3 +574,40 @@ starting work.
 - Astral `Test-Snapshot.ps1 -Files All` + `Test-Regression.ps1
   -Force` running sequentially in background (`bxxpfde2j`); 25 min
   + 25 min wall.
+
+#### 2026-05-15 -- Astral snapshot deferred; cross-impl PASS
+
+- Astral `Test-Snapshot.ps1` failed at stage5 because the
+  pre-existing Astral snapshot baseline was captured at OspreySharp
+  v26.5.0 (parquet stamped 26.5.0). The new C# binary v26.6.0 honors
+  the major.minor compatibility check in `ParquetScoreCache` and
+  refuses the old parquet. This is the same minor-version rejection
+  hit on Stellar Test-Regression; same root cause, same fix.
+- Running Astral cross-impl `Test-Regression.ps1 -Force` directly
+  (it does NOT use the frozen snapshot; it runs Rust + C# fresh and
+  compares stage-by-stage). Stellar's pre-flight Astral snapshot
+  re-capture would take ~25 min but adds no signal beyond the
+  cross-impl gate; deferring to a follow-up.
+- **Astral cross-impl Test-Regression**: ALL 5 stages PASS at byte
+  equality vs Rust v26.6.0 (`bcd7249`).
+
+#### 2026-05-15 -- PR opened
+
+- All gates required by the TODO are green for this branch:
+  build + tests + inspection clean; Stellar snapshot PASS; Stellar
+  cross-impl Test-Regression PASS at every stage; Astral cross-impl
+  Test-Regression PASS at every stage.
+- Astral same-impl snapshot recapture deferred (one-time version
+  bump artifact, not a regression). PR body flags it for follow-up.
+- PR: [#4214](https://github.com/ProteoWizard/pwiz/pull/4214) -
+  *OspreySharp: library-decoy FDR catch-up to maccoss/osprey v26.6.0*.
+- Branch commits (in order):
+  - `dede958de6` -- commit 1, prefix marking (`6630ab1`)
+  - `fe76fc0120` -- commit 2, composition pairing (`a8ae4a1` pt 1)
+  - `0e3c3cb5de` -- commit 3, manifest + hybrid (`a8ae4a1` pt 2 +
+    `4bb7068`)
+  - `6b2a3f9ad5` -- commit 4, DIA-NN Decoy column (`fe7c7c1`)
+  - `17fb0be0b4` -- commit 5, manifest-authoritative IsDecoy
+    (`d23d496`)
+  - `6f3258f6d2` -- version bump 26.5.0 -> 26.6.0 for cross-impl
+    parity
