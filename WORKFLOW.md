@@ -34,7 +34,9 @@ may differ from the Skyline defaults in this file.
 ## Branch Strategy
 
 **For pwiz repository:**
-- **master** - Stable releases, requires review
+- **master** - Stable releases. PRs should clear Copilot and Claude `/review`
+  before requesting human review — see
+  [docs/version-control-guide.md](docs/version-control-guide.md#pre-review-workflow).
 - **Skyline/skyline_YY_N** - Release branches
 - **Skyline/work/YYYYMMDD_description** - Feature/fix branches (all development)
 

@@ -173,7 +173,7 @@ pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -DryRun"
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `-Recipient` | `brendanx@uw.edu` | Email address for the report |
+| `-Recipient` | `skyline-dev@proteinms.net` | Email address for the report (Skyline dev team distribution list) |
 | `-Model` | `claude-opus-4-5-20251101` | Claude model to use |
 | `-MaxTurns` | Phase-dependent (100/40) | Maximum agentic turns per phase |
 | `-Phase` | `both` | `research`, `email`, or `both` |

@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260430_pip_bootstrap_py39`
 - **Base**: `master`
 - **Created**: 2026-04-30
-- **Status**: In Progress
+- **Status**: Completed (merged 2026-05-03, backported to `Skyline/skyline_26_1`)
 - **GitHub Issue**: [#4176](https://github.com/ProteoWizard/pwiz/issues/4176)
-- **PR**: [#4177](https://github.com/ProteoWizard/pwiz/pull/4177)
+- **PR**: [#4177](https://github.com/ProteoWizard/pwiz/pull/4177) — squash-merged as `e5a25cb51`
 - **Working Repo**: `C:\Dev\bugfix`
 
 ## Objective
@@ -44,8 +44,26 @@ Confirmed by fetching the live `get-pip.py` and reading the embedded version com
 
 ### Validation
 - [x] Run `TestAlphaPeptDeepBuildLibrary` locally via Run-Tests.ps1 (passed, 150.9s after both commits)
-- [ ] Code inspection pass
+- [x] Code inspection pass (build green at every commit)
 - [x] Open PR, link issue (PR #4177)
+- [x] PR merged (e5a25cb51, 2026-05-03)
+- [x] Cherry-picked to release branch `Skyline/skyline_26_1`
+
+## Completion Summary
+
+Merged 2026-05-03 as squash commit `e5a25cb51`. Backported to `Skyline/skyline_26_1` for the 26.1 release line.
+
+**Final scope** (5 commits in PR, squashed at merge):
+1. URL fix — `BOOTSTRAP_PYPA_URL` switched to PyPA's version-pinned subpath; `GetPipScriptDownloadUri` resolves to `pip/{major.minor}/get-pip.py` derived from `PythonVersion`
+2. Diagnostic improvement — promoted `TeeTextWriter` to `Util/UtilIO.cs`; added `RunProcessOrThrow` static helper that tees `Writer` + capture and includes captured output in `ToolExecutionException`; refactored 5 `RunProcess` call sites to use it; new resource string `PythonInstaller_Failed_to_execute_command____0____Output____1__`
+3. Cache invalidation (Copilot review) — `GetPipScriptDownloadPath` now writes `get-pip-{major.minor}.py` so URL changes invalidate any cached `get-pip.py` from the broken unpinned URL
+4. Bounded capture (Copilot review) — `RollingTextWriter` private helper caps capture at 32KB tail (pip can stream MBs of output)
+5. Reverted ja/zh-CHS resx additions + added `.github/copilot-instructions.md` rule that translations are handled by dedicated translators
+
+**Generality**: All version logic derives from `Settings.Default.PythonEmbeddableVersion`. Bumping Skyline's embedded Python past 3.9 requires no code change in this area.
+
+**Demonstrated diagnostic value**: With URL fix temporarily reverted, the new exception now shows pip's actual error message:
+> ERROR: This script does not work on Python 3.9. The minimum supported Python version is 3.10. Please use https://bootstrap.pypa.io/pip/3.9/get-pip.py instead.
 
 ## Key Files
 

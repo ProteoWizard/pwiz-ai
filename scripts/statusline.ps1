@@ -43,9 +43,13 @@
     - context_window.context_window_size: Total context window size
 
     Active project state file:
-    - Location: ai/.tmp/active-project.json (relative to project root)
+    - Per-session: ai/.tmp/active-project-<ppid>.json (preferred)
+    - Legacy global: ai/.tmp/active-project.json (fallback)
+    - The PPID is the Claude Code process that spawned both this statusline
+      and the StatusMcp server, so they share an identity without needing a
+      session_id channel that Claude Code does not expose to MCP servers.
     - Set by: StatusMcp's set_active_project tool
-    - Falls back to workspace.project_dir if not set
+    - Falls back to workspace.project_dir if no active project is set
 
     Context calculation: "% left" models when Claude Code will begin
     its auto-compact warning. Calibrated for the 1M-context tier
@@ -59,19 +63,49 @@
 
 $input_json = $input | Out-String | ConvertFrom-Json
 
-# Check for active project state file (set by StatusMcp)
+# Check for active project state file (set by StatusMcp).
 # Derive ai/ root from script location: ai/scripts/statusline.ps1 -> ai/
 $aiRoot = Split-Path -Parent $PSScriptRoot
-$activeProjectFile = Join-Path $aiRoot '.tmp\active-project.json'
+$tmpDir = Join-Path $aiRoot '.tmp'
+
+# Find the Claude Code process by walking up the parent chain. The
+# direct parent on Windows is often a bash.exe / pwsh.exe wrapper that
+# Claude Code spawns per-tick — its PID is transient and doesn't
+# correlate to the StatusMcp server (which has Claude Code as its own
+# direct parent). Walking up to the first process named claude.exe
+# gives a stable per-session identity both sides can compute. Capped
+# at 16 levels to bound runtime if the chain is somehow corrupted.
+function Find-ClaudeCodePid {
+    $cur = $PID
+    $d = 0
+    while ($cur -and $cur -ne 0 -and $d -lt 16) {
+        $proc = Get-CimInstance Win32_Process -Filter "ProcessId = $cur" -ErrorAction SilentlyContinue
+        if (-not $proc) { return $null }
+        if ($proc.Name -match '^claude') { return [int]$proc.ProcessId }
+        $cur = $proc.ParentProcessId
+        $d++
+    }
+    return $null
+}
+
+$ppid = $null
+try { $ppid = Find-ClaudeCodePid } catch { }
+
+$perSessionFile = if ($ppid) { Join-Path $tmpDir "active-project-$ppid.json" } else { $null }
+$legacyFile = Join-Path $tmpDir 'active-project.json'
+
 $project_dir = $null
 $project_name = $null
 
-if (Test-Path $activeProjectFile) {
-    try {
-        $active = Get-Content $activeProjectFile -Raw | ConvertFrom-Json
-        $project_dir = $active.path
-        $project_name = $active.name
-    } catch { }
+foreach ($candidate in @($perSessionFile, $legacyFile)) {
+    if ($candidate -and (Test-Path $candidate)) {
+        try {
+            $active = Get-Content $candidate -Raw | ConvertFrom-Json
+            $project_dir = $active.path
+            $project_name = $active.name
+            break
+        } catch { }
+    }
 }
 
 # Fall back to workspace project directory if no active project set
@@ -114,7 +148,60 @@ if ($input_json.context_window.current_usage) {
         $used_pct = ($current * 100) / $size
         $left = [math]::Max(0, [math]::Floor($usable_max_pct - $used_pct))
         $ctx = " | $left% left"
+
+        # Cache the snapshot so the StatusMcp's get_context_usage tool
+        # can serve Claude the same number the user sees here. Keyed by
+        # the Claude Code PID found above; the StatusMcp does the same
+        # walk so both sides land on the same file.
+        if ($ppid) {
+            try {
+                if (-not (Test-Path $tmpDir)) {
+                    New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+                }
+                $snapshot = [ordered]@{
+                    model                       = $model
+                    context_window_size         = [int]$size
+                    input_tokens                = [int]$usage.input_tokens
+                    cache_creation_input_tokens = [int]$usage.cache_creation_input_tokens
+                    cache_read_input_tokens     = [int]$usage.cache_read_input_tokens
+                    used_tokens                 = [int]$current
+                    used_pct                    = [math]::Round($used_pct, 2)
+                    left_pct                    = [int]$left
+                    usable_max_pct              = $usable_max_pct
+                    calibrated_at               = (Get-Date).ToUniversalTime().ToString('o')
+                }
+                $statePath = Join-Path $tmpDir "context-state-$ppid.json"
+                $snapshot | ConvertTo-Json | Set-Content -Path $statePath -Encoding UTF8
+            } catch {
+                # State file is best-effort. Statusline display must not
+                # break if the cache write fails (read-only filesystem,
+                # etc.); the user-visible % is the primary deliverable.
+            }
+        }
     }
 }
+
+# Sweep orphan context-state files: any whose PID is no longer running
+# is from a Claude Code session that has exited. Cheap (a few file stat
+# calls per tick); keeps ai/.tmp/ tidy without a separate cron / cleanup
+# script. The matching active-project files get the same treatment.
+try {
+    Get-ChildItem (Join-Path $tmpDir 'context-state-*.json') -ErrorAction SilentlyContinue | ForEach-Object {
+        if ($_.Name -match 'context-state-(\d+)\.json') {
+            $orphanPid = [int]$Matches[1]
+            if (-not (Get-Process -Id $orphanPid -ErrorAction SilentlyContinue)) {
+                Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    Get-ChildItem (Join-Path $tmpDir 'active-project-*.json') -ErrorAction SilentlyContinue | ForEach-Object {
+        if ($_.Name -match 'active-project-(\d+)\.json') {
+            $orphanPid = [int]$Matches[1]
+            if (-not (Get-Process -Id $orphanPid -ErrorAction SilentlyContinue)) {
+                Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+} catch { }
 
 Write-Host "$project_name$git_info | $model$ctx"

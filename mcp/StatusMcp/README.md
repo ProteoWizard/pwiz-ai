@@ -9,11 +9,12 @@ Claude Code lacks access to basic status information that would help it:
 - See **git status** without running commands
 - Track the **active project** in multi-repo setups
 
-This server provides four tools:
+This server provides five tools:
 - `get_status` - Returns timestamp and git info for one or more directories
 - `get_last_screenshot` - Gets recent Win+Shift+S screenshot(s), with multi-screenshot support
 - `get_clipboard_image` - Gets image from clipboard (for editor/browser copies)
 - `set_active_project` - Sets the active project for statusline display
+- `get_context_usage` - Returns the current session's context-window usage (same number the statusline shows)
 
 ## Installation
 
@@ -172,6 +173,49 @@ Arguments: { "count": 3 }
 Tool: get_clipboard_image
 Arguments: {}
 ```
+
+### Check remaining session context
+
+```
+Tool: get_context_usage
+Arguments: {}
+```
+
+## Tool: get_context_usage
+
+Returns the current Claude Code session's context-window usage — the same number `statusline.ps1` shows the user, so Claude and the user share a consistent picture of remaining headroom.
+
+### Parameters
+
+None.
+
+### Response
+
+```json
+{
+  "model": "Opus",
+  "context_window_size": 1000000,
+  "input_tokens": 12345,
+  "cache_creation_input_tokens": 67890,
+  "cache_read_input_tokens": 234567,
+  "used_tokens": 314802,
+  "used_pct": 31.48,
+  "left_pct": 65,
+  "usable_max_pct": 97,
+  "calibrated_at": "2026-05-09T17:30:00.000Z"
+}
+```
+
+### Behavior
+
+1. **Statusline writes the snapshot** to `ai/.tmp/context-state-<ppid>.json` on every tick. PPID is the parent Claude Code process — the same scoping the active-project file uses, so concurrent sessions stay independent.
+2. **This tool reads** the snapshot on demand. No transcript parsing, no second source of truth — just the cached number the statusline already computes.
+3. **Snapshot lags by at most one turn** (the statusline runs after each response). For "should I suggest a handoff?" decisions that's accurate enough.
+4. **Before the first tick**, the file doesn't exist; the tool returns an explanatory error. That itself signals "early session, plenty of context."
+
+### When to call
+
+Claude should call `get_context_usage` **before** suggesting handoff, end-of-session, or `/compact`. Per the project root CLAUDE.md guideline: don't estimate from feel — most users are comfortable pushing into single digits, and suggesting a handoff at 40% wastes their session.
 
 ## Tool: get_last_screenshot
 
