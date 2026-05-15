@@ -78,34 +78,55 @@ Two tracks, both setting up for OspreySharp going primary next week:
 
 ## Track 2 -- Rust catch-up (Mike's mid-May functional changes)
 
-### Targets, in dependency order
+### Delivered this session
 
-1. **`0c3a73e` (Rust-side piece): manifest-proteins-override.** The
-   manifest's `proteins` column becomes the authoritative
-   protein-ID source when set. Catches the Carafe failure mode
-   where the library generator stripped decoy prefixes from
-   accessions and Carafe's deduplication then collapsed protein-
-   peptide linkage. The Rust crate has a `n_proteins_replaced`
-   stat on `ManifestApplyStats` and an override loop in
-   `DecoyPairingManifest::apply_to_library`; the C# port from
-   commit 5 missed this. Smallest delta; lands first.
+1. **`0c3a73e` (Rust-side piece): manifest-proteins-override.**
+   `DecoyPairingManifest` now reads the optional `proteins` column
+   and substitutes the clean source accessions for every covered
+   library entry whose stored `ProteinIds` disagree. Catches the
+   Carafe failure mode where the library generator stripped decoy
+   prefixes from accessions and Carafe's deduplication then
+   collapsed protein-peptide linkage. `ManifestApplyStats` gains
+   `NProteinsReplaced`; `PerFileScoringTask` logs the count when
+   non-zero. Two cross-impl tests
+   (`ManifestReplacesProteinIdsWithCleanAccessions`,
+   `ManifestSkipsReplacementWhenProteinsColumnEmpty`) pin the
+   contract against the Rust unit tests of the same names.
+   **Landed**: commit `b1c3a81e1e`.
+
+### Deferred to a follow-up sprint
+
+The next two pieces fit the same "Mike's recent functional work"
+bucket but each adds substantial new surface area, and the user
+asked to stop at "commits done" without a second PR. Recorded
+here so the next session can pick them up. Both stay in scope
+for the broader OspreySharp-going-primary transition.
 
 2. **`5da4a46`: `--fdrbench` native export.** Adds a new
-   `osprey-io/src/output/fdrbench.rs` module + `--fdrbench` and
-   `--fdrbench-per-run` CLI flags. Writes a FDRBench-compatible
-   TSV from the pre-compaction first-pass FDR pool. Substantial
-   new feature; depends on Track 1 being landed for the CLI
-   plumbing pattern.
+   `osprey-io/src/output/fdrbench.rs` module (~404 lines) +
+   `--fdrbench` / `--fdrbench-per-run` CLI flags + a protein-side
+   helper in `osprey-fdr/src/protein.rs` (~47 lines) + pipeline
+   wiring (~34 lines). Writes a FDRBench-compatible TSV from the
+   pre-compaction first-pass FDR pool so every scored target is
+   included, not just FDR-passing entries as in the blib. Carries
+   the SVM discriminant as the `score` column so FDRBench can
+   re-rank and count entrapment hits. Level auto-selects from
+   `--fdr-level` (Both -> precursor, Protein -> picked-protein
+   TSV). Decoys are excluded per FDRBench convention; entrapment
+   `_p_target` sequences pass through. ~527 lines total port.
 
 3. **`1fd7552`: cap protein column at 4000 bytes.** Small
-   defensive fix in `fdrbench.rs` to truncate oversized protein
-   lists with a marker. Depends on #2 being landed.
+   defensive fix in `fdrbench.rs` (~125 lines) to truncate
+   oversized protein-ID lists with a marker so a Carafe library
+   stamping a multi-thousand-character `ProteinID` doesn't crash
+   downstream parsers. Depends on #2 being landed.
 
 ### Scope decision
 
-The user's instruction: "stop when commits are done for that work,
-and don't create a second pwiz PR." Both Track 1 commits and as
-many Track 2 commits as fit on the branch land in **one PR**.
+User instruction was "stop when commits are done for that work,
+and don't create a second pwiz PR." The two deferred pieces above
+will land in a follow-up PR; the next session can resume from
+this TODO without re-deriving the catch-up frame.
 
 ## Validation gates (per commit)
 
