@@ -515,3 +515,44 @@ starting work.
   bump.
 - **Landed**: commit `6b2a3f9ad5` on
   `Skyline/work/20260514_osprey_library_decoy_catchup`.
+- Stellar snapshot regression (post-commit-4): ALL 5 stages PASS
+  against the post-commit-3 baseline.
+
+### 2026-05-15 -- Commit 5 landed (manifest-authoritative IsDecoy, d23d496)
+
+- Implementation:
+  - `OspreySharp.IO/DecoyPairingManifest.cs`: added
+    `ManifestApplyStats` (NPaired + NNewlyMarkedDecoy);
+    `ApplyToLibrary` returns the new stats and stamps `IsDecoy=true`
+    + `DECOY_ID_BIT` on every manifest-classified decoy/p_decoy
+    entry (paired or not) BEFORE running the pairing pass. Catches
+    the Carafe failure mode where the predictor strips decoy
+    prefixes from accessions, so the prefix scan only flags a
+    fraction of true decoys but the manifest sequence-classification
+    is authoritative.
+  - `PerFileScoringTask`: captures `manifestStats.NNewlyMarkedDecoy`;
+    when non-zero, re-counts targets/decoys via
+    `CountTargetsAndDecoys` so the pairing fraction is honest;
+    emits a dedicated log line.
+  - `NUnpairedDecoys` already used `Math.Max(0, ...)` from the
+    commit 2 port; matches Rust's saturating_sub intent.
+- Tests: 4 existing manifest tests updated to the new
+  `ApplyToLibrary(...).NPaired` accessor; 2 new tests
+  (`ManifestFlipsUnflaggedDecoysToIsDecoy`,
+  `ManifestMarksUnpairedDecoyWithoutPairingIt`). 336 total tests
+  pass.
+- Inspection: 4 baseline warnings (untouched files), no new.
+- Search hash unchanged in commit 5 (no new config fields, no
+  behavior change in reverse-decoy mode), so the post-commit-3
+  Stellar snapshot remains the valid baseline.
+- **Landed**: commit `17fb0be0b4` on
+  `Skyline/work/20260514_osprey_library_decoy_catchup`.
+
+### 2026-05-15 -- PR-open gates in progress
+
+- Per-commit Stellar snapshot regression: PASS post-commit-4
+  (commit 5 is no-op for reverse-decoy mode so the same baseline
+  remains valid).
+- Stellar cross-impl `Test-Regression.ps1` and Astral
+  `Test-Snapshot.ps1` + `Test-Regression.ps1` still to run before
+  opening the PR.
