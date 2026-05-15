@@ -16,7 +16,7 @@
 - **Base**: `master` (post-#4199 squash, currently at `a8d9111c5b`)
 - **Created**: 2026-05-14
 - **Status**: In Progress
-- **PR**: (pending)
+- **PR**: [#4213](https://github.com/ProteoWizard/pwiz/pull/4213)
 
 ## Phase B core (what #4199 shipped) — short version
 
