@@ -129,18 +129,44 @@ The generated CSVs contain an `Issue` column indicating why each string needs re
 
 After receiving translated CSVs back from translators:
 
+### 1. Stage the CSVs
+
+Place the translated CSV files in `pwiz_tools\Skyline\Translation\Scratch\` with the exact filenames `localization.ja.csv` and `localization.zh-CHS.csv` (the import script greps for those names in that directory). Create the Scratch directory if it doesn't exist.
+
+### 2. Run the import via quickbuild
+
+From the pwiz checkout root:
+
 ```cmd
-cd <your pwiz checkout>\pwiz_tools\Skyline\Translation\Scratch
+quickbuild.bat address-model=64 pwiz_tools/Skyline/Executables/DevTools/ResourcesOrganizer//ImportLocalizationCsvFiles
+```
 
-# Import the CSV files into the database
-..\Executables\DevTools\ResourcesOrganizer\scripts\exe\ResourcesOrganizer.exe importLocalizationCsv
+This one target chains together build + import + extract. Internally it calls `scripts\ImportLocalizationCsvFiles.bat`, which:
 
-# Export updated RESX files
-..\Executables\DevTools\ResourcesOrganizer\scripts\exe\ResourcesOrganizer.exe exportResx resxFiles.zip
+1. Builds `ResourcesOrganizer.exe` if needed (Jamfile dependency).
+2. Creates `Scratch\ForImportLocalizationCsv.db` from the **current** `.resx` files (via `MakeResourcesDb.bat`).
+3. For each `localization.<lang>.csv` present in `Scratch\`, runs `ResourcesOrganizer.exe importLocalizationCsv --db ForImportLocalizationCsv.db --input <csv> --language <lang>`.
+4. Exports `Scratch\ImportedResxFiles.zip` containing the updated `.resx` files.
+5. Extracts the zip at the pwiz root with `libraries\7za.exe x -y`, overwriting the localized `.resx` files in the tree.
 
-# Extract to pwiz checkout root
-cd <your pwiz checkout>
-libraries\7za.exe x -y pwiz_tools\Skyline\Translation\Scratch\resxFiles.zip
+Watch for `SUCCESS` at the end of the output and check that ~50 `.resx` files show up as modified in `git status`.
+
+### 3. Update `LastReleaseResources.db`
+
+After the import, `Scratch\ForImportLocalizationCsv.db` contains the current resources **plus** the freshly imported translations — exactly the baseline future incremental updates should be measured against. Copy it over the committed file:
+
+```cmd
+copy /Y pwiz_tools\Skyline\Translation\Scratch\ForImportLocalizationCsv.db pwiz_tools\Skyline\Translation\LastReleaseResources.db
+```
+
+On the release branch (e.g. `Skyline/skyline_26_1`), commit `LastReleaseResources.db` together with the updated `.resx` files, then merge that commit back to `master` so both branches share the new baseline.
+
+### Manual fallback (no quickbuild)
+
+If you only want to run the import script directly (e.g. when iterating on the script itself), call it after ensuring `ResourcesOrganizer.exe` is built:
+
+```cmd
+pwiz_tools\Skyline\Executables\DevTools\ResourcesOrganizer\scripts\ImportLocalizationCsvFiles.bat
 ```
 
 ### Understanding "Needs Review" Comment Behavior
@@ -198,11 +224,12 @@ If localized RESX files are missing entries that exist in English files:
 
 ### After Receiving Translations
 
-1. Place translated CSVs in `Translation/Scratch/`
-2. Run `importLocalizationCsv`
-3. Run `exportResx`
-4. Extract ZIP to project root
-5. Build and test
+1. Place translated CSVs in `Translation/Scratch/` as `localization.ja.csv` / `localization.zh-CHS.csv`
+2. Run `quickbuild.bat address-model=64 pwiz_tools/Skyline/Executables/DevTools/ResourcesOrganizer//ImportLocalizationCsvFiles` from the pwiz root (chains build + import + zip + extract)
+3. Verify ~50 `.resx` files now show as modified in `git status` and the run ended with `SUCCESS`
+4. Copy `Scratch\ForImportLocalizationCsv.db` over `pwiz_tools\Skyline\Translation\LastReleaseResources.db`
+5. On the release branch, commit the updated `.resx` files plus `LastReleaseResources.db`, then merge to `master`
+6. Build and test
 
 ## File Locations
 
