@@ -441,3 +441,44 @@ starting work.
   (`b9fegwujg`); commit 3 work proceeds in parallel.
 - **Landed**: commit `fe76fc0120` on
   `Skyline/work/20260514_osprey_library_decoy_catchup`.
+
+### 2026-05-15 -- Commit 3 landed (manifest + hybrid, 4bb7068)
+
+- Implementation:
+  - `OspreySharp.IO/DecoyPairingManifest.cs` (new) -- 5-column TSV
+    reader; `PeptideKind` enum; `ApplyToLibrary(library, state)`
+    returns the count paired this pass.
+  - `OspreySharp.Core/LibraryDecoyPairing.cs` -- refactored to
+    state-based incremental API. `PairingState` (claimed_targets +
+    paired_decoys) shared between passes;
+    `PairLibraryDecoysByComposition` now skips already-paired
+    decoys / already-claimed targets.
+  - `PairingStats` extended with `NPairedViaManifest` and
+    `NPairedViaComposition`.
+  - `OspreyConfig.DecoyPairingManifestPath` (string); folded into
+    `SearchParameterHash` (None / Some("path") encoding matching
+    Rust `{:?}`).
+  - `PerFileScoringTask` runs manifest pairing first when path is
+    set, then composition fallback; logs manifest/composition
+    breakdown.
+- Existing 8 composition tests refactored through a private
+  `RunCompositionOnly` helper to keep their shape against the new
+  state-based core.
+- Added 6 manifest + hybrid tests in
+  `DecoyPairingManifestTest` (pair-index target/decoy + p-pairs;
+  charge-aware; sequences not in manifest stay unpaired; manifest
+  then composition hybrid; unknown peptide_type rows skipped;
+  missing required columns throws).
+- ResSharper hit two more `MemberHidesStaticFromOuterClass` (BucketKey
+  hiding `IsTargetSide` and `Partition`); renamed methods to
+  `IsTargetSideOf` / `PartitionOf`.
+- Gate sequence noted: rebuilding OspreySharp while the post-commit-2
+  snapshot capture was mid-flight caused stage7 to fail with a
+  search-hash mismatch (the running stage5/6 used commit-2's bin,
+  stage7 picked up the freshly-built commit-3 bin). **Lesson**:
+  pause OspreySharp builds during snapshot captures.
+- Gates after fix: 330 tests pass; 4 baseline ResSharper warnings
+  (untouched files). Stellar snapshot re-capture launched in
+  background (`bqwsijdip`); commit 4 prep proceeds in parallel.
+- **Landed**: commit `0e3c3cb5de` on
+  `Skyline/work/20260514_osprey_library_decoy_catchup`.
