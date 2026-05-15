@@ -8,10 +8,10 @@
 ## Branch Information
 
 - **Branch**: `Skyline/work/20260514_osprey_library_decoy_catchup`
-- **Base**: `master` (post-Phase-C; will rebase if PR #4213 merges first)
+- **Base**: `master` (post-#4213 squash, currently at `d348697df2`)
 - **Created**: 2026-05-14
-- **Status**: Ready to start (autonomous overnight session)
-- **GitHub Issue**: (none — Brendan will create if needed)
+- **Status**: In Progress
+- **GitHub Issue**: (none)
 - **PR**: (pending)
 
 ## Mission
