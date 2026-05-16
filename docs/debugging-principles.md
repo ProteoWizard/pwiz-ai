@@ -56,6 +56,29 @@ Before diving into investigation, **aggressively pursue cycle time reduction**:
 | **Hours/Days** | Variable | Strategic instrumentation, wait for next occurrence |
 | **Days/Weeks (intermittent)** | Low | Statistical bisection, DocChangeLogger pattern |
 
+## The Permanent Verifier Pattern
+
+Debugging in this project is not just about finding and fixing the bug. It is about converting the bug into a check that prevents its recurrence. **Every failure the loop catches should become a permanent, cheap verifier for that failure class.**
+
+The standard does not rise because the model gets better at checking itself. It rises because each fix leaves behind a deterministic check the next defect must clear — a test, a lint rule, an assertion, a validation script. That check runs forever at near-zero cost. The bar is now strictly higher than it was, and higher in a deterministic way rather than by another model's opinion.
+
+Two procedural rules encode this directly:
+
+- **Don't guess — bisect and add diagnostics until the root cause is *proven*.** The output of the procedure is a proof, not a claim. See "Fast-Cycle Mode" and "Cross-Implementation Bisection" below for the techniques.
+- **Implement a test that fails on the current code and passes on the fix.** The fix is the diff between "test red" and "test green." A bug fix without a regression test is a fix you cannot trust to stay fixed.
+
+These are not just good habits. They are expert skepticism externalized into rules the loop runs unattended. How long the work can safely proceed without supervision is a direct function of how much expert judgment has been converted from an in-the-moment act into a procedure that runs on its own. See [validation-cycle-principles.md](validation-cycle-principles.md) for the full framing.
+
+### What Done Looks Like
+
+Before declaring a debugging session complete, every "yes" should be answerable:
+
+- Is the root cause proven by output or diff, not asserted by reading code?
+- Is there a test that demonstrably fails on the unfixed code and passes on the fixed code?
+- Has that test been added to the appropriate test project so it runs unattended?
+
+If any answer is no, the loop has not yet held the line on this defect — even if the symptom no longer reproduces by hand.
+
 ## Fast-Cycle Mode (< 1 minute)
 
 When cycle time is under one minute, you have enormous power. Use it.

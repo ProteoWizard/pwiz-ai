@@ -110,6 +110,21 @@ or for nightly test failures/leaks:
 
 These fields are used by `record_exception_fix()` and `record_test_fix()` when the PR is merged. Without them, the fix cannot be tracked back to the original report.
 
+**Also add a Regression Test section** so the fix leaves behind a permanent verifier. The fix is the diff between "test red" and "test green" -- a bug fix without a regression test is a fix that cannot be trusted to stay fixed. See [ai/docs/validation-cycle-principles.md](../../docs/validation-cycle-principles.md).
+
+```markdown
+## Regression Test
+
+- **Test name**: (filled in once written)
+- **Test project**: Test | TestFunctional | TestData | TestPerf | other
+- **Fails on master**: (yes/no, with run log path or SHA when verified)
+- **Passes on fix**: (yes/no, with run log path or SHA when verified)
+
+If no regression test was added, explain why here. Acceptable answers exist (infrastructure-level fix no unit test could cover, infrastructure not yet in place) but must be acknowledged explicitly, not silently omitted.
+```
+
+The test should usually be the **first** deliverable on the branch, not the last. Write it, watch it fail on master, then make it pass.
+
 ### Step 4: Signal Ownership
 
 **Commit TODO to pwiz-ai:**
@@ -162,9 +177,10 @@ Reference the issue in commits: `See #$ARGUMENTS` or `Fixes #$ARGUMENTS`
 
 **For pwiz issues:**
 1. Update TODO Progress Log with completion summary
-2. Move TODO: `git mv todos/active/TODO-*.md todos/completed/`
-3. Commit to pwiz-ai master
-4. Create PR to pwiz master (use `Fixes #$ARGUMENTS` to auto-close issue)
+2. **For exception/nightly-fix issues**: confirm the Regression Test section is filled with a test name, project, and red->green verification (or an explicit rationale if no test was added). See [ai/docs/validation-cycle-principles.md](../../docs/validation-cycle-principles.md).
+3. Move TODO: `git mv todos/active/TODO-*.md todos/completed/`
+4. Commit to pwiz-ai master
+5. Create PR to pwiz master (use `Fixes #$ARGUMENTS` to auto-close issue)
 
 **For pwiz-ai issues:**
 1. Update TODO Progress Log with completion summary

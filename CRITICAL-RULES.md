@@ -2,6 +2,8 @@
 
 Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and ai/TESTING.md for details.
 
+**Trust comes from verifiers, not from the LLM.** Every rule below is intended to be enforced by a build, a test, or an inspection — not by the model reading and remembering. When a rule's verifier is weak, the rule will drift; strengthen the verifier rather than the wording. See [ai/docs/validation-cycle-principles.md](docs/validation-cycle-principles.md).
+
 ## File Format Requirements
 - Line endings: CRLF (`\r\n`) - Windows standard
 - Use spaces, not tabs
