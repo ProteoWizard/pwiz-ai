@@ -388,6 +388,11 @@ try {
     # Osprey generate reverse-decoys.
     if ($ds.DecoysInLibrary) {
         $toolArgs += "--decoys-in-library"
+        # A dataset with DecoysInLibrary=$true and Manifest=$null is a
+        # legitimate "composition-only" library-decoy invocation: the
+        # pipeline relies on prefix/Decoy-column flagging + AA-composition
+        # pairing without a manifest. The manifest flag is only forwarded
+        # when the dataset explicitly names a manifest filename.
         if (-not [string]::IsNullOrEmpty($ds.Manifest)) {
             $manifestPath = Join-Path $testDir $ds.Manifest
             if (-not (Test-Path $manifestPath)) {
