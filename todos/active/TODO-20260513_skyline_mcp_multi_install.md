@@ -4,14 +4,43 @@
 - **Branch**: `Skyline/work/20260513_skyline_mcp_multi_install`
 - **Base**: `master`
 - **Created**: 2026-05-13
-- **Status**: Ready for review
-- **GitHub Issue**: (none yet — split from `ai/todos/backlog/brendanx67/TODO-skyline_mcp_followups.md` Item 5)
-- **PR**: [#4212](https://github.com/ProteoWizard/pwiz/pull/4212)
+- **Status**: Completed
+- **GitHub Issue**: (none — split from `ai/todos/backlog/brendanx67/TODO-skyline_mcp_followups.md` Item 5)
+- **PR**: [#4212](https://github.com/ProteoWizard/pwiz/pull/4212) (squash-merged 2026-05-15 as `e8822a05ea`)
 
-## Commits
+## Branch Commits
+
+Three commits on the feature branch (squashed at merge time):
 
 - `e8c04d949e` Centralized SkylineRunner shims under Executables/SkylineRunner/Binaries
 - `0bf55ea45a` Added skyline_list_installed MCP tool for multi-install support
+- `f134af637c` Addressed Copilot review feedback on PR #4212
+
+## Completion Summary
+
+PR #4212 squash-merged to `master` 2026-05-15 as `e8822a05ea`. Closes
+Item 5 from the brendanx67 followups backlog; the backlog file now
+points to this completed TODO.
+
+Three review threads from Copilot were addressed in `f134af637c`:
+TrimEnd preserving trailing tabs, tool description aligning with the
+actual no-install response, and always-populating `RunnerPath` for
+ClickOnce installs. Two threads were left unresolved as deliberate
+pushback for the human reviewer: the test-assertion English-literal
+("MCP responses are LLM-facing, not localized") and the
+`VERSION_IN_URL` naming ("UPPER_SNAKE_CASE static readonly is an
+established Skyline convention, gated by ReSharper"). The human
+reviewer's clean-session review accepted the merge as-is.
+
+Follow-up surfaced during validation but **not** addressed in this PR:
+launching the Skyline GUI via `GuiPath` with no file argument shows the
+StartPage, which is friction when the LLM is orchestrating. `--new` is
+not the right knob (it is a SkylineCmd CLI flag and would run as a CLI
+command + exit). `--opendoc` alone happens to skip the StartPage today
+(see `Program.cs:182` and `:322`) but is semantically misleading. A
+clean follow-up PR should add an explicit `--no-startpage` (and likely
+a matching `--start-page` for the inverse) and document it in the MCP
+tool description. Separate PR; not blocking.
 
 ## Purpose
 

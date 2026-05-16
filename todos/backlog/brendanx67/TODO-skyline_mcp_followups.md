@@ -19,13 +19,17 @@ Items are independent. Each can land on its own PR.
 
 ---
 
-## 5. Multi-Skyline-install support
+## 5. Multi-Skyline-install support — DONE
 
-**Split into its own active TODO 2026-05-13:**
-`ai/todos/active/TODO-20260513_skyline_mcp_multi_install.md`. Two new
-MCP tools land there: `skyline_list_installed()` and
-`skyline_start_instance(release)`. Items 9 and 10 below remain in
-this backlog file for separate PRs.
+Completed 2026-05-15 in PR
+[#4212](https://github.com/ProteoWizard/pwiz/pull/4212) (squash-merged
+as `e8822a05ea`). See
+`ai/todos/completed/TODO-20260513_skyline_mcp_multi_install.md` for
+the full engineering context. Scope landed as a single new tool
+(`skyline_list_installed`); `skyline_start_instance` was dropped in
+favor of letting the LLM launch via shell using the returned
+`GuiPath`. Items 9 and 10 below remain in this backlog file for
+separate PRs.
 
 ---
 
