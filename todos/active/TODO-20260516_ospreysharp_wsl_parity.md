@@ -286,3 +286,9 @@ Only after Phase 2 PASSes and you have time:
 - Hard gate: Stellar 3-file same-impl snapshot PASS comparing a
   WSL-built C# run against the Windows-captured baseline at
   `bb1992e248`.
+- **Next session handoff**: For detailed startup protocol, read
+  `ai/.tmp/handoff-20260516_ospreysharp_wsl_parity.md` before
+  starting work. The handoff has the repo-state cleanup steps
+  (this session left pwiz on a merged feature branch), skill load
+  list, the Windows baseline freshness check, and the
+  out-of-scope reminders.
