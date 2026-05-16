@@ -21,7 +21,7 @@
   `TODO-20260423_osprey_sharp_stage{6,7,8}.md`)
 - **Base**: `master` (pwiz) / `main` (maccoss/osprey)
 - **Created**: 2026-04-20 (renamed from `TODO-20260420_` on 2026-04-23)
-- **Status**: In Progress
+- **Status**: Completed / closed 2026-05-16 (see final progress-log entry)
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
 - **PR**: (umbrella — see sub-sprints)
 
@@ -364,3 +364,51 @@ Stage 7 sub-sprint scaffolded as
 `ai/todos/active/TODO-20260507_osprey_sharp_stage7.md`. First step
 is the upstream-resync delta catalog, same template as the Stage 6
 sub-sprint's first step.
+
+### 2026-05-16 -- Umbrella closed; OspreySharp is now a multi-developer project
+
+All five sub-sprints this umbrella tracked have landed and moved
+to `completed/`:
+
+- `TODO-20260422_ospreysharp_stage5_diagnostics.md` -- Stage 5 cross-impl
+  parity + diagnostic harness
+- `TODO-20260423_osprey_sharp_stage6.md`, `TODO-20260428_osprey_sharp_stage6.md`,
+  `TODO-20260429_osprey_sharp_stage6.md` -- Stage 6 refinement +
+  reconciliation, missing-scoring-columns sweep, ZSTD-by-default
+- `TODO-20260507_osprey_sharp_stage7.md` -- Stage 7 protein FDR parity
+- `TODO-20260507_osprey_sharp_stage8.md` -- Stage 8 .blib output parity
+
+Plus the architecture follow-ups that grew out of Stages 6-8:
+
+- Phase B resume-on-restart (pwiz [#4199](https://github.com/ProteoWizard/pwiz/pull/4199))
+- Phase C stage6 worker entry path (pwiz [#4213](https://github.com/ProteoWizard/pwiz/pull/4213))
+- Library-decoy FDR catch-up to maccoss/osprey v26.6.0
+  (pwiz [#4214](https://github.com/ProteoWizard/pwiz/pull/4214))
+- Library-decoy CLI flags + manifest proteins-override
+  (pwiz [#4215](https://github.com/ProteoWizard/pwiz/pull/4215))
+
+**Project status, 2026-05-16**: Mike MacCoss has committed to
+making OspreySharp the primary project, replacing the Rust
+osprey, starting the week of 2026-05-18. The "one-person Phase N
+sprint" framing that organized this umbrella does not fit the
+project anymore -- collaborators are coming in:
+
+- Mike Riffle -- NextFlow + HPC environment integration (tracked
+  at `../active/TODO-20260516_ospreysharp_wsl_parity.md` for
+  the cross-platform validation gate and at
+  `../backlog/brendanx67/TODO-ospreysharp_nextflow_linux_support.md`
+  for the packaging follow-up).
+- Matt Chambers -- ProteoWizard data-layer integration.
+
+Going forward, OspreySharp work uses scoped sprint TODOs +
+GitHub issues, not a single umbrella. Live OspreySharp TODOs at
+the time of closure:
+
+- `../active/TODO-20260516_osprey_libdecoy_e2e_and_fdrbench.md` --
+  the deferred `--fdrbench` port + the AstralLibraryDecoy E2E gate
+- `../active/TODO-20260516_ospreysharp_wsl_parity.md` --
+  cross-platform validation gate before NextFlow handoff
+
+Both are scoped tightly, so anyone new picking up OspreySharp can
+read either of those without needing to absorb this umbrella's
+history.
