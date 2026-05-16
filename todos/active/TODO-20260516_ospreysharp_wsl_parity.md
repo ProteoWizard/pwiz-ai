@@ -13,11 +13,14 @@
 ## Branch Information
 
 - **Branch**: `Skyline/work/20260516_ospreysharp_wsl_parity`
-  (create only if script adjustments are needed; pure verification
-  may not produce any commits)
-- **Base**: `master` (post-#4215 squash at `bb1992e248`)
+  *(local branch created from `master` at `3113544855`, not yet
+  pushed; push when a commit lands, or never push if pure
+  verification completes with zero commits)*
+- **Base**: `master` (`3113544855` -- post-#4217 `--start-page` flag
+  which landed after #4215; the WSL gate is dataset-driven and not
+  affected by #4217)
 - **Created**: 2026-05-16
-- **Status**: Not Started
+- **Status**: Not Started (branch ready)
 - **GitHub Issue**: (none)
 - **PR**: (open only if script adjustments land; pure
   verification may complete with zero commits and a memo on the
@@ -286,9 +289,12 @@ Only after Phase 2 PASSes and you have time:
 - Hard gate: Stellar 3-file same-impl snapshot PASS comparing a
   WSL-built C# run against the Windows-captured baseline at
   `bb1992e248`.
+- pwiz already on `Skyline/work/20260516_ospreysharp_wsl_parity`
+  (created from master at `3113544855`, not pushed); old merged
+  `20260515_osprey_catchup_followup` branch deleted locally. ai
+  on master, clean.
 - **Next session handoff**: For detailed startup protocol, read
   `ai/.tmp/handoff-20260516_ospreysharp_wsl_parity.md` before
-  starting work. The handoff has the repo-state cleanup steps
-  (this session left pwiz on a merged feature branch), skill load
-  list, the Windows baseline freshness check, and the
-  out-of-scope reminders.
+  starting work. The handoff has the repo-state confirmation
+  step, skill load list, the Windows baseline freshness check,
+  and the out-of-scope reminders.
