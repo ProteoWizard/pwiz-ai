@@ -72,13 +72,16 @@ so a misjudged window must not be able to blow context.
 
 ## Regression Test
 
-- **Test name**: (filled in once written)
-- **Test project**: TestFunctional (most likely -- exercises MCP server end-to-end against a real document)
-- **Fails on master**: (to verify -- absence of the tools should manifest as a missing-tool error or by exercising the existing file-write tools and showing the new inline path is needed)
-- **Passes on fix**: (to verify after implementation)
-
-The test should be the **first** deliverable on the branch -- write it, watch it
-fail on master (calling tools that don't exist yet), then make it pass.
+- **Test name**: `JsonToolServerTest.TestReportRows` and `JsonToolServerTest.TestReportFromDefinitionRows`
+  (server-direct coverage), plus inline-roundtrip checks in `SkylineMcpTest.TestMcpServerEndToEnd`
+  exercising both new MCP tools through the named-pipe + stdio transport.
+- **Test project**: `TestFunctional`
+- **Fails on master**: Yes by construction -- the tests call
+  `server.GetReportRows` / `server.GetReportFromDefinitionRows` and the MCP tools
+  `skyline_get_report_rows` / `skyline_get_report_from_definition_rows`, none of
+  which exist on master.
+- **Passes on fix**: Yes -- TestJsonToolServer, TestSkylineMcp, and CodeInspection
+  all green on this branch.
 
 ## Progress Log
 
@@ -87,3 +90,30 @@ fail on master (calling tools that don't exist yet), then make it pass.
 Starting work on this issue. Branch created, TODO copied from issue, ownership
 signaled on the issue thread. Next: locate the existing report MCP tools in
 `pwiz_tools/Skyline/` and identify the materialization seam to reuse.
+
+### 2026-05-16 - Implementation complete
+
+- Models: `ReportRowsResult`, `ReportRowsColumn`, `ReportRowsWindow` added to
+  `JsonToolModels.cs` (link-compiled into both .NET Framework 4.7.2 and .NET 8).
+- Interface: `GetReportRows` and `GetReportFromDefinitionRows` added to
+  `IJsonToolService`, with matching wrappers in `SkylineJsonToolClient` and
+  `SkylineConnection`.
+- Server: `MaterializeReportRows` in `JsonToolServer` mirrors the file-export
+  flow (streaming when possible, BindingListSource for pivots / row transforms),
+  windows rows by `[offset, offset+count)`, applies an always-on token cap with
+  per-cell truncation and tail-row trimming (`truncated_at` for resume), and
+  optionally scans string-column max lengths over the first 200 rows
+  (`max_length_sampled` when the dataset is larger).
+- Filter on named reports resolves filter columns via a fresh `ColumnResolver`
+  rooted at the report's `RowSource`, merges with `ViewSpec.Filters`, and is
+  applied via the existing layout pipeline.
+- MCP tools `skyline_get_report_rows` and `skyline_get_report_from_definition_rows`
+  expose the surface to the LLM, serializing `ReportRowsResult` as snake_case
+  JSON. Tool count check bumped from 45 to 47.
+- New helper `RowFactories.TryGetRowSource(name, out source, out type)` exposes
+  the registered factory needed for in-memory materialization.
+- Tests: `TestReportRows` and `TestReportFromDefinitionRows` cover count=0
+  introspection, in-window / oversize / tail patterns, `include_max_length`
+  behavior, filter reduces totals, column projection, cell-cap enforcement, and
+  error paths. `SkylineMcpTest` exercises the wire path end-to-end. All green
+  locally: TestJsonToolServer, TestSkylineMcp, CodeInspection.
