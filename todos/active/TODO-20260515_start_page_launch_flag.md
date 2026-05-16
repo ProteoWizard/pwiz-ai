@@ -22,21 +22,21 @@ Today's behavior is fragile: scripted launches without a document get the StartP
 - [x] In `Skyline.OnShown`, after `LoadFile`, call `OpenStartPage()` when an `--opendoc` launch sets `Program.StartPageOverride == true`.
 - [x] Extend Skyline.cs arg filter so `--start-page=...` doesn't end up as `_fileToOpen`.
 - [x] Unit test `Program.ParseStartPageArg` for absent/valid/invalid/multi-arg cases (`Test/StartPageArgTest.cs`).
-- [x] Functional tests for override semantics: override=true forces StartPage even with `ShowStartupForm=false`; override=false forces MainWindow even with `ShowStartupForm=true` (`TestFunctional/StartPageOverrideFlagTest.cs`).
-- [ ] PR with `Fixes #4216`.
+- [x] Functional tests for override semantics, routed through `Program.Main` via `AbstractFunctionalTest.LaunchArgs`:
+      override=true beats `ShowStartupForm=false`; override=false beats `ShowStartupForm=true`;
+      `--opendoc --start-page=true` opens MainWindow (empty doc, null path) with StartPage modal on top.
+- [x] PR with `Fixes #4216` (PR #4217).
 
-## Manual smoke checks before PR
+## Manual smoke checks before merge
 
-The functional tests cover the override-vs-Setting interaction. The arg-driven launch
-flow (Program.Main parsing real command-line args) is not exercised by the test
-framework, so the following combinations should be sanity-checked by hand once the
-build is in a developer's Bin folder:
+The functional tests cover most of the issue's test matrix end-to-end via
+`AbstractFunctionalTest.LaunchArgs` (routed into `Program.Main`). The
+following two cases are still worth a hand sanity-check from a developer's
+`Bin\` folder, since the test framework does not exercise actual file I/O
+through `--opendoc PATH` and does not run the parse-error stderr exit path:
 
-- `Skyline.exe --start-page=false` — empty MainWindow, no StartPage, no file.
-- `Skyline.exe --start-page=true` (with `ShowStartupForm=false`) — StartPage shown.
-- `Skyline.exe --opendoc <path> --start-page=true` — document loads, then StartPage as modal.
-- `Skyline.exe --opendoc <path> --start-page=false` — document loads, no StartPage.
-- `Skyline.exe --start-page` and `Skyline.exe --start-page=foo` — clean stderr error, exit 1, no UI.
+- `Skyline.exe --opendoc <path> --start-page=false` -- the document loads, no StartPage modal (parity with `--opendoc <path>` alone).
+- `Skyline.exe --start-page` and `Skyline.exe --start-page=foo` -- clean stderr error, exit code 1, no UI launch.
 
 ## Progress Log
 
