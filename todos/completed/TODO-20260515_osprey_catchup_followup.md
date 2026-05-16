@@ -11,10 +11,14 @@
 - **Branch**: `Skyline/work/20260515_osprey_catchup_followup`
 - **Base**: `master` (post-#4214 squash, currently at `230a08a3ba`)
 - **Created**: 2026-05-15
-- **Status**: In Progress
+- **Status**: Completed (2026-05-15; squash-merged 2026-05-16)
 - **GitHub Issue**: (none)
-- **PR**: (pending — one PR planned)
-- **Sibling Rust PR**: [maccoss/osprey#35](https://github.com/maccoss/osprey/pull/35)
+- **PR**: [#4215](https://github.com/ProteoWizard/pwiz/pull/4215) merged as `bb1992e248`
+- **Sibling Rust PR**: [maccoss/osprey#35](https://github.com/maccoss/osprey/pull/35) -- pending upstream merge
+- **Follow-up TODO**: [`TODO-20260516_osprey_libdecoy_e2e_and_fdrbench.md`](../active/TODO-20260516_osprey_libdecoy_e2e_and_fdrbench.md)
+  -- the deferred Track 2 (`5da4a46` + `1fd7552`) + the
+  AstralLibraryDecoy E2E gate now that Mike's library + manifest
+  are arriving
 
 ## Mission
 
@@ -178,3 +182,75 @@ After each commit:
 - Test-Snapshot.ps1 / Test-Regression.ps1 / Test-Features.ps1
   ValidateSets updated to accept `AstralLibraryDecoy`.
 - Inspection clean (4 pre-existing baseline warnings, no new).
+
+### 2026-05-15 -- Track 1 + part of Track 2 landed; PR opened
+
+- **Track 2a (the smallest delta)** delivered: ported the manifest
+  proteins-override piece of Rust `0c3a73e`.
+  `DecoyPairingManifest` reads the optional `proteins` column and
+  substitutes its clean accessions onto every covered library
+  entry whose stored `ProteinIds` differ. `ManifestApplyStats`
+  gains `NProteinsReplaced`. Two cross-impl tests
+  (`ManifestReplacesProteinIdsWithCleanAccessions`,
+  `ManifestSkipsReplacementWhenProteinsColumnEmpty`).
+- Track 2b (`5da4a46` `--fdrbench` native export, ~527 lines) and
+  Track 2c (`1fd7552` 4000-byte protein column cap) deferred to a
+  follow-up sprint per the user's "stop when commits are done"
+  framing.
+- PR [#4215](https://github.com/ProteoWizard/pwiz/pull/4215) opened
+  with two commits (CLI flags + proteins-override).
+
+### 2026-05-15 -- Copilot review chain
+
+- Copilot landed 6 inline comments + 2 low-confidence flags.
+  5 inline + the 2 low-confidence all addressed in commit
+  `d53633aa1d`:
+  - `--decoy-pairing-manifest` now rejects bare flag or
+    `--`-prefixed next token.
+  - `--decoys-in-library` and `--decoy-pairing-manifest` added to
+    `PrintUsage`.
+  - `TestParseArgsDecoyPairingManifestFlag` dropped the
+    companion `--decoys-in-library` so the contract is actually
+    isolated; new `TestParseArgsDecoyPairingManifestRequiresValue`
+    covers the error cases.
+  - `minRequiredCols` initially relaxed to "required columns
+    only" per Copilot's note (later reverted; see agent review
+    below).
+  - Single-line `if`s split to two-line no-brace form.
+- One Copilot finding pushed back: the "no library decoys"
+  early-bail at `PerFileScoringTask.cs:308` was kept matching Rust
+  v26.6.0 ordering by design for cross-impl byte parity. Posted
+  a reply linking to [maccoss/osprey#35](https://github.com/maccoss/osprey/pull/35)
+  (the upstream fix) and left the thread unresolved for human
+  review.
+
+### 2026-05-15 -- Fresh-context agent review chain
+
+- Ran `/pw-self-review 4215`; agent found 2 Concerns + 3
+  Suggestions, all addressed in commit `e142b455af`:
+  - **The Copilot `minRequiredCols` fix was Rust-divergent.** Agent
+    caught that excluding `iProteins` from the column-count check
+    flipped semantics relative to Rust `0c3a73e`
+    (`max_needed = i_proteins.unwrap_or(0).max(...)`): Rust treats
+    truncated rows as malformed and counts them in `n_skipped`;
+    my fix silently accepted them with empty Proteins. Reverted
+    to Rust-strict, gated on `iProteins >= 0`. Documents the
+    in-body guard as belt-and-suspenders, not a design intent.
+  - **Silent no-op + cache-busting combination flagged.** Added
+    `LogWarning` in `ParseArgs` when `--decoy-pairing-manifest`
+    is set without `--decoys-in-library` (runtime no-op, but the
+    path is folded into `SearchParameterHash` and busts
+    `.scores.parquet` caches).
+  - Pinned the side-effect of the manifest's `peptide_type=decoy`
+    row flipping `IsDecoy` on a target-loaded library entry in
+    the empty-proteins test.
+  - Documented the legitimate `DecoysInLibrary=$true` +
+    `Manifest=$null` (composition-only) combination in
+    `Run-Osprey.ps1`.
+
+### 2026-05-16 -- Squash-merged
+
+- Squash-merged as `bb1992e248` on master. Branch deleted.
+- TODO moved to `completed/`. Remaining work (the deferred
+  Track 2b/2c ports + the now-unblocked Astral E2E gate) rolled
+  forward to `TODO-20260516_osprey_libdecoy_e2e_and_fdrbench.md`.
