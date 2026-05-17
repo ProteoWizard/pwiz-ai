@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260516_mcp_inline_image_return`
 - **Base**: `master`
 - **Created**: 2026-05-16
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4220](https://github.com/ProteoWizard/pwiz/issues/4220)
-- **PR**: [#4222](https://github.com/ProteoWizard/pwiz/pull/4222)
+- **PR**: [#4222](https://github.com/ProteoWizard/pwiz/pull/4222) (merged 2026-05-17)
 
 ## Objective
 
@@ -17,35 +17,36 @@ The new path must default to inline (fastest for clients that support it) with a
 ## Tasks
 
 ### Design surface (per issue)
-- [ ] `returnFormat` parameter added to `skyline_get_form_image`, `skyline_get_graph_image`, `skyline_get_tutorial_image`
+- [x] `returnFormat` parameter added to `skyline_get_form_image`, `skyline_get_graph_image`, `skyline_get_tutorial_image`
   - `"auto"` (default): inline, fall back to file on cap-exceeded OR version-skew "Unknown method"
   - `"inline"`: always inline, error on cap-exceeded, surface version-mismatch error
   - `"file"`: existing behavior (back-compat)
-- [ ] `filePath` honored only on `file` / auto-fell-back-to-file paths; ignored elsewhere with a one-line note
+- [x] `filePath` honored only on `file` / auto-fell-back-to-file paths; ignored elsewhere with a one-line note
 
 ### IJsonToolService additions
-- [ ] `GetFormImageBytes`, `GetGraphImageBytes`, `GetTutorialImageBytes` returning `ImageBytesMetadata`
-- [ ] New POCO `ImageBytesMetadata { byte[] Data, string FilePath, string MimeType, int? OriginalBytes }` in `JsonToolModels.cs` (link-compiled into both NF472 and .NET 8)
-- [ ] Refactor `JsonUiService.GetFormImage` / `GetGraphImage` and `JsonTutorialCatalog.FetchTutorialImage` so bitmap-producing core is separate from the file-writing tail
+- [x] `GetFormImageBytes`, `GetGraphImageBytes`, `GetTutorialImageBytes` returning `ImageBytesMetadata`
+- [x] New POCO `ImageBytesMetadata` in `JsonToolModels.cs` (link-compiled into both NF472 and .NET 8). Shipped fields: `byte[] Data, string FilePath, string MimeType, string Message`. Dropped the planned `int? OriginalBytes` (cap-comparison is wrapper-side; original byte count is reported in the cap-fallback text). Added `Message` field during Copilot review for structured non-image responses (screen-capture denial, desktop unavailable).
+- [x] Refactor `JsonUiService.GetFormImage` / `GetGraphImage` and `JsonTutorialCatalog.FetchTutorialImage` so bitmap-producing core is separate from the file-writing tail
 
 ### MCP server wrappers (`SkylineTools.cs`)
-- [ ] Wrappers convert `ImageBytesMetadata.Data` to `ImageContentBlock` for inline; emit `TextContentBlock` with file-path note for fallback
-- [ ] Return type changes from `string` to whichever content-block shape ModelContextProtocol 0.8.0-preview.1 exposes (`IList<ContentBlock>` likely)
-- [ ] Server-side size cap (~500 KB base64, internal static int with `InternalsVisibleTo("TestFunctional")`, same pattern as `MaxResponseChars`)
-- [ ] MIME type always `image/png` in v1
+- [x] Wrappers convert `ImageBytesMetadata.Data` to `ImageContentBlock` for inline; emit `TextContentBlock` with file-path note for fallback
+- [x] Return type changed from `string` to `ModelContextProtocol.Protocol.CallToolResult`
+- [x] Server-side size cap (~500 KB raw, tunable via `SKYLINE_MCP_INLINE_IMAGE_CAP_BYTES` env var). Implementation deviates from the planned `InternalsVisibleTo("TestFunctional")` pattern: an env var was used because the test runs the MCP server as a subprocess and so cannot reach into wrapper internals via reflection.
+- [x] MIME type `image/png` for form/graph captures; tutorial images use the source filename extension (so JPEG / GIF tutorial assets pass through correctly)
 
 ### Version-skew handling
-- [ ] `returnFormat="auto"` catches "Unknown method" from new bytes JSON-RPC call and falls back to existing `GetFormImage(formId, filePath)` call
-- [ ] `returnFormat="inline"` surfaces the version-mismatch error so caller can decide
+- [x] `returnFormat="auto"` catches JSON-RPC `ERROR_METHOD_NOT_FOUND` from the bytes call and falls back to the existing file-based JSON-RPC method
+- [x] `returnFormat="inline"` surfaces the version-mismatch error so caller can decide
+- Detection upgraded during self-review to match on the typed `JsonRpcException.Code` rather than message-text substring grep
 
 ### Tests
-- [ ] Inline return: bitmap → base64 → MIME `image/png`, byte length matches file form for the same source
-- [ ] Size-cap fallback (lower cap via test-only knob): response carries `FilePath`, file on disk matches in-memory bitmap
-- [ ] Version-skew fallback: simulate "Unknown method" on bytes call; `auto` falls back, `inline` errors
-- [ ] Explicit `inline` over cap → error response (not silent fallback)
-- [ ] Explicit `file` → matches today's behavior exactly (regression)
-- [ ] Permission denial → same behavior across all `returnFormat` values
-- [ ] `SkylineMcpTest` end-to-end: wire format actually emits `ImageContentBlock` JSON
+- [x] Inline return: bitmap → base64 → MIME `image/png`, byte length matches file form for the same source
+- [x] Size-cap fallback (lower cap via env var on a second subprocess): response carries the saved file path; file on disk is a valid PNG
+- [x] Version-skew fallback: typed-exception assertion via raw-pipe JSON-RPC probe; verifies `JsonRpcException.Code == ERROR_METHOD_NOT_FOUND` and message names the unknown method
+- [x] Explicit `inline` over cap → error response (not silent fallback)
+- [x] Explicit `file` → matches today's behavior exactly (regression)
+- [ ] Permission denial path NOT covered by functional test — screen-capture denial requires interactive dialog and the test machine pre-grants permission. Production code path is in place: `GetFormImageBytes` returns structured `ImageBytesMetadata.Message`, and the file-mode wrapper detects denial responses via `IsScreenCaptureDenial`. Deferred to a follow-up if/when a non-interactive denial seam is added.
+- [x] `SkylineMcpTest` end-to-end: wire format emits `ImageContentBlock` JSON (PNG signature verified after base64 decode)
 
 ### Out of scope (per issue)
 - Removing/changing file-based response when `returnFormat="file"`
@@ -101,3 +102,9 @@ Fresh-context Claude agent self-review surfaced three [important] + three [nit] 
 - Extended `TestVersionMismatchError` with a typed-exception assertion: `JsonRpcException` with `Code == ERROR_METHOD_NOT_FOUND` and message naming the unknown method.
 
 Deferred: positional-arg back-compat concern (no in-tree callers; MCP/JSON callers always use named args) and the timestamp-resolution collision in `GetMcpTmpFilePath` (existing property of the file-on-disk path, out of scope).
+
+### 2026-05-17 - Test refactor + Merged
+
+Post-PR test cleanup commit (`67793ac`): replaced JObject indexer chains in the new test code with typed POCOs (`JsonRpcResponse<TResult>`, `McpCallToolResult`, `McpContentBlock`, `McpListToolsResult`) and a generic `McpCall<T>` deserializer. Eliminated all ReSharper "Possible System.NullReferenceException" warnings that TeamCity's Skyline Code Inspection config flagged. Side effects: shrunk `TestVersionMismatchError` by half (no more manual JSON-RPC envelope parsing), gave the project a typed seam if other MCP tests want it later.
+
+PR #4222 merged 2026-05-17 as commit `41a9230b`. Four commits squashed into one on master: initial implementation, Copilot fixes, self-review fixes, test-typed refactor. Shipped everything in scope; one explicit gap (functional-test coverage of the screen-capture denial path) acknowledged above. Two follow-up concerns surfaced during review and explicitly deferred: positional-arg back-compat for any future in-process C# callers, and second-resolution timestamp collision in `GetMcpTmpFilePath` (pre-existing in the file-on-disk path).
