@@ -29,7 +29,7 @@ may differ from the Skyline defaults in this file.
 | *(none)* | Skyline | This document |
 | `LK` | LabKey Server | [ai/docs/labkey/](docs/labkey/) |
 | `OR` | Osprey Rust | [ai/docs/osprey-development-guide.md](docs/osprey-development-guide.md) |
-| `PW` | ProteoWizard C++ | [ai/docs/proteowizard-development-guide.md](docs/proteowizard-development-guide.md) *(future)* |
+| `PW` | ProteoWizard C++ | _(Matt's Claude-assisted C# port underway — guide TBD)_ |
 
 ## Branch Strategy
 

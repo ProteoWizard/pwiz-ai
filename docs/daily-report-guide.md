@@ -2,6 +2,8 @@
 
 Comprehensive guide for generating daily consolidated reports covering nightly tests, exceptions, and support activity.
 
+**Running on a schedule:** for Windows Task Scheduler setup, non-interactive `claude -p` mode, and `--allowedTools` permissions wiring, see [scheduled-tasks-guide.md](scheduled-tasks-guide.md). The daily report is its primary working example.
+
 ## Two-Phase Architecture
 
 A single scheduled task (`Invoke-DailyReport.ps1`) spawns two sequential Claude Code sessions:

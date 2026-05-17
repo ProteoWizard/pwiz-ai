@@ -211,6 +211,24 @@ $skillFiles = Get-ChildItem -Path (Join-Path $claudeRoot "skills") -Directory -E
 $commandFiles = Get-ChildItem -Path (Join-Path $claudeRoot "commands") -Filter "*.md" -File -ErrorAction SilentlyContinue |
     Select-Object -ExpandProperty FullName
 
+# Subdomains: documentation subdirectories with their own entry point (README.md).
+# Listed explicitly so the main TOC stays compact — the subdirectory's README
+# is responsible for indexing its own contents.
+$subdomains = @(
+    @{ LinkPath = 'docs/labkey/README.md'; DisplayName = 'LabKey / Panorama' }
+)
+
+# Validate each subdomain entry actually exists
+$subdomainEntries = @($subdomains | Where-Object {
+    $fullPath = Join-Path $aiRoot $_.LinkPath
+    if (Test-Path $fullPath) {
+        $true
+    } else {
+        Write-Warning "Subdomain README missing, skipping: $($_.LinkPath)"
+        $false
+    }
+})
+
 # Generate TOC content
 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm"
 
@@ -228,6 +246,7 @@ $tocContent = @"
 |----------|-------|----------|
 | Core Documents | $($coreFiles.Count) | ``ai/*.md`` |
 | Guides | $($guideFiles.Count) | ``ai/docs/*.md`` |
+| Subdomains | $($subdomainEntries.Count) | ``ai/docs/<subdomain>/README.md`` |
 | MCP Data Sources | $($mcpFiles.Count) | ``ai/docs/mcp/*.md`` |
 | Skills | $($skillFiles.Count) | ``.claude/skills/*/SKILL.md`` |
 | Commands | $($commandFiles.Count) | ``.claude/commands/*.md`` |
@@ -260,6 +279,32 @@ In-depth documentation on specific topics.
 
 $guideRows = New-TableRows -Files $guideFiles -BaseDir "ai/docs" -LinkPrefix "docs/" -ExistingDescriptions $existingDescriptions
 $tocContent += "`n" + ($guideRows -join "`n")
+
+$tocContent += @"
+
+
+---
+
+## Subdomains (ai/docs/<subdomain>/README.md)
+
+Documentation subdirectories with their own entry point. Each README indexes its own subdomain locally so the main TOC stays compact.
+
+| Subdomain | Description | Lines |
+|-----------|-------------|------:|
+"@
+
+$subdomainRows = @()
+foreach ($entry in $subdomainEntries) {
+    $fullPath = Join-Path $aiRoot $entry.LinkPath
+    $description = if ($existingDescriptions.ContainsKey($entry.LinkPath)) {
+        $existingDescriptions[$entry.LinkPath]
+    } else {
+        "**NEW** - needs description"
+    }
+    $lines = Format-Number (Get-LineCount -FilePath $fullPath)
+    $subdomainRows += "| [$($entry.DisplayName)]($($entry.LinkPath)) | $description | $lines |"
+}
+$tocContent += "`n" + ($subdomainRows -join "`n")
 
 $tocContent += @"
 
@@ -337,6 +382,7 @@ $tocContent | Set-Content -Path $tocPath -Encoding UTF8
 Write-Host "Generated: $tocPath"
 Write-Host "  Core documents: $($coreFiles.Count)"
 Write-Host "  Guides: $($guideFiles.Count)"
+Write-Host "  Subdomains: $($subdomainEntries.Count)"
 Write-Host "  MCP data sources: $($mcpFiles.Count)"
 Write-Host "  Skills: $($skillFiles.Count)"
 Write-Host "  Commands: $($commandFiles.Count)"

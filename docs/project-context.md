@@ -2,6 +2,13 @@
 
 This document provides essential context for AI tools working on the Skyline project, including architectural patterns, common gotchas, and project scale information.
 
+**Scope:** Skyline (the C# app under `pwiz/pwiz_tools/Skyline`). The
+pwiz-ai repository also supports sibling products with their own
+workflows and conventions — LabKey Server modules and the Rust/C# Osprey
+cross-implementation work. For the full product-prefix map (`LK`, `OR`,
+`PW`) and per-product guides, see
+[`../WORKFLOW.md`](../WORKFLOW.md#product-specific-todos).
+
 ## Project Scale & Context
 
 ### Codebase Size

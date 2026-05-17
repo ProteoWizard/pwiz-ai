@@ -63,10 +63,12 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Resolve repo + binary
+# $repoRoot resolves to the ai/ checkout; $projRoot is its parent (sibling of pwiz/, osprey/).
 $repoRoot   = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
+$projRoot   = Split-Path -Parent $repoRoot
 . (Join-Path $PSScriptRoot "Dataset-Config.ps1")
 $ds          = Get-DatasetConfig -Dataset $Dataset -TestBaseDir $TestBaseDir
-$ospreyExe   = "C:/proj/osprey/target/release/osprey.exe"
+$ospreyExe   = Join-Path $projRoot 'osprey\target\release\osprey.exe'
 if (-not (Test-Path $ospreyExe)) {
     throw "osprey.exe not found at $ospreyExe -- run Build-OspreyRust.ps1 first."
 }

@@ -12,6 +12,8 @@ claude -p "Read .claude/commands/pw-daily-research.md and follow it"
 
 This enables automated daily reports without manual intervention.
 
+**Common use — daily reports:** the daily consolidated report (nightly tests + exceptions + support) is the canonical working example of this setup. For the report's two-phase architecture, data flow, and turn-budget design, see [daily-report-guide.md](daily-report-guide.md).
+
 **Note:** Slash commands (`/pw-daily`) and Skills don't work in `-p` mode. See [Non-Interactive Mode Limitations](#non-interactive-mode-limitations) for workarounds.
 
 ## Prerequisites
