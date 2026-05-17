@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260516_report_rows_mcp`
 - **Base**: `master`
 - **Created**: 2026-05-16
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4218](https://github.com/ProteoWizard/pwiz/issues/4218)
-- **PR**: [#4219](https://github.com/ProteoWizard/pwiz/pull/4219)
+- **PR**: [#4219](https://github.com/ProteoWizard/pwiz/pull/4219) (squash-merged 2026-05-16)
 
 ## Objective
 
