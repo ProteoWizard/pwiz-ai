@@ -148,6 +148,14 @@ git push origin master
 ```
 
 **After PR merge:**
+
+The fastest path is `/pw-complete <PR#>` (or with no argument, against
+the current branch). It runs the same sequence below with the
+safety checks the manual flow tends to skip: it refuses to delete
+the local branch unless `gh pr view` confirms `state == MERGED` and
+the merge commit is an ancestor of the freshly-pulled local master.
+
+If running the steps manually:
 ```bash
 cd pwiz
 git checkout master
@@ -155,7 +163,8 @@ git pull origin master
 git branch -d Skyline/work/YYYYMMDD_feature  # Delete local branch
 ```
 
-**Close the GitHub Issue with completion summary:**
+**Close the GitHub Issue with completion summary** (skip if the PR
+description used `Fixes #NNNN` — the issue auto-closed at merge):
 ```bash
 gh issue comment NNNN --body "## Completion Summary
 
