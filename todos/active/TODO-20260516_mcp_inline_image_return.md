@@ -88,3 +88,16 @@ Starting work on this issue. Branch created from master, TODO scaffolded with th
 - Version-skew: when an older Skyline lacks the bytes method, `Invoke()` enriches the "Unknown method:" error with the Skyline version. The wrapper catches this in `auto` mode and falls back to the existing file-based JSON-RPC method; `inline` mode surfaces the error explicitly with retry guidance.
 - Tests: extended `SkylineMcpTest` with three new validation blocks across two subprocess scenarios (default cap and 100-byte cap). Validation closes the opened Peak Areas graph at end of each scenario so the GC-leak tracker stays clean.
 - Build: Skyline.sln + SkylineMcp.sln both green. TestSkylineMcp passes (~8 s, 0 failures, no GC-LEAK). CodeInspection passes (~14 s).
+
+### 2026-05-16 - Post-PR review pass complete
+
+PR #4222 opened. Copilot autoreviewed; addressed five inline findings in commit 175a802 (file-mode form-image denial pass-through, tutorial-image not-found back to non-error, GetFormImageBytes denial via structured `Message` field instead of throw, MimeType doc updated, "exceeded inline cap" extracted to `JsonToolConstants.MSG_INLINE_CAP_EXCEEDED`).
+
+Fresh-context Claude agent self-review surfaced three [important] + three [nit] findings. Addressed in commit a7dd4e2:
+
+- Threaded JSON-RPC error code through `SkylineJsonToolClient.Call` via new public `JsonRpcException` (derives from `InvalidOperationException` for back-compat). Version-skew detection now matches on `code == ERROR_METHOD_NOT_FOUND` instead of grepping "Unknown method:" message text. Resolves the tutorial-image dead-code nit as a side effect since server-side `IOException` now flows back as `JsonRpcException` not raw `IOException`.
+- Wrapped `WriteBytesToDisk` in cap-fallback with a tight try/catch that surfaces real disk-error messages instead of being mistranslated as "Skyline disconnected".
+- Wrapped both new test scenarios in try/finally so graph cleanup runs even when an assertion fails; without this, a real assertion failure would be masked behind a GC-LEAK failure.
+- Extended `TestVersionMismatchError` with a typed-exception assertion: `JsonRpcException` with `Code == ERROR_METHOD_NOT_FOUND` and message naming the unknown method.
+
+Deferred: positional-arg back-compat concern (no in-tree callers; MCP/JSON callers always use named args) and the timestamp-resolution collision in `GetMcpTmpFilePath` (existing property of the file-on-disk path, out of scope).
