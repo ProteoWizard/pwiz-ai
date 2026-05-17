@@ -55,12 +55,17 @@ The new path must default to inline (fastest for clients that support it) with a
 
 ## Regression Test
 
-- **Test name**: (filled in once written — likely additions in `SkylineMcpTest` and a new functional test covering size-cap + version-skew fallbacks)
-- **Test project**: TestFunctional (plus SkylineMcpTest for wire-format coverage)
-- **Fails on master**: (to verify — the new behavior doesn't exist on master, so a test that asserts `ImageContentBlock` emission will naturally fail there)
-- **Passes on fix**: (to verify)
+- **Test name**: `TestSkylineMcp` (extended) — `ValidateImageInlineAndFileModes` + `ValidateImageCapFallback` + `ValidateGetGraphImageBytesPipe`
+- **Test project**: TestFunctional
+- **Fails on master**: yes by construction (the new MCP return shape, the bytes JSON-RPC method, the cap-fallback wrapper logic, and the env-var cap knob do not exist on master)
+- **Passes on fix**: yes — 0 failures, 6-8 sec, no GC-LEAK (verified locally)
 
-The test should be the first deliverable on the branch: write the `SkylineMcpTest` end-to-end assertion that the three tools emit `ImageContentBlock` JSON for `returnFormat="inline"` (or default `"auto"`), watch it fail on master, then implement.
+Coverage:
+- File mode: response is a `TextContentBlock` with the file path and a PNG on disk whose first 8 bytes are the PNG signature (regression check for the existing contract).
+- Auto / inline mode (image fits cap): response is an `ImageContentBlock` with `mimeType=image/png` and base64 bytes that also decode to a PNG signature.
+- Auto mode (image over cap, second subprocess with `SKYLINE_MCP_INLINE_IMAGE_CAP_BYTES=100`): response is a `TextContentBlock` containing "exceeded inline cap" and a path that exists on disk and is a valid PNG.
+- Inline mode (image over cap, same subprocess): response is a `CallToolResult` with `isError=true` and an error text containing "exceeded inline cap".
+- Direct JSON-RPC pipe call to the new `GetGraphImageBytes` method confirms `ImageBytesMetadata` round-trips bytes + suggested file path across the Newtonsoft (server) / System.Text.Json (client) boundary.
 
 ## Related
 
@@ -72,3 +77,14 @@ The test should be the first deliverable on the branch: write the `SkylineMcpTes
 ### 2026-05-16 - Session Start
 
 Starting work on this issue. Branch created from master, TODO scaffolded with the design surface and version-compatibility plan copied from the issue. Next: locate the three image-producing tools in the MCP server / `JsonUiService` / `JsonTutorialCatalog`, sketch the `ImageBytesMetadata` POCO, and write the failing `SkylineMcpTest` assertion before any production-code changes.
+
+### 2026-05-16 - Implementation complete
+
+- Added `ImageBytesMetadata` POCO to `JsonToolModels.cs` (link-compiled into both NF472 and .NET 8).
+- Added `GetGraphImageBytes` / `GetFormImageBytes` / `GetTutorialImageBytes` to `IJsonToolService.cs` and implemented them across `SkylineJsonToolClient.cs` (client), `JsonToolServer.cs` (server dispatch), `JsonUiService.cs` (graph + form bitmap producers), and `JsonTutorialCatalog.cs` (HTTP download to memory). `SkylineConnection.cs` delegates the new methods.
+- Refactored `GetGraphImage` and `GetFormImage` so the bitmap-producing core is reusable: `RenderGraphBitmap` / `CaptureFormBitmap` are now the shared cores. `FetchTutorialImage` shares helpers `ResolveTutorial` / `ValidateTutorialImageFilename` / `BuildTutorialImageUrl` with its bytes companion.
+- MCP wrappers for the three image tools (`SkylineTools.cs`) now return `CallToolResult` and accept a `returnFormat` parameter (`auto`/`inline`/`file`). Added `InvokeContent` (CallToolResult counterpart of `Invoke`), `InvokeImage` (returnFormat dispatch + cap fallback + version-skew fallback), and supporting helpers. Cap is set to ~500 KB raw bytes by default, tunable via the `SKYLINE_MCP_INLINE_IMAGE_CAP_BYTES` environment variable.
+- Server-side cap is intentionally deferred to the MCP wrapper so the JSON-RPC layer stays pure transport. The wrapper writes bytes to the server-suggested fallback path when the cap is exceeded in `auto` mode.
+- Version-skew: when an older Skyline lacks the bytes method, `Invoke()` enriches the "Unknown method:" error with the Skyline version. The wrapper catches this in `auto` mode and falls back to the existing file-based JSON-RPC method; `inline` mode surfaces the error explicitly with retry guidance.
+- Tests: extended `SkylineMcpTest` with three new validation blocks across two subprocess scenarios (default cap and 100-byte cap). Validation closes the opened Peak Areas graph at end of each scenario so the GC-leak tracker stays clean.
+- Build: Skyline.sln + SkylineMcp.sln both green. TestSkylineMcp passes (~8 s, 0 failures, no GC-LEAK). CodeInspection passes (~14 s).
