@@ -86,6 +86,43 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - Test plan uses `- [x]` checkboxes
 - No emojis
 
+## After a PR Is Opened
+
+Once `gh pr create` returns the PR URL, the post-open review chain
+is mandatory. Both Copilot and a fresh-context Claude agent are gates,
+not options — they catch different classes of issue and we have seen
+each catch real bugs the other missed:
+
+1. **Wait for Copilot's review** (arrives within ~5 minutes).
+   Copilot reviews every PR in this repo automatically. Treat the PR
+   as not-yet-mergeable until it has reviewed and its findings are
+   either addressed or explicitly dismissed.
+
+2. **Run `/pw-respond <PR#>`** to address Copilot's comments in
+   code and resolve the threads.
+
+3. **Run `/pw-self-review <PR#>`** to launch a fresh-context Claude
+   agent review on top of Copilot. This step is **required**, not
+   optional. The agent runs in a fresh context so it doesn't inherit
+   the author's blind spots, and it picks up issues Copilot
+   systematically misses — particularly cross-implementation
+   divergence in ports (where the agent can read source repos
+   outside the current PR that Copilot does not see), correctness
+   bugs the new tests don't cover, and hash-stability invariants.
+   Decision rule:
+   - **If a developer is present and waiting**, surface the agent's
+     findings and ask which to address before merge.
+   - **In autonomous mode** (developer asleep or unavailable),
+     launch the agent automatically once Copilot threads are
+     resolved and address its findings in a follow-up commit on the
+     same branch. Don't skip this step because the PR "looks fine"
+     after Copilot — every PR that's reached this skill so far has
+     yielded at least one useful agent finding.
+
+4. **For maximum rigor**, follow with `/ultrareview <PR#>` — a
+   user-triggered, billed, multi-agent cloud review. Stronger than
+   either of the above. Claude Code cannot launch this itself.
+
 ## Branch Naming
 
 `Skyline/work/YYYYMMDD_feature_name`

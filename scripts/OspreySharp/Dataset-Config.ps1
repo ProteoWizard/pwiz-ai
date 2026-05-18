@@ -6,7 +6,17 @@
     Dot-source this file to get the Get-DatasetConfig function, which returns
     a hashtable with all dataset-specific paths and settings.
 
-    Supported datasets: Stellar, Astral
+    Supported datasets: Stellar, Astral, AstralLibraryDecoy
+
+    Each dataset hashtable carries:
+      * Name, TestDir, Library, Resolution, SingleFile, AllFiles, FileLabel
+        (always present)
+      * DecoysInLibrary  -- when $true, run-osprey passes --decoys-in-library
+                            (default: $false; reverse-decoy mode)
+      * Manifest         -- optional FDRBench pairing manifest filename
+                            (default: $null; composition pairing only)
+    The library-decoy fields are forwarded to OspreySharp / Rust osprey via
+    --decoys-in-library and --decoy-pairing-manifest in Run-Osprey.ps1.
 
     The test data root is resolved in this order:
       1. -TestBaseDir parameter (explicit, highest priority)
@@ -27,7 +37,7 @@
 function Get-DatasetConfig {
     param(
         [Parameter(Mandatory=$true, Position=0)]
-        [ValidateSet("Stellar", "Astral")]
+        [ValidateSet("Stellar", "Astral", "AstralLibraryDecoy")]
         [string]$Dataset,
 
         [Parameter(Mandatory=$false)]
@@ -48,32 +58,59 @@ function Get-DatasetConfig {
     switch ($Dataset) {
         "Stellar" {
             @{
-                Name       = "Stellar"
-                TestDir    = Join-Path $baseDir "stellar"
-                Library    = "hela-filtered-SkylineAI_spectral_library.tsv"
-                Resolution = "unit"
-                SingleFile = "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML"
-                AllFiles   = @(
+                Name             = "Stellar"
+                TestDir          = Join-Path $baseDir "stellar"
+                Library          = "hela-filtered-SkylineAI_spectral_library.tsv"
+                Resolution       = "unit"
+                SingleFile       = "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML"
+                AllFiles         = @(
                     "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML",
                     "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_21.mzML",
                     "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_22.mzML"
                 )
-                FileLabel  = @{ Single = "file 20"; All = "files 20-22" }
+                FileLabel        = @{ Single = "file 20"; All = "files 20-22" }
+                DecoysInLibrary  = $false
+                Manifest         = $null
             }
         }
         "Astral" {
             @{
-                Name       = "Astral"
-                TestDir    = Join-Path $baseDir "astral"
-                Library    = "SkylineAI_spectral_library.tsv"
-                Resolution = "hram"
-                SingleFile = "Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_49.mzML"
-                AllFiles   = @(
+                Name             = "Astral"
+                TestDir          = Join-Path $baseDir "astral"
+                Library          = "SkylineAI_spectral_library.tsv"
+                Resolution       = "hram"
+                SingleFile       = "Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_49.mzML"
+                AllFiles         = @(
                     "Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_49.mzML",
                     "Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_55.mzML",
                     "Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_60.mzML"
                 )
-                FileLabel  = @{ Single = "file 49"; All = "files 49-60" }
+                FileLabel        = @{ Single = "file 49"; All = "files 49-60" }
+                DecoysInLibrary  = $false
+                Manifest         = $null
+            }
+        }
+        "AstralLibraryDecoy" {
+            # Carafe-built Astral entrapment library with FDRBench pairing
+            # manifest. Library + manifest filenames are placeholders until
+            # Mike provides the final files; the existing Astral mzML files
+            # are reused. Running before the files are staged produces a
+            # clear "file not found" error in Run-Osprey.ps1. Used for
+            # cross-impl Test-Regression on the library-decoy code path.
+            @{
+                Name             = "AstralLibraryDecoy"
+                TestDir          = Join-Path $baseDir "astral-libdecoy"
+                Library          = "SkylineAI_entrapment_carafe_spectral_library.tsv"
+                Resolution       = "hram"
+                SingleFile       = "Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_49.mzML"
+                AllFiles         = @(
+                    "Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_49.mzML",
+                    "Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_55.mzML",
+                    "Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_60.mzML"
+                )
+                FileLabel        = @{ Single = "file 49"; All = "files 49-60" }
+                DecoysInLibrary  = $true
+                Manifest         = "SkylineAI_entrapment_carafe_pairing_manifest_pep.txt"
             }
         }
     }

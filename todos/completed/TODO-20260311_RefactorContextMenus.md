@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260311_RefactorContextMenus`
 - **Base**: `master`
 - **Created**: 2026-03-11
-- **Status**: In Progress
+- **Status**: Complete
 - **GitHub Issue**: [#4073](https://github.com/ProteoWizard/pwiz/issues/4073)
-- **PR**: (pending)
+- **PR**: [#4111](https://github.com/ProteoWizard/pwiz/pull/4111) (merged 2026-04-02)
 
 ## Objective
 
@@ -93,3 +93,15 @@ void GraphSummary.IStateProvider.BuildGraphMenu(ZedGraphControl zedGraphControl,
 
 - The "DropDownItems.Count == 0" pattern exists because menu items would disappear when a ZedGraphControl was disposed (it would dispose its ContextMenuStrip which would take ownership of inserted items). By creating fresh menus each time, we don't need this defensive check.
 - contextMenuTreeNode does NOT need the create-per-use pattern since it's assigned directly to the tree control, not inserted into ZedGraph menus.
+
+## Progress Log
+
+### 2026-04-02 - Merged
+
+PR [#4111](https://github.com/ProteoWizard/pwiz/pull/4111) "Refactor context menus from Skyline.designer.cs into separate files in Menus subfolder" merged to `master` as commit `6ba0449`. Closes issue #4073.
+
+## Resolution
+
+**Status**: Complete (PR #4111 merged 2026-04-02)
+
+All six context menus listed in the table were extracted from `Skyline.Designer.cs` into separate `SkylineControl` classes under `pwiz_tools/Skyline/Menus/`, following the `ChromatogramContextMenu` reference pattern. Graph context menus (Spectrum, RetentionTimes, PeakAreas, MassErrors, Detections) are created per-use via `using` blocks, eliminating the `DropDownItems.Count == 0` lazy-initialization defensive checks throughout `SkylineGraphs.cs`. `TreeNodeContextMenu` is created once since it is bound directly to the tree control rather than inserted into a `ZedGraphControl`-owned menu.

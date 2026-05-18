@@ -343,6 +343,9 @@
       opacity: 0;
       transition: opacity 0.2s;
       box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      /* Above group-overlays (z:5) and stats-panel (z:6) so a hover tip
+         on a node beneath a group label remains readable. */
+      z-index: 10;
     }
   </style>
 </head>
@@ -720,7 +723,14 @@
       const g = svg.append('g');
       zoomBehavior = d3.zoom()
         .scaleExtent([0.1, 4])
-        .on('zoom', (event) => g.attr('transform', event.transform));
+        .on('zoom', (event) => {
+          g.attr('transform', event.transform);
+          // Group labels live in an HTML overlay layered over the SVG, so the
+          // SVG's zoom transform doesn't move them on its own. `snap` mode
+          // bypasses the simulation-tick smoothing that would otherwise make
+          // labels lag behind the user's drag.
+          if (typeof updateGroupLabels === 'function') updateGroupLabels(true);
+        });
       svg.call(zoomBehavior);
 
       // Add arrow marker for directed edges

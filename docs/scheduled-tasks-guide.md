@@ -12,6 +12,8 @@ claude -p "Read .claude/commands/pw-daily-research.md and follow it"
 
 This enables automated daily reports without manual intervention.
 
+**Common use — daily reports:** the daily consolidated report (nightly tests + exceptions + support) is the canonical working example of this setup. For the report's two-phase architecture, data flow, and turn-budget design, see [daily-report-guide.md](daily-report-guide.md).
+
 **Note:** Slash commands (`/pw-daily`) and Skills don't work in `-p` mode. See [Non-Interactive Mode Limitations](#non-interactive-mode-limitations) for workarounds.
 
 ## Prerequisites
@@ -173,7 +175,7 @@ pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -DryRun"
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `-Recipient` | `brendanx@uw.edu` | Email address for the report |
+| `-Recipient` | `skyline-dev@proteinms.net` | Email address for the report (Skyline dev team distribution list) |
 | `-Model` | `claude-opus-4-5-20251101` | Claude model to use |
 | `-MaxTurns` | Phase-dependent (100/40) | Maximum agentic turns per phase |
 | `-Phase` | `both` | `research`, `email`, or `both` |

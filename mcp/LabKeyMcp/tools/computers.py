@@ -29,6 +29,7 @@ from .common import (
     get_server_context,
     get_daily_history_dir,
     get_labkey_session,
+    _server_url,
     DEFAULT_SERVER,
     TESTRESULTS_SCHEMA,
     DEFAULT_TEST_CONTAINER,
@@ -143,7 +144,7 @@ def _set_computer_active(
 
         # Build URL for setUserActive endpoint
         encoded_path = quote(container_path, safe="/")
-        url = f"https://{server}{encoded_path}/testresults-setUserActive.view"
+        url = f"{_server_url(server)}{encoded_path}/testresults-setUserActive.view"
 
         # SetUserActive is a MutatingApiAction. When Content-Type is application/json
         # (as `post_json` sets), BaseApiAction.populateForm() reads form fields from

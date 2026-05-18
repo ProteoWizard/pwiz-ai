@@ -117,7 +117,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Stellar", "Astral")]
+    [ValidateSet("Stellar", "Astral", "AstralLibraryDecoy")]
     [string]$Dataset = "Stellar",
 
     [Parameter(Mandatory=$false)]
@@ -381,6 +381,27 @@ try {
     }
     if ($ExitAfterScoring) {
         $toolArgs += "--no-join"
+    }
+    # Library-decoy mode: forwarded from the dataset config. The library-
+    # decoy datasets (e.g. AstralLibraryDecoy) supply their decoys via the
+    # spectral library + a FDRBench pairing manifest instead of letting
+    # Osprey generate reverse-decoys.
+    if ($ds.DecoysInLibrary) {
+        $toolArgs += "--decoys-in-library"
+        # A dataset with DecoysInLibrary=$true and Manifest=$null is a
+        # legitimate "composition-only" library-decoy invocation: the
+        # pipeline relies on prefix/Decoy-column flagging + AA-composition
+        # pairing without a manifest. The manifest flag is only forwarded
+        # when the dataset explicitly names a manifest filename.
+        if (-not [string]::IsNullOrEmpty($ds.Manifest)) {
+            $manifestPath = Join-Path $testDir $ds.Manifest
+            if (-not (Test-Path $manifestPath)) {
+                Write-Error "Pairing manifest not found: $manifestPath"
+                exit 1
+            }
+            $toolArgs += "--decoy-pairing-manifest"
+            $toolArgs += $manifestPath
+        }
     }
 
     # Parse and add extra args

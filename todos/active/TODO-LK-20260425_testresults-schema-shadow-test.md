@@ -66,7 +66,7 @@
   ```bash
   # Switch to dev
   claude mcp remove labkey -s local
-  claude mcp add labkey -e LABKEY_SERVER=localhost:8080 -e LABKEY_USE_SSL=false \
+  claude mcp add labkey -e LABKEY_SERVER=http://localhost:8080 \
     -- python C:/Users/vsharma/WORK/pwiz-ai/mcp/LabKeyMcp/server.py
 
   # Switch back to production
@@ -254,9 +254,11 @@ behaves the same.
   `(container, schema_name, query_name)`. The shadow question: does LabKey
   resolve them by schema *name* (port for free) or by schema *identity*
   (lost on registration)? Phase 2 is the empirical answer.
-- The MCP picks its target from `LABKEY_SERVER` / `LABKEY_USE_SSL` env vars
-  (set in `claude mcp add`; see `mcp/LabKeyMcp/README.md`). Auth via
-  `~/.netrc` / `~/_netrc`; the `machine` line must match `LABKEY_SERVER`.
+- The MCP picks its target from the `LABKEY_SERVER` env var, which accepts
+  a URL (e.g. `http://localhost:8080`) or a bare hostname (defaults to
+  `https://`). Set in `claude mcp add`; see `mcp/LabKeyMcp/README.md`. Auth
+  via `~/.netrc` / `~/_netrc`; the `machine` line must match the host
+  portion of `LABKEY_SERVER` (no scheme, no port).
 - **Claude Code MCP launch-config caching gotcha:** Claude Code stores the
   MCP launch parameters at session start. After `claude mcp add` with new
   env vars, `/mcp` reconnect re-spawns using the cached parameters. New env

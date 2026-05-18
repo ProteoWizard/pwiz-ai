@@ -5,6 +5,8 @@ description: ALWAYS load when investigating bugs, failures, or unexpected behavi
 
 # Debugging Mode
 
+> **Trust comes from verifiers, not from the LLM.** Every technique below is a way to build a verifier the model cannot talk around: a failing test, a printf line, a diff that is either zero or nonzero. The trustworthiness of any conclusion in this mode is bounded above by the strength of the verifier that produced it. See [ai/docs/validation-cycle-principles.md](../../../docs/validation-cycle-principles.md) for the full framing.
+
 When investigating bugs, failures, or unexpected behavior, shift into debugging mode. This is fundamentally different from development mode.
 
 ## Core Documentation
@@ -59,6 +61,22 @@ See **ai/docs/debugging-principles.md** → "Prove It From Inside" for the full 
 - **Don't assert** runtime behavior from code reading — instrument and run
 - **Don't limit diagnostics to the test file** — instrument feature code, infrastructure, anywhere in the control flow
 - **The cost is near zero** — generating diagnostic code and processing the output is what you do fastest
+
+## Critical Principle: Write the Failing Test First
+
+> **Before declaring a fix, write a test that fails on the current code and passes after the fix.**
+
+The test does three jobs at once:
+
+1. **Proves you understood the bug.** A test that does not actually fail on master is a test for a phenomenon you only theorize about. If you cannot reproduce the failure as a test, you do not yet know enough to fix it.
+2. **Proves the fix addresses the root cause.** A passing test after a code change is the only deterministic evidence that the change has the effect you claim. Anything else is "this looks right to me."
+3. **Leaves behind a permanent verifier.** Every defect becomes a check that runs forever at near-zero cost. The bar rises deterministically; that failure mode cannot silently recur.
+
+**For nightly test failures, exception reports, and reproducible bug reports**: the test usually already exists or can be constructed from the stack trace and the report's reproduction steps. Write it first, watch it fail, then make it pass. The fix is the diff between "test red" and "test green."
+
+**For bugs that resist reproduction**: make reproduction the *first* deliverable. Until a test fails reliably, no fix can be trusted. See "Long-Cycle Mode" in `ai/docs/debugging-principles.md` for amplification, statistical bisection, and DocChangeLogger strategies.
+
+This is the "permanent verifier" rule from [ai/docs/validation-cycle-principles.md](../../../docs/validation-cycle-principles.md) made operational. The bug is not allowed to be considered fixed without also being gated against forever after.
 
 ## Diagnostic Toolkit
 

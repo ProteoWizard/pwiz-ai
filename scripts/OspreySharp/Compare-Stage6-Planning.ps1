@@ -3,7 +3,7 @@
     Cross-impl Stage 6 planning-checkpoint byte-parity gate.
 
 .DESCRIPTION
-    Runs both Rust osprey and OspreySharp in --join-only mode against all
+    Runs both Rust osprey and OspreySharp in --join-at-pass=1 mode against all
     pre-generated .scores.rust.parquet files in a dataset, with each of
     three Stage 6 planning dump env-vars set in turn:
 
@@ -74,6 +74,64 @@ $ErrorActionPreference = "Stop"
 
 . "$PSScriptRoot\Dataset-Config.ps1"
 
+# When SHA-256 of two dump files differs, walk both files in lockstep and
+# decide whether each text difference is a real bit divergence or just
+# Rust ryu vs .NET R disagreeing on which equally-short decimal to emit
+# for the same f64 (e.g., 0x3fb9064000000000 has both "0.09775161743164062"
+# and "0.09775161743164063" as valid shortest-roundtrip forms; ryu picks
+# the higher, R picks the lower per round-half-to-even).
+#
+# Returns @{ StructuralDiff; BitDiffs; FmtDiffs }. Caller treats
+# StructuralDiff or BitDiffs > 0 as FAIL and FmtDiffs only as PASS.
+function Compare-DumpsNumerically {
+    param(
+        [Parameter(Mandatory=$true)] [string]$RustPath,
+        [Parameter(Mandatory=$true)] [string]$CsPath
+    )
+    $inv = [System.Globalization.CultureInfo]::InvariantCulture
+    $structural = $false
+    $bitDiffs = 0
+    $fmtDiffs = 0
+    $rustReader = [System.IO.File]::OpenText($RustPath)
+    $csReader   = [System.IO.File]::OpenText($CsPath)
+    try {
+        while ($true) {
+            $rustEof = $rustReader.EndOfStream
+            $csEof   = $csReader.EndOfStream
+            if ($rustEof -and $csEof) { break }
+            if ($rustEof -ne $csEof) { $structural = $true; break }
+            $rustLine = $rustReader.ReadLine()
+            $csLine   = $csReader.ReadLine()
+            if ($rustLine -eq $csLine) { continue }
+            $rcols = $rustLine.Split([char]9)
+            $ccols = $csLine.Split([char]9)
+            if ($rcols.Length -ne $ccols.Length) { $structural = $true; break }
+            for ($i = 0; $i -lt $rcols.Length; $i++) {
+                $rv = $rcols[$i]; $cv = $ccols[$i]
+                if ($rv -eq $cv) { continue }
+                $rd = 0.0; $cd = 0.0
+                $rok = [double]::TryParse($rv, [Globalization.NumberStyles]::Float, $inv, [ref]$rd)
+                $cok = [double]::TryParse($cv, [Globalization.NumberStyles]::Float, $inv, [ref]$cd)
+                if ($rok -and $cok -and `
+                    [System.BitConverter]::DoubleToInt64Bits($rd) -eq `
+                    [System.BitConverter]::DoubleToInt64Bits($cd)) {
+                    $fmtDiffs++
+                } else {
+                    $bitDiffs++
+                }
+            }
+        }
+    } finally {
+        $rustReader.Close()
+        $csReader.Close()
+    }
+    return [PSCustomObject]@{
+        StructuralDiff = $structural
+        BitDiffs       = $bitDiffs
+        FmtDiffs       = $fmtDiffs
+    }
+}
+
 $scriptRoot = Split-Path -Parent $PSCommandPath
 $aiRoot = Split-Path -Parent (Split-Path -Parent $scriptRoot)
 $projRoot = Split-Path -Parent $aiRoot
@@ -114,7 +172,8 @@ $dumpSpecs = @(
     @{ Name = "consensus";         DumpVar = "OSPREY_DUMP_CONSENSUS";  OnlyVar = "OSPREY_CONSENSUS_ONLY";   FilePrefix = "stage6_consensus" },
     @{ Name = "multicharge";       DumpVar = "OSPREY_DUMP_MULTICHARGE";OnlyVar = "OSPREY_MULTICHARGE_ONLY"; FilePrefix = "stage6_multicharge" },
     @{ Name = "loess_fit";         DumpVar = "OSPREY_DUMP_LOESS_FIT";  OnlyVar = "OSPREY_LOESS_FIT_ONLY";   FilePrefix = "stage6_loess_fit" },
-    @{ Name = "refit";             DumpVar = "OSPREY_DUMP_REFIT";      OnlyVar = "OSPREY_REFIT_ONLY";       FilePrefix = "stage6_refit" }
+    @{ Name = "refit";             DumpVar = "OSPREY_DUMP_REFIT";      OnlyVar = "OSPREY_REFIT_ONLY";       FilePrefix = "stage6_refit" },
+    @{ Name = "reconciliation";    DumpVar = "OSPREY_DUMP_RECONCILIATION"; OnlyVar = "OSPREY_RECONCILIATION_ONLY"; FilePrefix = "stage6_reconciliation" }
 )
 
 function Invoke-Stage6Dump {
@@ -137,7 +196,7 @@ function Invoke-Stage6Dump {
     $sw = [Diagnostics.Stopwatch]::StartNew()
     Push-Location $WorkDir
     try {
-        & $Binary --join-only @inputArgs -l $Library --output $outBlib `
+        & $Binary --join-at-pass=1 @inputArgs -l $Library --output $outBlib `
             --resolution $Resolution --protein-fdr 0.01 2>&1 | Out-Null
         $exit = $LASTEXITCODE
     } finally { Pop-Location }
@@ -272,7 +331,26 @@ foreach ($dsName in $datasets) {
             $hRust = (Get-FileHash $rustDump -Algorithm SHA256).Hash
             $hCs   = (Get-FileHash $csDump -Algorithm SHA256).Hash
             $rowCount = (Get-Content $rustDump | Measure-Object -Line).Lines - 1
-            if ($hRust -eq $hCs) { $status = "PASS" } else { $status = "FAIL" }
+            if ($hRust -eq $hCs) {
+                $status = "PASS"
+            } else {
+                # SHA-256 differs. Differences may be either real (bit-level
+                # f64 divergence) or formatter-only (Rust ryu vs .NET R pick
+                # different equally-short decimals for the same f64 bits;
+                # see e.g. 0x3fb9064000000000 = 0.097751617431640625, where
+                # ryu emits "...63" and R emits "...62"). Walk both files in
+                # lockstep; for any cell that differs textually, parse both
+                # sides to f64 and bit-compare. PASS if every difference is
+                # format-only; FAIL on any real bit divergence.
+                $cmp = Compare-DumpsNumerically -RustPath $rustDump -CsPath $csDump
+                if ($cmp.StructuralDiff -or $cmp.BitDiffs -gt 0) {
+                    $status = "FAIL"
+                } else {
+                    $status = "PASS"
+                    Write-Host ("    {0} cell(s) differ in text only (bit-equal; ryu/R tie-break)" `
+                        -f $cmp.FmtDiffs) -ForegroundColor DarkYellow
+                }
+            }
         }
 
         $row = [PSCustomObject]@{

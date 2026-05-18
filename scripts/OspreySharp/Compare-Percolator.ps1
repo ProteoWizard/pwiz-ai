@@ -76,12 +76,13 @@ $thresholds = @{
     "pep"                     = 1e-9
     "run_precursor_q"         = 1e-9
     "run_peptide_q"           = 1e-9
+    "run_protein_q"           = 1e-9
     "experiment_precursor_q" = 1e-9
     "experiment_peptide_q"   = 1e-9
 }
 $numericColumns = @(
     "score", "pep",
-    "run_precursor_q", "run_peptide_q",
+    "run_precursor_q", "run_peptide_q", "run_protein_q",
     "experiment_precursor_q", "experiment_peptide_q"
 )
 

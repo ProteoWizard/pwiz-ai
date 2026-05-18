@@ -15,6 +15,7 @@ from .common import (
     get_server_context,
     get_netrc_credentials,
     get_tmp_dir,
+    _server_url,
     DEFAULT_SERVER,
     DEFAULT_SUPPORT_CONTAINER,
 )
@@ -99,9 +100,9 @@ def register_tools(mcp):
             # For support: announcements-download.view
             # For wiki: wiki-download.view (uses different parameter names)
             if "support" in container_path.lower():
-                download_url = f"https://{server}{container_path}/announcements-download.view?entityId={parent_entity_id}&name={filename}"
+                download_url = f"{_server_url(server)}{container_path}/announcements-download.view?entityId={parent_entity_id}&name={filename}"
             else:
-                download_url = f"https://{server}{container_path}/wiki-download.view?entityId={parent_entity_id}&name={filename}"
+                download_url = f"{_server_url(server)}{container_path}/wiki-download.view?entityId={parent_entity_id}&name={filename}"
 
             # Create authenticated request
             request = urllib.request.Request(download_url)

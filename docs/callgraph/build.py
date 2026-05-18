@@ -124,17 +124,30 @@ CONFIG = core.ProjectConfig(
     # Spawn-from-group: new nodes stream out of their "source" cluster
     # instead of materializing mid-screen. Supports an optional dx/dy
     # direction offset for groups whose final home lies beyond the source
-    # (e.g., MCP flows *out of* core toward the left edge).
+    # (e.g., MCP flows *out of* docs toward the left edge).
     spawn_from_group={
-        # TODO pipeline — both active and completed emerge from backlog
-        # (the common origin); archive emerges from completed.
+        # TODO lifecycle chain — backlog → active → completed → archive.
+        # Each stage emerges from the one before it, so the lifecycle reads
+        # as a single eastward drift through the right column.
         "todos-active":    "todos-backlog",
-        "todos-completed": "todos-backlog",
+        "todos-completed": "todos-active",
         "todos-archive":   "todos-completed",
-        # MCP starts near the core files (CLAUDE.md, etc. reference it)
-        # and is pulled leftward. Spawning slightly left of core's centroid
-        # lets the new-node motion visually flow outward to MCP's anchor.
-        "mcp":             {"from": "core", "dx": -0.08},
+        # MCP files are referenced from docs (CLAUDE.md, MCP guides) and
+        # land at the far left of the layout. Spawning slightly left of
+        # docs' centroid lets the new-node motion flow outward leftward
+        # to MCP's anchor, instead of getting hung up on docs' right edge.
+        "mcp":             {"from": "docs", "dx": -0.08},
+    },
+    # Path-prefix fallback for nodes whose group has no spawn rule above.
+    # The archive-year/month folders (`todos/completed/2025/10`,
+    # `todos/completed/2026/01`, ...) are kind=folder, group="folders" —
+    # generic, no per-folder spawn intent. Without this they materialize
+    # at the viewport center and their contains-edges drag the archive
+    # TODOs leftward while settling. Spawning them at the todos-completed
+    # centroid means the contains-edges connect nodes that are already
+    # near each other, so the cluster stays put.
+    spawn_from_path={
+        "todos/completed/": "todos-completed",
     },
     # Dual-repo: commits with repo='pwiz' link to the main pwiz repo, all
     # others to pwiz-ai.

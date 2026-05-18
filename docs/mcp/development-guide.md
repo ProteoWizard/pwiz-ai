@@ -381,41 +381,52 @@ Example:
 | log | Other | **⚠️ LARGE** - Full test log, use `save_run_log()` |
 | document | Other | **⚠️ LARGE** - Binary blob up to 50MB |
 
-## Future Data Sources
+## Sibling MCP Servers
 
-### Gmail Integration
+Five MCP servers now live under `ai/mcp/`. Most follow the modular pattern
+LabKeyMcp grew into: a thin `server.py` that wires up `tools/<name>.py`
+modules. See each server's `README.md` for setup specifics, and the
+companion doc in `ai/docs/mcp/` for tool-by-tool reference.
 
-*(To be documented when implemented)*
+| Server | Language | Tool docs |
+|--------|----------|-----------|
+| `LabKeyMcp` | Python | [nightly-tests.md](nightly-tests.md), [exceptions.md](exceptions.md), [support.md](support.md), [issues.md](issues.md), [announcements.md](announcements.md), [wiki.md](wiki.md), [files.md](files.md), [tool-hierarchy.md](tool-hierarchy.md) |
+| `StatusMcp` | Python | [status.md](status.md) |
+| `TeamCityMcp` | Python | [team-city.md](team-city.md) |
+| `MailChimpMcp` | Python | [mailchimp.md](mailchimp.md) |
+| `ImageComparerMcp` | C# (.NET 8.0) | [image-comparer.md](image-comparer.md) |
 
-A Gmail MCP server could enable:
-- Reading exception report notifications
-- Reading nightly test result summaries
-- Other automated email alerts
+Gmail access uses an off-the-shelf server (see [gmail.md](gmail.md)) rather
+than a server in this repo.
 
-Will require Gmail MCP server setup with OAuth2.
+## MCP Server Locations
 
-### Panoramaweb.org
-
-*(To be documented when implemented)*
-
-Another LabKey server with proteomics datasets. The same patterns apply:
-- Use the `labkey` SDK
-- Create server-side queries for complex joins
-- Configure netrc for authentication
-
-## MCP Server Location
+LabKeyMcp grew from a single `server.py` into a small package as more
+domains were added:
 
 ```
 ai/mcp/LabKeyMcp/
-├── server.py        # MCP server with all tools
-├── pyproject.toml   # Dependencies
+├── server.py             # MCP wiring; one @mcp.tool() per public tool
+├── tools/                # Per-domain implementations
+│   ├── nightly.py, nightly_history.py, patterns.py
+│   ├── exceptions.py, stacktrace.py
+│   ├── support.py, issues.py, announcements.py, wiki.py, attachments.py
+│   ├── computers.py
+│   └── common.py         # Shared netrc/server-context helpers
+├── queries/              # Server-side LabKey SQL + schema docs
+├── scripts/              # Out-of-process helpers (e.g. analyze-run-metrics.R)
+├── pyproject.toml
 ├── test_connection.py
-├── queries/         # Server-side query documentation
 └── README.md
 ```
+
+`StatusMcp`, `TeamCityMcp`, and `MailChimpMcp` mirror the same shape at
+smaller scale (single `server.py` + `tools/`). `ImageComparerMcp` is C#;
+see [image-comparer.md](image-comparer.md) and the "C# MCP Servers"
+section above for its specifics.
 
 ## Related Documentation
 
 - [Developer Setup Guide](../developer-setup-guide.md) - Environment configuration
-- [Exceptions](exceptions.md) - Exception data access
-- [Nightly Tests](nightly-tests.md) - Test results data access
+- [tool-hierarchy.md](tool-hierarchy.md) - PRIMARY vs DRILL-DOWN tool selection
+- All sibling MCP server docs listed in the "Sibling MCP Servers" table above

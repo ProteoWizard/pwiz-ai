@@ -421,6 +421,10 @@ def set_active_project(path: str) -> str:
     Call this when switching focus between repositories
     (e.g., pwiz, pwiz-ai, skyline_26_1).
 
+    Per-session state is keyed by the Claude Code process's PID (this server's
+    parent process), which the statusline also reads, so concurrent Claude Code
+    sessions do not overwrite each other's status display.
+
     Args:
         path: Path to the project directory. Example: 'C:/proj/pwiz'
     """
@@ -433,9 +437,145 @@ def set_active_project(path: str) -> str:
         "setAt": datetime.now(timezone.utc).isoformat(),
     }
 
-    ACTIVE_PROJECT_FILE.write_text(json.dumps(active, indent=2), encoding="utf-8")
+    payload = json.dumps(active, indent=2)
+    target = _per_session_active_project_file() or ACTIVE_PROJECT_FILE
+    target.write_text(payload, encoding="utf-8")
 
     return f"Active project set to: {active['name']} ({active['path']})"
+
+
+# Cache the Claude Code PID across all calls in this server's lifetime.
+# Claude Code doesn't relocate; one walk-up is enough.
+_CLAUDE_PID_CACHE: Optional[int] = None
+
+
+def _find_claude_code_pid() -> Optional[int]:
+    """Walk up the process tree from this server until we find a process
+    named 'claude' (case-insensitive). The same walk in statusline.ps1
+    converges on the same PID, so files keyed by it are sharable.
+
+    On Windows the StatusMcp's direct parent IS claude.exe (so the walk
+    terminates after one step), but the statusline is launched via a
+    short-lived bash/pwsh wrapper, so it has to walk further. Both sides
+    use the same algorithm to ensure agreement.
+
+    Implementation shells out to pwsh once (cached) so we don't add a
+    psutil dependency. ~150ms one-time cost, negligible relative to
+    server lifetime.
+    """
+    global _CLAUDE_PID_CACHE
+    if _CLAUDE_PID_CACHE is not None:
+        return _CLAUDE_PID_CACHE
+
+    cmd = (
+        f"$cur = {os.getpid()}; "
+        "$d = 0; "
+        "while ($cur -and $cur -ne 0 -and $d -lt 16) { "
+        "  $p = Get-CimInstance Win32_Process -Filter \"ProcessId = $cur\" -ErrorAction SilentlyContinue; "
+        "  if (-not $p) { break } "
+        "  if ($p.Name -match '^claude') { Write-Host $p.ProcessId; exit 0 } "
+        "  $cur = $p.ParentProcessId; $d++ "
+        "}"
+    )
+    try:
+        result = subprocess.run(
+            ["pwsh", "-NoProfile", "-Command", cmd],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5,
+        )
+        out = result.stdout.strip()
+        if out.isdigit():
+            _CLAUDE_PID_CACHE = int(out)
+            logger.info(f"Found Claude Code PID via process-tree walk: {_CLAUDE_PID_CACHE}")
+            return _CLAUDE_PID_CACHE
+    except Exception as e:
+        logger.warning(f"Failed to find Claude Code PID: {e}")
+
+    # Fallback: use direct parent. On Windows that's already claude.exe
+    # in the StatusMcp's case (the walk would have found it at depth 0
+    # if pwsh didn't error), so this is harmless on the happy path.
+    try:
+        _CLAUDE_PID_CACHE = os.getppid()
+    except OSError:
+        return None
+    return _CLAUDE_PID_CACHE
+
+
+def _per_session_active_project_file() -> Optional[Path]:
+    """Path to this Claude Code session's active-project file. Keyed by
+    the Claude Code PID (walked up the process tree) so the statusline
+    and StatusMcp share the same identity."""
+    pid = _find_claude_code_pid()
+    if not pid:
+        return None
+    return STATE_DIR / f"active-project-{pid}.json"
+
+
+def _per_session_context_state_file() -> Optional[Path]:
+    """Path to this Claude Code session's context-usage snapshot file. The
+    statusline writes it on every tick; this server reads it on demand."""
+    pid = _find_claude_code_pid()
+    if not pid:
+        return None
+    return STATE_DIR / f"context-state-{pid}.json"
+
+
+@mcp.tool()
+def get_context_usage() -> str:
+    """Get the current Claude Code session's context-window usage.
+
+    Returns the same numbers the statusline displays — same model,
+    same calibration (97% consumed = 0% left, matching Claude Code's
+    auto-compact warning point on the 1M-context tier). The snapshot
+    is refreshed by the statusline every tick, so it lags the live
+    state by at most one turn.
+
+    Use this BEFORE suggesting end-of-session, handoff, or compact —
+    don't estimate from feel. Many users are comfortable pushing
+    sessions into single-digit percentages remaining; suggesting a
+    handoff at 40% wastes their session.
+
+    Returns JSON with:
+      model                       — display name of current model
+      context_window_size         — total tokens (e.g. 1000000 for Opus 4.7-1m)
+      input_tokens                — non-cached input tokens this turn
+      cache_creation_input_tokens — tokens entering the cache
+      cache_read_input_tokens     — tokens served from cache
+      used_tokens                 — sum of the three above
+      used_pct                    — used / window * 100 (raw)
+      left_pct                    — usable headroom % (97% - used_pct, floored to 0)
+      usable_max_pct              — calibration ceiling (97 for the 1M tier)
+      calibrated_at               — UTC timestamp of the snapshot
+
+    On a fresh session before the statusline has run once, returns an
+    empty/error payload — that itself signals "very early in session,
+    plenty of context."
+    """
+    state_file = _per_session_context_state_file()
+    if not state_file or not state_file.exists():
+        return json.dumps({
+            "error": "Context state file not found",
+            "expected_path": str(state_file) if state_file else None,
+            "hint": (
+                "The statusline writes this file on every tick. If you "
+                "are seeing this, either the session just started (no "
+                "tick yet) or the statusline isn't configured. Either "
+                "way, plenty of context is almost certainly available."
+            ),
+        }, indent=2)
+
+    try:
+        payload = state_file.read_text(encoding="utf-8")
+    except OSError as e:
+        return json.dumps({
+            "error": f"Failed to read context state: {e}",
+            "path": str(state_file),
+        }, indent=2)
+
+    return payload
 
 
 def main():

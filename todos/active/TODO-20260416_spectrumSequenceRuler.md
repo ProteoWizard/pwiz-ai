@@ -44,6 +44,11 @@ showing rulers from another tool (ETD spectrum, c/z ion series).
   - All peaks annotated to that ion series are highlighted in the spectrum
 - Rulers update when the user selects a different peptide or charge state
 
+- User should be able to pin the ruler using the context menu, so that it remains visible when the mouse moves away from the peak.
+- Other rulers might be shown as user moves the mouse over other peak types and those rulers can be pinned as well.
+- Multiple rulers should be grouped by the direction (N or C end) and charge, each group sharing single set of sequence annotations. Each ruler group should be represented by a single AminoAcidLadderObj and can have multiple ion types with the same direction and charge.
+- The rulers logic should also be able to support neutral loss peaks. Eacn newtral loss series should have its own ruler, since they do not align well.
+
 ## Key Files
 
 - `pwiz_tools/Skyline/Controls/Graphs/GraphFullScan.cs` — measured spectrum viewer (primary target)

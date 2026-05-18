@@ -29,12 +29,14 @@ may differ from the Skyline defaults in this file.
 | *(none)* | Skyline | This document |
 | `LK` | LabKey Server | [ai/docs/labkey/](docs/labkey/) |
 | `OR` | Osprey Rust | [ai/docs/osprey-development-guide.md](docs/osprey-development-guide.md) |
-| `PW` | ProteoWizard C++ | [ai/docs/proteowizard-development-guide.md](docs/proteowizard-development-guide.md) *(future)* |
+| `PW` | ProteoWizard C++ | _(Matt's Claude-assisted C# port underway — guide TBD)_ |
 
 ## Branch Strategy
 
 **For pwiz repository:**
-- **master** - Stable releases, requires review
+- **master** - Stable releases. PRs should clear Copilot and Claude `/review`
+  before requesting human review — see
+  [docs/version-control-guide.md](docs/version-control-guide.md#pre-review-workflow).
 - **Skyline/skyline_YY_N** - Release branches
 - **Skyline/work/YYYYMMDD_description** - Feature/fix branches (all development)
 
@@ -146,6 +148,14 @@ git push origin master
 ```
 
 **After PR merge:**
+
+The fastest path is `/pw-complete <PR#>` (or with no argument, against
+the current branch). It runs the same sequence below with the
+safety checks the manual flow tends to skip: it refuses to delete
+the local branch unless `gh pr view` confirms `state == MERGED` and
+the merge commit is an ancestor of the freshly-pulled local master.
+
+If running the steps manually:
 ```bash
 cd pwiz
 git checkout master
@@ -153,7 +163,8 @@ git pull origin master
 git branch -d Skyline/work/YYYYMMDD_feature  # Delete local branch
 ```
 
-**Close the GitHub Issue with completion summary:**
+**Close the GitHub Issue with completion summary** (skip if the PR
+description used `Fixes #NNNN` — the issue auto-closed at merge):
 ```bash
 gh issue comment NNNN --body "## Completion Summary
 

@@ -21,7 +21,7 @@
   `TODO-20260423_osprey_sharp_stage{6,7,8}.md`)
 - **Base**: `master` (pwiz) / `main` (maccoss/osprey)
 - **Created**: 2026-04-20 (renamed from `TODO-20260420_` on 2026-04-23)
-- **Status**: In Progress
+- **Status**: Completed / closed 2026-05-16 (see final progress-log entry)
 - **GitHub Issue**: (none — tool work, no Skyline integration yet)
 - **PR**: (umbrella — see sub-sprints)
 
@@ -289,8 +289,12 @@ Canonical Stage 5 inputs:
 - `ai/todos/completed/TODO-20260422_ospreysharp_stage5_diagnostics.md`
   — sibling TODO, Stage 5 parity + diagnostic harness. Completed
   2026-04-23 (all five PRs merged).
-- `ai/todos/active/TODO-20260423_osprey_sharp_stage6.md` — Stage 6
-  sub-sprint (Priorities 1-3 of this umbrella). Created 2026-04-23.
+- `ai/todos/completed/TODO-20260429_osprey_sharp_stage6.md` —
+  Stage 6 sub-sprint (Priorities 1-3 of this umbrella). Created
+  2026-04-23, completed 2026-05-07 (pwiz #4187 + #4188).
+- `ai/todos/active/TODO-20260507_osprey_sharp_stage7.md` —
+  Stage 7 sub-sprint (Priority 4 of this umbrella). Created
+  2026-05-07.
 - `ai/todos/active/TODO-OR-20260417_osprey_rust_upstream.md` —
   staged sprint to upstream Rust diagnostics + perf.
 - `ai/scripts/OspreySharp/` — harness scripts: `Test-Features.ps1`,
@@ -332,3 +336,79 @@ Ready to start Priority 1: re-scan `maccoss/osprey:main` for any
 commits landed since the 2026-04-22 delta catalog attempt and
 disposition each (parity-critical port vs. out-of-scope). Dump
 findings to `ai/.tmp/stage6_upstream_delta.md`.
+
+### 2026-05-07 — Stage 6 closed; ZSTD-by-default validated; Stage 7 sub-sprint queued
+
+Stage 6 is now "fully done without caveats". The six previously-
+allowlisted scoring columns (`fragment_mzs`, `fragment_intensities`,
+`reference_xic_rts`, `reference_xic_intensities`, `bounds_area`,
+`bounds_snr`) round-trip byte-for-byte on Stellar + Astral; the
+empty allowlist was removed from `Compare-Stage6-Crossimpl.ps1`.
+Sprint captured in
+`ai/todos/completed/TODO-20260507_ospreysharp_missing_scoring_columns.md`
+(squash-merged as pwiz #4188).
+
+Cross-tool ZSTD compatibility validated end-to-end: Stages 1-4 +
+Stage 5 + Stage 6 all green on Stellar with both Rust and
+OspreySharp emitting Zstd-compressed parquet (no Snappy fallback in
+the cross-tool path). Required a one-line fix in Parquet.Net's
+`ThriftCompactProtocolReader.SkipField(Struct)` recursion; vendored
+the patched build in `pwiz_tools/Shared/Lib/Parquet/ParquetNet.dll`,
+source fork in `maccoss-developers/skylinedev/Parquet.Net/`, upstream
+PR filed as
+[aloneguid/parquet-dotnet#747](https://github.com/aloneguid/parquet-dotnet/pull/747).
+Sprint captured in `ai/todos/completed/TODO-20260428_parquet_zstd.md`
+(pwiz #4172 squash-merged 2026-05-07).
+
+Stage 7 sub-sprint scaffolded as
+`ai/todos/active/TODO-20260507_osprey_sharp_stage7.md`. First step
+is the upstream-resync delta catalog, same template as the Stage 6
+sub-sprint's first step.
+
+### 2026-05-16 -- Umbrella closed; OspreySharp is now a multi-developer project
+
+All five sub-sprints this umbrella tracked have landed and moved
+to `completed/`:
+
+- `TODO-20260422_ospreysharp_stage5_diagnostics.md` -- Stage 5 cross-impl
+  parity + diagnostic harness
+- `TODO-20260423_osprey_sharp_stage6.md`, `TODO-20260428_osprey_sharp_stage6.md`,
+  `TODO-20260429_osprey_sharp_stage6.md` -- Stage 6 refinement +
+  reconciliation, missing-scoring-columns sweep, ZSTD-by-default
+- `TODO-20260507_osprey_sharp_stage7.md` -- Stage 7 protein FDR parity
+- `TODO-20260507_osprey_sharp_stage8.md` -- Stage 8 .blib output parity
+
+Plus the architecture follow-ups that grew out of Stages 6-8:
+
+- Phase B resume-on-restart (pwiz [#4199](https://github.com/ProteoWizard/pwiz/pull/4199))
+- Phase C stage6 worker entry path (pwiz [#4213](https://github.com/ProteoWizard/pwiz/pull/4213))
+- Library-decoy FDR catch-up to maccoss/osprey v26.6.0
+  (pwiz [#4214](https://github.com/ProteoWizard/pwiz/pull/4214))
+- Library-decoy CLI flags + manifest proteins-override
+  (pwiz [#4215](https://github.com/ProteoWizard/pwiz/pull/4215))
+
+**Project status, 2026-05-16**: Mike MacCoss has committed to
+making OspreySharp the primary project, replacing the Rust
+osprey, starting the week of 2026-05-18. The "one-person Phase N
+sprint" framing that organized this umbrella does not fit the
+project anymore -- collaborators are coming in:
+
+- Mike Riffle -- NextFlow + HPC environment integration (tracked
+  at `../active/TODO-20260516_ospreysharp_wsl_parity.md` for
+  the cross-platform validation gate and at
+  `../backlog/brendanx67/TODO-ospreysharp_nextflow_linux_support.md`
+  for the packaging follow-up).
+- Matt Chambers -- ProteoWizard data-layer integration.
+
+Going forward, OspreySharp work uses scoped sprint TODOs +
+GitHub issues, not a single umbrella. Live OspreySharp TODOs at
+the time of closure:
+
+- `../active/TODO-20260516_osprey_libdecoy_e2e_and_fdrbench.md` --
+  the deferred `--fdrbench` port + the AstralLibraryDecoy E2E gate
+- `../active/TODO-20260516_ospreysharp_wsl_parity.md` --
+  cross-platform validation gate before NextFlow handoff
+
+Both are scoped tightly, so anyone new picking up OspreySharp can
+read either of those without needing to absorb this umbrella's
+history.
