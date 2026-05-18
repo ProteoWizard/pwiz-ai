@@ -4,13 +4,19 @@
 - **Branch**: `labkey-mcp-fixes-for-testresults-refactor`
 - **Base**: `master`
 - **Created**: 2026-04-28
-- **Status**: Committed and pushed; awaiting deployment of the testresults Spring-binding refactor on skyline.ms before merge.
+- **PR**: [#3](https://github.com/ProteoWizard/pwiz-ai/pull/3)
+- **Status**: Committed and pushed; merged master back in after PR #4
+  landed (2026-05-18) — conflicts in `nightly.py` and `computers.py`
+  resolved cleanly. Awaiting deployment of the testresults Spring-binding
+  refactor on skyline.ms before merge.
 - **Related**:
   - `TODO-LK-20260425_testresults-schema-shadow-test.md` — caught these.
   - `TODO-LK-20260326_testresults-migrate-actions.md` Phase 7 — references
     this PR as a deployment prerequisite.
-  - `TODO-20260428_labkey_mcp_dev-target.md` — sibling PR (env-var
+  - `TODO-20260428_labkey_mcp_dev-target.md` — sibling
+    [PR #4](https://github.com/ProteoWizard/pwiz-ai/pull/4) (env-var
     dev-target support; the feature that enabled the shadow test).
+    Merged 2026-05-18.
 
 ## Objective
 
