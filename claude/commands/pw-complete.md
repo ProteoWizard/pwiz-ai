@@ -83,7 +83,7 @@ a single commit on `master`. That commit must follow the team
 standard from `ai/docs/version-control-guide.md`:
 
 ```
-<Title line in past tense>
+<Title line in past tense> (#NNNN)
 
 * <bullet point 1>
 * <bullet point 2>
@@ -97,6 +97,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 Format rules (also in `version-control-guide.md`):
 
 - Title: past tense ("Added", "Fixed", "Refactored" — NOT "Add", "Fix")
+- Title MUST end with ` (#NNNN)` — see the subject rule below
 - Bullets: 1-5, each `* `-prefixed; what shipped, not how
 - TODO reference: a `See ai/todos/active/TODO-...md` line, even
   though Step 3 moves the file to `completed/` — the commit lands
@@ -107,9 +108,14 @@ Format rules (also in `version-control-guide.md`):
 
 Generate a draft using this priority order:
 
-1. **Subject**: `<PR title>` (GitHub appends ` (#N)` automatically;
-   pass `--subject` without the `(#N)` suffix and let GitHub add it).
-   If the PR title is not in past tense, rewrite it.
+1. **Subject**: `<PR title> (#NNNN)`. **You MUST include the
+   ` (#NNNN)` suffix yourself** — when `gh pr merge --squash` is
+   invoked with an explicit `--subject`, GitHub does NOT auto-append
+   the PR number, so an explicit subject without `(#NNNN)` lands a
+   commit message with no PR reference in the title, breaking
+   `git log --oneline` discoverability and diverging from every other
+   squash commit on `master`. If the PR title is not in past tense,
+   rewrite it before adding the suffix.
 2. **Body bullets**: prefer the bullets under `## Summary` in the PR
    description; if absent, derive them from the first ("foundation")
    commit on the branch. Trim sub-bullets and redundant "addressed
@@ -128,16 +134,30 @@ Show the drafted subject and body to the user verbatim, then ask:
 - **edit**: incorporate the user's revisions and re-confirm
 - **abandon**: stop the command; do not touch local state
 
-On approval:
+On approval (note the literal ` (#<N>)` at the end of `--subject` —
+GitHub will NOT add it for you when an explicit subject is passed):
 
 ```bash
 gh pr merge <N> --squash \
-  --subject "<approved subject>" \
+  --subject "<approved subject> (#<N>)" \
   --body "$(cat <<'EOF'
 <approved body, verbatim, including blank lines and the TODO + Co-Author footers>
 EOF
 )"
 ```
+
+After the merge, sanity-check the subject landed correctly:
+
+```bash
+git -C C:/proj/pwiz fetch origin master
+git -C C:/proj/pwiz log origin/master --oneline -1
+```
+
+The first line must end with ` (#<N>)`. If it doesn't, the subject
+was passed without the PR-number suffix and the commit is now on
+`master` without it — flag this to the user immediately. Do not
+attempt to rewrite the merge commit; surface it so they can decide
+whether to leave it or hand-amend on the next push window.
 
 If the user wants the merge to wait for pending checks instead of
 firing immediately, append `--auto`.
@@ -312,6 +332,13 @@ they don't get lost.
 - **Never squash-merge without explicit user approval** of the exact
   subject and body in Step 1b.3. Auto-merging "because the PR looks
   ready" replaces author intent with model guesswork.
+- **Always include ` (#NNNN)` in the squash subject.** GitHub auto-
+  appends the PR number only when no explicit `--subject` is passed.
+  This command always passes one, so the model must include the
+  suffix verbatim. Past sessions have shipped commits to `master`
+  without it and the title fails to surface the PR in `git log`,
+  `git blame -L`, or release notes built from the log. The Step 1b.3
+  draft AND the `gh pr merge` invocation MUST both end with `(#N)`.
 - **Do not delete the local branch** unless Step 4 confirmed `state == MERGED`
   AND Step 5 confirmed the merge commit is an ancestor of local master.
 - **Never amend or rewrite history** on the TODO move. The TODO is the
