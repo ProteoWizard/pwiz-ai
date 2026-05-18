@@ -11,6 +11,7 @@ This module contains:
 
 import json
 import logging
+import os
 import base64
 import http.cookiejar
 import netrc
@@ -28,7 +29,33 @@ logger = logging.getLogger("labkey_mcp")
 # Default Server Configuration
 # =============================================================================
 
-DEFAULT_SERVER = "skyline.ms"
+# LABKEY_SERVER is a URL (e.g. "http://localhost:8080", "https://panoramaweb.org")
+# or a bare hostname (e.g. "skyline.ms"); a bare hostname defaults to https.
+# Devs point the MCP at a local LabKey via LABKEY_SERVER=http://localhost:8080.
+DEFAULT_SERVER = os.environ.get("LABKEY_SERVER", "skyline.ms")
+
+
+def _split_server(server: str) -> tuple[str, str]:
+    """Parse a server arg into (scheme, host).
+
+    Accepts a URL (``http://localhost:8080``, ``https://panoramaweb.org``) or
+    a bare hostname (``skyline.ms``, ``localhost:8080``). A bare hostname
+    defaults to https. The host portion preserves any ``:port`` and is fed
+    unchanged to ServerContext / URL builders.
+    """
+    server = server.strip()
+    if "://" in server:
+        scheme, _, host = server.partition("://")
+        return scheme.lower(), host.strip()
+    return "https", server
+
+
+def _server_url(server: str) -> str:
+    """Return the ``scheme://host[:port]`` base URL for a server arg."""
+    scheme, host = _split_server(server)
+    return f"{scheme}://{host}"
+
+
 DEFAULT_CONTAINER = "/home/issues/exceptions"
 
 # Exception data schema (discovered from skyline.ms)
@@ -59,14 +86,18 @@ DEFAULT_ISSUES_CONTAINER = "/home/issues"
 def get_server_context(server: str, container_path: str) -> ServerContext:
     """Create a LabKey server context for API calls.
 
+    Accepts ``server`` as a URL or bare hostname; the scheme determines
+    ``use_ssl`` (bare hostnames default to https).
+
     Authentication is handled automatically via netrc file in standard locations:
     - ~/.netrc (Unix/Windows)
     - ~/_netrc (Windows)
     """
+    scheme, host = _split_server(server)
     return ServerContext(
-        server,
+        host,
         container_path,
-        use_ssl=True,
+        use_ssl=(scheme == "https"),
     )
 
 
@@ -74,7 +105,11 @@ def get_netrc_credentials(server: str) -> tuple[str, str]:
     """Get credentials from netrc file.
 
     Args:
-        server: The server hostname to get credentials for
+        server: Server URL or hostname (optionally with ``:port``). Any
+            ``scheme://`` prefix and ``:port`` suffix are stripped before
+            the netrc lookup, so a single ``machine localhost`` entry works
+            for ``localhost``, ``localhost:8080``, and
+            ``http://localhost:8080``.
 
     Returns:
         Tuple of (login, password)
@@ -84,19 +119,21 @@ def get_netrc_credentials(server: str) -> tuple[str, str]:
     """
     home = Path.home()
     netrc_paths = [home / ".netrc", home / "_netrc"]
+    _, host_with_port = _split_server(server)
+    host = host_with_port.split(":", 1)[0]
 
     for netrc_path in netrc_paths:
         if netrc_path.exists():
             try:
                 nrc = netrc.netrc(str(netrc_path))
-                auth = nrc.authenticators(server)
+                auth = nrc.authenticators(host)
                 if auth:
                     login, _, password = auth
                     return login, password
             except Exception:
                 continue
 
-    raise Exception(f"No credentials found for {server} in netrc")
+    raise Exception(f"No credentials found for {host} in netrc")
 
 
 def make_authenticated_request(
@@ -151,7 +188,7 @@ def discovery_request(server: str, container_path: str, api_action: str, params:
     """
     # Build URL with proper encoding for paths with spaces
     encoded_path = quote(container_path, safe="/")
-    url = f"https://{server}{encoded_path}/{api_action}"
+    url = f"{_server_url(server)}{encoded_path}/{api_action}"
     if params:
         url = f"{url}?{urlencode(params)}"
 
@@ -247,7 +284,7 @@ class LabKeySession:
 
     def _establish_session(self):
         """GET to establish session and get CSRF token."""
-        url = f"https://{self.server}/project/home/begin.view?"
+        url = f"{_server_url(self.server)}/project/home/begin.view?"
         request = urllib.request.Request(url)
         request.add_header("Authorization", self.auth_header)
 
@@ -422,7 +459,7 @@ def build_webdav_url(server: str, container_path: str, subfolder: str = "", file
         Full WebDAV URL
     """
     encoded_container = quote(container_path, safe="/")
-    parts = [f"https://{server}/_webdav{encoded_container}/%40files"]
+    parts = [f"{_server_url(server)}/_webdav{encoded_container}/%40files"]
     if subfolder:
         parts.append(quote(subfolder, safe="/"))
     if filename:
@@ -481,7 +518,7 @@ def list_files_webdav(
 
             href_text = href.text or ""
             # Skip the directory itself (first entry)
-            if href_text.rstrip("/") == url.replace("https://" + server, "").rstrip("/"):
+            if href_text.rstrip("/") == url.replace(_server_url(server), "").rstrip("/"):
                 continue
 
             # Extract filename from href
@@ -680,6 +717,11 @@ def register_tools(mcp):
     """
 
     @mcp.tool()
+    async def current_target() -> str:
+        """[?] Report the LabKey server this MCP is configured to hit (verifies dev vs prod)."""
+        return _server_url(DEFAULT_SERVER)
+
+    @mcp.tool()
     async def list_queries(
         schema_name: str,
         server: str = DEFAULT_SERVER,
@@ -734,7 +776,7 @@ def register_tools(mcp):
         try:
             # Build URL with proper encoding for paths with spaces
             encoded_path = quote(container_path, safe="/")
-            url = f"https://{server}{encoded_path}/{view_name}"
+            url = f"{_server_url(server)}{encoded_path}/{view_name}"
             if params:
                 url = f"{url}?{urlencode(params)}"
 

@@ -40,12 +40,14 @@ mcp = FastMCP("labkey")
 
 # Import and register tools from all modules
 from tools import register_all_tools
+from tools.common import DEFAULT_SERVER, _server_url
 register_all_tools(mcp)
 
 
 def main():
     """Run the MCP server."""
-    logger.info("Starting LabKey MCP server")
+    target = _server_url(DEFAULT_SERVER)
+    logger.info(f"Starting LabKey MCP server — target: {target}")
     mcp.run(transport="stdio")
 
 
