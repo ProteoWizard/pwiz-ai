@@ -4,12 +4,15 @@
 - **Branch**: `feature/labkey-mcp-dev-target`
 - **Base**: `master`
 - **Created**: 2026-04-28
-- **Status**: Tested on both http (dev box) and https (production) targets; ready to commit.
+- **PR**: [#4](https://github.com/ProteoWizard/pwiz-ai/pull/4) (merged 2026-05-18)
+- **Status**: Merged into master.
 - **Related**:
   - `TODO-LK-20260425_testresults-schema-shadow-test.md` — this feature
     enabled the shadow test by allowing the MCP to point at a local LabKey.
-  - `TODO-20260428_labkey_mcp_shadow-fixes.md` — sibling PR (the three
-    regressions caught **by** the shadow test). Lands first.
+  - `TODO-20260428_labkey_mcp_shadow-fixes.md` — sibling
+    [PR #3](https://github.com/ProteoWizard/pwiz-ai/pull/3) (the three
+    regressions caught **by** the shadow test). Awaiting testresults
+    refactor deployment before merge.
 
 ## Motivation
 
