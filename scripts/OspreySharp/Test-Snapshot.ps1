@@ -65,10 +65,10 @@
       $TestBaseDir/<dataset>/_snapshots/<Tag>/
         manifest.json
         stage1to4/  (per-file .scores.parquet + .calibration.json)
-        stage5/     (cs_*_<dump>.tsv files)
+        stage5/     (<tool>_*_<dump>.tsv files; <tool> is cs or rust)
         stage6/     (dumps + reconciled parquet + FDR sidecars +
                      reconciliation.json)
-        stage7/     (cs_stage7_protein_fdr.tsv)
+        stage7/     (<tool>_stage7_protein_fdr.tsv)
         blib/       (output.blib)
 
     Default tag is 'main'. Use -Tag to keep multiple named baselines
@@ -105,6 +105,15 @@
 
 .PARAMETER TestBaseDir
     Override dataset root.
+
+.PARAMETER Tool
+    Which implementation to snapshot or compare: CSharp (default,
+    OspreySharp.exe at pwiz_tools/OspreySharp/...) or Rust (osprey.exe
+    at C:\proj\osprey\target\release\). Same-impl snapshot scope --
+    capture once per tool, then compare future runs of the same tool
+    against that baseline. Use distinct -Tag values to keep parallel
+    CSharp and Rust snapshots without collision (e.g. 'main-cs' and
+    'main-rust', or just reuse 'main' under separate tags).
 
 .OUTPUTS
     Exit code: 0 = all requested stages PASS (or capture succeeded);
@@ -147,7 +156,52 @@ param(
     [switch]$Force,
     [switch]$Continue,
 
-    [string]$TestBaseDir = $null
+    [string]$TestBaseDir = $null,
+
+    # Same-impl snapshot side: CSharp (OspreySharp.exe) or Rust
+    # (osprey.exe from C:\proj\osprey). Default CSharp for backward
+    # compatibility with existing tag-less workflows.
+    [ValidateSet('CSharp','Rust')]
+    [string]$Tool = 'CSharp',
+
+    # Wrap the C# binary in JetBrains dotTrace (Sampling) for the
+    # listed stages, save .dtp snapshots under -PerformanceProfileOutputDir.
+    # Stage names from the same ValidateSet as StartStage/StopAfterStage.
+    # No-op for Tool=Rust (dotTrace is .NET only).
+    [ValidateSet('stage1to4','stage5','stage6','stage7','blib')]
+    [string[]]$PerformanceProfileStages = @(),
+
+    [string]$PerformanceProfileOutputDir = $null,
+
+    # Sampling is fastest and almost always the right default. Tracing
+    # captures per-call timing but is much slower and intrudes on the
+    # measured wall time. Timeline adds thread / context data.
+    [ValidateSet('Sampling','Tracing','Timeline')]
+    [string]$PerformanceProfileType = 'Sampling',
+
+    # Wrap the C# binary in JetBrains dotMemory (Console CLI) for the
+    # listed stages, save .dmw workspaces under -MemoryProfileOutputDir.
+    # No-op for Tool=Rust. Periodic snapshot trigger + full allocation
+    # tracking (--collect-alloc); intended for short-stage runs.
+    [ValidateSet('stage1to4','stage5','stage6','stage7','blib')]
+    [string[]]$MemoryProfileStages = @(),
+
+    [string]$MemoryProfileOutputDir = $null,
+
+    # Snapshot cadence during the profiled stage. 30s gives ~5 snapshots
+    # over a 2:30 Astral stage5 run -- enough to see allocation drift
+    # through the parallel SVM training without flooding the workspace.
+    [string]$MemoryProfileTimer = '30s',
+
+    [int]$MemoryProfileMaxSnapshots = 10,
+
+    # Production-mode wall measurement: strip OSPREY_DUMP_* env vars from
+    # every stage's config so no diagnostic dumps run. *_ONLY exit hooks
+    # are preserved so the stage still isolates. Use to get clean
+    # production stage5/6/7 wall numbers without diagnostic-write overhead.
+    # Implies -Continue (snapshot compare is skipped — production-wall
+    # runs intentionally drop the cross-impl artifacts).
+    [switch]$NoDumps
 )
 
 $ErrorActionPreference = 'Stop'
@@ -194,13 +248,119 @@ $selectedStems = @($selectedFiles | ForEach-Object {
 # ----------------------------------------------------------------------
 
 $projRoot = (Resolve-Path (Join-Path $ospDir '..\..\..')).Path
-$csBin = Join-Path $projRoot 'pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\net8.0\OspreySharp.exe'
-if (-not (Test-Path $csBin)) {
-    Write-Host "[Test-Snapshot] OspreySharp.exe not found: $csBin" -ForegroundColor Red
-    Write-Host "  Build first: pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1" -ForegroundColor Yellow
+# Both implementations produce a Windows .exe and a Linux extension-less
+# ELF from their respective build systems. -Tool selects which side this
+# run targets; the captured snapshot and the workdir are scoped per-tag
+# so CSharp and Rust snapshots can coexist (use distinct tags).
+$exeSuffix = if ($IsWindows) { '.exe' } else { '' }
+switch ($Tool) {
+    'CSharp' {
+        $toolName        = 'C#'
+        $toolPrefix      = 'cs_'      # dump file prefix: cs_*.tsv
+        $toolWorkSubdir  = 'cs'       # workdir subdir: <stage>/cs/
+        $toolBinName     = "OspreySharp$exeSuffix"
+        $toolBin         = Join-Path $projRoot "pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\net8.0\$toolBinName"
+        $toolBuildHint   = 'pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -TargetFramework net8.0'
+    }
+    'Rust' {
+        $toolName        = 'Rust'
+        $toolPrefix      = 'rust_'    # dump file prefix: rust_*.tsv
+        $toolWorkSubdir  = 'rust'     # workdir subdir: <stage>/rust/
+        $toolBinName     = "osprey$exeSuffix"
+        $toolBin         = Join-Path $projRoot "osprey\target\release\$toolBinName"
+        $toolBuildHint   = 'pwsh -File ./ai/scripts/OspreySharp/Build-OspreyRust.ps1   (or: cd C:\proj\osprey && cargo build --release)'
+    }
+}
+if (-not (Test-Path $toolBin)) {
+    Write-Host "[Test-Snapshot] $toolName binary not found: $toolBin" -ForegroundColor Red
+    Write-Host "  Build first: $toolBuildHint" -ForegroundColor Yellow
     exit 2
 }
-$csSha = (Get-FileHash $csBin -Algorithm SHA256).Hash.ToLower()
+$toolSha = (Get-FileHash $toolBin -Algorithm SHA256).Hash.ToLower()
+
+# ----------------------------------------------------------------------
+# dotTrace setup (when -PerformanceProfileStages is non-empty)
+# ----------------------------------------------------------------------
+$dotTraceExe = $null
+if ($PerformanceProfileStages.Count -gt 0) {
+    if ($Tool -ne 'CSharp') {
+        Write-Host "[Test-Snapshot] -PerformanceProfileStages requires -Tool CSharp (dotTrace is .NET only); ignoring." -ForegroundColor Yellow
+        $PerformanceProfileStages = @()
+    } else {
+        # On Linux the global tool installs to ~/.dotnet/tools; on Windows
+        # Get-Command picks up either the user .dotnet\tools or PATH.
+        $candidate = if ($IsLinux) {
+            $p = Join-Path $env:HOME '.dotnet/tools/dottrace'
+            if (Test-Path $p) { $p } else { $null }
+        } else {
+            (Get-Command dottrace -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source) ??
+            (Join-Path $env:USERPROFILE '.dotnet\tools\dottrace.exe' | Where-Object { Test-Path $_ })
+        }
+        if (-not $candidate) {
+            Write-Host "[Test-Snapshot] dottrace not found. Install: dotnet tool install --global JetBrains.dotTrace.GlobalTools" -ForegroundColor Red
+            exit 2
+        }
+        $dotTraceExe = $candidate
+        if (-not $PerformanceProfileOutputDir) {
+            # ai/.tmp is the shared session-artifact directory (per ai/CLAUDE.md).
+            $PerformanceProfileOutputDir = Join-Path $projRoot 'ai\.tmp\dottrace'
+        }
+        if (-not (Test-Path $PerformanceProfileOutputDir)) {
+            New-Item -ItemType Directory -Path $PerformanceProfileOutputDir -Force | Out-Null
+        }
+        Write-Host ("[Test-Snapshot] dotTrace {0} -> {1}" -f $PerformanceProfileType, $PerformanceProfileOutputDir) -ForegroundColor Cyan
+        Write-Host ("[Test-Snapshot]   profiled stages: {0}" -f ($PerformanceProfileStages -join ', ')) -ForegroundColor Cyan
+    }
+}
+
+# ----------------------------------------------------------------------
+# dotMemory setup (when -MemoryProfileStages is non-empty)
+# ----------------------------------------------------------------------
+$dotMemoryExe = $null
+if ($MemoryProfileStages.Count -gt 0) {
+    if ($Tool -ne 'CSharp') {
+        Write-Host "[Test-Snapshot] -MemoryProfileStages requires -Tool CSharp (dotMemory is .NET only); ignoring." -ForegroundColor Yellow
+        $MemoryProfileStages = @()
+    } elseif (-not $IsWindows) {
+        # dotMemory Console exists for Linux but our installer lays it
+        # down only on Windows; skip rather than try to find it.
+        Write-Host "[Test-Snapshot] -MemoryProfileStages currently wired for Windows only; ignoring." -ForegroundColor Yellow
+        $MemoryProfileStages = @()
+    } else {
+        # Mirror Run-Tests.ps1: prefer ~/.claude-tools/dotMemory then NuGet cache.
+        $claudeToolsRoot = Join-Path $env:USERPROFILE ".claude-tools\dotMemory"
+        if (Test-Path $claudeToolsRoot) {
+            $latest = Get-ChildItem $claudeToolsRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1
+            if ($latest) {
+                $cand = Join-Path $latest.FullName "tools\dotMemory.exe"
+                if (Test-Path $cand) { $dotMemoryExe = $cand }
+            }
+        }
+        if (-not $dotMemoryExe) {
+            $nugetCache = Join-Path $env:USERPROFILE ".nuget\packages\jetbrains.dotmemory.console.windows-x64"
+            if (Test-Path $nugetCache) {
+                $latest = Get-ChildItem $nugetCache -Directory | Sort-Object Name -Descending | Select-Object -First 1
+                if ($latest) {
+                    $cand = Join-Path $latest.FullName "tools\dotMemory.exe"
+                    if (Test-Path $cand) { $dotMemoryExe = $cand }
+                }
+            }
+        }
+        if (-not $dotMemoryExe) {
+            Write-Host "[Test-Snapshot] dotMemory.exe not found. Install: pwsh -File ./ai/scripts/Install-DotMemory.ps1" -ForegroundColor Red
+            exit 2
+        }
+        if (-not $MemoryProfileOutputDir) {
+            $MemoryProfileOutputDir = Join-Path $projRoot 'ai\.tmp\dotmemory'
+        }
+        if (-not (Test-Path $MemoryProfileOutputDir)) {
+            New-Item -ItemType Directory -Path $MemoryProfileOutputDir -Force | Out-Null
+        }
+        Write-Host ("[Test-Snapshot] dotMemory -> {0}" -f $MemoryProfileOutputDir) -ForegroundColor Cyan
+        Write-Host ("[Test-Snapshot]   profiled stages: {0}  timer={1}  max_snapshots={2}" -f `
+            ($MemoryProfileStages -join ', '), $MemoryProfileTimer, $MemoryProfileMaxSnapshots) -ForegroundColor Cyan
+    }
+}
 
 # Source commit SHA (best-effort; used only in -CreateSnapshot manifest).
 $pwizDir = Join-Path $projRoot 'pwiz'
@@ -247,7 +407,9 @@ if ($CreateSnapshot -and -not (Test-Path $snapshotDir)) {
 }
 
 # In compare mode, the snapshot dir must exist or we have nothing to compare against.
-if (-not $CreateSnapshot -and -not (Test-Path $snapshotDir)) {
+# -NoDumps skips compare entirely (production-wall measurement), so the snapshot
+# dir is not required for that mode.
+if (-not $CreateSnapshot -and -not $NoDumps -and -not (Test-Path $snapshotDir)) {
     Write-Host "[Test-Snapshot] No snapshot at $snapshotDir" -ForegroundColor Red
     Write-Host "  Capture one first: -CreateSnapshot -Tag $Tag" -ForegroundColor Yellow
     exit 2
@@ -260,7 +422,8 @@ $workManifest = [ordered]@{
     files           = [string[]]$selectedStems
     library         = $libraryName
     resolution      = $resolution
-    cs_bin          = @{ path = $csBin; sha256 = $csSha }
+    tool            = $Tool
+    tool_bin        = @{ path = $toolBin; sha256 = $toolSha }
     snapshot_dir    = $snapshotDir
     create_snapshot = [bool]$CreateSnapshot
     source_commit   = $sourceCommit
@@ -279,7 +442,8 @@ Write-Host ("Snapshot:   {0}" -f $snapshotDir)
 Write-Host ("Mode:       {0}" -f $(if ($CreateSnapshot) { 'CAPTURE (writes snapshot)' } else { 'COMPARE (reads snapshot)' }))
 Write-Host ("Range:      {0} -> {1}{2}" -f $StartStage, $StopAfterStage,
     $(if ($Continue) { '  (continue on fail)' } else { '  (stop on first fail)' }))
-Write-Host ("C#:         sha {0}" -f $csSha.Substring(0,12))
+Write-Host ("Tool:       {0}" -f $toolName)
+Write-Host ("Binary:     sha {0}" -f $toolSha.Substring(0,12))
 if ($sourceCommit) {
     Write-Host ("Source:     {0} ({1})" -f $sourceCommit.Substring(0,12), $sourceBranch)
 }
@@ -299,7 +463,7 @@ if ($startIdx -gt $stopIdx) {
 }
 
 function Get-StageInputDir    { param([string]$Stage) Join-Path $workRoot ($Stage + '\inputs') }
-function Get-StageCsDir       { param([string]$Stage) Join-Path $workRoot ($Stage + '\cs') }
+function Get-StageToolDir     { param([string]$Stage) Join-Path $workRoot ("$Stage\$toolWorkSubdir") }
 function Get-StageSnapshotDir { param([string]$Stage) Join-Path $snapshotDir $Stage }
 function Get-StageStatusPath  { param([string]$Stage) Join-Path $workRoot ($Stage + '\status.json') }
 
@@ -320,7 +484,8 @@ function Reset-StageDir {
 function Invoke-Tool {
     param(
         [string]$Bin, [string]$WorkDir,
-        [string[]]$CliArgs, [hashtable]$EnvVars
+        [string[]]$CliArgs, [hashtable]$EnvVars,
+        [string]$Stage = ''
     )
     # Defensively unset every OSPREY_* dump/exit hook from prior stages.
     $allHooks = @(
@@ -352,8 +517,61 @@ function Invoke-Tool {
     $sw = [Diagnostics.Stopwatch]::StartNew()
     Push-Location $WorkDir
     try {
-        & $Bin @CliArgs *>&1 | Tee-Object -FilePath $logPath | Out-Null
-        $exit = $LASTEXITCODE
+        $shouldMemProfile = ($Stage -ne '') -and ($script:dotMemoryExe) -and
+                            ($script:MemoryProfileStages -contains $Stage)
+        $shouldProfile = ($Stage -ne '') -and ($script:dotTraceExe) -and
+                         ($script:PerformanceProfileStages -contains $Stage) -and
+                         (-not $shouldMemProfile)
+        if ($shouldMemProfile) {
+            $dmwName = "{0}-{1}-{2}-{3}-{4}.dmw" -f $Tool, $Dataset, $Files, $Stage,
+                        (Get-Date -Format 'yyyyMMdd-HHmmss')
+            $dmwPath = Join-Path $script:MemoryProfileOutputDir $dmwName
+            # --trigger-on-activation grabs a baseline at attach;
+            # --trigger-timer adds periodic snapshots through the stage;
+            # -c enables full per-stack allocation tracking (heavy but
+            # exactly the signal we want for GC-pressure analysis).
+            $memArgs = @(
+                'start',
+                '--trigger-on-activation',
+                ('--trigger-timer=' + $script:MemoryProfileTimer),
+                ('--trigger-max-snapshots=' + $script:MemoryProfileMaxSnapshots),
+                '-c',
+                ('--save-to-file=' + $dmwPath),
+                '--overwrite',
+                $Bin,
+                '--'
+            ) + $CliArgs
+            Write-Host ("  [memprofile] dotMemory -> {0}" -f $dmwPath) -ForegroundColor DarkMagenta
+            & $script:dotMemoryExe @memArgs *>&1 | Tee-Object -FilePath $logPath | Out-Null
+            $exit = $LASTEXITCODE
+        } elseif ($shouldProfile) {
+            $dtpName = "{0}-{1}-{2}-{3}-{4}.dtp" -f $Tool, $Dataset, $Files, $Stage,
+                        (Get-Date -Format 'yyyyMMdd-HHmmss')
+            $dtpPath = Join-Path $script:PerformanceProfileOutputDir $dtpName
+            # `--` separator stops dottrace's argument parser from
+            # consuming `--key=value` items meant for the wrapped binary
+            # (e.g. `--join-at-pass=1` was being eaten as a dottrace option).
+            # Linux JetBrains.dotTrace.GlobalTools 2026.x requires
+            # --framework=NetCore to disambiguate Mono vs .NET Core targets;
+            # Windows dotTrace 2025.x (current JetBrains Toolbox / Rider
+            # build) auto-detects and rejects --framework as unknown.
+            $profArgs = @('start')
+            if ($IsLinux) { $profArgs += '--framework=NetCore' }
+            $profArgs += @(
+                ('--profiling-type=' + $script:PerformanceProfileType),
+                ('--save-to=' + $dtpPath),
+                '--propagate-exit-code',
+                '--overwrite',
+                $Bin,
+                '--'
+            ) + $CliArgs
+            Write-Host ("  [profile] dottrace -> {0}" -f $dtpPath) -ForegroundColor DarkCyan
+            & $script:dotTraceExe @profArgs *>&1 | Tee-Object -FilePath $logPath | Out-Null
+            $exit = $LASTEXITCODE
+        } else {
+            & $Bin @CliArgs *>&1 | Tee-Object -FilePath $logPath | Out-Null
+            $exit = $LASTEXITCODE
+        }
     } finally {
         Pop-Location
     }
@@ -363,19 +581,29 @@ function Invoke-Tool {
 
 # ----------------------------------------------------------------------
 # Per-stage env + comparator config (shape mirrors Test-Regression.ps1
-# but each stage emits cs_* dumps; the snapshot dir holds the captured
-# baseline of those same cs_* files plus the artifacts downstream
+# but each stage emits $toolPrefix* dumps; the snapshot dir holds the
+# captured baseline of those same prefix files plus the artifacts downstream
 # stages need.)
 # ----------------------------------------------------------------------
 
 $stageConfig = @{
     'stage5' = @{
-        envVars = @{
-            OSPREY_DUMP_STANDARDIZER = '1'; OSPREY_DUMP_SUBSAMPLE = '1'
-            OSPREY_DUMP_SVM_WEIGHTS  = '1'; OSPREY_DUMP_PERCOLATOR = '1'
-            OSPREY_PERCOLATOR_ONLY   = '1'
+        envVars = if ($NoDumps) {
+            @{ OSPREY_PERCOLATOR_ONLY = '1' }
+        } else {
+            @{
+                OSPREY_DUMP_STANDARDIZER = '1'; OSPREY_DUMP_SUBSAMPLE = '1'
+                OSPREY_DUMP_SVM_WEIGHTS  = '1'; OSPREY_DUMP_PERCOLATOR = '1'
+                OSPREY_PERCOLATOR_ONLY   = '1'
+            }
         }
-        compareDumps = @('standardizer','subsample','svm_weights','percolator')
+        # standardizer/subsample/svm_weights stay on SHA-256: they
+        # carry no transcendentals, so same-impl runs match bit-for-bit
+        # cross-OS. percolator is dispatched separately to the
+        # content-tolerance path -- its 6 numeric columns (score, pep,
+        # and the 4 q-values) inherit ULP-level libm drift when
+        # the underlying scoring pipeline crossed OSes.
+        compareDumps = @('standardizer','subsample','svm_weights')
     }
     'stage6' = @{
         envVars = @{
@@ -435,7 +663,7 @@ function Stage-Inputs-Stage1to4 {
 
 function Run-Stage1to4 {
     $sIn  = Get-StageInputDir 'stage1to4'
-    $sOut = Get-StageCsDir 'stage1to4'
+    $sOut = Get-StageToolDir 'stage1to4'
     Reset-StageDir $sOut -KeepInputs:$false
     foreach ($f in (Get-ChildItem $sIn -File)) {
         Copy-Item $f.FullName (Join-Path $sOut $f.Name)
@@ -446,47 +674,57 @@ function Run-Stage1to4 {
                   '--resolution', $resolution,
                   '--protein-fdr', '0.01', '--threads', '16',
                   '--no-join')
-    $r = Invoke-Tool -Bin $csBin -WorkDir $sOut -CliArgs $cliArgs -EnvVars @{}
-    Write-Host ("  [run] cs   stage1to4  exit={0} wall={1:mm\:ss}" -f $r.exit, $r.wall) `
+    $r = Invoke-Tool -Bin $toolBin -WorkDir $sOut -CliArgs $cliArgs -EnvVars @{} -Stage 'stage1to4'
+    Write-Host ("  [run] {0,-4} stage1to4  exit={1} wall={2:mm\:ss}" -f $toolWorkSubdir, $r.exit, $r.wall) `
         -ForegroundColor $(if ($r.exit -eq 0) { 'DarkGreen' } else { 'DarkRed' })
     return $r
 }
 
 # Stage 1-4 comparator: row-aligned content equality via
-# inspect_parquet.py --diff at tolerance 0. Byte-level equality on
-# the full parquet file is unreliable: Parquet.Net's ZSTD
-# compression path (IronCompress + ZstdSharp) is non-deterministic
-# at the byte level for at least the boolean is_decoy column —
-# same logical data compresses to subtly different bytes across
-# same-binary runs (a one-byte page-size shift cascades across
-# every subsequent column). The LOGICAL data is fully deterministic
-# (verified column-by-column), so an exact-tolerance diff over the
-# decoded columns is the right gate: catches every regression in
-# stored values without flagging compression noise. Row order is
+# inspect_parquet.py --diff. Byte-level equality on the full parquet
+# file is unreliable: Parquet.Net's ZSTD compression path
+# (IronCompress + ZstdSharp) is non-deterministic at the byte level
+# for at least the boolean is_decoy column — same logical data
+# compresses to subtly different bytes across same-binary runs (a
+# one-byte page-size shift cascades across every subsequent column).
+# The LOGICAL data is deterministic same-OS (verified column-by-
+# column), so a column-level diff is the right gate. Row order is
 # deterministic because RunCoelutionScoring writes per-window
 # results into a pre-allocated array indexed by window position,
 # then flattens in window-index order (AnalysisPipeline.cs ~line 3592).
+#
+# Tolerance 1e-6: the 4 median-polish columns (cosine, residual_ratio,
+# min_fragment_r2, residual_correlation) inherit ULP-level drift
+# (~1e-14 max) from Math.Log / Math.Exp when comparing across OSes,
+# because .NET 8 delegates these to the host libm (Linux glibc) vs
+# ucrt (Windows). Math.Sqrt is bit-equal cross-OS, so the rest of
+# the 37 columns pass exact. The 1e-6 ceiling matches the threshold
+# Test-Features.ps1 has used for cross-OS / cross-impl parity since
+# the April 2026 net8 migration (TODO-20260418_osprey_sharp_net8.md
+# Phase 3, max observed delta 2.2e-13). User sign-off 2026-05-16
+# on this WSL parity sprint; if a future change introduces drift
+# above 1e-6 the comparator will flag it.
 function Compare-Stage1to4-Snapshot {
-    $csDir   = Get-StageCsDir 'stage1to4'
+    $toolDir = Get-StageToolDir 'stage1to4'
     $snapDir = Get-StageSnapshotDir 'stage1to4'
     $py = Join-Path $scriptDir 'inspect_parquet.py'
     $allOk = $true
     $details = @()
     foreach ($stem in $selectedStems) {
-        $cPq = Join-Path $csDir   ($stem + '.scores.parquet')
+        $cPq = Join-Path $toolDir   ($stem + '.scores.parquet')
         $sPq = Join-Path $snapDir ($stem + '.scores.parquet')
         if ((-not (Test-Path $sPq)) -or (-not (Test-Path $cPq))) {
             $details += @{ file=$stem; status='MISSING'; cs=$cPq; snapshot=$sPq }
             $allOk = $false
             continue
         }
-        $diffLog = Join-Path $csDir ('diff_' + $stem + '.log')
-        & python $py $sPq -B $cPq --tolerance 0 *>&1 | Tee-Object -FilePath $diffLog | Out-Null
+        $diffLog = Join-Path $toolDir ('diff_' + $stem + '.log')
+        & python $py $sPq -B $cPq --tolerance 1e-6 *>&1 | Tee-Object -FilePath $diffLog | Out-Null
         $exit = $LASTEXITCODE
         $st = if ($exit -eq 0) { 'PASS' } else { 'FAIL' }
         if ($st -eq 'FAIL') { $allOk = $false }
         $details += @{ file=$stem; status=$st; log=$diffLog;
-            cs_size=(Get-Item $cPq).Length; snap_size=(Get-Item $sPq).Length }
+            tool_size=(Get-Item $cPq).Length; snap_size=(Get-Item $sPq).Length }
     }
     return [pscustomobject]@{ ok = $allOk; details = $details }
 }
@@ -498,7 +736,7 @@ function Compare-Stage1to4-Snapshot {
 function Run-PostStage4 {
     param([string]$Stage)
     $sIn  = Get-StageInputDir $Stage
-    $sOut = Get-StageCsDir $Stage
+    $sOut = Get-StageToolDir $Stage
     Reset-StageDir $sOut -KeepInputs:$false
     foreach ($f in (Get-ChildItem $sIn -File)) {
         Copy-Item $f.FullName (Join-Path $sOut $f.Name)
@@ -514,40 +752,41 @@ function Run-PostStage4 {
                   '--resolution', $resolution,
                   '--protein-fdr', '0.01', '--threads', '16')
     $env = $stageConfig[$Stage].envVars
-    $r = Invoke-Tool -Bin $csBin -WorkDir $sOut -CliArgs $cliArgs -EnvVars $env
-    Write-Host ("  [run] cs   {0,-9} exit={1} wall={2:mm\:ss}" -f $Stage, $r.exit, $r.wall) `
+    $r = Invoke-Tool -Bin $toolBin -WorkDir $sOut -CliArgs $cliArgs -EnvVars $env -Stage $Stage
+    Write-Host ("  [run] {0,-4} {1,-9} exit={2} wall={3:mm\:ss}" -f $toolWorkSubdir, $Stage, $r.exit, $r.wall) `
         -ForegroundColor $(if ($r.exit -eq 0) { 'DarkGreen' } else { 'DarkRed' })
     return $r
 }
 
-# Stage 5/6 dump comparator: SHA-256 byte equality on cs_*_<tag>.tsv
-# files. Both the live cs run and the captured snapshot use the cs_*
-# prefix (since both are produced by the C# side); we compare files
-# that share a name across the two directories.
+# Stage 5/6 dump comparator: SHA-256 byte equality on $toolPrefix*_<tag>.tsv
+# files (cs_* for CSharp, rust_* for Rust). Both the live run and the
+# captured snapshot use the same prefix (snapshot directory holds the
+# tool's own captured output); we compare files that share a name
+# across the two directories.
 function Compare-DumpSha-Snapshot {
     param([string]$Stage)
-    $csDir   = Get-StageCsDir $Stage
+    $toolDir = Get-StageToolDir $Stage
     $snapDir = Get-StageSnapshotDir $Stage
     $allOk = $true
     $details = @()
     foreach ($tag in $stageConfig[$Stage].compareDumps) {
-        $csFiles   = Get-ChildItem $csDir   -Filter ("cs_*_{0}.tsv" -f $tag) -File -ErrorAction SilentlyContinue
-        $snapFiles = Get-ChildItem $snapDir -Filter ("cs_*_{0}.tsv" -f $tag) -File -ErrorAction SilentlyContinue
+        $toolFiles   = Get-ChildItem $toolDir   -Filter ("$($toolPrefix)*_{0}.tsv" -f $tag) -File -ErrorAction SilentlyContinue
+        $snapFiles = Get-ChildItem $snapDir -Filter ("$($toolPrefix)*_{0}.tsv" -f $tag) -File -ErrorAction SilentlyContinue
         # Symmetric absence (both sides skipped writing this dump) is
         # equivalent agreement. Single-file Stage 6 may legitimately
         # produce no consensus dump; if neither side wrote one, that's
         # not a regression.
-        if (-not $csFiles -and -not $snapFiles) {
+        if (-not $toolFiles -and -not $snapFiles) {
             $details += @{ tag=$tag; status='PASS'; note='symmetric absence' }
             continue
         }
-        if (-not $csFiles -or -not $snapFiles) {
+        if (-not $toolFiles -or -not $snapFiles) {
             $details += @{ tag=$tag; status='MISSING';
-                cs_present=([bool]$csFiles); snap_present=([bool]$snapFiles) }
+                tool_present=([bool]$toolFiles); snap_present=([bool]$snapFiles) }
             $allOk = $false
             continue
         }
-        foreach ($cf in $csFiles) {
+        foreach ($cf in $toolFiles) {
             $sf = $snapFiles | Where-Object { $_.Name -eq $cf.Name } | Select-Object -First 1
             if (-not $sf) {
                 $details += @{ tag=$tag; status='ASYMMETRIC'; cs=$cf.Name }
@@ -559,22 +798,67 @@ function Compare-DumpSha-Snapshot {
             $st = if ($cSha -eq $sSha) { 'PASS' } else { 'FAIL' }
             if ($st -eq 'FAIL') { $allOk = $false }
             $details += @{ tag=$tag; file=$cf.Name; status=$st;
-                cs_sha=$cSha.Substring(0,12); snap_sha=$sSha.Substring(0,12);
-                cs_size=$cf.Length; snap_size=$sf.Length }
+                tool_sha=$cSha.Substring(0,12); snap_sha=$sSha.Substring(0,12);
+                tool_size=$cf.Length; snap_size=$sf.Length }
         }
     }
     return [pscustomobject]@{ ok = $allOk; details = $details }
 }
 
+# Stage 5 percolator dump: content-tolerance comparison via
+# Compare-Percolator.ps1 with -Tolerance 1e-6. Same justification as
+# Compare-Stage1to4-Snapshot: the 6 numeric columns (score, pep, and
+# the 4 q-values) inherit libm-ULP drift cross-OS via Math.Log /
+# Math.Exp; 1e-6 is the threshold Test-Features.ps1 uses for cross-OS
+# parity and the same ceiling stage1to4 uses on its parquet content
+# diff. Row-set parity (file_name, entry_id) is still required exactly
+# (Compare-Percolator.ps1 fails if either side has only-in-A or
+# only-in-B keys).
+function Compare-Percolator-Snapshot {
+    $toolDir = Get-StageToolDir 'stage5'
+    $snapDir = Get-StageSnapshotDir 'stage5'
+    $name = "$($toolPrefix)stage5_percolator.tsv"
+    $cTsv = Join-Path $toolDir $name
+    $sTsv = Join-Path $snapDir $name
+    $cExists = Test-Path $cTsv
+    $sExists = Test-Path $sTsv
+    if (-not $cExists -and -not $sExists) {
+        return [pscustomobject]@{ ok = $true;
+            details = @(@{ tag='percolator'; status='PASS'; note='symmetric absence' }) }
+    }
+    if (-not $cExists -or -not $sExists) {
+        return [pscustomobject]@{ ok = $false;
+            details = @(@{ tag='percolator'; status='MISSING';
+                tool_present=$cExists; snap_present=$sExists;
+                tool=$cTsv; snapshot=$sTsv }) }
+    }
+    $diffLog = Join-Path $toolDir 'diff_stage5_percolator.log'
+    # Compare-Percolator.ps1 is parameterised as -RustTsv / -CsTsv but
+    # is symmetric: it hash-joins on (file_name, entry_id) and reports
+    # per-column max_abs_diff. Pass the snapshot as -RustTsv and the
+    # current run as -CsTsv just so the log labels are consistent.
+    & pwsh -File (Join-Path $ospDir 'Compare-Percolator.ps1') `
+        -RustTsv $sTsv -CsTsv $cTsv -Tolerance 1e-6 `
+        *>&1 | Tee-Object -FilePath $diffLog | Out-Null
+    $exit = $LASTEXITCODE
+    $st = if ($exit -eq 0) { 'PASS' } else { 'FAIL' }
+    return [pscustomobject]@{ ok = ($st -eq 'PASS');
+        details = @(@{ tag='percolator'; file=$name; status=$st; log=$diffLog;
+            tool_size=(Get-Item $cTsv).Length; snap_size=(Get-Item $sTsv).Length }) }
+}
+
 # Stage 6 rewrites .scores.parquet (content-equality via
 # inspect_parquet.py to absorb ZSTD compression noise — see
-# Compare-Stage1to4-Snapshot for the rationale) and emits FDR
-# sidecars (.1st-pass.fdr_scores.bin, .2nd-pass.fdr_scores.bin) plus
-# .reconciliation.json. The sidecars and JSON have shown stable
-# byte equality across runs (no compression on those paths), so
-# SHA-256 stays appropriate for them.
+# Compare-Stage1to4-Snapshot for the rationale and the 1e-6 cross-OS
+# tolerance justification) and emits FDR sidecars (.1st-pass.fdr_scores.bin,
+# .2nd-pass.fdr_scores.bin) plus .reconciliation.json. The sidecars
+# and JSON have shown stable byte equality across runs (no
+# compression on those paths), so SHA-256 stays appropriate for
+# them same-OS; cross-OS results from the same sidecars may also
+# drift via libm Math.Log/Exp paths in downstream Stage 6 code,
+# which is flagged below at compare time.
 function Compare-Stage6-Artifacts {
-    $csDir   = Get-StageCsDir 'stage6'
+    $toolDir = Get-StageToolDir 'stage6'
     $snapDir = Get-StageSnapshotDir 'stage6'
     $py = Join-Path $scriptDir 'inspect_parquet.py'
     $allOk = $true
@@ -582,12 +866,12 @@ function Compare-Stage6-Artifacts {
     foreach ($stem in $selectedStems) {
         # .scores.parquet: content-equality via inspect_parquet.py
         $name = $stem + '.scores.parquet'
-        $cPath = Join-Path $csDir   $name
+        $cPath = Join-Path $toolDir   $name
         $sPath = Join-Path $snapDir $name
         if ((Test-Path $cPath) -and (Test-Path $sPath))
         {
-            $diffLog = Join-Path $csDir ('diff_' + $stem + '.parquet.log')
-            & python $py $sPath -B $cPath --tolerance 0 *>&1 | Tee-Object -FilePath $diffLog | Out-Null
+            $diffLog = Join-Path $toolDir ('diff_' + $stem + '.parquet.log')
+            & python $py $sPath -B $cPath --tolerance 1e-6 *>&1 | Tee-Object -FilePath $diffLog | Out-Null
             $exit = $LASTEXITCODE
             $st = if ($exit -eq 0) { 'PASS' } else { 'FAIL' }
             if ($st -eq 'FAIL') { $allOk = $false }
@@ -601,7 +885,7 @@ function Compare-Stage6-Artifacts {
                 $details += @{ file=$name; status='PASS'; note='symmetric absence' }
             } else {
                 $details += @{ file=$name; status='MISSING';
-                    cs_present=$cExists; snap_present=$sExists }
+                    tool_present=$cExists; snap_present=$sExists }
                 $allOk = $false
             }
         }
@@ -611,7 +895,7 @@ function Compare-Stage6-Artifacts {
                               '.2nd-pass.fdr_scores.bin',
                               '.reconciliation.json')) {
             $name = $stem + $suffix
-            $cPath = Join-Path $csDir   $name
+            $cPath = Join-Path $toolDir   $name
             $sPath = Join-Path $snapDir $name
             $cExists = Test-Path $cPath
             $sExists = Test-Path $sPath
@@ -621,7 +905,7 @@ function Compare-Stage6-Artifacts {
             }
             if (-not $cExists -or -not $sExists) {
                 $details += @{ file=$name; status='MISSING';
-                    cs_present=$cExists; snap_present=$sExists }
+                    tool_present=$cExists; snap_present=$sExists }
                 $allOk = $false
                 continue
             }
@@ -630,17 +914,17 @@ function Compare-Stage6-Artifacts {
             $st = if ($cSha -eq $sSha) { 'PASS' } else { 'FAIL' }
             if ($st -eq 'FAIL') { $allOk = $false }
             $details += @{ file=$name; status=$st;
-                cs_sha=$cSha.Substring(0,12); snap_sha=$sSha.Substring(0,12) }
+                tool_sha=$cSha.Substring(0,12); snap_sha=$sSha.Substring(0,12) }
         }
     }
     return [pscustomobject]@{ ok = $allOk; details = $details }
 }
 
 function Compare-Stage7-Snapshot {
-    $csDir   = Get-StageCsDir 'stage7'
+    $toolDir = Get-StageToolDir 'stage7'
     $snapDir = Get-StageSnapshotDir 'stage7'
-    $cTsv = Join-Path $csDir   'cs_stage7_protein_fdr.tsv'
-    $sTsv = Join-Path $snapDir 'cs_stage7_protein_fdr.tsv'
+    $cTsv = Join-Path $toolDir   "$($toolPrefix)stage7_protein_fdr.tsv"
+    $sTsv = Join-Path $snapDir "$($toolPrefix)stage7_protein_fdr.tsv"
     if ((-not (Test-Path $sTsv)) -or (-not (Test-Path $cTsv))) {
         return [pscustomobject]@{ ok = $false; details = @(@{status='MISSING'; cs=$cTsv; snapshot=$sTsv}) }
     }
@@ -651,13 +935,13 @@ function Compare-Stage7-Snapshot {
     $sSha = (Get-FileHash $sTsv -Algorithm SHA256).Hash
     $st = if ($cSha -eq $sSha) { 'PASS' } else { 'FAIL' }
     return [pscustomobject]@{ ok = ($st -eq 'PASS');
-        details = @(@{status=$st; cs_sha=$cSha.Substring(0,12); snap_sha=$sSha.Substring(0,12)}) }
+        details = @(@{status=$st; tool_sha=$cSha.Substring(0,12); snap_sha=$sSha.Substring(0,12)}) }
 }
 
 function Compare-Blib-Snapshot {
-    $csDir   = Get-StageCsDir 'blib'
+    $toolDir = Get-StageToolDir 'blib'
     $snapDir = Get-StageSnapshotDir 'blib'
-    $cBlib = Join-Path $csDir   'output.blib'
+    $cBlib = Join-Path $toolDir   'output.blib'
     $sBlib = Join-Path $snapDir 'output.blib'
     if ((-not (Test-Path $sBlib)) -or (-not (Test-Path $cBlib))) {
         return [pscustomobject]@{ ok = $false; details = @(@{status='MISSING'; cs=$cBlib; snapshot=$sBlib}) }
@@ -679,13 +963,13 @@ function Compare-Blib-Snapshot {
 # ----------------------------------------------------------------------
 
 # Copy a stage's cs outputs into the snapshot dir. Captures both the
-# observation dumps (cs_*_<tag>.tsv) and the downstream artifacts
+# observation dumps ($toolPrefix*_<tag>.tsv) and the downstream artifacts
 # (parquets, sidecars, reconciliation.json) that the next stage's
 # inputs are built from. For stage1to4 also captures the per-file
 # .calibration.json (Freeze step needs it for stage5+).
 function Capture-Snapshot {
     param([string]$Stage)
-    $csDir   = Get-StageCsDir $Stage
+    $toolDir = Get-StageToolDir $Stage
     $snapDir = Get-StageSnapshotDir $Stage
     if (Test-Path $snapDir) {
         Get-ChildItem $snapDir -File | Remove-Item -Force
@@ -693,26 +977,26 @@ function Capture-Snapshot {
         New-Item -ItemType Directory -Path $snapDir -Force | Out-Null
     }
     # Copy all dumps.
-    foreach ($p in @('cs_*.tsv', 'cs_*.json')) {
-        foreach ($f in (Get-ChildItem $csDir -Filter $p -File -ErrorAction SilentlyContinue)) {
+    foreach ($p in @("$($toolPrefix)*.tsv", "$($toolPrefix)*.json")) {
+        foreach ($f in (Get-ChildItem $toolDir -Filter $p -File -ErrorAction SilentlyContinue)) {
             Copy-Item $f.FullName (Join-Path $snapDir $f.Name) -Force
         }
     }
     # Copy stage-specific artifacts.
     foreach ($p in $downstreamArtifactPatterns) {
-        foreach ($f in (Get-ChildItem $csDir -Filter $p -File -ErrorAction SilentlyContinue)) {
+        foreach ($f in (Get-ChildItem $toolDir -Filter $p -File -ErrorAction SilentlyContinue)) {
             Copy-Item $f.FullName (Join-Path $snapDir $f.Name) -Force
         }
     }
     # Copy .blib for the blib stage.
     if ($Stage -eq 'blib') {
-        $blib = Join-Path $csDir 'output.blib'
+        $blib = Join-Path $toolDir 'output.blib'
         if (Test-Path $blib) { Copy-Item $blib (Join-Path $snapDir 'output.blib') -Force }
     }
     # Stage 7's protein FDR dump.
     if ($Stage -eq 'stage7') {
-        $tsv = Join-Path $csDir 'cs_stage7_protein_fdr.tsv'
-        if (Test-Path $tsv) { Copy-Item $tsv (Join-Path $snapDir 'cs_stage7_protein_fdr.tsv') -Force }
+        $tsv = Join-Path $toolDir "$($toolPrefix)stage7_protein_fdr.tsv"
+        if (Test-Path $tsv) { Copy-Item $tsv (Join-Path $snapDir "$($toolPrefix)stage7_protein_fdr.tsv") -Force }
     }
     Write-Host ("  [capture] {0} snapshot updated" -f $Stage) -ForegroundColor DarkCyan
 }
@@ -805,7 +1089,12 @@ for ($i = $startIdx; $i -le $stopIdx; $i++) {
         continue
     }
 
-    if ($CreateSnapshot) {
+    if ($NoDumps) {
+        # Production-wall measurement: no dumps -> nothing to compare.
+        # Record the wall time and move on.
+        $results += @{ stage = $stage; status = 'WALL_ONLY';
+                       wall = $runResult.wall.ToString() }
+    } elseif ($CreateSnapshot) {
         # Capture mode: write cs outputs to snapshot dir, no comparison.
         Capture-Snapshot -Stage $stage
         $capturedStages += $stage
@@ -813,7 +1102,19 @@ for ($i = $startIdx; $i -le $stopIdx; $i++) {
     } else {
         $cmp = switch ($stage) {
             'stage1to4' { Compare-Stage1to4-Snapshot }
-            'stage5'    { Compare-DumpSha-Snapshot -Stage 'stage5' }
+            'stage5'    {
+                # SHA-256 on standardizer/subsample/svm_weights (no
+                # transcendentals -> bit-equal cross-OS); content-tolerance
+                # on percolator (6 numeric cols inherit libm ULP drift
+                # cross-OS via Math.Log/Exp). 1e-6 ceiling matches the
+                # stage1to4 parquet gate, justified at the same place.
+                $dumpCmp = Compare-DumpSha-Snapshot -Stage 'stage5'
+                $percCmp = Compare-Percolator-Snapshot
+                [pscustomobject]@{
+                    ok = ($dumpCmp.ok -and $percCmp.ok)
+                    details = @($dumpCmp.details + $percCmp.details)
+                }
+            }
             'stage6'    {
                 # Stage 6 has BOTH dumps and rewritten artifacts; check both.
                 $dumpCmp = Compare-DumpSha-Snapshot -Stage 'stage6'
@@ -875,7 +1176,8 @@ if ($CreateSnapshot) {
         files           = [string[]]$selectedStems
         library         = $libraryName
         resolution      = $resolution
-        cs_bin          = @{ path = $csBin; sha256 = $csSha }
+        tool            = $Tool
+        tool_bin        = @{ path = $toolBin; sha256 = $toolSha }
         source_commit   = $sourceCommit
         source_branch   = $sourceBranch
         captured_stages = [string[]]$capturedStages

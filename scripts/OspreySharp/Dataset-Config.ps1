@@ -44,10 +44,14 @@ function Get-DatasetConfig {
         [string]$TestBaseDir = $null
     )
 
-    # Precedence: explicit -TestBaseDir, then env var, then hardcoded default.
+    # Precedence: explicit -TestBaseDir, then env var, then OS-aware default.
+    # Linux/WSL default maps Windows D:\ to the drvfs mount /mnt/d so the
+    # same OspreySharp test data layout works on either host.
     if ([string]::IsNullOrEmpty($TestBaseDir)) {
         if ($env:OSPREY_TEST_BASE_DIR) {
             $baseDir = $env:OSPREY_TEST_BASE_DIR
+        } elseif ($IsLinux) {
+            $baseDir = "/mnt/d/test/osprey-runs"
         } else {
             $baseDir = "D:\test\osprey-runs"
         }

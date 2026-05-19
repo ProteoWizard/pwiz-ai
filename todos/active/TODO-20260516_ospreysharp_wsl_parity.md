@@ -1289,3 +1289,359 @@ for cross-impl parity. None of those are started.
 `ai/.tmp/handoff-20260519_residual_worker_compaction.md` for the
 next-session resume protocol (the worker-compaction bug, the two
 fix options, reproduction commands, files modified inventory).
+
+## 2026-05-19 mid-morning — residual worker over-compaction fixed; Stellar HPC chain is bit-parity with truth
+
+Picked up from the handoff above. Applied **Option B** at
+`osprey/crates/osprey/src/rescore.rs` ~lines 492-528: union
+`first_pass_base_ids` with the entry_ids of every action in
+`reconciliation_actions_pre` so that entries which pass FDR only via
+cross-file consensus rescue survive the worker compaction filter.
+
+### Result on Stellar 3-file (strict rehydration test)
+
+```
+Phase 0 (truth, straight-through):   60373 precursors, blib 52,846,592 B
+Phase 4 (HPC chain 4-step):          60373 precursors, blib 52,862,976 B
+precursors:                          truth=60373 chain=60373 delta=0
+Stage 7 protein FDR dump:            SHA D66E5CF0FCC96E9F == D66E5CF0FCC96E9F (IDENTICAL)
+Blib content (SQL row+col 1e-9):     PASS
+OVERALL:                             PASS
+```
+
+(The 16 KB blib size difference is the file-format envelope after the
+chain runs through the 2nd-join compaction; SQL contents match at 1e-9.)
+
+### Also landed this slice
+
+- **Bug D, half-scope:** turned the silent-`continue` in
+  `run_rescore`'s calibration-loading loop (rescore.rs lines ~424-447)
+  into a hard `OspreyError::config` for both "calibration JSON not
+  found" and "calibration JSON unreadable". Stage 6 worker no longer
+  silently produces empty rescore output when its `.calibration.json`
+  is missing or corrupt. C# port still pending.
+
+- **Clippy gates:** added `#[allow(clippy::too_many_arguments)]` on
+  `from_planner_output` and `from_planner_output_pre_grouped` in
+  reconciliation_io.rs (8 params each after the `file_stems` addition
+  from Bug B). All osprey workspace tests pass (`cargo test
+  --workspace` clean; fmt + clippy -D warnings clean).
+
+### Disk hazard
+
+Mid-session ENOSPC hit while editing `rescore.rs` while a background
+Astral strict-rehydration run was filling C:. The `Edit` tool's
+temp-write+rename sequence truncated rescore.rs to 0 bytes. Recovered
+by `git restore` to HEAD baseline and replaying all 8 morning
+`Edit` calls from the prior session transcript JSONL. Memory saved
+at `feedback_enospc_truncation.md`. Cleaned the authorized smoke /
+methodology / strict-rehydration workdirs per the handoff list to
+free space. C: now at ~99% used / 21 GB free — Astral confirmation
+run is still gated on freeing more disk before it can run safely.
+
+### Files modified (still uncommitted)
+
+Same 4 Rust files as the prior progress entry, plus the additional
+hard-error edit to `rescore.rs`. Plus the new
+`Compare-Stage7-Rehydration-Strict.ps1`. No C# changes this slice.
+
+### What remains
+
+- Run the Astral strict-rehydration test once disk is freed (not
+  authorized to delete `_snapshots` / `_measure_perf-*` dirs;
+  needs the user's call).
+- C# port of bugs A + B (per existing handoff section).
+- Bug D for C# side (mirror the hard error).
+- Bug C (C# 2nd-pass Percolator in MergeNodeTask).
+- Cross-impl validation matrix.
+- Commits of the 4 Rust files + the new strict-rehydration script.
+
+## 2026-05-19 mid-late morning — disk migration to D: + C# Bug B + Bug D ports
+
+User directed migrating all test data to D: (HDD verified not slower
+than C: SSD for these workloads, but D: has much more room). Resulting
+state: C: 29 GB free → 1.18 TB free; D: 8.2 TB → 7.98 TB free; all
+tests now target D:\test\osprey-runs by default via persisted
+`OSPREY_TEST_BASE_DIR` env var (User scope).
+
+### Data migration (task #44 — done)
+
+- WSL Ubuntu-22.04 vhdx moved C:\Users\...\wsl\{guid} → D:\test\wsl\{guid}.
+  User ran `sudo fstrim -av` then deleted 574 GB of `_*` workdirs from
+  inside WSL; `diskpart compact vdisk` (elevated) shrunk vhdx 1.03 TB
+  → 35 GB; robocopy'd to D:; LXSS registry BasePath updated; WSL
+  boots clean from D:. Whole sequence took ~10 min including the
+  user's manual fstrim/diskpart steps. Without compact the move would
+  have been ~1-2 hours.
+- C:\proj\test directory deleted entirely (D: had identical source
+  data at matching sizes). 71 stale side-cars + diagnostics (6.15 GB)
+  cleaned from D:\test\osprey-runs top-level. Two baseline dirs
+  preserved to D: under timestamped suffix
+  (`_snapshots-from-c-20260519` for both astral and stellar; the C:
+  `_measure_perf-astral-rust-run2` moved as-is).
+- Saved `feedback_enospc_truncation.md` memory after an Edit during
+  the morning ENOSPC'd and zeroed `rescore.rs`. Recovered by replaying
+  8 historical Edit calls from the prior session transcript JSONL
+  onto a `git restore`d baseline. Updated `MEMORY.md` index.
+
+### C# Bug B port (file_stems envelope + hash override) — done
+
+Files modified in pwiz on branch
+`Skyline/work/20260516_ospreysharp_wsl_parity` (still uncommitted):
+
+| File | Change |
+|---|---|
+| `OspreySharp.IO/ReconciliationFile.cs` | Added `FileStems` field (Order=0); bumped `CurrentFormatVersion = 2`. Order=1..7 shifted up by 1. |
+| `OspreySharp.Core/OspreyConfig.cs` | Split `ReconciliationParameterHash()` into a default (uses InputFiles) + new `ReconciliationParameterHashForStems(IReadOnlyList<string>)`. Internal sort + dedup matches Rust. |
+| `OspreySharp/Tasks/FirstJoinTask.cs` | `BuildReconciliationFile` gained an `IReadOnlyList<string> joinFileStems` parameter; computed once outside the per-file write loop from `perFileEntries.Keys` and threaded in. |
+| `OspreySharp/RescoreHydration.cs` | `RescoreInputs` gained `JoinFileStems` field. `HydrateReconciliationOverlay` captures stems from the first envelope and validates across siblings (mirrors Rust). Added private `NormalizeStems` + `StemsEqual` helpers. |
+| `OspreySharp/Tasks/PerFileRescoreTask.cs` | `ExecuteRescore` gained an optional `IReadOnlyList<string> joinFileStems` parameter. `WriteReconciledParquet` uses `config.ReconciliationParameterHashForStems(joinFileStems)` when stems are provided (falls back to the InputFiles-derived hash when null). `Run()` computes stems from `_perFileEntries.Keys` (multi-file in-process) or `rescoreBundle.JoinFileStems` (worker mode with v2 envelope) and threads them in. |
+
+Build clean (8.4s). All 24 inspection warnings are pre-existing in
+`PercolatorFdr.cs`, `LinearSvmClassifier.cs`, `RescoreWorker.cs`,
+`FileSaver.cs` — none from this slice. 343/346 tests pass; the 1
+failing test (`TestNoUnstableArraySort` in `CodeInspectionTest.cs`)
+is pre-existing and unrelated (flags `PercolatorFdr.cs:1313`).
+
+### C# Bug D port (hard error for missing calibration) — done
+
+`OspreySharp/Tasks/PerFileRescoreTask.cs` — `LoadMassCalibrations`
+now throws `InvalidDataException` when:
+- The parent directory cannot be derived from the input path.
+- The `.calibration.json` sidecar does not exist.
+- The sidecar exists but fails to parse.
+
+Updated docstring to document the hard-error contract and reference
+the Rust equivalent in `run_rescore`. Individual calibration sections
+within the file (Ms1/Ms2/RtMad) may still be absent; those leave the
+corresponding out-param at its uncalibrated default (matching the
+Rust behavior).
+
+### Cross-impl validation — both directions PASS on Stellar and Astral
+
+Two new test scripts (`ai/scripts/OspreySharp/Test-CrossImpl-Phase3.ps1`,
+`Test-CrossImpl-Planner.ps1`) exercise the C# Bug B port from both
+sides. Each runs a 4-phase HPC chain with one phase substituted to
+OspreySharp; success criterion is the Rust merge accepting the
+resulting reconciliation hash and producing a valid blib.
+
+| Direction (substituted phase) | Dataset | Precursors (truth) | Delta | Result |
+|---|---|---|---|---|
+| Rust planner → **C# worker** → Rust merge | Stellar | 60356 (60373) | -17 | PASS |
+| Rust planner → **C# worker** → Rust merge | Astral | 165354 (165288) | +66 | PASS |
+| **C# planner** → Rust worker → Rust merge | Stellar | **60373 (60373)** | **0** | PASS |
+| **C# planner** → Rust worker → Rust merge | Astral  | **165288 (165288)** | **0** | PASS |
+
+Walls (Stellar, all 3 phases substituted at most one position):
+Phase 1 02:35; Phase 2 01:19/02:21; Phase 3 01:02/01:47; Phase 4 01:07/01:09.
+
+The C# planner→Rust direction is the strongest single result: it
+proves the C# WRITE of the v2 reconciliation.json (file_stems +
+format_version=2) is byte-equivalent to what Rust produces, since
+Rust's strict `deny_unknown_fields` deserializer accepts it AND the
+join-wide hash Rust computes from C# stems matches what Rust merge
+expects. The +66/-17 deltas in the Rust→C# direction are the
+pre-existing C# Stage 6 algorithmic drift (NOT from Bug B; the
+bisection separates the two concerns cleanly — hash matched, only
+downstream scores differed slightly).
+
+Bug B is fully validated.
+
+### Still pending after this slice
+
+- ~~Astral strict-rehydration confirmation~~ **DONE — OVERALL: PASS.**
+  Wall budget: Phase 0 truth 23:54, Phase 1 raw workers 8:22,
+  Phase 2 first-join 2:33, Phase 3 rescore workers serial 5:30,
+  Phase 4 second-join 3:01 → ~44 min total. Result: `truth=165288
+  chain=165288 delta=0`; Stage 7 protein FDR dump SHA
+  `50569B3C93E89FDA` IDENTICAL; blib SQL row+col at 1e-9 PASS.
+  Rust HPC chain is now byte-parity with straight-through truth on
+  both Stellar (60373 precursors) AND Astral (165288 precursors).
+## 2026-05-19 afternoon — C# cleanup + Astral all-files surfaced a pre-existing Stage 5 percolator ULP drift
+
+### Cleanup landed (C# side now PR-clean)
+
+- `OspreySharp.FDR/PercolatorFdr.cs` — stripped 7 redundant
+  `pwiz.OspreySharp.ML.` qualifiers; added inline `// Array.Sort OK:`
+  exemption on the perm sort (tie-break key `winBaseIds` is unique
+  per row post-best-per-precursor selection, so introsort
+  instability is moot).
+- `OspreySharp.ML/LinearSvmClassifier.cs` — removed unused
+  `using System.Diagnostics;`; replaced 2 ambiguous
+  `<see cref="...Parallel.For"/>` and `<see cref="...Train"/>` doc
+  refs with `<c>...</c>` plain-code spans.
+- `OspreySharp.IO/FileSaver.cs` — replaced ambiguous
+  `<see cref="Path.GetDirectoryName(...)"/>` doc ref with
+  `<c>Path.GetDirectoryName</c>` plain-code.
+- `OspreySharp/RescoreWorker.cs` — removed unused
+  `using pwiz.OspreySharp.Tasks;`.
+- `OspreySharp/Tasks/PerFileRescoreTask.cs` — added null guard on
+  `Path.GetFileNameWithoutExtension` result before dictionary key
+  insert (was: possible-null-assignment-to-non-nullable warning).
+
+Result after cleanup:
+- `Build-OspreySharp.ps1 -RunInspection`: 0 errors, 0 warnings (was 24).
+- `Build-OspreySharp.ps1 -RunTests`: 346/346 pass, 2 skipped (was
+  343 pass / 1 fail).
+- Diagnostic outputs reviewed: all `[TIMING]` / `[COUNT]` /
+  `[STAGE-WALL]` / `[POOL]` / `[MEM]` / `[BISECT]` markers
+  intentional, none are temp/debug cruft. Rust uses `log::`
+  exclusively; C# `Console.Error.WriteLine` calls in
+  `PercolatorFdr.cs` could be modernized to `ctx.LogInfo` for log
+  capture but that's a stylistic preference, not a cleanup need.
+
+### Astral all-files Test-Regression finding (NEEDS USER SIGN-OFF)
+
+```
+--- stage1to4 ---  rust 11:03  cs 08:21  PASS
+--- stage5 ---     rust 04:49  cs 02:55  FAIL
+  standardizer  PASS  (SHA byte-identical, 1323 bytes both sides)
+  subsample     PASS  (SHA byte-identical, 16572387 bytes)
+  svm_weights   PASS  (SHA byte-identical, 3174 bytes)
+  percolator    FAIL  (same size 877798973 bytes; SHA differs)
+--- stage6 ---     NO_INPUTS (stage5 didn't freeze on FAIL)
+```
+
+**Divergence bisected**: 168 of 5,058,079 rows differ (0.0033%).
+Every divergent row drifts by 1 ULP in the
+`experiment_precursor_q` column, ALL of them at the same f64
+boundary `0.09775161743164063` (Rust) vs `0.09775161743164062`
+(C#). That's ONE q-value computation that hits a precision
+boundary at Astral all-files scale, then propagates to 168
+inheriting rows via the best-q-across-files dedup step. Stellar
+all-files (5x smaller library, 242K vs 1.5M entries) doesn't
+accumulate enough precision artifacts to cross this boundary,
+which is why Stellar all-files passed and Astral didn't.
+
+**Memory match**: `feedback_bit_parity_tolerance.md`
+("Don't loosen bit-parity gates unilaterally — bisect drift first;
+tolerance comparators / skip-lists need explicit user sign-off and
+must be flagged for end-of-pipeline review") tags this exact
+case. I have NOT touched the gate.
+
+**Three options on this finding, awaiting user decision**:
+
+1. **(a) Relax Stage 5 percolator gate from SHA to per-column 1e-9
+   tolerance** (matching the Stage 7 protein-FDR gate convention).
+   The bisection has already isolated the divergence to a single
+   q-value ULP boundary; the downstream Stage 7 protein FDR gate
+   uses 1e-9 tolerance and ABSORBS this drift cleanly. This is
+   the lowest-friction path. Risk: future Stage 5 regressions
+   above the 1e-9 threshold could be masked, but those would
+   show as Stage 7 failures regardless. Must flag for
+   end-of-pipeline review per memory.
+
+2. **(b) Bisect deeper** to find the exact FMA / sum-order
+   divergence in the q-value computation, fix the root cause,
+   keep SHA-strict gate. Probably 2-4 hours of bisection across
+   the q-value computation code paths in `osprey-fdr` (Rust) and
+   `OspreySharp.FDR/PercolatorFdr.cs` (C#).
+
+3. **(c) Skip Stage 5 percolator gate on Astral all-files only**
+   (Stellar single + Stellar all-files + Astral single-file all
+   PASS strict). Treat this as a known Astral-scale ULP-drift
+   issue and rely on Stage 7 / blib gates to catch any real
+   regression. Cheapest but most diagnostic-blind option.
+
+My recommendation: (a) with the per-column tolerance set the
+same as Stage 7 (1e-9), and a comment in the gate code citing
+this finding so future maintainers see the rationale.
+
+### Decision (user, 2026-05-19 afternoon): Option (a) — gate relaxed to 1e-9
+
+User direction: "We can relax the gate to 1e-9 for now. This is a
+lot of uncommitted work. I will do a pass later on relaxed gates
+and see if any can be restored to full parity. That can be
+separate work, though."
+
+Implemented in `ai/scripts/OspreySharp/Test-Regression.ps1`
+`Compare-DumpSha` function: when `Stage=stage5` and `tag=percolator`,
+delegate to `Compare-Percolator.ps1` (per-column 1e-9 tolerance)
+instead of strict SHA-256 byte equality. Standardizer / subsample /
+svm_weights remain SHA-strict (training-artifact determinism IS
+expected to hold byte-for-byte). Inline comment cites this finding
+for the future restoration pass.
+
+Verified on the existing Astral all-files Stage 5 dumps before
+re-running Test-Regression: `Compare-Percolator.ps1` reports
+`max_diff=0.000e+000  n_diverg=0/5058078  thresh=1.0e-009` on
+every column (the 168-row ULP-1 drift is sub-1e-15, absorbed
+cleanly).
+
+### Astral all-files end-to-end (with relaxed Stage 5 gate)
+
+```
+--- stage5 ---  rust 04:25  cs 02:56  PASS  (per-column 1e-9 via Compare-Percolator.ps1)
+--- stage6 ---  rust 16:18  cs 16:06  PASS
+--- stage7 ---  rust 00:19  cs 00:16  PASS
+--- blib  ---   rust 01:04  cs 00:29  PASS
+```
+
+**Complete cross-impl matrix all gates PASS**:
+
+| Layer | Stellar single | Stellar all | Astral single | Astral all |
+|---|---|---|---|---|
+| stage1to4 | PASS | PASS | PASS | PASS |
+| stage5 | PASS | PASS | PASS | PASS (1e-9) |
+| stage6 | PASS | PASS | PASS | PASS |
+| stage7 | PASS | PASS | PASS | PASS |
+| blib | PASS | PASS | PASS | PASS |
+
+### Pending script-folder audit (no autonomous deletions yet)
+
+Per the audit in chat, the retire candidates are:
+- `Compare-Stage7-Rehydration.ps1` — the weak original (stub
+  mzMLs, no calibration). Replaced this morning by
+  `Compare-Stage7-Rehydration-Strict.ps1`. Safe to delete now.
+- `Compare-Baseline.ps1` — compares against `osprey-mm` baseline.
+  After the morning's PR merges to maccoss/osprey:main, "baseline"
+  IS main and the script's distinction disappears. Useful right
+  now while the branch is open; retire after merge.
+
+Everything else in `ai/scripts/OspreySharp/` is either
+foundational (build wrappers, Dataset-Config, Run-Osprey, etc.),
+the cross-impl regression suite (Test-Regression + Test-Features +
+Test-Snapshot + the per-stage comparators they delegate to), the
+Rust HPC chain bit-parity goalpost
+(`Compare-Stage7-Rehydration-Strict.ps1`,
+`Test-CrossImpl-Phase3.ps1`, `Test-CrossImpl-Planner.ps1`), or
+perf tooling (`Measure-Pipeline.ps1`,
+`Bench-Scoring.ps1`, `Profile-OspreySharp.ps1`, `Audit-Loc.ps1`).
+All retained.
+
+### What's PR-ready and what's still gated
+
+PR-ready right now:
+- Rust commits to `maccoss/osprey:main` (Bug A + Bug B + Bug B
+  residual + Bug D, plus the strict-rehydration script in ai).
+- C# inspection + tests clean.
+
+Gated on user decision:
+- Whether to relax the Stage 5 percolator gate at Astral all-files
+  (decision (a)/(b)/(c) above) BEFORE landing the C# PR. If we
+  ship the C# PR without addressing this, the Test-Regression
+  Astral all-files gate will fail on every future invocation.
+
+- ~~Bug C: C# 2nd-pass Percolator in MergeNodeTask~~ **DONE.**
+  MergeNodeTask now runs 2nd-pass Percolator before persisting
+  sidecars when any 2nd-pass sidecar is missing (mirrors Rust
+  pipeline.rs:4394-4468). Required two C# code changes:
+  (a) refactor `FirstJoinTask.RunPercolatorFdr` to `internal static`
+  with `PipelineContext` + `passLabel` parameters so MergeNodeTask
+  can reuse the same Percolator harness;
+  (b) reload PIN features from reconciled parquets in MergeNodeTask
+  just before the 2nd-pass Percolator call, since
+  PerFileScoringTask's bundle-hydration path nulls `Features` to
+  preserve PerFileRescoreTask.WriteReconciledParquet's
+  "Features != null means rescored" invariant (PerFileScoringTask.cs
+  line 710).
+  Test-Regression Stellar single-file: **ALL FIVE GATES PASS** —
+  stage1to4 + stage5 + stage6 + stage7 + blib. The C# Stage 7
+  algorithmic divergence (best_peptide_score 12.15 vs 30.44) is
+  eliminated.
+- Cross-impl validation: chain Rust planner → C# worker, and vice
+  versa. Now unblocked on Rust side (Bug B done) and partially on
+  C# side (Bug B port done; Bug C still gates the C# merge node).
+- Commits across both repos (osprey/main + pwiz). 4 Rust files +
+  10 C# files uncommitted.
+
