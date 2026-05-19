@@ -5,10 +5,8 @@
 - **Base**: `master`
 - **Created**: 2026-04-28
 - **PR**: [#3](https://github.com/ProteoWizard/pwiz-ai/pull/3)
-- **Status**: Committed and pushed; merged master back in after PR #4
-  landed (2026-05-18) — conflicts in `nightly.py` and `computers.py`
-  resolved cleanly. Awaiting deployment of the testresults Spring-binding
-  refactor on skyline.ms before merge.
+- **Status**: Completed — merged 2026-05-19 alongside the testresults
+  Spring-binding refactor deployment on skyline.ms.
 - **Related**:
   - `TODO-LK-20260425_testresults-schema-shadow-test.md` — caught these.
   - `TODO-LK-20260326_testresults-migrate-actions.md` Phase 7 — references
@@ -165,3 +163,25 @@ ships the refactor.
   `request.getParameter("runid")` while every other run-id action in the
   controller already used `runId`. Pre-refactor inconsistency in the
   controller masked the inconsistency in the MCP caller.
+
+## Progress Log
+
+### 2026-05-19 - Merged
+
+PR #3 merged as commit `bafbec2d341b0f80ab1a72e22e65c4921a8b4030`, the same
+day the testresults Spring-binding refactor was deployed on skyline.ms.
+All three fixes verified on the dev box via the shadow test (Phases 1–3);
+post-deployment production re-verification is the open follow-up for whoever
+runs the next nightly cycle.
+
+## Resolution
+
+**Status**: Merged — PR [#3](https://github.com/ProteoWizard/pwiz-ai/pull/3)
+merged 2026-05-19.
+
+Three MCP-side regressions caught by the testresults schema shadow test and
+fixed before production deployment: (1) `runid` → `runId` URL params for
+`ViewLogAction`/`ViewXmlAction`; (2) `SetUserActive` JSON-body fix so Spring
+binding reads params correctly; (3) `exception`-over-`error` extraction for
+non-200 LabKey responses. All verified against the refactored module on the
+dev box; the production re-verification pass runs post-deployment.
