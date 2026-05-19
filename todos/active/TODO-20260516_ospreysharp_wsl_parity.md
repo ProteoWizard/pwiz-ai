@@ -1146,3 +1146,146 @@ decoupling. No half-implemented changes.
 **Next session handoff**: Read
 `ai/.tmp/handoff-20260519_hpc_rehydration_bugs.md` for the morning
 resume protocol (full bug list, fix sequence, reproduction commands).
+
+---
+
+## 2026-05-19 morning — bugs A + B fixed in Rust; residual bisected to worker compaction filtering out cross-file-consensus entries
+
+### What landed (Rust, all uncommitted on osprey main):
+
+- **`Compare-Stage7-Rehydration-Strict.ps1`** built (new goalpost test).
+  Runs the full 4-step HPC chain (raw workers → 1st-join → rescore
+  workers → 2nd-join) on REAL mzMLs and `.calibration.json`, then
+  compares the final blib + Stage 7 protein FDR dump to a `-i mzML`
+  straight-through baseline at 1e-9 tolerance. The pre-existing
+  `Compare-Stage7-Rehydration.ps1` had stub mzMLs + missing
+  calibration → silently validated broken-vs-broken.
+
+- **Bug B fixed** (per-file rescore worker reconciliation-hash
+  metadata):
+  - `reconciliation_io.rs`: bumped `RECONCILIATION_FORMAT_VERSION` to
+    2; added `file_stems: Vec<String>` field with `#[serde(default)]`
+    so v1 files still deserialize. Constructors take a `file_stems`
+    arg (sorted+deduped internally).
+  - `pipeline.rs`: at the reconciliation.json write site, gather the
+    full per_file_entries stem list and pass into the constructor.
+  - `osprey-core/config.rs`: split
+    `reconciliation_parameter_hash()` into a default variant and a
+    `_for_stems(stems: &[String])` variant. The worker uses
+    `_for_stems` with the file_stems carried in reconciliation.json,
+    matching the multi-file hash the 2nd-join validates against.
+  - `pipeline.rs`: `build_reconciled_metadata` takes
+    `Option<&[String]>` override. The two callers inside
+    `rescore_per_file_loop` thread the worker's stems through; the
+    in-process pipeline path passes `&[]` (uses default
+    `config.input_files`).
+  - `rescore.rs`: `RescoreInputs` gains `join_file_stems` populated
+    from reconciliation.json. Validates that every file's envelope
+    declares the same stems (errors loudly on mismatch).
+  - `pipeline.rs::rescore_per_file_loop` gains a `join_file_stems`
+    parameter; the worker passes its captured list, the in-process
+    caller passes empty.
+  - **Phase 4 of the strict chain now completes** (no more hash
+    mismatch error).
+
+- **Bug A fixed** (--join-at-pass=2 always runs 2nd-pass Percolator):
+  - `pipeline.rs`: the post-compaction sidecar reload block that
+    previously silently skipped 2nd-pass Percolator when sidecars
+    were missing now COMPUTES first-pass scores via
+    `run_percolator_fdr` (with restrict_base_ids =
+    first_pass_base_ids) when ANY file lacks a 2nd-pass sidecar.
+    Persists the new 2nd-pass scores after computing so future
+    re-runs can use them as resume cache.
+  - **Chain output is now 60462 precursors** (was 45153 before
+    bugs A/B). Truth is 60373. Delta +89 (0.15%).
+
+### Strict test now FAILS at a much sharper signal:
+
+| Metric | Pre-fix | After A+B | Truth |
+|---|---|---|---|
+| Precursors | 45153 (-25%) | **60462 (+0.15%)** | 60373 |
+| Stage 7 dump SHA | (no comparison) | Differs from truth | (reference) |
+| Blib content | FAIL | FAIL | (reference) |
+
+ApexIntensity + IntegratedArea match PERFECTLY (0 divergences).
+The 199 rows that differ have: different apex_rt, different
+cwt_candidates (truth has 0; chain has 4), different feature
+values (xcorr changes sign, bounds_area differs 2.7×). Not
+ULP drift — actual algorithmic divergence on 199 entries.
+
+### Root cause of residual divergence (open):
+
+Specific case: entry 17365 in file 20.
+- 1st-pass sidecar (truth) and 1st-pass sidecar (chain, written
+  by Phase 2 of HPC chain) are **byte-identical** for entry 17365:
+  score=-5.451, run_peptide_q=1.0, run_protein_q=1.0,
+  exp_peptide_q=0.0039.
+- The `first_pass_base_ids` filter in
+  `rescore_per_file_loop`'s pre-rescore compaction is
+  `!is_decoy && (run_peptide_qvalue <= 0.01 || run_protein_qvalue <= 0.01)`.
+  Entry 17365 has both q-values at 1.0 → FAILS the filter.
+- Yet truth produces a forced_integration at expected_rt=15.692
+  for this entry. So truth's reconciliation planner emitted an
+  action for an entry that the local compaction would drop.
+- The worker correctly drops the entry per its local compaction
+  filter, then drops the action via re-key step → entry never
+  gets rescored.
+
+Mechanism: the reconciliation planner uses
+`compute_consensus_rts` which operates on **cross-file consensus
+peptides**. An entry whose own file fails local first-pass FDR
+can still be a reconciliation target if THE SAME PEPTIDE passes
+in another file (cross-file rescue). The planner emits actions
+for these entries. But the worker's local compaction (in
+`rescore.rs::run_rescore` lines 492-505) uses only the local
+per-file q-values, which won't include such cross-file-rescued
+entries.
+
+### Proposed fix (deferred — needs design review):
+
+The worker should NOT pre-compact per_file_entries on the local
+first_pass_base_ids filter. Reconciliation actions ARE the
+authoritative list of entries that need rescoring. The worker
+should:
+- (option 1) Skip the worker compaction entirely. Apply all
+  reconciliation actions as the planner emitted them. The
+  2nd-pass FDR step (Phase 4 / --join-at-pass=2) will compact
+  the entries that don't pass 2nd-pass FDR.
+- (option 2) Compute first_pass_base_ids as the UNION of the
+  local filter AND the set of entry_ids that appear in
+  reconciliation actions. That keeps the local-fail entries
+  alive in per_file_entries through to rescore.
+
+Option 1 is cleaner but may have downstream implications for
+memory / blib write. Option 2 is minimal-change.
+
+### What did NOT change in C# yet:
+
+Bug C (C# 2nd-pass Percolator implementation) and bug D (hard
+errors for missing mzML / calibration in Stage 6) are still
+pending. The C# port also needs the bug B equivalent
+(reconciliation.json file_stems field + matching hash logic)
+for cross-impl parity. None of those are started.
+
+### Files modified (uncommitted, this morning):
+
+| File | Status |
+|---|---|
+| `osprey/crates/osprey-core/src/config.rs` | added `reconciliation_parameter_hash_for_stems` |
+| `osprey/crates/osprey/src/reconciliation_io.rs` | added `file_stems` field, format_version=2 |
+| `osprey/crates/osprey/src/pipeline.rs` | bug A fix + bug B threading + `join_file_stems` param |
+| `osprey/crates/osprey/src/rescore.rs` | `join_file_stems` captured from JSON + threaded to loop |
+| `ai/scripts/OspreySharp/Compare-Stage7-Rehydration-Strict.ps1` | NEW |
+| `ai/todos/active/TODO-20260516_ospreysharp_wsl_parity.md` | this update (will be committed) |
+
+### Build state:
+
+- Rust binary at `osprey/target/release/osprey.exe` — clean release
+  build, all morning's changes compiled.
+- C# binary unchanged from prior session (no C# changes this
+  morning).
+
+**Next session handoff**: Read
+`ai/.tmp/handoff-20260519_residual_worker_compaction.md` for the
+next-session resume protocol (the worker-compaction bug, the two
+fix options, reproduction commands, files modified inventory).
