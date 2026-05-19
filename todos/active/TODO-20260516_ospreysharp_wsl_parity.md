@@ -946,3 +946,203 @@ When picking this up after a /compact or session restart:
 **Next session handoff**: For detailed startup protocol, file inventory,
 build commands, and recommended next steps, read
 `ai/.tmp/handoff-20260518_ospreysharp_wsl_parity.md` before starting work.
+
+---
+
+## 2026-05-18 evening — perf table refresh effort surfaced a much bigger finding
+
+Started the work to refresh the Osprey-workflow.html perf table with
+clean apples-to-apples numbers. The investigation walked through
+production-mode measurements (no dump env vars, real wall clock), and
+in the process surfaced a series of nested findings that grew in scope:
+
+1. **Dump diagnostic was distorting perf.** `WriteStage5PercolatorDump`
+   was ~56s of `FormatF64Roundtrip`/`ExpandScientificToFixed` on Astral
+   stage 5, ~37% of stage5 wall. With dumps removed, C# stage5
+   production wall dropped to 1:30 (vs 2:30 measured-with-dump).
+
+2. **C# parallel SVM training is ~1.35× slower than Rust**, not the
+   2.5× ratio we'd been chasing. Production stage5 wall ratio is 1.32×
+   total, with the 1.35× gap concentrated in the parallel SVM training
+   inner loop (LLVM auto-vectorization advantage on liblinear's dual
+   coordinate descent). Not a parallelism cap, not a GC issue. Modest
+   absolute gap.
+
+3. **C# Stage 7 does not implement second-pass Percolator FDR.**
+   `MergeNodeTask.Run` only runs protein FDR; the comment in
+   `PerFileRescoreTask.cs:645` documents that scores were reset to 0
+   for rescored entries with the expectation that Stage 7's Percolator
+   would re-derive them. That re-derivation step is missing.
+
+4. **Rust `--join-at-pass=2` does not actually consume the
+   `.2nd-pass.fdr_scores.bin` sidecars and does not run a 2nd-pass
+   Percolator either.** It loads scores from the reconciled parquet
+   directly (which has Score=0 / q=1.0 for rescored entries) and
+   computes protein FDR on that. Result is bit-equal whether sidecars
+   are present or not.
+
+5. **Rust straight-through and Rust `--join-at-pass=2` produce
+   different end-to-end blibs** on Stellar 3-file:
+   - Fresh straight-through: 60373 precursors, 51M blib, 6491 protein groups
+   - `--join-at-pass=2` (either with or without sidecars): 45153 precursors,
+     38M blib, 6198 protein groups
+   - 25% fewer precursors via the HPC distributed path, 5% fewer
+     protein groups. Far above any tolerance.
+
+6. **The existing cross-impl parity gate has been validating the
+   HPC-distributed path's broken-relative-to-truth output**, not
+   the straight-through truth. `Osprey-workflow.html` footer says
+   "Stellar 45153 RefSpectra" — that's the `--join-at-pass=2`
+   number, not the straight-through number. Both Rust and C# in the
+   cross-impl test path skip 2nd-pass Percolator (Rust because the
+   `can_skip_fdr`/`expect_reconciled_input` branch takes parquet
+   q-values directly; C# because the call was never implemented).
+   They match each other on consensus brokenness, not on truth.
+
+7. **Stage 6 destructively overwrites the original
+   `.scores.parquet`** with reconciled content. A partial Stage 6
+   crash leaves indeterminate state across 300-1000 file HPC
+   workloads. User confirmed this is a design defect to fix.
+
+**Smoke test reproduction**: `C:\proj\test\osprey-runs\stellar\_smoke_fresh_truth`
+contains a clean fresh straight-through run (60373 precursors).
+`_smoke_cli_chain3` contains the contaminated re-runs and the
+`--join-at-pass=2` outputs (45153). Blibs + proteins.csv preserved at
+`ai/.tmp/stage7-divergence-smoke/`. Full reasoning in
+`ai/.tmp/stage7-divergence-smoke/FINDING.md`.
+
+**Status**: All autonomous work paused at this finding. Test
+rewrite, C# 2nd-pass Percolator implementation, Stage 6 parquet
+split, and cross-impl validation are all blocked pending the user's
+decision on which path (60373 straight-through or 45153 HPC-distributed)
+is the intended production output. Each fix sequence depends on the
+answer.
+
+**Build state**:
+- C# binary at `pwiz/pwiz_tools/OspreySharp/OspreySharp/bin/x64/Release/net8.0/OspreySharp.exe`
+  — clean (all evening's diagnostic instrumentation stripped, only
+  `[STAGE-WALL]` markers retained for the perf script).
+- Rust binary at `osprey/target/release/osprey.exe` — clean
+  (debug=full reverted, SVM-BRACKET removed, only `[STAGE-WALL]`
+  markers retained, OSPREY_PERCOLATOR_ONLY decoupling kept).
+- `Measure-Pipeline.ps1` exists and works for clean perf
+  measurements (script is correct; numbers it produces are however
+  comparing two different broken-vs-truth pipelines on the HPC path
+  side, so its output is currently misleading for perf claims).
+
+**Next session handoff**: Read
+`ai/.tmp/handoff-20260519_stage7_divergence.md` for the morning
+resume protocol.
+
+---
+
+## 2026-05-18 late evening — full HPC chain bisection confirmed bigger scope
+
+Continued investigation after the late-evening summary. Walked the
+HPC chain stage-by-stage with real mzMLs (single file and 3-file)
+and pinned down WHERE truth vs HPC-rehydrate diverge. Findings stack:
+
+### Truth baseline (Stellar 3-file fresh `-i mzML`)
+- **60373 precursors**, 51 MB blib, 6491 protein groups, 6533 stage7 dump rows
+- Reproducible from a clean workdir, no caches. Saved at
+  `C:\proj\test\osprey-runs\stellar\_truth_for_compare\`.
+- Stage7 dump SHA `d66e5cf0fcc96e9f...`
+
+### Existing `Compare-Stage7-Rehydration.ps1` test is fundamentally weak
+
+Already-passing parity gate:
+- RUN A (`--join-at-pass=1` from stage 4 parquets): writes **45153** precursors
+- RUN B (`--join-at-pass=2` from RUN A's reconciled parquets): writes **45153** precursors
+- SHA-256 match → PASS
+
+But:
+- The test uses **stub (empty) mzML files** (line 103: `New-Item -ItemType File`)
+- The test **does not copy `.calibration.json`** sidecars
+- Both runs therefore have:
+  - Empty calibration → reconciliation produces 0 actions
+  - Stub mzMLs → no actual rescore work even if actions existed
+- Both runs converge on the same broken-relative-to-truth 45153 number
+- They match each other; neither matches the 60373 straight-through truth
+- **The parity gate validates consensus brokenness, not correctness against straight-through**
+
+### Bisection: where exactly does truth diverge from HPC?
+
+Sequence of comparisons, each with full dumps:
+
+| Boundary | Truth | RUN A (`--join-at-pass=1`) | Verdict |
+|---|---|---|---|
+| **Stage 5 percolator dump** (q-values + scores) | SHA `e6a03afea64710fe` | SHA `e6a03afea64710fe` | **BYTE IDENTICAL** ✓ |
+| Stage 5 outputs match. Move on. | | | |
+| **Reconciliation actions per file** | 35494 use_cwt + 21844 forced + 280 gap-fill | `0 + 0 + 0` (no calibration loaded) | DIFFER |
+| With calibration.json staged in RUN A | (same 35494+21844+280) | 35494 + 21844 + 280 | **MATCH** ✓ |
+| **Stage 6 rescore execution** | 57768 entries re-scored | 0 (no real mzMLs → no rescore) | DIFFER |
+| With real mzMLs staged | (same 57768) | 57768 | **MATCH** ✓ |
+| **Stage 7 (2nd-pass Percolator)** | runs (`Second-pass FDR` log line, ~60s) | NEVER runs in `--join-at-pass=2`; condition is `total_rescored > 0` checked from sidecar/parquet state | DIFFER |
+| **Stage 7 protein FDR dump** | SHA `d66e5cf0fcc96e9f` (6533 rows) | SHA `6e6dade7e1a83a41` (6204 rows) | DIFFER |
+| **Final blib** | 60373 precursors / 51 MB | 45153 / 38 MB | DIFFER |
+
+So the bisection lands on:
+1. Stage 5 outputs are bit-identical between paths
+2. Reconciliation IS deterministic when given calibration + mzMLs
+3. Stage 6 rescore IS deterministic when given calibration + mzMLs
+4. **`--join-at-pass=2` does NOT run 2nd-pass Percolator** — this is the actual code path divergence
+
+### The proper 4-step HPC chain can't even complete today
+
+Tried the production HPC topology end-to-end with real mzMLs:
+1. `osprey -i mzML --no-join` × 3 → per-file `.scores.parquet` ✓
+2. `osprey --join-at-pass=1 --join-only --input-scores all3` → 1st-pass sidecars + reconciliation.json ✓
+3. `osprey --join-at-pass=1 --no-join --input-scores fileN` × 3 → reconciled `.scores.parquet` per file ✓ (worker logs "57768 entries re-scored ... Reconciled .scores.parquet files written.")
+4. `osprey --join-at-pass=2 --input-scores all3reconciled` → **FAILS** with `Error: Configuration error: --join-at-pass=2 requires a reconciled (post-Stage-6) parquet whose reconciliation hash matches the current config, but Ste-...20.scores.parquet does not.`
+
+The per-file rescore worker writes reconciled parquets that `--join-at-pass=2` then refuses to load due to reconciliation-hash mismatch. **The production HPC pipeline as currently shipped cannot complete end-to-end.**
+
+### Stack of confirmed bugs
+
+1. **`Compare-Stage7-Rehydration.ps1` test is weak** — stub mzMLs + missing calibration.json → both sides converge on broken-but-matching output. Test passes without validating correctness.
+2. **Stage 6 silently produces no rescore when mzML is absent.** Should error. (User flag.)
+3. **Stage 6 silently produces empty reconciliation actions when `.calibration.json` is absent.** Should error. (User flag.)
+4. **`--join-at-pass=2` refuses parquets written by the per-file rescore worker** due to reconciliation-hash mismatch in the metadata. Proper 4-step HPC chain can't complete.
+5. **`--join-at-pass=2` doesn't run 2nd-pass Percolator** even when it loads valid reconciled parquets. It expects the `.2nd-pass.fdr_scores.bin` sidecar to exist with pre-computed scores. None of the HPC steps produce that sidecar (only straight-through `-i mzML` does, where it's a resume cache).
+6. **C# Stage 7 doesn't implement 2nd-pass Percolator either** (the original finding). Has the same shape as bug #5 in Rust.
+
+### Coherent fix sequence (preserved for tomorrow morning's decision)
+
+A. **Make `--join-at-pass=2` always run 2nd-pass Percolator** when reconciled parquets have `total_rescored > 0` worth of work. Sidecars become resume cache, not load-bearing.
+
+B. **Fix the per-file rescore worker's reconciliation-hash metadata** so `--join-at-pass=2` will accept the parquets it writes.
+
+C. **Implement C# Stage 7 2nd-pass Percolator** to match Rust's corrected behavior. `MergeNodeTask.Run` adds the call before `RunProteinFdr`.
+
+D. **Add hard errors** for missing mzML / missing calibration in Stage 6 (rescue + reconciliation paths). No more silent zero-output.
+
+E. **Rewrite Compare-Stage7-Rehydration** (or replace it with a new script) to use real mzMLs + real calibration.json + run the proper 4-step HPC chain, then compare its final blib to a straight-through `-i mzML` baseline. **A or B alone won't make the test useful; the test design also has to change.**
+
+### What we now know is true (and what isn't)
+
+| Claim | Status |
+|---|---|
+| Stage 5 outputs are bit-identical between straight-through and HPC chain | TRUE (verified by stage 5 percolator dump SHA) |
+| Stage 6 outputs are bit-identical when given the same inputs | TRUE (verified by reconciliation action counts) |
+| 2nd-pass Percolator runs in Rust straight-through | TRUE (`Second-pass FDR` log line) |
+| 2nd-pass Percolator runs in Rust `--join-at-pass=2` | **FALSE** (silently skipped) |
+| 2nd-pass Percolator runs in C# Stage 7 | **FALSE** (never implemented) |
+| Existing parity test catches this | **FALSE** (validates broken-vs-broken) |
+| Production HPC chain reproduces straight-through truth | **FALSE** (45153 vs 60373; 25% missing precursors) |
+| HPC 4-step chain even completes today | **FALSE** (step 4 errors on hash mismatch) |
+
+### Smoke artifacts preserved (do NOT delete before fix)
+
+- `C:\proj\test\osprey-runs\stellar\_truth_for_compare\` — fresh straight-through 60373 baseline + stage 5 + stage 7 dumps
+- `C:\proj\test\osprey-runs\stellar\_runA_clean\` — `--join-at-pass=1` from stage 4 parquets, 45153 result
+- `C:\proj\test\osprey-runs\stellar\_runA_with_cal\` — same with calibration.json staged, still 45153 (proves stage 5+6 are bit-equal once cal present, but 2nd-pass Percolator still skipped)
+- `C:\proj\test\osprey-runs\stellar\_methodology_chain\` — partial 4-step HPC chain (failed at step 4 with hash mismatch)
+- `C:\proj\ai\.tmp\stage7-divergence-smoke\` — earlier blibs + FINDING.md
+
+**Build state**: clean — both Rust and C# binaries are in production-clean
+state with only `[STAGE-WALL]` markers + `OSPREY_PERCOLATOR_ONLY`
+decoupling. No half-implemented changes.
+
+**Next session handoff**: Read
+`ai/.tmp/handoff-20260519_hpc_rehydration_bugs.md` for the morning
+resume protocol (full bug list, fix sequence, reproduction commands).
