@@ -4,7 +4,7 @@
 - **Branch**: `26.3_fb_testresults-refactor` (MacCossLabModules repo)
 - **Base**: `release26.3-SNAPSHOT`
 - **Created**: 2026-03-26
-- **Status**: In Progress
+- **Status**: Completed
 - **PR**: [#622](https://github.com/LabKey/MacCossLabModules/pull/622)
 
 ## Objective
@@ -177,11 +177,11 @@ fixes" below).
 
 ### Deployment steps
 
-- [ ] Deploy the updated `testresults` module to skyline.ms.
-- [ ] Verify `testresults` schema and tables are accessible in `/home/development/Nightly x64`
+- [x] Deploy the updated `testresults` module to skyline.ms.
+- [x] Verify `testresults` schema and tables are accessible in `/home/development/Nightly x64`
       (Query UI, any custom queries) after deploy. The 14 saved queries should resolve
       via the now-active UserSchema.
-- [ ] **Enable the `TestResults` module in `/home/development`** (parent container)
+- [x] **Enable the `TestResults` module in `/home/development`** (parent container)
       *before* deleting the External Schema there. Reasoning: the saved queries are
       stored in `query.querydef` with `container = /home/development`, and sub-folders
       see them via parent-chain inheritance. With the External Schema gone, the parent
@@ -190,7 +190,7 @@ fixes" below).
       leaf-folder context where the module is enabled, but the Schema Browser's
       Jump-to-Definition / saved-query editing UI shows "Missing Schema" from
       sub-folders. Discovered in shadow-test Phase 3.
-- [ ] Delete the External Schema via **Admin → Schema Administration → testresults → DELETE**.
+- [x] Delete the External Schema via **Admin → Schema Administration → testresults → DELETE**.
       **Important:** the External Schema is registered in **7 containers** on prod —
       `/home/development` plus the 6 test sub-folders (`Nightly x64`, `Release Branch`,
       `Release Branch Performance Tests`, `Performance Tests`, `Integration`,
@@ -213,3 +213,28 @@ for MCP consumers until they land alongside.**
 ## Known Bugs (out of scope)
 
 See `TODO-LK-20260403_testresults-bugs.md` for known bugs discovered during test development.
+
+## Progress Log
+
+### 2026-05-15 - PR Merged
+
+PR #622 merged as commit `335bfd9c7018cadcd6f98c2679eb60c50f1e669c`.
+
+### 2026-05-19 - Deployed on skyline.ms
+
+Testresults module deployed to skyline.ms. TestResults module enabled in
+`/home/development`. External Schema deleted from all 7 containers
+(`/home/development` plus the 6 test sub-folders). MCP companion fixes
+(PR #3) merged the same day.
+
+## Resolution
+
+**Status**: Completed — PR [#622](https://github.com/LabKey/MacCossLabModules/pull/622)
+merged 2026-05-15; deployed to skyline.ms 2026-05-19.
+
+Migrated `TestResultsController` to Spring automatic parameter binding,
+registered `testresults` as a UserSchema (replacing the 2018 External Schema),
+and added a full Selenium test suite. All Phase 7 steps complete: module
+deployed, TestResults enabled in `/home/development`, External Schema deleted
+from 7 containers. MCP-side regressions fixed in companion PR #3 (merged same
+day as deployment).
