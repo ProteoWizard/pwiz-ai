@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260519_regen_ja_audit_baselines_release_26_1`
 - **Base**: `Skyline/skyline_26_1`
 - **Created**: 2026-05-19
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4228](https://github.com/ProteoWizard/pwiz/issues/4228)
-- **PR**: [#4230](https://github.com/ProteoWizard/pwiz/pull/4230)
+- **PR**: [#4230](https://github.com/ProteoWizard/pwiz/pull/4230) (merged 2026-05-19 as 02239a0a3)
 
 ### Test Failure Tracking (for `record_test_fix` when PR merges)
 - **Test Name**: TestLiveReportsTutorial (and TestPeakBoundaryImputationDiaTutorial under same fingerprint)
@@ -65,3 +65,13 @@ No new regression test is being added: the existing tutorial tests already exerc
 - Encountered a pre-existing flake in TestPeakBoundaryImputationDiaTutorial line 131 when run after another test in the same TestRunner invocation (both ja and zh). Standalone is reliable. Filed under Out of Scope / Follow-ups.
 
 Next: commit baselines and open PR against `Skyline/skyline_26_1`.
+
+### 2026-05-19 - Merged
+
+PR #4230 merged via squash as commit `02239a0a3` on `Skyline/skyline_26_1` (admin-bypass; release-branch protection requires TeamCity checks that don't cover ja/zh-CHS anyway). Three baselines now match #4211's translations: ja/TestLiveReportsTutorial.log, ja/TestPeakBoundaryImputationDiaTutorial.log, zh/TestPeakBoundaryImputationDiaTutorial.log. The fix lands in tonight's release-branch nightly run, which is the only environment that actually validates ja/zh-CHS audit log baselines (TeamCity does not).
+
+Issue #4228 auto-closed via `Fixes #4228`. Test-issue tracking on fingerprint `b9575cc8e050f39e` will need to be recorded as fixed in this step.
+
+Deferred to follow-up:
+- Master-side baseline regen, to be done when PR #4223 (forward-port of #4211's translation .resx to master) merges. Without that follow-up, the same failures will appear on the master nightly.
+- Pre-existing flake in `TestPeakBoundaryImputationDiaTutorial.cs:131` (GetSelectedPeptide returns null when this test runs after another in the same TestRunner invocation; standalone passes). Not caused by #4211; worth a separate issue if it surfaces on nightly machines.
