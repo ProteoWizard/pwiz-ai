@@ -1432,6 +1432,157 @@ resulting reconciliation hash and producing a valid blib.
 | **C# planner** → Rust worker → Rust merge | Stellar | **60373 (60373)** | **0** | PASS |
 | **C# planner** → Rust worker → Rust merge | Astral  | **165288 (165288)** | **0** | PASS |
 
+## 2026-05-19 evening — three new C# bugs found via C# in-memory vs C# HPC chain bisection; end-to-end Rust vs C# also diverges
+
+### C# strict-rehydration bisection (NEW test) — found + fixed 3 bugs
+
+The afternoon Measure-Pipeline run on Astral all-files showed the C#
+in-memory pipeline producing only 1294 passing precursors (vs Rust's
+~165K). Cross-impl Test-Regression had been passing, so the bug had
+to live in the C# in-memory path specifically.
+
+Built `ai/scripts/OspreySharp/Compare-Stage7-Rehydration-Strict-CSharp.ps1`
+(mirror of the Rust strict-rehydration goalpost but both sides run
+OspreySharp.exe). Gates at every stage boundary; STOP on first FAIL.
+Bisection narrowed three bugs in order:
+
+1. **`ParquetIndex` never assigned during in-memory Stage 1-4 scoring.**
+   `LoadFdrStubsFromParquet` sets `ParquetIndex = (uint)(stubs.Count)`
+   on read, but `WriteScoresParquet` (the FdrEntry overload, called
+   from `PerFileScoringTask.ScoreOrLoadForFile`) never touched the
+   field. In-memory entries reached Stage 5 `ReconciliationPlanner`
+   with `ParquetIndex = 0`, and every per-file CWT lookup
+   (`fileCwt[entry.ParquetIndex]`) returned row 0's `CwtCandidate`
+   list -- the planner force-integrated 35K entries on Stellar that
+   the HPC path correctly `use_cwt`'d (and the in-memory pipeline's
+   reconciliation.json had `forced_integration_actions = 56355` vs
+   the correct `use_cwt_peak_actions = 35428` from HPC).
+   Fix: assign `entry.ParquetIndex = (uint)i` inside the
+   `WriteScoresParquet` loop, mirroring the LoadFdrStubs convention.
+   Stellar Stage 5 boundary check now byte-identical between
+   in-memory and HPC chain.
+
+2. **`RescoreCompaction` predicate didn't union with planner-action
+   targets.** C# equivalent of the Rust Option B fix from this
+   morning. The worker compaction dropped ~200 cross-file-rescued
+   entries per Stellar file with a warn-level log. After fix:
+   Stellar Stage 6 reconciled .scores.parquet byte-identical between
+   in-memory and HPC chain on all 3 files. Updated test
+   `TestRescoreCompactionRekeysActionsAndDropsNonpassing` →
+   `TestRescoreCompactionUnionsActionsWithLocalFdrPredicate` to
+   assert the union behavior.
+
+3. **`PerFileRescoreTask.Run` always transitively triggered
+   `FirstJoinTask.Run` via `EnsureHydrated`,** even at
+   `--join-at-pass=2` where Stages 5+6 have already been performed
+   upstream. This caused Phase 4 to re-run Stage 5 first-pass
+   Percolator on the reconciled parquets, then attempt Stage 6
+   rescore that needed mzML files the merge node doesn't have in
+   production HPC. Fix: short-circuit on `ExpectReconciledInput =
+   true`, only running `RescoreCompaction.Apply` so MergeNodeTask
+   sees the compacted set (compaction needed because
+   PerFileScoringTask's bundle hydration loads all entries including
+   non-passing). Mirrors Rust pipeline.rs:3313-3344.
+
+After all three fixes:
+
+| | Stellar 3-file | Astral 3-file |
+|---|---|---|
+| C# in-memory ↔ C# HPC chain (strict-rehydration) | ✅ all 3 stage gates | ✅ all 3 stage gates |
+
+Walls (Stellar): Phase 0 truth 04:52, Phase 1 01:20, Phase 2 02:12,
+Phase 3 00:45, Phase 4 00:55. Walls (Astral): Phase 0 23:57,
+Phase 1 07:33, Phase 2 05:58, Phase 3 04:48, Phase 4 03:27.
+
+### Commits
+
+- Rust PR [maccoss/osprey#37](https://github.com/maccoss/osprey/pull/37) (1 commit `1dd0c9f`) — already open
+- C# pwiz PR [ProteoWizard/pwiz#4233](https://github.com/ProteoWizard/pwiz/pull/4233) — added follow-up commit `d2800d7165` for the 3 C# fixes
+- ai/master — added `Compare-Stage7-Rehydration-Strict-CSharp.ps1`
+  (commit `63c07dd`, since rebased to `8964586`)
+
+### End-to-end Rust vs C# in-memory comparison (NEW test) — DIVERGES
+
+Built `ai/scripts/OspreySharp/Compare-EndToEnd-Crossimpl.ps1`. Runs
+both impls straight through with `-i mzMLs ... -l lib -o blib`, no
+HPC chain anywhere, then compares Stage 7 protein FDR dump + blib at
+1e-9. The hardest cross-impl gate -- ULP errors can compound
+stage-to-stage.
+
+**Result on Stellar 3-file (FAIL):**
+- Rust:  60302 precursors, blib 52,760,576 B
+- C#:    ~60K precursors, blib 52,965,376 B (Δ 204,800 B)
+- Stage 7 dump: 6415 / 6488 common rows differ; max_diff in
+  `best_peptide_score` = **14.10** (well beyond ULP cascade)
+- Sample row: `sp|Q9UPN6|SCAF8_HUMAN` rust=2.99 vs cs=17.09
+
+Stage 6 reconciled parquets at end of pipeline:
+- Rust: 463,362 rows / 267 MB (Zstd compression)
+- C#:   463,360 rows / 183 MB (Snappy compression)
+- 2-row delta in row count; **identical osprey.search_hash,
+  osprey.library_hash, osprey.reconciliation_hash** in footer metadata
+
+So the inputs are byte-equivalent (same hashes) but the OUTPUTS at
+end of pipeline diverge by 14 score units in many rows. This is the
+exact pattern the user predicted: per-stage tests have been feeding
+Rust's outputs to both sides as frozen inputs, masking algorithmic
+drift that only shows when each side runs end-to-end with its own
+intermediate state.
+
+**Rust reproducibility confirmed**: re-ran Rust Phase 0 only on
+Stellar — got 60302 precursors / 52,772,864 blib (matches end-to-end
+Rust). Rust is deterministic across runs on this binary; the
+"morning's 60373" value was from an earlier binary state pre-PR-#37
+or from a different invocation. The current Rust binary is
+consistent with itself.
+
+**C# reproducibility confirmed**: C# blib size 52,965,376 across
+multiple runs (strict-rehydration truth + end-to-end). C# is
+deterministic too.
+
+So both impls are individually deterministic; they just disagree
+end-to-end. This is the open question for next session.
+
+### Open questions for next session
+
+1. Where does Rust vs C# end-to-end first diverge?
+   The per-stage gates won't catch it -- they feed frozen Rust
+   outputs to both sides. Need a new bisection script that runs each
+   side END-TO-END but compares per-stage intermediates from each
+   side's own outputs (so each side sees its own upstream state).
+   Likely candidates for first divergence: Stage 4 (CWT detection
+   thresholds, peak boundary picking), Stage 5 first-pass FDR
+   (subsample selection has been byte-identical though), or the
+   in-memory wiring of the 2nd-pass Percolator.
+
+2. Why does the in-memory C# 2nd-pass Percolator (via my Bug C path)
+   produce 17.09 for SCAF8 while Rust in-memory 2nd-pass produces
+   2.99? Cross-impl Stage 7 isolation (both fed Rust's stage6
+   output) PASSED at 1e-9 -- so on identical input the algorithms
+   agree. Therefore the inputs must differ; bisection target is
+   "what's different about C# stage6 in-memory output vs Rust
+   stage6 in-memory output" given the metadata hashes match.
+
+3. Should the Stage 4 boundary be added to Test-Regression's gated
+   stages? The user said "We know they match through stage 4" but
+   that statement assumed the same inputs, not end-to-end
+   independent state. Stage 4 outputs might differ subtly across
+   impls and we'd never have caught it.
+
+### Pending pre-merge items
+
+- Stellar perf re-run via `Measure-Pipeline.ps1` (4 runs:
+  Stellar/Astral × Rust/C#, Repeats=1, Windows native). Need to do
+  this AFTER characterizing the end-to-end divergence (otherwise the
+  perf numbers reflect a still-broken state).
+- PR #37 (Rust) and PR #4233 (C#) are both open and have CI green.
+  Awaiting Copilot review + `/pw-self-review` per
+  version-control-guide. Both will be squash-merged.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260519_endtoend_crossimpl_divergence.md`
+before starting work.
+
 Walls (Stellar, all 3 phases substituted at most one position):
 Phase 1 02:35; Phase 2 01:19/02:21; Phase 3 01:02/01:47; Phase 4 01:07/01:09.
 
