@@ -1796,3 +1796,109 @@ Gated on user decision:
 - Commits across both repos (osprey/main + pwiz). 4 Rust files +
   10 C# files uncommitted.
 
+## 2026-05-19 evening (late) — end-to-end Pass-1 bisection driver + Stage 4 verification
+
+Built `ai/scripts/OspreySharp/Compare-EndToEnd-Bisect-Crossimpl.ps1`
+(Pass 1 driver, walks all natural boundary outputs in stage order:
+calibration.json → reconciliation.json → 1st-pass.fdr_scores.bin →
+reconciled scores.parquet → 2nd-pass.fdr_scores.bin → Stage 7
+protein FDR dump → blib) and ran Stellar 3-file.
+
+### Pass 1 result: every boundary FAILed
+
+All 17 boundary comparisons failed at 1e-9 tolerance — divergence
+starts at the very first stage compared (Stage 3 calibration.json).
+
+### Stage 3 calibration.json: REAL numeric divergence, not just formatter
+
+Wrote `ai/.tmp/json_tol_diff.py` to walk both JSONs and report
+per-leaf max_abs_diff. Result: not formatter-only.
+
+| Leaf | Rust | C# | Diff |
+|---|---|---|---|
+| `ms1_calibration.count` | 18 | 193 | 10x more candidates on C# |
+| `ms1_calibration.adjusted_tolerance` | 0.00135 | 0.01325 | ~10x |
+| `ms1_calibration.mean` | -1.9e-5 | -5.1e-4 | 27x |
+| `ms1_calibration.sd` | 4.4e-4 | 4.2e-3 | ~10x |
+| `rt_calibration.model_params.abs_residuals[5]/[6]` | swapped | swapped | order-only |
+
+C# also DOES NOT write `metadata.isolation_scheme`,
+`ms1_calibration.histogram`, `ms2_calibration.histogram`,
+`metadata.num_sampled_precursors`, `metadata.num_confident_peptides`
+(those are diagnostic-only metadata gaps, not load-bearing).
+5,285 of 22,105 numeric leaves diverge above 1e-9.
+
+### Stage 4 verification: PIN features FAIL at 1e-9 cross-impl in end-to-end mode
+
+Wrote `ai/.tmp/stage4_check.ps1` — fresh `--no-join` per side
++ `parquet_diff.py --tolerance 1e-9` on each per-file
+`.scores.parquet`. Stellar 3-file:
+
+```
+[rust] --no-join exit=0 wall=01:28
+[cs]   --no-join exit=0 wall=01:32
+
+per-column [DIFF] (file 20):
+  xcorr               max_diff=1.08e-1  n_diverg=417487/462802  (~90% of rows)
+  sg_weighted_xcorr   max_diff=1.72e-2  n_diverg=416130
+  peak_sharpness      max_diff=9.49e+4  n_diverg=706
+  cwt_candidates      n_diverg=9717     (binary blob ULP differences)
+  apex_rt             diff=0.061 min    (row [0] catastrophic)
+  peak_apex           diff=213          (row [0] catastrophic)
+  sg_weighted_cosine  diff=0.057        (row [0] catastrophic)
+  ... most other features: 1 row differs (row [0])
+```
+
+Files 21 + 22 have ONLY bulk drift, no row-[0] catastrophic:
+- xcorr max ~5e-7 / sg_weighted_xcorr max ~4e-7 on ~417K rows each
+- peak_sharpness max 6e-7 on ~700 rows
+
+So Stage 4 has TWO distinct divergence phenomena:
+
+1. **Bulk f32-magnitude drift** on xcorr / sg_weighted_xcorr (~5e-7
+   on ~90% of rows on every file). Workflow doc claimed Stellar
+   `--resolution unit` is "not affected by the f32 scratch path"
+   — that statement may no longer hold, or there is a regression
+   in the unit-resolution xcorr code path.
+
+2. **One catastrophic peak-pick divergence** at file 20 entry_id 0
+   (apex_rt diff 0.061 min, peak_apex diff 213, sg_weighted_cosine
+   diff 0.057). Likely the source of the 14-unit Stage 7 score
+   divergence on SCAF8_HUMAN observed yesterday.
+
+### The non-determinism concern
+
+Workflow doc (status 2026-05-09): "Stages 1-4 PIN features bit-
+identical at ULP on Stellar (466K entries, all 21 features under
+1e-10)". Today's run with the current binaries shows 5e-7 drift on
+~90% of rows. Either:
+
+- (A) The Rust Bug A/B/C/D fixes from earlier today, or the C#
+  fixes from yesterday afternoon, changed Stage 4 behavior. Need
+  git-history bisection to confirm.
+- (B) Test-Regression's `stage1to4` gate has been passing because
+  its stage-isolation setup masks the drift we see in pure
+  end-to-end `--no-join` mode. Need to read Test-Regression more
+  carefully to understand the comparison setup.
+
+User signed off at this point — frustration with apparent
+non-determinism across sessions. Tomorrow's pivot: have the
+session walk the user through reproducing these results manually
+so they can pause and inspect in Visual Studio rather than
+relying on the agent's interpretations.
+
+### Files uncommitted (ai repo)
+
+- `ai/scripts/OspreySharp/Compare-EndToEnd-Crossimpl.ps1` — Pass-0
+  end-to-end driver from yesterday (Stage 7 + blib comparison).
+- `ai/scripts/OspreySharp/Compare-EndToEnd-Bisect-Crossimpl.ps1` —
+  NEW Pass-1 driver written today, walks all natural boundaries.
+- `ai/.tmp/json_tol_diff.py` — tolerance-based JSON diff (kept
+  in `.tmp/` since it's a one-off diagnostic).
+- `ai/.tmp/stage4_check.ps1` — Stage 4 `--no-join` verification
+  (kept in `.tmp/` since it's a one-off diagnostic).
+
+**Next session handoff**: For detailed startup protocol +
+reproduce-and-debug-in-VS plan, read
+`ai/.tmp/handoff-20260519_late_repro_in_VS.md` before starting work.
+
