@@ -2228,3 +2228,32 @@ calibration scoring code.
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260520_stage3_calibration_divergence.md`
 before starting work.
+
+### POSTSCRIPT (late afternoon) — the April fix was NEVER merged upstream
+
+After user pointed at completed TODOs, history search shows commits
+`c95b36c` and `dfda7cd` (the April f64 xcorr flip + restoration that
+achieved 90.7% bit-equal cal_match cross-impl) live ONLY on the
+`remotes/fork/fix/parquet-index-lookup` brendanx67 fork branch. They
+are NOT in the current HEAD history (verified via
+`git merge-base --is-ancestor c95b36c HEAD` returning false).
+
+**Today's Stage 3 calibration divergence is NOT a regression — the
+April fix was never adopted upstream.** Current
+`fix/hpc-chain-stage7-second-pass-percolator` HEAD has been on the
+original f32-primary code since 2026-02-05 (Mike MacCoss `d028d6e`).
+
+Path forward for next session: cherry-pick or replay `dfda7cd`
+(~120 lines: 108 in osprey-scoring/lib.rs + 14 in osprey/pipeline.rs)
+to bring f64 xcorr primary path into the current branch. Per the
+April TODO this should reproduce bit-equal cal_match cross-impl on
+all 6 feature columns.
+
+Second observation worth investigating: entry 222 cal_match SNR is
+~2.06 on BOTH sides (before LDA), but after LDA training the Rust
+`m.signal_to_noise` field is mutated in place to 15.94 (a z-score),
+while C# stays at 2.06. The `passing_targets` filter then tests
+`m.signal_to_noise >= 5.0` against a z-score on Rust vs raw SNR on
+C#. This could be a separate fix from the f32→f64 flip (or could be
+fixed by the April work — needs verification against the fork
+branch).
