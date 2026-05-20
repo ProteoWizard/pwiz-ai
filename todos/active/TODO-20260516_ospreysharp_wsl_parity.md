@@ -2297,3 +2297,145 @@ be the `PreprocessSpectrumForXcorrInto` f32 path with conscious
 imitation tweaks) and decide whether to coordinate a flip back to
 natural f64 on both sides.
 
+### POSTSCRIPT 3 (2026-05-20 evening) — C# calibration uses f32 cache via PerFileScoringTask.cs:2275; coordinated Rust+C# plan crystallized
+
+User endorsed the f64-scratch-with-f32-storage architecture:
+> Use f64 arrays for scratch (especially with recently implemented
+> scratch pooling), and f32 for per-peptide storage arrays which
+> impact total memory consumed.
+
+Investigation in this evening session uncovered the precise mechanism
+and committed the Rust half of the coordinated change.
+
+**What's f32 vs f64 in the xcorr pipeline today (5 distinct points):**
+
+| # | What | Type today | Pinned by | Free to flip? |
+|---|---|---|---|---|
+| 1 | Input intensities (Spectrum.intensities) | f32 | mzdata 0.63 quantization | NO |
+| 2 | Binned sqrt-intensity accumulator | f32 | nothing | YES (scratch) |
+| 3 | Sliding-window prefix sum (~100K bins) | f32 | nothing | YES (scratch) — dominant precision loss source |
+| 4 | Cached preprocessed spectrum (HRAM ~100K) | f32 | per-spectrum-per-window memory budget | NO |
+| 5 | Final dot-product accumulator | f32→f64 cast | nothing | YES (scalar) |
+
+The user's strategy maps to: keep #1 + #4 as f32 (constrained), flip
+#2 + #3 + #5 to f64 (free).
+
+**C# is already architected for this dual-track design.** Read
+`OspreySharp.Scoring.XcorrScratchPool`: `XcorrScratch` has BOTH
+`double[] Binned/Windowed/Prefix/Preprocessed` AND `float[] BinnedF/
+WindowedF/PrefixF`. SpectralScorer has both `ApplyWindowingNormalizationD`
+(f64) and `ApplyWindowingNormalizationF` (f32) helpers. Two preprocess
+variants: `PreprocessSpectrumForXcorr` returns `double[]` (f64 path),
+`PreprocessSpectrumForXcorrF32` returns `float[]` (HRAM cache path).
+The `xcorr_pool.rs` line-138 comment explicitly says "f32 matches Rust
+upstream maccoss/osprey to halve cache memory vs f64."
+
+**Which C# path Stage 3 calibration uses today** — read
+`PerFileScoringTask.cs:2275-2276`:
+
+```csharp
+double xcorrApex = (windowPreprocessed != null && apexWindowIdx >= 0)
+    ? s_calXcorrScorer.XcorrFromPreprocessed(windowPreprocessed[apexWindowIdx], entry)   // f32 cache path
+    : s_calXcorrScorer.XcorrAtScan(apexSpectrum, entry);                                  // f64 path
+```
+
+The f32 cache path wins because `windowPreprocessed` is populated at
+line 1550 by `PreprocessSpectrumForXcorrF32`. **So C# calibration's
+xcorr_score field is computed via pure f32 throughout** —
+PreprocessSpectrumForXcorrF32 (float[] binned, ApplyWindowingNormalizationF,
+ApplySlidingWindowF) + XcorrFromPreprocessed(float[]). That's the
+"imitate Rust f32" code path.
+
+**Rust half (LANDED this session, commit `690194a`):** rewrote
+`SpectralScorer::xcorr` body in `crates/osprey-scoring/src/lib.rs` to
+inline f64 windowing + sliding-window subtraction, with `(intensity as
+f64).sqrt()` widen-before-sqrt matching `Math.Sqrt((double)float)`.
+Old `apply_windowing_normalization`/`apply_sliding_window` allocating
+wrappers deleted (only `_into` f32 variants remain for the HRAM
+per-window cache path). Build + fmt + clippy + tests all green.
+
+**Verification on Stellar Single** (Compare-Stage1to4-Strict per-side):
+Per-column cal_match max-diff against C#:
+
+| Column | Before | After Rust patch | Status |
+|---|---|---|---|
+| apex_rt | 5.55e-16 noise | **0 bit-equal** | BIT-EQUAL ✓ |
+| correlation | f64 noise | 4.97e-14 | f64 epsilon ✓ |
+| libcosine | f64 noise | 5.55e-16 | f64 epsilon ✓ |
+| **xcorr** | 5.24e-10 (f32-imitation alignment) | **3.876e-6** (f64 vs f32 cross-impl) | NEEDS C# CHANGE |
+| snr | 5.24e-10 | 5.24e-10 unchanged | unrelated, separate root cause |
+
+The xcorr column drift jumped from 5.24e-10 to 3.876e-6 because Rust
+moved off the f32-imitation alignment and C# stayed on it. This is
+EXPECTED and is the predicted outcome of a unilateral Rust flip. Not
+a regression — the previous 5.24e-10 was f32-imitation parity, not
+true f64 parity.
+
+**C# half (NEEDS USER DECISION):** Switch C# calibration to use the
+f64 path. Three options ranked by trade-off:
+
+1. **One-line switch (simplest, has perf cost).** Change
+   `PerFileScoringTask.cs:2275-2276` to unconditionally use
+   `XcorrAtScan(apexSpectrum, entry)`. Uses already-existing C# f64
+   code path. Perf cost: one redundant f64 preprocess per calibration
+   apex match (~186K matches × ~100K bins on Stellar Single = ~18.6B
+   extra ops, estimated 10-30s additional calibration wall). Memory
+   cost: zero (uses existing pooled scratch).
+
+2. **F64 calibration cache (faster, more memory).** Build a parallel
+   `double[][]` cache in `PerFileScoringTask.cs:1550` (calibration
+   only — not main search). Then `XcorrFromPreprocessed(double[], entry)`
+   (already exists in SpectralScorer.cs:171) bit-equally matches
+   Rust's f64 path with no redundant preprocess. Memory cost:
+   ~800 MB transient per window during calibration instead of 400 MB
+   (calibration-only, frees after).
+
+3. **F64-internal + f32-storage cache (most invasive, perf-neutral).**
+   Add a new `PreprocessSpectrumForXcorrF32_F64Internal` that does f64
+   preprocessing internally and narrows to f32 at the final cache
+   write. Then `XcorrFromPreprocessed(float[])` reads the
+   f64-noise-floor f32 cache and bit-equals Rust if Rust does the same.
+   Requires identical Rust path: flip XcorrScratch to f64 internally
+   and adapt `preprocess_spectrum_for_xcorr_into` to do f64-internal +
+   f32-cast at output. Memory cost: same as today on both sides
+   (cache stays f32). Implementation cost: ~150 lines split across
+   Rust + C#.
+
+Recommendation: Option 1 first to validate cross-impl bit-equal
+calibration parity end-to-end (commit cycle, measure perf impact).
+Then if perf cost is too high, lift to Option 2 (cheap upgrade).
+Option 3 is only needed if both 1 and 2 prove inadequate (unlikely).
+
+**File pointers for next session:**
+- C#: `pwiz_tools/OspreySharp/OspreySharp/Tasks/PerFileScoringTask.cs:2275`
+- C# scratch pool: `pwiz_tools/OspreySharp/OspreySharp.Scoring/XcorrScratchPool.cs`
+- C# scorer with both paths: `pwiz_tools/OspreySharp/OspreySharp.Scoring/SpectralScorer.cs:92,125,171,226,280,303,508`
+- Rust scorer.xcorr() (this session's commit): `crates/osprey-scoring/src/lib.rs:2076-2178`
+
+**Open question still on the docket:** The xcorr-column ULP drift is
+the headline issue. The SNR column 5.24e-10 drift remains UNCHANGED
+across the entire session and is a separate root cause (likely the
+LDA in-place mutation of `m.signal_to_noise` to a z-score on the Rust
+side only — entry 222 evidence). Resolve xcorr parity first; revisit
+SNR after.
+
+**Commits landed today (cumulative):**
+
+| Repo | Commit | Content |
+|------|--------|---------|
+| osprey | `1fe4ff7` | iso_upper f64 mzML cvParam fix (yesterday) |
+| osprey | `1089407` | cal_match :.10 -> :.17 |
+| osprey | `3d2a0f5` | lda_scores :.10 -> :.17 |
+| osprey | `690194a` | scorer.xcorr f64 inline (this session) |
+| pwiz | `9982593f5b` | OspreySharp VERSION 26.6.0 -> 26.6.1 |
+| pwiz | `43100b1917` | cal_match F10 -> F17 |
+| pwiz | `af7088db35` | lda_scores F10 -> F17 |
+| ai | `288b492` | Test-Regression per-side refactor + comparators + Snappy cleanup |
+| ai | `8ff9fa5` | TODO mid-day update |
+| ai | `450b35d` | handoff pointer |
+| ai | `61e0105` | April-fix-not-merged note |
+| ai | `e17a891` | f64 replay failed note |
+
+**Next session handoff**: pick up at task #71 — the C# calibration
+flip decision. The Rust half is in place and verified.
+
