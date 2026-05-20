@@ -2257,3 +2257,43 @@ while C# stays at 2.06. The `passing_targets` filter then tests
 C#. This could be a separate fix from the f32→f64 flip (or could be
 fixed by the April work — needs verification against the fork
 branch).
+
+### POSTSCRIPT 2 (late afternoon, continued) — naive April-fix replay does NOT work; needs coordinated cross-impl change
+
+Attempted to replay the April dfda7cd f64-flip on the current osprey
+branch. Done as additive `_f64` suffixed functions plus a rewrite of
+`scorer.xcorr()` body to use f64 throughout (the calibration call site
+in `run_coelution_calibration_scoring`).
+
+The change DID exercise. Result was worse, not better:
+
+| Boundary | Before f64 (current code) | After f64 (this experiment) |
+|---|---|---|
+| CAL_MATCH max_diff | 5.239e-10 | 3.876e-6 |
+| LDA_SCORES max_diff | 5.063e-14 | 6.544e-5 |
+| LDA sample diff | 1.110e-16 (1 ULP) | 1.889e-8 |
+| LOESS_INPUT row count | 6,400 vs 7,363 | 6,400 vs 7,363 (unchanged) |
+
+The user's morning warning was correct. The current C# code has been
+tuned to "imitate Rust's f32 calculation" (i.e., C# is using f32-quirk
+behavior intentionally to stay within ~1e-8 of Rust f32). Flipping
+Rust to f64 unilaterally breaks the imitation alignment — Rust moves
+to true f64 while C# stays on its imitation path, and they drift
+~1e-6 apart (f32 ULP magnitude).
+
+To actually re-establish bit-equal (April-style), the change must be
+COORDINATED: flip Rust to f64 AND undo C#'s "imitate Rust f32" code
+(returning C# to its natural f64 behavior). Both sides f64 ⇒ bit-
+equal (like April). One side f64 + one side imitating f32 ⇒ worst-
+case f32-magnitude divergence.
+
+All experimental changes were reverted at end of session. osprey HEAD
+back at `3d2a0f5`. No uncommitted state.
+
+This finding strongly suggests the path forward is NOT a Rust-only
+change. It needs the user to locate the C# "imitate Rust f32" code
+(likely in `OspreySharp.Scoring.SpectralScorer` and helpers — could
+be the `PreprocessSpectrumForXcorrInto` f32 path with conscious
+imitation tweaks) and decide whether to coordinate a flip back to
+natural f64 on both sides.
+
