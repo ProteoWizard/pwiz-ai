@@ -176,7 +176,7 @@ function Compare-ReconciledParquet {
         return $true
     }
     # SHA differs -- fall back to column-wise bit-exact via parquet_diff.py.
-    # (Parquet metadata / Snappy block boundaries can differ even with
+    # (Parquet metadata or codec block boundaries can differ even with
     # identical row data, so SHA mismatch isn't always a real divergence.)
     $diffLog = "$B.diff_vs_truth.log"
     & $pythonExe $parquetDiffPy $A $B --tolerance 0 *>&1 | Tee-Object -FilePath $diffLog | Out-Null

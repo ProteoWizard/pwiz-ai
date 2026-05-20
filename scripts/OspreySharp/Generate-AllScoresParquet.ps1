@@ -120,13 +120,8 @@ foreach ($dsName in $datasets) {
             $sw = [Diagnostics.Stopwatch]::StartNew()
             Push-Location $testDir
             try {
-                # Rust osprey defaults to Zstd compression; OspreySharp also
-                # writes Zstd, so we let both sides use the same codec for
-                # cross-impl byte-parity. (Snappy was used previously as a
-                # workaround for a Parquet.Net Thrift skip bug that
-                # prevented C# from reading Rust-emitted parquets; that bug
-                # is now fixed in pwiz_tools/Shared/Lib/Parquet/ParquetNet.dll
-                # via the maccoss-developers Parquet.Net fork.)
+                # Both sides default to ZSTD compression for cross-impl
+                # byte-parity.
                 & $rustBinary --no-join `
                     -i $mzml -l $library --resolution $ds.Resolution --protein-fdr 0.01 2>&1 | Out-Null
             } finally { Pop-Location }

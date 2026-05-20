@@ -1887,6 +1887,167 @@ session walk the user through reproducing these results manually
 so they can pause and inspect in Visual Studio rather than
 relying on the agent's interpretations.
 
+## 2026-05-20 morning — root cause of "non-determinism" + new gate definition
+
+### Why prior sessions claimed "stage1to4 PASS" honestly
+
+The mystery was resolved on inspection of `Test-Regression.ps1`:
+the stage1to4 gate calls
+`inspect_parquet.py --diff --tolerance 1e-6` (line 568). My new
+end-to-end driver and `stage4_check.ps1` ran `parquet_diff.py
+--tolerance 1e-9` (~1000x tighter). The cross-impl xcorr drift
+we measured (~5e-7) cleanly passes 1e-6 but fails 1e-9 — both
+prior reports of PASS were accurate at the gate's measured
+tolerance.
+
+The workflow doc's "21/21 features under 1e-10" claim is
+inconsistent with what the gate actually measures; that doc
+statement appears to have been overstated or measured under
+different conditions than today's binaries. The verifier that's
+actually in the regression suite is gated at 1e-6.
+
+### Test-Regression confirmation today (Stellar Single)
+
+`Test-Regression.ps1 -Dataset Stellar -Files Single` PASSes all
+five gates with current binaries (after the `OspreySharp.VERSION`
+bump from 26.6.0 → 26.6.1; see "Version drift" below). The blib
+gate found ONE row of `OspreyMetadata.Value` differing on
+`osprey_version` (rust=26.6.1, cs=26.6.0) before the bump;
+every scientific column in the blib (`RefSpectra`,
+`RefSpectraPeaks`, `Modifications`, `Proteins`,
+`RetentionTimes`, `OspreyExperimentScores`, `OspreyRunScores`,
+`OspreyPeakBoundaries`) was bit-equal at max_diff=0.000e+000.
+Wall times Stellar Single (each side): stage1to4 0:29-0:32,
+stage5 0:59-1:21, stage6 1:24-1:47, stage7 0:11-0:13, blib
+0:14-0:16.
+
+### Version drift root cause (Mike's commits since v26.6.0)
+
+`git log` on `maccoss/osprey`:
+- 2026-05-13 19:36 — Mike: v26.6.0 release
+- 2026-05-14 23:26 — Mike: "Fixed reconciliation to pair
+  library-supplied decoys by base_id" — the algorithmic substance
+  of 26.6.1, only affects `--decoys-in-library` mode (not Stellar)
+- 2026-05-15 06:41 — Mike: v26.6.1 release
+- 2026-05-17 10:23 — Mike: "Add test for manifest recovering decoys"
+
+Mike pushes directly to main (no PRs). User is requesting Mike
+move to PR-based workflow during critical sprint windows so
+version bumps don't silently land mid-sprint.
+
+OspreySharp `Program.cs:41` `VERSION = "26.6.0"` bumped to
+`"26.6.1"` with a TODO comment noting the algorithmic v26.6.1
+fix (base_id pairing for library-supplied decoys in
+`compute_consensus_rts` + `plan_reconciliation`) is NOT yet
+ported on the C# side. Stellar runs in reverse-decoy mode so
+the missing fix has no effect there; will affect
+`AstralLibraryDecoy` (library-supplied decoys via FDRBench).
+
+### Snappy compression cleanup
+
+Per user direction, removed all `[Ss]nappy` mentions from the
+test scripts. OspreySharp has had ZSTD support for a long time;
+the snappy flag was vestigial. Files touched (functional + comment
+cleanup):
+
+- `Test-Features.ps1` — removed `--parquet-compression snappy`
+  from Rust invocation
+- `Compare-Stage6-Crossimpl.ps1` — removed conditional
+  `--parquet-compression snappy` for Rust
+- `Build-Stage6Fixture.ps1` — comment updates
+- `Compare-Stage7-Rehydration-Strict-CSharp.ps1` — comment update
+- `Generate-AllScoresParquet.ps1` — comment cleanup
+- `ai/.tmp/stage4_check.ps1` — removed `--parquet-compression
+  snappy` flag (the one I added yesterday; explained the surprising
+  ZSTD-vs-SNAPPY observation in this morning's analysis)
+
+### Stage 1-4 strict ULP comparison
+
+New comparator: `ai/scripts/OspreySharp/Compare-Stage1to4-Strict.ps1`.
+Runs `--no-join` per side with all Stage 1-3 calibration dumps
+enabled and compares every output at strict tolerance (SHA-first,
+then numeric-tolerance fallback). Companion:
+`json_tol_diff.py` (tolerance-based JSON diff for calibration.json).
+
+Stellar Single results (post version bump, BEFORE iso_upper fix):
+
+| Boundary | Result | Magnitude |
+|---|---|---|
+| CAL_SAMPLE rust_cal_sample.txt | PASS bit-equal | 0 |
+| CAL_SAMPLE rust_cal_scalars.txt | FAIL | 5 diffs at max 5.1e-13 |
+| CAL_SAMPLE rust_cal_grid.txt | PASS bit-equal | 0 |
+| CAL_WINDOWS rust_cal_windows.txt | FAIL | 1,732 diffs at 3.1e-5 |
+| CAL_MATCH rust_cal_match.txt | FAIL | 15,833 diffs at 5.2e-10 |
+| LDA_SCORES rust_lda_scores.txt | FAIL | 17 diffs at 1.0e-10 |
+| LOESS_INPUT rust_loess_input.txt | FAIL | structural — 6,400 vs 7,363 rows |
+| CAL_JSON | FAIL | full cascade |
+| SCORES_PQ (--tolerance 0) | FAIL | most cols 1-2 ULP; xcorr/sg_weighted_xcorr ~5e-7 bulk + 1 catastrophic row |
+
+### Root cause of CAL_WINDOWS divergence: mzdata 0.63 f32 quantization
+
+mzdata 0.63's reader pipes isolation window cvParams through
+`param.to_f32()` (reader.rs:281). At m/z 500 the f32 ULP is ~6e-5.
+The Stellar mzML's `<isolationWindow>` cvParams have one specific
+window (out of 125) whose upper edge in XML text lands between
+two f32-representable values; on round-trip Rust gets 512.481934
+while OspreySharp's f64 parse gets 512.481903 (~3e-5 m/z drift).
+
+Fixed in osprey commit `1fe4ff7` on
+`fix/hpc-chain-stage7-second-pass-percolator` branch: added a
+one-pass streaming quick-xml scan in `osprey-io::mzml::parser`
+that pre-extracts isolation cvParams as f64 and overrides
+mzdata's quantized values at both MS2 parsing sites
+(`convert_spectrum` and `load_all_spectra`). The fix is local to
+osprey-io and self-contained; can be deleted in one commit when
+mzdata moves to f64 storage upstream.
+
+After the fix: CAL_WINDOWS PASSes bit-equal. Surprising downstream
+effect: Stage 4 `.scores.parquet` row diffs went UP (xcorr
+417,487→456,609 rows). This is because the pre-fix run had
+"coincidental" cross-impl agreement on 124 of 125 windows where
+f32 happened to equal f64; the fix removes that coincidence and
+exposes the bulk drift that always existed (still ~5e-7 magnitude,
+just spread across more rows). Max abs diffs are unchanged from
+pre-fix — the algorithmic divergence sources are the same; the
+fix only addressed isolation window f32 quantization, not the
+xcorr-level f32 quantization elsewhere.
+
+### Remaining Stage 1-4 strict-comparison divergences (post iso_upper fix)
+
+| Boundary | Magnitude | Class |
+|---|---|---|
+| CAL_SAMPLE rust_cal_scalars.txt | 5 diffs at 5.1e-13 | ~10 ULP at m/z 400 (numerical noise) |
+| CAL_MATCH apex_rt | 15,739 rows, all at exactly ~1e-10 | systematic f64 offset, C# > Rust |
+| LDA_SCORES | 17 rows at 1e-10 | likely cascade from apex_rt |
+| LOESS_INPUT | 6,400 vs 7,363 rows | q-value gate flip from upstream noise |
+| Stage 4 xcorr / sg_weighted_xcorr | ~5e-7 bulk + 1 catastrophic row | independent f32-magnitude source elsewhere |
+
+`apex_rt` systematic ~1e-10 offset: both sides take
+`spec.retention_time` from the apex spectrum. The Stellar mzML
+stores scan start time in `unitName="minute"` (e.g.,
+`value="8.719852510583"`) so no ÷60 conversion happens. Both
+impls should parse the same XML f64 text and get bit-equal f64,
+yet 15,739 rows show C# `apex_rt` exactly ~1e-10 larger than
+Rust. Source unknown — needs deeper drilling.
+
+### New gate definition (user, 2026-05-20)
+
+The stage1to4 1e-6 gate was relaxed too early. Stage 1-4 is only
+truly "done" when the end-to-end run passes through Stage 7 +
+blib WITHOUT any cross-tool sharing of intermediate files. The
+proof that this bar is achievable is the existing parity in
+Stage 5+ when fed Rust-frozen inputs. The new gate definition:
+
+> "stage1to4 is only really done when it will allow stage5 to
+> pass. We know stage5 passes with Rust stage1to4, but if it
+> doesn't pass with C# stage1to4, then we need to keep working
+> on C# stage1to4 until stage5 can pass with it."
+
+This work stays on the current branch until end-to-end
+`Compare-EndToEnd-Crossimpl.ps1` reaches PASS on Stellar (and
+then Astral).
+
+
 ### Files uncommitted (ai repo)
 
 - `ai/scripts/OspreySharp/Compare-EndToEnd-Crossimpl.ps1` — Pass-0

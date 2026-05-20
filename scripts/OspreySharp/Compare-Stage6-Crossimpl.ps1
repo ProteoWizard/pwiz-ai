@@ -14,7 +14,7 @@
 
     This script is the FAST iteration loop for Stage 6 development.
     Build-Stage6Fixture.ps1 produces a frozen test fixture once: Stage
-    1-4 Snappy parquets + verified-identical Stage 5 sidecars + spectra
+    1-4 parquets + verified-identical Stage 5 sidecars + spectra
     cache + library. Every Stage 6 code change re-runs this script,
     which copies the fixture into a fresh per-iteration workdir and
     runs only --join-at-pass=1 --no-join on each binary against
@@ -178,14 +178,7 @@ function Invoke-Worker {
     $args += @("-l", $LibraryName, "--output", $outBlib,
                "--resolution", $Resolution, "--protein-fdr", "0.01",
                "--threads", $Threads.ToString())
-    # OspreySharp Parquet.Net only handles Snappy; Rust default is ZSTD.
-    # Force Snappy on Rust so the reconciled .scores.parquet from Phase
-    # 3 can be byte-compared cross-impl. OspreySharp doesn't recognize
-    # the flag (it always writes Snappy), so only pass it to the Rust
-    # binary.
-    if ($Tool -eq "Rust") {
-        $args += @("--parquet-compression", "snappy")
-    }
+    # Both sides default to ZSTD; no compression flag needed.
     $sw = [Diagnostics.Stopwatch]::StartNew()
     Push-Location $WorkDir
     try {
