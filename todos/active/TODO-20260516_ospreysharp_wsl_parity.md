@@ -823,4 +823,119 @@ in xcorr_sparse would close this; deferred as a follow-up.
 | ai | `5c7a30f` | TODO postscript 3 (3-option breakdown) |
 | ai | `3129f5d` | TODO split into phase1 + phase2 |
 
+### POSTSCRIPT 5 (2026-05-20 mid-afternoon) — chasing the three residual differences
+
+User picked "keep chasing." Pulled three open items:
+1. Rust `xcorr_sparse` f32 accumulator → C# f64 accumulator
+2. `snr` 5.24e-10 (purported LDA in-place mutation)
+3. `LOESS_INPUT` row count delta (6,400 vs 7,363)
+
+Plus discovered + fixed three additional bugs along the way.
+
+**Win 1 — Rust xcorr accumulator alignment** (`osprey f41ff88`):
+- Flipped `xcorr_sparse` to widen each f32 cache value to f64 on read
+  and accumulate in f64 (matches C# `XcorrFromPreprocessed(float[])`
+  which does `double xcorrRaw += preprocessed[bin]` implicitly).
+- Replaced `scorer.xcorr()` inline body with delegation to
+  `xcorr_at_scan` so both paths go through the same f32-cache-narrowing
+  pattern C# uses.
+- Result: cal_match xcorr 4.43e-8 → **5.11e-15** (f64 epsilon). Stage 4
+  .scores.parquet xcorr **100% bit-equal** cross-impl. sg_weighted_xcorr
+  **100% bit-equal**. peak_apex 100% bit-equal. apex_rt 462,375/462,802
+  bit-equal. LDA scores cascade: 3.29e-5 → 4.95e-14 (f64 epsilon).
+
+**Win 2 — Disproved LDA SNR mutation; found real LOESS_INPUT bug**
+(`osprey b80d86b`):
+- The morning's hypothesis (Rust LDA mutating `m.signal_to_noise`
+  in-place to z-score) was wrong. No mutation site exists in
+  `calibration_ml.rs`. The 5.24e-10 cal_match.snr drift is f64-epsilon
+  noise (single ULP at value ~3e5). Threshold analysis showed **zero
+  snr-gate flips** at the 5.0 threshold cross-impl. Entry 222 cal_match
+  SNR is 2.06 on BOTH sides.
+- Real root cause of LOESS_INPUT row delta: Rust's `dump_loess_input`
+  was called at pipeline.rs:1000 BEFORE the pass-2 refinement at line
+  1024, so the dump captured pass 1's 6,398 input rows even when pass
+  2's 7,361 were what the LOESS fit actually used. C# overwrites the
+  dump unconditionally on pass 2.
+- Also fixed `num_confident_peptides` metadata stuck on pass 1's count
+  when pass 2 was accepted.
+- Result: **LOESS_INPUT now PASS bit-equal** cross-impl.
+
+**Win 3 — C# CalibrationMetadata populated** (`pwiz e64bb5abcc`):
+- C# was writing `NumConfidentPeptides = 0` and `NumSampledPrecursors = 0`
+  hard-coded at `PerFileScoringTask.cs:1051-1052`. Now plumbed through
+  via new `CalibrationPassResult.MatchCount` field + `out int
+  numSampledPrecursors` on `RunCalibration`. Populated with
+  `rtCalibration.Stats().NPoints` and pass 1's matchArray.Length to
+  match Rust's `num_confident_peptides` and `num_sampled_precursors`
+  semantics.
+- Result: max cal_json diff dropped from 1.92e+5 (at
+  num_sampled_precursors) → 1.75e+2 (at next-largest remaining).
+
+**Win 4 — MS1 envelope tolerance unit fix** (`osprey 99c9e30`):
+- Rust was passing `config.precursor_tolerance.tolerance` directly as
+  `tolerance_ppm` to `IsotopeEnvelope::extract`, regardless of the
+  configured unit. For Stellar (unit-resolution: `tolerance=1.0,
+  unit=Mz`), this treated 1.0 Da as 1.0 ppm and produced an absurdly
+  tight ~0.5 mDa window. `envelope.has_m0()` failed on ~99.8% of
+  matches; only 18 of 7,361 entries contributed to ms1_calibration
+  (vs C# 193, 10x undercount).
+- Added `ms1_envelope_tolerance_ppm` helper matching C# behavior:
+  `unit == Ppm ? tolerance : 10.0`.
+- Found via `OSPREY_DIAG_MS1` instrumentation: `tol_ppm=1.0
+  peaks_in_m0_window=0 has_m0=false` on all sampled entries.
+- Result: **ms1_calibration drift eliminated** from cal_json
+  divergence list (was max 1.75e+2 at ms1_calibration.count).
+
+**Win 5 — LOESS sort tiebreak** (`osprey adfbea4`, `pwiz edb159ae23`):
+- Sort pairs by `(library_rt, measured_rt)` instead of just
+  `library_rt`, so duplicate-x positions are deterministic
+  cross-impl regardless of input order.
+- Result: marginal — eliminates cosmetic input-order dependency,
+  but the underlying LOESS prediction divergence at duplicate-x
+  remains (see "deferred" below).
+
+**Stellar Single boundary status after this round:**
+
+| Boundary | Status | Max diff |
+|---|---|---|
+| CAL_SAMPLE rust_cal_sample.txt | PASS | bit-equal |
+| CAL_SAMPLE rust_cal_scalars.txt | FAIL | 5.12e-13 (f64 epsilon) |
+| CAL_SAMPLE rust_cal_grid.txt | PASS | bit-equal |
+| CAL_WINDOWS | PASS | bit-equal |
+| CAL_MATCH | FAIL | 5.24e-10 (snr ULP floor) |
+| LDA_SCORES | FAIL | 4.95e-14 (f64 epsilon) |
+| **LOESS_INPUT** | **PASS** ✓ | bit-equal (was FAIL) |
+| CAL_JSON | FAIL | 7.04e-1 (LOESS dup-x swap; ms1 drift gone) |
+| SCORES_PQ Stage 4 | FAIL | xcorr/sg_xcorr/peak_apex **bit-equal**; rt_deviation 2.32e-11 |
+
+Boundary count unchanged at 4 PASS / 5 FAIL but the FAIL contents
+have tightened dramatically — nearly all remaining drift is at f64
+epsilon or single ULP. The CAL_JSON FAIL is now dominated by one
+LOESS dup-x prediction divergence.
+
+**Deferred — LOESS prediction divergence at duplicate-x points
+(task #82):** Both impls feed bit-equal LOESS inputs (verified row-
+by-row sed comparison shows identical (lib_rt, measured_rt) at every
+index). After (x, y) sort tiebreak, abs_residuals[5] and abs_residuals[6]
+are still swapped cross-impl with prediction divergence ~9 mDa at
+x=1.93. Suspected root cause: `find_k_nearest_sorted` uses INDEX-based
+k-NN, so i=5 and i=6 (both at x=1.93) get different neighborhood
+windows. Numerical reduction differences between Rust ndarray weighted
+least squares and C# manual implementation could amplify f64-epsilon
+prediction noise through bisquare weighting. Needs dedicated focused
+investigation.
+
+### Commits landed this round
+
+| Repo | Commit | Content |
+|------|--------|---------|
+| osprey | `f41ff88` | XCorr alignment: f64 accumulator + scorer.xcorr via cache narrowing |
+| osprey | `b80d86b` | Calibration pass 2: refresh LOESS dump + num_confident_peptides metadata |
+| osprey | `99c9e30` | Treat non-ppm precursor tolerance as 10 ppm default for MS1 envelope |
+| osprey | `adfbea4` | LOESS: sort by (lib_rt, measured_rt) tuple for deterministic dup-x order |
+| pwiz | `e64bb5abcc` | Populated CalibrationMetadata NumConfidentPeptides + NumSampledPrecursors |
+| pwiz | `edb159ae23` | LOESS: ThenBy on y for deterministic sort at duplicate library RT |
+
+
 
