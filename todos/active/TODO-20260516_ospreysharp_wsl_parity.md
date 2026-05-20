@@ -2063,3 +2063,169 @@ then Astral).
 reproduce-and-debug-in-VS plan, read
 `ai/.tmp/handoff-20260519_late_repro_in_VS.md` before starting work.
 
+
+## 2026-05-20 mid-day — Stage 3 calibration deep bisection
+
+### Test-Regression refactor: stop cross-tool freezing (committed ai/master `288b492`)
+
+Reframed the regression test to match the new gate definition. Each
+stage > stage1to4 now reads from `inputs-<side>/` (per-side input dir)
+populated from THAT side's own previous-stage outputs.
+`Get-StageInputDir` takes an optional `-Side` param; stage1to4 still
+uses a shared `inputs/` for dataset files. Freeze-Stage1to4 +
+Freeze-PostStage4 propagate each side's outputs to its own per-side
+next-stage inputs.
+
+Stellar Single result with the refactor:
+- stage1to4 PASS at 1e-6 (unchanged)
+- stage5 FAIL on all four dumps (standardizer SHA differs -6 bytes;
+  subsample SAME SIZE / SHA differs (same row set, drifted feature
+  values); svm_weights -7 bytes; percolator -66,558 bytes / 0.09%)
+
+The new gate confirms what we suspected: with each side feeding its
+own outputs forward, Stage 5 cannot pass at 1e-9 because Stage 4
+features drift cross-impl.
+
+### Stage 4 .scores.parquet per-column drift classification
+
+Python-Pyarrow inspection of all 40 columns x 462,802 entries at
+strict (bit-equal) and ULP-bucketed tolerance:
+
+- Bit-equal across all rows: entry_id, charge, precursor_mz,
+  bounds_snr, n_coeluting_fragments, consecutive_ions,
+  ms1_precursor_coelution, ms1_isotope_cosine,
+  median_polish_min_fragment_r2.
+- Bit-equal modulo 1 catastrophic file-20 row 0 + a few ULP-class:
+  apex_rt (99.9% + 1 catastrophic), start_rt, end_rt, peak_apex,
+  fragment_coelution_sum/max, peak_area, peak_sharpness,
+  mass_accuracy_*, median_polish_cosine/residual_ratio/correlation,
+  sg_weighted_cosine, explained_intensity, bounds_area.
+- The four drifters that feed Stage 5 SVM:
+    - `xcorr`: only 6,193 bit-equal, 413,394 at <1e-7 (f32 cascade) -
+      OFF LIMITS per user guidance.
+    - `sg_weighted_xcorr`: only 32 bit-equal, 414,950 at <1e-7 - same.
+    - `rt_deviation` / `abs_rt_deviation`: only 2,446 bit-equal,
+      460,311 at <1e-9. NOT f32 cascade - comes from LOESS
+      calibration model differing cross-impl.
+
+### F10 vs F17 formatter mismatch (solved + committed)
+
+The cal_match.txt "apex_rt 15,739 rows at exactly 1e-10 systematic
+offset" mystery was 100% formatter-rounding artifact:
+- Rust `{:.10}` uses round-half-to-even
+- .NET Framework 4.7.2 `F10` uses round-half-away-from-zero
+- On f64 values that land on a 10th-decimal rounding boundary, the
+  two formatters disagree by exactly 1 in the last printed digit
+- This created a fake "1e-10 systematic offset, always C# > Rust"
+  signal even though the underlying f64s were bit-equal
+
+Direct test at F17 (round-trip safe): all 186,118 matched cal_match
+rows have bit-equal apex_rt cross-impl. Same for LDA discriminant /
+q-value: max diff drops from 1e-10 (F10) to 5.06e-14 (F17), with most
+values bit-equal modulo 1 ULP.
+
+Commits:
+- osprey `1089407` - cal_match dump :.10 -> :.17
+- pwiz `43100b1917` - cal_match dump F10 -> F17
+- osprey `3d2a0f5` - lda_scores dump :.10 -> :.17
+- pwiz `af7088db35` - lda_scores dump F10 -> F17
+
+Lesson: cross-impl diagnostic dumps need round-trip-safe precision
+(16-17 fractional digits for f64). Earlier `:.10` choice was sound
+intent ("avoid banker's vs half-up") but wrong implementation -
+formatters still disagree at boundary cases regardless of precision.
+The only fix is enough digits that the underlying f64 bits round-trip.
+Pattern to watch for: systematic constant-direction constant-magnitude
+diff at the format-precision boundary is the signature of this issue.
+
+### Stage 3 calibration accumulator divergence (found via temporary OSPREY_DUMP_LOESS_GATE diagnostic - now reverted)
+
+Added a one-shot bisection diagnostic that dumps every accumulated
+calibration-match entry with (entry_id, is_decoy, q_value,
+signal_to_noise, library_rt, measured_rt, passes-gate). Comparing
+Rust vs C# dumps revealed the LOESS_INPUT 963-row delta is the tip
+of an iceberg:
+
+| Measure | Result |
+|---|---|
+| Rust `accumulated_matches` size | 192,289 entries |
+| C# `matchArray` size | 186,118 entries |
+| Rust-only entries (not in C#) | 6,240 (of which 6,118 are DECOYS, 122 targets) |
+| C#-only entries (not in Rust) | 69 (all decoys) |
+| Common entries | 186,049 |
+| Common entries with bit-equal `q_value` | 76,414 (41%) |
+| Common entries with bit-equal `snr` | 6,579 (3.5%) |
+| Common entries flipping LOESS gate | 4,715 (1,403 q-only + 1,577 SNR-only + 1,735 both) |
+
+SNR values differ wildly - e.g. entry 222 has Rust snr=15.94 vs C#
+snr=2.06. This is NOT ULP drift; it is the two impls picking DIFFERENT
+apex spectra during calibration matching, producing fundamentally
+different SNR values from different peaks.
+
+Important consolation finding: despite this Stage 3 calibration
+chaos, Stage 4 main-search `apex_rt` in `.scores.parquet` is 99.9%
+bit-equal cross-impl (462,375 of 462,802 rows; 426 at <=4 ULP; 1
+catastrophic row). Stage 4 main-search and Stage 3 calibration use
+INDEPENDENT candidate-spectrum-selection paths, so Stage 3 chaos
+does NOT defeat Stage 4 directly. Stage 4 features drift on xcorr
+(f32 cascade) and rt_deviation (LOESS-model cascade) but most other
+features are bit-equal.
+
+### What this means for the end-to-end gate
+
+To pass Stage 5 percolator at 1e-9 with each side using its own
+Stage 4 outputs, we need to reduce the .scores.parquet drift on
+features that feed the SVM. The four real drifters are:
+- xcorr, sg_weighted_xcorr - f32 cascade - OFF LIMITS without
+  thorough vetting per user guidance
+- rt_deviation, abs_rt_deviation - cascades from LOESS fit
+
+To make rt_deviation bit-equal, the LOESS fit needs the same input
+pairs. To get the same input pairs, calibration matching needs to
+pick the same apex spectra. Currently 4,715 of ~186K common
+entries pick different apex spectra -> fundamentally different LOESS
+fits.
+
+This is a deep Stage 3 calibration cross-impl bisection that
+requires comparing the SCORING choices made by each impl during the
+per-spectrum match loop. The temporary OSPREY_DUMP_LOESS_GATE
+diagnostic gave the symptom; the root cause is upstream in the
+calibration scoring code.
+
+### Open questions for next session
+
+1. What makes calibration matching pick different apex spectra
+   cross-impl? Same library entry, same candidate spectra (we
+   think), but different "best xcorr" picks. Need to dump per-entry
+   per-candidate-spectrum xcorr scores during calibration to see
+   where the scoring divergence enters.
+
+2. Does the FINAL LOESS calibration model (the predict_rt function)
+   actually produce similar predictions cross-impl despite the
+   input-pair divergence? rt_deviation in .scores.parquet drifts
+   at <1e-9 magnitude on 99.5% of rows. If the LOESS model is
+   producing predictions that align at sub-1e-9, then Stage 4 main
+   search doesn't suffer from the calibration chaos and the
+   remaining problem is purely xcorr (off-limits).
+
+3. Is the 6,118-decoy-entries-Rust-only an artifact of Rust running
+   more calibration ATTEMPTS than C#? Need to count `attempts` /
+   retry-with-widened-RT loop iterations on each side. If Rust has
+   more attempts, that explains the larger accumulator.
+
+### Commits landed today (cumulative)
+
+| Repo | Commit | Content |
+|------|--------|---------|
+| osprey | `1fe4ff7` | iso_upper f64 mzML cvParam fix (yesterday) |
+| osprey | `1089407` | cal_match :.10 -> :.17 |
+| osprey | `3d2a0f5` | lda_scores :.10 -> :.17 |
+| pwiz | `9982593f5b` | OspreySharp VERSION 26.6.0 -> 26.6.1 |
+| pwiz | `43100b1917` | cal_match F10 -> F17 |
+| pwiz | `af7088db35` | lda_scores F10 -> F17 |
+| ai | `288b492` | Test-Regression per-side refactor + comparators + Snappy cleanup |
+
+Next session handoff: see
+`ai/.tmp/handoff-20260520_stage3_calibration_divergence.md` (to be
+written by /pw-handoff) for startup protocol + Stage 3 bisection
+plan.
