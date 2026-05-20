@@ -729,6 +729,98 @@ SNR after.
 | ai | `61e0105` | April-fix-not-merged note |
 | ai | `e17a891` | f64 replay failed note |
 
-**Next session handoff**: pick up at task #71 — the C# calibration
-flip decision. The Rust half is in place and verified.
+### POSTSCRIPT 4 (2026-05-20 mid-afternoon) — Option 3 landed; calibration aligned, Stage 4 xcorr at f32 single-cast floor
+
+User picked Option 3 (f64-internal / f32-storage cache) over Option 1
+(one-line C# switch with perf cost on Astral) and Option 2 (parallel
+double[][] calibration cache, +400 MB transient). Option 3 keeps the
+cache memory budget at today's 400 KB per spectrum but moves the
+windowing / sliding-window cascade math to f64, so cache values now
+carry single-cast precision rather than f32-cascade noise. Memory
+overhead is negligible (~19 MB total scratch growth at 16 threads).
+
+**Rust changes** (`osprey a44f752`):
+- `xcorr_pool.rs`: XcorrScratch.binned/windowed/prefix flipped from
+  `Vec<f32>` to `Vec<f64>`. Per-thread scratch ~1.2 MB → ~2.4 MB on
+  HRAM; per-spectrum cache (`Vec<Vec<f32>>`) unchanged.
+- `lib.rs::apply_windowing_normalization_into`: f64 in, f64 out;
+  mirrors C# `ApplyWindowingNormalizationD` bit-for-bit.
+- `lib.rs::apply_sliding_window_into`: f64 spectrum + f64 prefix
+  scratch in, f32 result out. Single deterministic f64→f32 cast at
+  final store.
+- `lib.rs::preprocess_spectrum_for_xcorr_into`: bin with
+  `(intensity as f64).sqrt()` widen-before-sqrt. Output signature
+  unchanged (`&mut [f32]`); HRAM callers in pipeline.rs need no
+  updates.
+
+**C# changes** (`pwiz 6c17c20717`):
+- `SpectralScorer.PreprocessSpectrumForXcorrF32IntoBuffers`: takes
+  `double[] binned/windowed/prefix` + `float[] preprocessed`. Bin step
+  uses `Math.Sqrt(float)` (implicit widen-before-sqrt) so it bit-equals
+  Rust's `(intensity as f64).sqrt()`.
+- New `ApplySlidingWindowDIntoF32` helper: f64 inputs, f32 result with
+  final cast.
+- `PreprocessSpectrumForXcorrInto`: switched from `BinnedF/WindowedF/
+  PrefixF` (float[]) to `Binned/Windowed/Prefix` (double[]). Same
+  XcorrScratch pool, no new allocation.
+- Removed obsolete `XcorrScratch.BinnedF/WindowedF/PrefixF` fields
+  and `ApplyWindowingNormalizationF` / `ApplySlidingWindowF` helpers.
+
+**Verification on Stellar Single** (Compare-Stage1to4-Strict + per-column
+analysis joined by `entry_id+charge+scan_number`):
+
+| Boundary | Column | max diff | Status |
+|---|---|---|---|
+| cal_match | apex_rt | 0 | bit-equal ✓ |
+| cal_match | correlation | 4.97e-14 | f64 epsilon ✓ |
+| cal_match | libcosine | 5.55e-16 | f64 epsilon ✓ |
+| cal_match | xcorr | **4.43e-8** | down from 3.876e-6 (~100x) |
+| cal_match | snr | 5.24e-10 | unchanged (separate root cause) |
+| .scores.parquet | peak_apex | **0** | 100% bit-equal ✓ |
+| .scores.parquet | apex_rt | 3.55e-15 | 462,375 bit-equal + f64 epsilon ✓ |
+| .scores.parquet | rt_deviation | **2.32e-11** | LOESS cascade now tight |
+| .scores.parquet | peak_area | 4.42e-9 | overwhelmingly bit-equal ✓ |
+| .scores.parquet | xcorr | **5.41e-7** | at f32 single-cast floor (was f32 cascade) |
+| .scores.parquet | sg_weighted_xcorr | 3.52e-7 | same |
+
+**What the residual ~1e-7 floor represents.** The cache stores f32
+values that get cast once from f64. C# `XcorrFromPreprocessed(float[],
+entry)` sparse-sums them into a `double xcorrRaw` accumulator (implicit
+f32→f64 promote on read). Rust `xcorr_sparse` sums into an `f32`
+accumulator and casts to f64 only at the final scale. The two
+accumulator orders / types produce slightly different results even on
+bit-equal f32 caches — that's the residual. Aligning Rust to f64-sum
+in xcorr_sparse would close this; deferred as a follow-up.
+
+**Open items still on the docket:**
+- `snr` 5.24e-10 unchanged. Still the LDA in-place mutation of
+  `m.signal_to_noise` to a z-score on the Rust side only (entry 222
+  evidence). Worth a focused look once xcorr parity is locked in.
+- `LOESS_INPUT` row count still differs (6,400 vs 7,363). Now that
+  xcorr cascade is aligned, the residual is almost certainly the SNR
+  gate (depends on the LDA-mutated SNR).
+- Rust `xcorr_sparse` sums in f32 vs C# `XcorrFromPreprocessed`
+  sums in f64. Aligning these would push Stage 4 xcorr from
+  ~5e-7 (single-cast floor) toward bit-equal. Deferred.
+
+### Commits landed today (cumulative)
+
+| Repo | Commit | Content |
+|------|--------|---------|
+| osprey | `1089407` | cal_match :.10 -> :.17 |
+| osprey | `3d2a0f5` | lda_scores :.10 -> :.17 |
+| osprey | `690194a` | scorer.xcorr f64 inline (surgical patch) |
+| osprey | `a44f752` | XcorrScratch + cache build flipped to f64-internal/f32-storage |
+| pwiz | `9982593f5b` | OspreySharp VERSION 26.6.0 -> 26.6.1 |
+| pwiz | `43100b1917` | cal_match F10 -> F17 |
+| pwiz | `af7088db35` | lda_scores F10 -> F17 |
+| pwiz | `6c17c20717` | HRAM XCorr preprocess: f64-internal / f32-storage cache |
+| ai | `288b492` | Test-Regression per-side refactor + comparators |
+| ai | `8ff9fa5` | TODO mid-day |
+| ai | `450b35d` | handoff pointer |
+| ai | `61e0105` | April-fix-not-merged |
+| ai | `e17a891` | f64 replay failed |
+| ai | `5c7a30f` | TODO postscript 3 (3-option breakdown) |
+| ai | `3129f5d` | TODO split into phase1 + phase2 |
+
 
