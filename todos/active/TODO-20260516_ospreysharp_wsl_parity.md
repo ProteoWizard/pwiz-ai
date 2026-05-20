@@ -2225,7 +2225,6 @@ calibration scoring code.
 | pwiz | `af7088db35` | lda_scores F10 -> F17 |
 | ai | `288b492` | Test-Regression per-side refactor + comparators + Snappy cleanup |
 
-Next session handoff: see
-`ai/.tmp/handoff-20260520_stage3_calibration_divergence.md` (to be
-written by /pw-handoff) for startup protocol + Stage 3 bisection
-plan.
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260520_stage3_calibration_divergence.md`
+before starting work.
