@@ -1704,8 +1704,82 @@ all 3 files; `diff_fdr_bin.py` reports 0 score / q-value diffs.
   separately or merged upstream -- is open. Cross-impl parity does
   not depend on the answer.
 
+## Postscript 13 — Stellar 3-file perf refresh + WSL Linux binaries (2026-05-21 evening)
 
+After postscript-12 landed Stellar 3-file straight-through bit-equality,
+this session refreshed the Stellar timing tables in
+`Osprey-workflow.html` (pwiz commit `3b04664509`) and rebuilt Linux
+binaries from the post-fix commits.
 
+### Phase B: Compare-EndToEnd-Crossimpl 3-file Stellar straight-through PASS
+
+```
+pwsh -File ./scripts/OspreySharp/Compare-EndToEnd-Crossimpl.ps1 \
+     -Dataset Stellar -Files All -Framework net8.0 -Force
+
+[Rust]     wall 04:13   precursors 59733   blib 52310016 bytes
+[C#]       wall 04:43   precursors 59733   blib 52494336 bytes
+Stage 7 protein FDR (per-col 1e-9):  PASS
+Blib content (SQL row+col 1e-9):     PASS
+OVERALL: PASS  --  bit-parity at 1e-9 on Stellar 3-file
+```
+
+### Phase C: WSL Linux binaries (Ubuntu 22.04)
+
+* Rust: `cargo build --release` via `~/.cargo/bin/cargo` (1.95.0).
+  Toolchain pin needed because system `/usr/bin/cargo` is 1.75.0 and
+  doesn't support `edition2024` (required by `base64ct 1.8.3`).
+  Output: `/mnt/c/proj/osprey/target/release/osprey` (15.9 MB ELF).
+* C#: `dotnet publish -r linux-x64 --self-contained -c Release -f net8.0`.
+  Output: `bin/Release/net8.0/linux-x64/publish/OspreySharp`.
+  Measure-Pipeline.ps1 uses the cross-platform launcher at
+  `bin/x64/Release/net8.0/OspreySharp` (72 KB), which loads the
+  refreshed `.FDR.dll` from the same directory (today's fixes).
+
+### Phase D: Measure-Pipeline Stellar 3-file × 4 cells × 1 repeat
+
+| Config | Total wall | Notes |
+|---|---|---|
+| Rust  Windows | 4:29 | stage5 1:16, stage1to4 1:42 |
+| C#    Windows | 4:39 | stage5 2:03, stage1to4 1:20 |
+| Rust  WSL     | 6:01 | stage5 1:05, stage1to4 3:11 |
+| C#    WSL     | 6:39 | stage5 2:12, stage1to4 2:46 |
+
+* Windows ratio C#/Rust = 1.04x (~tied)
+* WSL ratio C#/Rust = 1.11x (Rust faster by ~10%)
+* stage5 (Percolator SVM training) is the dominant C# slowdown on
+  both OSes -- worth a future targeted pass.
+* WSL stage1to4 nearly 2x slower than Windows for both impls
+  (9P-mzML reads dominate); not a regression -- existing artifact.
+
+Artifacts:
+* `ai/.tmp/measure-pipeline/stellar-3file-windows-20260521/report.md`
+* `ai/.tmp/measure-pipeline/stellar-3file-wsl-20260521/report.md`
+
+### Phase E: Osprey-workflow.html refresh (pwiz `3b04664509`)
+
+Both the Windows-native and WSL Linux tables now carry today's
+Stellar 3-file numbers. Astral columns untouched (no Astral
+re-measurement this session). Annotation calls out that the Stellar
+refresh post-dates the 3-file straight-through bit-equality and lists
+the relevant osprey/pwiz commits.
+
+### Open follow-ups for next session
+
+1. **Stellar 3-file → median-of-3** (currently 1-shot per cell, the
+   stopping point we committed to). Re-run `Measure-Pipeline.ps1
+   -Repeats 3` per OS for tighter intervals.
+2. **Astral 3-file bit-equality** -- not addressed today; still on
+   the original 2026-05-18 numbers.
+3. **C# 73K gap-fill empty-fragment parquet** (postscript-12 follow-up
+   item) -- still UNFIXED. Does not affect parity but causes 85 MB
+   parquet-size delta on 3-file Stellar.
+4. **stage5 C# perf gap** -- ratio is 1.61x Windows / 2.01x WSL.
+   Worth a targeted pass; might also help Astral.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260516_ospreysharp_wsl_parity-postperf.md` before
+starting work.
 
 
 
