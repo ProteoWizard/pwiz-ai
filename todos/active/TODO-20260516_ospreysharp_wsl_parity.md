@@ -1203,8 +1203,9 @@ pwsh -File ./ai/scripts/OspreySharp/Compare-Stage1to4-Strict.ps1 -Dataset Stella
 # bin\x64\Release\net8.0\OspreySharp.exe, then re-run -Force.
 ```
 
-(Adding a `-Framework net472|net8` parameter to the script is left
-for a follow-up.)
+The `-Framework net472|net8.0` switch was added to
+Compare-Stage1to4-Strict.ps1 in ai `0e00286` so toggling the build
+target is now a single CLI arg, no script edit needed.
 
 ### Commits this round (cumulative)
 
@@ -1214,6 +1215,18 @@ for a follow-up.)
 | pwiz | `1b60a781ab` | cal_match + lda_scores dumps F17 → G17 |
 | pwiz | `7b057b1f7d` | MzmlReader cvParams use XmlConvert.ToDouble |
 | ai | `f231ea1` | TODO postscript 7 |
+| ai | `9cdd891` | TODO postscript 8 (.NET 8.0 is the proof) |
+| ai | `0e00286` | Compare-Stage1to4-Strict -Framework switch |
+| ai | `32f951e` | TODO Current Status reframed with .NET 8.0 as proof |
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260516_ospreysharp_wsl_parity.md` before starting
+work. Cross-impl Stage 1-4 parity sprint is COMPLETE; the next
+natural target if the sprint resumes would be either (a) coordinated
+sum-order alignment for the 2 remaining f64-cascade columns on
+net8.0 (sg_weighted_cosine + median_polish_residual_correlation),
+or (b) pivoting to Stage 5+ percolator parity which this sprint
+deliberately did not address.
 
 
 
