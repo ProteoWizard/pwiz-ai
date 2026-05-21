@@ -990,6 +990,97 @@ reached the architectural floor on Stellar Single.
 |------|--------|---------|
 | pwiz | `3ec9236dca` | Fixed outer/inner sort mismatch at duplicate library RT |
 
+### POSTSCRIPT 7 (2026-05-20 evening) — F17 → G17 print format + IEEE-correct parsers; CAL_SAMPLE passes, CAL_MATCH at f64 epsilon
+
+After the LOESS bit-equal fixes (postscript 6), the next-largest
+cross-impl drift was CAL_MATCH snr at 5.24e-10. Initial debugging
+attributed this to f32 cascade in XIC intensity reading. Wrong.
+
+**Real root cause**: .NET Framework 4.7.2's `F17` format truncates
+double output at ~15 significant digits and pads with zeros. The
+"5.24e-10 snr drift" was the comparator parsing those truncated
+strings back to f64 values that differed by 9 ULP from the original.
+Underlying f64 values were essentially bit-equal cross-impl.
+
+**Fix** (`pwiz 11943b19dd`, `pwiz 1b60a781ab`):
+- Switch cal_scalars, cal_match, lda_scores dumps from F17 → G17
+  for the f64 fields. G17 prints 17 significant digits required for
+  round-trip-safe representation. F17 in .NET Framework 4.7.2 caps
+  at ~15 sig figs.
+- DiannTsvLoader (`ParseDouble`, `ParseFloat`, `ParseDoubleOrDefault`)
+  switch to `XmlConvert.ToDouble`/`ToSingle` for IEEE-754 correct
+  parsing of TSV library values.
+- MzmlReader (`pwiz 7b057b1f7d`) similarly switches all 13
+  `double.TryParse` cvParam callsites to `TryParseXmlDouble`. Note
+  .NET Framework 4.7.2's XmlConvert.ToDouble apparently has the
+  same parser limitation as double.TryParse on the specific
+  cvParam values producing the apex_rt 137-row 2-ULP drift —
+  the fix is still correct in principle and helps on .NET 5+ /
+  values that fall in the correctable parser range.
+
+**Per-column cal_match drift after this round**:
+
+| Column | Before postscript 7 | After G17 |
+|---|---|---|
+| apex_rt | bit-equal (artifact) | 3.55e-15 on 137/186118 rows (parser ULP floor) |
+| correlation | 4.97e-14 (f64 epsilon) | **bit-equal** |
+| libcosine | 5.55e-16 (f64 epsilon) | **bit-equal** |
+| xcorr | 5.11e-15 (f64 epsilon) | **6.94e-18 (sub-epsilon)** |
+| snr | 5.24e-10 (thought f32 cascade) | **6.94e-18 (sub-epsilon)** |
+
+cal_match boundary max_diff: 5.24e-10 → **3.55e-15** (5 orders tighter).
+
+**Final boundary status this session (Stellar Single)**:
+
+| Boundary | Status | Max diff |
+|---|---|---|
+| CAL_SAMPLE rust_cal_sample.txt | PASS | bit-equal |
+| CAL_SAMPLE rust_cal_scalars.txt | **PASS** (was FAIL) | bit-equal |
+| CAL_SAMPLE rust_cal_grid.txt | PASS | bit-equal |
+| CAL_WINDOWS | PASS | bit-equal |
+| CAL_MATCH | FAIL | 3.55e-15 (apex_rt 137 rows at .NET parser ULP floor) |
+| LDA_SCORES | FAIL | 4.84e-14 (f64 epsilon cascade) |
+| LOESS_INPUT | PASS | bit-equal |
+| CAL_JSON | FAIL | 4.71e-12 (LOESS bisquare f64 cascade) |
+| SCORES_PQ Stage 4 | FAIL | xcorr/sg_xcorr/peak_apex bit-equal; rt_deviation 2.13e-11 |
+
+**Boundary count**: 5 PASS / 4 FAIL (was 4 PASS / 5 FAIL at session
+start). All remaining FAILs at single-ULP f64 noise or .NET parser
+precision floor.
+
+**Commits this round (cumulative for the day, 17 across 3 repos)**:
+
+| Repo | Commit | Content |
+|------|--------|---------|
+| pwiz | `11943b19dd` | DiannTsvLoader IEEE-correct + cal_scalars G17 |
+| pwiz | `1b60a781ab` | cal_match + lda_scores dumps F17 → G17 |
+| pwiz | `7b057b1f7d` | MzmlReader cvParams use XmlConvert.ToDouble |
+
+**Deferred / known limitations**:
+
+1. **CAL_MATCH apex_rt 137-row 2-ULP drift** (.NET Framework 4.7.2
+   parser limitation on specific cvParam values like "17.0286203070330").
+   Both `double.TryParse` and `XmlConvert.ToDouble` have the same
+   limitation. Would be fixed by .NET 5+ migration or a custom
+   IEEE-correct parser (e.g. David Gay-style).
+
+2. **CAL_JSON 4.71e-12** — LOESS bisquare-weighted refit f64
+   cascade. Eliminating would require identical floating-point
+   operation order in both LOESS implementations.
+
+3. **LDA_SCORES 4.84e-14** — f64 cascade through LDA classifier
+   weights / mean accumulation. Same operation-order limitation.
+
+4. **SCORES_PQ Stage 4 rt_deviation 2.13e-11** — cascade from LOESS
+   predictions. Improves automatically if (2) is addressed.
+
+The cross-impl parity work has effectively reached the architectural
+floor for cross-impl numerical equality on .NET Framework 4.7.2 +
+Rust f64. Further reduction would require either the .NET 5+
+migration or coordinated rewrite of LOESS / LDA internals to align
+floating-point reduction order.
+
+
 
 
 
