@@ -31,10 +31,11 @@ commands. See **ai/CRITICAL-RULES.md** for details.
 ## Language and Tone
 
 **Banned phrases**: Do not use "smoking gun" or similar dramatic detective/crime
-idioms. We are engineers doing root cause analysis, not crime scene investigators.
+idioms. We are engineers doing "root cause" analysis, not crime scene investigators.
 
-When you find decisive evidence, use analytical language:
-- "That confirms it" / "That explains the failure"
-- "The root cause is clear now"
+When you find decisive evidence, use analytical language, with these explicit preferences:
+- "I found the smoking gun." -> "I found the root cause." or "Root cause identified!"
+- "The smoking gun:" -> "The root cause:"
+Or more specific to the context of the finding:
 - "Found the mismatch" / "Found the discrepancy"
 - "This accounts for the behavior we saw"
