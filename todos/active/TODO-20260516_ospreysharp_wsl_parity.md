@@ -1592,6 +1592,118 @@ earlier handoff `handoff-20260516_ospreysharp_wsl_parity-option-a.md`
 remains a valid startup reference for the underlying sprint setup
 but is superseded by this one for current state.
 
+## Postscript 12 — 3-file Stage 7 bit-equal PASS (2026-05-21)
+
+Walked the bisection ladder from the postscript-11 handoff state and
+landed Stage 6 + Stage 7 bit-equal on 3-file Stellar. Three coupled
+defects accounted for the entire remaining divergence.
+
+### Bisection: where the ladder stopped
+
+* **Ladder L1 (standardizer dump)**: differed by 1 ULP on `rt_deviation`
+  mean. Per-column `perc_input` diff localized to (a) 2275 ULP-phantom
+  string-formatting differences in `peak_apex` (same f64 bits, two
+  equally-valid 16-digit roundtrip representations -- not real
+  divergence), and (b) 280 real diffs in `rt_deviation` / mirror
+  `abs_rt_deviation` -- traced to 94 per-file groups of duplicate
+  `(entry_id, charge, scan_number)` rows where the two distinct values
+  appeared in swapped order across sides.
+* **Ladder L4 (tie-break instability)**: confirmed. The canonical sort
+  added in postscript-11 was `(entry_id, charge, scan_number)`. Those
+  three keys tie on the duplicate-key rows, and .NET `List<T>.Sort` is
+  unstable, so the same input produced swapped order at every tied
+  group. Did NOT need to bisect into the SVM solver (ladder L3).
+
+### Three root causes
+
+1. **Sort key needs a fourth tie-breaker.** Adding `parquet_index` as a
+   final tie-break in both `pipeline.rs::run_percolator_fdr` and
+   `FirstJoinTask.cs::RunPercolatorFdr` makes the total order identical
+   on both sides regardless of underlying sort stability, because the
+   per-side parquets are byte-equal and `parquet_index` references the
+   shared canonical row layout.
+
+2. **Gap-fill `parquet_index` not remapped after canonical sort.** The
+   parquet writer's internal sort moves rows but `FdrEntry` stubs kept
+   their pre-sort `parquet_index`. Next Percolator pass loaded features
+   from the wrong row. Fix: compute the canonical permutation
+   explicitly in `rescore_per_file_loop`, invert into pre->post indices,
+   and remap every stub (upstream rows by `pre_to_post[old_pq_idx]`,
+   gap-fill stubs via a new `vec_idx -> pre_sort_row` map built during
+   append). Applied in Rust; the C# port already remapped correctly.
+
+3. **`compute_experiment_precursor_qvalues` didn't propagate.** The
+   Rust direct path only assigned the q-value to the single
+   `compete_all` winner per `base_id`, leaving every non-winning
+   per-file observation at `q=1.0`. The streaming path already did the
+   right thing (`base_id_exp_prec_q` map) and the C# port matched
+   streaming. Fixed Rust direct path to build the same map and
+   propagate. Net effect on the diagnostic: 109K `exp_prec_q` diffs
+   per file went to zero.
+
+4. **C# PSM Id collision.** OspreySharp constructed `psm_id` as
+   `"{fileName}_{EntryId}"`. EntryId is NOT unique within a file: a
+   single `base_id` with multiple scan-time observations (different
+   `scan_number`, same charge, same modified_sequence) shares one
+   EntryId. The 2-component psm_id collided on those, so `resultMap`
+   last-wins copied one observation's Percolator result onto every
+   same-EntryId stub. Rust direct path used a 4-component id
+   `"{file}_{mod_seq}_{charge}_{scan}"`; C# now matches.
+
+### Files changed + commits
+
+| Repo | Commit | Content |
+|------|--------|---------|
+| osprey | `8712ffe` | parquet_index sort tie-break + gap-fill remap + exp_prec_q propagation + `dump_stage5_perc_input` diagnostic |
+| pwiz | `bfd52e0095` | C# 4-component psm_id + ParquetIndex sort tie-break + perc_input dump + subsample dump native_position tie-break |
+| ai | `dd8d524` | stage6 envVars add standardizer + perc_input + subsample + svm_weights dumps + PERC_INPUT/_ONLY hooks added to defensive clear list |
+
+### Stage 6 + Stage 7 PASS evidence
+
+```
+pwsh -File 'C:/proj/ai/scripts/OspreySharp/Test-Regression.ps1' \
+     -Dataset Stellar -Files All \
+     -StartStage stage6 -StopAfterStage stage7 \
+     -Tag perside_3file_v4
+
+--- stage6 ---
+  [run] rust stage6    exit=0 wall=03:01
+  [run] cs   stage6    exit=0 wall=03:57
+  [PASS] stage6
+  [freeze] inputs prepared for stage7
+
+--- stage7 ---
+  [run] rust stage7    exit=0 wall=00:06
+  [run] cs   stage7    exit=0 wall=00:10
+  [PASS] stage7
+```
+
+Per-file `.2nd-pass.fdr_scores.bin` SHAs cross-impl are bit-equal on
+all 3 files; `diff_fdr_bin.py` reports 0 score / q-value diffs.
+
+### Latent / follow-up items
+
+* **Parquet rewrite leaves empty fragment lists for ~73K gap-fill
+  entries in C#**: still UNFIXED. C# stage 6 writes the rewritten
+  `.scores.parquet` with empty `fragment_mzs` /
+  `reference_xic_rts` / `fragment_intensities` for ~73K gap-fill rows;
+  Rust populates them. Accounts for ~85 MB parquet-size delta. Does
+  NOT affect 2nd-pass training (PIN feature scalars are populated)
+  and was deliberately left out of this fix. Track separately.
+* **`peak_apex` / `xcorr` perc_input dump formatting** still emits
+  2280 phantom diffs that have bit-identical f64 representations.
+  The two sides' shortest-roundtrip search finds equally-valid 16-
+  digit prints. Could be normalized (always use the same digit count)
+  if a future bisection workflow needs raw `diff` to be clean. Not
+  urgent.
+* **Duplicate-`(file, mod_seq, charge, scan_number)` PercolatorEntry
+  collisions** (94 per file on 3-file Stellar) still happen. Both
+  sides now consistently last-wins on the same observation, but the
+  underlying algorithmic question -- whether two scan observations
+  with the same key but different `rt_deviation` should be scored
+  separately or merged upstream -- is open. Cross-impl parity does
+  not depend on the answer.
+
 
 
 
