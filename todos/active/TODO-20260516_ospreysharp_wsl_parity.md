@@ -1080,6 +1080,98 @@ Rust f64. Further reduction would require either the .NET 5+
 migration or coordinated rewrite of LOESS / LDA internals to align
 floating-point reduction order.
 
+### POSTSCRIPT 8 (2026-05-20 evening, continued) — .NET 8.0 build gets us essentially bit-equal
+
+Tested the same build path against the .NET 8.0 OspreySharp binary
+(`bin\x64\Release\net8.0\OspreySharp.exe`) instead of the canonical
+net472. .NET 5+ ships with the Eisel-Lemire IEEE-754-correct double
+parser, so the .NET Framework 4.7.2 parser ULP limitations should
+vanish. Result far exceeded expectations.
+
+**Stellar Single boundary status on .NET 8.0** (vs net472 in parens):
+
+| Boundary | net8.0 max | net472 max |
+|---|---|---|
+| CAL_SAMPLE rust_cal_scalars.txt | bit-equal | bit-equal |
+| CAL_MATCH | **6.94e-18** (sub-epsilon) | 3.55e-15 |
+| LDA_SCORES | 4.84e-14 (real f64 cascade) | 4.84e-14 |
+| CAL_JSON | **4.44e-16** (n_above_1e-15=0) | 4.71e-12 |
+| SCORES_PQ Stage 4 | only sg_weighted_cosine + median_polish_residual_correlation at 1 ULP; **everything else bit-equal** | rt_deviation 2.13e-11, peak_sharpness 1.17e-6, etc. |
+
+**Per-column Stage 4 .scores.parquet on .NET 8.0:**
+
+| Column | Status |
+|---|---|
+| entry_id, charge, precursor_mz, etc. | bit-equal (always were) |
+| **apex_rt, start_rt, end_rt** | **bit-equal** (was 3.55e-15 + 427 rows) |
+| **bounds_area, peak_area, peak_apex** | **bit-equal** (was 4.42e-9 "f32 cascade") |
+| **peak_sharpness** | **bit-equal** (was 1.17e-6 "f32 cascade") |
+| **xcorr, sg_weighted_xcorr** | **bit-equal** (same as net472) |
+| **rt_deviation, abs_rt_deviation** | **bit-equal** (was 2.13e-11 "LOESS f64 cascade") |
+| explained_intensity, median_polish_*, mass_accuracy_* | **bit-equal** (was 1.87e-14 / 1.17e-6) |
+| sg_weighted_cosine | 1-2 ULP diffs (267,532 rows) |
+| median_polish_residual_correlation | 1-2 ULP diffs (288,665 rows) |
+
+**Massive realization: nearly every "f32 cascade" and "LOESS f64
+cascade" we attributed to internal arithmetic was actually driven by
+.NET Framework 4.7.2's 1-2 ULP parser bug.** Two distinct propagation
+chains:
+
+1. **Parser → apex_rt → peak boundary indices → all peak shape
+   features.** If C# parses mzML cvParam "17.0286203070330" to a
+   different f64 than Rust, apex_rt differs by 2 ULP, peak boundary
+   index selection differs, peak_sharpness / peak_area / bounds_area
+   compute over slightly different ranges → "f32 magnitude" drift.
+
+2. **Parser → cvParam mz/intensity values → cascading.** Smaller
+   contribution but compounds with #1.
+
+On .NET 8.0 with the Eisel-Lemire parser, both chains collapse: the
+parsed f64 values are IEEE-correct, downstream peak selection is
+deterministic, and almost all "cascades" become bit-equal.
+
+**Stage 4 .scores.parquet went from 8 columns with significant drift
+to just 2 columns with 1-2 ULP f64 noise.** That's the real
+architectural floor — only the genuine f64 reduction-order
+limitations remain (weighted cosine sum, median polish correlation
+sum).
+
+**Implications for the work plan:**
+
+- .NET 8.0 is the right target for cross-impl bit-equality.
+  net472 hits the parser precision floor; net8 doesn't.
+- The two remaining f64-cascade columns (sg_weighted_cosine and
+  median_polish_residual_correlation) could potentially be aligned
+  with focused sum-order matching, but this would be a coordinated
+  Rust + C# change.
+- The XmlConvert.ToDouble work we did (`7b057b1f7d`) is still
+  valuable: it makes net472 incrementally better in the cases where
+  XmlConvert is more correct than double.TryParse, and is required
+  by code that runs on both targets to behave consistently.
+
+**Verification commands** (Stellar Single):
+```
+# net472 (canonical Skyline binary):
+pwsh -File ./ai/scripts/OspreySharp/Compare-Stage1to4-Strict.ps1 -Dataset Stellar -Files Single -Force
+
+# net8.0 (eliminates parser-driven cascades):
+# Temporarily edit Compare-Stage1to4-Strict.ps1 line 85 to point at
+# bin\x64\Release\net8.0\OspreySharp.exe, then re-run -Force.
+```
+
+(Adding a `-Framework net472|net8` parameter to the script is left
+for a follow-up.)
+
+### Commits this round (cumulative)
+
+| Repo | Commit | Content |
+|------|--------|---------|
+| pwiz | `11943b19dd` | DiannTsvLoader IEEE-correct + cal_scalars G17 |
+| pwiz | `1b60a781ab` | cal_match + lda_scores dumps F17 → G17 |
+| pwiz | `7b057b1f7d` | MzmlReader cvParams use XmlConvert.ToDouble |
+| ai | `f231ea1` | TODO postscript 7 |
+
+
 
 
 
