@@ -937,5 +937,59 @@ investigation.
 | pwiz | `e64bb5abcc` | Populated CalibrationMetadata NumConfidentPeptides + NumSampledPrecursors |
 | pwiz | `edb159ae23` | LOESS: ThenBy on y for deterministic sort at duplicate library RT |
 
+### POSTSCRIPT 6 (2026-05-20 late afternoon) — LOESS outer/inner sort mismatch fixed; cal_json at f64 epsilon
+
+After committing the (x, y) tiebreak fix in both LOESS implementations
+(adfbea4, edb159ae23), the cal_json abs_residuals[5]/[6] swap PERSISTED.
+Investigation via `model_params.fitted_rts` revealed: predictions were
+bit-equal cross-impl (both 2.098903079075325), but the RESIDUALS were
+swapped. Tracing back showed C# has a DOUBLE-SORT BUG.
+
+**Root cause** (`pwiz 3ec9236dca`):
+- `RTCalibration.cs:120` outer wrapper sorts by `libraryRts` ONLY.
+- `LoessRegression.cs:258` inner sort uses `(x, y)` tuple (the
+  postscript-5 fix).
+- At duplicate-x positions, the two sorts produce different orders.
+  Outer `y[i]` and inner `fitted[i]` end up corresponding to
+  DIFFERENT data points, so `residuals[i] = y[i] - fitted[i]` is
+  mismatched on the duplicate-x rows.
+- Rust is consistent because `rt.rs::fit` does a SINGLE sort by
+  `(x, y)` tuple at line 123 — y[i] and fitted[i] always correspond.
+- Fix: outer C# sort gains `ThenBy(i => measuredRts[i])` to match
+  the inner sort.
+
+**Cross-impl effect on Stellar Single calibration.json:**
+- max_diff: 7.04e-1 → **4.71e-12** (~11 orders of magnitude tighter)
+- All `rt_calibration.model_params.abs_residuals[i]` now at f64
+  epsilon cross-impl
+- `rt_calibration.mad`: 8.14e-13 (f64 noise)
+- The remaining cal_json drift is f64 cascade noise in the bisquare-
+  weighted refit — essentially bit-equal
+
+**Final Stellar Single boundary status:**
+
+| Boundary | Status | Max diff |
+|---|---|---|
+| CAL_SAMPLE rust_cal_sample.txt | PASS | bit-equal |
+| CAL_SAMPLE rust_cal_scalars.txt | FAIL | 5.12e-13 (f64 noise; mz_min 1-ULP differs) |
+| CAL_SAMPLE rust_cal_grid.txt | PASS | bit-equal |
+| CAL_WINDOWS | PASS | bit-equal |
+| CAL_MATCH | FAIL | 5.24e-10 (snr ULP floor at value ~3e5; intensity precision) |
+| LDA_SCORES | FAIL | 4.95e-14 (f64 epsilon) |
+| LOESS_INPUT | PASS | bit-equal |
+| CAL_JSON | FAIL | **4.71e-12** (was 7.04e-1; f64 epsilon now) |
+| SCORES_PQ Stage 4 | FAIL | xcorr/sg_xcorr/peak_apex bit-equal; rt_deviation 2.13e-11 |
+
+All FAILs are at f64 epsilon, single ULP precision, or upstream
+intensity precision. The cross-impl parity work has effectively
+reached the architectural floor on Stellar Single.
+
+**Commits this round (cumulative for the day, 14 across 3 repos):**
+
+| Repo | Commit | Content |
+|------|--------|---------|
+| pwiz | `3ec9236dca` | Fixed outer/inner sort mismatch at duplicate library RT |
+
+
 
 
