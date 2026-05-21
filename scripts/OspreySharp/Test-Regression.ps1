@@ -370,6 +370,7 @@ function Invoke-Tool {
     $allHooks = @(
         'OSPREY_DUMP_STANDARDIZER','OSPREY_DUMP_SUBSAMPLE',
         'OSPREY_DUMP_SVM_WEIGHTS','OSPREY_DUMP_PERCOLATOR',
+        'OSPREY_DUMP_PERC_INPUT','OSPREY_PERC_INPUT_ONLY',
         'OSPREY_PERCOLATOR_ONLY',
         'OSPREY_DUMP_RECONCILIATION','OSPREY_RECONCILIATION_ONLY',
         'OSPREY_DUMP_RESCORED','OSPREY_RESCORED_ONLY',
@@ -636,6 +637,15 @@ $stageConfig = @{
             OSPREY_DUMP_CONSENSUS      = '1'
             OSPREY_DUMP_RECONCILIATION = '1'
             OSPREY_DUMP_RESCORED       = '1'
+            # Captures 2nd-pass Percolator subsample + fold assignment
+            # AND per-fold SVM weights in stage6/<side>/ (filename
+            # keeps "stage5_" prefix; 2nd-pass call overwrites 1st-pass
+            # within the same process). Diagnostic for cross-impl
+            # localization of any post-dedup, 2nd-pass divergence.
+            OSPREY_DUMP_STANDARDIZER   = '1'
+            OSPREY_DUMP_PERC_INPUT     = '1'
+            OSPREY_DUMP_SUBSAMPLE      = '1'
+            OSPREY_DUMP_SVM_WEIGHTS    = '1'
             # Exit after Stage 7 protein FDR dump (well before blib
             # write). The 2nd-pass FDR sidecar is written by the binary
             # BEFORE this exit point (AnalysisPipeline.cs writes it just
