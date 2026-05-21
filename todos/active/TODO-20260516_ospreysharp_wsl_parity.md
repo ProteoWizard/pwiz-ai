@@ -1393,6 +1393,123 @@ which the harness now isolates cleanly (every Stage 7 input is
 proven bit-equal cross-impl, so any work happens entirely inside
 Stage 7 code).
 
+## Postscript 10 — Stellar Single straight-through + Stellar 3-file (2026-05-21)
+
+Continued from the Option A overnight result, working through the
+three modes of cross-impl test on Stellar.
+
+### Stellar Single, straight-through (no rehydration): PASS
+
+The straight-through path (each side runs its own full pipeline in
+memory with no sidecar boundary, no information sharing) now bit-
+equals cross-impl end-to-end on Stellar Single net8.0:
+
+* Stage 7 protein FDR dump: every column PASS at 1e-9, 0 diverging rows
+* Blib content: every table column PASS, 0 diverging rows
+* `OVERALL: PASS — Rust and C# end-to-end in-memory bit-parity at
+  1e-9 on Stellar 1-file`
+
+Root cause was one missing sort: Rust's `deduplicate_pairs` ends with
+`sort_by_key(|e| e.entry_id)` (osprey `pipeline.rs:6123`) with an
+explicit comment about "non-deterministic gradient updates and model
+weights." The C# port's `DeduplicatePairs` was returning entries in
+`Dictionary.Values` insertion order. The rehydration path masked this
+because entries loaded from the canonically-sorted parquet, but the
+straight-through path fed un-sorted entries straight to Percolator,
+producing ~190-precursor / ~270-peptide first-pass FDR drift on
+Stellar Single. Pwiz `d85a3cbad7`.
+
+### Stellar 3-file: stages 1-6 PASS, Stage 7 still drifts
+
+The 3-file case (where reconciliation actually runs across replicates)
+exposed two more divergences. The first one was fixed; the second is
+in progress.
+
+**Fixed: ConsensusRts decoy pairing.** C#'s consensus selection in
+`OspreySharp.FDR.Reconciliation.ConsensusRts.Compute` identified
+paired decoys by stripping the `DECOY_` prefix from the modified
+sequence. Rust pairs by `base_id` (`entry_id & 0x7FFFFFFF`) per the
+explicit comment in `reconciliation.rs::compute_consensus_rts`:
+
+> "Pairing was already established by the FDRBench manifest or
+> composition fallback during library load. The prefix-strip approach
+> only works for Osprey-generated decoys; it silently misses library-
+> supplied decoys (Carafe etc.) whose modified sequence carries no
+> prefix."
+
+On Stellar 3-file, prefix-strip leaked 16 extra decoys into the
+cross-file consensus output. With base_id pairing, the consensus,
+reconciliation, and rescored dumps are all now bit-equal cross-impl
+(Stage 6 PASS per-side). Pwiz `c250ae351f` (consensus piece).
+
+**In progress: 2nd-pass Percolator divergence on multi-file.** Stage 7
+still fails on 3-file: Rust 5360 protein groups vs C# 6541 in the
+dump; C# `detected_peptides` at experiment_precursor_q ≤ 0.01 has
+44924 unique peptides vs Rust's 21120. Pattern:
+
+* Post-Stage-6 `.scores.parquet` is bit-equal cross-impl (same 463358
+  rows in identical physical order, same `entry_id`s, same feature
+  values byte-for-byte in the first-5 row spot check).
+* Stage 6 `rescored.tsv` is bit-equal cross-impl (carries
+  `experiment_precursor_q` column; PASS in the per-stage comparator).
+* The `.2nd-pass.fdr_scores.bin` sidecars written AFTER the rescored
+  dump have the **same byte size** cross-impl but **different SHAs**
+  and different `score` values per entry (entry 0 file 20: Rust 0.397
+  vs C# 2.505). So the 2nd-pass Percolator runs after the rescored
+  dump is captured and produces divergent SVM output cross-impl.
+
+Tried a fix: sort `per_file_entries` by `entry_id` at the top of
+`run_percolator_fdr` on both sides (mirrors the `deduplicate_pairs`
+sort) so the SVM working-set selection sees canonical order
+regardless of gap-fill append position. Result: Rust dump shifted
+5372 → 5360 (small change); C# unchanged. Did not close the gap.
+Rust `cf32a3d`, pwiz piece in `c250ae351f`.
+
+The remaining drift isn't input order. Candidates for the next
+investigation:
+
+* SVM training subsample selection / fold split. The 1st-pass
+  Percolator runs on the full 1.4M entries (subsampled to 300K). The
+  2nd-pass runs on the 393K post-compaction pool — both sides feed
+  identical post-rescore parquets, but the subsample/fold logic may
+  use a per-side-different iteration over the (best-per-precursor +
+  per-peptide-grouped) training set.
+* Whether C#'s `RunPercolatorStreaming` path is taken for 3-file. The
+  393K entry count is above the 300K subsample target but probably
+  below the streaming threshold (max_train_size * 2 = 600K). Both
+  sides likely take the direct path. Worth verifying logs.
+* `ComputeExperimentPrecursorQvalues` on each side: the q-value
+  propagation by base_id might differ in detail. Rust's
+  `osprey-fdr/src/percolator.rs:2168` is the explicit comparison
+  point for C#'s `OspreySharp.FDR.PercolatorFdr.cs:1783`.
+
+### Mode summary on Stellar (where we are now)
+
+| Mode | net8.0 | Status |
+|---|---|---|
+| Per-side rehydration, Stellar Single | PASS through blib | Option A complete (overnight) |
+| Straight-through in-memory, Stellar Single | PASS through blib | Closed by `DeduplicatePairs` sort |
+| Per-side rehydration, Stellar 3-file | Stages 1-6 PASS, Stage 7 FAIL | 2nd-pass Percolator on multi-file diverges |
+| Straight-through in-memory, Stellar 3-file | Stages 1-? PASS, Stage 7 FAIL | Same root cause as per-side |
+
+### Commits this round (cumulative)
+
+| Repo | Commit | Content |
+|------|--------|---------|
+| pwiz | `d85a3cbad7` | DeduplicatePairs sort by EntryId (closes Stellar Single straight-through) |
+| ai | `2f79dd1` | Compare-EndToEnd-Crossimpl -Framework / -Files switches + precursor regex |
+| osprey | `84ff72c` | `OSPREY_DUMP_DETECTED_PEPTIDES` diagnostic dump for cross-impl bisection |
+| osprey | `cf32a3d` | Sort per_file_entries by entry_id at run_percolator_fdr entry |
+| pwiz | `c250ae351f` | ConsensusRts pair decoys by base_id + sort Percolator input |
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260516_ospreysharp_wsl_parity-option-a.md` (last
+updated for Option A overnight; remains valid since this postscript
+extends the same work). The immediate target is the 3-file Stage 7
+divergence above. Two diagnostic commits sit ready: the Rust
+`OSPREY_DUMP_DETECTED_PEPTIDES` dump (`84ff72c`) and its C# twin (in
+`d85a3cbad7`-era code) for cross-impl bisection.
+
 
 
 
