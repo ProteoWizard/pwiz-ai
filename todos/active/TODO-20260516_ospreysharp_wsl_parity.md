@@ -1510,6 +1510,85 @@ divergence above. Two diagnostic commits sit ready: the Rust
 `OSPREY_DUMP_DETECTED_PEPTIDES` dump (`84ff72c`) and its C# twin (in
 `d85a3cbad7`-era code) for cross-impl bisection.
 
+## Postscript 11 — 3-file Stage 7 dedup investigation (2026-05-21)
+
+Dug into the 3-file Stage 7 cross-impl divergence under user
+direction. Two new commits landed; the underlying SVM-training
+divergence on 3-file remains open.
+
+### Algorithmic find: missing best-per-precursor dedup in Rust direct path
+
+The Rust streaming Percolator path (`pipeline.rs:5512-5557`) runs a
+best-per-precursor dedup before peptide-group subsampling so the SVM
+trains on one observation per precursor instead of N observations per
+N-file experiment. The Rust direct path (`osprey-fdr/src/percolator.rs::
+run_percolator`) was written without that dedup. The C# port's direct
+path (`OspreySharp.FDR.PercolatorFdr.RunPercolator`) had already
+inferred the correct dedup-then-subsample shape and was statistically
+correct.
+
+User confirmed this as an algorithmic mistake on the Rust side ("Mike
+made an algorithmic mistake; Claude assumed the correct
+implementation and so failed to match the Rust bug of training on
+duplicates"). Patched Rust to mirror the streaming path's dedup —
+both implementations now train on the same dedup'd 131k entries on
+Stellar 3-file (vs. Rust previously training on the full 393k pool
+with multi-file repeats inflating apparent target/decoy separation).
+Osprey `8ef6aa6`; pwiz `fa9b2cbe94` (comment refresh, code unchanged).
+
+### Stage 7 still drifts on 3-file
+
+With dedup aligned, both sides feed the 2nd-pass Percolator the same
+131,425-entry training set (66,857 targets + 64,568 decoys) in the
+same sorted order. Yet the resulting `.2nd-pass.fdr_scores.bin`
+sidecars have identical sizes but different SHAs cross-impl, and
+Stage 7 still reports Rust 5,366 protein groups vs. C# 6,541.
+
+Per-fold training counts also match (Rust logs 87,645 / 87,485 /
+87,720 train per fold; C# fold split logic is the same round-robin
+peptide-grouped algorithm). The remaining drift is somewhere inside
+the SVM solver or Percolator iteration logic on the same input —
+candidates we have not yet diagnosed:
+
+* SVM solver iteration count differs sharply (C# 2nd-pass converges
+  at 6-7 Percolator iterations per fold; Rust runs to its 10 cap
+  with many inner SVM convergences per fold). Could be different
+  outer-iteration convergence criterion.
+* Inner SVM solver may use slightly different stopping condition or
+  numerical tolerance.
+* `decoyScores.Sort()` for median computation is unstable but values
+  are unique in practice; existing `Array.Sort` callsites are vetted
+  with explicit tie-impossible comments.
+
+### Diagnostic dump that would resolve this
+
+Both sides have `OSPREY_DUMP_SUBSAMPLE=1` env-var support that writes
+a per-entry `entry_id, native_position, charge, modified_sequence,
+is_decoy, base_id, in_subsample, fold_id` TSV. The 2nd-pass call
+overwrites the 1st-pass dump (same filename), so the final TSV on
+disk captures the 2nd-pass training state. A `Test-Regression`
+re-run on the 3-file workdir with this env var set would emit
+`rust_stage5_subsample.tsv` and `cs_stage5_subsample.tsv` (the
+filename remains "stage5_" even for the 2nd-pass call). Diffing them
+shows whether the subsample SET or the fold assignment differs
+cross-impl. (Tried a quick direct-binary run on a copied workdir;
+hit a parquet library_hash mismatch — needs a full Test-Regression
+run to bypass.)
+
+### Commits this round (cumulative)
+
+| Repo | Commit | Content |
+|------|--------|---------|
+| osprey | `8ef6aa6` | best-per-precursor dedup in direct-path Percolator (matches streaming + C# behavior) |
+| pwiz | `fa9b2cbe94` | comment update on C# direct-path dedup (no code change) |
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260516_ospreysharp_wsl_parity-option-a.md`. The
+immediate diagnostic to run is the 3-file Test-Regression with
+`OSPREY_DUMP_SUBSAMPLE=1` and compare the per-side subsample TSVs
+post-2nd-pass to localize whether the divergence is the training
+set, the fold assignment, or downstream SVM/Percolator logic.
+
 
 
 
