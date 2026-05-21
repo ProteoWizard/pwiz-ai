@@ -58,7 +58,10 @@ param(
     [switch]$Force,
     [switch]$SkipRust,
     [switch]$SkipCs,
-    [int]$Threads = 16
+    [int]$Threads = 16,
+    [ValidateSet('net472','net8.0')]
+    [string]$Framework = 'net8.0',
+    [string]$Files = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -71,14 +74,33 @@ if (-not (Test-Path $ospreyExe)) {
     Write-Host "osprey.exe not found at $ospreyExe -- build first." -ForegroundColor Red
     exit 2
 }
-$ospreyShExe = Join-Path $projRoot 'pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\net472\OspreySharp.exe'
+$ospreyShExe = Join-Path $projRoot ("pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\$Framework\OspreySharp.exe")
 if (-not (Test-Path $ospreyShExe)) {
     Write-Host "OspreySharp.exe not found at $ospreyShExe -- build first." -ForegroundColor Red
     exit 2
 }
 
 $ds = Get-DatasetConfig $Dataset -TestBaseDir $TestBaseDir
-$mzmls = @($ds.AllFiles)
+$allFiles = @($ds.AllFiles)
+$mzmls = switch ($Files) {
+    'Single' { ,@($allFiles[0]) }
+    'All'    { $allFiles }
+    default  {
+        $stems = $Files -split ','
+        $resolved = @()
+        foreach ($s in $stems) {
+            $s = $s.Trim()
+            if (-not $s) { continue }
+            $match = $allFiles | Where-Object {
+                $_ -eq $s -or
+                ([System.IO.Path]::GetFileNameWithoutExtension($_)) -eq $s
+            } | Select-Object -First 1
+            if (-not $match) { throw "File '$s' not in dataset $Dataset" }
+            $resolved += $match
+        }
+        ,$resolved
+    }
+}
 $libraryName = $ds.Library
 $resolution = $ds.Resolution
 $datasetRoot = $ds.TestDir
@@ -125,7 +147,9 @@ function Invoke-Tool {
 
 function Get-PrecursorCount {
     param([string]$LogPath)
-    $m = Select-String -Path $LogPath -Pattern 'Wrote\s+(\d+)\s+precursors' -AllMatches | Select-Object -Last 1
+    # Rust logs "Wrote N precursors"; C# logs "Wrote N spectra to output.blib".
+    # Both forms refer to the same blib RefSpectra row count.
+    $m = Select-String -Path $LogPath -Pattern 'Wrote\s+(\d+)\s+(?:precursors|spectra)' -AllMatches | Select-Object -Last 1
     if ($m -and $m.Matches.Count -gt 0) { return [int]$m.Matches[0].Groups[1].Value }
     return -1
 }
