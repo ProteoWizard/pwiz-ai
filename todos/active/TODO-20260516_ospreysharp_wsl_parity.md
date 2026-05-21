@@ -1228,6 +1228,171 @@ net8.0 (sg_weighted_cosine + median_polish_residual_correlation),
 or (b) pivoting to Stage 5+ percolator parity which this sprint
 deliberately did not address.
 
+## Postscript 9 — Option A overnight: Stages 1-6 per-side bit-equal on net8.0 (2026-05-20 night)
+
+User asked for an overnight push on Option A: eliminate the touch
+point where C# must rely on Rust output to stay passing on downstream
+stages. Goal: pass all per-side stages with no information sharing.
+
+### Outcome
+
+**Stages 1-4, 5, and 6 now PASS per-side bit-equal on net8.0.**
+Stage 7 still fails due to a separate harness-level asymmetry
+(see below). Two `.scores.parquet` columns that previously drifted
+at 1-2 ULP cross-impl are now bit-equal, and the per-side Stage 5
+standardizer / SVM / percolator cascade is closed.
+
+### What landed
+
+| Repo | Commit | Branch | Content |
+|------|--------|--------|---------|
+| osprey | `8dc0441` | fix/hpc-chain-stage7-second-pass-percolator | compute_cosine_at_scan single-pass form + write_scores_parquet_with_metadata sorts by (entry_id, charge, scan_number) before writing |
+| pwiz | `9a72565527` | Skyline/work/20260516_ospreysharp_wsl_parity | TukeyMedianPolish.PearsonCorrelationRaw moment form + both WriteScoresParquet overloads sort by (EntryId, Charge, ScanNumber) before writing |
+| ai | `42b60a7` | master | Test-Regression-Hybrid.ps1 (shared Stage 4 → per-side from Stage 5) + Test-Regression-RustFeed.ps1 (Rust feeds both at every boundary) for cross-impl pipeline-shape investigation |
+
+All three pushed.
+
+### Root causes addressed
+
+**Stage 4 column-level cross-impl drift** (the two columns the
+sprint-complete summary flagged as 1-2 ULP):
+
+* `sg_weighted_cosine` drifted because Rust's `compute_cosine_at_scan`
+  did per-element divide before sum (`Σ (a/norm_a) * (b/norm_b)`)
+  while C# used the more common single-pass form
+  (`Σ a*b` then divide once at end). Mathematically equivalent;
+  bit-different in f64. Aligned Rust to the C# / `cosine_angle`
+  pattern, which is also what other Rust cosine helpers use.
+
+* `median_polish_residual_correlation` drifted because C#'s
+  `TukeyMedianPolish.PearsonCorrelationRaw` used the two-pass
+  centered Pearson form while Rust used the single-pass moment form.
+  C# already has a separate `PearsonCorrelation.Pearson` helper in
+  the moment form (used by all the other Pearson features which were
+  already bit-equal cross-impl) — switched the local helper to the
+  same form. Both columns now show 0 rows differ across all 462K
+  rows on Stellar Single net8.0.
+
+**Stage 5 standardizer cascade** (the per-side Stage 5 had every
+PSM's percolator score differing by up to 41, with q-values flipping
+across [0,1] for ~half of PSMs):
+
+* Root cause: per-side parquets had completely different physical
+  row orders even though their logical column data was bit-equal.
+  Rust wrote entries in `entry_id` ascending (0, 1, 3, 4, 5...);
+  C# wrote in target-decoy-paired order (38 (T), 38's decoy, 79 (T),
+  79's decoy...). The strict comparator aligns rows by key before
+  diffing, so it correctly reported "0 rows differ" — but Stage 5's
+  standardizer reduces 300K bit-equal samples in physical row order,
+  so the running sum hit different addition orders on each side,
+  producing ~1e-15 to 1e-10 drift per feature mean / stddev. SVM
+  then amplified that into 50-70% weight drift and 41-point score
+  differences. Fixed by adding canonical sort
+  (entry_id, charge, scan_number) to both parquet writers right
+  before the column fill. Zero algorithmic impact — only enforces
+  deterministic physical row order. With the sort, per-side Stage 5
+  dumps are now byte-identical and Stage 6 dumps follow.
+
+### Why net8.0 only
+
+These fixes target net8.0 (the build target the sprint pivoted to
+in postscript 8). On net472 the Stage 4 .NET Framework parser still
+adds its own 1-2 ULP per double parsed from XML, which cascades the
+same way through ungated parts of the pipeline. The net8.0 result is
+the clean architectural floor; net472 carries the parser-driven noise
+that won't be fixed without leaving .NET Framework 4.7.2.
+
+### Verification
+
+```
+# Confirms Stage 4 sg_weighted_cosine + median_polish_residual_correlation
+# are bit-equal (the parquet log shows "0 rows differ" for both):
+pwsh -File ./ai/scripts/OspreySharp/Compare-Stage1to4-Strict.ps1 \
+    -Dataset Stellar -Files Single -Force -Framework net8.0
+
+# Confirms Stages 1-4, 5, 6 PASS per-side end-to-end (each side runs
+# its own pipeline with no Rust output sharing; Stage 7 still FAILs):
+pwsh -File ./ai/scripts/OspreySharp/Test-Regression.ps1 \
+    -Dataset Stellar -Files Single -StopAfterStage blib -Continue -Force
+```
+
+Per-side stage results on net8.0 (Stellar Single):
+
+| Stage | Result | Notes |
+|---|---|---|
+| stage1to4 | PASS | Test-Regression 1e-9 gate (strict-strict is 6 of 9 boundaries PASS — CAL_MATCH at 6.94e-18, LDA_SCORES at 4.84e-14, CAL_JSON; all pre-existing sub-ε / non-Stage-4 items) |
+| stage5 | **PASS** | byte-equal on standardizer, subsample, svm_weights, percolator dumps cross-impl |
+| stage6 | **PASS** | byte-equal on multicharge, consensus, reconciliation, rescored dumps cross-impl |
+| stage7 | FAIL | 5474/5484 proteins differ on best_peptide_score (max diff 24.6) — see "Remaining: Stage 7" below |
+| blib | NO_INPUTS | gated by stage7 freeze failing |
+
+### Remaining: Stage 7 — protein FDR code divergence
+
+After the parquet sort + Pearson + cosine alignments, we chased the
+Stage 7 remainder. The Stage 6 → 7 boundary is now fully aligned:
+
+* Both `1st-pass.fdr_scores.bin` sidecars: bit-equal (SHA
+  `5ec0ccf4ce5fc111`, 27,768,152 bytes each side).
+* Both `2nd-pass.fdr_scores.bin` sidecars: bit-equal (SHA
+  `eba04f80558ba4bf`, 5,486,852 bytes each side) — this required
+  taking option (a) from the earlier handoff: removing the
+  `if has_reconciliation` gate at `pipeline.rs:5000` so Rust always
+  persists the 2nd-pass sidecar. Landed as osprey `566f583`.
+* Post-Stage-6 `.scores.parquet`: logically bit-equal (462,802 rows
+  in identical physical order, identical entry_ids, identical
+  protein_ids cross-impl, only the parquet writer's compression
+  encoding differs file-size-wise).
+
+**Yet Stage 7 still FAILs** with the same magnitudes as before — and
+in fact the protein-set itself differs (Rust produces 5484 proteins,
+C# 5485, with `sp|Q15283|RASA2_HUMAN` only on the C# side). Since
+all upstream inputs are now provably bit-equal at the byte level, the
+remaining divergence is **inside Stage 7's protein-FDR / parsimony /
+score-selection code**, not in what it reads.
+
+This is the next investigation, not closable in this overnight push:
+the two impls' protein FDR ports diverge on either (i) which entries
+feed the parsimony graph (different gate / filter conditions), (ii)
+how parsimony groups are built (different iteration order, different
+set-cover policy in non-Razor modes), or (iii) how "best peptide
+per protein" is selected (different score-source preference or
+tiebreak). The score diffs are large (24+ score units, q-values
+flipping across [0,1]) so a small ULP-style alignment isn't the
+explanation — this is genuine code divergence.
+
+### Per-side state at end of Option A push
+
+| Stage | Per-side gate | Pre-Option-A | Post-Option-A |
+|---|---|---|---|
+| stage1to4 | Test-Regression 1e-9 | PASS | PASS |
+| stage5 | byte-equal 4 dumps | FAIL (catastrophic) | **PASS** |
+| stage6 | byte-equal 4 dumps | FAIL (cascade) | **PASS** |
+| stage7 | per-column 1e-9 | FAIL | FAIL (now isolated to Stage 7 code itself, all inputs proven bit-equal) |
+| blib | per-table tolerance | NO_INPUTS | NO_INPUTS (gated by stage7) |
+
+Stages 1-6 inclusive now pass per-side bit-equal cross-impl with no
+information sharing on net8.0 Stellar Single. That's the through-line
+the user explicitly asked for — the standardizer-to-percolator-to-
+rescored cascade that previously fanned out across every dump is now
+fully closed.
+
+### Commits this round (cumulative)
+
+| Repo | Commit | Content |
+|------|--------|---------|
+| osprey | `8dc0441` | compute_cosine_at_scan single-pass + sorted parquet write |
+| osprey | `566f583` | always persist 2nd-pass FDR sidecar (single-file too) |
+| pwiz | `9a72565527` | PearsonCorrelationRaw moment form + sorted parquet write |
+| ai | `42b60a7` | Test-Regression-Hybrid + Test-Regression-RustFeed variants |
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260516_ospreysharp_wsl_parity-option-a.md`. The
+Stage 1-6 per-side bit-equal floor is in place. The next natural
+target is the Stage 7 protein-FDR / parsimony cross-impl divergence,
+which the harness now isolates cleanly (every Stage 7 input is
+proven bit-equal cross-impl, so any work happens entirely inside
+Stage 7 code).
+
 
 
 
