@@ -70,22 +70,66 @@ inputs align cross-impl.
 - C# XcorrScratchPool (dual-track f64+f32 ready): `pwiz_tools/OspreySharp/OspreySharp.Scoring/XcorrScratchPool.cs`
 - C# SpectralScorer (both XcorrAtScan f64 and XcorrFromPreprocessed f32 paths): `pwiz_tools/OspreySharp/OspreySharp.Scoring/SpectralScorer.cs:92,125,171,226,280,303,508`
 
-## Current Status (2026-05-20 mid-day)
+## Current Status (2026-05-20 evening) — sprint complete
 
-The Rust half of the coordinated f64 calibration flip is landed
-(`osprey 690194a`). Per-column cal_match drift on Stellar Single:
+**Cross-impl Stage 1-4 parity reached the architectural floor on both
+build targets.** The .NET 8.0 result is the proof: when we swap the
+.NET Framework 4.7.2 build for the .NET 8.0 build of OspreySharp,
+nearly every remaining drift collapses to bit-equal or 1-2 ULP f64
+reduction-order noise. The remaining drift on net472 is therefore not
+algorithmic divergence we should chase further — it is the .NET
+Framework parser limitation, fixed in .NET 5+'s Eisel-Lemire parser.
 
-| Column | Drift | Status |
+**Stellar Single boundary results, side-by-side:**
+
+| Boundary | net472 | net8.0 |
 |---|---|---|
-| apex_rt | 0 | **bit-equal** ✓ |
-| correlation | 4.97e-14 | f64 epsilon ✓ |
-| libcosine | 5.55e-16 | f64 epsilon ✓ |
-| xcorr | 3.876e-6 | **needs C# half (task #71)** |
-| snr | 5.24e-10 | unchanged; separate root cause (LDA in-place mutation) |
+| CAL_SAMPLE rust_cal_sample.txt | PASS | PASS |
+| CAL_SAMPLE rust_cal_scalars.txt | PASS | PASS |
+| CAL_SAMPLE rust_cal_grid.txt | PASS | PASS |
+| CAL_WINDOWS | PASS | PASS |
+| CAL_MATCH | 3.55e-15 (137 apex_rt rows at parser ULP) | **6.94e-18 sub-ε** |
+| LDA_SCORES | 4.84e-14 | 4.84e-14 (real f64 cascade) |
+| LOESS_INPUT | PASS | PASS |
+| CAL_JSON | 4.71e-12 | **4.44e-16** (n_above_1e-15=0) |
+| SCORES_PQ Stage 4 | 8+ columns drifting (parser-cascaded) | only sg_weighted_cosine + median_polish_residual_correlation at 1-2 ULP |
 
-The xcorr drift is the only remaining "headline" issue. Three options
-for the C# half are documented in the most recent postscript; user
-decision needed (task #71).
+**Stage 4 .scores.parquet on net8.0**: apex_rt, peak_apex, peak_area,
+peak_sharpness, rt_deviation, bounds_area, xcorr, sg_weighted_xcorr
+— all bit-equal. The two remaining columns differ at 1-2 ULP from
+genuine f64 reduction-order noise (weighted cosine sum,
+median-polish correlation sum).
+
+**Verification commands:**
+```
+# net472 (canonical Skyline distribution):
+pwsh -File ./ai/scripts/OspreySharp/Compare-Stage1to4-Strict.ps1 -Dataset Stellar -Files Single -Force
+
+# net8.0 (proves remaining net472 drift is .NET Framework parser):
+pwsh -File ./ai/scripts/OspreySharp/Compare-Stage1to4-Strict.ps1 -Dataset Stellar -Files Single -Force -Framework net8.0
+```
+
+**Why the .NET 8.0 result is the proof, not just "another data point":**
+
+On net472 we hit 8+ columns of drift across CAL_MATCH and Stage 4 that
+looked like real algorithmic divergence — apex_rt 137 rows at 2 ULP,
+peak_sharpness 1216 rows at 1e-6 ("f32 cascade"), rt_deviation 460K
+rows at f64 epsilon (allegedly "LOESS f64 cascade"), etc. Each looked
+like a separate root cause needing focused debugging.
+
+Swapping the same binary tree to the net8.0 build collapses ALL of
+them to bit-equal except the two genuine f64-reduction-order columns.
+Same source code. Same algorithms. Same inputs. Only the runtime's
+double parser changed. That means the entire chain of "cascades" was
+downstream of one .NET Framework 4.7.2 parser ULP — apex_rt parsed
+differently → peak boundary indices selected differently → peak shape
+features computed over slightly different ranges → "f32 magnitude"
+drift across many columns.
+
+So the remaining net472 FAILs are not unfinished work. They are the
+known limitation of the canonical Skyline distribution's runtime.
+Future investigation should reach for `-Framework net8.0` first to
+confirm whether a divergence is real before chasing it.
 
 ## Progress Log (Phase 2)
 
