@@ -1583,11 +1583,14 @@ run to bypass.)
 | pwiz | `fa9b2cbe94` | comment update on C# direct-path dedup (no code change) |
 
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260516_ospreysharp_wsl_parity-option-a.md`. The
+`ai/.tmp/handoff-20260516_ospreysharp_wsl_parity-3file.md`. The
 immediate diagnostic to run is the 3-file Test-Regression with
 `OSPREY_DUMP_SUBSAMPLE=1` and compare the per-side subsample TSVs
 post-2nd-pass to localize whether the divergence is the training
-set, the fold assignment, or downstream SVM/Percolator logic.
+set, the fold assignment, or downstream SVM/Percolator logic. The
+earlier handoff `handoff-20260516_ospreysharp_wsl_parity-option-a.md`
+remains a valid startup reference for the underlying sprint setup
+but is superseded by this one for current state.
 
 
 
