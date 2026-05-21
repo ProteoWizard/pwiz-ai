@@ -60,8 +60,20 @@
 .PARAMETER Threads
     --threads CLI flag (default 16).
 
+.PARAMETER Framework
+    Target framework for the C# build: net472 (default; canonical
+    Skyline distribution) or net8.0. .NET 8.0 uses the Eisel-Lemire
+    IEEE-correct double parser which eliminates parser-driven 1-2 ULP
+    cascades in apex_rt, peak boundaries, and downstream peak shape
+    features. Use net8.0 to verify a divergence is real f64 cascade
+    vs a .NET Framework parser artifact.
+
 .EXAMPLE
     pwsh -File ./Compare-Stage1to4-Strict.ps1 -Dataset Stellar -Files Single -Force
+
+.EXAMPLE
+    # Verify a divergence isn't a .NET Framework parser artifact:
+    pwsh -File ./Compare-Stage1to4-Strict.ps1 -Dataset Stellar -Files Single -Force -Framework net8.0
 #>
 
 param(
@@ -73,7 +85,13 @@ param(
     [switch]$Force,
     [switch]$SkipRust,
     [switch]$SkipCs,
-    [int]$Threads = 16
+    [int]$Threads = 16,
+    # Target framework for the C# build. net472 is the canonical
+    # Skyline distribution; net8.0 ships .NET 5+ IEEE-correct double
+    # parsing which eliminates parser-driven 1-2 ULP cascades in
+    # apex_rt, peak boundaries, and downstream peak shape features.
+    [ValidateSet('net472','net8.0')]
+    [string]$Framework = 'net472'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -82,7 +100,7 @@ $scriptDir = Split-Path -Parent $PSCommandPath
 
 $projRoot    = (Resolve-Path (Join-Path $scriptDir '..\..\..')).Path
 $ospreyExe   = Join-Path $projRoot 'osprey\target\release\osprey.exe'
-$ospreyShExe = Join-Path $projRoot 'pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\net472\OspreySharp.exe'
+$ospreyShExe = Join-Path $projRoot ('pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\{0}\OspreySharp.exe' -f $Framework)
 foreach ($p in @($ospreyExe, $ospreyShExe)) {
     if (-not (Test-Path $p)) {
         Write-Host "Missing binary: $p" -ForegroundColor Red
