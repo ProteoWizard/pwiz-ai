@@ -150,10 +150,22 @@ def get_directory_status(directory: str, verbose: bool = False) -> dict:
     }
 
 
-def _sync_root_claude_md(project_root: Path) -> Optional[str]:
-    """Copy ai/root-CLAUDE.md to project root CLAUDE.md if source is newer.
+def _ensure_root_claude_md_link(project_root: Path) -> Optional[str]:
+    """Ensure project-root CLAUDE.md is a hard link to ai/root-CLAUDE.md.
 
-    Returns a message if updated, None otherwise.
+    Replaces the legacy Copy-Item-based sync: instead of duplicating
+    content and tracking mtimes, the two paths now share an NTFS inode so
+    edits at either path show up at the other for free. Idempotent: a
+    no-op when the file is already linked.
+
+    Also handles the in-the-wild migration cases:
+    - Pre-hard-link setup left a regular copy at CLAUDE.md
+    - An editor or `git pull` overwrote ai/root-CLAUDE.md by atomic rename,
+      breaking the previous hard link
+
+    In both cases the existing CLAUDE.md is removed and a fresh hard link
+    is created. Returns a one-line message describing the action taken, or
+    None when nothing changed.
     """
     source = _AI_ROOT / "root-CLAUDE.md"
     target = project_root / "CLAUDE.md"
@@ -161,13 +173,25 @@ def _sync_root_claude_md(project_root: Path) -> Optional[str]:
     if not source.exists():
         return None
 
-    # Copy if target doesn't exist or source is newer
-    if not target.exists() or source.stat().st_mtime > target.stat().st_mtime:
-        import shutil
-        shutil.copy2(str(source), str(target))
-        return f"Updated {target} from {source}"
+    # Already linked: same inode → nothing to do.
+    if target.exists() and target.samefile(source):
+        return None
 
-    return None
+    # Determine which case we're in for a clear migration message, then
+    # remove the existing entry. Unlinking a hard link only drops the
+    # directory entry, not the underlying inode.
+    if target.exists():
+        action = "Re-linked"  # legacy copy or broken hard link
+        target.unlink()
+    else:
+        action = "Created hard link for"
+
+    try:
+        os.link(str(source), str(target))
+    except OSError as e:
+        return f"Failed to create hard link {target} -> {source}: {e}"
+
+    return f"{action} {target} -> {source}"
 
 
 @mcp.tool()
@@ -178,15 +202,18 @@ def get_project_status(verbose: bool = False) -> str:
     (derived from the ai/ folder location). Call this at session start to
     orient yourself — no arguments needed.
 
-    Also auto-syncs root CLAUDE.md from ai/root-CLAUDE.md if the source is newer.
+    Also ensures the project-root CLAUDE.md is a hard link to
+    ai/root-CLAUDE.md, creating or re-linking it as needed. This replaces
+    the older copy-and-sync mechanism, so legacy machines installed with
+    the Copy-Item-based setup are migrated transparently on the next call.
 
     Args:
         verbose: If True, include lists of modified/staged/untracked files (default: False)
     """
     project_root = _AI_ROOT.parent  # e.g., C:\proj
 
-    # Auto-sync root CLAUDE.md
-    sync_message = _sync_root_claude_md(project_root)
+    # Ensure root CLAUDE.md is hard-linked to ai/root-CLAUDE.md
+    sync_message = _ensure_root_claude_md_link(project_root)
 
     subdirs = sorted([
         d for d in project_root.iterdir()
