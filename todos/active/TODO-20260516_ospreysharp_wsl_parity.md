@@ -1781,5 +1781,83 @@ the relevant osprey/pwiz commits.
 `ai/.tmp/handoff-20260516_ospreysharp_wsl_parity-postperf.md` before
 starting work.
 
+## Postscript 14 — Astral parity probe + WSL slowdown puzzle (2026-05-21 late evening)
 
+Continued same session after postscript 13. Ran two more parity gates
+and surfaced a perf regression worth investigating overnight.
+
+### Astral 1-file straight-through PASS
+
+```
+pwsh -File ./scripts/OspreySharp/Compare-EndToEnd-Crossimpl.ps1 \
+     -Dataset Astral -Files Single -Framework net8.0 -Force
+
+[Rust]     wall 07:51   precursors 137129   blib 92917760 bytes
+[C#]       wall 06:13   precursors 137129   blib 93380608 bytes
+Stage 7 protein FDR (per-col 1e-9):  PASS
+Blib content (SQL row+col 1e-9):     PASS
+OVERALL: PASS  --  bit-parity at 1e-9 on Astral 1-file
+```
+
+C# 21% faster on Astral 1-file (HRAM); a different balance than
+Stellar 3-file (~tied). Confirms today's bit-equality fixes did NOT
+regress Astral 1-file.
+
+### Astral 3-file straight-through — MIXED
+
+```
+pwsh -File ./scripts/OspreySharp/Compare-EndToEnd-Crossimpl.ps1 \
+     -Dataset Astral -Files All -Framework net8.0 -Force
+
+[Rust]     wall 23:15   precursors 165573   blib 134647808 bytes
+[C#]       wall 21:58   precursors 165573   blib 135208960 bytes
+Stage 7 protein FDR (per-col 1e-9):  FAIL  (group_qvalue max_diff 1.1e-4, 177/13087 rows)
+Blib content (SQL row+col 1e-9):     PASS
+OVERALL: FAIL  --  technically FAIL per script, but BLIB IS BIT-EQUAL
+```
+
+* `best_peptide_score`: PASS (max_diff 2.2e-13, essentially bit-equal)
+* `n_unique` / `n_shared` / `is_target_winner`: PASS (categorical)
+* `group_qvalue`: FAIL — 177/13087 rows differ by up to 1.1e-4
+* `.blib` content: PASS at 1e-9 (downstream consumer is unaffected)
+
+So the residual is **q-value-only** drift in protein FDR; downstream
+parquet/blib are bit-equal. Wall-clock perf: Rust 23:15, C# 21:58
+(1.06x ratio, close to historical 2026-05-18 numbers).
+
+### WSL stage1to4 slowdown vs Windows on Stellar — new regression
+
+Today's Stellar 3-file numbers:
+
+| Stage1to4 | Windows | WSL | ratio (WSL/Win) |
+|---|---|---|---|
+| Rust | 1:42 | 3:11 | 1.87x slower |
+| C# | 1:20 | 2:46 | 2.08x slower |
+
+But the **2026-05-17/05-18 baselines** had WSL **FASTER** than Windows
+on stage1to4 (Rust 1:46 WSL vs 1:54 Win; C# 1:11 WSL vs 0:59 Win was
+about the only exception). The original WSL ext4 was on the C: SSD via
+`%LOCALAPPDATA%\wsl\ext4.vhdx`; the test data store may have moved to
+D: HDD between then and now, which would explain why mzML reads
+(stage1to4's dominant cost) got slower.
+
+This is unexpected and worth a deeper look overnight.
+
+## Open follow-ups for next session
+
+1. **Astral 3-file group_qvalue residual** (1.1e-4 on 177/13087 rows) —
+   likely a float-summation order in protein FDR's monotonic q-value
+   pass. Bit-equal everywhere else; blib unaffected.
+2. **Astral 3-file perf refresh** (4 cells) — blocked on (1).
+3. **WSL stage1to4 slowdown investigation** — characterize per-substage
+   (mzML read vs scoring vs serialize), test SSD-vs-HDD hypothesis by
+   relocating WSL VHDX from D: back to C:.
+4. **Stellar 3-file → median-of-3 + Astral median-of-3** — current
+   timings are 1-shot per cell.
+5. **C# 73K gap-fill empty-fragment parquet** (postscript-12 follow-up).
+6. **stage5 C# perf gap** — 1.61x Windows / 2.01x WSL vs Rust.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260516_ospreysharp_wsl_parity-astral-perf.md` before
+starting work.
 
