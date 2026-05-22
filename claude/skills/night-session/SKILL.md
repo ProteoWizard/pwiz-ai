@@ -22,6 +22,85 @@ waiting for instructions, they find work parallel to what may be
 blocked." Mirror that. **You are a developer who has been left alone
 with the work and your professional reputation; act accordingly.**
 
+## First step: measure your starting position
+
+Before any other work, run two measurements and write them down where
+you can refer back later (a `TaskCreate` description, a note at the top
+of the session log, or `ai/.tmp/night-session-budget.md`):
+
+1. **Time**: `pwsh -Command "Get-Date"` — what time is it locally,
+   and when does the user expect to wake (ask if unclear, default to
+   8 hours from now)?
+2. **Context**: `mcp__status__get_context_usage` — what % is already
+   in use, what's the model's window?
+
+The session has NEVER started at 100% free. With `/pw-handoff` →
+`/compact` → `/pw-continue`, a fresh night session typically begins at
+70–90%. With a deeper handoff chain or a heavy `/pw-continue` it can
+start much lower. Treat the opening reading as the **actual** budget
+you have to work with.
+
+### If opening context is below 80%, push back before committing
+
+Tell the user — before they go to bed — something like:
+
+> "Opening context is 64% free. For an 8-hour autonomous session
+> that's tight; even a moderate burn rate will hit single digits
+> in 3–4 hours. I can either (a) start now and pivot to sub-agents
+> early, (b) wait while you run `/pw-handoff` → `/clear` →
+> `/pw-continue` to start near 90%, or (c) work for as long as the
+> budget lasts and write a clean handoff at ~15% so the morning
+> session picks up cleanly. Which do you prefer?"
+
+This is the one acceptable place to ask a clarifying question at
+session start. The cost of getting it wrong (running out of context
+at 4 AM) is much higher than the cost of a 60-second exchange now.
+
+### Burn-rate check — re-measure every ~hour
+
+After ~1 hour of work, re-measure context and compute the burn rate:
+
+```
+burn_rate_pct_per_hour = (opening_pct_free - current_pct_free) / hours_elapsed
+projected_runway_hours = current_pct_free / burn_rate_pct_per_hour
+```
+
+If projected_runway < hours_left_until_wake, you're burning too fast.
+That's the signal to **shift strategy**, not to stop working:
+
+- **Hand expensive deep-dives to sub-agents** (their context is
+  separate; you only pay for the brief and the result).
+- **Stop re-reading files you've already seen** — work from the
+  conversation, not by re-loading state.
+- **Batch tool calls** more aggressively and check progress less
+  frequently. Polling a long-running task every 20 seconds at 500
+  tokens per turn burns 90K tokens per hour for nothing; trust the
+  background-task notification system and only poll on milestones.
+- **Trim noisy diagnostics** — pipe big `Bash` outputs through
+  `tail -N` or write them to disk for `Read` later, rather than
+  pulling 30K lines through a `Bash` tool result.
+
+Repeat the burn-rate check at each major milestone (a verification
+finishing, a fix landing, a hypothesis confirmed). Adjust strategy
+each time you measure.
+
+### When the runway gets short, write before you stop
+
+If projected runway falls below ~30 minutes:
+
+1. Commit any incremental work that's confidently correct
+2. Write a fresh `ai/.tmp/handoff-<date>.md` capturing the current
+   state at full detail — this is the deliverable when the budget
+   runs out
+3. Then keep working, but with the handoff already in place. If
+   you DO run out, the user wakes to a complete picture.
+
+Do not silently absorb runway-shrinking events. If you have to
+make a decision because of budget pressure ("I'd dig deeper here
+but instead I'm going to commit and move on"), say so in a
+progress message. The user reads those decisions to calibrate
+the morning playbook.
+
 ## What "high-definition findings" means
 
 Each finding the user wakes to should answer the question one level
@@ -61,9 +140,11 @@ Specific anti-patterns to avoid:
   Decisions are cheaper than choice trees.
 - Stopping because cycle time looks long. If a Rust+C# rebuild + Astral
   single-file run is 10 minutes, that's 6 cycles per hour. Plenty.
-- Stopping because context is at 60%. **40% used in 2 hours means
-  you have ~6 hours of context for the same density of work**, which
-  is the entire night.
+- Stopping because context is "only" at 60% free. Sessions never
+  start at 100% — what matters is the burn rate against your
+  *opening* reading and the time you have left. Run the projection
+  (see "First step: measure your starting position" above) and act
+  on the answer, don't act on a single percentage in isolation.
 
 ## When to use sub-agents
 
