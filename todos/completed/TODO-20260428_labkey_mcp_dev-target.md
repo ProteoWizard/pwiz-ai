@@ -4,12 +4,15 @@
 - **Branch**: `feature/labkey-mcp-dev-target`
 - **Base**: `master`
 - **Created**: 2026-04-28
-- **Status**: Tested on both http (dev box) and https (production) targets; ready to commit.
+- **PR**: [#4](https://github.com/ProteoWizard/pwiz-ai/pull/4) (merged 2026-05-18)
+- **Status**: Completed
 - **Related**:
   - `TODO-LK-20260425_testresults-schema-shadow-test.md` — this feature
     enabled the shadow test by allowing the MCP to point at a local LabKey.
-  - `TODO-20260428_labkey_mcp_shadow-fixes.md` — sibling PR (the three
-    regressions caught **by** the shadow test). Lands first.
+  - `TODO-20260428_labkey_mcp_shadow-fixes.md` — sibling
+    [PR #3](https://github.com/ProteoWizard/pwiz-ai/pull/3) (the three
+    regressions caught **by** the shadow test). Awaiting testresults
+    refactor deployment before merge.
 
 ## Motivation
 
@@ -255,3 +258,22 @@ refactor is deployed on skyline.ms.
   project-local, but each Claude Code session caches its launch
   parameters at start. If you flip the registration between launching
   session A and session B, A keeps its old target until restarted.
+
+## Progress Log
+
+### 2026-05-18 - Merged
+
+PR #4 merged as commit `13aaa8ff5ac9f2ed3310dc36dc9f45e1ce7855e4`. All 5 test
+plan rows verified for both `http://localhost:8080` and `https://skyline.ms`
+targets.
+
+## Resolution
+
+**Status**: Merged — PR [#4](https://github.com/ProteoWizard/pwiz-ai/pull/4)
+merged 2026-05-18.
+
+Replaced 6 hardcoded `https://` URL builders across the LabKey MCP with
+`_server_url()`, added the `LABKEY_SERVER` env var (accepts URL or bare
+hostname), and added a `current_target` MCP tool. Default behavior is
+unchanged (`https://skyline.ms`). The feature enabled the testresults schema
+shadow test by allowing the MCP to point at a local dev LabKey.

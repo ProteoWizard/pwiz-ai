@@ -370,7 +370,6 @@ function Invoke-Tool {
     $allHooks = @(
         'OSPREY_DUMP_STANDARDIZER','OSPREY_DUMP_SUBSAMPLE',
         'OSPREY_DUMP_SVM_WEIGHTS','OSPREY_DUMP_PERCOLATOR',
-        'OSPREY_DUMP_PERC_INPUT','OSPREY_PERC_INPUT_ONLY',
         'OSPREY_PERCOLATOR_ONLY',
         'OSPREY_DUMP_RECONCILIATION','OSPREY_RECONCILIATION_ONLY',
         'OSPREY_DUMP_RESCORED','OSPREY_RESCORED_ONLY',
@@ -590,15 +589,13 @@ function Compare-Stage1to4 {
 }
 
 function Freeze-Stage1to4 {
-    # Per-side freeze: each side's stage1to4 outputs (.scores.parquet
-    # + calibration.json) go into ITS OWN stage5/inputs-<side> dir.
-    # mzMLs + library are dataset (shared content) but duplicated into
-    # each per-side inputs dir so the side's runner finds them. This
-    # replaces the prior cross-tool freeze (all-Rust → both sides);
-    # the new gate requires each side's Stage 5+ to pass on its own
-    # Stage 4 outputs.
+    # HYBRID variant: seed BOTH inputs-rust/ and inputs-cs/ from Rust's
+    # stage1to4 output, so cross-tool Stage 5 starts from identical Stage 4
+    # features (isolating Stage 5+ algorithm parity from Stage 4 f64 noise).
+    # Downstream (Freeze-PostStage4 / Run-PostStage4) remains per-side, so
+    # each side's own Stage 5 output flows into its own Stage 6.
     foreach ($sideKey in @('rust', 'cs')) {
-        $srcDir = if ($sideKey -eq 'rust') { Get-StageRustDir 'stage1to4' } else { Get-StageCsDir 'stage1to4' }
+        $srcDir = Get-StageRustDir 'stage1to4'
         $next = Get-StageInputDir 'stage5' $sideKey
         Reset-StageDir $next -KeepInputs:$false
         foreach ($stem in $selectedStems) {
@@ -637,15 +634,6 @@ $stageConfig = @{
             OSPREY_DUMP_CONSENSUS      = '1'
             OSPREY_DUMP_RECONCILIATION = '1'
             OSPREY_DUMP_RESCORED       = '1'
-            # Captures 2nd-pass Percolator subsample + fold assignment
-            # AND per-fold SVM weights in stage6/<side>/ (filename
-            # keeps "stage5_" prefix; 2nd-pass call overwrites 1st-pass
-            # within the same process). Diagnostic for cross-impl
-            # localization of any post-dedup, 2nd-pass divergence.
-            OSPREY_DUMP_STANDARDIZER   = '1'
-            OSPREY_DUMP_PERC_INPUT     = '1'
-            OSPREY_DUMP_SUBSAMPLE      = '1'
-            OSPREY_DUMP_SVM_WEIGHTS    = '1'
             # Exit after Stage 7 protein FDR dump (well before blib
             # write). The 2nd-pass FDR sidecar is written by the binary
             # BEFORE this exit point (AnalysisPipeline.cs writes it just

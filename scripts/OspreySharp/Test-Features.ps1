@@ -196,12 +196,10 @@ try {
         if ($DiagXcorrScan) { $env:OSPREY_DIAG_XCORR_SCAN = $DiagXcorrScan }
 
         # --no-join writes the per-file scores parquet and exits before Stage 5.
-        # --parquet-compression snappy is required for cross-impl interop:
-        # Parquet.Net 3.x (OspreySharp) only reads Snappy. Rust also disables
-        # dictionary encoding automatically when Snappy is selected.
+        # Both sides default to ZSTD; no --parquet-compression flag needed.
         # --output is omitted (--no-join doesn't write a blib).
         $rustStart = Get-Date
-        & $rustBinary --no-join --parquet-compression snappy -i $mzml -l $library --resolution $ds.Resolution --protein-fdr 0.01 --write-pin 2>&1 | Out-Null
+        & $rustBinary --no-join -i $mzml -l $library --resolution $ds.Resolution --protein-fdr 0.01 --write-pin 2>&1 | Out-Null
         $rustExit = $LASTEXITCODE
         $rustDuration = (Get-Date) - $rustStart
 

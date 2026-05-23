@@ -270,8 +270,10 @@ git clone git@github.com:ProteoWizard/pwiz-ai.git ai
 # Create .claude junction (enables Claude Code commands and skills)
 cmd /c mklink /J .claude ai\claude
 
-# Create root CLAUDE.md (copied from ai/root-CLAUDE.md, auto-updated by StatusMcp)
-Copy-Item ai\root-CLAUDE.md CLAUDE.md
+# Create root CLAUDE.md as a hard link to ai/root-CLAUDE.md
+# (StatusMcp re-creates this link automatically if it ever gets broken
+# by an editor's rename-style save or a `git pull` of pwiz-ai.)
+cmd /c mklink /H CLAUDE.md ai\root-CLAUDE.md
 
 # Copy default Claude settings (pre-approved read operations)
 # NOTE: settings-defaults.local.json must NOT contain $schema or $comment fields.

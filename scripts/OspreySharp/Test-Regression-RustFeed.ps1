@@ -324,18 +324,7 @@ if ($startIdx -gt $stopIdx) {
     throw "StartStage ($StartStage) is after StopAfterStage ($StopAfterStage)"
 }
 
-function Get-StageInputDir {
-    # When -Side is supplied, returns a per-side input dir
-    # (`<stage>\inputs-<side>`). For stage1to4, callers pass no side and
-    # get the shared dataset inputs dir; for stage5+, per-side inputs
-    # carry that side's own previous-stage outputs so each side feeds
-    # its own intermediates forward (no cross-tool sidecar sharing).
-    param([string]$Stage, [string]$Side)
-    if ($Side) {
-        return Join-Path $workRoot ($Stage + '\inputs-' + $Side)
-    }
-    return Join-Path $workRoot ($Stage + '\inputs')
-}
+function Get-StageInputDir { param([string]$Stage) Join-Path $workRoot ($Stage + '\inputs') }
 function Get-StageRustDir  { param([string]$Stage) Join-Path $workRoot ($Stage + '\rust') }
 function Get-StageCsDir    { param([string]$Stage) Join-Path $workRoot ($Stage + '\cs') }
 function Get-StageStatusPath { param([string]$Stage) Join-Path $workRoot ($Stage + '\status.json') }
@@ -370,7 +359,6 @@ function Invoke-Tool {
     $allHooks = @(
         'OSPREY_DUMP_STANDARDIZER','OSPREY_DUMP_SUBSAMPLE',
         'OSPREY_DUMP_SVM_WEIGHTS','OSPREY_DUMP_PERCOLATOR',
-        'OSPREY_DUMP_PERC_INPUT','OSPREY_PERC_INPUT_ONLY',
         'OSPREY_PERCOLATOR_ONLY',
         'OSPREY_DUMP_RECONCILIATION','OSPREY_RECONCILIATION_ONLY',
         'OSPREY_DUMP_RESCORED','OSPREY_RESCORED_ONLY',
@@ -590,31 +578,27 @@ function Compare-Stage1to4 {
 }
 
 function Freeze-Stage1to4 {
-    # Per-side freeze: each side's stage1to4 outputs (.scores.parquet
-    # + calibration.json) go into ITS OWN stage5/inputs-<side> dir.
-    # mzMLs + library are dataset (shared content) but duplicated into
-    # each per-side inputs dir so the side's runner finds them. This
-    # replaces the prior cross-tool freeze (all-Rust → both sides);
-    # the new gate requires each side's Stage 5+ to pass on its own
-    # Stage 4 outputs.
-    foreach ($sideKey in @('rust', 'cs')) {
-        $srcDir = if ($sideKey -eq 'rust') { Get-StageRustDir 'stage1to4' } else { Get-StageCsDir 'stage1to4' }
-        $next = Get-StageInputDir 'stage5' $sideKey
-        Reset-StageDir $next -KeepInputs:$false
-        foreach ($stem in $selectedStems) {
-            Copy-Item (Join-Path $srcDir ($stem + '.scores.parquet')) `
-                (Join-Path $next ($stem + '.scores.parquet'))
-            $cal = Join-Path $srcDir ($stem + '.calibration.json')
-            if (Test-Path $cal) { Copy-Item $cal (Join-Path $next ($stem + '.calibration.json')) }
-        }
-        foreach ($mzml in $selectedFiles) {
-            $src = Join-Path $inputsDir (Split-Path $mzml -Leaf)
-            if (Test-Path $src) { Copy-Item $src (Join-Path $next (Split-Path $mzml -Leaf)) }
-        }
-        Copy-Item (Join-Path $inputsDir $libraryName) (Join-Path $next $libraryName)
-        $cache = Join-Path $inputsDir ($libraryName + '.libcache')
-        if (Test-Path $cache) { Copy-Item $cache (Join-Path $next ($libraryName + '.libcache')) }
+    # Freeze: copy rust's .scores.parquet + calibration JSON to
+    # stage5/inputs as the canonical Stage 5 input. Stage the library
+    # + libcache. Also stage the mzMLs because Stage 6 rescore re-
+    # extracts spectra from them (Stage 5 itself ignores mzMLs, so
+    # carrying them costs nothing on Stage 5 and saves a refetch later).
+    $rustDir = Get-StageRustDir 'stage1to4'
+    $next = Get-StageInputDir 'stage5'
+    Reset-StageDir $next -KeepInputs:$false
+    foreach ($stem in $selectedStems) {
+        Copy-Item (Join-Path $rustDir ($stem + '.scores.parquet')) `
+            (Join-Path $next ($stem + '.scores.parquet'))
+        $cal = Join-Path $rustDir ($stem + '.calibration.json')
+        if (Test-Path $cal) { Copy-Item $cal (Join-Path $next ($stem + '.calibration.json')) }
     }
+    foreach ($mzml in $selectedFiles) {
+        $src = Join-Path $inputsDir (Split-Path $mzml -Leaf)
+        if (Test-Path $src) { Copy-Item $src (Join-Path $next (Split-Path $mzml -Leaf)) }
+    }
+    Copy-Item (Join-Path $inputsDir $libraryName) (Join-Path $next $libraryName)
+    $cache = Join-Path $inputsDir ($libraryName + '.libcache')
+    if (Test-Path $cache) { Copy-Item $cache (Join-Path $next ($libraryName + '.libcache')) }
 }
 
 # ----------------------------------------------------------------------
@@ -637,15 +621,6 @@ $stageConfig = @{
             OSPREY_DUMP_CONSENSUS      = '1'
             OSPREY_DUMP_RECONCILIATION = '1'
             OSPREY_DUMP_RESCORED       = '1'
-            # Captures 2nd-pass Percolator subsample + fold assignment
-            # AND per-fold SVM weights in stage6/<side>/ (filename
-            # keeps "stage5_" prefix; 2nd-pass call overwrites 1st-pass
-            # within the same process). Diagnostic for cross-impl
-            # localization of any post-dedup, 2nd-pass divergence.
-            OSPREY_DUMP_STANDARDIZER   = '1'
-            OSPREY_DUMP_PERC_INPUT     = '1'
-            OSPREY_DUMP_SUBSAMPLE      = '1'
-            OSPREY_DUMP_SVM_WEIGHTS    = '1'
             # Exit after Stage 7 protein FDR dump (well before blib
             # write). The 2nd-pass FDR sidecar is written by the binary
             # BEFORE this exit point (AnalysisPipeline.cs writes it just
@@ -692,10 +667,7 @@ $stageConfig = @{
 
 function Run-PostStage4 {
     param([string]$Stage, [string]$SideName, [string]$Bin)
-    # Per-side input dir: each side reads its own previous-stage outputs
-    # (no cross-tool sidecar sharing). Freeze-PostStage4 propagates each
-    # side's prior outputs into its own per-side inputs dir.
-    $sIn  = Get-StageInputDir $Stage $SideName
+    $sIn  = Get-StageInputDir $Stage
     $sOut = if ($SideName -eq 'rust') { Get-StageRustDir $Stage } else { Get-StageCsDir $Stage }
     Reset-StageDir $sOut -KeepInputs:$false
     foreach ($f in (Get-ChildItem $sIn -File)) {
@@ -832,34 +804,32 @@ function Compare-Blib-Wrap {
 
 function Freeze-PostStage4 {
     param([string]$FromStage, [string]$ToStage)
-    # Per-side freeze: each side's prior-stage inputs + rewritten
-    # artifacts propagate into ITS OWN next-stage inputs dir. No
-    # cross-tool sharing. Stage 6 rewrites the .scores.parquet in
-    # place (post-rescore) and writes per-file .{1st,2nd}-pass.
-    # fdr_scores.bin sidecars; downstream stages must see those
-    # rewritten artifacts to enter at the right pipeline checkpoint.
-    # Stage 7 specifically uses --join-at-pass=2 which validates
-    # osprey.reconciled = "true" in the parquet footer — wrong-stage
-    # parquets fail loudly at the binary, not silently in the test
-    # harness.
-    foreach ($sideKey in @('rust', 'cs')) {
-        $next = Get-StageInputDir $ToStage $sideKey
-        Reset-StageDir $next -KeepInputs:$false
-        $prev = Get-StageInputDir $FromStage $sideKey
-        foreach ($f in (Get-ChildItem $prev -File)) {
-            Copy-Item $f.FullName (Join-Path $next $f.Name)
-        }
-        # Overlay rewritten / new artifacts from THIS side's prior
-        # output dir.
-        $prevSide = if ($sideKey -eq 'rust') { Get-StageRustDir $FromStage } else { Get-StageCsDir $FromStage }
-        if (Test-Path $prevSide) {
-            foreach ($pattern in @('*.scores.parquet',
-                                   '*.1st-pass.fdr_scores.bin',
-                                   '*.2nd-pass.fdr_scores.bin',
-                                   '*.reconciliation.json')) {
-                foreach ($f in (Get-ChildItem $prevSide -Filter $pattern -File -ErrorAction SilentlyContinue)) {
-                    Copy-Item $f.FullName (Join-Path $next $f.Name) -Force
-                }
+    # Propagate the prior stage's inputs forward, then OVERLAY any
+    # rewritten artifacts from the prior stage's rust/ output dir.
+    # Stage 6 rewrites the .scores.parquet in place (post-rescore)
+    # and writes per-file .{1st,2nd}-pass.fdr_scores.bin sidecars;
+    # downstream stages must see those rewritten artifacts to enter
+    # at the right pipeline checkpoint. Stage 7 specifically uses
+    # --join-at-pass=2 which validates osprey.reconciled = "true"
+    # in the parquet footer — wrong-stage parquets fail loudly at
+    # the binary, not silently in the test harness.
+    $next = Get-StageInputDir $ToStage
+    Reset-StageDir $next -KeepInputs:$false
+    $prev = Get-StageInputDir $FromStage
+    foreach ($f in (Get-ChildItem $prev -File)) {
+        Copy-Item $f.FullName (Join-Path $next $f.Name)
+    }
+    # Overlay rewritten / new artifacts from the prior stage's rust
+    # output. Patterns: rewritten parquet, both FDR sidecars, the
+    # reconciliation.json envelope.
+    $prevRust = Get-StageRustDir $FromStage
+    if (Test-Path $prevRust) {
+        foreach ($pattern in @('*.scores.parquet',
+                               '*.1st-pass.fdr_scores.bin',
+                               '*.2nd-pass.fdr_scores.bin',
+                               '*.reconciliation.json')) {
+            foreach ($f in (Get-ChildItem $prevRust -Filter $pattern -File -ErrorAction SilentlyContinue)) {
+                Copy-Item $f.FullName (Join-Path $next $f.Name) -Force
             }
         }
     }
@@ -878,23 +848,12 @@ for ($i = $startIdx; $i -le $stopIdx; $i++) {
     Write-Host ("--- {0} ---" -f $stage) -ForegroundColor Cyan
 
     # Verify inputs are available for this stage (for stages > stage1to4,
-    # the previous stage must have frozen each side's outputs into the
-    # per-side inputs dirs, OR we're starting mid-march). Per-side
-    # checks: both inputs-rust/ and inputs-cs/ must be present and
-    # populated for the next stage to run on both sides.
+    # the previous stage must have frozen its outputs, OR we're starting
+    # mid-march and the user must have previously run earlier stages).
     if ($stage -ne 'stage1to4') {
-        $missing = $false
-        # NOTE: use $sideKey here, not $side. PowerShell variable names
-        # are case-insensitive, and the $Side parameter (cs|rust|both)
-        # is shadowed by any $side reassignment in a foreach.
-        foreach ($sideKey in @('rust','cs')) {
-            $sIn = Get-StageInputDir $stage $sideKey
-            if (-not (Test-Path $sIn) -or @(Get-ChildItem $sIn -File).Count -eq 0) {
-                Write-Host ("  ERROR: no frozen inputs at {0}. Run from earlier stage first." -f $sIn) -ForegroundColor Red
-                $missing = $true
-            }
-        }
-        if ($missing) {
+        $sIn = Get-StageInputDir $stage
+        if (-not (Test-Path $sIn) -or @(Get-ChildItem $sIn -File).Count -eq 0) {
+            Write-Host ("  ERROR: no frozen inputs at {0}. Run from earlier stage first." -f $sIn) -ForegroundColor Red
             $fail = $true
             $results += @{ stage = $stage; status = 'NO_INPUTS' }
             break

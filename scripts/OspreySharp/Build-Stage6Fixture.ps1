@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Build a frozen Stage 6 test fixture: Stage 1-4 Snappy parquets +
+    Build a frozen Stage 6 test fixture: Stage 1-4 parquets +
     verified-identical Stage 5 sidecar pair + spectra cache + library.
 
 .DESCRIPTION
@@ -23,7 +23,7 @@
          if Stage 5 has drifted — Stage 6 testing only makes sense
          when its inputs are locked.
       3. Snapshot into <testDir>/_stage6_fixture/<dataset>/:
-           - <stem>.scores.parquet         (Snappy, from Stage 4)
+           - <stem>.scores.parquet         (from Stage 4)
            - <stem>.1st-pass.fdr_scores.bin (verified-identical sidecar)
            - <stem>.reconciliation.json    (verified-identical sidecar)
            - <stem>.calibration.json       (Stage 1-2 RT/MS2/MS1 cal)
@@ -97,7 +97,7 @@ foreach ($dsName in $datasets) {
         continue
     }
 
-    # Step 1: confirm Stage 4 Snappy parquets exist.
+    # Step 1: confirm Stage 4 parquets exist.
     $rustParquets = @()
     foreach ($stem in $stems) {
         $rustParquet = Join-Path $testDir "$stem.scores.rust.parquet"
@@ -137,7 +137,7 @@ foreach ($dsName in $datasets) {
     $rustOutputs = Join-Path $stage5WorkDir "rust_outputs"
 
     foreach ($stem in $stems) {
-        # Stage 4 parquet (Snappy from Rust).
+        # Stage 4 parquet (from Rust).
         Copy-Item -Path (Join-Path $testDir "$stem.scores.rust.parquet") `
                   -Destination (Join-Path $fixtureDir "$stem.scores.parquet")
         # Verified-identical Stage 5 sidecars (from Compare-Stage5-Boundary

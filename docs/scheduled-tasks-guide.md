@@ -14,6 +14,8 @@ This enables automated daily reports without manual intervention.
 
 **Common use — daily reports:** the daily consolidated report (nightly tests + exceptions + support) is the canonical working example of this setup. For the report's two-phase architecture, data flow, and turn-budget design, see [daily-report-guide.md](daily-report-guide.md).
 
+**Second example — PR & TODO activity report:** `ai/scripts/Invoke-PRReport.ps1` reuses the same two-phase pattern to produce a personal report on developer activity (PRs awaiting your review, stale PRs, author pile-up, stale TODOs, ready-to-complete TODOs). It runs `/pw-pr-research` then `/pw-pr-email` and writes findings to `ai/.tmp/pr-report/YYYY-MM-DD/`. Recommended schedule: **9:30 AM daily** (after the 8:05 AM daily report finishes). Default recipient is `brendanx@proteinms.net` since this is a personal management report, not a team broadcast.
+
 **Note:** Slash commands (`/pw-daily`) and Skills don't work in `-p` mode. See [Non-Interactive Mode Limitations](#non-interactive-mode-limitations) for workarounds.
 
 ## Prerequisites
@@ -46,6 +48,15 @@ This includes:
 When adding new MCP functionality to `/pw-daily`, update the `$AllowedTools` array in `Invoke-DailyReport.ps1`.
 
 Note: Destructive tools like `delete_email`, `update_wiki_page` are intentionally excluded.
+
+### PR Report Tool Permissions
+
+`ai/scripts/Invoke-PRReport.ps1` uses a much narrower permission set since it only reads from GitHub and the local TODO tree:
+
+- **Research phase**: `Read`, `Write`, `Edit`, `Glob`, `Grep`, plus granular `Bash(gh pr list|view|diff:*)`, `Bash(gh issue list|view:*)`, `Bash(gh api:*)`, `Bash(gh search:*)`, `Bash(git log|blame|show|-C:*)`, `Bash(grep:*)`
+- **Email phase**: `Read`, `Glob`, `Grep`, `mcp__gmail__send_email`
+
+No LabKey MCP, no email inbox modify/archive — the PR report has no inbox dependency and no destructive side-effects.
 
 ### Custom Automation Permissions
 

@@ -50,11 +50,43 @@ param(
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$dll = 'C:\proj\pwiz\pwiz_tools\Skyline\bin\x64\Debug\System.Data.SQLite.dll'
-if (-not (Test-Path $dll)) {
-    Write-Host "Missing System.Data.SQLite.dll: $dll" -ForegroundColor Red
-    Write-Host "Run a Skyline Debug build first to populate the bin\x64\Debug tree." -ForegroundColor Yellow
+# Prefer the OspreySharp net8.0 build's copy: cross-platform (Linux/WSL
+# bin includes runtimes/linux-x64/native/SQLite.Interop.dll alongside),
+# always present when OspreySharp itself has been built, and decoupled
+# from Skyline Debug build state. Fall back to the legacy Skyline Debug
+# path for environments where only Skyline is built.
+$ospReleaseBin = (Resolve-Path (Join-Path $PSScriptRoot '../../../pwiz/pwiz_tools/OspreySharp/OspreySharp/bin/x64/Release/net8.0')).Path
+$candidates = @(
+    (Join-Path $ospReleaseBin 'System.Data.SQLite.dll'),
+    'C:\proj\pwiz\pwiz_tools\Skyline\bin\x64\Debug\System.Data.SQLite.dll'
+)
+$dll = $null
+foreach ($c in $candidates) {
+    if (Test-Path $c) { $dll = $c; break }
+}
+if (-not $dll) {
+    Write-Host "Missing System.Data.SQLite.dll. Tried:" -ForegroundColor Red
+    foreach ($c in $candidates) { Write-Host "  $c" -ForegroundColor DarkRed }
+    Write-Host "Build OspreySharp first: pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -TargetFramework net8.0" -ForegroundColor Yellow
     exit 2
+}
+# System.Data.SQLite uses P/Invoke to "SQLite.Interop.dll". It does NOT
+# honor the runtimes/<rid>/native/ convention when loaded outside a
+# composed .NET app (e.g. via Add-Type in pwsh) -- it probes the
+# assembly directory directly. Ensure the native lib is alongside the
+# managed dll. On either OS, the build deposits the native under
+# runtimes/<rid>/native/ -- copy it up one level if missing so the
+# P/Invoke load succeeds.
+$dllDir = Split-Path $dll -Parent
+$rid = if ($IsLinux) { 'linux-x64' } else { 'win-x64' }
+$nativeSrc = Join-Path $dllDir "runtimes/$rid/native/SQLite.Interop.dll"
+$nativeDst = Join-Path $dllDir 'SQLite.Interop.dll'
+# Always overwrite: if a previous run on a different OS placed the
+# wrong-architecture binary here, P/Invoke would fail with
+# "incorrect format" (Windows trying to load an ELF, or vice versa).
+# Force-copy from the current-OS runtimes/ source on every invocation.
+if (Test-Path $nativeSrc) {
+    Copy-Item $nativeSrc $nativeDst -Force
 }
 Add-Type -Path $dll
 

@@ -35,12 +35,28 @@
     category (default: 5). The numeric-column summary prints one
     exemplar row for each divergent column.
 
+.PARAMETER Tolerance
+    Override the per-column numeric tolerance. When set, replaces
+    every entry in the per-column threshold table. Default (unset):
+    keep the per-column thresholds hardcoded below (1e-9, the
+    cross-impl same-OS gate). Use 1e-6 for the same-impl cross-OS
+    snapshot path where the 4 median-polish columns inherit
+    libm-ULP drift from Math.Log / Math.Exp -- same justification
+    as the stage1to4 parquet 1e-6 ceiling documented in
+    Test-Snapshot.ps1 (Compare-Stage1to4-Snapshot).
+
 .EXAMPLE
     .\Compare-Percolator.ps1
 
 .EXAMPLE
     .\Compare-Percolator.ps1 -RustTsv ".\rust_stage5_percolator.tsv" `
                              -CsTsv   ".\cs_stage5_percolator.tsv"
+
+.EXAMPLE
+    # Snapshot mode (same-impl cross-OS), looser tolerance for libm drift
+    .\Compare-Percolator.ps1 -RustTsv ".\snapshot\rust_stage5_percolator.tsv" `
+                             -CsTsv   ".\wsl\rust_stage5_percolator.tsv" `
+                             -Tolerance 1e-6
 #>
 
 param(
@@ -51,7 +67,10 @@ param(
     [string]$CsTsv = "D:\test\osprey-runs\stage5\stellar\cs_stage5_percolator.tsv",
 
     [Parameter(Mandatory=$false)]
-    [int]$MaxSampleRows = 5
+    [int]$MaxSampleRows = 5,
+
+    [Parameter(Mandatory=$false)]
+    [Nullable[double]]$Tolerance = $null
 )
 
 $ErrorActionPreference = "Stop"
@@ -79,6 +98,9 @@ $thresholds = @{
     "run_protein_q"           = 1e-9
     "experiment_precursor_q" = 1e-9
     "experiment_peptide_q"   = 1e-9
+}
+if ($null -ne $Tolerance) {
+    foreach ($k in @($thresholds.Keys)) { $thresholds[$k] = [double]$Tolerance }
 }
 $numericColumns = @(
     "score", "pep",
