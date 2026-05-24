@@ -1861,3 +1861,117 @@ This is unexpected and worth a deeper look overnight.
 `ai/.tmp/handoff-20260516_ospreysharp_wsl_parity-astral-perf.md` before
 starting work.
 
+---
+
+## Postscript 17 (2026-05-23) — Astral 3-file root cause + Bucket-3 split + integration test PASS
+
+### Astral 3-file group_qvalue ROOT CAUSE: decoy gap-fill duplication
+
+Bisected the residual 1.1e-4 divergence on 177/13087 rows with a
+chain of new dumps (`OSPREY_DUMP_DETECTED_PEPTIDES`,
+`OSPREY_DUMP_STAGE7_WINNERS`, `OSPREY_DUMP_BEST_PEPTIDE_SCORES`).
+Localized to 407 decoy modseqs having different aggregated max
+scores cross-impl despite bit-equal sidecar scores per entry_id.
+
+Root cause: **reconciliation gap-fill was including
+`decoy_entry_id` in `gap_fill_ids`** (pipeline.rs ~3080) alongside
+`target_entry_id`. Every decoy already has a row in the 1st-pass
+parquet (decoys are scored against every spectrum). Gap-fill then
+appended an exact-duplicate parquet row (same entry_id+charge+
+scan_number+apex_rt) with a different score (1st-pass natural-RT
+vs gap-fill forced-RT). `collect_best_peptide_scores` took max
+over the duplicates, inflating `decoy_score` per protein group,
+shifting cumulative-FDR sort positions, and producing the 1.1e-4
+`group_qvalue` divergence.
+
+OspreySharp had the same bug but its `Dictionary<uint, FdrEntry>`
+sidecar overlay deduplicated one of the two via key overwrite —
+masking the bug from one side. So both sides were buggy in
+mirror-image ways, with the visible cross-impl drift falling out
+of the asymmetry.
+
+**Fix** (commit `d77ffec`, now PR #45): drop `decoy_entry_id` from
+`gap_fill_ids`; targets continue through gap-fill as before.
+Astral 3-file post-fix: byte-equal blib + Stage 7 protein FDR
+PASS at 1e-9. Precursor count: 165,573 → 167,285 (+1,712), since
+targets are no longer depressed by inflated `decoy_score`
+aggregations.
+
+Remaining target-favoring asymmetry: targets get cross-replicate
+consensus RT via gap-fill, decoys don't get equivalent. The
+principled fix (per-decoy consensus RT) needs Mike's predicted-
+decoy-spectra/RT libraries. In the meantime this PR stops
+aggravating the asymmetry.
+
+### Bucket-3 PR split — 6 new PRs on maccoss/osprey
+
+Split PR #37 (16-commit epic) + post-merge bit-parity work into
+focused, separately-reviewable PRs. Pattern per PR: Copilot
+review → fix → fresh-context Claude agent review → fix →
+squash-merge. Full loop done for #38 + #39 (both MERGED) and the
+first iteration done for #40 (Copilot + agent fixes pushed,
+threads resolved).
+
+| PR | Theme | State |
+|---|---|---|
+| #38 | Bucket 1 diagnostics | MERGED (`41894f4`) |
+| #39 | Bucket 2 ULP-scale bit-parity tweaks | MERGED (`0f5433e`) |
+| #40 | Bucket 3a HPC chain `--join-at-pass=2` correctness | OPEN |
+| #41 | Bucket 3b non-ppm precursor tolerance MS1 default | OPEN |
+| #42 | Bucket 3c Calibration pass 2 LOESS+metadata refresh | OPEN |
+| #43 | Bucket 3d Percolator sort + dedup + parquet_index remap | OPEN |
+| #44 | Bucket 3e LDA-side-effect re-sort + ms2_cal_errors diag | OPEN |
+| #45 | Bucket 3f Decoy gap-fill exclusion (the closer) | OPEN |
+| #37 | original 16-commit epic | DRAFT, awaiting close |
+
+pwiz PR #4233 (ProteoWizard/pwiz) has all C# mirror changes
+(decoy gap-fill exclusion, fail-fast on missing mzML cvParams,
+diagnostic isolation refactor).
+
+### Integration regression test — `test/integration-bucket3` branch
+
+To validate the 6 splits don't cumulatively regress vs the
+integrated state, built a single test branch from `origin/main`
++ merge each open PR branch + cherry-pick 3aca00c (LDA-sort +
+ms2_cal_errors) + cherry-pick d77ffec (decoy gap-fill). Zero
+merge conflicts. 528 Rust + 344 C# tests pass (872 total).
+
+**Stellar 3-file end-to-end PASS at 1e-9 vs OspreySharp.**
+Astral 3-file run killed mid-execution (resource competition);
+needs re-launch overnight.
+
+### New diagnostic infrastructure + documentation
+
+- `osprey-fdr/src/diagnostics.rs` new module (in PR #38, merged)
+- `dump_stage7_winners` + `dump_best_peptide_scores` + their
+  `*_enabled()` predicates for caller-side short-circuit
+- C# mirror: `OspreySharp.FDR/FdrDiagnostics.cs`
+- `dump_ms2_cal_errors` Rust side bundled with PR #44
+- `ai/scripts/OspreySharp/DIAGNOSTICS.md` — comprehensive
+  reference doc cataloging every `OSPREY_DUMP_*` env var across
+  both impls, grouped by pipeline stage, with matching
+  `cs_*`/`rust_*` filename, source location, and when-to-use
+  guidance. Pushed to pwiz-ai master.
+
+### Open follow-ups for next session
+
+1. **Astral 3-file integration test on `test/integration-bucket3`** —
+   re-launch overnight. PASS at 1e-9 confirms the splits compose
+   correctly. FAIL → bisect by reverting merges in reverse order.
+2. **Copilot reviews on PRs #41 – #45** — same cycle as #40:
+   Copilot summary → fix → resolve threads → fresh-context Claude
+   agent review → fix → approve.
+3. **Squash-merge approved PRs** (one focused commit per PR).
+4. **Close PR #37** with a comment linking to the 6 split PRs
+   once #45 has landed.
+5. **Address Copilot review on pwiz PR #4233** as Rust side lands.
+6. **Final perf cells** — 8 cells (Stellar+Astral × Rust+C# ×
+   Windows+WSL) after merge.
+7. **WSL stage1to4 slowdown investigation** (carry-over from
+   postscript 16).
+8. **Median-of-3 perf timings** instead of 1-shot per cell
+   (carry-over).
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260523_bucket3_pr_pipeline.md` before starting
+work.
