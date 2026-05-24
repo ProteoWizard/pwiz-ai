@@ -1975,3 +1975,116 @@ needs re-launch overnight.
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260523_bucket3_pr_pipeline.md` before starting
 work.
+
+---
+
+## Postscript 18 — 2026-05-24 autonomous night session
+
+Three deliverables on the user's overnight plate: verify Astral
+parity on `test/integration-bucket3`, run a WSL SSD-vs-HDD I/O
+bench, refresh the 8-cell perf table in `Osprey-workflow.html`.
+All three completed.
+
+### 1) Astral 3-file integration bit-equality — PASS
+
+Ran `Compare-EndToEnd-Crossimpl.ps1 -Dataset Astral -Files All
+-Framework net8.0 -Force` on the integration branch (osprey HEAD
+`8262381`, pwiz HEAD `89995c95e1`). Walls: Rust 26:46, C# 24:37.
+167,285 precursors each side, **Stage 7 protein FDR PASS at 1e-9
+per-column**, **blib content PASS at SQL row+col 1e-9** (blib
+size delta 577 KB = SQLite freelist; row content bit-equal). The
+straight-through cross-impl gate now holds on both Stellar and
+Astral on the integration branch.
+
+Log: `ai/.tmp/integration-test-astral-20260523-2311.log`.
+
+### 2) WSL I/O bench — SSD-vs-HDD confirmed; VHDX is on HDD
+
+Direct `dd`-based bench (write `fdatasync` + read `O_DIRECT`
++ 500×4 KiB fsync metadata) across four WSL targets:
+
+| Target       | Backing storage         | Seq write  | Seq read¹   | 500×4 KiB fsync |
+|--------------|-------------------------|-----------:|------------:|----------------:|
+| `/mnt/c`     | C: SSD via 9P drvfs     |  333 MB/s  |  445 MB/s   |   240 files/s   |
+| `/mnt/d`     | D: HDD via 9P drvfs     |  180 MB/s  |  476 MB/s¹  |    23 files/s   |
+| `/home`      | ext4 / VHDX / D: HDD    | 1787 MB/s² | 10716 MB/s¹ |    14 files/s   |
+| `/dev/shm`   | tmpfs (RAM)             | 2929 MB/s  |     —       |   671 files/s   |
+
+¹ Cache-influenced (4 GiB fits in NTFS / page cache on a 64 GB
+host). ² fdatasync flushes Linux dirty pages but not the
+Windows-side VHDX cache.
+
+**Important finding:** `D:\test\wsl\{guid}\ext4.vhdx` — the
+distro's ext4 lives on the *HDD*, contradicting the workflow doc
+claim of `%LOCALAPPDATA%\wsl\` (SSD). At some point between
+2026-05-18 and 2026-05-24 the WSL distro was relocated to D:.
+This is the root cause of WSL Astral Rust stage1to4 jumping from
+6:07 (2026-05-18) to 19:38 (2026-05-24) on the same hardware
+(see perf table).
+
+Full writeup: `ai/.tmp/wsl-io-bench/summary.md`.
+
+**Per-substage timing within stage1to4** (mzML read vs scoring
+vs serialize) is *not* available from the current Rust binary —
+only the five `[STAGE-WALL]` markers exist. The I/O bench plus
+the stage-level perf table together already pin down the disk
+asymmetry; finer instrumentation is left as a separate follow-up.
+
+### 3) 8-cell perf table — Windows + WSL refreshed
+
+Ran `Measure-Pipeline.ps1 -Dataset Both -Tool Both -Repeats 1`
+separately on Windows-native pwsh and WSL pwsh. Reports under
+`ai/.tmp/measure-pipeline/`.
+
+| Dataset | OS      | Rust total | C# total |
+|---------|---------|-----------:|---------:|
+| Stellar | Windows |     5:04   |   3:52   |
+| Stellar | WSL     |     6:10   |   5:33   |
+| Astral  | Windows |    25:34   |  20:09   |
+| Astral  | WSL     |    31:41   |  23:55   |
+
+Notable shifts vs prior baselines:
+* **Windows Stellar Rust 4:29 → 5:04** (+0:35) — mostly stage1to4
+  (+0:25) and small bumps in stage7 / blib. Single-run noise or
+  small fixed cost from the PR #40-45 stack; without median-of-N
+  can't yet say which.
+* **Windows Astral C# 19:19 → 20:09** (+0:50) — stage1to4 +2:43,
+  stage5 +2:36, stage6 −4:08. Stage6 acceleration matches the
+  decoy-gap-fill exclusion fix (fewer entries to rescore);
+  stage1to4 and stage5 increases warrant a second look post-merge.
+* **WSL Astral Rust 16:12 → 31:41** (+15:29) — almost all in
+  stage1to4 (6:07 → 19:38). Consistent with VHDX-moved-to-HDD;
+  WSL is now ~2× slower than Windows on stage1to4, where it was
+  previously similar or slightly faster.
+
+The `Osprey-workflow.html` Windows and WSL tables are updated
+with the new numbers and the WSL caveat block was rewritten to
+include the I/O bench results table and correct the VHDX-location
+claim. Committed locally on
+`Skyline/work/20260516_ospreysharp_wsl_parity`; **not pushed**
+(morning user can review then push).
+
+### Carry-overs (still open for next session)
+
+1. **Bucket 3 PRs #40-#45** — user wants to finalize tomorrow
+   (review cycles + squash-merge + close PR #37).
+2. **Median-of-3 perf timings** — the single-run table above has
+   visible variance; a `-Repeats 3` refresh would tighten the
+   numbers. Cheap to run (~3 hr unattended).
+3. **WSL VHDX relocation to C: SSD** — bench predicts ~30-50%
+   stage1to4 wall reduction. Destructive operation
+   (`wsl --export`/`--import`), so flagged for explicit user
+   sign-off, not done autonomously.
+4. **Per-substage instrumentation inside stage1to4** — to
+   localize the I/O contribution within the disk-bound stage.
+   Small Rust change (~30 LOC).
+
+Local commits (not pushed):
+* `pwiz` Skyline/work/20260516_ospreysharp_wsl_parity:
+  Osprey-workflow.html 2026-05-24 perf refresh + WSL caveat
+  rewrite.
+* `ai` master: this postscript 18.
+
+**Session-end handoff**:
+`ai/.tmp/handoff-20260523_night-session.md` captures the timeline
+of the autonomous run with full diagnostic notes.
