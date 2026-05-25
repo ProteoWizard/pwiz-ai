@@ -2088,3 +2088,134 @@ Local commits (not pushed):
 **Session-end handoff**:
 `ai/.tmp/handoff-20260523_night-session.md` captures the timeline
 of the autonomous run with full diagnostic notes.
+
+---
+
+## Postscript 19 — 2026-05-24 day session (Rust regression + final perf)
+
+After the night-session perf numbers landed, the user (now awake)
+flagged the unexpected C#-beats-Rust pattern and asked for a
+regression hunt + clean median-of-3 timings on the fastest available
+storage. This postscript captures the rest of the day.
+
+### 1) Rust perf regression — root cause + fix
+
+Single-run bisection on Windows D: HDD (data set same, sum/n compiler
+fix isolated):
+
+| Build | Stellar Rust total | stage1to4 |
+|---|---:|---:|
+| `8712ffe` (PR #37 tip, 5/21 baseline) | 4:18 | 1:40 |
+| `8712ffe` + Welford cherry-pick (`3aca00c`) | 4:42 | 2:01 |
+| `5ad82d9` (integration: PR #40-43 merged, no Welford) | 4:40 | 2:03 |
+| `8262381` (integration tip with Welford + decoy gap-fill) | 4:46 | 2:03 |
+
+The Welford cherry-pick alone added +21 s on stage1to4. The original
+commit message (`3aca00c`) had two motivations: (a) numerical
+stability via a bounded running mean, and (b) defeating LLVM/.NET-JIT
+vectorisation differences that produced 1-ULP mean drift cross-impl.
+For ppm-scale MS2 calibration the (a) motivation never bites &mdash;
+sum/n has ~9 digits of headroom at f64 precision. The (b) motivation
+turned out not to require Welford either: with IEEE 754 strict mode
+(Rust default, .NET default) prohibiting associative re-ordering of
+the dependent reduction <code>sum = sum + x</code>, both compilers
+fall back to serial scalar and produce identical results &mdash; once
+the input order is pinned, which is what the deterministic
+<code>(base_id, entry_id)</code> sort already in
+<code>pipeline.rs</code> does.
+
+**Fix landed locally on both repos:**
+* osprey <code>b0c1f7e</code> on <code>test/integration-bucket3</code>:
+  reverted Welford-Knuth to plain sum/n in
+  <code>crates/osprey-chromatography/src/calibration/mass.rs</code>;
+* pwiz <code>f9d873e39f</code> on
+  <code>Skyline/work/20260516_ospreysharp_wsl_parity</code>:
+  matching revert in
+  <code>OspreySharp.Chromatography/MzCalibration.cs</code>.
+
+Verified by re-running <code>Compare-EndToEnd-Crossimpl.ps1</code>:
+both **Stellar PASS and Astral PASS at 1e-9** cross-impl on the
+sum/n binaries (167,285 Astral precursors match, Stage 7 protein FDR
++ blib SQL row+col bit-equal). Rust Stellar perf recovered to 4:25,
+within noise of the 4:18 baseline. C# Astral also saved ~2 min by
+ditching its mirror Welford recurrence.
+
+### 2) Storage fix — WSL VHDX relocated to C: SSD; data staged on C:
+
+Pre-existing problem: D:\test was missing from Defender real-time
+scan exclusions (user thought it was already excluded; it wasn't),
+and the WSL <code>ext4.vhdx</code> had migrated from C: SSD to D: HDD
+at some point. Both fixes applied this session:
+
+* User added <code>D:\test</code> to AV-scan exclusions and created
+  <code>C:\test</code> (also excluded) prior to authorising the work.
+* Session relocated VHDX via <code>wsl --export</code> →
+  <code>--unregister</code> → <code>--import</code> to
+  <code>C:\wsl\ubuntu-22.04\ext4.vhdx</code>. Backup tar preserved
+  at <code>C:\temp\wsl-ubuntu-22.04-backup.tar</code> until
+  user confirms.
+* Session staged Stellar (4.7 GB) and Astral (20 GB) test data on
+  both <code>C:\test\osprey-runs</code> (Windows-native) and
+  <code>/home/brendanx/test/osprey-runs</code> (WSL ext4).
+
+Post-move I/O bench (raw <code>dd</code>): <code>/home</code> went
+from 1185 MB/s → 2064 MB/s sequential write (now true C:-SSD speed
+through the VHDX), <code>/mnt/c</code> stable at ~356 MB/s (drvfs
+ceiling), <code>/mnt/d</code> back near its HDD ceiling at 215 MB/s.
+
+### 3) Final median-of-3 perf — three configurations published
+
+For each of the three viable on-SSD configurations, ran
+<code>Measure-Pipeline.ps1 -Dataset Both -Tool Both -Repeats 3</code>:
+
+| Config | Stellar Rust | Stellar C# | Astral Rust | Astral C# |
+|---|---:|---:|---:|---:|
+| Windows native NTFS on C: | 4:37 | 3:52 | 23:11 | 15:49 |
+| WSL ext4 inside VHDX (<code>/home</code>) | **4:00** | 4:02 | **15:46** | 16:16 |
+| WSL 9P drvfs (<code>/mnt/c</code>) | 6:09 | 5:59 | 24:03 | 24:55 |
+
+The three medians-of-3 are now published in
+<code>Osprey-workflow.html</code> as three stacked tables. Variance
+is &lt;5 s on Stellar and &lt;90 s on Astral.
+
+Headline cross-impl story per config:
+* **Windows native:** C# 0.84&times; Stellar, 0.68&times; Astral
+  &mdash; C# faster on every stage, dramatic on stage7+blib via
+  skip-Percolator sidecar overlay.
+* **WSL ext4 (/home):** Rust 17-21% faster &mdash; matches the
+  historical Linux-native baseline and the user's recollection that
+  Rust is faster on Linux ext4.
+* **WSL 9P drvfs (/mnt/c):** Essentially tied (C#/Rust 0.97-1.04&times;)
+  &mdash; the 9P penalty applies to both impls equally, so on the
+  storage layout most users default to (data on Windows side, run
+  pipeline from WSL shell), C# is at parity with Rust.
+
+### Local commits (not pushed)
+
+| Repo | Commit | What |
+|---|---|---|
+| osprey | <code>b0c1f7e</code> on <code>test/integration-bucket3</code> | Replace Welford with sum/n in calibration |
+| pwiz | <code>f9d873e39f</code> on parity branch | Mirror Welford → sum/n in C# |
+| pwiz | <code>307fb61683</code> on parity branch | Osprey-workflow.html refresh with median-of-3 |
+| ai | (this commit, master) | Postscript 19 |
+
+### Carry-overs for the team
+
+1. **Land the Welford → sum/n revert as a focused osprey PR.** Lives
+   only on <code>test/integration-bucket3</code> right now; needs a
+   real upstream branch + PR + cross-impl gate via
+   <code>Compare-EndToEnd-Crossimpl.ps1</code>.
+2. **Bucket 3 PRs #40-#45.** Same plan as before; the sum/n revert
+   either folds into one of them or ships as its own follow-up.
+3. **Stage7 Rust skip-Percolator parity.** The big stage7 C# advantage
+   in the Windows table comes from C# hitting the
+   <code>FdrScoresSidecar</code> skip-Percolator path while Rust runs
+   the full 2nd-pass SVM. The configurations measured here happen to
+   leave Rust on the slow path; check whether the Rust skip is wired
+   for the same cache state.
+4. **VHDX backup cleanup.** Delete
+   <code>C:\temp\wsl-ubuntu-22.04-backup.tar</code> (~31 GB) after
+   verifying the new C: VHDX runs reliably for a few days.
+5. **Push the local commits** when ready: pwiz parity branch has 2
+   new commits (HTML refresh + sum/n revert); osprey integration
+   branch is local-only by design (never push).
