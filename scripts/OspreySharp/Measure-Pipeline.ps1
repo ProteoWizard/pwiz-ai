@@ -162,6 +162,15 @@ Write-Host ""
 # Stages we expect to see in the log output, in pipeline order.
 $expectedStages = @('stage1to4','stage5','stage6','stage7','blib')
 
+# Some impls emit additional STAGE-WALL markers between stage6 and
+# stage7. C# OspreySharp emits `[STAGE-WALL] second-pass-fdr` for the
+# 2nd-pass Percolator (which Rust folds into its `stage7` marker
+# along with protein parsimony + protein FDR). For apples-to-apples
+# stage7 comparison we add the time from any of these "extra"
+# markers to stage7 when present. If an impl emits the work under
+# the `stage7` marker directly, this is a no-op.
+$stage7MergeMarkers = @('second-pass-fdr')
+
 # Single (tool, dataset, run_idx) -> per-stage wall (seconds) + total wall.
 # Returns a PSCustomObject with .stages (hashtable stage -> seconds), .total
 # (seconds, wrapper-measured), .exit (process exit code), .logPath (string).
@@ -277,6 +286,14 @@ function Invoke-PipelineRun {
             $stages[$Matches[1]] = [double]$Matches[2]
         }
     }
+    # Fold extra markers (e.g. C#'s separate `second-pass-fdr`) into
+    # stage7 so cross-impl comparison covers the same work.
+    foreach ($extra in $stage7MergeMarkers) {
+        if ($stages.ContainsKey($extra)) {
+            $stages['stage7'] = ($stages['stage7'] | ForEach-Object { if ($_) { $_ } else { 0.0 } }) + $stages[$extra]
+            $stages.Remove($extra) | Out-Null
+        }
+    }
 
     # Per-dataset disk hygiene: workdir holds Stellar ~10 GB / Astral ~30+ GB.
     # Without cleanup, 12 runs at -Repeats 3 would fill any disk.
@@ -331,7 +348,11 @@ function Get-Median {
     param([double[]]$Values)
     if ($Values.Count -eq 0) { return [double]::NaN }
     $sorted = $Values | Sort-Object
-    $mid = [int]($sorted.Count / 2)
+    # Use [Math]::Floor to get integer division -- PowerShell's [int]
+    # cast applies banker's rounding (`[int]1.5 -> 2`), which for odd
+    # counts of 3 or 7 would jump past the true middle index and
+    # return the wrong element (specifically the max for Count=3).
+    $mid = [int][Math]::Floor($sorted.Count / 2.0)
     if ($sorted.Count % 2 -eq 1) { return $sorted[$mid] }
     return ($sorted[$mid - 1] + $sorted[$mid]) / 2.0
 }
