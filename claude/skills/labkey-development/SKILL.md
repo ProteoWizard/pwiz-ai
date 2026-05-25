@@ -1,6 +1,6 @@
 ---
 name: labkey-development
-description: Use this skill when working on LabKey Server modules (MacCossLabModules, targetedms).
+description: ALWAYS load when working on LabKey Server modules (MacCossLabModules, targetedms), in a LabKey enlistment directory, or on GitHub issues/PRs in LabKey repositories.
 ---
 
 # LabKey Server Module Development
@@ -16,18 +16,17 @@ When working on LabKey Server modules, consult these documentation files.
 Ask the user the following questions upfront (can be combined into one message):
 
 1. **Which module** are you working on?
-2. **Do you need to create a feature branch?** If yes:
-   - Ask: **Which release are you targeting?** (e.g. `25.11`)
-   - Check the current branch: call `mcp__status__get_project_status()` and find the labkeyEnlistment repo
-   - If not already on the correct `releaseXX.Y-SNAPSHOT` branch, **tell the user which branch is currently checked out and which one is needed, and ask for confirmation before switching**. Only proceed after the user confirms:
-     ```bash
-     cd C:/proj/labkeyEnlistment
-     git checkout release25.11-SNAPSHOT
-     git pull
-     ```
+2. **Which LabKey enlistment are you using?** Check both candidate locations and report what you find before touching any files:
+   - `C:/proj/labkeyEnlistment`
+   - `C:/Users/vsharma/WORK/labkey/<checkout-name>` (e.g. `WORK/labkey/release-branch`)
+   Ask the user to confirm which one to use if both exist or neither is obvious.
+3. **Do you need to create a feature branch?** If yes:
+   - Ask: **Which release are you targeting?** (e.g. `26.3`)
+   - Check the current branch by running `git status -b` in the confirmed repo path.
+   - If not already on the correct `releaseXX.Y-SNAPSHOT` branch, **tell the user which branch is currently checked out and which one is needed, and ask for confirmation before switching**. Only proceed after the user confirms.
    - Then create the feature branch:
      ```bash
-     git checkout -b 25.11_fb_<label>
+     git checkout -b XX.Y_fb_<label>
      ```
    - **Never create a version-prefixed feature branch from `develop`** — the PR will show a massive diff of unrelated commits.
 
@@ -52,15 +51,27 @@ Also read `ai/docs/labkey-setup/README.md` if environment setup is needed.
 
 ## Skyline Team LabKey Modules
 
-All LabKey modules developed by the MacCoss lab live under:
-```
-labkeyEnlistment/server/modules/MacCossLabModules/
+The LabKey enlistment spans **multiple git repositories**. Key ones:
+
+| Repo path (relative to enlistment root) | Contains |
+|---|---|
+| `.` (enlistment root) | LabKey platform, core modules |
+| `server/modules/MacCossLabModules/` | MacCoss lab modules: `signup`, `panoramapublic`, `testresults`, `pwebdashboard`, `skylinetoolsstore`, etc. |
+| `server/modules/targetedms/` | targetedms (Panorama) module |
+
+**When creating a feature branch, create it in every repo that has changes.** Branch names must be identical across repos — TeamCity matches them by name.
+
+```bash
+# Create branch in the enlistment root repo
+cd <enlistment-root>
+git checkout -b 26.3_fb_my-feature
+
+# Create the same branch in MacCossLabModules if it has changes
+cd <enlistment-root>/server/modules/MacCossLabModules
+git checkout -b 26.3_fb_my-feature
 ```
 
-targetedms module lives under:
-```
-labkeyEnlistment/server/modules/targetedms/
-```
+where `<enlistment-root>` is the confirmed path (e.g. `C:/proj/labkeyEnlistment` or `C:/Users/vsharma/WORK/labkey/release-branch`).
 
 ### Key Modules
 
@@ -71,27 +82,25 @@ labkeyEnlistment/server/modules/targetedms/
 
 ## Build Commands
 
+Run these from `<enlistment-root>` (the confirmed repo path — see "Ask These Questions First" above).
+
 ```bash
 # Build and deploy the testresults module
-cd C:/proj/labkeyEnlistment
 gradlew :server:modules:MacCossLabModules:testresults:deployModule
 ```
 
 ```bash
 # Build and deploy the targetedms module
-cd C:/proj/labkeyEnlistment
 gradlew :server:modules:targetedms:deployModule
 ```
 
 ```bash
 # Build and deploy any MacCossLabModules module (replace <moduleName> with e.g. skylinetoolsstore, panoramapublic)
-cd C:/proj/labkeyEnlistment
 gradlew :server:modules:MacCossLabModules:<moduleName>:deployModule
 ```
 
 ```bash
 # Build and deploy all modules (use when changes span multiple modules)
-cd C:/proj/labkeyEnlistment
 ./gradlew deployApp
 ```
 
