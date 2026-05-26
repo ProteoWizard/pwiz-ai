@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260327_skyline_mcp_bug_fix`
 - **Base**: `master`
 - **Created**: 2026-03-27
-- **Status**: In Progress
-- **PR**: (pending)
+- **Status**: Complete
+- **PR**: [#4113](https://github.com/ProteoWizard/pwiz/pull/4113) (merged 2026-03-28)
 
 ## Objective
 
@@ -48,6 +48,21 @@ Initial reflection used exact type match (`== typeof(ZedGraphControl)`), which b
 - GraphFullScan: full scan (ion mobility heatmap)
 - FoldChangeVolcanoPlot: volcano plot (NEW - previously failed)
 - FoldChangeBarGraph: fold change bar graph (NEW - previously failed)
+
+### 2026-03-28 - Merged
+
+PR [#4113](https://github.com/ProteoWizard/pwiz/pull/4113) "Fix MCP server TestRunner connectivity and graph discovery" merged to `master` as commit `afeb483`.
+
+## Resolution
+
+**Status**: Complete (PR #4113 merged 2026-03-28)
+
+Both bugs found while reviewing PR #3847 are fixed and shipped:
+
+* MCP server now connects to Skyline hosted inside `TestRunner.exe` — `SkylineConnection.IsSkylineProcess()` accepts both `Skyline*` and `TestRunner*` process names, and TestRunner-written connection files are no longer treated as stale.
+* Graph image export works for all `ZedGraphControl`-bearing forms via reflection (`IsAssignableFrom`), including `FoldChangeVolcanoPlot` and `FoldChangeBarGraph` which previously returned `HasGraph=False`. New graph forms are picked up automatically with no whitelist edits.
+
+`SkylineAiConnector.zip` was rebuilt and the minimum version requirement bumped in `info.properties`.
 
 ## Future Enhancements
 

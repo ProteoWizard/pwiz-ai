@@ -150,10 +150,22 @@ def get_directory_status(directory: str, verbose: bool = False) -> dict:
     }
 
 
-def _sync_root_claude_md(project_root: Path) -> Optional[str]:
-    """Copy ai/root-CLAUDE.md to project root CLAUDE.md if source is newer.
+def _ensure_root_claude_md_link(project_root: Path) -> Optional[str]:
+    """Ensure project-root CLAUDE.md is a hard link to ai/root-CLAUDE.md.
 
-    Returns a message if updated, None otherwise.
+    Replaces the legacy Copy-Item-based sync: instead of duplicating
+    content and tracking mtimes, the two paths now share an NTFS inode so
+    edits at either path show up at the other for free. Idempotent: a
+    no-op when the file is already linked.
+
+    Also handles the in-the-wild migration cases:
+    - Pre-hard-link setup left a regular copy at CLAUDE.md
+    - An editor or `git pull` overwrote ai/root-CLAUDE.md by atomic rename,
+      breaking the previous hard link
+
+    In both cases the existing CLAUDE.md is removed and a fresh hard link
+    is created. Returns a one-line message describing the action taken, or
+    None when nothing changed.
     """
     source = _AI_ROOT / "root-CLAUDE.md"
     target = project_root / "CLAUDE.md"
@@ -161,13 +173,25 @@ def _sync_root_claude_md(project_root: Path) -> Optional[str]:
     if not source.exists():
         return None
 
-    # Copy if target doesn't exist or source is newer
-    if not target.exists() or source.stat().st_mtime > target.stat().st_mtime:
-        import shutil
-        shutil.copy2(str(source), str(target))
-        return f"Updated {target} from {source}"
+    # Already linked: same inode → nothing to do.
+    if target.exists() and target.samefile(source):
+        return None
 
-    return None
+    # Determine which case we're in for a clear migration message, then
+    # remove the existing entry. Unlinking a hard link only drops the
+    # directory entry, not the underlying inode.
+    if target.exists():
+        action = "Re-linked"  # legacy copy or broken hard link
+        target.unlink()
+    else:
+        action = "Created hard link for"
+
+    try:
+        os.link(str(source), str(target))
+    except OSError as e:
+        return f"Failed to create hard link {target} -> {source}: {e}"
+
+    return f"{action} {target} -> {source}"
 
 
 @mcp.tool()
@@ -178,15 +202,18 @@ def get_project_status(verbose: bool = False) -> str:
     (derived from the ai/ folder location). Call this at session start to
     orient yourself — no arguments needed.
 
-    Also auto-syncs root CLAUDE.md from ai/root-CLAUDE.md if the source is newer.
+    Also ensures the project-root CLAUDE.md is a hard link to
+    ai/root-CLAUDE.md, creating or re-linking it as needed. This replaces
+    the older copy-and-sync mechanism, so legacy machines installed with
+    the Copy-Item-based setup are migrated transparently on the next call.
 
     Args:
         verbose: If True, include lists of modified/staged/untracked files (default: False)
     """
     project_root = _AI_ROOT.parent  # e.g., C:\proj
 
-    # Auto-sync root CLAUDE.md
-    sync_message = _sync_root_claude_md(project_root)
+    # Ensure root CLAUDE.md is hard-linked to ai/root-CLAUDE.md
+    sync_message = _ensure_root_claude_md_link(project_root)
 
     subdirs = sorted([
         d for d in project_root.iterdir()
@@ -421,6 +448,10 @@ def set_active_project(path: str) -> str:
     Call this when switching focus between repositories
     (e.g., pwiz, pwiz-ai, skyline_26_1).
 
+    Per-session state is keyed by the Claude Code process's PID (this server's
+    parent process), which the statusline also reads, so concurrent Claude Code
+    sessions do not overwrite each other's status display.
+
     Args:
         path: Path to the project directory. Example: 'C:/proj/pwiz'
     """
@@ -433,9 +464,145 @@ def set_active_project(path: str) -> str:
         "setAt": datetime.now(timezone.utc).isoformat(),
     }
 
-    ACTIVE_PROJECT_FILE.write_text(json.dumps(active, indent=2), encoding="utf-8")
+    payload = json.dumps(active, indent=2)
+    target = _per_session_active_project_file() or ACTIVE_PROJECT_FILE
+    target.write_text(payload, encoding="utf-8")
 
     return f"Active project set to: {active['name']} ({active['path']})"
+
+
+# Cache the Claude Code PID across all calls in this server's lifetime.
+# Claude Code doesn't relocate; one walk-up is enough.
+_CLAUDE_PID_CACHE: Optional[int] = None
+
+
+def _find_claude_code_pid() -> Optional[int]:
+    """Walk up the process tree from this server until we find a process
+    named 'claude' (case-insensitive). The same walk in statusline.ps1
+    converges on the same PID, so files keyed by it are sharable.
+
+    On Windows the StatusMcp's direct parent IS claude.exe (so the walk
+    terminates after one step), but the statusline is launched via a
+    short-lived bash/pwsh wrapper, so it has to walk further. Both sides
+    use the same algorithm to ensure agreement.
+
+    Implementation shells out to pwsh once (cached) so we don't add a
+    psutil dependency. ~150ms one-time cost, negligible relative to
+    server lifetime.
+    """
+    global _CLAUDE_PID_CACHE
+    if _CLAUDE_PID_CACHE is not None:
+        return _CLAUDE_PID_CACHE
+
+    cmd = (
+        f"$cur = {os.getpid()}; "
+        "$d = 0; "
+        "while ($cur -and $cur -ne 0 -and $d -lt 16) { "
+        "  $p = Get-CimInstance Win32_Process -Filter \"ProcessId = $cur\" -ErrorAction SilentlyContinue; "
+        "  if (-not $p) { break } "
+        "  if ($p.Name -match '^claude') { Write-Host $p.ProcessId; exit 0 } "
+        "  $cur = $p.ParentProcessId; $d++ "
+        "}"
+    )
+    try:
+        result = subprocess.run(
+            ["pwsh", "-NoProfile", "-Command", cmd],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5,
+        )
+        out = result.stdout.strip()
+        if out.isdigit():
+            _CLAUDE_PID_CACHE = int(out)
+            logger.info(f"Found Claude Code PID via process-tree walk: {_CLAUDE_PID_CACHE}")
+            return _CLAUDE_PID_CACHE
+    except Exception as e:
+        logger.warning(f"Failed to find Claude Code PID: {e}")
+
+    # Fallback: use direct parent. On Windows that's already claude.exe
+    # in the StatusMcp's case (the walk would have found it at depth 0
+    # if pwsh didn't error), so this is harmless on the happy path.
+    try:
+        _CLAUDE_PID_CACHE = os.getppid()
+    except OSError:
+        return None
+    return _CLAUDE_PID_CACHE
+
+
+def _per_session_active_project_file() -> Optional[Path]:
+    """Path to this Claude Code session's active-project file. Keyed by
+    the Claude Code PID (walked up the process tree) so the statusline
+    and StatusMcp share the same identity."""
+    pid = _find_claude_code_pid()
+    if not pid:
+        return None
+    return STATE_DIR / f"active-project-{pid}.json"
+
+
+def _per_session_context_state_file() -> Optional[Path]:
+    """Path to this Claude Code session's context-usage snapshot file. The
+    statusline writes it on every tick; this server reads it on demand."""
+    pid = _find_claude_code_pid()
+    if not pid:
+        return None
+    return STATE_DIR / f"context-state-{pid}.json"
+
+
+@mcp.tool()
+def get_context_usage() -> str:
+    """Get the current Claude Code session's context-window usage.
+
+    Returns the same numbers the statusline displays — same model,
+    same calibration (97% consumed = 0% left, matching Claude Code's
+    auto-compact warning point on the 1M-context tier). The snapshot
+    is refreshed by the statusline every tick, so it lags the live
+    state by at most one turn.
+
+    Use this BEFORE suggesting end-of-session, handoff, or compact —
+    don't estimate from feel. Many users are comfortable pushing
+    sessions into single-digit percentages remaining; suggesting a
+    handoff at 40% wastes their session.
+
+    Returns JSON with:
+      model                       — display name of current model
+      context_window_size         — total tokens (e.g. 1000000 for Opus 4.7-1m)
+      input_tokens                — non-cached input tokens this turn
+      cache_creation_input_tokens — tokens entering the cache
+      cache_read_input_tokens     — tokens served from cache
+      used_tokens                 — sum of the three above
+      used_pct                    — used / window * 100 (raw)
+      left_pct                    — usable headroom % (97% - used_pct, floored to 0)
+      usable_max_pct              — calibration ceiling (97 for the 1M tier)
+      calibrated_at               — UTC timestamp of the snapshot
+
+    On a fresh session before the statusline has run once, returns an
+    empty/error payload — that itself signals "very early in session,
+    plenty of context."
+    """
+    state_file = _per_session_context_state_file()
+    if not state_file or not state_file.exists():
+        return json.dumps({
+            "error": "Context state file not found",
+            "expected_path": str(state_file) if state_file else None,
+            "hint": (
+                "The statusline writes this file on every tick. If you "
+                "are seeing this, either the session just started (no "
+                "tick yet) or the statusline isn't configured. Either "
+                "way, plenty of context is almost certainly available."
+            ),
+        }, indent=2)
+
+    try:
+        payload = state_file.read_text(encoding="utf-8")
+    except OSError as e:
+        return json.dumps({
+            "error": f"Failed to read context state: {e}",
+            "path": str(state_file),
+        }, indent=2)
+
+    return payload
 
 
 def main():

@@ -1,12 +1,12 @@
 # TODO-20260428_parquet_zstd.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260428_parquet_zstd`
+- **Branch**: `Skyline/work/20260428_parquet_zstd` (squash-merged + deleted)
 - **Base**: `master`
 - **Created**: 2026-04-28
-- **Status**: In Progress
-- **GitHub Issue**: [#4171](https://github.com/ProteoWizard/pwiz/issues/4171)
-- **PR**: [#4172](https://github.com/ProteoWizard/pwiz/pull/4172) (draft)
+- **Status**: COMPLETE — squash-merged 2026-05-07
+- **GitHub Issue**: [#4171](https://github.com/ProteoWizard/pwiz/issues/4171) (closed by merge)
+- **PR**: [#4172](https://github.com/ProteoWizard/pwiz/pull/4172) (merged 2026-05-07)
 
 ## Objective
 
@@ -39,10 +39,10 @@ Upgrade Parquet.Net 3.0.0 → 4.25.0 in Skyline + OspreySharp so Parquet exports
 _(none — both solutions build green and `TestParquetArrays` passes)_
 
 ### Remaining
-- [ ] Developer review (build in VS, full TestFunctional run if desired)
-- [ ] Verify byte-level cross-impl compat of `.scores.parquet` written by OspreySharp.IO with 4.25.0 is still readable by Rust osprey (Stage 5/6 reconciliation paths). 4.25.0's IronCompress→ZstdSharp.Port path may produce slightly different framing than 5.5.0's direct ZstdSharp.Port, but the parquet-level encoding should match.
-- [ ] Run code inspection / pre-commit checks
-- [ ] Push branch and update draft PR
+- [x] Developer review (TeamCity green: Skyline 1621/1621, Core 308 + 293 + 271, Bumbershoot 5+5, OspreySharp 299/299; intermittent Docker-container build flakiness traced to a stale-`artifacts/` race in the prep script — pre-existing infra bug unrelated to this PR, flagged to Matt Chambers separately)
+- [x] Verify byte-level cross-impl compat of `.scores.parquet` written by OspreySharp.IO with 4.25.0 is still readable by Rust osprey — Stages 1-4 (`Diff-Parquet`) 3/3, Stage 5 (`Compare-Stage5-AllFiles`) 3/3 across all four dumps, Stage 6 (`Compare-Stage6-Crossimpl`) 1/1, all on Stellar with both impls writing Zstd (no Snappy fallback in the cross-tool path)
+- [x] Run code inspection / pre-commit checks (ReSharper 0 warnings on net472 + net8.0)
+- [x] Push branch and update draft PR (PR #4172 squash-merged 2026-05-07)
 
 ## Key Files
 
@@ -118,9 +118,35 @@ So `ParquetReportExporter.cs`, `ParquetScoreCache.cs`, `ParquetReportExporterTes
 
 **Strong-name shape sanity check.** `ParquetNet.dll` 4.25.0 reports `Parquet, Version=4.0.0.0, Culture=neutral, PublicKeyToken=d380b3dee6d01926` and `AssemblyInformationalVersionAttribute = 4.25.0+687fbb462e94eddd1dc5a0aa26f33ba8e53f60e3`.
 
-## Context for Next Session
+### 2026-05-07 — Session 3 (Parquet.Net Thrift skip patch + cross-tool ZSTD validation + merge)
 
-**What still needs validation:**
-1. **Round-trip a parquet through `ParquetReportExporter`** — `TestParquetArrays` should now pass. Confirm with `pwsh -File ./ai/scripts/Skyline/Run-Tests.ps1 -TestName TestParquetArrays`.
-2. **Confirm `nironcompress.dll` lands in `Skyline/bin/x64/Release/`** alongside `IronCompress.dll`. If not, IronCompress falls back to managed Snappier/ZstdSharp.Port at a perf cost but writes still work.
-3. **Run any OspreySharp parquet round-trip tests** — particularly Stage 5/6/8 cross-impl tests that round-trip files between Rust osprey and OspreySharp. The `byte[]` columns in OspreySharp's schema (`cwt_candidates`, `fragment_mzs`, etc.) are declared as `new DataField("name", typeof(byte[]), isNullable: true, isArray: false)`; if byte parity fails, check Parquet.Net 4.x's encoding of nullable `byte[]` columns (raw BYTE_ARRAY vs ConvertedType.BSON).
+**Cross-impl read of Rust-emitted parquet broke under 4.25.0** with `InvalidOperationException: don't know how to skip type Uuid` thrown from `ThriftCompactProtocolReader.SkipField` while reading the file footer. Diagnosed as a Parquet.Net library bug, not a parquet-format issue: `SkipField(CompactType.Struct)` reads each nested field's header but never consumes the field's value (the loop body is empty), so once the auto-generated `ColumnMetaData.Read` falls back to `SkipField` for an unknown struct field the read cursor mis-aligns and a random byte's low nibble eventually matches `CompactType.Uuid` (0x0D, an unhandled case → throws). The trigger here is `parquet-rs >= 58` writing `ColumnMetaData.size_statistics` (field 16, struct), which Parquet.Net 4.25.0's auto-generated reader doesn't enumerate. Same bug present in upstream 5.6.1 and 6.0.1 — upgrading wouldn't fix it.
+
+**Patched fork**: `maccoss-developers/skylinedev/Parquet.Net` (MIT, built from upstream tag 4.25.0). One-line fix in `ThriftCompactProtocolReader.SkipField`: recurse into `SkipField(nestedType)` inside the Struct-skip loop body so each nested field's value is consumed. Also implemented the previously commented-out Uuid case (16 raw bytes per Apache Thrift compact spec). `<LangVersion>12</LangVersion>` pin in `Parquet.csproj` to dodge a .NET 10 SDK / C# 14 `field` keyword collision in `StructField.cs`. `BUILD.md` documents the rebuild flags (`-p:NuGetAudit=false -p:Version=4.25.0-osprey1 -p:FileVersion=4.25.0 -p:AssemblyVersion=4.0.0`); `PATCH-NOTES.md` documents the patch and links the upstream PR. Built for netstandard2.0 (lowest common denominator for Skyline net472 + OspreySharp net472/net8.0). AssemblyVersion=4.0.0 matches stock 4.25.0 so the existing app.config binding redirects keep working unchanged.
+
+**OspreySharp picks up the patched dll** via `pwiz_tools/OspreySharp/Directory.Build.targets` — a post-build target that copies `pwiz_tools/Shared/Lib/Parquet/ParquetNet.dll` over the NuGet-resolved `Parquet.dll` in each output directory. Skyline already references `Lib/Parquet/ParquetNet.dll` directly via `<Reference>` in `Skyline.csproj`, so it picks up the patched build automatically.
+
+**IronCompress native binary deploy for OspreySharp.Test net472**: Exe projects (e.g. OspreySharp itself) get `nironcompress.dll` for free because the SDK's RuntimeIdentifier inference unwraps `runtimes/win-x64/native/*`, but library/test projects don't. Added an explicit `IronCompress` PackageReference with `GeneratePathProperty="true"` and a Content copy in `OspreySharp.Test.csproj` for net472. net8.0 resolves the native dep via deps.json automatically.
+
+**Inspection cleanup** (8 ReSharper warnings) on pre-existing branch code that the prior pushes didn't catch (the session that pushed didn't run `-RunInspection`): defensive null checks on `col.Data` and `CustomMetadata` are dead code under Parquet.Net 4.x's non-null annotations.
+
+**Final cross-tool validation on Stellar** (Generate-AllScoresParquet now calls Rust osprey without `--parquet-compression snappy`, so Rust defaults to its own Zstd codec; OspreySharp also writes Zstd):
+
+| Stage | Harness | Result |
+|---|---|---|
+| 1-4 | `Diff-Parquet` (column byte-parity Rust vs OspreySharp) | 3/3 PASS, 0 diff cols |
+| 5 | `Compare-Stage5-AllFiles` (4 dumps SHA-256 byte-identical) | 3/3 PASS |
+| 6 | `Compare-Stage6-Crossimpl` (worker mode, hydration + rescored + parquet) | 1/1 PASS |
+
+OspreySharp unit tests 299/299 on net472 + net8.0, ReSharper 0 warnings.
+
+**Upstream PR filed**: [aloneguid/parquet-dotnet#747](https://github.com/aloneguid/parquet-dotnet/pull/747). Includes the SkipField fix, the Uuid case, and a focused regression test in `src/Parquet.Test/ThriftTest.cs` that constructs a 9-byte hand-crafted compact-protocol payload exercising the unknown-nested-struct case. Once #747 merges and a release ships, `pwiz_tools/Shared/Lib/Parquet/ParquetNet.dll` can be bumped to the stock NuGet release and the `Directory.Build.targets` post-build copy can be retired.
+
+**Squash-merged as PR #4172 on 2026-05-07.** Closes #4171. Branch deleted on merge.
+
+## See also
+
+- `ai/todos/active/TODO-20260423_osprey_sharp.md` — Phase 4 umbrella (Stages 6-8). Session log updated 2026-05-07 to reflect the ZSTD-by-default state.
+- `ai/todos/active/TODO-20260507_osprey_sharp_stage7.md` — next sub-sprint, queued.
+- `maccoss-developers/skylinedev/Parquet.Net/{BUILD.md,PATCH-NOTES.md}` — patched-fork rebuild + patch summary.
+- `aloneguid/parquet-dotnet#747` — upstream PR.

@@ -399,6 +399,22 @@ return new SimpleErrorView(errors);        // standard error page
 new HtmlView(DIV(cl("labkey-error"), "Error message"))
 ```
 
+## LabKey Style Guide (Reference)
+
+The LabKey core module ships a live style guide that demonstrates the canonical CSS classes, form layouts, button styles, and JSP taglib usage. **Consult it before introducing new CSS classes or hand-writing form markup** — most layout needs are already covered.
+
+- **Live page**: `/core-styleGuide.view` on any running server (`@RequiresNoPermission` — no login needed)
+- **Action**: `org.labkey.core.CoreController.StyleGuideAction`
+- **JSP source**: `server/modules/platform/core/src/org/labkey/core/view/styleGuide.jsp`
+
+Key things it codifies:
+- Forms use `<labkey:form layout="horizontal">` + `<labkey:input>` taglibs. The taglib emits the correct wrapper divs (`form-group`, `col-sm-*`, `control-label`, `form-control`) — do not hand-write those classes.
+- Input width is set via `<labkey:input size="50" ...>` (passes through to the HTML `size` attribute) or `width="..."` (CSS width).
+- The legacy `lk-fields-table` + `labkey-form-label` table-based layout is explicitly **deprecated** in the style guide; prefer the taglib pattern for new pages.
+- Buttons use `<button class="btn btn-default labkey-button">` from JSP, or `ButtonBuilder` from Java.
+
+If a hand-written class doesn't appear in `styleGuide.jsp` or anywhere else in the platform codebase, that's a strong signal it's wrong — grep before using.
+
 ## CSS Guidelines
 
 ### Naming Conventions

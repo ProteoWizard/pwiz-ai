@@ -2,6 +2,8 @@
 
 Comprehensive guide for generating daily consolidated reports covering nightly tests, exceptions, and support activity.
 
+**Running on a schedule:** for Windows Task Scheduler setup, non-interactive `claude -p` mode, and `--allowedTools` permissions wiring, see [scheduled-tasks-guide.md](scheduled-tasks-guide.md). The daily report is its primary working example.
+
 ## Two-Phase Architecture
 
 A single scheduled task (`Invoke-DailyReport.ps1`) spawns two sequential Claude Code sessions:
@@ -1263,7 +1265,7 @@ Individual phases can also be run separately if needed:
 - `Invoke-DailyReport.ps1 -Phase research` — research only
 - `Invoke-DailyReport.ps1 -Phase email` — email only
 
-**Default recipient**: brendanx@uw.edu
+**Default recipient**: skyline-dev@proteinms.net (the Skyline dev team distribution list)
 
 **Expected behavior**: The script pulls latest `ai/` and `pwiz/` master, runs the research Claude session (100 turns), consolidates output files into `ai/.tmp/daily/YYYY-MM-DD/`, then runs the email Claude session (40 turns) which reads the research findings and sends the report.
 

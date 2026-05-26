@@ -120,7 +120,9 @@ foreach ($dsName in $datasets) {
             $sw = [Diagnostics.Stopwatch]::StartNew()
             Push-Location $testDir
             try {
-                & $rustBinary --no-join --parquet-compression snappy `
+                # Both sides default to ZSTD compression for cross-impl
+                # byte-parity.
+                & $rustBinary --no-join `
                     -i $mzml -l $library --resolution $ds.Resolution --protein-fdr 0.01 2>&1 | Out-Null
             } finally { Pop-Location }
             $sw.Stop()

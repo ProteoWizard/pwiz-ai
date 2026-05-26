@@ -31,22 +31,23 @@
     a C#/Rust ratio column.
 
 .PARAMETER CSharpRoot
-    Path to the OspreySharp solution directory
-    (default: C:\proj\pwiz\pwiz_tools\OspreySharp).
+    Path to the OspreySharp solution directory.
+    Default: <projRoot>\pwiz\pwiz_tools\OspreySharp,
+    where <projRoot> is the parent of the ai/ checkout.
 
 .PARAMETER RustRoot
-    Path to the osprey Rust fork directory
-    (default: C:\proj\osprey).
+    Path to the osprey Rust fork directory.
+    Default: <projRoot>\osprey.
 
 .PARAMETER OutputPath
-    Where to write the Markdown report. Default:
-    C:\proj\ai\.tmp\osprey-loc-audit-YYYYMMDD-HHMM.md.
+    Where to write the Markdown report.
+    Default: <aiRoot>\.tmp\osprey-loc-audit-YYYYMMDD-HHMM.md.
 
 .EXAMPLE
-    pwsh -File C:/proj/ai/scripts/OspreySharp/Audit-Loc.ps1
+    pwsh -File ./ai/scripts/OspreySharp/Audit-Loc.ps1
 
 .EXAMPLE
-    pwsh -File C:/proj/ai/scripts/OspreySharp/Audit-Loc.ps1 -CSharpRoot D:/other/OspreySharp
+    pwsh -File ./ai/scripts/OspreySharp/Audit-Loc.ps1 -CSharpRoot D:/other/OspreySharp
 
 .NOTES
     Requires cloc: winget install AlDanial.Cloc
@@ -54,12 +55,17 @@
 
 [CmdletBinding()]
 param(
-    [string]$CSharpRoot = 'C:\proj\pwiz\pwiz_tools\OspreySharp',
-    [string]$RustRoot = 'C:\proj\osprey',
+    [string]$CSharpRoot,
+    [string]$RustRoot,
     [string]$OutputPath
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Resolve project root from this script's location: ai/scripts/OspreySharp -> ai/scripts -> ai -> projRoot
+$projRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+if (-not $CSharpRoot) { $CSharpRoot = Join-Path $projRoot 'pwiz\pwiz_tools\OspreySharp' }
+if (-not $RustRoot)   { $RustRoot   = Join-Path $projRoot 'osprey' }
 
 # Verify cloc is available
 $clocCmd = Get-Command cloc -ErrorAction SilentlyContinue
@@ -413,7 +419,7 @@ $null = $sb.AppendLine('  as test. Matches the standard Rust convention of `mod 
 $null = $sb.AppendLine('  the bottom of the file but will be inaccurate if a crate mixes production')
 $null = $sb.AppendLine('  and test code in non-trailing positions.')
 $null = $sb.AppendLine('- `C# / Rust` ratios < 1.00 indicate C# is more compact per module.')
-$null = $sb.AppendLine('- Regenerate with: `pwsh -File C:/proj/ai/scripts/OspreySharp/Audit-Loc.ps1`')
+$null = $sb.AppendLine('- Regenerate with: `pwsh -File ./ai/scripts/OspreySharp/Audit-Loc.ps1`')
 
 # Resolve output path
 if (-not $OutputPath) {

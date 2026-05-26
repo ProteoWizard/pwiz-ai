@@ -10,6 +10,23 @@ Begin work on a GitHub Issue, following the appropriate workflow based on the re
 
 $ARGUMENTS = GitHub Issue number (e.g., "3732") or URL
 
+## Before You Begin — REQUIRED
+
+**Load the `/version-control` skill BEFORE running any of the workflow steps below.**
+This command's very first action (Step 4) is a commit to `pwiz-ai` master, so the
+commit-message format, Co-Authored-By rule, and PR-description rules must already
+be in working memory when you commit. They are easy to violate from defaults
+(imperative tense, `-` bullets, emoji "Generated with" lines, fully-versioned
+Co-Authored-By strings) — and once committed/pushed/opened, several are
+either un-amendable or only amendable in a narrow window.
+
+```
+/version-control
+```
+
+Re-load `/version-control` if the conversation context has compacted before
+the final PR is opened.
+
 ## Repository Structure
 
 | Repository | Issues For | Local Path |
@@ -110,13 +127,38 @@ or for nightly test failures/leaks:
 
 These fields are used by `record_exception_fix()` and `record_test_fix()` when the PR is merged. Without them, the fix cannot be tracked back to the original report.
 
+**Also add a Regression Test section** so the fix leaves behind a permanent verifier. The fix is the diff between "test red" and "test green" -- a bug fix without a regression test is a fix that cannot be trusted to stay fixed. See [ai/docs/validation-cycle-principles.md](../../docs/validation-cycle-principles.md).
+
+```markdown
+## Regression Test
+
+- **Test name**: (filled in once written)
+- **Test project**: Test | TestFunctional | TestData | TestPerf | other
+- **Fails on master**: (yes/no, with run log path or SHA when verified)
+- **Passes on fix**: (yes/no, with run log path or SHA when verified)
+
+If no regression test was added, explain why here. Acceptable answers exist (infrastructure-level fix no unit test could cover, infrastructure not yet in place) but must be acknowledged explicitly, not silently omitted.
+```
+
+The test should usually be the **first** deliverable on the branch, not the last. Write it, watch it fail on master, then make it pass.
+
 ### Step 4: Signal Ownership
 
-**Commit TODO to pwiz-ai:**
+> **Checkpoint**: `/version-control` must already be loaded (see "Before You Begin"
+> at the top of this file). The commit below is the first place format rules apply.
+
+**Commit TODO to pwiz-ai** — past-tense title, `* ` bullets, Co-Authored-By line,
+max 10 lines, no TODO-file reference (the TODO file *is* the change):
+
 ```bash
 cd ai
 git add todos/active/TODO-*.md
-git commit -m "Start work on <issue> - <brief description>"
+git commit -m "$(cat <<'EOF'
+Started work on #<issue> - <brief past-tense description>
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+EOF
+)"
 git push origin master
 ```
 
@@ -160,16 +202,25 @@ Reference the issue in commits: `See #$ARGUMENTS` or `Fixes #$ARGUMENTS`
 
 ## Completion
 
+> **Checkpoint**: Re-confirm `/version-control` is loaded before the code commit
+> and `gh pr create`. Both have format rules (past-tense titles, `* ` bullets,
+> `Co-Authored-By: Claude <noreply@anthropic.com>`, no emoji "Generated with"
+> lines, no "Claude Opus 4.X (1M context)" variants in Co-Authored-By).
+> After `gh pr create` returns the URL, the post-open review chain in the
+> version-control skill (Copilot wait → `/pw-respond` → `/pw-self-review`)
+> is mandatory, not optional.
+
 **For pwiz issues:**
 1. Update TODO Progress Log with completion summary
-2. Move TODO: `git mv todos/active/TODO-*.md todos/completed/`
-3. Commit to pwiz-ai master
-4. Create PR to pwiz master (use `Fixes #$ARGUMENTS` to auto-close issue)
+2. **For exception/nightly-fix issues**: confirm the Regression Test section is filled with a test name, project, and red->green verification (or an explicit rationale if no test was added). See [ai/docs/validation-cycle-principles.md](../../docs/validation-cycle-principles.md).
+3. Move TODO: `git mv todos/active/TODO-*.md todos/completed/`
+4. Commit to pwiz-ai master (format per `/version-control`)
+5. Create PR to pwiz master (use `Fixes #$ARGUMENTS` to auto-close issue; description per `/version-control`)
 
 **For pwiz-ai issues:**
 1. Update TODO Progress Log with completion summary
 2. Move TODO: `git mv todos/active/TODO-*.md todos/completed/`
-3. Commit to pwiz-ai master
+3. Commit to pwiz-ai master (format per `/version-control`)
 4. Close issue: `gh issue close $ARGUMENTS --comment "Completed. See ai/todos/completed/TODO-*.md"`
 
 ## Related

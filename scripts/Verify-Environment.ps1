@@ -144,17 +144,45 @@ if (Test-Path $claudeJunctionPath) {
     Add-Result ".claude junction" "MISSING" "Run: cmd /c mklink /J .claude ai\claude (from project root)" $false
 }
 
-# CLAUDE.md (synced from ai/root-CLAUDE.md)
+# CLAUDE.md (hard link to ai/root-CLAUDE.md - one inode, two paths)
 Write-Host "Checking CLAUDE.md..." -ForegroundColor Gray
 $claudeMdPath = Join-Path $projRoot "CLAUDE.md"
 $rootClaudeMdSource = Join-Path $aiRoot "root-CLAUDE.md"
 if (Test-Path $rootClaudeMdSource) {
-    if (-not (Test-Path $claudeMdPath) -or
-        (Get-Item $rootClaudeMdSource).LastWriteTime -gt (Get-Item $claudeMdPath).LastWriteTime) {
-        Copy-Item $rootClaudeMdSource $claudeMdPath -Force
-        Add-Result "CLAUDE.md" "OK" "synced from ai/root-CLAUDE.md" $true
+    # Detect hard-linkage by checking whether fsutil reports the source
+    # path among the hard links of the target. fsutil prints volume-
+    # relative paths (e.g. "\proj\ai\root-CLAUDE.md") so we normalize the
+    # source to the same shape before comparing.
+    $sourceVolRel = (Resolve-Path $rootClaudeMdSource).Path -replace '^[A-Za-z]:', ''
+    $isLinked = $false
+    if (Test-Path $claudeMdPath) {
+        $links = & fsutil hardlink list $claudeMdPath 2>$null
+        foreach ($link in $links) {
+            if ($link.Trim() -eq $sourceVolRel) {
+                $isLinked = $true
+                break
+            }
+        }
+    }
+
+    if ($isLinked) {
+        Add-Result "CLAUDE.md" "OK" "hard-linked to ai/root-CLAUDE.md" $true
     } else {
-        Add-Result "CLAUDE.md" "OK" "up to date" $true
+        # Legacy copy or missing - migrate to a hard link. (StatusMcp does
+        # the same migration on every session start; doing it here covers
+        # the pristine-machine setup flow before StatusMcp is registered.)
+        if (Test-Path $claudeMdPath) {
+            Remove-Item $claudeMdPath -Force
+            $action = "re-linked from legacy copy"
+        } else {
+            $action = "created hard link"
+        }
+        & cmd /c mklink /H $claudeMdPath $rootClaudeMdSource | Out-Null
+        if (Test-Path $claudeMdPath) {
+            Add-Result "CLAUDE.md" "OK" $action $true
+        } else {
+            Add-Result "CLAUDE.md" "ERROR" "failed to create hard link (same volume required)" $false
+        }
     }
 } else {
     Add-Result "CLAUDE.md" "WARN" "ai/root-CLAUDE.md not found (git pull ai repo?)" $false
