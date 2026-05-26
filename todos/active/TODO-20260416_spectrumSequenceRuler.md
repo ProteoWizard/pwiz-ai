@@ -63,9 +63,13 @@ showing rulers from another tool (ETD spectrum, c/z ion series).
 - [x] Handle edge cases: small molecules, crosslinks, missing `SrmSettings`
 - [x] Fix hit-testing interference (`PointInBox` → false)
 - [x] Fix repaint loop when hovering peak labels (compare by ion series, not object identity)
-- [ ] Apply to `GraphFullScan` (measured spectrum viewer)
+- [x] Apply to `GraphFullScan` (measured spectrum viewer)
+- [x] Apply to Library Explorer dialog (`ViewLibraryDlg`)
+- [x] Disable ruler functionality entirely in small molecule mode (no defined AA sequence) — added `SpectrumGraphItem.RulersApplicable` (proteomic, non-crosslink, settings present); gated rendering, hover, and Pin/Unpin menu items on it in GraphFullScan, GraphSpectrum, and ViewLibraryDlg (also fixed a latent NRE in the old render guard)
+- [x] Incorporate neutral loss series into ruler functionality (each neutral loss series gets its own ruler)
 - [ ] Add functional test
 - [ ] Add resource strings for any user-visible text (none currently needed — no user-visible strings)
+- [ ] (Idea/low priority) Add a ruler selector control to the spectrum toolbar, allowing the user to manually show a ruler for any ion type, charge, and neutral loss combination — complementary to the mouse-over/pin workflow
 
 ## Notes / Decisions
 
