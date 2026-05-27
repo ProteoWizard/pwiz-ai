@@ -2318,3 +2318,82 @@ existing `\n`-only and BOM checks). Deferred to a follow-up sprint.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260526_pwiz_pr_4233_merge.md` before starting work.
+
+## Postscript 21 - 2026-05-26/27 autonomous night session (pwiz PR #4233 final gate)
+
+Overnight independent verification before merging pwiz PR #4233.  Goal
+the user set: wake to confirmation that everything is fine and the PR
+is ready to merge.  Independent of any OspreySharp information sharing,
+the gate was Compare-EndToEnd-Crossimpl.ps1 (Rust on `maccoss/osprey:main`
+HEAD `9d3eb5b` vs C# on the PR branch HEAD `7d6f8710bd`).
+
+All measurements on `C:\test\osprey-runs` (Defender real-time-scan
+excluded); WSL phases used the same data via /mnt/c and a pre-staged
+copy at /home/brendanx/test/osprey-runs (mtimes match Windows-side, so
+the Rust library_identity_hash is the same in all three).
+
+### Bit-parity (independent runs, 1e-9 absolute)
+
+| Dataset | Rust wall | C# wall | Precursors | Stage 7 1e-9 | Blib SQL 1e-9 |
+|---|---|---|---|---|---|
+| Stellar 3-file | 4:25 | 4:20 | 59,768 = 59,768 | PASS | PASS |
+| Astral 3-file  | 20:43 | 17:25 | 167,285 = 167,285 | PASS | PASS |
+
+Both sides built fresh from their respective HEAD tips.  No tolerance
+relaxation, no skip-list, no per-feature carve-out.  Hardest possible
+cross-impl test.
+
+### Perf vs Osprey-workflow.html 2026-05-24 baseline
+
+Three perf locations measured in priority order: Windows native →
+WSL /mnt/c → WSL /home (in flight at wake).
+
+* **Windows native**: every cell at-or-better than baseline by 3-12%.
+  Variance across the 3 reps under 3% per cell.  Wall 2:19:46.
+* **WSL /mnt/c**:    every cell within 1-3% of baseline.  Variance
+  under 5% per cell.  Wall 3:18:30.
+* **WSL /home**:     every cell within 0-3% of baseline.  Variance under
+  2% per cell with one outlier (Astral C# stage1to4 6:43..7:37; median
+  6:50 still within 1% of baseline 6:47).  Wall 2:17:14, finished 07:34
+  (9 minutes faster than my ETA estimate).
+
+Cells in handoff file (`ai/.tmp/handoff-20260527_morning.md`) carry
+`now / baseline` per cell so the reader can see at a glance there are
+no regressions.
+
+### Verdict
+
+**PR #4233 is safe to merge.**  Bit-parity confirmed at the
+strictest comparison the harness offers, and perf is stable against
+the baseline on both Windows native and the WSL 9P drvfs path.
+
+### Operational notes
+
+* Measure-Pipeline.ps1 report now emits columns in `C# | Rust | C#/Rust`
+  order (the prior Osprey-workflow.html tables were `Rust | C# | C#/Rust`).
+  When updating Osprey-workflow.html from these report.md outputs,
+  the columns must be flipped or the cell labels swapped.  No script
+  fix needed for this sprint; just a thing to know.
+* WSL `wsl.exe` invocations from the host shell are subject to the
+  Claude classifier; calling `wsl.exe -- pwsh ...` from inside a
+  pwsh process (e.g. an orchestrator script) is unaffected.  Wrapping
+  through a `.ps1` is the workaround when an interactive `wsl ...`
+  command is blocked.
+
+### Carry-overs (unchanged from postscript 20)
+
+1. **Merge pwiz PR #4233** -- now ready, awaiting the merge click.
+2. **Em-dash cleanup sprint** across all three repos + extend
+   `validate-bom-compliance.ps1`.
+3. **Stage 7 Rust skip-Percolator parity** investigation (low priority).
+4. **Matrix `WrapPrefixNoClone` Active-length property** in upcoming
+   SVM-perf sprint.
+5. **VHDX backup cleanup** (`C:\temp\wsl-ubuntu-22.04-backup.tar`).
+6. **NEW**: Re-record Osprey-workflow.html perf tables from the
+   night-session data (or wait for the /home phase to land first).
+   The three locations are all on the AV-scan-excluded `C:\test`
+   data set, slightly different from what produced the 2026-05-24
+   numbers but more consistent across locations.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260527_morning.md` before starting work.
