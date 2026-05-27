@@ -21,7 +21,7 @@ drift became the focus of Phase 2.
 ## Branch Information
 
 - **pwiz branch**: `Skyline/work/20260516_ospreysharp_wsl_parity`
-  (PR [#4233](https://github.com/ProteoWizard/pwiz/pull/4233) open)
+  (PR [#4233](https://github.com/ProteoWizard/pwiz/pull/4233) **MERGED** 2026-05-27 as `914f0f9b60`)
 - **osprey branch**: `fix/hpc-chain-stage7-second-pass-percolator`
   (PR [#37](https://github.com/maccoss/osprey/pull/37) open)
 - **ai branch**: `master`
@@ -2382,7 +2382,7 @@ the baseline on both Windows native and the WSL 9P drvfs path.
 
 ### Carry-overs (unchanged from postscript 20)
 
-1. **Merge pwiz PR #4233** -- now ready, awaiting the merge click.
+1. **Merge pwiz PR #4233** -- DONE 2026-05-27 (`914f0f9b60`).
 2. **Em-dash cleanup sprint** across all three repos + extend
    `validate-bom-compliance.ps1`.
 3. **Stage 7 Rust skip-Percolator parity** investigation (low priority).
@@ -2397,3 +2397,17 @@ the baseline on both Windows native and the WSL 9P drvfs path.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260527_morning.md` before starting work.
+
+### 2026-05-27 — Merged
+
+PR #4233 merged as `914f0f9b60` on `master` after the overnight
+independent verification (postscript 21) confirmed bit-parity at
+1e-9 on both Stellar and Astral 3-file and no perf regression vs
+the 2026-05-24 baseline across Windows native, WSL /mnt/c, and
+WSL /home.  Two non-blocking ERROR checks at merge time (TeamCity
+BiblioSpec subset source tarball flaky + Skyline PR Perf and
+Tutorial tests intermittent GC-LEAK in Skyline-side code) were
+explicitly accepted as unrelated to the PR contents.
+
+Carry-overs 2-6 from postscript 21 remain open; they move forward
+as separate sprints.  Sprint closed.
