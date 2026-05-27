@@ -2219,3 +2219,102 @@ Headline cross-impl story per config:
 5. **Push the local commits** when ready: pwiz parity branch has 2
    new commits (HTML refresh + sum/n revert); osprey integration
    branch is local-only by design (never push).
+
+---
+
+## Postscript 20 — 2026-05-26: Bucket 3 + pwiz PR review cycles complete
+
+The Bucket 3 PR finalization sprint after #46 (Welford → sum/n) merged
+landed in 4 phases: address open Copilot comments, restore stale post-
+revert references, push reviewed branches, run cross-impl gates on the
+freshly-merged main. Then the pwiz PR #4233 review chain ran in
+parallel: Copilot review → /pw-respond → /pw-self-review agent.
+
+### 1) Rust side — all Bucket 3 PRs (#40-#45) merged
+
+Per-PR cycle (in order): Copilot summary → ask user → fix → push →
+resolve threads → fresh-context Claude agent review → ask → fix → push.
+The user merged each after the second push.
+
+| PR | Copilot fix | Agent finding(s) addressed |
+|---|---|---|
+| #40 | (done in prior session) | (done in prior session) |
+| #41 | mDa unit error in doc, missing unit test for `ms1_envelope_tolerance_ppm` | idiomatic `FragmentToleranceConfig::hram/::unit_resolution` constructors, zero-ppm no-rescue pin, doc note that `OspreyConfig::precursor_tolerance` reuses the fragment-tolerance struct |
+| #42 | brittle line-number ref in LOESS-dump comment | C# parity drift: Rust pass-2 LOESS dump now only on R^2 accept; landed matching change in pwiz `PerFileScoringTask.cs` (`953b27d1f1`) |
+| #43 | warn on parquet_index remap edge cases (gap-fill stub missing overlay + out-of-range pre_sort_row), drop String clone in `subsample_by_peptide_group<S: AsRef<str>>` | honest warn-message comments (downstream loader silently skips, not hard-fails), include `file_name` in warn output; recognized C# vs Rust remap pattern divergence is intentional architecture (Rust has FdrEntry-vs-parquet split for memory tiering) not drift |
+| #44 | trust caller match order in `dump_ms2_cal_errors` + align docstring on `format_f64_roundtrip` | rebase on #42 merge (resolved `num_confident_peptides mut` conflict by keeping both new dump call and `mut` declaration), reword stale "Welford running sum" mentions to "left-to-right sum / n accumulator" after #46 revert |
+| #45 | condense decoy-gap-fill rationale comment | stale debug-log multiplier (`n_gap_fill * 2` -> `* 1`), updated `docs/12-intermediate-files.md` gap_fill_targets description |
+
+### 2) Post-merge cross-impl gate on maccoss/osprey:main
+
+Built fresh Rust + C# binaries against `origin/main` (HEAD `9d3eb5b`
+after all 7 Bucket 3 PRs landed) + pwiz parity branch (with C# sum/n
+revert and LOESS-dump-on-accept). Ran `Compare-EndToEnd-Crossimpl.ps1`:
+
+| Dataset | Rust wall | C# wall | Precursors | Stage 7 1e-9 | Blib SQL row+col 1e-9 |
+|---|---|---|---|---|---|
+| Stellar 3-file | 4:28 | 4:31 | 59,768 = 59,768 | PASS | PASS |
+| Astral 3-file | 24:10 | 22:02 | 167,285 = 167,285 | PASS | PASS |
+
+End-to-end bit-equality at 1e-9 holds on the freshly-merged main. The
+Bucket 3 PR stack composed without regressing the parity gate.
+
+### 3) pwiz PR #4233 review cycle
+
+Copilot raised 5 threads, all addressed:
+
+| # | File | Resolution |
+|---|---|---|
+| 1+2 | `PercolatorFdr.cs` lines 769, 1824 | Stripped UTF-8 BOM (introduced by editor save), replaced mojibake `â€"` em-dashes with ASCII `--`. Validated via `ai/scripts/validate-bom-compliance.ps1` -- OspreySharp folder now clean (`Skyline.sln.DotSettings` BOM is pre-existing outside scope). Commit `fa259506d8`. |
+| 3 | `Matrix.cs:84` `WrapPrefixNoClone` | Deferred to upcoming SVM-perf sprint per user direction. Posted explanatory reply on the thread and resolved. Agent later verified safe in this PR (no `Transpose`/`Multiply` callsites on wrapped pool matrices). |
+| 4 | `MergeNodeTask.cs:163-186` | Added two `LogWarning`s for silent skip modes: missing parquet path and stub/parquet row-count mismatch. Commit `bbb5b198cb`. |
+| 5 | `RescoreHydration.cs:281` | Dropped the dead `envelopeStems.Count > 0 &&` guard. `ReconciliationFile.Load` already rejects v1 envelopes at parse, so the guard was tolerating an impossible case. Commit `bbb5b198cb`. |
+
+Agent self-review (fresh context) on PR #4233 surfaced two
+worth-considering items, both addressed:
+
+* **MergeNodeTask silently skips unmatched `perFileEntries` keys** in
+  two more places (lines 126, 290). Added one upfront `LogWarning` per
+  block enumerating skipped keys (refactored to use LINQ on the
+  `List<KeyValuePair<...>>`). Commit `7d6f8710bd`.
+* **`ReconciliationFile.Load` did not reject v2 envelopes with
+  empty/null `file_stems`**. Added explicit `parsed.FileStems == null ||
+  parsed.FileStems.Count == 0` check. Updated 3 `IOTest.cs` fixtures
+  to carry `FileStems` so the test suite reflects the new invariant.
+  Commit `7d6f8710bd`.
+
+344 / 346 OspreySharp tests pass post-changes (2 skipped, 0 failed).
+
+### Survey finding — em-dashes throughout the codebase
+
+While fixing the mojibake, ran a smart-punctuation audit:
+
+| Tree | em-dashes |
+|---|---:|
+| osprey (Rust) | 623 |
+| pwiz/OspreySharp | 124 (top: MergeNodeTask 19, FirstJoinTask 13) |
+| ai (TODOs + docs) | 3801 |
+
+Confirmed: LLM-authored code routinely introduces em-dashes. The user
+will do a separate em-dash cleanup pass after this PR lands and noted
+that the BOM-compliance check (`ai/scripts/validate-bom-compliance.ps1`)
+should later be extended to gate against em-dashes (alongside the
+existing `\n`-only and BOM checks). Deferred to a follow-up sprint.
+
+### Carry-overs
+
+1. **Merge pwiz PR #4233** when CI is green.
+2. **Em-dash cleanup sprint** across osprey + pwiz/OspreySharp + ai.
+   Add em-dash gate to `validate-bom-compliance.ps1`.
+3. **Stage 7 Rust skip-Percolator parity** investigation (carried from
+   postscript 19) -- C# was found to genuinely run 2nd-pass FDR; the
+   reporting bug we fixed cleared most of the apparent gap. Lower
+   priority but still worth confirming Rust hits the sidecar fast path
+   in all cache states.
+4. **Matrix `WrapPrefixNoClone` Active-length property** in the
+   upcoming SVM-perf sprint where C# trails Rust.
+5. **VHDX backup cleanup** (`C:\temp\wsl-ubuntu-22.04-backup.tar`,
+   ~31 GB) once the C: VHDX has proven stable for a few days.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260526_pwiz_pr_4233_merge.md` before starting work.
