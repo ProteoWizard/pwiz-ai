@@ -217,3 +217,97 @@ for samply; the user lowered it in a separate sudo shell.
 Profile-prep freeze workdir at
 `/home/brendanx/test/osprey-runs/stellar/_test_snapshot_profile-prep/`
 preserved for follow-up runs.
+
+### 2026-05-28 — Sprint commit 1: SIMD inner loops (PASS)
+
+pwiz `Skyline/work/20260527_svm_stage5_perf @ 35afd3a521` --
+`LinearSvmClassifier.Train` dot-product and weight-update loops
+hand-vectorized with `System.Numerics.Vector<double>`.  Reduction
+uses `Vector.Dot(sumVec, Vector<double>.One)` for cross-framework
+horizontal sum (`Vector.Sum` is .NET 7+; net472 needs the Dot path).
+
+Measured impact (Stellar single-file Stage 5, dottrace sampling
++ samply, both in WSL on `/home`):
+
+| Metric | Baseline | Fix #1 | Delta |
+|---|---:|---:|---:|
+| `LinearSvmClassifier.Train` OwnTime | 734,705 ms | 481,133 ms | **-34.5%** |
+| C# Percolator train all folds (max) | 77.0s | 53.2s | **-31%** |
+| C# Stage 5 total wall | 85s | 62s | **-27%** |
+| C# / Rust wall ratio | 2.13x | 1.55x | -27% |
+
+End-to-end Astral 3-file parity:
+
+| Metric | Baseline (2026-05-26 night) | Fix #1 | Delta |
+|---|---:|---:|---:|
+| C# wall  | 22:02 | 19:48 | **-10%** |
+| Rust wall | 24:10 | 24:46 | run noise |
+| Precursors (Rust = C#) | 167,285 = 167,285 | 167,285 = 167,285 | match |
+| Stage 7 1e-9          | PASS  | PASS  | -- |
+| Blib SQL row+col 1e-9 | PASS  | PASS  | -- |
+
+C# end-to-end on Astral 3-file is now ~5 minutes FASTER than Rust
+on the same input, with the bit-parity gate at 1e-9 still green.
+
+Pushed to `origin/Skyline/work/20260527_svm_stage5_perf`.
+No PR opened yet -- the branch carries one commit and the user
+will decide when to open the PR.
+
+### 2026-05-28 — Sprint commit 2 attempt: scratch pool + AggressiveInlining (REJECTED)
+
+Tried Fix #2 (pool `int[]` partition buffers + `ExtractRowsInto`
+overload accepting an explicit row count) + Fix #3
+(`[MethodImpl(AggressiveInlining)]` on
+`LinearSvmClassifier.FisherYatesShuffle`).
+
+Build green.  Stellar single-file end-to-end parity at 1e-9 PASS
+(walls 2:20 C# vs 2:21 Rust).
+
+Re-profiled Stellar Stage 5 with both fixes applied:
+
+| Metric | Fix #1 only | Fix #1 + #2 + #3 |
+|---|---:|---:|
+| C# Percolator train all folds (max) | 53.2s | 53.7s |
+| C# Stage 5 total wall | 62.1s | 62.9s |
+
+Within run-to-run noise.  Fix #3 did inline `FisherYatesShuffle`
+(it disappeared from the top-10 profile, with its 26 s of CPU now
+attributed to `Train`'s OwnTime which rose 481 -> 512 ms),
+confirming the JIT honored the hint -- but the inlining produced no
+net CPU savings because the call overhead was already negligible
+relative to the swap loop body.  Fix #2's allocator pool did not
+move the wall either: the existing `TrainData`/`TestData` pool
+already absorbed the dominant LOH pressure, and the residual
+`List<int>` + ToArray pattern at ~190 MB/run was not a measurable
+bottleneck.
+
+Per the user directive "only commit changes with proven value,"
+both changes were reverted via `git checkout --` and the branch
+ends the sprint at `35afd3a521` (Fix #1 only).
+
+### Carry-overs
+
+1. **PR for `Skyline/work/20260527_svm_stage5_perf`** -- ready when
+   the user is.
+2. **Astral Stage 5 profile pass** (TODO task 166) -- skipped
+   in this session.  Worth running to confirm the post-Fix-#1
+   hotspot pattern at the bigger scale matches Stellar's, and
+   to characterize Astral's residual gap.  Current best estimate
+   from the end-to-end Astral wall (-10%) implies most of the
+   Stellar Stage 5 SIMD win carries over.
+3. **PepEstimator KDE Pdf 3.4x gap** -- still on the
+   secondary-target list (1176 vs 345 ms own).  SIMD on the
+   bandwidth-selection inner loop would be the same pattern as
+   Fix #1.  Defer to a future session unless prioritized.
+4. **GC-pressure investigation** -- the apparent parallel-scaling
+   gap (post Fix #1: C# 62s wall vs Rust 40s) may not be GC after
+   all, given Fix #2's null result.  Could be:
+   - dotnet startup + JIT warmup (the dotTrace profile process
+     pays init cost the bash `time` measures).
+   - Library load + decoy generation cost difference (pre-Stage-5
+     setup is part of the 62s C# vs 40s Rust window).
+   - Library file mzML parsing in WSL crossing the 9P boundary --
+     `/home` is ext4 but the parent process may still load
+     `/mnt/c/proj` binaries.
+   Worth measuring per-phase walls inside the percolator-only run
+   before forming a fix hypothesis.
