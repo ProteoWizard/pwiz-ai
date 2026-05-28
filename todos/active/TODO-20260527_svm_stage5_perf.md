@@ -125,3 +125,95 @@ TODO drafted from postscript 21 carry-over #4 (Matrix
 `WrapPrefixNoClone` Active-length property) plus the persistent
 Stage 5 gap visible in the night-session perf tables.  Working
 branch creation via `/pw-startup` follows.
+
+### 2026-05-28 — First profile pass: Stellar single-file, both impls in WSL
+
+Setup: both impls profiled in WSL on the same Linux .NET 8 build
+of OspreySharp + Linux Rust release build of osprey, against
+`/home/brendanx/test/osprey-runs/stellar/Ste-...20.mzML` (3-fold
+percolator, 16 threads, SVM training capped at 300000).
+
+* C# under dottrace 2026.1.1 (sampling, CpuInstruction)
+* Rust under samply 0.13.1 (1 kHz, threadCPUDelta)
+* Symbol resolution: dottrace Reporter.exe (Windows) for the .dtp;
+  samply JSON addresses resolved via `addr2line -f -C` against the
+  unstripped osprey ELF binary.
+
+#### Headline numbers (Stellar single-file, Stage 5 only)
+
+| Metric | C# | Rust | Ratio |
+|---|---:|---:|---:|
+| Wall time | 85s | 40s | **2.13x** |
+| SVM Train/fit CPU time | 734,705 ms | 588,911 ms | **1.25x** |
+| Effective cores used | 8.6 | 14.7 | — |
+
+The 2.13x wall gap decomposes into two roughly independent factors:
+
+1. **CPU efficiency**: the C# SVM inner loop costs 1.25x the CPU
+   cycles of the Rust SVM inner loop.  Both impls land 96% of
+   their pwiz.OspreySharp CPU on a single function
+   (`LinearSvmClassifier.Train` / `svm::LinearSvm::fit`), with the
+   dot-product / weight-update kernels inlined.  Likely cause:
+   LLVM auto-vectorizes the inner loops into SIMD; RyuJIT does
+   less.  Bounds-check elimination is a secondary factor.
+2. **Parallelism scaling**: the C# fold-parallel path achieves
+   ~8.6 effective cores on a 16-core host where Rust achieves
+   ~14.7.  This ~1.7x gap is *on top of* the 1.25x CPU gap and is
+   where most of the wall difference comes from.  Suspects: RNG /
+   shuffle contention, allocator pressure during inner training,
+   or false sharing on per-thread weight vectors.
+
+#### Top 30 C# hot spots vs Rust counterparts
+
+| # | C# function | C# own (ms) | Rust own (ms) | Ratio | Rust function |
+|---:|---|---:|---:|---:|---|
+| 1 | `LinearSvmClassifier.Train`     | 734,705 | 588,911 | 1.25x | `svm::LinearSvm::fit` |
+| 2 | `LinearSvmClassifier.FisherYatesShuffle` | 28,212 | (inlined) | n/a | -- |
+| 3 | `Matrix.DotVector`              | 2,192   | (inlined) | n/a | -- |
+| 4 | `SvmTrainScratch..ctor`         | 2,150   | (n/a) | n/a | -- |
+| 5 | `DecoyGenerator.RecalculateFragments` | 1,718 | (n/a) | n/a | -- |
+| 6 | `PercolatorFdr.CompeteFromIndicesInto` | 1,216 | 764 | 1.6x | `compete_from_indices` |
+| 7 | `PepEstimator+Kde.Pdf`          | 1,176   | 345 | **3.4x** | `pep::PepEstimator::fit` |
+| 8 | `DecoyGenerator.CalculateFragmentMz` | 751 | 228 | **3.3x** | `calculate_fragment_mz` |
+| 9 | `LibraryCache.LoadCache`        | 129     | -- | n/a | -- |
+| 10 | `ParquetScoreCache.LoadPinFeaturesFromParquet` | 48 | 4 | 12x | -- |
+| 11 | `FeatureStandardizer.Transform` | 41 | 5 | 8x | `svm::FeatureStandardizer::transform` |
+
+(Full table at `ai/.tmp/stage5-profile/extracted/stage5-csharp-vs-rust.md`.)
+
+#### Open investigation lines
+
+* **SVM inner loop SIMD probe**: dump the JIT assembly for
+  `LinearSvmClassifier.Train` via `DOTNET_JitDisasm=Train`, look
+  for AVX vector ops on the dot-product and weight-update steps.
+  Compare against Rust release asm for `svm::LinearSvm::fit`.
+* **Parallelism profile**: a Timeline profile (vs Sampling) on
+  the C# side to find where worker threads spend non-CPU time --
+  if they sit in `Wait`/`Monitor.Wait` instead of doing SVM work,
+  there's a synchronization bottleneck to remove.
+* **PepEstimator KDE**: 3.4x gap on a smaller hotspot but a clean
+  numerical kernel; a SIMD probe here would either confirm the
+  RyuJIT-vs-LLVM vectorization hypothesis at a smaller scale, or
+  surface a different algorithmic cost.
+* **Parquet loaders 8-12x slow**: the parquet load functions
+  (`LoadPinFeaturesFromParquet`, `LoadFdrStubsFromParquet`,
+  `FeatureStandardizer.Transform`) consume small absolute time
+  but show very large ratios.  Likely a row-by-row C# read vs
+  a vectorized Arrow read on the Rust side -- worth a quick fix.
+
+#### Tooling assets created (not yet committed)
+
+* `ai/scripts/OspreySharp/samply-to-csv.py` -- samply JSON to flat
+  per-function CSV with addr2line + libiberty demangling.
+* `ai/.tmp/stage5-profile-stellar.sh` -- one-shot freeze-then-profile
+  shell driver (will be promoted to `Profile-Stage5.ps1` once the
+  iteration loop stabilizes).
+* `ai/.tmp/stage5-extract-and-merge.ps1` -- post-processor producing
+  the 3-col markdown table (will be promoted to
+  `Combine-Stage5-Profile.ps1` after Astral pass confirms hotspots).
+
+WSL prereq: `/proc/sys/kernel/perf_event_paranoid` must be <= 1
+for samply; the user lowered it in a separate sudo shell.
+Profile-prep freeze workdir at
+`/home/brendanx/test/osprey-runs/stellar/_test_snapshot_profile-prep/`
+preserved for follow-up runs.
