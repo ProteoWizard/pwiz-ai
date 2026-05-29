@@ -281,9 +281,19 @@ function Invoke-PipelineRun {
 
     # Parse [STAGE-WALL] lines.
     $stages = @{}
+    # C#-only [TIMING] sub-stages we need for the stage5/stage6 boundary
+    # alignment described below. Captured here from the same log scan.
+    $percolatorSec = $null
+    $proteinFdrSec = $null
     foreach ($line in [System.IO.File]::ReadAllLines($logPath)) {
         if ($line -match '\[STAGE-WALL\]\s+(\S+):\s+([0-9.]+)s') {
             $stages[$Matches[1]] = [double]$Matches[2]
+        }
+        elseif ($line -match '\[TIMING\]\s+Percolator/Simple FDR:\s+([0-9.]+)s') {
+            $percolatorSec = [double]$Matches[1]
+        }
+        elseif ($line -match '\[TIMING\]\s+First-pass protein FDR:\s+([0-9.]+)s') {
+            $proteinFdrSec = [double]$Matches[1]
         }
     }
     # Fold extra markers (e.g. C#'s separate `second-pass-fdr`) into
@@ -292,6 +302,42 @@ function Invoke-PipelineRun {
         if ($stages.ContainsKey($extra)) {
             $stages['stage7'] = ($stages['stage7'] | ForEach-Object { if ($_) { $_ } else { 0.0 } }) + $stages[$extra]
             $stages.Remove($extra) | Out-Null
+        }
+    }
+    # Stage 5/6 boundary alignment for C#.
+    #
+    # Rust labels:
+    #   stage5 = 1st-pass percolator FDR + 1st-pass protein FDR
+    #   stage6 = reconciliation planning + per-file rescore + gap-fill
+    # C# labels (default emission from FirstJoinTask + PerFileRescore):
+    #   stage5 = 1st-pass percolator + protein FDR + reconciliation planning
+    #   stage6 = per-file rescore + gap-fill (no reconciliation)
+    # The work content of stage5+stage6 is identical cross-impl; the
+    # boundary placement is the difference. When the C# `[TIMING]
+    # Percolator/Simple FDR` and `[TIMING] First-pass protein FDR` lines
+    # are present (always emitted by OspreySharp in --no-bundle production
+    # mode), we can derive the reconciliation portion as
+    # stage5_total - percolator - protein_fdr and shift it into stage6.
+    # The result: aligned stage5/stage6 match the Rust split exactly,
+    # making cross-impl per-stage comparison apples-to-apples.
+    #
+    # Rust logs do not contain these TIMING markers, so this block is a
+    # no-op on the Rust side.
+    if ($percolatorSec -ne $null -and $stages.ContainsKey('stage5')) {
+        $protein = if ($proteinFdrSec -ne $null) { $proteinFdrSec } else { 0.0 }
+        $stage5Total = $stages['stage5']
+        $reconciliationSec = $stage5Total - $percolatorSec - $protein
+        if ($reconciliationSec -gt 0.5) {
+            # Stage 5 aligned = percolator + protein FDR only.
+            $stages['stage5'] = $percolatorSec + $protein
+            # Stage 6 aligned += reconciliation portion previously in
+            # stage5. If stage6 wasn't emitted (e.g. --join-only exit),
+            # we just publish reconciliation alone under stage6.
+            if ($stages.ContainsKey('stage6')) {
+                $stages['stage6'] = $stages['stage6'] + $reconciliationSec
+            } else {
+                $stages['stage6'] = $reconciliationSec
+            }
         }
     }
 
