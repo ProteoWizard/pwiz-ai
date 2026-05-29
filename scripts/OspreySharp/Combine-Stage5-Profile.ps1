@@ -52,7 +52,7 @@ Write-Host "C#: $($csharpRows.Count) functions, top=$($csharpRows[0].Function) o
 
 # ---- Rust: samply JSON -> CSV via python (with addr2line resolution) ----
 $rustCsv = Join-Path $OutDir 'rust-stage5.csv'
-$py = 'C:\proj\ai\scripts\OspreySharp\samply-to-csv.py'
+$py = Join-Path $ScriptRoot 'samply-to-csv.py'
 Write-Host "Parsing samply JSON $RustJson via python (addr2line on $RustBinary) ..." -ForegroundColor Cyan
 # Run via WSL because addr2line + binary are Linux-side
 $wslPyArgs = @(

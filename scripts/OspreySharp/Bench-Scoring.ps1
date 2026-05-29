@@ -103,9 +103,9 @@ if (-not (Test-Path $testDir)) {
 $library = Join-Path $testDir $ds.Library
 $tempBlib = Join-Path $testDir "_bench_output.blib"
 
-$upstreamBin = "C:\proj\osprey-mm\target\release\osprey.exe"
-$forkBin = "C:\proj\osprey\target\release\osprey.exe"
-$csharpBin = "C:\proj\pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\$TargetFramework\OspreySharp.exe"
+$upstreamBin = Get-OspreyExe -Upstream
+$forkBin = Get-OspreyExe
+$csharpBin = Get-OspreySharpExe -Framework $TargetFramework
 
 # Build mzML file list based on -Files parameter
 $mzmlFiles = if ($Files -eq "Single") {

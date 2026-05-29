@@ -61,7 +61,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [string]$OspreyRoot = "C:\proj\osprey",
+    [string]$OspreyRoot = $null,
 
     [Parameter(Mandatory=$false)]
     [switch]$Fmt = $false,
@@ -78,6 +78,18 @@ param(
     [Parameter(Mandatory=$false)]
     [switch]$Clippy = $false
 )
+
+# Default OspreyRoot is resolved via the shared config (honors
+# $env:OSPREY_ROOT and the sibling-checkout convention) so this
+# script works on machines that aren't laid out under C:\proj.
+$configCandidates = @(
+    (Join-Path $PSScriptRoot 'Dataset-Config.ps1'),
+    (Join-Path $PSScriptRoot '..\Dataset-Config.ps1')
+)
+foreach ($c in $configCandidates) { if (Test-Path $c) { . $c; break } }
+if ([string]::IsNullOrEmpty($OspreyRoot)) {
+    $OspreyRoot = Get-OspreyRoot
+}
 
 # -RunTests needs the workspace built
 if ($RunTests) {
