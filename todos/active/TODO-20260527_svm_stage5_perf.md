@@ -253,6 +253,53 @@ Pushed to `origin/Skyline/work/20260527_svm_stage5_perf`.
 No PR opened yet -- the branch carries one commit and the user
 will decide when to open the PR.
 
+### 2026-05-28 — Sprint commit 3: parallel LOESS outer loop (PASS)
+
+`Skyline/work/20260527_svm_stage5_perf @ c39b3889a7` — wrap
+`LoessFitInternal`'s outer `for (int i = 0; i < n; i++)` in
+`Parallel.For`.  Each output index is independent (read-only x/y, write-
+once `fitted[i]`), so the change is mechanical and cheap.
+
+Profile pass against the Astral 3-file dataset that motivated the
+sprint:
+
+| Metric | Pre Fix #5b | Post Fix #5b | Delta |
+|---|---:|---:|---:|
+| `LoessFitInternal` lambda OwnTime | 130,805 ms (serial) | (parallelized, 16 threads) | — |
+| C# reconciliation wall | 165.8s | 43.7s | **-74%** |
+| C# Stage 5 isolated wall (--join-only) | 4:20 | 2:18 | **-47%** |
+| Astral 3-file end-to-end C# wall | 19:48 (Fix #1 only) | 15:17 | **-23%** |
+| Astral 3-file end-to-end Rust wall | 24:46 | 25:58 | run noise |
+| Cross-impl 1e-9 parity (Stellar 1-file + Astral 3-file) | PASS | PASS | bit-equal |
+
+C# now beats Rust by **10:41** on Astral 3-file end-to-end with
+bit-equality preserved.  The headline "Astral stage5 4x C#/Rust" gap
+that started this profile pass is resolved.
+
+### 2026-05-28 — Sprint commit 4 attempt: SIMD inner LOESS accumulator (REJECTED)
+
+Tried Fix #5a on top of Fix #5b: `System.Numerics.Vector<double>` SIMD
+over the 5 weighted partial sums in the inner accumulator loop, with the
+hoisted `1/maxDist` and tricube `min(u,1)^3` clamp form.  Build green.
+
+Re-profile on Astral 3-file:
+
+| Metric | Fix #5b only | Fix #5b + #5a |
+|---|---:|---:|
+| `LoessFitInternal` lambda OwnTime | 357,635 ms | 221,671 ms (**-38% CPU**) |
+| C# Stage 5 isolated wall | 138.0s | 134.3s (-2.7%) |
+
+SIMD worked at the kernel level (-38% CPU on the targeted function),
+but the **wall savings were absorbed by Amdahl's law**.  After Fix #5b
+parallelized LOESS to 16 cores, the LOESS wall was already ~8-13s out
+of a 43s reconciliation phase; SIMD shrinks LOESS further but other
+reconciliation work (PepEstimator KDE, decoy generation, consensus
+computation, JSON writing) keeps the overall wall ~constant.
+
+Per the "only commit changes with proven value" directive, 2.7% wall
+delta is within run-to-run noise.  Reverted.  Branch ends the
+sprint at `c39b3889a7` (Fix #1 + Fix #5b).
+
 ### 2026-05-28 — Sprint commit 2 attempt: scratch pool + AggressiveInlining (REJECTED)
 
 Tried Fix #2 (pool `int[]` partition buffers + `ExtractRowsInto`
