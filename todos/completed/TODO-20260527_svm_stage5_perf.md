@@ -2,12 +2,12 @@
 
 ## Status
 
-Active — sprint just opened, no commits yet.
+Completed — merged via PR [#4246](https://github.com/ProteoWizard/pwiz/pull/4246) on 2026-05-29 as `a56498ca78`.
 
 ## Branch Information
 
-- **pwiz branch**: `Skyline/work/20260527_svm_stage5_perf` (to be created from `pwiz:master` HEAD)
-- **osprey branch**: not opened yet — only if a Rust-side change is needed for cross-impl perf parity
+- **pwiz branch**: `Skyline/work/20260527_svm_stage5_perf` (merged + deleted)
+- **osprey branch**: not opened — no Rust-side change was needed
 - **ai branch**: `master`
 
 ## Background
@@ -421,3 +421,42 @@ ends the sprint at `35afd3a521` (Fix #1 only).
      `/mnt/c/proj` binaries.
    Worth measuring per-phase walls inside the percolator-only run
    before forming a fix hypothesis.
+
+### 2026-05-29 — Merged
+
+PR [#4246](https://github.com/ProteoWizard/pwiz/pull/4246) merged
+as `a56498ca78` on 2026-05-29.  Shipped three measured perf
+fixes (Fix #1 SIMD inner SVM loops, Fix #5b parallel LOESS
+outer loop, Fix #6 parallel KDE Pdf binning) plus a round-4
+perf table refresh and a cross-impl stage5/stage6 boundary
+alignment in `ai/scripts/OspreySharp/Measure-Pipeline.ps1`.
+Cross-impl 1e-9 parity verified on Stellar 1-file and Astral
+3-file before and after each fix; all 347 OspreySharp.Test
+tests pass (345 + 2 skipped).  C# now beats Rust end-to-end
+on every storage location and dataset in the perf table:
+Windows native 0.79x Stellar / 0.66x Astral; WSL /mnt/c 0.77x /
+0.79x; WSL /home 0.93x / 0.96x.  Astral 3-file end-to-end
+C# wall dropped 22:02 → 15:08 across the sprint.
+
+Self-review findings addressed in a follow-up commit on the
+same branch (lane-stride documentation on the SIMD path,
+clarified PepEstimator parallel comment, `TestSvmHighDimensional`
+exercising p=21 features through the SIMD path).  One follow-up
+deferred: extend `Compare-Stage7-Crossimpl.ps1` and
+`Compare-Blib-Crossimpl.ps1` to also report observed
+max-absolute-delta values so we can quantify the 1e-9 parity
+budget headed into future SIMD ports (LDA, peak scoring).
+
+Fix #2 (allocator pool for GridSearchC) and Fix #3
+(`[AggressiveInlining]` on FisherYatesShuffle) were
+explicitly rejected mid-sprint after measurement: both built
+and passed parity, but neither moved the wall above the
+run-to-run noise floor.  Fix #5a (SIMD inner LOESS
+accumulator) was also rejected after measurement: kernel CPU
+dropped 38% but post-#5b LOESS wall was already small enough
+that wall savings were absorbed by Amdahl's law.
+
+Carry-overs for future sprints: PepEstimator KDE Pdf inner
+loop still 4.5x Rust at Astral scale (only outer binning
+loop parallelized in this sprint); `Matrix.WrapPrefixNoClone`
+Active-length property from postscript 20.
