@@ -276,6 +276,69 @@ C# now beats Rust by **10:41** on Astral 3-file end-to-end with
 bit-equality preserved.  The headline "Astral stage5 4x C#/Rust" gap
 that started this profile pass is resolved.
 
+### 2026-05-28 — Sprint commit 5: KDE Pdf parallel binning + stage5/6 boundary alignment (PASS)
+
+`Skyline/work/20260527_svm_stage5_perf @ a855cc6bea` — wrap
+`PepEstimator.Fit`'s binning loop in `Parallel.For`.  Each bin's Pdf
+evaluation is independent (writes to its own `bins[i]` slot, calls
+`decoyKde.Pdf(score)` + `targetKde.Pdf(score)` which only read
+shared `_sample` data).  Inner Pdf sum stays serial so the PDF
+values are bit-for-bit identical to the prior serial implementation
+— no reduction-order perturbation, no cross-impl bit-parity risk
+beyond what the existing harness already absorbs.
+
+Rust's `kde.rs::pdf` uses `par_iter().fold().sum()` on the inner
+sample loop; we instead parallelize the outer binning loop, which
+is coarser-grained (300-1000 bins x 2 KDEs = 600-2000 parallel
+work units) and lower overhead than 600-2000 nested Parallel.For
+invocations.
+
+| Metric | Pre Fix #6 | Post Fix #6 | Delta |
+|---|---:|---:|---:|
+| Astral 3-file Percolator phase | 94.3s | 82.1s | -13% |
+| Astral 3-file Stage 5 isolated | 138.0s | 126.7s | -8% |
+| Astral 3-file end-to-end C# | 15:17 | 15:08 | -9s |
+| Cross-impl 1e-9 parity (Stellar 1-file + Astral 3-file) | PASS | PASS | bit-equal |
+
+C# is now **11:27 faster than Rust** on Astral 3-file end-to-end.
+
+### 2026-05-28 — Diagnostic alignment: stage5/stage6 boundary
+
+`ai master @ 604812b` — modified `Measure-Pipeline.ps1` to parse
+the existing `[TIMING] Percolator/Simple FDR` and `[TIMING] First-
+pass protein FDR` lines from the C# log, derive the reconciliation
+portion of `[STAGE-WALL] stage5`, and shift it into `stage6`.  No
+C# code change needed; pure post-processor adjustment.
+
+Before alignment:
+* Rust stage5 = percolator + protein FDR (74s on Astral)
+* Rust stage6 = reconciliation + rescore + gap-fill (239s on Astral)
+* C# stage5 = percolator + protein FDR + reconciliation (138s today)
+* C# stage6 = rescore + gap-fill only (no reconciliation)
+
+After alignment in `report.md`:
+* stage5 = percolator + protein FDR (both impls)
+* stage6 = reconciliation + rescore + gap-fill (both impls)
+
+The headline "Astral stage5 4x C#/Rust" gap from the May 26 night-
+session perf table was a stage-label artifact; with both fixes
+(Fix #5b LOESS parallel + Fix #6 KDE parallel) AND the boundary
+aligned, Astral 3-file C# stage5 should now be ~tied with Rust.
+
+### 2026-05-28 — Overnight perf table refresh (in flight)
+
+Launched `ai/.tmp/overnight-perf-20260528.ps1` at 23:29 PT.  Walks
+3 storage locations (Windows native, WSL /mnt/c, WSL /home),
+3-rep median, both impls + both datasets per location.  ETA
+~07:00 AM wall completion.  Status sentinel:
+`ai/.tmp/overnight-perf-20260528/status.txt`.
+
+When the run completes:
+1. Read `report.md` from each location dir
+2. Update Osprey-workflow.html with round-4 medians + a caveat
+   block documenting the stage5/6 alignment derivation
+3. Commit + push to the working branch (no further code changes)
+
 ### 2026-05-28 — Sprint commit 4 attempt: SIMD inner LOESS accumulator (REJECTED)
 
 Tried Fix #5a on top of Fix #5b: `System.Numerics.Vector<double>` SIMD
