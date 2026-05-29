@@ -1,128 +1,140 @@
-# OspreySharp Build and Test Scripts
+# OspreySharp Scripts
 
-Scripts for building, testing, benchmarking, and running OspreySharp (C#)
-and Osprey (Rust) in the cross-implementation bisection workflow.
+Build, test, profile, and (occasionally) cross-impl-compare OspreySharp.
+All scripts default to `-Dataset Stellar` with `-Dataset Astral` and
+`-Dataset AstralLibraryDecoy` as alternatives.  Dataset-specific paths
+and resolution flags live in [`Dataset-Config.ps1`](Dataset-Config.ps1),
+which also exposes project-root helpers (`Get-PwizRoot`,
+`Get-OspreySharpExe`, etc.) so nothing here hard-codes `C:\proj`.
 
-All scripts support `-Dataset Stellar` (default) or `-Dataset Astral`.
-Dataset-specific settings (library, resolution, file names) are defined
-in `Dataset-Config.ps1`.
+## Layout
 
-## Scripts
+```
+ai/scripts/OspreySharp/
+  README.md                     (this file)
+  DIAGNOSTICS.md                env-var reference for OSPREY_DUMP_*
+  PRE-COMMIT.md                 pre-commit + pre-PR validation gates
 
-### Build-OspreySharp.ps1
+  Build-OspreySharp.ps1         build the .sln (+ optional tests/inspection)
+  Run-Osprey.ps1                run OspreySharp or Rust osprey on a dataset
+  Dataset-Config.ps1            dataset definitions + path helpers
+  Clean-TestData.ps1            wipe caches / diagnostic dumps
 
-Build the C# OspreySharp solution and optionally run unit tests.
+  Test-Snapshot.ps1             OspreySharp same-impl regression gate
+                                (frozen-baseline byte-equality per stage)
+  Test-Full-Regression.ps1      wrapper: Stellar + Astral, smoke/quick/full
 
-```bash
+  Measure-Pipeline.ps1          perf table generator (Osprey-workflow.html)
+  Profile-OspreySharp.ps1       dotTrace wrapper for OspreySharp
+  Profile-Stage5.sh             isolated Stage 5 profile (WSL)
+  Combine-Stage5-Profile.ps1    merge dotTrace + samply outputs into a table
+  samply-to-csv.py              samply JSON -> flat per-function CSV
+
+  Compare/                      cross-impl bridge (used rarely now)
+    README.md                   when/how to use the cross-impl gate
+    Build-OspreyRust.ps1
+    Compare-EndToEnd-Crossimpl.ps1
+    Compare-Stage7-Crossimpl.ps1
+    Compare-Blib-Crossimpl.ps1
+    archive/                    historical sprint-specific tools (26 scripts)
+```
+
+OspreySharp is the primary implementation; the Compare/ folder is the
+bridge for the rare "did this change drift us from Rust?" question.
+The rest of this README focuses on the OspreySharp-primary workflow.
+
+## Build
+
+```powershell
 # Build (Release, all projects)
-pwsh -File './ai/scripts/OspreySharp/Build-OspreySharp.ps1'
+pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1
 
 # Build + run all unit tests
-pwsh -File './ai/scripts/OspreySharp/Build-OspreySharp.ps1' -RunTests
+pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -RunTests
 
-# Build + run specific test
-pwsh -File './ai/scripts/OspreySharp/Build-OspreySharp.ps1' -RunTests -TestName TestXcorrPerfectMatch
-
-# Debug build with summary output
-pwsh -File './ai/scripts/OspreySharp/Build-OspreySharp.ps1' -Configuration Debug -Summary
+# Build + ReSharper inspection (zero-warning gate)
+pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -RunInspection
 ```
 
-### Build-OspreyRust.ps1
+See [PRE-COMMIT.md](PRE-COMMIT.md) for the full pre-commit gate.
 
-Build the Rust Osprey reference binary from `C:\proj\osprey`.
+## Run
 
-```bash
-# Build release
-pwsh -File './ai/scripts/OspreySharp/Build-OspreyRust.ps1'
+```powershell
+# Run OspreySharp on Stellar single file (default)
+pwsh -File ./ai/scripts/OspreySharp/Run-Osprey.ps1
 
-# Format + build + lint
-pwsh -File './ai/scripts/OspreySharp/Build-OspreyRust.ps1' -Fmt -Clippy
+# Astral all-files
+pwsh -File ./ai/scripts/OspreySharp/Run-Osprey.ps1 -Dataset Astral -Files All
+
+# Clean caches first
+pwsh -File ./ai/scripts/OspreySharp/Run-Osprey.ps1 -Clean
+
+# Run Rust osprey for ad-hoc comparison (optional sibling checkout)
+pwsh -File ./ai/scripts/OspreySharp/Run-Osprey.ps1 -Tool Rust
 ```
 
-### Run-Osprey.ps1
+## Regression (the centerpiece)
 
-Run either tool on a test dataset. Applies dataset-specific resolution
-and library automatically.
+`Test-Snapshot.ps1` is the OspreySharp-alone regression gate.  It
+compares the current OspreySharp build against a frozen snapshot
+captured from an earlier known-good build; no Rust checkout
+required.  Stage-by-stage isolation: byte-equality SHA-256 checks on
+stages 1-6, structured comparators on stage 7 (protein FDR) and blib.
 
-```bash
-# Run C# on Stellar single file (default)
-pwsh -File './ai/scripts/OspreySharp/Run-Osprey.ps1'
+`Test-Full-Regression.ps1` is the one-command wrapper that drives
+Test-Snapshot across both datasets at the chosen scale.
 
-# Run Rust on Astral single file, clean caches first
-pwsh -File './ai/scripts/OspreySharp/Run-Osprey.ps1' -Dataset Astral -Tool Rust -Clean
+```powershell
+# Smoke (~3 min): Stellar single
+pwsh -File ./ai/scripts/OspreySharp/Test-Full-Regression.ps1 -Smoke
 
-# Run C# on all 3 Stellar files with feature dump
-pwsh -File './ai/scripts/OspreySharp/Run-Osprey.ps1' -Files All -Clean -WritePin
+# Quick (~10 min): Stellar single + Astral single
+pwsh -File ./ai/scripts/OspreySharp/Test-Full-Regression.ps1 -Quick
 
-# Run with search XIC diagnostic for specific entries
-pwsh -File './ai/scripts/OspreySharp/Run-Osprey.ps1' -DiagEntryIds "0,1080,5765,28988"
+# Full (~70 min): Stellar all + Astral all
+pwsh -File ./ai/scripts/OspreySharp/Test-Full-Regression.ps1
 
-# Run both tools with diagnostic (two calls)
-pwsh -File './ai/scripts/OspreySharp/Run-Osprey.ps1' -Tool Rust -Clean -DiagEntryIds "0,1080"
-pwsh -File './ai/scripts/OspreySharp/Run-Osprey.ps1' -Tool CSharp -DiagEntryIds "0,1080"
-
-# Run Rust with cal_match dump and exit
-pwsh -File './ai/scripts/OspreySharp/Run-Osprey.ps1' -Tool Rust -DiagCalMatch -DiagCalMatchOnly
+# Refresh the frozen baseline after an approved behavior change
+pwsh -File ./ai/scripts/OspreySharp/Test-Full-Regression.ps1 -CreateSnapshot
 ```
 
-### Test-Features.ps1
+When to refresh the baseline: only after the PR carrying the
+intentional behavior change has been reviewed and approved.  Run
+`-CreateSnapshot` on master HEAD; the manifest records the source
+commit and the OspreySharp binary SHA-256 so a future bisection
+can identify the boundary.
 
-Automated 21-feature cross-implementation comparison. Runs Rust (produces
-calibration + PIN), then C# with shared calibration, then compares all 21
-PIN features via awk join.
+## Performance
 
-```bash
-# Stellar comparison (default)
-pwsh -File './ai/scripts/OspreySharp/Test-Features.ps1'
+```powershell
+# Refresh the Osprey-workflow.html perf table (3 reps median, both impls)
+pwsh -File ./ai/scripts/OspreySharp/Measure-Pipeline.ps1 -Dataset Both -Tool Both -Repeats 3
 
-# Astral comparison
-pwsh -File './ai/scripts/OspreySharp/Test-Features.ps1' -Dataset Astral
+# OspreySharp-only Stage 5 profile (dotTrace sampling)
+pwsh -File ./ai/scripts/OspreySharp/Profile-OspreySharp.ps1 -Dataset Astral -Stage Scoring
 
-# Skip Rust (reuse existing output for faster C# iteration)
-pwsh -File './ai/scripts/OspreySharp/Test-Features.ps1' -SkipRust
-```
-
-### Bench-Scoring.ps1
-
-Performance benchmark comparing Rust and C# on Stages 1-4. Supports
-single-file (per-stage breakdown) and multi-file (wall-clock only) modes.
-
-```bash
-# Single file, Stellar (default)
-pwsh -File './ai/scripts/OspreySharp/Bench-Scoring.ps1' -SkipUpstream -Iterations 2
-
-# All 3 files (C# parallel vs Rust sequential)
-pwsh -File './ai/scripts/OspreySharp/Bench-Scoring.ps1' -Files All -SkipUpstream -Iterations 2
-
-# Astral single file benchmark
-pwsh -File './ai/scripts/OspreySharp/Bench-Scoring.ps1' -Dataset Astral -SkipUpstream -Iterations 2
-```
-
-### Profile-OspreySharp.ps1
-
-dotTrace profiling of OspreySharp for performance optimization.
-
-### Clean-TestData.ps1
-
-Clean cached and diagnostic files from the test data directory.
-
-```bash
-# Clean everything (caches + diagnostics)
-pwsh -File './ai/scripts/OspreySharp/Clean-TestData.ps1'
-
-# Clean only diagnostic dump files
-pwsh -File './ai/scripts/OspreySharp/Clean-TestData.ps1' -DiagOnly
+# Full Stage 5 cross-impl profile (WSL dotTrace + samply)
+wsl bash ./ai/scripts/OspreySharp/Profile-Stage5.sh
+pwsh -File ./ai/scripts/OspreySharp/Combine-Stage5-Profile.ps1 -CsharpDtp ... -RustJson ...
 ```
 
 ## Test Data
 
-| Dataset | Directory | Library | Resolution | Files |
-|---------|-----------|---------|------------|-------|
+| Dataset | Default Directory | Library | Resolution | Files |
+|---|---|---|---|---|
 | Stellar | `D:\test\osprey-runs\stellar\` | `hela-filtered-SkylineAI_spectral_library.tsv` | `unit` | 20, 21, 22 |
 | Astral  | `D:\test\osprey-runs\astral\`  | `SkylineAI_spectral_library.tsv` | `hram` | 49, 55, 60 |
+| AstralLibraryDecoy | `D:\test\osprey-runs\astral-libdecoy\` | `SkylineAI_entrapment_carafe_spectral_library.tsv` | `hram` | 49, 55, 60 |
 
-Source files at `D:\test\osprey-testfiles\{stellar,astral}\`.
+Override the base via `-TestBaseDir`, `$env:OSPREY_TEST_BASE_DIR`,
+or rely on the default.  Stellar requires `--resolution unit`;
+Astral requires `--resolution hram` --- all scripts forward this
+automatically via Dataset-Config.
 
-**CRITICAL**: Always use the correct `--resolution` flag per dataset.
-Stellar requires `unit`; Astral requires `hram`. The scripts handle
-this automatically via `Dataset-Config.ps1`.
+## Cross-impl Bridge
+
+Rarely needed now that OspreySharp is the primary implementation.
+See [Compare/README.md](Compare/README.md) for when to invoke the
+1e-9 parity gate, and how to opt in to the historical bisection
+tools archived under `Compare/archive/`.
