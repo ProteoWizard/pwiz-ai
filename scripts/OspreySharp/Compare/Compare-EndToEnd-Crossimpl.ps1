@@ -66,15 +66,21 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $PSCommandPath
-. (Join-Path $scriptDir 'Dataset-Config.ps1')
 
-$projRoot = (Resolve-Path (Join-Path $scriptDir '..\..\..')).Path
-$ospreyExe = Join-Path $projRoot 'osprey\target\release\osprey.exe'
+# Dot-source Dataset-Config from either the top-level scripts dir or
+# from the parent (when this script lives in Compare/).
+$configCandidates = @(
+    (Join-Path $scriptDir 'Dataset-Config.ps1'),
+    (Join-Path $scriptDir '..\Dataset-Config.ps1')
+)
+foreach ($c in $configCandidates) { if (Test-Path $c) { . $c; break } }
+
+$ospreyExe = Get-OspreyExe
 if (-not (Test-Path $ospreyExe)) {
     Write-Host "osprey.exe not found at $ospreyExe -- build first." -ForegroundColor Red
     exit 2
 }
-$ospreyShExe = Join-Path $projRoot ("pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\$Framework\OspreySharp.exe")
+$ospreyShExe = Get-OspreySharpExe -Framework $Framework
 if (-not (Test-Path $ospreyShExe)) {
     Write-Host "OspreySharp.exe not found at $ospreyShExe -- build first." -ForegroundColor Red
     exit 2
