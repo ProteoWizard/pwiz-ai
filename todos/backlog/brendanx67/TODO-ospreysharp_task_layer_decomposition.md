@@ -27,27 +27,36 @@ captures the remainder, in recommended execution order.
 ### PR-A -- Make state ownership explicit (encapsulation) (~1 day)
 
 `PerFileScoringTask`'s producer accessors hand out **live, mutable,
-concrete collections** that downstream tasks mutate in place:
+concrete collections** (`PerFileScoringTask.cs:128-132`).
 
-```csharp
-public List<LibraryEntry> GetFullLibrary(PipelineContext ctx) { EnsureHydrated(ctx); return _fullLibrary; }
-public Dictionary<uint, LibraryEntry> GetLibraryById(PipelineContext ctx) { ... return _libraryById; }
-public List<KeyValuePair<string, List<FdrEntry>>> GetPerFileEntries(PipelineContext ctx) { ... return _perFileEntries; }
-```
-(`PerFileScoringTask.cs:128-132`)
+**REVISED 2026-05-30 after reading the code (the original "open
+question" is now answered).** The headline `GetPerFileEntries` case is
+NOT a fixable leak: `_perFileEntries` is a **deliberately load-bearing
+shared mutable buffer**. The same `List<KeyValuePair<string,
+List<FdrEntry>>>` reference flows Scoring -> FirstJoin -> PerFileRescore
+and is mutated in place at each stage to avoid copying very large entry
+sets (Astral ~945K entries):
+- `FirstJoinTask` (`:217`) compacts it (drops non-passing rows) and
+  overlays 2nd-pass sidecar scores onto the compacted inner lists.
+- `PerFileRescoreTask` (`:167`) overlays rescored entries
+  (`fdrEntries[idx] = ...`), appends gap-fill rows (`fdrEntries.Add`,
+  `:908/:969`), and resets `FdrEntry` fields.
 
-`PerFileRescoreTask.ExecuteRescore` mutates `_perFileEntries` through
-that shared reference, so "who owns this state" has no real answer.
-Contrast `FirstJoinTask`, which correctly exposes `IReadOnly*` -- the
-inconsistency shows the leak is an oversight.
+Returning `IReadOnlyList` for `GetPerFileEntries` would force a full
+copy at each boundary -- a real perf regression, exactly what the
+parity/perf gates guard against. So this PR is **deflated** to:
 
-- Return `IReadOnly*` views from `PerFileScoringTask`'s accessors.
-- Convert the in-place rescore mutation into an explicit handoff
-  method rather than a silent write through a "getter" return value.
-- **Open question to resolve first**: is the in-place mutation a
-  deliberate memory optimization for large runs (avoiding a copy of a
-  big entry set)? If so, the fix must preserve ownership-transfer
-  semantics, not introduce defensive copies. Confirm before coding.
+- Tighten ONLY the genuinely read-only accessors (`GetFullLibrary`,
+  `GetLibraryById`, `GetPerFileParquetPaths`, `GetPerFileCalibrations`)
+  to `IReadOnly*` -- after confirming no consumer mutates them. Low
+  value, but cheap and correct.
+- For `_perFileEntries`: do NOT freeze it. Instead **make the
+  shared-buffer contract explicit and documented** -- rename/annotate
+  so it reads as "Scoring owns this buffer; the pipeline mutates it in
+  place by design," not as an innocent getter. Clarity, not structure.
+
+This is now a small item; it can ride along with another PR or be
+skipped if the documentation is judged sufficient.
 
 Secondary, same theme (optional, low priority): `OspreyConfig` is
 fully mutable (`{ get; set; }`) with a "don't mutate hash-affecting
@@ -77,15 +86,21 @@ Pure extraction, no numeric change; parity must stay bit-identical.
 
 ### PR-C -- Finish evacuating AbstractScoringTask (~1 day + parity)
 
-After the active math-extraction PR lands, continue shrinking the god
-base class (`AbstractScoringTask.cs:56`, 3,016 LOC):
+Continue shrinking the god base class. Split into smaller PRs as the
+relocation work has proven less uniform than PR1:
 
-- Move `LoadLibrary` (`:157`) toward `OspreySharp.IO`.
-- Move domain-specific helpers to their natural homes: fragment-m/z
-  helpers (`GetTop6FragmentMzs`, `TopNFragmentMzs`,
-  `CountTopNFragmentOverlap`, `HasTopNFragmentMatch`) and
-  `TheoreticalIsotopeEnvelope` -> `Core`/`IsotopeDistribution` or a
-  fragment-math helper.
+- **Domain-helper relocation -- NOW ACTIVE as
+  `TODO-20260530_ospreysharp_relocate_domain_helpers.md`.** Note the
+  homes are NOT uniform (verified 2026-05-30): `TheoreticalIsotopeEnvelope`,
+  `GetTop6FragmentMzs` (+ its static `_top6MzCache`), `HasTopNFragmentMatch`,
+  `TopNFragmentMzs` are Core-typed -> `Core`; but `CountTopNFragmentOverlap`
+  calls `ScoringMath.LowerBoundDouble` so it must go to `Scoring`, not
+  Core. `HasTopNFragmentMatch` also has an inline binary search
+  duplicating `ScoringMath` -- left verbatim, dedup deferred here.
+- **`LoadLibrary` -> `OspreySharp.IO` -- its own follow-up PR.** Not a
+  verbatim move: it logs via the instance `_ctx`, so it needs
+  logging-callback injection (signature change). Its data deps
+  (`LibraryCache`, the loaders, `LibraryDeduplicator`) are already in IO.
 - **Parity-sensitive, gate carefully**: consolidate the duplicate
   correlation implementations -- `PearsonOverRange`
   (`AbstractScoringTask.cs:467`), `PearsonCorrelation` (`:2531`),
