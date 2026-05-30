@@ -2,11 +2,13 @@
 
 ## Status
 
-Active -- committed, pushed, **PR #4249 open**, in the post-open review
-chain (Copilot -> /pw-respond -> /pw-self-review). First PR of a
-multi-PR Tasks-layer architecture cleanup (see backlog
+**Completed** -- PR [#4249](https://github.com/ProteoWizard/pwiz/pull/4249)
+merged 2026-05-30 as `9a68ac5`. First PR of a multi-PR Tasks-layer
+architecture cleanup (see backlog
 `TODO-ospreysharp_task_layer_decomposition.md` for the deferred
-remainder). See Progress Log for results.
+remainder; next active PR is
+`TODO-20260530_ospreysharp_relocate_domain_helpers.md`). See Progress
+Log for results.
 
 ## Branch Information
 
@@ -187,8 +189,17 @@ decomposition).
   the decomposition backlog (add range-variant unit coverage before the
   consolidation merge).
 - Commits: `c63e4bcf7a`, `e9a4c19932`, `6a6e64f3ad`, `75d0d7e58f`.
-- **Open: awaiting human go-ahead to merge** (developer was away during
-  the review chain). Optional `/ultrareview` available for more rigor.
+
+### 2026-05-30 - Merged
+
+PR #4249 squash-merged to `master` as commit `9a68ac5`. All 22 CI
+checks green (CodeQL, g++, Skyline code inspection, TeamCity Core +
+Bumbershoot + BiblioSpec + Docker/Wine, Skyline suite 1628 tests + 18
+TestConnected). Shipped exactly as scoped: verbatim relocation of the
+four stateless helpers into `ScoringMath`, the Copilot doc fix, the
+self-review dead-code annotation, and the bundled MLTest.cs inspection
+cleanup. Nothing deferred from this PR's own scope. Follow-on relocation
+work proceeds in `TODO-20260530_ospreysharp_relocate_domain_helpers.md`.
 
 ## Related
 
