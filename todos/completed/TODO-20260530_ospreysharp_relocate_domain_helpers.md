@@ -2,16 +2,43 @@
 
 ## Status
 
-Active -- not yet started. Second PR of the multi-PR Tasks-layer
+**Completed** -- PR [#4250](https://github.com/ProteoWizard/pwiz/pull/4250)
+merged 2026-05-30 as `c19e035b02`. Second PR of the multi-PR Tasks-layer
 architecture cleanup (PR1 = `TODO-20260529_ospreysharp_extract_scoring_math.md`,
-merged/in-review as PR #4249; backlog =
-`TODO-ospreysharp_task_layer_decomposition.md`).
+merged as #4249; backlog = `TODO-ospreysharp_task_layer_decomposition.md`).
+See the Merged log entry below.
 
 ## Branch Information
 
 - **pwiz branch**: `Skyline/work/20260530_ospreysharp_relocate_domain_helpers`
-  (to be created off `master` after PR #4249 merges)
+  (off `master` @ 9a68ac5)
+- **PR**: https://github.com/ProteoWizard/pwiz/pull/4250
+- **Commit**: `1ad4f4e5f4`
 - **ai branch**: `master`
+
+## Verification (all green)
+
+- Build clean (net472 + net8.0); 345/347 tests; inspection 0/0.
+- Stellar 1-file 1e-9 bit-parity PASS (precursor delta 0).
+- Astral 3-file 1e-9 bit-parity PASS (precursor delta 0; C# 17:41 vs Rust 24:57).
+- Perf A/B (Stellar, C#-only, 3 repeats): no regression -- stage1to4
+  median 89.4s branch vs 92.1s master, within noise. The hot
+  `HasTopNFragmentMatch` prefilter now crosses exe -> Core.dll at no
+  measurable cost.
+
+## Implementation notes
+
+- `Core/FragmentMath.cs`: `HasTopNFragmentMatch` (public) +
+  `GetTop6FragmentMzs` (private) + `_top6MzCache` (private), verbatim.
+- `Scoring/FragmentOverlap.cs`: `CountTopNFragmentOverlap` (public) +
+  `TopNFragmentMzs` (private), verbatim; keeps the
+  `ScoringMath.LowerBoundDouble` call (the reason it's in Scoring, not Core).
+- Call sites qualified: `FragmentMath.HasTopNFragmentMatch` x2
+  (AbstractScoringTask, PerFileScoringTask),
+  `FragmentOverlap.CountTopNFragmentOverlap` x1.
+- Dead `TheoreticalIsotopeEnvelope` flagged in place (not relocated).
+- `HasTopNFragmentMatch`'s inline lower-bound search left verbatim
+  (duplicate of `ScoringMath.BinarySearchLowerBound`; dedup deferred).
 
 ## Background
 
@@ -106,6 +133,19 @@ Settle placement in review; don't let it block.
 
 After this: a `LoadLibrary -> IO` PR (logging-injection), then the
 mega-method decomposition (backlog PR-B) on a now-cleaner class.
+
+### 2026-05-30 - Merged
+
+PR #4250 squash-merged to `master` as commit `c19e035b02`. All 22 CI
+checks green; review chain clean (Copilot no comments; fresh-context
+self-review APPROVE, no blockers/should-fix). Shipped exactly as
+scoped: verbatim relocation of the fragment prefilter to
+`Core.FragmentMath` and the overlap counter to `Scoring.FragmentOverlap`
+(split by the `ScoringMath` dependency), plus the dead-code annotation
+on `TheoreticalIsotopeEnvelope`. Self-review's one [CONSIDER]
+(`ToleranceDa` ppm/Da parity) confirmed exact and is pre-existing.
+Deferred as planned: `LoadLibrary` -> IO (logging-injection) and the
+inline-binary-search / correlation dedup (PR-C, parity-sensitive).
 
 ## Related
 
