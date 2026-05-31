@@ -33,8 +33,15 @@ early-exits exactly in place (lowest parity risk; the #4252 pattern):
 - [x] Regression gate (C#-only, straight-through multi-file vs cached Rust):
       `Compare-EndToEnd-Crossimpl.ps1 -Dataset Astral -Files All -SkipRust`
       — precursor delta 0, Stage 7 + blib content 1e-9 PASS (C# wall 17:11).
-- [ ] Copilot review addressed (`/pw-respond`).
-- [ ] Fresh-context self-review addressed (`/pw-self-review`).
+- [x] Copilot review addressed (`/pw-respond`) — COMMENTED, no inline
+      comments, no actionable findings; nothing to fix or resolve.
+- [x] Fresh-context self-review addressed (`/pw-self-review`) — clean
+      verdict, no defects at any severity; all five extractions confirmed
+      verbatim (log order, sentinels, reference semantics, accumulators,
+      parameter threading). One non-defect follow-up (static-vs-instance
+      split): keeping the gap-fill timing logs co-located with the timed
+      `RunCoelutionScoring` work is the deliberate choice to keep it a
+      pure lift, hence the instance method.
 
 ## Progress Log
 
@@ -42,4 +49,6 @@ early-exits exactly in place (lowest parity risk; the #4252 pattern):
 
 Branch created off master @ 9eee47851f. Five helpers extracted as
 verbatim lifts; orchestrator re-verified for flow + log-order parity.
-Pre-commit gate green. Regression gate running.
+Pre-commit gate green. Regression gate PASS (precursor delta 0, Stage 7
++ blib content 1e-9). PR #4254 opened. Copilot clean; fresh-context
+self-review clean. Review chain complete — awaiting morning merge approval.
