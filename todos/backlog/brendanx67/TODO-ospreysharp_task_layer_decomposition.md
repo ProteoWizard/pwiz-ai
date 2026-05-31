@@ -6,6 +6,41 @@
 **Created**: 2026-05-29
 **Scope**: `C:\proj\pwiz\pwiz_tools\OspreySharp` (the `OspreySharp/Tasks/` layer in the exe project)
 
+## Progress (updated 2026-05-31)
+
+Merged so far (master @ `9eee47851f`):
+
+- **#4249** -- extracted stateless scoring math -> `OspreySharp.Scoring.ScoringMath` (PR-C, math portion).
+- **#4250** -- relocated fragment helpers -> `Core.FragmentMath` + `Scoring.FragmentOverlap` (PR-C, domain-helper portion).
+- **#4251** -- `LoadLibrary` -> `OspreySharp.IO.LibraryLoader` (PR-C, the logging-injection move). **`AbstractScoringTask` now references no I/O and holds no stray math** -- it's a clean scoring engine.
+- **#4252** -- **PR-B #1**: decomposed `MergeNodeTask.WriteBlibOutput` (~530 LOC -> 27-line orchestrator + 10 helpers), byte-identical (C#-only multi-file gate).
+- **#4253** -- removed the orphaned `OSPREY_DUMP_BLIB_QVALUES` diagnostic (Rust had already dropped its half; audit confirmed it was the only C#-only orphan dump).
+
+Remaining:
+
+- **PR-B (mega-method decomposition), 3 left**: `FirstJoinTask.Run` (~650,
+  largest/most-coupled -- touches the shared `_perFileEntries` blackboard +
+  Stage-6 planning), `PerFileScoringTask.Run` (~580) + `RunCalibrationScoringPass`
+  / `ScoreCalibrationEntry`, `PerFileRescoreTask.ExecuteRescore` (~520). Same
+  pattern as #4252: extract along the `[STAGE-WALL]`/phase seams, one method per
+  PR, verify with the C#-only multi-file gate (`Compare-EndToEnd-Crossimpl
+  -Files All -SkipRust`, no Rust re-run).
+- **PR-A (deflated)**: read-only views on the genuinely read-only
+  `PerFileScoringTask` accessors + document the `_perFileEntries`
+  shared-buffer contract (NOT a freeze -- it's load-bearing). Small.
+- **PR-D**: eliminate the `FirstJoinTask -> MergeNodeTask` forward-reach.
+- **Parity-sensitive dedup** (correlation/cosine variants, the inline
+  binary search in `FragmentMath.HasTopNFragmentMatch`) -- needs a
+  patched-vs-unpatched parity measurement; do NOT drive-by merge.
+- Standalone: `TODO-ospreysharp_assembly_consolidation.md` (DLL count eval).
+
+**Gate for all of the above** (memory `feedback_ospreysharp_csharp_regression_gate`):
+C#-only straight-through multi-file `-SkipRust` (~17 min Astral, no Rust
+re-run). Rust reference is cached at `D:\test\osprey-runs\astral\_endtoend_crossimpl\rust\`.
+
+**Next session handoff**: read `ai/.tmp/handoff-20260530_ospreysharp_decomposition.md`
+before starting the next decomposition PR.
+
 ## Motivation
 
 A 2026-05-29 OOP/architecture review found the OspreySharp *project*
