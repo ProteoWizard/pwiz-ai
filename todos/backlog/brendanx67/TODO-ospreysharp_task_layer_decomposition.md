@@ -16,15 +16,23 @@ Merged so far (master @ `9eee47851f`):
 - **#4252** -- **PR-B #1**: decomposed `MergeNodeTask.WriteBlibOutput` (~530 LOC -> 27-line orchestrator + 10 helpers), byte-identical (C#-only multi-file gate).
 - **#4253** -- removed the orphaned `OSPREY_DUMP_BLIB_QVALUES` diagnostic (Rust had already dropped its half; audit confirmed it was the only C#-only orphan dump).
 
-Remaining:
+Posted 2026-05-30→31 (autonomous night session; **OPEN, awaiting squash-merge**;
+all bit-identical at 1e-9 via the C#-only `-SkipRust` gate; Copilot addressed +
+self-review clean for each):
 
-- **PR-B (mega-method decomposition), 3 left**: `FirstJoinTask.Run` (~650,
-  largest/most-coupled -- touches the shared `_perFileEntries` blackboard +
-  Stage-6 planning), `PerFileScoringTask.Run` (~580) + `RunCalibrationScoringPass`
-  / `ScoreCalibrationEntry`, `PerFileRescoreTask.ExecuteRescore` (~520). Same
-  pattern as #4252: extract along the `[STAGE-WALL]`/phase seams, one method per
-  PR, verify with the C#-only multi-file gate (`Compare-EndToEnd-Crossimpl
-  -Files All -SkipRust`, no Rust re-run).
+- **#4254** -- `PerFileRescoreTask.ExecuteRescore` (~520 -> ~230 orchestrator + 5 helpers).
+- **#4255** -- `FirstJoinTask.Run` (~657 -> ~165 + 4 helpers: LogFirstPassResults, CompactFirstPass, ReloadSecondPassOverlay, PlanStage6).
+- **#4256** -- `PerFileScoringTask.Run` (~580 -> ~220 + 3 helpers: LoadLibraryAndDecoys, LoadJoinOnlyScores, HydrateRescoreBundleIfPresent).
+- **#4257** -- `PerFileScoringTask.RunCalibrationScoringPass` (~480 -> ~150 + 4 phase helpers).
+- **#4258** -- `PerFileScoringTask.ScoreCalibrationEntry` separable phases (~393 -> ~290 + 3 helpers); cohesive scoring core left intact.
+
+**PR-B (mega-method decomposition) is COMPLETE** with the above. The three
+originally-named methods (ExecuteRescore, FirstJoinTask.Run, PerFileScoringTask.Run)
+plus the two large `PerFileScoringTask` calibration methods are all decomposed.
+Left intact by design: `RunCalibration` (~244, cohesive 2-pass orchestrator) and
+the `ScoreCalibrationEntry` core pipeline (tightly-coupled per-entry algorithm).
+
+Remaining (NOT started this session):
 - **PR-A (deflated)**: read-only views on the genuinely read-only
   `PerFileScoringTask` accessors + document the `_perFileEntries`
   shared-buffer contract (NOT a freeze -- it's load-bearing). Small.
@@ -38,8 +46,9 @@ Remaining:
 C#-only straight-through multi-file `-SkipRust` (~17 min Astral, no Rust
 re-run). Rust reference is cached at `D:\test\osprey-runs\astral\_endtoend_crossimpl\rust\`.
 
-**Next session handoff**: read `ai/.tmp/handoff-20260530_ospreysharp_decomposition.md`
-before starting the next decomposition PR.
+**Next session handoff**: read `ai/.tmp/handoff-20260531_ospreysharp_decomposition.md`
+(night session that posted #4254-#4258). With PR-B complete, the remaining backlog
+is PR-A, PR-D, the parity-sensitive dedup, and the assembly-consolidation eval.
 
 ## Motivation
 
