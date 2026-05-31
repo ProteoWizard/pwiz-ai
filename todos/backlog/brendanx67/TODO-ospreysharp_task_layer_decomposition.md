@@ -169,6 +169,16 @@ relocation work has proven less uniform than PR1:
 
 ### PR-D -- Stage 7 owns its 2nd-pass rehydrate; Stage 5 clean of forward knowledge
 
+**SUPERSEDED 2026-05-31 by the Stage 6 reconciled-parquet split**
+(`ai/todos/active/TODO-20260531_ospreysharp_stage6_reconciled_parquet.md`). On
+re-examination with the user, the root coupling is that stages overwrite prior
+stages' artifacts (Stage 6 overwriting Stage 4's `.scores.parquet`), and the
+overlay/forward-reach machinery exists to reconstruct what the overwrite destroyed.
+The proper fix is to stop the overwrite (Stage 6 writes a separate
+`.reconciled.scores.parquet`), not to relocate the forward-reach. The Stage 5->7
+forward-reach (`FirstJoinTask.ReloadSecondPassOverlay`) is expected to remain and is
+no longer the target. The original PR-D analysis is kept below for history.
+
 **DECISION 2026-05-31 (brendanx): do the proper fix, NOT the band-aid hoist.**
 Stage 5 must have zero knowledge of what comes after it.
 
