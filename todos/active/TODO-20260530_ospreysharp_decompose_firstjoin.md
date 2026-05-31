@@ -35,8 +35,15 @@ is already well-factored and untouched.
 
 - [x] Pre-commit gate: `Build-OspreySharp.ps1 -RunInspection -RunTests` — Build OK, 345/347, inspection 0/0.
 - [x] Regression gate (C#-only): precursor delta 0, Stage 7 + blib content 1e-9 PASS (C# wall 17:17).
-- [ ] Copilot review addressed (`/pw-respond`).
-- [ ] Fresh-context self-review addressed (`/pw-self-review`).
+- [x] Copilot review addressed (`/pw-respond`) — 2 inline doc-accuracy nits
+      (XML docs said `ctx.ExitCode`; helpers use `_ctx`). Fixed in 4bb2c7229b
+      (now `<see cref="PipelineContext.ExitCode"/>`); both threads resolved.
+- [x] Fresh-context self-review addressed (`/pw-self-review`) — clean verdict,
+      no defects. Confirmed log order, all ExitCode/return-false paths, the
+      PlanStage6 gate, output-field assignments, parameter threading, and the
+      complete ctx→_ctx substitution. One non-defect follow-up (mixed
+      _ctx-field/config-param convention): config passed explicitly keeps
+      helper signatures self-documenting, matching the file's other helpers.
 
 ## Progress Log
 
