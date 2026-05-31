@@ -32,8 +32,15 @@ ProcessFile, TryLoadStubsAndCalibration) are untouched.
 
 - [x] Pre-commit gate: `Build-OspreySharp.ps1 -RunInspection -RunTests` — Build OK, 345/347, inspection 0/0.
 - [x] Regression gate (C#-only): precursor delta 0, Stage 7 + blib content 1e-9 PASS (C# wall 17:02). PR #4256.
-- [ ] Copilot review addressed (`/pw-respond`).
-- [ ] Fresh-context self-review addressed (`/pw-self-review`).
+- [x] Copilot review addressed (`/pw-respond`) — 3 doc-accuracy nits
+      (LoadJoinOnlyScores "skips Stages 1-4" → Stage 2-4; stale "side data not
+      loaded" comment; Hydrate "throws" → InvalidDataException). Fixed in
+      13a5bd18cf; all 3 threads resolved.
+- [x] Fresh-context self-review addressed (`/pw-self-review`) — clean verdict,
+      no defects. Confirmed log order, out-param/early-return ExitCode mapping,
+      throws-propagation, caller threading, and complete ctx→_ctx substitution.
+      Follow-up (swLibrary scope) is a non-issue: Stop() immediately followed
+      the decoy block originally, so the timing span is identical.
 
 ## Follow-up (separate PR)
 
