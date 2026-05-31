@@ -33,8 +33,15 @@ shared buffer — that idea was walked back (see the REVISED note in the program
 ## Verification
 
 - [x] Pre-commit gate: `Build-OspreySharp.ps1 -RunInspection -RunTests` — Build OK, 345/347, inspection 0/0. PR #4259.
-- [ ] Copilot review addressed (`/pw-respond`).
-- [ ] Fresh-context self-review addressed (`/pw-self-review`).
+- [x] Copilot review addressed (`/pw-respond`) — COMMENTED, generated no comments.
+- [x] Fresh-context self-review addressed (`/pw-self-review`) — APPROVE, no defects.
+      Confirmed identity-preserving narrowing (same instances; concrete types already
+      implement IReadOnly*), no consumer mutates, no missing widening, no overload/
+      serialization risk, and agreed the no-regression-gate justification is sound.
+      Its lone flag (commit Co-Authored-By "Claude Opus" variant) is a FALSE POSITIVE:
+      it conflated the source-file-header AI line (STYLEGUIDE, model-named) with the
+      commit footer (version-control guide / pw-startissue prescribe exactly
+      `Co-Authored-By: Claude <noreply@anthropic.com>`, no model variant). No change.
 
 **No regression gate:** this is a pure type-widening (`Dictionary` → the
 `IReadOnly*` interface the concrete types already implement) + comments. The same
