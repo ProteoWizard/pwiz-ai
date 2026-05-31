@@ -35,8 +35,15 @@ helpers and convert clean early-returns into out-param dances, hurting readabili
 
 - [x] Pre-commit gate: `Build-OspreySharp.ps1 -RunInspection -RunTests` — Build OK, 345/347, inspection 0/0.
 - [x] Regression gate (C#-only): precursor delta 0, Stage 7 + blib content 1e-9 PASS (C# wall 17:20). PR #4258.
-- [ ] Copilot review addressed (`/pw-respond`).
-- [ ] Fresh-context self-review addressed (`/pw-self-review`).
+- [x] Copilot review addressed (`/pw-respond`) — COMMENTED, no inline comments,
+      no actionable findings.
+- [x] Fresh-context self-review addressed (`/pw-self-review`) — APPROVE, no defects.
+      Mechanical whitespace-normalized diffs: cohesive core byte-identical (exit 0),
+      all 3 helpers faithful lifts (only added `return` statements), caller threading
+      + relocated CalibrationMatch initializer field-for-field identical. Follow-up
+      (migrate other call sites onto the new reusable helpers) is a forward-looking
+      design Q, not a defect — ScoreCalibrationEntry is deliberately the sole caller;
+      any migration needs its own parity verification.
 
 ## Note on remaining calibration code
 
