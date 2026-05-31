@@ -35,8 +35,15 @@ orchestrator (single calls + result assembly):
 
 - [x] Pre-commit gate: `Build-OspreySharp.ps1 -RunInspection -RunTests` — Build OK, 345/347, inspection 0/0.
 - [x] Regression gate (C#-only): precursor delta 0, Stage 7 + blib content 1e-9 PASS (C# wall 16:51). PR #4257.
-- [ ] Copilot review addressed (`/pw-respond`).
-- [ ] Fresh-context self-review addressed (`/pw-self-review`).
+- [x] Copilot review addressed (`/pw-respond`) — COMMENTED, no inline comments,
+      no actionable findings; nothing to fix.
+- [x] Fresh-context self-review addressed (`/pw-self-review`) — APPROVE, no
+      defects. Verified byte-identical parallel-scoring determinism, the
+      order-imposing sort still gating downstream reads, all matchArray loop
+      predicates, log order, out-params, early returns, diagnostics, the
+      resolution-local removal, and complete ctx→_ctx. Follow-up (early-return
+      branches verified by inspection vs. exercised on Astral) is a non-issue
+      for a verbatim lift.
 
 ## Remaining calibration decomposition (assessed)
 
