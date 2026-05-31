@@ -167,17 +167,56 @@ relocation work has proven less uniform than PR1:
   (`AbstractScoringTask.cs`, no callers tree-wide) flagged in the
   active extraction PR.
 
-### PR-D -- Eliminate the forward-reach (small, ~half day)
+### PR-D -- Stage 7 owns its 2nd-pass rehydrate; Stage 5 clean of forward knowledge
 
-`FirstJoinTask` reaches *forward* to the downstream `MergeNodeTask`
-for a `ValidityKey` (`FirstJoinTask.cs:422`), inverting the pipeline's
-own ordering. Hoist the shared validity-key derivation so neither task
-reaches across the ordering boundary.
+**DECISION 2026-05-31 (brendanx): do the proper fix, NOT the band-aid hoist.**
+Stage 5 must have zero knowledge of what comes after it.
 
-The `GetTask<T>()` service-locator itself (`PipelineContext.cs:179`)
-should be **kept** -- it is a conscious choice whose payoff is the
-lazy-rehydrate accessors that let worker-mode and straight-through
-runs share one code path. Not a target for removal.
+Today `FirstJoinTask` (Stage 5) reaches *forward* to `MergeNodeTask` (Stage 7):
+it borrows MergeNode's `ValidityKey` + `Name` to validate the
+`.2nd-pass.fdr_scores.bin` sidecars and overlays them onto the post-compaction
+`_perFileEntries`. That logic now lives in `FirstJoinTask.ReloadSecondPassOverlay`
+(extracted verbatim in #4255). It is a resume/distributed/test cache -- a **no-op
+in a straight-through run** (no 2nd-pass sidecars exist yet when Stage 5 runs).
+
+**Fix:** relocate the 2nd-pass-sidecar rehydrate from FirstJoin into MergeNodeTask,
+so Stage 7 owns its own prior-output rehydration. Afterward FirstJoin references
+neither `MergeNodeTask` nor any 2nd-pass sidecar.
+
+**Why it's parity-safe:** the cross-impl gate only requires the load *ORDER*
+(2nd-pass overlay AFTER first-pass compaction, BEFORE Stage-7 protein-FDR/blib
+consumption) -- NOT which task does it. MergeNode runs after compaction and is the
+consumer, so it is the correct home and the order is preserved. The forward-reach
+was a structural accident of where the port dropped the load-point, not a parity
+requirement.
+
+**Investigate FIRST (fresh context):**
+- `FirstJoinTask.ReloadSecondPassOverlay` + its caller in `FirstJoinTask.Run`
+  (the block to remove from Stage 5).
+- `MergeNodeTask` ALREADY touches 2nd-pass sidecars: probe ~`:149`, write
+  `Pass.SecondPass` ~`:329-339`, `TryReadOverlay(..., Pass.SecondPass)` ~`:402-412`.
+  Understand how FirstJoin's overlay relates to MergeNode's existing handling
+  (redundant? complementary? different mode?) BEFORE moving -- the fix may be
+  partly *consolidation* with MergeNode's logic, not a raw lift.
+- Confirm nothing between Stage 5 and Stage 7 (Stage 6 PerFileRescore) consumes
+  the 2nd-pass-overlaid scores in the modes where the overlay fires (resume /
+  `--join-at-pass=2` / worker / test-freeze) -- in those, Stage 6 is skipped or
+  the parquet is already reconciled.
+
+**Verification:** C#-only `-SkipRust` gate (1e-9) AND an explicit resume-path
+check -- run straight-through once to produce 2nd-pass sidecars, then re-run (or
+`--join-at-pass=2`) and confirm the overlay still kicks in and output is
+bit-identical. The straight-through gate ALONE will NOT exercise the moved code
+(overlay is a no-op there) -- this is the one PR where the standard gate is
+insufficient on its own.
+
+The `GetTask<T>()` service-locator (`PipelineContext.cs:179`) stays -- its payoff
+is the lazy-rehydrate accessors that unify worker-mode and straight-through. Not a
+removal target. (The broader driver-owned-skip model -- "option C" -- remains a
+separate, larger future initiative.)
+
+**Next-session handoff:** read `ai/.tmp/handoff-20260531_ospreysharp_prd_forwardreach.md`
+before starting.
 
 ## Out of scope / explicitly decided to keep
 
