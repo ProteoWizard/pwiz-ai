@@ -16,7 +16,7 @@ Merged so far (master @ `9eee47851f`):
 - **#4252** -- **PR-B #1**: decomposed `MergeNodeTask.WriteBlibOutput` (~530 LOC -> 27-line orchestrator + 10 helpers), byte-identical (C#-only multi-file gate).
 - **#4253** -- removed the orphaned `OSPREY_DUMP_BLIB_QVALUES` diagnostic (Rust had already dropped its half; audit confirmed it was the only C#-only orphan dump).
 
-Posted 2026-05-30→31 (autonomous night session; **OPEN, awaiting squash-merge**;
+Posted + **MERGED 2026-05-31** (autonomous night session; squash-merged to master;
 all bit-identical at 1e-9 via the C#-only `-SkipRust` gate; Copilot addressed +
 self-review clean for each):
 
