@@ -87,12 +87,34 @@ reference graph?
 3. A measure of any real cost beyond perf: build-parallelism change,
    `InternalsVisibleTo` churn for the test project, deployment surface.
 
+## DECISION 2026-06-01 (Brendan): keep all 8 DLLs as-is for now
+
+A 3-subagent study of how OspreySharp scoring might inter-relate with Skyline's
+peak-scoring architecture ([[TODO-ospreysharp_skyline_shared_scoring]]) **reversed the
+earlier lean toward "collapse the middle."** The boundaries `Core / Scoring /
+FDR(linear-model)` are exactly the seams a future *shared cross-tool scoring core*
+(feature-vector -> linear model -> FDR, the point where Skyline and Osprey scoring
+converge) would be carved along. `OspreySharp.Scoring` already has the property a
+Shared-bound assembly needs -- dependency-light (no Parquet/SQLite/WinForms). Collapsing
+the middle into the exe now would destroy that scaffolding and force a re-extraction
+later, while the perf motive to collapse is already nil.
+
+So: **no consolidation now.** Keep the 8-assembly split, especially the Scoring + FDR
+seams. Revisit this together with the shared-scoring direction -- the two decisions are
+coupled and the sharing question dominates. (If a consolidation is ever chosen, it would
+still keep Core + Scoring + FDR distinct; only assemblies with no sharing future and no
+dep-isolation value would be candidates, and even those aren't worth churning while the
+sharing direction is undecided.)
+
+The keep-as-is vs collapse analysis below is retained for context; the layering-
+enforcement-via-architecture-test option remains valid IF a collapse is ever revisited.
+
 ## Why backlog
 
 - No defect; pure structural improvement.
-- Interacts with the Tasks-layer cleanup (PR-C placement decisions) and
-  the Shared-migration direction -- best decided deliberately, not as a
-  drive-by during the scoring-math/decomposition PRs.
+- Interacts with the Tasks-layer cleanup (PR-C placement decisions), the
+  Shared-migration direction, AND the Skyline<->Osprey shared-scoring question
+  ([[TODO-ospreysharp_skyline_shared_scoring]]) -- best decided deliberately.
 - The perf question that motivated urgency is already answered (no
   measurable cross-assembly cost), so this can wait for a considered call.
 
