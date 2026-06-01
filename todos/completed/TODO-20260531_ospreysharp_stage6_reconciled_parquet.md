@@ -1,8 +1,8 @@
 # TODO: Stage 6 writes a separate reconciled parquet (stop overwriting Stage 4)
 
-**Status**: In progress (PR open; review chain underway)
+**Status**: Completed
 **Branch**: `Skyline/work/20260531_ospreysharp_stage6_reconciled_parquet` (pwiz)
-**PR**: [#4261](https://github.com/ProteoWizard/pwiz/pull/4261)
+**PR**: [#4261](https://github.com/ProteoWizard/pwiz/pull/4261) (merged 2026-05-31 as e7e989cc7d)
 **Created**: 2026-05-31
 **Scope**: `C:\proj\pwiz\pwiz_tools\OspreySharp` (C#-only; Rust `osprey` untouched)
 
@@ -132,5 +132,19 @@ the design sound. 3 minor findings:
   rejects the original (clear abort), so no silent corruption.
 The no-work-file-in-pass=2 strict-gate rejection the reviewer asked about is
 PRE-EXISTING (no-work files were `reconciled=false` before this PR too); Tier 2's 3
-Stellar files all had Stage 6 work. PR #4261 head: 0af02ae180. Not merged (left for
-human merge decision).
+Stellar files all had Stage 6 work. PR #4261 head: 0af02ae180.
+
+### 2026-05-31 - Merged
+
+PR #4261 squash-merged to master as commit e7e989cc7d. Shipped the full
+reconciled-parquet split: Stage 6 writes `<stem>.scores-reconciled.parquet` (no
+longer overwriting Stage 4's `.scores.parquet`); Stage 7 + resume read the effective
+(reconciled-else-original) path; `--input-scores` dir mode dedupes per stem; the
+`.scores-reconciled` marker keeps original-vs-reconciled unambiguous; and the
+write-back reports success so no stale output is marked valid. C#-only; bit-identical
+on straight-through (Astral 1e-9) and in-memory-vs-HPC-rehydrate (Stellar) gates.
+Merged with `--admin` over an unrelated intermittent `teamcity - Bumbershoot Linux
+x86_64` failure (Bumbershoot is C++; this PR touches only OspreySharp). Deferred (per
+user, until true HPC testing): the pre-existing no-work-file `--join-at-pass=2`
+strict-gate rejection. The intermediate-artifact cleanup CLI flag remains a future
+follow-up.
