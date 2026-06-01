@@ -34,7 +34,7 @@
           *.1st-pass.fdr_scores.bin    (SHA-256 byte equality)
           *.reconciliation.json        (SHA-256 byte equality)
       Stage 6 boundary -- truth vs ph3:
-          *.reconciled.scores.parquet  (parquet_diff.py --tolerance 0; bit-exact column-wise)
+          *.scores-reconciled.parquet  (parquet_diff.py --tolerance 0; bit-exact column-wise)
           *.scores.parquet original survived (Stage 6 no longer overwrites it)
       Stage 7 boundary -- truth vs ph4:
           cs_stage7_protein_fdr.tsv    (Compare-Stage7-Crossimpl.ps1 per-column 1e-9)
@@ -315,12 +315,12 @@ $stage6Ok = $true
 foreach ($f in $mzmls) {
     $stem = [IO.Path]::GetFileNameWithoutExtension($f)
     $ph3Dir = Join-Path $rootDir ("phase3_worker_" + $stem)
-    # Stage 6 now writes a SEPARATE <stem>.reconciled.scores.parquet
+    # Stage 6 now writes a SEPARATE <stem>.scores-reconciled.parquet
     # (it no longer overwrites the Stage 4 <stem>.scores.parquet).
     $stage6Ok = (Compare-ReconciledParquet `
-        (Join-Path $truthDir ($stem + '.reconciled.scores.parquet')) `
-        (Join-Path $ph3Dir   ($stem + '.reconciled.scores.parquet')) `
-        ("$stem .reconciled.scores.parquet")) -and $stage6Ok
+        (Join-Path $truthDir ($stem + '.scores-reconciled.parquet')) `
+        (Join-Path $ph3Dir   ($stem + '.scores-reconciled.parquet')) `
+        ("$stem .scores-reconciled.parquet")) -and $stage6Ok
     # Original-survival: the Stage 4 <stem>.scores.parquet must still
     # exist intact (proves the overwrite is gone). Both the in-memory
     # truth and the HPC worker must have left it in place.
@@ -348,7 +348,7 @@ foreach ($f in $mzmls) {
     # The merge node consumes the RECONCILED parquet (Stage 6 output),
     # not the original Stage 4 parquet. --join-at-pass=2 also requires
     # osprey.reconciled="true", which only the reconciled file carries.
-    Copy-Item (Join-Path $ph3Dir ($stem + '.reconciled.scores.parquet')) (Join-Path $ph4Dir ($stem + '.reconciled.scores.parquet'))
+    Copy-Item (Join-Path $ph3Dir ($stem + '.scores-reconciled.parquet')) (Join-Path $ph4Dir ($stem + '.scores-reconciled.parquet'))
     Copy-Item (Join-Path $ph3Dir ($stem + '.1st-pass.fdr_scores.bin')) (Join-Path $ph4Dir ($stem + '.1st-pass.fdr_scores.bin'))
     Copy-Item (Join-Path $ph3Dir ($stem + '.calibration.json')) (Join-Path $ph4Dir ($stem + '.calibration.json'))
     Copy-Item (Join-Path $ph3Dir ($stem + '.reconciliation.json')) (Join-Path $ph4Dir ($stem + '.reconciliation.json'))
@@ -368,7 +368,7 @@ Write-Host "[Phase 4] HPC 2nd-join merge (--join-at-pass=2, Stage 7) ..." -Foreg
 $args4 = @('--join-at-pass=2')
 foreach ($f in $mzmls) {
     $stem = [IO.Path]::GetFileNameWithoutExtension($f)
-    $args4 += @('--input-scores', ($stem + '.reconciled.scores.parquet'))
+    $args4 += @('--input-scores', ($stem + '.scores-reconciled.parquet'))
 }
 $args4 += @('-l', $libraryName, '-o', 'output.blib',
             '--resolution', $resolution,

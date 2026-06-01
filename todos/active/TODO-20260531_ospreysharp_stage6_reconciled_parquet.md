@@ -1,8 +1,8 @@
 # TODO: Stage 6 writes a separate reconciled parquet (stop overwriting Stage 4)
 
-**Status**: In progress
+**Status**: In progress (PR open; review chain underway)
 **Branch**: `Skyline/work/20260531_ospreysharp_stage6_reconciled_parquet` (pwiz)
-**PR**: (pending)
+**PR**: [#4261](https://github.com/ProteoWizard/pwiz/pull/4261)
 **Created**: 2026-05-31
 **Scope**: `C:\proj\pwiz\pwiz_tools\OspreySharp` (C#-only; Rust `osprey` untouched)
 
@@ -10,7 +10,7 @@
 
 Stage 6 (`PerFileRescoreTask`) must stop **destructively overwriting** the Stage 4
 (`PerFileScoringTask`) per-file `<stem>.scores.parquet`. It now writes a separate
-`<stem>.reconciled.scores.parquet` sibling, leaving the Stage 4 output intact. Stage 7
+`<stem>.scores-reconciled.parquet` sibling, leaving the Stage 4 output intact. Stage 7
 (`MergeNodeTask`) and the resume / `--join-at-pass=2` paths read the reconciled file
 when it exists, else fall back to the original.
 
@@ -23,7 +23,7 @@ when it exists, else fall back to the original.
   confirmed this is a design defect to fix."). That Phase-1 file was orphaned in
   `active/` (its Phase-2 successor was already in `completed/`); moved to `completed/`
   as part of this work.
-- Concrete design (separate `.reconciled.scores.parquet`, update `--join-at-pass=2`
+- Concrete design (separate `.scores-reconciled.parquet`, update `--join-at-pass=2`
   loaders + cache validity probes) was specced in the (gitignored) 2026-05-19
   `ai/.tmp/stage7-divergence-smoke/FINDING.md` + `handoff-20260519_stage7_divergence.md`
   task #35, but was never promoted to a tracked TODO. This TODO closes that gap.
@@ -63,7 +63,7 @@ when it exists, else fall back to the original.
 - [x] Tier 2 **in-memory vs sidecar+rehydrate parity gate**
   (`Compare/archive/Compare-Stage7-Rehydration-Strict-CSharp.ps1`): proves the HPC
   4-phase chain reproduces the straight-through in-memory result. Harness updated to
-  compare `.reconciled.scores.parquet` at the Stage 6 boundary, assert the Stage 4
+  compare `.scores-reconciled.parquet` at the Stage 6 boundary, assert the Stage 4
   original survived, and feed the reconciled parquet to `--join-at-pass=2`.
 - [ ] PR + Copilot + `/pw-self-review`.
 
@@ -91,8 +91,28 @@ PASS. (blib SIZE delta 565 KB is the known-normal SQLite layout difference.)
 
 **Tier 2** (Stellar 3-file in-memory vs HPC sidecar+rehydrate,
 `Compare-Stage7-Rehydration-Strict-CSharp.ps1`): OVERALL PASS at every boundary --
-Stage 5 sidecars byte-identical, Stage 6 `.reconciled.scores.parquet` bit-identical
+Stage 5 sidecars byte-identical, Stage 6 `.scores-reconciled.parquet` bit-identical
 (`parquet_diff --tolerance 0` / SHA), Stage 7 dump + blib content 1e-9, and the
 Stage 4 `.scores.parquet` original survived intact in both truth and worker dirs
 (overwrite confirmed gone). Also fixed that archived harness's stale dependency
 paths (it had not been runnable from `Compare/archive/`).
+
+### 2026-05-31 - PR #4261 opened; Copilot round addressed (commit 0a3878825c)
+
+PR #4261 opened (foundation commit ed94f19304); ai TODO + harness pushed to pwiz-ai
+master (72938e4). Copilot raised 4 comments; all addressed in a follow-up commit:
+
+- **Naming refined** from `<stem>.reconciled.scores.parquet` to
+  `<stem>.scores-reconciled.parquet` (#1-3, one root cause). The marker now follows
+  the controlled `.scores` token, so a Stage 4 path -- which always ends exactly
+  `.scores.parquet` -- can never be misread as a reconciled output, even for an input
+  stem ending in `.reconciled`. Removes the suffix ambiguity with no metadata read.
+  Added regression test `TestReconciledNamingUnambiguousForReconciledStem`.
+- **Write-back safety** (#4): `WriteReconciledParquet` returns success; the validity
+  sidecar is written only on a successful write, and a stale reconciled parquet +
+  sidecar are cleared on failure (no false-valid output for Stage 7 / resume).
+
+Re-verified after the change: pre-commit gate (352 tests, inspection 0/0), Tier 2
+rehydrate parity (Stellar, bit-identical at every boundary with the new filename),
+Tier 1 straight-through cross-impl (Astral, 1e-9 PASS). All 4 Copilot threads resolved.
+Fresh-context `/pw-self-review` launched on head 0a3878825c.

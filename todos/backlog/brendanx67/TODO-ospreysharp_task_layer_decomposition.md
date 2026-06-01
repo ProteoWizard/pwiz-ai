@@ -175,7 +175,7 @@ re-examination with the user, the root coupling is that stages overwrite prior
 stages' artifacts (Stage 6 overwriting Stage 4's `.scores.parquet`), and the
 overlay/forward-reach machinery exists to reconstruct what the overwrite destroyed.
 The proper fix is to stop the overwrite (Stage 6 writes a separate
-`.reconciled.scores.parquet`), not to relocate the forward-reach. The Stage 5->7
+`.scores-reconciled.parquet`), not to relocate the forward-reach. The Stage 5->7
 forward-reach (`FirstJoinTask.ReloadSecondPassOverlay`) is expected to remain and is
 no longer the target. The original PR-D analysis is kept below for history.
 
