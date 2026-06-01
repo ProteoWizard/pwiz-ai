@@ -1,8 +1,8 @@
 # TODO: Decompose PerFileRescoreTask.ExecuteRescore
 
-**Status**: In Review
+**Status**: Completed
 **Branch**: `Skyline/work/20260530_ospreysharp_decompose_executerescore`
-**PR**: [#4254](https://github.com/ProteoWizard/pwiz/pull/4254)
+**PR**: [#4254](https://github.com/ProteoWizard/pwiz/pull/4254) (merged 2026-05-31 as f9b7d76858)
 **Date**: 2026-05-30
 
 ## Objective

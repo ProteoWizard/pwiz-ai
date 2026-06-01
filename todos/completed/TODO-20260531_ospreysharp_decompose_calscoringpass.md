@@ -1,8 +1,8 @@
 # TODO: Decompose PerFileScoringTask.RunCalibrationScoringPass
 
-**Status**: In Review
+**Status**: Completed
 **Branch**: `Skyline/work/20260531_ospreysharp_decompose_calscoringpass`
-**PR**: [#4257](https://github.com/ProteoWizard/pwiz/pull/4257)
+**PR**: [#4257](https://github.com/ProteoWizard/pwiz/pull/4257) (merged 2026-05-31 as c0cb237a37)
 **Date**: 2026-05-31
 
 ## Objective

@@ -1,8 +1,8 @@
 # TODO: Decompose PerFileScoringTask.Run
 
-**Status**: In Review
+**Status**: Completed
 **Branch**: `Skyline/work/20260531_ospreysharp_decompose_perfilescoring`
-**PR**: [#4256](https://github.com/ProteoWizard/pwiz/pull/4256)
+**PR**: [#4256](https://github.com/ProteoWizard/pwiz/pull/4256) (merged 2026-05-31 as 85d9a3279e)
 **Date**: 2026-05-31
 
 ## Objective

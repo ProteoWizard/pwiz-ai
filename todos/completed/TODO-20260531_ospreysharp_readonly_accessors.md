@@ -1,8 +1,8 @@
 # TODO: Tighten read-only PerFileScoringTask accessors (PR-A, limited)
 
-**Status**: In Review
+**Status**: Completed
 **Branch**: `Skyline/work/20260531_ospreysharp_readonly_accessors`
-**PR**: [#4259](https://github.com/ProteoWizard/pwiz/pull/4259)
+**PR**: [#4259](https://github.com/ProteoWizard/pwiz/pull/4259) (merged 2026-05-31 as 25219837b0)
 **Date**: 2026-05-31
 
 ## Objective

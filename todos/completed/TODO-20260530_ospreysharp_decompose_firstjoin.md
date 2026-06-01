@@ -1,8 +1,8 @@
 # TODO: Decompose FirstJoinTask.Run
 
-**Status**: In Review
+**Status**: Completed
 **Branch**: `Skyline/work/20260530_ospreysharp_decompose_firstjoin`
-**PR**: [#4255](https://github.com/ProteoWizard/pwiz/pull/4255)
+**PR**: [#4255](https://github.com/ProteoWizard/pwiz/pull/4255) (merged 2026-05-31 as f2ba05ae5f)
 **Date**: 2026-05-30
 
 ## Objective

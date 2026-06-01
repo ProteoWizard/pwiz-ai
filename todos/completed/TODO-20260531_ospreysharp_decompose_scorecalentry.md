@@ -1,8 +1,8 @@
 # TODO: Decompose ScoreCalibrationEntry's separable phases
 
-**Status**: In Review
+**Status**: Completed
 **Branch**: `Skyline/work/20260531_ospreysharp_decompose_scorecalentry`
-**PR**: [#4258](https://github.com/ProteoWizard/pwiz/pull/4258)
+**PR**: [#4258](https://github.com/ProteoWizard/pwiz/pull/4258) (merged 2026-05-31 as 84e497f356)
 **Date**: 2026-05-31
 
 ## Objective
