@@ -32,23 +32,44 @@ plus the two large `PerFileScoringTask` calibration methods are all decomposed.
 Left intact by design: `RunCalibration` (~244, cohesive 2-pass orchestrator) and
 the `ScoreCalibrationEntry` core pipeline (tightly-coupled per-entry algorithm).
 
-Remaining (NOT started this session):
-- **PR-A (deflated)**: read-only views on the genuinely read-only
-  `PerFileScoringTask` accessors + document the `_perFileEntries`
-  shared-buffer contract (NOT a freeze -- it's load-bearing). Small.
-- **PR-D**: eliminate the `FirstJoinTask -> MergeNodeTask` forward-reach.
-- **Parity-sensitive dedup** (correlation/cosine variants, the inline
-  binary search in `FragmentMath.HasTopNFragmentMatch`) -- needs a
-  patched-vs-unpatched parity measurement; do NOT drive-by merge.
-- Standalone: `TODO-ospreysharp_assembly_consolidation.md` (DLL count eval).
+**Merged since (2026-05-31 -> 2026-06-01):**
+- **#4259** -- PR-A (deflated): tightened the genuinely read-only `PerFileScoringTask`
+  accessors to `IReadOnly*` + documented the load-bearing `_perFileEntries`
+  shared-buffer contract (not frozen).
+- **#4261** -- Stage 6 writes a separate `.scores-reconciled.parquet` instead of
+  overwriting Stage 4's `.scores.parquet` (the root-cause fix that emerged from the
+  PR-D investigation). See `todos/completed/TODO-20260531_ospreysharp_stage6_reconciled_parquet.md`.
+- **#4262** -- PR-D: removed the `FirstJoinTask -> MergeNodeTask` forward-reach by
+  DELETING the vestigial 2nd-pass overlay (MergeNode already owned the rehydrate). See
+  `todos/completed/TODO-20260531_ospreysharp_stage5_drop_forwardreach.md`.
 
-**Gate for all of the above** (memory `feedback_ospreysharp_csharp_regression_gate`):
-C#-only straight-through multi-file `-SkipRust` (~17 min Astral, no Rust
-re-run). Rust reference is cached at `D:\test\osprey-runs\astral\_endtoend_crossimpl\rust\`.
+**Assembly-count question: DECIDED -- keep all 8 DLLs as-is.** The Scoring/FDR seams are
+scaffolding for a possible shared Skyline<->Osprey scoring core; revisit with that
+direction. See [[TODO-ospreysharp_assembly_consolidation]] +
+[[TODO-ospreysharp_skyline_shared_scoring]].
 
-**Next session handoff**: read `ai/.tmp/handoff-20260531_ospreysharp_decomposition.md`
-(night session that posted #4254-#4258). With PR-B complete, the remaining backlog
-is PR-A, PR-D, the parity-sensitive dedup, and the assembly-consolidation eval.
+**Remaining -- the only open items from the review** (all in the parity-sensitive math
+dedup bucket; do NOT drive-by merge):
+1. **Add edge-case unit tests FIRST** for the Pearson range variants
+   (`ScoringMath.PearsonOverRange` product-guard `<1e-30` vs
+   `PearsonCorrelationInRange` sqrt-guard `<1e-10`, plus `n<3`/no-variance) -- the
+   prerequisite gate (gap found in #4249 self-review).
+2. **Consolidate the duplicate correlation impls** -- `AbstractScoringTask`
+   (`PearsonOverRange`, `PearsonCorrelation`), `Scoring/PearsonCorrelation.cs`,
+   `TukeyMedianPolish.cs` -- plus the ~5 cosine sites. Changes numbers: requires a
+   patched-vs-unpatched parity measurement before claiming no impact
+   (`feedback_parity_vs_impact`, `feedback_bit_parity_tolerance`).
+3. **Dedup the inline binary search** in `FragmentMath.HasTopNFragmentMatch`
+   (duplicates `ScoringMath`).
+4. **Retire dead `CosineSimilarity`** in `AbstractScoringTask` (no callers tree-wide) --
+   the one SAFE, trivial cleanup; can go on its own or with the consolidation.
+5. *(Optional, low)* Freeze `OspreyConfig` hash-affecting fields after pipeline entry
+   (PR-A secondary item) -- make the "don't mutate after entry" invariant type-enforced.
+
+**Gate** (`feedback_ospreysharp_csharp_regression_gate`): C#-only straight-through
+multi-file `-SkipRust` (~17 min Astral) + the in-memory-vs-HPC rehydrate parity gate for
+anything touching the resume path. Items 1-3 additionally need the patched-vs-unpatched
+measurement.
 
 ## Motivation
 
@@ -169,15 +190,18 @@ relocation work has proven less uniform than PR1:
 
 ### PR-D -- Stage 7 owns its 2nd-pass rehydrate; Stage 5 clean of forward knowledge
 
-**SUPERSEDED 2026-05-31 by the Stage 6 reconciled-parquet split**
-(`ai/todos/active/TODO-20260531_ospreysharp_stage6_reconciled_parquet.md`). On
-re-examination with the user, the root coupling is that stages overwrite prior
-stages' artifacts (Stage 6 overwriting Stage 4's `.scores.parquet`), and the
-overlay/forward-reach machinery exists to reconstruct what the overwrite destroyed.
-The proper fix is to stop the overwrite (Stage 6 writes a separate
-`.scores-reconciled.parquet`), not to relocate the forward-reach. The Stage 5->7
-forward-reach (`FirstJoinTask.ReloadSecondPassOverlay`) is expected to remain and is
-no longer the target. The original PR-D analysis is kept below for history.
+**RESOLVED 2026-05-31 -> 2026-06-01 (two PRs, #4261 then #4262).** The investigation
+reframed the root coupling: stages overwriting prior stages' artifacts (Stage 6
+overwriting Stage 4's `.scores.parquet`), with the overlay/forward-reach machinery
+existing to reconstruct what the overwrite destroyed.
+- **#4261** stopped the overwrite (Stage 6 writes a separate `.scores-reconciled.parquet`).
+- **#4262** then removed the Stage 5->7 forward-reach itself: on inspection
+  `FirstJoinTask.ReloadSecondPassOverlay` turned out **vestigial** (MergeNode already
+  owns the 2nd-pass rehydrate before protein FDR + blib), so PR-D shipped as a clean
+  DELETION rather than the originally-planned relocation. Stage 5 now holds zero forward
+  knowledge of Stage 7.
+The original PR-D "relocate" analysis is kept below for history (it predates realizing
+MergeNode had subsumed the overlay).
 
 **DECISION 2026-05-31 (brendanx): do the proper fix, NOT the band-aid hoist.**
 Stage 5 must have zero knowledge of what comes after it.
