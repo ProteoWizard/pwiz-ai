@@ -1,8 +1,8 @@
 # TODO: Remove Stage 5's forward-reach into Stage 7 (drop the vestigial 2nd-pass overlay)
 
-**Status**: In progress (PR open; review chain underway)
+**Status**: Completed
 **Branch**: `Skyline/work/20260531_ospreysharp_stage5_drop_forwardreach` (pwiz)
-**PR**: [#4262](https://github.com/ProteoWizard/pwiz/pull/4262)
+**PR**: [#4262](https://github.com/ProteoWizard/pwiz/pull/4262) (merged 2026-06-01 as 18e10882a6)
 **Created**: 2026-05-31
 **Scope**: `C:\proj\pwiz\pwiz_tools\OspreySharp\OspreySharp\Tasks\FirstJoinTask.cs` (C#-only)
 
@@ -90,3 +90,14 @@ overlay + `missingPass2` recompute subsume it, nothing consumes the overlay betw
 Stage 5 and Stage 7, dead 1st-pass fallback, self-consistency). One Low (lost
 `ExitCode=1` guard, superseded by recompute) + the pre-existing corrupt-sidecar note
 above. No follow-up commit needed. Ready for human merge.
+
+### 2026-06-01 - Merged
+
+PR #4262 squash-merged to master as commit 18e10882a6 (CLEAN gate, normal squash --
+no admin bypass needed this time). Shipped the deletion of FirstJoinTask's vestigial
+2nd-pass overlay, removing Stage 5's only forward-reach into Stage 7 (the original
+PR-D, resolved as a simplification rather than the planned relocation since MergeNode
+already owned the 2nd-pass rehydrate). C#-only, +9/-133. Verified bit-identical on
+Tier 2 rehydrate parity (the load-bearing mode) + Tier 1 straight-through. Deferred to
+true HPC testing (recorded above): the no-work-file `--join-at-pass=2` strict-gate
+behavior and the corrupt-2nd-pass-sidecar validity-check hardening -- both pre-existing.
