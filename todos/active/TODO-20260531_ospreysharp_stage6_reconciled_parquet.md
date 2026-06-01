@@ -65,7 +65,8 @@ when it exists, else fall back to the original.
   4-phase chain reproduces the straight-through in-memory result. Harness updated to
   compare `.scores-reconciled.parquet` at the Stage 6 boundary, assert the Stage 4
   original survived, and feed the reconciled parquet to `--join-at-pass=2`.
-- [ ] PR + Copilot + `/pw-self-review`.
+- [x] PR #4261 + Copilot (4 comments, resolved) + `/pw-self-review` (3 minor findings,
+  doc items addressed). Ready for human merge (not merged).
 
 ## Verification
 
@@ -116,3 +117,20 @@ Re-verified after the change: pre-commit gate (352 tests, inspection 0/0), Tier 
 rehydrate parity (Stellar, bit-identical at every boundary with the new filename),
 Tier 1 straight-through cross-impl (Astral, 1e-9 PASS). All 4 Copilot threads resolved.
 Fresh-context `/pw-self-review` launched on head 0a3878825c.
+
+### 2026-05-31 - Self-review addressed (commit 0af02ae180); review chain complete
+
+`/pw-self-review` traced every pipeline mode against the new read contract and found
+the design sound. 3 minor findings:
+- (Low) stale overwrite-describing doc comment in `OspreyTask.cs` -- fixed.
+- (Medium, efficiency) `PerFileRescoreTask.Outputs()` over-declares reconciled paths
+  for no-work files, so the driver's coarse task-level resume skip is inert when any
+  no-work file is present (the within-task per-file skip preserves correctness) --
+  documented inline; not filtered (the work-file set isn't known until the planner runs).
+- (Low) explicit-file `--input-scores` can pass both an original and its reconciled
+  sibling for one stem -- left as-is; `--join-at-pass=2`'s strict reconciled-input gate
+  rejects the original (clear abort), so no silent corruption.
+The no-work-file-in-pass=2 strict-gate rejection the reviewer asked about is
+PRE-EXISTING (no-work files were `reconciled=false` before this PR too); Tier 2's 3
+Stellar files all had Stage 6 work. PR #4261 head: 0af02ae180. Not merged (left for
+human merge decision).
