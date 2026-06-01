@@ -71,6 +71,22 @@ multi-file `-SkipRust` (~17 min Astral) + the in-memory-vs-HPC rehydrate parity 
 anything touching the resume path. Items 1-3 additionally need the patched-vs-unpatched
 measurement.
 
+### Second OOP review (2026-06-01) — iteration 1 confirmed; next iteration identified
+
+Ran a fresh, blind 3-reviewer OOP review (no knowledge of this program). Tight
+consensus: **"Solid-with-issues," maintainability 5-6/10, Modularity unanimously
+Strong.** Key result: **none of the three flagged the orchestration mega-methods** that
+were the 2026-05-29 review's #1 concern — confirming PR-B landed. Freed from that, all
+three independently converged on the **next-dominant issue**: the implicit,
+side-effecting inter-task dataflow (`GetTask<T>()` + lazy `EnsureHydrated`-triggers-`Run`)
+and prescribed making the task DAG **explicit and driver-owned** (the deferred "option C"
+/ Brendan's 2008 instinct). Captured as its own initiative:
+[[TODO-ospreysharp_declarative_pipeline_dataflow]] (with scoring-engine extraction,
+immutable `OspreyConfig`, and injected diagnostics as partner refactors). The fresh group
+was also less forgiving than the first on `OspreyConfig` + `OspreyDiagnostics` (the first
+called both "cohesive"). The parity-sensitive correlation/cosine dedup above remains the
+only open item *from iteration 1*.
+
 ## Motivation
 
 A 2026-05-29 OOP/architecture review found the OspreySharp *project*
