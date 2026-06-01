@@ -51,7 +51,9 @@ its own 2nd-pass Percolator -- Stage 7 depending on Stage 5.)
   the `--join-at-pass=2` mode where the deleted overlay actually fired. Must stay
   bit-identical at every boundary (this is the load-bearing proof for the deletion).
 - [ ] Tier 1: `Compare-EndToEnd-Crossimpl.ps1` Astral `-SkipRust` (1e-9).
-- [ ] PR + Copilot + `/pw-self-review`.
+- [x] PR #4262 + Copilot (positive overview, no findings) + `/pw-self-review`
+  (no Critical/High/Medium; deletion confirmed output-preserving in every mode).
+  Ready for human merge.
 
 ## Verification
 
@@ -66,3 +68,25 @@ truly subsumes it, Tier 2 stays bit-identical at the Stage 7 + blib boundary.
   ordering; only the forward reach was the problem.
 - Deferred (per user, until true HPC testing): the pre-existing no-work-file
   `--join-at-pass=2` strict reconciled-input gate behavior (from #4261 review).
+- Latent hardening (surfaced by #4262 self-review, PRE-EXISTING, not a regression):
+  MergeNode's 2nd-pass overlay (`MergeNodeTask.cs:404`) loads a present-but-stale/
+  corrupt 2nd-pass sidecar with only a `File.Exists` check + warning -- no
+  validity-key check (the deleted FirstJoin overlay had `TaskValiditySidecar.IsValid`,
+  but it never affected final output since MergeNode's overlay was authoritative).
+  `missingPass2` (`:154`) counts only ABSENT sidecars, so a corrupt-but-present one
+  isn't recomputed. Consider a 2nd-pass validity-key check in MergeNode when real HPC
+  testing begins.
+
+## Progress Log
+
+### 2026-05-31 - PR #4262 opened, gates + reviews green
+
+Deleted the vestigial overlay (commit d35a2b3579). Pre-commit (352 tests, 0/0),
+Tier 2 rehydrate parity (Stellar `--join-at-pass=2`, bit-identical at every boundary --
+the load-bearing proof), Tier 1 Astral straight-through 1e-9 all PASS. Copilot: positive
+overview, no findings. `/pw-self-review`: no Critical/High/Medium; independently
+confirmed output-preserving across all modes (shared-buffer model, MergeNode's `:404`
+overlay + `missingPass2` recompute subsume it, nothing consumes the overlay between
+Stage 5 and Stage 7, dead 1st-pass fallback, self-consistency). One Low (lost
+`ExitCode=1` guard, superseded by recompute) + the pre-existing corrupt-sidecar note
+above. No follow-up commit needed. Ready for human merge.
