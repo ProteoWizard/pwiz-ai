@@ -7,7 +7,7 @@ Active -- PR open, awaiting Matt's TeamCity configuration.
 ## Branch Information
 
 - **pwiz branch**: `Skyline/work/20260529_ospreysharp_ci_scaffold`
-  (PR pending)
+- **PR**: [#4247](https://github.com/ProteoWizard/pwiz/pull/4247) (open)
 - **ai branch**: `master`
 
 ## Background
@@ -76,3 +76,11 @@ blockers for the PR:
 Local smoke verified.  Pushed to
 `Skyline/work/20260529_ospreysharp_ci_scaffold` (commit
 `083b8914`).  PR to follow.
+
+### 2026-06-01 -- PR opened
+
+PR [#4247](https://github.com/ProteoWizard/pwiz/pull/4247) is open
+(found during a `/pw-uptodos-complete` scan; the TODO had no PR
+reference yet).  Still **active** -- awaiting Matt's TeamCity build-
+config wiring (working dir `pwiz_tools/OspreySharp/`, step
+`tcbuild.bat`, file trigger `pwiz_tools/OspreySharp/**`).

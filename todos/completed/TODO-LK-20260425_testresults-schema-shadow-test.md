@@ -3,7 +3,10 @@
 ## Branch Information
 - **Branch**: TBD (test plan, not a code branch)
 - **Created**: 2026-04-25
-- **Status**: Substantively complete (2026-04-28).
+- **Status**: Completed (2026-06-01). Tested refactor PR #622 merged 2026-05-15;
+  both cross-referenced dependency TODOs (`labkey_mcp_shadow-fixes`,
+  `testresults-migrate-actions`) are in `completed/`. See Resolution below.
+  - Substantively complete since 2026-04-28.
   - Phases 0–3 done.
   - Phase 4 skipped — no usable test server (current test server has an
     outdated DB without the custom queries).
@@ -22,6 +25,8 @@
     `/home/development`.
 - **Related PRs**:
   - Refactor (UserSchema registration): [#622](https://github.com/LabKey/MacCossLabModules/pull/622)
+    — **MERGED 2026-05-15** (`335bfd9c7018cadcd6f98c2679eb60c50f1e669c`,
+    branch `26.3_fb_testresults-refactor`)
   - Container filtering: separate PR (out of scope here)
 
 ## Objective
@@ -318,3 +323,39 @@ PGPASSWORD=postgres "$PGBIN/pg_restore" -h localhost -U postgres -d "labkey-test
     reconnect.
   - Considered a runtime `switch_target` MCP tool but rejected — it would
     mutate session state and reintroduce silent-production-vs-dev confusion.
+
+## Resolution
+
+**Status**: Completed 2026-06-01.
+
+The schema-shadowing question this test plan set out to answer is settled, and the
+refactor it validated has shipped:
+
+- **Tested refactor merged**: PR
+  [#622](https://github.com/LabKey/MacCossLabModules/pull/622) (UserSchema
+  registration + Spring form binding + Selenium tests) merged **2026-05-15**
+  (`335bfd9c7018cadcd6f98c2679eb60c50f1e669c`, branch `26.3_fb_testresults-refactor`).
+- **Dependency TODOs resolved**: the two follow-up TODOs this plan filed findings
+  into are both in `completed/` — `TODO-20260428_labkey_mcp_shadow-fixes.md` (the 3
+  MCP regressions caught here) and `TODO-LK-20260326_testresults-migrate-actions.md`
+  (deployment plan, Phase 7). The "deferred until shadow-fixes merges" teardown
+  blocker is therefore cleared.
+- **Verified outcomes** (Phases 0–3, on a dev box seeded from a production DB dump):
+  UserSchema cleanly shadows the External Schema in all three tested states; 13/13
+  read-only MCP smoke tools byte-identical across phases; 2/2 write tools work
+  post-refactor; saved-query authoring + child-folder inheritance confirmed under
+  UserSchema-only.
+
+**Not done (intentionally) — does not block completion:**
+- **Phase 4** (real-data verification on the deployed test server) skipped — the
+  current test server runs an outdated DB without the custom queries. Phases 0–3
+  already exercised real production-shape data, so this was descoped rather than
+  deferred indefinitely.
+- **Optional cleanup**: delete the user-authored test query (Phase 3, non-blocking).
+
+**Outstanding manual action for whoever has the dev box:**
+- Tear down the local dev LabKey instance and switch the labkey MCP target back to
+  production (`claude mcp remove`/`add` without the `LABKEY_SERVER` override, then
+  restart Claude Code; verify with `current_target`). This is an environment-state
+  action on the dev machine, not code, so it does not gate closing the TODO — but it
+  should be done so the MCP isn't left pointed at a dev DB.
