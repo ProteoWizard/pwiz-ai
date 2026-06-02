@@ -505,10 +505,40 @@ fully-drafted `OSPREY_CSHARP_SCALAR_SVM` switch with a 20-LOC fix in
 
 ### Stable vs unstable sort
 
-Rust `sort()` is unstable; `sort_by()` with a key is stable. .NET
-`List<T>.Sort()` is QuickSort (unstable). When sorted output matters
-for parity, use LINQ `OrderBy` in C# (stable, matches Rust
-`sort_by`). When it doesn't matter, document the choice.
+Rust `slice::sort_by` is stable. .NET `Array.Sort` and
+`List<T>.Sort` are introsort (unstable). When the C# comparator
+can return 0 (a true tie), unstable reorder produces a different
+output from the Rust stable sort on the same input — silent
+cross-impl divergence the moment an actual tie shows up.
+
+**Default for new sort sites**: use LINQ `OrderBy(...).ThenBy(...)`
+in C# (stable). Matches Rust `sort_by` semantics without further
+thought.
+
+**Enforcement (Array.Sort only)**: `CodeInspectionTest.TestNoUnstableArraySort`
+in `OspreySharp.Test/CodeInspectionTest.cs` scans production code
+for `Array.Sort(` calls and fails the test unless an inline
+`// Array.Sort OK: <reason>` comment is on the same line. New
+`Array.Sort` uses MUST carry that exemption explaining why ties
+cannot occur (typically: the comparator's key is unique per
+element by construction, so 0 is unreachable). The test catches
+new violations at PR time.
+
+**Same rule applies to `List<T>.Sort` even though the regex
+doesn't catch it**: when you write `someList.Sort(Comparison)`,
+add the same `// Array.Sort OK: <reason>` inline comment when the
+key is unique by construction. The tag is a convention — the
+inspection just happens to not enforce it on `List<T>.Sort` yet.
+If the comparator CAN return 0, switch to
+`someList.OrderBy(...).ThenBy(...).ToList()` instead.
+
+**Why this matters for parity, not just within-C# correctness**:
+upstream arithmetic drift can mask the failure for a long time —
+the sort never actually hits a tie because float noise breaks
+every would-be equality. Once the upstream becomes bit-equal
+cross-impl (the goal of every parity push), every previously-
+hidden tie surfaces at once and the unstable sort is suddenly
+the only thing standing between you and a clean gate.
 
 ### Explicit element types in tests
 

@@ -34,7 +34,8 @@
           *.1st-pass.fdr_scores.bin    (SHA-256 byte equality)
           *.reconciliation.json        (SHA-256 byte equality)
       Stage 6 boundary -- truth vs ph3:
-          *.scores.parquet             (parquet_diff.py --tolerance 0; bit-exact column-wise)
+          *.scores-reconciled.parquet  (parquet_diff.py --tolerance 0; bit-exact column-wise)
+          *.scores.parquet original survived (Stage 6 no longer overwrites it)
       Stage 7 boundary -- truth vs ph4:
           cs_stage7_protein_fdr.tsv    (Compare-Stage7-Crossimpl.ps1 per-column 1e-9)
           output.blib                  (Compare-Blib-Crossimpl.ps1 SQL row+col 1e-9)
@@ -66,10 +67,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$scriptDir = Split-Path -Parent $PSCommandPath
-. (Join-Path $scriptDir 'Dataset-Config.ps1')
+$scriptDir = Split-Path -Parent $PSCommandPath          # .../Compare/archive
+$compareDir = Split-Path -Parent $scriptDir             # .../Compare
+$ospreyDir  = Split-Path -Parent $compareDir            # .../OspreySharp
+. (Join-Path $ospreyDir 'Dataset-Config.ps1')
 
-$projRoot = (Resolve-Path (Join-Path $scriptDir '..\..\..')).Path
+$projRoot = (Resolve-Path (Join-Path $ospreyDir '..\..\..')).Path
 $ospreyShExe = Join-Path $projRoot 'pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\net472\OspreySharp.exe'
 if (-not (Test-Path $ospreyShExe)) {
     Write-Host "OspreySharp.exe not found at $ospreyShExe -- build first:" -ForegroundColor Red
@@ -312,10 +315,22 @@ $stage6Ok = $true
 foreach ($f in $mzmls) {
     $stem = [IO.Path]::GetFileNameWithoutExtension($f)
     $ph3Dir = Join-Path $rootDir ("phase3_worker_" + $stem)
+    # Stage 6 now writes a SEPARATE <stem>.scores-reconciled.parquet
+    # (it no longer overwrites the Stage 4 <stem>.scores.parquet).
     $stage6Ok = (Compare-ReconciledParquet `
-        (Join-Path $truthDir ($stem + '.scores.parquet')) `
-        (Join-Path $ph3Dir   ($stem + '.scores.parquet')) `
-        ("$stem reconciled .scores.parquet")) -and $stage6Ok
+        (Join-Path $truthDir ($stem + '.scores-reconciled.parquet')) `
+        (Join-Path $ph3Dir   ($stem + '.scores-reconciled.parquet')) `
+        ("$stem .scores-reconciled.parquet")) -and $stage6Ok
+    # Original-survival: the Stage 4 <stem>.scores.parquet must still
+    # exist intact (proves the overwrite is gone). Both the in-memory
+    # truth and the HPC worker must have left it in place.
+    foreach ($d in @($truthDir, $ph3Dir)) {
+        $orig = Join-Path $d ($stem + '.scores.parquet')
+        if (-not (Test-Path $orig)) {
+            Write-Host ("    {0}  MISSING original Stage 4 parquet in {1} (overwrite regression?)" -f $stem, $d) -ForegroundColor Red
+            $stage6Ok = $false
+        }
+    }
 }
 if (-not $stage6Ok) {
     Write-Host ""
@@ -330,7 +345,10 @@ New-Item -ItemType Directory -Path $ph4Dir -Force | Out-Null
 foreach ($f in $mzmls) {
     $stem = [IO.Path]::GetFileNameWithoutExtension($f)
     $ph3Dir = Join-Path $rootDir ("phase3_worker_" + $stem)
-    Copy-Item (Join-Path $ph3Dir ($stem + '.scores.parquet')) (Join-Path $ph4Dir ($stem + '.scores.parquet'))
+    # The merge node consumes the RECONCILED parquet (Stage 6 output),
+    # not the original Stage 4 parquet. --join-at-pass=2 also requires
+    # osprey.reconciled="true", which only the reconciled file carries.
+    Copy-Item (Join-Path $ph3Dir ($stem + '.scores-reconciled.parquet')) (Join-Path $ph4Dir ($stem + '.scores-reconciled.parquet'))
     Copy-Item (Join-Path $ph3Dir ($stem + '.1st-pass.fdr_scores.bin')) (Join-Path $ph4Dir ($stem + '.1st-pass.fdr_scores.bin'))
     Copy-Item (Join-Path $ph3Dir ($stem + '.calibration.json')) (Join-Path $ph4Dir ($stem + '.calibration.json'))
     Copy-Item (Join-Path $ph3Dir ($stem + '.reconciliation.json')) (Join-Path $ph4Dir ($stem + '.reconciliation.json'))
@@ -350,7 +368,7 @@ Write-Host "[Phase 4] HPC 2nd-join merge (--join-at-pass=2, Stage 7) ..." -Foreg
 $args4 = @('--join-at-pass=2')
 foreach ($f in $mzmls) {
     $stem = [IO.Path]::GetFileNameWithoutExtension($f)
-    $args4 += @('--input-scores', ($stem + '.scores.parquet'))
+    $args4 += @('--input-scores', ($stem + '.scores-reconciled.parquet'))
 }
 $args4 += @('-l', $libraryName, '-o', 'output.blib',
             '--resolution', $resolution,
@@ -376,7 +394,7 @@ Write-Host ("    {0}  precursors: truth={1}  chain={2}  delta={3}" -f `
     $truthPrecursors, $chainPrecursors, ($chainPrecursors - $truthPrecursors)) `
     -ForegroundColor $(if ($precursorOk) { 'Green' } else { 'Red' })
 
-$stage7Cmp = Join-Path $scriptDir 'Compare-Stage7-Crossimpl.ps1'
+$stage7Cmp = Join-Path $compareDir 'Compare-Stage7-Crossimpl.ps1'
 $stage7Log = Join-Path $ph4Dir 'stage7_compare.log'
 & pwsh -File $stage7Cmp -RustTsv $truthDump -CsTsv $chainDump *>&1 |
     Tee-Object -FilePath $stage7Log | Out-Null
@@ -385,7 +403,7 @@ Write-Host ("    {0}  Stage 7 protein FDR dump (per-col 1e-9; full log: {1})" -f
     $(if ($stage7DumpOk) { 'PASS' } else { 'FAIL' }), $stage7Log) `
     -ForegroundColor $(if ($stage7DumpOk) { 'Green' } else { 'Red' })
 
-$blibCmp = Join-Path $scriptDir 'Compare-Blib-Crossimpl.ps1'
+$blibCmp = Join-Path $compareDir 'Compare-Blib-Crossimpl.ps1'
 $blibLog = Join-Path $ph4Dir 'blib_compare.log'
 & pwsh -File $blibCmp -RustBlib $truthBlib -CsBlib $chainBlib *>&1 |
     Tee-Object -FilePath $blibLog | Out-Null

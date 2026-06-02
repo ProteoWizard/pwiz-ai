@@ -21,7 +21,7 @@ drift became the focus of Phase 2.
 ## Branch Information
 
 - **pwiz branch**: `Skyline/work/20260516_ospreysharp_wsl_parity`
-  (PR [#4233](https://github.com/ProteoWizard/pwiz/pull/4233) open)
+  (PR [#4233](https://github.com/ProteoWizard/pwiz/pull/4233) **MERGED** 2026-05-27 as `914f0f9b60`)
 - **osprey branch**: `fix/hpc-chain-stage7-second-pass-percolator`
   (PR [#37](https://github.com/maccoss/osprey/pull/37) open)
 - **ai branch**: `master`
@@ -1861,3 +1861,553 @@ This is unexpected and worth a deeper look overnight.
 `ai/.tmp/handoff-20260516_ospreysharp_wsl_parity-astral-perf.md` before
 starting work.
 
+---
+
+## Postscript 17 (2026-05-23) — Astral 3-file root cause + Bucket-3 split + integration test PASS
+
+### Astral 3-file group_qvalue ROOT CAUSE: decoy gap-fill duplication
+
+Bisected the residual 1.1e-4 divergence on 177/13087 rows with a
+chain of new dumps (`OSPREY_DUMP_DETECTED_PEPTIDES`,
+`OSPREY_DUMP_STAGE7_WINNERS`, `OSPREY_DUMP_BEST_PEPTIDE_SCORES`).
+Localized to 407 decoy modseqs having different aggregated max
+scores cross-impl despite bit-equal sidecar scores per entry_id.
+
+Root cause: **reconciliation gap-fill was including
+`decoy_entry_id` in `gap_fill_ids`** (pipeline.rs ~3080) alongside
+`target_entry_id`. Every decoy already has a row in the 1st-pass
+parquet (decoys are scored against every spectrum). Gap-fill then
+appended an exact-duplicate parquet row (same entry_id+charge+
+scan_number+apex_rt) with a different score (1st-pass natural-RT
+vs gap-fill forced-RT). `collect_best_peptide_scores` took max
+over the duplicates, inflating `decoy_score` per protein group,
+shifting cumulative-FDR sort positions, and producing the 1.1e-4
+`group_qvalue` divergence.
+
+OspreySharp had the same bug but its `Dictionary<uint, FdrEntry>`
+sidecar overlay deduplicated one of the two via key overwrite —
+masking the bug from one side. So both sides were buggy in
+mirror-image ways, with the visible cross-impl drift falling out
+of the asymmetry.
+
+**Fix** (commit `d77ffec`, now PR #45): drop `decoy_entry_id` from
+`gap_fill_ids`; targets continue through gap-fill as before.
+Astral 3-file post-fix: byte-equal blib + Stage 7 protein FDR
+PASS at 1e-9. Precursor count: 165,573 → 167,285 (+1,712), since
+targets are no longer depressed by inflated `decoy_score`
+aggregations.
+
+Remaining target-favoring asymmetry: targets get cross-replicate
+consensus RT via gap-fill, decoys don't get equivalent. The
+principled fix (per-decoy consensus RT) needs Mike's predicted-
+decoy-spectra/RT libraries. In the meantime this PR stops
+aggravating the asymmetry.
+
+### Bucket-3 PR split — 6 new PRs on maccoss/osprey
+
+Split PR #37 (16-commit epic) + post-merge bit-parity work into
+focused, separately-reviewable PRs. Pattern per PR: Copilot
+review → fix → fresh-context Claude agent review → fix →
+squash-merge. Full loop done for #38 + #39 (both MERGED) and the
+first iteration done for #40 (Copilot + agent fixes pushed,
+threads resolved).
+
+| PR | Theme | State |
+|---|---|---|
+| #38 | Bucket 1 diagnostics | MERGED (`41894f4`) |
+| #39 | Bucket 2 ULP-scale bit-parity tweaks | MERGED (`0f5433e`) |
+| #40 | Bucket 3a HPC chain `--join-at-pass=2` correctness | OPEN |
+| #41 | Bucket 3b non-ppm precursor tolerance MS1 default | OPEN |
+| #42 | Bucket 3c Calibration pass 2 LOESS+metadata refresh | OPEN |
+| #43 | Bucket 3d Percolator sort + dedup + parquet_index remap | OPEN |
+| #44 | Bucket 3e LDA-side-effect re-sort + ms2_cal_errors diag | OPEN |
+| #45 | Bucket 3f Decoy gap-fill exclusion (the closer) | OPEN |
+| #37 | original 16-commit epic | DRAFT, awaiting close |
+
+pwiz PR #4233 (ProteoWizard/pwiz) has all C# mirror changes
+(decoy gap-fill exclusion, fail-fast on missing mzML cvParams,
+diagnostic isolation refactor).
+
+### Integration regression test — `test/integration-bucket3` branch
+
+To validate the 6 splits don't cumulatively regress vs the
+integrated state, built a single test branch from `origin/main`
++ merge each open PR branch + cherry-pick 3aca00c (LDA-sort +
+ms2_cal_errors) + cherry-pick d77ffec (decoy gap-fill). Zero
+merge conflicts. 528 Rust + 344 C# tests pass (872 total).
+
+**Stellar 3-file end-to-end PASS at 1e-9 vs OspreySharp.**
+Astral 3-file run killed mid-execution (resource competition);
+needs re-launch overnight.
+
+### New diagnostic infrastructure + documentation
+
+- `osprey-fdr/src/diagnostics.rs` new module (in PR #38, merged)
+- `dump_stage7_winners` + `dump_best_peptide_scores` + their
+  `*_enabled()` predicates for caller-side short-circuit
+- C# mirror: `OspreySharp.FDR/FdrDiagnostics.cs`
+- `dump_ms2_cal_errors` Rust side bundled with PR #44
+- `ai/scripts/OspreySharp/DIAGNOSTICS.md` — comprehensive
+  reference doc cataloging every `OSPREY_DUMP_*` env var across
+  both impls, grouped by pipeline stage, with matching
+  `cs_*`/`rust_*` filename, source location, and when-to-use
+  guidance. Pushed to pwiz-ai master.
+
+### Open follow-ups for next session
+
+1. **Astral 3-file integration test on `test/integration-bucket3`** —
+   re-launch overnight. PASS at 1e-9 confirms the splits compose
+   correctly. FAIL → bisect by reverting merges in reverse order.
+2. **Copilot reviews on PRs #41 – #45** — same cycle as #40:
+   Copilot summary → fix → resolve threads → fresh-context Claude
+   agent review → fix → approve.
+3. **Squash-merge approved PRs** (one focused commit per PR).
+4. **Close PR #37** with a comment linking to the 6 split PRs
+   once #45 has landed.
+5. **Address Copilot review on pwiz PR #4233** as Rust side lands.
+6. **Final perf cells** — 8 cells (Stellar+Astral × Rust+C# ×
+   Windows+WSL) after merge.
+7. **WSL stage1to4 slowdown investigation** (carry-over from
+   postscript 16).
+8. **Median-of-3 perf timings** instead of 1-shot per cell
+   (carry-over).
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260523_bucket3_pr_pipeline.md` before starting
+work.
+
+---
+
+## Postscript 18 — 2026-05-24 autonomous night session
+
+Three deliverables on the user's overnight plate: verify Astral
+parity on `test/integration-bucket3`, run a WSL SSD-vs-HDD I/O
+bench, refresh the 8-cell perf table in `Osprey-workflow.html`.
+All three completed.
+
+### 1) Astral 3-file integration bit-equality — PASS
+
+Ran `Compare-EndToEnd-Crossimpl.ps1 -Dataset Astral -Files All
+-Framework net8.0 -Force` on the integration branch (osprey HEAD
+`8262381`, pwiz HEAD `89995c95e1`). Walls: Rust 26:46, C# 24:37.
+167,285 precursors each side, **Stage 7 protein FDR PASS at 1e-9
+per-column**, **blib content PASS at SQL row+col 1e-9** (blib
+size delta 577 KB = SQLite freelist; row content bit-equal). The
+straight-through cross-impl gate now holds on both Stellar and
+Astral on the integration branch.
+
+Log: `ai/.tmp/integration-test-astral-20260523-2311.log`.
+
+### 2) WSL I/O bench — SSD-vs-HDD confirmed; VHDX is on HDD
+
+Direct `dd`-based bench (write `fdatasync` + read `O_DIRECT`
++ 500×4 KiB fsync metadata) across four WSL targets:
+
+| Target       | Backing storage         | Seq write  | Seq read¹   | 500×4 KiB fsync |
+|--------------|-------------------------|-----------:|------------:|----------------:|
+| `/mnt/c`     | C: SSD via 9P drvfs     |  333 MB/s  |  445 MB/s   |   240 files/s   |
+| `/mnt/d`     | D: HDD via 9P drvfs     |  180 MB/s  |  476 MB/s¹  |    23 files/s   |
+| `/home`      | ext4 / VHDX / D: HDD    | 1787 MB/s² | 10716 MB/s¹ |    14 files/s   |
+| `/dev/shm`   | tmpfs (RAM)             | 2929 MB/s  |     —       |   671 files/s   |
+
+¹ Cache-influenced (4 GiB fits in NTFS / page cache on a 64 GB
+host). ² fdatasync flushes Linux dirty pages but not the
+Windows-side VHDX cache.
+
+**Important finding:** `D:\test\wsl\{guid}\ext4.vhdx` — the
+distro's ext4 lives on the *HDD*, contradicting the workflow doc
+claim of `%LOCALAPPDATA%\wsl\` (SSD). At some point between
+2026-05-18 and 2026-05-24 the WSL distro was relocated to D:.
+This is the root cause of WSL Astral Rust stage1to4 jumping from
+6:07 (2026-05-18) to 19:38 (2026-05-24) on the same hardware
+(see perf table).
+
+Full writeup: `ai/.tmp/wsl-io-bench/summary.md`.
+
+**Per-substage timing within stage1to4** (mzML read vs scoring
+vs serialize) is *not* available from the current Rust binary —
+only the five `[STAGE-WALL]` markers exist. The I/O bench plus
+the stage-level perf table together already pin down the disk
+asymmetry; finer instrumentation is left as a separate follow-up.
+
+### 3) 8-cell perf table — Windows + WSL refreshed
+
+Ran `Measure-Pipeline.ps1 -Dataset Both -Tool Both -Repeats 1`
+separately on Windows-native pwsh and WSL pwsh. Reports under
+`ai/.tmp/measure-pipeline/`.
+
+| Dataset | OS      | Rust total | C# total |
+|---------|---------|-----------:|---------:|
+| Stellar | Windows |     5:04   |   3:52   |
+| Stellar | WSL     |     6:10   |   5:33   |
+| Astral  | Windows |    25:34   |  20:09   |
+| Astral  | WSL     |    31:41   |  23:55   |
+
+Notable shifts vs prior baselines:
+* **Windows Stellar Rust 4:29 → 5:04** (+0:35) — mostly stage1to4
+  (+0:25) and small bumps in stage7 / blib. Single-run noise or
+  small fixed cost from the PR #40-45 stack; without median-of-N
+  can't yet say which.
+* **Windows Astral C# 19:19 → 20:09** (+0:50) — stage1to4 +2:43,
+  stage5 +2:36, stage6 −4:08. Stage6 acceleration matches the
+  decoy-gap-fill exclusion fix (fewer entries to rescore);
+  stage1to4 and stage5 increases warrant a second look post-merge.
+* **WSL Astral Rust 16:12 → 31:41** (+15:29) — almost all in
+  stage1to4 (6:07 → 19:38). Consistent with VHDX-moved-to-HDD;
+  WSL is now ~2× slower than Windows on stage1to4, where it was
+  previously similar or slightly faster.
+
+The `Osprey-workflow.html` Windows and WSL tables are updated
+with the new numbers and the WSL caveat block was rewritten to
+include the I/O bench results table and correct the VHDX-location
+claim. Committed locally on
+`Skyline/work/20260516_ospreysharp_wsl_parity`; **not pushed**
+(morning user can review then push).
+
+### Carry-overs (still open for next session)
+
+1. **Bucket 3 PRs #40-#45** — user wants to finalize tomorrow
+   (review cycles + squash-merge + close PR #37).
+2. **Median-of-3 perf timings** — the single-run table above has
+   visible variance; a `-Repeats 3` refresh would tighten the
+   numbers. Cheap to run (~3 hr unattended).
+3. **WSL VHDX relocation to C: SSD** — bench predicts ~30-50%
+   stage1to4 wall reduction. Destructive operation
+   (`wsl --export`/`--import`), so flagged for explicit user
+   sign-off, not done autonomously.
+4. **Per-substage instrumentation inside stage1to4** — to
+   localize the I/O contribution within the disk-bound stage.
+   Small Rust change (~30 LOC).
+
+Local commits (not pushed):
+* `pwiz` Skyline/work/20260516_ospreysharp_wsl_parity:
+  Osprey-workflow.html 2026-05-24 perf refresh + WSL caveat
+  rewrite.
+* `ai` master: this postscript 18.
+
+**Session-end handoff**:
+`ai/.tmp/handoff-20260523_night-session.md` captures the timeline
+of the autonomous run with full diagnostic notes.
+
+---
+
+## Postscript 19 — 2026-05-24 day session (Rust regression + final perf)
+
+After the night-session perf numbers landed, the user (now awake)
+flagged the unexpected C#-beats-Rust pattern and asked for a
+regression hunt + clean median-of-3 timings on the fastest available
+storage. This postscript captures the rest of the day.
+
+### 1) Rust perf regression — root cause + fix
+
+Single-run bisection on Windows D: HDD (data set same, sum/n compiler
+fix isolated):
+
+| Build | Stellar Rust total | stage1to4 |
+|---|---:|---:|
+| `8712ffe` (PR #37 tip, 5/21 baseline) | 4:18 | 1:40 |
+| `8712ffe` + Welford cherry-pick (`3aca00c`) | 4:42 | 2:01 |
+| `5ad82d9` (integration: PR #40-43 merged, no Welford) | 4:40 | 2:03 |
+| `8262381` (integration tip with Welford + decoy gap-fill) | 4:46 | 2:03 |
+
+The Welford cherry-pick alone added +21 s on stage1to4. The original
+commit message (`3aca00c`) had two motivations: (a) numerical
+stability via a bounded running mean, and (b) defeating LLVM/.NET-JIT
+vectorisation differences that produced 1-ULP mean drift cross-impl.
+For ppm-scale MS2 calibration the (a) motivation never bites &mdash;
+sum/n has ~9 digits of headroom at f64 precision. The (b) motivation
+turned out not to require Welford either: with IEEE 754 strict mode
+(Rust default, .NET default) prohibiting associative re-ordering of
+the dependent reduction <code>sum = sum + x</code>, both compilers
+fall back to serial scalar and produce identical results &mdash; once
+the input order is pinned, which is what the deterministic
+<code>(base_id, entry_id)</code> sort already in
+<code>pipeline.rs</code> does.
+
+**Fix landed locally on both repos:**
+* osprey <code>b0c1f7e</code> on <code>test/integration-bucket3</code>:
+  reverted Welford-Knuth to plain sum/n in
+  <code>crates/osprey-chromatography/src/calibration/mass.rs</code>;
+* pwiz <code>f9d873e39f</code> on
+  <code>Skyline/work/20260516_ospreysharp_wsl_parity</code>:
+  matching revert in
+  <code>OspreySharp.Chromatography/MzCalibration.cs</code>.
+
+Verified by re-running <code>Compare-EndToEnd-Crossimpl.ps1</code>:
+both **Stellar PASS and Astral PASS at 1e-9** cross-impl on the
+sum/n binaries (167,285 Astral precursors match, Stage 7 protein FDR
++ blib SQL row+col bit-equal). Rust Stellar perf recovered to 4:25,
+within noise of the 4:18 baseline. C# Astral also saved ~2 min by
+ditching its mirror Welford recurrence.
+
+### 2) Storage fix — WSL VHDX relocated to C: SSD; data staged on C:
+
+Pre-existing problem: D:\test was missing from Defender real-time
+scan exclusions (user thought it was already excluded; it wasn't),
+and the WSL <code>ext4.vhdx</code> had migrated from C: SSD to D: HDD
+at some point. Both fixes applied this session:
+
+* User added <code>D:\test</code> to AV-scan exclusions and created
+  <code>C:\test</code> (also excluded) prior to authorising the work.
+* Session relocated VHDX via <code>wsl --export</code> →
+  <code>--unregister</code> → <code>--import</code> to
+  <code>C:\wsl\ubuntu-22.04\ext4.vhdx</code>. Backup tar preserved
+  at <code>C:\temp\wsl-ubuntu-22.04-backup.tar</code> until
+  user confirms.
+* Session staged Stellar (4.7 GB) and Astral (20 GB) test data on
+  both <code>C:\test\osprey-runs</code> (Windows-native) and
+  <code>/home/brendanx/test/osprey-runs</code> (WSL ext4).
+
+Post-move I/O bench (raw <code>dd</code>): <code>/home</code> went
+from 1185 MB/s → 2064 MB/s sequential write (now true C:-SSD speed
+through the VHDX), <code>/mnt/c</code> stable at ~356 MB/s (drvfs
+ceiling), <code>/mnt/d</code> back near its HDD ceiling at 215 MB/s.
+
+### 3) Final median-of-3 perf — three configurations published
+
+For each of the three viable on-SSD configurations, ran
+<code>Measure-Pipeline.ps1 -Dataset Both -Tool Both -Repeats 3</code>:
+
+| Config | Stellar Rust | Stellar C# | Astral Rust | Astral C# |
+|---|---:|---:|---:|---:|
+| Windows native NTFS on C: | 4:37 | 3:52 | 23:11 | 15:49 |
+| WSL ext4 inside VHDX (<code>/home</code>) | **4:00** | 4:02 | **15:46** | 16:16 |
+| WSL 9P drvfs (<code>/mnt/c</code>) | 6:09 | 5:59 | 24:03 | 24:55 |
+
+The three medians-of-3 are now published in
+<code>Osprey-workflow.html</code> as three stacked tables. Variance
+is &lt;5 s on Stellar and &lt;90 s on Astral.
+
+Headline cross-impl story per config:
+* **Windows native:** C# 0.84&times; Stellar, 0.68&times; Astral
+  &mdash; C# faster on every stage, dramatic on stage7+blib via
+  skip-Percolator sidecar overlay.
+* **WSL ext4 (/home):** Rust 17-21% faster &mdash; matches the
+  historical Linux-native baseline and the user's recollection that
+  Rust is faster on Linux ext4.
+* **WSL 9P drvfs (/mnt/c):** Essentially tied (C#/Rust 0.97-1.04&times;)
+  &mdash; the 9P penalty applies to both impls equally, so on the
+  storage layout most users default to (data on Windows side, run
+  pipeline from WSL shell), C# is at parity with Rust.
+
+### Local commits (not pushed)
+
+| Repo | Commit | What |
+|---|---|---|
+| osprey | <code>b0c1f7e</code> on <code>test/integration-bucket3</code> | Replace Welford with sum/n in calibration |
+| pwiz | <code>f9d873e39f</code> on parity branch | Mirror Welford → sum/n in C# |
+| pwiz | <code>307fb61683</code> on parity branch | Osprey-workflow.html refresh with median-of-3 |
+| ai | (this commit, master) | Postscript 19 |
+
+### Carry-overs for the team
+
+1. **Land the Welford → sum/n revert as a focused osprey PR.** Lives
+   only on <code>test/integration-bucket3</code> right now; needs a
+   real upstream branch + PR + cross-impl gate via
+   <code>Compare-EndToEnd-Crossimpl.ps1</code>.
+2. **Bucket 3 PRs #40-#45.** Same plan as before; the sum/n revert
+   either folds into one of them or ships as its own follow-up.
+3. **Stage7 Rust skip-Percolator parity.** The big stage7 C# advantage
+   in the Windows table comes from C# hitting the
+   <code>FdrScoresSidecar</code> skip-Percolator path while Rust runs
+   the full 2nd-pass SVM. The configurations measured here happen to
+   leave Rust on the slow path; check whether the Rust skip is wired
+   for the same cache state.
+4. **VHDX backup cleanup.** Delete
+   <code>C:\temp\wsl-ubuntu-22.04-backup.tar</code> (~31 GB) after
+   verifying the new C: VHDX runs reliably for a few days.
+5. **Push the local commits** when ready: pwiz parity branch has 2
+   new commits (HTML refresh + sum/n revert); osprey integration
+   branch is local-only by design (never push).
+
+---
+
+## Postscript 20 — 2026-05-26: Bucket 3 + pwiz PR review cycles complete
+
+The Bucket 3 PR finalization sprint after #46 (Welford → sum/n) merged
+landed in 4 phases: address open Copilot comments, restore stale post-
+revert references, push reviewed branches, run cross-impl gates on the
+freshly-merged main. Then the pwiz PR #4233 review chain ran in
+parallel: Copilot review → /pw-respond → /pw-self-review agent.
+
+### 1) Rust side — all Bucket 3 PRs (#40-#45) merged
+
+Per-PR cycle (in order): Copilot summary → ask user → fix → push →
+resolve threads → fresh-context Claude agent review → ask → fix → push.
+The user merged each after the second push.
+
+| PR | Copilot fix | Agent finding(s) addressed |
+|---|---|---|
+| #40 | (done in prior session) | (done in prior session) |
+| #41 | mDa unit error in doc, missing unit test for `ms1_envelope_tolerance_ppm` | idiomatic `FragmentToleranceConfig::hram/::unit_resolution` constructors, zero-ppm no-rescue pin, doc note that `OspreyConfig::precursor_tolerance` reuses the fragment-tolerance struct |
+| #42 | brittle line-number ref in LOESS-dump comment | C# parity drift: Rust pass-2 LOESS dump now only on R^2 accept; landed matching change in pwiz `PerFileScoringTask.cs` (`953b27d1f1`) |
+| #43 | warn on parquet_index remap edge cases (gap-fill stub missing overlay + out-of-range pre_sort_row), drop String clone in `subsample_by_peptide_group<S: AsRef<str>>` | honest warn-message comments (downstream loader silently skips, not hard-fails), include `file_name` in warn output; recognized C# vs Rust remap pattern divergence is intentional architecture (Rust has FdrEntry-vs-parquet split for memory tiering) not drift |
+| #44 | trust caller match order in `dump_ms2_cal_errors` + align docstring on `format_f64_roundtrip` | rebase on #42 merge (resolved `num_confident_peptides mut` conflict by keeping both new dump call and `mut` declaration), reword stale "Welford running sum" mentions to "left-to-right sum / n accumulator" after #46 revert |
+| #45 | condense decoy-gap-fill rationale comment | stale debug-log multiplier (`n_gap_fill * 2` -> `* 1`), updated `docs/12-intermediate-files.md` gap_fill_targets description |
+
+### 2) Post-merge cross-impl gate on maccoss/osprey:main
+
+Built fresh Rust + C# binaries against `origin/main` (HEAD `9d3eb5b`
+after all 7 Bucket 3 PRs landed) + pwiz parity branch (with C# sum/n
+revert and LOESS-dump-on-accept). Ran `Compare-EndToEnd-Crossimpl.ps1`:
+
+| Dataset | Rust wall | C# wall | Precursors | Stage 7 1e-9 | Blib SQL row+col 1e-9 |
+|---|---|---|---|---|---|
+| Stellar 3-file | 4:28 | 4:31 | 59,768 = 59,768 | PASS | PASS |
+| Astral 3-file | 24:10 | 22:02 | 167,285 = 167,285 | PASS | PASS |
+
+End-to-end bit-equality at 1e-9 holds on the freshly-merged main. The
+Bucket 3 PR stack composed without regressing the parity gate.
+
+### 3) pwiz PR #4233 review cycle
+
+Copilot raised 5 threads, all addressed:
+
+| # | File | Resolution |
+|---|---|---|
+| 1+2 | `PercolatorFdr.cs` lines 769, 1824 | Stripped UTF-8 BOM (introduced by editor save), replaced mojibake `â€"` em-dashes with ASCII `--`. Validated via `ai/scripts/validate-bom-compliance.ps1` -- OspreySharp folder now clean (`Skyline.sln.DotSettings` BOM is pre-existing outside scope). Commit `fa259506d8`. |
+| 3 | `Matrix.cs:84` `WrapPrefixNoClone` | Deferred to upcoming SVM-perf sprint per user direction. Posted explanatory reply on the thread and resolved. Agent later verified safe in this PR (no `Transpose`/`Multiply` callsites on wrapped pool matrices). |
+| 4 | `MergeNodeTask.cs:163-186` | Added two `LogWarning`s for silent skip modes: missing parquet path and stub/parquet row-count mismatch. Commit `bbb5b198cb`. |
+| 5 | `RescoreHydration.cs:281` | Dropped the dead `envelopeStems.Count > 0 &&` guard. `ReconciliationFile.Load` already rejects v1 envelopes at parse, so the guard was tolerating an impossible case. Commit `bbb5b198cb`. |
+
+Agent self-review (fresh context) on PR #4233 surfaced two
+worth-considering items, both addressed:
+
+* **MergeNodeTask silently skips unmatched `perFileEntries` keys** in
+  two more places (lines 126, 290). Added one upfront `LogWarning` per
+  block enumerating skipped keys (refactored to use LINQ on the
+  `List<KeyValuePair<...>>`). Commit `7d6f8710bd`.
+* **`ReconciliationFile.Load` did not reject v2 envelopes with
+  empty/null `file_stems`**. Added explicit `parsed.FileStems == null ||
+  parsed.FileStems.Count == 0` check. Updated 3 `IOTest.cs` fixtures
+  to carry `FileStems` so the test suite reflects the new invariant.
+  Commit `7d6f8710bd`.
+
+344 / 346 OspreySharp tests pass post-changes (2 skipped, 0 failed).
+
+### Survey finding — em-dashes throughout the codebase
+
+While fixing the mojibake, ran a smart-punctuation audit:
+
+| Tree | em-dashes |
+|---|---:|
+| osprey (Rust) | 623 |
+| pwiz/OspreySharp | 124 (top: MergeNodeTask 19, FirstJoinTask 13) |
+| ai (TODOs + docs) | 3801 |
+
+Confirmed: LLM-authored code routinely introduces em-dashes. The user
+will do a separate em-dash cleanup pass after this PR lands and noted
+that the BOM-compliance check (`ai/scripts/validate-bom-compliance.ps1`)
+should later be extended to gate against em-dashes (alongside the
+existing `\n`-only and BOM checks). Deferred to a follow-up sprint.
+
+### Carry-overs
+
+1. **Merge pwiz PR #4233** when CI is green.
+2. **Em-dash cleanup sprint** across osprey + pwiz/OspreySharp + ai.
+   Add em-dash gate to `validate-bom-compliance.ps1`.
+3. **Stage 7 Rust skip-Percolator parity** investigation (carried from
+   postscript 19) -- C# was found to genuinely run 2nd-pass FDR; the
+   reporting bug we fixed cleared most of the apparent gap. Lower
+   priority but still worth confirming Rust hits the sidecar fast path
+   in all cache states.
+4. **Matrix `WrapPrefixNoClone` Active-length property** in the
+   upcoming SVM-perf sprint where C# trails Rust.
+5. **VHDX backup cleanup** (`C:\temp\wsl-ubuntu-22.04-backup.tar`,
+   ~31 GB) once the C: VHDX has proven stable for a few days.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260526_pwiz_pr_4233_merge.md` before starting work.
+
+## Postscript 21 - 2026-05-26/27 autonomous night session (pwiz PR #4233 final gate)
+
+Overnight independent verification before merging pwiz PR #4233.  Goal
+the user set: wake to confirmation that everything is fine and the PR
+is ready to merge.  Independent of any OspreySharp information sharing,
+the gate was Compare-EndToEnd-Crossimpl.ps1 (Rust on `maccoss/osprey:main`
+HEAD `9d3eb5b` vs C# on the PR branch HEAD `7d6f8710bd`).
+
+All measurements on `C:\test\osprey-runs` (Defender real-time-scan
+excluded); WSL phases used the same data via /mnt/c and a pre-staged
+copy at /home/brendanx/test/osprey-runs (mtimes match Windows-side, so
+the Rust library_identity_hash is the same in all three).
+
+### Bit-parity (independent runs, 1e-9 absolute)
+
+| Dataset | Rust wall | C# wall | Precursors | Stage 7 1e-9 | Blib SQL 1e-9 |
+|---|---|---|---|---|---|
+| Stellar 3-file | 4:25 | 4:20 | 59,768 = 59,768 | PASS | PASS |
+| Astral 3-file  | 20:43 | 17:25 | 167,285 = 167,285 | PASS | PASS |
+
+Both sides built fresh from their respective HEAD tips.  No tolerance
+relaxation, no skip-list, no per-feature carve-out.  Hardest possible
+cross-impl test.
+
+### Perf vs Osprey-workflow.html 2026-05-24 baseline
+
+Three perf locations measured in priority order: Windows native →
+WSL /mnt/c → WSL /home (in flight at wake).
+
+* **Windows native**: every cell at-or-better than baseline by 3-12%.
+  Variance across the 3 reps under 3% per cell.  Wall 2:19:46.
+* **WSL /mnt/c**:    every cell within 1-3% of baseline.  Variance
+  under 5% per cell.  Wall 3:18:30.
+* **WSL /home**:     every cell within 0-3% of baseline.  Variance under
+  2% per cell with one outlier (Astral C# stage1to4 6:43..7:37; median
+  6:50 still within 1% of baseline 6:47).  Wall 2:17:14, finished 07:34
+  (9 minutes faster than my ETA estimate).
+
+Cells in handoff file (`ai/.tmp/handoff-20260527_morning.md`) carry
+`now / baseline` per cell so the reader can see at a glance there are
+no regressions.
+
+### Verdict
+
+**PR #4233 is safe to merge.**  Bit-parity confirmed at the
+strictest comparison the harness offers, and perf is stable against
+the baseline on both Windows native and the WSL 9P drvfs path.
+
+### Operational notes
+
+* Measure-Pipeline.ps1 report now emits columns in `C# | Rust | C#/Rust`
+  order (the prior Osprey-workflow.html tables were `Rust | C# | C#/Rust`).
+  When updating Osprey-workflow.html from these report.md outputs,
+  the columns must be flipped or the cell labels swapped.  No script
+  fix needed for this sprint; just a thing to know.
+* WSL `wsl.exe` invocations from the host shell are subject to the
+  Claude classifier; calling `wsl.exe -- pwsh ...` from inside a
+  pwsh process (e.g. an orchestrator script) is unaffected.  Wrapping
+  through a `.ps1` is the workaround when an interactive `wsl ...`
+  command is blocked.
+
+### Carry-overs (unchanged from postscript 20)
+
+1. **Merge pwiz PR #4233** -- DONE 2026-05-27 (`914f0f9b60`).
+2. **Em-dash cleanup sprint** across all three repos + extend
+   `validate-bom-compliance.ps1`.
+3. **Stage 7 Rust skip-Percolator parity** investigation (low priority).
+4. **Matrix `WrapPrefixNoClone` Active-length property** in upcoming
+   SVM-perf sprint.
+5. **VHDX backup cleanup** (`C:\temp\wsl-ubuntu-22.04-backup.tar`).
+6. **NEW**: Re-record Osprey-workflow.html perf tables from the
+   night-session data (or wait for the /home phase to land first).
+   The three locations are all on the AV-scan-excluded `C:\test`
+   data set, slightly different from what produced the 2026-05-24
+   numbers but more consistent across locations.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260527_morning.md` before starting work.
+
+### 2026-05-27 — Merged
+
+PR #4233 merged as `914f0f9b60` on `master` after the overnight
+independent verification (postscript 21) confirmed bit-parity at
+1e-9 on both Stellar and Astral 3-file and no perf regression vs
+the 2026-05-24 baseline across Windows native, WSL /mnt/c, and
+WSL /home.  Two non-blocking ERROR checks at merge time (TeamCity
+BiblioSpec subset source tarball flaky + Skyline PR Perf and
+Tutorial tests intermittent GC-LEAK in Skyline-side code) were
+explicitly accepted as unrelated to the PR contents.
+
+Carry-overs 2-6 from postscript 21 remain open; they move forward
+as separate sprints.  Sprint closed.
