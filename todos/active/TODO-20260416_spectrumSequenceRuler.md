@@ -67,7 +67,7 @@ showing rulers from another tool (ETD spectrum, c/z ion series).
 - [x] Apply to Library Explorer dialog (`ViewLibraryDlg`)
 - [x] Disable ruler functionality entirely in small molecule mode (no defined AA sequence) — added `SpectrumGraphItem.RulersApplicable` (proteomic, non-crosslink, settings present); gated rendering, hover, and Pin/Unpin menu items on it in GraphFullScan, GraphSpectrum, and ViewLibraryDlg (also fixed a latent NRE in the old render guard)
 - [x] Incorporate neutral loss series into ruler functionality (each neutral loss series gets its own ruler)
-- [ ] Add functional test
+- [x] Add functional test — `TestFunctional/SpectrumSequenceRulerTest.cs` covers all three hosts (GraphFullScan, GraphSpectrum, ViewLibraryDlg) in one `[TestMethod]` with the EAD doc loaded once. Verifies hover→correct ruler, pin persists after hover clears, multi-ruler grouping, selective unpin, and unpin-all. Drives public test seams (`HoverRulerPeak`/`PinHoveredRuler`/`UnpinRuler`/`UnpinAllRulers`/`RulerGraphItem`) added to each host since mouse and context menu can't be synthesized. Consolidated the duplicated peak→`IonSeriesKey` (min-mass-error) mapping into a public `SpectrumGraphItem.GetBestSeriesKey` shared by all three hosts. Added `GraphFullScan.ShowAnnotations(bool)` so the test can switch the full-scan into annotated mode (rulers don't apply in target-only mode).
 - [ ] Add resource strings for any user-visible text (none currently needed — no user-visible strings)
 - [ ] (Idea/low priority) Add a ruler selector control to the spectrum toolbar, allowing the user to manually show a ruler for any ion type, charge, and neutral loss combination — complementary to the mouse-over/pin workflow
 
@@ -77,3 +77,4 @@ showing rulers from another tool (ETD spectrum, c/z ion series).
 - abc and xyz blocks both drawn at top; xyz stacks below abc
 - Exact stacking order of sequence row vs. individual series lines within a block: TBD during prototyping
 - Label crowding for short peptides or wide modifications: TBD
+- **Drop-line X uses the theoretical (predicted) ion m/z, not the observed peak m/z** — the ruler is a theoretical ladder, so anchoring drop lines to predicted positions is the intended semantic. At very high zoom (a few m/z visible), peaks with non-trivial mass error appear visually offset from their drop lines. This is accepted behavior, not a bug.
