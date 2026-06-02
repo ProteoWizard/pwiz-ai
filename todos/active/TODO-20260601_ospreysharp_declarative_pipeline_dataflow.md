@@ -1,18 +1,49 @@
 # TODO: Make the OspreySharp task dataflow explicit / lazy-rehydrate / driver-owned
 
-**Status**: Active — design doc agreed (no code yet). PR-A is the first implementable slice.
+**Status**: Active — PR-A IN PROGRESS (3 commits, all parity-verified). See Progress below.
 **Priority**: Medium-strategic (no defect; the next-dominant structural issue once the
 mega-methods are gone)
 **Complexity**: Large (3-PR core; touches the task framework + every task + the resume/worker
 model; each PR parity-gated)
 **Created**: 2026-06-01
-**Branch**: none yet — this is the design doc. PR-A opens its own pwiz feature branch
-(default `C:\proj\pwiz`, per `feedback_pwiz_worktree_preference`).
+**Branch**: `Skyline/work/20260602_ospreysharp_config_identity` (pwiz) — PR-A: config
+identity split + RunPlan.
 **Scope**: `pwiz_tools\OspreySharp` — the task/pipeline layer (`OspreyTask`,
 `PipelineContext`, `AnalysisPipeline`, the 4 concrete tasks). Framework types
 (`OspreyTask`, `PipelineContext`, `TaskValiditySidecar`) live in the `OspreySharp.Tasks`
 project; the 4 concrete tasks + `AbstractScoringTask` + `AnalysisPipeline` live in the
 `OspreySharp` exe project under `Tasks\`.
+
+## Progress — PR-A (branch `Skyline/work/20260602_ospreysharp_config_identity`)
+
+Splitting "freeze config" (partner refactor #2) into verifiable slices, each byte-identical
+(unit: 352 tests + inspection green; cross-impl e2e bit-parity at 1e-9 on Stellar 3-file via
+`Compare-EndToEnd-Crossimpl -Files All -SkipRust`). Commits (pwiz):
+
+- **`a217284b79`** — extracted the SHA identity hashing (`SearchParameterHash` /
+  `LibraryIdentityHash` / `ReconciliationParameterHash[ForStems]` + `EscapeForRustDebug`)
+  out of `OspreyConfig` into a single-responsibility `SearchIdentity` (`.Core`).
+- **`4aaa85e846`** — repointed all ~10 hash callers to `config.Identity` / `SearchIdentity`
+  and removed the `OspreyConfig` delegators (+ fixed `<see cref>` docs).
+- **`9df75088c1`** — moved `EffectiveFileParallelism` off `OspreyConfig` onto a new
+  driver-owned `RunPlan` (`.Tasks`, exposed as `PipelineContext.RunPlan`).
+
+**Remaining PR-A slices (the higher-blast-radius, parity-sensitive parts):**
+1. Synthesized `InputFiles` → resolve at parse/entry time (stop the mid-`Run` mutation in
+   `PerFileScoringTask.cs:235-240`); `InputFiles` is read pervasively, so prefer resolving
+   once at config construction over moving the field everywhere.
+2. Per-file calibrated `FragmentTolerance` → onto the existing per-file `ScoringContext`
+   (`OspreySharp.Scoring`), replacing the `ShallowClone`-and-mutate pattern — parity-sensitive
+   (feeds scoring).
+3. Make `OspreyConfig` init-only immutable (needs a `net472` `IsExternalInit` shim + any
+   CLI-parser post-construction assignments switched to object initializers).
+
+**Parity-gate note (2026-06-02):** the C#-only gate appeared RED on master, but it was a
+FALSE alarm — `-SkipRust` had reused a stale **single-file** Rust reference against a 3-file
+C# run (proven: fresh 3-file Rust vs 3-file C# = OVERALL PASS at 1e-9; C# branch-vs-master
+also byte-identical). A stale-reference guard now fails the gate fast on a file-set mismatch
+(ai commit `5c1cee7`), and the cached Stellar reference is regenerated to 3-file. See
+`feedback_ospreysharp_csharp_regression_gate`.
 
 ## Why this exists (and why it's iteration N, not a one-off)
 
