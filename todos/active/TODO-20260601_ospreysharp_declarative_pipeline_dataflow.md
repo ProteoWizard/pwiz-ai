@@ -1,6 +1,7 @@
 # TODO: Make the OspreySharp task dataflow explicit / lazy-rehydrate / driver-owned
 
-**Status**: Active — PR-A IN PROGRESS (3 commits, all parity-verified). See Progress below.
+**Status**: Active — PR-A1 opened (pwiz #4264, parity-verified); full init-only immutability
+deferred. See Progress.
 **Priority**: Medium-strategic (no defect; the next-dominant structural issue once the
 mega-methods are gone)
 **Complexity**: Large (3-PR core; touches the task framework + every task + the resume/worker
@@ -18,7 +19,8 @@ project; the 4 concrete tasks + `AbstractScoringTask` + `AnalysisPipeline` live 
 
 Splitting "freeze config" (partner refactor #2) into verifiable slices, each byte-identical
 (unit: 352 tests + inspection green; cross-impl e2e bit-parity at 1e-9 on Stellar 3-file via
-`Compare-EndToEnd-Crossimpl -Files All -SkipRust`). Commits (pwiz):
+`Compare-EndToEnd-Crossimpl -Files All -SkipRust`). **PR-A1 shipped as pwiz #4264** with the
+three commits below:
 
 - **`a217284b79`** — extracted the SHA identity hashing (`SearchParameterHash` /
   `LibraryIdentityHash` / `ReconciliationParameterHash[ForStems]` + `EscapeForRustDebug`)
@@ -28,15 +30,21 @@ Splitting "freeze config" (partner refactor #2) into verifiable slices, each byt
 - **`9df75088c1`** — moved `EffectiveFileParallelism` off `OspreyConfig` onto a new
   driver-owned `RunPlan` (`.Tasks`, exposed as `PipelineContext.RunPlan`).
 
-**Remaining PR-A slices (the higher-blast-radius, parity-sensitive parts):**
-1. Synthesized `InputFiles` → resolve at parse/entry time (stop the mid-`Run` mutation in
-   `PerFileScoringTask.cs:235-240`); `InputFiles` is read pervasively, so prefer resolving
-   once at config construction over moving the field everywhere.
-2. Per-file calibrated `FragmentTolerance` → onto the existing per-file `ScoringContext`
-   (`OspreySharp.Scoring`), replacing the `ShallowClone`-and-mutate pattern — parity-sensitive
-   (feeds scoring).
-3. Make `OspreyConfig` init-only immutable (needs a `net472` `IsExternalInit` shim + any
-   CLI-parser post-construction assignments switched to object initializers).
+**Full `OspreyConfig` init-only immutability — DEFERRED (decision 2026-06-02: ship PR-A1,
+defer immutability).** The remaining mid-run mutations turned out to be a **load-bearing
+in-place propagation pattern**, structurally like the deliberately-kept `_perFileEntries`
+buffer: the MS2-calibrated `FragmentTolerance` is written back onto the per-file config clone
+(`AbstractScoringTask.cs:527`) and read by ~15 downstream scoring sites through that shared
+reference; per-file `NThreads` (`PerFileScoringTask.cs:1014`) is the same. Making the config
+init-only would mean converting `:527` to a copy-with-change + verifying propagation to all
+readers, relocating `NThreads`, restructuring `Program.cs` config-building to object-
+initializers + a `net472` `IsExternalInit` shim, and resolving the join-only `InputFiles`
+synthesis (`PerFileScoringTask.cs:235-240`) at parse time. Payoff: type-enforce a contract
+that already works and whose only mid-run-mutated hash-affecting field (`FragmentTolerance`)
+is already correctly scoped via `ShallowClone` (shared config keeps the configured value for
+hashing; the clone gets the calibrated value for scoring). Marginal vs. the parity risk — so
+deferred/likely-dropped, mirroring the `_perFileEntries` call. Revisit only if a concrete
+defect motivates it.
 
 **Parity-gate note (2026-06-02):** the C#-only gate appeared RED on master, but it was a
 FALSE alarm — `-SkipRust` had reused a stale **single-file** Rust reference against a 3-file
