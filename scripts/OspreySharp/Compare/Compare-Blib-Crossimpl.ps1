@@ -50,15 +50,25 @@ param(
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+# Dot-source the shared config from the OspreySharp scripts root, so
+# this script works whether it lives at the top of ai/scripts/OspreySharp
+# or in the Compare/ subfolder.
+$configCandidates = @(
+    (Join-Path $PSScriptRoot 'Dataset-Config.ps1'),
+    (Join-Path $PSScriptRoot '..\Dataset-Config.ps1')
+)
+foreach ($c in $configCandidates) { if (Test-Path $c) { . $c; break } }
+
 # Prefer the OspreySharp net8.0 build's copy: cross-platform (Linux/WSL
 # bin includes runtimes/linux-x64/native/SQLite.Interop.dll alongside),
 # always present when OspreySharp itself has been built, and decoupled
-# from Skyline Debug build state. Fall back to the legacy Skyline Debug
-# path for environments where only Skyline is built.
-$ospReleaseBin = (Resolve-Path (Join-Path $PSScriptRoot '../../../pwiz/pwiz_tools/OspreySharp/OspreySharp/bin/x64/Release/net8.0')).Path
+# from Skyline Debug build state. Fall back to the Skyline Debug path
+# for environments where only Skyline is built.
+$pwizRoot = Get-PwizRoot
+$ospReleaseBin = Join-Path $pwizRoot 'pwiz_tools/OspreySharp/OspreySharp/bin/x64/Release/net8.0'
 $candidates = @(
     (Join-Path $ospReleaseBin 'System.Data.SQLite.dll'),
-    'C:\proj\pwiz\pwiz_tools\Skyline\bin\x64\Debug\System.Data.SQLite.dll'
+    (Join-Path $pwizRoot 'pwiz_tools/Skyline/bin/x64/Debug/System.Data.SQLite.dll')
 )
 $dll = $null
 foreach ($c in $candidates) {

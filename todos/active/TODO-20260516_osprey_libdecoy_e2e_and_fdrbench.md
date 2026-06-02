@@ -12,7 +12,16 @@
   (to be created)
 - **Base**: `master` (post-#4215 squash at `bb1992e248`)
 - **Created**: 2026-05-16
-- **Status**: Not Started
+- **Status**: **BLOCKED (highest priority) — waiting on Mike MacCoss** to deliver
+  the testable dataset (Carafe-built Astral spectral library with target +
+  entrapment + decoys baked in, the FDRBench pairing manifest, and the canonical
+  `--decoys-in-library --decoy-pairing-manifest ... --fdrbench` CLI invocation) that
+  runs against `maccoss/osprey` (Rust). Mike's message forwarded 2026-05-15 evening
+  said the library + manifest were "arriving overnight"; **as of 2026-06-01 they have
+  not arrived / not been staged**. Track 1 cannot start until the files land at
+  `D:\test\osprey-runs\astral-libdecoy\`. Track 2 (`--fdrbench` port) can proceed in
+  parallel but the cross-impl byte-parity gate that proves it correct also needs
+  Mike's CLI example. **Next action: ping Mike for the dataset.**
 - **GitHub Issue**: (none)
 - **PR**: (planned -- one PR if scope holds; split if Track 2 grows)
 - **Predecessor TODO**:
