@@ -1,0 +1,13 @@
+{
+  "name": "csharp-lsp",
+  "description": "pwiz C# LSP. Launches Microsoft.CodeAnalysis.LanguageServer (Roslyn LSP from VS Code C# extension) scoped to pwiz_tools.",
+  "version": "0.3.0",
+  "lspServers": {
+    "csharp-roslyn": {
+      "command": "pwsh",
+      "args": ["-NoProfile", "-File", "C:/proj/ai/scripts/lsp/Invoke-RoslynLsp.ps1"],
+      "workspaceFolder": "C:/proj/pwiz/pwiz_tools",
+      "extensionToLanguage": { ".cs": "csharp" }
+    }
+  }
+}

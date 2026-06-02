@@ -775,6 +775,148 @@ The `ai/` folder contains extensive documentation in Markdown format. Install a 
 
 For full AI tooling documentation, see: `ai/docs/developer-setup-guide.md`
 
+### 7.6 LSP Code Intelligence (Recommended)
+
+Claude Code can drive a language server for symbol-precise navigation
+(go-to-definition, find-references, hover types, call hierarchy) and
+automatic post-edit diagnostics. This replaces grep-based search with
+semantic queries on the same projects Visual Studio understands.
+
+Anthropic's article ["How Claude Code works in large
+codebases"](https://claude.com/blog/how-claude-code-works-in-large-codebases-best-practices-and-where-to-start)
+specifically calls out LSP as a high-value investment for large C# and
+C++ codebases. Skyline (~900 KLOC of C#) is exactly that.
+
+The primary install for nearly every developer:
+
+- **Microsoft.CodeAnalysis.LanguageServer** (Roslyn LSP) for all C# under
+  `pwiz_tools/` (Skyline, OspreySharp, AutoQC, SkylineBatch, Shared, etc.).
+  Handles both .NET Framework 4.7.2 and modern .NET in one workspace.
+
+Optional, only for the small number of developers actively working on the
+Rust `maccoss/osprey` implementation:
+
+- **rust-analyzer** for `C:\proj\osprey`. With the team consolidating on
+  OspreySharp (C#), this path is shrinking. Skip the Rust steps unless the
+  developer explicitly works on the Rust side.
+
+> **For LLM assistants:** Offer the C# (Roslyn LSP) setup. It is a meaningful
+> upgrade to Claude Code's effectiveness on Skyline. Do NOT proactively offer
+> the Rust path - ask whether the developer works on `maccoss/osprey` first;
+> if not, skip the Rust steps entirely.
+
+> **Existing mode**: Check whether the pwiz-lsp marketplace is already
+> registered. Inside Claude Code run `/plugin marketplace list` and look
+> for `pwiz-lsp`. If already configured, skip this phase or verify by
+> running an LSP query (Step 4).
+
+> **Why not the official `csharp-lsp@claude-plugins-official`?** That plugin
+> uses `csharp-ls`, a community Roslyn LSP that only discovers the .NET SDK
+> MSBuild and cannot load .NET Framework 4.7.2 projects. Confirmed empirically:
+> csharp-ls silently fails on Skyline.sln, AutoQC.sln, and SkylineBatch.sln
+> (all .NET Framework). Microsoft.CodeAnalysis.LanguageServer (from VS Code's
+> C# extension) bundles both `BuildHost-net472` and `BuildHost-netcore`
+> runtimes and handles the full pwiz_tools mix.
+
+**Step 1 - Ensure VS Code with the C# extension is installed:**
+
+The Roslyn LSP server ships inside the VS Code C# extension. You do NOT
+need to use VS Code to edit code - this is just where the binary lives.
+
+```powershell
+# Check VS Code is on PATH
+code --version
+
+# If missing:
+winget install Microsoft.VisualStudioCode --accept-source-agreements --accept-package-agreements
+
+# Install the C# extension
+code --install-extension ms-dotnettools.csharp
+
+# Confirm the server binary exists (path uses whichever version is installed)
+Get-ChildItem "$env:USERPROFILE\.vscode\extensions\ms-dotnettools.csharp-*\.roslyn\Microsoft.CodeAnalysis.LanguageServer.exe"
+```
+
+The wrapper script (`ai/scripts/lsp/Invoke-RoslynLsp.ps1`) discovers the
+latest installed C# extension dynamically, so subsequent updates do not
+break the plugin.
+
+**Step 2 - Install the C# plugin:**
+
+In Claude Code (these are slash commands, not shell commands):
+
+```
+/plugin disable csharp-lsp@claude-plugins-official
+/plugin marketplace add C:/proj/ai/claude/plugins/pwiz-lsp
+/plugin install csharp-lsp@pwiz-lsp
+/reload-plugins
+```
+
+> **Note on slash paths:** `/plugin marketplace add` requires forward
+> slashes - backslashes get interpreted as escape characters and the path
+> fails. This is the same gotcha as the statusline path in Phase 1.12.
+
+**Step 3 - Verify:**
+
+In Claude Code, run `/plugin` and tab to the **Errors** tab. It should be
+empty. Then trigger an initial query (e.g., ask Claude to read any `.cs`
+file under `pwiz_tools/Skyline`). That spawns the LSP server lazily.
+
+While indexing is in progress, monitor the server from a PowerShell window:
+
+```powershell
+# Confirm the Roslyn LSP process is running and watching memory climb
+Get-Process Microsoft.CodeAnalysis.LanguageServer -ErrorAction SilentlyContinue |
+    Select-Object Id, @{L='WS_MB';E={[math]::Round($_.WorkingSet64/1MB,1)}}, CPU
+```
+
+Healthy signs: WorkingSet climbs from ~270 MB toward 1.3-3 GB, CPU
+ticks up. **A flat process at ~150 MB with no CPU growth indicates the
+server is stuck and queries will return empty** (this is the failure mode
+that csharp-ls exhibits on .NET Framework projects). If you see that pattern
+on the Roslyn LSP, check the VS Code C# extension is actually installed
+and the binary exists at the path shown by Step 2.
+
+Once memory plateaus (typically 2-5 minutes for a full pwiz_tools load),
+ask Claude: "find references to `SrmDocument` in Skyline." A working setup
+returns several thousand references across hundreds of files (compared to
+grep's noisy textual matches in comments and strings).
+
+**Sibling pwiz clones.** The plugin's `workspaceFolder` is hard-coded to
+`C:/proj/pwiz/pwiz_tools`, so only the primary pwiz clone gets LSP. For
+secondary clones (`skyline_26_1/`, etc.), either launch Claude Code from
+that clone's root or create a personal sibling plugin with its own
+`workspaceFolder`. Roslyn LSP's workspace is set via LSP `initialize`
+(not a CLI arg), so dynamic in-session switching is not feasible today.
+
+**Memory pressure.** Roslyn LSP on the full pwiz_tools workspace can sit at
+2-3 GB resident. If that becomes a problem, `/plugin disable csharp-lsp@pwiz-lsp`
+and fall back to grep until the LSP is needed again. A future iteration could
+narrow `workspaceFolder` to just `Skyline/` or just `OspreySharp/`.
+
+**Optional: Rust LSP for maccoss/osprey work.** Only if the developer is
+actively working on the Rust `osprey` implementation (a shrinking population
+as the team consolidates on OspreySharp). The setup:
+
+```powershell
+# In a terminal
+rustup component add rust-analyzer
+rust-analyzer --version
+```
+
+```
+# In Claude Code
+/plugin install rust-analyzer-lsp@claude-plugins-official
+/reload-plugins
+```
+
+If `rust-analyzer --version` errors with "Unknown binary 'rust-analyzer.exe'
+in official toolchain", the component is missing - re-run `rustup component
+add rust-analyzer`. The Cargo `bin\rust-analyzer.exe` shim is a rustup
+proxy and needs the actual component installed.
+
+For developers not touching `maccoss/osprey`, skip this entirely.
+
 ---
 
 ## Phase 8: Nightly Test Setup (Optional)

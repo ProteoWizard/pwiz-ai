@@ -1,0 +1,11 @@
+{
+  "name": "pwiz-lsp",
+  "owner": { "name": "ProteoWizard" },
+  "plugins": [
+    {
+      "name": "csharp-lsp",
+      "source": "./csharp-lsp",
+      "description": "csharp-ls with --solution sourced from a local sentinel file; works for any pwiz-area C# solution (Skyline.sln, OspreySharp.sln, others)"
+    }
+  ]
+}

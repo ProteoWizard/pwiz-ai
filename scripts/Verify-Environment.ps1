@@ -725,6 +725,152 @@ if ($Skip -contains "teamcity") {
     }
 }
 
+# ===========================================
+# LSP CODE INTELLIGENCE (new-machine-setup.md Phase 7.6)
+# ===========================================
+# C# checks are INFO-level (optional) for now - promote to MISSING once
+# the team decides Roslyn LSP is required.
+#
+# Rust checks (rustup, rust-analyzer, rust-analyzer-lsp plugin) are NICHE -
+# only relevant for the shrinking population still working on the maccoss/osprey
+# Rust implementation. Do NOT offer Rust setup proactively. Surface the rows so
+# someone who IS doing Rust work sees missing pieces, but the "INFO - skip
+# unless you work on maccoss/osprey" wording should keep an LLM assistant from
+# trying to install Rust on every machine.
+
+# VS Code (required only for the C# extension that bundles Roslyn LSP)
+Write-Host "Checking VS Code..." -ForegroundColor Gray
+if (Test-Command "code") {
+    try {
+        $codeVersion = & code --version 2>$null | Select-Object -First 1
+        if ($codeVersion -match '(\d+\.\d+\.\d+)') {
+            Add-Result "VS Code" "OK" $Matches[1] $true
+        } else {
+            Add-Result "VS Code" "OK" "installed" $true
+        }
+    } catch {
+        Add-Result "VS Code" "INFO" "optional - Run: winget install Microsoft.VisualStudioCode" $true
+    }
+} else {
+    Add-Result "VS Code" "INFO" "optional (needed for C# LSP) - Run: winget install Microsoft.VisualStudioCode" $true
+}
+
+# VS Code C# extension (ships Microsoft.CodeAnalysis.LanguageServer)
+Write-Host "Checking VS Code C# extension (Roslyn LSP host)..." -ForegroundColor Gray
+$vscodeExtRoot = Join-Path $env:USERPROFILE ".vscode\extensions"
+$csharpExtDir = $null
+$roslynServerExe = $null
+if (Test-Path $vscodeExtRoot) {
+    $csharpExtDir = Get-ChildItem $vscodeExtRoot -Directory -Filter 'ms-dotnettools.csharp-*' -ErrorAction SilentlyContinue |
+                    Sort-Object LastWriteTime -Descending |
+                    Select-Object -First 1
+    if ($csharpExtDir) {
+        $roslynServerExe = Join-Path $csharpExtDir.FullName ".roslyn\Microsoft.CodeAnalysis.LanguageServer.exe"
+    }
+}
+if ($csharpExtDir -and (Test-Path $roslynServerExe)) {
+    # Extract version (e.g., "ms-dotnettools.csharp-2.130.5-win32-x64" -> "2.130.5")
+    if ($csharpExtDir.Name -match 'ms-dotnettools\.csharp-(\d+\.\d+\.\d+)') {
+        Add-Result "VS Code C# extension (Roslyn LSP)" "OK" $Matches[1] $true
+    } else {
+        Add-Result "VS Code C# extension (Roslyn LSP)" "OK" "installed" $true
+    }
+} elseif ($csharpExtDir) {
+    Add-Result "VS Code C# extension (Roslyn LSP)" "WARN" "extension found but Roslyn server missing at $roslynServerExe - reinstall the extension" $false
+} else {
+    Add-Result "VS Code C# extension (Roslyn LSP)" "INFO" "optional (needed for C# LSP) - Run: code --install-extension ms-dotnettools.csharp" $true
+}
+
+# Claude Code plugin cache reflects install state. Marketplace dir presence ==
+# user ran "/plugin marketplace add". Plugin subdir presence == "/plugin install".
+$pluginCacheRoot = Join-Path $env:USERPROFILE ".claude\plugins\cache"
+
+# pwiz-lsp marketplace registered
+Write-Host "Checking pwiz-lsp marketplace registration..." -ForegroundColor Gray
+$pwizLspCache = Join-Path $pluginCacheRoot "pwiz-lsp"
+if (Test-Path $pwizLspCache) {
+    Add-Result "pwiz-lsp marketplace" "OK" "registered" $true
+} else {
+    Add-Result "pwiz-lsp marketplace" "INFO" "optional - In Claude Code: /plugin marketplace add C:/proj/ai/claude/plugins/pwiz-lsp" $true
+}
+
+# csharp-lsp@pwiz-lsp installed. Claude Code keeps old version dirs in the cache
+# when /plugin marketplace update bumps a plugin, so sort by version number (not
+# LastWriteTime) to report the highest installed version.
+Write-Host "Checking csharp-lsp@pwiz-lsp plugin..." -ForegroundColor Gray
+$csharpLspCache = Join-Path $pwizLspCache "csharp-lsp"
+if (Test-Path $csharpLspCache) {
+    $versionDirs = Get-ChildItem $csharpLspCache -Directory -ErrorAction SilentlyContinue |
+                   Where-Object { $_.Name -match '^\d+\.\d+\.\d+' }
+    $highest = $versionDirs | Sort-Object { [version]($_.Name -replace '^(\d+\.\d+\.\d+).*', '$1') } -Descending |
+               Select-Object -First 1
+    if ($highest) {
+        $extra = if ($versionDirs.Count -gt 1) { " ($($versionDirs.Count) versions cached)" } else { "" }
+        Add-Result "csharp-lsp@pwiz-lsp plugin" "OK" "v$($highest.Name)$extra" $true
+    } else {
+        Add-Result "csharp-lsp@pwiz-lsp plugin" "OK" "installed" $true
+    }
+} else {
+    Add-Result "csharp-lsp@pwiz-lsp plugin" "INFO" "optional - In Claude Code: /plugin install csharp-lsp@pwiz-lsp then /reload-plugins" $true
+}
+
+# --- Rust LSP path (only relevant for maccoss/osprey work) ---
+# These three checks are grouped at the end of the LSP section because they
+# apply to a shrinking minority of developers. The "skip unless..." wording
+# in the INFO message tells an LLM assistant not to proactively offer setup.
+
+# rustup toolchain
+Write-Host "Checking rustup (Rust toolchain)..." -ForegroundColor Gray
+if (Test-Command "rustup") {
+    try {
+        $rustupVersion = & rustup --version 2>$null | Select-Object -First 1
+        if ($rustupVersion -match 'rustup\s+(\d+\.\d+\.\d+)') {
+            Add-Result "rustup" "OK" $Matches[1] $true
+        } else {
+            Add-Result "rustup" "OK" "installed" $true
+        }
+    } catch {
+        Add-Result "rustup" "ERROR" "rustup found but version check failed" $false
+    }
+} else {
+    Add-Result "rustup" "INFO" "skip unless working on maccoss/osprey - Run: winget install Rustlang.Rustup" $true
+}
+
+# rust-analyzer component
+Write-Host "Checking rust-analyzer component..." -ForegroundColor Gray
+if (Test-Command "rustup") {
+    try {
+        $raCheck = & rust-analyzer --version 2>&1 | Out-String
+        if ($raCheck -match 'rust-analyzer\s+(\S+)') {
+            Add-Result "rust-analyzer (LSP)" "OK" $Matches[1] $true
+        } else {
+            Add-Result "rust-analyzer (LSP)" "INFO" "skip unless working on maccoss/osprey - Run: rustup component add rust-analyzer" $true
+        }
+    } catch {
+        Add-Result "rust-analyzer (LSP)" "INFO" "skip unless working on maccoss/osprey - Run: rustup component add rust-analyzer" $true
+    }
+} else {
+    Add-Result "rust-analyzer (LSP)" "INFO" "skip unless working on maccoss/osprey - install rustup first" $true
+}
+
+# rust-analyzer-lsp@claude-plugins-official installed
+Write-Host "Checking rust-analyzer-lsp@claude-plugins-official plugin..." -ForegroundColor Gray
+$raPluginCache = Join-Path $pluginCacheRoot "claude-plugins-official\rust-analyzer-lsp"
+if (Test-Path $raPluginCache) {
+    Add-Result "rust-analyzer-lsp plugin" "OK" "installed" $true
+} else {
+    Add-Result "rust-analyzer-lsp plugin" "INFO" "skip unless working on maccoss/osprey - In Claude Code: /plugin install rust-analyzer-lsp@claude-plugins-official" $true
+}
+
+# Leftover old-marketplace cache from previous "maccoss-lsp" naming
+Write-Host "Checking for leftover plugin caches..." -ForegroundColor Gray
+$staleMaccossCache = Join-Path $pluginCacheRoot "maccoss-lsp"
+if (Test-Path $staleMaccossCache) {
+    Add-Result "Leftover maccoss-lsp cache" "WARN" "delete with: Remove-Item -Recurse -Force '$staleMaccossCache'" $false
+} else {
+    Add-Result "Leftover plugin caches" "OK" "none" $true
+}
+
 # Print Summary
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "Environment Check Results" -ForegroundColor Cyan
