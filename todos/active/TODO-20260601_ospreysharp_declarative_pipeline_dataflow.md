@@ -1,7 +1,7 @@
 # TODO: Make the OspreySharp task dataflow explicit / lazy-rehydrate / driver-owned
 
-**Status**: Active — PR-A1 opened (pwiz #4264, parity-verified); full init-only immutability
-deferred. See Progress.
+**Status**: Active — PR-A1 MERGED (pwiz #4264 → `b2d4072ff1`, 2026-06-03); init-only
+immutability deferred; PR-B (dataflow) + optional PR-C remain. See Progress.
 **Priority**: Medium-strategic (no defect; the next-dominant structural issue once the
 mega-methods are gone)
 **Complexity**: Large (3-PR core; touches the task framework + every task + the resume/worker
@@ -19,8 +19,8 @@ project; the 4 concrete tasks + `AbstractScoringTask` + `AnalysisPipeline` live 
 
 Splitting "freeze config" (partner refactor #2) into verifiable slices, each byte-identical
 (unit: 352 tests + inspection green; cross-impl e2e bit-parity at 1e-9 on Stellar 3-file via
-`Compare-EndToEnd-Crossimpl -Files All -SkipRust`). **PR-A1 shipped as pwiz #4264** with the
-three commits below:
+`Compare-EndToEnd-Crossimpl -Files All -SkipRust`). **PR-A1 MERGED as pwiz #4264** (squash
+`b2d4072ff1`, 2026-06-03) with the three commits below:
 
 - **`a217284b79`** — extracted the SHA identity hashing (`SearchParameterHash` /
   `LibraryIdentityHash` / `ReconciliationParameterHash[ForStems]` + `EscapeForRustDebug`)
@@ -52,6 +52,17 @@ C# run (proven: fresh 3-file Rust vs 3-file C# = OVERALL PASS at 1e-9; C# branch
 also byte-identical). A stale-reference guard now fails the gate fast on a file-set mismatch
 (ai commit `5c1cee7`), and the cached Stellar reference is regenerated to 3-file. See
 `feedback_ospreysharp_csharp_regression_gate`.
+
+### 2026-06-03 — PR-A1 merged
+
+PR #4264 merged (squash `b2d4072ff1`). Shipped the `SearchIdentity` responsibility split + the
+`RunPlan` seam (`EffectiveFileParallelism` moved off `OspreyConfig`), all parity-verified (352
+tests + inspection; cross-impl 1e-9 on Stellar 3-file; C#-vs-C# byte-identical). Copilot (2 doc
+nits) + fresh-context self-review (clean — byte-identical hash compare + Rust cross-check) both
+addressed. **Deferred:** full `OspreyConfig` init-only immutability (the per-file
+`FragmentTolerance`/`NThreads` load-bearing in-place propagation — see above). This umbrella
+TODO stays Active for **PR-B** (the lazy-rehydrate / `IsIncluded` dataflow change) and the
+optional **PR-C** (retire `GetTask<T>()`).
 
 ## Why this exists (and why it's iteration N, not a one-off)
 
