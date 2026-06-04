@@ -1,7 +1,9 @@
 # TODO: Make the OspreySharp task dataflow explicit / lazy-rehydrate / driver-owned
 
-**Status**: Active — PR-A1 MERGED (pwiz #4264 → `b2d4072ff1`, 2026-06-03); init-only
-immutability deferred; PR-B (dataflow) + optional PR-C remain. See Progress.
+**Status**: Active — PR-A1 MERGED (pwiz #4264 → `b2d4072ff1`); PR-B (dataflow) COMPLETE on
+branch `Skyline/work/20260603_ospreysharp_dataflow` (B0–B6, byte-identical Stellar+Astral),
+pending PR open/review; PR-C (byproduct context + `_runOrHydrated` unification) remains. See
+Progress.
 **Priority**: Medium-strategic (no defect; the next-dominant structural issue once the
 mega-methods are gone)
 **Complexity**: Large (3-PR core; touches the task framework + every task + the resume/worker
@@ -63,6 +65,55 @@ addressed. **Deferred:** full `OspreyConfig` init-only immutability (the per-fil
 `FragmentTolerance`/`NThreads` load-bearing in-place propagation — see above). This umbrella
 TODO stays Active for **PR-B** (the lazy-rehydrate / `IsIncluded` dataflow change) and the
 optional **PR-C** (retire `GetTask<T>()`).
+
+### 2026-06-03 — PR-B complete (branch `Skyline/work/20260603_ospreysharp_dataflow`)
+
+The headline dataflow change. The implicit, side-effecting service-locator dataflow
+(`ctx.GetTask<T>()` + `EnsureHydrated→Run` getters + a 5-branch `DeriveStartAt/StopAfter`
+range loop) is now explicit and driver-owned. Every sub-step verified byte-identical to
+master (worker-mode strict-rehydration gate net8.0 + `Compare-EndToEnd` 1e-9 + 353 tests):
+
+- **B0** (ai repo `a85fb6e`) — restored `Compare-Stage7-Rehydration-Strict-CSharp.ps1` from
+  archive as PR-B's oracle; parametrized `-Framework` (default **net8.0**, the canonical
+  runtime — see `project_ospreysharp_runtime_parity`); proven green on master both runtimes.
+- **B1** `4e1c474a80` — additive `PipelineContext.Demand<T>`/`CanRehydrate` + `OspreyTask.Rehydrate`.
+- **B2a–d** `661882e3d4`/`63813ef28f`/`e739487e2f`/`4a1aaafe1d` — split each task's `Run` into
+  compute-only `Run` + disk-load `Rehydrate` (PerFileScoring join-only load; FirstJoin Option-B
+  bundle adopt; PerFileRescore `--join-at-pass=2` short-circuit; MergeNode no-op).
+- **B3** `d28c96f444` — producer getters made pure; all 15 cross-task `GetTask` sites routed
+  through `Demand`; `EnsureHydrated`/`RunOrHydrate` deleted (note: died at B3, not B6 — once
+  getters stop calling `EnsureHydrated` it goes unreferenced and inspection flags it).
+- **B4** `efab6c8974` — task-owned `OspreyTask.IsIncluded` membership predicate + an oracle
+  unit test; synthesize `InputFiles` at pipeline entry (the documented mutation-contract
+  location). The oracle caught **real bugs in this TODO's original IsIncluded pseudocode**
+  (its `FirstJoin: !inputs` wrongly included `--no-join`; its `PerFileRescore` third term
+  lacked `&& !StopAfterStage5`, wrongly including `--join-only`) — the committed matrix is the
+  corrected one.
+- **B5** `5ed2020851` — flipped the driver to `Where(t => t.IsIncluded(ctx))` +
+  `CanRehydrate`-skip; FirstJoin `--join-only` success returns `true` (stop is now a membership
+  fact). Validated byte-identical on **Stellar AND Astral** worker-mode + mode-6 fix.
+- **B6** `67d6d70f73` — deleted the dead surface: `StartAt/StopAfter` props + 2nd `PipelineContext`
+  ctor, `Derive*Task` (oracle rewritten to an explicit truth table), the `Rehydrate=Run` base
+  shim (→ abstract); privatized `GetTask`.
+
+**Two findings worth carrying forward:**
+1. **Mode-6 regression found + fixed.** `--join-at-pass=1 --input-scores` (single-node full
+   Stage 5-8, no other join modifier) was silently broken from B2a (driver called
+   PerFileScoring's compute-only `Run` for the StartAt task; pre-split the monolithic `Run`
+   dispatched the join-only load internally). The worker-mode gate never covered it. B5's
+   `IsIncluded` fixes it (PerFileScoring excluded → `Demand`-rehydrated). Verified: score
+   Stage 1-4 then mode 6 → blib byte-size-identical to straight-through. Mode is vestigial
+   (user-confirmed) vs the staged worker chain. **Gate coverage gap to close: add a mode-6
+   smoke to the strict-rehydration gate.**
+2. **`_runOrHydrated` is NOT dead** (plan had it slated for B6 removal). It coordinates the
+   driver-`Run` path with the `Demand`-`Rehydrate` path (without it `Demand` would re-execute
+   `Rehydrate` after the driver already ran a task — e.g. wrongly disk-loading in
+   straight-through). Removing it cleanly needs a guard-unification refactor
+   (mark-materialized-in-`RunTask`); folded into **PR-C** scope rather than B6.
+
+**PR-C** is now well-shaped: the byproduct-context model (user's `PeakScoringContext`-style
+`AddInfo<T>`/`GetInfo<T>` idea — see `project_ospreysharp_byproduct_context_prc`), which also
+subsumes the `_runOrHydrated` guard-unification and the `GetTask` retirement.
 
 ## Why this exists (and why it's iteration N, not a one-off)
 
