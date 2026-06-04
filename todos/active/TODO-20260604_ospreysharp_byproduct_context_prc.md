@@ -1,7 +1,7 @@
 # TODO: PR-C — typed byproduct context (retire GetTask/_runOrHydrated)
 
-**Status**: Active — not started. Successor to PR-B (#4266, the declarative-dataflow
-refactor). Start in a FRESH session.
+**Status**: PR open — [#4267](https://github.com/ProteoWizard/pwiz/pull/4267) (in review).
+Successor to PR-B (#4266, the declarative-dataflow refactor).
 **Priority**: Medium-strategic (no defect; the next OOP slice once PR-B's explicit dataflow
 lands). This is iteration N+1 of the recurring OspreySharp OOP-review program.
 **Branch (to create)**: `Skyline/work/<YYYYMMDD>_ospreysharp_byproduct_context` in `C:\proj\pwiz`.
@@ -88,6 +88,79 @@ Needs its own parity-gated fix + a straight-through-resume smoke (the gate cover
 - Memories to read first: `project_ospreysharp_byproduct_context_prc`,
   `project_ospreysharp_runtime_parity`, `feedback_bit_parity_tolerance`,
   `feedback_ospreysharp_csharp_regression_gate`, `project_osprey_organic_growth_needs_iterative_oop_review`.
+
+## Progress Log
+
+### 2026-06-04 — C0–C7 implemented on branch `Skyline/work/20260604_ospreysharp_byproduct_context`
+
+Executed the full plan, one parity-gated commit per concern. Branch off the
+#4266 merge (`23d196a762`).
+
+- **C0** — Re-confirmed the baseline on the fresh tree: build + 353 tests +
+  inspection; worker-mode strict bit-parity (Stellar net8.0, Stage-5 truth hash
+  `0C353A72CBCC` reproduced); Compare-EndToEnd 1e-9 (59768). No code.
+- **C1** (`2ddec933d4`) — `Publish<T>`/`TryGet<T>`/`Get<T>` on `PipelineContext`
+  (modeled on Skyline `PeakScoringContext.AddInfo`/`TryGetInfo`) + a
+  byproduct→producer registry built from a new `OspreyTask.Publishes`. `Get<T>`
+  resolves a cache miss by demanding the registered producer (whose `Rehydrate`
+  publishes). `Demand<T>` refactored to a runtime-`Type` core (`DemandByType`)
+  the registry shares. **The registry is the answer to "by-byproduct lookup, so
+  which class do I rehydrate?"** — the named-byproduct → producer-task map, which
+  `PeakScoringContext` never needed (it has no skipped producers / disk rehydrate).
+- **C2+C3** (`9c2c8f6235`) — ~13 named byproduct purpose types (collision: two are
+  `IReadOnlyDictionary<string,RTCalibration>`). **Design refinement (Brendan's
+  idea):** the one mutable shared buffer became a three-milestone state hierarchy
+  — abstract `PerFileEntries` base + `ScoredEntries` → `CompactedEntries` →
+  `RescoredEntries`, each published once by its single producing task over the
+  same no-copy backing list. This **dissolved the registry exception entirely**
+  (the buffer now resolves uniformly; my first cut had left it out of the
+  registry and used explicit demand). Producers `Publish` on both Run and
+  Rehydrate paths and declare `Publishes`. Additive; byte-identical.
+- **C4+C5** (`434b4a5e22`) — Switched all ~15 consumer sites to `ctx.Get<T>()`;
+  the milestone type now *selects the producer*: FirstJoin.Run reads
+  `ScoredEntries`, PerFileRescore.Run reads `CompactedEntries` (triggers
+  FirstJoin), MergeNode reads `RescoredEntries` (triggers PerFileRescore — the
+  merge-mode materialization), and PerFileRescore's merge-mode Rehydrate reads
+  `ScoredEntries` so it does NOT materialize FirstJoin (the "merge mode must not
+  re-run Stage 5" invariant is now a type choice, not a comment). Deleted the
+  dead surface: FirstJoin's four dual-source getters (`_didPlan ? computed :
+  bundle.X` collapse into one slot each), PerFileScoring's six getters,
+  PerFileRescore's `GetPerFileEntries`, `PipelineContext.GetTask<T>`.
+- **C6** (`acf687b427`) — Retired per-task `_runOrHydrated`: the driver now calls
+  `ctx.MarkMaterialized(task)` after each `task.Run`, so `_materialized` is the
+  single guard coordinating the driver-Run and lazy-Rehydrate paths.
+- **C7** — Folded-in PR-B deferrals: (1) `DemandByType` throws
+  `RehydrateFailedException` when a lazily-driven Rehydrate fails *with
+  ExitCode != 0* (surfaces previously-silent worker-materialization failures;
+  success-stops with ExitCode 0 stay benign — verified against `FinalizeAndCheck`
+  publish-before-stop); (2) comment in `FirstJoin.IsIncluded` documenting the
+  CLI-enforced `StopAfterStage5 ⟹ InputScores` invariant, pinned by the existing
+  `ProgramTests.TestValidateJoinOnlyRequiresInputScores`; (3) new
+  `ByproductContextTest` (3 tests) pinning the throw/benign-stop discriminator
+  and publish-once. 356 tests total.
+
+Each behavioral step gated green: build + tests + inspection, worker-mode strict
+(Stellar), Compare-EndToEnd 1e-9.
+
+### 2026-06-04 — Final validation + PR opened (#4267)
+
+- **Correctness**: worker-mode strict bit-parity (Stellar net8.0, Stage-5 `0C353A72CBCC`) +
+  Compare-EndToEnd 1e-9 (59768) green on the clean-rebuilt branch.
+- **A rare pre-existing flake surfaced** during the first final-validation run: a one-off
+  heap-corruption-class `InvalidCastException` in the Percolator→protein-FDR path (code
+  UNCHANGED by PR-C). Clean PR-C was **0/20** on the exact failing `--join-only` command; the
+  single failure was on an incrementally-built binary that then *passed* on re-run. User call:
+  accept as a pre-existing rare flake, file separately → filed
+  `ai/todos/backlog/TODO-ospreysharp_percolator_proteinfdr_rare_heap_corruption.md`. (Lesson:
+  I over-reached calling it a "race"; corrected to "non-deterministic, mechanism unknown" once
+  investigation showed the parallel infra is thread-safe.)
+- **Perf gate** (single-run Astral side-by-side, C#, same machine): PR-C **1057.9s** vs master
+  HEAD **1064.8s** — no regression (PR-C marginally faster, incl. stage6 the no-copy buffer).
+  A Rust anchor (unchanged) confirmed the environment was stable (1464.7s vs published 1466s).
+  Side-finding: a ~9% C# `stage1to4` regression from the *earlier* PR-A/B sprint (not PR-C) →
+  filed `ai/todos/backlog/TODO-ospreysharp_sprint_stage1to4_perf_regression.md`.
+- **PR opened**: [#4267](https://github.com/ProteoWizard/pwiz/pull/4267) — 5 commits (C1, C2+C3,
+  C4+C5, C6, C7) off the #4266 merge.
 
 ## Related
 - `ai/todos/active/TODO-20260601_ospreysharp_declarative_pipeline_dataflow.md` (PR-A/B umbrella)
