@@ -743,10 +743,10 @@ if (Test-Command "code") {
             Add-Result "VS Code" "OK" "installed" $true
         }
     } catch {
-        Add-Result "VS Code" "INFO" "optional - Run: winget install Microsoft.VisualStudioCode" $true
+        Add-Result "VS Code" "INFO" "needed only for C# LSP (not part of normal Skyline dev) - Run: winget install Microsoft.VisualStudioCode" $true
     }
 } else {
-    Add-Result "VS Code" "INFO" "optional (needed for C# LSP) - Run: winget install Microsoft.VisualStudioCode" $true
+    Add-Result "VS Code" "INFO" "needed only for C# LSP, NOT normal Skyline dev (VS is the IDE). Skip unless setting up LSP. To set up: winget install Microsoft.VisualStudioCode, then code --install-extension ms-dotnettools.csharp" $true
 }
 
 # VS Code C# extension (ships Microsoft.CodeAnalysis.LanguageServer)
@@ -772,7 +772,48 @@ if ($csharpExtDir -and (Test-Path $roslynServerExe)) {
 } elseif ($csharpExtDir) {
     Add-Result "VS Code C# extension (Roslyn LSP)" "WARN" "extension found but Roslyn server missing at $roslynServerExe - reinstall the extension" $false
 } else {
-    Add-Result "VS Code C# extension (Roslyn LSP)" "INFO" "optional (needed for C# LSP) - Run: code --install-extension ms-dotnettools.csharp" $true
+    Add-Result "VS Code C# extension (Roslyn LSP)" "INFO" "needed for C# LSP - requires VS Code first, then: code --install-extension ms-dotnettools.csharp" $true
+}
+
+# .NET runtime compatibility for the Roslyn LSP server.
+# The server's runtimeconfig.json pins a .NET major version (e.g. net10.0 for
+# C# extension 2.120.x). If no installed runtime satisfies it, the LSP host
+# crashes immediately with exit code 150 - the single most confusing LSP setup
+# failure (an installed-but-crashing server looks like a hang). Catch it here
+# with an actionable message. WARN (not MISSING) since LSP is optional.
+if ($csharpExtDir -and (Test-Path $roslynServerExe)) {
+    Write-Host "Checking .NET runtime for Roslyn LSP..." -ForegroundColor Gray
+    $rtConfig = Join-Path $csharpExtDir.FullName ".roslyn\Microsoft.CodeAnalysis.LanguageServer.runtimeconfig.json"
+    $requiredMajor = $null
+    if (Test-Path $rtConfig) {
+        try {
+            $rt = Get-Content $rtConfig -Raw | ConvertFrom-Json
+            $verStr = $rt.runtimeOptions.framework.version
+            if (-not $verStr) { $verStr = ($rt.runtimeOptions.frameworks | Select-Object -First 1).version }
+            if ($verStr -match '^(\d+)\.') { $requiredMajor = [int]$Matches[1] }
+            elseif ($rt.runtimeOptions.tfm -match 'net(\d+)\.') { $requiredMajor = [int]$Matches[1] }
+        } catch { }
+    }
+    if (-not $requiredMajor) {
+        Add-Result ".NET runtime for Roslyn LSP" "WARN" "could not read required version from runtimeconfig.json - verify .NET runtime manually" $false
+    } else {
+        $installedMajors = @()
+        if (Test-Command "dotnet") {
+            try {
+                $installedMajors = & dotnet --list-runtimes 2>$null |
+                    Where-Object { $_ -match '^Microsoft\.NETCore\.App\s+\d+\.' } |
+                    ForEach-Object { [int]($_ -replace '^Microsoft\.NETCore\.App\s+(\d+)\..*', '$1') } |
+                    Sort-Object -Unique
+            } catch { }
+        }
+        $maxInstalled = ($installedMajors | Measure-Object -Maximum).Maximum
+        if ($installedMajors -and $maxInstalled -ge $requiredMajor) {
+            Add-Result ".NET runtime for Roslyn LSP" "OK" "net$requiredMajor required, .NET $maxInstalled installed" $true
+        } else {
+            $have = if ($installedMajors) { ".NET $maxInstalled found" } else { "none detected" }
+            Add-Result ".NET runtime for Roslyn LSP" "WARN" "Roslyn LSP needs .NET $requiredMajor runtime ($have) - without it the server crashes with exit code 150. Run: winget install Microsoft.DotNet.Runtime.$requiredMajor (VS 2026 also installs .NET 10)" $false
+        }
+    }
 }
 
 # Claude Code plugin cache reflects install state. Marketplace dir presence ==
@@ -806,6 +847,27 @@ if (Test-Path $csharpLspCache) {
     }
 } else {
     Add-Result "csharp-lsp@pwiz-lsp plugin" "INFO" "optional - In Claude Code: /plugin install csharp-lsp@pwiz-lsp then /reload-plugins" $true
+}
+
+# Conflict: two C# LSP plugins installed will fight over .cs files. The official
+# csharp-lsp@claude-plugins-official (csharp-ls) must be disabled before using
+# csharp-lsp@pwiz-lsp. Only meaningful once the pwiz plugin is installed, so the
+# row is gated on its presence to avoid noise on machines not using C# LSP.
+if (Test-Path $csharpLspCache) {
+    Write-Host "Checking for conflicting C# LSP plugins..." -ForegroundColor Gray
+    $installedPluginsJson = Join-Path $env:USERPROFILE ".claude\plugins\installed_plugins.json"
+    $officialPresent = $false
+    if (Test-Path $installedPluginsJson) {
+        try {
+            $ip = Get-Content $installedPluginsJson -Raw | ConvertFrom-Json
+            $officialPresent = ($ip.plugins.PSObject.Properties.Name) -contains 'csharp-lsp@claude-plugins-official'
+        } catch { }
+    }
+    if ($officialPresent) {
+        Add-Result "C# LSP plugin conflict" "WARN" "both csharp-lsp@pwiz-lsp and csharp-lsp@claude-plugins-official are installed - they fight over .cs files. Run: /plugin disable csharp-lsp@claude-plugins-official" $false
+    } else {
+        Add-Result "C# LSP plugin conflict" "OK" "no conflicting C# LSP plugin" $true
+    }
 }
 
 # --- Rust LSP path (only relevant for maccoss/osprey work) ---

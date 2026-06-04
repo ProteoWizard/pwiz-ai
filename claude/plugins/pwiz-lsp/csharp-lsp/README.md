@@ -123,3 +123,23 @@ installing this:
 ```
 
 Two C# LSP servers competing on `.cs` would fight each other.
+
+## Updating the plugin (cache staleness)
+
+`/plugin install` copies the plugin into a **cache** under
+`~/.claude/plugins/cache/pwiz-lsp/csharp-lsp/<version>/`, and Claude Code runs the
+LSP server from that cached copy — NOT from the source in this repo. So editing
+`plugin.json` here (or pulling new pwiz-ai commits that change it) does **not**
+affect the running plugin until you refresh the cache:
+
+```
+/plugin marketplace update pwiz-lsp
+/plugin install csharp-lsp@pwiz-lsp
+/reload-plugins
+```
+
+This is a real trap: a `git pull` that bumps the plugin version looks applied but
+isn't until the cache is refreshed. A fresh `/plugin install` on a new machine
+always gets the latest version, so this only bites machines that installed an
+earlier version. (`Verify-Environment.ps1` reports the cached version, so compare
+it against this plugin's `version` in `plugin.json` if in doubt.)
