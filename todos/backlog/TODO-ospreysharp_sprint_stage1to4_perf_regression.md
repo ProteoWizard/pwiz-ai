@@ -93,6 +93,38 @@ going forward for the closest match to the original capture conditions.**
 4. If recoverable, **re-instate a stage1to4-watching perf A/B gate** (like #4250's Stellar 3-repeat)
    so future work measures against a pinned, reproducible baseline.
 
+## Per-stage breakdown (2026-06-04) — the resolution target is stage1to4 only
+
+Published vs today, with Rust as the change-immune control and the C#/Rust ratio per stage
+(C# = #4246 3-run median; Rust = today single-run, which reproduced the published total to 0.1%):
+
+| stage     | C# pub | C# today | C# Δ        | Rust pub | Rust today | Rust Δ      | C#/Rust pub | C#/Rust today |
+|-----------|-------:|---------:|-------------|---------:|-----------:|-------------|------------:|--------------:|
+| stage1to4 | 437    | 488      | **+51 (+12%)** | 549   | 546.6      | −2 (flat)   | 0.80x       | **0.89x**     |
+| stage5    | 74     | 68.1     | −6 (−8%)    | 102      | 89.5       | −12         | 0.73x       | 0.76x         |
+| stage6    | 295    | 345.9    | +51 (+17%)  | 478      | 566.3      | +88 (+18%)  | 0.62x       | 0.61x         |
+| stage7    | 150    | 134.8    | −15 (−10%)  | 194      | 181.6      | −12         | 0.77x       | 0.74x         |
+| blib      | 9      | 12.1     | +3          | 113      | 72.6       | −40         | 0.08x       | 0.17x         |
+| **total** | **970**| **1053.9**| **+84 (+9%)**| **1466**| **1464.7** | −1 (flat)   | **0.66x**   | **0.72x**     |
+
+The +84s total splits into two stages with DIFFERENT causes:
+
+1. **stage6 +51s — environmental, not a C# problem.** Rust is up the same ~18% here; the C#/Rust
+   ratio held (0.62 → 0.61). Shared with Rust, washes out of the comparison. C# keeps its big lead.
+2. **stage1to4 +51s — C#-specific, the real target.** Rust is FLAT here (549 → 546.6), but C# is
+   +12% at FIXED source (#4246, which predates the scoring decompositions — so not the refactors
+   either). Same runtime (8.0.27), Rust-controlled environment, low variance.
+
+**Is C# notably slower than Rust? No.** C# is still faster than Rust in EVERY stage today and 28%
+faster overall (0.72x). The only erosion is stage1to4, where C#'s lead thinned from 0.80x to 0.89x
+(still faster, by less). The entire total-ratio erosion (0.66 → 0.72) traces to that one stage.
+
+**Resolution target = stage1to4 (per-file scoring) only.** Same source, same runtime, Rust flat,
+~+51s. Runtime patch ruled out. Live hypothesis: build-time (no 8.0 SDK installed now → net8.0 is
+built by the .NET 10 SDK; different ReadyToRun / Dynamic-PGO / IL). Clean test: build #4246 with an
+8.0 SDK and re-measure stage1to4 — if it drops toward 437, that's the cause and it's recoverable.
+**To be pursued in a fresh session.**
+
 ## Process lesson
 
 The perf gate lapsed after #4250 (the #4254–#4259 scoring decompositions + #4259's explicit
