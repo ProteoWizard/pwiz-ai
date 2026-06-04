@@ -10,7 +10,30 @@
             "args": [
               "-NoProfile",
               "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/Deny-DirectBuildTest.ps1"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-File",
               "${CLAUDE_PROJECT_DIR}/.claude/hooks/Inject-VersionControlSkill.ps1"
+            ]
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/Inject-PathBasedSkill.ps1"
             ]
           }
         ]
