@@ -870,24 +870,55 @@ Get-Process Microsoft.CodeAnalysis.LanguageServer -ErrorAction SilentlyContinue 
     Select-Object Id, @{L='WS_MB';E={[math]::Round($_.WorkingSet64/1MB,1)}}, CPU
 ```
 
-Healthy signs: WorkingSet climbs from ~270 MB toward 1.3-3 GB, CPU
-ticks up. **A flat process at ~150 MB with no CPU growth indicates the
-server is stuck and queries will return empty** (this is the failure mode
-that csharp-ls exhibits on .NET Framework projects). If you see that pattern
-on the Roslyn LSP, check the VS Code C# extension is actually installed
-and the binary exists at the path shown by Step 2.
+Process metrics are **ambiguous on their own** — read them carefully:
 
-Once memory plateaus (typically 2-5 minutes for a full pwiz_tools load),
-ask Claude: "find references to `SrmDocument` in Skyline." A working setup
-returns several thousand references across hundreds of files (compared to
-grep's noisy textual matches in comments and strings).
+- **Still indexing:** WorkingSet climbs slowly toward 1.3-3 GB and CPU ticks
+  up. First-load indexing of the full `pwiz_tools` workspace can take **tens of
+  minutes**, not the "couple of minutes" you might expect. Low-but-nonzero CPU
+  growth over a long stretch is normal.
+- **Done indexing (healthy):** a **flat plateau at 1.3-3 GB with CPU no longer
+  climbing means the server is idle and ready** — NOT stuck. Do not mistake a
+  high, stable memory plateau for a hang.
+- **Genuinely stuck:** the process *starts* at ~150-270 MB and **never rises**,
+  with no CPU growth from the outset (the failure mode csharp-ls exhibits on
+  .NET Framework projects). If you see that on the Roslyn LSP, check the VS Code
+  C# extension is installed and the binary exists at the path from Step 2, and
+  that a compatible .NET runtime is installed (see the runtime note below).
 
-**Sibling pwiz clones.** The plugin's `workspaceFolder` is hard-coded to
-`C:/proj/pwiz/pwiz_tools`, so only the primary pwiz clone gets LSP. For
-secondary clones (`skyline_26_1/`, etc.), either launch Claude Code from
-that clone's root or create a personal sibling plugin with its own
-`workspaceFolder`. Roslyn LSP's workspace is set via LSP `initialize`
-(not a CLI arg), so dynamic in-session switching is not feasible today.
+**The definitive readiness test is a query, not a metric.** Ask Claude: "find
+references to `SrmDocument` in Skyline." A fully-loaded workspace returns
+**several thousand references across hundreds of files** (vs. grep's noisy
+textual matches in comments and strings). If the *first* query right after
+startup returns only same-file hits (e.g. ~100 references all inside
+`SrmDocument.cs`), the workspace is still loading — that is a partial index,
+not a misconfiguration. Wait and re-run; do not start "fixing" the config.
+
+> **Known issue — .NET runtime / exit code 150.** The Roslyn server's
+> `runtimeconfig.json` pins a specific .NET major version (e.g. C# extension
+> 2.120.x requires .NET 10). If that runtime is not installed, the LSP host
+> crashes immediately with **exit code 150** ("no compatible framework found"),
+> visible in `/plugin` → Errors. Fix by installing the matching runtime
+> (`winget install Microsoft.DotNet.Runtime.10`, or the SDK) — installing VS 2026
+> also brings .NET 10. After installing, `/reload-plugins`. Check the required
+> version with:
+> ```powershell
+> Get-Content "$env:USERPROFILE\.vscode\extensions\ms-dotnettools.csharp-*\.roslyn\Microsoft.CodeAnalysis.LanguageServer.runtimeconfig.json"
+> ```
+
+**Path independence.** The plugin's `workspaceFolder` and launcher-script path
+are anchored on `${CLAUDE_PROJECT_DIR}` (the directory Claude Code was launched
+from), not a hard-coded `C:/proj`. So the plugin works unchanged for any project
+root — `C:\proj`, `D:\Dev`, `E:\repos` — as long as you launch Claude Code from
+that root (which the root `CLAUDE.md` already requires) and the layout is sibling
+mode (`ai/` and `pwiz/` side by side under the root). No per-developer editing of
+`plugin.json` is needed.
+
+**Sibling pwiz clones.** The scope (`${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools`)
+covers the primary `pwiz/` clone only. For secondary clones (`skyline_26_1/`,
+etc.), either launch Claude Code from that clone's root or create a personal
+sibling plugin with its own `workspaceFolder`. Roslyn LSP's workspace is set via
+LSP `initialize` (not a CLI arg), so dynamic in-session switching is not feasible
+today.
 
 **Memory pressure.** Roslyn LSP on the full pwiz_tools workspace can sit at
 2-3 GB resident. If that becomes a problem, `/plugin disable csharp-lsp@pwiz-lsp`

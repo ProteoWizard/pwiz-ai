@@ -63,22 +63,32 @@ param(
     [string]$Dataset = 'Stellar',
     [string]$TestBaseDir,
     [switch]$Force,
-    [int]$Threads = 16
+    [int]$Threads = 16,
+    # Target runtime to exercise. Defaults to net8.0 to match the
+    # active cross-impl gate (Compare-EndToEnd-Crossimpl.ps1) and the
+    # bulk of recent Windows/WSL validation; net472 available as a
+    # cross-runtime check (a divergence between the two localizes a
+    # TFM-specific bit-parity slip rather than a dataflow regression).
+    [ValidateSet('net8.0','net472')]
+    [string]$Framework = 'net8.0'
 )
 
 $ErrorActionPreference = 'Stop'
-$scriptDir = Split-Path -Parent $PSCommandPath          # .../Compare/archive
-$compareDir = Split-Path -Parent $scriptDir             # .../Compare
+$compareDir = Split-Path -Parent $PSCommandPath         # .../Compare
 $ospreyDir  = Split-Path -Parent $compareDir            # .../OspreySharp
 . (Join-Path $ospreyDir 'Dataset-Config.ps1')
 
-$projRoot = (Resolve-Path (Join-Path $ospreyDir '..\..\..')).Path
-$ospreyShExe = Join-Path $projRoot 'pwiz\pwiz_tools\OspreySharp\OspreySharp\bin\x64\Release\net472\OspreySharp.exe'
+# Resolve the exe via Dataset-Config so net8.0/net472 selection stays in
+# one place. On Windows the net8.0 build emits an apphost OspreySharp.exe,
+# so the same '& $exe @args' invocation works for both runtimes.
+$ospreyShExe = Get-OspreySharpExe -Framework $Framework
 if (-not (Test-Path $ospreyShExe)) {
-    Write-Host "OspreySharp.exe not found at $ospreyShExe -- build first:" -ForegroundColor Red
+    Write-Host "OspreySharp.exe ($Framework) not found at $ospreyShExe -- build first:" -ForegroundColor Red
     exit 2
 }
-$parquetDiffPy = Join-Path $scriptDir 'parquet_diff.py'
+# parquet_diff.py remains in the archive/ bisection-utility folder; the
+# promoted gate references it there rather than duplicating it.
+$parquetDiffPy = Join-Path $compareDir 'archive\parquet_diff.py'
 if (-not (Test-Path $parquetDiffPy)) {
     Write-Host "parquet_diff.py not found at $parquetDiffPy" -ForegroundColor Red
     exit 2
@@ -96,7 +106,7 @@ $libraryName = $ds.Library
 $resolution = $ds.Resolution
 $datasetRoot = $ds.TestDir
 
-$rootDir   = Join-Path $datasetRoot "_strict_rehydration_csharp"
+$rootDir   = Join-Path $datasetRoot "_strict_rehydration_csharp_$Framework"
 $truthDir  = Join-Path $rootDir "phase0_truth"
 $ph1Dir    = Join-Path $rootDir "phase1_raw_workers"
 $ph2Dir    = Join-Path $rootDir "phase2_first_join"
@@ -194,7 +204,7 @@ function Compare-ReconciledParquet {
 
 Write-Host ""
 Write-Host "=== Compare-Stage7-Rehydration-Strict-CSharp (stage-by-stage bisection) ===" -ForegroundColor Cyan
-Write-Host ("Dataset: {0} ({1} files)" -f $Dataset, $mzmls.Count)
+Write-Host ("Dataset: {0} ({1} files); runtime: {2}" -f $Dataset, $mzmls.Count, $Framework)
 Write-Host ("Workdir: {0}" -f $rootDir)
 Write-Host ""
 
@@ -416,7 +426,7 @@ $stage7Ok = $precursorOk -and $stage7DumpOk -and $blibOk
 
 Write-Host ""
 if ($stage7Ok) {
-    Write-Host "OVERALL: PASS  -- C# in-memory and C# HPC chain are bit-parity on $Dataset $($mzmls.Count)-file at every gated stage boundary" -ForegroundColor Green
+    Write-Host "OVERALL: PASS  -- C# in-memory and C# HPC chain are bit-parity on $Dataset $($mzmls.Count)-file ($Framework) at every gated stage boundary" -ForegroundColor Green
     exit 0
 } else {
     Write-Host "Stage 7 boundary: FAIL  -- divergence localized to Stage 7 (Stages 5+6 matched)" -ForegroundColor Red

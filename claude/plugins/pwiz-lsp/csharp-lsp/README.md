@@ -34,8 +34,24 @@ LSP binary.
 
 ## Scope
 
-The plugin's `workspaceFolder` is set to `C:/proj/pwiz/pwiz_tools`. The server
-indexes:
+The plugin's `workspaceFolder` is set to `${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools`,
+and the launcher script is referenced as
+`${CLAUDE_PROJECT_DIR}/ai/scripts/lsp/Invoke-RoslynLsp.ps1`.
+`${CLAUDE_PROJECT_DIR}` is the directory Claude Code was launched from, which in
+sibling mode is the project root containing both `ai/` and `pwiz/`. This makes the
+plugin **path-independent**: it works unchanged whether the project root is
+`C:\proj`, `D:\Dev`, `E:\repos`, or anything else, as long as the developer
+launches Claude Code from that root (which the root `CLAUDE.md` already requires).
+
+> **Why `${CLAUDE_PROJECT_DIR}` and not `${CLAUDE_PLUGIN_ROOT}`?** Claude Code
+> expands both inside `lspServers` config. `${CLAUDE_PLUGIN_ROOT}` points at this
+> plugin's install dir (`ai/claude/plugins/pwiz-lsp/csharp-lsp`), but the launcher
+> script lives outside it (in `ai/scripts/`), so anchoring on the plugin root would
+> require fragile `../../../..` traversal that Claude Code's docs do not define for
+> `workspaceFolder`. `${CLAUDE_PROJECT_DIR}` reaches both the script and the
+> workspace with no `..` segments.
+
+The server indexes:
 
 - `Skyline/` (Skyline.sln, ~900 KLOC of C#)
 - `OspreySharp/` (.NET 8 port of osprey)
@@ -50,16 +66,43 @@ resolve as expected).
 Expect:
 - ~1.3 GB resident after Skyline.sln finishes indexing
 - 2-3 GB resident with all pwiz_tools projects loaded
-- Several minutes for full first-load indexing
+- **First-load indexing of the full `pwiz_tools` workspace can take tens of
+  minutes**, not just "a few minutes." Plan for a slow first load; subsequent
+  sessions reuse cached state and are much faster.
+
+### Telling "still indexing" from "done" from "stuck"
+
+Do **not** judge readiness from process CPU/memory deltas alone — they are
+ambiguous:
+
+- **Healthy, done indexing:** the process sits at a stable 1.3-3 GB with CPU no
+  longer climbing. A flat plateau here means *idle, ready for queries* — NOT
+  stuck. (This is the state that previously got misread as "hung.")
+- **Still indexing:** memory climbs slowly and CPU ticks up over many minutes.
+  Low-but-nonzero CPU growth is normal during a large first load.
+- **Genuinely stuck:** the process *starts* at ~150-270 MB and never rises, with
+  no CPU growth from the outset. That is the csharp-ls-on-.NET-Framework failure
+  mode. If you see it on the Roslyn server, confirm the VS Code C# extension is
+  installed and the `.roslyn/Microsoft.CodeAnalysis.LanguageServer.exe` binary
+  exists (see Prerequisites), and that a compatible .NET runtime is installed
+  (the server's `runtimeconfig.json` pins a specific major version — e.g. .NET 10
+  for C# extension 2.120.x; a missing runtime crashes the host with exit code 150).
+
+**The definitive readiness test is a query, not a metric.** A query like
+`findReferences` on `SrmDocument` should return **several thousand references
+across hundreds of files** once the workspace is fully loaded. If the *first*
+query right after startup returns only same-file references (e.g. ~100 hits all
+in `SrmDocument.cs`), that is a partial index still loading — re-run the query
+after indexing finishes; it is not a misconfiguration.
 
 If memory becomes a problem, `/plugin disable csharp-lsp@pwiz-lsp` and rely on
 grep until needed.
 
 ## Sibling pwiz clones
 
-The default scope (`C:/proj/pwiz/pwiz_tools`) covers the primary pwiz clone only.
-For other clones (`skyline_26_1/`, etc.), the LSP server is NOT active. Two
-options:
+The default scope (`${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools`) covers the primary
+`pwiz/` clone only. For other clones (`skyline_26_1/`, etc.), the LSP server is
+NOT active. Two options:
 
 1. Edit `plugin.json` to point at a different clone's `pwiz_tools` directory.
 2. Create a personal sibling plugin with its own `workspaceFolder`.
@@ -80,3 +123,23 @@ installing this:
 ```
 
 Two C# LSP servers competing on `.cs` would fight each other.
+
+## Updating the plugin (cache staleness)
+
+`/plugin install` copies the plugin into a **cache** under
+`~/.claude/plugins/cache/pwiz-lsp/csharp-lsp/<version>/`, and Claude Code runs the
+LSP server from that cached copy — NOT from the source in this repo. So editing
+`plugin.json` here (or pulling new pwiz-ai commits that change it) does **not**
+affect the running plugin until you refresh the cache:
+
+```
+/plugin marketplace update pwiz-lsp
+/plugin install csharp-lsp@pwiz-lsp
+/reload-plugins
+```
+
+This is a real trap: a `git pull` that bumps the plugin version looks applied but
+isn't until the cache is refreshed. A fresh `/plugin install` on a new machine
+always gets the latest version, so this only bites machines that installed an
+earlier version. (`Verify-Environment.ps1` reports the cached version, so compare
+it against this plugin's `version` in `plugin.json` if in doubt.)

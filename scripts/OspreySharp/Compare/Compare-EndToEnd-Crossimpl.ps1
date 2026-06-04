@@ -171,9 +171,45 @@ Write-Host ""
 $rustBlib = Join-Path $rustDir 'output.blib'
 $rustDump = Join-Path $rustDir 'rust_stage7_protein_fdr.tsv'
 $rustLog  = Join-Path $rustDir 'osprey.log'
+# Manifest of the input-file set used to build the cached Rust reference,
+# so a later -SkipRust run can verify the reference matches this run before
+# reusing it (guards the stale-reference false-divergence class).
+$refManifest = Join-Path $rustDir '.reference_mzmls.txt'
+$expectedRefKey = (@($mzmls | ForEach-Object { [System.IO.Path]::GetFileName($_) }) | Sort-Object) -join "`n"
 
 if ($SkipRust -and (Test-Path $rustBlib) -and (Test-Path $rustDump)) {
-    Write-Host "[Rust] -SkipRust: reusing $rustBlib" -ForegroundColor DarkGray
+    # Guard: the cached Rust reference must have been generated from the
+    # SAME input-file set as this run. A mismatched reference (e.g. a
+    # 1-file Rust blib reused for a -Files All 3-file run) is apples-to-
+    # oranges: precursors diverge ~30%, RT ~1 min, scores wholly -- exactly
+    # mimicking a gross code regression, but it is NOT one. See memory
+    # feedback_ospreysharp_csharp_regression_gate.
+    $actualRefKey = $null
+    if (Test-Path $refManifest) {
+        $actualRefKey = ((Get-Content $refManifest) | Where-Object { $_ -ne '' } | Sort-Object) -join "`n"
+    } else {
+        # Reference predates the manifest: fall back to the mzMLs still
+        # staged in the rust workdir from its last run.
+        $stagedRef = @(Get-ChildItem -Path $rustDir -Filter '*.mzML' -File -ErrorAction SilentlyContinue |
+                       ForEach-Object { $_.Name } | Sort-Object)
+        if ($stagedRef.Count -gt 0) { $actualRefKey = ($stagedRef -join "`n") }
+    }
+    if ($null -eq $actualRefKey) {
+        Write-Host "[Rust] -SkipRust: cannot determine the cached reference's file set" -ForegroundColor Red
+        Write-Host "  ($refManifest missing and no *.mzML staged in $rustDir)." -ForegroundColor Red
+        Write-Host "  Re-run WITHOUT -SkipRust to regenerate the Rust reference." -ForegroundColor Red
+        exit 2
+    }
+    if ($actualRefKey -ne $expectedRefKey) {
+        Write-Host "[Rust] -SkipRust: STALE REFERENCE -- cached Rust came from a DIFFERENT" -ForegroundColor Red
+        Write-Host "  input-file set than this -Files '$Files' run. Reusing it would report a" -ForegroundColor Red
+        Write-Host "  FALSE divergence (mismatched file sets differ on precursors/RT/scores," -ForegroundColor Red
+        Write-Host "  mimicking a regression). Re-run WITHOUT -SkipRust to regenerate." -ForegroundColor Red
+        Write-Host ("    cached reference: {0}" -f (($actualRefKey -split "`n") -join ', ')) -ForegroundColor DarkYellow
+        Write-Host ("    this run wants:   {0}" -f (($expectedRefKey -split "`n") -join ', ')) -ForegroundColor DarkYellow
+        exit 2
+    }
+    Write-Host "[Rust] -SkipRust: reusing $rustBlib (reference file-set matches)" -ForegroundColor DarkGray
     $rustWall = [TimeSpan]::Zero
 } else {
     if (Test-Path $rustDir) { Remove-Item $rustDir -Recurse -Force }
@@ -195,6 +231,8 @@ if ($SkipRust -and (Test-Path $rustBlib) -and (Test-Path $rustDump)) {
     $rustPrec = Get-PrecursorCount -LogPath $r.logPath
     Write-Host ("  Rust wall: {0}; precursors: {1}; blib: {2}" -f `
         (Format-Duration $r.wall), $rustPrec, (Get-Item $rustBlib).Length) -ForegroundColor Green
+    # Record this reference's input-file set for the -SkipRust staleness guard.
+    Set-Content -Path $refManifest -Value (@($mzmls | ForEach-Object { [System.IO.Path]::GetFileName($_) }) | Sort-Object)
 }
 
 $csBlib = Join-Path $csDir 'output.blib'

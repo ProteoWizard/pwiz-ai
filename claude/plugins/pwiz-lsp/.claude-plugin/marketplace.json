@@ -5,7 +5,7 @@
     {
       "name": "csharp-lsp",
       "source": "./csharp-lsp",
-      "description": "csharp-ls with --solution sourced from a local sentinel file; works for any pwiz-area C# solution (Skyline.sln, OspreySharp.sln, others)"
+      "description": "C# LSP via Microsoft.CodeAnalysis.LanguageServer (Roslyn LSP from the VS Code C# extension). Scoped to ${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools; handles .NET Framework 4.7.2 and modern .NET."
     }
   ]
 }
