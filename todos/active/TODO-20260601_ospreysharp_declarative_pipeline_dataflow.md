@@ -95,6 +95,13 @@ master (worker-mode strict-rehydration gate net8.0 + `Compare-EndToEnd` 1e-9 + 3
 - **B6** `67d6d70f73` — deleted the dead surface: `StartAt/StopAfter` props + 2nd `PipelineContext`
   ctor, `Derive*Task` (oracle rewritten to an explicit truth table), the `Rehydrate=Run` base
   shim (→ abstract); privatized `GetTask`.
+- **Self-review fix** `fd5012a805` — fresh-context `/pw-self-review` (pre-PR, local) found a
+  HIGH: straight-through *resume* (skip-then-Demand a producer) NPE'd because `Demand→Rehydrate`
+  dereferenced null `InputScores`. Reproduced on the pre-fix build, fixed by having each
+  producer's `Rehydrate` defer to `Run` off its worker-mode path (byte-for-byte the old
+  `EnsureHydrated→Run`); byte-neutral for tested modes. Surfaced a SEPARATE pre-existing bug
+  (1st-pass RTs on resume via `ExecuteRescore`'s per-file skip) → filed
+  `ai/todos/backlog/TODO-ospreysharp_straightthrough_resume_1stpass_rt.md`.
 
 **Two findings worth carrying forward:**
 1. **Mode-6 regression found + fixed.** `--join-at-pass=1 --input-scores` (single-node full
