@@ -1,9 +1,9 @@
 # TODO: Make the OspreySharp task dataflow explicit / lazy-rehydrate / driver-owned
 
-**Status**: Active — PR-A1 MERGED (pwiz #4264 → `b2d4072ff1`); PR-B (dataflow) COMPLETE on
-branch `Skyline/work/20260603_ospreysharp_dataflow` (B0–B6, byte-identical Stellar+Astral),
-pending PR open/review; PR-C (byproduct context + `_runOrHydrated` unification) remains. See
-Progress.
+**Status**: Active — PR-A1 MERGED (pwiz #4264 → `b2d4072ff1`); **PR-B OPENED as pwiz #4266**
+(branch `Skyline/work/20260603_ospreysharp_dataflow`, B0–B6 + self-review fix, byte-identical
+Stellar+Astral, awaiting Copilot + review); PR-C (byproduct context + `_runOrHydrated`
+unification) remains. See Progress.
 **Priority**: Medium-strategic (no defect; the next-dominant structural issue once the
 mega-methods are gone)
 **Complexity**: Large (3-PR core; touches the task framework + every task + the resume/worker
