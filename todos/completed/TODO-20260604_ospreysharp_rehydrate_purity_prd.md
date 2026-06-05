@@ -1,8 +1,7 @@
 # TODO: PR-D — make Rehydrate pure (eliminate the Run-inside-Rehydrate deferrals)
 
-**Status**: **IMPLEMENTED (2026-06-05 night session) — awaiting Brendan's review; PR NOT created.**
-Branch `Skyline/work/20260605_ospreysharp_rehydrate_purity` @ afb0e2c280 (off master bc7c777a50).
-Proposed PR message: `ai/.tmp/prd-proposed-pr.md`. Successor to PR-C (#4267, the byproduct cache).
+**Status**: **Completed** — PR [#4269](https://github.com/ProteoWizard/pwiz/pull/4269) merged
+2026-06-05 as `acd0cd54`. Successor to PR-C (#4267, the byproduct cache).
 
 ## Progress (2026-06-05 night session)
 - All THREE deferrals eliminated (Sites 1/2/3): PerFileScoring `RehydrateFromOwnOutputs`
@@ -28,8 +27,21 @@ Proposed PR message: `ai/.tmp/prd-proposed-pr.md`. Successor to PR-C (#4267, the
   PerFileRescore-inline == old-Run-self-gate. Its one actionable follow-up (unit gate for
   "Rehydrate never calls Run") added as commit e32ab45c1c (TestDemandDrivesRehydrateNeverRun).
 - **Commits**: afb0e2c280 (the 3 pure-load paths + 4 fold-in tests), e32ab45c1c (self-review test).
-- **Remaining for Brendan**: review `ai/.tmp/prd-proposed-pr.md`, then create the PR (gh pr create),
-  await Copilot, /pw-respond, optionally /ultrareview, then /pw-complete. PR intentionally NOT created.
+- **PR #4269 MERGED 2026-06-05 as `acd0cd54`.** Copilot (1 comment: strict-load messaging, fixed
+  in 84be512c1e), fresh-context self-review (no HIGH/MED), and /ultrareview (no findings) all clean;
+  22/22 CI checks green. Merged behavior-preserving (option A) per the reviewer note.
+
+### 2026-06-05 — Merged
+
+PR #4269 merged as `acd0cd54`. Shipped the three pure-load resume Rehydrate paths (PerFileScoring /
+FirstJoin / PerFileRescore) — eliminating the last Run-inside-Rehydrate deferrals so Run is
+outer-loop-only — plus the ByproductContext cache-invariant tests (incl. a Rehydrate-never-Run unit
+gate) and the straight-through-resume parity gate. Gated by build/361 tests/inspection + worker-mode
+strict bit-parity on Stellar AND Astral. **Deferred (by design):** the pre-existing straight-through
+resume 1st-pass-RT bug is NOT fixed here — PR-D is behavior-preserving and the new resume gate
+deliberately FAILs on it. Follow-up is **PR-E** (load own .scores-reconciled.parquet in PerFileRescore's
+resume Rehydrate); recipe + parity traps recorded in
+[[TODO-ospreysharp_straightthrough_resume_1stpass_rt]] and ai/.tmp/prd-implementation-map.md.
 - **DELIBERATE SCOPE CALL — Site 3 behavior-preserving; the resume-RT bug is NOT fixed here.**
   The resume smoke surfaced (byte-exact) the pre-existing straight-through-resume RT bug
   ([[TODO-ospreysharp_straightthrough_resume_1stpass_rt]]). Fixing it = load own
