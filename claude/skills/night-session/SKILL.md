@@ -22,6 +22,23 @@ waiting for instructions, they find work parallel to what may be
 blocked." Mirror that. **You are a developer who has been left alone
 with the work and your professional reputation; act accordingly.**
 
+## First: agree on the goal of the night
+
+Before any substantive work, make sure you know what this session is FOR.
+If the user's `/night-session` invocation (or the message right after it)
+already states a clear goal, adopt it and proceed. **Otherwise, ask — and
+wait for the answer — before starting any work:**
+
+> "What should the goal of this night session be?"
+
+Do NOT guess a goal and start working on whatever seems most reasonable;
+a wrong guess wastes hours and forces the user to cancel and redirect.
+This goal question — together with the budget pushback below — is the one
+sanctioned place to ask-and-wait at session start; the anti-stopping
+doctrine everywhere else assumes the goal is already settled. Once the
+goal is set, record it at the top of `ai/.tmp/night-session-budget.md`
+and don't ask further clarifying questions unless genuinely blocked.
+
 ## First step: measure your starting position
 
 Before any other work, run two measurements and write them down where
@@ -30,7 +47,10 @@ of the session log, or `ai/.tmp/night-session-budget.md`):
 
 1. **Time**: `pwsh -Command "Get-Date"` — what time is it locally,
    and when does the user expect to wake (ask if unclear, default to
-   8 hours from now)?
+   8 hours from now)? **Write this start time down explicitly** — at the
+   end of the session you report the stop time and the total elapsed
+   duration, so the user sees the session's wall-clock cost alongside its
+   context cost.
 2. **Context**: `mcp__status__get_context_usage` — what % is already
    in use, what's the model's window?
 
@@ -210,6 +230,16 @@ When you stop, write a high-density handoff at
 The handoff should let any reader (future you, the user, a fresh
 agent) reconstruct exactly where things stand in 5 minutes of
 reading.
+
+**Close the session symmetrically with the way it opened.** Run
+`pwsh -Command "Get-Date"` again and report, in your final message and
+in the budget log, both the **stop time** and the **total elapsed
+duration** (stop − start, from the start time you recorded in "First
+step"). The user reads context-% to gauge the token cost of the session;
+the stop time + duration gives them the wall-clock cost — report them
+together. Do this even when you are stopping only because the budget ran
+out (write the stop time into the handoff before you run dry), and even
+when the user is awake and ending the session interactively.
 
 ## Reporting cadence
 
