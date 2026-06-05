@@ -1,7 +1,57 @@
 # TODO: C# Astral ~9% slower than the published baseline at FIXED source — runtime/build drift, NOT a sprint regression
 
-**Status**: Backlog — filed 2026-06-04 during PR-C perf gating; **conclusion CORRECTED 2026-06-04
-after a full bisect** (see below).
+**Status**: **RESOLVED 2026-06-05 (night session)** — the gap was transient machine state, NOT a
+regression. A fresh-reboot re-measure at the recorded commit reproduces the published baseline.
+Filed 2026-06-04 during PR-C perf gating; conclusion CORRECTED 2026-06-04 after a full bisect;
+**closed 2026-06-05 after a fresh-reboot 3-run median** (see RESOLUTION below).
+
+## RESOLUTION (2026-06-05 night session) — fresh-reboot re-measure reproduces the baseline
+
+The user rebooted the machine to approximate the original overnight-capture conditions, then asked
+for a 3-run median at the **recorded commit #4246 (a56498ca78)** — the exact commit listed with the
+published Osprey-workflow.html numbers. Result (net8.0, Astral, MaxParallelFiles=1, 16 threads,
+`ai/.tmp/measure-pipeline/n4246_fresh_reboot_3run/`):
+
+| metric    | published | **fresh-reboot 3-run median** | prior-today (after a day of heavy builds) |
+|-----------|----------:|------------------------------:|------------------------------------------:|
+| stage1to4 | 437       | **455.7** (+4.3%)             | 488 (+12%)                                |
+| total     | 970       | **983.6** (+1.4%)             | 1053.9 (+9%)                              |
+
+The reboot recovered **83% of the total gap** (1053.9→983.6) and **63% of the stage1to4 gap**
+(488→455.7), at the SAME commit and SAME build process. Residual is **+1.4% total / +4.3% stage1to4**
+— within day-to-day machine variance and the imperfect reproduction of the original capture schedule.
+**There is no durable 10% regression.**
+
+### Corroborating evidence — the residual is thermal/sustained-load, not code
+The three back-to-back runs are **monotonically increasing** in every heavy stage:
+- total: 962.6 → 983.6 → 986.9
+- stage1to4: 451.9 → 455.7 → 458.6
+- stage6: 316.0 → 332.4 → 336.6
+
+The **cold run 1 was the fastest** — the opposite of a cold-cache signature — which is the
+fingerprint of thermal/sustained-load throttling as 3 consecutive ~16-min Astral runs heat the CPU.
+The published 2026-05-28 overnight capture interleaved Rust + Stellar + other datasets between the
+C# Astral runs (giving CPU cooling gaps), so a back-to-back 3-run reasonably sits ~1-4% above it.
+
+### Why it was never build-SDK or source (priors that agreed in advance)
+- OspreySharp `Release` builds a **pure-IL net8.0 dll with no ReadyToRun/crossgen** (no `<PublishReadyToRun>`
+  in the csproj), so hot loops are JIT-compiled at runtime by the **8.0.27 runtime — identical in both
+  captures**. Roslyn IL differences from a newer build SDK don't move a compute kernel ~10% when the
+  JIT is fixed. No `global.json` SDK pin, no `DOTNET_`/`COMPlus_` overrides, default Tiered+PGO,
+  workstation GC — same both times. So there was no build-time codegen lever to explain it.
+- (An 8.0 SDK is winget-installable as `Microsoft.DotNet.SDK.8` if a future build-SDK A/B is ever wanted,
+  but it is not indicated.)
+
+### Process lesson (the durable fix still stands)
+Perf captures must run on a **clean/idle machine** (ideally fresh-rebooted) and, for the closest match
+to the published numbers, with **cooling gaps between heavy same-dataset runs** (interleave tools/datasets
+rather than back-to-back). The durable fix from the original filing remains valid: a **pinned, reproducible
+perf baseline + a standing gate** captured under controlled (rebooted, interleaved) conditions — not a
+one-off number in HTML compared against an ad-hoc end-of-day measurement.
+
+---
+*Original investigation notes below (retained for the record).*
+
 **Priority**: Medium — the C# port still beats Rust on Astral today (0.73×), but ~9% short of
 the published 0.66× advantage we want to maintain. The gap is in the C# runtime/build layer, not
 OspreySharp source.

@@ -3,6 +3,20 @@
 **Status**: Backlog — pre-existing bug (predates the PR-B declarative-dataflow work;
 PR-B's mode-routing NPE was masking it). Straight-through resume IS a supported workflow
 (confirmed 2026-06-03), so this is a real correctness issue.
+
+**2026-06-05 update (PR-D night session)**: The gate now exists.
+`ai/scripts/OspreySharp/Compare/Compare-StraightThroughResume-CSharp.ps1` reproduces this bug
+byte-exact (Stellar 3-file: warm/resume blib 52,486,144 vs cold 52,514,816; ~11K/59768 RTs off by
+~1.3 min) and FAILS on it today. PR-D (rehydrate purity) is behavior-preserving and deliberately does
+NOT fix it. **The fix is now PR-E**: make PerFileRescore's straight-through resume Rehydrate
+(PerFileRescoreTask.cs, the `!ExpectReconciledInput` branch — currently reads CompactedEntries) load
+its own `.scores-reconciled.parquet` and overlay reconciled RT/area/Features/ParquetIndex onto the
+CompactedEntries rows + append gap-fill rows, reaching the same buffer a fresh `ExecuteRescore` leaves.
+Full recipe + parity traps in `ai/.tmp/prd-implementation-map.md` and the Site-3 sub-agent map (esp.:
+fresh OverlayRescoredEntries PRESERVES the original ParquetIndex, PerFileRescoreTask.cs:1013, and
+gap-fill rows carry ParquetIndex=uint.MaxValue — the load must reproduce that, NOT the reconciled-row
+index; and gap-fill vs compacted-out rows must be disambiguated via PerFileGapFillForRescore). Gate
+the fix with the resume smoke (Stellar + Astral) until cold==warm.
 **Priority**: Medium — correctness bug, but only on the resume path (rare); no fresh-run impact.
 **Found by**: PR-B fresh-context self-review follow-up (2026-06-03).
 

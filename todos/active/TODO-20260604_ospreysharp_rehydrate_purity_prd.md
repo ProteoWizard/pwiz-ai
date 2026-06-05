@@ -1,6 +1,47 @@
 # TODO: PR-D — make Rehydrate pure (eliminate the Run-inside-Rehydrate deferrals)
 
-**Status**: Active — not started. Successor to PR-C (#4267, the byproduct cache). Start in a
+**Status**: **IMPLEMENTED (2026-06-05 night session) — awaiting Brendan's review; PR NOT created.**
+Branch `Skyline/work/20260605_ospreysharp_rehydrate_purity` @ afb0e2c280 (off master bc7c777a50).
+Proposed PR message: `ai/.tmp/prd-proposed-pr.md`. Successor to PR-C (#4267, the byproduct cache).
+
+## Progress (2026-06-05 night session)
+- All THREE deferrals eliminated (Sites 1/2/3): PerFileScoring `RehydrateFromOwnOutputs`
+  (loads own .scores.parquet via TryLoadStubsAndCalibration); FirstJoin `LoadOwnReconciliationBundle`
+  (rebuilds the post-Stage-5 bundle from own .1st-pass.fdr_scores.bin + .reconciliation.json, nulls
+  features, flows through the existing bundle-adopt path; `ConsensusTargetsFromBundleOrEmpty` ->
+  `ConsensusTargetsFromBundle(ctx, bundle)`); PerFileRescore reads CompactedEntries + publishes
+  RescoredEntries inline.
+- **publish-or-throw**: KEPT the `&& ExitCode != 0` discriminator (the TODO's design question).
+  Reason: Site 1's RehydrateFromOwnOutputs still routes through FinalizeAndCheck, which has the
+  legitimate `--no-join`/empty-scores success-stops (false + ExitCode 0). The worker --input-scores
+  Rehydrate path does too. So dropping the discriminator would wrongly throw on benign stops.
+- **Test fold-ins**: added 4 ByproductContextTest methods (dup-producer ctor throw, MarkMaterialized
+  suppression, one-shot Demand guard, forgetful-producer -> UnknownByproduct). SKIPPED milestone
+  ref-equality (the wrapper types are internal to OspreySharp; the no-copy contract lives in the
+  task code, and the proposed test would only re-assert Publish/Get round-trip).
+- **Gates ALL GREEN**: Build -RunTests -RunInspection (361 tests, ReSharper clean). Worker-mode
+  strict **Stellar OVERALL PASS** AND **Astral OVERALL PASS** (in-memory vs HPC chain bit-parity at
+  every stage boundary, net8.0). New resume gate `Compare/Compare-StraightThroughResume-CSharp.ps1`
+  added (FAILs on the pre-existing resume-RT bug, by design — see below).
+- **Self-review** (fresh-context, ran locally — no PR yet): NO HIGH/MEDIUM findings; independently
+  confirmed bundle==null reachability, shared-buffer aliasing, ConsensusTargetsFromBundle neutrality,
+  PerFileRescore-inline == old-Run-self-gate. Its one actionable follow-up (unit gate for
+  "Rehydrate never calls Run") added as commit e32ab45c1c (TestDemandDrivesRehydrateNeverRun).
+- **Commits**: afb0e2c280 (the 3 pure-load paths + 4 fold-in tests), e32ab45c1c (self-review test).
+- **Remaining for Brendan**: review `ai/.tmp/prd-proposed-pr.md`, then create the PR (gh pr create),
+  await Copilot, /pw-respond, optionally /ultrareview, then /pw-complete. PR intentionally NOT created.
+- **DELIBERATE SCOPE CALL — Site 3 behavior-preserving; the resume-RT bug is NOT fixed here.**
+  The resume smoke surfaced (byte-exact) the pre-existing straight-through-resume RT bug
+  ([[TODO-ospreysharp_straightthrough_resume_1stpass_rt]]). Fixing it = load own
+  .scores-reconciled.parquet in Site 3, which has HIGH parity risk (a fresh OverlayRescoredEntries
+  PRESERVES the original ParquetIndex at PerFileRescoreTask.cs:1013; gap-fill rows carry
+  ParquetIndex=uint.MaxValue). That belongs in its own PR-E, not bolted onto this structural refactor.
+  Recipe saved in `ai/.tmp/prd-implementation-map.md` + the Site-3 sub-agent map.
+
+---
+*Original plan below.*
+
+**Status (original)**: Active — not started. Successor to PR-C (#4267, the byproduct cache). Start in a
 FRESH session.
 **Priority**: Medium-strategic — closes the ONE remaining violation of the declarative-dataflow
 initiative's decisive design constraint. No defect (the resume path loads correctly today), but
