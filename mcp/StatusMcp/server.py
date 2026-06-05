@@ -605,6 +605,113 @@ def get_context_usage() -> str:
     return payload
 
 
+@mcp.tool()
+def get_pr_checks(pr: Optional[int] = None) -> str:
+    """Return a normalized CI + mergeability verdict for a GitHub PR.
+
+    Use this in merge / gating flows (e.g. /pw-complete) instead of reading
+    `gh pr view --json statusCheckRollup` by hand. GitHub's statusCheckRollup
+    mixes two node types that report status in DIFFERENT fields, which makes
+    raw reads error-prone and has repeatedly caused a fully-green PR to be
+    misreported as having "pending" checks:
+      - CheckRun nodes (GitHub Actions / app checks): .status + .conclusion
+      - StatusContext nodes (legacy commit statuses, e.g. TeamCity): .state
+    This tool coalesces (.conclusion // .state // .status) per node and
+    returns a single verdict, so callers never re-derive pass/fail.
+
+    Args:
+        pr: PR number. Omit to resolve the PR for the current branch of the
+            pwiz repo.
+
+    Returns JSON with: pr, title, url, headRefName, state, mergeable,
+    reviewDecision, total, all_green, ready_to_merge, by_state, failing[],
+    pending[]. Decision rule for callers:
+      - failing non-empty (or mergeable != "MERGEABLE")  -> STOP
+      - pending non-empty                                 -> wait or merge --auto
+      - ready_to_merge == true                            -> green; merge on approval
+    """
+    pwiz_dir = str(_AI_ROOT.parent / "pwiz")
+    fields = "number,title,url,state,headRefName,mergeable,reviewDecision,statusCheckRollup"
+    cmd = ["gh", "pr", "view"]
+    if pr is not None:
+        cmd.append(str(pr))
+    cmd += ["--json", fields]
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=pwiz_dir,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+        )
+    except FileNotFoundError:
+        return json.dumps({"error": "gh CLI not found on PATH"}, indent=2)
+    except subprocess.TimeoutExpired:
+        return json.dumps({"error": "gh pr view timed out after 30s"}, indent=2)
+
+    if proc.returncode != 0:
+        return json.dumps({
+            "error": "gh pr view failed",
+            "stderr": (proc.stderr or "").strip(),
+            "hint": "No open PR for the current branch? Pass pr=<number> explicitly.",
+        }, indent=2)
+
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError as e:
+        return json.dumps({"error": f"Could not parse gh output: {e}"}, indent=2)
+
+    rollup = data.get("statusCheckRollup") or []
+    green_states = {"SUCCESS", "NEUTRAL", "SKIPPED"}
+    failing_states = {
+        "FAILURE", "ERROR", "TIMED_OUT", "CANCELLED",
+        "ACTION_REQUIRED", "STARTUP_FAILURE", "STALE",
+    }
+
+    by_state: dict[str, int] = {}
+    failing: list[dict] = []
+    pending: list[dict] = []
+    for node in rollup:
+        # CheckRun -> conclusion (when COMPLETED) else status; StatusContext -> state.
+        eff = (node.get("conclusion") or node.get("state")
+               or node.get("status") or "PENDING").upper()
+        by_state[eff] = by_state.get(eff, 0) + 1
+        if eff in green_states:
+            continue
+        entry = {
+            "name": node.get("name") or node.get("context") or "(unnamed)",
+            "typename": node.get("__typename"),
+            "effective": eff,
+            "status": node.get("status"),
+            "conclusion": node.get("conclusion"),
+            "state": node.get("state"),
+        }
+        (failing if eff in failing_states else pending).append(entry)
+
+    mergeable = data.get("mergeable")
+    state = data.get("state")
+    all_green = not failing and not pending
+    result = {
+        "pr": data.get("number"),
+        "title": data.get("title"),
+        "url": data.get("url"),
+        "headRefName": data.get("headRefName"),
+        "state": state,
+        "mergeable": mergeable,
+        "reviewDecision": data.get("reviewDecision"),
+        "total": len(rollup),
+        "all_green": all_green,
+        "ready_to_merge": all_green and mergeable == "MERGEABLE" and state == "OPEN",
+        "by_state": by_state,
+        "failing": failing,
+        "pending": pending,
+    }
+    return json.dumps(result, indent=2)
+
+
 def main():
     """Run the MCP server."""
     logger.info("Starting Status MCP server")

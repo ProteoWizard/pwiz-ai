@@ -9,12 +9,14 @@ Claude Code lacks access to basic status information that would help it:
 - See **git status** without running commands
 - Track the **active project** in multi-repo setups
 
-This server provides five tools:
+This server provides these tools:
 - `get_status` - Returns timestamp and git info for one or more directories
+- `get_project_status` - Git status for all repos under the project root (call at session start)
 - `get_last_screenshot` - Gets recent Win+Shift+S screenshot(s), with multi-screenshot support
 - `get_clipboard_image` - Gets image from clipboard (for editor/browser copies)
 - `set_active_project` - Sets the active project for statusline display
 - `get_context_usage` - Returns the current session's context-window usage (same number the statusline shows)
+- `get_pr_checks` - Normalized CI + mergeability verdict for a GitHub PR (coalesces CheckRun/StatusContext so a green PR is never misread as pending)
 
 ## Installation
 
