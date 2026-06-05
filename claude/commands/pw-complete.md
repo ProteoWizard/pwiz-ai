@@ -64,17 +64,66 @@ happens.
 
 ### 1b.1 — Check the gate
 
+**Query the checks correctly — this is a recurring trap.**
+`statusCheckRollup` mixes two node types that report status in
+*different fields*:
+
+- **CheckRun** nodes (GitHub Actions / app checks) carry `.status`
+  (`QUEUED` / `IN_PROGRESS` / `COMPLETED`) and, once finished,
+  `.conclusion` (`SUCCESS` / `FAILURE` / `NEUTRAL` / `SKIPPED` / …).
+- **StatusContext** nodes (legacy commit statuses — **this is how
+  TeamCity reports**) carry NEITHER; they report a `.state`
+  (`SUCCESS` / `PENDING` / `FAILURE` / `ERROR`).
+
+A query that reads only `.status` / `.conclusion` shows every
+StatusContext as `null` and makes a **fully-green PR look like it has
+14 "pending" checks**. The effective state of *any* node is
+`(.conclusion // .state // .status)`. Always coalesce those three.
+
+Quick human read (handles both node types natively):
+
 ```bash
-gh pr view <N> --json statusCheckRollup,mergeable,reviewDecision \
-  --jq '{checks: [.statusCheckRollup[] | {name, status, conclusion}],
-         mergeable, reviewDecision}'
+gh pr checks <N>        # table of every check with pass/fail/pending; exits non-zero if not all pass
 ```
 
-If `mergeable != "MERGEABLE"`, or any required check is `FAILURE`,
-**STOP** and report — manual intervention is needed (fix the conflict
-or the failing check). Pending checks are fine to merge over only if
-the user explicitly says so; otherwise either wait or pass `--auto` in
-Step 1b.3 so GitHub merges when the gate clears.
+Structured gate (adds `mergeable` + `reviewDecision`, which
+`gh pr checks` omits):
+
+```bash
+gh pr view <N> --json statusCheckRollup,mergeable,reviewDecision --jq '{
+  mergeable,
+  reviewDecision,
+  total: (.statusCheckRollup | length),
+  byState: (.statusCheckRollup
+            | map(.conclusion // .state // .status // "PENDING")
+            | group_by(.) | map({(.[0]): length}) | add),
+  notGreen: [.statusCheckRollup[]
+             | select((.conclusion // .state // .status // "PENDING") as $s
+                      | ($s != "SUCCESS" and $s != "NEUTRAL" and $s != "SKIPPED"))
+             | {name: (.name // .context), typename: .__typename, status, conclusion, state}]
+}'
+```
+
+Read the result:
+
+- **`notGreen` is `[]` and `mergeable == "MERGEABLE"`** → the gate is
+  fully green; on approval **merge immediately (no `--auto` needed)**.
+  This is the common case — do NOT report "pending checks" just because
+  some nodes have a null `.conclusion`; check `notGreen`, not raw
+  conclusions.
+- **`notGreen` contains a `FAILURE` / `ERROR`**, or `mergeable !=
+  "MERGEABLE"` → **STOP** and report; manual intervention is needed
+  (fix the conflict or the failing check).
+- **`notGreen` contains only genuinely-running entries** (a CheckRun
+  with `status` `IN_PROGRESS` / `QUEUED` and no `conclusion`, or a
+  StatusContext with `state` `PENDING`) → checks really are still
+  running. Wait, or pass `--auto` in Step 1b.3 so GitHub merges when
+  the gate clears; merge over them immediately only if the user says so.
+
+If `gh pr checks` / the web UI shows "All checks have passed" but your
+structured query says pending, you read the wrong field — re-run with
+the `(.conclusion // .state // .status)` coalescing above before
+telling the user anything is pending.
 
 ### 1b.2 — Draft the squash message
 
