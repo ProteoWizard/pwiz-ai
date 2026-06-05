@@ -1,6 +1,6 @@
 # TODO: PR-C — typed byproduct context (retire GetTask/_runOrHydrated)
 
-**Status**: PR open — [#4267](https://github.com/ProteoWizard/pwiz/pull/4267) (in review).
+**Status**: Completed — [#4267](https://github.com/ProteoWizard/pwiz/pull/4267) (merged 2026-06-04 as `bc7c777a50`).
 Successor to PR-B (#4266, the declarative-dataflow refactor).
 **Priority**: Medium-strategic (no defect; the next OOP slice once PR-B's explicit dataflow
 lands). This is iteration N+1 of the recurring OspreySharp OOP-review program.
@@ -162,6 +162,22 @@ Each behavioral step gated green: build + tests + inspection, worker-mode strict
 - **PR opened**: [#4267](https://github.com/ProteoWizard/pwiz/pull/4267) — 5 commits (C1, C2+C3,
   C4+C5, C6, C7) off the #4266 merge.
 
+### 2026-06-04 — Merged
+
+PR #4267 squash-merged as `bc7c777a50`. Shipped the typed byproduct cache + producer registry,
+the three-milestone model for the no-copy shared buffer (dissolving FirstJoin's dual-source
+getters and the producer getter surface), the `_runOrHydrated` retirement via driver-owned
+materialization, and lazy-rehydrate failure surfacing. All 22 CI checks green (Core 308, Skyline
+1628, TestConnected 18, code inspection, Linux/Docker/Bumbershoot). Copilot's one finding (a stale
+registry doc) fixed in `a3c2eda833`; the fresh-context self-review validated the core clean.
+
+**Deferred → PR-D** (`TODO-20260604_ospreysharp_rehydrate_purity_prd.md`): the self-review surfaced
+that the initiative's decisive constraint — `Run` is outer-loop-only; `Rehydrate` loads, never
+computes — is still violated by 3 `Rehydrate → return Run(ctx)` deferrals (inherited from PR-B,
+untouched here). PR-D makes `Rehydrate` pure (from-own-outputs load paths) and folds in the
+self-review test gaps. This is the one initiative goal NOT yet fully met after A→B→C.
+
 ## Related
+- `ai/todos/active/TODO-20260604_ospreysharp_rehydrate_purity_prd.md` (PR-D — the deferred Rehydrate-purity fix)
 - `ai/todos/active/TODO-20260601_ospreysharp_declarative_pipeline_dataflow.md` (PR-A/B umbrella)
 - `ai/todos/backlog/TODO-ospreysharp_straightthrough_resume_1stpass_rt.md`
