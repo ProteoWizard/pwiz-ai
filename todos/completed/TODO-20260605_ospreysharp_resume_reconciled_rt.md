@@ -1,4 +1,12 @@
-# TODO: Straight-through resume writes 1st-pass RTs (ExecuteRescore per-file skip)
+# TODO-20260605_ospreysharp_resume_reconciled_rt.md — Straight-through resume writes 1st-pass RTs
+
+## Branch Information
+- **Branch**: `Skyline/work/20260605_ospreysharp_resume_reconciled_rt`
+- **Base**: `master`
+- **Created**: 2026-06-05 (bug originally reported 2026-06-03; fixed under this branch as PR-E)
+- **Status**: Completed
+- **GitHub Issue**: (none — tracked via this TODO)
+- **PR**: [#4270](https://github.com/ProteoWizard/pwiz/pull/4270) (merged 2026-06-05 as `6d6db7dd`)
 
 **Status**: **Completed — FIXED + merged 2026-06-05 as PR [#4270](https://github.com/ProteoWizard/pwiz/pull/4270) (`6d6db7dd`).**
 
