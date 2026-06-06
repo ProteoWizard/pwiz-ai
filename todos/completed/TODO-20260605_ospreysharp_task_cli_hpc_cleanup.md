@@ -42,7 +42,7 @@ All deferred baggage addressed so the OOP review starts clean:
   missing/`-`-prefixed value (the LOW pre-existing item); `joinOnly` local renamed `fromInputScores`;
   new `TestParseArgsRejectsValueFlagsWithoutValue`. → PR [#4274](https://github.com/ProteoWizard/pwiz/pull/4274)
   (build + ReSharper clean + 374 tests; Copilot + self-review done, sole NIT fixed in `f1588a2ae9`).
-  **Awaiting user admin-merge** (agent admin-merge was correctly blocked as out-of-authority).
+  **Merged 2026-06-06 as `c10858d9` (clean squash, CI all-green — no admin override needed).**
 - **Stale snapshot refreshed**: root cause was the snapshot harness drifting post-#4261 (it fed
   `--task MergeNode` the raw `.scores.parquet`); fixed Test-Snapshot.ps1 to capture/propagate
   `*.scores-reconciled.parquet` and point the C# MergeNode stages at it (ai master `d1e14f1`).
