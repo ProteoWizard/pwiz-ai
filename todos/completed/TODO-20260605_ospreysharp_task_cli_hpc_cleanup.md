@@ -46,8 +46,25 @@ All deferred baggage addressed so the OOP review starts clean:
 - **Stale snapshot refreshed**: root cause was the snapshot harness drifting post-#4261 (it fed
   `--task MergeNode` the raw `.scores.parquet`); fixed Test-Snapshot.ps1 to capture/propagate
   `*.scores-reconciled.parquet` and point the C# MergeNode stages at it (ai master `d1e14f1`).
-  `-CreateSnapshot` now PASSES all stages on Stellar + Astral; fresh complete snapshot captured;
-  compare-mode round-trip validation running at time of writing.
+  `-CreateSnapshot` now PASSES all stages on Stellar + Astral; fresh complete snapshot captured.
+  My reconciled-parquet fix is validated in BOTH modes (capture all-pass; in a compare run blib RAN
+  and produced output = MergeNode got valid reconciled input, and stage7 passed via SHA-256).
+
+### 2026-06-06 — FOLLOW-UP discovered: compare-mode comparators mis-referenced (separate, pre-existing)
+A bonus compare-mode regression run surfaced a SEPARATE pre-existing issue (NOT my changes, NOT a
+blocker for the OOP review which reviews product code, not the snapshot harness): `c5a8349`
+("Moved comparison scripts into Compare/ subfolder") relocated several comparators, but Test-Snapshot.ps1
+still invokes some at the old top-level `$ospDir` path. The inspect_parquet.py fix above was only ONE of
+them. Remaining mis-referenced comparators that make a COMPARE run report spurious FAILs:
+- **stage5 percolator** → `Compare-Percolator.ps1` is in `Compare/archive/`, invoked at top-level
+  (Test-Snapshot.ps1:866). Has its own deps (Compare-Diagnostic.ps1, also archived).
+- **blib** → `Compare-Blib-Crossimpl.ps1` is in `Compare/`, invoked at top-level (Test-Snapshot.ps1:980).
+- stage1to4/6 use inspect_parquet.py (fixed) + SHA; stage7 same-impl uses SHA (no script) so it passes.
+**Fix (bounded follow-up):** point the `$ospDir`-based comparator invocations at `Compare/` (and
+un-archive `Compare-Percolator.ps1` + its `Compare-Diagnostic.ps1` dep), then re-run a compare-mode
+`Test-Full-Regression` (~63 min) to confirm round-trip GREEN. Left for a scoped follow-up rather than
+half-fixed unvalidated. The frozen-snapshot regression gate has effectively been compare-broken since
+`c5a8349` independent of this work.
 
 ### 2026-06-06 — Night validation session (pre-/pw-oop-review)
 Ran the 8-hour validation plan (`ai/.tmp/night-prf/20260605_2232/REPORT.md`). **Product code GREEN
