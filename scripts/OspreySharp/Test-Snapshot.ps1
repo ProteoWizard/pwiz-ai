@@ -36,13 +36,14 @@
 
     Stage isolation matrix (matches Test-Regression.ps1):
 
+      (OspreySharp CLI; Rust osprey still uses the old --no-join/--join-at-pass flags)
       Stage      CLI extras                                         Exit hook
       ---------  -------------------------------------------------  -----------------------------
-      stage1to4  --no-join                                          (--no-join exits after Stage 4)
-      stage5     --join-at-pass=1 --input-scores <frozen.parquet>   OSPREY_PERCOLATOR_ONLY=1
-      stage6     --join-at-pass=1 --input-scores <frozen.parquet>   OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
-      stage7     --join-at-pass=2 --input-scores <frozen.parquet>   OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
-      blib       --join-at-pass=2 --input-scores <frozen.parquet>   (none — full pipeline)
+      stage1to4  --task PerFileScoring                              (exits after Stage 4)
+      stage5     --input-scores <frozen.parquet>                    OSPREY_PERCOLATOR_ONLY=1
+      stage6     --input-scores <frozen.parquet>                    OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
+      stage7     --task MergeNode --input-scores <frozen.parquet>   OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
+      blib       --task MergeNode --input-scores <frozen.parquet>   (none — Stages 7-8 from reconciled)
 
     Comparators (tightened relative to Test-Regression.ps1 because
     same-impl removes the documented Rust<->C# xcorr / sg_weighted_xcorr
@@ -550,7 +551,8 @@ function Invoke-Tool {
             $dtpPath = Join-Path $script:PerformanceProfileOutputDir $dtpName
             # `--` separator stops dottrace's argument parser from
             # consuming `--key=value` items meant for the wrapped binary
-            # (e.g. `--join-at-pass=1` was being eaten as a dottrace option).
+            # (e.g. `--task=PerFileScoring` would otherwise be eaten as a
+            # dottrace option).
             # Linux JetBrains.dotTrace.GlobalTools 2026.x requires
             # --framework=NetCore to disambiguate Mono vs .NET Core targets;
             # Windows dotTrace 2025.x (current JetBrains Toolbox / Rider
@@ -672,8 +674,10 @@ function Run-Stage1to4 {
     foreach ($mzml in $selectedFiles) { $cliArgs += '-i'; $cliArgs += (Split-Path $mzml -Leaf) }
     $cliArgs += @('-l', $libraryName, '-o', 'unused.blib',
                   '--resolution', $resolution,
-                  '--protein-fdr', '0.01', '--threads', '16',
-                  '--no-join')
+                  '--protein-fdr', '0.01', '--threads', '16')
+    # OspreySharp uses --task PerFileScoring for the Stage 1-4 worker;
+    # Rust osprey keeps the retired --no-join flag.
+    $cliArgs += if ($Tool -eq 'CSharp') { @('--task', 'PerFileScoring') } else { @('--no-join') }
     $r = Invoke-Tool -Bin $toolBin -WorkDir $sOut -CliArgs $cliArgs -EnvVars @{} -Stage 'stage1to4'
     Write-Host ("  [run] {0,-4} stage1to4  exit={1} wall={2:mm\:ss}" -f $toolWorkSubdir, $r.exit, $r.wall) `
         -ForegroundColor $(if ($r.exit -eq 0) { 'DarkGreen' } else { 'DarkRed' })
@@ -742,8 +746,22 @@ function Run-PostStage4 {
         Copy-Item $f.FullName (Join-Path $sOut $f.Name)
     }
     $useJP2 = $stageConfig[$Stage].useJoinAtPass2
-    $entry = if ($useJP2) { '--join-at-pass=2' } else { '--join-at-pass=1' }
-    $cliArgs = @($entry)
+    # OspreySharp: pass-2 entry (Stages 7-8 from reconciled parquets) is
+    # --task MergeNode; pass-1 entry (Stages 5-8 from scores) is the default
+    # pipeline driven purely by --input-scores (no --task). Rust osprey keeps
+    # the retired --join-at-pass flags.
+    # Type-constrain to [string[]] so the empty-CSharp-pass-1 case stays an
+    # array. A bare `$cliArgs = if (...) { ... } else { @() }` would make the
+    # else-branch's empty array collapse to $null (scriptblock output drops
+    # zero-length arrays), and the first `+=` below would then start STRING
+    # concatenation instead of array-append -- jamming every token together
+    # (`--input-scoresFILE--input-scores...`), which the binary rejects.
+    [string[]]$cliArgs = @()
+    if ($Tool -eq 'CSharp') {
+        if ($useJP2) { $cliArgs += @('--task', 'MergeNode') }
+    } else {
+        if ($useJP2) { $cliArgs += '--join-at-pass=2' } else { $cliArgs += '--join-at-pass=1' }
+    }
     foreach ($stem in $selectedStems) {
         $cliArgs += '--input-scores'
         $cliArgs += ($stem + '.scores.parquet')
