@@ -79,4 +79,15 @@ showing rulers from another tool (ETD spectrum, c/z ion series).
 - abc and xyz blocks both drawn at top; xyz stacks below abc
 - Stacking order resolved: each pinned ruler group (and the hovered ruler last) occupies its own slot below the previous one at `yLine = 0.04 + slot * RULER_SLOT_HEIGHT` (~7% chart height per slot). Within a single group, the horizontal ruler line, the per-series ion-type-colored ticks, and the residue labels (from the reference series — `b` for N-terminal, `y` for C-terminal) all share the same `yLine`; drop lines are drawn beneath everything else.
 - Label crowding for short peptides or wide modifications: known limitation, not actively handled. Residue labels are drawn centered at the midpoint of each fragment-ion interval and can overlap at very narrow zoom widths or with long modification text (e.g. `C[+57]`). Workaround is zooming out; revisit if user feedback warrants explicit handling.
+
+## Session Log
+
+### 2026-06-05 — Code review complete, PR in human-review queue
+
+PR #4158 passed two automated review gates (Copilot × 2, fresh-context
+`/pw-self-review`). All inline threads either resolved with fixes or deferred
+to tracked backlog TODOs. Final HEAD: `c4b2aca511`.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260416_spectrumSequenceRuler.md` before starting work.
 - **Drop-line X uses the theoretical (predicted) ion m/z, not the observed peak m/z** — the ruler is a theoretical ladder, so anchoring drop lines to predicted positions is the intended semantic. At very high zoom (a few m/z visible), peaks with non-trivial mass error appear visually offset from their drop lines. This is accepted behavior, not a bug.
