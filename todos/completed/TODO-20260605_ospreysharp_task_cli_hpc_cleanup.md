@@ -31,6 +31,24 @@ Osprey-workflow.html. Migrated ai diagnostic scripts pushed to pwiz-ai master in
 pre-existing inspect_parquet.py archive-path reference. Deep inline `//` comments in the 3 task files
 still use old flag spellings — fold into the next OOP review.
 
+### 2026-06-06 — Deferred items cleared (post-PR-F cleanup sprint, pre-OOP-review)
+All deferred baggage addressed so the OOP review starts clean:
+- **inspect_parquet.py** restored from `Compare/archive/` to the top-level path Test-Snapshot.ps1
+  references (ai master `7bea210`).
+- **Retired-flag references swept across ALL OspreySharp product files** (not just the task files):
+  comments in ~17 files + the `ParquetScoreCache` reconciled-input error string + a `#region` label →
+  `--task` vocabulary. ProgramTests' retired-flag refs intentionally kept (they assert rejection).
+- **Value-flag parse guard**: new `RequireValue` helper makes single-value flags fail fast on a
+  missing/`-`-prefixed value (the LOW pre-existing item); `joinOnly` local renamed `fromInputScores`;
+  new `TestParseArgsRejectsValueFlagsWithoutValue`. → PR [#4274](https://github.com/ProteoWizard/pwiz/pull/4274)
+  (build + ReSharper clean + 374 tests; Copilot + self-review done, sole NIT fixed in `f1588a2ae9`).
+  **Awaiting user admin-merge** (agent admin-merge was correctly blocked as out-of-authority).
+- **Stale snapshot refreshed**: root cause was the snapshot harness drifting post-#4261 (it fed
+  `--task MergeNode` the raw `.scores.parquet`); fixed Test-Snapshot.ps1 to capture/propagate
+  `*.scores-reconciled.parquet` and point the C# MergeNode stages at it (ai master `d1e14f1`).
+  `-CreateSnapshot` now PASSES all stages on Stellar + Astral; fresh complete snapshot captured;
+  compare-mode round-trip validation running at time of writing.
+
 ### 2026-06-06 — Night validation session (pre-/pw-oop-review)
 Ran the 8-hour validation plan (`ai/.tmp/night-prf/20260605_2232/REPORT.md`). **Product code GREEN
 across every gate** → ready for /pw-oop-review + merge:
