@@ -640,6 +640,7 @@ $stageConfig = @{
 # bare binaries with no metadata to validate.
 $downstreamArtifactPatterns = @(
     '*.scores.parquet',
+    '*.scores-reconciled.parquet',
     '*.calibration.json',
     '*.1st-pass.fdr_scores.bin',
     '*.2nd-pass.fdr_scores.bin',
@@ -762,9 +763,16 @@ function Run-PostStage4 {
     } else {
         if ($useJP2) { $cliArgs += '--join-at-pass=2' } else { $cliArgs += '--join-at-pass=1' }
     }
+    # The C# --task MergeNode stages (stage7, blib) consume the Stage-6
+    # reconciled parquets, not the raw Stage-4 scores: MergeNode rejects a
+    # parquet whose osprey.reconciled metadata is 'false'. Before #4261 Stage 6
+    # overwrote the raw .scores.parquet in place so the same name carried
+    # reconciled data; now the reconciled output is a distinct sibling. Rust's
+    # --join-at-pass=2 path is unchanged (it still keys off .scores.parquet).
+    $inputScoresSuffix = if ($useJP2 -and $Tool -eq 'CSharp') { '.scores-reconciled.parquet' } else { '.scores.parquet' }
     foreach ($stem in $selectedStems) {
         $cliArgs += '--input-scores'
-        $cliArgs += ($stem + '.scores.parquet')
+        $cliArgs += ($stem + $inputScoresSuffix)
     }
     $cliArgs += @('-l', $libraryName, '-o', 'output.blib',
                   '--resolution', $resolution,
