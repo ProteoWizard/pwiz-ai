@@ -858,18 +858,18 @@ function Compare-Percolator-Snapshot {
                 tool_present=$cExists; snap_present=$sExists;
                 tool=$cTsv; snapshot=$sTsv }) }
     }
-    $diffLog = Join-Path $toolDir 'diff_stage5_percolator.log'
-    # Compare-Percolator.ps1 is parameterised as -RustTsv / -CsTsv but
-    # is symmetric: it hash-joins on (file_name, entry_id) and reports
-    # per-column max_abs_diff. Pass the snapshot as -RustTsv and the
-    # current run as -CsTsv just so the log labels are consistent.
-    & pwsh -File (Join-Path $ospDir 'Compare-Percolator.ps1') `
-        -RustTsv $sTsv -CsTsv $cTsv -Tolerance 1e-6 `
-        *>&1 | Tee-Object -FilePath $diffLog | Out-Null
-    $exit = $LASTEXITCODE
-    $st = if ($exit -eq 0) { 'PASS' } else { 'FAIL' }
+    # Same-impl snapshot: prefer SHA-256 byte equality. The percolator dump is
+    # byte-identical run-to-run on the same impl (confirmed). The tolerance
+    # comparator Compare-Percolator.ps1 (now under Compare/archive/) was for the
+    # CROSS-impl / cross-OS libm-ULP case; reach for it only if a cross-OS
+    # snapshot is ever compared. (Was invoking the moved script at a stale path,
+    # which produced a false FAIL on every run.)
+    $cSha = (Get-FileHash $cTsv -Algorithm SHA256).Hash
+    $sSha = (Get-FileHash $sTsv -Algorithm SHA256).Hash
+    $st = if ($cSha -eq $sSha) { 'PASS' } else { 'FAIL' }
     return [pscustomobject]@{ ok = ($st -eq 'PASS');
-        details = @(@{ tag='percolator'; file=$name; status=$st; log=$diffLog;
+        details = @(@{ tag='percolator'; file=$name; status=$st;
+            tool_sha=$cSha.Substring(0,12); snap_sha=$sSha.Substring(0,12);
             tool_size=(Get-Item $cTsv).Length; snap_size=(Get-Item $sTsv).Length }) }
 }
 
@@ -977,7 +977,9 @@ function Compare-Blib-Snapshot {
     # comparison; a same-impl run should pass at exact equality on
     # every table the script checks.
     $diffLog = Join-Path $workRoot 'blib\diff.log'
-    & pwsh -File (Join-Path $ospDir 'Compare-Blib-Crossimpl.ps1') -RustBlib $sBlib -CsBlib $cBlib `
+    # Compare-Blib-Crossimpl.ps1 lives under Compare/ (was invoked at a stale
+    # top-level path, producing a false FAIL on every run).
+    & pwsh -File (Join-Path (Join-Path $ospDir 'Compare') 'Compare-Blib-Crossimpl.ps1') -RustBlib $sBlib -CsBlib $cBlib `
         *>&1 | Tee-Object -FilePath $diffLog | Out-Null
     $exit = $LASTEXITCODE
     return [pscustomobject]@{ ok = ($exit -eq 0);
