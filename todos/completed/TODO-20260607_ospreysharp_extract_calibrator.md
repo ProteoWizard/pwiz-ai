@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260607_ospreysharp_extract_calibrator`
 - **Base**: `master`
 - **Created**: 2026-06-07
-- **Status**: In Progress
-- **PR**: [#4276](https://github.com/ProteoWizard/pwiz/pull/4276)
+- **Status**: Completed
+- **PR**: [#4276](https://github.com/ProteoWizard/pwiz/pull/4276) (merged 2026-06-07)
 
 **Priority**: Medium — largest single readability win, lowest risk of the three;
 good first step before the scoring decomposition
@@ -49,6 +49,19 @@ concerns lens + Top Recommendation #1
   the local present. The unused-local-variable inspection is disabled in the
   Skyline DotSettings that OspreySharp inherits, so the -RunInspection gate will
   not catch dead locals.
+
+### 2026-06-07 - Merged
+
+PR #4276 merged as commit 6774740f (squash) on 2026-06-07. Shipped the calibration
+extraction in full: the RT/mass calibration cluster (12 methods, CalibrationPassResult,
+5 constants) now lives in `Tasks/Calibrator.cs` (standalone, PipelineContext ctor);
+PerFileScoringTask dropped 2828 -> 1558 LOC; the 3 shared helpers were promoted to
+internal static and the 2 shared statics left on AbstractScoringTask. Verified pure
+relocation (byte-identical bodies; Stellar + Astral cross-impl parity PASS at 1e-9;
+372 tests; 0 warnings). Both open design questions resolved in-code (Calibrator stays
+in the exe; shared scorer/constant stay on AbstractScoringTask). Copilot's one comment
+(a pre-existing dead local) was removed and the thread resolved. No scope deferred;
+no follow-up issues filed. Unblocks `TODO-ospreysharp_modular_scoring_context.md`.
 
 ## Problem
 
