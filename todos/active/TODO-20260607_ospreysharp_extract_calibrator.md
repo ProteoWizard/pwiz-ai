@@ -40,6 +40,15 @@ concerns lens + Top Recommendation #1
   calls in identical order, no method overrides (static promotion safe),
   InternalsVisibleTo keeps test access to the promoted internals, no hidden state,
   no dead code. Ready to commit + open PR.
+- 2026-06-07: PR #4276 opened. Copilot review: one comment (unused `resolution`
+  local at Calibrator.cs:913, a pre-existing dead read carried over verbatim).
+  Removed it (commit f0347da78c) -- side-effect-free, parity-neutral; Debug gate
+  re-run green (372 tests, 0 warnings). Replied + resolved the thread. Side note:
+  Copilot claimed it would trigger a ReSharper warning; it does NOT under our
+  shared DotSettings -- verified by running -RunInspection (52s, 0 warnings) WITH
+  the local present. The unused-local-variable inspection is disabled in the
+  Skyline DotSettings that OspreySharp inherits, so the -RunInspection gate will
+  not catch dead locals.
 
 ## Problem
 
