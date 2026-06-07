@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260606_ospreysharp_diagnostics_di`
 - **Base**: `master`
 - **Created**: 2026-06-06
-- **Status**: In Progress
-- **PR**: [#4275](https://github.com/ProteoWizard/pwiz/pull/4275)
+- **Status**: Completed
+- **PR**: [#4275](https://github.com/ProteoWizard/pwiz/pull/4275) (merged 2026-06-07)
 
 **Priority**: Medium — clean, mostly parity-neutral, unblocks cleaner scoring/calibration extraction
 **Type**: Architecture / decoupling
@@ -61,6 +61,18 @@
   `ShouldDumpMpFor` uses Ordinal; detected-peptides dump writes LF; `-d` added to
   PrintUsage. Self-review + Copilot both done; PR in CI (~1.5-2 h). Ready for
   merge pending green CI; run /pw-complete after merge.
+
+### 2026-06-07 - Merged
+
+PR #4275 merged as commit 8a79b86c (22/22 CI green). Shipped the diagnostics
+encapsulation (call-site `OspreyDiagnostics` facade + swappable no-op
+`OspreyFileDiagnostics` sink, null sink = no-op default), the `-d` / `--diagnostics`
+CLI switch, removal of the per-candidate predict-rt scoring-hotspot diagnostic
+(guarded with a NotImplementedException + restore instructions), and a stray BOM
+strip. Verified output-neutral by same-impl bit-parity on Stellar + Astral
+(`-Files All`); self-review + Copilot rounds both addressed. No scope deferred.
+Follow-on work tracked separately: calibrator extraction (PR #4276), and the
+modular-scoring + self-contained-e2e-regression-gate backlog TODOs.
 
 ## Problem
 
