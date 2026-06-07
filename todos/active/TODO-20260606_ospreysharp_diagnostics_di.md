@@ -55,6 +55,12 @@
   (2) `OSPREY_DUMP_PREDICT_RT` silent no-op -> ctor throws NotImplementedException
   naming the producers to uncomment. Verified green (build + 372 tests + 0
   warnings). PR #4275 opened; Copilot review pending.
+- 2026-06-07: Copilot review addressed (commit 4c1359336b), all 5 threads
+  resolved: Initialize moved into `AnalysisPipeline.Run` (every entry point,
+  incl. RescoreWorker, inits before any diagnostics call); `-d` overrides `"0"`;
+  `ShouldDumpMpFor` uses Ordinal; detected-peptides dump writes LF; `-d` added to
+  PrintUsage. Self-review + Copilot both done; PR in CI (~1.5-2 h). Ready for
+  merge pending green CI; run /pw-complete after merge.
 
 ## Problem
 
