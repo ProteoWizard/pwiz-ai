@@ -18,8 +18,26 @@
 - 2026-06-06: Commented out the predict-rt diagnostic family (per-candidate
   hotspot the OOP review flagged) -- see "Call-site disposition" below. Verified
   green: build (net472 + net8.0), 372 unit tests pass, ReSharper 0 warnings.
-  Output-neutral (env-gated dumps, off in all normal runs). Next: the injectable
-  no-op diagnostics sink + `PipelineContext.Diagnostics` + `-d` flag (increment 1).
+  Output-neutral (env-gated dumps, off in all normal runs).
+- 2026-06-06: Landed the injectable diagnostics sink (commit 5c36139759).
+  **As built (deviation from "Desired design" above):** the DI vehicle is a
+  static **facade** `OspreyDiagnostics` (call sites unchanged) delegating to a
+  swappable `OspreyFileDiagnostics` sink; the no-op default is a `null` sink
+  (null-object via `?.`), not a separate base class and not
+  `PipelineContext.Diagnostics`. Chosen for the smaller/safer diff over the
+  ~40-flag virtual/override surface (developer picked "encapsulated sink, facade
+  kept"). The static `OspreyDiagnostics` class became the instance
+  `OspreyFileDiagnostics` (members converted static->instance, dump BODIES
+  untouched = byte-stable); the new facade forwards every flag/method. `-d` /
+  `--diagnostics` added to `OspreyConfig` + parsed in `Program`, calling
+  `OspreyDiagnostics.Initialize(forceDumps)` at pipeline entry; it turns on a
+  documented OSPREY_DUMP_* bundle (excludes the per-call MP_INPUTS firehose, the
+  disabled predict-rt dump, the *_ONLY exits, and the per-entry DIAG selectors).
+  Env-only workflows still self-enable via lazy `Initialize(false)` on first use.
+  Verified green: build, 372 tests, ReSharper 0 warnings. Production runs (no env,
+  no -d) get a null sink = full no-op. Remaining: document `-d` in DIAGNOSTICS.md;
+  optional `-SkipRust` end-to-end spot-check (output-neutral by construction since
+  dumps are off in a normal run).
 
 ## Problem
 
