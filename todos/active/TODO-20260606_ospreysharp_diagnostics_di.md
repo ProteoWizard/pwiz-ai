@@ -1,9 +1,20 @@
 # TODO: OspreySharp — replace static diagnostics with an injectable sink (no-op default, enabled by `-d`)
 
-**Status**: Backlog (not started)
+## Branch Information
+- **Branch**: `Skyline/work/20260606_ospreysharp_diagnostics_di`
+- **Base**: `master`
+- **Created**: 2026-06-06
+- **Status**: In Progress
+- **PR**: (pending)
+
 **Priority**: Medium — clean, mostly parity-neutral, unblocks cleaner scoring/calibration extraction
 **Type**: Architecture / decoupling
 **Source**: OOP review of `pwiz_tools/OspreySharp` (2026-06-06), Coupling lens + Top Recommendation #3
+
+## Progress log
+- 2026-06-06: Branch created. First commit strips the UTF-8 BOM that ReSharper
+  re-added to `pwiz_tools/Skyline/Skyline.sln.DotSettings` in #4065 (unrelated
+  housekeeping, bundled here per developer request). Diagnostics work follows.
 
 ## Problem
 
