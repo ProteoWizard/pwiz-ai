@@ -111,6 +111,17 @@ FALSE failure for three harness reasons -- each a thing the redesigned gate must
    refactor is **patched-vs-unpatched on the same branch** (HEAD vs base), which is
    immune to baseline provenance. See [[feedback_parity_vs_impact]],
    [[feedback_ospreysharp_csharp_regression_gate]].
+4. **Live bug: Test-Snapshot calls comparators at stale paths.** `Test-Snapshot.ps1`
+   invokes `Compare-Percolator.ps1` (line ~866) and `Compare-Blib-Crossimpl.ps1`
+   (line ~980) from the top-level `ai/scripts/OspreySharp/` dir, but both were relocated
+   (`Compare-Percolator.ps1` -> `Compare/archive/`; `Compare-Blib-Crossimpl.ps1` ->
+   `Compare/`). Result: stage5-percolator and blib report a FALSE "FAIL" (script not
+   found -> nonzero exit) on EVERY run today. stage7 survives only because it prefers
+   SHA-256 over the (also-moved) `Compare-Stage7-Crossimpl.ps1`. Fix: for a same-impl
+   snapshot, percolator should compare by SHA-256 byte-equality (we confirmed it IS
+   byte-identical same-impl, so the tolerance comparator is unnecessary); blib should
+   point at `Compare/Compare-Blib-Crossimpl.ps1`. This is small and independent of the
+   redesign -- worth a quick patch even before the larger reorg.
 
 ## Relationship to other work
 

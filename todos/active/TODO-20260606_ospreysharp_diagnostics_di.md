@@ -35,9 +35,19 @@
   disabled predict-rt dump, the *_ONLY exits, and the per-entry DIAG selectors).
   Env-only workflows still self-enable via lazy `Initialize(false)` on first use.
   Verified green: build, 372 tests, ReSharper 0 warnings. Production runs (no env,
-  no -d) get a null sink = full no-op. Remaining: document `-d` in DIAGNOSTICS.md;
-  optional `-SkipRust` end-to-end spot-check (output-neutral by construction since
-  dumps are off in a normal run).
+  no -d) get a null sink = full no-op.
+- 2026-06-06: **Bit-parity verified (measured, not by-construction).** Built Release
+  from this branch and ran Test-Snapshot on Stellar `-Files All` vs `_snapshots/main`
+  (baseline #4273, an ancestor of HEAD). All comparisons byte-identical: stage1to4,
+  stage5 standardizer/subsample/svm_weights, stage5 percolator (SHA 0cc0c7f9, both
+  sides), stage6 (parquet+fdr_scores), stage7, and blib (Compare-Blib: 0/59768
+  divergence, all columns). The three stage5 dumps + percolator going through the new
+  facade/sink prove the dump output is unchanged. Confounds hit along the way (logged
+  in TODO-ospreysharp_selfcontained_e2e_regression_gate.md): the first `-Quick` run was
+  a false fail (stale Release binary + single-file vs 3-file baseline); and
+  Test-Snapshot reports false FAILs on percolator/blib because it invokes
+  `Compare-Percolator.ps1` / `Compare-Blib-Crossimpl.ps1` at stale top-level paths
+  (now in Compare/archive/ and Compare/). Astral `-Files All` not yet run.
 
 ## Problem
 
