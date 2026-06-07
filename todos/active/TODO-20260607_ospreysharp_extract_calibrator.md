@@ -1,11 +1,45 @@
-# TODO: OspreySharp — extract calibration out of PerFileScoringTask into a Calibrator
+# TODO-20260607_ospreysharp_extract_calibrator.md
 
-**Status**: Backlog (not started)
+## Branch Information
+- **Branch**: `Skyline/work/20260607_ospreysharp_extract_calibrator`
+- **Base**: `master`
+- **Created**: 2026-06-07
+- **Status**: In Progress
+- **PR**: (pending)
+
 **Priority**: Medium — largest single readability win, lowest risk of the three;
 good first step before the scoring decomposition
 **Type**: Architecture / separation of concerns
 **Source**: OOP review of `pwiz_tools/OspreySharp` (2026-06-06), Separation-of-
 concerns lens + Top Recommendation #1
+
+## Progress log
+- 2026-06-07: Branch created off master (`c10858d971`, pre-#4275). Chose to base
+  off current master rather than wait for diagnostics PR #4275 or stack on it:
+  calibrator work guts `PerFileScoringTask.cs`, which #4275 never touched, and
+  #4275 shipped diagnostics as a static facade (`OspreyDiagnostics.X` call sites
+  unchanged), so the relocated calibration code keeps calling the facade and
+  resolves correctly before or after #4275 merges. Overlap surface is tiny.
+
+- 2026-06-07: Extraction landed. Created `Tasks/Calibrator.cs` (internal sealed,
+  `pwiz.OspreySharp.Tasks`, ctor takes `PipelineContext`); moved the 5 constants,
+  `CalibrationPassResult`, and all 12 calibration methods (incl. the omitted
+  `ScoreCalibrationMatches`) out of `PerFileScoringTask` via scripted byte-exact
+  slicing. PerFileScoringTask 2828 -> 1558 LOC; Calibrator 1330 LOC. Promoted
+  `ExtractTopNFragmentXics`, `FindNearestMs1`, `CountTop6Matches` to
+  `internal static` on AbstractScoringTask (all pure; `CountTop6Matches` was the
+  one dependency the initial map missed, caught by the build); call site uses
+  `new Calibrator(_ctx).RunCalibration(...)`. **Verified byte-identical**: moved
+  method bodies (1237 lines), constants, and CalibrationPassResult all diff-clean
+  vs HEAD after reversing the qualifier edits. Green: build net8.0+net472, 372
+  tests, ReSharper 0 warnings. Parity (`-Files All -SkipRust`, net8.0 vs cached
+  Rust): **Stellar PASS** (precursors delta=0; Stage7 + blib content 1e-9) and
+  **Astral PASS** (precursors 167285=167285, delta=0; Stage7 + blib content 1e-9).
+  (blib byte-size deltas are pre-existing SQLite page padding, not content.)
+  Fresh-context self-review: clean, no findings -- confirmed 33 OspreyDiagnostics
+  calls in identical order, no method overrides (static promotion safe),
+  InternalsVisibleTo keeps test access to the promoted internals, no hidden state,
+  no dead code. Ready to commit + open PR.
 
 ## Problem
 
@@ -85,3 +119,83 @@ constructs and calls. The task is left as clean orchestration:
   decomposition easier to reason about.
 - Pairs with `TODO-ospreysharp_diagnostics_di.md`: the extracted `Calibrator`
   should receive an injected diagnostics sink rather than calling the static class.
+
+## Design decisions (resolved 2026-06-07, from code analysis)
+
+Both open questions above are answerable from the code; resolved as follows.
+
+- **Home for `Calibrator`: keep in the OspreySharp exe**, namespace
+  `pwiz.OspreySharp.Tasks`, new file `Tasks/Calibrator.cs`. NOT promoted to
+  `OspreySharp.Chromatography`. The cluster depends on `pwiz.OspreySharp.Scoring`
+  (CalibrationMatch, CalibrationScorer, ScoringContext, SpectralScorer,
+  ScoringMath, FragmentMath) *and* `Chromatography` (RTCalibration, MzCalibration,
+  MzCalibrationResult, LoessRegression). Promotion would force a
+  `Chromatography -> Scoring` reference and break the dependency DAG. Calibrator
+  sits above both layers, so it belongs in the exe.
+- **`s_calXcorrScorer` / `CAL_TOP_N_FRAGMENTS` do NOT move onto `Calibrator`.**
+  `CAL_TOP_N_FRAGMENTS` is also used by dedup scoring in `AbstractScoringTask`
+  (:1753/:1755), and `s_calXcorrScorer` is pinned by name in
+  `CalibrationTest.cs:544`. Both stay `internal static` on `AbstractScoringTask`;
+  the same-assembly `Calibrator` references them qualified
+  (`AbstractScoringTask.s_calXcorrScorer`, `AbstractScoringTask.CAL_TOP_N_FRAGMENTS`).
+- **`Calibrator` does not inherit `AbstractScoringTask`** — it is a standalone
+  collaborator. Constructor takes the pipeline `PipelineContext` (`_ctx`, the only
+  instance dependency of the cluster, used for LogInfo/LogWarning). The per-file
+  `ScoringContext` keeps flowing as a `RunCalibration` parameter.
+- **4 inherited members** the cluster reaches today get minimal, parity-safe
+  treatment (no body changes, just visibility/qualification):
+  - `ExtractTopNFragmentXics` (AbstractScoringTask:298): `protected` -> `internal
+    static`. It is pure (params only; calls static `ScoringMath` only) and its only
+    caller is the calibration cluster. Calibrator calls
+    `AbstractScoringTask.ExtractTopNFragmentXics`.
+  - `FindNearestMs1` (AbstractScoringTask:2259): `protected static` -> `internal
+    static`. Genuinely shared (AbstractScoringTask:2210/:2233 also call it), so it
+    stays on the base. Calibrator calls `AbstractScoringTask.FindNearestMs1`.
+  - `s_calXcorrScorer`, `CAL_TOP_N_FRAGMENTS`: already `internal`, no change.
+- **Diagnostics**: PR #4275 shipped diagnostics as a static facade
+  (`OspreyDiagnostics.X`, call sites unchanged). The moved cluster keeps calling
+  `OspreyDiagnostics.X` verbatim, preserving the Stage-cal dump call order. (The
+  "injected sink" aspiration in the diagnostics TODO was superseded by the facade
+  design; no injection needed here.)
+
+## Cluster inventory (verified, PerFileScoringTask.cs)
+
+Contiguous calibration region **lines 1570-2806** (RunCalibration's doc-comment
+through ComputeMs1MassError's close); no non-calibration members interleaved.
+NOTE: the TODO's original method list omitted `ScoreCalibrationMatches` (:2037,
+a tuple-returning method called by RunCalibrationScoringPass). Full move set:
+
+- private class `CalibrationPassResult` (:76-98)
+- 5 constants (:67-74): MIN_SNR_FOR_RT_CAL, MIN_COELUTION_CORR_SCORE,
+  MIN_COELUTION_SPECTRA, CAL_FDR_THRESHOLD, ABSOLUTE_MIN_CALIBRATION_POINTS
+  (all cluster-only; verified)
+- RunCalibration (:1581) -> becomes `public`, the only external entry point
+- RunCalibrationScoringPass (:1825), PreprocessWindowsForXcorr (:2012),
+  ScoreCalibrationMatches (:2037), CollectCalibrationPoints (:2100),
+  AggregateMassCalibrations (:2157), SampleLibraryForCalibration (:2207, static),
+  ScoreCalibrationEntry (:2377), ScorePeaksByCorrelation (:2677, static),
+  CollectMs2FragmentErrors (:2720, static), ComputeMs1MassError (:2782)
+
+Call site: ProcessFile, PerFileScoringTask.cs:1295 (only caller of RunCalibration)
+-> rewrite to `new Calibrator(_ctx).RunCalibration(...)`.
+
+`FormatPrefixList` (:2813) sits right after the region and STAYS in
+PerFileScoringTask.
+
+## Implementation plan
+
+1. Promote `ExtractTopNFragmentXics` and `FindNearestMs1` to `internal static` in
+   AbstractScoringTask.cs; remove the stale ExtractTopNFragmentXics comment block
+   (:289-291). Build (confirms static promotion is clean).
+2. Create `Tasks/Calibrator.cs`: file header (AI attribution), usings, namespace,
+   `internal sealed class Calibrator` with `_ctx` field + ctor. Move the constants,
+   `CalibrationPassResult`, and the 11 methods in VERBATIM (scripted slice to keep
+   bodies byte-identical). Make RunCalibration `public`; qualify the 4 inherited
+   references with `AbstractScoringTask.`.
+3. Delete the moved region + constants + CalibrationPassResult from
+   PerFileScoringTask.cs; rewrite the call site to use `new Calibrator(_ctx)`.
+4. Add Calibrator.cs to the .csproj. Build net8.0 + net472, fix using/inspection.
+5. Gate: `Build-OspreySharp.ps1 -Configuration Debug -RunTests -RunInspection`,
+   then `Compare-EndToEnd-Crossimpl.ps1 -Files All -SkipRust` on Stellar + Astral
+   (expect byte-exact; pure relocation). Diff a -d dump set to confirm dump order.
+6. Self-review, PR, Copilot.
