@@ -15,6 +15,11 @@
 - 2026-06-06: Branch created. First commit strips the UTF-8 BOM that ReSharper
   re-added to `pwiz_tools/Skyline/Skyline.sln.DotSettings` in #4065 (unrelated
   housekeeping, bundled here per developer request). Diagnostics work follows.
+- 2026-06-06: Commented out the predict-rt diagnostic family (per-candidate
+  hotspot the OOP review flagged) -- see "Call-site disposition" below. Verified
+  green: build (net472 + net8.0), 372 unit tests pass, ReSharper 0 warnings.
+  Output-neutral (env-gated dumps, off in all normal runs). Next: the injectable
+  no-op diagnostics sink + `PipelineContext.Diagnostics` + `-d` flag (increment 1).
 
 ## Problem
 
@@ -97,14 +102,34 @@ argument:
 - Do **not** loosen any parity gate to make this pass — if output moves, the
   extraction changed something; bisect it.
 
+## Call-site disposition (decided 2026-06-06)
+
+These dumps are "previously useful" bisection diagnostics; each call site is a
+risk-vs-future-reward call. Two dispositions, not one:
+
+1. **Keep & inject** (the default for the ~100 non-hot-path sites): route through
+   `ctx.Diagnostics` with the no-op default. A no-op virtual call per task/per-file
+   is negligible.
+2. **Remove / comment out** (hot-path sites in per-candidate / per-spectrum inner
+   loops): do NOT inject — even a gated-off call + branch per candidate is unwanted
+   perf risk that outweighs the future reward of keeping it wired. Comment the call
+   out (don't delete the producing method), leave a restore note pointing here.
+   Accepts some code-drift risk before the diagnostic is next used; restoring even
+   with drift is usually little work.
+
+First applied to the predict-rt family (the hotspot the OOP review flagged):
+`WritePredictRtCall` (per-candidate, `AbstractScoringTask.ScoreCandidate`) plus its
+paired `WritePredictRtArrays` / `ClosePredictRtDump` in `PerFileRescoreTask` are
+commented out as a unit. Byte-identical for production/regression (the dumps are
+env-gated and off in every normal run); the `OspreyDiagnostics` methods stay for
+easy restore. Verified: build + 372 unit tests + ReSharper 0-warning gate all pass.
+
 ## Open design questions
 
 - Keep env-var sub-selection inside `FileOspreyDiagnostics`, or fold all toggles
   into `-d` sub-options? (Leaning: keep env vars for fine entry-id selection,
   `-d` as the master on/off — least churn, preserves existing bisection muscle
   memory.)
-- Null-object vs. an `IsEnabled` guard at the hottest sites — measure which keeps
-  `WritePredictRtCall` overhead at zero when off.
 
 ## Relationship to sibling TODOs
 
