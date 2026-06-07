@@ -90,6 +90,28 @@ regression that:
   `feedback_ospreysharp_csharp_regression_gate` memory (its `-SkipRust` preference is a
   workaround for the absence of this clean gate).
 
+## Gotchas observed 2026-06-06 (concrete fuel for the redesign)
+
+A `Test-Full-Regression -Quick` run during the diagnostics PR produced a gross
+FALSE failure for three harness reasons -- each a thing the redesigned gate must fix:
+
+1. **Snapshot is keyed by tag, not by `-Files`.** `_snapshots/main` was captured at
+   `-Files All` (3 files); `-Quick` runs single-file and compares against the same dir.
+   Cross-file stages (5/6/7/blib) then diverge grossly (reconciliation 19 MB -> 89 bytes;
+   consensus MISSING) -- a false fail that mimics a regression. The gate must key the
+   baseline by (dataset, files) and refuse to compare mismatched configs.
+2. **The harness reuses a stale Release binary and does NOT rebuild.** `Test-Snapshot`
+   only prints a build *hint*; it runs whatever `bin/.../Release/OspreySharp.exe` exists.
+   A run can silently test a binary from a *different branch* than the working tree (here,
+   the snapshot's own `postprf_cleanup` build, not the branch under test). The gate should
+   build (or verify the binary's source commit matches HEAD) before comparing.
+3. **Baseline provenance is unmanaged.** The snapshot was captured from an arbitrary
+   sibling work branch (`postprf_cleanup`), so it isn't a clean oracle for another branch.
+   Capture should record + check provenance, and the recommended verification for a
+   refactor is **patched-vs-unpatched on the same branch** (HEAD vs base), which is
+   immune to baseline provenance. See [[feedback_parity_vs_impact]],
+   [[feedback_ospreysharp_csharp_regression_gate]].
+
 ## Relationship to other work
 
 - Supersedes the day-to-day use of `Compare-EndToEnd-Crossimpl -SkipRust` as the C#
