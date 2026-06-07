@@ -5,7 +5,7 @@
 - **Base**: `master`
 - **Created**: 2026-06-07
 - **Status**: In Progress
-- **PR**: (pending)
+- **PR**: [#4276](https://github.com/ProteoWizard/pwiz/pull/4276)
 
 **Priority**: Medium — largest single readability win, lowest risk of the three;
 good first step before the scoring decomposition
