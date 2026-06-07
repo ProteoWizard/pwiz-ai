@@ -5,7 +5,7 @@
 - **Base**: `master`
 - **Created**: 2026-06-06
 - **Status**: In Progress
-- **PR**: (pending)
+- **PR**: [#4275](https://github.com/ProteoWizard/pwiz/pull/4275)
 
 **Priority**: Medium — clean, mostly parity-neutral, unblocks cleaner scoring/calibration extraction
 **Type**: Architecture / decoupling
@@ -48,6 +48,13 @@
   Test-Snapshot reports false FAILs on percolator/blib because it invokes
   `Compare-Percolator.ps1` / `Compare-Blib-Crossimpl.ps1` at stale top-level paths
   (now in Compare/archive/ and Compare/). Astral `-Files All` not yet run.
+- 2026-06-07: Astral `-Files All` bit-parity PASS (all 5 stages), matching Stellar.
+  Local self-review (run before the PR) raised 2 LOW findings, both addressed:
+  (1) lazy-init race -> `Sink` getter now throws if `Initialize` wasn't called
+  first (assert-the-invariant; removes the race) + publish ordering fixed;
+  (2) `OSPREY_DUMP_PREDICT_RT` silent no-op -> ctor throws NotImplementedException
+  naming the producers to uncomment. Verified green (build + 372 tests + 0
+  warnings). PR #4275 opened; Copilot review pending.
 
 ## Problem
 
