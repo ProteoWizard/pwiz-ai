@@ -74,13 +74,22 @@ pwsh -File ./ai/scripts/OspreySharp/Run-Osprey.ps1 -Clean
 pwsh -File ./ai/scripts/OspreySharp/Run-Osprey.ps1 -Tool Rust
 ```
 
-## Regression (the centerpiece)
+## Regression
 
-`Test-Snapshot.ps1` is the OspreySharp-alone regression gate.  It
-compares the current OspreySharp build against a frozen snapshot
-captured from an earlier known-good build; no Rust checkout
-required.  Stage-by-stage isolation: byte-equality SHA-256 checks on
-stages 1-6, structured comparators on stage 7 (protein FDR) and blib.
+For routine C#-side refactors (Rust unchanged), the preferred gate is
+the multi-file straight-through cross-impl run that reuses a cached Rust
+reference -- faster than the snapshot below, and it exercises the
+multi-file reconciliation / consensus-RT / gap-fill machinery that
+single-file runs never touch:
+`Compare/Compare-EndToEnd-Crossimpl.ps1 -Files All -SkipRust`.  See
+[PRE-COMMIT.md](PRE-COMMIT.md) and [Compare/README.md](Compare/README.md).
+
+When no Rust reference is available, use the OspreySharp-alone snapshot
+gate instead.  `Test-Snapshot.ps1` compares the current OspreySharp
+build against a frozen snapshot captured from an earlier known-good
+build; no Rust checkout required.  Stage-by-stage isolation:
+byte-equality SHA-256 checks on stages 1-6, structured comparators on
+stage 7 (protein FDR) and blib.
 
 `Test-Full-Regression.ps1` is the one-command wrapper that drives
 Test-Snapshot across both datasets at the chosen scale.

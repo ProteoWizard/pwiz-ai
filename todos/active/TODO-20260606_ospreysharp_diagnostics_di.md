@@ -83,12 +83,16 @@ argument:
   the values dumped must not change, and — critically — enabling/disabling
   diagnostics must not perturb scoring output (no order-of-operations or RNG
   coupling hiding in the dump calls).
-- Gate with the **C#-only end-to-end regression** before/after:
-  `Compare-EndToEnd-Crossimpl -Files All -SkipRust` (reuse cached Rust).
-- Because hot-path scoring calls are touched, also run `Test-Features.ps1` on
-  Stellar + Astral at **1e-6 per PIN feature** with `-d` **off** and confirm the
-  feature vectors are unchanged. Diff a representative dump set with `-d` **on**
-  against a current env-var capture to prove the dump content is identical.
+- Pre-commit gate (build + tests + zero-warning inspection):
+  `Build-OspreySharp.ps1 -Configuration Debug -RunTests -RunInspection`.
+- Because hot-path scoring calls are touched, run the C#-side refactor gate
+  before/after with `-d` **off** -- the multi-file straight-through run reusing the
+  cached Rust reference (Rust not re-run):
+  `Compare-EndToEnd-Crossimpl.ps1 -Files All -SkipRust` on Stellar + Astral;
+  Stage 7 + blib must match at 1e-9. (Cached Rust reference must match the
+  `-Files` set; no `-Force` with `-SkipRust` -- it wipes the cached `rust/`.) Diff
+  a representative dump set with `-d` **on** against a current env-var capture to
+  prove the dump content is identical.
 - net8.0 is the canonical parity runtime.
 - Do **not** loosen any parity gate to make this pass — if output moves, the
   extraction changed something; bisect it.

@@ -87,10 +87,14 @@ aspirational, and document where Osprey needs inputs Skyline cannot provide.)
   through CWT peak detection. **Extraction must preserve order of operations
   exactly** — each extracted calculator must reproduce the identical f64 value.
 - Phase it: extract **one calculator at a time behind a golden feature-dump diff**,
-  not a big-bang rewrite. After each extraction, `Test-Features.ps1` on Stellar +
-  Astral must hold at **1e-6 per PIN feature** (ideally exact for a pure move).
-- C#-only end-to-end gate each step: `Compare-EndToEnd-Crossimpl -Files All
-  -SkipRust`.
+  not a big-bang rewrite. After each extraction, the C#-side refactor regression on
+  Stellar + Astral must hold (exact for a pure move) -- the multi-file
+  straight-through run reusing the cached Rust reference:
+  `Compare-EndToEnd-Crossimpl.ps1 -Files All -SkipRust`, plus the pre-commit
+  `Build-OspreySharp.ps1 -Configuration Debug -RunTests -RunInspection`.
+  (Cached Rust reference must match the `-Files` set; no `-Force` with `-SkipRust`.)
+- Full cross-impl drift check (rare; re-runs Rust, only if porting a Rust algorithm
+  change): drop `-SkipRust`. See `Compare/README.md`.
 - net8.0 canonical for parity. Do not loosen a gate to land a step; if a feature
   moves, the extraction changed the math — bisect and fix, don't widen tolerance
   (needs explicit sign-off and end-of-pipeline review per project rule).

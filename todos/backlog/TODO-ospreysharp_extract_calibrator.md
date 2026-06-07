@@ -56,9 +56,11 @@ constructs and calls. The task is left as clean orchestration:
 - This is a **pure relocation** — byte-for-byte identical calibration output
   required. Calibration feeds RT prediction, which feeds scoring, so a drift here
   cascades into the feature vectors.
-- Gate: `Test-Features.ps1` on Stellar + Astral at **1e-6 per PIN feature**
-  (expect exact for a clean move) **and** the C#-only end-to-end regression
-  `Compare-EndToEnd-Crossimpl -Files All -SkipRust` (reuse cached Rust).
+- Gate: the C#-side refactor regression on Stellar + Astral (expect exact for a
+  clean move) -- the multi-file straight-through run reusing the cached Rust
+  reference: `Compare-EndToEnd-Crossimpl.ps1 -Files All -SkipRust`, plus the
+  pre-commit `Build-OspreySharp.ps1 -Configuration Debug -RunTests -RunInspection`.
+  (Cached Rust reference must match the `-Files` set; no `-Force` with `-SkipRust`.)
 - Preserve the calibration diagnostic-dump call order exactly (the Stage-cal dumps
   are bisection seams); the dumps move with the code.
 - net8.0 canonical for parity. Do not loosen a gate to land it.
