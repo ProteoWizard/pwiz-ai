@@ -152,8 +152,11 @@ on"); stacked PRs per family, low→high risk; transferability matrix skipped.
     different from the inline original.
   - **Non-PIN scores deferred to backlog (2026-06-07 decision).** A request to also port the
     ~26 EXCLUDED scores (hyperscore, dot-product/Top-N family, DIA-NN pCos, coverage, etc.)
-    surfaced that these are **Rust-computed but C#-dead** (the `CoelutionFeatureSet` non-PIN
-    fields are a never-assigned mirror) — so there is no cross-impl oracle for them today.
+    surfaced that **most** are Rust-computed with **no C# code** (the `CoelutionFeatureSet`
+    non-PIN fields are a never-assigned mirror; a unit test asserts the 0.0 defaults) — so no
+    cross-impl oracle exists for that tier. (Correction 2026-06-08: a few — `dot_product`/
+    `lib_cosine`, `signal_to_noise`, `top6_matches` — ARE already computed in C# as
+    byproducts/bounds and are cheap to wire; the backlog TODO splits the two tiers.)
     Per the user, NOT ported now (would be unverified math); captured in
     `ai/todos/backlog/TODO-ospreysharp_nonpin_scores_port.md` for a future parity-gated sprint
     that builds a full-feature-set Rust↔C# verification harness first. pCos must stay 0.0.

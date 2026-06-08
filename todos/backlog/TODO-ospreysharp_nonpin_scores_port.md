@@ -20,21 +20,46 @@ on that SPI.
 
 ## Why this is a separate sprint (the parity problem)
 
-These scores **do not exist in OspreySharp today**. The C# port builds a bare
-`double[21]` PIN vector directly from the 21 calculators; it never populates a
+**Most** of these scores do not exist in OspreySharp today. The C# port builds a
+bare `double[21]` PIN vector directly from the 21 calculators; it never populates a
 `CoelutionFeatureSet`. The `CoelutionFeatureSet` class
-(`OspreySharp.Core/CoelutionFeatureSet.cs`, ~40 properties) is a **dead 1:1 mirror**
-of the Rust struct — every non-PIN field is defined-but-never-assigned in the C#
-scoring path. The full ~47-field set is computed only in **Rust**
-(`crates/osprey/src/pipeline.rs` `run_search` + `crates/osprey-scoring/src/lib.rs`),
-which then selects 21 for the PIN.
+(`OspreySharp.Core/CoelutionFeatureSet.cs`, ~40 properties) is a near-**dead 1:1
+mirror** of the Rust struct — its non-PIN fields are defined-but-never-assigned in
+the C# scoring path (a unit test, `CoreTypesTest.cs:362-363`, even asserts
+`Hyperscore == 0.0` / `PeakWidth == 0.0` defaults). The full ~47-field set is
+computed in **Rust** (`crates/osprey/src/pipeline.rs` `run_search` +
+`crates/osprey-scoring/src/lib.rs`), which then selects 21 for the PIN.
 
-Consequently there is **no cross-impl oracle** for these scores: the existing
+**Two tiers of effort (verified 2026-06-08, important correction):** a *few* of the
+excluded scores ARE already computed in C# — the math exists, it is just consumed as
+a byproduct or for peak bounds, never emitted as a feature. Wiring those into
+calculators is cheap and (for `dot_product`) even has a partial oracle. The
+*majority* have no C# code at all and need a from-scratch Rust→C# port.
+- **C#-AVAILABLE (cheap to wire):**
+  - `dot_product` (= `lib_cosine`): real, exercised C# computation in
+    `SpectralScorer.LibCosine` (`SpectralScorer.cs:573`), invoked at the apex
+    (`AbstractScoringTask.cs:1433`, currently a vestigial/unused local). Also
+    `BatchScorer.LibCosineScorer`.
+  - `signal_to_noise`: computed for peak-bounds detection
+    (`PeakDetector.ComputeSnr`; stored on `XICPeakBounds.SignalToNoise`, used at
+    `AbstractScoringTask.cs:1671`). A calculator would just read `bestPeak.SignalToNoise`.
+  - `top6_matches`: computed inline via `CountTop6Matches` as a dedup byproduct.
+- **NO C# CODE (needs a verified port):** hyperscore, dot_product_smz, the
+  dot_product[_smz]_top4/5/6 family, fragment_coverage, sequence_coverage,
+  base_peak_rank, mass_accuracy_std, peak_symmetry, peak_width, n_scans,
+  coelution_min, n_fragment_pairs, fragment_corr_0..5, elution_weighted_cosine
+  (pCos), modification_count, peptide_length, missed_cleavages,
+  median_polish_rsquared. (~22 scores; whole-tree search finds only the dead field
+  declarations, no computing method.)
+
+Consequently there is **no cross-impl oracle** for the NO-C#-CODE tier: the existing
 end-to-end gate (`Compare-EndToEnd-Crossimpl.ps1`, Stage 7 + blib @ 1e-9) only
-covers the 21 PIN columns. Porting the Rust math to C# without a per-feature
-parity gate would mean shipping ~18 unverified scoring functions — against the
-project's byte-parity discipline. So this sprint must **first build the
-verification harness**, then port.
+covers the 21 PIN columns. Porting that Rust math to C# without a per-feature parity
+gate would mean shipping unverified scoring functions — against the project's
+byte-parity discipline. So this sprint must **first build the verification harness**,
+then port that tier. (The C#-AVAILABLE tier can be wired up before the harness,
+since its math is already in the tree; `dot_product` can be checked against Rust's
+`lib_cosine`, and `signal_to_noise` reuses the already-validated bounds SNR.)
 
 **Hard invariant (carry into any change):** nothing here may alter the 21-element
 PIN vector, its order, or its values. The PIN width is fixed at 21 in three
@@ -67,7 +92,9 @@ Excluded scores must **never** become PIN columns.
 
 ## The catalog of non-PIN scores (durable copy)
 
-Status legend: **RUST-ONLY** = computed in Rust, C# mirror field dead.
+Status legend: **RUST-ONLY** = computed in Rust, C# mirror field dead (no C#
+computation). **C#-AVAILABLE** = the C# math already exists (as a byproduct or for
+peak bounds), just not emitted as a feature — cheap to wire into a calculator.
 **RUST-ZEROED** = Rust hard-codes 0.0. **C#-BYPRODUCT** = computed in C# for a
 non-feature purpose. Reason "bulk-removed" = dropped from PIN as a group during
 feature-weight optimization (`osprey-fdr/src/mokapot.rs:957-964` + osprey `CLAUDE.md`);
@@ -81,10 +108,10 @@ before use.
 | fragment_corr_0..5 | Coelution | RUST-ONLY | pipeline.rs:7503 | `Xics` | bulk-removed |
 | peak_width | Peak-shape | RUST-ONLY | pipeline.rs:7506 | `Xics`/`PeakBounds` | bulk-removed |
 | peak_symmetry | Peak-shape | RUST-ONLY | pipeline.rs:7507 | `Xics`/`PeakBounds` | bulk-removed |
-| signal_to_noise | Peak-shape | RUST-ONLY | pipeline.rs:7508 (= peak SNR) | `PeakBounds` | bulk-removed |
+| signal_to_noise | Peak-shape | **C#-AVAILABLE** | pipeline.rs:7508 (= peak SNR) | `bestPeak.SignalToNoise` (already computed: PeakDetector.ComputeSnr; XICPeakBounds.SignalToNoise) | bulk-removed — but C# value already exists for bounds; calculator just reads it |
 | n_scans | Peak-shape | RUST-ONLY | pipeline.rs:7509 | `PeakBounds` | bulk-removed |
 | hyperscore | Spectral-at-apex | RUST-ONLY | lib.rs:1463 (compute_hyperscore), lib.rs:2177; pipeline.rs:7511 | `ApexSpectrum` + `Candidate.Fragments` | bulk-removed (X!Tandem-style) |
-| dot_product | Spectral-at-apex | RUST-ONLY | lib.rs:1635 (lib_cosine); pipeline.rs:7513 | `ApexSpectrum` | bulk-removed |
+| dot_product | Spectral-at-apex | **C#-AVAILABLE** | lib.rs:1635 (lib_cosine); pipeline.rs:7513 | `ApexSpectrum` — C# `SpectralScorer.LibCosine` (SpectralScorer.cs:573) already runs at apex (vestigial local AbstractScoringTask.cs:1433); also BatchScorer.LibCosineScorer | bulk-removed — C# math exists; checkable vs Rust lib_cosine |
 | dot_product_smz | Spectral-at-apex | RUST-ONLY | pipeline.rs:7514 | `ApexSpectrum` | bulk-removed |
 | dot_product_top6/5/4 | Spectral-at-apex | RUST-ONLY | lib.rs:1772-1774 (cosine_topn_sqrt); pipeline.rs:7515-7517 | `ApexSpectrum` + top-N lib frags | bulk-removed |
 | dot_product_smz_top6/5/4 | Spectral-at-apex | RUST-ONLY | pipeline.rs:7518-7520 | `ApexSpectrum` | bulk-removed |
