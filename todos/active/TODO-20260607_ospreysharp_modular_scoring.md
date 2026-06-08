@@ -116,6 +116,51 @@ on"); stacked PRs per family, low→high risk; transferability matrix skipped.
   after public methods, AI-attribution headers.
 
 ## Progress log
+- 2026-06-08 (night session): **Apex-match + xcorr+SG committed; 6 of 7 families done.**
+  - **apex-match (7/8/9/10)** `41e37977b8`: `ApexMatchCalculators` — `ConsecutiveIonsCalc`
+    (separate `HasMatch` pass) + `ApexFragmentMatchSet` byproduct serving
+    explained_intensity / mass_accuracy_deviation_mean / abs_mass_accuracy_deviation_mean.
+    Added the `ApexSpectrum` accessor to `IOspreyDetailedPeakData` (first spectral family).
+    Stellar+Astral 1e-9 vs fresh Release; +`TestApexMatchCalculators` (incl. the feature-10
+    no-match fallback = live `FragmentTolerance.Tolerance`, not 0.0).
+  - **xcorr+SG (6/17/18)** `0664a0260e`: `XcorrCalculators` — `XcorrCalc` (single apex call)
+    + shared `SgWeightedSweep` byproduct (apex±2 sweep once, serving sg_weighted_xcorr /
+    sg_weighted_cosine); relocated `ComputeCosineAtScan` + `SG_WEIGHTS`. Added per-window
+    machinery to the context via `SetWindow` (Resolution/PreprocessedXcorr/Scorer/
+    XcorrScratchPool) and the apex index surface to the peak-data (ApexGlobalIndex /
+    ApexLocalIndex / WindowStartIndex / WindowLength / WindowSpectra) — global-vs-local
+    INDEX TRAP preserved; removed the dead `preprocessedXcorr` param from ScoreCandidate.
+    XcorrScratchPool still threaded to ScoreXcorr (`[POOL] scratch_allocs=0`). Stellar+Astral
+    1e-9 vs fresh Release; +`TestXcorrSgCalculators` (index-echo resolution fake pins the SG
+    weights + asymmetric edge skip). Perf A/B (model overhead vs merge-base) in progress.
+  - Both spectral families' extraction specs + draft calculators came from parallel ultracode
+    planning sub-agents (dossier-driven); persisted under `ai/.tmp/xcorr-sg/` and `ai/.tmp/ms1/`.
+  - **MS1 (13/14)** `552e0aa4ed`: `Ms1Calculators` — a shared `Ms1ScoringByproduct`
+    (one HRAM-gated pass) serving ms1_precursor_coelution / ms1_isotope_cosine, with the
+    MS1-specific ref-XIC pick (seed 0.0 / >= last-wins), skip-not-zerofill sampling,
+    <1e-10 Pearson guard, apex isotope-envelope cosine. Relocated the nearest-MS1 search
+    into Core (`MS1Spectrum.FindNearest`, single <=-tie-break impl; the exe `FindNearestMs1`
+    is now a forwarder still used by `Calibrator`). Added `SetMs1Machinery` to the context +
+    `ScanRetentionTimes` to the peak-data. Stellar+Astral 1e-9 vs fresh Release; +`TestMs1Calculators`.
+  - **ALL 21 PIN features now decomposed.** 7 family commits on master `6774740f99`:
+    peak-shape `55b8da50ce`, coelution `e0c72e7cdf`, median-polish `31692ee098`,
+    rt-deviation `01a53e2d1d`, apex-match `41e37977b8`, xcorr+sg `0664a0260e`, ms1 `552e0aa4ed`.
+  - **Perf gate PASS** (xcorr+SG family, the perf-dominant one): Astral single-file stage-4
+    "Coelution scoring" (1,699,771 candidates, median of 3, interleaved vs merge-base):
+    master 61.50s [66.0,61.5,58.2] vs branch 60.50s [65.3,60.5,59.3] = **-1.6% (within noise,
+    no regression)**. The full calculator+context model across all families is unmeasurably
+    different from the inline original.
+  - **Non-PIN scores deferred to backlog (2026-06-07 decision).** A request to also port the
+    ~26 EXCLUDED scores (hyperscore, dot-product/Top-N family, DIA-NN pCos, coverage, etc.)
+    surfaced that these are **Rust-computed but C#-dead** (the `CoelutionFeatureSet` non-PIN
+    fields are a never-assigned mirror) — so there is no cross-impl oracle for them today.
+    Per the user, NOT ported now (would be unverified math); captured in
+    `ai/todos/backlog/TODO-ospreysharp_nonpin_scores_port.md` for a future parity-gated sprint
+    that builds a full-feature-set Rust↔C# verification harness first. pCos must stay 0.0.
+  - **Remaining for the user (morning):** open the single PR — PR message ready at
+    `ai/.tmp/pr-modular-scoring.md`; run `/pw-self-review` locally first, then `gh pr create`,
+    then address Copilot. Nothing pushed. Optional cleanup: `git -C C:/proj/pwiz worktree
+    remove C:/proj/pwiz-perfbase`.
 - 2026-06-07: **PR-3/PR-4 committed.** Median-polish `31692ee098`, RT-deviation
   `01a53e2d1d` (added `ApexRetentionTime`/`ExpectedRt` to the peak-data interface).
   Both Stellar+Astral 1e-9 vs fresh Release. **4 of 7 families done** (peak-shape,
