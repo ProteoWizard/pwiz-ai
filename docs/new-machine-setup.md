@@ -1072,6 +1072,50 @@ This validates that the build environment works, tests can execute, and antiviru
 
 ## Troubleshooting
 
+### `cl.exe` Not Found / "Did not find command for MSVC toolset"
+
+**Symptoms** (building from `b.bat` / `bs.bat`, even with `toolset=msvc-14.3`):
+- `'cl' is not recognized as an internal or external command`
+- `warning: Did not find command for MSVC toolset. If you have Visual Studio 2017 installed you will need to ... set VS150COMNTOOLS ...` (this VS 2017/VS150 wording is misleading boost.build fallback chatter — it really means "the requested MSVC toolset isn't installed")
+
+**Cause:** Visual Studio is installed but the **Desktop development with C++** workload is not, so there is no C++ compiler. This commonly happens after:
+- A bare `winget install Microsoft.VisualStudio.2022.Community` **without** the `--override` workload flags (see Phase 2.1) — installs the IDE but no compiler.
+- A partial, interrupted, or repaired install where the VS Installer records the workload as *selected* but never finishes installing its component payloads.
+
+**Do NOT trust the VS Installer checkboxes.** A workload can show as checked while its files are absent on disk. Verify against the filesystem / vswhere instead:
+
+```powershell
+# Authoritative: does the C++ compiler toolset actually exist?
+Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC" -ErrorAction SilentlyContinue | Select-Object Name
+# Empty / missing folder = no C++ compiler installed (regardless of checkbox state)
+
+# Which installs actually have C++ tools:
+& "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -all -products * `
+    -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+```
+
+**Fix — add the workload via the VS Installer:**
+1. Open **Visual Studio Installer** → **Modify** on VS 2022
+2. Check **Desktop development with C++** (and **.NET desktop development** if also missing)
+3. Under **Individual components**, confirm **.NET Framework 4.7.2 targeting pack**
+4. Click **Modify**
+
+If the boxes already appear checked but the files are missing, **uncheck → re-check** them before clicking Modify to force the installer to reconcile and actually install the payloads.
+
+Or from an **elevated** terminal:
+```powershell
+& "C:\Program Files (x86)\Microsoft Visual Studio\Installer\setup.exe" modify `
+  --installPath "C:\Program Files\Microsoft Visual Studio\2022\Community" `
+  --add Microsoft.VisualStudio.Workload.NativeDesktop `
+  --add Microsoft.VisualStudio.Workload.ManagedDesktop `
+  --add Microsoft.Net.Component.4.7.2.TargetingPack `
+  --passive --norestart
+```
+
+After it finishes, re-run the `VC\Tools\MSVC` check above — a `14.3x.xxxxx` (or `14.4x`) folder confirms `cl.exe` is present and `toolset=msvc-14.3` will resolve.
+
+> **Note on multiple VS versions:** `vswhere -latest` returns the highest version (VS 2026 = `...\18\Community`), which can mask a compiler-less VS 2022. Use `-all` to enumerate every install, and remember nightly builds require VS 2022's `msvc-14.3` toolset specifically — having C++ tools only in VS 2026 is not enough.
+
 ### NuGet Package Errors (NU1101)
 
 If you see "Unable to find package" errors:
