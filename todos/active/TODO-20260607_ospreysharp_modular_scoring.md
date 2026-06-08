@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260607_ospreysharp_modular_scoring`
 - **Base**: `master` (`6774740f99`, post-#4276 calibrator extraction)
 - **Created**: 2026-06-07
-- **Status**: In Progress
+- **Status**: PR open — [#4277](https://github.com/ProteoWizard/pwiz/pull/4277)
 - **Delivery**: ONE branch, ONE final PR; one byte-parity-gated **commit** per
   feature family (peak-shape → coelution → median-polish → rt-dev → apex-match →
   xcorr+sg → ms1). Per-family *gate* is unchanged (build+tests+inspection +
@@ -160,10 +160,13 @@ on"); stacked PRs per family, low→high risk; transferability matrix skipped.
     Per the user, NOT ported now (would be unverified math); captured in
     `ai/todos/backlog/TODO-ospreysharp_nonpin_scores_port.md` for a future parity-gated sprint
     that builds a full-feature-set Rust↔C# verification harness first. pCos must stay 0.0.
-  - **Remaining for the user (morning):** open the single PR — PR message ready at
-    `ai/.tmp/pr-modular-scoring.md`; run `/pw-self-review` locally first, then `gh pr create`,
-    then address Copilot. Nothing pushed. Optional cleanup: `git -C C:/proj/pwiz worktree
-    remove C:/proj/pwiz-perfbase`.
+  - **PR opened: [#4277](https://github.com/ProteoWizard/pwiz/pull/4277)** (2026-06-08).
+    pwiz branch pushed; ai-repo records pushed. Remaining: `/pw-self-review 4277` +
+    address Copilot's auto-review (`/pw-respond 4277`); optional `/ultrareview 4277`.
+    Optional cleanup: `git -C C:/proj/pwiz worktree remove C:/proj/pwiz-perfbase`.
+  - Two follow-up backlog TODOs queued: `TODO-ospreysharp_nonpin_scores_port.md`
+    (the ~26 non-PIN scores, two-tier) and `TODO-ospreysharp_feature_weight_contributions.md`
+    (Skyline-style Percolator weight + percent-contribution table).
 - 2026-06-07: **PR-3/PR-4 committed.** Median-polish `31692ee098`, RT-deviation
   `01a53e2d1d` (added `ApexRetentionTime`/`ExpectedRt` to the peak-data interface).
   Both Stellar+Astral 1e-9 vs fresh Release. **4 of 7 families done** (peak-shape,
