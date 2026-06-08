@@ -1,0 +1,207 @@
+# TODO-20260607_ospreysharp_modular_scoring.md
+
+## Branch Information
+- **Branch**: `Skyline/work/20260607_ospreysharp_modular_scoring`
+- **Base**: `master` (`6774740f99`, post-#4276 calibrator extraction)
+- **Created**: 2026-06-07
+- **Status**: In Progress
+- **Delivery**: ONE branch, ONE final PR; one byte-parity-gated **commit** per
+  feature family (peak-shape → coelution → median-polish → rt-dev → apex-match →
+  xcorr+sg → ms1). Per-family *gate* is unchanged (build+tests+inspection +
+  Stellar/Astral 1e-9 each commit); only the per-family PR overhead is dropped.
+  (Revised 2026-06-07 from stacked-PRs — the gate, not the PR boundary, is what
+  protects parity; one coherent refactor reviews better as one PR. May peel the
+  high-risk xcorr+sg commit into its own PR if it warrants isolated review.)
+- **Parent (backlog)**: `TODO-ospreysharp_modular_scoring_context.md` (stays as the
+  broader design doc); strategic alignment from
+  `brendanx67/TODO-ospreysharp_skyline_shared_scoring.md`
+- **Plan**: `C:\Users\brendanx\.claude\plans\let-s-begin-planning-the-wobbly-dragon.md`
+
+**Priority**: Medium-High — highest-leverage structural change in the scoring path,
+highest parity risk.
+**Type**: Architecture / scoring decomposition. **Execution**: ultracode (parallel
+authoring + adversarial parity verification; serial gated integration).
+
+## Goal
+
+Replace the ~870-line inline 21-feature block in
+`AbstractScoringTask.ScoreCandidate` with **one class per score**, driven by an
+`OspreyScoringContext`, mirroring Skyline's `IPeakFeatureCalculator` /
+`PeakScoringContext` / `ISummaryPeakData`/`IDetailedPeakData` shapes — so the two
+scoring systems are close enough to imagine sharing scores later.
+
+**Decisions (locked):** mirror inside Osprey only (new SPI in `OspreySharp.Scoring`;
+no `Shared` assembly, no Skyline edits this sprint); **all 21 features** incl. the
+spectrum-wall set; flattened Skyline-shaped peak data **plus** an apex/MS1 spectral
+accessor on `IOspreyDetailedPeakData` (the "ApexSpectrum that Skyline would throw
+on"); stacked PRs per family, low→high risk; transferability matrix skipped.
+
+## Architecture (in `OspreySharp.Scoring`)
+
+- `IOspreyFeatureCalculator.Calculate(OspreyScoringContext, IOspreyPeakData)` +
+  `Name`; abstract `Summary`/`Detailed` bases mirroring Skyline.
+- `IOspreyPeakData` (summary: Candidate, PeakBounds, ExpectedRt, ApexRetentionTime)
+  → `IOspreyDetailedPeakData` (Xics + cropped-peak helpers + spectral accessor:
+  ApexSpectrum, window spectra apex±2, Ms1Spectra/nearest-MS1, ApexGlobalIndex).
+- `OspreyScoringContext` (Config, Resolution, Scorer, XcorrScratchPool,
+  preprocessedXcorr, RT/mass calibration, tolerances) + `AddInfo<T>`/`TryGetInfo<T>`
+  byproduct cache. **Reused per file/window, byproduct dict Clear()'d between
+  candidates** (hot-loop allocation discipline; mirrors XcorrScratchPool).
+- `OspreyFeatureCalculators` registry — the ordered array owns the parity-critical
+  PIN order as data.
+- Per-family shared intermediates published via `AddInfo<T>`: `PeakShapeStats`,
+  `CoelutionStats`, `MedianPolishResult`.
+- Non-feature byproducts (`libCosine` at apex, `top6Matches`) stay inline — not
+  calculators.
+
+## Feature families → PRs (low → high risk)
+
+| PR | Family (PIN idx) | Source | Risk |
+|---|---|---|---|
+| 0 | Scaffolding (SPI, context, registry, interfaces) | — | none |
+| 1 | Peak-shape (3,4,5) | `ComputePeakShapeFeatures` | low |
+| 2 | Coelution (0,1,2) | `ComputeCoelutionStats` | low |
+| 3 | Median-polish (15,16,19,20) | inline Tukey + `TukeyMedianPolish.*` | low-med |
+| 4 | RT-deviation (11,12) | inline | low |
+| 5 | Apex-match (7,8,9,10) | `CountConsecutiveIons`, `ComputeApexMatchFeatures` | med |
+| 6 | Xcorr+SG (6,17,18) | `resolution.ScoreXcorr`, SG loop, `ComputeCosineAtScan` | **high** (perf gate) |
+| 7 | MS1 (13,14) | `ComputeMs1Features` | high |
+
+## Constraints / gates (per PR)
+
+- **Byte-for-byte parity.** Each extraction is a pure value-preserving move; if a
+  feature value moves, the math changed — **bisect and fix; do NOT widen tolerance**
+  (needs explicit sign-off + end-of-pipeline review).
+- **GATE VALIDITY (learned 2026-06-07): `Compare-EndToEnd-Crossimpl` runs the
+  Release net8.0 exe via `Get-OspreySharpExe` and does NOT build** — it errors only
+  if the exe is missing. So the per-family gate order MUST be: (a)
+  `Build-OspreySharp -Configuration Debug -RunTests -RunInspection` (logic/tests),
+  THEN (b) `Build-OspreySharp -Configuration Release` (so Compare runs THIS family's
+  code), THEN (c) `Compare-EndToEnd-Crossimpl` Stellar + Astral. Skipping (b) makes
+  Compare run a stale exe; because each extraction is byte-identical by construction,
+  a stale exe PASSES regardless, so the gate would NOT catch an extraction bug. Do
+  not commit a family until parity passes against a FRESH Release build. (Do not
+  rebuild Release while a Compare run is in flight — Windows locks the running exe.)
+- Gates: (1) per-feature golden diff — `--write-pin` `{file}.cs_features.tsv`
+  byte-identical (merge-base vs branch); (2) `Compare-EndToEnd-Crossimpl.ps1 -Files
+  All -SkipRust` on Stellar + Astral, net8.0, Stage7 + blib at 1e-9; (3)
+  `Build-OspreySharp.ps1 -Configuration Debug -RunTests -RunInspection`; (4)
+  per-calculator unit tests vs pre-extraction values.
+- **Performance (no stage-4 regression)** — baseline = recently-updated
+  `Osprey-workflow.html` on this machine (do NOT re-record). Watch stage-4 "Coelution
+  scoring" / stage1to4 vs baseline; if apparent regression (most likely PR-6),
+  confirm via A/B (`Bench-Scoring.ps1 -BaselineBin <merge-base exe> -BaselineType
+  CSharp -Iterations 3`) at the same machine state before concluding.
+- **EARLY infrastructure perf screen (after family 1 / peak-shape).** The
+  per-candidate model overhead (reused context, `ClearByproducts`/`Set`, registry
+  dispatch, `AddInfo`/`TryGetInfo` Type-keyed dict ops) is in the hot loop for ALL
+  candidates regardless of feature, so measure it in isolation now -- a serious
+  regression here would otherwise compound and be hard to attribute at PR-6. Run a
+  clean (idle-machine) Astral branch run, compare stage1to4 / coelution-scoring to
+  the HTML baseline; escalate to the rigorous master-vs-branch A/B only on a signal.
+  Going forward, capture the perf datapoint from the family's parity Astral run by
+  running it WITHOUT a concurrent build (one run yields both parity + timing).
+- **Perf A/B recipe (worked out 2026-06-07; archived Bench-Scoring.ps1 is STALE).**
+  The archived `Bench-Scoring.ps1` dot-sources Dataset-Config.ps1 from its own dir
+  (wrong: it's one level up) AND uses the retired `--no-join` flag (PR #4273 replaced
+  mode flags with `--task`). Working approach: baseline worktree
+  `git worktree add --detach C:/proj/pwiz-perfbase HEAD~1`; build both Release via
+  `Build-OspreySharp.ps1 -SourceRoot <tree> -Configuration Release`; A/B each exe on
+  ONE Astral file with `--task PerFileScoring` (stages 1-4, emits
+  `[INFO] [TIMING] Coelution scoring: Xs (N candidates)` = the per-candidate stage);
+  interleave master/branch + warmup; median the stage-4 timing. Self-contained driver:
+  `ai/.tmp/Run-PerfAB-Manual.ps1`. (`--write-pin` is the golden-feature-dump flag for
+  gate #1.)
+- Skyline conventions: no async/await, resource strings, `_camelCase`, CRLF, helpers
+  after public methods, AI-attribution headers.
+
+## Progress log
+- 2026-06-07: **PR-3/PR-4 committed.** Median-polish `31692ee098`, RT-deviation
+  `01a53e2d1d` (added `ApexRetentionTime`/`ExpectedRt` to the peak-data interface).
+  Both Stellar+Astral 1e-9 vs fresh Release. **4 of 7 families done** (peak-shape,
+  coelution, median-polish, rt-deviation). Architecture + perf hold byte-for-byte.
+  Remaining = the 3 spectral families (apex-match, xcorr+sg, ms1) — these grow the
+  peak-data's spectral surface (ApexSpectrum / window spectra / MS1) and the
+  context's machinery (scorer / preprocessedXcorr / resolution); xcorr is the
+  perf-gate family (worktree baseline ready at `C:\proj\pwiz-perfbase`).
+
+  **Next session handoff**: For detailed startup protocol, read
+  `ai/.tmp/handoff-20260607_ospreysharp_modular_scoring.md` before starting work.
+- 2026-06-07: **PR-3 median-polish implemented** (trickiest family). 4 calculators
+  (`MedianPolishCosine/ResidualRatio/MinFragmentR2/ResidualCorrelation`) read a
+  **harness-published** `MedianPolishByproduct{polish, peakXics}` (public — the crop +
+  `WriteMpInputsRow` + `Compute` must stay in `ScoreCandidate` because
+  `OspreyDiagnostics` is exe-layer, unreferenceable from `OspreySharp.Scoring`).
+  Per-feature no-fit defaults `0 / 1.0 / 0 / 0` (the `residualRatio=1.0` trap).
+  `ClearByproducts`/`Set` moved ABOVE the median-polish block so the byproduct
+  survives; `WriteMpDump` moved just after the feature vector (reads `features[]` +
+  byproduct) — content + candidate-order preserved, and the standard gate compares
+  Stage7+blib not the `-d` dumps anyway. **Debug gate green** (377 tests +
+  `TestMedianPolishCalculatorDefaults`, inspection clean); **Stellar end-to-end 1e-9
+  PASS** vs fresh Release; Astral running.
+- 2026-06-07: **PR-2 coelution committed `e0c72e7cdf`.** FragmentCoelutionSum/Max +
+  NCoelutingFragments (PIN 0-2) behind a shared `CoelutionStats` byproduct (one i<j
+  pairwise-Pearson pass); inline `ComputeCoelutionStats` removed, Stage-6 byproduct
+  reads `features[0]`. **Re-validated BOTH families against a FRESH Release build**
+  (the gate-validity fix): Stellar + Astral end-to-end 1e-9 PASS (precursors
+  59768=59768 / 167285=167285), 376 tests + `TestCoelutionCalculators`, inspection
+  clean. Two of seven families done; architecture + perf validated.
+- 2026-06-07: Branch created off master (`6774740f99`, post-#4276). Plan approved
+  (full 21-feature scope, stacked PRs, ultracode execution). Sprint TODO opened.
+- 2026-06-07: **Phase A (ultracode) done** — 9 agents (7 family + harness +
+  synthesis), ~446K tokens, ~6 min. Produced the SPI blueprint + a per-feature
+  parity-hazard catalog. Persisted: `ai/.tmp/osprey-scoring-spi-dossier.json`.
+  Registry order (21 calc class names) + 6 byproduct intermediates +
+  data/context member split all defined there.
+
+### Resolved design decisions (from Phase A open questions)
+- **All 21 calculators are "Detailed"** — Osprey has no Summary-only score.
+  Mirror Skyline's *data* split (IOspreyPeakData → IOspreyDetailedPeakData) but
+  use a **single Detailed calculator base** (no SummaryOspreyFeatureCalculator —
+  would be dead). Documents a real limit of "how close to Skyline."
+- **Three distinct reference-XIC selections stay separate** byproducts (peak-shape
+  `>=`/seed -1.0; MS1 `>=`/seed 0.0; harness fallback `>`/seed 0.0). Do NOT unify.
+- **Diagnostics are harness-owned** — the orchestrator in ScoreCandidate emits
+  WriteMpInputsRow (before Compute) / WriteMpDump (after the 4 MP features);
+  calculators are pure and never call OspreyDiagnostics. So the calculator-facing
+  context carries no Diagnostics member.
+- **Incremental interface/context growth**: each family PR adds only the
+  IOspreyDetailedPeakData / OspreyScoringContext members its features read
+  (minimal-honest, inspection-clean per PR). PR-1 needs only Xics + the byproduct
+  cache; spectral members (ApexSpectrum, WindowSpectra, ApexGlobalIndex, StartScan,
+  RangeLen, Ms1Spectra) + machinery (Scorer, PreprocessedXcorr, calibrations)
+  arrive with apex-match/xcorr/ms1.
+- **Concrete domain types in the interface** (LibraryEntry, XICPeakBounds, XicData,
+  Spectrum, MS1Spectrum via covariant IReadOnlyList) — allocation-free + dependency-
+  correct; a future shared assembly would abstract them. The SHAPE (calculator +
+  context + data-split + AddInfo/TryGetInfo) is the mirror, not the member types.
+- **Peak-data + context are reused mutable class instances** (one per file/window,
+  fields set per candidate; byproduct dict Clear()'d per candidate) — no per-
+  candidate heap alloc, no boxing. Calculators run **sequentially** within a
+  candidate (shared XcorrScratchPool/VisitedBins safe).
+- **Scaffolding folds into PR-1** (peak-shape) so the SPI is born used (no
+  dead-code-only PR).
+- 2026-06-07: **PR-1 (scaffolding + peak-shape) implemented.** New in
+  `OspreySharp.Scoring`: `IOspreyFeatureCalculator` (+ `DetailedOspreyFeatureCalculator`
+  base), `IOspreyPeakData`/`IOspreyDetailedPeakData`, `OspreyScoringContext`
+  (`AddInfo`/`TryGetInfo`/`ClearByproducts`), `OspreyFeatureCalculators` registry,
+  `PeakShapeCalculators.cs` (`PeakShapeReference` byproduct + `PeakApexCalc`/
+  `PeakAreaCalc`/`PeakSharpnessCalc`). New in exe: `Tasks/OspreyPeakData.cs` (reused
+  adapter). `ScoreCandidate` now routes features 3/4/5 through the registry
+  (reused per-window context+peak-data created in `ScoreWindow`); inline
+  `ComputePeakShapeFeatures` deleted. **Gates:** build net8.0+net472 PASS; 372
+  tests PASS; inspection clean; **Stellar end-to-end 1e-9 PASS** (precursors
+  59768=59768, Stage7 + blib content) + **Astral end-to-end 1e-9 PASS** (precursors
+  167285=167285). Committed `55b8da50ce`.
+- 2026-06-07: **Early infrastructure perf screen PASS (no regression).** Astral
+  single-file `--task PerFileScoring` A/B (merge-base worktree vs branch, median of 3),
+  stage-4 "Coelution scoring" with 1,699,771 candidates both: master 59.20s
+  [59.1,59.6,59.2] vs branch 59.50s [58.7,59.9,59.5] = **+0.5%, within noise** (ranges
+  overlap; branch fastest < master median). The per-candidate model overhead is
+  unmeasurable; architecture validated. Baseline worktree kept at
+  `C:\proj\pwiz-perfbase` for the PR-6 xcorr perf check.
+
+## Out of scope (future)
+- Shared multi-targeted SPI assembly under `pwiz_tools\Shared` (tier 2).
+- Skyline-side `ApexSpectrum`-throws stub + Skyline referencing the contract.
+- Transferability matrix; `FirstJoinTask` de-inheritance.
