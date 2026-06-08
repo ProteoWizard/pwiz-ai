@@ -116,13 +116,22 @@ on"); stacked PRs per family, low→high risk; transferability matrix skipped.
   after public methods, AI-attribution headers.
 
 ## Progress log
+- 2026-06-08 (post-merge cleanup): **Non-PIN score port retired.** Mike confirmed (chat)
+  the 21 are the empirically-chosen set out of 100+ scores tried over months (overfitting,
+  the dual HRAM/unit-resolution requirement, LDA behavior, hyperscore = noise); leaving the
+  others out is intentional. Deleted the backlog `TODO-ospreysharp_nonpin_scores_port.md`
+  and folded its catalog + Mike's rationale into "Non-PIN scores — intentionally excluded"
+  below. Also deleted the duplicate parent backlog `TODO-ospreysharp_modular_scoring_context.md`
+  (superseded by this PR; a fresh /pw-oop-review will regenerate any residual
+  FirstJoinTask/transferability scope). The `brendanx67/` shared-scoring strategy doc is kept.
 - 2026-06-08: **MERGED.** PR #4277 squash-merged to master as `08e0710fcf`. Shipped
   the full 21-feature decomposition onto the Skyline-shaped SPI across 7 family
   commits, each Stellar (unit-res) + Astral (HRAM) 1e-9 vs Rust; perf −1.6% (no
   regression). Copilot round (5 comments) + fresh-context self-review (clean, no
-  CRITICAL/HIGH) both addressed; both review rounds re-passed parity. **Deferred**
-  (backlog): the ~26 non-PIN scores (`TODO-ospreysharp_nonpin_scores_port.md`) and
+  CRITICAL/HIGH) both addressed; both review rounds re-passed parity. **Deferred**:
   the Percolator weight/contribution table (`TODO-ospreysharp_feature_weight_contributions.md`).
+  (The ~26 non-PIN scores were later left out by design — see "Non-PIN scores —
+  intentionally excluded" below.)
 - 2026-06-08 (night session): **Apex-match + xcorr+SG committed; 6 of 7 families done.**
   - **apex-match (7/8/9/10)** `41e37977b8`: `ApexMatchCalculators` — `ConsecutiveIonsCalc`
     (separate `HasMatch` pass) + `ApexFragmentMatchSet` byproduct serving
@@ -171,9 +180,9 @@ on"); stacked PRs per family, low→high risk; transferability matrix skipped.
     pwiz branch pushed; ai-repo records pushed. Remaining: `/pw-self-review 4277` +
     address Copilot's auto-review (`/pw-respond 4277`); optional `/ultrareview 4277`.
     Optional cleanup: `git -C C:/proj/pwiz worktree remove C:/proj/pwiz-perfbase`.
-  - Two follow-up backlog TODOs queued: `TODO-ospreysharp_nonpin_scores_port.md`
-    (the ~26 non-PIN scores, two-tier) and `TODO-ospreysharp_feature_weight_contributions.md`
-    (Skyline-style Percolator weight + percent-contribution table).
+  - Follow-up backlog: `TODO-ospreysharp_feature_weight_contributions.md` (Skyline-style
+    Percolator weight + percent-contribution table). (The non-PIN-scores port backlog was
+    later retired — see "Non-PIN scores — intentionally excluded" below.)
 - 2026-06-07: **PR-3/PR-4 committed.** Median-polish `31692ee098`, RT-deviation
   `01a53e2d1d` (added `ApexRetentionTime`/`ExpectedRt` to the peak-data interface).
   Both Stellar+Astral 1e-9 vs fresh Release. **4 of 7 families done** (peak-shape,
@@ -260,6 +269,58 @@ on"); stacked PRs per family, low→high risk; transferability matrix skipped.
   `C:\proj\pwiz-perfbase` for the PR-6 xcorr perf check.
 
 ## Out of scope (future)
-- Shared multi-targeted SPI assembly under `pwiz_tools\Shared` (tier 2).
+- Shared multi-targeted SPI assembly under `pwiz_tools\Shared` (tier 2). The strategic
+  exploration for this lives in `ai/todos/backlog/brendanx67/TODO-ospreysharp_skyline_shared_scoring.md`.
 - Skyline-side `ApexSpectrum`-throws stub + Skyline referencing the contract.
 - Transferability matrix; `FirstJoinTask` de-inheritance.
+
+## Non-PIN scores — intentionally excluded (design context + reference catalog)
+
+The Rust engine computes a ~47-field `CoelutionFeatureSet` but selects only the 21 for
+the PIN. A follow-up to also port the ~26 non-PIN scores was filed as a backlog item
+(`TODO-ospreysharp_nonpin_scores_port.md`) and then **retired** — per Mike (and Brendan,
+2026-06-08), the 21 are the empirically-chosen set and leaving the rest out is
+intentional, not an oversight. The still-useful catalog is folded here.
+
+### Mike's design rationale (the durable "why", from chat 2026-06-08)
+- He tried **100+ different scores in total**, over **months** of work.
+- Many **made the analysis worse**, or **overfit** — a score that cleanly separates
+  targets from decoys is overfitting, not signal.
+- He made **distribution plots for all** of them, and looked in Skyline at the
+  **peptides gained vs. lost** as he added/removed each.
+- **Every score had to work for BOTH accurate-mass (HRAM) and unit resolution** — good
+  on one but not the other was dropped. (Exactly why the parity gate runs both
+  Stellar=unit-res and Astral=HRAM.)
+- The **LDA step (Skyline's mProphet) struggles more with poorly-behaving scores than
+  Percolator** (Osprey's SVM) does — a score must be well-behaved for the Skyline side
+  too, not just survive Percolator.
+- **Hyperscore specifically added a lot more noise** — a concrete rejected example.
+- He iteratively **added/subtracted** scores from the model, and also experimented with
+  using different scores to **pick the "best" peak** before computing the full set.
+- He has a **full list elsewhere** of every score tried and the ones removed, and is
+  **comfortable with the current 21**.
+
+Takeaway: the 26 exclusions are a tuned result, not a backlog gap. Any future port
+should be motivated by a specific new need, not completeness — and clears a high
+empirical bar (re-check gained-vs-lost on both resolutions, watch LDA behavior, avoid
+overfitting) on top of the engineering bar below.
+
+### Reference catalog (if ever revisited)
+Computed in Rust, excluded from the PIN. On the C# side they are NOT computed (the
+`CoelutionFeatureSet` non-PIN fields are a never-assigned mirror; a unit test asserts
+the 0.0 defaults), so there is **no cross-impl oracle** for them today — a port would
+first need a full-feature-set Rust↔C# 1e-9 verification harness. Two tiers:
+- **C#-AVAILABLE (math already in the tree, cheap to wire):** `dot_product`
+  (= `lib_cosine`; `SpectralScorer.LibCosine`, run vestigially at the apex),
+  `signal_to_noise` (on `XICPeakBounds`, computed for bounds), `top6_matches`
+  (`CountTop6Matches`, a dedup byproduct).
+- **NO C# CODE (from-scratch verified port):** hyperscore, dot_product_smz, the
+  dot_product[_smz]_top4/5/6 family, fragment_coverage, sequence_coverage,
+  base_peak_rank, mass_accuracy_std, peak_symmetry, peak_width, n_scans, coelution_min,
+  n_fragment_pairs, fragment_corr_0..5, elution_weighted_cosine (**pCos** — Rust deleted
+  its computation, hard-coded 0.0 "removed: expensive per-scan ppm matching"; must stay
+  0.0), modification_count, peptide_length, missed_cleavages, median_polish_rsquared.
+- Rust computes these in `crates/osprey/src/pipeline.rs` (~7498-7544 feature assembly)
+  and `crates/osprey-scoring/src/lib.rs`; the exclusion list is at
+  `crates/osprey-fdr/src/mokapot.rs:957-964` + osprey `CLAUDE.md` ("removed during
+  feature weight optimization").
