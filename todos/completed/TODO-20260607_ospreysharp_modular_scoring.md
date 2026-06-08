@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260607_ospreysharp_modular_scoring`
 - **Base**: `master` (`6774740f99`, post-#4276 calibrator extraction)
 - **Created**: 2026-06-07
-- **Status**: PR open — [#4277](https://github.com/ProteoWizard/pwiz/pull/4277)
+- **Status**: Completed — [#4277](https://github.com/ProteoWizard/pwiz/pull/4277) (merged 2026-06-08 as 08e0710fcf)
 - **Delivery**: ONE branch, ONE final PR; one byte-parity-gated **commit** per
   feature family (peak-shape → coelution → median-polish → rt-dev → apex-match →
   xcorr+sg → ms1). Per-family *gate* is unchanged (build+tests+inspection +
@@ -116,6 +116,13 @@ on"); stacked PRs per family, low→high risk; transferability matrix skipped.
   after public methods, AI-attribution headers.
 
 ## Progress log
+- 2026-06-08: **MERGED.** PR #4277 squash-merged to master as `08e0710fcf`. Shipped
+  the full 21-feature decomposition onto the Skyline-shaped SPI across 7 family
+  commits, each Stellar (unit-res) + Astral (HRAM) 1e-9 vs Rust; perf −1.6% (no
+  regression). Copilot round (5 comments) + fresh-context self-review (clean, no
+  CRITICAL/HIGH) both addressed; both review rounds re-passed parity. **Deferred**
+  (backlog): the ~26 non-PIN scores (`TODO-ospreysharp_nonpin_scores_port.md`) and
+  the Percolator weight/contribution table (`TODO-ospreysharp_feature_weight_contributions.md`).
 - 2026-06-08 (night session): **Apex-match + xcorr+SG committed; 6 of 7 families done.**
   - **apex-match (7/8/9/10)** `41e37977b8`: `ApexMatchCalculators` — `ConsecutiveIonsCalc`
     (separate `HasMatch` pass) + `ApexFragmentMatchSet` byproduct serving
