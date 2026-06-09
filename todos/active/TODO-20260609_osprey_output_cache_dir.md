@@ -242,6 +242,25 @@ the fingerprint layout (the format is shared / round-tripped).
     artifacts + spectra cache are handled by this PR; the libcache is a separate,
     smaller redirect to wire before the nightly reads the library read-only.
 
+- **2026-06-09 (both PRs open; self-review fix)** -- **Track A pwiz PR
+  [#4278](https://github.com/ProteoWizard/pwiz/pull/4278)** (commit `f088d410`).
+  Fresh-context `/pw-self-review` caught a CRITICAL miss: straight-through FDR /
+  `reconciliation.json` sidecars bypassed `ArtifactPaths` and wrote beside the
+  read-only input. Fixed by routing `FdrScoresSidecar`/`ReconciliationFile`
+  through `ResolveOutputDir` (catches all callers); also unified the spectra-cache
+  write on `GetCachePath` and pre-create `--output-dir`/`--cache-dir`. Sidecar
+  redirect now has test coverage; gate green (0 warnings, 384/382).
+  **Track B Rust PR [maccoss/osprey#47](https://github.com/maccoss/osprey/pull/47)**
+  (branch `output-cache-dir`): full mirror, all Rust gates green (fmt/clippy/test),
+  fingerprint byte-identical to C# VERSION 3 (`[version u32][size u64][mtime i64]`,
+  Unix-ms). Note: `maccoss/osprey` HEAD relicensed Apache-2.0 -> LGPL-3.0 and
+  banners "archived in favor of OspreySharp"; Brendan confirmed the Rust change is
+  still wanted to normalize cross-impl testing. Both PRs made ready-for-review;
+  Copilot reviews in-flight.
+  - **Remaining**: address Copilot on both (`/pw-respond`); end-to-end parity gate
+    (now that both sides exist, a FULL `Compare-EndToEnd-Crossimpl` with `--work-dir`
+    on Stellar + Astral can confirm copy-free parity); then un-draft/merge order.
+
 ## Out of scope / future
 
 - `pwiz_data_cli.dll` direct `.raw` reading. When it lands, the same cascade applies
