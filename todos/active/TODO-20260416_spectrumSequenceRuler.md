@@ -100,7 +100,19 @@ Files: `Settings.settings`/`.Designer.cs`, `GraphsResources.resx`/`.designer.cs`
 `ViewLibraryDlg.cs`, and `SpectrumSequenceRulerTest.cs` (new step 6).
 
 Per developer: setting is persisted and global; disabling clears pinned state.
-Lands on top of the existing open PR #4158 (was in the human-review queue).
+
+Follow-ups this session:
+- Added a label assertion (RulerToggleMenuText reflects state) after a coverage
+  run showed that getter was the only new logic left uncovered.
+- Fixed topmost-ruler residue labels clipping at the chart top in short panes
+  (`AminoAcidLadderObj.Draw` now reserves one label-height above the line and
+  shifts the whole ruler down). Verified visually.
+- Rebased the three commits onto the remote (someone had clicked "Update branch",
+  adding a master merge `a794462086`); rebuilt + retested green, then pushed.
+  Pushed tip: `103403aa60`. Posted a method-level coverage report as a PR comment.
+- Coverage summary: all new decision logic 100% (toggle action, render/hover
+  gates, RulersEnabled, label getter); menu builders and `Draw` are 0% (GUI-only,
+  not synthesizable / not unit-testable) - consistent with the seam-based pattern.
 
 ### 2026-06-05 — Code review complete, PR in human-review queue
 
