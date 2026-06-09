@@ -14,12 +14,13 @@
 ## Branch Information
 
 - **Track A branch (OspreySharp / pwiz)**: `Skyline/work/20260609_osprey_output_cache_dir`
-  (to be created; default to `C:\proj\pwiz` per the plain-worktree preference)
+  (created 2026-06-09 in `C:\proj\pwiz`)
 - **Track B branch (maccoss/osprey, Rust)**: upstream-style branch on
   `maccoss/osprey` (e.g. `output-cache-dir`); PR via `gh pr create --repo maccoss/osprey`
 - **Base**: `master` (pwiz) / upstream default branch (osprey)
 - **Created**: 2026-06-09
-- **Status**: **SPEC / not started.** Design converged with Brendan 2026-06-09.
+- **Status**: **IN PROGRESS (Track A).** Design converged 2026-06-09; Track A branch
+  created and development started. Track B (Rust) follows once Track A lands.
   Prerequisite for the regression-nightly work (separate TODO, not yet written).
 - **GitHub Issue**: (none)
 - **PRs**: one pwiz PR (Track A) + one maccoss/osprey PR (Track B); must stay in
