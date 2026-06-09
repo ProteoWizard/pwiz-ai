@@ -222,6 +222,26 @@ the fingerprint layout (the format is shared / round-tripped).
   (`Compare-EndToEnd-Crossimpl -SkipRust`, Stellar + Astral) for end-to-end
   byte-identity. Then Track B (Rust).
 
+- **2026-06-09 (Track A complete: fingerprint + tests + help, commits `9ecc774`,
+  `ffb1c12`)** -- `SpectraCache` VERSION 3 carries source size + mtime (Unix ms,
+  matching the planned Rust layout); load rejects a changed source, skips when no
+  fingerprint or source absent. Save/Load callers in PerFileScoring/PerFileRescore
+  pass the source path. New `ArtifactPathsTest` (3 tests): resolver paths + flag
+  precedence + byte-identical defaults + fingerprint invalidation. `--help`
+  documents the three flags. Pre-commit gate green: build (both TFMs), **0
+  inspection warnings, 384 tests (382 pass / 2 skip)**. Track A code is DONE and
+  unit-verified. Track B (Rust) launched as a background subagent mirroring this
+  design.
+  - **Remaining before merge**: (1) end-to-end C#-side parity gate
+    (`Compare-EndToEnd-Crossimpl -SkipRust`, Stellar + Astral) to confirm the
+    default path is byte-identical end-to-end and the `--work-dir` path produces
+    identical output; (2) `/pw-self-review` + Copilot.
+  - **Follow-up found (out of scope here)**: the spectral library cache
+    (`<library>.libcache`) is still written beside the `-l` library, so a fully
+    read-only INPUT set (library included) needs the same treatment. Per-file
+    artifacts + spectra cache are handled by this PR; the libcache is a separate,
+    smaller redirect to wire before the nightly reads the library read-only.
+
 ## Out of scope / future
 
 - `pwiz_data_cli.dll` direct `.raw` reading. When it lands, the same cascade applies
