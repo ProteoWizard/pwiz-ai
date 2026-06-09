@@ -69,6 +69,7 @@ showing rulers from another tool (ETD spectrum, c/z ion series).
 - [x] Incorporate neutral loss series into ruler functionality (each neutral loss series gets its own ruler)
 - [x] Add functional test — `TestFunctional/SpectrumSequenceRulerTest.cs` covers all three hosts (GraphFullScan, GraphSpectrum, ViewLibraryDlg) in one `[TestMethod]` with the EAD doc loaded once. Verifies hover→correct ruler, pin persists after hover clears, multi-ruler grouping, selective unpin, and unpin-all. Drives public test seams (`HoverRulerPeak`/`PinHoveredRuler`/`UnpinRuler`/`UnpinAllRulers`/`RulerGraphItem`) added to each host since mouse and context menu can't be synthesized. Consolidated the duplicated peak→`IonSeriesKey` (min-mass-error) mapping into a public `SpectrumGraphItem.GetBestSeriesKey` shared by all three hosts. Added `GraphFullScan.ShowAnnotations(bool)` so the test can switch the full-scan into annotated mode (rulers don't apply in target-only mode).
 - [x] Add resource strings for any user-visible text — the "Pin Ruler", "Unpin Ruler", and "Unpin All Rulers" context-menu labels were hard-coded literals (caught by Copilot review). Moved them into `GraphsResources.resx`/`.designer.cs` as `SequenceRulerMenu_PinRuler` / `SequenceRulerMenu_UnpinRuler` / `SequenceRulerMenu_UnpinAllRulers`, referenced from all three hosts.
+- [x] Add a master "Enable Rulers" / "Disable Rulers" context-menu toggle (from oral UI review) — a single item whose label reflects the current state. When disabled, all rulers (hovered and pinned) stop rendering, hover is inert, and the Pin/Unpin/Unpin-All items disappear; only "Enable Rulers" remains so the feature can be turned back on. Backed by a persisted global preference `Settings.Default.SpectrumSequenceRulersEnabled` (default true), exposed via static `SpectrumGraphItem.RulersEnabled` + `RulerToggleMenuText`. Gated rendering (`AddPreCurveAnnotations`), hover (`UpdateHoveredPeak`), and the menu in all three hosts. New resource strings `SequenceRulerMenu_EnableRulers` / `SequenceRulerMenu_DisableRulers`. Disabling clears the host's pinned rulers (via a public `ToggleRulersEnabled()` seam per host), so re-enabling shows no rulers until the user hovers/pins again. Test extended (step 6) to verify the pinned state clears on disable and does not return on re-enable.
 - [ ] (Idea/low priority) Add a ruler selector control to the spectrum toolbar, allowing the user to manually show a ruler for any ion type, charge, and neutral loss combination — complementary to the mouse-over/pin workflow
 - [x] Preserve pinned rulers across annotation-display toggles in `GraphSpectrum` — added the `_lastPrecursorId` pattern (already used by `GraphFullScan` and `ViewLibraryDlg`): removed the unconditional `_pinnedSeriesKeys.Clear()` from `ClearGraphPane`, added the precursor-change check at the top of `MakeGraphItem`, and re-sync pinned keys to the freshly built `GraphItem` so pins survive annotation-toggle redraws.
 - [ ] (Deferred from Copilot review #10) Extract a shared `SpectrumRulerHost` helper from `GraphSpectrum`, `GraphFullScan`, and `ViewLibraryDlg` so the ruler context-menu, pin/hover state machine (`_pinnedSeriesKeys`, `_lastPrecursorId`, `_contextMenuOpen`), `PinRuler`/`UnpinRuler`/`UnpinAllRulers`/`PinHoveredRuler`, and `BuildMenuItems` live in one place. Composition-based (each host holds a `SpectrumRulerHost` field constructed with `() => GraphItem` + `() => graphControl.Invalidate()`). Mouse-event wiring stays per-host. Larger refactor; deferred from the current PR to keep correctness fixes focused — full plan in `ai/todos/backlog/TODO-spectrum_ruler_host_extraction.md`.
@@ -81,6 +82,25 @@ showing rulers from another tool (ETD spectrum, c/z ion series).
 - Label crowding for short peptides or wide modifications: known limitation, not actively handled. Residue labels are drawn centered at the midpoint of each fragment-ion interval and can overlap at very narrow zoom widths or with long modification text (e.g. `C[+57]`). Workaround is zooming out; revisit if user feedback warrants explicit handling.
 
 ## Session Log
+
+### 2026-06-09 — Added master Enable/Disable rulers toggle (oral UI review)
+
+Added a single context-menu toggle ("Disable Rulers" when on, "Enable Rulers"
+when off) per oral UI review feedback. Single source of truth is a persisted
+global preference `Settings.Default.SpectrumSequenceRulersEnabled` (default
+true), surfaced via static `SpectrumGraphItem.RulersEnabled` and
+`RulerToggleMenuText`. When disabled: `AddPreCurveAnnotations` short-circuits
+(no ladders), each host's `UpdateHoveredPeak` ignores hover, and the menu
+builders drop Pin/Unpin/Unpin-All so only "Enable Rulers" shows. Disabling also
+clears the host's pinned rulers (per-host `ToggleRulersEnabled()` method, which
+the menu item and the test both call) so they do not return on re-enable.
+
+Files: `Settings.settings`/`.Designer.cs`, `GraphsResources.resx`/`.designer.cs`
+(2 new strings), `SpectrumGraphItem.cs`, `GraphSpectrum.cs`, `GraphFullScan.cs`,
+`ViewLibraryDlg.cs`, and `SpectrumSequenceRulerTest.cs` (new step 6).
+
+Per developer: setting is persisted and global; disabling clears pinned state.
+Lands on top of the existing open PR #4158 (was in the human-review queue).
 
 ### 2026-06-05 — Code review complete, PR in human-review queue
 
