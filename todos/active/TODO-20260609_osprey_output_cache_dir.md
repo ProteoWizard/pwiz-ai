@@ -205,6 +205,23 @@ the fingerprint layout (the format is shared / round-tripped).
 5. **Scope** -- both OspreySharp (Track A) and maccoss/osprey (Track B), to keep
    cross-impl parity testing copy-free.
 
+## Progress log
+
+- **2026-06-09 (Track A, commit `45c8762`)** -- CLI options + resolver landed and
+  verified. `OspreyConfig.OutputDir/CacheDir` + `--work-dir`/`--output-dir`/
+  `--cache-dir` parsing (precedence wired). New `OspreySharp.IO/ArtifactPaths`
+  holder (set once in `Main`) routes the scores parquet, reconciled parquet,
+  spectra cache, and calibration JSON through one place; the FDR /
+  reconciliation sidecars cascade automatically (they hang off the redirected
+  scores-parquet path), and the rescore spectra-cache/calibration lookups resolve
+  through the same holder so straight-through and resume agree. Pre-commit gate
+  green: build (net472 + net8.0), **0 inspection warnings, 379/381 tests pass**
+  (2 pre-existing skips); existing path tests pass unchanged -> default path is
+  byte-identical. Still TODO on Track A: spectra-cache fingerprint (size+mtime),
+  new unit tests for the flags/fallback/fingerprint, and the C#-side parity gate
+  (`Compare-EndToEnd-Crossimpl -SkipRust`, Stellar + Astral) for end-to-end
+  byte-identity. Then Track B (Rust).
+
 ## Out of scope / future
 
 - `pwiz_data_cli.dll` direct `.raw` reading. When it lands, the same cascade applies
