@@ -35,9 +35,11 @@ stopifnot(file.exists(csv_path))
 
 # --- Load & shape ---------------------------------------------------------------------
 usage <- read_csv(csv_path, show_col_types = FALSE) |>
-  mutate(date = as.Date(date), model = factor(model), user = factor(user))
+  mutate(date = as.Date(date), model = factor(model), user = factor(user),
+         machine = factor(machine))
 
-multi_user <- nlevels(usage$user) > 1
+multi_user    <- nlevels(usage$user) > 1
+multi_machine <- nlevels(usage$machine) > 1
 
 daily <- usage |>
   group_by(date) |>
@@ -114,6 +116,29 @@ if (multi_user) {
   save_plot(p6, "06_cost_by_user.png")
 } else {
   message("Single user so far — team charts (05/06) skipped until teammates join.")
+}
+
+# --- 7 & 8. Per-machine views (one person running Claude on several computers) ---------
+if (multi_machine) {
+  p7 <- usage |>
+    group_by(date, machine) |>
+    summarise(total_tokens = sum(total_tokens), .groups = "drop") |>
+    ggplot(aes(date, total_tokens, fill = machine)) +
+    geom_col() +
+    scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
+    labs(title = "Claude usage — daily tokens by machine", x = NULL, y = "tokens", fill = "machine")
+  save_plot(p7, "07_tokens_by_machine.png")
+
+  p8 <- usage |>
+    group_by(machine) |>
+    summarise(est_cost_usd = sum(est_cost_usd), .groups = "drop") |>
+    ggplot(aes(reorder(machine, est_cost_usd), est_cost_usd)) +
+    geom_col(fill = "steelblue") + coord_flip() +
+    scale_y_continuous(labels = label_dollar()) +
+    labs(title = "Claude usage — total modeled cost by machine", x = NULL, y = "USD (modeled)")
+  save_plot(p8, "08_cost_by_machine.png")
+} else {
+  message("Single machine so far — machine charts (07/08) skipped.")
 }
 
 # --- Combined multi-page PDF (one chart per page) -------------------------------------
