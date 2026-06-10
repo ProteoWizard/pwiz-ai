@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260610_duplicate_fragment_per_line`
 - **Base**: `master`
 - **Created**: 2026-06-10
-- **Status**: In Progress (code + test green, ready for self-review/PR)
+- **Status**: PR open, awaiting Copilot review
 - **GitHub Issue**: [#4284](https://github.com/ProteoWizard/pwiz/issues/4284)
-- **PR**: (pending)
+- **PR**: [#4286](https://github.com/ProteoWizard/pwiz/pull/4286)
 - **Worktree**: `C:\Dev\DupFragLine`
 
 ## Objective
@@ -37,9 +37,11 @@ instead of crashing. Origin: skyline.ms support thread #74731 (Sciex ZenoTOF 760
 - [x] Build + `TestPasteMolecules` green.
 
 ### Remaining
-- [ ] `/pw-self-review`
-- [ ] Commit (ai/ TODO + pwiz code), open PR (`Fixes #4284`)
-- [ ] Address Copilot review
+- [x] `/pw-self-review` (findings addressed: resource rename, doc comment; tolerate-errors asymmetry documented as intentional)
+- [x] Added column name to the error message: `See column N "Header"`
+- [x] Commit (ai/ TODO + pwiz code), open PR #4286 (`Fixes #4284`)
+- [ ] Address Copilot review (`/pw-respond 4286`)
+- [ ] Merge; reply to support thread #74731
 
 ## Files
 - `pwiz_tools/Skyline/Model/SmallMoleculeTransitionListReader.cs`
