@@ -19,12 +19,12 @@
   `maccoss/osprey` (e.g. `output-cache-dir`); PR via `gh pr create --repo maccoss/osprey`
 - **Base**: `master` (pwiz) / upstream default branch (osprey)
 - **Created**: 2026-06-09
-- **Status**: **IN PROGRESS (Track A).** Design converged 2026-06-09; Track A branch
-  created and development started. Track B (Rust) follows once Track A lands.
-  Prerequisite for the regression-nightly work (separate TODO, not yet written).
+- **Status**: **COMPLETED 2026-06-09** -- both PRs squash-merged. Remains the
+  prerequisite for the regression-nightly work (separate TODO, not yet written).
 - **GitHub Issue**: (none)
-- **PRs**: one pwiz PR (Track A) + one maccoss/osprey PR (Track B); must stay in
-  lockstep on flag names/semantics.
+- **PRs**: [ProteoWizard/pwiz#4278](https://github.com/ProteoWizard/pwiz/pull/4278)
+  (merged 2026-06-09 as `c5f4d9c`) + [maccoss/osprey#47](https://github.com/maccoss/osprey/pull/47)
+  (merged 2026-06-09 as `696c938`).
 
 ## Mission
 
@@ -277,6 +277,19 @@ the fingerprint layout (the format is shared / round-tripped).
   - Optional later: a source-size/mtime fingerprint on the `.libcache` (parity with
     the `.spectra.bin` fingerprint) for shared-cache-dir reuse; Rust already does a
     source-newer-than-cache mtime check, C# relies on magic/version.
+
+### 2026-06-09 - Merged
+
+Both PRs squash-merged: **pwiz #4278** as `c5f4d9c` and **maccoss/osprey #47** as
+`696c938`. Shipped the full cross-impl change: `--work-dir`/`--output-dir`/
+`--cache-dir` on both tools, every per-file artifact (scores parquet, calibration
+JSON, FDR/reconciliation sidecars, `.spectra.bin`, and the library `.libcache`)
+routed through the resolver, a `.spectra.bin` source size+mtime fingerprint
+(byte-compatible across tools), and a fix for the Stage 6 rescore calibration
+lookup (caught by the no-copy parity run). Both verified by an end-to-end no-copy
+run (read-only mzML + library, only `--work-dir`) with the source dir untouched;
+C# separated-vs-default blib parity exact at 1e-9. Deferred (noted below): a
+`.libcache` source fingerprint to match the `.spectra.bin` one.
 
 ## Out of scope / future
 
