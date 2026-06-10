@@ -261,6 +261,23 @@ the fingerprint layout (the format is shared / round-tripped).
     (now that both sides exist, a FULL `Compare-EndToEnd-Crossimpl` with `--work-dir`
     on Stellar + Astral can confirm copy-free parity); then un-draft/merge order.
 
+- **2026-06-09 (no-copy verified both impls; ready for /pw-complete)** -- An
+  end-to-end `--work-dir` run (mzML from read-only `osprey-testfiles-mzML`) caught
+  a real bug both sides had: the Stage 6 rescore loaded the calibration JSON from
+  the input mzML's own directory, not the output dir -> fixed (C# `b936333`, Rust
+  `a8855e0`). Separated-vs-default blib parity confirmed at 1e-9 (0 divergence /
+  46,115 rows). Then the library `.libcache` was routed through `ResolveCacheDir`
+  too (C# `5ab7cd3`, Rust `6fb89db`), closing the last input-adjacent write. **Both
+  OspreySharp and Rust now pass a true no-copy run**: `-i` mzML and `-l` library
+  both reference the read-only source in place, only `--work-dir` given; the run
+  completes end-to-end and the source directory is untouched (no
+  `.libcache`/`.spectra.bin`/`.parquet`/`.calibration.json` leaked). Both PRs green
+  on their gates and **ready for `/pw-complete`** (#4278 drives the squash-merge +
+  shared-TODO move; #47 branch cleanup after its merge).
+  - Optional later: a source-size/mtime fingerprint on the `.libcache` (parity with
+    the `.spectra.bin` fingerprint) for shared-cache-dir reuse; Rust already does a
+    source-newer-than-cache mtime check, C# relies on magic/version.
+
 ## Out of scope / future
 
 - `pwiz_data_cli.dll` direct `.raw` reading. When it lands, the same cascade applies
