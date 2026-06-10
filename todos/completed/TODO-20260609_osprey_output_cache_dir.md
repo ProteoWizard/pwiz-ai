@@ -19,12 +19,12 @@
   `maccoss/osprey` (e.g. `output-cache-dir`); PR via `gh pr create --repo maccoss/osprey`
 - **Base**: `master` (pwiz) / upstream default branch (osprey)
 - **Created**: 2026-06-09
-- **Status**: **IN PROGRESS (Track A).** Design converged 2026-06-09; Track A branch
-  created and development started. Track B (Rust) follows once Track A lands.
-  Prerequisite for the regression-nightly work (separate TODO, not yet written).
+- **Status**: **COMPLETED 2026-06-09** -- both PRs squash-merged. Remains the
+  prerequisite for the regression-nightly work (separate TODO, not yet written).
 - **GitHub Issue**: (none)
-- **PRs**: one pwiz PR (Track A) + one maccoss/osprey PR (Track B); must stay in
-  lockstep on flag names/semantics.
+- **PRs**: [ProteoWizard/pwiz#4278](https://github.com/ProteoWizard/pwiz/pull/4278)
+  (merged 2026-06-09 as `c5f4d9c`) + [maccoss/osprey#47](https://github.com/maccoss/osprey/pull/47)
+  (merged 2026-06-09 as `696c938`).
 
 ## Mission
 
@@ -221,6 +221,75 @@ the fingerprint layout (the format is shared / round-tripped).
   new unit tests for the flags/fallback/fingerprint, and the C#-side parity gate
   (`Compare-EndToEnd-Crossimpl -SkipRust`, Stellar + Astral) for end-to-end
   byte-identity. Then Track B (Rust).
+
+- **2026-06-09 (Track A complete: fingerprint + tests + help, commits `9ecc774`,
+  `ffb1c12`)** -- `SpectraCache` VERSION 3 carries source size + mtime (Unix ms,
+  matching the planned Rust layout); load rejects a changed source, skips when no
+  fingerprint or source absent. Save/Load callers in PerFileScoring/PerFileRescore
+  pass the source path. New `ArtifactPathsTest` (3 tests): resolver paths + flag
+  precedence + byte-identical defaults + fingerprint invalidation. `--help`
+  documents the three flags. Pre-commit gate green: build (both TFMs), **0
+  inspection warnings, 384 tests (382 pass / 2 skip)**. Track A code is DONE and
+  unit-verified. Track B (Rust) launched as a background subagent mirroring this
+  design.
+  - **Remaining before merge**: (1) end-to-end C#-side parity gate
+    (`Compare-EndToEnd-Crossimpl -SkipRust`, Stellar + Astral) to confirm the
+    default path is byte-identical end-to-end and the `--work-dir` path produces
+    identical output; (2) `/pw-self-review` + Copilot.
+  - **Follow-up found (out of scope here)**: the spectral library cache
+    (`<library>.libcache`) is still written beside the `-l` library, so a fully
+    read-only INPUT set (library included) needs the same treatment. Per-file
+    artifacts + spectra cache are handled by this PR; the libcache is a separate,
+    smaller redirect to wire before the nightly reads the library read-only.
+
+- **2026-06-09 (both PRs open; self-review fix)** -- **Track A pwiz PR
+  [#4278](https://github.com/ProteoWizard/pwiz/pull/4278)** (commit `f088d410`).
+  Fresh-context `/pw-self-review` caught a CRITICAL miss: straight-through FDR /
+  `reconciliation.json` sidecars bypassed `ArtifactPaths` and wrote beside the
+  read-only input. Fixed by routing `FdrScoresSidecar`/`ReconciliationFile`
+  through `ResolveOutputDir` (catches all callers); also unified the spectra-cache
+  write on `GetCachePath` and pre-create `--output-dir`/`--cache-dir`. Sidecar
+  redirect now has test coverage; gate green (0 warnings, 384/382).
+  **Track B Rust PR [maccoss/osprey#47](https://github.com/maccoss/osprey/pull/47)**
+  (branch `output-cache-dir`): full mirror, all Rust gates green (fmt/clippy/test),
+  fingerprint byte-identical to C# VERSION 3 (`[version u32][size u64][mtime i64]`,
+  Unix-ms). Note: `maccoss/osprey` HEAD relicensed Apache-2.0 -> LGPL-3.0 and
+  banners "archived in favor of OspreySharp"; Brendan confirmed the Rust change is
+  still wanted to normalize cross-impl testing. Both PRs made ready-for-review;
+  Copilot reviews in-flight.
+  - **Remaining**: address Copilot on both (`/pw-respond`); end-to-end parity gate
+    (now that both sides exist, a FULL `Compare-EndToEnd-Crossimpl` with `--work-dir`
+    on Stellar + Astral can confirm copy-free parity); then un-draft/merge order.
+
+- **2026-06-09 (no-copy verified both impls; ready for /pw-complete)** -- An
+  end-to-end `--work-dir` run (mzML from read-only `osprey-testfiles-mzML`) caught
+  a real bug both sides had: the Stage 6 rescore loaded the calibration JSON from
+  the input mzML's own directory, not the output dir -> fixed (C# `b936333`, Rust
+  `a8855e0`). Separated-vs-default blib parity confirmed at 1e-9 (0 divergence /
+  46,115 rows). Then the library `.libcache` was routed through `ResolveCacheDir`
+  too (C# `5ab7cd3`, Rust `6fb89db`), closing the last input-adjacent write. **Both
+  OspreySharp and Rust now pass a true no-copy run**: `-i` mzML and `-l` library
+  both reference the read-only source in place, only `--work-dir` given; the run
+  completes end-to-end and the source directory is untouched (no
+  `.libcache`/`.spectra.bin`/`.parquet`/`.calibration.json` leaked). Both PRs green
+  on their gates and **ready for `/pw-complete`** (#4278 drives the squash-merge +
+  shared-TODO move; #47 branch cleanup after its merge).
+  - Optional later: a source-size/mtime fingerprint on the `.libcache` (parity with
+    the `.spectra.bin` fingerprint) for shared-cache-dir reuse; Rust already does a
+    source-newer-than-cache mtime check, C# relies on magic/version.
+
+### 2026-06-09 - Merged
+
+Both PRs squash-merged: **pwiz #4278** as `c5f4d9c` and **maccoss/osprey #47** as
+`696c938`. Shipped the full cross-impl change: `--work-dir`/`--output-dir`/
+`--cache-dir` on both tools, every per-file artifact (scores parquet, calibration
+JSON, FDR/reconciliation sidecars, `.spectra.bin`, and the library `.libcache`)
+routed through the resolver, a `.spectra.bin` source size+mtime fingerprint
+(byte-compatible across tools), and a fix for the Stage 6 rescore calibration
+lookup (caught by the no-copy parity run). Both verified by an end-to-end no-copy
+run (read-only mzML + library, only `--work-dir`) with the source dir untouched;
+C# separated-vs-default blib parity exact at 1e-9. Deferred (noted below): a
+`.libcache` source fingerprint to match the `.spectra.bin` one.
 
 ## Out of scope / future
 
