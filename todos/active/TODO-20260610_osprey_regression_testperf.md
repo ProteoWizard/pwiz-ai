@@ -16,6 +16,8 @@
 - **Base**: `master`
 - **Created**: 2026-06-10
 - **Status**: **SPEC / backlog.** Unblocked by the merged prerequisite.
+- **Next session handoff**: For the startup protocol, read
+  `ai/.tmp/handoff-20260610_osprey_regression_testperf.md` before starting work.
 - **Predecessor TODO**:
   [`TODO-20260609_osprey_output_cache_dir.md`](../completed/TODO-20260609_osprey_output_cache_dir.md)
   -- the `--work-dir`/`--output-dir`/`--cache-dir` decoupling (pwiz #4278 `c5f4d9c`,
