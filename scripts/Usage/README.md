@@ -16,8 +16,10 @@ ai/scripts/Usage/                    (pwiz-ai repo — the tooling)
   Resolve-UsageStore.ps1             # shared helper: find the Drive data store
   Snapshot-ClaudeUsage.ps1           # parse THIS machine's transcripts -> data/usage_<MACHINE>.csv
   Combine-ClaudeUsage.ps1            # union all usage_<MACHINE>.csv -> data/usage_combined.csv
-  Register-ClaudeUsageTask.ps1       # install the daily Scheduled Task
+  Register-ClaudeUsageTask.ps1       # install the daily snapshot task (every machine)
   Setup-ThisMachine.ps1              # one-command onboarding (retention + task + first run)
+  Update-ClaudeUsageGraphs.ps1       # combine + render charts (run on ONE host)
+  Register-ClaudeUsageGraphTask.ps1  # install the daily graph task (ONE always-on host)
   usage_plots.R                      # ggplot2 charts -> <store>/plots
   README.md
 
@@ -51,6 +53,21 @@ ai/scripts/Usage/                    (pwiz-ai repo — the tooling)
 4. Charts: in RStudio, once `install.packages(c("tidyverse","scales"))`, then Source `usage_plots.R`.
 
 `Setup-ThisMachine.ps1` backs up `settings.json` before editing and is safe to re-run.
+
+## Daily charts (one host only)
+
+Each machine's snapshot task already runs `Combine` at 06:00, so `usage_combined.csv` stays
+fresh. Rendering the **charts** is centralized on ONE always-on machine (a workstation, not a
+sleeping laptop), a little later so it folds in what has synced:
+
+```powershell
+pwsh -File "C:\proj\ai\scripts\Usage\Register-ClaudeUsageGraphTask.ps1" -At 06:30 -RunNow
+```
+
+That host needs R (Rscript). Data is eventually consistent — a machine that was asleep at
+06:30 appears in the next day's charts; no run-time offset can fix a sleeping machine. The
+`plots/` folder is shared: automated charts use the `01`–`08` names, so keep any ad-hoc
+analysis on other names (or a subfolder) to avoid clobbering.
 
 ## Manual use
 
