@@ -1,6 +1,30 @@
-# TODO: Straight-through resume writes 1st-pass RTs (ExecuteRescore per-file skip)
+# TODO-20260605_ospreysharp_resume_reconciled_rt.md — Straight-through resume writes 1st-pass RTs
 
-**Status**: Backlog — pre-existing bug (predates the PR-B declarative-dataflow work;
+## Branch Information
+- **Branch**: `Skyline/work/20260605_ospreysharp_resume_reconciled_rt`
+- **Base**: `master`
+- **Created**: 2026-06-05 (bug originally reported 2026-06-03; fixed under this branch as PR-E)
+- **Status**: Completed
+- **GitHub Issue**: (none — tracked via this TODO)
+- **PR**: [#4270](https://github.com/ProteoWizard/pwiz/pull/4270) (merged 2026-06-05 as `6d6db7dd`)
+
+**Status**: **Completed — FIXED + merged 2026-06-05 as PR [#4270](https://github.com/ProteoWizard/pwiz/pull/4270) (`6d6db7dd`).**
+
+### 2026-06-05 — Merged
+PR #4270 (PR-E) merged as `6d6db7dd`. PerFileRescore's resume paths (the Rehydrate no-op and the
+ExecuteRescore per-file skip) now load each file's own `.scores-reconciled.parquet` and overlay the
+reconciled boundary/area/feature columns onto the post-compaction buffer (by EntryId, preserving
+ParquetIndex + 1st-pass scores), append gap-fill rows, and apply the canonical
+(EntryId,Charge,ScanNumber,ParquetIndex) sort to EVERY file — so MergeNode writes Stage-6 reconciled
+RTs to the blib, not 1st-pass. A reconciled-parquet load failure now throws (fail-loud) rather than
+producing a wrong blib. Gated by resume-smoke byte-parity + worker-strict bit-parity on Stellar AND
+Astral; the resume parity gate (added with PR-D #4269) is now green. Copilot + fresh-context
+self-review both addressed.
+
+---
+*Original (pre-fix) bug report below.*
+
+**Status (original)**: Backlog — pre-existing bug (predates the PR-B declarative-dataflow work;
 PR-B's mode-routing NPE was masking it). Straight-through resume IS a supported workflow
 (confirmed 2026-06-03), so this is a real correctness issue.
 

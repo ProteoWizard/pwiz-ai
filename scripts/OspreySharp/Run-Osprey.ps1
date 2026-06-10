@@ -83,8 +83,9 @@
     full calibration.json + spectra cache; skips main search and FDR).
 
 .PARAMETER ExitAfterScoring
-    Pass --no-join to exit after Stage 4 (produces the scores.parquet;
-    skips FDR / reconciliation / blib output). Matches what
+    Exit after Stage 4 (produces the scores.parquet; skips FDR /
+    reconciliation / blib output). Sent as --task PerFileScoring for
+    OspreySharp, or --no-join for Rust osprey. Matches what
     Test-Features.ps1 and Bench-Scoring.ps1 use internally. Replaces the
     retired OSPREY_EXIT_AFTER_SCORING env var.
 
@@ -355,7 +356,9 @@ try {
         $env:OSPREY_EXIT_AFTER_CALIBRATION = "1"
         $envVarsSet += "OSPREY_EXIT_AFTER_CALIBRATION=1"
     }
-    # ExitAfterScoring is wired below as --no-join in $toolArgs.
+    # ExitAfterScoring (Stages 1-4 only) is wired below in $toolArgs:
+    # --task PerFileScoring for OspreySharp, --no-join for Rust osprey
+    # (Rust still uses the old mode flags).
     if ($Tool -eq "Rust") {
         $env:RUST_LOG = "info"
         $envVarsSet += "RUST_LOG=info"
@@ -380,7 +383,12 @@ try {
         $toolArgs += "--write-pin"
     }
     if ($ExitAfterScoring) {
-        $toolArgs += "--no-join"
+        if ($Tool -eq "CSharp") {
+            $toolArgs += "--task"
+            $toolArgs += "PerFileScoring"
+        } else {
+            $toolArgs += "--no-join"
+        }
     }
     # Library-decoy mode: forwarded from the dataset config. The library-
     # decoy datasets (e.g. AstralLibraryDecoy) supply their decoys via the

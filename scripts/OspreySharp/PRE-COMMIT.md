@@ -42,13 +42,41 @@ pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -RunTests
 pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -RunInspection
 ```
 
-## Same-impl Regression (algorithm-affecting changes)
+## C#-side Refactor / Algorithm Regression
 
 Changes that touch scoring, calibration, LOESS, KDE, the SVM kernel,
 FDR thresholds, decoy generation, or the blib write path must also
-pass the OspreySharp-alone regression gate.  This compares the
-current OspreySharp build against a frozen baseline -- no Rust
-checkout required.
+pass a regression gate.
+
+### Preferred routine gate (C#-side changes, Rust unchanged)
+
+The multi-file straight-through run that REUSES a cached Rust reference
+(Rust is not re-run), comparing Stage 7 + blib at 1e-9.  Build the Rust
+reference once per dataset, then reuse it with `-SkipRust` on every
+iteration:
+
+```powershell
+# Stellar all-files, C#-only (cached Rust reused; ~minutes)
+pwsh -File ./ai/scripts/OspreySharp/Compare/Compare-EndToEnd-Crossimpl.ps1 -Dataset Stellar -Files All -SkipRust
+
+# Astral all-files, C#-only (~17 min)
+pwsh -File ./ai/scripts/OspreySharp/Compare/Compare-EndToEnd-Crossimpl.ps1 -Dataset Astral -Files All -SkipRust
+```
+
+This is faster than the stage-isolated snapshot below AND exercises the
+multi-file reconciliation / consensus-RT / multi-charge / gap-fill
+machinery that single-file runs never touch.  Caveats: do NOT pass
+`-Force` with `-SkipRust` (it wipes the cached `rust/`), and the cached
+reference must match the `-Files` set or you get a false, gross-looking
+FAIL that mimics a regression.  Re-run Rust (drop `-SkipRust`) only when
+Rust itself changes.
+
+### Alternative gate (no Rust checkout available)
+
+The OspreySharp-alone snapshot gate compares the current build against a
+frozen baseline -- no Rust required.  Slower (per-stage process restarts
++ dump overhead), so prefer the `-SkipRust` gate above for routine
+checks.
 
 ```powershell
 # Smoke (~3 min): Stellar single
@@ -57,7 +85,7 @@ pwsh -File ./ai/scripts/OspreySharp/Test-Full-Regression.ps1 -Smoke
 # Quick (~10 min): Stellar + Astral single
 pwsh -File ./ai/scripts/OspreySharp/Test-Full-Regression.ps1 -Quick
 
-# Full (~70 min): Stellar + Astral all -- pre-PR gate
+# Full (~70 min): Stellar + Astral all
 pwsh -File ./ai/scripts/OspreySharp/Test-Full-Regression.ps1
 ```
 

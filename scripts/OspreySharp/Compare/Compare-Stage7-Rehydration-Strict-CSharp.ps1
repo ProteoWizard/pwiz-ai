@@ -23,10 +23,10 @@
     Pipeline shape:
 
       Phase 0 (TRUTH, in-memory):     OspreySharp -i mzML -l lib ...     -> writes ALL stage artifacts in one dir
-      Phase 1 (HPC raw workers):      OspreySharp -i mzML ... --no-join  -> Stage 1-4 outputs
-      Phase 2 (HPC 1st-join):         OspreySharp --join-at-pass=1 --join-only ...  -> Stage 5 sidecar pair
-      Phase 3 (HPC rescore worker):   OspreySharp --join-at-pass=1 --no-join ...    -> Stage 6 reconciled parquet (per file)
-      Phase 4 (HPC 2nd-join):         OspreySharp --join-at-pass=2 ...              -> Stage 7 + blib
+      Phase 1 (HPC raw workers):      OspreySharp -i mzML ... --task PerFileScoring -> Stage 1-4 outputs
+      Phase 2 (HPC 1st-join):         OspreySharp --task FirstJoin ...              -> Stage 5 sidecar pair
+      Phase 3 (HPC rescore worker):   OspreySharp --task PerFileRescore ...         -> Stage 6 reconciled parquet (per file)
+      Phase 4 (HPC 2nd-join):         OspreySharp --task MergeNode ...              -> Stage 7 + blib
 
     Stage boundaries compared (GATED in order; STOP on first FAIL):
 
@@ -235,13 +235,13 @@ Write-Host ("  Phase 0 wall: {0}; precursors: {1}; blib: {2}" -f `
 if (Test-Path $ph1Dir) { Remove-Item $ph1Dir -Recurse -Force }
 New-Item -ItemType Directory -Path $ph1Dir -Force | Out-Null
 Stage-DatasetFiles -Dir $ph1Dir
-Write-Host "[Phase 1] HPC raw workers (--no-join, Stage 1-4) ..." -ForegroundColor Cyan
+Write-Host "[Phase 1] HPC raw workers (--task PerFileScoring, Stage 1-4) ..." -ForegroundColor Cyan
 $args1 = @()
 foreach ($f in $mzmls) { $args1 += @('-i', $f) }
 $args1 += @('-l', $libraryName, '-o', 'output.blib',
             '--resolution', $resolution,
             '--protein-fdr', '0.01', '--threads', $Threads.ToString(),
-            '--no-join')
+            '--task', 'PerFileScoring')
 $r1 = Invoke-OspreySharp -WorkDir $ph1Dir -CliArgs $args1
 Write-Host ("  Phase 1 wall: {0}" -f (Format-Duration $r1.wall)) -ForegroundColor Green
 # Stage 4 boundary not gated -- known deterministic; user-confirmed.
@@ -256,8 +256,8 @@ foreach ($f in $mzmls) {
     New-Item -ItemType File -Path (Join-Path $ph2Dir ($stem + '.mzML')) -Force | Out-Null
 }
 Stage-DatasetFiles -Dir $ph2Dir -IncludeMzml:$false
-Write-Host "[Phase 2] HPC 1st-join merge (--join-at-pass=1 --join-only, Stage 5) ..." -ForegroundColor Cyan
-$args2 = @('--join-at-pass=1', '--join-only')
+Write-Host "[Phase 2] HPC 1st-join merge (--task FirstJoin, Stage 5) ..." -ForegroundColor Cyan
+$args2 = @('--task', 'FirstJoin')
 foreach ($f in $mzmls) {
     $stem = [IO.Path]::GetFileNameWithoutExtension($f)
     $args2 += @('--input-scores', ($stem + '.scores.parquet'))
@@ -292,7 +292,7 @@ Write-Host "Stage 5 boundary: PASS" -ForegroundColor Green
 
 # ----- PHASE 3: per-file rescore workers (Stage 6) -----
 Write-Host ""
-Write-Host "[Phase 3] HPC rescore workers (--join-at-pass=1 --no-join, Stage 6, per-file) ..." -ForegroundColor Cyan
+Write-Host "[Phase 3] HPC rescore workers (--task PerFileRescore, Stage 6, per-file) ..." -ForegroundColor Cyan
 $ph3Roots = @()
 $ph3Total = [TimeSpan]::Zero
 foreach ($f in $mzmls) {
@@ -308,7 +308,7 @@ foreach ($f in $mzmls) {
     Copy-Item (Join-Path $ph2Dir ($stem + '.reconciliation.json')) (Join-Path $ph3Dir ($stem + '.reconciliation.json'))
     Stage-DatasetFiles -Dir $ph3Dir -IncludeMzml:$false
     Write-Host ("  -- worker for {0} ..." -f $stem) -ForegroundColor DarkCyan
-    $args3 = @('--join-at-pass=1', '--no-join',
+    $args3 = @('--task', 'PerFileRescore',
                '--input-scores', ($stem + '.scores.parquet'),
                '-l', $libraryName, '-o', 'output.blib',
                '--resolution', $resolution,
@@ -356,7 +356,7 @@ foreach ($f in $mzmls) {
     $stem = [IO.Path]::GetFileNameWithoutExtension($f)
     $ph3Dir = Join-Path $rootDir ("phase3_worker_" + $stem)
     # The merge node consumes the RECONCILED parquet (Stage 6 output),
-    # not the original Stage 4 parquet. --join-at-pass=2 also requires
+    # not the original Stage 4 parquet. --task MergeNode also requires
     # osprey.reconciled="true", which only the reconciled file carries.
     Copy-Item (Join-Path $ph3Dir ($stem + '.scores-reconciled.parquet')) (Join-Path $ph4Dir ($stem + '.scores-reconciled.parquet'))
     Copy-Item (Join-Path $ph3Dir ($stem + '.1st-pass.fdr_scores.bin')) (Join-Path $ph4Dir ($stem + '.1st-pass.fdr_scores.bin'))
@@ -366,7 +366,7 @@ foreach ($f in $mzmls) {
     if (Test-Path $pass2) { Copy-Item $pass2 (Join-Path $ph4Dir ($stem + '.2nd-pass.fdr_scores.bin')) }
     # Stub mzML for path derivation only (mirrors the Rust strict-
     # rehydration script). The merge node MUST NOT read spectra at
-    # --join-at-pass=2 because in production HPC the merge node ships
+    # --task MergeNode because in production HPC the merge node ships
     # only sidecars + reconciled parquets, never mzMLs. If the merge
     # binary tries to open this 0-byte file, that's a bug to fix in the
     # binary, not the test.
@@ -374,8 +374,8 @@ foreach ($f in $mzmls) {
 }
 Stage-DatasetFiles -Dir $ph4Dir -IncludeMzml:$false
 Write-Host ""
-Write-Host "[Phase 4] HPC 2nd-join merge (--join-at-pass=2, Stage 7) ..." -ForegroundColor Cyan
-$args4 = @('--join-at-pass=2')
+Write-Host "[Phase 4] HPC 2nd-join merge (--task MergeNode, Stage 7) ..." -ForegroundColor Cyan
+$args4 = @('--task', 'MergeNode')
 foreach ($f in $mzmls) {
     $stem = [IO.Path]::GetFileNameWithoutExtension($f)
     $args4 += @('--input-scores', ($stem + '.scores-reconciled.parquet'))

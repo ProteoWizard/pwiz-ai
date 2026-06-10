@@ -36,13 +36,14 @@
 
     Stage isolation matrix (matches Test-Regression.ps1):
 
+      (OspreySharp CLI; Rust osprey still uses the old --no-join/--join-at-pass flags)
       Stage      CLI extras                                         Exit hook
       ---------  -------------------------------------------------  -----------------------------
-      stage1to4  --no-join                                          (--no-join exits after Stage 4)
-      stage5     --join-at-pass=1 --input-scores <frozen.parquet>   OSPREY_PERCOLATOR_ONLY=1
-      stage6     --join-at-pass=1 --input-scores <frozen.parquet>   OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
-      stage7     --join-at-pass=2 --input-scores <frozen.parquet>   OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
-      blib       --join-at-pass=2 --input-scores <frozen.parquet>   (none — full pipeline)
+      stage1to4  --task PerFileScoring                              (exits after Stage 4)
+      stage5     --input-scores <frozen.parquet>                    OSPREY_PERCOLATOR_ONLY=1
+      stage6     --input-scores <frozen.parquet>                    OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
+      stage7     --task MergeNode --input-scores <frozen.parquet>   OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
+      blib       --task MergeNode --input-scores <frozen.parquet>   (none — Stages 7-8 from reconciled)
 
     Comparators (tightened relative to Test-Regression.ps1 because
     same-impl removes the documented Rust<->C# xcorr / sg_weighted_xcorr
@@ -550,7 +551,8 @@ function Invoke-Tool {
             $dtpPath = Join-Path $script:PerformanceProfileOutputDir $dtpName
             # `--` separator stops dottrace's argument parser from
             # consuming `--key=value` items meant for the wrapped binary
-            # (e.g. `--join-at-pass=1` was being eaten as a dottrace option).
+            # (e.g. `--task=PerFileScoring` would otherwise be eaten as a
+            # dottrace option).
             # Linux JetBrains.dotTrace.GlobalTools 2026.x requires
             # --framework=NetCore to disambiguate Mono vs .NET Core targets;
             # Windows dotTrace 2025.x (current JetBrains Toolbox / Rider
@@ -638,6 +640,7 @@ $stageConfig = @{
 # bare binaries with no metadata to validate.
 $downstreamArtifactPatterns = @(
     '*.scores.parquet',
+    '*.scores-reconciled.parquet',
     '*.calibration.json',
     '*.1st-pass.fdr_scores.bin',
     '*.2nd-pass.fdr_scores.bin',
@@ -672,8 +675,10 @@ function Run-Stage1to4 {
     foreach ($mzml in $selectedFiles) { $cliArgs += '-i'; $cliArgs += (Split-Path $mzml -Leaf) }
     $cliArgs += @('-l', $libraryName, '-o', 'unused.blib',
                   '--resolution', $resolution,
-                  '--protein-fdr', '0.01', '--threads', '16',
-                  '--no-join')
+                  '--protein-fdr', '0.01', '--threads', '16')
+    # OspreySharp uses --task PerFileScoring for the Stage 1-4 worker;
+    # Rust osprey keeps the retired --no-join flag.
+    $cliArgs += if ($Tool -eq 'CSharp') { @('--task', 'PerFileScoring') } else { @('--no-join') }
     $r = Invoke-Tool -Bin $toolBin -WorkDir $sOut -CliArgs $cliArgs -EnvVars @{} -Stage 'stage1to4'
     Write-Host ("  [run] {0,-4} stage1to4  exit={1} wall={2:mm\:ss}" -f $toolWorkSubdir, $r.exit, $r.wall) `
         -ForegroundColor $(if ($r.exit -eq 0) { 'DarkGreen' } else { 'DarkRed' })
@@ -742,11 +747,32 @@ function Run-PostStage4 {
         Copy-Item $f.FullName (Join-Path $sOut $f.Name)
     }
     $useJP2 = $stageConfig[$Stage].useJoinAtPass2
-    $entry = if ($useJP2) { '--join-at-pass=2' } else { '--join-at-pass=1' }
-    $cliArgs = @($entry)
+    # OspreySharp: pass-2 entry (Stages 7-8 from reconciled parquets) is
+    # --task MergeNode; pass-1 entry (Stages 5-8 from scores) is the default
+    # pipeline driven purely by --input-scores (no --task). Rust osprey keeps
+    # the retired --join-at-pass flags.
+    # Type-constrain to [string[]] so the empty-CSharp-pass-1 case stays an
+    # array. A bare `$cliArgs = if (...) { ... } else { @() }` would make the
+    # else-branch's empty array collapse to $null (scriptblock output drops
+    # zero-length arrays), and the first `+=` below would then start STRING
+    # concatenation instead of array-append -- jamming every token together
+    # (`--input-scoresFILE--input-scores...`), which the binary rejects.
+    [string[]]$cliArgs = @()
+    if ($Tool -eq 'CSharp') {
+        if ($useJP2) { $cliArgs += @('--task', 'MergeNode') }
+    } else {
+        if ($useJP2) { $cliArgs += '--join-at-pass=2' } else { $cliArgs += '--join-at-pass=1' }
+    }
+    # The C# --task MergeNode stages (stage7, blib) consume the Stage-6
+    # reconciled parquets, not the raw Stage-4 scores: MergeNode rejects a
+    # parquet whose osprey.reconciled metadata is 'false'. Before #4261 Stage 6
+    # overwrote the raw .scores.parquet in place so the same name carried
+    # reconciled data; now the reconciled output is a distinct sibling. Rust's
+    # --join-at-pass=2 path is unchanged (it still keys off .scores.parquet).
+    $inputScoresSuffix = if ($useJP2 -and $Tool -eq 'CSharp') { '.scores-reconciled.parquet' } else { '.scores.parquet' }
     foreach ($stem in $selectedStems) {
         $cliArgs += '--input-scores'
-        $cliArgs += ($stem + '.scores.parquet')
+        $cliArgs += ($stem + $inputScoresSuffix)
     }
     $cliArgs += @('-l', $libraryName, '-o', 'output.blib',
                   '--resolution', $resolution,
@@ -832,18 +858,18 @@ function Compare-Percolator-Snapshot {
                 tool_present=$cExists; snap_present=$sExists;
                 tool=$cTsv; snapshot=$sTsv }) }
     }
-    $diffLog = Join-Path $toolDir 'diff_stage5_percolator.log'
-    # Compare-Percolator.ps1 is parameterised as -RustTsv / -CsTsv but
-    # is symmetric: it hash-joins on (file_name, entry_id) and reports
-    # per-column max_abs_diff. Pass the snapshot as -RustTsv and the
-    # current run as -CsTsv just so the log labels are consistent.
-    & pwsh -File (Join-Path $ospDir 'Compare-Percolator.ps1') `
-        -RustTsv $sTsv -CsTsv $cTsv -Tolerance 1e-6 `
-        *>&1 | Tee-Object -FilePath $diffLog | Out-Null
-    $exit = $LASTEXITCODE
-    $st = if ($exit -eq 0) { 'PASS' } else { 'FAIL' }
+    # Same-impl snapshot: prefer SHA-256 byte equality. The percolator dump is
+    # byte-identical run-to-run on the same impl (confirmed). The tolerance
+    # comparator Compare-Percolator.ps1 (now under Compare/archive/) was for the
+    # CROSS-impl / cross-OS libm-ULP case; reach for it only if a cross-OS
+    # snapshot is ever compared. (Was invoking the moved script at a stale path,
+    # which produced a false FAIL on every run.)
+    $cSha = (Get-FileHash $cTsv -Algorithm SHA256).Hash
+    $sSha = (Get-FileHash $sTsv -Algorithm SHA256).Hash
+    $st = if ($cSha -eq $sSha) { 'PASS' } else { 'FAIL' }
     return [pscustomobject]@{ ok = ($st -eq 'PASS');
-        details = @(@{ tag='percolator'; file=$name; status=$st; log=$diffLog;
+        details = @(@{ tag='percolator'; file=$name; status=$st;
+            tool_sha=$cSha.Substring(0,12); snap_sha=$sSha.Substring(0,12);
             tool_size=(Get-Item $cTsv).Length; snap_size=(Get-Item $sTsv).Length }) }
 }
 
@@ -951,7 +977,9 @@ function Compare-Blib-Snapshot {
     # comparison; a same-impl run should pass at exact equality on
     # every table the script checks.
     $diffLog = Join-Path $workRoot 'blib\diff.log'
-    & pwsh -File (Join-Path $ospDir 'Compare-Blib-Crossimpl.ps1') -RustBlib $sBlib -CsBlib $cBlib `
+    # Compare-Blib-Crossimpl.ps1 lives under Compare/ (was invoked at a stale
+    # top-level path, producing a false FAIL on every run).
+    & pwsh -File (Join-Path (Join-Path $ospDir 'Compare') 'Compare-Blib-Crossimpl.ps1') -RustBlib $sBlib -CsBlib $cBlib `
         *>&1 | Tee-Object -FilePath $diffLog | Out-Null
     $exit = $LASTEXITCODE
     return [pscustomobject]@{ ok = ($exit -eq 0);

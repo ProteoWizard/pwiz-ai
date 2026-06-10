@@ -1394,6 +1394,36 @@ The HTML file should follow this exact structure:
    verify: correct version numbers, no leftover content, proper attributions,
    subject line matches body content
 9. Send to the full segment
+10. **Confirm receipt** — after sending, Claude searches the `claude.c.skyline@gmail.com`
+    inbox via Gmail MCP for the announcement (e.g., `subject:(Skyline-daily 26.1.1.159)`)
+    and confirms it landed. Brendan also receives every announcement and can confirm.
+    Don't rely on memory — the send step is easy to forget, and a silent failure
+    (unsubscribed address, wrong segment) looks identical to "not sent yet."
+
+> **Prerequisite**: `claude.c.skyline@gmail.com` must be subscribed to the **Skyline
+> Daily Release** segment, otherwise neither the test email (step 8) nor the final
+> announcement (step 10) will arrive, and Claude cannot confirm receipt. If a test or
+> final email never shows up in the inbox, check the segment membership first.
+
+### Release Finalization Gate
+
+**A release is NOT final until the MailChimp announcement has been sent AND its
+receipt confirmed.** All of the prior steps (build, tag, publish installers, upload,
+wiki updates, skyline.ms announcement, Docker) can be complete and the release is
+still unfinished if the MailChimp email never went out. The MailChimp send is a
+manual developer step (Claude generates the HTML but cannot send), so it is the
+single most common step to forget.
+
+When finalizing any release, Claude must:
+
+1. **Explicitly remind the developer to send the MailChimp email** — do not assume it
+   was sent just because the HTML was generated and the test email was reviewed.
+2. **Confirm receipt** by searching `claude.c.skyline@gmail.com` for the announcement
+   (see step 10 above). Only after the email is confirmed in the inbox should the
+   release be reported as complete.
+
+Treat "MailChimp sent + received" as the last checklist item for every release type
+(daily, complete, rc, major, patch).
 
 ### Querying Past Release Notes
 

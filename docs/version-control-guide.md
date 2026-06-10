@@ -81,15 +81,31 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 ## Pre-Review Workflow
 
-Before requesting human review, a PR should clear these AI review passes:
+Before requesting human review, a change should clear two AI review passes —
+a fresh-context Claude self-review and GitHub Copilot. They catch different
+classes of issue (Claude: logic / cross-impl / spec conformance, and it can
+read source repos outside the change; Copilot: idiomatic / API / language),
+and each has caught real bugs the other missed, so both are mandatory.
 
-1. **GitHub Copilot review** — request a Copilot review on the PR and address
-   its comments. Iterate until Copilot has nothing substantive to flag.
-2. **Claude `/review`** — run `/review <PR#>` and iterate the same way.
-3. **GitHub Copilot re-review** — once Claude is clean, request Copilot again
-   so it can weigh in on anything that changed during the Claude round. If
-   Copilot raises new substantive issues, fix them and loop back to step 2
-   until both reviewers are quiet on the latest commit.
+**The ORDER is deliberate — self-review runs LOCALLY, before the PR exists:**
+
+1. **`/pw-self-review` — local, before opening the PR.** As soon as coding is
+   complete (tests may still be running), run it on the local branch (it diffs
+   `master...HEAD`; no PR number needed). Address its findings first.
+   - Developer present: surface findings and agree which to fix.
+   - Autonomous: fix the agreed set in follow-up commits.
+2. **Open the PR** (`gh pr create`) once self-review findings are resolved and
+   build/tests are green.
+3. **Copilot reviews automatically** within ~5 min of the PR opening. Because
+   self-review already landed, Copilot reviews the FINAL state instead of being
+   immediately invalidated by self-review fixes. Run **`/pw-respond <PR#>`** to
+   address its comments and resolve the threads.
+4. **Optional — `/ultrareview <PR#>`** for maximum rigor (user-triggered,
+   billed, multi-agent cloud review; stronger than either pass above).
+
+Why local-first: opening the PR is what triggers Copilot's automatic review, so
+posting before self-review wastes that pass on a state you are about to change.
+Run self-review first; let Copilot land last.
 
 Address each round in a NEW commit (see "Amending Commits" below); PRs are
 squash-merged, so extra commits cost nothing and preserve the review history.

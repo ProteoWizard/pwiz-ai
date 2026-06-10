@@ -86,42 +86,45 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - Test plan uses `- [x]` checkboxes
 - No emojis
 
-## After a PR Is Opened
+## Review chain: self-review first (local), then open the PR, then Copilot
 
-Once `gh pr create` returns the PR URL, the post-open review chain
-is mandatory. Both Copilot and a fresh-context Claude agent are gates,
-not options — they catch different classes of issue and we have seen
-each catch real bugs the other missed:
+Both the fresh-context Claude self-review and Copilot are **mandatory
+gates** — they catch different classes of issue and each has caught
+real bugs the other missed. The ORDER is deliberate: run the
+self-review LOCALLY *before* opening the PR, so (a) the author fixes
+its findings before anyone else sees the PR, and (b) Copilot's
+automatic review lands LAST, on the final state, instead of being
+immediately invalidated by the self-review fixes.
 
-1. **Wait for Copilot's review** (arrives within ~5 minutes).
-   Copilot reviews every PR in this repo automatically. Treat the PR
-   as not-yet-mergeable until it has reviewed and its findings are
-   either addressed or explicitly dismissed.
+1. **`/pw-self-review` — local, before the PR.** As soon as coding is
+   complete (tests may still be running), launch the fresh-context
+   Claude agent on the local branch (diff vs base; no PR number
+   needed). Running fresh, it doesn't inherit the author's blind
+   spots and catches what Copilot systematically misses — cross-
+   implementation divergence in ports (it can read source repos
+   outside the change that Copilot can't see), correctness bugs the
+   new tests don't cover, concurrency, and hash-stability invariants.
+   Address its findings before posting.
+   - **Developer present:** surface findings and agree which to fix.
+   - **Autonomous:** address them in follow-up commits on the branch.
+   Don't skip it because the change "looks fine" — every PR that has
+   reached this skill yielded at least one useful agent finding.
 
-2. **Run `/pw-respond <PR#>`** to address Copilot's comments in
-   code and resolve the threads.
+2. **Open the PR** (`gh pr create`) once self-review findings are
+   resolved and the build/tests are green.
 
-3. **Run `/pw-self-review <PR#>`** to launch a fresh-context Claude
-   agent review on top of Copilot. This step is **required**, not
-   optional. The agent runs in a fresh context so it doesn't inherit
-   the author's blind spots, and it picks up issues Copilot
-   systematically misses — particularly cross-implementation
-   divergence in ports (where the agent can read source repos
-   outside the current PR that Copilot does not see), correctness
-   bugs the new tests don't cover, and hash-stability invariants.
-   Decision rule:
-   - **If a developer is present and waiting**, surface the agent's
-     findings and ask which to address before merge.
-   - **In autonomous mode** (developer asleep or unavailable),
-     launch the agent automatically once Copilot threads are
-     resolved and address its findings in a follow-up commit on the
-     same branch. Don't skip this step because the PR "looks fine"
-     after Copilot — every PR that's reached this skill so far has
-     yielded at least one useful agent finding.
+3. **Wait for Copilot's review** (arrives within ~5 minutes; Copilot
+   reviews every PR in this repo automatically). Treat the PR as
+   not-yet-mergeable until it has reviewed and its findings are
+   addressed or explicitly dismissed. Run **`/pw-respond <PR#>`** to
+   address its comments and resolve the threads.
 
 4. **For maximum rigor**, follow with `/ultrareview <PR#>` — a
    user-triggered, billed, multi-agent cloud review. Stronger than
    either of the above. Claude Code cannot launch this itself.
+
+(`/pw-self-review` still accepts a `<PR#>` if you ever need to run it
+after a PR exists — but local-first is the default.)
 
 ## Branch Naming
 

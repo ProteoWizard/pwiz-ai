@@ -2,12 +2,13 @@
 
 ## Status
 
-Active -- PR open, awaiting Matt's TeamCity configuration.
+Completed -- PR merged. TeamCity build-config wiring deferred to Matt
+(tracked in "Open questions for Matt" below).
 
 ## Branch Information
 
 - **pwiz branch**: `Skyline/work/20260529_ospreysharp_ci_scaffold`
-- **PR**: [#4247](https://github.com/ProteoWizard/pwiz/pull/4247) (open)
+- **PR**: [#4247](https://github.com/ProteoWizard/pwiz/pull/4247) (merged 2026-06-08)
 - **ai branch**: `master`
 
 ## Background
@@ -84,3 +85,20 @@ PR [#4247](https://github.com/ProteoWizard/pwiz/pull/4247) is open
 reference yet).  Still **active** -- awaiting Matt's TeamCity build-
 config wiring (working dir `pwiz_tools/OspreySharp/`, step
 `tcbuild.bat`, file trigger `pwiz_tools/OspreySharp/**`).
+
+### 2026-06-08 -- Merged
+
+PR #4247 merged as commit `16fea56` (squash). Shipped the three
+self-contained build-driver files at `pwiz_tools/OspreySharp/`
+(`build.ps1`, `build.bat`, `tcbuild.bat`), no `ai/` dependency.
+Merged over one unrelated failing check ("teamcity - BiblioSpec
+subset source tarball" ERROR) -- the team's most frequent
+intermittent failure, already raised with Matt Chambers; the other
+22 checks were green.
+
+**Deferred (not blockers, carried forward to Matt's wire-up step):**
+the actual TeamCity build config and the `tcbuild.bat` end-to-end run
+on a real agent (PR test-plan item left unchecked), plus the four
+"Open questions for Matt" above (dotCover Global Tools install state,
+GitHub status hook, smart-trigger glob, net8.0-only vs net8.0+net472
+matrix).

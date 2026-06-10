@@ -24,6 +24,21 @@ magnitudes. Cross-impl byte-equal for any value both sides agree on at
 the f64 level. Prefer the `ai/.tmp/diff_*.py` numerical helpers over
 raw `diff` (handles CRLF and any residual format differences).
 
+## OspreySharp `-d` master switch (C# only)
+
+OspreySharp accepts `-d` / `--diagnostics` on the command line as a
+convenience that turns on the structured cross-impl dump bundle without
+setting individual env vars. It enables every `OSPREY_DUMP_*` dump
+**except** the per-call firehose `OSPREY_DUMP_MP_INPUTS`, the (currently
+disabled) `OSPREY_DUMP_PREDICT_RT`, all `*_ONLY` early-exit gates, and the
+`OSPREY_DIAG_*` per-entry selectors (which need specific IDs). For
+fine-grained control set the individual env vars below instead -- they
+compose with `-d` and still work on their own (no `-d` required). Internally
+`-d` is implemented by the `OspreyDiagnostics` facade, which holds the live
+`OspreyFileDiagnostics` sink only when a dump is enabled; with neither `-d`
+nor any env var set, the sink is null and all diagnostics are a no-op.
+(Rust osprey has no `-d`; use the env vars.)
+
 ## Calibration Stage (Stage 3)
 
 ### OSPREY_DUMP_CAL_SAMPLE=1
