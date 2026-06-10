@@ -57,26 +57,200 @@ reach it.
   (it is a DirectUI surface) -- it silently no-ops. Drive the dialog with
   window messages instead: a posted **Enter** (`WM_KEYDOWN`/`WM_KEYUP`,
   `VK_RETURN`) to accept, `WM_CLOSE` to cancel.
+* The screen-reader accept path **does** work on this dialog (spike, this
+  branch). Two facts: (1) the managed `System.Windows.Automation` wrapper does
+  **not** expose `LegacyIAccessiblePattern` -- it exists only in the COM UIA API
+  and in raw MSAA -- so a "legacy pattern" accept via `AutomationElement` is not
+  available without dropping a level; (2) going straight to MSAA/oleacc
+  (`AccessibleObjectFromWindow` -> walk the accessible tree -> the
+  `ROLE_SYSTEM_PUSHBUTTON` with `STATE_SYSTEM_DEFAULT` -> `accDoDefaultAction`)
+  accepts the dialog where `InvokePattern.Invoke` no-ops. It works **offscreen**
+  (no foreground/focus needed, unlike `SendInput`) and is **locale-independent**
+  (keys on the default-button state + `AutomationId`, never the caption "Open").
+  Spike code: `OpenFileDialogAutomation.EnterPathAndAcceptViaButton` +
+  `NativeFileDialogLegacyAcceptTest` (decide keep-vs-revert before PR).
 * Set the path on the **Edit** control inside the "File name" combo box
   (AutomationId `1148`), not on the combo box -- the combo auto-completes and
   discards the directory portion. Setting the full path on the Edit + Enter
   navigates and opens in one action, regardless of the dialog's current folder.
-* Native dialogs appear in the UIA tree as a top-level window or a direct
-  child of the owner window -- enumerate via top-level windows + their direct
-  children, never a full `Subtree` walk (prohibitively slow over Skyline's
-  control tree).
+* Discover native dialog windows with Win32 **`EnumWindows`** (filter to
+  process + class `#32770`, then `AutomationElement.FromHandle`), NOT a UIA
+  child walk. EnumWindows enumerates *owned* top-level windows regardless of
+  nesting, so it finds a dialog owned by a **nested** modal form (e.g. the
+  "Add Input Files" dialog owned by the Import Peptide Search wizard, which is
+  itself nested under the main window). The earlier approach -- `RootElement`
+  children + their *direct* children -- only caught dialogs owned by a
+  top-level window like the main window, and silently missed grandchild
+  dialogs (`RootElement.FindAll(Children, processId)` returns only the main
+  window, not nested modal forms). EnumWindows visits only top-level windows,
+  so it also avoids the prohibitively slow full `Subtree` walk.
 * The UIA scan must run off the UI thread (the modal dialog holds the UI
   thread in its own message loop); the WinForms enumeration still marshals to
   the UI thread.
+* To click a WinForms button programmatically, post **`BM_CLICK`** to the
+  button handle -- NOT `Button.PerformClick()`, which is gated by `CanSelect`
+  and `ValidateActiveControl` and silently no-ops on a freshly opened form
+  (focused field fails validation). `BM_CLICK` clicks like a real mouse and is
+  fire-and-forget (does not block when the click opens a modal dialog).
 
 ## Remaining work
 
 * Migrate remaining tutorial/functional tests from `SkylineWindow.OpenFile`
   to `OpenDocument` incrementally (not all at once).
-* MCP Phase 3: route `get_form_state` / `set_form_values` /
-  `click_form_button` to the native automation when `IsNative` is set, so the
-  dialog is fully operable through the generic tools (this PR only adds
-  discovery + image).
+* MCP Phase 3: generic form automation -- enumerate controls, set values, and
+  submit/click, working uniformly for WinForms forms and wrapped native dialogs.
+  See **Phase 3 design** below for the full plan.
+  * **Done (this branch):** `InvokeMenuItem` / `ClickFormButton` /
+    `SetFormValue` added to `IJsonToolService` + `JsonToolServer` +
+    `SkylineJsonToolClient` + `JsonUiService`, and wired through the external
+    MCP server: `SkylineConnection` delegations + MCP tools
+    `skyline_invoke_menu_item` / `skyline_click_form_button` /
+    `skyline_set_form_value` in `SkylineTools.cs` (`SkylineMcpServer` compiles;
+    `SkylineMcpTest` `EXPECTED_TOOL_COUNT` bumped 47 -> 50). The PRM tutorial's
+    Import Peptide Search open steps (menu -> wizard -> Add Files -> native
+    dialog -> select 2 files -> Open) run end to end through these verbs,
+    verified by `PrmConnectorTest` (offscreen, translation-proof; it waits for
+    the dialog by polling `GetOpenForms`, the connector discovery method).
+    Native dialog discovery switched to `EnumWindows` (see Key findings) so the
+    wizard-owned dialog is found.
+  * **Non-blocking commands (alert-watch):** `JsonUiService.RunWithAlertWatch`
+    runs a verb's work on a background thread (`ActionUtil.RunAsync`) and, if a
+    `CommonAlertDlg` appears first, reads its text and throws -- returning
+    immediately instead of blocking on the modal. The alert is left open for the
+    model to dismiss (`ClickFormButton` is intentionally NOT wrapped, so it can
+    still dismiss alerts). Applied to `RunCommand` (`RunCommandImpl` ->
+    `RunCommandCore`) and `SetFormValue`; extend to more verbs as needed.
+    Progress dialogs (`LongWaitDlg`) are not `CommonAlertDlg`, so normal command
+    progress does not trip it. Verified by `AlertWatchTest`. (An earlier
+    multi-connection JsonToolServer approach to the same blocking problem was
+    implemented and then reverted in favor of this -- fail-fast keeps the single
+    connection free, so no second connection is needed to dismiss a hung dialog.)
+  * **Not yet done:** `GetFormState` (enumerate a form's controls into the
+    hierarchical DTO); the broader verbs (`SelectTab`, `SelectTreeNode`,
+    send-key). Also: `SkylineMcpTest` only runs end to end against an
+    *installed* AiConnector tool (else `Assert.Inconclusive`); after this
+    change the tool must be repackaged (`SkylineAiConnector.csproj`) and
+    reinstalled for the new 50-tool count to be exercised. (Standalone
+    `dotnet build` of `SkylineAiConnector.csproj` fails on a pre-existing
+    net472 `System.Text.Json` restore quirk in `SkylineTool.csproj` -- build it
+    via the solution/MSBuild with restore, not standalone.)
+
+## Phase 3 design (generic form automation + tutorial runner)
+
+### Ultimate goal
+
+Claude (via the AI Connector / MCP) should be able to **run the Skyline
+tutorials** in `pwiz_tools/Skyline/Documentation/Tutorials`. Those tutorials are
+step-by-step instructions that name controls and values, e.g. (MethodEdit):
+
+* "In the **Name** field of the **Build Library** form, enter "Yeast (Atlas)"."
+* "From the **Background proteome** drop-list, choose **<Add…>**."
+* "In the **Peptide Settings** form, click the **Digestion** tab."
+* "On the **Settings** menu, click **Peptide Settings**."
+* "Click the **Browse** button." (-> the native file dialog this branch wraps)
+
+The instruction format is regular -- `<location> + <bold control label> +
+<action> + <optional value>` -- and the `<b>` spans delimit the UI identifiers,
+so steps can be parsed into structured actions fairly reliably. Tutorials are
+**localized** (`en/`, `ja/`, `zh-CHS/`): each transcribes the *visible label in
+that language*, matching the localized UI.
+
+### Decision: Approach A (two backends, unified contract)
+
+Drive WinForms forms via **direct `Control`-tree access on the UI thread**;
+drive native dialogs via **UIA/MSAA off the UI thread**. Unify only at the
+**DTO + verb contract** -- each verb dispatches on `FormInfo.IsNative`, exactly
+as `GetOpenForms`/`GetFormImage` already do.
+
+Rejected alternative **B** (drive *everything* through UIA, since WinForms
+controls also expose UIA providers): more uniform, but UIA over in-process
+WinForms is slower/flakier than typed access and some custom controls have thin
+UIA support. Keep the proven typed path for real forms. (If duplication ever
+hurts, B is worth a spike; setting `AccessibleName` -- see below -- would also
+make a future B pivot cheaper.)
+
+### Control-model DTO (`GetFormState`)
+
+Not a flat list -- a **hierarchy**, because the tutorials disambiguate by
+container ("the **Name** field of the **Build Library** form", "the **Digestion**
+tab"). Per control:
+
+* **Stable key** -- `Control.Name` (WinForms) / `AutomationId` (native). The key
+  the *service* acts on. Locale-independent; never used for matching tutorial
+  text.
+* **Visible label** -- *derived*, in the current UI language, by precedence:
+  `Control.Text` -> associated/preceding `Label` -> `AccessibleName` if set ->
+  `Control.Name`. This is what tutorial text matches against.
+* **Container path** -- Form title -> TabPage -> GroupBox -> control, for scoped
+  disambiguation.
+* **Kind** -- model on UIA's `ControlType` vocabulary (Edit, Button, ComboBox,
+  CheckBox, RadioButton, List, Tab, ...).
+* **Current value** + **states** (enabled / visible / focusable / checked).
+
+### Matching rule (tutorial step -> control)
+
+Match the bolded label against the **derived visible label in the current UI
+language**, scoped by the named container (form / tab / group) and filtered by
+control kind. Labels are not unique ("Name", "OK" recur), so the container path
+does the disambiguation -- the same way the tutorial sentence does.
+
+**Localization is the through-line.** The connector operates in terms of the
+current language's visible strings; automation/tests run per language. Always
+**derive labels from the live UI**, never author a parallel copy -- a derived
+label is guaranteed to match the string the tutorial author transcribed.
+
+### On `AccessibleName`
+
+Do **not** start setting `AccessibleName` across Skyline for the sake of the AI
+Connector. Under Approach A the action key is `Control.Name`, and the match key
+is the derived visible label -- both already exist. A hand-authored
+`AccessibleName` is a separately-localized duplicate that can drift from the
+visible label and silently break matching, and tutorials never reference a
+control that has no visible label anyway. Keep `AccessibleName` as optional
+real-accessibility work (blind users / Section 508), justified on its own
+merits, plus surgical use on the rare unlabeled control the AI cannot resolve.
+
+### Verbs (beyond enumerate / set / submit)
+
+The MethodEdit tutorial alone exercises all of these, so the service needs more
+than form-filling:
+
+* `GetFormState(formId)` -- the DTO above.
+* `SetFormValues(formId, {controlKey: value})` -- text, checkbox, combo
+  selection (combo set **by visible item text**, also localized).
+* `ClickButton(formId, buttonKey)` / submit-default (the native default-button
+  accept is proven by the spike; WinForms = `AcceptButton.PerformClick()` or a
+  named button).
+* `InvokeMenuItem(path)` -- e.g. "Settings > Peptide Settings".
+* `SelectTab(formId, tabKey)`.
+* `SelectTreeNode(locator)` -- the Targets tree (overlaps existing
+  selection/ElementLocator APIs).
+* `SendKeys` / press-key -- "Press the down-arrow key...".
+
+Out of scope for the service: steps that leave Skyline (e.g. Notepad
+copy/paste) -- those are the connector/agent's own desktop control, not this API.
+
+### Threading
+
+WinForms verbs marshal to the UI thread; native modal-dialog verbs run **off**
+it (the UI thread is blocked in the dialog's message loop -- the deadlock
+already noted for `GetOpenForms`). Each verb branches on `IsNative` and picks
+the thread accordingly. The "unified" surface is the contract, not one code
+path.
+
+### Dialog chains are on the critical path
+
+Tutorials stack modal dialogs (Peptide Settings -> Build Library -> Browse ->
+native file dialog -> ...). The native-dialog automation in this branch is not a
+side feature; it is directly on the tutorial path, and the off-UI-thread
+contract is what makes nested native dialogs operable.
+
+### Division of labor
+
+The C# service exposes **primitives** (the verbs above). The **tutorial runner**
+-- parse a localized tutorial into steps, resolve each step's control by label +
+container, choose the verb, handle dialog chains -- is an agent loop in the MCP
+client (Claude), not C# code.
 
 ## Verification
 
