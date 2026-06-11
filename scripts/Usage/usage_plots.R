@@ -35,8 +35,9 @@ stopifnot(file.exists(csv_path))
 
 # --- Load & shape ---------------------------------------------------------------------
 usage <- read_csv(csv_path, show_col_types = FALSE) |>
-  mutate(date = as.Date(date), model = factor(model), user = factor(user),
-         machine = factor(machine))
+  mutate(date = as.Date(date)) |>
+  filter(date < Sys.Date()) |>   # drop the current, still-partial day (e.g. a 06:00 snapshot of "today") so charts don't end on a misleading sliver
+  mutate(model = factor(model), user = factor(user), machine = factor(machine))
 
 multi_user    <- nlevels(usage$user) > 1
 multi_machine <- nlevels(usage$machine) > 1
