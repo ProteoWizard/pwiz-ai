@@ -151,6 +151,32 @@ Two consequences:
   `Ms1ScoringByproduct`, MS1/isotope paths). The serialized-Astral leg can follow
   separately once this lands.
 
+### 2026-06-11 -- Stellar 3-file run #1 failed at blib write; root cause = memory, fix = serialize
+The first Stellar 3-file coverage run **failed at exit 1** -- but not in the science.
+It completed second-pass FDR + protein FDR (6416 protein groups) and died only at
+`BlibWriter..ctor` with `Could not load file or assembly 'System.Transactions.Local'
+... the system cannot find the file specified` (and earlier non-fatal
+`System.Runtime.Intrinsics` warnings reloading `.scores.parquet`). Both are
+**shared-framework** assemblies the uninstrumented exe loads fine (last night's
+41-min TeamCity nightly wrote blibs without issue), so it is **dotCover-specific**.
+
+**Root cause = memory exhaustion, NOT assembly resolution.** Discriminating test:
+re-ran the *same* dotCover apphost launch against the completed work dir
+(MergeNode-resume; all heavy stages cached -> **low** memory), hitting the identical
+`BlibWriter`/`System.Transactions.Local` path -> **succeeded, exit 0, blib written**.
+The only variable was peak memory: the failed run scored 3 files in **parallel**, each
+~20 GB working set (peak ~25 GB). Under dotCover instrumentation that exhausts memory
+and the framework assembly loader fails with a misleading "file not found". (A single-
+file Stellar run -- the prior 70.8% -- also uses BlibWriter and worked, which already
+ruled pure resolution out: it would have failed single-file too.)
+
+**Fix:** `Measure-CumulativeCoverage.ps1` now sets `OSPREY_MAX_PARALLEL_FILES=1` for
+**every** leg (not just hram), so each multi-file leg scores sequentially with the
+full thread budget per file (commit `ddfe7c2`). No-op for single-file legs. Known
+small cost: the multi-file `Parallel.For` *scheduling* branch goes uncovered (the
+per-file scoring it wraps is covered regardless) -- acceptable vs. a crashed run that
+yields zero coverage. Re-launched Stellar 3-file (serialized).
+
 **Staged plan (Brendan, 2026-06-11) -- advance slowly:**
 1. **Stellar 3-file** (in progress) -- the most complete number reachable on
    unit-resolution data; report it.
