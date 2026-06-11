@@ -28,13 +28,17 @@ Two runners, two repos:
    (resolution-gated, or per-dataset), unset for Stellar. Mirrors
    `Measure-Pipeline.ps1`'s "1 for Astral" policy.
 2. **`ai/scripts/OspreySharp/Measure-CumulativeCoverage.ps1`** (ai/ -> pwiz-ai
-   master, no branch) -- **DONE (commit `ddfe7c2`).** Note the scope is broader here
-   than in the regression: under dotCover instrumentation even **unit-resolution
-   Stellar** 3-file parallel exhausts memory (the framework assembly loader fails at
-   the blib write), so the orchestrator serializes **all** legs, not just Astral.
-   The regression test runs uninstrumented (no dotCover), so it only needs the
-   Astral leg serialized (item 1). **No golden dependency** (coverage is
-   scheduling-independent), which is why this half landed independently.
+   master, no branch) -- **DONE (commit `ddfe7c2`).** Scope is broader here than in
+   the regression: it serializes **all** legs, not just Astral, but for
+   **determinism**, not a proven Stellar memory limit. A 3-file Stellar parallel leg
+   *intermittently* died at the blib write under dotCover with a shared-framework
+   assembly-load failure; the failure is parallel-correlated but NOT deterministic
+   (a prior run completed Stellar 3-file parallel fine before reaching Astral). Serial
+   is reliable, so all coverage legs serialize to avoid a flaky run. The regression
+   test runs uninstrumented (no dotCover) and only needs the Astral leg serialized
+   (item 1). **No golden dependency** (coverage is scheduling-independent), which is
+   why this half landed independently. See the cumulative-coverage TODO for the full
+   reconciliation.
 
 ## Verification gate (do BEFORE changing the regression)
 The committed Astral golden (`osprey-regression.data/astral/`) was captured with

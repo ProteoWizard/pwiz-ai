@@ -190,20 +190,25 @@ if (-not $SkipUnit) {
     $snapshots.Add($unitSnap)
 }
 
-# Serialize file processing for ALL coverage legs. OspreySharp parallelizes input
-# files by default (Parallel.For up to ProcessorCount); each Stellar file's
-# main-search working set is ~20 GB (peak ~25 GB), so 3 in parallel UNDER dotCover
-# instrumentation exhausts memory and the framework assembly loader fails with
-# "could not load ... System.Transactions.Local / System.Runtime.Intrinsics ...
-# the system cannot find the file specified" (a resource-exhaustion symptom, not a
-# probing bug) -- the 3-file Stellar straight-through died at the blib write this
-# way (2026-06-11). Proven memory-bound: the identical dotCover apphost launch
-# writes the blib fine at low memory (MergeNode-resume repro). Astral (hram) is far
-# worse (~44 GB). Setting =1 takes the strictly-sequential path; it is a no-op for
-# the single-file legs (1 file is sequential regardless). Trade-off: the multi-file
-# Parallel.For *scheduling* branch goes uncovered, but the per-file scoring work it
-# wraps is covered either way -- a few lines of orchestration vs. a crashed run that
-# yields zero coverage. See TODO-20260611_ospreysharp_serialize_astral_runners.md.
+# Serialize file processing for ALL coverage legs -- for DETERMINISM under dotCover.
+# OspreySharp parallelizes input files by default (Parallel.For up to ProcessorCount).
+# On 2026-06-11 a 3-file Stellar straight-through died at the blib write with
+# "could not load ... System.Transactions.Local / System.Runtime.Intrinsics ... the
+# system cannot find the file specified" -- both are shared-framework assemblies the
+# UNinstrumented exe loads fine, so it is dotCover-specific. The failure is
+# INTERMITTENT and parallel-correlated, NOT a hard memory wall: a prior
+# -Dataset All run completed BOTH Stellar 3-file parallel legs (straight + resume,
+# blibs written) at ~85% machine memory before reaching Astral. The mechanism is not
+# fully pinned -- either a transient memory spike crossing the line under parallel
+# load, or a dotCover assembly-resolution race when parallel threads first-load the
+# same framework assembly at once. A sequential MergeNode-resume repro wrote the blib
+# fine, confirming serial is RELIABLE but not isolating the cause. =1 takes the
+# strictly-sequential path (reliable, deterministic), a no-op for single-file legs;
+# each file still gets the full --threads inner budget so per-file scoring code is
+# covered identically. Cost: the outer Parallel.For *scheduling* branch (~a dozen
+# lines of glue) goes uncovered -- acceptable vs. an intermittently crashing run.
+# Astral (hram, ~44 GB) needs serial regardless. See
+# TODO-20260611_ospreysharp_serialize_astral_runners.md.
 $env:OSPREY_MAX_PARALLEL_FILES = '1'
 
 # ---- 2. Per-dataset regression legs (straight-through + resume) ----

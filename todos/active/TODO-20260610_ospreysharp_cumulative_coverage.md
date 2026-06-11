@@ -160,22 +160,34 @@ It completed second-pass FDR + protein FDR (6416 protein groups) and died only a
 **shared-framework** assemblies the uninstrumented exe loads fine (last night's
 41-min TeamCity nightly wrote blibs without issue), so it is **dotCover-specific**.
 
-**Root cause = memory exhaustion, NOT assembly resolution.** Discriminating test:
-re-ran the *same* dotCover apphost launch against the completed work dir
-(MergeNode-resume; all heavy stages cached -> **low** memory), hitting the identical
-`BlibWriter`/`System.Transactions.Local` path -> **succeeded, exit 0, blib written**.
-The only variable was peak memory: the failed run scored 3 files in **parallel**, each
-~20 GB working set (peak ~25 GB). Under dotCover instrumentation that exhausts memory
-and the framework assembly loader fails with a misleading "file not found". (A single-
-file Stellar run -- the prior 70.8% -- also uses BlibWriter and worked, which already
-ruled pure resolution out: it would have failed single-file too.)
+**The failure is INTERMITTENT and parallel-correlated -- mechanism not fully pinned.**
+(Corrected after Brendan flagged the contradicting anchor.) An earlier
+`-Dataset All -Files All` run reached **Astral**, which -- since the orchestrator
+throws on any non-zero exit -- means **both Stellar 3-file parallel legs (straight +
+resume) had already completed and written blibs**, at ~85% machine memory. So Stellar
+3-file parallel under dotCover demonstrably *succeeds*; it does **not** hit a
+deterministic memory wall. My initial "memory exhaustion, proven" claim was over-fit
+to a single failure: the discriminating repro (sequential MergeNode-resume at low
+memory) only proved **serial is reliable** -- it did **not** reproduce the parallel
+failure, so it never established parallelism as a deterministic cause. Two mechanisms
+fit the evidence and neither is isolated:
+- a **transient memory spike** crossing the line under parallel load (box already at
+  85%), or
+- a **dotCover assembly-resolution race** when parallel threads first-load the same
+  shared-framework assembly (`System.Transactions.Local` / `System.Runtime.Intrinsics`)
+  at once -- a concurrency bug, not memory at all.
+Both shared-framework assemblies load fine UNinstrumented (the 41-min TeamCity
+nightly), so the fault is dotCover-specific either way.
 
-**Fix:** `Measure-CumulativeCoverage.ps1` now sets `OSPREY_MAX_PARALLEL_FILES=1` for
-**every** leg (not just hram), so each multi-file leg scores sequentially with the
-full thread budget per file (commit `ddfe7c2`). No-op for single-file legs. Known
-small cost: the multi-file `Parallel.For` *scheduling* branch goes uncovered (the
-per-file scoring it wraps is covered regardless) -- acceptable vs. a crashed run that
-yields zero coverage. Re-launched Stellar 3-file (serialized).
+**Fix = determinism, not a proven root-cause fix.** `Measure-CumulativeCoverage.ps1`
+sets `OSPREY_MAX_PARALLEL_FILES=1` for **every** leg (commit `ddfe7c2`, comment
+corrected in a follow-up), so each multi-file leg scores sequentially -- which the
+repro showed is reliable -- with the full thread budget per file. No-op for
+single-file legs. Cost: the outer `Parallel.For` *scheduling* branch (~a dozen lines)
+goes uncovered; the per-file scoring it wraps is covered regardless. Open question for
+later: whether Stellar even needs serialization (the failure may be a rare transient)
+or whether only Astral (the genuine ~44 GB case) does -- revisit if we want the
+parallel branch covered on real-data runs. Re-launched Stellar 3-file (serialized).
 
 **Staged plan (Brendan, 2026-06-11) -- advance slowly:**
 1. **Stellar 3-file** (in progress) -- the most complete number reachable on
