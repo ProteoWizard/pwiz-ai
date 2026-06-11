@@ -54,7 +54,7 @@ collected <- list()  # accumulate plots so we can also emit a single multi-page 
 save_plot <- function(p, name, w = 10, h = 5) {
   ggsave(file.path(plot_dir, name), p, width = w, height = h, dpi = 120)
   collected[[name]] <<- p
-  print(p)
+  if (interactive()) print(p)   # RStudio stepping only; under Rscript print() opens Rplots.pdf in the CWD, which fails when run from a read-only dir (e.g. a Scheduled Task's System32)
 }
 
 # --- 1. Daily tokens, stacked by model ------------------------------------------------
