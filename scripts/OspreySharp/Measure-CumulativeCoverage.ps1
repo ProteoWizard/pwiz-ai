@@ -190,20 +190,25 @@ if (-not $SkipUnit) {
     $snapshots.Add($unitSnap)
 }
 
+# Serialize file processing for ALL coverage legs. OspreySharp parallelizes input
+# files by default (Parallel.For up to ProcessorCount); each Stellar file's
+# main-search working set is ~20 GB (peak ~25 GB), so 3 in parallel UNDER dotCover
+# instrumentation exhausts memory and the framework assembly loader fails with
+# "could not load ... System.Transactions.Local / System.Runtime.Intrinsics ...
+# the system cannot find the file specified" (a resource-exhaustion symptom, not a
+# probing bug) -- the 3-file Stellar straight-through died at the blib write this
+# way (2026-06-11). Proven memory-bound: the identical dotCover apphost launch
+# writes the blib fine at low memory (MergeNode-resume repro). Astral (hram) is far
+# worse (~44 GB). Setting =1 takes the strictly-sequential path; it is a no-op for
+# the single-file legs (1 file is sequential regardless). Trade-off: the multi-file
+# Parallel.For *scheduling* branch goes uncovered, but the per-file scoring work it
+# wraps is covered either way -- a few lines of orchestration vs. a crashed run that
+# yields zero coverage. See TODO-20260611_ospreysharp_serialize_astral_runners.md.
+$env:OSPREY_MAX_PARALLEL_FILES = '1'
+
 # ---- 2. Per-dataset regression legs (straight-through + resume) ----
 foreach ($name in $selected) {
     $cfg = $datasets[$name]
-    # Serialize HRAM file processing. OspreySharp parallelizes input files by
-    # default; on multi-file hram that balloons the managed heap (~44 GB on
-    # 3-file Astral) and gen-2-GC-thrashes under dotCover instrumentation (a
-    # full run never finished). Mirrors Measure-Pipeline.ps1's "1 for Astral"
-    # policy; pure scheduling, no effect on results. See
-    # TODO-20260611_ospreysharp_serialize_astral_runners.md.
-    if ($cfg.Resolution -eq 'hram') {
-        $env:OSPREY_MAX_PARALLEL_FILES = '1'
-    } else {
-        Remove-Item env:OSPREY_MAX_PARALLEL_FILES -ErrorAction SilentlyContinue
-    }
     $dataDir = Resolve-DataDir -Folder $cfg.Folder
     $allMzml = @(Get-ChildItem -Path $dataDir -Filter '*.mzML' -File | Sort-Object Name | ForEach-Object { $_.FullName })
     $mzmls = if ($Files -eq 'Single') { @($allMzml[0]) } else { $allMzml }
