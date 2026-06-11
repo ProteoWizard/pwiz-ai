@@ -193,6 +193,17 @@ if (-not $SkipUnit) {
 # ---- 2. Per-dataset regression legs (straight-through + resume) ----
 foreach ($name in $selected) {
     $cfg = $datasets[$name]
+    # Serialize HRAM file processing. OspreySharp parallelizes input files by
+    # default; on multi-file hram that balloons the managed heap (~44 GB on
+    # 3-file Astral) and gen-2-GC-thrashes under dotCover instrumentation (a
+    # full run never finished). Mirrors Measure-Pipeline.ps1's "1 for Astral"
+    # policy; pure scheduling, no effect on results. See
+    # TODO-20260611_ospreysharp_serialize_astral_runners.md.
+    if ($cfg.Resolution -eq 'hram') {
+        $env:OSPREY_MAX_PARALLEL_FILES = '1'
+    } else {
+        Remove-Item env:OSPREY_MAX_PARALLEL_FILES -ErrorAction SilentlyContinue
+    }
     $dataDir = Resolve-DataDir -Folder $cfg.Folder
     $allMzml = @(Get-ChildItem -Path $dataDir -Filter '*.mzML' -File | Sort-Object Name | ForEach-Object { $_.FullName })
     $mzmls = if ($Files -eq 'Single') { @($allMzml[0]) } else { $allMzml }
