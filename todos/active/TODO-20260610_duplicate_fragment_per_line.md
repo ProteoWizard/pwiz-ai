@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260610_duplicate_fragment_per_line`
 - **Base**: `master`
 - **Created**: 2026-06-10
-- **Status**: PR open, awaiting Copilot review
+- **Status**: PR open; self-review (x3) + Copilot (x4) all clean; awaiting human review
 - **GitHub Issue**: [#4284](https://github.com/ProteoWizard/pwiz/issues/4284)
 - **PR**: [#4286](https://github.com/ProteoWizard/pwiz/pull/4286)
 - **Worktree**: `C:\Dev\DupFragLine`
@@ -30,20 +30,27 @@ instead of crashing. Origin: skyline.ms support thread #74731 (Sciex ZenoTOF 760
 - [x] Applied in both per-line paths (`GetMoleculeTransitionGroup` new-molecule branch, `AddFragmentTransitions`).
 - [x] `GetProductColumnForDuplicateFragment` - points the error at the offending repeated column (e.g. the
   second Product Charge), not the fill-forwarded Product m/z.
-- [x] New resource string in `Properties/Resources.resx` (+ Designer).
 - [x] `CreateTransitionLossToChildMap` left strict (unhandled-exception backstop preserved).
-- [x] Test `PasteMoleculesTest.TestDuplicateFragmentOnLine` - asserts the error message and that it flags
-  the correct column. Red->green verified (without the fix, Check For Errors reports "No errors").
-- [x] Build + `TestPasteMolecules` green.
+- [x] Error names the offending column: `See column N "Header"` (`GetColumnDescription` + abstract
+  `GetColumnName` returning the dialog-assigned/localized label; a label is always available).
+- [x] New message strings in `Model/ModelResources.resx` (moved there from `Properties/Resources.resx`
+  per code inspection; designer kept at the repo builder version to avoid churn).
+- [x] Test `PasteMoleculesTest.TestDuplicateFragmentOnLine` - two scenarios covering both guard paths
+  (new-molecule `GetMoleculeTransitionGroup` and existing-molecule `AddFragmentTransitions`); red->green
+  verified for each. Translation-proof (asserts the localized column-name resource); green en + zh.
+- [x] Build + `TestPasteMolecules` + `CodeInspection` green.
+
+### Review
+- [x] `/pw-self-review` x3 - findings addressed (resource placement, GetColumnName doc/abstract,
+  AddFragmentTransitions test coverage). Final pass run.
+- [x] Copilot x4 - all threads resolved; latest review clean (no comments).
 
 ### Remaining
-- [x] `/pw-self-review` (findings addressed: resource rename, doc comment; tolerate-errors asymmetry documented as intentional)
-- [x] Added column name to the error message: `See column N "Header"`
-- [x] Commit (ai/ TODO + pwiz code), open PR #4286 (`Fixes #4284`)
-- [ ] Address Copilot review (`/pw-respond 4286`)
-- [ ] Merge; reply to support thread #74731
+- [ ] Human review + CI; merge
+- [x] Support thread #74731 reply (done by author)
 
 ## Files
 - `pwiz_tools/Skyline/Model/SmallMoleculeTransitionListReader.cs`
-- `pwiz_tools/Skyline/Properties/Resources.resx` (+ `Resources.Designer.cs`)
+- `pwiz_tools/Skyline/Model/ModelResources.resx` (+ `ModelResources.designer.cs`)
+- `pwiz_tools/Skyline/Properties/Resources.resx` (+ `Resources.Designer.cs`) (string removed)
 - `pwiz_tools/Skyline/TestFunctional/PasteMoleculesTest.cs`
