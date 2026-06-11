@@ -15,17 +15,16 @@
   default to `C:\proj\pwiz` per the plain-worktree preference)
 - **Base**: `master`
 - **Created**: 2026-06-10
-- **Status**: **IN PROGRESS.** Branch created; harness implemented + unit-validated
-  against blib fixtures; end-to-end run + golden commit in progress. See Progress Log.
-- **Next session handoff**: For the startup protocol, read
-  `ai/.tmp/handoff-20260610_osprey_regression_testperf.md` before starting work.
+- **Status**: **Completed.** Harness built, validated end-to-end on Stellar +
+  Astral, reviewed (Copilot + self-review), merged. See Progress Log.
 - **Predecessor TODO**:
   [`TODO-20260609_osprey_output_cache_dir.md`](../completed/TODO-20260609_osprey_output_cache_dir.md)
   -- the `--work-dir`/`--output-dir`/`--cache-dir` decoupling (pwiz #4278 `c5f4d9c`,
   maccoss/osprey #47 `696c938`) that lets a run read read-only inputs and write only
   to a work dir. That capability is the foundation this builds on.
-- **GitHub Issue**: (none)
-- **PR**: (planned)
+- **GitHub Issue**: (none) — wire-up tracked in
+  [#4281](https://github.com/ProteoWizard/pwiz/issues/4281) (Matt Chambers)
+- **PR**: [#4280](https://github.com/ProteoWizard/pwiz/pull/4280) (merged 2026-06-11 as `55b34e8`)
 
 ## Mission
 
@@ -266,3 +265,24 @@ Review rounds done:
   first real agent run.
 - (Deferred) faster mode-2 compare (SQL-ATTACH / raw-value) if nightly wall-time
   matters; raw-data path (`osprey-testfiles.zip` + `pwiz_data_cli`).
+
+### 2026-06-11 — Merged
+PR #4280 merged (squash) as commit `55b34e8`. Shipped the pwiz-standalone
+PowerShell regression harness (`regression.ps1` + `Regression/` modules +
+`tctest.bat` + committed Stellar/Astral text goldens) with mode-1 (vs golden) and
+mode-2 (resume==straight) gates at 1e-9, both validated end-to-end on real data.
+Wire-up of the scheduled "Osprey Windows .NET Regression" TeamCity config is
+handed to Matt Chambers via issue [#4281](https://github.com/ProteoWizard/pwiz/issues/4281)
+(labels `osprey`, `todo`). **First TeamCity nightly ran in 41 minutes** — far
+under the stale ~70 min estimate, and it confirms the heavy slowness seen during
+the cumulative-coverage run is dotCover instrumentation overhead, not the pipeline.
+
+Follow-ups filed:
+- Interim Astral serialization in the runners —
+  `TODO-20260611_ospreysharp_serialize_astral_runners.md` (orchestrator half done;
+  `regression.ps1` half is the next pwiz branch/PR).
+- Memory-aware default + a `--file-threads`-style CLI arg —
+  `TODO-ospreysharp_file_parallelism_arg.md` (backlog).
+- Fast subset-data per-commit pipeline test —
+  `TODO-ospreysharp_fast_subset_coverage_test.md` (backlog).
+- Deferred faster mode-2 compare; raw-data path (carried above).
