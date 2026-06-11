@@ -15,7 +15,8 @@ ai/scripts/OspreySharp/
   DIAGNOSTICS.md                env-var reference for OSPREY_DUMP_*
   PRE-COMMIT.md                 pre-commit + pre-PR validation gates
 
-  Build-OspreySharp.ps1         build the .sln (+ optional tests/inspection)
+  Build-OspreySharp.ps1         build the .sln (+ optional tests/inspection/coverage)
+  Summarize-Coverage.ps1        summarize a dotCover JSON report (whole-project)
   Run-Osprey.ps1                run OspreySharp or Rust osprey on a dataset
   Dataset-Config.ps1            dataset definitions + path helpers
   Clean-TestData.ps1            wipe caches / diagnostic dumps
@@ -57,6 +58,31 @@ pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -RunInspection
 ```
 
 See [PRE-COMMIT.md](PRE-COMMIT.md) for the full pre-commit gate.
+
+## Coverage
+
+`-Coverage` runs the unit tests under JetBrains dotCover and exports a
+JSON report; `Summarize-Coverage.ps1` turns that JSON into a
+whole-project picture (overall %, per-assembly table, most-uncovered
+types, zero-coverage types). This is the measured complement to the
+by-eye `/pw-test-review` — run it first to ground the review in actual
+numbers.
+
+```powershell
+# Build + run all unit tests under dotCover, export coverage JSON
+pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -Coverage
+
+# Summarize the exported JSON (path is printed at the end of the run)
+pwsh -File ./ai/scripts/OspreySharp/Summarize-Coverage.ps1 `
+  -CoverageJsonPath ai/.tmp/osprey-coverage-<timestamp>.json
+```
+
+Coverage spans the `OspreySharp.*` production assemblies; the
+`OspreySharp.Test` assembly is excluded. The `.json` and `.dcvr`
+snapshot land in `ai/.tmp/`; import the `.dcvr` in Visual Studio
+(ReSharper > Unit Tests > Coverage > Import from Snapshot) for
+line-by-line detail. Requires the dotCover command-line tool
+(`dotnet tool install -g JetBrains.dotCover.CommandLineTools`).
 
 ## Run
 
