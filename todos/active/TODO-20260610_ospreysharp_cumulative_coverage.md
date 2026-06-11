@@ -128,3 +128,25 @@ instrumentation; that merged number is the real target.
 The prior coverage WIP (`Build-OspreySharp -Coverage`, `Summarize-Coverage.ps1`,
 README) was uncommitted on a base 9 behind origin, but origin's 9 commits do NOT
 touch those files -> clean fast-forward + reapply, committed together here.
+
+### 2026-06-11 -- Full `-Dataset All` run abandoned under instrumentation; Stellar 3-file first
+The full `-Dataset All -Files All` run was killed after ~11 hours: it was still in
+the **Astral straight-through PerFileScoring**, with the 3-file **parallel-by-default**
+path driving a ~38 GB managed heap that GC-thrashed under dotCover instrumentation
+(working set ~44 GB). dotCover instrumentation multiplies the per-file footprint, so
+the parallel HRAM path that is merely slow uninstrumented becomes impractical here.
+Two consequences:
+- **Interim serialization fix** applied to the orchestrator
+  (`Measure-CumulativeCoverage.ps1`): for `hram` datasets it now sets
+  `OSPREY_MAX_PARALLEL_FILES=1` so the Astral leg serializes (commit `8a71b72`).
+  Unit-resolution datasets (Stellar) keep the parallel default. This mirrors
+  `Measure-Pipeline.ps1`'s "Astral = 1" policy and the perf scripts. (The regression.ps1
+  half + the code-level smarter default are tracked separately:
+  `TODO-20260611_ospreysharp_serialize_astral_runners.md` and
+  `TODO-ospreysharp_file_parallelism_arg.md`.)
+- **Get Stellar 3-file first.** Running
+  `Measure-CumulativeCoverage.ps1 -Dataset Stellar -Files All` (unit + 3-file
+  straight + resume, merged). This expands the prior 70.8% Stellar-**single** number
+  to 3 files; it leaves out only HRAM-specific code (`HramStrategy`,
+  `Ms1ScoringByproduct`, MS1/isotope paths). The serialized-Astral leg can follow
+  separately once this lands.
