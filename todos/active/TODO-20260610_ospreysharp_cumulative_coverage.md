@@ -150,3 +150,17 @@ Two consequences:
   to 3 files; it leaves out only HRAM-specific code (`HramStrategy`,
   `Ms1ScoringByproduct`, MS1/isotope paths). The serialized-Astral leg can follow
   separately once this lands.
+
+**Staged plan (Brendan, 2026-06-11) -- advance slowly:**
+1. **Stellar 3-file** (in progress) -- the most complete number reachable on
+   unit-resolution data; report it.
+2. **One Astral file, straight-through** next
+   (`-Dataset Astral -Files Single` with a single-file run). A single file is
+   sequential by definition (`PerFileScoringTask` takes the `InputFiles.Count == 1`
+   path -- no parallelism, no 44 GB blow-up, no env-var needed), so it is the cheap
+   way to pick up **most** of the HRAM-specific coverage (`HramStrategy`,
+   `Ms1ScoringByproduct`, MS1/isotope) that Stellar can't reach.
+3. **Decide** from those two numbers whether more ambitious multi-file Astral runs
+   (which need the serialized `OSPREY_MAX_PARALLEL_FILES=1` path under instrumentation)
+   are worth the wall-time. The 41-min uninstrumented TeamCity nightly says the
+   pipeline itself is fast; the cost here is purely dotCover instrumentation.

@@ -10,11 +10,14 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260611_ospreysharp_serialize_astral` (pwiz part; to
-  be created off `master` **after PR #4280 merges**)
+  be created off `master` -- **PR #4280 now merged, so the base is ready**)
 - **Base**: `master`
 - **Created**: 2026-06-11
-- **Status**: Queued (not started) -- gated on the in-flight cumulative-coverage
-  run freeing the machine (the verification needs a sequential Astral run).
+- **Status**: **Active, not started.** The PR-#4280 gate is cleared (merged
+  2026-06-11 as `55b34e8`). The orchestrator half (`Measure-CumulativeCoverage.ps1`)
+  is **done** (commit `8a71b72`). The `regression.ps1` half remains -- still gated
+  only on the machine freeing up, because its verification needs a sequential
+  Astral run and the box is busy with the Stellar cumulative-coverage run.
 - **GitHub Issue**: (none)
 - **PR**: (pending)
 
@@ -56,3 +59,17 @@ Verified the parallel-default behavior (`PerFileScoringTask.cs:202-280`) +
 `Measure-Pipeline.ps1`'s Astral=1 policy from the cumulative-coverage run's 44 GB
 Astral observation. Brendan: queue this; let the in-flight run finish rather than
 kill it to verify now.
+
+### 2026-06-11 -- Gate cleared (#4280 merged); precautionary, not urgent
+PR #4280 merged, so the `regression.ps1` branch can now fork off `master`. Orchestrator
+half already shipped (`8a71b72`). **Important nuance:** last night's first TeamCity
+nightly of the merged regression ran the full Stellar + Astral (3-file, parallel)
+in **41 minutes** with no OOM -- so the current TeamCity agent handles parallel
+Astral fine. This interim fix is therefore **defensive** (smaller agents) and
+**policy-consistency** (match `Measure-Pipeline.ps1`'s single-file Astral, which is
+what keeps the perf comparisons competitive with single-file Rust), **not** a fix
+for a current TeamCity failure. Still worth doing, but it is not blocking the
+nightly. Remaining work unchanged: branch off master, gate the Astral leg on
+`OSPREY_MAX_PARALLEL_FILES=1`, run the sequential-vs-parallel golden verification
+at 1e-9, commit + PR. Deferred until the Stellar (then single-Astral) coverage runs
+free the box.
