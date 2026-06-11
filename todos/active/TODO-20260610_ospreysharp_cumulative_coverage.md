@@ -189,6 +189,31 @@ later: whether Stellar even needs serialization (the failure may be a rare trans
 or whether only Astral (the genuine ~44 GB case) does -- revisit if we want the
 parallel branch covered on real-data runs. Re-launched Stellar 3-file (serialized).
 
+### 2026-06-11 -- Stellar 3-file cumulative number: 73.4%
+Serialized re-run **succeeded** (artifacts: `ai/.tmp/osprey-cumcov-20260611_093922`).
+**Cumulative = 73.4% (11878 / 16191 statements, 4313 uncovered)** for unit + Stellar
+3-file straight+resume. Progression: ~45% unit-only -> 70.8% Stellar-single cumulative
+-> **73.4% Stellar-3-file**. The 3-file delta over single is only ~2.6 pts -- one file
+already covers most pipeline code; the extra is cross-file reconciliation (FirstJoin,
+MergeNode second-pass).
+
+Per assembly: FDR 86.7%, ML 90.6%, Chromatography 83.2%, Tasks 84%, IO 73.7%,
+Scoring 72.2%, Core 69.4%, OspreySharp(exe) 63.9%.
+
+Remaining uncovered is dominated by three buckets, only one of which is "real" pipeline
+logic a bigger run would reach:
+- **HRAM-only code at 0% (~600+ stmts)** -- `IsotopeDistribution` (282), `LibCosineScorer`
+  (93), `Ms1ScoringByproduct` (74), `PreprocessedLibrary`/`PreprocessedSpectra` (48 each),
+  `BatchScorer` (44), `HramStrategy` (28). Stellar is unit-resolution so these never run.
+  **The planned single-Astral leg should light most of this up** -- the highest-value
+  next step.
+- **`OspreyFileDiagnostics` 829 stmts at 7%** -- diagnostic-dump code gated behind
+  `OSPREY_DUMP_*` env vars, which the coverage orchestrator does not set (it runs the exe
+  with plain args). Largest single uncovered block, but it is diagnostics, not analysis
+  logic. Could be covered by setting the dump env vars on one leg -- decide if worth it.
+- **`ElibLoader` 138 at 0%** -- `.elib` input format; never exercised by mzML runs. Needs
+  a dedicated `.elib` input to cover (separate from data size).
+
 **Staged plan (Brendan, 2026-06-11) -- advance slowly:**
 1. **Stellar 3-file** (in progress) -- the most complete number reachable on
    unit-resolution data; report it.
