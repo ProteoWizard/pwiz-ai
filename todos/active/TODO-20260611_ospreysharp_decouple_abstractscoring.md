@@ -10,13 +10,15 @@ rec #1). Each stage is structural-only and gated on byte-parity + perf.
 - **Branch**: `Skyline/work/20260611_ospreysharp_decouple_abstractscoring`
 - **Base**: `master`
 - **Created**: 2026-06-11
-- **Status**: Stage 1 MERGED. Night session 2026-06-12 shipped 4 stacked OPEN PRs (A/B/C +
-  OspreyPeakData) -- all gated + self-reviewed clean; cumulative stack passes Astral 1e-9. The
-  `CoelutionScorer` extraction is BLOCKED on a diagnostics-bleed decision (handoff below). Umbrella stays active.
+- **Status**: Stages 1 + A/B/C/D-peakdata ALL MERGED to master (2026-06-12). The remaining
+  `CoelutionScorer` extraction is now **UNBLOCKED** -- the diagnostics-bleed blocker has a chosen
+  design (`IScoringDiagnostics` interface + DI; see the Stage D handoff below). Umbrella stays active
+  until that lands.
 - **PR (Stage 1)**: [#4290](https://github.com/ProteoWizard/pwiz/pull/4290) (merged 2026-06-11 as `f4a05f0`)
-- **Open stacked PRs (review/merge bottom-up)**: A [#4291](https://github.com/ProteoWizard/pwiz/pull/4291) (base master)
-  -> B [#4292](https://github.com/ProteoWizard/pwiz/pull/4292) -> C [#4293](https://github.com/ProteoWizard/pwiz/pull/4293)
-  -> OspreyPeakData [#4294](https://github.com/ProteoWizard/pwiz/pull/4294). None merged overnight.
+- **Merged stages (squashed onto master, bottom-up)**:
+  A [#4291](https://github.com/ProteoWizard/pwiz/pull/4291) `9fcad73d42` -> B [#4295](https://github.com/ProteoWizard/pwiz/pull/4295) `f2c601df35`
+  (B was re-opened from auto-closed #4292) -> C [#4293](https://github.com/ProteoWizard/pwiz/pull/4293) `360ba77ca9`
+  -> OspreyPeakData [#4294](https://github.com/ProteoWizard/pwiz/pull/4294) `9035c425fc`. All branches deleted.
 
 ## Standing gates (every stage)
 
@@ -75,6 +77,18 @@ Copilot reviewed 2/2 files, no comments.
 
 ## Progress Log
 
+### 2026-06-12 -- All four stages MERGED to master
+Sequentially squash-merged bottom-up: A `9fcad73d42` (#4291) -> B `f2c601df35` (#4295) -> C
+`360ba77ca9` (#4293) -> OspreyPeakData `9035c425fc` (#4294). Each cascade step: FF master, retarget
+next PR to master, `git rebase --onto master <old_lower_tip>` (drops the squashed-away commits),
+force-push, wait CI, merge (no `--delete-branch`). Branches deleted at the end.
+**Gotcha hit + recorded:** `--delete-branch` on #4291's squash deleted #4292's base branch and
+auto-closed #4292 (unreopenable); recovered by re-opening it as #4295. See [[stacked-pr-no-delete-branch]].
+Earlier the same morning, Copilot review on the open PRs yielded 3 comments: #4291 null-`logInfo`
+guard (fixed), #4292 stale doc (fixed), #4292 `CountTop6Matches` literal-6 (dismissed -- distinct
+from `CAL_TOP_N_FRAGMENTS`, parity-safety). `/ultrareview 4293` was attempted twice but the cloud
+service timed out both runs (no findings) -- not a blocker (already self-reviewed + Copilot + Astral 1e-9).
+
 ### 2026-06-12 -- Night session CLOSE (22:24 -> 02:37, ~4h13m)
 Shipped 4 stacked, structural-only, OPEN PRs that shrink `AbstractScoringTask`, each gated
 (pre-commit zero-warning + `regression.ps1 -Dataset Stellar` 1e-9 + `Test-PerfGate -Dataset Stellar`)
@@ -129,6 +143,26 @@ marked out of scope. Options (user picks):
 Recommendation: option 2, likely as its own supervised PR (define `IScoringDiagnostics` + back it with
 `OspreyDiagnostics` first), then the verbatim ScoreWindow/ScoreCandidate move on top. Full sub-agent
 detail: `ai/.tmp/agent-stageD-status.md`.
+
+**DECISION (2026-06-12, with the developer): option 2 -- `IScoringDiagnostics` interface + DI.**
+Design verified against the code:
+- `OspreyDiagnostics` (exe) is already a thin *static facade* -> forwards every call to a private
+  `Sink` of concrete type `OspreyFileDiagnostics` (exe), which **already declares** the ~6 methods.
+- Every parameter type those methods take is Scoring-reachable: `LibraryEntry`/`Spectrum`/`FdrEntry`/
+  `XICPeakBounds` (Core), `XicData` (Chromatography), `TukeyMedianPolishResult` (Scoring/
+  `MedianPolishCalculators`). So the interface can live in `OspreySharp.Scoring`.
+- Plan (2 PRs):
+  - **PR1 (decouple, scorer stays put):** add `IScoringDiagnostics` + `NullScoringDiagnostics` no-op
+    singleton in Scoring; make `OspreyFileDiagnostics` implement it; route `ScoreCandidate`'s
+    `OspreyDiagnostics.X` calls through an injected `IScoringDiagnostics`. Also fold the inline
+    `StreamWriter` dump in `ScoreCandidate` behind the interface. Gate: regression 1e-9 (diagnostics
+    OFF = byte-identical) + perf + a **manual diagnostics-ON dump-parity check** (the dump paths are
+    debug-only and NOT covered by the 1e-9 gate -- the one thing to verify by hand).
+  - **PR2 (the move, now unblocked):** relocate `ScoreWindow`+`ScoreCandidate` into
+    `OspreySharp.Scoring.CoelutionScorer`, ctor `(Action<string> logInfo, IScoringDiagnostics diagnostics)`.
+    Gate: regression Stellar + Astral 1e-9 + perf.
+  - Rejected option 1 (relocate whole `OspreyDiagnostics`/`OspreyFileDiagnostics`): drags file-IO +
+    calibration/Stage5/RT dump machinery into the scoring layer; larger + wrong layer.
 
 ### 2026-06-12 (night session) -- Stage C pushed (PR #4293, OPEN, not merged)
 Branch `Skyline/work/20260611_ospreysharp_remove_ambient_ctx` (base = Stage B branch, **stacked**),
