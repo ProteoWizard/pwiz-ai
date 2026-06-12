@@ -57,7 +57,20 @@ is seeding `SkylineCmd.exe.config` with `<setting name="CompactFormatOption">`).
       CommandLineImportTest all green)
 - [x] /pw-self-review (fresh-context agent) — findings addressed below
 - [x] Commit + push branch, open PR #4288 (Fixes #4285)
-- [ ] Copilot review (auto, ~5 min) -> /pw-respond 4288
+- [x] Copilot review addressed (commit 1610a31ea, both threads resolved)
+- [x] CI failure fixed: TestCommandLineHelpDocumentation (regenerated CommandLine.html)
+
+## Copilot Review + CI (2026-06-11/12)
+- [FIXED] Help-text wording: removed "(the default)"; clarified that omitting the
+  argument uses the persisted CompactFormatOption setting (default largefilesonly).
+- [FIXED] `CommandArgUsage.Designer.cs` had no `_save_compact_format` property while
+  sibling keys do; added it for resx/designer consistency (works either way since
+  Description reads via ResourceManager.GetString).
+- [FIXED] TeamCity bt209 build #21255 failed TestCommandLineHelpDocumentation-en:
+  the new arg changed `CommandArgs.GenerateUsageHtml()`, so the checked-in
+  `Documentation/Help/{en,ja,zh-CHS}/CommandLine.html` reference files were stale.
+  Regenerated via IsRecordMode toggle (ja/zh carry English fallback until translated).
+  Second commit 1610a31ea pushed; all gates re-run green.
 
 ## Self-Review Findings (2026-06-10)
 - [MEDIUM, FIXED] Case-sensitivity mismatch: CommandArgs validates arg values
