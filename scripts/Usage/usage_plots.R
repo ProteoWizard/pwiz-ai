@@ -35,8 +35,9 @@ stopifnot(file.exists(csv_path))
 
 # --- Load & shape ---------------------------------------------------------------------
 usage <- read_csv(csv_path, show_col_types = FALSE) |>
-  mutate(date = as.Date(date), model = factor(model), user = factor(user),
-         machine = factor(machine))
+  mutate(date = as.Date(date)) |>
+  filter(date < Sys.Date()) |>   # drop the current, still-partial day (e.g. a 06:00 snapshot of "today") so charts don't end on a misleading sliver
+  mutate(model = factor(model), user = factor(user), machine = factor(machine))
 
 multi_user    <- nlevels(usage$user) > 1
 multi_machine <- nlevels(usage$machine) > 1
@@ -54,7 +55,7 @@ collected <- list()  # accumulate plots so we can also emit a single multi-page 
 save_plot <- function(p, name, w = 10, h = 5) {
   ggsave(file.path(plot_dir, name), p, width = w, height = h, dpi = 120)
   collected[[name]] <<- p
-  print(p)
+  if (interactive()) print(p)   # RStudio stepping only; under Rscript print() opens Rplots.pdf in the CWD, which fails when run from a read-only dir (e.g. a Scheduled Task's System32)
 }
 
 # --- 1. Daily tokens, stacked by model ------------------------------------------------

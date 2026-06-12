@@ -37,3 +37,4 @@ if (-not $rscript) { throw 'Rscript not found. Install R, or add Rscript.exe to 
 $plots = Join-Path $PSScriptRoot 'usage_plots.R'
 Write-Host ("Rendering charts with {0}" -f $rscript)
 & $rscript $plots
+if ($LASTEXITCODE -ne 0) { throw "Rscript failed with exit code $LASTEXITCODE (charts may be incomplete)" }

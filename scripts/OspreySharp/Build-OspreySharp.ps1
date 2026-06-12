@@ -50,6 +50,23 @@
 .EXAMPLE
     .\Build-OspreySharp.ps1 -Configuration Debug -RunInspection
     Build and run ReSharper inspection; non-zero exit on any warnings
+
+.PARAMETER Coverage
+    Run the unit tests under JetBrains dotCover and export a JSON coverage
+    report. Implies -RunTests. Requires the dotCover command-line tool
+    (install with: dotnet tool install -g JetBrains.dotCover.CommandLineTools).
+    Coverage spans the OspreySharp.* production assemblies (the
+    OspreySharp.Test assembly is excluded). Summarize the JSON with
+    Summarize-Coverage.ps1.
+
+.PARAMETER CoverageOutputPath
+    Path for the coverage JSON output (default:
+    ai\.tmp\osprey-coverage-{timestamp}.json). The matching .dcvr snapshot
+    is written alongside it.
+
+.EXAMPLE
+    .\Build-OspreySharp.ps1 -Coverage
+    Build, run all unit tests under dotCover, and export a coverage JSON
 #>
 
 param(
@@ -78,8 +95,19 @@ param(
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("net472", "net8.0")]
-    [string]$TargetFramework = "net472"
+    [string]$TargetFramework = "net472",
+
+    [Parameter(Mandatory=$false)]
+    [switch]$Coverage = $false,
+
+    [Parameter(Mandatory=$false)]
+    [string]$CoverageOutputPath = ""
 )
+
+# Coverage is meaningless without running the tests - imply -RunTests
+if ($Coverage) {
+    $RunTests = $true
+}
 
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -320,15 +348,100 @@ try {
             exit 1
         }
 
-        $testStart = Get-Date
+        # vstest target arguments (shared by the plain and dotCover-wrapped runs)
+        $targetArgs = @($testDll, "/Platform:$Platform")
         if ($TestName) {
+            $targetArgs += "/Tests:$TestName"
+        }
+
+        # Resolve dotCover and coverage output paths when -Coverage is requested
+        $dotCoverExe = $null
+        $coverageSnapshot = $null
+        if ($Coverage) {
+            # Primary: dotCover command-line tool installed as a .NET global tool
+            $globalTool = Join-Path $env:USERPROFILE ".dotnet\tools\dotCover.exe"
+            if (Test-Path $globalTool) {
+                $dotCoverExe = $globalTool
+            }
+            # Fallback: command-line tools unpacked under pwiz\libraries
+            if (-not $dotCoverExe) {
+                $libPath = Join-Path $pwizRoot "libraries"
+                if (Test-Path $libPath) {
+                    $dotCoverDirs = Get-ChildItem -Path $libPath -Directory -Filter "*dotcover*commandlinetools*" -ErrorAction SilentlyContinue
+                    foreach ($dir in $dotCoverDirs) {
+                        $exePath = Get-ChildItem -Path $dir.FullName -Recurse -Filter "dotCover.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+                        if ($exePath) {
+                            $dotCoverExe = $exePath.FullName
+                            break
+                        }
+                    }
+                }
+            }
+            if (-not $dotCoverExe) {
+                Write-Host "dotCover.exe not found - coverage requires the JetBrains dotCover command-line tool" -ForegroundColor Red
+                Write-Host "Install with: dotnet tool install -g JetBrains.dotCover.CommandLineTools" -ForegroundColor Yellow
+                exit 1
+            }
+
+            # dotCover 2025.3.0+ replaced the slash-style cover/report syntax used below.
+            # This machine runs the older syntax; fail clearly rather than mis-invoking a newer build.
+            $dotCoverVersion = & $dotCoverExe --version 2>&1 | Select-String "dotCover" |
+                ForEach-Object { if ($_ -match '(\d+\.\d+\.\d+)') { [version]$matches[1] } } | Select-Object -First 1
+            if ($dotCoverVersion -and $dotCoverVersion -ge [version]"2025.3.0") {
+                Write-Host "dotCover $dotCoverVersion uses the newer CLI syntax this script does not yet support." -ForegroundColor Red
+                Write-Host "Update Build-OspreySharp.ps1 to the 2025.3.0+ 'cover --target-executable' form." -ForegroundColor Yellow
+                exit 1
+            }
+
+            if ([string]::IsNullOrEmpty($CoverageOutputPath)) {
+                $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+                $aiTmpDir = Join-Path $aiRoot ".tmp"
+                if (-not (Test-Path $aiTmpDir)) {
+                    New-Item -ItemType Directory -Path $aiTmpDir -Force | Out-Null
+                }
+                $CoverageOutputPath = Join-Path $aiTmpDir "osprey-coverage-$timestamp.json"
+            } else {
+                $covDir = Split-Path -Parent $CoverageOutputPath
+                if ($covDir -and -not (Test-Path $covDir)) {
+                    New-Item -ItemType Directory -Path $covDir -Force | Out-Null
+                }
+            }
+            $coverageBaseName = [System.IO.Path]::GetFileNameWithoutExtension($CoverageOutputPath)
+            $coverageSnapshot = Join-Path (Split-Path -Parent $CoverageOutputPath) "$coverageBaseName.dcvr"
+
+            Write-Host "Coverage enabled - dotCover: $dotCoverExe" -ForegroundColor Cyan
+            Write-Host "  Snapshot: $coverageSnapshot" -ForegroundColor Gray
+            Write-Host "  JSON:     $CoverageOutputPath" -ForegroundColor Gray
+        }
+
+        $testStart = Get-Date
+        if ($Coverage) {
+            # Wrap vstest.console.exe with dotCover. Filters keep the OspreySharp.*
+            # production assemblies and drop the test assembly. /TargetWorkingDir must
+            # be a writable directory (vstest creates a TestResults folder there).
+            Write-Host "Running OspreySharp unit tests under dotCover..." -ForegroundColor Cyan
+            $coverArgs = @(
+                "cover",
+                "/Filters=+:module=OspreySharp*",
+                "/Filters=-:module=OspreySharp.Test",
+                "/Output=$coverageSnapshot",
+                "/ReturnTargetExitCode",
+                "/AnalyzeTargetArguments=false",
+                "/TargetWorkingDir=$ospreyRoot",
+                "/TargetExecutable=$vstestPath",
+                "--"
+            ) + $targetArgs
+            & $dotCoverExe $coverArgs
+            $testExitCode = $LASTEXITCODE
+        } elseif ($TestName) {
             Write-Host "Running test: $TestName" -ForegroundColor Cyan
-            & $vstestPath $testDll /Platform:$Platform /Tests:$TestName
+            & $vstestPath $targetArgs
+            $testExitCode = $LASTEXITCODE
         } else {
             Write-Host "Running all OspreySharp unit tests..." -ForegroundColor Cyan
-            & $vstestPath $testDll /Platform:$Platform
+            & $vstestPath $targetArgs
+            $testExitCode = $LASTEXITCODE
         }
-        $testExitCode = $LASTEXITCODE
         $testDuration = (Get-Date) - $testStart
 
         Write-Host ""
@@ -337,6 +450,24 @@ try {
         } else {
             Write-Host "Tests FAILED in $($testDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Red
             exit $testExitCode
+        }
+
+        # Export the coverage snapshot to JSON and point at the summarizer
+        if ($Coverage -and (Test-Path $coverageSnapshot)) {
+            Write-Host ""
+            Write-Host "Exporting coverage to JSON..." -ForegroundColor Cyan
+            & $dotCoverExe report "/Source=$coverageSnapshot" "/Output=$CoverageOutputPath" "/ReportType=JSON"
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $CoverageOutputPath)) {
+                Write-Host "Coverage exported:" -ForegroundColor Green
+                Write-Host "  JSON:     $CoverageOutputPath" -ForegroundColor Gray
+                Write-Host "  Snapshot: $coverageSnapshot" -ForegroundColor Gray
+                Write-Host ""
+                Write-Host "Summarize with:" -ForegroundColor Cyan
+                Write-Host "  pwsh -File ./ai/scripts/OspreySharp/Summarize-Coverage.ps1 -CoverageJsonPath `"$CoverageOutputPath`"" -ForegroundColor Gray
+            } else {
+                Write-Host "Failed to export coverage JSON (exit $LASTEXITCODE)" -ForegroundColor Yellow
+                Write-Host "Snapshot retained at: $coverageSnapshot" -ForegroundColor Gray
+            }
         }
     }
 
