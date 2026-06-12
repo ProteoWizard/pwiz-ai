@@ -10,8 +10,8 @@ rec #1). Each stage is structural-only and gated on byte-parity + perf.
 - **Branch**: `Skyline/work/20260611_ospreysharp_decouple_abstractscoring`
 - **Base**: `master`
 - **Created**: 2026-06-11
-- **Status**: In Progress (Stage 1 done, validating)
-- **PR**: (pending)
+- **Status**: In Progress (Stage 1 done; PR open, awaiting Copilot)
+- **PR**: [#4290](https://github.com/ProteoWizard/pwiz/pull/4290)
 
 ## Standing gates (every stage)
 
