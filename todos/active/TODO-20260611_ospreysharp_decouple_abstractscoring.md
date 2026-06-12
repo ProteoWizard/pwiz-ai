@@ -10,8 +10,9 @@ rec #1). Each stage is structural-only and gated on byte-parity + perf.
 - **Branch**: `Skyline/work/20260611_ospreysharp_decouple_abstractscoring`
 - **Base**: `master`
 - **Created**: 2026-06-11
-- **Status**: In Progress (Stage 1 done; PR open, awaiting Copilot)
-- **PR**: [#4290](https://github.com/ProteoWizard/pwiz/pull/4290)
+- **Status**: Stage 1 MERGED; Stages 2-4 pending (umbrella TODO stays active)
+- **PR (Stage 1)**: [#4290](https://github.com/ProteoWizard/pwiz/pull/4290) (merged 2026-06-11 as `f4a05f0`)
+- **Branch (next stages)**: new `Skyline/work/...` per stage off the merged master
 
 ## Standing gates (every stage)
 
@@ -61,9 +62,21 @@ god-class. `AbstractScoringTask.cs`: -99 / +3 lines.
   method beneath it was deleted).
 - [x] Updated the 2 call sites to `TotalOrder.Greater` / `TotalOrder.Comparer`.
 
-**Validation**: pre-commit green (382 tests pass, incl. `TestStableSortOnApexRanking`
-+ `TestApexTieBreakLastWins` which exercise the relocated comparer; zero-warning
-inspection). Correctness + perf gates: _(filling in from the runs in progress)_.
+**Validation (all green)**: pre-commit (382 tests, incl. `TestStableSortOnApexRanking`
++ `TestApexTieBreakLastWins`; zero-warning inspection); `regression.ps1 -Dataset Stellar`
+mode-1 (golden) + mode-2 (resume) PASS at 1e-9 (blib byte-identical); `Test-PerfGate
+-Dataset Stellar` total -0.1% (no regression); fresh-context self-review clean
+(independently verified `TotalOrder` parity vs Rust `f64::total_cmp` across edge cases);
+Copilot reviewed 2/2 files, no comments.
+
+## Progress Log
+
+### 2026-06-11 -- Stage 1 merged
+PR #4290 merged (squash) as `f4a05f0`. Shipped the `TotalOrder` relocation + dead-code
+removal; behavior-identical (byte-parity + perf gates green). Both standing gates
+(`regression.ps1`, `Test-PerfGate.ps1`) were also stood up + validated this session and
+are now the per-stage gate for the rest of this work. Stages 2-4 deferred to the night
+session (planned separately); each lands as its own PR off the merged master.
 
 ## Staged plan (subsequent PRs on this branch / night session)
 
