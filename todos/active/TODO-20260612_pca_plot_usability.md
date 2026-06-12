@@ -41,9 +41,10 @@ Findings:
       hardcoded level 0 -> symbol, level 1 -> color), including color-only or one-attribute-for-both
 - [x] Make the legend usable with many categories (rebuilt from distinct color + symbol values so
       legend size is the sum, not the product, of categories; no longer hidden at >=16)
-- [ ] Replace the ZedGraph built-in legend with a custom legend control: own panel beside the graph,
-      vertical scrollbar, grouped swatch/shape entries, and click-to-select the replicates/peptides
-      for the points sharing a value (uses the IdentityPath/ReplicateName already on each point)
+- [x] Replace the ZedGraph built-in legend with a custom legend control: own panel beside the graph
+      (SplitContainer), vertical scrollbar, grouped swatch/shape entries, and click-to-select. Row PCA
+      only for selection (column-PCA legend clicks are inert for now, per Nick); single-point click left
+      as-is. Selection targets the source grid rows (NavBar then acts on them).
 - [ ] Allow custom color and symbol assignment per category, persisted with the view
 - [ ] Handle palette exhaustion gracefully so distinct categories stay distinguishable
 - [ ] Show percent variance explained on axis labels; consider a scree plot
@@ -108,6 +109,33 @@ palette exhaustion, % variance explained / scree plot, tooltips/labels, ellipses
   ReplicateName) is already available to drive that selection. This supersedes the ZedGraph legend.
 - Open decision: fold the custom legend into this branch before any PR, vs. ship the current slice as
   PR #1 and do the custom legend as PR #2.
+
+### 2026-06-12 - Session 3: custom legend control (commit d85989fd1)
+
+Implemented per Nick's decisions (fold into branch; row-PCA-only selection; point click unchanged):
+
+- New `Controls/Clustering/PcaLegend.cs`: owner-drawn `Panel` (AutoScroll) listing grouped entries
+  (bold header per attribute, then color swatch / symbol shape + label). Hit-tests clicks, raises
+  `ItemClicked`, shows a hand cursor + hover highlight on selectable entries. GDI `DrawSymbol` mirrors
+  the ZedGraph symbol shapes. Added to Skyline.csproj (plain Compile, no designer/resx).
+- `PcaPlot` hosts the graph + legend in a runtime-built `SplitContainer` (FixedPanel=Panel2, ~190px
+  legend). ZedGraph's own legend is hidden. `BuildLegendItems` replaces the old dummy-curve legend.
+- Click-to-select: each row-PCA point carries its `RowItem` (added to `PointInfo`); legend entries
+  carry the list of RowItems sharing the value; `SelectGridRows` selects those rows in
+  `DataboundGridControl.DataGridView` (RowItem reference equality; same instances via
+  `BindingListSource.ReportResults`) and activates the grid form so the NavBar can act on them.
+
+Build green; ClusteredHeatMapTest + PcaTest pass.
+
+IMPORTANT debugging note (avoid repeating): launching `Skyline-daily.exe <path>.sky` from
+pwsh/Start-Process makes the DEV build enter SkylineCmd mode (prints CLI help, exits 0) - it does NOT
+open the GUI. Several "it crashed on load" observations were this, not a real crash. To verify in the
+GUI, launch with NO args and open the document via File > Open (or MCP) after enabling Tools > AI
+Connector. The hardening done while chasing this (TextRenderer.MeasureText instead of CreateGraphics;
+splitter sizing in OnHandleCreated; null-key guard in RowItemsByValue) is still correct and was kept.
+
+Next: visual verification of the side legend + click-to-select in the GUI (needs AI Connector), then
+remaining issue scope.
 
 ## Context for Next Session
 
