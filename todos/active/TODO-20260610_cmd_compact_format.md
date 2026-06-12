@@ -71,6 +71,20 @@ is seeding `SkylineCmd.exe.config` with `<setting name="CompactFormatOption">`).
   `Documentation/Help/{en,ja,zh-CHS}/CommandLine.html` reference files were stale.
   Regenerated via IsRecordMode toggle (ja/zh carry English fallback until translated).
   Second commit 1610a31ea pushed; all gates re-run green.
+- [FIXED] Copilot 2nd pass (commit e96956c80, thread resolved): arg value validation
+  used the framework default `CurrentCultureIgnoreCase`, which mishandles e.g.
+  `LARGEFILESONLY` in Turkish locale (dotted-i). Set `HasValueChecking` on the arg and
+  validate explicitly with `OrdinalIgnoreCase` in the handler (throwing
+  `ValueInvalidException` for unknown values). Reverted the earlier
+  `CompactFormatOption.Parse` change since the handler now owns case-insensitive matching.
+
+## Lesson (for future SkylineCmd args)
+- Adding a SkylineCmd argument requires regenerating the three checked-in
+  `Documentation/Help/{en,ja,zh-CHS}/CommandLine.html` (via HelpDocumentationContentTest
+  IsRecordMode) or TestCommandLineHelpDocumentation fails in CI - it is a TestFunctional
+  test, outside the TestData gates run locally by default.
+- For enumerated arg values, prefer explicit OrdinalIgnoreCase matching with
+  HasValueChecking over the framework's CurrentCultureIgnoreCase default (locale safety).
 
 ## Self-Review Findings (2026-06-10)
 - [MEDIUM, FIXED] Case-sensitivity mismatch: CommandArgs validates arg values
