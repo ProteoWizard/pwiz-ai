@@ -10,9 +10,13 @@ rec #1). Each stage is structural-only and gated on byte-parity + perf.
 - **Branch**: `Skyline/work/20260611_ospreysharp_decouple_abstractscoring`
 - **Base**: `master`
 - **Created**: 2026-06-11
-- **Status**: Stage 1 MERGED; Stages 2-4 pending (umbrella TODO stays active)
+- **Status**: Stage 1 MERGED. Night session 2026-06-12 shipped 4 stacked OPEN PRs (A/B/C +
+  OspreyPeakData) -- all gated + self-reviewed clean; cumulative stack passes Astral 1e-9. The
+  `CoelutionScorer` extraction is BLOCKED on a diagnostics-bleed decision (handoff below). Umbrella stays active.
 - **PR (Stage 1)**: [#4290](https://github.com/ProteoWizard/pwiz/pull/4290) (merged 2026-06-11 as `f4a05f0`)
-- **Branch (next stages)**: new `Skyline/work/...` per stage off the merged master
+- **Open stacked PRs (review/merge bottom-up)**: A [#4291](https://github.com/ProteoWizard/pwiz/pull/4291) (base master)
+  -> B [#4292](https://github.com/ProteoWizard/pwiz/pull/4292) -> C [#4293](https://github.com/ProteoWizard/pwiz/pull/4293)
+  -> OspreyPeakData [#4294](https://github.com/ProteoWizard/pwiz/pull/4294). None merged overnight.
 
 ## Standing gates (every stage)
 
@@ -70,6 +74,17 @@ mode-1 (golden) + mode-2 (resume) PASS at 1e-9 (blib byte-identical); `Test-Perf
 Copilot reviewed 2/2 files, no comments.
 
 ## Progress Log
+
+### 2026-06-12 -- Night session CLOSE (22:24 -> 02:37, ~4h13m)
+Shipped 4 stacked, structural-only, OPEN PRs that shrink `AbstractScoringTask`, each gated
+(pre-commit zero-warning + `regression.ps1 -Dataset Stellar` 1e-9 + `Test-PerfGate -Dataset Stellar`)
+and fresh-context self-reviewed CLEAN: A #4291 (decoy gen -> DecoyGenerator), B #4292 (fragment
+XIC/match -> TopFragmentExtractor), C #4293 (remove ambient `_ctx`, thread `ctx`), #4294
+(OspreyPeakData -> Scoring). Cumulative stack (#4294 HEAD) also passes **Astral 1e-9** (golden +
+resume, blib byte-identical). Nothing merged overnight (review/merge bottom-up). The `CoelutionScorer`
+extraction is blocked + handed off (see the Stage D entry below: pick a diagnostics-bleed option).
+Follow-on once CoelutionScorer lands: `OspreyPeakData` can revert `public`->`internal` once the
+Scoring-side scorer becomes its sole constructor (the exe stops `new`-ing it). perfbase pinned at f4a05f0.
 
 ### 2026-06-11 -- Stage 1 merged
 PR #4290 merged (squash) as `f4a05f0`. Shipped the `TotalOrder` relocation + dead-code
