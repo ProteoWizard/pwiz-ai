@@ -107,22 +107,29 @@ and `README.md` are the authoritative gate references.
 - **OspreySharp pre-commit** (build + tests + zero-warning inspection, ~30s):
   `pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -Configuration Debug -RunTests -RunInspection`
 - **C#-side refactor / algorithm-affecting changes** (scoring, calibration,
-  LOESS/KDE, SVM, FDR, decoy generation, blib): run the C#-side refactor gate --
-  the multi-file straight-through run that REUSES the cached Rust reference (Rust
-  is not re-run), comparing Stage 7 + blib at 1e-9:
-  `pwsh -File ./ai/scripts/OspreySharp/Compare/Compare-EndToEnd-Crossimpl.ps1 -Files All -SkipRust`
-  on Stellar + Astral. Build the Rust reference once per dataset, then reuse it
-  with `-SkipRust` every iteration. Do NOT pass `-Force` with `-SkipRust` (it
-  wipes the cached `rust/`), and the cached reference must match the `-Files` set
-  or you get a false fail. This is faster than (and preferred over) the
-  stage-isolated `Test-Full-Regression.ps1` for routine C#-only checks; reach for
-  `Test-Full-Regression.ps1` only when no Rust reference is available. See
-  `ai/scripts/OspreySharp/Compare/README.md` and `PRE-COMMIT.md`.
+  LOESS/KDE, SVM, FDR, decoy generation, blib) and every OOP/structural
+  refactor: pass two standing gates.
+  - **Correctness** (output unchanged): the self-contained straight-through
+    regression vs a committed C# golden + a resume leg, both at 1e-9 (no Rust
+    checkout):
+    `pwsh -File ./pwiz_tools/OspreySharp/regression.ps1 -Dataset Stellar`
+    (`-Dataset All` before a behavior/perf-sensitive merge). Also the overnight
+    TeamCity gate.
+  - **Performance** (speed not degraded): a same-session A/B of the branch vs the
+    pinned `pwiz-perfbase` baseline worktree (3-rep median, fails only on a real
+    regression with non-overlapping bands):
+    `pwsh -File ./ai/scripts/OspreySharp/Test-PerfGate.ps1 -Dataset Stellar`.
+  `Test-Full-Regression.ps1` / `Test-Snapshot.ps1` are the stage-isolated
+  bisection drill-down for WHERE a red correctness gate diverged, not the
+  first-line gate. See `PRE-COMMIT.md`.
 - **Rust osprey**:
   `pwsh -File ./ai/scripts/OspreySharp/Compare/Build-OspreyRust.ps1 -Fmt -Clippy -RunTests`
   (mirrors maccoss/osprey CI gates).
-- **Full cross-impl parity** (rare; re-runs Rust, e.g. after a Rust algorithm
-  change): drop `-SkipRust` from the command above.
+- **Cross-impl drift check** (rare; "did we drift from Rust?", e.g. after porting
+  a Rust algorithm change):
+  `pwsh -File ./ai/scripts/OspreySharp/Compare/Compare-EndToEnd-Crossimpl.ps1 -Files All`
+  on Stellar + Astral (re-runs Rust). This replaces the old `-SkipRust` routine
+  use, which `regression.ps1` superseded. See `Compare/README.md`.
 
 ## Key Repositories
 

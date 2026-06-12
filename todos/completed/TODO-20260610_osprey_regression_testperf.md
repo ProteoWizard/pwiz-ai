@@ -15,16 +15,16 @@
   default to `C:\proj\pwiz` per the plain-worktree preference)
 - **Base**: `master`
 - **Created**: 2026-06-10
-- **Status**: **SPEC / backlog.** Unblocked by the merged prerequisite.
-- **Next session handoff**: For the startup protocol, read
-  `ai/.tmp/handoff-20260610_osprey_regression_testperf.md` before starting work.
+- **Status**: **Completed.** Harness built, validated end-to-end on Stellar +
+  Astral, reviewed (Copilot + self-review), merged. See Progress Log.
 - **Predecessor TODO**:
   [`TODO-20260609_osprey_output_cache_dir.md`](../completed/TODO-20260609_osprey_output_cache_dir.md)
   -- the `--work-dir`/`--output-dir`/`--cache-dir` decoupling (pwiz #4278 `c5f4d9c`,
   maccoss/osprey #47 `696c938`) that lets a run read read-only inputs and write only
   to a work dir. That capability is the foundation this builds on.
-- **GitHub Issue**: (none)
-- **PR**: (planned)
+- **GitHub Issue**: (none) — wire-up tracked in
+  [#4281](https://github.com/ProteoWizard/pwiz/issues/4281) (Matt Chambers)
+- **PR**: [#4280](https://github.com/ProteoWizard/pwiz/pull/4280) (merged 2026-06-11 as `55b34e8`)
 
 ## Mission
 
@@ -153,3 +153,136 @@ developer bisection tool -- not the nightly.
 - Straight-through vs golden and resume vs straight-through both pass at 1e-9; a
   seeded regression makes the harness emit a TeamCity `buildProblem` and non-zero exit.
 - The entry point is pwiz-standalone (no `ai/` checkout required on the agent).
+
+## Open decisions — RESOLVED (2026-06-10, with Brendan)
+
+1. **Harness language** → **PowerShell** (`regression.ps1`), matching the
+   `build.ps1` standalone precedent.
+2. **Downloads path** → derive `<Downloads>\Perftests` via the Windows
+   known-folder rule (honours a relocated Downloads, e.g. D:) with
+   `SKYLINE_DOWNLOAD_PATH` + `-DownloadsPath` overrides. Mirrors
+   `PathEx.GetDownloadsPath` + `GetTargetZipFilePath`.
+3. **Golden** → **small committed text** in `osprey-regression.data/<dataset>/`.
+   The full-fidelity blib is ~50 MB (Stellar) / ~135 MB (Astral) — too big to
+   commit — so the golden is `protein_fdr.tsv` (full) + a deterministic
+   ~500-precursor subset of per-table projections + a full-set `blib_summary`
+   (counts + aggregates). Measured Stellar golden = **0.61 MB**. Versioned with
+   the code so an older tag runs against its own baseline; refreshed only via
+   `-CreateGolden` on a reviewed behavior change.
+4. **Comparators** → **ported slim into pwiz** (`Regression/BlibGolden.ps1`), no
+   `ai/` dependency. Same projection schema + 1e-9 tolerance as the cross-impl
+   `Compare-Blib-Crossimpl.ps1`.
+5. **Scope per night** → Stellar + Astral, each straight-through (mode 1) +
+   resume (mode 2). Wall time TBD from the first agent run; comparison overhead
+   is minutes (mode-2 full blib compare ~164s Stellar; see perf note).
+
+## Progress Log
+
+### 2026-06-10 — Harness built + unit-validated; end-to-end in progress
+Branch `Skyline/work/20260610_osprey_regression_testperf` created off master.
+
+**Risk cleared first (per verify-before-assuming):** the resume leg depends on a
+resume path that was RED by design until recently. Confirmed the 1st-pass-RT
+resume bug was **fixed + merged** as PR #4270 (`6d6db7dd`, 2026-06-05) and the
+resume parity gate is green; the "FAILS today" comment still in
+`ai/scripts/.../Compare-StraightThroughResume-CSharp.ps1` is stale doc-lag.
+Mode 2 is therefore viable; empirically re-confirmed below.
+
+**Implemented (pwiz_tools/OspreySharp/, all pwiz-standalone):**
+- `Regression/RegressionData.ps1` — `Get-RegressionData`: download (HttpClient) +
+  DoNotOverwrite extract + skip-if-present. Path derivation validated → resolves
+  to `D:\Users\brendanx\Downloads\Perftests\osprey-testfiles-mzML`.
+- `Regression/BlibGolden.ps1` — blib projection schema (single source of truth)
+  + SQLite access (System.Data.SQLite from the build output) + `Save-BlibGolden`
+  (capture), `Compare-BlibGolden` (mode 1 vs committed text golden),
+  `Compare-BlibFull` (mode 2 full blib-vs-blib).
+- `regression.ps1` — orchestrator: build → acquire data → per dataset
+  straight-through (no-copy, `--work-dir`, `OSPREY_DUMP_STAGE7_PROTEIN_FDR`) →
+  no-copy assertion (data dir fingerprint unchanged) → mode 1 vs golden → mode 2
+  resume (invalidate FirstJoin sidecars + blib, re-run, compare). TeamCity
+  service messages + `buildProblem` mirror `build.ps1`.
+- `tctest.bat` — scheduled TeamCity entry point.
+- `Regression/README.md`, `Regression/TEAMCITY-CONFIG.md` (spec for Matt).
+
+**Validated against blib fixtures (no run needed):**
+- Golden capture: Stellar **0.61 MB** text, ~516-precursor subset.
+- mode 1: cold-vs-own-golden **PASS** (0 issues); buggy-resume-vs-golden
+  **FAIL** (36 issues) correctly localized to RetentionTimes/RefSpectra RT.
+- mode 2: cold-vs-cold **PASS**; cold-vs-buggy **FAIL** (18 issues,
+  11058/59768 RefSpectra RT rows) — catches the exact historical bug.
+
+**Perf note:** `Compare-BlibFull` (mode 2, full blib) ~165s/Stellar in pure
+PowerShell (per-cell rendering of 180K rows dominates); ~2-3x for Astral.
+Acceptable for an overnight (one mode-2 compare/dataset). A SQL-ATTACH diff or
+raw-value compare would cut this materially — deferred follow-up.
+
+**End-to-end VALIDATED on real data (Stellar):**
+- Data acquisition: downloaded osprey-testfiles-mzML.zip = **~14 GB** (these are
+  real DIA mzML, ~1.5 GB each; extracts to ~25 GB) in ~130s; second run printed
+  "data present, skipping download" → **skip-if-present works**.
+- Cold straight-through 4:10, blib 52,514,816 bytes; **no-copy assertion PASS**
+  (caches/.spectra.bin/.libcache to work-dir; read-only data dir untouched).
+- Golden captured = **1.1 MB** text (0.45 MB protein_fdr + 0.6 MB blib
+  projections), committed to `osprey-regression.data/stellar/`.
+- **mode 1 (cold vs golden): PASS** at 1e-9.
+- Resume 1:38 (loads, not recomputes); **mode 2 (resume==straight): PASS** at
+  1e-9 — the empirical re-confirmation that PR #4270's resume fix holds.
+
+Two bugs found + fixed during real runs: `"$name:"` PS interpolation (→
+`${name}:`); and `-o output.blib` / Stage 7 dump are CWD-relative not
+`--work-dir`-relative, so `Invoke-OspreyRun` now `Push-Location $WorkDir`. Also a
+SQLite file-lock on the mode-2 invalidation (pooled handle from the mode-1
+compare) → `Pooling=False` + `Dispose` in `Invoke-BlibQuery`.
+
+**Astral also VALIDATED end-to-end (hram):** golden captured = **2.4 MB**;
+cold straight-through 15:28, blib 136,622,080 bytes; **mode 1 (vs golden) PASS**
+(committed golden reproducible by a fresh cold run); resume 2:16; **mode 2
+(resume==straight) PASS**. Both goldens committed-ready (stellar 1.1 MB + astral
+2.4 MB = 3.5 MB text under `osprey-regression.data/`). Repo root verified clean
+(two first-run leftover output files removed; `Push-Location` prevents
+recurrence).
+
+**Status: feature complete + validated; PR [#4280](https://github.com/ProteoWizard/pwiz/pull/4280)
+open (3 commits, squash-merge pending).**
+
+Review rounds done:
+- **Copilot** (3 comments, all fixed + threads resolved, `61ad1b14f0`): zip-slip
+  guard in `Expand-ZipNoOverwrite`; corrected README golden size; fixed a
+  `BlibGolden` header path comment.
+- **`/pw-self-review`** fresh-context agent (`47a1a29b34`): found 1 HIGH + 3 LOW.
+  HIGH = same-day re-run left `$straightDir` un-wiped, so the "straight-through"
+  leg resumed against leftover mode-2 invalidation state and mode 1 silently
+  compared a mislabeled resume blib to the golden. Fixed by wiping `$straightDir`
+  before each leg; **validated** (same-day re-run now cold 03:42, not 00:00, both
+  modes PASS). LOWs: hoisted subset modulus to one `$script:DefaultModulus`;
+  documented mode 1's out-of-subset blind spot + SUM order-dependence; corrected
+  the TEAMCITY-CONFIG trigger section to the per-PR-overnight smart-trigger model.
+
+**Remaining:**
+- Commit the harness + both goldens (`/pw-pcommit`).
+- Hand Matt the `Regression/TEAMCITY-CONFIG.md` spec to create the scheduled
+  "Osprey Windows .NET Regression" config; fill its Astral wall-time from the
+  first real agent run.
+- (Deferred) faster mode-2 compare (SQL-ATTACH / raw-value) if nightly wall-time
+  matters; raw-data path (`osprey-testfiles.zip` + `pwiz_data_cli`).
+
+### 2026-06-11 — Merged
+PR #4280 merged (squash) as commit `55b34e8`. Shipped the pwiz-standalone
+PowerShell regression harness (`regression.ps1` + `Regression/` modules +
+`tctest.bat` + committed Stellar/Astral text goldens) with mode-1 (vs golden) and
+mode-2 (resume==straight) gates at 1e-9, both validated end-to-end on real data.
+Wire-up of the scheduled "Osprey Windows .NET Regression" TeamCity config is
+handed to Matt Chambers via issue [#4281](https://github.com/ProteoWizard/pwiz/issues/4281)
+(labels `osprey`, `todo`). **First TeamCity nightly ran in 41 minutes** — far
+under the stale ~70 min estimate, and it confirms the heavy slowness seen during
+the cumulative-coverage run is dotCover instrumentation overhead, not the pipeline.
+
+Follow-ups filed:
+- Interim Astral serialization in the runners —
+  `TODO-20260611_ospreysharp_serialize_astral_runners.md` (orchestrator half done;
+  `regression.ps1` half is the next pwiz branch/PR).
+- Memory-aware default + a `--file-threads`-style CLI arg —
+  `TODO-ospreysharp_file_parallelism_arg.md` (backlog).
+- Fast subset-data per-commit pipeline test —
+  `TODO-ospreysharp_fast_subset_coverage_test.md` (backlog).
+- Deferred faster mode-2 compare; raw-data path (carried above).

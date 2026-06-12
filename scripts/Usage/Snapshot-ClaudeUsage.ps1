@@ -122,9 +122,13 @@ foreach ($f in $files) {
 }
 
 # --- Build fresh rows for the dates we just recomputed ---
+# Skip the current local day: at snapshot time (e.g. a 06:00 task) it is only a partial day,
+# and it self-corrects tomorrow when it is recomputed complete from the still-present transcripts.
+$today = (Get-Date).ToString('yyyy-MM-dd')
 $freshDates = @{}
 $freshRows = foreach ($key in $agg.Keys) {
     $a = $agg[$key]
+    if ($a.date -eq $today) { continue }
     $freshDates[$a.date] = $true
     [pscustomobject][ordered]@{
         date                  = $a.date
@@ -147,7 +151,7 @@ $freshRows = foreach ($key in $agg.Keys) {
 # --- Merge: keep archived rows for aged-out dates, replace rows for recomputed dates ---
 $preserved = @()
 if (Test-Path $csvPath) {
-    $preserved = Import-Csv $csvPath | Where-Object { -not $freshDates.ContainsKey($_.date) }
+    $preserved = Import-Csv $csvPath | Where-Object { (-not $freshDates.ContainsKey($_.date)) -and ($_.date -ne $today) }
 }
 $all = @($preserved) + @($freshRows) | Sort-Object date, model
 
