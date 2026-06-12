@@ -37,9 +37,10 @@ Findings:
 
 ## Tasks
 
-- [ ] Let the user choose which attribute(s) drive color and which drive symbol (replace the
+- [x] Let the user choose which attribute(s) drive color and which drive symbol (replace the
       hardcoded level 0 -> symbol, level 1 -> color), including color-only or one-attribute-for-both
-- [ ] Make the legend usable with many categories (scroll/page/summarize instead of hiding at >=16)
+- [x] Make the legend usable with many categories (rebuilt from distinct color + symbol values so
+      legend size is the sum, not the product, of categories; no longer hidden at >=16)
 - [ ] Allow custom color and symbol assignment per category, persisted with the view
 - [ ] Handle palette exhaustion gracefully so distinct categories stay distinguishable
 - [ ] Show percent variance explained on axis labels; consider a scree plot
@@ -50,13 +51,15 @@ Findings:
 
 ## Regression Test
 
-- **Test name**: (filled in once written)
-- **Test project**: TestFunctional (likely)
-- **Fails on master**: (n/a until written - this is an enhancement, not a bug fix)
-- **Passes on fix**: (TBD)
+- **Test name**: ClusteredHeatMapTest.TestClusteredHeatMap (extended)
+- **Test project**: TestFunctional
+- **Fails on master**: n/a (enhancement, no master-red baseline)
+- **Passes on fix**: yes - 0 failures, 36s (2026-06-12)
 
-This is an enhancement rather than a bug fix, so there is no master-red baseline. New
-functional test(s) will exercise the added color/symbol configuration and legend behavior.
+This is an enhancement rather than a bug fix, so there is no master-red baseline. The existing
+PCA coverage in ClusteredHeatMapTest was extended to set a non-default encoding (both channels
+off), confirm it renders (curve count does not grow) and that the new SymbolLevel/ColorLevel
+persist through a document save/reopen round-trip.
 
 ## Progress Log
 
@@ -66,6 +69,31 @@ functional test(s) will exercise the added color/symbol configuration and legend
 - Created branch `Skyline/work/20260612_pca_plot_usability` and this TODO.
 - Next: decide scope for first PR (likely user control over color/symbol encoding + legend
   legibility) and design the UI hook (extend the PCA plot controls vs. the ClusteringEditor).
+
+### 2026-06-12 - Session 1: encoding control + legend (commit 0ed2a5ff8)
+
+Implemented the first slice (color/symbol control + legend), all in the PCA plot's own controls
+(no ClusteringEditor change needed):
+
+- `PcaPlot.PcaChoice` gained `SymbolLevel` and `ColorLevel` (defaults 0 and 1 to preserve the old
+  behavior; `LEVEL_NONE = -1` disables a channel). Persistence appends two ints; `ParsePersistentString`
+  accepts both the old 3-part and new 5-part strings, so existing saved views still load.
+- `UpdateGraph` now reads the available header-level captions for the current dataset, constrains
+  the choice, and populates two new combo boxes (`comboColorBy`, `comboSymbolBy`, "Color by:" /
+  "Symbol by:" on a second control row; the graph moved down to y=90).
+- `BuildCurvesAndLegend` draws the data points (real curves now carry empty labels so they stay out
+  of the legend) and builds the legend from distinct color values and distinct symbol values via
+  zero-point "legend-only" curves. When one attribute drives both channels they merge into one
+  group. Legend size is now sum-of-categories, not product, and it is no longer force-hidden at >=16.
+- Added `ClusteringResources.PcaPlot_Encoding_None` = "(None)".
+- Gotcha hit and fixed: `LineItem.Label.FontSpec` is null by default in ZedGraph, so a header entry
+  cannot set bold there (NRE). Group headers are symbol-less entries instead.
+
+Build: green (full solution). Tests: ClusteredHeatMapTest 0 failures (36s), PcaTest 0 failures.
+
+Not yet done / next: visual layout check of the two new combos in the running app; then the
+remaining issue scope (custom per-category color/symbol assignment, palette exhaustion, % variance
+explained / scree plot, tooltips/labels, ellipses).
 
 ## Context for Next Session
 
