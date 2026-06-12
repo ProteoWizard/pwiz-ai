@@ -11,6 +11,7 @@ This directory contains comprehensive, detailed documentation for LLM-assisted d
 - **[architecture-data-model.md](architecture-data-model.md)** - Core data model architecture (immutable SrmDocument)
 - **[architecture-error-handling.md](architecture-error-handling.md)** - Error handling patterns (user-actionable vs programming defects)
 - **[architecture-files.md](architecture-files.md)** - File handle architecture (ConnectionPool, pooled streams, FileSaver)
+- **[architecture-reporting-layer.md](architecture-reporting-layer.md)** - Reporting/databinding layer (Pivoter, DataSchema, ViewInfo, BindingListSource, BoundDataGridView, Skyline entities)
 
 ### Setup
 

@@ -47,8 +47,7 @@ daily <- usage |>
   summarise(across(c(total_tokens, est_cost_usd, input_tokens,
                      cache_creation_tokens, cache_read_tokens, output_tokens), sum),
             .groups = "drop") |>
-  arrange(date) |>
-  mutate(cum_cost = cumsum(est_cost_usd))
+  arrange(date)
 
 theme_set(theme_minimal(base_size = 12))
 collected <- list()  # accumulate plots so we can also emit a single multi-page PDF
@@ -76,13 +75,24 @@ p2 <- ggplot(daily, aes(date, est_cost_usd)) +
        x = NULL, y = "USD (modeled)")
 save_plot(p2, "02_daily_cost.png")
 
-# --- 3. Cumulative modeled cost -------------------------------------------------------
-p3 <- ggplot(daily, aes(date, cum_cost)) +
+# --- 3. Trailing 30-day modeled cost — a rolling "monthly bill if paying by token" -----
+# Fill calendar gaps with $0 so the window is a true trailing 30 CALENDAR days (not 30
+# active days); each point = sum of the prior 30 days, inclusive. Ramps up until 30 days
+# of history have accrued.
+trailing30 <- daily |>
+  complete(date = seq(min(date), max(date), by = "day"),
+           fill = list(est_cost_usd = 0)) |>
+  arrange(date) |>
+  mutate(roll30 = cumsum(est_cost_usd) - lag(cumsum(est_cost_usd), 30, default = 0))
+
+p3 <- ggplot(trailing30, aes(date, roll30)) +
   geom_area(fill = "steelblue", alpha = 0.3) +
   geom_line(color = "steelblue", linewidth = 1) +
   scale_y_continuous(labels = label_dollar()) +
-  labs(title = "Claude usage — cumulative modeled cost", x = NULL, y = "USD (modeled, cumulative)")
-save_plot(p3, "03_cumulative_cost.png")
+  labs(title = "Claude usage — trailing 30-day modeled cost",
+       subtitle = "Rolling sum of the prior 30 days — a monthly run-rate if paying by token (ramps up over the first 30 days)",
+       x = NULL, y = "USD (modeled, trailing 30 days)")
+save_plot(p3, "03_trailing_30d_cost.png")
 
 # --- 4. Token composition over time ---------------------------------------------------
 p4 <- daily |>
