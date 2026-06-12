@@ -21,9 +21,10 @@ ai/scripts/OspreySharp/
   Dataset-Config.ps1            dataset definitions + path helpers
   Clean-TestData.ps1            wipe caches / diagnostic dumps
 
-  Test-Snapshot.ps1             OspreySharp same-impl regression gate
-                                (frozen-baseline byte-equality per stage)
-  Test-Full-Regression.ps1      wrapper: Stellar + Astral, smoke/quick/full
+  Test-PerfGate.ps1             perf gate: branch vs pinned pwiz-perfbase
+                                (same-session A/B, 3-rep median)
+  Test-Snapshot.ps1             stage-isolated bisection (per-stage byte-equality)
+  Test-Full-Regression.ps1      wrapper around Test-Snapshot (smoke/quick/full)
 
   Measure-Pipeline.ps1          perf table generator (Osprey-workflow.html)
   Profile-OspreySharp.ps1       dotTrace wrapper for OspreySharp
@@ -102,45 +103,45 @@ pwsh -File ./ai/scripts/OspreySharp/Run-Osprey.ps1 -Tool Rust
 
 ## Regression
 
-For routine C#-side refactors (Rust unchanged), the preferred gate is
-the multi-file straight-through cross-impl run that reuses a cached Rust
-reference -- faster than the snapshot below, and it exercises the
-multi-file reconciliation / consensus-RT / gap-fill machinery that
-single-file runs never touch:
-`Compare/Compare-EndToEnd-Crossimpl.ps1 -Files All -SkipRust`.  See
-[PRE-COMMIT.md](PRE-COMMIT.md) and [Compare/README.md](Compare/README.md).
+Two standing gates guard every C#-side refactor; see
+[PRE-COMMIT.md](PRE-COMMIT.md) for the full gate doc.
 
-When no Rust reference is available, use the OspreySharp-alone snapshot
-gate instead.  `Test-Snapshot.ps1` compares the current OspreySharp
-build against a frozen snapshot captured from an earlier known-good
-build; no Rust checkout required.  Stage-by-stage isolation:
-byte-equality SHA-256 checks on stages 1-6, structured comparators on
-stage 7 (protein FDR) and blib.
-
-`Test-Full-Regression.ps1` is the one-command wrapper that drives
-Test-Snapshot across both datasets at the chosen scale.
+**Correctness** -- `pwiz_tools/OspreySharp/regression.ps1` (in the pwiz
+tree, self-contained): a straight-through run vs a committed OspreySharp
+golden plus a resume self-consistency leg, both at 1e-9.  No Rust
+checkout.  This is also the overnight TeamCity gate for OspreySharp PRs.
 
 ```powershell
-# Smoke (~3 min): Stellar single
-pwsh -File ./ai/scripts/OspreySharp/Test-Full-Regression.ps1 -Smoke
-
-# Quick (~10 min): Stellar single + Astral single
-pwsh -File ./ai/scripts/OspreySharp/Test-Full-Regression.ps1 -Quick
-
-# Full (~70 min): Stellar all + Astral all
-pwsh -File ./ai/scripts/OspreySharp/Test-Full-Regression.ps1
-
-# Refresh the frozen baseline after an approved behavior change
-pwsh -File ./ai/scripts/OspreySharp/Test-Full-Regression.ps1 -CreateSnapshot
+# Routine per-change correctness gate
+pwsh -File ./pwiz_tools/OspreySharp/regression.ps1 -Dataset Stellar
 ```
 
-When to refresh the baseline: only after the PR carrying the
-intentional behavior change has been reviewed and approved.  Run
-`-CreateSnapshot` on master HEAD; the manifest records the source
-commit and the OspreySharp binary SHA-256 so a future bisection
-can identify the boundary.
+**Performance** -- `Test-PerfGate.ps1` (this folder): a same-session A/B
+of the branch build vs the pinned `pwiz-perfbase` baseline worktree,
+3-rep median, failing only on a real regression (non-overlapping noise
+bands).
+
+```powershell
+# Routine per-refactor perf gate
+pwsh -File ./ai/scripts/OspreySharp/Test-PerfGate.ps1 -Dataset Stellar
+```
+
+`Test-Full-Regression.ps1` / `Test-Snapshot.ps1` are now the
+stage-isolated BISECTION tools -- run them to localize WHERE a red
+`regression.ps1` diverged (per-stage SHA-256 + structured stage7/blib
+comparators), not as the first-line gate.
+
+```powershell
+# Localize a divergence (~3 min smoke): Stellar single
+pwsh -File ./ai/scripts/OspreySharp/Test-Full-Regression.ps1 -Smoke
+```
 
 ## Performance
+
+`Test-PerfGate.ps1` (see Regression, above) is the pass/fail perf gate
+for refactors.  The scripts below are for *characterizing* perf, not
+gating: `Measure-Pipeline.ps1` generates the cross-impl Osprey-workflow.html
+table, and the profilers attribute time within a stage.
 
 ```powershell
 # Refresh the Osprey-workflow.html perf table (3 reps median, both impls)
