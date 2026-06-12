@@ -41,6 +41,9 @@ Findings:
       hardcoded level 0 -> symbol, level 1 -> color), including color-only or one-attribute-for-both
 - [x] Make the legend usable with many categories (rebuilt from distinct color + symbol values so
       legend size is the sum, not the product, of categories; no longer hidden at >=16)
+- [ ] Replace the ZedGraph built-in legend with a custom legend control: own panel beside the graph,
+      vertical scrollbar, grouped swatch/shape entries, and click-to-select the replicates/peptides
+      for the points sharing a value (uses the IdentityPath/ReplicateName already on each point)
 - [ ] Allow custom color and symbol assignment per category, persisted with the view
 - [ ] Handle palette exhaustion gracefully so distinct categories stay distinguishable
 - [ ] Show percent variance explained on axis labels; consider a scree plot
@@ -91,9 +94,20 @@ Implemented the first slice (color/symbol control + legend), all in the PCA plot
 
 Build: green (full solution). Tests: ClusteredHeatMapTest 0 failures (36s), PcaTest 0 failures.
 
-Not yet done / next: visual layout check of the two new combos in the running app; then the
-remaining issue scope (custom per-category color/symbol assignment, palette exhaustion, % variance
-explained / scree plot, tooltips/labels, ellipses).
+Not yet done / next: the remaining issue scope (custom per-category color/symbol assignment,
+palette exhaustion, % variance explained / scree plot, tooltips/labels, ellipses).
+
+### 2026-06-12 - Session 2: visual verification + custom legend direction
+
+- Verified the encoding + legend slice in the running app on `Rat_plasma.sky` (Color by = Condition,
+  Symbol by = SubjectId). Two-group legend renders correctly (Condition: Diseased/Healthy color
+  swatches; SubjectId: per-subject shapes); combos and graph layout look right, no clipping.
+- New direction from Nick (issue comment): replace the ZedGraph built-in legend with a custom legend
+  CONTROL - own panel beside the graph, vertical scrollbar for many entries, and click-to-select the
+  replicates/peptides for the points sharing a clicked value. The per-point PointInfo (IdentityPath +
+  ReplicateName) is already available to drive that selection. This supersedes the ZedGraph legend.
+- Open decision: fold the custom legend into this branch before any PR, vs. ship the current slice as
+  PR #1 and do the custom legend as PR #2.
 
 ## Context for Next Session
 
