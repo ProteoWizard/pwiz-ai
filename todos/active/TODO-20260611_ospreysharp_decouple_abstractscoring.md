@@ -77,6 +77,25 @@ Copilot reviewed 2/2 files, no comments.
 
 ## Progress Log
 
+### 2026-06-12 -- CoelutionScorer extraction: ONE PR (#4298), two validated commits
+Per developer preference (these stages are smaller than he'd normally PR), the diagnostics
+decouple + the scorer move ship as a SINGLE PR [#4298](https://github.com/ProteoWizard/pwiz/pull/4298)
+(base master) with two commits, gates run BETWEEN commits (no intermediate merge to master):
+- **Commit 1 (`fb9d81fa1a`) -- decouple:** added `IScoringDiagnostics` (OspreySharp.Scoring) + made
+  `OspreyFileDiagnostics` implement it + `OspreyDiagnostics.ScoringDiagnostics` nullable accessor;
+  routed ScoreWindow/ScoreCandidate's 10 dump calls through an injected (nullable) `IScoringDiagnostics`,
+  null-conditional (`diag?.X`) per the developer's perf call (no no-op singleton). Gates: 382 + zero-warn;
+  regression Stellar 1e-9 (diag off); perf +2.6% vs master; **diagnostics-ON dump parity** identical
+  (cwt-path 467K rows + mp-inputs 18.16M rows). Both fresh-context self-reviews CLEAN.
+- **Commit 2 -- move:** relocated `ScoreWindow`+`ScoreCandidate` (+ `DIAG_PEPTIDE`, `BuildOverridePeaks`)
+  into new `OspreySharp.Scoring/CoelutionScorer.cs` (ctor `(Action<string> logInfo, IScoringDiagnostics
+  diagnostics)`; `_logInfo`/`_diagnostics` fields); `RunCoelutionScoring` constructs + calls it.
+  AbstractScoringTask -1024 lines. One behavior-identical substitution: ScoreCandidate's
+  `NUM_PIN_FEATURES` (exe const, =21) -> `OspreyFeatureCalculators.FeatureCount` (Scoring const, =21).
+  Pre-commit GREEN (independently re-run); correctness (Stellar+Astral) + perf + diag-on parity in progress.
+This completes the `AbstractScoringTask` decomposition (rec #1). The perfbase baseline was advanced to
+master `9035c425fc` so PR gates isolate this PR.
+
 ### 2026-06-12 -- All four stages MERGED to master
 Sequentially squash-merged bottom-up: A `9fcad73d42` (#4291) -> B `f2c601df35` (#4295) -> C
 `360ba77ca9` (#4293) -> OspreyPeakData `9035c425fc` (#4294). Each cascade step: FF master, retarget
