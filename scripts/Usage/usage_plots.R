@@ -37,7 +37,29 @@ stopifnot(file.exists(csv_path))
 usage <- read_csv(csv_path, show_col_types = FALSE) |>
   mutate(date = as.Date(date)) |>
   filter(date < Sys.Date()) |>   # drop the current, still-partial day (e.g. a 06:00 snapshot of "today") so charts don't end on a misleading sliver
-  mutate(model = factor(model), user = factor(user), machine = factor(machine))
+  mutate(user = factor(user), machine = factor(machine))
+
+# Pretty, version-ordered model labels for the legend: drop the redundant "claude-" prefix,
+# format like "Opus 4.8" / "Fable 5", and order by version DESCENDING (newest on top),
+# tie-broken by family capability (Opus > Sonnet > Haiku). Non-versioned ids (e.g.
+# <synthetic>) sort last. Applied only to the by-model chart below (others use all models).
+model_order <- function(ids) {
+  fam_rank <- c(fable = 1, opus = 1, sonnet = 2, haiku = 3)
+  tibble(id = unique(as.character(ids))) |>
+    mutate(
+      base    = sub("^claude-", "", id),
+      parts   = str_split(base, "-"),
+      family  = map_chr(parts, 1),
+      verstr  = map_chr(parts, ~ if (length(.x) > 1) paste(.x[-1], collapse = ".") else NA_character_),
+      version = suppressWarnings(as.numeric(verstr)),
+      version = if_else(is.na(version), -Inf, version),
+      rank    = if_else(is.na(unname(fam_rank[family])), 99, unname(fam_rank[family])),
+      pretty  = if_else(is.na(verstr),
+                        str_to_title(str_remove_all(base, "[<>]")),
+                        paste0(str_to_title(family), " ", verstr))
+    ) |>
+    arrange(desc(version), rank, family)
+}
 
 multi_user    <- nlevels(usage$user) > 1
 multi_machine <- nlevels(usage$machine) > 1
@@ -58,7 +80,16 @@ save_plot <- function(p, name, w = 10, h = 5) {
 }
 
 # --- 1. Daily tokens, stacked by model ------------------------------------------------
+# Keep only models that are a meaningful share of all tokens; drop tinier ones (and the
+# zero-token <synthetic>) so the legend lists only what's actually visible in the plot.
+min_model_share <- 0.01   # 1% of total tokens
+model_tok   <- usage |> group_by(model) |> summarise(t = sum(total_tokens), .groups = "drop")
+keep_models <- model_tok |> filter(t >= min_model_share * sum(model_tok$t)) |> pull(model)
+mo <- model_order(keep_models)
+
 p1 <- usage |>
+  filter(model %in% keep_models) |>
+  mutate(model = factor(model, levels = mo$id, labels = mo$pretty)) |>
   group_by(date, model) |>
   summarise(total_tokens = sum(total_tokens), .groups = "drop") |>
   ggplot(aes(date, total_tokens, fill = model)) +
@@ -90,7 +121,6 @@ p3 <- ggplot(trailing30, aes(date, roll30)) +
   geom_line(color = "steelblue", linewidth = 1) +
   scale_y_continuous(labels = label_dollar()) +
   labs(title = "Claude usage — trailing 30-day modeled cost",
-       subtitle = "Rolling sum of the prior 30 days — a monthly run-rate if paying by token (ramps up over the first 30 days)",
        x = NULL, y = "USD (modeled, trailing 30 days)")
 save_plot(p3, "03_trailing_30d_cost.png")
 
