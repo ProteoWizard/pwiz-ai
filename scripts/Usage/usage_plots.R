@@ -168,6 +168,23 @@ if (multi_user) {
     scale_y_continuous(labels = label_dollar()) +
     labs(title = "Claude usage — modeled cost by teammate (last 30 days)", x = NULL, y = "USD (modeled)")
   save_plot(p6, "06_cost_by_user.png")
+
+  # 06b. Same data as a share-of-total pie (slices ordered largest first; tiny ones unlabeled).
+  user_share <- usage |>
+    filter(date >= recent_start) |>
+    group_by(user) |>
+    summarise(est_cost_usd = sum(est_cost_usd), .groups = "drop") |>
+    arrange(desc(est_cost_usd)) |>
+    mutate(user = factor(user, levels = user),
+           pct = est_cost_usd / sum(est_cost_usd),
+           lbl = if_else(pct >= 0.02, percent(pct, accuracy = 1), ""))
+  p6b <- ggplot(user_share, aes(x = "", y = est_cost_usd, fill = user)) +
+    geom_col(width = 1, color = "white") +
+    coord_polar(theta = "y") +
+    geom_text(aes(label = lbl), position = position_stack(vjust = 0.5), size = 3) +
+    theme_void(base_size = 12) +
+    labs(title = "Claude usage — share of modeled cost by teammate (last 30 days)", fill = "user")
+  save_plot(p6b, "06b_cost_share_by_user.png")
 } else {
   message("Single user so far — team charts (05/06) skipped until teammates join.")
 }
@@ -193,6 +210,23 @@ if (multi_machine) {
     scale_y_continuous(labels = label_dollar()) +
     labs(title = "Claude usage — modeled cost by machine (last 30 days)", x = NULL, y = "USD (modeled)")
   save_plot(p8, "08_cost_by_machine.png")
+
+  # 08b. Same data as a share-of-total pie (slices ordered largest first; tiny ones unlabeled).
+  machine_share <- usage |>
+    filter(date >= recent_start) |>
+    group_by(machine) |>
+    summarise(est_cost_usd = sum(est_cost_usd), .groups = "drop") |>
+    arrange(desc(est_cost_usd)) |>
+    mutate(machine = factor(machine, levels = machine),
+           pct = est_cost_usd / sum(est_cost_usd),
+           lbl = if_else(pct >= 0.02, percent(pct, accuracy = 1), ""))
+  p8b <- ggplot(machine_share, aes(x = "", y = est_cost_usd, fill = machine)) +
+    geom_col(width = 1, color = "white") +
+    coord_polar(theta = "y") +
+    geom_text(aes(label = lbl), position = position_stack(vjust = 0.5), size = 3) +
+    theme_void(base_size = 12) +
+    labs(title = "Claude usage — share of modeled cost by machine (last 30 days)", fill = "machine")
+  save_plot(p8b, "08b_cost_share_by_machine.png")
 } else {
   message("Single machine so far — machine charts (07/08) skipped.")
 }
