@@ -34,9 +34,20 @@ csv_path <- file.path(data_dir, "usage_combined.csv")
 stopifnot(file.exists(csv_path))
 
 # --- Load & shape ---------------------------------------------------------------------
+# Common baseline start (fixed, then extends forward). Most teammates had only ~28 days of
+# retained transcripts when they first ran the scripts; a few happened to have more. To keep
+# the cross-person comparison fair, anchor every chart to one shared start date rather than
+# each person's full retained history. Fixed (not Sys.Date()-28) so the window GROWS forward.
+start_date <- as.Date("2026-05-15")   # 28 days before the project's common start (2026-06-12)
+
+# Per-person / per-machine charts (05–08) show only this trailing window — a recent "burn
+# rate" rather than an ever-growing all-time total, and a fair like-for-like comparison.
+recent_start <- Sys.Date() - 30
+
 usage <- read_csv(csv_path, show_col_types = FALSE) |>
   mutate(date = as.Date(date)) |>
   filter(date < Sys.Date()) |>   # drop the current, still-partial day (e.g. a 06:00 snapshot of "today") so charts don't end on a misleading sliver
+  filter(date >= start_date) |>  # shared baseline so longer-retained histories don't skew the comparison
   mutate(user = factor(user), machine = factor(machine))
 
 # Pretty, version-ordered model labels for the legend: drop the redundant "claude-" prefix,
@@ -139,21 +150,23 @@ save_plot(p4, "04_token_composition.png")
 # --- 5 & 6. Team views (only meaningful once >1 teammate reports) ----------------------
 if (multi_user) {
   p5 <- usage |>
+    filter(date >= recent_start) |>
     group_by(date, user) |>
     summarise(total_tokens = sum(total_tokens), .groups = "drop") |>
     ggplot(aes(date, total_tokens, fill = user)) +
     geom_col() +
     scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
-    labs(title = "Claude usage — daily tokens by teammate", x = NULL, y = "tokens", fill = "user")
+    labs(title = "Claude usage — daily tokens by teammate (last 30 days)", x = NULL, y = "tokens", fill = "user")
   save_plot(p5, "05_tokens_by_user.png")
 
   p6 <- usage |>
+    filter(date >= recent_start) |>
     group_by(user) |>
     summarise(est_cost_usd = sum(est_cost_usd), .groups = "drop") |>
     ggplot(aes(reorder(user, est_cost_usd), est_cost_usd)) +
     geom_col(fill = "steelblue") + coord_flip() +
     scale_y_continuous(labels = label_dollar()) +
-    labs(title = "Claude usage — total modeled cost by teammate", x = NULL, y = "USD (modeled)")
+    labs(title = "Claude usage — modeled cost by teammate (last 30 days)", x = NULL, y = "USD (modeled)")
   save_plot(p6, "06_cost_by_user.png")
 } else {
   message("Single user so far — team charts (05/06) skipped until teammates join.")
@@ -162,21 +175,23 @@ if (multi_user) {
 # --- 7 & 8. Per-machine views (one person running Claude on several computers) ---------
 if (multi_machine) {
   p7 <- usage |>
+    filter(date >= recent_start) |>
     group_by(date, machine) |>
     summarise(total_tokens = sum(total_tokens), .groups = "drop") |>
     ggplot(aes(date, total_tokens, fill = machine)) +
     geom_col() +
     scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
-    labs(title = "Claude usage — daily tokens by machine", x = NULL, y = "tokens", fill = "machine")
+    labs(title = "Claude usage — daily tokens by machine (last 30 days)", x = NULL, y = "tokens", fill = "machine")
   save_plot(p7, "07_tokens_by_machine.png")
 
   p8 <- usage |>
+    filter(date >= recent_start) |>
     group_by(machine) |>
     summarise(est_cost_usd = sum(est_cost_usd), .groups = "drop") |>
     ggplot(aes(reorder(machine, est_cost_usd), est_cost_usd)) +
     geom_col(fill = "steelblue") + coord_flip() +
     scale_y_continuous(labels = label_dollar()) +
-    labs(title = "Claude usage — total modeled cost by machine", x = NULL, y = "USD (modeled)")
+    labs(title = "Claude usage — modeled cost by machine (last 30 days)", x = NULL, y = "USD (modeled)")
   save_plot(p8, "08_cost_by_machine.png")
 } else {
   message("Single machine so far — machine charts (07/08) skipped.")
