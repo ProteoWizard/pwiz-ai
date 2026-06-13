@@ -10,10 +10,11 @@ rec #1). Each stage is structural-only and gated on byte-parity + perf.
 - **Branch**: `Skyline/work/20260611_ospreysharp_decouple_abstractscoring`
 - **Base**: `master`
 - **Created**: 2026-06-11
-- **Status**: Stages 1 + A/B/C/D-peakdata ALL MERGED to master (2026-06-12). The remaining
-  `CoelutionScorer` extraction is now **UNBLOCKED** -- the diagnostics-bleed blocker has a chosen
-  design (`IScoringDiagnostics` interface + DI; see the Stage D handoff below). Umbrella stays active
-  until that lands.
+- **Status**: **COMPLETED 2026-06-13.** The full `AbstractScoringTask` decomposition (OOP review
+  rec #1) is merged to master: Stage 1 + A/B/C/D-peakdata + the final `CoelutionScorer` extraction
+  ([#4298](https://github.com/ProteoWizard/pwiz/pull/4298), squashed as `a57cac690d`). The
+  diagnostics-bleed blocker (rec #3) was resolved via the `IScoringDiagnostics` seam. Two follow-ups
+  remain in the backlog (triplicated top-N loop; `s_calXcorrScorer` relocation) -- not part of rec #1.
 - **PR (Stage 1)**: [#4290](https://github.com/ProteoWizard/pwiz/pull/4290) (merged 2026-06-11 as `f4a05f0`)
 - **Merged stages (squashed onto master, bottom-up)**:
   A [#4291](https://github.com/ProteoWizard/pwiz/pull/4291) `9fcad73d42` -> B [#4295](https://github.com/ProteoWizard/pwiz/pull/4295) `f2c601df35`
@@ -76,6 +77,24 @@ mode-1 (golden) + mode-2 (resume) PASS at 1e-9 (blib byte-identical); `Test-Perf
 Copilot reviewed 2/2 files, no comments.
 
 ## Progress Log
+
+### 2026-06-13 -- #4298 MERGED; AbstractScoringTask decomposition COMPLETE
+PR #4298 squash-merged as `a57cac690d` (the CoelutionScorer extraction -- decouple + move + cleanup,
+3 commits + the developer's update-merge, all collapsed). All checks green incl. the overnight TeamCity
+regression. This completes OOP-review rec #1: `AbstractScoringTask` has shed decoy generation, the
+fragment XIC/match helpers, the ambient `_ctx`, `OspreyPeakData`, and now the ~1024-line coelution
+scorer; the diagnostics-bleed blocker (rec #3) is resolved via `IScoringDiagnostics`.
+
+**Two Copilot comments on #4298 were reviewed and DEFERRED** (minor, behavior-neutral; not worth a
+re-commit that would supersede the overnight-validated HEAD -- threads replied-to + resolved). Recorded
+here for a future touch of `OspreySharp.Scoring/IScoringDiagnostics.cs`:
+- Doc typo: the XML doc says `--d`; the CLI flag is `-d` / `--diagnostics`.
+- `WriteCwtPathRow` takes a concrete `List<XicData>`; widen to `IReadOnlyList<XicData>` for consistency
+  with the sibling `WriteSearchXicDump` (a `PerFileRescoreTask.cs:779` restore-breadcrumb is also still
+  stale, pointing at AbstractScoringTask instead of CoelutionScorer).
+
+Still-open backlog follow-ups (separate from rec #1): consolidate the triplicated top-N fragment-select
++ closest-peak loop ([[reference notes in this TODO]]); relocate `s_calXcorrScorer` out of AbstractScoringTask.
 
 ### 2026-06-12 -- CoelutionScorer extraction: ONE PR (#4298), two validated commits
 Per developer preference (these stages are smaller than he'd normally PR), the diagnostics
