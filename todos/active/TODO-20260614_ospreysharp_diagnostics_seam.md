@@ -157,4 +157,39 @@ the next):
 ### 2026-06-14 -- Created
 Authored after the 4th OOP review. Plan reviewed with Brendan: one PR, multiple
 commit/test cycles. Branch + ai-master commit of this TODO pending his sign-off on
-the arc's PR decomposition above.
+the arc's PR decomposition above. (PR 3 kept as a single PR, not a/b/c.)
+
+### 2026-06-14 -- Commit 1: the seam (pwiz 8d8cffa815)
+Established `IOspreyDiagnostics` and injected it; no call sites migrated (no-op run).
+- New `OspreySharp.Diagnostics` DLL (refs Core/Chromatography/Scoring/FDR) holds
+  `IOspreyDiagnostics` (43 gate props + 35 dump methods, mirrors the static facade)
+  + `NullOspreyDiagnostics` no-op singleton (flag defaults reproduce the old
+  `Sink?.X ?? default`, incl. DiagXicPass=1).
+- `OspreyFileDiagnostics` now implements it; its 42 `public readonly` flag FIELDS
+  became get-only auto-properties (fields can't satisfy interface get-properties).
+- `OspreyDiagnostics.Active` exposes the live sink as `IOspreyDiagnostics` (or the
+  null sink); `PipelineContext.Diagnostics` carries it (optional ctor arg, defaults
+  to the null sink); `AnalysisPipeline` injects `OspreyDiagnostics.Active`.
+- Gates: build + 382 unit tests + zero-warning inspection PASS; `regression.ps1
+  -Dataset Stellar` PASS (mode1 vs golden + mode2 resume==straight). Perf gate
+  deferred -- this commit adds no per-iteration work (one property read at ctor;
+  the converted sink props aren't instantiated when dumps are off).
+
+**Resolved open decision #1 (interface host) -- with a twist.** Tasks-vs-Core was
+moot: the dump surface spans Chromatography/Core/Scoring/FDR, so neither minimal
+DLL can host it. Chose the new `OspreySharp.Diagnostics` DLL (Brendan's pick). But
+its types live in namespace **`pwiz.OspreySharp`**, NOT `pwiz.OspreySharp.Diagnostics`:
+a `.Diagnostics` child namespace would shadow the existing
+`pwiz.OspreySharp.Core.Diagnostics` float-format helper (referenced by its bare
+name `Diagnostics.` in 81 spots across 6 files) and break the build. Consumers see
+the interface via enclosing-namespace lookup, so no `using` churn in commits 2-4.
+
+**New smell flagged (decide later, NOT in this PR):** `Core.Diagnostics` is a
+misnamed cross-impl float formatter (FormatF64Roundtrip etc.), unrelated to the
+dump diagnostics; it is what forced the namespace workaround. A future rename
+(e.g. `RoundtripFormat`) would free the conventional `pwiz.OspreySharp.Diagnostics`
+namespace. Out of scope here.
+
+Next: commit 2 -- migrate the light task call sites (AbstractScoringTask,
+PerFileScoringTask, MergeNodeTask, PerFileRescoreTask, ~26 sites) to
+`ctx.Diagnostics`, then Calibrator, then FirstJoinTask, then retire the static.
