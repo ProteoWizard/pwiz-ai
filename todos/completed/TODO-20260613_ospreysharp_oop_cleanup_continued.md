@@ -1,5 +1,9 @@
 # TODO-20260613_ospreysharp_oop_cleanup_continued.md
 
+**Status**: Completed (2026-06-14) -- rec #1/#2/#3 of the 3rd OOP review are paid down; the
+codebase is ready for the **4th blind `/pw-oop-review`** (which re-prioritizes the multi-sprint
+task-layer decomposition). PRs: #4299 (`27f5586e0a`) + #4300 (`2f833b13b9`), both merged.
+
 Continue paying down OspreySharp OOP / structural tech-debt from the **3rd OOP review**,
 one gated PR at a time, until the codebase is ready for a **4th OOP review**. This is the
 working record for the phase after the `AbstractScoringTask` god-class decomposition.
@@ -122,3 +126,18 @@ the diagnostics-seam nits, the consolidated `TopFragmentExtractor.SelectTopFragm
 work branch deleted; local master synced. **This phase TODO stays active** (covers the still-open rec #2 PR
 #4300 and the path to the 4th OOP review) -- it moves to `completed/` only when the whole phase wraps.
 **Remaining**: #4300 (rec #2) merge -> then 4th blind `/pw-oop-review`.
+
+### 2026-06-14 -- PR #4300 MERGED; phase complete
+PR #4300 squash-merged to master as `2f833b13b9` (TeamCity 17/17 green). Rec #2 shipped: the `DidPlan` ->
+`PlanningPerformed` byproduct-token reroute and the unified `PercolatorFdr.BuildTrainingSubset` shared by the
+direct + streaming Percolator paths (regression `-Dataset All` byte-identical, Stellar direct + Astral streaming).
+`close_coupling_escapes` work branch deleted; local master synced. With rec #1/#2/#3 all merged, **this phase is
+complete and the TODO moves to `completed/`.**
+**Carried forward to the next phase (new TODO when picked up):**
+- **4th blind `/pw-oop-review`** -- the named 3rd-review debt is paid down; re-run to surface the new dominant issue.
+- **Item #4 task-layer decomposition** (`PerFileScoringTask.ProcessFile`, `MergeNodeTask.Run` god-methods) --
+  multi-sprint; the 4th review prioritizes it.
+- **Deferred test**: targeted `ByproductContextTest` for the `didPlan==true` branch read through
+  `ctx.Get<PlanningPerformed>()` (guards the co-production ordering; e2e regression covers it today).
+- **Deferred doc nit (#4300 Copilot)**: a `BuildTrainingSubset` doc comment says `FirstJoin.RunPercolatorStreaming`;
+  the type is `FirstJoinTask`. Cosmetic; fold the one-word fix into a later osprey touch.
