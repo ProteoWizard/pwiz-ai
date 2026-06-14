@@ -190,6 +190,43 @@ dump diagnostics; it is what forced the namespace workaround. A future rename
 (e.g. `RoundtripFormat`) would free the conventional `pwiz.OspreySharp.Diagnostics`
 namespace. Out of scope here.
 
-Next: commit 2 -- migrate the light task call sites (AbstractScoringTask,
-PerFileScoringTask, MergeNodeTask, PerFileRescoreTask, ~26 sites) to
-`ctx.Diagnostics`, then Calibrator, then FirstJoinTask, then retire the static.
+### 2026-06-14 -- Design correction + commit 2 (pwiz 33718a327a)
+**Brendan's call: null-default, not a NullObject.** `PipelineContext.Diagnostics`
+is now `null` when diagnostics are off; call sites use `ctx.Diagnostics?.X` (and
+`?? false` / `?? 1` for value members). The `?.` is a null-check branch -- no
+v-table call, args short-circuited -- matching `IScoringDiagnostics`. Deleted
+`NullOspreyDiagnostics`; `OspreyDiagnostics.Active => s_sink`. **Folded into commit
+1 via --amend** (local/unpushed): commit 1 is now 4a458ea884.
+
+**Consequence for cadence (Brendan):** no full build/test/regression cycle per
+module -- every migrated site is a runtime no-op with dumps off (what the tests +
+regression exercise), so each migration commit needs only build + inspection;
+ONE regression at the end confirms the no-op; the dumps-on cross-impl spot-check
+is the real on-path validation (pre-merge).
+
+Commit 2 (33718a327a): migrated the 4 light task files (AbstractScoringTask,
+PerFileScoringTask, PerFileRescoreTask, MergeNodeTask, ~26 sites) to
+`ctx.Diagnostics?.X`. Build + 382 tests + zero-warning inspection PASS.
+Convention: inside a `?.Flag ?? false` guard the inner dump call may use plain
+`.`; where the guard is compound (e.g. `WritePin || ?.DumpCalSample`) the call
+must use `?.`.
+
+### Remaining (next session) -- commits 3-5
+- **Commit 3: Calibrator (~33 sites)** -- uses the `_ctx` field, so `_ctx.Diagnostics?.X`.
+  HAZARD: L387 and L977 are byte-identical (`if (OspreyDiagnostics.CalWindowsCollecting)`),
+  and several Write calls span multiple lines -- do NOT blind-regex; read the file
+  and edit precisely (or regex with a careful diff review), because a mis-wrapped
+  `?? false` changes dumps-ON behavior (a parity break the regression gate, run
+  dumps-off, will NOT catch -- only the cross-impl dump spot-check would).
+  `ShouldDumpCalXicFor(...)` is a bool method in an `if` -> needs `?? false`.
+  Keep `ExitAfterDump` static.
+- **Commit 4: FirstJoinTask (~32 sites)** -- static method `RunPercolatorFdr` takes
+  `ctx`; confirm ctx in scope at each site.
+- **Commit 5: retire the static facade** -- migrate the last Program/AnalysisPipeline
+  reaches; collapse `OspreyDiagnostics` to the sink bootstrap (or delete, exe `new`s
+  the sink into PipelineContext). Decide F10/ExitAfterDump/ScoringDiagnostics homes:
+  likely make `IOspreyDiagnostics : IScoringDiagnostics` so `new CoelutionScorer(...,
+  ctx.Diagnostics)` works and ScoringDiagnostics can go; move F10 to Core or keep a
+  tiny static.
+- **Pre-merge gate:** `regression.ps1 -Dataset All` + `Test-PerfGate.ps1` +
+  one `OSPREY_DUMP_*` cross-impl dump spot-check (before vs after) + inspection.
