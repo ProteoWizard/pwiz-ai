@@ -11,8 +11,8 @@
 - **Branch**: `Skyline/work/20260614_ospreysharp_diagnostics_seam`
 - **Base**: `master`
 - **Created**: 2026-06-14
-- **Status**: In Progress
-- **PR**: [#4302](https://github.com/ProteoWizard/pwiz/pull/4302)
+- **Status**: Completed
+- **PR**: [#4302](https://github.com/ProteoWizard/pwiz/pull/4302) (merged 2026-06-15)
 
 ## Why this is one PR with multiple commit/test cycles
 Per Brendan's working style (2026-06-14): this is **one logical block = one PR**,
@@ -270,3 +270,23 @@ mentioning OspreyDiagnostics (PerFileRescoreTask:788, PerFileScoringTask:1455).
   tiny static.
 - **Pre-merge gate:** `regression.ps1 -Dataset All` + `Test-PerfGate.ps1` +
   one `OSPREY_DUMP_*` cross-impl dump spot-check (before vs after) + inspection.
+
+### 2026-06-15 -- Merged
+
+PR #4302 merged as squash commit `6752500b`. Shipped PR 1 of the debt-paydown arc:
+the OspreySharp task layer no longer reaches the exe-only `OspreyDiagnostics` static
+facade -- the cross-impl dump sink is injected on `PipelineContext` as a nullable
+`IOspreyDiagnostics` (new `OspreySharp.Diagnostics` DLL), call sites use
+`ctx.Diagnostics?.X` (null short-circuit, no v-table cost when off), and the static
+facade is reduced to an `Initialize`/`Active` bootstrap with stateless helpers in
+`OspreyDiagnosticsLog`. Five commits, each Stellar-regression-gated; pre-merge
+`-Dataset All` + data-rich dumps-on + perf (-1.5%) all green; fresh-context
+self-review + Copilot both addressed (5 LOW findings: a `dotnet sln add` BOM and
+uniform `?.` in guarded blocks).
+
+**Deferred to PR 2 (its natural exe-thinning scope), NOT shipped here:** moving the
+2076-line `OspreyFileDiagnostics` sink out of the exe; 2 stale code COMMENTS that
+still name `OspreyDiagnostics` (PerFileRescoreTask:788, PerFileScoringTask:1455);
+and the optional `IOspreyDiagnostics : IScoringDiagnostics` / gate-flags-vs-writes
+interface split. The keystone constraint is resolved, so PR 2 (lift task layer to a
+testable DLL) is now unblocked -- see [[project_ospreysharp_debt_paydown_arc]].
