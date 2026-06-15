@@ -1116,7 +1116,11 @@ about what happened. This convention also applies to UI error messages.
 - **Developer attribution**: `(thanks to Nick)` - not needed for Brendan (he sends the email)
 - **Requester/reporter attribution**: `(requested by Philip)`, `(reported by Lillian)`
 - **First names only** for all attributions
-- **Look in commit body** for requester/reporter info (not in title)
+- **Look in commit body** for requester/reporter info (not in title) — authors are
+  expected to add a `Reported by <First>.` / `Requested by <First>.` line at commit
+  time (see `ai/docs/version-control-guide.md`, "Crediting Reporters and
+  Requesters"); the PR description carries the same line. If it is missing, check
+  the linked GitHub issue and support thread for the original reporter.
 - **Link to tutorials/webinars** when a feature has associated documentation (e.g., `https://skyline.ms/webinar27.url`)
 - **Cherry-picked commits**: Look up the original PR to find the author:
   ```bash

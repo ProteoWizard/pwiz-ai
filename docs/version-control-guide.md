@@ -13,10 +13,15 @@ All commits MUST follow this exact format:
 * <bullet point 2>
 * <bullet point 3>
 
+Reported by <First>.
+
 See ai/todos/active/TODO-YYYYMMDD_feature_name.md
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
+
+The `Reported by <First>.` line is included only when the change originated
+from a user report or request — see "Crediting Reporters and Requesters" below.
 
 ### Format Rules
 
@@ -26,7 +31,8 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 | Bullets | 1-5 points, each starting with `* ` (asterisk + space) |
 | TODO reference | `See ai/todos/active/TODO-YYYYMMDD_feature_name.md` |
 | Co-authorship | Exactly `Co-Authored-By: Claude <noreply@anthropic.com>` |
-| Total lines | Maximum 10 lines including blank lines |
+| Reporter credit | `Reported by <First>.` on its own line when the change came from a user report/request (see below) |
+| Total lines | Maximum 10 lines including blank lines (the reporter-credit line does not count against this) |
 | Prohibited | Emojis, markdown links |
 
 ### Example
@@ -70,6 +76,10 @@ EOF
 - Bullet point summarizing change 2
 - Bullet point summarizing change 3
 
+Reported by <First>.
+
+Fixes #XXXX
+
 ## Test plan
 - [x] Test that was run
 - [x] Another test that was run
@@ -78,6 +88,41 @@ See ai/todos/active/TODO-YYYYMMDD_feature_name.md
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
+
+The `Reported by <First>.` line is included only when the change originated from
+a user report or request — see "Crediting Reporters and Requesters" below.
+
+## Crediting Reporters and Requesters
+
+When a change originates from a user report or request — a support-board thread,
+a GitHub issue, an email, or a conversation — credit the originator in **both the
+commit message and the PR description**. This is standard practice: the
+attribution feeds the release notes, where reporters are acknowledged (see
+`ai/docs/release-guide.md`, "Generating Skyline-daily Release Notes", which
+harvests requester/reporter info from the commit body). Capturing it at authoring
+time is the only reliable way to get it there.
+
+**Rules:**
+
+- **First name only.** "Reported by Jane", never "Reported by Jane Doe". Full
+  names feel exposing in public history; first names match how the team refers to
+  users and match the release-notes style (`(reported by Lillian)`).
+- **Placement.** A line on its own — `Reported by <First>.` (a feature request is
+  `Requested by <First>.`) — above the `See ai/todos/...` / `Co-Authored-By:`
+  lines, separated by a blank line. Not inside a bullet, not woven into prose.
+- **Both records.** Put it in the commit message *and* the PR description (the
+  squash-merge uses the PR description, so it carries into git history either way;
+  include it in both so neither path loses it).
+- **Look it up when it isn't obvious.** The reporter is often a support-board user
+  even when the GitHub issue/PR was filed by a team member. Find the name from the
+  linked thread — `mcp__labkey__get_support_thread` on the thread's `rowId`; the
+  reporter is the original poster — and credit them even though they aren't the
+  issue author. See the `GitHub ID to Name Mapping` table in `release-guide.md`
+  for team-member first names.
+- **Full identity stays in the link.** The support-thread URL or GitHub issue can
+  carry the full name and context; the prose credit is first-name only.
+- **Brendan is omitted** (he sends the release email) — consistent with the
+  release-notes attribution rule.
 
 ## Pre-Review Workflow
 
@@ -161,6 +206,7 @@ git push --force-with-lease
 
 - [ ] Title in past tense
 - [ ] 1-5 bullet points with `* ` prefix
+- [ ] `Reported by <First>.` line if the change came from a user report/request
 - [ ] TODO reference included
 - [ ] Co-Authored-By line at end
 - [ ] No emojis or markdown links

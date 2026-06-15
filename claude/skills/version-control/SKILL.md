@@ -31,6 +31,8 @@ If the LLM has not built/tested the code itself, ask the developer: "Has this be
 * bullet point 1
 * bullet point 2
 
+Reported by <First>.
+
 See ai/todos/active/TODO-YYYYMMDD_feature.md
 
 Co-Authored-By: Claude <noreply@anthropic.com>
@@ -39,6 +41,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 **Rules:**
 - Past tense title ("Added feature" not "Add feature")
 - Bullet points use `* ` prefix (not `-`)
+- `Reported by <First>.` (or `Requested by <First>.`) when the change came from a user report/request — see "Crediting reporters" below
 - TODO reference required for feature branches
 - Co-Authored-By required when LLM contributed
 - Maximum 10 lines total
@@ -71,6 +74,8 @@ The commits will be squashed on merge anyway, so there is no cost to having mult
 * bullet point 1
 * bullet point 2
 
+Reported by <First>.
+
 Fixes #XXXX
 
 ## Test plan
@@ -85,6 +90,15 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - Bullet points use `* ` prefix in Summary
 - Test plan uses `- [x]` checkboxes
 - No emojis
+
+## Crediting reporters
+
+When a change came from a user report or request, credit the originator by **first
+name only** in both the commit message and the PR description: `Reported by
+<First>.` / `Requested by <First>.` on its own line (it feeds the release notes).
+Full rules — placement, looking the name up from a support thread, the Brendan
+exception — in ai/docs/version-control-guide.md ("Crediting Reporters and
+Requesters").
 
 ## Review chain: self-review first (local), then open the PR, then Copilot
 
