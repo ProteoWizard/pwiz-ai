@@ -113,6 +113,14 @@ gradlew :server:modules:MacCossLabModules:<moduleName>:deployModule
 
 This is critical because JSP files are compiled at build time, not by the IDE — compilation errors in JSPs will not be caught by the IDE and will only surface during a build.
 
+## Running Tests
+
+- **Module unit tests** (`TestCase` inner classes run via `junit-run.view`): registration
+  in `getUnitTests()`, the run URLs, and the curl-based invocation are documented in
+  `ai/docs/labkey/labkey-modules-coding-patterns.md` (Unit Tests).
+- **Selenium UI tests** (browser-driven, `gradlew :server:test:uiTests`): see
+  `ai/docs/labkey/labkey-selenium-testing-guide.md`.
+
 ## Key Patterns
 
 - **Controllers** extend `SpringActionController` with static inner action classes
