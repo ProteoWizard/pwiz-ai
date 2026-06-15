@@ -4,10 +4,11 @@
 - **Branch**: `Skyline/work/20260610_cmd_compact_format`
 - **Base**: `master`
 - **Created**: 2026-06-10
-- **Status**: In Progress
-- **GitHub Issue**: [#4285](https://github.com/ProteoWizard/pwiz/issues/4285)
-- **PR**: [#4288](https://github.com/ProteoWizard/pwiz/pull/4288)
+- **Status**: Completed
+- **GitHub Issue**: [#4285](https://github.com/ProteoWizard/pwiz/issues/4285) (closed)
+- **PR**: [#4288](https://github.com/ProteoWizard/pwiz/pull/4288) (merged 2026-06-15 as 6f041d31)
 - **Checkout**: `C:\Dev\cmdline` (full built checkout)
+- **Requester**: James (support thread rowId 75112)
 
 ## Objective
 Add a SkylineCmd argument `--save-compact-format=never|largefilesonly|always`
@@ -126,3 +127,41 @@ is seeding `SkylineCmd.exe.config` with `<setting name="CompactFormatOption">`).
 - Test seeds the OPPOSITE persisted setting in each direction to prove the flag
   overrides settings, and asserts the flag does not persist back.
 - Arg values reuse `CompactFormatOption.Name` 1:1 via `CompactFormatOption.Parse`.
+
+### 2026-06-15 - Merged
+
+PR #4288 merged as commit `6f041d31`; issue #4285 auto-closed. Requested by James
+(support thread rowId 75112) — credited in the PR description.
+
+**What shipped differs from the "threaded override" design above.** On review,
+brendanx67 noted the threaded `CompactFormatOption` parameter never reached the
+in-process Skyline MCP `RunCommand()` path (that path saves through the GUI's own
+`SkylineFiles.SaveDocument` → `SerializeToFile`, which the extra parameter bypassed)
+— and the entire CLI must work through MCP `RunCommand()`. He replaced the threading
+with a **transient scoped override on `CompactFormatOption`** (`Effective` accessor +
+`SetOverride` IDisposable scope), set for the whole invocation in `CommandLine.RunInner`
+and read by `DocumentWriter`, so every save path (CLI and MCP) honors it; `FromSettings`
+and the GUI options dialog are unchanged. `SrmDocument`/`JsonToolServer` reverted to
+master. Our local threaded branch was abandoned in favor of his commits (3d6124317,
+8e5b3812f); his approach is the cleaner expression of the same idea.
+
+Post-refactor review handled: 4 Copilot comments addressed (`--save-as` added to the
+no-save-target warning, commit 3d613513b; two thread-safety/race comments and a
+`volatile` comment dismissed with reasoning — MCP command execution is serialized
+[single-instance pipe + single ServerLoop thread] and the save's blocking `Invoke`
+carries a memory barrier; the override mirrors the existing process-wide
+`Settings.Default.CompactFormatOption`). Fresh-context self-review re-run on the merged
+implementation: lifecycle/exception-safety/non-fatal-warning/locale all clean; its one
+MEDIUM (a concurrent interactive save during an MCP command could adopt the override) is
+benign (format-only, no autosave, narrow window) and consistent with the existing
+override pattern (`Program.StartPageOverride`), so left as-is.
+
+Deferred LOW items (unchanged): the `--share-zip` interaction is documented (CLI shares
+copy the on-disk `.sky` verbatim, so save with `--save-compact-format` first).
+
+Follow-up shipped to pwiz-ai (commit fa85a98): reporter-credit automation — `pw-startissue`
+now resolves the requester first name at issue-start (incl. the `core.Users` lookup for
+numeric support ids), `version-control-guide` documents that lookup, and a new
+`Check-ReporterCredit` PreToolUse hook warns when a commit/PR closes an issue or links a
+support thread without a credit line. No cherry-pick: this is a feature, and the current
+release phase (Post-Release Patch Mode) takes bug fixes only.
