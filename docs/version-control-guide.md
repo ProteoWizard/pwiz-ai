@@ -119,6 +119,14 @@ time is the only reliable way to get it there.
   reporter is the original poster — and credit them even though they aren't the
   issue author. See the `GitHub ID to Name Mapping` table in `release-guide.md`
   for team-member first names.
+  - **If the thread shows only a numeric user id** (external posters come through
+    as e.g. `From: 41337`, not a name), resolve it via the `core.Users` table:
+    `mcp__labkey__fetch_labkey_page(view_name="query-executeQuery.view",
+    container_path="/home/support", params={schemaName:"core",
+    "query.queryName":"Users", "query.UserId~eq":<id>})` and read the **Display
+    Name** column (e.g. `41337` → `james41337` → credit "James"). `get_support_thread`,
+    `query_support_threads`, and the rendered thread page all anonymize external
+    posters to the id — the `core.Users` query is the step that yields the name.
 - **Full identity stays in the link.** The support-thread URL or GitHub issue can
   carry the full name and context; the prose credit is first-name only.
 - **Brendan is omitted** (he sends the release email) — consistent with the

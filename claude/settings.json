@@ -21,6 +21,47 @@
               "-File",
               "${CLAUDE_PROJECT_DIR}/.claude/hooks/Inject-VersionControlSkill.ps1"
             ]
+          },
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/Check-ReporterCredit.ps1"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/Restrict-Cd.ps1"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/Restrict-SearchScope.ps1"
+            ]
+          }
+        ]
+      },
+      {
+        "matcher": "Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/Restrict-SearchScope.ps1"
+            ]
           }
         ]
       },
@@ -38,6 +79,35 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/Set-ActiveCheckout.ps1"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "mcp__teamcity__get_build_log",
+      "mcp__teamcity__get_build_status",
+      "mcp__teamcity__search_builds",
+      "mcp__status__get_project_status",
+      "mcp__status__get_status",
+      "mcp__status__get_context_usage",
+      "mcp__status__get_last_screenshot",
+      "mcp__labkey__list_attachments",
+      "mcp__labkey__get_support_thread",
+      "mcp__labkey__get_attachment"
     ]
   }
 }

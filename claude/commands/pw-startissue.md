@@ -48,6 +48,20 @@ Review the issue and note:
 - **Labels**: Check for `skyline`, `pwiz`, `tutorial`, etc. (determines which skill to load in Step 5)
 - **Scope**: What work is described
 - **Repository**: pwiz (code changes) or pwiz-ai (AI tooling/docs)
+- **Reporter/requester**: Scan the issue body for a support-thread link
+  (`skyline.ms/.../announcements-thread.view?rowId=NNNNN`) or "reported/requested
+  via" language. **The originator is often a support-board user even when a
+  teammate filed the issue** — that was true here in spirit, and it is easy to
+  miss because the issue *looks* team-authored. If you find one, resolve the
+  originator's **first name now** and record it in the TODO (Step 3): the credit
+  line is far easier to capture here than to reconstruct at commit/PR time.
+  Resolution: `mcp__labkey__get_support_thread` on the `rowId`; the original
+  poster is the reporter. If that shows only a numeric user id, get the name with
+  `mcp__labkey__fetch_labkey_page(view_name="query-executeQuery.view",
+  container_path="/home/support", params={schemaName:"core", "query.queryName":"Users",
+  "query.UserId~eq":<id>})` → the **Display Name** column. Credit by first name
+  only (`Requested by <First>.` for a feature request, `Reported by <First>.` for
+  a bug). See ai/docs/version-control-guide.md, "Crediting Reporters and Requesters".
 
 ### Step 2: Prepare Repositories
 
@@ -90,6 +104,7 @@ Create `ai/todos/active/TODO-YYYYMMDD_<issue_title_slug>.md`:
 - **Status**: In Progress
 - **GitHub Issue**: [#NNNN](https://github.com/ProteoWizard/pwiz/issues/NNNN)
 - **PR**: (pending)
+- **Requester/Reporter**: <First> (from support thread rowId NNNNN) — omit if not user-originated; feeds the commit/PR credit line
 
 ## Objective
 
