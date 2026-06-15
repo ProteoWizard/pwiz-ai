@@ -12,7 +12,7 @@
 - **Base**: `master`
 - **Created**: 2026-06-14
 - **Status**: In Progress
-- **PR**: (pending)
+- **PR**: [#4302](https://github.com/ProteoWizard/pwiz/pull/4302)
 
 ## Why this is one PR with multiple commit/test cycles
 Per Brendan's working style (2026-06-14): this is **one logical block = one PR**,
