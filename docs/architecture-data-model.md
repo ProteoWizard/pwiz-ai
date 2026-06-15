@@ -443,6 +443,85 @@ void OnDocumentChanged(SrmDocument docNew, SrmDocument docOld)
 }
 ```
 
+## Reporting and Data Binding Layer
+
+Reports, the Document Grid, clustered heat maps, and the PCA plot do **not** run directly on
+the `SrmDocument` tree. They run on a separate, generic **data binding** layer
+(`pwiz.Common.DataBinding`, in the shared `Common` assembly) that has no knowledge of Skyline's
+document types. Skyline plugs its document into that layer through a schema and property
+descriptors. This is why the same grid/clustering/PCA machinery is reusable outside Skyline.
+
+### Rows and Columns: ReportResults, RowItem, DataPropertyDescriptor
+
+- **`RowItem`** wraps one row's underlying object. It is just an opaque carrier — the columns
+  know how to read it.
+- **`ItemProperties`** is the ordered list of **`DataPropertyDescriptor`** (the columns). A
+  `DataPropertyDescriptor` is the bridge to a value: `pd.GetValue(rowItem)` returns that row's
+  cell, and `pd.ColumnCaption` / `pd.PropertyType` describe it.
+- **`ReportResults`** bundles `RowItems` with `ItemProperties`. Everything downstream
+  (grid, clustering, PCA) is computed from these two collections, never from DocNodes directly.
+
+### Pivoting: PivotedProperties, Series, SeriesGroup
+
+Skyline reports frequently pivot a column across replicates (e.g. one "Abundance" value per
+replicate group, as in a group comparison). `PivotedProperties` discovers that structure:
+
+- A **`Series`** is a set of columns that are the *same logical property* repeated across pivot
+  keys (e.g. "Abundance" for each replicate). It holds `PropertyIndexes` into `ItemProperties`,
+  a `SeriesId`, a `SeriesCaption`, and a single `PropertyType`. `Series.PropertyDescriptors`
+  resolves the indexes back to the actual columns.
+- A **`SeriesGroup`** bundles the `Series` that share the same pivot (the same `PivotKeys` —
+  e.g. the set of replicates). `PivotCaptions` label those keys.
+- **`UngroupedProperties`** are the non-pivoted columns (e.g. Protein, Peptide).
+- `CreateSeriesGroups()` builds this from each column's `PivotedColumnId` (only columns whose
+  `PivotedColumnId.SeriesId` repeats become a `Series`).
+
+### Clustering: ClusteringSpec, ClusterRole, Clusterer, ClusteredProperties
+
+The user configures clustering in `ClusteringEditor`, which produces a **`ClusteringSpec`**:
+a list of `ValueSpec(ColumnRef, transform)` plus a `DistanceMetric`. Each column is assigned a
+**`ClusterRole`**:
+
+- `ClusterRole.IGNORED` — not used for clustering
+- `ClusterRole.ROWHEADER` — an ungrouped column used to label/identify rows
+- `ClusterRole.COLUMNHEADER` — a pivoted column whose value is constant down each column, so it
+  labels the columns (only offered when "equal in all rows")
+- `ClusterRole.Transform` (e.g. `ZSCORE`) — a numeric column actually fed into the distance
+  metric, after the named transform
+
+**`ClusteredProperties`** is the resolved view that the rest of the code reads:
+
+- `RowHeaders` — the `DataPropertyDescriptor`s acting as row headers (the leftmost grid columns)
+- `GetColumnHeaders(group)` — the `Series` in a group acting as column headers
+- `GetColumnRole(series)` / `GetRowTransform(pd)` — look up a column's role
+- `RowValues` / `ColumnValues` — the columns being clustered
+
+**`Clusterer`** (`pwiz.Common.DataBinding.Clustering.Clusterer`) holds the `RowItems` plus the
+`ClusteredProperties` and runs the analysis: `MakeDataFrames(...)` builds the numeric matrices,
+and `PerformPcaOnRows(n)` / `PerformPcaOnColumnGroup(group, n)` produce the PCA components the
+`PcaPlot` plots. `MAX_CLUSTER_ROW_COUNT = 15000` caps row count.
+
+### Coloring: ReportColorScheme (shared by grid and PCA)
+
+**`ReportColorScheme.FromClusteredResults(...)`** assigns a color to every header value once, and
+**both** the clustered heat-map grid and the PCA plot read colors from this same object — that is
+why point colors in the PCA plot match the colored header cells in the grid. Internally it keeps a
+`ColorManager` per property (keyed by `DataPropertyDescriptor.Name`) wrapping either a
+`DiscreteColorScheme` (categorical values) or a `NumericColorScheme` (numeric gradients). Lookups:
+`GetColor(propertyDescriptor, rowItem)` for row headers, `GetColor(series, value)` for column
+headers. (The PCA plot is the consumer that lets the user pick *which* header level drives color
+vs. symbol — see `Controls/Clustering/PcaPlot.cs`.)
+
+### Bridging back to the document: CellLocator
+
+The data binding layer is generic, but Skyline still needs a grid/plot click to select the right
+node in the document tree. **`CellLocator`** is that bridge: `CellLocator.ForRow(rowHeaders)` (or
+`ForColumn(...)`) yields, for a given `RowItem`, the `SkylineDocNode`'s `IdentityPath` and the
+`Replicate` name. The PCA plot stashes these on each point and calls
+`SkylineWindow.SelectPathAndReplicate(...)` on click, reconnecting the abstract row to the
+concrete `SrmDocument` (see [Identity vs DocNode](#identity-vs-docnode-a-critical-distinction)
+and the Results-array replicate indexing above).
+
 ## See Also
 
 - `pwiz_tools/Skyline/Model/DocNode.cs` - Base DocNode class
@@ -452,3 +531,10 @@ void OnDocumentChanged(SrmDocument docNew, SrmDocument docOld)
 - `pwiz_tools/Skyline/Model/Results/Chromatogram.cs` - ChromatogramSet and ChromatogramSetId
 - `pwiz_tools/Skyline/Skyline.cs` - SkylineWindow.ModifyDocumentInner()
 - `pwiz_tools/Skyline/Controls/TreeView/SrmTreeNode.cs` - UpdateNodes() example
+- `pwiz_tools/Shared/Common/DataBinding/Clustering/PivotedProperties.cs` - Series/SeriesGroup pivoting
+- `pwiz_tools/Shared/Common/DataBinding/Clustering/Clusterer.cs` - clustering + PCA computation
+- `pwiz_tools/Shared/Common/DataBinding/Clustering/ClusteredProperties.cs` - resolved row/column roles
+- `pwiz_tools/Shared/Common/DataBinding/Clustering/ClusteringSpec.cs` - clustering configuration
+- `pwiz_tools/Shared/Common/DataBinding/Clustering/ReportColorScheme.cs` - shared grid/PCA coloring
+- `pwiz_tools/Shared/Common/DataBinding/Controls/ClusteringEditor.cs` - clustering configuration UI
+- `pwiz_tools/Skyline/Controls/Clustering/PcaPlot.cs` - PCA plot (consumer of the above)

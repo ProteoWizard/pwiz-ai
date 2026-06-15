@@ -34,10 +34,43 @@ csv_path <- file.path(data_dir, "usage_combined.csv")
 stopifnot(file.exists(csv_path))
 
 # --- Load & shape ---------------------------------------------------------------------
+# Common baseline start (fixed, then extends forward). Most teammates had only ~28 days of
+# retained transcripts when they first ran the scripts; a few happened to have more. To keep
+# the cross-person comparison fair, anchor every chart to one shared start date rather than
+# each person's full retained history. Fixed (not Sys.Date()-28) so the window GROWS forward.
+start_date <- as.Date("2026-05-15")   # 28 days before the project's common start (2026-06-12)
+
+# Per-person / per-machine charts (05–08) show only this trailing window — a recent "burn
+# rate" rather than an ever-growing all-time total, and a fair like-for-like comparison.
+recent_start <- Sys.Date() - 30
+
 usage <- read_csv(csv_path, show_col_types = FALSE) |>
   mutate(date = as.Date(date)) |>
   filter(date < Sys.Date()) |>   # drop the current, still-partial day (e.g. a 06:00 snapshot of "today") so charts don't end on a misleading sliver
-  mutate(model = factor(model), user = factor(user), machine = factor(machine))
+  filter(date >= start_date) |>  # shared baseline so longer-retained histories don't skew the comparison
+  mutate(user = factor(user), machine = factor(machine))
+
+# Pretty, version-ordered model labels for the legend: drop the redundant "claude-" prefix,
+# format like "Opus 4.8" / "Fable 5", and order by version DESCENDING (newest on top),
+# tie-broken by family capability (Opus > Sonnet > Haiku). Non-versioned ids (e.g.
+# <synthetic>) sort last. Applied only to the by-model chart below (others use all models).
+model_order <- function(ids) {
+  fam_rank <- c(fable = 1, opus = 1, sonnet = 2, haiku = 3)
+  tibble(id = unique(as.character(ids))) |>
+    mutate(
+      base    = sub("^claude-", "", id),
+      parts   = str_split(base, "-"),
+      family  = map_chr(parts, 1),
+      verstr  = map_chr(parts, ~ if (length(.x) > 1) paste(.x[-1], collapse = ".") else NA_character_),
+      version = suppressWarnings(as.numeric(verstr)),
+      version = if_else(is.na(version), -Inf, version),
+      rank    = if_else(is.na(unname(fam_rank[family])), 99, unname(fam_rank[family])),
+      pretty  = if_else(is.na(verstr),
+                        str_to_title(str_remove_all(base, "[<>]")),
+                        paste0(str_to_title(family), " ", verstr))
+    ) |>
+    arrange(desc(version), rank, family)
+}
 
 multi_user    <- nlevels(usage$user) > 1
 multi_machine <- nlevels(usage$machine) > 1
@@ -58,7 +91,16 @@ save_plot <- function(p, name, w = 10, h = 5) {
 }
 
 # --- 1. Daily tokens, stacked by model ------------------------------------------------
+# Keep only models that are a meaningful share of all tokens; drop tinier ones (and the
+# zero-token <synthetic>) so the legend lists only what's actually visible in the plot.
+min_model_share <- 0.01   # 1% of total tokens
+model_tok   <- usage |> group_by(model) |> summarise(t = sum(total_tokens), .groups = "drop")
+keep_models <- model_tok |> filter(t >= min_model_share * sum(model_tok$t)) |> pull(model)
+mo <- model_order(keep_models)
+
 p1 <- usage |>
+  filter(model %in% keep_models) |>
+  mutate(model = factor(model, levels = mo$id, labels = mo$pretty)) |>
   group_by(date, model) |>
   summarise(total_tokens = sum(total_tokens), .groups = "drop") |>
   ggplot(aes(date, total_tokens, fill = model)) +
@@ -90,7 +132,6 @@ p3 <- ggplot(trailing30, aes(date, roll30)) +
   geom_line(color = "steelblue", linewidth = 1) +
   scale_y_continuous(labels = label_dollar()) +
   labs(title = "Claude usage — trailing 30-day modeled cost",
-       subtitle = "Rolling sum of the prior 30 days — a monthly run-rate if paying by token (ramps up over the first 30 days)",
        x = NULL, y = "USD (modeled, trailing 30 days)")
 save_plot(p3, "03_trailing_30d_cost.png")
 
@@ -109,22 +150,41 @@ save_plot(p4, "04_token_composition.png")
 # --- 5 & 6. Team views (only meaningful once >1 teammate reports) ----------------------
 if (multi_user) {
   p5 <- usage |>
+    filter(date >= recent_start) |>
     group_by(date, user) |>
     summarise(total_tokens = sum(total_tokens), .groups = "drop") |>
     ggplot(aes(date, total_tokens, fill = user)) +
     geom_col() +
     scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
-    labs(title = "Claude usage — daily tokens by teammate", x = NULL, y = "tokens", fill = "user")
+    labs(title = "Claude usage — daily tokens by teammate (last 30 days)", x = NULL, y = "tokens", fill = "user")
   save_plot(p5, "05_tokens_by_user.png")
 
   p6 <- usage |>
+    filter(date >= recent_start) |>
     group_by(user) |>
     summarise(est_cost_usd = sum(est_cost_usd), .groups = "drop") |>
     ggplot(aes(reorder(user, est_cost_usd), est_cost_usd)) +
     geom_col(fill = "steelblue") + coord_flip() +
     scale_y_continuous(labels = label_dollar()) +
-    labs(title = "Claude usage — total modeled cost by teammate", x = NULL, y = "USD (modeled)")
+    labs(title = "Claude usage — modeled cost by teammate (last 30 days)", x = NULL, y = "USD (modeled)")
   save_plot(p6, "06_cost_by_user.png")
+
+  # 06b. Same data as a share-of-total pie (slices ordered largest first; tiny ones unlabeled).
+  user_share <- usage |>
+    filter(date >= recent_start) |>
+    group_by(user) |>
+    summarise(est_cost_usd = sum(est_cost_usd), .groups = "drop") |>
+    arrange(desc(est_cost_usd)) |>
+    mutate(user = factor(user, levels = user),
+           pct = est_cost_usd / sum(est_cost_usd),
+           lbl = if_else(pct >= 0.02, percent(pct, accuracy = 1), ""))
+  p6b <- ggplot(user_share, aes(x = "", y = est_cost_usd, fill = user)) +
+    geom_col(width = 1, color = "white") +
+    coord_polar(theta = "y") +
+    geom_text(aes(label = lbl), position = position_stack(vjust = 0.5), size = 3) +
+    theme_void(base_size = 12) +
+    labs(title = "Claude usage — share of modeled cost by teammate (last 30 days)", fill = "user")
+  save_plot(p6b, "06b_cost_share_by_user.png")
 } else {
   message("Single user so far — team charts (05/06) skipped until teammates join.")
 }
@@ -132,22 +192,41 @@ if (multi_user) {
 # --- 7 & 8. Per-machine views (one person running Claude on several computers) ---------
 if (multi_machine) {
   p7 <- usage |>
+    filter(date >= recent_start) |>
     group_by(date, machine) |>
     summarise(total_tokens = sum(total_tokens), .groups = "drop") |>
     ggplot(aes(date, total_tokens, fill = machine)) +
     geom_col() +
     scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
-    labs(title = "Claude usage — daily tokens by machine", x = NULL, y = "tokens", fill = "machine")
+    labs(title = "Claude usage — daily tokens by machine (last 30 days)", x = NULL, y = "tokens", fill = "machine")
   save_plot(p7, "07_tokens_by_machine.png")
 
   p8 <- usage |>
+    filter(date >= recent_start) |>
     group_by(machine) |>
     summarise(est_cost_usd = sum(est_cost_usd), .groups = "drop") |>
     ggplot(aes(reorder(machine, est_cost_usd), est_cost_usd)) +
     geom_col(fill = "steelblue") + coord_flip() +
     scale_y_continuous(labels = label_dollar()) +
-    labs(title = "Claude usage — total modeled cost by machine", x = NULL, y = "USD (modeled)")
+    labs(title = "Claude usage — modeled cost by machine (last 30 days)", x = NULL, y = "USD (modeled)")
   save_plot(p8, "08_cost_by_machine.png")
+
+  # 08b. Same data as a share-of-total pie (slices ordered largest first; tiny ones unlabeled).
+  machine_share <- usage |>
+    filter(date >= recent_start) |>
+    group_by(machine) |>
+    summarise(est_cost_usd = sum(est_cost_usd), .groups = "drop") |>
+    arrange(desc(est_cost_usd)) |>
+    mutate(machine = factor(machine, levels = machine),
+           pct = est_cost_usd / sum(est_cost_usd),
+           lbl = if_else(pct >= 0.02, percent(pct, accuracy = 1), ""))
+  p8b <- ggplot(machine_share, aes(x = "", y = est_cost_usd, fill = machine)) +
+    geom_col(width = 1, color = "white") +
+    coord_polar(theta = "y") +
+    geom_text(aes(label = lbl), position = position_stack(vjust = 0.5), size = 3) +
+    theme_void(base_size = 12) +
+    labs(title = "Claude usage — share of modeled cost by machine (last 30 days)", fill = "machine")
+  save_plot(p8b, "08b_cost_share_by_machine.png")
 } else {
   message("Single machine so far — machine charts (07/08) skipped.")
 }

@@ -2,6 +2,46 @@
 
 Patterns and commonly used methods for writing Selenium tests for LabKey Server modules.
 
+## Running the tests
+
+Run from the enlistment root. `:server:test` is the short alias for the `:server:testAutomation`
+project, so `gradlew :server:test:uiTests` and `gradlew :server:testAutomation:uiTests` are equivalent
+(the task name is `uiTests`).
+
+```powershell
+# A single test class (most common while developing)
+gradlew :server:test:uiTests "-Ptest=MyModuleTest"
+
+# A named suite
+gradlew :server:test:uiTests "-Psuite=DRT"            # also: targetedms, panoramapublic
+
+# All UI tests for one module
+gradlew -PenableUiTests :server:modules:targetedms:moduleUiTests
+
+# Launch the test-runner GUI (pick tests interactively)
+gradlew :server:test:uiTests
+```
+
+**Prerequisites:**
+- LabKey server running with the module deployed (`http://localhost:8080/`).
+- Test credentials set once (interactive): `gradlew :server:test:setPassword` (use the admin
+  username/password from the LabKey setup wizard).
+- A browser + driver: Firefox ESR is the default (`selenium.browser=firefox`); for Chrome, set
+  `selenium.browser=chrome` in `server/testAutomation/test.properties` (ChromeDriver is downloaded
+  automatically by Gradle).
+
+See `ai/docs/labkey-setup/phases/phase-8-test-setup.md` for full one-time test-environment setup.
+
+These are distinct from module **unit tests** (`junit-run.view`, no browser) — see
+`ai/docs/labkey/labkey-modules-coding-patterns.md` (Unit Tests).
+
+### Keeping test data after a run (manual verification)
+
+`test.properties` defaults to `clean=true`, which deletes the test's project when it
+passes. To keep the containers and data for browser inspection, set `clean=false` and
+re-run. The preamble still precleans, so re-runs start fresh; only the post-test delete
+is skipped. Restore `clean=true` afterward (CI relies on it).
+
 ## Test Structure
 
 ### Class hierarchy
@@ -58,7 +98,7 @@ public class MyTest extends BaseWebDriverTest implements PostgresOnlyTest
 |---|---|---|
 | `@BeforeClass` | Once before all tests | Project creation, module enable, post test data |
 | `@Before` | Before each `@Test` method | Navigate to a known starting point (e.g. project home) |
-| `doCleanup()` | Before first test and after last test (if passed) | Idempotent cleanup (delete project) |
+| `doCleanup()` | Before first test (always) and after last test (if passed and `clean=true`) | Idempotent cleanup (delete project). See [Keeping test data after a run](#keeping-test-data-after-a-run-manual-verification) to skip the post-test delete. |
 | `@After` | After each `@Test` method | Restore state modified during the test |
 
 **Do not use `@AfterClass`** — it interferes with LabKey test harness cleanup.
