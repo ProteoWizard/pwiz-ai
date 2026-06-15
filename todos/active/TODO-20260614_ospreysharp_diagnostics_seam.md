@@ -211,7 +211,31 @@ Convention: inside a `?.Flag ?? false` guard the inner dump call may use plain
 `.`; where the guard is compound (e.g. `WritePin || ?.DumpCalSample`) the call
 must use `?.`.
 
-### Remaining (next session) -- commits 3-5
+### 2026-06-14 -- Commits 3-5 complete (Brendan: continue through each commit, parity-check each step)
+Parity cadence tightened per Brendan: ran `regression.ps1 -Dataset Stellar` (golden +
+resume, 1e-9) after EACH commit, not just at the end. All PASS.
+- **Commit 3 (Calibrator, d65063889e):** 33 sites -> `_ctx.Diagnostics?.X`. The static
+  `SampleLibraryForCalibration` had no `_ctx`, so threaded an `IOspreyDiagnostics diag`
+  param for its grid dump (CS0120 caught it). Inside a `diag?.Flag ?? false` guard the
+  inner call must be plain `diag.` -- ReSharper flow-narrows the LOCAL to non-null and
+  flags a redundant `?.` (ConstantConditionalAccessQualifier); a PROPERTY like
+  `_ctx.Diagnostics` is NOT narrowed, so `?.` stays there.
+- **Commit 4 (FirstJoinTask, 5a4247f6fa):** 32 sites via a verified two-pass regex
+  (no dup lines, no compound guards except `DumpConsensus && ...` which wrapped
+  correctly); collapsed the redundant doubled parens; diff eyeballed before build.
+- **Commit 5 (retire static, 7224104b6d, net -275 LOC):** deleted the dead delegating
+  dump surface; `OspreyDiagnostics` is now just `Initialize`/`Active` (sink bootstrap).
+  Moved stateless `LogAction`/`F10`/`ExitAfterDump` to new `OspreyDiagnosticsLog` in the
+  Diagnostics DLL (17 ExitAfterDump + F10 + 2 LogAction renamed). Scorer's
+  IScoringDiagnostics now flows via `ctx.Diagnostics as IScoringDiagnostics` (sink
+  implements both; avoided an interface-inheritance change). Task bodies are now
+  facade-free (only 2 stale COMMENTS mention OspreyDiagnostics; `Initialize`/`Active`
+  remain only in the AnalysisPipeline driver, which is correct).
+
+**Pre-merge gate (in progress):** `regression.ps1 -Dataset All` (Stellar+Astral),
+a dumps-on smoke (`-d`) to exercise the on-path migrated WriteX calls, then perf.
+
+### Original remaining plan (now done) -- commits 3-5
 - **Commit 3: Calibrator (~33 sites)** -- uses the `_ctx` field, so `_ctx.Diagnostics?.X`.
   HAZARD: L387 and L977 are byte-identical (`if (OspreyDiagnostics.CalWindowsCollecting)`),
   and several Write calls span multiple lines -- do NOT blind-regex; read the file
