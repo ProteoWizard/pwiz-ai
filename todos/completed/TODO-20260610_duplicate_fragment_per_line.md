@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260610_duplicate_fragment_per_line`
 - **Base**: `master`
 - **Created**: 2026-06-10
-- **Status**: PR open; self-review (x3) + Copilot (x4) all clean; awaiting human review
-- **GitHub Issue**: [#4284](https://github.com/ProteoWizard/pwiz/issues/4284)
-- **PR**: [#4286](https://github.com/ProteoWizard/pwiz/pull/4286)
+- **Status**: Completed
+- **GitHub Issue**: [#4284](https://github.com/ProteoWizard/pwiz/issues/4284) (closed)
+- **PR**: [#4286](https://github.com/ProteoWizard/pwiz/pull/4286) (merged 2026-06-15 as 33c132f5)
 - **Worktree**: `C:\Dev\DupFragLine`
 
 ## Objective
@@ -46,7 +46,7 @@ instead of crashing. Origin: skyline.ms support thread #74731 (Sciex ZenoTOF 760
 - [x] Copilot x4 - all threads resolved; latest review clean (no comments).
 
 ### Remaining
-- [ ] Human review + CI; merge
+- [x] Human review + CI; merge
 - [x] Support thread #74731 reply (done by author)
 
 ## Files
@@ -54,3 +54,14 @@ instead of crashing. Origin: skyline.ms support thread #74731 (Sciex ZenoTOF 760
 - `pwiz_tools/Skyline/Model/ModelResources.resx` (+ `ModelResources.designer.cs`)
 - `pwiz_tools/Skyline/Properties/Resources.resx` (+ `Resources.Designer.cs`) (string removed)
 - `pwiz_tools/Skyline/TestFunctional/PasteMoleculesTest.cs`
+
+## Progress Log
+
+### 2026-06-15 - Merged
+
+PR #4286 merged as commit 33c132f5 (squash), auto-closing issue #4284. Approved by
+brendanx67. Final follow-up: corrected the `AddFragmentTransitions` call-site comment
+(it returns true when a fragment was not added — absent first fragment or a duplicate
+reported as a row error) and credited the reporter (Eva) in the PR/issue. Reporter
+identified from support thread #74731. No cherry-pick: POST-RELEASE PATCH phase, and
+this is a non-critical guard on relatively-new master-only multi-fragment-per-line code.
