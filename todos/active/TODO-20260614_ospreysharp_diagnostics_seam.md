@@ -232,8 +232,24 @@ resume, 1e-9) after EACH commit, not just at the end. All PASS.
   facade-free (only 2 stale COMMENTS mention OspreyDiagnostics; `Initialize`/`Active`
   remain only in the AnalysisPipeline driver, which is correct).
 
-**Pre-merge gate (in progress):** `regression.ps1 -Dataset All` (Stellar+Astral),
-a dumps-on smoke (`-d`) to exercise the on-path migrated WriteX calls, then perf.
+**Pre-merge gate -- ALL GREEN (2026-06-14):**
+- `regression.ps1 -Dataset All`: Stellar + Astral, golden + resume, all PASS.
+- Data-rich dumps-on validation: full Stellar single run with the entire
+  OSPREY_DUMP_* bundle enabled produced correct results (30,913 peptides /
+  3,848 protein groups / 45,962 spectra) and exercised every migrated
+  `ctx.Diagnostics?.WriteX` path with real data, no crash (cs_stage5_percolator
+  462,802 rows, cs_stage6_rescored 91,194, cs_stage7_protein_fdr 5,461, cal/loess
+  dumps, etc.). The real on-path check the dumps-off regression can't give.
+  (A bare `-d` exe run first came back empty -- a missing-resolution-flag CLI gap
+  on my direct invocation, NOT a code issue; Run-Osprey supplies the right flags.)
+- `Test-PerfGate.ps1 -Dataset Stellar`: PASS, total median -1.5% (perf-neutral, as
+  expected -- null `?.` short-circuit adds no hot-path work).
+
+**PR 1 COMPLETE.** Task bodies are facade-free; the keystone constraint is resolved,
+unblocking PR 2 (lift task layer to a testable DLL). Branch ready for self-review +
+PR. Deferred to PR 2 (its natural exe-thinning scope): moving the 2076-line
+OspreyFileDiagnostics sink out of the exe, and the 2 residual stale code COMMENTS
+mentioning OspreyDiagnostics (PerFileRescoreTask:788, PerFileScoringTask:1455).
 
 ### Original remaining plan (now done) -- commits 3-5
 - **Commit 3: Calibrator (~33 sites)** -- uses the `_ctx` field, so `_ctx.Diagnostics?.X`.
