@@ -4,8 +4,19 @@
 - **Branch**: `Skyline/work/20260616_ospreysharp_debt_paydown_pr3`
 - **Base**: `master` (pwiz at 6ee60e4e43, just merged #4304)
 - **Created**: 2026-06-16
-- **Status**: In Progress
-- **PR**: [#4308](https://github.com/ProteoWizard/pwiz/pull/4308)
+- **Status**: Completed
+- **PR**: [#4308](https://github.com/ProteoWizard/pwiz/pull/4308) (merged 2026-06-16 as cf9af7ec3d)
+
+## Merge log
+### 2026-06-16 - Merged
+PR #4308 squash-merged to master as commit cf9af7ec3d. Shipped: ReconciledParquetWriter
++ PerFileResumeDriver extractions with unit tests (rec 1); ExecuteRescore -> RescoreOneFile
+sequencer (+ RescorePassInputs bundle) and ProcessFile -> ResolveCalibration (rec 2). Pure
+structural refactor, byte-identical (Stellar + Astral mode1+mode2), perf-neutral, self-review
+clean; Copilot's two single-line-if nits fixed. **Deferred to PR 4** (TODO-20260616_ospreysharp_debt_paydown_pr4):
+the two remaining god-methods (MergeNodeTask.Run, FirstJoinTask.PlanStage6), the rec-3
+unit-level characterization tests for the parity-locked giants, the ScoreAndDeduplicate
+extraction, and the gap-fill ParquetIndex latent-invariant guard. No follow-up issues filed.
 
 > PR 3 of the OspreySharp debt-paydown arc. See memory
 > project_ospreysharp_debt_paydown_arc for the full arc and
