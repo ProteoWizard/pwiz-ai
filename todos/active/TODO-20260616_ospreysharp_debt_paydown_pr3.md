@@ -52,11 +52,28 @@ Recommendations 1 + 2 + 3 from the review, in order. Tackle the parity-safe seam
 first, then the orchestrator decomposition behind the regression gate.
 
 ### Step 1 -- Extract the resume/IO seam, with unit tests (rec 1)
-- `ReconciledParquetWriter`: lift the reconciled-parquet reload/replace-by-
-  ParquetIndex/append-gap-fill/metadata-build/write out of
-  `PerFileRescoreTask.WriteReconciledParquet` (475-587). Unit-test the metadata
-  round-trip (osprey.reconciled / reconciliation_hash / search_hash fallback) and
-  the row-replace + gap-fill-append logic against a small fixture.
+- [x] `ReconciledParquetWriter` (DONE 2026-06-16, commit 584309176a on branch):
+  lifted `PerFileRescoreTask.WriteReconciledParquet` (was 475-587) into an
+  internal `ReconciledParquetWriter` (OspreySharp.Tasks) with two pure helpers --
+  `ApplyRescoredRows` (replace-by-ParquetIndex + skip Features==null + append
+  gap-fill + reassign index + out-of-range warn) and `BuildReconciliationMetadata`
+  (joinFileStems-present vs config fallback hash). Logging via `Action<string>`
+  callbacks, NOT PipelineContext, so it unit-tests without a live context. The
+  task now calls `ReconciledParquetWriter.Write(... ctx.LogInfo, ctx.LogWarning)`.
+  - Tests: `ReconciledParquetWriterTest` (2 methods) cover both helpers. Q2
+    resolved -- no parquet fixture needed; the pure helpers are the parity-
+    relevant logic. (A full Write round-trip via Path.GetTempFileName, the
+    IOTest idiom, can be added later if desired.)
+  - Gate: 0 inspection warnings; 385 tests pass (2 pre-existing skips); Stellar
+    regression mode 1 (vs golden) + mode 2 (resume==straight) PASS, blib
+    byte-identical (52,514,816 bytes).
+- [ ] `PerFileResumeDriver`: lift the sidecar probe-and-stamp logic shared by the
+  two tasks (PerFileRescoreTask 644-690 + 867-900; PerFileScoringTask 983-1114).
+  Unit-test skip decisions and sidecar validity directly. Decide (open Q3) whether
+  the two tasks UNIFY on one driver or just both call a shared helper -- their
+  output shapes differ (.scores.parquet vs .scores-reconciled.parquet).
+- ORIGINAL note retained: build a tiny parquet + sidecar fixture only if the
+  PerFileResumeDriver work needs it (the ReconciledParquetWriter seam did not).
 - `PerFileResumeDriver`: lift the sidecar probe-and-stamp logic shared by the two
   tasks (PerFileRescoreTask 644-690 + 867-900; PerFileScoringTask 983-1114). Unit-
   test skip decisions and sidecar validity directly. Decide (open Q3) whether the
