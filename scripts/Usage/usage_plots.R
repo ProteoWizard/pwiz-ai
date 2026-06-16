@@ -76,10 +76,11 @@ multi_user    <- nlevels(usage$user) > 1
 multi_machine <- nlevels(usage$machine) > 1
 
 # Marker for the all-history daily charts (05/07): a dashed line where the trailing-30-day
-# window — the period the cost bar/pie summaries cover — begins. Shown only once history
-# exceeds 30 days, otherwise the line would sit at/left of the first bar.
+# window — the period the cost bar/pie summaries cover — begins. Placed half a day before
+# recent_start so it falls in the GAP just left of the first included bar (not through it).
+# Shown only once history exceeds 30 days, otherwise the line would sit at/left of the first bar.
 window_marker <- if (recent_start > min(usage$date)) {
-  list(geom_vline(xintercept = recent_start, linetype = "dashed", color = "grey40"),
+  list(geom_vline(xintercept = recent_start - 0.5, linetype = "dashed", color = "grey40"),
        labs(caption = "dashed line: start of the trailing 30-day window summarized by the cost bar/pie charts"))
 } else NULL
 
