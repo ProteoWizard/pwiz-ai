@@ -44,11 +44,28 @@ start_date <- as.Date("2026-05-15")   # 28 days before the project's common star
 # rate" rather than an ever-growing all-time total, and a fair like-for-like comparison.
 recent_start <- Sys.Date() - 30
 
+# Friendly display names for the 'user' column — emails are noisy, and some (e.g.
+# Matt@proteinms.net) aren't even real addresses; they're just derived from the Drive label.
+# Keep names UNIQUE: if two teammates share a first name (e.g. Brian Pratt and a future Brian
+# Connolly), switch to first + last initial ("Brian P." / "Brian C."), or their rows would
+# merge into one. Unmapped users fall back to the email's local-part.
+user_display <- c(
+  "brendanx@proteinms.net" = "Brendan",
+  "matt@proteinms.net"     = "Matt",
+  "nicksh@proteinms.net"   = "Nick",
+  "vsharma@proteinms.net"  = "Vagisha",
+  "bspratt@proteinms.net"  = "Brian"
+)
+display_user <- function(u) {
+  nm <- unname(user_display[tolower(u)])
+  ifelse(is.na(nm), sub("@.*$", "", u), nm)
+}
+
 usage <- read_csv(csv_path, show_col_types = FALSE) |>
   mutate(date = as.Date(date)) |>
   filter(date < Sys.Date()) |>   # drop the current, still-partial day (e.g. a 06:00 snapshot of "today") so charts don't end on a misleading sliver
   filter(date >= start_date) |>  # shared baseline so longer-retained histories don't skew the comparison
-  mutate(user = factor(user), machine = factor(machine))
+  mutate(user = factor(display_user(user)), machine = factor(machine))
 
 # Pretty, version-ordered model labels for the legend: drop the redundant "claude-" prefix,
 # format like "Opus 4.8" / "Fable 5", and order by version DESCENDING (newest on top),
