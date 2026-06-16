@@ -207,21 +207,24 @@ Add this **final section** before moving to ai/todos/completed/:
 
 ### Build, Test, and Inspection Workflow
 
-**IMPORTANT**: AI agents (Claude Code, Cursor, GitHub Copilot, ChatGPT, etc.) should **NOT** attempt to build or run tests for this large project. Instead, follow this workflow:
+**IMPORTANT**: AI agents build and test their own changes through the project's
+wrapper scripts. These scripts exist specifically so an agent can self-verify
+without driving Visual Studio. Do not ask the developer to build or test what you
+can run yourself.
 
 #### After Making Code Changes
-1. **Ask the developer to inspect the changes** in Visual Studio 2022
-2. **Ask the developer to build the solution** (Ctrl+Shift+B or F6)
-3. **Ask the developer to run relevant tests** in Test Explorer
-4. **For larger changes: Ask the developer to run ReSharper inspection**
+1. **Build via the wrapper script** - `pwsh -File ./ai/scripts/Skyline/Build-Skyline.ps1` (add `-RunTests` to build and test; OspreySharp uses `ai/scripts/OspreySharp/Build-OspreySharp.ps1`)
+2. **Run the relevant tests** - `pwsh -File ./ai/scripts/Skyline/Run-Tests.ps1 -TestName <name>` (see `ai/CLAUDE.md` for common invocations)
+3. **Run ReSharper inspection on larger changes** - `Build-Skyline.ps1 -RunInspection` / `Build-OspreySharp.ps1 -RunInspection`
+4. **Fix any failures before committing** - a commit that does not build breaks the team (see `ai/CRITICAL-RULES.md`)
 
 #### What AI Agents Should Do
-- **DO**: Generate code, write tests, update files, suggest changes
-- **DO**: Explain what needs to be tested and why
-- **DO**: Update TODO file with what was changed
-- **DO**: Point to specific files/lines for developer review
-- **DON'T**: Run msbuild, invoke test runners, attempt full builds
-- **DON'T**: Commit before developer has reviewed and tested
+- **DO**: Generate code, write tests, update files
+- **DO**: Build, run tests, and run inspection via the wrapper scripts before committing
+- **DO**: Update the TODO file with what was changed
+- **DO**: Report build/test results plainly, including failures with their output
+- **DON'T**: Commit code that has not been built and tested
+- **DON'T**: Introduce a new build system or invoke raw msbuild/test runners directly when a wrapper script covers the task
 
 ### Context Switching
 When switching between LLM tools or sessions:

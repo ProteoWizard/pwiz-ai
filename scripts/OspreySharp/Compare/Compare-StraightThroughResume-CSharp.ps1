@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     The worker-mode strict gate (Compare-Stage7-Rehydration-Strict-CSharp.ps1)
-    exercises the --input-scores / --join-at-pass worker rehydration paths, but
+    exercises the per-task (--task) worker rehydration paths, but
     NOT the straight-through-RESUME deferrals: PerFileScoring (InputScores
     empty), FirstJoin (bundle == null), and PerFileRescore
     (!ExpectReconciledInput). Those fire only when the driver skips a task

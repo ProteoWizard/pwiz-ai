@@ -15,10 +15,16 @@ Perform full pre-commit workflow:
 * bullet 2
 * bullet 3
 
+Reported by <First>.
+
 See ai/todos/active/TODO-YYYYMMDD_feature.md
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
+
+Include the `Reported by <First>.` line only when the change came from a user
+report or request — see ai/docs/version-control-guide.md, "Crediting Reporters and
+Requesters".
 
 ## Bug-fix gate
 

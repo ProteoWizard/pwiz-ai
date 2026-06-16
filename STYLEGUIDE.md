@@ -199,7 +199,9 @@ All source files should include:
 
 **CRITICAL**: Comments should start with a capital letter (especially imperative sentences). True sentences should end with a period. Use `<see cref="ClassName">` for class references in XML docs.
 
-**CRITICAL**: Never use Unicode dashes (em dash, en dash) in comments or strings - always use a single ASCII hyphen `-`. These are visually indistinguishable in many UIs but cause encoding issues. Avoid all characters above ASCII 127 unless required by the domain.
+**CRITICAL**: In comments and string literals, use a single ASCII hyphen `-` for any dash. This bans two things:
+- **Unicode dashes** (em dash `U+2014`, en dash `U+2013`): visually indistinguishable in many UIs but cause encoding issues. Avoid all characters above ASCII 127 unless required by the domain.
+- **Double hyphen `--` used as an em-dash substitute** in prose comments (e.g. `// foo -- bar`). Human comments use a single `-`; a `--` is an LLM tell, and inside XML/Razor/Jam comments (`<!-- -->`) a literal `--` is a parse error. Write `// foo - bar` instead. (This does not apply to real code: the C# `--` operator, CLI flags like `--task`, or `--` inside a quoted string are fine.)
 
 See [ai/docs/style-guide.md](docs/style-guide.md) for detailed guidelines and examples.
 

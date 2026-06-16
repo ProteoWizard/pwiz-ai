@@ -761,7 +761,16 @@ public @NotNull Set<Class<?>> getUnitTests()
 }
 ```
 
-Run unit tests in a browser at: `http://localhost:8080/junit-run.view?module=MyModule`
+Run unit tests in a browser:
+
+- **All of a module's unit tests:** `http://localhost:8080/junit-run.view?module=MyModule`
+  (the module name, e.g. `TargetedMS`, `PanoramaPublic` — not the lowercase controller name).
+- **A single test class:** `http://localhost:8080/junit-run.view?testCase=<fully.qualified.ClassName>`.
+  For an inner `TestCase` class, encode the `$` as `%24`. Example:
+  `http://localhost:8080/junit-run.view?testCase=org.labkey.targetedms.parser.speclib.ElibCache%24TestCase`
+
+The server must be running the freshly built classes — `deployModule` (or your usual redeploy) after code
+changes so newly added/registered `TestCase` classes are picked up before you hit the URL.
 
 ### Running unit tests from the command line (Claude Code)
 

@@ -211,7 +211,7 @@ function Invoke-PipelineRun {
         Copy-Item $libcache (Join-Path $workdir ($library + '.libcache'))
     }
 
-    # Build CLI args. Full pipeline (no --join-at-pass), no diagnostic
+    # Build CLI args. Full pipeline (no --task), no diagnostic
     # dumps -- production wall.
     $cliArgs = @()
     foreach ($f in $files) {
@@ -331,7 +331,7 @@ function Invoke-PipelineRun {
             # Stage 5 aligned = percolator + protein FDR only.
             $stages['stage5'] = $percolatorSec + $protein
             # Stage 6 aligned += reconciliation portion previously in
-            # stage5. If stage6 wasn't emitted (e.g. --join-only exit),
+            # stage5. If stage6 wasn't emitted (e.g. --task FirstJoin exit),
             # we just publish reconciliation alone under stage6.
             if ($stages.ContainsKey('stage6')) {
                 $stages['stage6'] = $stages['stage6'] + $reconciliationSec

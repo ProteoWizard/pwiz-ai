@@ -42,13 +42,67 @@ pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -RunTests
 pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -RunInspection
 ```
 
-## Same-impl Regression (algorithm-affecting changes)
+## C#-side Refactor / Algorithm Regression
 
 Changes that touch scoring, calibration, LOESS, KDE, the SVM kernel,
-FDR thresholds, decoy generation, or the blib write path must also
-pass the OspreySharp-alone regression gate.  This compares the
-current OspreySharp build against a frozen baseline -- no Rust
-checkout required.
+FDR thresholds, decoy generation, or the blib write path -- and every
+OOP/structural refactor of the pipeline -- must pass two standing gates
+before commit: a CORRECTNESS gate (output unchanged) and a PERFORMANCE
+gate (speed not degraded).
+
+### Correctness gate (routine): regression.ps1
+
+The self-contained, straight-through end-to-end regression.  No Rust
+checkout required -- it compares against a committed OspreySharp golden
+(`osprey-regression.data/`) plus a resume self-consistency leg, both at
+1e-9.  This is the same harness TeamCity runs overnight on OspreySharp
+PRs.
+
+```powershell
+# Stellar (mode 1 vs golden + mode 2 resume): the routine per-change gate
+pwsh -File ./pwiz_tools/OspreySharp/regression.ps1 -Dataset Stellar
+
+# Stellar + Astral: before a behavior/perf-sensitive merge
+pwsh -File ./pwiz_tools/OspreySharp/regression.ps1 -Dataset All
+```
+
+Refresh the golden only on an intentional, reviewed behavior change:
+`regression.ps1 -Dataset All -CreateGolden`, then review the
+`osprey-regression.data/` text diff and commit it with the change.  See
+`pwiz_tools/OspreySharp/Regression/README.md`.
+
+### Performance gate (routine for refactors): Test-PerfGate.ps1
+
+A same-session A/B of the branch build vs the pinned `pwiz-perfbase`
+baseline worktree.  It builds both binaries with the identical toolchain,
+runs them interleaved (3-rep median), and fails only on a REAL regression
+(branch slower than baseline beyond threshold with non-overlapping noise
+bands).  This design is robust against the thermal / build-SDK drift that
+makes a number-in-HTML baseline throw false regressions (see
+`ai/todos/backlog/TODO-ospreysharp_sprint_stage1to4_perf_regression.md`).
+
+```powershell
+# Stellar branch-vs-baseline A/B: the routine per-refactor perf gate
+pwsh -File ./ai/scripts/OspreySharp/Test-PerfGate.ps1 -Dataset Stellar
+
+# Heavier check before a perf-sensitive merge
+pwsh -File ./ai/scripts/OspreySharp/Test-PerfGate.ps1 -Dataset Both
+```
+
+The baseline is `C:\proj\pwiz-perfbase` (a pinned pwiz worktree).  Advance
+it -- check out the new master HEAD there and rebuild -- only after a
+reviewed, intentional perf change lands, so future work measures against
+current HEAD.  On a FAIL, confirm code vs environment by re-running that
+dataset with `Measure-Pipeline.ps1 -Tool Both` and checking the Rust
+column (the change-immune anchor) held flat.
+
+### Bisection drill-down (when a gate goes red)
+
+`Test-Full-Regression.ps1` / `Test-Snapshot.ps1` are the stage-isolated
+same-impl snapshot tools -- slower (per-stage process restarts + dump
+overhead), but they localize a correctness divergence to a single stage.
+Use them to find WHERE a red `regression.ps1` diverged, not as the
+first-line gate.
 
 ```powershell
 # Smoke (~3 min): Stellar single
@@ -56,27 +110,20 @@ pwsh -File ./ai/scripts/OspreySharp/Test-Full-Regression.ps1 -Smoke
 
 # Quick (~10 min): Stellar + Astral single
 pwsh -File ./ai/scripts/OspreySharp/Test-Full-Regression.ps1 -Quick
-
-# Full (~70 min): Stellar + Astral all -- pre-PR gate
-pwsh -File ./ai/scripts/OspreySharp/Test-Full-Regression.ps1
 ```
-
-If your change is intentional, refresh the baseline AFTER PR
-approval:
-
-```powershell
-pwsh -File ./ai/scripts/OspreySharp/Test-Full-Regression.ps1 -CreateSnapshot
-```
-
-See [Test-Snapshot.ps1](Test-Snapshot.ps1) for the per-stage
-comparator details, and [Test-Full-Regression.ps1](Test-Full-Regression.ps1)
-for the wrapper.
 
 ## Cross-impl Regression (rare; for ports of Rust algorithm changes)
 
 Only relevant when you also need to confirm OspreySharp hasn't
 drifted from Rust osprey at the 1e-9 gate.  Requires a Rust checkout
 (`<project root>/osprey` by default, override via `$env:OSPREY_ROOT`).
+
+> Note: `Compare-EndToEnd-Crossimpl.ps1 -SkipRust` used to be the routine
+> C#-refactor gate (it borrowed a cached Rust blib as the "expected").
+> `regression.ps1` (above) replaced it -- a committed C# golden, no Rust
+> checkout, and none of the `-Files`-mismatch false-fail footgun.  Reach
+> for `Compare-EndToEnd-Crossimpl.ps1` (with Rust) only for the occasional
+> "did we drift from Rust?" check after porting a Rust algorithm change.
 
 ```powershell
 # Stellar single (~5 min) -- quickest cross-impl sanity

@@ -124,3 +124,76 @@ parquet "expected" files that skyline-prism produces from the same `PRISM.parque
 
 **Next session handoff**: this Progress Log entry is self-contained (cross-machine); no `ai/.tmp`
 handoff file. Run `/pw-continue` and start from "Next steps" above.
+
+### 2026-05-20 - RT fix verified on second machine
+
+Resumed via `/pw-continue` on the second computer (worktree `sky_peakscoringandnormalization`,
+HEAD = `efce936b95`). `pwsh` 7.5.5 is installed here, so used `Run-Tests.ps1` directly.
+
+- Built Release: `Build-Skyline.ps1 -SourceRoot sky_peakscoringandnormalization -Configuration Release`.
+- Ran `TestMedianPolishSmall,TestMedianPolishMedium` via
+  `Run-Tests.ps1 -TestName ... -SourceRoot ... -Configuration Release` (note: `Run-Tests.ps1`
+  defaults to Debug; must pass `-Configuration Release` to find the Release `TestRunner.exe`).
+- **Both PASSED.** `TestMedianPolishMedium` max diffs: median-polished 2.49e-14, summed 7.9e-4,
+  median-normalized 0.011, **RT-loess normalized 0.088** (tol 1). The single-mean-RT fix
+  (`GetPeptideMeanRetentionTime`) resolves the prior `Assert.IsNotNull` failure on
+  `VVERHQSAC(unimod:4)K` replicate 1. Handoff next-step #2 is complete.
+- skyline-prism `generate_peptide_rollups.py` already committed+pushed here
+  (`9e2939f` on branch `20260520_GenerateExpectedFiles`) -> handoff next-step #3 also complete.
+
+**Remaining**: (a) resolve `ImputeMissingValues` default for production median-polish callers
+(`ProteinQuantifier`, `Peptide` databinding); (b) expose RT_LOESS in group comparisons +
+Peptide Settings > Quantification UI.
+
+### 2026-05-20 - Protein-level rollup parity (issue #4097)
+
+Extended `MedianPolishScenariosTest` to verify Skyline's peptide -> protein median polish matches
+skyline-prism, on top of the existing peptide checks.
+
+- **skyline-prism** (`scripts/generate_peptide_rollups.py`, branch `20260520_GenerateExpectedFiles`):
+  added a peptide -> protein median-polish rollup. Peptides are grouped into proteins by the
+  `Protein` column of `PRISM.parquet` (skyline-prism's "Skyline CSV-based parsimony"), so grouping
+  matches the Skyline document exactly - no FASTA, no document edits. Shared peptides (142 in the
+  medium set) are included under each protein they map to, matching Skyline's per-protein peptide
+  nodes. Reuses `rollup_protein_matrix(method="median_polish", min_peptides=2)`. Writes two new
+  expected files per dataset: `protein_medianpolish_median_normalized.parquet` and
+  `protein_medianpolish_rtloess_normalized.parquet` (LOG2). Regenerated for Small + Medium `.data`
+  folders (peptide files were rewritten identically -> reverted to avoid binary churn).
+- **min_peptides decision**: chose 2 (the skyline-prism config-template default). At 2, skyline-prism's
+  rollup reduces to "1 peptide -> use directly; >=2 -> median polish", which Skyline's
+  `MedianPolisher` already does (keys.Count==1 returns the peptide directly). So **no `ProteinQuantifier`
+  change was needed** - it already matches. (min_peptides=3 would have sent 2-peptide proteins to a
+  linear sum; not what the lab ships.)
+- **Test** (`MedianPolishScenariosTest.cs`): added `ReadExpectedProteinAreas` (keyed by protein name =
+  `PeptideGroupDocNode.Name`) and `VerifyProteinAreas`, which builds a `ProteinQuantifier` per protein
+  from its `PeptideQuantifier`s (peptide+protein summarization MEDIANPOLISH, normalization
+  EQUALIZE_MEDIANS / RT_LOESS, `ImputeMissingValues=true`) and compares `log2(abundance)` to expected.
+  RT-loess gated by the same `MIN_PEPTIDES_FOR_RT_LOESS` (100) as the peptide check.
+- **Scope**: only the **median-polished-peptide** inputs (combos 1 & 2). Transition-summed + peptide-level
+  normalization is NOT verifiable without a Skyline change: `GetPeptideLog2Abundances(AVERAGING)` passes
+  the normalization down to the transition level and never calls `ApplyPeptideLevelAdjustment`, and that
+  adjustment derives factors from the polished matrix (skyline-prism normalizes each method's own
+  matrix). Deferred.
+- **Result**: built Release, ran `TestMedianPolishSmall` + `TestMedianPolishMedium` -> both PASS. Protein
+  max diffs: Small median-normalized = 0 (1 protein, exact); Medium median-normalized = 0.024 (tol 0.1),
+  RT-loess = 0.064 (tol 1).
+
+### 2026-05-20 - RT LOESS graph: Legend + Peptides "Show" menu items
+
+Added two independent toggles to the RT Loess Curves graph's "Show" context submenu (alongside the
+mutually-exclusive Median / Normalization Factor / Normalized Median items):
+- **Legend**: shows/hides the graph legend (`Settings.Default.RtLoessShowLegend`, default true).
+  Replaced the old logic that auto-hid the legend in Normalized Median mode - it's now user-controlled.
+- **Peptides**: shows/hides the individual per-precursor (RT, log2 area) points for the currently
+  selected replicate (`RtLoessShowPeptides`, default false). One dot per precursor. Each dot's Y is
+  shifted by the same transform that maps a replicate's raw curve to the displayed curve, so dots always
+  scatter around the visible curve: Median -> raw log2 area; Normalization Factor -> `P - G(rt)` (raw
+  minus global median, centers on the factor); Normalized Median -> `P - adjustment` (normalized).
+  Clicking a dot selects that peptide in the Targets tree (`StateProvider.SelectPath`).
+
+Files: `Settings.settings`/`.Designer.cs`, `AreaGraphController` (two bool props),
+`PeakAreasContextMenu` (.Designer/.cs/.resx - two checkable items + separator + handlers),
+`SkylineGraphs.cs` (`SetRtLoessShowLegend`/`SetRtLoessShowPeptides`), `AreaRtLoessGraphPane`
+(`AddPeptidePoints`/`TransformPeptidePoint`, `_peptidesCurve`, `TryFindPeptideAt`, legend logic),
+`GraphsResources` ("Peptides" label). New test `RtLoessGraphTest` (toggles + click-to-select);
+built Release, `TestRtLoessGraph` + `TestMedianPolishSmall` PASS.

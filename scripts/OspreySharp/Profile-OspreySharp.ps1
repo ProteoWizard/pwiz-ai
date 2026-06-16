@@ -148,12 +148,13 @@ foreach ($p in $patterns) {
 
 # Set up environment
 $env:RUST_LOG = "info"
-# Calibration uses an env var (no CLI analog yet); Scoring uses --no-join
-# (replaces the retired OSPREY_EXIT_AFTER_SCORING env var). Full sets neither.
+# Calibration uses an env var (no CLI analog yet); Scoring uses
+# --task PerFileScoring (Stages 1-4, replaces the retired
+# OSPREY_EXIT_AFTER_SCORING env var). Full sets neither.
 $extraAppArgs = @()
 switch ($Stage) {
     "Calibration" { $env:OSPREY_EXIT_AFTER_CALIBRATION = "1" }
-    "Scoring"     { $extraAppArgs += "--no-join" }
+    "Scoring"     { $extraAppArgs += @("--task", "PerFileScoring") }
 }
 if ($MaxWindows -gt 0) { $env:OSPREY_MAX_SCORING_WINDOWS = "$MaxWindows" }
 

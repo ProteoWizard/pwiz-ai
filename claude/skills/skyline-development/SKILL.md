@@ -48,6 +48,7 @@ Read these files to understand project constraints and patterns:
 - **Line endings: CRLF** - Windows standard
 - **Private fields: `_camelCase`** - Not `m_` prefix
 - **Always include `Co-Authored-By: Claude <noreply@anthropic.com>`** in commits
+- **CLI args must work via MCP `RunCommand()`** - Every SkylineCmd argument is also driven by an LLM through the in-process Skyline MCP, which saves via the GUI path (`SkylineFiles.SaveDocument`), not `CommandLine`'s. Don't thread per-invocation state through the `SaveDocument`/`Serialize*` signatures (the MCP path drops it); use a scoped ambient override set in `CommandLine.RunInner` and read at the convergence point all save paths share (`DocumentWriter` → `CompactFormatOption.Effective`). See PR #4288.
 
 ## Slash Commands Available
 

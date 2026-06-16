@@ -205,6 +205,12 @@ When creating issues for unhandled exceptions:
 
 ## Rules
 
+- **Capture the reporter**: When the issue originates from a user report, record
+  who reported it in the body (name + link to the original report); look it up if
+  needed (`mcp__labkey__get_support_thread` on the thread `rowId`, or the reporter
+  field from `get_issue_details`). This is what later flows into the fix's
+  commit/PR credit and the release notes — see ai/docs/version-control-guide.md,
+  "Crediting Reporters and Requesters".
 - **Complete transfer**: The GitHub Issue must contain ALL information from the source. No summarizing or omitting technical details.
 - **Self-contained**: After migration, the issue should be usable without referencing the original TODO file.
 - **Deletable source**: The goal is that `ai/todos/backlog/` ceases to exist - all backlog items live in GitHub Issues.

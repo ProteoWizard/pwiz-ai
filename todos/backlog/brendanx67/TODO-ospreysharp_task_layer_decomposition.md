@@ -61,8 +61,11 @@ dedup bucket; do NOT drive-by merge):
    (`feedback_parity_vs_impact`, `feedback_bit_parity_tolerance`).
 3. **Dedup the inline binary search** in `FragmentMath.HasTopNFragmentMatch`
    (duplicates `ScoringMath`).
-4. **Retire dead `CosineSimilarity`** in `AbstractScoringTask` (no callers tree-wide) --
-   the one SAFE, trivial cleanup; can go on its own or with the consolidation.
+4. ~~**Retire dead `CosineSimilarity`** in `AbstractScoringTask` (no callers tree-wide) --
+   the one SAFE, trivial cleanup; can go on its own or with the consolidation.~~
+   **DONE 2026-06-11** in Stage 1 of `TODO-20260611_ospreysharp_decouple_abstractscoring`
+   (removed both `CosineSimilarity` and `TheoreticalIsotopeEnvelope`; a later dead-code
+   pass should not expect them).
 5. *(Optional, low)* Freeze `OspreyConfig` hash-affecting fields after pipeline entry
    (PR-A secondary item) -- make the "don't mutate after entry" invariant type-enforced.
 

@@ -41,10 +41,14 @@ points at:
 
 Cross-impl parity work additionally needs:
 - **`ai/docs/osprey-development-guide.md`** - steel-thread parity
-  doctrine, Stage 1-5 diagnostic dumps, `Compare-Percolator.ps1`,
-  bisection methodology.
+  doctrine, Stage 1-5 diagnostic dumps, bisection methodology.
 - **`ai/docs/osprey-crossimpl-validation-guide.md`** - validation
   guide for cross-impl test runs.
+- **`ai/scripts/OspreySharp/Compare/README.md`** - the cross-impl
+  bridge scripts (`Compare-EndToEnd-Crossimpl.ps1`), needed only for
+  the rare "did this drift us from Rust?" check. Older per-stage
+  comparators (`Compare-Percolator.ps1`, `Test-Features.ps1`) are
+  archived under `Compare/archive/`.
 
 OspreySharp and cross-impl TODOs live at
 `ai/todos/active/TODO-*_osprey_sharp.md`.
@@ -75,8 +79,12 @@ Rust-side key constraints:
   only.)
 - **Upstream-style commit prose**, no Skyline 10-line cap, no
   `Co-Authored-By: Claude` unless maintainer opts in.
-- **Parity gate after scoring/calibration changes**: Stellar +
-  Astral `Test-Features.ps1` must pass at 1e-6 per PIN feature.
+- **Parity gate after scoring/calibration changes**: confirm
+  OspreySharp still matches Rust with the cross-impl gate
+  `ai/scripts/OspreySharp/Compare/Compare-EndToEnd-Crossimpl.ps1`
+  on Stellar + Astral; see `Compare/README.md` for the tolerance.
+  (The former per-PIN-feature `Test-Features.ps1` is archived under
+  `Compare/archive/`.)
 
 Rust-only TODOs live at `ai/todos/active/TODO-OR-*.md`
 (`OR` = osprey rust).
@@ -89,17 +97,39 @@ Rust-only TODOs live at `ai/todos/active/TODO-OR-*.md`
 3. OspreySharp and cross-impl TODOs:
    `ai/todos/active/TODO-*_osprey_sharp.md`.
 
-## Before You Commit
+## Build, Test, and Commit
 
-- **OspreySharp**: run
-  `pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -RunTests -Summary`
-  (mirrors the Skyline pre-commit gate for the OspreySharp solution).
-- **Rust osprey**: run
-  `pwsh -File ./ai/scripts/OspreySharp/Build-OspreyRust.ps1 -Fmt -Clippy -RunTests`
+You can and should build, test, and run OspreySharp yourself - the wrapper
+scripts in `ai/scripts/OspreySharp/` exist for exactly that. Do not ask the
+developer to build what you can run. `ai/scripts/OspreySharp/PRE-COMMIT.md`
+and `README.md` are the authoritative gate references.
+
+- **OspreySharp pre-commit** (build + tests + zero-warning inspection, ~30s):
+  `pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -Configuration Debug -RunTests -RunInspection`
+- **C#-side refactor / algorithm-affecting changes** (scoring, calibration,
+  LOESS/KDE, SVM, FDR, decoy generation, blib) and every OOP/structural
+  refactor: pass two standing gates.
+  - **Correctness** (output unchanged): the self-contained straight-through
+    regression vs a committed C# golden + a resume leg, both at 1e-9 (no Rust
+    checkout):
+    `pwsh -File ./pwiz_tools/OspreySharp/regression.ps1 -Dataset Stellar`
+    (`-Dataset All` before a behavior/perf-sensitive merge). Also the overnight
+    TeamCity gate.
+  - **Performance** (speed not degraded): a same-session A/B of the branch vs the
+    pinned `pwiz-perfbase` baseline worktree (3-rep median, fails only on a real
+    regression with non-overlapping bands):
+    `pwsh -File ./ai/scripts/OspreySharp/Test-PerfGate.ps1 -Dataset Stellar`.
+  `Test-Full-Regression.ps1` / `Test-Snapshot.ps1` are the stage-isolated
+  bisection drill-down for WHERE a red correctness gate diverged, not the
+  first-line gate. See `PRE-COMMIT.md`.
+- **Rust osprey**:
+  `pwsh -File ./ai/scripts/OspreySharp/Compare/Build-OspreyRust.ps1 -Fmt -Clippy -RunTests`
   (mirrors maccoss/osprey CI gates).
-- **After scoring or calibration changes (either side)**: run
-  `Test-Features.ps1` on Stellar + Astral; 1e-6 per PIN feature must
-  hold.
+- **Cross-impl drift check** (rare; "did we drift from Rust?", e.g. after porting
+  a Rust algorithm change):
+  `pwsh -File ./ai/scripts/OspreySharp/Compare/Compare-EndToEnd-Crossimpl.ps1 -Files All`
+  on Stellar + Astral (re-runs Rust). This replaces the old `-SkipRust` routine
+  use, which `regression.ps1` superseded. See `Compare/README.md`.
 
 ## Key Repositories
 
