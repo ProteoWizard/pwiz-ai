@@ -75,6 +75,14 @@ model_order <- function(ids) {
 multi_user    <- nlevels(usage$user) > 1
 multi_machine <- nlevels(usage$machine) > 1
 
+# Marker for the all-history daily charts (05/07): a dashed line where the trailing-30-day
+# window — the period the cost bar/pie summaries cover — begins. Shown only once history
+# exceeds 30 days, otherwise the line would sit at/left of the first bar.
+window_marker <- if (recent_start > min(usage$date)) {
+  list(geom_vline(xintercept = recent_start, linetype = "dashed", color = "grey40"),
+       labs(caption = "dashed line: start of the trailing 30-day window summarized by the cost bar/pie charts"))
+} else NULL
+
 daily <- usage |>
   group_by(date) |>
   summarise(across(c(total_tokens, est_cost_usd, input_tokens,
@@ -150,13 +158,13 @@ save_plot(p4, "04_token_composition.png")
 # --- 5 & 6. Team views (only meaningful once >1 teammate reports) ----------------------
 if (multi_user) {
   p5 <- usage |>
-    filter(date >= recent_start) |>
     group_by(date, user) |>
     summarise(total_tokens = sum(total_tokens), .groups = "drop") |>
     ggplot(aes(date, total_tokens, fill = user)) +
     geom_col() +
     scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
-    labs(title = "Claude usage — daily tokens by teammate (last 30 days)", x = NULL, y = "tokens", fill = "user")
+    labs(title = "Claude usage — daily tokens by teammate", x = NULL, y = "tokens", fill = "user") +
+    window_marker
   save_plot(p5, "05_tokens_by_user.png")
 
   p6 <- usage |>
@@ -192,13 +200,13 @@ if (multi_user) {
 # --- 7 & 8. Per-machine views (one person running Claude on several computers) ---------
 if (multi_machine) {
   p7 <- usage |>
-    filter(date >= recent_start) |>
     group_by(date, machine) |>
     summarise(total_tokens = sum(total_tokens), .groups = "drop") |>
     ggplot(aes(date, total_tokens, fill = machine)) +
     geom_col() +
     scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
-    labs(title = "Claude usage — daily tokens by machine (last 30 days)", x = NULL, y = "tokens", fill = "machine")
+    labs(title = "Claude usage — daily tokens by machine", x = NULL, y = "tokens", fill = "machine") +
+    window_marker
   save_plot(p7, "07_tokens_by_machine.png")
 
   p8 <- usage |>
