@@ -123,6 +123,27 @@ branch: 584309176a, c098f80ca6, eaab6dab3d, + the ProcessFile commit.
 3. Unify PerFileScoring/PerFileRescore resume logic on one driver, or just have
    both call a shared helper? (Output shapes differ.)
 
+## Pre-merge gate results (2026-06-16, all green)
+- **Self-review** (`/pw-self-review`, fresh-context agent): CLEAN, no findings at
+  any severity. Independently verified the dropped null-check (provably non-null),
+  the continue->return counter equivalence, ResolveCalibration out-param definite
+  assignment + preserved ordering, PerFileResumeDriver call-site equivalence,
+  BuildReconciliationMetadata hash-regime + keys, and concurrency (helper touches
+  only per-file clones).
+  - Latent invariant it flagged (NOT a PR-3 regression; pre-existing behavior):
+    `ApplyRescoredRows` reassigns gap-fill `ParquetIndex` in place, so passing the
+    SAME in-memory FdrEntry list to `ReconciledParquetWriter.Write` twice would
+    re-append. Not reachable today -- each pipeline/worker invocation hydrates
+    fresh per-file lists and the loop visits each file once. Noted for the future.
+- **Full regression** `regression.ps1 -Dataset All`: PASS. Stellar mode1+mode2
+  (blib 52,514,816) and Astral mode1+mode2 (blib 136,622,080), all byte-identical.
+- **Perf gate** `Test-PerfGate.ps1 -Dataset Stellar`: PASS (perf-neutral). First run
+  flagged total +5.0% but entirely in high-variance stage1to4 (baseline's own
+  intra-run spread was ~24%, one rep flat); re-run on a quiet machine gave total
+  -1.6% (stage1to4 -3.6%, branch faster). Two runs straddling zero == environmental
+  noise, not a code regression (pure code motion can't regress 5%). Verify-before-
+  blaming confirmed environment, not code.
+
 ## Gates (the standing OspreySharp cadence -- see osprey-development skill)
 - Per commit: `Build-OspreySharp.ps1 -Configuration Debug -RunTests -RunInspection`
   (0 warnings) + `regression.ps1 -Dataset Stellar` (mode 1 + mode 2).
