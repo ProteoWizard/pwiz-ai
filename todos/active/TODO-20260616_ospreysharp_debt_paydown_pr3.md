@@ -5,7 +5,7 @@
 - **Base**: `master` (pwiz at 6ee60e4e43, just merged #4304)
 - **Created**: 2026-06-16
 - **Status**: In Progress
-- **PR**: (pending)
+- **PR**: [#4308](https://github.com/ProteoWizard/pwiz/pull/4308)
 
 > PR 3 of the OspreySharp debt-paydown arc. See memory
 > project_ospreysharp_debt_paydown_arc for the full arc and
