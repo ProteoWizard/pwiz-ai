@@ -90,11 +90,24 @@ byte-identical. Two unpushed pwiz commits on the branch: 584309176a, c098f80ca6.
 - Build a tiny parquet + sidecar test fixture first if none exists (open Q2).
 
 ### Step 2 -- Decompose the orchestration loops (rec 2)
-- `PerFileRescoringOrchestrator` (+ a peer for ProcessFile): reduce
-  `ExecuteRescore` (612-911) and `ProcessFile` (1119-1413) to ~80-line sequencers
-  that call named step methods (load -> score -> overlay -> gap-fill -> write).
-  Characterize, do NOT re-derive, the scoring calls inside. Lean on the 41-min
-  nightly as the integration backstop for these big mechanical moves.
+- [x] `ExecuteRescore` -> sequencer (DONE 2026-06-16, commit eaab6dab3d): lifted
+  the 250-line per-file loop body into a named `RescoreOneFile`; `ExecuteRescore`
+  is now a ~50-line setup + accumulate sequencer. Cross-file inputs bundled into a
+  private `RescorePassInputs` (one collaborator object vs a dozen positional
+  params). Pure code motion + dropped a now-provably-redundant null check.
+- [x] `ProcessFile` -> extracted `ResolveCalibration` (DONE 2026-06-16, commit
+  pending): lifted the ~115-line calibration phase (load cached/Rust JSON or
+  compute via Calibrator, then persist the calibration JSON) into a named helper;
+  ProcessFile drops ~294 -> ~180. Scoring orchestration left whole (characterized,
+  not re-derived, per feedback_no_unverified_ports).
+  - Optional further cut (not done): a `ScoreAndDeduplicate` helper around
+    RunCoelutionScoring + the two dedup passes (~44 lines) would take ProcessFile
+    to ~135. Deferred -- diminishing returns vs the calibration extraction.
+- Each move verified output byte-identical (Stellar mode 1 + mode 2, blib
+  52,514,816 bytes) + 0 inspection warnings + 389 tests pass.
+
+**Step 2 COMPLETE** (both god-methods decomposed). Unpushed pwiz commits on the
+branch: 584309176a, c098f80ca6, eaab6dab3d, + the ProcessFile commit.
 
 ### Step 3 -- Characterization tests on parity-locked giants (rec 3)
 - Wrap RunCoelutionScoring, ScoreCandidate, RunPercolatorFdr (FirstJoinTask
