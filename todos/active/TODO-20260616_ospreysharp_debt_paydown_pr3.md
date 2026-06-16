@@ -67,13 +67,21 @@ first, then the orchestrator decomposition behind the regression gate.
   - Gate: 0 inspection warnings; 385 tests pass (2 pre-existing skips); Stellar
     regression mode 1 (vs golden) + mode 2 (resume==straight) PASS, blib
     byte-identical (52,514,816 bytes).
-- [ ] `PerFileResumeDriver`: lift the sidecar probe-and-stamp logic shared by the
-  two tasks (PerFileRescoreTask 644-690 + 867-900; PerFileScoringTask 983-1114).
-  Unit-test skip decisions and sidecar validity directly. Decide (open Q3) whether
-  the two tasks UNIFY on one driver or just both call a shared helper -- their
-  output shapes differ (.scores.parquet vs .scores-reconciled.parquet).
-- ORIGINAL note retained: build a tiny parquet + sidecar fixture only if the
-  PerFileResumeDriver work needs it (the ReconciledParquetWriter seam did not).
+- [x] `PerFileResumeDriver` (DONE 2026-06-16, commit c098f80ca6 on branch):
+  Q3 resolved -- SHARED HELPER, not a unified driver (Brendan's call). The driver
+  owns ONLY the sidecar mechanics: `IsCurrent` (File.Exists && IsValid), `ClearStale`
+  (Delete), `Stamp` (Write + try/catch + warn via Action callback). Each task keeps
+  its own load/compute/output shape. Removed the duplicated try/catch sidecar-write
+  block from both PerFileScoringTask and PerFileRescoreTask; the rescore task's
+  failed-output parquet delete stays inline (output mechanics, not sidecar).
+  - Tests: `PerFileResumeDriverTest` (2 methods) -- probe/stamp/clear round-trip
+    (incl. the File.Exists gate and key-mismatch) and swallowed write failure.
+  - Gate: 0 inspection warnings; 389 tests pass (2 pre-existing skips); Stellar
+    regression mode 1 + mode 2 PASS, blib byte-identical (52,514,816 bytes). Mode 2
+    (resume) directly exercises the touched paths.
+
+**Step 1 COMPLETE.** Both resume/IO seams extracted + unit-tested, output
+byte-identical. Two unpushed pwiz commits on the branch: 584309176a, c098f80ca6.
 - `PerFileResumeDriver`: lift the sidecar probe-and-stamp logic shared by the two
   tasks (PerFileRescoreTask 644-690 + 867-900; PerFileScoringTask 983-1114). Unit-
   test skip decisions and sidecar validity directly. Decide (open Q3) whether the
