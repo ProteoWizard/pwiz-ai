@@ -54,7 +54,8 @@ user_display <- c(
   "matt@proteinms.net"     = "Matt",
   "nicksh@proteinms.net"   = "Nick",
   "vsharma@proteinms.net"  = "Vagisha",
-  "bspratt@proteinms.net"  = "Brian"
+  "bspratt@proteinms.net"  = "Brian",
+  "ritach@proteinms.net"   = "Rita"
 )
 display_user <- function(u) {
   nm <- unname(user_display[tolower(u)])
