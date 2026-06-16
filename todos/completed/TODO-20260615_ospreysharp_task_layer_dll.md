@@ -12,8 +12,8 @@
 - **Branch**: `Skyline/work/20260615_ospreysharp_task_layer_dll`
 - **Base**: `master` (cut from post-#4302 master, 6752500b)
 - **Created**: 2026-06-15
-- **Status**: In Progress
-- **PR**: (pending)
+- **Status**: Completed
+- **PR**: [#4304](https://github.com/ProteoWizard/pwiz/pull/4304) (merged 2026-06-16)
 
 ## Decisions (Brendan, 2026-06-15)
 1. **Fold into the existing `OspreySharp.Tasks` DLL** (not a new OspreySharp.Pipeline
@@ -259,3 +259,18 @@ PR #4304 opened. Copilot left 9 inline comments. Addressed 3, pushed back on 6:
 the build, surfacing an LLM habit. Audit of OspreySharp: 139 Unicode em/en-dashes +
 235 ASCII ` -- `-in-comments, none caught by any verifier (inspection passes clean).
 STYLEGUIDE.md updated to ban both. Verifier + cleanup = separate effort (TBD scope).
+
+### 2026-06-16 - Merged
+PR #4304 merged as commit 6ee60e4e43 (squash). Shipped all four planned commits:
+the Skyline version scheme + OspreyVersion.Current with the OSPREY_VERSION_OVERRIDE
+bit-parity seam, the cache-version hard-fail hardening, the ProfilerHooks move, and
+the lift of the seven task bodies + RescoreHydration/RescoreCompaction into the
+OspreySharp.Tasks DLL (pipeline layer now a unit-testable DLL). Gated green
+throughout: build + 0-warning inspection + 383 tests, Stellar + Astral regression
+(mode 1 + mode 2), perf-neutral (-1.4% Stellar), fresh-context self-review, and the
+Copilot round (a real AssemblyVersion-pinning bug caught and fixed + verified; six
+translation-proof nits pushed back and resolved). Out of scope / deferred: the full
+thin-exe (AnalysisPipeline + OspreyFileDiagnostics + the diagnostics bootstrap stay
+in the exe), PR 3 (extract collaborators + migrate coverage off the nightly), and the
+IOspreyDiagnostics interface split. Follow-up filed: the dash-hygiene verifier +
+cleanup backlog plan (ai/todos/backlog/TODO-dash_hygiene_verifier_and_cleanup.md).
