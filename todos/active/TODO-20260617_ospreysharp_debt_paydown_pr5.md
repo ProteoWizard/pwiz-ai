@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260617_ospreysharp_debt_paydown_pr5` (to be created)
 - **Base**: `master` (after PR 4 #4310 merged as 42bab53085)
 - **Created**: 2026-06-17
-- **Status**: Planned (not started)
+- **Status**: Pre-work DONE (cross-impl audit + expanded gate, no drift found); PR 5 feature work (FDR-ownership move) NOT started
 - **PR**: (pending)
 
 > PR 5 of the OspreySharp OOP debt-paydown arc. Seeded by the 2026-06-17 blind
@@ -169,3 +169,6 @@ Do NOT retire the diagnostics -- the baseline proves they still discriminate.
   multi-file parallelism (default `min(nFiles, cores)`) collide on it ("file in use").
   Gate works around it with `OSPREY_MAX_PARALLEL_FILES=1`. Fix: per-stem filename
   (or skip when file-parallel). Diagnostic-only; does not affect output.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260617_ospreysharp_debt_paydown_pr5.md` before starting work.
