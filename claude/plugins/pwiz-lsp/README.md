@@ -7,7 +7,7 @@ Lives in the pwiz-ai repository so the team shares patterns, naming, and docs.
 
 | Plugin | Purpose |
 |---|---|
-| `csharp-lsp` | C# LSP via Microsoft.CodeAnalysis.LanguageServer (Roslyn LSP from the VS Code C# extension). Scoped to `pwiz_tools/`, covers Skyline, OspreySharp, AutoQC, SkylineBatch, Shared, etc. Handles both .NET Framework 4.7.2 and modern .NET. |
+| `csharp-lsp` | C# LSP via Microsoft.CodeAnalysis.LanguageServer (Roslyn LSP from the VS Code C# extension). Workspace is `${PWIZ_LSP_DIR:-${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools}` (PWIZ_LSP_DIR is the full `pwiz_tools` path; set it per checkout in multi-checkout layouts — see [`csharp-lsp/README.md`](csharp-lsp/README.md#selecting-the-workspace)). Covers Skyline, OspreySharp, AutoQC, SkylineBatch, Shared, etc. Handles both .NET Framework 4.7.2 and modern .NET. |
 
 ## Install
 

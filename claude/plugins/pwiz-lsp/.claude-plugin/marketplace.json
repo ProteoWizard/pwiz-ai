@@ -5,7 +5,7 @@
     {
       "name": "csharp-lsp",
       "source": "./csharp-lsp",
-      "description": "C# LSP via Microsoft.CodeAnalysis.LanguageServer (Roslyn LSP from the VS Code C# extension). Scoped to ${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools; handles .NET Framework 4.7.2 and modern .NET."
+      "description": "C# LSP via Microsoft.CodeAnalysis.LanguageServer (Roslyn LSP from the VS Code C# extension). Workspace = ${PWIZ_LSP_DIR:-${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools} (PWIZ_LSP_DIR is the full pwiz_tools path; set it to pick a checkout in multi-checkout layouts); handles .NET Framework 4.7.2 and modern .NET."
     }
   ]
 }
