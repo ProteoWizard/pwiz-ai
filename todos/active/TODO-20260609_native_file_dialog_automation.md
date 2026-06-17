@@ -153,11 +153,15 @@ reach it.
     implemented and then reverted in favor of this -- fail-fast keeps the single
     connection free, so no second connection is needed to dismiss a hung dialog.)
   * **Done since:** `SetFormValue` selects radio buttons; `ClickFormButton` drives
-    any `IButtonControl` (e.g. StartPage tiles); the native **Save** dialog.
-  * **Not yet done (gaps the PRM tutorial review section needs):**
+    any `IButtonControl` (e.g. StartPage tiles); the native **Save** dialog;
+    ranked control matching (exact > symbol-stripped, prefer visible+enabled, so
+    "Next"/"Finish" match "Next >"/the live Finish button); and **graph
+    right-click context-menu invocation** -- `InvokeContextMenuItem` builds a
+    graph's context menu via its `ContextMenuBuilder` and walks it by path
+    (`ContextMenuConnectorTest` passes; exposed as `skyline_invoke_context_menu_item`,
+    tool count 50 -> 51). This unblocks most of the "Reviewing the Data" section.
+  * **Not yet done (remaining gaps for the PRM tutorial):**
     `GetFormState` (enumerate a form's controls into the hierarchical DTO);
-    **graph right-click context-menu** invocation (`InvokeMenuItem` is main-menu
-    only -- this is the biggest unlock for the "Reviewing the Data" section);
     `SelectTab` (tabbed settings dialogs); `SelectTreeNode` + tree pop-up
     pick-lists (manual precursor picking); send-key; and **derived-label
     matching** so a text field can be addressed by its adjacent `Label`
@@ -165,7 +169,7 @@ reach it.
     `SkylineMcpTest` only runs end to end against an
     *installed* AiConnector tool (else `Assert.Inconclusive`); after this
     change the tool must be repackaged (`SkylineAiConnector.csproj`) and
-    reinstalled for the new 50-tool count to be exercised. (Standalone
+    reinstalled for the new 51-tool count to be exercised. (Standalone
     `dotnet build` of `SkylineAiConnector.csproj` fails on a pre-existing
     net472 `System.Text.Json` restore quirk in `SkylineTool.csproj` -- build it
     via the solution/MSBuild with restore, not standalone.)
