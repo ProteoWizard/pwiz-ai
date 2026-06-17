@@ -837,6 +837,23 @@ code --install-extension ms-dotnettools.csharp
 Get-ChildItem "$env:USERPROFILE\.vscode\extensions\ms-dotnettools.csharp-*\.roslyn\Microsoft.CodeAnalysis.LanguageServer.exe"
 ```
 
+> **For LLM assistants — `code` not on PATH right after a fresh install.** When
+> you install VS Code via winget in the same session, `code` will NOT be on PATH
+> until the terminal restarts, so `code --install-extension ...` fails with
+> "term not recognized". Invoke the CLI by full path instead (user install
+> location):
+> ```powershell
+> $code = Join-Path $env:LOCALAPPDATA "Programs\Microsoft VS Code\bin\code.cmd"
+> & $code --install-extension ms-dotnettools.csharp
+> ```
+
+> **Verify the runtime the Roslyn host needs.** Read its `runtimeconfig.json`
+> (`...\.roslyn\Microsoft.CodeAnalysis.LanguageServer.runtimeconfig.json`) for
+> the pinned `tfm` (e.g. `net10.0`), then confirm that runtime is installed with
+> `dotnet --list-runtimes | Select-String "Microsoft.NETCore.App 10"`. A missing
+> match is the exit-code-150 crash described below. Installing VS 2026 also
+> provides .NET 10.
+
 The wrapper script (`ai/scripts/lsp/Invoke-RoslynLsp.ps1`) discovers the
 latest installed C# extension dynamically, so subsequent updates do not
 break the plugin.
@@ -905,20 +922,57 @@ not a misconfiguration. Wait and re-run; do not start "fixing" the config.
 > Get-Content "$env:USERPROFILE\.vscode\extensions\ms-dotnettools.csharp-*\.roslyn\Microsoft.CodeAnalysis.LanguageServer.runtimeconfig.json"
 > ```
 
-**Path independence.** The plugin's `workspaceFolder` and launcher-script path
-are anchored on `${CLAUDE_PROJECT_DIR}` (the directory Claude Code was launched
-from), not a hard-coded `C:/proj`. So the plugin works unchanged for any project
-root — `C:\proj`, `D:\Dev`, `E:\repos` — as long as you launch Claude Code from
-that root (which the root `CLAUDE.md` already requires) and the layout is sibling
-mode (`ai/` and `pwiz/` side by side under the root). No per-developer editing of
-`plugin.json` is needed.
+**Path independence.** The launcher-script path is anchored on
+`${CLAUDE_PROJECT_DIR}` (the directory Claude Code was launched from), not a
+hard-coded `C:/proj`, so it works unchanged for any project root — `C:\proj`,
+`D:\Dev`, `E:\repos` — as long as you launch Claude Code from that root (which
+the root `CLAUDE.md` already requires).
 
-**Sibling pwiz clones.** The scope (`${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools`)
-covers the primary `pwiz/` clone only. For secondary clones (`skyline_26_1/`,
-etc.), either launch Claude Code from that clone's root or create a personal
-sibling plugin with its own `workspaceFolder`. Roslyn LSP's workspace is set via
-LSP `initialize` (not a CLI arg), so dynamic in-session switching is not feasible
-today.
+**Selecting the workspace — `PWIZ_LSP_DIR`.** Roslyn LSP indexes exactly one
+workspace folder, fixed when the server starts (set via LSP `initialize`, not a
+CLI arg — so it cannot be switched in-session). The plugin resolves it from an
+environment variable with a fallback:
+
+```jsonc
+"workspaceFolder": "${PWIZ_LSP_DIR:-${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools}"
+```
+
+`PWIZ_LSP_DIR` is the **full `pwiz_tools` path** (not the checkout root): the
+`pwiz` segment belongs only to the single-clone fallback, where the clone is
+named `pwiz`. In multi-checkout layouts the clone is named something else and
+contains `pwiz_tools` directly, so that segment lives inside the `:-` default.
+
+- **Single-clone layout** (one `pwiz/` clone beside `ai/`): do nothing.
+  `PWIZ_LSP_DIR` stays unset and the workspace falls back to
+  `${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools` — the original zero-config behavior.
+- **Multi-checkout layout** (many named clones beside `ai/` — e.g. `BugFix/`,
+  `IMoffset/`, `master_clean/` — and no `pwiz/` folder): set `PWIZ_LSP_DIR` to
+  that checkout's `pwiz_tools` folder *before* launching Claude Code. Dot-source the
+  helper from your PowerShell `$PROFILE` (use your own project root):
+
+  ```powershell
+  . C:\Dev\ai\scripts\lsp\Enable-PwizLsp.ps1
+  $PwizLspDefault = 'master_clean'   # optional: checkout for a no-arg launch
+  ```
+
+  Then start Claude Code with `skyclaude` instead of `claude`:
+
+  ```powershell
+  skyclaude IMoffset   # scope the C# LSP to <root>\IMoffset\pwiz_tools, then launch
+  skyclaude            # use $PwizLspDefault, or the 'pwiz' fallback in single-clone layouts
+  ```
+
+  Each session is typically dedicated to one checkout, so per-session scoping
+  fits naturally and avoids mid-session reindex churn. `Enable-PwizLsp.ps1`
+  derives the project root from its own location, so it needs no per-developer
+  path edits.
+
+> **Nested-default caveat.** `${VAR:-default}` is documented for `.mcp.json` and
+> LSP config claims parity, but the *nested* `${CLAUDE_PROJECT_DIR}` inside the
+> default is not separately documented. Multi-checkout machines always set
+> `PWIZ_LSP_DIR`, so they are unaffected. If a single-clone machine ever indexes
+> nothing on a bare `claude`, set `PWIZ_LSP_DIR` explicitly (or use `skyclaude`)
+> and confirm the resolved path in the Roslyn log under `ai/.tmp/state/roslyn-logs/`.
 
 **Memory pressure.** Roslyn LSP on the full pwiz_tools workspace can sit at
 2-3 GB resident. If that becomes a problem, `/plugin disable csharp-lsp@pwiz-lsp`
