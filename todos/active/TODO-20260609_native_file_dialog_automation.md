@@ -2,8 +2,10 @@
 
 ## Status
 
-Active -- on the feature branch: initial implementation + base/subclass refactor
-landed (2 commits). PR not yet opened.
+Active -- on the feature branch. Native Open + **Save** dialog automation, MCP
+StartPage support, and the generic form verbs (incl. radio buttons and custom
+clickable controls) have landed. The PRM tutorial's Import Peptide Search wizard
+now runs end to end over the connector. PR not yet opened.
 
 ## Branch Information
 
@@ -50,6 +52,31 @@ reach it.
   capture a native window by HWND. MCP server `skyline_get_open_forms` adds an
   `IsNative` column.
 * `NativeFileDialogTest` -- covers discovery, image capture, cancel, and open.
+
+## Done (2026-06-17 session)
+
+* **Save file dialog automation** (`6be78fc6f`). The modern Save dialog is NOT
+  the classic combo (`AutomationId 1148`) the Open path keys on: its file-name
+  field is a Win32 `Edit` (`AutomationId 1001`, inside `FileNameControlHost`) and
+  its Save button a Win32 `Button` (control id `1` = IDOK), neither exposing a UI
+  Automation Value/Invoke pattern. They ARE real windows, so `SaveFileDialogAutomation`
+  drives them with `WM_SETTEXT` / `BM_CLICK`. Extracted a `FileDialogAutomation`
+  base shared by Open and Save; `GetOpenForms` now lists `FileDialog:Save As` and
+  `SetFormValue`/`ClickFormButton` drive it like Open. Verified live end to end (the
+  earlier "Save dialogs are undriveable" note is now obsolete).
+* **MCP works while the StartPage is showing** (`Make ActionBoxControl clickable.`).
+  The tool service now starts before the StartPage and marshals via a captured
+  `WindowsFormsSynchronizationContext`, so `GetOpenForms`/`GetFormImage`/
+  `ClickFormButton` work with no `SkylineWindow`. `ScreenCapture` consent uses
+  `Program.MainWindow ?? Program.StartWindow` as owner. `ToolService` no longer
+  requires the window at construction.
+* **Generic clickable controls**: `ClickFormButton` now drives any `IButtonControl`,
+  and `ActionBoxControl` (the StartPage tiles) implements it -- so Blank Document /
+  Import-PRM tiles are clickable. `SetFormValue` now selects **radio buttons**
+  (needed for the PRM workflow and retention-time-filtering options).
+* **PRM tutorial** (`More steps of PRM tutorial`): `Documentation/Tutorials/PRM/
+  mcp-steps.txt` now drives File>Open through the completed Import Peptide Search
+  import (2 replicates) over the connector, validated live against the mzML data.
 
 ## Key findings (hard-won; keep for the MCP work)
 
@@ -125,9 +152,17 @@ reach it.
     multi-connection JsonToolServer approach to the same blocking problem was
     implemented and then reverted in favor of this -- fail-fast keeps the single
     connection free, so no second connection is needed to dismiss a hung dialog.)
-  * **Not yet done:** `GetFormState` (enumerate a form's controls into the
-    hierarchical DTO); the broader verbs (`SelectTab`, `SelectTreeNode`,
-    send-key). Also: `SkylineMcpTest` only runs end to end against an
+  * **Done since:** `SetFormValue` selects radio buttons; `ClickFormButton` drives
+    any `IButtonControl` (e.g. StartPage tiles); the native **Save** dialog.
+  * **Not yet done (gaps the PRM tutorial review section needs):**
+    `GetFormState` (enumerate a form's controls into the hierarchical DTO);
+    **graph right-click context-menu** invocation (`InvokeMenuItem` is main-menu
+    only -- this is the biggest unlock for the "Reviewing the Data" section);
+    `SelectTab` (tabbed settings dialogs); `SelectTreeNode` + tree pop-up
+    pick-lists (manual precursor picking); send-key; and **derived-label
+    matching** so a text field can be addressed by its adjacent `Label`
+    (e.g. "Ion match tolerance") rather than only its control name. Also:
+    `SkylineMcpTest` only runs end to end against an
     *installed* AiConnector tool (else `Assert.Inconclusive`); after this
     change the tool must be repackaged (`SkylineAiConnector.csproj`) and
     reinstalled for the new 50-tool count to be exercised. (Standalone
