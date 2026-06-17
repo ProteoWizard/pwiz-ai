@@ -30,6 +30,38 @@
               "-File",
               "${CLAUDE_PROJECT_DIR}/.claude/hooks/Check-ReporterCredit.ps1"
             ]
+          },
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/Restrict-Cd.ps1"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/Restrict-SearchScope.ps1"
+            ]
+          }
+        ]
+      },
+      {
+        "matcher": "Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/Restrict-SearchScope.ps1"
+            ]
           }
         ]
       },
@@ -43,6 +75,21 @@
               "-NoProfile",
               "-File",
               "${CLAUDE_PROJECT_DIR}/.claude/hooks/Inject-PathBasedSkill.ps1"
+            ]
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/Set-ActiveCheckout.ps1"
             ]
           }
         ]
