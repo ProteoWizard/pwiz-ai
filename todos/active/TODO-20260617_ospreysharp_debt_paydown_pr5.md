@@ -143,3 +143,29 @@ Do NOT retire the diagnostics -- the baseline proves they still discriminate.
   STALE per the blind review (scoring seam clean: lower layers see
   `IScoringDiagnostics` / `IOspreyDiagnostics`; no static call to the exe-level
   facade). Re-verify and update the memory during Phase A.
+
+### CROSS-IMPL AUDIT RESOLVED + EXPANDED GATE BUILT (2026-06-17)
+- **No drift, anywhere.** The "278-row scores.parquet" was NOT a regression: commit
+  #4261 ("Stopped Stage 6 from overwriting the Stage 4 scores parquet") changed what
+  scores.parquet HOLDS (Stage-4 462802 now; reconciled 463080 moved to
+  .scores-reconciled.parquet). Rust still overwrites in place, so the old end-to-end
+  walk compared Rust-reconciled vs C#-Stage-4. Proof: a56498ca78 Stage-4 (`--no-join`)
+  = 462802 = current Stage-4. Every other boundary diff was timestamp / Rust-only
+  diagnostics / ULP / compression-codec / intentional `osprey_version`.
+- **Stable Rust reference set** built by `Compare/Build-CrossImplReference.ps1`
+  (two passes: `--no-join` freezes Stage-4 parquet, straight-through freezes
+  reconciled + side-cars + Stage7 + blib), at `D:\test\osprey-runs\stellar\_crossimpl_reference\`
+  with a README (Rust 696c938 / v26.6.1). Not committed (large); regenerate locally;
+  PanoramaWeb someday.
+- **Expanded occasional gate** `Compare/Compare-CrossImpl-Reference.ps1`: OspreySharp
+  live vs frozen reference, stage-correct (C# Stage-4 scores.parquet -> ref
+  .scores.stage4.parquet @1e-9), reconciliation.json byte-equal, `.bin` value-level
+  (`bin_tol_diff.py`), Stage7 + blib @1e-9 (`osprey_version` whitelisted in
+  Compare-Blib-Crossimpl). calibration.json dropped (bisection-debug artifact).
+  **Ran net8.0: OVERALL PASS, all 14 boundaries green.** regression.ps1 stays the
+  everyday gate; this is the periodic cross-impl double-check.
+- **BACKLOG (minor product bug surfaced):** `OspreyFileDiagnostics.WriteCalibrationSummary`
+  writes a hardcoded `cs_cal_summary.txt` (no per-file stem), so diagnostics-on +
+  multi-file parallelism (default `min(nFiles, cores)`) collide on it ("file in use").
+  Gate works around it with `OSPREY_MAX_PARALLEL_FILES=1`. Fix: per-stem filename
+  (or skip when file-parallel). Diagnostic-only; does not affect output.
