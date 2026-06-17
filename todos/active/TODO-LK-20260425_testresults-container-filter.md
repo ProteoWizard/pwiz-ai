@@ -4,8 +4,14 @@
 - **Branch**: `26.3_fb_testresults-container-filter` (MacCossLabModules)
 - **Base**: `release26.3-SNAPSHOT`
 - **PR**: [#645](https://github.com/LabKey/MacCossLabModules/pull/645) (open)
-- **Status**: Fix done and tested; PR open, awaiting review.
+- **Status**: Tested green; Copilot review addressed (3 follow-up commits pushed). PR awaiting human review/merge.
 - **Related**: split from `TODO-LK-20260403_testresults-bugs.md`.
+
+## Review status (Copilot)
+- **#3 null container** -> fixed: `getUsers` throws on null container (commit `d71d8aa`).
+- **blank computer name + nullability** -> fixed: `ParseAndStoreXML` rejects a blank `id`; `@NotNull`/`@Nullable` added (commit `fa01688`). From the repo review catalog (fail-fast §13, null-safety §2).
+- **#1/#2 `List.getFirst()` JDK compat** -> DECLINED + resolved: repo is Java 25 (`gradle.properties` sourceCompatibility/targetCompatibility=25), so `getFirst()` (Java 21+) is fine. Reply posted on both threads; both resolved.
+- Catalog-based review (against `docs/labkey/code-review-feedback-catalog.md`) found no High issues; remaining items (table-name constants §4, test container-path style) deemed optional / house-style.
 
 ## What the fix does
 Scope the `testresults` tables to the folder being viewed (query-layer only, no DB change). Several
@@ -45,16 +51,21 @@ etc.) are unaffected.
   `save_run_comparison` (nightly.py:1515) look up a child table by run id with no `testruns` join, so
   they return nothing if the run is in a folder other than the one passed (default `Nightly x64`).
   Optional fix: add `container_filter='AllFolders'` (run ids are unique).
-- **Behavior change**: `list_computer_status`, `deactivate_computer`, `reactivate_computer` now
-  resolve/list computers within the folder. The `active` flag is per-folder (`userdata`), so this is
-  correct — just pass the folder you mean. Don't use `AllFolders` for `list_computer_status` (its
-  `userdata` join would duplicate rows).
+- **Computer status is per-folder, and the tools already handle it**: `list_computer_status`,
+  `deactivate_computer`, `reactivate_computer` pass the same `container_path` to both the `user`-table
+  lookup and the `setUserActive` write, so they resolve and flip the per-folder `userdata.active` flag
+  in the folder you target — no change needed. Caveats: the lookup now finds a computer only if it has
+  a run in that folder (always true for an active nightly tester, since `testruns` rows are historical);
+  and don't pass `AllFolders` to `list_computer_status` (its `userdata` join would duplicate rows).
 - **Where it surfaces**: `pw-daily-research` and `pw-daily` are the smoke-test targets (they call
   `list_computer_status` + the by-run-id tools). Only `list_computer_status` is wired into a command;
   `deactivate_computer`/`reactivate_computer` are ad hoc — test directly.
 
 ## Next steps
-1. PR #645 open — address review, then merge. (Shares the test file with the bug-fixes branch;
+1. PR #645: await human review, then merge. (Shares the test file with the bug-fixes branch;
    whichever merges second needs a keep-both merge of `release26.3-SNAPSHOT`.)
-2. Optional: add the `AllFolders` fix to the 3 MCP tools.
+2. Optional: add the `AllFolders` fix to the 3 by-runId MCP tools.
 3. Add the missing leak/hang filter tests.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260616_testresults-container-filter.md` before starting work.
