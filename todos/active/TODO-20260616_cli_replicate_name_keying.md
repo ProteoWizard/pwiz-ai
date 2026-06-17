@@ -1,11 +1,41 @@
 # Consistent replicate-name keying in CLI (mProphet features export & peak boundary import)
 
 ## Branch Information
-- **Branch**: TBD
+- **Branch**: `Skyline/work/20260616_cli_replicate_name_keying`
 - **Base**: `master`
-- **Status**: Backlog
+- **Status**: Active (started 2026-06-16)
+- **Checkout**: `C:\Dev\cmdline`
 - **GitHub Issue**: (pending)
 - **Support thread**: https://skyline.ms/home/support/announcements-thread.view?rowId=75143
+
+## Design decisions (2026-06-16)
+- **Multi-file ambiguity**: when a replicate name resolves to a replicate that
+  holds more than one file (multi-file replicate / multi-sample `.wiff`), FAIL
+  with an explanatory message (per Brian) rather than guessing. Message should
+  point the user at `FileName` (and optionally `SampleName`) to disambiguate.
+- **Precedence when both columns present**: `FileName` wins per-row; the
+  replicate-name path is used only when `filename` is absent/empty for that row.
+  This keeps existing `FileName` behavior byte-identical (incl. the mProphet
+  export -> peak-boundary import roundtrip in MProphetResultsHandlerTest, where
+  both columns are present), so ambiguity-fail only triggers on the
+  replicate-name path.
+- **No CommandArgs/help changes**: both are file-format changes on existing args
+  (`--exp-mprophet-features` output column; `--import-peak-boundaries` auto-
+  detected input column), so no `CommandArgUsage.resx` / `CommandLine.html`
+  regeneration gate (unlike #4288).
+- **Export column placement**: `ReplicateName` is the **LAST** column (after the
+  variable-length `main_var_/var_` feature columns), per Brian, so NO existing
+  column index shifts -- protects any position-based downstream parser of the
+  mProphet feature file. Always-on (not opt-in). This still changes
+  `MProphetExpected.csv` -> must regenerate the checked-in expected files
+  (en-US + intl) inside `Test\MProphetResultsHandlerTest.zip` (IsSaveAll).
+- **Downstream risk (assessed)**: by-name parsers (R mProphet / pyprophet) ignore
+  the extra named column; the only at-risk consumer is a positional/strict-schema
+  script, which the last-column placement protects. Import side is zero-risk
+  (recognizes an optional extra input column only).
+- **Docs**: in-repo CLI help only for now (enrich `--import-peak-boundaries`
+  help in `CommandArgUsage.resx` to mention the `ReplicateName` column; this
+  re-incurs the `CommandLine.html` regen gate). skyline.ms wiki deferred.
 
 ## Problem
 
