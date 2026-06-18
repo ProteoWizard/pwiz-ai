@@ -1,10 +1,10 @@
 # TODO-20260618_ospreysharp_debt_paydown_pr6.md -- OspreySharp debt-paydown PR 6 (ProteinFdrEngine: finish the FDR-ownership move)
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260618_ospreysharp_debt_paydown_pr6` (to be created off master)
+- **Branch**: `Skyline/work/20260618_ospreysharp_debt_paydown_pr6` (created off master @ 3c464c983b)
 - **Base**: `master` (after PR 5 #4314 merged as 3c464c983b)
 - **Created**: 2026-06-18
-- **Status**: Ready to start (PR 5 merged)
+- **Status**: In Progress
 - **PR**: (pending)
 
 > PR 6 of the OspreySharp OOP debt-paydown arc. Finishes the FDR-ownership move
@@ -40,12 +40,35 @@ finding) and RETURN a dump/early-exit signal the Tasks-layer caller acts on; it 
 not call `Environment.Exit` from inside `OspreySharp.FDR`. Reuse PR 5's cut-list
 approach.
 
+> **CORRECTION (resolved in-session, 2026-06-18):** the framing above is loose --
+> the engine does **NOT** take `IOspreyDiagnostics`. PR 5's Phase A spike proved
+> `OspreySharp.Diagnostics` references `OspreySharp.FDR` (a back-edge), so an
+> `FDR -> Diagnostics` dependency would be a project-reference cycle. Re-verified
+> the csproj graph this session: FDR -> {Core, ML, Chromatography} only; Diagnostics
+> -> FDR; Tasks -> {FDR, Diagnostics}. So `IOspreyDiagnostics` (Diagnostics project)
+> is unreachable from the engine. The engine takes `Action<string> logInfo` only
+> (mirroring `PercolatorEngine`) and RETURNS the parsimony / FDR artifacts; the Tasks
+> facade keeps the `ctx.Diagnostics?.Write...` dumps AND the `ExitAfterDump` decision.
+> `FdrDiagnostics` (the env-var-gated dumps in `ProteinFdr.cs`) is a *different* class
+> that lives in the FDR project, which is why it stays inside the algorithm code.
+
 ## Secondary (only if still warranted) -- decompose RunPercolator in place
 `RunPercolator` now lives in `OspreySharp.FDR/PercolatorEngine.cs` (PR 5 moved it but
 did not carve it). If it is still a meaningful giant (check current LOC -- the file is
 ~352 lines total, so it may already be modest), extract a `PercolatorTrainer`
 (folds + standardizer + scoring) by pure motion in its final home. Skip if it no
 longer warrants it.
+
+> **DEFERRED to a follow-up PR (decided 2026-06-18).** Checked LOC in-session:
+> `PercolatorFdr.RunPercolator` (PercolatorFdr.cs:205-645) is still ~440 lines, so it
+> DOES warrant a carve -- but it is orthogonal to PR 6's protein-FDR consolidation and
+> is the single most cross-impl-parity-sensitive method in the tree. A clean
+> `PercolatorTrainer` extraction needs a result/context object (standardizer, fold
+> models, trainSubset, foldAssignments, stdFeatures, finalScores are densely
+> interwoven across the TrainOnly short-circuit), not trivial pure motion. Per the
+> developer's call, PR 6 ships as the clean byte-identical ProteinFdrEngine PR; the
+> RunPercolator carve gets its own focused tranche (PR 5 explicitly allowed "PR 6+").
+> Backlog it alongside the PR 7 scorer-fork work.
 
 ## Out of scope
 - **`CoelutionScorer.ScoreCandidate` + AbstractScoringTask fork** -> PR 7
@@ -65,6 +88,60 @@ longer warrants it.
   -Dataset Stellar` -- should stay all-green (confirms no drift from Rust). Reference
   set is local at `D:\test\osprey-runs\stellar\_crossimpl_reference\`; regenerate with
   `Compare/Build-CrossImplReference.ps1 -Force` if absent.
+
+## Progress (2026-06-18)
+Branch `Skyline/work/20260618_ospreysharp_debt_paydown_pr6` off master @3c464c983b.
+
+- **Introduced `ProteinFdrEngine`** (`OspreySharp.FDR/ProteinFdrEngine.cs`), the shared
+  orchestration the three tasks now call:
+  - `RunFirstPass(entries, lib, config, logInfo)` -- delegates the compute to the
+    existing pure `ProteinFdr.RunFirstPassProteinFdr`, adds the summary logging
+    (moved out of the FirstJoin facade), returns `FirstPassProteinFdrResult`.
+    `logInfo` may be null (silent) for the rehydration path.
+  - `RunSecondPass(entries, lib, config, logInfo)` -- full run-wide composite moved
+    verbatim from `MergeNodeTask.RunProteinFdr` (collect / detected-peptide gate /
+    parsimony / picked-protein FDR / logging / `PropagateProteinQvalues(true,true)`),
+    minus the two diagnostic-dump blocks. Returns a new `SecondPassProteinFdrResult`
+    (detectedPeptides / parsimony / proteinFdr) for the facade's dumps.
+- **Rewired all three call sites** to the engine (thin facades):
+  - `FirstJoinTask.RunFirstPassProteinFdr` -> `engine.RunFirstPass(ctx.LogInfo)` + the
+    Stage-6 `DumpProteinFdr` / `ProteinFdrOnly`->`ExitAfterDump` block kept in Tasks.
+  - `MergeNodeTask.RunProteinFdr` -> `engine.RunSecondPass(ctx.LogInfo)` + the two
+    Stage-7 dump blocks (`DumpDetectedPeptides`, `DumpStage7ProteinFdr` /
+    `Stage7ProteinFdrOnly`->`ExitAfterDump`) kept in Tasks.
+  - `PerFileRescoreTask` rehydration -> `engine.RunFirstPass(..., null)` (silent).
+- **Dump/early-exit inversion** per the corrected Phase A finding: the engine never
+  touches `IOspreyDiagnostics` or `Environment.Exit`; it returns artifacts and the
+  facade owns dumps + exit. Second-pass propagation now runs inside the engine before
+  the facade dump (was: dump-before-propagate). Output-invariant -- the Stage-7 dumps
+  read only parsimony/proteinFdr (not the stubs propagation mutates), and the
+  `*-Only` exit kills the process so the in-memory propagation is unobservable. This
+  also matches the first-pass ordering (RunFirstPassProteinFdr already propagates
+  before the facade dump).
+- Gate: Build Debug -RunTests -RunInspection = **0 warnings, 390 pass** (2 cross-impl
+  skipped). `regression.ps1 -Dataset Stellar` = **PASS** (mode 1 vs golden + mode 2
+  resume, both byte-identical; blib 52,514,816 B == PR 5 baseline). Committed as
+  `3d8e7d9df4`.
+- Pre-merge correctness: `regression.ps1 -Dataset All` = **PASS** (Stellar + Astral,
+  both modes byte-identical; Stellar blib 52,514,816 B, Astral blib 136,622,080 B).
+- **Fresh-context self-review** (`/pw-self-review`) = clean, no correctness defects
+  (reviewer diffed old-vs-new method bodies, confirmed output equivalence). Two LOW
+  findings addressed in a follow-up commit:
+  1. `RunSecondPass` log calls now `logInfo?.Invoke(...)` (null-safe, symmetric with
+     `RunFirstPass`); doc updated to allow null. Removes a latent NRE for a future
+     silent second-pass caller.
+  2. Added an `INVARIANT` note to `WriteStage6ProteinFdrDump` /
+     `WriteStage7ProteinFdrDump` (OspreyFileDiagnostics): dump only from passed-in
+     artifacts, never the FdrEntry stubs (since the engine propagates before the
+     facade dumps -- an assumption the first-pass Stage-6 dump already relied on).
+  Follow-up gated: Build Debug -RunTests -RunInspection 0 warnings/390 pass +
+  Stellar regression byte-identical.
+- **Perf gate**: `Test-PerfGate.ps1 -Dataset Stellar` (standing pre-merge cadence) =
+  PENDING (running). Expected flat -- pure motion, no hot-path change -- but run to
+  honor the documented gate.
+- **Cross-impl reference check SKIPPED** (justified): the change is byte-identical to
+  the committed golden on Stellar + Astral, so it cannot have drifted from the frozen
+  Rust reference; re-running `Compare-CrossImpl-Reference.ps1` would add no signal.
 
 ## Notes
 - `project_ospreysharp_diagnostics_bleed_blocks_scoring_extraction` is STALE: the
