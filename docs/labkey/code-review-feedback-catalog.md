@@ -5,9 +5,9 @@ generated: 2026-06-18
 sources: ~820 human code-review comments + Copilot/CodeQL findings across ALL PRs
          (repo-wide, regardless of author) in LabKey/targetedms and
          LabKey/MacCossLabModules, fetched via `gh api`.
-regenerate: run fetch_review_catalog.py then digest_review_catalog.py
-            (C:\Users\vsharma\WORK\), then re-synthesize this file from the
-            digests. Bump `generated:` above.
+regenerate: scripts in C:\Users\vsharma\WORK\ClaudeSessions\LabKeyReviewCatalog\
+            (refresh_review_catalog.ps1 orchestrates fetch -> digest -> claude -p
+            synthesis). Bump `generated:` above.
 -->
 
 A checklist of issues reviewers repeatedly flag in these two repos. Each entry is
