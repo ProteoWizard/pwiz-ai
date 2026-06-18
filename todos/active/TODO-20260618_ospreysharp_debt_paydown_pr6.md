@@ -5,7 +5,7 @@
 - **Base**: `master` (after PR 5 #4314 merged as 3c464c983b)
 - **Created**: 2026-06-18
 - **Status**: In Progress
-- **PR**: (pending)
+- **PR**: [#4315](https://github.com/ProteoWizard/pwiz/pull/4315)
 
 > PR 6 of the OspreySharp OOP debt-paydown arc. Finishes the FDR-ownership move
 > that PR 5 (#4314, PercolatorEngine + q-value consolidation) explicitly deferred:
@@ -137,11 +137,15 @@ Branch `Skyline/work/20260618_ospreysharp_debt_paydown_pr6` off master @3c464c98
   Follow-up gated: Build Debug -RunTests -RunInspection 0 warnings/390 pass +
   Stellar regression byte-identical.
 - **Perf gate**: `Test-PerfGate.ps1 -Dataset Stellar` (standing pre-merge cadence) =
-  PENDING (running). Expected flat -- pure motion, no hot-path change -- but run to
-  honor the documented gate.
+  **PASSED** -- total median -2.2% (branch slightly faster), no real regression.
+  stage7 (protein FDR) +2.3% median (info, within noise); stage6 +6.1% WARN is
+  untouched reconcile code and inconsistent across reps (+8.5/+6.1/+0.9).
 - **Cross-impl reference check SKIPPED** (justified): the change is byte-identical to
   the committed golden on Stellar + Astral, so it cannot have drifted from the frozen
   Rust reference; re-running `Compare-CrossImpl-Reference.ps1` would add no signal.
+- **PR [#4315](https://github.com/ProteoWizard/pwiz/pull/4315)** opened (2 commits:
+  `3d8e7d9df4` engine + `653cc7d077` self-review fixes). **Copilot: reviewed all 6
+  files, generated no comments.** Awaiting human review.
 
 ## Notes
 - `project_ospreysharp_diagnostics_bleed_blocks_scoring_extraction` is STALE: the
