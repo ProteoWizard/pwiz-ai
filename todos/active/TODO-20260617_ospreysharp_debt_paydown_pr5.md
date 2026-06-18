@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260617_ospreysharp_debt_paydown_pr5` (to be created)
 - **Base**: `master` (after PR 4 #4310 merged as 42bab53085)
 - **Created**: 2026-06-17
-- **Status**: Pre-work DONE (cross-impl audit + expanded gate, no drift found); PR 5 feature work (FDR-ownership move) NOT started
-- **PR**: (pending)
+- **Status**: Pre-work DONE; Phase A spike DONE; Phase B (FDR-ownership move) DONE; Phase C (q-value unify + competition why-two) DONE. 4 commits, each byte-identical (Stellar mode1+mode2). Pending: branch push, pre-merge gates (regression All + perf), self-review, PR.
+- **PR**: [#4314](https://github.com/ProteoWizard/pwiz/pull/4314)
 
 > PR 5 of the OspreySharp OOP debt-paydown arc. Seeded by the 2026-06-17 blind
 > `/pw-oop-review` (`ai/.tmp/20260617-oop-review-report.txt`) plus the informed
@@ -137,6 +137,125 @@ commits on the 278-row parquet drop (and recon.json if real) to attribute each s
 same method that reached a56498ca78; (3) freeze a56498ca78 boundary outputs as the
 committed C#-vs-C# per-stage local golden (the durable diagnostics regression).
 Do NOT retire the diagnostics -- the baseline proves they still discriminate.
+
+## Phase A DELIVERABLE (2026-06-17): the cut-list -- DONE
+Spike complete. Read the four FDR-orchestration methods + every call site +
+the project-reference graph. **Headline: the coupling is far thinner than the
+review feared, and the dependency direction *forces* the dump-stays-in-Tasks
+inversion -- it is required, not merely preferable.**
+
+### Root-cause finding: FDR -> Diagnostics is NOT acyclic (it is a back-edge)
+`OspreySharp.Diagnostics.csproj` already references `OspreySharp.FDR`
+(Diagnostics names FDR domain types: FdrEntry, ProteinParsimonyResult,
+ReconcileAction, PeptideScore). So **FDR cannot depend on Diagnostics** -- that
+would be a project-reference cycle. Consequence: the FDR engines must NOT take
+`IOspreyDiagnostics`, and must NOT call `OspreyDiagnosticsLog.ExitAfterDump`
+(also in the Diagnostics project). The engine RETURNS the dump payload + a
+signal; the Tasks-layer facade owns the `ctx.Diagnostics?.Write...` dump and the
+`ExitAfterDump` decision. This is exactly the inversion the plan called for, now
+confirmed mandatory by the existing graph (not a stylistic choice).
+
+### What each FDR-orchestration method actually touches on `ctx`
+Verified by reading FirstJoinTask.cs:1218-1576. The heavy compute already takes
+NO ctx (PercolatorFdr.RunPercolator / BuildTrainingSubset /
+ScorePopulationAndComputeFdr / ProteinFdr.RunFirstPassProteinFdr are pure FDR
+statics). The four Tasks-layer wrappers use ctx for only two things:
+- `RunPercolatorFdr` (1218): `ctx.LogInfo` x9, `ctx.LogWarning` (dispatcher). NO
+  Diagnostics, NO Exit, NO Get/Publish, NO ExitCode.
+- `RunPercolatorStreaming` (1400): `ctx.LogInfo` x2 only.
+- `RunSimpleFdr` (1475): `ctx.LogInfo` only.
+- `RunFirstPassProteinFdr` (1524): `ctx.LogInfo` x2 + the ONLY diagnostics block:
+  `ctx.Diagnostics?.DumpProteinFdr` / `WriteStage6ProteinFdrDump(bestScores,
+  proteinFdr.PeptideQvalues)` / `ProteinFdrOnly` -> `ExitAfterDump` (1569-1575).
+The byproduct registry (Get/Publish) and ExitCode are touched by the *surrounding*
+FirstJoinTask.Run / Stage-6 planning code (445-803), which STAYS in Tasks. The
+engine boundary is clean.
+
+### The cut-list (what each engine takes instead of `ctx`)
+- **Logging** -> `Action<string> logInfo` (+ `logWarning` for the dispatcher
+  default-case). Established pattern: `new CoelutionScorer(ctx.LogInfo,
+  ctx.Diagnostics as IScoringDiagnostics)` (AbstractScoringTask.cs:321). Pure
+  delegate, zero project dependency.
+- **Config** -> `OspreyConfig` directly (already in OspreySharp.Core, which FDR
+  references). No change.
+- **Diagnostics + early-exit** -> NOT passed to the engine. `ProteinFdrEngine`
+  returns the first-pass result (parsimony + `bestScores` + `proteinFdr` incl.
+  `PeptideQvalues`); the Tasks facade keeps the `DumpProteinFdr` block and the
+  `ProteinFdrOnly -> ExitAfterDump` decision. (`ProteinFdr.RunFirstPassProteinFdr`
+  already returns enough; the wrapper's recompute of parsimony/ComputeProteinFdr
+  for the dump can fold into the engine's returned result.)
+- **PIN feature plumbing** -> the engine takes feature names/count as inputs, it
+  does NOT reach the IO/Scoring constants. `ParquetScoreCache.PIN_FEATURE_NAMES`
+  (OspreySharp.IO) and `NUM_PIN_FEATURES = OspreyFeatureCalculators.FeatureCount`
+  (Scoring, via AbstractScoringTask) are NOT reachable from FDR (FDR refs only
+  Core/ML/Chromatography). Resolution: the facade supplies `FeatureNames` via the
+  existing `PercolatorConfig.FeatureNames`, and `PercolatorEntryBuilder.Build`
+  takes `expectedFeatureCount` as a parameter. Keeps FDR's reference surface
+  unchanged -- no new project refs, no new cycle.
+
+### Code-motion inventory for Phase B (all pure motion, output-locked)
+- Move into `OspreySharp.FDR`: `PercolatorEntryBuilder` (Tasks, internal static;
+  parameterize the feature count), the bodies of `RunPercolatorFdr` /
+  `RunPercolatorStreaming` / `RunSimpleFdr` -> `PercolatorEngine`, and the
+  `RunFirstPassProteinFdr` wrapper logic -> `ProteinFdrEngine`.
+- Demote to `internal` once callers are in-project: `PercolatorFdr.BuildTrainingSubset`
+  and `SubsampleByPeptideGroup` (the promoted-public leak; sole external caller is
+  RunPercolatorStreaming at FirstJoinTask.cs:1426).
+- **Call sites to rewire** (the only cross-task consumer): `Pass2FdrSidecar.cs:203`
+  calls `FirstJoinTask.RunPercolatorFdr(perFileEntries, config, ctx, "Second-pass")`.
+  Repoint to the new engine via the thin facade, passing `ctx.LogInfo`. All other
+  callers (`RunFdr` dispatcher 1194/1198/1205, `RunFirstPassProteinFdr` 230) are
+  FirstJoinTask-internal.
+- The `RunFdr` dispatcher (switch on `config.FdrMethod`) stays in Tasks as the
+  facade entry; it delegates to `PercolatorEngine`/`FdrController`.
+
+### Acyclicity confirmation
+Post-move graph stays acyclic: FDR -> {Core, ML, Chromatography} unchanged
+(engines add only `System` + `Action<string>`); Diagnostics -> FDR back-edge
+preserved; Tasks -> {FDR, Diagnostics, ...} unchanged. No FDR -> Diagnostics and
+no FDR -> Tasks edge is introduced. **Confirmed safe.**
+
+### Memory re-verify (TODO Notes item)
+`project_ospreysharp_diagnostics_bleed_blocks_scoring_extraction` is about the
+Scoring layer (clean via `IScoringDiagnostics`). The FDR equivalent is different:
+the blocker is the **FDR<-Diagnostics project back-edge**, resolved by the
+return-the-payload inversion above (no IOspreyDiagnostics in FDR). No memory edit
+needed; captured here.
+
+## Phase B PROGRESS (2026-06-17) -- branch created, commits landing
+Branch `Skyline/work/20260617_ospreysharp_debt_paydown_pr5` off master @42bab53085.
+Baseline (pre-change) regression confirmed byte-identical (blib 52,514,816). Each
+commit below: Build Debug -RunTests -RunInspection (0 warnings, 390 pass) +
+regression Stellar mode1+mode2 byte-identical.
+- **Commit 1 (86e2709cb0):** Introduced `PercolatorEngine` (OspreySharp.FDR) owning
+  RunPercolatorFdr + streaming; `FirstJoinTask.RunPercolatorFdr` now a thin facade
+  passing `ctx.LogInfo` + PIN feature names. Moved `PercolatorEntryBuilder` into FDR
+  (feature count parameterized -> no Scoring/IO constant reach). PASS.
+- **Commit 2 (cb030f7980):** Moved `RunSimpleFdr` into PercolatorEngine; dispatcher
+  calls engine with `ctx.LogInfo`. Demoted `PercolatorFdr.BuildTrainingSubset` +
+  `SubsampleByPeptideGroup` public->internal (encapsulation leak gone; sole external
+  caller was the now-in-project streaming path). PASS.
+- **Commit 3 (64a849c588):** `ProteinFdr.RunFirstPassProteinFdr` now RETURNS a
+  `FirstPassProteinFdrResult` (detected/parsimony/bestScores/proteinFdr); the
+  FirstJoinTask facade logs + dumps from it instead of recomputing parsimony +
+  ComputeProteinFdr a second time. Removes the first-pass protein-FDR recompute
+  duplication. The dump/ExitAfterDump stays in the Tasks facade (FDR<-Diagnostics
+  back-edge, per Phase A). PASS.
+- **Commit 4 (Phase C, c3052b42db):** Unified the 3 near-identical q-value methods
+  (`ComputeConservativeQvalues` / `ComputeQvalues` / `ComputeQvaluesInto`) behind
+  one `ComputeQvaluesCore(isDecoy, qValues, n, decoyOffset)` -- they differed only
+  by the +1 conservative offset and the prefix length; `scores` was vestigial in
+  all three. Documented the two competition impls (`CompeteFromIndices` hot/array
+  path vs `FdrController.CompeteAndFilter<T>` generic) as a deliberate why-two
+  (perf vs ergonomics, same competition rule), not a duplicate to merge.
+
+**Reframed scope note:** the Percolator *move* (the review's headline ownership
+fragmentation -- RunPercolatorFdr physically in Tasks) is DONE in commits 1-2.
+`ProteinFdr` already lived in OspreySharp.FDR, so the protein side is de-duplication
+(commit 3), not a move. Phase C q-value unification = commit 4. The cross-task
+ProteinFdrEngine consolidation (FirstJoin first-pass + MergeNode second-pass +
+PerFileRescore rehydration share one shape) is a candidate follow-up tranche (PR 6),
+lower value than what landed here.
 
 ## Notes
 - `project_ospreysharp_diagnostics_bleed_blocks_scoring_extraction` is now PARTLY
