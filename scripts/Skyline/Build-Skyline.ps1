@@ -36,7 +36,7 @@
 
 .EXAMPLE
     .\Build-Skyline.ps1 -RunInspection
-    Build entire solution and run full ReSharper code inspection (~20-25 min, pre-commit)
+    Build entire solution and run full ReSharper code inspection (~5 min with jb 2026.1.3, pre-commit)
 
 .EXAMPLE
     .\Build-Skyline.ps1 -RunTests -TestName CodeInspection
@@ -71,7 +71,7 @@ param(
     [string]$TestName = $null,  # Specific test to run (e.g., "CodeInspection")
 
     [Parameter(Mandatory=$false)]
-    [switch]$RunInspection = $false,  # Run ReSharper code inspection (full solution, ~20-25 min)
+    [switch]$RunInspection = $false,  # Run ReSharper code inspection (full solution, ~5 min with jb 2026.1.3)
 
     [Parameter(Mandatory=$false)]
     [switch]$QuickInspection = $false,  # Run quick inspection on modified projects only (~1-5 min)
@@ -497,7 +497,7 @@ if (($RunInspection -or $QuickInspection) -and $Target -ne "Clean") {
         if ($jbPath) {
             $inspectStart = Get-Date
             $perProjectEstimate = 2
-            $skylineEstimate = 10
+            $skylineEstimate = 4   # Measured ~4.2 min for --project=Skyline alone, jb 2026.1.3 (full solution is ~5 min)
             $estimatedTime = if ($projectFilter.Count -gt 0) {
                 $hasSkyline = $projectFilter -contains "Skyline"
                 if ($hasSkyline) {
@@ -509,7 +509,10 @@ if (($RunInspection -or $QuickInspection) -and $Target -ne "Clean") {
                     "~${perProjectEstimate} minutes per project (~$totalEstimate minutes total for $($projectFilter.Count) project(s))"
                 }
             } else {
-                "typically 20-25 minutes for full solution"
+                # Measured ~5 minutes for full solution with jb (JetBrains.ReSharper.GlobalTools) 2026.1.3,
+                # cold or warm cache (the persistent --caches-home cache showed no measurable speedup).
+                # Older tool versions were much slower (the prior "20-25 minutes" estimate); re-measure if jb is upgraded/downgraded.
+                "typically ~5 minutes for full solution (jb 2026.1.3)"
             }
             Write-Host "`nRunning ReSharper code inspection ($estimatedTime)..." -ForegroundColor Cyan
             
