@@ -18,16 +18,33 @@ land on the final state; see the version-control skill.
 ## Step 1 — Resolve what to review (local branch by default)
 
 Default: review the current LOCAL branch before any PR exists (the
-local-first flow). Get the branch + base and the diff range:
+local-first flow). Get the branch name:
 
 ```bash
 git -C <repo> rev-parse --abbrev-ref HEAD
-git -C <repo> log --oneline <base>..HEAD   # base is usually master
 ```
 
-The agent reviews `git -C <repo> diff <base>...HEAD`. If `$ARGUMENTS`
-is a PR number, review that open PR instead
-(`gh pr view <N> --json number,url,headRefName,baseRefName,title`).
+**Resolve `<base>` from the branch's target — do NOT assume `master`:**
+- If `$ARGUMENTS` is a PR number, use the PR's target branch:
+  `gh pr view <N> --repo <owner/repo> --json baseRefName,headRefName,title`.
+- Otherwise infer from the repo + branch name:
+  - **LabKey (`targetedms`, `MacCossLabModules`):** mainline is
+    `origin/develop` (NOT master). A branch named `NN.N_fb_...` targets
+    `origin/releaseNN.N-SNAPSHOT` (e.g. `26.3_fb_foo` ->
+    `origin/release26.3-SNAPSHOT`). A branch with no `NN.N_` prefix targets
+    `origin/develop`.
+  - **pwiz/Skyline:** base is `origin/master`.
+- Verify the base resolves: `git -C <repo> rev-parse --verify <base>`. If it
+  doesn't, or the branch name is ambiguous, ask the developer which branch
+  this targets before continuing.
+
+Then confirm the commit range and diff:
+
+```bash
+git -C <repo> fetch origin                  # make the base ref current
+git -C <repo> log --oneline <base>..HEAD
+git -C <repo> diff <base>...HEAD
+```
 
 ## Step 2 — Copilot ordering
 
@@ -50,6 +67,13 @@ Spawn a general-purpose agent in the background with a prompt that:
   (cross-impl divergence, correctness bugs the existing tests miss,
   hash-stability invariants, concurrency, API choices that age
   poorly). Skip nits.
+- **LabKey repos only (`targetedms`, `MacCossLabModules`):** tells the
+  agent to read the recurring-feedback catalog at
+  `C:\Users\vsharma\WORK\pwiz-ai\docs\labkey\code-review-feedback-catalog.md`
+  and check the diff against it, reporting each match with its catalog
+  category. This primes the agent with what these reviewers reliably
+  flag; it augments the correctness pass, doesn't replace it. (Skip for
+  any other repo.)
 - When reviewing an already-open PR, tells the agent which Copilot
   findings are already addressed (so it doesn't re-flag them).
 - Caps the report length (~600 words) and asks for severity-tagged
