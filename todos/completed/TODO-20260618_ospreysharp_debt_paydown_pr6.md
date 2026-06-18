@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260618_ospreysharp_debt_paydown_pr6` (created off master @ 3c464c983b)
 - **Base**: `master` (after PR 5 #4314 merged as 3c464c983b)
 - **Created**: 2026-06-18
-- **Status**: In Progress
-- **PR**: [#4315](https://github.com/ProteoWizard/pwiz/pull/4315)
+- **Status**: Completed
+- **PR**: [#4315](https://github.com/ProteoWizard/pwiz/pull/4315) (merged 2026-06-18 as dc58d41a07)
 
 > PR 6 of the OspreySharp OOP debt-paydown arc. Finishes the FDR-ownership move
 > that PR 5 (#4314, PercolatorEngine + q-value consolidation) explicitly deferred:
@@ -154,3 +154,17 @@ Branch `Skyline/work/20260618_ospreysharp_debt_paydown_pr6` off master @3c464c98
   bleed, is the work here. Update that memory when convenient.
 - After PR 6 + PR 7 land, run the next blind `/pw-oop-review` to re-survey the
   decomposed tree (cadence: ~3-4 PRs per review; PR 5/6/7 are this batch).
+
+### 2026-06-18 - Merged
+
+PR #4315 merged as commit dc58d41a07 (squash). Shipped the cross-task protein-FDR
+consolidation: new `ProteinFdrEngine` (OspreySharp.FDR) owns first-pass + second-pass
+orchestration; `FirstJoinTask` / `MergeNodeTask` / `PerFileRescoreTask` are thin
+facades; diagnostic dumps + `ExitAfterDump` stay in Tasks (FDR<-Diagnostics back-edge,
+per PR 5 Phase A) with the engine returning `SecondPassProteinFdrResult`. Pure
+byte-identical code motion. Gates: build/inspection (0 warnings) + 390 tests;
+regression -Dataset All (Stellar + Astral) byte-identical both modes; fresh-context
+self-review clean (2 LOW fixed: null-safe `RunSecondPass` logging + dump-writer
+INVARIANT notes); perf gate PASSED (total -2.2%); Copilot no comments. **Deferred**
+to a follow-up tranche: the `PercolatorFdr.RunPercolator` carve (~440 lines, warranted
+but orthogonal + parity-critical) -- backlog it alongside the PR 7 scorer-fork work.
