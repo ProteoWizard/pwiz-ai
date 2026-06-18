@@ -109,6 +109,21 @@ if ($perSessionFile -and (Test-Path $perSessionFile)) {
     } catch { }
 }
 
+# 1.5 skyclaude scoping: when PWIZ_LSP_DIR points at a checkout's pwiz_tools,
+#     show that checkout (and its git branch) rather than the launch dir. The
+#     skyclaude launcher cd's to the shared project root (e.g. C:\Dev) so the
+#     ai/ tooling resolves, which would otherwise label every session with the
+#     root's leaf ('Dev'). The active checkout lives in PWIZ_LSP_DIR instead.
+#     An explicit set_active_project (above) still outranks this; single-clone
+#     layouts leave PWIZ_LSP_DIR unset and fall through unchanged.
+if (-not $project_dir -and $env:PWIZ_LSP_DIR) {
+    $checkoutDir = Split-Path $env:PWIZ_LSP_DIR -Parent  # strip trailing 'pwiz_tools'
+    if ($checkoutDir -and (Test-Path -LiteralPath $checkoutDir)) {
+        $project_dir = $checkoutDir
+        $project_name = Split-Path $checkoutDir -Leaf
+    }
+}
+
 # 2. The directory Claude Code was actually launched in (this session's real
 #    workspace). This must outrank the legacy global below -- otherwise a
 #    weeks-old global set_active_project shadows the live session.

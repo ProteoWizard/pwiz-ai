@@ -29,11 +29,22 @@
 
         . C:\Dev\ai\scripts\lsp\Enable-PwizLsp.ps1
         $PwizLspDefault = 'master_clean'   # optional: checkout for a no-arg launch
+        $PwizClaudePinTab = $true          # optional: pin the tab title by default
 
     Then start Claude Code with the 'skyclaude' launcher instead of 'claude':
 
         skyclaude IMoffset   # scope the C# LSP to <root>\IMoffset\pwiz_tools, then launch
         skyclaude            # use $PwizLspDefault (multi-checkout) or 'pwiz' (single-clone)
+
+    Optionally pin the terminal tab title for the session (off by default, so
+    Claude Code's auto topic-summary title is preserved unless you opt in):
+
+        skyclaude IMoffset -PinTab              # tab shows 'IMoffset' all session
+        skyclaude IMoffset -TabTitle 'IM bug'   # tab shows a custom string
+
+    Pinning also suppresses Claude Code's own title updates for the session
+    (CLAUDE_CODE_DISABLE_TERMINAL_TITLE); the prior title and env var are
+    restored when the session exits.
 
 .NOTES
     The project root is derived from this script's own location
@@ -54,6 +65,17 @@ function Start-PwizClaude {
         # or, in single-clone layouts, the built-in 'pwiz' fallback.
         [Parameter(Position = 0)]
         [string] $Checkout,
+
+        # Pin the terminal tab title to the checkout name for this session.
+        # Defaults to $PwizClaudePinTab (set in your $PROFILE) when not passed;
+        # pass -PinTab to force on or -PinTab:$false to force off for one session.
+        # When neither this, -TabTitle, nor the preference applies, Claude Code
+        # drives the tab title with its auto topic summary (the original default).
+        [switch] $PinTab,
+
+        # Pin the terminal tab title to an explicit string for this session.
+        # Implies -PinTab. Overrides the checkout name when both are usable.
+        [string] $TabTitle,
 
         # Anything after the checkout name is passed through to 'claude'.
         [Parameter(ValueFromRemainingArguments = $true)]
@@ -85,7 +107,43 @@ function Start-PwizClaude {
     }
 
     Set-Location -LiteralPath $root
-    claude @ClaudeArgs
+
+    # Optional: pin the tab title for this session. The tab is a single string
+    # that Claude Code rewrites with its topic summary while running, so to make
+    # a static title stick we also suppress CC's title updates. Both the title
+    # and the env var are restored on exit so a later plain 'claude' in the same
+    # window behaves normally.
+    #
+    # Pin when: an explicit -TabTitle is given; or -PinTab was passed; or the
+    # personal preference $PwizClaudePinTab is set and -PinTab was not overridden.
+    $pin = if ($PSBoundParameters.ContainsKey('PinTab')) { [bool]$PinTab }
+           else { [bool]$Global:PwizClaudePinTab }
+    $pinnedTitle =
+        if ($TabTitle) { $TabTitle }
+        elseif ($pin) {
+            # Use the checkout name; fall back to the resolved workspace's leaf
+            # so a no-arg launch (via $PwizLspDefault) still gets a sensible title.
+            if ($Checkout) { $Checkout }
+            elseif ($env:PWIZ_LSP_DIR) { Split-Path (Split-Path $env:PWIZ_LSP_DIR -Parent) -Leaf }
+            else { $null }
+        }
+        else { $null }
+    if ($pinnedTitle) {
+        $priorTitle = $Host.UI.RawUI.WindowTitle
+        $priorDisable = $env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE
+        $Host.UI.RawUI.WindowTitle = $pinnedTitle
+        $env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE = '1'
+        try {
+            claude @ClaudeArgs
+        }
+        finally {
+            $Host.UI.RawUI.WindowTitle = $priorTitle
+            $env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE = $priorDisable
+        }
+    }
+    else {
+        claude @ClaudeArgs
+    }
 }
 
 Set-Alias -Name skyclaude -Value Start-PwizClaude
