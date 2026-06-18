@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260617_ospreysharp_debt_paydown_pr5` (to be created)
 - **Base**: `master` (after PR 4 #4310 merged as 42bab53085)
 - **Created**: 2026-06-17
-- **Status**: Pre-work DONE; Phase A spike DONE; Phase B (FDR-ownership move) DONE; Phase C (q-value unify + competition why-two) DONE. 4 commits, each byte-identical (Stellar mode1+mode2). Pending: branch push, pre-merge gates (regression All + perf), self-review, PR.
-- **PR**: [#4314](https://github.com/ProteoWizard/pwiz/pull/4314)
+- **Status**: Completed
+- **PR**: [#4314](https://github.com/ProteoWizard/pwiz/pull/4314) (merged 2026-06-18 as 3c464c983b)
 
 > PR 5 of the OspreySharp OOP debt-paydown arc. Seeded by the 2026-06-17 blind
 > `/pw-oop-review` (`ai/.tmp/20260617-oop-review-report.txt`) plus the informed
@@ -291,3 +291,21 @@ lower value than what landed here.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260617_ospreysharp_debt_paydown_pr5.md` before starting work.
+
+### 2026-06-18 - Merged
+
+PR #4314 merged as commit 3c464c983b. Shipped the FDR-ownership move (Phase B)
+and the q-value/competition consolidation (Phase C) as 4 byte-identical commits:
+PercolatorEngine + the streaming/simple moves into OspreySharp.FDR behind a thin
+FirstJoinTask facade; the first-pass protein-FDR return-value inversion that drops
+the recompute; the BuildTrainingSubset/SubsampleByPeptideGroup public->internal
+demotion; and the single ComputeQvaluesCore. Phase A's finding stands: the
+FDR<-Diagnostics project back-edge forces the dump + ExitAfterDump to stay in the
+Tasks facade. Gates: per-commit build/inspection/390-tests + Stellar golden;
+pre-merge regression -Dataset All (Stellar + Astral) + perf gate (stage5 flat);
+fresh-context self-review clean. Deferred to a later tranche (PR 6+): the
+cross-task ProteinFdrEngine consolidation (FirstJoin/MergeNode/PerFileRescore share
+one shape) and extracting collaborators from the giant scorer methods. Copilot's 3
+`scores`-unused comments were intentionally declined (no warning; pre-existing
+signature symmetry / debugging aid) and left unresolved for the human reviewer.
+Backlog still open: cs_cal_summary.txt per-stem filename fix (diagnostic-only).
