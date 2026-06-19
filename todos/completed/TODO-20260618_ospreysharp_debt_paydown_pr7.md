@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260618_ospreysharp_debt_paydown_pr7` (created off master @ dc58d41a07, includes PR 6 #4315)
 - **Base**: `master` (after PR 6 #4315 merged as dc58d41a07)
 - **Created**: 2026-06-18
-- **Status**: In Progress
-- **PR**: [#4316](https://github.com/ProteoWizard/pwiz/pull/4316)
+- **Status**: Completed
+- **PR**: [#4316](https://github.com/ProteoWizard/pwiz/pull/4316) (merged 2026-06-18 as 3a6e017b9e)
 
 > PR 7 of the OspreySharp OOP debt-paydown arc. The blind review's Rec 1 headline:
 > `CoelutionScorer.ScoreCandidate` (~827 LOC) is the single largest remaining giant.
@@ -117,3 +117,22 @@ ProfilerHooks itself is left intact in OspreySharp.Tasks.
   -Force` (needs a built Rust osprey) if missing.
 - After PR 7 lands, run the next blind `/pw-oop-review` to re-survey the decomposed
   tree and seed the next batch (this PR + PR 5/6 are the post-06-17 batch).
+
+### 2026-06-18 - Merged
+
+PR #4316 merged as commit 3a6e017b9e (squash). Shipped both halves of the "do both in
+PR 7" decision as pure byte-identical code motion: (1) `CoelutionScorer.ScoreCandidate`
+decomposed into `FindScanRange` / `DetectCandidatePeaks` / `CaptureCwtCandidates` /
+`BuildFdrEntry` (rank-scoring loop left whole), and (2) `RunCoelutionScoring` /
+`DeduplicateDoubleCounting` / `DeduplicatePairs` composed off `AbstractScoringTask`
+into a new `ScoringPipeline` (OspreySharp.Scoring), severing PipelineContext via the
+logInfo + `IScoringDiagnostics` seam, with thin protected forwarders keeping the six
+subclass call sites unchanged. Added `IScoringDiagnostics.DiagSearchEntryIds`. Gates:
+per-commit build/inspection (0 warnings) + Stellar golden; pre-merge `-Dataset All`
+(Stellar + Astral byte-identical) + perf gate (total +0.1%, flat) + cross-impl
+reference (14/14 boundaries vs frozen Rust) + fresh-context self-review (clean, 2 LOW
+fixed) + Copilot (no comments). **Deferred / not action items:** profiler-hook
+placement (removed; reinstate only if scoring profiling is resumed); a dedup tie-break
+unit test (self-review follow-up; only needed once the seam gets a second caller).
+This completes the PR 5/6/7 post-2026-06-17 debt-paydown batch -- next: a fresh blind
+`/pw-oop-review` to seed the following batch.
