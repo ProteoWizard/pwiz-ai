@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260619_ospreysharp_debt_paydown_pr8` (create off master)
 - **Base**: `master` (after PR 7 #4316 merged as 3a6e017b9e)
 - **Created**: 2026-06-19
-- **Status**: In Progress -- 3 decompositions done + all pre-merge gates green; one open item (standing-cadence wiring) pending decision
+- **Status**: Ready for PR -- 3 decompositions done, all pre-merge gates green; standing-cadence wiring deferred to PR 9 (user decision 2026-06-19)
 - **PR**: (pending)
 
 ## Progress (2026-06-19)
@@ -26,8 +26,8 @@ Verified the TODO's stale line refs in-session (PR 3/4 had already extracted man
 - `Test-PerfGate -Dataset Stellar`: PASS (total median -3.8%, within noise; all stages ok/info, no regression).
 - `/pw-self-review` (independent fresh-context agent): verdict BEHAVIOR-PRESERVING, no concerns; only benign log-reorder noted (now before the side-effect-free ShallowClone).
 
-### Open item -- standing-cadence wiring (needs decision)
-"Add the two rehydrate tests to the standing/pre-commit cadence." Finding: regression.ps1's **mode 2 already IS the in-process straight-through-resume rehydrate test**. The genuine gap is the **HPC `--task` worker chain** (Compare-Stage7-Rehydration-Strict-CSharp). regression.ps1 is deliberately self-contained (no ai/ dependency); the strict comparator lives in ai/ and depends on parquet_diff.py + Dataset-Config.ps1. Options: (A) add a self-contained mode-3 HPC-chain leg to regression.ps1; (B) have tctest.bat additionally invoke the ai/ comparator (cross-repo coupling); (C) separate TeamCity config. Pending user decision before implementing.
+### Standing-cadence wiring -- DEFERRED TO PR 9 (user decision 2026-06-19)
+"Add the two rehydrate tests to the standing/pre-commit cadence." Finding: regression.ps1's **mode 2 already IS the in-process straight-through-resume rehydrate test**. The genuine gap is the **HPC `--task` worker chain** (Compare-Stage7-Rehydration-Strict-CSharp). regression.ps1 is deliberately self-contained (no ai/ dependency); the strict comparator lives in ai/ and depends on parquet_diff.py + Dataset-Config.ps1. Options weighed: (A) self-contained mode-3 HPC-chain leg in regression.ps1 [recommended]; (B) tctest.bat invokes the ai/ comparator (cross-repo coupling); (C) separate TeamCity config. **Decision: defer to PR 9** -- this PR ships the 3 decompositions only (HPC chain verified manually here, all boundaries bit-parity). PR 9 picks the wiring approach.
 
 > Seeded by the 2026-06-18 blind `/pw-oop-review` (`ai/.tmp/20260618-oop-review-report.txt`,
 > Rec 1). The bones are rated excellent; the one remaining concentrated debt is the

@@ -37,6 +37,15 @@ Output-locked by `regression.ps1` @1e-9. See `feedback_refactor_gate_output_not_
    onto ScoringPipeline where they belong), have `PerFileScoringTask` / `PerFileRescoreTask`
    call `ScoringPipeline` directly (a `private readonly` field preserves bare-name
    ergonomics), and drop the base class (they extend `OspreyTask` directly).
+4. **Wire the HPC `--task` worker-chain rehydrate test into the standing cadence**
+   (deferred here from PR 8 by Brendan, 2026-06-19). regression.ps1's mode 2 already
+   covers in-process straight-through resume; the gap is the 4-task HPC chain. Recommended
+   approach (revisit when implementing): add a self-contained **mode 3** HPC-chain leg to
+   `regression.ps1` (runs --task PerFileScoring|FirstJoin|PerFileRescore|MergeNode and
+   compares the chain blib + reconciled parquets to straight-through), keeping the overnight
+   gate free of any ai/ dependency. Alternatives weighed in PR 8 TODO: tctest.bat invoking
+   the ai/ comparator (cross-repo coupling) or a separate TeamCity config. PR 8 verified the
+   chain manually (Compare-Stage7-Rehydration-Strict-CSharp, all boundaries bit-parity).
 
 ## Out of scope
 - The orchestration-monolith decompositions -> PR 8.
