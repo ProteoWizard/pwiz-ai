@@ -33,7 +33,7 @@ git -C <repo> rev-parse --abbrev-ref HEAD
     `origin/releaseNN.N-SNAPSHOT` (e.g. `26.3_fb_foo` ->
     `origin/release26.3-SNAPSHOT`). A branch with no `NN.N_` prefix targets
     `origin/develop`.
-  - **pwiz/Skyline:** base is `origin/master`.
+  - **pwiz/Skyline:** base is usually `origin/master`.
 - Verify the base resolves: `git -C <repo> rev-parse --verify <base>`. If it
   doesn't, or the branch name is ambiguous, ask the developer which branch
   this targets before continuing.
