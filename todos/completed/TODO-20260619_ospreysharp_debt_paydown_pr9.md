@@ -4,8 +4,24 @@
 - **Branch**: `Skyline/work/20260619_ospreysharp_debt_paydown_pr9` (create off master; REBASE onto master after PR 8 lands)
 - **Base**: `master` (after PR 8 merges)
 - **Created**: 2026-06-19
-- **Status**: In Review (PR #4319 open; all 4 items done, all pre-merge gates green)
-- **PR**: [#4319](https://github.com/ProteoWizard/pwiz/pull/4319)
+- **Status**: Completed
+- **PR**: [#4319](https://github.com/ProteoWizard/pwiz/pull/4319) (merged 2026-06-20 as a0065b3efa)
+
+### 2026-06-20 - Merged
+
+PR #4319 merged as commit `a0065b3efa`. All four items shipped: Rec 3 (DEBUG shared-buffer
+ordering guard), Rec 2 (Stage 5 Percolator diagnostics lifted out of the FDR core), the
+AbstractScoringTask retirement (-> `internal static ScoringTaskShared`), and the
+self-contained HPC 4-task worker-chain regression leg (mode 3, default-on). All pre-merge
+gates green: `-Dataset All` regression modes 1/2/3 (Stellar+Astral byte-identical), strict
+HPC comparator boundary-parity, perf gate (+0.5% total), clean fresh-context self-review.
+One Copilot comment (duplicate `<summary>` block) fixed in `023dfed85c`. Mode 3 raised the
+overnight gate runtime (~35 -> ~64 min on the TeamCity agent); the TC execution timeout was
+bumped 60 -> 120 min. Deferred / backlog: (1) osprey FirstJoin `--input-scores` order-
+sensitivity is a latent HPC production-parity risk -- mode 3 pins the order, masking it;
+needs a follow-up ticket to confirm the orchestrator's ordering guarantee (see
+`project_osprey_firstjoin_order_sensitivity`). (2) Per the Notes below, run the FINAL
+confirmatory blind `/pw-oop-review`; if clean, declare the OOP debt-paydown arc complete.
 
 > Seeded by the 2026-06-18 blind `/pw-oop-review` (`ai/.tmp/20260618-oop-review-report.txt`,
 > Rec 2 + Rec 3 + the AbstractScoringTask open question). The small/low-risk closeout of
