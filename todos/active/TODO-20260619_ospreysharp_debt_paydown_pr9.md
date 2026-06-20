@@ -71,6 +71,33 @@ Output-locked by `regression.ps1` @1e-9. See `feedback_refactor_gate_output_not_
   mode 1+2 byte-identical (diagnostics off), and a diagnostics-on run wrote
   `cs_stage5_standardizer.tsv` + aborted exit 0 via the facade.
 
+- **Retire AbstractScoringTask -- DONE** (commit `10a4b24267`). Replaced the 167-line
+  plumbing-only base with `internal static ScoringTaskShared` (the mzML read gate, the
+  NUM_PIN_FEATURES/BASE_ID_MASK consts, `ExtractIsolationWindows`, `FindNearestMs1`, plus a
+  `Pipeline(ctx)` factory). `PerFileScoringTask`, `PerFileRescoreTask`, `FirstJoinTask` now
+  extend `OspreyTask` directly and call `ScoringPipeline` through
+  `ScoringTaskShared.Pipeline(ctx)`. Net -57 lines. Pure code motion; Stellar regression
+  modes 1 & 2 byte-identical. (Decided against the per-task `private readonly` field the TODO
+  floated -- tasks are default-constructed, ctx arrives per-call, so a ctx-built field can't
+  be readonly; the static factory keeps DRY without inheritance.)
+- **Mode 3 HPC chain gate -- DONE** (commit `1b55c29605`). Full Stellar regression green on
+  all three modes (1 vs golden, 2 resume, 3 HPC chain), each blib 52,514,816 bytes.
+  Added a self-contained `Invoke-HpcChain` that runs PerFileScoring -> FirstJoin
+  -> PerFileRescore -> MergeNode with sidecar rehydration between phases and asserts the
+  chain blib == straight-through blib at 1e-9 via the existing `Compare-BlibFull` (no ai/
+  dependency). Brendan's calls: **blib-only @1e-9** hard gate (not reconciled-parquet SHA;
+  that stays in the ai/ strict comparator for red-gate bisection), **default-on for all
+  datasets** (added `-SkipHpcChain` for local fast iteration, paralleling `-SkipResume`).
+  - **Gotcha found + fixed:** FirstJoin's reconciliation/gap-fill output is **input-file-order
+    sensitive**. The first cut iterated a PowerShell hashtable's key order for `--input-scores`,
+    which differed from the straight-through's sorted file order and produced a *different*
+    (bloated) blib -- a false FAIL. Fixed to feed files in `$inputs.Mzmls` order (the same order
+    the straight-through uses). Verified the chain itself is genuinely bit-parity on this build
+    by running the ai/ strict comparator (Compare-Stage7-Rehydration-Strict-CSharp): PASS at
+    every Stage 5/6/7 boundary. Mode 3 then PASS (chain blib == straight, 52,514,816 bytes).
+  - **Backlog candidate (not this PR):** osprey's multi-file FirstJoin output depends on input
+    file order -- worth a robustness ticket (results shouldn't vary with file order).
+
 ## Out of scope
 - The orchestration-monolith decompositions -> PR 8.
 
