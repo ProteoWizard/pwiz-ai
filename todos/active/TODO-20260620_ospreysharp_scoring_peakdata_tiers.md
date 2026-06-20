@@ -130,6 +130,36 @@ XIC/vector consumer once its precursor XIC + isotope envelope are produced upstr
   the producer-seam reframing supersedes the earlier "narrow the window list" idea.
 
 ## Progress log
+- 2026-06-20: **Commit 1 done + pushed** (`bfffe32ec8`). Four-tier hierarchy +
+  4 calculator bases; all 21 calculators reclassified (2 Summary / 10 Detailed /
+  5 ApexSpectrum / 4 ApexSpectra). Behavior-free; Stellar+Astral byte-identical
+  (golden/resume/HPC-chain), build + 389 tests + zero-warning inspection.
+  **PR [#4320](https://github.com/ProteoWizard/pwiz/pull/4320)** opened as draft
+  (TeamCity per push; Copilot deferred to final state).
+- 2026-06-20: **Commit 2 done + pushed** (`dacf6ed7c6`). `PeakDataExtractor`
+  producer seam (scan-range/XIC/peak-detect/apex resolution + all detection
+  diagnostics); `ScoreCandidate` collapsed to extract→score→assemble. MS1 precursor
+  XIC + isotope envelope produced upstream and exposed on the Detailed tier; the two
+  MS1 scores became pure consumers (dropped to Detailed); removed the now-dead MS1
+  machinery from `OspreyScoringContext`. Dropped dead `libCosine`/`top6Matches`.
+  Byte-identical Stellar+Astral. **Perf gate PASS** (Stellar A/B vs perfbase:
+  stage1to4 -3.7%, total -1.8% median — scoring slightly faster; `ExtractedPeak`
+  alloc immaterial). Perf-gate data path note: pass `-TestBaseDir
+  'D:\Users\brendanx\Downloads\Perftests\osprey-testfiles-mzML'` (its default
+  `D:\test\osprey-runs\stellar` is unstaged on this machine).
+- 2026-06-20: **Commit 3 done + pushed** (`7ba0a13c5f`). Replaced the four window
+  members with the bounded `TryGetApexOffsetSpectrum(offset, out spectrum, out
+  cacheIndex)` (apex±2, owns the index mapping + edge skip); SG sweep reaches spectra
+  only through it. Dropped now-dead `WindowRetentionTimes`. **Stellar+Astral
+  byte-identical** (golden/resume/HPC-chain); **perf gate PASS** (Stellar A/B
+  stage1to4 -2.9%, total -1.3%).
+- 2026-06-20: **Self-review (fresh-context agent) clean** — no CRITICAL/HIGH; verified
+  MS1-lift fidelity, stale-state reset, accessor index math, tier classifications,
+  concurrency. Addressed its one actionable LOW by adding a direct unit test of the
+  production `OspreyPeakData.TryGetApexOffsetSpectrum` (`d1155f9e5b`, +1 test → 390).
+- 2026-06-20: **All gates green across all 4 commits.** PR
+  [#4320](https://github.com/ProteoWizard/pwiz/pull/4320) marked ready for Copilot.
+  Remaining: `/pw-respond` Copilot, then complete on merge.
 - 2026-06-20: Branch created off master `a0065b3efa`. Design settled with the
   developer: 4 tiers (Summary/Detailed/ApexSpectrum/ApexSpectra) — revising the
   modular-scoring "all Detailed" decision; MS1 reclassifies Detailed in commit 2 via
