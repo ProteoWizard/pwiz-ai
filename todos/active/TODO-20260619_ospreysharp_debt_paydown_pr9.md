@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260619_ospreysharp_debt_paydown_pr9` (create off master; REBASE onto master after PR 8 lands)
 - **Base**: `master` (after PR 8 merges)
 - **Created**: 2026-06-19
-- **Status**: Queued (start after PR 8 merges)
+- **Status**: In Progress (PR 8 #4317 merged; branch created off master)
 - **PR**: (pending)
 
 > Seeded by the 2026-06-18 blind `/pw-oop-review` (`ai/.tmp/20260618-oop-review-report.txt`,
@@ -46,6 +46,30 @@ Output-locked by `regression.ps1` @1e-9. See `feedback_refactor_gate_output_not_
    gate free of any ai/ dependency. Alternatives weighed in PR 8 TODO: tctest.bat invoking
    the ai/ comparator (cross-repo coupling) or a separate TeamCity config. PR 8 verified the
    chain manually (Compare-Stage7-Rehydration-Strict-CSharp, all boundaries bit-parity).
+
+## Progress
+- **Rec 3 -- DONE** (commit `bb77ce5906`). DEBUG-only guard in `PipelineContext`:
+  `Publish` asserts the milestone currently published over a backing list (keyed by the
+  `List` reference) was consumed via `TryGet`/`Get` before that same list is re-published
+  at a new milestone. Reference-keyed, NOT a static ScoredEntries->Compacted->Rescored
+  type order, because the merge path (`PerFileRescoreTask` line ~403) publishes
+  `RescoredEntries` directly over the `ScoredEntries` buffer, skipping `CompactedEntries` --
+  a static-order assert would false-fire there. Decision on the open Q: kept the **assert**
+  (not immutable snapshots); `PipelineByproducts` already documents the no-copy hand-off as
+  "load-bearing at Astral scale", which resolves it against snapshots. Validated: Debug
+  3-file Stellar straight-through ran clean (no assert), identical blib.
+- **Rec 2 -- DONE** (commit `adbbb66d56`). New `PercolatorDiagnosticsConfig` (FDR assembly,
+  8 bool gates) on `PercolatorConfig.Diagnostics`; `RunPercolator`'s four inline
+  `OSPREY_DUMP_*` env reads + `Environment.Exit(0)` replaced by config-gated dumps + a
+  `PercolatorResults.DiagnosticAbort` sentinel. Env sensing moved onto `IOspreyDiagnostics`
+  (8 new flags, parsed in `OspreyFileDiagnostics`); `PercolatorEngine.RunPercolatorFdr` now
+  returns `bool aborted` and threads the config (incl. the streaming train-only pass); the
+  `FirstJoinTask` facade builds the config from `ctx.Diagnostics` and owns the
+  `Environment.Exit(0)`. Also added the 8 flags to `OspreyFileDiagnostics.AnyEnabled` (a
+  smoke test caught that a lone `OSPREY_DUMP_STANDARDIZER` no longer activated the sink --
+  the old inline path didn't depend on the sink). Validated both ways: Stellar regression
+  mode 1+2 byte-identical (diagnostics off), and a diagnostics-on run wrote
+  `cs_stage5_standardizer.tsv` + aborted exit 0 via the facade.
 
 ## Out of scope
 - The orchestration-monolith decompositions -> PR 8.
