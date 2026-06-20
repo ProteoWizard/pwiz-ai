@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260619_ospreysharp_debt_paydown_pr9` (create off master; REBASE onto master after PR 8 lands)
 - **Base**: `master` (after PR 8 merges)
 - **Created**: 2026-06-19
-- **Status**: In Progress (PR 8 #4317 merged; branch created off master)
-- **PR**: (pending)
+- **Status**: In Review (PR #4319 open; all 4 items done, all pre-merge gates green)
+- **PR**: [#4319](https://github.com/ProteoWizard/pwiz/pull/4319)
 
 > Seeded by the 2026-06-18 blind `/pw-oop-review` (`ai/.tmp/20260618-oop-review-report.txt`,
 > Rec 2 + Rec 3 + the AbstractScoringTask open question). The small/low-risk closeout of
@@ -95,8 +95,25 @@ Output-locked by `regression.ps1` @1e-9. See `feedback_refactor_gate_output_not_
     the straight-through uses). Verified the chain itself is genuinely bit-parity on this build
     by running the ai/ strict comparator (Compare-Stage7-Rehydration-Strict-CSharp): PASS at
     every Stage 5/6/7 boundary. Mode 3 then PASS (chain blib == straight, 52,514,816 bytes).
-  - **Backlog candidate (not this PR):** osprey's multi-file FirstJoin output depends on input
-    file order -- worth a robustness ticket (results shouldn't vary with file order).
+  - **Backlog candidate (not this PR), sharpened by the self-review:** osprey's multi-file
+    FirstJoin reconciliation output depends on `--input-scores` order. mode 3 pins it to the
+    straight-through's `$inputs.Mzmls` order, so the gate validates cross-process rehydrate
+    parity but **masks the order-sensitivity by construction**. Open question for a follow-up:
+    does the production HPC orchestrator guarantee the SAME canonical `--input-scores` order at
+    the FirstJoin/MergeNode boundary that the per-file workers were launched in? If a real
+    multi-node run can hand FirstJoin a different order, that's a latent production parity bug.
+    Follow-up ticket should (a) confirm the orchestrator's ordering guarantee, and if absent
+    (b) make FirstJoin order-insensitive or enforce canonical ordering. Not yet known whether
+    the in-memory path is itself order-sensitive (would distinguish a general osprey
+    determinism property from a chain-only bug) -- needs a shuffled-order in-memory A/B.
+
+## Self-review (fresh-context agent, clean)
+Ran `/pw-self-review` on the local branch before opening the PR: "No correctness or parity
+defects." Two LOW notes, both non-defects on inspection -- (1) the 4 new `*Only` flags now
+contribute to `OspreyFileDiagnostics.AnyEnabled`, which is consistent with how every other
+dump's `*Only` already works there and is harmless (no dump fires without the `Dump` flag);
+(2) `Invoke-OspreyTaskRun`'s post-`finally` `$exit` check matches the existing
+`Invoke-OspreyRun` pattern (a launch throw propagates past it). No code changes taken.
 
 ## Out of scope
 - The orchestration-monolith decompositions -> PR 8.
