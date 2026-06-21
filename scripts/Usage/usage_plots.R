@@ -66,7 +66,29 @@ usage <- read_csv(csv_path, show_col_types = FALSE) |>
   mutate(date = as.Date(date)) |>
   filter(date < Sys.Date()) |>   # drop the current, still-partial day (e.g. a 06:00 snapshot of "today") so charts don't end on a misleading sliver
   filter(date >= start_date) |>  # shared baseline so longer-retained histories don't skew the comparison
-  mutate(user = factor(display_user(user)), machine = factor(machine))
+  mutate(user = display_user(user))
+
+# Canonical category order: DESCENDING by trailing-30-day modeled cost — the same metric the
+# share pies and summed bars use — so the daily stacked chart, the pie, and the summed bar all
+# list users (and likewise machines) in one consistent order.
+rank_by_recent_cost <- function(df, col) {
+  recent <- df |> filter(date >= recent_start) |>
+    group_by(across(all_of(col))) |>
+    summarise(c = sum(est_cost_usd), .groups = "drop") |>
+    arrange(desc(c))
+  # Append any category present only in older history (no recent cost) so factor() keeps it.
+  c(recent[[col]], setdiff(unique(df[[col]]), recent[[col]]))
+}
+user_levels    <- rank_by_recent_cost(usage, "user")
+machine_levels <- rank_by_recent_cost(usage, "machine")
+usage <- usage |> mutate(user    = factor(user,    levels = user_levels),
+                         machine = factor(machine, levels = machine_levels))
+
+# Fixed color per category, keyed by name, so each user/machine is the SAME color across the
+# daily / pie / summed charts even when a chart omits some categories (e.g. the pie drops
+# zero-cost users). A shared scale would re-derive colors per chart and break the matching.
+user_colors    <- setNames(hue_pal()(length(user_levels)),    user_levels)
+machine_colors <- setNames(hue_pal()(length(machine_levels)), machine_levels)
 
 # Pretty, version-ordered model labels for the legend: drop the redundant "claude-" prefix,
 # format like "Opus 4.8" / "Fable 5", and order by version DESCENDING (newest on top),
@@ -181,37 +203,38 @@ if (multi_user) {
     summarise(total_tokens = sum(total_tokens), .groups = "drop") |>
     ggplot(aes(date, total_tokens, fill = user)) +
     geom_col() +
+    scale_fill_manual(values = user_colors) +
     scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
     labs(title = "Claude usage — daily tokens by teammate", x = NULL, y = "tokens", fill = "user") +
     window_marker
   save_plot(p5, "05_tokens_by_user.png")
 
-  p6 <- usage |>
+  # 06a. Share-of-total pie. 'user' is already ordered by 30-day cost, so slices run
+  # largest-first; user_colors fixes each teammate's color across all three user charts.
+  user_cost <- usage |>
     filter(date >= recent_start) |>
     group_by(user) |>
     summarise(est_cost_usd = sum(est_cost_usd), .groups = "drop") |>
-    ggplot(aes(reorder(user, est_cost_usd), est_cost_usd)) +
-    geom_col(fill = "steelblue") + coord_flip() +
-    scale_y_continuous(labels = label_dollar()) +
-    labs(title = "Claude usage — modeled cost by teammate (last 30 days)", x = NULL, y = "USD (modeled)")
-  save_plot(p6, "06_cost_by_user.png")
-
-  # 06b. Same data as a share-of-total pie (slices ordered largest first; tiny ones unlabeled).
-  user_share <- usage |>
-    filter(date >= recent_start) |>
-    group_by(user) |>
-    summarise(est_cost_usd = sum(est_cost_usd), .groups = "drop") |>
-    arrange(desc(est_cost_usd)) |>
-    mutate(user = factor(user, levels = user),
+    mutate(user = fct_drop(user),   # drop users with no cost in the window (no empty slice/axis row)
            pct = est_cost_usd / sum(est_cost_usd),
            lbl = if_else(pct >= 0.02, percent(pct, accuracy = 1), ""))
-  p6b <- ggplot(user_share, aes(x = "", y = est_cost_usd, fill = user)) +
+  p6a <- ggplot(user_cost, aes(x = "", y = est_cost_usd, fill = user)) +
     geom_col(width = 1, color = "white") +
     coord_polar(theta = "y") +
     geom_text(aes(label = lbl), position = position_stack(vjust = 0.5), size = 3) +
+    scale_fill_manual(values = user_colors) +
     theme_void(base_size = 12) +
     labs(title = "Claude usage — share of modeled cost by teammate (last 30 days)", fill = "user")
-  save_plot(p6b, "06b_cost_share_by_user.png")
+  save_plot(p6a, "06a_cost_share_by_user.png")
+
+  # 06b. Same totals as a horizontal bar — same order (largest on top via fct_rev under the
+  # flip) and same colors as the pie. Legend off since the axis already names each teammate.
+  p6b <- ggplot(user_cost, aes(x = fct_rev(user), y = est_cost_usd, fill = user)) +
+    geom_col(show.legend = FALSE) + coord_flip() +
+    scale_fill_manual(values = user_colors) +
+    scale_y_continuous(labels = label_dollar()) +
+    labs(title = "Claude usage — modeled cost by teammate (last 30 days)", x = NULL, y = "USD (modeled)")
+  save_plot(p6b, "06b_cost_by_user.png")
 } else {
   message("Single user so far — team charts (05/06) skipped until teammates join.")
 }
@@ -223,37 +246,37 @@ if (multi_machine) {
     summarise(total_tokens = sum(total_tokens), .groups = "drop") |>
     ggplot(aes(date, total_tokens, fill = machine)) +
     geom_col() +
+    scale_fill_manual(values = machine_colors) +
     scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
     labs(title = "Claude usage — daily tokens by machine", x = NULL, y = "tokens", fill = "machine") +
     window_marker
   save_plot(p7, "07_tokens_by_machine.png")
 
-  p8 <- usage |>
+  # 08a. Share-of-total pie. 'machine' is already ordered by 30-day cost (largest-first);
+  # machine_colors fixes each machine's color across all three machine charts.
+  machine_cost <- usage |>
     filter(date >= recent_start) |>
     group_by(machine) |>
     summarise(est_cost_usd = sum(est_cost_usd), .groups = "drop") |>
-    ggplot(aes(reorder(machine, est_cost_usd), est_cost_usd)) +
-    geom_col(fill = "steelblue") + coord_flip() +
-    scale_y_continuous(labels = label_dollar()) +
-    labs(title = "Claude usage — modeled cost by machine (last 30 days)", x = NULL, y = "USD (modeled)")
-  save_plot(p8, "08_cost_by_machine.png")
-
-  # 08b. Same data as a share-of-total pie (slices ordered largest first; tiny ones unlabeled).
-  machine_share <- usage |>
-    filter(date >= recent_start) |>
-    group_by(machine) |>
-    summarise(est_cost_usd = sum(est_cost_usd), .groups = "drop") |>
-    arrange(desc(est_cost_usd)) |>
-    mutate(machine = factor(machine, levels = machine),
+    mutate(machine = fct_drop(machine),   # drop machines with no cost in the window
            pct = est_cost_usd / sum(est_cost_usd),
            lbl = if_else(pct >= 0.02, percent(pct, accuracy = 1), ""))
-  p8b <- ggplot(machine_share, aes(x = "", y = est_cost_usd, fill = machine)) +
+  p8a <- ggplot(machine_cost, aes(x = "", y = est_cost_usd, fill = machine)) +
     geom_col(width = 1, color = "white") +
     coord_polar(theta = "y") +
     geom_text(aes(label = lbl), position = position_stack(vjust = 0.5), size = 3) +
+    scale_fill_manual(values = machine_colors) +
     theme_void(base_size = 12) +
     labs(title = "Claude usage — share of modeled cost by machine (last 30 days)", fill = "machine")
-  save_plot(p8b, "08b_cost_share_by_machine.png")
+  save_plot(p8a, "08a_cost_share_by_machine.png")
+
+  # 08b. Same totals as a horizontal bar — same order (largest on top) and colors as the pie.
+  p8b <- ggplot(machine_cost, aes(x = fct_rev(machine), y = est_cost_usd, fill = machine)) +
+    geom_col(show.legend = FALSE) + coord_flip() +
+    scale_fill_manual(values = machine_colors) +
+    scale_y_continuous(labels = label_dollar()) +
+    labs(title = "Claude usage — modeled cost by machine (last 30 days)", x = NULL, y = "USD (modeled)")
+  save_plot(p8b, "08b_cost_by_machine.png")
 } else {
   message("Single machine so far — machine charts (07/08) skipped.")
 }
