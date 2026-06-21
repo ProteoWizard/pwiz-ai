@@ -10,8 +10,9 @@
 > session.
 
 - **Created**: 2026-06-10 (as cumulative-coverage tooling); **expanded**: 2026-06-21
-- **Status**: In Progress -- all gates green + pushed; pwiz PR not yet opened
-- **Branch (pwiz)**: `Skyline/work/20260621_ospreysharp_test_coverage` (pushed)
+- **Status**: In Progress -- PR open (#4321), awaiting Copilot review
+- **Branch (pwiz)**: `Skyline/work/20260621_ospreysharp_test_coverage`
+- **PR (pwiz)**: https://github.com/ProteoWizard/pwiz/pull/4321
 - **pwiz-ai**: committed + pushed to master
 
 ## Deliverables (two repos, two destinations)
@@ -140,5 +141,10 @@ Staged plan: add one Astral file straight-through to light up the HRAM path.
   output unchanged); cumulative `-Files Mixed` = **77.1%**.
 - pwiz branch: two commits (unit tests; `.elib` removal) pushed to origin.
 - pwiz-ai: Mixed mode + this TODO committed + pushed to master.
-- **Remaining**: open the pwiz PR after `/pw-self-review`, address Copilot, merge,
+- Self-review (fresh-context Claude) clean on the high-value checks
+  (enum-ordinal shift safe, no dangling refs, test values independently
+  re-verified). Addressed its two LOW findings in a 3rd commit: `.elib` now
+  rejected with an explicit `NotSupportedException` (vs silent TSV mis-parse),
+  and stale `.elib` doc mentions (README x3, workflow diagram) removed.
+- Opened PR #4321 (3 commits). **Remaining**: address Copilot review, merge,
   then move this TODO to `completed/`.
