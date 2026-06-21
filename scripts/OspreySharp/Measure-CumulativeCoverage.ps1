@@ -35,7 +35,13 @@
     slow under dotCover instrumentation (hours).
 
 .PARAMETER Files
-    Single (one mzML, fastest) or All (3-file, what the nightly runs). Default Single.
+    Single (one mzML, fastest), All (3-file, what the nightly runs), or Mixed.
+    Mixed = the cheap "tctest + regression estimate": unit-resolution datasets
+    (Stellar) run all 3 files while hram datasets (Astral) run a SINGLE file. A
+    single Astral file is sequential by definition (no parallel path, no ~44 GB
+    blow-up) so it lights up the HRAM-only code (HramStrategy, Ms1ScoringByproduct,
+    IsotopeDistribution, LibCosineScorer) that Stellar can never reach, at a
+    fraction of a full 3-file Astral run's instrumented wall time. Default Single.
 
 .PARAMETER SkipUnit
     Skip the unit-test leg (regression coverage only).
@@ -66,7 +72,7 @@
 #>
 param(
     [ValidateSet('Stellar', 'Astral', 'All')] [string]$Dataset = 'Stellar',
-    [ValidateSet('Single', 'All')] [string]$Files = 'Single',
+    [ValidateSet('Single', 'All', 'Mixed')] [string]$Files = 'Single',
     [switch]$SkipUnit,
     [switch]$SkipResume,
     [int]$Threads = 16,
@@ -216,7 +222,10 @@ foreach ($name in $selected) {
     $cfg = $datasets[$name]
     $dataDir = Resolve-DataDir -Folder $cfg.Folder
     $allMzml = @(Get-ChildItem -Path $dataDir -Filter '*.mzML' -File | Sort-Object Name | ForEach-Object { $_.FullName })
-    $mzmls = if ($Files -eq 'Single') { @($allMzml[0]) } else { $allMzml }
+    # Mixed = Stellar (unit) all-files, Astral (hram) single-file -- the cheap
+    # tctest+regression estimate (see -Files help).
+    $fileMode = if ($Files -eq 'Mixed') { if ($cfg.Resolution -eq 'hram') { 'Single' } else { 'All' } } else { $Files }
+    $mzmls = if ($fileMode -eq 'Single') { @($allMzml[0]) } else { $allMzml }
     $library = @(Get-ChildItem -Path $dataDir -Filter '*.tsv' -File)[0].FullName
 
     Write-Host ("[$name] straight-through under dotCover ($($mzmls.Count) file(s), $($cfg.Resolution)) ..." ) -ForegroundColor Cyan
