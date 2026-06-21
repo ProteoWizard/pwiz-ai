@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260619_ospreysharp_debt_paydown_pr8` (create off master)
 - **Base**: `master` (after PR 7 #4316 merged as 3a6e017b9e)
 - **Created**: 2026-06-19
-- **Status**: Ready for PR -- 3 decompositions done, all pre-merge gates green; standing-cadence wiring deferred to PR 9 (user decision 2026-06-19)
-- **PR**: (pending)
+- **Status**: Completed
+- **PR**: [#4317](https://github.com/ProteoWizard/pwiz/pull/4317) (merged 2026-06-19 as e2dfcd5315)
 
 ## Progress (2026-06-19)
 Branch pushed: `Skyline/work/20260619_ospreysharp_debt_paydown_pr8` (off master 3a6e017b9e).
@@ -74,3 +74,16 @@ side-car writing / rehydration.
 ## Notes
 - After PR 8 + PR 9, run a FINAL confirmatory blind `/pw-oop-review`; if clean, declare
   the OOP debt-paydown arc complete.
+
+### 2026-06-19 - Merged
+
+PR #4317 merged as e2dfcd5315. Shipped the three Tasks-layer decompositions
+(RescoreOneFile, Stage6Planner, LoadLibraryAndDecoys) as pure, output-locked code
+motion; all pre-merge gates green (regression All, HPC rehydration-strict,
+straight-through resume, cross-impl-vs-frozen-Rust, perf gate, self-review) and the
+TeamCity Perf/Regression config passed. Copilot's one finding (unused fdrEntries
+param) was fixed. DEFERRED to PR 9: the HPC --task worker-chain standing-cadence
+wiring (in-process resume already covered by regression mode 2) and the
+Test-PerfGate self-prune. A disk-space failure on the TeamCity agent surfaced
+during this PR and was fixed separately as #4318 (regression.ps1 self-prunes stale
+TestResults run dirs); local scratch (~3.9 TB) was also cleaned.
