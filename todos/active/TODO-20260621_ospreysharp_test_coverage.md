@@ -10,8 +10,9 @@
 > session.
 
 - **Created**: 2026-06-10 (as cumulative-coverage tooling); **expanded**: 2026-06-21
-- **Status**: In Progress
-- **Branch (pwiz)**: `Skyline/work/20260621_ospreysharp_test_coverage`
+- **Status**: In Progress -- all gates green + pushed; pwiz PR not yet opened
+- **Branch (pwiz)**: `Skyline/work/20260621_ospreysharp_test_coverage` (pushed)
+- **pwiz-ai**: committed + pushed to master
 
 ## Deliverables (two repos, two destinations)
 
@@ -131,5 +132,13 @@ Staged plan: add one Astral file straight-through to light up the HRAM path.
 - Wrote 4 unit-test files (workstream B) targeting the top pure 0%/low classes.
 - Removed EncyclopeDIA `.elib` reading (workstream C) -- one of the flagged 0%
   classes (`ElibLoader`) is now gone rather than covered.
-- Branched pwiz `Skyline/work/20260621_ospreysharp_test_coverage`. Build/test/
-  regression verification pending the running coverage run releasing the exe.
+- Branched pwiz `Skyline/work/20260621_ospreysharp_test_coverage`.
+
+### 2026-06-21 -- Verified + committed + pushed
+- Gates all green: build clean; inspection 0 warnings; 426 tests pass (incl. 31
+  new); unit-only coverage **46.8% -> 50.9%**; Stellar regression PASS (mode 1/2/3,
+  output unchanged); cumulative `-Files Mixed` = **77.1%**.
+- pwiz branch: two commits (unit tests; `.elib` removal) pushed to origin.
+- pwiz-ai: Mixed mode + this TODO committed + pushed to master.
+- **Remaining**: open the pwiz PR after `/pw-self-review`, address Copilot, merge,
+  then move this TODO to `completed/`.
