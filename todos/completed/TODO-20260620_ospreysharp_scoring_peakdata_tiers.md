@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260620_osprey_scoring_peakdata_tiers`
 - **Base**: `master` (`a0065b3efa`, post-#4319 "retired AbstractScoringTask, debt-paydown PR 9")
 - **Created**: 2026-06-20
-- **Status**: Active — in progress
+- **Status**: Completed — [#4320](https://github.com/ProteoWizard/pwiz/pull/4320) (merged 2026-06-21 as 09269b4205)
 - **Delivery**: ONE branch, THREE commits, ONE PR. Per the developer's preference,
   do not split into stacked PRs (sole developer on this code; well-separated, low
   merge-conflict risk). Open the PR after commit 1 so each subsequent pushed commit
@@ -130,6 +130,18 @@ XIC/vector consumer once its precursor XIC + isotope envelope are produced upstr
   the producer-seam reframing supersedes the earlier "narrow the window list" idea.
 
 ## Progress log
+### 2026-06-21 - Merged
+PR #4320 squash-merged to master as `09269b4205`. Shipped the four-tier scoring
+peak-data hierarchy (Summary/Detailed/ApexSpectrum/ApexSpectra) with all 21 PIN
+calculators reclassified, the `PeakDataExtractor` producer seam, the MS1 production
+lift (MS1 scores now Detailed-tier consumers), and the N=2 bounded apex accessor --
+all byte-identical on Stellar+Astral with perf flat-to-faster. Also folded in a
+`regression.ps1` self-clean of its TestResults scratch (per phase/dataset + on
+failure, `KeepRunDirs=0` default, `-KeepOutput` opt-out) to fix the build-agent
+out-of-disk failure (agent build #4054724); validated locally and the overnight
+agent perf/regression runs passed. Review: self-review clean; Copilot + ultrareview
+each found only doc nits, all addressed/resolved. No scope deferred.
+
 - 2026-06-20: **Commit 1 done + pushed** (`bfffe32ec8`). Four-tier hierarchy +
   4 calculator bases; all 21 calculators reclassified (2 Summary / 10 Detailed /
   5 ApexSpectrum / 4 ApexSpectra). Behavior-free; Stellar+Astral byte-identical
