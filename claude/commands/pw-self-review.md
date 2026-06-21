@@ -69,8 +69,8 @@ Spawn a general-purpose agent in the background with a prompt that:
   poorly). Skip nits.
 - **LabKey repos only (`targetedms`, `MacCossLabModules`):** tells the
   agent to read the recurring-feedback catalog at
-  `C:\Users\vsharma\WORK\pwiz-ai\docs\labkey\code-review-feedback-catalog.md`
-  and check the diff against it, reporting each match with its catalog
+  `ai/docs/labkey/code-review-feedback-catalog.md` and check the diff
+  against it, reporting each match with its catalog
   category. This primes the agent with what these reviewers reliably
   flag; it augments the correctness pass, doesn't replace it. (Skip for
   any other repo.)
