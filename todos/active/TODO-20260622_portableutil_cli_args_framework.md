@@ -160,9 +160,47 @@ The combined two-phase plan (this + Phase B) was authored at
   `TestCommandLineHelpDocumentation` (byte-identical en/ja/zh-CHS HTML) PASS;
   `CommandLineUsageTest`/`CommandLineUsageDescriptionsTest` PASS; full ReSharper inspection 0/0.
 
-### Phase 2 - generify + move framework types (IN PROGRESS)
-Planned seams (confirmed during exploration): descriptions/headers provider, `IsRemoteUrl` static seam,
-HtmlEncode (try `WebUtility` vs goldens), and a 4th coupling found: `WRAPPABLE_LIST_TYPE_VALUES`
-(Skyline static keyed by `ValueExample` delegate, used in `ArgumentGroup.ToHtmlString`) -> static
-predicate seam like `IsRemoteUrl`. Format-type constants `ARG_VALUE_ASCII`/`ARG_VALUE_NO_BORDERS`
-needed by `ArgumentGroup` -> define in PortableUtil, reference from Skyline.
+### Phase 2 + 3 - generify + move framework types AND value exceptions (DONE, commit 3eee1363d8)
+Phases 2 and 3 were done together: NameValuePair and Argument throw the context-free value
+exceptions, so the exceptions could not stay in Skyline while their throw-sites moved. All landed
+in one green commit.
+
+Moved to `pwiz.Common.CommandLine` (PortableUtil): `ArgumentBase` (non-generic),
+`Argument<TContext>`, `NameValuePair` (non-generic, references `ArgumentBase`),
+`ArgumentGroup<TContext>`, `IUsageBlock`, `ParaUsageBlock`, base `UsageException`, and the 10
+context-free value exceptions (Missing/Unexpected/Invalid/InvalidBool/Int/Double/Date/Path +
+OutOfRangeInt/OutOfRangeDouble).
+
+Seams on a new static `ArgUsage` (PortableUtil):
+- `IArgUsageProvider Provider` - descriptions, the 3 table headers, AND the 10 value-error
+  message strings (bundled so PortableUtil carries no .resx). Skyline installs
+  `SkylineArgUsageProvider` (templates copied verbatim from the old exceptions) in the CommandArgs
+  static ctor; value exceptions build their message through the provider, so they take
+  `(ArgumentBase arg, ...)` (no churn at the ~30 throw/construct sites).
+- `IsRemoteUrl`, `IsWrappableListType` (the `WRAPPABLE_LIST_TYPE_VALUES` coupling), `HtmlEncode`.
+- Format constants `FORMAT_ASCII`/`FORMAT_NO_BORDERS`; Skyline's `ARG_VALUE_*` now alias them.
+
+HtmlEncode: kept Skyline on `HttpUtility.HtmlEncode` via the seam (PortableUtil default is
+`WebUtility.HtmlEncode`) -> byte-identical goldens confirmed, no risk taken on the encoder swap.
+
+DEVIATION from the plan's "nested re-export shims for zero test edits": infeasible. (a) generic
+covariance - `new HashSet<CommandArgs.Argument>(CommandArgs.AllArguments...)` can't take a shim
+subclass element type; (b) exception identity - `ThrowsException<CommandArgs.ValueInvalidException>`
+must catch the actual PortableUtil type the framework throws, not a Skyline shim. Chosen instead:
+file-scoped `using` aliases inside CommandArgs.cs (the 100+ declarations compile unchanged) +
+targeted edits to the 5 external files (CommandLine.cs + 4 test files; ConsoleAddAnnotationsTest
+needed none - it only uses a domain exception). Added PortableUtil ProjectReference to Skyline +
+Test/TestData/TestFunctional/TestPerf.
+
+`Argument.Parse`/`Argument.ValuesToExample` calls in CommandArgs were qualified as
+`ArgumentBase.*` (static-member-via-derived-type inspection). Moved the table HtmlEncode regex
+helper into a non-generic `UsageHtmlEncoder` (static-field-in-generic-type inspection).
+
+Verified green: full Skyline.sln build; `TestCommandLineHelpDocumentation` byte-identical
+en/ja/zh-CHS HTML; `CommandLineUsageTest`/`CommandLineUsageDescriptionsTest`; message suites
+`CommandLineImportTest`/`CommandLineRefineTest`/`ConsoleAddAnnotationsTest`/
+`ConsoleVerboseExceptionsTest`/`SkylineCmdTest`; full `CommandLineTest`; full ReSharper inspection 0/0.
+
+### Remaining for the PR
+- Self-review (`/pw-self-review`), open PR, Copilot, optional ultrareview.
+- Consider a broader TestData/TestFunctional sweep before opening the PR.
