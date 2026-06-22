@@ -5,7 +5,7 @@
 - **Base**: `master`
 - **Created**: 2026-06-22
 - **Status**: In Progress
-- **PR**: (pending)
+- **PR**: [#4322](https://github.com/ProteoWizard/pwiz/pull/4322)
 
 **Status**: In Progress (Phase A of two-phase sprint)
 **Priority**: Medium-High — foundational enabler. Creates the net8.0-capable shared home
@@ -201,6 +201,19 @@ en/ja/zh-CHS HTML; `CommandLineUsageTest`/`CommandLineUsageDescriptionsTest`; me
 `CommandLineImportTest`/`CommandLineRefineTest`/`ConsoleAddAnnotationsTest`/
 `ConsoleVerboseExceptionsTest`/`SkylineCmdTest`; full `CommandLineTest`; full ReSharper inspection 0/0.
 
-### Remaining for the PR
-- Self-review (`/pw-self-review`), open PR, Copilot, optional ultrareview.
-- Consider a broader TestData/TestFunctional sweep before opening the PR.
+### Self-review (DONE, fixes in commit 689e0f6a23)
+Fresh-context agent review found one MEDIUM + three LOW. Addressed:
+- MEDIUM: seam defaults could silently emit empty/mis-encoded output if a moved value
+  exception or usage render ran before the seams were installed -> default `IArgUsageProvider`
+  now THROWS (`NotInstalledArgUsageProvider`); all message suites still pass, proving install
+  ordering holds. This also closes the LOW HttpUtility/WebUtility concern (render can't reach
+  HtmlEncode without the provider installed first).
+- LOW: `NameValuePair.EMPTY` made `readonly` (now shared-DLL public API).
+- LOW: confirmed `ExceptionUtil.IsProgrammingDefect` (Util.cs:1898) returns true for
+  `InvalidOperationException`, so the inline throws replacing `Assume` keep the same classification.
+
+### PR open: #4322
+- Developer ran all Skyline non-perf tests locally in en/ja/zh-CHS - all passed.
+- Next: Copilot review (auto) -> `/pw-respond 4322`; optional `/ultrareview 4322`.
+- On merge: move this TODO to completed (`/pw-complete 4322`). Phase B (OspreySharp adoption)
+  depends on this being merged first.
