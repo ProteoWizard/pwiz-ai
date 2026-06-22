@@ -10,9 +10,9 @@
 > session.
 
 - **Created**: 2026-06-10 (as cumulative-coverage tooling); **expanded**: 2026-06-21
-- **Status**: In Progress -- PR open (#4321), awaiting Copilot review
+- **Status**: Completed
 - **Branch (pwiz)**: `Skyline/work/20260621_ospreysharp_test_coverage`
-- **PR (pwiz)**: https://github.com/ProteoWizard/pwiz/pull/4321
+- **PR (pwiz)**: [#4321](https://github.com/ProteoWizard/pwiz/pull/4321) (merged 2026-06-21 as 8f3c8f50)
 - **pwiz-ai**: committed + pushed to master
 
 ## Deliverables (two repos, two destinations)
@@ -146,5 +146,11 @@ Staged plan: add one Astral file straight-through to light up the HRAM path.
   re-verified). Addressed its two LOW findings in a 3rd commit: `.elib` now
   rejected with an explicit `NotSupportedException` (vs silent TSV mis-parse),
   and stale `.elib` doc mentions (README x3, workflow diagram) removed.
-- Opened PR #4321 (3 commits). **Remaining**: address Copilot review, merge,
-  then move this TODO to `completed/`.
+- Opened PR #4321 (3 commits); ultrareview returned zero findings.
+
+### 2026-06-21 -- Merged
+PR #4321 merged as commit 8f3c8f50 (squash). Shipped the 4 new unit-test files
+(unit-only coverage 46.8% -> 50.9%) and the EncyclopeDIA `.elib` removal with an
+explicit `NotSupportedException` rejection + doc cleanup. Self-review and
+ultrareview both clean. The pwiz-ai side (`-Files Mixed` estimator; cumulative
+77.1%) was already on master. No follow-ups deferred.
