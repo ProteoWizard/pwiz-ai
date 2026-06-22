@@ -142,3 +142,27 @@ portable pieces migrate into over time.
 ## Full plan reference
 The combined two-phase plan (this + Phase B) was authored at
 `~/.claude/plans/okay-now-i-would-melodic-fog.md` (2026-06-22 planning session).
+
+## Progress log
+
+### Phase 1 - PortableUtil project + ConsoleTable move (DONE, commit 6712c15b99)
+- Created `pwiz_tools/Shared/PortableUtil/PortableUtil.csproj` (SDK, `net472;net8.0`,
+  `Platforms=AnyCPU;x64`, `AssemblyName=pwiz.PortableUtil`, `RootNamespace=pwiz.Common`,
+  Nullable/ImplicitUsings disabled). Props inlined; no `Directory.Build.props` under `Shared/`.
+- `git mv` `Skyline/Util/ConsoleTable.cs` -> `Shared/PortableUtil/CommandLine/ConsoleTable.cs`;
+  namespace -> `pwiz.Common.CommandLine`; class made `public`; dropped `using pwiz.Common.SystemUtil`.
+- Replaced the single `Assume.IsTrue(widths.All(w => w > 0))` with an inline
+  `throw new InvalidOperationException(...)` (keeps IsProgrammingDefect classification; pure-BCL leaf).
+- Skyline.csproj: removed `Util\ConsoleTable.cs` Compile; added PortableUtil ProjectReference.
+- Skyline.sln: added PortableUtil project (GUID `97ECF0B4-...`) + config rows; sln `x86` -> project `Any CPU`, `x64` -> `x64`.
+- CommandArgs.cs: added `using pwiz.Common.CommandLine;` (only consumer of ConsoleTable).
+- Verified: standalone PortableUtil build (both TFMs) clean; full Skyline.sln build clean;
+  `TestCommandLineHelpDocumentation` (byte-identical en/ja/zh-CHS HTML) PASS;
+  `CommandLineUsageTest`/`CommandLineUsageDescriptionsTest` PASS; full ReSharper inspection 0/0.
+
+### Phase 2 - generify + move framework types (IN PROGRESS)
+Planned seams (confirmed during exploration): descriptions/headers provider, `IsRemoteUrl` static seam,
+HtmlEncode (try `WebUtility` vs goldens), and a 4th coupling found: `WRAPPABLE_LIST_TYPE_VALUES`
+(Skyline static keyed by `ValueExample` delegate, used in `ArgumentGroup.ToHtmlString`) -> static
+predicate seam like `IsRemoteUrl`. Format-type constants `ARG_VALUE_ASCII`/`ARG_VALUE_NO_BORDERS`
+needed by `ArgumentGroup` -> define in PortableUtil, reference from Skyline.
