@@ -76,9 +76,10 @@ calibration scoring before it are next; all three scale with
 
 ## What it will NOT cover (keep complementary)
 
-- **Format/mode paths** -- `ElibLoader` (0%) only runs for `.elib` input; some
-  scorers are mode-specific. Smaller data doesn't help; they need dedicated
-  inputs/modes (separate tests).
+- **Format-specific loaders + mode-specific scorers** -- e.g. the `.blib` loader
+  path and resolution-specific scorers only run for those inputs/modes. Smaller
+  data doesn't help; they need dedicated inputs/modes (separate tests).
+  (The old `.elib`/`ElibLoader` example was removed from OspreySharp in #4321.)
 - **Data-volume branches** -- cross-file consensus, gap-fill, large-data
   heuristics.
 - **Scientific validity** -- a handful of peptides doesn't prove the search is
@@ -106,9 +107,9 @@ The per-commit build stops being blind to pipeline breakage between nightlies.
 
 ## Dependencies / sequencing
 
-- Use the cumulative-coverage baseline (`Measure-CumulativeCoverage.ps1
-  -Dataset All -Files All`, in progress under
-  `TODO-20260610_ospreysharp_cumulative_coverage.md`) as the target to compare
-  the subset test's coverage against.
+- Compare the subset test's coverage against the measured cumulative baseline
+  (`Measure-CumulativeCoverage.ps1`): unit + Stellar 3-file + single Astral =
+  **77.1%** as of 2026-06-21 (completed
+  `TODO-20260621_ospreysharp_test_coverage.md`). Unit-only is now 50.9%.
 - Derive the subsets from the existing regression data
   (`<Downloads>\Perftests\osprey-testfiles-mzML`).

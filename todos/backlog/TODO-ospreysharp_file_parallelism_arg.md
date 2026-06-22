@@ -80,14 +80,15 @@ concurrently** -- e.g. `1,2,3,...8` -- so users can tune to their hardware and
    nodes), so this in-process outer-parallelism is C#-only -- the arg has no Rust
    equivalent. Note in help/docs.
 
-## Interim mitigation (separate, smaller)
-Until the smarter default lands, the multi-file runners that go through the
-parallel path on HRAM should serialize Astral to avoid OOM on the agent:
-- `pwiz_tools/OspreySharp/regression.ps1` (the nightly regression -- runs Astral
-  3-file) and `ai/scripts/OspreySharp/Measure-CumulativeCoverage.ps1` should set
-  `OSPREY_MAX_PARALLEL_FILES=1` for the Astral leg (matching `Measure-Pipeline.ps1`).
-  Verify the committed Astral golden is unchanged parallel-vs-sequential first
-  (should be identical). This is a quick fix, trackable on its own.
+## Interim mitigation -- DONE (superseded)
+The script-level serialize-Astral interim was handled separately and that TODO
+was closed as superseded (completed
+`TODO-20260611_ospreysharp_serialize_astral_runners.md`):
+`ai/scripts/OspreySharp/Measure-CumulativeCoverage.ps1` sets
+`OSPREY_MAX_PARALLEL_FILES=1` under instrumentation, and the perf scripts already
+serialize Astral via `Measure-Pipeline.ps1`. What remains for THIS TODO is the
+durable code-level fix: the memory-aware default + the first-class
+`--file-threads` CLI argument described above (neither is built yet).
 
 ## Refs
 - `PerFileScoringTask.cs:202-280` (parallel/sequential branches, EffectiveFileParallelism).
