@@ -1,6 +1,13 @@
 # TODO: PortableUtil — extract Skyline's declarative CLI-argument framework into a new shared DLL
 
-**Status**: Backlog (not started)
+## Branch Information
+- **Branch**: `Skyline/work/20260622_portableutil_cli_args_framework`
+- **Base**: `master`
+- **Created**: 2026-06-22
+- **Status**: In Progress
+- **PR**: (pending)
+
+**Status**: In Progress (Phase A of two-phase sprint)
 **Priority**: Medium-High — foundational enabler. Creates the net8.0-capable shared home
 (`PortableUtil`) that OspreySharp's CLI adoption (Phase B) depends on, and the staging
 ground for future portable pieces of CommonUtil (next sprint: `ProgressStatus`).
