@@ -179,6 +179,12 @@ defaults): ShortName now renders as "-i, --input ..."; a value-separator seam
 (`ArgUsage.ArgumentValueSeparator`, default "=") which OspreySharp sets to " ". Restores the old
 PrintUsage's "-i, --input <files>" style in the generated (drift-proof) help.
 
+### Usage default -> unicode (post-review, Brendan; commit 0c5d0ab562)
+`--help` (and no-args usage) now defaults to unicode tables to match Skyline; `--help ascii`
+gives lower-128 output on request. Help-only change (no parse/config impact). The space-separated
+grammar + short flags (`-d`/`--diagnostics`) are intentionally KEPT (unlike Skyline's `--name=value`)
+so existing osprey scripts keep working; revisiting the grammar is a possible future item.
+
 ### Self-review (DONE, note in commit eb7c249c39)
 Fresh-context agent: 3 LOW findings, no correctness issues; line-by-line parity vs the old switch
 confirmed (variadic stops, --input-scores accumulate-then-resolve, --task/--task=, positional
