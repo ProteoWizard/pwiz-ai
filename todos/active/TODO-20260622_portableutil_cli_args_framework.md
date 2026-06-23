@@ -212,6 +212,15 @@ Fresh-context agent review found one MEDIUM + three LOW. Addressed:
 - LOW: confirmed `ExceptionUtil.IsProgrammingDefect` (Util.cs:1898) returns true for
   `InvalidOperationException`, so the inline throws replacing `Assume` keep the same classification.
 
+### Installer manifest fix (commit 5e9a1163c1)
+TeamCity "Skyline admin installer test" failed: 71 tests threw `TypeInitializationException`
+for `pwiz.Skyline.CommandArgs` -> `Could not load file or assembly 'pwiz.PortableUtil'`. The
+admin-installer tests run against the INSTALLED build, and the new DLL was not packaged. Local
+`Run-Tests` passed because it runs from the build output (DLL present via ProjectReference).
+Fix: added `pwiz.PortableUtil.dll`/`.pdb` to `Executables/Installer/FileList64-template.txt`
+and `Product-template.wxs` (mirrors `pwiz.CommonUtil`; no `.resources.dll` entries since
+PortableUtil carries no .resx). Any NEW shared DLL needs both manifests updated.
+
 ### PR open: #4322
 - Developer ran all Skyline non-perf tests locally in en/ja/zh-CHS - all passed.
 - Next: Copilot review (auto) -> `/pw-respond 4322`; optional `/ultrareview 4322`.
