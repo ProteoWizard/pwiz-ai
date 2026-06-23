@@ -79,7 +79,13 @@ Implemented end to end; build + 432 unit tests + 0-warning inspection all green.
 - [x] `Test-PerfGate.ps1 -Dataset Stellar -MaxParallelFiles 1 -TestBaseDir D:\test\osprey-testfiles-all`
       (both A/B legs pinned sequential -- the comparable config now the default shifted):
       PASSED, total wall median -3.5%, all stage gates ok/info, no regression.
-- [ ] `regression.ps1 -Dataset All` (Stellar + multi-file Astral) -- running.
+- [x] `regression.ps1 -Dataset All`: PASS all 6 modes -- Stellar (golden/chain/resume) AND
+      Astral 3-file hram (golden/chain/resume). Astral blib 136,622,080 bytes identical
+      across straight (15:10) / HPC chain (19:50) / resume (2:09) at 1e-9.
+- [x] Perf scripts updated to reproduce recorded conditions after the sequential default:
+      Measure-Pipeline C# leg uses `--parallel-files` (Stellar 3 / Astral 1); Test-PerfGate
+      keeps OSPREY_MAX_PARALLEL_FILES (pinned old baseline predates the arg), default fixed
+      to Stellar 3 / Astral 1; Measure-CumulativeCoverage comment corrected. (pwiz-ai 2762eaa)
 
 ### Self-review (PR #4324, fresh-context agent) -- addressed
 No CRITICAL/HIGH. Findings:
