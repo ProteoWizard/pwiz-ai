@@ -1,6 +1,15 @@
-# TODO: OspreySharp console/log output + IProgressMonitor adoption
+# TODO-20260623_ospreysharp_console_output.md
 
-**Status**: Backlog (not started)
+## Branch Information
+- **Branch**: `Skyline/work/20260623_ospreysharp_console_output`
+- **Base**: `master`
+- **Created**: 2026-06-23
+- **Status**: In Progress
+- **GitHub Issue**: (none)
+- **PR**: (pending)
+
+# OspreySharp console/log output + IProgressMonitor adoption
+
 **Priority**: Medium-High -- foundational CLI usability/observability work that
 unblocks `--timestamp`/`--memstamp` perf analysis and percent-progress for long runs.
 **Type**: OspreySharp feature / infrastructure / shared-code refactor
