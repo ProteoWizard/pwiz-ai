@@ -76,8 +76,24 @@ Implemented end to end; build + 432 unit tests + 0-warning inspection all green.
       `Compare-BlibFull` oracle. NOTE: raw blib SHA differs across runs (SQLite page
       layout is not byte-reproducible) -- same byte size (52,514,816); content matches.
       This is why the regression compares table content at 1e-9, not raw bytes.
-- [ ] `Test-PerfGate.ps1` -- pin `--parallel-files <N>` on both A/B legs (default shifted to sequential).
-- [ ] `-Dataset All` (multi-file Astral) before merge.
+- [x] `Test-PerfGate.ps1 -Dataset Stellar -MaxParallelFiles 1 -TestBaseDir D:\test\osprey-testfiles-all`
+      (both A/B legs pinned sequential -- the comparable config now the default shifted):
+      PASSED, total wall median -3.5%, all stage gates ok/info, no regression.
+- [ ] `regression.ps1 -Dataset All` (Stellar + multi-file Astral) -- running.
+
+### Self-review (PR #4324, fresh-context agent) -- addressed
+No CRITICAL/HIGH. Findings:
+- MEDIUM: `--parallel-files 0` silently became AUTO + a stray "Unknown argument: 0"
+  warning. FIXED (commit 8005878): the lookahead consumes a non-negative integer and
+  0 maps to sequential (the natural "off"); test added.
+- LOW: net8 `GC.GetGCMemoryInfo` can read stale/zero early -- already fail-safe (CPU-cap
+  fallback) and documented in `SystemMemory`; no change.
+- LOW: `Osprey-workflow.html` parallelism note described the old parallel-by-default;
+  updated for the new sequential default (commit 8005878).
+
+### PR / review flow
+- #4324 opened early (updated policy: open PR -> TeamCity/CodeQL first round -> self-review).
+  Copilot review now optional/billed; pwiz-ai workflow docs updated separately.
 
 ### Deferred / open
 - AUTO footprint multiplier (3x) and 80% RAM budget are coarse, conservative
