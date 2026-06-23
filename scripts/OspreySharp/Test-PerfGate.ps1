@@ -77,8 +77,10 @@
     --threads for each run. Default 16 (matches the other harnesses).
 
 .PARAMETER MaxParallelFiles
-    OSPREY_MAX_PARALLEL_FILES. Default -1 = dataset default (1 for Astral, unset
-    otherwise), matching Measure-Pipeline.ps1.
+    OSPREY_MAX_PARALLEL_FILES -- the cross-binary control (the pinned baseline binary
+    predates the --parallel-files argument, so the env var is the only knob both A/B
+    legs understand). Default -1 = dataset default reproducing the recorded
+    Osprey-workflow.html conditions: 3 (parallel) for Stellar, 1 (sequential) for Astral.
 
 .PARAMETER TestBaseDir
     Where the datasets live. Default: Dataset-Config.ps1 default.
@@ -261,8 +263,14 @@ function Invoke-PerfRun {
         $_.Name -like 'OSPREY_DUMP_*' -or $_.Name -like 'OSPREY_*_ONLY' -or $_.Name -eq 'OSPREY_TRACE_PEPTIDE'
     } | ForEach-Object { Remove-Item ("env:" + $_.Name) -ErrorAction SilentlyContinue }
 
+    # Pin the file parallelism the Osprey-workflow.html numbers were recorded under:
+    # Stellar with 3 files in parallel, Astral (hram) sequential. Driven by the env
+    # var rather than the new --parallel-files argument because the pinned baseline
+    # binary (pwiz-perfbase) predates that argument and would reject it; the branch
+    # (new) binary honors OSPREY_MAX_PARALLEL_FILES as a back-compat cap when
+    # --parallel-files is absent, so BOTH A/B legs run the identical parallelism.
     $mpf = $MaxParallelFiles
-    if ($mpf -lt 0) { $mpf = if ($DatasetName -eq 'Astral') { 1 } else { 0 } }
+    if ($mpf -lt 0) { $mpf = if ($DatasetName -eq 'Stellar') { 3 } else { 1 } }
     if ($mpf -gt 0) {
         [Environment]::SetEnvironmentVariable('OSPREY_MAX_PARALLEL_FILES', $mpf.ToString())
     } elseif (Test-Path 'env:OSPREY_MAX_PARALLEL_FILES') {

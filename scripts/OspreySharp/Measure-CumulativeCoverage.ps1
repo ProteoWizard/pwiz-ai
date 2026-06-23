@@ -197,7 +197,10 @@ if (-not $SkipUnit) {
 }
 
 # Serialize file processing for ALL coverage legs -- for DETERMINISM under dotCover.
-# OspreySharp parallelizes input files by default (Parallel.For up to ProcessorCount).
+# OspreySharp now processes files sequentially by default, so this =1 is
+# belt-and-suspenders: it pins sequential explicitly (independent of the default)
+# and keeps the back-compat env cap path exercised. (Pre-2026-06-23 the default was
+# parallel via Parallel.For up to ProcessorCount, which is why this was required.)
 # On 2026-06-11 a 3-file Stellar straight-through died at the blib write with
 # "could not load ... System.Transactions.Local / System.Runtime.Intrinsics ... the
 # system cannot find the file specified" -- both are shared-framework assemblies the
