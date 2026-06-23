@@ -1,5 +1,25 @@
 # TODO: OspreySharp file-parallelism -- memory-aware default + a first-class CLI argument
 
+## Branch Information
+- **Branch**: `Skyline/work/20260623_ospreysharp_file_parallelism_arg`
+- **Base**: `master`
+- **Created**: 2026-06-23
+- **Status**: In Progress
+- **PR**: (pending)
+
+## Decisions (2026-06-23, session start)
+- AUTO mode (`--parallel-files` no value): implement RAM-aware now. Probe free
+  physical memory (net8.0 `GC.GetGCMemoryInfo`; net472 `GlobalMemoryStatusEx`
+  PInvoke), estimate per-file footprint = max input mzML size x 3 (grounded:
+  Astral hram mzML ~6 GB on disk -> ~14.6 GB working set/file observed
+  2026-06-11, i.e. ~2.4x; rounded up to 3x to bias AUTO toward FEWER files).
+  Use 80% of available RAM as the budget. Cap by ProcessorCount and nFiles.
+  Footprint multiplier is a coarse, deliberately-conservative heuristic;
+  explicit `--parallel-files <N>` bypasses it.
+- Help grouping: new **Performance** group holding `--parallel-files` (OUTER:
+  files at once) + `--threads` (INNER: per-file scoring threads), moved out of
+  Distributed / HPC.
+
 **Status**: Backlog (not started)
 **Priority**: Medium -- a memory footgun on smaller machines and a missing
 user-facing perf knob; not blocking, but the current default can OOM/thrash on
@@ -21,6 +41,48 @@ commit/PR `Requested by Mike.`
 landed (Phase A #4322 + Phase B #4323, both merged). Adding the argument is now the
 established `OspreyCommandArgs` pattern, not a from-scratch parser change -- see the
 implementation notes under "What to build #2".
+
+## Progress (2026-06-23)
+Implemented end to end; build + 432 unit tests + 0-warning inspection all green.
+- **Core model** (`OspreySharp.Core/FileParallelism.cs`): `FileParallelismMode`
+  (Sequential/Auto/Explicit) + readonly `FileParallelism` struct (default =
+  Sequential) + `FileParallelismResolver` -- the single owner of the precedence
+  (explicit N > auto > `OSPREY_MAX_PARALLEL_FILES` cap > sequential). Auto =
+  80% of free RAM / (max mzML x 3) footprint estimate, capped by cores + nFiles.
+- **Memory probe** (`OspreySharp.Core/SystemMemory.cs`): net8.0 `GC.GetGCMemoryInfo`
+  (cross-platform, cgroup-aware); net472 `GlobalMemoryStatusEx` PInvoke.
+- **Config**: `OspreyConfig.FileParallelism` field; `OspreyEnvironment.MaxParallelFiles`
+  doc updated (now a back-compat cap; unset = sequential, not all-at-once).
+- **CLI** (`OspreyCommandArgs.cs`): `--parallel-files [<N>]` with optional-value
+  tokenizer lookahead (mirrors `--help [fmt]`); new **Performance** group holding
+  it + `--threads` (moved out of Distributed / HPC); OUTER vs INNER clarified in
+  both descriptions.
+- **Threading** (`PerFileScoringTask.cs`): all 3 EffectiveFileParallelism sites
+  now call one `ResolveFileParallelism` helper; Run's sequential/parallel dispatch
+  is driven by the resolved N (was the raw env var). The `[BENCH]
+  OSPREY_MAX_PARALLEL_FILES=...` log lines are replaced by one resolver decision line.
+- **Tests**: `FileParallelismResolverTests` (precedence/clamping/auto, injected
+  RAM/footprint); `OspreyCommandArgsTests` extended (absent/auto/explicit + the
+  optional value not swallowing the next flag + Performance group in help).
+
+### Gates
+- [x] `Build-OspreySharp.ps1 -RunTests -RunInspection`: build OK, 432 pass / 3 skip, 0 warnings.
+- [x] `regression.ps1 -Dataset Stellar`: PASS all 3 modes (mode1 vs golden, mode3 HPC
+      chain, mode2 resume). Confirms the new sequential default == the golden (recorded
+      under `OSPREY_MAX_PARALLEL_FILES=1`). Run log showed the resolver decision line
+      `File parallelism: 1 (sequential default; ...)` for the 3-file set.
+- [x] Proved `--parallel-files 3` (explicit) and `--parallel-files` (auto, chose 3 from
+      39.5 GB free) BOTH == sequential at 1e-9 incl. peaks, via the regression's own
+      `Compare-BlibFull` oracle. NOTE: raw blib SHA differs across runs (SQLite page
+      layout is not byte-reproducible) -- same byte size (52,514,816); content matches.
+      This is why the regression compares table content at 1e-9, not raw bytes.
+- [ ] `Test-PerfGate.ps1` -- pin `--parallel-files <N>` on both A/B legs (default shifted to sequential).
+- [ ] `-Dataset All` (multi-file Astral) before merge.
+
+### Deferred / open
+- AUTO footprint multiplier (3x) and 80% RAM budget are coarse, conservative
+  constants (bias toward fewer files). Refine with measurement in a follow-up;
+  explicit `--parallel-files <N>` is the precise escape hatch meanwhile.
 
 ## Verified behavior (2026-06-11)
 
