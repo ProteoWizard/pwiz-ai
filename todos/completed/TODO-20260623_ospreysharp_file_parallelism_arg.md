@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260623_ospreysharp_file_parallelism_arg`
 - **Base**: `master`
 - **Created**: 2026-06-23
-- **Status**: In Progress
-- **PR**: (pending)
+- **Status**: Completed
+- **PR**: [#4324](https://github.com/ProteoWizard/pwiz/pull/4324) (merged 2026-06-23)
 
 ## Decisions (2026-06-23, session start)
 - AUTO mode (`--parallel-files` no value): implement RAM-aware now. Probe free
@@ -20,7 +20,7 @@
   files at once) + `--threads` (INNER: per-file scoring threads), moved out of
   Distributed / HPC.
 
-**Status**: Backlog (not started)
+**Status**: Completed (merged 2026-06-23 as 0e59d2d) -- original framing below.
 **Priority**: Medium -- a memory footgun on smaller machines and a missing
 user-facing perf knob; not blocking, but the current default can OOM/thrash on
 multi-file HRAM.
@@ -229,3 +229,25 @@ durable code-level fix: the memory-aware default + the first-class
 - `ai/scripts/OspreySharp/Measure-Pipeline.ps1` (Astral default = 1).
 - Skyline `--import-threads=<integer>` (CLI-arg precedent).
 - Observed: ~44 GB working set, 3-file Astral hram parallel (cumulative-coverage run, 2026-06-11).
+
+## Progress Log
+
+### 2026-06-23 - Merged
+
+PR #4324 merged as commit 0e59d2d. Shipped the full design: strictly-sequential
+default; first-class `--parallel-files [<N>]` (absent=sequential, `0`/`1`=sequential,
+`N`=explicit count, no-value=RAM/CPU-aware AUTO via a cross-platform free-memory probe
+-- net8.0 `GC.GetGCMemoryInfo`, net472 `GlobalMemoryStatusEx`); a single
+`FileParallelismResolver` owning the precedence (explicit arg > auto > `OSPREY_MAX_PARALLEL_FILES`
+back-compat cap > sequential) routed through all three `PerFileScoringTask` sites; new
+**Performance** help group. Gates all green: build + 432 tests + 0-warning inspection;
+`regression.ps1 -Dataset All` PASS (Stellar + Astral 3-file, all golden/chain/resume modes,
+byte-identical at 1e-9); `--parallel-files` explicit + auto proven == sequential at 1e-9 incl.
+peaks; `Test-PerfGate` PASS (no regression). Fresh-context self-review was clean (1 MEDIUM
+`--parallel-files 0`->sequential + 2 LOW, all addressed in commit 8005878). Separately
+(pwiz-ai): updated the PR-review-policy docs (Copilot now optional/billed, self-review the
+primary gate, open-PR-early-for-TeamCity), and pinned the perf scripts to the recorded
+conditions (Stellar 3-parallel / Astral sequential) now that the default flipped. No GitHub
+issue (none was filed). Nothing deferred from the agreed scope; AUTO footprint multiplier (3x)
+and 80% RAM budget remain coarse, conservative constants noted for future measurement-based
+refinement.
