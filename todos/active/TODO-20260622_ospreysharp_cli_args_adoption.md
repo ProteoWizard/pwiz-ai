@@ -132,3 +132,38 @@ declarations or the drift test.
 ## Full plan reference
 The combined two-phase plan (Phase A + this) was authored at
 `~/.claude/plans/okay-now-i-would-melodic-fog.md` (2026-06-22 planning session).
+
+## Progress log
+
+### Implementation (IN PROGRESS)
+- PortableUtil: added `ShortName` to `ArgumentBase` (Phase A had not). Skyline unaffected
+  (descriptor-only; not rendered).
+- New `OspreySharp/OspreyCommandArgs.cs`: declarative args in 6 `ArgumentGroup`s
+  (General I/O, Scoring & Tolerance, FDR & Protein Inference, Decoys, Distributed/HPC,
+  Diagnostics & Info) + leading/trailing `ParaUsageBlock`s. `OspreyArgument : Argument<OspreyCommandArgs>`
+  carries `Variadic` + a `ProcessVariadic` (whole-run) delegate. `TokenizeAndDispatch` keeps
+  OspreySharp's grammar (short `-i`, space-separated, variadic, positional-file fallback);
+  ProcessValue lambdas do the EXACT former parsing (invariant `ParseDouble`, `int.Parse`,
+  `ToLowerInvariant`, warn-and-default enums) so `OspreyConfig` stays byte-identical. `ToConfig()`
+  runs the identical epilogue (work-dir fan-out, resolution mode, unit defaults, fragment overrides,
+  decoy-manifest warning). `--input-scores` keeps per-occurrence accumulate-then-`ResolveInputScores`.
+  Generated help: `BuildUsage(ascii|unicode|sections|<Section>)` + `GenerateUsageHtml()`; inline
+  `IArgUsageProvider` (descriptions + headers; value-error members unreached since the tokenizer
+  raises its own ArgumentExceptions). Note: the framework's interface is `IArgUsageProvider` (Phase A),
+  not the plan's `IArgDescriptionProvider` name.
+- Program.cs surgery: `ParseArgs` is now a thin facade -> `OspreyCommandArgs.ParseArgs`;
+  removed `RequireValue`/`ParseDouble`/`PrintUsage`; Main's no-args path calls
+  `OspreyCommandArgs.PrintUsage(null)`. Kept Main task pre-scan, `ValidateArgs`, `ResolveTask`,
+  `ResolveInputScores`, logging, top-level catch, `-h`/`-v` exit-0.
+- Plumbing: PortableUtil ProjectReference in OspreySharp.csproj; PortableUtil added to
+  OspreySharp.sln (x86->AnyCPU), reusing the Phase A GUID 97ECF0B4.
+- New `OspreySharp.Test/OspreyCommandArgsTests.cs`: arg->config table, variadic, short-alias
+  equivalence, drift killer (every arg grouped + described), help rendering (ascii/sections/unicode/
+  section-filter/html). ProgramTests unchanged (facade keeps the signature).
+
+### Verification status
+- Build (net472 + net8.0) green; existing 429 tests pass; ReSharper 0 warnings (after dropping a
+  redundant `using pwiz.OspreySharp.IO`).
+- New OspreyCommandArgsTests: written, pending a build+run (held until the Stellar regression frees
+  the exe).
+- Stellar byte-identical regression: running.
