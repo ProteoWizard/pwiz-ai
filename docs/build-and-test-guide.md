@@ -618,6 +618,30 @@ stop -> build -> launch, never build -> stop -> launch.
 - `skyline_get_settings_list_item` - Inspect saved report XML definitions
 - `skyline_get_report_from_definition` - Test a report without saving it
 
+### Workflow: Adding a new shared project / DLL (update the installer manifests)
+
+When you add a new assembly that Skyline ships (e.g. a new `pwiz_tools/Shared/*`
+project referenced by Skyline.csproj), you must also list its outputs in **both**
+Skyline installer manifests, or the application will build and pass local tests but
+fail to load the assembly at runtime once installed:
+
+- `pwiz_tools/Skyline/Executables/Installer/FileList64-template.txt`
+- `pwiz_tools/Skyline/Executables/Installer/Product-template.wxs`
+
+Add the `.dll` and `.pdb` (mirror an existing peer such as `pwiz.CommonUtil`). Add
+`{lang}\{name}.resources.dll` entries **only** if the project has localized `.resx`
+satellite assemblies; a pure-BCL project with no `.resx` needs none. Only Skyline-side
+DLLs go in the templates - ProteoWizard (C++) build outputs are auto-included by
+`SetupDeployProject.cs`, which warns if one is wrongly added to a template.
+
+**Why this matters / how it's caught**: a missing entry does NOT fail the normal build
+or `Run-Tests.ps1` (those run from the build output, where ProjectReference already
+copied the DLL). It surfaces in the TeamCity **"Skyline admin installer test"**, which
+runs against the *installed* build: the missing DLL produces a runtime load failure
+(e.g. a `TypeInitializationException` whose inner exception is
+`Could not load file or assembly '<name>'`). So even if this doc is missed, CI flags it
+before merge - but updating the manifests in the same PR avoids the round-trip.
+
 ## Output Interpretation
 
 ### Build Output (verbosity:minimal)
@@ -730,6 +754,12 @@ Skyline requires zero warnings - fix all warnings before committing
 
 ### Tests fail with "File not found"
 Ensure you're running TestRunner.exe from the output directory (`bin\x64\Debug`)
+
+### Admin-installer test fails with "Could not load file or assembly" (TypeInitializationException)
+A new shared DLL is missing from the installer manifests, so it is not packaged and
+cannot load at runtime in the installed build. Add it to both
+`Executables/Installer/FileList64-template.txt` and `Product-template.wxs` - see
+"Workflow: Adding a new shared project / DLL" above.
 
 ### Build blocked by running processes (Exit code 2)
 
