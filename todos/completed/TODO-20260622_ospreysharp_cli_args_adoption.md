@@ -4,11 +4,11 @@
 - **Branch**: `Skyline/work/20260622_ospreysharp_cli_args_adoption`
 - **Base**: `master`
 - **Created**: 2026-06-22
-- **Status**: In Progress
-- **PR**: (pending)
+- **Status**: Completed
+- **PR**: [#4323](https://github.com/ProteoWizard/pwiz/pull/4323) (merged 2026-06-23)
 - **Depends on**: Phase A PR [#4322](https://github.com/ProteoWizard/pwiz/pull/4322) (merged) — PortableUtil now on master
 
-**Status**: In Progress (Phase B of two-phase sprint)
+**Status**: Completed (Phase B of two-phase sprint)
 **Priority**: Medium — removes the hand-rolled `switch` parser + the separately hand-maintained
 `PrintUsage` (which drifts from the parser), giving a single source of truth and drift-proof
 generated help (ascii / unicode / HTML).
@@ -128,6 +128,25 @@ declarations or the drift test.
 - Modify: `pwiz_tools/OspreySharp/OspreySharp/Program.cs` (remove ParseArgs internals + PrintUsage),
   `OspreySharp.sln`, `OspreySharp/OspreySharp.csproj`.
 - Reference (unchanged target of the mapping): `pwiz_tools/OspreySharp/OspreySharp.Core/OspreyConfig.cs`.
+
+### 2026-06-23 - Merged
+
+PR #4323 merged as commit 1fffcabc36 (squash, admin override). Shipped Phase B in full: OspreySharp's
+hand-rolled switch parser + drift-prone PrintUsage replaced by a declarative OspreyCommandArgs on the
+shared PortableUtil framework, with generated unicode/ascii/sections/html help (matching Skyline's
+default + stylesheet). OspreyConfig parsing is byte-identical (Stellar regression: golden + HPC chain +
+resume all unchanged). Includes the post-open refinements: ShortName + value-separator render seam,
+unicode-default help, --help to stdout, and the Skyline-matching HTML stylesheet.
+
+Gates at merge: 21/22 CI checks green; the one pending check (Docker Wine x86_64 container) does not
+build OspreySharp and its earlier failure was an unrelated dependency (re-run green) - merged via
+admin override (Brendan, admin) over that irrelevant pending check. Fresh-context self-review done
+(3 LOW, addressed/intended). **Copilot did NOT review** - account quota-blocked until 2026-07-01;
+merge proceeded by developer decision, same as Phase A #4322.
+
+The two-phase CLI-unification sprint (PortableUtil extraction + OspreySharp adoption) is complete.
+Possible future item: revisit OspreySharp's space-separated grammar vs Skyline's --name=value (kept
+as-is now so existing osprey scripts keep working).
 
 ## Full plan reference
 The combined two-phase plan (Phase A + this) was authored at
