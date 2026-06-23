@@ -161,9 +161,28 @@ The combined two-phase plan (Phase A + this) was authored at
   equivalence, drift killer (every arg grouped + described), help rendering (ascii/sections/unicode/
   section-filter/html). ProgramTests unchanged (facade keeps the signature).
 
-### Verification status
-- Build (net472 + net8.0) green; existing 429 tests pass; ReSharper 0 warnings (after dropping a
-  redundant `using pwiz.OspreySharp.IO`).
-- New OspreyCommandArgsTests: written, pending a build+run (held until the Stellar regression frees
-  the exe).
-- Stellar byte-identical regression: running.
+### Verification status (ALL GREEN)
+- OspreySharp build (net472 + net8.0); 434 tests pass (429 existing + 5 new OspreyCommandArgsTests
+  methods); ReSharper 0 warnings.
+- Stellar byte-identical regression: PASS - mode1 (vs golden), mode3 (HPC --task chain == straight),
+  mode2 (resume == straight); blib 52,514,816 bytes unchanged. Confirms the rewrite is byte-identical
+  end-to-end including the --task split and --input-scores variadic.
+- Skyline 3-language CommandLine.html goldens + usage tests: PASS - the shared PortableUtil change
+  (ShortName prefix + value-separator seam) is Skyline-safe via the "=" / null-ShortName defaults.
+- Manual exe spot-checks: `osprey` (no args -> usage + exit 1), `--help` (ascii, shows "-i, --input
+  <files>"), `--help unicode`, `--help sections`, `--help html`, `-v`.
+
+### Help rendering refinement (beyond the plan)
+The framework's ArgumentDescription rendered "--input=<...>", which would mislead - OspreySharp's
+grammar is space-separated and short aliases were not shown. Added to PortableUtil (Skyline-safe via
+defaults): ShortName now renders as "-i, --input ..."; a value-separator seam
+(`ArgUsage.ArgumentValueSeparator`, default "=") which OspreySharp sets to " ". Restores the old
+PrintUsage's "-i, --input <files>" style in the generated (drift-proof) help.
+
+### Self-review (DONE, note in commit eb7c249c39)
+Fresh-context agent: 3 LOW findings, no correctness issues; line-by-line parity vs the old switch
+confirmed (variadic stops, --input-scores accumulate-then-resolve, --task/--task=, positional
+fallback, epilogue ordering, warn-and-default messages, exit codes). Addressed the one actionable
+item: documented that ArgUsage seams are process-global. The other two (-h consuming an optional
+section token; --fragment-unit advertising {ppm,mz} but accepting th/da) are intended and match the
+original. Copilot remains quota-blocked until 2026-07-01.
