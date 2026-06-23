@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260622_portableutil_cli_args_framework`
 - **Base**: `master`
 - **Created**: 2026-06-22
-- **Status**: In Progress
-- **PR**: [#4322](https://github.com/ProteoWizard/pwiz/pull/4322)
+- **Status**: Completed
+- **PR**: [#4322](https://github.com/ProteoWizard/pwiz/pull/4322) (merged 2026-06-22)
 
-**Status**: In Progress (Phase A of two-phase sprint)
+**Status**: Completed (Phase A of two-phase sprint)
 **Priority**: Medium-High — foundational enabler. Creates the net8.0-capable shared home
 (`PortableUtil`) that OspreySharp's CLI adoption (Phase B) depends on, and the staging
 ground for future portable pieces of CommonUtil (next sprint: `ProgressStatus`).
@@ -221,8 +221,18 @@ Fix: added `pwiz.PortableUtil.dll`/`.pdb` to `Executables/Installer/FileList64-t
 and `Product-template.wxs` (mirrors `pwiz.CommonUtil`; no `.resources.dll` entries since
 PortableUtil carries no .resx). Any NEW shared DLL needs both manifests updated.
 
-### PR open: #4322
-- Developer ran all Skyline non-perf tests locally in en/ja/zh-CHS - all passed.
-- Next: Copilot review (auto) -> `/pw-respond 4322`; optional `/ultrareview 4322`.
-- On merge: move this TODO to completed (`/pw-complete 4322`). Phase B (OspreySharp adoption)
-  depends on this being merged first.
+### 2026-06-22 - Merged
+
+PR #4322 merged as commit d78dcfb8a0 (squash). Shipped Phase A in full: the PortableUtil
+shared DLL + the generified CLI-argument framework extracted from CommandArgs.cs, the ArgUsage
+seams (with the self-review hardening that makes the default provider throw), and the installer
+manifest entries that the admin-installer test required.
+
+Gates at merge: fresh-context self-review done (found + fixed the silent-empty-output seam
+default); all 19 CI checks green incl. the admin-installer test; developer ran all Skyline
+non-perf tests locally in en/ja/zh-CHS. **Copilot did NOT review** - its account hit the monthly
+quota (renews 2026-07-01), so the emailed "comment" was a quota notice, not a clean review;
+ultrareview was skipped (low credits). Merge proceeded on that basis by developer decision,
+given the well-tested area and the self-review + CI + local coverage.
+
+Phase B (`TODO-ospreysharp_cli_args_adoption.md`) is now unblocked - PortableUtil exists on master.
