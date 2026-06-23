@@ -1,6 +1,14 @@
 # TODO: OspreySharp — adopt the PortableUtil declarative CLI-arg framework (declarative args + generated help)
 
-**Status**: Backlog (not started)
+## Branch Information
+- **Branch**: `Skyline/work/20260622_ospreysharp_cli_args_adoption`
+- **Base**: `master`
+- **Created**: 2026-06-22
+- **Status**: In Progress
+- **PR**: (pending)
+- **Depends on**: Phase A PR [#4322](https://github.com/ProteoWizard/pwiz/pull/4322) (merged) — PortableUtil now on master
+
+**Status**: In Progress (Phase B of two-phase sprint)
 **Priority**: Medium — removes the hand-rolled `switch` parser + the separately hand-maintained
 `PrintUsage` (which drifts from the parser), giving a single source of truth and drift-proof
 generated help (ascii / unicode / HTML).
