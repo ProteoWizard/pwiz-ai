@@ -108,8 +108,13 @@ pattern and shares the infrastructure via PortableUtil.
       AssemblyInfo.cs is Boost-Build-generated (gitignored) and was just absent in the
       checkout (pre-existing, not this PR). AutoQC builds + all AutoQC tests PASS after that.
       Also removed an inspection-flagged unused `using pwiz.Skyline` in CommandLinePeakBoundaryTest.
-      NOTE: AutoQC.sln registers PortableUtil under a fresh GUID vs Skyline.sln's canonical
-      {97ECF0B4...}; harmless (SDK project, path-resolved) but could be aligned later.
+- [x] **Pinned PortableUtil identity** (`6f68eb372b`): root cause of the GUID divergence was
+      that PortableUtil.csproj (SDK-style) had no `<ProjectGuid>`, so each solution mints its
+      own. A prior Claude session happened to use {97ECF0B4...} everywhere it wired the project
+      (Skyline.sln, OspreySharp.sln, 7 csproj refs); VS-2026 minted a different one (5D588BE8)
+      when AutoQC.sln was added by hand. Added `<ProjectGuid>{97ECF0B4...}</ProjectGuid>` to
+      PortableUtil.csproj and aligned AutoQC.sln to it, so solutions READ the identity instead
+      of minting. PENDING dev verification that VS-2026 honors the pin (doesn't re-mint).
 - [ ] **CodeQL** (PR #4326): 2 pre-existing "PanoramaUserEmail -> external write" alerts on
       the moved CommandStatusWriter.cs (flow lives in Skyline; re-flagged only because the
       sink file moved). NOT introduced by this PR -> left for the security review (not resolved).
