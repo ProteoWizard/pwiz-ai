@@ -3,7 +3,8 @@
 ## Branch
 - **Branch**: `26.3_fb_testresults-bug-fixes` (MacCossLabModules)
 - **Base**: `release26.3-SNAPSHOT`
-- **Status**: Fixes committed and pushed. PR not opened yet.
+- **PR**: [#646](https://github.com/LabKey/MacCossLabModules/pull/646) (open) — "TestResults module bugfixes"
+- **Status**: PR #646 open, awaiting review/merge.
 - **Related**: container scoping split out to `TODO-LK-20260425_testresults-container-filter.md`.
 - **Handoff**: read `.tmp/handoff-20260614_testresults.md` before starting.
 

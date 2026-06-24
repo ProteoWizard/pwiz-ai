@@ -3,8 +3,8 @@
 ## Branch
 - **Branch**: `26.3_fb_testresults-container-filter` (MacCossLabModules)
 - **Base**: `release26.3-SNAPSHOT`
-- **PR**: [#645](https://github.com/LabKey/MacCossLabModules/pull/645) (open)
-- **Status**: Tested green; Copilot review addressed (3 follow-up commits pushed). PR awaiting human review/merge.
+- **PR**: [#645](https://github.com/LabKey/MacCossLabModules/pull/645) (merged 2026-06-18)
+- **Status**: Completed
 - **Related**: split from `TODO-LK-20260403_testresults-bugs.md`.
 
 ## Review status (Copilot)
@@ -69,3 +69,10 @@ etc.) are unaffected.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260616_testresults-container-filter.md` before starting work.
+
+## Closeout
+
+### 2026-06-24 - Merged
+
+PR #645 "Filter testresults tables to the current folder" merged 2026-06-18 into
+`release26.3-SNAPSHOT`. Closed out as completed.
