@@ -223,6 +223,11 @@ function Invoke-PipelineRun {
                   '--resolution', $resolution,
                   '--protein-fdr', '0.01',
                   '--threads', $Threads.ToString())
+    # C# OspreySharp gates [STAGE-WALL]/[TIMING] behind --perf-stats (off by default);
+    # Rust osprey emits them unconditionally and does not accept the flag.
+    if ($ToolKey -eq 'CSharp') {
+        $cliArgs += '--perf-stats'
+    }
 
     # Pre-run env scrub: remove every OSPREY_DUMP_* / *_ONLY hook so the
     # binary executes the production path. Then set the few env vars this

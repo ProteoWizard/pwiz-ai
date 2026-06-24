@@ -254,7 +254,8 @@ function Invoke-PerfRun {
     foreach ($f in $files) { $cliArgs += @('-i', $f) }
     $cliArgs += @('-l', $ds.Library, '-o', 'output.blib',
                   '--resolution', $ds.Resolution, '--protein-fdr', '0.01',
-                  '--threads', $Threads.ToString())
+                  '--threads', $Threads.ToString(),
+                  '--perf-stats')   # emit [STAGE-WALL]/[TIMING] this gate parses (off by default)
 
     # Scrub every diagnostic OSPREY_DUMP_* / *_ONLY hook so we measure the
     # production path (dumps add 30s+ to stage5). Pattern-based so the list can't

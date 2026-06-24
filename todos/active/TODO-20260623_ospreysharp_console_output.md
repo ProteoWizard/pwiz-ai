@@ -74,8 +74,22 @@ pattern and shares the infrastructure via PortableUtil.
       Note: invariant hint comparison changed InvariantCulture -> CurrentCulture;
       behaviorally identical for the ASCII "Error:" prefix.
 - [x] Wired project reference: added `CommonUtil -> PortableUtil` ProjectReference
-      (Commit 5 prereq). Skyline already references PortableUtil (from OspreyCommandArgs
+      (Commit 6 prereq). Skyline already references PortableUtil (from OspreyCommandArgs
       work), so no new Skyline ref needed. PortableUtil stays a leaf.
+- [x] **REVERTED in Commit 5 (CI breakage):** this `CommonUtil -> PortableUtil` edge broke
+      the legacy bjam C++ tool builds (Core/Bumbershoot/Docker on PR #4326). The pwiz GUI
+      tools (MSConvertGUI/SeeMS) + Bumbershoot consume CommonUtil via bjam `msbuild <proj>
+      /restore`, which can't restore/TF-resolve an SDK-style multi-targeting project ->
+      `error MSB4006 circular dependency` (Core) / `error NETSDK1004 project.assets.json not
+      found` (Bumbershoot), both naming `PortableUtil.csproj::TargetFramework=net472`. Master
+      is green; the failure is type-agnostic (fires just from the SDK project entering the
+      bjam ProjectReference graph). CommonUtil uses NO PortableUtil type yet, so the edge was
+      load-bearing for nothing -> removed it (kept a guard comment in CommonUtil.csproj).
+      **Commit 6 BLOCKER:** the move there (Immutable/ProgressStatus -> PortableUtil) FORCES
+      CommonUtil -> PortableUtil (CommonUtil's own code uses those 92x), so the bjam tool
+      builds will break again. Must land the build-infra fix first (teach those tool builds
+      to restore SDK projects, or `SetTargetFramework=net472` on the edge, or sln-ify them) --
+      Matt's domain; deferred until he returns.
 - [x] Updated Skyline: removed class from `CommandLine.cs`; installed the localized
       hint once in `Program.cs:Main` via `CommandStatusWriter.AddErrorMessageHint(
       Resources.CommandStatusWriter_WriteLine_Error_)`. All 10 construction sites and
@@ -186,7 +200,53 @@ rendering), though full progress plumbing is NOT a goal of this sprint.
       fallback matches the historical stderr channel.
 - Result: ALL output flows through `_out` and honors the stamps/log-file.
 
-### Commit 5 - Move IProgressMonitor + ProgressStatus + Immutable cluster to PortableUtil
+### Commit 5 - Output-review cleanup (--perf-stats, rescore labels, Percolator cycles)
+**Emerged from reviewing the first real `--timestamp --memstamp` Stellar log in
+perfviz.html (2026-06-23/24).** Three problems the chart/log surfaced, all output-only
+(no data-path change; regression.ps1 still byte-identical at 1e-9):
+- [x] **Leftover dev diagnostics removed.** Dropped the `[DIAG]` peptide-trigger block
+      (`AAAAAAAAAAAAAAAGAGAGAK`) + `_logInfo` plumbing from `PeakDataExtractor`
+      (ctor now `(IScoringDiagnostics)`), the valueless `[POOL]` lines from
+      `ScoringPipeline`, the forwarded `logInfo` param from `CoelutionScorer`/
+      `ScoringPipeline`; dropped the `[INFO]` prefix on `Program.LogInfo`; `[task]`
+      -> `[TASK] ` in `AnalysisPipeline` (3 sites).
+- [x] **`--perf-stats` flag gates the machine-parseable lines.** New `OspreyOutput.PerfStats`
+      + `IsStatLine` + `StatFilteringTextWriter` (a sink wrapper). Default OFF -> the
+      `[COUNT]/[TIMING]/[STAGE-WALL]` lines are suppressed (each has a plain human twin
+      that stays); `--perf-stats` ON restores all tagged lines for the perf tools.
+      `ARG_PERF_STATS` in `GROUP_LOGGING`; `OspreyConfig.PerfStats`. Verified: default
+      Stellar = 0 tagged lines, `--perf-stats` = 125.
+- [x] **Rescore scoring passes self-label.** `RunCoelutionScoring` gained an optional
+      `passLabel` (default `"Scored"`); the two PerFileRescore phases were emitting the
+      identical `Scored N/125` and read as "scored each file twice". Now: `Re-scored`
+      (Phase 1 existing entries), `Gap-fill scored` (Phase 2 CWT), `Gap-fill
+      forced-integration scored` (Phase 2 forced). First-pass scoring keeps `Scored`.
+- [x] **Percolator per-cycle progress** (`PercolatorFdr.TrainFold`): the SVM fold
+      training was 57s (first-pass) / 31s (second-pass) of total silence -> two big
+      Time-Diff spikes in perfviz. Added a per-cycle line mirroring Skyline's mProphet
+      LDA cycle logging: `Percolator fold f/3: iteration i of 10 (N targets at 1% FDR)`.
+      Folds train in parallel (OspreyParallel.For) so writes are serialized under
+      `_trainProgressLock` and each line names its fold. Plain human line (always on,
+      NOT --perf-stats-gated). NO ProgressStatus: the loop converges early
+      (consecutiveNoImprove) before MaxIterations. Result: whole-run max inter-line gap
+      57s -> 8s.
+- [x] **ai perf tools pass `--perf-stats`** so they still receive the tagged lines:
+      `Test-PerfGate.ps1` ($cliArgs) and `Measure-Pipeline.ps1` (C#-only branch).
+- [ ] **Gate: OspreySharp pre-commit** PASSED (build + 432 tests + 0-warning).
+- [ ] **Gate: `regression.ps1 -Dataset Stellar`** (output-only; expect byte-identical).
+- [ ] Commit pwiz (SHA: pending); commit ai scripts separately.
+
+**Future direction surfaced here (developer, 2026-06-24):** a `--verbose` mode will
+become the gate for implementer-grade metrics (means, SDs, per-step internals), while
+the DEFAULT log keeps user-relevant signals -- e.g. "N targets at 1% FDR" (the
+Percolator cycle metric) STAYS visible by default; verbose-only metrics are for
+algorithm implementers assessing per-step success. This is a DIFFERENT axis from
+`--perf-stats` (machine-parseable tags); the two coexist. Design into Commit 7.
+Follow-up: the new 8s max gap is the **RT-calibration LDA pass** ("Calibration pass 1
+LDA passing count") -- the genuine mProphet-LDA analog; give it the same per-cycle
+treatment (candidate for Commit 7 or a fast-follow).
+
+### Commit 6 - Move IProgressMonitor + ProgressStatus + Immutable cluster to PortableUtil
 - [ ] Move (delete from CommonUtil, add under PortableUtil, namespaces UNCHANGED):
       `SystemUtil/IProgressMonitor.cs`, `SystemUtil/ProgressStatus.cs`,
       `SystemUtil/Immutable.cs`, `Collections/ImmutableList.cs`,
@@ -200,7 +260,7 @@ rendering), though full progress plumbing is NOT a goal of this sprint.
 - [ ] **Gate: full `Skyline.sln` build** -- this is the riskiest commit (relocates a
       foundational base class's home assembly across all of Skyline).
 
-### Commit 6 - Portable ConsoleProgressMonitor + percent-progress adoption
+### Commit 7 - Portable ConsoleProgressMonitor + percent-progress adoption
 - [ ] Add `pwiz_tools/Shared/PortableUtil/SystemUtil/ConsoleProgressMonitor.cs`
       (`pwiz.Common.SystemUtil`): fresh port of the render core of
       `CommandProgressMonitor` (CommandLine.cs:5151-5376) -- ctor
