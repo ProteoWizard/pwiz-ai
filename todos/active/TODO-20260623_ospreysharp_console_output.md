@@ -60,43 +60,88 @@ pattern and shares the infrastructure via PortableUtil.
 ## Commit sequence (pwiz repo; each builds + passes gates)
 
 ### Commit 1 - Share CommandStatusWriter via PortableUtil
-- [ ] Move `CommandStatusWriter` out of `pwiz_tools/Skyline/CommandLine.cs:4843-4980`
-      into `pwiz_tools/Shared/PortableUtil/SystemUtil/CommandStatusWriter.cs`
-      (namespace `pwiz.Common.SystemUtil`, BCL-only).
-- [ ] Parameterize the error hint: replace the `Resources.CommandStatusWriter_WriteLine_Error_`
-      branch in `IsErrorMessage` with a settable hint collection (default `{ "Error:" }`);
-      Skyline sets the localized variant where it constructs the writer.
-- [ ] Wire project references: add `PortableUtil` ProjectReference to `CommonUtil`
-      (and `Skyline` directly if its non-SDK csproj does not flow the reference
-      transitively -- verify). PortableUtil stays a leaf (never references back).
-- [ ] Update Skyline (`CommandLine.cs`, `Program.cs`) to use the moved class.
-- [ ] **Gate: full `Skyline.sln` build** (this commit touches Skyline).
+- [x] Moved `CommandStatusWriter` out of `CommandLine.cs` into
+      `pwiz_tools/Shared/PortableUtil/SystemUtil/CommandStatusWriter.cs`
+      (namespace `pwiz.Common.SystemUtil`, BCL-only). PortableUtil is SDK-style and
+      globs `.cs`, so no csproj `<Compile>` entry needed.
+- [x] Parameterized the error hint: the `Resources.CommandStatusWriter_WriteLine_Error_`
+      branch in `IsErrorMessage` is replaced by a hint collection seeded with the
+      invariant `ERROR_MESSAGE_HINT` ("Error:") plus `AddErrorMessageHint(string)`.
+      DECISION/DEVIATION: made the collection `static` (set once at startup) rather
+      than per-construction as the original wording implied. Rationale: preserves the
+      original dual-detection at ALL writers including the mid-run log-file swap
+      (`CommandLine.cs:173`) with one DRY wire-up, and localization is process-wide.
+      Note: invariant hint comparison changed InvariantCulture -> CurrentCulture;
+      behaviorally identical for the ASCII "Error:" prefix.
+- [x] Wired project reference: added `CommonUtil -> PortableUtil` ProjectReference
+      (Commit 5 prereq). Skyline already references PortableUtil (from OspreyCommandArgs
+      work), so no new Skyline ref needed. PortableUtil stays a leaf.
+- [x] Updated Skyline: removed class from `CommandLine.cs`; installed the localized
+      hint once in `Program.cs:Main` via `CommandStatusWriter.AddErrorMessageHint(
+      Resources.CommandStatusWriter_WriteLine_Error_)`. All 10 construction sites and
+      the `ERROR_MESSAGE_HINT`/resource references already import `pwiz.Common.SystemUtil`.
+- [x] **Gate: full `Skyline.sln` build** PASSED. Committed as `56b10ae613`.
 
 ### Commit 2 - Route OspreySharp exe-layer output through one writer
-- [ ] `OspreySharp/Program.cs`: add `private static CommandStatusWriter _out` =
-      `new CommandStatusWriter(Console.Error)` in `Main` before any logging; rewrite
-      `LogInfo/LogWarning/LogError` (`Program.cs:409-422`) to `_out.WriteLine(...)`
-      keeping the `[INFO]/[WARN]/[ERROR]` prefixes; route the no-args usage error
-      (`Program.cs:60`) and startup banner through `_out`.
-- [ ] Keep `--version`/`--help` on **stdout** (`OspreyCommandArgs.cs:350,552`) -- do
-      NOT let `_out` push these to stderr (HPC scripts capture stdout for version).
+- [x] `OspreySharp/Program.cs`: added `private static CommandStatusWriter _out =
+      new CommandStatusWriter(Console.Error)` as a field (inline init -> never null even
+      if Log* is called before Main; Commit 3 reassigns it for --log-file). Rewrote
+      `LogInfo/LogWarning/LogError` to `_out.WriteLine("[INFO] {0}", message)` etc.
+      (the inherited TextWriter format overload routes through the overridden
+      WriteLine(string), so stamps/error-detection apply). Startup banner (the
+      `LogInfo("OspreySharp v...")` block) is covered transitively.
+- [x] Routed the no-args usage error through `_out` (PrintUsage(null, _out)); `_out`
+      wraps Console.Error so it stays on stderr.
+- [x] Kept `--version`/`--help` on **stdout** (untouched in OspreyCommandArgs.cs).
+      Verified no other direct `Console.*` writes remain in the exe-layer Program.cs.
 - Note: PipelineContext/AnalysisPipeline already funnel through `Program.Log*`, so
   the task layer is covered transitively.
+- [x] **Gate: OspreySharp pre-commit (build + 432 tests + inspection)** PASSED.
+      Committed as `bb9ac04a99`.
 
 ### Commit 3 - Add --timestamp / --memstamp / --log-file
-- [ ] Declare `ARG_TIMESTAMP`, `ARG_MEMSTAMP` (value-less), `ARG_LOG_FILE` (string)
-      in `OspreyCommandArgs.cs` in a Diagnostics/General group (mirror the recent
-      `--parallel-files` pattern); surface on `OspreyConfig` (`IsTimeStamped`,
-      `IsMemStamped`, `LogFilePath`).
-- [ ] In `Main` after parse: set `_out.IsTimeStamped/IsMemStamped`; if `LogFilePath`
-      set, swap `_out` to a `CommandStatusWriter(new StreamWriter(path))` preserving
-      the stamp flags (mirror Skyline `CommandLine.cs:168-188`), try/finally flush+dispose.
-- [ ] Extend the drift-killer test in `OspreySharp.Test/OspreyCommandArgsTests.cs`.
+- [x] Declared `ARG_TIMESTAMP`, `ARG_MEMSTAMP` (value-less), `ARG_LOG_FILE` (string)
+      in a new `GROUP_LOGGING` ("Logging") in `OspreyCommandArgs.cs` (mirrors the
+      `--parallel-files` pattern), added to UsageBlocks + help dictionary. Surfaced
+      `IsTimeStamped`, `IsMemStamped`, `LogFilePath` on `OspreyConfig` (runtime-only,
+      not in any identity hash).
+- [x] In `Main` after ValidateArgs: set `_out.IsTimeStamped/IsMemStamped`; if
+      `LogFilePath` set, swap `_out` to `CommandStatusWriter(new StreamWriter(path))`
+      preserving flags (mirrors Skyline `CommandLine.cs:168-188`). Added a pre-try
+      `loggingToFile` flag + `finally` that flushes/disposes ONLY the log-file writer
+      (never the shared Console.Error). Placed after validation so a bad command line
+      creates no file.
+- [x] Extended tests: parse assertions for the three args (defaults off/null) in the
+      parse test; added "Logging" group title + `--timestamp` to `TestHelpRendering`.
+      The existing `TestEveryArgIsGroupedAndDescribed` drift-killer auto-covers them.
+- [x] **Gate: OspreySharp pre-commit** PASSED. Committed as `6076205eb8`.
+      regression.ps1 deferred to after Commit 4 (batch output-path commits 2-4).
 
 ### Commit 4 - Reroute the below-exe Console bypass sites
-- [ ] Sites that cannot see `Program._out` (they live in `OspreySharp.FDR` /
-      `OspreySharp.IO`): `PercolatorFdr.cs` (~lines 253,308,319,387,452,455,2209,2258,
-      2292,2345) and `MzmlReader.cs:701,705`. Route them through the existing static
+**REDESIGN (2026-06-23, per developer):** the TODO's original plan (route the
+lower-layer sites through `OspreyDiagnosticsLog.LogAction`) is WRONG on two counts:
+(1) it is infeasible -- `OspreySharp.Diagnostics` already references `OspreySharp.FDR`,
+so FDR routing through it is a circular project reference; and (2) it conflates
+mainline output with the Diagnostics module, which must stay `-d`-only debug code.
+Principle (developer): ALL OspreySharp output flows through the one `CommandStatusWriter`
+so timestamp/memstamp prefixing is uniform; we are architecting toward long operations
+posting `ProgressStatus` to an `IProgressMonitor` (timer-driven percent + exception
+rendering), though full progress plumbing is NOT a goal of this sprint.
+- [x] Added `OspreySharp.Core/OspreyOutput.cs`: a process-wide `static TextWriter Out`
+      (BCL type, so Core needs no PortableUtil ref), default `Console.Error`. `Program`
+      points it at `_out` after the stamp/log-file setup, so below-exe layers (FDR, IO)
+      emit through the same `CommandStatusWriter`. FDR/IO already reference Core -> no cycle.
+- [x] Rerouted `PercolatorFdr.cs` (all 10 `[TIMING]/[COUNT]` + Stage-5 dump lines) and
+      `MzmlReader.cs` (2 unsorted-spectrum lines): `Console.Error` -> `OspreyOutput.Out`.
+      Both files already `using pwiz.OspreySharp.Core`.
+- [x] Reverted the interim `OspreyDiagnosticsLog` default-LogAction change (orthogonal;
+      Diagnostics stays `-d`-only, its `LogAction` is still wired to `LogInfo` by Program).
+- [x] **Gate: OspreySharp pre-commit** PASSED (build + 432 tests + 0-warning, after a
+      doc-comment cref fix). Committed as `5c9a932f17`.
+- [x] **Gate: `regression.ps1 -Dataset Stellar` PASSED** (covers output-path commits 2-4):
+      mode1 vs golden PASS, mode3 HPC-chain==straight PASS, mode2 resume==straight PASS,
+      all at 1e-9 (identical 52,514,816-byte blibs). Output routing did not change results.
+- ORIGINAL plan (superseded): Route them through the existing static
       sink `OspreyDiagnosticsLog.LogAction` (already set to `Program.LogInfo` in
       `Program.cs:54`, so they land in `_out`).
 - [ ] `OspreyDiagnosticsLog.cs:40`: change the default `LogAction` from
