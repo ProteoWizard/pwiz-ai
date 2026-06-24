@@ -103,6 +103,40 @@ Move the **transitive closure** (namespaces unchanged -> no consumer edits), fro
   counter lines (`Scored N/125`, rescore window loops, per-file fan-out) under `--verbose`. Leave the
   simple-progressive blocks (Percolator percent, calibration LDA) unchanged.
 
+## Phase 4 - I/O read/write progress (the big determinate gaps)
+Measured on **Astral** (2026-06-24, non-verbose; `ai/.tmp/osprey-astral-default/run.log`), the dominant
+remaining default-mode gaps are NOT the percent-counted compute blocks (those are fine at a 2s timer) but
+the **I/O steps that emit nothing while they run**:
+- **mzML read**: ~40-44s per file (parse + decode of ~200k MS/MS spectra).
+- **Scored / reconciled parquet write**: ~33-47s per file (~2.9M rows).
+- Post-training Percolator apply: ~26s (count-based; smaller).
+(Stellar is small enough that none of these exceed ~8s, which is why they only surfaced on Astral.)
+
+**Survey the existing patterns first.** Skyline has implemented progress tracking for I/O **several
+ways** -- `ProgressStream` (`pwiz_tools/Shared/CommonUtil/SystemUtil/ProgressStream.cs`, a byte-counting
+`Stream` decorator that reports `min(99, 100*pos/len)` on each `Read`) is just ONE of them. Inventory the
+others (e.g. row/line-count reporters on writes, `IProgressMonitor`-driven loops) and pick per call-site
+rather than forcing one mechanism everywhere.
+
+Concrete mapping for OspreySharp:
+- **mzML read -> byte-based.** Wrap the `FileStream` in `MzmlReader.LoadAllSpectra`
+  (`OspreySharp.IO/MzmlReader.cs`, the `new FileStream(...)` feeding `XmlReader.Create`) in a
+  `ProgressStream`-style decorator. It can drive either the cheap `ProgressReporter`
+  (`OspreySharp.Core/ProgressReporter.cs`; `total = stream.Length`, `Report(bytesRead)`) or, post-Phase-3,
+  the ported `ConsoleProgressMonitor`. **Caveat:** `ProgressReporter` is currently `int`-based; mzML peak
+  data exceeds 2 GB on Astral-class files, so widen `total`/`current` to `long` (safe -- `int` promotes;
+  percent math already uses `100L`). Byte-based is preferred over counting spectra via
+  `<spectrumList count="N">` (the attribute isn't always present/trustworthy).
+- **parquet write -> count-based** ("output lines vs expected count"): the writer emits row-groups, so
+  `ProgressReporter("Writing N entries", totalRows).Report(rowsWritten)` per row-group fills the gap.
+  Files: the parquet writers under `OspreySharp.IO` (`ParquetScoreCache`, `ReconciledParquetWriter`).
+- Keep these behind the same disposition model: the heading + final line stay in default; intermediate
+  percents are timer-throttled (2s) like the scoring loop.
+
+Origin: surfaced during PR #4326 console-output review (developer flagged the Astral I/O gaps and pointed
+at `ProgressStream`); deferred here so #4326 stays scoped to output clarity. The `[unsorted-spectrum]`
+notice (also IO-layer) was already moved to `--verbose` + summarized as a per-file count in #4326.
+
 ## Reused existing assets (do not re-implement)
 - `CommandProgressMonitor` (Skyline `CommandLine.cs:5025-5250`) -- render-core reference.
 - `IProgressMonitor`/`SilentProgressMonitor` (`CommonUtil/SystemUtil/IProgressMonitor.cs`).
