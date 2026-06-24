@@ -8,13 +8,18 @@
 - **GitHub Issue**: (none)
 - **PR**: [#4326](https://github.com/ProteoWizard/pwiz/pull/4326)
 
-# OspreySharp console/log output + IProgressMonitor adoption
+# OspreySharp console/log output
 
 **Priority**: Medium-High -- foundational CLI usability/observability work that
 unblocks `--timestamp`/`--memstamp` perf analysis and percent-progress for long runs.
-**Type**: OspreySharp feature / infrastructure / shared-code refactor
-**Scope**: One large PR (multi-commit), touches Skyline + a cross-project type
-relocation into PortableUtil. Planned 2026-06-23.
+**Type**: OspreySharp feature / infrastructure
+**Scope**: One PR (multi-commit) on the OspreySharp CLI output path; shares
+`CommandStatusWriter` via PortableUtil (Commit 1). Planned 2026-06-23.
+
+> **Follow-on split out:** the `IProgressMonitor`/`ProgressStatus` (+ `Immutable` cluster)
+> relocation into PortableUtil and the timer-progress adoption are a **separate future PR** ->
+> `ai/todos/backlog/TODO-ospreysharp_progressmonitor_portableutil.md`. This TODO covers
+> everything up to but NOT including that refactor.
 
 ## Context (why)
 OspreySharp's user-visible output is ad hoc: `Program.LogInfo/LogWarning/LogError`
@@ -41,13 +46,8 @@ pattern and shares the infrastructure via PortableUtil.
 - **Commit `perfviz.html` into the repo** (`ai/scripts/OspreySharp/perfviz.html`,
   Yuval Boss attribution preserved) as the documented way to visualize a
   `--timestamp --memstamp` log. Source copy: `G:\My Drive\Claude\perfviz.html`.
-- **Move `IProgressMonitor`/`ProgressStatus` down to PortableUtil** -- which drags
-  `Immutable` + the immutable-collection cluster with them (see Commit 5). Keep all
-  namespaces (`pwiz.Common.SystemUtil`, `pwiz.Common.Collections`) so every existing
-  Skyline `using` keeps compiling.
-- **Extract a fresh portable `ConsoleProgressMonitor`** (the reusable render core of
-  `CommandProgressMonitor`); leave Skyline's `CommandProgressMonitor` as its
-  Skyline-coupled self (`ILongWaitBroker`/`MultiProgressStatus`/`SrmDocument`).
+- **IProgressMonitor/ProgressStatus -> PortableUtil + ConsoleProgressMonitor**: split to the
+  backlog refactor TODO (see pointer above).
 
 ## Target output format (must stay byte-identical to perfviz's parser)
 - `--timestamp`: `[yyyy/MM/dd HH:mm:ss]\t<message>`
@@ -74,7 +74,7 @@ pattern and shares the infrastructure via PortableUtil.
       Note: invariant hint comparison changed InvariantCulture -> CurrentCulture;
       behaviorally identical for the ASCII "Error:" prefix.
 - [x] Wired project reference: added `CommonUtil -> PortableUtil` ProjectReference
-      (Commit 6 prereq). Skyline already references PortableUtil (from OspreyCommandArgs
+      (prereq for the backlog refactor). Skyline already references PortableUtil (from OspreyCommandArgs
       work), so no new Skyline ref needed. PortableUtil stays a leaf.
 - [x] **REVERTED in Commit 5 (CI breakage):** this `CommonUtil -> PortableUtil` edge broke
       the legacy bjam C++ tool builds (Core/Bumbershoot/Docker on PR #4326). The pwiz GUI
@@ -85,11 +85,9 @@ pattern and shares the infrastructure via PortableUtil.
       is green; the failure is type-agnostic (fires just from the SDK project entering the
       bjam ProjectReference graph). CommonUtil uses NO PortableUtil type yet, so the edge was
       load-bearing for nothing -> removed it (kept a guard comment in CommonUtil.csproj).
-      **Commit 6 BLOCKER:** the move there (Immutable/ProgressStatus -> PortableUtil) FORCES
-      CommonUtil -> PortableUtil (CommonUtil's own code uses those 92x), so the bjam tool
-      builds will break again. Must land the build-infra fix first (teach those tool builds
-      to restore SDK projects, or `SetTargetFramework=net472` on the edge, or sln-ify them) --
-      Matt's domain; deferred until he returns.
+      The forward-looking half (re-adding the edge once Immutable/ProgressStatus move forces it,
+      and the bjam build-infra fix that must precede it) is captured in the backlog refactor TODO
+      `ai/todos/backlog/TODO-ospreysharp_progressmonitor_portableutil.md` (Phase 1).
 - [x] Updated Skyline: removed class from `CommandLine.cs`; installed the localized
       hint once in `Program.cs:Main` via `CommandStatusWriter.AddErrorMessageHint(
       Resources.CommandStatusWriter_WriteLine_Error_)`. All 10 construction sites and
@@ -241,10 +239,11 @@ become the gate for implementer-grade metrics (means, SDs, per-step internals), 
 the DEFAULT log keeps user-relevant signals -- e.g. "N targets at 1% FDR" (the
 Percolator cycle metric) STAYS visible by default; verbose-only metrics are for
 algorithm implementers assessing per-step success. This is a DIFFERENT axis from
-`--perf-stats` (machine-parseable tags); the two coexist. Design into Commit 7.
+`--perf-stats` (machine-parseable tags); the two coexist. (`--verbose` shipped in Commit 5b;
+the timer-progress adoption is in the backlog refactor TODO.)
 Follow-up: the new 8s max gap is the **RT-calibration LDA pass** ("Calibration pass 1
 LDA passing count") -- the genuine mProphet-LDA analog; give it the same per-cycle
-treatment (candidate for Commit 7 or a fast-follow).
+treatment (candidate for the backlog refactor or a fast-follow).
 
 ### Commit 5b - --verbose disposition + Percolator training progress as percent
 **Emerged from reviewing the percent/cycle output in perfviz + Notepad++ (2026-06-24).**
@@ -274,38 +273,11 @@ treatment (candidate for Commit 7 or a fast-follow).
       cross-impl parity), so it is out of scope for this output PR; evaluate via a throwaway
       experiment, decide separately. The visibility itself is the win.
 
-### Commit 6 - Move IProgressMonitor + ProgressStatus + Immutable cluster to PortableUtil
-- [ ] Move (delete from CommonUtil, add under PortableUtil, namespaces UNCHANGED):
-      `SystemUtil/IProgressMonitor.cs`, `SystemUtil/ProgressStatus.cs`,
-      `SystemUtil/Immutable.cs`, `Collections/ImmutableList.cs`,
-      `Collections/ImmutableListFactory.cs`, `Collections/ImmutableDictionary.cs`,
-      `Collections/ImmutableCollection.cs`.
-- [ ] Strip the single `using JetBrains.Annotations;` + `[InstantHandle]` from the
-      moved `Immutable.cs` (keeps PortableUtil JetBrains-free; attribute is inspection-only).
-- [ ] `CommonUtil.csproj`: remove those 7 `<Compile>` entries (PortableUtil reference
-      was added in Commit 1). Grep ALL `.csproj` for stray `<Compile>` includes of
-      those filenames so nothing double-compiles.
-- [ ] **Gate: full `Skyline.sln` build** -- this is the riskiest commit (relocates a
-      foundational base class's home assembly across all of Skyline).
-
-### Commit 7 - Portable ConsoleProgressMonitor + percent-progress adoption
-- [ ] Add `pwiz_tools/Shared/PortableUtil/SystemUtil/ConsoleProgressMonitor.cs`
-      (`pwiz.Common.SystemUtil`): fresh port of the render core of
-      `CommandProgressMonitor` (CommandLine.cs:5151-5376) -- ctor
-      `(TextWriter, IProgressStatus, secondsBetweenStatusUpdates = 2.0)`, throttled
-      `UpdateProgress` so fast ops show ~0%..100% and slow ops show intermediate %,
-      indeterminate (-1) handling, `IsCanceled => false`. No `ILongWaitBroker` /
-      `MultiProgressStatus` / `SrmDocument` / Skyline localization.
-- [ ] Thread an `IProgressMonitor` from `Main` into `AnalysisPipeline.Run` and onto
-      `PipelineContext` (alongside the existing log delegates); construct
-      `new ConsoleProgressMonitor(_out, new ProgressStatus())`.
-- [ ] Push the `PortableUtil` ProjectReference down to the OspreySharp DLLs that
-      report progress (Core/Tasks/FDR) as needed.
-- [ ] Report percent in the three dominant loops using the existing
-      `ProgressStatus.ThreadsafeIncrementPercent` / `UpdatePercentCompleteProgress`
-      helpers: per-file scoring fan-out (`PerFileScoringTask`), Percolator folds
-      (`PercolatorFdr.cs:452` loop), scoring windows (`ScoringPipeline`). Keep the
-      existing `[TIMING]/[STAGE-WALL]/[COUNT]` lines (they coexist and feed perfviz).
+### IProgressMonitor / ProgressStatus -> PortableUtil + timer-progress adoption -- SPLIT OUT
+Moved to its own future PR: `ai/todos/backlog/TODO-ospreysharp_progressmonitor_portableutil.md`
+(build-infra prerequisite, the Immutable/ProgressStatus cluster move, and the
+ConsoleProgressMonitor + percent-progress adoption, with the ProgressStatus-vs-simple-output
+classification). This TODO ends at the console-output work above.
 
 ### pwiz-ai task (separate from the pwiz PR)
 - [ ] Add `ai/scripts/OspreySharp/perfviz.html` (from `G:\My Drive\Claude\perfviz.html`,
@@ -314,11 +286,7 @@ treatment (candidate for Commit 7 or a fast-follow).
       gaps + memory.
 
 ## Reused existing assets (do not re-implement)
-- `CommandStatusWriter` (Skyline `CommandLine.cs:4843-4980`) -- the class being shared.
-- `CommandProgressMonitor` (Skyline `CommandLine.cs:5151-5376`) -- render-core reference.
-- `IProgressMonitor`/`SilentProgressMonitor` (`CommonUtil/SystemUtil/IProgressMonitor.cs`).
-- `ProgressStatus.ThreadsafeIncrementPercent` / `UpdatePercentCompleteProgress`
-  (`CommonUtil/SystemUtil/ProgressStatus.cs`) -- parallel-safe percent helpers.
+- `CommandStatusWriter` (Skyline `CommandLine.cs:4843-4980`) -- the class shared in Commit 1.
 - `OspreyDiagnosticsLog.LogAction` -- existing static sink for lower-layer logging.
 - `OspreyCommandArgs` declarative arg framework + drift-killer test (the recent
   `--parallel-files` work, completed PR #4324, is the template).
@@ -329,23 +297,15 @@ treatment (candidate for Commit 7 or a fast-follow).
 - Correctness (output stamping must NOT change results):
   `pwsh -File ./pwiz_tools/OspreySharp/regression.ps1 -Dataset Stellar`. It compares
   the protein-FDR text golden + blib content at 1e-9 and does NOT diff console/stderr,
-  so log changes are invisible to it. Run after the output-path commits (2,3,4) and
-  the progress commit (6).
-- Skyline unaffected: full `Skyline.sln` build after Commit 1 and Commit 5 (the two
-  commits that touch Skyline / relocate shared types).
+  so log changes are invisible to it. Run after the output-path commits (2,3,4) and the
+  output-tuning commits (5, 5b).
+- Skyline unaffected: full `Skyline.sln` build after Commit 1 (the one commit here that
+  touches Skyline / relocates `CommandStatusWriter`).
 - perfviz end-to-end: run a small Stellar command with `--timestamp --memstamp` (or
   `--log-file run.log`), load into `ai/scripts/OspreySharp/perfviz.html`, confirm it
   parses and charts time-gaps + managed/total memory.
 
 ## Risks / watch-outs
-- **Riskiest: Commit 5** (moving `Immutable` + immutable-collections down). Wide
-  Skyline usage; relocating the home assembly can surface duplicate-type compiles or
-  a non-SDK transitive-reference gap. Mitigation: move the whole cluster in one
-  commit, grep every `.csproj` for stray `<Compile>` of those files, gate on a full
-  `Skyline.sln` build, limit the JetBrains-strip to the one `[InstantHandle]`.
-- **Project-reference flow**: Skyline's non-SDK csprojs may not flow PortableUtil
-  transitively through CommonUtil -- be ready to add a direct `Skyline -> PortableUtil`
-  reference (and for any OspreySharp DLL that newly uses the moved types).
 - **stdout vs stderr contract**: keep `--version`/`--help` on stdout; route everything
   else through `_out` (stderr by default). Don't let stamps leak onto stdout.
 - **Localization**: OspreySharp log strings remain English literals (current
@@ -353,11 +313,10 @@ treatment (candidate for Commit 7 or a fast-follow).
   Skyline can keep its localized hint.
 
 ## Refs
-- Skyline pattern: `pwiz_tools/Skyline/CommandLine.cs` (CommandStatusWriter 4843-4980,
-  CommandProgressMonitor 5151-5376), `CommandArgs.cs:268-269` (--timestamp/--memstamp).
-- Shared types: `pwiz_tools/Shared/CommonUtil/SystemUtil/{IProgressMonitor,ProgressStatus,Immutable}.cs`,
-  `pwiz_tools/Shared/CommonUtil/Collections/Immutable*.cs`,
-  `pwiz_tools/Shared/PortableUtil/` (target net472;net8.0, zero pwiz refs).
+- Skyline pattern: `pwiz_tools/Skyline/CommandLine.cs` (CommandStatusWriter 4843-4980),
+  `CommandArgs.cs:268-269` (--timestamp/--memstamp).
+- Shared: `pwiz_tools/Shared/PortableUtil/` (target net472;net8.0, zero pwiz refs) -- now holds
+  `SystemUtil/CommandStatusWriter.cs`.
 - OspreySharp: `OspreySharp/Program.cs` (Log* 409-422, Main entry), `OspreySharp/OspreyCommandArgs.cs`,
   `OspreySharp.FDR/PercolatorFdr.cs`, `OspreySharp.IO/MzmlReader.cs`,
   `OspreySharp.Diagnostics/OspreyDiagnosticsLog.cs`, `OspreySharp.Tasks/{AnalysisPipeline,PipelineContext,PerFileScoringTask}.cs`.
