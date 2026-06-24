@@ -10,9 +10,11 @@ contributes to the composite discriminant (variance of the score with its coeffi
 applied), and a contribution is **negative** (red in Skyline's UI) when the trained
 coefficient points in the *unexpected* direction for that score.
 
-This is a follow-up to the modular-scoring refactor
-(`TODO-20260607_ospreysharp_modular_scoring.md`), which is the natural home for the
-per-score **direction** this feature needs.
+This is a follow-up to the modular-scoring refactor (now **completed**,
+`TODO-20260607_ospreysharp_modular_scoring.md`): the `IOspreyFeatureCalculator`
+SPI it added is the natural home for the per-score **direction** this feature
+needs, so that dependency is now satisfied -- the direction property + the
+contribution table can be built directly on the existing seam.
 
 **Status**: Backlog (not started). **Type**: Scoring interpretability / FDR reporting.
 

@@ -404,10 +404,13 @@ $allPass = (Compare-Table `
     -NumericCols @('RT', 'Coefficient')
 ) -and $allPass
 
-# OspreyMetadata — exact key + value match.
+# OspreyMetadata — exact key + value match, EXCLUDING osprey_version:
+# OspreySharp is intentionally on the Skyline version scheme (e.g. 26.1.1.x)
+# while Rust osprey uses its own (e.g. 26.6.1), so that one key is an expected
+# cross-impl difference, not a divergence. All other metadata must still match.
 $allPass = (Compare-Table `
     -TableName 'OspreyMetadata' `
-    -Sql 'SELECT Key, Value FROM OspreyMetadata' `
+    -Sql "SELECT Key, Value FROM OspreyMetadata WHERE Key <> 'osprey_version'" `
     -KeyCols @('Key') `
     -ExactCols @('Value')
 ) -and $allPass

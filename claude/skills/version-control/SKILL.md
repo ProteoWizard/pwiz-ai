@@ -100,45 +100,46 @@ Full rules — placement, looking the name up from a support thread, the Brendan
 exception — in ai/docs/version-control-guide.md ("Crediting Reporters and
 Requesters").
 
-## Review chain: self-review first (local), then open the PR, then Copilot
+## Review chain: open the PR early (TeamCity), then self-review
 
-Both the fresh-context Claude self-review and Copilot are **mandatory
-gates** — they catch different classes of issue and each has caught
-real bugs the other missed. The ORDER is deliberate: run the
-self-review LOCALLY *before* opening the PR, so (a) the author fixes
-its findings before anyone else sees the PR, and (b) Copilot's
-automatic review lands LAST, on the final state, instead of being
-immediately invalidated by the self-review fixes.
+**`/pw-self-review` is the mandatory AI gate** on every PR — a fresh-
+context Claude pass that doesn't inherit the author's blind spots and
+catches cross-implementation divergence in ports (it can read source
+repos outside the change), correctness bugs the new tests don't cover,
+concurrency, and hash-stability invariants. Every PR that has reached
+this skill yielded at least one useful finding, so don't skip it
+because the change "looks fine."
 
-1. **`/pw-self-review` — local, before the PR.** As soon as coding is
-   complete (tests may still be running), launch the fresh-context
-   Claude agent on the local branch (diff vs base; no PR number
-   needed). Running fresh, it doesn't inherit the author's blind
-   spots and catches what Copilot systematically misses — cross-
-   implementation divergence in ports (it can read source repos
-   outside the change that Copilot can't see), correctness bugs the
-   new tests don't cover, concurrency, and hash-stability invariants.
-   Address its findings before posting.
+**Copilot review is now OPTIONAL and billed** (it used to be free and
+automatic on every PR — the old reason to run self-review first so
+Copilot landed last). It now carries a per-use cost, the same category
+as `/ultrareview`, so it is opt-in for extra rigor, not a standing
+gate. That removes the reason to withhold the PR until self-review is
+done.
+
+1. **Open the PR early** (`gh pr create`) as soon as the build is green
+   and tests pass — *before* self-review. This kicks off the first
+   round of **TeamCity** CI, which then runs in parallel while
+   self-review proceeds. (Safe now that Copilot no longer auto-reviews
+   on open: no automatic pass to waste on a state you are about to
+   change.)
+
+2. **`/pw-self-review`** — the primary AI gate. Run on the branch (diffs
+   `master...HEAD`; a `<PR#>` also works now the PR exists). Address its
+   findings in NEW commits on the branch.
    - **Developer present:** surface findings and agree which to fix.
    - **Autonomous:** address them in follow-up commits on the branch.
-   Don't skip it because the change "looks fine" — every PR that has
-   reached this skill yielded at least one useful agent finding.
 
-2. **Open the PR** (`gh pr create`) once self-review findings are
-   resolved and the build/tests are green.
+3. **Optional, billed — extra rigor when warranted:**
+   - **Copilot review** — opt-in (billed). Trigger it deliberately for
+     idiomatic / API / language scrutiny, then **`/pw-respond <PR#>`**
+     to address comments and resolve threads.
+   - **`/ultrareview <PR#>`** — user-triggered, billed, multi-agent
+     cloud review; stronger than either pass above. Claude Code cannot
+     launch it itself.
 
-3. **Wait for Copilot's review** (arrives within ~5 minutes; Copilot
-   reviews every PR in this repo automatically). Treat the PR as
-   not-yet-mergeable until it has reviewed and its findings are
-   addressed or explicitly dismissed. Run **`/pw-respond <PR#>`** to
-   address its comments and resolve the threads.
-
-4. **For maximum rigor**, follow with `/ultrareview <PR#>` — a
-   user-triggered, billed, multi-agent cloud review. Stronger than
-   either of the above. Claude Code cannot launch this itself.
-
-(`/pw-self-review` still accepts a `<PR#>` if you ever need to run it
-after a PR exists — but local-first is the default.)
+Request human review only after self-review is clean on the latest
+commit and TeamCity is green.
 
 ## Branch Naming
 

@@ -1,0 +1,213 @@
+# TODO: OspreySharp — adopt the PortableUtil declarative CLI-arg framework (declarative args + generated help)
+
+## Branch Information
+- **Branch**: `Skyline/work/20260622_ospreysharp_cli_args_adoption`
+- **Base**: `master`
+- **Created**: 2026-06-22
+- **Status**: Completed
+- **PR**: [#4323](https://github.com/ProteoWizard/pwiz/pull/4323) (merged 2026-06-23)
+- **Depends on**: Phase A PR [#4322](https://github.com/ProteoWizard/pwiz/pull/4322) (merged) — PortableUtil now on master
+
+**Status**: Completed (Phase B of two-phase sprint)
+**Priority**: Medium — removes the hand-rolled `switch` parser + the separately hand-maintained
+`PrintUsage` (which drifts from the parser), giving a single source of truth and drift-proof
+generated help (ascii / unicode / HTML).
+**Type**: OspreySharp refactor (behavior-preserving; gate on the Stellar regression)
+**Source**: 2026-06-22 planning session with Brendan on unifying OspreySharp's CLI with Skyline's
+declarative `CommandArgs` model.
+**Sequencing**: This is **Phase B**. It **DEPENDS ON Phase A**
+(`TODO-portableutil_cli_args_framework.md`) being merged first — the `PortableUtil` DLL and the
+generic `Argument<TContext>` / `NameValuePair` / `ArgumentGroup<TContext>` / `IUsageBlock` /
+`ConsoleTable` it provides must exist. Do not start until Phase A is on master.
+
+## Context / why
+
+OspreySharp's CLI is a hand-rolled `while`/`switch` over `argv` in `Program.cs` (~lines 214-580),
+with a separate hand-written `PrintUsage` (~796-865) of literal `Console.Error.WriteLine` lines that
+can drift from the parser, ~25 flags, and no generated/multi-format help. Phase A extracts Skyline's
+declarative framework into `PortableUtil`; this phase adopts it in OspreySharp so the args are
+declared once and the help is generated (can't drift), with ascii/unicode/HTML output like Skyline.
+**CLI args only** — the ~90 `OSPREY_*` environment variables are explicitly out of scope.
+
+This is a refactor: keep the exact current CLI behavior (same flags, same `OspreyConfig` population,
+same task-aware validation, same exit codes). The win is structure + generated help, gated by the
+Stellar regression behaving byte-identically.
+
+## What to build
+
+### 1. New `OspreySharp/OspreyCommandArgs.cs` (namespace `pwiz.OspreySharp`, exe project)
+- `OspreyCommandArgs` **is the `TContext`** for `Argument<OspreyCommandArgs>` — mirrors Skyline's
+  controller pattern. Holds the static arg declarations, the `ArgumentGroup` list, raw parse-sink
+  fields, and `ToConfig()` which runs today's `ParseArgs` epilogue (resolution / work-dir /
+  fragment-unit defaults) so `OspreyConfig` population stays **byte-identical**.
+- Expose `internal static OspreyConfig ParseArgs(string[] args)` with the **same signature** the
+  existing `ProgramTests` already call, so those tests keep compiling.
+
+### 2. Keep OspreySharp's own tokenizer (do NOT adopt Skyline's `=`-only grammar)
+The framework's `Argument.Parse` only understands `--name` / `--name=value`. OspreySharp needs short
+aliases (`-i`), space-separated values (`--name value`), variadic consumption (`-i a b c`,
+`--input-scores …`), and positional-file fallback — forcing those onto `--name=value` would change
+the CLI surface and break the Stellar gate. So OspreySharp keeps a small `TokenizeAndDispatch(args)`
+that resolves each token to a declared `Argument` and calls its
+`ProcessValue(this, new NameValuePair(name, value))`. Reuse the framework for **declaration,
+`NameValuePair` coercion, grouping, and help rendering only**.
+- Two small descriptor extensions: add **`ShortName`** to `Argument<T>` in PortableUtil (broadly
+  useful; Skyline could use it too — coordinate with whoever picks this up if Phase A didn't add it).
+  Keep **`Variadic`** as an OspreySharp-local `OspreyArgument : Argument<OspreyCommandArgs>` property
+  (greedy multi-token consumption is a quirk the shared grammar shouldn't carry).
+- Enum aliases (`th`/`da`→`mz`) and warn-and-default enums (`--fdr-method`, `--fdr-level`,
+  `--shared-peptides`) stay in the `ProcessValue`/epilogue with `HasValueChecking=true` so the
+  framework doesn't reject them (preserving the exact warning strings).
+
+### 3. Argument groups + `--help` UX
+Six `ArgumentGroup`s: **General I/O** (`-i/--input`, `-l/--library`, `-o/--output`, `--work-dir`,
+`--output-dir`, `--cache-dir`, `--report`) · **Scoring & Tolerance** (`--resolution`,
+`--fragment-tolerance`, `--fragment-unit`, `--no-prefilter`) · **FDR & Protein Inference** (`--run-fdr`,
+`--experiment-fdr`, `--protein-fdr`, `--fdr-method`, `--fdr-level`, `--shared-peptides`) · **Decoys**
+(`--decoys-in-library`, `--decoy-pairing-manifest`, `--write-pin`) · **Distributed / HPC** (`--task`,
+`--input-scores`, `--threads`) · **Diagnostics & Info** (`-d/--diagnostics`, `-h/--help`,
+`-v/--version`). Plus leading/trailing `ParaUsageBlock`s (tagline + synopsis, and the EXAMPLES / HPC
+prose from today's `PrintUsage`).
+`--help` (or no args) → ascii tables; `--help unicode` → unicode (the framework's no-borders renderer
+under the friendlier name); `--help sections`; `--help html` → `GenerateUsageHtml()`;
+`--help <Section>` → section filter.
+
+### 4. Program.cs surgery
+- **Replace:** the `ParseArgs` switch body (→ thin `OspreyCommandArgs.ParseArgs` facade + tokenizer),
+  `RequireValue`/`ParseDouble` (fold into the tokenizer + `NameValuePair` coercion), and `PrintUsage`
+  (entirely → generated help). This is the drift-elimination win.
+- **Keep unchanged:** `Main`'s `--task` pre-scan + membership flags; `ValidateArgs` (stays the
+  post-parse, task-aware validator — do NOT force it into `ArgumentGroup.Validate`); `ResolveTask`;
+  `ResolveInputScores` (still invoked from the `--input-scores` lambda during parse); logging; the
+  top-level `catch`; `-h`/`-v` exit-0 behavior.
+
+### 5. Descriptions: inline strings through the seam (no resx yet)
+Construct `OspreyCommandArgs` with an `IArgDescriptionProvider` defaulting to an inline-literal
+provider (a `static Dictionary<string,string>` keyed by arg name). OspreySharp text isn't localized
+yet; routing through the seam means swapping in a resx later is a one-line change with no edits to the
+declarations or the drift test.
+
+### 6. sln + csproj plumbing
+- `OspreySharp/OspreySharp.csproj`: add
+  `<ProjectReference Include="..\..\Shared\PortableUtil\PortableUtil.csproj" />` (exe project only).
+- Add PortableUtil to `OspreySharp.sln` with Debug/Release × AnyCPU/x64/x86 rows (x86→AnyCPU),
+  `Platforms=AnyCPU;x64`. `OspreySharp.Test` already has `InternalsVisibleTo`, so `OspreyCommandArgs`
+  is testable.
+
+## Tests (`OspreySharp.Test`)
+- Keep existing `ProgramTests.cs` (ValidateArgs / ResolveTask / ResolveInputScores / retired-flag
+  rejection all survive). Add `OspreyCommandArgsTests.cs`:
+  - (a) **Table-driven arg→config mapping** — one row per flag asserting the parsed `OspreyConfig`
+    field (incl. variadic `-i a b c`, `--work-dir` fan-out + override, `--resolution unit` injected
+    defaults, `--fragment-unit th/da/mz/ppm`, warn-and-default enums, `--task=MergeNode`). The
+    regression net proving the rewrite reproduces the old switch exactly.
+  - (b) **Drift killer** — every non-internal `Argument` is in exactly one group AND resolves a
+    non-empty description; fails the build if an arg is added without grouping/documenting it.
+  - (c) **ascii help golden** snapshot + cheap smoke for `--help sections/unicode/html`.
+  - (d) short-alias equivalence (`-i`==`--input`, etc.) + the existing missing-value-throws cases.
+
+## Verification
+- `ai/scripts/OspreySharp/Build-OspreySharp.ps1 -RunTests -RunInspection` (builds net472 + net8.0,
+  runs the new arg tests, zero inspection warnings).
+- `pwiz_tools/OspreySharp/regression.ps1 -Dataset Stellar` — **byte-identical output gate**: the
+  committed golden blib must be unchanged (proves the CLI behaves identically after the rewrite).
+- Manual spot-checks on the built exe: `osprey --help [ascii|unicode|sections|html]`, `osprey`
+  (no args → usage + exit 1), `osprey -v`.
+- One pwiz PR through the standard review chain (`/pw-self-review` → PR → Copilot → optional ultrareview).
+
+## Acceptance criteria
+- OspreySharp parses its ~25 args declaratively via the PortableUtil framework; `Program.cs`'s switch
+  and `PrintUsage` are gone; help is generated (ascii/unicode/sections/html) and cannot drift.
+- `OspreyConfig` population, task-aware validation, and exit codes are unchanged; Stellar regression
+  golden unchanged.
+- Build green (net472 + net8.0), inspection clean, new arg tests pass.
+
+## Critical files
+- New: `pwiz_tools/OspreySharp/OspreySharp/OspreyCommandArgs.cs`,
+  `pwiz_tools/OspreySharp/OspreySharp.Test/OspreyCommandArgsTests.cs`.
+- Modify: `pwiz_tools/OspreySharp/OspreySharp/Program.cs` (remove ParseArgs internals + PrintUsage),
+  `OspreySharp.sln`, `OspreySharp/OspreySharp.csproj`.
+- Reference (unchanged target of the mapping): `pwiz_tools/OspreySharp/OspreySharp.Core/OspreyConfig.cs`.
+
+### 2026-06-23 - Merged
+
+PR #4323 merged as commit 1fffcabc36 (squash, admin override). Shipped Phase B in full: OspreySharp's
+hand-rolled switch parser + drift-prone PrintUsage replaced by a declarative OspreyCommandArgs on the
+shared PortableUtil framework, with generated unicode/ascii/sections/html help (matching Skyline's
+default + stylesheet). OspreyConfig parsing is byte-identical (Stellar regression: golden + HPC chain +
+resume all unchanged). Includes the post-open refinements: ShortName + value-separator render seam,
+unicode-default help, --help to stdout, and the Skyline-matching HTML stylesheet.
+
+Gates at merge: 21/22 CI checks green; the one pending check (Docker Wine x86_64 container) does not
+build OspreySharp and its earlier failure was an unrelated dependency (re-run green) - merged via
+admin override (Brendan, admin) over that irrelevant pending check. Fresh-context self-review done
+(3 LOW, addressed/intended). **Copilot did NOT review** - account quota-blocked until 2026-07-01;
+merge proceeded by developer decision, same as Phase A #4322.
+
+The two-phase CLI-unification sprint (PortableUtil extraction + OspreySharp adoption) is complete.
+Possible future item: revisit OspreySharp's space-separated grammar vs Skyline's --name=value (kept
+as-is now so existing osprey scripts keep working).
+
+## Full plan reference
+The combined two-phase plan (Phase A + this) was authored at
+`~/.claude/plans/okay-now-i-would-melodic-fog.md` (2026-06-22 planning session).
+
+## Progress log
+
+### Implementation (IN PROGRESS)
+- PortableUtil: added `ShortName` to `ArgumentBase` (Phase A had not). Skyline unaffected
+  (descriptor-only; not rendered).
+- New `OspreySharp/OspreyCommandArgs.cs`: declarative args in 6 `ArgumentGroup`s
+  (General I/O, Scoring & Tolerance, FDR & Protein Inference, Decoys, Distributed/HPC,
+  Diagnostics & Info) + leading/trailing `ParaUsageBlock`s. `OspreyArgument : Argument<OspreyCommandArgs>`
+  carries `Variadic` + a `ProcessVariadic` (whole-run) delegate. `TokenizeAndDispatch` keeps
+  OspreySharp's grammar (short `-i`, space-separated, variadic, positional-file fallback);
+  ProcessValue lambdas do the EXACT former parsing (invariant `ParseDouble`, `int.Parse`,
+  `ToLowerInvariant`, warn-and-default enums) so `OspreyConfig` stays byte-identical. `ToConfig()`
+  runs the identical epilogue (work-dir fan-out, resolution mode, unit defaults, fragment overrides,
+  decoy-manifest warning). `--input-scores` keeps per-occurrence accumulate-then-`ResolveInputScores`.
+  Generated help: `BuildUsage(ascii|unicode|sections|<Section>)` + `GenerateUsageHtml()`; inline
+  `IArgUsageProvider` (descriptions + headers; value-error members unreached since the tokenizer
+  raises its own ArgumentExceptions). Note: the framework's interface is `IArgUsageProvider` (Phase A),
+  not the plan's `IArgDescriptionProvider` name.
+- Program.cs surgery: `ParseArgs` is now a thin facade -> `OspreyCommandArgs.ParseArgs`;
+  removed `RequireValue`/`ParseDouble`/`PrintUsage`; Main's no-args path calls
+  `OspreyCommandArgs.PrintUsage(null)`. Kept Main task pre-scan, `ValidateArgs`, `ResolveTask`,
+  `ResolveInputScores`, logging, top-level catch, `-h`/`-v` exit-0.
+- Plumbing: PortableUtil ProjectReference in OspreySharp.csproj; PortableUtil added to
+  OspreySharp.sln (x86->AnyCPU), reusing the Phase A GUID 97ECF0B4.
+- New `OspreySharp.Test/OspreyCommandArgsTests.cs`: arg->config table, variadic, short-alias
+  equivalence, drift killer (every arg grouped + described), help rendering (ascii/sections/unicode/
+  section-filter/html). ProgramTests unchanged (facade keeps the signature).
+
+### Verification status (ALL GREEN)
+- OspreySharp build (net472 + net8.0); 434 tests pass (429 existing + 5 new OspreyCommandArgsTests
+  methods); ReSharper 0 warnings.
+- Stellar byte-identical regression: PASS - mode1 (vs golden), mode3 (HPC --task chain == straight),
+  mode2 (resume == straight); blib 52,514,816 bytes unchanged. Confirms the rewrite is byte-identical
+  end-to-end including the --task split and --input-scores variadic.
+- Skyline 3-language CommandLine.html goldens + usage tests: PASS - the shared PortableUtil change
+  (ShortName prefix + value-separator seam) is Skyline-safe via the "=" / null-ShortName defaults.
+- Manual exe spot-checks: `osprey` (no args -> usage + exit 1), `--help` (ascii, shows "-i, --input
+  <files>"), `--help unicode`, `--help sections`, `--help html`, `-v`.
+
+### Help rendering refinement (beyond the plan)
+The framework's ArgumentDescription rendered "--input=<...>", which would mislead - OspreySharp's
+grammar is space-separated and short aliases were not shown. Added to PortableUtil (Skyline-safe via
+defaults): ShortName now renders as "-i, --input ..."; a value-separator seam
+(`ArgUsage.ArgumentValueSeparator`, default "=") which OspreySharp sets to " ". Restores the old
+PrintUsage's "-i, --input <files>" style in the generated (drift-proof) help.
+
+### Usage default -> unicode (post-review, Brendan; commit 0c5d0ab562)
+`--help` (and no-args usage) now defaults to unicode tables to match Skyline; `--help ascii`
+gives lower-128 output on request. Help-only change (no parse/config impact). The space-separated
+grammar + short flags (`-d`/`--diagnostics`) are intentionally KEPT (unlike Skyline's `--name=value`)
+so existing osprey scripts keep working; revisiting the grammar is a possible future item.
+
+### Self-review (DONE, note in commit eb7c249c39)
+Fresh-context agent: 3 LOW findings, no correctness issues; line-by-line parity vs the old switch
+confirmed (variadic stops, --input-scores accumulate-then-resolve, --task/--task=, positional
+fallback, epilogue ordering, warn-and-default messages, exit codes). Addressed the one actionable
+item: documented that ArgUsage seams are process-global. The other two (-h consuming an optional
+section token; --fragment-unit advertising {ppm,mz} but accepting th/da) are intended and match the
+original. Copilot remains quota-blocked until 2026-07-01.

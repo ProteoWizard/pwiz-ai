@@ -13,11 +13,16 @@
   be created off `master` -- **PR #4280 now merged, so the base is ready**)
 - **Base**: `master`
 - **Created**: 2026-06-11
-- **Status**: **Active, not started.** The PR-#4280 gate is cleared (merged
-  2026-06-11 as `55b34e8`). The orchestrator half (`Measure-CumulativeCoverage.ps1`)
-  is **done** (commit `8a71b72`). The `regression.ps1` half remains -- still gated
-  only on the machine freeing up, because its verification needs a sequential
-  Astral run and the box is busy with the Stellar cumulative-coverage run.
+- **Status**: **Superseded / closed 2026-06-21.** The perf-consistency goal is met:
+  every perf/measurement path already serializes Astral (`Test-PerfGate.ps1` defaults
+  `OSPREY_MAX_PARALLEL_FILES=1` for Astral; `Measure-Pipeline.ps1` / the coverage
+  orchestrator likewise), and the serialize mechanism is in code
+  (`PerFileScoringTask.cs:231-252`). The only un-serialized path left is
+  `regression.ps1`'s 3-file Astral leg, and that is not worth doing: the agent runs
+  it parallel in ~41 min with no OOM, and the recent agent failure was **disk** (fixed
+  separately by the `regression.ps1` self-clean in PR #4320), not memory. The proper
+  long-term fix (memory-aware default + `--file-threads`-style CLI arg) stays in
+  `TODO-ospreysharp_file_parallelism_arg.md`, which a follow-up session will pick up.
 - **GitHub Issue**: (none)
 - **PR**: (pending)
 

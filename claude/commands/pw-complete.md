@@ -1,5 +1,5 @@
 ---
-description: Finalize a merged PR — write final TODO, move to completed, sync local master, delete the work branch
+description: Finalize a merged PR — write final TODO, move to completed, sync local master, delete the work branch (local + remote)
 args: pr-number (optional)
 ---
 
@@ -174,8 +174,10 @@ If the user wants the merge to wait for pending checks instead of
 firing immediately, append `--auto`.
 
 Do **NOT** add `--delete-branch`. Step 6 deletes the *local* branch
-with the safe `-d` after the merge-commit ancestry check; whether the
-*remote* branch gets cleaned up is a repo-policy decision.
+with the safe `-d` after the merge-commit ancestry check, then deletes
+the *remote* branch too — guarded against the stacked-PR hazard. Letting
+`gh pr merge --delete-branch` clean up here would bypass both the
+ancestry check and that guard.
 
 After `gh pr merge` returns, re-fetch the PR to capture the actual
 `mergeCommit.oid`:
@@ -281,9 +283,11 @@ spot-check that the squash actually carries the expected change:
 git show <mergeCommit.oid> --stat | head -20
 ```
 
-## Step 6 — Delete the local work branch
+## Step 6 — Delete the work branch (local, then remote)
 
-Only after Step 5 passes:
+Only after Step 5 passes.
+
+### 6a — Local
 
 ```bash
 git branch -d Skyline/work/YYYYMMDD_<slug>
@@ -307,6 +311,30 @@ everything"). For a merge-commit merge there is no warning.
 If `-d` *refuses* (different from warning), stop and report what's
 unreachable; do NOT escalate to `-D` without the user's explicit
 go-ahead.
+
+### 6b — Remote
+
+Once the local delete succeeds, clean up the GitHub branch too — but
+FIRST confirm nothing is stacked on it:
+
+```bash
+gh pr list --repo ProteoWizard/pwiz --state open \
+  --base Skyline/work/YYYYMMDD_<slug> --json number,headRefName
+```
+
+- **Empty result → safe to delete:**
+
+  ```bash
+  git push origin --delete Skyline/work/YYYYMMDD_<slug>
+  ```
+
+  This is reversible: the merged PR keeps a "Restore branch" button, so a
+  mistaken delete is one click to undo.
+- **Non-empty → STOP, do not delete.** The branch is the base of an open
+  PR; deleting it auto-closes that PR *unreopenably* (see
+  `feedback_stacked_pr_no_delete_branch`). Retarget the child onto
+  `master` first, or leave the remote branch until the end of the
+  cascade and tell the user it was left behind on purpose.
 
 ## Step 7 — Close the GitHub Issue (optional)
 
@@ -332,7 +360,8 @@ End with a short status to the user:
 - PR #NNNN: merged as `<short SHA>` on YYYY-MM-DD
 - TODO moved to `ai/todos/completed/TODO-YYYYMMDD_<slug>.md`
 - Local master at `<short SHA>` (matches upstream)
-- Work branch `Skyline/work/YYYYMMDD_<slug>` deleted
+- Work branch `Skyline/work/YYYYMMDD_<slug>` deleted (local + remote; if a
+  stacked open PR blocked the remote delete, say so explicitly)
 
 If any step had a deviation (deferred scope items, follow-up issues
 filed, unresolved review threads carried forward), name them here so
@@ -358,6 +387,12 @@ they don't get lost.
 - **Never use `-D`** on the work branch. If `-d` refuses (different
   from the squash-merge warning in Step 6), that's a signal to
   investigate, not to escalate.
+- **Never delete the remote branch when an open PR is stacked on it.**
+  Step 6b checks `gh pr list --base <branch>` first; a non-empty result
+  means deleting the branch auto-closes the dependent PR unreopenably.
+  Retarget the child onto `master` first. The ordinary (non-stacked)
+  remote delete is reversible via GitHub's "Restore branch", so it is
+  safe to automate once that check is clean.
 - **Pull `pwiz-ai` master before the TODO commit** — TODOs from other
   sessions land on master too and rebasing the move is messier than
   just pulling first.

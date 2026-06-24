@@ -36,7 +36,7 @@
 
 .EXAMPLE
     .\Build-Skyline.ps1 -RunInspection
-    Build entire solution and run full ReSharper code inspection (~20-25 min, pre-commit)
+    Build entire solution and run full ReSharper code inspection (~5 min with jb 2026.1.3, pre-commit)
 
 .EXAMPLE
     .\Build-Skyline.ps1 -RunTests -TestName CodeInspection
@@ -71,7 +71,7 @@ param(
     [string]$TestName = $null,  # Specific test to run (e.g., "CodeInspection")
 
     [Parameter(Mandatory=$false)]
-    [switch]$RunInspection = $false,  # Run ReSharper code inspection (full solution, ~20-25 min)
+    [switch]$RunInspection = $false,  # Run ReSharper code inspection (full solution, ~5 min with jb 2026.1.3)
 
     [Parameter(Mandatory=$false)]
     [switch]$QuickInspection = $false,  # Run quick inspection on modified projects only (~1-5 min)
@@ -497,7 +497,7 @@ if (($RunInspection -or $QuickInspection) -and $Target -ne "Clean") {
         if ($jbPath) {
             $inspectStart = Get-Date
             $perProjectEstimate = 2
-            $skylineEstimate = 10
+            $skylineEstimate = 4   # Measured ~4.2 min for --project=Skyline alone, jb 2026.1.3 (full solution is ~5 min)
             $estimatedTime = if ($projectFilter.Count -gt 0) {
                 $hasSkyline = $projectFilter -contains "Skyline"
                 if ($hasSkyline) {
@@ -509,7 +509,10 @@ if (($RunInspection -or $QuickInspection) -and $Target -ne "Clean") {
                     "~${perProjectEstimate} minutes per project (~$totalEstimate minutes total for $($projectFilter.Count) project(s))"
                 }
             } else {
-                "typically 20-25 minutes for full solution"
+                # Measured ~5 minutes for full solution with jb (JetBrains.ReSharper.GlobalTools) 2026.1.3,
+                # cold or warm cache (the persistent --caches-home cache showed no measurable speedup).
+                # Older tool versions were much slower (the prior "20-25 minutes" estimate); re-measure if jb is upgraded/downgraded.
+                "typically ~5 minutes for full solution (jb 2026.1.3)"
             }
             Write-Host "`nRunning ReSharper code inspection ($estimatedTime)..." -ForegroundColor Cyan
             
@@ -536,7 +539,7 @@ if (($RunInspection -or $QuickInspection) -and $Target -ne "Clean") {
             
             # Run inspection matching TeamCity configuration:
             # --severity WARNING: Only report warnings and errors (not suggestions/hints)
-            # --format Xml: Use XML format for compatibility with existing OutputParser.exe
+            # --format Xml: machine-readable output for the result parser below
             # --profile: Use solution settings, which automatically discovers project-specific .DotSettings
             #   (SkylineTester.csproj.DotSettings and TestRunner.csproj.DotSettings disable localization)
             # --no-swea: Disable solution-wide analysis (not needed for warnings)
@@ -553,78 +556,57 @@ if (($RunInspection -or $QuickInspection) -and $Target -ne "Clean") {
     
     if ($jbPath) {
         
-        # Use TeamCity's OutputParser.exe for exact parity with CI validation
-        $outputParserPath = "Executables\LocalizationHelper\OutputParser.exe"
-        
-        if (Test-Path $outputParserPath) {
-            Write-Host "`nParsing inspection results with OutputParser.exe (TeamCity validator)..." -ForegroundColor Cyan
-            
-            # OutputParser.exe validates inspection output and enforces TeamCity rules:
-            # - MAX_ISSUES_ALLOWED = 0 (zero warnings required)
-            # - Only counts WARNING and ERROR severity
-            # - Exit code 0 = passed, 1 = failed
-            & $outputParserPath $inspectionOutput
-            $parserExitCode = $LASTEXITCODE
-            
-            if ($parserExitCode -ne 0) {
-                Write-Host "`n❌ Code inspection FAILED in $($inspectDuration.TotalSeconds.ToString('F1'))s - TeamCity validation requires zero warnings" -ForegroundColor Red
-                Write-Host "Fix all warnings and errors listed above before committing" -ForegroundColor Red
-                exit $parserExitCode
-            } else {
-                Write-Host "`n✅ Code inspection passed - zero warnings/errors in $($inspectDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
-            }
-        } else {
-            # Fallback: Basic XML parsing if OutputParser.exe not available
-            Write-Warning "OutputParser.exe not found at $outputParserPath - using basic parsing"
-            
-            if (Test-Path $inspectionOutput) {
-                try {
-                    [xml]$xml = Get-Content $inspectionOutput
-                    $issueTypes = $xml.GetElementsByTagName("IssueType")
-                    $severities = @{}
-                    foreach ($issueType in $issueTypes) {
-                        $severities[$issueType.Id] = $issueType.Severity
-                    }
-                    
-                    $allIssues = @()
-                    $projects = $xml.GetElementsByTagName("Project")
-                    foreach ($project in $projects) {
-                        foreach ($issue in $project.ChildNodes) {
-                            if ($issue.Name -eq "Issue") {
-                                $severity = $severities[$issue.TypeId]
-                                if ($severity -eq "WARNING" -or $severity -eq "ERROR") {
-                                    $allIssues += [PSCustomObject]@{
-                                        File = $issue.File
-                                        Line = $issue.Line
-                                        TypeId = $issue.TypeId
-                                        Message = $issue.Message
-                                        Severity = $severity
-                                    }
+        # Validate inspection output. TeamCity's old OutputParser.exe
+        # (Executables/LocalizationHelper) was retired in #4125 -- its checks were
+        # folded into CodeInspectionTest. This parser enforces the same rule TeamCity
+        # applies: fail on any WARNING- or ERROR-severity issue (zero tolerance).
+        if (Test-Path $inspectionOutput) {
+            try {
+                [xml]$xml = Get-Content $inspectionOutput
+                $issueTypes = $xml.GetElementsByTagName("IssueType")
+                $severities = @{}
+                foreach ($issueType in $issueTypes) {
+                    $severities[$issueType.Id] = $issueType.Severity
+                }
+
+                $allIssues = @()
+                $projects = $xml.GetElementsByTagName("Project")
+                foreach ($project in $projects) {
+                    foreach ($issue in $project.ChildNodes) {
+                        if ($issue.Name -eq "Issue") {
+                            $severity = $severities[$issue.TypeId]
+                            if ($severity -eq "WARNING" -or $severity -eq "ERROR") {
+                                $allIssues += [PSCustomObject]@{
+                                    File = $issue.File
+                                    Line = $issue.Line
+                                    TypeId = $issue.TypeId
+                                    Message = $issue.Message
+                                    Severity = $severity
                                 }
                             }
                         }
                     }
-                    
-                    $errors = @($allIssues | Where-Object { $_.Severity -eq "ERROR" })
-                    $warnings = @($allIssues | Where-Object { $_.Severity -eq "WARNING" })
-                    
-                    Write-Host "`nInspection Results:" -ForegroundColor Cyan
-                    Write-Host "  Errors: $($errors.Count), Warnings: $($warnings.Count)" -ForegroundColor Gray
-                    
-                    if ($errors.Count -gt 0 -or $warnings.Count -gt 0) {
-                        ($allIssues | Select-Object -First 20) | ForEach-Object {
-                            $loc = if ($_.Line) { "$($_.File):$($_.Line)" } else { $_.File }
-                            $color = if ($_.Severity -eq "ERROR") { "Red" } else { "Yellow" }
-                            Write-Host "  [$($_.Severity)] $loc - $($_.Message)" -ForegroundColor $color
-                        }
-                        Write-Host "`n❌ Code inspection FAILED - $($errors.Count + $warnings.Count) issue(s) found" -ForegroundColor Red
-                        exit 1
-                    } else {
-                        Write-Host "`n✅ Code inspection passed" -ForegroundColor Green
-                    }
-                } catch {
-                    Write-Warning "Failed to parse: $_"
                 }
+
+                $errors = @($allIssues | Where-Object { $_.Severity -eq "ERROR" })
+                $warnings = @($allIssues | Where-Object { $_.Severity -eq "WARNING" })
+
+                Write-Host "`nInspection Results:" -ForegroundColor Cyan
+                Write-Host "  Errors: $($errors.Count), Warnings: $($warnings.Count)" -ForegroundColor Gray
+
+                if ($errors.Count -gt 0 -or $warnings.Count -gt 0) {
+                    ($allIssues | Select-Object -First 20) | ForEach-Object {
+                        $loc = if ($_.Line) { "$($_.File):$($_.Line)" } else { $_.File }
+                        $color = if ($_.Severity -eq "ERROR") { "Red" } else { "Yellow" }
+                        Write-Host "  [$($_.Severity)] $loc - $($_.Message)" -ForegroundColor $color
+                    }
+                    Write-Host "`n❌ Code inspection FAILED - $($errors.Count + $warnings.Count) issue(s) found in $($inspectDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Red
+                    exit 1
+                } else {
+                    Write-Host "`n✅ Code inspection passed - zero warnings/errors in $($inspectDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
+                }
+            } catch {
+                Write-Warning "Failed to parse inspection output: $_"
             }
         }
     }

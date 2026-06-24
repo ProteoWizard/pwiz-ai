@@ -43,9 +43,10 @@
     ai\.tmp\measure-pipeline\<UTC timestamp>\.
 
 .PARAMETER MaxParallelFiles
-    Pass-through to OSPREY_MAX_PARALLEL_FILES. Default 1 for Astral (memory
-    constraint), unset for Stellar (per-file parallelism does not help wall
-    on 3 small files).
+    File parallelism for the C# leg, passed as --parallel-files. Default -1 =
+    dataset default reproducing the recorded Osprey-workflow.html conditions:
+    3 (parallel) for Stellar, 1 (sequential) for Astral (hram, ~3 GB/file). Rust
+    is single-file-per-process and ignores this.
 
 .PARAMETER Threads
     --threads CLI flag. Default 16 (matches the existing Test-Snapshot harness).
@@ -222,6 +223,11 @@ function Invoke-PipelineRun {
                   '--resolution', $resolution,
                   '--protein-fdr', '0.01',
                   '--threads', $Threads.ToString())
+    # C# OspreySharp gates [STAGE-WALL]/[TIMING] behind --perf-stats (off by default);
+    # Rust osprey emits them unconditionally and does not accept the flag.
+    if ($ToolKey -eq 'CSharp') {
+        $cliArgs += '--perf-stats'
+    }
 
     # Pre-run env scrub: remove every OSPREY_DUMP_* / *_ONLY hook so the
     # binary executes the production path. Then set the few env vars this
@@ -250,18 +256,22 @@ function Invoke-PipelineRun {
         if (Test-Path "env:$k") { Remove-Item "env:$k" }
     }
 
-    # Per-dataset MaxParallelFiles default: Astral needs serialization at
-    # the outer per-file loop (each file holds ~3 GB spectra in memory);
-    # Stellar is small enough that the default (unset) is fine.
+    # Per-dataset file parallelism, pinned to the conditions the
+    # Osprey-workflow.html numbers were recorded under: Stellar with 3 files in
+    # parallel, Astral (hram, ~3 GB spectra/file) sequential. OspreySharp's
+    # default is now sequential, so pin it explicitly via the first-class
+    # --parallel-files argument on the C# leg. Rust is single-file-per-process
+    # and has no file-parallelism control, so it gets no such flag.
     $mpfApplied = $MaxParallelFiles
     if ($mpfApplied -lt 0) {
-        $mpfApplied = if ($DatasetName -eq 'Astral') { 1 } else { 0 }
+        $mpfApplied = if ($DatasetName -eq 'Stellar') { 3 } else { 1 }
     }
-    if ($mpfApplied -gt 0) {
-        [Environment]::SetEnvironmentVariable('OSPREY_MAX_PARALLEL_FILES', $mpfApplied.ToString())
-    } else {
-        if (Test-Path 'env:OSPREY_MAX_PARALLEL_FILES') { Remove-Item env:OSPREY_MAX_PARALLEL_FILES }
+    if ($ToolKey -eq 'CSharp' -and $mpfApplied -ge 1) {
+        $cliArgs += @('--parallel-files', $mpfApplied.ToString())
     }
+    # Scrub any stale env cap so it cannot shadow the explicit argument (the
+    # argument wins when both are set, but keep the environment clean anyway).
+    if (Test-Path 'env:OSPREY_MAX_PARALLEL_FILES') { Remove-Item env:OSPREY_MAX_PARALLEL_FILES }
 
     $logPath = Join-Path $OutputDir ("{0}-{1}-run{2}.log" -f $ToolKey, $DatasetName, $RunIdx)
     Write-Host ("  [{0}/{1}/{2}] {3} ..." -f $ToolKey, $DatasetName, $RunIdx, (Split-Path $t.Bin -Leaf)) -ForegroundColor Cyan

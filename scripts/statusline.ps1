@@ -24,11 +24,13 @@
     Windows: %USERPROFILE%\.claude\settings.json
     macOS/Linux: ~/.claude/settings.json
 
-    Contents (adjust path to match your ai/ checkout location):
+    Contents (adjust path to match your ai/ checkout location). Use FORWARD
+    slashes in the path: on Windows, Claude Code runs this command through Git
+    Bash, which silently strips backslashes and leaves the status line blank.
     {
       "statusLine": {
         "type": "command",
-        "command": "pwsh -NoProfile -File <your-root>\\ai\\scripts\\statusline.ps1"
+        "command": "pwsh -NoProfile -File <your-root>/ai/scripts/statusline.ps1"
       }
     }
 
@@ -97,21 +99,47 @@ $legacyFile = Join-Path $tmpDir 'active-project.json'
 $project_dir = $null
 $project_name = $null
 
-foreach ($candidate in @($perSessionFile, $legacyFile)) {
-    if ($candidate -and (Test-Path $candidate)) {
-        try {
-            $active = Get-Content $candidate -Raw | ConvertFrom-Json
-            $project_dir = $active.path
-            $project_name = $active.name
-            break
-        } catch { }
+# 1. Per-session active project: an explicit set_active_project for THIS session
+#    (keyed by the Claude Code PID), which deliberately overrides the launch dir.
+if ($perSessionFile -and (Test-Path $perSessionFile)) {
+    try {
+        $active = Get-Content $perSessionFile -Raw | ConvertFrom-Json
+        $project_dir = $active.path
+        $project_name = $active.name
+    } catch { }
+}
+
+# 1.5 skyclaude scoping: when PWIZ_LSP_DIR points at a checkout's pwiz_tools,
+#     show that checkout (and its git branch) rather than the launch dir. The
+#     skyclaude launcher cd's to the shared project root (e.g. C:\Dev) so the
+#     ai/ tooling resolves, which would otherwise label every session with the
+#     root's leaf ('Dev'). The active checkout lives in PWIZ_LSP_DIR instead.
+#     An explicit set_active_project (above) still outranks this; single-clone
+#     layouts leave PWIZ_LSP_DIR unset and fall through unchanged.
+if (-not $project_dir -and $env:PWIZ_LSP_DIR) {
+    $checkoutDir = Split-Path $env:PWIZ_LSP_DIR -Parent  # strip trailing 'pwiz_tools'
+    if ($checkoutDir -and (Test-Path -LiteralPath $checkoutDir)) {
+        $project_dir = $checkoutDir
+        $project_name = Split-Path $checkoutDir -Leaf
     }
 }
 
-# Fall back to workspace project directory if no active project set
-if (-not $project_dir) {
+# 2. The directory Claude Code was actually launched in (this session's real
+#    workspace). This must outrank the legacy global below -- otherwise a
+#    weeks-old global set_active_project shadows the live session.
+if (-not $project_dir -and $input_json.workspace.project_dir) {
     $project_dir = $input_json.workspace.project_dir
     $project_name = Split-Path $project_dir -Leaf
+}
+
+# 3. Legacy global active project (cross-session, no PID): final fallback only,
+#    used when the payload carried no workspace dir.
+if (-not $project_dir -and (Test-Path $legacyFile)) {
+    try {
+        $active = Get-Content $legacyFile -Raw | ConvertFrom-Json
+        $project_dir = $active.path
+        $project_name = $active.name
+    } catch { }
 }
 
 # Get model display name

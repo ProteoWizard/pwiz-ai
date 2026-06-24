@@ -134,39 +134,41 @@ time is the only reliable way to get it there.
 
 ## Pre-Review Workflow
 
-Before requesting human review, a change should clear two AI review passes —
-a fresh-context Claude self-review and GitHub Copilot. They catch different
-classes of issue (Claude: logic / cross-impl / spec conformance, and it can
-read source repos outside the change; Copilot: idiomatic / API / language),
-and each has caught real bugs the other missed, so both are mandatory.
+**`/pw-self-review` is the mandatory AI review gate** before requesting human
+review — a fresh-context Claude pass that catches logic / cross-impl / spec-
+conformance bugs and can read source repos outside the change. It is required
+on every PR.
 
-**The ORDER is deliberate — self-review runs LOCALLY, before the PR exists:**
+**Copilot review is now OPTIONAL and billed.** It used to be free and ran
+automatically on every PR (which is why self-review was once sequenced to land
+before it). Copilot review now carries a per-use cost — the same category as
+`/ultrareview` — so it is opt-in for extra rigor, not a standing gate. This
+removes the reason to withhold the PR until self-review is done.
 
-1. **`/pw-self-review` — local, before opening the PR.** As soon as coding is
-   complete (tests may still be running), run it on the local branch (it diffs
-   `master...HEAD`; no PR number needed). Address its findings first.
+**The order, updated for that policy:**
+
+1. **Open the PR early** (`gh pr create`) as soon as the build is green and
+   tests pass — *before* self-review. Opening the PR kicks off the first round
+   of **TeamCity** CI, so that runs in parallel while self-review proceeds.
+   (Safe now that Copilot no longer auto-reviews on open: there is no automatic
+   pass to waste on a state you are about to change.)
+2. **`/pw-self-review`** — the primary AI gate. Run it on the branch (it diffs
+   `master...HEAD`; a `<PR#>` also works now the PR exists). Address its findings
+   in NEW commits (see "Amending Commits"); PRs are squash-merged, so extra
+   commits cost nothing and preserve the review history.
    - Developer present: surface findings and agree which to fix.
    - Autonomous: fix the agreed set in follow-up commits.
-2. **Open the PR** (`gh pr create`) once self-review findings are resolved and
-   build/tests are green.
-3. **Copilot reviews automatically** within ~5 min of the PR opening. Because
-   self-review already landed, Copilot reviews the FINAL state instead of being
-   immediately invalidated by self-review fixes. Run **`/pw-respond <PR#>`** to
-   address its comments and resolve the threads.
-4. **Optional — `/ultrareview <PR#>`** for maximum rigor (user-triggered,
-   billed, multi-agent cloud review; stronger than either pass above).
+3. **Optional, billed — extra rigor when warranted:**
+   - **Copilot review** — now opt-in (billed). Trigger it deliberately when the
+     change wants idiomatic / API / language scrutiny; then **`/pw-respond <PR#>`**
+     to address comments and resolve threads.
+   - **`/ultrareview <PR#>`** — user-triggered, billed, multi-agent cloud review;
+     stronger than either pass above. Claude Code cannot launch it itself.
 
-Why local-first: opening the PR is what triggers Copilot's automatic review, so
-posting before self-review wastes that pass on a state you are about to change.
-Run self-review first; let Copilot land last.
-
-Address each round in a NEW commit (see "Amending Commits" below); PRs are
-squash-merged, so extra commits cost nothing and preserve the review history.
-Only after both AI reviewers are clean on the same commit should you request
-human review.
-
-The goal is to spend reviewers' time on judgment calls, not on issues the AI
-passes would have caught.
+Only after self-review is clean (and any optional reviews triggered are
+addressed) on the latest commit, with TeamCity green, should you request human
+review. The goal is to spend reviewers' time on judgment calls, not on issues
+the AI passes would have caught.
 
 ## Branch Naming Convention
 

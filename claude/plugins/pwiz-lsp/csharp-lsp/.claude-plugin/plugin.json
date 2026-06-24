@@ -1,12 +1,12 @@
 {
   "name": "csharp-lsp",
-  "description": "pwiz C# LSP. Launches Microsoft.CodeAnalysis.LanguageServer (Roslyn LSP from VS Code C# extension) scoped to pwiz_tools.",
-  "version": "0.4.0",
+  "description": "pwiz C# LSP via Microsoft.CodeAnalysis.LanguageServer (Roslyn LSP from the VS Code C# extension). Workspace is ${PWIZ_LSP_DIR} (the full pwiz_tools path), falling back to ${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools when PWIZ_LSP_DIR is unset. Multi-checkout (named sibling clones, no 'pwiz' folder) developers set PWIZ_LSP_DIR per session; see ai/scripts/lsp/Enable-PwizLsp.ps1.",
+  "version": "0.5.1",
   "lspServers": {
     "csharp-roslyn": {
-      "command": "pwsh",
+      "command": "pwsh.exe",
       "args": ["-NoProfile", "-File", "${CLAUDE_PROJECT_DIR}/ai/scripts/lsp/Invoke-RoslynLsp.ps1"],
-      "workspaceFolder": "${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools",
+      "workspaceFolder": "${PWIZ_LSP_DIR:-${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools}",
       "extensionToLanguage": { ".cs": "csharp" }
     }
   }

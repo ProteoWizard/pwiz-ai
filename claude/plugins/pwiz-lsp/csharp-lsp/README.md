@@ -34,14 +34,16 @@ LSP binary.
 
 ## Scope
 
-The plugin's `workspaceFolder` is set to `${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools`,
-and the launcher script is referenced as
+The plugin's `workspaceFolder` is `${PWIZ_LSP_DIR:-${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools}`
+(`PWIZ_LSP_DIR` is the full `pwiz_tools` path), and the launcher script is referenced as
 `${CLAUDE_PROJECT_DIR}/ai/scripts/lsp/Invoke-RoslynLsp.ps1`.
-`${CLAUDE_PROJECT_DIR}` is the directory Claude Code was launched from, which in
-sibling mode is the project root containing both `ai/` and `pwiz/`. This makes the
-plugin **path-independent**: it works unchanged whether the project root is
-`C:\proj`, `D:\Dev`, `E:\repos`, or anything else, as long as the developer
-launches Claude Code from that root (which the root `CLAUDE.md` already requires).
+`${CLAUDE_PROJECT_DIR}` is the directory Claude Code was launched from — the
+project root containing `ai/` and the C# checkout(s). This makes the plugin
+**path-independent**: it works unchanged whether the project root is `C:\proj`,
+`D:\Dev`, `E:\repos`, or anything else, as long as the developer launches Claude
+Code from that root (which the root `CLAUDE.md` already requires). Which checkout
+gets indexed is chosen by `PWIZ_LSP_DIR` — see
+[Selecting the workspace](#selecting-the-workspace) below.
 
 > **Why `${CLAUDE_PROJECT_DIR}` and not `${CLAUDE_PLUGIN_ROOT}`?** Claude Code
 > expands both inside `lspServers` config. `${CLAUDE_PLUGIN_ROOT}` points at this
@@ -98,18 +100,56 @@ after indexing finishes; it is not a misconfiguration.
 If memory becomes a problem, `/plugin disable csharp-lsp@pwiz-lsp` and rely on
 grep until needed.
 
-## Sibling pwiz clones
+## Selecting the workspace
 
-The default scope (`${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools`) covers the primary
-`pwiz/` clone only. For other clones (`skyline_26_1/`, etc.), the LSP server is
-NOT active. Two options:
+Roslyn LSP indexes exactly one workspace folder, fixed when the server starts
+(it is set via LSP `initialize`, not a CLI arg, so it cannot be switched
+in-session — the sentinel-file design we used for csharp-ls does not apply). The
+plugin resolves that folder from the `PWIZ_LSP_DIR` environment variable, with a
+fallback:
 
-1. Edit `plugin.json` to point at a different clone's `pwiz_tools` directory.
-2. Create a personal sibling plugin with its own `workspaceFolder`.
+```jsonc
+"workspaceFolder": "${PWIZ_LSP_DIR:-${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools}"
+```
 
-A dynamic-workspace switcher is not feasible today: Roslyn LSP's workspace is
-set via LSP `initialize`, not a CLI arg, so the sentinel-file design we used
-for csharp-ls does not apply.
+`PWIZ_LSP_DIR` is the **full `pwiz_tools` path** (not the checkout root): the
+`pwiz` segment belongs only to the single-clone fallback, where the clone is
+literally named `pwiz`. In multi-checkout layouts the clone is named something
+else (e.g. `IMoffset`) and contains `pwiz_tools` directly, so there is no `pwiz`
+segment — which is why it lives inside the `:-` default, not after the variable.
+
+- **Single-clone layout** (one `pwiz/` clone beside `ai/`): do nothing.
+  `PWIZ_LSP_DIR` stays unset and the workspace falls back to
+  `${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools` — the original zero-config behavior.
+- **Multi-checkout layout** (many named clones beside `ai/` — e.g. `BugFix/`,
+  `IMoffset/`, `master_clean/` — and no `pwiz/` folder): set `PWIZ_LSP_DIR` to
+  that checkout's `pwiz_tools` folder *before* launching Claude Code (the
+  `skyclaude` helper does this for you). Each session is
+  typically dedicated to one checkout, so per-session scoping fits naturally and
+  avoids mid-session reindex churn.
+
+`ai/scripts/lsp/Enable-PwizLsp.ps1` provides a launcher that sets the variable.
+Dot-source it from your PowerShell `$PROFILE` (use your own project root):
+
+```powershell
+. C:\Dev\ai\scripts\lsp\Enable-PwizLsp.ps1
+$PwizLspDefault = 'master_clean'   # optional: checkout for a no-arg launch
+```
+
+Then start Claude Code with `skyclaude` instead of `claude`:
+
+```powershell
+skyclaude IMoffset   # scope the C# LSP to <root>\IMoffset\pwiz_tools, then launch
+skyclaude            # use $PwizLspDefault (multi-checkout) or the 'pwiz' fallback
+```
+
+> **Note on the nested default.** `${VAR:-default}` is documented for `.mcp.json`
+> and LSP config claims parity, but a *nested* `${CLAUDE_PROJECT_DIR}` inside the
+> default is not separately documented. Multi-checkout machines always set
+> `PWIZ_LSP_DIR`, so they are unaffected. If a single-clone machine ever indexes
+> nothing on a bare `claude`, set `PWIZ_LSP_DIR` explicitly (or just use
+> `skyclaude`), and confirm the resolved workspace in the Roslyn log under
+> `ai/.tmp/state/roslyn-logs/`.
 
 ## Conflicts
 
