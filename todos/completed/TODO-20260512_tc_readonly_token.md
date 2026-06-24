@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260512_tc_readonly_token`
 - **Base**: `master`
 - **Created**: 2026-05-12
-- **Status**: PR open
-- **PR**: https://github.com/ProteoWizard/pwiz/pull/4202
+- **Status**: Completed
+- **PR**: https://github.com/ProteoWizard/pwiz/pull/4202 (merged 2026-05-12 as ad91bfdca)
 
 ## Objective
 
@@ -53,3 +53,10 @@ the shim updates itself nightly via the new bearer-token path.
   expected entries).
 - Cherry-pick: **no** — POST-RELEASE PATCH phase, master-only infrastructure
   work with no impact on released users.
+
+## Progress Log
+
+### 2026-06-24 - Merged (closeout)
+
+PR #4202 merged to master 2026-05-12 as commit ad91bfdca; TODO had simply never
+been moved out of active. No follow-up — bearer-token auth shipped as designed.
