@@ -6,7 +6,7 @@
 - **Created**: 2026-06-23
 - **Status**: In Progress
 - **GitHub Issue**: (none)
-- **PR**: (pending)
+- **PR**: [#4326](https://github.com/ProteoWizard/pwiz/pull/4326)
 
 # OspreySharp console/log output + IProgressMonitor adoption
 
