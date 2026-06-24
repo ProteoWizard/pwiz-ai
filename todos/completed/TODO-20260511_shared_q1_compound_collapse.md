@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260511_shared_q1_compound_collapse`
 - **Base**: `master`
 - **Created**: 2026-05-11
-- **Status**: PR open
+- **Status**: Closed — superseded by Brendan's transition-aware fix (PR #4305, merged 2026-06-23)
 - **GitHub Issue**: (pending)
 - **Support thread**: https://skyline.ms/home/support/announcements-thread.view?rowId=66356 (Wesley)
-- **PR**: https://github.com/ProteoWizard/pwiz/pull/4200
+- **PR**: https://github.com/ProteoWizard/pwiz/pull/4200 (CLOSED, not merged — superseded by #4305)
 - **Related**: Same dataset as TODO-20260429_srm_times_intensities_mismatch (now merged
   as PR #4174, commit 3315ee92b). That fix addressed the points-count crash;
   this TODO covers the *second* issue Wesley reported on the same thread.
@@ -117,3 +117,14 @@ Skyline's chromatogram-to-target mapping rather than vendor-specific.
   thread context in the PR — just link.
 - "Reported by Wesley." trailer goes above the Co-Authored-By in the eventual
   commit message.
+
+## Closeout
+
+### 2026-06-24 - Superseded
+
+Brendan landed an alternative fix for the same support issue —
+[PR #4305](https://github.com/ProteoWizard/pwiz/pull/4305) "Fix SRM shared-precursor
+compound collapse via transition-aware matching (alternative to #4200)", merged
+2026-06-23 as commit 41d3be94f. Our PR #4200 was closed (not merged) in favor of
+the transition-aware approach. No further action here; this TODO is closed as
+superseded.
