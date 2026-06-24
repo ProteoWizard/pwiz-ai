@@ -81,6 +81,25 @@ pattern and shares the infrastructure via PortableUtil.
       Resources.CommandStatusWriter_WriteLine_Error_)`. All 10 construction sites and
       the `ERROR_MESSAGE_HINT`/resource references already import `pwiz.Common.SystemUtil`.
 - [x] **Gate: full `Skyline.sln` build** PASSED. Committed as `56b10ae613`.
+- [x] **REGRESSION + FIX (post-PR #4326):** Commit 1's error-hint parameterization
+      broke localized command-line error detection. I captured the localized "Error:"
+      prefix into a static collection installed once in `Program.Main`; tests don't run
+      Main and switch UI language IN-PROCESS, so in zh/ja/fr/tr the localized prefix
+      (`错误：` in zh) went undetected -> `IsErrorReported` false -> "exit status 2 but no
+      error reported" across ALL `Console*` tests in non-en passes. Root cause: a
+      localizable string assigned to a static freezes the first locale. FIX:
+      `CommandStatusWriter.IsErrorMessage` is now a `static Func<string,bool>` (default =
+      invariant "Error:"); `CommandLine`'s static ctor assigns a lambda re-resolving
+      `Resources.CommandStatusWriter_WriteLine_Error_` per line (installed there because
+      every CLI path -- prod and tests via `CommandLineRunner.RunCommand` -- builds a
+      `CommandLine` before writing errors). Removed the `Program.Main` install.
+      See [[feedback_no_localizable_string_in_static]].
+- [x] **GATE STRENGTHENED:** the missed gate was running only the Skyline *build*, not
+      localized CLI tests. Standing gate for any output-path change now includes the
+      command-line tests in ALL languages: `Run-Tests.ps1 -UseTestList -Language all`
+      (the failing set is in `SkylineTester test list.txt`).
+- [x] **FIX VERIFIED:** `Run-Tests.ps1 -UseTestList -Language all` -> all 38 tests PASS in
+      en/ja/zh/fr/tr (216.6s), including the previously-failing zh pass.
 
 ### Commit 2 - Route OspreySharp exe-layer output through one writer
 - [x] `OspreySharp/Program.cs`: added `private static CommandStatusWriter _out =
