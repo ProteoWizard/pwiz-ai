@@ -246,6 +246,34 @@ Follow-up: the new 8s max gap is the **RT-calibration LDA pass** ("Calibration p
 LDA passing count") -- the genuine mProphet-LDA analog; give it the same per-cycle
 treatment (candidate for Commit 7 or a fast-follow).
 
+### Commit 5b - --verbose disposition + Percolator training progress as percent
+**Emerged from reviewing the percent/cycle output in perfviz + Notepad++ (2026-06-24).**
+- [x] **`--verbose` introduced** as the third output disposition (keep / remove /
+      hide-unless-verbose). `ARG_VERBOSE` in `GROUP_LOGGING`; `OspreyConfig.Verbose`;
+      `OspreyOutput.Verbose` + `WriteVerbose(...)` helper; wired in `Program` next to
+      `PerfStats`. Orthogonal to `--perf-stats` (human detail level vs machine tags).
+- [x] **Percolator per-iteration progress reports a percent**, not a raw/summed count.
+      The 3 CV folds train in parallel; `TrainProgressReporter` buffers each iteration's
+      per-fold reports under a lock and flushes only once all folds report, so output is
+      always ordered. Default: one line `iteration N of M (P.P% of training targets at
+      1% FDR)` -- passing/total summed over folds, a ratio that cancels the 300k subsample
+      scale AND the CV fold-overlap (~2x) double-count, giving a scale-free convergence
+      signal. `--verbose`: each fold in fold order with its own `X of Y targets, Z%`
+      (the ~2/3 split is explicit, not assumed).
+- [x] **CV training-set size in a section sub-header** (emitted from `RunPercolator`,
+      where the actual subsample is known): `3-fold cross-validation on <subN> training
+      entries (<subTargets> targets)`. First-pass ~300k (MaxTrainSize cap); second-pass
+      ~131k (best-per-precursor dedup left fewer) -- honest per-pass denominator.
+- [x] **Gate: OspreySharp pre-commit** PASSED (build + 432 tests + 0-warning).
+- [ ] **Gate: `regression.ps1 -Dataset Stellar`** (output-only; expect byte-identical).
+- [ ] Commit pwiz (SHA: pending).
+- **Observation the metric enabled (kept as a future note, NOT changed here):** first-pass
+      is still climbing at iteration 10 (hits the MaxIterations=10 cap, not converged);
+      second-pass self-stops at iteration 8 (converged). Whether raising MaxIterations
+      helps first-pass is an ALGORITHM change (alters scores -> regression golden + Rust
+      cross-impl parity), so it is out of scope for this output PR; evaluate via a throwaway
+      experiment, decide separately. The visibility itself is the win.
+
 ### Commit 6 - Move IProgressMonitor + ProgressStatus + Immutable cluster to PortableUtil
 - [ ] Move (delete from CommonUtil, add under PortableUtil, namespaces UNCHANGED):
       `SystemUtil/IProgressMonitor.cs`, `SystemUtil/ProgressStatus.cs`,
