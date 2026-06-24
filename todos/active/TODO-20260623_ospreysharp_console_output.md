@@ -100,6 +100,19 @@ pattern and shares the infrastructure via PortableUtil.
       (the failing set is in `SkylineTester test list.txt`).
 - [x] **FIX VERIFIED:** `Run-Tests.ps1 -UseTestList -Language all` -> all 38 tests PASS in
       en/ja/zh/fr/tr (216.6s), including the previously-failing zh pass.
+- [x] **CROSS-SOLUTION CONSUMERS (AutoQC / SkylineBatch / SharedBatch):** these separate
+      .NET 4.7.2 solutions reference CommonUtil, so the Commit-1 `CommonUtil -> PortableUtil`
+      ref makes PortableUtil a new transitive dep there (Skyline.sln can't catch it).
+      SkylineBatch.sln builds + tests PASS (PortableUtil resolves transitively). AutoQC.sln
+      needed `PortableUtil.csproj` added to the .sln (committed `9a8dd369e7`); its
+      AssemblyInfo.cs is Boost-Build-generated (gitignored) and was just absent in the
+      checkout (pre-existing, not this PR). AutoQC builds + all AutoQC tests PASS after that.
+      Also removed an inspection-flagged unused `using pwiz.Skyline` in CommandLinePeakBoundaryTest.
+      NOTE: AutoQC.sln registers PortableUtil under a fresh GUID vs Skyline.sln's canonical
+      {97ECF0B4...}; harmless (SDK project, path-resolved) but could be aligned later.
+- [ ] **CodeQL** (PR #4326): 2 pre-existing "PanoramaUserEmail -> external write" alerts on
+      the moved CommandStatusWriter.cs (flow lives in Skyline; re-flagged only because the
+      sink file moved). NOT introduced by this PR -> left for the security review (not resolved).
 
 ### Commit 2 - Route OspreySharp exe-layer output through one writer
 - [x] `OspreySharp/Program.cs`: added `private static CommandStatusWriter _out =
