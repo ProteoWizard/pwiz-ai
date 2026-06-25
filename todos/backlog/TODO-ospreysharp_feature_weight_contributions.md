@@ -5,10 +5,11 @@
 After Percolator training, emit a **feature weight + percent-contribution table** for
 the trained linear model — for each of the 21 PIN scores: its trained coefficient and
 its relative importance as a percentage (signed, all summing to 100%), exactly like
-Skyline's peak-scoring model report. The percentages express how much each score
-contributes to the composite discriminant (variance of the score with its coefficient
-applied), and a contribution is **negative** (red in Skyline's UI) when the trained
-coefficient points in the *unexpected* direction for that score.
+Skyline's peak-scoring model report. The percentages express each score's share of the
+target-decoy *separation* of the composite discriminant (`w_j * Delta-mu_j`, where
+`Delta-mu_j` is the feature's target-minus-decoy mean gap), and a contribution is
+**negative** (red in Skyline's UI) when the trained coefficient points in the *unexpected*
+direction for that score.
 
 This is a follow-up to the modular-scoring refactor (now **completed**,
 `TODO-20260607_ospreysharp_modular_scoring.md`): the `IOspreyFeatureCalculator`
@@ -41,9 +42,11 @@ Signal to noise:              -0.1864 (-3.5%)     <- unexpected direction (red)
 Product mass error:           -0.0423  (1.9%)
 ```
 
-The percentages are a variance decomposition of the composite score across features;
-the sign is set by the feature's expected direction (see "direction" below). Negative
-contributions render red in `EditPeakScoringModelDlg`.
+The percentages are a **target-decoy mean-difference decomposition** of the composite
+score across features (NOT a variance / `w*std` decomposition -- see "How the math works
+(why it ports across training paradigms)" below); the sign is set by the feature's expected
+direction (see "direction" below). Negative contributions render red in
+`EditPeakScoringModelDlg`.
 
 ## What Osprey already has (grounding)
 
@@ -62,6 +65,48 @@ contributions render red in `EditPeakScoringModelDlg`.
 So the linear equation exists post-training; this TODO adds the **contribution %**, the
 **direction**, and a first-class **report**.
 
+## How the math works (why it ports across training paradigms)
+
+Settled in design discussion (2026-06-24). The percent-contribution is a property of **a
+linear discriminant and the data it scored**, independent of the optimizer that produced the
+weights -- so it ports to Percolator's linear SVM exactly as to mProphet's LDA. (This was
+doubted on the grounds that "an SVM equation differs from an LDA equation"; that conflates
+the *fitting objective* with the *model form*. Both emit the same object -- a bias + weight
+vector, `d(x) = b + sum_j w_j z_j`. OspreySharp scores precisely this:
+`PercolatorFdr.cs:738-740`, `score = avgBias + sum_j avgWeights[j]*featureBuf[j]` on the
+standardized `featureBuf`.)
+
+**Skyline's exact formula** (`TargetDecoyGenerator.GetPercentContribution`, `:233-258`,
+reached via `LinearModelParams.CalculatePercentContributions` / `MProphetScoringModel`) is a
+target-decoy **mean-difference** decomposition -- NOT a variance / `w*std` formula:
+
+    contribution_j = w_j * (mean_target(x_j) - mean_decoy(x_j)) / (mean_target(d) - mean_decoy(d))
+                   = w_j * Delta-mu_j / Delta-mu_composite
+
+By linearity of expectation the denominator equals the sum of the numerators
+(`Delta-mu_composite = sum_j w_j*Delta-mu_j`; the bias cancels in the difference), so the
+per-feature percentages sum to **exactly 100% for any linear model whatsoever**. The only
+ingredients are the coefficients `w_j` and the data's per-feature target-minus-decoy gap
+`Delta-mu_j`; the training paradigm leaves no fingerprint beyond the numeric values of `w_j`.
+
+- **Load-bearing assumption:** linearity of the final scorer. It breaks only for a
+  nonlinear/kernel SVM, a tree, or feature interactions -- none in play here. A linear SVM
+  yields the same object as LDA.
+- **Do NOT** port an LDA-specific importance formula (e.g. backing weights out through the
+  pooled within-class covariance, `w = Sigma^-1 (mu_T - mu_D)`) -- that *would* assume the
+  generative model. Skyline deliberately uses the model-agnostic mean-difference method above;
+  port that.
+- **Sign / direction** falls out of the same formula: feature `j` contributes negatively when
+  `w_j*Delta-mu_j < 0` -- the weighted feature pushes targets *below* decoys, i.e. the trained
+  sign disagrees with the score's expected direction (the `IsReversedScore` property of task 1).
+- **Score calibration is orthogonal.** OspreySharp applies Granholm-2012 between-fold
+  calibration to the composite score (anchors the FDR-threshold score -> 0, median decoy -> -1;
+  `CalibrateScoresBetweenFolds`, `:1678-1728`) and does NOT z-score the output. That does not
+  touch the contribution table: the % is invariant to any affine rescale of the composite, and
+  is computed from `avgWeights`, which the calibration never modifies. (Aside: inputs ARE
+  z-scored -- the per-feature standardizer -- but the composite output is decision-anchored,
+  not moment-standardized, mirroring Percolator/mokapot/Rust.)
+
 ## What to build
 
 1. **Per-score direction on the calculator SPI.** Add an `IsReversedScore`-equivalent
@@ -72,15 +117,17 @@ So the linear equation exists post-training; this TODO adds the **contribution %
    disagrees. (Map each PIN score's expected direction from its meaning / from Rust /
    from Skyline's analogous calculator.)
 
-2. **Percent-contribution computation.** Port Skyline's exact formula (do NOT
-   approximate) from `pwiz_tools/Skyline/Model/Results/Scoring/` —
-   `LinearModelParams` + `MProphetPeakScoringModel` (the percent-contribution / weighted
-   feature variance method). The contribution of feature `j` is its share of the
-   composite-score variance with the coefficient applied (≈ `w_j * std_j`, normalized by
-   `Σ_k |w_k * std_k|`, signed by direction); on Osprey's **standardized** features
-   `std_j == 1`, so `|w_j|` is already the standardized contribution — but confirm
-   against Skyline's formula and decide raw-vs-standardized reporting (see open
-   questions). Percentages sum to 100%.
+2. **Percent-contribution computation.** Port Skyline's exact method (do NOT approximate):
+   `TargetDecoyGenerator.GetPercentContribution` (`:233-258`), reached via
+   `LinearModelParams.CalculatePercentContributions` / `MProphetScoringModel`. It is the
+   **target-decoy mean-difference** decomposition
+   `contribution_j = w_j * Delta-mu_j / Delta-mu_composite` (see "How the math works"), NOT a
+   `w*std` variance formula. Compute `Delta-mu_j` (target-minus-decoy mean of feature `j`) in
+   the SVM's actual input space -- the standardized `featureBuf` OspreySharp already scores on
+   -- and use `avgWeights[j]`. Contributions are invariant to standardized-vs-raw as long as
+   `w` and `Delta-mu` share a space (`w_j^std * Delta-mu_j^std = w_j^raw * Delta-mu_j^raw`);
+   only the *displayed coefficient* differs (see open questions). Percentages sum to exactly
+   100%.
 
 3. **Report / output.** Emit the table (per-feature: friendly name, coefficient,
    signed percent) after Stage 5 training — a log line set and/or a structured report
@@ -126,10 +173,13 @@ So the linear equation exists post-training; this TODO adds the **contribution %
   data; match that.
 - **Per-fold vs averaged.** Report contributions for the averaged model (`avgWeights`)
   — confirm that is what users want (vs per-fold spread).
-- **Correlated features.** A pure `|w_j*std_j|` normalization ignores inter-feature
-  covariance; Skyline's exact variance decomposition may account for it. Port the exact
-  method so correlated scores (e.g. the median-polish family, the coelution family)
-  attribute correctly.
+- **Correlated features (resolved).** Skyline's formula has **no covariance term** -- the
+  mean-difference decomposition is exact and sums to 100% regardless of correlation,
+  attributing the shared signal per the fitted weights. This limitation is *shared by LDA and
+  SVM*, not a reason the method fails for the SVM. (SVM L2 tends to *spread* weight across
+  correlated scores -- the median-polish / coelution families -- where LDA may concentrate it;
+  different-looking, neither wrong, each describes its own model.) Nothing extra to port for
+  correlation -- just don't substitute a covariance-aware variance method Skyline doesn't use.
 
 ## References
 
