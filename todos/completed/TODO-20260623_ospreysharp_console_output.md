@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260623_ospreysharp_console_output`
 - **Base**: `master`
 - **Created**: 2026-06-23
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none)
-- **PR**: [#4326](https://github.com/ProteoWizard/pwiz/pull/4326)
+- **PR**: [#4326](https://github.com/ProteoWizard/pwiz/pull/4326) (merged 2026-06-24 as `31fd1caee2`)
 
 # OspreySharp console/log output
 
@@ -230,9 +230,9 @@ perfviz.html (2026-06-23/24).** Three problems the chart/log surfaced, all outpu
       57s -> 8s.
 - [x] **ai perf tools pass `--perf-stats`** so they still receive the tagged lines:
       `Test-PerfGate.ps1` ($cliArgs) and `Measure-Pipeline.ps1` (C#-only branch).
-- [ ] **Gate: OspreySharp pre-commit** PASSED (build + 432 tests + 0-warning).
-- [ ] **Gate: `regression.ps1 -Dataset Stellar`** (output-only; expect byte-identical).
-- [ ] Commit pwiz (SHA: pending); commit ai scripts separately.
+- [x] **Gate: OspreySharp pre-commit** PASSED (build + 432 tests + 0-warning).
+- [x] **Gate: `regression.ps1 -Dataset Stellar`** PASSED (output-only; byte-identical golden).
+- [x] Committed on branch; squashed into `31fd1caee2` at merge.
 
 **Future direction surfaced here (developer, 2026-06-24):** a `--verbose` mode will
 become the gate for implementer-grade metrics (means, SDs, per-step internals), while
@@ -264,8 +264,8 @@ treatment (candidate for the backlog refactor or a fast-follow).
       entries (<subTargets> targets)`. First-pass ~300k (MaxTrainSize cap); second-pass
       ~131k (best-per-precursor dedup left fewer) -- honest per-pass denominator.
 - [x] **Gate: OspreySharp pre-commit** PASSED (build + 432 tests + 0-warning).
-- [ ] **Gate: `regression.ps1 -Dataset Stellar`** (output-only; expect byte-identical).
-- [ ] Commit pwiz (SHA: pending).
+- [x] **Gate: `regression.ps1 -Dataset Stellar`** PASSED (output-only; byte-identical).
+- [x] Committed on branch; squashed into `31fd1caee2` at merge.
 - **Observation the metric enabled (kept as a future note, NOT changed here):** first-pass
       is still climbing at iteration 10 (hits the MaxIterations=10 cap, not converged);
       second-pass self-stops at iteration 8 (converged). Whether raising MaxIterations
@@ -321,3 +321,39 @@ classification). This TODO ends at the console-output work above.
   `OspreySharp.FDR/PercolatorFdr.cs`, `OspreySharp.IO/MzmlReader.cs`,
   `OspreySharp.Diagnostics/OspreyDiagnosticsLog.cs`, `OspreySharp.Tasks/{AnalysisPipeline,PipelineContext,PerFileScoringTask}.cs`.
 - Tool + sample: `G:\My Drive\Claude\perfviz.html`, `G:\My Drive\Claude\Import_20191009_170333-skyline.log`.
+
+## Progress Log
+
+### 2026-06-24 - Merged
+
+PR #4326 merged to master as squash commit `31fd1caee2` ("Reworked OspreySharp CLI output
+and renamed its pipeline tasks"). **Admin-override used:** the only red check was the
+ProteoWizard/Skyline Docker (Wine x86_64) build, failing on 2 unrelated `msconvert`
+vendor-conversion tests (a CJK-filename locale flake + a missing-output flake). This PR is
+OspreySharp-only C# and touches no msconvert/core code, and the Docker config is otherwise
+12-for-12 green, so the failure is confirmed flaky/unrelated; the required check was bypassed
+with `gh pr merge --admin` on developer approval.
+
+**Shipped:** all OspreySharp output routed through one shared `CommandStatusWriter`
+(PortableUtil) with `--timestamp`/`--memstamp`/`--log-file`; `--perf-stats` (machine-tag gate)
+and `--verbose` (implementer-detail gate) tiers; below-exe Console-bypass sites rerouted;
+Percolator per-iteration percent progress; a cheap stopwatch-throttled `ProgressReporter` (2s,
+matching Skyline's `CommandProgressMonitor` default) for isolation-window scoring; full
+pipeline-task rename (FirstJoin->FirstPassFDR, MergeNode->SecondPassFDR,
+PerFileRescore->PerFileRescoring -- `--task` tokens, `*.osprey.task` resume sidecars, tests,
+regression.ps1, workflow doc); redundant section-header removal; and a per-file
+unsorted-spectrum count in the load line (per-spectrum `[unsorted-spectrum]` detail moved to
+`--verbose`). `regression.ps1 -Dataset Stellar` green at 1e-9 (golden + resume + HPC chain).
+
+**Deferred (NOT in this PR):**
+- The 2 CodeQL "PanoramaUserEmail -> external write" alerts on the moved
+  `CommandStatusWriter.cs` (pre-existing Skyline flow, re-flagged only because the sink file
+  moved) -- left for security review.
+- I/O read/write progress (the remaining ~40-47s Astral mzML-read / parquet-write gaps) ->
+  new `ai/todos/backlog/TODO-ospreysharp_io_progress.md`. The heavy
+  `IProgressMonitor`/`ProgressStatus` -> PortableUtil port was abandoned in favor of the cheap
+  `ProgressReporter`; its old backlog TODO (`TODO-ospreysharp_progressmonitor_portableutil.md`)
+  was deleted and replaced by the io_progress one.
+- **pwiz-ai task still OPEN:** `ai/scripts/OspreySharp/perfviz.html` was never committed
+  (source at `G:\My Drive\Claude\perfviz.html`) -- the visualization tool the whole
+  observability effort relies on is still not in the repo. Carry forward.
