@@ -7,7 +7,11 @@
   `ProgressStatus`/`IProgressMonitor` into PortableUtil (that port carries the heavy
   UI+CLI dual-support burden and a build-infra blast radius), so the relocation is OFF
   the table. This TODO is the narrow remaining goal that motivated it.
-- **Branch**: TBD (`Skyline/work/YYYYMMDD_ospreysharp_io_progress`)
+- **Branch**: `Skyline/work/20260624_ospreysharp_io_progress` (started 2026-06-24)
+- **Status**: **Completed**.
+- **PR**: [#4327](https://github.com/ProteoWizard/pwiz/pull/4327) (merged 2026-06-25 as `65899bd6ed`).
+- **History**: PR #4327 OPEN (night session 2026-06-24). Implemented mzML read (ProgressStream byte decorator) + both parquet writes (per-row build + per-column write, byte-identical order); ProgressReporter int->long. Gates green: Debug build+inspection+tests; regression.ps1 Stellar all 3 legs 1e-9; self-review clean. Astral max gap 47s->31s (3 I/O steps no longer >8s). TeamCity: per-commit 4062208 + regression 4062209.
+  - **Residuals (follow-up):** one ~11s intra-column parquet gap (largest blob column, needs write-side byte progress); compute gaps out of scope (library load 31s, RT cal ~18s, Percolator training ~10s, post-train FDR math 24s). TODO premise "between spikes <8s" false on --resolution-unit Astral; recommend hram re-measure + compute-step progress.
 
 # Add %-complete progress to OspreySharp I/O so no step stalls silently
 
@@ -78,3 +82,21 @@ scoring/rescore call sites (they pass `int` counts -> implicit widen).
   If a writer is single-shot, a coarse "Writing N rows..." heading + final line is the
   fallback (still better than silence, but won't meet the 8s bar -- check before relying on it).
 - Keep it OspreySharp-only (Core/IO/Tasks); do NOT reach back toward the PortableUtil port.
+
+## Progress Log
+
+### 2026-06-25 - Merged
+
+PR #4327 merged as commit `65899bd6ed`. Shipped %-complete progress for the three large
+OspreySharp I/O steps that previously ran silently: mzML read (new `ProgressStream`
+byte-counting `Stream` decorator in Core, wrapping the `FileStream` feeding the `XmlReader`)
+and both parquet writes (per-row build + per-column write reporters via shared
+`BuildRowGroupColumns`/`WriteRowGroupColumns` helpers, byte-for-byte unchanged column order);
+`ProgressReporter.total`/`Report` widened int->long for Astral-class counts. Output-neutral --
+regression.ps1 Stellar all 3 legs byte-identical at 1e-9. Astral max silent gap 47s->31s.
+**Deferred (follow-ups, not filed as issues):** one ~11s intra-column parquet gap on the
+largest blob column (needs a write-side byte-counting stream); compute-step gaps left out of
+scope (spectral-library load ~31s, RT calibration ~18s, Percolator training ~10s/iter,
+post-training FDR math ~24s); and a proper hram (non-`--resolution unit`) re-measurement, since
+the harness runs Astral at unit resolution which inflates the compute steps and falsifies the
+TODO's "between spikes <8s" premise.
