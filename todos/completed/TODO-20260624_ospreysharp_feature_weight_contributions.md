@@ -1,5 +1,38 @@
 # TODO-ospreysharp_feature_weight_contributions.md
 
+> **DONE (2026-06-25):** Author-requested structural refinement complete and committed
+> (`e0e64a6f62` on PR #4328, base `3099488f15`). `FeatureContributions.Accumulator` now owns both
+> the per-feature summing (a `double[]` streaming overload + a `Matrix` row overload) and the
+> fold-averaging (`Build`); the decomposition ctor is `internal` so `Build` is the only public path
+> from a trained model. Both Percolator paths (direct + streaming) use the Accumulator;
+> `PercolatorResults` carries a `FeatureContributions` object in place of the speculative
+> `AvgWeights`/`AvgBias`, and `TestFeatureContributionReport` is rewired off them. Gates green:
+> pre-commit (build + 439 tests + 0-warning inspection) and regression.ps1 Stellar 3/3 legs PASS
+> with the blib byte-identical (52,514,816 bytes) -- confirming reporting-only. fw TeamCity
+> re-triggered on pull/4328 (`ProteoWizard_OspreyWindowsNet` #4062498 +
+> `...PerfRegressionTests` #4062499).
+>
+> **Review round 2 (2026-06-25, `054bec9993`):** addressed two author review notes.
+> (1) Collapsed the three parallel feature arrays (FeatureNames/FeatureLabels/ReversedScore) into one
+> `OspreyFeatureInfo` struct (new, in Core) carrying name+label+direction; the Tasks caller populates
+> the vector from the calculators via `OspreyFeatureCalculators.BuildFeatureInfos` (replaces
+> GetFeatureLabels/GetReversedScoreFlags). FDR can't see the Scoring SPI, so the struct lives in Core
+> (FDR and Scoring are siblings that both reference Core). One `OspreyFeatureInfo[]` now threads through
+> PercolatorConfig/PercolatorEngine/PercolatorFdr (Stage 5 dumps + report). (2) Trimmed the
+> over-detailed EmitFeatureContributions doc to defer to FeatureContributions. Two getter tests
+> consolidated into TestBuildFeatureInfos. Gates green again: build + 438 tests + 0-warning inspection,
+> regression.ps1 Stellar 3/3 PASS (blib still 52,514,816 bytes). Re-triggered fw TeamCity on pull/4328
+> (`ProteoWizard_OspreyWindowsNet` #4062666 + `...PerfRegressionTests` #4062667).
+>
+> **Review round 3 (2026-06-25, `2c7b5bab72`, test-only):** rewrote `TestBuildFeatureInfos` -- the
+> hard-coded label/direction oracle was a change-detector re-encoding data the calculators already
+> own. Now it calls `BuildFeatureInfos(ParquetScoreCache.PIN_FEATURE_NAMES)` and asserts each info's
+> name == the supplied PIN name and its label/direction == the calculator at the same index, i.e. it
+> verifies the by-index merge itself. Build + 438 tests + 0-warning inspection green; production code
+> unchanged from `054bec9993` so the perf run #4062667 still applies, only the per-commit unit-test
+> build re-triggered on pull/4328. Next: confirm CI green, then the PR is mergeable.
+> This was the first clean extraction toward `ai/todos/backlog/TODO-ospreysharp_percolatorfdr_god_class.md`.
+
 ## Summary
 
 After Percolator training, emit a **feature weight + percent-contribution table** for
@@ -17,7 +50,8 @@ SPI it added is the natural home for the per-score **direction** this feature
 needs, so that dependency is now satisfied -- the direction property + the
 contribution table can be built directly on the existing seam.
 
-**Status**: Backlog (not started). **Type**: Scoring interpretability / FDR reporting.
+**Status**: **Completed** -- PR [#4328](https://github.com/ProteoWizard/pwiz/pull/4328)
+merged 2026-06-25 as `74cf4785e9`. **Type**: Scoring interpretability / FDR reporting.
 
 ## Why it's valuable
 
@@ -191,3 +225,23 @@ ingredients are the coefficients `w_j` and the data's per-feature target-minus-d
 - Origin: requested 2026-06-08 — replicate Skyline's per-feature weight + percent-
   contribution table (with signed/red unexpected-direction contributions) for Osprey's
   Percolator-trained linear model.
+
+## Progress Log
+
+### 2026-06-25 - Merged
+
+PR #4328 merged as commit `74cf4785e9`. Shipped the post-Percolator per-feature weight +
+signed percent-contribution table (Skyline's exact target-decoy mean-difference decomposition,
+percents sum to 100% by linearity), `IsReversedScore` added to the `IOspreyFeatureCalculator`
+SPI with the `(unexpected direction)` wrong-sign flag, and an optional machine-precision TSV
+via `OSPREY_DUMP_FEATURE_CONTRIB`. Three structural review rounds landed on top of the feature:
+(1) extracted the calculation into a `FeatureContributions` class with a nested `Accumulator`
+owning the summing + fold-averaging, carried on `PercolatorResults`; (2) collapsed the three
+parallel name/label/direction arrays into one `OspreyFeatureInfo` struct (new in Core) the Tasks
+layer populates from the calculators via `OspreyFeatureCalculators.BuildFeatureInfos`, keeping
+OspreySharp.FDR free of a Scoring reference; (3) rewrote `TestBuildFeatureInfos` to validate the
+by-index merge against its sources instead of a re-encoded oracle. Reporting only -- regression.ps1
+Stellar all 3 legs byte-identical at 1e-9 throughout. Merged over a still-running CodeQL
+`Analyze (c-cpp)` check (irrelevant to a pure-C# diff) per developer go-ahead; all other checks
+green. **Follow-up (not filed):** the `TODO-ospreysharp_percolatorfdr_god_class.md` backlog item --
+this contribution extraction was its first clean piece.
