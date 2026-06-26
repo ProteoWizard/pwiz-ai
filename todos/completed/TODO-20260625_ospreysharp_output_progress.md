@@ -3,7 +3,8 @@
 ## Status
 - **Type**: OspreySharp CLI output (final tuning round; follow-on to PR #4326 / #4327)
 - **Branch**: `Skyline/work/20260625_ospreysharp_output_progress` (started 2026-06-25)
-- **Status**: In progress. Hoped to be the **final** OspreySharp output-tuning round.
+- **PR**: [#4332](https://github.com/ProteoWizard/pwiz/pull/4332) (merged 2026-06-25 as bcc9480774)
+- **Status**: Completed. The final OspreySharp output-tuning round + Stage 6 rescore parallelization.
 - **Packaging**: Part 1 (5s I/O interval) rides along in the SAME PR as Part 2 (the parallel-files
   MultiProgressReporter) -- the 5s tweak alone isn't worth a PR cycle (Brendan, 2026-06-25). One PR
   for both.
@@ -320,3 +321,16 @@ dirties it. Copy the mzML+library into a scratch base (e.g. `D:\test\osprey-runs
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260625_ospreysharp_output_progress.md` before starting work (NOTE: that handoff
 predates Session 2 -- Part 2 is now implemented; trust this Session 2 entry over the handoff).
+
+### 2026-06-25 - Merged
+
+PR #4332 merged as commit bcc9480774. Shipped Part 1 (5s I/O progress interval) + Part 2 (the
+`MultiProgressReporter` for `--parallel-files`: throttled `[i] p%` aggregate line + numbered legend +
+per-file buffered blocks, clean default log with `[BENCH]` now perf-gated, no `--task`/`--output`
+warning, corrected `Task:`/`Output:` settings, `Scoring file N/M` header) + the Stage 6 per-file
+rescore parallelization (byte-identical, ~2x faster on the rescore stage). Gates: full
+`regression.ps1 -Dataset All` (6/6 legs PASS at parallelism 3), `Test-PerfGate` total -5.5%, TeamCity
+Osprey .NET green (436 tests), self-review addressed (buffer/segment lock cleanup, dead-field removal).
+Sibling ai-repo fix: made `Test-PerfGate.ps1` version-aware so it can measure a baseline that predates
+`--perf-stats` (#4326) -- the perf gate had been un-runnable since #4326 merged. No scope deferred;
+`--verbose` was confirmed a no-op (verbose detail already buffers into each file's block).
