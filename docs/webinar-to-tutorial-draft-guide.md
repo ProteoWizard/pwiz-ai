@@ -131,7 +131,10 @@ Notes:
 
 Drive everything through the connector — never `ShowDialog`/direct control access.
 
-- **Menus:** `Connector.InvokeMenuItem("File > Start")` (posts asynchronously).
+- **Menus:** `Connector.InvokeMenuItem("File > Start")` (posts asynchronously). The
+  path is matched against the menu items' **visible captions**, so a hard-coded
+  English path breaks in ja/zh-CHS — build it from localized captions (see
+  Localization below).
 - **Open a form / dialog:** `var dlg = WaitForConnectorForm<SomeDlg>();` →
   drive it as an `IFormElement`.
 - **Click / set value:** `dlg.ClickButton(caption)`, `dlg.SetValue(label, value)`
@@ -175,6 +178,40 @@ For a strongly-typed localized string that already exists (e.g. a Start Page til
 caption, `StartupResources.StartPage_PopulateWizardPanel_Import_DIA_Peptide_Search`),
 use it directly.
 
+**Menu paths are captions too.** `InvokeMenuItem` matches each `>`-separated
+segment against the menu items' visible (localized, normalized) text — so a
+hard-coded `"File > Start"` works in English only. Build the path from the menu
+items' resources, the same way as buttons (the menu items live on `SkylineWindow`):
+
+```csharp
+Connector.InvokeMenuItem(GetLocalizedText<SkylineWindow>("fileToolStripMenuItem") + " > " +
+                         GetLocalizedText<SkylineWindow>("startPageMenuItem"));   // "File > Start"
+```
+
+`NormalizeLabel` is what makes this line up on both sides: the resx has
+`startPageMenuItem.Text = "S&tart..."`, which normalizes to `"Start"` — the same
+value the connector reports for the live item. Any menu step a tutorial invokes by
+an English string is a multi-language break waiting to happen; localize it.
+
+### Translating the HTML and verifying tag parity
+
+The test runs in en, ja, and zh-CHS, so each language needs its own `index.html`
+**and** the tooling verifies the localized HTML has the same structure as English:
+
+- Translate `en/index.html` into `ja/index.html` and `zh-CHS/index.html`,
+  **preserving the tag skeleton exactly** — translate only the text inside each
+  tag; keep every `<p>`/`<h1>`/`<h2>`/`<ul>`/`<li>`/`<b>`/`<img>`/`<a>` and all
+  attributes identical. Swap the two shared boilerplate images to the matching
+  language folder (`../../../Tutorials/shared/ja/...`, `.../zh-CHS/...`); the
+  `s-NN.png` references stay the same (they live in the language folder).
+- Drop an `invariant.html` (a copy of `en/index.html`) into each localized folder.
+  `TestLocalizedTutorialHtml` compares each `index.html` against the `invariant.html`
+  beside it by XPath and fails on any structural (block-tag) divergence. That test
+  scans both `Tutorials` and `Tutorial-Drafts`, so a draft's translations are
+  checked too — run `Run-Tests.ps1 -TestName TestLocalizedTutorialHtml` after
+  translating.
+- Generate the localized screenshots with `-Language ja` / `-Language zh` (below).
+
 ## Generating the screenshots
 
 `PauseForScreenShot(IFormElement)` only captures when recording. Run the test in
@@ -183,6 +220,16 @@ auto-screenshot mode (implies on-screen UI), which writes the PNGs into
 
 ```
 ai/scripts/Skyline/Run-Tests.ps1 -TestName TestDiaToSrmTutorial -TakeScreenshots
+```
+
+For the localized screenshots, add `-Language ja` / `-Language zh` (each writes
+into the matching `ja/` / `zh-CHS/` folder). A localized run is also the real test
+of the caption/menu localization above — if any caption was hard-coded English it
+fails here, not in the English run:
+
+```
+ai/scripts/Skyline/Run-Tests.ps1 -TestName TestDiaToSrmTutorial -Language ja -TakeScreenshots
+ai/scripts/Skyline/Run-Tests.ps1 -TestName TestDiaToSrmTutorial -Language zh -TakeScreenshots
 ```
 
 Known quality issues to watch for (the connector's `CaptureImage` grabs the
@@ -254,9 +301,13 @@ don't leave it in.
    `TestFilesZipPaths`, the draft overrides.
 5. Build; validate offscreen; use the MCP harvest to nail down control captions;
    address every step through the connector (file connector gaps you hit).
-6. Localize captions with `GetLocalizedText<T>`.
-7. Run `-TakeScreenshots` to generate the PNGs; review them.
-8. Commit (Skyline branch). Verify a localized run (`-Language ja`).
+6. Localize every caption and menu path with `GetLocalizedText<T>` (buttons,
+   labels, and `InvokeMenuItem` segments).
+7. Run `-TakeScreenshots` to generate the English PNGs; review them.
+8. Translate `index.html` into `ja`/`zh-CHS` (preserve the tag skeleton), add an
+   `invariant.html` copy to each; run `TestLocalizedTutorialHtml` to verify parity.
+9. Generate localized screenshots (`-Language ja`/`-Language zh -TakeScreenshots`).
+10. Commit (Skyline branch).
 
 ## Related docs
 
