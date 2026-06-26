@@ -282,6 +282,18 @@ where supported (pre-#4326 baselines emit the `[STAGE-WALL]`/`[TIMING]` lines un
 asymmetry the harness already handled for `--parallel-files` via `OSPREY_MAX_PARALLEL_FILES`. Baseline
 NOT advanced (kept #4298 per Brendan).
 
+**Committed + PR'd + self-reviewed (2026-06-25).** Two pwiz commits on the branch (b3f3a186f0 output,
+a18af7c452 rescore-parallel) atop Part 1 (38eeba1104) -> **PR #4332** (base master); Test-PerfGate fix +
+TODO committed to the ai repo. `/pw-self-review` (fresh-context agent) found NO critical/high; it
+independently re-confirmed the parallel-rescore per-file independence + byte-identical invariant +
+AsyncLocal flow + no deadlock. Addressed: read the per-file buffer without the misleading lock (only
+caller runs after the inner Parallel.For joins) and dropped the unnecessary per-file segment lock
+(single-threaded advance); removed the dead `FileSlot.DisplayName`. Dismissed two cosmetic LOWs
+(render-lock-held-during-block-flush is intentional for block contiguity; resume/no-work files briefly
+at 0% is transient). Fix commit d9c2f2fb70 (build + 439 tests + 0-warning inspection green). The
+reviewer's "validated on a real multi-file reconciliation run?" question = yes, regression -Dataset All
+at parallelism 3.
+
 **Harmonized the per-file block header (Brendan, 2026-06-25):** scoring's
 `\n===== Processing file N/M: <path> =====` banner replaced with the terse `Scoring file N/M: <path>`
 to match rescore's `Re-scoring file N/M: <stem>` (rescore left as-is). Scoring keeps the full mzML path
