@@ -219,6 +219,26 @@ foreach ($key in $variants.Keys) {
     $variants[$key].Bin = Join-Path $destDir (Split-Path -Leaf $srcBin)
 }
 
+# Per-variant --perf-stats capability. --perf-stats (and the [STAGE-WALL]/[TIMING]
+# gating behind it) was added in #4326 -- the SAME PR as --parallel-files. A pinned
+# baseline older than that (e.g. pwiz-perfbase at #4298) emits the perf-prefixed
+# lines this gate parses UNCONDITIONALLY and rejects --perf-stats as an unknown
+# argument and exits 1; post-#4326 binaries gate those lines behind the flag. So,
+# exactly as with --parallel-files (handled via OSPREY_MAX_PARALLEL_FILES below),
+# add --perf-stats only to the legs whose binary understands it -- both legs still
+# emit the [STAGE-WALL] lines, so the A/B stays apples-to-apples. Detect from each
+# variant's source (matches the staged binary, which was built from it).
+foreach ($key in $variants.Keys) {
+    $argsSrc = Join-Path $variants[$key].Root 'pwiz_tools\OspreySharp\OspreySharp\OspreyCommandArgs.cs'
+    $hasFlag = $false
+    if (Test-Path $argsSrc) {
+        $hasFlag = [bool](Select-String -Path $argsSrc -SimpleMatch 'perf-stats' -Quiet)
+    }
+    $variants[$key].SupportsPerfStats = $hasFlag
+    Write-Host ("  {0}: --perf-stats {1}" -f $key,
+        $(if ($hasFlag) { 'supported' } else { 'absent (pre-#4326 baseline; perf lines emitted unconditionally)' }))
+}
+
 # --- One full-pipeline run: invoke the binary, parse [STAGE-WALL] walls --------
 # Slim C#-only sibling of Measure-Pipeline.ps1's Invoke-PipelineRun: no Rust, no
 # cross-impl stage5/6 alignment (both variants share C# labeling, so raw walls
@@ -254,8 +274,15 @@ function Invoke-PerfRun {
     foreach ($f in $files) { $cliArgs += @('-i', $f) }
     $cliArgs += @('-l', $ds.Library, '-o', 'output.blib',
                   '--resolution', $ds.Resolution, '--protein-fdr', '0.01',
-                  '--threads', $Threads.ToString(),
-                  '--perf-stats')   # emit [STAGE-WALL]/[TIMING] this gate parses (off by default)
+                  '--threads', $Threads.ToString())
+    # --perf-stats emits the [STAGE-WALL]/[TIMING] lines this gate parses, but it
+    # only exists on post-#4326 binaries; pre-#4326 baselines emit those lines
+    # unconditionally and reject the unknown flag. Add it only where supported
+    # (see the per-variant SupportsPerfStats probe above) -- both legs still emit
+    # the markers, so the A/B compares like-for-like.
+    if ($variants[$VariantKey].SupportsPerfStats) {
+        $cliArgs += '--perf-stats'
+    }
 
     # Scrub every diagnostic OSPREY_DUMP_* / *_ONLY hook so we measure the
     # production path (dumps add 30s+ to stage5). Pattern-based so the list can't

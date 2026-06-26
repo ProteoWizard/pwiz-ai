@@ -179,5 +179,132 @@ Branched off master at `74cf4785e9` (both #4327 + #4328 already merged + cleaned
   parsed and exactly where single-file load hands off to parallel scoring -- then sketch the
   `MultiProgressReporter` / `IProgressSink` API against the real call sites before coding.
 
+### 2026-06-25 - Session 2 (Part 2 implemented + demonstrated)
+
+Built Part 2 end-to-end. Debug build + 439 tests (incl. new `TestMultiProgressReporter`) +
+0-warning inspection all green; demonstrated on a real Stellar 3-file `--parallel-files 3` run.
+
+**Implemented (the locked design, minimal blast radius via an ambient sink):**
+- `OspreySharp.Core/MultiProgressReporter.cs` (NEW): thin aggregator. `BeginFile(i, name, segCount)`
+  returns a `FileScope` (IDisposable) that redirects this async flow's narrative into the file's own
+  buffer and becomes the ambient `Current`; `FileScope.BeginSegment()` advances equal-weight segments;
+  each segment's `IProgressSink` maps an inner reporter's 0-100 into its slice (monotonic, so the
+  multi-reporter write phase never regresses); renders the `[i] p%` line to the unscoped writer on the
+  shared throttle; flushes each file's buffered block atomically on `CompleteFile`.
+- `OspreyOutput.cs`: `AsyncLocal<TextWriter>` scoped-out (per-file buffer) + internal `RealOut`
+  (unscoped) for the aggregate line; flows into the inner scoring `Parallel.For` via ExecutionContext.
+- `ProgressReporter.cs`: captures the ambient `CurrentSink` at construction; in multi mode routes
+  percent to the sink (no `<pct>%` line) while the heading still buffers. **Zero changes to
+  MzmlReader / ScoringPipeline / ParquetScoreCache** -- their existing reporters route automatically.
+- `PerFileScoringTask.cs`: wraps the `Parallel.For` body in `BeginFile`; `ProcessFile` calls
+  `MultiProgressReporter.Current?.BeginSegment()` at the read/calibrate/score/write boundaries
+  (`PROCESS_FILE_SEGMENTS = 4`).
+- `Program.LogWarning` now routes through `OspreyOutput.Out` so WARN buffers into the file block
+  (per Brendan: warnings in the block); `LogError` stays on `_out` -> immediate (errors surface now).
+
+**Demonstrated:** `ai/.tmp/osprey-output-20260625/stellar-parallel3-scoring.log` (THE canonical demo
+log -- keep refreshing this one path; Brendan reads it in Notepad++) -- the `[1] p% [2] p% [3] p%`
+aggregate line tracks all 3 files (reads stall at 25% under the mzML gate; scoring drives the bulk),
+then each file's full narrative flushes as one contiguous block on completion, no interleaving.
+Exactly the Skyline MultiProgressStatus + Boost-Build look. Run on a SCRATCH dir
+(`D:\test\osprey-runs\mpdemo`, source hardlinked in) so the read-only source is untouched.
+
+**Review fixes this session (Brendan):**
+1. **Stat-line leak (regression I introduced) -- FIXED.** The per-file buffer was a plain StringWriter,
+   so it bypassed `StatFilteringTextWriter` and leaked the machine `[COUNT]`/`[TIMING]`/`[BENCH]` lines
+   the default log suppresses (looked like perf mode). Fix: `BeginFile` wraps the buffer in a
+   `StatFilteringTextWriter`, so stat lines drop as they're buffered (unless `--perf-stats`), exactly
+   like the unbuffered path.
+2. **`[BENCH]` now perf-gated.** Added `[BENCH]` to `OspreyOutput.IsStatLine` so the
+   `[BENCH] Per-file thread cap` line (and the env-triggered ones) are hidden by default and restored
+   under `--perf-stats`, alongside `[COUNT]`/`[TIMING]`/`[STAGE-WALL]`. (Flag for Brendan: this is a
+   slightly broader output change beyond the parallel-files feature.)
+3. **Legend added.** Before the aggregate line, `PerFileScoringTask.Run` prints
+   `Scoring N files in parallel:` + a numbered `  [i] <path>` list mapping each `[i]` slot to its
+   input file (mirrors Skyline's numbered file list above its multi-import progress).
+`TestMultiProgressReporter` extended to assert stat lines are filtered from the buffered block. All
+gates re-green (439 tests, 0-warning inspection).
+
+**Output-polish round 2 (Brendan, same session):**
+4. **Legend uses Skyline's `N. <path>` format** (un-bracketed), not `[N]`. (`PerFileScoringTask.Run`.)
+5. **No `[WARN]` for `--task` runs.** Removed the "`--task PerFileScoring: --output is ignored`"
+   warning -- `--task` is standard on HPC and wrappers pass a placeholder `--output`, so warning is
+   noise. (`Program.Main`.)
+6. **Settings block reports the task + real output.** Added `Task: <CLIName> (single-task run)` when
+   `--task` is given (new `Program.TaskCliName` maps HpcTask->CLI name), and for PerFileScoring the
+   `Output:` line now reads `per-file .scores.parquet (next to each input mzML)` instead of the
+   ignored blib path. Full-pipeline (no `--task`) runs are unchanged (no Task line, Output = blib).
+Rebuilt, all gates green; canonical demo log re-captured (legend + clean settings, no [WARN]).
+
+**Parallelized the Stage 6 rescore (Brendan asked; was sequential).** `PerFileRescoreTask.ExecuteRescore`
+now runs its per-file loop as a `Parallel.For` bounded by the SAME `ctx.RunPlan.EffectiveFileParallelism`
+the scoring phase resolved (sequential when ==1 or 1 file), mirroring `PerFileScoringTask`: per-file
+results land by index (order-free accumulation), each file wrapped in `MultiProgressReporter.BeginFile`
+with a 3-segment model (read/score/write) via `RESCORE_FILE_SEGMENTS`, inner thread budget divided by
+parallelism, plus the `Re-scoring N files in parallel:` legend. Safe because each file's rescore is the
+designed "second per-file fan-out": own entry list + own `.scores-reconciled.parquet`, reusing the
+already-concurrent `RunCoelutionScoring`; no cross-file mutable state.
+**PARITY PROVEN:** `OSPREY_MAX_PARALLEL_FILES=3 regression.ps1 -Dataset Stellar -SkipHpcChain` (the env
+cap forces the in-process straight-through + resume legs to parallelism 3, exercising parallel scoring
+AND rescore) -> **mode1 (vs committed golden) PASS, mode2 (resume==straight) PASS**, i.e. byte-identical
+to the sequentially-generated golden.
+
+**FULL GATE GREEN:** `OSPREY_MAX_PARALLEL_FILES=2 regression.ps1 -Dataset All` (both datasets, all 3
+modes, in-process legs at parallelism 2 so parallel scoring + rescore run on Stellar AND Astral vs the
+committed goldens) -> ALL 6 legs PASS (Stellar+Astral x mode1 vs-golden / mode2 resume / mode3 HPC
+4-task chain); blib byte-size identical across modes per dataset. Log:
+`ai/.tmp/osprey-output-20260625/regression-all-parallel2.log`. Comprehensive correctness sign-off for
+the whole changeset (output buffering + aggregate line + legend + clean settings/no-[WARN] + parallel
+rescore). Still TODO before PR: `Test-PerfGate.ps1`, `--verbose` disposition (task 4), then commit Part 2 +
+rescore-parallel alongside Part 1 (38eeba1104).
+
+**[BENCH] gating CONFIRMED (Brendan, 2026-06-25):** he reviewed and approved removing `[BENCH]` from
+the default log alongside the other 3 perf prefixes. Usage audit (the why): only 3 production emit
+sites, all measurement -- `[BENCH] Per-file thread cap` (parallel-mode thread-split report, the only
+one in normal use) + two env-gated dev knobs (`OSPREY_EXIT_AFTER_CALIBRATION`, `OSPREY_MAX_SCORING_WINDOWS`).
+Same character as [COUNT]/[TIMING]/[STAGE-WALL]; restored under `--perf-stats`. Settled.
+Also re-ran the canonical demo at `--parallel-files 3` (full pipeline): all 3 files concurrent in BOTH
+the scoring AND the now-parallel rescore phases; rescore 14.4s (vs 19.7s at parallelism 2 -- fan-out scales).
+
+**PERF GATE PASSED -- net speedup (2026-06-25).** `Test-PerfGate.ps1 -Dataset Stellar` (branch vs
+pinned pwiz-perfbase @ #4298, parallelism 3, 3 interleaved reps): **total -5.5% median, every rep
+faster** (-5.5/-7.3/-4.9). stage1to4 (scoring, where all the output buffering/aggregate/filtering
+lives) **flat at -0.7%** -> output changes add zero overhead. **stage6 (rescore) -51.2%** (21.5s->10.6s,
+all reps ~-51%) -> the rescore parallelization. blib +7.9% is +0.3s on a 3.5s stage (noise, info-only).
+Log: `ai/.tmp/osprey-output-20260625/perfgate-stellar.log`; verdict: `ai/.tmp/perf-gate/20260625-234034Z/verdict.md`.
+
+**Test-PerfGate harness fix (NEEDED to run the gate; include in PR or as a sibling fix).** The gate
+unconditionally passed `--perf-stats` to BOTH binaries, but the pinned baseline (#4298) predates that
+flag (added in #4326, same PR as `--parallel-files`) and exited 1 -> the perf gate had been un-runnable
+since #4326 merged. Fix: made `--perf-stats` version-aware in `ai/scripts/OspreySharp/Test-PerfGate.ps1`
+-- detect per-variant `SupportsPerfStats` from each root's `OspreyCommandArgs.cs`, add the flag only
+where supported (pre-#4326 baselines emit the `[STAGE-WALL]`/`[TIMING]` lines unconditionally). Same
+asymmetry the harness already handled for `--parallel-files` via `OSPREY_MAX_PARALLEL_FILES`. Baseline
+NOT advanced (kept #4298 per Brendan).
+
+**Harmonized the per-file block header (Brendan, 2026-06-25):** scoring's
+`\n===== Processing file N/M: <path> =====` banner replaced with the terse `Scoring file N/M: <path>`
+to match rescore's `Re-scoring file N/M: <stem>` (rescore left as-is). Scoring keeps the full mzML path
+(it reads the mzML); rescore keeps the stem (reads from cache). Output-only -> golden unaffected; build
++ 439 tests + 0-warning inspection green. Canonical demo log refreshed with the new headers.
+
+**Scope finding:** `PerFileRescoreTask.ExecuteRescore` runs its per-file loop SEQUENTIALLY (`for`,
+not `Parallel.For`) -- so PerFileScoring is the ONLY concurrent producer today; the rescore phase
+emits one file at a time and needs no aggregate line. Wiring rescore would first require
+parallelizing it (a parity-sensitive change, out of this output-only round). Left as-is; noted for
+Brendan.
+
+**Still to do before the combined PR:** run the standing `regression.ps1 -Dataset Stellar` gate
+(output-only change -> expected byte-identical golden) and `Test-PerfGate.ps1`; then commit Part 2
+alongside the already-committed Part 1 (`38eeba1104`) as one PR. Decide whether `--verbose` adds any
+per-file detail (TODO task 4 -- currently unaddressed; the one-line summary is the default view).
+
+**Run-harness gotcha (learned the hard way):** `Run-Osprey.ps1 -ExitAfterScoring` writes per-file
+`.scores.parquet` / `.spectra.bin` / `.calibration.json` NEXT TO each input mzML, so pointing
+`-TestBaseDir` at the read-only `D:\Users\brendanx\Downloads\Perftests\osprey-testfiles-mzML` source
+dirties it. Copy the mzML+library into a scratch base (e.g. `D:\test\osprey-runs\stellar`) and point
+`-TestBaseDir` there, like `regression.ps1` does. (Cleaned up the stellar source dir afterward.)
+
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260625_ospreysharp_output_progress.md` before starting work.
+`ai/.tmp/handoff-20260625_ospreysharp_output_progress.md` before starting work (NOTE: that handoff
+predates Session 2 -- Part 2 is now implemented; trust this Session 2 entry over the handoff).
