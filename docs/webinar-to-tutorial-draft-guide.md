@@ -123,6 +123,14 @@ Notes:
   `UnfinishedActionCount()` returns to baseline (the count is incremented
   synchronously when the action is posted). Use for a fire-and-forget action
   that does **not** open a dialog.
+- `WaitForControl(form, controlType)` — wait until the form shows a control of
+  that type (e.g. a wizard page's UserControl that swaps in after a transition).
+  Tolerates a transient `InvalidOperationException` from `GetControls()` while a
+  page transition briefly blocks the form behind a long-wait dialog.
+- `WaitForControlEnabled(form, controlType)` — wait until the form's first
+  control of that type is enabled. A dialog that recomputes on a background
+  thread disables its OK button while it works (so `Accept()` would be a no-op);
+  wait for the button to re-enable before accepting.
 - `PauseForScreenShot(IFormElement)` — capture the form via
   `IFormElement.CaptureImage()` and save it as the next `s-NN.png`.
 - `GetLocalizedText<T>("controlName")` — see Localization below.
@@ -155,6 +163,61 @@ Drive everything through the connector — never `ShowDialog`/direct control acc
   wait for the dialog instead (it stays counted in `UnfinishedActionCount` until
   it closes, so `WaitForAction` would hang).
 
+### Addressing controls with no usable caption (`UiElementPath`)
+
+Some controls can't be matched by a visible caption at all. The connector names a
+caption-less field by the `Label` immediately before it **in tab order**, which
+fails when:
+- the field's real label is a separate sibling `Label` placed *after* it (a
+  checkbox whose caption is a label to its right), or
+- a help `LinkLabel` (its `Text` is `"?"`) sits between the real label and the
+  field, so the field is matched as `"?"` (and several share it), or
+- the designer's tab order simply doesn't match the visual layout.
+
+`skyline_get_controls` shows the symptom: the control's `Label` comes back empty
+or `"?"`. When it does, address the control by its **structured `UiElementPath`**
+(what `UiElementPath` exists for) instead of a caption:
+
+```csharp
+var controls = associate.GetControls();              // each ControlInfo has a .Path
+// Identify by observable type/position, the way an MCP client reading the tutorial would --
+// NOT by internal control name. "Create protein groups" is the dialog's first checkbox:
+var groupProteins = controls.First(c => Equals(c.Path.Type, "CheckBox")).Path;
+WaitForAction(() => associate.PerformAction(groupProteins, UiActions.SetValue, "true"));
+// ... and there is only one combo box; clear the Path's Text so it matches by type+index
+// only (the label it would otherwise match by changes when grouping re-lays-out the dialog):
+var combo = associate.GetControls().Single(c => Equals(c.Path.Type, "ComboBox")).Path.ChangeText(null);
+WaitForAction(() => associate.PerformAction(combo, UiActions.SetValue, EnumNames.SharedPeptidesGroup_Removed));
+```
+
+Key points, learned the hard way:
+- **Identify like an MCP client.** Find the control by what you can observe — its
+  type, its position ("the only combo box", "the first checkbox") — not by an
+  internal field name from the source. The test pretends it doesn't know the
+  control names or exact layout. (`GetLocalizedText<T>("name")` is different: it
+  reads a *resource string* to avoid hard-coding localized text, not to identify
+  a control.)
+- **A captured `Path` embeds the control's current label**, so it goes stale if a
+  prior action re-lays-out the form. Either re-fetch the `Path` after the change,
+  or `ChangeText(null)` to match by type + index only.
+- **`PerformAction(path, UiActions.SetValue, value)`** is the in-process
+  equivalent of the MCP `perform_action` with an explicit path.
+- The fastest way to discover a control's `Path` is the MCP harvest: pause the
+  test, then `skyline_perform_action ... get_children` on the form returns every
+  control's `UiElementPath` as JSON.
+
+### Waiting for a dialog that works in the background
+
+A dialog that recomputes when you change an option (e.g. `AssociateProteinsDlg`
+re-runs its parsimony analysis) **disables its OK button while it works** and
+re-enables it when the result is ready. `Accept()` (which clicks the form's
+accept button) is a silent no-op while OK is disabled, so the dialog never
+closes and the next wait times out. Set the options, then
+`WaitForControlEnabled(dlg, "Button")` (OK is the dialog's first button) before
+the screenshot and `Accept()` — that also ensures the screenshot shows the final
+result counts. The symptom of getting this wrong is a `WaitForCondition` timeout
+whose "Open forms" list still includes the dialog you thought you closed.
+
 ### Localization (required — tests run in en, ja, zh-CHS)
 
 Button/label captions differ per language. Do **not** hard-code English, and do
@@ -177,6 +240,14 @@ constrained to `ContainerControl`, so it works for both `Form` and `UserControl`
 For a strongly-typed localized string that already exists (e.g. a Start Page tile
 caption, `StartupResources.StartPage_PopulateWizardPanel_Import_DIA_Peptide_Search`),
 use it directly.
+
+**Combo-box *values* are localized too.** `ComboBox.SetValue` matches an item by
+its exact visible text, so a localized-enum item (e.g. the shared-peptides option)
+needs the localized string, not an English literal. Where the item comes from an
+enum the codebase already localizes via `EnumNames`, pass that resource
+(`EnumNames.SharedPeptidesGroup_Removed`) so it matches in every language. A few
+wizard combos (ion-range, mass-analyzer, isolation-scheme) are still English
+literals — a known remaining multi-language gap for those steps.
 
 **Menu paths are captions too.** `InvokeMenuItem` matches each `>`-separated
 segment against the menu items' visible (localized, normalized) text — so a
