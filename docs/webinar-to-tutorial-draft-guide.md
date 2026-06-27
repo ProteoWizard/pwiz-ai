@@ -134,6 +134,8 @@ Notes:
 - `PauseForScreenShot(IFormElement)` — capture the form via
   `IFormElement.CaptureImage()` and save it as the next `s-NN.png`.
 - `GetLocalizedText<T>("controlName")` — see Localization below.
+- `MenuPath<T>("itemA", "itemB", …)` — builds a localized `>`-joined menu path
+  for `InvokeMenuItem` from the menu items' field names (see Localization below).
 
 ## Connector driving idioms
 
@@ -252,12 +254,23 @@ literals — a known remaining multi-language gap for those steps.
 **Menu paths are captions too.** `InvokeMenuItem` matches each `>`-separated
 segment against the menu items' visible (localized, normalized) text — so a
 hard-coded `"File > Start"` works in English only. Build the path from the menu
-items' resources, the same way as buttons (the menu items live on `SkylineWindow`):
+items' resources with the `MenuPath<T>` helper (it joins each
+`GetLocalizedText<T>` with `" > "`):
 
 ```csharp
-Connector.InvokeMenuItem(GetLocalizedText<SkylineWindow>("fileToolStripMenuItem") + " > " +
-                         GetLocalizedText<SkylineWindow>("startPageMenuItem"));   // "File > Start"
+Connector.InvokeMenuItem(MenuPath<SkylineWindow>("fileToolStripMenuItem", "startPageMenuItem"));
+Connector.InvokeMenuItem(MenuPath<SkylineWindow>(
+    "fileToolStripMenuItem", "importToolStripMenuItem", "importDocumentMenuItem"));   // File > Import > Document
 ```
+
+`T` is the class that *declares* those menu items, and the menus are split across
+several classes since the menu refactor: the **File** and **Settings** menus live
+on `SkylineWindow`, but **View / Edit / Refine** each live on their own
+`ViewMenu` / `EditMenu` / `RefineMenu` class (all `: SkylineControl : UserControl`,
+so they satisfy the `ContainerControl` constraint). Use the class that owns the
+segments — e.g. `MenuPath<ViewMenu>("viewToolStripMenuItem", "peakAreasMenuItem",
+"areaCVHistogramMenuItem")` for View > Peak Areas > CV Histogram. A whole path's
+segments are normally all on one class.
 
 `NormalizeLabel` is what makes this line up on both sides: the resx has
 `startPageMenuItem.Text = "S&tart..."`, which normalizes to `"Start"` — the same
