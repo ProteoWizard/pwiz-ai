@@ -11,9 +11,9 @@
 - **Branch**: `Skyline/work/20260626_osprey_workflow_html`
 - **Base**: `master`
 - **Created**: 2026-06-26
-- **Status**: In progress -- pre-commit gate green, opening PR
+- **Status**: Completed
 - **GitHub Issue**: (none)
-- **PR**: (pending)
+- **PR**: [#4333](https://github.com/ProteoWizard/pwiz/pull/4333) (merged 2026-06-26)
 
 ## Scope
 
@@ -55,3 +55,18 @@ Workflow HTML redesign, README rewrite, and the generated/validated
 (build + 437 tests pass, 0 inspection warnings). Updated the Mike Riffle
 draft email to point at the githack-rendered workflow + CommandLine pages.
 Opening the PR next.
+
+### 2026-06-26 - Merged
+
+PR #4333 merged as commit d9f1ac6ea5 (17/17 checks green). Shipped: the
+reworked Osprey-workflow.html landing page (per-task HPC banners with
+input/output files + rehydration sidecars, the added PerFileRescoring
+worker, trimmed changelog, source-line counts refreshed from a canonical
+Audit-Loc.ps1 re-run -> 140 prod files / 26.2 KLOC), the rewritten README,
+and the generated, self-validating Documentation/Help/en/CommandLine.html
+(the test self-heals it on drift). Self-review was clean on all
+docs-vs-code conformance; Copilot was unavailable (quota). Deferred to
+later pushes (noted in Scope): .resx-izing the arg descriptions for
+ja/zh-CHS, publishing both HTML pages to skyline.ms, and a possible
+Documentation/Tutorials/ set. Pre-existing flaky SystemMemory.cs P/Invoke
+inspection warnings were left untouched (out of scope; not in this diff).
