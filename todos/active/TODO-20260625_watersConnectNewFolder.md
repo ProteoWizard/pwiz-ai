@@ -42,21 +42,27 @@ Must catch permission errors (e.g. 403 when the user lacks folder-create permiss
 
 ## Tasks
 
-- [ ] Regression/functional test first: extend `WatersConnectMethodExportTest` with a mock
-      PUT-folders handler (success + 403) and assert the new folder appears + payload is correct
-- [ ] `BaseFileDialogNE`: hidden New Folder button + `protected virtual CreateNewFolder()`
-- [ ] `WatersConnectSaveMethodFileDialog`: show button, override `CreateNewFolder()`, enable logic
-- [ ] `WatersConnectSession.CreateFolder(...)` API call + cache invalidation
-- [ ] Folder-name prompt UI (reuse an existing simple text-input dialog)
-- [ ] Error handling (403 / name conflict / generic)
-- [ ] New resource strings in the appropriate .resx (+ .designer.cs)
+- [x] `WatersConnectSession.CreateFolder(...)` API (PUT, returns HttpStatusCode + cache refresh via RetryFetch)
+- [x] `BaseFileDialogNE`: hidden New Folder button + inline-rename (LabelEdit/AfterLabelEdit) + `protected virtual CreateNewFolder(string)` + `RefreshCurrentDirectory`
+- [x] `WatersConnectSaveMethodFileDialog`: show button, enable on writable folder, override `CreateNewFolder`, error switch (403/409/generic), description "Created by {user} using Skyline"
+- [x] Resource strings: CommonFileDialogResources (button text, placeholder) + FileUIResources (6 strings) + designers
+- [x] Functional test: `WatersConnectMethodExportTest.VerifyNewFolder` (mock PUT handler success + Forbidden); test seam runs create synchronously (no LongWaitDlg) to avoid PerformWork-via-RunUI deadlock
+- [x] Build green + test passing (TestWatersConnectExportMethodDlg, 8.5s)
+
+## Follow-ups (after this test is green)
+
+- Add a delayed mock-handler variant so a test can exercise the LongWaitDlg progress indicator
+  during folder creation (developer suggestion 2026-06-25).
+- Inline-rename UI itself (BeginEdit/AfterLabelEdit) is not driven by the functional harness; the
+  test drives the CreateNewFolder seam directly. See [[project_functional_tests_no_gui]].
 
 ## Regression Test
 
-- **Test name**: (filled in once written)
-- **Test project**: TestFunctional (extend `WatersConnectMethodExportTest`)
-- **Fails on master**: (to verify - button/flow does not exist yet)
-- **Passes on fix**: (to verify)
+- **Test name**: `TestWatersConnectExportMethodDlg` (`VerifyNewFolder`)
+- **Test project**: TestFunctional
+- **Fails on master**: yes - red->green verified for the self-review HIGH (post-create refresh was a
+  no-op, so the new folder never appeared). Test times out "new folder did not appear" without the fix.
+- **Passes on fix**: yes - `ClearResultsFor` + refetch makes the stateful mock's new folder appear.
 
 ## Progress Log
 
@@ -65,3 +71,13 @@ Must catch permission errors (e.g. 403 when the user lacks folder-create permiss
 Scoped the feature with the code map (BaseFileDialogNE parent, Save/Select children,
 WatersConnectSession API, MockHttpMessageHandler test seam). Agreed design above. Branch
 created off master; starting with the functional test.
+
+### 2026-06-26 - Implemented, PR #4331
+
+Implemented + tested. PR https://github.com/ProteoWizard/pwiz/pull/4331 (Requested by Stephen Jepson).
+Manual real-API check: request correct, 403 handled; create-success blocked on account permission.
+Cosmetics: AddFolder.png icon, More Info detail, error icon. Copilot review addressed (AssertEx.Contains;
+network exception handling in CreateFolder) + resolved. Self-review found a HIGH: post-create refresh
+was a no-op (RetryFetch doesn't invalidate) - fixed with ClearResultsFor + refetch and locked with a
+red->green regression test (stateful mock asserts the folder appears). Also hardened cancel/inline-edit
+placeholder (LOWs). 4 commits pushed; deferred LOW addressed too. Pending: TeamCity green, human review.
