@@ -47,6 +47,12 @@ def register_tools(mcp):
                 parts.append(f"branch:{branch}")
             if state:
                 parts.append(f"state:{state}")
+            else:
+                # TeamCity's /app/rest/builds defaults to state:finished. The
+                # documented "None = all states" behavior needs an explicit
+                # state:any, or just-queued/running builds (e.g. a freshly
+                # triggered PR build) are silently missed and read as "not run".
+                parts.append("state:any")
             if status:
                 parts.append(f"status:{status}")
             parts.append(f"count:{count}")
