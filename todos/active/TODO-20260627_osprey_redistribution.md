@@ -24,6 +24,41 @@ PR). Phase 5 (website) and Phase 6 (UI) remain future. Decisions taken:
   Osprey is its own .NET tool with its own sln / TC configs / versioning.
 - **Objective**: Give Osprey first-class redistribution: (1) a stand-alone download posted on skyline.ms, (2) a complete copy shipped inside the Skyline installation, and (3) groundwork toward running Osprey from the Skyline UI as the default DIA search engine. Near-term driver: replace EncyclopeDIA with Osprey on the skyline.ms home page, which requires a stand-alone Osprey install + a landing page. The ZIP/`.msi` this sprint produces should become the **canonical Osprey artifact** that downstream tools (e.g. Carafe) consume, replacing per-tool home-grown OspreySharp builds.
 
+## Session log (2026-06-27 night)
+
+Delivered in pwiz PR **#4336** (branch `Skyline/work/20260627_osprey_redistribution`):
+- `pwiz_tools/Osprey/package.ps1` -- per-RID self-contained net8.0 ZIPs
+  (win-x64 + linux-x64), single versioned top folder, docs/README/LICENSE
+  bundled, pdbs stripped, in-bundle CommandLine.html link rewritten to local;
+  `-Msi` builds the WiX v5 per-machine installer; env-gated `-Sign` hook.
+- `pwiz_tools/Osprey/version.ps1` -- shared version formula; `build.ps1` now
+  dot-sources it (DRY: binary stamp == artifact name).
+- `pwiz_tools/Osprey/Installer/Osprey.wxs` -- WiX v5 installer (Program Files,
+  PATH, ARP). WiX v5 chosen because v6/v7 require the paid OSMF EULA.
+- `pwiz_tools/Osprey/tcpackage.bat` -- TeamCity packaging entry point.
+- README "Redistribution" section; `.gitignore` ignores `dist/`.
+
+Local verification: both zips + msi built; win zip exe runs `--help`; msi
+validated via Installer DB (per-machine, 219 files, PATH, v26.1.178). Scripts
+parse clean. No C# touched.
+
+**TO WIRE UP (server-side, Brendan):**
+1. Create a TeamCity build config "Osprey Package" (or add a build step) that
+   runs `pwiz_tools/Osprey/tcpackage.bat`, triggered on master and/or release
+   tags. Artifacts self-publish via `##teamcity[publishArtifacts]` -- NO
+   artifact-path config needed. Agent prereq: the WiX v5 dotnet tool +
+   `WixToolset.UI.wixext/5.0.2` (commands in tcpackage.bat header).
+2. Code signing: supply a cert, then run packaging with `-Sign` (or set
+   `OSPREY_SIGN*`); script hard-fails if signing is requested but unavailable.
+
+**Open follow-ups:** Phase 4 (Skyline bundling), Phase 5 (skyline.ms landing
+page + doc hosting + branding), Phase 6 (UI). Carafe adoption plan written to
+`ai/.tmp/osprey-carafe-adoption-plan.md` (retarget Mike's PRs #9/#10 at the
+official artifact + fix hardcoded OspreySharp names).
+
+NOTE: the ai/ TODO move commit is LOCAL only this session (classifier blocked
+the push to ai master); push `git -C C:\proj\ai push origin master` in the AM.
+
 ## Background / motivation
 
 Osprey is the C# DIA search tool in `pwiz_tools/Osprey` (just renamed from
