@@ -39,8 +39,15 @@ Delivered in pwiz PR **#4336** (branch `Skyline/work/20260627_osprey_redistribut
 - README "Redistribution" section; `.gitignore` ignores `dist/`.
 
 Local verification: both zips + msi built; win zip exe runs `--help`; msi
-validated via Installer DB (per-machine, 219 files, PATH, v26.1.178). Scripts
-parse clean. No C# touched.
+validated via Installer DB (per-machine, 219 files, PATH, v26.1.178) and
+`msiexec /a` admin-extract (-> Program Files\Osprey\Osprey.exe). Scripts parse
+clean. No C# touched.
+
+TeamCity GREEN on final head 8e04ae8bfb: per-commit build 4068111 (build +
+tests + coverage) SUCCESS; regression 4068112 (Stellar + Astral byte-identical)
+SUCCESS. Self-review (fresh-context Sonnet) findings addressed in commit
+8e04ae8bfb (version.ps1 -RepoPath mandatory; package.ps1 -Encoding utf8; wxs
+Files win-only note).
 
 **TO WIRE UP (server-side, Brendan):**
 1. Create a TeamCity build config "Osprey Package" (or add a build step) that
