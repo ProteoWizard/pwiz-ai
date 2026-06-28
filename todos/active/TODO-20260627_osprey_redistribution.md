@@ -1,12 +1,27 @@
-# TODO-osprey_redistribution.md
+# TODO-20260627_osprey_redistribution.md
 
 ## Branch Information
-- **Branch**: (to be created when work starts)
+- **Branch**: `Skyline/work/20260627_osprey_redistribution`
 - **Base**: `master` (pwiz); ai/ changes direct to ai master
-- **Created**: (pending)
-- **Status**: Backlog
+- **Created**: 2026-06-27
+- **Status**: In Progress
 - **PR**: (pending)
-- **Depends on**: the OspreySharp -> Osprey rename (pwiz PR #4335) landing first.
+- **Depends on**: the OspreySharp -> Osprey rename (pwiz PR #4335) landing first. DONE -- #4335 is on master (commit 1ca152c549); pwiz_tools/Osprey exists.
+
+## Session scope (2026-06-27 night session, confirmed with Brendan)
+This session implements **Phase 2 (standalone ZIP) + Phase 3 (WiX MSI) + TeamCity
+artifact wiring**. Phase 4 (bundle inside Skyline) is DEFERRED to a follow-up PR
+(Skyline is net472, Osprey net8.0 -> can't share a runtime -> forces a ~150MB
+self-contained copy + WiX-template edits inside Skyline = too much CI risk for one
+PR). Phase 5 (website) and Phase 6 (UI) remain future. Decisions taken:
+- Platforms v1: Windows + Linux (`Osprey-<ver>-win-x64.zip`, `...-linux-x64.zip`); MSI = win-x64.
+- Distribution runtime: net8.0 only, self-contained (no system .NET dependency).
+- MSI: per-machine `C:\Program Files\Osprey`, Add/Remove-Programs entry.
+- Signing: unsigned draft + env-gated signtool hook (off by default), documented.
+- TeamCity: build/package emits artifacts to a known dist path; server-side
+  artifact-path change documented for Brendan (can't edit server config from repo).
+- Packaging lives in a standalone `package.ps1` (NOT wired into Boost.Build/pwiz-bin);
+  Osprey is its own .NET tool with its own sln / TC configs / versioning.
 - **Objective**: Give Osprey first-class redistribution: (1) a stand-alone download posted on skyline.ms, (2) a complete copy shipped inside the Skyline installation, and (3) groundwork toward running Osprey from the Skyline UI as the default DIA search engine. Near-term driver: replace EncyclopeDIA with Osprey on the skyline.ms home page, which requires a stand-alone Osprey install + a landing page. The ZIP/`.msi` this sprint produces should become the **canonical Osprey artifact** that downstream tools (e.g. Carafe) consume, replacing per-tool home-grown OspreySharp builds.
 
 ## Background / motivation
