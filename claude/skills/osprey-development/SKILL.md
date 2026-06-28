@@ -1,27 +1,27 @@
 ---
 name: osprey-development
-description: ALWAYS load when working in pwiz_tools/OspreySharp (C# port), on maccoss/osprey (Rust), or debugging OspreySharp-Rust parity issues.
+description: ALWAYS load when working in pwiz_tools/Osprey (C# port), on maccoss/osprey (Rust), or debugging Osprey-Rust parity issues.
 ---
 
 # Osprey Development Context
 
 Two trees, two convention sets:
 
-- **OspreySharp** (`C:\proj\pwiz\pwiz_tools\OspreySharp`) - the C#
+- **Osprey** (`C:\proj\pwiz\pwiz_tools\Osprey`) - the C#
   implementation, now the path forward for the Osprey DIA proteomics
   search tool. Lives in the pwiz repo. **Follows Skyline conventions
   in full.**
 - **Rust osprey** (`C:\proj\osprey` -> `maccoss/osprey`) - the
   original Rust implementation. Maintained for cross-impl parity
-  validation against OspreySharp. Follows upstream osprey
+  validation against Osprey. Follows upstream osprey
   conventions, NOT Skyline's.
 
 Which convention set applies depends on which tree you are touching.
 The sections below are organized along that split.
 
-## OspreySharp (C#) - Skyline Conventions Apply
+## Osprey (C#) - Skyline Conventions Apply
 
-When working in `pwiz_tools/OspreySharp`, all Skyline development
+When working in `pwiz_tools/Osprey`, all Skyline development
 rules apply. Read the same files the `/skyline-development` skill
 points at:
 
@@ -34,7 +34,7 @@ points at:
    array literals, control-flow rules.
 3. **`ai/WORKFLOW.md`** - git workflow, TODO system, commit message
    format (past-tense title, `* ` bullets, `See ai/todos/...`,
-   `Co-Authored-By: Claude` line). OspreySharp commits go through the
+   `Co-Authored-By: Claude` line). Osprey commits go through the
    pwiz repo workflow (feature branches under `Skyline/work/...`).
 4. **`ai/TESTING.md`** - translation-proof tests, consolidated
    `[TestMethod]` structure, `AssertEx` over `Assert`.
@@ -44,14 +44,14 @@ Cross-impl parity work additionally needs:
   doctrine, Stage 1-5 diagnostic dumps, bisection methodology.
 - **`ai/docs/osprey-crossimpl-validation-guide.md`** - validation
   guide for cross-impl test runs.
-- **`ai/scripts/OspreySharp/Compare/README.md`** - the cross-impl
+- **`ai/scripts/Osprey/Compare/README.md`** - the cross-impl
   bridge scripts (`Compare-EndToEnd-Crossimpl.ps1`), needed only for
   the rare "did this drift us from Rust?" check. Older per-stage
   comparators (`Compare-Percolator.ps1`, `Test-Features.ps1`) are
   archived under `Compare/archive/`.
 
-OspreySharp and cross-impl TODOs live at
-`ai/todos/active/TODO-*_osprey_sharp.md`.
+Osprey and cross-impl TODOs live at
+`ai/todos/active/TODO-*_osprey*.md`.
 
 ## Rust osprey - Upstream Conventions Apply
 
@@ -75,13 +75,13 @@ Rust-side key constraints:
   gate the CI. Test modules must be the last item in their file
   (`clippy::items-after-test-module`).
 - **LF line endings** - not CRLF. Do NOT run `fix-crlf.ps1` on the
-  Rust tree. (CRITICAL-RULES.md's CRLF rule is Skyline / OspreySharp
+  Rust tree. (CRITICAL-RULES.md's CRLF rule is Skyline / Osprey
   only.)
 - **Upstream-style commit prose**, no Skyline 10-line cap, no
   `Co-Authored-By: Claude` unless maintainer opts in.
 - **Parity gate after scoring/calibration changes**: confirm
-  OspreySharp still matches Rust with the cross-impl gate
-  `ai/scripts/OspreySharp/Compare/Compare-EndToEnd-Crossimpl.ps1`
+  Osprey still matches Rust with the cross-impl gate
+  `ai/scripts/Osprey/Compare/Compare-EndToEnd-Crossimpl.ps1`
   on Stellar + Astral; see `Compare/README.md` for the tolerance.
   (The former per-PIN-feature `Test-Features.ps1` is archived under
   `Compare/archive/`.)
@@ -94,46 +94,46 @@ Rust-only TODOs live at `ai/todos/active/TODO-OR-*.md`
 1. Call `mcp__status__get_project_status()` to see branch state
    across `C:\proj\osprey` and the relevant pwiz worktree.
 2. Rust-only TODOs: `ai/todos/active/TODO-OR-*.md`.
-3. OspreySharp and cross-impl TODOs:
-   `ai/todos/active/TODO-*_osprey_sharp.md`.
+3. Osprey and cross-impl TODOs:
+   `ai/todos/active/TODO-*_osprey*.md`.
 
 ## Build, Test, and Commit
 
-You can and should build, test, and run OspreySharp yourself - the wrapper
-scripts in `ai/scripts/OspreySharp/` exist for exactly that. Do not ask the
-developer to build what you can run. `ai/scripts/OspreySharp/PRE-COMMIT.md`
+You can and should build, test, and run Osprey yourself - the wrapper
+scripts in `ai/scripts/Osprey/` exist for exactly that. Do not ask the
+developer to build what you can run. `ai/scripts/Osprey/PRE-COMMIT.md`
 and `README.md` are the authoritative gate references.
 
-- **OspreySharp pre-commit** (build + tests + zero-warning inspection, ~30s):
-  `pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -Configuration Debug -RunTests -RunInspection`
+- **Osprey pre-commit** (build + tests + zero-warning inspection, ~30s):
+  `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection`
 - **C#-side refactor / algorithm-affecting changes** (scoring, calibration,
   LOESS/KDE, SVM, FDR, decoy generation, blib) and every OOP/structural
   refactor: pass two standing gates.
   - **Correctness** (output unchanged): the self-contained straight-through
     regression vs a committed C# golden + a resume leg, both at 1e-9 (no Rust
     checkout):
-    `pwsh -File ./pwiz_tools/OspreySharp/regression.ps1 -Dataset Stellar`
+    `pwsh -File ./pwiz_tools/Osprey/regression.ps1 -Dataset Stellar`
     (`-Dataset All` before a behavior/perf-sensitive merge). Also the overnight
     TeamCity gate.
   - **Performance** (speed not degraded): a same-session A/B of the branch vs the
     pinned `pwiz-perfbase` baseline worktree (3-rep median, fails only on a real
     regression with non-overlapping bands):
-    `pwsh -File ./ai/scripts/OspreySharp/Test-PerfGate.ps1 -Dataset Stellar`.
+    `pwsh -File ./ai/scripts/Osprey/Test-PerfGate.ps1 -Dataset Stellar`.
   `Test-Full-Regression.ps1` / `Test-Snapshot.ps1` are the stage-isolated
   bisection drill-down for WHERE a red correctness gate diverged, not the
   first-line gate. See `PRE-COMMIT.md`.
 - **Rust osprey**:
-  `pwsh -File ./ai/scripts/OspreySharp/Compare/Build-OspreyRust.ps1 -Fmt -Clippy -RunTests`
+  `pwsh -File ./ai/scripts/Osprey/Compare/Build-OspreyRust.ps1 -Fmt -Clippy -RunTests`
   (mirrors maccoss/osprey CI gates).
 - **Cross-impl drift check** (rare; "did we drift from Rust?", e.g. after porting
   a Rust algorithm change):
-  `pwsh -File ./ai/scripts/OspreySharp/Compare/Compare-EndToEnd-Crossimpl.ps1 -Files All`
+  `pwsh -File ./ai/scripts/Osprey/Compare/Compare-EndToEnd-Crossimpl.ps1 -Files All`
   on Stellar + Astral (re-runs Rust). This replaces the old `-SkipRust` routine
   use, which `regression.ps1` superseded. See `Compare/README.md`.
 
 ## Key Repositories
 
-- `C:\proj\pwiz\pwiz_tools\OspreySharp` - the C# implementation.
+- `C:\proj\pwiz\pwiz_tools\Osprey` - the C# implementation.
   Lives in `ProteoWizard/pwiz`. Branches and PRs follow Skyline
   conventions (`Skyline/work/YYYYMMDD_*`, past-tense title,
   Co-Authored-By).
@@ -146,6 +146,6 @@ and `README.md` are the authoritative gate references.
 ## Slash Commands Available
 
 Type `/pw-` to see project-wide commands. Most are Skyline-focused
-and apply to OspreySharp work as well (commit, TODO, build wrappers,
+and apply to Osprey work as well (commit, TODO, build wrappers,
 review). They do NOT apply to Rust osprey work - the Rust side does
 not use the Skyline TODO system or commit format.

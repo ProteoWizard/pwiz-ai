@@ -54,7 +54,7 @@ In-depth documentation on specific topics.
 | [new-machine-bootstrap.md](docs/new-machine-bootstrap.md) | Quick start: 1-hour AI-assisted setup from pristine Windows | 135 |
 | [new-machine-setup.md](docs/new-machine-setup.md) | Full development environment setup from scratch | 690 |
 | [new-machine-windows-install.md](docs/new-machine-windows-install.md) | Clean Windows install and initial config for Dell Precision dev workstations | 80 |
-| [osprey-crossimpl-validation-guide.md](docs/osprey-crossimpl-validation-guide.md) | Catalog of Rust ↔ OspreySharp parity-testing scripts (Compare-*, Test-*, Bench-*); standard flow and per-stage gate selection | 103 |
+| [osprey-crossimpl-validation-guide.md](docs/osprey-crossimpl-validation-guide.md) | Catalog of Rust ↔ Osprey parity-testing scripts (Compare-*, Test-*, Bench-*); standard flow and per-stage gate selection | 103 |
 | [osprey-development-guide.md](docs/osprey-development-guide.md) | Osprey Rust development: cargo commands, cross-impl parity testing, env-var reference, differences from Skyline WORKFLOW.md | 579 |
 | [project-context.md](docs/project-context.md) | Detailed project background: history, architecture, team | 221 |
 | [README.md](docs/README.md) | Index of all guides in ai/docs/ with when-to-read guidance | 68 |
@@ -120,7 +120,7 @@ Auto-activated contexts for specific work areas. Character count shown (skill sp
 | [debugging](claude/skills/debugging/SKILL.md) | ALWAYS load when investigating bugs, failures, or unexpected behavior - ensures root cause analysis before attempting fixes. | 6,989 |
 | [labkey-development](claude/skills/labkey-development/SKILL.md) | Use this skill when working on LabKey Server modules (MacCossLabModules, targetedms). | 5,395 |
 | [leak-debugging](claude/skills/leak-debugging/SKILL.md) | Load when investigating handle leaks, memory leaks, or GC-LEAK failures. Covers handle counting, dotMemory profiling, and GC leak tracker workflows. | 3,321 |
-| [osprey-development](claude/skills/osprey-development/SKILL.md) | ALWAYS load when working on Rust osprey (maccoss/osprey checkout at C:\proj\osprey), opening PRs against maccoss/osprey, touching OspreySharp C# code for cross-impl parity, or debugging Rust-vs-OspreySharp divergence. | 3,198 |
+| [osprey-development](claude/skills/osprey-development/SKILL.md) | ALWAYS load when working on Rust osprey (maccoss/osprey checkout at C:\proj\osprey), opening PRs against maccoss/osprey, touching Osprey C# code for cross-impl parity, or debugging Rust-vs-Osprey divergence. | 3,198 |
 | [release-management](claude/skills/release-management/SKILL.md) | Use this skill when working on releases, version numbers, or release preparation. | 2,392 |
 | [skyline-development](claude/skills/skyline-development/SKILL.md) | ALWAYS load when working in pwiz_tools/Skyline, on GitHub issues labeled 'skyline', or TODOs referencing Skyline code. | 2,684 |
 | [skyline-exceptions](claude/skills/skyline-exceptions/SKILL.md) | Use this skill when looking at exception reports from skyline.ms. | 1,226 |

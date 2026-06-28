@@ -7,7 +7,7 @@
 #
 #   Skyline:     ai/scripts/Skyline/Build-Skyline.ps1
 #                ai/scripts/Skyline/Run-Tests.ps1
-#   OspreySharp: ai/scripts/OspreySharp/Build-OspreySharp.ps1
+#   Osprey: ai/scripts/Osprey/Build-Osprey.ps1
 #
 # The wrappers handle MSBuild toolset selection, -Summary mode (which avoids
 # the compound-command permission trap from CRITICAL-RULES.md), test
@@ -59,9 +59,9 @@ Use the team's wrapper scripts under ai/scripts/ instead:
     pwsh -File ./ai/scripts/Skyline/Build-Skyline.ps1 -RunTests -TestName <Name> -Summary
     pwsh -File ./ai/scripts/Skyline/Run-Tests.ps1 -TestName <Name>
 
-  OspreySharp:
-    pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1
-    pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -RunTests -Summary
+  Osprey:
+    pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1
+    pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -RunTests -Summary
 
 The wrappers handle MSBuild toolset selection, -Summary output (which avoids
 the compound-command permission trap documented in ai/CRITICAL-RULES.md),

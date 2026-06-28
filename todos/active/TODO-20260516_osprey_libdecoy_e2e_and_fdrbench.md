@@ -40,12 +40,12 @@
 
 ## Mission
 
-OspreySharp going primary next week needs the library-decoy code
+Osprey going primary next week needs the library-decoy code
 path verified at byte-parity against Rust on real Carafe-built data
 (Track 1), and Mike's most recent functional work in osprey-io's
 FDRBench TSV writer ported so the C# port doesn't fall behind on
 the artifact downstream FDRBench GUI consumes (Track 2). After this
-sprint, OspreySharp produces the same library-decoy and FDRBench-
+sprint, Osprey produces the same library-decoy and FDRBench-
 input outputs as `maccoss/osprey:bcd7249` and the AstralLibraryDecoy
 dataset shape is a real gate, not a placeholder.
 
@@ -88,7 +88,7 @@ So the inputs to expect:
    `D:\test\osprey-runs\astral-libdecoy\` (or wherever the
    `$env:OSPREY_TEST_BASE_DIR` override resolves to).
 2. **Update placeholders** in
-   `ai/scripts/OspreySharp/Dataset-Config.ps1`:
+   `ai/scripts/Osprey/Dataset-Config.ps1`:
    - `Library`: currently
      `SkylineAI_entrapment_carafe_spectral_library.tsv`. Replace
      with Mike's actual filename.
@@ -98,7 +98,7 @@ So the inputs to expect:
      calls these `*_pep.txt` by convention; check.)
 3. **Capture the same-impl baseline** at v26.6.0:
    ```
-   pwsh -File ai/scripts/OspreySharp/Test-Snapshot.ps1 \
+   pwsh -File ai/scripts/Osprey/Test-Snapshot.ps1 \
      -Dataset AstralLibraryDecoy -Files All -CreateSnapshot
    ```
    Watch for the new "Library-decoy mode" log lines that PR
@@ -108,7 +108,7 @@ So the inputs to expect:
    running the cross-impl gate.
 4. **Run cross-impl Test-Regression** vs Rust v26.6.0:
    ```
-   pwsh -File ai/scripts/OspreySharp/Test-Regression.ps1 \
+   pwsh -File ai/scripts/Osprey/Test-Regression.ps1 \
      -Dataset AstralLibraryDecoy -Files All -Force
    ```
    Goal: PASS at every stage (`stage1to4 -> stage5 -> stage6
@@ -149,21 +149,21 @@ Rust source layout:
   wiring + `--fdr-level` auto-selection.
 
 C# placement plan:
-- `OspreySharp.Core/OspreyConfig.cs`: add `FdrbenchOutputPath`
+- `Osprey.Core/OspreyConfig.cs`: add `FdrbenchOutputPath`
   and `FdrbenchPerRun` properties. Fold into
   `SearchParameterHash` matching Rust formatting (path through
   `EscapeForRustDebug`, bool as `b()`).
-- `OspreySharp.IO/FdrbenchWriter.cs` (NEW): the TSV writer.
+- `Osprey.IO/FdrbenchWriter.cs` (NEW): the TSV writer.
   Mirror Rust's column set exactly; use the patched
   `ParquetNet.dll` overlay convention if Parquet I/O is
   involved (it isn't here -- TSV-only).
-- `OspreySharp.FDR/ProteinFdr.cs`: the picked-protein
+- `Osprey.FDR/ProteinFdr.cs`: the picked-protein
   helper.
-- `OspreySharp/Program.cs`: `--fdrbench <PATH>` and
+- `Osprey/Program.cs`: `--fdrbench <PATH>` and
   `--fdrbench-per-run` CLI flags (same `internal static
   ParseArgs` exposure as #4215 used for the library-decoy
   flags, with strict path validation).
-- `OspreySharp/Tasks/PerFileScoringTask.cs` or `MergeNodeTask.cs`:
+- `Osprey/Tasks/PerFileScoringTask.cs` or `MergeNodeTask.cs`:
   the pipeline wiring -- emit after first-pass FDR but
   before compaction (mirror Rust's "pre-compaction first-pass
   FDR pool" sequencing). `--fdr-level` auto-selection.
@@ -209,7 +209,7 @@ Hold for the maccoss/osprey upstream PRs to merge:
 1. **`maccoss/osprey#35`** (defer "no library decoys" until
    after manifest pass). Once merged:
    - Update local osprey to the new HEAD (`git pull`).
-   - Port the deferral back to OspreySharp at
+   - Port the deferral back to Osprey at
      `PerFileScoringTask.cs:308`: move the `NDecoys == 0`
      bail to AFTER the manifest pass; recount decoys via the
      `CountTargetsAndDecoys` helper.
@@ -222,7 +222,7 @@ Hold for the maccoss/osprey upstream PRs to merge:
 ## Validation gates (per commit)
 
 1. **Build + tests**: `pwsh -File
-   ai/scripts/OspreySharp/Build-OspreySharp.ps1 -RunTests
+   ai/scripts/Osprey/Build-Osprey.ps1 -RunTests
    -RunInspection`. 0 errors, all tests pass, inspection at
    baseline 4 warnings.
 2. **Stellar reverse-decoy snapshot**: still PASS post-commit.
@@ -245,7 +245,7 @@ Hold for the maccoss/osprey upstream PRs to merge:
 
 ## Out of scope
 
-- The OspreySharp NextFlow / Linux packaging work tracked at
+- The Osprey NextFlow / Linux packaging work tracked at
   [`ai/todos/backlog/brendanx67/TODO-ospreysharp_nextflow_linux_support.md`](../backlog/brendanx67/TODO-ospreysharp_nextflow_linux_support.md).
   That's a new-feature track for the lab member starting
   NextFlow testing; separate sprint.

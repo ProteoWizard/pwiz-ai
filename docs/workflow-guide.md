@@ -213,9 +213,9 @@ without driving Visual Studio. Do not ask the developer to build or test what yo
 can run yourself.
 
 #### After Making Code Changes
-1. **Build via the wrapper script** - `pwsh -File ./ai/scripts/Skyline/Build-Skyline.ps1` (add `-RunTests` to build and test; OspreySharp uses `ai/scripts/OspreySharp/Build-OspreySharp.ps1`)
+1. **Build via the wrapper script** - `pwsh -File ./ai/scripts/Skyline/Build-Skyline.ps1` (add `-RunTests` to build and test; Osprey uses `ai/scripts/Osprey/Build-Osprey.ps1`)
 2. **Run the relevant tests** - `pwsh -File ./ai/scripts/Skyline/Run-Tests.ps1 -TestName <name>` (see `ai/CLAUDE.md` for common invocations)
-3. **Run ReSharper inspection on larger changes** - `Build-Skyline.ps1 -RunInspection` / `Build-OspreySharp.ps1 -RunInspection`
+3. **Run ReSharper inspection on larger changes** - `Build-Skyline.ps1 -RunInspection` / `Build-Osprey.ps1 -RunInspection`
 4. **Fix any failures before committing** - a commit that does not build breaks the team (see `ai/CRITICAL-RULES.md`)
 
 #### What AI Agents Should Do
