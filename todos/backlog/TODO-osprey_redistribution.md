@@ -1,0 +1,261 @@
+# TODO-osprey_redistribution.md
+
+## Branch Information
+- **Branch**: (to be created when work starts)
+- **Base**: `master` (pwiz); ai/ changes direct to ai master
+- **Created**: (pending)
+- **Status**: Backlog
+- **PR**: (pending)
+- **Depends on**: the OspreySharp -> Osprey rename (pwiz PR #4335) landing first.
+- **Objective**: Give Osprey first-class redistribution: (1) a stand-alone download posted on skyline.ms, (2) a complete copy shipped inside the Skyline installation, and (3) groundwork toward running Osprey from the Skyline UI as the default DIA search engine. Near-term driver: replace EncyclopeDIA with Osprey on the skyline.ms home page, which requires a stand-alone Osprey install + a landing page. The ZIP/`.msi` this sprint produces should become the **canonical Osprey artifact** that downstream tools (e.g. Carafe) consume, replacing per-tool home-grown OspreySharp builds.
+
+## Background / motivation
+
+Osprey is the C# DIA search tool in `pwiz_tools/Osprey` (just renamed from
+OspreySharp, PR #4335). It is a **command-line tool with no UI**, multi-targeted
+`net472;net8.0`, x64, producing `Osprey.exe` / `Osprey.dll`. net8.0 is the
+canonical runtime; it also runs on Linux (HPC).
+
+Two pressures converged:
+- Mike has started adding OspreySharp to **`Noble-Lab/Carafe`** (open PRs from his
+  `maccoss` fork; see Reference models) -- "High quality in silico spectral
+  library generation for DIA proteomics." It builds its own OspreySharp-bundled
+  `.msi`, and its commit messages say "OspreySharp," which is part of what
+  motivated finishing the rename.
+- We want Osprey to be distributable the way Skyline's other companion tools are,
+  rather than an internal build artifact -- and to be the single official build
+  that downstream tools reuse.
+
+**Current state of Osprey distribution = nothing.** `pwiz_tools/Osprey/build.ps1`
+explicitly "publishes NO downloadable artifacts"; the TeamCity config only
+publishes the raw `bin/.../net8.0` + `net472` dirs and TestResults. Osprey is
+**not** bundled into the Skyline install and is **not** on the website.
+
+## Target end-states
+
+1. **Stand-alone download** on skyline.ms, modeled on BiblioSpec -- a CLI engine
+   that runs separately on Windows/Linux. (NOT a ClickOnce installer like
+   SkylineBatch: Osprey has no UI.)
+2. **Shipped inside the Skyline installation**, like BiblioSpec, so a Skyline user
+   already has Osprey on disk.
+3. **Canonical for downstream consumers** -- the official ZIP/`.msi` supersedes
+   home-grown per-tool OspreySharp builds (Carafe today; others later), which
+   point at / bundle the official artifact instead of building from the pwiz tree.
+4. **(Future, separate sprint)** Osprey driven from the **Skyline UI** as a DIA
+   search engine, eventually the **default** (replacing EncyclopeDIA's role),
+   requiring no extra install. Months out; flagged so 1-3 don't paint us into a
+   corner.
+
+## Package format (DECIDED 2026-06-27)
+
+Primary deliverable: a **versioned-folder ZIP** of a self-contained .NET publish.
+Second deliverable (fast-follow): a **WiX `.msi`**. Per-RID artifacts; the
+generated docs are bundled inside the zip. (Decided with Brendan; do not
+re-litigate -- just implement.) Independently corroborated by Mike's Carafe build,
+which bundles OspreySharp as a self-contained per-RID `dotnet publish` (see
+Reference models).
+
+ZIP layout -- ONE containing folder, never root-exploded (a self-contained
+publish is `Osprey.exe` + dozens of runtime/dependency DLLs, so dumping them at
+the zip root explodes ~100 files into the user's extract dir):
+
+    Osprey-<version>-win-x64.zip
+    +- Osprey-<version>-win-x64/        (single top-level folder)
+       +- Osprey.exe                    (at the folder root; easy to find / add to PATH)
+       +- *.dll                         (bundled .NET runtime + Arrow / Parquet / Zstd / ...)
+       +- Documentation/                (CommandLine.html + Osprey-workflow.html)
+       +- README / LICENSE
+
+Why this layout:
+- **Side-by-side for free** -- each version unzips to its own `Osprey-<version>`
+  folder, so multiple versions coexist. Critical for HPC reproducibility: pin an
+  exact Osprey per analysis, copy the folder to a cluster, run it with ZERO
+  system-.NET dependency (self-contained).
+- **Self-documenting** -- the generated `CommandLine.html` /
+  `Osprey-workflow.html` ride along in the zip (the same files the landing page
+  iframes).
+- **Clean extraction** -- mirrors Skyline's "unzip -> one folder -> double-click
+  the exe" UX; no Downloads-folder explosion.
+- **Per-platform zips** (`...-win-x64.zip`, `...-linux-x64.zip`), one top-level
+  folder each. Do NOT mix RIDs in one zip.
+
+Single-file publish (`PublishSingleFile`) is an OPTIONAL later refinement (fewer
+files) -- but Osprey's native deps (Parquet / Zstd / IronCompress) do not all
+embed cleanly and it adds first-run extraction latency, so the versioned folder
+stays primary.
+
+`.msi` (WiX, fast-follow): packages the SAME self-contained publish into a signed
+`C:\Program Files\Osprey` install (per-machine) with an Add/Remove-Programs entry
+-- for pharma IT and centrally-deployed / virtualized academic environments (the
+same reason Skyline eventually shipped an `.msi`). ZIP is the historical-record
+format (most reliably archived, like Skyline's releases); the `.msi` is the
+presentable institutional installer, and the canonical one downstream tools adopt.
+
+## Branding / design (in progress, parallel track)
+
+Brendan is working with a designer; a home-page mock-up already exists (captured
+this session):
+- A finished **Osprey logo** -- an osprey diving over a blue Skyline-style
+  cityscape, matching Skyline's blue identity -- placed in EncyclopeDIA's slot.
+- The **BiblioSpec** logo is being recolored from green to the same blue scheme.
+- A new home-page layout swapping the EncyclopeDIA callout for Osprey.
+
+Still needed: the **Osprey home-page blurb** (the mock-up reuses EncyclopeDIA's
+placeholder text) and final logo asset hand-off. This track feeds Phase 5 but is
+not blocking on the engineering (package + bundle) work.
+
+## Reference models (study these first)
+
+- **BiblioSpec** (`pwiz_tools/BiblioSpec`) -- the closest analog: an open-source
+  CLI engine that ships *inside* Skyline AND runs stand-alone on Windows/Linux,
+  with a project page + download on skyline.ms
+  (https://skyline.ms/home/software/BiblioSpec/project-begin.view). Built via
+  Boost.Build (`Jamfile.jam`); its binaries travel in the ProteoWizard release.
+  Determine exactly how its stand-alone download is produced and how it lands in
+  the Skyline install -- and use its landing page as the template for Osprey's.
+- **SkylineBatch** (`pwiz_tools/Skyline/Executables/SkylineBatch`) -- has a
+  stand-alone download/website page too
+  (https://skyline.ms/home/software/Skyline/wiki-page.view?name=skyline-batch),
+  but it is **ClickOnce** because it has a UI. Use it as the model for the
+  *website/standalone* pattern, NOT the installer mechanism. (Skyline itself ships
+  as a ClickOnce installer *inside a ZIP*, and its side-by-side layout also lets
+  you just unzip and double-click `Skyline.exe` -- the versioned-folder ZIP above
+  gives Osprey the same unzip-and-run behavior without ClickOnce.)
+- **Noble-Lab/Carafe** (GitHub; Java/Maven tool, NOT .NET) -- the most direct
+  `.msi` prior art. Mike's OspreySharp work is in OPEN PRs from his `maccoss`
+  fork: **PR #9** (`feature/ospreysharp-integration` -- `OspreyBlibReader` reads
+  Osprey `.blib`, Koina library generation, `resolveOspreyBinary`) and **PR #10**
+  (`ci/ospreysharp-installer` -- the MSI). **Cloned to `C:\proj\Carafe`; PR
+  branches fetched locally as `pr-9-integration` and `pr-10-msi`.** How its MSI
+  works (`scripts/generate_installer_win.bat`, `.github/workflows/build-installer.yml`):
+  `jpackage --type msi` (WiX 3.x backend), **per-user** install to
+  `%LOCALAPPDATA%\Carafe\app\`, bundling a **self-contained per-RID** OspreySharp
+  publish (`scripts/build_ospreysharp.sh`: `dotnet publish -c Release -f net8.0
+  -r <rid> --self-contained`; win-x64 / linux-x64 / osx-arm64). Takeaways:
+  - Confirms our self-contained-per-RID decision.
+  - jpackage is **Java-specific**; our pure-.NET `.msi` uses **WiX directly**.
+    Carafe is the reference for layout / branding / vendor, and the per-user vs
+    per-machine choice (Mike chose per-user; we want a Program Files option).
+  - **Goal: replace Carafe's home-grown OspreySharp `.msi` with the official one
+    from this sprint** -- Carafe consumes the official Osprey artifact instead of
+    `build_ospreysharp.sh`. Its scripts also hardcode the old
+    `pwiz_tools/OspreySharp` path + `OspreySharp.exe`, which break on our rename
+    anyway -- coordinate with Mike to retarget PRs #9/#10 at the official build.
+- **How Skyline bundles CLI tools**: `Skyline.csproj` pulls external executables
+  in as `<Content Include>` items that copy into the Skyline output/install (e.g.
+  `msconvert.exe` is linked in from `Shared/ProteowizardWrapper/obj/$(Platform)`;
+  BiblioSpec's `modifications.xml` is Content). This is the likely mechanism for
+  bundling `Osprey.exe` + its runtime into Skyline.
+- **skyline.ms home page** (live): tools are shown as a callout = logo +
+  `[Project]` link + short description + (for BiblioSpec) a download. EncyclopeDIA
+  is the open-source DIA *search* engine slot -- the one Osprey replaces near-term.
+
+## The Osprey landing page (Phase 5 target, spelled out)
+
+Model it on BiblioSpec's project page. It should host the docs we already
+generate, plus downloads:
+- A **documentation view** with an `<iframe>` embedding
+  `pwiz_tools/Osprey/Documentation/Help/en/CommandLine.html` (the CLI usage page,
+  auto-generated + drift-locked by `TestCommandLineHelpDocumentation`).
+- A **workflow/overview page** built from some form of
+  `pwiz_tools/Osprey/Osprey-workflow.html` (the pipeline diagram).
+- **Download + install links** for the ZIP (per platform) and the `.msi`.
+
+Implication: both HTML docs must be **web-hostable**. They are already generated
+in-repo (and currently cross-link via `raw.githack.com/.../pwiz_tools/Osprey/...`).
+The sprint must decide where the website pulls them from (githack against
+master, a copy published to skyline.ms, or an artifact) and keep that link target
+correct after the rename.
+
+## Proposed phases
+
+### Phase 1 -- Reference gathering
+- Carafe is already cloned (`C:\proj\Carafe`, branches `pr-9-integration` /
+  `pr-10-msi`). Read `scripts/generate_installer_win.bat`,
+  `scripts/build_ospreysharp.sh`, `.github/workflows/build-installer.yml` for the
+  MSI/bundling approach.
+- Document BiblioSpec's stand-alone build + how it reaches the Skyline install +
+  how its skyline.ms landing page is wired.
+- Skim SkylineBatch's ClickOnce setup only enough to confirm we are NOT copying it.
+
+### Phase 2 -- Stand-alone Osprey ZIP (primary deliverable)
+- Add a package target (extend `pwiz_tools/Osprey/build.ps1` or the Jamfile) that:
+  - runs `dotnet publish -c Release -r win-x64 --self-contained` (and `linux-x64`),
+  - copies the generated `Documentation/` (CommandLine.html, Osprey-workflow.html)
+    + README/LICENSE into the publish dir,
+  - zips it under the single versioned top-level folder per the layout above,
+    naming `Osprey-<version>-<rid>.zip`.
+- Add/adjust a TeamCity config to **publish** that zip artifact (today the Osprey
+  config publishes none -- and watch the 4 GB per-artifact limit note in
+  build.ps1).
+
+### Phase 3 -- Osprey `.msi` (fast-follow, becomes the canonical installer)
+- WiX installer that packages the same self-contained publish into
+  `C:\Program Files\Osprey` (per-machine; pharma-IT-presentable), with
+  Add/Remove-Programs entry; consider PATH entry and code signing.
+- **Intent: this is the canonical Osprey `.msi`** that downstream consumers
+  (Carafe today, others later) bundle/point at, replacing home-grown per-tool
+  OspreySharp builds. Coordinate with Mike to retarget Carafe PRs #9/#10 at the
+  official artifact (their scripts reference the old `OspreySharp` path/exe).
+
+### Phase 4 -- Bundle Osprey inside Skyline
+- Stage `Osprey.exe` + required runtime/DLLs into the Skyline install (via
+  `Skyline.csproj` `<Content>` or the Skyline build staging), choosing a subdir
+  (e.g. a `Tools/Osprey` or alongside the other bundled exes).
+- Decide self-contained vs framework-dependent here (Skyline already targets a
+  specific .NET; avoid shipping a second full runtime if Skyline's covers it).
+- Mind install footprint/size and the existing Skyline installer.
+
+### Phase 5 -- skyline.ms website
+- Create the **Osprey project/landing page** (LabKey wiki, modeled on BiblioSpec's
+  `project-begin.view`) with the iframe doc view + workflow page + download/install
+  links described in "The Osprey landing page" section above. (Use the
+  skyline-wiki skill / MCP.)
+- Land the **Osprey logo** + recolored **BiblioSpec** logo from the designer.
+- Write the **Osprey home-page blurb** and update the home page to replace the
+  EncyclopeDIA callout with Osprey. Coordinate with whoever owns the home page.
+
+### Phase 6 (future, separate sprint) -- Skyline UI integration
+- Wire Osprey in as a DIA search engine reachable from the Skyline UI (compare to
+  how EncyclopeDIA is wired: `EncyclopeDiaSearchDlg`, `EncyclopeDiaHelpers.cs`,
+  the DDA/DIA search plumbing in `Model/DdaSearch`). Eventually make Osprey the
+  default. Out of scope for this sprint; listed so earlier phases stay compatible.
+
+## Open decisions (need Brendan's input early)
+- **Platforms** for the stand-alone: Windows-only first, or Windows + Linux
+  shipped together (Osprey supports Linux / HPC)? (Layout already supports both
+  via per-RID zips; question is what we publish in v1.)
+- **Runtime when bundled in Skyline**: reuse Skyline's .NET runtime
+  (framework-dependent, smaller) vs ship Osprey self-contained inside Skyline too.
+  (The stand-alone ZIP/`.msi` are self-contained either way.)
+- **net8.0 only** for distribution, or keep net472 in the package?
+- **Where Osprey lives** inside the Skyline install tree.
+- **`.msi` install scope**: per-machine (Program Files; our stated goal) vs
+  Mike's per-user choice in Carafe.
+- **Doc hosting** for the landing-page iframes: raw.githack against master, a copy
+  published to skyline.ms, or a build artifact?
+- **Relationship to the ProteoWizard release** (BiblioSpec ships in pwiz-bin; does
+  Osprey too, or as its own thing?).
+- **Code signing** for the `.msi` (and exe) -- which cert / process.
+
+## Constraints / gates
+- C# work follows Skyline conventions (NO async/await, resource strings for any UI
+  text, CRLF, etc. -- see ai/CRITICAL-RULES.md). Osprey itself is gated by its
+  standing correctness (regression.ps1) + perf gates; a packaging change must keep
+  output byte-identical and not perturb the build/tests.
+- Cross-platform: don't Windows-only-ify Osprey; it runs on Linux.
+- Coordinate website + Skyline-installer changes with their owners; the home-page
+  swap is user-facing. Coordinate the Carafe handoff with Mike.
+
+## References
+- Rename that preceded this: pwiz PR #4335 (OspreySharp -> Osprey).
+- `pwiz_tools/Osprey/` (build.ps1, tcbuild.bat, Directory.Build.props, README.md,
+  Documentation/Help/en/CommandLine.html, Osprey-workflow.html).
+- `pwiz_tools/BiblioSpec/` (Jamfile.jam) and skyline.ms BiblioSpec project page.
+- `pwiz_tools/Skyline/Executables/SkylineBatch/` (ClickOnce -- contrast only).
+- `pwiz_tools/Skyline/Skyline.csproj` (`<Content>` bundling of msconvert /
+  BiblioSpec assets; EncyclopeDIA UI wiring at `EncyclopeDiaSearchDlg` /
+  `Model/Lib/EncyclopeDiaHelpers.cs`).
+- `C:\proj\Carafe` (clone; branches `pr-9-integration`, `pr-10-msi`) -- Mike's
+  OspreySharp integration + jpackage MSI; `scripts/generate_installer_win.bat`,
+  `scripts/build_ospreysharp.sh`, `.github/workflows/build-installer.yml`.
