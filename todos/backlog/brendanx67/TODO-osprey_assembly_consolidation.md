@@ -1,10 +1,10 @@
-# TODO: Evaluate OspreySharp assembly count (8 DLLs) vs. fewer/single assembly
+# TODO: Evaluate Osprey assembly count (8 DLLs) vs. fewer/single assembly
 
 **Status**: Backlog (evaluation / decision, not yet a coding task)
 **Priority**: Low-Medium (no defect; structural question raised once the project went past proof-of-concept)
 **Complexity**: Medium to evaluate; Large if a consolidation is chosen (touches every csproj + the layering-enforcement story)
 **Created**: 2026-05-29
-**Scope**: `C:\proj\pwiz\pwiz_tools\OspreySharp` -- the 8-project solution graph
+**Scope**: `C:\proj\pwiz\pwiz_tools\Osprey` -- the 8-project solution graph
 
 ## The question (raised by Brendan, 2026-05-29)
 
@@ -24,11 +24,11 @@ project is a separately-loaded assembly: cross-assembly JIT inlining is
 more heuristic-sensitive than intra-assembly, there is assembly-load
 overhead, and the boundary forces `public` (or `internal` +
 `InternalsVisibleTo`) where one assembly could use `internal`/private.
-So OspreySharp pays a .NET-specific tax for a decomposition that cost
+So Osprey pays a .NET-specific tax for a decomposition that cost
 Rust nothing.
 
 Added irony: Rust split into many crates but kept a **monolithic
-`pipeline.rs` of thousands of lines**. OspreySharp inherited both the
+`pipeline.rs` of thousands of lines**. Osprey inherited both the
 fine-grained assembly split *and* (until the task decomposition) the
 monolith. The Tasks-layer work is fixing the monolith Rust still
 hasn't, while carrying Rust's crate-count as DLLs.
@@ -37,7 +37,7 @@ hasn't, while carrying Rust's crate-count as DLLs.
 
 The 2026-05-29 `extract_scoring_math` PR moved four hot-loop helpers
 (`PearsonOverRange`, `PearsonCorrelationInRange`, `BinarySearchLowerBound`,
-`LowerBoundDouble`) from the exe project into `OspreySharp.Scoring.dll`,
+`LowerBoundDouble`) from the exe project into `Osprey.Scoring.dll`,
 turning previously same-assembly calls into cross-assembly calls in the
 scoring hot path (per-fragment m/z lower-bound search, per-XIC-pair
 Pearson). A 3-repeat Stellar C#-only perf A/B (master vs branch):
@@ -70,7 +70,7 @@ without separate assemblies.
 
 **Constraint from the Shared direction**: whatever eventually migrates
 to `pwiz_tools\Shared` (`Common*`) must be its own assembly to be
-referenced by both Skyline and OspreySharp (see
+referenced by both Skyline and Osprey (see
 [[project_ospreysharp_exe_and_shared]]). So the `Core`-like bottom layer
 stays separate regardless. The live question is really the middle
 (`Scoring`/`FDR`/`ML`/`Chromatography`/`Tasks`): could those be one
@@ -89,12 +89,12 @@ reference graph?
 
 ## DECISION 2026-06-01 (Brendan): keep all 8 DLLs as-is for now
 
-A 3-subagent study of how OspreySharp scoring might inter-relate with Skyline's
-peak-scoring architecture ([[TODO-ospreysharp_skyline_shared_scoring]]) **reversed the
+A 3-subagent study of how Osprey scoring might inter-relate with Skyline's
+peak-scoring architecture ([[TODO-osprey_skyline_shared_scoring]]) **reversed the
 earlier lean toward "collapse the middle."** The boundaries `Core / Scoring /
 FDR(linear-model)` are exactly the seams a future *shared cross-tool scoring core*
 (feature-vector -> linear model -> FDR, the point where Skyline and Osprey scoring
-converge) would be carved along. `OspreySharp.Scoring` already has the property a
+converge) would be carved along. `Osprey.Scoring` already has the property a
 Shared-bound assembly needs -- dependency-light (no Parquet/SQLite/WinForms). Collapsing
 the middle into the exe now would destroy that scaffolding and force a re-extraction
 later, while the perf motive to collapse is already nil.
@@ -114,13 +114,13 @@ enforcement-via-architecture-test option remains valid IF a collapse is ever rev
 - No defect; pure structural improvement.
 - Interacts with the Tasks-layer cleanup (PR-C placement decisions), the
   Shared-migration direction, AND the Skyline<->Osprey shared-scoring question
-  ([[TODO-ospreysharp_skyline_shared_scoring]]) -- best decided deliberately.
+  ([[TODO-osprey_skyline_shared_scoring]]) -- best decided deliberately.
 - The perf question that motivated urgency is already answered (no
   measurable cross-assembly cost), so this can wait for a considered call.
 
 ## Related
 
-- `TODO-ospreysharp_task_layer_decomposition.md` (PR-C placement decisions
+- `TODO-osprey_task_layer_decomposition.md` (PR-C placement decisions
   depend on this outcome)
 - Active PR: `TODO-20260529_ospreysharp_extract_scoring_math.md` (source
   of the perf evidence above)

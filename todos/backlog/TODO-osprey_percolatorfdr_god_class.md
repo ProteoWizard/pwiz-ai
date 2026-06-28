@@ -1,7 +1,7 @@
-# TODO-ospreysharp_percolatorfdr_god_class.md
+# TODO-osprey_percolatorfdr_god_class.md
 
 ## Summary
-`OspreySharp.FDR/PercolatorFdr.cs` has grown to ~2,500 lines and is a god-class:
+`Osprey.FDR/PercolatorFdr.cs` has grown to ~2,500 lines and is a god-class:
 it accretes several distinct responsibilities that should be separate collaborators.
 Surfaced 2026-06-25 while extracting `FeatureContributions` (PR #4328) — the right
 reflex was to add the new concept as its own class rather than grow the monolith;

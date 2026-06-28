@@ -1,11 +1,11 @@
-# TODO: OspreySharp NextFlow / Linux deployment
+# TODO: Osprey NextFlow / Linux deployment
 
 ## Why
 
-A lab member plans to start NextFlow testing on OspreySharp next week
+A lab member plans to start NextFlow testing on Osprey next week
 (post-2026-05-18). NextFlow workflows almost always run under Linux
 containers, which means the `net8.0` build needs to be a first-class
-deployment target -- not just "happens to compile." OspreySharp's
+deployment target -- not just "happens to compile." Osprey's
 task-architecture rearchitecture (vs. Rust osprey's 7000-line monolithic
 pipeline) is what makes it the right target for distributed scheduling
 in the first place; this work delivers the packaging and platform
@@ -19,15 +19,15 @@ Status: planning only -- no commits yet.
 Release output today (per audit on 2026-05-15):
 
 - Framework-dependent .NET 8 (or net472) drop, ~40-50 files, ~50 MB
-- `OspreySharp.exe` + 9 OspreySharp managed DLLs + ~14 third-party
+- `Osprey.exe` + 9 Osprey managed DLLs + ~14 third-party
   managed DLLs (Parquet.Net patched overlay, Apache.Arrow, MathNet,
   Microsoft.ML.DataView, Newtonsoft.Json, DotNetZip,
   System.Data.SQLite, Snappier, ZstdSharp, JetBrains profiler shim)
 - `runtimes/{linux-x64, linux-arm64, osx-x64, osx-arm64, win-x64,
   win-x86}/native/` -- native interop deps (SQLite, libnironcompress)
-- `OspreySharp.runtimeconfig.json` -- runtime version + server GC
+- `Osprey.runtimeconfig.json` -- runtime version + server GC
 - Patched `Parquet.dll` overlay swapped in by
-  `pwiz_tools/OspreySharp/Directory.Build.targets` to fix a Thrift
+  `pwiz_tools/Osprey/Directory.Build.targets` to fix a Thrift
   struct-skip bug reading parquet-rs >=58 files
 
 **Not in place yet**:
@@ -42,14 +42,14 @@ Release output today (per audit on 2026-05-15):
 
 ### Phase A -- Linux packaging (~1 session)
 
-1. Add `ai/scripts/OspreySharp/Publish-OspreySharp.ps1` (and `.sh`
+1. Add `ai/scripts/Osprey/Publish-Osprey.ps1` (and `.sh`
    counterpart) that wraps `dotnet publish -c Release -r <RID>
    --self-contained false` for the supported RIDs (linux-x64 first,
    then osx-arm64, then win-x64), and emits a `.tar.gz` at
-   `pwiz_tools/OspreySharp/dist/OspreySharp-<version>-<rid>.tar.gz`.
+   `pwiz_tools/Osprey/dist/Osprey-<version>-<rid>.tar.gz`.
 2. Emit a `RUNNING.md` next to the tarball that documents the dotnet
    8 runtime install requirement and the smoke-test command.
-3. TeamCity build config that runs Publish-OspreySharp on every
+3. TeamCity build config that runs Publish-Osprey on every
    pwiz/master push and archives the tarballs as build artifacts.
 
 ### Phase B -- Path / line-ending audit (~1 session)
@@ -71,7 +71,7 @@ Release output today (per audit on 2026-05-15):
 ### Phase C -- Linux smoke test in CI (~1 session)
 
 1. Smallest viable: a Linux job that runs `dotnet
-   OspreySharp.Test.dll --filter ...` on the existing test suite,
+   Osprey.Test.dll --filter ...` on the existing test suite,
    confirms all 340+ tests pass.
 2. Bigger: spin up the 3-file Stellar dataset on a Linux runner,
    produce a `.blib`, byte-compare against the Windows reference
@@ -79,11 +79,11 @@ Release output today (per audit on 2026-05-15):
    accessible location -- ask Mike whether `/share/labdata/...` is
    reachable from a TeamCity Linux agent.
 3. Add this as a status check on every PR touching
-   `pwiz_tools/OspreySharp/**`.
+   `pwiz_tools/Osprey/**`.
 
 ### Phase D -- Self-contained / single-file builds (~0.5 session)
 
-1. Add a `--SelfContained` switch to `Publish-OspreySharp.ps1` that
+1. Add a `--SelfContained` switch to `Publish-Osprey.ps1` that
    emits a self-contained tarball (doubles the size to ~120 MB but
    removes the dotnet-runtime-install prereq).
 2. Try `<PublishSingleFile>true</PublishSingleFile>` for the
@@ -93,7 +93,7 @@ Release output today (per audit on 2026-05-15):
 
 ## Open questions
 
-- Should we publish OspreySharp tarballs to GitHub Releases on tags?
+- Should we publish Osprey tarballs to GitHub Releases on tags?
   Or stay TeamCity-internal for now?
 - Does the NextFlow user have a specific RID requirement
   (linux-x64 vs linux-arm64)? Linux-x64 is the default first target.
@@ -101,7 +101,7 @@ Release output today (per audit on 2026-05-15):
   `AfterTargets="Build"` step. Does `dotnet publish` pick up the
   patched file or revert to the NuGet-resolved one? Worth a quick
   diff on the published tarball before declaring Phase A done.
-- The OspreySharp DIAGNOSTIC env vars and the `_test_*` workdir
+- The Osprey DIAGNOSTIC env vars and the `_test_*` workdir
   conventions assume forward-slash-compatible paths; verify on
   Linux before the smoke test.
 
@@ -113,9 +113,9 @@ Release output today (per audit on 2026-05-15):
 
 ## Related
 
-- `pwiz_tools/OspreySharp/Osprey-workflow.html` -- the conceptual
+- `pwiz_tools/Osprey/Osprey-workflow.html` -- the conceptual
   architecture diagram that makes NextFlow a natural target.
-- `ai/scripts/OspreySharp/Build-OspreySharp.ps1` -- the existing
+- `ai/scripts/Osprey/Build-Osprey.ps1` -- the existing
   build script that this work builds on.
-- `pwiz_tools/OspreySharp/Directory.Build.targets` -- the patched-
-  Parquet overlay that Publish-OspreySharp.ps1 must preserve.
+- `pwiz_tools/Osprey/Directory.Build.targets` -- the patched-
+  Parquet overlay that Publish-Osprey.ps1 must preserve.

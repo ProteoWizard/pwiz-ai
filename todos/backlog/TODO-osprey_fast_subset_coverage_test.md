@@ -1,4 +1,4 @@
-# TODO: OspreySharp fast subset-data pipeline test (per-commit coverage)
+# TODO: Osprey fast subset-data pipeline test (per-commit coverage)
 
 **Status**: Backlog (not started)
 **Priority**: Medium-High -- would give the per-commit build most of the pipeline
@@ -13,7 +13,7 @@ test.
 
 ## Goal
 
-A **fast, committed, subset-data integration test** that runs the OspreySharp
+A **fast, committed, subset-data integration test** that runs the Osprey
 pipeline end-to-end (`PerFileScoring -> FirstJoin/Percolator -> PerFileRescore ->
 MergeNode -> blib`) on tiny inputs, lifting per-commit coverage from ~45% toward
 the cumulative number, and catching a broken pipeline in seconds. It
@@ -35,9 +35,9 @@ Skyline `pwiz_tools/Skyline/TestFunctional/DiaSearchTest.cs` runs a *functional*
 That is the model: subset with msconvert, commit, run fast. (Matt built the DDA/
 DIA search functional tests this way.)
 
-## OspreySharp-specific catch (the key design point)
+## Osprey-specific catch (the key design point)
 
-Unlike the Skyline mzML-only trick, for OspreySharp the **mzML is not the main
+Unlike the Skyline mzML-only trick, for Osprey the **mzML is not the main
 cost -- the spectral library + Percolator are.** In the baseline run, Percolator
 FDR alone was ~400s of the ~7.5 min straight-through, and the coelution +
 calibration scoring before it are next; all three scale with
@@ -65,7 +65,7 @@ calibration scoring before it are next; all three scale with
 3. Binary-search the size down until Percolator still produces a non-empty,
    structurally-valid `output.blib`. That's the floor.
 4. Commit the subset(s) (small enough; see open questions) and add an
-   `OspreySharp.Test` integration test that runs the pipeline and asserts a
+   `Osprey.Test` integration test that runs the pipeline and asserts a
    non-empty, well-formed blib (RefSpectra/RetentionTimes present, sane counts).
 5. Repeat with an **Astral-style hram** subset and **2-3 files** to also cover the
    hram paths (`HramStrategy`, `Ms1ScoringByproduct`, MS1/isotope code that sat at
@@ -79,7 +79,7 @@ calibration scoring before it are next; all three scale with
 - **Format-specific loaders + mode-specific scorers** -- e.g. the `.blib` loader
   path and resolution-specific scorers only run for those inputs/modes. Smaller
   data doesn't help; they need dedicated inputs/modes (separate tests).
-  (The old `.elib`/`ElibLoader` example was removed from OspreySharp in #4321.)
+  (The old `.elib`/`ElibLoader` example was removed from Osprey in #4321.)
 - **Data-volume branches** -- cross-file consensus, gap-fill, large-data
   heuristics.
 - **Scientific validity** -- a handful of peptides doesn't prove the search is
@@ -87,14 +87,14 @@ calibration scoring before it are next; all three scale with
 
 ## Open questions
 
-1. **Where the committed data lives** -- an `OspreySharp.Test` `TestData/`
+1. **Where the committed data lives** -- an `Osprey.Test` `TestData/`
    folder, or a committed zip like `DiaSearchTest.zip`. And the size budget that
    is comfortable to commit (target a few MB, not tens).
 2. **mzML vs mz5** -- mzML is text (diff-reviewable) but bigger; mz5/mzMLb is
-   smaller binary. Does OspreySharp read anything but mzML today? (It reads mzML
+   smaller binary. Does Osprey read anything but mzML today? (It reads mzML
    via `MzmlReader`; raw/mz5 are future.) Probably commit mzML for now.
 3. **Per-commit wiring** -- the integration test should run in the per-commit
-   `OspreySharp.Test` suite (`build.ps1 -RunTests`/`-Coverage`) to get the
+   `Osprey.Test` suite (`build.ps1 -RunTests`/`-Coverage`) to get the
    coverage + breakage win. Confirm runtime stays seconds, not minutes.
 4. **Floor experiment** -- how small can the library + mzML get before Percolator
    stops training? Capture the minimum.

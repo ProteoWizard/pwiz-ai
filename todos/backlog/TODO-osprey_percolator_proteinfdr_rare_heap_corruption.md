@@ -13,12 +13,12 @@ first-pass protein FDR with:
 
 ```
 [ERROR] Pipeline failed: Unable to cast object of type
-        'pwiz.OspreySharp.Tasks.FirstJoinTask' to type
+        'pwiz.Osprey.Tasks.FirstJoinTask' to type
         'System.Collections.Generic.IEqualityComparer`1[System.String]'.
    at System.Collections.Generic.HashSet`1.IsSubsetOf(IEnumerable`1 other)
-   at pwiz.OspreySharp.FDR.ProteinFdr.BuildProteinParsimony(...) ProteinFdr.cs:line 225
-   at pwiz.OspreySharp.Tasks.FirstJoinTask.RunFirstPassProteinFdr(...) FirstJoinTask.cs:1646
-   at pwiz.OspreySharp.Tasks.FirstJoinTask.Run(...) FirstJoinTask.cs:231
+   at pwiz.Osprey.FDR.ProteinFdr.BuildProteinParsimony(...) ProteinFdr.cs:line 225
+   at pwiz.Osprey.Tasks.FirstJoinTask.RunFirstPassProteinFdr(...) FirstJoinTask.cs:1646
+   at pwiz.Osprey.Tasks.FirstJoinTask.Run(...) FirstJoinTask.cs:231
 ```
 
 The crash happened immediately after the parallel Percolator folds completed
@@ -37,8 +37,8 @@ surfaced it.
 The Percolator parallel infrastructure looks thread-safe on inspection
 (`SvmTrainScratchPool` is a `ConcurrentBag`, `OspreyParallel.For` uses `Interlocked`), so the
 corruption source is not obvious there. Prime remaining suspects: unsafe/`Span`/`stackalloc`
-out-of-bounds writes in the SVM / matrix numeric code (`OspreySharp.ML`,
-`OspreySharp.FDR/PercolatorFdr.cs`), or the nested-parallel grid search. Not yet root-caused.
+out-of-bounds writes in the SVM / matrix numeric code (`Osprey.ML`,
+`Osprey.FDR/PercolatorFdr.cs`), or the nested-parallel grid search. Not yet root-caused.
 
 ## Attribution (not PR-C)
 

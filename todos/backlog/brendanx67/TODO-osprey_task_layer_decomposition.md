@@ -1,18 +1,18 @@
-# TODO: OspreySharp Tasks-layer decomposition + encapsulation cleanup
+# TODO: Osprey Tasks-layer decomposition + encapsulation cleanup
 
 **Status**: Backlog
 **Priority**: Medium (no active defect; maintainability + parity-debugging cost that compounds as the pipeline grows)
 **Complexity**: Large (multi-PR program; one task file or one concern per PR, each parity-gated)
 **Created**: 2026-05-29
-**Scope**: `C:\proj\pwiz\pwiz_tools\OspreySharp` (the `OspreySharp/Tasks/` layer in the exe project)
+**Scope**: `C:\proj\pwiz\pwiz_tools\Osprey` (the `Osprey/Tasks/` layer in the exe project)
 
 ## Progress (updated 2026-05-31)
 
 Merged so far (master @ `9eee47851f`):
 
-- **#4249** -- extracted stateless scoring math -> `OspreySharp.Scoring.ScoringMath` (PR-C, math portion).
+- **#4249** -- extracted stateless scoring math -> `Osprey.Scoring.ScoringMath` (PR-C, math portion).
 - **#4250** -- relocated fragment helpers -> `Core.FragmentMath` + `Scoring.FragmentOverlap` (PR-C, domain-helper portion).
-- **#4251** -- `LoadLibrary` -> `OspreySharp.IO.LibraryLoader` (PR-C, the logging-injection move). **`AbstractScoringTask` now references no I/O and holds no stray math** -- it's a clean scoring engine.
+- **#4251** -- `LoadLibrary` -> `Osprey.IO.LibraryLoader` (PR-C, the logging-injection move). **`AbstractScoringTask` now references no I/O and holds no stray math** -- it's a clean scoring engine.
 - **#4252** -- **PR-B #1**: decomposed `MergeNodeTask.WriteBlibOutput` (~530 LOC -> 27-line orchestrator + 10 helpers), byte-identical (C#-only multi-file gate).
 - **#4253** -- removed the orphaned `OSPREY_DUMP_BLIB_QVALUES` diagnostic (Rust had already dropped its half; audit confirmed it was the only C#-only orphan dump).
 
@@ -45,8 +45,8 @@ the `ScoreCalibrationEntry` core pipeline (tightly-coupled per-entry algorithm).
 
 **Assembly-count question: DECIDED -- keep all 8 DLLs as-is.** The Scoring/FDR seams are
 scaffolding for a possible shared Skyline<->Osprey scoring core; revisit with that
-direction. See [[TODO-ospreysharp_assembly_consolidation]] +
-[[TODO-ospreysharp_skyline_shared_scoring]].
+direction. See [[TODO-osprey_assembly_consolidation]] +
+[[TODO-osprey_skyline_shared_scoring]].
 
 **Remaining -- the only open items from the review** (all in the parity-sensitive math
 dedup bucket; do NOT drive-by merge):
@@ -92,7 +92,7 @@ only open item *from iteration 1*.
 
 ## Motivation
 
-A 2026-05-29 OOP/architecture review found the OspreySharp *project*
+A 2026-05-29 OOP/architecture review found the Osprey *project*
 graph genuinely strong (clean, acyclic, well-documented;
 `OspreyDiagnostics`, `Program`, `AnalysisPipeline`, `OspreyConfig` all
 cohesive) -- but the **task layer** carries the project's
@@ -181,14 +181,14 @@ relocation work has proven less uniform than PR1:
   calls `ScoringMath.LowerBoundDouble` so it must go to `Scoring`, not
   Core. `HasTopNFragmentMatch` also has an inline binary search
   duplicating `ScoringMath` -- left verbatim, dedup deferred here.
-- **`LoadLibrary` -> `OspreySharp.IO` -- its own follow-up PR.** Not a
+- **`LoadLibrary` -> `Osprey.IO` -- its own follow-up PR.** Not a
   verbatim move: it logs via the instance `_ctx`, so it needs
   logging-callback injection (signature change). Its data deps
   (`LibraryCache`, the loaders, `LibraryDeduplicator`) are already in IO.
 - **Parity-sensitive, gate carefully**: consolidate the duplicate
   correlation implementations -- `PearsonOverRange`
   (`AbstractScoringTask.cs:467`), `PearsonCorrelation` (`:2531`),
-  `OspreySharp.Scoring/PearsonCorrelation.cs:38`, and
+  `Osprey.Scoring/PearsonCorrelation.cs:38`, and
   `TukeyMedianPolish.cs:537` -- which differ in edge-case handling.
   Cosine similarity appears in ~5 places likewise. Merging changes
   numbers: requires patched-vs-unpatched parity measurement before
@@ -275,19 +275,19 @@ before starting.
 
 - **Project structure**: the acyclic 8-project graph is the strong
   part; leave it. The earlier "concrete tasks live in the exe rather
-  than the `OspreySharp.Tasks` library" wrinkle is **resolved as a
-  non-issue**: OspreySharp is intended to stay its own EXE, run
+  than the `Osprey.Tasks` library" wrinkle is **resolved as a
+  non-issue**: Osprey is intended to stay its own EXE, run
   out-of-process from Skyline (2026-05-29 decision). It does not need
   to be embeddable, so the concrete tasks living in the exe is fine.
   - Forward-looking placement note (do NOT act on yet): future code
-    sharing between OspreySharp and Skyline is expected to go through
+    sharing between Osprey and Skyline is expected to go through
     `pwiz_tools\Shared` (where the `Common*` projects,
     `ProteoWizardWrapper`, and `BiblioSpec` already live), not through
     in-process embedding. The stateless math helpers (active PR) and
     the `Core` value types are the most likely eventual migrants to a
     `Shared` Common* project. Keep that direction in mind when
     choosing homes during PR-C, but do not prematurely relocate into
-    `Shared` -- land the helpers in `OspreySharp.Scoring` now; a move
+    `Shared` -- land the helpers in `Osprey.Scoring` now; a move
     to `Shared` is its own future PR driven by an actual sharing need.
 - `OspreyDiagnostics` (2,013 LOC): large but cohesive; not a target.
 
