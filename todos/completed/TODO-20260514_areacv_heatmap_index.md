@@ -3,9 +3,9 @@
 - **Branch:** `Skyline/work/20260514_areacv_heatmap_index` (BugFix checkout)
 - **Base:** `master`
 - **Created:** 2026-05-14
-- **Status:** Active
+- **Status:** Completed
 - **GitHub Issue:** [#4209](https://github.com/ProteoWizard/pwiz/issues/4209)
-- **PR:** [#4210](https://github.com/ProteoWizard/pwiz/pull/4210)
+- **PR:** [#4210](https://github.com/ProteoWizard/pwiz/pull/4210) (merged 2026-06-29 as `9df40fb0`)
 
 ## Objective
 
@@ -84,3 +84,24 @@ heat map behavior.
 - `pwiz_tools/Shared/MSGraph/HeatMapData.cs` `Cell._maxPoint` can be null
   for all-zero-Z cells; `Cell.GetPoints` can `Add(null)` for a degenerate
   root cell (separate latent NRE risk, note while here).
+
+## Progress Log
+
+### 2026-06-29 - Merged
+
+PR #4210 merged to master as commit `9df40fb0` (squash). Shipped:
+- `GraphHeatMap` guards: clamp `maxZValue` (`<= 0` / NaN / Infinity -> 1.0)
+  *before* deriving `fullScale`/`scale` so both stay positive, and bound every
+  computed color index with `Math.Max(0, Math.Min(..., Length - 1))`.
+- `MaxPoint == null` early return for all-Z<=0 data — closes the latent NRE
+  noted above.
+- Per-point `Z <= 0` skip (added at rita-gwen's review request; defensive,
+  since `HeatMapData.Cell` already filters `Z <= 0`).
+- Regression test `TestHeatMapCrashRegression` folded into the existing
+  `TestAreaCVHistograms` `[TestMethod]`; reproduces the frequency=1 crash
+  (red-without-fix verified) and asserts a point was actually plotted.
+
+Visually verified the all-frequency-1 render (single blue point, "Frequency 1"
+legend — no crash). Reviews all addressed/resolved: self-review (3 passes),
+Copilot (negative-log-scale, folded into the `maxZValue <= 0` clamp), human
+(rita-gwen, `Z <= 0` guard). Not cherry-picked to release.
