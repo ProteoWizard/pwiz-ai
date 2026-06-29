@@ -41,6 +41,15 @@
 .PARAMETER GitHubUser
     GitHub login whose review queue and authored PRs/issues are the focus of
     the report. Default: brendanx67
+    Ignored in -FanOut mode (each recipient's login comes from the roster).
+
+.PARAMETER FanOut
+    Team fan-out mode. Instead of a single -Recipient/-GitHubUser report, run research ONCE
+    (team-wide, raw) and then loop the shared opt-in roster, emailing each active subscriber
+    a report customized to their GitHub login and reporting level (individual vs team). The
+    roster lives in the shared Google Drive store "<drive>:\My Drive\Claude\PRReport"
+    (managed via Manage-PRReportRoster.ps1 / /pw-pr-reporting). If the roster has no active
+    subscribers, the run is a no-op. See ai/scripts/PRReport/README.md.
 
 .PARAMETER Schedule
     Register as a daily Windows Task Scheduler task at the specified time.
@@ -93,6 +102,7 @@ param(
     [string]$Phase = "both",
     [string]$Date,
     [string]$GitHubUser = "brendanx67",
+    [switch]$FanOut,
     [string]$Schedule,
     [switch]$DryRun
 )
@@ -147,10 +157,16 @@ if ($Schedule) {
     }
 
     $TaskPrefix = "PR Report"
-    $TasksToRemove = switch ($Phase) {
-        "research" { @("$TaskPrefix - Research") }
-        "email"    { @("$TaskPrefix - Email") }
-        "both"     { @("$TaskPrefix - Research", "$TaskPrefix - Email", "$TaskPrefix - Both") }
+    # Fan-out and single-recipient are mutually exclusive task families; removing the other
+    # family's tasks here avoids a machine quietly running both (double email, double cost).
+    if ($FanOut) {
+        $TasksToRemove = @("$TaskPrefix - Fanout", "$TaskPrefix - Research", "$TaskPrefix - Email", "$TaskPrefix - Both")
+    } else {
+        $TasksToRemove = switch ($Phase) {
+            "research" { @("$TaskPrefix - Research", "$TaskPrefix - Fanout") }
+            "email"    { @("$TaskPrefix - Email", "$TaskPrefix - Fanout") }
+            "both"     { @("$TaskPrefix - Research", "$TaskPrefix - Email", "$TaskPrefix - Both", "$TaskPrefix - Fanout") }
+        }
     }
 
     foreach ($Name in $TasksToRemove) {
@@ -161,10 +177,17 @@ if ($Schedule) {
         }
     }
 
-    $PhaseCapitalized = (Get-Culture).TextInfo.ToTitleCase($Phase)
-    $TaskName = "$TaskPrefix - $PhaseCapitalized"
     $ScriptPath = $PSCommandPath
-    $Arguments = "-NoProfile -WindowStyle Hidden -File `"$ScriptPath`" -Phase $Phase -Recipient `"$Recipient`" -Model `"$Model`" -GitHubUser `"$GitHubUser`""
+    if ($FanOut) {
+        $TaskName = "$TaskPrefix - Fanout"
+        $Arguments = "-NoProfile -WindowStyle Hidden -File `"$ScriptPath`" -FanOut -Phase $Phase -Model `"$Model`""
+        $TaskDescription = "Claude Code PR activity report — team fan-out ($Phase phase, per-roster)"
+    } else {
+        $PhaseCapitalized = (Get-Culture).TextInfo.ToTitleCase($Phase)
+        $TaskName = "$TaskPrefix - $PhaseCapitalized"
+        $Arguments = "-NoProfile -WindowStyle Hidden -File `"$ScriptPath`" -Phase $Phase -Recipient `"$Recipient`" -Model `"$Model`" -GitHubUser `"$GitHubUser`""
+        $TaskDescription = "Claude Code PR activity report ($Phase phase)"
+    }
 
     $Action = New-ScheduledTaskAction -Execute "pwsh" -Argument $Arguments -WorkingDirectory $WorkDir
     $Trigger = New-ScheduledTaskTrigger -Daily -At $ScheduleTime
@@ -175,7 +198,7 @@ if ($Schedule) {
         -ExecutionTimeLimit (New-TimeSpan -Hours 2)
 
     Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger `
-        -Settings $Settings -Description "Claude Code PR activity report ($Phase phase)" | Out-Null
+        -Settings $Settings -Description $TaskDescription | Out-Null
 
     Write-Host "Created task: $TaskName at $($ScheduleTime.ToString('h:mm tt')) daily"
     exit 0
@@ -189,7 +212,31 @@ function Get-PhasePrompt([string]$PhaseName) {
     switch ($PhaseName) {
         "research" {
             $CommandFile = ".claude/commands/pw-pr-research.md"
-            @"
+            if ($FanOut) {
+                @"
+You are running as a scheduled automation task. Slash commands and skills do not work in non-interactive mode.
+
+FIRST: Read ai/CLAUDE.md to understand project rules (especially: use pwsh not powershell, backslashes for file paths).
+
+THEN: Read $CommandFile and follow it to run the research phase — in TEAM FAN-OUT MODE (see the "Fan-out mode" section).
+
+Key points:
+- Use the gh CLI (pre-authorized) for all GitHub queries
+- Use pwsh (not powershell) for any shell commands
+- The report date is $DateFolder (use $DateCompact for filenames)
+- FAN-OUT: the active subscribers are listed in ai/.tmp/pr-report/$DateFolder/roster-active.json
+  (each has email, github_login, level). Gather the team-wide raw data ONCE, AND a personal
+  slice for EACH subscriber's github_login (awaiting-their-review, their open PRs with a
+  pile-up self-check at 3+ non-draft, their assigned issues, their TODOs). Write each to
+  ai/.tmp/pr-report/$DateFolder/subscribers/<github_login>.json (+ .md narrative).
+- Do NOT send email - only collect data and write findings to files
+- Output directory: ai/.tmp/pr-report/$DateFolder/
+- Write the manifest file at the end: ai/.tmp/pr-report/$DateFolder/manifest.json (include a
+  "subscribers" list of the github_logins you produced slices for)
+- If gh CLI fails, write a manifest with research_completed: false
+"@
+            } else {
+                @"
 You are running as a scheduled automation task. Slash commands and skills do not work in non-interactive mode.
 
 FIRST: Read ai/CLAUDE.md to understand project rules (especially: use pwsh not powershell, backslashes for file paths).
@@ -206,10 +253,31 @@ Key points:
 - Write the manifest file at the end: ai/.tmp/pr-report/$DateFolder/manifest.json
 - If gh CLI fails, write a manifest with research_completed: false
 "@
+            }
         }
         "email" {
             $CommandFile = ".claude/commands/pw-pr-email.md"
-            @"
+            if ($FanOut) {
+                @"
+You are running as a scheduled automation task. Slash commands and skills do not work in non-interactive mode.
+
+FIRST: Read ai/CLAUDE.md to understand project rules (especially: use pwsh not powershell, backslashes for file paths).
+
+THEN: Read $CommandFile and follow it to compose and send emails — in TEAM FAN-OUT MODE (see the "Fan-out mode" section).
+
+Key points:
+- The report date is $DateFolder
+- FAN-OUT: loop ai/.tmp/pr-report/$DateFolder/roster-active.json. For EACH subscriber, read
+  the shared team findings AND their personal slice
+  (ai/.tmp/pr-report/$DateFolder/subscribers/<github_login>.json) and send ONE email to their
+  email address, rendered at their level: "individual" = personal slice + self pile-up
+  warning; "team" = the full cross-team report.
+- If research files are missing entirely, send ONE error email to each subscriber per the command file
+- Use Gmail MCP tools to send the email(s)
+- Do NOT archive any inbox emails (this report has no inbox dependency)
+"@
+            } else {
+                @"
 You are running as a scheduled automation task. Slash commands and skills do not work in non-interactive mode.
 
 FIRST: Read ai/CLAUDE.md to understand project rules (especially: use pwsh not powershell, backslashes for file paths).
@@ -225,6 +293,7 @@ Key points:
 - Use Gmail MCP tools to send the email
 - Do NOT archive any inbox emails (this report has no inbox dependency)
 "@
+            }
         }
     }
 }
@@ -270,9 +339,16 @@ function Get-PhaseTools([string]$PhaseName) {
 }
 
 function Get-PhaseMaxTurns([string]$PhaseName) {
+    # In fan-out a single session covers every subscriber, so the budget scales with roster
+    # size: research builds N personal slices, email composes+sends N messages. Capped so a
+    # runaway roster can't request an unbounded turn budget.
     switch ($PhaseName) {
-        "research" { 80 }
-        "email"    { 30 }
+        "research" {
+            if ($FanOut) { [math]::Min(250, 80 + 12 * [math]::Max(1, $ActiveSubscriberCount)) } else { 80 }
+        }
+        "email" {
+            if ($FanOut) { [math]::Min(220, 30 + 15 * [math]::Max(1, $ActiveSubscriberCount)) } else { 30 }
+        }
     }
 }
 
@@ -281,6 +357,23 @@ function Get-PhaseMaxTurns([string]$PhaseName) {
 # ─────────────────────────────────────────────────────────────
 
 $PhasesToRun = if ($Phase -eq "both") { @("research", "email") } else { @($Phase) }
+
+# ─────────────────────────────────────────────────────────────
+# Fan-out: resolve the active roster (read-only; safe under -DryRun)
+# ─────────────────────────────────────────────────────────────
+
+$ActiveSubscribers = @()
+$ActiveSubscriberCount = 0
+if ($FanOut) {
+    . (Join-Path $PSScriptRoot 'PRReport\PRReportStore.ps1')
+    $StoreCheck = Test-PRReportStore
+    if (-not $StoreCheck.Ok) {
+        Write-Error ("Fan-out aborted — not the shared PRReport store: {0}" -f $StoreCheck.Reason)
+        exit 1
+    }
+    $ActiveSubscribers = @(Get-PRReportRoster -ActiveOnly)
+    $ActiveSubscriberCount = $ActiveSubscribers.Count
+}
 
 $TimeStamp = Get-Date -Format "HHmm"
 $LogDir = Join-Path $WorkDir "ai\.tmp\pr-report\$DateFolder"
@@ -294,8 +387,15 @@ if ($DryRun) {
     Write-Host "Would execute:" -ForegroundColor Cyan
     Write-Host "  Phase: $Phase"
     Write-Host "  Date: $DateFolder"
-    Write-Host "  GitHub user: $GitHubUser"
-    Write-Host "  Recipient: $Recipient"
+    if ($FanOut) {
+        Write-Host "  Mode: FAN-OUT (per-roster)" -ForegroundColor Cyan
+        Write-Host "  Store: $($StoreCheck.Path)"
+        Write-Host "  Active subscribers: $ActiveSubscriberCount"
+        $ActiveSubscribers | ForEach-Object { Write-Host ("    - {0,-26} {1,-14} {2}" -f $_.email, $_.github_login, $_.level) }
+    } else {
+        Write-Host "  GitHub user: $GitHubUser"
+        Write-Host "  Recipient: $Recipient"
+    }
     Write-Host "  Working directory: $WorkDir"
     Write-Host "  Git pull ai/: git pull origin master"
     Write-Host "  Git pull pwiz/: git pull origin master"
@@ -320,8 +420,22 @@ if (-not (Test-Path $LogDir)) {
     New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 }
 
+# Fan-out: no active subscribers => nothing to do. Snapshot the active roster for the phases.
+if ($FanOut) {
+    if ($ActiveSubscriberCount -eq 0) {
+        Write-Host "Fan-out: roster has no active subscribers — nothing to send. Exiting."
+        exit 0
+    }
+    $RosterSnapshot = Join-Path $LogDir "roster-active.json"
+    $ActiveSubscribers |
+        Select-Object email, github_login, level |
+        ConvertTo-Json -Depth 4 -AsArray |
+        Out-File -FilePath $RosterSnapshot -Encoding UTF8
+}
+
 $StartTime = Get-Date
-"[$StartTime] Starting Claude Code PR report (phase: $Phase)" | Out-File -FilePath $LogFile -Encoding UTF8
+$ModeLabel = if ($FanOut) { "fan-out, $ActiveSubscriberCount subscriber(s)" } else { "single: $Recipient" }
+"[$StartTime] Starting Claude Code PR report (phase: $Phase; $ModeLabel)" | Out-File -FilePath $LogFile -Encoding UTF8
 
 # Pull latest pwiz-ai (ai/) master
 "[$(Get-Date)] Pulling latest ai/ (pwiz-ai) master..." | Out-File -FilePath $LogFile -Append -Encoding UTF8

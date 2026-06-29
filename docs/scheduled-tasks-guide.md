@@ -14,7 +14,11 @@ This enables automated daily reports without manual intervention.
 
 **Common use — daily reports:** the daily consolidated report (nightly tests + exceptions + support) is the canonical working example of this setup. For the report's two-phase architecture, data flow, and turn-budget design, see [daily-report-guide.md](daily-report-guide.md).
 
-**Second example — PR & TODO activity report:** `ai/scripts/Invoke-PRReport.ps1` reuses the same two-phase pattern to produce a personal report on developer activity (PRs awaiting your review, stale PRs, author pile-up, stale TODOs, ready-to-complete TODOs). It runs `/pw-pr-research` then `/pw-pr-email` and writes findings to `ai/.tmp/pr-report/YYYY-MM-DD/`. Recommended schedule: **9:30 AM daily** (after the 8:05 AM daily report finishes). Default recipient is `brendanx@proteinms.net` since this is a personal management report, not a team broadcast.
+**Second example — PR & TODO activity report:** `ai/scripts/Invoke-PRReport.ps1` reuses the same two-phase pattern to produce a report on developer activity (PRs awaiting your review, stale PRs, author pile-up, stale TODOs, ready-to-complete TODOs). It runs `/pw-pr-research` then `/pw-pr-email` and writes findings to `ai/.tmp/pr-report/YYYY-MM-DD/`. Recommended schedule: **9:30 AM daily** (after the 8:05 AM daily report finishes).
+
+Two ways to run it:
+- **Single recipient** (legacy/default): one report to `-Recipient` (default `brendanx@proteinms.net`), focused on `-GitHubUser`.
+- **Team fan-out** (`-FanOut`): research runs **once**, then a single email session loops the shared **opt-in roster** and sends each subscriber a report customized to their GitHub login and reporting level (`individual` vs `team`). Teammates opt in with `/pw-pr-reporting on` — they run nothing locally; only this central host runs the task. Roster + mechanics: `ai/scripts/PRReport/README.md`. Schedule it with `pwsh -File '.../Invoke-PRReport.ps1' -FanOut -Schedule '9:30AM'` (registers the **"PR Report - Fanout"** task and removes the single-recipient tasks so a machine never runs both).
 
 **Note:** Slash commands (`/pw-daily`) and Skills don't work in `-p` mode. See [Non-Interactive Mode Limitations](#non-interactive-mode-limitations) for workarounds.
 
@@ -326,6 +330,8 @@ Get-ChildItem ai/.tmp/daily/*/*.log | Sort-Object LastWriteTime -Descending | Se
 
 ## Related
 
+- `ai/scripts/PRReport/README.md` - Team PR-report opt-in roster + `-FanOut` mechanics
+- `.claude/commands/pw-pr-reporting.md` - Opt in/out of the daily team PR & TODO email
 - `ai/scripts/Invoke-DailyReport.ps1` - The automation script (supports `-Phase research|email|both` and `-Schedule`)
 - `ai/docs/daily-report-guide.md` - Full daily report guide
 - `ai/docs/mcp/gmail.md` - Gmail MCP setup
