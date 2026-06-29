@@ -49,6 +49,16 @@ SUCCESS. Self-review (fresh-context Sonnet) findings addressed in commit
 8e04ae8bfb (version.ps1 -RepoPath mandatory; package.ps1 -Encoding utf8; wxs
 Files win-only note).
 
+2026-06-29: wired the per-commit "Osprey Windows .NET" config to publish the
+unsigned installers as Tier-C testing artifacts. tcbuild.bat now runs package.ps1
+after build+test (publishArtifacts service messages -> win-x64 ZIP + .msi; no
+server-side artifact-path config needed) and self-provisions the wix v5 tool +
+v5 UI extension if the agent lacks them. Verified GREEN: build 4068695 (#142, head
+8c13bd2191) publishes Osprey-26.1.1.180-win-x64.zip + .msi. NOTE: keep the wix
+self-provision (dotnet global tools are per-user, so a manual install only helps
+if the agent service runs as that user); revert only if agents are provisioned
+explicitly. Signing is a later CI phase (see TODO-release_process_unification).
+
 **TO WIRE UP (server-side, Brendan):**
 1. Create a TeamCity build config "Osprey Package" (or add a build step) that
    runs `pwiz_tools/Osprey/tcpackage.bat`, triggered on master and/or release
