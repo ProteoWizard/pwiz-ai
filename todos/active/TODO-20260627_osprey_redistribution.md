@@ -24,6 +24,36 @@ PR). Phase 5 (website) and Phase 6 (UI) remain future. Decisions taken:
   Osprey is its own .NET tool with its own sln / TC configs / versioning.
 - **Objective**: Give Osprey first-class redistribution: (1) a stand-alone download posted on skyline.ms, (2) a complete copy shipped inside the Skyline installation, and (3) groundwork toward running Osprey from the Skyline UI as the default DIA search engine. Near-term driver: replace EncyclopeDIA with Osprey on the skyline.ms home page, which requires a stand-alone Osprey install + a landing page. The ZIP/`.msi` this sprint produces should become the **canonical Osprey artifact** that downstream tools (e.g. Carafe) consume, replacing per-tool home-grown OspreySharp builds.
 
+## What we ship vs. what we build (TFM x platform)
+
+"net472", "net8.0", and "linux" are NOT three parallel installs -- they are two
+axes plus a self-contained/framework-dependent knob:
+- Runtime / TFM: net472 (.NET Framework, **Windows-only**) vs net8.0 (cross-platform).
+- Platform / RID: win-x64 vs linux-x64. (.NET Framework is Windows-only, so
+  net472 x Linux does not exist.)
+
+DISTRIBUTED (package.ps1): **net8.0 only, self-contained, two platforms**:
+- `Osprey-<ver>-win-x64.zip` + `.msi`   (net8.0 self-contained)
+- `Osprey-<ver>-linux-x64.zip`          (net8.0 self-contained)
+Self-contained means the .NET 8 runtime is bundled **inside** each artifact
+(~80 MB unpacked), so the user installs nothing else -- there is no separate
+"install .NET 8" step; the artifact IS Osprey + its runtime.
+
+BUILT/TESTED BUT NOT DISTRIBUTED: **net472**. It is a parity/test target (matches
+the Rust reference at 1e-9) but is NOT canonical -- it differs from net8.0
+byte-wise in cosmetic CLR float formatting. net8.0 is the canonical gated runtime.
+Shipping net8.0-self-contained-only keeps numerics canonical, stays cross-platform,
+and removes any "is the right runtime installed?" question. (A net472
+framework-dependent Windows build is possible and would be smaller -- .NET
+Framework is in-box on Windows -- but trades away canonical numerics +
+cross-platform; not worth it.)
+
+Skyline-bundling (Phase 4) note: Osprey's net472 target does NOT enable in-process
+hosting by Skyline (also net472). Osprey is an out-of-process EXE, and a net472
+process cannot load net8.0 in-process regardless. Bundling Osprey in Skyline =
+dropping the self-contained net8.0 build into the install tree (a second runtime
+alongside Skyline's), which is why Phase 4 carries the ~150 MB cost.
+
 ## Session log (2026-06-27 night)
 
 Delivered in pwiz PR **#4336** (branch `Skyline/work/20260627_osprey_redistribution`):
