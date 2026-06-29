@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260627_osprey_redistribution`
 - **Base**: `master` (pwiz); ai/ changes direct to ai master
 - **Created**: 2026-06-27
-- **Status**: In Progress
-- **PR**: (pending)
+- **Status**: Completed
+- **PR**: [#4336](https://github.com/ProteoWizard/pwiz/pull/4336) (merged 2026-06-29 as 9e2ffb07f2)
 - **Depends on**: the OspreySharp -> Osprey rename (pwiz PR #4335) landing first. DONE -- #4335 is on master (commit 1ca152c549); pwiz_tools/Osprey exists.
 
 ## Session scope (2026-06-27 night session, confirmed with Brendan)
@@ -23,6 +23,21 @@ PR). Phase 5 (website) and Phase 6 (UI) remain future. Decisions taken:
 - Packaging lives in a standalone `package.ps1` (NOT wired into Boost.Build/pwiz-bin);
   Osprey is its own .NET tool with its own sln / TC configs / versioning.
 - **Objective**: Give Osprey first-class redistribution: (1) a stand-alone download posted on skyline.ms, (2) a complete copy shipped inside the Skyline installation, and (3) groundwork toward running Osprey from the Skyline UI as the default DIA search engine. Near-term driver: replace EncyclopeDIA with Osprey on the skyline.ms home page, which requires a stand-alone Osprey install + a landing page. The ZIP/`.msi` this sprint produces should become the **canonical Osprey artifact** that downstream tools (e.g. Carafe) consume, replacing per-tool home-grown OspreySharp builds.
+
+### 2026-06-29 - Merged
+
+PR #4336 merged as commit 9e2ffb07f2. Shipped Phase 2 (self-contained net8.0
+ZIPs win-x64 + linux-x64) + Phase 3 (per-machine WiX v5 .msi) + version.ps1 +
+the per-commit "Osprey Windows .NET" config publishing the unsigned installers
+as Tier-C artifacts (tcbuild.bat self-provisions wix). Installers are UNSIGNED;
+CI signing, the monthly GitHub release, Phase 4 (Skyline bundling), Phase 5
+(website/landing page) and Phase 6 (UI) are deferred -- see
+TODO-release_process_unification for the broader release-coherence plan.
+Next priority: hand Mike the Osprey artifacts for Carafe adoption
+(ai/.tmp/osprey-carafe-adoption-plan.md) to replace his ad hoc OspreySharp
+installer build. The Osprey regression did not re-run on the final CI-plumbing
+commit but passed on the code-complete commit 8e04ae8bfb (since-diffs are
+tcbuild.bat only, output-neutral).
 
 ## What we ship vs. what we build (TFM x platform)
 
