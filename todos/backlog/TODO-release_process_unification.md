@@ -198,12 +198,28 @@ Why the new tools barely move the needle:
   too (optional, defense-in-depth) makes it ~11. **Order matters**: sign the exe
   (+own DLLs) first, package the zip AND msi from the signed files, then sign the
   msi.
+- **Single-exe tools are ~2; multi-exe suites scale with their exe count.** Osprey
+  is one exe -> 2 signatures. pwiz is a *suite*: a real install has ~18 first-party
+  `.exe` (msconvert, idconvert, mspicture, SeeMS, MSConvertGUI, ...). For a polished
+  install you sign all ~18 exes + the MSI ~= **~19 per release** (the tarball and
+  the MSI share the same signed exes; +1 for the MSI). BiblioSpec adds ~3-4 Blib
+  exes (BlibBuild, BlibFilter, BlibToMs2[, BlibSearch]) -- counted ONCE if they
+  ship inside the pwiz install, don't double-count.
+- **MOTW nuance (what "signed" actually buys per path):** signing the **.msi**
+  removes the install-time SmartScreen warning, and MSI-installed exes carry no
+  Mark-of-the-Web so they run without warning even if individually unsigned. BUT
+  the **tarball/zip** path: extracted exes DO carry MOTW -> unsigned ones warn when
+  launched; and AppLocker/WDAC (pharma IT) reject unsigned exes outright. So the
+  MSI signature is the floor; signing the exes is needed for the tarball path and
+  managed environments -- i.e. sign all ~18 for a clean both-paths story.
 - **Only RELEASES sign, not commits.** Tier-C per-commit "testing" artifacts are
   unsigned (that is what makes "official == signed" meaningful), so signature cost
   is tied to the ~monthly promote (12 events/year/tool), not CI volume.
-- Rough yearly: Skyline ~650-700; pwiz ~60-120; BiblioSpec ~60; Osprey ~25
-  (min, 2/release x 12) to ~130 (with own DLLs). Total ~800-1000/year -- at/near
-  the 1000/year allocation, trivially topped up at $300/1000.
+- Rough yearly: Skyline ~650-700; **pwiz ~230** (~19/release x 12, all exes + MSI);
+  BiblioSpec ~36-48; Osprey ~24 (min) to ~130 (with own DLLs). Total **~950-1100/
+  year** -- now bumping the 1000/year allocation, so plan one $300 top-up (-> 1350
+  or 2000/yr). Still trivial cost; the suite exe count, not the release count, is
+  what moved it.
 
 The signature-count knobs (impact order): (1) sign installer + primary exe(s), NOT
 every DLL in a bundle -- the one lever that could blow the budget up; (2) sign only
