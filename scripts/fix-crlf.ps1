@@ -23,7 +23,7 @@ function Test-BinaryFile {
 
   # Check common binary file extensions
   $binaryExtensions = @('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.zip',
-                        '.gz', '.tar', '.skyd', '.mzml', '.mzxml', '.raw',
+                        '.7z', '.gz', '.tar', '.skyd', '.mzml', '.mzxml', '.raw',
                         '.wiff', '.dll', '.exe', '.so', '.dylib', '.pdf')
   $ext = [System.IO.Path]::GetExtension($filePath).ToLower()
   if ($binaryExtensions -contains $ext) {
