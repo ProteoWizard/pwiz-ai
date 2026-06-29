@@ -37,10 +37,13 @@
         skyclaude            # use $PwizLspDefault (multi-checkout) or 'pwiz' (single-clone)
 
     Optionally pin the terminal tab title for the session (off by default, so
-    Claude Code's auto topic-summary title is preserved unless you opt in):
+    Claude Code's auto topic-summary title is preserved unless you opt in). A
+    pinned title is "<PR> <checkout> <branch>" for the active checkout -- the
+    open PR number (if any), the checkout name, and the git branch, space-
+    separated, dropping any field that can't be resolved:
 
-        skyclaude IMoffset -PinTab              # tab shows 'IMoffset' all session
-        skyclaude IMoffset -TabTitle 'IM bug'   # tab shows a custom string
+        skyclaude IMoffset -PinTab              # tab e.g. '4321 IMoffset im-fix'
+        skyclaude IMoffset -TabTitle 'IM bug'   # tab shows a custom string instead
 
     Pinning also suppresses Claude Code's own title updates for the session
     (CLAUDE_CODE_DISABLE_TERMINAL_TITLE); the prior title and env var are
@@ -66,7 +69,8 @@ function Start-PwizClaude {
         [Parameter(Position = 0)]
         [string] $Checkout,
 
-        # Pin the terminal tab title to the checkout name for this session.
+        # Pin the terminal tab title to "<PR> <checkout> <branch>" for this
+        # session (open PR number if any, checkout name, git branch).
         # Defaults to $PwizClaudePinTab (set in your $PROFILE) when not passed;
         # pass -PinTab to force on or -PinTab:$false to force off for one session.
         # When neither this, -TabTitle, nor the preference applies, Claude Code
@@ -121,10 +125,32 @@ function Start-PwizClaude {
     $pinnedTitle =
         if ($TabTitle) { $TabTitle }
         elseif ($pin) {
-            # Use the checkout name; fall back to the resolved workspace's leaf
-            # so a no-arg launch (via $PwizLspDefault) still gets a sensible title.
-            if ($Checkout) { $Checkout }
-            elseif ($env:PWIZ_LSP_DIR) { Split-Path (Split-Path $env:PWIZ_LSP_DIR -Parent) -Leaf }
+            # Build "<PR> <checkout> <branch>" for the active checkout, dropping
+            # any field we can't resolve. The checkout dir is the parent of
+            # PWIZ_LSP_DIR (which is <checkout>\pwiz_tools); fall back to
+            # <root>\<checkout> when an explicit name was passed.
+            $checkoutDir =
+                if ($Checkout) { Join-Path $root $Checkout }
+                elseif ($env:PWIZ_LSP_DIR) { Split-Path $env:PWIZ_LSP_DIR -Parent }
+                else { $null }
+            if ($checkoutDir) {
+                $checkoutName = Split-Path $checkoutDir -Leaf
+                # Current branch of the checkout (silent if it isn't a git repo).
+                $branch = if (Test-Path -LiteralPath $checkoutDir) {
+                    git -C $checkoutDir rev-parse --abbrev-ref HEAD 2>$null
+                } else { $null }
+                # Open PR for that branch, if gh finds one. gh keys off the
+                # working directory's repo, so query from inside the checkout.
+                # One network call -- adds a beat to launch; failures are silent.
+                $pr = $null
+                if ($branch -and (Get-Command gh -ErrorAction SilentlyContinue)) {
+                    Push-Location -LiteralPath $checkoutDir
+                    try { $pr = gh pr view --json number --jq '.number' 2>$null }
+                    catch { $pr = $null }
+                    finally { Pop-Location }
+                }
+                (@($pr, $checkoutName, $branch) | Where-Object { $_ }) -join ' '
+            }
             else { $null }
         }
         else { $null }
