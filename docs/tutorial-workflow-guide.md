@@ -98,6 +98,9 @@ skill.
 
 ## Related docs
 
+- [`webinar-to-tutorial-draft-guide.md`](webinar-to-tutorial-draft-guide.md) —
+  converting a webinar into a draft tutorial whose test drives Skyline through
+  the connector (`McpTutorialTest`) and generates the screenshots.
 - [`tutorial-doc-style-guide.md`](tutorial-doc-style-guide.md) — HTML
   conventions (authoritative).
 - [`screenshot-update-workflow.md`](screenshot-update-workflow.md) — diff

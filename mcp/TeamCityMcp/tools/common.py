@@ -240,24 +240,29 @@ def parse_build_xml(build_elem: ET.Element) -> dict:
 
 def format_build_summary(build: dict) -> str:
     """Format a build dict into a readable summary line."""
-    parts = [f"Build #{build.get('number', '?')} (ID: {build.get('id', '?')})"]
+    parts = [f"Build #{build.get('number') or '?'} (ID: {build.get('id') or '?'})"]
 
-    status = build.get("status", "")
-    state = build.get("state", "")
+    # Queued builds have no status/number/agent/revision yet; guard every field
+    # against None so the join never raises (and queued shows as QUEUED, not a
+    # crash that reads like "no builds found").
+    status = build.get("status") or ""
+    state = build.get("state") or ""
     if state == "running":
         pct = build.get("percentageComplete", "?")
         stage = build.get("currentStageText", "")
         parts.append(f"RUNNING ({pct}%)")
         if stage:
             parts.append(f"- {stage}")
+    elif state == "queued":
+        parts.append("QUEUED")
     else:
-        parts.append(status)
+        parts.append(status or state or "unknown")
 
-    commit = build.get("commit", "")
+    commit = build.get("commit") or ""
     if commit:
         parts.append(f"[{commit[:8]}]")
 
-    agent = build.get("agent", "")
+    agent = build.get("agent") or ""
     if agent:
         parts.append(f"on {agent}")
 

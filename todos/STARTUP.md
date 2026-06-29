@@ -46,7 +46,7 @@ Follow the tasks in the TODO file. Update the TODO with every commit.
 
 Build and test your changes yourself before each commit using the wrapper
 scripts (see Key Principle 5). For Skyline the build/test scripts live in
-`ai/scripts/Skyline/`; for OspreySharp see `ai/scripts/OspreySharp/`
+`ai/scripts/Skyline/`; for Osprey see `ai/scripts/Osprey/`
 (`PRE-COMMIT.md` documents the full pre-commit gate).
 
 ## TODO Locations
@@ -62,7 +62,7 @@ scripts (see Key Principle 5). For Skyline the build/test scripts live in
 2. **Follow CRITICAL-RULES.md** - No async/await, resource strings only, CRLF line endings
 3. **Use DRY principles** - Extract helpers when duplication exceeds 3 lines
 4. **Translation-proof testing** - Never use English text literals in assertions
-5. **Build and test your own changes** - Run the wrapper scripts before committing: `ai/scripts/Skyline/Build-Skyline.ps1 -RunTests` for Skyline, `ai/scripts/OspreySharp/Build-OspreySharp.ps1 -RunTests -RunInspection` for OspreySharp. These exist so an agent can self-verify; do not ask the developer to build what you can run yourself. Only fall back to asking if the build environment is genuinely unavailable.
+5. **Build and test your own changes** - Run the wrapper scripts before committing: `ai/scripts/Skyline/Build-Skyline.ps1 -RunTests` for Skyline, `ai/scripts/Osprey/Build-Osprey.ps1 -RunTests -RunInspection` for Osprey. These exist so an agent can self-verify; do not ask the developer to build what you can run yourself. Only fall back to asking if the build environment is genuinely unavailable.
 
 ## Need More Detail?
 

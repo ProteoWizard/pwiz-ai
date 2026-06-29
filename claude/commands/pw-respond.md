@@ -24,8 +24,8 @@ commit, then reply to and resolve each addressed thread on GitHub.
 
 1. Apply the agreed fixes.
 2. Run the project's pre-commit gate (build + tests + inspection). For
-   OspreySharp this is
-   `pwsh -File ./ai/scripts/OspreySharp/Build-OspreySharp.ps1 -RunInspection -RunTests`;
+   Osprey this is
+   `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -RunInspection -RunTests`;
    for Skyline use the gate documented in `ai/CLAUDE.md`.
 3. Commit. **NEVER amend after review** — always a new commit. Use a
    message like:

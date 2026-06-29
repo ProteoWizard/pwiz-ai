@@ -1,7 +1,7 @@
 # Osprey Cross-Implementation Validation Guide
 
-Catalog of the Rust ↔ OspreySharp (C#) parity-testing tooling under
-`ai/scripts/OspreySharp/`, plus the standard flow for running it.
+Catalog of the Rust ↔ Osprey (C#) parity-testing tooling under
+`ai/scripts/Osprey/`, plus the standard flow for running it.
 
 This guide is **the inventory**. For the conceptual foundation — env var
 reference, HPC split CLI flags (`--join-at-pass`, `--no-join`,
@@ -20,7 +20,7 @@ The scripts catalogued below automate each checkpoint in that bisection.
 
 ## Script categories
 
-The OspreySharp script directory has three flavors of tool:
+The Osprey script directory has three flavors of tool:
 
 - **Validation gates** (`Compare-*.ps1`) — binary pass/fail per stage or
   per dump. Used as both bisection probes and CI-style gates during a port.
@@ -36,11 +36,11 @@ The OspreySharp script directory has three flavors of tool:
 ## Standard flow
 
 1. **Build both implementations.** Rust via
-   [`Build-OspreyRust.ps1`](../scripts/OspreySharp/Build-OspreyRust.ps1);
-   C# via [`Build-OspreySharp.ps1`](../scripts/OspreySharp/Build-OspreySharp.ps1).
+   [`Build-OspreyRust.ps1`](../scripts/Osprey/Build-OspreyRust.ps1);
+   C# via [`Build-Osprey.ps1`](../scripts/Osprey/Build-Osprey.ps1).
    Profile output paths in `Compare-*` scripts assume the release builds at
    their default locations (sibling `osprey/target/release/osprey.exe` and
-   the OspreySharp solution output).
+   the Osprey solution output).
 2. **Generate parquet inputs** for the stage under test via
    `Generate-AllScoresParquet.ps1` (Stage 1–4 fan-out exit) or by running
    the upstream regression script that froze them.
@@ -90,15 +90,15 @@ The OspreySharp script directory has three flavors of tool:
 | Script | When to use |
 |--------|-------------|
 | `Test-Regression.ps1` | Full five-stage walk: build both, isolated dumps + comparisons per stage, freeze each stage as input to the next. Exit 0 only if every stage passes. The "is this branch clean?" command. |
-| `Test-Snapshot.ps1` | Same-impl regression against a frozen snapshot baseline. Two modes: compare (fail on mismatch) or `-CreateSnapshot` to capture a new baseline. Used during the OspreySharp pipeline-task rearchitecture where Rust output is the moving target. |
+| `Test-Snapshot.ps1` | Same-impl regression against a frozen snapshot baseline. Two modes: compare (fail on mismatch) or `-CreateSnapshot` to capture a new baseline. Used during the Osprey pipeline-task rearchitecture where Rust output is the moving target. |
 | `Test-Features.ps1` | Single-file Stage 1–4 feature-parity quick check. Compares all 21 PIN features at default `1e-6`; reports wall-clock timings. Stellar ~2 min, Astral ~18 min — fastest gate during active debugging. |
 
 ## Measurement tools
 
 | Script | Output |
 |--------|--------|
-| `Bench-Scoring.ps1` | Ground-truth Stage 1–4 benchmark — median timing + peak RSS across Rust upstream, fork Rust, and OspreySharp. Optional `-BaselineBin -BaselineLabel` for A/B. |
-| `Profile-OspreySharp.ps1` | OspreySharp profile via dotTrace CLI. Captures `.dtp` snapshot, generates XML report, prints top hot spots by own/total time. Stage gates: Calibration (1–3), Scoring (1–4), or Full. |
+| `Bench-Scoring.ps1` | Ground-truth Stage 1–4 benchmark — median timing + peak RSS across Rust upstream, fork Rust, and Osprey (C#). Optional `-BaselineBin -BaselineLabel` for A/B. |
+| `Profile-Osprey.ps1` | Osprey profile via dotTrace CLI. Captures `.dtp` snapshot, generates XML report, prints top hot spots by own/total time. Stage gates: Calibration (1–3), Scoring (1–4), or Full. |
 
 ## Helpers (used by the gates above)
 
@@ -120,12 +120,12 @@ The OspreySharp script directory has three flavors of tool:
 | Confirm Stage 6 didn't drift | `Compare-Stage6-Crossimpl.ps1` |
 | Bisect a single divergent feature | `Compare-Diagnostic.ps1` (Stages 1–4), then `Compare-Percolator.ps1` (Stage 5), then a `Compare-Stage6-*` script |
 | Detect a parquet column drift (any stage) | `Diff-Parquet.ps1` directly |
-| Tune perf, not parity | `Bench-Scoring.ps1` for timing, `Profile-OspreySharp.ps1` for hot spots |
+| Tune perf, not parity | `Bench-Scoring.ps1` for timing, `Profile-Osprey.ps1` for hot spots |
 | Capture a snapshot of current output to gate future changes | `Test-Snapshot.ps1 -CreateSnapshot` |
 
 ## Skill integration
 
 The `osprey-development` skill auto-loads when working on Rust osprey
-(`maccoss/osprey`), OspreySharp, or cross-impl divergence. It pulls in
+(`maccoss/osprey`), Osprey, or cross-impl divergence. It pulls in
 [`osprey-development-guide.md`](osprey-development-guide.md); this guide
 is the operational companion to that conceptual reference.

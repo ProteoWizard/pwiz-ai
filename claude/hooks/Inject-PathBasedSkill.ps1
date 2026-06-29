@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 
 # PreToolUse hook: when Claude is about to Edit/Write/MultiEdit a file under
-# pwiz/pwiz_tools/Skyline or pwiz/pwiz_tools/OspreySharp, inject the
+# pwiz/pwiz_tools/Skyline or pwiz/pwiz_tools/Osprey, inject the
 # corresponding skill (skyline-development or osprey-development) SKILL.md
 # content into Claude's context. Skill descriptions alone are advisory; this
 # hook makes the load deterministic at the moment Claude is about to change
@@ -32,9 +32,9 @@ $treeLabel = $null
 if ($norm -match '(?i)/pwiz/pwiz_tools/Skyline/') {
     $skillSlug = 'skyline-development'
     $treeLabel = 'pwiz/pwiz_tools/Skyline'
-} elseif ($norm -match '(?i)/pwiz/pwiz_tools/OspreySharp/') {
+} elseif ($norm -match '(?i)/pwiz/pwiz_tools/Osprey/') {
     $skillSlug = 'osprey-development'
-    $treeLabel = 'pwiz/pwiz_tools/OspreySharp'
+    $treeLabel = 'pwiz/pwiz_tools/Osprey'
 }
 
 if (-not $skillSlug) { exit 0 }

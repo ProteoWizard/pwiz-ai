@@ -790,14 +790,14 @@ C++ codebases. Skyline (~900 KLOC of C#) is exactly that.
 The primary install for nearly every developer:
 
 - **Microsoft.CodeAnalysis.LanguageServer** (Roslyn LSP) for all C# under
-  `pwiz_tools/` (Skyline, OspreySharp, AutoQC, SkylineBatch, Shared, etc.).
+  `pwiz_tools/` (Skyline, Osprey, AutoQC, SkylineBatch, Shared, etc.).
   Handles both .NET Framework 4.7.2 and modern .NET in one workspace.
 
 Optional, only for the small number of developers actively working on the
 Rust `maccoss/osprey` implementation:
 
 - **rust-analyzer** for `C:\proj\osprey`. With the team consolidating on
-  OspreySharp (C#), this path is shrinking. Skip the Rust steps unless the
+  Osprey (C#), this path is shrinking. Skip the Rust steps unless the
   developer explicitly works on the Rust side.
 
 > **For LLM assistants:** Offer the C# (Roslyn LSP) setup. It is a meaningful
@@ -977,11 +977,11 @@ contains `pwiz_tools` directly, so that segment lives inside the `:-` default.
 **Memory pressure.** Roslyn LSP on the full pwiz_tools workspace can sit at
 2-3 GB resident. If that becomes a problem, `/plugin disable csharp-lsp@pwiz-lsp`
 and fall back to grep until the LSP is needed again. A future iteration could
-narrow `workspaceFolder` to just `Skyline/` or just `OspreySharp/`.
+narrow `workspaceFolder` to just `Skyline/` or just `Osprey/`.
 
 **Optional: Rust LSP for maccoss/osprey work.** Only if the developer is
 actively working on the Rust `osprey` implementation (a shrinking population
-as the team consolidates on OspreySharp). The setup:
+as the team consolidates on Osprey). The setup:
 
 ```powershell
 # In a terminal

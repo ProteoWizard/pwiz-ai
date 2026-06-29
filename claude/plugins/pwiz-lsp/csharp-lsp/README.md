@@ -9,7 +9,7 @@ The previous design used `csharp-ls` (community Roslyn-based server). It cannot
 load .NET Framework 4.7.2 projects because it only discovers .NET SDK MSBuild
 instances and never finds the Visual Studio MSBuild needed for .NET Framework
 targets. Confirmed empirically: csharp-ls 0.24.0 fails on Skyline.sln, AutoQC.sln,
-and SkylineBatch.sln (all .NET Framework 4.7.2). OspreySharp.sln (.NET 8) was the
+and SkylineBatch.sln (all .NET Framework 4.7.2). Osprey.sln (.NET 8) was the
 only pwiz solution it could load.
 
 Microsoft.CodeAnalysis.LanguageServer bundles both `BuildHost-net472` and
@@ -56,7 +56,7 @@ gets indexed is chosen by `PWIZ_LSP_DIR` — see
 The server indexes:
 
 - `Skyline/` (Skyline.sln, ~900 KLOC of C#)
-- `OspreySharp/` (.NET 8 port of osprey)
+- `Osprey/` (.NET 8 port of osprey)
 - `Skyline/Executables/AutoQC/`, `SkylineBatch/`, etc.
 - `Shared/` (CommonUtil, PanoramaClient, etc.)
 

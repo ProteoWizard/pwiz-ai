@@ -357,7 +357,7 @@ Claude Code should recognize it's in debugging mode when:
 A distinct class of debugging problem arises when **two implementations are
 supposed to produce identical output but don't**. Examples:
 
-- Porting Rust code to C# (OspreySharp vs Osprey) and trying to match results
+- Porting Rust code to C# (Osprey vs Rust osprey) and trying to match results
 - Refactoring a Skyline module and comparing output against the old version
 - Comparing a new optimized algorithm against a reference slow implementation
 - Validating a GPU or SIMD port against a scalar baseline
@@ -403,7 +403,7 @@ diverge — and every downstream computation inherits that divergence. Comparing
 anything downstream of the first disagreement is meaningless: the two
 implementations are operating on different data.
 
-**Example from OspreySharp vs Osprey:**
+**Example from Osprey vs Rust osprey:**
 
 The pipeline has these stages:
 
