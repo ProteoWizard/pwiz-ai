@@ -4,7 +4,7 @@
 - **Branch**: (to be created when work starts)
 - **Base**: `master` (pwiz); ai/ changes direct to ai master
 - **Created**: (pending)
-- **Status**: Backlog (FIRST DRAFT for review)
+- **Status**: Backlog (DRAFT for review; updated 2026-06-29 with the signing-budget detail)
 - **PR**: (pending)
 - **Objective**: Reconcile ProteoWizard/pwiz's ad hoc per-tool build-and-release
   flavors into ONE coherent release process that (1) produces a directly usable,
@@ -49,11 +49,12 @@ What is already solved and should be built upon, not redone:
 - **The `B` digit already encodes the channel** for the Skyline family
   (0=release, 1=daily, 9=feature-complete) -- the version is itself a routing key.
 - **DigiCert KeyLocker is already in use** (cloud HSM, no local private key since
-  the last renewal; cert expires 2026-02-28... see note). The signing primitive
-  lives in `pwiz_tools/Skyline/SignAfterPublish.bat`:
+  the last renewal; 3-year cert, expires 2027-02-28). The signing primitive lives
+  in `pwiz_tools/Skyline/SignAfterPublish.bat`:
   `signtool sign /csp "DigiCert Signing Manager KSP" /kc <key> /f <crt> /tr <ts> ...`
-  plus `mage -update` for ClickOnce manifests. The KeyLocker auth + key alias
-  live only on release machines today.
+  plus `mage -update` for ClickOnce manifests. The KeyLocker auth + key alias live
+  only on release machines today. Signatures are metered + cheap -- see "Signing
+  budget and signature accounting" below.
 
 ## Goals
 
@@ -154,6 +155,62 @@ definition of "official."**
 - **Security posture decision** (below): putting KeyLocker auth on a shared
   TeamCity agent lets it sign anything unattended.
 
+## Signing budget and signature accounting
+
+Cost is not a constraint, but Matt wants the details. KeyLocker meters per
+SIGNING OPERATION (each `signtool` / `mage` call), not per release -- and
+ClickOnce burns several per Publish, so **1 signature != 1 release**.
+
+The cert and meter (KeyLocker Order 637015839 / `key_637015839`):
+- 3-year DigiCert code-signing cert, ~$2000, 1000 signatures/year (3000 allocated
+  over the term), expires 2027-02-28.
+- Consumed **1549 / 3000** as of 2026-06-29 (since the Feb-2024 KeyLocker move) ->
+  ~660/year, matching the ~650/year Skyline-alone estimate.
+- Top-up: +1000 signatures = **$300**, purchasable in CertCentral as needed. A
+  full extra 1000/year for each of pwiz + BiblioSpec + Osprey is ~$900/year worst
+  case; realistically one $300 top-up covers all three for years.
+- KeyLocker (our tier; we do NOT have Software Trust Manager) exposes only the
+  aggregate consumed/allocated counter -- there is no per-event signing audit log
+  in the UI (the Account Manager "Audit logs" are admin events, not signings).
+  Measure per-publish cost by the **counter delta**: note Consumed, do one publish,
+  refresh, read the increment. (Brendan to capture this on the next release.)
+
+Per-release math (Skyline, the dominant consumer):
+- `SignAfterPublish.bat` does 3 signing ops/run: `signtool` on `Skyline.exe`,
+  `mage -update` on `.exe.manifest`, `mage -update` on `.application`.
+- The VS "Sign the ClickOnce manifests" checkbox (`SignManifests=true`) is ALSO
+  required -- Brendan verified it is load-bearing for a smooth ClickOnce install,
+  NOT redundant with the mage steps -- adding ~2 manifest signings during publish.
+  So a single Publish is ~5 ops (exact count TBD via the counter delta).
+- A Skyline release = 2 Publish clicks (web ClickOnce + ZIP ClickOnce) ~= 10 ops,
+  plus ~5 per test-location publish. (Skyline `.msi` is currently NOT signed, same
+  as the pwiz `.msi`; the unified model adds MSI signing.)
+
+Why the new tools barely move the needle:
+- **Sign your own files + the installer, NOT the whole bundle.** A self-contained
+  net8.0 publish is ~200 files but ~95% are Microsoft/third-party DLLs already
+  vendor-signed. Concretely, an **Osprey** official release set costs as few as
+  **2 signatures**: `Osprey.exe` (1) + the `win-x64.msi` (1). The `win-x64.zip`
+  rides on the already-signed exe at no extra cost (a zip is not a signable PE, so
+  you sign its CONTENTS -- the same exe -- before zipping), and the `linux-x64.zip`
+  uses no Authenticode (0; Linux integrity, if wanted, is a separate GPG/sigstore
+  signature, not a KeyLocker op). Signing the ~9 `Osprey.*` / `PortableUtil` DLLs
+  too (optional, defense-in-depth) makes it ~11. **Order matters**: sign the exe
+  (+own DLLs) first, package the zip AND msi from the signed files, then sign the
+  msi.
+- **Only RELEASES sign, not commits.** Tier-C per-commit "testing" artifacts are
+  unsigned (that is what makes "official == signed" meaningful), so signature cost
+  is tied to the ~monthly promote (12 events/year/tool), not CI volume.
+- Rough yearly: Skyline ~650-700; pwiz ~60-120; BiblioSpec ~60; Osprey ~25
+  (min, 2/release x 12) to ~130 (with own DLLs). Total ~800-1000/year -- at/near
+  the 1000/year allocation, trivially topped up at $300/1000.
+
+The signature-count knobs (impact order): (1) sign installer + primary exe(s), NOT
+every DLL in a bundle -- the one lever that could blow the budget up; (2) sign only
+the monthly promote, never Tier-C/per-commit; (3) avoid redundant re-signing where
+the deployment allows -- which does NOT apply to the ClickOnce manifest re-sign
+(required) but DOES mean a shared signed exe serves both the zip and the msi.
+
 ### Versioning note (one drift risk to fix)
 
 Osprey is the only family member with TWO version computations: `Osprey/Jamfile.jam`
@@ -234,11 +291,13 @@ version.
 
 ## Open questions / coordination
 
-- **Cert renewal**: the doc references a DigiCert cert expiring 2026-02-28; confirm
-  the exact date and renewal plan (timestamping protects already-signed archives
-  regardless).
+- **Cert / signature cost (RESOLVED)**: 3-year DigiCert cert, ~$2000, 1000 sigs/yr
+  (3000 allocated), expires 2027-02-28; +1000 sigs = $300; currently 1549/3000
+  consumed. Cost is not a constraint -- see "Signing budget". Timestamping protects
+  already-signed archives past expiry regardless.
 - **KeyLocker for CI**: is the credential per-release-machine or one account
-  credential that can be scoped onto a TeamCity agent?
+  credential that can be scoped onto a TeamCity agent? (Determines whether CI
+  signing is "enroll the agent" or "scope a new credential".)
 - **Matt**: agreement on monthly cadence, GitHub-as-archive, demoting AWS/commit
   builds to "unofficial testing," and propagating pwiz to the monthly release point.
 - **Docker**: confirm DockerHub retention concerns; decide ghcr.io mirror +
