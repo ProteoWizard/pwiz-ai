@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20251225_SpectrumFilterParser` (PR #4115)
 - **Owner**: Nick (precision-filtering subsystem)
 - **Related**: [[TODO-20260219_precision_filtering]] — same work, merged into this branch.
-- **Status**: **Proposed fix implemented and verified by Brian — for Nick's review.**
+- **Status**: **COMPLETED — merged in PR #4115 (2026-06-24).** Root cause was a CI gap (TeamCity bt209 never ran `CommonTest.dll`, hiding two long-red tests); the gap was fixed separately and all three fixes shipped. Nick reviewed and merged, settling the two "your call on the layer" design notes below as accepted-as-implemented.
 
 ## Summary
 
