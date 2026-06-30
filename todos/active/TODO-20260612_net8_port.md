@@ -3,6 +3,73 @@
 Branch: `Skyline/work/20260612_net8_port` (off `master`)
 Worktree: `C:\dev\pwiz-net8\`
 
+## The multi-target conversion pattern (proven on PortableUtil + CommonUtil)
+
+The Skyline tree is large but the conversion of each csproj follows a repeatable
+template. **Multi-target `net472;net8.0-windows`** — net472 keeps the legacy
+Skyline build path working unchanged; net8.0-windows is the new path.
+
+Template csproj (drop the legacy 600-line XML, replace with ~40 lines):
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <ProjectGuid>{...}</ProjectGuid>                 <!-- preserve from legacy -->
+    <TargetFrameworks>net472;net8.0-windows</TargetFrameworks>
+    <Platforms>AnyCPU;x64</Platforms>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>pwiz.X</RootNamespace>
+    <AssemblyName>pwiz.X</AssemblyName>
+    <UseWindowsForms>true</UseWindowsForms>           <!-- if WinForms used -->
+    <Company>University of Washington</Company>
+    <Copyright>Copyright (c) University of Washington 2026</Copyright>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>  <!-- AssemblyInfo.cs already exists -->
+    <GenerateResourceUsePreserializedResources>true</GenerateResourceUsePreserializedResources>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- both targets -->
+    <PackageReference Include="System.Resources.Extensions" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- net472-only assemblies the SDK doesn't add by default -->
+    <Reference Include="System.Net.Http" Condition="'$(TargetFramework)' == 'net472'" />
+    <Reference Include="System.Web" Condition="'$(TargetFramework)' == 'net472'" />
+    <Reference Include="System.Security" Condition="'$(TargetFramework)' == 'net472'" />
+    <!-- HintPath legacy DLLs, kept net472-only so the existing path uses
+         exactly the binaries it always has -->
+    <Reference Include="JetBrains.Annotations" Condition="'$(TargetFramework)' == 'net472'">
+      <HintPath>..\Lib\JetBrains.Annotations.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
+    <!-- net8 equivalents via NuGet -->
+    <PackageReference Include="JetBrains.Annotations" Version="2024.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dep\Dep.csproj" />
+  </ItemGroup>
+</Project>
+```
+
+**Source-code adjustments commonly needed:**
+
+1. **`.Reverse()` on arrays** — net8 prefers `Span<T>.Reverse()` (void, in-place)
+   over LINQ `Enumerable.Reverse()`. Use explicit `Enumerable.Reverse(arr)` so
+   the same source picks the right overload on both targets.
+2. **VS-tooling assemblies** (`Microsoft.ConcurrencyVisualizer.Markers`) — wrap
+   in `#if NET472` blocks; net8 path becomes a no-op.
+3. **Native deps with `$(PLATFORM)` substitution** (System.Data.SQLite) — switch
+   to `Microsoft.Data.Sqlite` or `System.Data.SQLite.Core` NuGet package on net8.
+4. **NHibernate** — versions ≥5.5 support net6+. Multi-target by package version
+   if legacy needed.
+
 ## Status (2026-06-30)
 
 ### Done
@@ -64,18 +131,51 @@ That's ~30 of ~80 members — the TestData-most-frequent slice + supporting type
   accessors, DiaPASEF config inference, lockmass refining wrapping, SONAR
   helpers. All map mechanically using the same techniques shown in the sandbox.
 
-### Recommended next steps
+### Recommended next steps (multi-session friendly)
 
-1. Decide between (a) converting Skyline.csproj + Shared/* tree to net8 in
-   one branch (multi-week effort) or (b) multi-targeting ProteowizardWrapper
-   net48+net8 with conditional compilation so Skyline stays on net48 while the
-   data layer is parallel-tested. The committed sandbox keeps option (b) open
-   without preventing option (a).
-2. Continue extending the sandbox MsDataFileImpl with the remaining ~50
-   members so the refactored surface fully covers Skyline's call sites. This
-   work is mechanical and reviewable independent of the csproj cascade.
-3. When ready, the actual swap is one csproj edit: have Skyline reference the
-   sandbox project (when on net8) instead of the legacy ProteowizardWrapper.
+**The proven path forward is multi-targeting `net472;net8.0-windows`.** Decision
+is made: legacy Skyline.sln keeps building net472 unchanged while the same
+sources also build net8.0-windows. When the cascade reaches Skyline.csproj
+itself, both Skyline.exe and Skyline.Net8.exe can ship in parallel until net8
+is fully validated, then net472 retires.
+
+**Conversion order (each step is one commit; ~1 hour each for leaves, scaling up):**
+
+1. ✅ PortableUtil — already SDK-style net472;net8.0 (done before this branch)
+2. ✅ CommonUtil — done in this branch
+3. **Next: MSGraph** (~30 .cs files, leaf dep of Common)
+4. **Then: ZedGraph fork** (`pwiz_tools/Shared/zedgraph/`) — large but
+   well-isolated; ZedGraph 6+ supports net6+
+5. **Then: Common** (206 .cs files, depends on CommonUtil + MSGraph + ZedGraph,
+   + NHibernate which needs ≥5.5 for net6+)
+6. **Then: ProteomeDb** (SQLite proteome layer, no pwiz dep)
+7. **Then: CommonFileDialogs, PanoramaClient, CommonMsData** (parallel-ish)
+8. **Then: ProteowizardWrapper** — convert csproj AND retarget MsDataFileImpl
+   to use pwiz-sharp instead of pwiz.CLI. The
+   `pwiz_tools/Shared/ProteowizardWrapper.PwizSharp/` sandbox already proves
+   ~30 of ~80 methods work; merge those ports into the real
+   `ProteowizardWrapper/MsDataFileImpl.cs` under `#if NET8_0_OR_GREATER` and
+   port the remaining ~50 using the same techniques (`pwiz.CLI.msdata` →
+   `Pwiz.Data.MsData`, `pwiz.CLI.analysis` → `Pwiz.Data.MsData.Analysis`,
+   `pwiz.CLI.cv` → `Pwiz.Data.Common.Cv`).
+9. **Then: BiblioSpec wrapper** — retarget to pwiz-sharp's BiblioSpec port
+10. **Then: TestUtil** (test infrastructure)
+11. **Then: Skyline.csproj** — the monolith (7,536 lines legacy → ~80 SDK)
+12. **Then: TestData.csproj** + run TestData tests
+13. Repeat for other Test* projects, SkylineCmd, SkylineTester, Executables/*
+
+**At each step:**
+- Build both `net472` and `net8.0-windows` targets, both must be green
+- Run any project-local tests (if present)
+- Commit before moving to the next project
+
+**Source-code adjustments that recur across projects** (consolidated from the
+CommonUtil pass):
+- `.Reverse()` on arrays — use `Enumerable.Reverse()` explicit form
+- `Microsoft.ConcurrencyVisualizer.*` — `#if NET472` wrapper
+- `System.Net.Http` / `System.Web` / `System.Security` — net472-only assembly
+  Reference; net8 picks them up via TargetFramework
+- `$(PLATFORM)` SQLite — switch to NuGet on net8
 
 
 ## Objective
