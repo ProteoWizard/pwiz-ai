@@ -81,3 +81,12 @@ network exception handling in CreateFolder) + resolved. Self-review found a HIGH
 was a no-op (RetryFetch doesn't invalidate) - fixed with ClearResultsFor + refetch and locked with a
 red->green regression test (stateful mock asserts the folder appears). Also hardened cancel/inline-edit
 placeholder (LOWs). 4 commits pushed; deferred LOW addressed too. Pending: TeamCity green, human review.
+
+### 2026-06-30 - Fixed code-inspection failure after master merge
+
+TeamCity ReSharper build #18696 failed with 2 LocalizableElement warnings: the 'NewTestFolder'
+literal in VerifyNewFolder was compared against ListViewItem.Text ([Localizable(true)]) at lines
+278/281. Hoisted the name into a local `const string newFolderName` and reused it across all six
+call sites - removes the literal from the localizable position and de-duplicates. Verified locally:
+build green, TestWatersConnectExportMethodDlg passes (10.5s), QuickInspection clean (0/0). Merged
+origin master (GitHub Update-branch) into local, rebased the fix on top, pushed (de4fa4e839).
