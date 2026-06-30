@@ -635,17 +635,20 @@ if ($Skip -contains "labkey") {
         $registeredArgs = $null
 
         if (Test-Path $claudeJsonPath) {
-            $claudeConfig = Get-Content $claudeJsonPath -Raw | ConvertFrom-Json
+            # Parse as a hashtable: ~/.claude.json can contain a property whose name is
+            # an empty string (e.g. a "" project key), which the default PSCustomObject
+            # parse rejects with "property whose name is an empty string ... -AsHashTable".
+            $claudeConfig = Get-Content $claudeJsonPath -Raw | ConvertFrom-Json -AsHashTable
             # Normalize project root to forward-slash for comparison
             $projKeyBase = ($projRoot -replace '\\', '/').TrimEnd('/')
 
             # Search all project entries under this workspace root (handles the case where
             # MCP servers were registered from a subdirectory, e.g. pwiz1/, rather than
             # the workspace root itself)
-            foreach ($key in $claudeConfig.projects.PSObject.Properties.Name) {
+            foreach ($key in $claudeConfig.projects.Keys) {
                 $normalizedKey = ($key -replace '\\', '/').TrimEnd('/')
                 if ($normalizedKey -eq $projKeyBase -or $normalizedKey.StartsWith($projKeyBase + '/')) {
-                    $pc = $claudeConfig.projects.$key
+                    $pc = $claudeConfig.projects[$key]
                     if ($pc.mcpServers.labkey -and -not $isRegistered) {
                         $isRegistered = $true
                         $registeredArgs = $pc.mcpServers.labkey.args -join ' '
@@ -690,13 +693,13 @@ if ($Skip -contains "teamcity") {
         $tcDisabled = $false
         if (Test-Path $claudeJsonPath) {
             if (-not $claudeConfig) {
-                $claudeConfig = Get-Content $claudeJsonPath -Raw | ConvertFrom-Json
+                $claudeConfig = Get-Content $claudeJsonPath -Raw | ConvertFrom-Json -AsHashTable
             }
             $projKeyBase = ($projRoot -replace '\\', '/').TrimEnd('/')
-            foreach ($key in $claudeConfig.projects.PSObject.Properties.Name) {
+            foreach ($key in $claudeConfig.projects.Keys) {
                 $normalizedKey = ($key -replace '\\', '/').TrimEnd('/')
                 if ($normalizedKey -eq $projKeyBase -or $normalizedKey.StartsWith($projKeyBase + '/')) {
-                    $pc = $claudeConfig.projects.$key
+                    $pc = $claudeConfig.projects[$key]
                     if ($pc.mcpServers.teamcity) { $tcRegistered = $true }
                     if ($pc.disabledMcpServers -contains 'teamcity') { $tcDisabled = $true }
                 }
