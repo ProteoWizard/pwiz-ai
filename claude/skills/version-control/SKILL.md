@@ -66,6 +66,30 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 The commits will be squashed on merge anyway, so there is no cost to having multiple commits.
 
+## Committing to pwiz-ai (ai/) — Rebase, Never Merge
+
+Changes under `ai/` commit **directly to pwiz-ai master** (no PR, no feature branch).
+There is no squash-merge to clean up history later, so the master history must stay
+linear — **never create a merge commit on pwiz-ai master.**
+
+When `git push` is rejected because the remote advanced (another machine pushed first),
+**rebase your local commits onto the new remote tip — do not `git pull` (merge).**
+pwiz-ai changes are almost always small and most machines keep pwiz-ai fairly
+up-to-date, so a rejected push is typically only a commit or two out of sync and
+rebases cleanly:
+
+```bash
+cd /c/proj/ai
+git pull --rebase origin master   # replay your commits on top of remote; no merge commit
+git push origin master
+```
+
+Note this overrides the machine's global `pull.rebase false` setting (which is correct
+for pwiz feature branches) by passing `--rebase` explicitly for pwiz-ai work.
+
+If the rebase hits a conflict (rare for `ai/`), resolve it, `git rebase --continue`,
+then push. Do not fall back to a merge to avoid the conflict.
+
 ## PR Description Format
 
 ```
