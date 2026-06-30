@@ -72,9 +72,55 @@ Template csproj (drop the legacy 600-line XML, replace with ~40 lines):
 
 ## Status (2026-06-30)
 
-### Done
+### Cumulative progress (2026-06-30, end of second session)
 
-- **Phase 1 complete.** Full surface catalog of `MsDataFileImpl` + 3 siblings vs.
+| Project | csproj converted | Both targets build | Notes |
+|---|---|---|---|
+| PortableUtil | yes (predates branch) | yes | template |
+| CommonUtil | yes | **yes** | ConcurrencyVisualizer net472-only, Reverse() shadow fix, net472-only System.Net.Http/Web/Security refs |
+| ZedGraph (fork) | yes | **yes** | Deterministic=false for AssemblyVersion("5.1.*") |
+| MSGraph | yes | **yes** | trivial — only refs ZedGraph |
+| Common | yes | **net472 untested / net8 has remaining source errors** | NHibernate/MathNet 5.0 API drift; per-call-site fixes ongoing |
+| ProteomeDb | no | n/a | next |
+| PanoramaClient | no | n/a | next |
+| CommonFileDialogs | no | n/a | next |
+| CommonMsData (wrapper) | no | n/a | next; already pure managed |
+| BiblioSpec (wrapper) | no | n/a | next; retarget to pwiz-sharp's BiblioSpec |
+| **ProteowizardWrapper** | sandbox demonstrates feasibility | sandbox 29/29 PASS | merge sandbox MsDataFileImpl back into the real one with `#if NET8_0_OR_GREATER` |
+| TestUtil | no | n/a | |
+| **Skyline.csproj** | no | n/a | the monolith — 7,536 lines legacy → ~80 SDK |
+| TestData.csproj | no | n/a | goal target |
+
+### Known source-level fixes recurring across the cascade
+
+1. **Reverse() on arrays** → `Enumerable.Reverse(arr)` explicit form.
+2. **`Microsoft.ConcurrencyVisualizer.*`** → `#if NET472` wrap.
+3. **AssemblyCompany/Product/Title/Copyright/Version/FileVersion duplicates** —
+   wrap these in `Properties/AssemblyInfo.cs` and any vendor-shipped
+   `*_info.cs` (e.g. alglib) in `#if NET472`; let the SDK generate them on net8.
+4. **MathNet.Numerics 5.0 API changes** — `Properties.Resources` (substitute
+   English literals), `Control.LinearAlgebraProvider` (renamed),
+   plus likely more across the `DataAnalysis/` tree.
+5. **NHibernate transitive NU1605** — add `<NoWarn>$(NoWarn);NU1605</NoWarn>`
+   to projects that pull NHibernate.
+6. **`$(PLATFORM)` SQLite HintPath** — net472 keeps the HintPath;
+   net8 uses `System.Data.SQLite.Core` NuGet.
+7. **net472-only BCL refs** — explicit `System.Net.Http` / `System.Web` /
+   `System.Security` `<Reference Include>` with `Condition='net472'`.
+
+### Realistic remaining work
+
+The multi-target pattern is proven; each leaf takes ~30 min – 2 hours to convert
+**plus iterative debug on per-project source-compat issues that depend on
+the project's NuGet dep surface**. Skyline.csproj alone will take 2-3 full
+sessions because the dep mass is large and the binding-redirect / app.config
+story has to be replaced.
+
+**Best estimate: 5-10 sessions of dedicated work to reach "TestData tests
+running with pwiz-sharp".** Multi-session is explicitly supported by the user;
+no shortcut available.
+
+### Done
   pwiz-sharp. Originally 6 suspected pwiz-sharp gaps; verification dig closed 5
   — they're already present. 1 real gap (`ReaderConfig.PassEntireDiaPasefFrame`)
   added as an advisory flag; Bruker reader implementation deferred until a
