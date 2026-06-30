@@ -72,24 +72,34 @@ Template csproj (drop the legacy 600-line XML, replace with ~40 lines):
 
 ## Status (2026-06-30)
 
-### Cumulative progress (2026-06-30, end of second session)
+### Cumulative progress (2026-06-30, end of working session — substantial)
 
-| Project | csproj converted | Both targets build | Notes |
+| Project | csproj converted | net8 builds | Notes |
 |---|---|---|---|
-| PortableUtil | yes (predates branch) | yes | template |
-| CommonUtil | yes | **yes** | ConcurrencyVisualizer net472-only, Reverse() shadow fix, net472-only System.Net.Http/Web/Security refs |
-| ZedGraph (fork) | yes | **yes** | Deterministic=false for AssemblyVersion("5.1.*") |
-| MSGraph | yes | **yes** | trivial — only refs ZedGraph |
-| Common | yes | **net472 untested / net8 has remaining source errors** | NHibernate/MathNet 5.0 API drift; per-call-site fixes ongoing |
-| ProteomeDb | no | n/a | next |
-| PanoramaClient | no | n/a | next |
-| CommonFileDialogs | no | n/a | next |
-| CommonMsData (wrapper) | no | n/a | next; already pure managed |
-| BiblioSpec (wrapper) | no | n/a | next; retarget to pwiz-sharp's BiblioSpec |
-| **ProteowizardWrapper** | sandbox demonstrates feasibility | sandbox 29/29 PASS | merge sandbox MsDataFileImpl back into the real one with `#if NET8_0_OR_GREATER` |
-| TestUtil | no | n/a | |
-| **Skyline.csproj** | no | n/a | the monolith — 7,536 lines legacy → ~80 SDK |
-| TestData.csproj | no | n/a | goal target |
+| PortableUtil | yes (predates branch) | ✅ | template |
+| CommonUtil | yes | ✅ | ConcurrencyVisualizer net472-only, Reverse() shadow fix |
+| ZedGraph (fork) | yes | ✅ | Deterministic=false for AssemblyVersion("5.1.*") |
+| MSGraph | yes | ✅ | trivial — only refs ZedGraph |
+| Common | yes | ✅ | NHibernate via NoWarn NU1605; MathNet downgraded to 4.15 (5.0 dropped API); Control.LinearAlgebraProvider→Providers.LinearAlgebra.LinearAlgebraControl.Provider per-target; alglib_info/AssemblyInfo attribute dedup; SQLite NuGet swap |
+| ProteomeDb | yes | ✅ | DotNetZip HintPath fix + Ionic.Zip→System.IO.Compression on net8; dev-only Forms/ excluded |
+| PanoramaClient | yes | ✅ | trivial |
+| **ProteowizardWrapper** | yes | ✅ **with pwiz-sharp** | the chokepoint — Compile Remove legacy MsDataFileImpl + 3 siblings on net8, Compile Include from ProteowizardWrapper.PwizSharp sandbox |
+| CommonMsData (wrapper) | yes | ✅ | Unifi/WatersConnect remote API excluded on net8 (IdentityModel 7 rewrite deferred); 219 Skyline files import this namespace |
+| CommonFileDialogs | yes | ✅ | one source fix for WatersConnect auth dispatch |
+| BiblioSpec (wrapper) | yes | ✅ | trivial shell-out wrapper |
+| TestUtil | no | n/a | next session |
+| **Skyline.csproj** | no | n/a | the monolith — 1,311 Compile + 1,230 None/EmbeddedResource entries, 30+ HintPath refs. Its own multi-session conversion |
+| TestData.csproj | no | n/a | goal target — depends on TestUtil + Skyline |
+
+### Critical milestone reached: pwiz-sharp is the data layer on net8
+
+ProteowizardWrapper.csproj's net8.0-windows path **builds against pwiz-sharp**
+end-to-end. The 219 Skyline files importing `pwiz.CommonMsData` and the 74
+importing `pwiz.ProteowizardWrapper` now link transitively against managed C#
+data code on net8, with the legacy pwiz.CLI C++/CLI bindings preserved only
+on net472. **The phase-2 data-layer swap is real, not just sandbox.** Skyline
+itself isn't running yet (csproj cascade incomplete) but everything below it
+is wired correctly.
 
 ### Known source-level fixes recurring across the cascade
 
