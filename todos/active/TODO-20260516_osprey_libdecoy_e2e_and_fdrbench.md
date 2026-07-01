@@ -432,3 +432,36 @@ tooling; (2) confirm C# and Rust `--fdrbench` output are byte-identical; (3)
 investigate why reconciling library decoys over-includes false discoveries
 before proposing any FDR-affecting change. Loop Mike in -- his current Rust
 would now show ~1.46%, not his 0.98% screenshot.
+
+### 2026-06-30 (session 2, end) -- Night-session handoff: FDRBench pass-1/pass-2 assessment
+
+**Reframe (Brendan):** matching this *late-breaking, possibly-incorrect* Rust is
+NOT a correctness proof. FDRBench entrapment FDP is the **independent
+correctness oracle** and wins when it disagrees with cross-impl parity. Today's
+data already shows the base_id fix reaches Rust parity but *degrades* entrapment
+FDR -- so it stays HELD (`Skyline/held/20260630_libdecoy_baseid_fix`); the work
+branch/tree is the pre-fix "matches-Mike" state; only FDR-neutral tooling was
+committed (ai `9f51eed`).
+
+**Next session = `/night-session` autonomous work.** Full protocol +
+implementation detail + run matrix + plotting spec + gotchas are in the handoff:
+
+**Next session handoff**: read
+`ai/.tmp/handoff-20260630-fdrbench-assessment.md` and follow its Session Start
+Protocol before doing anything.
+
+Mission summary (see handoff for detail):
+1. **New CLI capability**: emit `--fdrbench` at **pass-1** (pre-compaction
+   first-pass pool + pass-1 q, mirroring Rust `write_fdrbench_peptide_input`)
+   OR **pass-2** (current post-compaction survivors + final q). Suggested
+   `--fdrbench-pass <1|2>`.
+2. **Decoy-free libraries**: strip `decoy_`-prefixed ProteinID rows from the
+   entrapment library → target+entrapment, for Osprey-generated-decoy runs.
+3. **Run 4 conditions x 2 datasets = 8**: {library-supplied vs Osprey-generated
+   decoys} x {pass-1 vs pass-2}, on Stellar + Astral (3-file).
+4. **FDRBench + calibration (q-q) plots** zoomed to q in [0, 0.02] (deviations
+   below 1% are the point; 0->1.0 hides them). combined + paired FDP vs Osprey
+   q, y=x = perfect.
+5. **Test the hypothesis**: library-supplied decoys should out-calibrate
+   Osprey-generated decoys per FDRBench (Mike's May motivation). Report all 8
+   cells honestly; judge any code change on the entrapment oracle, not parity.
