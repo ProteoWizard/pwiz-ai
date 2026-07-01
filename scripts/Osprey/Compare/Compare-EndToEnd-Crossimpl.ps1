@@ -31,7 +31,12 @@
       Precursor counts from per-side log lines
 
 .PARAMETER Dataset
-    Stellar (default) or Astral.
+    Stellar (default), Astral, StellarLibraryDecoy, or AstralLibraryDecoy.
+    The *LibraryDecoy datasets carry a Carafe-built target+decoy(+entrapment)
+    library plus an FDRBench pairing manifest; for those, both sides get the
+    --decoys-in-library and --decoy-pairing-manifest flags so the library-
+    supplied-decoy code path is exercised cross-impl (rather than Osprey
+    generating reverse decoys).
 
 .PARAMETER TestBaseDir
     Override dataset root (defaults to OSPREY_TEST_BASE_DIR or
@@ -52,7 +57,7 @@
 #>
 
 param(
-    [ValidateSet('Stellar','Astral')]
+    [ValidateSet('Stellar','Astral','StellarLibraryDecoy','AstralLibraryDecoy')]
     [string]$Dataset = 'Stellar',
     [string]$TestBaseDir,
     [switch]$Force,
@@ -75,9 +80,9 @@ $configCandidates = @(
 )
 foreach ($c in $configCandidates) { if (Test-Path $c) { . $c; break } }
 
-$ospreyExe = Get-OspreyExe
+$ospreyExe = Get-OspreyRustExe
 if (-not (Test-Path $ospreyExe)) {
-    Write-Host "osprey.exe not found at $ospreyExe -- build first." -ForegroundColor Red
+    Write-Host "osprey.exe (Rust) not found at $ospreyExe -- build first." -ForegroundColor Red
     exit 2
 }
 $ospreyShExe = Get-OspreyExe -Framework $Framework
@@ -111,6 +116,26 @@ $libraryName = $ds.Library
 $resolution = $ds.Resolution
 $datasetRoot = $ds.TestDir
 
+# Library-supplied-decoy datasets forward extra flags to BOTH sides so the
+# comparison exercises the library-decoy path (not generated reverse decoys).
+# The manifest (when named) is staged alongside the library into each workdir
+# and referenced by bare filename since both tools run with the workdir as cwd.
+$libDecoyArgs = @()
+$manifestName = $null
+if ($ds.DecoysInLibrary) {
+    $libDecoyArgs += '--decoys-in-library'
+    if (-not [string]::IsNullOrEmpty($ds.Manifest)) {
+        $manifestName = $ds.Manifest
+        $manifestSrc = Join-Path $datasetRoot $manifestName
+        if (-not (Test-Path $manifestSrc)) {
+            Write-Host "Pairing manifest not found: $manifestSrc" -ForegroundColor Red
+            exit 2
+        }
+        $libDecoyArgs += @('--decoy-pairing-manifest', $manifestName)
+    }
+    Write-Host ("[LibraryDecoy] extra flags: {0}" -f ($libDecoyArgs -join ' ')) -ForegroundColor DarkCyan
+}
+
 $rootDir  = Join-Path $datasetRoot "_endtoend_crossimpl"
 $rustDir  = Join-Path $rootDir "rust"
 $csDir    = Join-Path $rootDir "cs"
@@ -130,6 +155,9 @@ function Stage-DatasetFiles {
     $cache = Join-Path $datasetRoot ($libraryName + '.libcache')
     if (Test-Path $cache) {
         Copy-Item $cache (Join-Path $Dir ($libraryName + '.libcache'))
+    }
+    if ($manifestName) {
+        Copy-Item (Join-Path $datasetRoot $manifestName) (Join-Path $Dir $manifestName)
     }
 }
 
@@ -153,9 +181,11 @@ function Invoke-Tool {
 
 function Get-PrecursorCount {
     param([string]$LogPath)
-    # Rust logs "Wrote N precursors"; C# logs "Wrote N spectra to output.blib".
-    # Both forms refer to the same blib RefSpectra row count.
-    $m = Select-String -Path $LogPath -Pattern 'Wrote\s+(\d+)\s+(?:precursors|spectra)' -AllMatches | Select-Object -Last 1
+    # Rust logs "Wrote N precursors"; C# logs "Wrote N library spectra to
+    # output.blib" (reworded by the 2026-06 console-output pass -- an optional
+    # qualifier word can sit between the count and "spectra"). Both forms refer
+    # to the same blib RefSpectra row count.
+    $m = Select-String -Path $LogPath -Pattern 'Wrote\s+(\d+)\s+(?:\w+\s+)?(?:precursors|spectra)' -AllMatches | Select-Object -Last 1
     if ($m -and $m.Matches.Count -gt 0) { return [int]$m.Matches[0].Groups[1].Value }
     return -1
 }
@@ -221,6 +251,7 @@ if ($SkipRust -and (Test-Path $rustBlib) -and (Test-Path $rustDump)) {
     $args1 += @('-l', $libraryName, '-o', 'output.blib',
                 '--resolution', $resolution,
                 '--protein-fdr', '0.01', '--threads', $Threads.ToString())
+    $args1 += $libDecoyArgs
     $env:OSPREY_DUMP_STAGE7_PROTEIN_FDR = '1'
     try {
         $r = Invoke-Tool -Exe $ospreyExe -WorkDir $rustDir -CliArgs $args1 -LogName 'osprey.log'
@@ -252,6 +283,7 @@ if ($SkipCs -and (Test-Path $csBlib) -and (Test-Path $csDump)) {
     $args2 += @('-l', $libraryName, '-o', 'output.blib',
                 '--resolution', $resolution,
                 '--protein-fdr', '0.01', '--threads', $Threads.ToString())
+    $args2 += $libDecoyArgs
     $env:OSPREY_DUMP_STAGE7_PROTEIN_FDR = '1'
     try {
         $r = Invoke-Tool -Exe $ospreyShExe -WorkDir $csDir -CliArgs $args2 -LogName 'osprey-cs.log'

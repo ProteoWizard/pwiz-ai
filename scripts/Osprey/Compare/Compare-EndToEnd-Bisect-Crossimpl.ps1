@@ -79,7 +79,7 @@ $configCandidates = @(
 )
 foreach ($c in $configCandidates) { if (Test-Path $c) { . $c; break } }
 
-$ospreyExe = if ($RustExe) { $RustExe } else { Get-OspreyExe }
+$ospreyExe = if ($RustExe) { $RustExe } else { Get-OspreyRustExe }
 if (-not (Test-Path $ospreyExe)) {
     Write-Host "osprey.exe not found at $ospreyExe -- build first." -ForegroundColor Red
     exit 2

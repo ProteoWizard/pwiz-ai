@@ -49,7 +49,7 @@ foreach ($c in @((Join-Path $scriptDir 'Dataset-Config.ps1'),
     if (Test-Path $c) { . $c; break }
 }
 
-$ospreyExe = Get-OspreyExe
+$ospreyExe = Get-OspreyRustExe
 if (-not (Test-Path $ospreyExe)) {
     Write-Host "osprey.exe not found at $ospreyExe -- build Rust first (Build-OspreyRust.ps1)." -ForegroundColor Red
     exit 2

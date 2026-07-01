@@ -6,7 +6,7 @@
 .DESCRIPTION
     Dot-source this file to get the Get-DatasetConfig function (test data
     path resolution) and the Get-ProjectRoot / Get-PwizRoot / Get-OspreyRoot
-    / Get-OspreyExe / Get-OspreyExe helpers (sibling-repo path
+    / Get-OspreyExe (C#) / Get-OspreyRustExe helpers (sibling-repo path
     resolution).  Centralising these here means no script needs to
     hard-code `C:\proj\...` paths -- developers who keep their checkouts
     under `D:\dev` or `~/src` get correct paths without per-script edits.
@@ -50,10 +50,10 @@
 
 .EXAMPLE
     . "$PSScriptRoot\Dataset-Config.ps1"
-    $exe = Get-OspreyExe                 # net8.0 by default
+    $exe = Get-OspreyExe                 # C# Osprey, net8.0 by default
     $exe = Get-OspreyExe -Framework net472
-    $rust = Get-OspreyExe                     # primary osprey checkout
-    $rustUp = Get-OspreyExe -Upstream         # maccoss/osprey clone
+    $rust = Get-OspreyRustExe                 # primary Rust osprey checkout
+    $rustUp = Get-OspreyRustExe -Upstream     # maccoss/osprey clone
 #>
 
 # Track Dataset-Config.ps1's own location so the project-root walk
@@ -104,8 +104,9 @@ function Get-OspreyUpstreamRoot {
 
 function Get-OspreyExe {
     <#
-    Path to the built Osprey executable.  -Framework picks
+    Path to the built C# Osprey executable.  -Framework picks
     net8.0 (default) or net472.  Adds .exe on Windows.
+    For the Rust osprey exe use Get-OspreyRustExe.
     #>
     param([ValidateSet('net8.0','net472')] [string]$Framework = 'net8.0')
     $exeSuffix = if ($IsWindows -or $null -eq $IsWindows) { '.exe' } else { '' }
@@ -113,11 +114,19 @@ function Get-OspreyExe {
         ("pwiz_tools/Osprey/Osprey/bin/x64/Release/$Framework/Osprey$exeSuffix")
 }
 
-function Get-OspreyExe {
+function Get-OspreyRustExe {
     <#
     Path to the built Rust osprey executable.  -Upstream selects the
     maccoss/osprey clone (Get-OspreyUpstreamRoot); default is the
     primary checkout (Get-OspreyRoot).
+
+    NOTE: Distinct from Get-OspreyExe (the C# Osprey accessor). Before
+    the 2026-06-27 OspreySharp->Osprey rename the C# accessor was
+    Get-OspreySharpExe; the rename collapsed it onto Get-OspreyExe,
+    which had collided with this Rust accessor (both were named
+    Get-OspreyExe, so the Rust one silently shadowed the C# one and
+    every "-Framework" call returned the Rust exe). Keep the names
+    distinct.
     #>
     param([switch]$Upstream)
     $exeSuffix = if ($IsWindows -or $null -eq $IsWindows) { '.exe' } else { '' }
@@ -138,7 +147,7 @@ function Get-OspreyScriptDir {
 function Get-DatasetConfig {
     param(
         [Parameter(Mandatory=$true, Position=0)]
-        [ValidateSet("Stellar", "Astral", "AstralLibraryDecoy")]
+        [ValidateSet("Stellar", "Astral", "StellarLibraryDecoy", "AstralLibraryDecoy")]
         [string]$Dataset,
 
         [Parameter(Mandatory=$false)]
@@ -195,17 +204,41 @@ function Get-DatasetConfig {
                 Manifest         = $null
             }
         }
+        "StellarLibraryDecoy" {
+            # Mike's Carafe-built Stellar target+decoy+entrapment library with
+            # FDRBench pairing manifest (delivered 2026-06-30 via Panorama:
+            # StellarTest-TargetDecoyLibraries/target+decoy+entrapment/). Reuses
+            # the existing Stellar mzML (files 20-22). Entrapment sequences are
+            # included so FDRBench can measure true FDP -- see the --fdrbench
+            # path. Used for cross-impl bit-parity on the library-decoy code
+            # path and for reproducing Mike's FDRBench FDP plots.
+            @{
+                Name             = "StellarLibraryDecoy"
+                TestDir          = Join-Path $baseDir "stellar-libdecoy"
+                Library          = "carafe_spectral_library.tsv"
+                Resolution       = "unit"
+                SingleFile       = "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML"
+                AllFiles         = @(
+                    "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML",
+                    "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_21.mzML",
+                    "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_22.mzML"
+                )
+                FileLabel        = @{ Single = "file 20"; All = "files 20-22" }
+                DecoysInLibrary  = $true
+                Manifest         = "osprey_library_db_pairing.tsv"
+            }
+        }
         "AstralLibraryDecoy" {
-            # Carafe-built Astral entrapment library with FDRBench pairing
-            # manifest. Library + manifest filenames are placeholders until
-            # Mike provides the final files; the existing Astral mzML files
-            # are reused. Running before the files are staged produces a
-            # clear "file not found" error in Run-Osprey.ps1. Used for
-            # cross-impl Test-Regression on the library-decoy code path.
+            # Mike's Carafe-built Astral target+decoy+entrapment library with
+            # FDRBench pairing manifest (delivered 2026-06-30 via Panorama:
+            # AstralTest-TargetDecoyLibraries/target+decoy+entrapment/). Reuses
+            # the existing Astral mzML (files 49/55/60). Used for cross-impl
+            # bit-parity on the library-decoy code path and for reproducing
+            # Mike's FDRBench FDP plots.
             @{
                 Name             = "AstralLibraryDecoy"
                 TestDir          = Join-Path $baseDir "astral-libdecoy"
-                Library          = "SkylineAI_entrapment_carafe_spectral_library.tsv"
+                Library          = "carafe_spectral_library.tsv"
                 Resolution       = "hram"
                 SingleFile       = "Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_49.mzML"
                 AllFiles         = @(
@@ -215,7 +248,7 @@ function Get-DatasetConfig {
                 )
                 FileLabel        = @{ Single = "file 49"; All = "files 49-60" }
                 DecoysInLibrary  = $true
-                Manifest         = "SkylineAI_entrapment_carafe_pairing_manifest_pep.txt"
+                Manifest         = "osprey_library_db_pairing.tsv"
             }
         }
     }
