@@ -465,3 +465,79 @@ Mission summary (see handoff for detail):
 5. **Test the hypothesis**: library-supplied decoys should out-calibrate
    Osprey-generated decoys per FDRBench (Mike's May motivation). Report all 8
    cells honestly; judge any code change on the entrapment oracle, not parity.
+
+### 2026-06-30 (session 3, night) -- pass-1 `--fdrbench` CLI landed; 8-cell matrix running
+
+Autonomous `/night-session`. Executed the handoff mission.
+
+**Implementation task 1 DONE + committed (`dc05539eb7`):** new `--fdrbench-pass
+<1|2>` CLI. Pass 2 (default) = the existing post-compaction second-pass reported
+set (MergeNodeTask). Pass 1 = the full pre-compaction first-pass pool emitted from
+`FirstJoinTask` right after first-pass protein FDR / before compaction, mirroring
+Rust `write_fdrbench_peptide_input`. The C# pipeline point was located by reading
+the Rust call site (pipeline.rs ~4629, after `persist_fdr_scores`, before the
+`first_pass_base_ids` compaction) and matching the C# analogue; the existing
+`FdrBenchInputWriter` is reused unchanged (its `EffectiveExperimentQvalue` fields
+hold first-pass values at that point -- confirmed `PercolatorEngine`/`PercolatorFdr`
+populate experiment q at first pass). Files: `OspreyConfig` (`FdrBenchPass=2`),
+`OspreyCommandArgs` (+ arg, `ParseFdrBenchPass`, help, validation, arg test),
+`FirstJoinTask` (`WriteFdrBenchPass1IfRequested`), `MergeNodeTask` (pass-2 guard),
+regenerated `CommandLine.html`. Gates: Debug build + 442 tests + zero-warning
+inspection GREEN. `FdrBenchPass` is deliberately NOT in `SearchIdentity` (fdrbench
+is a terminal output, not a scoring parameter -- parquet reuse unaffected).
+
+**Pass-1 wiring VERIFIED byte-equal to Rust HEAD** (the strongest cross-check):
+C# pass-1 on Stellar 3-file library-decoy = 493,101 rows, identical key set to
+`_fdrbench_rust/rust_fdrbench.tsv` (0 keys unique either side), max|dq|=0.0,
+max|dscore|=1e-10 (cosmetic float-format slip, below 1e-9). This holds even though
+the Rust ref is post-`0abe0ff` and the C# branch is pre-fix: pass-1 is
+pre-compaction / pre-reconciliation, so the base_id reconciliation fix cannot
+affect it. Same run's blib wrote 28,542 spectra (the pre-fix "matches-Mike"
+state), confirming the branch is unchanged.
+
+**Implementation task 2 DONE:** decoy-free libraries built by stripping
+`decoy_`/`rev_` ProteinID-prefixed rows (streaming awk; `ai/.tmp/strip-decoys.sh`).
+Stellar 9,215,671 kept rows (= exact non-decoy count), Astral 47,927,450. Staged at
+`D:\test\osprey-runs\{stellar,astral}-gendecoy\` with hardlinked mzML.
+
+**8-cell matrix RUNNING** (`ai/.tmp/drive-all.sh`, background): {libdecoy,gendecoy}
+x {pass1,pass2} x {Stellar,Astral}, each a full Osprey run + FDRBench (precursor
+level, `-score score:1`, `_p_target` entrapment). Stellar cells ~4.5min each,
+Astral ~40min each. Cell 1 (stellar libdecoy pass1) already done + verified.
+Plotting/metrics: `ai/.tmp/plot-calibration.py` -> 2 figures (zoom q,FDP in [0,2%])
++ `fdrbench_metrics.csv`. Deliverable table + hypothesis assessment pending matrix
+completion.
+
+Helper scripts (all in `ai/.tmp/`, gitignored): `run-cell.sh`, `run-fdrbench.sh`,
+`drive-all.sh`, `plot-calibration.py`, `strip-decoys.sh`.
+
+**RESULTS -- all 8 cells done (02:23 PDT), no failures. Combined FDP @ Osprey q=1%:**
+
+| dataset | decoy source | pass | disc@1%q | comb FDP@1%q | disc@1% true FDP |
+|---------|-------------|------|----------|--------------|-------------------|
+| Stellar | library-supplied | 2 | 28517 | **0.82%** | 30503 |
+| Stellar | library-supplied | 1 | 27154 | 2.03% | 24633 |
+| Stellar | Osprey-generated | 2 | 51975 | **16.05%** | 16126 |
+| Stellar | Osprey-generated | 1 | 37872 | 11.73% | 24167 |
+| Astral  | library-supplied | 2 | 99714 | **1.32%** | 84618 |
+| Astral  | library-supplied | 1 | 82979 | 1.89% | 71529 |
+| Astral  | Osprey-generated | 2 | 149150 | **12.19%** | 63860 |
+| Astral  | Osprey-generated | 1 | 111361 | 8.15% | 75260 |
+
+**HYPOTHESIS CONFIRMED on both datasets.** Library-supplied (Carafe) decoys are
+near-calibrated at the reported pass-2 level (Stellar 0.82% below the line, Astral
+1.32% just above); Osprey-generated reverse decoys are severely anti-conservative
+(16.05% / 12.19% true FDP at a claimed 1%). At equal 1% TRUE FDP, library decoys
+yield more real IDs (Stellar 30503 vs 16126 ~1.9x; Astral 84618 vs 63860 ~1.3x).
+Pass diagnostic: library decoys tighten p1->p2, generated decoys degrade p1->p2.
+Stellar libdecoy pass2 = 0.82% reproduces the pre-fix anchor exactly (pipeline
+validated). Full write-up + figures: `ai/.tmp/fdrbench-assessment-report.md`,
+`calibration_{stellar,astral}.png`, `fdrbench_metrics.csv`.
+
+**Decisions this settles:** (1) base_id reconciliation fix stays HELD -- pre-fix is
+well-calibrated (0.82%), matching Rust HEAD degrades it to 1.46%; do not ship to
+match Rust. (2) Product guidance for Mike: on entrapment libraries, prefer
+library-supplied decoys; generated reverse decoys badly under-estimate FDR. No new
+code change warranted by the oracle. Caveats: precursor level only; entrapment-oracle
+assumptions (truly-absent entrapment, 1:1 ratio, FDRBench estimator); the separate
+Astral cross-impl divergence is out of scope.
