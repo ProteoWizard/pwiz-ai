@@ -20,9 +20,24 @@ PR #4352. Both branched off master b2373f9f9c.
 - DEFERRED: `FdrLevel.Protein` restoration (item 4) -- optional per this TODO's
   scope note, touches the FDR gating path, and no C# oracle for the protein-gate
   path yet (see feedback_no_unverified_ports). Flag for a follow-up.
-- VALIDATION (in flight): `regression.ps1 -Dataset Stellar` golden diff, and the
-  entrapment-oracle re-run (~0.90% target with `--protein-fdr 0.01`). Results +
-  any golden re-capture appended below.
+- **BLOCKER FOUND — PR #4353 set to DRAFT.** `regression.ps1 -Dataset Stellar`:
+  mode2 PASS; mode1 (golden) FAIL (expected: 2nd-pass Percolator retrains on the
+  smaller set); **mode3 (HPC==straight) FAIL** — a real regression (clean master
+  passes all 3). ROOT CAUSE (confirmed via -KeepOutput compaction counts):
+  straight compacts to a GLOBAL first-pass base_id set (66793; a base_id passing
+  peptide-q in ANY file kept in ALL files); the HPC PerFileRescore worker sees
+  one file and recomputes a PER-FILE set. On master the worker predicate's
+  `|| protein-q` clause was LOAD-BEARING — it inflated the per-file worker set to
+  ≈ global (66749≈66857). Removing it drops workers to per-file peptide-q (62991)
+  vs global 66793, so workers drop ~3800 cross-file entries straight keeps; the
+  chaotic 2nd-pass Percolator amplifies -> wholesale mode3 divergence. FIX
+  (architectural, do NOT guess): plumb FirstJoin's global base_id set to the
+  workers via the reconciliation bundle so `RescoreCompaction` retains the global
+  set, not a per-file recompute. Latent HPC production-parity issue the rescue
+  removal merely EXPOSED (cf. [[project_osprey_firstjoin_order_sensitivity]]);
+  flag to Mike as its own fix. Full write-up: ai/.tmp/handoff-20260702-morning.md.
+  Entrapment-oracle re-run (~0.90% gate, ai/.tmp/pr2-oracle-ab.sh) DEFERRED behind
+  the mode3 fix. Do NOT re-capture the golden until mode3 is green.
 - FOLLOW-UP for Mike: remove the same rescue from Rust (pipeline.rs:1488-1491)
   and reconcile his recollection with the code.
 
