@@ -1,9 +1,20 @@
 # TODO-osprey_version_git_hash.md -- Stamp Osprey version with commit-date DOY + git hash on every build path
 
 ## Status
-Active (brendanx67). Branch `Skyline/work/20260701_osprey_version_git_hash`,
-PR #4352 (opened 2026-07-01, autonomous night session). Motivated by a concrete,
-expensive incident (2026-07-01, below).
+Completed. PR [#4352](https://github.com/ProteoWizard/pwiz/pull/4352) (merged
+2026-07-02 as d032f59786). Branch `Skyline/work/20260701_osprey_version_git_hash`.
+Motivated by a concrete, expensive incident (2026-07-01, below).
+
+### 2026-07-02 - Merged
+PR #4352 merged as commit d032f59786. Shipped: git commit hash + commit-date DOY
+stamped into the Osprey version on every build path via `Directory.Build.targets`
++ `stamp-version.ps1` (single source in `version.ps1`); `OspreyVersion` exposes
+`InformationalVersion`/`GitHash`/`DisplayVersion`; `--version` shows
+`26.1.1.183 (58241e4153)`; `Current` kept bare-numeric so golden/cache unchanged.
+Self-review + Copilot both addressed (dirty-on-git-failure guard, trimmed-stamp
+condition, self-contained comments). DEFERRED (not shipped): embedding the hash
+in the blib `osprey_version` / sidecar provenance cells (needs a golden
+re-capture) -- follow-up.
 
 ### Progress (2026-07-01 night session)
 - DONE. `Directory.Build.targets` stamps `AssemblyInformationalVersion =
