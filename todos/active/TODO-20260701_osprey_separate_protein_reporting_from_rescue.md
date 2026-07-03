@@ -38,6 +38,32 @@ PR #4352. Both branched off master b2373f9f9c.
   flag to Mike as its own fix. Full write-up: ai/.tmp/handoff-20260702-morning.md.
   Entrapment-oracle re-run (~0.90% gate, ai/.tmp/pr2-oracle-ab.sh) DEFERRED behind
   the mode3 fix. Do NOT re-capture the golden until mode3 is green.
+
+### 2026-07-02 - mode3 FIXED (commit 1dd206b831)
+- ROOT CAUSE (confirmed): HPC per-file rescore worker recomputed a PER-FILE
+  first-pass base_id set (62,991) instead of the straight-through GLOBAL set
+  (66,793); the `|| protein-q` clause had been masking the gap. See memory
+  project_osprey_hpc_worker_compaction_global_coupling.
+- FIX: FirstJoin now persists the join-wide first-pass base_id set in
+  `reconciliation.json` (bumped to **v3**, required `first_pass_base_ids`).
+  `RescoreHydration` reads it into `RescoreInputs.GlobalFirstPassBaseIds`;
+  `RescoreCompaction.Apply(inputs)` compacts to exactly that set and HARD-FAILS if
+  absent (no silent per-file fallback); dropped its unused `config` param. Chose
+  the envelope (not a standalone sidecar): already staged at every HPC/NextFlow
+  boundary + is the cross-impl byte-parity format. NextFlow implementer approved
+  the design.
+- VERIFIED: regression **mode3 PASS** (worker keeps 66,793) + mode2 PASS, on the
+  final envelope code. Build + 446 unit tests + inspection green. mode1 still FAILs
+  = intended rescue-removal golden change (re-capture pending).
+- REMAINING: (1) push branch (local commits 2d14ca1e4d + 1dd206b831, unpushed);
+  (2) port `first_pass_base_ids` v3 to Rust reconciliation_io.rs (Brendan wants
+  cross-impl parity kept); (3) re-capture golden (mode1) after confirming the diff
+  = only removed rescue admissions; (4) run entrapment oracle (~0.90%);
+  (5) strip TODO-file refs from PR-2 code comments (feedback_no_todo_refs_in_code);
+  (6) /pw-self-review 4353, un-draft.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260701_osprey_protein_rescue_removal.md` before starting work.
 - FOLLOW-UP for Mike: remove the same rescue from Rust (pipeline.rs:1488-1491)
   and reconcile his recollection with the code.
 
