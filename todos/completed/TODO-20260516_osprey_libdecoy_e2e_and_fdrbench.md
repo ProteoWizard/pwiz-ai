@@ -1,5 +1,13 @@
 # TODO-20260516_osprey_libdecoy_e2e_and_fdrbench.md -- Library-decoy E2E + `--fdrbench` port
 
+> **RETIRED / SUPERSEDED 2026-07-04.** Track 2 (`--fdrbench` native export) shipped in
+> PR #4337. Track 1 (the AstralLibraryDecoy cross-impl byte-parity gate) never ran as
+> specced: the Carafe Astral entrapment/decoy library + manifest we were blocked on
+> became the files later used directly in the reconciliation base_id work, and Track 1's
+> intent (proving library-decoy FDR is controlled) was met by PR #4347 + FDRBench
+> validation on Stellar entrapment rather than the never-staged AstralLibraryDecoy
+> Test-Regression gate. No residual work retained. Moved to completed as done+superseded.
+
 > Follow-up sprint to PR #4215. Two tracks: (1) close the library-
 > decoy gap by running the cross-impl byte-parity gate on Mike's
 > Carafe-built Astral library + FDRBench manifest; (2) port the
