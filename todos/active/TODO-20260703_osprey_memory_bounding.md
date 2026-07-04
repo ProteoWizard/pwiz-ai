@@ -73,9 +73,21 @@
 - Make the `--parallel-files` free-RAM guard budget the accumulating results buffer, not
   just spectra, so K reflects true peak RAM. Independent, low risk.
 
-**Phase 3 -- Parquet temp staging (SSD win).**
-- Stage the `scores.parquet` temp beside the destination (mirror `FileSaver`), not
-  `%TEMP%`. Removes the cross-volume copy + direct SSD traffic. Independent, small.
+**Phase 3 -- DROPPED (Mike's catch, 2026-07-03).** An earlier draft proposed staging the
+parquet temp beside the destination (like `FileSaver`) instead of `%TEMP%`. Withdrawn: for
+a remote NAS destination the local-stage-then-move is the *better* design (fast local seeky
+writes + one bulk transfer; the NAS only ever sees a complete file; `ParquetScoreCache.cs:261`
+comments it "safe NAS writes"). The SSD-100% is the pagefile (memory), fixed by Phase 1.
+
+**Separate robustness follow-up (NOT part of this memory fix).** The C# temp->final move
+(`ParquetScoreCache.cs:288-290`, `File.Delete` then `File.Move`) does no post-copy integrity
+check, so a truncated write on a flaky CIFS/SMB mount could land silently. Rust guards every
+such move with `osprey_core::copy_and_verify` (`crates/osprey-core/src/lib.rs:26`): stat the
+source, `fs::copy`, verify the copied byte count == source size, retry with a buffered
+`io::copy` on mismatch ("handles CIFS/NFS where `copy_file_range` may silently truncate").
+Used at 6 Rust sites (scores + reconciled parquet, calibration, libcache, `.spectra.bin`).
+Port a `CopyAndVerify` helper and route the C# parquet/blib/cache moves through it. Track
+separately (own issue/TODO).
 
 **Phase 4 (only if Phase 1 falls short of 64 GB) -- Stream the join.**
 - Stream Percolator scoring from per-file parquet instead of holding all entries
@@ -159,6 +171,11 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
   PENDING: (1) byte-identical `regression.ps1` (Release binary busy with the 20-file
   baseline run); (2) baseline `[MEM]` curve; (3) instrumented-Release fixed run to confirm
   the 82-file peak < 64 GB. Baseline (20 files) running in background.
+- 2026-07-04: Corrected the disk-symptom analysis (issue #4355 body + comment). Phase 3
+  dropped -- local-stage-then-move is the right design for a NAS destination. Confirmed Rust
+  does post-copy integrity verification (`osprey_core::copy_and_verify`, byte-count +
+  buffered-retry, 6 sites); C# `File.Move` lacks it -> tracked as a separate robustness
+  follow-up above.
 
 ## Handoff prompt
 
