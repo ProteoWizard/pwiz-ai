@@ -18,6 +18,8 @@ ai/scripts/Osprey/
   Build-Osprey.ps1         build the .sln (+ optional tests/inspection/coverage)
   Summarize-Coverage.ps1        summarize a dotCover JSON report (whole-project)
   Run-Osprey.ps1                run Osprey or Rust osprey on a dataset
+  Run-FdrBench.ps1              FDRBench entrapment-calibration driver
+                                (Osprey run -> FDRBench jar -> FDP metrics)
   Dataset-Config.ps1            dataset definitions + path helpers
   Clean-TestData.ps1            wipe caches / diagnostic dumps
 
@@ -135,6 +137,37 @@ comparators), not as the first-line gate.
 # Localize a divergence (~3 min smoke): Stellar single
 pwsh -File ./ai/scripts/Osprey/Test-Full-Regression.ps1 -Smoke
 ```
+
+## FDRBench validation (the correctness oracle)
+
+`regression.ps1` proves the output did not *change*; the FDRBench
+entrapment oracle proves the reported FDR is *correct*.  It is the gate
+for any change that moves the discovery set or the reported q-values,
+and it wins over cross-impl parity when they disagree.  Full doctrine +
+mechanism: the "FDRBench entrapment validation" section of
+[../../docs/osprey-development-guide.md](../../docs/osprey-development-guide.md).
+
+`Run-FdrBench.ps1` runs one cell end-to-end (Osprey `--fdrbench` run ->
+FDRBench jar -> `disc@1%q`, combined/paired FDP@1%q, `disc@1% true FDP`)
+and needs `java` on PATH plus the FDRBench jar (auto-found under
+`D:\test\fdrbench\`, or `-FdrBenchJar` / `$env:FDRBENCH_JAR`).
+
+```powershell
+# Calibrated reference (library-supplied decoys) -- expect ~0.82% Stellar
+pwsh -File ./ai/scripts/Osprey/Run-FdrBench.ps1 -Dataset StellarLibraryDecoy
+
+# Anti-conservative demonstration (Osprey-generated reverse decoys)
+pwsh -File ./ai/scripts/Osprey/Run-FdrBench.ps1 -DecoySource Generated
+
+# --protein-fdr pass-2 A/B on one binary (cell A off vs cell B on)
+pwsh -File ./ai/scripts/Osprey/Run-FdrBench.ps1 -ProteinFdr '' -FragmentTolerance 0.4 -OutName A_noprotein
+pwsh -File ./ai/scripts/Osprey/Run-FdrBench.ps1 -ProteinFdr 0.01 -FragmentTolerance 0.4 -OutName B_proteinfdr
+```
+
+Requires an entrapment dataset (`*LibraryDecoy`); precursor level is the
+trusted path.  The zoomed q-q calibration *plots* remain a Python helper
+(matplotlib, reads each cell's `fdp.csv`); the numeric gate above does
+not need it.
 
 ## Performance
 

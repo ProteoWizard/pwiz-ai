@@ -41,7 +41,10 @@ points at:
 
 Cross-impl parity work additionally needs:
 - **`ai/docs/osprey-development-guide.md`** - steel-thread parity
-  doctrine, Stage 1-5 diagnostic dumps, bisection methodology.
+  doctrine, Stage 1-5 diagnostic dumps, bisection methodology, and the
+  **FDRBench entrapment validation** section (the independent
+  correctness oracle -- read it before any change that moves the
+  discovery set or reported q-values; the oracle wins over parity).
 - **`ai/docs/osprey-crossimpl-validation-guide.md`** - validation
   guide for cross-impl test runs.
 - **`ai/scripts/Osprey/Compare/README.md`** - the cross-impl
@@ -130,6 +133,28 @@ and `README.md` are the authoritative gate references.
   `pwsh -File ./ai/scripts/Osprey/Compare/Compare-EndToEnd-Crossimpl.ps1 -Files All`
   on Stellar + Astral (re-runs Rust). This replaces the old `-SkipRust` routine
   use, which `regression.ps1` superseded. See `Compare/README.md`.
+
+## TeamCity Perf/Regression gate (manual - trigger it yourself)
+
+The **Osprey Windows .NET Perf/Regression Tests** config
+(`ProteoWizard_OspreyWindowsNetPerfRegressionTests`) runs `regression.ps1`
+mode1/2/3 on **Stellar AND Astral** (straight-through, HPC chain, resume) plus a
+perf leg - about an hour. It is deliberately **manual / overnight**, NOT triggered
+on every commit or push, so opening or pushing a PR does **not** start it. When a
+PR is otherwise ready (self-review clean, the `Osprey Windows .NET` unit build
+green), trigger it yourself and let it run before requesting human review / merge.
+
+Trigger via the TeamCity MCP:
+`mcp__teamcity__trigger_build(build_type_id="ProteoWizard_OspreyWindowsNetPerfRegressionTests", branch="pull/<N>")`
+
+**Always use `branch="pull/<N>"` (the PR number), NEVER the named
+`Skyline/work/...` branch.** The Osprey configs watch PR refs
+(`refs/pull/<N>/head`); a named branch is not recognized and TeamCity **silently
+falls back to building master** - a green result that tested the wrong commit. (The
+MCP now refuses a named branch for Osprey configs and tells you to use `pull/<N>`.)
+The local Stellar gates (`regression.ps1 -Dataset Stellar` +
+`Compare-EndToEnd-Crossimpl`) already cover Stellar; this CI gate's unique value is
+the **Astral** legs, which are too slow to run locally each session.
 
 ## Key Repositories
 

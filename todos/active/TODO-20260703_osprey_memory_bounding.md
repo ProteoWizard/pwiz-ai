@@ -175,7 +175,35 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
   dropped -- local-stage-then-move is the right design for a NAS destination. Confirmed Rust
   does post-copy integrity verification (`osprey_core::copy_and_verify`, byte-count +
   buffered-retry, 6 sites); C# `File.Move` lacks it -> tracked as a separate robustness
-  follow-up above.
+  follow-up above (filed #4356). Also filed #4357 (near-linear parsimony) + backlog TODO.
+- 2026-07-04: Overnight fixed-20 measurement on the 64 GB TARGET machine. Phase 1 WORKS:
+  file-13 managed 19.9 GB (vs unfixed baseline 56 GB); the unfixed baseline OOM'd at file 14,
+  the fixed run scored all 20 + Stage 5 + into Stage 6 at ~46 GB working set (~2x reduction),
+  producing valid output (no crash). BUT Stage 5 is the new ceiling: the Phase-1 feature-reload
+  is itself O(N) -- ~27 GB managed for 20 files (library + 20x features) -> ~89 GB extrapolated
+  for 82; and peak_paged already hit 65.57 GB at 20 files. => **Phase 1 necessary but NOT
+  sufficient for 82 files on 64 GB; Phase 4 (streaming Percolator) confirmed required.** The
+  run was killed by the machine SLEEPING at 02:08 (healthy in Stage 6, not an OOM) -> future
+  unattended runs need sleep disabled. Parsimony: 8454 protein groups @ 20 files (#4357 sizing).
+  Started Phase 4: two probes mapping the C# `PercolatorFdr` flow + the Rust streaming reference
+  (`crates/osprey-fdr/src/percolator.rs`) before coding. Byte-identical is the gate.
+- 2026-07-04: Phase 4 (streaming Percolator) implemented via a worktree agent, REVIEWED here +
+  byte-identity verified (`CoelutionSum == Features[0]` so best-per-precursor unchanged; per-entry
+  score math character-identical; `ResolveFeatureRow` == the old reload). Integrated + committed
+  `d46708fc5` + pushed. Debug + Osprey.Test **448 pass**, 0 new inspection warnings (fixed 2
+  ReSharper nits the agent missed). Phase-4 82-file run on the 64 GB machine: **working set
+  BOUNDED ~35-53 GB** (was OOM @ file 14 unfixed) -- Phase 4 works -- BUT managed heap climbs
+  ~0.6 GB/file (the `FdrEntry` STUB buffer O(N) + the fixed 3.17M library) and peak_paged hit
+  65 GB, so 82-on-64 GB is at the EDGE (paging). Killed the 64 GB run; moved the definitive
+  82-file run + peak measurement to the **96 GB machine** (handoff written at
+  `\\maccoss-nas\home\2026-05-SEA-AD-Pilot-MTG\Carafe-Osprey\OSPREY-MEMORY-WORK-HANDOFF.md`).
+- **NEXT LEVERS (Phase 5+, still #4355), to get 82 comfortably under 64 GB:** (1) intern
+  `ModifiedSequence` (Rust #4 `Arc<str>`; likely the biggest stub win); (2) compact non-passing
+  stubs after the first pass (Rust #3); (3) Phase 4b -- stream the Stage-7 2nd-pass FDR (the agent
+  left it resident: gap-fill `ParquetIndex == uint.MaxValue` + `CoelutionSum` diverges after
+  rescore); (4) profile the 3.17M-library fixed cost. Size these from the 96 GB peak.
+- **Byte-identity gates still PENDING:** `regression.ps1`/Stellar (direct path) + a >600K
+  before/after diff (streaming path -- Stellar doesn't exercise it).
 
 ## Handoff prompt
 

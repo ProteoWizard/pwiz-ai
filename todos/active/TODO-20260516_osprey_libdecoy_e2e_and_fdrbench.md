@@ -541,3 +541,80 @@ library-supplied decoys; generated reverse decoys badly under-estimate FDR. No n
 code change warranted by the oracle. Caveats: precursor level only; entrapment-oracle
 assumptions (truly-absent entrapment, 1:1 ratio, FDRBench estimator); the separate
 Astral cross-impl divergence is out of scope.
+
+### 2026-07-03 (deep FDR-calibration investigation, Brendan pairing) -- ROOT CAUSE: reversed decoys are anti-conservative
+Long interactive session dissecting WHY FDRBench `combined` FDP sits ~2x above Osprey's
+q on Stellar libdecoy pass-1. **Conclusion (Brendan, well-supported): Osprey's decoy FDR
+is genuinely ANTI-CONSERVATIVE on library-supplied (Carafe reversed/shuffled) decoys --
+NOT a plotting/estimator artifact.** Earlier "combined is just the estimator doubling,
+Osprey ~right" framing was WRONG.
+
+KEY FACTS (all on Stellar libdecoy, pass-1 pre-compaction pool; DB is balanced 1:1:1:1
+target:decoy:p_target:p_decoy, 218871 each):
+- `combined_fdp = 2 x lower_bound_fdp` EXACTLY (formula). At Osprey q=0.01: lower_bound
+  1.01%, combined 2.03%, paired 1.79%. FDRBench's own `lower_bound_fdp` column = the raw
+  entrapment fraction n_P/(n_T+n_P); it was never plotted in the earlier post-PR4347 q-q
+  graphs (only combined+paired), which is why the 2x looked like inflation.
+- ROOT CAUSE via per-pair decoy-win fraction (`ai/.tmp/OspreyFDR/winfrac.py`, from the
+  Stage-5 percolator dump): **entrapment-vs-its-p_decoy = fair ~50/50 at every score band;
+  real-target-vs-its-decoy = decoy wins far less (0.7% at winner>=0).** Much of that is
+  true positives, but the entrapment 50/50 is the tell: real peptides beat their
+  reversed/shuffled decoys (reversal destroys peptide-likeness), so FALSE reals also beat
+  their decoys > 50/50 -> Osprey's decoys UNDER-count the false reals -> anti-conservative.
+  A PAIRED effect, invisible in the marginal density (which shows decoy==entrapment==target
+  null-bulk overlapping). This is Mike's decoy-GENERATION quality issue, not an FDR-code bug.
+- `lower_bound` is an ASSUMPTION-FREE hard floor (entrapment are known-false). In the boost
+  experiment (below) Osprey-q drops BELOW lower_bound -> provable anti-conservatism, no
+  exchangeability argument needed ("+1 entrapment < +1 FP").
+- NO Osprey code fix brings combined->y=x; fix is better decoys OR decoy-independent
+  calibration (pi0/mixture, PeptideProphet-style -- Nesvizhskii's approach would catch this
+  and is immune to reversed-decoy bias). Product read: on entrapment libraries trust the
+  entrapment/combined (or lower_bound floor), not the decoy q, on this data.
+
+DIAGNOSTICS BUILT (on branch, Release+Debug green, zero-warning inspection):
+- **`OSPREY_BOOST_TARGET_DISCRIMINANT=c`** (NEW, committed-worthy): adds c to the first-pass
+  SVM discriminant of REAL targets only (non-decoy, non-entrapment via `_p_target` protein),
+  before FDR q-comp; entrapment+decoys untouched. 6 edits: OspreyEnvironment (env+
+  ParseDoubleOrZero), FdrEntry.IsEntrapment, PercolatorEntry.IsEntrapment,
+  PercolatorEntryBuilder copy, FirstJoinTask.TagEntrapmentForBoost (library lookup),
+  PercolatorFdr boost in ScorePopulationAndComputeFdr. Default-off. VALIDATED: c=0
+  reproduces the real baseline (27154 disc, 2.03%) exactly -> faithful. c=1/2/3: disc@q=0.01
+  27154->63137 while combined stays ~2%, lower_bound rises 1.01%->1.13% (crosses above y=x).
+- `Run-FdrBench.ps1` (committed, ai/scripts/Osprey) + ai/.tmp/OspreyFDR/ python plotters:
+  density-plot.py (4-class), plot-boost.py, winfrac.py, qq-with-lowerbound.py, whatif-*.py.
+- Faithful Osprey q + FDRBench FDP requires running THROUGH Osprey (the boost hook); every
+  from-scratch competition reconstruction from the dump MISSED (base_id vs precursor dedup).
+
+ARTIFACTS: /d/test/osprey-runs/_boost/boost_{0..3}/ (fdp.csv), _density/stellar_{lib,gen}decoy/
+(cs_stage5_percolator.tsv dumps), _gendecoy_repro/. Density PNGs + boost PNG in
+ai/.tmp/OspreyFDR/density/. Diagnostic-development notes NOT yet written up (TODO).
+
+NEXT EXPERIMENT (Brendan, queued): all-null control -- remove real targets+decoys, split the
+entrapment 1/2 "target" 1/2 "entrapment" (all false, generated, symmetric with decoys), run
+FDRBench. Prediction (agreed): combined ON y=x, lower_bound at y=x/2, Osprey-q == combined
+-> confirms combined is correct when the null is fair and the real-case 2x is the
+reversed-decoy asymmetry. Heads-up: no true positives -> q collapses ~1.0 (a point at
+(1,1)/(1,0.5), not a spanning line unless some real true targets are salted in).
+
+REMAINING TODOs from this session: (1) write up the reversed-decoy-bias finding +
+lower_bound-as-hard-floor argument as a durable note; (2) commit the boost diagnostic +
+winfrac + Run-FdrBench (currently on libdecoy branch, uncommitted); (3) run the all-null
+control; (4) regenerate post-PR4347 q-q plots with lower_bound + Osprey-q reference lines.
+Session ran below 10% context; continuing past auto-compact.
+
+PASS-1 vs PASS-2 RESOLUTION (Mike's pass-2 plot, same Stellar libdecoy no-protein-fdr):
+Mike's pass-2 = combined 0.90% (ON y=x), lower_bound 0.45% (~y=x/2), 26898 disc -> CALIBRATED.
+Ours pass-1 = combined 2.03%, lower_bound 1.01%. combined=2xlower_bound in BOTH; the ONLY
+difference is the entrapment fraction halving (1.01%->0.45%), which slides combined from
+2x-above to on y=x. WHY pass-2 has half the entrapment: COMPACTION + RECONCILIATION. The
+reversed-decoy bias admits false targets (entrapment + false-real) on lucky SINGLE-RUN peak
+matches in pass 1; pass-2 reconciliation demands CROSS-RUN consensus, which demotes those
+lucky peaks (false peptides have no consistent cross-run signal) -> ~275 entrapment drop to
+~121. So reconciliation is a false-positive filter that removes exactly the reversed-decoy
+errors -> pass-2 calibrated. CONSEQUENCE: Osprey's SHIPPING output (pass 2) is well-calibrated
+(Mike right); the anti-conservatism is a PASS-1 property. But pass-1 q drives COMPACTION, so it
+admits extra false-reals into the compacted pool (reconciliation cleans them) -- and this is
+exactly why --protein-fdr, which RECALIBRATES on the compacted/decoy-depleted pool, goes
+anti-conservative. VERIFY NEXT: confirm 275->121 is reconciliation demoting lucky single-run
+peaks; re-run winfrac on the pass-2 pool (real-target decoy-win should climb back toward the
+entrapment's fair 50/50 once lucky matches are gone).

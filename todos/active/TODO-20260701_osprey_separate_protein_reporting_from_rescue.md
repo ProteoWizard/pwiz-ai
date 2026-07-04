@@ -62,10 +62,103 @@ PR #4352. Both branched off master b2373f9f9c.
   (5) strip TODO-file refs from PR-2 code comments (feedback_no_todo_refs_in_code);
   (6) /pw-self-review 4353, un-draft.
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260701_osprey_protein_rescue_removal.md` before starting work.
-- FOLLOW-UP for Mike: remove the same rescue from Rust (pipeline.rs:1488-1491)
-  and reconcile his recollection with the code.
+### 2026-07-02 (evening) - ORACLE RE-RUN OVERTURNS THE ROOT-CAUSE ATTRIBUTION
+The entrapment oracle (deferred until now) was finally run on the rescue-removed
+build. It shows the rescue removal did NOT fix the anti-conservative `--protein-fdr`
+FDR, and that the stated justification was misattributed. Full write-up:
+`ai/.tmp/pr2-oracle-finding.md`; memory `project_osprey_pass2_recalibration_inflates_fdr`.
+
+Stellar libdecoy, precursor, --fragment-tolerance 0.4, same Release binary:
+- A: --protein-fdr OFF                              -> 27050 disc, FDP **0.92%** (good).
+- B: --protein-fdr ON                               -> 30788 disc, FDP **1.57%** (bad).
+- C: --protein-fdr ON + OSPREY_PASS2_NO_RECALIBRATE -> 27050 disc, **0.92%** = **C==A exactly**.
+
+- **The 2nd-pass Percolator RECALIBRATION is the entire anti-conservative source, NOT
+  the rescue.** `MergeNodeTask.cs:127` gates the 2nd-pass Percolator retrain on
+  `--protein-fdr`; that retrain re-estimates q from the reconciliation-biased,
+  decoy-paired null and radically underestimates q (curve jumps to 1.46% by q~=0.001
+  then plateaus). Skipping it (cell C) restores 0.92% and makes `--protein-fdr`
+  genuinely reporting-only.
+- **The 6.3x entrapment figure that "ONLY justified" the rescue removal was measured
+  WITH recalibration on -> it was measuring the recalibration, not the rescue.** The
+  mode1 golden diff (rescue-removed vs rescue-present, both with recalibration) was
+  only **net -3 discoveries**, confirming the rescue removal is ~no-op on final output.
+- **CONSEQUENCE:** PR-2's premise ("remove the rescue -> fix anti-conservative
+  --protein-fdr / make it reporting-only") is invalid. The rescue removal is at best a
+  cosmetic cleanup matching Mike's intent; the mode3-fix + reconciliation-v3 parity
+  fix a *latent* HPC coupling (worth keeping) but only manifest once the rescue is
+  removed. Do NOT ship #4353 on the old narrative.
+
+**RECOMMENDATION (pending Brendan+Mike science call):**
+1. The real fix is TRIC-style (Rost 2016) confidence *transfer*: pass 2 re-picks peaks
+   but does NOT recompute FDR -- score the reconciled peak with the FROZEN 1st-pass
+   model and map through the 1st-pass score->q table (co-monotonic), never re-estimating
+   a null on the biased decoys. Variant (iii). Minimal proof-of-direction lives behind
+   experimental env var OSPREY_PASS2_NO_RECALIBRATE (uncommitted in the pwiz worktree:
+   OspreyEnvironment.cs + Pass2FdrSidecar.cs).
+2. Rust PR maccoss/osprey#48 (reconciliation.json v3 parity) is INDEPENDENT and ready --
+   byte-identical to C# (SHA 3896e545). Keep it.
+3. HOLD pwiz #4353 (draft) -- fold rescue-removal + mode3 + reconciliation-v3 into the
+   coherent pass-2 recalibration-fix rework, OR reframe narrowly as an HPC-hardening +
+   cleanup PR. Brendan to decide. Golden re-capture is deferred behind that decision.
+4. Whether Osprey stops recalibrating in pass 2 by default (and variant ii vs iii) is
+   the science decision. Osprey is now the platform to A/B it rigorously (the 2016
+   Horowitz-Gelb aim); the oracle harness produces one FDP curve per variant.
+
+**Next session handoff**: For the CURRENT state (night 2026-07-02/03 findings + validated
+fix), read `ai/.tmp/handoff-20260703-morning.md` first. (Older startup protocol:
+`ai/.tmp/handoff-20260701_osprey_protein_rescue_removal.md`.)
+- NIGHT 2026-07-02 RESULT: the --protein-fdr inflation is the 2nd-pass Percolator
+  RECALIBRATION (not the rescue). Its SCORE helps (+390 real IDs @ true 1% FDP) but its q
+  is anti-conservative because compaction DEPLETES the decoy null before Stage 7. FIX
+  VALIDATED (cell E = 0.86%): carry the FULL 1st-pass score->q null to Stage 7 + transfer.
+  Best-but-unverified fix (vii, interrupted by reboot) = retrain score + non-depleted null.
+  Experimental env vars OSPREY_PASS2_NO_RECALIBRATE + OSPREY_PASS2_TRANSFER_Q uncommitted on
+  the branch. See handoff for the A/B/C/D/E numbers + next experiments.
+- FOLLOW-UP for Mike: the rescue in Rust (pipeline.rs:1488-1491) is now a lower priority
+  than the pass-2 recalibration question above; reconcile his recollection with the code.
+
+### 2026-07-04 - OUTCOME: #4353 closed; split into a parity-clean PR + backlog (Brendan)
+The 07-02 oracle overturn led to reducing scope. Final disposition:
+- **#4353 CLOSED.** Superseded by **pwiz #4358** ("Carried the join-wide first-pass
+  base_id set in reconciliation.json (v3)") -- reconciliation-v3 ONLY, a clean C#/Rust
+  bit-parity pair with Rust **maccoss/osprey#48**. Validated: build + 443 tests;
+  regression Stellar mode1/2/3 PASS (behavior-neutral, NO golden re-capture); and
+  Compare-EndToEnd-Crossimpl Stellar 3-file PASS (1e-9). Branch
+  `Skyline/work/20260704_osprey_reconciliation_v3_baseids`.
+- **Rescue removal: NOT shipped.** The score-flip investigation resolved the mode1 golden
+  diff as the 2nd-pass Percolator RE-SCORING (blib RetentionTimes.score = EffectiveRunQvalue;
+  `--protein-fdr` retrains globally when the compacted set changes) -- expected, not a bug,
+  but it makes the C#-only rescue removal a cross-impl parity break. Keeping the rescue in C#
+  preserves parity with Rust; removing it is deferred to a dual C#+Rust change (Mike's
+  sign-off) or folded into the pass-2 fix, since the oracle showed it is ~a no-op.
+- **The real anti-conservative fix** (2nd-pass recalibration on a decoy-depleted null) ->
+  `backlog/brendanx67/TODO-osprey_pass2_recalibration_fix.md`. Experimental instruments
+  (OSPREY_PASS2_NO_RECALIBRATE / _TRANSFER_Q / _RETRAIN_FULLNULL) preserved on branch
+  `Skyline/work/20260704_osprey_pass2_recalibration` (commit d52cf7db17).
+- Two more backlog TODOs this sprint: `TODO-osprey_diagnostics_fdr_plots.md`,
+  `TODO-osprey_assumption_failure_detection.md`.
+This TODO's original deliverable (rescue removal) did not ship; its remaining work is now
+tracked by the pass-2 backlog TODO. Move active -> completed/ or backlog accordingly.
+
+### 2026-07-04 - Self-review (Opus 4.8) follow-ups on #4358
+Fresh-context Opus 4.8 self-review passed; core change confirmed clean (sorted
+first_pass_base_ids -> deterministic reconciliation.json byte-parity; golden
+unchanged; union semantics + fail-fast complete). Minor fixes landed in a follow-up
+commit: stale "currently 2"->3 version comment (RescoreHydration), and corrected the
+PerFileRescoreTask protein-FDR-recompute comment now that compaction reads the
+persisted global set (the recompute is retained for the downstream 2nd-pass, not
+compaction). Tracked / deferred:
+- (tracked) The Rust HPC worker still RECOMPUTES the first-pass predicate rather than
+  CONSUMING the persisted first_pass_base_ids (Rust commit b5362cc calls the worker
+  wiring a follow-up). C# reads the set; Rust recomputes. With the rescue present in
+  both impls they converge (mode3 + cross-impl prove it transitively on Stellar), but
+  the byte-parity gate checks only the WRITER. Follow-ups: (1) wire the Rust worker to
+  consume the set; (2) add a cross-impl WORKER-vs-worker HPC parity gate on a dataset
+  with cross-file consensus-rescued entries (Compare-EndToEnd runs straight-through
+  only). Not a #4358 blocker.
+- (deferred) reconciliation.json byte-parity test uses pre-sorted input, so the
+  Array.Sort + empty-array determinism paths aren't exercised.
 
 ## Decision (Brendan + Mike, 2026-07-01)
 Protein-FDR **reporting** (per-protein q-values / `output.proteins.csv`) is

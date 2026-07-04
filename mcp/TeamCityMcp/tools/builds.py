@@ -269,12 +269,18 @@ def register_tools(mcp):
         - ProteoWizard_WindowsX8664msvcProfessionalSkylineResharperChecks: Code Inspection
         - ProteoWizard_ZSkylineSingleTestTroubleshooting: Single test troubleshooting
         - bt83: Core Windows x86_64
+        - ProteoWizard_OspreyWindowsNet: Osprey Windows .NET unit build
+        - ProteoWizard_OspreyWindowsNetPerfRegressionTests: Osprey Perf/Regression
+          (Stellar+Astral, ~1hr, manual/overnight; use branch='pull/<N>')
 
         Args:
             build_type_id: Build configuration ID (e.g., 'bt209')
             branch: Branch name (e.g., 'Skyline/work/20260123_feature' or 'pull/3861').
                     For named branches, 'refs/heads/' is prepended automatically.
                     For PR branches like 'pull/NNN', they are used as-is.
+                    NOTE: Osprey configs (ProteoWizard_Osprey*) build PR refs ONLY --
+                    pass 'pull/<N>', never a named branch (which silently builds
+                    master; this method refuses that combination).
                     If not specified, the build uses its default branch.
             agent_name: Agent name to run on (e.g., 'MacCoss TeamCity Agent 1').
                         The agent ID is resolved automatically by name lookup.
@@ -284,6 +290,25 @@ def register_tools(mcp):
             Build queue info with ID and URL for monitoring.
         """
         try:
+            # Guard the Osprey silent-master trap. Osprey TeamCity configs watch PR
+            # refs (refs/pull/<N>/head), not named branches; a Skyline/work/... branch
+            # is not recognized and TeamCity silently falls back to building master --
+            # a green result against the wrong commit. Refuse it and point at pull/<N>.
+            # (Skyline configs legitimately use named branches, so this guard is scoped
+            # to Osprey configs only.)
+            if (
+                branch
+                and "osprey" in build_type_id.lower()
+                and not branch.startswith("pull/")
+                and branch not in ("master", "<default>")
+            ):
+                return (
+                    f"Refusing to trigger '{build_type_id}' on named branch '{branch}'.\n"
+                    f"Osprey TeamCity configs build PR refs (refs/pull/<N>/head); a named "
+                    f"branch is not recognized and TeamCity silently builds master instead. "
+                    f"Pass branch='pull/<N>' (the PR number), e.g. branch='pull/4358'."
+                )
+
             # Build the JSON payload
             payload = {
                 "buildType": {"id": build_type_id},

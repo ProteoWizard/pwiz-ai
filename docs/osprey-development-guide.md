@@ -224,6 +224,163 @@ pwsh -File ./ai/scripts/Osprey/Bench-Scoring.ps1 -Dataset Stellar -Files Single 
 Compares upstream Rust (`osprey-mm`), our fork Rust (`osprey`), and
 Osprey (C#). `-SkipUpstream` skips the upstream Rust run.
 
+## FDRBench entrapment validation (the correctness oracle)
+
+Cross-impl parity (above) proves the two implementations *agree*. It
+says nothing about whether the FDR they both report is *correct*.
+**FDRBench is the independent oracle that answers the second question**,
+and it is now a first-class gate for any change that can move the
+discovery set or the reported q-values (scoring, calibration, FDR,
+compaction, reconciliation, decoy handling).
+
+**FDRBench** ([Noble-Lab/FDRBench](https://github.com/Noble-Lab/FDRBench))
+is an external Java tool that measures the *true* false-discovery
+proportion (FDP) of a search result by the entrapment method: the
+search library is spiked with **entrapment** sequences that are known
+to be absent from the sample, so any entrapment peptide reported at a
+given q-value is a known-false discovery. FDRBench counts them across
+the reported ranking and produces an FDP-vs-reported-q curve. Perfect
+calibration is the `y = x` line; a curve **above** it means the search
+is anti-conservative (under-reporting its true error rate).
+
+- Local install: **FDRBench v1.1.1** jar at `D:\test\fdrbench\`.
+- Ground-truth data: Carafe-built entrapment libraries delivered by
+  Mike via Panorama (`StellarTest-TargetDecoyLibraries/`,
+  `AstralTest-TargetDecoyLibraries/`), each with `target+decoy/` and
+  `target+decoy+entrapment/` variants (a `carafe_spectral_library.tsv`
+  + an `osprey_library_db_pairing.tsv` FDRBench pairing manifest +
+  fasta). Entrapment ratio is 1:1. Staged at
+  `D:\test\osprey-runs\{stellar,astral}-libdecoy\`; decoy-stripped
+  "generated-decoy" variants at `...-gendecoy\`.
+
+### The doctrine: the oracle wins over parity
+
+When entrapment FDP and cross-impl parity disagree, **the oracle
+wins.** Matching a late-breaking (possibly-incorrect) reference is not
+a correctness proof. Two decisive precedents:
+
+- **The base_id reconciliation fix** reached Rust byte-parity
+  (30674 = 30674, stage-7 + blib @ 1e-9) yet **degraded** entrapment
+  FDP on Stellar library-decoy from 0.82% to 1.46% (above the line).
+  It was held back rather than shipped to match Rust -- see
+  [[project_osprey_libdecoy_vs_gendecoy_calibration]] and
+  [[feedback_parity_vs_impact]]. Rust HEAD was simply anti-conservative
+  there too.
+- **The pass-2 protein-FDR investigation:** the oracle showed the
+  `--protein-fdr` rescue removal was a near no-op on output and that the
+  real anti-conservative source was the 2nd-pass Percolator
+  *recalibration* on a decoy-depleted null -- a conclusion no parity
+  gate could have reached. See
+  [[project_osprey_pass2_recalibration_inflates_fdr]].
+
+Corollary: report every measured cell honestly, and judge any
+FDR-affecting code change on the entrapment oracle, not on parity or on
+raw discovery count. More raw IDs at a claimed 1% q is *worse*, not
+better, if the extra IDs are disproportionately entrapment hits.
+
+### The pipeline (Osprey run -> FDRBench input -> FDP curve)
+
+The committed driver **`ai/scripts/Osprey/Run-FdrBench.ps1`** runs all three
+stages below for one cell and prints the calibration metrics (it dot-sources
+`Dataset-Config.ps1`, resolves the jar, and parses `fdp.csv` natively -- no
+Python needed for the numbers):
+
+```
+# Calibrated reference cell (library-supplied decoys, reported level):
+pwsh -File ./ai/scripts/Osprey/Run-FdrBench.ps1 -Dataset StellarLibraryDecoy
+
+# Anti-conservative demonstration (Osprey-generated reverse decoys):
+pwsh -File ./ai/scripts/Osprey/Run-FdrBench.ps1 -DecoySource Generated
+
+# The --protein-fdr pass-2 A/B (same binary, cell A off vs cell B on):
+pwsh -File ./ai/scripts/Osprey/Run-FdrBench.ps1 -ProteinFdr '' -FragmentTolerance 0.4 -OutName A_noprotein
+pwsh -File ./ai/scripts/Osprey/Run-FdrBench.ps1 -ProteinFdr 0.01 -FragmentTolerance 0.4 -OutName B_proteinfdr
+```
+
+The three stages it wraps:
+
+1. **Osprey emits the FDRBench input TSV.** The committed CLI is
+   `--fdrbench <input.tsv>` (one row per precursor, experiment-level
+   q) plus `--fdrbench-per-run` (one row per precursor+run, run-level
+   q; adds a `run` column). The writer is
+   `pwiz_tools/Osprey/Osprey.Tasks/FdrBenchInputWriter.cs` (a port of
+   Rust `osprey-io/src/output/fdrbench.rs`
+   `write_fdrbench_peptide_input`). It emits **every reported
+   (compaction-surviving) target regardless of q-value**, with the raw
+   SVM discriminant as the `score` column, so FDRBench sees the full
+   reported ranking without truncation at Osprey's threshold.
+   Entrapment sequences are marked by `_p_target` in the protein
+   accessions and pass through as targets; decoys are excluded. The
+   `protein` column is capped at 4000 chars (FDRBench's bundled
+   Univocity CSV parser aborts past 4096).
+
+2. **Run the FDRBench jar** on that TSV. The score is
+   "higher-is-better", so invoke with `-score 'score:1'`. Runs to date
+   are **precursor-level** (`-level precursor`); the FDP is
+   parameter-sensitive, so pin `-fold` / `-r`, `-pick first`, and
+   `-seed` (the pass-2 oracle used `-level precursor -fold 1
+   -pick first -seed 2000`). Entrapment is recognized via the
+   `_p_target` marker. FDRBench emits an FDP CSV.
+
+3. **Read the curve.** FDRBench reports **combined FDP** and **paired
+   FDP** vs Osprey's reported q. Plot both against `y = x`, **zoomed to
+   q,FDP in [0, 0.02]** -- the whole point is deviations below 1%, and
+   a 0->1.0 axis hides them. For comparing two methods fairly, also
+   read **discoveries at true 1% FDP** (walk the ranking to the point
+   where true FDP crosses 1%): a method with a better score recovers
+   more real IDs at matched true FDP even if its reported q is equally
+   calibrated.
+
+**Pass 1 vs pass 2.** Osprey can emit the FDRBench input at either
+pipeline point via `--fdrbench-pass <1|2>` (this flag currently lives
+on branch `Skyline/work/20260630_osprey_libdecoy_reconciliation_baseid`,
+commit `dc05539eb7`, pending merge -- the flag is not yet on master).
+Pass 1 = the full **pre-compaction** first-pass pool with first-pass q
+(byte-equal to Rust `write_fdrbench_peptide_input`); pass 2 (default) =
+the **post-compaction** reported set with final q. **Quote pass-2 for
+reported FDR** (it is what the user sees). The p1->p2 delta is itself
+diagnostic: library-supplied decoys *tighten* calibration from p1 to
+p2, generated decoys *degrade* it.
+
+### Validated reference anchors (as of 2026-07-03)
+
+Use these as regression anchors -- a change that moves them needs a
+science explanation, not just a green build:
+
+- **Library-supplied (Carafe) decoys are near-calibrated** at the
+  reported pass-2 level: Stellar 0.82% (below the line), Astral 1.32%
+  (just above). **Osprey-generated reverse decoys are severely
+  anti-conservative**: Stellar 16.05%, Astral 12.19% true FDP at a
+  claimed 1%. Confirmed on both instruments -- this is Mike's original
+  motivation for library-supplied decoys, and the product guidance is
+  to prefer them on entrapment libraries.
+- **`--protein-fdr` is not reporting-only today**: it triggers the
+  2nd-pass Percolator recalibration, which inflates Stellar
+  library-decoy FDP from 0.92% (off) to 1.57% (on). Carrying the full
+  1st-pass score->q null to Stage 7 and transferring q through it
+  (TRIC-style) restores 0.86%.
+
+### Caveats
+
+- **Precursor-level only** so far. Peptide-level FDRBench has errored
+  ("entrapment hits > k=1") on these libraries; get Mike's exact
+  peptide-level invocation before trusting it.
+- The oracle rests on entrapment assumptions: the entrapment sequences
+  are truly absent from the sample, the 1:1 target:entrapment ratio,
+  and FDRBench's own estimator. It is the best independent signal we
+  have, not an absolute truth.
+- **The committed driver is `ai/scripts/Osprey/Run-FdrBench.ps1`**
+  (single-cell: Osprey run -> FDRBench jar -> metrics). It replaces the
+  per-session bash scripts that used to live under `ai/.tmp/`
+  (`run-cell.sh`, `run-fdrbench.sh`, `drive-all.sh`, `strip-decoys.sh`).
+  Its `Get-FdrBenchCalibration` metric parser is validated against the
+  recorded Stellar libdecoy pass-2 reference (28517 disc @ 1% q, 0.82%
+  combined FDP, 30503 disc @ 1% true FDP). The **q-q calibration
+  *plots*** (the zoomed 2x2 grid) still come from a Python helper
+  (`plot-calibration.py`, matplotlib) that reads each cell's `fdp.csv`
+  -- promote that too if plotting becomes routine; the numeric gate does
+  not need it.
+
 ## HPC split CLI flags
 
 Since the 2026-04-19 HPC split sprint, both tools expose CLI flags
@@ -751,7 +908,8 @@ EOF
   `Test-Features.ps1` (Stages 1-4 parity), `Compare-Diagnostic.ps1`
   (row-wise dump diff), `Compare-Percolator.ps1` (hash-joined
   Stage 5 compare), `Bench-Scoring.ps1` (perf),
-  `Profile-Osprey.ps1` (C# profiling)
+  `Profile-Osprey.ps1` (C# profiling),
+  `Run-FdrBench.ps1` (FDRBench entrapment-calibration driver)
 - `pwiz_tools/Osprey/Osprey/OspreyDiagnostics.cs` --
   C# diagnostic constants + cal-phase dump methods
 - `pwiz_tools/Osprey/Osprey.FDR/PercolatorFdr.cs` -- C#
