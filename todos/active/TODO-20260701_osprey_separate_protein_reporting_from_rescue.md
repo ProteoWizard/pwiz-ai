@@ -141,6 +141,25 @@ The 07-02 oracle overturn led to reducing scope. Final disposition:
 This TODO's original deliverable (rescue removal) did not ship; its remaining work is now
 tracked by the pass-2 backlog TODO. Move active -> completed/ or backlog accordingly.
 
+### 2026-07-04 - Self-review (Opus 4.8) follow-ups on #4358
+Fresh-context Opus 4.8 self-review passed; core change confirmed clean (sorted
+first_pass_base_ids -> deterministic reconciliation.json byte-parity; golden
+unchanged; union semantics + fail-fast complete). Minor fixes landed in a follow-up
+commit: stale "currently 2"->3 version comment (RescoreHydration), and corrected the
+PerFileRescoreTask protein-FDR-recompute comment now that compaction reads the
+persisted global set (the recompute is retained for the downstream 2nd-pass, not
+compaction). Tracked / deferred:
+- (tracked) The Rust HPC worker still RECOMPUTES the first-pass predicate rather than
+  CONSUMING the persisted first_pass_base_ids (Rust commit b5362cc calls the worker
+  wiring a follow-up). C# reads the set; Rust recomputes. With the rescue present in
+  both impls they converge (mode3 + cross-impl prove it transitively on Stellar), but
+  the byte-parity gate checks only the WRITER. Follow-ups: (1) wire the Rust worker to
+  consume the set; (2) add a cross-impl WORKER-vs-worker HPC parity gate on a dataset
+  with cross-file consensus-rescued entries (Compare-EndToEnd runs straight-through
+  only). Not a #4358 blocker.
+- (deferred) reconciliation.json byte-parity test uses pre-sorted input, so the
+  Array.Sort + empty-array determinism paths aren't exercised.
+
 ## Decision (Brendan + Mike, 2026-07-01)
 Protein-FDR **reporting** (per-protein q-values / `output.proteins.csv`) is
 desirable and stays. The pass-2 **protein rescue** -- keeping a peptide that
