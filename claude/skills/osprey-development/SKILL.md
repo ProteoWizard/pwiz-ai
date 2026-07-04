@@ -41,7 +41,10 @@ points at:
 
 Cross-impl parity work additionally needs:
 - **`ai/docs/osprey-development-guide.md`** - steel-thread parity
-  doctrine, Stage 1-5 diagnostic dumps, bisection methodology.
+  doctrine, Stage 1-5 diagnostic dumps, bisection methodology, and the
+  **FDRBench entrapment validation** section (the independent
+  correctness oracle -- read it before any change that moves the
+  discovery set or reported q-values; the oracle wins over parity).
 - **`ai/docs/osprey-crossimpl-validation-guide.md`** - validation
   guide for cross-impl test runs.
 - **`ai/scripts/Osprey/Compare/README.md`** - the cross-impl
