@@ -1,9 +1,15 @@
 # TODO-osprey_separate_protein_reporting_from_rescue.md -- Remove the pass-2 protein-FDR rescue; keep protein-FDR reporting
 
 ## Status
-Active (brendanx67). Branch `Skyline/work/20260701_osprey_protein_rescue_removal`,
-PR #4353 (opened 2026-07-01, autonomous night session). PR-1 (versioning) =
-PR #4352. Both branched off master b2373f9f9c.
+**Completed (2026-07-04).** The recon-v3 carve-out shipped: pwiz
+[#4358](https://github.com/ProteoWizard/pwiz/pull/4358) ("Carried the join-wide
+first-pass base_id set in reconciliation.json (v3)") **merged as `345c5d2` on
+2026-07-04**, paired with Rust maccoss/osprey#48. The original branch
+`Skyline/work/20260701_osprey_protein_rescue_removal` / PR #4353 (PR-1 versioning =
+#4352, both off master b2373f9f9c) was **CLOSED** -- the rescue removal did NOT ship
+(its premise was overturned; see the 2026-07-04 outcome below). The rescue removal
+plus the real anti-conservative fix are deferred to
+`backlog/brendanx67/TODO-osprey_pass2_recalibration_fix.md`.
 
 ### Progress (2026-07-01 night session)
 - DONE (code). Removed the `|| protein-q passes` clause from all THREE survival
