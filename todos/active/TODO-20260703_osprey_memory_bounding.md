@@ -187,6 +187,23 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
   unattended runs need sleep disabled. Parsimony: 8454 protein groups @ 20 files (#4357 sizing).
   Started Phase 4: two probes mapping the C# `PercolatorFdr` flow + the Rust streaming reference
   (`crates/osprey-fdr/src/percolator.rs`) before coding. Byte-identical is the gate.
+- 2026-07-04: Phase 4 (streaming Percolator) implemented via a worktree agent, REVIEWED here +
+  byte-identity verified (`CoelutionSum == Features[0]` so best-per-precursor unchanged; per-entry
+  score math character-identical; `ResolveFeatureRow` == the old reload). Integrated + committed
+  `d46708fc5` + pushed. Debug + Osprey.Test **448 pass**, 0 new inspection warnings (fixed 2
+  ReSharper nits the agent missed). Phase-4 82-file run on the 64 GB machine: **working set
+  BOUNDED ~35-53 GB** (was OOM @ file 14 unfixed) -- Phase 4 works -- BUT managed heap climbs
+  ~0.6 GB/file (the `FdrEntry` STUB buffer O(N) + the fixed 3.17M library) and peak_paged hit
+  65 GB, so 82-on-64 GB is at the EDGE (paging). Killed the 64 GB run; moved the definitive
+  82-file run + peak measurement to the **96 GB machine** (handoff written at
+  `\\maccoss-nas\home\2026-05-SEA-AD-Pilot-MTG\Carafe-Osprey\OSPREY-MEMORY-WORK-HANDOFF.md`).
+- **NEXT LEVERS (Phase 5+, still #4355), to get 82 comfortably under 64 GB:** (1) intern
+  `ModifiedSequence` (Rust #4 `Arc<str>`; likely the biggest stub win); (2) compact non-passing
+  stubs after the first pass (Rust #3); (3) Phase 4b -- stream the Stage-7 2nd-pass FDR (the agent
+  left it resident: gap-fill `ParquetIndex == uint.MaxValue` + `CoelutionSum` diverges after
+  rescore); (4) profile the 3.17M-library fixed cost. Size these from the 96 GB peak.
+- **Byte-identity gates still PENDING:** `regression.ps1`/Stellar (direct path) + a >600K
+  before/after diff (streaming path -- Stellar doesn't exercise it).
 
 ## Handoff prompt
 
