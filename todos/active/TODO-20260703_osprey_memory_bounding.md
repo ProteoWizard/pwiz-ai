@@ -108,11 +108,46 @@ spectra freeing + spill + `XcorrScratchPool` + streaming blib. The gaps that mat
 here: #1 (free results per file) and #2 (shrink struct after spill) -- Phase 1; the
 parallelism/accounting -- Phase 2. Streaming Percolator (#5) -- Phase 4 if needed.
 
+## Phase 1 design (from the rehydration audit, 2026-07-03)
+
+Heavy `FdrEntry` fields + verdicts (all persisted by `ParquetScoreCache.WriteScoresParquet`
+and reloadable by `ParquetIndex`):
+- **5 blob fields** (`CwtCandidates`, `FragmentMzs`, `FragmentIntensities`,
+  `ReferenceXicRts`, `ReferenceXicIntensities`) -- **no in-memory consumer** after the
+  per-file write (Stage 6 CWT loads from parquet via `CwtCandidateLoader`; blib fragments
+  come from the library, not these). Safe to null. The bulk of the memory.
+- **`Features`** (double[21]) -- one in-memory consumer: Stage-5 first-pass Percolator
+  (`FirstJoinTask.RunFdr` -> `PercolatorEntryBuilder`). Stage 7 reloads from parquet.
+- **Landmine:** `ReconciledParquetWriter.ApplyRescoredRows` uses `Features == null` as the
+  "not rescored, keep parquet row" sentinel -> invariant `Features-null <=> blobs-null`.
+  Breaking it silently overlays empty blobs into the reconciled parquet.
+
+3-site implementation (null all six; matches the existing warm-path contract):
+1. After `WriteScoresParquet` (`PerFileScoringTask.cs:~1307`, before `return` at ~1314):
+   null all six on each entry -> stub shape.
+2. Before Stage-5 Percolator (`FirstJoinTask` before `RunFdr`): bulk-reload `Features` per
+   file via `ParquetScoreCache.LoadPinFeaturesFromParquet` + bind by `ParquetIndex` (reuse
+   `Pass2FdrSidecar.MapFeaturesByParquetIndex` / `LoadJoinOnlyScores`).
+3. After first-pass + protein FDR, before Stage 6: re-null `Features` (mirror
+   `FirstJoinTask.cs:431-433`) so the sentinel invariant holds.
+
+**Percolator refinement (confirmed in code):** C# ALREADY subsamples training to 300K
+(`PercolatorConfig.MaxTrainSize = 300000`, `PercolatorFdr.cs:115`; `BuildTrainingSubset`).
+So training memory is bounded, same as Rust. The Stage-5 watermark is the **score** pass:
+`RunFdr` holds the full `IList<PercolatorEntry>` and a dense `n x nFeatures` matrix
+(`PercolatorFdr.cs:254`) over ALL entries. Rust streams the score pass from per-file
+parquet and never materializes that. => **Phase 4, if needed, streams the SCORING (not the
+trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement decides.
+
 ## Progress log
 
 - 2026-07-03: Diagnosed via 3 code probes (C# memory, C# disk/temp, Rust techniques) +
   the live Carafe log. Filed issue #4355, created branch + this TODO. Root cause = O(N)
-  heavy-array retention; not a leak. Plan phased above.
+  heavy-array retention; not a leak.
+- 2026-07-03: Rehydration audit complete (per-field verdicts + 3-site design above);
+  confirmed the 300K training subsample is already ported (Stage-5 lever is streaming the
+  score pass). Dataset confirmed: 82 SEA-AD Astral files at `Y:\...\project_mzML`.
+  Implementing Phase 0 (ProfilerHooks) + Phase 1 next.
 
 ## Handoff prompt
 
