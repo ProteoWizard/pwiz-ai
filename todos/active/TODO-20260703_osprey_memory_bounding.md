@@ -175,7 +175,18 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
   dropped -- local-stage-then-move is the right design for a NAS destination. Confirmed Rust
   does post-copy integrity verification (`osprey_core::copy_and_verify`, byte-count +
   buffered-retry, 6 sites); C# `File.Move` lacks it -> tracked as a separate robustness
-  follow-up above.
+  follow-up above (filed #4356). Also filed #4357 (near-linear parsimony) + backlog TODO.
+- 2026-07-04: Overnight fixed-20 measurement on the 64 GB TARGET machine. Phase 1 WORKS:
+  file-13 managed 19.9 GB (vs unfixed baseline 56 GB); the unfixed baseline OOM'd at file 14,
+  the fixed run scored all 20 + Stage 5 + into Stage 6 at ~46 GB working set (~2x reduction),
+  producing valid output (no crash). BUT Stage 5 is the new ceiling: the Phase-1 feature-reload
+  is itself O(N) -- ~27 GB managed for 20 files (library + 20x features) -> ~89 GB extrapolated
+  for 82; and peak_paged already hit 65.57 GB at 20 files. => **Phase 1 necessary but NOT
+  sufficient for 82 files on 64 GB; Phase 4 (streaming Percolator) confirmed required.** The
+  run was killed by the machine SLEEPING at 02:08 (healthy in Stage 6, not an OOM) -> future
+  unattended runs need sleep disabled. Parsimony: 8454 protein groups @ 20 files (#4357 sizing).
+  Started Phase 4: two probes mapping the C# `PercolatorFdr` flow + the Rust streaming reference
+  (`crates/osprey-fdr/src/percolator.rs`) before coding. Byte-identical is the gate.
 
 ## Handoff prompt
 
