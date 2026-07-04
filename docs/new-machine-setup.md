@@ -199,6 +199,16 @@ If no key exists, guide the user:
 4. Tell user: "Copy this key and add it to GitHub at https://github.com/settings/keys"
 5. **Wait for user to confirm** they've added the key before proceeding
 
+> **For LLM assistants — PowerShell passphrase quoting gotcha.** If you generate the
+> key non-interactively (so the tool shell doesn't hang on the passphrase prompt), do
+> NOT write the empty-passphrase flag as `-N '""'` in PowerShell — that passes the
+> literal two-character string `""` as the passphrase. The symptom is a later
+> `ssh -T git@github.com` that logs **`Server accepts key`** immediately followed by
+> **`Permission denied (publickey)`** (and interactive `ssh` hangs waiting for the
+> passphrase). PowerShell 7 passes a genuine empty string with single quotes, so use
+> `-N ''`. To fix an already-created key in place (public key unchanged, no GitHub
+> re-add needed): `ssh-keygen -p -f ~/.ssh/id_ed25519 -P '""' -N ''`.
+
 ### 1.7 Test GitHub SSH Access
 
 ```powershell
@@ -387,6 +397,38 @@ This installs with:
 - .NET Framework 4.7.2 targeting pack
 
 The `--passive` flag shows progress without requiring interaction.
+
+> **For LLM assistants — winget can report success while the C++ workload is absent.**
+> On at least one Windows 11 (26200) / VS 17.14 machine, the winget one-liner above
+> printed *"Successfully installed"* but left the install **incomplete**
+> (`vswhere -all -property isComplete` = 0) with `VC\Tools\MSVC` **empty** — i.e. no
+> `cl.exe`. Always verify against the filesystem after install, and repair with an
+> explicit component add if needed:
+>
+> ```powershell
+> # Verify cl.exe actually exists (checkboxes/"installed" status can lie):
+> Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\*\bin\Hostx64\x64\cl.exe"
+>
+> # If missing, add the workload AND the explicit toolset component, ELEVATED:
+> $setup = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\setup.exe"
+> $args = 'modify --installPath "C:\Program Files\Microsoft Visual Studio\2022\Community"' +
+>         ' --add Microsoft.VisualStudio.Workload.NativeDesktop' +
+>         ' --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64' +
+>         ' --add Microsoft.VisualStudio.Workload.ManagedDesktop' +
+>         ' --add Microsoft.Net.Component.4.7.2.TargetingPack' +
+>         ' --includeRecommended --passive --norestart'
+> Start-Process -FilePath $setup -ArgumentList $args -Verb RunAs   # then poll for cl.exe
+> ```
+>
+> Three gotchas learned the hard way:
+> - **Do NOT pass `--wait`** — the installed `setup.exe` (v4.7.25) rejects it with
+>   **exit code 87** (`Option 'wait' is unknown`). Launch without it and poll for
+>   `cl.exe` / `isComplete=1` instead.
+> - **Must be elevated.** A silent `setup.exe modify --quiet/--passive` from an
+>   admin-but-not-elevated shell **silently no-ops** (no log, nothing installed). Use
+>   `Start-Process -Verb RunAs` so it actually elevates via UAC.
+> - **`-Verb RunAs -ArgumentList` array quoting** mangles `--installPath "...spaces..."`.
+>   Pass the whole argument line as a single string (as above), or drive the GUI.
 
 **Option B - Manual download:**
 
@@ -627,8 +669,16 @@ Tell the user:
    cd <your pwiz checkout>
    bs.bat
    ```
+   > **PowerShell:** run `.\bs.bat` (with the leading `.\`). PowerShell does not run
+   > scripts from the current directory without it, and errors with
+   > *"bs.bat is not recognized"*. In Command Prompt, plain `bs.bat` works.
 3. Wait for the build to complete (10-20 minutes on first run)
 4. The build downloads vendor SDKs on first run
+
+> **Note on the artifact name:** the standard build brands the output as
+> `Skyline-daily.exe` (not `Skyline.exe`). `Skyline-daily.exe` + `TestRunner.exe` in
+> `bin\x64\Release` is the expected successful result. The 4.4 check for `Skyline.exe`
+> may read as missing even on a good build — check for `Skyline-daily.exe` too.
 
 ### 4.4 Verify Build Artifacts
 
