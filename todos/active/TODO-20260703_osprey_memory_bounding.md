@@ -148,6 +148,17 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
   confirmed the 300K training subsample is already ported (Stage-5 lever is streaming the
   score pass). Dataset confirmed: 82 SEA-AD Astral files at `Y:\...\project_mzML`.
   Implementing Phase 0 (ProfilerHooks) + Phase 1 next.
+- 2026-07-03: Phase 0 (gated `ProfilerHooks.LogMemoryStatsIfEnabled` via `OSPREY_LOG_MEMORY`;
+  per-file + Stage-5 boundary probes) committed `9dd06feb1`. Phase 1 (null the 6 heavy
+  `FdrEntry` arrays after each per-file parquet write; reload PIN features by `ParquetIndex`
+  before first-pass Percolator via `Pass2FdrSidecar.MapFeaturesByParquetIndex`; re-null
+  before Stage 6 to keep the `ApplyRescoredRows` sentinel valid) committed `a2ce32b87`.
+  Verified `ParquetScoreCache.cs:384` sets `ParquetIndex` on the passed entries; the f64
+  feature roundtrip is the same one 2nd-pass FDR already uses (regression-exact). Debug +
+  Osprey.Test 447 pass + 0-warning inspection.
+  PENDING: (1) byte-identical `regression.ps1` (Release binary busy with the 20-file
+  baseline run); (2) baseline `[MEM]` curve; (3) instrumented-Release fixed run to confirm
+  the 82-file peak < 64 GB. Baseline (20 files) running in background.
 
 ## Handoff prompt
 
