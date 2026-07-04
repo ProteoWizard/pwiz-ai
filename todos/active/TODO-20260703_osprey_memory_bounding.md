@@ -205,6 +205,39 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
 - **Byte-identity gates still PENDING:** `regression.ps1`/Stellar (direct path) + a >600K
   before/after diff (streaming path -- Stellar doesn't exercise it).
 
+- 2026-07-04 (96 GB machine): Ran the definitive peak measurement on the 96 GB box (branch
+  `d46708fc5`, Release, `OSPREY_LOG_MEMORY=1`, the 82-file SEA-AD command). Stopped early at
+  **file 14/82** -- the trajectory was already decisive: working_set peak **76.8 GB**,
+  managed_heap peak **39.74 GB**, peak_paged **78.14 GB**, steady managed-heap slope
+  **~0.69 GB/file** (files 4->12, confirms the handoff's ~0.6 GB/file). Free RAM fell
+  ~0.8 GB/file (13.6 GB by file 12) -> projects to exhaust physical around file ~20 and page
+  after; i.e. 82 files does NOT fit even 96 GB past-Phase-4, let alone the <64 GB target.
+  Confirmed the slope's root in C# code: `FdrEntry.ModifiedSequence` is an **un-interned
+  `string`** (one object/entry, duplicated across GPF replicates) AND `FdrEntry` is a **`class`**
+  (16 B object header + gen2/LOH GC churn -> the 96 GB working_set ballooned to 77 GB while
+  managed_heap was only 40 GB; a smaller box would GC harder and OOM sooner).
+- 2026-07-04: DECISION (Mike) -- port the two Rust techniques that are already worked out +
+  byte-identity-validated, **faithfully**, before any C#-specific structural change:
+  - **#1 Intern `ModifiedSequence`** -- Rust `intern_seq` (`pipeline.rs:2371`, a
+    `HashSet<Arc<str>>` canonicalizing pool threaded through every stub builder). C# intern
+    points mapped: `CoelutionScorer.cs:448` (fresh scoring, the O(N) primary),
+    `ParquetScoreCache.cs:754` (`LoadFdrStubsFromParquet`) + `:898` (join-only loader),
+    `PerFileRescoreTask.cs:1349` (gap-fill). Byte-identity-trivial: only string *reference*
+    identity changes, values are character-identical.
+  - **#3 Compact non-passing stubs after first-pass FDR** -- Rust commit `1a93449` (drop stubs
+    for precursors passing in no replicate; `ParquetIndex` -- already added in Phase 1 --
+    preserves the parquet row ref; gap-fill uses `ParquetIndex = uint.MaxValue`). Slots in
+    right after first-pass protein FDR (Rust `pipeline.rs` ~4580).
+  - **FALLBACK only** (if faithful #1+#3 still misses <64 GB): make C# `FdrEntry` a value
+    struct in a contiguous buffer (removes the per-entry header + class-instance GC pressure).
+    This is a C#-idiom change NOT in the Rust algorithm -> fallback, not first resort.
+  - Sequence: implement #1 -> build Debug + `Osprey.Test` -> re-measure the 20-file `[MEM]`
+    slope -> decide if #3 (and/or the struct fallback) is still needed. Gate every step on
+    `regression.ps1 -Dataset Stellar` (direct path) + the >600K streaming before/after diff.
+- Reference: the Rust `maccoss/osprey` clone on this machine is
+  `C:\Users\macco\Documents\github\maccoss\osprey` (`main` @ `696c938`), NOT the skill's
+  `C:\proj\osprey` convention.
+
 ## Handoff prompt
 
 Fixing O(N) memory in Osprey multi-file runs (issue #4355). Root cause: heavy `FdrEntry`
