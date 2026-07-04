@@ -1,4 +1,19 @@
-# Osprey (Rust) Development Guide
+# Osprey Development Guide
+
+> **Conventions -- read this first.** This guide's deep-dives (parity doctrine,
+> bisection, HPC flags, determinism) are shared by both implementations, but **which
+> coding-convention set applies depends on which tree you touch** -- and that changed
+> once the C# port became the path forward (it is no longer "maccoss/osprey is the
+> master project"):
+> - **C# Osprey (`pwiz_tools/Osprey`)** follows the Skyline rules in the `ai/*.md`
+>   files IN FULL: `ai/CRITICAL-RULES.md` (no async/await, resource strings, CRLF,
+>   `_camelCase`, helpers-after-callers), `ai/STYLEGUIDE.md` (control flow -- incl. **no
+>   single-line `if`** -- using-directive order, file headers), `ai/TESTING.md`, and
+>   `ai/WORKFLOW.md` (branch/commit/PR format). They are not optional just because this
+>   file's deep-dives are Rust-heavy; the `/osprey-development` skill points at them.
+> - **Rust osprey (`C:\proj\osprey`)** follows upstream conventions (LF endings,
+>   `cargo fmt` / `clippy -D warnings`, upstream commit prose); the `ai/*.md` Skyline
+>   rules do NOT apply there.
 
 Development conventions for work on the `maccoss/osprey` Rust
 project. Referenced by `TODO-OR-*.md` files, which may have workflow
@@ -69,6 +84,45 @@ in one place. The same Rust convention applies in `osprey-core`'s
 When a new env var is needed in a project that the wrapper class doesn't
 yet live in, push the wrapper down to Core first (see "Sharing rule"
 above), then add the new field.
+
+### Atomic file writes: FileSaver (never a cross-volume temp + move)
+
+Every DURABLE artifact -- anything a later step, a resume, or the user reads
+back (`calibration.json`, `reconciliation.json`, `.fdr_scores.bin`,
+`.osprey.task`, `.spectra.bin`, `.libcache`, `.scores.parquet`, `.blib`, the
+`--fdrbench` input) -- is written through `FileSaver` (in `Osprey.Core`),
+never straight to its final path:
+
+```csharp
+using (var saver = new FileSaver(finalPath))
+{
+    using (var stream = new FileStream(saver.SafeName, FileMode.Create, FileAccess.Write))
+    using (var w = new BinaryWriter(stream))   // or StreamWriter / File.WriteAllText(saver.SafeName, ...)
+    {
+        // ... write to saver.SafeName ...
+    }
+    saver.Commit();   // after the inner writer closes (flushed), inside the saver using
+}
+```
+
+`FileSaver.SafeName` is a **same-directory sibling** temp; `Commit()` is a
+same-volume rename (a metadata-only op) -- atomic, and it CANNOT truncate. A
+failure before `Commit()` disposes the temp and leaves the previous final
+content (or nothing), never a partially-written destination a resume check
+could mistake for finished output.
+
+**Never write to a separate temp directory (e.g. `Path.GetTempPath()`) and
+then `File.Move`/`File.Copy` to the final path.** That crosses volumes, so
+`File.Move` degrades to a byte copy that can silently land a *truncated* file
+on CIFS/NFS/NAS -- the failure mode Rust guards with `copy_and_verify`. The
+same-directory rename sidesteps it entirely, so no post-move size/hash
+verification is needed on the C# side (`copy_and_verify` need not be ported).
+The parquet writer once did exactly this anti-pattern (temp in the system temp
+dir + `File.Move`, mislabelled "safe NAS writes"); it now uses `FileSaver`.
+
+**Exempt:** `-d` diagnostic dumps (`OspreyFileDiagnostics` etc.), the streaming
+CLI log, and test fixtures -- transient or append-streaming files that are not
+durable pipeline artifacts.
 
 ## Repositories
 
