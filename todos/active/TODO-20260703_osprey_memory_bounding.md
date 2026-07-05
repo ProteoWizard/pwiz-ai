@@ -429,6 +429,25 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
   also make the fast local gate exercise the production path) -- teed up as a SEPARATE low-risk
   change, not folded into step (b).
 
+- 2026-07-05: **STEP (b) INCREMENT (ii) COMMITTED** (pwiz branch `e2fe78a32`, 9 files +1514/-134,
+  new `Osprey.Core/FdrProjection.cs`). `readonly struct FdrProjection` (**80 B**: EntryId+ParquetIndex
+  +PeptideId+FileIdx+Charge+IsDecoy=16, + 8 f64 incl. CoelutionSum f64 + Score + 6 q-values). Built at
+  the load choke point with ordinal-sorted `peptide_id` (risk #1); routes first-pass Percolator +
+  protein-FDR + sidecar + compaction; **releases FdrEntry stubs before the SVM peak**; reloads full
+  survivors via existing `RescoreHydration.HydrateReconciliationOverlay` (risk #9), Stage 6/7 UNCHANGED.
+  **Feature-flagged `OSPREY_FDR_PROJECTION`, OFF by default** (legacy = oracle). GATES: build +
+  **457 tests/454 pass/0 warn** (+4 new incl. end-to-end SVM equivalence); **mode1/2/3 PASS 1e-9 in
+  BOTH flag states** (+ I independently re-ran flag-ON mode1, PASS, blib 52,514,816 B identical);
+  **Test-PerfGate -0.2% total, stage5 -1.9%** (survivor-reload I/O negligible).
+  - MEMORY: 82f first-pass peak **~95 -> ~60 GB (fits 64 GB)**; 400f projection alone ~74 GB.
+  - **HONEST CAVEAT / what's left:** (ii) kept the parity-locked SVM core byte-for-byte, so the
+    transient stack (`PercolatorEntry` list + q-value arrays + `results`, ~230 B/entry) still
+    co-exists WITH the projection DURING `RunFdr` -> ~60 GB not the idealized ~22 GB. **Reaching
+    ~22 GB AND fitting 300-1500 files requires (iii)/(iv): collapse that transient stack (make
+    `ScorePopulationAndComputeFdr` consume the projection in place) + shrink the struct (stream the
+    4 sidecar-only q-values -> ~44 B, then peptide-summary protein-FDR + two-phase sidecar -> ~28 B).**
+    (iii)/(iv) touch the byte-parity-locked SVM core -> higher risk, need fresh care + the Astral leg.
+
 ## Handoff prompt
 
 Fixing O(N) memory in Osprey multi-file runs (issue #4355). Root cause: heavy `FdrEntry`
