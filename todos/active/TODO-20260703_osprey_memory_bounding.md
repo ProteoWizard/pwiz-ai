@@ -370,6 +370,26 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
     REVERTED (ai/ clean now -- LSP fix kept only in the per-machine untracked cache copy, no more
     stash-dance); `pwiz-perfbase` worktree exists (parked on a bisect commit).
 
+- 2026-07-04: **REGRESSION FIXED** (pwiz branch `c9d47d6f1`, `Pass2FdrSidecar.cs` + test). Root
+  cause was NOT the first pass (that was healthy: 66,857 passing) -- it was the **second pass
+  (Stage 7)**. Stage 6 reconciliation appends ~278 interleaved gap-fill rows/file and
+  `WriteScoresParquet` re-sorts + re-indexes the reconciled parquet, so the compacted stubs' stale
+  Stage-4 `ParquetIndex` no longer addressed their own reconciled row -- `Pass2FdrSidecar` bound
+  ~55% of entries to a NEIGHBOR's PIN features -> SVM trained on wrong features -> discovery set
+  halved. Straight-through only (HPC reloads stubs from the reconciled parquet, so its ParquetIndex
+  matched). Fix: map second-pass features by **stable identity (entry_id, charge, scan_number)**
+  (`MapFeaturesByIdentity` + `LoadReconciledFeaturesByIdentity`), still one reconciled parquet at a
+  time -> memory bound intact, Phase 1 nulling kept. GATES (verified independently): build clean,
+  Osprey.Test **448 pass** (+ new `TestMapFeaturesByIdentity`), **regression Stellar mode1/2/3 PASS**
+  (byte-identical golden/HPC/resume), Stellar **25,663 -> 59,768**, blib 21.9MB -> 52.5MB.
+- 2026-07-04: **The golden was NOT stale after all** -- mode1 passing byte-identically means the
+  committed golden (59,768, last written #4335) IS the correct current reference; it was correctly
+  FAILING because the branch had regressed (the "13-commits-behind, needs refresh" read was wrong --
+  #4337/#4347/Phase 4 turned out byte-neutral on Stellar). **NO golden refresh needed.** Good thing
+  we discarded the `-CreateGolden` capture of the broken 25,663 output instead of committing it.
+- **Step (b) UNBLOCKED** -- the branch is correct again; the minimal-projection streaming join can
+  resume on a sound baseline. Re-pin `pwiz-perfbase` to `c9d47d6f1` before step (b)'s perf gate.
+
 ## Handoff prompt
 
 Fixing O(N) memory in Osprey multi-file runs (issue #4355). Root cause: heavy `FdrEntry`
