@@ -289,6 +289,44 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
   `List<FdrEntry>` element must become index-assign or array/`Span` access). SCOPE before coding;
   gate on `regression.ps1 -Dataset Stellar` + the >600K streaming diff.
 
+- 2026-07-04: MEMORY BREAKDOWN (reconstructed from [MEM] anchors) -- three groups: **library
+  ~4-6 GB** (fixed); **stub buffer ~1.0-1.2 GB/file** (ACCUMULATES across files in
+  `perFileEntries`); **per-file transient ~20 GB** (spectra + full scored entries; released per
+  file, does NOT accumulate). Two peaks: scoring peak = lib + accumulated stubs + current transient
+  (~108 GB @ 82f); first-pass-FDR peak = lib + all stubs (no transient). The OOM is the transient
+  stacking on the growing stub buffer during scoring.
+- 2026-07-04: EMPIRICAL JOIN-WALL measurement (`--task FirstPassFDR` over session-scored parquets,
+  OSPREY_LOG_MEMORY, no re-scoring). 14 & 20 files scale cleanly:
+  - Stage-5 start (all stubs+features loaded, pre-FDR): 14f=20.84 / 20f=28.01 GB heap -> library
+    ~4 GB + ~1.2 GB/file. **Extrapolate 82f: ~102 GB just to LOAD.**
+  - After first-pass Percolator FDR: 20f WS 73 (peak 78), heap 37.2, peak_paged 80.6.
+    **Extrapolate 82f: heap ~126 GB, peak_paged ~200 GB.**
+  => the join cannot fit 82f even on 96 GB. The join loads "stubs + FEATURES" per file
+  (`PerFileScoringTask.LoadJoinOnlyScores:854`, `889`/`893`) -> ~450 B stub + ~168 B features =
+  ~618 B/entry resident.
+- 2026-07-04: **NEW PLAN (Mike's architecture) -- decouple scoring + minimal-projection streaming
+  join. Struct-ify DEMOTED off the critical path.**
+  1. **Decouple scoring:** `PerFileScoringTask` spills each file's parquet and FREES it instead of
+     `perFileEntries.Add()` (mirror `--task PerFileScoring`). Bounds Stage 4 to lib + one-file
+     transient (~26 GB), N-flat -> 82-file scoring COMPLETES.
+  2. **Minimal-projection streaming join:** replace `LoadJoinOnlyScores`' full-stub+feature load
+     with a **~20 B/entry value-struct projection** [Score 8 + IsDecoy 1 + EntryId 4 + Charge 1 +
+     peptide_id 4 (int index into a modseq string table) + file_idx 2] in a contiguous array
+     (base_id = EntryId & 0x7FFFFFFF, derived). 82f: 189M x 20 B = ~3.8 GB + lib 4 + 300K training
+     features (~50 MB) + one-file streamed features (~0.4 GB) = **~9 GB join** (vs ~100-126 GB).
+     ~12-20x cut; fits 64 GB with huge headroom. The `int` peptide_id IS the correct modseq
+     interning (4 B/entry) the `ConcurrentDictionary` failed to deliver.
+  - Reuse EXISTING machinery: `PercolatorEngine.RunPercolatorStreaming` (streams the score pass,
+    Phase 4; `PercolatorEngine.cs:139-149`), `FdrScoresSidecar` (writes per-file
+    `.1st-pass.fdr_scores.bin` q-values), `LoadFdrStubsFromParquet` (per-file reload for
+    reconciliation/output = the byte-parity-validated HPC-split path), the 300K `BuildTrainingSubset`.
+  - Competition reads only Score/IsDecoy/EntryId/Charge/ModifiedSequence and WRITES the q-values
+    (to sidecars) -> the projection is sufficient; full stubs reload later per-file.
+  - Impl surface: `PerFileScoringTask.LoadJoinOnlyScores` (+ the straight-through `perFileEntries`
+    build), `PercolatorEngine.RunPercolatorFdr`, `FdrScoresSidecar` 1st-pass write, reconciliation/
+    output reload. Byte-identity-critical (competition + q-value math bit-exact); gate on
+    `regression.ps1 Stellar` + >600K streaming diff. Large but reuses proven streaming/sidecar plumbing.
+
 ## Handoff prompt
 
 Fixing O(N) memory in Osprey multi-file runs (issue #4355). Root cause: heavy `FdrEntry`
