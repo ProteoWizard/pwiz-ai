@@ -1,63 +1,155 @@
-# TODO-osprey_diagnostics_fdr_plots.md -- Ship the FDR-calibration diagnostic plots we built by hand as first-class Osprey.Diagnostics exports
+# TODO-20260705_osprey_model_diagnostics.md -- Ship the FDR-calibration diagnostics as a self-contained interactive `--model-diagnostics` HTML report
 
-## Status
-Backlog (brendanx67). Not started. Motivated by the 2026-07-03/04 FDR-calibration
-sprint: a handful of plots proved decisive for understanding how Osprey's FDR is
-performing and where its assumptions fail. They were built as one-off Python against
-the sidecar + parquet + manifest; they should become reproducible `-d` diagnostics so
-we (and Mike) can generate them for any run without the ad-hoc scripts.
+## Branch Information
+- **Branch**: `Skyline/work/20260705_osprey_model_diagnostics`
+- **Base**: `master`
+- **Created**: 2026-07-05
+- **Status**: In Progress
+- **Worktree**: `C:\proj\pwiz-work2`
+- **GitHub Issue**: (pending)
+- **PR**: (pending)
 
-## Why (what each plot told us that nothing else did)
-- The **paired decoy-win fraction** is the single most valuable one: target-decoy
-  COMPETITION depends on the WITHIN-PAIR ordering, which marginal density plots cannot
-  see. Two identical-looking marginals can encode a fair coin (calibrated) or
-  target-always-wins (0% reported FDR). Only the win fraction exposes it. It cleanly
-  separated the two failure regimes: libdecoy entrapment coin ~50% (valid nulls) vs
-  gendecoy ~22% (generated decoys too weak). See
-  [[project_osprey_libdecoy_vs_gendecoy_calibration]].
-- The **4-class density** (target T / entrapment P / decoy D / p_decoy Pd) is the
-  human-eye view: once the target curve is in frame, its left (null) half failing to
-  overlay the decoy/entrapment curves is visible -- the gendecoy miscalibration.
-- The **entrapment q-q / accepted-set Venn** quantified the cost of doubling a library
-  with sample-absent entrapment (net -1,872 real IDs at 1% on Stellar file 20; the
-  confident core sharpens, the marginal band sloughs off).
-- The **FDRBench q-q with lower_bound + combined** is the external-oracle calibration
-  curve (already produced via `Run-FdrBench.ps1`).
+## Origin
+Backlog item `TODO-osprey_diagnostics_fdr_plots.md` (brendanx67), motivated by the
+2026-07-03/04 FDR-calibration sprint. A handful of one-off Python plots proved
+decisive for understanding how Osprey's FDR performs and where its assumptions
+fail; they should become reproducible, first-class Osprey exports.
 
-## Prototypes (the spec)
-Working Python in `ai/.tmp/OspreyFDR/` (NOT committed; reference only):
-`winfrac-plot.py` (paired win fraction), `density-plot.py` / `density-plot-gendecoy.py`
-(4-class density), `qq-entrapment.py` + `venn-entrapment.py` (library-impact q-q/Venn),
-`qq-with-lowerbound.py` (FDRBench oracle q-q). Data sources they use are ALREADY inside
-Osprey at diagnostic time: `.1st-pass.fdr_scores.bin` (entry_id -> score + q-values, see
-`FdrScoresSidecar`), the per-file `.scores.parquet` (is_decoy, modified_sequence), and the
-decoy-pairing manifest (peptide_type target/p_target/decoy/p_decoy). base_id =
-entry_id & 0x7FFFFFFF pairs a target-type with its decoy-type.
+## Direction decision (2026-07-05)
+The backlog item's "open decision" (CSV+script vs in-process PNG) was superseded
+by a better idea from brendanx67: **emit a single self-contained interactive DHTML
+page** (inline JS/CSS/data, no CDN, opens offline) with a multi-tab display of rich
+diagnostics -- plots AND the summary table we currently write to command output.
+More informative and more dynamic than PNG/PDF, and the C# data-extraction work
+(pairing, binning, dedup, classification, FDP math) is the same either way.
+
+- **Flag**: a first-class CLI argument `--model-diagnostics` (NOT a `-d` bisection
+  sub-flag). `-d` emits byte-stable English dumps for cross-impl diffing; this is a
+  user-facing deliverable that writes one HTML file when a run finishes.
+- **Rendering**: compact vanilla-SVG charts in JS, no charting library, everything
+  inlined into one `.html`. Run data embedded as a JSON blob.
+- **Scope this branch (single-run page, 4 tabs)**:
+  1. **Summary** -- the per-file / total passing-precursor table currently logged
+     to stdout (`FirstJoinTask.LogFirstPassResults`), rendered sortable + richer.
+  2. **Win-fraction** -- paired decoy-win fraction vs winner-score bins, real
+     (target) vs entrapment (p_target) pairs, fair-coin reference + null-band
+     summary. Highest-value plot. Degrades to real-only when no manifest.
+  3. **4-class Density** -- best-per-precursor score density for T / P / D / Pd
+     (needs the manifest for the P/Pd split; degrades to T vs D without it).
+  4. **FDP q-q** -- Osprey q-value vs true FDP (lower_bound / paired / combined),
+     **computed in C# in-process** from the pairing manifest + per-entry q-values
+     (no external FDRBench dependency). Verify numbers against the existing
+     `Run-FdrBench.ps1` `fdp.csv` on Stellar so the oracle matches.
+- **Deferred to a follow-up** (`--model-diagnostics-compare runA runB` mode): the
+  **library-impact q-q + Venn**, which is inherently a TWO-run comparison
+  (entrapment vs non-entrapment library) and cannot come from a single finishing
+  run. It will read two run dirs off disk and emit its own comparison HTML.
+
+## Data sources (all present in-memory at Stage 5 / first-join)
+`FdrEntry` (`Osprey.Core/FdrEntry.cs`) already carries everything the prototypes
+read from the 458 MB Stage-5 Percolator TSV: `EntryId`, `IsDecoy`, `Charge`,
+`Score` (first-pass SVM discriminant), `RunPeptideQvalue` (+ the other q-values),
+`ModifiedSequence`. The Stage-5 hook
+`FirstJoinTask.LogFirstPassResultsAndDump(perFileEntries, config, ctx)` has the
+per-file `List<FdrEntry>` lists in memory plus `config` (with
+`DecoyPairingManifestPath`). So the report is computed from live data -- no
+parquet/sidecar disk re-read.
+- Pairing: `base_id = entry_id & 0x7FFFFFFF` (`FdrBenchInputWriter.BASE_ID_MASK`);
+  high bit = decoy flag (`LibraryEntry.DECOY_ID_BIT`).
+- Classification: `DecoyPairingManifest.FromTsv(path)` ->
+  `PeptideKind {Target, Decoy, PTarget, PDecoy}`, looked up by
+  `entry.ModifiedSequence` (matches the prototype; add an "unclassified count"
+  log so a sequence-key mismatch is visible).
+
+## Architecture (keeps the feature OUT of the `-d` bisection seam)
+The feature needs only `FdrEntry` + the manifest, both reachable from
+`Osprey.IO` / `Osprey.Tasks`, so it does NOT touch `IOspreyDiagnostics`
+(the cross-impl bisection seam). Only exe touch = the CLI arg + help text.
+- `Osprey.IO/ModelDiagnostics/` (new): pure, testable data model + computation
+  (win-fraction, density, FDP, summary) returning a serializable model; +
+  self-contained HTML writer that injects the JSON into an embedded template.
+- `Osprey.Tasks/FirstJoinTask.cs`: one gated call
+  `if (config.ModelDiagnostics) ModelDiagnosticsReport.Write(perFileEntries, config, ctx);`.
+- `Osprey.Core/OspreyConfig.cs`: `ModelDiagnostics` bool.
+- `Osprey/OspreyCommandArgs.cs`: `--model-diagnostics` argument + help text.
+- `Osprey.Test/`: unit tests for the pure computation (win-fraction real-below-50%,
+  entrapment-at-coin, 4-class counts, FDP monotonic vs oracle, no-manifest degrade)
+  and a smoke test that the HTML renders + is self-contained (no external URLs).
 
 ## Work
-1. **Pick the rendering path (open decision).** Osprey.Diagnostics is `-d`-only, off the
-   mainline output path ([[project_ospreysharp_output_architecture]]). Decide: (a) emit
-   tidy per-plot CSV + a committed plotting script (no C# charting dependency), or
-   (b) render PNG in-process. Prefer (a) first -- the data extraction is the hard/valuable
-   part; charting can follow. Whatever renders must not pull a charting lib into the
-   mainline assemblies.
-2. **Win-fraction diagnostic first** (highest value). Emit, per (real-target-pair,
-   entrapment-pair): decoy-win fraction vs winner-score bins + the null-band summary +
-   the fair-coin reference. Works whenever a pairing manifest is present; degrade
-   gracefully to real-target-only when no entrapment.
-3. **4-class density** second (needs the manifest for the P/Pd split; without it, T vs D).
-4. **Library-impact q-q / Venn** and **FDRBench oracle q-q** as a second tier (these
-   compare two runs / an external tool -- more of an analysis harness than a per-run `-d`).
-5. Gate behind a `-d` sub-flag (e.g. `--diagnostics-plots`), never on the default path;
-   localize any user-facing text ([[no_localizable_string_in_static]]).
+- [ ] Locate/confirm the stdout summary + add a `TryGetKind(sequence)` accessor to
+      `DecoyPairingManifest` if not already public.
+- [ ] Pure data model + computation in `Osprey.IO/ModelDiagnostics/` + unit tests.
+- [ ] In-process FDP (lower_bound / paired / combined) + verify vs `fdp.csv`.
+- [ ] Self-contained HTML writer + template (tabs, vanilla-SVG charts). Use the
+      dataviz design guidance; theme-aware, no CDN, one file.
+- [ ] `--model-diagnostics` flag + `FirstJoinTask` hook + help text.
+- [ ] Run on Stellar (with an entrapment manifest), open the HTML, sanity-check
+      each tab against the sprint prototypes.
+- [ ] Follow-up TODO for the two-run `--model-diagnostics-compare` mode + the
+      HTML-text localization pass (treated as a diagnostic artifact / English for now).
 
 ## Gates
-- No change to non-`-d` output (regression golden unaffected).
-- `Build-Osprey.ps1 -RunTests -RunInspection` clean.
+- No change to non-`--model-diagnostics` output (regression golden unaffected;
+  the feature is opt-in and writes only its own HTML file).
+- `Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection` clean.
+- Correctness gate `regression.ps1 -Dataset Stellar` unaffected (opt-in feature).
 
 ## References
-- `FdrScoresSidecar.cs` (sidecar format), the scores.parquet schema, the pairing manifest.
-- Related: [[project_ospreysharp_output_architecture]] (Diagnostics is -d-only),
-  the FDR-calibration understanding in this sprint's TODO history.
-- Pairs conceptually with [[TODO-osprey_assumption_failure_detection]] (the plots are the
-  human view; that TODO is the automated version).
+- Prototypes (NOT committed; reference only): `ai/.tmp/OspreyFDR/winfrac-plot.py`,
+  `density-plot.py`, `qq-entrapment.py` + `venn-entrapment.py` (two-run, deferred),
+  `qq-with-lowerbound.py` (FDP oracle).
+- `FdrScoresSidecar.cs` (sidecar format), `ParquetScoreCache.cs` (scores.parquet),
+  `DecoyPairingManifest.cs` (manifest), `FdrBenchInputWriter.cs` (base_id mask).
+- Related memory: [[project_ospreysharp_output_architecture]] (Diagnostics is
+  `-d`-only -- this feature deliberately sits beside it as a user-facing export),
+  [[project_osprey_libdecoy_vs_gendecoy_calibration]] (what the plots revealed),
+  [[no_localizable_string_in_static]] (localization posture).
+
+## Night session progress (2026-07-05, autonomous)
+**Status: feature built, runs end-to-end on real data, gates green, committed on
+the branch (NOT pushed, no PR -- per the night-session instruction).**
+
+Commits on `Skyline/work/20260705_osprey_model_diagnostics`:
+- `53d0e6385f` -- feature: `--model-diagnostics` flag + self-contained HTML report.
+- `5afdece11f` -- FDP validated vs FDRBench + unit tests + inspection fixes.
+
+What works (verified on real Stellar all-3 + Astral entrapment runs):
+- **Model tab**: 21-feature contribution table (SG-weighted cosine 44%, xcorr 30%,
+  ...), negative-percent rows in red -- the Skyline mProphet feature table, reproduced.
+  Composite score histogram (T/D/P/Pd) with a fitted decoy-normal overlay.
+- **Density tab**: area-normalized 4-class density.
+- **FDR calibration tab**: reported-q vs true-FDP. **FDP verified EXACT vs FDRBench
+  fdp.csv**: combined = (1+1/r)*n_p/(n_t+n_p), lower_bound = n_p/(r*(n_t+n_p)); at
+  Stellar r=1, reported q=1% -> combined FDP 1.68% / lower-bound 0.84% (reproduces the
+  sprint's anti-conservative pass-2 finding, in-process, no FDRBench install).
+- **Competition tab**: paired decoy-win fraction, real vs entrapment; Stellar null band
+  real 47.8% vs entrapment 50.0% (the honest-coin signal).
+- **Summary tab**: per-file passing counts.
+
+Key implementation facts (for the next session):
+- Data model: `Osprey.FDR/ModelDiagnostics/ModelDiagnosticsData.cs` (pure, unit-tested).
+  Orchestrator + embedded HTML template: `Osprey.Tasks/ModelDiagnostics/`.
+- Hook: `FirstJoinTask.LogFirstPassResultsAndDump` (Stage 5, pre-compaction). The
+  trained `FeatureContributions` is now returned out of `PercolatorEngine.RunPercolatorFdr`.
+- Manifest match: strip `[UniMod:...]` mods from ModifiedSequence -> bare sequence
+  (manifest is keyed bare). Lifts match 77%->98% on Stellar.
+- Demo outputs: `D:\test\osprey-runs\_mdiag\{stellar,astral}\*.model-diagnostics.html`.
+  Regenerate fast by clearing FDR artifacts (keep `*.scores.parquet`) and re-running
+  the same Osprey command (PerFileScoring resumes from cache; FirstPassFDR reruns ~66s
+  Stellar). Build Release: `Build-Osprey.ps1 -SourceRoot C:\proj\pwiz-work2 -Configuration Release -TargetFramework net8.0`.
+- Screenshot QA: the Chrome extension can't screenshot localhost here; use headless
+  Chrome `--screenshot` on a copy with `.tab{display:block}` forced (all tabs stacked).
+
+Deferred / follow-ups:
+- **Paired FDP estimator** (n_p + n_p_s_t)/(n_t+n_p): needs the target<->entrapment
+  pair_index to count entrapment-over-target wins; dropped from the UI tonight rather
+  than show an unvalidated curve. Load pair_index and implement next.
+- **Two-run compare mode** (`--model-diagnostics-compare`) for the library-impact
+  q-q/Venn (still the right home for the two-run plots).
+- **HTML template ASCII cleanup**: a few typographic chars (middot, delta-mu, en-dash)
+  remain as raw UTF-8 in the template JS; render fine, but convert to \uXXXX for the
+  ASCII rule. (Inspection gate is C#-only, so it's green regardless.)
+- **Resume path**: on a bundle-rehydrate run the model table is absent (no retrain);
+  the other tabs still render. Acceptable; note for polish.
+- Localization of the HTML body text (treated as diagnostic artifact / English now).
