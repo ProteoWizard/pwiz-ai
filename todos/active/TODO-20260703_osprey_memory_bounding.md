@@ -327,6 +327,26 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
     output reload. Byte-identity-critical (competition + q-value math bit-exact); gate on
     `regression.ps1 Stellar` + >600K streaming diff. Large but reuses proven streaming/sidecar plumbing.
 
+- 2026-07-04: **STEP (a) DECOUPLE SCORING -- IMPLEMENTED + COMMITTED** (pwiz branch `8920f8bda`,
+  `PerFileScoringTask.cs` +40/-6). `Run` no longer retains per-file `FdrEntry` stubs during Stage 4
+  (records only ordered file names); after the scoring loop it reloads scalar stubs from each
+  `.scores.parquet` (`LoadFdrStubsFromParquet`) before `FinalizeAndCheck`. Calibrations stay LIVE
+  (not in parquet). **Unconditional** (matches the HPC per-file spill/reload contract -> one path
+  for single-system + distributed; a gate would add a divergence-risk second path for a few seconds'
+  small-run gain). GATES: build + Osprey.Test **448 pass / 0 new warnings**; **byte-identical**
+  (`Compare-BlibFull` 1e-9, 0 diffs vs baseline -- direct A/B, since the golden is stale, below);
+  **Test-PerfGate Stellar total -1.5%** (stage5/join -3.5%), PASS. Bounds the scoring peak to
+  ~lib + one-file transient; the join peak (~100 GB @ 82f) is still the wall -> step (b).
+- 2026-07-04: SEPARATE ISSUE (not our change) -- the regression **GOLDEN is STALE**: `regression.ps1`
+  mode1 fails on clean HEAD too (byte-identical 87 issues); golden last written `1ca152c54`
+  (~13 commits back, before recon fix #4347 + Phase 1/4). mode1 is red on this branch regardless;
+  needs a **golden refresh** (own task). Byte-identity proven via direct `Compare-BlibFull` A/B
+  instead. Machine notes: perf dataset at `C:\Users\macco\Downloads\Perftests\osprey-testfiles-mzML`
+  (`OSPREY_TEST_BASE_DIR` unset -> pass `-TestBaseDir`); `pwiz-perfbase` worktree pinned at
+  `d46708fc5` for the A/B (re-pin as the branch advances).
+- **NEXT: step (b) minimal-projection streaming join** (~100 GB -> ~9 GB). The big win; fresh
+  focused session. Surface recorded above (`LoadJoinOnlyScores`, `PercolatorEngine`, `FdrScoresSidecar`).
+
 ## Handoff prompt
 
 Fixing O(N) memory in Osprey multi-file runs (issue #4355). Root cause: heavy `FdrEntry`
