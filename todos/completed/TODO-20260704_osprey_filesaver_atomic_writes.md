@@ -1,8 +1,19 @@
 # TODO-20260704_osprey_filesaver_atomic_writes.md -- Route durable Osprey writes through FileSaver (atomic same-directory rename)
 
 ## Status
-Active (brendanx67). Branch `Skyline/work/20260704_osprey_filesaver_atomic_writes`
-(commit `1ebf4bc0e0`, pushed). Issue: **#4356**. Started 2026-07-04.
+**Completed.** PR [#4366](https://github.com/ProteoWizard/pwiz/pull/4366) merged
+2026-07-05 as `4e777a7f25`. Issue **#4356** auto-closed via `Fixes #4356`.
+
+### 2026-07-05 - Merged
+PR #4366 merged (squash `4e777a7f25`). Shipped exactly the branch contents: FileSaver
+moved to `Osprey.Core`, 7 durable writers routed through it, the parquet cross-volume
+`File.Move` truncation risk fixed, and a new `FileSaverTest` (added during self-review,
+alongside a comment documenting the BlibWriter WAL-checkpoint reliance). All gates green:
+`regression.ps1 -Dataset Stellar` byte-identical (mode1/2/3), 448 unit tests, 0 new
+inspection warnings, and the full TeamCity Stellar+Astral Perf/Regression SUCCESS. A
+comment on #4356 recommends closing it (the copy_and_verify port is unnecessary: FileSaver's
+same-directory rename is atomic and cannot truncate). Self-review was clean after the WAL
+comment + FileSaverTest were added.
 
 ## What is on the branch (build + 447 unit tests GREEN)
 - Moved `FileSaver` from `Osprey.IO` to `Osprey.Core` so every project can use it.
