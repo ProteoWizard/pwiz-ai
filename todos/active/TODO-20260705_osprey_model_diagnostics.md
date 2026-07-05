@@ -141,10 +141,19 @@ Key implementation facts (for the next session):
 - Screenshot QA: the Chrome extension can't screenshot localhost here; use headless
   Chrome `--screenshot` on a copy with `.tab{display:block}` forced (all tabs stacked).
 
+Update (later in the same night session): **paired estimator now implemented** and
+committed (`b6ba1ba57c`). paired = (n_p + n_p_s_t)/(n_t+n_p) via
+`DecoyPairingManifest.PairIndices()`; on Stellar at reported q=1% the three curves
+read lower 0.84% < paired 1.49% < combined 1.68% (FDRBench's expected ordering),
+paired within [lower, combined] for all points. Unit-tested (`TestPairedEstimator`).
+
 Deferred / follow-ups:
-- **Paired FDP estimator** (n_p + n_p_s_t)/(n_t+n_p): needs the target<->entrapment
-  pair_index to count entrapment-over-target wins; dropped from the UI tonight rather
-  than show an unvalidated curve. Load pair_index and implement next.
+- **Live end-to-end FDRBench cross-check**: the three estimators are proven to match
+  FDRBench's fdp.csv *formulas* (decoded byte-exact from a real fdp.csv) and are
+  unit-tested, but a `--fdrbench` run of THIS build piped through the jar, diffed
+  against the HTML curve, would be the belt-and-suspenders proof. (Do serially -- never
+  run two Osprey processes at once; it corrupts the inspection gate and invalidates the
+  scores.parquet cache, per tonight's experience.)
 - **Two-run compare mode** (`--model-diagnostics-compare`) for the library-impact
   q-q/Venn (still the right home for the two-run plots).
 - **HTML template ASCII cleanup**: a few typographic chars (middot, delta-mu, en-dash)
