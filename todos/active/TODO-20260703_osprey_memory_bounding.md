@@ -409,6 +409,26 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
   -> (iii) stream 4 sidecar-only q-values ~12 GB -> (iv) peptide-summary protein-FDR + two-phase
   sidecar ~9 GB. Each gated mode1/2/3 + perf. Target: at least (iii), ideally (iv).
 
+- 2026-07-05: **STEP (b) INCREMENT (i) COMMITTED** (pwiz branch `5dde76e66`). Replaced the
+  psm_id-string + `resultMap` re-join in first-pass Percolator with a positional index-zip
+  (`PercolatorEngine.ApplyPercolatorResults`, count-invariant guard), removed the per-observation
+  psm_id string + dead `Id` props. Peptide table DEFERRED to (ii) (would be throwaway scaffolding in
+  (i)). GATES: build + Osprey.Test **453 tests, 450 pass**; regression Stellar **mode1/2/3 PASS 1e-9**
+  (2nd pass covered via mode3); +2 unit tests incl. one driving the REAL streaming assembler. Perf:
+  gate PASSED but noise-dominated this run (untouched stage6 moved +14% -> machine noise floor);
+  stage5 -1.8% where the change lives. Est. **-16 to -22 GB transient** at 82 files.
+- 2026-07-05: **DIRECT-vs-STREAMING measured** (Mike's Q: why keep 2 Percolator paths?). Forced
+  streaming on Stellar via temp `OSPREY_FORCE_STREAMING` override (reverted). Result over 3
+  interleaved reps: **direct 3:54 median == streaming 3:54 median** (~2%, within noise) and
+  **byte-identical** (all forced-streaming runs mode1-vs-golden PASS, blib 52,514,816 B identical).
+  Conclusions: (1) the 300K training subsample is used by BOTH paths (`BuildTrainingSubset`,
+  `PercolatorFdr.cs:330`) -- direct vs streaming differs ONLY in resident-vs-per-file FEATURE loading;
+  (2) direct is NOT faster and is only used where features are trivially small (~100 MB), so it earns
+  its keep on neither speed nor memory -- the only reason to keep it is mirroring Rust's threshold.
+  **Collapsing to a single always-streaming path is a safe, byte-identical simplification** (would
+  also make the fast local gate exercise the production path) -- teed up as a SEPARATE low-risk
+  change, not folded into step (b).
+
 ## Handoff prompt
 
 Fixing O(N) memory in Osprey multi-file runs (issue #4355). Root cause: heavy `FdrEntry`
