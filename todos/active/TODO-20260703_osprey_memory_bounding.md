@@ -390,6 +390,25 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
 - **Step (b) UNBLOCKED** -- the branch is correct again; the minimal-projection streaming join can
   resume on a sound baseline. Re-pin `pwiz-perfbase` to `c9d47d6f1` before step (b)'s perf gate.
 
+- 2026-07-04: **STEP (b) DESIGN complete** (`C:\Dev\ai\.tmp\step-b-design.md`). Key reframes:
+  the join peak is a STACK of co-resident O(N) structures (FdrEntry buffer + full PercolatorEntry
+  list w/ psm_id strings + q-value arrays + results list + resultMap), not one 520 B object -- so
+  step (b) collapses the whole stack. Honest process-peak floor: ~9 GB (aggressive) to ~22 GB
+  (conservative), NOT 4 GB (lib alone 4-6 GB). Corrections: projection must also carry
+  `CoelutionSum` (best-per-precursor ranks on it pre-Score) -> ~28 B drive set; `peptide_id` MUST
+  be assigned in `Ordinal`-sorted order (SubsampleByPeptideGroup sorts groups ordinally,
+  `PercolatorFdr.cs:2384`). Reload boundary already exists (`RescoreHydration.HydrateReconciliationOverlay`)
+  -> straight-through converges onto the resume/HPC path modes 2/3 validate at 1e-9, so **Stage 6/7
+  untouched** (small blast radius).
+- 2026-07-04: **SCALING is the real driver** (per Mike): 80 files is SMALL; 300-400 typical, 1500
+  done. Projection is O(total entries) so per-entry size = the file-count ceiling. (ii)'s ~88 B fits
+  82f@~22 GB but 400f -> ~85 GB; **must reach (iii) ~44 B, ideally (iv) ~28 B, to fit 300-1500 files
+  on a modest machine** -- that scaling is the design's whole appeal. **SPEED is a first-class gate:
+  run Test-PerfGate + track wall-time at EVERY increment** (perfbase pinned at `c9d47d6f1`), no big
+  regressions. Plan: (i) peptide-table + index-zip [no struct] -> (ii) projection struct ~22 GB@82f
+  -> (iii) stream 4 sidecar-only q-values ~12 GB -> (iv) peptide-summary protein-FDR + two-phase
+  sidecar ~9 GB. Each gated mode1/2/3 + perf. Target: at least (iii), ideally (iv).
+
 ## Handoff prompt
 
 Fixing O(N) memory in Osprey multi-file runs (issue #4355). Root cause: heavy `FdrEntry`
