@@ -347,6 +347,29 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
 - **NEXT: step (b) minimal-projection streaming join** (~100 GB -> ~9 GB). The big win; fresh
   focused session. Surface recorded above (`LoadJoinOnlyScores`, `PercolatorEngine`, `FdrScoresSidecar`).
 
+- 2026-07-04: **CRITICAL REGRESSION FOUND -- Phase 1 (`a2ce32b87`) silently lost 57% of
+  identifications.** Refreshing the stale golden surfaced it: Stellar straight-through yields
+  **25,663** precursors (RefSpectra rows) vs the correct **59,768**. Bisected on Stellar via
+  `regression.ps1 -CreateGolden` RefSpectra count: Phase 0 `9dd06feb1`=59,768 OK; **Phase 1
+  `a2ce32b87`=25,663 (regression HERE)**; Phase 4 `d46708fc5` / HEAD `8920f8bda`=25,663 (carried,
+  NOT fixed). #4347 `b2373f9f9`=59,768 (so #4347 is NOT the cause -- it's the memory work itself).
+  - Mechanism: Phase 1 nulls the in-memory `Features` and reloads PIN features from parquet via
+    `Pass2FdrSidecar.MapFeaturesByParquetIndex` (`featRows[ParquetIndex]`) before first-pass
+    Percolator (`FirstJoinTask`). The reloaded vectors evidently differ from the originals ->
+    corrupt first-pass discriminant -> 57% fewer pass. STRAIGHT-THROUGH only (HPC reloads via
+    `LoadFdrStubsFromParquet`, ParquetIndex correct -- same shape as the prior CWT
+    `ParquetIndex=0` bug documented at `ParquetScoreCache.cs:366-383`).
+  - **Hidden by the stale golden** (last refreshed at #4335 `1ca152c54`, before #4347). No gate ran.
+  - CONSEQUENCES: the whole branch output is WRONG. **Step (b) + golden refresh ON HOLD.** Do NOT
+    refresh the golden to this broken output. Step (a)'s "byte-identity" is only vs the broken
+    Phase-4 baseline (step (a) itself is a sound refactor, not the culprit). This must be fixed and
+    Stellar returned to 59,768 before anything else. Debug+fix delegated (subagent, gated on
+    Stellar->59,768).
+  - Housekeeping this session: `OSPREY_TEST_BASE_DIR` set (User) to
+    `C:\Users\macco\Downloads\Perftests\osprey-testfiles-mzML`; the tracked LSP `plugin.json` edit
+    REVERTED (ai/ clean now -- LSP fix kept only in the per-machine untracked cache copy, no more
+    stash-dance); `pwiz-perfbase` worktree exists (parked on a bisect commit).
+
 ## Handoff prompt
 
 Fixing O(N) memory in Osprey multi-file runs (issue #4355). Root cause: heavy `FdrEntry`
