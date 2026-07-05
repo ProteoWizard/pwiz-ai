@@ -238,6 +238,57 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
   `C:\Users\macco\Documents\github\maccoss\osprey` (`main` @ `696c938`), NOT the skill's
   `C:\proj\osprey` convention.
 
+- 2026-07-04: Inventoried the FULL Rust memory-strategy set vs the C# port (verified in code,
+  not just the handoff). #1 interning IMPLEMENTED (static thread-safe `SequenceInterner`, ordinal
+  `ConcurrentDictionary`, `Reset()` at the single `AnalysisPipeline.Run` chokepoint; interned at
+  `CoelutionScorer` fresh-scoring + both `ParquetScoreCache` loaders); Debug + Osprey.Test 448
+  pass, 0 new warnings. PENDING: diff review + 20-file `[MEM]` re-measure. Additional levers to
+  track beyond #1/#3, priority order:
+  - **Tier 4 -- streaming blib output** (Rust `BlibPlanEntry` ~96 B: 5-col parquet projection +
+    in-memory library lookup). C# instead reloads FULL ~940 B entries for blib via
+    `ParquetScoreCache.LoadFullFdrEntries` (`ParquetScoreCache.cs:850`) -- the ~22 GB @24M cost
+    Rust designed away. The real remaining full-reload; biggest post-first-pass lever. MISSING.
+  - **Tier 3 -- `LightFdr`** (~48 B): extract a light struct before blib and DROP the FdrEntry
+    stubs (Rust frees ~19 GB @240f). No `LightFdr` in C#. MISSING.
+  - **Reconciliation re-scoring parallelism**: Rust forces SEQUENTIAL (`iter_mut`) to avoid
+    K x ~3 GB spectra resident; C# uses `Parallel.For` (`PerFileRescoreTask.cs:563`,
+    byte-identical output). On 64 GB, match Rust's sequential default or make the
+    `--parallel-files` RAM guard conservative (overlaps Phase 2). WATCH.
+  - **Phase 4b (stream 2nd-pass FDR) -- effectively already handled; DOWNGRADED.**
+    `Pass2FdrSidecar.cs:136-190` ALREADY reads PIN features per-file
+    (`LoadPinFeaturesFromParquet` in a per-file loop) -- no dense reload-all. It only attaches
+    them onto the resident stubs for 2nd-pass Percolator; that residency is O(pool-at-2nd-pass) =
+    O(all-N) WITHOUT compaction but O(passing) once #3 lands, so **#3 subsumes it**. Phase 4b
+    (score-and-discard) is at most a minor follow-up on the compacted pool. The measured OOM is
+    at Stage-4 per-file scoring (file 14), before the 2nd pass is reached.
+  - Sequence: finish #1 (diff review + 20-file `[MEM]`) -> #3 compaction -> re-measure ->
+    Tier 4 -> Tier 3. Byte-identity gated each step (`regression.ps1 -Dataset Stellar` + >600K
+    streaming diff).
+
+- 2026-07-04: MEASURED #1 (interning) -- clean fresh 14-file A/B (interned build fresh-scoring
+  files 1-14 vs the preserved non-interned baseline `C:\temp\phase4-82.log`). **RESULT: interning
+  is a NET NEGATIVE in C#.** Median delta managed_heap (files >=4) = **+0.58 GB (interned HIGHER)**;
+  slope 4->14 interned **0.875** vs baseline **0.687** GB/file (baseline confirms the original
+  ~0.69). The interner's `ConcurrentDictionary` (~3.17M unique strings + node overhead) is not
+  repaid by string dedup. => **#1 REVERTED** (`SequenceInterner.cs` deleted, 3 edits restored;
+  branch clean at d46708fc5). Root cause of the wash: in Rust `FdrEntry` is a 128 B *struct* where
+  the interned `Arc<str>` is the only per-entry heap allocation (interning is a big win there); in
+  C# `FdrEntry` is a ~300 B *class* (16 B header + 16 doubles + string + 6 heavy-array refs), so the
+  string is a minor slice and the interner overhead exceeds the saving.
+- 2026-07-04: CONFIRMED **#3 (stub compaction) is ALREADY IMPLEMENTED** in the C# straight-through
+  pipeline (`FirstJoinTask.cs:307 CompactFirstPass`, drops non-passing base_ids 32.3M->2.06M). The
+  handoff/TODO were wrong to list it as a lever -- REMOVED from the plan. (Phase 4b likewise
+  effectively handled: 2nd pass reads PIN features per-file, residency bounded by #3.)
+- 2026-07-04: **NEW PRIMARY LEVER -- make C# `FdrEntry` match Rust's Tier-2 stub (~128 B):**
+  (a) value **STRUCT** in a contiguous buffer -- kills the 16 B/object header x tens of millions
+      AND the gen2/LOH GC churn that ballooned the 96 GB working_set to 77 GB vs 40 GB live heap;
+  (b) **split the 6 heavy array fields OUT of the stub** -- Rust's `FdrEntry` has NO array fields
+      (heavy data reloaded from parquet); C# carries them as nulled refs (+48 B/stub).
+  Target ~128 B/stub (vs C#'s ~300 B) = ~2.3x cut => 82 files ~25 GB stubs, fits 64 GB. Bigger,
+  byte-identity-sensitive refactor (structs copy on assignment: every in-place mutation of a
+  `List<FdrEntry>` element must become index-assign or array/`Span` access). SCOPE before coding;
+  gate on `regression.ps1 -Dataset Stellar` + the >600K streaming diff.
+
 ## Handoff prompt
 
 Fixing O(N) memory in Osprey multi-file runs (issue #4355). Root cause: heavy `FdrEntry`
