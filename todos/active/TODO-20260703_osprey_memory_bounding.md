@@ -479,6 +479,25 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
   don't-hold-full-target+decoy library). #4355 stays the JOIN lever; #4372 the library/scoring lever.
   (40-file run still in progress; join-peak extrapolation to 82/400/1500 pending via the periodic check.)
 
+- 2026-07-05: **FIRST LARGE-DATASET VALIDATION** (40-file Carafe, `OSPREY_FDR_PROJECTION=1`,
+  `OSPREY_LOG_MEMORY`, 92,850,667 entries / 2,262,311 distinct peptides). Empirical peaks:
+  - **Scoring: BOUNDED/flat** (step (a) confirmed on real data) -- ~45 GB heap / **~64.8 GB WS**
+    plateaued from file 11, zero creep across all 40 files.
+  - **First-pass FDR join: steady ~35 GB heap, but PEAK ~43.7 GB heap / 57.6 WS** at
+    `[MEM projection built ... FdrEntry stubs released]` -- the cold FdrEntry stubs + the projection
+    **co-exist transiently** (~235 B/entry) before the stubs are released. After `CompactFirstPass`:
+    22.5 GB heap (library + survivors).
+  - **Reconciliation (Stage 6): WS ~67 GB (climbing)** -- a NEW peak ABOVE scoring. The memory
+    ceiling is shifting OFF the first-pass join onto scoring/library (#4372) and reconciliation.
+  - Extrapolation (join peak ~43.7, ~22 GB fixed library): 82f **~66 GB** (borderline/over 64 at the
+    spike; ~half of legacy ~100 GB); 400f/1500f far over -> **(iv) + #4372 required** for real scale.
+  - **OPTIMIZATION to fold into (iv) (Mike agreed):** build the projection and **release the FdrEntry
+    stubs INCREMENTALLY per file** (as each file's projection rows are built) instead of all-at-once
+    -> removes the ~43.7 GB stubs+projection coexistence spike, dropping the first-pass peak toward
+    the steady ~35 GB (projection-only footprint). Cheap, high-value.
+  - Reconciliation (Stage 6) WS ~67 GB is worth its OWN look (separate from #4355/#4372) if it proves
+    the true ceiling once scoring/join are bounded.
+
 ## Handoff prompt
 
 Fixing O(N) memory in Osprey multi-file runs (issue #4355). Root cause: heavy `FdrEntry`
