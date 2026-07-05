@@ -498,6 +498,22 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
   - Reconciliation (Stage 6) WS ~67 GB is worth its OWN look (separate from #4355/#4372) if it proves
     the true ceiling once scoring/join are bounded.
 
+- 2026-07-05: **40-file run COMPLETED** (blib 228.7 MB, NO OOM on 94 GB) -- but the run revealed the
+  **TRUE memory ceiling is Stage 6/7 (reconciliation + 2nd-pass FDR) at ~79-80 GB WS**, ABOVE the
+  scoring plateau (~64.8) and the first-pass join (~57.6) that #4355 optimized. So #4355 fixed a real
+  ~100 GB stage but not the tallest pole on this dataset. Root cause (confirmed -- Mike's insight):
+  the **2nd-pass Percolator holds all survivor features RESIDENT** (`Pass2FdrSidecar`:
+  `LoadReconciledFeaturesByIdentity` -> `MapFeaturesByIdentity` sets `entry.Features` resident on the
+  full `FdrEntry` survivor buffer; calls `FirstJoinTask.RunPercolatorFdr(..., "Second-pass")` with
+  `loadFileFeatures = null`) -- NOT the 1st-pass streaming+projection (increment iii). Same Percolator
+  engine, two memory strategies, not standardized. Plus reconciliation (Stage 6) heavy CWT/gap-fill;
+  NO `[MEM]` anchors in Stage 6/7. **Filed ProteoWizard/pwiz#4374** (standardize 2nd pass to the
+  1st-pass streaming/300K/projection method + instrument Stage 6/7).
+- **MEMORY-CEILING MAP (40-file empirical):** scoring ~64.8 WS (#4372 library floor) < first-pass
+  join ~57.6 WS / 43.7 heap (#4355, DONE i-iii; (iv) + incremental stub release remaining) <
+  **Stage 6/7 ~79-80 WS (#4374, the current ceiling)**. Three independent levers -- #4355+(iv),
+  #4372, #4374 -- all needed to fit 300-1500 files on a modest machine.
+
 ## Handoff prompt
 
 Fixing O(N) memory in Osprey multi-file runs (issue #4355). Root cause: heavy `FdrEntry`
