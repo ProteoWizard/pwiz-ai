@@ -162,3 +162,37 @@ Deferred / follow-ups:
 - **Resume path**: on a bundle-rehydrate run the model table is absent (no retrain);
   the other tabs still render. Acceptable; note for polish.
 - Localization of the HTML body text (treated as diagnostic artifact / English now).
+
+## Morning session progress (2026-07-05) - FDRBench side-by-side harness
+Interactive session with Brendan reworking the FDR-calibration tab to match the
+FDRBench plots he reviews. Commits on the branch (newest first):
+- `fd4d0772b3` Fixed FDP counting to q-threshold (matches FDRBench) - the core fix
+- `671ee677aa` Cherry-picked `--fdrbench-pass` from the libdecoy branch (stays on
+  this branch per Brendan; lets ONE binary emit both the HTML report and the
+  FDRBench pass-1/2 input TSVs for same-run validation)
+- `47af0bfeba` Reworked FDR tab: run- vs experiment-scope precursor-q views (the
+  experiment-wide views reproduce FDRBench; per-run is a new picture), 2-panel
+  layout (zoom [0,2%] with auto-scaled FDP axis + full extent), y=x, open-circle
+  markers, metrics box, view selector. Kept raw SVG (decided against c3.js).
+
+**Key findings this session:**
+- FDRBench does NOT compute its own q - it passes through Osprey's q from the
+  `--fdrbench` TSV (experiment-precursor by default). The calibration x-axis must be
+  Osprey's precursor q, not peptide q.
+- FDRBench counts each class by its OWN q<=t (n_t, n_p = targets, entrapment with
+  q<=t), NOT a score-ranked running tally. This was my core bug; fixing it moved
+  Stellar combined@1%q from 0.82% -> 1.79% (FDRBench golden = 2.03%, CONFIRMED
+  correct on our own run via the live jar).
+- Built + validated the side-by-side harness (Osprey `--model-diagnostics --fdrbench
+  --fdrbench-pass 1` -> FDRBench jar -> diff vs HTML). It caught the bug.
+
+**Remaining (the finalize-blocker):** ~12% gap left - my n_p=237 vs FDRBench 275,
+disc 26499 vs 26879. Source = precursor CLASSIFICATION (manifest mod-strip catches
+~98%; FDRBench matches the unmodified `peptide`) + the DEDUP KEY vs
+`FdrBenchInputWriter`. Next task: align the report's classification+dedup with
+`FdrBenchInputWriter` (ideally reuse its row-building so they can't drift), validate
+to a byte-level match, THEN add pass-2 views + a repeatable compare script.
+
+**Next session handoff**: read `ai/.tmp/handoff-20260705-fdrbench-classification.md`
+before starting - it has the exact harness commands, current numbers, the classification
+alignment plan, and gotchas (no parallel Osprey; cd to C:\proj before pwsh).
