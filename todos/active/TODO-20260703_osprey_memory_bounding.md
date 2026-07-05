@@ -469,6 +469,16 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
   (iv): stream the 4 sidecar-only q-values (-> ~44 B) + peptide-summary protein-FDR + two-phase
   sidecar (-> ~28 B) for the 300-1500-file scale.
 
+- 2026-07-05: **VALIDATION-RUN FINDING + SCOPE SPLIT.** First large-dataset run (40 Carafe files,
+  flag ON, `OSPREY_LOG_MEMORY`) shows scoring is BOUNDED/flat (step (a) works) but the plateau is
+  **~50-60 GB WS**, because the **3.17M-entry library is ~18-20 GB resident** (file-1 heap 26.5 GB is
+  mostly library) -- much bigger than the design's ~5 GB assumption. So the projection correctly moved
+  the JOIN below scoring (legacy ~100 GB join -> ~57 GB overall), but the **library/scoring plateau is
+  now the ceiling**, which the join projection cannot touch. **Split to a SEPARATE issue+TODO:
+  ProteoWizard/pwiz#4372 / `TODO-20260705_osprey_library_resident_memory.md`** (memory-map / page /
+  don't-hold-full-target+decoy library). #4355 stays the JOIN lever; #4372 the library/scoring lever.
+  (40-file run still in progress; join-peak extrapolation to 82/400/1500 pending via the periodic check.)
+
 ## Handoff prompt
 
 Fixing O(N) memory in Osprey multi-file runs (issue #4355). Root cause: heavy `FdrEntry`
