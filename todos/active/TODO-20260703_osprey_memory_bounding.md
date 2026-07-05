@@ -448,6 +448,27 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
     4 sidecar-only q-values -> ~44 B, then peptide-summary protein-FDR + two-phase sidecar -> ~28 B).**
     (iii)/(iv) touch the byte-parity-locked SVM core -> higher risk, need fresh care + the Astral leg.
 
+- 2026-07-05: **STEP (b) INCREMENT (iii) COMMITTED** (pwiz branch `96ac54406`, 3 files +591/-57).
+  Collapsed the transient SVM stack on the projection STREAMING path: no full-population
+  `PercolatorEntry` / `PercolatorResult` list -- score + competition run over the projection rows in
+  place, q-values written straight back. The PEP/q-value math was extracted VERBATIM into a shared
+  `PercolatorFdr.ComputeStreamingCompetitionQvalues` called by BOTH the legacy and projection scorers
+  (one source of truth -> parity-locked ordering can't drift). GATES: build + **458 tests/455 pass/0
+  warn** (+`TestProjectionStreamingMatchesFdrEntryStreaming`); **mode1/2/3 PASS both flag states**;
+  perf **-1.9%** (faster). **I independently verified the STREAMING collapse end-to-end** by forcing
+  Stellar through the streaming projection path (temp `OSPREY_FORCE_STREAMING` override, reverted) +
+  `OSPREY_FDR_PROJECTION=1` -> mode1 PASS, blib 52,514,816 B identical (Stellar default is DIRECT, so
+  mode1/2/3 alone don't exercise (iii)'s change -- this closes that gap).
+  - MEMORY: transient ~239 -> ~95 B/entry; **82f process peak ~65 -> ~38 GB**. Residual ~95 B/entry
+    flat math arrays remain (lowering needs columnar/SoA of the parity-locked signatures = higher
+    risk, deferred). **400f still ~162 GB (the 80 B struct buffer dominates) -> (iv) required.**
+- **NEXT (per Mike): FIRST LARGE-DATASET MEMORY VALIDATION** now that a large run is viable (~38 GB
+  @ 82f). Run the 82-file Carafe set with `OSPREY_FDR_PROJECTION=1` + `OSPREY_LOG_MEMORY=1`, parse
+  [MEM] for the actual first-pass peak, confirm ~38 GB (vs legacy ~65 GB) -- the empirical proof.
+  Multi-hour (full scoring + join); no fast join-only path (not all 82 valid parquets on disk). THEN
+  (iv): stream the 4 sidecar-only q-values (-> ~44 B) + peptide-summary protein-FDR + two-phase
+  sidecar (-> ~28 B) for the 300-1500-file scale.
+
 ## Handoff prompt
 
 Fixing O(N) memory in Osprey multi-file runs (issue #4355). Root cause: heavy `FdrEntry`
