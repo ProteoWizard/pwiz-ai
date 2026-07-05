@@ -196,3 +196,72 @@ to a byte-level match, THEN add pass-2 views + a repeatable compare script.
 **Next session handoff**: read `ai/.tmp/handoff-20260705-fdrbench-classification.md`
 before starting - it has the exact harness commands, current numbers, the classification
 alignment plan, and gotchas (no parallel Osprey; cd to C:\proj before pwsh).
+
+## Autonomous session progress (2026-07-05, later) - FDRBench MATCH achieved
+Cloned FDRBench source (`Noble-Lab/FDRBench` -> `ai/.tmp/fdrbench-src`) and read the
+actual counting path (`FDREval.calc_fdp_fast_kfold` + `FDPCalcKFold`, k=1). Root cause
+of the residual gap found in the source:
+- FDRBench classifies each row by the library sequence its **base-id** resolves to
+  (`lib.Sequence` via `EntryId & 0x7FFFFFFF`, the exact key `FdrBenchInputWriter`
+  emits as the `peptide` column), then looks it up in the manifest. The report was
+  stripping mods off `ModifiedSequence` instead - diverged for ~2%.
+- FDRBench **removes invalid peptides** (`peptide` not in the manifest) before
+  counting (`remove_invalid_peptides`): ~7,873 unique peptides / ~10k rows on Stellar.
+  The report was counting those as targets, depressing the FDP.
+- Paired estimator is `vt = n_p_s_t + 2*n_p_t_s` (was missing the 2x term) with the
+  target matched by (pair_index, charge).
+
+Fix (commit `45cafb60f1`): classify by base-id -> manifest (Unknown = FDRBench-invalid,
+dropped from FDP); paired reworked to the two-event vt; q-aware curve thinning (dense
+in [0,2%]). Plumbed `libraryById` into `ModelDiagnosticsReport.Write`.
+
+**RESULT - HTML now reproduces FDRBench fdp.csv** (3-file Stellar libdecoy, 1% exp q):
+| metric | HTML | FDRBench | 
+|--------|------|----------|
+| discoveries n_t | 26879 | 26879 |
+| combined | 2.026% | 2.025% |
+| lower_bound | 1.013% | 1.013% |
+| paired | 1.786% | 1.786% |
+Exact at q=0.001/0.002/0.005/0.01/0.02; off-grid points (0.008/0.015) differ only by
+curve-sampling (nearest kept q differs by ~1e-4), not computation. Debug gate green
+(451 tests), Release green. NOT pushed.
+
+**Still open:** (1) per-run view validation vs FDRBench per-run TSV; (2) PASS-2 views
+(post-compaction, needs the MergeNodeTask end-of-run hook + carrying FeatureContributions
+forward + the 2nd-pass sidecar); (3) small repeatable compare script; (4) regenerate the
+Astral page; (5) `--fdrbench-pass` accepting `1,2`/both. The FDRBench source is at
+`ai/.tmp/fdrbench-src` (gitignored) for reference.
+
+### Later autonomous progress (2026-07-05 ~10:30) - plots + Astral + compare tool
+- **Plot fix (commit `204c24fb05`):** the [0,2%] zoom panel y-axis was pinned to 100%
+  by the tiny-n transient (first target -> combined=100%). Now scales to the settled
+  curve (ignore the first ~2% of accepted targets) and skips those points when drawing.
+  Stellar zoom now reads "FDP axis to 4.6%" with clean combined/paired/lower curves
+  hitting the 1%-q KPIs (2.03/1.79/1.01%). Screenshots (headless Chrome, FDR tab forced
+  visible): `D:\test\osprey-runs\_mdiag\{stellar,astral}\*_fdr_zoom.png`.
+- **Compare tool:** `ai/scripts/Osprey/Compare/Compare-Fdrbench-Html.py` -- runs the
+  FDRBench jar on the run's `*_fdrbench.tsv` and diffs the HTML experiment view at q
+  points, PASS/FAIL at q=0.001/0.002/0.005/0.01/0.02 (tol 5e-4). Stellar: MATCH.
+- **Astral (libdecoy, hram, 3 files) regenerated** with the fix. HTML KPIs: 82,127
+  disc @1% q, combined 1.89%, paired 1.76%, lower 0.94%, max q 88.3%. Numbers are
+  correct by construction (identical validated BuildFdpView; Stellar proved it exact).
+  Astral has a genuine q-floor (~0.0015) where many precursors cluster -- shows as a
+  short vertical FDP feature at the far left of the zoom; faithful to FDRBench, not a
+  bug. (Astral jar cross-check is slow: 2.57M-row pass-1 pool, ~O(n*uniq_q).)
+- Gotcha: Astral scores.parquet cache in `_mdiag/astral` does NOT match `--resolution
+  hram` params, so each regen re-scores (~15 min). For a screenshot-only refresh, patch
+  the generated HTML's two `drawPanel` lines directly instead of re-running Osprey.
+
+### PASS-2 implementation plan (deliberate, not done autonomously - carries risk)
+The report fires once at `FirstJoinTask` (pass 1, pre-compaction). Pass 2 = the reported
+pool = `MergeNodeTask`: `ctx.Get<RescoredEntries>().Value` (post-compaction, 2nd-pass
+q-values) + `libraryById` are in scope there; `FdrBenchInputWriter` already emits the
+pass-2 TSV at MergeNodeTask.cs:166 (`--fdrbench-pass 2`). To show BOTH passes in one HTML
+with the existing view selector, generate the report at MergeNode with both pools -- the
+pass-1 pool would be reloaded from the `.1st-pass.fdr_scores.bin` sidecars (it is compacted
+away by MergeNode). The pass-2 model table needs the 2nd-pass Percolator's
+FeatureContributions (not currently surfaced by `Pass2FdrSidecar`); the FDP views only need
+(score, exp/run q, base-id) per precursor, which RescoredEntries has. Lowest-risk first cut:
+a SECOND report invocation at MergeNode writing pass-2 FDP views into the same
+`ModelDiagnosticsData.FdpViews` list (Pass=2), validated with `--fdrbench-pass 2` via the
+compare tool.
