@@ -370,4 +370,9 @@ has the local fork with that fix, validated).
 
 **Still open / next:** resume general HTML work (pass-2 views still deferred; per-run view;
 Astral regen with the new drop-logic); consider whether to also drop the symmetric orphan
-TARGETS (currently kept - they only add to n_t).
+TARGETS (currently kept - they only add to n_t). Branch has 11 commits, clean tree, NOT pushed
+(no PR yet). Latest verified commit `925647753d`; HTML matches STOCK FDRBench (RESULT: MATCH).
+
+**Next session handoff**: For detailed startup protocol (build, the reprocess+compare validation
+loop, next steps, gotchas), read `ai/.tmp/handoff-20260705_osprey_model_diagnostics.md` before
+starting work.
