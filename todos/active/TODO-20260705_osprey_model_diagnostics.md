@@ -440,6 +440,24 @@ both reports were regenerated from their on-disk data by re-splicing the templat
 JSON -- NO re-search (demonstrates cheap "regenerate from disk" for pure UI changes). Release
 rebuilt so the embedded template matches source.
 
+### Review round 3 (2026-07-06) - dual model view + self-review fixes, commit `cecb77d052`
+- **2nd-pass model view.** With `--protein-fdr`, Percolator retrains on the post-reconciliation
+  reported pool (Pass2FdrSidecar's 2nd Percolator, ~242K entries). That model is now captured
+  (`Pass2FdrSidecar.ComputeAndPersist` returns its FeatureContributions -> MergeNodeTask ->
+  `ModelDiagnosticsData.BuildModelPass2`) and the Model tab gains a 1st-pass/2nd-pass selector
+  that swaps the feature table + composite + per-feature distributions. Verified on Stellar
+  `--protein-fdr 0.01`: the two models differ (SG cosine 44%->30% contribution) and pass-2 FDR
+  shifts 0.90% -> **1.48%** (the protein-fdr recalibration inflation, as expected). Single-pass
+  runs don't show the selector (backward compatible).
+- **Self-review (fresh-context agent) findings addressed:** data sidecar now deleted in every
+  path (was leaked with no entrapment); warn when the 1st-pass model wasn't retrained (resumed
+  run) instead of a silent empty Model tab; histogram binning skips NaN std values. Deferred
+  (documented): standalone `peptide_pair_index` enumeration-order dependence (harmless; flag for
+  the byte-parity review).
+- **Library-type robustness (in progress):** validating no-entrapment (target+decoy library ->
+  FDR tab should drop) and gendecoy (Osprey-generated decoys, ~10-16% anti-conservative FDP ->
+  Competition should show non-honest nulls). Runner: `ai/.tmp/run-libtypes.sh`.
+
 ## CURRENT STATE (2026-07-06) - feature complete, awaiting review sign-off, NOT pushed
 Branch `Skyline/work/20260705_osprey_model_diagnostics` (pwiz-work2), clean tree, NOT pushed, no PR.
 The `--model-diagnostics` HTML is a self-contained interactive report + PDF with:
