@@ -133,6 +133,12 @@ def main():
         mq, mc = sample(Q, comb, thr); _, ml = sample(Q, lb, thr)
         _, mp = sample(Q, paired, thr); _, mnt = sample(Q, nt, thr)
         gi = bisect.bisect_right(gq, thr) - 1
+        # Below either curve's smallest q (a genuine q-floor, e.g. Astral clusters
+        # near ~0.0015) there is no point to compare -- skip, don't gate, don't crash.
+        if mc is None or gi < 0:
+            note = "n/a (below q-floor)"
+            print(f"{thr:>7.3f} | {'':>34} | {'':>38} | {note}")
+            continue
         _, gc, gl, gp, gnt, gnp = golden[gi]
         gate = ""
         if thr in GATE_Q:
@@ -140,6 +146,7 @@ def main():
             gate = "PASS" if d <= GATE_TOL else f"FAIL d={d*100:.3f}pp"
             if d > GATE_TOL:
                 ok = False
+        mp = mp if mp is not None else float("nan")
         print(f"{thr:>7.3f} | {mc*100:6.3f} {ml*100:6.3f} {mp*100:6.3f} ({mnt:6d}) | "
               f"{gc*100:6.3f} {gl*100:6.3f} {gp*100:6.3f} ({gnt:6d}/{gnp:4d}) | {gate}")
     print("\n" + ("RESULT: MATCH" if ok else "RESULT: MISMATCH"))
