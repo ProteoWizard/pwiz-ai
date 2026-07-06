@@ -421,13 +421,23 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
   streaming on Stellar via temp `OSPREY_FORCE_STREAMING` override (reverted). Result over 3
   interleaved reps: **direct 3:54 median == streaming 3:54 median** (~2%, within noise) and
   **byte-identical** (all forced-streaming runs mode1-vs-golden PASS, blib 52,514,816 B identical).
-  Conclusions: (1) the 300K training subsample is used by BOTH paths (`BuildTrainingSubset`,
-  `PercolatorFdr.cs:330`) -- direct vs streaming differs ONLY in resident-vs-per-file FEATURE loading;
-  (2) direct is NOT faster and is only used where features are trivially small (~100 MB), so it earns
-  its keep on neither speed nor memory -- the only reason to keep it is mirroring Rust's threshold.
-  **Collapsing to a single always-streaming path is a safe, byte-identical simplification** (would
-  also make the fast local gate exercise the production path) -- teed up as a SEPARATE low-risk
-  change, not folded into step (b).
+  **CORRECTION (2026-07-05, standardizer verification):** the "byte-identical / safe to collapse"
+  conclusion below was WRONG -- it was a DEGENERATE case. Stellar's 1st pass has ~one observation
+  per precursor, so best-per-precursor dedup is a no-op and the streaming subset == the full set,
+  making streaming coincide with direct. It does NOT generalize. Direct and streaming differ in TWO
+  Rust-matched ways: (i) the feature **standardizer** is fit on ALL entries in direct
+  (`PercolatorFdr.cs:284`) vs the best-per-precursor **subset** in streaming (`PercolatorEngine.cs:694`/
+  `:924`); (ii) scoring is held-out CV folds + Granholm calibration (direct) vs a single averaged
+  model, no calibration (streaming). Rust switches at `pipeline.rs:5748` and fits the same two ways
+  (`percolator.rs:191` "global" vs `pipeline.rs:5985` subset). So for a MULTI-observation population
+  (real multi-file, and the 2nd pass) subset (subset) full and every score diverges -- which is exactly
+  why the always-stream attempt (increment A) broke Stellar's 2nd pass. **Keep the 600K size-dispatch
+  -- it is required for Rust parity, NOT an incidental artifact.** Unifying to one path is a cross-impl
+  algorithmic decision (changes the Stellar oracle + breaks Rust parity in one regime + trades
+  small-data quality vs memory) -- filed as **[#4375](https://github.com/ProteoWizard/pwiz/issues/4375)**,
+  not a mechanical cleanup. Legacy-streaming and projection-streaming (iii) fit the SAME subset -- iii
+  is faithful, no bug. Guarded permanently by the multi-observation red-guard test
+  `TestProjectionRunPercolatorFdrMatchesFdrEntry` (`FdrTest.cs:681`).
 
 - 2026-07-05: **STEP (b) INCREMENT (ii) COMMITTED** (pwiz branch `e2fe78a32`, 9 files +1514/-134,
   new `Osprey.Core/FdrProjection.cs`). `readonly struct FdrProjection` (**80 B**: EntryId+ParquetIndex
@@ -513,6 +523,34 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
   join ~57.6 WS / 43.7 heap (#4355, DONE i-iii; (iv) + incremental stub release remaining) <
   **Stage 6/7 ~79-80 WS (#4374, the current ceiling)**. Three independent levers -- #4355+(iv),
   #4372, #4374 -- all needed to fit 300-1500 files on a modest machine.
+
+- 2026-07-05: **Increment (A) = #4374 2nd-pass streaming COMMITTED (`90b773b84`).** Routed
+  `Pass2FdrSidecar` through the shared projection `RunPercolatorFdr` (streams reconciled features by an
+  identity-baked `ParquetIndex` = reconciled-parquet row, via `BuildReconciledIdentityToRow`) instead
+  of holding all survivor features resident. Kept the 600K direct/streaming size-dispatch on BOTH
+  passes -- an attempt to always-stream (Mike's "one strategy") broke Stellar's 2nd pass and is
+  genuinely impossible byte-identically: direct fits the SVM standardizer on ALL entries + CV/Granholm
+  calibration, streaming on the best-per-precursor SUBSET + averaged model, and Rust switches at the
+  same threshold (`pipeline.rs:5748`). Filed **[#4375](https://github.com/ProteoWizard/pwiz/issues/4375)**
+  for the future one-path unification (cross-impl decision: changes the Stellar oracle + Rust parity).
+- 2026-07-05: **(A) byte-identity was hard-won -- three false alarms, all cache/measurement artifacts.**
+  (1) A first 8-file Carafe scale A/B (flag-ON projection vs flag-OFF legacy) showed 10 RT/peak-only
+  diffs (~0.05%; FDR scores byte-identical). (2) Determinism check: two legacy runs are
+  content-identical (0 issues) -- NOT non-determinism. (3) A code bisect attributed it to (A)'s
+  scan-omitted 2nd-pass sort. (4) But a CLEAN re-run (clearing FDR+reconciliation intermediates before
+  EACH path so neither reuses the other's reconciled parquets) gave **0 issues** -- the divergence was a
+  **cache-contamination artifact** (flag-OFF reusing flag-ON's reconciliation / stale validate-40 state),
+  not a real bug. Confirmed with a **second** independent clean run (0 issues, blib 69,566,464 both).
+  LESSON: for any scale A/B, clear per-file FDR+reconciliation intermediates first, every time.
+- 2026-07-05: **(A) gates all green:** Stellar mode1/2/3 byte-identical (flag OFF oracle + flag ON ==
+  golden 52,514,816); scale byte-identical x2 (clean 8-file Carafe); build+tests 460/457 (0 warnings)
+  incl. new guard `TestScanOmittedProjectionSortMatchesLegacyOrder` (`Pass2FdrSidecarTest.cs:129`,
+  asserts scan-omitted projection order == legacy scan+original-index order through the real Stage-6
+  chain, PASS -- and genuine scan-ties don't even arise, `DeduplicatePairs` removes them); perf
+  flag-ON vs flag-OFF Stellar 3-rep median 06:00 vs 05:57 (**+0.8%, neutral**).
+- **NEXT: increment (iv)** (memory shrink, NOT started): (B) incremental per-file stub release (kills
+  the ~43.7 GB first-pass "projection built" spike); (C1) 2nd-pass `FdrProjection` struct 80->~28 B
+  (single-phase, easy); (C2) 1st-pass struct ->~28 B (two-phase tail). Then #4372 (library floor).
 
 ## Handoff prompt
 
