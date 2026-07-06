@@ -265,3 +265,106 @@ FeatureContributions (not currently surfaced by `Pass2FdrSidecar`); the FDP view
 a SECOND report invocation at MergeNode writing pass-2 FDP views into the same
 `ModelDiagnosticsData.FdpViews` list (Pass=2), validated with `--fdrbench-pass 2` via the
 compare tool.
+
+## KEY FINDING (2026-07-05, later) - the searched LIBRARY is a complete, single authority
+Chasing "why does FDRBench drop ~2% of IDs" led to the most important structural insight
+of this work. Summary:
+
+**What FDRBench drops, and why.** FDRBench (`-pep <manifest>`) classifies each ID by the
+pairing manifest and **drops** any peptide whose sequence is not in it (its
+`remove_invalid_peptides` step). On Stellar pass-1 that is 10,233 rows / 7,873 unique
+peptides = 2.1% of the pool; only 26 clear 1% q, so combined@1%q moves 2.03% -> 2.05% if
+kept. NOT a FDRBench counting bug (our HTML matches it exactly on the kept set); it drops
+because we hand it a manifest that does not fully describe the searched library.
+
+**Root cause = two sources of truth.** The carafe spectral library and the
+`osprey_library_db_pairing.tsv` manifest are produced by two different tools independently
+digesting the same FASTA (Carafe predicts the library; a FDRBench-style `-build_entrapment_fasta`
+step writes the manifest). They agree on 97.9% of peptides and differ on ~2% at the edges
+(peptides Carafe put spectra in the library for but FDRBench's pairing step did not emit).
+No reconciliation, no "counts must match" assertion -> silent drift. Brendan's framing:
+that is broken-by-design; only one tool should be the authority. The manifest is Mike's
+carafe/osprey workflow output (we consume it, did not produce it).
+
+**Correction to an earlier mis-count in this session.** I first reported a huge 296K/375K
+"divergence." That was WRONG: this library's `Decoy` column is all 0 (decoys are marked via
+the manifest / the `decoy_` protein prefix, not the column), so I was comparing the library's
+unmarked decoys against the target-only half of the manifest. Corrected: library vs FULL
+manifest = 97.9% in, 2.1% out.
+
+**THE finding: the library's `ProteinID` column already encodes everything the manifest does.**
+- type: `decoy_` prefix => decoy side; `_p_target` in the name => entrapment. So
+  target = neither, p_target = `_p_target`, decoy = `decoy_`, p_decoy = both.
+  Verified: library protein-label type == manifest `peptide_type` on 359,309/359,309
+  overlapping peptides (100%).
+- pairing: the quartet {target, p_target, decoy, p_decoy} are all shuffles of ONE original
+  peptide and share `<accession>_pep<NNNNN>` in the protein name (target `P55011_pep00001`,
+  entrapment `P55011_p_target_pep00001`, decoy `decoy_sp|P55011_pep00001|...`, etc). Verified:
+  50,000/50,003 manifest `peptide_pair_index` groups reconstruct EXACTLY from the library
+  protein `(accession, pepNNNNN)`.
+So the external manifest is REDUNDANT for this workflow -- the library Osprey actually
+searched carries the full classification AND the pairing.
+
+**Pairing semantics (for the record).** The quartet carries two relationships: target<->decoy
+(Osprey's own target-decoy FDR competition) and target<->entrapment (FDRBench's PAIRED
+estimator). FDRBench builds each entrapment by shuffling a specific target, so entrapment is
+the "closest possible fake" of one real peptide; the paired estimator uses that head-to-head
+(did the shuffled twin out-score the real one, or was the real one unseen?) for a tighter FDP.
+combined/lower need only target-vs-entrapment counts + ratio r, no pairing.
+
+### DECISION: library = single source of truth (implementing now)
+Derive classification + pairing from the searched library (protein names), use it for the
+model-diagnostics classification AND emit a complete FDRBench pairing manifest from it, so
+neither the HTML nor FDRBench drops anything. Demote the external `--decoy-pairing-manifest`
+to an optional cross-check and WARN loudly when it disagrees with the library (the assertion
+the generation pipeline is missing). Staging by risk:
+- Stage 1 (now, diagnostics-only, low risk): library-derived classifier -> HTML classByBaseId/
+  pairByBaseId; emit `<fdrbench>.pairing.tsv` from the library; compare tool uses it; mismatch
+  warning. Validate: HTML + FDRBench both keep all IDs and agree.
+- Stage 2 (later, deliberate, regression-gated): migrate Osprey's own decoy pairing
+  (`ApplyToLibrary`) to derive base-ids from the library too, so the FDR path shares the one
+  authority. Mainline-affecting -> needs the regression + perf gates; NOT bundled into Stage 1.
+- Upstream (Mike's pipeline): single-authority digestion + a hard count-match assertion so the
+  library and manifest cannot diverge. A conversation + workflow change, characterized here for
+  that discussion; not something to unilaterally rewrite.
+
+## Single-authority classification + Met-clip root cause (2026-07-05, deep dive)
+Chasing "why does FDRBench drop ~2%" led to the real root cause, confirmed in Mike's
+`carafe_log.txt`:
+
+**Root cause = Carafe `-clip_n_m` misapplied + shuffle doesn't hold the N-terminus.** Entrapment
+is Carafe's own `EntrapmentFastaGear`, peptide-level clean 1:1 quartets (NOT protein-level; NOT
+FDRBench). But the final library is predicted with `-clip_n_m`, which clips EVERY M-starting
+peptide (98.6% are internal Mets that are never cleaved in vivo, not initiator Mets) because each
+peptide is a standalone FASTA record. The entrapment/decoy shuffle fixes the C-terminus but not
+the N-terminus, so it moves the Met in/out of position 1; the clip then fires asymmetrically,
+leaving peptides with no counterpart. Verified: 15,539 library peptides (2.1%) are Met-clip forms
+(100% are `M`+seq of a manifest peptide); orphans split 164 target / 138 entrapment among
+identified, more across the full library; 164/164 orphan-target and 138/138 orphan-entrapment show
+the exact M-move. Carafe issue drafts (issues DISABLED on maccoss/Carafe, so unposted):
+`ai/.tmp/carafe-issue-1-nterm-met.md`, `ai/.tmp/carafe-issue-2-pairing-manifest.md`.
+
+**Osprey fixes (committed on the branch):**
+- `45cafb60f1` classify FDP by library base-id (matches FDRBench); `204c24fb05` zoom y-axis fix.
+- `cdfb325217` classification is derived from the searched LIBRARY (single source of truth), not
+  the external manifest; Osprey emits a corrected `<fdrbench>.pairing.tsv` from the library;
+  `EntrapmentLibraryClassifier` reads type from protein accessions (`_p_target`/`decoy_`).
+- `da8737694f` `EntrapmentPairing` reconciles library vs manifest: reconstruct the extras' pairing
+  from the intact `_pepNNNNN` token, keep matched Met-clip pairs, DROP unmatched entrapment when
+  `M`+seq is a manifest peptide (the artifact), surface anything unmatched it can't explain.
+  Dropped consistently from the emitted manifest, the FDRBench input TSV, AND the HTML
+  classification, so the two code paths agree.
+
+**RESULT (Stellar libdecoy): HTML FDP now matches STOCK FDRBench** (no jar patch), 3,241 orphan
+entrapment dropped, no invalid-removal, no NPE. Compare tool `RESULT: MATCH` at every gated q;
+1% exp q combined 2.03% both sides. Repeatable: `Compare-Fdrbench-Html.py --dir <run> --pass 1`
+(prefers Osprey's emitted `<tsv>.pairing.tsv`).
+
+**FDRBench:** a graceful patch was tried but abandoned - stock FDRBench works once we feed it a
+clean manifest. Remaining upstream nicety (optional PR): FDRBench `get_paired_target_peptide`
+should give a clean error, not an NPE, on an entrapment with no target (`ai/.tmp/fdrbench-src`
+has the local fork with that fix, validated).
+
+**Still open / next:** resume general HTML work (pass-2 views still deferred; per-run view;
+Astral regen with the new drop-logic); consider whether to also drop the symmetric orphan
+TARGETS (currently kept - they only add to n_t).

@@ -84,7 +84,9 @@ def sample(qs, arr, thr):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", required=True, help="Run output dir with HTML + *_fdrbench.tsv")
-    ap.add_argument("--manifest", required=True, help="FDRBench pairing manifest TSV")
+    ap.add_argument("--manifest", default=None,
+                    help="Fallback external pairing manifest (used only if Osprey's "
+                         "<tsv>.pairing.tsv is absent)")
     ap.add_argument("--jar", default="D:/test/fdrbench/fdrbench-1.1.1/fdrbench-1.1.1.jar")
     ap.add_argument("--no-jar", action="store_true", help="Reuse existing *_fdp.csv")
     ap.add_argument("--pass", dest="pass_", default=None, help="Label only (1 or 2)")
@@ -95,8 +97,15 @@ def main():
     stem = re.sub(r"_fdrbench\.tsv$", "", os.path.basename(tsv))
     fdp_csv = os.path.join(args.dir, stem + "_fdp.csv")
 
+    # Prefer the pairing manifest Osprey emits from the searched library (complete
+    # by construction, so FDRBench drops nothing) over an external manifest.
+    emitted = tsv + ".pairing.tsv"
+    manifest = emitted if os.path.exists(emitted) else args.manifest
+    print(f"Using pairing manifest: {manifest}"
+          + ("  (Osprey-emitted, library-derived)" if manifest == emitted else "  (external)"))
+
     if not args.no_jar:
-        run_jar(args.jar, tsv, args.manifest, fdp_csv)
+        run_jar(args.jar, tsv, manifest, fdp_csv)
     elif not os.path.exists(fdp_csv):
         sys.exit(f"ERROR: --no-jar but {fdp_csv} does not exist")
 
