@@ -552,6 +552,35 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
   the ~43.7 GB first-pass "projection built" spike); (C1) 2nd-pass `FdrProjection` struct 80->~28 B
   (single-phase, easy); (C2) 1st-pass struct ->~28 B (two-phase tail). Then #4372 (library floor).
 
+- 2026-07-06: **(B) COMMITTED (`d870e5878`)** -- incremental per-file stub release in
+  `FdrProjectionSet.BuildFromEntries(releaseStubs:true)` (1st pass only; 2nd pass keeps survivors
+  resident). The full projection never coexists with the full stub buffer -> the "projection built"
+  overhang is gone. Byte-identical (Stellar mode1/2/3 flag-ON, explicit `Compare-BlibFull` PASS),
+  perf-neutral. Global peptide-id pre-pass runs before any release, so the ordinal invariant holds.
+- 2026-07-06: **(iv) STRUCT-SHRINK SHIPPED: S0/C1 (`3c83cca9e`) + S1/C2-a (`e38e46c51`); S2 deferred.**
+  Design `C:\Dev\ai\.tmp\c1-c2-struct-shrink-design.md` (mechanism = split-arrays + per-pass
+  `IFdrOutputSink`, generic rejected; two corrections: the tail `[COUNT]` reads a q-value on BOTH
+  passes so it moved into `sink.Finish`; a two-phase sidecar is UNAVOIDABLE for any 1st-pass shrink
+  because global protein FDR sits between q-values-computed and sidecar-final; honest floor is 32 B
+  not 28 -- `ParquetIndex`+`CoelutionSum` can't be dropped).
+  - **S0/C1:** split the six q-value fields off `FdrProjection` -> lean **32 B** struct + `IFdrOutputSink`
+    (`FdrProjectionOutput.cs`, `FdrProjectionSinks.cs`). 2nd pass streams to sidecar+overlay (RunProteinQ
+    looked up on the resident survivor by entry_id) -> **2nd-pass projection 80->32 B (C1)**. 1st pass
+    byte-neutral (6-field array). Byte-identical both flag states (flag-ON independently re-verified),
+    perf 05:58 vs 06:00.
+  - **S1/C2-a:** 1st-pass outputs array shrunk to `{RunPeptideQ, RunProteinQ}` (16 B) + **two-phase
+    sidecar** (phase-1 partial record w/ `run_protein_qvalue` placeholder; phase-2 patches `[52..60]`
+    by entry_id after protein FDR) -> **1st-pass projection 80->48 B (C2-a)**. New unit test proves
+    phase1+patch == single-phase bytes; mode3 validates cross-process. Byte-identical (flag-ON
+    re-verified), perf-neutral.
+  - **S2 (48->32 B) DEFERRED** per design §8: only -16 B/entry (~3 GB @ 189M), needs peptide-summary
+    protein FDR + accumulated base-id set -- disproportionate byte-identity risk vs reward; revisit only
+    if a scale/perf run shows the 1st-pass ceiling still binds.
+- 2026-07-06: **CLEAN 40-file Carafe memory-accumulation run LAUNCHED** (`mem-40.ps1`; cleared 506
+  per-file intermediates for a true clean start, no cache reuse; `OSPREY_LOG_MEMORY` + a live 30 s
+  working-set sampler). Assessing peak WS + per-file accumulation with all of (iv) in place vs the
+  pre-iv validate-40 baseline (iii: scoring plateau ~64.8 WS, first-pass join ~57.6 WS). [results pending]
+
 ## Handoff prompt
 
 Fixing O(N) memory in Osprey multi-file runs (issue #4355). Root cause: heavy `FdrEntry`
