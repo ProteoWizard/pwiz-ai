@@ -77,17 +77,17 @@ The feature needs only `FdrEntry` + the manifest, both reachable from
   and a smoke test that the HTML renders + is self-contained (no external URLs).
 
 ## Work
-- [ ] Locate/confirm the stdout summary + add a `TryGetKind(sequence)` accessor to
-      `DecoyPairingManifest` if not already public.
-- [ ] Pure data model + computation in `Osprey.IO/ModelDiagnostics/` + unit tests.
-- [ ] In-process FDP (lower_bound / paired / combined) + verify vs `fdp.csv`.
-- [ ] Self-contained HTML writer + template (tabs, vanilla-SVG charts). Use the
-      dataviz design guidance; theme-aware, no CDN, one file.
-- [ ] `--model-diagnostics` flag + `FirstJoinTask` hook + help text.
-- [ ] Run on Stellar (with an entrapment manifest), open the HTML, sanity-check
-      each tab against the sprint prototypes.
-- [ ] Follow-up TODO for the two-run `--model-diagnostics-compare` mode + the
-      HTML-text localization pass (treated as a diagnostic artifact / English for now).
+- [x] Pure data model + computation in `Osprey.FDR/ModelDiagnostics/` + unit tests.
+- [x] In-process FDP (lower_bound / paired / combined) + verified vs `fdp.csv` (Stellar + Astral MATCH).
+- [x] Self-contained HTML writer + template (tabs, vanilla-SVG charts, theme-aware, no CDN, one file).
+- [x] `--model-diagnostics` flag + `FirstJoinTask` hook + help text.
+- [x] Run on Stellar + Astral (entrapment manifest), sanity-check each tab; pass-1 == FDRBench.
+- [x] **Pass-2 FDR views** (final reported pool) via a data sidecar carried FirstJoin -> MergeNode.
+- [x] **Per-feature score distributions** (mProphet "Feature Scores"): click a Model row.
+- [x] **Print-to-PDF** (all tabs, all FDR views, all feature distributions).
+- [x] Review round 1 (8 items) + round 2 (7 items) applied and verified.
+- [ ] Push + open PR; trigger TeamCity Perf/Regression on `pull/<N>` (Astral legs).
+- [ ] Follow-up TODO for the two-run `--model-diagnostics-compare` mode + HTML-text localization.
 
 ## Gates
 - No change to non-`--model-diagnostics` output (regression golden unaffected;
@@ -426,6 +426,49 @@ All addressed + verified on Stellar (pass-2 still RESULT: MATCH; Debug gate gree
    8. Red rows now = unexpected coefficient direction (IsReversedScore XOR coef<0), not negative %;
    RT-difference(abs) with negative weight correctly no longer flagged. Astral regenerating with
    the fixes (background). Screenshots/PDF in ai/.tmp/mdiag-shots/.
+
+### Review round 2 (2026-07-06, Brendan) - 7 UI refinements, commits `94c143ee39` + `b8c6b1634f`
+1. Collapsed feature table now SCROLLS in place (overflow-y:auto), with a STICKY header row so
+   the columns stay labeled; the Show-all/Best-fit toggle still expands to the full table.
+2. Fixed the per-feature print-grid x-axis title ("standardized score") being clipped below the SVG.
+3. Trimmed the red-row description (dropped the verbose idotp example).
+4. Widened description blocks (max-width 70ch -> 105ch) to cut their height.
+5. Capped the feature-contribution table width (700px) so labels sit next to the numbers.
+6. Capped the per-file summary table width (640px) so it groups left instead of spanning the card.
+All verified on Stellar (screenshots in ai/.tmp/mdiag-shots/). Both rounds were TEMPLATE-ONLY, so
+both reports were regenerated from their on-disk data by re-splicing the template around the embedded
+JSON -- NO re-search (demonstrates cheap "regenerate from disk" for pure UI changes). Release
+rebuilt so the embedded template matches source.
+
+## CURRENT STATE (2026-07-06) - feature complete, awaiting review sign-off, NOT pushed
+Branch `Skyline/work/20260705_osprey_model_diagnostics` (pwiz-work2), clean tree, NOT pushed, no PR.
+The `--model-diagnostics` HTML is a self-contained interactive report + PDF with:
+- 5 tabs (Model, Density, FDR calibration, Competition, Summary).
+- FDR calibration: pass-1 AND pass-2, experiment + per-run (4-view selector); pass-2 reproduces
+  STOCK FDRBench by construction. **Both datasets RESULT: MATCH** -- Stellar pass2 0.90% / pass1
+  2.01%; Astral pass2 0.88% / pass1 1.92% (targets 0.90/2.03, 0.87/1.89).
+- Model tab: mProphet-style contribution table (red = unexpected coefficient direction),
+  collapsible with sticky header, click a feature -> its target/decoy distribution.
+- Save-as-PDF: 17-page complete report (all FDR views + all 21 per-feature distributions).
+Debug gate green (452 tests, 0 warnings). Key commits: `9fd321cd38` (pass-2 + per-feature + PDF),
+`58d0afbd80` (review 1), `94c143ee39` + `b8c6b1634f` (review 2). ai repo: compare-tool + TODO commits.
+
+### NEXT STEPS
+1. Await Brendan's next review; apply any further tweaks (template-only tweaks regenerate from disk).
+2. When signed off: `/pw-self-review`, then push + open a PR (base master).
+3. Trigger TeamCity `ProteoWizard_OspreyWindowsNetPerfRegressionTests` on `pull/<N>` (Astral legs).
+4. Backlog: two-run `--model-diagnostics-compare` (library-impact q-q/Venn); `--fdrbench-pass 1,2`
+   (emit both TSVs in one run); a true one-shot `--regenerate-diagnostics` (load scores.parquet,
+   run only FDR math, emit HTML -- no flag/cache guesswork); strip the now-unused `deltaMu` JSON
+   field; HTML-body localization; template ASCII cleanup.
+
+### Regenerate cheaply (no re-search)
+`bash ai/.tmp/reprocess-mdiag.sh stellar|astral` clears FDR caches (keeps scores.parquet), re-runs
+Osprey with `--model-diagnostics --fdrbench <tsv> --fdrbench-pass 2` (Stellar ~2min resume; Astral
+re-scores hram ~23min), then `Compare-Fdrbench-Html.py --pass 2`. For TEMPLATE-ONLY changes, re-splice
+the template around the embedded JSON instead (instant). Screenshots: `ai/.tmp/shot-mdiag.py`.
+Gotcha: FirstPassFDR must RETRAIN (clear 1st-pass sidecars) for the model table + per-feature
+histograms; a bundle-rehydrate resume omits them.
 
 **Still open / polish (deferred, not blocking):** ~~PDF's FDR page captures only the selected view~~ (FIXED)
 (shows both passes would be nicer); disc count ~0.5% under the target PNG (known entrapment-regime
