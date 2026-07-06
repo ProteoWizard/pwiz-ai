@@ -416,7 +416,18 @@ Commit `9fd321cd38` (pwiz) + `85a01e8` (ai, compare-tool). Debug gate green (452
 `ai/.tmp/shot-mdiag.py <html> <outdir> <stem>` (headless Chrome, drives the tab/view/feature-click).
 Outputs in `ai/.tmp/mdiag-shots/`.
 
-**Still open / polish (deferred, not blocking):** PDF's FDR page captures only the selected view
+### Review round 1 (2026-07-06, Brendan awake) - 8 fixes, commit `58d0afbd80`
+All addressed + verified on Stellar (pass-2 still RESULT: MATCH; Debug gate green):
+1+2. PDF now prints ALL per-feature distributions (21) + all 4 FDR views (print-only blocks;
+   17-page PDF). 3. Composite "decoy normal" legend is a working toggle. 4. Feature table
+   defaults to best-fit height + Show-all/Best-fit toggle so the score plot stays visible.
+   5. Competition legend toggles the real/entrapment bands. 6. Per-file summary table gained an
+   Entrapment column (Targets now excludes entrapment). 7. Dropped the confusing delta-mu column.
+   8. Red rows now = unexpected coefficient direction (IsReversedScore XOR coef<0), not negative %;
+   RT-difference(abs) with negative weight correctly no longer flagged. Astral regenerating with
+   the fixes (background). Screenshots/PDF in ai/.tmp/mdiag-shots/.
+
+**Still open / polish (deferred, not blocking):** ~~PDF's FDR page captures only the selected view~~ (FIXED)
 (shows both passes would be nicer); disc count ~0.5% under the target PNG (known entrapment-regime
 Percolator cross-build float sensitivity; FDP matches, so not a bug); template ASCII cleanup;
 HTML-body localization. Next: push + PR when Brendan is happy, then trigger the manual TeamCity
