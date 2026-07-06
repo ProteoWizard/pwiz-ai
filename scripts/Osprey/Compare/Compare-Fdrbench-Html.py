@@ -52,7 +52,7 @@ def run_jar(jar, tsv, manifest, out_csv):
         sys.exit(f"ERROR: FDRBench jar exited {r.returncode}")
 
 
-def load_html(html_path):
+def load_html(html_path, pass_=None):
     html = open(html_path, encoding="utf-8").read()
     m = re.search(r'<script[^>]*id="osprey-data"[^>]*>(.*?)</script>', html, re.S)
     if not m:
@@ -62,6 +62,15 @@ def load_html(html_path):
     exp = [v for v in views if v.get("scope") == "experiment"]
     if not exp:
         sys.exit("ERROR: no experiment-scope FDP view in HTML (no entrapment?)")
+    # With both passes present the HTML carries two experiment-scope views; pick
+    # the one matching --pass so we diff the pass-N curve against the pass-N TSV.
+    if pass_ is not None:
+        want = int(pass_)
+        by_pass = [v for v in exp if v.get("pass") == want]
+        if not by_pass:
+            sys.exit(f"ERROR: no experiment-scope FDP view for pass {want} in HTML "
+                     f"(present: {sorted(set(v.get('pass') for v in exp))})")
+        return by_pass[0]
     return exp[0]
 
 
@@ -109,7 +118,7 @@ def main():
     elif not os.path.exists(fdp_csv):
         sys.exit(f"ERROR: --no-jar but {fdp_csv} does not exist")
 
-    exp = load_html(html)
+    exp = load_html(html, args.pass_)
     Q, comb, lb = exp["q"], exp["combined"], exp["lowerBound"]
     paired, nt = exp.get("paired"), exp["nTargetAccepted"]
     golden = load_golden(fdp_csv)
