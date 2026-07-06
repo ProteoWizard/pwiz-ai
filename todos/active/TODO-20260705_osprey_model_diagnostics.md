@@ -454,9 +454,15 @@ rebuilt so the embedded template matches source.
   run) instead of a silent empty Model tab; histogram binning skips NaN std values. Deferred
   (documented): standalone `peptide_pair_index` enumeration-order dependence (harmless; flag for
   the byte-parity review).
-- **Library-type robustness (in progress):** validating no-entrapment (target+decoy library ->
-  FDR tab should drop) and gendecoy (Osprey-generated decoys, ~10-16% anti-conservative FDP ->
-  Competition should show non-honest nulls). Runner: `ai/.tmp/run-libtypes.sh`.
+- **Library-type robustness (validated):** runner `ai/.tmp/run-libtypes.sh`.
+  - No-entrapment (target+decoy library, `StellarTest-TargetDecoyLibraries/target+decoy`):
+    graceful degrade -- hasEntrapment=false, 0 FDP views, FDR-calibration tab dropped from the
+    nav; Model/Density/Competition/Summary render (chips = targets+decoys only).
+  - Gendecoy (`stellar-gendecoy`, entrapment + Osprey-generated decoys): the diagnostic loudly
+    flags the anti-conservative decoys -- combined FDP **11.8%** at reported 1% q (vs 0.90% for
+    the well-calibrated library-decoy run), curves far above y=x, KPIs red; competition null band
+    entrapment 20.5% (not the honest ~50%). Exactly the ~10x inflation, made visible.
+  Both confirm the report is robust across library types and surfaces bad decoys.
 
 ## CURRENT STATE (2026-07-06) - feature complete, awaiting review sign-off, NOT pushed
 Branch `Skyline/work/20260705_osprey_model_diagnostics` (pwiz-work2), clean tree, NOT pushed, no PR.
