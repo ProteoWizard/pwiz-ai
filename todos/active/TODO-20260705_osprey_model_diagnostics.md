@@ -376,3 +376,46 @@ TARGETS (currently kept - they only add to n_t). Branch has 11 commits, clean tr
 **Next session handoff**: For detailed startup protocol (build, the reprocess+compare validation
 loop, next steps, gotchas), read `ai/.tmp/handoff-20260705_osprey_model_diagnostics.md` before
 starting work.
+
+## Night session progress (2026-07-05/06, autonomous) - PASS 2 + per-feature dists + PDF
+Goal (Brendan, at bedtime): pass-2 FDR views (were absent), regenerate BOTH datasets to match
+(for FDR) the target PNGs in `ai/.tmp/OspreyFDR/post-PR4347`, plus extra credit per-feature score
+distributions and (final stretch) print-to-PDF. **All delivered; committed on the branch (NOT
+pushed).**
+
+Commit `9fd321cd38` (pwiz) + `85a01e8` (ai, compare-tool). Debug gate green (452 tests, 0 warnings).
+
+- **Pass 2 FDR views (the main ask).** FirstJoinTask now stashes the pass-1 `ModelDiagnosticsData`
+  to a JSON sidecar (`<stem>.model-diagnostics.data.json`, Newtonsoft, NaN-safe Symbol float
+  handling); MergeNodeTask reloads it, computes the pass-2 (post-compaction, 2nd-pass-q) FDP views
+  from `RescoredEntries` -- the SAME pool the pass-2 FDRBench TSV is written from -- appends them,
+  and re-renders one page. The 4-view selector offers Pass 1/2 x experiment/per-run. Shared code
+  (`ReduceToPrecs` + `BuildFdpViewsFromPrecs`) computes both passes identically, so pass 2
+  reproduces stock FDRBench by construction (same library-derived classification/pairing/orphan-drop).
+  - **Stellar validated: RESULT MATCH** (no --protein-fdr, 1% exp q): combined 0.90% (FDRBench 0.90%,
+    target PNG 0.90%), paired 0.81%, lower 0.46%, disc 26753. Pass 1 unchanged (2.01%, target 2.03%).
+    Screenshot matches `stellar_libdecoy_pass2.png` (curves below y=x, flat full-extent).
+  - Validate: `python ai/scripts/Osprey/Compare/Compare-Fdrbench-Html.py --dir <run> --pass 2`
+    (the tool now filters the HTML experiment view by --pass).
+- **Per-feature score distributions (extra credit).** `FeatureContributions.Accumulator` optionally
+  bins each feature's standardized value by class into target/decoy histograms (gated on
+  `PercolatorConfig.CollectFeatureHistograms = config.ModelDiagnostics`, so the production scoring
+  path is byte-identical + perf-neutral). Carried onto the model rows. In the HTML, clicking a
+  feature row in the Model tab swaps the composite-score chart for that feature's target(blue)/
+  decoy(red) standardized distribution (the mProphet "Feature Scores" view) with a "back to
+  composite" link. Verified on Stellar (SG-weighted cosine 44.2%; 21/21 features carry histograms).
+- **Print-to-PDF (final stretch).** "Save as PDF" button + `@media print` (stacks all tabs, one
+  section per page, forces the light ink-friendly palette, `print-color-adjust: exact`). Modeled on
+  Brendan's UGM slide-deck DHTML. Headless `--print-to-pdf` -> valid 7-page PDF.
+
+**Reprocess loop (both datasets, no --protein-fdr to match the target PNGs):**
+`ai/.tmp/reprocess-mdiag.sh stellar|astral` clears FDR caches (keeps scores.parquet), runs Osprey
+`--model-diagnostics --fdrbench <tsv> --fdrbench-pass 2`, then the compare tool. Screenshots:
+`ai/.tmp/shot-mdiag.py <html> <outdir> <stem>` (headless Chrome, drives the tab/view/feature-click).
+Outputs in `ai/.tmp/mdiag-shots/`.
+
+**Still open / polish (deferred, not blocking):** PDF's FDR page captures only the selected view
+(shows both passes would be nicer); disc count ~0.5% under the target PNG (known entrapment-regime
+Percolator cross-build float sensitivity; FDP matches, so not a bug); template ASCII cleanup;
+HTML-body localization. Next: push + PR when Brendan is happy, then trigger the manual TeamCity
+Perf/Regression gate on `pull/<N>` for the Astral legs.
