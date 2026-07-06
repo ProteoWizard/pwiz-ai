@@ -6,8 +6,8 @@
 - **Created**: 2026-07-05
 - **Status**: In Progress
 - **Worktree**: `C:\proj\pwiz-work2`
-- **GitHub Issue**: (pending)
-- **PR**: (pending)
+- **GitHub Issue**: (none)
+- **PR**: https://github.com/ProteoWizard/pwiz/pull/4377 (base master; opened 2026-07-06)
 
 ## Origin
 Backlog item `TODO-osprey_diagnostics_fdr_plots.md` (brendanx67), motivated by the
