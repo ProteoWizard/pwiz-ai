@@ -341,8 +341,11 @@ the N-terminus, so it moves the Met in/out of position 1; the clip then fires as
 leaving peptides with no counterpart. Verified: 15,539 library peptides (2.1%) are Met-clip forms
 (100% are `M`+seq of a manifest peptide); orphans split 164 target / 138 entrapment among
 identified, more across the full library; 164/164 orphan-target and 138/138 orphan-entrapment show
-the exact M-move. Carafe issue drafts (issues DISABLED on maccoss/Carafe, so unposted):
-`ai/.tmp/carafe-issue-1-nterm-met.md`, `ai/.tmp/carafe-issue-2-pairing-manifest.md`.
+the exact M-move. Carafe issues FILED on maccoss/Carafe:
+#1 (N-terminal Met handling) https://github.com/maccoss/Carafe/issues/1 ; #2 (manifest doesn't
+match predicted library) https://github.com/maccoss/Carafe/issues/2. Drafts:
+`ai/.tmp/carafe-issue-{1,2}-*.md`. Quantified over-representation: 14,386 of 15,539 Met-clipped
+peptides (93%) are mis-clips of internal Mets; correct initiator-Met-only clip = ~30x reduction.
 
 **Osprey fixes (committed on the branch):**
 - `45cafb60f1` classify FDP by library base-id (matches FDRBench); `204c24fb05` zoom y-axis fix.
