@@ -70,6 +70,65 @@ Template csproj (drop the legacy 600-line XML, replace with ~40 lines):
 4. **NHibernate** — versions ≥5.5 support net6+. Multi-target by package version
    if legacy needed.
 
+## Status (2026-07-04)
+
+### Test-project ports + net8 parallel test infra + TestFunctional failure triage (MAJOR)
+
+Two arcs this session: (1) finished porting the remaining test projects and built the
+net8 parallel-test infrastructure end-to-end; (2) ran the full TestFunctional suite,
+clustered the failures by root cause, and fixed 13 tests across 4 distinct causes.
+
+**Test-project ports completed (SDK-style, multi-target net472;net8.0-windows):**
+- ✅ `Test.csproj` — 413/0 on net8 (the 16 blockers from last session resolved: ModelsResources
+  stub removed, AreNotEqual `(object)` casts, `Enumerable.Reverse`, ModificationMatcher `List<KVP>`,
+  G15 + tolerance, SkylineCmd port).
+- ✅ `TestFunctional.csproj` — builds; fixed CS0433 SkylineTool duplicate-types (excluded
+  `SkylineTool\**` from Skyline glob + added ProjectReference), DigitalRune HintPath, KoinaTestUtil
+  un-exclude + `Channel`→`ChannelBase`, `SpectrumNodeSelection`→`PeptidePrecursorNCE` operator ungated.
+- ✅ `TestRunner` / `TestRunnerLib` — full port incl. NetMQ Docker-worker model.
+
+**Net8 parallel test infrastructure — WORKING end-to-end (verified real workercount=2 + full run):**
+- `Stage-Net8Tests.ps1` (NEW) — robocopies each project's `bin\<Config>\net8.0-windows` into one
+  `bin\staging-net8\<Config>` (restores the legacy single-bin the runner/container assume) AND bundles
+  a portable .NET 8 Desktop runtime into `<staging>\dotnet` (auto-picks highest 8.0.x; `-NoRuntime` opt-out).
+- `TestRunner/Program.cs` — container mapping rewritten pwizRoot-relative (was fragile `pwiz_tools\Skyline\bin`
+  anchor); `GetHostTestRunnerExe()` resolves the apphost `.exe` on net8 (Assembly.Location is the `.dll`);
+  **Docker workers launch via the staged `dotnet.exe` muxer** (`dotnet.exe TestRunner.dll …`) which
+  self-locates its runtime — needed because AlwaysUp runs the worker as a `.\TestUser` service that does
+  NOT inherit `docker run -e` env vars (so DOTNET_ROOT never reached the apphost). `skipsystemheaps=on`
+  passed as a **command-line arg** (not env, same reason) so container workers skip the `HeapWalk`/`HeapLock`
+  system-heap walk that AVs against the Windows-container segment heap (fatal on net8).
+- `RunTests.cs` — `SkipSystemHeaps` settable; `HandleEnumeratorWrapper` (C++/CLI TestDiagnostics) gated `#if NET472`.
+- `InvokeSkyline.cs` — loads `Skyline-daily.dll` on net8 (the `.exe` is a native apphost).
+- Verified: `workercount=2` (host worker + 1 Docker worker over NetMQ) runs real functional tests; full
+  `TestFunctional.dll` parallel run with 4 Docker workers distributes + requeues correctly.
+
+**Full TestFunctional run (168/417 before stopping) → clustered failures. 13 tests fixed across 4 root causes:**
+
+| Cause | Fix | Tests |
+|---|---|---|
+| NHibernate 5.5.2 rejects duplicate-column mapping (`<many-to-one>`+`<property>` same col) | ChromLib `Precursor` mapping: `insert="false" update="false"` on redundant `PeptideId`/`SampleFileId` props | TestAddLibrary, TestAddMixedLibrary (2) |
+| `KoinaConfig.xml` not embedded (Jamfile copied dev→xml; SDK build skipped it) | `Skyline.csproj` embed `KoinaConfig_development.xml` under the looked-up resource name (LogicalName) | TestEditCustomTheme, TestClearAllSettings (2) |
+| `DocumentationGenerator.css` not embedded → empty stylesheet; **net8 SDK skips satellite for deprecated `zh-CHS` culture** → all Simplified Chinese localization missing | `Common.csproj` embed css; **renamed 327 `.zh-CHS.resx`→`.zh-Hans.resx`** (excl `Executables/`) + `Documentation/Help/zh-CHS`→`zh-Hans` + 8 code refs | 3 help-doc tests **+ restored Chinese localization app-wide** |
+| `ProteomeDb.CloseDbConnection()` closes shared NHibernate `SessionFactory` but leaves the pooled `DatabaseResource` cached → next open reuses a closed factory → `ObjectDisposedException` (swallowed → loader never completes → WaitForCondition hangs) | `DatabaseResource.GetDbResource`: if cached `SessionFactory.IsClosed`, drop + recreate | BackgroundProteome, IrtBlib, CleavableCrosslink, ExplicitPeakScore, FullScanId, HighPrecMods (6) |
+
+**4 "failures" were flaky/parallel-only** (pass in clean local single-process run): TestArrangeGraphs,
+TestFullScanGraph, TestFullScanProperties, TestIgnoreSimScans.
+
+**Remaining TestFunctional failures (from the enumeration, not yet fixed):**
+- Cluster C leftovers (2, distinct larger areas): **ConstantNeutralLossTest** — hangs importing Agilent `.d`
+  (vendor-reader/data-layer); **TestImportPeptideSearch** — hangs building a BiblioSpec spectral library.
+- Cluster D (1): **TestExportMethodDlg** — `WaitForOpenForm(ExportMethodScheduleGraph)` never opens.
+- Fast assertion/exception failures (not hangs): TestExportSpectralLibrary (`'1'` not valid Boolean —
+  net8 stricter parse), TestExportChromatogram (output diff), TestDissociationMethod, ImmediateWindowTestMethod,
+  TestImportFullScanNarrowScanWindows, TestExportHugeParquetReport, TestExportIsolationListAsExplicitRetentionTimes.
+- Environmental (not net8 code bugs): TestAccessServer (network), TestDdaSearch* (tool downloads).
+
+**Nothing committed this session** — all changes are uncommitted in the `C:\dev\pwiz-net8` worktree
+(the earlier 4-commit net8 batch `f0ad715..02a6c78` was already pushed in a prior session).
+
+**Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20260704_net8_test_fixes.md` before starting work.
+
 ## Status (2026-07-02)
 
 ### Cumulative progress (2026-07-02, end of two-day working session — MAJOR)
