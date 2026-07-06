@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260705_osprey_model_diagnostics`
 - **Base**: `master`
 - **Created**: 2026-07-05
-- **Status**: In Progress
+- **Status**: Completed
 - **Worktree**: `C:\proj\pwiz-work2`
 - **GitHub Issue**: (none)
-- **PR**: https://github.com/ProteoWizard/pwiz/pull/4377 (base master; opened 2026-07-06)
+- **PR**: [#4377](https://github.com/ProteoWizard/pwiz/pull/4377) (merged 2026-07-06 as `174e3ddd87`)
 
 ## Origin
 Backlog item `TODO-osprey_diagnostics_fdr_plots.md` (brendanx67), motivated by the
@@ -482,7 +482,20 @@ master-merge tip, rebuilt, ran `TestNoUnstableSort` explicitly (net472) -> PASS,
 which is why the local gate missed it -- rely on the TeamCity unit build for that check. Re-ran
 the unit build on pull/4377 (TC 4079329).
 
-## CURRENT STATE (2026-07-06) - feature complete + review responses in, PR #4377 open (pushed)
+### 2026-07-06 - Merged
+PR #4377 merged as squash commit `174e3ddd87` on master. Shipped the full opt-in
+`--model-diagnostics` interactive HTML/PDF report: FDR calibration reproducing stock FDRBench
+in-process for both passes (validated MATCH on Stellar 0.90% + Astral 0.87%), the mProphet-style
+model tab with composite + per-feature score distributions and a 1st/2nd-pass model selector
+under `--protein-fdr`, library-as-single-source-of-truth classification/pairing, print-to-PDF,
+and graceful behavior across library types (no-entrapment degrade; gendecoy anti-conservative-FDP
+alarm). Off the default output path; production scoring output byte-identical (regression PASSED).
+Gates: local Stellar regression + TeamCity Stellar/Astral Perf-Regression green; self-review +
+CodeQL + Copilot addressed; unstable-sort CI failure fixed (`0d2e6b7b76`). **Deferred to backlog**
+(both under ai/todos/backlog/brendanx67/): per-feature training-pool (max-separation) distributions;
+null-distribution alignment + decoy-quality alarm.
+
+## CURRENT STATE (2026-07-06) - MERGED (#4377), superseded by the Merged log entry above
 Branch `Skyline/work/20260705_osprey_model_diagnostics` (pwiz-work2), clean tree, NOT pushed, no PR.
 The `--model-diagnostics` HTML is a self-contained interactive report + PDF with:
 - 5 tabs (Model, Density, FDR calibration, Competition, Summary).
