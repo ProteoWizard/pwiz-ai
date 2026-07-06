@@ -471,6 +471,17 @@ line from DOM text nodes instead of innerHTML (CodeQL DOM-text-as-HTML); removed
 Osprey gate green (452 tests, 0 warnings). Local regression PASSED earlier; TeamCity Perf/Regression
 running on pull/4377.
 
+### CI fix (2026-07-06) - unstable-sort rule, commit `0d2e6b7b76`
+The "Osprey Windows .NET" unit build failed on `TestNoUnstableSort` (a NEW code-inspection test
+that arrived via the GitHub "Update branch" master merge; it forbids instance `List<T>.Sort()`,
+not just `Array.Sort(`). It flagged the four q-value `.Sort()` calls in `BuildFdpView`. Fixed by
+tagging each `// Array.Sort OK:` (primitive q doubles, value is the whole key, ties bit-identical
+and immaterial to the `<=` sweep; C#-only diagnostics off the parity path). Rebased onto the
+master-merge tip, rebuilt, ran `TestNoUnstableSort` explicitly (net472) -> PASS, full gate green
+(456 tests, 0 warnings). Note: the local `-RunTests` list does NOT include `CodeInspectionTest`,
+which is why the local gate missed it -- rely on the TeamCity unit build for that check. Re-ran
+the unit build on pull/4377 (TC 4079329).
+
 ## CURRENT STATE (2026-07-06) - feature complete + review responses in, PR #4377 open (pushed)
 Branch `Skyline/work/20260705_osprey_model_diagnostics` (pwiz-work2), clean tree, NOT pushed, no PR.
 The `--model-diagnostics` HTML is a self-contained interactive report + PDF with:
