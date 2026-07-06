@@ -392,9 +392,11 @@ Commit `9fd321cd38` (pwiz) + `85a01e8` (ai, compare-tool). Debug gate green (452
   and re-renders one page. The 4-view selector offers Pass 1/2 x experiment/per-run. Shared code
   (`ReduceToPrecs` + `BuildFdpViewsFromPrecs`) computes both passes identically, so pass 2
   reproduces stock FDRBench by construction (same library-derived classification/pairing/orphan-drop).
-  - **Stellar validated: RESULT MATCH** (no --protein-fdr, 1% exp q): combined 0.90% (FDRBench 0.90%,
-    target PNG 0.90%), paired 0.81%, lower 0.46%, disc 26753. Pass 1 unchanged (2.01%, target 2.03%).
-    Screenshot matches `stellar_libdecoy_pass2.png` (curves below y=x, flat full-extent).
+  - **Both datasets validated: RESULT MATCH** (no --protein-fdr, 1% exp q).
+    Stellar pass 2: combined 0.90% (FDRBench 0.90%, target PNG 0.90%), paired 0.81%, disc 26753;
+    pass 1 = 2.01% (target 2.03%). Astral pass 2: combined 0.88% (FDRBench 0.876%, target 0.87%),
+    paired 0.82%, disc 81918; pass 1 = 1.92% (target 1.89%). Astral's genuine ~0.0015 q-floor spike
+    renders faithfully (matches `astral_libdecoy_pass2.png`). Screenshots + PDFs in ai/.tmp/mdiag-shots/.
   - Validate: `python ai/scripts/Osprey/Compare/Compare-Fdrbench-Html.py --dir <run> --pass 2`
     (the tool now filters the HTML experiment view by --pass).
 - **Per-feature score distributions (extra credit).** `FeatureContributions.Accumulator` optionally
