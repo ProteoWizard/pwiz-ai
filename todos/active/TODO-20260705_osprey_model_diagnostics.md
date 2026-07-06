@@ -464,7 +464,14 @@ rebuilt so the embedded template matches source.
     entrapment 20.5% (not the honest ~50%). Exactly the ~10x inflation, made visible.
   Both confirm the report is robust across library types and surfaces bad decoys.
 
-## CURRENT STATE (2026-07-06) - feature complete, awaiting review sign-off, NOT pushed
+### PR review responses (2026-07-06) - commit `cc7e6a8ab8` (PR #4377)
+Addressed the CodeQL + Copilot review threads (all replied + resolved): built the header meta
+line from DOM text nodes instead of innerHTML (CodeQL DOM-text-as-HTML); removed dead `MapKind`
+(+ redundant using); wrote the HTML report and the pass-1 data sidecar atomically via `FileSaver`.
+Osprey gate green (452 tests, 0 warnings). Local regression PASSED earlier; TeamCity Perf/Regression
+running on pull/4377.
+
+## CURRENT STATE (2026-07-06) - feature complete + review responses in, PR #4377 open (pushed)
 Branch `Skyline/work/20260705_osprey_model_diagnostics` (pwiz-work2), clean tree, NOT pushed, no PR.
 The `--model-diagnostics` HTML is a self-contained interactive report + PDF with:
 - 5 tabs (Model, Density, FDR calibration, Competition, Summary).
