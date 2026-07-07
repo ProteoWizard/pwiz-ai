@@ -90,6 +90,15 @@ Record their choice and reference it throughout setup.
 
 ## Phase 1: Prerequisites
 
+> **For LLM assistants — elevated winget installs need a visible UAC prompt.** Machine-scope
+> installers (Node.js, GitHub CLI, Visual Studio, TortoiseGit, .NET runtimes) request
+> elevation. Do **NOT** run them with `--disable-interactivity`, and do **NOT** launch them
+> as a detached/background task: the UAC prompt is auto-cancelled and winget fails with
+> **exit code 1602** ("user cancelled") even though the command looks like it ran. Run these
+> in the foreground so the UAC dialog appears, and tell the user to click **Yes**. Verify the
+> real exit status — a `... | tail` pipe returns 0 regardless, so read winget's own
+> "Successfully installed" line, not the pipe's exit code.
+
 ### 1.1 Check for Node.js
 
 Node.js provides npm, used for installing Claude Code and other development tools.
@@ -269,6 +278,17 @@ Examples below use `C:\proj` as the project root. This is just an example -- any
 > ```
 > Skip any steps for components that already exist.
 
+> **For LLM assistants — the `.claude` junction + `settings.local.json` steps are usually
+> BLOCKED by the auto-mode self-modification classifier.** Creating `.claude` (a junction into
+> the `ai` repo) and copying `settings.local.json` (permission config sourced from that repo)
+> is flagged as the agent modifying its own configuration from an external source, and the
+> Bash call is denied. **Have the developer run these steps themselves** — paste the block
+> below for them to run in their own PowerShell window (not via the Claude `!` prefix, where
+> PowerShell parses `!` as an operator). The `git clone` lines are fine for the assistant to
+> run; only the `mklink`/`Copy-Item` config steps are blocked. Note also: a plain `.claude`
+> folder is often auto-created in the project root by the running session (holding a few
+> throwaway permissions) and must be removed before `mklink /J .claude` will succeed.
+
 ```powershell
 # Create project directory (if needed) - substitute your preferred location
 New-Item -ItemType Directory -Path C:\proj -Force
@@ -321,6 +341,12 @@ This resumes the same conversation but with full project context loaded. You sho
 **For LLM assistants:** You MUST offer to configure the statusline. Do not skip this step silently. Ask: "Would you like me to configure the Claude Code statusline? It shows the current project, git branch, model, and context usage."
 
 This is a personal preference setting, but most developers find it useful.
+
+> **For LLM assistants — editing `~/.claude/settings.json` is BLOCKED by the auto-mode
+> self-modification classifier** (wiring a repo-provided script to run on every prompt is
+> flagged as agent self-modification). You cannot apply this edit yourself. Give the developer
+> the final JSON to paste into `~/.claude/settings.json` (preserving their existing keys) and
+> let them save it. Since it is a personal preference, it is fine for them to decline or defer.
 
 Example statusline output: `pwiz [Skyline/work/20260113_feature] | Opus | 36% used`
 
