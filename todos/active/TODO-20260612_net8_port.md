@@ -70,6 +70,193 @@ Template csproj (drop the legacy 600-line XML, replace with ~40 lines):
 4. **NHibernate** — versions ≥5.5 support net6+. Multi-target by package version
    if legacy needed.
 
+## Status (2026-07-06)
+
+### Consolidated everything onto net8 + committed the whole port (branch is PR-ready)
+
+The net8 branch (`Skyline/work/20260612_net8_port`) is now the single consolidated branch for PR #4178
+("Port ProteoWizard core to .NET 8"). All previously-uncommitted work is committed in clean area commits:
+- `8c2bf26972` net8 TestFunctional fixes + DOTNET_ROOT apphost resolution (this session's 9 files)
+- `dc12600f3a` zh-CHS -> zh-Hans localization rename (332 files)
+- `6961871dae` net8 test infrastructure + parallel runner
+- `0e1cc18285` TestFunctional/TestData failure fixes (NHibernate/ProteomeDb/ChromLib/docs)
+- `4149052421` Skyline/Common csproj multi-target + core net8 fixes
+- `235a2aaf4c` merge of chambem2/pwiz-sharp WIP (ChargeFromIsotope parent cache + native tests + build infra)
+
+net8 already contained the full pwiz-sharp port (via the earlier `c5ae2fd` merge of chambem2/pwiz-sharp), so
+a single PR from net8 carries pwiz-sharp port + net8 Skyline port + the chambem2 WIP. The chambem2 WIP itself
+was committed (`ec44c07ddc`) after validating the mascot BiblioSpec tests (15/15 green; the two mascot
+`.check.observed` "discrepancies" were stale outputs, not real failures).
+
+**BlibBuild deployment reconciliation (option A):** the merge conflicted on `Skyline.csproj` + `BlibBuild.cs`
+because the two branches used different managed-BlibBuild layouts -- net8 deploys `BlibBuild.exe` to the base
+dir (`CopyBiblioSpecTools` + `AppContext.BaseDirectory`), chambem2's newer WIP used a `BlibBuild-sharp/`
+subdir. Resolved to net8's base-dir approach: took net8's `Skyline.csproj`/`BlibBuild.cs` and reverted the 3
+installer files to net8's versions. Verified 0 `BlibBuild-sharp` references remain (consistent). chambem2's
+unrelated work (ChargeFromIsotope cache, native tests, pwiz-sharp build/test infra) preserved.
+
+**Follow-ups (not blocking):** (1) `TestExportMethodDlg` -- the ShowSchedulingGraph hang fix is committed but a
+residual `double`-shortest-round-trip diff in a triggered export remains (same class as the G7/GetProductMz
+fixes; needs the column pinned). (2) A full net8 suite run before flipping PR #4178 out of DRAFT would be the
+belt-and-suspenders check -- the pieces were verified individually, and the final merge added only native/build
+files (no Skyline .NET build inputs).
+
+### Two remaining 750s hangs: one fixed, one root-caused (deeper)
+
+The full run actually had FIVE ~750-790s tests (not two): UpgradeErrors (fixed earlier), LabelLayout
+(headless-skip), TestPeakBoundaryCompare (passes single-process = parallel-only), plus these two genuine
+single-process hangs:
+
+- `TestExportMethodDlg` -- HANG FIXED. `ExportMethodDlg.ShowSchedulingGraph()` had its ENTIRE body wrapped
+  in `#if NET472`, so on net8 it was a no-op -> the graph dialog never opened -> `ShowDialog<ExportMethodScheduleGraph>`
+  hung 720s (ThermoTsqTest, ExportMethodDialogTest.cs:137). Only the Bruker timsTOF scheduling-METRICS
+  gathering is net472-only (native PrmScheduling SDK); the graph itself + non-Bruker scheduling work on net8
+  (`ExportMethodScheduleGraph` isn't gated -- uses the `Pwiz.Vendor.Bruker` net8 namespace). Fix: declare
+  brukerTemplate/brukerMetrics as null outside the `#if`, keep only the metrics computation net472-gated, and
+  run the dialog display on both frameworks. Verified: 720s hang -> 10s. **Caveat:** the fix unmasks a
+  pre-existing latent failure in the same test -- a double shortest-round-trip diff `0.9456002044677735`
+  (net8) vs `0.945600204467773` (net472) in a triggered Thermo method export. Same class as the G7/GetProductMz
+  fixes; needs the specific exporter column pinned (a double written via bare `.ToString(CultureInfo)`). Not
+  yet fixed -- follow-up.
+- `TestImportPeptideSearch` -- HANG FIXED (in the managed BlibBuild). Hung at ImportPeptideSearchTest.cs:385
+  `WaitForConditionUI(IsNextButtonEnabled)` after adding SpectrumSources.blib on the Build Spectral Library
+  page. Chain: `BuildLibraryGridView.FilePaths` setter -> BackgroundWorker -> `GetScoreTypes` -> runs the
+  managed `BlibBuild.exe -s -t` score-types query. Root cause (reproduced directly): the C# port's
+  `BlibBuilder.DispatchReader` special-cased `.blib` to ALWAYS call `TransferLibrary`, which uses the output
+  `BlibMaker.Db` -- but in score-lookup mode that Db is never opened, so it threw "Db not open. Call OpenDb
+  first." The error flagged the file with a score-type error -> `Grid.IsReady` stayed false -> Next never
+  enabled -> 720s. Fix (`pwiz-sharp/Tools/BiblioSpec/src/BiblioSpec/BlibBuilder.cs`): mirror cpp
+  `BlibHandler::getScoreTypes` (BlibBuild.cpp:49-72) -- in score-lookup mode a `.blib` opens itself read-only
+  and reports its own distinct `ScoreTypes` (fallback UNKNOWN), never touching the output Db. New
+  `GetBlibScoreTypes(iLib)` + branch on `IsScoreLookupMode`. Verified: `BlibBuild.exe -s -t` on a .blib now
+  emits a clean score-type row (no "Db not open"), and **TestImportPeptideSearch passes in 12s** (was 720s).
+  NOTE: fix lives in the nested pwiz-sharp repo -- commit there separately.
+
+Diagnostic used: temporary `SKYLINE_TRIAGE_FAST` env gate capping GetWaitCycles in TestFunctional.cs so hung
+WaitFors fail in ~20s with their "Open forms" message. Reverted after triage.
+
+### net8-candidate failures: triaged the 10, fixed the genuine format-class ones
+
+Ran the 10 "genuine net8 candidate" failures single-process on the host. 3 pass single-process =>
+parallel-flaky, set aside (`TestPeakBoundaryCompare`, `TestCrosslinkChromatograms`, `TestLocalizedResources`).
+7 genuinely fail; root-caused all, fixed the two clean format-class ones (verified passing, no regression in
+the export tests):
+
+- `TestPeakScoringModel` -- FIXED. **Negative zero**: `TargetDecoyGenerator.GetPercentContribution` returns
+  `meanWeightedDiff / meanDiffAll`, and `meanWeightedDiff` is `-0.0` when `meanDiff` is exactly 0 and the
+  weight is negative (IEEE `0.0 * -x`). net8 formats that as "-0.0%" where net472 dropped the sign. Fix:
+  normalize `-0.0`->`0.0` at the source (`return pct == 0 ? 0.0 : pct`) -- numerically identical, fixes grid +
+  CommandLine displays.
+- `TestOptimization` -- FIXED. **double shortest-round-trip** (the double analog of the chromatogram G7 fix):
+  product m/z `524.216337` (net472) vs `524.2163370000001` (net8). Root cause is shared:
+  `AbstractMassListExporter.GetProductMz(mz, step)` adds the optimization-step offset which re-introduces
+  full precision, and ~8 export call sites `.ToString()` it raw. Fix: `PersistentMZ`-round inside
+  `GetProductMz` (single point, covers all callers).
+
+**Remaining 5 genuine failures -- deeper root-cause round:**
+- `TestSynchSiblingsSmallMolecules` -- ROOT-CAUSED (needs owner decision, not a quick fix). Diagnostic dump
+  showed identical formula+masses; the diff is the **adduct representation**: `compareIon` (built with
+  `Adduct.SINGLY_PROTONATED`, the proteomic charge-only `z=1`) stays `'1'`, but the small-molecule the dialog
+  adds now normalizes to the formula adduct `'[M+H]'` on net8 (net472 kept `'1'`). `Adduct.Equals` correctly
+  distinguishes them. Need product-owner call on whether net8's `[M+H]` (arguably correct for a small molecule)
+  or net472's `1` is right, and where the add-molecule pipeline diverges. Likely fix is either a normalization
+  alignment or updating the test's expected adduct.
+- `TestSkylineCmdInEmptyDirectory` -- ROOT-CAUSED (fiddly test-infra fix). Test copies ONLY `SkylineCmd.exe`
+  to an empty dir and runs it expecting SkylineCmd's own "Skyline-daily.dll not found" error. On net8 the bare
+  apphost dies at the runtime level ("application to execute does not exist: SkylineCmd.dll") before any managed
+  code runs (the net8-adapted expected strings at SkylineCmdTest.cs:139-140 assume it got that far). Fix: copy
+  the full apphost bundle (.exe + .dll + .runtimeconfig.json + .deps.json) minus Skyline-daily.dll so SkylineCmd
+  launches (DOTNET_ROOT already handled by the TestRunner fix) and produces the intended error.
+- `TestObjectFilterOperations` (CommonTest) -- `Uri` `OP_STARTS_WITH "urn:t"` returns 0 not 2. `StringFilterOperation.IsValidFor`
+  requires the handler be `IFilterHandler.IContains`; on net8 the `Uri` column's handler apparently isn't, or the
+  Uri->string path in `StartsWith` differs. Not yet fully root-caused.
+- `TestPasteMolecules` -- "Unexpected value in paste dialog error window"; paste-validation error text mismatch. Signature only.
+- `TestCommandLineNoJoin` (TestData) -- `Assert.IsTrue` on a `.raw` path existing after import. Signature only; possibly data/import.
+
+### Full parallel run: 933/978 pass (95.4%) + two 750s hangs resolved
+
+After the DOTNET_ROOT fix + environmental skip list, the full Test+TestData+TestFunctional parallel run
+completed: **978 run, 933 pass, 45 fail (95.4%)**, ~50 environmental tests skipped, 0 apphost errors, 1
+worker death (`TestDocumentSharing`, passed on requeue). The 45 failures break down as ~16 environmental
+stragglers the skip-regex missed (Console*Import, Wiff, Thermo-method, Midas, EI -- several are the TODO's
+known-hard items), ~6 known-flaky-parallel (07-04 list), ~5 already-triaged fast-failures, ~2 hangs (below),
+and ~10 genuine net8 candidates (TestOptimization, TestPeakScoringModel, TestPasteMolecules,
+TestObjectFilterOperations, TestSynchSiblingsSmallMolecules, TestPeakBoundaryCompare, TestCrosslinkChromatograms,
+TestCommandLineNoJoin, TestSkylineCmdInEmptyDirectory, TestLocalizedResources). Full run log:
+scratchpad/net8_parallel_run3.log.
+
+**Two 750s hangs resolved (different in kind):**
+- `UpgradeErrorsFunctionalTest` -- REAL net8 bug, FIXED. `UpgradeManager.updateCheck_Complete` special-cased
+  `TrustNotGrantedException` (route to UpgradeDlg + manual install link) only under `#if NET472`, because the
+  `System.Deployment.Application` `using` was net472-only. On net8 the trust case fell through to the generic
+  "Failed attempting to check for an upgrade" MessageDlg, which the test didn't expect -> desync -> 720s
+  timeout. Fix: un-guard the `using` (resolves to the net8 stub in SkylineNet8Stubs.cs) and the special-case
+  block. Safe for production: net8 uses `NullDeployment` (IsNetworkDeployed=false, never throws this), so the
+  path is only reachable by tests that inject a deployment. Now passes in 2s.
+- `TestLabelLayoutDeterminism` -- NOT a net8 bug. Passes on the host single-process in 5s; hangs ONLY headless
+  (Docker container). The GroupComparisonAvoidLabelOverlap layout (`LabelLayoutRunner`) needs real text metrics
+  from `Graphics.FromHwnd(IntPtr.Zero)`; in a headless container those return zero-height, so the runner bails
+  at its `if (!heights.Any(h => h > 0)) return;` guards before applying a layout -> pane._labelLayout stays
+  null -> `WaitForConditionUI(EnableLabelLayout && Layout!=null && PointsLayout.Count>0)` never satisfies.
+  Resolution: display-dependent test; add `~.*LabelLayout.*` to the container skip regex (same class as vendor/
+  network). Needs a nightly box with a display to actually run. (Possible harness follow-up: make display-
+  dependent tests fail-fast/self-skip headless instead of hanging 720s.)
+
+### Docker-worker die-off root-caused + fixed (DOTNET_ROOT for spawned apphosts)
+
+Running the full Test+TestData+TestFunctional suite under `parallelmode=server` (6 workers: 1 host +
+5 Docker), workers died en masse within the first minute. Root cause (confirmed from the coordinator
+log): tests spawn Skyline-built **.NET 8 tool apphosts** via `ProcessRunner` -- caught `BlibBuild.exe`
+failing with `0x80008083` / "Failed to resolve hostfxr.dll" / ".NET location: Not found". The worker's
+own `TestRunner.dll` launches through the staged `dotnet.exe` **muxer** (self-locating, 07-04 fix), but a
+bare apphost the *test* spawns does not use the muxer -- it needs `DOTNET_ROOT` / a global install /
+co-located `hostfxr.dll`, none of which exist in the container (no global .NET; the AlwaysUp `.\TestUser`
+service session does not inherit `docker run -e` vars). The failed/hung child took its worker down, and
+the coordinator does NOT relaunch dead workers -> 6 workers -> 1 in minutes.
+
+**Fix** (`TestRunner/Program.cs`, `Main` + new `SetDotNetRootForChildApphosts()`): the worker sets
+`DOTNET_ROOT` to the staged runtime (`<AppContext.BaseDirectory>\dotnet`, which ships
+`dotnet\host\fxr\8.0.27\hostfxr.dll`) in **its own process environment** at startup. Child processes
+inherit the process env (not the service session), so spawned apphosts (`BlibBuild.exe`, `BlibFilter.exe`,
+`SkylineCmd.exe`, ...) resolve the runtime. No-op if `DOTNET_ROOT` is already set or the staged runtime is
+absent (net472 / unstaged dev bins where a global install is used). Verified: re-run showed **0
+hostfxr/app-launch errors** (was many within the first minute) and workers stopped dying from that cause.
+
+**Remaining worker deaths are environmental, not net8 bugs:** the container lacks OS-install vendor SDKs
+(Agilent MHDAC confirmed; Shimadzu/Waters likely) and downloaded tools (MSFragger/Comet/etc.), and network
+(Panorama/Koina/AccessServer). These hang their worker (no relaunch). For a clean parallel pass-count they
+are skipped via `skip=~.*Agilent.*,~.*Shimadzu.*,~.*Waters.*,~.*Unifi.*,~.*DdaSearch.*,~.*DiaSearch.*,~.*EncyclopeDia.*,~.*Koina.*,~.*Panorama.*,~.*AccessServer.*`
+(TestRunner `skip=` supports `~regex` against `ClassName.MethodName`). They need a nightly machine with the
+SDKs/tools to actually run. **Follow-up idea:** make these self-skip (Inconclusive) when the dependency is
+absent instead of hanging, so containerized runs don't need the skip list.
+
+### Fast-failure cluster: float/formatting export tests (4 fixed)
+
+Worked the 2026-07-04 "fast assertion/exception failures" list. Root-caused and fixed the
+formatting/tolerance cluster; each fix is minimal and framework-agnostic (green on net8, and
+does not diverge net472). All uncommitted in `C:\dev\pwiz-net8`.
+
+| Test | Root cause | Fix |
+|---|---|---|
+| `TestExportSpectralLibrary` | net8's SQLite provider returns the NHibernate-mapped `Standard` INTEGER column as a boxed `Int64`; `bool.Parse("1")` throws (net472 returned a `bool` whose ToString was "True") | `ExportSpectralLibraryTest.cs`: `Convert.ToBoolean(reader["Standard"])` (dispatches on the boxed type on both frameworks) |
+| `TestExportIsolationListAsExplicitRetentionTimes` | **Test-side** check strings built from unrounded `t46 - halfWin` (=`56.79-1.2`); exporter rounds RT to 2 dp (`Prediction.GetRetentionTimeDisplay`). net472's lossy `"G"` printed "55.59" and hid it; net8's shortest-round-trip prints "55.589999999999996" | `ExportIsolationListTest.cs`: precompute `t46Start/t46End/t39Start/t39End = Math.Round(..., 2)` and use in all 10 `FieldSeparate` expectations |
+| `TestExportChromatogram` (part 1: lines 2-3) | **Product-side** `ExportChromatograms.cs` formats `float` times/intensities/TIC via default `Convert.ToString`; .NET Core changed `float.ToString()` to shortest-round-trip (8 digits) vs net472's ~7 (`46.37717`->`46.377167`) | Added `FormatFloat(float,culture) => ToString("G7", culture)` helper (MS-recommended workaround; a float only carries ~7 sig digits) and routed the 4 float sites through it |
+| `TestExportChromatogram` (part 2: line 4) | After G7, residual last-digit **numeric drift** in extracted intensities (~1e-6 relative; JIT FMA/accumulation-order). Test used the exact-string `FileEquals` overload | `ExportChromatogramTest.cs`: pass `ColumnTolerances(0.001, 1e-6)` + `AddTolerance(3, 0.0001, 1e-6)`, mirroring the existing `ChromatogramExporterTest` unit test. AssertEx already handles the comma-packed arrays element-wise |
+
+**Reusable finding:** the `float`-`ToString` shortest-round-trip change (net472 ~7 digits ->
+net8 8-9) will recur anywhere product code writes `float` via default `ToString`/`Convert.ToString`.
+Fix = explicit `"G7"` (float) / `"G15"` (double), OR a column relative tolerance in the compare.
+`AssertEx.ColumnTolerances` was purpose-built for this (see its net8 comments) and splits
+comma-packed array columns.
+
+**Remaining fast-failures reclassified as deeper (not formatting):**
+- `TestDissociationMethod` — `MeasuredResults.TryLoadChromatogram` returns false for a precursor
+  after importing `DissociationMethodTest.mzML` (`DissociationMethodTest.cs:222`). Data/analysis
+  parity: dissociation-method spectrum filtering via pwiz-sharp, not a formatting bug.
+- `ImmediateWindowTestMethod` — tool-add immediate-window command echoes its args instead of
+  emitting the "<X> was added to the Tools Menu" confirmation (`ImmediateWindowTest.cs:57`).
+  Immediate-window command execution/parse behavior on net8.
+
 ## Status (2026-07-04)
 
 ### Test-project ports + net8 parallel test infra + TestFunctional failure triage (MAJOR)
@@ -690,3 +877,87 @@ pwsh -File ai\scripts\Skyline\Run-Tests.ps1 -TestName <fast subset>
   work; vendor harness state.
 - `ai/docs/version-control-guide.md` — commit/PR format.
 - `ai/WORKFLOW.md` — branch lifecycle.
+
+---
+
+## Progress Log
+
+### 2026-07-07 — net8 CI pipeline brought fully green through the test phase; first real test run; WIFF reader bug fixed
+
+Worktree: `C:\dev\pwiz-net8`, branch `Skyline/work/20260612_net8_port`. PR **#4178**
+(head branch `chambem2/pwiz-sharp`; both refs pushed together each commit).
+CI config: **`ProteoWizard_SkylineWindowsNet`** runs `pwiz_tools/Skyline/tcbuild.bat`
+→ `build.bat` (dotnet restore/build/test under dotCover). Watched via TeamCity
+guestAuth REST (`https://teamcity.labkey.org/guestAuth/...`) since the TC MCP
+disconnected mid-session.
+
+**Cleared the entire build→test pipeline, one blocker at a time (all committed):**
+1. SmartBuildTrigger `KeyError` for base-branch-only targets — `smartBuildTrigger.py`
+   now records `building[]` for triggered base-branch targets.
+2. `build.bat` rejected the TeamCity vendor flags (`--i-agree-to-the-vendor-licenses`,
+   `--require-vendor-support`) — mirrored pwiz-sharp/build.bat's arg parsing.
+3. **153 protobuf/gRPC compile errors** — `ProtocolBuffers/GeneratedCode/*.cs` is
+   git-ignored; wired a `GenerateProtobufCode` MSBuild target (runs `generatecode.bat`,
+   injects the .cs into `@(Compile)`) into Skyline.csproj + Test.csproj.
+4. **142k-line build log** (99% warnings) — CA1416 was 98.7%. `Directory.Build.targets`
+   suppresses CA1416 only where `TargetPlatformIdentifier==Windows` (GUI stays quiet,
+   platform-neutral net8.0 model/CLI keeps the check); `Directory.Build.props` NoWarns
+   CS8981/SYSLIB0003 + demotes MSB3825. Log → ~1k lines.
+5. Missing `pwiz_tools/Skyline/.config/dotnet-tools.json` (dotcover) — added.
+6. **Debug/Release mismatch → 0 tests but green (false pass)** — `build.bat` built
+   Release but `dotnet test`/`dotnet dotcover` passed no `-c`, looked in `bin\Debug`.
+   Added `-c %CONFIG%` + a snapshot-existence guard so "0 tests ran" fails.
+7. **TeamCity `teamcity` vstest logger not found** — `TeamCity.VSTest.TestAdapter 1.0.40`
+   delivers its logger DLLs to net-family TFMs but NOT `net8.0-windows`; also Skyline's
+   test projects only set `IsTestProject` implicitly (TFM-conditioned) so the shared
+   `Directory.Build.targets` package never restored. Fix: set `<IsTestProject>true`
+   explicitly in TestData/Test csproj + copy the logger DLLs to output on Windows test
+   builds. (pwiz-sharp's test projects set IsTestProject explicitly — the tell.)
+
+**First real net8 test run (build #10, aa742bc8b9): 575 passed / 4 failed** — TeamCity
+now shows the full per-test tree with suite/class organization (no importData flattening).
+
+**The 4 failures + status:**
+- `CommandLineWiffTest.TestWiffCommandLineImport` + `...SingleReplicate` — **FIXED**
+  (`9dfdb632a1`, pending CI confirmation — build queued). Root cause: the Clearcore2
+  .NET SDK returns Sciex sample names comma-form (`rfp9,after,h,1`) where cpp
+  `getSampleNames()` returns underscore (`rfp9_after_h_1`); Skyline builds the requested
+  sample path from the *escaped* underscore name, so the reader's run id
+  (`<wiff>-<sampleName>`) never matched → `HasResults=false`. Fix: normalize `,`→`_`
+  in `WiffFile.cs` (`NormalizeSampleName`, applied in `EnumerateSampleNames` + per-sample
+  id). Verified with a direct Sciex-reader harness.
+- `Results.AsymCEOptTest.TestAsymCEOpt` — **NOT STARTED**. Value diff: expected 86
+  transitions, got 90 (Agilent/Sciex CE-optimization; imports a Sciex .wiff).
+- `CommandLineEiTest.ConsoleImportEiTest` — **INVESTIGATED, NOT FIXED**. Crash
+  `IndexOutOfRangeException` at `t.Results[0][0]` because *every* transition's
+  `ChromInfoList` is empty (r0count=0) — net8 EI full-scan import extracts zero
+  chromatograms. **Definitively ruled out the reader/wrapper**: mzXML reader returns
+  4572 spectra, level=1, ~700 peaks, RT `UO_second` correct; `MsDataFileImpl` (the
+  class Skyline calls) returns `level=1, rt=4.69–34.99 min, 698 peaks` — perfect data.
+  So the bug is in **Skyline's full-scan extraction/matching algorithm on the net8
+  runtime** (same code, correct input, no chrom infos). Signature = a chromatogram→
+  transition *matching* miss; prime suspect is the known net8 float-`ToString`
+  (shortest-round-trippable vs G7/G15) or `Dictionary`/`HashSet` ordering change in the
+  matching key. Needs interactive debugging / instrumenting the full-scan matcher.
+
+**Build-infra bugs fixed along the way (enabling local `TestData` iteration):**
+- **MascotShim wouldn't copy** (`33a1df75fe`): `BuildMascotShim` used a config-agnostic
+  `Outputs=build\.stamp`, so a prior Debug build skipped the Release build → MSB3030.
+  Pointed `Outputs` at the per-config artifact. Verified: clean Release BiblioSpec build
+  now runs cmake (auto-located via vswhere → VS 18's bundled CMake, no separate install)
+  and copies `MascotShim.dll`. CMake provisioning was never the problem.
+- **Recursive-glob disk bug** (`64e5a0884f`): `TestData.csproj` `<None Include="**\*.zip">`
+  (with `EnableDefaultNoneItems=false`) re-copied `bin` into `bin\Release\...\bin\Debug\...`
+  deeper each incremental build → filled C: to 100%. Added `Exclude="bin\**;obj\**"`.
+
+**Local iteration recipe (MascotShim/msparser not needed for non-Mascot tests):**
+`dotnet build TestData/TestData.csproj -f net8.0-windows -c Release -p:IAgreeToVendorLicenses=true -p:MascotSupport=false`
+then `dotnet test ... --no-build --filter "FullyQualifiedName~<Test>" --logger "console;verbosity=normal"`.
+Harness pattern: a net8.0-windows console app with a `ProjectReference` to
+`ProteowizardWrapper.csproj` (or `Sciex.csproj`) reproduces the reader/wrapper layer
+outside the MascotShim-blocked full `TestData` build.
+
+Latest commit: **33a1df75fe**. WIFF-fix CI build was still queued at session end.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260612_net8_port.md` before starting work.
