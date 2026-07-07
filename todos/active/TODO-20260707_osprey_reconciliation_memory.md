@@ -1,0 +1,75 @@
+# Osprey: reduce reconciliation (Stage 6) memory during large runs
+
+**Issue:** ProteoWizard/pwiz#4376
+**Branch:** `Skyline/work/20260707_osprey_reconciliation_memory`
+**Base:** #4378 branch `Skyline/work/20260703_osprey_memory_bounding` (tip `c3878bac1`), NOT bare
+master -- reconciliation memory only makes sense once scoring/join are bounded (#4378). Rebase
+onto master when #4378 merges.
+**Status:** investigation (measure-first). Follows #4372 (library, PR [#4381]) and #4378 (scoring/join).
+
+## Problem
+
+In an 8-file Astral Carafe run the `[STAGE-WALL] stage6` reconciliation leg (~600 s) is the
+overall working-set peak (~80 GB WS on a 94 GB box with lazy Server GC). #4378 bounded per-file
+scoring and the first-pass join and explicitly left Stage 6 to #4376. Goal: run 100s of Astral
+files on a 32-64 GB machine, byte-identical.
+
+## Approach (measure-first -- same discipline that reframed #4372)
+
+The ~80 GB is WORKING SET; #4378 measured managed heap ~31-47 GB vs ~79 GB WS, so the true
+reconciliation footprint may be much smaller (the library turned out 9 GB WS -> 3.2 GB real).
+1. Map the reconciliation stage: what task(s), what holds memory at peak, what scales with FILE
+   COUNT vs library size. (Explore agent in progress.)
+2. Add a post-full-GC `[MEM reconciliation-peak]` `GC.GetTotalMemory(true)` probe at the peak
+   (gated by `OSPREY_LOG_MEMORY`), like the #4372 `[MEM library-resident]` probe.
+3. **Measure** the true reconciliation managed heap on the 8-file Carafe run (this #4378 base).
+4. Only if genuinely large (>~target): find the lever (stream per-file instead of all-files-at-once,
+   heavy per-candidate class->struct, O(files x N) buffers, redundant copies) and reduce it,
+   BYTE-IDENTICAL. Check whether the Rust reference streams this differently.
+
+## Exploration (2026-07-07)
+
+Stage6 = `PerFileRescoreTask` (`[STAGE-WALL] stage6`). The rescore per-file loop
+(`ExecuteRescore`, `PerFileRescoreTask.cs:489`) runs `Parallel.For` at
+`EffectiveFileParallelism`; Rust runs the same loop SEQUENTIALLY (`pipeline.rs:3047`,
+"limit peak memory -- each file loads spectra ~1.5 GB; per-file rescore is already
+internally parallelized"). C# has a byte-identical sequential path (`parallelism==1`,
+comment `:535`). Candidate levers: (1) all-files `perFileCwtCandidates`
+(`CwtCandidateLoader.cs:53`) loaded at once during planning, planner indexes one file at
+a time -> streamable; (2) heavy `FdrEntry` class (6 nullable heap arrays each,
+`FdrEntry.cs:33`) held for all files, arrays repopulated during rescore (array-of-arrays,
+like #4372 fragments); (3) full original-parquet reload per file in
+`ReconciledParquetWriter`. Probes added at reconciliation start/end (`PerFileRescoreTask`).
+
+## Measurement (2026-07-07, PARTIAL -- run killed mid-rescore)
+
+8-file Carafe on this #4378 base, wiped work-dir, `OSPREY_LOG_MEMORY=1`:
+- `[MEM reconciliation start]` working_set **63.49 GB** (peak 65.91), managed_heap **28.92 GB**
+  (UNFORCED -- includes stage5 garbage), peak_paged **69.45 GB**.
+- Rescore ran **SEQUENTIALLY** ("Re-scoring file 1/8" then "2/8"): the #4378 free-RAM guard
+  set `EffectiveFileParallelism=1` on this machine. Run **killed during file 2/8** (likely
+  machine sleep ~night, as a prior #4378 run was, or memory pressure).
+
+**REFRAME:** parallelism is ALREADY 1 when memory-constrained, so the rescore-concurrency
+lever (match Rust sequential) only helps on a big-RAM box where the guard allows >1. On a
+64 GB box the guard forces sequential and reconciliation STILL sits at ~63.5 GB WS. So the
+real #4376 lever is the **persistent/planning state entering reconciliation** (~28.9 GB
+managed unforced) -- suspects above (perFileCwtCandidates all-files load, heavy FdrEntry
+buffer, library). Unlike the library (WS-inflated), reconciliation looks like a genuine
+large heap -- but the forced-GC number is still needed to separate real heap from garbage.
+
+**NEXT:** a fresh clean run (machine not sleeping; consider `-Files 4` to finish faster, or
+overnight with sleep disabled) to capture the new post-GC `[MEM reconciliation-floor]`
+(added, fires early) + the end `[MEM reconciliation-resident]` + pre-GC peak_ws. Then size
+the lever (likely stream `perFileCwtCandidates` per-file and/or lean the FdrEntry buffer).
+
+## Gates
+
+`regression.ps1 -Dataset Stellar` byte-identical (mode1/2/3, 1e-9) + `Test-PerfGate.ps1`; validate
+the reduction on the Carafe run with the managed-heap probe.
+
+## Relationship
+
+- #4378 (`TODO-20260703_osprey_memory_bounding.md`): scoring/join bounding -- the base for this work.
+- #4372 (`TODO-20260705_osprey_library_resident_memory.md`, PR [#4381]): library floor, ~1.7 GB, independent.
+- Reconciliation (this) is the largest remaining memory lever per #4378's own ceiling analysis.
