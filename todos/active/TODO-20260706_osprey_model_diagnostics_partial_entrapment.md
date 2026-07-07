@@ -110,3 +110,31 @@ crash; optional polish); **5** (spot-check r=0.5/0.25 too). Then push + self-rev
 - Ratio computed: `ModelDiagnosticsReport.cs:295`; estimators: `ModelDiagnosticsData.cs:~893-901`.
 - Feature: PR #4377 (`174e3ddd87`); completed TODO
   `ai/todos/completed/TODO-20260705_osprey_model_diagnostics.md`.
+
+## Progress 2026-07-06 (later) — PR #4380 opened, reviewed; MS1-decoy research spun up
+- **PR [#4380](https://github.com/ProteoWizard/pwiz/pull/4380)** opened (base master),
+  6 commits: paired gate + tests; `docs/fractional-entrapment.md` + report link;
+  doc-table clean baseline; Wen author list; lower-bound formula fix; Copilot fixes.
+  Justification doc anchored on **Fitzgibbon, Li & McIntosh 2008** (ratio-corrected
+  classic-FIR = Wen 2025 combined estimator, with the same 1/2·1/4·1/10 experiment).
+  Report links the doc via a GitHub blob URL (was githack) when r≠1.
+- **Self-review**: clean (fixed the doc lower-bound formula). **Copilot**: 3 comments
+  addressed + threads resolved (lower-bound already fixed; githack→blob; XML-doc tolerance).
+- Local Debug gate green (453 pass). `SystemMemory.cs` inspection = 9 PRE-EXISTING P/Invoke
+  false-positives (untouched file, on master since #4335) — NOT this PR; separate ticket.
+- **NEXT for the PR**: watch CI (`get_pr_checks 4380`); optional TeamCity Perf/Regression
+  on `pull/4380` (near-formality, off production path); merge + `/pw-complete`.
+
+**New research thread (Brendan's MS1-collision insight, CONFIRMED)** — the Arabidopsis
+generator matches on neutral mass ⇒ entrapments/decoys isobaric to targets ⇒ share
+precursor m/z ⇒ borrow the real target's MS1 envelope. Measured: MS1 features 0% on
+Stellar AND **~0% on Astral HRAM** with isobaric reverse decoys ⇒ **isobaric decoys
+suppress MS1 power even where HRAM MS1 is informative**. Matters more for DECOYS (train
+the model) than entrapment. NEXT experiment: Astral library with m/z-SEPARATED decoys →
+does MS1 gain weight (pass-1 model only)? Road to Brendan's 2008 nr-as-decoys idea.
+GOTCHA: Astral pass-2 rescore at `--threads 30` gets memory-killed; `--threads 8` survives.
+Full detail in `[[project_osprey_natural_entrapment]]` and `ai/.tmp/natural-entrapment-design.md`.
+
+**Next session handoff**: For detailed startup protocol (build, the Astral run command with
+--threads 8, key paths, gotchas), read `ai/.tmp/handoff-20260706_osprey_entrapment_ms1.md`
+before starting work.
