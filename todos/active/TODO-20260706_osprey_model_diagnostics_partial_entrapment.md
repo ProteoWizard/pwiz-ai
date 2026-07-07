@@ -138,3 +138,58 @@ Full detail in `[[project_osprey_natural_entrapment]]` and `ai/.tmp/natural-entr
 **Next session handoff**: For detailed startup protocol (build, the Astral run command with
 --threads 8, key paths, gotchas), read `ai/.tmp/handoff-20260706_osprey_entrapment_ms1.md`
 before starting work.
+
+## Progress 2026-07-06/07 (overnight research session) — decoy m/z-collision, MS1 power, Osprey kill
+Full report: `ai/.tmp/night-report-decoy-mz-collision.md`. Lit: `ai/.tmp/night-lit-report.md`.
+Key results (Astral HRAM, decoy-only m/z shift, isobaric entrapment = true-FDP oracle):
+- **Isobaric decoys suppress MS1** (weight +0.16% ≈ 0). **+10 Th shift (Skyline's default) restores
+  MS1 ~20× (3.25%)** and gives **+12.3% more IDs at true FDP=1%**, BUT inflates FDP@reported-1%q
+  1.92%→3.05% (anti-conservative). **+0.5 Th control** (in-window): restores MS1 isotope (+3.80%),
+  +4.1% IDs at true 1%, milder inflation (2.06%) — isolates the isotope effect from +10's
+  window-crossing.
+- **Solution that ties to THIS PR**: shifted/foreign decoys for MS1 SENSITIVITY + isobaric-entrapment
+  overlay (the combined estimator, PR #4380) for honest CALIBRATION. Neither alone; together = MS1
+  sensitivity with honest FDR. This is a concrete new motivation for the partial-entrapment work.
+- **Osprey Astral --threads 30 "kill" ROOT-CAUSED**: real commit-limit OOM (pass-2 mem scales with
+  threads → ~98GB commit), silent because the Bash Job Object sets DIE_ON_UNHANDLED_EXCEPTION
+  (suppresses WER). Not external, not file-parallelism (sequential by default). Fix (separate pwiz
+  ticket): catch OOM+log guidance; memory-aware pass-2 thread cap; stream rescored rows. Interim:
+  --threads 8. See [[reference_osprey_astral_thread_memory_oom]].
+- Tooling (reusable): `ai/.tmp/shift_decoy_mz.py` (decoy m/z shift), `ai/.tmp/extract_mdiag.py`
+  (MS1 weights + FDP@q from model-diagnostics HTML), `ai/.tmp/mem-sampler.ps1`, `ai/.tmp/job-probe.ps1`.
+- OPEN (designed, not run — confound-prone, deferred): foreign-species/nr decoys at real m/z w/
+  collision avoidance (`--min-target-sep-ppm`); the road to the 2008 nr-as-decoys idea. Needs a
+  distribution-matched Carafe build. See report §5.
+
+## Progress 2026-07-07 (later) — extended decoy sweep + literature corroboration
+Additional Astral experiments (report §4b–4h): **+0.5 Th** charge-3 decoys are 100% in the atomic
+mass-defect "no man's land" (defect off 0.44 Da) → artificial isotope separability; **charge-blind
+permute** (44% impossible masses) and **charge-preserving permute** (occupied same-charge m/z, FDP
+**4.35%** — worst) both anti-conservative. **The reframe**: the reverse decoy's zero MS1 power is the
+ANAGRAM (co-locates on the target peak → precursor co-elutes), NOT the isobaric m/z. No decoy m/z
+placement gives honest MS1 power. Refined hypothesis (untested, needs Carafe): **isobaric mass-matched
+NON-anagram (real foreign) decoys** — match m/z, change fragments — could be honest AND MS1-powerful.
+
+**Literature corroboration (independent, strong):**
+- **Bernhardt, Bruderer, …, Reiter (Biognosys), 2016** ("General guidelines for validation of decoy
+  models…", poster `ai/.tmp/General_guidelines_for_validation_of_dec.pdf`): on HRAM (Q Exactive) they
+  used **E. coli as a ground-truth negative control** to validate decoys — scrambled/inverted
+  (isobaric) decoys match the control and give accurate/conservative FDR (0.6% true @ 1% est); a
+  **fragment-m/z-shift** decoy underestimates FDR (2.3% true @ 1% est) with the MOST IDs (a mirage).
+  "Number of identifications alone should not be used as a qualifier." = our +10 result, 9 yr early.
+- **diagFDR — Chion, …, Giai Gianetto, bioRxiv Apr 2026** (`ai/.tmp/biorxiv2026.txt`): formalizes the
+  **"equal-chance" assumption** (incorrect matches equally likely to hit a decoy or a false target).
+  Our m/z manipulations are textbook equal-chance violations. **Chan, Madej, Chung, Lam (JPR 2025)**:
+  template decoys in *predicted* libraries systematically violate equal-chance (our Carafe setting).
+  **Granularity paradox** (Couté, Bruley, Burger, Anal Chem 2020): sharpening decoy separation empties
+  the decoy tail near the cutoff → FDR numerically fragile (worse on HRAM) — a 2nd failure mode of
+  "more IDs from better separation". **TargetDecoy** QC pkg (Debrie…Clement, JPR 2023). Entrapment
+  (Wen [22]): interpret FDPentrap **comparatively**; **FDPentrap≫α = anti-conservative evidence**
+  (our +10 = 3.05%); **FDPentrap≈α is NOT proof** (optimistic-decoy + pessimistic-entrapment cancel) =
+  our shift-both collusion trap, formalized. Three entrapment-proteome criteria (absent / large enough
+  / phylogenetically distant) validate the nr choice.
+- **Net for THIS PR**: the partial-entrapment/combined estimator is the load-bearing "external
+  oracle" the whole field (Bernhardt, Wen, diagFDR) says you need; our night reproduces & extends it
+  with the MS1-feature mechanism. The success criterion for any MS1-powered decoy is now stateable in
+  their language: **raise MS1 feature weight while keeping the equal-chance diagnostic flat and
+  FDPentrap ≈ α under an independent isobaric-human oracle.** Full synthesis in the report §3–§5b.
