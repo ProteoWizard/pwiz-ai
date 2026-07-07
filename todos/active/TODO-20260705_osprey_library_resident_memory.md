@@ -43,6 +43,14 @@ scan would thrash; no m/z index).
 - 2026-07-06/07: **Added string interning** (`LibraryStringInterner`, `OSPREY_NO_INTERN`
   toggle) + a post-GC `[MEM library-resident]` managed-heap probe in `PerFileScoringTask`.
   Debug build + 453 tests + ReSharper clean (0 issues).
+- 2026-07-07: **Addressed Copilot review on PR #4381** (commit `12af2aa4b`, new commit -- not
+  amended). (1) Re-audited every `FragmentAnnotation` initializer for the struct's zero
+  defaults: all production sites set `IonType`+`Charge` explicitly; the `ScoringTest` fixtures
+  omitted `IonType` (would default to `B`) -> pinned to `IonType.Unknown` (old class default);
+  documented on the struct that both fields must be set explicitly. (2) `[MEM library-resident]`
+  probe: `GetTotalMemory(false)` after the explicit collect (dropped the redundant forced GC) +
+  `InvariantCulture`. Build green, 455/458 tests, inspection clean, `regression.ps1 -Dataset
+  Stellar` byte-identical (mode1/2/3). Both Copilot threads replied + resolved.
 
 ## Measured results (8-file Astral SEA-AD Carafe, clean wiped work-dir)
 
