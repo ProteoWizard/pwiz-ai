@@ -68,8 +68,43 @@ Full write-up: **`ai/.tmp/night-report-decoy-mz-collision.md`** (§1–§7). Lit
      setting) systematically violate equal-chance. Also: Wen 2025 [entrapment]; Couté 2020 [granularity];
      Freestone/Noble/Keich 2024 [Percolator cross-run]; TargetDecoy pkg (Debrie 2023).
 
+7. **RT-CONSTRAINT insight (Mike MacCoss, 2026-07-07) — the load-bearing variable is RT, not m/z.**
+   Osprey constrains a match to a **tight window around the library-predicted RT**. So a query's
+   location = (predicted RT, precursor m/z). A reverse decoy inherits its target's m/z AND ~its RT
+   (reversal barely changes composition → hydrophobicity → predicted RT), so it is **pinned to the
+   target's exact coordinate, where a real MS1 signal is guaranteed** (the target's own precursor
+   co-eluting) → MS1 can NEVER reject it → reject-on-fragments-only. This is a cleaner explanation
+   than "anagram co-location" for (a) why isobaric decoys forfeit MS1 (MS1≈0 for BOTH libdecoy and
+   gendecoy — both inherit ~the target RT), and (b) Mike's account of the gendecoy miscalibration
+   (pinned to a real signal → unrepresentative of a real false ID, which sits where its peptide is
+   ABSENT → no co-eluting precursor). **KEY consequence for THIS experiment**: a foreign peptide has
+   a genuinely DIFFERENT predicted RT (different sequence → different RT) from the human precursor
+   sharing its m/z, so it is NOT pinned to a real precursor → MS1 can reject it HONESTLY (mirrors a
+   false target). The tight RT constraint therefore *reduces* the MS1-mirage worry FOR foreign
+   decoys. Requirement: the foreign decoys MUST get their OWN peptdeep-predicted RT (do not copy a
+   target RT). Caveat on the proxies: all tonight's shift/permute proxies held RT = target RT and
+   (m/z-shifts) broke coherence, so they don't test the foreign regime.
+
 **Bottom line going in**: the outcome for real foreign decoys is genuinely OPEN and looks promising —
-the one first-principles reason it would fail on HRAM (empty m/z) was ruled out by finding (5).
+finding (5) ruled out the empty-m/z failure mode, and finding (7) says the tight RT window makes a
+foreign decoy's honest, own predicted RT the source of legitimate MS1 discrimination.
+
+## CHEAP FIRST EXPERIMENT (do this BEFORE the GPU build — hours saved if it settles the question)
+**RT-shift proxy** — isolates Mike's variable (RT off the real precursor) while keeping coherence:
+take the isobaric reverse decoys, keep m/z isobaric (so the decoy stays a coherent peptide — fragments
+sum to its precursor), but **shift the predicted-RT column `Tr_recalibrated` (library col 5) of the
+decoy rows off the target's RT** (e.g. +N min, or randomize within the gradient, staying in-range).
+One-column library edit — clone `ai/.tmp/shift_decoy_mz.py` to edit col 4 (0-indexed) instead of col 2;
+run Osprey (`--threads 8`, detached) exactly like tonight's runs; read MS1 weight + FDP + IDs@true-1%.
+- If MS1 weight rises AND FDP stays ≈ baseline 1.92% → a coherent decoy placed where no precursor
+  co-elutes is honest AND MS1-powerful → strong, cheap evidence the foreign build will work, and it
+  confirms Mike's RT-pinning mechanism. Then do the Carafe build to get the real (foreign) version.
+- If it goes anti-conservative → coherence+RT alone isn't enough; foreign decoys are still suspect;
+  re-scope before the GPU build.
+This is the RT-axis analog of tonight's m/z-axis sweep and a strictly better proxy (preserves coherence).
+NOTE the confound: a reverse decoy is still an ANAGRAM of its target (shared fragment masses), so even
+at a shifted RT it may match co-isolated target fragments; if the RT-shift proxy is ambiguous, the
+Carafe foreign build (non-anagram + own RT + coherent) is the definitive test.
 
 ---
 
