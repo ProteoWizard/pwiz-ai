@@ -63,6 +63,41 @@ overnight with sleep disabled) to capture the new post-GC `[MEM reconciliation-f
 (added, fires early) + the end `[MEM reconciliation-resident]` + pre-GC peak_ws. Then size
 the lever (likely stream `perFileCwtCandidates` per-file and/or lean the FdrEntry buffer).
 
+## Measurement (2026-07-07, CLEAN 4-file run completed)
+
+`[MEM reconciliation-floor]` **7.60 GB** (post-GC, entering rescore; identical at 4 and 8 files
+-> does NOT scale with file count), `[MEM reconciliation-resident]` **6.94 GB** (post-GC, after
+all files). But the pre-GC end snapshot was managed **48.70 GB** / peak WS **71.5 GB** -> ~42 GB
+is uncollected garbage. So reconciliation's PERSISTENT heap is ~7 GB (fits easily); the big WS is
+lazy Server-GC slack + per-file transients (reloaded spectra + the writer's full-parquet reload),
+exactly like the library (WS-inflated). On a 64 GB box the GC collects under pressure -> fits.
+
+Rescore already ran SEQUENTIALLY (the #4378 free-RAM guard set `EffectiveFileParallelism=1`).
+The two 8-file runs that died mid-rescore were killed by a live **Monitor** tailing the log (the
+no-monitor 4-file run completed) -- do NOT run a Monitor on a long background run.
+
+## #4378 already mapped these levers (its own TODO), NOT done
+
+- "Reconciliation re-scoring parallelism: Rust forces SEQUENTIAL (`iter_mut`) to avoid K x ~3 GB
+  spectra resident; C# uses `Parallel.For`... On 64 GB match Rust's sequential default. **WATCH**"
+- "C# reloads FULL ~940 B entries via `ParquetScoreCache.LoadFullFdrEntries` -- the ~22 GB @24M
+  cost Rust designed away. The real remaining full-reload; **biggest post-first-pass lever. MISSING.**"
+  (used by `ReconciledParquetWriter` AND the blib path; Rust uses a 5-col ~96 B `BlibPlanEntry`.)
+
+## Fix (2026-07-07) -- deterministic per-file transient drop
+
+Can't hold 300 x ~1.5 GB spectra, so per-file load/release is mandatory; the gap is that C#
+frees each file's spectra at scope exit but the Server GC defers collection until near the RAM
+ceiling, so the WS rides UP with file count. Added a per-file **deterministic drop** at the end
+of `RescoreOneFile` (null spectra/ms1Spectra/rescored/isolationWindows + `GC.Collect()`), gated to
+`EffectiveFileParallelism <= 1` (skip when concurrent files legitimately share residency and a
+blocking GC would stall them). Mirrors Rust's per-iteration spectra drop; keeps the reconciliation
+WS at ~persistent floor + one file's transient regardless of file count. **Byte-identical (GC
+timing only).** Build green, 466/469 tests. `regression.ps1 -Dataset Stellar` running.
+
+**Follow-up lever (bigger):** stream/project `LoadFullFdrEntries` (Rust's 5-col `BlibPlanEntry`)
+so the per-file reload is small in the first place -- #4378's "biggest remaining full-reload."
+
 ## Gates
 
 `regression.ps1 -Dataset Stellar` byte-identical (mode1/2/3, 1e-9) + `Test-PerfGate.ps1`; validate
