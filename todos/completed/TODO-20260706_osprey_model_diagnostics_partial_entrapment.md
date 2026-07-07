@@ -4,7 +4,8 @@
 - **Branch**: `Skyline/work/20260706_osprey_model_diagnostics_partial_entrapment`
 - **Base**: `master` (`174e3ddd87`, the #4377 model-diagnostics merge)
 - **Created**: 2026-07-06
-- **Status**: Active — in progress
+- **Status**: Completed
+- **PR**: [#4380](https://github.com/ProteoWizard/pwiz/pull/4380) (merged 2026-07-07)
 - **Worktree**: `C:\proj\pwiz`
 
 **Priority**: High-value — unlocks the "routine ~10% entrapment overlay for FDR visibility"
@@ -193,3 +194,14 @@ NON-anagram (real foreign) decoys** — match m/z, change fragments — could be
   with the MS1-feature mechanism. The success criterion for any MS1-powered decoy is now stateable in
   their language: **raise MS1 feature weight while keeping the equal-chance diagnostic flat and
   FDPentrap ≈ α under an independent isobaric-human oracle.** Full synthesis in the report §3–§5b.
+
+### 2026-07-07 - Merged
+PR #4380 merged as commit `31168db37b`. Shipped: the paired FDP estimator is now suppressed when the
+entrapment library is not ~1:1 (paired is 1-fold only; the ratio-aware combined and lower-bound
+estimators stay valid at any ratio and the report labels the omission), plus
+`pwiz_tools/Osprey/docs/fractional-entrapment.md` justifying a fractional (~10%) entrapment overlay
+(Fitzgibbon 2008 / Wen 2025, grounded in the equal-chance framework per Bernhardt 2016 and diagFDR
+2026), and tests for the gating + ratio-aware estimators at r<1. The extensive decoy-m/z / MS1 /
+RT-constraint research logged above was the *consumer-side motivation* and is NOT part of this PR; it
+is carried forward in the night-session-ready [[TODO-osprey_foreign_decoys_honest_ms1_power]] and the
+consolidated [[TODO-osprey_assumption_failure_detection]]. No scope from #4380 was deferred.
