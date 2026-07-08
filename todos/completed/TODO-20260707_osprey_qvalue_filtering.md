@@ -4,7 +4,8 @@
 - **Branch**: `Skyline/work/20260707_osprey_qvalue_filtering`
 - **Base**: `master` (`31168db37b`)
 - **Created**: 2026-07-07
-- **Status**: Implemented + validated on Stellar; remaining = tests, golden re-baseline, self-review, TeamCity, Rust parity (see handoff)
+- **Status**: **Completed**
+- **PR**: [#4390](https://github.com/ProteoWizard/pwiz/pull/4390) (merged 2026-07-08 as `0bd543f51c`)
 - **Commits**: `ed0c5414bf` (clamp), `43d3a65da8` (Both-floor + merge-node re-clamp)
 - **Worktree**: `C:\proj\pwiz`
 - **Requested by**: Brendan (with Mike's blib observation)
@@ -103,6 +104,19 @@ Clean Stellar libdecoy runs (`--fdr-level precursor`), verified end-to-end:
   f373038895); 3 threads resolved. Golden + cross-impl parity re-verified unchanged.
 - **Rust parity PR opened: maccoss/osprey#49** (branch q-clamp-parity @ 4c20174, base
   reconciliation-v3-first-pass-base-ids); cross-impl bit-parity Stellar+Astral PASS.
+
+### 2026-07-08 - Merged
+PR #4390 merged (squash) as commit `0bd543f51c` on master. Shipped the best-of-runs
+experiment-q clamp (floor experiment q to each entry's best min-over-runs run-Both q,
+keyed per precursor by EntryId and per peptide by (ModifiedSequence, IsDecoy), null/empty
+skipped), applied at every Percolator pass and authoritatively at the merge node before
+the blib write; re-baselined the Osprey regression golden for the intended change. Green:
+464 unit tests, 0-warning inspection, Stellar+Astral regression (TeamCity 4082703), and
+cross-impl bit-parity vs Rust. **Deferred / follow-ups:** the `--protein-fdr` Pass-2 retrain
+collapse (1.48% FDP, ~all q<0.001) is untouched — that's TRIC's job, still open; the Rust
+parity branch ships as its own PR (maccoss/osprey#49, left open for Mike); the
+charge-level clamp (peptide_q ← max over charges) was left out of scope; gendecoy
+salvage-or-deadend backlogged ([[TODO-osprey_gendecoy_salvage_or_deadend]]).
 
 ## Where to implement — options (decided: C, at two sites — see Progress)
 - **(A) Just before blib** (`MergeNodeTask`/`BlibOutputWriter`): localized, but the plots,
