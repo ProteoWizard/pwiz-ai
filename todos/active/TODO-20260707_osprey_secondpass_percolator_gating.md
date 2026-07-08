@@ -204,6 +204,22 @@ All divergences below are tracked here and in issue #4389 (Tier 1/2/3). Work ord
 - [ ] Latent/theoretical (safe to defer): UTF-8 vs UTF-16 peptide key ordering
       (`percolator.rs:1541` vs `PercolatorFdr.cs:2148`); `total_cmp` vs `double.CompareTo`
       on ±0/NaN.
+- [ ] **[self-review #4395] `AnyReconciledParquet` stale-parquet robustness** (edge case) —
+      `MergeNodeTask.AnyReconciledParquet` gates the 2nd pass on `File.Exists` of the FIXED
+      path `{dir}/{stem}.scores-reconciled.parquet` (`ParquetScoreCache.cs:1003`), not a
+      validity/hash check. Reusing an output dir across incompatible reconciliation configs
+      could let a stale parquet trigger a spurious 2nd pass, unlike Rust's in-memory
+      `total_rescored > 0`. Safe for fresh-work-dir (norm) + same-config resume. Needs a
+      validity-keyed check + its own regression; deferred out of PR #4395.
+- [ ] **[self-review #4395] 2nd-pass `set_run` divergence** (LOW, inert) — `ProteinFdrEngine.cs:187`
+      2nd pass calls `PropagateProteinQvalues(..., set_run=true)`; Rust 2nd pass uses `false`
+      ("leave first-pass values in place", `pipeline.rs:5379`). Pre-existing, but fix #1 makes it
+      run on every analysis. Inert (run_protein_qvalue is a Stage-6 gate, already consumed).
+- [ ] **[self-review #4395] 2nd-pass sidecar not written in single-file/no-rescore** (LOW, inert) —
+      C# gates the sidecar write on `AnyReconciledParquet`; Rust writes it on `!can_skip_fdr`
+      (`pipeline.rs:5288`), i.e. even single-file where sidecar==1st-pass. Output-invariant
+      (readers fall back to 1st-pass); regression mode3 HPC-chain PASSES, so no consumer
+      hard-requires it.
 
 ## Confirmed NOT divergences (parity holds — from the same review)
 - Target+decoy pairs retained through compaction → consensus → reconciliation by `base_id`
