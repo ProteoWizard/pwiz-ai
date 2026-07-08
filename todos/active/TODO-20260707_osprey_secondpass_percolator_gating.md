@@ -157,13 +157,15 @@ Type/semantics mismatch:
 
 ### Remaining-work priority (Michael: ALL of these must be done; determinism first)
 All divergences below are tracked here and in issue #4389 (Tier 1/2/3). Work order after #2:
-1. **#3 / "#C" SVM training dot-product reduction order — DETERMINISM-CRITICAL, do next.**
-   C# hand-vectorized SIMD lane-partial-sums (`LinearSvmClassifier.cs:546-568`) vs Rust sequential
-   scalar fold (`svm.rs:95`). Not just sub-ULP drift vs Rust — the C# result is **non-deterministic
-   across CPU SIMD width** (AVX2 vs AVX-512 vs NEON give different sums), so the same input can flip
-   `best_C` and shift boundary PSMs run-to-run/machine-to-machine. Rust is identical on every platform.
-   Scoring path (`decision_function`) is scalar on both sides and matches. Fix: make C# training use a
-   deterministic sequential (or fixed-order) reduction. **Filed as its own issue: #4392.**
+1. **#3 / "#C" SVM training dot-product reduction — DEFERRED (keep SIMD), issue #4392.**
+   Measured (Stellar single-file, 3-rep median, net8.0): the deterministic pure-scalar port is
+   **~1.48× slower** total (FirstPassFDR 69→118s = 1.71×; SecondPassFDR 16→24s = 1.51×). Michael's
+   call: keep the current SIMD now — the ~1.5× hit isn't worth it. **Fix when Osprey is net8.0-only:**
+   fixed-width `Vector256<double>` reduction = deterministic across CPU width AT SIMD speed (net472
+   can't do the intrinsic, which is the only reason it's deferred; a 4-accumulator scalar unroll is a
+   net472-compatible fallback if needed). Interim risk accepted: the trained model is not
+   bit-reproducible across differing SIMD widths (fine on consistent hardware; the 1e-9 gate still
+   passes). NEXT actionable priority is now **#4**.
 2. **#4 reconciliation_compaction_fdr knob absent in C#** (MEDIUM) — add the config field; C#
    hardwires `RunFdr` (`FirstJoinTask.cs:597`) vs Rust `config.reconciliation_compaction_fdr`
    (`pipeline.rs:4650`). Inert at default 0.01; diverges when set.
