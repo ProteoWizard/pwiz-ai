@@ -600,9 +600,19 @@ Get-Command jb -ErrorAction SilentlyContinue
 
 # Install if missing:
 dotnet tool install -g JetBrains.ReSharper.GlobalTools
+
+# Update an existing install (install does NOT update a frozen version):
+dotnet tool update -g JetBrains.ReSharper.GlobalTools
 ```
 
 > **Note:** The `jb` command doesn't support `--version`. Use `dotnet tool list -g | Select-String jetbrains` to see installed versions.
+>
+> **Require 2026.1.x or newer.** Older CLIs (e.g. 2025.3.x) ignored inline
+> `// ReSharper disable` suppressions in `jb inspectcode`, reddening the local
+> `-RunInspection` gate nondeterministically on annotated code (issue #4379).
+> `dotnet tool install` freezes at whatever version was current when first
+> installed and never auto-updates, so existing machines must run
+> `dotnet tool update` to pick up the fix.
 
 **dotCover CLI** - Code coverage analysis:
 ```powershell

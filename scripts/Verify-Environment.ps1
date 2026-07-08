@@ -403,10 +403,19 @@ Write-Host "Checking ReSharper CLI tools..." -ForegroundColor Gray
 if (Test-Command "jb") {
     try {
         $jbOutput = & jb inspectcode --version 2>&1 | Out-String
-        if ($jbOutput -match 'Inspect Code (\d+\.\d+\.\d+)') {
-            Add-Result "ReSharper CLI (jb)" "OK" $Matches[1] $true
-        } elseif ($jbOutput -match 'Version:\s*(\d+\.\d+\.\d+)') {
-            Add-Result "ReSharper CLI (jb)" "OK" $Matches[1] $true
+        $jbVersion = $null
+        if ($jbOutput -match 'Inspect Code (\d+\.\d+\.\d+)' -or $jbOutput -match 'Version:\s*(\d+\.\d+\.\d+)') {
+            $jbVersion = $Matches[1]
+        }
+        if ($jbVersion) {
+            # Require 2026.1.x or newer: older CLIs (e.g. 2025.3.x) ignored inline
+            # // ReSharper disable suppressions in jb inspectcode, reddening the
+            # local -RunInspection gate nondeterministically (issue #4379).
+            if ([version]$jbVersion -lt [version]"2026.1") {
+                Add-Result "ReSharper CLI (jb)" "WARN" "$jbVersion is behind 2026.1.x -- older CLIs ignore inline suppressions (issue #4379). Run: dotnet tool update -g JetBrains.ReSharper.GlobalTools" $true
+            } else {
+                Add-Result "ReSharper CLI (jb)" "OK" $jbVersion $true
+            }
         } else {
             Add-Result "ReSharper CLI (jb)" "OK" "installed" $true
         }
