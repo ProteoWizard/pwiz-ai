@@ -166,9 +166,13 @@ All divergences below are tracked here and in issue #4389 (Tier 1/2/3). Work ord
    net472-compatible fallback if needed). Interim risk accepted: the trained model is not
    bit-reproducible across differing SIMD widths (fine on consistent hardware; the 1e-9 gate still
    passes). NEXT actionable priority is now **#4**.
-2. **#4 reconciliation_compaction_fdr knob absent in C#** (MEDIUM) — add the config field; C#
-   hardwires `RunFdr` (`FirstJoinTask.cs:597`) vs Rust `config.reconciliation_compaction_fdr`
-   (`pipeline.rs:4650`). Inert at default 0.01; diverges when set.
+2. **#4 reconciliation_compaction_fdr knob — DONE (pwiz `726661f50`).** Added
+   `OspreyConfig.ReconciliationCompactionFdr` (default 0.01 = run-fdr) + `--reconciliation-compaction-fdr`
+   CLI arg + help (CommandLine.html regenerated) + config test; the compaction peptide gate now uses it
+   instead of hardwired `RunFdr`, mirroring Rust `config.reconciliation_compaction_fdr` (`pipeline.rs:4650`).
+   Inert at default; 458 tests pass. NEXT actionable: **#5**. (Local `-RunInspection` reddens on the
+   pre-existing #4379 SystemMemory.cs jb-inspectcode flake — not #4; its suggested SuppressMessage fix +
+   cache-clear both tested, still 9; local-gate-only, does not affect TeamCity CI.)
 3. **#5 multi-charge consensus leader tie-break** (LOW, determinism-adjacent) — Rust `max_by` keeps
    last (`pipeline.rs:7644-7658`); C# keeps first (`MultiChargeConsensus.cs:118-142`). Exact ties only.
 4. **#6 missing-feature entries** (LOW, path-dependent) — Rust skips (`pipeline.rs:6137-6141`); C#
