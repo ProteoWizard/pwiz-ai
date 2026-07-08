@@ -34,15 +34,22 @@ Why experiment-q can beat every run-q at all: run-level and experiment-level are
 target-decoy competitions; experiment-level dedups to each precursor's **best** observation (a
 selection advantage), so it is optimistic by construction. The run gate corrects that bias.
 
-## The fix (Brendan)
-Replace the hard-0.01, pool-only, Pass-1-only rule with a **uniform per-precursor effective q**:
+## The fix (Brendan) — clamp each best-of aggregate to its constituents
+Both experiment-level and peptide-level q are **best-of** reductions (experiment = each
+precursor's best *run*; peptide = each peptide's best *charge*), each re-competed against a
+*deduplicated / thinner* decoy null. A thinner null can hand the aggregate a q **below** its best
+constituent's own q — that is the artifact. Neither monotonicity holds today. Enforce both:
 
-> **effective_exp_q = max( experiment_q , min-over-runs run_q )**
+> **experiment_q ← max( experiment_q , min-over-runs run_q )**
+> **peptide_q ← max( peptide_q , min-over-charges precursor_q )**
 
-A precursor is only as confident as the *weaker* of (its experiment evidence, its best single
-run). Gating any output on this at any threshold enforces "reported ⇒ some run genuinely passed"
-by construction — killing the artifact and calibrating Pass 1 the same as Pass 2, independent of
-whether/when Pass-2 Percolator recomputed q.
+i.e. a best-of aggregate can never be more confident than its best single member (valid because
+Osprey aggregates by best-of, not by *combining* evidence). Together they make a consistent
+hierarchy; gating output on the clamped q enforces "reported ⇒ a genuine constituent passed" at
+any threshold, independent of whether/when Pass-2 Percolator recomputed q. Mike's missing-ID case
+is the run→experiment clamp; "peptide more confident than any of its charges" is the symmetric
+sibling. **Level match**: the min-over-runs should be over run-**Both** q, since the blib ID line
+uses `EffectiveRunQvalue(Both)` — so "reported ⇒ some run passes at both granularities."
 
 ## Where to implement — options
 - **(A) Just before blib** (`MergeNodeTask`/`BlibOutputWriter`): localized, but the plots,
@@ -71,11 +78,16 @@ whether/when Pass-2 Percolator recomputed q.
   (see [[project_osprey_parity_removal_sprint]]).
 
 ## Validation
-- **FDRBench oracle via `--fdrbench-pass both`** (PR #4386 [[TODO-20260707_osprey_fdrbench_pass_both]]):
-  after the fix, the **Pass-1 experiment-wide** curve should drop from ~2% to ~0.9%, matching
-  Pass 2 — the direct proof the run-gate is now on the emitted q.
+- **Primary: `--model-diagnostics`** (the interactive HTML — Summary / Competition / Density /
+  FDR-calibration tabs; FDP computed in-process). After the fix, the **Pass-1 experiment-wide**
+  FDR-calibration curve should drop from ~2% to ~0.9%, matching Pass 2 — the direct proof the
+  run-gate is now on the emitted q. Keep exercising / improving `--model-diagnostics` as the
+  primary FDR-assessment surface; FDRBench (`--fdrbench-pass both`,
+  [[TODO-20260707_osprey_fdrbench_pass_both]]) now serves to validate the *plot math*, not as the
+  primary readout.
 - **Invariant test**: assert no reported (blib) peptide has *every* run's `EffectiveRunQvalue(Both)`
-  > `config.RunFdr`. This is exactly Mike's finding as a regression guard.
+  > `config.RunFdr` (Mike's finding as a regression guard); analogously no peptide passing with
+  every charge's precursor-q above threshold.
 - Standing gates: `regression.ps1` (expect a golden re-baseline), `Build-Osprey.ps1 -RunInspection -RunTests`.
 
 ## Related
