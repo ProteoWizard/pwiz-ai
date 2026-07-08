@@ -179,8 +179,10 @@ All divergences below are tracked here and in issue #4389 (Tier 1/2/3). Work ord
 4. **#6 missing-feature entries — DONE (pwiz `06e2872ab`).** `PercolatorEntryBuilder` now skips
    feature-less entries (matching Rust `continue`, `pipeline.rs:6153-6162`) instead of fabricating a
    placeholder; removed dead BuildBasicFeatures; test updated. NEXT actionable: **#7**.
-5. **#7 Simple-FDR winner sort stability** (LOW, non-default path, DETERMINISM) — Rust stable
-   (`lib.rs:148`) vs C# unstable `List.Sort` (`FdrController.cs:187`, self-flagged). Simple FDR only.
+5. **#7 Simple-FDR winner sort stability — DONE (pwiz `8c251de73`).** `FdrController.CompeteAndFilter`
+   now uses a stable `OrderByDescending` (matching Rust stable `sort_by`, `lib.rs:148`) so tied winners
+   keep input order; + FdrControllerTest. Simple-FDR path only (`RunSimpleFdr`); default Percolator uses
+   `PercolatorFdr`, so inert for the Stellar golden. ALL Tier-1/Tier-2 divergences now done -> **PR #4395**.
 6. **Tier 3 (latent, defer):** UTF-8 vs UTF-16 peptide-group key sort (`percolator.rs:1541` vs
    `PercolatorFdr.cs:2148`); `f64::total_cmp` vs `double.CompareTo` on +/-0.0/NaN. Unreachable today
    but both feed ordering — worth a shared comparator eventually.
@@ -197,8 +199,8 @@ All divergences below are tracked here and in issue #4389 (Tier 1/2/3). Work ord
 - [x] **Missing-feature entries** (LOW, path-dependent) — DONE, pwiz `06e2872ab`.
       `PercolatorEntryBuilder` skips feature-less entries (matching Rust `continue`,
       `pipeline.rs:6153-6162`); removed dead BuildBasicFeatures; test updated.
-- [ ] **Simple-FDR winner sort stability** (LOW, non-default path) — Rust stable sort
-      vs C# unstable `List.Sort` (`FdrController.cs:187`, self-flagged). Simple FDR only.
+- [x] **Simple-FDR winner sort stability** (LOW, non-default path) — DONE, pwiz `8c251de73`.
+      Stable `OrderByDescending` matching Rust stable `sort_by`; + FdrControllerTest. Simple FDR only.
 - [ ] Latent/theoretical (safe to defer): UTF-8 vs UTF-16 peptide key ordering
       (`percolator.rs:1541` vs `PercolatorFdr.cs:2148`); `total_cmp` vs `double.CompareTo`
       on ±0/NaN.
