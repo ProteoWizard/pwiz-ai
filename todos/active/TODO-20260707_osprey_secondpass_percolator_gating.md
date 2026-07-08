@@ -238,3 +238,23 @@ All divergences below are tracked here and in issue #4389 (Tier 1/2/3). Work ord
   cover its m/z. C# matches on consensus RT but disables the gap-fill m/z filter
   (`FirstJoinTask.cs:850` perFileIsolationMz: null) = divergence #2. GPF data: Y:\...\calibrated-GPF-data.
   Next: #2 -- plumb per-file isolation-window m/z through C# and enable the filter.
+- 2026-07-08: **#2 IMPLEMENTED (both repos) + validated straight-through on GPF.** Rust: added
+  `isolation_intervals_from_cal` helper + populated `per_file_isolation_mz` at the join/cached
+  calibration-load sites (pipeline.rs:4034/4129; fmt/clippy/tests green). C#: `PerFileIsolationMz`
+  byproduct + `IsolationSchemeJson.Windows` calibration.json carrier + read-back at the 3
+  calibration-population sites; `FirstJoinTask` now feeds the real dict to
+  `GapFillTargetIdentifier.Identify` (was null). Validation:
+  * Stellar regression PASS all 3 modes (change inert for single full-range window).
+  * GPF 3-window cross-impl (C# vs Rust, absolute inputs + `--work-dir`): m/z filter ACTIVE and
+    identical — 118,668 cross-window candidates filtered, `0 gap-fill` both; reconciliation.json
+    counts match line-for-line (8350/6502/0, 6/2/0). All content blib tables (RefSpectra 57,401 rows,
+    RefSpectraPeaks, OspreyRunScores/ExperimentScores/PeakBoundaries, Proteins, Modifications) match
+    at 1e-9.
+  * `Compare-Blib` OVERALL FAIL is a NON-#2 artifact (path storage — see below).
+  NOT yet committed (adding #1 + #2 regression tests first). Still TODO: HPC-chain GPF validation.
+- 2026-07-08: **NEW minor divergence — blib source-file-name storage.** Rust stores the FULL input
+  path in `SpectrumSourceFiles.fileName` (`Y:\...\file.mzML`); C# stores the BASENAME (`file.mzML`),
+  which cascades into the `RetentionTimes` key. Only surfaces with absolute-path input (bare-filename
+  runs match, e.g. the official gate). Orthogonal to #2; low functional impact (Skyline matches by
+  basename). Track as its own low-priority parity item; decide which form is canonical (basename is
+  likely the more portable choice).
