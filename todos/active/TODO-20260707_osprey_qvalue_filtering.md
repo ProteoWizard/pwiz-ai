@@ -4,9 +4,11 @@
 - **Branch**: `Skyline/work/20260707_osprey_qvalue_filtering`
 - **Base**: `master` (`31168db37b`)
 - **Created**: 2026-07-07
-- **Status**: Design / not started
+- **Status**: Implemented + validated on Stellar; remaining = tests, golden re-baseline, self-review, TeamCity, Rust parity (see handoff)
+- **Commits**: `ed0c5414bf` (clamp), `43d3a65da8` (Both-floor + merge-node re-clamp)
 - **Worktree**: `C:\proj\pwiz`
 - **Requested by**: Brendan (with Mike's blib observation)
+- **Night handoff**: `ai/.tmp/handoff-20260707-osprey-qvalue-filtering.md`
 
 ## The problem
 Osprey can report a peptide at experiment-level q < 1% that has **no run** passing run-level
@@ -51,7 +53,25 @@ is the run→experiment clamp; "peptide more confident than any of its charges" 
 sibling. **Level match**: the min-over-runs should be over run-**Both** q, since the blib ID line
 uses `EffectiveRunQvalue(Both)` — so "reported ⇒ some run passes at both granularities."
 
-## Where to implement — options
+## Progress (2026-07-07 evening) — implemented + validated
+Implemented as `ClampExperimentQToBestRun` in `PercolatorEngine` (Osprey.FDR), floored by best
+run **Both** q (`EffectiveRunQvalue(Both)`) to match the blib ID line / `OspreyRunScores.RunQValue`.
+Called in **two** places: (1) end of every `RunPercolatorFdr` pass (pass-1/2 `--model-diagnostics`
+calibration); (2) `MergeNodeTask.Run` on the final post-Stage-6 pool before `WriteBlibOutput` —
+authoritative, because Stage 6 zeroes moved-peak run-q *after* the pass-1 clamp.
+
+Clean Stellar libdecoy runs (`--fdr-level precursor`), verified end-to-end:
+- Pass-1 experiment-wide combined FDP @1%: **2.01% → 0.90%** (calibrated); Pass-2 unchanged 0.90%.
+- blib ID-line violations (reported precursor with best-run-Both q > 1%): **3 → 0**; cost −3 disc.
+- `--protein-fdr` Pass-2 unchanged at 1.48% (that's the depleted-null retrain = TRIC, out of scope).
+- Osprey.Test 453 pass; build 0 warnings.
+
+**Remaining (the night session):** unit tests for the clamp; **re-baseline the regression golden**
+(output intentionally changed); full pre-commit gate; open PR + `/pw-self-review`; TeamCity green
+(Stellar+Astral); a `maccoss/osprey` parity branch mirroring the clamp so
+`Compare-EndToEnd-Crossimpl` passes. Full playbook + gotchas in the handoff above.
+
+## Where to implement — options (decided: C, at two sites — see Progress)
 - **(A) Just before blib** (`MergeNodeTask`/`BlibOutputWriter`): localized, but the plots,
   compaction, and any other consumer still see the raw q → duplication + drift.
 - **(B) Just after the 2nd Percolator run** (`Pass2FdrSidecar`): fixes the reported set but not
