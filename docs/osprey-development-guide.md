@@ -455,9 +455,9 @@ The three stages it wraps:
 pipeline point via `--fdrbench-pass <1|2|both>`.
 Pass 1 = the full **pre-compaction** first-pass pool with first-pass q
 (byte-equal to Rust `write_fdrbench_peptide_input`); pass 2 (default) =
-the **post-compaction** reported set with final q; `both` emits both in
-one run, suffixing the `--fdrbench` path with `.pass1` / `.pass2` so a
-single run validates both passes. **Quote pass-2 for reported FDR** (it
+the **post-compaction** reported set with final q; `both` (#4386) emits
+both in one run, suffixing the `--fdrbench` path with `.pass1` /
+`.pass2` so a single run validates both passes. **Quote pass-2 for reported FDR** (it
 is what the user sees). The p1->p2 delta is itself diagnostic:
 library-supplied decoys *tighten* calibration from p1 to p2, generated
 decoys *degrade* it.
