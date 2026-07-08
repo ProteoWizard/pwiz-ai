@@ -580,6 +580,26 @@ trainer)** + drops the separate dense `stdFeatures` copy. Phase 0 measurement de
   per-file intermediates for a true clean start, no cache reuse; `OSPREY_LOG_MEMORY` + a live 30 s
   working-set sampler). Assessing peak WS + per-file accumulation with all of (iv) in place vs the
   pre-iv validate-40 baseline (iii: scoring plateau ~64.8 WS, first-pass join ~57.6 WS). [results pending]
+- 2026-07-08: **Merged master (#4390 best-of-runs experiment-q clamp) and integrated it the
+  memory-bounded way.** #4390 shipped the clamp as a post-pass over the full resident `FdrEntry`
+  buffer (`PercolatorEngine.ClampExperimentQToBestRun`). Folded the IN-PASS clamp into the flat
+  score-pass scalar arrays instead (`PercolatorFdr.ClampExperimentQToBestRunFlat`, called at both
+  experiment-q chokepoints -- direct `RunPercolator` and streaming `ComputeStreamingCompetitionQvalues`)
+  so the projection/streaming path clamps with NO resident buffer. Kept the resident overload only for
+  the MergeNode post-Stage-6 pre-blib re-clamp (bounded survivor buffer). The clamp needs only scalars
+  (entryId/isDecoy/modseq + run/exp q) the FDR math already holds; min/max are order-independent, so it
+  is byte-identical to the resident form.
+  - **Validation (all green):** Stellar `regression.ps1` mode1/2/3 PASS vs the #4390-rebaselined golden;
+    `Compare-EndToEnd-Crossimpl` Stellar bit-parity @ 1e-9 vs Rust #49 (56534 precursors, Stage-7 +
+    blib content match); entrapment FDP (StellarLibraryDecoy, no `--protein-fdr`, pass 1) = **0.90%
+    combined @ 1% q** (controlled, the calibrated reference); `--model-diagnostics` HTML curve == stock
+    FDRBench `RESULT: MATCH` at every gate. 474 unit tests pass.
+  - Also this session: `Original author:` headers -> Mike on the 4 new files (his PR); `FdrProjection`
+    cluster moved `Osprey.Core -> Osprey.FDR` (FDR-domain, byte-neutral); root-caused the
+    `-RunInspection` nondeterminism to the stale jb CLI (2025.3.1 ignored inline suppressions; 2026.1.4
+    fixes it -- issue #4379; new-machine-setup + Verify-Environment updated on pwiz-ai master).
+  - **Remaining:** Astral TeamCity Perf/Regression (streaming clamp at scale); the streaming-only
+    Percolator change (drop the direct path in BOTH tools) is a separate C#+Rust matched pair.
 
 ## Handoff prompt
 
