@@ -129,10 +129,31 @@ Type/semantics mismatch:
       regression vs the C# golden.
 
 ### Additional parity divergences found during the review (triage — may split to own issues)
-- [ ] **Gap-fill isolation-window m/z filter disabled in C#** (HIGH, GPF only) —
-      `FirstJoinTask.cs:850` passes `perFileIsolationMz: null`; Rust plumbs it
-      (`pipeline.rs:5045`, filter `reconciliation.rs:956-968`). Filter code exists in C#
-      (`GapFillTargetIdentifier.cs:165-181`) but is never reached. No-op for standard DIA.
+- [ ] **#2 Gap-fill isolation-window m/z filter disabled in C#** (HIGH, GPF). DECISION (Michael):
+      **fix BOTH C# and Rust** so distributed GPF filters and parity holds. Key finding: Rust
+      only filters straight-through — its join/HPC path never rebuilds isolation intervals
+      (serializes `isolation_scheme.windows` to calibration.json but never reads them back), so
+      the filter is a no-op on the distributed path on BOTH sides today.
+      C# filter already implemented (`GapFillTargetIdentifier.cs:165-181`); only the feed is null
+      (`FirstJoinTask.cs:850`). C# already extracts windows (`ScoringTaskShared.ExtractIsolationWindows`,
+      `PerFileScoringTask.cs:1232`; `IsolationWindow` = Center/LowerOffset/UpperOffset).
+      Target shape: `IReadOnlyDictionary<string,IReadOnlyList<(double Lo,double Hi)>>` keyed by file
+      stem; interval = `(Center - Width/2, Center + Width/2)` (matches Rust `pipeline.rs:4248-4255`).
+      Plan:
+      - C# straight-through: add `PerFileIsolationMz` byproduct (`PipelineByproducts.cs`), populate in
+        `PerFileScoringTask.ProcessFile` next to `perFileCalibrationsOut` (~:1232/:1266), publish in
+        `FinalizeAndCheck` (~:519), consume in `FirstJoinTask.Run` (~:204) → thread through
+        `PlanStage6→WriteReconciliationFiles→BuildReconciliation` to replace `perFileIsolationMz: null`.
+      - C# HPC/merge: add `windows` (double[][]) to `IsolationSchemeJson` (`CalibrationParams.cs:133-154`,
+        currently missing), populate `Metadata.IsolationScheme` when writing calibration.json
+        (`PerFileScoringTask.cs:1493-1518` — pass `isolationWindows` into `ResolveCalibration`), read
+        back in `LoadJoinOnlyScores` (~:905-935) to fill the byproduct.
+      - Rust: on the join path (`pipeline.rs:3874+`), read `metadata.isolation_scheme.windows` from
+        calibration.json and populate `per_file_isolation_mz` (Rust serializes it at
+        `calibration/mod.rs:129-143` but never reads it back).
+      - Validate on GPF (`Y:\osprey-test-data\stellar\calibrated-GPF-data`): straight-through AND
+        HPC chain, C# vs Rust cross-impl (`Compare-Blib`/`Compare-EndToEnd`); expect gap-fill target
+        set to shrink (precursors outside a file's m/z windows no longer force-integrated).
 - [ ] **SVM training dot-product reduction order** (HIGH, determinism) — C# SIMD
       lane-partial-sums (`LinearSvmClassifier.cs:546-568`) vs Rust sequential scalar fold
       (`svm.rs:95`). Sub-ULP drift, can flip `best_C`/boundary PSMs, non-deterministic across
