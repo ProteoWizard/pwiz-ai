@@ -71,6 +71,29 @@ Clean Stellar libdecoy runs (`--fdr-level precursor`), verified end-to-end:
 (Stellar+Astral); a `maccoss/osprey` parity branch mirroring the clamp so
 `Compare-EndToEnd-Crossimpl` passes. Full playbook + gotchas in the handoff above.
 
+## Progress (2026-07-08 night session) — PR opened, re-baselined, self-reviewed, Rust mirrored
+- **PR #4390** open (https://github.com/ProteoWizard/pwiz/pull/4390). Commits: clamp
+  (ed0c5414bf) + merge re-clamp (43d3a65da8) + tests (0241abf7e9) + golden re-baseline
+  (349a038d70) + self-review fix (f373038895).
+- **Impact corrected (important):** on the real production path (standard Stellar/Astral,
+  default --fdr-level Precursor, WITH --protein-fdr) the clamp drops ~4–5% of reported
+  precursors (Stellar 59,768→56,534 −5.4%; Astral 167,285→160,358 −4.1%), = exactly the
+  invariant violators (min-run-Both>1%), 0 residual. NOT the "−3" the evening (libdecoy,
+  no-protein-fdr) run implied. Driver: --protein-fdr Pass-2 retrain anti-conservatism, which
+  the clamp cleans up. Golden verified current (anchor run at base 31168db37b passed) — the
+  diff IS the clamp. NEEDS Brendan's sign-off on the −5.4% tradeoff.
+- **Golden re-baselined** (both datasets, 349a038d70); regression mode1/2/3 green Stellar
+  post-fix. Astral via TeamCity 4082720 (pull/4390).
+- **Self-review (fresh-context) round → f373038895:** fixed a real latent bug — peptide-q
+  floor keyed by ModifiedSequence alone let a decoy lower its target's floor
+  (anti-conservative); now keyed (ModifiedSequence, IsDecoy). No-op on default path (golden
+  unchanged). Also TryGetValue + docstring. Added shared-modseq test. Design-question
+  (run-Both floor under --fdr-level Precursor) documented, kept, flagged for Brendan.
+- **Rust parity branch** `q-clamp-parity` @ ef27069 on maccoss/osprey (local, NOT pushed):
+  faithful mirror incl. the peptide-key fix; fmt/clippy/tests green; 2 PARITY NOTE markers at
+  HPC join-at-pass=2 sites (follow-up). Compare-EndToEnd-Crossimpl in flight.
+- Morning report: ai/.tmp/morning-report-20260708-osprey-qvalue-filtering.md.
+
 ## Where to implement — options (decided: C, at two sites — see Progress)
 - **(A) Just before blib** (`MergeNodeTask`/`BlibOutputWriter`): localized, but the plots,
   compaction, and any other consumer still see the raw q → duplication + drift.
