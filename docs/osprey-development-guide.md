@@ -20,6 +20,41 @@ project. Referenced by `TODO-OR-*.md` files, which may have workflow
 rules that differ from the Skyline-mainline conventions documented
 in `ai/WORKFLOW.md`.
 
+## File header attribution (C# Osprey)
+
+The `Original author:` line names **the developer who created the file with
+Claude** -- i.e. the author of the PR that adds it -- NOT a fixed person.
+`ai/STYLEGUIDE.md` already spells this out (`[Author Name]`); the osprey-only
+trap is that **every existing Osprey C# file was authored by Brendan (he wrote
+the port), so seeding a new file's header by copying a sibling carries
+`Brendan MacLean` forward verbatim** -- wrong whenever someone else is the
+author. Skyline never hits this because its files have many authors. When you
+add a file, set `Original author:` to the real author, not whatever the
+neighboring file says.
+
+For example, files added by a Mike MacCoss PR use:
+
+```csharp
+/*
+ * Original author: Michael MacCoss <maccoss .at. uw.edu>,
+ *                  MacCoss Lab, Department of Genome Sciences, UW
+ * AI assistance: Claude Code (Claude <Model>) <noreply .at. anthropic.com>
+ *
+ * Based on osprey (https://github.com/MacCossLab/osprey)
+ *   by Michael J. MacCoss, MacCoss Lab, Department of Genome Sciences, UW
+ *
+ * Copyright <Year> University of Washington - Seattle, WA
+ * ...
+ */
+```
+
+The rest of the `ai/STYLEGUIDE.md` header applies in full -- only the
+`Original author:` identity varies by who wrote the file. Existing files keep
+their original author (Brendan's port files stay Brendan); do not rewrite
+history. Keep the `Based on osprey ... by Michael J. MacCoss` line on every
+Osprey file regardless of author -- that credits the tool's origin, separately
+from who authored this particular file.
+
 ## Workspace structure
 
 `maccoss/osprey` is a Cargo workspace with 7 crates:
