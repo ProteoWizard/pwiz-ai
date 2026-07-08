@@ -93,6 +93,16 @@ Clean Stellar libdecoy runs (`--fdr-level precursor`), verified end-to-end:
   faithful mirror incl. the peptide-key fix; fmt/clippy/tests green; 2 PARITY NOTE markers at
   HPC join-at-pass=2 sites (follow-up). Compare-EndToEnd-Crossimpl in flight.
 - Morning report: ai/.tmp/morning-report-20260708-osprey-qvalue-filtering.md.
+- **2026-07-08 AM (Brendan accepted the change):** --model-diagnostics re-check on libdecoy
+  confirmed the clamp is a no-op on calibration (no-pfdr 0.90% intact; --protein-fdr 1.48%
+  collapse persists = TRIC's job). Old-vs-new libdecoy drop is tiny (−262 / ~0.9% with
+  --protein-fdr, −8 without) vs −5.4% on the gendecoy `stellar` regression — the −5.4% is a
+  gendecoy-regime artifact ([[project_osprey_libdecoy_vs_gendecoy_calibration]]).
+- **Copilot review addressed** (94f8e80bc3): treat null/empty ModifiedSequence as missing
+  in the peptide floor (the (Modseq,IsDecoy) keying + doc were already in the self-review
+  f373038895); 3 threads resolved. Golden + cross-impl parity re-verified unchanged.
+- **Rust parity PR opened: maccoss/osprey#49** (branch q-clamp-parity @ 4c20174, base
+  reconciliation-v3-first-pass-base-ids); cross-impl bit-parity Stellar+Astral PASS.
 
 ## Where to implement — options (decided: C, at two sites — see Progress)
 - **(A) Just before blib** (`MergeNodeTask`/`BlibOutputWriter`): localized, but the plots,
