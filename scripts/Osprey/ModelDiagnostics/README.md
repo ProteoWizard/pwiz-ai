@@ -1,0 +1,28 @@
+# Osprey `--model-diagnostics` runner scripts
+
+Convenience wrappers for generating and validating the Osprey
+`--model-diagnostics` HTML/PDF report. See the full workflow + the
+`--protein-fdr` rationale in
+`ai/docs/osprey-development-guide.md` -> "The `--model-diagnostics` report".
+
+- **`Run-ModelDiagnostics.sh stellar|astral [pfdr]`** — clears the FDR-stage
+  caches (keeps `*.scores.parquet`), re-runs Osprey with `--model-diagnostics`
+  (+ `--fdrbench --fdrbench-pass 2` for the cross-check), then diffs the HTML
+  pass-2 curve vs stock FDRBench via `../Compare/Compare-Fdrbench-Html.py`.
+  Add `pfdr` to include `--protein-fdr 0.01` (into a separate `-pfdr` output
+  dir) — that is what populates the Model tab's 1st/2nd-pass selector and
+  shifts pass-2 FDP up (the decoy-depleted-null recalibration). Override the
+  binary with `OSPREY_EXE=...`, data root with `OSPREY_TESTDIR=...`.
+
+- **`Shot-ModelDiagnostics.py <html> <outdir> <stem>`** — headless-Chrome
+  screenshots of the report's tabs/views (the browser extension can't
+  screenshot `file://`); drives the tab/view/feature/pass clicks before
+  capturing.
+
+These replace the per-session bash scripts that lived under `ai/.tmp/`
+(`reprocess-mdiag.sh`, `shot-mdiag.py`, `run-libtypes.sh`) — same pattern as
+`Run-FdrBench.ps1` replacing the earlier `.tmp` FDRBench scripts.
+
+Paths default to this machine's layout (primary `pwiz` checkout's net8.0
+Release build; `D:/test/osprey-runs/{stellar,astral}-libdecoy`). Adapt them
+for a different checkout/data root.

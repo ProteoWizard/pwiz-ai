@@ -452,15 +452,77 @@ The three stages it wraps:
    calibrated.
 
 **Pass 1 vs pass 2.** Osprey can emit the FDRBench input at either
-pipeline point via `--fdrbench-pass <1|2>` (this flag currently lives
-on branch `Skyline/work/20260630_osprey_libdecoy_reconciliation_baseid`,
-commit `dc05539eb7`, pending merge -- the flag is not yet on master).
+pipeline point via `--fdrbench-pass <1|2|both>`.
 Pass 1 = the full **pre-compaction** first-pass pool with first-pass q
 (byte-equal to Rust `write_fdrbench_peptide_input`); pass 2 (default) =
-the **post-compaction** reported set with final q. **Quote pass-2 for
-reported FDR** (it is what the user sees). The p1->p2 delta is itself
-diagnostic: library-supplied decoys *tighten* calibration from p1 to
-p2, generated decoys *degrade* it.
+the **post-compaction** reported set with final q; `both` emits both in
+one run, suffixing the `--fdrbench` path with `.pass1` / `.pass2` so a
+single run validates both passes. **Quote pass-2 for reported FDR** (it
+is what the user sees). The p1->p2 delta is itself diagnostic:
+library-supplied decoys *tighten* calibration from p1 to p2, generated
+decoys *degrade* it.
+
+### The `--model-diagnostics` report (in-process FDP + model views)
+
+`--model-diagnostics` is the SELF-CONTAINED alternative to the FDRBench-jar
+pipeline above: Osprey computes the entrapment FDP **in-process** (no jar, no
+Python for the numbers) and writes ONE interactive HTML report (printable to
+PDF) beside the run output. It carries the FDRBench-matching FDR-calibration
+curve (both passes, experiment + per-run scope), the trained-model
+feature-contribution table, composite + per-feature score distributions, the
+paired decoy-win-fraction, and a per-file summary. Opt-in and off the default
+output path -- production scoring output is byte-identical without it. Merged
+in #4377.
+
+**Generate + validate one dataset (the committed runner):**
+
+```
+# calibrated reference (no --protein-fdr):
+bash ai/scripts/Osprey/ModelDiagnostics/Run-ModelDiagnostics.sh stellar
+# dual model + inflated pass 2 (adds --protein-fdr 0.01, into a separate -pfdr dir):
+bash ai/scripts/Osprey/ModelDiagnostics/Run-ModelDiagnostics.sh stellar pfdr
+```
+
+The runner clears the FDR-stage caches but KEEPS `*.scores.parquet`, so Osprey
+resumes from the (expensive) per-file scoring checkpoint and only re-runs the
+fast FDR / rescore / merge stages (~2 min Stellar; Astral re-scores under
+`--resolution hram`, ~15-20 min). The report is emitted INSIDE those stages
+(`FirstJoinTask` writes pass 1 + a data sidecar; `MergeNodeTask` appends pass 2
+and re-renders) -- there is **no standalone "render the HTML from disk" path**,
+and FirstPassFDR must actually RETRAIN (the runner clears the 1st-pass sidecars
+to force it) or the model table + per-feature histograms are absent. The runner
+then diffs the HTML pass-2 curve vs a stock-FDRBench run of the same TSV via
+`Compare/Compare-Fdrbench-Html.py --pass <1|2>` (`RESULT: MATCH` at each gated q).
+
+**Why `--protein-fdr` matters right now (the usual reason to ask for it).** It
+fires a SECOND Percolator retrain on the post-reconciliation reported pool,
+which does two visible things:
+1. **Populates the Model tab's "1st pass / 2nd pass" selector.** Without
+   `--protein-fdr` the run trains a single model, so there is no second model to
+   compare and the selector does not appear. With it, you see how the retrained
+   model reweights the features (e.g. Stellar SG-weighted cosine ~44% -> ~30%
+   contribution) and can switch the composite + per-feature distributions
+   between the two models.
+2. **Shifts the pass-2 FDR upward**, because that retrain runs against a
+   decoy-DEPLETED null -- the known anti-conservative source
+   ([[project_osprey_pass2_recalibration_inflates_fdr]]). On Stellar libdecoy
+   the pass-2 combined FDP goes ~0.90% (off) -> ~1.5% (on). Since #4390's
+   best-of-runs q-clamp landed, `--protein-fdr` ALSO drops ~5% of reported IDs
+   on standard runs -- the clamp removing exactly those pass-2 recalibration
+   violators. So run WITHOUT it to reproduce the well-calibrated reference; run
+   WITH it to demonstrate the dual model and the pass-2 recalibration story.
+
+**Screenshots** (the browser extension can't screenshot `file://`): headless
+Chrome via `ai/scripts/Osprey/ModelDiagnostics/Shot-ModelDiagnostics.py <html>
+<outdir> <stem>` (it drives the tab / view / feature / pass clicks first). And
+the standing gotcha: **NEVER run two Osprey processes at once** (SQLite /
+parquet cache corruption) -- serialize dataset runs.
+
+**Library-type behavior** (a quick robustness + degeneracy check): with **no
+entrapment** (a plain target+decoy library) the report DROPS the
+FDR-calibration tab and keeps the rest; with **Osprey-generated decoys**
+(gendecoy) it loudly flags the anti-conservative decoys -- ~11-12% combined FDP
+at a reported 1% q with the KPIs in red.
 
 ### Validated reference anchors (as of 2026-07-03)
 
