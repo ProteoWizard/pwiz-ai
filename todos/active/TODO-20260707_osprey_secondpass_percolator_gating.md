@@ -1,12 +1,64 @@
 # TODO-20260707_osprey_secondpass_percolator_gating.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260707_osprey_secondpass_percolator_gating` (not yet created — use `/pw-startissue 4389`)
+- **Branch**: `Skyline/work/20260707_osprey_secondpass_percolator_gating`
 - **Base**: `master`
 - **Created**: 2026-07-07
-- **Status**: Not Started
+- **Status**: In Progress
 - **GitHub Issue**: [#4389](https://github.com/ProteoWizard/pwiz/issues/4389)
 - **PR**: (pending)
+
+## Design decision (from Michael): FULL PARITY for #1
+
+In Rust there is no "protein-FDR off" state — `config.protein_fdr` is a plain `f64`
+(default 0.01) and the protein machinery runs unconditionally: first-pass protein FDR
+(→ compaction + consensus protein-rescue), second Percolator pass, second-pass protein
+FDR, and the `proteins.csv` report all run every time. `--protein-fdr` only *sets the
+threshold* and gates protein-level output filtering.
+
+C# must match this: the protein-FDR machinery + second Percolator pass always run at
+default 0.01; `--protein-fdr` becomes threshold + `--fdr-level protein` output only.
+A default C# run will now always compute protein FDR and write `proteins.csv`.
+
+### C# gates to flip (all currently keyed on `config.ProteinFdr.HasValue`)
+1. `FirstJoinTask.cs:235` — first-pass protein FDR → run always (Rust guard is
+   `!can_skip_fdr`, not protein_fdr; pipeline.rs:4529).
+2. `FirstJoinTask.cs:598` — compaction `proteinGate = ProteinFdr ?? 0.0` → `?? 0.01`,
+   rescue always active (Rust pipeline.rs:4651/4658).
+3. `MergeNodeTask.cs:132` — split: second Percolator pass (`Pass2FdrSidecar.ComputeAndPersist`)
+   runs when reconciliation rescored (analog of Rust `total_rescored > 0`, pipeline.rs:5209 —
+   detect via "any `<stem>.scores-reconciled.parquet` exists"); protein FDR + `proteins.csv`
+   run always (Rust pipeline.rs:5293).
+4. `PerFileRescoreTask.cs:438` — first-pass protein-FDR recompute in the rehydration path →
+   run always.
+5. `ConsensusRts.cs` consensus protein-rescue — use default 0.01 threshold, always active.
+6. `MergeNodeTask.cs:87` `Outputs()` — declare 2nd-pass sidecars when rescored, not on protein_fdr.
+7. Introduce an effective-threshold accessor on `OspreyConfig` (e.g. `ProteinFdr ?? 0.01`)
+   and a default constant; `--fdr-level protein` no longer needs `--protein-fdr`.
+
+### Validation plan for #1 (does NOT require Rust)
+- Self-consistency: C# Stellar 3-file **without** `--protein-fdr` blib == **with** `--protein-fdr 0.01`
+  blib (machinery now always runs at 0.01). This is the direct proof of the fix.
+- `regression.ps1 -Dataset Stellar` (uses `--protein-fdr 0.01`) stays green — the with-protein-fdr
+  path is unchanged. Regenerate golden only if an intended delta appears.
+- Cross-impl confirmation once the Windows Rust reference builds (below).
+
+## Environment setup (this machine, for Windows cross-impl parity)
+- Rust: no toolchain was installed. Installed rustup stable MSVC (cargo/rustc 1.96.1).
+- Rust osprey needs OpenBLAS on Windows (`openblas-src` "system" via vcpkg). Installing vcpkg
+  at `~/vcpkg` + `openblas:x64-windows` (the wrapper sets `VCPKG_ROOT=$USERPROFILE\vcpkg`).
+  Michael normally builds Rust under WSL2; for this parity work we build the **Windows** Rust
+  binary to compare against Windows C#.
+- Build wrappers: C# `Build-Osprey.ps1 -Configuration Release -TargetFramework net8.0`;
+  Rust `Compare/Build-OspreyRust.ps1 -OspreyRoot C:\Users\macco\Documents\github\maccoss\osprey`.
+  Note: `cargo`/`pwsh` must have `~/.cargo/bin` on PATH (Git Bash→pwsh does not by default).
+- GPF dataset for divergence #2 (gap-fill isolation m/z): `Y:\osprey-test-data\stellar\calibrated-GPF-data`
+  (5 disjoint-m/z windows 400–500 … 800–900).
+
+## Rust doc fixes (DONE — stale notes, in the maccoss/osprey repo)
+Fixed `docs/07-fdr-control.md` to match the code: initial feature selection is ascending-only;
+grid search runs every iteration; `reconciliation_compaction_fdr` default is 0.01. Needs a
+Rust-side commit/PR (LF, upstream conventions) — separate from the pwiz branch.
 
 ## Problem
 
@@ -121,4 +173,8 @@ Type/semantics mismatch:
   + direct verification of the orchestration in `pipeline.rs` and C# Tasks). Root-caused the
   second-pass gating bug (C# side), catalogued the additional divergences above, confirmed
   decoy retention parity through compaction/consensus/reconciliation. Filed issue #4389,
-  created this TODO. Branch not yet created — work not started.
+  created this TODO.
+- 2026-07-07: Started the branch. Fixed the Rust stale docs (07-fdr-control.md). Set up the
+  Windows Rust cross-impl toolchain (rustup MSVC; vcpkg + openblas:x64-windows building).
+  Locked the FULL-PARITY design for #1 with Michael (see above) and the no-Rust-needed
+  self-consistency validation. Next: implement the 7 gate changes for #1, then build + validate.
