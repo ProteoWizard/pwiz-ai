@@ -173,10 +173,12 @@ All divergences below are tracked here and in issue #4389 (Tier 1/2/3). Work ord
    Inert at default; 458 tests pass. NEXT actionable: **#5**. (Local `-RunInspection` reddens on the
    pre-existing #4379 SystemMemory.cs jb-inspectcode flake — not #4; its suggested SuppressMessage fix +
    cache-clear both tested, still 9; local-gate-only, does not affect TeamCity CI.)
-3. **#5 multi-charge consensus leader tie-break** (LOW, determinism-adjacent) — Rust `max_by` keeps
-   last (`pipeline.rs:7644-7658`); C# keeps first (`MultiChargeConsensus.cs:118-142`). Exact ties only.
-4. **#6 missing-feature entries** (LOW, path-dependent) — Rust skips (`pipeline.rs:6137-6141`); C#
-   fabricates a placeholder vector (`PercolatorEntryBuilder.cs:82-85`). Bites only when nWithoutFeatures>0.
+3. **#5 multi-charge consensus leader tie-break — DONE (pwiz `252caee76`).** `MultiChargeConsensus`
+   tie-break now keeps the LAST charge state on an exact score+q tie (`<=`), matching Rust `max_by`
+   (`pipeline.rs:7665-7679`); + MultiChargeConsensusTest. Stellar regression PASS (all 3 modes; inert at default).
+4. **#6 missing-feature entries — DONE (pwiz `06e2872ab`).** `PercolatorEntryBuilder` now skips
+   feature-less entries (matching Rust `continue`, `pipeline.rs:6153-6162`) instead of fabricating a
+   placeholder; removed dead BuildBasicFeatures; test updated. NEXT actionable: **#7**.
 5. **#7 Simple-FDR winner sort stability** (LOW, non-default path, DETERMINISM) — Rust stable
    (`lib.rs:148`) vs C# unstable `List.Sort` (`FdrController.cs:187`, self-flagged). Simple FDR only.
 6. **Tier 3 (latent, defer):** UTF-8 vs UTF-16 peptide-group key sort (`percolator.rs:1541` vs
@@ -186,16 +188,15 @@ All divergences below are tracked here and in issue #4389 (Tier 1/2/3). Work ord
       lane-partial-sums (`LinearSvmClassifier.cs:546-568`) vs Rust sequential scalar fold
       (`svm.rs:95`). Sub-ULP drift, can flip `best_C`/boundary PSMs, non-deterministic across
       CPU SIMD width. Scoring path (`decision_function`) is unaffected.
-- [ ] **`reconciliation_compaction_fdr` knob absent in C#** (MEDIUM, config) — Rust
-      `pipeline.rs:4650` uses a dedicated field (default 0.01); C# hardwires `config.RunFdr`
-      (`FirstJoinTask.cs:597`). No `ReconciliationCompactionFdr` property exists in C#.
-      Identical at defaults; diverges if the Rust knob is set ≠ run_fdr.
-- [ ] **Multi-charge consensus leader tie-break** (LOW) — Rust `max_by` keeps last
-      (`pipeline.rs:7644-7658`); C# keeps first (`MultiChargeConsensus.cs:118-142`). Exact
-      score+q ties only.
-- [ ] **Missing-feature entries** (LOW, path-dependent) — Rust skips
-      (`pipeline.rs:6137-6141`); C# fabricates a placeholder vector
-      (`PercolatorEntryBuilder.cs:82-85`). Only when feature-less stubs reach the builder.
+- [x] **`reconciliation_compaction_fdr` knob absent in C#** (MEDIUM, config) — DONE, pwiz
+      `726661f50`. Added `OspreyConfig.ReconciliationCompactionFdr` + `--reconciliation-compaction-fdr`
+      CLI arg; compaction gate uses it instead of hardwired `RunFdr`. Inert at default 0.01.
+- [x] **Multi-charge consensus leader tie-break** (LOW) — DONE, pwiz `252caee76`. `<=` keeps the
+      last charge state on an exact score+q tie, matching Rust `max_by` (`pipeline.rs:7665-7679`).
+      + MultiChargeConsensusTest; Stellar regression PASS.
+- [x] **Missing-feature entries** (LOW, path-dependent) — DONE, pwiz `06e2872ab`.
+      `PercolatorEntryBuilder` skips feature-less entries (matching Rust `continue`,
+      `pipeline.rs:6153-6162`); removed dead BuildBasicFeatures; test updated.
 - [ ] **Simple-FDR winner sort stability** (LOW, non-default path) — Rust stable sort
       vs C# unstable `List.Sort` (`FdrController.cs:187`, self-flagged). Simple FDR only.
 - [ ] Latent/theoretical (safe to defer): UTF-8 vs UTF-16 peptide key ordering
