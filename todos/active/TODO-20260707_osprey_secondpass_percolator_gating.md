@@ -178,3 +178,20 @@ Type/semantics mismatch:
   Windows Rust cross-impl toolchain (rustup MSVC; vcpkg + openblas:x64-windows building).
   Locked the FULL-PARITY design for #1 with Michael (see above) and the no-Rust-needed
   self-consistency validation. Next: implement the 7 gate changes for #1, then build + validate.
+- 2026-07-07: **#1 DONE + committed** (pwiz `251ece004`). Implemented all 7 gate changes via
+  `OspreyConfig.EffectiveProteinFdr` (ProteinFdr ?? 0.01). Validation:
+  * `regression.ps1 -Dataset Stellar` PASS all 3 modes (straight/HPC/resume), with --protein-fdr.
+  * Stellar 3-file WITHOUT --protein-fdr == WITH 0.01: `Compare-Blib` OVERALL PASS at 1e-9.
+  * Single-file C# == Rust: `Compare-Blib` OVERALL PASS at 1e-9 (both run intra-run multi-charge
+    consensus -> 2nd pass; blib size differs only by SQLite page layout). Confirmed Michael's rule:
+    the ONLY no-2nd-pass case is a single file with nothing to reconcile -- but intra-run
+    multi-charge consensus still rescores within one run, so single-file DOES run a 2nd pass.
+  * Pre-commit gate: 453 unit tests pass, inspection clean.
+  * Rust doc fix pushed to maccoss/osprey main (`fe52573`).
+- 2026-07-07: GPF multi-charge behavior (Rust, for #2): cross-run consensus RT is peptide-level
+  (`compute_consensus_rts` groups by modified_sequence, charge-agnostic across files) so a
+  peptide's charges in different GPF runs share one library-RT consensus; gap-fill is m/z-gated
+  (`reconciliation.rs:956-968`) so a charge is only force-filled into runs whose isolation windows
+  cover its m/z. C# matches on consensus RT but disables the gap-fill m/z filter
+  (`FirstJoinTask.cs:850` perFileIsolationMz: null) = divergence #2. GPF data: Y:\...\calibrated-GPF-data.
+  Next: #2 -- plumb per-file isolation-window m/z through C# and enable the filter.
