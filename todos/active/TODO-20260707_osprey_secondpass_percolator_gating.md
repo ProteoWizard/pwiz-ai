@@ -154,6 +154,28 @@ Type/semantics mismatch:
       - Validate on GPF (`Y:\osprey-test-data\stellar\calibrated-GPF-data`): straight-through AND
         HPC chain, C# vs Rust cross-impl (`Compare-Blib`/`Compare-EndToEnd`); expect gap-fill target
         set to shrink (precursors outside a file's m/z windows no longer force-integrated).
+
+### Remaining-work priority (Michael: ALL of these must be done; determinism first)
+All divergences below are tracked here and in issue #4389 (Tier 1/2/3). Work order after #2:
+1. **#3 / "#C" SVM training dot-product reduction order — DETERMINISM-CRITICAL, do next.**
+   C# hand-vectorized SIMD lane-partial-sums (`LinearSvmClassifier.cs:546-568`) vs Rust sequential
+   scalar fold (`svm.rs:95`). Not just sub-ULP drift vs Rust — the C# result is **non-deterministic
+   across CPU SIMD width** (AVX2 vs AVX-512 vs NEON give different sums), so the same input can flip
+   `best_C` and shift boundary PSMs run-to-run/machine-to-machine. Rust is identical on every platform.
+   Scoring path (`decision_function`) is scalar on both sides and matches. Fix: make C# training use a
+   deterministic sequential (or fixed-order) reduction. Candidate for its OWN issue given severity.
+2. **#4 reconciliation_compaction_fdr knob absent in C#** (MEDIUM) — add the config field; C#
+   hardwires `RunFdr` (`FirstJoinTask.cs:597`) vs Rust `config.reconciliation_compaction_fdr`
+   (`pipeline.rs:4650`). Inert at default 0.01; diverges when set.
+3. **#5 multi-charge consensus leader tie-break** (LOW, determinism-adjacent) — Rust `max_by` keeps
+   last (`pipeline.rs:7644-7658`); C# keeps first (`MultiChargeConsensus.cs:118-142`). Exact ties only.
+4. **#6 missing-feature entries** (LOW, path-dependent) — Rust skips (`pipeline.rs:6137-6141`); C#
+   fabricates a placeholder vector (`PercolatorEntryBuilder.cs:82-85`). Bites only when nWithoutFeatures>0.
+5. **#7 Simple-FDR winner sort stability** (LOW, non-default path, DETERMINISM) — Rust stable
+   (`lib.rs:148`) vs C# unstable `List.Sort` (`FdrController.cs:187`, self-flagged). Simple FDR only.
+6. **Tier 3 (latent, defer):** UTF-8 vs UTF-16 peptide-group key sort (`percolator.rs:1541` vs
+   `PercolatorFdr.cs:2148`); `f64::total_cmp` vs `double.CompareTo` on +/-0.0/NaN. Unreachable today
+   but both feed ordering — worth a shared comparator eventually.
 - [ ] **SVM training dot-product reduction order** (HIGH, determinism) — C# SIMD
       lane-partial-sums (`LinearSvmClassifier.cs:546-568`) vs Rust sequential scalar fold
       (`svm.rs:95`). Sub-ULP drift, can flip `best_C`/boundary PSMs, non-deterministic across
