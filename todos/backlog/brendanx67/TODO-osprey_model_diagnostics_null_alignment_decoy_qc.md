@@ -13,3 +13,10 @@ because both rest on the *same* non-circular null reference and audit the *same*
 This stub is retained only to keep the `[[TODO-osprey_model_diagnostics_null_alignment_decoy_qc]]`
 link (from the partial-entrapment active TODO) resolving. See the consolidated TODO for the
 full design, gates, and references. Safe to delete once the inbound link is repointed.
+
+**Stashed here (2026-07-07):** the `OSPREY_BOOST_TARGET_DISCRIMINANT` instrument — a synthetic
+equal-chance violation that is invisible to the entrapment oracle, useful as a positive-control
+test fixture for these null-alignment / decoy-QC detectors — was lifted out of the
+`--fdrbench-pass both` PR and written up in **section F** of
+[[TODO-osprey_assumption_failure_detection]] (with recovery pointer to git tag
+`osprey-stash/boost-target-discriminant`).

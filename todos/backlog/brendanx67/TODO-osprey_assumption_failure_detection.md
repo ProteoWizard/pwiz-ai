@@ -94,6 +94,67 @@ at real occupied precursor m/z — or it colludes with a manipulated decoy and h
 anti-conservatism (the shift-both trap). Do not let the entrapment share the decoy's m/z
 manipulation.
 
+### F. Stashed test instrument: `OSPREY_BOOST_TARGET_DISCRIMINANT` (synthetic equal-chance violation)
+A working, env-gated (default off) diagnostic that manufactures a *controlled* equal-chance
+violation invisible to the entrapment oracle — the ideal positive-control fixture for the
+B/C/D/E detectors above. It adds a constant to the first-pass SVM discriminant of every
+**real** target (non-decoy, non-entrapment) just before q-computation, leaving the
+decoy==entrapment null untouched. This slides the false-target distribution up relative to
+both estimators, so Osprey reports low q AND `FDP_entrap ≈ alpha` looks fine — yet the result
+is genuinely anti-conservative. It is the mechanism behind the "boost experiment" cited in the
+equal-chance section above (real paired coin 47%→27% while entrapment held 50%): proof that
+marginal + entrapment checks can both pass while pairing/f_false checks catch it. Use it to
+generate labeled test cases (sweep the boost; assert C's paired-coin and A/B's f_false
+divergence fire while E stays quiet).
+
+**Why stashed here (not shipped):** it is a QC *test input*, not FDRBench plumbing; it was
+lifted out of the `--fdrbench-pass both` PR ([[TODO-20260707_osprey_fdrbench_pass_both]]) to
+keep that PR minimal. Entrapment tagging keys on protein accession containing `_p_target`.
+
+**Recovery (durable):** git tag `osprey-stash/boost-target-discriminant` → commit `467db607cf`
+(a preservation checkpoint containing both this instrument and `--fdrbench-pass both`; tags are
+not GC'd, so it survives deletion of the source branch). Instrument-2-only diff =
+`git diff <fdrbench-pass-both-PR-tip> osprey-stash/boost-target-discriminant`. A snapshot of
+that isolated diff is also at `ai/.tmp/OSPREY_BOOST_TARGET_DISCRIMINANT.patch` (ephemeral). The
+patch is purely additive (5 files, +96); orientation summary below:
+
+```diff
+diff --git a/pwiz_tools/Osprey/Osprey.Core/FdrEntry.cs b/pwiz_tools/Osprey/Osprey.Core/FdrEntry.cs
+@@ namespace pwiz.Osprey.Core (after `public bool IsDecoy { get; set; }`)
++        /// <summary>
++        /// True for entrapment targets (protein accession contains <c>_p_target</c>).
++        /// Set only when the OSPREY_BOOST_TARGET_DISCRIMINANT diagnostic is active, so
++        /// the boost can leave entrapment (the estimation null) untouched. Not persisted.
++        /// </summary>
++        public bool IsEntrapment { get; set; }
+
+diff --git a/pwiz_tools/Osprey/Osprey.Core/OspreyEnvironment.cs
++        /// OSPREY_BOOST_TARGET_DISCRIMINANT: adds this constant to the first-pass SVM
++        /// discriminant of every real target (non-decoy, non-entrapment). 0/unset = off.
++        public static readonly double BoostTargetDiscriminant = ParseDoubleOrZero(@"OSPREY_BOOST_TARGET_DISCRIMINANT");
++        // + private static double ParseDoubleOrZero(string name) { ... InvariantCulture TryParse ... }
+
+diff --git a/pwiz_tools/Osprey/Osprey.FDR/PercolatorEntryBuilder.cs
++                        IsEntrapment = fdrEntry.IsEntrapment,   // in the PercolatorEntry initializer
+
+diff --git a/pwiz_tools/Osprey/Osprey.FDR/PercolatorFdr.cs
++        public bool IsEntrapment { get; set; }                 // on PercolatorEntry
+@@ after the contribAcc.Add loop, before contribAcc.Build:
++            double targetBoost = OspreyEnvironment.BoostTargetDiscriminant;
++            if (targetBoost != 0.0)
++                for (int i = 0; i < n; i++)
++                    if (!entries[i].IsDecoy && !entries[i].IsEntrapment)
++                        finalScores[i] += targetBoost;   // + [DIAG] log line with nBoosted
+
+diff --git a/pwiz_tools/Osprey/Osprey.Tasks/FirstJoinTask.cs
+@@ top of RunPercolatorFdr:
++            if (OspreyEnvironment.BoostTargetDiscriminant != 0.0)
++                TagEntrapmentForBoost(perFileEntries, ctx);
++        // + private static void TagEntrapmentForBoost(...): tag non-decoy entries whose
++        //   library ProteinIds contain "_p_target" as e.IsEntrapment = true.
+```
+(The above is an orientation summary; the byte-exact patch is the `.patch` file / commit `467db607cf`.)
+
 ## Policy
 - Prefer a prominent WARNING with the diagnostic number over silent proceed. Where output
   would be silently INVALID that a user might trust (e.g. decoy null depleted to an
