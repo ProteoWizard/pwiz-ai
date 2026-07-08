@@ -163,7 +163,7 @@ All divergences below are tracked here and in issue #4389 (Tier 1/2/3). Work ord
    across CPU SIMD width** (AVX2 vs AVX-512 vs NEON give different sums), so the same input can flip
    `best_C` and shift boundary PSMs run-to-run/machine-to-machine. Rust is identical on every platform.
    Scoring path (`decision_function`) is scalar on both sides and matches. Fix: make C# training use a
-   deterministic sequential (or fixed-order) reduction. Candidate for its OWN issue given severity.
+   deterministic sequential (or fixed-order) reduction. **Filed as its own issue: #4392.**
 2. **#4 reconciliation_compaction_fdr knob absent in C#** (MEDIUM) — add the config field; C#
    hardwires `RunFdr` (`FirstJoinTask.cs:597`) vs Rust `config.reconciliation_compaction_fdr`
    (`pipeline.rs:4650`). Inert at default 0.01; diverges when set.
