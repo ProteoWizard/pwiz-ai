@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260707_osprey_fdrbench_pass_both`
 - **Base**: `master` (`31168db37b`, the #4380 partial-entrapment merge)
 - **Created**: 2026-07-07
-- **Status**: PR open, awaiting self-review + CI
-- **PR**: [#4386](https://github.com/ProteoWizard/pwiz/pull/4386)
+- **Status**: **Completed**
+- **PR**: [#4386](https://github.com/ProteoWizard/pwiz/pull/4386) (merged 2026-07-08 as `487e33df9b`)
 - **Worktree**: `C:\proj\pwiz-libdecoy`
 
 **Priority**: Small enabler — salvaged from the decommissioned
@@ -45,3 +45,13 @@ the entrapment oracle can plot both FDP curves without two separate invocations.
   was **deliberately excluded** from this PR and stashed for later under
   [[TODO-osprey_model_diagnostics_null_alignment_decoy_qc]] (it is a null-alignment QC test
   mechanism, not FDRBench plumbing).
+
+### 2026-07-08 - Merged
+PR #4386 merged (squash) as commit `487e33df9b` on master. Shipped `--fdrbench-pass both`
+(the `FdrBenchPass` bitmask + `PathForPass` suffixing `.pass1`/`.pass2` so a single run emits
+both FDRBench pools on the same axes for the pass-2 recalibration assessment). Copilot
+feedback was addressed pre-merge (commit f5c4fbbaf3: dropped the `1,2` alias, added the
+"pass 2" log label). Green via CI + `OspreyCommandArgsTests` parse coverage. The manual
+`both`-writes-two-files end-to-end check (test-plan line) was not separately re-run this
+session — covered by the parse tests + merge CI. `OSPREY_BOOST_TARGET_DISCRIMINANT` stays
+stashed for the null-alignment QC TODO (out of scope, as designed).
