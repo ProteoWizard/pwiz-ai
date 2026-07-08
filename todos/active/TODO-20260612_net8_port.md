@@ -961,3 +961,60 @@ Latest commit: **33a1df75fe**. WIFF-fix CI build was still queued at session end
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260612_net8_port.md` before starting work.
+
+### 2026-07-08 - Sciex reader fixes landed; TestFunctional parallel run triaged (22 net8-wide + 20 container-only)
+
+**Sciex reader fixes (committed + pushed to PR #4178, both refs):**
+- `27490eac86` - TestAsymCEOpt: `WiffFile.GetSic` now requests the full experiment cycle
+  range (`StartCycle=0` / `EndCycle=RetentionTimeToExperimentScan(lastTicTime)` /
+  `UseStartEndCycle=true`), matching cpp `ExperimentImpl::getSIC` with
+  `ignoreScheduledLimits=true` (hardcoded in `ChromatogramList_ABI.cpp`). The SDK-default
+  (scheduled-window) SIC omitted out-of-window zero points, so Skyline's `delimitByMinimumLevel`
+  set different integration boundaries -> areas + forced-integration flags differed (got 90 vs 86).
+  Verified byte-identical to cpp msconvert SIC.
+- `1126ecb7ed` - CommandLineWiffTest (+SingleReplicate): multi-sample WIFF import intermittently
+  threw "used by another process" in `ReaderList.ReadHead`'s `File.OpenRead` - the Sciex SDK frees
+  a prior sample's `.wiff` handle only after finalization + an SDK-internal async native close.
+  ReadHead now forces finalization then polls the open up to 5s on IOException. (Forcing GC in
+  `WiffFile.Dispose` does NOT help - the instance is still reachable during its own Dispose.)
+- CI build #12 pending on both fixes.
+
+**TestFunctional health check (net8, Docker parallelmode=server, 10 workers, 617 tests):** 42 failures.
+Re-ran all 42 on the HOST (`parallelmode=off`) to separate real regressions from Docker-container
+artifacts -> **22 net8-wide (fail/hang on host), 20 container-only (pass on host).** The 3 Sciex
+fixes hold everywhere (AsymCEOpt / WIFF / MultiSampleImport green on host and in-container).
+
+**22 net8-wide (real backlog):**
+- Dialog-never-opens / WaitFor timeout (6): TestExportMethodDlg, TestWatersConnectExportMethodDlg,
+  TestManageLibraryRuns, TestLibraryBuild, TestKoinaSkylineIntegration, ConstantNeutralLossTest
+  (Agilent `.d` import hang).
+- Dependency / native (3): TestParquetArrays + TestExportHugeParquetReport (Parquet.NET
+  `DataField..ctor` MissingMethod = version mismatch), TestImportFullScanNarrowScanWindows
+  (`HDF.PInvoke.H5E` type-init threw = HDF5/mzMLb native).
+- Known (3): ConsoleImportEiTest (the CI EI IndexOutOfRange), ImmediateWindowTestMethod (tool menu),
+  TestDdaSearch (MSAmanda on-demand-download dialog not auto-handled offscreen).
+- Assorted assertion / logic (10): TestDissociationMethod, TestJsonToolServer, TestLiteDropdownList,
+  TestObjectFilterOperations, TestPasteMolecules, TestReportErrorDlg, TestSkylineCmdInEmptyDirectory,
+  TestSynchSiblingsSmallMolecules, TestTriggeredAcquisition, TestZedGraphClipboard.
+
+**20 container-only (pass on host - TRACK DOWN LATER: there should be NO missing DLLs/exes/data):**
+- Waters cluster (native `MassLynxRaw` DLL not resolvable in container): WatersCacheTest,
+  WatersFileTypeTest, WatersMultiFileTest, WatersMultiReplicateTest.
+- TestExportMethodShimadzu (`BuildShimadzuMethod.exe` not in container).
+- Console* imports (missing `.raw` / `M:\` share in container): ConsoleBadRawFileImportTest,
+  ConsoleImportNonSRMFile, ConsoleMethodTest, ConsoleMultiReplicateImportTest.
+- Graph/UI that differ in container: TestFullScanGraph, TestFullScanProperties, TestIgnoreSimScans,
+  TestArrangeGraphs, TestSplitGraph, TestScientificNotationGraph, TestTreeRestoration,
+  TestLabelLayoutDeterminism, TestManageResults, TestPeakBoundaryCompare, TestCommandLineNoJoin.
+
+**Container-artifact cleanup (separate task):** the Docker parallel workers lack native DLLs
+(MassLynxRaw), exes (BuildShimadzuMethod), and data (.raw, M: share) present on the host - fix the
+container mount/staging (Stage-Net8Tests + the `docker run -v` mounts) so nothing is missing, then
+those 20 stop being false failures. Full traces: `ai/.tmp/tf_parallel.log` (container) +
+`ai/.tmp/tf_host*.log` (host).
+
+**Corrections:** the full-scan value-diff cluster (FullScanGraph/Properties/IgnoreSimScans) is
+container-only, NOT the EI bug. Waters/Shimadzu "packaging gaps" are container-only (present on host).
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260708_net8_testfunctional_triage.md` before starting work.
