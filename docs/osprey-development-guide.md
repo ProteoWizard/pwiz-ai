@@ -286,6 +286,37 @@ Dataset-specific configuration:
 
 ## Cross-implementation parity testing
 
+### The parity gate is a STANDING requirement -- mirror every substantive change in Rust
+
+The C#<->Rust byte-identity gate is **not** being retired soon. It is kept
+deliberately because it is too valuable: Mike's parallel Rust work plus the
+byte-identity comparison keep catching real divergences, and that extra testing
+outweighs the double-PR overhead. Treat it as a durable gate, not an
+about-to-go one.
+
+**Rule: every SUBSTANTIVE C# change ships with a companion Rust PR** in
+`maccoss/osprey` that keeps the two implementations at bit-parity. "Substantive"
+= anything that can move the numbers or the discovery set: scoring, calibration,
+LOESS/KDE, SVM/Percolator, FDR, decoy generation, reconciliation, blib output.
+Pure-C# refactors that are byte-neutral (file moves, comments, renames that don't
+touch output) do NOT need a Rust mirror.
+
+Workflow:
+- Open the C# PR and a companion Rust PR in `maccoss/osprey`, branched off the
+  **current parity base** (e.g. `reconciliation-v3-first-pass-base-ids`).
+- Validate the pair with `Compare-EndToEnd-Crossimpl` at 1e-9 on **Stellar AND
+  Astral** before merging either side.
+- For a **parity-affecting** change (one that deliberately changes the numbers --
+  e.g. making Percolator streaming-only, which drops the direct/no-stream path),
+  switch BOTH tools together and re-baseline the golden. Parity stays green
+  because both sides move to the same new behavior; only the absolute values
+  change.
+
+Canonical template pair: **pwiz#4390 (C#) <-> maccoss/osprey#49 (Rust)** -- the
+experiment-q best-of-runs clamp. The Rust PR is a single-commit diff whose body
+opens with "Mirrors the C# Osprey ... (ProteoWizard/pwiz#NNNN) so the two
+implementations stay in cross-impl parity," validated on Stellar + Astral.
+
 The cross-impl bisection infrastructure lives on the C# side (under
 `ai/scripts/Osprey/`) but drives both tools:
 
