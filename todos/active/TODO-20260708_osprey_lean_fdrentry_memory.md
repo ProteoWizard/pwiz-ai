@@ -63,6 +63,25 @@ modified sequence across ALL files, so a streaming loader must assign insertion-
 skip `BuildFromEntries`); keep fat-stub loads lazy for model-diagnostics/FDRBench and the merge
 path. Then `regression.ps1 -Dataset Stellar`.
 
+### Wiring design (the structural fact that makes this safe)
+
+`ctx.Publish(new ScoredEntries(_perFileEntries))` (`PerFileScoringTask.cs:559`) sits in a **shared
+Run/Rehydrate tail**, but the fat-stub loop (`:334-346`) is in **`Run`** (fresh scoring) only; the
+merge/resume path fills `_perFileEntries` via a **separate `Rehydrate`** method (`:446+`,
+`TryLoadStubsAndCalibration`). So:
+
+1. **`Run` path**: replace the fat-stub loop with `FdrProjectionSet.Builder` +
+   `ParquetScoreCache.ReadFdrStubScalars` per file; publish a new lean `FdrProjections` byproduct.
+   Leave `_perFileEntries` empty (`ScoredEntries` still publishes, just empty). `totalScored` must
+   come from `FdrProjectionSet.TotalRows` instead of summing `perFileEntries`.
+2. **`Rehydrate` path**: unchanged — merge/resume keeps its fat stubs, so
+   `PerFileRescoreTask.cs:411` is unaffected.
+3. **`FirstJoinTask`**: consume `FdrProjections` directly (skip `BuildFromEntries`). When
+   `needsResidentFirstPassPool` (`:258`, `--model-diagnostics` / FDRBench-pass-1), lazily load fat
+   stubs from `PerFileParquetPaths` via the existing `LoadFdrStubsFromParquet`.
+
+This keeps the fat buffer alive exactly where it is genuinely required and nowhere else.
+
 ---
 
 ## Lever 2 — Scoring: the dense preprocessed XCorr **observed-spectrum** cache (~18-37 GB)
