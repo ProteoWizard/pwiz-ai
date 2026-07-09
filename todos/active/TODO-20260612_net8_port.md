@@ -70,6 +70,99 @@ Template csproj (drop the legacy 600-line XML, replace with ~40 lines):
 4. **NHibernate** — versions ≥5.5 support net6+. Multi-target by package version
    if legacy needed.
 
+## Status (2026-07-08, session 4)
+
+### Cleared the ENTIRE diagnosed-failure shortlist -- 9 net8 tests GREEN (overnight autonomous batch)
+
+Worked the remaining diagnosed-failure shortlist from the session-3 handoff to zero. Fixed and committed
+9 tests (each: reproduce -> root-cause -> fix -> verify 0-failures -> focused commit, all pushed to `origin`
++ mirrored to `chambem2/pwiz-sharp`). `TestJsonToolServer` was already passing (session-3 diagnosis didn't
+reproduce), so it was dropped. Commits `8787075894..288c8647d7`.
+
+**The first 5 I did directly; the last 4 (WatersConnect, Koina, ConsoleImportEi, ConstantNeutralLoss) I
+delegated to 4 parallel investigation subagents** -- they read+reasoned in parallel and ran read-only
+diagnostics (repro + `dotnet-dump` stack captures) on the current staged build, serialized by a shared
+file-lock semaphore (`skyline-coord/with-skyline-lock.sh`, atomic `mkdir` lock, 30-min stale breaker) so
+only one offscreen Skyline/TestRunner ran machine-wide at a time. Subagents did NOT edit tracked files or
+build -- each returned a precise fix spec; the parent applied -> built -> staged+ran under the same lock ->
+committed, iterating via SendMessage. This parallelized the expensive investigation while keeping builds
+collision-free. Two subagents needed a second SendMessage round (WatersConnect: the error-scenario layer;
+ConsoleImportEi: the reader was proven correct, redirected to the extraction layer). **Reusable finding:**
+a stale incremental build can silently skip a just-edited file (WatersConnect Edit 5/6 didn't compile on
+net8 but a stale `CommonFileDialogs.dll` made a "verify" pass look like a no-op) -- when a fix "does
+nothing", force a clean rebuild of the edited assembly before trusting the result.
+
+**Fixed + verified (first 5, done directly):**
+- `TestTriggeredAcquisition` (`8787075894`, pwiz-sharp) -- an mzML integer array carrying a numpress term
+  (intensity array tagged "32-bit integer" + "MS-Numpress positive integer / Pic") threw
+  `NotImplementedException` in `BinaryDataEncoder.DecodeIntegers`. cpp parity (IO.cpp:2461-2478): for mzML
+  (not mzMLb) a numpress array's integer type term is meaningless (numpress defines word size + format), so
+  it's remapped to float and decoded as doubles into a BinaryDataArray. `MzmlReader.ReadBinaryDataArray`
+  now flips `isInteger=false` when numpress is set on the base64 path (gated on no external HDF5 source).
+- `TestImportFullScanNarrowScanWindows` (`a53855026c`, pwiz-sharp) -- HDF5 1.10's native H5Fopen/H5Fcreate
+  take an ANSI `const char*`, so the Unicode "Utest" dir mangled the path and the open failed though
+  File.Exists saw it. Feed `H5F.open`/`H5F.create` the 8.3 short name via `Filesystem.GetNonUnicodePath`.
+- `TestDissociationMethod` (`1326a828c9`, pwiz-sharp + sandbox) -- `CVTermInfo.ShortName` was stubbed to
+  return the full Name, and the sandbox MsDataFileImpl read the dissociation method via `.Name`, so it came
+  through as "collision-induced dissociation"/"beam-type..." where the legacy pwiz.CLI reader produced
+  "CID"/"HCD". Skyline's SpectrumClassFilter matches the short form -> net8 filter dropped every spectrum ->
+  TryLoadChromatogram false. Implemented `ShortName` = shortest of Name + ExactSynonyms (cpp cv.inl:54; the
+  OBO already loads "CID"/"HCD" as EXACT synonyms) and routed the two mechanical-port `.Name` sites
+  (`GetCvParamName`, dissociation method) that stand in for cpp `shortName()` back to `.ShortName`.
+- `TestSynchSiblingsSmallMolecules` (`74b9a39baa`, test-only) -- NOT a product regression. The molecule
+  dialog stores the small-molecule adduct in formula form `[M+H]` (`EditCustomMoleculeDlg.OkDialog` ->
+  `Adduct.NonProteomicProtonatedFromCharge`), not the proteomic charge-only `Adduct.SINGLY_PROTONATED`.
+  The comparison passed on net472 only because MSTest v2's `Assert.AreEqual` used `object.Equals` ->
+  `CustomMolecule.Equals` (ignores adduct); MSTest v3 (net8) uses `EqualityComparer<T>.Default` ->
+  `IEquatable<CustomIon>.Equals` (compares adduct). Fix: build the expected CustomIon with `[M+H]`.
+  **Reusable finding:** any net8 `Assert.AreEqual(a,b)` that "should be equal but isn't, same ToString" is
+  likely MSTest v2->v3 honoring IEquatable where v2 used object.Equals -- check for a type whose
+  `IEquatable<T>.Equals` is stricter than its (possibly inherited) `object.Equals`.
+- `TestPasteMolecules` (`35a895b2e5`, product + test) -- net8 float/double `ToString()` shortest-round-trip
+  in the small-molecule paste-validation errors (`delta "402.99658"` vs `"402.9966"`, mass
+  `"503970013.01879007"` vs `"503970013.01879"`). Product fix: `SmallMoleculeTransitionListReader` m/z msg
+  floats -> G7; `CustomMolecule.Validate` mass double -> G15. Test builds its expected strings through an
+  `Mz7` helper applying the same G7 so they match on both frameworks. **A pure test-value change can't work
+  here** -- the product's computed `(float)(mzCalc-mz)` and a rounded literal are adjacent floats that
+  render differently, and net472 vs net8 differ, so the framework-agnostic fix is deterministic product
+  formatting (G7 float / G15 double) + the test formatting its expected the same way.
+
+**Fixed + verified (last 4, via parallel subagents):**
+- `TestKoinaSkylineIntegration` (`1206df1689`, Skyline) -- NOT the Grpc.Net stall the handoff guessed. A
+  `dotnet-dump` of the hung process showed the test thread parked in `WaitForConditionUI` with NO prediction
+  or gRPC thread running. `GraphSpectrum.UpdateKoinaPrediction` (+ its `_koinaRequest` field + the CE-toolbar
+  update) were still `#if NET472` mechanical-port stubs, so net8 returned null and never called `Predict()` ->
+  the predicted spectrum never appeared -> infinite wait. Model/Koina is fully compiled on net8 and the
+  already-working `KoinaPingRequest` proves the fake client + Grpc.Net wiring are fine, so the guards were
+  stale; removed them.
+- `TestWatersConnectExportMethodDlg` (`f06835cd5d`, CommonMsData + CommonFileDialogs + test) -- three layers:
+  (1) test registered an empty WatersConnect account (blank username); IdentityModel 7 validates UserName
+  client-side and throws before the token request reaches the mock -> give the dummy account a username.
+  (2) `Authenticate()` runs on the UI thread; blocking `RequestPasswordToken/RefreshTokenAsync().Result`
+  deadlocked the WinForms SynchronizationContext -> `Task.Run(...).Result`. (3) two `BaseFileDialogNE`
+  blocks were stale `#if NET472` stubs (the single-account nav gate unconditionally navigated instead of
+  gating on `SupportsMethodDevelopment`; the auth-exception handler threw `NotSupportedException`); restored
+  the net472 logic and un-guarded the `pwiz.CommonMsData.RemoteApi.WatersConnect` using so it resolves on net8.
+- `ConstantNeutralLossTest` (`ba405544d2`, pwiz-sharp Agilent) -- NOT an Agilent reader hang. A dump showed
+  the load threw `NullReferenceException` (which Skyline's ImportResults/WaitForConditionUI silently turns
+  into a hang). `ChromatogramList_Agilent.FillTic` guarded array creation on `times.Count > 0`, so the empty
+  MS1-only TIC of an all-MS2 CNL `.d` got no time/intensity/ms-level arrays -- but the wrapper's
+  `GetChromatogram` dereferences `GetTimeArray().Data` unconditionally. cpp always emplaces the arrays when
+  binary data is requested; dropped the guard. (Also: the Agilent `.d` vendor test data was unextracted --
+  `Reader_Agilent_Test.data.tar.bz2` -- a prerequisite for every Agilent test on this checkout.)
+- `ConsoleImportEiTest` (`288c8647d7`, pwiz-sharp mzXML) -- the reader was PROVEN correct (decodes all 4572
+  spectra); the failure was in extraction. `MzxmlReader.ReadOneScan` built the scan window only from
+  startMz/endMz; this Agilent GC-EI mzXML omits those but carries lowMz/highMz, so the scan got no scan
+  window -> Skyline couldn't synthesize the all-ions MS1 precursor (GetMs1Precursors needs ScanWindows) ->
+  no isolation window -> empty ChromInfoList on every transition -> `t.Results[0][0]` IndexOutOfRange. cpp
+  (SpectrumList_mzXML.cpp:483-490) falls back to lowMz/highMz; matched it.
+
+**net8 build/stage/run recipe used** (host, offscreen), unchanged from session 3:
+`dotnet build TestFunctional\TestFunctional.csproj -f net8.0-windows -c Release -p:IAgreeToVendorLicenses=true`
+-> `pwsh -File .\Stage-Net8Tests.ps1 -Configuration Release -NoRuntime` -> from `bin\staging-net8\Release`:
+`.\TestRunner.exe test=A,B,C parallelmode=off loop=1 language=en offscreen=on`. Wrap TestRunner in
+`timeout <s>` when probing a possible hang; kill leftover `TestRunner.exe`/`Skyline-daily.exe` between runs.
+
 ## Status (2026-07-08, session 3)
 
 ### Committed the Tier-1 TestFunctional batch + drove TestManageLibraryRuns and TestLibraryBuild GREEN
