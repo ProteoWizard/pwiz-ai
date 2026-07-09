@@ -11,9 +11,9 @@
 - **Branch**: `Skyline/work/20260703_osprey_memory_bounding`
 - **Base**: `master` (`d032f5978`)
 - **Created**: 2026-07-03
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4355](https://github.com/ProteoWizard/pwiz/issues/4355)
-- **PR**: (pending)
+- **PR**: [#4378](https://github.com/ProteoWizard/pwiz/pull/4378) (merged 2026-07-08 as f4de686450)
 
 ## Problem (evidence)
 
@@ -609,3 +609,21 @@ arrays already spilled to parquet stay resident for all N files. Start at Phase 
 consumer of `Features`/`CwtCandidates`/`Fragment*`/`ReferenceXic*`). Gate on
 `regression.ps1` (byte-identical) + a `ProfilerHooks` measurement showing <64 GB for ~80
 files. Rust reference (frozen) at `D:\GitHub-Repo\maccoss\osprey`.
+
+## Progress Log
+
+### 2026-07-08 - Merged
+
+PR #4378 merged as commit f4de686450 (squash). Shipped the memory-bounding work
+(#4355 step-a + i/ii/iii, #4374 2nd-pass streaming, and the beyond-Rust FdrProjection
+struct-shrink with survivor reload) AND the folded-in Percolator streaming-only change
+(removed the direct/small-experiment path on both dispatch sites; Stellar golden
+re-baselined 56534 -> 57112; dead-code cleanup + self-review doc fixes). Master merged
+in #4386 (--fdrbench-pass both) via Update-branch; verified golden-neutral. Gates green:
+build + 473 unit tests + zero-warning inspection; TeamCity Perf/Regression 4083634
+SUCCESS (Stellar + Astral mode1/2/3 + perf); entrapment FDP 0.90% @ 1% q; cross-impl
+bit parity vs Rust at 1e-9 (Stellar 57112==57112, Astral 160358==golden). The
+streaming-only half is documented in [[TODO-20260708_osprey_percolator_streaming_only]]
+and matched by maccoss/osprey#51 (still open, base reconciliation-v3). Deferred (tracked
+separately): Stage-6 reconciliation rescoring (#4376) and the resident library (#4372),
+the two remaining levers toward the sub-64 GB target.
