@@ -6,6 +6,9 @@
 **Follows:** #4378 (scoring/join bounding + default-on FDR streaming), #4381 (library),
 #4376/PR #4394 (reconciliation drop). **Byte-parity is the hard gate on every phase.**
 
+**Status (2026-07-09):** Lever 1 (#4397) **MERGED as PR #4400** (`c9526f0e`, squash). Lever 2
+(#4398, dense XCorr spectrum cache) is still **ACTIVE** — this TODO stays open for it.
+
 ## Where the memory actually goes (measured, 82-file Astral, 2026-07-08)
 
 Run completed in 8 h 28 m on a 64 GB box, peak WS **55.61 GB** (`peak_paged` 77.47 GB), blib
@@ -50,7 +53,8 @@ modified sequence across ALL files, so a streaming loader must assign insertion-
 
 **Expected: 53.13 GB → ~6 GB** (191 M × 32 B), and the garbage spike goes with it.
 
-**Status:** branch `Skyline/work/20260708_osprey_lean_fdr_stub` (off #4378), commit `9b2073426`:
+**Status: MERGED 2026-07-09 as PR #4400** (`c9526f0e`, squash; Fixes #4397). Branch was
+`Skyline/work/20260708_osprey_lean_fdr_stub` (rebased off #4378 onto master before merge):
 - `FdrProjectionSet.Builder` (`Osprey.FDR/FdrProjection.cs`) — streaming rows + insertion-order
   ids + ordinal remap in `Build()`.
 - `ParquetScoreCache.ReadFdrStubScalars` (`Osprey.IO`) — reads the 5 needed columns
@@ -59,9 +63,14 @@ modified sequence across ALL files, so a streaming loader must assign insertion-
 - `TestFdrProjectionBuilderMatchesBuildFromEntries` — pins element-for-element parity.
 - Build + 474 tests green.
 
-**Remaining:** wire `PerFileScoringTask` (publish the lean set) + `FirstJoinTask` (consume it,
-skip `BuildFromEntries`); keep fat-stub loads lazy for model-diagnostics/FDRBench and the merge
-path. Then `regression.ps1 -Dataset Stellar`.
+**Shipped in #4400:** wired `PerFileScoringTask` (publishes the lean `FdrProjections` byproduct)
++ `FirstJoinTask` (consumes it, skips `BuildFromEntries`); fat-stub loads stay on
+model-diagnostics / FDRBench pass 1 / SecondPassFDR + the merge/rehydrate path. Gates green:
+build + 473 tests, `regression.ps1 -Dataset Stellar` mode1/2/3 byte-identical, `Test-PerfGate`
+PASS (+0.1% total), and the TeamCity Perf/Regression (Stellar+Astral) on `pull/4400`. Copilot
+review added a defensive `ExpectReconciledInput` term to the lean gate (byte-neutral; that mode
+is Rehydrate-routed). **Deferred: the at-scale 82-file Astral `OSPREY_LOG_MEMORY` measurement to
+confirm 53 → ~6 GB** (correctness is proven; this is the memory-payoff number).
 
 ### Wiring design (the structural fact that makes this safe)
 
