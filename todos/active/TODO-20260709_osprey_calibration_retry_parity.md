@@ -1,6 +1,7 @@
 # Osprey C# drops Rust's calibration retry ladder and the >=50-point acceptance floor
 
-**Status:** PRs open; all local gates green; awaiting self-review + TeamCity Astral legs
+**Status:** PRs open; all local gates green; Rust CI green on all 3 platforms.
+Awaiting **maintainer action**: TeamCity Astral legs, then Brendan's review/test/merge.
 **Issue:** https://github.com/ProteoWizard/pwiz/issues/4401
 **PR (pwiz):** https://github.com/ProteoWizard/pwiz/pull/4402
 **PR (maccoss/osprey):** https://github.com/maccoss/osprey/pull/52
@@ -62,6 +63,25 @@ which discarded a **perfectly good pass-1 calibration** and ran the file uncalib
 the same failure mode as #4401, reached by another route. `docs/02-calibration.md:145`
 says the pass-1 calibration should be kept. Clean files never hit it (`n_refined ~ 800`).
 
+## A second bug, in both trees, that two self-review passes missed
+
+Copilot (on maccoss/osprey#52) caught what neither self-review did. Pass 2 calls
+`select_fit_plan(n_refined)` like pass 1, so it can land in the **linear tier**
+(`n_refined` in `[50, 100)` -- reachable, because pass 2 only runs when pass 1 was LOESS,
+i.e. `n_pass1 >= 100`, and pass 2 requires `>= 50`). But the linear-tier guards
+(`has_sufficient_rt_span`, `is_plausible_linear_fit`) were applied **only to pass 1**, and
+pass 2 was accepted on **R^2 alone**. A line through points clustered in a narrow RT span
+scores R^2 ~ 1 while extrapolating badly, so it could displace a perfectly good pass-1
+LOESS calibration. Fixed in both trees via `is_refined_fit_acceptable` /
+`IsRefinedFitAcceptable`, which is a no-op for a LOESS refit and applies both guards to a
+linear one. Mutation-tested: forcing it to always accept fails
+`TestRefinedLinearFitMustClearPass1Guards`.
+
+**Lesson:** both self-review passes checked the *new* guards' internal arithmetic and the
+pass-1 call site, and neither asked "where *else* can a linear fit be produced?" The guard
+was reviewed; the guard's coverage was not. Worth adding to the review prompt: for any new
+validation, enumerate every path that can produce the validated object.
+
 ## What was implemented
 
 ### pwiz (`Osprey.Tasks/Calibrator.cs`, `Osprey.Chromatography/RTCalibration.cs`)
@@ -107,6 +127,9 @@ says the pass-1 calibration should be kept. Clean files never hit it (`n_refined
     narrowed window, so points outside a mis-centred window can never be recovered --
     harmless at n=729, the whole risk at the bottom of the tier. This is Mike's original
     self-confirming worry, now structurally impossible in the linear regime.
+  * **A pass-2 fit that lands in the linear tier must clear the same guards as pass 1**
+    (`IsRefinedFitAcceptable`) -- see the Copilot finding above. R^2 alone is not evidence
+    that a line is right; a narrow-span line scores R^2 ~ 1.
 * **Fallback now uses the range line, not the identity.** Both trees previously searched
   at the raw library RT when calibration failed (C# `PeakDataExtractor.cs:97`, Rust
   `pipeline.rs:8265` + `MzRTIndex::build`), discarding the `rtSlope`/`rtIntercept` range
@@ -179,10 +202,47 @@ two differently-strided samples, and the larger LDA training set sharpens the di
   `Math.Min(20, n)` where Rust uses `min(n, min_calibration_points)` (inert today, since
   both are <= n and the guard is the only consumer, but a latent divergence if `MinPoints`
   ever becomes fit-affecting).
-* **Rust:** `cargo fmt` clean, `clippy -D warnings` clean, 557 tests pass.
-* **C#:** 487 tests pass. Inspection adds **zero** new warnings (the 11 remaining, in
+* **Third self-review, targeted at the pass-2 guard alone** (the one behaviour change no
+  independent reviewer had seen): no HIGH, no MEDIUM. It independently enumerated every
+  `Fit` call site to confirm the guard's *coverage*, not just its arithmetic: pass 1 is
+  guarded pre- and post-fit, pass 2 now at both acceptance sites, `CalibrationRefit.Refit`
+  never sets `LinearFit` (always LOESS), resume loads a stored model without refitting, and
+  the HPC reduce merges PSMs rather than RT fits. It also proved the guard is a strict
+  no-op above the tier: `SelectFitPlan` gates on `n < 100` *unconditionally*, so
+  `n_refined >= 100` can never be linear even under a non-default `MinCalibrationPoints`.
+  Two LOWs, both accepted as-is: the Rust test builds its LOESS case with default
+  bandwidth/min_points where C# pins 0.3/20 (both only assert the method and the guard
+  result, so no parity risk), and C# rejects a non-finite fitted slope via the ratio check
+  where Rust rejects it earlier via `!is_finite()` (same outcome on every input;
+  pre-existing, and a slope over finite points cannot be infinite).
+* **Rust:** `cargo fmt` clean, `clippy -D warnings` clean (against `stable` 1.97, after a
+  `rustup update` -- CI tracks stable and 1.97 added a `clippy::question_mark` lint that
+  fires on untouched `osprey-io/src/mzml/parser.rs`, which is what turned CI red, not this
+  PR), 557 tests pass. **GitHub CI green on ubuntu, macOS and windows** (`38604e6`).
+* **C#:** 489 tests pass. Inspection adds **zero** new warnings (the 11 remaining, in
   `SystemMemory.cs` and `PerFileScoringTask.cs`, are pre-existing on master -- verified
   against a stashed clean tree).
+
+## Why those three files, specifically: low yield, not bad chromatography
+
+Worth recording, because the obvious hypotheses are all wrong. Controlled comparison of
+the healthy `SEA-AD-0001_..._A01_005` against the failing `SEA-AD-0071_..._G05_093`, with
+an identical 100k sample, the same seed 43, and the same 1,594,868-target library:
+
+| | healthy 005 | failing 093 |
+|---|---|---|
+| LDA target wins | 823 | 241 |
+| after S/N filter | 689 pts (-16.3%) | 193 pts (-19.9%) |
+| MS1 mass precision | 1.56 ppm SD | **1.29 ppm SD** |
+| fit once enough pts accumulate | R^2 ~ 0.998 | R^2 = 0.9984 |
+
+So 093 is **~3.4x less detectable**, and *nothing else* differs: S/N attrition is
+comparable, its mass precision is actually **tighter**, and its RT behaviour is fine --
+once the ladder gives it enough points it fits as well as any healthy file. It is not an
+RT problem, a peak-shape problem, or an instrument problem. The ladder is therefore the
+right fix in kind: it buys **more evidence** rather than stretching thin evidence further,
+which is why the +12% recovered IDs rest on 729 genuinely confident peptides rather than
+on a loosened threshold.
 
 ## Known gaps
 
@@ -193,10 +253,12 @@ on a *band* file. Accepted for now (Mike, 2026-07-09) on indirect evidence: the 
 target-decoy FDR-controlled exactly as before, and arise from a 4x tighter RT window plus
 m/z recalibration, not from loosening anything.
 
-The graduated tier, the low-n linear regime and the range-line fallback are likewise
-**not exercised by any real data** -- no file in the 82 lands below 200 after the ladder,
-and none fails calibration. They are covered by unit tests only, which is the same
-coverage-hole shape that produced #4401.
+The graduated tier, the low-n linear regime, the pass-2 linear guard and the range-line
+fallback are likewise **not exercised by any real data** -- no file in the 82 lands below
+200 after the ladder, and none fails calibration. They are covered by unit tests only,
+which is the same coverage-hole shape that produced #4401. (The pass-2 guard is the
+sharpest instance: `n_refined` in `[50, 100)` occurs in no file in Stellar, Astral, or the
+82, which is precisely why the missing guard survived implementation and two reviews.)
 
 **Next step: expose the ladder knobs so those paths can be tested on real data.**
 `--calibration-sample-size` / `--calibration-retry-factor` / `--min-calibration-points`
@@ -212,6 +274,19 @@ cache), but are reachable from neither the CLI nor an env var. With them:
 Cross-impl: `Compare-EndToEnd-Crossimpl.ps1` only accepts `-Dataset Stellar|Astral`, so it
 cannot be pointed at a SEA-AD file as-is. With the knobs above, a band fixture could be
 built on Stellar instead and compared properly.
+
+## Handoff (2026-07-09)
+
+Everything reachable from this account is green. Two steps remain, both for a maintainer:
+
+1. **TeamCity** `ProteoWizard_OspreyWindowsNetPerfRegressionTests`, triggered with
+   `branch=pull/4402`. It **must** be the `pull/4402` ref -- passing the branch name
+   silently builds master and reports a meaningless green.
+2. **Brendan** to review, test and merge (pwiz #4402), and to merge maccoss/osprey#52.
+   Merge order does not matter: neither PR depends on the other at build time, and the two
+   trees are only compared by `Compare-EndToEnd-Crossimpl.ps1`, which is run manually.
+
+Mike cannot trigger TeamCity from his account (2026-07-09).
 
 ## Files
 
