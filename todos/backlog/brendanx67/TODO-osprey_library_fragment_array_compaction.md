@@ -65,20 +65,28 @@ caches). Key techniques Osprey's `LibraryCache` (and likely `SpectraCache`) shou
   without a full scan.
 - **Bulk block reads of blittable struct arrays.** #4381 made `LibraryFragment` a
   reference-free value struct, so a whole entry's (or the whole library's) fragment array can
-  be read with a single block copy / `MemoryMarshal.Cast<byte, LibraryFragment>` instead of
-  the current per-field `BinaryReader.ReadDouble()/ReadSingle()/...` per fragment. That is the
-  big load-time win the struct change unlocks; pair it with the flat shared fragment array
-  (idea 2 above) so the on-disk block maps directly to the resident array. Watch endianness /
-  explicit `[StructLayout]` + padding so the format stays portable and versioned.
+  be read/written in ONE block copy instead of the current per-field
+  `BinaryReader.ReadDouble()/ReadSingle()/...` per fragment. That is the big load-time win the
+  struct change unlocks; pair it with the flat shared fragment array (idea 2 above) so the
+  on-disk block maps directly to the resident array. The canonical Skyline implementation is
+  `pwiz_tools/Skyline/Model/Results/ChromHeaderInfo.cs` -- see its `#region Fast file I/O`
+  blocks: `[StructLayout(LayoutKind.Sequential, Pack = 4)]` structs (with the "CAREFUL: this
+  ordering IS the on-disk layout, loaded directly into memory ... to avoid wasted space due to
+  alignment" comment) plus `unsafe ReadArray/WriteArray` that `fixed`-pin the exact-size array
+  and call `FastRead.ReadBytes` / `FastWrite.WriteBytes` (Randy Kern's Win32 ReadFile/WriteFile
+  p-invoke, one syscall for the whole array). The element count comes from the header/footer so
+  the array is allocated at final length once. Watch explicit layout/padding + endianness so
+  the format stays portable and versioned.
 - **Memory-mapped / lazy load.** Skyline's caches memory-map and read on demand; for a 300+
   file target where the library is read-mostly, mmapping the fragment block (or lazily paging
   it) keeps it out of the managed heap entirely.
 - Applies to the **binary spectrum cache** (`SpectraCache`) too -- same footer + block-read
   pattern for the per-file spectra, which are also large and read-mostly.
 
-Reference: Skyline `pwiz_tools/Skyline` chromatogram/spectrum cache infrastructure
-(ChromatogramCache and friends) -- the source of the footer format, block IO, and mmap
-patterns. A format change here is a `.libcache` VERSION bump (currently 2), so old caches
+Reference: `pwiz_tools/Skyline/Model/Results/ChromHeaderInfo.cs` is the best example of
+Skyline's most complex cache with the `Fast file I/O` block-IO pattern (per Brendan);
+`ChromatogramCache.cs` / `CacheFormat.cs` are the surrounding footer/format + mmap machinery.
+A format change here is a `.libcache` VERSION bump (currently 2), so old caches
 rebuild once -- acceptable for a load-speed/memory win, unlike the #4381 byte-preserving change.
 
 ## Gates (any of these)
