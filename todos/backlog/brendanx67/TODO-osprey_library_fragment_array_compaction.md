@@ -1,0 +1,70 @@
+# TODO-osprey_library_fragment_array_compaction.md -- Further resident-library compaction (post #4381)
+
+## Context
+
+#4381 (`Shrank the resident spectral library with value-struct fragments and string
+interning`, Fixes #4372) took the resident Carafe library from ~4.9 -> ~3.2 GB by
+making `LibraryFragment` / `FragmentAnnotation` value structs (dropping tens of millions
+of tiny heap objects) and interning the repeated per-entry strings. This is the accepted,
+output-preserving baseline. These are the next levers if we need to push further toward
+Mike's target: **84 files today, 300+ files on a 64 GB machine (DIA-NN-class)**.
+
+After #4381 the fragment storage is effectively an **array of structs**, but per entry:
+`LibraryEntry.Fragments` is a `List<LibraryFragment>`, so a 3.17M-entry library holds 3.17M
+`List<>` objects, each with (a) a separate backing `LibraryFragment[]` on the heap and
+(b) growth slack (Count < Capacity). At ~tens of bytes of list/array overhead plus slack
+per entry, that is meaningful fixed overhead on top of the fragment payload, and large
+per-entry arrays can land on the Large Object Heap (LOH) and fragment it.
+
+## Ideas (roughly increasing effort)
+
+1. **Trim per-entry list slack.** Cheapest win: `List<LibraryFragment>.Capacity = Count`
+   (TrimExcess) after each entry's fragments are finalized at load, or load straight into a
+   right-sized array. Removes the growth slack across 3.17M lists. Verify byte-identical
+   (regression.ps1) -- pure allocation change.
+
+2. **Flat shared fragment array (structure-of-arrays or one big AoS).** Replace the
+   per-entry `List<LibraryFragment>` with a single library-wide `LibraryFragment[]` plus a
+   per-entry `(int offset, int count)` slice (or a `ReadOnlyMemory<LibraryFragment>`). Kills
+   3.17M list/array objects and their slack; makes the whole fragment pool one contiguous
+   allocation. Downside: entries become views into a shared buffer, so decoy generation /
+   any code that rebuilds an entry's fragments needs an append-to-shared or per-entry
+   scratch path. Bigger refactor; do behind regression.ps1 + the perf gate.
+
+3. **Pull the Skyline / CommonUtil "Blocked" collection types over PortableUtil.**
+   Skyline.Util has `BlockedArray` / `BlockedArrayList` (block-chunked arrays that sidestep
+   LOH fragmentation and the 2 GB single-array limit while staying cache-friendly). A flat
+   fragment pool at 300+ files could exceed comfortable single-array sizes, so a blocked
+   backing store is the natural home. Investigate `pwiz.CommonUtil.Collections` too --
+   Nick Shulman has done substantial in-memory-size reduction for Skyline there, so it is
+   the most likely source of newer, reusable compact-collection code. Osprey currently only
+   depends on PortableUtil; per [[project_ospreysharp_exe_and_shared]] the direction for
+   Skyline<->Osprey sharing is via `pwiz_tools\Shared`, not embedding -- so the task is to
+   identify which Blocked/collection types to promote into a Shared assembly Osprey can
+   reference (or into PortableUtil) rather than copy-paste.
+
+4. **Micro-shrinks (low value, note for completeness).**
+   - `IonType : byte` (matches `NeutralLossCode : byte`); a few MB at 3M fragments. The
+     cache already maps via `IonTypeToByte`, so backing-type change is cache-neutral.
+   - `FragmentAnnotation.CustomLossMass` is an 8-byte double carried on every fragment but
+     meaningful only for `Custom` losses (rare). A side-table keyed by fragment index would
+     save 8 B/fragment for the common case, at the cost of complexity -- probably not worth
+     it vs. the flat-array win, but record it.
+
+## Gates (any of these)
+
+- Correctness: `regression.ps1 -Dataset Stellar` (and `-Dataset All` before a
+  behaviour/perf-sensitive merge) must stay byte-identical -- every idea above is intended
+  to be pure allocation/layout, output-preserving.
+- Coverage gap to close: the byte-identical regression uses the Carafe **TSV** library
+  (`DiannTsvLoader`), so it does NOT exercise `BlibLoader`. Any fragment-storage change
+  should add or lean on a blib round-trip assertion (see #4381 review note).
+- Perf: `Test-PerfGate.ps1` -- fewer/larger allocations should be neutral-to-faster; confirm
+  no regression.
+- Memory: `OSPREY_LOG_MEMORY` `[MEM library-resident]` post-GC probe (added in #4381) is the
+  before/after number to move.
+
+## Related
+- #4372 (resident library, closed by #4381), #4355/#4378 (per-file scoring + FDR streaming),
+  #4376 (stage-6 reconciliation, #4394) -- the other memory levers toward the 300-file goal.
+- Skyline `BlockedArray` / `BlockedArrayList`, `pwiz.CommonUtil.Collections` (Nick Shulman).
