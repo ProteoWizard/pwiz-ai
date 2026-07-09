@@ -1,126 +1,209 @@
 # Osprey C# drops Rust's calibration retry ladder and the >=50-point acceptance floor
 
-**Status:** open, not started
+**Status:** PRs open; all local gates green; awaiting self-review + TeamCity Astral legs
 **Issue:** https://github.com/ProteoWizard/pwiz/issues/4401
+**PR (pwiz):** https://github.com/ProteoWizard/pwiz/pull/4402
+**PR (maccoss/osprey):** https://github.com/maccoss/osprey/pull/52
+**Branch (pwiz):** `Skyline/work/20260709_osprey_calibration_retry_parity` (off `origin/master` c9526f0e6)
+**Branch (maccoss/osprey):** `fix/calibration-pass2-min-points` (off `origin/main` f6d2a0f)
 **Found:** 2026-07-09, while reading the 82-file SEA-AD Astral run log for unrelated memory work.
 
-## Symptom
+## Symptom (reproduced, Gate 0)
 
-Three of 82 SEA-AD files fell back to **uncalibrated** m/z and RT tolerances:
+Three of 82 SEA-AD files fell back to **uncalibrated** m/z and RT tolerances. Reproduced
+exactly on master `c9526f0e6`:
 
 ```
-[COUNT] Calibration pass 1 LDA winners [...0071_7043_G05_093]: 241 target wins, 2 decoy wins at 1% FDR
-[COUNT] Calibration pass 1 high-quality (S/N>=5) [...0071_7043_G05_093]: 193
+Calibration pass 1: 193 RT calibration points (from 243 peptides at 1% FDR)
 [WARN] Insufficient calibration points in pass 1 (193 < 200).
 [WARN] Calibration pass 1 failed. Using fallback tolerance.
-   RT: calibration failed - using fallback RT tolerance
 ```
 
-Affected: `SEA-AD-0071_7043_G05_093` (193 pts), `SEA-AD-0073_7181_G07_095` (178),
-`SEA-AD-pool-07_G10_098` (141). Each scored ~3.1 M entries normally (162 k MS2 + 974 MS1,
-167 windows) -- nothing crashed. They simply ran the whole search with **fallback tolerances**,
-which widens the candidate set and costs identifications. ~3.7 % of the cohort, silently degraded.
-
-A healthy file has ~823 LDA target wins; these have 241.
+`SEA-AD-0071_7043_G05_093` (193 pts), `SEA-AD-0073_7181_G07_095` (178),
+`SEA-AD-pool-07_G10_098` (141).
 
 ## Root cause: the port stopped after attempt 1
 
-**Rust** (`crates/osprey/src/pipeline.rs:686-760, 982-1032`):
+Rust has **two orthogonal loops**; C# ported only the inner one.
 
-1. `max_attempts` derived from `calibration_sample_size` / `calibration_retry_factor` (`:693`).
-2. `for attempt in 1..=max_attempts` (`:734`), sampling with seed `42 + attempt` (`:736`).
-3. If `num_confident_peptides < min_calibration_points` **and** attempts remain, grow the sample by
-   `retry_factor` and retry; the final attempt uses **ALL** library targets (`:988-990`).
-4. On the final attempt, if `num_confident_peptides >= ABSOLUTE_MIN_CALIBRATION_POINTS` (50),
-   **proceed with LOESS anyway** (`:1012`), with
-   `effective_min_points = min(num_confident_peptides, min_calibration_points)` (`:1032`).
-5. Only `< 50` is a hard error (`:1024`).
+| Loop | Rust | C# (before) |
+|---|---|---|
+| Outer *attempt ladder* | `for attempt in 1..=max_attempts` (`pipeline.rs:750`): seed `42+attempt`, accumulate matches per entry across attempts (`:730,:812-825`), retrain LDA on the accumulated set, grow sample on shortfall, final attempt uses ALL targets, accept `>=50` (`:1028`) | **absent** -- one `SampleLibraryForCalibration(..., 43UL)` |
+| Inner *tolerance refinement* | narrow RT tolerance from MAD, re-score, accept if R^2 holds (`:1087-1238`) | `pass1`->`pass2` in `RunCalibration` |
 
-**C#** (`pwiz_tools/Osprey/Osprey.Tasks/Calibrator.cs`):
+`CalibrationRetryFactor` existed, was hashed into `SearchIdentity`, and was read by nothing.
 
-- `SampleLibraryForCalibration(library, config.RtCalibration.CalibrationSampleSize, 43UL, ...)`
-  at `:197` -- **called once**, seed hardcoded `43UL` (= Rust's `42 + attempt` for attempt 1).
-  The comment at `:193-194` even says "on the first calibration attempt". There is no loop.
-- `RTCalibrationConfig.CalibrationRetryFactor` (`Osprey.Core/RTCalibrationConfig.cs:56`) is
-  **never read by any calibration code**. It exists, it is hashed into `SearchIdentity`
-  (`SearchIdentity.cs:119`), and `CoreTypesTest.cs:595` asserts its default. Dead config.
-- `ABSOLUTE_MIN_CALIBRATION_POINTS = 50` (`:60`) is used **only** for the pass-2 refinement
-  (`:317`, `:360`). It is never the pass-1 acceptance floor.
-- Pass 1 passes `MinCalibrationPoints` (200) as `minLoessPoints` (`:259`). Below it,
-  `RunCalibrationScoringPass` returns `null` (`:476-486`) and the caller falls back to
-  `MzCalibrationResult.Uncalibrated()` (`:261-266`).
+### Two corrections to the original issue text
 
-**Consequence:** at 193 / 178 / 141 points -- all far above 50 -- **Rust calibrates and C# does not.**
+1. **Rust does NOT abort the run below the 50-point floor.**
+   `run_calibration_discovery_windowed` returns `Err`, but its only caller
+   (`pipeline.rs:4278`) catches it, logs "Calibration failed ... Using fallback
+   tolerance", and searches that file uncalibrated. Net behaviour is a per-file
+   graceful degrade -- exactly what C# does, and what `docs/02-calibration.md:402`
+   documents. **There is no divergence**, so the "one bad file kills an 82-file batch"
+   design question was moot.
 
-## Why no gate caught it
+2. **`CalibrationMatch.score`'s doc comment was wrong.** `batch.rs:869` claimed
+   "Primary score (XCorr, same as xcorr_score)", but the field means "the primary score
+   of whichever scorer produced this match": XCorr from `run_xcorr_calibration_scoring`
+   (`:2210,:2367`), and the **co-elution correlation sum** from
+   `run_coelution_calibration_scoring` (`:2773`) -- the one the pipeline actually calls.
+   The accumulate step compares that field, so the C# equivalent is `CorrelationScore`,
+   **not** `DiscriminantScore` (LDA overwrites that in place between attempts).
+   Mutation-tested: swapping to `DiscriminantScore` fails `TestCalibrationMatchAccumulation`.
 
-Stellar and Astral regression files are clean; their calibration never dips below 200, so the
-branch is never executed. `regression.ps1` and `Compare-EndToEnd-Crossimpl` both pass. Byte-parity
-gates only prove agreement on paths the test data traverses -- this is a coverage hole, not a gate
-failure. **Any fix needs a regression file (or a synthetic library subsample) that lands in the
-50-200 band**, or the same hole swallows the fix.
+## A latent Rust bug on exactly the band files
 
-## Fix (restore parity first -- do NOT design a new algorithm yet)
+Pass 2 reused pass 1's `calibrator`, whose `min_points` is `effective_min_points`. On a
+band file that is `n_pass1` (e.g. 193), not 50 -- so a refit yielding 50..192 points
+cleared Rust's own `>= 50` guard (`pipeline.rs:1141`) and then tripped
+`RTCalibrator::fit`'s `min_points` check (`rt.rs:109`). The error propagated to the caller,
+which discarded a **perfectly good pass-1 calibration** and ran the file uncalibrated --
+the same failure mode as #4401, reached by another route. `docs/02-calibration.md:145`
+says the pass-1 calibration should be kept. Clean files never hit it (`n_refined ~ 800`).
 
-1. Implement the retry ladder in `Calibrator.cs`: loop `attempt = 1..max_attempts`, seed
-   `42 + attempt`, grow `currentSampleSize *= CalibrationRetryFactor`, final attempt uses all
-   targets. Mirror `pipeline.rs:686-760` exactly, including `max_attempts` derivation.
-2. Accept `>= ABSOLUTE_MIN_CALIBRATION_POINTS` on the final attempt and fit LOESS with
-   `effectiveMinPoints = Math.Min(nConfident, MinCalibrationPoints)`.
-3. Hard-fail only below 50, matching Rust's `OspreyError::ConfigError`. (Decide: C# currently
-   degrades to fallback tolerances rather than erroring. Rust errors. Which is right for a
-   82-file batch where one bad file should not kill the run? **This is a real design question --
-   Rust's behavior may itself be wrong for batch use.**)
-4. Re-run the three SEA-AD files and check they now calibrate.
+## What was implemented
 
-## Open question (Mike, 2026-07-09): bootstrap the window
+### pwiz (`Osprey.Tasks/Calibrator.cs`, `Osprey.Chromatography/RTCalibration.cs`)
 
-> "If we have <200 points after the second attempt but ~100 points, should we do a calibration
-> step with that and then use those windows to repeat the calibration again? We start with 25% of
-> the entire RT range; for noisy files that wide RT window might be the problem. I'm a bit worried
-> about the calibration making an error and making it worse."
+* Outer **retry ladder** mirroring `pipeline.rs:700-1271`: `ComputeMaxAttempts`, seed
+  `42+attempt`, per-`EntryId` accumulation (best `CorrelationScore`, carrying its S/N and
+  RTs), LDA retrained on the accumulated set, growth by `CalibrationRetryFactor`, final
+  attempt uses all targets.
+* `>=50` acceptance floor with `effectiveMinPoints = Math.Min(nConfident, MinCalibrationPoints)`.
+  `MinPoints` is a fit-time guard only (the other branch reading it is behind
+  `OutlierRetention < 1.0`, pinned to 1.0), and `effectiveMinPoints <= n` always, so the
+  clean path cannot shift.
+* Sub-50: graceful fallback, loud, `calibration_successful=false` (already wired via
+  `rtCalibration != null`).
+* **Graduated fit tier** (Mike, 2026-07-09): a LOESS local window holds `bandwidth * n`
+  points, so a fixed 0.3 bandwidth lets the window collapse as n falls (n=729 -> 219 pts,
+  193 -> 58, 100 -> 30, 50 -> 15). `SelectFitPlan` holds the window near the size the
+  default config yields at `MinCalibrationPoints` (0.3*200 = 60) by *widening* bandwidth
+  as n shrinks, and below `LINEAR_FIT_MAX_POINTS = 100` fits a global line
+  (`RTCalibratorConfig.LinearFit`, reported as `RTCalibrationMethod.Linear`). The linear
+  path reuses the existing knot representation, so `Predict`/`InversePredict`/model params
+  /resume/HPC merge are untouched.
+* **Low-n regime** (Mike, 2026-07-09: "even for <50 peptides a fit ... is better than just
+  the range", worried those 50 may not be confident):
+  * **Fit floor 50 -> `MIN_LINEAR_FIT_POINTS` = 15**, but guarded rather than trusted:
+    also requires the points to span >= 50% of the library RT range
+    (`HasSufficientRtSpan` -- leverage, not just count) and the fitted line to pass
+    `IsPlausibleLinearFit` (slope within 2x of the range mapping either way, positive,
+    predictions inside the acquisition window +/-10%). Any failure -> fallback.
+  * **Theil-Sen replaces OLS** for the linear tier. Those peptides cleared LDA + 1% FDR +
+    S/N, but at n~40 the FDR estimate is granular so a false positive or two can survive,
+    and OLS lets one at an RT extreme lever the slope. Theil-Sen's ~29% breakdown removes
+    that. Test: 3 false positives, 2 at the extremes, slope still recovered to 1e-9.
+  * **n-aware minimum RT tolerance** (Mike's explicit ask -- "if the MAD is small by luck
+    I'd rather have a minRTtolerance larger than 0.5 min"). The sampling error of a scale
+    estimate shrinks like `1/sqrt(n)`, so
+    `EffectiveMinRtTolerance(n) = MinRtTolerance * sqrt(MinCalibrationPoints / n)`:
+    0.50 min at n>=200 (unchanged), 0.71 at 100, 1.00 at 50, 1.83 at 15, capped at
+    `MaxRtTolerance`. Applied at all four floor sites (both calibration passes, the main
+    search, and the persisted JSON half-width) so they cannot disagree. The window still
+    tightens from the MAD -- just no further than the fit's own precision supports.
+  * **Pass-2 refinement is skipped off a linear fit.** Pass 2 re-scores *inside* the
+    narrowed window, so points outside a mis-centred window can never be recovered --
+    harmless at n=729, the whole risk at the bottom of the tier. This is Mike's original
+    self-confirming worry, now structurally impossible in the linear regime.
+* **Fallback now uses the range line, not the identity.** Both trees previously searched
+  at the raw library RT when calibration failed (C# `PeakDataExtractor.cs:97`, Rust
+  `pipeline.rs:8265` + `MzRTIndex::build`), discarding the `rtSlope`/`rtIntercept` range
+  mapping that calibration had already computed. `RTCalibration.FromLinearMapping` /
+  `RTCalibration::from_linear_mapping` now supplies it as a predict-only calibration
+  (C# via `ScoringContext.FallbackRtMap`, Rust via `fallback_rt_map`). It is the identity
+  -- hence a strict no-op -- whenever the two RT scales already agree, and only bites for
+  scale-mismatched libraries (e.g. Carafe `Tr_recalibrated` in seconds vs a minutes-keyed
+  mzML), where the search currently runs at a completely wrong RT. It carries no
+  residuals: the tolerance stays `FallbackRtTolerance`, `calibration_successful` stays
+  false, and Rust's reconciliation retention was re-gated on `cal_params` so the range
+  line cannot seed inter-replicate reconciliation.
+* Refactor: the monolithic `RunCalibrationScoringPass` split into `EmitScoringDumps`,
+  `MergeCalibrationMatches`, `BuildSortedMatchArray`, `RunLdaAndCollectPoints`,
+  `FitCalibrationPass`, `RunRefinementPass`, plus pure `ComputeMaxAttempts`,
+  `DecideLadderAction`, `SelectFitPlan`. Window preprocessing hoisted out of the loops.
 
-The worry is well-founded and worth stating precisely: **Rust's ladder increases the *evidence*
-(sample more library entries) while Mike's bootstrap narrows the *window* (re-search with a fit
-derived from weak data).** Narrowing a window using a fit estimated from 100 noisy points is
-self-confirming: points outside the (possibly wrong) window can no longer be recovered, so a bad
-pass-1 fit is entrenched rather than corrected. Rust's approach has no such failure mode.
+### maccoss/osprey (`pipeline.rs`, `rt.rs`, `batch.rs`)
 
-Note also that the existing pass-2 refinement already does a guarded version of this: it only
-re-scores when `pass1Tolerance < initialTolerance * 0.5` (`Calibrator.cs:306`) -- i.e. only when
-pass 1 was confident enough to tighten by 2x -- and it requires only 50 points on the refit.
+* Fixed the pass-2 `min_points` bug: the refit builds its own adaptive floor
+  (`n_refined.min(min_calibration_points)`) instead of reusing pass 1's calibrator.
+* Ported the same graduated tier (`select_fit_plan`, `LINEAR_FIT_MAX_POINTS`,
+  `RTCalibratorConfig::linear_fit`, `RTCalibration::method()`), so the two trees stay
+  comparable on band files.
+* Corrected the `CalibrationMatch.score` doc comment.
 
-**Sequence:** restore the ladder (step 1-3), then measure. The retry samples *more library entries*,
-which raises the confident-peptide count -- it is entirely possible these three files clear 200 on
-attempt 2 or 3 and the graduated-fit question becomes moot. Do not build the linear-fit /
-restrictive-LOESS tier until we know the ladder does not already solve it.
+## Gates
 
-If a graduated tier is still needed after measurement, the proposal on the table is:
-- 100-200 points: LOESS with a larger bandwidth (smoother, fewer effective dof)
-- 50-100 points: linear fit only
-- <50: fallback tolerances (or error)
+* **Gate 0 (baseline, master c9526f0e6):** bug reproduced; 193/178/141 points, all fell back.
+* **Gate 1 (Stellar regression, 1e-9 vs golden):** PASS -- `mode1 (vs golden)`,
+  `mode2 (resume)`, `mode3 (HPC chain)` all bit-identical. The ladder and the tier are
+  unreachable at n >= 200, so clean data cannot move.
+* **Gate 3 (SEA-AD 093/095/098, wiped work-dir):** all three now calibrate. The ladder
+  rescues them on **attempt 2** -- no file reaches the graduated tier.
 
-## Validation
+| File | pts (attempt 1) | pts (attempt 2) | after pass-2 | precursors before | after | delta |
+|---|---|---|---|---|---|---|
+| 0071 G05_093 | 193 | 633 | 729 (R^2 0.9984, SD 0.187) | 15,602 | 17,470 | +12.0% |
+| 0073 G07_095 | 178 | 554 | 691 (R^2 0.9985, SD 0.185) | 12,999 | 14,235 | +9.5% |
+| pool-07 G10_098 | 141 | 457 | 611 | 12,552 | 14,326 | +14.1% |
+| **total** | | | | **41,153** | **46,031** | **+11.9%** |
 
-- **Correctness oracle, not parity:** this changes which files get calibrated, so it moves the
-  discovery set. `regression.ps1` goldens will shift for any file in the 50-200 band. The arbiter is
-  **FDRBench entrapment** (see `ai/docs/osprey-development-guide.md`), not the golden.
-- **Cross-impl:** restoring the ladder should *converge* C# to Rust, so
-  `Compare-EndToEnd-Crossimpl` on a 50-200-band file becomes the real test. Today both agree only
-  because the band is never hit.
-- **Caution -- `SearchIdentity`:** `min_calibration_points`, `calibration_sample_size`, and
-  `calibration_retry_factor` are all hashed (`SearchIdentity.cs:117-119`). Changing defaults
-  invalidates every cache. Changing *behavior* at a fixed config does **not** bump the identity --
-  so a stale `.calibration.json` from a pre-fix run will be silently reused. Wipe work-dirs when
-  testing, or bump the identity deliberately.
+Experiment-level: 17,735 -> **19,797** peptides at 1% FDR (+11.6%).
+Wall clock **26m46s -> 19m22s**: the tighter RT window (fallback +/-2.0 min -> +/-0.50 min)
+shrinks the main search more than the extra attempt costs. MS1/MS2 mass calibration also
+goes from "not calibrated" to +1.10 / +0.19 ppm corrections.
+
+Note 193 -> 633 is a **3.3x** jump from a 2x larger sample: matches accumulate across the
+two differently-strided samples, and the larger LDA training set sharpens the discriminant.
+
+* **Gate 1 re-run after every phase** (tier; low-n floor + Theil-Sen + tolerance floor;
+  fallback range line): PASS each time. Every new path is unreachable at n >= 200, and
+  the tolerance floor reduces exactly to 0.5 min there.
+* **Calibration-only re-check** (`OSPREY_EXIT_AFTER_CALIBRATION=1`, file 093): bit-identical
+  to Gate 3 -- 193 -> 633 -> 729 points, MAD=0.103, R^2=0.9984, +/-0.50 min floor,
+  MS1 +1.10 ppm, MS2 +0.19 ppm. The low-n work is inert on these files.
+* **Rust:** `cargo fmt` clean, `clippy -D warnings` clean, 557 tests pass.
+* **C#:** 487 tests pass. Inspection adds **zero** new warnings (the 11 remaining, in
+  `SystemMemory.cs` and `PerFileScoringTask.cs`, are pre-existing on master -- verified
+  against a stashed clean tree).
+
+## Known gaps
+
+**Gate 4 (FDRBench entrapment) as originally scoped is vacuous.** Because the change is
+bit-identical on Stellar/Astral, running entrapment there measures nothing about the band
+path. Validating that the +4,878 recovered precursors are real needs an entrapment library
+on a *band* file. Accepted for now (Mike, 2026-07-09) on indirect evidence: the IDs are
+target-decoy FDR-controlled exactly as before, and arise from a 4x tighter RT window plus
+m/z recalibration, not from loosening anything.
+
+The graduated tier, the low-n linear regime and the range-line fallback are likewise
+**not exercised by any real data** -- no file in the 82 lands below 200 after the ladder,
+and none fails calibration. They are covered by unit tests only, which is the same
+coverage-hole shape that produced #4401.
+
+**Next step: expose the ladder knobs so those paths can be tested on real data.**
+`--calibration-sample-size` / `--calibration-retry-factor` / `--min-calibration-points`
+exist in `RTCalibrationConfig` and are already hashed into `SearchIdentity` (so no stale
+cache), but are reachable from neither the CLI nor an env var. With them:
+* `retry_factor = 1.0` makes `ComputeMaxAttempts` return 1, pinning 093 at exactly
+  **193 points** -- a real-data band fixture whose right answer we already know (the
+  729-point fit, R^2=0.9984).
+* shrinking `calibration_sample_size` walks 093 down through the band and below 50,
+  exercising the stiffened LOESS, the Theil-Sen line, and finally the fallback.
+`OSPREY_EXIT_AFTER_CALIBRATION=1` makes each such run cheap (calibration only, no search).
+
+Cross-impl: `Compare-EndToEnd-Crossimpl.ps1` only accepts `-Dataset Stellar|Astral`, so it
+cannot be pointed at a SEA-AD file as-is. With the knobs above, a band fixture could be
+built on Stellar instead and compared properly.
 
 ## Files
 
-- `pwiz_tools/Osprey/Osprey.Tasks/Calibrator.cs` (`:58-60`, `:193-197`, `:250-266`, `:306`, `:317`,
-  `:360`, `:476-486`)
-- `pwiz_tools/Osprey/Osprey.Core/RTCalibrationConfig.cs` (`:41` MinCalibrationPoints=200,
-  `:53` CalibrationSampleSize=100000, `:56` CalibrationRetryFactor=2.0)
-- `pwiz_tools/Osprey/Osprey.Core/SearchIdentity.cs` (`:117-119`)
-- Rust reference: `crates/osprey/src/pipeline.rs:686-760`, `:982-1032`;
-  `crates/osprey-core/src/config.rs:735-757`
-- Evidence log: `ai/.tmp/osprey-82-prior/run.log` (grep `Insufficient calibration`)
+- `pwiz_tools/Osprey/Osprey.Tasks/Calibrator.cs`
+- `pwiz_tools/Osprey/Osprey.Chromatography/RTCalibration.cs`, `CalibrationParams.cs`
+- `pwiz_tools/Osprey/Osprey.Test/CalibrationTest.cs`
+- Rust: `crates/osprey/src/pipeline.rs`, `crates/osprey-chromatography/src/calibration/rt.rs`,
+  `crates/osprey-scoring/src/batch.rs`
+- Run artifacts: `C:\temp\osprey-4401\{gate0-baseline,gate3-fixed}\` (SEA-AD tree kept
+  read-only via `--work-dir`; `--output-dir` alone is NOT enough -- the spectra cache still
+  lands beside the data).
