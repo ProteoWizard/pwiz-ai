@@ -2,10 +2,9 @@
 
 **Issue:** ProteoWizard/pwiz#4376
 **Branch:** `Skyline/work/20260707_osprey_reconciliation_memory`
-**Base:** #4378 branch `Skyline/work/20260703_osprey_memory_bounding` (tip `c3878bac1`), NOT bare
-master -- reconciliation memory only makes sense once scoring/join are bounded (#4378). Rebase
-onto master when #4378 merges.
-**Status:** investigation (measure-first). Follows #4372 (library, PR [#4381]) and #4378 (scoring/join).
+**Base:** master (rebased off the #4378 branch after #4378 merged).
+**Status:** Completed
+**PR:** [#4394](https://github.com/ProteoWizard/pwiz/pull/4394) (merged 2026-07-08 as 9353ed4c31)
 
 ## Problem
 
@@ -108,3 +107,20 @@ the reduction on the Carafe run with the managed-heap probe.
 - #4378 (`TODO-20260703_osprey_memory_bounding.md`): scoring/join bounding -- the base for this work.
 - #4372 (`TODO-20260705_osprey_library_resident_memory.md`, PR [#4381]): library floor, ~1.7 GB, independent.
 - Reconciliation (this) is the largest remaining memory lever per #4378's own ceiling analysis.
+
+## Progress Log
+
+### 2026-07-08 - Merged
+
+PR #4394 merged as commit 9353ed4c31 (squash). Shipped: drop each file's rescore transients
+(spectra / ms1 / isolation windows / rescored list nulled + a forced GC on the sequential path)
+right after WriteReconciledAndStamp, cutting reconciliation transient garbage ~48.7 -> ~17.4 GB,
+byte-identical, no measurable perf cost; plus two OSPREY_LOG_MEMORY reconciliation probes via a
+new shared `ProfilerHooks.LogManagedHeapAfterGcIfEnabled` helper (added during review to DRY the
+two probe blocks). Rebased off the #4378 branch onto master after #4378 merged; base retargeted.
+Gates: build + 473 tests + zero-warning inspection (local red is only the unrelated
+SystemMemory.cs / #4379 jb-CLI false positive); Stellar `regression.ps1` mode1/2/3 byte-identical
+vs the streaming-only golden (50,237,440); perf gate PASS (stage6 -1.5%, total +1.5%); TeamCity
+Perf/Regression on `pull/4394` green (Stellar + Astral). Fixes #4376 (auto-closed).
+Follow-up lever (deferred, tracked in the TODO): stream/project `LoadFullFdrEntries` so the
+per-file reload is small in the first place -- #4378's "biggest remaining full-reload."

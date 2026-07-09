@@ -14,6 +14,20 @@ This stub is retained only to keep the `[[TODO-osprey_model_diagnostics_null_ali
 link (from the partial-entrapment active TODO) resolving. See the consolidated TODO for the
 full design, gates, and references. Safe to delete once the inbound link is repointed.
 
+## Night-ready slice (2026-07-08, with Brendan + Mike) — Storey non-parametric ratio plot
+A bounded, TeamCity-green-PR-sized carve-out of §B, teed up for a `/night-session`:
+`ai/.tmp/handoff-20260708-osprey-model-diagnostics-two-prs.md` (PR 2, first priority).
+- **Storey's non-parametric null check** (Mike, 2026-07-08): ratio of the points between
+  targets and decoys on the left/null side is a **horizontal line** that rises at real hits;
+  a non-flat left side = decoy/false-target mismatch — no parametric fit needed (the
+  decoy-normal overlay misfits the skewed decoys, screenshot `...195912.png`).
+- **Decided scope:** a new plot on the **Density tab under "Score density by class"** with
+  exactly **two density-ratio lines — target:decoy and p_target:p_decoy** (the latter ≈1 flat,
+  the matched-null reference: entrapment ≈ entrapment-decoy, screenshot `...200147.png`) +
+  a **left-side flatness KPI**. NO console alarm, NO parametric f_false, keep the normal
+  overlay. Validation oracle = libdecoy (flat) vs gendecoy (non-flat). Diagnostics-only
+  (golden unchanged). Full design in the handoff.
+
 **Stashed here (2026-07-07):** the `OSPREY_BOOST_TARGET_DISCRIMINANT` instrument — a synthetic
 equal-chance violation that is invisible to the entrapment oracle, useful as a positive-control
 test fixture for these null-alignment / decoy-QC detectors — was lifted out of the

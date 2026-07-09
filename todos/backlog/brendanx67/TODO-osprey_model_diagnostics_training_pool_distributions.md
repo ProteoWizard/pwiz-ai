@@ -1,6 +1,9 @@
 # TODO: Osprey --model-diagnostics — per-feature "training-pool" (max-separation) distributions
 
-**Status**: Backlog (feature idea — design captured, NOT a coding task yet)
+**Status**: Backlog — **night-ready as PR 1 (second priority)** in
+  `ai/.tmp/handoff-20260708-osprey-model-diagnostics-two-prs.md` (Storey null-alignment PR 2
+  goes first). Decided scope: Option A (second binning pass after q), final-model global
+  q≤TrainFdr, full set shown ghosted. Diagnostics-only (regression golden unchanged).
 **Priority**: Medium (high interpretive value; enhances the just-shipped per-feature distributions)
 **Created**: 2026-07-06
 **Requested by**: Brendan
