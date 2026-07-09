@@ -157,6 +157,20 @@ nothing", force a clean rebuild of the edited assembly before trusting the resul
   no isolation window -> empty ChromInfoList on every transition -> `t.Results[0][0]` IndexOutOfRange. cpp
   (SpectrumList_mzXML.cpp:483-490) falls back to lowMz/highMz; matched it.
 
+**Full parallel run (post-fixes, `parallelmode=server workercount=8`, 1 host + 7 Docker):** 978 tests,
+22 failures (97.7%, down from 45 / 95.4% in the 07-06 run). Had to fix a net8 TestRunner coordinator crash
+first (`f10f89e4cd`): in parallel-server mode the per-worker connection threads wrote an unsynchronized
+shared StreamWriter -> racing `StreamWriter.WriteLine` throws IndexOutOfRange on net8 -> the worker thread's
+catch does `Environment.Exit`, aborting the whole run at ~375/978. Serialized the two WriteLine calls with a
+lock (counters already Interlocked). Host-verified all 22: **14 are container/language false-failures**
+(pass on host -- incl. my `TestImportFullScanNarrowScanWindows` + `TestPasteMolecules`; Docker workers run
+non-en languages and a `c:\pwiz` mount where 8.3 short names are off), **2 are documented headless-hangers**
+(`TestLabelLayoutDeterminism`, `TestPeakBoundaryCompare`), and **6 genuinely fail on the host in isolation --
+NONE touch this session's changed files** (verified: no stack hits): `TestCommandLineExportThermoMethod`
+(Thermo method export, the known double shortest-round-trip class), `TestToolService` (external-tool
+config/download, environmental), `TestDocumentSharing`, `TestFilesTreeForm`, `TestMiscForms`,
+`TestReplicatePivotGrid`. These 6 are the next shortlist; none are regressions from the 9 fixes.
+
 **net8 build/stage/run recipe used** (host, offscreen), unchanged from session 3:
 `dotnet build TestFunctional\TestFunctional.csproj -f net8.0-windows -c Release -p:IAgreeToVendorLicenses=true`
 -> `pwsh -File .\Stage-Net8Tests.ps1 -Configuration Release -NoRuntime` -> from `bin\staging-net8\Release`:
