@@ -477,9 +477,10 @@ in #4377.
 **Generate + validate one dataset (the committed runner):**
 
 ```
-# calibrated reference (no --protein-fdr):
+# default run -- as of #4395 this already produces BOTH models + the inflated
+# pass 2 (the second pass is always on; compare via the report's Pass 1/Pass 2 selector):
 bash ai/scripts/Osprey/ModelDiagnostics/Run-ModelDiagnostics.sh stellar
-# dual model + inflated pass 2 (adds --protein-fdr 0.01, into a separate -pfdr dir):
+# adds --protein-fdr 0.01 (now only sets the protein-q THRESHOLD, into a separate -pfdr dir):
 bash ai/scripts/Osprey/ModelDiagnostics/Run-ModelDiagnostics.sh stellar pfdr
 ```
 
@@ -494,23 +495,28 @@ to force it) or the model table + per-feature histograms are absent. The runner
 then diffs the HTML pass-2 curve vs a stock-FDRBench run of the same TSV via
 `Compare/Compare-Fdrbench-Html.py --pass <1|2>` (`RESULT: MATCH` at each gated q).
 
-**Why `--protein-fdr` matters right now (the usual reason to ask for it).** It
-fires a SECOND Percolator retrain on the post-reconciliation reported pool,
-which does two visible things:
-1. **Populates the Model tab's "1st pass / 2nd pass" selector.** Without
-   `--protein-fdr` the run trains a single model, so there is no second model to
-   compare and the selector does not appear. With it, you see how the retrained
-   model reweights the features (e.g. Stellar SG-weighted cosine ~44% -> ~30%
-   contribution) and can switch the composite + per-feature distributions
-   between the two models.
-2. **Shifts the pass-2 FDR upward**, because that retrain runs against a
+**The second pass is always on (as of pwiz #4395).** Reconciliation fires a
+SECOND Percolator retrain on the post-reconciliation reported pool on ANY run
+where Stage 6 rescored entries, independent of `--protein-fdr` (matching Rust,
+whose `protein_fdr` is a plain f64 that always runs; the C# gate is
+`MergeNodeTask.AnyReconciledParquet`). `--protein-fdr` now only sets the
+protein-q THRESHOLD (default 0.01), NOT whether the machinery runs. So both
+things the retrain does are visible on a plain run with NO `--protein-fdr`:
+1. **The Model tab's "1st pass / 2nd pass" selector is populated** -- you see how
+   the retrained model reweights the features (e.g. Stellar SG-weighted cosine
+   ~44% -> ~30% contribution) and can switch the composite + per-feature
+   distributions between the two models.
+2. **The pass-2 FDR is shifted upward**, because that retrain runs against a
    decoy-DEPLETED null -- the known anti-conservative source
-   ([[project_osprey_pass2_recalibration_inflates_fdr]]). On Stellar libdecoy
-   the pass-2 combined FDP goes ~0.90% (off) -> ~1.5% (on). Since #4390's
-   best-of-runs q-clamp landed, `--protein-fdr` ALSO drops ~5% of reported IDs
-   on standard runs -- the clamp removing exactly those pass-2 recalibration
-   violators. So run WITHOUT it to reproduce the well-calibrated reference; run
-   WITH it to demonstrate the dual model and the pass-2 recalibration story.
+   ([[project_osprey_pass2_recalibration_inflates_fdr]]). On Stellar libdecoy the
+   pass-2 combined FDP is ~1.47% vs the well-calibrated pass-1 ~0.90% (reproduced
+   2026-07-09 on the #4395 binary, no `--protein-fdr`). This is now the DEFAULT,
+   with no committed off-switch; the fix + a kill-switch
+   (`OSPREY_PASS2_QVALUE`) are tracked in
+   [[TODO-osprey_pass2_recalibration_fix.md]]. Compare the two via the report's
+   Pass 1 vs Pass 2 selector within a single run -- no need to toggle
+   `--protein-fdr`. (Its interaction with #4390's best-of-runs q-clamp, formerly
+   ~5% ID drop, now happens by default too; re-measure its post-#4395 ID effect.)
 
 **Screenshots** (the browser extension can't screenshot `file://`): headless
 Chrome via `ai/scripts/Osprey/ModelDiagnostics/Shot-ModelDiagnostics.py <html>
@@ -536,11 +542,14 @@ science explanation, not just a green build:
   claimed 1%. Confirmed on both instruments -- this is Mike's original
   motivation for library-supplied decoys, and the product guidance is
   to prefer them on entrapment libraries.
-- **`--protein-fdr` is not reporting-only today**: it triggers the
-  2nd-pass Percolator recalibration, which inflates Stellar
-  library-decoy FDP from 0.92% (off) to 1.57% (on). Carrying the full
-  1st-pass score->q null to Stage 7 and transferring q through it
-  (TRIC-style) restores 0.86%.
+- **The 2nd-pass Percolator recalibration is anti-conservative and now
+  runs by default** (pwiz #4395 made it independent of `--protein-fdr`):
+  Stellar library-decoy combined FDP ~1.47% (pass 2) vs ~0.90% (pass 1),
+  reproduced 2026-07-09 on the #4395 binary with no `--protein-fdr`.
+  Historically measured as 0.92% (2nd pass off) -> 1.57% (on); carrying
+  the full 1st-pass score->q null to Stage 7 and transferring q through it
+  (TRIC-style) restores 0.86%. Fix + kill-switch:
+  [[TODO-osprey_pass2_recalibration_fix.md]].
 
 ### Caveats
 

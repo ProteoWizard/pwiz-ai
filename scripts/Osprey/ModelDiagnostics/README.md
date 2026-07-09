@@ -9,10 +9,13 @@ Convenience wrappers for generating and validating the Osprey
   caches (keeps `*.scores.parquet`), re-runs Osprey with `--model-diagnostics`
   (+ `--fdrbench --fdrbench-pass 2` for the cross-check), then diffs the HTML
   pass-2 curve vs stock FDRBench via `../Compare/Compare-Fdrbench-Html.py`.
-  Add `pfdr` to include `--protein-fdr 0.01` (into a separate `-pfdr` output
-  dir) — that is what populates the Model tab's 1st/2nd-pass selector and
-  shifts pass-2 FDP up (the decoy-depleted-null recalibration). Override the
-  binary with `OSPREY_EXE=...`, data root with `OSPREY_TESTDIR=...`.
+  As of pwiz #4395 the second pass is always on, so a plain run ALREADY
+  populates the Model tab's 1st/2nd-pass selector and shows the shifted (~1.47%
+  on Stellar libdecoy) pass-2 FDP — no `--protein-fdr` needed. Add `pfdr` to
+  include `--protein-fdr 0.01` (into a separate `-pfdr` output dir); post-#4395
+  that only sets the protein-q threshold (re-measure any residual effect on the
+  reported ID count via #4390's q-clamp). Override the binary with
+  `OSPREY_EXE=...`, data root with `OSPREY_TESTDIR=...`.
 
 - **`Shot-ModelDiagnostics.py <html> <outdir> <stem>`** — headless-Chrome
   screenshots of the report's tabs/views (the browser extension can't

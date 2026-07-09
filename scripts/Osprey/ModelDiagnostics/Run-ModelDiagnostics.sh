@@ -11,18 +11,18 @@
 #   pfdr  -> add --protein-fdr 0.01 (see WHY below), into a separate -pfdr dir.
 #
 # WHY the pfdr toggle matters (read before choosing):
-#   --protein-fdr fires a SECOND Percolator retrain on the post-reconciliation
-#   reported pool. That does two visible things in the report:
-#     1) populates the Model tab's "1st pass / 2nd pass" selector (without it the
-#        run trains one model, so there is no 2nd model to show);
-#     2) shifts the pass-2 FDR upward, because the retrain runs against a
+#   As of pwiz #4395 the SECOND Percolator retrain on the post-reconciliation
+#   reported pool runs on ANY reconciled run, independent of --protein-fdr. So a
+#   plain run ALREADY shows both report effects:
+#     1) the Model tab's "1st pass / 2nd pass" selector is populated (two models);
+#     2) the pass-2 FDR is shifted upward, because the retrain runs against a
 #        decoy-DEPLETED null -- the known anti-conservative source
 #        (project_osprey_pass2_recalibration_inflates_fdr). On Stellar libdecoy
-#        the pass-2 combined FDP goes ~0.90% (off) -> ~1.5% (on).
-#   So run WITHOUT pfdr to reproduce the well-calibrated target PNGs; run WITH
-#   pfdr to demonstrate the dual model + the pass-2 recalibration inflation.
-#   (Since #4390's best-of-runs q-clamp, --protein-fdr also drops ~5% of reported
-#   IDs on standard runs -- the clamp removing exactly those pass-2 violators.)
+#        the pass-2 combined FDP is ~1.47% vs the calibrated pass-1 ~0.90%.
+#   Compare the two via the report's Pass 1 / Pass 2 selector in a single run.
+#   pfdr now only sets the protein-q THRESHOLD (into a separate -pfdr dir);
+#   re-measure any residual effect on the reported ID count (#4390's q-clamp).
+#   Fix + kill-switch tracked in TODO-osprey_pass2_recalibration_fix.md.
 #
 # Override the binary with OSPREY_EXE=... (defaults to the primary pwiz checkout's
 # net8.0 Release build). Data lives under $OSPREY_TESTDIR (default D:/test/osprey-runs).
