@@ -70,13 +70,23 @@ caches). Key techniques Osprey's `LibraryCache` (and likely `SpectraCache`) shou
   struct change unlocks; pair it with the flat shared fragment array (idea 2 above) so the
   on-disk block maps directly to the resident array. The canonical Skyline implementation is
   `pwiz_tools/Skyline/Model/Results/ChromHeaderInfo.cs` -- see its `#region Fast file I/O`
-  blocks: `[StructLayout(LayoutKind.Sequential, Pack = 4)]` structs (with the "CAREFUL: this
-  ordering IS the on-disk layout, loaded directly into memory ... to avoid wasted space due to
-  alignment" comment) plus `unsafe ReadArray/WriteArray` that `fixed`-pin the exact-size array
-  and call `FastRead.ReadBytes` / `FastWrite.WriteBytes` (Randy Kern's Win32 ReadFile/WriteFile
-  p-invoke, one syscall for the whole array). The element count comes from the header/footer so
-  the array is allocated at final length once. Watch explicit layout/padding + endianness so
-  the format stays portable and versioned.
+  blocks and the `[StructLayout(LayoutKind.Sequential, Pack = 4)]` structs (with the "CAREFUL:
+  this ordering IS the on-disk layout, loaded directly into memory ... to avoid wasted space
+  due to alignment" comment). The element count comes from the header/footer so the array is
+  allocated at its final length once.
+
+  **CROSS-PLATFORM caveat (important for Osprey):** ChromHeaderInfo's whole-array
+  `ReadArray`/`WriteArray` use `FastRead.ReadBytes`/`FastWrite.WriteBytes`, which p-invoke Win32
+  `ReadFile`/`WriteFile` -- **Windows-only, so NOT usable as Osprey's shared path** (Osprey must
+  run on Linux/HPC). Note Skyline has largely moved OFF whole-array block reads and mostly keeps
+  *direct per-struct* reading now. For Osprey use the portable .NET equivalents that give the
+  same zero-extra-copy blittable read without p-invoke: `Stream.Read(Span<byte>)` (or
+  `System.IO.RandomAccess.Read`) into a buffer, then `MemoryMarshal.Cast<byte, LibraryFragment>`
+  / `MemoryMarshal.Read<T>` to reinterpret -- all cross-platform on net8.0. Alternatively keep a
+  Win32 fast path but **degrade gracefully to the Span/Stream path off Windows** (via
+  `RuntimeInformation.IsOSPlatform`) rather than depend on the p-invoke. Watch explicit
+  layout/padding + endianness (x64 LE both sides today, but pin it) so the format stays
+  portable and versioned.
 - **Memory-mapped / lazy load.** Skyline's caches memory-map and read on demand; for a 300+
   file target where the library is read-mostly, mmapping the fragment block (or lazily paging
   it) keeps it out of the managed heap entirely.
