@@ -2,8 +2,8 @@
 
 **Issue:** ProteoWizard/pwiz#4372
 **Branch:** `Skyline/work/20260706_osprey_library_resident_memory` (off master `174e3ddd8`)
-**PR:** [#4381](https://github.com/ProteoWizard/pwiz/pull/4381)
-**Status:** in review. Split out from the #4355 memory-bounding work
+**PR:** [#4381](https://github.com/ProteoWizard/pwiz/pull/4381) (merged 2026-07-09 as 9f87c5c5d1)
+**Status:** Completed. Split out from the #4355 memory-bounding work
 (`TODO-20260703_osprey_memory_bounding.md`) on 2026-07-05.
 
 ## Plan (approved 2026-07-06)
@@ -144,3 +144,24 @@ Validate the actual reduction on a real large-library run with `OSPREY_LOG_MEMOR
 
 - #4355 (`TODO-20260703_osprey_memory_bounding.md`): first-pass-FDR minimal-projection join.
   Reduces the join peak; this TODO reduces the scoring/library floor. Independent.
+
+## Progress Log
+
+### 2026-07-09 - Merged
+
+PR #4381 merged as commit 9f87c5c5d1 (squash) by Brendan. Shipped: `LibraryFragment` /
+`FragmentAnnotation` value structs + a `NeutralLossCode` byte with inline custom mass (drops
+tens of millions of tiny heap objects; fragment array now contiguous), and a once-per-load
+`LibraryStringInterner` collapsing distinct sequence/protein/gene/mod-name strings -- resident
+3.17M-entry Carafe library ~4.9 -> ~3.2 GB, output-preserving. `.libcache` format unchanged
+(VERSION 2; the neutral-loss near-mass collapse is preserved on write so old caches still load).
+Fixes #4372 (auto-closed). Reviewed 2026-07-08 (read-based; the Opus classifier gating Bash was
+down): all struct-default sites set Charge/IonType explicitly, BlibLoader normalizes with
+copy-modify-store, decoy gen uses value-copy -- no struct-mutation bugs. Rebased off its
+pre-#4378 base onto current master and re-ran `regression.ps1 -Dataset Stellar`: mode1/2/3
+byte-identical vs the streaming-only golden (50,237,440), confirming orthogonality with #4378.
+Follow-ups captured in `ai/todos/backlog/brendanx67/TODO-osprey_library_fragment_array_compaction.md`
+(flat shared fragment array, Skyline `Blocked*`/`CommonUtil.Collections`, ChromHeaderInfo-style
+Fast file I/O block reads via portable Span/RandomAccess -- NOT the Win32 p-invoke, since Osprey
+must run on Linux). Coverage note: the byte-identical gate uses a TSV library, so BlibLoader is
+verified by reading + unit tests, not end-to-end.
