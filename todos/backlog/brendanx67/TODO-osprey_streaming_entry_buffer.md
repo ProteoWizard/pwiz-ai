@@ -23,7 +23,7 @@ produces output a user would trust. Make it fail loud at the point of misuse.
 Origin: raised by Brendan off the #4400 review question "does anything read the
 progressively-nulled/empty buffer and get taken by surprise?" -- see #4400 (#4397).
 
-## Design 1 (near-term, low-risk): a fail-fast `PerFileEntryBuffer`
+## Design: a fail-fast `PerFileEntryBuffer`
 
 Replace the bare `List<FdrEntry>` value in `List<KeyValuePair<string, List<FdrEntry>>>`
 (threaded through `PerFileScoringTask` / `FirstJoinTask` and consumers) with a small buffer
@@ -51,40 +51,6 @@ mechanical; gated byte-identical by `regression.ps1`.
 Sequencing: **do this AFTER #4400 merges** -- keep #4400 focused (it is reviewed, retargeted
 to master, byte-identical). This is a separate hardening PR that can also retrofit
 #4378/#4394.
-
-## Design 2 (further memory lever): a windowed ring buffer -- ONLY where access is sequential
-
-Brendan's ring-buffer idea for the case where a stage must process a large logical sequence
-in order but only needs a bounded window resident at once. Present a sliding window over a
-hypothetical large array with three scalars:
-
-- `startListIndex`  -- global index of the window's first entry,
-- `countEntries`    -- entries currently resident,
-- `startEntryIndex` -- physical head in the small backing array,
-- address global index `g` at physical slot `(startEntryIndex + (g - startListIndex)) % capacity`.
-
-This is a correct, standard circular buffer. Refinements:
-- **Power-of-two capacity + `& (capacity - 1)`** instead of `%` on the hot path (millions of
-  rows) -- avoids integer division.
-- **Slot type must be the LEAN element (a struct: `FdrProjection`, or raw scalars), NOT the
-  fat `FdrEntry` class.** Then the backing `T[]` is inline; advancing the window just
-  **overwrites** slots -- zero GC, no nulling. Nulling only matters if the array stays a
-  class array, which defeats the memory goal.
-- **Precondition: forward-sequential (monotonic) access only.** A window + throw-on-miss is
-  correct for streaming; it breaks or thrashes under random/backward access. So this is the
-  right tool **iff** we can name a consumer whose access to these entries is strictly
-  ordered. Do NOT build it speculatively -- identify the sequential consumer first, else it
-  is complexity without payoff.
-- Out-of-window access: **throw** (tripwire) if the consumer is supposed to be sequential;
-  **page-in from the backing store** (parquet) only if a bounded look-back is genuinely
-  needed. Note `ParquetScoreCache` already yields **one row-group at a time**
-  (`ReadFdrStubScalars`), which is a coarser natural "window" that may remove the need to
-  hand-roll a ring at all -- prefer processing at the storage's own chunk grain if the
-  consumer allows it.
-
-Unify: Design 1's buffer interface (`Count` + defined-throw row access) is the seam; the ring
-buffer is just a third implementation (`Windowed`) behind it. #4400 needs only Materialized +
-Projected; Windowed is the future lever.
 
 ## Gates (any change here)
 
