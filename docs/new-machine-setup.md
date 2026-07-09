@@ -88,6 +88,52 @@ Record their choice and reference it throughout setup.
 
 ---
 
+## Check CPU Architecture (Do This First)
+
+**Before installing anything, confirm the machine is x64.** Skyline's build chain is x64-only:
+the build scripts pass `address-model 64` with `toolset=msvc-14.3`, output lands in `bin\x64\`,
+and the vendor SDKs (Thermo, Bruker, Waters, Sciex, Agilent) ship as closed-source x64 binaries.
+Nightly testing requires x64 Visual Studio 2022.
+
+```powershell
+$env:PROCESSOR_ARCHITECTURE   # AMD64 = supported. ARM64 = read the note below.
+```
+
+> **For LLM assistants — Windows on ARM (Snapdragon X, e.g. Surface Laptop 7) is not a
+> supported Skyline development platform.** Most of this guide still works, but three things
+> diverge, and you must surface them rather than paper over them:
+>
+> - **Python / MCP servers.** `mcp` depends on `cryptography`, which publishes **no
+>   `win_arm64` wheel** (Windows gets `win_amd64` only; aarch64 wheels exist for Linux and
+>   macOS but not Windows). `pip install mcp` on an ARM64 interpreter therefore falls back to
+>   the source dist and dies compiling the Rust extension under `maturin`/`cargo`. See Phase 1.4.
+> - **C++ toolchain — the stock `b.bat` silently builds the WRONG architecture.** boost.build
+>   derives its `architecture` feature from the host CPU (`msvc.jam` sets
+>   `.default-cpu-arch = arm64` when `PROCESSOR_ARCHITECTURE` is `ARM64`). Combined with
+>   `address-model 64` that resolves to **ARM64**, not x64: it runs `vcvarsx86_arm64.bat`,
+>   compiles with `bin\HostX86\ARM64\cl.exe`, and links against `lib\ARM64` — while still
+>   labelling the output directory `adrs-mdl-64`. The build does **not** announce this. It dies
+>   later in BiblioSpec (`_InterlockedIncrement` overloads clash with the ARM64 intrinsics in
+>   `winbase.h`), which is a confusing symptom of a wrong-architecture build, not a code bug.
+>   ARM64 binaries could never load the x64 vendor SDKs anyway.
+>
+>   **Fix: add `architecture=x86` to `b.bat`** (Phase 4.2). boost.build already supports the
+>   native ARM64→x64 cross toolchain (`msvc.jam` maps
+>   `default-global-setup-options-amd64 = arm64_x64` on ARM64 hosts); the build scripts simply
+>   never request it. With `architecture=x86 address-model=64` the setup script becomes
+>   `vcvars64.bat` / `Platform=x64` / `lib\x64`, output moves to `...\adrs-mdl-64\archt-x86\`,
+>   and the build completes clean. **Verified 2026-07-08** on a Snapdragon X Elite (Surface
+>   Laptop 7): 2078 targets, 0 errors, 6m31s, producing x64 `Skyline-daily.exe`, `TestRunner.exe`,
+>   and x64 native vendor readers (`baf2sql_c.dll`, `pwiz_data_cli.dll`).
+>
+>   If you switch a checkout between architectures, **delete `build-nt-x86` first** — before the
+>   `archt-x86` token appears in the path, stale ARM64 objects sit at paths an x64 build reuses.
+> - **Nightly tests.** Not supported on ARM64. Skip Phase 8.
+>
+> Get an explicit decision from the developer before installing Visual Studio. Do not silently proceed.
+
+---
+
 ## Phase 1: Prerequisites
 
 > **For LLM assistants — elevated winget installs need a visible UAC prompt.** Machine-scope
@@ -175,6 +221,35 @@ winget install Python.Python.3.12 --accept-source-agreements --accept-package-ag
 ```
 
 After installation, **restart the terminal** (type `exit`, then <kbd>Win</kbd>+<kbd>X</kbd>, <kbd>I</kbd>) and verify `python --version` works.
+
+> **On ARM64 machines, `python` must not be the interpreter that runs the MCP servers.**
+> An ARM64 interpreter accepts only `*-win_arm64` wheel tags, and `cryptography` (a hard
+> dependency of `mcp`, via `PyJWT[crypto]`) ships no such wheel — `pip install mcp labkey Pillow`
+> fails building the Rust extension. A venv does not help by itself: it inherits its base
+> interpreter's architecture.
+>
+> Install an x64 Python side-by-side and give the MCP servers their own venv on top of it:
+>
+> ```powershell
+> # winget refuses a second install of the same package id (exit 43, "no available upgrade"),
+> # so verify with `winget list --name Python` afterwards, or install from python.org directly.
+> winget install Python.Python.3.12 --architecture x64 --accept-source-agreements --accept-package-agreements
+>
+> C:\Python312-x64\python.exe -m venv <project root>\.mcp-venv
+> <project root>\.mcp-venv\Scripts\python.exe -m pip install mcp labkey Pillow
+> ```
+>
+> Then register each MCP server against the venv interpreter instead of bare `python`:
+>
+> ```powershell
+> claude mcp add status -- ./.mcp-venv/Scripts/python.exe ./ai/mcp/StatusMcp/server.py
+> claude mcp add labkey -- ./.mcp-venv/Scripts/python.exe ./ai/mcp/LabKeyMcp/server.py
+> ```
+>
+> The default `python` stays ARM64 for everything else. Note that `Verify-Environment.ps1`
+> probes packages by globbing `C:\Python3*`, `%LOCALAPPDATA%\Programs\Python\Python3*` and
+> `%ProgramFiles%\Python3*` — it does not look inside venvs, so it can report
+> `Python packages ... MISSING` even when the servers connect fine.
 
 ### 1.5 Configure Git Line Endings
 
@@ -314,6 +389,17 @@ Copy-Item ai\claude\settings-defaults.local.json ai\claude\settings.local.json
 # Clone pwiz
 git clone git@github.com:ProteoWizard/pwiz.git
 ```
+
+> **If the pwiz clone dies mid-transfer** with `Connection reset by peer` /
+> `fetch-pack: unexpected disconnect while reading sideband packet` / `fatal: early EOF`,
+> that is a transport failure on the large pack, not an auth problem. Delete the partial
+> checkout and retry over HTTPS, then restore the SSH remote so pushes still use the key:
+>
+> ```powershell
+> Remove-Item -Recurse -Force pwiz
+> git -c http.postBuffer=1048576000 clone https://github.com/ProteoWizard/pwiz.git
+> git -C pwiz remote set-url origin git@github.com:ProteoWizard/pwiz.git
+> ```
 
 The pwiz clone takes several minutes (large repository). Verify:
 ```powershell
@@ -693,6 +779,18 @@ call "%~dp0b.bat" pwiz_tools\Skyline//Skyline.exe
 ```
 
 > **Note on toolset**: Use `toolset=msvc-14.3` for VS 2022 (recommended for nightly testing). Use `toolset=msvc-14.5` for VS 2026 (experimental).
+
+> **On ARM64 hosts, `b.bat` MUST also pass `architecture=x86`**, or boost.build inherits
+> `architecture=arm` from the host CPU and silently produces ARM64 binaries that cannot load the
+> x64 vendor SDKs:
+>
+> ```batch
+> @call "%~dp0pwiz_tools\build-apps.bat" 64 --i-agree-to-the-vendor-licenses toolset=msvc-14.3 architecture=x86 %*
+> ```
+>
+> `architecture=x86` + `address-model 64` is boost.build's spelling for "the x86 family, 64-bit"
+> — i.e. x64. It is harmless on x64 hosts (where it is already the default), so it can be added
+> unconditionally. See the ARM64 note under "Check CPU Architecture".
 
 ### 4.3 Run the Build
 
@@ -1338,7 +1436,10 @@ If the setup was interrupted before `ai/` was cloned, note the improvements need
 The setup is complete when:
 1. `git config --global core.autocrlf` returns `true`
 2. `pwiz\pwiz_tools\Skyline\Skyline.sln` exists (relative to your project root)
-3. `pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline.exe` exists
+3. `pwiz\pwiz_tools\Skyline\bin\x64\Release\Skyline-daily.exe` exists
+   (the standard build brands the artifact `Skyline-daily.exe`, **not** `Skyline.exe` — checking
+   for `Skyline.exe` reports a false failure on a perfectly good build; `TestRunner.exe` should
+   be there too)
 4. Visual Studio can build the solution without errors
 5. `TestRunner.exe test=TestA` passes
 
