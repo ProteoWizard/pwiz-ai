@@ -1,5 +1,12 @@
 # TODO (backlog): Osprey console/logging parity cleanup
 
+**Status (2026-07-08):** folded into issue **#4387** and **PR #4388** (the calibration
+console-wording PR, broadened to "Osprey console output cleanup"). Code changes are
+DEFERRED until the in-progress 82-file Astral fit test finishes — a build would contend
+with its Stage-6 reconciliation. Then add both fixes to
+`Skyline/work/20260707_osprey_calibration_summary_wording` as new commits. This file is
+the implementation spec; #4387 is the tracking issue.
+
 **Type:** console/logging only — NO correctness or output impact. Osprey's numeric
 output (blib, q-values) is byte-parity-gated against Rust (`regression.ps1 -Dataset
 Stellar`); these items are about what the *console* prints, which is not gated and has
