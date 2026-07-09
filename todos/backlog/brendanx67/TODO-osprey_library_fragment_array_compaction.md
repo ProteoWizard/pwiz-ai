@@ -51,6 +51,36 @@ per-entry arrays can land on the Large Object Heap (LOH) and fragment it.
      save 8 B/fragment for the common case, at the cost of complexity -- probably not worth
      it vs. the flat-array win, but record it.
 
+## Faster cache load + spectrum cache (Skyline binary-cache techniques)
+
+Separate from the in-memory shrink above: the load PATH itself can adopt the binary-cache
+format Skyline has refined for ~17 years (e.g. the `.skyd` ChromatogramCache and the spectrum
+caches). Key techniques Osprey's `LibraryCache` (and likely `SpectraCache`) should mine:
+
+- **Counts/offsets in a FOOTER at the end of the file.** Skyline writes the array sizes (and
+  per-section offsets) at the END, so the loader seeks to the end, reads the sizes, allocates
+  each array at its exact final length once, then reads forward -- no count-prefix guesswork,
+  no List<> growth/realloc. Osprey's cache currently writes `entries.Count` as a leading
+  prefix; a footer layout additionally lets a random-access/mmapped reader locate any section
+  without a full scan.
+- **Bulk block reads of blittable struct arrays.** #4381 made `LibraryFragment` a
+  reference-free value struct, so a whole entry's (or the whole library's) fragment array can
+  be read with a single block copy / `MemoryMarshal.Cast<byte, LibraryFragment>` instead of
+  the current per-field `BinaryReader.ReadDouble()/ReadSingle()/...` per fragment. That is the
+  big load-time win the struct change unlocks; pair it with the flat shared fragment array
+  (idea 2 above) so the on-disk block maps directly to the resident array. Watch endianness /
+  explicit `[StructLayout]` + padding so the format stays portable and versioned.
+- **Memory-mapped / lazy load.** Skyline's caches memory-map and read on demand; for a 300+
+  file target where the library is read-mostly, mmapping the fragment block (or lazily paging
+  it) keeps it out of the managed heap entirely.
+- Applies to the **binary spectrum cache** (`SpectraCache`) too -- same footer + block-read
+  pattern for the per-file spectra, which are also large and read-mostly.
+
+Reference: Skyline `pwiz_tools/Skyline` chromatogram/spectrum cache infrastructure
+(ChromatogramCache and friends) -- the source of the footer format, block IO, and mmap
+patterns. A format change here is a `.libcache` VERSION bump (currently 2), so old caches
+rebuild once -- acceptable for a load-speed/memory win, unlike the #4381 byte-preserving change.
+
 ## Gates (any of these)
 
 - Correctness: `regression.ps1 -Dataset Stellar` (and `-Dataset All` before a
