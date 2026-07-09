@@ -129,12 +129,16 @@ candidate.** Each probe is computable on demand from the sparse input:
 IEEE-754 (intensities are >= 0, so no -0.0 case). A prefix sum over only the peaks therefore equals
 the dense prefix at every index, bit for bit — same `result[bin]`, same XCorr, same golden.
 
-**Expected: ~391 KB → ~18 KB per spectrum** (~1.5 k × (int bin + double prefix)), i.e. **~20x**,
-taking the scoring cache from ~18-37 GB to ~1-2 GB.
+**Expected: ~391 KB → ~40 KB per spectrum.** Three arrays are needed per peak, not two: the bin
+(`int`), the windowed **value** (`double`, needed for the `- spectrum[i]` centre term), and the
+running prefix (`double`) = **20 B/peak**. At ~2 k peaks that is **~10x**, not the ~20x first
+estimated here, taking the scoring cache from ~18-37 GB to ~2-4 GB.
 
 **Caveats:**
-- **Perf**: each fragment probe becomes two binary searches (~11 compares) rather than one array
-  index; ~30 fragments x 5 spectra on the SG-weighted path. Must pass `Test-PerfGate.ps1 -Dataset Stellar`.
+- **Perf**: each fragment probe becomes **three** binary searches (centre value + prefix at `left`
+  and `right`), ~11 compares each, rather than one array index; ~180 probes/candidate. Must pass
+  `Test-PerfGate.ps1 -Dataset Astral` — **not Stellar**: Stellar is `Resolution = "unit"` and never
+  enters `HramStrategy`, so a Stellar-only gate exercises none of this code.
 - `XcorrFromPreprocessed(float[], LibraryEntry)` (the 2-arg overload, `SpectralScorer.cs:223`)
   allocates `new bool[preprocessed.Length]` — a **100 KB allocation per call**. Rust's
   `xcorr_sparse` deliberately avoids this with a linear-scan dedup. Confirm the pooled 3-arg
@@ -143,6 +147,32 @@ taking the scoring cache from ~18-37 GB to ~1-2 GB.
   (`ScoringPipeline.cs:104-124`, ~1-2 GB); the parquet write builds a **full second columnar copy**
   of all ~3 M rows in one row group (`ParquetScoreCache.cs:299-479`, ~4-6 GB transient) → batch
   row groups. Raw spectra (~4-8 GB) are the true floor.
+
+### Lever 2 — implemented (2026-07-09, commit `ed9d97fef`)
+
+Branch `Skyline/work/20260709_osprey_sparse_xcorr_cache`, stacked on the Lever-1 branch.
+
+- New `Osprey.Scoring/SparseXcorrSpectrum.cs`: `int[] bins` + `double[] values` + `double[] prefix`,
+  `CenteredAt(bin)` does the three binary searches and **narrows to `float`**. The narrowing is
+  load-bearing: the dense path computed in f64, stored `float[]`, and widened back on read, so
+  returning raw f64 would drift every XCorr off the golden.
+- `SpectralScorer.PreprocessSpectrumForXcorrSparse` / `XcorrFromSparse` (mirrors the dense
+  `XcorrFromPreprocessed` exactly: same bin dedup via `visitedBins`, same touched-bin-only clear,
+  same `XCORR_SCALING`).
+- `HramStrategy` builds/scores/releases the sparse cache. `UnitStrategy` untouched.
+- **Deleted** `XcorrScratchPool.RentBins/ReturnBins/ReturnBinsArray` + its `ConcurrentBag<float[]>`.
+  Nothing rents from it now, and that never-shrinking bag *was* the resident memory.
+
+**Verified:**
+- `TestSparseXcorrCacheMatchesDenseCache` compares all 100,001 bins against the dense `float[]` cache
+  by **raw IEEE-754 bits** (not a delta) — zero difference. Plus empty-spectrum/out-of-range and
+  dedup/`visitedBins`-reset tests. 477 pass, 3 skipped.
+- `regression.ps1 -Dataset All`: **all six legs PASS**, including Astral mode1 vs golden. Astral blib
+  131,174,400 B — identical to the pre-change baseline.
+- Perf gate: **not yet measured.** This trades memory for CPU and it is the one open risk.
+
+**Still projections, not measurements:** scoring 18-37 → ~2-4 GB, Stage-5 stub load 53.13 → ~6 GB.
+Only the 82-file rerun with `OSPREY_LOG_MEMORY=1` settles them.
 
 ---
 
@@ -160,7 +190,12 @@ plus in-memory library lookup. Add `LoadBlibPlanEntries`; stream untouched rows 
 
 - `regression.ps1 -Dataset Stellar` (mode1/2/3, 1e-9) → `-Dataset All` before merge; cross-impl
   `Compare-EndToEnd-Crossimpl` on Stellar + Astral.
-- `Test-PerfGate.ps1 -Dataset Stellar` (mandatory for Lever 2).
+- `Test-PerfGate.ps1 -Dataset Astral` (mandatory for Lever 2 — Stellar runs `UnitStrategy` and would
+  pass without executing a single changed line).
+- **Machine setup:** `Test-PerfGate.ps1` defaults to `-BaselineRoot C:\proj\pwiz-perfbase`; on this
+  box the pinned worktree is `C:\Dev\pwiz-perfbase` (at `245a69d3a`). `-TestBaseDir` is the *dataset
+  root* (`C:\Users\macco\Downloads\Perftests\osprey-testfiles-mzML`, holding `stellar/` + `astral/`),
+  not a scratch dir. Invoke `ai/` scripts by absolute path — the checkout cwd is `C:\Dev\pwiz`.
 - 82-file Astral fit test with `OSPREY_LOG_MEMORY=1`: confirm `[MEM Stage 5 start]` 53 → ~6 GB and
   `[MEM scored file N]` ~26 → ~6-8 GB managed; then push file count to 150-300.
 
