@@ -4,9 +4,11 @@
 - **C# PR**: shipped inside [#4378](https://github.com/ProteoWizard/pwiz/pull/4378)
   (merged 2026-07-08 as f4de686450) -- folded into the memory-bounding branch, NOT a
   separate stacked PR. See [[TODO-20260703_osprey_memory_bounding]].
-- **Rust PR**: [maccoss/osprey#51](https://github.com/maccoss/osprey/pull/51) -- OPEN
-  (base `reconciliation-v3-first-pass-base-ids`); cross-impl bit parity held at 1e-9
-  (Stellar 57112==57112, Astral 160358==golden). Merge is the developer's call.
+- **Rust PR**: [maccoss/osprey#51](https://github.com/maccoss/osprey/pull/51) -- MERGED
+  2026-07-08 as `56cf1b0f` (squash) into `reconciliation-v3-first-pass-base-ids` (the
+  parity integration branch, on top of #49). Cross-impl bit parity held at 1e-9
+  (Stellar 57112==57112, Astral 160358==golden). reconciliation-v3 -> maccoss `main` is
+  a separate step the Rust side sequences.
 
 ## Branch Information
 
