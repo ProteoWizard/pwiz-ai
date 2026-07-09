@@ -176,9 +176,13 @@ All divergences below are tracked here and in issue #4389 (Tier 1/2/3). Work ord
 3. **#5 multi-charge consensus leader tie-break — DONE (pwiz `252caee76`).** `MultiChargeConsensus`
    tie-break now keeps the LAST charge state on an exact score+q tie (`<=`), matching Rust `max_by`
    (`pipeline.rs:7665-7679`); + MultiChargeConsensusTest. Stellar regression PASS (all 3 modes; inert at default).
-4. **#6 missing-feature entries — DONE (pwiz `06e2872ab`).** `PercolatorEntryBuilder` now skips
-   feature-less entries (matching Rust `continue`, `pipeline.rs:6153-6162`) instead of fabricating a
-   placeholder; removed dead BuildBasicFeatures; test updated. NEXT actionable: **#7**.
+4. **#6 missing-feature entries — DEFERRED (implemented `06e2872ab`, then reverted in the master merge).**
+   Master's #4355/#4394 streaming-memory refactor reintroduced + extended `BuildBasicFeatures` (the
+   fabricate fallback, now also used by the deferred streaming reload `ResolveFeatureRow`) and removed the
+   psm_id `.Id` field. #6's build-time skip no longer maps cleanly onto the deferred-reload streaming path,
+   so we took master's `PercolatorEntryBuilder` + test in the merge. RE-FILE as a follow-up: apply skip
+   consistently across the non-streaming path AND `ResolveFeatureRow`, with its own tests + regression.
+   LOW-severity / normally inert (nWithoutFeatures == 0 on real data).
 5. **#7 Simple-FDR winner sort stability — DONE (pwiz `8c251de73`).** `FdrController.CompeteAndFilter`
    now uses a stable `OrderByDescending` (matching Rust stable `sort_by`, `lib.rs:148`) so tied winners
    keep input order; + FdrControllerTest. Simple-FDR path only (`RunSimpleFdr`); default Percolator uses
@@ -196,9 +200,10 @@ All divergences below are tracked here and in issue #4389 (Tier 1/2/3). Work ord
 - [x] **Multi-charge consensus leader tie-break** (LOW) — DONE, pwiz `252caee76`. `<=` keeps the
       last charge state on an exact score+q tie, matching Rust `max_by` (`pipeline.rs:7665-7679`).
       + MultiChargeConsensusTest; Stellar regression PASS.
-- [x] **Missing-feature entries** (LOW, path-dependent) — DONE, pwiz `06e2872ab`.
-      `PercolatorEntryBuilder` skips feature-less entries (matching Rust `continue`,
-      `pipeline.rs:6153-6162`); removed dead BuildBasicFeatures; test updated.
+- [ ] **Missing-feature entries** (LOW, path-dependent) — DEFERRED. Implemented (`06e2872ab`) then
+      reverted in the master merge: master's #4355/#4394 streaming-memory refactor reintroduced
+      `BuildBasicFeatures` (now used by `ResolveFeatureRow`) + removed psm_id. Re-file to apply skip
+      across the non-streaming path AND `ResolveFeatureRow`, with tests + regression.
 - [x] **Simple-FDR winner sort stability** (LOW, non-default path) — DONE, pwiz `8c251de73`.
       Stable `OrderByDescending` matching Rust stable `sort_by`; + FdrControllerTest. Simple FDR only.
 - [ ] Latent/theoretical (safe to defer): UTF-8 vs UTF-16 peptide key ordering
