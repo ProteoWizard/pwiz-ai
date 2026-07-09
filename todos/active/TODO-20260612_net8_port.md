@@ -70,6 +70,52 @@ Template csproj (drop the legacy 600-line XML, replace with ~40 lines):
 4. **NHibernate** — versions ≥5.5 support net6+. Multi-target by package version
    if legacy needed.
 
+## Status (2026-07-08, session 3)
+
+### Committed the Tier-1 TestFunctional batch + drove TestManageLibraryRuns and TestLibraryBuild GREEN
+
+Resumed on `Skyline/work/20260612_net8_port`. Everything committed + pushed to `origin` and mirrored to
+`chambem2/pwiz-sharp` (PR #4178). 12 commits this session (through `6955d14f6f`).
+
+**Tier-1 TestFunctional batch (7 commits `88621b8a90..7c6737a1a2`)** -- the prior session's uncommitted
+8-file diff, re-verified (build clean + 5 representative tests 0 failures) and split into focused commits:
+net8 Uri text-filter CONTAINS/STARTS_WITH (DataSchema IsValueType gate); Immediate Window WriteLine(string);
+triggered-method export G15 + relative-exe ResolveToolPath; Parquet.Net 4.25.0; WinForms ModalMenuFilter
+GC-leak release; SkylineCmd apphost companions; DdaSearch MSAmanda download path.
+
+**TestManageLibraryRuns (`c04a760b04`)** -- real net8 lock race. DeleteDataFiles held the redundant-.blib
+SQLite write connection across the BlibFilter shell-out; net8's provider keeps the handle where net472
+released it -> BlibFilter File.OpenRead sharing violation ("cannot be opened"). Fixed by closing the
+redundant connection before the Filter call. (+ BlibFilter.cs UTF-8 stream encoding to match BlibBuild.)
+
+**TestLibraryBuild -> GREEN (5 commits)** -- a chain of independent net8/pwiz-sharp parity gaps, each
+surfaced only after the previous was fixed:
+- Mascot native deployment (`7846f50c6b`): MascotShim.dll + msparser.dll + msparser-config were not
+  flowing from BlibBuild's runtimes\win-x64\native into the Skyline/test bins (the `**\*` Content glob
+  drops files whose Link lands under runtimes\...\); deploy them flat next to BlibBuild.exe.
+- Mascot score-filter parity (`749deef203`): managed MascotResultsReader let the shim pre-filter, so an
+  all-filtered .dat created no source-file bucket and never emitted "No matches passed score filter";
+  open the shim permissively and filter in managed after bucket creation (cpp MascotResultsReader.cpp:226).
+- PwizReader native-id mismatch warning (`4ef8235fde`): ported SpectrumList.CheckNativeIdMatch
+  (MSData.cpp:1170) to ISpectrumList/SpectrumListBase + the "Mismatch between spectrum id format" warning
+  (PwizReader.cpp:224) in PwizSharpSpecFileReader.
+- BlibMaker file-share (`7bfae56d3a`): VerifyFileExists probed with File.OpenRead (FileShare.Read), which
+  cannot coexist with a writer; cpp uses std::ifstream (shares R+W) -> FileShare.ReadWrite. Fixes the
+  score-types hang when Skyline holds an input .blib open as a loaded document library.
+- BlibBuild/BlibFilter UTF-8 output (`6955d14f6f`): neither tool set Console.OutputEncoding, so under
+  Skyline's non-UTF-8 console the non-ASCII input paths (Unicode "Utest" test dir + CJK .blib names) were
+  written in the ANSI code page and read back mangled as UTF-8 -> the score-type result key failed to
+  match the input file -> Build Library dialog hung. Set Console.OutputEncoding=UTF8 at both Main entries.
+
+TestLibraryBuild now passes 0-failures/46s; regression-checked TestManageLibraryRuns + TestImportPeptideSearch
++ TestExportSpectralLibrary (all green, no collateral damage). **Reusable finding:** any BlibBuild/BlibFilter
+shell-out over a Unicode path needs BOTH (a) the input not held by Skyline with a write-incompatible share
+mode, and (b) UTF-8 console output on the child; this "held handle + non-UTF-8 child console" pair recurs
+wherever net8 Skyline shells out to a managed CLI tool over non-ASCII paths.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260708_net8_libbuild_green.md` before starting work.
+
 ## Status (2026-07-06)
 
 ### Consolidated everything onto net8 + committed the whole port (branch is PR-ready)
@@ -1018,3 +1064,73 @@ container-only, NOT the EI bug. Waters/Shimadzu "packaging gaps" are container-o
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260708_net8_testfunctional_triage.md` before starting work.
+
+### 2026-07-08 (session 2) - Root-caused all 22 net8-wide failures; fixed + host-verified 9
+
+Worktree `C:\dev\pwiz-net8`, branch `Skyline/work/20260612_net8_port`, PR #4178. **All edits are
+uncommitted** (8-file working tree) pending review - nothing pushed this session.
+
+**Investigation:** fanned out 6 parallel read/diff investigators over the 22 net8-wide TestFunctional
+failures (host stack traces in `ai/.tmp/tf_host*.log` + product code + `git diff origin/master...HEAD`,
+no test runs). Collapsed 22 failures into ~13 distinct root causes across 4 themes (harness/infra,
+dependency pins, net8 BCL/runtime behavior, pwiz-sharp reader gaps). Then implemented the Tier-1
+(cheap/high-confidence) fixes and host-verified each with `TestRunner ... parallelmode=off offscreen=on`.
+
+**Fixed + verified (9 tests):**
+- **GC-LEAK triad** (TestLiteDropdownList, TestZedGraphClipboard, TestReportErrorDlg): net8 WinForms
+  `ToolStripManager.ModalMenuFilter._lastActiveWindow` (a `HandleRef<HWND>` whose Wrapper roots the
+  Form) retains the last active window after menu mode exits; net472 tracked a bare HWND. Root-caused
+  with a full-memory dump (`MiniDump`) at the leak moment + `dotnet-dump gcroot`. Fix: reflectively
+  release that field in `AbstractFunctionalTest.EndTest()` (TestUtil/TestFunctional.cs), net8-gated,
+  beside the existing `ClipboardEx.Release()`. One release clears all three. (Clusters D/E's
+  "forced-GC guard" hypothesis was FALSIFIED by the dump - it is a real retention, not GC timing.)
+- **TestParquetArrays + TestExportHugeParquetReport**: Skyline.csproj pinned Parquet.Net 4.23.5 but
+  the graph loads bundled 4.25.0 (DataField ctor gained a 6th param) -> MissingMethodException. Fix:
+  bump pin to 4.25.0 (matches Osprey/BiblioSpec).
+- **ImmediateWindowTestMethod**: net8 added `TextWriter.WriteLine(StringBuilder)`, which routes through
+  the unimplemented `Write(char)` on TextBoxStreamWriter -> output dropped. Fix: `CommandStatusWriter`
+  passes `message.ToString()`.
+- **TestExportMethodDlg**: TWO net8 issues. (1) `Process.Start` no longer resolves a relative exe path
+  -> `MethodExporter.ExportMethod` now resolves via `AppContext.BaseDirectory` (`ResolveToolPath`,
+  single choke-point for all vendor method builders). (2) exposed a `double.ToString` diff in the AB
+  Sciex triggered CSV RT-window column -> format with explicit `G15` (net472 default) so net8 matches.
+- **TestObjectFilterOperations**: `System.Uri` implements `IFormattable` on net8 (not net472), so
+  `DataSchema.GetFilterHandler` routed it to the no-Contains handler. Fix: require `type.IsValueType`
+  (numbers/dates get WITHOUT_CONTAINS; reference types like Uri keep WITH_CONTAINS).
+- **TestSkylineCmdInEmptyDirectory**: net8 SkylineCmd.exe is a native apphost needing its managed
+  companions to bootstrap; the test copied only the exe. Fix: copy SkylineCmd.dll/.runtimeconfig.json/
+  .deps.json (but NOT Skyline*.dll, which must stay missing).
+
+**Correct but env-blocked (1): TestDdaSearch** - guard fix (`!= MSFragger` so MSAmanda uses the generic
+download path) is correct and the test now reaches the download, but the tool mirror
+(`ci.skyline.ms/skyline_tool_testing_mirror/latest.zip`) returns 403 on this host. Needs CI/networked
+verification.
+
+**Secondary:** removed the net8 `#if NET472` guard around `FlushMemory()` in
+`GarbageCollectionTracker`'s retry loop (it was a GC-less no-op on net8). Not required by the real fix;
+droppable for a minimal diff.
+
+**Files changed (uncommitted):** TestUtil/TestFunctional.cs, Model/Export.cs, Skyline.csproj,
+Shared/PortableUtil/SystemUtil/CommandStatusWriter.cs, TestFunctional/DdaSearchTest.cs,
+TestFunctional/SkylineCmdTest.cs, TestRunnerLib/GarbageCollectionTracker.cs,
+Shared/Common/DataBinding/DataSchema.cs. Clean CRLF, no new trailing whitespace.
+
+**Remaining 13 net8-wide (diagnosed, not yet fixed):**
+- pwiz-sharp reader gaps: TestTriggeredAcquisition (numpress integer-array decode unimplemented,
+  `pwiz-sharp/pwiz/src/MsData/BinaryDataEncoder.cs:376`); ConsoleImportEiTest (non-indexed mzXML ->
+  zero chromatograms; probe `SpectraChromDataProvider.cs:1221`; also the lone CI/TestData failure);
+  ConstantNeutralLossTest (Agilent CNL reader hang; needs a stack dump); TestImportFullScanNarrowScanWindows
+  (HDF5 1.10 can't open the harness `Ütest` path; `MzMlbConnection.cs:78` short-path or HDF.PInvoke 1.14).
+- threading/async: TestWatersConnectExportMethodDlg (sync-over-async `.Result` deadlock, IdentityModel7
+  `WatersConnectAccount.cs:234-270`); TestJsonToolServer (async IW `BeginInvoke` write vs immediate read;
+  add a flush/wait barrier); TestKoinaSkylineIntegration (FakeKoina float-hash match miss vs Grpc.Net
+  migration; needs a host run to disambiguate).
+- native subprocess encoding: TestManageLibraryRuns + TestLibraryBuild (ProcessRunner sets no
+  StandardOutput/ErrorEncoding, so `Ütest` -> `?` reaches BlibFilter/BlibBuild.exe).
+- uncertain premise: TestSynchSiblingsSmallMolecules (MSTest v1->v3 makes Assert.AreEqual honor
+  IEquatable, so CustomIon.Equals now compares Adduct - unclear if the y1 ion adduct is a real
+  regression or over-strict comparison; needs domain confirmation before touching); TestPasteMolecules
+  (net8 float.ToString in an error-message string; align test/product formatting); TestDissociationMethod
+  (empty filtered chromatogram; needs a per-molecule TryLoadChromatogram + per-spectrum DissociationMethod probe).
+
+**Next session handoff**: read `ai/.tmp/handoff-20260708_net8_tier1_fixes.md`.
