@@ -163,6 +163,22 @@ two differently-strided samples, and the larger LDA training set sharpens the di
 * **Calibration-only re-check** (`OSPREY_EXIT_AFTER_CALIBRATION=1`, file 093): bit-identical
   to Gate 3 -- 193 -> 633 -> 729 points, MAD=0.103, R^2=0.9984, +/-0.50 min floor,
   MS1 +1.10 ppm, MS2 +0.19 ppm. The low-n work is inert on these files.
+* **"Inert at n >= 200" confirmed empirically, not just argued.** Self-review pointed out
+  the claim depends on every golden's *accepted* calibration (including an accepted pass-2
+  refit, whose narrowed window can yield fewer points than pass 1) having n >= 200.
+  Stellar: Gate 1 passes against the committed golden with no regeneration. Astral,
+  measured directly via `OSPREY_EXIT_AFTER_CALIBRATION`: n_points = 3145 / 3207 / 3011,
+  method LOESS. Both datasets are far above the threshold.
+* **Self-review (fresh-context agent) found no HIGH.** It independently verified from the
+  Rust source that `CalibrationMatch.score` is the co-elution correlation sum (so
+  `CorrelationScore`, not `DiscriminantScore`, is the right accumulation key), that Rust
+  runs LDA on a *clone* while C# mutates in place but only ever reads feature columns LDA
+  never writes, and that the `(base_id, entry_id)` sort makes the Dictionary/ConcurrentBag
+  order irrelevant. Two LOW divergences it found were fixed: `FromLinearMapping` accepted a
+  non-finite `libMaxRt` where Rust rejects it, and pass 2's `MinPoints` was
+  `Math.Min(20, n)` where Rust uses `min(n, min_calibration_points)` (inert today, since
+  both are <= n and the guard is the only consumer, but a latent divergence if `MinPoints`
+  ever becomes fit-affecting).
 * **Rust:** `cargo fmt` clean, `clippy -D warnings` clean, 557 tests pass.
 * **C#:** 487 tests pass. Inspection adds **zero** new warnings (the 11 remaining, in
   `SystemMemory.cs` and `PerFileScoringTask.cs`, are pre-existing on master -- verified
