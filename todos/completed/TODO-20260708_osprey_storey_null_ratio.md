@@ -1,6 +1,6 @@
 # TODO: Osprey --model-diagnostics — decoy-modeling goodness diagnostics (null-alignment ratio + paired-coin collapse)
 
-**Status**: Active — PR #4399 (https://github.com/ProteoWizard/pwiz/pull/4399).
+**Status**: Completed — PR [#4399](https://github.com/ProteoWizard/pwiz/pull/4399) (merged 2026-07-09 as babcebdb6e).
   Branch `Skyline/work/20260708_osprey_storey_null_ratio` (from master).
 **Created**: 2026-07-08 (night session)
 **Requested by**: Brendan (Mike weighed in on the design)
@@ -113,3 +113,22 @@ See [[project_osprey_libdecoy_vs_gendecoy_calibration]].
 - Diagnostics-only; do not touch blib/FDR output. No console alarm / no parametric
   f_false. Localize user-facing strings ([[no_localizable_string_in_static]]) — but
   note the HTML report text lives in the embedded template, not C# resources.
+
+## Progress Log
+
+### 2026-07-09 — Merged
+PR #4399 merged as commit babcebdb6e. Shipped both decoy-modeling goodness
+diagnostics: the non-parametric null-alignment **density ratio** (Density tab,
+target:decoy + p_target:p_decoy, left-side flatness KPI) and the
+**paired-coin-collapse** KPI (Competition tab). Validated end-to-end on the
+libdecoy (flat 0.055) vs gendecoy (steep 3.08) oracle and, via the recovered
+`OSPREY_BOOST_TARGET_DISCRIMINANT` instrument, on the target-boost case the coin
+catches (real coin 47.8% → 22.7% while entrapment held 50%) — trial set at
+`D:\test\osprey-runs\_ratio_trial\`. Copilot review addressed (null-region cap
+made inclusive; KPI labels aligned to series names). Diagnostics-only: blib/FDR
+output and the regression golden unchanged. Deferred/parked: option (b)
+`p_target:decoy` (rejected — entrapment-anchored, boost-blind); the parametric
+f_false (§A) and a console/FDR-path alarm remain in
+[[TODO-osprey_assumption_failure_detection]]; the broader reduced-pool FDR
+program is captured in [[TODO-osprey_reduced_pool_fdr_calibration]]. Boost
+instrument stays on the local-only `osprey-boost-demo2` branch (not pushed).
