@@ -927,6 +927,22 @@ On .NET Framework 4.7.2, the two worst hot-path patterns are:
 When `gen2_count` stays constant across a run, LOH churn is
 eliminated. The `[MEM pre/post-main-search]` log line reports it.
 
+**Update (#4398):** the HRAM per-spectrum XCorr cache is no longer a
+dense `float[NBins]`. `HramStrategy` now stores the sparse
+pre-subtraction source (`SparseXcorrSpectrum`: ~1-3 k nonzero bins +
+a prefix sum, ~20 B/peak) and recomputes each probed bin on demand,
+so `XcorrScratchPool.RentBins`/`ReturnBins` and its never-shrinking
+`ConcurrentBag<float[]>` are gone — that bag was the resident ~15 GB.
+The `double[]` scratch (Binned/Windowed/Prefix) the pool still hands
+out is unchanged. Bit-exact vs the dense path because the dense prefix
+adds `0.0` at empty bins and `x + 0.0 == x` in IEEE-754 (see
+`SparseXcorrSpectrum.CenteredAt` and `TestSparseXcorrCacheMatchesDenseCache`).
+Counterintuitively this is also **~9% faster** on scoring: three binary
+searches per probe cost less than the LOH allocation + gen-2 pressure of
+a 391 KB array per spectrum. This is C#-only for now; the Rust side keeps
+the dense cache (Brendan's `xcorr_sparse` is sparse over *fragments*, not
+the observed spectrum).
+
 Rust has Vec allocation instead of LOH but the pattern is the same.
 Batch 2a of `TODO-OR-20260417_osprey_rust_upstream.md` brings the
 pool + per-window cache pattern to Rust.
@@ -942,6 +958,99 @@ Debug C# build vs release Rust is 10x misleading.
 `Osprey.exe.config` sets `gcServer enabled="true"`. Without it
 you lose 30-50% on parallel workloads. Confirm with `GC.IsServerGC`
 or check the .config file.
+
+### Measuring memory: the live set vs GC weather
+
+This is the single most error-prone measurement in the project, and
+during the #4398/#4400/#4406 memory work every "obvious" number turned
+out to be misleading. Read this before quoting a memory figure in a PR
+or an issue; two public claims had to be retracted for ignoring it
+(#4404 correction, and a "native memory = negative 10 GB" subtraction).
+
+Set `OSPREY_LOG_MEMORY=1` to emit the `[MEM ...]` probes. They come from
+`ProfilerHooks.LogMemoryStats` / `LogManagedHeapAfterGcIfEnabled`
+(`Osprey.Tasks/ProfilerHooks.cs`). A line looks like:
+
+```
+[MEM stage5-start] working_set=37.02 GB (peak=42.50 GB), managed_heap=22.74 GB,
+    peak_paged=44.78 GB, gen2_count=339, loh_count=339,
+    gc_committed_last_gc=31.74 GB, gc_heap_last_gc=24.96 GB, gc_fragmented_last_gc=8.30 GB
+```
+
+**None of the fields on that line is the live set.** What each one is,
+and how it lies:
+
+- **`managed_heap`** — `GC.GetTotalMemory(false)`: bytes allocated since
+  the last collection, WITHOUT forcing one. It carries uncollected
+  garbage, so it is a function of GC *timing*, not workload. On an
+  82-file run, three builds executing **byte-identical** first-pass
+  Percolator code reported `26.57`, `29.25`, and `54.53 GB` at the same
+  probe. A 25 GB spread that means nothing. Never quote `managed_heap`
+  as "memory used".
+- **`working_set` / `peak`** — resident memory, but Server GC (one heap
+  per core) expands toward the high-memory-load threshold (~90% of
+  physical) before collecting. On a 64 GB box the peak lands near
+  ~55 GB almost regardless of demand: three builds whose **live** Stage-5
+  memory spanned `53.13 -> 24.45 -> 22.74 GB` all peaked within
+  **0.13 GB** of each other. **Peak working set measures the machine,
+  not the workload — do not use it to size a run or to claim a
+  reduction.** This is why cutting 30 GB out of Stage 5 (#4400) moved the
+  peak by ~0.
+- **`gc_committed_last_gc` / `gc_heap_last_gc` / `gc_fragmented_last_gc`**
+  — from `GC.GetGCMemoryInfo()`, which reports the **most recent GC**,
+  not the present moment (hence the `_last_gc` suffix). They are a stale
+  snapshot. **Do not subtract them from the live `working_set`:**
+  `working_set - gc_committed_last_gc` mixes a current value with a stale
+  one and went **negative by 10 GB** at one probe. `gc_fragmented_last_gc`
+  alone is directionally meaningful (free bytes stranded between live
+  objects; it reached 8-12 GB during first-pass FDR).
+- **`peak_paged`** — peak committed address space. This one actually
+  tracks the workload: across the same three builds it fell
+  `77.47 -> 68.53 -> 64.20 GB`. Prefer it over peak working set when you
+  need a single "footprint" number from a non-forced probe.
+
+**The only trustworthy "will it fit in N GB" number is a forced-GC live
+probe.** `LogManagedHeapAfterGcIfEnabled` does
+`GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();` then reads
+`GetTotalMemory` — so the reported heap is the live set with transient
+garbage reclaimed. The probes that use it:
+
+- `stage5-start-live` — live set entering first-pass FDR
+- `first-pass-fdr-live` — after first-pass Percolator
+- `reconciliation-floor` — entering Stage-6 rescore
+
+`reconciliation-floor` is why the #4405 retention bug was caught at all:
+because it forces a GC, its `8.40 -> 18.30 GB` jump was unambiguously
+*live* data (a ~5.7 GiB `FdrProjectionSet` pinned in `PipelineContext`
+past its only consumer), not GC slack. The non-forced probes would have
+buried it in noise.
+
+**Practical recipe for measuring a memory change:**
+
+1. Compare the same **build composition** on both sides. Memory deltas
+   are worthless if the two runs differ by unrelated merged PRs — an
+   80-file run was invalidated this way because the "baseline" lacked
+   #4381/#4376 that the branch carried. Pin the comparison build and
+   record exactly which output-affecting and memory-affecting commits it
+   does and does not contain (the run-script header is a good place).
+2. Read the `*-live` (forced-GC) probes, not `managed_heap` or peak WS.
+3. If a stage lacks a forced-GC probe, add one via
+   `LogManagedHeapAfterGcIfEnabled` — it is a zero-cost no-op (including
+   the collection) when `OSPREY_LOG_MEMORY` is unset. As of #4398 the
+   scoring *plateau* still has no live probe; a forced GC every ~20th
+   file in `PerFileScoringTask` would close that gap (4 collections per
+   82-file run).
+4. `ai/scripts/Osprey/Get-MemoryReport.ps1` parses all of this into a
+   side-by-side markdown table; it puts the LIVE rows first and labels
+   peak WS as "GC-expanded, NOT demand".
+
+The corollary for a **32 GB** target: GC tuning
+(`DOTNET_GCConserveMemory`, `DOTNET_GCHeapHardLimitPercent`, fewer heaps)
+reclaims the *elastic* part — slack and fragmentation shrink on their own
+on a smaller box, paid for in throughput — but it **cannot** move the
+live set. First-pass Percolator's live feature arrays (~30 GB at 82
+files) are the wall a 32 GB machine hits, and no GC flag touches them.
+Distinguish the two before proposing either fix (see #4404).
 
 ### Profiling C# via dotTrace
 
