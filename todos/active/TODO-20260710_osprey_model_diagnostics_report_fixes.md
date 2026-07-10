@@ -87,13 +87,18 @@ below.
   [the entrapment measurement].
 
 ### Phases
-- **Phase A (in progress): the tab-level toggle + `max` semantics.** Data: `CrossRunView` (the 7
-  reproducibility arrays under one gate) held twice on `CrossRunDetection` -- `PerRun` (gate: run q)
-  and `Experiment` (gate: `max(run q, exp q)`). Both q's already on every `FdrEntry`; no new plumbing.
-  Template: one tab-level toggle re-renders the yield chart and both cross-run plots together. Tests:
-  extend `TestCrossRunDetection` to assert the `Experiment` view is a subset (an entry with small run
-  q but large exp q is in `PerRun` but not `Experiment`). Regenerate the 20-run and confirm the k=1
-  bump collapses / union flattens under experiment-wide.
+- **Phase A (DONE -- commit `c7c1f9b413`, pushed): the tab-level toggle + `max` semantics.** Data:
+  `CrossRunView` (the 7 reproducibility arrays under one gate) held twice on `CrossRunDetection` --
+  `PerRun` (gate: run q) and `Experiment` (gate: `max(run q, exp q)`), via a shared
+  `ComputeCrossRunView` helper. Template: one tab-level `reproScopeSel` toggle (unified IIFE)
+  re-renders the yield chart and both cross-run plots together; new "FDR scope" intro card with the
+  Collins/Rosenberger citations. Tests: `TestCrossRunDetection` now asserts both views + the
+  experiment-wide subset gate (`EntryRunExp` helper; `Entry` now sets `ExperimentPeptideQvalue`).
+  480 tests green. VERIFIED on the regenerated 20-run r=0.5 (healthy): flipping to experiment-wide
+  collapses k=1 from 10,859 (17%) -> 322 (1%), shrinks the union 63,747 -> 36,149, leaves the
+  intersection ~unchanged (13,593 -> 13,573), and turns the histogram into a clean monotone ramp to
+  the k=N peak -- exactly the global-FDR effect. Report:
+  `D:\test\Pilot-MTG-Tissue-May2026\runs\verify-toggle-r0.5\seaad.model-diagnostics.html`.
 - **Phase B: entrapment adjudication overlay.** Add the entrapment (p_target) precursors' own
   run-count distribution (currently excluded) as a second histogram series, and report the
   entrapment-measured FDP of the exp-q-surviving k=1/low-k set. This turns the visibility into an
@@ -103,15 +108,16 @@ below.
   empirical version of the Collins/Rosenberger concern -- answers "how bad at 82 runs" quantitatively.
   Fast to prototype on the existing 20-run first (compute from the per-file passing sets; no rerun).
 
-## Implementation status (WIP -- uncommitted in the working tree, does NOT yet build)
-`ModelDiagnosticsData.cs`: `CrossRunView` class added and `CrossRunDetection` restructured to
-`RunNames` + `PerRun` + `Experiment`. STILL TO DO for Phase A: rewrite `BuildCrossRunDetection` to
-compute both views (run-q set and max(run-q,exp-q) set) via a shared view-builder; the template
-tab-level toggle + wiring the two cross-run render functions to a `view`; update `TestCrossRunDetection`
-(now `cr.PerRun.*` / add `cr.Experiment.*` subset assertions). Either complete per the plan above or
-`git checkout -- pwiz_tools/Osprey/...` to revert the WIP and redo cleanly. Gate: Debug build +
-tests + inspection; regenerate the 20-run via the hardlink-reprocess trick (copy scores.parquet +
-.PerFileScoring.osprey.task + calibration into a fresh dir; no deletions).
+## Current status (2026-07-10, end of session)
+Phases A + the two report bugs + the two graphs + the self-review and Copilot fixes are all LANDED
+on PR #4408 (4 commits: `e10464f035`, `e300d3fd02`, `9e3164fda5`, `c7c1f9b413`), pushed, 480 tests
+green, and verified on real SEA-AD data. Working tree is CLEAN. PR is review-ready pending the
+latest Perf/Regression build (4086216, reporting-only so golden unaffected). **Remaining = Phase B
+then Phase C** (both specced above); neither is started. Nothing is blocked.
+
+**Next session handoff**: For detailed startup protocol (skills to load, build/verify commands, the
+hardlink-reprocess recipe, and the Phase B starting point), read
+`ai/.tmp/handoff-20260710_osprey_model_diagnostics_report_fixes.md` before starting work.
 
 ## Files
 - `pwiz_tools/Osprey/Osprey.FDR/ModelDiagnostics/ModelDiagnosticsData.cs`
