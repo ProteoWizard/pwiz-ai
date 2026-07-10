@@ -69,8 +69,10 @@ function Read-RunLog {
         Stage5Heap        = $null
         Stage5Ws          = $null
         Stage5PeakPaged   = $null
+        Stage5LiveHeap    = $null   # post-forced-GC: the only "will it fit" number
         ProjectionHeap    = $null
         AfterFdrHeap      = $null
+        FirstPassLiveHeap = $null   # post-forced-GC
         AfterCompactHeap  = $null
         ReconFloorHeap    = $null
         ReconResidentHeap = $null
@@ -100,8 +102,10 @@ function Read-RunLog {
                     if ($null -ne $heap -and ($null -eq $r.ScoringMaxHeap -or $heap -gt $r.ScoringMaxHeap)) { $r.ScoringMaxHeap = $heap }
                 }
                 '\[MEM Stage 5 start'                 { $r.Stage5Heap = $heap; $r.Stage5Ws = $ws; $r.Stage5PeakPaged = $pgd }
+                '\[MEM stage5-start-live\]'           { $r.Stage5LiveHeap = $heap }
                 '\[MEM projection built'              { $r.ProjectionHeap = $heap }
                 '\[MEM after first-pass Percolator'   { $r.AfterFdrHeap = $heap }
+                '\[MEM first-pass-fdr-live\]'         { $r.FirstPassLiveHeap = $heap }
                 '\[MEM after Stage-5 CompactFirstPass'{ $r.AfterCompactHeap = $heap }
                 '\[MEM reconciliation-floor\]'        { $r.ReconFloorHeap = $heap }
                 '\[MEM reconciliation-resident\]'     { $r.ReconResidentHeap = $heap }
@@ -160,8 +164,18 @@ Write-Output ''
 Write-Output ('| Stage / anchor | ' + ($cols -join ' | ') + ' |')
 Write-Output $sep
 
+# LIVE rows (post-forced-GC) are the sizing numbers. The rest include uncollected
+# garbage (GC.GetTotalMemory(false)) or reflect the GC expanding into available RAM;
+# in particular **peak working set is NOT a measure of demand** -- Server GC grows
+# heaps toward the high-memory-load threshold (~90% of physical) before collecting,
+# so on a 64 GB box it lands near ~55 GB almost regardless of the live set.
 $rows = [ordered]@{
-    'Library resident (managed)'          = { param($d) Format-Gb $d.LibraryResident }
+    'Library resident (LIVE, post-GC)'    = { param($d) Format-Gb $d.LibraryResident }
+    '**Stage 5 start (LIVE, post-GC)**'   = { param($d) Format-Gb $d.Stage5LiveHeap }
+    '**1st-pass FDR (LIVE, post-GC)**'    = { param($d) Format-Gb $d.FirstPassLiveHeap }
+    '**Reconciliation floor (LIVE)**'     = { param($d) Format-Gb $d.ReconFloorHeap }
+    'Reconciliation resident (LIVE)'      = { param($d) Format-Gb $d.ReconResidentHeap }
+    '-- below: not live, read with care --' = { param($d) '' }
     'Scoring plateau (peak WS)'           = { param($d) Format-Gb $d.ScoringPeakWs }
     'Scoring (max managed heap)'          = { param($d) Format-Gb $d.ScoringMaxHeap }
     'Stage 5 stub load (managed)'         = { param($d) Format-Gb $d.Stage5Heap }
@@ -169,10 +183,8 @@ $rows = [ordered]@{
     'Stage 5 projection built (managed)'  = { param($d) Format-Gb $d.ProjectionHeap }
     'After 1st-pass Percolator (managed)' = { param($d) Format-Gb $d.AfterFdrHeap }
     'After Stage-5 compaction (managed)'  = { param($d) Format-Gb $d.AfterCompactHeap }
-    'Reconciliation floor (managed)'      = { param($d) Format-Gb $d.ReconFloorHeap }
-    'Reconciliation resident (managed)'   = { param($d) Format-Gb $d.ReconResidentHeap }
-    '**Overall peak working set**'        = { param($d) Format-Gb $d.OverallPeakWs }
-    'Overall peak_paged'                  = { param($d) Format-Gb $d.OverallPeakPaged }
+    'Overall peak WS (GC-expanded, NOT demand)' = { param($d) Format-Gb $d.OverallPeakWs }
+    '**Overall peak_paged**'              = { param($d) Format-Gb $d.OverallPeakPaged }
 }
 foreach ($name in $rows.Keys) {
     $cells = $reports | ForEach-Object { & $rows[$name] $_.Data }
