@@ -219,7 +219,8 @@ two differently-strided samples, and the larger LDA training set sharpens the di
   `rustup update` -- CI tracks stable and 1.97 added a `clippy::question_mark` lint that
   fires on untouched `osprey-io/src/mzml/parser.rs`, which is what turned CI red, not this
   PR), 557 tests pass. **GitHub CI green on ubuntu, macOS and windows** (`38604e6`).
-* **C#:** 489 tests pass. Inspection adds **zero** new warnings (the 11 remaining, in
+* **C#:** 486 tests pass, 3 skipped (cross-impl parity tests that need Rust parquet
+  fixtures not present locally). Inspection adds **zero** new warnings (the 11 remaining, in
   `SystemMemory.cs` and `PerFileScoringTask.cs`, are pre-existing on master -- verified
   against a stashed clean tree).
 
