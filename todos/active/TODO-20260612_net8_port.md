@@ -1345,3 +1345,61 @@ change fast: build `BiblioSpec.csproj` then `cp` the fresh `Pwiz.Tools.BiblioSpe
 clean build.bat propagates correctly.
 
 **Next session handoff**: read `ai/.tmp/handoff-20260612_net8_port.md`.
+
+### 2026-07-10 (session 5) - 4 more net8 tests green: TestPivotEditor + EncyclopeDIA + both DIA-Umpire searches; msconvert-sharp bundled with Skyline
+
+Worktree `C:\dev\pwiz-net8`, branch `Skyline/work/20260612_net8_port`, PR #4178. Commits `f2e97b3ced`
+(TestPivotEditor) + `c1657ec892` (msconvert-sharp + EncyclopeDIA + DIA-Umpire), **pushed to origin and
+mirrored to `origin HEAD:chambem2/pwiz-sharp`**. All four tests verified locally (parallelmode=off
+offscreen=on; the DDA/DIA ones with originalurls=on).
+
+**TestPivotEditor (f2e97b3ced) - the missing half of session-4's DsvWriter "R" fix.** The earlier fix made
+invariant report EXPORTS emulate net472's "R" (G15-else-G17) on net8, but the invariant grid DISPLAY still
+used net8's native shortest-round-trip "R". TestPivotEditor compares a live grid preview against a live
+export, so they diverged (grid `0.2796261731540983` vs export `0.27962617315409832`). Extracted the emulation
+into a shared `RoundTripFormat` helper (`pwiz_tools/Shared/Common/DataBinding/RoundTripFormat.cs`); `DsvWriter`
+delegates to it and `BoundDataGridView.OnCellFormatting` applies it to "R"-formatted double/float cells so
+grid display == export == net472 baseline. Extends the `reference_net8_roundtrip_format` family (that memo
+also flagged a latent `Xml.cs` .sky instance - still open).
+
+**EncyclopeDIA un-deferred + msconvert-sharp bundled with Skyline (c1657ec892).** User directive: fix
+EncyclopeDIA on net8, don't skip-guard it. The only deferral was a `#if NET472 ... #else throw "feature
+deferred"` guard in `SkylineFiles.ShowEncyclopeDiaSearchDlg` (from the 90db5edf4e "make it compile" commit);
+all EncyclopeDIA infra (Koina/Grpc.Net, Java jar download, out-of-process invoke) was already net8-ready.
+Removing the guard exposed the real blocker: the 4 Skyline msconvert call sites shell out to a bare
+"msconvert" that the SDK build doesn't produce, and **net8 Process.Start no longer searches cwd** (same class
+as the Thermo BuildThermoMethod fix). Per user direction, wired up the managed **msconvert-sharp** port:
+- **Skyline.csproj**: net8-only ProjectReference + Content deploy of msconvert next to Skyline (mirrors the
+  BlibBuild/BlibFilter pattern). net472 keeps native msconvert from Jam.
+- **`PathEx.ResolveBundledExe`** roots a bundled tool exe to an absolute path in the app dir; the 4 msconvert
+  sites + `Export.ResolveToolPath` (method builders) use it.
+- **Full rename** (user-approved) `AssemblyName msconvert-sharp -> msconvert` in pwiz-sharp, plus
+  installer/build.ps1, Installer.Tests, ArgParser usage text, build.bat coverage filter to keep pwiz-sharp CI
+  coherent.
+
+**Three msconvert-sharp behavior fixes (surfaced by actually running the conversions on net8):**
+1. **`ArgParser` accepts `--runIndex`** - native msconvert (boost::program_options) takes it as an unambiguous
+   prefix-abbreviation of `--runIndexSet`; msconvert-sharp did exact matching and rejected the abbreviated form
+   Skyline's EncyclopeDIA path passes.
+2. **`SpectrumListFactory.TakeKeyValue` is now quote-aware** - it whitespace-split the filter args, truncating
+   a quoted `params=` value that contains a space (`diaUmpire params="...\TestRunner results\...params"` ->
+   `params file "...\TestRunner not found`). The DIA tests use adversarial paths (spaces + `~&TMP ^` + unicode).
+3. **DiaUmpire temp-dir leak** - `DiaUmpire.Impl.Run` nulled `Msd.Run.SpectrumList` mid-run as a memory
+   optimization (literal cpp port, where that field is the raw input list). In pwiz-sharp that field is the
+   `SpectrumList_DiaUmpire` wrapper that owns the per-window spill temp dir, so nulling it ORPHANED the wrapper
+   -> `MSData.Dispose` never disposed it -> spill dir left behind -> test's leftover-temp-files guard failed.
+   Root-caused via stderr diagnostics on `Run.Dispose` (showed `SpectrumList type = null`). Fix: drop the
+   `Msd.Run.SpectrumList = null` line; the input is already freed by `Sl = null`. Verified 0 leftover dirs.
+
+**Reusable findings:**
+- A managed msconvert-sharp needs to accept native msconvert's boost prefix-abbreviated options + quote-honoring
+  filter-arg parsing to be a true drop-in; running the real Skyline conversions is what surfaces these.
+- C++ RAII vs C# dispose: a cpp filter that resets `run.spectrumListPtr` for memory must NOT be ported literally
+  when the sharp side has a disposable wrapper in `Run.SpectrumList` - it orphans the wrapper's cleanup.
+- Build/deploy: Skyline's net8 Content glob deploys the fixed `Pwiz.Analysis.dll` + `msconvert.exe`; for fast
+  local iteration on a pwiz-sharp change, `dotnet build MsConvert.csproj` then `cp` the fresh DLL into
+  `bin/staging-net8/Release` (incremental Skyline build won't re-copy Content). A clean build propagates.
+
+**Open (not touched this session):** the 5 DDA/DIA tool-download 403s (S3 mirror infra - human action, not
+code; note the EncyclopeDIA Java JRE + jar and the DIA-Umpire MSFragger/JRE zips ARE already on the mirror,
+only the MSAmanda/MSFragger DDA zips 403); latent `Xml.cs` "R" round-trip instance.
