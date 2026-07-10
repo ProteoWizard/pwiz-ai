@@ -1241,3 +1241,107 @@ Shared/Common/DataBinding/DataSchema.cs. Clean CRLF, no new trailing whitespace.
   (empty filtered chromatogram; needs a per-molecule TryLoadChromatogram + per-spectrum DissociationMethod probe).
 
 **Next session handoff**: read `ai/.tmp/handoff-20260708_net8_tier1_fixes.md`.
+
+### 2026-07-09/10 - Two CI run-killers fixed; suite now completes; 6 genuine failures fixed; MS Amanda standalone DDA made to work end-to-end
+
+Worktree `C:\dev\pwiz-net8`, branch `Skyline/work/20260612_net8_port`, PR #4178. Everything below is
+**committed + pushed to origin and mirrored to `origin HEAD:chambem2/pwiz-sharp`** (standing directive).
+Local verification used `TestRunner ... parallelmode=off offscreen=on`; DDA tests need `originalurls=on`.
+
+**Build/test harness reworked (91b26945e2, f10f89e4cd):** `build.bat`/`tcbuild.bat` now run the WHOLE
+suite (Test + TestData + TestFunctional) through the staged Skyline **TestRunner** harness, not
+`dotnet test` (which can't run the UI/functional tests). Default = sequential host run
+(`parallelmode=off`); `--parallel` / `SKYLINE_TEST_PARALLEL=1` spreads across Docker workers
+(`parallelmode=server`). No skip list - a test opts out of parallel with `[NoParallelTesting("reason")]`.
+Fixed a parallel-coordinator `StreamWriter` race (logWriteLock).
+
+**Run-killer #1 - segment-heap AccessViolation (CI builds #22-25).** TestRunner's leak-tracking
+`GetProcessHeapSizes` walks process heaps with HeapLock/HeapWalk, which fault with a fatal,
+**uncatchable** AV on a Windows **Segment Heap** (default on Windows Server + Windows containers = the
+TC build agents + Docker workers). Dead ends tried and rejected (each burned a CI build): blanket
+skip-on-net8 (kills the leak number the user relies on); `HeapCompatibilityInformation==3` detection
+(segment heaps report 0/2, not 3 - proven in a real Server container); per-heap `0xDDEEDDEE` signature
+whitelist (a classic `HEAP_NO_SERIALIZE` heap has the classic 0xFFEEFFEE sig but a null lock and STILL
+AVs on HeapLock - build #25). **Final fix (0700f4cb9d): on net8 NEVER walk - read committed/reserved via
+`HeapSummary` (kernelbase.dll), which never traverses a heap and works on every heap type; net472 keeps
+the historically-safe walk.** Verified end-to-end by running the real staged net8 TestRunner INSIDE a
+`mcr.microsoft.com/windows/server:ltsc2022` container (segment heaps by default) - no AV. See memory
+`reference_net8_segment_heap_detection`.
+
+**Run-killer #2 - System.Private.CoreLib FailFast (CI build #26).** `AbstractUnitTestEx.GetSystemResourceString`
+fetched BCL error strings via `new ResourceManager(assembly.GetName().Name, coreLib)`. On net8 that
+assembly is System.Private.CoreLib, whose strings live in the embedded `System.Private.CoreLib.Strings`
+resource - ResourceManager groveled for a missing stream and the runtime called `Environment.FailFast`
+("...CoreLib.resources couldn't be found!"), uncatchably terminating the whole sequential TestRunner
+mid-suite. **Fix (b959da223c): read the `System.Private.CoreLib.Strings.resources` manifest stream
+directly (returns null, never FailFast); translate the mscorlib dotted ids to net8's underscored form
+(`IO.FileNotFound_FileName` -> `IO_FileNotFound_FileName`).** Added `Test/SystemResourceStringTest.cs`
+regression guard. See memory `reference_net8_corelib_resource_failfast`.
+
+**With both run-killers cleared, CI build #27 COMPLETED the full suite** (~50 min, 32k log lines) with
+**14 failures** (up from #26's 4 only because the whole suite now runs). Buckets: 5 DDA/DIA tool-download
+infra (403 / dialog timeout), 2 DIA-Umpire `msconvert` conversions, 1 intentional net8 deferral
+(TestEncyclopeDiaSearch throws "not available on .NET 8"), 1 Thermo-SDK/agent (below), 5 genuine
+product failures (below).
+
+**5 genuine pre-existing failures fixed + host-verified (en+fr):**
+- **TestDocumentSharing** (159cd83145): net8 SDK csproj re-lists NHibernate mapping .xml as EmbeddedResource
+  but missed `Model\Lib\BlibData\mapping_redundant.xml` -> null mapping stream -> NRE building a minimized
+  .blib. Added the one entry (all 7 Model mapping files now embedded).
+- **TestFilesTreeForm** (e22746a585): net8 `Path.GetFullPath` no longer throws on invalid chars (and dropped
+  `"`,`<`,`>` from `GetInvalidPathChars`), so `FileSystemUtil.Normalize` stopped returning null. Restored by
+  an explicit invalid-char check.
+- **TestMiscForms** (1875500adb): net8 added `MessageBoxButtons.CancelTryContinue` (=6); the test iterates all
+  enum values and the unsupported one renders a buttonless dialog -> AcceptButton null NRE. Skip values past
+  RetryCancel (numeric compare, compiles on net472).
+- **TestReplicatePivotGrid** (e497b40769): net8 `double.ToString("R")` = shortest round-trip (16 digits) vs
+  net472 G15-else-G17 (17). One cell differed. Fixed in `DsvWriter` by emulating net472's "R" (G15-else-G17,
+  G7-else-G9 for float). NOTE: a blanket G15 is WRONG here (regresses legit 16-17 digit values). Latent same
+  bug in `Xml.cs` .sky serialization. Memory `reference_net8_roundtrip_format`.
+- **TestToolService** (2472a95635): TWO net8 issues. (1) legacy SkylineTool IPC uses BinaryFormatter, disabled
+  by default on net8 -> tool crashed on connect. Re-enabled globally via `EnableUnsafeBinaryFormatterSerialization`
+  in `pwiz_tools/Directory.Build.props` (net472 ignores it; temporary until the JSON tool protocol migration;
+  gone in net9). (2) net8 throws IOException writing the report to a tool that never reads stdin -> swallow it
+  on the report-to-stdin write only (product hardening too).
+
+**Thermo test fixed (4ed5a1dc1e): TestCommandLineExportThermoMethod** - NOT a Thermo-SDK problem (the test is
+designed to run without OrbitrapAstral and expects BuildThermoMethod.exe to fail with the registry error). It
+only failed the command-line-echo check: it pinned the relative `Method\Thermo\BuildThermoMethod -t OrbitrapAstral`,
+but net8 emits the absolute `...\BuildThermoMethod.exe` (because `Export.ResolveToolPath` roots the path -
+.NET 8 Process.Start no longer searches cwd). Updated the assertion to match the `.exe` tail.
+
+**MS Amanda standalone DDA integration - TestDdaSearch now GREEN end-to-end** (supersedes session-2's
+"env-blocked" note; the wrapper was already OOP+download but never actually produced usable output). Fixes:
+- **Wrapper (e10ff1300c, `Model/DdaSearch/MSAmandaSearchWrapper.cs`):** SupportedExtensions = { .mzml } +
+  convert others (the standalone reads only mzML); set `WorkingDirectory` to the exe's dir (else "Cannot find
+  enzymes.xml!"); MSAmanda writes `.mzid.gz` directly (don't expect a plain .mzid then gzip); the `-e` settings
+  file must end in `.xml` (a `.tmp` was rejected); clean up MSAmanda side files.
+- **Distinctive mirror/cache name (2bce8ab314, `Util/UtilInstall.cs`):** added `FileDownloadInfo.MirrorFilename`
+  (defaults to URL last segment) so MS Amanda's generic GitHub `latest.zip` maps to `MSAmanda-<ver>.zip` on the
+  S3 mirror + cache instead of a collision-prone `latest.zip`. The user asked for this specifically.
+- **BiblioSpec reader (39558abff3, `pwiz-sharp/.../BiblioSpec/MzIdentMLReader.cs`):** the standalone's mzid has
+  items with only `Amanda:AmandaScore` (no percolator q-value) and references spectra as `spectrumID="index=N"`.
+  `GetScore` now returns null (skip the item) instead of throwing "unsupported score type" (whole-file error
+  only if NO item scored); an `index=N` id sets `PSM.SpecIndex` + `LookUpBy=IndexId`. Diverges from
+  MzIdentMLReader.cpp (net472 uses the retired in-process MS Amanda) - cpp parity is a follow-up.
+- **Re-recorded** TestDdaSearch counts to `(79, 192, 241, 723, 93)` (lower than the retired in-process
+  integration: only percolator-validated PSMs enter the library; zero spectra missed, so legit).
+
+**Follow-ups / open:**
+1. **S3 mirror upload (infra):** for CI to pass WITHOUT `originalurls`, `MSAmanda-<ver>.zip` (and the other DDA/DIA
+   tool zips - MSFragger, MSAmanda for the DIA tests) must be uploaded to `ci.skyline.ms/skyline_tool_testing_mirror/`.
+   The 5 DDA/DIA download failures in #27 are all this (403). Not code.
+2. **cpp parity** for the MzIdentMLReader score-skip + index= changes (native build; not in the net8 path).
+3. **Remaining #27 failures** not yet touched: the 2 DIA-Umpire `msconvert diaUmpire` conversion failures
+   (120s WaitForConditionUI timeout), and TestEncyclopeDiaSearch (intentional net8 feature deferral - likely
+   should be skip-guarded on net8).
+4. Session-2's "Remaining 13 net8-wide (diagnosed, not yet fixed)" list above - status unknown vs #27; several
+   may already be fixed (e.g. ConsoleImportEi, WatersConnect landed in commits 288c8647d7 / f06835cd5d).
+
+**Build gotcha (cost real time, now in memory `reference_net8_bibliospec_staging`):** the BiblioSpec assembly
+is `Pwiz.Tools.BiblioSpec.dll` (NOT `BiblioSpec.dll`), and incremental `dotnet build` does NOT propagate a
+BiblioSpec change into the Skyline staging dir (ReferenceOutputAssembly=false + Content-copy). To test a reader
+change fast: build `BiblioSpec.csproj` then `cp` the fresh `Pwiz.Tools.BiblioSpec.dll` over the staged one. A
+clean build.bat propagates correctly.
+
+**Next session handoff**: read `ai/.tmp/handoff-20260612_net8_port.md`.
