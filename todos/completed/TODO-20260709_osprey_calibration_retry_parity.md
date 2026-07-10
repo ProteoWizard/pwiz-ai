@@ -1,10 +1,8 @@
 # Osprey C# drops Rust's calibration retry ladder and the >=50-point acceptance floor
 
-**Status:** Review requested from Brendan (2026-07-09). All local gates green; Rust CI
-green on all 3 platforms; Copilot threads resolved on both PRs. Still awaiting the
-**TeamCity Astral legs**, which only a maintainer can trigger (`branch=pull/4402`).
-**Issue:** https://github.com/ProteoWizard/pwiz/issues/4401
-**PR (pwiz):** https://github.com/ProteoWizard/pwiz/pull/4402
+**Status:** Completed — pwiz #4402 merged 2026-07-10 as `9b5b4105d7`.
+**Issue:** https://github.com/ProteoWizard/pwiz/issues/4401 (auto-closed on merge)
+**PR (pwiz):** https://github.com/ProteoWizard/pwiz/pull/4402 (merged 2026-07-10 as `9b5b4105d7`)
 **PR (maccoss/osprey):** https://github.com/maccoss/osprey/pull/52
 **Branch (pwiz):** `Skyline/work/20260709_osprey_calibration_retry_parity` (off `origin/master` c9526f0e6)
 **Branch (maccoss/osprey):** `fix/calibration-pass2-min-points` (off `origin/main` f6d2a0f)
@@ -289,6 +287,29 @@ Everything reachable from this account is green. Two steps remain, both for a ma
    trees are only compared by `Compare-EndToEnd-Crossimpl.ps1`, which is run manually.
 
 Mike cannot trigger TeamCity from his account (2026-07-09).
+
+### 2026-07-10 - Merged
+
+PR #4402 merged as commit `9b5b4105d7`. Reviewed via `/pw-review`: build + 494 tests
+green (after merging current master, which pulled in #4395/#4399/#4400/#4403 — the
+`Calibrator.cs`/`PerFileScoringTask.cs` overlap auto-merged cleanly, no conflicts). Shipped
+the full retry ladder + graduated fit + low-n linear regime + range-line fallback as
+described above. Squash subject dropped the "Reported by Mike" line (Mike authored both the
+issue and the fix — no external reporter to credit).
+
+**Gates at merge:** GitHub checks green (18/18); the manual Osprey Perf/Regression
+(`ProteoWizard_OspreyWindowsNetPerfRegressionTests`) was **triggered on `pull/4402`
+(build 4086146)** but merged before it finished — Astral legs not confirmed green at merge
+time; check 4086146 post-hoc. Local `regression.ps1 -Dataset Stellar` was set up but not run
+(merged first); Stellar was already covered by the committed golden + the branch's own Gate 1.
+
+**Deferred (unchanged from Known gaps above):** the graduated tier / low-n linear regime /
+pass-2 linear guard / range-line fallback remain unexercised by real data — Brendan's
+entrapment FDR + model-performance tooling on the 82-run SEA-AD set is the intended coverage,
+plus exposing `--calibration-retry-factor` / `--calibration-sample-size` /
+`--min-calibration-points` to pin file 093 at 193 points as a real-data band fixture. The
+FDRBench-on-a-band-file check (Gate 4) is likewise deferred to that tooling. Companion
+**maccoss/osprey#52** still to be merged separately (no build-time dependency either way).
 
 ## Files
 
