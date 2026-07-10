@@ -142,9 +142,17 @@ mode1/2/3 on **Stellar AND Astral** (straight-through, HPC chain, resume) plus a
 perf leg - about an hour. It is deliberately **manual / overnight**, NOT triggered
 on every commit or push, so opening or pushing a PR does **not** start it. When a
 PR is otherwise ready (self-review clean, the `Osprey Windows .NET` unit build
-green), trigger it yourself and let it run before requesting human review / merge.
+green), it must run before human review / merge.
 
-Trigger via the TeamCity MCP:
+**First check whether you can actually trigger it.** The TeamCity MCP server is not
+configured on every machine -- on Mike's it is absent (`~/.claude.json` defines only
+`labkey`), and `ai/claude/settings.json` pre-approves three read-only teamcity tools
+(`get_build_log`, `get_build_status`, `search_builds`) for a server that does not exist.
+`trigger_build` is not even in that allow-list. If `mcp__teamcity__*` does not resolve,
+say so plainly and hand the trigger to a maintainer rather than claiming the gate is
+pending on nothing.
+
+Where the MCP *is* connected, trigger via:
 `mcp__teamcity__trigger_build(build_type_id="ProteoWizard_OspreyWindowsNetPerfRegressionTests", branch="pull/<N>")`
 
 **Always use `branch="pull/<N>"` (the PR number), NEVER the named
