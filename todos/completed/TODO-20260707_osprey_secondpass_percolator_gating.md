@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260707_osprey_secondpass_percolator_gating`
 - **Base**: `master`
 - **Created**: 2026-07-07
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4389](https://github.com/ProteoWizard/pwiz/issues/4389)
-- **PR**: (pending)
+- **PR**: [#4395](https://github.com/ProteoWizard/pwiz/pull/4395) (merged 2026-07-09 as `35d7fab879`)
 
 ## Design decision (from Michael): FULL PARITY for #1
 
@@ -113,23 +113,27 @@ Type/semantics mismatch:
 ## Scope / Tasks
 
 ### Primary fix (issue #4389)
-- [ ] Decouple the 2nd-pass Percolator from protein FDR in `MergeNodeTask.Run`: move
+- [x] Decouple the 2nd-pass Percolator from protein FDR in `MergeNodeTask.Run`: move
       `Pass2FdrSidecar.ComputeAndPersist` out of the `if (config.ProteinFdr.HasValue)`
       block; trigger it on the reconciliation/rescore condition (C# analog of Rust's
       `total_rescored > 0`). Leave only `RunProteinFdr` inside the protein-FDR gate.
-- [ ] Reconcile the parallel gate at `PerFileRescoreTask.cs:438` (first-pass protein-FDR
+- [x] Reconcile the parallel gate at `PerFileRescoreTask.cs:438` (first-pass protein-FDR
       recompute) against Rust's `!can_skip_fdr || config.expect_reconciled_input`.
-- [ ] Update the now-inaccurate `Pass2FdrSidecar` docstring ("Only invoked when protein
+- [x] Update the now-inaccurate `Pass2FdrSidecar` docstring ("Only invoked when protein
       FDR is enabled") and the `Outputs()` sidecar gate in `MergeNodeTask.cs:87` if the
-      2nd-pass sidecars should now be written without `--protein-fdr`.
-- [ ] Add/adjust a regression test that runs multi-file reconciliation **without**
+      2nd-pass sidecars should now be written without `--protein-fdr`. (Further stale
+      `--protein-fdr` wording cleaned up in the post-merge-merge cleanup commit.)
+- [x] Add/adjust a regression test that runs multi-file reconciliation **without**
       `--protein-fdr` and asserts the blib uses 2nd-pass (reconciliation-corrected) q-values.
 - [ ] Validate cross-impl (`Compare-EndToEnd-Crossimpl.ps1`) on Stellar + Astral **with and
       without `--protein-fdr`** (the without case is what diverges today) + straight-through
-      regression vs the C# golden.
+      regression vs the C# golden. (Stellar done; **Astral cross-impl + the manual Osprey
+      Perf/Regression Astral gate were NOT run before merge** — carry as a post-merge check.)
 
 ### Additional parity divergences found during the review (triage — may split to own issues)
-- [ ] **#2 Gap-fill isolation-window m/z filter disabled in C#** (HIGH, GPF). DECISION (Michael):
+- [x] **#2 Gap-fill isolation-window m/z filter disabled in C#** (HIGH, GPF) — SHIPPED in #4395
+      (straight-through + GPF 3-window cross-impl validated; HPC-chain GPF validation still a follow-up).
+      DECISION (Michael):
       **fix BOTH C# and Rust** so distributed GPF filters and parity holds. Key finding: Rust
       only filters straight-through — its join/HPC path never rebuilds isolation intervals
       (serializes `isolation_scheme.windows` to calibration.json but never reads them back), so
@@ -288,3 +292,32 @@ All divergences below are tracked here and in issue #4389 (Tier 1/2/3). Work ord
   runs match, e.g. the official gate). Orthogonal to #2; low functional impact (Skyline matches by
   basename). Track as its own low-priority parity item; decide which form is canonical (basename is
   likely the more portable choice).
+
+### 2026-07-09 - Merged
+
+PR #4395 merged as commit `35d7fab879`. Shipped the Tier-1/Tier-2 parity fixes: #1 protein-FDR +
+second Percolator pass always run (decoupled from `--protein-fdr` via `EffectiveProteinFdr`,
+default 0.01; C# analog of Rust `total_rescored > 0` via `AnyReconciledParquet`), #2 gap-fill
+isolation-m/z filter (straight-through + GPF cross-impl validated), #4 `--reconciliation-compaction-fdr`
+knob, #5 multi-charge consensus last-wins tie-break, #7 stable Simple-FDR winner sort.
+
+Reviewed via `/pw-review`: build + 483 tests green, gate green (17/17). During completion the branch
+was updated by merging current master (pulled in #4399 decoy-diagnostics + #4400 the 53 GB
+stub-buffer streaming refactor + #4388); the one conflict (`PerFileScoringTask.cs`, both sides
+additive — `PerFileIsolationMz` vs `FdrProjections`) was resolved keeping both, rebuilt to 485 tests
+green. A follow-up commit reworded stale `--protein-fdr` model-diagnostics comments/HTML for the
+now-always-on second pass.
+
+**Empirically confirmed at merge time** (Stellar libdecoy `--model-diagnostics`, no `--protein-fdr`,
+`35d7fab879` binary): the second pass now runs by default and the diagnostics HTML renders both
+passes, but this makes the anti-conservative pass-2 recalibration the DEFAULT — pass-1 combined FDP
+0.90% vs pass-2 1.47% at 1% q, with no off-switch. Accepted for Rust parity; the fix + a kill-switch
+are tracked in `backlog/brendanx67/TODO-osprey_pass2_recalibration_fix.md`.
+
+**Deferred (not shipped in #4395):** #3/#C SVM SIMD determinism (#4392); #6 missing-feature skip
+(reverted in the master merge, re-file); Tier-3 UTF ordering; the three self-review items
+(`AnyReconciledParquet` validity-key robustness, 2nd-pass `set_run` divergence, single-file 2nd-pass
+sidecar); Astral cross-impl + the manual Osprey Perf/Regression **Astral** gate (Stellar only was run
+before merge — the reviewer flagged this, user accepted the risk given prior green Perf/Regression and
+low-risk changes); the blib basename-vs-fullpath storage nit. `IOTest` test rename
+(`TestRescoreCompactionWithoutProteinFdrSkipsRescue`, premise invalidated by #1) also deferred.
