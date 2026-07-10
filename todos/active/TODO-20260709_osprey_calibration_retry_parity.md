@@ -1,7 +1,8 @@
 # Osprey C# drops Rust's calibration retry ladder and the >=50-point acceptance floor
 
-**Status:** PRs open; all local gates green; Rust CI green on all 3 platforms.
-Awaiting **maintainer action**: TeamCity Astral legs, then Brendan's review/test/merge.
+**Status:** Review requested from Brendan (2026-07-09). All local gates green; Rust CI
+green on all 3 platforms; Copilot threads resolved on both PRs. Still awaiting the
+**TeamCity Astral legs**, which only a maintainer can trigger (`branch=pull/4402`).
 **Issue:** https://github.com/ProteoWizard/pwiz/issues/4401
 **PR (pwiz):** https://github.com/ProteoWizard/pwiz/pull/4402
 **PR (maccoss/osprey):** https://github.com/maccoss/osprey/pull/52
