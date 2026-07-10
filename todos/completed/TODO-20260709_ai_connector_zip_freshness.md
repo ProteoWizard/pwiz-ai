@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260709_ai_connector_zip_freshness`
 - **Base**: `master`
 - **Created**: 2026-07-09
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: none
-- **PR**: [#4403](https://github.com/ProteoWizard/pwiz/pull/4403)
+- **PR**: [#4403](https://github.com/ProteoWizard/pwiz/pull/4403) (merged 2026-07-09)
 
 ## Motivation
 
@@ -57,3 +57,15 @@ check only compared a hard-coded count (47), which never changed.
 - Philip's original question (finding SkylineCmd.exe for a ClickOnce install) is answered via
   the tool API (`GetProcessId` today, or a possible `GetExecutablePath`) rather than the
   filesystem; tracked separately.
+
+## Progress Log
+
+### 2026-07-09 - Merged
+
+PR #4403 merged as commit `9f204983` (squash, admin override after a branch update).
+Shipped exactly as scoped: the rebuilt `26.1.1.159` `SkylineAiConnector.zip` (also live on
+the Tool Store) plus the `SkylineMcpTest` guards - both version checks (info.properties and
+bundled `SkylineMcpServer.exe` FileVersion against `EXPECTED_ZIP_VERSION`) and the
+source-parsed `[McpServerTool]` tool-surface check. CI was green (19/19); `/pw-self-review`
+was not run for this change. The two follow-ups above (release-guide note, root cause of the
+frozen version stamp) remain deferred and were not part of this PR.
