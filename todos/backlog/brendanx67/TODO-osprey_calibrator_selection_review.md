@@ -1,0 +1,105 @@
+# TODO-osprey_calibrator_selection_review.md -- Review the Stage-3 RT/mass calibrator-selection scheme for robustness improvements
+
+## Status
+**Backlog (created 2026-07-11).** Raised by Brendan: he wants to understand how Osprey's
+Stage-3 calibration CHOOSES its calibrator peptides, because the mechanism is the lever for
+making calibration **less likely to degrade in cases where tens of thousands of peptides are
+detectable** (rich data should never produce a weak calibration). This is a **review +
+improvement-hypothesis** TODO -- first document the mechanism precisely, then propose and A/B
+concrete robustness changes. Not a bug fix. Adjacent to (but distinct from)
+[[TODO-osprey_fdr_entrapment_collapse_investigation]] (that one is about high-scoring
+false members downstream; calibration itself is confirmed to SUCCEED on the degenerate file).
+Load `/osprey-development` before working it.
+
+Mike's recent work already addressed calibration *degradation under scarcity* (issue #4401,
+restored in #4402: retry ladder + graduated-RT fallback). This TODO looks at the other end --
+the selection quality and its heuristics -- and whether the picker is leaving robustness on
+the table when data is abundant.
+
+## The mechanism as it stands (reviewed 2026-07-11, cited) -- answers to the open questions
+Entry: `Calibrator.RunCalibration` (`Osprey.Tasks/Calibrator.cs:180`, port of Rust
+`run_calibration_discovery_windowed`). The log lines "N RT calibration points (from M
+peptides at 1% FDR)" are `Calibrator.cs:1063-1065`; summary in `PerFileScoringTask.cs:1814`.
+
+1. **What scores the candidates (the calibrator scorer).** A dedicated *lightweight*
+   calibration scorer, NOT the Stage-4 search scorer. Candidates come from co-elution/XICs
+   via a unit-resolution XCorr (`s_calXcorrScorer`, `:90`); each gets **4 features** at the
+   apex (`CalibrationScorer.ExtractFeatureMatrix:581-597`): mean pairwise corr (/6), LibCosine
+   apex, top-6-matched (/6), XCorr (/3) -- the /6,/3 are **hardcoded normalizers**. These feed
+   an **LDA trained on THIS file** (`TrainLdaWithNonNegativeCv:227`): Percolator-style iterative
+   CV, 3-fold stratified by peptide, average fold weights, **clip negative weights to 0 +
+   renormalize**, `MAX_ITERATIONS=3`, early-stop after 2 non-improvements; baseline = single
+   best feature.
+
+2. **How calibrators are selected -- a REAL target-decoy q (answers "does it compute q?": YES).**
+   Not top-N, not a fixed cutoff. On the final LDA discriminant, `CompeteCalibrationPairs:150`
+   runs paired target-decoy competition per `base_id = entry_id & 0x7FFFFFFF` (ties -> decoy,
+   conservative), then `QValueCalculator.ComputeQValues:49` computes q = cumulative decoys/targets
+   with reverse-pass monotonization; the calibrator set is those with **q <= CAL_FDR_THRESHOLD
+   (0.01)** (`Calibrator.cs:56`). So "1% FDR" is a genuine target-decoy q on the *calibration
+   LDA score*, computed independently of the main search. (Relaxes to 5% if nothing passes at 1%.)
+
+3. **Two-pass = inner refinement (orthogonal to the outer retry ladder).** Pass 1 scores in the
+   wide initial RT window; its LOESS MAD narrows the tolerance to `3*MAD*1.4826`; pass 2
+   (`RunRefinementPass:840`) re-scores the same sample inside the tighter, better-centered window
+   using pass-1 LOESS to predict RT, so more true peptides clear the prefilter + LDA threshold
+   (402 -> 503). Pass 2 accepted only if `R^2 >= pass1.R^2 * 0.99`; skipped if pass 1 was linear.
+
+4. **M peptides -> N points.** Best-per-`entry_id` dedup + one competition winner per base_id,
+   then `CollectCalibrationPoints:1274` drops decoys, drops q>1%, applies **S/N >= 5.0**
+   (`MIN_SNR_FOR_RT_CAL`). Notable: the LOESS fit runs with **`OutlierRetention = 1.0`
+   (`:1126`) -- fit-time outlier trimming is DISABLED** -- relying entirely on upstream LDA+S/N,
+   softened only by `RobustnessIterations = 2` (Theil-Sen in the linear tier).
+
+5. **Degradation/floors (#4402).** Outer retry ladder samples 100K targets, grows x2, final
+   attempt = ALL targets. Floors: `MinCalibrationPoints=200`, `ABSOLUTE_MIN=50`,
+   `MIN_LINEAR_FIT_POINTS=15`. Graduated fallback: >=200 -> LOESS bw 0.3; 100-200 -> widened bw;
+   <100 -> Theil-Sen line; <15 confident -> Fallback (null -> `FallbackRtTolerance=2.0`). Guards:
+   `HasSufficientRtSpan` (>=50% of library RT range), `IsPlausibleLinearFit` (slope within 2x).
+
+6. **Decoy reuse + entrapment contamination.** Decoys are the LDA negatives + the FDR denominator
+   (`SampleLibraryForCalibration:1392`). Entrapment peptides are **targets**, invisible to the
+   target-decoy q -- so a high-scoring co-eluting entrapment can pass the 1% gate and enter the
+   calibrator set as a library-RT-vs-measured-RT outlier. Defenses: S/N>=5, RobustnessIterations=2,
+   Theil-Sen breakdown -- but `OutlierRetention=1.0` disables LOESS's own trimming. Under scarcity,
+   `SelectPositiveTrainingSet:513` relaxes the *training* positive threshold through {5,10,25,50}%
+   to reach `MIN_POSITIVE_EXAMPLES=50`, admitting lower-confidence targets into LDA training.
+
+## Candidate robustness improvements to evaluate (hypotheses, A/B each)
+Flagged as heuristic/fragile in the review -- the point is to test whether tightening them makes
+calibration more robust when data is abundant (tens of thousands detectable) without hurting the
+scarce case:
+- [ ] **Re-enable fit-time outlier rejection.** `OutlierRetention=1.0` disables LOESS inlier
+  trimming; a high-scoring entrapment/decoy or a chimeric co-elution becomes a leverage point.
+  A/B a modest retention (e.g. 0.9-0.95) or an explicit robust residual gate against the current
+  LDA+S/N-only defense. Measure RT-fit MAD/SD and downstream IDs.
+- [ ] **Entrapment-aware calibrator hygiene.** The q gate cannot see entrapment (they are targets).
+  When an entrapment manifest exists, consider excluding manifest-entrapment from the calibrator
+  set (or at least measuring how many enter it and their RT-residual leverage). This also gives a
+  clean number for "how contaminated is the calibrator set" as a diagnostic.
+- [ ] **Scale the calibrator target with available signal.** `MinCalibrationPoints=200` /
+  100K sample is a floor tuned for scarcity; when tens of thousands of confident peptides exist,
+  does using more (and RT-span-stratified) calibrators tighten the fit / stabilize the tails? A/B
+  more calibrators + span-stratified selection vs the current top-of-q selection.
+- [ ] **Revisit the hardcoded feature normalizers (/6, /3) and S/N=5.0** -- are they optimal across
+  instruments/depths, or should they be data-driven? Low priority; measure sensitivity first.
+- [ ] **Relaxed-FDR training ladder ({5,10,25,50}%).** Admitting 50%-FDR positives into LDA
+  training under scarcity may teach the discriminant the wrong boundary; check whether it ever
+  fires on rich data and whether it degrades the selection.
+
+## Deliverables
+1. A written **mechanism doc** (the above, expanded) -- candidate home:
+   `pwiz_tools/Osprey/docs/` (sibling of the calibration workflow notes) so Mike has a reference.
+2. A prioritized, A/B-tested shortlist of the improvements above, each measured on RT-fit quality
+   (MAD/SD/R^2), calibrator count/composition, and downstream IDs + entrapment FDP, on the SEA-AD
+   dataset across entrapment ratios. Gate real changes on `regression.ps1` (calibration is
+   algorithm-affecting -> golden must be re-blessed deliberately if output changes) + the
+   entrapment oracle.
+
+## References
+- Code: `Osprey.Tasks/Calibrator.cs` (RunCalibration :180, retry ladder :318-622, CollectCalibration
+  Points :1274, floors/constants :53-56), `Osprey.Scoring/CalibrationScorer.cs` (ExtractFeatureMatrix
+  :581, TrainLdaWithNonNegativeCv :227, CompeteCalibrationPairs :150, SelectPositiveTrainingSet :513),
+  `QValueCalculator.cs:49`, `RTCalibrationConfig.cs`, `PerFileScoringTask.cs:1814` (summary log).
+- #4401/#4402 (calibration degradation retry ladder + graduated-RT fallback).
+- [[TODO-osprey_fdr_entrapment_collapse_investigation]] (shares the high-scoring-false-member theme).

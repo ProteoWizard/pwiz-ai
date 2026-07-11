@@ -30,9 +30,33 @@ At r=1.0, file **Astral-SEA-AD_2-MTG-May2026_SEA-AD-0002_7297_A02_006** reports
 ```
 At r=0.5 the 006 file does NOT collapse (it is in the healthy 20-file run). So the
 collapse is triggered by the 1:1 entrapment ratio interacting with something specific
-to 006. Mike guessed Stage-3 (RT/mass) calibration failure on 006 -- reportedly ruled
-out. Open: what actually zeroes 006's output at r=1.0? (Calibration retry ladder #4402?
-A file-specific score/threshold interaction? An empty post-compaction pool for that file?)
+to 006.
+
+**Stage-3 calibration is NOT the cause (CONFIRMED from the r=1.0 log, not memory).** Mike's
+initial guess was a Stage-3 RT/mass calibration failure on 006; the degenerate-case log
+(`...\seaad-10files-entrapment-r1.0-recheck\run.log`) shows 006's calibration SUCCEEDING:
+```
+Scoring file 2/10: ...SEA-AD-0002_..._006.mzML
+Running RT calibration...
+Calibration pass 1: 402 RT calibration points (from 483 peptides at 1% FDR)
+Calibration pass 2: 503 RT calibration points (from 624 peptides at 1% FDR)
+Calibration summary [...006]: RT tolerance +/-4.77 -> +/-0.55 min; RT fit MAD=0.124,
+  SD=0.217, R^2=0.9977, n=503
+Scored 4506993 entries (2271631 targets, 2235362 decoys) for ...006
+```
+So 006 calibrates fine (R^2=0.9977, tolerance tightened 4.77->0.55 min) and scores 4.5M
+entries. The zero happens LATER (Stage 5+ FDR / compaction), not at calibration. NUANCE
+worth keeping: the calibrator count *does* fall as entrapment % rises (fewer peptides pass
+the calibrator FDR gate when the entrapment competitors multiply) -- a real phenomenon Mike
+just addressed with an RT-calibration-degradation handling PR -- but at r=1.0 006's count
+(483->624 peptides) never gets low enough to trip that degradation. So calibration
+robustness is a genuine concern (see the separate calibrator-selection TODO) but is not
+what zeroes 006.
+
+Open: what actually zeroes 006's output at r=1.0 downstream of calibration? A file-specific
+score/threshold interaction, an all-decoy/entrapment top for that file, or an empty
+post-compaction pool? Bisect the pipeline stage where 006 goes from 4.5M scored entries to
+0 reported.
 
 ## Anomaly B -- decoys AND entrapment score at the far-right (high-score) edge
 Normally the top of the score ranking is a clean run of pure targets -- a score band
