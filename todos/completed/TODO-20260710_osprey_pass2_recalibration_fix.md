@@ -4,8 +4,26 @@
 - **Branch**: `Skyline/work/20260710_osprey_pass2_recalibration_fix`
 - **Base**: `master`
 - **Created**: 2026-07-10
-- **Status**: In Progress
-- **PR**: [#4410](https://github.com/ProteoWizard/pwiz/pull/4410)
+- **Status**: Completed
+- **PR**: [#4410](https://github.com/ProteoWizard/pwiz/pull/4410) (merged 2026-07-11 as 2985b4d063)
+
+### 2026-07-11 - Merged
+PR #4410 merged to master as squash commit **2985b4d063**
+("Added OSPREY_PASS2_QVALUE transfer mode as a 2nd-pass Percolator-retrain off-switch").
+Shipped Part A: the `OSPREY_PASS2_QVALUE` selector (`percolator` default byte-identical to the
+committed golden; `transfer` = frozen 1st-pass model + full pre-compaction score->q table),
+consolidating the three `d52cf7db17` prototype env vars, plus `TestTransferScoreQTable`. Both AI
+review gates cleared (self-review CRITICAL resident-pool gate + a follow-up feature-load bug the
+plain-transfer verification exposed; Copilot's 4 comments, threads resolved). Gates green:
+Debug + 505 tests + 0-warning inspection; `regression.ps1 -Dataset Stellar` mode1/2/3 byte-identical;
+**Osprey Perf/Regression build #150 SUCCESS on fc95bb335e (Stellar + Astral)**.
+A/B validated the effect on SEA-AD 20-file r=0.5 (deterministic): Pass-2 exp-wide true FDP@1%q
+3.61% (percolator) -> 1.11% (transfer), Pass-1 identical 0.835%.
+**Deferred (Part B, not in this PR):** the surgical Design 1 (transfer only the changed minority to
+recover IDs the coarse whole-pool transfer loses on r=0.5), Design 2 (pre-Percolator gap-fill), the
+`tric`/`retrain_fullnull` mode, cross-mode-resume sidecar mode-tagging, the `PercolatorResults`
+memory pin, and the companion doc for Mike. Follow-up backlog TODOs filed: FDR entrapment-collapse
+investigation, model-diagnostics Pass-1/2 switch, calibrator-selection review.
 
 ## Progress (2026-07-11, night session)
 Part A IMPLEMENTED (percolator default + transfer). Consolidated the three
