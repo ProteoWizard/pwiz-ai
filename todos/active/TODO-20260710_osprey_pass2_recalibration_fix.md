@@ -1,7 +1,14 @@
-# TODO-osprey_pass2_recalibration_fix.md -- Stop recalibrating q in the 2nd Percolator pass; add a kill-switch now and a TRIC-transfer alternative
+# TODO-20260710_osprey_pass2_recalibration_fix.md -- Stop recalibrating q in the 2nd Percolator pass; add a kill-switch now and a TRIC-transfer alternative
+
+## Branch Information
+- **Branch**: `Skyline/work/20260710_osprey_pass2_recalibration_fix`
+- **Base**: `master`
+- **Created**: 2026-07-10
+- **Status**: In Progress
+- **PR**: (pending)
 
 ## Status
-**Backlog (created 2026-07-09).** Promoted from the forward-reference left by
+**Active (created 2026-07-09; started 2026-07-10).** Promoted from the forward-reference left by
 `completed/TODO-20260701_osprey_separate_protein_reporting_from_rescue.md` (see its
 2026-07-02 oracle overturn and 2026-07-04 disposition) and
 [[project_osprey_pass2_recalibration_inflates_fdr]]. Trigger to raise priority now:
