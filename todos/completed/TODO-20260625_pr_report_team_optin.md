@@ -3,7 +3,7 @@
 ## Repo / Branch
 - **Repo**: pwiz-ai (`ai/`) — committed directly to `master`, no feature branch (doc/tooling).
 - **Created**: 2026-06-25
-- **Status**: In Progress (code complete; live store seeding + scheduling migration pending)
+- **Status**: Completed (2026-07-10) — opt-in live (3 subscribers); daily fan-out runs on BRENDANX-UW6
 - **PR**: (none — pwiz-ai master)
 
 # Team opt-in for the PR & TODO activity report (central fan-out)
@@ -49,17 +49,27 @@ tracking — but without each machine running its own heavy `claude -p` report.
 - [x] `ai/scripts/PRReport/README.md` + `ai/docs/scheduled-tasks-guide.md` updates.
 
 ## Remaining
-- [ ] **Seed the live shared store (owner machine)**: create `Claude\PRReport\` +
-      `TEAM-STORE-ID.txt` (`SKYLINE-TEAM-PRREPORT-STORE`), add brendanx67 at `team` level. (One-time
-      setup block is in the README. Touches the shared Drive — do with the user.)
-- [ ] **Migrate the schedule**: replace the current single-recipient "PR Report - Both" task with
-      `Invoke-PRReport.ps1 -FanOut -Schedule "9:30AM"` (elevated). Verify with `-FanOut -DryRun`.
-- [ ] **End-to-end test** before relying on it: `-FanOut` run with a 1–2 person roster, confirm
-      research writes per-subscriber slices and each person gets the right level + pile-up line.
-- [ ] **Share the `Claude` folder** with the team (edit access) and announce `/pw-pr-reporting on`.
-- [ ] Run `ai/scripts/Generate-TOC.ps1` (or let the weekly sync) so the new files land in TOC.md.
+- [x] **Seed the live shared store**: `Claude\PRReport\TEAM-STORE-ID.txt`
+      (`SKYLINE-TEAM-PRREPORT-STORE`) created 2026-06-25; brendanx67 added at `team` level.
+- [x] **Migrate the schedule**: the `-FanOut` fan-out task runs daily on **BRENDANX-UW6** (the
+      single owner machine), so no dev box runs the heavy report.
+- [x] **End-to-end test**: confirmed live — the daily fan-out produces the per-subscriber slices
+      and sends each subscriber their email from BRENDANX-UW6.
+- [x] **Share the `Claude` folder** + announce `/pw-pr-reporting on`: done — bspratt and chambm
+      opted in from their own machines (2026-06-30 / 07-06).
+- [ ] Run `ai/scripts/Generate-TOC.ps1` — deferred to the weekly sync (the TODO's sanctioned
+      option), which will land the new `ai/scripts/PRReport/` files in TOC.md.
 
 ## Refs
 - Pattern mirrored: `ai/scripts/Usage/` (Resolve-UsageStore, Setup-ThisMachine,
   `.claude/commands/pw-usage-reporting.md`).
 - Engine: `ai/scripts/Invoke-PRReport.ps1`; command files `pw-pr-research.md` / `pw-pr-email.md`.
+
+## Resolution
+
+**Completed 2026-07-10.** The central fan-out PR/TODO activity report is live: teammates opt in
+with `/pw-pr-reporting on`, which writes a row to the shared roster at
+`G:\My Drive\Claude\PRReport\roster.csv` (3 active subscribers — brendanx67 + bspratt at `team`,
+chambm at `individual`). The daily `-FanOut` research + per-subscriber email loop runs on
+**BRENDANX-UW6** (the single owner machine), so no dev box runs the heavy report. Only leftover is
+letting the weekly sync refresh `TOC.md` with the new `ai/scripts/PRReport/` files.
