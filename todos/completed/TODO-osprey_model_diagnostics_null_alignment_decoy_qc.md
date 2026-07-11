@@ -1,6 +1,12 @@
 # TODO: Osprey --model-diagnostics — null-distribution alignment + decoy-quality alarm
 
 ## Status
+**COMPLETED — the concrete "night-ready slice" (the Storey non-parametric density-ratio plot)
+shipped as #4399** (merged 2026-07-09, "Added a non-parametric null-alignment density-ratio plot
+to model diagnostics"). This was already a consolidation stub (below); moved to completed under
+its original slug so the inbound `[[...]]` links keep resolving. Any remaining
+assumption-diagnostics scope lives in [[TODO-osprey_assumption_failure_detection]].
+
 **MERGED (2026-07-07) into [[TODO-osprey_assumption_failure_detection]]** — retitled
 "Osprey FDR assumption diagnostics (equal-chance, stability, entrapment)". This idea (fit
 the target mixture to recover the decoy-independent false-target null `f_false`, overlay
