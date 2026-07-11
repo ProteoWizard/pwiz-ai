@@ -1,8 +1,14 @@
 # TODO-osprey_assumption_failure_detection.md -- Osprey FDR assumption diagnostics (equal-chance, stability, entrapment)
 
 ## Status
-Backlog (brendanx67). Not started. **Consolidates the former
-`TODO-osprey_model_diagnostics_null_alignment_decoy_qc` (now a stub) into one design** —
+Backlog (brendanx67). **Partially shipped: the report-VISUALIZATION half is done (#4399,
+2026-07-09) — idea B's null-alignment density-ratio overlay + left-side flatness KPI and idea C's
+paired-coin-collapse display (`BuildDensityRatio` / `DensityRatioData` in
+`ModelDiagnosticsData.cs`). The AUTOMATED-DETECTOR half is what remains:** the decoy-independent
+`f_false` null (A), the divergence metric + q-band check + **alarm** (B), the paired-coin **alarm**
+(C), stability / granularity (D), the comparative-entrapment alarm (E), and the stashed boost
+positive-control fixture (F). **Consolidates the former
+`TODO-osprey_model_diagnostics_null_alignment_decoy_qc` (now completed) into one design** —
 they were two facets (report-visualization vs automated-detector) of the same thing:
 auditing whether Osprey's target-decoy FDR assumptions actually hold. Motivated by the
 2026-07-03/04 FDR-calibration sprint and the 2026-07-06/07 decoy-m/z research night, and
@@ -54,6 +60,9 @@ fallback "insufficient separation to assess"). This is the pi_0/mixture referenc
 sprint kept converging on; the plots, the alarm, and the pass-2 fix all want it.
 
 ### B. Equal-chance null alignment (marginals) — report overlay + metric + alarm
+**Shipped in #4399:** the target:decoy / p_target:p_decoy density-ratio overlay + left-side
+flatness KPI. **Remaining:** add the fitted-`f_false` null to the overlay, the divergence metric,
+the q-band decoy-fraction check, and the alarm.
 - **Overlay the (up to) three nulls** — decoys, fitted f_false, entrapment (if present) —
   area-normalized on the composite (and optionally per-feature) chart in
   `--model-diagnostics`, generalizing the existing "decoy normal" overlay so misalignment
@@ -70,6 +79,8 @@ sprint kept converging on; the plots, the alarm, and the pass-2 fix all want it.
   ordinary runs with no entrapment library.
 
 ### C. Paired-coin fairness (pairs)
+**Shipped in #4399:** the paired-coin-collapse display. **Remaining:** the automated alarm on
+deviation from ~50%.
 When a pairing manifest with entrapment is present, compute the entrapment-pair
 decoy-win fraction; flag deviation from ~50% (gendecoy trips at 22%). Without entrapment
 the check is weaker (real pairs confounded by true positives) — note the limitation.

@@ -1,6 +1,6 @@
 # TODO: Evaluate Osprey assembly count (8 DLLs) vs. fewer/single assembly
 
-**Status**: Backlog (evaluation / decision, not yet a coding task)
+**Status**: CLOSED — evaluation complete; **DECIDED 2026-06-01 to keep all 8 DLLs as-is** (see the DECISION section below). No consolidation; revisit only together with the shared-scoring direction ([[TODO-osprey_skyline_shared_scoring]]).
 **Priority**: Low-Medium (no defect; structural question raised once the project went past proof-of-concept)
 **Complexity**: Medium to evaluate; Large if a consolidation is chosen (touches every csproj + the layering-enforcement story)
 **Created**: 2026-05-29
@@ -120,8 +120,9 @@ enforcement-via-architecture-test option remains valid IF a collapse is ever rev
 
 ## Related
 
-- `TODO-osprey_task_layer_decomposition.md` (PR-C placement decisions
-  depend on this outcome)
+- `TODO-osprey_scoring_math_dedup.md` (renamed from
+  `TODO-osprey_task_layer_decomposition.md`; the decomposition shipped, only the
+  parity-sensitive math-dedup bucket remains)
 - Active PR: `TODO-20260529_ospreysharp_extract_scoring_math.md` (source
   of the perf evidence above)
 - Memory: [[project_ospreysharp_exe_and_shared]]
