@@ -6,8 +6,9 @@
 **Follows:** #4378 (scoring/join bounding + default-on FDR streaming), #4381 (library),
 #4376/PR #4394 (reconciliation drop). **Byte-parity is the hard gate on every phase.**
 
-**Status (2026-07-09):** Lever 1 (#4397) **MERGED as PR #4400** (`c9526f0e`, squash). Lever 2
-(#4398, dense XCorr spectrum cache) is still **ACTIVE** — this TODO stays open for it.
+**Status:** COMPLETED 2026-07-10 — both levers shipped. Lever 1 (#4397) MERGED as PR #4400
+(`c9526f0e6`, 2026-07-09); Lever 2 (#4398, dense XCorr spectrum cache) MERGED as PR #4409
+(`0a8a7676a`, 2026-07-10). Issues #4397 and #4398 both closed-completed. See Resolution at end.
 
 ## Where the memory actually goes (measured, 82-file Astral, 2026-07-08)
 
@@ -213,3 +214,21 @@ plus in-memory library lookup. Add `LoadBlibPlanEntries`; stream untouched rows 
 Its inspection reports **9 pre-existing warnings in `Osprey.Core/SystemMemory.cs`**
 (8x `UnassignedField.Compiler`, 1x `NotAccessedField.Local`) — not introduced by this work, but
 they fail `Build-Osprey.ps1 -RunInspection` on that branch.
+
+## Resolution
+
+**Completed 2026-07-10** — both levers shipped and both issues closed-completed.
+
+### 2026-07-10 - Merged
+
+- **Lever 1 (#4397, Stage-5 fat stubs):** PR #4400 (`c9526f0e6`, 2026-07-09) — load the lean
+  `FdrProjectionSet` straight from parquet instead of rematerializing 191 M `FdrEntry` stubs
+  (~53 GB → ~6 GB), byte-identical.
+- **Lever 2 (#4398, dense XCorr spectrum cache):** PR #4409 (`0a8a7676a`, 2026-07-10) — replaced
+  the dense `float[NBins]` per-spectrum HRAM cache with the sparse on-demand form
+  (`SparseXcorrSpectrum`), removing the ~15 GB pool; bit-identical and ~9% faster scoring. Its
+  perf gate settled the "perf not yet measured" risk noted above.
+
+Related retention fix from the same campaign: PR #4406 (`3a4e49e37`, 2026-07-10) released the
+first-pass `FdrProjections` after Stage 5. The 64 GB minimum goal is met; the sub-32 GB stretch
+remains aspirational, not a blocker for this TODO.

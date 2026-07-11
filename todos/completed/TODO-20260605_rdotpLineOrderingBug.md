@@ -5,9 +5,9 @@
 - **Base**: `master`
 - **Repo**: `pwiz2`
 - **Created**: 2026-06-05
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none - from support thread 75064)
-- **PR**: ProteoWizard/pwiz#4279
+- **PR**: [ProteoWizard/pwiz#4279](https://github.com/ProteoWizard/pwiz/pull/4279) (merged 2026-06-30)
 
 ## Bug Report
 
@@ -74,7 +74,7 @@ change and keeps the three paths consistent.
 - [x] QuickInspection before push - clean for my files (only the pre-existing
       `ExportMethodDlg.cs` ambiguous-reference errors from the master merge remain).
 - [x] Committed (`b283594d24`), pushed, PR #4279 opened against master.
-- [ ] Post-open review chain: Copilot auto-review, then `/pw-respond` / `/pw-self-review`.
+- [x] Post-open review chain complete; PR reviewed and merged.
 
 ## Session Log
 
@@ -98,3 +98,16 @@ Build + `PeakAreaDotpGraphTest` pass. Not yet committed.
   `build_skyline_64.bat`, an MSFileReader manifest, a stray
   `pwiz_tools/Skyline/System.IO.IOException` file) - not part of this fix; leave
   alone and do not stage.
+
+## Resolution
+
+**Completed** — PR [#4279](https://github.com/ProteoWizard/pwiz/pull/4279) merged 2026-06-30 (`1c640eff6`).
+
+### 2026-07-10 - Merged
+
+Merged as `1c640eff6` (2026-06-30). The rdotp ("Normalized To: Heavy", Show Dot Product:
+Line) path in `AreaReplicateGraphPane.AreaGraphData.GetDotProductResults` was indexing
+`nodeGroup.GetChromInfoEntry(indexResult)` by display position; it now maps through
+`ReplicateGroups[indexResult].ReplicateIndexes` and averages across the group, mirroring the
+already-correct library/isotope path — so the dot-product line follows replicate ordering and
+Group By. Reported by Shimin (support thread 75064). No follow-up.

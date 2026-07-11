@@ -1,6 +1,7 @@
 # TODO: Productionize the Osprey FDR projection streaming (both Percolator passes)
 
 **Created:** 2026-07-08  **Requested by:** Mike  **Related:** PR #4378 (#4355/#4374); issue #4393 (closed, wrong premise)
+**Status:** COMPLETED 2026-07-10 — productionized in PR #4378 (`f4de68645`, merged 2026-07-09): FDR projection streaming for both passes + `OSPREY_FDR_PROJECTION` flipped default-on (`UseFdrProjection = IsNotZero`; legacy path via `=0`). Issues #4355/#4374 closed-completed. See Resolution at end.
 
 ## Correction to the original filing
 
@@ -41,3 +42,20 @@ reduced-memory FDR path. (Scoring bounding is default-on, which is why scoring h
 
 This is finishing work on #4378, not a separate implementation. No new issue needed (#4393
 closed).
+
+## Resolution
+
+**Completed** — the productionization shipped in PR #4378 ("Bounded search memory so large file
+counts fit a modest machine", `f4de68645`, merged 2026-07-09); issues #4355/#4374 closed-completed.
+
+### 2026-07-10 - Merged
+
+The four "Real remaining work" items are done:
+1–2. **Validate + measure:** the projection path is byte-identical to the legacy `FdrEntry` buffer
+   (Stellar regression mode1/2/3), and the memory campaign measured the 82-file peak.
+3. **Flip to default:** `OspreyEnvironment.UseFdrProjection` is now
+   `IsNotZero(@"OSPREY_FDR_PROJECTION")` — projection streaming is the production default, with
+   `OSPREY_FDR_PROJECTION=0` as the legacy escape hatch (slated for removal once model-diagnostics
+   + FDRBench stream too).
+4. **Residual sinks:** spun out and shipped as the lean-FDR campaign — Stage-5 fat stubs (#4400),
+   dense XCorr cache (#4409), and first-pass `FdrProjections` retention (#4406).
