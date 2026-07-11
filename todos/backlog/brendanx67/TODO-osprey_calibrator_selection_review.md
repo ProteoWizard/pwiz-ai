@@ -65,6 +65,49 @@ peptides at 1% FDR)" are `Calibrator.cs:1063-1065`; summary in `PerFileScoringTa
    `SelectPositiveTrainingSet:513` relaxes the *training* positive threshold through {5,10,25,50}%
    to reach `MIN_POSITIVE_EXAMPLES=50`, admitting lower-confidence targets into LDA training.
 
+## Measured evidence + the Skyline seed recipe (2026-07-11)
+Gathered while framing this TODO -- the concrete numbers the next session should start from.
+
+**(1) Calibrator 1% FDR count vs final per-file count -- a ~40-60x gap.** The calibrator picker
+finds a few hundred where the full search finds tens of thousands, same file (r=1.0 recheck log):
+006 = **624 cal / 0 final** (calibrates normally, collapses downstream -- NOT a calibration
+problem), 007 = 684 / 33,615, 008 = 328 / 23,613, others ~330-650 / 21k-31k. Some gap is expected
+(the calibrator is a lightweight unit-res bootstrap before the HRAM search, and RT calibration only
+needs a few hundred well-spread anchors), but 40-60x is a lot of left-on-the-table signal on a
+weak seed. This gap is the primary symptom to move.
+
+**(2) Feature contributions.** The FINAL model is single-feature-dominated: Pass-1 = Median-polish
+cosine **40%**, SG-weighted cosine 22%, fragment co-elution 13%, xcorr 8% (from the model table in
+`runs\seaad-20files-entrapment-r0.5-percolator\seaad.model-diagnostics.html`); Pass-2 retrain =
+Median-polish cosine 46%, co-elution 27%. So one spectral-similarity feature does ~40-46% of the
+work -- a single strong feature is not crazy per se. BUT the calibration seed picks *the single
+best of 4 CRUDER features* (LibCosine-apex, XCorr, top-6-matched, pairwise-corr on unit-res),
+"best on THIS file" = the per-run-varying quantity we distrust, and a coarser cosine than the
+final Median-polish cosine. The calibration LDA's OWN per-feature weights are **not exposed in any
+output** -- see the observability deliverable below.
+
+**(3) Skyline's mProphet seed = a FIXED COMPOSITE + loose bootstrap + per-run re-derivation.**
+The proven recipe (`Skyline/Model/Results/Scoring/LegacyScoringModel.cs:34-52`,
+`MProphetScoringModel.cs:172,221-353`), attributed to the mProphet paper (Reiter 2011; Dario Amodei
+is original author on the surrounding peak-scoring infra):
+- Seed = hardcoded 7-feature composite `LegacyScoringModel.DEFAULT_WEIGHTS`: log-intensity **1.0**,
+  unforced-count **1.0**, identified-count **20.0**, library dotp **3.0**, shape **4.0**,
+  co-elution **-0.05**, RT **-0.7** (RT weight zeroed for the seed pass). NOT a single feature.
+- The seed only has to rank well enough to pick a first true set at a **LOOSE 15% FDR**.
+- Then LDA re-derives FRESH per-run weights, tightening the cutoff **0.15 -> 0.02 -> 0.01** over up
+  to **10 iterations** (`DEFAULT_CUTOFFS`, `MAX_ITERATIONS=10`), stopping when the true-peak count
+  stops growing at the tightest cutoff.
+
+**Reconciles Brendan's two intuitions:** "the good score changes per run" -> YES, so final weights
+are re-derived per run; "a single-score seed is a bad idea" -> YES, so the seed is a *fixed
+composite* (robust-enough universally, not optimal for any run). Osprey's calibrator diverges from
+this recipe on **THREE axes**, which compound: **single-best-feature seed** (vs fixed composite),
+**tight 1% first cutoff** (vs 15%), **3 iterations** (vs 10 with a tightening schedule). A weak
+per-run-variable seed judged at a strict 1% cut leaves almost nothing to train on -> what *looks*
+like "LDA is insensitive" is really seed + cutoff starvation. So the improvement is not just "use a
+composite seed" -- it is **adopt the whole Skyline pattern**: fixed composite seed + loose (~15%)
+first cutoff + progressive tightening over more iterations, then measure against the §1 count gap.
+
 ## Candidate robustness improvements to evaluate (hypotheses, A/B each)
 Flagged as heuristic/fragile in the review -- the point is to test whether tightening them makes
 calibration more robust when data is abundant (tens of thousands detectable) without hurting the
@@ -85,6 +128,20 @@ scarce case:
   Also check whether the 4 calibration features even contain a good composite, or whether a couple more
   discriminating features are needed. Caveat: this is the Stage-3 CALIBRATION LDA (lightweight, per-file),
   NOT the Stage-4/5 Percolator SVM -- a contained change to the calibrator picker.
+- [ ] **ENABLER (do this first) -- make the calibration LDA training observable.** Today it is far
+  more opaque than the Percolator trainings: it emits only a few processing lines (enough to make
+  observation §1, the count, and nothing more) while Percolator dumps its per-feature weights /
+  contributions. You cannot tune the seed, diagnose per-run seed instability, or judge any of the
+  hypotheses below without seeing what the calibration LDA actually learned. Add, mirroring the
+  Percolator dumps:
+  - Under **`--verbose`**: a per-iteration **per-feature %-contribution / weight dump** for the
+    calibration LDA (which feature seeded, per-iteration weights, positive-set size + FDR cutoff per
+    iteration, iteration count and stop reason). This alone tests the §3 diagnosis: is the seed
+    per-run-variable? is it hitting the 3-iteration cap with a small positive set?
+  - Possibly a **Model-diagnostics HTML** panel for the calibration LDA -- the calibration analog of
+    the existing feature-model table (the 4 calibration features + their contributions + the
+    target/decoy calibration-score histogram), so the calibrator model gets the same scrutiny the
+    search model already gets. (Coordinate with the diagnostics Pass-1/Pass-2 switch TODO.)
 - [ ] **Re-enable fit-time outlier rejection.** `OutlierRetention=1.0` disables LOESS inlier
   trimming; a high-scoring entrapment/decoy or a chimeric co-elution becomes a leverage point.
   A/B a modest retention (e.g. 0.9-0.95) or an explicit robust residual gate against the current
