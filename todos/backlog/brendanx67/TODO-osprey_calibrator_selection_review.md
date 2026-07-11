@@ -69,6 +69,22 @@ peptides at 1% FDR)" are `Calibrator.cs:1063-1065`; summary in `PerFileScoringTa
 Flagged as heuristic/fragile in the review -- the point is to test whether tightening them makes
 calibration more robust when data is abundant (tens of thousands detectable) without hurting the
 scarce case:
+- [ ] **LEADING HYPOTHESIS -- the seed, not the LDA, is weak (Brendan, 2026-07-11).** Mike reads
+  the low sub-1%-FDR calibrator yield as "LDA is less sensitive than SVM," but mProphet uses LDA
+  and Skyline finds plenty -- so it is likely not the model. The review shows the calibration LDA
+  **seeds from the single best individual feature** (`CalibrationScorer.cs:237-251`) and iterates
+  only `MAX_ITERATIONS=3`. In semi-supervised training (mProphet / Percolator) the SEED determines
+  the initial confident-positive set the discriminant trains on; a weak single-feature seed picks a
+  small/noisy positive set -> poor boundary -> few peptides pass 1% -> *looks* like weak LDA. Dario
+  Amodei's work on mProphet-in-Skyline produced a fixed **default composite score** that discriminates
+  well on its own across many datasets and seeds fast convergence (usually <10 iterations). HYPOTHESIS:
+  replace the single-best-feature seed with a fixed composite over the calibration features (or a small
+  offline-derived weight vector), and expect (a) many more peptides at q<=1%, (b) faster convergence,
+  (c) far less degradation when tens of thousands are detectable. TELL to confirm the diagnosis first:
+  is the current picker hitting the 3-iteration cap / early-stopping with a still-small positive set?
+  Also check whether the 4 calibration features even contain a good composite, or whether a couple more
+  discriminating features are needed. Caveat: this is the Stage-3 CALIBRATION LDA (lightweight, per-file),
+  NOT the Stage-4/5 Percolator SVM -- a contained change to the calibrator picker.
 - [ ] **Re-enable fit-time outlier rejection.** `OutlierRetention=1.0` disables LOESS inlier
   trimming; a high-scoring entrapment/decoy or a chimeric co-elution becomes a leverage point.
   A/B a modest retention (e.g. 0.9-0.95) or an explicit robust residual gate against the current
