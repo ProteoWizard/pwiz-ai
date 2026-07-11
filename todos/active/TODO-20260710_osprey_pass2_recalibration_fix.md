@@ -5,7 +5,97 @@
 - **Base**: `master`
 - **Created**: 2026-07-10
 - **Status**: In Progress
-- **PR**: (pending)
+- **PR**: [#4410](https://github.com/ProteoWizard/pwiz/pull/4410)
+
+## Progress (2026-07-11, night session)
+Part A IMPLEMENTED (percolator default + transfer). Consolidated the three
+`d52cf7db17` prototype env vars into a single `OSPREY_PASS2_QVALUE` selector; the
+`retrain_fullnull`/variant-vii probe is deferred to Part B per this TODO. Re-derived
+against current master (two `RunPercolatorFdr` overloads, projection+resident+
+model-diagnostics pass-2 paths) rather than cherry-picking the stale prototype diff.
+
+Files changed:
+- `Osprey.Core/OspreyEnvironment.cs`: `OSPREY_PASS2_QVALUE` (`percolator` default /
+  `transfer`), `Pass2TransferQ`, `Pass2QValueUnrecognized`, normalized once at startup.
+- `Osprey.Tasks/PipelineByproducts.cs`: `FirstPassPercolatorModel`, `FirstPassScoreQTable`.
+- `Osprey.FDR/PercolatorEngine.cs`: optional `captureModel` hook on the FdrEntry
+  `RunPercolatorFdr` overload (no-op on the default path).
+- `Osprey.Tasks/FirstJoinTask.cs`: transfer added to `needsResidentFirstPassPool` (so the
+  1st pass runs resident and captures the frozen model + builds the full-population table);
+  first-pass wrapper publishes `FirstPassPercolatorModel`; builds+publishes
+  `FirstPassScoreQTable` after `LogFirstPassResultsAndDump`.
+- `Osprey.Tasks/Pass2FdrSidecar.cs`: mode log + unrecognized warning; transfer routed to
+  the resident path; `ComputePass2Resident` switch calls `TransferQFromFrozenModel` instead
+  of the retrain when transfer + byproducts present (bool return -> falls back to retrain
+  otherwise); helpers `BuildFullPopulationScoreQTable`, `ScoreWithFrozenModel`,
+  `AverageFoldModel`, `TransferQWithTable`, `BuildScoreToQTable`, `LookupQForScore`.
+
+Stale-doc-ref fixes (Part A item): the `(--protein-fdr)`-gated wording the TODO flagged in
+`model-diagnostics-template.html`, `ModelDiagnosticsReport.cs`, `ModelDiagnosticsData.cs`
+was ALREADY corrected by #4408 (now in master) -- current wording is "any reconciled run",
+accurate for the post-#4395 always-on 2nd pass. No further action; the transfer-mode
+"null pass-2 model view" case is also covered by the existing "not retrained on this run" copy.
+
+Gates:
+- Build Debug + 505 tests (502 pass/3 skip, incl. TestTransferScoreQTable) + `-RunInspection`
+  0 warnings/0 errors: GREEN (the 9 SystemMemory.cs warnings are the #4379 local flake, untouched file).
+- `regression.ps1 -Dataset Stellar` mode1/2/3 (default percolator byte-identity): PASS on commit
+  01e0e4dca7 (blib 50,237,440 identical across straight/HPC/resume + vs golden). Re-run after the
+  self-review fix commit pending the Release exe freeing (A/B percolator arm holds it).
+
+Self-review (fresh-context agent, PR #4410) - all findings addressed in commit fd2c15efaa:
+- CRITICAL: `PerFileScoringTask.needsResidentPool` did not mirror the `FirstJoinTask` gate for
+  `Pass2TransferQ` -> a plain `transfer` run (no --model-diagnostics, default projection) split
+  to empty stubs and ran the 1st pass on zero entries. The A/B harness masked it (--model-diagnostics
+  forces resident in both gates). FIXED: added `|| Pass2TransferQ` to PerFileScoringTask.
+- MEDIUM: cross-mode resume in one --output-dir reuses the other mode's 2nd-pass sidecar q (sidecar
+  not mode-tagged) -> documented "fresh output dir per mode" limitation; mode-tagging deferred to Part B.
+- MEDIUM: transfer flattens precursor/peptide + run/experiment q to one value -> commented; Design 1
+  (Part B) preserves per-level survivor q.
+- LOW: guarded the add-only frozen-model Publish; noted the PercolatorResults memory pin (Part B).
+- Verified clean: default byte-identity, ScoreWithFrozenModel parity w/ ScorePopulationAndComputeFdr,
+  table monotonicity + clamps, table-build timing, HPC/resume safe-degrade-to-retrain.
+- Follow-up (agent): confirm a plain `transfer` run (no --model-diagnostics) logs the "confidence
+  transfer" line, not the fallback warning. RAN on Stellar (no --model-diagnostics) -> it EXPOSED
+  a SECOND-layer bug: the resident 1st pass STREAMS PIN features into the SVM (lean stubs) and
+  never persists them to FdrEntry.Features, so BuildFullPopulationScoreQTable found 0 entries and
+  transfer SILENTLY FELL BACK to the retrain. --model-diagnostics does not populate Features either,
+  so the A/B transfer arm would have fallen back too (looked identical to percolator). FIXED in
+  fc95bb335e: BuildFullPopulationScoreQTable now streams features from the Stage-4 parquet by
+  ParquetIndex (like the score pass). Re-verified on Stellar: "built FULL-population score->q table
+  from 1000 entries (0 skipped ...q range [5.0E-4, 0.974])" + "re-scored 392713 entries with the
+  FROZEN 1st-pass model", NO fallback, exit=0. See [[reference_osprey_resident_firstpass_streams_features]].
+
+Commits: 01e0e4dca7 (Part A) -> fd2c15efaa (self-review CRITICAL gate) -> 0d3645ead1 (Copilot) ->
+fc95bb335e (transfer feature-load fix). Head fc95bb335e.
+TeamCity on pull/4410 (final head fc95bb335e): 4089588 Perf/Regression, 4089589 unit.
+
+## A/B RESULT (percolator vs transfer, --model-diagnostics, SEA-AD 20-file r=0.5b)
+Both arms same branch build, stage1-4 hard-linked, differ ONLY in OSPREY_PASS2_QVALUE.
+Deliverable: D:\test\Pilot-MTG-Tissue-May2026\runs\pass2-ab-percolator-vs-transfer.html
+(+ per-arm seaad.model-diagnostics.html in runs\seaad-20files-entrapment-r0.5-{percolator,transfer}).
+
+True combined FDP @ 1% reported q (from --model-diagnostics entrapment calibration):
+| view              | percolator     | transfer       |
+| Pass 1 exp-wide   | 0.835% / 36212 | 0.835% / 36212 |  (identical - the calibrated reference)
+| Pass 2 exp-wide   | 3.612% / 64995 | 1.108% / 31586 |  <- transfer restores toward Pass-1 calibration
+| Pass 2 per-run    | 3.634%         | 1.108%         |
+
+=> On CURRENT post-#4395 master, the always-on 2nd-pass Percolator retrain is anti-conservative
+on SEA-AD r=0.5 (3.61% true FDP at 1% reported q, accepting 64,995 targets); transfer cuts that
+to 1.11% (31,586 targets), close to the Pass-1 0.835% calibration. Directly demonstrates the
+TODO thesis on the real current code.
+
+DETERMINISM (verified): percolator-rep2 reproduced 3.612%/64995 EXACTLY; the two runs'
+.1st-pass.fdr_scores.bin are byte-identical -> my exe is deterministic, the A/B gap is purely
+the q mode (not run noise). The reconciled parquet differs byte-wise across runs (minor Stage-6
+gap-fill ordering; does not move the reported FDP). The earlier "baseline" 0.844% was a PRE-#4395
+build (existing run seaad-20files-entrapment-r0.5, exe e300d3fd02 off #4399) -> not comparable;
+#4395 is what introduced the always-on retrain this fast-follow addresses.
+NOTE: transfer here is the coarse whole-pool transfer; on r=0.5 it is CONSERVATIVE (31,586 <
+Pass-1 36,212) because the full-pop table's min q is ~0.0095 (this data's FDR floor). Part B's
+surgical Design 1 (keep unchanged survivors' Pass-1 q; transfer only gap-filled/moved peaks)
+should recover the IDs while keeping calibration - the next validation target.
 
 ## Status
 **Active (created 2026-07-09; started 2026-07-10).** Promoted from the forward-reference left by
