@@ -1,9 +1,10 @@
 # TODO-20260710_osprey_model_diagnostics_report_fixes.md -- --model-diagnostics report bugs, cross-run reproducibility graphs, and a global-vs-run-FDR view
 
 ## Status
-**Active (2026-07-10).** Branch `Skyline/work/20260710_osprey_model_diagnostics_report_fixes`
-off master `babcebdb6e`. PR **#4408** (https://github.com/ProteoWizard/pwiz/pull/4408) OPEN and
-green (both Osprey Perf/Regression builds SUCCESS; unit build 477 tests; CodeQL/Core green).
+**Completed (2026-07-11).** Branch `Skyline/work/20260710_osprey_model_diagnostics_report_fixes`
+off master `babcebdb6e`. PR [#4408](https://github.com/ProteoWizard/pwiz/pull/4408) (merged 2026-07-11
+as squash commit `9128e9635e`). Merged green: Osprey Windows .NET unit build 501 tests, CodeQL/Core
+green; Perf/Regression passed on earlier heads and was not re-run for the small final changes.
 Reporting-only change (off the production FDR path; golden regression unaffected). Implements the
 cross-run graphs specced in the backlog sibling
 [[TODO-osprey_model_diagnostics_cross_run_detection_consistency]], fixes two report bugs found on
@@ -99,21 +100,82 @@ below.
   intersection ~unchanged (13,593 -> 13,573), and turns the histogram into a clean monotone ramp to
   the k=N peak -- exactly the global-FDR effect. Report:
   `D:\test\Pilot-MTG-Tissue-May2026\runs\verify-toggle-r0.5\seaad.model-diagnostics.html`.
-- **Phase B: entrapment adjudication overlay.** Add the entrapment (p_target) precursors' own
-  run-count distribution (currently excluded) as a second histogram series, and report the
-  entrapment-measured FDP of the exp-q-surviving k=1/low-k set. This turns the visibility into an
-  adjudicated biology-vs-miscalibration number. (Only shown when a manifest is present.)
-- **Phase C (before/with the 82-run): "union FDP vs number of runs" curve.** Walk N = 1..82; at each
-  N plot the entrapment-measured true FDP of the accumulated union (run-q vs exp-q gated). The direct
-  empirical version of the Collins/Rosenberger concern -- answers "how bad at 82 runs" quantitatively.
-  Fast to prototype on the existing 20-run first (compute from the per-file passing sets; no rerun).
+- **Phase B (DONE -- implemented + verified, NOT yet committed): entrapment adjudication overlay.**
+  Added the entrapment (p_target) precursors' own run-count distribution (previously excluded) as a
+  second series on the "precursors by number of runs detected" histogram, plus a per-k
+  entrapment-measured FDP (FDRBench combined estimator `(1 + 1/r) * n_p / (n_t + n_p)`). Data:
+  `CrossRunView` gained `EntrapmentRunCountHistogram` + `EntrapmentFdpByRunCount` (both null on a
+  plain target+decoy run); `BuildCrossRunDetection` now routes p_target to parallel entrapment sets
+  under the SAME two gates and threads `entrapmentRatio` through; extracted a shared
+  `TallyRunCountHistogram` helper. Template: amber entrapment overlay line + legend on the run-count
+  chart (ymax includes the overlay so a dominant entrapment k is shown, not clipped), hover shows
+  n_p + FDP per k, and the note carries the **adjudication verdict** -- k=1 FDP ~nominal => real rare
+  biology; >> nominal => exp-q admitting excess 1-hit-wonders. Tests: `TestCrossRunDetection` asserts
+  the entrapment histogram, the combined-FDP values, r-scaling (r=0.1 -> 11.0), and null-when-no-manifest.
+  Also qualified three pre-existing invalid `<see cref>` (CrossRunView members referenced unqualified
+  from CrossRunDetection). 480 tests green, inspection clean on touched files. VERIFIED via a synthetic
+  4-run render headless-screenshotted at both scopes (`scratchpad/shot-phaseb.py`, green "JS OK"
+  banner both scopes): per-run shows the k=1 bump (real+entrapment) at 550% FDP; experiment-wide drops
+  the real singletons, leaving entrapment-only k=1 at 1100% -- the toggle + adjudication working together.
+- **Phase C (DONE -- committed `cd37122c84`, pushed): "union FDP vs number of runs" curve.**
+  `CrossRunView` gained `CumUnionEntrapment` + `UnionFdp` (null without entrapment): `ComputeCrossRunView`
+  accumulates the entrapment union alongside the real-target `CumUnion` and reports the FDRBench combined
+  FDP of the accumulated union at each prefix i = 1..N. New **scope-independent** card plots BOTH scopes
+  at once (per-run red vs experiment-wide indigo; the gap is the point, so it ignores the tab toggle),
+  nominal-FDR dashed line, hover per i. Tests extended (union counts, per-prefix FDP, ratio scaling,
+  null-without-manifest). VERIFIED on a from-scratch regeneration of the real 20-run r0.5b data
+  (`D:\test\Pilot-MTG-Tissue-May2026\runs\verify-phaseb3-r0.5\seaad.model-diagnostics.html`): per-run
+  union FDP climbs 0.9% (1 run) -> 2.0% (5) -> 3.1% (10) -> **4.4% (20)**, crossing above the 1% nominal
+  and accreting 923 entrapment into the union; experiment-wide stays **under 1%** (0.2% -> 0.8%, only 99
+  entrapment). The textbook run-vs-global FDR gap, growing with N -- extrapolates to materially worse at 82.
 
-## Current status (2026-07-10, end of session)
-Phases A + the two report bugs + the two graphs + the self-review and Copilot fixes are all LANDED
-on PR #4408 (4 commits: `e10464f035`, `e300d3fd02`, `9e3164fda5`, `c7c1f9b413`), pushed, 480 tests
-green, and verified on real SEA-AD data. Working tree is CLEAN. PR is review-ready pending the
-latest Perf/Regression build (4086216, reporting-only so golden unaffected). **Remaining = Phase B
-then Phase C** (both specced above); neither is started. Nothing is blocked.
+## Current status (2026-07-10, session 2)
+Phases A + the two report bugs + the two graphs + the self-review and Copilot fixes are LANDED on
+PR #4408 (4 commits: `e10464f035`, `e300d3fd02`, `9e3164fda5`, `c7c1f9b413`), pushed, verified on
+real SEA-AD data. **Phase B is now COMMITTED locally (commit `d27c1f6556`) but NOT yet pushed.**
+480 tests green, inspection clean on touched files, and verified on a **from-scratch regeneration**
+of the real 20-run r0.5b data (not just the re-skin): the FDP curve peaks at k=1 and decays to 0 at
+the k=20 peak; per-run k=1 = 10,859 real / 713 entrapment / 18.9% FDP, experiment-wide k=1 = 322 /
+47 / 39.0% FDP (the global gate cuts real singletons harder than the false ones, so surviving
+low-k FDP roughly doubles -- exp-q anti-conservative at its own tail). Report:
+`D:\test\Pilot-MTG-Tissue-May2026\runs\verify-phaseb2-r0.5\seaad.model-diagnostics.html` (regen via
+the full hardlink+cached-outputs recipe, ~8 min). **Remaining = push Phase B (awaiting Brendan's
+go-ahead), then Phase C** (union-FDP-vs-N curve, specced above). Nothing is blocked.
+
+Phase B UI iteration (all in the committed template): entrapment plotted as a per-k **FDP curve on a
+second right axis** (not raw counts, which are dwarfed by the real bars), the axis **shared across
+both scopes** (max of both) so the toggle visibly moves the curve, a nominal-FDR dashed reference,
+and a per-k count/FDP tooltip. Screenshot harness: `scratchpad/shot-real.py` + `reskin.py` (re-skins
+a real report's JSON with the current template for fast headless preview without a rerun; NOTE the
+re-skin cannot preview NEW data-model fields -- Phase C needed a real regen because `unionFdp` wasn't
+in the old JSON).
+
+## ALL THREE PHASES LANDED (2026-07-11)
+Phases A + B + C are committed and pushed to PR #4408 (`c7c1f9b413` toggle, `d27c1f6556` entrapment-FDP
+adjudication overlay, `cd37122c84` union-FDP-vs-N), plus the master merge someone pushed
+(`2a9267810a`) reconciled via merge `e1208ae3b5`. Merged state: **501 tests, 498 pass / 3 skipped**,
+inspection clean on touched files. The Reproducibility tab now tells the full story: reproducibility
+(bars) -> per-k entrapment adjudication (FDP curve) -> cumulative run-vs-global gap (union FDP).
+**Self-review DONE** (`a58d69c355`, pushed): fresh-context agent pass found no CRITICAL/HIGH; fixed a
+latent `hist[-1]` crash in `ComputeCrossRunView` for the degenerate zero-input-files case
+(`Math.Max(half, 1)`), and added a 3-run test where entrapment run-q/exp-q diverge (covers the two
+scopes producing different entrapment histograms + union FDP, and union-FDP accretion past N=2).
+Dismissed by design: the yield curve uses pure precursor-q per scope while the run-counting plots use
+run-q bars + `max(run q, exp q)` for the experiment view -- intentional and correct (pure exp-q would
+make the run-counting bars degenerate/flat; the run plots are inherently run-resolved, and max(run,exp)
+is what produces the Collins union-saturation). Left honest: combined FDP can read >100% on an
+all-entrapment k-slice (doesn't occur on real calibrated data). Two more master merges were reconciled
+into the branch along the way (`d851d1282e` #4406 etc.); merged state 504 tests, 501 pass / 3 skipped.
+
+**Remaining:** run the Astral Perf/Regression gate before human review (ASK Brendan first --
+[[feedback_ask_before_teamcity_triggers]]); optional Copilot review (billed). The 82-run union-FDP is
+the natural real-data follow-up when that dataset is processed.
+
+**Do NOT trigger the TeamCity Perf/Regression gate during this sprint** -- Brendan gates the shared
+agents manually and kills premature runs; ask before triggering (see memory
+[[feedback_ask_before_teamcity_triggers]]). The red Perf/Regression on the PR is infrastructure
+(build #141 `9e3164fd` died in 11s with `pwsh not found` / exit 9009 on a spot agent), not a code
+failure; the two builds that ran on MacCoss TeamCity Agent 1 passed.
 
 **Next session handoff**: For detailed startup protocol (skills to load, build/verify commands, the
 hardlink-reprocess recipe, and the Phase B starting point), read
@@ -131,3 +193,18 @@ hardlink-reprocess recipe, and the Phase B starting point), read
   `crossRun.experiment`, `.runCountHistogram`, ...).
 - CRLF, no async/await, resource strings for user-facing text (report labels live in the template);
   helpers after public methods. Report changes must NOT alter the golden regression output.
+
+## Progress Log
+
+### 2026-07-11 - Merged
+PR #4408 merged as squash commit `9128e9635e`. Shipped all planned scope: the two report-bug fixes
+(yield-scope switch, no-entrapment Reproducibility tab), the two cross-run graphs, and Phases A/B/C --
+the per-run vs experiment-wide FDR toggle (`max(run q, exp q)`), the per-k entrapment-FDP adjudication
+curve on a shared right axis, and the "union FDP vs number of runs" curve (run-vs-global gap). All
+verified on from-scratch regenerations of the real 20-run r0.5b SEA-AD data (per-run union FDP climbs
+0.9%->4.4% over 20 runs while experiment-wide stays <1%). Fresh-context self-review found no
+CRITICAL/HIGH; its fixes (an N=0 `hist[-1]` guard + scope-divergence/accretion tests) landed in
+`a58d69c355`. Three master merges were reconciled into the branch during the work. Merged green on the
+unit build (501 tests); Perf/Regression was not re-run for the small final changes (Brendan's call, it
+had passed on earlier heads). Nothing deferred; no follow-up issues filed. The 82-run union-FDP is the
+natural real-data follow-up when that dataset is processed.
