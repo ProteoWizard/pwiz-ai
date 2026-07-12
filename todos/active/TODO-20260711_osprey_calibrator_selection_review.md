@@ -624,39 +624,54 @@ FDRBench tsv (100K baseline / full006-s300k / full006-s1m):
 On file 006, 300K is optimal (+5.0% IDs, beats 1M, flat FDP). Beyond ~300K the RT/mass fit saturates
 (R^2 0.99+) so 1M's extra anchors do not help.
 
-### CAUTION - the +5.0% is FILE-DEPENDENT, not universal (2nd file overturns the headline)
-A second-file downstream A/B (file 007, full pipeline, run-fullfile.ps1) shows NO benefit:
-| file | 100K IDs @q<=1% | 300K IDs @q<=1% | delta | true-FDP 100K->300K |
+### CRITICAL - a 3-file A/B OVERTURNS the recommendation: raising the sample gives NO AGGREGATE BENEFIT
+Full-pipeline 100K-vs-300K downstream A/B on 3 files (run-fullfile.ps1), real IDs @q<=1%:
+| file | 100K IDs | 300K IDs | delta | true-FDP 100K->300K |
 |---|---|---|---|---|
 | 006 | 37,947 | 39,843 | **+5.0%** | 0.47% -> 0.48% |
-| 007 | 38,374 | 38,060 | **~flat (-0.8%, noise)** | 0.67% -> 0.66% |
-File 007's calibration is ALREADY SATURATED at 100K: 300K gave it 3x more anchors (519 -> 1721 RT points)
-but ZERO downstream ID gain. So more calibration anchors help a file whose 100K calibration is MARGINAL
-(006) and are harmless-but-useless on a file already well-calibrated (007). Both stayed FDR-clean (more
-anchors never HURT). => the honest read: raising the sample is "sometimes helps, never hurts, +~1.5x cal
-cost." NOT a universal +5%. This RE-STRENGTHENS the ADAPTIVE option (b) over a blanket default raise -
-a blanket 300K pays the cost on every file but only marginal-calibration files benefit. (Caveat: adaptive
-"grow while anchors rise" would still grow BOTH 006 and 007, since anchors rise in both - to be truly
-selective you'd need a calibration-quality signal (RT-fit R^2 plateau), not just anchor count.)
-(3rd file A/B in flight to characterize how common the 006 "gain" vs 007 "flat" case is.)
-=> OPEN DECISION #1 answer is now nuanced: 300K never hurts + sometimes helps materially; whether the
-average gain justifies uniform +1.5x cost (or an adaptive scheme) is Brendan's cost/benefit call.
+| 007 | 38,374 | 38,060 | -0.8% (noise) | 0.67% -> 0.66% |
+| 005 | 33,962 | 32,341 | **-4.8% (HURT)** | 0.72% -> 0.52% |
+| **TOTAL** | **110,283** | **110,244** | **-0.03% (FLAT)** | - |
+The single-file 006 +5.0% does NOT generalize. File 005 got 4.8% FEWER IDs at 300K (its calibration went
+MORE CONSERVATIVE - true-FDP dropped 0.72->0.52%). Across the 3 files the aggregate is DEAD FLAT: more
+anchors just REDISTRIBUTE IDs (006 up, 005 down, 007 flat) with high per-file variance (+5.0 / -0.8 /
+-4.8%), NO net benefit, and NO predictor (see the R^2 note below - all three are R^2~0.997 at 100K). It can
+HURT, so it is NOT a "never hurts" change. The prior-session "1M -> +2-4% IDs on 006" was a single-file
+artifact that does not hold up.
+=> **RECOMMENDATION REVERSED: do NOT raise the default calibration sample size.** Calibration is already
+near-optimal at 100K; 300K adds ~1.5x cost + variance for zero aggregate ID gain. OPEN DECISION #1 answer:
+leave CalibrationSampleSize at 100K. (Step A's committed --verbose purity diagnostic stands on its own as
+the useful deliverable.)
+
+### No calibration-QUALITY predictor for who benefits (weakens adaptive-on-R^2)
+Compared 006 vs 007 at 100K: BOTH already have RT-fit R^2 ~0.9977 and tight mass (+/-5 ppm, ~1.5 ppm SD)
+- i.e. both calibrations look SATURATED by the standard quality metrics at 100K. 006's own 100K R^2
+(0.9977) equals its 1M R^2 (0.9976), so 006's +5% did NOT come from a better RT fit. Yet 006 still gained
+IDs from more anchors and 007 did not. => the ID benefit does NOT correlate with obvious calibration
+metrics; it is a subtle second-order effect of exactly which anchors shift the LOESS/mass curve near
+borderline precursors. Consequence: an adaptive scheme keyed on RT-fit R^2 would NOT fire for either file
+(both 0.997 at 100K), so it cannot cleanly target the benefiting files. Honest bottom line: **calibration
+is already near-optimal at 100K (R^2=0.9977); more anchors is a MINOR, UNPREDICTABLE, FDR-clean refinement,
+not a major lever.** The larger ID levers are the search-level scoring/FDR (other TODOs), not calibration.
 
 ### COST (cal-only, file 006): 100K = 67s, 1M = 180s (task 58 -> 179s). ~10x anchors (and cleaner) for
 only ~2.7x wall-clock; the fixed library/spectra load dominates, so scaling the sample is affordable.
 
 ### PR PROPOSAL (evidence-backed; ALGORITHM-AFFECTING -> needs golden re-bless + Brendan cost/benefit sign-off)
-Root problem is now precisely: the ladder stops as soon as nConfident >= MinCalibrationPoints (200)
-(DecideLadderAction, Calibrator.cs:704), so a RICH file halts at 100K and leaves clean anchors on the
-table. Raise the anchor yield; the q is trustworthy and the downstream is FDR-clean, so this is safe.
-  **RECOMMENDED (measured-optimal): (a) raise default CalibrationSampleSize 100K -> 300K.** One config
-      value + a Stellar golden re-bless; NO new code (OSPREY_CAL_SAMPLE_SIZE already implements it). The
-      A/B makes 300K the winner (+5.0% IDs, flat FDP, beats 1M), so no need to go higher; scarce files
-      unaffected (ladder still grows them to all-targets).
-  (b) ADAPTIVE (optional polish, only if per-file cost matters for huge cohorts) - a TargetCalibration
-      Anchors knob that grows the sample (geometric, CAPPED ~300-500K - NOT the ladder's current jump to
-      all 3.17M targets) while confident anchors keep rising. More code, marginal gain over (a) now that
-      300K is shown optimal. Gate behind OSPREY_CAL_ANCHOR_TARGET, default 0 = current (byte-identical).
+UPDATE (post 3-file A/B): the "raise the anchor yield" proposal is NOT supported by the data. Raising the
+sample (100K->300K) gives ZERO aggregate ID benefit across 3 files (flat: 110,283->110,244) with high
+variance (+5.0 / -0.8 / -4.8%) and can HURT (005 -4.8%). So the mechanically-tempting change below is NOT
+recommended; kept here only to document what was tried and why it was rejected:
+  (a) [REJECTED] raise default CalibrationSampleSize 100K->300K (RTCalibrationConfig.cs:53). Looked good on
+      file 006 alone (+5%) but nets to flat across files - do NOT ship.
+  (b) [NOT WORTH IT] adaptive anchor target - even if it grew only "marginal" files, there is no reliable
+      calibration-quality predictor to identify them (all 3 files are R^2~0.997 at 100K), and the aggregate
+      payoff is ~zero, so the added complexity buys nothing.
+  The ladder's current stop-at-200 (DecideLadderAction, Calibrator.cs:704) is FINE: 100K calibration is
+  already near-optimal. LEAVE IT.
+THE DELIVERABLE that stands: the committed --verbose anchor-purity diagnostic (c56fa9b7b4) + the finding
+that the calibration is clean, well-calibrated, and near-optimal (so the original q-rigor concern is
+unfounded and no anchor-selection change is warranted).
   Optional coupling: at high sample the STRICT q<=0.1% gate already yields thousands of anchors at 0.00%
       measured FDP, so the anchor gate could be TIGHTENED (cleaner RT points), never loosened past 1%
       (the q-sweep shows FDP rises ~linearly with q; >1% buys anchors at a real FDP cost).
@@ -694,9 +709,30 @@ File 007 (cal-only, 300K, ai/.tmp/run-calfile.ps1): pass1 q<=1% 1369 anchors / 6
 (+/-0.58 min, 1721 pts); MS1 1.29 ppm, MS2 -0.08 ppm. Same pattern as 006: clean anchors, well-calibrated
 q, HRAM-tight mass, thousands of anchors at 300K. (007 is slightly less rich than 006 but still ample.)
 
-### EXACT change site for the recommended proposal
-Option (a) = one line: `Osprey.Core/RTCalibrationConfig.cs:53` `CalibrationSampleSize { get; set; } = 100000`
--> 300000. Then re-bless the Stellar regression golden + run the full gate (Build-Osprey -RunTests
--RunInspection; regression.ps1 -Dataset Stellar mode1/2/3; Test-PerfGate). Requires Brendan's sign-off
-(algorithm-affecting). The OSPREY_CAL_SAMPLE_SIZE lever (committed) reproduces the effect without the
-default change for further A/B.
+### Change site (FOR REFERENCE ONLY - this change was tried and REJECTED by the 3-file A/B)
+The sample-size default lives at `Osprey.Core/RTCalibrationConfig.cs:53` `CalibrationSampleSize = 100000`.
+Raising it to 300000 is the change that looked good on file 006 (+5%) but nets FLAT across 3 files (and
+hurt 005). DO NOT SHIP. Left here so a future reader knows exactly what was evaluated. The
+OSPREY_CAL_SAMPLE_SIZE lever (committed) reproduces the effect for any further A/B without touching the
+default.
+
+## FINAL CONCLUSION (2026-07-12 session bottom line - read this first)
+1. **The original concern is unfounded.** The Stage-3 calibration anchor selection is CLEAN (entrapment-FDP
+   ~= claimed q across 0.1-10%; q<=0.1% is 0% entrapment) and the q<=0.01 gate is well-calibrated, not
+   anti-conservative. Validated on files 006 + 007 against the FDRBench entrapment oracle.
+2. **The calibration is already near-optimal at the default 100K** (RT R^2=0.9977, mass MS1 ~1 ppm / MS2
+   ~0 ppm). Mass extraction is 10 ppm HRAM, not unit resolution; no mass/PPM lever exists.
+3. **Raising the anchor yield does NOT help.** A 3-file 100K-vs-300K full-pipeline A/B nets FLAT
+   (110,283 -> 110,244 IDs) with high per-file variance (+5.0 / -0.8 / -4.8%), no predictor, and it can
+   HURT (005 -4.8%). The single-file 006 +5% did NOT generalize. => do NOT raise CalibrationSampleSize;
+   do NOT add adaptive growth; leave the ladder as-is.
+4. **The deliverable that stands:** the committed --verbose calibration anchor-purity diagnostic
+   (pwiz-work2 c56fa9b7b4) - default-off, byte-identical, the standing acceptance oracle - plus this
+   measured evidence that the calibration needs no anchor-selection change. Candidate for a small
+   standalone diagnostic PR (Brendan's call).
+5. **Where the real ID levers are:** the search-level scoring / FDR (other TODOs), NOT calibration. The
+   "50% of Percolator" goal is essentially already met at the model level (~45% present-peptide recovery);
+   more anchors don't move it.
+The 3 prior-session commits (verbose LDA report 7d9663295a, env levers 063e2bbe92, purity diagnostic
+c56fa9b7b4) are all default-off / byte-identical; none change calibration output. No PR opened per
+instructions.
