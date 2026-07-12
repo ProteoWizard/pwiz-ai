@@ -239,9 +239,19 @@ Landed this session behind default-off env flags (byte-identical): `--verbose` r
 `OSPREY_CAL_MEDIANPOLISH`, `OSPREY_CAL_SAMPLE_SIZE` (the last demonstrates the mechanism).
 VALIDATION: build clean (net472+net8.0); tests 503/506 (+3 expected skips); inspection clean on
 changed files; **regression.ps1 -Dataset Stellar mode1/2/3 all PASS (byte-identical to golden)** so
-the default path is provably unchanged. OPEN (deferred - a foreign 38GB Astral run held the machine):
-the downstream full-pipeline A/B (does calibrating on more anchors change IDs/FDP on file 006) is
-NOT yet run; `ai/.tmp/run-full006.ps1 -SampleSize N` is ready for the morning.
+the default path is provably unchanged.
+
+DOWNSTREAM A/B DONE (`full006-s1m` 1M sample vs `seaad-006only-r1.0-baseline` 100K; regression proved
+my default == golden, so the baseline is a valid 100K reference). Calibrating on **5885 RT anchors +
+35,192 MS2 mass-cal matches** (vs 503 + 3,004) yields, on this already-succeeding file:
+- First-pass Percolator: **34,452 vs 33,712 = +740 (+2.2%)**; decoys 343 vs 336 (FDR still 1.0%).
+- Second-pass: **39,489 vs 38,041 = +1,448 (+3.8%)**; protein groups 4988 vs 4856 (+2.7%).
+- RT fit R^2 unchanged (0.9976 vs 0.9977); MS2 mass SD 1.60 vs 1.53 ppm on 11.7x more matches.
+=> **Real, FDR-clean ID gain (+2-4%) even where calibration already works**, driven mostly by the
+much richer MS2 mass calibration (11.7x fragment matches -> more reliable tolerance). On files where
+calibration is currently MARGINAL the benefit should be larger. This confirms the adaptive-anchor
+fix is worth building. (FDRBench true-FDP not recomputed; decoy fractions identical + model-
+diagnostics HTML present in both run dirs for a deeper morning check.)
 
 ## SESSION 2026-07-11 night (autonomous) -- observability landed + median-polish lever in flight
 Branch `Skyline/work/20260711_osprey_calibrator_selection_review` (pwiz-work2). Goal this session
