@@ -642,3 +642,15 @@ the table. Raise the anchor yield; the q is trustworthy and the downstream is FD
       (the q-sweep shows FDP rises ~linearly with q; >1% buys anchors at a real FDP cost).
   The --verbose anchor-purity report (c56fa9b7b4) is the standing acceptance oracle for whichever option
   ships. Step B (geometric outlier rejection) is DEMOTED: the anchors are already pure -> little to reject.
+
+### MASS-CALIBRATION check (addresses Brendan's PPM concern) - no actionable lever
+Measured on file 006 (1M cal): MS1 correction 0.94 ppm / SD 1.53 -> search tol +/-5.53 ppm; MS2
+correction 0.05 ppm / SD 1.60 -> +/-4.86 ppm; RT +/-4.77 -> +/-0.58 min (R^2=0.9976, 5885 pts). Initial
+fragment extraction = 10 ppm (HRAM). => the instrument is ~1 ppm (MS1) / ~0 ppm (MS2) calibrated, far
+under the MacCoss 5-ppm rule; extraction is HRAM (10 ppm, within Brendan's +/-20 guideline), refined to
++/-5 ppm - NOT unit resolution. The "unit resolution absurdly wide" concern is real but confined to the
+XCorr *scoring feature* (s_calXcorrScorer = BinConfig.UnitResolution, Calibrator.cs:90), NOT the mass
+extraction window, and that feature is not the yield limiter (median-polish addition was near-null last
+session). Conclusion: the mass/PPM path has no yield lever; sample size is the sole driver. (A HRAM-bin
+calibration XCorr feature could be tried for marginal discrimination, but the reframe says it won't move
+yield materially - deprioritized.)
