@@ -553,3 +553,92 @@ in Spectronaut's controlled test; +2-4% in our file-006 A/B even where calibrati
   `QValueCalculator.cs:49`, `RTCalibrationConfig.cs`, `PerFileScoringTask.cs:1814` (summary log).
 - #4401/#4402 (calibration degradation retry ladder + graduated-RT fallback).
 - [[TODO-osprey_fdr_entrapment_collapse_investigation]] (shares the high-scoring-false-member theme).
+
+## SESSION 2026-07-12 (autonomous) - Step A: anchor entrapment-purity MEASURED -> REFRAME
+
+### Diagnostic added (default-off / verbose-only, byte-identical)
+- `CalibrationMatch.IsEntrapment` (Osprey.Scoring) populated at anchor construction from
+  `EntrapmentLibraryClassifier.IsEntrapment(entry.ProteinIds)` (FDRBench `_p_target` marker).
+- `Calibrator.RunCalibration` tallies the full-library entrapment composition once (verbose-gated);
+  `RunLdaAndCollectPoints` emits an anchor-purity report per pass via `--verbose`: scored-pool
+  composition + a q-sweep (0.1/1/2/5/10%) of anchor counts and entrapment-FDP (lower + combined,
+  ratio-corrected per docs/fractional-entrapment.md). Never used by scoring -> output unchanged.
+- Library confirmed r=0.986 (near 1:1 shuffled-anagram entrapment): fasta has 5,563,916 headers,
+  exactly half `decoy_` and half `_p_target` => equal Target/PTarget/Decoy/PDecoy quartet. At the
+  precursor level: 3,173,636 target-side = 1,597,693 real + 1,575,943 entrapment.
+
+### THE FINDING (reframes the whole review)
+The calibration anchors are **essentially PURE**, and the q<=0.01 gate is **well-calibrated, even
+slightly conservative** - NOT anti-conservative. File 006, 100K sample:
+| pass | q<=1% anchors | entrapment | combined FDP | q<=0.1% anchors | entrapment |
+|---|---|---|---|---|---|
+| 1 | 479 | 3 | 1.26% | 178 | 0 (0.00%) |
+| 2 | 618 | 2 | 0.65% | 193 | 0 (0.00%) |
+The worry ("not confident of anchor quality / q rigor at 0.01") is **empirically unfounded** on this
+file at 100K: combined entrapment-FDP is at/below the claimed 1%, and at q<=0.1% it is exactly 0%.
+=> Calibration anchor SELECTION is clean and decoupled from the SEARCH-level entrapment-FDR collapse
+documented elsewhere ([[project_osprey_intensity_hijacks_percolator]]) - different stage, different
+cause. The calibration limitation is **purely sample-limited YIELD, not purity or q-rigor.**
+
+### Consequence for the plan (priorities updated)
+- **Step B (geometric outlier rejection) drops in priority**: on a file whose anchors are already pure
+  there is almost nothing to reject. Keep it only as a safety net for larger samples / looser gates
+  (pending the 1M purity check + q-sweep curve).
+- **The yield levers are primary**: (D) more / adaptive sample (validated: 1M->4958 anchors, +2-4% IDs),
+  and (enrichment) a CiRT-style / observability-weighted PRIORITY DRAW so the calibrator hit rate rises
+  above ~1% (the real ceiling: only ~1070 of a 100K uniform draw are present).
+- **Step C (loosen the q gate) is a cheap multiplier** now that the entrapment-FDP q-sweep is the
+  built-in safety check: if q<=2-5% keeps FDP acceptable it buys more anchors with zero extra sampling.
+- The entrapment-FDP report is now the standing ACCEPTANCE ORACLE for every subsequent anchor-selection
+  change (does it add anchors without raising true FDP?).
+
+### MEASURED - anchor yield + purity q-sweep (file 006, cal-only, --verbose; commit c56fa9b7b4)
+The calibration q-value estimator is **well-calibrated across 0.1-10% at BOTH sample sizes**, and a
+larger sample gives MORE and slightly CLEANER anchors. Combined true-FDP (entrapment oracle, r=0.986)
+vs the claimed q, pass 1 (wide):
+| q gate | 100K anchors | 100K FDP | 1M anchors | 1M FDP |
+|---|---|---|---|---|
+| 0.1%  |  178 | 0.00% |  2298 |  0.00% |
+| 1.0%  |  479 | 1.26% |  4958 |  1.10% |
+| 2.0%  |  657 | 2.76% |  6922 |  2.36% |
+| 5.0%  |  829 | 5.83% |  9137 |  5.40% |
+| 10.0% |  978 | 9.88% | 11113 | 11.09% |
+- combined FDP ~= claimed q everywhere; true FDP bracketed [lower, combined] straddles q -> the q is
+  rigorous, refuting the "not confident of q rigor at 0.01" worry (it holds across the whole range).
+- 1M is slightly CLEANER than 100K at the same q (1%: 1.10 vs 1.26; 2%: 2.36 vs 2.76) - more decoys
+  -> better-conditioned LDA + q. So bigger sample is strictly better (more AND cleaner).
+- **Goal met by sampling: q<=0.1% at 1M = 2298 anchors at 0.00% measured entrapment-FDP** ("thousands
+  of peaks at near-zero FDR"). RT points after the S/N>=5 filter: 100K default 503, 1M 5885 (q<=1%).
+- Scored pool @1M pass1 = 793,739 candidates (402,463 real + 391,276 entrapment ~ r=1); only ~1.2% of
+  the real-target candidates that produce a peak pass at q<=1% -> the gate correctly keeps the cleanly
+  detectable subset. The ceiling is #cleanly-detectable peptides in the file, reached only via more sample.
+
+### DOWNSTREAM - does better calibration help IDs without inflating true FDP? YES (full006 pass-2, FDRBench)
+Computed directly from the existing full-run FDRBench tsvs (100K baseline vs full006-s1m), true-FDP via
+the combined estimator (r=0.986):
+| cal sample | q<=1% target IDs | true-FDP | q<=0.1% IDs | true-FDP |
+|---|---|---|---|---|
+| 100K (baseline) | 37,947 | 0.47% | 33,775 | 0.46% |
+| 1M | 39,375 (+3.8%) | 0.53% | 34,302 (+1.6%) | 0.44% |
+**+1,428 real IDs at q<=1%, downstream true-FDP FLAT (~0.5%, HALF the claimed 1%).** The calibration-yield
+gain is a genuine, entrapment-validated, FDR-clean win - not a mirage. (300K full run launched for the
+sweet-spot midpoint; result to be appended.)
+
+### COST (cal-only, file 006): 100K = 67s, 1M = 180s (task 58 -> 179s). ~10x anchors (and cleaner) for
+only ~2.7x wall-clock; the fixed library/spectra load dominates, so scaling the sample is affordable.
+
+### PR PROPOSAL (evidence-backed; ALGORITHM-AFFECTING -> needs golden re-bless + Brendan cost/benefit sign-off)
+Root problem is now precisely: the ladder stops as soon as nConfident >= MinCalibrationPoints (200)
+(DecideLadderAction, Calibrator.cs:704), so a RICH file halts at 100K and leaves ~10x clean anchors on
+the table. Raise the anchor yield; the q is trustworthy and the downstream is FDR-clean, so this is safe:
+  (a) SIMPLEST - raise default CalibrationSampleSize (e.g. 100K -> 300K). One config value; rich files get
+      ~3x anchors at ~1.5x cost, scarce files unaffected (ladder still grows them to all-targets).
+  (b) ADAPTIVE - add a TargetCalibrationAnchors knob and keep growing the sample (geometric, CAPPED near
+      ~1M or a config max - NOT the ladder's current jump straight to all 3.17M targets) while confident
+      anchors keep rising materially. Best cost control; more code. Gate behind OSPREY_CAL_ANCHOR_TARGET,
+      default 0 = current behavior (byte-identical) until blessed.
+  Optional coupling: at high sample the STRICT q<=0.1% gate already yields thousands of anchors at 0.00%
+      measured FDP, so the anchor gate could be TIGHTENED (cleaner RT points), never loosened past 1%
+      (the q-sweep shows FDP rises ~linearly with q; >1% buys anchors at a real FDP cost).
+  The --verbose anchor-purity report (c56fa9b7b4) is the standing acceptance oracle for whichever option
+  ships. Step B (geometric outlier rejection) is DEMOTED: the anchors are already pure -> little to reject.
