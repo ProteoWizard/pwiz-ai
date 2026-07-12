@@ -363,6 +363,70 @@ from the ~1% contamination) rather than a guaranteed ID lift -- must be measured
 3. Dead `top6_matched` feature (0% contribution) -- cosmetic; drop it, but no yield effect.
 4. Iteration cap (3, best often at iter 2) / Skyline tightening schedule -- untested this session.
 
+## PRIOR ART (2026-07-12, Brendan-provided) -- curated anchor lists beat random sampling
+The random-sampling weakness Brendan flagged (hit rate <0.5-1% -> too few confident calibrators) is
+exactly what the DIA field solved with CURATED, high-observability anchor sets. Two sources:
+
+**Bruderer, Bernhardt, Gandhi, Reiter (2016), Proteomics 16:2246-2256, "High-precision iRT prediction
+in the targeted analysis of DIA" (Biognosys/Spectronaut), DOI 10.1002/pmic.201500488** (ai/.tmp/PMIC-16-2246.pdf):
+- Standard iRT = 11 Biognosys iRT spike-in peptides + LINEAR regression. Their improvement = a LARGE
+  CURATED anchor set (**21,155 HeLa/human peptides**) + SEGMENTED per-bin robust regression.
+- How the curated set was built (the key part): DIA triplicates of HeLa; keep only precursors
+  identified in ALL 3 runs; bin into 20 equal RT bins; **per bin keep the lowest-SD 80%** (drop
+  outliers / in-source frag). => a high-reproducibility, RT-SPAN-STRATIFIED endogenous human anchor DB.
+- Segmented regression: bins of max(n/40,20) points, 50% overlap, **robust Theil-Sen per bin**, connect
+  bin refs with lines, linear-extrapolate edges. Adaptive extraction-window width = 2x a regression on
+  (median peak width + 75th-pct RT residual). Mass calibration = LOCAL (RT-dependent) mass recalibration.
+- IMPACT: segmented + large curated set = **18% more identified precursors vs 11-pep linear** (p=7.6e-5).
+- NOTE the parallels to Osprey: Theil-Sen, RT-binning, residual-gated outliers, adaptive window are
+  ALREADY in Osprey's calibrator. The gap is ANCHOR SELECTION (random 100K vs a curated high-observability
+  set), not the fit.
+
+**OpenSWATH / Rost -- CiRT ("common internal retention time") endogenous peptides** -- THIS is the
+"priority list in human samples" Brendan recalls: Parker, Rost, Rosenberger, Collins, Malmstrom,
+**Amodei** (yes, the mProphet Amodei), Venkatraman, Raedschelders, Van Eyk, Aebersold, "Identification
+of a Set of Conserved Eukaryotic Internal Retention Time Standards for DIA MS," MCP 2015 14(10):2800-2813,
+DOI 10.1074/mcp.O114.042267 (open: PMC4597153).
+- **113 CiRT peptides** (+ a hand-picked **14-peptide CiRT-SW** SWATH subset). ENDOGENOUS, no spike-in.
+- Selection = curation, not random: started from the **500 most-common tryptic peptides** in
+  UniProt/Swiss-Prot (conserved housekeeping), cross-referenced for detectability across human+yeast
+  (84/113 human, 98/113 yeast), validated over 5 datasets (human/yeast/mouse). => near-universally
+  present, so the effective calibrator hit rate is ~100%, NOT ~1%. RT predicted within ~2 min for most.
+- OpenSWATH (Rost 2014, Nat Biotech, nbt.2841) uses anchors via `tr_irt`; recommends the Biognosys
+  iRT-kit if spiked, else CiRT. RT transform default linear (lowess/b_spline for many/noisy anchors).
+- RUNTIME OUTLIER REJECTION on anchors: `RTNormalization:outlierMethod` = iter_residual (default,
+  drop largest-residual each iter) / iter_jackknife (drop the point whose removal most improves R^2) /
+  **RANSAC** / none; `estimateBestPeptides` peak-shape prefilter; `NrRTBins`(10) enforces RT coverage.
+  CiRT's filter "confidently removes low-scoring signals up to a **10x excess of false signals**."
+- m/z correction from the SAME anchors: `mz_correction_function=quadratic_regression_delta_ppm` -> one
+  curated anchor set solves RT AND m/z together (Osprey currently derives both from the random draw).
+- Escher 2012 (Proteomics, pmic.201100463): the original 11 synthetic iRT peptides + the selection
+  criteria (high intensity, no mod-prone residues, non-natural sequence, EVEN RT distribution).
+
+### Refined recommendation (updates the BOTTOM LINE)
+Two tiers, not either/or:
+1. **Fallback / immediate (validated tonight)**: when random sampling is used, sample MORE on rich files
+   (adaptive anchor target). +2-4% IDs on file 006, FDR-clean. "Simply finding more beats degrading."
+2. **Principled fix (prior-art-backed)**: preferentially draw calibration candidates from a CURATED
+   high-observability PRIORITY LIST (CiRT-style, species/tissue-appropriate) instead of uniform random,
+   so the calibrator hit rate is ~100% not ~1%. This is what Spectronaut (21,155-pep set) and OpenSWATH
+   (CiRT-113/14) both do. CONCRETE OSPREY DESIGN:
+   - Ship the published **CiRT-113 / CiRT-SW-14** sequences (human/eukaryotic; SEA-AD is human brain,
+     so directly applicable). At calibration, MATCH them to assay-library entries by sequence and draw
+     those FIRST as calibration candidates (they carry fragment info, so Osprey's co-elution scorer can
+     score them unchanged). This slots into the existing pass-1 (wide) calibration: seed pass 1 with the
+     CiRT anchors instead of a random 100K draw, then the existing pass-2 refinement (and/or the adaptive
+     sample from tier 1) expands to a high-precision fit -- exactly Spectronaut's "start from iRT-11,
+     grow to 21,155 from confident IDs" pattern.
+   - Add OpenSWATH-style **anchor OUTLIER REJECTION** (RANSAC / iterative-largest-residual) on top of the
+     current S/N + Theil-Sen; it survives up to 10x false-anchor excess and directly addresses the
+     entrapment-contamination + OutlierRetention=1.0 gaps this TODO already flagged.
+   - Derive **m/z correction from the same anchors** (as OpenSWATH does) rather than a separate draw.
+   - For non-eukaryotic/custom libraries, reuse the CiRT METHODOLOGY (top-N most-common conserved tryptic
+     peptides, filtered by cross-run detectability) to generate a per-library anchor list offline.
+Both tiers are consistent with the measured driver: calibration/anchor quality materially moves IDs (18%
+in Spectronaut's controlled test; +2-4% in our file-006 A/B even where calibration already succeeds).
+
 ## References
 - Code: `Osprey.Tasks/Calibrator.cs` (RunCalibration :180, retry ladder :318-622, CollectCalibration
   Points :1274, floors/constants :53-56), `Osprey.Scoring/CalibrationScorer.cs` (ExtractFeatureMatrix
