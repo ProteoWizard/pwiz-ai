@@ -733,6 +733,7 @@ default.
 5. **Where the real ID levers are:** the search-level scoring / FDR (other TODOs), NOT calibration. The
    "50% of Percolator" goal is essentially already met at the model level (~45% present-peptide recovery);
    more anchors don't move it.
-The 3 prior-session commits (verbose LDA report 7d9663295a, env levers 063e2bbe92, purity diagnostic
-c56fa9b7b4) are all default-off / byte-identical; none change calibration output. No PR opened per
-instructions.
+Branch commits (all default-off / byte-identical; none change calibration output): 7d9663295a verbose LDA
+report + 063e2bbe92 env levers (prior session); c56fa9b7b4 anchor-purity diagnostic + 730117d579 its unit
+test (this session). Stellar regression PASSED mode1/2/3 (vs golden / resume / HPC chain, byte-identical,
+blib 50,237,440 bytes) - the diagnostic commits do NOT change default output. No PR opened per instructions.
