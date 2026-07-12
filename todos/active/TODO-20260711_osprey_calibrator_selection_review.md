@@ -224,6 +224,20 @@ scarce case:
    algorithm-affecting -> golden must be re-blessed deliberately if output changes) + the
    entrapment oracle.
 
+## BOTTOM LINE (2026-07-11 night) -- PR PROPOSAL
+The low calibration yield is **sample-limited, not feature-limited**. On file 006 the library is
+3.17M targets with only ~1.06% present; the default random 100K sample holds ~1K present peptides,
+so calibration selects only ~479 anchors @1% (~45% of present-in-sample). Growing the sample scales
+anchors ~linearly (300K->1478, 1M->4958 @1%; 1M gives **2298 anchors @0.1%** and **5885 RT points**
+vs 503). Adding the top Percolator feature (median-polish cosine) did almost nothing (redundant with
+libcosine_apex). **Recommended PR: make the calibration anchor target adaptive** -- keep sampling/
+growing while confident anchors keep rising materially, instead of stopping at the first attempt
+past MinCalibrationPoints=200; on scarce files behavior is unchanged (protected by #4402 floors).
+Ship the `--verbose` calibration report (already implemented) alongside so the effect is observable.
+Drop the dead `top6_matched` feature (0% contribution). Median-polish cosine: optional, low priority.
+Landed this session behind default-off env flags (byte-identical): `--verbose` report,
+`OSPREY_CAL_MEDIANPOLISH`, `OSPREY_CAL_SAMPLE_SIZE` (the last demonstrates the mechanism).
+
 ## SESSION 2026-07-11 night (autonomous) -- observability landed + median-polish lever in flight
 Branch `Skyline/work/20260711_osprey_calibrator_selection_review` (pwiz-work2). Goal this session
 (from Brendan): (1) add --verbose visibility into the calibration LDA mirroring the Percolator
@@ -300,12 +314,18 @@ calibration (stop at 200 points), the opposite of using the rich signal.
 |--------|-----------:|-------------:|-----------:|-------------:|-----------------:|-----------:|
 | 100K (default) | 479 | 178 | 618* | ~230* | 503 | ~90s |
 | 300K | 1478 | 816 | 2193 | 1067 | 1712 | 102s |
-| 1M | <pending> | | | | | |
+| 1M | 4958 | 2298 | 7443 | 2259 | 5885 | 223s |
 
-(*pass-2 100K numbers approximate from the --verbose iter trace.) 300K vs 100K = **3.1x @1%,
-4.6x @0.1%** -- ~linear (slightly super-linear at the tighter cutoff). The calibration LOESS is now
-fit on **1712 anchors instead of 503**. This is the mechanism Brendan asked for: rich data -> many
-more near-zero-FDR anchors. Cost scales with the sample (300K calibration scoring was still ~1 min).
+(*pass-2 100K numbers approximate from the --verbose iter trace.) Pass-1 @1% scales essentially
+PERFECTLY LINEARLY: 100K->479, 300K->1478 (3.08x), 1M->4958 (**10.4x**) -- textbook sample-limited.
+@0.1% is slightly super-linear (178->2298 = 12.9x at 10x sample). At 1M the LOESS is fit on **5885
+anchors (pass 2) vs 503 default**, and there are **2298 anchors at q<=0.1%** -- exactly Brendan's
+"thousands of high-quality peaks at near-zero FDR." Calibration cost stayed modest (1M = 223s total
+incl. the ~60s library load; the scoring itself ~2-3 min). NOTE: even 4958 @1% is only ~15% of
+Percolator's 33,712 on this file -- reaching the aspirational 50% via sampling alone would need
+near-full-library (~3.17M) sampling (~10 min) AND may saturate below Percolator because the 4 apex
+features are weaker than the full-search HRAM feature set. But the stated goal (thousands of pure
+anchors) is met at 300K-1M.
 
 ### 7. The principled fix (for the PR proposal, NOT committed tonight)
 The clean change is NOT "always sample everything" (a 3.17M full sample would be ~10x slower for
