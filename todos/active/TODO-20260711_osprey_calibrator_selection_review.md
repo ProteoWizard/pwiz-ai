@@ -224,6 +224,110 @@ scarce case:
    algorithm-affecting -> golden must be re-blessed deliberately if output changes) + the
    entrapment oracle.
 
+## SESSION 2026-07-11 night (autonomous) -- observability landed + median-polish lever in flight
+Branch `Skyline/work/20260711_osprey_calibrator_selection_review` (pwiz-work2). Goal this session
+(from Brendan): (1) add --verbose visibility into the calibration LDA mirroring the Percolator
+contribution report; (2) raise calibration peak-selection yield toward >=50% of a full Percolator
+training by adding the features that dominate the Percolator model.
+
+### 1. --verbose calibration-LDA report -- DONE + committed (7d9663295a)
+`CalibrationScorer.TrainAndScoreCalibration` gained an `out CalibrationTrainingReport` overload;
+the Calibrator logs it under `--verbose`. Shows: candidate pool (target/decoy), seed feature +
+FDR, per-iteration refinement trace (positive pool, passing, "new best"), stop reason, 1%/0.1%
+calibrator yield, and the per-feature share-of-separation table (same shape as the Percolator
+`FeatureContributions`). Unit test `TestCalibrationTrainingReport`; full suite 503/506 (+3 expected
+skips) green; inspection clean on changed files (the 9 SystemMemory.cs warnings are the known
+pre-existing #4379 local-only issue). Non-algorithm-affecting (diagnostic only).
+
+### 2. BASELINE observed on file 006 (r=1.0 entrapment lib, `runs/cal006-baseline`)
+```
+Calibration LDA pass 1: 150,673 matches (76,321 target / 74,352 decoy)
+  seed libcosine_apex @1% (229) -> iters 229->417->479->467 (cap hit, best=479 @ iter2)
+  yield: 479 @ q<=1%, 178 @ q<=0.1%          [matches the earlier MEASURED numbers exactly]
+  contributions: libcosine_apex 64.0% | xcorr 19.7% | coelution_corr 16.2% | top6_matched 0.0%
+```
+KEY: `top6_matched` is DEAD (weight clipped to 0) -- effectively only 3 of 4 features work.
+`libcosine_apex` (HRAM apex cosine) carries 64%.
+
+### 3. RECONCILED the "unit resolution is absurdly wide" concern (important)
+Observed, not inferred (`cal006-baseline/run.log`): calibration runs at **fragment tolerance
+10 ppm** (config default, HRAM) -- NOT unit resolution. Only the *XCorr feature value* is
+unit-resolution-binned (`s_calXcorrScorer`); the XIC extraction, libcosine, top6, and the MS1/MS2
+mass-error collection all use the 10 ppm HRAM tolerance. And the instrument is already near-
+calibrated: **MS1 correction 0.98 ppm (SD 1.77), MS2 correction 0.08 ppm (SD 1.53)** -- so 10 ppm
+easily catches true fragments; widening the mass window would only admit noise. Initial RT window
+is +/-4.77 min (0.2x the mzML RT range). => The limiter is NOT the mass/RT window; it is FEATURE
+QUALITY: the 4 apex-only features cannot separate the 76K-target pool (only 479 clear 1%). This
+confirms the TODO's MEASURED conclusion by direct observation. The lever is adding the strong
+full-profile HRAM features that dominate Percolator, exactly as Brendan proposed.
+
+### 4. median_polish_cosine lever -- implemented behind OSPREY_CAL_MEDIANPOLISH (experiment in flight)
+Sub-agent mapped the Percolator features (spec in this session's notes): `median_polish_cosine`
+(~40% of the search model) is the single best value x cheapness -- fully computable from the
+peak-cropped calibration XICs the scorer already extracts, via the public `TukeyMedianPolish.Compute`
++ `.LibCosine` (same crop as `CoelutionScorer.ScoreCandidate`, maxIter=10 tol=0.01). Added as an
+OPTIONAL 5th calibration LDA feature gated on `OSPREY_CAL_MEDIANPOLISH` (default OFF -> matrix stays
+4 features -> output byte-identical AND perf-neutral: the feature is neither computed nor scored when
+off). Files: `OspreyEnvironment.CalMedianPolishFeature`, `CalibrationMatch.MedianPolishCosine`,
+`ScoreCalibrationCandidate` compute + `ComputeCalibrationMedianPolishCosine` helper,
+`ExtractFeatureMatrix` 5th column, `s_featureNames`. Committed 063e2bbe92 (default off -> byte-identical).
+
+RESULT (`cal006-medianpolish`, pass 1): **491 @ q<=1%, 180 @ q<=0.1%** vs baseline 479/178 -- only
+**+12 / +2**, and `median_polish_cosine` earns just **5.9%** of the separation (libcosine still 56.7%).
+=> median-polish cosine is **largely REDUNDANT with libcosine_apex** (both measure library-spectrum
+agreement); adding it barely moves yield. **Feature richness is NOT the dominant lever here.** This
+was the surprise that redirected the investigation.
+
+### 5. ROOT CAUSE of the low yield: the calibration is SAMPLE-LIMITED, not discrimination-limited
+The numbers reconcile cleanly:
+- Full first-pass Percolator on file 006 finds **33,712 targets @1%** (`seaad-006only-r1.0-baseline`
+  run.log) out of a **3,173,636-target** entrapment library => only **~1.06% of the library is
+  actually present**.
+- Calibration samples a **random 100K** targets per attempt and STOPS at attempt 1 once >= 200
+  clear (`ComputeMaxAttempts`/the ladder only grows the sample on SHORTFALL). A 100K random draw
+  from a 3.17M library holds only **~1,070 present peptides** (100K x 1.06%).
+- Calibration finds **479 @1%** = **~45% of the present-in-sample peptides**, and 178 @0.1%.
+So the calibration LDA is ALREADY recovering ~half the present peptides IN ITS SAMPLE. It looks
+weak (479 of 76K matched) only because the 76K "matched" pool is ~99% not-actually-present library
+entries the 4 apex features cannot reject -- but the CEILING is set by how many present peptides are
+in the sample, and a 100K random sample of a 3.17M library only contains ~1K of them. **To surface
+"thousands of high-quality peaks at near-zero FDR" (Brendan's goal), the dominant lever is the
+SAMPLE (size/enrichment), not the feature set.** The retry ladder is tuned for a MINIMAL sufficient
+calibration (stop at 200 points), the opposite of using the rich signal.
+
+### 6. CONFIRMED: yield scales ~linearly with sample size (`OSPREY_CAL_SAMPLE_SIZE` sweep, file 006)
+| sample | pass-1 @1% | pass-1 @0.1% | pass-2 @1% | pass-2 @0.1% | pass-2 RT points | total wall |
+|--------|-----------:|-------------:|-----------:|-------------:|-----------------:|-----------:|
+| 100K (default) | 479 | 178 | 618* | ~230* | 503 | ~90s |
+| 300K | 1478 | 816 | 2193 | 1067 | 1712 | 102s |
+| 1M | <pending> | | | | | |
+
+(*pass-2 100K numbers approximate from the --verbose iter trace.) 300K vs 100K = **3.1x @1%,
+4.6x @0.1%** -- ~linear (slightly super-linear at the tighter cutoff). The calibration LOESS is now
+fit on **1712 anchors instead of 503**. This is the mechanism Brendan asked for: rich data -> many
+more near-zero-FDR anchors. Cost scales with the sample (300K calibration scoring was still ~1 min).
+
+### 7. The principled fix (for the PR proposal, NOT committed tonight)
+The clean change is NOT "always sample everything" (a 3.17M full sample would be ~10x slower for
+marginal gain past saturation). It is to **make the calibration anchor target adaptive to the
+available signal**: keep the retry ladder, but instead of stopping at the first attempt that clears
+MinCalibrationPoints=200, grow the sample while confident anchors keep rising materially (rich file
+-> thousands of anchors; scarce file -> unchanged behavior, still protected by #4402's floors).
+Equivalent framings to evaluate: (a) raise the default CalibrationSampleSize and/or the "enough"
+threshold; (b) a signal-proportional target (e.g. grow until @0.1% anchors plateau or the sample is
+exhausted); (c) enrich the sample toward library entries with >=1 in-window top-6 fragment match
+before drawing (cuts the ~99% not-present dilution so a smaller sample yields more true anchors).
+OPEN VALIDATION (needs a full-pipeline A/B, expensive, not done tonight): does calibrating on 1712
+vs 503 anchors measurably improve DOWNSTREAM IDs / FDP? The calibration already succeeds
+(R^2=0.9977) with 503, so the win is robustness margin (purer, more numerous anchors, less leverage
+from the ~1% contamination) rather than a guaranteed ID lift -- must be measured before shipping.
+
+### Levers ranked by impact (this session's evidence)
+1. **Sample size / adaptive anchor target** -- DOMINANT (3x sample -> ~3x anchors). The real fix.
+2. Feature richness (median-polish cosine) -- MINOR (+2.5% @1%), redundant with libcosine_apex.
+3. Dead `top6_matched` feature (0% contribution) -- cosmetic; drop it, but no yield effect.
+4. Iteration cap (3, best often at iter 2) / Skyline tightening schedule -- untested this session.
+
 ## References
 - Code: `Osprey.Tasks/Calibrator.cs` (RunCalibration :180, retry ladder :318-622, CollectCalibration
   Points :1274, floors/constants :53-56), `Osprey.Scoring/CalibrationScorer.cs` (ExtractFeatureMatrix
