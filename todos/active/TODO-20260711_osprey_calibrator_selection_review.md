@@ -437,8 +437,55 @@ Brendan authorized pulling two open-source reference engines into C:\proj for di
 - **OpenSWATH** (`C:\proj\OpenMS`, OpenSWATH algs under src/openms/.../OPENSWATH). Faded in the field
   (Aebersold retired, Rost -> Toronto / small-molecule) but the RANSAC/iter-residual RT normalizer +
   m/z correction are canonical reference code.
-Two sub-agents are reviewing each for: RT calibration, WHICH peptides are used as anchors (random vs
-quality-selected vs first-pass-confident), mass correction, and q-value rigor. <fold in results>.
+Two sub-agents reviewed each for: RT calibration, WHICH peptides are anchors, mass correction, q rigor.
+
+**DIA-NN 1.8 code review (src/diann.cpp; validates BOTH our suspicions):**
+- ANCHOR SELECTION: NEVER random-samples. Scores the FULL (batched) library, ranks by classifier
+  confidence (cscore), takes the **top-N best**: `iRTTopPrecursors=50` for RT, `iRTRefTopPrecursors=250`
+  for the reference/peak-width set (diann.cpp:9597-9599, 9706-9725). RT anchors = q<=iRTMaxQvalue(**0.1**,
+  looser than our 0.01) OR in the top-50 by score -> a GUARANTEED FLOOR of the 50 best even if few pass
+  q, so calibration never starves. Mass cal uses a stricter q<=MassCalQvalue set.
+- Bootstrapped/semi-supervised: small batches (MinBatch=2000) -> fit classifier -> q -> calibrate ->
+  grow -> refit, with hard min-ID gates (MinCal=1000, MinCalRec=100; run() 10361-10578). Optional
+  reference_run() calibrates on a curated .ref set first.
+- RT fit = monotone cubic-Hermite SPLINE, outlier-trimmed (drop residuals > 80th pct, refit), bidirectional
+  (1153-1201). Mass = RT-binned linear-in-m/z least-squares (Eigen SparseQR), MS1+MS2 separately, with a
+  **REVERT-IF-WORSE self-check** (reverts if correction didn't beat no-correction; 9909-9924).
+- Q RIGOR: TDC on the classifier score, but the NN is a **12-network bagged CROSS-VALIDATION** ensemble
+  where each net scores only precursors it did NOT train on (830-840, 9306-9359, 9476-9480) + revert-if-
+  worse + a separate GLOBAL profile-q across runs (6116-6147, 11177). BUT the agent notes the residual
+  optimism is real: "TDC counting is still on the same precursors used to fit the classifier" -- exactly
+  the over-optimism FDRBench exposed (Mike's point about Vadim's fix).
+- NO detectability/observability PRIOR: DIA-NN carries no pre-search per-entry detection-probability score;
+  it derives quality empirically by scoring the whole library and ranking by cscore. => Osprey's Carafe
+  quality flag is our EFFICIENT SUBSTITUTE for DIA-NN's brute-force full-library scoring (we can't cheaply
+  co-elution-score all 3.17M; a Carafe prior enriches the scored subset for present peptides).
+- PORTABLE IDEAS: (i) confidence-RANK anchor selection with a guaranteed top-N floor (vs our hard q<=0.01
+  that starves); (ii) looser q (0.1) + geometric outlier trim beats a strict q with few anchors; (iii)
+  revert-if-worse mass-cal guard; (iv) held-out/CV scoring for a less-optimistic q.
+**OpenSWATH code review (OpenMS CalibrationWorkflow/MRMRTNormalizer; confirms the GEOMETRIC thesis):**
+- Anchor trust is PURELY GEOMETRIC -- **NO per-run q/target-decoy/FDR on the RT anchors anywhere**
+  (grep-confirmed across CalibrationWorkflow.cpp, MRMRTNormalizer.cpp, OpenSwathHelper.cpp,
+  SwathMapMassCorrection.cpp). Decoys are excluded once at sampling (library-level), not a per-run TDC.
+- Anchors = a CURATED set (iRT/CiRT) -> optional peak-quality pre-screen (`estimateBestPeptides`,
+  OverallQualityCutoff=5.5; OFF by default -- they trust the curated list) -> **geometric outlier
+  rejection**: `iter_residual` (drop largest-residual, refit until R^2>=0.95 or coverage<0.6; DEFAULT) or
+  **RANSAC** (consensus inliers within 3% of gradient, most-inliers-wins ties-by-RSS, 1000 iters) ->
+  RT-bin coverage gate (NrRTBins=10, MinBinsFilled=8) -> fit linear/lowess/b_spline.
+- m/z correction REUSES the exact surviving RT anchors (quadratic_regression_delta_ppm etc.), same set.
+- => OpenSWATH proves a curated set + geometric filter needs NO per-run q at all.
+
+**THE TWO ENGINES BRACKET THE DESIGN SPACE; Osprey is the outlier.**
+- DIA-NN: score the FULL library, rank by (cross-validated) confidence, loose q(0.1)+floor+spline-trim.
+- OpenSWATH: small CURATED anchor set + PURELY geometric RANSAC/residual rejection, no per-run q.
+- Osprey (today): strict per-run resubstitution q<=0.01 on a RANDOM 100K sample. NEITHER reference does
+  this -- not the random sample, not the strict per-run q for anchor trust. CONVERGENT LESSONS:
+  (1) don't random-sample (DIA-NN scores all + ranks; OpenSWATH curates; our Carafe flag = the efficient
+  middle path); (2) don't lean on a strict per-run q -- use geometric robustness. Osprey ALREADY has
+  Theil-Sen+LOESS but **OutlierRetention=1.0 DISABLES the trim** (this TODO's item) -- re-enable it and
+  add RANSAC/iter-residual, directly endorsed by BOTH engines; (3) select by confidence RANK + a floor
+  (DIA-NN top-50) not a hard q that starves; (4) reuse anchors for m/z (both do; Osprey already does);
+  (5) revert-if-worse mass-cal guard (DIA-NN) is a cheap robustness win.
 
 **BRENDAN'S KEY ARCHITECTURAL IDEA (2026-07-12) -- self-generated quality anchor list from Carafe.**
 Hannes's "~1000 anchors" was likely just him configuring many endogenous anchors / curating a ~1000
