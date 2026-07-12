@@ -16,6 +16,20 @@ restored in #4402: retry ladder + graduated-RT fallback). This TODO looks at the
 the selection quality and its heuristics -- and whether the picker is leaving robustness on
 the table when data is abundant.
 
+**Update 2026-07-11 -- the seed weakness is NOT calibration-only; it also lives in Pass-1
+Percolator.** While root-causing [[TODO-osprey_fdr_entrapment_collapse_investigation]] we confirmed
+Pass-1 Percolator uses the same **single-best-feature seed at a tight 1% first cutoff**
+(`Osprey.FDR/PercolatorFdr.cs:407-434` `FindBestInitialFeature`, relaxes to 5% only if zero pass),
+vs Skyline mProphet's fixed-composite seed + loose 15% cutoff + progressive tightening. Coupled with
+**raw (un-logged) intensity features** run through a plain mean/std standardizer, the free
+per-iteration SVM re-derivation trains raw `peak_apex`/`peak_area` up to a dominant, heavy-tailed
+weight, and intensity outliers (a lone DIA interference: huge intensity, no coelution) hijack the top
+of the ranking -- flooring the achievable q and producing the entrapment-run FDP spike. So the two
+seed levers proposed below (fixed composite seed; keep intensity low by construction) should be
+evaluated for **Pass-1 Percolator as well as Stage-3 calibration**, and paired with a feature-
+conditioning fix (log/robust-scale the intensity features). Details + evidence in that TODO's
+"ROOT CAUSE FOUND" section.
+
 ## The mechanism as it stands (reviewed 2026-07-11, cited) -- answers to the open questions
 Entry: `Calibrator.RunCalibration` (`Osprey.Tasks/Calibrator.cs:180`, port of Rust
 `run_calibration_discovery_windowed`). The log lines "N RT calibration points (from M
@@ -107,6 +121,39 @@ per-run-variable seed judged at a strict 1% cut leaves almost nothing to train o
 like "LDA is insensitive" is really seed + cutoff starvation. So the improvement is not just "use a
 composite seed" -- it is **adopt the whole Skyline pattern**: fixed composite seed + loose (~15%)
 first cutoff + progressive tightening over more iterations, then measure against the §1 count gap.
+
+## MEASURED (2026-07-11) -- the depleted pool is primarily FEATURE-limited, seed is ~2x secondary
+Authoritative dumps on 006 (`OSPREY_DUMP_LDA_SCORES` for the real discriminant+q,
+`OSPREY_DUMP_CAL_MATCH` for the 4 features; analysis in `ai/.tmp/lda_analysis.py`,
+`cal_seed_experiment.py`). My competition-q reproduces the pipeline's own q exactly (479 @1% both
+ways), so these numbers are trustworthy:
+
+- **Real calibration LDA yield (006): 479 targets @ q<=1%, 178 @ q<=0.1%.** The LDA discriminant
+  **barely separates**: target median 0.627 vs decoy median 0.624 (a 0.003 gap). The 150,673 sampled
+  matches are ~balanced (76,321 target / 74,352 decoy).
+- **The model already extracts near the feature ceiling; the seed is not the lever.** Single-feature
+  competition-q yields @1%: libcosine 229, xcorr 150, correlation 0, top6 0. The pipeline's trained
+  LDA already reaches **479** (~2x the best single feature) and a fixed equal-weight composite reaches
+  **~500** -- i.e. the current iterative LDA is ALREADY close to the best a linear model can do on
+  these 4 features. So the LDA is NOT seed-starved (it is not stuck at the single-feature 229); a
+  fixed-composite seed would mainly help convergence/stability, not raise the endpoint past ~500.
+  This REFUTES the "weak seed starves the LDA -> few pass" framing below as the primary cause: the
+  ceiling is the features, not the seed.
+- **The primary limiter is FEATURE QUALITY.** The 4 unit-resolution apex features (correlation,
+  libcosine, top6, xcorr) cannot separate true from false peaks at this stage. The full HRAM search
+  finds ~34K IDs on 006 (70x more) using HRAM fragment-match features (median-polish cosine etc.).
+  So "are we just using low-value scores?" -> largely YES.
+- **Direct answer to the user's questions.** (a) Better seed? worth ~2x (do it, cheap, via a fixed
+  composite over the 4 features). (b) Other explanation? YES -- the features are weak. (c) Low-value
+  scores? YES, unit-resolution apex features. (d) Could higher-value scores be computed quickly
+  enough? THIS is the real lever: a stronger fragment-similarity feature over the elution profile
+  (not just the apex), computable at the pre-calibration wide window before RT/mass are calibrated,
+  is what would lift the 0.1% yield materially. Next experiment: add one stronger cheap feature to
+  the calibration scorer and re-measure the @0.1% yield + RT-fit robustness.
+- NOTE: the calibration still SUCCEEDS today (006: 503 RT points, R^2=0.9977) -- a few hundred
+  well-spread anchors suffice for the LOESS fit. The aspiration ("many more at 0.1%") is about
+  robustness margin (purer anchors, less leverage from the ~1% contamination), which needs the
+  feature lever, not just the seed.
 
 ## Candidate robustness improvements to evaluate (hypotheses, A/B each)
 Flagged as heuristic/fragile in the review -- the point is to test whether tightening them makes
