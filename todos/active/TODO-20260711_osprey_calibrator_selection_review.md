@@ -237,6 +237,11 @@ Ship the `--verbose` calibration report (already implemented) alongside so the e
 Drop the dead `top6_matched` feature (0% contribution). Median-polish cosine: optional, low priority.
 Landed this session behind default-off env flags (byte-identical): `--verbose` report,
 `OSPREY_CAL_MEDIANPOLISH`, `OSPREY_CAL_SAMPLE_SIZE` (the last demonstrates the mechanism).
+VALIDATION: build clean (net472+net8.0); tests 503/506 (+3 expected skips); inspection clean on
+changed files; **regression.ps1 -Dataset Stellar mode1/2/3 all PASS (byte-identical to golden)** so
+the default path is provably unchanged. OPEN (deferred - a foreign 38GB Astral run held the machine):
+the downstream full-pipeline A/B (does calibrating on more anchors change IDs/FDP on file 006) is
+NOT yet run; `ai/.tmp/run-full006.ps1 -SampleSize N` is ready for the morning.
 
 ## SESSION 2026-07-11 night (autonomous) -- observability landed + median-polish lever in flight
 Branch `Skyline/work/20260711_osprey_calibrator_selection_review` (pwiz-work2). Goal this session
