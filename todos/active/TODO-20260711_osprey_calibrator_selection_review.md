@@ -737,3 +737,18 @@ Branch commits (all default-off / byte-identical; none change calibration output
 report + 063e2bbe92 env levers (prior session); c56fa9b7b4 anchor-purity diagnostic + 730117d579 its unit
 test (this session). Stellar regression PASSED mode1/2/3 (vs golden / resume / HPC chain, byte-identical,
 blib 50,237,440 bytes) - the diagnostic commits do NOT change default output. No PR opened per instructions.
+
+## FOLLOW-UP (raised by Brendan, 2026-07-12)
+- **Port Mike's Rust osprey docs into pwiz_tools/Osprey/docs.** C:\proj\osprey\docs holds Mike's
+  pre-port algorithm notes (20 files: 02-calibration.md, 04-xcorr-scoring.md, 14-rt-alignment.md, ...);
+  the C# side currently has only docs/fractional-entrapment.md. These are the authoritative references
+  for the ported algorithms and should be pulled over (adapted to Skyline conventions). NOT done this
+  session - logged for a future docs pass.
+- **Mass-error mechanism confirmed (answers Brendan's "unit resolution" concern):** MS1/MS2 mass error is
+  measured at NATIVE HRAM precision in ppm, NOT unit resolution. ComputeMs1MassError (Calibrator.cs:2142)
+  finds the M+0 peak within the 10 ppm precursor window then reports (obs-theo)/theo*1e6; CollectMs2Fragment
+  Errors (:2112) does the same per top-N matched fragment; FragmentToleranceConfig.MassError (:72) is the
+  ppm formula. The 10 ppm is only the SEARCH WINDOW, not the measurement resolution (measured SD ~1.5 ppm
+  proves it). "Unit resolution" in Mike's doc = (a) the XCorr *scoring feature* binning (Comet-style shape
+  score, one of 4 anchor-selection LDA features, does NOT touch mass calibration) and (b) the low-res
+  *instrument class* (Stellar), where mass error is measured in Th not ppm - irrelevant to Astral HRAM.
