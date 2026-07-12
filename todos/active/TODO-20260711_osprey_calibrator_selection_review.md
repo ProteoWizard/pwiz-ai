@@ -1,7 +1,15 @@
-# TODO-osprey_calibrator_selection_review.md -- Review the Stage-3 RT/mass calibrator-selection scheme for robustness improvements
+# TODO-20260711_osprey_calibrator_selection_review.md -- Review the Stage-3 RT/mass calibrator-selection scheme for robustness improvements
+
+## Branch Information
+- **Branch**: `Skyline/work/20260711_osprey_calibrator_selection_review`
+- **Base**: `master`
+- **Created**: 2026-07-11
+- **Status**: In Progress
+- **GitHub Issue**: (none)
+- **PR**: (pending)
 
 ## Status
-**Backlog (created 2026-07-11).** Raised by Brendan: he wants to understand how Osprey's
+**Active (moved to active 2026-07-11).** Raised by Brendan: he wants to understand how Osprey's
 Stage-3 calibration CHOOSES its calibrator peptides, because the mechanism is the lever for
 making calibration **less likely to degrade in cases where tens of thousands of peptides are
 detectable** (rich data should never produce a weak calibration). This is a **review +
