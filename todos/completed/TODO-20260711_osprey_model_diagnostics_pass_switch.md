@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260711_osprey_model_diagnostics_pass_switch`
 - **Base**: `master`
 - **Created**: 2026-07-11
-- **Status**: In Progress
-- **PR**: [#4413](https://github.com/ProteoWizard/pwiz/pull/4413)
+- **Status**: Completed
+- **PR**: [#4413](https://github.com/ProteoWizard/pwiz/pull/4413) (merged 2026-07-12 as a3e227d76b)
 
 ## Status
 **Active (created 2026-07-11, started 2026-07-11).** Raised by Brendan after the pass-2 q-value work
@@ -136,6 +136,19 @@ Implemented in `pwiz-work1` on `Skyline/work/20260711_osprey_model_diagnostics_p
   had NO real pass-2 q-driven data (old embedded JSON predates it), so the harness cloned pass-1 ->
   pass-2 and those three tabs looked identical -- a demo-data artifact, NOT a template/C# bug
   (proven: perturbing pass-2 data makes all three tabs change on the switch).
+### 2026-07-12 - Merged
+PR #4413 merged as squash commit a3e227d76b. Shipped the page-level Pass 1 / Pass 2 switch for the
+`--model-diagnostics` report: a `Pass2Data` bundle + `BuildPass2` on the reported pool (structural
+half null under confidence-transfer, q-driven half always), the global switch re-sourcing every card,
+per-card graceful "n/a" under transfer, yield moved to the FDR-calibration tab under a shared exp/run
+scope selector, and the Reproducibility tab reorg. Gates: full Osprey.Test suite green, inspection
+clean, `regression.ps1 -Dataset Stellar` byte-identical, Osprey Perf/Regression TeamCity build #151
+(Stellar+Astral) SUCCESS on the merged commit, and a real 20-file end-to-end render verified.
+Self-review + Copilot: addressed (print `.navbar` hidden; test comment clarified); the one deferred
+item is that Save-as-PDF now captures only the active pass (deliberate; Brendan to decide if the PDF
+should stack both passes as a future enhancement).
+
+**Verification detail below (kept for the engineering record):**
 - **Real end-to-end render (authoritative):** re-ran Stages 5-7 of the 20-file SEA-AD r0.5 run on
   hard-linked Stage-1-4 caches (new dir `runs\seaad-20files-entrapment-r0.5-mdiag`, 17 min vs 118 min
   full). `PerFileScoring` + `PerFileRescoring` rehydrated from links; `FirstPassFDR` + `SecondPassFDR`
