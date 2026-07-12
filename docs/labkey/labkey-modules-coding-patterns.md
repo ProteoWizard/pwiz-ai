@@ -814,6 +814,11 @@ For comprehensive Selenium testing patterns, methods, locators, assertions, and 
 
 This section covers LabKey-specific patterns not covered in the general testing guide.
 
+> **Inspecting test data after a run:** a passing test deletes its project by default.
+> To keep the folders/data for browser inspection, set `clean=false` in
+> `server/testAutomation/test.properties` and re-run (restore `clean=true` when done).
+> See [Keeping test data after a run](labkey-selenium-testing-guide.md#keeping-test-data-after-a-run-manual-verification).
+
 ### Impersonation
 
 ```java

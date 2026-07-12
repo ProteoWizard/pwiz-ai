@@ -37,10 +37,32 @@ These are distinct from module **unit tests** (`junit-run.view`, no browser) —
 
 ### Keeping test data after a run (manual verification)
 
-`test.properties` defaults to `clean=true`, which deletes the test's project when it
-passes. To keep the containers and data for browser inspection, set `clean=false` and
-re-run. The preamble still precleans, so re-runs start fresh; only the post-test delete
-is skipped. Restore `clean=true` afterward (CI relies on it).
+By default a passing test **deletes its project** (and every folder, file, and row it
+created) during post-test cleanup, so there is nothing left to inspect in the browser.
+This is controlled by the `clean` property in `server/testAutomation/test.properties`:
+
+```properties
+clean=true     # default: delete the test project after a passing run
+```
+
+To keep the data for browser inspection at `http://localhost:8080/`, set `clean=false`
+and re-run. The preamble still precleans (deletes any leftover project from a previous
+run), so re-runs start fresh; only the **post-test** delete is skipped. The project the
+test created (e.g. `PanoramaPublicValidationTest Project ...`) and all of its subfolders
+remain after the run, so you can browse the experiment, the `@files/RawFiles` directory,
+validation results, etc.
+
+**Restore `clean=true` when done** — normal/CI runs rely on it to avoid leaving stale
+projects behind.
+
+Related properties in the same file:
+- `cleanOnly=true` — run *only* the cleanup steps for the named tests/suites (delete
+  their projects without running the tests).
+- `haltOnError=true` — stop at the first failure (CLI only).
+
+Note: `test.properties` is generated from `test.properties.template` by
+`gradlew :server:test:initProperties` and is **not** checked in, so changing `clean` is
+a local-only edit (it won't show up in `git status`).
 
 ## Test Structure
 
@@ -102,6 +124,16 @@ public class MyTest extends BaseWebDriverTest implements PostgresOnlyTest
 | `@After` | After each `@Test` method | Restore state modified during the test |
 
 **Do not use `@AfterClass`** — it interferes with LabKey test harness cleanup.
+
+**Restoring site-wide (server-global) settings — use `@After`, not `doCleanup`.** A test that
+changes a setting outside its own project (root-container `PropertyManager` property, site-admin
+console setting, registered service) must restore it, because a leftover global value leaks into
+every other test and into local dev. Put the restore in `@After`, not `doCleanup`: `doCleanup` only
+runs its post-test pass when `clean=true`, so a local `clean=false` run skips it and leaves the
+setting mangled, whereas `@After` always runs. Capture the original in setup and restore defensively
+— guard on whether it was captured, and call `ensureSignedInAsPrimaryTestUser()` first if the test
+can end signed out. Keep project-scoped cleanup (deleting the project, users) in `doCleanup`.
+Examples: `PublicationSearchTest` (panoramapublic) and `TargetedMSGuestAccessTest` (targetedms).
 
 ## Navigation
 

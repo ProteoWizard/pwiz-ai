@@ -60,15 +60,19 @@ The LabKey enlistment spans **multiple git repositories**. Key ones:
 | `server/modules/MacCossLabModules/` | MacCoss lab modules: `signup`, `panoramapublic`, `testresults`, `pwebdashboard`, `skylinetoolsstore`, etc. |
 | `server/modules/targetedms/` | targetedms (Panorama) module |
 
-**When creating a feature branch, create it in every repo that has changes.** Branch names must be identical across repos — TeamCity matches them by name.
+**Create a feature branch only in the repo(s) that actually have changes** — and use the **same branch name** in each, because TeamCity matches branches across repos by name. Do NOT reflexively branch the enlistment root.
+
+- **Work confined to one module under `server/modules/MacCossLabModules/`** (e.g. `testresults`, `lincs`, `panoramapublic`, `signup`, `pwebdashboard`): branch **only MacCossLabModules**. The enlistment root has no changes, so a root branch is pointless — it just clutters the enlistment and gives TeamCity a no-op branch.
+- **Work in `targetedms`**: branch **only `server/modules/targetedms/`**.
+- **Branch the enlistment root** (`.`) **only when the root repo itself has tracked changes** (platform/core modules, or a change that genuinely spans the root and a module).
 
 ```bash
-# Create branch in the enlistment root repo
-cd <enlistment-root>
+# Module-only work (the common case) — branch just the module repo:
+cd <enlistment-root>/server/modules/MacCossLabModules
 git checkout -b 26.3_fb_my-feature
 
-# Create the same branch in MacCossLabModules if it has changes
-cd <enlistment-root>/server/modules/MacCossLabModules
+# ONLY if the enlistment root ALSO has changes, create the identically-named branch there too:
+cd <enlistment-root>
 git checkout -b 26.3_fb_my-feature
 ```
 
