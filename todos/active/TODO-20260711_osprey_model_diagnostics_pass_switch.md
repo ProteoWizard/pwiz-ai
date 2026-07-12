@@ -1,7 +1,14 @@
-# TODO-osprey_model_diagnostics_pass_switch.md -- One top-level [Pass 1][Pass 2] switch for the whole --model-diagnostics page + Reproducibility/yield layout cleanup
+# TODO-20260711_osprey_model_diagnostics_pass_switch.md -- One top-level [Pass 1][Pass 2] switch for the whole --model-diagnostics page + Reproducibility/yield layout cleanup
+
+## Branch Information
+- **Branch**: `Skyline/work/20260711_osprey_model_diagnostics_pass_switch`
+- **Base**: `master`
+- **Created**: 2026-07-11
+- **Status**: In Progress
+- **PR**: (pending)
 
 ## Status
-**Backlog (created 2026-07-11).** Raised by Brendan after the pass-2 q-value work
+**Active (created 2026-07-11, started 2026-07-11).** Raised by Brendan after the pass-2 q-value work
 (pwiz #4410, [[project_osprey_pass2_recalibration_inflates_fdr]]) made it obvious that
 **almost every plot and table on the `--model-diagnostics` page is really a function of a
 chosen pass's q-values / scores**, but the page exposes that choice inconsistently:
