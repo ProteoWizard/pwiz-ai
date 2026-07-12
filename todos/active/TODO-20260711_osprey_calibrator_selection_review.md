@@ -621,10 +621,26 @@ FDRBench tsv (100K baseline / full006-s300k / full006-s1m):
 | 100K (default)  | 37,947            | 0.47% | 33,775            | 0.46% |
 | **300K**        | **39,843 (+5.0%)**| 0.48% | **34,840 (+3.2%)**| 0.45% |
 | 1M              | 39,375 (+3.8%)    | 0.53% | 34,302 (+1.6%)    | 0.44% |
-**300K is optimal: +5.0% real IDs over the 100K default at FLAT true-FDP (~0.48%, half the claimed 1%),
-and it BEATS 1M** (more IDs, lower cost, lower FDP). Beyond ~300K the RT/mass fit is already saturated
-(R^2 0.99+), so 1M's extra anchors do not help and marginally hurt. The yield gain is a genuine,
-entrapment-validated, FDR-clean win - not a mirage. => answers OPEN DECISION #1: 300K suffices (is best).
+On file 006, 300K is optimal (+5.0% IDs, beats 1M, flat FDP). Beyond ~300K the RT/mass fit saturates
+(R^2 0.99+) so 1M's extra anchors do not help.
+
+### CAUTION - the +5.0% is FILE-DEPENDENT, not universal (2nd file overturns the headline)
+A second-file downstream A/B (file 007, full pipeline, run-fullfile.ps1) shows NO benefit:
+| file | 100K IDs @q<=1% | 300K IDs @q<=1% | delta | true-FDP 100K->300K |
+|---|---|---|---|---|
+| 006 | 37,947 | 39,843 | **+5.0%** | 0.47% -> 0.48% |
+| 007 | 38,374 | 38,060 | **~flat (-0.8%, noise)** | 0.67% -> 0.66% |
+File 007's calibration is ALREADY SATURATED at 100K: 300K gave it 3x more anchors (519 -> 1721 RT points)
+but ZERO downstream ID gain. So more calibration anchors help a file whose 100K calibration is MARGINAL
+(006) and are harmless-but-useless on a file already well-calibrated (007). Both stayed FDR-clean (more
+anchors never HURT). => the honest read: raising the sample is "sometimes helps, never hurts, +~1.5x cal
+cost." NOT a universal +5%. This RE-STRENGTHENS the ADAPTIVE option (b) over a blanket default raise -
+a blanket 300K pays the cost on every file but only marginal-calibration files benefit. (Caveat: adaptive
+"grow while anchors rise" would still grow BOTH 006 and 007, since anchors rise in both - to be truly
+selective you'd need a calibration-quality signal (RT-fit R^2 plateau), not just anchor count.)
+(3rd file A/B in flight to characterize how common the 006 "gain" vs 007 "flat" case is.)
+=> OPEN DECISION #1 answer is now nuanced: 300K never hurts + sometimes helps materially; whether the
+average gain justifies uniform +1.5x cost (or an adaptive scheme) is Brendan's cost/benefit call.
 
 ### COST (cal-only, file 006): 100K = 67s, 1M = 180s (task 58 -> 179s). ~10x anchors (and cleaner) for
 only ~2.7x wall-clock; the fixed library/spectra load dominates, so scaling the sample is affordable.
