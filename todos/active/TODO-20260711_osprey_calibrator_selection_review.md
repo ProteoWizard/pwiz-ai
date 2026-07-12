@@ -504,6 +504,24 @@ prioritizes/samples by it; whether to combine with geometric (RANSAC) outlier re
 This is the leading long-term direction; the adaptive-sample fallback + entrapment-purity measurement
 remain the near-term steps.
 
+CARAFE MECHANISM CONFIRMED (Carafe-mm code review, 2026-07-12): transfer learning is PURE
+RE-PREDICTION (answer A). Base = AlphaPeptDeep (peptdeep); Carafe fine-tunes 3 models (MS2 intensity,
+RT/iRT, CCS) on sample-specific search results (measured intensities from psm_pdv.txt +
+fragment_intensity_df.tsv used ONLY as training targets; MS2 20 epochs lr1e-4, RT 40 epochs, ~10%
+seq-unique held-out test), saves fine-tuned WEIGHTS ONLY, then Phase 2 digests the output -db FASTA and
+predicts EVERY peptide from the fine-tuned model -- NO "use measured if seen" branch. So a seen
+peptide's library row is a fresh prediction, identical in kind to an unseen one; the measured data
+influenced it only by nudging shared weights (generalization/"coloring"). IMPLICATIONS FOR THE
+QUALITY-FLAG HOOK: (1) the output `carafe_spectral_library.tsv` schema carries NO provenance/observed/
+confidence field -- the "was detected in the sample-specific search" info EXISTS in Phase 1 but is
+DISCARDED before the library. (2) Carafe ALREADY computes a per-peptide measured-vs-predicted
+correlation (`cor_n_*` in psm_pdv_with_correlation.txt) for internal NCE selection but does not write
+it to the library -- that (for SEEN peptides) is a natural quality signal to propagate. (3) Nice
+parallel to DIA-NN/our plan: Carafe's MS2 model is used only if all 4 similarity metrics improve on
+the held-out test, else it REVERTS to the generic model (a revert-if-worse guard). => a future Carafe
+quality flag = emit training-set membership + `cor_n_*` per entry (measured-quality for seen; model
+prediction / uncertainty for unseen). DEFERRED per Brendan (near-term = Osprey-only refinements).
+
 ### Refined recommendation (updates the BOTTOM LINE)
 Two tiers, not either/or:
 1. **Fallback / immediate (validated tonight)**: when random sampling is used, sample MORE on rich files
