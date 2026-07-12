@@ -671,3 +671,16 @@ model/feature, but median-polish (the top Percolator feature) was near-null last
 feature gains look exhausted. Net: the "50%" goal is essentially met; more anchors come from sample, not
 from a richer feature set. (Estimate rests on the sample-fraction x present-count approximation - treat
 as ~40-50%, not a third significant figure.)
+
+### GENERALITY - the finding is not file-006-specific (2nd file confirms)
+File 007 (cal-only, 300K, ai/.tmp/run-calfile.ps1): pass1 q<=1% 1369 anchors / 6 entrap (combined FDP
+0.88%), q<=0.1% 783 / 0 (0.00%); pass2 q<=1% 2217 / 9 (0.82%), q<=0.1% 1063 / 1 (0.19%); RT R^2=0.9976
+(+/-0.58 min, 1721 pts); MS1 1.29 ppm, MS2 -0.08 ppm. Same pattern as 006: clean anchors, well-calibrated
+q, HRAM-tight mass, thousands of anchors at 300K. (007 is slightly less rich than 006 but still ample.)
+
+### EXACT change site for the recommended proposal
+Option (a) = one line: `Osprey.Core/RTCalibrationConfig.cs:53` `CalibrationSampleSize { get; set; } = 100000`
+-> 300000. Then re-bless the Stellar regression golden + run the full gate (Build-Osprey -RunTests
+-RunInspection; regression.ps1 -Dataset Stellar mode1/2/3; Test-PerfGate). Requires Brendan's sign-off
+(algorithm-affecting). The OSPREY_CAL_SAMPLE_SIZE lever (committed) reproduces the effect without the
+default change for further A/B.
