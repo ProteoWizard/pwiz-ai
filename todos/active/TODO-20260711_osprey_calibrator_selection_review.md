@@ -403,6 +403,60 @@ DOI 10.1074/mcp.O114.042267 (open: PMC4597153).
 - Escher 2012 (Proteomics, pmic.201100463): the original 11 synthetic iRT peptides + the selection
   criteria (high intensity, no mod-prone residues, non-natural sequence, EVEN RT distribution).
 
+### On the "~1000-anchor precision-iRT second pass" (Brendan's recollection) + the RIGOR point
+Could NOT source a named OpenSWATH/Rost "precision-iRT pass expanding to ~1000 self-derived anchors";
+the ~1000 figure is in no doc/paper found. What IS real and adjacent:
+- OpenSWATH `-RTNormalization:alignmentMethod` lowess/b_spline + `estimateBestPeptides` = nonlinear
+  alignment against MANY/noisy ENDOGENOUS anchors (one configurable step, not a documented 2-stage
+  iRT->endogenous re-fit).
+- **DIAlignR** (Gupta & Rost, MCP 2019, PMC6442363): closest "self-derived confident anchors" method,
+  but aligns RUN-TO-RUN (not library/iRT->run), post-identification, anchor counts in the HUNDREDS
+  (406-437), LOESS span 0.27.
+- The "expand small set -> large self-derived set + segmented/nonlinear regression" is really
+  Spectronaut (Bruderer 2016), n-dependent binning, no fixed ~1000.
+- Likely a blend of DIAlignR (self-derived, hundreds) + Spectronaut, or a direct-from-Hannes detail
+  not in public docs. Neither confirmed nor refuted.
+KEY INSIGHT (directly answers Brendan's quality/rigor concern): every method that expands to a large
+self-derived anchor set pairs it with a QUALITY FILTER STRONGER THAN A PER-RUN IN-SAMPLE q --
+DIAlignR uses post-pyProphet high-confidence peaks; Spectronaut uses all-3-replicate + lowest-SD-per-
+bin; OpenSWATH endogenous mode leans on RANSAC/iter-residual outlier rejection. Osprey's calibration
+q<=0.01 is the WEAKEST of these: (1) optimistically biased/resubstitution (CV stabilizes weights but
+the final discriminant+q are scored on the same points, positive set re-selected from current scores),
+(2) entrapment-blind (entrapment are targets, invisible to target-decoy competition), (3) small-count
+noisy (~5 decoys support the 1% cut at ~479 anchors). => "sample more" scales COUNT but inherits the
+same weak q; it does NOT improve anchor QUALITY. Curated CiRT (known-present) + RANSAC (geometric, no q
+needed) is what improves quality. PROPOSED MEASUREMENT (pending Brendan go-ahead): use the SEA-AD
+entrapment library to measure the TRUE FDP of the anchor set (how many q<=1% calibration anchors are
+entrapment/known-absent) at 100K vs 1M -- turns the q-rigor question into a number.
+
+### Reference implementations to consult (cloned 2026-07-12) + the CARAFE library-quality direction
+Brendan authorized pulling two open-source reference engines into C:\proj for direct code review:
+- **DIA-NN 1.8** (`C:\proj\DiaNN`, tag 1.8, one 11,260-line `src/diann.cpp`) -- the field-leading DIA
+  engine, open in this era; Vadim Demichev says core principles are stable. Mike: Vadim was compelled
+  to fix over-optimistic q-value estimation AFTER FDRBench -- directly relevant to our q-rigor worry.
+- **OpenSWATH** (`C:\proj\OpenMS`, OpenSWATH algs under src/openms/.../OPENSWATH). Faded in the field
+  (Aebersold retired, Rost -> Toronto / small-molecule) but the RANSAC/iter-residual RT normalizer +
+  m/z correction are canonical reference code.
+Two sub-agents are reviewing each for: RT calibration, WHICH peptides are used as anchors (random vs
+quality-selected vs first-pass-confident), mass correction, and q-value rigor. <fold in results>.
+
+**BRENDAN'S KEY ARCHITECTURAL IDEA (2026-07-12) -- self-generated quality anchor list from Carafe.**
+Hannes's "~1000 anchors" was likely just him configuring many endogenous anchors / curating a ~1000
+list for his OWN samples (any researcher would). Osprey's situation is BETTER: we detect tens of
+thousands of peptides per sample AND we BUILD the spectral library ourselves from separate library
+runs via Carafe. So instead of importing a fixed external CiRT list, we can **encode a per-entry
+QUALITY / observability flag into the library** -- either measured during Carafe library generation
+(these peptides WERE confidently detected in the library runs, with peak-quality / reproducibility
+stats) or PREDICTED by Carafe. Then Stage-3 calibration seeds from that high-quality subset instead
+of a random 100K/1M draw. This is a SELF-GENERATING CiRT analog, tailored to the actual sample/library,
+and it fixes BOTH problems at once: (1) high calibrator hit rate (start from known-good entries, not
+1%-present random) and (2) anchor QUALITY independent of the weak per-run q. Design threads to work
+out: what quality signal Carafe can expose (detection reproducibility across library runs, peak-shape,
+precursor intensity rank, prediction confidence); the library-format field to carry it; how Osprey
+prioritizes/samples by it; whether to combine with geometric (RANSAC) outlier rejection as a backstop.
+This is the leading long-term direction; the adaptive-sample fallback + entrapment-purity measurement
+remain the near-term steps.
+
 ### Refined recommendation (updates the BOTTOM LINE)
 Two tiers, not either/or:
 1. **Fallback / immediate (validated tonight)**: when random sampling is used, sample MORE on rich files
