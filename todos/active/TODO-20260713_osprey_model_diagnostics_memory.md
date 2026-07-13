@@ -93,8 +93,29 @@ Stage-5 caches into `runs/pass2ab-82file-memfix` (ValidityKey=search+library, no
 Stages 1-4 skip), runs the branch Release build with `--memstamp --timestamp` (output in
 `run.err.log`), detached PID 16968. Watching for it to clear the Stage-6 planning wall.
 
+### 2026-07-13 - Heartbeat + granularity; 82-file resume OOM root-caused to a THIRD ceiling; resume-lean fix
+Heartbeat (commit `e138f7a04d`) + finer granularity (commit `5825c4889e`): the slow-phase heartbeat
+now prints `N.NN% (done/total, elapsed)` (Brendan's ask -- a moving count, not just a clock). Caveat:
+only fires when the phase calls Report; a silent bulk load needs a reporter wrapped first.
+82-file resume (PID 16968) thrashed: silent 53 min, private commit climbed to 102.9 GB / 4.1 GB free,
+WS trimmed to 2-3 GB -- killed it. Root cause is NOT the Stage-6 fix and NOT --model-diagnostics: the
+pure straight-through RESUME path `PerFileScoringTask.RehydrateFromOwnOutputs` loaded the full fat
+FdrEntry stubs + PIN features for all 82 files (~53-58 GB) with NO lean branch -- the exact cost #4400
+removed for the Run path, still paid on resume (a THIRD memory ceiling). It's a silent bulk load (no
+Report), so it looked hung; my concurrent Debug build tipped it into an unrecoverable page-fault spiral.
+Fix (folded in, user-approved): gave `RehydrateFromOwnOutputs` the same `needsResidentPool`-gated
+lean/fat branch as `Run` -- extracted `NeedsResidentPool(config)` (shared by both) + `LoadCalibrationAndIsolation`
+(cheap cal/iso load reused by both), stream 32 B FdrProjection rows via `ReadFdrStubScalars` unless an
+opt-in output needs the resident pool. Wrapped the all-files load in a ProgressReporter (the silent
+phase now reports per-file). Byte-identical (regression mode2/resume covers it; running).
+Gates: build 0 warnings (my files; the 9 SystemMemory.cs are the known #4379 local flake, CI green);
+508 tests (505 pass/3 skip). `regression.ps1 -Dataset Stellar` running (mode2 exercises the lean resume).
+
 ### Next
-- Deliverable B (stream --model-diagnostics): report Model tab needs per-entry `.Features`
-  (21-dim), so fold per-file feature histograms + build the scalar FDP/yield views from the
-  already-streamed FdrProjection (~6 GB at 82 files) instead of the resident FdrEntry pool.
-- Companion heartbeat (`TODO-osprey_progress_reporter_heartbeat.md`) folded into this branch.
+- Commit the resume-lean fix once regression is green; re-run the 82-file resume CLEAN (hands-off, no
+  concurrent build) -- it should now clear both the fat-stub load AND the Stage-6 CWT wall.
+- Deliverable B (stream --model-diagnostics): report Model tab needs per-entry `.Features` (21-dim),
+  so fold per-file feature histograms + build the scalar FDP/yield views from the already-streamed
+  FdrProjection instead of the resident pool. Note `needsResidentPool` includes ModelDiagnostics, so B
+  is the same theme (removing the mdiag trigger via streaming).
+- Perf gate (Test-PerfGate.ps1) after the 82-file resume completes.
