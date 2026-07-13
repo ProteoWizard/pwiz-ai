@@ -2,14 +2,24 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260712_osprey_model_diagnostics_calibration` (in C:\proj\pwiz-work1)
-- **PR**: [#4414](https://github.com/ProteoWizard/pwiz/pull/4414) (pushed + opened 2026-07-12; 10 commits atop
-  #4413). NEXT GATE: `/pw-self-review` (mandatory AI gate) before human review; TeamCity Perf/Regression
-  (Astral legs) to trigger on pull/4414 when ready. Then Brendan's /pw-handoff + /night-session 82-file run.
+- **PR**: [#4414](https://github.com/ProteoWizard/pwiz/pull/4414) (MERGED 2026-07-13 as 8cc48f3a22). Self-review
+  clean (byte-identity held, no Critical/High); all 6 review findings addressed + 4 Copilot threads resolved;
+  CI 17/17 green.
 - **Base**: master @ a3e227d76b (#4413 page-level Pass 1/Pass 2 switch) + 4 cherry-picked calibration
   commits from the pwiz-work2 calibrator-review branch (ac8c7c68df verbose LDA report, f06e001d7c env
   levers, d922268ba7 anchor-purity diagnostic, 61c088cfc7 anchor-purity test).
 - **Created**: 2026-07-12
-- **Status**: Active
+- **Status**: Completed
+
+### 2026-07-13 - Merged
+PR #4414 merged (squash) as commit **8cc48f3a22**. Shipped the CAL (Stage-3 calibration) view in the
+--model-diagnostics HTML + --verbose calibration-LDA training and anchor entrapment-purity (FDP) reporting,
+with per-file capture fully gated behind config.ModelDiagnostics (verified byte-identical AND memory-neutral
+on the default path: calDiagnostics=null / empty byproduct when off; does not touch Stage 6). Self-review +
+Copilot findings all addressed (commit 354a26b381). DEFERRED (separate follow-ups, backlog TODOs filed):
+osprey_model_diagnostics_run_count_fdp (FDP-vs-#runs card), osprey_model_diagnostics_memory (stream so 82-run
+diagnostics fit 64GB; also the pre-existing Stage-6 reconciliation reload OOM), osprey_progress_reporter_
+heartbeat. Adjacent: TRIC transfer experiment-q pass-through validated + stashed for TODO-20260710.
 
 ## Goal (from Brendan)
 Extend the `--model-diagnostics` HTML with a **CAL** button beside the existing global [1st pass][2nd pass]
