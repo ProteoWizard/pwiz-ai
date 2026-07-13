@@ -1,4 +1,4 @@
-# TODO-fdp_by_run_count_diagnostic -- Add a "true FDP vs number-of-runs-identified" card to --model-diagnostics
+# TODO-osprey_model_diagnostics_run_count_fdp -- Add a "true FDP vs number-of-runs-identified" card to --model-diagnostics
 
 - **Status**: Backlog
 - **Created**: 2026-07-13

@@ -1,4 +1,4 @@
-# TODO-model_diagnostics_memory_streaming -- Stream --model-diagnostics so it doesn't scale memory with run count
+# TODO-osprey_model_diagnostics_memory -- Stream --model-diagnostics so it doesn't scale memory with run count
 
 - **Status**: Backlog
 - **Created**: 2026-07-13

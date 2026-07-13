@@ -1,4 +1,4 @@
-# TODO-progress_reporter_slow_phase_heartbeat -- ProgressReporter heartbeat for phases progressing < 1% per interval
+# TODO-osprey_progress_reporter_heartbeat -- ProgressReporter heartbeat for phases progressing < 1% per interval
 
 - **Status**: Backlog
 - **Created**: 2026-07-13
