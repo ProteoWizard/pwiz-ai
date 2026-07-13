@@ -111,11 +111,31 @@ phase now reports per-file). Byte-identical (regression mode2/resume covers it; 
 Gates: build 0 warnings (my files; the 9 SystemMemory.cs are the known #4379 local flake, CI green);
 508 tests (505 pass/3 skip). `regression.ps1 -Dataset Stellar` running (mode2 exercises the lean resume).
 
+Resume-lean committed `a0453d28eb`; `regression.ps1 -Dataset Stellar` mode1/2/3 **byte-identical PASS**
+(golden blib 45,064,192; mode2 exercises the lean resume). Branch pushed.
+
+### 2026-07-13 - Resume-lean VALIDATED in real-time; HPC merge/join had the SAME fat-stub bug (Brendan)
+Clean 82-file resume relaunch (PID 32564) with the fixes: the `Loading scored entries` phase REPORTED
+PROGRESS (...89/91/93/95/98/100%) instead of the silent 58 GB hang, completed `344,615,472 total scored
+entries` (totalScored from projections.TotalRows -> lean path ran), and reached `Running First-pass
+Percolator ... projection streaming ingest` -- past the exact load that thrashed the fat run. CommitFree
+44 GB (vs 4 GB when it thrashed). Resume-lean fix confirmed working end-to-end.
+Brendan flagged: the RESUME path I fixed is the single-machine case, but `LoadJoinOnlyScores` (the
+`--input-scores` path) is the **HPC merge/join node**, and it had the SAME unconditional fat-stub +
+features load -- a large HPC first-pass merge would blow up Stage 5 the same way. Folded in the same
+lean fix: `LoadJoinOnlyScores` now returns the `FdrProjectionSet` and streams via `ReadFdrStubScalars`
+when `!NeedsResidentPool && !AllHaveReconSidecars` (extracted `AllHaveReconSidecars` from
+HydrateRescoreBundleIfPresent; the reconciled 2nd-pass bundle merge stays fat -- it overlays q onto the
+stubs and FirstJoin skips Percolator there). Caller captures projections -> FinalizeAndCheck.
+**regression mode3 (HPC chain == straight) exercises exactly this path** and gates its byte-identity.
+Status: HPC-merge fix coded; Debug build + regression DEFERRED until the 82-file resume frees Release
+(hands-off during its heavy phases). Watching it clear the Stage-6 CWT wall.
+
 ### Next
-- Commit the resume-lean fix once regression is green; re-run the 82-file resume CLEAN (hands-off, no
-  concurrent build) -- it should now clear both the fat-stub load AND the Stage-6 CWT wall.
-- Deliverable B (stream --model-diagnostics): report Model tab needs per-entry `.Features` (21-dim),
-  so fold per-file feature histograms + build the scalar FDP/yield views from the already-streamed
-  FdrProjection instead of the resident pool. Note `needsResidentPool` includes ModelDiagnostics, so B
-  is the same theme (removing the mdiag trigger via streaming).
-- Perf gate (Test-PerfGate.ps1) after the 82-file resume completes.
+- After the 82-file resume clears Stage 6 / completes: Debug build + `regression.ps1` (mode3 verifies
+  the HPC-merge lean fix, mode2 the resume-lean) + commit the HPC-merge fix.
+- Perf gate (Test-PerfGate.ps1).
+- Deliverable B (stream --model-diagnostics): fold per-file feature histograms + scalar FDP/yield from
+  the streamed FdrProjection instead of the resident pool. `needsResidentPool` includes ModelDiagnostics,
+  so B is the same theme (remove the mdiag trigger via streaming). This branch is now 4 memory fixes
+  (Stage-6 CWT, resume-lean, HPC-merge-lean) + heartbeat; B may warrant its own follow-up PR.
