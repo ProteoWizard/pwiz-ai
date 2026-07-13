@@ -1,8 +1,18 @@
 # TODO-osprey_fdr_entrapment_collapse_investigation.md -- Why do decoys + entrapment score at the far-right edge, and why does one file collapse to 0 IDs at 1:1 entrapment?
 
 ## Status
-**Active (created 2026-07-11).** Branch `Skyline/work/20260711_osprey_intensity_log_conditioning`
-(pwiz) + `fix/intensity-feature-log-conditioning` (maccoss/osprey PR #53). The root cause
+**Completed (created 2026-07-11, merged 2026-07-13).** Shipped as
+[pwiz #4412](https://github.com/ProteoWizard/pwiz/pull/4412) (merged 2026-07-13 as `7e1bb52694`)
++ [maccoss/osprey #53](https://github.com/maccoss/osprey/pull/53) (merged 2026-07-13), a
+parity-matched pair. `log10(x+1)` conditioning of peak_apex/area/sharpness (sharpness floored at 0
+before the log to avoid a non-finite feature); cross-impl parity re-verified at 1e-9 on Stellar +
+Astral (max delta 0), regression golden re-blessed. Validation: r=1.0 10-file file 006 0->34,165 IDs
+(+22% total); r=0.5 20-file q-floor 0.88%->0.019%, FDP spike 302%->0%, +37% IDs at 1% q, entrapment
+oracle flat/conservative. Deferred median-of-medians per-run intensity normalization ->
+[[TODO-osprey_intensity_batch_normalization]]; scale-free sharpness idea ->
+[[TODO-osprey_scale_free_sharpness_feature]]. Was: Active (created 2026-07-11). Branch
+`Skyline/work/20260711_osprey_intensity_log_conditioning` (pwiz) +
+`fix/intensity-feature-log-conditioning` (maccoss/osprey PR #53). The root cause
 below is diagnosed, validated, and now SHIPPED as a fix: `log10(x + 1)` conditioning of
 `peak_apex` / `peak_area` / `peak_sharpness` in their calculators (C# `PeakShapeCalculators`,
 Rust `compute_features_at_peak`), with the regression golden re-blessed and cross-impl
