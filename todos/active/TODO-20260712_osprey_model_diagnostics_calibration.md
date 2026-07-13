@@ -107,5 +107,26 @@ REMAINING: (1) `/pw-self-review` on pull/4414 (mandatory AI gate) -> address fin
 Open UI items Brendan may still tweak on review of caldiag-10file-v2.html: keep-or-prune ms1Count/ms2Count
 + rtMad/rtWindowBefore fields; any further card/layout polish; more cross-tab links.
 
+## SESSION 2026-07-13 - self-review + review-feedback fixes (committed, not pushed)
+`/pw-self-review` run (fresh-context agent): byte-identity HOLDS, no Critical/High. Addressed all findings in a
+NEW commit **354a26b381 "Addressed model-diagnostics CAL review feedback"** (4 files, +42/-11; build + 504/507
+tests + zero-warning inspection green):
+- **S1 [self-review, Medium]**: CAL FDR-tab "@1% cal-q" KPIs used `opIdx` (built for the data-driven search
+  curve) on the FIXED CalQGrid -> landed on index 3 (q=0.0075) and disagreed with the C# Summary's
+  `Array.IndexOf(grid,0.01)`=index 4. Now `fdp.q.indexOf(0.01)`. VERIFIED on real data: old showed 0.000% at
+  0.75%, fix shows the true 0.986% at 1%.
+- **C1 [Copilot]** FirstJoinTask.BuildCalibrationData: log CAL files with no captured diagnostics instead of
+  silently omitting them. **C2 [Copilot]** Calibrator.cs:2169 gate the diagnostic-only IsEntrapment tag on
+  Verbose||ModelDiagnostics. **S2 [self-review]** Calibrator.cs:1098 build the calibration training report only
+  under Verbose||ModelDiagnostics (plain overload else) so the per-iteration positive-pool competition is not
+  paid on normal runs. **C3** align the noEntrapment comment. **C4** Array.Sort for percentiles.
+- Deferred **S3** (stem-key collision, pre-existing in all per-file maps; not introduced here).
+REMAINING for #4414: (1) PUSH the commit (left for Brendan - outward-facing); (2) optional headless-Chrome
+render to eyeball S1/C3 (S1 already data-verified); (3) Brendan gates Perf/Regression on pull/4414 when ready.
+ADJACENT (separate from #4414, see ai/.tmp/pass2ab-20file-results.md + budget log): TRIC transfer experiment-q
+pass-through VALIDATED (exp FDP 3.13->0.88%, stash@{0} -> TODO-20260710); run-count-vs-FDP is the real
+confidence axis (>=half runs = 0.25% FDP); 82-file Stage-6 OOM = untested scale/config (#4394 was 8-file
+non-entrapment), not a regression; ProgressReporter advance-gate silence -> UX PR (heartbeat + fractional).
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260712_osprey_model_diagnostics_calibration.md` before starting work.
