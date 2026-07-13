@@ -92,6 +92,21 @@ confident targets (q <= TrainFdr) + decoys.
   view help the reader trust "this is the maximum separation reached"? Probably a
   one-line caption: "converged after N iterations" vs "stopped at the 10-iteration cap".
 
+## Companion: permutation importance (added 2026-07-13)
+Pair the per-feature *distribution* view with a per-feature **permutation importance** scalar: shuffle
+one feature's values across entries (breaking its association with class), **re-score with the frozen
+model (no retrain)**, and measure the degradation — drop in accepted targets at 1% q, and/or rise in the
+entrapment FDP. It is the cheap, model-agnostic substitute for leave-one-out ablation (no `features x
+folds` retrains), and it answers the "would we lose IDs without this feature?" question the
+percent-contribution table deliberately does **not**. Caveat to note in the UI: under collinearity,
+permuting one of a covarying pair understates its importance (the partner still carries the signal) —
+so read it alongside the correlation/grouped view in
+[[TODO-osprey_model_diagnostics_feature_importance]]. Cheap (one rescore pass per feature over the
+resident standardized matrix, flag-gated); surfaces as a column next to the training-pool separation.
+Routed here (rather than the importance/redundancy TODO) because it is the natural scalar companion to
+this per-feature distribution view. See [[TODO-osprey_model_diagnostics_feature_importance]] for the
+fold-stability / univariate-AUROC / correlation-grouping analyses.
+
 ## Why it is worth doing
 It gets *inside* the semi-supervised separation the model achieves — turning "the
 model works" into "here is exactly how well each individual score separates the
