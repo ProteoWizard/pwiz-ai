@@ -73,3 +73,28 @@ default (no-flag) path. (Design TBD after A; the report needs aggregate-shaped d
   #4378 (memory bounding; names Stage 6 as the remaining ceiling).
 - Companion: `TODO-osprey_progress_reporter_heartbeat.md` (the ~1 h silent Stage-6 phase in this run).
 - This session's 82-file OOM log + `ai/.tmp/pass2ab-20file-results.md`.
+
+## Progress Log
+
+### 2026-07-13 - Deliverable A implemented + byte-identical; 82-file validation launched
+Streamed the Stage-6 reconciliation-planning CWT load (commit `d6116709ef`, branch pushed):
+- `ParquetScoreCache.ProbeCwtRowMetadata` (footer-only rows + cwt-field probe, no blob decode).
+- `CwtCandidateLoader`: `Load` (eager all-files) -> `ValidateAllInRange` (metadata-only gate,
+  same all-or-nothing decision + warnings) + `LoadOneFile` (per-file streaming loader).
+- `ReconciliationPlanner.Plan`: new `Func<>` streaming overload (one file resident at a time);
+  dict overload kept as a zero-churn adapter (10 ReconciliationTest sites untouched).
+- `Stage6Planner.PlanReconciliation`: metadata gate + lazy loader, same gate logic + log strings.
+- Drive-by: fixed the now-ambiguous `<see cref="ReconciliationPlanner.Plan"/>` in OspreyFileDiagnostics.
+Gates: build net472+net8.0 0 warnings; inspection 0 warnings; 507 tests (504 pass/3 skip);
+`regression.ps1 -Dataset Stellar` mode1/2/3 **byte-identical PASS** (golden blib 45,064,192).
+Perf gate deferred until after the 82-file validation (Release-DLL lock).
+82-file validation: `ai/.tmp/run-82file-memfix.ps1` hard-links the pass2ab-82file-percolator
+Stage-5 caches into `runs/pass2ab-82file-memfix` (ValidityKey=search+library, no build hash ->
+Stages 1-4 skip), runs the branch Release build with `--memstamp --timestamp` (output in
+`run.err.log`), detached PID 16968. Watching for it to clear the Stage-6 planning wall.
+
+### Next
+- Deliverable B (stream --model-diagnostics): report Model tab needs per-entry `.Features`
+  (21-dim), so fold per-file feature histograms + build the scalar FDP/yield views from the
+  already-streamed FdrProjection (~6 GB at 82 files) instead of the resident FdrEntry pool.
+- Companion heartbeat (`TODO-osprey_progress_reporter_heartbeat.md`) folded into this branch.
