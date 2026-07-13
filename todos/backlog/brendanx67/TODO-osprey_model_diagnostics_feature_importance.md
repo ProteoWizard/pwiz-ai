@@ -19,36 +19,33 @@
 
 The shipped table (`FeatureContributions`, `--verbose` / `--model-diagnostics`) decomposes the
 composite target-decoy mean gap: `Delta-mu_composite = sum_j w_j*Delta-mu_j`, so each feature's
-"share (%)" is `100 * w_j*Delta-mu_j / Delta-mu_composite`. Its heading already frames it correctly:
-**"Model sanity check -- feature share of target-decoy separation"**, and the code comment states it
-is **NOT feature importance**.
+"share (%)" is `100 * w_j*Delta-mu_j / Delta-mu_composite`. Its heading frames it correctly --
+**"Model sanity check -- feature share of target-decoy separation"** -- and the code comment states it
+is **NOT feature importance**. The decomposition is exact for any trained linear model (it is a
+property of a weighted sum `s = w.x + b`), so it applies to Percolator's SVM as it does to any linear
+discriminant.
 
-When we added it, Mike MacCoss pushed back (it moved to `--verbose`). Untangling his objections, for
-the record and to guide this work:
+Several valid, well-established concerns motivate adding *importance / redundancy* companions to that
+descriptive table. Listed as background for the design, not as claims about the table:
 
-1. **"Percolator uses a hyperplane"** -- true, but not a distinction from mProphet. *Every* linear
-   model scores `s = w.x + b`; a q=0.01 cutoff maps monotonically to a score threshold `s*`, and
-   `{x : w.x = s*}` is a hyperplane (2 features -> line, 3 -> plane, >=4 -> hyperplane). SVM and LDA
-   share this functional form; they differ only in the objective that orients `w` (SVM = max margin;
-   LDA = Fisher ratio under an equal-covariance Gaussian). So the decomposition of `w` is valid for
-   both.
-2. **"People used leave-one-out with Percolator because percent-contribution was invalid."** The real
-   issue is not the SVM -- it is **collinearity**. Percent-contribution faithfully describes the
-   equation you got; it does **not** tell you whether a feature is *necessary* (importance), because
-   correlated features trade weight. This is true for LDA too; importance needs a different measure
-   (ablation / permutation), regardless of the trainer.
-3. **Covariance is handled differently by the two trainers** (the load-bearing insight for this TODO):
-   - **LDA (mProphet, no CV)**: `Sigma^-1` **concentrates** weight -- loads one of a correlated pair,
-     near-zeros the twin, and can blow up / go unstable when `Sigma` is near-singular.
-   - **L2 SVM (Percolator, 3-fold CV)**: **spreads** weight across a correlated group (L2 prefers many
-     small weights over one large). So each member of a covarying set shows a modest share and **none
-     looks essential -- yet the group is**. This is exactly why "is one of a covarying set
-     unnecessary?" is unreadable from the table alone.
+1. **A per-feature share describes the trained equation; it does not measure importance.** Whether a
+   feature is *necessary* -- how much discrimination is lost without it -- is a separate question a
+   coefficient cannot answer. The established measures are ablation (drop-and-retrain) and permutation.
+2. **Collinearity is why coefficients cannot be read as importance.** Correlated features trade weight,
+   so a share can be small on a feature that genuinely matters, or spread thin across a covarying group.
+   This is a property of linear models in general, independent of the trainer.
+3. **Trainers distribute weight over covarying features differently.** LDA (via `Sigma^-1`) tends to
+   concentrate weight on one of a correlated pair (and can be numerically unstable when `Sigma` is
+   near-singular); L2-regularized SVM tends to spread weight across the group, so each member shows a
+   modest share though the group matters together. Either way, "is one of a covarying set unnecessary?"
+   is not readable from coefficients alone.
 
-**The point of this TODO:** add the companion diagnostics that (a) measure importance/redundancy
-rather than describe the equation, and (b) turn the covariance blind spot into something visible --
-while leaning on a Percolator advantage mProphet lacks (cross-validation gives fold-to-fold weight
-stability for free).
+A Percolator-specific opportunity: because it trains 3 cross-validation folds, the fold-to-fold spread
+of each weight is available for free -- a robustness / redundancy signal a single-fit trainer does not
+produce.
+
+**The point of this TODO:** add companion diagnostics that *measure* importance and redundancy rather
+than *describe* the equation, and make the covarying-feature behavior visible rather than hidden.
 
 ## Deliverables (three cheap, no-retrain analyses)
 
@@ -57,8 +54,8 @@ Percolator trains `nFolds` (default 3) SVMs; `FeatureContributions.Accumulator.B
 `foldWeights` but currently only **averages** them. Report, per feature, the **spread** of its
 standardized weight across folds: mean +/- std (or min/max), and a **sign-consistency** flag (did the
 weight keep the same sign in every fold?). A stable, same-sign weight is a robust contributor; a weight
-that swings or flips sign across folds is a redundancy / collinearity tell. This is the direct,
-data-in-hand answer to "mProphet has no CV" -- a robustness signal LDA cannot give.
+that swings or flips sign across folds is a redundancy / collinearity tell. This robustness signal is
+available for free from Percolator's cross-validation; a single-fit trainer does not produce it.
 - **Cost**: ~free (fold weights already resident at Stage 5; no extra pass).
 - **Surfacing**: extra columns on the existing feature table (coefficient +/- fold spread; a
   "sign flips across folds" marker), and/or a small per-feature error-bar glyph.
@@ -119,7 +116,6 @@ feature (`1/(1 - R_j^2)` from regressing each feature on the rest) as a collinea
   correlation cluster groups them, grouped share ~= sum, fold-stability flags the unstable member).
 
 ## Why it is worth doing
-It converts Mike's objection into features: the report stops *only* describing the trained equation and
-starts answering "which features actually carry the separation, and which are redundant?" -- with cheap,
-no-retrain diagnostics that exploit Percolator's cross-validation, and that make the covariance behavior
-(the real source of the "percent-contribution is invalid" folklore) visible rather than hidden.
+It moves the report from *only describing* the trained equation to *measuring* which features carry the
+separation and which are redundant -- with cheap, no-retrain diagnostics that exploit Percolator's
+cross-validation and make covarying-feature behavior visible rather than hidden.
