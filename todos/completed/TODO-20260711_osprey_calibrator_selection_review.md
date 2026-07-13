@@ -4,9 +4,24 @@
 - **Branch**: `Skyline/work/20260711_osprey_calibrator_selection_review`
 - **Base**: `master`
 - **Created**: 2026-07-11
-- **Status**: In Progress
+- **Status**: Completed (2026-07-13)
 - **GitHub Issue**: (none)
-- **PR**: (pending)
+- **PR**: no standalone PR -- deliverables cherry-picked into #4414, merged 2026-07-13 as 8cc48f3a22
+
+## COMPLETED 2026-07-13
+DELIVERABLES SHIPPED via **PR #4414** (merged 8cc48f3a22): the --verbose calibration-LDA training report,
+the anchor entrapment-purity q-sweep diagnostic + its unit test, and the OSPREY_CAL_MEDIANPOLISH /
+OSPREY_CAL_SAMPLE_SIZE env levers were cherry-picked from this pwiz-work2 branch into #4414 alongside the
+new CAL --model-diagnostics view. CONCLUSION (the review's actual finding): the premise "calibrator
+selection is flawed / in need of a fix" was REFUTED -- anchor selection is clean, the q<=0.01 gate is
+well-calibrated (entrapment oracle), and calibration is already near-optimal at the default 100K sample
+(R^2=0.9977, ~1 ppm); raising anchor yield gives NO aggregate ID benefit (3-file A/B flat, can hurt). So
+NO calibrator-selection code change was warranted -- the value delivered was the OBSERVABILITY (CAL view +
+--verbose diagnostics) to keep watching it, plus the mechanism doc + the CiRT/DIA-NN/OpenSWATH prior-art
+map below for any future improvement. Separate later findings (while validating #4414) are their own
+follow-ups: Pass-2 TRIC transfer q-scope (TODO-20260710), FDP-vs-#runs as the real confidence axis, and
+--model-diagnostics/Stage-6 memory + ProgressReporter (osprey_* backlog TODOs). NOTE: the pwiz-work2 branch
+is now redundant (its content is in master via the #4414 cherry-picks) and can be deleted.
 
 ## Status
 **Active (moved to active 2026-07-11).** Raised by Brendan: he wants to understand how Osprey's
