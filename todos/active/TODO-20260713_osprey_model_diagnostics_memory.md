@@ -131,9 +131,25 @@ stubs and FirstJoin skips Percolator there). Caller captures projections -> Fina
 Status: HPC-merge fix coded; Debug build + regression DEFERRED until the 82-file resume frees Release
 (hands-off during its heavy phases). Watching it clear the Stage-6 CWT wall.
 
+### 2026-07-13 - 82-file resume CLEARED the Stage-6 CWT wall end-to-end (Deliverable A validated on real data)
+The clean resume (PID 32564) reached and passed the exact point the original run OOM'd:
+`Reconciliation calibration refit: 82/82` (the original's last line) -> `Reconciliation: 6,472,914
+per-(file, entry) actions planned` (NEVER appeared before -- CwtCandidateLoader now streams per-file).
+Planning took ~5 min and memory DROPPED after (58 -> 54 GB), vs the original's ~1 h thrash -> commit
+OOM. Then reconciliation rescore (6.47M actions) -> 2nd-pass/protein FDR -> blib write (5M+ entries),
+memory stable ~60 GB, no OOM. All THREE memory ceilings cleared on the 82-file set: resume fat-stub
+load, Stage-6 CWT planning, (HPC-merge same pattern, gated by mode3). The full run is long (~4 h+, the
+inherent 82-file cost + a slow large-blib write under memory pressure -- a possible future MergeNode/
+blib-write memory lever, separate from these fixes), but the memory validation is done.
+Progress-granularity follow-up (Brendan): the two silent first-pass Percolator gaps are countable
+344M-row loops -> RunStreamingIntoProjection flat-array build + BuildTrainingSubset (~5 min) and
+ScoreProjectionAndComputeFdrInPlace (~15 min, per-file). Wrap both in ProgressReporter (per-file/
+per-chunk, NOT per-row -- Report locks) w/ the fractional+count line; byte-identical (console only).
+
 ### Next
-- After the 82-file resume clears Stage 6 / completes: Debug build + `regression.ps1` (mode3 verifies
-  the HPC-merge lean fix, mode2 the resume-lean) + commit the HPC-merge fix.
+- After the 82-file resume frees Release: Debug build + `regression.ps1` (mode3 verifies the HPC-merge
+  lean fix, mode2 the resume-lean) + commit the HPC-merge fix.
+- Optional (Brendan to confirm): add the two first-pass Percolator progress reporters (same build pass).
 - Perf gate (Test-PerfGate.ps1).
 - Deliverable B (stream --model-diagnostics): fold per-file feature histograms + scalar FDP/yield from
   the streamed FdrProjection instead of the resident pool. `needsResidentPool` includes ModelDiagnostics,
