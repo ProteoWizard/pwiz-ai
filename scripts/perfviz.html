@@ -1,4 +1,6 @@
 <!-- Code by Yuval Boss yuval(at)uw.edu -->
+<!-- Enhanced 2026-07: Time Diff moved to its own secondary y-axis (in seconds) so a large
+     time gap no longer flattens the memory scale; memory (MB) and time-gap (sec) axes labeled. -->
 <html>
 <head>
 	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.0/jquery.min.js"></script>	
@@ -23,6 +25,12 @@
 	  		var difference = ['Time Diff'];
 	  		var managedMems = ['Managed Memory'];
 	  		var totalMems = ['Total Memory'];
+	  		// Detect memstamp format from ANY bracketed line with tab-delimited columns, so a log
+	  		// that begins with non-memstamp preamble (e.g. a launcher banner) still charts memory.
+	  		for(var s = 0; s < logLines.length; s++) {
+	  			var ps = logLines[s].match(/\[(.*?)\](.*)/);
+	  			if (ps && ps[2].split('\t').length > 2) { hasMemStamps = true; break; }
+	  		}
 	  		var dateBefore;
 	  		for(var i = 0; i < logLines.length; i++) {
 	  			var line = logLines[i];
@@ -36,8 +44,10 @@
 	  			var date = parsed[1];
 	  			var text = parsed[2];
 	  			var items = text.split('\t');
+	  			// With memstamps, skip lines carrying no memory columns (preamble / interstitial).
+	  			if(hasMemStamps && items.length <= 2)
+	  				continue;
 	  			if(dateBefore == null) {
-                    hasMemStamps = (items.length > 2);
 	  				dateBefore = date;
 	  				continue;
 	  			}
@@ -53,7 +63,7 @@
                 else {
                     message = text.substring(1);
                 }
-	  			var diff = (new Date(date).getTime() - new Date(dateBefore).getTime())/(hasMemStamps?1:1000); // use ms with memstamps, or sec without
+	  			var diff = (new Date(date).getTime() - new Date(dateBefore).getTime())/1000; // time gap in seconds (its own y2 axis)
 	  			difference.push(diff);
 	  			dates.push(new Date(date).getTime());
 	  			managedMems.push(avgMem);
@@ -70,7 +80,10 @@
 			    data: {
 			        x: 'x',
 			        xFormat: '%H:%M:%S', // 'xFormat' can be used as custom format of 'x'
-			        columns: cols
+			        columns: cols,
+			        axes: {
+			            'Time Diff': 'y2' // time gap on its own axis so a large gap doesn't swamp the memory scale
+			        }
 			    },
 			    zoom: {
 			        enabled: true
@@ -81,6 +94,13 @@
 			            tick: {
 			                format: '%H:%M:%S'
 			            }
+			        },
+			        y: {
+			            label: { text: 'Memory (MB)', position: 'outer-middle' }
+			        },
+			        y2: {
+			            show: true,
+			            label: { text: 'Time gap (sec)', position: 'outer-middle' }
 			        }
 			    },
 			    tooltip: {
@@ -90,7 +110,7 @@
 			            	return str + " - " + messages[d.getTime()]; },
 			            value: function (value, ratio, id) {
 			            	if(id == "Time Diff")
-			                	return (value/(hasMemStamps?1000:1)) + "sec";
+			                	return value + "sec";
 			                return value + "mb";
 			            }
 			        }
