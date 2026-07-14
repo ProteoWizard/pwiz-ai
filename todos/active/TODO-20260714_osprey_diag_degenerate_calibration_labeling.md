@@ -1,9 +1,14 @@
 # TODO-osprey_diag_degenerate_calibration_labeling.md -- Model-diagnostics HTML mislabels a degenerate-but-successful calibration as "did not calibrate"
 
 ## Status
-**Active (created 2026-07-14).** Raised by Brendan while reviewing the first full
+**In review (created 2026-07-14).** Raised by Brendan while reviewing the first full
 82-file `--model-diagnostics` run on the SEA-AD Pilot-MTG Astral-DIA set. Pure
 presentation bug in the diagnostics HTML; no calibration-correctness issue.
+PR [#4421](https://github.com/ProteoWizard/pwiz/pull/4421) on branch
+`Skyline/work/20260714_osprey_diag_degenerate_calibration_labeling` (pwiz-work2).
+Verified by regenerating the 82-file run's HTML from the edited template: 0 red
+(no `calibrated===false`), the 2 degenerate files (`…0035…051`, `…0070…092`) render
+amber single-feature (`libcosine_apex` 100%). Build Debug -RunTests green (506/3).
 
 ## Problem
 On the 82-file run, the CAL tab flags two files as **"did not calibrate / too few usable
