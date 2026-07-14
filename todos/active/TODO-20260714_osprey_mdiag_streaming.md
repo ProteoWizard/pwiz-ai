@@ -47,9 +47,16 @@ resident-vs-projection HTML identity (all green pre-session).
 - `regression.ps1 -Dataset Stellar` PASS: mode1/2/3 blib byte-identical (45,064,192 bytes) -> default path
   byte-neutral.
 - Self-review clean after fixes (1 HIGH resume regression + 2 LOW nits, all addressed).
-- **3-file resident-vs-projection(lean) mdiag HTML byte-identity** -- running (validates L1's lean-path
-  accumulator == batch oracle on the NEW lean path).
-- **perfviz before/after on a 20-file mdiag run** -- pending (visual proof the spike + gaps are gone).
+- **3-file resident-vs-projection(lean) mdiag HTML byte-identity** PASS (355,767 bytes; validates L1's
+  lean-path accumulator == batch oracle on the NEW lean path).
+- **20-file perfviz** CONFIRMED L1 + the pool-load heartbeat removed the ~100 GB PerFileScoring spike + its
+  15-min gap. Surfaced 3 residual first-pass-FDR gaps that scale with file/entry count (~5x at 82 files):
+  per-run q-values (~83 s), experiment q-values (~97 s), survivor reload / "First-pass compaction" (~73 s).
+  FIXED (commit 39a7fc0037): a throttled ProgressReporter threaded through the shared CompeteFromIndices/
+  CompeteAll (experiment + PEP ~344M-row walks) + per-file per-run q-value + survivor-reload reporters,
+  gated on a large population. Re-gated: pre-commit + regression Stellar blib-identical + 3-file projection
+  mdiag byte-identical with all six new reporters firing. Console-only, byte-neutral.
+- The definitive 82-file perfviz (spike + all gaps gone at scale) comes from tonight's overnight re-run.
 
 ## Remaining / overnight
 - **Tonight (overnight):** re-run BOTH Arm A (percolator) and Arm B (transfer) 82-file `--model-diagnostics`
