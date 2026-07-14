@@ -1,49 +1,69 @@
-# Osprey: stream `--model-diagnostics` (Deliverable B)
+# Osprey: stream `--model-diagnostics` (Deliverable B) + kill its 82-file memory/logging anomalies
 
 **Date:** 2026-07-14
-**Branch:** `Skyline/work/20260714_osprey_mdiag_streaming` (pwiz), stacked on PR #4419's
-branch `Skyline/work/20260713_osprey_diagnostics_memory`.
-**Parent:** the explicitly-deferred "Deliverable B" follow-up of
-`TODO-20260713_osprey_model_diagnostics_memory.md` ("stream `--model-diagnostics`").
+**Branch:** `Skyline/work/20260714_osprey_mdiag_streaming` (pwiz). **PR #4420**, now based on
+**master** (retargeted + rebased after #4419 merged 2026-07-14).
+**Parent:** the explicitly-deferred "Deliverable B" of `TODO-20260713_osprey_model_diagnostics_memory.md`.
 
 ## Problem
-`--model-diagnostics` forced the resident pre-compaction first-pass pool at FirstJoin
-(`FirstJoinTask.cs` `needsResidentFirstPassPool = config.ModelDiagnostics || ...`) because
-`ModelDiagnosticsData.Build` walks every per-file `FdrEntry`. At 82 SEA-AD Astral files that
-pool is ~340M entries and OOMs a 64 GB box at the join — so the 82-file mdiag comparison could
-never be produced. #4400/#4355 already stream the default path via a thin `FdrProjection`; mdiag
-opted out.
+`--model-diagnostics` OOM'd / mis-behaved on the full 82-file SEA-AD Astral run in two ways:
+1. **Report build** walked every per-file `FdrEntry` (340M entries), forcing the resident pool at
+   FirstJoin. (Deliverable B, below, streamed this.)
+2. **Upstream per-file pool** stayed resident because `PerFileScoringTask.NeedsResidentPool`
+   still included `ModelDiagnostics` -> the scoring->FirstJoin boundary spiked to **~100 GB** on a
+   64 GB box (perfviz on the 82-file arm-A log). Plus a cluster of **silent logging gaps** (5-15 min
+   with no output) in FirstPassFDR / SecondPassFDR that made the run look hung.
 
-## Approach (byte-identical streaming)
-Every report card is derived from the REDUCED best-per-precursor set (bounded by unique
-precursors / base-ids, not the 340M raw entries). The reductions (max score, min q, per-file
-passing tallies, cross-run key-sets, per-base_id max) are all ORDER-INDEPENDENT (within a
-`modseq|charge` key the class / is_decoy / pair are invariant), so folding each row as it streams
-reproduces the batch reduction exactly. New `ModelDiagnosticsData.Accumulator` (nested, mirrors
-`FeatureContributions.Accumulator`) is fed per-row by the projection score-pass sink
-(`FdrProjectionSinkBase.Accept`) and its `Build` runs the identical downstream builders. The
-projection SVM now also collects the per-feature histograms (Model tab) and surfaces
-`FeatureContributions` via a capture callback. `--model-diagnostics` dropped from the
-resident-pool gate → mdiag takes the projection path; the resident path keeps the old batch
-`Write` as the byte-identity oracle. Pass-2 report (MergeNode, small reported pool) unchanged.
+## Deliverable B (committed: 9259c059cf, dccced9b1b)
+Every report card derives from the REDUCED best-per-precursor set. New nested
+`ModelDiagnosticsData.Accumulator` is fed per-row by the projection score-pass sink and its `Build`
+runs the identical downstream builders -> byte-identical to the resident batch `Write`. `--model-diagnostics`
+dropped from the FirstJoin resident gate. Gated: unit byte-identity test + Stellar blib + 3-file
+resident-vs-projection HTML identity (all green pre-session).
 
-Transfer arm (`OSPREY_PASS2_QVALUE=transfer`) still forces the resident pool via its own
-`Pass2TransferQ` term (builds the full score→q table) — separate, smaller follow-up (stream the
-`(score,label)` table). Arm A (percolator) is unblocked by B alone.
+## This session (2026-07-14, autonomous) -- memory + logging anomalies (Brendan-requested)
+- **L1 (100 GB spike):** dropped `config.ModelDiagnostics` from `PerFileScoringTask.NeedsResidentPool`
+  so the COMPUTE path streams the lean projection per file (no fat FdrEntry pool). The scoring->FirstJoin
+  fat-pool assembly (the perfviz spike, ~41->102 GB over a 15-min silent gap) is gone.
+  - **Resume-path fix (self-review HIGH):** a resume SKIPS the first-pass score pass that feeds the
+    streaming accumulator, so `FirstJoinTask.RehydrateFromOwnOutputs` emits mdiag via the BATCH
+    `ModelDiagnosticsReport.Write(perFileEntries,...)`. With L1 that got empty entries -> empty report.
+    Fix: `NeedsResidentPool(config) || config.ModelDiagnostics` on the resume path only (pre-L1-identical;
+    compute path stays lean). PerFileScoringTask.cs:602.
+- **Logging heartbeats** (output-safe; blib/HTML/JSON gates don't read the log) for the silent phases:
+  pool load (fat+lean, PerFileScoringTask), library classification (ModelDiagnosticsReport heading),
+  training-vector load (PercolatorEngine), competition q-values (PercolatorFdr, phase markers gated on
+  n>2M), reconciliation planning (ReconciliationPlanner), 2nd-pass PIN reload (Pass2FdrSidecar).
+- **M2 (memory step-up PerFileScoring ~50 GB -> PerFileRescoring 60-75 GB):** INVESTIGATED, deferred to
+  a **profiled follow-up** (NOT this byte-identity PR). Root: `PerFileRescoreTask.Run:200` holds the whole
+  `CompactedEntries` pool resident FirstJoin->MergeNode (the #4394 lever). Candidate win: the 2nd pass
+  RELOADS PIN features from the reconciled parquet (`Pass2FdrSidecar:504`), so features held resident
+  meanwhile may be droppable -- but needs a dotMemory profile at 82-file scale + byte-identity proof first.
+  L1 already removes the dominant 100 GB spike; the 60-75 GB band is pre-existing on ALL 82-file runs.
 
-## Status
-- Implemented across 6 product files + 2 test files (see budget log / commit).
-- Osprey pre-commit GREEN (build net472+net8.0, inspection 0 warnings, 506/509 tests, 3 skipped).
-- **Byte-identity unit test GREEN** (`TestStreamingAccumulatorMatchesBatch`): streaming
-  Accumulator == batch Build (serialized JSON) on a 3-file entrapment fixture, all cards populated.
+## Gates (this session)
+- Osprey pre-commit GREEN (build net472+net8.0, 506/509 tests, inspection clean modulo the known
+  SystemMemory.cs #4379 local flake).
+- `regression.ps1 -Dataset Stellar` PASS: mode1/2/3 blib byte-identical (45,064,192 bytes) -> default path
+  byte-neutral.
+- Self-review clean after fixes (1 HIGH resume regression + 2 LOW nits, all addressed).
+- **3-file resident-vs-projection(lean) mdiag HTML byte-identity** -- running (validates L1's lean-path
+  accumulator == batch oracle on the NEW lean path).
+- **perfviz before/after on a 20-file mdiag run** -- pending (visual proof the spike + gaps are gone).
 
-## Remaining / gates
-- `regression.ps1 -Dataset Stellar` — blib byte-identical (B must not touch the mainline blib).
-- End-to-end report byte-identity: same input, resident (`OSPREY_USE_FDR_PROJECTION=0`) vs
-  projection mdiag HTML must match (validates projection-vs-resident SVM + histograms end to end).
-- Produce the 82-file arm A (percolator) mdiag HTML with the B build (the science deliverable).
-- Open the stacked PR (base = the #4419 branch). Run `/pw-self-review`. Do NOT trigger TeamCity.
+## Remaining / overnight
+- **Tonight (overnight):** re-run BOTH Arm A (percolator) and Arm B (transfer) 82-file `--model-diagnostics`
+  on this fixed build; validate at scale (perfviz: no 100 GB spike, no FirstPassFDR/SecondPassFDR gaps) and
+  produce the Pass-2 A/B comparison (`Compare-Pass2AB.py`). Arm B may still OOM via the `Pass2TransferQ`
+  resident term -> stream the (score,label) score->q table if so (separate lever).
+- **Open follow-up (profiled):** M2 Stage-6 resident-pool profiling + streaming lever, AND Copilot's
+  accumulator key-allocation note (#4420 threads deferred, left unresolved): `Add` builds a `modseq|charge`
+  key string per projection row (340M on 82 files). A `(modseq,charge)->string` cache is byte-safe but adds
+  ~100-300 MB resident; a value-tuple key is allocation-free but reorders `_best.Values` and breaks the
+  BuildScoreHistogram byte-identity invariant. Measure allocation-churn vs peak-resident with dotMemory at
+  82-file scale before choosing -- do not guess.
 
 ## References
 - Design: `ai/.tmp/deliverable-B-design.md`; night log: `ai/.tmp/night-session-budget.md`.
-- Handoff: `ai/.tmp/handoff-20260714_osprey_mdiag_82file_pass2ab.md`.
+- perfviz: `ai/scripts/perfviz.html`; gap/mem analyzers: `ai/.tmp/find-log-gaps.py`, `find-mem-spikes.py`,
+  `make-perfviz.py`. 3-file A/B: `ai/.tmp/run-mdiag-ab3.ps1` + `Compare-MdiagData.py`.
