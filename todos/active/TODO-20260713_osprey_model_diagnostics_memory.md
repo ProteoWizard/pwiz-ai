@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260713_osprey_diagnostics_memory`
 - **Base**: `master`
 - **Created**: 2026-07-13
-- **Status**: In Progress
+- **Status**: In Progress (PR #4419 open; Deliverable A + memory ceilings + fail-fast; B is a follow-up)
 - **Raised by**: Brendan (2026-07-13, after the 82-file run OOMed on a 64 GB box)
 - **GitHub Issue**: (pending)
-- **PR**: (pending)
+- **PR**: #4419 (https://github.com/ProteoWizard/pwiz/pull/4419)
 
 ## Problem
 Two independent all-runs-resident memory ceilings block 82-file (SEA-AD Astral, ~2x entrapment
@@ -159,10 +159,35 @@ gap + trips the heartbeat on a slow file); two `logInfo` phase markers for the ~
 Compile + 508 tests green (Debug); `regression.ps1 -Dataset Stellar` running (Release build compile-verifies
 the HPC-merge fix + reporters; mode2/3 gate byte-identity). PR description drafted: `ai/.tmp/pr-osprey-memory.md`.
 
+### 2026-07-13 - /pw-self-review: four findings, fail-fast hardening; regression re-green
+Fresh-context self-review of the branch flagged 4 items; Brendan's directive on the parity call was
+**"Fail fast. Partial but wrong is not an improvement"** (old skip-all-reconciliation is ALSO wrong --
+must abort and stop; ideal user action = delete the bad parquet + regenerate). All 4 addressed:
+- **(1) [high]** Stage-6 CWT gate wasn't equivalent on a *decode-failing* parquet. `CwtCandidateLoader`
+  `ValidateAllInRange` + `LoadOneFile` now THROW `InvalidDataException` (naming the file, "delete the
+  affected .scores.parquet and re-run") on missing / unreadable / out-of-range / undecodable candidates,
+  instead of skipping reconciliation for that file and silently keeping its peaks. `Stage6Planner` gate
+  simplified (no more "skipped X/Y" partial branch).
+- **(2) [medium]** Lean resume dropped the fat path's `features.Count != stubs.Count` guard (streaming
+  scalars never loads features). Restored an equivalent up-front check via a footer-only
+  `ParquetScoreCache.HasPinFeatureColumns` probe (no feature memory) on BOTH the lean resume
+  (`RehydrateFromOwnOutputs`) and HPC-merge (`LoadJoinOnlyScores`) paths -- a parquet missing the PIN
+  feature schema stops the run ("delete it and re-run to regenerate"). Deliberately NOT applied to Run's
+  fresh-compute lean path (#4400, parquets the same run just wrote).
+- **(3) [low]** `AllHaveReconSidecars` TOCTOU: computed once in the merge path and threaded to both the
+  loader (lean/fat choice) and `HydrateRescoreBundleIfPresent`, so a sidecar appearing between two disk
+  reads can't make them disagree.
+- **(4) [low]** ProgressReporter heartbeat/elapsed formatting -> `CultureInfo.InvariantCulture`.
+Tests: `TestHasPinFeatureColumnsRejectsFeaturelessParquet` (Parquet.Net-built features-less parquet is
+rejected) + a positive assertion in `TestParquetScoreCacheRoundTrip` (valid parquet passes; pins the
+writer/probe column-name agreement so a rename can't silently reject every real run).
+Gates: build net472+net8.0 0 warnings (my files; the 9 SystemMemory.cs are the known #4379 local flake);
+**509 tests** (506 pass/3 skip); `regression.ps1 -Dataset Stellar` mode1/2/3 **byte-identical PASS**
+(golden blib 45,064,192 -- guards inert on valid inputs; mode2=resume, mode3=HPC-merge exercise them).
+
 ### Next (PR)
-- On regression green: commit the HPC-merge fix + progress reporters (2 commits) -> `Test-PerfGate.ps1`
-  -> `gh pr create` (open early to kick TeamCity) -> `/pw-self-review` -> address findings -> trigger the
-  TeamCity Osprey Perf/Regression on the PR ref (Astral).
+- Commit the self-review fixes -> `Test-PerfGate.ps1` -> `gh pr create` (open to kick TeamCity + Copilot)
+  -> address Copilot findings -> trigger the TeamCity Osprey Perf/Regression on the PR ref (Astral).
 - Move this TODO active-header Status to In Progress w/ the PR link once opened.
 - Deliverable B (stream `--model-diagnostics`, the original headline) is NOT in this PR -- its own follow-up:
   it still forces the resident pool (`needsResidentPool` includes ModelDiagnostics) and builds the report
