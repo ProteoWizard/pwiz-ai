@@ -192,3 +192,11 @@ Gates: build net472+net8.0 0 warnings (my files; the 9 SystemMemory.cs are the k
 - Deliverable B (stream `--model-diagnostics`, the original headline) is NOT in this PR -- its own follow-up:
   it still forces the resident pool (`needsResidentPool` includes ModelDiagnostics) and builds the report
   from all pre-compaction entries. Would need per-file feature-histogram streaming + its own WITH-mdiag run.
+
+### 2026-07-14 - Merged (Completed)
+
+PR #4419 merged as squash commit 927015d3dd — bounded Osprey large-run memory across the
+resume, HPC-merge, and Stage-6 reconciliation-planning paths (byte-identical), landing the
+first successful 82-file run. The --model-diagnostics streaming follow-up (Deliverable B)
+shipped separately as PR #4420 (stacked on this branch); retarget #4420 to master +
+rebase --onto after this merge, then delete the 20260713 branch.
