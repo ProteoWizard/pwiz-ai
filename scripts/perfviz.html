@@ -32,6 +32,7 @@
 	  			if (ps && ps[2].split('\t').length > 2) { hasMemStamps = true; break; }
 	  		}
 	  		var dateBefore;
+	  		var lastTime = 0; // strictly-increasing x tiebreak so same-second lines don't collapse
 	  		for(var i = 0; i < logLines.length; i++) {
 	  			var line = logLines[i];
 	  			if(isBlank(line))
@@ -64,11 +65,18 @@
                     message = text.substring(1);
                 }
 	  			var diff = (new Date(date).getTime() - new Date(dateBefore).getTime())/1000; // time gap in seconds (its own y2 axis)
+	  			// Keep x strictly increasing: the log is second-resolution, so multiple events in
+	  			// one second (e.g. 84 per-file result lines at the same timestamp) would collapse
+	  			// onto one x and drop points. Bump 1ms per duplicate; Time Diff above still uses the
+	  			// true second gap (0 for same-second lines).
+	  			var t = new Date(date).getTime();
+	  			if (t <= lastTime) t = lastTime + 1;
+	  			lastTime = t;
 	  			difference.push(diff);
-	  			dates.push(new Date(date).getTime());
+	  			dates.push(t);
 	  			managedMems.push(avgMem);
 	  			totalMems.push(totalMem);
-	  			messages[new Date(date).getTime()] = (message);
+	  			messages[t] = (message);
 	  			dateBefore = date;
 	  		}
         
