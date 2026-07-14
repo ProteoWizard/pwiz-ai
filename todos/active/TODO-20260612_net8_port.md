@@ -1403,3 +1403,155 @@ as the Thermo BuildThermoMethod fix). Per user direction, wired up the managed *
 **Open (not touched this session):** the 5 DDA/DIA tool-download 403s (S3 mirror infra - human action, not
 code; note the EncyclopeDIA Java JRE + jar and the DIA-Umpire MSFragger/JRE zips ARE already on the mirror,
 only the MSAmanda/MSFragger DDA zips 403); latent `Xml.cs` "R" round-trip instance.
+
+### 2026-07-10 (session 6) - CI board 10->4 (all remaining are download-403 infra); TestConnected ported + wired into CI; TestTutorial + TestPerf ported
+
+Worktree `C:\dev\pwiz-net8`, branch `Skyline/work/20260612_net8_port`, PR #4178. All four commits below are
+**pushed to origin and mirrored to `origin HEAD:chambem2/pwiz-sharp`** (standing directive). Local verification:
+`dotnet build <proj> -f net8.0-windows -c Release`, `Stage-Net8Tests.ps1 -NoRuntime -Projects <X>`, then
+`bin/staging-net8/Release/TestRunner.exe test=<Name> offscreen=on parallelmode=off` (+ `originalurls=on` for
+DDA/DIA/tutorial downloads, `perftests=on` for TestPerf).
+
+**CI board: TeamCity `ProteoWizard_SkylineWindowsNet` build #32 (commit c1657ec8) has only 4 failures**
+(down from #29's 10). All 4 (`TestDdaSearchMsFragger`, `...BadFasta`, `TestDiaSearchFixedWindows`,
+`TestDiaSearchVariableWindows`) are the **S3-mirror download-403 infra** issue (Download dialog timeout) -
+NOT code. The 6 genuine failures + the Thermo test cleared. My PivotEditor/EncyclopeDIA/DIA-Umpire fixes all
+dropped off the board.
+
+**`f2e97b3ced` - TestPivotEditor (the missing half of session-4's "R" fix).** Session 4 made invariant report
+EXPORTS emulate net472's "R" (G15-else-G17) but the invariant grid DISPLAY still used net8's shortest-round-trip.
+TestPivotEditor compares a live grid preview against a live export, so they diverged. Extracted the emulation to a
+shared `RoundTripFormat.FormatOrNull` (`pwiz_tools/Shared/Common/DataBinding/RoundTripFormat.cs`); `DsvWriter`
+delegates and `BoundDataGridView.OnCellFormatting` applies it. See `reference_net8_roundtrip_format` (updated).
+
+**`c1657ec892` - Bundle msconvert-sharp with Skyline on net8; restore EncyclopeDIA + DIA-Umpire.** User directive:
+fix EncyclopeDIA, don't skip-guard. Removed the `#if NET472 ... #else throw "feature deferred"` guard in
+`SkylineFiles.ShowEncyclopeDiaSearchDlg`. Real blocker was msconvert: the 4 Skyline call sites shell out to bare
+`"msconvert"` (net8 Process.Start ignores cwd). Wired up the managed **msconvert-sharp** port:
+- `Skyline.csproj` net8-only ProjectReference + Content deploy of msconvert (mirrors BlibBuild); `PathEx.ResolveBundledExe`
+  roots it to an absolute path (4 msconvert sites + `Export.ResolveToolPath`); full rename `AssemblyName
+  msconvert-sharp -> msconvert` in pwiz-sharp + installer/tests/CLI to match.
+- Three msconvert-sharp fixes surfaced by running the conversions: `ArgParser` accepts legacy `--runIndex` (boost
+  prefix-abbrev of `--runIndexSet`); `SpectrumListFactory.TakeKeyValue` now quote-aware (quoted `params=` path with
+  spaces); `DiaUmpire.Impl.Run` no longer nulls `Msd.Run.SpectrumList` (a literal cpp port that orphaned the
+  disposable wrapper -> spill-dir temp leak). See `reference_net8_msconvert_sharp_bundling`. Fixes
+  TestEncyclopeDiaSearch + both TestDiaSearchVariableWindows{MsFragger,MsgfPlus}.
+
+**`a00c8676be` - TestConnected ported to net8 + wired into CI + net8 fixes.** Converted the legacy `v4.7.2` csproj
+to multi-target SDK (needs explicit `DigitalRune.Windows.Docking` ref on net8 for GraphChromatogram/GraphFullScan);
+added to `build.bat` BUILD_TARGET + `Stage-Net8Tests.ps1`. net8 fixes: `UnifiFunctionalTest` network-error asserts
+now derive the expected text from `SocketException` at runtime (locale-safe, matches net8 HttpClient's raw socket
+message; net472 keeps WebException wording) + target the selected replicate's GraphChromatogram (net8 eagerly
+creates the WinForms handle for every per-replicate graph, so `FindOpenForm<GraphChromatogram>` over-counts);
+`WatersConnectAccount.HandleAuthenticationException` surfaces the raw (non-localized) identity-server error for
+`invalid_scope`/`invalid_grant` (net8's IdentityModel 7 populates `TokenResponse.Raw`, routing them through
+classified branches that left the message blank). **Blocker:** WatersConnect/Unifi results import throws
+`No registered reader recognized the file` (`pwiz-sharp/pwiz/src/MsData/DefaultReaderList.cs:139`) - the
+UNIFI/waters_connect reader isn't in pwiz-sharp's net8 reader list yet (see `project_unifi_watersconnect_port`).
+Also `TestUnifi` has a pre-existing test-structure NRE (`_testAccount as WatersConnectAccount` is null for a
+UnifiAccount). Both credentialed tests self-skip on CI (no creds). Locally Koina + Panorama tests PASS.
+
+**`9b3fa41e53` - TestTutorial + TestPerf csproj ports.** Both legacy `v4.7.2` -> multi-target SDK (same template).
+Build clean on net8, 0 errors, **no source changes**. TestPerf `<Compile Remove>`s the orphan `BullseySharpTest.cs`
+(duplicate class the legacy explicit list never compiled). Kept OUT of build.bat's standard suite (separate CI
+configs per convention). Local sampling: TestTutorial 4/8 pass (`CustomReports`, `LibraryExplorer`, `AuditLog`,
+`GroupedStudies`); 4 fail with net8 runtime NRE/assertion diffs (`MethodRefinement`, `Irt`, `PeakPicking`,
+`SmallMoleculesQuantification`). TestPerf `TestAreaCVHistogramQValuesAndRatios` passes (with `perftests=on`).
+
+**Reusable findings (also in memories):** managed msconvert-sharp must accept native msconvert's boost
+prefix-abbreviated options + quote-honoring filter parsing to be a drop-in; a cpp filter that resets
+`run.spectrumListPtr` for memory must NOT be ported literally where the sharp side has a disposable wrapper in
+`Run.SpectrumList`; net8 eagerly creates WinForms handles for hidden docked forms (breaks `FindOpenForm<T>` that
+counts `Created`); net8 network-error assertions should derive from `SocketException`/framework, never hardcode
+English (locale + CRITICAL-RULES). `Stage-Net8Tests` robocopy `/XO` sometimes fails to overwrite a staged DLL held
+by a prior offscreen run - force-`cp` the fresh DLL into `bin/staging-net8/Release` for fast iteration.
+
+**Next up (per priority):** (1) TestTutorial runtime triage - the 4 net8 NRE/assertion failures above (same flavor
+as the TestFunctional net8 triage). (2) pwiz-sharp `waters_connect` reader registration in `DefaultReaderList` -
+unblocks TestConnected's WatersConnect/Unifi import path. (3) broader TestPerf sampling (needs `perftests=on` +
+large vendor data). (4) `TestUnifi` pre-existing NRE. (5) latent `Xml.cs` "R" instance. (6) the 5 DDA/DIA
+download-403s (S3 mirror upload - human/infra).
+
+**Next session handoff**: For detailed startup protocol, read `ai/.tmp/handoff-20260710_net8_testconnected_ports.md`
+before starting work.
+
+### 2026-07-13/14 (session 7) - All 9 TestTutorial net8 failures fixed + committed; DIA-Umpire + Bullseye fixed; TestPerf triage started
+
+Worktree `C:\dev\pwiz-net8`, branch `Skyline/work/20260612_net8_port`, PR #4178. All commits pushed to origin
+AND mirrored to `origin HEAD:chambem2/pwiz-sharp` (standing directive).
+
+**TestTutorial: all 9 net8 failures fixed + verified (full suite 25/25 + ExistingExperiments pass).** Commits
+`269f2b2529` (A/B/D/E/G/H) + `18c47b7cec` (F). Buckets:
+- **A Excel-reader NRE** - net8 TestUtil.csproj referenced the Framework-only `Excel.4.5.dll` whose `AsDataSet()`
+  NREs on net8; migrated the net8 target to modern `ExcelDataReader`+`.DataSet`+`System.Text.Encoding.CodePages`,
+  conditional `using` in TestFunctional. Fixed Irt/GroupedStudies1/SmallMoleculesQuantification/SRM.
+- **B Dia audit-log "R" float** - routed `AuditLogToStringHelper` "R" through `RoundTripFormat`; also taught
+  `FrameworkRoundTrip` to accept a G15 form within 1 ULP (net472's imprecise parser). The latent Xml.cs/audit-log
+  instance the older entries flagged.
+- **C Sciex .wiff** - (1) `pwiz-sharp DefaultReaderList.ReadHeadOnce` opened FileShare.Read only, colliding with a
+  live Clearcore2 write handle on GraphFullScan reopen -> `FileShare.ReadWrite|Delete`. (2) `SpectrumList_Sciex.CreateIndex`
+  did a full per-cycle GetSpectrum read on every open (port-only probe) -> removed (cpp checks only BPC/TIC intensity),
+  fixing a >360s open (Ms1 481s->63s) and halving Sciex import.
+- **D RT scheduling graph pane** - a **dangling `#if NET472`** in `RTGraphController.OnUpdateGraph` compiled out
+  `RTScheduleGraphPane` creation on net8 (blank pane for real users). Removed. FOLLOWUP: audit other dangling
+  `#if NET472` from the make-it-compile commit `90db5edf4e`.
+- **E EditPeakScoringModelDlg dispose NRE** - net8 raises grid `SelectionChanged` during Dispose; the form's
+  Disposing/IsDisposed are still false there (components disposed before base.Dispose), so guard on the GRID's
+  `IsDisposed||Disposing` + null-check the cell.
+- **F mzXML O(N^2)** (`18c47b7cec`) - `silac_1_to_4.mzXML` has no `</scan>` end tags, so the net8 lazy
+  `SpectrumList_Mzxml.GetSpectrum`/`ReadOneScan` `Skip()`ed to EOF per scan (~50min). Bounded each scan's parse to
+  its indexed byte range via a MemoryStream slice (mirrors cpp). Full walk 50min->2.45s; ExistingExperiments 24min
+  hang -> 31s. Added MsData.Tests regression test.
+- **G DDA/DIA CI download** - **NOT a mirror 403** (downloads succeed - CI-log proven). A test-harness
+  engine-exclusion guard skipped dismissing the "Download <engine>" dialog: `DdaSearchTest.cs` excluded MSFragger
+  (broke its Java/Crux deps), `DiaSearchTest.cs` excluded MSAmanda. Removed exclusions at all 3 sites. CI build
+  #34 confirms MSFragger DDA tests pass. **Correct any "download-403 infra" note in memory - it was wrong.**
+- **H x87/SSE numeric baselines** - RT-regression slopes differ 16-19 ULP between 32-bit-x87 net472 (baselines)
+  and 64-bit-SSE2 net8. Added a **numeric-tolerant audit-log comparison** (`AssertEx.AreAuditLogsEquivalentWithNumericTolerance`,
+  ~1e-9 rel tol on float tokens, exact non-numeric+integers) so one baseline serves both runtimes. Fixed Irt +
+  MethodRefinement's residual slope diffs.
+
+**DIA-Umpire MSAmanda (`1f94f282a6`).** On net8 the OOP MSAmanda derives a scan number from each spectrum's mzML
+native id, but DIA-Umpire pseudo-spectra use `merged=N` ids -> MSAmanda skips ALL spectra -> empty mzid -> BlibBuild
+"No spectra". (MsFragger/MsgfPlus don't need a parseable scan id; net472's retired in-process MSAmanda read by
+index.) Fix in `MSAmandaSearchWrapper.cs` (net8-only): rewrite `merged=N` ids -> `scan=<index>` before invoking
+MSAmanda. Fixes TestDiaSearchFixedWindows + VariableWindows; clears CI #34's 2 DIA failures. **Re-baselined**
+VariableWindows Final `{85,92,103,927}`->`{48,53,64,576}` - investigated + confirmed genuine OOP-MSAmanda
+conservatism (settings correct, rewrite clean, Percolator not degenerating, mc=2 experiment shows scoring-limited;
+MsFragger~94/MsgfPlus~38 reproduce on same data). Counts asserted 64-bit-only so net472 unaffected.
+
+**Bullseye net8 bundling (`56ecfc68b4`).** net8 shelled out to bare `"BullseyeSharp"` (not deployed + net8
+Process.Start ignores cwd). Bundled managed `bullseye-sharp` (AssemblyName is `bullseye-sharp`) via Skyline.csproj
+ProjectReference+Content (mirrors msconvert/BlibBuild) + `ResolveBundledExe`; guarded the bare-name launch in
+HardklorSearchEngine.cs + BullseyeSharpTest.cs with `#if NET472`. Exe now deploys+runs. REMAINING: TestBullseyeSharp
+fails on a bullseye-sharp output float-precision diff; Hardklor.exe (native, no managed port) still not deployed.
+
+**TestPerf triage (29/39 ran before a disk crash; 15 pass, 14 fail - all real).** Failure GROUPS for next session
+(work in parallel, subagents PROPOSE fixes, master APPLIES+TESTS serially):
+1. **G-class download dialog (5)** DiaQeDiaUmpire{Extra,FullFileset}, DiaTtofDiaUmpire{,FullFileset}, DiaUmpireWiffFile
+   - "Download MSAmanda" not dismissed; same exclusion bug as bucket G but in the TestPerf DIA tests. TRACTABLE.
+2. **PASEF isolation-window Start>End (2)** DiaPasef{FullDatasetExtra,Tutorial}.
+3. **net8 threading races (2)** DdaTutorial (non-concurrent collection concurrent-update), DiaNnPeakImputation
+   (Control.Invoke to dead thread). Harder, maybe flaky.
+4. **Hardklor.exe not deployed (2)** FeatureDetection{SIMscans,TutorialFuture} - native tool, no managed port; DECISION.
+5. **bullseye-sharp float-precision (1)** TestBullseyeSharp (B/H family).
+6. **EncyclopeDIA count re-baseline (1)** EncyclopeDiaSearchTutorialDraft (~5% lower, likely OOP conservatism).
+7. **mz5/HDF5 import (1)** NonScoringTransitions.
+Passed (15): DiaSearchQe/StellarTutorialDraft, DiaTtof{FullSearchExtra,Tutorial}, DriftTimePredictor x2, HiResMetab,
+HighEnergyIonMobility, HugeAssociateProteins, ImportHundredsOfReplicates, ImportMassOnlyMolecules, MinimizeResults,
+MobilIon, Ms3Chromatograms, OrbiPrmArdia. ~10 didn't run (disk crash): Thermo FAIMS trio, Qe/Ttof/PasefData,
+SciexPrmCeOpt, PeakPerf, PerfTicArea, OrbiPrmTutorial, etc. (AlphaPeptDeep = env-gated Python/NVIDIA, not code.)
+
+**!!! DISK IS THE BOTTLENECK.** The full TestPerf run cannot complete on this box - hit 0 GB twice (multi-GB perf
+datasets in `C:\test\Skyline\downloads` + extracted into `pwiz_tools\Skyline\TestResults`). Run TestPerf tests
+INDIVIDUALLY, deleting `TestResults` between them; the parallel-copy-to-temp trick FAILED (extra 3.6GB copy +
+concurrent downloads + shared %APPDATA% state filled the disk and corrupted the run). A disk guard (<6GB alert)
+saved the uncommitted tree once.
+
+**Gotchas:** an unexpected set of `pwiz_aux/sfcap/old/peaks_tools_temp/*` deletions appeared in the tree this
+session (not from net8 work; possibly disk-full fallout) - `git restore`d. **Reusable findings (memory candidates):**
+G's download failure was a test-harness bug not a 403; DIA-Umpire merged=N scan-id rewrite; OOP-MSAmanda conservatism
+re-baseline pattern; dangling `#if NET472` audit; the disk/parallel-copy constraint.
+
+**Next session handoff**: For detailed startup protocol + per-group investigation briefs, read
+`ai/.tmp/handoff-20260714_net8_testperf.md` before starting work.
