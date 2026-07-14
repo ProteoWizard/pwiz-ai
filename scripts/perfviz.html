@@ -1,0 +1,111 @@
+<!-- Code by Yuval Boss yuval(at)uw.edu -->
+<html>
+<head>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.0/jquery.min.js"></script>	
+	<link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/c3/0.4.11/c3.css">
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.17/d3.min.js"></script>	
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/c3/0.4.11/c3.min.js"></script>	
+<script type="text/javascript">
+	function isBlank(str) {
+	    return (!str || /^\s*$/.test(str));
+	}
+	var messages = {};
+	$( document ).ready(function() {
+	    $( "#loginput" ).submit(function( event ) {
+	  		event.preventDefault();
+	  		var logLines = $('#logtext').val().split("\n");
+            var hasMemStamps = false;
+	  		if($('#logtext').val().length == 0 || logLines.length == 0) {
+	  			console.log("ERROR: No log given")
+	  			return;
+	  		} 
+	  		var dates = ['x'];
+	  		var difference = ['Time Diff'];
+	  		var managedMems = ['Managed Memory'];
+	  		var totalMems = ['Total Memory'];
+	  		var dateBefore;
+	  		for(var i = 0; i < logLines.length; i++) {
+	  			var line = logLines[i];
+	  			if(isBlank(line))
+	  				continue;
+	  			var parsed = line.match(/\[(.*?)\](.*)/);
+	  			if (parsed == null || parsed.length < 2) {
+	  				console.log(parsed + "NOT VALID")
+	  				continue;
+	  			}
+	  			var date = parsed[1];
+	  			var text = parsed[2];
+	  			var items = text.split('\t');
+	  			if(dateBefore == null) {
+                    hasMemStamps = (items.length > 2);
+	  				dateBefore = date;
+	  				continue;
+	  			}
+	  			var message = "";
+	  			var avgMem = 0;
+	  			var totalMem = 0;
+                if (hasMemStamps) {
+	  			    avgMem = items[1];
+	  			    totalMem = items[2];
+    	  			if(items.length>3)
+	      				message = items[3];
+                }
+                else {
+                    message = text.substring(1);
+                }
+	  			var diff = (new Date(date).getTime() - new Date(dateBefore).getTime())/(hasMemStamps?1:1000); // use ms with memstamps, or sec without
+	  			difference.push(diff);
+	  			dates.push(new Date(date).getTime());
+	  			managedMems.push(avgMem);
+	  			totalMems.push(totalMem);
+	  			messages[new Date(date).getTime()] = (message);
+	  			dateBefore = date;
+	  		}
+        
+            var cols = hasMemStamps
+                ? [ dates, difference, managedMems, totalMems ]
+                : [ dates, difference ];
+	  		var chart = c3.generate({
+	  			 bindto: '#chart',	
+			    data: {
+			        x: 'x',
+			        xFormat: '%H:%M:%S', // 'xFormat' can be used as custom format of 'x'
+			        columns: cols
+			    },
+			    zoom: {
+			        enabled: true
+			    },
+			    axis: {
+			        x: {
+			            type: 'timeseries',
+			            tick: {
+			                format: '%H:%M:%S'
+			            }
+			        }
+			    },
+			    tooltip: {
+			        format: {
+			            title: function (d) {
+		            		var str = d.getHours() + ":" + d.getMinutes() + ":" + d.getSeconds();
+			            	return str + " - " + messages[d.getTime()]; },
+			            value: function (value, ratio, id) {
+			            	if(id == "Time Diff")
+			                	return (value/(hasMemStamps?1000:1)) + "sec";
+			                return value + "mb";
+			            }
+			        }
+			    }
+			});
+		});
+	});
+</script>
+</head>
+<body>
+<form id="loginput">
+  <textarea id="logtext" rows="4" cols="100">
+</textarea>
+  <input type="submit" value="Submit">
+</form>
+<div id="chart"></div>
+</body>
+</html>
