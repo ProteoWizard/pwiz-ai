@@ -146,12 +146,24 @@ Progress-granularity follow-up (Brendan): the two silent first-pass Percolator g
 ScoreProjectionAndComputeFdrInPlace (~15 min, per-file). Wrap both in ProgressReporter (per-file/
 per-chunk, NOT per-row -- Report locks) w/ the fractional+count line; byte-identical (console only).
 
-### Next
-- After the 82-file resume frees Release: Debug build + `regression.ps1` (mode3 verifies the HPC-merge
-  lean fix, mode2 the resume-lean) + commit the HPC-merge fix.
-- Optional (Brendan to confirm): add the two first-pass Percolator progress reporters (same build pass).
-- Perf gate (Test-PerfGate.ps1).
-- Deliverable B (stream --model-diagnostics): fold per-file feature histograms + scalar FDP/yield from
-  the streamed FdrProjection instead of the resident pool. `needsResidentPool` includes ModelDiagnostics,
-  so B is the same theme (remove the mdiag trigger via streaming). This branch is now 4 memory fixes
-  (Stage-6 CWT, resume-lean, HPC-merge-lean) + heartbeat; B may warrant its own follow-up PR.
+### 2026-07-13 - 82-file run COMPLETED (first ever); PR finalization
+`Analysis complete in 3 hours 55 minutes`, clean exit, NO OOM. Outputs: `out.blib` 387,657,728 bytes
+(65,762 library spectra from 5,385,957 passing entries), `fdrbench.tsv` 8.27 MB (pass-2, 90,463 rows).
+2nd-pass Percolator 3,690,474 T / 36,785 D @1%; 8,648 protein groups @1% protein FDR. Rescore was the
+dominant cost (10,643s ~3h); 2nd-pass FDR 1,055s. This is the result Mike's #4400 alone couldn't reach
+on the resume path -> the PR narrative.
+Progress reporters (Brendan approved "include in this PR"): score pass wrapped in a ProgressReporter
+(`ScoreProjectionAndComputeFdrInPlace`, manual create/Report/Dispose, per-file -- covers the 15-min
+gap + trips the heartbeat on a slow file); two `logInfo` phase markers for the ~5-min Gap-1 span
+(training-subset select + subset feature load) in `RunStreamingIntoProjection`. Console-only, byte-identical.
+Compile + 508 tests green (Debug); `regression.ps1 -Dataset Stellar` running (Release build compile-verifies
+the HPC-merge fix + reporters; mode2/3 gate byte-identity). PR description drafted: `ai/.tmp/pr-osprey-memory.md`.
+
+### Next (PR)
+- On regression green: commit the HPC-merge fix + progress reporters (2 commits) -> `Test-PerfGate.ps1`
+  -> `gh pr create` (open early to kick TeamCity) -> `/pw-self-review` -> address findings -> trigger the
+  TeamCity Osprey Perf/Regression on the PR ref (Astral).
+- Move this TODO active-header Status to In Progress w/ the PR link once opened.
+- Deliverable B (stream `--model-diagnostics`, the original headline) is NOT in this PR -- its own follow-up:
+  it still forces the resident pool (`needsResidentPool` includes ModelDiagnostics) and builds the report
+  from all pre-compaction entries. Would need per-file feature-histogram streaming + its own WITH-mdiag run.
