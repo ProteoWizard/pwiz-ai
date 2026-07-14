@@ -85,6 +85,9 @@
 			            'Time Diff': 'y2' // time gap on its own axis so a large gap doesn't swamp the memory scale
 			        }
 			    },
+			    size: {
+			        height: Math.max(400, window.innerHeight - 230) // fill the viewport below the textarea/button
+			    },
 			    zoom: {
 			        enabled: true
 			    },
@@ -120,11 +123,10 @@
 	});
 </script>
 </head>
-<body>
+<body style="margin:8px;">
 <form id="loginput">
-  <textarea id="logtext" rows="4" cols="100">
-</textarea>
-  <input type="submit" value="Submit">
+  <textarea id="logtext" style="width:100%; height:160px; box-sizing:border-box; font-family:monospace; font-size:12px;"></textarea>
+  <div style="margin-top:4px;"><input type="submit" value="Submit"></div>
 </form>
 <div id="chart"></div>
 </body>
