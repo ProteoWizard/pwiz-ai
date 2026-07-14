@@ -1,8 +1,9 @@
 # Osprey: stream `--model-diagnostics` (Deliverable B) + kill its 82-file memory/logging anomalies
 
+**Status:** Completed
 **Date:** 2026-07-14
-**Branch:** `Skyline/work/20260714_osprey_mdiag_streaming` (pwiz). **PR #4420**, now based on
-**master** (retargeted + rebased after #4419 merged 2026-07-14).
+**Branch:** `Skyline/work/20260714_osprey_mdiag_streaming` (pwiz).
+**PR:** [#4420](https://github.com/ProteoWizard/pwiz/pull/4420) (merged 2026-07-14 as `ac2488d8df`).
 **Parent:** the explicitly-deferred "Deliverable B" of `TODO-20260713_osprey_model_diagnostics_memory.md`.
 
 ## Problem
@@ -74,3 +75,19 @@ resident-vs-projection HTML identity (all green pre-session).
 - Design: `ai/.tmp/deliverable-B-design.md`; night log: `ai/.tmp/night-session-budget.md`.
 - perfviz: `ai/scripts/perfviz.html`; gap/mem analyzers: `ai/.tmp/find-log-gaps.py`, `find-mem-spikes.py`,
   `make-perfviz.py`. 3-file A/B: `ai/.tmp/run-mdiag-ab3.ps1` + `Compare-MdiagData.py`.
+
+## Progress Log
+
+### 2026-07-14 - Merged
+PR #4420 merged (admin squash: all CI green; required-review policy overridden because the author cannot
+self-approve) as commit `ac2488d8df`. Shipped: streamed `--model-diagnostics` off the projection path
+(byte-identical to the resident batch build); dropped ModelDiagnostics from the per-file + join
+resident-pool gates so mdiag runs lean, removing the ~100 GB PerFileScoring->FirstJoin spike (resume path
+keeps resident entries via a self-review-caught fix); and progress heartbeats across every silent
+FirstPassFDR/SecondPassFDR phase (pool load, library classification, training-vector load, the ~344M-row
+competition + q-value walks, reconciliation planning, survivor reload, 2nd-pass PIN reload). Gated: Osprey
+pre-commit, regression.ps1 Stellar blib-identical, 3-file resident-vs-projection mdiag byte-identical
+(twice), independent self-review, TeamCity Osprey unit + Perf/Regression green. DEFERRED (tracked above):
+the transfer arm's `Pass2TransferQ` score->q table streaming, the M2 Stage-6 resident-pool lever (needs a
+dotMemory profile), and Copilot's accumulator key-allocation note (2 PR threads left unresolved for the
+human reviewer). The 82-file Arm A/B at-scale perfviz + Pass-2 A/B science run overnight on this build.
