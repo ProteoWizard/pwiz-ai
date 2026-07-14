@@ -10,7 +10,7 @@ Astral (max delta 0), regression golden re-blessed. Validation: r=1.0 10-file fi
 (+22% total); r=0.5 20-file q-floor 0.88%->0.019%, FDP spike 302%->0%, +37% IDs at 1% q, entrapment
 oracle flat/conservative. Deferred median-of-medians per-run intensity normalization ->
 [[TODO-osprey_intensity_batch_normalization]]; scale-free sharpness idea ->
-[[TODO-osprey_scale_free_sharpness_feature]]. Was: Active (created 2026-07-11). Branch
+[[TODO-osprey_scale_free_sharpness]]. Was: Active (created 2026-07-11). Branch
 `Skyline/work/20260711_osprey_intensity_log_conditioning` (pwiz) +
 `fix/intensity-feature-log-conditioning` (maccoss/osprey PR #53). The root cause
 below is diagnosed, validated, and now SHIPPED as a fix: `log10(x + 1)` conditioning of

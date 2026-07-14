@@ -78,5 +78,5 @@ parquet-baking shortcut is a dead end; implement the in-code Stage-5 pre-pass.
 
 ## Related
 - [[TODO-20260711_osprey_fdr_entrapment_collapse_investigation]] -- the root cause + the shipped log-conditioning core (this is its deferred robustness follow-up)
-- [[TODO-osprey_scale_free_sharpness_feature]] -- redesign peak_sharpness as a scale-free (slope/apex) shape descriptor that stays linear, complementary to conditioning the current magnitude feature
+- [[TODO-osprey_scale_free_sharpness]] -- redesign peak_sharpness as a scale-free (slope/apex) shape descriptor that stays linear, complementary to conditioning the current magnitude feature
 - [[TODO-osprey_calibrator_selection_review]] -- the Pass-1 seed / calibrator-selection lever (intensity pinned low, looser first cutoff), complementary to feature conditioning

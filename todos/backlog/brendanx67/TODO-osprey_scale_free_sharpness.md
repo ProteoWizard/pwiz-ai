@@ -66,3 +66,8 @@ entrapment validation, so it is deliberately separate work.
   `pwiz_tools/Osprey/Osprey.Scoring/PeakShapeCalculators.cs`.
 - The hijack fix and its validation: pwiz#4412, maccoss/osprey#53, and the
   v26.7.0 release notes ("Scoring and FDR").
+- Coordinate with [[TODO-osprey_intensity_batch_normalization]] -- both are
+  "condition the intensity-scale PIN features so the linear SVM sees the right
+  signal"; a scale-free sharpness plus a normalized magnitude is the cleaner
+  end state.
+- Skyline analog: `MQuestShapeCalc` / shape features assessed at linear scale.
