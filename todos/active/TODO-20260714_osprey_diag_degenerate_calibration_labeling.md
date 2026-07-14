@@ -10,6 +10,15 @@ Verified by regenerating the 82-file run's HTML from the edited template: 0 red
 (no `calibrated===false`), the 2 degenerate files (`…0035…051`, `…0070…092`) render
 amber single-feature (`libcosine_apex` 100%). Build Debug -RunTests green (506/3).
 
+The PR grew (per Brendan's iterative feedback while reviewing the regenerated HTML)
+into a small CAL-views polish pass beyond the labeling fix: the Summary degenerate
+marker is a compact amber ⚠ + hover (not a wrapping label); chart gridlines
+strengthened (`--grid`→`--line`) for dark-mode readability; and the Summary jump
+links got Back-button support (history push/popstate restores tab+file+scroll) plus
+a click-vs-drag guard so text selection no longer navigates. Nav verified by a
+headless-Chrome self-test. PR retitled "Improved the Osprey model-diagnostics
+calibration views".
+
 ## Problem
 On the 82-file run, the CAL tab flags two files as **"did not calibrate / too few usable
 anchors"** (red), and the "Per-file calibration overview" (Reproducibility) scatter panels
