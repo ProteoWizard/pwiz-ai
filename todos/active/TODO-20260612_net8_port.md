@@ -70,6 +70,110 @@ Template csproj (drop the legacy 600-line XML, replace with ~40 lines):
 4. **NHibernate** — versions ≥5.5 support net6+. Multi-target by package version
    if legacy needed.
 
+## Status (2026-07-14, session: TestPerf triage)
+
+### Worked the 7 TestPerf failure groups from the 2026-07-14 handoff via parallel investigation subagents
+
+Resumed from `ai/.tmp/handoff-20260714_net8_testperf.md`. HEAD at start `56ecfc68b4`. Method (as the handoff
+requested): spawned one read-only investigation subagent per failure GROUP (Agent tool, general-purpose,
+background), each returning a precise fix spec; the master applied -> built (`dotnet build TestPerf -f
+net8.0-windows -c Release`) -> staged (`Stage-Net8Tests.ps1 -Projects TestPerf`) -> ran each test serially,
+**disk-guarded** (box has only ~24 GB free; the wrapper `ai/.tmp/run_perf.sh` pre-checks >=7 GB and kills the
+run if free space drops under 5 GB mid-run, deleting `TestResults` between runs). All diagnostic fast-fails
+used ~0 GB (they throw before extracting).
+
+**Every group was a REAL bug; several were mislabeled in the handoff.** Fixes applied (uncommitted, all build
+clean on net8):
+
+- **Group 3-B `TestDiaNnPeakImputation` -- FIXED + VERIFIED (0 failures, 49s).** `Receiver.BeginInvoke`
+  (`CommonUtil/SystemUtil/Caching/Receiver.cs`) posted to a SynchronizationContext whose UI thread had exited
+  -> `InvalidAsynchronousStateException` on a background producer thread. Wrapped the `Post` itself in try/catch.
+  Genuine robustness bug, net472-safe.
+- **Group 7 `TestNonScoringTransitions` (mz5) -- FIXED + VERIFIED (0 failures, 14s).** Real error was
+  `unsupported time unit in chromatogram: CVID_Unknown`, NOT the wraparound the handoff guessed. pwiz-sharp
+  `Mz5ReferenceRead.FillParamContainer` APPENDED params where cpp `ReferenceRead_mz5.cpp:87` does clear-then-fill,
+  so a pre-seeded unitless `MS_time_array` shadowed the real `MS_time_array(units=UO_minute)`. Added guarded
+  `.Clear()` before each fill loop (cpp parity). Also fixed a genuine latent 32-bit SpectrumIndex wraparound
+  omission in `Mz5SpectrumList.ReadUlongIndex` (cpp `SpectrumList_mz5.cpp:181-193`).
+- **Group 3-A `TestDdaTutorial` -- FIXED + VERIFIED (0 failures, 142s full MSFragger search).** Data race
+  (not the search): the UI thread (posted `ClickNextButton`->`EnsureRequiredFilesDownloaded`) and the test
+  thread (`HasMissingDependencies`) both did check-then-`Add` on the shared global `Settings.Default.SearchToolList`
+  (unsynchronized `MappedList`), corrupting the `Dictionary` ("same key Java already added"). Serialized the
+  `SearchToolList` singleton (lock in the 4 mutators + the SearchToolType keyed accessors). Genuine product
+  thread-safety bug, net472-safe, no async/await.
+- **Group 2 `TestDiaPasefTutorial` -- FIXED + VERIFIED (0 failures, 57s, NO re-baseline).** Two layers:
+  (1) `InvalidDataException: Isolation window Start > End` in the **ImportRanges UI path**: pwiz-sharp's combined
+  non-centroid Bruker reader labels the mean-1/K0 array `MS_mean_ion_mobility_array` (MS:1002816) where C++ uses
+  `MS_mean_inverse_reduced_ion_mobility_array` (MS:1003006); Skyline's `GetIonMobilityArray` only recognized
+  1003006 -> `IonMobilities` null -> `isPasef=false` -> diaPASEF sort skipped -> `CalculateMargin` fabricated
+  112.5 margins -> MEASUREMENT windows collapse. Fix (per Matt: support 2816 IN ADDITION to 3006): net8 wrapper
+  `MsDataFileImpl.PwizSharp.GetIonMobilityArray` falls back to MS:1002816 for inverse_K0.
+  (2) That unmasked a `ValidateCoefficients` mismatch (mProphet weights). Determined NOT a re-baseline but
+  **Gap A**: pwiz-sharp `Reader_Bruker` never implemented `PassEntireDiaPasefFrame`, so net8 emitted per-window
+  diaPASEF spectra where net472/C++ emit ONE whole-frame combined spectrum per frame -> subtly different feature
+  values -> the LDA coefficients flipped. **Per Matt's call, fixed properly (not re-baselined): implemented
+  whole-frame diaPASEF in pwiz-sharp** (6 Bruker files; ~200 lines, no new P/Invoke -- the SDK surface was
+  already bound). `TdfData.cs` now builds a per-windowGroup active-scan/isolation cache and emits one whole-frame
+  combined spectrum (all active scans' peaks + per-peak 1/K0, optional scanning-quadrupole isolation arrays)
+  when `passEntireDiaPasefFrame`; per-window path unchanged for the flag off. Coefficients returned to the
+  committed values -> **net8 diaPASEF extraction is now byte-identical to net472** (and the latent
+  overlapping/diagonal-scheme misassignment risk is closed). Diagonal auto-detect left as a documented TODO in
+  `Reader_Bruker` (a plain bool flag can't distinguish explicit-false from default; standard diaPASEF sets it
+  explicitly so the tests don't need it). Gap B (`isolationWidth>0` guard) inert for this data -- not needed.
+- **Sciex SWATH `TestDiaUmpireWiffFile` isolation-range gap -- FIXED (verify running).** Same class, different
+  vendor: legacy `WiffSpectrum.IsolationLowerOffset/UpperOffset` (pwiz-sharp `Vendor/Sciex/WiffFile.cs`) were
+  hardcoded to 0, so a SWATH `.wiff` emitted an isolation target but no offsets -> Skyline threw "Missing
+  isolation range for isolation target 412.5 m/z". Now computes `FragmentBasedScanMassRange.IsolationWindow/2`
+  from the experiment's first `MassRangeInfo` (cpp `WiffFile.cpp:766-776` / `SpectrumList_ABI.cpp:200-208`);
+  wiff2 path already did this. net8-only, no new SDK binding. (The download-dialog mechanical fix itself is
+  verified working -- this was a separate reader gap behind it.)
+- **Group 5 `TestBullseyeSharp` -- FIXED + VERIFIED (0 failures, 38s).** Three layers: (1) managed
+  `bullseye-sharp` `CKronik2.cs` wrote net8 shortest-round-trip floats -> pinned the 5 `.bs.kro` float columns
+  to `G7`; (2) residual `.bs.kro` diffs were 7th-sig-fig drift (net8 vs net472 FMA) -> added an opt-in
+  `relativeTolerance` param to `AssertEx.AreEquivalentDsvFiles` (default 0 = unchanged for other callers),
+  test passes `5e-6`; (3) the `.ms2` `I TIC` line differed by shape (net472 `%.7g` "177994"/"1.130326e+07"
+  vs net8 "177993.96875"/"11303264") -> extended `AssertEx.FieldsEqual`'s `allowForTinyNumericDifferences` to
+  accept a mixed integer-vs-decimal/scientific field within a tight RELATIVE tolerance (1e-5), small values
+  still strict. All net472-safe.
+- **Group 1 DIA-Umpire download dialog (5 tests) -- mechanical fix applied.** net8 downloads MSAmanda on demand
+  (a modal "Download MSAmanda" MultiButtonMsgDlg shown synchronously by `ClickNextButton`); the DIA-Umpire
+  TestPerf files had no dialog handling. Added async-click + dismiss (`DiaUmpireTutorialTest.cs`,
+  `DiaUmpireVendorFormatTest.cs`). `TestDiaUmpireWiffFile` needs no re-baseline; the 4 tutorials will need JSON
+  re-recording (net8 OOP MSAmanda more conservative) -- pending run.
+- **Group 6 `TestEncyclopeDiaSearchTutorialDraft` -- `#if`-conditional re-baseline applied** to
+  `{362,684,684,4786}` (net8 C#-ported NNLS demux is slightly more conservative; net472 keeps
+  `{369,719,719,5058}`). Verify pending.
+- **Group 4 Hardklor -- DEFERRED per Matt.** Native `Hardklor.exe` isn't in managed net8 staging; a prebuilt
+  x64 exe exists in sibling checkouts (`pwiz/.../Executables/Hardklor/obj/x64/Hardklor.exe`, PE32+ x64) if we
+  revisit bundling.
+
+**Verified GREEN this session: Group 3-B, Group 7, Group 3-A, Group 5** (+ Group 2 primary crash fixed).
+Group 2 coefficient layer determined a legitimate re-baseline (NOT Gap A -- extraction verified correct; the
+net472-C++-whole-frame baseline vs net8-managed-per-window reader shifts feature values enough to flip the
+mProphet LDA coefficients; `ValidateCoefficients` is an over-strict exact assert). Re-baseline needs a
+per-framework expected-values gating decision (recurring: PASEF + Group 1 tutorials) -- `#if NET8_0_OR_GREATER`
+-> `.net8.json` (preserve net472) vs clobber the shared JSON if net472 TestPerf is retired on this branch.
+**COMMITTED + PUSHED (5 focused commits `270358261f..f320b4297a`, origin + mirrored to chambem2/pwiz-sharp):**
+mz5 (Group 7), Receiver (3-B), SearchToolList (3-A), bullseye (5), whole-frame diaPASEF (2). All verified green.
+
+Still uncommitted / in progress (per Matt "commit verified batch, then continue"):
+- **Sciex SWATH isolation-offset fix** (`Vendor/Sciex/WiffFile.cs`) -- genuine reader-parity fix (verified the
+  "Missing isolation range" error is gone), but held: no end-to-end green test yet (`TestDiaUmpireWiffFile` now
+  hits a 3rd layer -- a pre-existing net8 "A FASTA file is required for the DDA search" wizard page-flow issue at
+  DiaUmpireVendorFormatTest.cs:265, unmasked by the isolation fix; needs its own investigation). The download-
+  dialog mechanical fix (DiaUmpireTutorialTest.cs + DiaUmpireVendorFormatTest.cs) is verified working but held
+  with the tutorials.
+- **Group 6 EncyclopeDIA** `#if` re-baseline applied but held pending the count-guardrail check (its C# NNLS
+  demux is a deliberate ~0.1-tol reimplementation, so likely a legit re-baseline unlike PASEF -- verify counts).
+- **Group 1** 4 DIA-Umpire tutorials -- need count re-baselines (record runs + per-framework gating decision).
+- `TestDiaPasefFullDatasetExtra` -- expected fixed by the committed whole-frame change; verify.
+- Group 4 Hardklor deferred. Disk-guarded run wrapper: `ai/.tmp/run_perf.sh`.
+
+**Next session handoff**: read `ai/.tmp/handoff-20260714_net8_testperf_tail.md` for the detailed startup
+protocol + the remaining tail (Sciex fix commit-when-green, WiffFile FASTA logged-diagnostic, EncyclopeDIA
+guardrail run, DIA-Umpire tutorial re-baselines + the per-framework gating decision). The working tree carries
+4 intentional held files (the in-progress tail) -- do NOT discard them.
+
 ## Status (2026-07-08, session 4)
 
 ### Cleared the ENTIRE diagnosed-failure shortlist -- 9 net8 tests GREEN (overnight autonomous batch)
