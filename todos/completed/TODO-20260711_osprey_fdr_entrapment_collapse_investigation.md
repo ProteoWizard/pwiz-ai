@@ -19,6 +19,17 @@ Rust `compute_features_at_peak`), with the regression golden re-blessed and cros
 bit-parity re-verified at 1e-9 on Stellar + Astral. The deferred per-run median-of-medians
 intensity normalization is spun out to [[TODO-osprey_intensity_batch_normalization]].
 
+Follow-up: Mike's own Claude review of #4412 shipped as
+[pwiz #4418](https://github.com/ProteoWizard/pwiz/pull/4418) (merged 2026-07-14 as `e8881a77`) --
+consolidated the `log10(max(x,0)+1)` transform into one `ConditionIntensityFeature` helper,
+extended the input floor to peak_apex/peak_area (bit-identical no-op, enforces the >=0 invariant),
+documented the C#/Rust NaN-handling divergence (`Math.Max` propagates NaN, `f64::max` ignores it),
+labeled the three display names `(log10)`, and added an `osprey-regression.data/README.md`
+explaining the deliberate Stellar -9.9% ID drop. Reviewed here via [[pw-review]]; the duplicate
+scale-free-sharpness backlog TODO Mike's session filed was reconciled into the single
+[[TODO-osprey_scale_free_sharpness]] (his more-developed version kept, our unique cross-links
+folded in).
+
 Raised by Brendan while validating Osprey's FDR
 control with entrapment on Mike's SEA-AD Pilot-MTG dataset (10-20 of the 82 files for
 now; see [[project_sead_pilot_mtg_dataset]]). This began as a **diagnosis / root-cause**
