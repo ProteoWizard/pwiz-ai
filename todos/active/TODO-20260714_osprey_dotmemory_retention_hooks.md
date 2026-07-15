@@ -164,8 +164,10 @@ drops). This is the workspace for the streaming TODO's step 1.
 - [x] Correctness gate `regression.ps1 -Dataset Stellar` -> PASS (mode1/2/3).
 - [x] Allocation-tracking capture -> setup-dominated churn (above).
 - [x] C# committed (`350f07bac3`/`7109061f77`/`22f21a3f38`); ai pushed; PR #4423.
-- [ ] TeamCity Perf/Regression on `pull/4423` HEAD (`22f21a3f38`) -> green before
-      merge (Brendan's manual trigger; the 4093445 run predates `22f21a3f38`).
+- [~] TeamCity Perf/Regression run `4093445` (on `7109061f77`) is accepted as the
+      gate for the PR: the only commit above it (`22f21a3f38`, perfile-scoring-peak)
+      is a SnapshotReady-gated no-op on the regression path, so a green `4093445`
+      covers HEAD (Brendan's call, 2026-07-14). Merge once it's green.
 - [x] Follow-up TODO written: `TODO-osprey_perfile_scored_entry_streaming.md`
       (the structural streaming lever; GC-cap ConserveMemory=9 as interim win and
       the lighter API alloc mode noted there).
