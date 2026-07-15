@@ -22,9 +22,13 @@ Requested by Nick.
 - [x] Step 1: System.Data.SQLite upgraded to 1.0.119 tree-wide (committed: 49fe0d25b)
 - [x] Step 2: `RandomAccessZipFile` + `ByteRangeStream` foundation (uncommitted; unit-tested)
 - [x] Step 3: `.blib`-VFS mechanism decided by a bake-off (loadable extension wins)
-- [ ] Step 4: wire `.skyd` in-place read into `ChromatogramCache`
+- [~] Step 4: `.skyd` in-place read - building block `PooledZipEntryStream` done + tested;
+      `ChromatogramCache`/`MeasuredResults` wiring still to do
+- [x] Safety gate: `CheckDocumentExists` prompts to extract when the doc is `.zip`-backed
+      (state + prompt + `ExtractAndOpenSharedFile` refactor done; the in-place open in Step 6
+      is what sets `SharedZipFilePath`)
 - [ ] Step 5: wire `.blib` in-place read (build + ship the extension, route opens through it)
-- [ ] Step 6: `OpenSharedFile` open-in-place decision + `.sky` via ZipStream
+- [ ] Step 6: `OpenSharedFile` open-in-place decision + `.sky` via ZipStream (sets SharedZipFilePath)
 - [ ] Step 7: write side (Share stores `.blib`/`.skyd` uncompressed)
 - [ ] PR created
 
@@ -246,14 +250,31 @@ var cs = $"FullUri=\"file:///{zipPath.Replace('\\','/')}?ofs={ofs}&len={len}&vfs
 
 ### Step 4: `.skyd` in-place read (no SQLite; the biggest single win)
 
+DONE (building block): `Util/PooledZipEntryStream.cs` - an `IPooledStream` whose `Stream` is a
+`ByteRangeStream` over the `.sky.zip` at a stored entry's `(offset, length)`; `FilePath` reports
+the logical extracted path (pool identity) while bytes come from the zip and staleness tracks the
+zip's write time. Compressed entries are rejected. Unit test `TestPooledZipEntryStream` passes.
+It opens a fresh `FileStream` per Connect (FileShare.Read) so concurrent readers don't collide.
+
+STILL TO DO (the wiring):
 - `ChromatogramCache.Load` currently does `loader.StreamManager.CreatePooledStream(cachePath,false)`.
-  Provide an `IPooledStream` whose `Stream` is a `ByteRangeStream` over the open `.sky.zip` at the
-  `.skyd` entry's `(offset, length)`. Inject via the existing `ChromatogramCache(..., IPooledStream
-  readStream)` ctor / `ChangeReadStream`.
+  Have the caller (`MeasuredResults`, given the zip context) supply a `PooledZipEntryStream` and
+  inject it via the existing `ChromatogramCache(..., IPooledStream readStream)` ctor / `ChangeReadStream`.
 - GOTCHA: `ChromatogramCache.ReadDataForAll` (~line 1969) opens `new FileStream(CachePath,...)`
   directly, bypassing the pool - must be redirected to the zip-backed stream too.
-- Each `ByteRangeStream` should own its own `FileStream` on the `.zip` (FileShare.Read) so
-  concurrent readers don't collide on one handle. The `.zip` stays on disk for the doc session.
+- The `.zip` stays on disk for the doc session (like the `.skyd`/`.blib` do today).
+
+### Safety gate (DONE): CheckDocumentExists extraction prompt
+
+`SkylineWindow.SharedZipFilePath` (in SkylineFiles.cs) holds the `.zip` path when the document was
+opened in place; null otherwise. `OpenFile` clears it (any on-disk open). `CheckDocumentExists`,
+called before disk-modifying operations, now: if `SharedZipFilePath != null`, shows a prompt
+("This document was opened directly from '{0}'. ... extract them now?") and on OK extracts to a new
+folder and reopens via `ExtractAndOpenSharedFile`, returning false so the user re-initiates the
+operation on the now-on-disk document. Two new `SkylineResources` strings added. `OpenSharedFile`
+was refactored to call a reusable `ExtractAndOpenSharedFile` (pure refactor, no behavior change).
+Note: the state is only *set* once Step 6 (open-in-place) lands, so the gate is currently inert but
+wired and building. Also consider gating `SaveDocument`/autosave the same way.
 
 ### Step 5: `.blib` in-place read
 
