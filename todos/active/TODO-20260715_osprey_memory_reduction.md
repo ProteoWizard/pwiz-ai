@@ -113,6 +113,18 @@ partition to hang a build/release on; and pass 2 needs pass 1's completed LOESS 
 A per-window lifecycle needs entry-partition-by-window + a two-sweep pass split --
 large, byte-identity-risky, second-order. See agent-task3-plan.md Section 4.
 
+## Task 5 -- read-only arrays for library-entry collections (DONE, byte-identical)
+
+Retyped `LibraryEntry.Modifications/ProteinIds/GeneNames/Fragments` from `List<T>`
+to `IReadOnlyList<T>` backed by arrays (`Array.Empty<T>()` when empty). Interning
+moved INTO construction: `LibraryStringInterner` is now an instance pool (relocated
+to `Osprey.Core`) that the loaders + `DecoyGenerator` route strings through as they
+fill the interned arrays -- replacing the post-load member-mutation pass (same
+72.7% / 55.8% collapse). Drops the per-entry List wrapper + growth slack.
+- **Result**: library-resident **2.67 -> 2.07 GB (-600 MB)**; cumulative from the
+  2.92 GB baseline = -850 MB / -29%. Byte-identical: Stellar AND Astral mode1/2/3
+  (blib 45,064,192 / 135,249,920); 506/509 tests; 0 warnings. Commit 870d7d2a8.
+
 ## Verification status (2026-07-15)
 
 - **Byte-identical on BOTH datasets**: `regression.ps1 -Dataset Stellar` PASS (run per
