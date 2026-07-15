@@ -164,6 +164,20 @@ unilaterally -- `[[feedback_bit_parity_tolerance]]`):
 7. Gates: `regression.ps1 -Dataset Stellar` (+ `All`), cross-impl if parity kept,
    and a `-MemoryProfile` before/after to quantify the peak reduction.
 
+## Related cheap win (separate scope, ~1 line)
+
+**Intern generated decoy strings.** `LibraryStringInterner.InternInPlace` runs at
+load on targets only (`LibraryLoader.cs:89`/`:151`); `DecoyGenerator` then mints
+fresh `"DECOY_" + p` accessions (`DecoyGenerator.cs:152-153`) that are never
+re-interned, so every decoy peptide of a protein holds a duplicate copy (huge
+proteins -- titin/obscurin/SYNE1/nebulin -- dominate; visible as the top
+"String duplicates" in the retention `.dmw`). Fix: `InternInPlace(decoys)` right
+after `PerFileScoringTask.cs:891` (or on the combined `fullLibrary` at `:912`).
+Output-neutral (interning changes only identity; regression confirms). ~few
+hundred MB; secondary to the array streaming above but essentially free. The
+loader itself is fine -- `LibraryEntry` holds only parsed typed fields, no raw
+TSV row is retained.
+
 ## Explicitly NOT in scope
 
 - **Spectra streaming** (holding all ~200k HRAM spectra resident) -- a separate,
