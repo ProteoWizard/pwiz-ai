@@ -30,10 +30,18 @@ Requested by Nick.
 - [x] VFS extension `libraries/SQLite/zipvfs_ext.c` committed + Jamfile `lib zipvfs_ext` rule
       (verified working); open-in-place criterion `ContainsOnlyEntriesWithSuffixes` +
       `DocumentZipSuffixes` (tested)
-- [ ] Step 5: `.blib` in-place read - deploy the extension DLL into the Skyline output (Jamfile
-      rule builds it; deployment wiring TODO), load it once at startup, and route
-      `SqliteOperations.OpenConnection` through the VFS for zip paths (`FilePath.TryGetZipByteRange`
-      is ready: build `FullUri=file:///<zip>?ofs=..&len=..&vfs=skyzipvfs`)
+- [x] Step 5: `.blib` in-place read - DONE + VERIFIED (read 29 RefSpectra from a real .blib stored
+      inside a .sky.zip). `ZipVfs` pins+loads `zipvfs_ext.dll` and opens the .blib at its byte range
+      (`FullUri ... ?ofs=&len=&vfs=skyzipvfs`); `PooledSqliteConnection.Connect` routes zip .blib
+      paths through it. The built x64/x86 `zipvfs_ext.dll` are committed to `libraries/SQLite/{x64,x86}`
+      and copied to the Skyline output by a Content item.
+
+>>> BLOCKER (SQLite 1.0.119 upgrade, must fix): the NATIVE `SQLite.Interop.dll` provisioned
+>>> out-of-band reverted to 1.0.109, so the committed managed 1.0.119 is MISMATCHED against native
+>>> 1.0.109 -> the managed provider throws EntryPointNotFound (hashed symbols). The recent zip tests
+>>> didn't use the managed provider so it hid; the .blib work exposed it. The 1.0.119 interop must be
+>>> provisioned through the team's out-of-band channel (locally re-copied 1.0.119 into ABI/obj/bin to
+>>> test, but that is transient and reverts on a native build). Until then SQLite is broken on the branch.
 - [ ] Step 6: `OpenSharedFile` in-place branch - if `CanOpenInPlace` (only DocumentZipSuffixes +
       .skyd/.blib stored), read `.sky` from the zip and `OpenFile(<zip>\doc.sky)`, then set
       SharedZipFilePath. Also make the remaining `OpenFile` choke points FilePath-aware
