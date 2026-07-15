@@ -27,11 +27,23 @@ Requested by Nick.
       VERIFIED reading a real 28 MB stored `.skyd` in place from a `.sky.zip`
 - [x] Safety gate: `CheckDocumentExists` prompts to extract when the doc is `.zip`-backed
 - [x] Step 7: write side (Share stores `.blib`/`.skyd` uncompressed)
-- [ ] Step 5: `.blib` in-place read - route `SqliteOperations.OpenConnection` through the VFS for
-      zip paths (FilePath.TryGetZipByteRange is ready); build + ship + load the extension
-- [ ] Step 6: `OpenSharedFile` open-in-place branch (read `.sky` from zip, set DocumentFilePath =
-      `<zip>\doc.sky` and SharedZipFilePath) - this is what actually triggers in-place open
+- [x] VFS extension `libraries/SQLite/zipvfs_ext.c` committed + Jamfile `lib zipvfs_ext` rule
+      (verified working); open-in-place criterion `ContainsOnlyEntriesWithSuffixes` +
+      `DocumentZipSuffixes` (tested)
+- [ ] Step 5: `.blib` in-place read - deploy the extension DLL into the Skyline output (Jamfile
+      rule builds it; deployment wiring TODO), load it once at startup, and route
+      `SqliteOperations.OpenConnection` through the VFS for zip paths (`FilePath.TryGetZipByteRange`
+      is ready: build `FullUri=file:///<zip>?ofs=..&len=..&vfs=skyzipvfs`)
+- [ ] Step 6: `OpenSharedFile` in-place branch - if `CanOpenInPlace` (only DocumentZipSuffixes +
+      .skyd/.blib stored), read `.sky` from the zip and `OpenFile(<zip>\doc.sky)`, then set
+      SharedZipFilePath. Also make the remaining `OpenFile` choke points FilePath-aware
+      (`ConnectDocument`, `CheckResults`, `ReadAuditLog`). Gate `SaveDocument` like CheckDocumentExists.
 - [ ] End-to-end functional test; PR
+
+FUTURE (Nick's design, not the "for now" criterion): make `OpenSharedFile` start reading the `.sky`
+straight from the zip, and as soon as `DocumentReader.ReadXml` gets past the `settings_summary`
+element, decide whether it can read everything it needs directly from the zip or must extract.
+The "for now" path is the simpler whole-zip-inspection criterion above.
 
 ## Architecture decision (Nick): FilePath, not a resolver
 
