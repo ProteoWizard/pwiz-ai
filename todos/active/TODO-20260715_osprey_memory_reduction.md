@@ -140,6 +140,23 @@ fill the interned arrays -- replacing the post-load member-mutation pass (same
   2/3 reps show it. Verdict: `ai/.tmp/perf-gate/20260715-084056Z/verdict.md`.
 - NOT pushed; NO PR opened (per the night handoff -- Brendan reviews first).
 
+## Task 7 -- intern manifest / dedup protein accessions (self-review follow-up, byte-identical)
+
+A fresh-context self-review + a Stellar-libdecoy A/B found the library-decoy
+**manifest path un-interned protein accessions**:
+`DecoyPairingManifest.ApplyToLibrary` replaced ProteinIds on ~98% of entries
+(968,437/988,740) with fresh un-interned `List`s, discarding the loader's
+interning for almost the whole resident library on libdecoy runs (the path
+Pilot-MTG uses; the gendecoy regression golden never exercises it). Fixed by
+interning the manifest's clean accessions into a read-only array via a shared
+`LibraryStringInterner` (Stellar libdecoy: 42,590 distinct / 1,022,095 total,
+**95.8% collapsed**). `LibraryDeduplicator` merged-group unions got the same
+treatment; the loader's `InternToArray` moved onto `LibraryStringInterner`.
+- **Byte-identical**: Stellar regression mode1/2/3 PASS (blib 45,064,192);
+  post-fix Stellar-libdecoy A/B vs master byte-identical (6/6 fdr_scores.bin raw;
+  all calibration/reconciliation/parquet identical modulo run-path / search_hash /
+  timestamp only). Interning is identity-only. 509 tests, 0 inspection warnings.
+
 ## Gates (every change)
 
 - `pwsh -File ./pwiz_tools/Osprey/regression.ps1 -Dataset Stellar` (byte-identical).
