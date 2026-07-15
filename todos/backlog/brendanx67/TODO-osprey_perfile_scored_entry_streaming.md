@@ -167,6 +167,29 @@ unilaterally -- `[[feedback_bit_parity_tolerance]]`):
 7. Gates: `regression.ps1 -Dataset Stellar` (+ `All`), cross-impl if parity kept,
    and a `-MemoryProfile` before/after to quantify the peak reduction.
 
+## Related target: stream the calibration XCorr preprocess cache (~3.3 GB)
+
+The retention `.dmw` type table (alloc snapshot 10) surfaced a single
+`Dictionary<int, double[][]>` retaining 2.68 GB + 167 `Double[][]` (3.27 GB).
+Creation stack + code: it is `Calibrator.PreprocessWindowsForXcorr`
+(`Calibrator.cs:1529`, from `RunCalibration:336`) -- the CALIBRATION phase
+densely pre-preprocesses EVERY spectrum for ALL ~167 windows up front (unit-bin
+`double[~2000]`, ~16 KB each; 204k spectra ~= 3.3 GB). This is the exact pattern
+scoring ABANDONED in #4398 (`ResolutionStrategy.cs:30-38`: dense per-window cache
+was tens of GB -> switched to sparse per-window build+release). Calibration never
+got that fix.
+
+- **Fix:** mirror #4398 in calibration -- preprocess one window, score its sampled
+  calibration entries, release, next window. Peak ~3.3 GB -> ~one window (~20 MB).
+- **Leak vs working set (open):** `preprocessedByWindowKey` is a local in
+  `RunCalibration` with no field/context capture found (grep) and is not in the
+  returned `RTCalibration`, so it should free after calibration (snapshot 10 = mid
+  calibration). CONFIRM by checking the `perfile-scoring-peak` snapshot in
+  `ai/.tmp/osprey-memory-20260714-200043.dmw` (during scoring): if the dict is
+  present it leaks into scoring (null it = ~2.7 GB scoring win, #4405 class); if
+  absent it is a calibration-phase peak (streaming still cuts the calibration
+  high-water, which matters only if the run apex is in calibration).
+
 ## Related cheap win (separate scope, ~1 line)
 
 **Intern generated decoy strings.** `LibraryStringInterner.InternInPlace` runs at
