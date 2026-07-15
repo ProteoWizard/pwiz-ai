@@ -22,15 +22,29 @@ Requested by Nick.
 - [x] Step 1: System.Data.SQLite upgraded to 1.0.119 tree-wide (committed: 49fe0d25b)
 - [x] Step 2: `RandomAccessZipFile` + `ByteRangeStream` foundation (uncommitted; unit-tested)
 - [x] Step 3: `.blib`-VFS mechanism decided by a bake-off (loadable extension wins)
-- [~] Step 4: `.skyd` in-place read - building block `PooledZipEntryStream` done + tested;
-      `ChromatogramCache`/`MeasuredResults` wiring still to do
+- [x] `FilePath` (Skyline/Util) - the zip-aware path type (Nick's chosen design; see below)
+- [x] Step 4: `.skyd` in-place read - `PooledZipEntryStream` + the `FilePath` wiring done;
+      VERIFIED reading a real 28 MB stored `.skyd` in place from a `.sky.zip`
 - [x] Safety gate: `CheckDocumentExists` prompts to extract when the doc is `.zip`-backed
-      (state + prompt + `ExtractAndOpenSharedFile` refactor done; the in-place open in Step 6
-      is what sets `SharedZipFilePath`)
-- [ ] Step 5: wire `.blib` in-place read (build + ship the extension, route opens through it)
-- [ ] Step 6: `OpenSharedFile` open-in-place decision + `.sky` via ZipStream (sets SharedZipFilePath)
-- [ ] Step 7: write side (Share stores `.blib`/`.skyd` uncompressed)
-- [ ] PR created
+- [x] Step 7: write side (Share stores `.blib`/`.skyd` uncompressed)
+- [ ] Step 5: `.blib` in-place read - route `SqliteOperations.OpenConnection` through the VFS for
+      zip paths (FilePath.TryGetZipByteRange is ready); build + ship + load the extension
+- [ ] Step 6: `OpenSharedFile` open-in-place branch (read `.sky` from zip, set DocumentFilePath =
+      `<zip>\doc.sky` and SharedZipFilePath) - this is what actually triggers in-place open
+- [ ] End-to-end functional test; PR
+
+## Architecture decision (Nick): FilePath, not a resolver
+
+Instead of a global path->zip resolver, the zip-ness lives IN THE PATH STRING: a path like
+`C:\MyDocument.sky.zip\Library.blib` means entry "Library.blib" inside the zip. `FilePath` (a thin
+wrapper over one string, in Skyline/Util) has zip-aware `Exists`/`OpenRead`/`GetLastWriteTime`/
+`OpenPooledStream`/`TryGetZipByteRange` that transparently handle such paths (stored entries read in
+place and seekable; compressed decompressed; `GetLastWriteTime` = the outermost zip's time). The
+choke points just switch `File.*` -> `new FilePath(path).*`, which is a no-op for ordinary paths.
+So when the document is opened in place, its `DocumentFilePath` becomes `<zip>\doc.sky` and every
+derived path (`<zip>\doc.skyd`, `<zip>\lib.blib`) is a self-describing zip path. Longer term this
+becomes a proper strongly-typed path type replacing raw strings. (FileEx was NOT used - it lives in
+CommonUtil, which must not take a zip dependency.)
 
 ## How it will work (architecture)
 
