@@ -36,12 +36,14 @@ Requested by Nick.
       paths through it. The built x64/x86 `zipvfs_ext.dll` are committed to `libraries/SQLite/{x64,x86}`
       and copied to the Skyline output by a Content item.
 
->>> BLOCKER (SQLite 1.0.119 upgrade, must fix): the NATIVE `SQLite.Interop.dll` provisioned
->>> out-of-band reverted to 1.0.109, so the committed managed 1.0.119 is MISMATCHED against native
->>> 1.0.109 -> the managed provider throws EntryPointNotFound (hashed symbols). The recent zip tests
->>> didn't use the managed provider so it hid; the .blib work exposed it. The 1.0.119 interop must be
->>> provisioned through the team's out-of-band channel (locally re-copied 1.0.119 into ABI/obj/bin to
->>> test, but that is transient and reverts on a native build). Until then SQLite is broken on the branch.
+- [x] SQLite interop provisioning FIXED: the native `SQLite.Interop.dll` was bundled at 1.0.109
+      inside `pwiz_aux/msrc/utility/vendor_api_ABI.7z` (the SCIEX ABI vendor package), which the
+      build re-extracts overwrite-all every time -> it reverted the interop to 1.0.109 and mismatched
+      the committed managed 1.0.119 (EntryPointNotFound on hashed symbols). Swapped the x64/x86
+      `SQLite.Interop.dll` inside the .7z to 1.0.119 (password `i-agree-to-the-vendor-licenses`;
+      solid+AES archive so extract-swap-recreate, not in-place update). Managed-provider tests pass
+      (TestTableExists, DocLoadLibrary, TestConnectionPoolReportAndTracking). REMAINING CHECK: verify
+      SCIEX WIFF reading still works, since Clearcore2 shares this interop (needs real .wiff data).
 - [ ] Step 6: `OpenSharedFile` in-place branch - if `CanOpenInPlace` (only DocumentZipSuffixes +
       .skyd/.blib stored), read `.sky` from the zip and `OpenFile(<zip>\doc.sky)`, then set
       SharedZipFilePath. Also make the remaining `OpenFile` choke points FilePath-aware
