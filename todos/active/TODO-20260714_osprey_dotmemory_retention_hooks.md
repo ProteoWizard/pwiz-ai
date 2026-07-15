@@ -5,7 +5,7 @@
 - **Base**: `master`
 - **Created**: 2026-07-14
 - **Status**: In Progress
-- **PR**: (pending)
+- **PR**: [#4423](https://github.com/ProteoWizard/pwiz/pull/4423)
 
 **Status**: In Progress
 **Priority**: Medium (no active defect; a diagnosis-time gap that costs hours of
