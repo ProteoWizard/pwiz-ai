@@ -45,11 +45,14 @@ passes run over the full list, then the whole list is written in one shot
 The comment at `:1751` already says *"these arrays dominate"* -- the mitigation
 just fires at end-of-file instead of per-window.
 
-## Heap characterization (alloc-run snapshot 10, near-apex)
+## Heap characterization (alloc-run timeline)
 
-dotMemory timeline at ~near-peak: total 17.17 GB, **gen 2 ~11.76 GB (~89% of
-managed), LOH/POH/FOH ~140 MB (~1%)**, gen 0 ~1.25 GB, unmanaged ~4.01 GB. Two
-consequences shape the fix:
+The dotMemory timeline apex is **~20 GB total used**; snapshot 10 (the last timer
+snapshot, 17.17 GB) is BELOW it, not at the apex, so treat its numbers as a
+representative composition, not the peak magnitude. At snapshot 10: **gen 2
+~11.76 GB (~89% of managed), LOH/POH/FOH ~140 MB (~1%)**, gen 0 ~1.25 GB,
+unmanaged ~4.01 GB -- the same gen-2-dominant / near-zero-LOH shape holds up to
+the ~20 GB apex. Two consequences shape the fix:
 
 - **Gen-2 dominance = genuinely retained, not churn.** Objects reach gen 2 only by
   surviving collections, so the heap is live for the file's duration -- consistent
