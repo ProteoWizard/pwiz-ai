@@ -55,7 +55,26 @@ only the scoring peak was). Log-only + profiler-gated -> no-op on batch/regressi
   13.36 -> 13.15 GB. Regression Stellar mode1/2/3 byte-identical
   (blib 45,064,192). 506/509 tests pass.
 
-## Task 2 -- MS2 spectra during scoring (IN PROGRESS)
+## Task 2 -- MS2 spectra during scoring
+
+**Bankable slice DONE (byte-identical, regression-green, committed a961152edd).**
+On a calibrated file `RunCoelutionScoring` copied every spectrum's m/z into a
+calibrated list while the caller still held the originals for
+`DeduplicateDoubleCounting` -- two ~4 GB MS2 m/z sets coexisted. Added a
+`consumeInputMzs` flag (Stage-4 call site only) that nulls each input spectrum's
+m/z as its calibrated copy is built (dedup reads only RetentionTime; Stage-6
+rescore shares one spectra list across 3 calls and keeps the default false).
+- **Result**: SCORING peak managed 16.08 -> 9.41 GB (**-6.6 GB, -41%**). The apex
+  moves from the scoring peak to the calibration peak (13.18 GB): overall managed
+  apex 16.08 -> 13.18 GB (**-18%**). 1,683,778 entries scored (unchanged).
+  Regression Stellar mode1/2/3 byte-identical (blib 45,064,192).
+
+**Full per-window disk streaming (NEXT, ~6.3 GB more, scoring MS2 -> ~NThreads
+windows)** remains the documented follow-up (agent plan `ai/.tmp/agent-task2-plan.md`).
+Larger surface (new SpectraWindowIndex/loader, `RunCoelutionScoring`/`ScoreWindow`
+signature changes, parallel reader). Not attempted this session.
+
+## Task 2 background (design)
 
 Design in `ai/.tmp/agent-task2-plan.md`. On a calibrated (Astral) file,
 `ScoringPipeline.RunCoelutionScoring` builds a full `calibratedSpectra` copy
@@ -71,13 +90,43 @@ Design in `ai/.tmp/agent-task2-plan.md`. On a calibrated (Astral) file,
   Larger surface (new index/loader, 3 signature changes, parallel reader). Roadmap
   in the agent plan; attempt only if runway allows, else leave prototyped.
 
-## Task 3 -- calibration phase reduction (PROTOTYPE, likely not mergeable)
+## Task 3 -- calibration XCorr cache float[][] (bankable slice; design agent-task3-plan.md)
 
-The apex crux. `Calibrator.RunCalibration` holds all spectra + the ~3.3 GB dense
-XCorr cache across TWO passes (pass 2 needs pass 1's RT model). Investigate
-per-window build+release within each pass reusing the Task 2 loader; must stay
-byte-identical. If it doesn't land clean, leave a detailed design + the exact
-2-pass obstacle.
+The calibration peak (13.18 GB, now the apex) holds a ~3.3 GB dense XCorr cache.
+`Calibrator.PreprocessWindowsForXcorr` got the canonical `float[]` Comet cache from
+`PreprocessSpectrumForXcorrF32` then **widened every float to `double`** and stored
+`double[][]` (8 bytes carrying 4 bytes of info). **Implemented**: store `float[][]`
+directly (drop the widening loop) and let the consumer (Calibrator.cs:2155) bind to
+the EXISTING `XcorrFromPreprocessed(float[], entry)` overload -> cache 3.3 -> ~1.65 GB.
+- **Byte-identical**: both overloads widen the SAME float to double before the same
+  same-order `+=` (float->double is exact + unique); the 3-arg double/float bodies are
+  identical arithmetic. Same equivalence #4398 / `XcorrFromSparse` already ship on.
+- Edits (Calibrator.cs only): `PreprocessWindowsForXcorr` return type + body + doc;
+  3 params (`ScoreCalibrationMatches`/`RunRefinementPass`/`ScoreCalibrationEntry`) +
+  the `windowPreprocessed` local -> `float[][]`. Pre-commit GREEN (0 warnings, 506/509).
+- Result: PENDING regression + Astral A/B (expect CAL peak 13.18 -> ~11.5 GB).
+
+**Full per-window build+release of the calibration cache (DEFERRED, prototype-only):**
+both passes iterate ALL sampled entries in a flat `Parallel.ForEach` with the window
+resolved inside the loop (+ neighbor/linear-scan fallbacks), so there is no window
+partition to hang a build/release on; and pass 2 needs pass 1's completed LOESS fit.
+A per-window lifecycle needs entry-partition-by-window + a two-sweep pass split --
+large, byte-identity-risky, second-order. See agent-task3-plan.md Section 4.
+
+## Verification status (2026-07-15)
+
+- **Byte-identical on BOTH datasets**: `regression.ps1 -Dataset Stellar` PASS (run per
+  task) AND `-Dataset Astral` PASS (mode1 vs golden / mode3 HPC / mode2 resume, blib
+  135,249,920). The Astral golden compare is the load-bearing one -- Task 2's
+  `s.Mzs = null` only runs on CALIBRATED MS2, which HRAM always is.
+- Pre-commit GREEN each task (0 inspection warnings, 506/509 tests).
+- Independent fresh-context self-review of the diff: 0 blocking findings
+  (`ai/.tmp/agent-selfreview.md`).
+- Perf standing gate (`Test-PerfGate.ps1 -Dataset Stellar`): **PASSED, and the
+  changes are FASTER** -- total 4:00 -> 3:15 (median -19%), stage1to4 1:58 -> 1:21
+  (-31.3%), no regression (reduced gen-2 GC pressure). Some rep variance; median +
+  2/3 reps show it. Verdict: `ai/.tmp/perf-gate/20260715-084056Z/verdict.md`.
+- NOT pushed; NO PR opened (per the night handoff -- Brendan reviews first).
 
 ## Gates (every change)
 
