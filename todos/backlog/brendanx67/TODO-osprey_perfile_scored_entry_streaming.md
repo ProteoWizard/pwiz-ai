@@ -45,6 +45,32 @@ passes run over the full list, then the whole list is written in one shot
 The comment at `:1751` already says *"these arrays dominate"* -- the mitigation
 just fires at end-of-file instead of per-window.
 
+## Confirmed peak decomposition + target ranking (2026-07-14)
+
+Two comparable ~20 GB peaks per file (~12 GB managed each): a **calibration** peak
+(library + spectra + the 3.3 GB XCorr cache) and a **scoring** peak (library +
+spectra + scored-entry arrays). The apex is a near-tie, so moving it needs BOTH
+phases reduced. Scoring-peak types (`osprey-memory-20260714-200043.dmw` SNAPSHOT
+#1, verified):
+
+| Owner | Retained | In which peak |
+|---|---|---|
+| Spectra (`List<Spectrum>`, 204k) | 6.31 GB | **both** |
+| Library (`LibraryEntry`, 3.13M) | 2.89 GB | **both** |
+| Scored entries (`FdrEntry`+`CwtCandidate`, 1.68M) | ~2.2 GB | scoring |
+| Calibration XCorr cache | 3.3 GB | calibration (released before scoring) |
+| Scoring caches (`ConcurrentDictionary<UInt32,Double[]>`+`XcorrScratch`) | ~0.5 GB | scoring |
+
+Everything is `Double[]` x 10.1M (5.31 GB) + `Single[]` x 1.9M (2.24 GB) -- small
+gen-2 arrays. **Ranked levers:**
+1. **Spectra streaming (#1)** -- 6.3 GB and resident in BOTH peaks, so streaming
+   the spectra load (per-window / scan-range) is the single change that lowers the
+   apex on both sides. Do this first.
+2. **Scored-entry streaming** (this TODO's core) -- ~2-4 GB, scoring peak only.
+3. **Calibration XCorr cache** (below) -- 3.3 GB, calibration peak only.
+4. **Library object-model slim / SoA** -- 2.9 GB, both peaks.
+5. **Decoy-string interning** (below) -- ~few hundred MB, cheap.
+
 ## Heap characterization (alloc-run timeline)
 
 The dotMemory timeline apex is **~20 GB total used**; snapshot 10 (the last timer
@@ -181,14 +207,14 @@ got that fix.
 
 - **Fix:** mirror #4398 in calibration -- preprocess one window, score its sampled
   calibration entries, release, next window. Peak ~3.3 GB -> ~one window (~20 MB).
-- **Leak vs working set (open):** `preprocessedByWindowKey` is a local in
-  `RunCalibration` with no field/context capture found (grep) and is not in the
-  returned `RTCalibration`, so it should free after calibration (snapshot 10 = mid
-  calibration). CONFIRM by checking the `perfile-scoring-peak` snapshot in
-  `ai/.tmp/osprey-memory-20260714-200043.dmw` (during scoring): if the dict is
-  present it leaks into scoring (null it = ~2.7 GB scoring win, #4405 class); if
-  absent it is a calibration-phase peak (streaming still cuts the calibration
-  high-water, which matters only if the run apex is in calibration).
+- **Leak vs working set: RESOLVED -- it releases after calibration** (not a leak).
+  The `perfile-scoring-peak` snapshot (`osprey-memory-20260714-200043.dmw` SNAPSHOT
+  #1, during scoring) has NO `Dictionary<int,double[][]>` (only the smaller scoring
+  `ConcurrentDictionary<UInt32,Double[]>`, 0.40 GB). Matches the code (local in
+  `RunCalibration`, not captured). So streaming it cuts the CALIBRATION peak, not
+  the scoring peak -- which still matters because calibration and scoring are two
+  comparable ~20 GB peaks (see the ranking above); reducing the calibration side
+  needs this.
 
 ## Related cheap win (separate scope, ~1 line)
 
@@ -206,10 +232,10 @@ TSV row is retained.
 
 ## Explicitly NOT in scope
 
-- **Spectra streaming** (holding all ~200k HRAM spectra resident) -- a separate,
-  parallel lever; only pursue if step 1 shows spectra dominate.
 - **GC-config changes** -- `DOTNET_GCConserveMemory=9` is a ~10% interim win
   tracked separately; this TODO is the structural fix.
+- (Spectra streaming was previously parked here; the peak decomposition promoted
+  it to the #1 target -- see the ranking above.)
 
 ## References
 
