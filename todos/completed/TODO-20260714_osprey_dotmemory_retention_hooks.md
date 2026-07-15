@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260714_osprey_dotmemory_retention_hooks`
 - **Base**: `master`
 - **Created**: 2026-07-14
-- **Status**: In Progress
-- **PR**: [#4423](https://github.com/ProteoWizard/pwiz/pull/4423)
+- **Status**: Completed
+- **PR**: [#4423](https://github.com/ProteoWizard/pwiz/pull/4423) (merged 2026-07-14 as 110c9f7833)
 
-**Status**: In Progress
+**Status**: Completed
 **Priority**: Medium (no active defect; a diagnosis-time gap that costs hours of
 manual reasoning each time a live-set jump has to be attributed to a retaining
 reference)
@@ -164,13 +164,25 @@ drops). This is the workspace for the streaming TODO's step 1.
 - [x] Correctness gate `regression.ps1 -Dataset Stellar` -> PASS (mode1/2/3).
 - [x] Allocation-tracking capture -> setup-dominated churn (above).
 - [x] C# committed (`350f07bac3`/`7109061f77`/`22f21a3f38`); ai pushed; PR #4423.
-- [~] TeamCity Perf/Regression run `4093445` (on `7109061f77`) is accepted as the
-      gate for the PR: the only commit above it (`22f21a3f38`, perfile-scoring-peak)
-      is a SnapshotReady-gated no-op on the regression path, so a green `4093445`
-      covers HEAD (Brendan's call, 2026-07-14). Merge once it's green.
+- [x] TeamCity Perf/Regression `4093445` green -> merged.
 - [x] Follow-up TODO written: `TODO-osprey_perfile_scored_entry_streaming.md`
       (the structural streaming lever; GC-cap ConserveMemory=9 as interim win and
       the lighter API alloc mode noted there).
+
+### 2026-07-14 - Merged
+
+PR #4423 merged as commit `110c9f7833`. Shipped the dotMemory retention/allocation
+profiling capability: `ProfilerHooks` `MemoryProfiler.GetSnapshot` wrappers folded
+into the forced-GC `[MEM ...]` boundaries + a `perfile-scoring-peak` boundary, and
+`Profile-Osprey.ps1 -MemoryProfile [-TrackAllocations]` with the shared
+`Get-DotMemoryExe` resolver. Self-review clean; regression byte-identical; the added
+probes are env/SnapshotReady-gated no-ops on normal runs. The tooling immediately
+paid off in-session: it pinned the calibration XCorr cache (~3.3 GB, released after
+calibration), the un-interned decoy strings, and a verified two-peak/~20 GB
+decomposition ranking spectra as the #1 reduction lever -- all captured in the
+follow-up `TODO-osprey_perfile_scored_entry_streaming.md`. No scope deferred from
+this PR; the reduction work itself is the (separate) follow-up TODO + a night-session
+handoff (`ai/.tmp/handoff-osprey-memory-nightsession.md`).
 
 ## Motivation
 
