@@ -256,13 +256,25 @@ the logical extracted path (pool identity) while bytes come from the zip and sta
 zip's write time. Compressed entries are rejected. Unit test `TestPooledZipEntryStream` passes.
 It opens a fresh `FileStream` per Connect (FileShare.Read) so concurrent readers don't collide.
 
-STILL TO DO (the wiring):
-- `ChromatogramCache.Load` currently does `loader.StreamManager.CreatePooledStream(cachePath,false)`.
-  Have the caller (`MeasuredResults`, given the zip context) supply a `PooledZipEntryStream` and
-  inject it via the existing `ChromatogramCache(..., IPooledStream readStream)` ctor / `ChangeReadStream`.
-- GOTCHA: `ChromatogramCache.ReadDataForAll` (~line 1969) opens `new FileStream(CachePath,...)`
-  directly, bypassing the pool - must be redirected to the zip-backed stream too.
+DONE (Step 6 gate, tested): `RandomAccessZipFile.AreEntriesStored(params string[] extensions)` -
+true iff every entry with one of the given extensions (".skyd", ".blib") is stored uncompressed,
+i.e. the document can be opened in place. Unit test `TestAreEntriesStored` passes.
+
+STILL TO DO (the wiring) - a transparent zip-aware IStreamManager will NOT work, because the
+`.skyd` load path has several DIRECT filesystem accesses that bypass the StreamManager and assume
+a real file. All of these must be made zip-aware (thread a zip-backed cache source through, or a
+`(RandomAccessZipFile zip, ZipEntryInfo skydEntry)` context):
+- `MeasuredResults.LoadFinalCache` `File.Exists(cachePath)` (~line 1315) and
+  `File.OpenRead(cachePath)` + `ChromatogramCache.GetCachedFilePaths(stream)` (~line 1320).
+- `MeasuredResults` calls `ChromatogramCache.Load(cachePath,...)` at ~1330, 1620, 1718, 1788, 1826.
+- `ChromatogramCache.Load` (~693) `loader.StreamManager.CreatePooledStream(cachePath,false)` ->
+  supply a `PooledZipEntryStream` (done - the building block) instead, via the existing
+  `ChromatogramCache(..., IPooledStream readStream)` ctor / `ChangeReadStream`.
+- `ChromatogramCache.ReadDataForAll` (~line 1969) opens `new FileStream(CachePath,...)` directly,
+  bypassing the pool - must be redirected to the zip-backed stream too.
 - The `.zip` stays on disk for the doc session (like the `.skyd`/`.blib` do today).
+This is the large, careful core-results-loading refactor; it can only be exercised once Step 6
+provides the zip context, so it and Step 6 should land together.
 
 ### Safety gate (DONE): CheckDocumentExists extraction prompt
 
