@@ -70,6 +70,70 @@ Template csproj (drop the legacy 600-line XML, replace with ~40 lines):
 4. **NHibernate** — versions ≥5.5 support net6+. Multi-target by package version
    if legacy needed.
 
+## Status (2026-07-14, session: DIA-Umpire net8 fixes + Sciex commit + Hardklor MSBuild)
+
+Continued from the TestPerf-triage tail. HEAD started at `f320b4297a`.
+
+**A -- Sciex SWATH isolation offsets COMMITTED (`3d3ef3cae6`, pushed origin + chambem2).** The held
+`WiffFile.cs` fix (legacy-WIFF `IsolationLowerOffset/UpperOffset` computed from `FragmentBasedScanMassRange.IsolationWindow/2`,
+cpp parity) verified green via `zzzNativeVsMz5_AbDiaChromatogramPerformanceTest` (native SWATH `.wiff` import,
+0 failures) and committed on its own.
+
+**D -- DIA-Umpire tutorial re-baseline: turned out to be 4 real net8 bugs, all fixed + verified.** Recording
+`TestDiaTtof/QeDiaUmpireTutorial` baselines revealed the tutorials never completed on net8. Root causes + fixes
+(all uncommitted; see memory `reference_net8_diaumpire_pipeline`):
+  1. **mz5 writer missing** in pwiz-sharp (only mzMLb HDF5 writer wired). DIA-Umpire defaulted to `.mz5` spill ->
+     NotImplementedException. Fix: net8 `DiaUmpireDdaConverter` routes `mz5`->`mzMLb` (per Matt: the other HDF5
+     format, keep compact spill) at ctor + SetRequiredOutputFormat.
+  2. **Progress ilr not wired**: `SpectrumListFactory.ParseDiaUmpire` passed no IterationListenerRegistry ->
+     DIA-Umpire `[step N of M]` never printed -> Skyline's 17%-gate (`DiaUmpireTutorialTest.cs:593`) timed out
+     (looked like a hang). Fix: thread `ilr` through `Wrap` to the diaUmpire builder + one shared registry in
+     msconvert `Converter` ctor.
+  3. **O(N^2) clustering (THE perf killer)**: `PeakCurveClusteringCorrKDtree.Run` linear-scanned all ~1.3M peak
+     curves per target (flat list; cpp R-tree deferred "phase 5"). Fix: sort searchable by m/z once, binary-search
+     each job's m/z window. Parity byte-identical. This is what let the tutorial finish (was stuck at step 5/7 of
+     file 1 at 26 min).
+  4. **Thread bump**: net8 sets `DiaUmpire.Config Parameters["Thread"]=ProcessorCount/2` (presets pin 1; managed
+     slower than native). Verified deterministic (byte-identical multithreaded output). ~0 speedup until #3 fixed.
+- After the fixes the TTOF tutorial RUNS to completion (~43 min, MSAmanda-dominated) and records. **Investigated the
+  ~40% library-peptide drop thoroughly per Matt**: FDR verified correct (q<=0.05 applied, library max q=0.0499;
+  0.01 would give 11234), DIA-Umpire faithful (471 pseudo-spectra = cpp reference), extraction stable
+  (FinalTargetCounts ~unchanged). Full settings audit (net8 XML vs master in-process API): all match EXCEPT
+  `WriteResultsTwice=true` which standalone MSAmanda 3.0.22.864 does NOT support (absent from its settings.xml +
+  CLI). **Conclusion: legitimate OOP-MSAmanda re-baseline, not a bug.** Per Matt: **clobber the shared JSON**
+  (net472 TestPerf retired on this branch), **record all 4 then commit**.
+- Recording status: TestDiaTtofDiaUmpireTutorial.json recorded (TTOF, ~43 min). QE Extra hit a NEW re-baseline
+  wrinkle: the hardcoded manual-review screenshot nav `FindNode("TDINQALNR")` (DiaUmpireTutorialTest.cs:768/774)
+  failed -- TDINQALNR is no longer a net8 QE target. **Investigated the QE target divergence per Matt** (QE targets
+  177->57, disproportionate to the library's 25% drop): NOT a target-selection bug -- digesting the 12-protein
+  `DIA/target_protein_sequences.fasta` against the net8 library gives 84 candidate matches -> 57 non-ambiguous targets
+  (the 84->57 gap = standard shared/ambiguous-peptide exclusion). The disproportion is uneven net8 SEARCH coverage of
+  the QE tutorial's specific target proteins (esp. yeast: 0-1 lib peptides each), amplified by the tighter QE 10ppm
+  tolerance -- same accepted OOP-MSAmanda cause. TDINQALNR is in the net8 QE library but correctly excluded as
+  shared/ambiguous. **Fix: made the exemplar a per-instrument `AnalysisValues.ExemplarPeptide`** -- TTOF keeps
+  `TDINQALNR` (unchanged, already recorded), QE uses **`AIDLIDEAASSIR`** (CLPB_ECOLI; verified excellent peak: both
+  replicates, q 1.5e-5/2.7e-4, not truncated, b3 dominant 1.9e6, apex RT 48.16) + QE ChromatogramClickPoint ->
+  (48.16f, 5.5e5f). QE re-run verifying. FullFileset exemplars (whole-proteome association) tentatively
+  AIDLIDEAASSIR/TDINQALNR -- verify when recording (may be ambiguous in the full proteome). Then set
+  `IsRecordMode=>false` and commit the batch.
+
+**E -- Hardklor Jam->MSBuild port DONE (subagent, verified).** Submodules inited; corrected `Hardklor.vcxproj`
+to match `Jamfile.jam` (XML_STATIC, casing, warning-disables, MultiByte, x64-only, self-extract zlib/expat
+tarballs via bsdtar, v143+v145 fallback); wired `HardklorSearchEngine.cs` (PathEx.ResolveBundledExe),
+`Skyline.csproj` Content, `build.bat` native step. `Hardklor.exe` builds (Release x64, 507 KB, runs). Remaining:
+a full `build.bat Release` end-to-end check.
+
+**Uncommitted batch** (record 3 more -> IsRecordMode false -> commit): DiaUmpireDdaConverter.cs,
+SpectrumListFactory.cs, Converter.cs (msconvert), DiaUmpire.cs + PeakCluster.cs (pwiz-sharp), the 4 tutorial
+.json baselines, DiaUmpireTutorialTest.cs/DiaUmpireVendorFormatTest.cs/EncyclopeDiaSearchTutorialTest.cs (held),
++ E's Hardklor files. Disk-guarded runs via `ai/.tmp/run_perf.sh`; persistent tutorial data at
+`C:\test\Skyline\downloads\Tutorials\`. **2 of 4 recorded (TTOF + QE Extra); 2 FullFileset variants remain,
+then revert `IsRecordMode=>false` and commit.**
+
+**Next session handoff**: For detailed startup protocol (IsRecordMode-ON warning, FullFileset recording, exemplar
+picking, build/stage/run recipe, commit plan), read `ai/.tmp/handoff-20260715_net8_diaumpire_recording.md` before
+starting work.
+
 ## Status (2026-07-14, session: TestPerf triage)
 
 ### Worked the 7 TestPerf failure groups from the 2026-07-14 handoff via parallel investigation subagents
