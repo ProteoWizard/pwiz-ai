@@ -1,7 +1,8 @@
 # TODO: Osprey per-file memory reduction (single Astral file 49)
 
-**Status**: Active
+**Status**: Completed
 **Branch**: `Skyline/work/20260715_osprey_memory_reduction` (off master @ 110c9f7833)
+**PR**: [#4424](https://github.com/ProteoWizard/pwiz/pull/4424) (merged 2026-07-15 as fc148e4)
 **Created**: 2026-07-15
 **Goal**: Lower the per-file memory ceiling for the single Astral file-49 case
 with verified, byte-identical, regression-green code. Bank safe wins; take the
@@ -163,3 +164,18 @@ treatment; the loader's `InternToArray` moved onto `LibraryStringInterner`.
 - `pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection`
   (SystemMemory.cs 9 warnings are known local #4379 noise).
 - `-MemoryProfile` / `OSPREY_LOG_MEMORY` A/B before+after each change.
+
+## 2026-07-15 - Merged
+
+PR #4424 merged as commit fc148e4. Shipped: freed the Stage-4 MS2 m/z double-hold
+(scoring peak 16.08 -> 9.41 GB), calibration XCorr cache float[][] (~3.3 -> ~1.65 GB),
+resident library ~850 MB (decoy interning, empty-list sentinels, array-backed
+IReadOnlyList collections), and a profiler-gated post-calibration [MEM] boundary --
+all byte-identical (Stellar+Astral regression mode1/2/3). A self-review + Stellar-libdecoy
+A/B caught the library-decoy manifest path un-interning protein accessions on ~98% of
+entries; fixed in follow-up (Task 7, 95.8% collapse, byte-identical). Full per-window MS2
+disk streaming was deferred to
+`ai/todos/backlog/brendanx67/TODO-osprey_perfile_spectra_window_streaming.md` (next session).
+The manual TeamCity Perf/Regression was re-run green on the pre-fix head; the final
+identity-only interning commit was merged on local gates (regression Stellar + libdecoy
+A/B) by Brendan's explicit judgment call, not a fresh Perf/Regression.
