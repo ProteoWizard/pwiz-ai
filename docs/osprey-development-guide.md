@@ -1119,6 +1119,18 @@ The `perfile-scored-live` boundary also gives the single-file scoring
 path the forced-GC live probe the plateau previously lacked (the gap
 noted under "the live set vs GC weather").
 
+**Read the `perfile-scoring-peak` snapshot, not `perfile-scored-live`, for
+"what is held at the peak."** `perfile-scored-live` fires *after* the #4355
+write-then-null (`PerFileScoringTask.cs:1759`) drops the heavy per-entry arrays,
+and a dotMemory snapshot forces a GC first -- so it can never show those arrays
+(they are unreferenced by then) and only captures the post-release floor
+(library + stubs). `perfile-scoring-peak` fires right after `ScoreAndDeduplicate`,
+while the arrays *and* the resident spectra are still live, so it is the snapshot
+that shows the ~25 GB in-scoring retained set. Concretely, on Astral file 49 the
+peak snapshot held 48.73M objects vs the floor's 34.45M -- the delta is the
+streamable scored-entry payload. Lesson: place a retention snapshot at the live
+high-water, before any deliberate release, or the forced GC hides the target.
+
 ## Validation before pushing to a PR
 
 **Cross-impl parity tests are not gated by CI on either side.** The

@@ -116,12 +116,18 @@ unilaterally -- `[[feedback_bit_parity_tolerance]]`):
 
 ## Phased plan
 
-1. **Confirm the target first (cheap, no code).** Open the retention `.dmw`
-   (`ai/.tmp/osprey-memory-20260714-171533.dmw`, or re-capture with
-   `Profile-Osprey.ps1 -Dataset Astral -MemoryProfile`) and rank Biggest Retained
-   Types at `perfile-scored-live`. Confirm the scored-entry heavy arrays (vs
-   resident spectra vs library) are the dominant target before touching
-   parity-locked code. If spectra dominate, pivot to spectra streaming first.
+1. **Confirm the target first (cheap, no code).** Open the retention `.dmw` and
+   rank **Biggest Retained Types at the `perfile-scoring-peak` snapshot** -- the
+   IN-SCORING peak, before the #4355 array-null, which is the only snapshot that
+   shows the heavy arrays live. Use `ai/.tmp/osprey-memory-20260714-200043.dmw`
+   (SNAPSHOT #1 = `perfile-scoring-peak`, 48.73M objects; SNAPSHOT #2 =
+   `perfile-scored-live` floor, 34.45M) -- the ~14.3M-object delta between them is
+   the streamable array payload. (Do NOT use `perfile-scored-live` alone: a
+   forced-GC snapshot taken after the arrays are nulled cannot show them; that was
+   the initial mistake, fixed by the `perfile-scoring-peak` boundary in PR #4423.)
+   Confirm scored-entry arrays (vs resident spectra vs the 3.2 GB library)
+   dominate before touching parity-locked code. If spectra dominate, pivot to
+   spectra streaming first.
 2. **Decide the parity contract** (a/b/c above) with Brendan.
 3. `ParquetScoreCache`: incremental row-group append writer + `.scores.dedup`
    manifest read/write.

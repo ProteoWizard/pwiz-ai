@@ -144,19 +144,31 @@ Conclusions:
   lever to move the green/orange lines is **structural streaming** of the spectra
   load and scored-entry accumulation, not a GC flag.
 
+**Fix - snapshot was mis-timed** (Brendan caught it): the `perfile-scored-live`
+snapshot fires AFTER the #4355 write-then-null (`PerFileScoringTask.cs:1759`), so a
+forced-GC snapshot could never show the freed heavy arrays -- it only ever captured
+the 4 GB floor (library + stubs). Added a `perfile-scoring-peak` SnapshotReady-gated
+capture right after `ScoreAndDeduplicate` (commit `22f21a3f38`), while the arrays +
+spectra are still live. Re-capture `ai/.tmp/osprey-memory-20260714-200043.dmw`
+(7.5 GB): SNAPSHOT #1 `perfile-scoring-peak` = **48.73M objects**, SNAPSHOT #2
+`perfile-scored-live` floor = 34.45M -> the ~14.3M-object delta is the streamable
+scored-entry array payload (plus the peak also holds the resident spectra the floor
+drops). This is the workspace for the streaming TODO's step 1.
+
 ### Remaining
 - [x] Interpret the full Astral single-file crest-vs-floor + snapshot.
 - [x] GC-cap A/B: negligible perf cost, ~10% safe win (ConserveMemory), 30% cap
       crashes -> peak is genuine in-scoring live set, not garbage.
 - [x] Self-review (clean; one clarifying comment applied, commit 7109061f77).
-- [x] Correctness gate `regression.ps1 -Dataset Stellar` -> PASS (mode1/2/3,
-      byte-identical golden; instrumentation env-gated, zero normal-run impact).
+- [x] Re-time the retention snapshot to the in-scoring peak (`22f21a3f38`).
+- [x] Correctness gate `regression.ps1 -Dataset Stellar` -> PASS (mode1/2/3).
 - [x] Allocation-tracking capture -> setup-dominated churn (above).
-- [x] Commit C# (`350f07bac3`, pwiz branch).
-- [ ] Commit ai (scripts/docs/TODO); push + PR on Brendan's go.
-- [ ] Follow-up TODO(s): (a) GC-cap A/B on one Astral file (quantify green/orange
-      drop vs throughput); (b) spectra-load streaming investigation (the real
-      structural lever); (c) lighter API-driven allocation mode.
+- [x] C# committed (`350f07bac3`/`7109061f77`/`22f21a3f38`); ai pushed; PR #4423.
+- [ ] TeamCity Perf/Regression on `pull/4423` HEAD (`22f21a3f38`) -> green before
+      merge (Brendan's manual trigger; the 4093445 run predates `22f21a3f38`).
+- [x] Follow-up TODO written: `TODO-osprey_perfile_scored_entry_streaming.md`
+      (the structural streaming lever; GC-cap ConserveMemory=9 as interim win and
+      the lighter API alloc mode noted there).
 
 ## Motivation
 
