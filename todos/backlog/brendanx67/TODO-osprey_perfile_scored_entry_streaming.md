@@ -45,6 +45,31 @@ passes run over the full list, then the whole list is written in one shot
 The comment at `:1751` already says *"these arrays dominate"* -- the mitigation
 just fires at end-of-file instead of per-window.
 
+## Heap characterization (alloc-run snapshot 10, near-apex)
+
+dotMemory timeline at ~near-peak: total 17.17 GB, **gen 2 ~11.76 GB (~89% of
+managed), LOH/POH/FOH ~140 MB (~1%)**, gen 0 ~1.25 GB, unmanaged ~4.01 GB. Two
+consequences shape the fix:
+
+- **Gen-2 dominance = genuinely retained, not churn.** Objects reach gen 2 only by
+  surviving collections, so the heap is live for the file's duration -- consistent
+  with the 30% hard-cap crash and the ~10% ceiling on GC tuning. Only *not holding
+  it* helps.
+- **Near-zero LOH = millions of SMALL objects, not a few big buffers.** The 6 GB
+  `Double[]` + 2 GB `Single[]` + 1.9 GB `LibraryFragment[]` are **per-entry** arrays
+  (fragment m/z, 21-double feature vector, ref-XIC, CWT), each < 85 KB, so ~1.7M
+  entries x several tiny arrays = tens of millions of gen-2 objects. Header overhead
+  alone (~24 B x tens of millions) is hundreds of MB, plus gen-2 fragmentation.
+
+Rules out LOH-targeted tactics (ArrayPool for big buffers, LOH compaction,
+GCConserveMemory -- all gen-2-live, unreclaimable). Two structural levers, which
+compose:
+1. **Streaming** (this TODO) -- per-window write+drop so the arrays never coexist.
+2. **Structure-of-Arrays** -- collapse the millions of tiny per-entry arrays into a
+   few large column arrays with per-entry offsets; slashes object count + header
+   overhead, and the few big arrays land in LOH (fewer, cleaner) instead of
+   flooding gen 2. Bigger refactor; a strong complementary follow-on to streaming.
+
 ## What dedup needs to succeed (verified against the code)
 
 Neither dedup pass touches the heavy arrays. Both need only a ~4-field scalar
