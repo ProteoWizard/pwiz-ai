@@ -1102,9 +1102,15 @@ own pre-GC `[MEM ...]` `working_set`/`managed_heap` crest:
   uncollected garbage + native, not retention. The lever is *allocate
   less* or *cap the GC heap* (`DOTNET_GCHeapHardLimitPercent`, fewer
   heaps -- see "the live set vs GC weather" above), not "hold less". For
-  what *allocates* that crest, use allocation tracking
-  (`Test-Snapshot.ps1 -MemoryProfileStages`, which drives dotMemory
-  `-c`), since a forced-GC snapshot cannot see transient garbage.
+  what *allocates* that crest, use `-MemoryProfile -TrackAllocations`
+  (drives dotMemory `-c`), since a forced-GC snapshot cannot see
+  transient garbage. **`-c` is heavy** -- ~32x slowdown and a
+  multi-tens-of-GB workspace even at `-MaxWindows 6` (it records every
+  allocation), so it auto-caps windows and captures the front-loaded
+  setup churn. On the Astral per-file envelope this showed the managed
+  peak is a **fixed setup cost** (6 windows churns as much as 167):
+  the target+decoy library build and loading all ~200k HRAM spectra at
+  once dominate, not per-window scoring temporaries.
 - **crest ~= post-GC floor** -> the peak is genuinely live; the snapshot
   names the retaining reference (the #4405 `FdrProjectionSet`-in-
   `PipelineContext` class of bug). *Hold less.*

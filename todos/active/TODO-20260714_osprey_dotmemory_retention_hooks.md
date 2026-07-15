@@ -88,13 +88,42 @@ Levers (in priority for "lower the two lines"):
 3. **Shrink the live floor** (the true wall GC flags can't move): the 3.23 GB
    library dominates; on-the-fly decoys / compact library rep are the only lever.
 
+**Finding - allocation traffic (`-MemoryProfile -TrackAllocations`, Astral file
+49, auto-capped 6 windows; log `ai/.tmp/astral-alloc-run.log`, workspace
+`ai/.tmp/osprey-alloc-20260714-174547.dmw`):**
+
+```
+6 windows (87,049 entries, ~5% of the full 1.7M):
+[MEM single file scored (pre-GC)] working_set=25.39 GB (peak), managed_heap=17.73 GB,
+                                  gc_committed_last_gc=20.83 GB
+[MEM perfile-scored-live]         managed_heap=2.99 GB (post-GC)
+```
+
+**Key result: the per-file managed peak is a FIXED SETUP COST, not
+scoring-proportional.** 6 windows churns as much managed heap (17.73 GB) as the
+full 167-window run (15.12 GB). So the dominant allocators are front-loaded --
+target+decoy library build (3.13M entries) and loading all 204,149 HRAM spectra
+from the 6 GB mzML at once -- NOT per-window scoring temporaries. Levers reorder:
+streaming/windowing the spectra load and lazy decoy generation are the
+structural wins; pooling per-window scoring temporaries would barely move the line.
+
+**Tooling caveat (record in guide):** full `-c` is heavy -- 32 min wall (~32x)
+and a 26.9 GB workspace even at 6 windows, capturing the first ~200 s (which is
+the setup churn, conveniently). A lighter API-driven alloc mode
+(`--use-api` + `MemoryProfiler.CollectAllocations(true)` at scoring start +
+`GetSnapshot` at the boundary) would capture the exact boundary at a fraction of
+the cost -- deferred to the follow-up TODO.
+
 ### Remaining
 - [x] Interpret the full Astral single-file crest-vs-floor + snapshot.
-- [ ] Correctness gate `regression.ps1 -Dataset Stellar` (running; env-gated
-      instrumentation, expected byte-identical -- OSPREY_LOG_MEMORY unset there).
-- [ ] Commit the tool.
-- [ ] Follow-up (separate TODO): GC-cap A/B on one Astral file to quantify the
-      green/orange drop vs throughput; allocation-tracking capture for the churn.
+- [x] Correctness gate `regression.ps1 -Dataset Stellar` -> PASS (mode1/2/3,
+      byte-identical golden; instrumentation env-gated, zero normal-run impact).
+- [x] Allocation-tracking capture -> setup-dominated churn (above).
+- [x] Commit C# (`350f07bac3`, pwiz branch).
+- [ ] Commit ai (scripts/docs/TODO); push + PR on Brendan's go.
+- [ ] Follow-up TODO(s): (a) GC-cap A/B on one Astral file (quantify green/orange
+      drop vs throughput); (b) spectra-load streaming investigation (the real
+      structural lever); (c) lighter API-driven allocation mode.
 
 ## Motivation
 
