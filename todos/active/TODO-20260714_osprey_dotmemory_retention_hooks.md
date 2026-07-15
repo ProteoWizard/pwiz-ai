@@ -114,8 +114,41 @@ the setup churn, conveniently). A lighter API-driven alloc mode
 `GetSnapshot` at the boundary) would capture the exact boundary at a fraction of
 the cost -- deferred to the follow-up TODO.
 
+**Finding - GC-config A/B** (Astral file 49, Stage 1-4, net8.0 Server GC;
+harness `ai/.tmp/gc-cap-experiment.ps1`, logs `ai/.tmp/gc-cap-logs/`,
+summary `ai/.tmp/gc-cap-summary.csv`):
+
+```
+config          wall_s  WS_peak  mgd_crest  committed  live  scored     exit
+baseline(warm)   118.4   28.00    15.04      25.41      4.03  1,699,771   0
+conservemem9     115.7   26.02    13.50      24.68      4.03  1,699,771   0
+heapcount8       114.8   27.79    15.57      26.86      4.03  1,699,771   0
+hardlimit50pct   113.7   28.11    15.03      25.55      4.03  1,699,771   0
+hardlimit30pct    -      CRASH (exit 1 at 71s: 19 GB cap < in-scoring live need)
+(baseline cold-cache first read was 160.9s -- a confound; warm re-run 118.4s)
+```
+
+Conclusions:
+- **Perf cost negligible**: all configs 114-118s (the 160.9s was a cold mzML
+  read, not GC). GC config does not move wall time for this workload.
+- **Results identical**: 1,699,771 scored + 4.03 GB live floor in every
+  successful config -- GC config cannot change search output (correctness).
+- **Target-metric impact modest**: `DOTNET_GCConserveMemory=9` is the safe win
+  -- WS 28.0->26.0 GB (~7%), managed crest 15.0->13.5 GB (~10%), no perf cost,
+  no crash. HeapCount/50%-cap do ~nothing (50% ~= 32 GB never binds).
+- **Root-cause refinement (the load-bearing result)**: the 30% cap (~19 GB)
+  **crashes mid-scoring** -> the per-file peak is NOT mostly collectable garbage.
+  ~20 GB is genuinely LIVE during scoring (all 200k HRAM spectra resident +
+  in-flight scoring + the accumulating 1.7M scored entries); the 4 GB floor is
+  low only because those free AFTER scoring. So GC tuning caps out ~10%; the real
+  lever to move the green/orange lines is **structural streaming** of the spectra
+  load and scored-entry accumulation, not a GC flag.
+
 ### Remaining
 - [x] Interpret the full Astral single-file crest-vs-floor + snapshot.
+- [x] GC-cap A/B: negligible perf cost, ~10% safe win (ConserveMemory), 30% cap
+      crashes -> peak is genuine in-scoring live set, not garbage.
+- [x] Self-review (clean; one clarifying comment applied, commit 7109061f77).
 - [x] Correctness gate `regression.ps1 -Dataset Stellar` -> PASS (mode1/2/3,
       byte-identical golden; instrumentation env-gated, zero normal-run impact).
 - [x] Allocation-tracking capture -> setup-dominated churn (above).
