@@ -1,6 +1,13 @@
 # TODO: Osprey dotMemory retention hooks (who-holds-it diagnosis)
 
-**Status**: Backlog
+## Branch Information
+- **Branch**: `Skyline/work/20260714_osprey_dotmemory_retention_hooks`
+- **Base**: `master`
+- **Created**: 2026-07-14
+- **Status**: In Progress
+- **PR**: (pending)
+
+**Status**: In Progress
 **Priority**: Medium (no active defect; a diagnosis-time gap that costs hours of
 manual reasoning each time a live-set jump has to be attributed to a retaining
 reference)
@@ -10,6 +17,84 @@ in *scoping* the run, not the wiring)
 **Created**: 2026-07-10
 **Scope**: `C:\proj\pwiz\pwiz_tools\Osprey\Osprey.Tasks\ProfilerHooks.cs` +
 `ai/scripts/Osprey/Profile-Osprey.ps1`
+
+## Progress log
+
+### 2026-07-14 - Implemented + validated (Brendan steered toward single-file)
+
+Built the capability and ran it. Brendan refined the target in-session: the
+pain is the **per-file** memory envelope (`perfviz.html` on a 20-file Astral run
+shows the green *private bytes* + orange *managed* lines high and **stable
+file-to-file**, a per-file sawtooth, not cross-file accumulation), so the
+scenario is a **single file**, and the goal is to *lower those two lines*.
+
+Implemented:
+- `ProfilerHooks.cs` - `SnapshotReady` + `CaptureRetentionSnapshot(name)`
+  wrappers around `JetBrains.Profiler.Api.MemoryProfiler` (same NoInlining +
+  try/catch isolation shape as the `MeasureProfiler` wrappers). Folded a
+  `CaptureRetentionSnapshot(label)` into `LogManagedHeapAfterGcIfEnabled`, so
+  **every** forced-GC `[MEM ...]` boundary also captures a dotMemory snapshot
+  when a `--use-api` session is attached (no-op otherwise).
+- `PerFileScoringTask.cs` - added a `perfile-scored-live` forced-GC boundary in
+  the single-file path (pre-GC crest + post-GC floor). Also closes the
+  "scoring plateau has no live probe" gap for the single-file path. Zero batch
+  impact (batch never takes the `nFiles==1` branch).
+- `Profile-Osprey.ps1` - `-MemoryProfile` switch: forces net8.0, sets
+  `OSPREY_LOG_MEMORY=1`, runs one file through Stage 1-4 under
+  `dotMemory start --use-api`, writes `.dmw` to `ai/.tmp`, prints the
+  human-in-the-loop retention read + crest-vs-floor interpretation.
+- `Dataset-Config.ps1` - shared `Get-DotMemoryExe` / `Get-DotMemoryInstallHint`
+  resolvers (mirror Run-Tests.ps1's order); refactored `Test-Snapshot.ps1` to
+  use them (de-duped its inline copy).
+- `ai/docs/osprey-development-guide.md` - "Retention diagnosis via dotMemory".
+
+Gates: Debug build + 506 tests + inspection (0 warnings) green; Release net8.0
+built. Smoke test (Stellar, `-MaxWindows 2`) confirmed the snapshot fires and a
+254 MB `.dmw` is written.
+
+**Finding - full uncapped Astral file 49** (log
+`ai/.tmp/astral-memprofile-run.log`; workspace
+`ai/.tmp/osprey-memory-20260714-171533.dmw`, 1.9 GB, 34.5M objects):
+
+```
+[MEM library-resident]            managed_heap=3.23 GB (3,131,286 entries)
+[MEM single file scored (pre-GC)] working_set=28.63 GB, managed_heap=15.12 GB,
+                                  gc_committed_last_gc=26.45 GB, gc_heap_last_gc=13.78 GB
+[MEM perfile-scored-live]         managed_heap=4.34 GB (post-GC)
+```
+
+Root cause of the high green (private bytes) + orange (managed) per-file lines:
+the per-file peak is **GC heap-growth / churn, not live retention**.
+- Managed crest 15.12 GB -> post-GC floor 4.34 GB: ~71% (10.8 GB) is collectable
+  garbage (scoring-loop churn).
+- working_set 28.63 GB with gc_committed 26.45 GB but only 4.34 GB live: Server
+  GC (32 heaps on this box) expanded the managed heap to ~26 GB committed while
+  <5 GB is live. The 28-vs-50 GB gap vs the batch is GC *weather* (where a gen2
+  lands), not a fixed requirement -- the stable number is the 4.34 GB live floor.
+- Of the 4.34 GB live floor, 3.23 GB is the spectral library (3.13M target+decoy
+  entries, already 71.5% string-interned); ~1.1 GB is held scored entries.
+
+Levers (in priority for "lower the two lines"):
+1. **GC config A/B (biggest/cheapest, no code change):**
+   `DOTNET_GCHeapHardLimitPercent`, fewer heaps (`DOTNET_GCHeapCount` /
+   workstation GC), `DOTNET_GCConserveMemory` -- collapse the ~24 GB elastic
+   slack toward the ~4-5 GB live floor, paid in throughput. Matches the guide's
+   "GC weather" corollary and the thread-scaling OOM note
+   `[[reference_osprey_astral_thread_memory_oom]]`.
+2. **Cut allocation churn** in Stage-1-4 scoring (the 10.8 GB transient): needs
+   allocation tracking (`Test-Snapshot.ps1 -MemoryProfileStages stage1to4`,
+   dotMemory `-c`) to name the top allocators -- a forced-GC snapshot can't see
+   transient garbage.
+3. **Shrink the live floor** (the true wall GC flags can't move): the 3.23 GB
+   library dominates; on-the-fly decoys / compact library rep are the only lever.
+
+### Remaining
+- [x] Interpret the full Astral single-file crest-vs-floor + snapshot.
+- [ ] Correctness gate `regression.ps1 -Dataset Stellar` (running; env-gated
+      instrumentation, expected byte-identical -- OSPREY_LOG_MEMORY unset there).
+- [ ] Commit the tool.
+- [ ] Follow-up (separate TODO): GC-cap A/B on one Astral file to quantify the
+      green/orange drop vs throughput; allocation-tracking capture for the churn.
 
 ## Motivation
 

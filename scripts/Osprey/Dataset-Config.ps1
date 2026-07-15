@@ -144,6 +144,48 @@ function Get-OspreyScriptDir {
     return $script:Osprey_DatasetConfigDir
 }
 
+function Get-DotMemoryExe {
+    <#
+    Resolves the JetBrains dotMemory Console CLI (dotMemory.exe), or $null if
+    it is not installed.  Mirrors the search order in
+    ai/scripts/Skyline/Run-Tests.ps1: prefer the ~/.claude-tools/dotMemory
+    install (laid down by ai/scripts/Install-DotMemory.ps1), then the NuGet
+    global-packages cache.  Unlike dotCover / dotTrace, dotMemory is NOT a
+    .NET global tool, so it is not on PATH; the installer only lays it down on
+    Windows, so this returns $null off Windows.  Callers decide whether a
+    missing dotMemory is fatal -- use Get-DotMemoryInstallHint for the message.
+    #>
+    if (-not ($IsWindows -or $null -eq $IsWindows)) {
+        return $null
+    }
+    $claudeToolsRoot = Join-Path $env:USERPROFILE ".claude-tools\dotMemory"
+    if (Test-Path $claudeToolsRoot) {
+        $latest = Get-ChildItem $claudeToolsRoot -Directory |
+            Sort-Object Name -Descending | Select-Object -First 1
+        if ($latest) {
+            $cand = Join-Path $latest.FullName "tools\dotMemory.exe"
+            if (Test-Path $cand) { return $cand }
+        }
+    }
+    $nugetCache = Join-Path $env:USERPROFILE ".nuget\packages\jetbrains.dotmemory.console.windows-x64"
+    if (Test-Path $nugetCache) {
+        $latest = Get-ChildItem $nugetCache -Directory |
+            Sort-Object Name -Descending | Select-Object -First 1
+        if ($latest) {
+            $cand = Join-Path $latest.FullName "tools\dotMemory.exe"
+            if (Test-Path $cand) { return $cand }
+        }
+    }
+    return $null
+}
+
+function Get-DotMemoryInstallHint {
+    <#
+    One-line install hint printed when Get-DotMemoryExe returns $null.
+    #>
+    return "dotMemory.exe not found. Install: pwsh -File ./ai/scripts/Install-DotMemory.ps1"
+}
+
 function Get-DatasetConfig {
     param(
         [Parameter(Mandatory=$true, Position=0)]

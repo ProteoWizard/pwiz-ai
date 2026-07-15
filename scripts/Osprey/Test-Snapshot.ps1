@@ -328,27 +328,11 @@ if ($MemoryProfileStages.Count -gt 0) {
         Write-Host "[Test-Snapshot] -MemoryProfileStages currently wired for Windows only; ignoring." -ForegroundColor Yellow
         $MemoryProfileStages = @()
     } else {
-        # Mirror Run-Tests.ps1: prefer ~/.claude-tools/dotMemory then NuGet cache.
-        $claudeToolsRoot = Join-Path $env:USERPROFILE ".claude-tools\dotMemory"
-        if (Test-Path $claudeToolsRoot) {
-            $latest = Get-ChildItem $claudeToolsRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1
-            if ($latest) {
-                $cand = Join-Path $latest.FullName "tools\dotMemory.exe"
-                if (Test-Path $cand) { $dotMemoryExe = $cand }
-            }
-        }
+        # Resolve the dotMemory Console CLI via the shared helper in
+        # Dataset-Config.ps1 (same resolver Profile-Osprey.ps1 uses).
+        $dotMemoryExe = Get-DotMemoryExe
         if (-not $dotMemoryExe) {
-            $nugetCache = Join-Path $env:USERPROFILE ".nuget\packages\jetbrains.dotmemory.console.windows-x64"
-            if (Test-Path $nugetCache) {
-                $latest = Get-ChildItem $nugetCache -Directory | Sort-Object Name -Descending | Select-Object -First 1
-                if ($latest) {
-                    $cand = Join-Path $latest.FullName "tools\dotMemory.exe"
-                    if (Test-Path $cand) { $dotMemoryExe = $cand }
-                }
-            }
-        }
-        if (-not $dotMemoryExe) {
-            Write-Host "[Test-Snapshot] dotMemory.exe not found. Install: pwsh -File ./ai/scripts/Install-DotMemory.ps1" -ForegroundColor Red
+            Write-Host ("[Test-Snapshot] " + (Get-DotMemoryInstallHint)) -ForegroundColor Red
             exit 2
         }
         if (-not $MemoryProfileOutputDir) {

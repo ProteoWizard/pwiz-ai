@@ -1,10 +1,12 @@
 # TODO-osprey_diag_degenerate_calibration_labeling.md -- Model-diagnostics HTML mislabels a degenerate-but-successful calibration as "did not calibrate"
 
 ## Status
-**In review (created 2026-07-14).** Raised by Brendan while reviewing the first full
+**Completed (created 2026-07-14, merged 2026-07-14).** Shipped as
+[#4421](https://github.com/ProteoWizard/pwiz/pull/4421) (merged 2026-07-14 as `6e07141b`).
+Raised by Brendan while reviewing the first full
 82-file `--model-diagnostics` run on the SEA-AD Pilot-MTG Astral-DIA set. Pure
 presentation bug in the diagnostics HTML; no calibration-correctness issue.
-PR [#4421](https://github.com/ProteoWizard/pwiz/pull/4421) on branch
+Was: PR [#4421](https://github.com/ProteoWizard/pwiz/pull/4421) on branch
 `Skyline/work/20260714_osprey_diag_degenerate_calibration_labeling` (pwiz-work2).
 Verified by regenerating the 82-file run's HTML from the edited template: 0 red
 (no `calibrated===false`), the 2 degenerate files (`…0035…051`, `…0070…092`) render
@@ -130,3 +132,18 @@ independent so a future refactor can't re-merge them.)
 - Related: [[project_osprey_calibration_anchors_clean_sample_limited]] (anchor selection is
   clean / near-optimal -- consistent with these files' good fits despite the collapsed LDA),
   [[TODO-osprey_calibrator_selection_review]].
+
+## Progress Log
+
+### 2026-07-14 - Merged
+
+PR #4421 merged as commit `6e07141b`. Shipped the labeling fix (split the CAL verdict into
+`calNotCalibrated` red vs `calDegenerate` amber single-feature; Model tab shows the
+single-feature contribution table; Summary marks it with a compact amber warning glyph +
+hover; Reproducibility no longer reddens these files) plus two UX improvements found during
+Brendan's iterative review of the regenerated HTML: stronger chart gridlines for dark-mode
+readability, and Summary jump-link Back-button support + a click-vs-drag guard so text
+selection no longer navigates. All C# data already carried `Calibrated`/`Degenerate`
+separately, so the change was HTML-template-only. Verified by regenerating the 82-file run's
+HTML and a headless-Chrome self-test of the navigation. Copilot's tag-wording consistency
+nits addressed (all three visible tags now read "· single-feature model"). Nothing deferred.

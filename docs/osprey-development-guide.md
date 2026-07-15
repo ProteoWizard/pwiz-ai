@@ -1068,6 +1068,51 @@ time stays small (Astral ~15 min -> ~2 min with `-MaxWindows 2`).
 Rust equivalent: `cargo flamegraph` or `perf record / perf report`
 with `OSPREY_MAX_SCORING_WINDOWS` equally applicable.
 
+### Retention diagnosis via dotMemory (who holds it)
+
+The `[MEM ...]` printf layer answers *how much* is live; it cannot name
+*what* object is live or *who* is holding it. That is dotMemory's job.
+`ProfilerHooks.cs` also wraps `JetBrains.Profiler.Api.MemoryProfiler`:
+at each forced-GC memory boundary (`perfile-scored-live`,
+`stage5-start-live`, `first-pass-fdr-live`, `reconciliation-floor`,
+`reconciliation-resident`) it calls `MemoryProfiler.GetSnapshot(label)`
+**iff** a dotMemory session is attached AND `OSPREY_LOG_MEMORY` is set --
+a caught no-op otherwise, so ordinary and headless-batch runs are
+unaffected. Drive it via:
+
+```
+pwsh -File ai/scripts/Osprey/Profile-Osprey.ps1 -Dataset Astral -MemoryProfile
+```
+
+This forces `net8.0`, sets `OSPREY_LOG_MEMORY=1`, runs ONE file through
+Stage 1-4 scoring under `dotMemory start --use-api`, and writes a `.dmw`
+to `ai/.tmp`. It is a **scoped diagnosis run, not the batch** -- memory is
+stable file-to-file, so one file captures the whole per-file envelope;
+the full 82-file run stays the printf layer's job. Add `-MaxWindows N`
+for a fast smoke pass, or `-Stage Full` (single file, still) to also hit
+the Stage 5/6 join boundaries.
+
+**Reading it (human-in-the-loop; do NOT guess retention paths):** open
+the `.dmw`, pick the `perfile-scored-live` snapshot, and read Biggest
+Retained Types / Dominators, then retention paths on the top objects.
+The snapshot is a *post-GC live* figure, so pair it with the boundary's
+own pre-GC `[MEM ...]` `working_set`/`managed_heap` crest:
+
+- **big crest, small post-GC floor** -> the peak is GC heap-growth /
+  uncollected garbage + native, not retention. The lever is *allocate
+  less* or *cap the GC heap* (`DOTNET_GCHeapHardLimitPercent`, fewer
+  heaps -- see "the live set vs GC weather" above), not "hold less". For
+  what *allocates* that crest, use allocation tracking
+  (`Test-Snapshot.ps1 -MemoryProfileStages`, which drives dotMemory
+  `-c`), since a forced-GC snapshot cannot see transient garbage.
+- **crest ~= post-GC floor** -> the peak is genuinely live; the snapshot
+  names the retaining reference (the #4405 `FdrProjectionSet`-in-
+  `PipelineContext` class of bug). *Hold less.*
+
+The `perfile-scored-live` boundary also gives the single-file scoring
+path the forced-GC live probe the plateau previously lacked (the gap
+noted under "the live set vs GC weather").
+
 ## Validation before pushing to a PR
 
 **Cross-impl parity tests are not gated by CI on either side.** The
