@@ -63,6 +63,8 @@ Requested by Nick.
 - [x] Open PR: https://github.com/ProteoWizard/pwiz/pull/4426 (DRAFT; Copilot round addressed)
 - [x] Session 3: `.skyl` opens in place; `CheckDocumentExists` extracts silently; `DocumentStreams`
       closes streams opened for a document that is no longer current (see Session 3 below)
+- [ ] BLOCKER: `.wiff2` is broken by the Step 1 SQLite 1.0.119 upgrade (licensing gate on encrypted
+      databases) - see "BLOCKER (session 3)" below. Not fixed; not caused by the zip work.
 - [ ] NEXT: TeamCity green on the full suite, then `/pw-self-review 4426` (still not run)
 
 ## Session 2 additions (pushed)
@@ -164,6 +166,58 @@ needed for the leak.
 RISK: stream lifetime is now global to Skyline (`SetDocument` runs on every document change), and
 local testing covered only a slice of the functional suite. TeamCity's full run is the real check.
 
+### BLOCKER (session 3, NOT yet fixed): .wiff2 broken by the SQLite 1.0.119 upgrade
+
+TeamCity run 21566 on `8565c05bb` had TWO failure classes. Class 1 ("Streams left open", ~27
+tests) was mine and is fixed (see the MemoryDocumentContainer commit). Class 2 is this, and it is
+PRE-EXISTING on this branch from the Step 1 SQLite upgrade, independent of all the zip work:
+
+`Wiff2ResultsTest`, `TestInstrumentInfo`, `TestInstrumentSerialNumbers`, `FileTypeTest` fail with
+`[WiffFile2Impl::ctor()] Could not load file or assembly 'System.Data.SQLite.SEE.License,
+Version=1.0.119.0, Culture=neutral, PublicKeyToken=0a9a2a02614f8a52'`. Reproduces locally too.
+`.wiff` (v1) is fine - it is not SQLite. `.wiff2` IS a SQLite database, opened WITH A PASSWORD.
+
+ROOT CAUSE (established by decompiling, not guessed - dotPeek export at
+`C:\Users\nicksh\source\System.Data.SQLite`):
+- Managed `System.Data.SQLite` 1.0.119 contains a class `SQLiteExtra` - a "Harpy late-bound
+  licensing SDK" gate. `InnerVerify` does
+  `Assembly.Load("System.Data.SQLite.SEE.License, Version=1.0.119.0, ..., PublicKeyToken=0a9a2a02614f8a52")`
+  and throws `NotSupportedException` if it cannot verify; it looks for that assembly or an
+  `SDS-SEE.exml` certificate, and on failure will even `Process.Start` a purchase URL
+  (`https://urn.to/r/sds_see1`) when `Environment.UserInteractive`. Its header says its use "is
+  governed by a special license agreement".
+- `SQLiteExtra.Verify` is called from EXACTLY three places, all password/encryption entry points:
+  `SQLite3.SetPassword` (-> `sqlite3_key`), `SQLite3.ChangePassword` (-> `sqlite3_rekey`), and
+  `SQLite3.DecryptLegacyDatabase`. THAT is why every other SQLite path in this branch is fine:
+  `.blib`/`.protdb`/`.skyd` never set a password, so they never reach the gate. Clearcore2's wiff2
+  reader sets one, so it does.
+- So encrypted-db support is a PAID feature in modern System.Data.SQLite. 1.0.98 (SCIEX's copy) has
+  no `SEE.License` literal at all - no gate - which is why wiff2 worked before this branch.
+  1.0.118 HAS the same literals, so this is not a 1.0.119 regression; the gate predates it.
+  There is no supported bypass (`Override_SEE_Certificate`/`AlwaysVerifyLicense` still require a
+  valid certificate), and I did not go looking for an unsupported one.
+
+FIX DIRECTION (Nick): let wiff2 use the OLD dll and Skyline the NEW one, side by side.
+- `pwiz_tools/Skyline/app.config` has `<bindingRedirect oldVersion="0.0.0.0-1.0.119.0"
+  newVersion="1.0.119.0"/>` for `System.Data.SQLite` (ADDED BY THIS BRANCH in Step 1). Both
+  versions are strong-named with the SAME token (db937bc2d44ff139) and differ only by version, so
+  the CLR WOULD load them side by side - the redirect is exactly what prevents it, forcing
+  Clearcore2 (compiled against 1.0.98) onto the gated 1.0.119.
+- `vendor_api/ABI/{x64,x86}/SQLite_v1.0.98/System.Data.SQLite.dll` is SCIEX's own 1.0.98 copy. The
+  TODO previously called it "dormant ... a deletion candidate" - WRONG, it is precisely what a
+  side-by-side load needs. Do not delete it. Its Jamfile refs are commented out.
+- CAVEAT before touching this: the managed/native pairing rule. There is ONE `SQLite.Interop.dll`
+  in the output folder (now 1.0.119). 1.0.98-managed + 1.0.119-interop is exactly the mismatch that
+  crashes, so the split probably needs the vendor's interop kept private to the vendor path too,
+  not just the redirect narrowed. Unverified.
+- WORTH READING: https://github.com/ProteoWizard/pwiz/pull/4178 (Port ProteoWizard core to .NET 8)
+  hit the same wall and solved it by loading `.wiff2` via `SCIEX.Apis.Data.v1` in a SIDE-BY-SIDE
+  `AssemblyLoadContext`. ALC is .NET Core+ only so we cannot use it on 4.7.2, but the PR should
+  show why isolation was needed and whether they also had to pair a private interop with it.
+
+NOTE the TODO's earlier "VERIFIED: Nick confirmed .wiff reading still works with the 1.0.119
+interop" was a real check that simply did not cover .wiff2.
+
 FUTURE (Nick's design, not the "for now" criterion): make `OpenSharedFile` start reading the `.sky`
 straight from the zip, and as soon as `DocumentReader.ReadXml` gets past the `settings_summary`
 element, decide whether it can read everything it needs directly from the zip or must extract.
@@ -214,7 +268,9 @@ port - API stable 1.0.98 -> 1.0.119, zero source changes. Committed as `49fe0d25
 - Skipped (Nick): legacy Bumbershoot tools (IDPicker/ScanRanker/BumberDash) - their DLLs are
   not present in the checkout, 30+ version jump, separate products.
 - Left dormant: `vendor_api/ABI/{x64,x86}/SQLite_v1.0.98/System.Data.SQLite.dll` (tracked but
-  unused; the Jamfile refs to it are commented out) - a deletion candidate, not bumped.
+  unused; the Jamfile refs to it are commented out). DO NOT DELETE - this was called a deletion
+  candidate, but it is SCIEX's own ungated 1.0.98 and is what .wiff2 needs to bind to. See the
+  .wiff2 BLOCKER section.
 - `libraries/SQLite/update3rdPartyDLLs.bat` (the old IL version-mangle script) is now obsolete;
   left in place (deleting it was not explicitly requested).
 
