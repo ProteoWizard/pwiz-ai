@@ -1,6 +1,8 @@
 # TODO: Osprey per-file MS2 spectra streaming by isolation window
 
-**Status**: Backlog
+**Status**: In Progress
+**Branch**: `Skyline/work/20260715_osprey_perfile_spectra_window_streaming`
+**Base**: `master` (follow-on to #4424, merged)
 **Priority**: High (the single largest remaining per-file memory lever; ~6.3 GB of
 resident MS2 spectra held in BOTH the calibration and scoring peaks)
 **Complexity**: Large (streaming refactor of a parity-locked scoring path + a new
