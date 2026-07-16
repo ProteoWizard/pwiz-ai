@@ -166,3 +166,97 @@ ONCE sequentially (23.5s) into a resident list, then computes in-RAM -> 104s col
 memory by isolation window. This is STEP 2 -- NOT a bare end-index. Re-base onto #4427 next, then
 design the grouped writer + grouped-read path in `BuildFromCache`/`LoadWindow`, byte-identical
 output to the v3 walk.
+
+### 2026-07-16 (STRATEGY: grouping folded INTO #4427 as a merge blocker; v4 implemented)
+**Brendan's call:** the ~7 GB memory win of #4427 is NOT shippable with the ~2.9x cold regression
+(cold is the default in HPC / first-pass runs). So the blocked-spectra fix becomes a **merge
+blocker for #4427**, folded into that PR -- not a stacked follow-up. Retired the empty
+`20260716_...v4` branch; the work now lives on the **#4427 branch**
+(`Skyline/work/20260715_osprey_perfile_spectra_window_streaming`) in `C:\proj\pwiz`. The
+`pwiz-4427` worktree stays pinned at `88dc80f5f` as the **pre-grouping baseline** for the cold A/B.
+This TODO is the design/measurement record for that #4427 change (see also its own TODO).
+
+**v4 format implemented** (`Osprey.IO/SpectraCache.cs`, `SpectraWindowIndex.cs`, `IOTest.cs`):
+layout `[header][MS2 grouped-by-window][MS1][index: per-record {offset,iso*,rt} in ACQ order]
+[footer: ms1_offset,index_offset]`. VERSION 3->4 (invalidates v3). `BuildFromCache` reads the
+index (no walk); `LoadWindow` reads each window as one contiguous sequential run. `LoadSpectraCache`
+(Stage-6 full loader) reads the grouped body in ascending-offset order (one forward pass) and
+returns MS2 in **acquisition order** via the index -- so Stage-6 stays a resident load, NO Stage-6
+streaming required to merge. Decisions locked: invalidate v3; grouped-but-acq-ordered LoadSpectraCache;
+cross-impl shares no cache (output parity intact, Rust retiring).
+
+**Gates so far:** unit tests GREEN (511 total, 508 passed, 3 cross-impl skipped, 0 failed) --
+includes a new acquisition-order assertion (proves LoadSpectraCache reorders grouped->file order on
+interleaved input) and a v3-rejection test. `TestNoUnstableSort` initially failed on an `Array.Sort`
+in `BuildOffsetReadOrder` -> switched to stable `OrderBy` (offsets unique, no ties). Inspection: my
+files clean; only `SystemMemory.cs` reddens (known local flake #4379, CI-green).
+
+**Gates:** unit tests GREEN. **regression.ps1 -Dataset Stellar PASS all 3 modes** (mode1 vs golden,
+mode3 HPC chain==straight, mode2 resume==straight) -> v4 grouped output byte-identical to golden,
+incl. the cache write/re-read handoff across HPC tasks. Left a Release build in place.
+**Remaining:** regression.ps1 -Dataset All (Astral) before merge; cold A/B on Astral file 49
+(grouped vs `pwiz-4427` baseline 300.3s) to prove ~300s->~110s cold with memory held; Stage-6
+rescore perf (offset-order full load must not regress).
+
+**Index design note (Brendan asked):** the EOF index is PER-RECORD `{offset,iso*,rt}` (acq order),
+not a per-block `{offset,size}` directory. The per-record rt/iso are needed to rebuild AllMs2Rts +
+first-cycle windows without reading bodies (what the old walk read). The cold win comes from the
+physical GROUPING (LoadWindow's contiguous per-window reads are sequential), independent of
+per-record vs per-block indexing. A per-block directory (one ReadBytes(block) per window, leaner
+~2.4 MB index) is an optional warm/overhead follow-up.
+**DECIDED (Brendan): keep the per-record index + bump the read buffer** (option 1); the single
+block-read isn't necessary. Applied a **1 MB explicit `FileStream` buffer** to all four cache
+streams (was the 4 KB default) -- a ~31 KB peak blob << buffer, so prefix+peaks stream from one
+refill and the 8 MB index reads in ~8. Skip the per-block directory.
+
+### 2026-07-16 (COLD A/B RESULT -- fix validated, better than the original)
+Grouped v4 (Release, 1 MB buffers), Astral file 49, cold (42 GB balloon evict), v4 cache hit:
+
+| slice (all-files, COLD) | master resident | #4427 v3 streaming | grouped v4 |
+|-------------------------|-----------------|--------------------|------------|
+| load (mzML parsing)     | 23.5s           | 27.7s              | **0.1s**   |
+| calibration pass-1      | 7.4s            | **206.8s**         | 11.6s      |
+| coelution               | 44.0s           | 41.0s              | 45.7s      |
+| **total all-files**     | 103.8s          | **300.3s**         | **85.4s**  |
+| peak working set        | 25.9 GB         | 18.8 GB            | **17.4 GB**|
+
+The 207s scattered-read thrash is gone (->11.6s; windows stream contiguously). Boundary build
+0.1s (8 MB index, one read). Grouped v4 cold is **3.5x faster than the #4427 regression** AND
+**~18% faster than master's resident load** (no 23.5s upfront full-decode stall -- the file is read
+lazily during calibration/scoring), **while keeping the ~8 GB memory win** (17.4 vs 25.9 GB). So
+#4427+grouping beats master on both cold speed and memory.
+
+**Remaining:** warm grouped confirm (no warm regression vs #4427 75.4s); Stage-6 rescore perf;
+regression.ps1 -Dataset All (Astral); then commit + push to #4427.
+
+### 2026-07-16 (WARM regression found + FIXED -> buffer reverted to default; FINAL numbers)
+The 1 MB buffer decision above was WRONG. Warm grouped came in ~85s vs #4427's ~76s -- a ~9s
+regression, all in coelution (47.8 vs 41.9s, 35.6K vs 40.6K cand/s), reproduced same-session
+(re-measured #4427 warm = 77.3s, matching its 75.4s). Ruled out machine drift (compute-only RT
+calibration flat) and LOH/GC (64 KB buffer -- off-LOH -- did NOT help).
+
+**Root cause:** a buffer LARGER than the ~31 KB peak blob is counterproductive. At the DEFAULT 4 KB,
+`ReadBytes(peaks)` is >buffer so it reads DIRECT into the array (single copy). A 64 KB/1 MB buffer
+pulls all ~6 GB of peaks THROUGH the buffer (double copy). Cold hid it (disk-bound), warm exposed it.
+**Reverted all four FileStreams to the default buffer.** Documented in-code (SpectraCache.cs NOTE +
+a pointer at LoadWindow) with the numbers so nobody re-tries a bigger buffer. The single block-read
+(Brendan's "ensure sequential reads" idea) is NOT needed -- default-buffer direct reads already do a
+single copy; grouping already gives sequential.
+
+**FINAL numbers (grouped v4, DEFAULT buffer -- all one build), Astral file 49:**
+
+| slice (all-files)   | master resident | #4427 v3 | grouped v4 COLD | grouped v4 WARM |
+|---------------------|-----------------|----------|-----------------|-----------------|
+| load (mzML parsing) | 23.5 / 3.0      | 27.7/0.5 | 0.2s            | 0.0s            |
+| calibration pass-1  | 7.4             | 206.8    | 11.5s           | 8.9s            |
+| coelution           | 44.0 / 41.0     | 41.0/41.9| 43.1s           | 42.4s           |
+| **total all-files** | 103.8 / 79.0    | 300.3/75.4| **79.0s**      | **76.6s**       |
+| peak working set    | 25.9 GB         | 18.8 GB  | 17.4 GB         | 17.4 GB         |
+
+Default buffer beat the 1 MB buffer on BOTH axes (cold 85.4->79.0, warm 84.7->76.6). **Grouped v4
+final: COLD 79.0s (3.8x vs #4427's 300.3s; ~24% faster than master's resident 103.8s -- cold now
+≈ master's WARM), WARM 76.6s (matches #4427, no regression), peak 17.4 GB.** Wins on every axis.
+Unit tests 508/508 green on the final build.
+
+**Remaining before merge:** Stage-6 rescore perf (offset-order full load vs v3); regression.ps1
+-Dataset All (Astral byte-identity); commit + push to #4427.
