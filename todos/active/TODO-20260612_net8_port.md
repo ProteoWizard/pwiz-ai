@@ -70,6 +70,79 @@ Template csproj (drop the legacy 600-line XML, replace with ~40 lines):
 4. **NHibernate** — versions ≥5.5 support net6+. Multi-target by package version
    if legacy needed.
 
+## Status (2026-07-15, session: DIA-Umpire FullFileset root-cause + rewirings + cache-reuse fix + engine experiment)
+
+Resumed via `/pw-continue` from the 2026-07-14 DIA-Umpire recording handoff. Committed the held verified
+batch first; then the FullFileset recording turned into a deep root-cause investigation.
+
+**Committed + pushed (6 focused commits `97c34ee245..b9667e0769`, origin + `chambem2/pwiz-sharp`; reverted
+`IsRecordMode=>false` first, built clean):** O(N^2)->binary-search clustering (`97c34ee245`), ilr progress
+(`b8262875dd`), mz5->mzMLb+thread (`6da29cdbd0`), DIA-Umpire tutorial re-baseline + download-dialog +
+per-instrument exemplar (`efa565bd4a`), EncyclopeDIA `#if` re-baseline (`993b3d9843`), Hardklor MSBuild
+(`b9667e0769`). Only 2 of 4 DIA-Umpire tutorials recorded (TTOF + QE Extra); the 2 FullFileset variants were
+still unrecorded (always timed out) -- root-caused below.
+
+**ROOT CAUSE of the DIA-Umpire FullFileset 17%-gate timeout -- FIXED (uncommitted, CONFIRMED).** FullFileset
+always timed out at `DiaUmpireTutorialTest.cs:601` (PercentComplete>17, ~24min). Instrumentation (external CPU
+monitor + `dotnet-stack` of TestRunner during the stall) proved it was NOT the converter (each file converts
+~3-5min); the killer was a ~13.5-min STALL BETWEEN files with TestRunner pegging one core in
+`ProcessStreamReader.ReadLine`. Root cause: `pwiz_tools/Shared/CommonUtil/SystemUtil/ProcessStreamReader.cs`
+buffered child output in a `List<string>` and the consumer pulled with `RemoveAt(0)` = O(N) -> O(N^2) draining
+msconvert's verbose progress. **Fix: `List` -> `Queue` (Dequeue O(1)).** VERIFIED: all 6 files convert
+back-to-back (~26min), the run passes the 17%-gate and reaches ValidateTargets. Genuine shared-CommonUtil bug,
+both frameworks. (The `--verboseProgressPeriod` refactor below was from a DISPROVEN "progress flood" hypothesis
+-- it does NOT fix the stall; the Queue fix does.)
+
+**FullFileset DRIFT (finally measured, verify mode):** TTOF FullFileset library **33,997 (Jun-30 baseline) ->
+16,447 (net8 OOP-MSAmanda) = ~52% drop** (`DiaUmpireTutorialTest.cs:634` LibraryPeptideCount). Whole-proteome
+analog of the regular tutorial's ~25% drop; legitimate OOP-MSAmanda conservatism, amplified by the full
+proteome. NOT recorded yet (verify-mode only; needs `IsRecordMode` + a full completing run).
+
+**DIA-Umpire re-converts EVERY run (cache reuse broken) -- FIXED + VERIFIED (uncommitted).** The reuse check
+(`DiaUmpireDdaConverter.cs:125`) rejected every cached `-diaumpire.mzML` -> ~25min reconvert each run. Diagnosed
+with a temporary `### REUSE-CHECK` log: mismatch on `BoostComplementaryIon` (embedded `True` vs config `False`).
+Root cause: the net8 msconvert-sharp `GetParameterMap()` (`pwiz-sharp/pwiz/src/Analysis/DiaUmpire/InstrumentParameter.cs:144`)
+emitted only 23 of ~61 config params, omitting `BoostComplementaryIon` (+18); `GetConfigFromDiaUmpireOutput`
+then read back the field DEFAULT (`true`) which never matched Skyline's explicit `false`. The engine RUNS
+`false` correctly (`ParseBool` works -- NO result impact); only the mzML EMBED was incomplete. **Fix: added the
+19 InstrumentParameter-backed params to `GetParameterMap`.** Verified standalone: output now embeds
+`BoostComplementaryIon value="False"` (48 config userParams, was ~23). One-time reconvert after the fix ships
+(old cache lacks the params), then reuse works.
+
+**3 narrow rewirings applied + compile-verified (uncommitted; runtime verification deferred -- external deps):**
+Koina RT (`Skyline.cs:GetScore`, removed stale `#if NET472` -> real `KoinaRetentionTimeModel.PredictSingle`);
+Bruker timsTOF PRM metrics (`ExportMethodDlg.cs:ShowSchedulingGraph` un-gated -> managed
+`Pwiz.Vendor.Bruker.PrmScheduling`, already referenced net8; needs a `.prmsqlite` template to verify); UNIFI
+reader (`Reader_UNIFI` registered in `MsDataFileImpl.Vendors.cs` + `UNIFI.csproj` ProjectReference in
+`ProteowizardWrapper.csproj`; needs WatersConnect creds to verify).
+
+**`--verboseProgressPeriod` refactor (uncommitted, kept per Matt):** msconvert verbose progress iteration-period
+is now a config option (default 100); Skyline sets 2500 (`DiaUmpireDdaConverter`, `#if !NET472`). Cuts search-log
+spam 58k->2.3k lines but does NOT fix the stall. `Config.cs`/`Converter.cs`/`ArgParser.cs`/`ArgParserTests.cs`.
+
+**Engine-comparison experiment (Matt: "what counts do MSFragger/Comet give?" -- TEMPORARY test edits, REVERT):**
+MSFragger CRASHES on the pseudo-spectra (`ArrayIndexOutOfBoundsException` in `edu.umich.andykong.msfragger`) -- no
+count. Comet runs but its **library is NOT FDR-filtered**: Percolator ran correctly (`testFDR 0.05` -> 87,264
+target PSMs at q<=0.05 of 305,301 total, incl 64,920 at q>0.5), but the library got **161,235 peptides = unique
+peptides of the ENTIRE unfiltered 305k-PSM set** -> garbage, NOT comparable to MSAmanda's FDR-correct 16,447.
+The Comet->Percolator->library path drops the q<=0.05 cutoff (MSAmanda's path filters correctly); also ~8x
+slower (68min vs 9min) building the bloated library. Cannot fairly compare Comet vs MSAmanda from this run; the
+Comet library-FDR gap needs its own investigation (net8-specific? Comet-path bug? artifact of forcing Comet
+through the MSAmanda-designed DIA-Umpire flow?).
+
+**Uncommitted file inventory (12 files):**
+- KEEPERS (verified / compile-clean product fixes): `ProcessStreamReader.cs` (Queue), `InstrumentParameter.cs`
+  (GetParameterMap), `Skyline.cs` (Koina), `ExportMethodDlg.cs` (Bruker), `MsDataFileImpl.Vendors.cs` +
+  `ProteowizardWrapper.csproj` (UNIFI).
+- REFACTOR (keep per Matt): `Config.cs`, `Converter.cs`, `ArgParser.cs`, `ArgParserTests.cs`.
+- MIXED -- `DiaUmpireDdaConverter.cs`: KEEP the `--verboseProgressPeriod 2500` arg; REVERT the `### REUSE-CHECK`
+  `Console.WriteLine` diagnostic.
+- REVERT ENTIRELY -- `DiaUmpireTutorialTest.cs`: all MSFragger/Comet experiment scaffolding (engine switch,
+  deletion-block change, commented CutoffLabel asserts, download-dialog loop, LibraryPeptideCount print).
+
+**Next session handoff**: For detailed startup protocol (revert scaffolding, split `DiaUmpireDdaConverter`,
+commit plan, verification steps), read `ai/.tmp/handoff-20260715_net8_diaumpire_rootcause.md` before starting.
+
 ## Status (2026-07-14, session: DIA-Umpire net8 fixes + Sciex commit + Hardklor MSBuild)
 
 Continued from the TestPerf-triage tail. HEAD started at `f320b4297a`.
