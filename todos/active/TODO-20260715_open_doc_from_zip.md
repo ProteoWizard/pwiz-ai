@@ -20,21 +20,23 @@ Requested by Nick.
 
 - [x] Feasibility proven end to end (SQLite can read a `.blib` from a byte-range in the zip)
 - [x] Step 1: System.Data.SQLite upgraded to 1.0.119 tree-wide (committed: 49fe0d25b)
-- [x] Step 2: `RandomAccessZipFile` + `ByteRangeStream` foundation (uncommitted; unit-tested)
+- [x] Step 2: `RandomAccessZipFile` + `ByteRangeStream` foundation (committed; unit-tested)
 - [x] Step 3: `.blib`-VFS mechanism decided by a bake-off (loadable extension wins)
 - [x] `FilePath` (Skyline/Util) - the zip-aware path type (Nick's chosen design; see below)
 - [x] Step 4: `.skyd` in-place read - `PooledZipEntryStream` + the `FilePath` wiring done;
       VERIFIED reading a real 28 MB stored `.skyd` in place from a `.sky.zip`
-- [x] Safety gate: `CheckDocumentExists` prompts to extract when the doc is `.zip`-backed
+- [x] Safety gate: `CheckDocumentExists` extracts (no prompt) when the doc is `.zip`-backed
 - [x] Step 7: write side (Share stores `.blib`/`.skyd` uncompressed)
-- [x] VFS extension `libraries/SQLite/zipvfs_ext.c` committed + Jamfile `lib zipvfs_ext` rule
+- [x] VFS extension `libraries/SQLite/slicevfs.c` committed + Jamfile `lib slicevfs` rule
       (verified working); open-in-place criterion `ContainsOnlyEntriesWithSuffixes` +
-      `DocumentZipSuffixes` (tested)
+      `OpenInPlaceExtensions` (tested). NAMING: the extension knows nothing about zips - it exposes
+      a byte range of any file - hence `slicevfs` (was `zipvfs_ext`/`skyzipvfs`; the bake-off
+      narrative below still uses the old names).
 - [x] Step 5: `.blib` in-place read - DONE + VERIFIED (read 29 RefSpectra from a real .blib stored
-      inside a .sky.zip). `ZipVfs` pins+loads `zipvfs_ext.dll` and opens the .blib at its byte range
-      (`FullUri ... ?ofs=&len=&vfs=skyzipvfs`); `PooledSqliteConnection.Connect` routes zip .blib
-      paths through it. `zipvfs_ext.dll` is now built from source by bjam (the `install-zipvfs-ext`
-      rule in the Skyline Jamfile builds the `libraries/SQLite//zipvfs_ext` shared lib and installs
+      inside a .sky.zip). `SqliteSliceVfs` pins+loads `slicevfs.dll` and opens the .blib at its byte
+      range (`FullUri ... ?ofs=&len=&vfs=slicevfs`); `PooledSqliteConnection.Connect` routes zip
+      .blib paths through it. `slicevfs.dll` is built from source by bjam (the `install-slicevfs`
+      rule in the Skyline Jamfile builds the `libraries/SQLite//slicevfs` shared lib and installs
       it next to `SQLite.Interop.dll` in `ProteowizardWrapper/obj/$(PLATFORM)`); Skyline.csproj
       copies it from there as Content. No prebuilt binary is committed anymore.
 
@@ -58,13 +60,16 @@ Requested by Nick.
 - [x] Jamfile deployment wiring for `zipvfs_ext.dll` (built from source, installed to obj; no
       committed binary). Verified: `quickbuild ... pwiz_tools/Skyline//install-zipvfs-ext` builds the
       DLL into `ProteowizardWrapper/obj/x64`, MSBuild copies it to output, functional test passes.
-- [x] Open PR: https://github.com/ProteoWizard/pwiz/pull/4426 (next: /pw-self-review, then TeamCity green)
+- [x] Open PR: https://github.com/ProteoWizard/pwiz/pull/4426 (DRAFT; Copilot round addressed)
+- [x] Session 3: `.skyl` opens in place; `CheckDocumentExists` extracts silently; `DocumentStreams`
+      closes streams opened for a document that is no longer current (see Session 3 below)
+- [ ] NEXT: TeamCity green on the full suite, then `/pw-self-review 4426` (still not run)
 
-## Session 2 additions (committed locally, NOT yet pushed to the PR branch)
+## Session 2 additions (pushed)
 
 - [x] Share progress says "Storing {0}" for entries stored uncompressed vs "Compressing {0}" for
       the rest (`SrmDocumentSharing_SaveProgress`, keyed off `e.CurrentEntry.CompressionMethod`).
-- [x] Split `DocumentZipSuffixes` into `SequentialAccessExtensions` (`.sky`/`.sky.view`/`.sky.log` -
+- [x] Split `DocumentZipSuffixes` into `SequentialAccessExtensions` (`.sky`/`.sky.view`/`.skyl` -
       read sequentially, may be compressed) vs `RandomAccessExtensions` (stored). `OpenInPlaceExtensions`
       is the union; a `.zip` opens in place when every entry is in it.
 - [x] Moved `FilePath` + `RandomAccessZipFile`/`ByteRangeStream` to `pwiz.Common.Database.FileSystems`,
@@ -79,6 +84,85 @@ Requested by Nick.
       would hit `ProteomeDb`'s upgrade branch and attempt a write on the read-only slicevfs connection
       (fails). Rare for a freshly-shared, current proteome. True extract-fallback not yet wired.
 - [ ] `.elib` (EncyclopeDIA) intentionally still extracts - it always needs a sibling `.elibc`.
+
+## Session 3 additions (pushed: 676f788d6, 8565c05bb)
+
+### `.skyl` in place, and the fallout (commit 676f788d6)
+
+- [x] `.skyl` added to `SequentialAccessExtensions` (Nick's correction - there is no `.sky.log`).
+      Audit log read in place (`AuditLogEntry.ReadFromFile` via `FilePath.OpenRead` +
+      `XmlTextReader(stream)`; `SrmDocument.ReadAuditLog` via `FilePath.Exists`).
+- [x] `.sky.view` read in place (`SkylineGraphs` layout load) - without this the audit log form did
+      not restore, which is how `DirtyDocumentSharingTest` failed.
+- [x] `CheckResults` no longer tries to `FileEx.SafeDelete` a `.skyd` inside the zip (guarded with
+      `IsInZipFile`) - it threw `DirectoryNotFoundException` into a swallowing catch.
+- [x] `CheckDocumentExists` extracts without prompting (see the reworked safety-gate section above).
+- [x] `AssertEx.FileExists`/`FileNotExists` go through `FilePath`, so they find in-zip files.
+- [x] `Kernel32.LoadLibrary` moved into `pwiz.Common.SystemUtil.PInvoke` - `SqliteSliceVfs` had a
+      raw `[DllImport]`, which `CodeInspection` prohibits (it would have failed CI). NOTE:
+      `CodeInspectionTest` declares an EXPECTED `[DllImport]` COUNT per class (`Kernel32` 8 -> 9);
+      adding a P/Invoke means bumping it.
+
+Test fallout, all from in-place becoming the common path. Only ONE was the extract prompt; the rest
+were tests reaching around Skyline's file abstraction to check things on disk themselves:
+- `DirtyDocumentSharingTest`, `LibraryBuildShareTest` - pass with NO test change.
+- `ChangeDocumentGuidTest` - `File.Copy` on an in-zip `DocumentFilePath`; added a `FilePath`-based
+  `CopyFile` helper (it builds a "frankendoc" folder, so it genuinely needs real files).
+- `LegacyIgnoreSimTest` (`XmlDocument.Load`), `LegacyOptimizationStepTest` (`File.OpenRead` on the
+  `.skyd`) - one-line `FilePath.OpenRead` swaps.
+- `InternationalFilenamesTest` - now uses `AssertEx.FileExists` and asserts the in-zip paths.
+- `JsonToolServerTest` line ~1884 asserts `DocumentFilePath.EndsWith(".sky")` to prove extraction;
+  an in-zip path ALSO ends in `.sky`, so it still passes but tests nothing. NOT yet fixed.
+
+### Stream lifetime: DocumentStreams (commit 8565c05bb)
+
+`TestInternationalFilenames` leaked one `PooledFileStream` on the PREVIOUS document's on-disk
+`.skyd`, at a different loop iteration each run (also seen as a GC-LEAK: an open stream roots the
+document, which roots `SkylineWindow`). Controlled experiment: forcing `CanOpenInPlace` to return
+false gave 3/3 passes; with in-place on it failed on iteration 1. PRE-EXISTING race - opening in
+place is just fast enough to win it, where extracting was slow enough to lose.
+
+Root cause: `ChromatogramCache.Load` MANUFACTURES a `PooledFileStream` while building a new
+`MeasuredResults`, i.e. the stream exists before any document holds it. If the container swaps
+documents before that document lands, nothing can close it - `BackgroundLoader.OnDocumentChanged`
+already ran `CloseRemovedStreams`, and `CloseStream()` on a not-yet-connected stream is a no-op.
+
+Fix = Nick's abandoned branch `Skyline/work/20260203_DocumentStreams`, revived:
+- `Util/DocumentStreams.cs` - an `IDisposable` scope that closes the streams the container's current
+  document does not have. `AddStream`/`AddStreams` track streams that no document holds YET, which
+  is the part a document snapshot alone cannot cover (two of my attempts failed on exactly this).
+- `SrmDocument.GetOpenStreams()` (libraries + `MeasuredResults`) REPLACES the per-loader
+  `GetOpenStreams`/`CloseRemovedStreams`, deleted from `BackgroundLoader` + all 8 managers (6 were
+  empty stubs). That split ownership WAS the bug: a `LibraryManager` load calls `ChangeSettings`,
+  which reads chromatograms, so the stream is opened by one loader and owned by another and no
+  single loader's `CloseRemovedStreams` could ever close it.
+- Scopes: `SkylineWindow.SetDocument` (REQUIRED - it is what replaces the per-change closing; the
+  `OnLoadBackground` scope only runs when a load thread starts, so an `IsLoaded` swap would close
+  nothing), `BackgroundLoader.OnLoadBackground`, `LibraryManager.CallWithSettingsChangeMonitor`,
+  and `ChromatogramManager` (the `AddStreams(results)` one that actually fixes the leak).
+- `ConnectionPool.RecordEvent` takes an `Identity` (history keyed by `ReferenceValue<Identity>`, not
+  `int`) - readable traces with real filenames.
+- Two debugging switches, BOTH OFF (Nick: no noise even under Debug): private static
+  `AllDocumentStreams` (null; set it to a `ConcurrentDictionary` to make `EnsureTracked` report
+  streams nothing will close) and `DocumentStreams.DumpStreamsRegex` (null; set it to e.g.
+  `new Regex(@"\.skyd")` to log a stream's pool events, then diff a leaking run vs a clean one).
+  Unfiltered `EnsureTracked` fired 35x over 3 passing tests, mostly `PooledSqliteConnection` paths
+  that have no scope yet - that noise is the to-do list if this is ever picked up again.
+
+Result: `TestInternationalFilenames` 8/8 (was failing on iteration 1 every run).
+
+NOT taken from the branch (orthogonal): its `BiblioSpecLite` hunk (swaps a stream-closing loop for a
+scope; needs the `DocumentStreams(IEnumerable<IPooledStream>)` ctor, which I dropped) and its
+`GraphSpectrum` rendering scope.
+
+WHY the branch was abandoned (my read): the scope model needs a `DocumentStreams` at EVERY site that
+manufactures a stream, and the set is open-ended - hence its `#if DEBUG` `EnsureTracked` tripwire
+hunting for uncovered sites, and scopes spreading into `GraphSpectrum`/`BiblioSpecLite`/
+`ChromatogramCache`/`LongWaitDlg`/`SkylineFiles`/`Skyline.cs`. This session took only the scopes
+needed for the leak.
+
+RISK: stream lifetime is now global to Skyline (`SetDocument` runs on every document change), and
+local testing covered only a slice of the functional suite. TeamCity's full run is the real check.
 
 FUTURE (Nick's design, not the "for now" criterion): make `OpenSharedFile` start reading the `.sky`
 straight from the zip, and as soon as `DocumentReader.ReadXml` gets past the `settings_summary`
@@ -342,17 +426,26 @@ a real file. All of these must be made zip-aware (thread a zip-backed cache sour
 This is the large, careful core-results-loading refactor; it can only be exercised once Step 6
 provides the zip context, so it and Step 6 should land together.
 
-### Safety gate (DONE): CheckDocumentExists extraction prompt
+### Safety gate (DONE, reworked in session 3): CheckDocumentExists extracts silently
 
 `SkylineWindow.SharedZipFilePath` (in SkylineFiles.cs) holds the `.zip` path when the document was
-opened in place; null otherwise. `OpenFile` clears it (any on-disk open). `CheckDocumentExists`,
-called before disk-modifying operations, now: if `SharedZipFilePath != null`, shows a prompt
-("This document was opened directly from '{0}'. ... extract them now?") and on OK extracts to a new
-folder and reopens via `ExtractAndOpenSharedFile`, returning false so the user re-initiates the
-operation on the now-on-disk document. Two new `SkylineResources` strings added. `OpenSharedFile`
-was refactored to call a reusable `ExtractAndOpenSharedFile` (pure refactor, no behavior change).
-Note: the state is only *set* once Step 6 (open-in-place) lands, so the gate is currently inert but
-wired and building. Also consider gating `SaveDocument`/autosave the same way.
+opened in place; null otherwise. `OpenFile` clears it (any on-disk open). `CheckDocumentExists` is
+called before disk-modifying operations (`SaveDocument`, Import Results, and the peptide-search
+dialogs - the only six call sites). If `SharedZipFilePath != null` it now extracts WITHOUT prompting
+and re-points the open document at the extracted files, so tests and users need do nothing. The two
+prompt strings were deleted from `SkylineResources`.
+
+Nick's design (session 3), and both parts matter:
+- `ExtractAndOpenSharedFile` was split: `ExtractSharedFile` just extracts and returns the document
+  path, and callers do the `OpenFile`. `CheckDocumentExists` does NOT re-open - it sets
+  `DocumentFilePath` to the extracted path, clears `SharedZipFilePath`, calls `SetActiveFile`
+  (which puts the extracted path at the top of the MRU) and removes the in-zip path from the MRU.
+- Keeping the in-memory document instead of re-opening fixes TWO bugs the old prompt path had:
+  (1) DATA LOSS - re-opening replaced the document, silently discarding unsaved edits (proven by
+  `ChangeDocumentGuidTest`, which pastes ELVISK then saves); and (2) a DEADLOCK - `OpenFile` calls
+  `ReadAuditLog(..., AskForLogEntry)`, which shows a modal `AlertDlg` from a background worker via
+  `Invoke` while the UI thread sits inside the test's `RunUI`. That hung `TestChangeDocumentGuid`
+  with no output at all.
 
 ### Step 5: `.blib` in-place read
 
@@ -379,13 +472,13 @@ wired and building. Also consider gating `SaveDocument`/autosave the same way.
 - `SrmDocumentSharing.ZipFileShare.AddFile` sets `CompressionMethod.None` for
   `RandomAccessExtensions` (`.skyd`/`.blib`, incl. redundant `.blib`); other entries stay Deflate.
 
-### KNOWN LIMITATION: audit log (`.skyl`) blocks in-place open
+### Audit log (`.skyl`) - RESOLVED in session 3
 
-- `DocumentZipSuffixes` does NOT include `.skyl`, so a complete share of a document that has audit
-  logging ENABLED (`ShouldShareAuditLog` -> `DataSettings.AuditLogging`) contains a `.skyl` entry
-  and `CanOpenInPlace` returns false -> it extracts. This matches Nick's original 5-extension
-  criterion "for now". To make in-place work for audit-logged documents, add `.skyl` to
-  `DocumentZipSuffixes` and confirm the audit log loads correctly from a `FilePath` inside the zip.
+- `.skyl` is in `SequentialAccessExtensions`, so a share of an audit-logged document opens in place.
+  `AuditLogList.ReadFromFile` reads the `.skyl` through `new FilePath(fileName).OpenRead()` and
+  `SrmDocument.ReadAuditLog` tests existence through `FilePath`.
+- NOTE the consequence: audit logging is on by default, so in-place is now the COMMON path for
+  shared documents rather than a rare one. That is what turned up the fallout in session 3 below.
 
 ## Tests
 
@@ -394,9 +487,16 @@ wired and building. Also consider gating `SaveDocument`/autosave the same way.
 - Done (functional): `OpenDocFromZipTest` - shares `LibraryShareTest` as a stored `.sky.zip`, opens
   it in place, asserts `SharedZipFilePath`/in-zip path, and that peptide/transition counts, library
   spectrum count (`.blib`), and chromatogram point count (`.skyd`) match the same document opened
-  normally. Also `ChangeDocumentGuidTest` (audit-logged share) still passes via the extract path.
+  normally. `OpenProteomeFromZipTest` - reads a `.protdb` in place through NHibernate + slicevfs.
+- Done (functional, session 3): `ChangeDocumentGuidTest` now exercises the IN-PLACE path (its share
+  is `.sky`/`.sky.view`/`.skyl` only) and proves the extract-on-save keeps unsaved edits.
+  `TestInternationalFilenames` is the regression test for the `DocumentStreams` leak.
+- Green locally (session 3): the zip suite x2 loops, `TestRetentionTimeManager`,
+  `TestMinimizeWithEmptyFiles`, `TestFilesTreeForm`, `TestMinimizeIrt`, `TestSkyp`,
+  `TestShareDocument`, `TestResultFileMetadataBackCompat`, `TestLibraryShare`,
+  `TestBuildLibraryShare`, `CodeInspection`.
 - TODO: a large-file (>4 GB, ZIP64) case for the offset math; explicit fallback-to-extract test
-  when an entry is compressed.
+  when an entry is compressed; fix the now-vacuous `JsonToolServerTest` assert.
 
 ## Key references / gotchas (quick list)
 
@@ -406,5 +506,13 @@ wired and building. Also consider gating `SaveDocument`/autosave the same way.
 - The extension DLL must stay loaded for the process lifetime (the registered VFS lives in it).
 - `.blib` open needs URI mode to pass ofs/len; select the VFS via `VfsName` or `?vfs=`.
 - `.skyd` is self-contained; `.peaks/.scans/.scores` are build-time temporaries only.
+- `CodeInspection` prohibits raw `[DllImport]` (use `pwiz.Common.SystemUtil.PInvoke`) AND asserts an
+  expected `[DllImport]` count per class in `CodeInspectionTest.InspectPInvokeApi`.
+- A stream can be OPENED by one background loader and OWNED by another (a library load changes the
+  settings, which reads chromatograms), and `ChromatogramCache.Load` creates streams before any
+  document holds them. That is why stream closing has to be document-level (`DocumentStreams`).
+- `Run-Tests.ps1` defaults to `-Loop` FOREVER; pass `-Loop 1`. `-Summary` HIDES console output (so
+  it hides `DumpStreamsRegex`/`EnsureTracked` dumps). The per-test "N failures" column is a RUNNING
+  TOTAL, not per-test - easy to misread as every later test failing.
 - Spikes were developed in the session scratchpad (ephemeral). The extension source above is the
   durable copy. The earlier `ai/.tmp/zipvfs-poc` PoC was wiped when `ai/.tmp` was cleaned.
