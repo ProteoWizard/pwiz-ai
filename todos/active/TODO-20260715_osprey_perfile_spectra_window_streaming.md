@@ -1,10 +1,16 @@
 # TODO: Osprey per-file MS2 spectra streaming by isolation window
 
-**Status**: In Progress
-**Branch**: `Skyline/work/20260715_osprey_perfile_spectra_window_streaming`
+**Status**: Implemented + byte-identity-gated (Stellar+Astral), **PR HELD** pending a
+bigger memory-apex win (the MS2-streaming payoff alone is only ~2 GB -- see Phase 4
+findings). Branch pushed, 3 commits. NOT merged. Next: extend the rearchitecture to
+the actual per-file apex (calibration + scored entries) before opening a PR.
+**Branch**: `Skyline/work/20260715_osprey_perfile_spectra_window_streaming` (pushed, HEAD `07c23c7`)
 **Base**: `master` (follow-on to #4424, merged)
 **Priority**: High (the single largest remaining per-file memory lever; ~6.3 GB of
-resident MS2 spectra held in BOTH the calibration and scoring peaks)
+resident MS2 spectra held in BOTH the calibration and scoring peaks) -- **REVISED by
+Phase 4 measurement: #4424 already freed the m/z (~4 GB) via consumeInputMzs, so
+MS2-streaming's SCORING-phase remainder is only ~2 GB; the true apex is the CALIBRATION
+phase (holds full resident MS2) + the ~8 GB of scored entries. See Phase 4 below.**
 **Complexity**: Large (streaming refactor of a parity-locked scoring path + a new
 seekable loader; the design is clear and HIGH-confidence byte-identical, the risk is
 byte-parity of the on-disk reads, three method-signature changes, and parallel-reader
@@ -34,18 +40,72 @@ so instead of swapping its `List<Spectrum>` param we introduced an
   (used unchanged by the 3 rescore callers) + a provider core; `ScoreWindow` takes one
   window's list; `DeduplicateDoubleCounting` takes `IReadOnlyList<double>`. **Gate:
   `regression.ps1 -Dataset Stellar` mode1/2/3 all PASS (blib byte-identical).**
-- **Phase 3 (code complete, gate running)** -- `StreamingWindowSpectraProvider` (Osprey.Tasks,
+- **Phase 3 (commit `07c23c7`)** -- `StreamingWindowSpectraProvider` (Osprey.Tasks,
   wraps the IO index, calibrates each window in place). In `ProcessFile` after
-  `ResolveCalibration`: `BuildFromCache` the index, `spectra = null` (drops ~6 GB resident
+  `ResolveCalibration`: `BuildFromCache` the index, `spectra = null` (drops the resident
   MS2), stream scoring; resident fallback if the cache can't be indexed. All 510 unit tests
-  pass. **Gate: `regression.ps1 -Dataset All` (Stellar + Astral) RUNNING.**
+  pass. **Gate: `regression.ps1 -Dataset All` (Stellar + Astral) mode1/2/3 all PASS,
+  blib byte-identical (Stellar 45,064,192; Astral 135,249,920).**
 
 Verified byte-identity linchpins: `Calibrator` never mutates the resident spectra objects
 or order (it sorts only its own transient dict lists); after `LoadSpectra` the on-disk
 cache matches the resident spectra bit-for-bit; `ScoreWindow`'s `(RT, ScanNumber)` re-sort
-is a unique total order so file-order streamed load scores identically. Remaining: Phase 3
-Astral gate, memory A/B (`Get-MemoryReport.ps1` on `OSPREY_LOG_MEMORY=1` single-Astral
-before/after), `Test-PerfGate.ps1` (watch scattered-read I/O), PR.
+is a unique total order so file-order streamed load scores identically.
+
+## Phase 4 findings -- MEASUREMENT REVERSED THE PREMISE (read before continuing)
+
+Single Astral file 49, Stage 1-4, `OSPREY_LOG_MEMORY=1`, resident (Phase 2 `c1b90f5`) vs
+streaming (Phase 3). To get a readable scoring-peak number I temporarily routed the
+`perfile-scoring-peak` retention snapshot through `ProfilerHooks.LogManagedHeapAfterGcIfEnabled`
+(forced-GC printf; reverted after measuring -- main is clean at `07c23c7`).
+
+| metric (file 49) | resident | streaming | delta |
+|---|---|---|---|
+| `perfile-scoring-peak` forced-GC LIVE | 6.02 GB | 4.05 GB | **-1.97 GB** |
+| managed pre-GC after scoring | 9.43 GB | 6.81 GB | -2.6 GB |
+| peak working set | 25.89 GB | 23.53 GB | -2.4 GB (NOISY: first A/B showed ~0) |
+| committed (last GC) | 26.09 GB | 23.48 GB | -2.6 GB |
+| **post-calibration managed (the APEX)** | **11.02 GB** | **11.08 GB** | **~0 (unchanged)** |
+| wall (Stage 1-4) | 92.7 s | 91.0 s | ~0 (perf-neutral) |
+
+**Conclusions:**
+1. The mechanism WORKS and is byte-identical + perf-neutral -- streaming genuinely drops
+   the resident MS2 from the scoring-phase live set (6.02 -> 4.05 GB).
+2. But the payoff is **~2 GB, not ~6.3 GB**: #4424's `consumeInputMzs` already freed the
+   resident *m/z* (~4 GB) during scoring, so only the ~2-3 GB of intensities remained for
+   this work to reclaim.
+3. The peak-WS/committed benefit is **GC-decommit-timing-dependent** -- the first (no
+   forced-GC) A/B showed the freed pages staying committed (peak ~unchanged); only once a
+   GC runs after `spectra = null` do they decommit. Noisy ~0..2.4 GB run-to-run.
+4. **The per-file APEX is now the CALIBRATION phase** (post-cal managed ~11 GB > scoring
+   peak ~4-6 GB), which still materializes the full resident MS2 for Stage-3 XCorr and is
+   OUT OF SCOPE for this change. So streaming SCORING does not lower the per-file peak.
+   The other co-dominant holder at the scoring peak is the **~8 GB of scored entries**.
+
+## Next: prove the apex win before any PR (the /night-session mission)
+
+The rearchitecture (SpectraWindowIndex + provider seam) is a clean, byte-identical,
+perf-neutral FOUNDATION but does not justify itself on a ~2 GB scoring-only win. To prove
+its value, land the pieces that actually move the per-file apex, THEN PR the whole thing:
+
+- **Lever A -- stream the CALIBRATION phase's spectra** (the true apex). Stage 3
+  (`Calibrator.RunCalibration` -> builds its own `spectraByWindowKey` +
+  `PreprocessWindowsForXcorr` dense XCorr cache) currently holds the full resident MS2.
+  Investigate whether calibration can consume the same `IWindowSpectraProvider` / index
+  per window (its access pattern samples entries across windows -- confirm it can be a
+  per-window sweep or a windowed load). This is the biggest apex lever.
+- **Lever B -- stream/bound the ~8 GB of scored entries** (co-dominant at the scoring
+  peak). See the sibling `TODO-osprey_perfile_scored_entry_streaming.md`: write scored
+  entries to `.scores.parquet` incrementally instead of accumulating all in RAM.
+
+Together A+B (on top of this MS2 streaming) would drop the ~6.3 GB resident MS2 AND the
+8 GB scored entries from the apex -- the real "fit large runs on a modest machine" win
+(#4355/#4378 lineage). Only then is the rearchitecture's value provable -> open the PR.
+
+Held gates (do NOT re-litigate; already green on this branch): `Build-Osprey.ps1 -RunTests
+-RunInspection` (my files 0 warn; SystemMemory.cs 9 = known #4379 noise), `regression.ps1
+-Dataset All` (byte-identical). `Test-PerfGate.ps1` was deferred -- the single-file A/B
+already showed perf-neutral, so it is not the blocker; the apex win is.
 
 ## Start here (fresh session)
 
