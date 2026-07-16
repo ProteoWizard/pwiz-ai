@@ -58,3 +58,15 @@ re-read scored windows" into "read ~8 MB index + read scored windows."
 - Stage-6 rescore streaming (separate TODO
   `TODO-osprey_stage6_rescore_spectra_streaming.md`).
 - The streaming mzML→cache writer that avoids materializing on a cache *miss* (separate lever).
+
+## Session startup (2026-07-16) — measure PR #4427 perf FIRST
+Spun into its own session/branch off **master**, orthogonal to PR #4427 (#4427 = per-file MS2
+streaming; this = the cache format). They merge cleanly later, NOT stacked. Before implementing v4,
+**measure PR #4427's perf impact** to understand the streaming trade-off: on a v3 cache hit #4427
+now SKIPS the full `List<Spectrum>` load and streams immediately (a real win — verify + quantify),
+but pays extra HDD I/O from the header-walk + per-window re-reads. The night-session 88 vs 123 s A/B
+is cache-warmth-confounded and invalid; a controlled cold/warm measurement is needed. That result
+motivates v4 (the end-index removes the header-walk I/O).
+
+**Next session handoff**: For the detailed startup protocol (perf-measurement method, v4 spec,
+gates, key files), read `ai/.tmp/handoff-spectra-bin-v4.md` before starting work.
