@@ -14,6 +14,39 @@ concurrency)
 `SpectraWindowIndex.cs`), `Osprey.Scoring/ScoringPipeline.cs`,
 `Osprey.Scoring/CoelutionScorer.cs`, `Osprey.Tasks/PerFileScoringTask.cs`.
 
+## Progress (branch `Skyline/work/20260715_osprey_perfile_spectra_window_streaming`)
+
+Implemented in three byte-identity-gated phases (design refinement vs the original
+plan: `RunCoelutionScoring` has 3 resident callers -- Stage-6 rescore + 2 gap-fill --
+so instead of swapping its `List<Spectrum>` param we introduced an
+`IWindowSpectraProvider` seam that both the resident and streaming paths flow through):
+
+- **Phase 1 (commit `8ad51e2`)** -- `SpectraWindowIndex` (Osprey.IO): header-only pass
+  builds a `windowKey -> [fileOffset]` map + `AllMs2Rts`; `LoadWindow(key)` seeks +
+  decodes one window on demand via shared `SpectraCache.ReadMs2Record`. DRY-refactored
+  `SpectraCache` decode into `TryReadHeader`/`ReadMs2Record`/`ReadMs1Record`. New
+  `TestSpectraWindowIndex` proves streamed grouping == `LoadSpectraCache` grouping
+  (byte-identical, incl. two centers rounding to one key, an empty-peak record, MS1 skip,
+  absent key, `AllMs2Rts`). Debug build + inspection (0 warn) + test green.
+- **Phase 2 (commit `c1b90f5`)** -- `IWindowSpectraProvider` + `ResidentWindowSpectraProvider`
+  (Osprey.Scoring, holds the old calibrate-copy+group prologue verbatim incl.
+  `consumeInputMzs`); `RunCoelutionScoring` split into a resident `List<Spectrum>` wrapper
+  (used unchanged by the 3 rescore callers) + a provider core; `ScoreWindow` takes one
+  window's list; `DeduplicateDoubleCounting` takes `IReadOnlyList<double>`. **Gate:
+  `regression.ps1 -Dataset Stellar` mode1/2/3 all PASS (blib byte-identical).**
+- **Phase 3 (code complete, gate running)** -- `StreamingWindowSpectraProvider` (Osprey.Tasks,
+  wraps the IO index, calibrates each window in place). In `ProcessFile` after
+  `ResolveCalibration`: `BuildFromCache` the index, `spectra = null` (drops ~6 GB resident
+  MS2), stream scoring; resident fallback if the cache can't be indexed. All 510 unit tests
+  pass. **Gate: `regression.ps1 -Dataset All` (Stellar + Astral) RUNNING.**
+
+Verified byte-identity linchpins: `Calibrator` never mutates the resident spectra objects
+or order (it sorts only its own transient dict lists); after `LoadSpectra` the on-disk
+cache matches the resident spectra bit-for-bit; `ScoreWindow`'s `(RT, ScanNumber)` re-sort
+is a unique total order so file-order streamed load scores identically. Remaining: Phase 3
+Astral gate, memory A/B (`Get-MemoryReport.ps1` on `OSPREY_LOG_MEMORY=1` single-Astral
+before/after), `Test-PerfGate.ps1` (watch scattered-read I/O), PR.
+
 ## Start here (fresh session)
 
 Run `/pw-startup` on this file. Load `/osprey-development` + `/debugging`. This is the
