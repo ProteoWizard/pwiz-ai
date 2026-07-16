@@ -1,8 +1,13 @@
 # TODO-osprey_diag_reproducibility_frontier.md -- Reproducibility-vs-FDR diagnostics + the iso-FDR "frontier" card (C#-backed)
 
 ## Status
-**Active (created 2026-07-16).** Branch `Skyline/work/20260716_osprey_diag_reproducibility_frontier`
-(pwiz-work2). Grew out of an extended exploration with Brendan on the model-diagnostics
+**In review (created 2026-07-16).** PR [#4428](https://github.com/ProteoWizard/pwiz/pull/4428)
+on branch `Skyline/work/20260716_osprey_diag_reproducibility_frontier` (pwiz-work2). C# frontier
+implemented + gate-green (508 tests, 0 inspection warnings); local fresh-context self-review done
+and its findings fixed (per-file-dedup blocker: run count = files not candidate rows; loosest-Q*
+on a plateau). PRE-MERGE: confirm the C# reproduces the numpy reference on the SEA-AD 82-file run
+(unit-tested + byte-matched, not yet run end-to-end). Grew out of an extended exploration with
+Brendan on the model-diagnostics
 Reproducibility tab, motivated by a journal (MCP) discussion on whether experiment-wide q
 should be a *required* FDR-control standard for DIA. Entrapment-validated on Mike's SEA-AD
 Pilot-MTG 82-file Astral-DIA run.
