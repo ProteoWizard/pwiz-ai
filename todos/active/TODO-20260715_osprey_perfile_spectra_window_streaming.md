@@ -132,13 +132,17 @@ XCorr cache; the accumulator (`MergeCalibrationMatches`, keep-best-per-entry) an
 `(base_id, entry_id)` `BuildSortedMatchArray` are order-independent, so window-parallel produces the
 identical result to candidate-parallel.
 
-**Residual to harden before default-on / merge:** the linear-scan window fallback's enumeration order
-(`WindowKeysInFileOrder` vs the resident `Dictionary` enumeration) -- did NOT fire on Astral/Stellar
-(match counts identical), so unproven on a file that triggers it. Next steps: (1) run
-`regression.ps1 -Dataset Astral` with `OSPREY_STREAM_CALIBRATION=1` to prove streaming==golden on the
-3 Astral files (stronger than the single-file A/B); (2) add a `TryResolveCalibrationWindow` unit test
-covering the neighbour + collision + linear-scan cases as a permanent verifier; (3) decide default-on
-vs gated (default-on needs a full-batch `[MEM]` + perf gate). Then `/pw-self-review` + TeamCity.
+**Validation done this session:** (1) `regression.ps1 -Dataset Astral` with `OSPREY_STREAM_CALIBRATION=1`
+PASSED mode1/2/3 (streaming==golden on all 3 Astral files -- stronger than the single-file A/B);
+(2) `TestStreamingCalibrationWindowResolution` (commit `3d4fe232c`) covers the resolver's 4 branches
+(direct+collision, neighbour +/-1, linear-scan, no-match) as a permanent verifier; (3) a fresh-context
+self-review (`ai/.tmp/agent-leverA-review.md`) found no Critical/High bug and confirmed the extraction is
+byte-identical by diff; its one High (the fallback sub-paths) is what the unit test now covers, and its
+M1 (shared-scorer stateless invariant) is documented (commit `b0f12ca04`).
+**Remaining before default-on / merge (user-gated):** decide default-on vs ship-gated (default-on needs a
+full-batch `[MEM]` + `Test-PerfGate.ps1`); `/pw-self-review` on the branch; open the PR; TeamCity
+Perf/Regression on `pull/<N>`. Open review nit: M2 (`OSPREY_TRACK_RELEASE` treats `=0` as ON, unlike
+`OSPREY_STREAM_CALIBRATION`) -- cosmetic, consistent with the other ProfilerHooks flags.
 
 ## Next: prove the apex win before any PR (the /night-session mission)
 
