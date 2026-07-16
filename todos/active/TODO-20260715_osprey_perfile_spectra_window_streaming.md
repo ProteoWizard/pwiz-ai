@@ -82,6 +82,16 @@ streaming (Phase 3). To get a readable scoring-peak number I temporarily routed 
    OUT OF SCOPE for this change. So streaming SCORING does not lower the per-file peak.
    The other co-dominant holder at the scoring peak is the **~8 GB of scored entries**.
 
+**PROVISIONAL -- retention not yet dominator-verified (per Brendan).** All of the above is
+from console `[MEM]` AGGREGATES, which show how much is live, not WHO holds it. Before
+trusting "the resident MS2 is released, so the win is only ~2 GB", a dotMemory retention
+snapshot (`perfile-scoring-peak` dominators) must confirm nothing unexpected still roots
+the resident MS2 (index / provider / closure / isolationWindows / scratch pool /
+windowResults). If a hidden root exists, streaming is NOT releasing as intended and fixing
+that root is the real lever. A current-state streaming `.dmw` was generated at
+`ai/.tmp/osprey-memory-*.dmw`; a fresh `.dmw` is a required end-of-night deliverable. See
+`ai/.tmp/handoff-osprey-memory-apex-20260715.md` -> "CRITICAL: validate RETENTION".
+
 ## Next: prove the apex win before any PR (the /night-session mission)
 
 The rearchitecture (SpectraWindowIndex + provider seam) is a clean, byte-identical,
