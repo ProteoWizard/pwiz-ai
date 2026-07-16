@@ -33,8 +33,10 @@ Requested by Nick.
 - [x] Step 5: `.blib` in-place read - DONE + VERIFIED (read 29 RefSpectra from a real .blib stored
       inside a .sky.zip). `ZipVfs` pins+loads `zipvfs_ext.dll` and opens the .blib at its byte range
       (`FullUri ... ?ofs=&len=&vfs=skyzipvfs`); `PooledSqliteConnection.Connect` routes zip .blib
-      paths through it. The built x64/x86 `zipvfs_ext.dll` are committed to `libraries/SQLite/{x64,x86}`
-      and copied to the Skyline output by a Content item.
+      paths through it. `zipvfs_ext.dll` is now built from source by bjam (the `install-zipvfs-ext`
+      rule in the Skyline Jamfile builds the `libraries/SQLite//zipvfs_ext` shared lib and installs
+      it next to `SQLite.Interop.dll` in `ProteowizardWrapper/obj/$(PLATFORM)`); Skyline.csproj
+      copies it from there as Content. No prebuilt binary is committed anymore.
 
 - [x] SQLite interop provisioning FIXED: the native `SQLite.Interop.dll` was bundled at 1.0.109
       inside `pwiz_aux/msrc/utility/vendor_api_ABI.7z` (the SCIEX ABI vendor package), which the
@@ -51,8 +53,11 @@ Requested by Nick.
       `BiblioSpecLite`, `MeasuredResults.CheckFinalCache`, `ChromatogramCache`, `PooledSqliteConnection`).
       FilePath now compares paths case-sensitively (Ordinal) since zip entry names are case-sensitive.
 - [x] End-to-end functional test: `OpenDocFromZipTest` (committed, passes)
-- [ ] Gate `SaveDocument` like `CheckDocumentExists` (prompt to extract before writing a zip-backed doc)
-- [ ] Finish Jamfile deployment wiring for `zipvfs_ext.dll` (currently committed prebuilt binaries)
+- [x] Gate `SaveDocument` like `CheckDocumentExists` (prompts to extract before writing a zip-backed
+      doc; `OpenDocFromZipTest` covers it)
+- [x] Jamfile deployment wiring for `zipvfs_ext.dll` (built from source, installed to obj; no
+      committed binary). Verified: `quickbuild ... pwiz_tools/Skyline//install-zipvfs-ext` builds the
+      DLL into `ProteowizardWrapper/obj/x64`, MSBuild copies it to output, functional test passes.
 - [ ] Open PR
 
 FUTURE (Nick's design, not the "for now" criterion): make `OpenSharedFile` start reading the `.sky`
