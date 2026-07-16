@@ -1,10 +1,17 @@
 # TODO: Osprey per-file MS2 spectra streaming by isolation window
 
-**Status**: Implemented + byte-identity-gated (Stellar+Astral), **PR HELD** pending a
-bigger memory-apex win (the MS2-streaming payoff alone is only ~2 GB -- see Phase 4
-findings). Branch pushed, 3 commits. NOT merged. Next: extend the rearchitecture to
-the actual per-file apex (calibration + scored entries) before opening a PR.
-**Branch**: `Skyline/work/20260715_osprey_perfile_spectra_window_streaming` (pushed, HEAD `07c23c7`)
+**Status**: **APEX WIN PROVEN (2026-07-16 night session) — PR now justified.** The MS2-streaming
+payoff alone was only ~2 GB (Phase 4), so Lever A (streaming the CALIBRATION phase, the true apex)
+was added: **post-calibration managed heap 11.13 → 7.09 GB (−36%), WS peak 20.68 → 13.89 GB (−33%)**
+on Astral file 49, **byte-identical** (scores.parquet bit-identical; calibration.json identical modulo
+its generation timestamp), perf-neutral/faster. Also answered Brendan's retention concern: a
+prove-from-inside WeakReference probe confirms the streamed resident MS2 is genuinely released
+(all sampled spectra/arrays dead after null+GC). Branch now 5 commits (3 shipped + retention probe
+`a0ef01200` + Lever A `41eb83d39`), local only (2 new not pushed). Lever A is gated behind
+`OSPREY_STREAM_CALIBRATION` (default-off; the golden is byte-identical with it off).
+Before PR: verify the linear-scan window-fallback order on a file that triggers it, decide
+default-on vs gated, `/pw-self-review`, TeamCity Perf/Regression. See the "Lever A" section below.
+**Branch**: `Skyline/work/20260715_osprey_perfile_spectra_window_streaming` (HEAD `41eb83d39`; `07c23c7` pushed)
 **Base**: `master` (follow-on to #4424, merged)
 **Priority**: High (the single largest remaining per-file memory lever; ~6.3 GB of
 resident MS2 spectra held in BOTH the calibration and scoring peaks) -- **REVISED by
@@ -91,6 +98,47 @@ windowResults). If a hidden root exists, streaming is NOT releasing as intended 
 that root is the real lever. A current-state streaming `.dmw` was generated at
 `ai/.tmp/osprey-memory-*.dmw`; a fresh `.dmw` is a required end-of-night deliverable. See
 `ai/.tmp/handoff-osprey-memory-apex-20260715.md` -> "CRITICAL: validate RETENTION".
+
+## Lever A -- DONE 2026-07-16 (calibration streaming; apex win proven, byte-identical)
+
+Streaming the CALIBRATION phase (the true apex) is implemented behind
+`OSPREY_STREAM_CALIBRATION` (default-off) and committed as `41eb83d39`.
+
+**Result (Astral file 49, `ai/.tmp/leverA-ab.ps1`):**
+| boundary | resident | streaming | delta |
+|---|---|---|---|
+| post-calibration managed heap | 11.13 GB | **7.09 GB** | **-4.04 GB (-36%)** |
+| post-calibration WS peak | 20.68 GB | **13.89 GB** | **-6.79 GB (-33%)** |
+| wall | 122.8 s | 88.4 s | -28% (faster, GC pressure relief) |
+
+**Byte-identity:** `scores.parquet` bit-for-bit identical (all 1,683,778 scored entries);
+`calibration.json` identical except its generation `timestamp` (RT fit MAD/SD/R^2/n=3145 and
+`num_sampled_precursors` identical -> the match set + model are identical). Resident-refactor gate:
+`regression.ps1 -Dataset All` PASSED all 6 legs (Stellar+Astral golden/resume/HPC).
+
+**How (design):** the resident calibration scores candidate-parallel against resident per-window
+dicts; that cannot bound memory (random cross-window access). So the loop is inverted to
+**window-parallel**: `SpectraWindowIndex` now also carries each window's first `IsolationWindow` +
+file-order keys, so `TryResolveCalibrationWindow` reproduces the resident window resolution
+(direct+Contains, neighbour +/-1, linear scan) WITHOUT peaks; entries are pre-grouped by resolved
+window, then `Parallel.ForEach` over windows loads/RT-sorts/preprocesses/scores/releases each. The
+per-entry math is the shared `ScoreResolvedCalibrationEntry` (extracted from the resident scorer, so
+the resident path is a behaviour-preserving refactor). `ProcessFile` builds the index before Stage 3
+and drops the resident MS2 before calibration; scoring reuses the same index. Files:
+`OspreyEnvironment.cs`, `SpectraWindowIndex.cs`, `Calibrator.cs`, `PerFileScoringTask.cs`.
+
+**Byte-identity rationale:** each entry is scored exactly once against the same RT-sorted window +
+XCorr cache; the accumulator (`MergeCalibrationMatches`, keep-best-per-entry) and the
+`(base_id, entry_id)` `BuildSortedMatchArray` are order-independent, so window-parallel produces the
+identical result to candidate-parallel.
+
+**Residual to harden before default-on / merge:** the linear-scan window fallback's enumeration order
+(`WindowKeysInFileOrder` vs the resident `Dictionary` enumeration) -- did NOT fire on Astral/Stellar
+(match counts identical), so unproven on a file that triggers it. Next steps: (1) run
+`regression.ps1 -Dataset Astral` with `OSPREY_STREAM_CALIBRATION=1` to prove streaming==golden on the
+3 Astral files (stronger than the single-file A/B); (2) add a `TryResolveCalibrationWindow` unit test
+covering the neighbour + collision + linear-scan cases as a permanent verifier; (3) decide default-on
+vs gated (default-on needs a full-batch `[MEM]` + perf gate). Then `/pw-self-review` + TeamCity.
 
 ## Next: prove the apex win before any PR (the /night-session mission)
 
