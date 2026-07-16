@@ -60,6 +60,26 @@ Requested by Nick.
       DLL into `ProteowizardWrapper/obj/x64`, MSBuild copies it to output, functional test passes.
 - [x] Open PR: https://github.com/ProteoWizard/pwiz/pull/4426 (next: /pw-self-review, then TeamCity green)
 
+## Session 2 additions (committed locally, NOT yet pushed to the PR branch)
+
+- [x] Share progress says "Storing {0}" for entries stored uncompressed vs "Compressing {0}" for
+      the rest (`SrmDocumentSharing_SaveProgress`, keyed off `e.CurrentEntry.CompressionMethod`).
+- [x] Split `DocumentZipSuffixes` into `SequentialAccessExtensions` (`.sky`/`.sky.view`/`.sky.log` -
+      read sequentially, may be compressed) vs `RandomAccessExtensions` (stored). `OpenInPlaceExtensions`
+      is the union; a `.zip` opens in place when every entry is in it.
+- [x] Moved `FilePath` + `RandomAccessZipFile`/`ByteRangeStream` to `pwiz.Common.Database.FileSystems`,
+      and `ZipVfs` -> `SqliteSliceVfs` in `pwiz.Common.Database` (next to `SqliteOperations`). Common
+      needs no DotNetZip: `FilePath.OpenRead` decompresses via `System.IO.Compression`. Kept
+      `ConnectionPool`/`IPooledStream`/`PooledZipEntryStream` in Skyline (bridge via `TryGetZipEntry`).
+- [x] `.protdb` (background proteome) added to `RandomAccessExtensions`. `SessionFactoryFactory`
+      opens a zip-backed db through a read-only `SqliteSliceVfs.GetConnectionString` (slicevfs URI),
+      so NHibernate reads a `.protdb` in place; `ProteomeDb` uses `FilePath` for existence, and
+      `FindBackgroundProteome` resolves the proteome to its in-zip path. Test: `OpenProteomeFromZipTest`.
+- [ ] EDGE (Nick: fall back to extract): a zip-backed `.protdb` whose schema is older than current
+      would hit `ProteomeDb`'s upgrade branch and attempt a write on the read-only slicevfs connection
+      (fails). Rare for a freshly-shared, current proteome. True extract-fallback not yet wired.
+- [ ] `.elib` (EncyclopeDIA) intentionally still extracts - it always needs a sibling `.elibc`.
+
 FUTURE (Nick's design, not the "for now" criterion): make `OpenSharedFile` start reading the `.sky`
 straight from the zip, and as soon as `DocumentReader.ReadXml` gets past the `settings_summary`
 element, decide whether it can read everything it needs directly from the zip or must extract.
