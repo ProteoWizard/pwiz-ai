@@ -44,11 +44,16 @@ Requested by Nick.
       solid+AES archive so extract-swap-recreate, not in-place update). Managed-provider tests pass
       (TestTableExists, DocLoadLibrary, TestConnectionPoolReportAndTracking). REMAINING CHECK: verify
       SCIEX WIFF reading still works, since Clearcore2 shares this interop (needs real .wiff data).
-- [ ] Step 6: `OpenSharedFile` in-place branch - if `CanOpenInPlace` (only DocumentZipSuffixes +
-      .skyd/.blib stored), read `.sky` from the zip and `OpenFile(<zip>\doc.sky)`, then set
-      SharedZipFilePath. Also make the remaining `OpenFile` choke points FilePath-aware
-      (`ConnectDocument`, `CheckResults`, `ReadAuditLog`). Gate `SaveDocument` like CheckDocumentExists.
-- [ ] End-to-end functional test; PR
+      VERIFIED: Nick confirmed .wiff reading still works with the 1.0.119 interop (J:\skydata\pedro).
+- [x] Step 6: `OpenSharedFile` in-place branch - `CanOpenInPlace` (only DocumentZipSuffixes +
+      .skyd/.blib stored) -> `OpenSharedFileInPlace` reads `.sky` from the zip, `OpenFile(<zip>\doc.sky)`,
+      sets `SharedZipFilePath`. Load pipeline made FilePath-aware (`CheckResults`, `ConnectLibrarySpecs`,
+      `BiblioSpecLite`, `MeasuredResults.CheckFinalCache`, `ChromatogramCache`, `PooledSqliteConnection`).
+      FilePath now compares paths case-sensitively (Ordinal) since zip entry names are case-sensitive.
+- [x] End-to-end functional test: `OpenDocFromZipTest` (committed, passes)
+- [ ] Gate `SaveDocument` like `CheckDocumentExists` (prompt to extract before writing a zip-backed doc)
+- [ ] Finish Jamfile deployment wiring for `zipvfs_ext.dll` (currently committed prebuilt binaries)
+- [ ] Open PR
 
 FUTURE (Nick's design, not the "for now" criterion): make `OpenSharedFile` start reading the `.sky`
 straight from the zip, and as soon as `DocumentReader.ReadXml` gets past the `settings_summary`
@@ -334,25 +339,39 @@ wired and building. Also consider gating `SaveDocument`/autosave the same way.
   zip path + offset/length). The connection/VFS must stay valid for the whole doc session
   (BiblioSpecLite keeps a persistent connection, lazy `ReadSpectrum`).
 
-### Step 6: OpenSharedFile open-in-place decision
+### Step 6 (DONE): OpenSharedFile open-in-place decision
 
-- In `SkylineFiles.OpenSharedFile`, use `RandomAccessZipFile` to check whether every entry that
-  needs random access (`.skyd`, `.blib`, redundant `.blib`) is stored uncompressed. If so, open in
-  place; else fall back to the existing `SrmDocumentSharing.Extract` path.
-- Read the `.sky` XML through a decompressing zip stream (it may remain Deflate).
+- `SkylineFiles.OpenSharedFile` calls `CanOpenInPlace` (via `RandomAccessZipFile`): the `.zip` must
+  contain only `DocumentZipSuffixes` entries AND have the `RandomAccessExtensions` (`.skyd`,
+  `.blib`) stored uncompressed. If so `OpenSharedFileInPlace` opens `<zip>\doc.sky` through
+  `FilePath` and sets `SharedZipFilePath`; otherwise `ExtractAndOpenSharedFile` (the old path).
+- The whole load pipeline was made `FilePath`-aware so background loaders read `.skyd`/`.blib`
+  from inside the `.zip`: `BiblioSpecLite` -> `ZipVfs.OpenConnection`, `MeasuredResults`,
+  `ChromatogramCache`, `PooledSqliteConnection`, plus `CheckResults`/`ConnectLibrarySpecs` dialogs.
 
-### Step 7: write side
+### Step 7 (DONE): write side
 
-- `SrmDocumentSharing.ZipFileShare.AddFile`: set `entry.CompressionMethod = CompressionMethod.None`
-  for `.blib`/`.skyd` (and redundant `.blib`) so shared documents can be opened without extraction.
-  `_zip.AddFile(path, "")` returns the `ZipEntry` to set this on. Other entries stay Deflate.
+- `SrmDocumentSharing.ZipFileShare.AddFile` sets `CompressionMethod.None` for
+  `RandomAccessExtensions` (`.skyd`/`.blib`, incl. redundant `.blib`); other entries stay Deflate.
+
+### KNOWN LIMITATION: audit log (`.skyl`) blocks in-place open
+
+- `DocumentZipSuffixes` does NOT include `.skyl`, so a complete share of a document that has audit
+  logging ENABLED (`ShouldShareAuditLog` -> `DataSettings.AuditLogging`) contains a `.skyl` entry
+  and `CanOpenInPlace` returns false -> it extracts. This matches Nick's original 5-extension
+  criterion "for now". To make in-place work for audit-logged documents, add `.skyl` to
+  `DocumentZipSuffixes` and confirm the audit log loads correctly from a `FilePath` inside the zip.
 
 ## Tests
 
-- Done: `TestRandomAccessZipFile`, `TestByteRangeStreamBounds` (pass); SQLite-upgrade tests above.
-- TODO: round-trip functional test (Share with stored `.blib`/`.skyd`, then OpenSharedFile in
-  place, verify chromatograms + library spectra load and match the extracted path); a large-file
-  (>4 GB, ZIP64) case for the offset math; fallback-to-extract when an entry is compressed.
+- Done (unit): `TestRandomAccessZipFile`, `TestByteRangeStreamBounds`, `TestPooledZipEntryStream`,
+  `TestAreEntriesStored`, `TestContainsOnlyEntriesWithSuffixes`, `TestFilePath`; SQLite-upgrade tests.
+- Done (functional): `OpenDocFromZipTest` - shares `LibraryShareTest` as a stored `.sky.zip`, opens
+  it in place, asserts `SharedZipFilePath`/in-zip path, and that peptide/transition counts, library
+  spectrum count (`.blib`), and chromatogram point count (`.skyd`) match the same document opened
+  normally. Also `ChangeDocumentGuidTest` (audit-logged share) still passes via the extract path.
+- TODO: a large-file (>4 GB, ZIP64) case for the offset math; explicit fallback-to-extract test
+  when an entry is compressed.
 
 ## Key references / gotchas (quick list)
 
