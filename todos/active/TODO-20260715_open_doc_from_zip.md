@@ -19,7 +19,8 @@ Requested by Nick.
 ## Status at a glance
 
 - [x] Feasibility proven end to end (SQLite can read a `.blib` from a byte-range in the zip)
-- [x] Step 1: System.Data.SQLite upgraded to 1.0.119 tree-wide (committed: 49fe0d25b)
+- [x] Step 1: System.Data.SQLite 1.0.119 upgrade - REVERTED (b75d0b0bf) once it turned out to break
+      .wiff2 and not to be needed. The tree is back on 1.0.98. See "Step 1 (REVERTED)" below.
 - [x] Step 2: `RandomAccessZipFile` + `ByteRangeStream` foundation (committed; unit-tested)
 - [x] Step 3: `.blib`-VFS mechanism decided by a bake-off (loadable extension wins)
 - [x] `FilePath` (Skyline/Util) - the zip-aware path type (Nick's chosen design; see below)
@@ -40,7 +41,9 @@ Requested by Nick.
       it next to `SQLite.Interop.dll` in `ProteowizardWrapper/obj/$(PLATFORM)`); Skyline.csproj
       copies it from there as Content. No prebuilt binary is committed anymore.
 
-- [x] SQLite interop provisioning FIXED: the native `SQLite.Interop.dll` was bundled at 1.0.109
+- [x] SQLite interop provisioning - ALL OF THIS IS MOOT NOW, the upgrade was reverted (b75d0b0bf)
+      and the .7z is back to its original 1.0.109 interop. Kept only as the record of why the .7z
+      was touched at all. HISTORICAL: the native `SQLite.Interop.dll` was bundled at 1.0.109
       inside `pwiz_aux/msrc/utility/vendor_api_ABI.7z` (the SCIEX ABI vendor package), which the
       build re-extracts overwrite-all every time -> it reverted the interop to 1.0.109 and mismatched
       the committed managed 1.0.119 (EntryPointNotFound on hashed symbols). Swapped the x64/x86
@@ -63,9 +66,10 @@ Requested by Nick.
 - [x] Open PR: https://github.com/ProteoWizard/pwiz/pull/4426 (DRAFT; Copilot round addressed)
 - [x] Session 3: `.skyl` opens in place; `CheckDocumentExists` extracts silently; `DocumentStreams`
       closes streams opened for a document that is no longer current (see Session 3 below)
-- [ ] BLOCKER: `.wiff2` is broken by the Step 1 SQLite 1.0.119 upgrade (licensing gate on encrypted
-      databases) - see "BLOCKER (session 3)" below. Not fixed; not caused by the zip work.
+- [x] TeamCity run 21566 fallout both fixed and pushed: `MemoryDocumentContainer` streams
+      (8f29f38ae) and the SQLite revert which un-breaks `.wiff2` (b75d0b0bf)
 - [ ] NEXT: TeamCity green on the full suite, then `/pw-self-review 4426` (still not run)
+- [ ] NEXT (Nick): try this by hand on really big documents
 
 ## Session 2 additions (pushed)
 
@@ -166,7 +170,12 @@ needed for the leak.
 RISK: stream lifetime is now global to Skyline (`SetDocument` runs on every document change), and
 local testing covered only a slice of the functional suite. TeamCity's full run is the real check.
 
-### BLOCKER (session 3, NOT yet fixed): .wiff2 broken by the SQLite 1.0.119 upgrade
+### RESOLVED (session 3) by reverting Step 1: .wiff2 was broken by the SQLite 1.0.119 upgrade
+
+RESOLUTION: reverted the whole upgrade (b75d0b0bf reverts 49fe0d25b + 129d0e345). All four .wiff2
+tests pass again, and `TestOpenDocFromZip`/`TestOpenProteomeFromZip` still pass, so slicevfs never
+needed 1.0.119. The diagnosis below is kept because it is the reason the upgrade cannot come back
+without solving the licensing problem first.
 
 TeamCity run 21566 on `8565c05bb` had TWO failure classes. Class 1 ("Streams left open", ~27
 tests) was mine and is fixed (see the MemoryDocumentContainer commit). Class 2 is this, and it is
@@ -197,7 +206,8 @@ ROOT CAUSE (established by decompiling, not guessed - dotPeek export at
   There is no supported bypass (`Override_SEE_Certificate`/`AlwaysVerifyLicense` still require a
   valid certificate), and I did not go looking for an unsupported one.
 
-FIX DIRECTION (Nick): let wiff2 use the OLD dll and Skyline the NEW one, side by side.
+NOT DONE, and no longer needed now that the upgrade is reverted - kept in case 1.0.119 is ever
+wanted again. FIX DIRECTION (Nick): let wiff2 use the OLD dll and Skyline the NEW one, side by side.
 - `pwiz_tools/Skyline/app.config` has `<bindingRedirect oldVersion="0.0.0.0-1.0.119.0"
   newVersion="1.0.119.0"/>` for `System.Data.SQLite` (ADDED BY THIS BRANCH in Step 1). Both
   versions are strong-named with the SAME token (db937bc2d44ff139) and differ only by version, so
@@ -319,7 +329,16 @@ Upside: 1.0.119 added a first-class managed `SQLiteConnectionStringBuilder.VfsNa
 `sqlite3_open_interop` takes a `vfsName` argument, so SELECTING a registered VFS is clean. The
 problem is REGISTERING our VFS.
 
-### Candidate #1 (hashed-symbol P/Invoke): INFEASIBLE
+### Candidate #1 (hashed-symbol P/Invoke): INFEASIBLE **ON 1.0.119 ONLY - NOW REOPENED**
+
+REOPENED (session 3): this whole bake-off only happened because 1.0.119 hashes its exports. The
+tree is back on 1.0.98, whose managed assembly references `sqlite3_vfs_register` BY NAME (grep the
+dll) - which is exactly why the original feasibility PoC could register a managed VFS. So the
+simpler managed-VFS approach is viable again, and `libraries/SQLite/slicevfs.c`, its Jamfile `lib
+slicevfs` + `install-slicevfs` rules, the Skyline.csproj Content copy, and the whole native build
+step could potentially be DELETED. Not chased: slicevfs is built, proven and passing, and this
+would be a rewrite of a working feature. Worth doing only if the native build step becomes a
+maintenance problem. The text below is the 1.0.119-era reasoning.
 
 To register a VFS you must call `sqlite3_vfs_register`. It is not among the managed provider's
 imports, so its hash cannot be read from the managed assembly. The interop exports 209 hashed
@@ -553,10 +572,30 @@ Nick's design (session 3), and both parts matter:
   `TestBuildLibraryShare`, `CodeInspection`.
 - TODO: a large-file (>4 GB, ZIP64) case for the offset math; explicit fallback-to-extract test
   when an entry is compressed; fix the now-vacuous `JsonToolServerTest` assert.
+- UNTESTED AT SCALE (Nick is trying this by hand on really big documents next). Nothing here has
+  seen a `.sky.zip` over 4 GB. The places to suspect if something goes wrong:
+  * ZIP64. `RandomAccessZipFile` reads 64-bit sizes/offsets from the ZIP64 extra field / EOCD, and
+    Share writes with `Zip64Option.AsNecessary`, so a >4 GB zip takes a code path no test covers.
+    A wrong offset would read the wrong bytes rather than fail loudly.
+  * `ApplyZip64Extra` bounds the extra-field reads with `Math.Min(dataPos + size, extra.Length)`.
+  * The `.skyd` is read through `PooledZipEntryStream` -> `ByteRangeStream`, which opens a fresh
+    `FileStream` per Connect, so many replicates means many concurrent handles on the one .zip.
+  * Sharing stores `.skyd`/`.blib` uncompressed, so a big shared .zip is now BIGGER than before
+    and Share does more I/O - "Storing" vs "Compressing" in the progress text tells which is which.
 
 ## Key references / gotchas (quick list)
 
-- Managed+native System.Data.SQLite versions must match exactly per output folder.
+- Managed+native System.Data.SQLite versions must match exactly per output folder. NOTE what the
+  tree actually ships and what works: managed 1.0.98 (IL-mangled from 1.0.105) in bin next to the
+  ABI package's 1.0.109 `SQLite.Interop.dll`. It looks like a mismatch and is not - do not "fix" it.
+- A clean + `quickbuild.bat` leaves `bin` WITHOUT `slicevfs.dll`: quickbuild builds it into
+  `ProteowizardWrapper/obj/$(PLATFORM)`, and getting it to `bin` is the MSBuild Content copy, so
+  Build-Skyline must run afterwards. Symptom if you miss it: every zip test HANGS (no output after
+  "Running N tests"), because `SqliteSliceVfs` cannot LoadLibrary the extension. Cost a hung run
+  and a wrong theory about interop pairing.
+- Encrypted SQLite is a PAID feature in modern System.Data.SQLite (see the .wiff2 section). Any
+  future SQLite upgrade must keep `Wiff2ResultsTest` working - `.wiff2` is an encrypted database,
+  and the vendor tests are the only thing that catches it.
 - `System.IO.Compression.ZipArchive` on .NET Framework cannot write a stored (method-0) entry; use Ionic.
 - 1.0.119 interop exports are hashed (`SI<hex>`); the raw sqlite3 C API (incl. `vfs_register`) is not exported.
 - The extension DLL must stay loaded for the process lifetime (the registered VFS lives in it).
