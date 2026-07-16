@@ -58,7 +58,7 @@ Requested by Nick.
 - [x] Jamfile deployment wiring for `zipvfs_ext.dll` (built from source, installed to obj; no
       committed binary). Verified: `quickbuild ... pwiz_tools/Skyline//install-zipvfs-ext` builds the
       DLL into `ProteowizardWrapper/obj/x64`, MSBuild copies it to output, functional test passes.
-- [ ] Open PR
+- [x] Open PR: https://github.com/ProteoWizard/pwiz/pull/4426 (next: /pw-self-review, then TeamCity green)
 
 FUTURE (Nick's design, not the "for now" criterion): make `OpenSharedFile` start reading the `.sky`
 straight from the zip, and as soon as `DocumentReader.ReadXml` gets past the `settings_summary`
