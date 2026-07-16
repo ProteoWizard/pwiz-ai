@@ -260,3 +260,29 @@ Unit tests 508/508 green on the final build.
 
 **Remaining before merge:** Stage-6 rescore perf (offset-order full load vs v3); regression.ps1
 -Dataset All (Astral byte-identity); commit + push to #4427.
+
+### 2026-07-16 (COMMITTED f735053e5 + pushed to #4427; Stage-6 perf; sequential-read follow-up)
+**Commit 1 (`f735053e5`, pushed):** the v4 grouping fix (3 Osprey files). Brendan runs TeamCity
+regression (remote) while I run Stage-6 perf (local -- no contention).
+
+**Stage-6 perf = NO regression.** Isolated `LoadSpectraCache` on the real file-49 cache via direct
+assembly call. Steady-state under **Server GC** (what Osprey.exe uses) = **3.0s = the v3 reference**.
+(An isolated PowerShell harness defaults to Workstation GC -> 3.5s; that ~0.5s was a GC-mode
+confound, not v4. `DOTNET_gcServer=1` reproduced the 3.0s.) Cold is disk-bound-identical for v3/v4
+(same 6.3 GB sequential read).
+
+**Follow-up (b) -- sequential-read + contiguity assert (uncommitted, validating):** both readers
+(`LoadSpectraCache` Stage-6 + `LoadWindow` streaming) now seek ONCE to the block start and read
+straight through, asserting `fs.Position == expected offset` per record. This bakes in Brendan's
+"reads stay in-sequence within a group, no out-of-sequence" invariant, matches the v3 sequential
+read, and faults a mis-grouped cache instead of decoding garbage. **Perf-neutral** (the per-record
+Seeks were free no-ops: Stage-6 3.55->3.55s; streaming warm 76.6->72.2s, coelution 42.4->39.9s,
+neutral-to-better -- fewer seeks under Parallel.For). Unit tests 508/508, inspection 0 warnings.
+**Stellar regression PASS all 3 modes (byte-identical).** Committed **`e9164d213`** and pushed to
+#4427.
+
+**STATUS: v4 grouping COMPLETE on #4427** (commits `f735053e5` + `e9164d213`). All local gates
+green (unit 508/508, inspection clean, Stellar byte-identical, cold 3.8x win, warm neutral, Stage-6
+no regression). Remaining = the **TeamCity Astral regression** (Brendan-gated; the merge gate that
+covers the Astral byte-identity + perf leg locally too slow to run each session). Merge #4427 once
+TeamCity is green.
