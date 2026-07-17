@@ -1,9 +1,9 @@
 # TODO: Osprey Stage-6 rescore — stream MS2 from spectra.bin (never materialize)
 
-**Status**: In Progress (follow-up to the Stages 1-4 streaming PR #4427).
+**Status**: Completed
 **Branch**: `Skyline/work/20260716_osprey_stage6_rescore_spectra_streaming`
 **Base**: `master` (post-#4427 merge `32106f96`)
-**PR**: [#4429](https://github.com/ProteoWizard/pwiz/pull/4429)
+**PR**: [#4429](https://github.com/ProteoWizard/pwiz/pull/4429) (merged 2026-07-16 as `d4b7ad54b`)
 **Priority**: Medium — the last resident full-`List<Spectrum>` load in the per-file path.
 **Created**: 2026-07-16
 **Scope**: `pwiz_tools/Osprey/Osprey.Tasks/PerFileRescoreTask.cs`
@@ -219,3 +219,17 @@ Streaming overlaps the cold per-window I/O (contiguous v4 reads) with scoring co
 resident path's blocking upfront full read + 3 calibrated-copy allocations. Resolves the HPC
 cold-worker concern. TeamCity Astral Perf/Regression (running) is the authoritative whole-pipeline
 cold gate.
+
+### 2026-07-16 - Merged
+
+PR #4429 merged as squash commit `d4b7ad54b` on master. Shipped: Stage-6 rescore
+(`PerFileRescoreTask`) streams each isolation window's MS2 from the `.spectra.bin` cache via a shared
+`StreamingWindowSpectraProvider` instead of a resident ~6 GB `List<Spectrum>`; the cache is required
+(no mzML fallback, hard-fails if absent). Retired `ResidentWindowSpectraProvider` + the
+`RunCoelutionScoring(List<Spectrum>)` wrapper (net -56 lines); `regression.ps1` mode3 now ships
+phase-1's `.spectra.bin` (+ 0-byte stub mzML) so the HPC chain streams. Astral file 49: resident MS2
+load 8.19->2.30 GB, working-set peak 29.8->14.1 GB (-53%), faster warm AND cold. Byte-identical
+(Stellar mode1/2/3, 508 tests, 0-warning inspection, TeamCity Astral green 18/18). Copilot's one nit
+(phase-3 stub filename) pushed back with rationale, threads left open for the human reviewer.
+Follow-up filed: `TODO-osprey_parquet_bounded_rowgroup_write.md` (the reconciled/scores Parquet write
+is now the tallest ~14 GB per-file peak; bounded row-group write shared with PerFileScoring).
