@@ -101,6 +101,34 @@ post-GC managed (genuinely live). `peak_paged` = peak private bytes (commit).
 - Correct output: 1,870,745 precursors pass; compaction 344.6M -> 12.4M survivors
   (90,544 passing base_ids). Log: `D:\test\osprey-runs\_firstpassmem_82f_base\firstpassfdr-mem-base.log`.
 
+## Reader A/B result (2026-07-17) -- the feature reader does NOT lower the peak
+
+82-file A/B, baseline (probe+capacity-hint) vs +`ParquetFeatureReader`
+(`_firstpassmem_82f_reader`):
+
+| Probe (post-GC live) | baseline | +reader |
+| --- | --- | --- |
+| projection built | 15.68 | (same) |
+| model trained | 26.81 | 27.74 |
+| score pass done | 29.37 | 30.30 |
+| q-value PEAK live | 38.04 | 38.97 |
+| **q-value PEAK commit (peak_paged)** | **86.97** | **90.88** |
+| after pass (transients freed) | 20.57 | 20.57 |
+
+- **Live matches (+~0.9 GB = the reader's one reused ~706 MB row buffer). Peak commit
+  is UNCHANGED within variance (90.88 vs 86.97).** Byte-identical output confirmed:
+  1,870,745 precursors (identical), Stellar golden PASS (mode1/2/3), 509/512 unit tests.
+- **Why no peak win:** the peak commit is Server-GC slack over the **LOH column churn**,
+  not the gen-0 row churn the reader fixed. Each per-file column read is a 34 MB array
+  (single-row-group test data) -- well over the 85 KB LOH threshold -- allocated inside
+  Parquet.NET (not reusable), so ~58 GB of LOH column garbage sets the high-water
+  regardless of the row arrays. 100K-row-group data (#4430) would be 800 KB reads --
+  still LOH, just smaller (easier gen-2), so somewhat better but not off the LOH; can't
+  test without regenerating (or a parquet re-chunk).
+- **The reader's defensible value (NOT a peak win):** byte-identical; removes 344.6M
+  gen-0 row-array allocations (GC object-count / CPU); FLAT in file count (row churn no
+  longer grows with N -- matters at 500 files). Commit gated on a wall-time perf sign.
+
 **Why a bounded design is possible (byte-identical, Step B):** the q-value math's
 intrinsic working set is bounded, not O(n) -- PEP KDE is fit on competition
 winners (one per base_id ~= O(library)); experiment-q is best-per-precursor
