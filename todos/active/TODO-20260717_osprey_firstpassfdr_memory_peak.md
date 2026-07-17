@@ -65,24 +65,43 @@ the real peak:
   (`ScoreProjectionAndComputeFdrInPlace` + `ComputeStreamingCompetitionQvalues`,
   `PercolatorFdr.cs:1113`/`946`), which allocates one `double[n]` per output.
 
-**Resident cost model** (n = total scored rows across all files, ~344.6M @ 82 files):
+## MEASURED baseline (2026-07-17, Start-Process detached, 82 files, --threads 8)
 
-| Buffer | B/row | @344.6M | Where |
-| --- | --- | --- | --- |
-| `FdrProjectionSet` (per-file `List<FdrProjection>`) | 32 | ~11 GB | held all pass |
-| flat `labels`+`entryIds`+`peptides`+`fileNames` | 21 | ~7 GB | `RunStreamingIntoProjection` -> reused by score pass |
-| `finalScores` | 8 | ~2.8 GB | score pass |
-| `peps` + 4 q-value arrays | 40 | ~14 GB | `ComputeStreamingCompetitionQvalues` |
-| **peak** | **~101** | **~35 GB** | + CompeteAll winners + peptide table |
+Run: `firstpass-mem-n.ps1 -MaxFiles 82` (probes + capacity-hint build), 36m22s,
+survived. Dual probes report no-GC managed (committed high-water incl. churn) AND
+post-GC managed (genuinely live). `peak_paged` = peak private bytes (commit).
 
-True peak ~35-40 GB @ 82 files (higher than the recorded 32 GB, which missed the
-q-value pass) -> ~210+ GB @ 500 files. Unlike the Stage-6 / calibration peaks,
-this is GENUINELY LIVE managed data, so the lever is real -- this is NOT
-Server-GC retained-committed. See
-`[[project_osprey_pipeline_peak_is_servergc_retained_committed]]` for the
-contrast.
+| Probe | live (post-GC) | commit (peak_paged) |
+| --- | --- | --- |
+| projection built | 15.68 GB | -- (capacity hint: 21.09 -> 15.68, saved ~5.4 GB) |
+| model trained | 26.81 GB | -- |
+| score pass done | 29.37 GB | -- |
+| **q-value peak** | **38.04 GB** | **86.97 GB** |
+| after pass (transients freed) | 20.57 GB | 87 held |
 
-**Why a bounded design is possible (byte-identical):** the q-value math's
+- **Peak = 87 GB commit / 38 GB live.** Peak WS 56 GB, ~10 GB paged. The box
+  commits ~100 GB via the page file and SURVIVES (earlier "OOM kills" were
+  harness reaping of background-bash runs, NOT real OOM -- launch long runs via
+  `Start-Process` + Monitor, per `[[feedback_night_session_detached_runs]]`).
+- **~49 GB of the 87 GB commit is reclaimable churn + Server-GC committed slack,
+  NOT live.** Two churn sources, both visible as memory sawtooth:
+  1. **Feature-load churn (~30 GB):** `LoadPinFeaturesFromParquet` allocates 21
+     column arrays + 4.2M `double[21]` per file, loaded TWICE (subset extraction +
+     score pass), ~115 GB allocated total. HDD-I/O-bound (D: is a SATA HDD).
+  2. **Competition scratch churn (the q-value-pass sawtooth):** each helper
+     (`ComputePerRun*`, `ComputeExperiment*`, `CompeteAll`) reallocates O(n)
+     temp arrays / dicts per sub-step.
+- **The 38 GB live is the structural O(files) set** (the Step-B target): projection
+  11.3 + library 4.4 (fixed) + flat identity arrays ~7 + finalScores 2.8 + sink
+  outputs 5.5 + 5 q-value arrays (net ~8.7 at peak). At 500 files ~210+ GB live.
+- **Wall time is also a cost:** the q-value competition + clamp are SINGLE-THREADED
+  over 344.6M rows (CPU ~4% = one core), plus double HDD feature reads. Stage 6
+  planning by contrast parallelizes (CPU 92%). Bounding (B) should parallelize the
+  serial passes too.
+- Correct output: 1,870,745 precursors pass; compaction 344.6M -> 12.4M survivors
+  (90,544 passing base_ids). Log: `D:\test\osprey-runs\_firstpassmem_82f_base\firstpassfdr-mem-base.log`.
+
+**Why a bounded design is possible (byte-identical, Step B):** the q-value math's
 intrinsic working set is bounded, not O(n) -- PEP KDE is fit on competition
 winners (one per base_id ~= O(library)); experiment-q is best-per-precursor
 (~= O(distinct precursors)); run-q is per-file competition (~= O(rows in one
@@ -95,12 +114,26 @@ less RAM held).
 
 ## Plan (Brendan's call 2026-07-17: A first, then B)
 
-**Step A -- byte-identical buffer reduction (this commit).** Drop the redundant
-flat identity arrays (they duplicate projection fields: `peptides`/`fileNames`
-are `PeptideId`/`FileIdx` re-expanded as 8 B refs) and stop holding all five
-q-value `double[n]` at once. ~2x peak reduction, `regression.ps1` byte-identical.
-Also stands up the Astral test harness + a `[MEM]`/probe at the REAL peak (the
-q-value pass), which is currently unmeasured. De-risks B.
+**Step A -- byte-identical churn reduction (revised after measurement).** The
+measurement showed the reclaimable slice is ~49 GB of CHURN + Server-GC committed
+slack, NOT the live buffers -- so Step A targets the churn, byte-identical, and
+leaves the flat-array / q-array live reduction to B (which rewrites those helpers
+anyway). Sub-steps:
+1. **Capacity hint on the projection lists** -- DONE (`PerFileScoringTask.LoadJoinOnlyScores`
+   pre-sizes each per-file `List<FdrProjection>` to the parquet row count; -5.4 GB).
+2. **Peak `[MEM]` probe** -- DONE (threaded `Action<string> logMemory` from
+   `FirstJoinTask.RunFirstPassProjection` -> `RunPercolatorFdr(projection)` ->
+   `RunStreamingIntoProjection` -> `ScoreProjectionAndComputeFdrInPlace`; logs
+   no-GC committed + post-GC live at model-trained / score-pass-done / q-value peak).
+3. **Feature-buffer reuse** -- reuse a per-file feature buffer instead of 4.2M fresh
+   `double[21]` per file in the score pass + subset extraction (and, if cheap, avoid
+   loading all rows for the <=300K subset). Collapses ~30 GB feature churn + the HDD
+   re-reads. `LoadPinFeaturesFromParquet` + the two streaming loops.
+4. *(stretch)* reuse the competition per-substep scratch (the sawtooth).
+
+Target: commit peak 87 -> ~45-50 GB, no paging, faster. Gates: `regression.ps1`
+byte-identical + `Test-PerfGate` (feature-load path is perf-sensitive). Does NOT
+bound 500 files -- that is B.
 
 **Step B -- bounded q-value competition redesign (next).** Restructure
 `ComputeStreamingCompetitionQvalues` + the score pass so only the bounded
