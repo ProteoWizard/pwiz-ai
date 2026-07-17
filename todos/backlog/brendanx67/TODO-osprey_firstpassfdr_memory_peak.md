@@ -27,11 +27,25 @@ PerFileScoring inputs (`*.scores.parquet` + `*.calibration.json`, hard-linked so
 - `--input-scores <dir>` takes a DIRECTORY (globbed + sorted internally).
 - FirstPassFDR needs NO mzML / spectra -- it reads the scored features + library only.
 
-## Observed (fill in from the run)
+## Observed (first run, 2026-07-17, OSPREY_LOG_MEMORY, log at D:\test\osprey-runs\_firstpassmem\firstpassfdr-mem.log)
 
-- Peak working_set / gc_committed / gc_heap(used) / native: **TODO from firstpassfdr-mem.log**
-  (`[MEM]` stage-boundary probes). Note the load-all-82 point vs the Percolator-train
-  point vs the reconciliation point.
+- library-resident: managed 4.38 GB (6.32M entries).
+- **PEAK = "Stage 5 start: 82 files loaded (stubs), before first-pass FDR":
+  working_set=32.11 (peak=35.52 GB), managed_heap=32.56 GB, gc_committed=31.88 GB,
+  gc_heap(used)=22.98 GB, gc_fragmented=2.51.**
+- stage5-start-live (post-GC): managed **20.53 GB**.
+- projection built (344,615,472 rows, 4.5M distinct peptides; FdrEntry stubs released):
+  managed 20.53 GB, gc_heap 20.60 GB.
+
+**KEY: this peak is DIFFERENT from the Stage-6 / calibration peaks.** Here
+`gc_heap(used)=22.98 GB` is GENUINELY LIVE managed data -- it is NOT Server-GC
+retained-committed. The ~32 GB peak is **all 82 files' `FdrEntry` stubs materialized
+at once** before the 32 B projection is built and the stubs released (drops to ~20.5
+GB). So the lever here is REAL: **stream the per-file load -> projection -> release**
+so all 82 files' fat stubs never coexist, rather than `LoadJoinOnlyScores` building
+the whole pooled stub set first. The projection itself (344.6M rows x 32 B ~= 11 GB +
+per-peptide maps) is the ~20.5 GB residual -- a second, smaller target.
+
 - dotMemory follow-up (optional, heavy on 82 files): `loh-diag`-style `-DotMemory`.
 
 ## Expected shape / where to look
