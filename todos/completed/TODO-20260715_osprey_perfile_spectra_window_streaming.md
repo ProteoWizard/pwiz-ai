@@ -1,6 +1,21 @@
 # TODO: Osprey per-file MS2 spectra streaming by isolation window
 
-**Status**: **APEX WIN PROVEN (2026-07-16 night session) — PR now justified.** The MS2-streaming
+**Status**: **Completed** - merged to master as PR [#4427](https://github.com/ProteoWizard/pwiz/pull/4427) (2026-07-16, squash `32106f96`).
+
+### 2026-07-16 - Merged
+PR #4427 merged as `32106f96` (admin override: TeamCity Perf/Regression passed on the prior commit
+`f735053e5`, but a TeamCity/GitHub orchestration gap left the required status un-refreshed on the
+final commit `e9164d213`, which was validated locally instead -- Stellar byte-identical all 3 modes,
+508 tests, inspection clean). Shipped: (1) per-file MS2 streaming for the memory win (post-cal WS
+-33%, managed heap -36% on Astral), and (2) the **spectra.bin v4 window-grouping cold-HDD fix** added
+this session -- file-order streaming was a ~3.8x cold regression; grouping each window into one
+sequential read restores baseline-beating cold (79s vs master's 104s) while keeping the memory win
+and staying byte-identical. Grouping detail: TODO-20260716_osprey_spectra_bin_v4_end_index.md.
+Follow-up (Brendan next PR): Stage-6 rescore streaming.
+
+(Historical pre-merge status and journey below.)
+
+**Pre-merge status**: **APEX WIN PROVEN (2026-07-16 night session) — PR now justified.** The MS2-streaming
 payoff alone was only ~2 GB (Phase 4), so Lever A (streaming the CALIBRATION phase, the true apex)
 was added: **post-calibration managed heap 11.13 → 7.09 GB (−36%), WS peak 20.68 → 13.89 GB (−33%)**
 on Astral file 49, **byte-identical** (scores.parquet bit-identical; calibration.json identical modulo
