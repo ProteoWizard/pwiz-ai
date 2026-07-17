@@ -250,3 +250,25 @@ mode1/2/3 + perf gate; Astral legs exercise the real multi-row-group write.
 
 **In flight:** single-file memory+perf A/B on PerFileScoring + PerFileRescoring with
 dotMemory AFTER dumps (subagent); /pw-respond to the auto Copilot review.
+
+### 2026-07-16 (night: measurement DONE + Copilot fix)
+**Memory+perf (single-file Astral file 49, --threads 8, AFTER = 5b7199fdb), posted to
+PR #4430 as a comment; dotMemory AFTER dumps captured for BOTH tasks:**
+- **PerFileRescoring** (reconciled write-back, tallest peak after #4429): pre-GC managed
+  at write apex **8.63 -> 5.46 GB (-3.2 GB, -37%)**; WS peak ~14.1 -> 13.18 GB; warm wall
+  57.5 -> 54.1 s (-6%, faster). Dump: `D:\test\osprey-runs\_memperf_night\rescore-base-20260716-231617\rescore-after-20260716-232226.dmw`.
+- **PerFileScoring**: WS peak 15.0 GB, managed-at-peak 9.47 GB, write phase 17.1 s, warm
+  147.4 s. Dump: `D:\test\osprey-runs\_memperf_night\score-after-20260716-230253.dmw`.
+- The bounded 100K-row write caps the end-of-file managed column arrays + native
+  Zstd/IronCompress buffers to one chunk (was all 1.68M rows). Residual at the apex is now
+  the managed `fullEntries` reload -> motivates deferred fix (b). Full write-up +
+  before/after tables: `ai/.tmp/agent-memperf-results.md`. BONUS same-session before-binary
+  A/B was left incomplete (before-binary built at worktree `C:\proj\pwiz-membase-night`;
+  before-runs not captured) -- optional, not needed for Brendan's ask.
+
+**Copilot review (PR #4430):** ONE finding -- the test seam `RowGroupRowCapForTest`, if set
+to 0/negative, could spin the write loop forever. Accepted: guarded
+`rowsPerGroup = Math.Max(1, RowGroupRowCapForTest ?? MAX_ROWS_PER_ROW_GROUP)` (production
+unchanged: null -> 100000). New commit (gated) + thread reply/resolve.
+
+**TeamCity** Perf/Regression 4096475 on pull/4430: queued (agent not yet free); runs overnight.
