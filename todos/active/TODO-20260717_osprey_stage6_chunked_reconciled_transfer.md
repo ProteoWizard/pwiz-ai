@@ -139,6 +139,25 @@ inspection); `regression.ps1 -Dataset Stellar` mode1 (vs golden) / mode3 (HPC ch
 mode2 (resume) all PASS -- blib byte-identical (45,064,192 bytes) across all three.
 
 Remaining: `Test-PerfGate.ps1 -Dataset Stellar` (speed A/B); `-Dataset All` Astral legs via
-the TeamCity Perf/Regression config (Brendan-gated); memory A/B (single-file Astral 49) to
-confirm the +4.4 GB reload vanished; `/pw-self-review` + PR. The `.gitignore` nested-nuget
-fix (`**/.nuget/.nuget/`) is folded into this branch/PR per Brendan.
+the TeamCity Perf/Regression config (Brendan-gated); `/pw-self-review` + PR. The `.gitignore`
+nested-nuget fix (`**/.nuget/.nuget/`) is folded into this branch/PR per Brendan.
+
+## Memory investigation conclusion (2026-07-17) -- MOTIVATION REFRAMED
+
+The max-RSS motivation in "Why" above is **largely invalidated by measurement.** Memory
+A/B (single-file Astral case B) + dotMemory showed the reconciled-write peak is NOT the
+managed reload -- it is **Server-GC committed-but-free managed heap** left after the
+scoring Gen-0 burst (dotMemory paints it "unmanaged" gray; native is ~0.8 GB). See
+`[[project_osprey_pipeline_peak_is_servergc_retained_committed]]` for the proof
+(`gc_committed 9.80` vs `gc_heap 3.55`; compacting GC collects but does not decommit;
+`DOTNET_GCConserveMemory=9` decommits at 3x GC cost). The streaming transfer moved the
+dotMemory peak only 11.34 -> 10.43 GB and #4430 only shaved the read transient -- neither
+touched the ~9 GB retained floor.
+
+**Decision (Brendan, 2026-07-17): KEEP + finish the PR on its real merits** -- byte-identical
+output (regression mode1/2/3 green), ~1.5 GB less managed churn per file (helps the
+`--threads` commit scaling, the one place memory is a real wall), and simpler code (no
+whole-file `List<FdrEntry>` materialization). It is NOT a max-RSS fix; do not claim one in
+the PR. The real per-worker peaks are separate backlog items:
+`[[TODO-osprey_perfilescoring_calibration_memory_peak]]` (15.5 GB) and
+`[[TODO-osprey_firstpassfdr_memory_peak]]`.
