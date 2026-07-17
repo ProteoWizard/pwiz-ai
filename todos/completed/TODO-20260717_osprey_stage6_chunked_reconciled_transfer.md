@@ -1,6 +1,7 @@
 # TODO: Osprey Stage-6 chunked reconciled transfer (stream the reconciled round-trip)
 
-**Status**: In Progress -- started 2026-07-17 (PR #4430 merged 2026-07-17 14:12 UTC).
+**Status**: Completed.
+**PR**: [#4433](https://github.com/ProteoWizard/pwiz/pull/4433) (merged 2026-07-17 as 3086197)
 **Branch**: `Skyline/work/20260717_osprey_stage6_chunked_reconciled_transfer`
 **Base**: `master`
 **Priority**: High -- this is the HALF THAT ACTUALLY BOUNDS STAGE 6. #4430 chunked the
@@ -161,3 +162,16 @@ whole-file `List<FdrEntry>` materialization). It is NOT a max-RSS fix; do not cl
 the PR. The real per-worker peaks are separate backlog items:
 `[[TODO-osprey_perfilescoring_calibration_memory_peak]]` (15.5 GB) and
 `[[TODO-osprey_firstpassfdr_memory_peak]]`.
+
+### 2026-07-17 - Merged
+
+PR #4433 merged (squash) as commit 3086197. Shipped the streaming k-way-merge Stage-6
+reconciled transfer (byte-identical, regression mode1/2/3 green), plus a monotonic-key
+hard-fail guard against non-canonical output (self-review Findings 1+2) and the nested
+`**/.nuget/.nuget/` gitignore. Self-review + both Copilot doc threads resolved; Stellar
+perf gate green (exit 0). DEFERRED (small, noted on the PR): self-review Finding 3
+(single-group residency docstring caveat) and Finding 4 (a unit test that the guard
+FIRES on a scan-moving overlay crossing a same-(entry_id,charge) sibling). The max-RSS
+motivation was reframed to byte-identity + managed-churn (see the section above); the
+real per-worker peaks moved to the two backlog TODOs. `pwiz-perfbase`/TeamCity Astral
+were green at merge.
