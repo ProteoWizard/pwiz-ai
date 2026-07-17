@@ -1,7 +1,14 @@
 # TODO: Osprey bounded row-group Parquet write (cap the end-of-file write tail)
 
-**Status**: Backlog (start immediately after the Stage-6 spectra-streaming PR
-`Skyline/work/20260716_osprey_stage6_rescore_spectra_streaming` squash-merges).
+## Branch Information
+- **Branch**: `Skyline/work/20260716_osprey_parquet_bounded_rowgroup_write`
+- **Base**: `master` (post-#4429 Stage-6 merge `d4b7ad54b`)
+- **Created**: 2026-07-16
+- **Status**: In Progress
+- **PR**: (pending)
+
+**Status**: Active (started 2026-07-16; predecessor Stage-6 PR
+[#4429](https://github.com/ProteoWizard/pwiz/pull/4429) merged as `d4b7ad54b`).
 **Priority**: Medium-High -- once the resident MS2 is streamed (Stage-6 PR), the
 Parquet write is the tallest remaining per-file peak in BOTH PerFileScoring and
 PerFileRescoring.
