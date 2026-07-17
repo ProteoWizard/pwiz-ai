@@ -4,11 +4,12 @@
 - **Branch**: `Skyline/work/20260716_osprey_parquet_bounded_rowgroup_write`
 - **Base**: `master` (post-#4429 Stage-6 merge `d4b7ad54b`)
 - **Created**: 2026-07-16
-- **Status**: In Progress
-- **PR**: [#4430](https://github.com/ProteoWizard/pwiz/pull/4430)
+- **Status**: Completed
+- **PR**: [#4430](https://github.com/ProteoWizard/pwiz/pull/4430) (merged 2026-07-17 as `1d05b843`)
 
-**Status**: Active (started 2026-07-16; predecessor Stage-6 PR
-[#4429](https://github.com/ProteoWizard/pwiz/pull/4429) merged as `d4b7ad54b`).
+**Status**: Completed (fix (a) shipped; the Stage-6 chunked TRANSFER is broken off to
+`[[TODO-osprey_stage6_chunked_reconciled_transfer]]`). Predecessor Stage-6 PR
+[#4429](https://github.com/ProteoWizard/pwiz/pull/4429) merged as `d4b7ad54b`.
 **Priority**: Medium-High -- once the resident MS2 is streamed (Stage-6 PR), the
 Parquet write is the tallest remaining per-file peak in BOTH PerFileScoring and
 PerFileRescoring.
@@ -323,3 +324,18 @@ design (stream original groups -> overlay -> write -> release; append gap-fill, 
 byte-identity oracle for merge-vs-append) + all diagnostic data. The earlier "night session
 COMPLETE - goal achieved" note above overclaimed: fix (a) is done + validated, but the Stage-6
 memory GOAL is completed by the follow-up. `[[feedback_todo_lifecycle_dated_active]]`.
+
+### 2026-07-17 - Merged
+PR #4430 merged as squash commit `1d05b843`. Shipped **fix (a) only**: both
+`WriteScoresParquet` overloads write bounded 100K-row row groups (`WriteChunkedParquet`),
+capping the end-of-file write tail's managed column arrays + native Zstd/IronCompress
+buffers to one chunk; empty blob cells write as null (nullable columns) so an all-empty
+blob row group can't fail to decode -- both byte/blib-neutral (no gate compares parquet
+bytes). Gates: 512 unit tests + 0-warning inspection, `/pw-self-review` clean, Copilot
+finding fixed (test-seam `rowsPerGroup >= 1` guard), Stellar regression mode1/2/3
+byte-identical, **TeamCity Osprey Perf/Regression (Stellar + Astral) green 20/20**.
+**DEFERRED (the load-bearing half for the actual Stage-6 memory win):** the chunked Stage-6
+reconciled TRANSFER (stream the multi-group original group-by-group instead of the full
+`LoadFullFdrEntries` reload) -> `[[TODO-osprey_stage6_chunked_reconciled_transfer]]`. The
+diagnostic proved fix (a) alone cuts the Stage-6 read transient ~2 GB (production multi-group
+original) but leaves the ~4.4 GB resident reload, which only the transfer removes.
