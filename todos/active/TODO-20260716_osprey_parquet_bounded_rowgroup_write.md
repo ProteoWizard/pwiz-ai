@@ -5,7 +5,7 @@
 - **Base**: `master` (post-#4429 Stage-6 merge `d4b7ad54b`)
 - **Created**: 2026-07-16
 - **Status**: In Progress
-- **PR**: (pending)
+- **PR**: [#4430](https://github.com/ProteoWizard/pwiz/pull/4430)
 
 **Status**: Active (started 2026-07-16; predecessor Stage-6 PR
 [#4429](https://github.com/ProteoWizard/pwiz/pull/4429) merged as `d4b7ad54b`).
@@ -213,3 +213,40 @@ written once, unchanged. Implementation must audit every parquet reader
 (`LoadFullFdrEntries` already loops `RowGroupCount`; verify `LoadPinFeatures*`,
 `LoadCwtCandidates*`, and ParquetIndex-based random access in the rescore overlay
 all handle multi-row-group + preserve ParquetIndex).
+
+### 2026-07-16 (night session: fix (a) IMPLEMENTED + PR #4430 opened)
+**Scope decision:** ship fix (a) bounded 100K-row row groups + an empty-blob->null
+robustness fix as this PR; **DEFER fix (b)** (streaming reconciled round-trip) to a
+follow-up. Fix (a) already bounds the dominant UNMANAGED tail on BOTH the reconciled
+write AND read (`LoadFullFdrEntries` already reads group-by-group, so once the file is
+multi-row-group its native Arrow/IronCompress buffers are per-group too). Fix (b) only
+targets the residual managed `fullEntries` reload; keep it out of this PR to stay
+low-risk for TeamCity. Memory measurement (in flight) quantifies the residual.
+
+**Implemented (commit `5b7199fdb`, pushed):**
+- `ParquetScoreCache.WriteChunkedParquet` helper: both `WriteScoresParquet` overloads
+  build+compress+flush+release one 100K-row group at a time (`MAX_ROWS_PER_ROW_GROUP`,
+  test seam `RowGroupRowCapForTest`). Same global `(entry_id,charge,scan)` sort ->
+  identical row order + `ParquetIndex`. `WriteRowGroupColumns` simplified (file-level
+  progress in the helper).
+- `EncodeF64Blob`/`EncodeF32Blob` write empty blobs as **null** (columns already
+  `isNullable:true`) not a 0-length blob. Root cause found via the unit test: an
+  all-0-length blob COLUMN in a row group can't be decoded by Parquet.Net, and chunking
+  makes it reachable (decoys are a contiguous block at the end of the entry_id sort ->
+  a 100K group can fall entirely in a region with no reference XIC). Null decodes back
+  to empty (`DecodeF64Blob(null)==empty`) -> blib-neutral, no gate compares parquet bytes.
+- `TestParquetBoundedRowGroupRoundTrip`: forced multi-group == single-group (rows/order/
+  ParquetIndex/features/blobs) + an all-empty blob column across 3 groups reads back empty.
+
+**Gates so far (all green):** Build-Osprey -RunTests -RunInspection = 512 tests, 0 fail,
+inspection 0/0. `/pw-self-review` (fresh-context subagent) = CLEAN, no Critical/High/Med
+(2 informational LOW: test-only static seam reset in finally; fix (b) deferral is a
+memory opt not a correctness dep). Stellar regression mode1 (vs golden) PASS byte-identical
+(straight blib 45,064,192); mode2/mode3 in flight.
+
+**PR #4430** opened. **TeamCity Osprey Perf/Regression** triggered on `pull/4430`
+(build 4096475, Brendan-authorized overnight) = the authoritative Stellar+Astral
+mode1/2/3 + perf gate; Astral legs exercise the real multi-row-group write.
+
+**In flight:** single-file memory+perf A/B on PerFileScoring + PerFileRescoring with
+dotMemory AFTER dumps (subagent); /pw-respond to the auto Copilot review.
