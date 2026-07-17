@@ -1,6 +1,8 @@
 # TODO: Osprey Stage-6 chunked reconciled transfer (stream the reconciled round-trip)
 
-**Status**: Backlog -- start after PR #4430 (bounded row-group WRITE) merges.
+**Status**: In Progress -- started 2026-07-17 (PR #4430 merged 2026-07-17 14:12 UTC).
+**Branch**: `Skyline/work/20260717_osprey_stage6_chunked_reconciled_transfer`
+**Base**: `master`
 **Priority**: High -- this is the HALF THAT ACTUALLY BOUNDS STAGE 6. #4430 chunked the
 Parquet *write* (so the original is multi-row-group); this chunks the Stage-6 *transfer*
 that reloads it. The original night session was meant to deliver BOTH; #4430 is only part 1.
