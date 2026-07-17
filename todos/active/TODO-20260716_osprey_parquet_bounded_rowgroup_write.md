@@ -302,3 +302,24 @@ interleave, so it's a merge not an append). Sibling: `[[TODO-osprey_perfile_scor
 **Morning cleanup:** worktree `C:\proj\pwiz-membase-night` (before-binary) ->
 `git -C C:/proj/pwiz worktree remove C:/proj/pwiz-membase-night --force`; `D:\test\osprey-runs\_memperf_night\`
 holds the .dmw dumps (keep until diffed).
+
+### 2026-07-17 morning (Brendan) -- SCOPE CORRECTED: #4430 is fix (a) ONLY; goal continues
+Brendan clarified the night's real goal (the TODO under-specified it): the inspiring question was
+whether Parquet could imitate CSV row-by-row streaming (read/modify/write/release). Answer: not
+row-by-row, but CHUNK-by-chunk -- and Stage 6 only improves if BOTH halves are chunked: the
+Stages-1-4 WRITE (so the original is multi-row-group) AND the Stage-6 reconciled TRANSFER that
+reloads it. **#4430 delivers only the WRITE half.** Chunking the write was never meant to lower
+Stage 1-4's own peak (it didn't); its target was Stage 6. The diagnostic proved the payoff is
+real but PARTIAL: a multi-group original cuts the Stage-6 read TRANSIENT ~2 GB (WS 13.09->11.12),
+but the reload is a discrete +4.4 GB managed step (`LoadFullFdrEntries` materializing the whole
+1.68M-entry list) that the write chunking does NOT touch. That resident reload is the prize --
+removed only by the chunked TRANSFER.
+
+**Decision (Brendan):** #4430 is merge-ready and a valid standalone improvement (delivers the
+~2 GB production Stage-6 read-transient win + the write-tail cap); MERGE it, and complete the
+Stage-6 goal in a fresh session on a broken-off TODO:
+**`[[TODO-osprey_stage6_chunked_reconciled_transfer]]`** (backlog/brendanx67/) -- carries the full
+design (stream original groups -> overlay -> write -> release; append gap-fill, mode3 as the
+byte-identity oracle for merge-vs-append) + all diagnostic data. The earlier "night session
+COMPLETE - goal achieved" note above overclaimed: fix (a) is done + validated, but the Stage-6
+memory GOAL is completed by the follow-up. `[[feedback_todo_lifecycle_dated_active]]`.
