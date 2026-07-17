@@ -272,3 +272,33 @@ to 0/negative, could spin the write loop forever. Accepted: guarded
 unchanged: null -> 100000). New commit (gated) + thread reply/resolve.
 
 **TeamCity** Perf/Regression 4096475 on pull/4430: queued (agent not yet free); runs overnight.
+
+### 2026-07-17 00:50 PDT (night session COMPLETE -- PR #4430 fully tested)
+**All gates GREEN. PR ready for human review/merge.**
+- **TeamCity Osprey Perf/Regression 4096475: SUCCESS** (finished) -- full Stellar + Astral
+  mode1/2/3 (golden / resume / HPC 4-task chain) + perf, byte-identical. The Astral legs are
+  the real multi-row-group exercise (>100K rows/file). Tested `5b7199fdb`; HEAD `487f3bf5c`
+  is the output-neutral Math.Max guard, so it's a valid gate (local build+512 tests green on
+  HEAD). Re-trigger on HEAD only if an exact-commit run is wanted.
+- Commits on branch: `5b7199fdb` (fix a + blob-null), `487f3bf5c` (Copilot guard).
+- Same-session before/after A/B (both tasks) posted to the PR + in `ai/.tmp/agent-memperf-results.md`:
+  rescore write-apex managed **8.63 -> 5.46 GB (-37%)** (base 8.63 exactly reproduces the
+  #4429-documented value), WS 14.13 -> 13.18, warm 61 -> 54 s. **Scoring delta is small**
+  (WS 15.64 -> 15.0, managed 9.94 -> 9.47) -- scoring's peak is dominated by the resident
+  `scoredEntries` set, not the write buffer.
+- dotMemory AFTER dumps: `D:\test\osprey-runs\_memperf_night\score-after-20260716-230253.dmw`
+  and `...\rescore-base-20260716-231617\rescore-after-20260716-232226.dmw`.
+
+**NEXT LEVER (fix (b), now measurement-justified):** the residual write apex is the managed
+`fullEntries` set held to end-of-file (scored/reconciled entries + heavy per-entry arrays
+reloaded for the write-back). Fix (b) = per-window scored-entry streaming: flush + null the
+heavy arrays as writing proceeds so only light scalars stay resident. This PR removed the
+write-BUFFER amplification on top of that set; (b) removes the SET. Byte-parity contract is
+already settled (no gate compares parquet bytes). The reconciled round-trip needs a streaming
+k-way merge of [sorted original rows, streamed group-by-group] + [resident sorted gap-fill]
+to preserve the exact `(entry_id,charge,scan)` output order + ParquetIndex (gap-fill entry_ids
+interleave, so it's a merge not an append). Sibling: `[[TODO-osprey_perfile_scored_entry_streaming]]`.
+
+**Morning cleanup:** worktree `C:\proj\pwiz-membase-night` (before-binary) ->
+`git -C C:/proj/pwiz worktree remove C:/proj/pwiz-membase-night --force`; `D:\test\osprey-runs\_memperf_night\`
+holds the .dmw dumps (keep until diffed).
