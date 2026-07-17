@@ -125,22 +125,44 @@ anyway). Sub-steps:
    `FirstJoinTask.RunFirstPassProjection` -> `RunPercolatorFdr(projection)` ->
    `RunStreamingIntoProjection` -> `ScoreProjectionAndComputeFdrInPlace`; logs
    no-GC committed + post-GC live at model-trained / score-pass-done / q-value peak).
-3. **Feature-buffer reuse** -- reuse a per-file feature buffer instead of 4.2M fresh
-   `double[21]` per file in the score pass + subset extraction (and, if cheap, avoid
-   loading all rows for the <=300K subset). Collapses ~30 GB feature churn + the HDD
-   re-reads. `LoadPinFeaturesFromParquet` + the two streaming loops.
-4. *(stretch)* reuse the competition per-substep scratch (the sawtooth).
+3. **Feature-buffer reuse** -- DONE (`ParquetScoreCache.ParquetFeatureReader`, nested
+   in Osprey.IO). One reused `double[][]` row buffer refilled per file, columns read +
+   scattered one at a time; `FirstJoinTask.RunFirstPassProjection` owns one reader for
+   the whole projection pass (subset load + score pass both request one file at a time
+   and copy/clone what they keep) and disposes it before survivor reload. Byte-identical
+   (same columns/order/NaN-clamp). Eliminates the ~115 GB per-file feature re-alloc
+   churn; the reused buffer is one file's worth (~706 MB) reused, so it is already flat
+   in file count. Validated: Stellar regression PASS (mode1/2/3 byte-identical) + 509/512
+   unit tests + my files inspection-clean.
+4. *(stretch, not done)* reuse the competition per-substep scratch (the q-value-pass
+   sawtooth).
 
-Target: commit peak 87 -> ~45-50 GB, no paging, faster. Gates: `regression.ps1`
-byte-identical + `Test-PerfGate` (feature-load path is perf-sensitive). Does NOT
-bound 500 files -- that is B.
+Gates: `regression.ps1` byte-identical (Stellar DONE) + `-Dataset Astral` + `Test-PerfGate`
+(feature path is perf-sensitive) + the 82-file memory A/B (commit peak 87 -> target
+~45-55 GB). Does NOT bound 500 files -- that is B.
 
 **Step B -- bounded q-value competition redesign (next).** Restructure
 `ComputeStreamingCompetitionQvalues` + the score pass so only the bounded
 per-precursor / per-file structures are resident and rows are streamed twice.
 Truly flat in file count. Touches the most parity-critical code (PEP KDE order,
 the experiment-q clamp), so gate on the full regression + FDRBench oracle with
-careful bisection. Design against Step A's measured numbers.
+careful bisection. Design against Step A's measured numbers. Concrete Step-B levers
+surfaced by the measurement:
+- **100K-block feature streaming (Brendan, 2026-07-17):** the parquet is now written in
+  100K-row row groups (#4430/#4433), and on the 1st pass the `(EntryId,Charge,ParquetIndex)`
+  sort is a NO-OP (parquet already in that order), so the score pass walks features
+  SEQUENTIALLY by ParquetIndex -- it is genuinely 100K-block-streamable (reused buffer
+  ~17 MB instead of a whole file). Catch: the training-subset load random-accesses ~300K
+  scattered rows, so it needs the whole-file buffer OR a selective by-parquet-index read.
+  The `ParquetFeatureReader` already reads per-row-group, so the COLUMN transient already
+  matches the block size; this lever shrinks the resident ROW buffer + enables true
+  bounded streaming of the score pass.
+- **Parallelize the serial 344.6M-row passes** (score + q-value competition + clamp are
+  single-threaded, ~4% CPU = one core, and drive the 36-min wall time). Stage 6 planning
+  already uses `OspreyParallel.For` (92% CPU) as a template.
+- **Bound the q-value output arrays / sink** (the 5 `double[n]` + `FdrProjectionOutputs`)
+  by streaming per-file assignment from bounded lookup tables (see the "Why a bounded
+  design is possible" section above).
 
 ## Gates
 - `regression.ps1 -Dataset Stellar` (fast) + `-Dataset Astral` for any
