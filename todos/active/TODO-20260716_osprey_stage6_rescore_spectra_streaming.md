@@ -195,3 +195,27 @@ immutable index maps, pure ApplyCalibration), the mode3 0-byte-stub fingerprint 
 PR #4429 opened (body per version-control convention). **Remaining before merge (Brendan-gated):**
 `regression.ps1 -Dataset All` (Astral byte-identity) + TeamCity Astral Perf/Regression; optional
 Copilot / `/ultrareview`.
+
+### 2026-07-16 (Copilot review + COLD perf A/B)
+**Copilot (PR #4429):** 2 inline comments, one duplicated nit -- phase-3 stub named `"$s.mzML"` vs
+`Split-Path -Leaf $mzmlByStem[$s]` for case-sensitive-FS robustness. **Pushed back** (Brendan
+concurred, triggered TeamCity on `63a2e6e40` with no changes): consistent with the phase-2/4 stubs,
+the rescore worker derives cache/sidecar paths from the `.scores.parquet` stem (`ResolveInputScores`
+-> `Config.InputFiles`) not the stub filename, mode3 byte-identical, Windows-only harness. Replied to
+both threads, left unresolved for the human reviewer.
+
+**COLD perf A/B (Brendan: "HPC will always be cold").** Built the resident before-binary from
+`32106f960` into `D:\test\osprey-runs\_stage6base\net8.0`; `ai/.tmp/stage6-cold-perf.ps1` evicts the
+OS standby cache (42 GB balloon, as a CHILD process so it frees on exit) before each rep and runs
+`--task PerFileRescoring` cold with NO `OSPREY_LOG_MEMORY` (clean timing). Astral file 49:
+
+| cold (no probe) | rep1 | rep2 |
+|---|---|---|
+| before (resident) | 83.2 s | 63.0 s |
+| after (streaming)  | 51.8 s | 52.2 s |
+
+**min-before (63.0) > max-after (52.2)** -> streaming is FASTER cold by ~11-31 s, never slower.
+Streaming overlaps the cold per-window I/O (contiguous v4 reads) with scoring compute, vs the
+resident path's blocking upfront full read + 3 calibrated-copy allocations. Resolves the HPC
+cold-worker concern. TeamCity Astral Perf/Regression (running) is the authoritative whole-pipeline
+cold gate.
