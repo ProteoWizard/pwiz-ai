@@ -105,7 +105,7 @@ var ids = new[] { 1, 2, 3 };
 var scores = new[] { 0.9f, 0.8f, 0.7f };
 ```
 
-Keep the explicit type only when it is load-bearing:
+Keep the explicit type only when it is essential:
 - Mixed numeric literals that must widen:
   `new double[] { 1, 2.5 }` forces `1` to `double`. `new[] { 1, 2.5 }` is
   also `double[]` because the compiler picks the best common type, but the

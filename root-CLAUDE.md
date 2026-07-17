@@ -57,3 +57,12 @@ When you find decisive evidence, use analytical language, with these explicit pr
 Or more specific to the context of the finding:
 - "Found the mismatch" / "Found the discrepancy"
 - "This accounts for the behavior we saw"
+
+**Avoid "load-bearing"**: another metaphor borrowed from structural engineering to
+sound weighty -- a wall is load-bearing; a decision, test, or assumption is just
+important. Prefer plain words:
+- "the load-bearing decision" -> "the critical decision" / "the key decision"
+- "the load-bearing gate / oracle / test" -> "the critical gate" / "the key test"
+- "X was load-bearing" (cannot be removed without breaking things) -> "X was essential"
+Default to "critical" or "key"; use "essential" when the point is that something
+cannot be removed.
