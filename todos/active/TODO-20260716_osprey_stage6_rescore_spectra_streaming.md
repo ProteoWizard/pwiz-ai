@@ -98,3 +98,80 @@ cache-miss `LoadAllSpectra` fallback. Removing that fallback (per guidance) mean
 must instead ship phase-1's `.spectra.bin` so it streams (models the intended deployment +
 exercises the new path). Byte-identical (cache round-trip == mzML parse of the same file, already
 validated for Stage-4). Confirm retire-vs-keep-fallback with Brendan before coding.
+
+### 2026-07-16 (measurement scaffold + BASELINE proven; lever = 5.88 GB)
+**Probe (commit pending):** added `perfile-rescore-loaded` (forced-GC, resident MS2 rooted) +
+`perfile-rescore-peak (pre-GC)` (during-scoring high-water) + `perfile-rescore-live` (forced-GC
+floor) probes to `RescoreOneFile`, plus retention snapshots at the loaded/floor boundaries for
+dotMemory. Byte-identical (zero-cost/no-op when `OSPREY_LOG_MEMORY` unset). KEY placement lesson:
+the resident MS2 must be measured RIGHT AFTER `LoadSpectraForRescore` -- Release JIT drops the
+`spectra` root after its last scoring use, so a forced GC at the post-write-back "peak" already
+reclaims it (live-at-peak collapsed to the floor, 8.84==8.84 in the first attempt).
+
+**Harness:** `ai/.tmp/stage6-mem.ps1` -- single-file `--task PerFileRescoring` on Astral file 49.
+`-Setup` scores file 55 (FirstPassFDR needs 2+ files; 49 alone is rejected), runs FirstPassFDR
+(49+55 -> 21 MB reconciliation.json + 101 MB 1st-pass.bin for 49), and stages a rescore dir that
+HARDLINKS the 6.3 GB spectra.bin + a 0-byte stub mzML (fingerprint skipped for a 0-byte source ->
+guaranteed cache HIT, no mzML read). Measure loop deletes only the rescore outputs per rep.
+`-DotMemory` drives dotMemory `--use-api`. Rescore does REAL work: 65,611 entries re-scored,
+62,749 reconciliation actions.
+
+**BASELINE (before, median of 3, Astral file 49):**
+| metric | GB |
+|---|---|
+| loaded-live (forced-GC, resident MS2 rooted) | 8.19 |
+| working_set peak (during-scoring high-water) | 29.81 |
+| pre-GC managed at peak | 14.80 |
+| post-release floor (in RescoreOneFile) | 9.00 |
+| truly-persistent floor (reconciliation-resident) | 2.39 |
+
+**LEVER SIZED DIRECTLY (`ai/.tmp/measure-ms2-size.ps1`, Server GC, managed-heap delta of
+`LoadSpectraCache`):** 204,149 MS2 = **5.88 GB** (the streamed-away resident set); 1,223 MS1 =
+0.03 GB (stays resident by design). So streaming should drop loaded-live 8.19 -> ~2.3 GB and cut
+the during-scoring peak further by also eliminating the per-pass calibrated COPIES the resident
+provider builds. dotMemory `.dmw` saved at `D:\test\osprey-runs\_stage6mem\stage6-rescore-before-*.dmw`
+(11.5 GB; open -> `perfile-rescore-loaded` snapshot -> dominators to confirm List<Spectrum> holds
+the 5.88 GB).
+
+### 2026-07-16 (IMPLEMENTED + all local gates green; committed 89943fb38, pushed)
+**Change (commit `89943fb38`):**
+- `PerFileRescoreTask.LoadSpectraForRescore` -> `SpectraWindowIndex.BuildFromCache` (streams each
+  window); MS1 + isolation windows from the index; ONE shared `StreamingWindowSpectraProvider`
+  across the subset rescore + both gap-fill passes (stateless, re-reads windows per pass). **No mzML
+  fallback** -- absent/stale cache hard-fails (`InvalidDataException`), per Brendan.
+- **Retired** `ResidentWindowSpectraProvider` + `ScoringPipeline.RunCoelutionScoring(List<Spectrum>)`
+  wrapper (callerless once all 3 rescore sites use the provider). Net -56 lines.
+- **regression.ps1 mode3** phase-3 now ships phase-1's `<stem>.spectra.bin` + a 0-byte stub mzML to
+  the rescore worker (was: copy the real mzML + rely on the removed reparse fallback). Disk-neutral.
+- Added `perfile-rescore-loaded/-peak/-live` [MEM] probes + a `perfile-rescore-apex` retention
+  snapshot so the NEXT lever (scored/reconciled entries rooted by fdrEntries) is directly visible.
+
+**A/B RESULT (Astral file 49, median of 3, before=resident vs after=streaming):**
+| metric | before | after | delta |
+|---|---|---|---|
+| loaded-live (resident MS2 rooted) | 8.19 GB | 2.30 GB | **-5.89 GB (-72%)** |
+| working_set peak (during-scoring) | 29.81 GB | 14.1 GB | **-15.7 GB (-53%)** |
+| pre-GC managed at peak | 14.8 GB | 8.63 GB | -6.17 GB |
+| rescore wall (warm) | 64.3 s | 57.5 s | **-11% (faster; GC-pressure relief)** |
+
+-5.89 GB loaded-live matches the measured 5.88 GB MS2 lever exactly; the extra WS drop is the 3
+per-pass whole-list calibrated copies, also gone. FASTER warm (no perf regression), mirroring #4427.
+
+**Gates (all green):** `regression.ps1 -Dataset Stellar` mode1 (vs golden) + mode3 (HPC chain, now
+streams) + mode2 (resume) all PASS byte-identical (blib 45,064,192). `Build-Osprey.ps1 -RunTests
+-RunInspection`: 508/508 tests, inspection 0/0. after `.dmw`:
+`D:\test\osprey-runs\_stage6mem\stage6-rescore-after-20260716-191611.dmw` (5.8 GB, half the before).
+
+**Remaining before merge:** `regression.ps1 -Dataset All` (Astral) + TeamCity Astral Perf/Regression
+(Brendan-gated); `/pw-self-review`; open PR.
+
+### NEXT LEVER (Brendan, from the dotMemory summary): scored-entry accumulation
+After the resident MS2 is gone the dominant per-file holder is the **scored + reconciled entries**
+(~6.5 GB for file-49 rescore): parquet-loaded fdrEntries + reconciled/gap-fill results, each carrying
+heavy per-entry arrays (Features / CwtCandidates / Fragment* / ReferenceXic*). We do NOT write scored
+precursors as we go -- the whole set is held to the end (rescore even reloads the full parquet in the
+write-back). Same root cause in **BOTH** PerFileScoring (~8 GB scoredEntries) and PerFileRescoring.
+Dedup + FDR need the full set but only the light scalars; the heavy arrays are only needed to write
+the parquet, so they could be flushed + nulled as scoring proceeds. Backlog:
+`TODO-osprey_perfile_scored_entry_streaming.md` -- the next PR, shared across both stages. The new
+`perfile-rescore-apex` snapshot in the after `.dmw` shows these dominators.
