@@ -154,3 +154,62 @@ on the same Parquet byte-parity decision, so settle that once.
 - Memory: `[[feedback_bit_parity_tolerance]]`,
   `[[project_osprey_parity_removal_sprint]]`,
   `[[reference_osprey_resident_firstpass_streams_features]]`.
+
+## Progress Log
+
+### 2026-07-16 (session start: branch cut, load-bearing parity question RESOLVED)
+Branch `Skyline/work/20260716_osprey_parquet_bounded_rowgroup_write` off master
+`d4b7ad54b` (#4429 Stage-6 merge). TODO backlog -> active.
+
+**THE LOAD-BEARING QUESTION (Parquet byte-parity contract) -- RESOLVED read-only,
+BEFORE any code.** Verdict: **NO gate byte-compares `.scores.parquet`.** Row-group
+chunking changes physical parquet bytes but preserves logical rows, their global
+sort order, and `ParquetIndex` -> every gate stays green with NO golden refresh and
+NO Rust row-group-size matching. Evidence (airtight, four independent angles):
+
+1. **regression.ps1 (mode1/2/3)** compares the **blib SQL content + Stage-7 protein
+   FDR dump at 1e-9**, never parquet bytes (SYNOPSIS lines 16-36 authoritative;
+   mode1 = text golden `osprey-regression.data`, mode2/3 = blib-vs-blib at 1e-9).
+   Per-stage parquet compare exists ONLY as a red-gate bisection tool
+   (`Compare-Stage7-Rehydration-Strict-CSharp.ps1`), not a first-line gate.
+2. **Committed golden `osprey-regression.data/`** contains ONLY `.tsv` table dumps
+   (blib SQL tables + `protein_fdr.tsv` + `blib_summary.tsv`) -- **zero `.parquet`**.
+3. **Cross-impl Rust gate** (`Compare-EndToEnd-Crossimpl.ps1` + `Compare/README.md`)
+   compares **Stage-7 protein FDR + blib SQL at per-column 1e-9**; grep shows zero
+   parquet `Get-FileHash`/byte hashing. `Regression/` helpers: zero
+   `Get-FileHash`/`SequenceEqual`/`.parquet` references at all.
+4. **Unit tests**: every `byte-for-byte`/`ReadAllBytes`/`CollectionAssert.AreEqual`
+   assertion in `IOTest.cs` targets `FdrScoresSidecar` (`.fdr_scores.bin`),
+   `.spectra.bin`, or `.libcache` -- NOT parquet. The parquet tests
+   (`ReconciledParquetWriterTest`, `Pass2FdrSidecarTest`) assert LOGICAL content
+   (EntryId/ParquetIndex/counts/metadata), not bytes -- e.g.
+   `ReconciledParquetWriterTest:82 Assert.AreEqual(3u, gapFill.ParquetIndex)` pins
+   the exact invariant chunking preserves.
+
+**Corrects the sibling `[[TODO-osprey_perfile_scored_entry_streaming]]`**, whose
+"Open decision" section claims `.scores.parquet` "is compared **byte-for-byte** vs
+the C# golden (regression.ps1) and cross-impl vs Rust." That is factually wrong:
+the gate is already a LOGICAL compare (blib + protein-FDR at 1e-9). So that TODO's
+options (a)/(b)/(c) collapse -- "(a) logical compare" is ALREADY the reality; no
+manifest-parity contract change or golden refresh is needed for either TODO's
+physical parquet-layout change. (The `ScoringPipeline`/`ParquetScoreCache` code
+comments still assert cross-impl "identical physical row layout" intent -- historical
+aspiration, NOT enforced by any live gate. Flagged for Brendan.)
+
+**Not a gate loosening** (`[[feedback_bit_parity_tolerance]]`): I am not widening a
+comparator or adding a skip-list -- I am confirming the existing gates never
+constrained parquet physical bytes. Surfaced to Brendan for explicit go/no-go before
+writing the chunking code, given the sibling-TODO contradiction + the code-comment
+intent.
+
+**Write-path facts (for the chunking design):** both `WriteScoresParquet` overloads
+(`:182` CoelutionScoredEntry, `:299` FdrEntry) materialize ALL n column arrays then
+write ONE `CreateRowGroup()` (`:276`/analogous). Rows are emitted in a **global
+canonical sort** (`entry_id, charge, scan_number`, `:226`/`:351`); `ParquetIndex` =
+post-sort global row position. Chunking = slice that SAME sorted index array into
+50-100K-row groups, build+write+dispose per chunk -> identical row sequence and
+ParquetIndex, bounded managed + native (IronCompress) buffers. Metadata footer
+written once, unchanged. Implementation must audit every parquet reader
+(`LoadFullFdrEntries` already loops `RowGroupCount`; verify `LoadPinFeatures*`,
+`LoadCwtCandidates*`, and ParquetIndex-based random access in the rescore overlay
+all handle multi-row-group + preserve ParquetIndex).
