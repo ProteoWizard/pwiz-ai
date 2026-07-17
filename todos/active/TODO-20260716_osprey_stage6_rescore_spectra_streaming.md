@@ -3,6 +3,7 @@
 **Status**: In Progress (follow-up to the Stages 1-4 streaming PR #4427).
 **Branch**: `Skyline/work/20260716_osprey_stage6_rescore_spectra_streaming`
 **Base**: `master` (post-#4427 merge `32106f96`)
+**PR**: [#4429](https://github.com/ProteoWizard/pwiz/pull/4429)
 **Priority**: Medium — the last resident full-`List<Spectrum>` load in the per-file path.
 **Created**: 2026-07-16
 **Scope**: `pwiz_tools/Osprey/Osprey.Tasks/PerFileRescoreTask.cs`
@@ -174,4 +175,23 @@ write-back). Same root cause in **BOTH** PerFileScoring (~8 GB scoredEntries) an
 Dedup + FDR need the full set but only the light scalars; the heavy arrays are only needed to write
 the parquet, so they could be flushed + nulled as scoring proceeds. Backlog:
 `TODO-osprey_perfile_scored_entry_streaming.md` -- the next PR, shared across both stages. The new
-`perfile-rescore-apex` snapshot in the after `.dmw` shows these dominators.
+`perfile-rescore-apex` snapshot in the after `.dmw` shows these dominators. Written up as a
+standalone backlog TODO: `TODO-osprey_parquet_bounded_rowgroup_write.md` (bounded row-group write,
+shared by PerFileScoring + the reconciled write-back; start after this squash-merges).
+
+### 2026-07-16 (self-review clean + PR #4429 opened)
+Fresh-context `/pw-self-review` (general-purpose agent, diff vs origin/master): **no CRITICAL/HIGH**.
+Independently verified byte-identity (fresh per-pass decode == resident calibrated copy; ScoreWindow's
+(RT,ScanNumber) re-sort makes the offset-vs-file pre-sort order irrelevant; index IsolationWindows/MS1
+== ExtractIsolationWindows/resident MS1), `Parallel.For` concurrency (LoadWindow owns its FileStream,
+immutable index maps, pure ApplyCalibration), the mode3 0-byte-stub fingerprint skip
+(`TryReadHeader:305-310`), retirement completeness (zero residual refs), and the ProfilerHooks no-op.
+- **[MEDIUM] accepted (intended, per Brendan's directive):** hard-fail on absent cache is a genuine
+  behavior change -- a resume with a SEPARATE `--cache-dir` that was independently cleaned would abort
+  where the old mzML fallback succeeded. Error message is clear + actionable ("Re-run PerFileScoring
+  for <file>"). Flagged in the PR body; straight-through / same-dir resume / HPC chain are unaffected.
+- **[LOW] fixed (commit `63a2e6e40`):** stale RescoreOneFile doc ("reload ... or the mzML") -> streams.
+
+PR #4429 opened (body per version-control convention). **Remaining before merge (Brendan-gated):**
+`regression.ps1 -Dataset All` (Astral byte-identity) + TeamCity Astral Perf/Regression; optional
+Copilot / `/ultrareview`.
