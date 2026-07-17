@@ -68,8 +68,14 @@ Requested by Nick.
       closes streams opened for a document that is no longer current (see Session 3 below)
 - [x] TeamCity run 21566 fallout both fixed and pushed: `MemoryDocumentContainer` streams
       (8f29f38ae) and the SQLite revert which un-breaks `.wiff2` (b75d0b0bf)
-- [ ] NEXT: TeamCity green on the full suite, then `/pw-self-review 4426` (still not run)
-- [ ] NEXT (Nick): try this by hand on really big documents
+- [x] Nick tried it by hand on a 17.7 GB document, which found the ZipArchive, MemoryStream and
+      silent-drop-on-re-share bugs - all fixed in session 4 below (committed, NOT pushed)
+- [ ] NEXT: push, TeamCity green on the full suite, then `/pw-self-review 4426` (still not run)
+- [ ] NEXT: `FileOptions.RandomAccess`, and `OpenDeflatedEntry` -> `OpenEntry`; see "NEXT (Nick,
+      session 5)" below
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260715_open_doc_from_zip.md` before starting work.
 
 ## Session 2 additions (pushed)
 
@@ -227,6 +233,88 @@ wanted again. FIX DIRECTION (Nick): let wiff2 use the OLD dll and Skyline the NE
 
 NOTE the TODO's earlier "VERIFIED: Nick confirmed .wiff reading still works with the 1.0.119
 interop" was a real check that simply did not cover .wiff2.
+
+## Session 4: what Nick's big documents found (committed, NOT pushed)
+
+Nick tried this by hand on a 17.7 GB `.sky.zip` (a 15.4 GB stored `.skyd`, a 5.2 GB `.sky` deflated
+to 1.9 GB) at `I:\bugs_i\maccoss\20260404_SavePerf\`. Everything below came out of that.
+
+### Reading (commit "Read and re-shared a big .sky.zip without holding it in memory")
+
+- [x] `System.IO.Compression.ZipArchive` CANNOT READ the .zip files Share produces at this size:
+      "A local file header is corrupt" from `ZipArchiveEntry.OpenInReadMode`. Our own
+      `RandomAccessZipFile` parses the same .zip correctly (it found the entry the BCL then choked
+      on). `FilePath.OpenRead` no longer uses ZipArchive at all: `OpenDeflatedEntry` inflates the
+      byte range we work out (a zip entry holds a RAW deflate stream, which is what DeflateStream
+      reads). Do NOT reintroduce ZipArchive, and no DotNetZip dependency was needed.
+- [x] The `MemoryStream` is gone: `OpenRead` returns the decompressing stream. `DeflatedEntryStream`
+      wraps it only to report the entry's uncompressed Length, which `ProgressStream`'s ctor needs
+      (`this(input, input.Length)`) and a bare DeflateStream cannot answer. VERIFIED on the real
+      file: the 5.2 GB .sky streams in 23 MB of working set, ~30 s.
+
+### Sharing a document which is open in place (same commit)
+
+- [x] `ZipFileShare.AddFile` gives Ionic a stream (`AddEntry(name, opener, closer)`, opened at save
+      time) for a file inside another .zip, since Ionic cannot stat an in-zip path. That was Nick's
+      reported exception.
+- [x] MUCH WORSE than the exception: FOUR `File.Exists` guards silently SKIPPED in-zip files, so a
+      re-share produced a .zip with NO `.skyd`, NO `.skyl`, NO `.sky.view` and no complaint -
+      `ShareSkydFile`, `AddDocumentAndAuditLog`, the redundant .blib, and `ViewFilePath` in
+      `SkylineFiles.ShareDocument`. All now use `FilePath`. `OpenDocFromZipTest` re-shares from an
+      in-place document and reopens the result, which is what caught it.
+- NOTE `ContainsOnlyEntriesWithSuffixes`/`AreEntriesStored` both PASS on a .zip with no `.skyd` -
+      neither checks an entry exists. Consider making `CanOpenInPlace` require a `.skyd` when the
+      document has results, instead of extracting and then failing.
+
+### ByteRangeStream / StructSerializer (same commit)
+
+- [x] `ByteRangeStream` moved to `CommonUtil\SystemUtil` and takes its position FROM THE STREAM IT
+      WRAPS (`Position => BaseStream.Position - Offset`). Nick's design. It keeps no position of its
+      own, so nothing can disagree; `Seek(0, SeekOrigin.Current)` resyncs for free; `Read` never
+      seeks. This deleted `_position`, `_basePosition`, an exposed-handle flag, an `Advance` method
+      and an `IFileStreamWindow` interface I had added.
+- [x] `StructSerializer.TryDirectRead` reads through a `ByteRangeStream` via `BaseStream as
+      FileStream`, so an in-zip `.skyd` gets the same blit-the-array path a file does.
+- [x] `ReadArray` converts items on a `QueueWorker` when `ItemSizeOnDisk != ItemSizeInMemory` (old
+      cache formats - the current format takes the direct path and never runs this). MEASURED
+      1.5-1.9x by `TestReadPaddedChromPeaks`. Chunks are 64 KB deliberately: big enough that the
+      queue is not locked per item, under the 85,000 byte LOH threshold so each chunk is gen0.
+- [x] `ReadComplete` fixes a latent bug: `stream.Read(...) != count` assumed a single Read returns
+      everything, which `Stream` does not promise and `DeflatedEntryStream` legitimately violates.
+
+### THE BENCHMARK TRAP - read this before trusting any timing here
+
+`TestChromatogramCacheFromZip` first reported "307 ms in place from the .zip, 1 ms from the file",
+and I burned hours and FOUR changes on a theory that in-zip reads were missing the direct-read path.
+The number never moved, because THE 300x WAS ENTIRELY JIT: whichever load ran first paid for JIT
+compiling the whole ChromatogramCache/StructSerializer/BlockedArray stack. Nick spotted it (the
+first `SrmSettingsList.GetDefault()` was part of it too).
+
+WITH A WARM-UP LOAD FIRST, in place is 0-1 ms and the file is 1-3 ms - reading in place is AS FAST
+AS OR FASTER THAN reading a file. There is no in-place read performance problem.
+
+- Both tests in `Test\ChromatogramCacheFromZipTest.cs` now do an untimed load first. Keep it.
+- The same trap bit the padded benchmark: 23,615 peaks is ~1.7 MB, so a single read is 3-7 ms of
+  noise and the first path measured eats its own JIT. It warms up BOTH paths and repeats 20x.
+- LESSON: 420 chromatogram groups cannot take 300 ms, and a purged-disk-cache read cannot do 14.9 MB
+  of I/O in 1 ms. Both said "this is not I/O" long before I listened. Question the measurement.
+
+Test data: `Test\ChromatogramCacheFromZipTest.zip` (35 MB) holds Nick's `Bereman_ChromPerf.sky.zip`.
+`TestReadPaddedChromPeaks` builds a `ChromPeak` + `int` struct with `ItemSizeOnDisk` = the real
+ChromPeak size and `PadFromStart=false`, which is the only thing exercising the padding path.
+
+### NEXT (Nick, session 5)
+
+- [ ] Try `FileOptions.RandomAccess` in `RandomAccessZipFile.OpenStoredEntry` - that stream is the
+      random-access one, and the hint tells Windows not to read ahead. Measure it warm, with
+      `PurgeFileFromDiskCache`.
+- [ ] `OpenDeflatedEntry` has the abstraction backwards. The distinction is not the compression
+      method, it is WHAT KIND OF STREAM you can get: a SEQUENTIAL stream can be had from ANY entry
+      (stored -> read the range; deflated -> inflate it), a RANDOM-ACCESS stream ONLY from a stored
+      entry. So: `OpenEntry` (sequential, any entry) + `OpenStoredEntry` (random access, stored
+      only). Also closes a hole: `FilePath.OpenRead` branches on `IsStored` and would throw on any
+      other method (Ionic can write bzip2).
+- [ ] The full suite has not run since these commits; only the zip suite has. Nothing is pushed.
 
 FUTURE (Nick's design, not the "for now" criterion): make `OpenSharedFile` start reading the `.sky`
 straight from the zip, and as soon as `DocumentReader.ReadXml` gets past the `settings_summary`
