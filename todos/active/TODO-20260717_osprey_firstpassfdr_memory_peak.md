@@ -165,9 +165,12 @@ anyway). Sub-steps:
 4. *(stretch, not done)* reuse the competition per-substep scratch (the q-value-pass
    sawtooth).
 
-Gates: `regression.ps1` byte-identical (Stellar DONE) + `-Dataset Astral` + `Test-PerfGate`
-(feature path is perf-sensitive) + the 82-file memory A/B (commit peak 87 -> target
-~45-55 GB). Does NOT bound 500 files -- that is B.
+Gates: `regression.ps1` byte-identical (Stellar DONE) + 509/512 unit tests DONE.
+**82-file memory A/B DONE -- see "Reader A/B result" above: peak NOT lowered (LOH column
+churn dominates), wall time flat (36m39 vs 36m22, HDD-bound). Brendan gated the commit on
+"any sign of perf improvement"; none -> the reader commit is HELD, kept in the working
+tree (byte-identical + flat-in-files, not a peak/wall-time win). Capacity hint + probe
+are separable and unambiguously worth keeping.** Does NOT bound 500 files -- that is B.
 
 **Step B -- bounded q-value competition redesign (next).** Restructure
 `ComputeStreamingCompetitionQvalues` + the score pass so only the bounded
@@ -188,6 +191,15 @@ surfaced by the measurement:
 - **Parallelize the serial 344.6M-row passes** (score + q-value competition + clamp are
   single-threaded, ~4% CPU = one core, and drive the 36-min wall time). Stage 6 planning
   already uses `OspreyParallel.For` (92% CPU) as a template.
+  - **Per-run q-values -- IMPLEMENTED (2026-07-17, pending review), byte-identical.**
+    `ComputePerRunPrecursorQvalues` + `ComputePerRunPeptideQvalues` now run one file per
+    thread via `OspreyParallel.For` (degree = `PercolatorConfig.MaxParallelism` <-
+    `OspreyConfig.NThreads`, default 1 = serial for tests/FdrEntry). Each file's
+    competition is independent and writes disjoint `qvalues` indices, so any degree is
+    byte-identical. The clamp (partition + `min`-merge) and the global PEP/experiment
+    competitions (sort tie-break + sequential cumulative scan + KDE base_id-order) are the
+    remaining, parity-fragile pieces -- left for the Part-B redesign. Gate: Stellar
+    regression (in flight) + `Test-PerfGate`. NOT committed yet (Brendan to review).
 - **Bound the q-value output arrays / sink** (the 5 `double[n]` + `FdrProjectionOutputs`)
   by streaming per-file assignment from bounded lookup tables (see the "Why a bounded
   design is possible" section above).
