@@ -66,7 +66,7 @@ featureFields)` from the `WriteScoresParquet(FdrEntry)` chunk callback, and a
 `ParquetIndex` is NOT a stored column -- it is re-derived on read as a running count -- so the
 reconciled write need not preserve any specific ParquetIndex.
 
-## THE LOAD-BEARING DECISION: gap-fill ordering (decide empirically)
+## THE KEY DECISION: gap-fill ordering (decide empirically)
 
 Current output is fully sorted `(entry_id, charge, scan)` with gap-fill INTERLEAVED (the
 re-sort in step 3). Streaming original-groups-then-appended-gap-fill puts gap-fill AT THE END.
@@ -85,7 +85,7 @@ difference is gap-fill position.
   (`[[feedback_bit_parity_tolerance]]`: don't loosen the gate; make the output match.)
 
 ## Gates
-- `regression.ps1 -Dataset Stellar` (fast) then `-Dataset All` -- mode3 is load-bearing.
+- `regression.ps1 -Dataset Stellar` (fast) then `-Dataset All` -- mode3 is critical.
 - `Build-Osprey.ps1 -RunTests -RunInspection`. Add a unit test: streaming reconciled transfer
   of a multi-group original == the old load-all+overlay+write output (logical rows), incl.
   gap-fill.
@@ -105,3 +105,40 @@ difference is gap-fill position.
 - Sibling (larger, per-window scored-entry streaming for PerFileScoring):
   `[[TODO-osprey_perfile_scored_entry_streaming]]`.
 - Memory: `[[feedback_bit_parity_tolerance]]`, `[[project_osprey_parity_removal_sprint]]`.
+
+## Progress (2026-07-17)
+
+**Implemented -- streaming k-way merge (NOT append-first).** The KEY DECISION above
+was resolved without needing the full `-Dataset All` mode3 run: the existing unit test
+`Pass2FdrSidecarTest.TestScanOmittedProjectionSortMatchesLegacyOrder` hard-asserts that
+gap-fill *interleaves by scan* in the reconciled parquet, because Pass 2's projection
+sort recovers scan order from the reconciled row index. So append-at-end is observably
+wrong; the streaming 2-way merge (original groups streamed in sorted order, merged with
+the resident `gapFill` sorted by (entry_id,charge,scan), ties keep the original first to
+match the stable `WriteScoresParquet` re-sort) was required. The merge reproduces the
+former load-all + re-sort physical order byte-for-byte.
+
+Changes:
+- `Osprey.IO/ParquetScoreCache.cs`: extracted `BuildFdrEntryColumns` (from the
+  `WriteScoresParquet(FdrEntry)` chunk callback) and `ReadFdrEntryGroup` (per-group body
+  of `LoadFullFdrEntries`, which now loops it); added public
+  `StreamReconciledScoresParquet` (streaming read -> overlay -> merge -> bounded-group
+  write) + `KeyLess`. Residency is one original row group + the overlay map + gap-fill,
+  never the whole `List<FdrEntry>`.
+- `Osprey.Tasks/ReconciledParquetWriter.cs`: `Write` now builds the overlay map + gap-fill
+  list via the new pure `BuildOverlay` (replaces `ApplyRescoredRows`) and calls the
+  streaming transfer; out-of-range warning moved into the IO method. `FirstJoinTask.cs`
+  comment updated (`ApplyRescoredRows` -> `BuildOverlay`).
+- Tests: `ReconciledParquetWriterTest` now tests `BuildOverlay`; `IOTest` adds
+  `TestStreamReconciledTransferMatchesLoadAllOverlay` (multi-group round-trip ==
+  load-all+overlay, canonical physical order, out-of-range warning, overlay effect);
+  `Pass2FdrSidecarTest` harness rebuilt on the streaming path.
+
+Gates passed: `Build-Osprey.ps1 -RunTests -RunInspection` green (513 tests, zero-warning
+inspection); `regression.ps1 -Dataset Stellar` mode1 (vs golden) / mode3 (HPC chain) /
+mode2 (resume) all PASS -- blib byte-identical (45,064,192 bytes) across all three.
+
+Remaining: `Test-PerfGate.ps1 -Dataset Stellar` (speed A/B); `-Dataset All` Astral legs via
+the TeamCity Perf/Regression config (Brendan-gated); memory A/B (single-file Astral 49) to
+confirm the +4.4 GB reload vanished; `/pw-self-review` + PR. The `.gitignore` nested-nuget
+fix (`**/.nuget/.nuget/`) is folded into this branch/PR per Brendan.
