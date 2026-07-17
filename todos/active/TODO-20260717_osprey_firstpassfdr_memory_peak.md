@@ -212,6 +212,43 @@ surfaced by the measurement:
 - Memory A/B: the 82-file `--task FirstPassFDR` run (final scaling demo);
   Astral 3-file + dotTrace for iteration.
 
+## Session update (2026-07-17 PM)
+
+- **Reader (ParquetFeatureReader / feature-buffer pooling): DISCARDED.** Brendan's call:
+  don't add pooling to beat GC without a demonstrated win -- Gen-0 is very fast, GC
+  usually wins, and a single "within variance" run is not proof of no-regression (need
+  >=1 more A/B where the new code is actually faster). The reader was byte-identical but
+  moved neither the peak (LOH column churn dominates) nor wall time (HDD-bound). Lesson
+  saved to memory `[[feedback_no_unproven_pooling_vs_gc]]`.
+- **Per-run q-value parallelization: being MEASURED** (measurement build with env-var
+  degree `OSPREY_QVAL_THREADS` + `[QVAL-TIMING]` probe; 24-file A/B degree 1 vs 8 via
+  `ai/.tmp/qval-ab.ps1`). Keep + do the commit-ready (config-plumbed) version only if the
+  A/B proves it faster.
+- Capacity hint (-5.4 GB live projection) + the peak `[MEM]` probe were also discarded
+  with the reader (entangled). The capacity hint is a proven, separable live win, cheap
+  to re-add standalone if wanted.
+
+## Parquet chunk-sizing study (Brendan, 2026-07-17) -- next task
+
+The prior session picked 100K rows/row-group (#4430/#4433) fairly arbitrarily. Study
+smaller sizes for the cost/benefit tradeoff. Deliverables:
+
+1. **Re-chunk utility** -- a standalone Osprey tool: read a `.scores.parquet`, rewrite it
+   with a configurable rows-per-row-group, WITHOUT rescoring (byte-identical data, only
+   the row-group blocking changes). Lets us test chunk sizes on the existing 82-file data
+   without regenerating (the hard-link recipe avoids the expensive PerFileScoring).
+   Useful utility to keep until we settle on the optimal chunking. Reuse Osprey.IO's
+   Parquet read/write (`ParquetScoreCache`); verify a re-chunked file still passes
+   `ValidateScoresParquetGroup` (hashes search/library/version, which re-chunking preserves).
+2. **Study matrix**: re-chunk to **10,000 / 20,000 / 50,000 / 100,000** rows and measure
+   for each:
+   - **disk size** (does 10K bloat the file via row-group metadata/footers?),
+   - **load time** (`--task FirstPassFDR` feature-read wall time -- HDD-bound),
+   - **memory ceiling** (peak commit / the LOH column-read transient: smaller groups =>
+     smaller column reads; <~10K rows would drop columns below the 85 KB LOH threshold ->
+     gen-0 not LOH; 10K x 8 B = 80 KB is right at the boundary).
+   Directly feeds Part B's 100K-block score-pass streaming (optimal block = this study's answer).
+
 ## References
 - Sibling: `[[TODO-osprey_perfilescoring_calibration_memory_peak]]`.
 - `[[project_sead_pilot_mtg_dataset]]`, `[[reference_osprey_astral_thread_memory_oom]]`,
