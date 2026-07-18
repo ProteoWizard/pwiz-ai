@@ -89,6 +89,16 @@ pass keeps its resident survivor projection. This is where resident goes FLAT. G
   drop resident FdrProjection[] + flat labels/entryIds/peptides/bestScores[n]. Fork from the
   shared 2nd-pass path (keeps its O(survivors) resident projection). Gate: -Dataset All +
   FDRBench + 16f/82f LIVE measurement; Test-Snapshot for bisection if red.
+  - DONE (957d21a64): extracted `CompeteFromDicts` (+winnerBaseIds) shared compete+sort finish.
+  - DONE (811a29113): `PercolatorFdr.StreamingFirstPassQ` (exp-prec/exp-pept/PEP maps by pushing
+    rows) VERIFIED byte-identical to the flat builders by `TestStreamingFirstPassQMatchesFlat`
+    (514 tests + inspection green). The riskiest Stage-B math is now proven in isolation.
+  - REMAINING (the pipeline-touching wiring; see `ai/.tmp/stageB-design-20260718.md` NEXT §):
+    per-file run-q streaming (trivial reuse) -> 1st-pass-only streaming score path (2 passes,
+    recompute score, sink Accept gets peptide+charge) -> training subset off parquet ->
+    producer stops building the projection -> drop resident projection/flat arrays/finalScores
+    -> gate -Dataset All + FDRBench + measurement. All committed pieces are pipeline-untouched
+    (branch green); the wiring is the next focused push.
 
 ## The goal (Brendan)
 FirstPassFDR resident memory bounded in file count -- flat from 82 -> 500 files, not linear.
