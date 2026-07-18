@@ -191,15 +191,16 @@ surfaced by the measurement:
 - **Parallelize the serial 344.6M-row passes** (score + q-value competition + clamp are
   single-threaded, ~4% CPU = one core, and drive the 36-min wall time). Stage 6 planning
   already uses `OspreyParallel.For` (92% CPU) as a template.
-  - **Per-run q-values -- IMPLEMENTED (2026-07-17, pending review), byte-identical.**
-    `ComputePerRunPrecursorQvalues` + `ComputePerRunPeptideQvalues` now run one file per
-    thread via `OspreyParallel.For` (degree = `PercolatorConfig.MaxParallelism` <-
-    `OspreyConfig.NThreads`, default 1 = serial for tests/FdrEntry). Each file's
-    competition is independent and writes disjoint `qvalues` indices, so any degree is
-    byte-identical. The clamp (partition + `min`-merge) and the global PEP/experiment
-    competitions (sort tie-break + sequential cumulative scan + KDE base_id-order) are the
-    remaining, parity-fragile pieces -- left for the Part-B redesign. Gate: Stellar
-    regression (in flight) + `Test-PerfGate`. NOT committed yet (Brendan to review).
+  - **Per-run q-values -- COMMITTED (f4719e084, 2026-07-17), MEASURED 3.46x, byte-identical.**
+    `ComputePerRunPrecursorQvalues` + `ComputePerRunPeptideQvalues` run one file per thread
+    via `OspreyParallel.For` (degree = `PercolatorConfig.MaxParallelism` <- `OspreyConfig.NThreads`,
+    default 1 = serial for tests/FdrEntry). Each file's competition is independent + writes
+    disjoint `qvalues` indices -> any degree byte-identical. A/B (24-file, degree 8):
+    precursor 21.66->5.73s (3.8x), peptide 49.93->14.98s (3.3x), total 71.6->20.7s (3.46x);
+    ~4 min -> ~1.2 min at 82 files. Gate passed: Stellar mode1/2/3 + 509/512 unit tests.
+    Still serial (parity-fragile, Part-B): the clamp (partition + `min`-merge is easy), and
+    the global PEP/experiment competitions (sort tie-break + sequential cumulative scan +
+    KDE base_id-order).
 - **Bound the q-value output arrays / sink** (the 5 `double[n]` + `FdrProjectionOutputs`)
   by streaming per-file assignment from bounded lookup tables (see the "Why a bounded
   design is possible" section above).
