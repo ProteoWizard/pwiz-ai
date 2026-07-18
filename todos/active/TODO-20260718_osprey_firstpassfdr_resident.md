@@ -57,6 +57,26 @@ score pass + training from parquet (`LoadJoinOnlyScores`).** 1st-pass-only path 
 pass keeps its resident survivor projection. This is where resident goes FLAT. Gate:
 `-Dataset All` byte-identical + FDRBench + the 16f/82f LIVE measurement.
 
+### Progress log
+- **2026-07-18 Stage A DONE (byte-identical, committed):** Dropped `FdrProjectionOutputs`.
+  - Added `FdrScoresSidecar.ReadRecords(path, pass, onRecord)` -- streaming per-file record
+    reader, no FdrEntry stubs; decode single-sourced with `WriteRecord` via `DecodeRecord`.
+  - Added pure `ProteinFdr.FirstPassProteinFdrAccumulator` (Add/Finish) + extracted
+    `ProteinFdrEngine.LogFirstPassSummary`. Deleted the 3 dead projection overloads
+    (`RunFirstPassProteinFdr`/`CollectBestPeptideScores`/`PropagateRunProteinQvalues`) +
+    `ProteinFdrEngine.RunFirstPass(projection)`.
+  - `FirstJoinTask.RunFirstPassProteinFdrStreaming` (+ `StreamFirstPassFileScores`): pass 1
+    reductions from sidecar(Score,RunPeptideQ) x parquet-scalar(modseq,IsDecoy); pass 2 patches
+    run_protein_qvalue from PeptideQvalues[modseq] (folds the old propagate + phase-2 patch).
+    `ComputeFirstPassBaseIds` streams the finalized sidecar (IsDecoy from the entry_id decoy bit).
+  - Removed `FdrProjectionOutputs` class + the sink's `_outputs`/`Outputs`/`SetRunPeptideQvalue`.
+  - Gates: Build Debug + ReSharper 0 warnings; 513 unit tests PASS; `regression.ps1 -Dataset
+    Stellar` mode1/2/3 byte-identical PASS.
+  - NOTE (perf, revisit at Stage B / perf gate): Stage A adds ~2 parquet + ~2 sidecar reads
+    per file to the FirstPassFDR path (protein-FDR pass1+pass2 re-read parquet for modseq;
+    compaction re-reads the sidecar) WITHOUT yet a memory win (projection still resident) --
+    it's the prove-the-plumbing stage. The memory win lands in Stage B. Watch Test-PerfGate.
+
 ## The goal (Brendan)
 FirstPassFDR resident memory bounded in file count -- flat from 82 -> 500 files, not linear.
 The transient q-value arrays are already gone (PR #4434). The remaining O(files) RESIDENT
