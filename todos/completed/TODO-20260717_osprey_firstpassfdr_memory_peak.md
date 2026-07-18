@@ -1,6 +1,6 @@
 # TODO: Osprey --task FirstPassFDR (join node) memory peak
 
-**Status**: Active.
+**Status**: Completed -- PR [#4434](https://github.com/ProteoWizard/pwiz/pull/4434) merged 2026-07-18 as 9115caf7b (transient/constant-factor wins; the O(files) RESIDENT core is DEFERRED to Increment 2).
 **Branch**: `Skyline/work/20260717_osprey_firstpassfdr_memory` (pwiz, off master).
 **Priority**: Medium-High -- the FirstPassFDR join node holds the whole
 all-file scored population resident for Percolator scoring + FDR estimation.
@@ -471,6 +471,25 @@ commit / 38.04 live) -- expect the q-value peak ~38 -> ~24 GB live.
    FDR); gate on regression `-Dataset All` + FDRBench.
 
 Design detail: `ai/.tmp/partB-design-20260717.md`.
+
+### 2026-07-18 - Merged
+
+PR #4434 merged as commit 9115caf7b (9 commits squashed). Shipped the transient +
+constant-factor memory reductions for `--task FirstPassFDR`: the five `double[n]` q-value
+arrays are gone (reconstructed from bounded lookups + per-file recompute), plus lean-library
+`OmitFragments`, a projection-list capacity hint, the flat `fileNames[n]` drop, and a
+peak-less-entry fail-fast at library load. ~15 GB less LIVE working set at 82 files,
+byte-identical (Stellar mode1/2/3 on every commit + 82-file discovery 1,870,745). Two
+fresh-context self-reviews + Copilot addressed; one real finding (peak-less lean-library
+divergence) fixed with the fail-fast + a unit test.
+
+**DEFERRED -- the handoff #1 goal is NOT shipped:** the O(files) RESIDENT core --
+`FdrProjection[]` (210 MB/file) + `FdrProjectionOutputs` -- is untouched, so FirstPassFDR
+memory is NOT yet flat in file count (~140 GB resident at 500 files). **Increment 2** (stream
+protein FDR + compaction from the on-disk 1st-pass sidecar, dropping the resident buffers;
+code-traced as feasible, full plan in `ai/.tmp/partB-design-20260717.md`) is the next-session
+task. Also deferred: the deeper flat-array drops (finalScores/entryIds/peptides via a
+competition-primitive rewrite) and a full-from-scratch 82-file "after" run.
 
 ## References
 - Sibling: `[[TODO-osprey_perfilescoring_calibration_memory_peak]]`.
