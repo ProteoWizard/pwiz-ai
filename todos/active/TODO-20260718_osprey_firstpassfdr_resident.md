@@ -99,6 +99,9 @@ pass keeps its resident survivor projection. This is where resident goes FLAT. G
     producer stops building the projection -> drop resident projection/flat arrays/finalScores
     -> gate -Dataset All + FDRBench + measurement. All committed pieces are pipeline-untouched
     (branch green); the wiring is the next focused push.
+  - **Next session handoff**: For detailed startup protocol, read
+    `ai/.tmp/handoff-20260718_osprey_firstpassfdr_resident.md` before starting work (it points at
+    `ai/.tmp/stageB-design-20260718.md`, which has the exact NEXT wiring steps + byte-identity invariant).
 
 ## The goal (Brendan)
 FirstPassFDR resident memory bounded in file count -- flat from 82 -> 500 files, not linear.
