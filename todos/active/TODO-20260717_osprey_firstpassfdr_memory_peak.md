@@ -250,6 +250,11 @@ smaller sizes for the cost/benefit tradeoff. Deliverables:
      gen-0 not LOH; 10K x 8 B = 80 KB is right at the boundary).
    Directly feeds Part B's 100K-block score-pass streaming (optimal block = this study's answer).
 
+**Next session handoff**: For detailed startup protocol (skills, build, detached-run
+recipe, scratch harnesses), read `ai/.tmp/handoff-20260717_osprey_firstpassfdr_memory.md`
+before starting work. Next tasks: (1) Parquet chunk-sizing study, (2) Part B -- bound the
+38 GB live. The per-run parallelization (3.46x) is committed (pwiz f4719e084).
+
 ## References
 - Sibling: `[[TODO-osprey_perfilescoring_calibration_memory_peak]]`.
 - `[[project_sead_pilot_mtg_dataset]]`, `[[reference_osprey_astral_thread_memory_oom]]`,
