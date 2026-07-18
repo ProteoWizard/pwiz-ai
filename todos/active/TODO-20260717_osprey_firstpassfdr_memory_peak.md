@@ -443,6 +443,17 @@ commit / 38.04 live) -- expect the q-value peak ~38 -> ~24 GB live.
 - **82-file measurement (1a build)**: byte-identical at scale (1,870,745 precursors pass; compaction
   344,615,472->12,405,655 / 90,544 base_ids == baseline). Peak commit peak_paged **76.09 vs baseline
   86.97 GB (-12.5%)**, understated (branch lacks the baseline's capacity hint). Lean re-measure running.
+- Two more byte-identical commits landed after: **capacity hint (316669aa0** -- pre-size the streaming
+  projection list to parquet NumRows, proven ~5.4 GB LIVE, byte-neutral) and **dropped fileNames[n]
+  (bbd22ccf1** -- single-file shortcut from the PerFile count, -2.8 GB transient, byte-neutral).
+  PR #4434 = 6 commits, all Stellar mode1/2/3 byte-identical.
+- **Lean re-measure (1a+guard+lean, 82-file)**: byte-identical at scale (1,870,745 precursors, compaction
+  == baseline). LIVE wins: library-resident 4.38->1.40 GB (-2.98); live-at-FDR-peak gc_heap_last_gc
+  43.04->38.60 GB (-4.44). peak_paged 79.02 vs 1a's 76.09 = Server-GC-slack NOISE (library provably
+  shrank) -- FRAME PART B ON LIVE METRICS, not peak_paged.
+- Remaining flat-array drops (finalScores+labels+entryIds+peptides ~7 GB) back the SHARED competition
+  primitives -> need those to read the projection (or streaming base_id/peptide reductions) = the
+  parity-fragile rewrite, the lead-in to Increment 2. NOT started (32% context at wrap).
 - Handoff: `ai/.tmp/handoff-20260718-osprey-partB-morning.md`.
 
 **Remaining (harder, in priority order):**
