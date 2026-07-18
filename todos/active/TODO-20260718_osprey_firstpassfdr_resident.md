@@ -1,13 +1,17 @@
 # TODO: Osprey FirstPassFDR resident memory bounding (Increment 2)
 
-**Status**: Backlog.
+## Branch Information
+- **Branch**: `Skyline/work/20260718_osprey_firstpassfdr_resident`
+- **Base**: `master`
+- **Created**: 2026-07-18
+- **Status**: In Progress
+- **PR**: (pending)
+
 **Priority**: High -- the ONE goal: make `--task FirstPassFDR` memory FLAT in file count.
 PR #4434 (merged) bounded the TRANSIENT + trimmed constants (-15 GB LIVE @82f, byte-identical)
 but did NOT touch the O(files) RESIDENT core. At 500 files the resident set is still ~140 GB
 and grows linearly -- the blocker to a 500-file run.
-**Created**: backlog (date on `/pw-startup`).
 **Predecessor**: `TODO-20260717_osprey_firstpassfdr_memory_peak.md` (completed, PR #4434).
-**Branch when started**: `Skyline/work/YYYYMMDD_osprey_firstpassfdr_resident` (off master).
 
 ## The goal (Brendan)
 FirstPassFDR resident memory bounded in file count -- flat from 82 -> 500 files, not linear.
