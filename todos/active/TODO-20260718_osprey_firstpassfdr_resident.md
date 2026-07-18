@@ -5,7 +5,7 @@
 - **Base**: `master`
 - **Created**: 2026-07-18
 - **Status**: In Progress
-- **PR**: (pending)
+- **PR**: [#4435](https://github.com/ProteoWizard/pwiz/pull/4435) (draft; Stage A landed, Stage B in progress)
 
 **Priority**: High -- the ONE goal: make `--task FirstPassFDR` memory FLAT in file count.
 PR #4434 (merged) bounded the TRANSIENT + trimmed constants (-15 GB LIVE @82f, byte-identical)
