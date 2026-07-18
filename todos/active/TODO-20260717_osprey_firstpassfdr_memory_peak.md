@@ -433,6 +433,18 @@ INPUTS (finalScores 2.76 + flat labels/entryIds/peptides/fileNames 7.24 = 10 GB 
 through the pass). Measurement in progress: `firstpassmem-82f-partB1a` vs recorded baseline (86.97
 commit / 38.04 live) -- expect the q-value peak ~38 -> ~24 GB live.
 
+### Late update (2026-07-17 ~23:15) -- guard + lean-library LANDED, 82-file MEASURED
+- Self-review returned CLEAN (no defect changing numbers/order). Added a distinct-per-file-key
+  fail-fast guard (277261fa8) for the new per-file slicing (self-review finding; byte-neutral).
+- **Lean-library LANDED** (e3cc6df03, cherry-picked from the worktree agent): OmitFragments,
+  byte-identical by design (dedup full + decoy-gen omit mode + drop-after-count-work + cache-always-
+  full). Combined guard+lean-library **Stellar mode1/2/3 PASSED** (blib 45,064,192 B; mode3 exercises
+  the lean --task FirstPassFDR path). PR #4434 now 4 commits.
+- **82-file measurement (1a build)**: byte-identical at scale (1,870,745 precursors pass; compaction
+  344,615,472->12,405,655 / 90,544 base_ids == baseline). Peak commit peak_paged **76.09 vs baseline
+  86.97 GB (-12.5%)**, understated (branch lacks the baseline's capacity hint). Lean re-measure running.
+- Handoff: `ai/.tmp/handoff-20260718-osprey-partB-morning.md`.
+
 **Remaining (harder, in priority order):**
 1. **Projection-native inputs** -- make the q-value math read the resident projection
    (proj.Score/EntryId/IsDecoy/PeptideId->PeptideById, per-file key) instead of the flat input
