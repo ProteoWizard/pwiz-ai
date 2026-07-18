@@ -404,6 +404,51 @@ recipe, scratch harnesses), read `ai/.tmp/handoff-20260717_osprey_firstpassfdr_m
 before starting work. Next tasks: (1) Parquet chunk-sizing study, (2) Part B -- bound the
 38 GB live. The per-run parallelization (3.46x) is committed (pwiz f4719e084).
 
+## Part B progress -- night session 2026-07-17 (PR #4434)
+
+**Landed (byte-identical, committed on `Skyline/work/20260718_osprey_firstpassfdr_partB`):**
+Bounded q-value reconstruction in the projection score pass -- the first-pass
+`ScoreProjectionAndComputeFdrInPlace` no longer materializes the five full-length `double[n]`
+q-value arrays; it reconstructs each row's PEP + experiment + per-run q-values from
+intrinsically-bounded lookups and streams them to the sink unchanged.
+- **1a-i** (dec1cdc47): extracted shared bounded maps -- `ComputeExperimentPrecursorQMap`
+  (base_id->q), `ComputeExperimentPeptideQMap` (peptide->q), `ComputePepWinnerMap` (winner->PEP),
+  `BuildExperimentQClampFloors` -- and refactored the full-length `[n]` methods to expand them
+  (one source of truth, shared with the population path). Removed peps/expPrec/expPept[n] (-8.28 GB).
+- **1a-ii** (61886cefc): added per-file per-run q helpers (`ComputePerRunPrecursorQvaluesForFile`,
+  `...PeptideForFile`, `ComputePerFileRunQvalues`); the emit is now a floor-reduction pass (per-file
+  run-q -> bounded minRunBoth maps) + an emit pass (per-file run-q recompute -> assign). Removed
+  runPrec/runPept[n] (-5.52 GB). All five q-value OUTPUT arrays now bounded.
+- Gates: `regression.ps1 -Dataset Stellar` mode1/2/3 byte-identical (blib 45,064,192 B), 510/513
+  unit tests (incl. `TestProjectionStreamingMatchesFdrEntryStreaming` byte-identity), PercolatorFdr
+  inspection-clean. PR #4434 open; self-review spawned. TeamCity Perf/Regression (Astral) NOT
+  triggered -- auto-mode classifier blocked the self-trigger; left for Brendan (handoff pre-authorized it).
+- PERF note (1a-ii): floor pass + emit pass each recompute per-file run-q (2x, inherent to needing
+  global clamp mins before emit); ~+11% wall at 82f IF serial. Mitigation = parallelize the floor
+  pass (files independent) -- DEFERRED pending a measured wall regression.
+
+**Key reframing:** the peak is driven by TRANSIENT O(n) arrays, not only the resident projection.
+The 6 transient double[n] split into OUTPUTS (5 q-value arrays 13.8 GB -- now bounded by 1a) and
+INPUTS (finalScores 2.76 + flat labels/entryIds/peptides/fileNames 7.24 = 10 GB -- still resident
+through the pass). Measurement in progress: `firstpassmem-82f-partB1a` vs recorded baseline (86.97
+commit / 38.04 live) -- expect the q-value peak ~38 -> ~24 GB live.
+
+**Remaining (harder, in priority order):**
+1. **Projection-native inputs** -- make the q-value math read the resident projection
+   (proj.Score/EntryId/IsDecoy/PeptideId->PeptideById, per-file key) instead of the flat input
+   arrays, and null those after training. Drops finalScores + flat (-10 GB). Via streaming
+   base_id/peptide reductions (byte-identical: strict-`>` in flat order reproduces CompeteFromIndices'
+   winner). Sets up (2).
+2. **Increment 2 -- drop the RESIDENT `FdrProjection[]` (3.36 GB, 210 MB/file) + `FdrProjectionOutputs`
+   (1.09 GB)** -- the handoff #1 goal; only this makes the resident set flat in file count. Requires
+   the two-pass to re-read rows from parquet (as `LoadJoinOnlyScores` already streams 32B rows) AND
+   the two resident consumers to stream: protein FDR (`ProteinFdrEngine.RunFirstPass` reads
+   projection.PerFile+PeptideById+outputs -> stream from parquet+library+sidecar) and the compaction
+   predicate (`ComputeFirstPassBaseIds` -> stream from parquet+sidecar). High parity risk (protein
+   FDR); gate on regression `-Dataset All` + FDRBench.
+
+Design detail: `ai/.tmp/partB-design-20260717.md`.
+
 ## References
 - Sibling: `[[TODO-osprey_perfilescoring_calibration_memory_peak]]`.
 - `[[project_sead_pilot_mtg_dataset]]`, `[[reference_osprey_astral_thread_memory_oom]]`,
