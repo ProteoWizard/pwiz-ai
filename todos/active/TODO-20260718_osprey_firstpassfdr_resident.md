@@ -13,6 +13,50 @@ but did NOT touch the O(files) RESIDENT core. At 500 files the resident set is s
 and grows linearly -- the blocker to a 500-file run.
 **Predecessor**: `TODO-20260717_osprey_firstpassfdr_memory_peak.md` (completed, PR #4434).
 
+## Execution plan (2026-07-18 session) -- staged, each byte-identical-gated
+
+Code re-traced on master@#4434 and CONFIRMED the design. Splitting Increment 2 into two
+byte-gate-able stages (lowest-risk first). The full O(rows) resident set to eliminate is
+THREE buffers, all O(pre-compaction rows n ~= 344M @82f), not two:
+`FdrProjectionSet.PerFile` (32 B/row) + `FdrProjectionOutputs` (16 B/row) + the flat
+`labels/entryIds/peptides/bestScores[n]` arrays in `RunStreamingIntoProjection` (~7 GB @82f;
+the design's "1c", DEFERRED by #4434, NOT shipped).
+
+Key facts verified this session:
+- The phase-1 sidecar record ALREADY carries `run_peptide_qvalue` (FdrStoringSink.AcceptOutput
+  writes `q.RunPeptideQvalue` to slot [20..28]); phase-2 patches `run_protein_qvalue` [52..60].
+  So the finalized `.1st-pass.fdr_scores.bin` holds Score + ALL 5 q-values keyed by entry_id.
+  => `FdrProjectionOutputs` (RunPeptideQ+RunProteinQ) is 100% redundant with the sidecar.
+- `FdrProjectionOutputs` has exactly 4 readers: ProteinFdr.CollectBestPeptideScores +
+  RunFirstPassProteinFdr (RunPeptideQ), ComputeFirstPassBaseIds (both), and
+  PatchFirstPassSidecarProteinQvalues (RunProteinQ). Rewrite those 4 -> the array is gone.
+- Modseq source = `ParquetScoreCache.ReadFdrStubScalars(path, onRow(entryId,charge,isDecoy,
+  coelutionSum,modseq))` -- light per-row callback, no full FdrEntry. Same parquet column
+  peptideById was interned from (value-identical => byte-identical string keys).
+- `IsDecoy == (EntryId & DECOY_ID_BIT 0x80000000) != 0` holds by construction (decoys minted
+  `target.Id | 0x80000000`; base_id = `& 0x7FFFFFFF`; target/decoy pairs share base_id). So
+  compaction can run purely from the sidecar's entry_id (verify via the byte gate).
+- CAVEAT: `ScoreProjectionAndComputeFdrInPlace` + `RunStreamingIntoProjection` + the flat
+  arrays + `FdrProjectionSinkBase.Accept/Finish` are SHARED with the 2nd pass
+  (`FdrStreamingSink`, --task SecondPassFDR). The 2nd-pass projection is O(survivors ~12.4M),
+  NOT the 82->500 blocker, and must stay resident for Stage 7/8. => Stage B (streaming the
+  score pass) must be a 1st-pass-ONLY path (fork/parameterize the row source), higher blast
+  radius. `FdrProjectionOutputs` is 1st-pass-only, so Stage A is cleanly isolated.
+
+**Stage A (LOW risk, do first): drop `FdrProjectionOutputs`; stream the 3 consumers from disk.**
+Score pass + training + resident `FdrProjection[]` UNCHANGED (backstop). Rewrite protein FDR
+(detectedPeptides + bestScores from sidecar Score/RunPeptideQ joined w/ parquet-scalar modseq/
+IsDecoy), the propagate+phase-2 patch (entry_id->PeptideQvalues[modseq] from parquet scalars),
+and compaction (entry_id/RunPeptideQ/RunProteinQ from the finalized sidecar). Add a light
+`FdrScoresSidecar` per-file record reader (entry_id -> record) that needs no FdrEntry stubs.
+Proves the disk-streaming reconstruction (modseq source + protein-group ordering) in isolation.
+Removes the 16 B/row array (~34 GB @500f). Gate: regression `-Dataset Stellar` byte-identical.
+
+**Stage B (HIGH risk): drop the resident `FdrProjection[]` + flat arrays; stream the 1st-pass
+score pass + training from parquet (`LoadJoinOnlyScores`).** 1st-pass-only path so the 2nd
+pass keeps its resident survivor projection. This is where resident goes FLAT. Gate:
+`-Dataset All` byte-identical + FDRBench + the 16f/82f LIVE measurement.
+
 ## The goal (Brendan)
 FirstPassFDR resident memory bounded in file count -- flat from 82 -> 500 files, not linear.
 The transient q-value arrays are already gone (PR #4434). The remaining O(files) RESIDENT
