@@ -4,8 +4,8 @@
 - **Branch**: `Skyline/work/20260718_osprey_firstpassfdr_resident`
 - **Base**: `master`
 - **Created**: 2026-07-18
-- **Status**: In Progress
-- **PR**: [#4435](https://github.com/ProteoWizard/pwiz/pull/4435) (draft; Stage A landed, Stage B in progress)
+- **Status**: Stage B COMPLETE -- primary goal achieved (first-pass resident memory FLAT in files); PR ready for review + gates green. Awaiting human review + Brendan's manual TeamCity Perf/Regression trigger.
+- **PR**: [#4435](https://github.com/ProteoWizard/pwiz/pull/4435) (ready for review; Stage A + Stage B landed)
 
 **Priority**: High -- the ONE goal: make `--task FirstPassFDR` memory FLAT in file count.
 PR #4434 (merged) bounded the TRANSIENT + trimmed constants (-15 GB LIVE @82f, byte-identical)
@@ -102,6 +102,62 @@ pass keeps its resident survivor projection. This is where resident goes FLAT. G
   - **Next session handoff**: For detailed startup protocol, read
     `ai/.tmp/handoff-20260718_osprey_firstpassfdr_resident.md` before starting work (it points at
     `ai/.tmp/stageB-design-20260718.md`, which has the exact NEXT wiring steps + byte-identity invariant).
+- **2026-07-18 Stage B WIRING DONE (byte-identical, committed 3fba794c3 + 7562e2fcd):** The
+  1st-pass score pass now streams off parquet with NO resident FdrProjection[] -- resident memory
+  is projection-free (the O(files) blocker is gone). Two commits:
+  - `3fba794c3` (kernel + sink contract, pipeline unchanged): `IFdrOutputSink.Accept` takes
+    charge+peptide as args (so the sink needs no resident row); `FdrProjectionSet` gains a
+    counts-only shape (`CountsOnly`/`RowCount`/`IsCountsOnly`); `PercolatorFdr.RunStreamingFirstPass`
+    -- the 1st-pass-only fork: 3 streaming passes over a row-source delegate (pass 0 = streaming
+    best-per-precursor dedup captured w/ identity, sorted ascending-g == SelectBestPerPrecursor,
+    then SubsampleByPeptideGroup + RunPercolator; pass 1 = score + StreamingFirstPassQ + per-file
+    run-q -> clamp floors; pass 2 = re-score + assign 5 q + sink.Accept). Score recomputed per row
+    (no finalScores[n]); reuses ComputePerFileRunQvalues/UpdateExperimentQClampFloor/StreamingFirstPassQ
+    unchanged. `RowBuffer` (bounded one-file buffer) + `ComputeStreamedScore` keep the stream
+    callbacks closure-clean. **`FdrTest.TestStreamingFirstPassMatchesProjection`** pins it
+    byte-identical to the resident projection path on a multi-obs fixture with a FORCED
+    peptide-grouped subsample (MaxTrainSize=60 < 80 dedup) -- the ONE path Stellar/Astral don't
+    reach (they're under the 300K subsample threshold).
+  - `7562e2fcd` (the flip): the 3 lean producers (Run / resume Rehydrate / merge-node
+    LoadJoinOnlyScores) build a counts-only projection (Builder(countsOnly:true) -> file names +
+    row counts, no rows, no PeptideById). FirstJoinTask.RunFirstPassProjection branches on
+    `IsCountsOnly` -> `PercolatorEngine.RunFirstPassStreaming` (row source =
+    `ReadFdrStubScalars(perFileParquetPaths[name])`, features via loadFileFeatures). 2nd pass +
+    the fat 1st-pass path keep the resident `ScoreProjectionAndComputeFdrInPlace` unchanged.
+  - **GATE: `regression.ps1 -Dataset Stellar` PASS all 3 modes byte-identical** (mode1 vs golden,
+    mode3 HPC chain==straight, mode2 resume==straight; all blibs 45,064,192 bytes). 515 unit tests
+    + ReSharper 0-warning inspection green. Covers BOTH producer paths (in-process + --input-scores)
+    and straight/resume/HPC.
+  - LOAD-BEARING invariant (holds, gate-confirmed): parquet row order == the resident sort order on
+    the 1st pass (parquet is (entry_id,charge,scan)-sorted), so streaming in parquet order
+    reproduces the resident (EntryId,Charge,ParquetIndex) sort exactly (incl. competition
+    first-seen tie-breaks).
+  - NOTE (pre-existing, out of scope): the global row ordinal `g` is `int`, matching the resident
+    path's `int n` array indexing -- both cap at ~2.1B pre-compaction rows. Stage B is memory-flat;
+    widening ordinals to `long` for >2B-row runs is a separate follow-up (82f @ 344M rows is safe).
+  - REMAINING before PR-ready: `-Dataset All` (Astral leg) byte-identical + the 16f/82f LIVE memory
+    measurement (prove FLAT: FdrProjection[] block GONE, first-pass-fdr-live flat 16f->82f vs the
+    reference O(files) 13.35 GB @82f projection-built) + `/pw-self-review` + mark PR #4435 ready.
+- **2026-07-18 Stage B COMPLETE + all gates green; PR #4435 READY (commit ca94388d4 = self-review fixes):**
+  - GATES: `regression.ps1 -Dataset Stellar` PASS mode1/2/3 (blibs 45,064,192) + `-Dataset Astral`
+    PASS mode1/2/3 (blibs 135,249,920) -- full `-Dataset All` byte-identical. 515 unit tests +
+    inspection green. `TestStreamingFirstPassMatchesProjection` proves the FORCED-subsample path.
+  - MEMORY (SEA-AD 82-file, OSPREY_LOG_MEMORY LIVE gc_heap post-GC) -- FLAT proven:
+    projection-built 2.28 GB @16f -> 2.59 GB @82f (was 13.35 GB @82f resident);
+    first-pass-fdr-live 2.65 @16f -> 2.35 GB @82f; transient peak gc_heap 9.35 -> 9.75 GB. All flat
+    despite 5x rows (68M->344M). 82f exit 0, 45.9 min, compaction 344M->12.4M survivors.
+  - dotMemory 20f before(3fba794c3 resident)/after(Stage B), same lean-lib+Stage A -> ISOLATES the
+    FdrProjection[] elimination: stage5-start 4.88->2.28 GB, first-pass-fdr-live 4.70->2.31 GB
+    (delta ~2.6 GB = the resident FdrProjection[]). .dmw at ai/.tmp/firstpassfdr-20f-stageB-{before,after}.dmw
+    (open side-by-side in the GUI). Both produce identical FDR output; the 20 .1st-pass.fdr_scores.bin
+    sidecars are BYTE-IDENTICAL 20/20 (at-scale HRAM subsample-path byte proof; subsumes FDRBench).
+  - SELF-REVIEW (fresh agent): 2 fixes committed (null-modseq normalize in RowBuffer.Add;
+    FdrStoringSink.OnFinish hard-fail on short streamed count) + [PATH] log dedup; 1 documented
+    tradeoff (1st-pass features read 2x = memory-for-IO trade; watch Test-PerfGate).
+  - FOLLOW-UPS (out of scope, note in a backlog TODO): (1) widen the int row ordinal `g` to long for
+    >2.1B-row runs (pre-existing cap shared with the resident path); (2) Test-PerfGate the extra
+    parquet re-reads; (3) fix firstpassfdr-dmw.ps1 hardcoded inner log name (breaks concurrent runs).
+  - NEXT: human review + Brendan's MANUAL TeamCity Perf/Regression trigger on pull/4435 (do NOT self-trigger).
 
 ## The goal (Brendan)
 FirstPassFDR resident memory bounded in file count -- flat from 82 -> 500 files, not linear.
