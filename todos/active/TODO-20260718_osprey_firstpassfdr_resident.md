@@ -76,6 +76,19 @@ pass keeps its resident survivor projection. This is where resident goes FLAT. G
     per file to the FirstPassFDR path (protein-FDR pass1+pass2 re-read parquet for modseq;
     compaction re-reads the sidecar) WITHOUT yet a memory win (projection still resident) --
     it's the prove-the-plumbing stage. The memory win lands in Stage B. Watch Test-PerfGate.
+  - SELF-REVIEW (fresh-context agent, clean byte-identity verdict): 1 MEDIUM fixed
+    (StreamFirstPassFileScores now skips a parquet row absent from the sidecar instead of
+    aborting -> matches the survivor reload's superset tolerance; byte-neutral). 2 LOW noted,
+    no change (OSPREY_PROTEIN_FDR_ONLY patches before exit = diagnostic-only; parquet 3x
+    re-read = deliberate memory tradeoff). Confirmed clean: reduction equivalence, modseq
+    source, decoy-bit invariant, patch-before-compaction, record layout, log order.
+- **2026-07-18 Stage B STARTED** (Brendan: proceed now, one gated commit). 1st-pass-only
+  streaming score/reduction/emit off parquet (LoadJoinOnlyScores); recompute SVM score per
+  streamed row (no finalScores[n]); rewrite the bounded-lookup builders
+  (ComputePepWinnerMap/ComputeExperiment*/ComputePerFileRunQvalues) to consume streamed rows;
+  drop resident FdrProjection[] + flat labels/entryIds/peptides/bestScores[n]. Fork from the
+  shared 2nd-pass path (keeps its O(survivors) resident projection). Gate: -Dataset All +
+  FDRBench + 16f/82f LIVE measurement; Test-Snapshot for bisection if red.
 
 ## The goal (Brendan)
 FirstPassFDR resident memory bounded in file count -- flat from 82 -> 500 files, not linear.
