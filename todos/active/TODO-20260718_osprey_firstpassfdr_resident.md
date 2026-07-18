@@ -169,5 +169,8 @@ Result: FirstPassFDR resident = library (lean, ~1.4 GB) + bounded lookups
   slope -> ~0). READ THE LIVE metrics (gc_heap_last_gc), not peak_paged (Server-GC-slack noise).
 
 ## References
+- **Stage B execution-ready spec (resume here): `ai/.tmp/stageB-design-20260718.md`** — the
+  streaming-competition-core rewrite plan (unit-test-first), row source, byte-identity invariant,
+  two-path producer, gates.
 - Full design detail while it exists: `ai/.tmp/partB-design-20260717.md` (Increment 2 section).
 - `[[TODO-osprey_perfilescoring_calibration_memory_peak]]` (sibling memory frontier).
