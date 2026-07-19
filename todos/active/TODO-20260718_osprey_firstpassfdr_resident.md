@@ -158,6 +158,29 @@ pass keeps its resident survivor projection. This is where resident goes FLAT. G
     >2.1B-row runs (pre-existing cap shared with the resident path); (2) Test-PerfGate the extra
     parquet re-reads; (3) fix firstpassfdr-dmw.ps1 hardcoded inner log name (breaks concurrent runs).
   - NEXT: human review + Brendan's MANUAL TeamCity Perf/Regression trigger on pull/4435 (do NOT self-trigger).
+- **2026-07-18 review rounds done; PR still green.** Copilot (3 comments) fixed in `5e45a8ef4`
+  (StreamFirstPassFileScores doc skip-not-fault; null sidecarBase guards in StreamFirstPassFileScores
+  + ComputeFirstPassBaseIds); replied + resolved all 3 threads. Full-branch `/pw-self-review` at HEAD
+  found 1 MEDIUM (Stage A `StreamFirstPassFileScores` fed raw null modseq to the protein-FDR
+  Dictionary key -> crash; the earlier Stage-B-scoped self-review had skipped Stage A) fixed in
+  `df1084f93` (normalize modseq->"" at the pass-1 callback + pass-2 patch lookup; byte-neutral).
+  Self-review otherwise clean + confirmed both prior fix rounds correct. Open follow-up it raised:
+  `--model-diagnostics` uses the streaming accumulator on main/merge but forces the resident batch
+  report on resume (PRE-EXISTING asymmetry from #4355/#4377, not Stage B) -- worth a "are the two
+  reports identical" check someday, out of scope here.
+- **2026-07-18 PERF HANDOFF (next session): measure before-vs-after wall clock for --task FirstPassFDR.**
+  The memory win is proven + PR is review-ready; the ONE remaining question is the SPEED cost.
+  Expected: streaming reads each file's 21 PIN feature columns 2x on the 1st pass (recompute-score-per-row,
+  no finalScores[n]) -> some slowdown; but at 82f the freedom from GC/allocation pressure may offset or
+  win, and the whole point was to make 500+ files feasible on a 64 GB box (prohibitive before).
+  - BEFORE = commit `3fba794c3` (pre-flip resident FdrProjection[], SAME lean-lib + Stage A -> isolates
+    Stage B's perf effect; matches the dotMemory before/after). AFTER = branch HEAD.
+  - Data already captured (task-time, NOT perf-clean -- profiler and/or concurrent load): AFTER 82f
+    `firstpass-mem-n.ps1 -MaxFiles 82` = 45.9 min / FirstPassFDR:done 2753.3s (--threads 8, no profiler);
+    AFTER 16f = 8.5 min / 509.4s. 20f under dotMemory + contention: before 1454.2s vs after 1376.7s
+    (NOT reliable). Need CLEAN uncontended reps.
+  - **Next session handoff**: read `ai/.tmp/handoff-20260718_osprey_firstpassfdr_resident_perf.md` for the
+    exact perf-run protocol (rebuild the before worktree, the two datasets, the timing harness, reps).
 
 ## The goal (Brendan)
 FirstPassFDR resident memory bounded in file count -- flat from 82 -> 500 files, not linear.
