@@ -1,12 +1,13 @@
 # TODO-osprey_diag_reproducibility_frontier.md -- Reproducibility-vs-FDR diagnostics + the iso-FDR "frontier" card (C#-backed)
 
 ## Status
-**In review (created 2026-07-16).** PR [#4428](https://github.com/ProteoWizard/pwiz/pull/4428)
+**Completed.** PR [#4428](https://github.com/ProteoWizard/pwiz/pull/4428) (merged 2026-07-18)
 on branch `Skyline/work/20260716_osprey_diag_reproducibility_frontier` (pwiz-work2). C# frontier
 implemented + gate-green (508 tests, 0 inspection warnings); local fresh-context self-review done
 and its findings fixed (per-file-dedup blocker: run count = files not candidate rows; loosest-Q*
-on a plateau). PRE-MERGE: confirm the C# reproduces the numpy reference on the SEA-AD 82-file run
-(unit-tested + byte-matched, not yet run end-to-end). Grew out of an extended exploration with
+on a plateau). DEFERRED (post-merge): confirm the C# reproduces the numpy reference on the SEA-AD
+82-file run (unit-tested + byte-matched, not yet run end-to-end); Brendan will validate on his next
+night-session full run, easier with this merged. Grew out of an extended exploration with
 Brendan on the model-diagnostics
 Reproducibility tab, motivated by a journal (MCP) discussion on whether experiment-wide q
 should be a *required* FDR-control standard for DIA. Entrapment-validated on Mike's SEA-AD
@@ -65,17 +66,19 @@ tallying (Accumulator.cs:195). So the un-gated per-run q is already in hand at t
   the graph.
 
 ## Tasks
-- [ ] Accumulator: Q-grid + per-target-side-precursor run-q-bin accumulation (un-gated).
-- [ ] `ModelDiagnosticsData.Frontier` data class (per-scope yield[]/q[], N, target, bestPeak,
+- [x] Accumulator: Q-grid + per-target-side-precursor run-q-bin accumulation (un-gated).
+- [x] `ModelDiagnosticsData.Frontier` data class (per-scope yield[]/q[], N, target, bestPeak,
       apex overlap, peak K/Q/yield).
-- [ ] Build: port the numpy frontier + overlap + standard math; wire into the data object.
-- [ ] Serialize `D.frontier` (1st pass only) via ModelDiagnosticsHtml.
-- [ ] Template: `drawFrontier` 2nd-pass no-graph + explanation; drop prototype labeling; keep
+- [x] Build: port the numpy frontier + overlap + standard math; wire into the data object.
+- [x] Serialize `D.frontier` (1st pass only) via ModelDiagnosticsHtml.
+- [x] Template: `drawFrontier` 2nd-pass no-graph + explanation; drop prototype labeling; keep
       KPI tiles + the standard reference line.
-- [ ] Validate the C# frontier reproduces the offline numpy numbers (peak K=3, 45,129 / 44,418,
-      Q* 0.008 / 0.04, overlap 94%, standard 37,174) on the SEA-AD 82-file run.
-- [ ] Gate: Build-Osprey -RunTests -RunInspection; regression.ps1 unaffected (diagnostics output
-      is not in the blib golden -- confirm).
+- [ ] DEFERRED (post-merge): Validate the C# frontier reproduces the offline numpy numbers
+      (peak K=3, 45,129 / 44,418, Q* 0.008 / 0.04, overlap 94%, standard 37,174) on the SEA-AD
+      82-file run. Unit-tested + byte-matched across both code paths; end-to-end run pending
+      Brendan's next night session.
+- [x] Gate: Build-Osprey -RunTests -RunInspection; regression.ps1 unaffected (diagnostics output
+      is not in the blib golden).
 
 ## Follow-ups (separate, NOT this PR)
 - **Decoy-vs-entrapment calibration check.** "Can this be predicted with decoys instead of an
@@ -87,6 +90,20 @@ tallying (Accumulator.cs:195). So the un-gated per-run q is already in hand at t
   tally + oracle check before shipping. Add as a second frontier curve/KPI once verified.
 - **Standalone MCP note**: method + the three findings (+~19% at matched FDR, peak at >=3, 94%
   content overlap) for the journal-guidelines discussion.
+
+## Progress Log
+
+### 2026-07-18 - Merged
+
+PR #4428 merged as commit aedc7333. Shipped the template-only reproducibility-vs-required-runs
+yield card plus the C#-backed reproducibility frontier (streaming accumulator and resident batch
+build via a shared per-file fold, preserving the streaming==batch byte-match). Gate-green (508
+tests, 0 inspection warnings) and fresh-context self-review findings fixed. Merged at Brendan's
+direction (lead author, so no "Reported by" credit) on local gates plus green CI; the one deferred
+item -- end-to-end validation against the offline numpy reference on the SEA-AD 82-file run -- is
+left unchecked and will be confirmed on Brendan's next night-session full run (easier with this
+merged). Follow-ups (decoy-vs-entrapment calibration curve; standalone MCP note) remain out of
+scope for this PR.
 
 ## References
 - Prototype + validation (numpy, this session): reproduces the diagnostics q<=1% histograms to
