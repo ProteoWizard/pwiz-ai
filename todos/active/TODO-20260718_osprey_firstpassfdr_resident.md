@@ -237,6 +237,18 @@ pass keeps its resident survivor projection. This is where resident goes FLAT. G
     SecondPassFDR 45 GB peak -> [[TODO-osprey_stage6_rescored_buffer_streaming]]; transfer/mdiag-resume
     resident pool -> [[TODO-osprey_transfer_mdiag_resume_resident_streaming]].
 
+- **2026-07-19 FirstPassFDR 82f before/after -- CLEAN 3-rep median (supersedes the earlier confounded pair).**
+  BEFORE (`3fba794c3` resident) median **2641.3 s** vs AFTER (`df1084f93` pure streaming, NO progress fix)
+  median **2913.6 s** = **+10.3%** (streaming slower, +272.3 s). Runs: BEFORE {3004.8 cold, 2625.7, 2641.3},
+  AFTER {3078, 2668.4, 2913.6}; AFTER has ~15% run-to-run variance (2668-3078). Ran detached via Start-Process
+  (a background-bash driver was harness-reaped twice mid-sweep -- see [[feedback_night_session_detached_runs]]).
+  - SCALING: **16f +13.9%, 82f +10.3%** -> streaming costs a steady ~+10-14% on the FirstPassFDR task; modest
+    GC-relief narrowing at 82f, NOT a crossover (the killed sweep's -8.9% was the cold-BEFORE/warm-AFTER
+    artifact + AFTER's high-outlier rep1). Essentially AT Brendan's ~10% tolerance line.
+  - VERDICT: acceptable -- small end-to-end (FirstPassFDR is a slice; PerFileScoring dominates the wall clock),
+    bought by the memory win (A 44 GB vs ~100 GB reference + flat-in-files headroom to 500 files). Brendan
+    handles the PR #4435 comment.
+
 ## The goal (Brendan)
 FirstPassFDR resident memory bounded in file count -- flat from 82 -> 500 files, not linear.
 The transient q-value arrays are already gone (PR #4434). The remaining O(files) RESIDENT
