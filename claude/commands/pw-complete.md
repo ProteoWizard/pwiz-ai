@@ -1,21 +1,29 @@
 ---
-description: Finalize a merged PR — write final TODO, move to completed, sync local master, delete the work branch (local + remote)
+description: Finalize a PR (open OR already merged) — if it's still open, propose and run the squash-merge with your approval first; then write the final TODO, move it to completed, sync local master, and delete the work branch (local + remote)
 args: pr-number (optional)
 ---
 
 # Complete a (Merged or Mergeable) PR
 
-End-of-branch ritual for a PR that is either already merged or ready
-to be merged. The user is telling you the work is done — your job is
-to merge it (only if asked), leave a clean record in
-`ai/todos/completed/`, and sync the local checkout so the work
-branch is gone and `master` is the merged state.
+End-of-branch ritual for a PR whose work is done. **This command handles
+BOTH an already-merged PR and one that is still OPEN — do NOT refuse it as
+"only for merged PRs" (a recurring mistake). Merging an open PR is part of
+this command's job, not a reason to stop.** The default flow is two branches
+on the PR's `state`:
 
-The default behavior is **non-destructive**: if the PR isn't merged,
-you stop and offer to squash-merge it. The user explicitly approves
-the squash subject + body before any merge happens, and the local
-branch is never deleted until the merge commit is confirmed to be an
-ancestor of the freshly-pulled local master.
+1. **OPEN** → check the CI gate, then propose a squash-merge in the team
+   commit-message format, get the user's explicit approval of the subject +
+   body, EXECUTE the merge, then finalize (Step 1b below).
+2. **MERGED** → skip straight to finalizing (Step 2 below).
+
+Only a **CLOSED-not-merged** PR is a hard stop.
+
+Finalizing = write the final TODO, move it to `ai/todos/completed/`, sync
+the local checkout so the work branch is gone and `master` is the merged
+state. It is safe by construction: no merge happens without the user's
+explicit approval of the exact subject + body, and the local branch is never
+deleted until the merge commit is confirmed to be an ancestor of the
+freshly-pulled local master.
 
 ## Arguments
 
