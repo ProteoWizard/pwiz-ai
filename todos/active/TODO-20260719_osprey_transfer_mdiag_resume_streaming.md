@@ -1,6 +1,7 @@
 # TODO: Osprey transfer / mdiag-on-resume resident first-pass pool (OOMs at 82 files)
 
-**Status**: Backlog.
+**Status**: Active (started 2026-07-19).
+**Branch**: `Skyline/work/20260719_osprey_transfer_streaming` (pwiz).
 **Priority**: Medium for the transfer arm alone (transfer is the non-default experimental pass-2
 mode, #4410); HIGHER for the mdiag-on-resume half, which OOMs ANY --model-diagnostics RESUME at
 scale (percolator too), not just transfer.
