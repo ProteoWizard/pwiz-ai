@@ -4,7 +4,13 @@
 - **Branch**: `Skyline/work/20260718_osprey_firstpassfdr_resident`
 - **Base**: `master`
 - **Created**: 2026-07-18
-- **Status**: Stage B COMPLETE -- primary goal achieved (first-pass resident memory FLAT in files); PR ready for review + gates green. Awaiting human review + Brendan's manual TeamCity Perf/Regression trigger.
+- **Status**: COMPLETE pending merge. Stage B (first-pass streaming, resident memory FLAT in files) + the
+  progress-reporting fix (`56a726124`, pushed) landed; PR #4435 OPEN, gates green (regression Stellar+Astral
+  byte-identical, 515 tests, inspection). **PERF fully characterized (2026-07-19):** FirstPassFDR task
+  +13.9% (16f) / +10.3% (82f) streaming vs resident (3-rep medians), diluting to **+2.7% (Stellar) / +0.6%
+  (Astral) end-to-end** (stage5 is 27% / 6.4% of the total); 82-file full run peak **44 GB vs ~100 GB**
+  reference, no paging. Perf comment posted to PR #4435. Awaiting TeamCity Perf/Regression + human review +
+  merge, then /pw-complete.
 - **PR**: [#4435](https://github.com/ProteoWizard/pwiz/pull/4435) (ready for review; Stage A + Stage B landed)
 
 **Priority**: High -- the ONE goal: make `--task FirstPassFDR` memory FLAT in file count.
