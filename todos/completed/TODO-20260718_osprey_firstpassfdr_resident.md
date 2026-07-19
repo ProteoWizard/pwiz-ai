@@ -4,14 +4,12 @@
 - **Branch**: `Skyline/work/20260718_osprey_firstpassfdr_resident`
 - **Base**: `master`
 - **Created**: 2026-07-18
-- **Status**: COMPLETE pending merge. Stage B (first-pass streaming, resident memory FLAT in files) + the
-  progress-reporting fix (`56a726124`, pushed) landed; PR #4435 OPEN, gates green (regression Stellar+Astral
-  byte-identical, 515 tests, inspection). **PERF fully characterized (2026-07-19):** FirstPassFDR task
-  +13.9% (16f) / +10.3% (82f) streaming vs resident (3-rep medians), diluting to **+2.7% (Stellar) / +0.6%
-  (Astral) end-to-end** (stage5 is 27% / 6.4% of the total); 82-file full run peak **44 GB vs ~100 GB**
-  reference, no paging. Perf comment posted to PR #4435. Awaiting TeamCity Perf/Regression + human review +
-  merge, then /pw-complete.
-- **PR**: [#4435](https://github.com/ProteoWizard/pwiz/pull/4435) (ready for review; Stage A + Stage B landed)
+- **Status**: **Completed** (merged 2026-07-19 as `df9bb0121`). Stage B (first-pass streaming, resident memory
+  FLAT in files) + the progress-reporting fix landed; gates green (regression Stellar+Astral byte-identical,
+  515 tests, inspection, TeamCity 18/18). PERF characterized: FirstPassFDR task +13.9% (16f) / +10.3% (82f)
+  streaming vs resident, diluting to **+2.7% (Stellar) / +0.6% (Astral) end-to-end**; 82-file full run peak
+  **44 GB vs ~100 GB** reference. Follow-ups deferred to the memory sprint (Stage-6/7 + transfer/mdiag pool).
+- **PR**: [#4435](https://github.com/ProteoWizard/pwiz/pull/4435) (merged 2026-07-19 as `df9bb0121`)
 
 **Priority**: High -- the ONE goal: make `--task FirstPassFDR` memory FLAT in file count.
 PR #4434 (merged) bounded the TRANSIENT + trimmed constants (-15 GB LIVE @82f, byte-identical)
@@ -262,6 +260,20 @@ pass keeps its resident survivor projection. This is where resident goes FLAT. G
     instead of the O(files) resident path that thrashes then FAILS at scale (B proved it: 82 GB commit-ceiling
     OOM at 46% load). The change is clearly worth it. (No full-pipeline A/B run needed -- the stage breakdown
     settles it; Test-PerfGate vs the 07-08 perfbase would conflate the streaming with all other recent work.)
+
+### 2026-07-19 - Merged
+
+PR #4435 merged (squash) as commit `df9bb0121`. Shipped: Stage B first-pass streaming (no resident
+`FdrProjection[]`; first-pass memory flat in file count) + Stage A + the log-only progress-reporting fill for
+the streaming first-pass phases. Byte-identical (regression Stellar+Astral mode1/2/3, 20/20 HRAM sidecar
+byte-diff, 515 tests, inspection, TeamCity 18/18 green). Perf: FirstPassFDR task +10.3% @82f / +13.9% @16f
+(streaming's 2x feature reads; modest GC-relief narrowing at scale), diluting to +2.7% (Stellar) / +0.6%
+(Astral) end-to-end -- a small single-stage cost that converts FirstPassFDR from O(files)-resident (thrashes
+then OOMs at scale, as the transfer arm proved) into memory-bounded, unlocking 200-500 file runs. Deferred to
+a new memory sprint (backlog filed): Stage-6 O(files) survivor-buffer slope, Stage-7 SecondPassFDR 45 GB peak
+([[TODO-osprey_stage6_rescored_buffer_streaming]]), and the transfer/mdiag-on-resume resident pool
+([[TODO-osprey_transfer_mdiag_resume_resident_streaming]]). The `int` global row ordinal (>2.1B-row cap) also
+remains a documented pre-existing follow-up.
 
 ## The goal (Brendan)
 FirstPassFDR resident memory bounded in file count -- flat from 82 -> 500 files, not linear.
