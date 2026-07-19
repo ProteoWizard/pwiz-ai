@@ -227,10 +227,15 @@ pass keeps its resident survivor projection. This is where resident goes FLAT. G
     ProgressReporter -- log-only, byte-identical -- so --timestamp/--memstamp perfviz has no multi-minute
     gaps. Gates: 16f FirstPassFDR shows all 6 labels; regression Stellar mode1/2/3 byte-identical; 515 tests +
     inspection clean. Rebased onto Brendan's master-merge (#4428); Brendan reruns TeamCity Perf/Regression.
-  - **B (transfer, resume from A):** launched with OSPREY_VERSION_OVERRIDE=26.1.1.199; resume works (skip
-    Stage 1-4, ~6h saved); running (resident path -- memory watched).
+  - **B (transfer, resume from A):** resume worked (skip Stage 1-4, ~6h saved, v199 override matched A's
+    parquet) but **OOM'd at the 82 GB commit ceiling at 46% of loading the resident pool** (managed 80.5 /
+    private 82.2 GB, fully paged) -> killed, machine recovered. Transfer (Pass2TransferQ) + mdiag-on-resume
+    BOTH force the resident fat pool; the #4435 streaming doesn't apply (resident fork). Confirmed reason the
+    82-file transfer arm never completes. Transfer is experimental (default=percolator=A, which works).
+    Deferred to a transfer-arm streaming fix -> [[TODO-osprey_transfer_mdiag_resume_resident_streaming]].
   - **Deferred to a NEW memory sprint (NOT this PR):** Stage-6 O(files) survivor-buffer slope + Stage-7
-    SecondPassFDR 45 GB peak -> [[TODO-osprey_stage6_rescored_buffer_streaming]].
+    SecondPassFDR 45 GB peak -> [[TODO-osprey_stage6_rescored_buffer_streaming]]; transfer/mdiag-resume
+    resident pool -> [[TODO-osprey_transfer_mdiag_resume_resident_streaming]].
 
 ## The goal (Brendan)
 FirstPassFDR resident memory bounded in file count -- flat from 82 -> 500 files, not linear.
