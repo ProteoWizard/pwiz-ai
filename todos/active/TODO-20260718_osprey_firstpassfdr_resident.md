@@ -181,6 +181,40 @@ pass keeps its resident survivor projection. This is where resident goes FLAT. G
     (NOT reliable). Need CLEAN uncontended reps.
   - **Next session handoff**: read `ai/.tmp/handoff-20260718_osprey_firstpassfdr_resident_perf.md` for the
     exact perf-run protocol (rebuild the before worktree, the two datasets, the timing harness, reps).
+- **2026-07-18 PERF MEASURED (before-vs-after, --task FirstPassFDR; uncontended, no profiler).**
+  BEFORE = `C:\proj\pwiz-stageb-before` @ `3fba794c3` (resident `FdrProjection[]`, same lean-lib + Stage A);
+  AFTER = branch HEAD `df1084f93`. Driver `ai/.tmp/perf-ab-driver.ps1` (serial, interleaved B/A per rep;
+  wraps `firstpass-mem-n.ps1`; parses `[TASK] FirstPassFDR:done (Ns)`). Both Release net8.0.
+  - **16f (clean, 3 reps, median):** BEFORE 422.5 s vs AFTER 481.1 s = **+13.9%** (min-vs-min +10.6%; mean
+    +4.7% but mean is dragged by BEFORE's cold-cache rep1=528.1 s, the sweep's first run). This is the pure
+    algorithmic cost (both fit RAM): the streaming path re-reads the 21 PIN feature columns 2x on pass 1.
+  - **82f (1 pair only — sweep killed at 93 min during BEFORE rep2):** BEFORE 2922.7 s (48.7 min) vs AFTER
+    2661.8 s (44.4 min) = **-8.9% (AFTER faster)**, but CONFOUNDED: BEFORE ran cold (first run), AFTER ran
+    warm (cache primed by BEFORE) -> biased toward AFTER. True 82f delta is between the clean 16f +14% and
+    this -9%; heavier BEFORE GC at scale (managed heap 21.8 GB vs AFTER 5.7 GB) gives real GC relief that
+    pulls it below +14%, plausibly ~parity. NOT a proven crossover (needs a warm B/A pair to nail).
+  - **Memory @82f (Stage 5 start / projection-built, the resident peak) — the decisive result:**
+    BEFORE working_set 36.3 GB / committed 28.7 GB / peak_paged 37.8 GB / live managed 12.7 GB;
+    AFTER working_set 15.2 GB / committed 11.5 GB / peak_paged 15.9 GB / live managed 2.6 GB.
+    Reduction **WS -21 GB (-58%), committed -17 GB (-60%)**. (Brendan observed ~52 GB *system* live = 36 GB
+    process + ~16 GB OS/file-cache; no paging at 82f — prior work already put BEFORE under the wall here.)
+  - **64 GB crossover (2-point fit, 16f+82f):** BEFORE peak_paged slope ~0.37 GB/file -> crosses 64 GB at
+    **~154 files** (committed ~211f); at 200f BEFORE peak ~81 GB, at 300f ~118 GB (severe paging). AFTER
+    committed slope ~0.038 GB/file -> 200f ~20 GB, 300f ~20 GB, 500f ~27 GB (WS: 300f ~31 GB, 500f ~45 GB),
+    crosses 64 GB only at ~760+ files. **=> on this 64 GB box BEFORE tops out ~150-210 files (below the
+    200-300f target); AFTER enables 200-500f with headroom.** Directly answers the sizing question for the
+    planned 200-300f runs.
+  - **Verdict vs Brendan's criterion (~10% FDR-task slowdown acceptable for 500-file headroom without
+    paging):** cost is <= ~10-14% clean (16f), likely less at scale; memory win unlocks exactly the runs
+    BEFORE can't do. Clears the bar. PerFile scoring (not FDR) dominates 82f wall clock, so this FDR-task
+    delta is a small slice end-to-end.
+  - Artifacts (Brendan handles the PR comment): driver `ai/.tmp/perf-ab-driver.ps1` (fixed a median bug --
+    PowerShell `[int]1.5`=2 returned the max not the middle; now `[int][math]::Floor`). Run logs under
+    `D:\test\osprey-runs\_firstpassmem_{16f,82f}_p{16,82}{Before,After}N\firstpassfdr-mem-*.log`. BEFORE
+    worktree `C:\proj\pwiz-stageb-before` (3fba794c3) LEFT IN PLACE (kept for a clean warm 82f pair if
+    wanted; remove with `git -C C:/proj/pwiz worktree remove --force C:/proj/pwiz-stageb-before`).
+  - OPEN (optional): one warm B/A 82f pair (~1.5 h, pre-warm cache then B then A both warm) would replace
+    the confounded -8.9% with a trustworthy headline timing number. Not required for the merge decision.
 
 ## The goal (Brendan)
 FirstPassFDR resident memory bounded in file count -- flat from 82 -> 500 files, not linear.
