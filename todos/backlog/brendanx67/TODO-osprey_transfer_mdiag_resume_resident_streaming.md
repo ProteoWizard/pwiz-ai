@@ -5,6 +5,9 @@
 mode, #4410); HIGHER for the mdiag-on-resume half, which OOMs ANY --model-diagnostics RESUME at
 scale (percolator too), not just transfer.
 **Created**: 2026-07-19
+**Next-session handoff (start here)**: `ai/.tmp/handoff-20260719_osprey_transfer_mdiag_resume_streaming.md`
+-- session-start protocol, the exact B-run command (+ OSPREY_VERSION_OVERRIDE=26.1.1.199 resume), the
+flat-through-Stage-5 success criterion, and gotchas (detached runs, cwd trap).
 **Scope**: `Osprey.Tasks/FirstJoinTask.cs:~280` (`needsResidentFirstPassPool` = ... ||
 `OspreyEnvironment.Pass2TransferQ`), `Osprey.Tasks/PerFileScoringTask.cs:~625`
 (`needsResidentPool = NeedsResidentPool(config) || config.ModelDiagnostics` on the RESUME path),
