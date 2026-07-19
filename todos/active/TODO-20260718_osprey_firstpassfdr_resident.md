@@ -248,6 +248,14 @@ pass keeps its resident survivor projection. This is where resident goes FLAT. G
   - VERDICT: acceptable -- small end-to-end (FirstPassFDR is a slice; PerFileScoring dominates the wall clock),
     bought by the memory win (A 44 GB vs ~100 GB reference + flat-in-files headroom to 500 files). Brendan
     handles the PR #4435 comment.
+  - END-TO-END dilution (from the Osprey-workflow.html 3-file regression perf table, median-of-3): stage5
+    (1st-pass FDR) is only **27% of the Stellar total** (1:01 / 3:42) and **6.4% of the Astral total**
+    (1:08 / 17:38), so the +10% streaming cost is **+2.7% end-to-end on Stellar, +0.6% on Astral** -- well
+    under 10%, negligible on the hram Astral case where scoring/reconciliation dominate. This is the settled
+    trade-off characterization: a small single-stage cost to make FirstPassFDR memory-BOUNDED (O(1) in files)
+    instead of the O(files) resident path that thrashes then FAILS at scale (B proved it: 82 GB commit-ceiling
+    OOM at 46% load). The change is clearly worth it. (No full-pipeline A/B run needed -- the stage breakdown
+    settles it; Test-PerfGate vs the 07-08 perfbase would conflate the streaming with all other recent work.)
 
 ## The goal (Brendan)
 FirstPassFDR resident memory bounded in file count -- flat from 82 -> 500 files, not linear.
