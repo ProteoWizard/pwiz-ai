@@ -216,6 +216,22 @@ pass keeps its resident survivor projection. This is where resident goes FLAT. G
   - OPEN (optional): one warm B/A 82f pair (~1.5 h, pre-warm cache then B then A both warm) would replace
     the confounded -8.9% with a trustworthy headline timing number. Not required for the merge decision.
 
+- **2026-07-19 A/B overnight run + progress-reporting fix (PUSHED).** Ran the full pass2ab A/B on the
+  82-file SEA-AD Astral set with the branch's memory work:
+  - **A (percolator+mdiag, fresh from mzML, v4 spectra):** exit 0, 10h 2min, PEAK private 44.1 GB / managed
+    29.1 GB -- vs the 7/14 pre-#4434/#4435 reference ~100 GB (paged). --model-diagnostics now takes the
+    STREAMING first-pass path, so the ~100 GB spike is GONE; runs in 64 GB with ~20 GB headroom. Perfviz:
+    PerFileScoring 45-50->35, FirstPassFDR 102.5->39, PerFileRescoring 50-60+->25-30 GB.
+  - **Progress-reporting fix (commit 56a726124, PUSHED):** wrapped the 6 previously-silent streaming
+    first-pass phases (Pass-1 score, Pass-2 q-assign, subset-load, protein-FDR reduce/patch, compaction) in
+    ProgressReporter -- log-only, byte-identical -- so --timestamp/--memstamp perfviz has no multi-minute
+    gaps. Gates: 16f FirstPassFDR shows all 6 labels; regression Stellar mode1/2/3 byte-identical; 515 tests +
+    inspection clean. Rebased onto Brendan's master-merge (#4428); Brendan reruns TeamCity Perf/Regression.
+  - **B (transfer, resume from A):** launched with OSPREY_VERSION_OVERRIDE=26.1.1.199; resume works (skip
+    Stage 1-4, ~6h saved); running (resident path -- memory watched).
+  - **Deferred to a NEW memory sprint (NOT this PR):** Stage-6 O(files) survivor-buffer slope + Stage-7
+    SecondPassFDR 45 GB peak -> [[TODO-osprey_stage6_rescored_buffer_streaming]].
+
 ## The goal (Brendan)
 FirstPassFDR resident memory bounded in file count -- flat from 82 -> 500 files, not linear.
 The transient q-value arrays are already gone (PR #4434). The remaining O(files) RESIDENT
