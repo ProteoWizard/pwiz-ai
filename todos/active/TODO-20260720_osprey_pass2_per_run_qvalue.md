@@ -5,6 +5,24 @@
 - **Status**: Active (started 2026-07-19 night, autonomous session)
 - **Commits**: a98759c72 (redesign) + 14d2782b4 (AssignPerRunQ testable seam + unit test)
 
+### 2026-07-20 (morning, Brendan): mdiag-on-resume memory + log-gap fixes
+Root cause of the "82-file transfer+mdiag OOM": NOT the per-run-q logic and NOT transfer-specific.
+`PerFileScoringTask.RehydrateFromOwnOutputs:625` forced the fat first-pass pool under `--model-diagnostics`
+for EVERY PerFileScoring skip. But the fat pool is only needed on a FULL resume (1st-pass sidecars present)
+where FirstJoin skips the score pass and emits the batch `ModelDiagnosticsReport.Write` (resident entries).
+On a `-LinkFrom` (Stage-1-4) resume the sidecars are ABSENT -> FirstPassFDR RE-RUNS and STREAMS the report
+off its score pass -> the fat pool is pure waste. The A/B harness runs transfer via `-LinkFrom`, so it bit
+transfer; percolator+mdiag "worked" only because Brendan ran it FULL-from-mzML (lean compute path). Proven
+from the `[PATH]` markers: transfer+mdiag+resume took `RunStreamingIntoProjection` (fat, 77 GB@82f);
+percolator+mdiag+resume 8f probe ALSO took it (34 GB) -> confirms resume+mdiag, not transfer.
+FIXES (commit 19fe4306f):
+- `FirstPassSidecarsPresent(config)` gates line 625's mdiag fat term -> `-LinkFrom` resume stays counts-only
+  lean. 8-file verify: `RunStreamingFirstPass` @17 GB (vs fat 34 GB), mdiag HTML still produced, exit 0.
+- `TransferPerRunQ` scan + classify loops now drive a `ProgressReporter` (closes the ~6-min silent gap).
+FOLLOW-UP (documented, not in this PR): full elimination of the fat path = stream the FULL-resume batch
+report from the sidecar+parquet too (#4437 Lever-2), with a fat-vs-lean A/B (the fat path's one legit use).
+82-file transfer+MDIAG re-run in flight (v201, `-LinkFrom` -5day, lean) -> the diagnostics deliverable.
+
 ### Progress (2026-07-19/20 night, autonomous)
 IMPLEMENTED the TRANSFER-path redesign (default percolator unchanged):
 - Stage-5 made mode-independent: `OSPREY_PASS2_QVALUE=transfer` no longer forces the resident
