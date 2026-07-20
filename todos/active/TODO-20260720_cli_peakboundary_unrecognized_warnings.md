@@ -5,6 +5,8 @@
 - **Base**: `master`
 - **Status**: Active (started 2026-07-20)
 - **Checkout**: `C:\Dev\cmdline`
+- **GitHub Issue**: [#4439](https://github.com/ProteoWizard/pwiz/issues/4439)
+- **PR**: [#4440](https://github.com/ProteoWizard/pwiz/pull/4440) (opened 2026-07-20, Fixes #4439)
 - **Origin**: Deferred follow-up from #4350 (replicate-name keying). While testing that
   feature, James hit a silent no-op: `SkylineCmd --import-peak-boundaries` imports nothing
   when rows match no file/peptide/charge, giving no clue why. Requester: James.
