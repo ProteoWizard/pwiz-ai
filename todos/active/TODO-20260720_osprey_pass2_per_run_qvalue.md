@@ -33,7 +33,11 @@ IMPLEMENTED the TRANSFER-path redesign (default percolator unchanged):
   quantized-band + q-truncation signature eliminated. Classified 1.39M unchanged / 1.28M moved / 86K
   gap-fill; no fallback. Memory ~30-42 GB (no resident pool). commit c/self-review commit 8a8713f82.
 - SELF-REVIEW CLEAN (Critical/High 0, 1 Medium addressed) + Copilot addressed+resolved. PR #4438 open.
-- 82-FILE B ARM in flight (runs\pass2ab-82file-transfer-5dayTransferPerRun, ~03:00-03:30 ETA), full-scale.
+- 82-FILE B ARM (no-mdiag; mdiag OOMs the 64GB box at 82f -- pre-existing #4437 limit, not this PR)
+  DONE exit 0, peak 45.4 GB: Pass-2 exp-wide @q<=1% = 37,627 disc @ 0.94% combined FDP (qmax 1.00) ==
+  the measured PASS-1 (37,676 @ 0.92%) -> REPRODUCES pass-1 at full scale. vs coarse 66,862 @ 8.96%
+  (qmax 0.93) + retrain 64,237 @ 4.63%. 5.92M unchanged / 6.48M moved / 47K gap-fill. PR comment posted.
+  20-file mdiag oracle has the HTML plots. DELIVERABLE COMPLETE (20f + 82f).
 - BLOCKED: TeamCity Perf/Regression -- classifier enforces the "Brendan gates TC manually" boundary;
   Brendan to trigger pull/4438 manually. Design notes: ai/.tmp/pass2-per-run-qvalue-design.md;
   results handoff: ai/.tmp/handoff-20260720-perrunq-results.md.
