@@ -23,10 +23,25 @@ IMPLEMENTED the TRANSFER-path redesign (default percolator unchanged):
   Score1` is a reliable bit-exact MOVED discriminator (unchanged rows stream original features through
   the reconciled parquet). Experiment q is frozen by the best-peak anchor +
   `ClampExperimentQToBestRun` (a floor that only raises to min-run-q; best run untouched).
-- GATES: build net472+net8.0 clean, inspection 0 warnings, 519 unit tests pass (+1
-  TestAssignPerRunQCarriesExperimentQ). regression.ps1 -Dataset Stellar mode1/3 blib 45,064,192 ==
-  golden (default byte-identical). Entrapment oracle (legible-plot deliverable) + 82-file B arm: in
-  flight. Design notes: ai/.tmp/pass2-per-run-qvalue-design.md.
+- GATES ALL GREEN: build net472+net8.0 clean, inspection 0 warnings, 519 unit tests pass (+1
+  TestAssignPerRunQCarriesExperimentQ). regression.ps1 -Dataset Stellar mode1/2/3 blib 45,064,192 ==
+  golden (default byte-identical).
+- ENTRAPMENT ORACLE (deliverable MET, 20-file r=0.97, runs\pass2ab-20file-transfer-perRunOracle):
+  Pass-2 exp-wide @q<=1% = 44,287 disc @ 0.87% combined FDP (qmax 1.00) vs coarse 55,555 @ 3.09%
+  (qmax 0.95) vs retrain 60,840 @ 3.34%. Pass-2 per-run = 367 distinct q vs coarse 81. => calibrated
+  exp-wide (reproduces pass-1 by the carry invariant) + real per-run resolution; the coarse
+  quantized-band + q-truncation signature eliminated. Classified 1.39M unchanged / 1.28M moved / 86K
+  gap-fill; no fallback. Memory ~30-42 GB (no resident pool). commit c/self-review commit 8a8713f82.
+- SELF-REVIEW CLEAN (Critical/High 0, 1 Medium addressed) + Copilot addressed+resolved. PR #4438 open.
+- 82-FILE B ARM in flight (runs\pass2ab-82file-transfer-5dayTransferPerRun, ~03:00-03:30 ETA), full-scale.
+- BLOCKED: TeamCity Perf/Regression -- classifier enforces the "Brendan gates TC manually" boundary;
+  Brendan to trigger pull/4438 manually. Design notes: ai/.tmp/pass2-per-run-qvalue-design.md;
+  results handoff: ai/.tmp/handoff-20260720-perrunq-results.md.
+- LOW follow-ups (deferred): (a) TransferPerRunQ orchestration lacks a unit test (only oracle-validated);
+  (b) each 1st-pass sidecar is read twice (deliberate: gap-fill exp q needs a global-first pass);
+  (c) bit-exact newScore==Score1 discriminator is documented + robust-under-misclassification (exp q is
+  always the pass-1 carry, so a misclassify only coarsens per-run q, never perturbs experiment q).
+- DEFERRED (needs golden regen + Mike): unify the DEFAULT remodel path onto the same invariant.
 
 **Priority**: High -- this is the real fix for the pass-2 recalibration problem; the prior memory
 work was treating a symptom of the coarse whole-pool misunderstanding. Supersedes and replaces the
