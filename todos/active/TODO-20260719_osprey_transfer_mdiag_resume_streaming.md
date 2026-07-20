@@ -83,7 +83,28 @@ Implemented on `Skyline/work/20260719_osprey_transfer_streaming` (pwiz commit 60
     pass-1 mdiag (enough for the diffs) rather than running the full resident pipeline.
 - **Case B (mdiag on FirstJoin.Rehydrate)** not directly A/B'd -- uses the same WriteFromAccumulator +
   sidecar-streaming primitives as Case A (validated), byte-identical by construction. Flag for self-review.
-- **Next:** launch the 82-file B run (the deliverable) now that the small-scale gate is green.
+- **82-file B run LAUNCHED + Stage 5 CONFIRMED FLAT** (`runs\pass2ab-82file-transfer-5dayTransferFixed`,
+  fixed binary, LinkFrom A, v199, threads 8): resumed Stage 1-4, streamed Stage 5 on 344.6M entries.
+  Log confirms BOTH levers at scale: `[MODEL-DIAGNOSTICS] wrote model diagnostics report` (18:18) and
+  `OSPREY_PASS2_QVALUE=transfer: built FULL-population score->q table` (18:20). Stage-5 live-managed peaked
+  ~36-51 GB (transient pre-GC; the score->q accumulator + #4435 streamingQ over 344M rows) then dropped --
+  NOT the 82 GB live resident pool that OOM'd the unfixed run (which sat at 80 GB live managed). Now in
+  Stage 6 (survivor reload ~38 GB / reconciliation), the expected mild incline. No OOM.
+- **PR self-review (fresh agent):** 1 HIGH, 2 MEDIUM, 2 LOW. MEDIUM/LOW addressed in pwiz 016fb99d3
+  (stale-comment fix; nSkipped byte-identity invariant documented; `TestScoreQTableOrderIndependent`).
+- **OPEN -- HIGH finding to verify post-B-run:** dropping `config.ModelDiagnostics` from
+  `RehydrateFromOwnOutputs` makes a straight-through mdiag resume that lands in `FirstJoin.Rehydrate`
+  (Stage-5 sidecars cached) produce lean/empty `ScoredEntries`; the agent worried
+  `HydrateReconciliationOverlay`->`CompactedEntries` could go empty and starve Stage 7/8. Investigation:
+  the bundle-path `CompactFirstPass` calls `RescoreCompaction.Apply(bundle)` (operates on the disk-hydrated
+  bundle, not the stubs), and MergeNode reads `RescoredEntries`/the reconciled parquet -- so it MAY
+  reconstruct from disk regardless. The `#4435` comment framed the resident-pool forcing as ONLY for the
+  mdiag report, implying reconciliation already works lean (plain percolator is lean too). NOT the B-run
+  path (that's `FirstJoin.Run`). **Verify:** small plain-percolator straight-through, then invalidate a
+  DOWNSTREAM stage but keep FirstJoin's Stage-5 sidecars, re-run -> forces `FirstJoin.Rehydrate` lean ->
+  check the blib is non-empty + byte-identical. If plain works -> mdiag works (dismiss). If broken ->
+  pre-existing #4400/#4435 issue; my change would regress mdiag-resume-to-Rehydrate (was fat) -> fix then.
+- **Next:** B run -> exit 0; render perfviz + compare A vs B mdiag; run the FirstJoin.Rehydrate verification.
 
 ## References
 - Same O(files)-resident memory theme: `[[TODO-osprey_stage6_rescored_buffer_streaming]]`
