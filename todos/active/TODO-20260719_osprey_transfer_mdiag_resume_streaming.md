@@ -51,6 +51,27 @@ With both, an 82-file transfer+mdiag resume fits in 64 GB (streaming, like A's f
 - mdiag report byte-identical fresh-Run vs resume (the asymmetry fix must not change output).
 - `regression.ps1 -Dataset Stellar` (default percolator path unaffected).
 
+## Progress (2026-07-19, session)
+Implemented on `Skyline/work/20260719_osprey_transfer_streaming` (pwiz commit 604c85568):
+- **Lever 1 (transfer table streaming):** new `Pass2FdrSidecar.FirstPassScoreQTableAccumulator`
+  fed by `FdrStoringSink` (averaged-model score `fScores`/`finalScores` + effective experiment q --
+  the same pair the resident `BuildFullPopulationScoreQTable` collects); `BuildScoreToQTable` sorts,
+  so the streamed table is byte-identical. Threaded a `captureModel` callback through
+  `RunStreamingFirstPass`/`RunStreamingIntoProjection` to publish `FirstPassPercolatorModel` off the
+  projection path. Removed `Pass2TransferQ` from `needsResidentFirstPassPool` (FirstJoinTask) and
+  `NeedsResidentPool` (PerFileScoringTask). Resident `BuildFullPopulationScoreQTable` kept for the
+  projection-off path.
+- **Lever 2 (mdiag on resume):** dropped `|| config.ModelDiagnostics` from the RehydrateFromOwnOutputs
+  resident-pool gate; `FirstJoinTask.WriteModelDiagnosticsFromSidecars` streams the 1st-pass sidecar +
+  parquet scalars into `ModelDiagnosticsData.Accumulator` + `WriteFromAccumulator` on the Rehydrate
+  path (`streamModelDiagnosticsFromSidecars`). `BuildModelDiagnosticsAccumulator` now takes run names.
+- **Gates green so far:** Build + 520 unit tests + zero-warning inspection; `regression.ps1 -Dataset
+  Stellar` mode1/2/3 byte-identical (default path unaffected; lean resume + HPC reconciliation OK).
+- **In progress:** 20-file transfer+mdiag A/B -- master (pwiz-work2 @ df9bb01218, resident) vs branch
+  (streaming), both LinkFrom the 82-file A Stage-1-4 caches (first 20, OSPREY_VERSION_OVERRIDE=199).
+  Compare via `ai/.tmp/Compare-AbTest.ps1` (Stage 5+ sidecars + fdrbench.tsv + mdiag data.json/html).
+- **Next:** launch the 82-file B run once the A/B is byte-identical.
+
 ## References
 - Same O(files)-resident memory theme: `[[TODO-osprey_stage6_rescored_buffer_streaming]]`
   (Stage-6 survivor buffer + Stage-7 SecondPassFDR peak).
