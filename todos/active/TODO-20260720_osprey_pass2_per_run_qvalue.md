@@ -1,9 +1,36 @@
 # TODO: Pass-2 changes ONLY per-run q -- unify transfer + remodel on the correct invariant
 
-**Status**: Backlog. Supersedes and replaces the abandoned
-`completed/TODO-20260719_osprey_transfer_mdiag_resume_streaming.md` (PR #4437, closed unmerged).
+## Branch Information
+- **Branch**: `Skyline/work/20260720_osprey_pass2_per_run_qvalue` (off master df9bb0121)
+- **Status**: Active (started 2026-07-19 night, autonomous session)
+- **Commits**: a98759c72 (redesign) + 14d2782b4 (AssignPerRunQ testable seam + unit test)
+
+### Progress (2026-07-19/20 night, autonomous)
+IMPLEMENTED the TRANSFER-path redesign (default percolator unchanged):
+- Stage-5 made mode-independent: `OSPREY_PASS2_QVALUE=transfer` no longer forces the resident
+  first-pass pool (dropped from `needsResidentFirstPassPool` + `NeedsResidentPool`); it takes the
+  same lean projection first pass as default. A `captureModel` hook was threaded through the
+  projection path (PercolatorFdr.RunStreamingFirstPass + PercolatorEngine.RunStreamingIntoProjection/
+  RunFirstPassStreaming/RunPercolatorFdr-projection) so `FirstPassPercolatorModel` is still published
+  (gated on Pass2TransferQ).
+- Deleted `BuildFullPopulationScoreQTable` + the `FirstPassScoreQTable` byproduct + `TransferQWithTable`
+  (the coarse whole-pool 4-slot flatten). Replaced with `Pass2FdrSidecar.TransferPerRunQ`: per file,
+  build (1st-pass score -> run q) tables from that file's OWN `.1st-pass.fdr_scores.bin`, then
+  `AssignPerRunQ` classifies each survivor -- UNCHANGED (carry the record verbatim), MOVED (re-map run
+  q, carry experiment q), GAP-FILL (table run q + the precursor's cross-file pass-1 experiment q).
+- KEY verified fact: both 1st-pass paths store the AVERAGED-model score (no Granholm), == the
+  ScoreWithFrozenModel scale, so the sidecar-Score->run-q table is scale-consistent and `newScore ==
+  Score1` is a reliable bit-exact MOVED discriminator (unchanged rows stream original features through
+  the reconciled parquet). Experiment q is frozen by the best-peak anchor +
+  `ClampExperimentQToBestRun` (a floor that only raises to min-run-q; best run untouched).
+- GATES: build net472+net8.0 clean, inspection 0 warnings, 519 unit tests pass (+1
+  TestAssignPerRunQCarriesExperimentQ). regression.ps1 -Dataset Stellar mode1/3 blib 45,064,192 ==
+  golden (default byte-identical). Entrapment oracle (legible-plot deliverable) + 82-file B arm: in
+  flight. Design notes: ai/.tmp/pass2-per-run-qvalue-design.md.
+
 **Priority**: High -- this is the real fix for the pass-2 recalibration problem; the prior memory
-work was treating a symptom of the coarse whole-pool misunderstanding.
+work was treating a symptom of the coarse whole-pool misunderstanding. Supersedes and replaces the
+abandoned `completed/TODO-20260719_osprey_transfer_mdiag_resume_streaming.md` (PR #4437, closed unmerged).
 **Origin**: Brendan, reasserting the invariant agreed in the original transfer-implementation session
 (#4410) that the implementation did NOT actually honor.
 
