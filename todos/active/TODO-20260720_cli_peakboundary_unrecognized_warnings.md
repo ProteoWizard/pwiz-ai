@@ -55,7 +55,11 @@ document result.
 - [x] Gates (Debug, en unless noted): build green; `TestCommandLineImportPeakBoundaryWarnings`
       green en + fr; `TestCommandLineImportPeakBoundary` + `TestImportPeakBoundary` green;
       `CodeInspection` green (resx ordering canonical — SortRESX modified 0 files).
-- [ ] Remaining: full ReSharper solution inspection (CI-parity); open PR; self-review.
+- [x] Full ReSharper solution inspection (Debug, CI-parity, jb 2026.1.3) on the final committed
+      state: 0 warnings / 0 errors in all changed files; 0 findings of any severity inside the new
+      CommandLine methods. Remaining notes are pre-existing style suggestions in the large files.
+- [x] Self-review (fresh-context agent): clean; one LOW applied (ordering), one dismissed.
+- [ ] Remaining: open PR (outward — awaiting go-ahead), then Copilot/optional review.
 
 ## Design notes (as built)
 - Non-fatal: warnings only, exit code unchanged (a skipped row is a warning, matching the GUI's
@@ -67,7 +71,39 @@ document result.
 - Edge (accepted): importing into a document with no results makes every row an unrecognized
   file (the file-match block is gated on `HasResults`); same as the GUI, and a meaningless input.
 
+## Line numbers in the warnings (2026-07-20, per Brian)
+- Each listed value is prefixed with the input-file line it first appeared on, e.g.
+  `line 4: PEPTIDER`, so the user can jump straight to the offending row.
+- Importer now records first-occurrence line numbers in three parallel dictionaries
+  (`Unrecognized{Peptide,File,ChargeState}Lines`), populated only when the existing dedup
+  `HashSet.Add` returns true. The deduped sets, the GUI, and the audit log are untouched —
+  the dictionaries are additive, CLI-only data.
+- New `"line {0}: {1}"` resource string; `WarnUnrecognizedItems<T>` takes the line dictionary
+  and prefixes each shown value. Test asserts the cited line for each category and that exactly
+  ten (bounded) line-prefixed items show in the >10 case (matcher built from the resource string,
+  so it survives localization).
+
+## "File or replicate name" wording (2026-07-20, per Brian)
+- `UnrecognizedFiles` holds the file *identity*, which is the on-disk file name for FileName-keyed
+  rows but the replicate name for replicate-keyed rows (#4350). The warning header now reads
+  "file or replicate name(s)" so a replicate-keyed no-match (James's exact case) is labeled
+  accurately instead of calling his replicate name a "file name". Keys renamed to match the values
+  (strings are new in this branch, so no released/translated text is affected).
+
+## Self-review (fresh-context agent, 2026-07-20)
+- No HIGH/MEDIUM defects. Verified clean: line numbers correct (1-based, charge recorded only after
+  peptide+file match), set/dict never diverge (dict written only inside `if (HashSet.Add(...))`, and
+  the previously-ignored return value keeps GUI/audit-log semantics byte-identical), bound/ellipsis
+  edge cases (exactly 10 vs 11), no throw paths, exit code/error-count unaffected, resx/designer
+  consistency, existing tests unaffected.
+- LOW (applied): the bounded 10 were taken in HashSet order, so a user with >10 bad rows might not see
+  the *earliest* ones and cited lines could read out of order. `WarnUnrecognizedItems` now `OrderBy`
+  first-appearance line before bounding; test asserts line 2 shown and line 13 truncated.
+- LOW (dismissed): bare `@"..."` ellipsis literal — matches the existing GUI code
+  (`PeakBoundaryImporterUI`), an ellipsis is not translatable, and CodeInspection passes.
+
 ## Files changed
-- `CommandLine.cs` — `WarnUnrecognizedPeakBoundaries` + generic `WarnUnrecognizedItems<T>`.
-- `SkylineResources.resx` + `.designer.cs` — 6 CLI warning strings.
+- `Model/ImportPeakBoundaries.cs` — first-occurrence line dictionaries recorded at each skip site.
+- `CommandLine.cs` — `WarnUnrecognizedPeakBoundaries` + generic `WarnUnrecognizedItems<T>` (line-prefixed).
+- `SkylineResources.resx` + `.designer.cs` — 6 category warning strings + `"line {0}: {1}"`.
 - `Test/CommandLinePeakBoundaryTest.cs` — `TestCommandLineImportPeakBoundaryWarnings`.
