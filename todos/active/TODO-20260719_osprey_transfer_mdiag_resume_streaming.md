@@ -67,10 +67,23 @@ Implemented on `Skyline/work/20260719_osprey_transfer_streaming` (pwiz commit 60
   path (`streamModelDiagnosticsFromSidecars`). `BuildModelDiagnosticsAccumulator` now takes run names.
 - **Gates green so far:** Build + 520 unit tests + zero-warning inspection; `regression.ps1 -Dataset
   Stellar` mode1/2/3 byte-identical (default path unaffected; lean resume + HPC reconciliation OK).
-- **In progress:** 20-file transfer+mdiag A/B -- master (pwiz-work2 @ df9bb01218, resident) vs branch
-  (streaming), both LinkFrom the 82-file A Stage-1-4 caches (first 20, OSPREY_VERSION_OVERRIDE=199).
-  Compare via `ai/.tmp/Compare-AbTest.ps1` (Stage 5+ sidecars + fdrbench.tsv + mdiag data.json/html).
-- **Next:** launch the 82-file B run once the A/B is byte-identical.
+- **PR:** #4437 (open; CI unit build running).
+- **8-file A/B GREEN** (master pwiz-work2 @ df9bb01218 resident vs branch streaming, both LinkFrom the
+  82-file A Stage-1-4 caches, OSPREY_VERSION_OVERRIDE=199):
+  - Transfer: all 8 `.1st-pass.fdr_scores.bin` byte-identical (resident==streaming). These carry the
+    exact (averaged-model score, experiment q) pairs the table is built from, so the table is identical
+    (BuildScoreToQTable sorts). `2nd-pass q comes from` the streamed table + published model confirmed.
+  - mdiag: `out.model-diagnostics.data.json` + `.html` byte-identical modulo GeneratedUtc (resident
+    `Write` vs streaming `WriteFromAccumulator`).
+  - **Memory (the point):** 8-file, 33.3M entries: unfixed Stage-5 managed heap **48 GB** (resident
+    FdrEntry pool) -> fixed **13 GB** (streamed); whole-run managed peak 48 GB -> 21.6 GB (peak MOVED
+    to the Stage-6 reconciliation survivor buffer -- the expected mild incline, separate Stage-6 TODO).
+  - I sized the resident "before" arm down from 20 files (peaked ~60 GB, too close to the 64 GB wall)
+    to 8 files (~48 GB Stage-5) at Brendan's prompting; killed it after it wrote the 1st-pass sidecars +
+    pass-1 mdiag (enough for the diffs) rather than running the full resident pipeline.
+- **Case B (mdiag on FirstJoin.Rehydrate)** not directly A/B'd -- uses the same WriteFromAccumulator +
+  sidecar-streaming primitives as Case A (validated), byte-identical by construction. Flag for self-review.
+- **Next:** launch the 82-file B run (the deliverable) now that the small-scale gate is green.
 
 ## References
 - Same O(files)-resident memory theme: `[[TODO-osprey_stage6_rescored_buffer_streaming]]`
