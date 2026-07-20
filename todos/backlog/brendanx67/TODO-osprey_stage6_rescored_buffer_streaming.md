@@ -74,6 +74,31 @@ scoring on the reconciled survivor pool holding the survivor FdrEntry + features
 dotMemory at the SecondPassFDR peak to pin what the 45 GB is (live survivor pool vs Server-GC
 committed gray) before choosing a lever.
 
+## Added 2026-07-20: the RESUME/HPC path is heavier than compute (FirstJoin.Rehydrate is resident)
+Surfaced while fixing the pass-2 transfer mdiag memory ([[TODO-20260720_osprey_pass2_per_run_qvalue]]).
+There is a **compute-vs-resume asymmetry** the FirstPassFDR streaming (PR #4435) did NOT close:
+- `FirstJoin.Run` (straight-through COMPUTE) streams the first pass (counts-only) -- bounded.
+- `FirstJoin.Rehydrate` (RESUME) does `perFileEntries = ctx.Get<ScoredEntries>()` (the **pre-compaction**
+  pool) and `CompactFirstPass(perFileEntries,...)` in place (FirstJoinTask.cs ~447/474) -- i.e. it loads
+  the FULL pre-compaction pool RESIDENT, O(all entries), the treatment the compute path shed.
+- That resident load is gated upstream by `PerFileScoringTask.RehydrateFromOwnOutputs` publishing FAT
+  `ScoredEntries` when `NeedsResidentPool` is true. On the **HPC merge / SecondPassFDR** task
+  `config.ExpectReconciledInput` forces exactly that -> **every HPC merge resumes into the resident
+  pre-compaction pool.** So HPC (where every task resumes from sidecars) is heavier than a local
+  straight-through run of the same data, and is the FIRST thing to explode at 500 files -- arguably
+  more important than the 64 GB local case. (Consistent with the 82-file Stage-6 OOM, session 3.)
+- **Lever**: give `FirstJoin.Rehydrate` + the reconciled-input merge the same per-file streaming the
+  compute path got -- reload each file's pre-compaction stubs on demand for compaction, hold only the
+  bounded cross-file state resident. This is the open "does a lean straight-through resume that lands in
+  FirstJoin.Rehydrate produce non-empty, byte-identical CompactedEntries" question from the #4437
+  self-review. Gate on `regression.ps1 -Dataset All` mode2/mode3 (resume + HPC) byte-identical.
+- **Interaction with the `--allow-unbounded-memory` guard** (being added in the pass-2 PR): the guard
+  hard-errors when the resident pool is taken without explicit opt-in. It must EXEMPT the HPC
+  reconciled-input rehydrate path (else it breaks the HPC chain + regression mode3) until this streaming
+  lever lands -- OR HPC must pass the flag, making the unbounded-at-scale reality explicit. Decide with
+  Brendan; for the pass-2 PR the guard targets the LOCAL mdiag/FDRBench-pass-1/non-Percolator triggers
+  and exempts ExpectReconciledInput, with the HPC O(files) tracked here.
+
 ## References
 - Precedent (same idea, one stage earlier): PR #4435 FirstPassFDR streaming,
   `[[TODO-20260718_osprey_firstpassfdr_resident]]`.
