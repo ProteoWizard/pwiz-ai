@@ -3,10 +3,10 @@
 ## Branch Information
 - **Branch**: `Skyline/work/20260616_cli_replicate_name_keying`
 - **Base**: `master`
-- **Status**: Active (started 2026-06-16)
+- **Status**: Completed
 - **Checkout**: `C:\Dev\cmdline`
 - **GitHub Issue**: [#4351](https://github.com/ProteoWizard/pwiz/issues/4351)
-- **PR**: [#4350](https://github.com/ProteoWizard/pwiz/pull/4350) (opened 2026-07-01, commit 3cf4d7eb8, Fixes #4351)
+- **PR**: [#4350](https://github.com/ProteoWizard/pwiz/pull/4350) (merged 2026-07-20 as db2f5943, Fixes #4351)
 - **Support thread**: https://skyline.ms/home/support/announcements-thread.view?rowId=75143
 - **Requester**: James
 
@@ -331,6 +331,20 @@ build green, `CodeInspection` green, full ReSharper solution inspection **0 erro
   TestData `CommandLineTest` suite is NOT in the default local TestData gate I ran
   -- run `ConsoleExportMProphetTest` explicitly, or the full `CommandLineTest`
   class, when changing any `--exp-*` CLI output format.
+
+### 2026-07-20 - Merged
+
+PR #4350 merged to master as commit db2f5943 (squash), Fixes #4351. Shipped
+replicate-name keying across both SkylineCmd interfaces: `--exp-mprophet-features`
+now emits a trailing `ReplicateName` column (last, so no existing column index
+shifts), and `--import-peak-boundaries` accepts a `ReplicateName` / "Replicate Name" /
+`Replicate` column (all per-display-language), keying a row by replicate name when it
+carries no `FileName` (FileName still wins per row). A multi-file replicate is
+disambiguated by an optional `SampleName` column, else the row fails with an
+explanatory message. Same file-identity relaxation extended to `ComparePeakBoundaries`,
+and the missing-header error now reads "FileName or ReplicateName". Deferred (not in
+scope of this PR): surfacing a CLI warning when `--import-peak-boundaries` matches no
+file/peptide/charge (rows silently skipped) — noted as a separate improvement.
 
 ## Files changed (C:\Dev\cmdline)
 
