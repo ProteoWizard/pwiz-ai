@@ -1,7 +1,14 @@
 # TODO: Osprey transfer / mdiag-on-resume resident first-pass pool (OOMs at 82 files)
 
-**Status**: Active (started 2026-07-19).
-**Branch**: `Skyline/work/20260719_osprey_transfer_streaming` (pwiz).
+**Status**: ABANDONED (2026-07-19, unmerged). PR #4437 closed. The transfer half of this work --
+memory-bounding the full-population score->q table -- was treating a symptom: the table exists only
+because the coarse whole-pool transfer OVERWRITES the experiment q, which by the best-peak-anchor
+invariant it must never do. Pass-2 can change ONLY per-run q. Superseded by
+`backlog/brendanx67/TODO-osprey_pass2_per_run_only_qvalue.md` (the real fix: carry experiment q from
+pass 1; recompute per-run q for adjusted peaks only; unify transfer+remodel; no global table). The
+independent mdiag-on-resume streaming (Lever 2) is preserved in the #4437 branch and noted there as a
+deferred follow-up. The 82-file coarse-transfer B run kept only as a reference data point.
+**Branch**: `Skyline/work/20260719_osprey_transfer_streaming` (pwiz; PR #4437 closed unmerged).
 **Priority**: Medium for the transfer arm alone (transfer is the non-default experimental pass-2
 mode, #4410); HIGHER for the mdiag-on-resume half, which OOMs ANY --model-diagnostics RESUME at
 scale (percolator too), not just transfer.
