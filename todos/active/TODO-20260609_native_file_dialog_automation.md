@@ -297,3 +297,93 @@ client (Claude), not C# code.
   stable across repeated runs (~1-2s).
 * `LiveReportsTutorialTest` -- passes (~20s), exercises `OpenDocument`.
 * `SkylineMcpTest`, `CodeInspection` -- pass. Solution builds clean.
+
+## Localization fix for connector verb tests (2026-07-21, Brendan + Claude)
+
+### Problem
+
+Nightly ran the new `*McpConnectorTest` functional tests under all languages and
+11 failed under Chinese (zh-CHS) and Japanese (ja) but passed in English,
+French, and Turkish (fr/tr are not translated, so the UI stays English). Root
+cause: the tests match controls / assert against **hardcoded English UI text**,
+which only diverges once the UI is actually translated -- a violation of the
+translation-proof rule that will red the localized nightly on merge. This is a
+merge blocker.
+
+Failing tests: ClickControl, Clipboard, ContextMenu, GetControls, LazyMenu,
+PerformAction, PickChildren, PlainGrid, Prm, SetFormValue, SetGridText.
+
+### Fix pattern
+
+Resolve every localized token from its resource the same way the *passing*
+sibling tests (`ClickCheckedList`, `SetItem`) already do -- never a literal:
+
+* **Designer control captions** (labels, buttons, tab pages) ->
+  `GetLocalizedText<TForm>("fieldName")` (reads `"<field>.Text"` from the form's
+  ComponentResourceManager).
+* **Image-only controls matched by tooltip** -> new helper
+  `GetLocalizedToolTip<TForm>("fieldName")` (reads `"<field>.ToolTipText"`);
+  added to `McpConnectorTest` beside `GetLocalizedText`. Needed because the
+  PopupPickList green-check commit button's caption is `"OK"` in en/ja but
+  `"确定"` in zh-CHS, and it lives in `.ToolTipText`, not `.Text`.
+* **Menu paths** -> `MenuPath<TMenu>(...field names...)`.
+* **Grid column headers** -> read the live column's `HeaderText` (already
+  localized by `ApplyResources` / the databinding `DisplayName`), not a literal.
+* **Enum display values** (annotation type "Number") ->
+  `ListPropertyType.GetAnnotationTypeName(AnnotationDef.AnnotationType.number)`.
+* **String-table entries** -> the strongly-typed `Resources.*` /
+  `AuditLogStrings.*` identifier.
+
+### Per-test mapping (all source-verified)
+
+| Test | Literal -> resolution |
+|------|----------------------|
+| GetControls | `"Name"`/`"Applies to"`/`"OK"` -> `GetLocalizedText<DefineAnnotationDlg>("lblName"/"lblAppliesTo"/"btnOK")` |
+| SetFormValue | `"Name"`/`"Type"` -> `GetLocalizedText<DefineAnnotationDlg>("lblName"/"lblType")`; `"Number"` -> `ListPropertyType.GetAnnotationTypeName(AnnotationDef.AnnotationType.number)` |
+| Clipboard | `"Name"` -> `GetLocalizedText<DefineAnnotationDlg>("lblName")` |
+| PerformAction | `"Name"` -> `lblName`; `"Cancel"` -> `GetLocalizedText<DefineAnnotationDlg>("btnCancel")` |
+| ContextMenu | `"Log Scale"` -> `GetLocalizedText<PeakAreasContextMenu>("peptideLogScaleContextMenuItem")` |
+| PickChildren | `"Pick Children"` -> `GetLocalizedText<TreeNodeContextMenu>("pickChildrenContextMenuItem")`; `"OK"` -> `GetLocalizedToolTip<PopupPickList>("tbbOk")` |
+| ClickControl | `"Enable audit logging"` -> `AuditLogStrings.AuditLogForm_AuditLogForm_Enable_audit_logging`; `"Quantification"` -> `GetLocalizedText<PeptideSettingsUI>("tabQuantification")` |
+| Prm | `"Add Files"` -> `GetLocalizedText<BuildPeptideSearchLibraryControl>("btnAddFile")` |
+| LazyMenu | menu path -> `MenuPath<ViewMenu>("viewToolStripMenuItem","liveReportsMenuItem","groupComparisonsMenuItem","addGroupComparisonMenuItem")` (base class changed `AbstractFunctionalTest` -> `McpConnectorTest` so the helper is in scope) |
+| PlainGrid | header `"Pattern"` -> `rulesGrid.Columns["colPattern"].HeaderText` |
+| SetGridText | header `"Note"` -> `noteColumnObj.HeaderText` |
+
+Also corrected the now-stale "Runs in en" / "runs in en otherwise" class-doc
+comments on SetFormValue and ClickControl.
+
+### Connector bug uncovered by the fix (UiElement.GetChild)
+
+Fixing the labels advanced GetControls / PerformAction past the label lookup and
+exposed a real **connector** defect (not a test bug): the GetControls -> PerformAction
+round-trip threw in ja/zh:
+
+    The TextBox at index 0 does not match the Text '名前(N)' in the path.
+
+`UiElement.GetChild`'s indexed branch verified the path's Text with only a LOOSE
+match (`MatchesText(text, false)`). Loose match rejects any key carrying a symbol
+by design (`TextMatches`: `if (HasSymbol(key)) return false`). GetControls emits
+the normalized label as the path Text, and a Japanese mnemonic normalizes to
+`名前(N)` -- the parentheses are a symbol -- so the loose-only check always failed
+to re-resolve a path the connector itself produced. The non-indexed branch already
+did strict-then-loose; the indexed branch was inconsistent. English hid it (`Name`
+has no symbol; the old English-literal test also failed earlier, never reaching the
+round-trip).
+
+Fix (`pwiz_tools/Skyline/ToolsUI/UiElement.cs`, GetChild indexed branch): accept a
+strict OR loose match, matching the non-indexed branch:
+`!indexed.MatchesText(path.Text, true) && !indexed.MatchesText(path.Text, false)`.
+Strictly additive (more permissive), so it cannot regress a previously-passing match.
+
+### Verification (done, warm build)
+
+Built pwiz-work2 (solution build after the C# change) and ran the connector verb
+tests offscreen:
+
+* All 11 verb tests -- **0 failures in ja**.
+* The two round-trip tests (GetControls, PerformAction) -- **0 failures in en AND ja**.
+
+Still recommended before merge: the full localized nightly (ja + zh-CHS) across the
+whole branch, ideally on a dedicated integration branch, since this is a large branch
+and this class of failure only shows under a real multi-language run.
