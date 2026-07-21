@@ -12,7 +12,16 @@ enough to run a whole tutorial end-to-end — a step that can't be expressed
 through the connector is a gap to fix in the connector.
 
 First example, used as the reference throughout: **DIAtoSRM** (Webinar 22,
-"Using DIA Data to Create SRM Methods").
+"Using DIA Data to Create SRM Methods"), in `TestPerf/DiaToSrmTutorialTest.cs`.
+A second, much smaller one — **DiaFragPipe**, `TestPerf/DiaFragPipeTutorialTest.cs`
+— is worth reading first if you want the shape without the volume.
+
+Note that `TestDiaToSrmTutorial` is listed in `scripts/misc/tc-perftests-skiplist.txt`:
+it imports ~36 GB and assembles a second copy, which needs more free disk than the
+PR perf agent has. It runs fine where there is room; the skiplist entry is a
+disk-space accommodation, not a disabled test. A new tutorial test is picked up by
+the perf loop automatically (TestPerf.dll is enumerated wholesale), so decide
+deliberately whether yours belongs in that skiplist.
 
 ## Write the test one step at a time, over MCP
 
@@ -107,7 +116,7 @@ existing tutorials' conventions (see also `tutorial-doc-style-guide.md`):
   for the boilerplate "Getting Started" steps (these are NOT counted in the
   `s-NN` sequence).
 - Walk the tutorial notes and assign one `s-NN` to each figure/screenshot point,
-  in order. The test's `PauseForScreenShot` calls must occur in the same order so
+  in order. The test's `PauseForMcpScreenShot` calls must occur in the same order so
   the numbering lines up.
 
 ## Step 3 — Write the McpConnectorTest
@@ -135,7 +144,7 @@ public class DiaToSrmTutorialTest : McpConnectorTest
     protected override void DoTest()
     {
         StartToolService();
-        // ... drive the tutorial through the connector, one PauseForScreenShot per s-NN ...
+        // ... drive the tutorial through the connector, one PauseForMcpScreenShot per s-NN ...
     }
 }
 ```
@@ -159,20 +168,20 @@ Notes:
 
 **Everything is addressed by a form-id *string*, never an in-process form object.**
 An MCP client can't see `StandaloneWindow` (it lives inside Skyline), so the helpers
-return a **formId string** and every action goes through a `Connector`
+return a **formId string** and every action goes through an `McpConnector`
 (`IJsonToolService`) method that takes that string. This keeps the test honest: if
 the test can do it, the MCP wire surface can do it.
 
-- `Connector` — the running `IJsonToolService` (`Program.MainJsonToolServer`).
+- `McpConnector` — the running `IJsonToolService` (`Program.MainJsonToolServer`).
 - `StartToolService()` — starts the in-process service, **publishes its
   connection file**, and **pre-authorizes MCP screen capture** (so a paused test
   is discoverable/drivable over MCP — see the harvest workflow).
-- `WaitForConnectorForm<TForm>()` / `WaitForConnectorForm(typeName)` /
+- `WaitForMcpConnectorForm<TForm>()` / `WaitForMcpConnectorForm(typeName)` /
   `WaitForNativeFileDialog()` / `WaitForNativeFolderDialog()` /
-  `WaitForConnectorGraph(titleSubstring)` — poll `GetOpenForms` until the form
+  `WaitForMcpConnectorGraph(titleSubstring)` — poll `GetOpenForms` until the form
   appears and **return its formId string**. Prefer `ResolveModal` (below) when an
   action *just* opened the form synchronously.
-- `GetOpenFormId<TForm>()` / `GetConnectorGraph(...)` / `GetNativeFileDialog()` /
+- `GetOpenFormId<TForm>()` / `GetMcpConnectorGraph(...)` / `GetNativeFileDialog()` /
   `GetNativeFolderDialog()` — the immediate (no-poll) counterparts, for a form a
   preceding step already opened.
 - `ResolveModal(actionResult)` — **the preferred way to name a just-opened
@@ -184,11 +193,11 @@ the test can do it, the MCP wire surface can do it.
   every action that should just take effect (a value set, a click that doesn't open
   a dialog, a dismiss that closes its form).
 - `WaitForAction(Action)` — run a connector action and wait until
-  `Connector.ModalNestingCount()` returns to baseline (the count is incremented
+  `McpConnector.ModalNestingCount()` returns to baseline (the count is incremented
   synchronously when the action is posted). Use for a fire-and-forget action that
   does **not** open a dialog. (An action that DOES open one stays counted until it
   closes, so this would hang — wait for the dialog instead.)
-- `WaitForControl(formId, controlType)` — poll `Connector.GetControls(formId)`
+- `WaitForControl(formId, controlType)` — poll `McpConnector.GetControls(formId)`
   until the form shows a control of that type (e.g. a wizard page's UserControl
   that swaps in after a transition). Tolerates a transient exception from
   `GetControls` while a page transition briefly blocks the form.
@@ -197,9 +206,17 @@ the test can do it, the MCP wire surface can do it.
   disables its OK button while it works (so a dismiss would be a no-op); wait for
   the button to re-enable before dismissing.
 - `SelectTab(formId, tabText)` — select a tabbed dialog's page
-  (`Connector.PerformAction` on the form's single `TabControl`).
-- `PauseForScreenShot(formId)` — capture the form the MCP way,
-  `Connector.GetFormImageBytes(formId)`, and save it as the next `s-NN.png`.
+  (`McpConnector.PerformAction` on the form's single `TabControl`).
+- `PauseForMcpScreenShot(formId, description = null)` — capture the form the MCP
+  way, `McpConnector.GetFormImageBytes(formId)`, and save it as the next
+  `s-NN.png`. The `description` only documents the shot at the call site; nothing
+  displays it, because the capture is unattended (there is no pause form to show it
+  on). **Note the name**: it is deliberately *not* an overload of
+  `AbstractFunctionalTest.PauseForScreenShot(string description = null, …)`. A
+  same-named overload taking a string would hide the base method for every subclass,
+  so an ordinary `PauseForScreenShot("Import Results dialog")` would silently bind
+  to the connector version, be read as a form id, and fail at runtime with the
+  description thrown away. Do not "simplify" it back to a matching name.
 - `GetLocalizedText<T>("controlName")` — see Localization below.
 - `MenuPath<T>("itemA", "itemB", …)` — builds a localized `>`-joined menu path
   for `ClickMainMenuItem` from the menu items' field names (see Localization below).
@@ -209,8 +226,8 @@ the test can do it, the MCP wire surface can do it.
 Drive everything through the connector by **formId string** — never `ShowDialog`,
 direct control access, or an in-process form object.
 
-- **Menus — two verbs.** `Connector.ClickMainMenuItem(menuPath)` clicks the MAIN
-  window's menu bar. `Connector.ClickControlMenuItem(formId, control, menuPath)`
+- **Menus — two verbs.** `McpConnector.ClickMainMenuItem(menuPath)` clicks the MAIN
+  window's menu bar. `McpConnector.ClickControlMenuItem(formId, control, menuPath)`
   clicks every *other* menu, and which one it means follows from `control`:
   - **empty** → the form's own menu: its menu bar, else its first toolbar (e.g. the
     Document Grid's "Reports" nav bar), else its right-click menu;
@@ -222,25 +239,25 @@ direct control access, or an in-process form object.
   command); one that opens a *dialog* does **not** complete — take the dialog from
   the result with `ResolveModal`. Segments match the items' **visible captions**, so
   build the path localized with `MenuPath<T>`.
-- **Click / set a value:** `Connector.ClickFormButton(formId, caption)`,
-  `Connector.SetFormValue(formId, label, value)`. Both return an `ActionResult`;
+- **Click / set a value:** `McpConnector.ClickFormButton(formId, caption)`,
+  `McpConnector.SetFormValue(formId, label, value)`. Both return an `ActionResult`;
   `AssertComplete` the ones that should simply take effect.
 - **Confirm / dismiss a dialog (each *waits for it to close*):**
-  - `Connector.DismissWithAcceptButton(formId)` — presses the default/OK button
+  - `McpConnector.DismissWithAcceptButton(formId)` — presses the default/OK button
     (the Enter equivalent), no localized caption. Use for OK/Yes boxes, a wizard
     Finish, and to **commit a native file dialog** (which has no caption button).
-  - `Connector.DismissWithCancelButton(formId)` — presses Cancel, or closes when
+  - `McpConnector.DismissWithCancelButton(formId)` — presses Cancel, or closes when
     there is none. (A Yes/No box has no cancel affordance — use `DismissWithButton`
     for those.)
-  - `Connector.DismissWithButton(formId, caption)` — presses a **named** button,
+  - `McpConnector.DismissWithButton(formId, caption)` — presses a **named** button,
     e.g. `"No"` on a "replace it?" box. Throws for a native file dialog (no caption
     button).
 - **Native file dialogs (Open / Save As, Browse-For-Folder):**
   ```csharp
-  var fileDlg = ResolveModal(Connector.ClickMainMenuItem(MenuPath<SkylineWindow>(
+  var fileDlg = ResolveModal(McpConnector.ClickMainMenuItem(MenuPath<SkylineWindow>(
       "fileToolStripMenuItem", "saveAsMenuItem")));     // the Save dialog's formId
-  Connector.SetFormValue(fileDlg, "FileName", path);     // "FileName" (or "Folder") is a fixed id, not localized
-  Connector.DismissWithAcceptButton(fileDlg);
+  McpConnector.SetFormValue(fileDlg, "FileName", path);     // "FileName" (or "Folder") is a fixed id, not localized
+  McpConnector.DismissWithAcceptButton(fileDlg);
   ```
   A native dialog reports **`Type` "Dialog"** and **`IsNative == true`** — its
   file-dialog nature isn't knowable the instant it appears (its DirectUI children
@@ -252,7 +269,7 @@ direct control access, or an in-process form object.
   `DismissWithButton(id, "No")` / `DismissWithAcceptButton(id)`.
 - **A click/set that does NOT open a dialog** but posts asynchronously (a managed
   button's `BM_CLICK`, a radio that re-lays-out the page): wrap in
-  `WaitForAction(() => Connector.ClickFormButton(...))` so the posted gesture
+  `WaitForAction(() => McpConnector.ClickFormButton(...))` so the posted gesture
   completes before the next step reads state.
 
 ### Finding a modal from its action (`ResolveModal` vs `WaitFor…`)
@@ -266,7 +283,7 @@ modal before the verb returns:
   (the menu click runs the handler synchronously → `ShowDialog` blocks), and a
   `DismissWithAcceptButton` on a native or managed dialog whose accept raises a
   follow-on (the accept's synchronous click blocks in the follow-on's loop).
-- **NOT reliable → `WaitForConnectorForm<T>()` / `WaitForNativeFileDialog()`:**
+- **NOT reliable → `WaitForMcpConnectorForm<T>()` / `WaitForNativeFileDialog()`:**
   - a managed **`ClickFormButton`** that opens a dialog — the button click is
     POSTED (`BM_CLICK`), so the verb returns before the handler shows the dialog;
   - a dialog raised on a **later background pass** (a FASTA digest that then shows
@@ -294,15 +311,15 @@ or `"?"`. When it does, address the control by its **structured `UiElementPath`*
 (what `UiElementPath` exists for) instead of a caption:
 
 ```csharp
-var controls = Connector.GetControls(associateId);   // each ControlInfo has a .Path
+var controls = McpConnector.GetControls(associateId);   // each ControlInfo has a .Path
 // Identify by observable type/position, the way an MCP client reading the tutorial would --
 // NOT by internal control name. "Create protein groups" is the dialog's first checkbox:
 var groupProteins = controls.First(c => Equals(c.Path.Type, "CheckBox")).Path;
-AssertComplete(Connector.PerformAction(groupProteins, @"set_value", "true"));
+AssertComplete(McpConnector.PerformAction(groupProteins, @"set_value", "true"));
 // ... and there is only one combo box; clear the Path's Text so it matches by type+index
 // only (the label it would otherwise match by changes when grouping re-lays-out the dialog):
-var combo = Connector.GetControls(associateId).Single(c => Equals(c.Path.Type, "ComboBox")).Path.ChangeText(null);
-AssertComplete(Connector.PerformAction(combo, @"set_value", EnumNames.SharedPeptidesGroup_Removed));
+var combo = McpConnector.GetControls(associateId).Single(c => Equals(c.Path.Type, "ComboBox")).Path.ChangeText(null);
+AssertComplete(McpConnector.PerformAction(combo, @"set_value", EnumNames.SharedPeptidesGroup_Removed));
 ```
 
 Key points, learned the hard way:
@@ -315,7 +332,7 @@ Key points, learned the hard way:
 - **A captured `Path` embeds the control's current label**, so it goes stale if a
   prior action re-lays-out the form. Either re-fetch the `Path` after the change,
   or `ChangeText(null)` to match by type + index only.
-- **`Connector.PerformAction(path, "set_value", value)`** is the exact in-process
+- **`McpConnector.PerformAction(path, "set_value", value)`** is the exact in-process
   equivalent of the MCP `perform_action` with an explicit path. The action is a
   **string** (`"set_value"`, `"click"`, `"get_children"`, …) — the test uses the
   same string names the MCP does, not an in-process `UiActions` enum (the MCP has
@@ -343,8 +360,8 @@ Button/label captions differ per language. Do **not** hard-code English, and do
 captions). Instead pull the caption from the control's resources:
 
 ```csharp
-Connector.ClickFormButton(wizardId, GetLocalizedText<ImportPeptideSearchDlg>("btnNext"));       // "Next >"
-Connector.SetFormValue(wizardId, GetLocalizedText<BuildPeptideSearchLibraryControl>("lblLibraryPath"), path); // "Path:" label
+McpConnector.ClickFormButton(wizardId, GetLocalizedText<ImportPeptideSearchDlg>("btnNext"));       // "Next >"
+McpConnector.SetFormValue(wizardId, GetLocalizedText<BuildPeptideSearchLibraryControl>("lblLibraryPath"), path); // "Path:" label
 ```
 
 `GetLocalizedText<T>("name")` reads `"name.Text"` from `T`'s `.resx`
@@ -367,6 +384,35 @@ enum the codebase already localizes via `EnumNames`, pass that resource
 wizard combos (ion-range, mass-analyzer, isolation-scheme) are still English
 literals — a known remaining multi-language gap for those steps.
 
+**Not every list item lives in a `.resx` keyed by control name.** When the visible
+text comes from a model rather than a designer, find the API that produces it:
+
+| Visible text | Where it comes from |
+|--------------|---------------------|
+| "Applies to" list items ("Replicates", "Peptides") | `AnnotationDef.AnnotationTargetPluralName(target)` |
+| Annotation "Type" combo ("Value List") | `ListPropertyType.GetAnnotationTypeName(AnnotationDef.AnnotationType.value_list)` |
+| Document Grid report names ("Proteins", "Peptides") | `Resources.SkylineViewContext_GetDocumentGridRowSources_Proteins` etc. — **these are localized**, so a `ViewInfo.Name` comparison against an English literal breaks in ja/zh |
+| Grid right-click "Sort Descending" | `GetLocalizedText<DataboundGridControl>("sortDescendingToolStripMenuItem")` |
+| Document Grid "Reports" nav-bar button | `GetLocalizedText<NavBar>("navBarButtonViews")` |
+
+**And a few things genuinely are NOT localized — leave those literal.** Ion-type
+buttons (`a`/`b`/`c`/`x`/`y`/`z`) come from `Transition.VALUES`, which hard-codes
+them; only the precursor and custom entries are resource-backed. Wrapping a
+non-localized string in a resource lookup is worse than the literal, so check
+before "fixing" one.
+
+**Watch the proteomic / small-molecule split.** `GetDocumentGridRowSources` returns
+"Molecule Lists"/"Molecules" when `DefaultUiMode != PROTEOMIC`, and
+`AnnotationTargetItem.ToString()` runs `PeptideToMoleculeTextMapper.Translate`. A
+test that hard-codes the proteomic wording is already wrong for a molecule-mode run,
+independent of language.
+
+**In-process menu lookups: match on `Name`, not `Text`.** The designer assigns
+`.Name` in code but sets `.Text` through `resources.ApplyResources`, so a test that
+reaches into `MainMenuStrip.Items` directly must key on the field name
+(`"fileToolStripMenuItem"`). This is the opposite of the *connector* verbs, which
+match visible captions — hence `MenuPath<T>` above.
+
 **Menu paths are captions too.** `ClickMainMenuItem` matches each `>`-separated
 segment against the menu items' visible (localized, normalized) text — so a
 hard-coded `"File > Start"` works in English only. Build the path from the menu
@@ -374,8 +420,8 @@ items' resources with the `MenuPath<T>` helper (it joins each
 `GetLocalizedText<T>` with `" > "`):
 
 ```csharp
-Connector.ClickMainMenuItem(MenuPath<SkylineWindow>("fileToolStripMenuItem", "startPageMenuItem"));
-Connector.ClickMainMenuItem(MenuPath<SkylineWindow>(
+McpConnector.ClickMainMenuItem(MenuPath<SkylineWindow>("fileToolStripMenuItem", "startPageMenuItem"));
+McpConnector.ClickMainMenuItem(MenuPath<SkylineWindow>(
     "fileToolStripMenuItem", "importToolStripMenuItem", "importDocumentMenuItem"));   // File > Import > Document
 ```
 
@@ -414,7 +460,7 @@ The test runs in en, ja, and zh-CHS, so each language needs its own `index.html`
 
 ## Generating the screenshots
 
-`PauseForScreenShot(formId)` only captures when recording. Run the test in
+`PauseForMcpScreenShot(formId)` only captures when recording. Run the test in
 auto-screenshot mode (implies on-screen UI), which writes the PNGs into
 `Tutorial-Drafts/<Name>/en/`:
 
@@ -432,14 +478,14 @@ ai/scripts/Skyline/Run-Tests.ps1 -TestName TestDiaToSrmTutorial -Language ja -Ta
 ai/scripts/Skyline/Run-Tests.ps1 -TestName TestDiaToSrmTutorial -Language zh -TakeScreenshots
 ```
 
-Known quality issues to watch for (`Connector.GetFormImageBytes(formId)` grabs the
+Known quality issues to watch for (`McpConnector.GetFormImageBytes(formId)` grabs the
 on-screen window rect and redacts non-target pixels):
 - **Cyan/fuchsia redaction block** over part of the form = another window
   overlapped the form's rectangle during capture. Make sure the form is brought
   to the front / not overlapped.
 - **Wrong page captured** = the screenshot fired before an async transition (e.g.
   loading a library after "Next") finished. Wait for the new page to be current
-  before the `PauseForScreenShot`.
+  before the `PauseForMcpScreenShot`.
 
 For a normal offscreen run (validate logic, no capture):
 `Run-Tests.ps1 -TestName TestDiaToSrmTutorial`.
@@ -462,6 +508,20 @@ harvest a dialog's captions and paths. A few extras:
   `RunUI(...)` deadlocks (the modal blocks the UI thread, the test can't dismiss
   it). Drive it through the connector (which posts the click) and dismiss the
   modal with a follow-up connector call.
+- **A verb that raises a dialog now reports it rather than wedging the server.**
+  Every UI-thread hop in `JsonToolServer` goes through `DialogWatcher`, which posts
+  the work and waits cancellably, so a dialog comes back in the `ActionResult`
+  (`Completed == false`, id in `FormId`) and the connection stays usable — you can
+  ask `GetOpenForms` and dismiss the dialog over the same connector. This covers
+  the document operations behind `RunCommand` too: an `--in` whose file is missing
+  or whose raw files have moved surfaces the message box's text instead of holding
+  the pipe server's single thread. Consequently `ImportFasta`, `ImportProperties`
+  and `SelectSettingsListItems` return `ActionResult`, not `void`.
+  A `LongWaitDlg` is *not* treated as a stop — `DialogWatcher` rides through
+  transient modals, and `ILongWaitForm.IsBusy` keeps the no-progress watchdog from
+  tripping — so a long import completes normally rather than being reported as a
+  dialog. (That watchdog only applies to gestures with a wait condition, i.e. the
+  `DismissWith*` verbs, so a plain action can take as long as it needs.)
 - **`Settings > Default` via the connector** trips a `"Document was modified, but
   audit log entry is null"` assertion in tutorial-test (audit-logging) mode. Skip
   the revert step — a functional test already starts at default settings.
@@ -470,7 +530,7 @@ harvest a dialog's captions and paths. A few extras:
   first; `DismissWithAcceptButton` it, then a native Save As dialog, then the
   wizard opens. Because these come from the **startup frame** (not a synchronous
   menu click), their formIds do **not** come back on an `ActionResult` — get each
-  with `WaitForConnectorForm<T>()` / `WaitForNativeFileDialog()`, not `ResolveModal`.
+  with `WaitForMcpConnectorForm<T>()` / `WaitForNativeFileDialog()`, not `ResolveModal`.
 - **Native file/folder dialogs report `Type == "Dialog"`, not `"FileDialog"`/**
   **`"FolderDialog"`.** Their type isn't classifiable the instant they appear (the
   common-dialog DirectUI children are created lazily), so a stable id is more
@@ -481,7 +541,7 @@ harvest a dialog's captions and paths. A few extras:
   loop** (synchronous menu-item opens, native/managed accepts that raise a
   follow-on). A **posted** `ClickFormButton` that opens a dialog, and any dialog
   raised on a later background pass, return before the modal exists — use
-  `WaitForConnectorForm` for those. (See "Finding a modal from its action".)
+  `WaitForMcpConnectorForm` for those. (See "Finding a modal from its action".)
 - **Data layout:** the webinar ZIP typically extracts into a nested
   `<Name>/<Name>/...` folder; confirm the real paths (inspect a `TestResults`
   extract or harvest over MCP) when building `GetTestPath`.
@@ -494,9 +554,21 @@ harvest a dialog's captions and paths. A few extras:
   top-to-bottom as the tutorial runs — it makes the "what happens after what"
   obvious and is the convention these tests follow.
 - **Build/commit hygiene:** build with the `ai/scripts/Skyline` scripts via the
-  Bash tool; the rebuilt `SkylineAiConnector.zip` is a build artifact — keep it
-  out of commits. The pwiz tutorial work is on a Skyline feature branch (commit
+  Bash tool. The pwiz tutorial work is on a Skyline feature branch (commit
   there); this guide is in pwiz-ai (`ai/`, pushed to master directly).
+- **`SkylineAiConnector.zip` is a committed artifact, not build noise.** It is
+  rebuilt by `PackageToolZip` (`AfterTargets="Build"`) in `SkylineAiConnector.csproj`,
+  which lives in **`SkylineMcp.sln` — a separate solution `Skyline.sln` does not
+  build** — so rebuilding it is a deliberate act. Commit the rebuilt ZIP whenever
+  you change the connector or MCP-server sources it bundles: it is what Tool Store
+  users install, so a fix left out of it never reaches them. A rebuild restamps the
+  version from `AssemblyInfo.cs`, so update `EXPECTED_ZIP_VERSION` in
+  `SkylineMcpTest.cs` to match — `TestSkylineMcp` pins it and fails otherwise (the
+  assertion message tells you the new value). `SkylineMcpTest` also diffs the
+  `[McpServerTool]` names in source against the ZIP's advertised list, so a
+  forgotten rebuild after adding or renaming a tool fails — but nothing catches a
+  stale `ChatAppRegistry.cs` / `MainForm.cs`, so rebuild deliberately after touching
+  those.
 
 ## Checklist for a new webinar
 
