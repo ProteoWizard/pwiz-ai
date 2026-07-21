@@ -23,6 +23,26 @@ FOLLOW-UP (documented, not in this PR): full elimination of the fat path = strea
 report from the sidecar+parquet too (#4437 Lever-2), with a fat-vs-lean A/B (the fat path's one legit use).
 82-file transfer+MDIAG re-run in flight (v201, `-LinkFrom` -5day, lean) -> the diagnostics deliverable.
 
+### 2026-07-21 (Brendan, wrap-up): unbounded-memory guard + switch confirmation
+- The pass-2 mode switch is the **`OSPREY_PASS2_QVALUE`** env var (`percolator` default | `transfer`),
+  NOT a CLI flag. Left as an env var (Brendan's call).
+- **`OSPREY_ALLOW_UNBOUNDED_MEMORY`** env var (default off) added: any run that would take the RESIDENT
+  O(files) first-pass pool now FAILS FAST with an actionable error naming the trigger (HPC
+  reconciled-input merge / `--fdrbench-pass 1` / non-Percolator FDR / `--model-diagnostics` on a full
+  resume) unless the operator opts in -- so no user reaches an O(files) path by accident.
+  `OSPREY_FDR_PROJECTION=0` (A/B oracle) honored as an equivalent opt-in. Guard at both fat-pool origins
+  (PerFileScoringTask.Run + RehydrateFromOwnOutputs); pure `ResidentPoolGuardError` + unit test
+  `TestResidentPoolGuardError`. Commit 192c6e85c.
+- regression.ps1 sets the env var ONLY around the mode3 HPC chain -> modes 1/2 run with the guard ARMED,
+  proving the default straight-through + resume paths stay lean. regression.ps1 -Dataset Stellar mode1/2/3
+  all PASS byte-identical (45,064,192) WITH the guard armed -> no false positive + HPC exemption works.
+- Gate HPC decision (Brendan): gate it (mode3 opts in via the env var); production HPC at scale now
+  errors-with-pointer until the Stage-6/rehydrate streaming lands ([[TODO-osprey_stage6_rescored_buffer_streaming]]).
+- MERGE-READY: 8 commits (redesign a98759c7 -> guard 192c6e85c) + master merged in. Regression green.
+  Remaining: Brendan triggers TeamCity Perf/Regression on pull/4438, then merge. Optional: a final 82-file
+  mdiag run to confirm zero >30s gaps end-to-end (the 3 gap fixes are byte-inert logging, Gate-1 tested;
+  the prior 82f run's profile showed ONLY the ingest+refit gaps, both now fixed).
+
 ### Progress (2026-07-19/20 night, autonomous)
 IMPLEMENTED the TRANSFER-path redesign (default percolator unchanged):
 - Stage-5 made mode-independent: `OSPREY_PASS2_QVALUE=transfer` no longer forces the resident
