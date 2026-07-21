@@ -21,6 +21,15 @@
   `regression.ps1 -Dataset Stellar` PASS mode 1/2/3 (blib 45,064,192) and `-Dataset Astral`
   PASS mode 1/2/3 (blib 135,249,920) -- byte-identical, confirming the change is inert on the
   default `all` path. NEXT: `/pw-self-review`, then human review + manual TeamCity trigger.
+- **2026-07-20 self-review (fresh-context agent): implementation CLEAN, zero defects** --
+  confirmed the C# logic mirrors Rust `protein.rs` line-for-line (winner selection, lowest-id
+  tiebreak == `max_by_key((len, Reverse(id)))`, batch-claim, live unique counts, no residual
+  enumeration-order dependence in the OUTPUT). Findings were test-strength only: the cascading
+  test is a deterministic forward-guard but only fails the OLD code on ~half of hash seeds; the
+  across-input-order test collapses to identical gids for its topology (kept -- harmless, mild
+  reversed-input guard). Addressed the one real coverage gap by adding
+  `TestSharedPeptidesRazorTiebreakFavorsLowestGroupId` (pins the equal-unique-count lowest-id
+  winner, the subtlest cross-impl detail) -- 4/4 razor tests pass. Pushed as a follow-up commit.
 
 **Priority**: Medium -- correctness/determinism bug, but on the non-default `--shared-peptides
 razor` path (default is `all`), so it does not affect the certified Stellar/Astral output.
