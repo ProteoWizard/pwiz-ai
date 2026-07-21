@@ -1,7 +1,9 @@
 # TODO: GraphChromatogram totals NRE on stale peptide path
 
+**Status**: Completed
 **Branch**: `Skyline/work/20260721_graphchrom_totals_null_peptide`
 **Checkout**: C:\Dev\bugfix
+**PR**: [#4443](https://github.com/ProteoWizard/pwiz/pull/4443) (merged 2026-07-21 as 0cf7ef2)
 **Source**: skyline.ms exception report #75292 (NullReferenceException, 26.1.0.057)
 
 ## Objective
@@ -38,5 +40,18 @@ curves. Red/green verified — reproduces the exact NRE without the guard.
 - [x] CodeInspection test passes
 - [x] Full ReSharper inspection clean (no issues in changed regions)
 - [x] Self-review clean ("ship it")
-- [ ] PR opened
-- [ ] Cherry-pick to `Skyline/skyline_26_1`? (patch mode - crash fix, maintainer call)
+- [x] PR opened and merged (#4443)
+- [x] Copilot review addressed (hoisted guard above the peak-window merge)
+- [x] `Cherry pick to release` label applied; auto cherry-pick to `Skyline/skyline_26_1` pending
+
+### 2026-07-21 - Merged
+
+PR #4443 merged as commit 0cf7ef2. Shipped the null guard in
+`GraphChromatogram.DisplayTotals` (skips a transition group whose cached path no
+longer resolves to a peptide in the current document) plus the `TestStaleSelection`
+regression coverage folded into `ChromGraphTransformTest`. Copilot's one comment led
+to hoisting the guard to the top of the loop so a stale group can't influence
+auto-zoom; re-inspected, re-self-reviewed, and re-verified red/green at the new
+placement — all clean. The `Cherry pick to release` label is set; the work branch is
+intentionally left in place (local + remote) until the automated cherry-pick to
+`Skyline/skyline_26_1` runs.
