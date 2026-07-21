@@ -1,16 +1,26 @@
 # TODO: Osprey protein parsimony razor rollup determinism
 
 ## Branch Information
-- **Branch**: TBD -- to be cut fresh from `master` (see "Landing plan" below). NOT the
-  current `Skyline/work/20260709_osprey_sparse_xcorr_cache` checkout, which is 29 commits
-  behind master and an unrelated topic.
+- **Branch**: `Skyline/work/20260720_osprey_protein_razor_determinism` (worktree at
+  `C:\Dev\pwiz-razor`, cut fresh from `origin/master`).
 - **Base**: `master`
 - **Created**: 2026-07-20
-- **Status**: Fix written + unit-tested locally; NOT yet on a branch, NOT committed.
-  Awaiting a free machine (a second session is on the Rust osprey tree) and a clean
-  master-based branch before running the full dataset gates + PR.
+- **Status**: PR OPEN, all local gates GREEN. Awaiting `/pw-self-review` + human review +
+  the manual TeamCity Perf/Regression trigger on `pull/4442`.
+- **PR**: [#4442](https://github.com/ProteoWizard/pwiz/pull/4442)
 - **Issue**: [#4441](https://github.com/ProteoWizard/pwiz/issues/4441)
 - **Reported by**: Mike
+
+### Progress log
+- **2026-07-20**: Fix committed on a fresh worktree off `origin/master` and PR #4442 opened.
+  Gates GREEN: full Osprey unit suite 519 passed / 3 skipped / 0 failed (incl. the 3 razor
+  tests + `TestNoUnstableSort` -- the two new `.Sort` calls are annotated `// Array.Sort OK`
+  as distinct-key, no-tie); inspection 0 warnings under solution-wide analysis (the wrapper's
+  fast `--no-swea` mode surfaces 9 pre-existing, already-source-suppressed false positives in
+  the unrelated `Osprey.Core/SystemMemory.cs` Win32 interop struct -- NOT touched);
+  `regression.ps1 -Dataset Stellar` PASS mode 1/2/3 (blib 45,064,192) and `-Dataset Astral`
+  PASS mode 1/2/3 (blib 135,249,920) -- byte-identical, confirming the change is inert on the
+  default `all` path. NEXT: `/pw-self-review`, then human review + manual TeamCity trigger.
 
 **Priority**: Medium -- correctness/determinism bug, but on the non-default `--shared-peptides
 razor` path (default is `all`), so it does not affect the certified Stellar/Astral output.
