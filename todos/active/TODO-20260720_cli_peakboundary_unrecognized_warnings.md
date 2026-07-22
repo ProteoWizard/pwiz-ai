@@ -92,6 +92,17 @@ document result.
   accurately instead of calling his replicate name a "file name". Keys renamed to match the values
   (strings are new in this branch, so no released/translated text is affected).
 
+## Nick Shulman review round (commit 89dbeb19, 2026-07-22)
+- Two inline comments, both addressed + threads resolved:
+  - Merged the three redundant `HashSet`s into the line-number dictionaries: `UnrecognizedPeptides`/
+    `Files`/`ChargeStates` are now `Dictionary<T,long>` (item -> first line); dedup uses
+    `!ContainsKey` (`Dictionary.TryAdd` isn't in net472). GUI (`PeakBoundaryImporterUI`, param
+    relaxed to `ICollection<T>`) and audit log consume `.Keys`. One member per category, no parallel state.
+  - `WarnUnrecognizedItems` dropped the redundant `items` param — iterates the dictionary directly.
+- Follow-up self-review + full ReSharper inspection on the refactor: caught a `RedundantStringFormatCall`
+  (inlined `string.Format` inside `_out.WriteLine`, which has a format-args overload) — fixed. Final
+  inspection 0 warnings/0 errors (changed files and whole solution); CLI output byte-identical.
+
 ## Self-review (fresh-context agent, 2026-07-20)
 - No HIGH/MEDIUM defects. Verified clean: line numbers correct (1-based, charge recorded only after
   peptide+file match), set/dict never diverge (dict written only inside `if (HashSet.Add(...))`, and
