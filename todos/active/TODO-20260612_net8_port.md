@@ -1975,3 +1975,48 @@ projects (SkylineAiConnector, the 8 arg-collectors under Executables/Tools, dev/
 LaunchBatch (deferred, ClickOnce); (3) item 4 — non-EN audit-log baselines for TestDiaTtofDiaUmpireTutorial
 (fr/ja): re-run under language=fr/ja to see if the culture-aware tolerance now clears them (deferred this
 session). Items 3/5a/5b above are closed.
+
+## 2026-07-22 (session c cont.) — net472-only project ports: arg collectors + DevTools (21 projects, 6 commits)
+
+Worked the "port remaining net472-only projects" backlog (memory `reference_net8_app_port_gotchas` +
+`project_net8_port_peripheral_scope`). All converted to SDK-style multi-target, all build BOTH TFMs, all
+committed + dual-pushed (origin + chambem2). HEAD `31acfc5308`.
+
+**Arg collectors (9) — commit `3c9d80724b`:** QuaSAR, SProCoP, MS1ProbeArgsCollector,
+ProteinTurnoverArgCollector, TestArgCollector, ExampleArgCollector, MSStatArgCollectors, MSstats/TestHarness,
+TFExportTool. Pattern: SDK multi-target net472;net8.0-windows + UseWindowsForms + System.Resources.Extensions;
+dropped vestigial System.Deployment/System.Net.Http; renamed the Chinese satellite resx **zh-CHS -> zh-Hans**
+(12 files, branch standard); ja + zh-Hans satellites verified building. Specifics: ProteinTurnover/MSStat use
+Microsoft.VisualBasic.FileIO.TextFieldParser (net472 framework ref; net8 via WindowsDesktop); TFExportTool
+references the bundled net40 CsvHelper.dll for both TFMs (old CsvConfiguration API predates modern NuGet) +
+embeds icon.ico; TestHarness -> MSStatArgCollectors project ref.
+
+**DevTools (12) — commits `38b494fcb0` (6 console), `adc9292974` (UniMod+Ipi), `6f4d0e400c` (ImageComparer
+pair), `268ec8cd9f` (AssortResources), `31acfc5308` (TutorialLocalization):**
+- Pure-console -> net472;net8.0 (plain, no -windows): ImportPerf, ParseIsotopeAbundancesFromNIST,
+  OpenSwathConvert, PeakViewConvert, SortRESX, BindingRedirectGenerator, IpiToUniprotMapCompiler,
+  TutorialLocalization.
+- WinForms/CommonUtil/ResX -> net472;net8.0-windows: UniModCompiler (CommonUtil proj ref), AssortResources
+  (System.Resources.ResXFileRef + StronglyTypedResourceBuilder -> UseWindowsForms; System.Design net472-only),
+  ImageComparer (+ added a net8.0-windows target to ImageComparer.Core with System.Drawing.Common 8.0.10).
+- Dep handling: DotNetZip net472 HintPath + net8 NuGet 1.16.0 (Ipi; **fixed a stale 3-up HintPath -> 4-up**);
+  TutorialLocalization's 5 real deps (CommandLine/CsvHelper/DotNetZip/F23.StringSimilarity/HtmlAgilityPack) are
+  pure-managed on-disk libs referenced for BOTH TFMs, with the BCL polyfill shims (System.Memory etc.)
+  net472-only (built into net8).
+
+**New reusable gotchas** (added to `reference_net8_app_port_gotchas`): embedded-`.cs` code-gen templates need
+`Compile Remove` + `EmbeddedResource`; old net40/net461 pure-managed vendor DLLs (CsvHelper/CommandLine) are
+net8-loadable so reference them for both TFMs rather than a source-breaking NuGet upgrade; ResX tooling
+(ResXFileRef / StronglyTypedResourceBuilder) resolves via UseWindowsForms on net8, needs System.Design on
+net472; Microsoft.VisualBasic.FileIO.TextFieldParser is on the net8 WindowsDesktop framework (no ref).
+
+**DEFERRED follow-up (not blocking the source port):** the SHIPPED tool artifacts still carry the old
+net472 zh-CHS builds - checked-in `Executables/Tools/QuaSAR/QuaSAR.dll`, `MSstats/MSstats.zip`,
+`Turnover/TurnoveR.zip`, etc. Rebuilding + repackaging those (and wiring net8 external-tool deployment /
+in-process loading of a net8-built arg-collector DLL) is a separate step.
+
+**Remaining net472-only port backlog:** interactive tools (ExampleInteractiveTool,
+TestCommandLineInteractiveTool, TestInteractiveTool, SkylineIntegration/XLTCalc, MPPExport, SkyGadget),
+AdvancedEditingCommands + ToolServiceTestHarness (net7 -> net8), BullseyeSharp (legacy), SetupDeployProject
+(Installer). Deferred: LaunchBatch (ClickOnce). Out of scope: the 9 Build*Method vendor method builders.
+SkylineAiConnector already net8.
