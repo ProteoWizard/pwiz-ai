@@ -36,6 +36,8 @@ Data folder confirmed present: `WormUnrefined.sky` + pre-cached `WormUnrefined.s
 | s-13 | Picking Measurable | PASS | expanded precursor transitions + library ranks + bracketed SRM ranks all match exactly |
 | s-14 | Picking Measurable | PASS | VTLDSLYAPHAGK (dotp 0.94, y7/y6/y5) + LDWALPTAR (dotp 0.89, y6/y5/y4) tree matches ref |
 | s-15 | Picking Measurable | PASS | LDWALPTAR chromatogram y6/y5/y4 peak 50.2 matches ref (minor y-axis autoscale 7 vs 8) |
+| (Automated Refinement) | no screenshot | DIVERGENCE | Refine rank3/r0.95/dotp0.8 → 75 pep/225 tran (tutorial 80/240); rank6/r0.9/dotp0.712 → 119 pep (tutorial 127). SSRCalc-drift cascade (RT-outlier filter) |
+| (Scheduling import) | no screenshot | PASS | Unscheduled01/02 imported; Refine>Remove Missing Results → 86 pep/256 tran (tutorial 86/255) — count RECOVERS exactly |
 
 ## Progress log
 
@@ -137,3 +139,25 @@ Data folder confirmed present: `WormUnrefined.sky` + pre-cached `WormUnrefined.s
   cleanly (no send-key needed) — a positive for transition-level refinement.
 - Skipped the no-screenshot optional VTADVGVTSAPVINAAGVFSR manual edit (keep y14/y13/y11);
   Automated Refinement re-filters to 3 transitions/precursor regardless.
+
+### Automated Refinement (no screenshots) — DIVERGENCE (count) [2026-07-22]
+- `Refine > Advanced` → Results tab (`select_tab type=TabControl value=Results`). Set
+  Max transition peak rank=3, checked Prefer larger product ions, Remove nodes missing
+  results, Target r=0.95, Min dotp=0.8. OK → **75 pep / 225 tran** (tutorial: 80 / 240).
+- Undo → 222/2053. Second Refine rank=6, r=0.9, Min dotp=0.712 → **119 pep** (tutorial:
+  127). Undo → 222/2053.
+- Both counts run ~5-8 peptides LOW. Root cause: the same SSRCalc score drift that gave
+  140 refined vs 146 at s-06/s-07 — the "Target r" RT-outlier filter classifies a few
+  more peptides as outliers on this Skyline build, removing them. Not an MCP issue; a
+  Skyline calculation/version difference vs the tutorial's original build.
+
+### Scheduling for Efficient Acquisition (through import) — PASS [2026-07-22]
+- Undo (222). `Edit > Manage Results` → Remove → OK (0 replicates). `File > Save`.
+- `File > Import > Results` → **Add multi-injection replicates in directories** → OK →
+  **Browse For Folder** (native) accepted default (MethodRefine) → **Import Results**
+  common-prefix dialog → **Do not remove** → OK.
+- Imported Unscheduled01 + Unscheduled02 (4 RAW, ~80MB) behind AllChromatogramsGraph;
+  polled `get_open_forms` until it closed. 2 replicates.
+- `Refine > Remove Missing Results` → **86 pep / 256 tran** (tutorial 86 / 255). Peptide
+  count matches EXACTLY — the data-driven Scheduling count recovers despite the earlier
+  refinement divergence. (256 vs 255 tran: one peptide keeps 3 vs 2, negligible.)
