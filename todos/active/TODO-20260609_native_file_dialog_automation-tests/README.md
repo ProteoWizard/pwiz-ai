@@ -1,5 +1,9 @@
 # Tutorial MCP Testing — Process & Runner Guide
 
+**Running autonomously?** Launch `/night-session <this file>` — the executable
+loop is in **[▶ Run this](#-run-this-night-session-entry-point)** below; the rest
+is detail it references.
+
 Companion to
 [`../TODO-20260609_native_file_dialog_automation.md`](../TODO-20260609_native_file_dialog_automation.md)
 (PR #4313 — native file-dialog automation + Phase 3 generic form automation).
@@ -17,6 +21,66 @@ The runner **is a Claude session following this document.** There is no C#
 tutorial-runner to build; the deliverable is proof that a Claude session, given
 the MCP, can complete a tutorial the way a supported user would — and a
 high-signal list of where it can't (yet).
+
+---
+
+## ▶ Run this (night-session entry point)
+
+Launch on any set-up machine:
+
+```
+/night-session C:\proj\ai\todos\active\TODO-20260609_native_file_dialog_automation-tests\README.md
+```
+
+The session becomes the **orchestrator**: it claims one unclaimed tutorial, runs
+it (via a sub-agent), then the next, and so on until interrupted (~7–8 h). Start
+it on several machines at once — coordination is automatic through the git claim
+(§2.1). Sections below are the details; this is the loop.
+
+### Kickoff — the one moment a human is needed
+
+Do this once when you launch, then walk away:
+
+1. Confirm Skyline (debug, on the PR #4313 branch) is running with the AiConnector
+   loaded, and `skyline_get_instances` shows exactly one instance.
+2. **Grant screen capture.** As its first act the orchestrator calls
+   `skyline_get_form_image` on the main window; on a freshly-started Skyline this
+   opens a consent dialog *inside Skyline* — click to grant while you're still
+   there. The grant persists for the **life of that Skyline process**, so repeat
+   night-sessions against the same running Skyline inherit it and this step goes
+   silent. (Only human-in-the-loop step — Finding #3 in `TEST-MethodEdit.md`; a
+   Skyline restart requires re-granting.)
+
+### Orchestrator loop (autonomous)
+
+Prime once: call `skyline_get_form_image` on `SkylineWindow:Skyline` and, if it
+returns "permission required", surface it and wait for the grant (kickoff step 2).
+Then repeat until interrupted:
+
+1. `git pull --rebase` in `ai/` (pick up other machines' claims).
+2. Get the tutorial Name list from `skyline_get_available_tutorials`. The
+   **unclaimed** set = Names with no `TEST-<Name>.md` in this folder.
+3. If none unclaimed → every tutorial is taken; stop and log that coverage is
+   complete.
+4. Pick the first unclaimed Name. `skyline_new_document` to start clean (dismiss a
+   save prompt without saving if one appears).
+5. **Spawn ONE sub-agent** (Agent tool) with the §7 prompt for that Name and
+   **await** it. Never spawn a second while one is running — they share the one
+   Skyline.
+6. If it returns `CLAIM COLLISION` (another machine claimed it first), just loop.
+   Otherwise keep its one-paragraph summary in your **own** context (do not
+   commit it anywhere) and loop.
+
+Keep the orchestrator lean: it does **not** fetch tutorial markdown/images or
+drive the UI — the sub-agent does, so those tokens are discarded per tutorial and
+the orchestrator survives the whole session. Each sub-agent claims (§2.1) and
+commits its own progress, so an interruption mid-tutorial still leaves a pushed
+claim plus whatever was committed.
+
+> **Stalled claims:** a `TEST-<Name>.md` left at `Status: CLAIMED`/`WIP` by a
+> dead session blocks re-pickup (claim = file present). For now a human resolves
+> stalled claims (resume or delete the file); auto-resuming them is a future
+> improvement, not v1.
 
 ---
 
@@ -229,23 +293,34 @@ tool calls and observations that matter)
 
 ## 7. Sub-agent prompt template (orchestrator → per-tutorial agent)
 
-> You are testing whether Claude can drive the Skyline tutorial **"<Title>"**
-> (`<Name>`) end-to-end through the Skyline MCP. Read
-> `ai/todos/active/TODO-20260609_native_file_dialog_automation-tests/README.md`
-> and follow its §3 prerequisites and §4 methodology **exactly**. Drive every
-> step through MCP verbs; **pause at every tutorial screenshot** to capture the
-> live UI and compare it to the reference image; log progress **as you go** to
-> `TEST-<Name>.md` in that folder. Do not rabbit-hole — after ~3 failed attempts
-> at any single action, classify it (§5), record the exact calls, and continue.
-> When done (or blocked), fill in "Findings & fix suggestions" and "Final
-> status", then return a **one-paragraph** summary: completed? count of
-> blocking vs. cosmetic findings; the single most important fix suggestion.
+> You are a per-tutorial test agent. Test whether Claude can drive the Skyline
+> tutorial **"<Title>"** (`<Name>`) end-to-end through the Skyline MCP. This
+> folder is `ai/todos/active/TODO-20260609_native_file_dialog_automation-tests/`;
+> read its `README.md` and follow §3 prerequisites and §4 methodology **exactly**.
+>
+> 1. **Load tools.** The `mcp__skyline__*` tools are deferred — load what you need
+>    via ToolSearch (README §4 names the verbs).
+> 2. **Claim it (§2.1).** `git pull --rebase` in `ai/`. If `TEST-<Name>.md`
+>    already exists, STOP and return exactly `CLAIM COLLISION`. Otherwise create
+>    the stub `TEST-<Name>.md` (Run-context header + `Status: CLAIMED`), then
+>    `git add`/`commit`/`pull --rebase`/`push`.
+> 3. **Run.** Drive every step through MCP verbs; **pause at every screenshot** to
+>    capture the live UI and compare to the reference; log progress to
+>    `TEST-<Name>.md` **as you go** and `git commit`+`push` it periodically so an
+>    interruption preserves progress. Don't rabbit-hole — after ~3 failed attempts
+>    at one action, classify it (§5), record the exact calls, and continue.
+> 4. **Finish.** Fill in "Findings & fix suggestions" and "Final status", update
+>    the `Status:` line, final `commit`+`push`.
+> 5. **Return** a **one-paragraph** summary: completed end-to-end? blocking vs.
+>    cosmetic finding counts; the single most important fix suggestion. (Or
+>    `CLAIM COLLISION` from step 2.)
 
-The orchestrator: resets to a blank document between tutorials
-(`skyline_new_document`), keeps the returned paragraph in its **own** context
-(does not commit it to §8), and starts the next sub-agent only after the previous
-one returns (sequential). Each sub-agent claims via §2.1 first, so two machines
-never drive the same tutorial.
+The orchestrator runs the loop at the top ("▶ Run this"): reset to a blank
+document between tutorials (`skyline_new_document`), spawn one sub-agent at a time
+and await it, keep the returned paragraph in its **own** context (never commit it
+to §8). Each sub-agent claims via §2.1 first, so two machines never drive the same
+tutorial; a `CLAIM COLLISION` return just means loop and pick the next unclaimed
+Name.
 
 ---
 
