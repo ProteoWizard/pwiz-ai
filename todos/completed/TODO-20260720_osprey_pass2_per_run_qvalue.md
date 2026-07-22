@@ -1,8 +1,26 @@
 # TODO: Pass-2 changes ONLY per-run q -- unify transfer + remodel on the correct invariant
 
+### 2026-07-22 - Merged
+
+PR #4438 merged as commit 8a32095c5 (squash, `--admin` after an `Update branch`
+merge of master; the incoming master change did not touch Osprey). All 18
+GitHub checks (incl. Brendan's manually-triggered TeamCity Perf/Regression on
+pull/4438) were green before merge. What shipped: the opt-in
+`OSPREY_PASS2_QVALUE=transfer` redesign (per-run-q-only reconciliation with
+pass-1 experiment q carried through), the mode-independent Stage-5 +
+`captureModel` hook, `Pass2FdrSidecar.TransferPerRunQ`/`AssignPerRunQ`, the
+`OSPREY_ALLOW_UNBOUNDED_MEMORY` fast-fail guard, and the mdiag-on-resume
+memory/log-gap fixes. Default `percolator` path byte-identical (regression
+golden 45,064,192 unchanged); transfer validated against the entrapment-FDP
+oracle (20f r=0.97 @ 0.87% FDP; 82f reproduces pass-1 at 37,627 @ 0.94%).
+DEFERRED (out of scope, needs golden regen + Mike's sign-off): unifying the
+DEFAULT remodel path onto the same invariant. Low follow-ups also deferred
+(TransferPerRunQ orchestration unit test; double sidecar read).
+
 ## Branch Information
 - **Branch**: `Skyline/work/20260720_osprey_pass2_per_run_qvalue` (off master df9bb0121)
-- **Status**: Active (started 2026-07-19 night, autonomous session)
+- **Status**: Completed
+- **PR**: [#4438](https://github.com/ProteoWizard/pwiz/pull/4438) (merged 2026-07-22)
 - **Commits**: a98759c72 (redesign) + 14d2782b4 (AssignPerRunQ testable seam + unit test)
 
 ### 2026-07-20 (morning, Brendan): mdiag-on-resume memory + log-gap fixes
