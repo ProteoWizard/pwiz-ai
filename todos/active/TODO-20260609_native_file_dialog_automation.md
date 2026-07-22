@@ -387,3 +387,15 @@ tests offscreen:
 Still recommended before merge: the full localized nightly (ja + zh-CHS) across the
 whole branch, ideally on a dedicated integration branch, since this is a large branch
 and this class of failure only shows under a real multi-language run.
+
+### TestPrmMcpConnector: case-insensitive path compare (parallel Docker)
+
+A follow-up run under the parallel Docker test framework failed TestPrmMcpConnector in
+ALL languages. Not a localization issue: the native Open dialog returns the drive letter
+upper-cased ("C:\..."), while the Docker worker's results path (and so the expected
+paths) is lower-cased ("c:\AlwaysUpCLT\TestResults_N\..."), and the pre-existing
+`CollectionAssert.AreEquivalent` compared case-sensitively. Reproduced locally by
+running the test with a lowercase-drive `results=` path; the added expected-vs-actual
+dump showed the drive letter as the only difference. Fixed by comparing the paths
+case-insensitively (Windows paths are case-insensitive) and keeping the diagnostic
+message. Verified: lowercase-drive repro passes, and all 11 tests pass in en/fr/ja/tr/zh.
