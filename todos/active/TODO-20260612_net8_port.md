@@ -1850,5 +1850,76 @@ SIMscans/TutorialFuture) was MISLABELED; actually SIMscans = missing managed CKr
 - 🟡 `TestAlphaPeptDeepBuildLibrary` — `SkylineProcessRunner.exe` not in staging + AlphaPeptDeep Python env (harness).
 - 🟡 `TestDiaTtofDiaUmpireTutorial` (fr, ja) — non-EN audit-log recording, not yet root-caused.
 
-**Next session handoff**: For detailed startup protocol + the Sciex-reader fix brief, read
-`ai/.tmp/handoff-20260717_net8_perf_sciex.md` before starting work.
+**Next session handoff** (SUPERSEDED — see 2026-07-22 below): For the Sciex-reader fix brief, read
+`ai/.tmp/handoff-20260717_net8_perf_sciex.md`.
+
+---
+
+## 2026-07-22 — App-tier ports done; net8 per-commit CI GREEN (#51 1706/1706); loader + Thermo-French fixes; audit-log tolerance (WIP)
+
+**The net8 per-commit TeamCity build (`ProteoWizard_SkylineWindowsNet`) is GREEN — build #51 (`3d526a3470`)
+= 1706/1706, 0 failures**, running pass0 (French, no-vendor mzML) + pass2 (full English suite, real vendor
+readers) + ja/zh import + a pass1 functional subset. It was RED at #50; the loader fix below flipped it.
+
+**App-tier ports completed** (all multi-target net472;net8.0-windows, committed + mirrored to
+`chambem2/pwiz-sharp`): SkylineProcessRunner (`1662fd219a`), SkylineRunner/SkylineDailyRunner
+(`653cbc0be4`), SkylineTester (`7e97746fa2`), SkylineBatch+SharedBatch (+SkylineBatchTest 38/38,
+`6f06a355d9`), SkylineNightly+Shim (`805fae1e55`), AutoQC+AutoQCStarter+AutoQCTest (`8c4dd63005`). Gotchas
+in memory `reference_net8_app_port_gotchas`. **LaunchBatch DEFERRED** — trivial to multi-target but only
+launches ClickOnce `.appref-ms` refs, so blocked on the ClickOnce-replacement decision.
+
+**CI test policy rewritten in `build.bat`/`tcbuild.bat`** (`ce747ae461`, `07d1525866`, `77fcf2af73`) to
+mirror the old net472 per-commit check: the full English suite (pass2) PLUS three extra modes — French
+pass0 build-check over CommonTest+Test+TestData, `~\.TestImport` under ja/zh, and a pass1 functional subset
+(TestInstrumentInfo/TestQcTraces/TestTicChromatogram/TestDiaSearchFixedWindows). All modes run even if an
+earlier one has failing tests (only a compile error short-circuits); a `SKYLINE_TEST_ARGS` escape hatch
+runs a single custom TestRunner. Added CommonTest to BUILD_TARGET + Stage-Net8Tests default projects.
+
+**ThermoFormatsTest (pass0) FIXED — net8 loader-checkpoint regression (`3d526a3470`).** NOT
+French/reader/matcher: the net8 port loosened `MemoryDocumentContainer.IsFinal` (to stop WatersCacheTest
+hanging) to return final on ANY `LastProgress.IsFinal`. Multi-file loading posts a final status per file
+while parking the doc at a checkpoint (commit partial cache, re-trigger for the next file), so
+`SetDocument(wait:true)` returned before importing the 2nd file (mzXML) → empty infoSet. Refined IsFinal to
+distinguish by "are any files still uncached" (checkpoint→keep waiting; Waters→all cached, fail-fast).
+Memory `reference_net8_isfinal_multifile_checkpoint`. `ConsoleImportEiTest` re-checked and confirmed
+ALREADY PASSING (stale TODO note — fixed earlier by the mzXML lowMz/highMz fallback `288c8647d7`).
+
+**Thermo French-culture SRM import FIXED (`ae1c95ccfa`, pwiz-sharp).** With a proper vendor build,
+importing Thermo `.raw` under French threw `InvalidFilterFormatException` — the managed RawFileReader SDK
+parses the period-decimal SRM filters pwiz builds under the thread culture. Wrapped
+`ChromatogramList_Thermo.GetChromatogram`'s SDK dispatch in InvariantCulture (restore in finally). 13
+Thermo/ConsoleImport tests now pass fr+en. CI never caught it (only English+vendor or French+no-vendor).
+Memory `reference_net8_dotnetbuild_vendor_staging`: a bare `dotnet build`+Stage staging ALSO pulls a
+mismatched Thermo SDK → the SAME exception even in English; use build.bat/CI, not dotnet build, for
+vendor-reader test runs.
+
+**Suite results (proper vendor build):** TestData clean (my local "151/166" was the dotnet-build staging
+artifact; CI #51 pass0+pass2 both green). TestTutorial **en 26/26**; **fr** had 3 audit-log-baseline
+failures (TestIrtTutorial/TestMethodRefinementTutorial/TestPeakPickingTutorial) — net8's `double.ToString`
+emits shortest-round-trip (17 sig figs) where net472 emitted ~15, and the two frameworks differ by ~1 ULP
+right at the 15th figure (e.g. slope `0,151543213352228` vs `0,15154321335222853`).
+
+**⚠️ UNCOMMITTED + NEEDS REWORK — `AssertEx.cs` audit-log numeric tolerance.** Added
+`NumbersEquivalentWithinFloatNoise` (tokenize numbers comma/period-aware; compare within 1e-13 relative) to
+`LinesEquivalentIgnoringTimeStampsAndGUIDs`; makes the 3 fr tutorials pass. A `/code-review` flagged 7
+findings — the fix is at the wrong altitude:
+  1. It's in the SHARED `NoDiff` path (~38 callers: transition-list/koina/EncyclopeDIA CSV exports, .sky
+     docs, XSDs), so ALL now silently tolerate 1e-13 numeric drift, bypassing the opt-in `columnTolerances`
+     design → scope it to audit logs (or an opt-in param).
+  2. 1e-13 is 4 orders tighter than the EXISTING `AUDIT_LOG_NUMERIC_RELATIVE_TOLERANCE = 1e-9` used by
+     `AreAuditLogsEquivalentWithNumericTolerance` — reuse/reconcile that (a 3rd parallel impl; the sibling
+     `CommonTextUtil.LinesEquivalentIgnoringTimeStampsAndGUIDs` used by CompareDocuments is left unpatched).
+  3. Integers ≥~14 digits differing by 1 are tolerated (contradicts the "integers still match" comment);
+     `scale==0` rejects equal zeros formatted differently ("0" vs "0,0"). (Finding 7: the Thermo culture
+     wrap covers only extraction, not the ctor's index-building SDK calls — latent.)
+
+**Still open / next:** (1) rework the AssertEx audit-log tolerance per the review; (2) port remaining
+net472-only projects (SkylineAiConnector, the 8 arg-collectors, dev/build utilities); (3) LaunchBatch
+(deferred, ClickOnce); (4) `TestSciexPrmCeOptimization` isolation-halfwidth — verify current status vs the
+2026-07-17 handoff; (5) non-EN audit-log baselines for TestDiaTtofDiaUmpireTutorial (fr/ja). A clean full
+**fr TestTutorial** run was in progress at session end (verifying all 26 with the tolerance fix; the 3
+targets + tests 1-7 already green). Live status-map artifact:
+https://claude.ai/code/artifact/eb82129b-c56b-440a-acf7-52343461dce2
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260722_net8_ci_green_auditlog_tolerance.md` before starting work.
