@@ -2053,3 +2053,7 @@ their tests (Analyst/Sciex - `Process.Start(Analyst.exe/SciexOs.exe)`) can't be 
 `Process.Start`), so a net8 Skyline shells out to net472 OR net8 builder exes interchangeably. The value of the
 net8 port is future-proofing (Windows without net472), not a functional requirement today. New gotchas recorded
 in [[reference_net8_app_port_gotchas]]. **Only genuinely-unportable project left: BullseyeSharp (C++/CLI).**
+
+**Next session handoff**: For detailed startup protocol (port recipe, build/verify commands incl. the
+full-MSBuild path for COM projects, remaining backlog, vendor-test deployment steps), read
+`ai/.tmp/handoff-20260722c_net8_project_ports.md` before starting work.
