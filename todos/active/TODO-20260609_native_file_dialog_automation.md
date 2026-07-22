@@ -399,3 +399,20 @@ running the test with a lowercase-drive `results=` path; the added expected-vs-a
 dump showed the drive letter as the only difference. Fixed by comparing the paths
 case-insensitively (Windows paths are case-insensitive) and keeping the diagnostic
 message. Verified: lowercase-drive repro passes, and all 11 tests pass in en/fr/ja/tr/zh.
+
+A subsequent full Docker run found the SAME drive-letter casing bug in two more
+native-dialog tests (the connector round-trips paths through the Windows common
+dialog, which upper-cases the drive):
+
+* `NativeFileDialogTest` -- `Assert.AreEqual(savePath, DocumentFilePath)` after opening
+  through the native dialog, and the multiselect `CollectionAssert.AreEquivalent`.
+* `NativeMessageBoxTest` -- `WaitForConditionUI(() => Equals(DocumentFilePath, savePath))`
+  after a native Save; the case-sensitive compare never became true and it waited out
+  the full 720s timeout.
+
+Fixed all three to compare case-insensitively. `JsonToolServerTest` / `SkylineMcpTest`
+path asserts are fine as-is: they set the path via SaveDocument/RunCommand (which
+preserves the given casing), not the native dialog. Verified both tests pass with a
+lowercase-drive results path (Docker scenario) and in en/fr/ja/tr/zh with the normal
+path. (`ConsoleImportNonSRMFile` also failed in the run but is pre-existing/intermittent
+-- a corrupt-RAW import in a non-connector CommandLine test, unrelated to this branch.)
