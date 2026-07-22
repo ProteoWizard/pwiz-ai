@@ -45,6 +45,32 @@ if (-not (Test-Path -LiteralPath $serverExe)) {
     exit 1
 }
 
+# The server is an apphost pinned to a .NET major version (see its
+# runtimeconfig.json). Without a matching machine-wide runtime it exits 150.
+# Installing one under C:\Program Files\dotnet needs admin, so on locked-down
+# machines the runtime lives in a per-user install at %USERPROFILE%\.dotnet -
+# which the apphost does not search unless DOTNET_ROOT points at it. Set that
+# for this process only, and only when the machine-wide install falls short.
+if (-not $env:DOTNET_ROOT) {
+    $rtConfig = Join-Path $extDir.FullName '.roslyn\Microsoft.CodeAnalysis.LanguageServer.runtimeconfig.json'
+    $required = $null
+    if (Test-Path -LiteralPath $rtConfig) {
+        try {
+            $v = (Get-Content -LiteralPath $rtConfig -Raw | ConvertFrom-Json).runtimeOptions.framework.version
+            if ($v -match '^(\d+)\.') { $required = $Matches[1] }
+        } catch { }
+    }
+
+    if ($required) {
+        $userRoot   = Join-Path $env:USERPROFILE '.dotnet'
+        $frameworks = Join-Path $userRoot "shared\Microsoft.NETCore.App\$required.*"
+        $machine    = Join-Path $env:ProgramFiles "dotnet\shared\Microsoft.NETCore.App\$required.*"
+        if (-not (Test-Path -Path $machine) -and (Test-Path -Path $frameworks)) {
+            $env:DOTNET_ROOT = $userRoot
+        }
+    }
+}
+
 # $PSScriptRoot is ai/scripts/lsp; ai root is two levels up.
 $aiRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $logDir = Join-Path $aiRoot '.tmp\state\roslyn-logs'
