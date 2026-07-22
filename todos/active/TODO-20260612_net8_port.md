@@ -1899,10 +1899,15 @@ failures (TestIrtTutorial/TestMethodRefinementTutorial/TestPeakPickingTutorial) 
 emits shortest-round-trip (17 sig figs) where net472 emitted ~15, and the two frameworks differ by ~1 ULP
 right at the 15th figure (e.g. slope `0,151543213352228` vs `0,15154321335222853`).
 
-**⚠️ UNCOMMITTED + NEEDS REWORK — `AssertEx.cs` audit-log numeric tolerance.** Added
-`NumbersEquivalentWithinFloatNoise` (tokenize numbers comma/period-aware; compare within 1e-13 relative) to
-`LinesEquivalentIgnoringTimeStampsAndGUIDs`; makes the 3 fr tutorials pass. A `/code-review` flagged 7
-findings — the fix is at the wrong altitude:
+**✅ AUDIT-LOG NUMERIC TOLERANCE — REWORKED + COMMITTED (`fcf2ea59f7`).** The initial WIP added a parallel
+`NumbersEquivalentWithinFloatNoise` (1e-13) to the SHARED `NoDiff` path; a `/code-review` flagged 7 findings
+(fix at the wrong altitude). REWORKED: reverted the NoDiff addition and instead extended the existing
+audit-log-scoped `AreAuditLogsEquivalentWithNumericTolerance` to be culture-aware (numeric regex accepts
+`.`/`,`; `IsIntegerToken` treats `,` as a decimal separator; value parse via
+`CommonTextUtil.TryParseDoubleUncertainCulture`), reusing its established 1e-9/1e-12 tolerance + exact
+integer/zero-floor guards. Findings: 5 fixed, 2 skipped (`IsFinal` final-but-uncached-no-error edge = design
+trade-off; Thermo ctor index-build InvariantCulture wrap = latent). Verified: fr TestTutorial **26/26**, en
+`TestAuditLogTutorial` green. Original review findings, kept for the record:
   1. It's in the SHARED `NoDiff` path (~38 callers: transition-list/koina/EncyclopeDIA CSV exports, .sky
      docs, XSDs), so ALL now silently tolerate 1e-13 numeric drift, bypassing the opt-in `columnTolerances`
      design → scope it to audit logs (or an opt-in param).
@@ -1913,13 +1918,13 @@ findings — the fix is at the wrong altitude:
      `scale==0` rejects equal zeros formatted differently ("0" vs "0,0"). (Finding 7: the Thermo culture
      wrap covers only extraction, not the ctor's index-building SDK calls — latent.)
 
-**Still open / next:** (1) rework the AssertEx audit-log tolerance per the review; (2) port remaining
-net472-only projects (SkylineAiConnector, the 8 arg-collectors, dev/build utilities); (3) LaunchBatch
-(deferred, ClickOnce); (4) `TestSciexPrmCeOptimization` isolation-halfwidth — verify current status vs the
-2026-07-17 handoff; (5) non-EN audit-log baselines for TestDiaTtofDiaUmpireTutorial (fr/ja). A clean full
-**fr TestTutorial** run was in progress at session end (verifying all 26 with the tolerance fix; the 3
-targets + tests 1-7 already green). Live status-map artifact:
+**Still open / next (working tree CLEAN at `fcf2ea59f7`, CI green):** (1) port remaining net472-only
+projects (SkylineAiConnector, the 8 arg-collectors under Executables/Tools, the dev/build utilities);
+(2) LaunchBatch (deferred, ClickOnce); (3) `TestSciexPrmCeOptimization` isolation-halfwidth — verify current
+status vs the 2026-07-17 handoff; (4) non-EN audit-log baselines for TestDiaTtofDiaUmpireTutorial (fr/ja) —
+the culture-aware tolerance may now clear these; (5) optional low-pri review follow-ups: `IsFinal`
+final-but-uncached edge, Thermo ctor index-build InvariantCulture wrap. Live status-map artifact:
 https://claude.ai/code/artifact/eb82129b-c56b-440a-acf7-52343461dce2
 
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260722_net8_ci_green_auditlog_tolerance.md` before starting work.
+`ai/.tmp/handoff-20260722b_net8_auditlog_reworked.md` before starting work.
