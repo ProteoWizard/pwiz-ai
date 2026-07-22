@@ -28,6 +28,8 @@ Data folder confirmed present: `WormUnrefined.sky` + pre-cached `WormUnrefined.s
 | s-05 | Retention Time Prediction | PASS | Score-To-Run regression graph matches (axes, both lines, scatter, outliers); minor slope/r drift at 0.9 threshold |
 | s-06 | Retention Time Prediction | PASS | after Set Threshold 0.95: slope 1.52/window 15.6/r 0.951 vs ref 1.53/15.8/0.9511 — near-identical |
 | s-07 | Retention Time Prediction | PASS | chromatogram Predicted RT indicator (63.0) + shaded window matches ref (63.1) |
+| s-08 | Missing Data | PASS* | YLAEVASEDR selected via locator (graph-point mouse-click not driveable); tree content matches, selection auto-scrolled to viewport bottom (missing-data peptides below out of frame) |
+| s-09 | Missing Data | PASS | "File: worm_0027.RAW" choice-list toolbar present + doubled y3-y10 legend (two files) + chromatogram (42.4/68.8/57.0/65.1) match ref |
 
 ## Progress log
 
@@ -93,3 +95,16 @@ Data folder confirmed present: `WormUnrefined.sky` + pre-cached `WormUnrefined.s
 - s-07: chromatogram (first peptide VLEAGGLDC[+57]DMENANSVVDALK) shows "Predicted" RT
   indicator at 63.0 (ref 63.1) with the shaded ±window (~55-71 min) around the 63.8 peak,
   peaks 41.4/48.2/62.4/67.7 and y3-y13 legend — matches ref.
+
+### Missing Data (s-08, s-09) — PASS [2026-07-22]
+- Tutorial selects the left-most x-axis outlier by **mouse-clicking the graph point**
+  (cursor→hand). No MCP verb for clicking a data point on a graph → achieved the same
+  selection with `set_selection` `Molecule:/peptides1/YLAEVASEDR`. s-08 Targets content
+  matches (…VKVEQELNDIC[+57]QDVLK (missed 1) → YLAEVASEDR selected); the tree scrolled
+  the selection to the viewport bottom so the 7 missing-data peptides below are out of
+  frame (no scroll verb) — cosmetic.
+- Selected VTVVDDQSVILK (`Molecule:/peptides1/VTVVDDQSVILK`, peptide 158/224). s-09: the
+  chromatogram pane shows the **"File:" choice list = worm_0027.RAW** and the y3-y10
+  legend is DOUBLED (transitions for worm_0027 + worm_0028) — the tutorial's evidence
+  that a transition list was duplicated across two RAW files. Clean chromatogram
+  (Predicted 45.7, peaks 42.4/68.8/57.0/57.7/65.1, y to 350) matches ref.
