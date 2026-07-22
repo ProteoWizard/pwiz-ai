@@ -1928,3 +1928,50 @@ https://claude.ai/code/artifact/eb82129b-c56b-440a-acf7-52343461dce2
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260722b_net8_auditlog_reworked.md` before starting work.
+
+## 2026-07-22 (session c) — Sciex CE-opt RESOLVED (stale, not a reader bug); Thermo ctor culture wrap committed; IsFinal left as-is
+
+Worked the 3 low-pri follow-ups from session b's next-steps (items 3/5a/5b). Item 4 (fr/ja
+DIA-Umpire audit-log baselines) deferred by request.
+
+**Item 3 — `TestSciexPrmCeOptimization` (TestPerf): ALREADY RESOLVED at HEAD — verified passing
+(en, 24s, 0 failures). NOT a reader bug; the 2026-07-17 root-cause was wrong on every count.**
+Investigated the Skyline layer per request and found the test already green, then traced *why*
+the reader was never the problem (memory `project_net8_sciex_reader_parity` corrected in full):
+- `.wiff2` is read via the MODERN SCIEX.Apis SDK on BOTH frameworks — C++ `WiffFile::create`
+  (`WiffFile.cpp:1053`, `iends_with(".wiff2")→WiffFile2Impl`) and managed `AbstractWiffFile.Open`
+  (`.wiff2→Wiff2File` plugin) dispatch identically. There IS a `Wiff2Spectrum` class
+  (`Vendor/Sciex/Wiff2/Wiff2File.cs:336`); the handoff's "no Wiff2Spectrum, fix
+  `WiffSpectrum.IsolationHalfWidth`" pointed at the legacy `.wiff` path that is never hit.
+- Raw SDK ground truth (diagnostic dump of 60 Product/TOFMSMS spectra): `IsolationWindowTarget=491.27`
+  (2-dec rounded), `LowerOffset=UpperOffset=0` — the SDK provides NO Q1 width. Managed `Wiff2Spectrum`
+  faithfully ports C++ `WiffFile2::getIsolationInfo` (`WiffFile2.ipp:744-746`) + `SpectrumList_ABI.cpp:200-208`,
+  so net472 and net8 emit IDENTICAL mzML (target 491.27, no offsets). A reader change would DIVERGE from net472.
+- The "zero-width window can't contain 491.26559" reasoning is a RED HERRING: for `acquisition_method="PRM"`
+  Skyline IGNORES the file's offsets and re-matches with width `2*MzMatchTolerance` around the target
+  (`SpectrumFilter.FindFilterPairs` PRM branch). doc2.sky `mz_match_tolerance=0.055` >> Δ0.0044, so it matches.
+- Fixed by an intervening commit after 2026-07-17 `aec97caad0` (not pinned; candidates: wiff2 non-ASCII
+  reader-robustness `f9d574d75d`, or the CommandLineWiff file-handle ReadHead retry). **No code change; TODO
+  item retired.** Lesson: RUN a stale "open failure" before diagnosing.
+
+**Item 5b — Thermo constructor InvariantCulture wrap: COMMITTED `9aefc1e79d` (origin + chambem2).**
+The extraction fix `ae1c95ccfa` only wrapped `GetChromatogram`; the ctor's SIM/SRM index-building
+(`GetFilterForScanNumber(...).ToString()` matched as dict keys vs period-formatted `GetAutoFilters()`)
+had the same latent French gap → empty SIM/SRM index. Extracted the culture save/set/restore into a
+shared `RunInvariant` helper and wrapped the ctor. Latent (CI never runs French+vendor). Verified no
+regression: `ThermoQuantTest` suite (8 methods incl. SRM `.raw` imports ThermoFormatsTest/ThermoRatioTest/
+ThermoMixedPeptidesTest) passes fr+en with real vendor readers (ran by swapping the rebuilt reader into
+today's vendor staging — the Thermo SDK dll is byte-identical, avoiding the bare-staging SDK-mismatch trap
+`reference_net8_dotnetbuild_vendor_staging`).
+
+**Item 5a — `MemoryDocumentContainer.IsFinal` final-but-uncached-no-error edge: LEFT AS-IS (recommend no
+change).** The hang only triggers if a loader posts a final error-free status yet leaves a file uncached
+AND never re-triggers — a loader bug already surfaced by `WaitForComplete`'s 1-hour diagnostic. Any
+timeout/no-progress hardening risks reintroducing the ThermoFormatsTest regression `3d526a3470` fixed
+(bailing before a slow checkpoint re-trigger). The /code-review already classified it a design trade-off.
+
+**Still open / next (working tree CLEAN at `9aefc1e79d`, CI expected green):** (1) port remaining net472-only
+projects (SkylineAiConnector, the 8 arg-collectors under Executables/Tools, dev/build utilities); (2)
+LaunchBatch (deferred, ClickOnce); (3) item 4 — non-EN audit-log baselines for TestDiaTtofDiaUmpireTutorial
+(fr/ja): re-run under language=fr/ja to see if the culture-aware tolerance now clears them (deferred this
+session). Items 3/5a/5b above are closed.
