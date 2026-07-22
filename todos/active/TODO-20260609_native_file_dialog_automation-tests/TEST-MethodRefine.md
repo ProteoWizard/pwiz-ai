@@ -38,6 +38,9 @@ Data folder confirmed present: `WormUnrefined.sky` + pre-cached `WormUnrefined.s
 | s-15 | Picking Measurable | PASS | LDWALPTAR chromatogram y6/y5/y4 peak 50.2 matches ref (minor y-axis autoscale 7 vs 8) |
 | (Automated Refinement) | no screenshot | DIVERGENCE | Refine rank3/r0.95/dotp0.8 → 75 pep/225 tran (tutorial 80/240); rank6/r0.9/dotp0.712 → 119 pep (tutorial 127). SSRCalc-drift cascade (RT-outlier filter) |
 | (Scheduling import) | no screenshot | PASS | Unscheduled01/02 imported; Refine>Remove Missing Results → 86 pep/256 tran (tutorial 86/255) — count RECOVERS exactly |
+| s-16 | Measuring Retention Times | PASS | Export Transition List form exact (Multiple, 130, Methods: 2, Ignore proteins checked) |
+| s-17 | Reviewing RT Runs | PASS* | FWEVISDEHGIQPDGTFK (57/86) tiled Unscheduled01/02 chromatograms match; tile order swapped (cosmetic), 167/256 vs 166/255 |
+| s-18 | Reviewing RT Runs | PASS | Scheduling graph (2/5/10-min window concurrent-transitions curves) matches ref |
 
 ## Progress log
 
@@ -161,3 +164,15 @@ Data folder confirmed present: `WormUnrefined.sky` + pre-cached `WormUnrefined.s
 - `Refine > Remove Missing Results` → **86 pep / 256 tran** (tutorial 86 / 255). Peptide
   count matches EXACTLY — the data-driven Scheduling count recovers despite the earlier
   refinement divergence. (256 vs 255 tran: one peptide keeps 3 vs 2, negligible.)
+
+### Measuring Retention Times (s-16, s-17, s-18) — PASS [2026-07-22]
+- `File > Export > Transition List` → Max transitions=130. s-16 form EXACT: Multiple
+  methods, **Methods: 2**, Ignore proteins checked (ref matches). OK → native Save
+  `...\MethodRefine\Unscheduled` → 2 CSVs `Unscheduled_0001.csv`, `Unscheduled_0002.csv`.
+- Closed Library Match (`dismiss_with_cancel_button`). `View > Arrange Graphs > Tiled`.
+  Selected FWEVISDEHGIQPDGTFK (57/86). s-17: Unscheduled01 (peak 62.1) + Unscheduled02
+  (peak 62.4) tiled, y9/y6/y4 — matches ref; tile L/R order swapped (cosmetic Tiled
+  ordering), status 167/256 vs 166/255. Had to close a leftover Peak Areas graph first.
+- `View > Retention Times > Scheduling` → floating GraphSummary. s-18 concurrent-
+  transitions curves (2/5/10-min windows, 10-min peak ~90 at scheduled time ~50)
+  match ref (only legend line-wrap differs). Confirms the s-07 RT predictor works.
