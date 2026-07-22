@@ -2023,5 +2023,33 @@ normal SDK project vs a VS deploy/WiX project). Deferred: LaunchBatch (ClickOnce
 compiles the Bullseye source against the C++/CLI `pwiz_data_cli.dll` (no net8 equivalent) and is built only by
 the net472 Jam toolchain; net8 Skyline already uses the managed `pwiz-sharp/Tools/BullseyeSharp/src`
 (AssemblyName `bullseye-sharp`, `bullseye-sharp.exe`) via a net8-only ProjectReference in Skyline.csproj
-(lines ~287-297). Same permanently-net472 bucket as the 9 Build*Method vendor builders (out of scope).
-SkylineAiConnector already net8.
+(lines ~287-297). BullseyeSharp is the GENUINE un-portable case (C++/CLI); the Build*Method builders turned
+out to be portable and are now ported (see below). SkylineAiConnector already net8.
+
+## 2026-07-22 (session c cont.) — Build*Method vendor builders: feasibility PROVEN + all 10 ported (`2fff27594f`)
+
+Matt asked to test whether the "out of scope" vendor method builders can port to net8 (reason: a future
+Windows may not ship .NET Framework 4.7.2). **They can — all 10 ported + committed (`2fff27594f`, dual-pushed).**
+
+**Compile (both TFMs):** the 7 managed-vendor-DLL builders (Thermo, Sciex, Agilent, Bruker, Shimadzu, Waters =
+net472;net8.0-windows; AgilentMH12 = **net48**;net8.0-windows - its `Agilent.MSDrivers.LCQuadrupole.*` DLLs
+target .NET 4.8, which 4.7.2 can't reference) build via `dotnet build`. The 3 COM-interop Analyst-family
+builders (BuildAnalystMethod stdole `<COMReference>`, + its ProjectReference dependents AnalystFullScan/QTRAP)
+build via full **`MSBuild.exe`** only - dotnet's Core MSBuild lacks the `ResolveComReference` task (**MSB4803**);
+the Skyline .sln pipeline uses full MSBuild so that's fine. Per-project net8 fixes: dropped a dead
+`using System.Runtime.Remoting.Messaging` in BuildWatersMethod (Remoting removed in net8); excluded the embedded
+MSTest-v1 `Test\` folders from AnalystFullScan/QTRAP (`Compile Remove` - that framework has no net8 build; the
+builder EXE is the deliverable); added `System.Configuration.ConfigurationManager` for QTRAP's Settings.
+
+**Runtime CONFIRMED (this is the important part):** `TestExportMethodShimadzu` (TestData) **PASSED (0 failures)**
+after deploying the net8-built `BuildShimadzuMethod.exe` into the staging `Method\Shimadzu\` - net8 Skyline
+shelled out to it, it loaded the net8 runtime + the net472 Shimadzu vendor DLLs and converted a bundled `.lcm`
+template into a method file. Also: net8 `BuildThermoMethod.exe` runs, loads + executes the net472 `Thermo.TNG.*`
+DLLs, failing only on a missing instrument-software registry key (identical on net472). So the net472-targeted
+vendor DLLs run under the net8 runtime; the only builders that truly need instrument hardware/software to run
+their tests (Analyst/Sciex - `Process.Start(Analyst.exe/SciexOs.exe)`) can't be exercised on a dev box either way.
+
+**Architectural note:** Skyline invokes all builders as separate-process exes (`MethodExporter.ExportMethod` ->
+`Process.Start`), so a net8 Skyline shells out to net472 OR net8 builder exes interchangeably. The value of the
+net8 port is future-proofing (Windows without net472), not a functional requirement today. New gotchas recorded
+in [[reference_net8_app_port_gotchas]]. **Only genuinely-unportable project left: BullseyeSharp (C++/CLI).**
