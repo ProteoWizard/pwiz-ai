@@ -127,6 +127,16 @@ other steps drove, most with exact screenshot matches.
 - **Fix suggestions:** open each submenu (fire `DropDownOpening`) before matching;
   and investigate why the spectrum graph's `ContextMenuBuilder` menu isn't exposed
   (the TODO says graph context menus are invokable).
+- **⚠ UPDATE — reconciled by the MethodRefine run (see `TEST-MethodRefine.md`
+  Finding #2):** that run **succeeded** at `View > Libraries > Ion Types > B`
+  (b-ions rendered) and drove graph right-click menus (Set Threshold, Create
+  Regression, Legend) via `click_control_menu_item` with **`control=""` (empty
+  control string)**. So this finding is **not a hard gap** — graph context menus
+  and the Ion Types leaf ARE reachable. My MethodEdit attempts likely used the
+  wrong control argument (named control / `msGraphExtension` path) or hit a
+  transient unpopulated-submenu state. **Action:** re-verify the exact approach;
+  treat "graph menu → `control=""`" as the canonical method and downgrade this
+  from "capability gap" pending that re-test.
 
 ### 3. [Tutorial-text — stale] Protein-metadata columns now populated (s-10)
 - **What:** The tutorial says the Accession/Preferred Name/Gene/Species columns of
