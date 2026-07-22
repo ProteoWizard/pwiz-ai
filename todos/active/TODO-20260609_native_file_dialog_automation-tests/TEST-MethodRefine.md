@@ -25,6 +25,9 @@ Data folder confirmed present: `WormUnrefined.sky` + pre-cached `WormUnrefined.s
 | s-02 | Unrefined Methods | PASS* | Export Transition List form matches (Thermo, Multiple, 59, Methods: 39); "Ignore proteins" came up checked (persisted from prior session) vs reference unchecked — unchecked to match |
 | s-03 | Importing Multiple Injection Data | SKIPPED | Optional per tutorial (needs separate 36MB MethodRefineSupplement.zip; re-import yields the same pre-cached .skyd already loaded) |
 | s-04 | Simple Manual Refinement | PASS | full-range chromatogram (RT 0-100, peaks 34.8/53.0/64.1/72.4) matches reference |
+| s-05 | Retention Time Prediction | PASS | Score-To-Run regression graph matches (axes, both lines, scatter, outliers); minor slope/r drift at 0.9 threshold |
+| s-06 | Retention Time Prediction | PASS | after Set Threshold 0.95: slope 1.52/window 15.6/r 0.951 vs ref 1.53/15.8/0.9511 — near-identical |
+| s-07 | Retention Time Prediction | PASS | chromatogram Predicted RT indicator (63.0) + shaded window matches ref (63.1) |
 
 ## Progress log
 
@@ -67,3 +70,26 @@ Data folder confirmed present: `WormUnrefined.sky` + pre-cached `WormUnrefined.s
 - `View > Auto-Zoom > None` (Shift-F11). Live "Unrefined" chromatogram (full RT 0-100,
   peaks 34.8/40.3/53.0/52.2/64.1/59.6/67.5/72.4, y-axis to 14e3) matches s-04.png.
 - `Edit > Delete` removed first peptide → doc **225→224 pep, 2096→2083 tran**.
+
+### Retention Time Prediction (s-05, s-06, s-07) — PASS [2026-07-22]
+- `View > Retention Times > Regression > Score To Run` → floating GraphSummary opened.
+  s-05 live matches ref structurally (SSRCalc 3.0 (300A) Score vs Measured Time, Refined
+  + full regression lines, blue Peptides Refined / purple Outliers, x-axis missing-peak
+  outliers). Minor numeric drift at the default 0.9 threshold (live slope 1.52/r 0.9021
+  vs ref 1.64/r 0.9033).
+- **Graph right-click menu**: `click_control_menu_item` with control=`graphControl`
+  FAILED ("No control ... supports get_children"), but with an **EMPTY control string**
+  it SUCCEEDED (reaches the form's own right-click/ZedGraph menu). This is the key
+  method for graph context menus — see Findings (differs from MethodEdit's "no context
+  menu" conclusion).
+- Set Threshold → dialog → Threshold=0.95 → OK. s-06 live slope 1.52/intercept 2.85/
+  window 15.6/r 0.951 vs ref 1.53/2.49/15.8/0.9511 — near-identical, expanded outlier
+  set matches.
+- Create Regression → **Edit Retention Time Predictor** pre-populated: Name WormUnrefined,
+  Slope 1.516, Intercept 2.850, Time window 15.6194, Calculator SSRCalc 3.0 (300A),
+  **"(140 peptides, R = 0.951)"**. Tutorial states **146 peptides** / window 15.7 —
+  DIVERGENCE of 6 in the refined-set count (SSRCalc/version drift; regression stats still
+  match). Accepted with OK.
+- s-07: chromatogram (first peptide VLEAGGLDC[+57]DMENANSVVDALK) shows "Predicted" RT
+  indicator at 63.0 (ref 63.1) with the shaded ±window (~55-71 min) around the 63.8 peak,
+  peaks 41.4/48.2/62.4/67.7 and y3-y13 legend — matches ref.
