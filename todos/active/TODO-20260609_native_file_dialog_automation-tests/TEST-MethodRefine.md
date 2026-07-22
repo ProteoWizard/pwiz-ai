@@ -30,6 +30,12 @@ Data folder confirmed present: `WormUnrefined.sky` + pre-cached `WormUnrefined.s
 | s-07 | Retention Time Prediction | PASS | chromatogram Predicted RT indicator (63.0) + shaded window matches ref (63.1) |
 | s-08 | Missing Data | PASS* | YLAEVASEDR selected via locator (graph-point mouse-click not driveable); tree content matches, selection auto-scrolled to viewport bottom (missing-data peptides below out of frame) |
 | s-09 | Missing Data | PASS | "File: worm_0027.RAW" choice-list toolbar present + doubled y3-y10 legend (two files) + chromatogram (42.4/68.8/57.0/65.1) match ref |
+| s-10 | Picking Measurable | PASS | peptide view dotp values all match (1160.5434++ 0.57, 1117.5455++ 0.53, 686.3670++ 0.87, 521.7876++ 0.9, 870.4154++ 0.55) |
+| s-11 | Picking Measurable | PASS | chromatogram 11 co-eluting y-ions on 63.8 peak matches ref |
+| s-12 | Picking Measurable | PASS | library spectrum y10/b10 (rank1) + y12/b12 (rank2) co-annotation matches ref |
+| s-13 | Picking Measurable | PASS | expanded precursor transitions + library ranks + bracketed SRM ranks all match exactly |
+| s-14 | Picking Measurable | PASS | VTLDSLYAPHAGK (dotp 0.94, y7/y6/y5) + LDWALPTAR (dotp 0.89, y6/y5/y4) tree matches ref |
+| s-15 | Picking Measurable | PASS | LDWALPTAR chromatogram y6/y5/y4 peak 50.2 matches ref (minor y-axis autoscale 7 vs 8) |
 
 ## Progress log
 
@@ -108,3 +114,26 @@ Data folder confirmed present: `WormUnrefined.sky` + pre-cached `WormUnrefined.s
   legend is DOUBLED (transitions for worm_0027 + worm_0028) — the tutorial's evidence
   that a transition list was duplicated across two RAW files. Clean chromatogram
   (Predicted 45.7, peaks 42.4/68.8/57.0/57.7/65.1, y to 350) matches ref.
+- Closed the floating regression graph: menu toggle re-showed it and the graph
+  right-click menu has no "Close"; `dismiss_with_cancel_button` on the FloatingWindow
+  closed it.
+
+### Picking Measurable Peptides and Transitions (s-10..s-15) — PASS [2026-07-22]
+- Selected first peptide (VLEAGGLDC[+57]DMENANSVVDALK), F11 Best Peak, `Edit > Expand
+  All > Peptides`. s-10 peptide-view dotp values all match reference exactly.
+- s-11 chromatogram (11 co-eluting y-ions, 63.8 peak) and s-12 library spectrum
+  (y10/b10 rank1, y12/b12 rank2 co-annotation) match ref.
+- Expanded precursor via `perform_action expand type=TreeView value=["peptides1",0,0]`
+  (index path; the text-path form failed on the modified peptide's node text). s-13
+  transitions + library ranks + bracketed SRM ranks match exactly.
+- Deleted VLEAGGLDC[+57]DMENANSVVDALK and WNTENQLGTVIEVNEQFGR (`set_selection` + `Edit >
+  Delete`) → 224→222 pep, 2083→2061 tran.
+- VTLDSLYAPHAGK: read SRM ranks from the expanded tree; kept the 3 both-agree ions
+  (y5/y6/y7), multi-selected the other 6 (y11/y10/y9/y8/y4/y3 via additionalLocators) →
+  `Edit > Delete`. dotp 0.87→0.94. Matches s-14.
+- LDWALPTAR: SRM ranks y4[1]/y5[2]/y6[3]/y7[4]/y3[5]; deleted y7 + y3, kept y4/y5/y6.
+  dotp 0.89. s-14 tree + s-15 chromatogram (y6/y5/y4, peak 50.2) match ref.
+- Multi-transition delete via `set_selection` primary + `additionalLocators` worked
+  cleanly (no send-key needed) — a positive for transition-level refinement.
+- Skipped the no-screenshot optional VTADVGVTSAPVINAAGVFSR manual edit (keep y14/y13/y11);
+  Automated Refinement re-filters to 3 transitions/precursor regardless.
