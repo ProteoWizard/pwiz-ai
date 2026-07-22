@@ -2017,6 +2017,11 @@ in-process loading of a net8-built arg-collector DLL) is a separate step.
 
 **Remaining net472-only port backlog:** interactive tools (ExampleInteractiveTool,
 TestCommandLineInteractiveTool, TestInteractiveTool, SkylineIntegration/XLTCalc, MPPExport, SkyGadget),
-AdvancedEditingCommands + ToolServiceTestHarness (net7 -> net8), BullseyeSharp (legacy), SetupDeployProject
-(Installer). Deferred: LaunchBatch (ClickOnce). Out of scope: the 9 Build*Method vendor method builders.
+AdvancedEditingCommands + ToolServiceTestHarness (net7 -> net8), SetupDeployProject (Installer - verify it's a
+normal SDK project vs a VS deploy/WiX project). Deferred: LaunchBatch (ClickOnce).
+**NOT a port target - permanently net472 legacy:** `pwiz_tools/Skyline/BullseyeSharp/BullseyeSharp.csproj`
+compiles the Bullseye source against the C++/CLI `pwiz_data_cli.dll` (no net8 equivalent) and is built only by
+the net472 Jam toolchain; net8 Skyline already uses the managed `pwiz-sharp/Tools/BullseyeSharp/src`
+(AssemblyName `bullseye-sharp`, `bullseye-sharp.exe`) via a net8-only ProjectReference in Skyline.csproj
+(lines ~287-297). Same permanently-net472 bucket as the 9 Build*Method vendor builders (out of scope).
 SkylineAiConnector already net8.
