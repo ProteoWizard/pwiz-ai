@@ -52,6 +52,11 @@ longer resolves to a peptide in the current document) plus the `TestStaleSelecti
 regression coverage folded into `ChromGraphTransformTest`. Copilot's one comment led
 to hoisting the guard to the top of the loop so a stale group can't influence
 auto-zoom; re-inspected, re-self-reviewed, and re-verified red/green at the new
-placement — all clean. The `Cherry pick to release` label is set; the work branch is
-intentionally left in place (local + remote) until the automated cherry-pick to
-`Skyline/skyline_26_1` runs.
+placement — all clean.
+
+### 2026-07-22 - Cherry-picked and cleaned up
+
+Cherry-pick PR #4444 merged to `Skyline/skyline_26_1` as commit 80b5225. Work branch
+`Skyline/work/20260721_graphchrom_totals_null_peptide` deleted (local + remote).
+Exception #75292 (fingerprint 12e70ba8d154fc90) recorded fixed on the dashboard for
+both master (#4443) and release (#4444).
