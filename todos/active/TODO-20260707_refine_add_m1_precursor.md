@@ -40,8 +40,13 @@ and must round-trip in the document.
 - **No form resizing**: the checkbox fits in the existing gap between the Peaks textbox
   and the "Isotope labeling enrichment" label, so no containing form had to grow. The
   Import Peptide Search wizard's `groupBoxMS1` shrink was re-anchored to the checkbox.
-- **New document format**: `VERSION_26_11` / `MINUS_ONE_PRECURSOR`, with a
-  `RemoveUnsupportedFeatures` clause that clears the flag when saving to an older format.
+- **New document format**: `VERSION_26_11`, for the added `Skyline_Current.xsd` attribute.
+- **No `RemoveUnsupportedFeatures` clause**: a first pass cleared the flag when saving to
+  an older format; Nick removed it. That downgrade handling is only worth doing when the
+  unsupported property would cause a real compatibility problem, and this one does not.
+  The attribute is purely additive, so an older Skyline ignores it, and the M-1
+  transitions it produces are ordinary precursor transitions with mass index -1, which
+  every version already understands (the pick list has always offered them).
 
 ## Completed
 - Reverted the Refine dialog approach (RefineDlg, RefinementSettings, RefineMenu,
