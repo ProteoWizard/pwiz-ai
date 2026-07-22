@@ -3,10 +3,10 @@
 ## Branch Information
 - **Branch**: `Skyline/work/20260720_cli_peakboundary_unrecognized_warnings`
 - **Base**: `master`
-- **Status**: Active (started 2026-07-20)
+- **Status**: Completed
 - **Checkout**: `C:\Dev\cmdline`
-- **GitHub Issue**: [#4439](https://github.com/ProteoWizard/pwiz/issues/4439)
-- **PR**: [#4440](https://github.com/ProteoWizard/pwiz/pull/4440) (opened 2026-07-20, Fixes #4439)
+- **GitHub Issue**: [#4439](https://github.com/ProteoWizard/pwiz/issues/4439) (auto-closed via Fixes)
+- **PR**: [#4440](https://github.com/ProteoWizard/pwiz/pull/4440) (merged 2026-07-22 as ff1f20a9, Fixes #4439)
 - **Origin**: Deferred follow-up from #4350 (replicate-name keying). While testing that
   feature, James hit a silent no-op: `SkylineCmd --import-peak-boundaries` imports nothing
   when rows match no file/peptide/charge, giving no clue why. Requester: James.
@@ -91,6 +91,16 @@ document result.
   "file or replicate name(s)" so a replicate-keyed no-match (James's exact case) is labeled
   accurately instead of calling his replicate name a "file name". Keys renamed to match the values
   (strings are new in this branch, so no released/translated text is affected).
+
+### 2026-07-22 - Merged
+
+PR #4440 merged to master as commit ff1f20a9 (squash), Fixes #4439. `SkylineCmd
+--import-peak-boundaries` now surfaces every skipped row (unrecognized peptide, file/replicate
+name, or peptide/file/charge-state combination) as a bounded, earliest-first, line-numbered
+`Warning:` mirroring the GUI dialog — non-fatal, exit code unchanged, importer/GUI/audit-log
+otherwise untouched. Incorporated Nick Shulman's review: the parallel unrecognized HashSets were
+merged into the line-number dictionaries (one `Dictionary<T,long>` per category, consumers use
+`.Keys`) and the CLI helper simplified. Nothing deferred from this PR's scope.
 
 ## Nick Shulman review round (commit 89dbeb19, 2026-07-22)
 - Two inline comments, both addressed + threads resolved:
