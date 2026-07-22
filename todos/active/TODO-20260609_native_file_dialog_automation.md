@@ -416,3 +416,27 @@ preserves the given casing), not the native dialog. Verified both tests pass wit
 lowercase-drive results path (Docker scenario) and in en/fr/ja/tr/zh with the normal
 path. (`ConsoleImportNonSRMFile` also failed in the run but is pre-existing/intermittent
 -- a corrupt-RAW import in a non-connector CommandLine test, unrelated to this branch.)
+
+### TestPrmMcpConnector: background score-type detection outliving the wizard (2026-07-22)
+
+After the casing fixes, a full Docker parallel run failed TestPrmMcpConnector on nearly every
+iteration with a temp-file leftover (`tmp####.tmp`) -- a different, intermittent, pre-existing
+issue the casing fix un-masked (the test now runs to completion, so the harness's post-test
+leftover check fires).
+
+Found by instrumentation (temp-dir snapshots per test step + a FileSystemWatcher; `/debugging`
+skill). Root cause: adding the search files runs `BuildLibraryGridView.FilePaths` setter ->
+a fire-and-forget `BackgroundWorker` -> `BlibBuild.GetScoreTypes`, which runs `BlibBuild.exe`
+with a `Path.GetTempFileName()` stdin file. The temp is deleted in a `finally` after the
+subprocess, but the worker OUTLIVES the wizard: the test closes the wizard while the subprocess
+is still running, so under parallel load the temp is still in use when the leftover check runs.
+(Also explained a one-off GC-leak: the worker kept the grid/window alive.)
+
+Fix (Brendan's direction -- teardown frees the background work, not a test-side wait):
+* `BuildLibraryGridView` runs the detection on a tracked `Thread` + `CancellationTokenSource`
+  instead of a `BackgroundWorker`. New `CancelScoreTypeDetection()` cancels (ProcessRunner honors
+  `IsCanceled` and kills `BlibBuild.exe`, so its `finally` deletes the temp) and joins the thread;
+  called from the grid's `Dispose`, from `ImportPeptideSearchDlg.OnFormClosing`, and before starting
+  a new detection. Results marshal with `BeginInvoke` so the join cannot deadlock.
+Verified: locally the temp is gone by end-of-DoTest every run (was ~50% leftover before);
+Brendan's Docker parallel run passed 150+ times across all 5 languages. Commit ff39b225c2.
