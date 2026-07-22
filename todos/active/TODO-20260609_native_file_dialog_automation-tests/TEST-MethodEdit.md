@@ -1,8 +1,10 @@
 # TEST — Targeted Method Editing (MethodEdit)
 
-**Status: WIP — through s-14 of s-23.** Claimed by Brendan + Claude (interactive
-session), 2026-07-22. Both the results log for MethodEdit and the worked example
-of the `TEST-<Name>.md` format (README §6).
+**Status: COMPLETE — driven end-to-end to the export (s-23).** Claimed by Brendan
++ Claude (interactive session), 2026-07-22. Both the results log for MethodEdit
+and the worked example of the `TEST-<Name>.md` format (README §6). One functional
+blocker (s-12, send-key) and one blocked section (s-16–22, keystroke/mouse); all
+other steps drove, most with exact screenshot matches.
 
 ## Run context
 
@@ -34,9 +36,9 @@ of the `TEST-<Name>.md` format (README §6).
 | s-12 | Insert Peptides (per-protein) | BLOCKED | protein resolution not triggered → bare list (Finding #1, send-key gap) |
 | s-13 | Find "IPEE" spectrum | PASS | exact — y6 r1 / b4 r2 (GPM peptide, unaffected by s-12) |
 | s-14 | Simple Refinement | PASS | count exact: 70 → 64 peptides |
-| s-15 | Peptide Uniqueness | NOT RUN | cascade-affected by s-12 (different "last protein") |
-| s-16 … s-22 | Direct Document Editing | NOT RUN | auto-complete/pick-lists/hover/drag — expect send-key & mouse gaps |
-| s-23 | Preparing to Measure / Export | NOT RUN | dialog-driven; expected drivable |
+| s-15 | Peptide Uniqueness | VERB OK | form drives (YAL035W); content cascade-diverged from s-12 |
+| s-16 … s-22 | Direct Document Editing | BLOCKED | auto-complete/pick-lists/hover/drag need send-key & mouse verbs (Finding #7) |
+| s-23 | Preparing to Measure / Export | PASS | form exact ("Methods: 5"); exported 5 CSV files, correct column format |
 
 ## Progress log (condensed)
 
@@ -76,6 +78,22 @@ of the `TEST-<Name>.md` format (README §6).
 - **Simple Refinement (s-13, s-14)** — PASS. `Edit > Find` "IPEE" → IPEEYLDANVFR
   (YAL034W-A); spectrum exact (y6 r1 / b4 r2). `Refine > Advanced` min 5
   transitions/precursor → **70 → 64** (exact).
+- **Peptide Uniqueness (s-15)** — VERB OK. Selected last protein (YAL035W in this
+  doc; a peptide-list protein in the tutorial — s-12 cascade); `Edit > Unique
+  Peptides` opened and rendered correctly (3 unique peptides + UniProt metadata).
+  Content can't match s-15's protein. Cancelled without deleting.
+- **Direct Document Editing (s-16–22)** — BLOCKED (not driven). Auto-completion
+  (type→popup), pop-up pick-lists (hover drop-arrow + funnel/binoculars), data
+  tips (hover), drag-and-drop are keystroke/mouse interactions with no MCP verb
+  (Finding #7). Documented, not probed (avoids corrupting the doc).
+- **Preparing to Measure / Export (s-23)** — PASS. Transition Settings →
+  Prediction: CE=SCIEX, DP=SCIEX; Instrument: Max m/z 1800. `File > Save` →
+  native Save As → `MethodEditTutorial.sky`. `File > Export > Transition List` →
+  Multiple methods, Ignore proteins, Max 75 → form **exact match** ("Methods:
+  5", instrument defaulted to SCIEX) → native Save → `Yeast_list`. **5 CSV files
+  written** (`Yeast_list_0001..0005.csv`) with the tutorial's column order
+  (precursor m/z, product m/z, dwell, extended peptide, DP, CE); only the
+  extended-peptide prefix shows the s-12 cascade (`peptides1.` vs protein name).
 
 ## Findings & fix suggestions
 
@@ -135,23 +153,48 @@ of the `TEST-<Name>.md` format (README §6).
   `get_locations`); the caption-less `textPeptideCount` needed
   `perform_action set_value type=TextBox` (not `set_form_value`).
 
+### 7. [MCP capability gap — send-key + mouse] Direct Document Editing undriveable
+- **What:** The entire "Direct Document Editing" section (s-16–22) is
+  keystroke/mouse-driven: **auto-completion** (type characters → suggestion popup,
+  s-16/17/18), **pop-up pick-lists** (hover a node's drop-arrow, click
+  funnel/binoculars, s-19/20), **data tips** (hover, s-21/22), and **drag-and-drop**
+  to reorder proteins. None map to a current MCP verb.
+- **Root cause:** no **send-key** verb, no **mouse hover/drag**, no **tree pop-up
+  pick-list** support — all three are on the TODO's own "remaining gaps" list.
+- **Impact:** the whole section can't be driven; blocks any tutorial that teaches
+  in-tree editing. (Not probed here to avoid corrupting the document.)
+- **Fix suggestions:** add send-key + a tree pick-list verb (and, longer-term, a
+  hover/data-tip and drag-reorder verb). These also unblock the s-12 peptide
+  resolution (Finding #1).
+
 ### Works-as-designed (positive)
-- Native file dialogs, tab selection, `check_item`/`uncheck_item`, combo/textbox
-  sets, `Find`, `Refine > Advanced`, `Remove Empty Proteins`, grid paste of a
-  protein list, `rename_node`, and direct locator selection all worked. s-01…s-09,
-  s-11, s-13, s-14 matched (s-05 partial, s-10 stale-tutorial).
+- Native file dialogs (open + save), tab selection, `check_item`/`uncheck_item`,
+  combo/textbox sets, `Find`, `Refine > Advanced`, `Remove Empty Proteins`, grid
+  paste of a protein list, `rename_node`, direct locator selection, the
+  Transition-List **export** (multi-file), and document **Save** all worked.
+  s-01…s-09, s-11, s-13, s-14, s-23 matched (s-05 partial, s-10 stale-tutorial).
 
-## Final status (interim)
+## Final status
 
-- **Completed:** s-01…s-14 driven; s-01–04, 06–09, 11, 13, 14 full matches; s-05
-  partial (Finding #2); s-10 stale-tutorial (Finding #3); **s-12 blocked
-  (Finding #1)**, causing a structural cascade for s-15+.
-- **Remaining:** s-15 (Uniqueness — cascade-affected), s-16–22 (Direct Document
-  Editing — expected send-key/mouse gaps), s-23 (Preparing to Measure / Export —
-  expected drivable).
-- **Overall so far:** the core method-building path (library, background proteome,
-  FASTA, transition settings, second library, limiting, protein-list insert,
-  refinement) is drivable with high-fidelity screenshot matches, given the
-  faithful-paste workaround and a human-granted screen capture. The **peptide→
-  protein Insert (send-key gap)** is the first hard functional blocker and the most
-  important fix.
+- **Reached the end** of the tutorial: built the method and **exported the SCIEX
+  transition list** (5 CSV files). Every menu/dialog-driven step drove.
+- **Screenshot outcomes:** full matches — s-01, 02, 03, 04, 06, 07, 08, 09, 11,
+  13, 14, 23. Partial — s-05 (Finding #2, b-ion overlay). Stale tutorial — s-10
+  (Finding #3, UniProt metadata). Verb-OK-but-cascaded — s-15. Blocked — s-12
+  (Finding #1), s-16–22 (Finding #7).
+- **Two things stop a *faithful, fully-autonomous* run:**
+  1. **s-12 / s-16–22 need keystroke & mouse verbs** (send-key, tree pick-lists,
+     hover, drag) — Findings #1 and #7. s-12 also causes a structural cascade
+     (bare peptide list) that diverges later structure-dependent screenshots,
+     though transition-driven counts and the export still line up.
+  2. **Screen-capture consent** needs a one-time human grant (Finding #4).
+- **Everything else works well.** With the faithful `Set-Clipboard`+`Edit>Paste`
+  substitution (Finding #5) and screen capture granted, a user + Claude can drive
+  MethodEdit from a blank document to an exported transition list via the MCP,
+  with high-fidelity screenshot verification at nearly every checkpoint.
+- **Priority fixes for Nick + Brendan:** (1) a **send-key / real-paste verb**
+  (unblocks s-12 and the auto-completion in s-16–18, the biggest wins); (2) tree
+  **pick-list** + **hover/drag** verbs (s-19–22); (3) **pre-grantable screen
+  capture** for autonomy; (4) an `import_fasta` keep-empty option; (5) update the
+  **s-10 tutorial text** for populated metadata; (6) the **Ion Types** on-demand
+  submenu / graph context menu.
