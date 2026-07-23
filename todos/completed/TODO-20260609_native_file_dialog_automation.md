@@ -2,15 +2,18 @@
 
 ## Status
 
-Active -- on the feature branch. Native Open + **Save** dialog automation, MCP
+Completed -- merged to master. Native Open + **Save** dialog automation, MCP
 StartPage support, and the generic form verbs (incl. radio buttons and custom
-clickable controls) have landed. The PRM tutorial's Import Peptide Search wizard
-now runs end to end over the connector. PR not yet opened.
+clickable controls) landed, along with the generic `PerformAction`/`GetControls`
+surface, the `McpTutorialTest` base class (TestUtil), and the WIP
+`DiaToSrmTutorialTest` (TestPerf) reproducing Webinar 22 as a draft DIAtoSRM
+tutorial. The later refinement/scheduling/export steps of that tutorial are
+deferred and being added incrementally.
 
 ## Branch Information
 
 - **pwiz branch**: `Skyline/work/20260609_native_file_dialog_automation`
-- **PR**: TBD
+- **PR**: [#4313](https://github.com/ProteoWizard/pwiz/pull/4313) (merged 2026-07-23)
 - **ai branch**: `master`
 
 ## Background
@@ -440,3 +443,19 @@ Fix (Brendan's direction -- teardown frees the background work, not a test-side 
   a new detection. Results marshal with `BeginInvoke` so the join cannot deadlock.
 Verified: locally the temp is gone by end-of-DoTest every run (was ~50% leftover before);
 Brendan's Docker parallel run passed 150+ times across all 5 languages. Commit ff39b225c2.
+
+### 2026-07-23 - Merged
+
+PR #4313 merged as commit a840067e8 (squash). Shipped: generic UI automation over
+the AI connector (`IJsonToolService`) -- `InvokeMenuItem`, `ClickFormButton`,
+`SetFormValue`, `GetControls`, `Accept`/`Close`, and a general `PerformAction`;
+native Open/Save file and Browse-For-Folder dialogs driven through the same
+`IFormElement` surface via UI Automation; the `McpTutorialTest` base class in
+TestUtil; and `DiaToSrmTutorialTest` (TestPerf) reproducing Webinar 22 as a draft
+DIAtoSRM tutorial. Issue #4089 auto-closed via `Fixes #4089` in the PR body.
+
+Deferred (WIP, tracked as follow-up, not part of the merged scope): the later
+DIAtoSRM tutorial steps (refinement/scheduling/export); the remaining Phase 3
+verbs (`GetFormState`, `SelectTab`, `SelectTreeNode`/tree pick-lists, send-key,
+derived-label matching); and the incremental migration of remaining tutorial
+tests from `SkylineWindow.OpenFile` to `OpenDocument`.
