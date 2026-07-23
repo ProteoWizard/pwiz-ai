@@ -7,7 +7,7 @@
 - **Status**: In progress, unpushed. Phase 2a/2b/2c + Declared operator + filter-string
   authoring all done and green locally. Gates not re-run since the Declared increment.
 - **GitHub Issue**: (none)
-- **PR**: (none yet)
+- **PR**: https://github.com/ProteoWizard/pwiz/pull/4422 (opened 2026-07-14, base `master`)
 
 Phase 1 (capture + full-scan display) shipped in
 [#4349](https://github.com/ProteoWizard/pwiz/pull/4349), merged 2026-07-14 as `cdea33f0b`.
@@ -167,10 +167,9 @@ no use outside spectrum filters):
 
 ## Remaining
 
-- **Rebase onto merged master** (`cdea33f0b`). Phase 1 renamed `RawMetadataInfo` -> `OtherMetadataInfo`,
-  the property `RawMetadata` -> `OtherMetadata`, and the resx keys; `SpectrumMetadataTerm` gained
-  `UnitAccession`. Expect conflicts in MsDataFileImpl / SpectrumMetadataTerm / ScanProvider.
-- **Re-run gates** (CodeInspection + full-solution ReSharper) - not run since the Declared increment.
+- ~~**Rebase onto merged master**~~ DONE 2026-07-14 (see progress log).
+- ~~**Re-run gates**~~ DONE 2026-07-22: CodeInspection + full-solution ReSharper both clean (0/0) after
+  the self-review fixes below.
 - **Discoverability #1 (chosen with Brian 2026-07-05; DESIGN PAUSED - capture strategy undecided).**
   Annotate the filter editor's CV column picker: distinguish terms actually **present in the loaded
   file(s)** vs the ontology **catalog** (possible-but-unseen), and surface each term's CV definition as
@@ -191,12 +190,36 @@ no use outside spectrum filters):
     filter exists.
   - (SeeMS enhancement is a secondary power-user option.)
 - **Autocomplete** of CV filter values (SpectrumFilterAutoComplete): include CV columns. Deferred (nicety).
-- **Grid direct file-read path** (SpectrumReader.ReadSpectraFromFile uses GetSpectrumMetadata, which does
-  not capture OtherParams) shows no CV values for not-yet-imported files; the imported-cache path works.
 - Editing an existing CV filter whose accession isn't in the catalog nor discovered still drops the row
   in the editor (pre-existing unknown-column behavior) - minor.
 
+  (Removed 2026-07-22: the stale "Grid direct file-read path" bullet — it noted the Spectrum Grid's
+  live-read path `SpectrumGridForm.ReadSpectraFromFile` -> `GetSpectrumMetadata(int)` doesn't capture
+  OtherParams. Moot since the Spectrum Grid CV-columns feature was dropped in `3d84de410`; the grid no
+  longer surfaces CV columns at all, so there's no user-visible gap. If that feature is ever revived,
+  its live-read path would need the capture the extraction path already does.)
+
 ## Progress Log
+
+### 2026-07-22 - Gates re-run + fresh-context self-review + serialization fix (commit `581956c0f`)
+
+- Re-ran both gates on `C:\Dev\SmartCV`: CodeInspection test green, full-solution ReSharper 0/0.
+- `/pw-self-review` (fresh-context agent) found a real serialization bug, independently verified:
+  **the cache round-trip corrupted a CV term's `Definition` and `UnitAccession`.** The proto `OtherParam`
+  message had no `unitAccession` field, and `SpectrumMetadatas` read passed `Definition` into the
+  constructor's 5th positional param (`unitAccession`), so after any save/reload `UnitAccession` = the
+  definition text and `Definition` = null. Latent today (viewer/extraction/discovery all read live or
+  ignore these fields) but data corruption in an **unreleased** persistent format, so fixed now.
+  The round-trip test was green against the bug because it built the expected term with the same 5-arg
+  slip **and** never asserted `UnitAccession`.
+- Fix (test-first, red then green): added proto `unitAccession = 6`; corrected `SpectrumMetadatas`
+  read/write; stopped `NullForEmpty`-ing the cache-read `Value` so a value-less flag stays "Is Declared"
+  after reload; fixed the catalog builder's definition placement (named arg); ordinal decoding of CV
+  column-name tokens; thread-safe + read-only `GetSpectrumCvTermCatalog`. Tightened `ResultFileMetaDataTest`
+  to assert `UnitAccession` and a non-null `Definition`.
+- Self-review #3 (numeric-vs-non-numeric hard-fail) RETAINED by Brian's call. #7 (editor caption dedup)
+  left by-design (caption is the combobox key; distinct CV terms can't collide) with an explaining comment.
+- No cache-format version bump: the new proto field is additive/self-describing (same rationale as Phase 2b).
 
 ### 2026-07-14 - Split from the Phase 1 TODO
 
@@ -204,3 +227,38 @@ Phase 1 merged as #4349 (`cdea33f0b`); this file carries the Phase 2 filtering w
 previously tracked in TODO-20260630_mzml_cv_metadata.md. All Phase 2 content above is unchanged
 from that file. Next step is a rebase onto the merged master, since Phase 1 renamed the display
 type and added `SpectrumMetadataTerm.UnitAccession`.
+
+### 2026-07-14 - Rebased onto merged master + CvValues databinding fix
+
+- Rebased the 14 Phase 2 commits onto `origin/master`: `git rebase --onto origin/master 9e3f91211`
+  (0 conflicts; dropped the branch's stale pre-merge Phase 1, incl. `RawMetadataInfo.cs` → master's
+  `OtherMetadataInfo.cs`). **The DONE-section commit SHAs above are now stale** (old `7c5810e08`… →
+  new `f859b8b01`…`57b8dd40a`). Backup at `backup/pre-rebase-20260714`. Build + full CV/filter suite
+  + CodeInspection green post-rebase.
+- A full French SkylineTester run (Brian) found the ONLY 2 failures: `TestAllColumnCaptionsAreLocalized`
+  + `TestAllColumnsHaveTooltips`, both from grid display — `SpectrumClass.CvValues` was
+  `IDictionary<string,object>`, exposing a forbidden report column named "Value". Fixed by wrapping the
+  value in a `CvParameterValue` type with `[InvariantDisplayName]` ("Parameter Value"); `GetValue` unwraps
+  so grid grouping/filtering unchanged (commit `73eaaa9cb`). `[Browsable(false)]` not viable — the grid's
+  `CvValues!<key>` lookup resolves through the same browsable-filtered path. Grid feature KEPT (Brian).
+  Gates green. **Lesson:** run those two databinding tests when adding any databound property.
+- Branch = 15 Phase 2 commits on merged master, PR-ready against `master` (drafted PR text in chat).
+
+### 2026-07-14 - DROPPED the Spectrum Grid CV-columns feature (was broken)
+
+Onscreen demo revealed the grid-columns feature (`4c608e60e`) is **broken**: checking a numeric CV
+column (base peak intensity) empties the grid to "0 of 0" rows. Root cause: the CV values are strings
+but `SpectrumMetadataList.GetColumnValues` groups them through a typed `double[]`
+(`Array.CreateInstance(column.ValueType)`), so grouping fails. It was never really tested (the one
+assertion checked a column *header* on an empty grid, since the test never selected a target). It's also
+undocumented and niche (the whole Spectrum Grid is an undocumented power-user viewer from #2450, 2023).
+Brian's call: **drop it** rather than rework the grid's typed-column machinery for an unasked-for feature.
+- Reverted the grid commit + the CvValues wrapper (`73eaaa9cb`, which existed only for it) into one
+  removal commit `3d84de410`. `SpectrumGridForm.cs` back to master's version; `SpectrumClass.CvValues`
+  and `CvParameterValue` gone; `CvParamColumn` `SpectrumClass` accessors back to `throw NotSupportedException`.
+  The two databinding-test failures disappear with no wrapper. `IsCvParamColumn` stays (used by the
+  filtering predicate/editor, not the grid). Filtering feature untouched.
+- Verified: build + databinding tests + `SpectrumGridTest` + `TestCvSpectrumFilter` + filter tests +
+  CodeInspection all green. Safety tag `pre-drop-grid-20260714`.
+- Branch = 16 commits (net = filtering only; grid add-then-removed, invisible after squash-merge). The
+  "grid display" DONE section above is now superseded/removed. PR-ready against `master`.
