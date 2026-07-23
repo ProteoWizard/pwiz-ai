@@ -1,17 +1,28 @@
-# Tutorial MCP Testing — Process & Runner Guide
+# MCP Tutorial Testing — process, runner & results
+
+## Status
+
+**Active.** Spun off 2026-07-23 from the PR #4313 connector work
+(`TODO-20260609_native_file_dialog_automation`, being completed to
+`todos/completed/`) so this testing effort continues as its own TODO across
+multiple sprints, independent of that PR's lifecycle. The connector foundation is
+in place; this effort drives the Skyline tutorials end-to-end through it, catalogs
+what works and what's still missing, and feeds implementation sprints — each its
+own TODO (e.g. the backlog
+[`../backlog/TODO-mcp_tutorial_view_layout.md`](../backlog/TODO-mcp_tutorial_view_layout.md)).
+
+**Layout:** this file is the **runbook**. The per-tutorial result files
+(`TEST-<Name>.md`) live in the sibling
+**[`TODO-20260722_mcp_tutorial_testing/`](TODO-20260722_mcp_tutorial_testing/)**
+folder — their presence there is also the cross-machine claim (§2.1). Where the
+sections below say "this folder" for `TEST-*.md` files, they mean that folder.
 
 **Running autonomously?** Launch `/night-session <this file>` — the executable
 loop is in **[▶ Run this](#-run-this-night-session-entry-point)** below; the rest
 is detail it references.
 
-Companion to
-[`../TODO-20260609_native_file_dialog_automation.md`](../TODO-20260609_native_file_dialog_automation.md)
-(PR #4313 — native file-dialog automation + Phase 3 generic form automation).
-
-This folder is the **operating manual and results log** for driving the Skyline
-tutorials end-to-end through the expanded Skyline MCP (the AiConnector tool). It
-operationalizes the "tutorial runner" agent loop that the TODO's **Phase 3
-design** describes:
+This runbook operationalizes the "tutorial runner" agent loop that PR #4313's
+**Phase 3 design** describes:
 
 > *"The tutorial runner — parse a localized tutorial into steps, resolve each
 > step's control by label + container, choose the verb, handle dialog chains —
@@ -29,7 +40,7 @@ high-signal list of where it can't (yet).
 Launch on any set-up machine:
 
 ```
-/night-session C:\proj\ai\todos\active\TODO-20260609_native_file_dialog_automation-tests\README.md
+/night-session C:\proj\ai\todos\active\TODO-20260722_mcp_tutorial_testing.md
 ```
 
 The session becomes the **orchestrator**: it claims one unclaimed tutorial, runs
@@ -294,9 +305,10 @@ tool calls and observations that matter)
 ## 7. Sub-agent prompt template (orchestrator → per-tutorial agent)
 
 > You are a per-tutorial test agent. Test whether Claude can drive the Skyline
-> tutorial **"<Title>"** (`<Name>`) end-to-end through the Skyline MCP. This
-> folder is `ai/todos/active/TODO-20260609_native_file_dialog_automation-tests/`;
-> read its `README.md` and follow §3 prerequisites and §4 methodology **exactly**.
+> tutorial **"<Title>"** (`<Name>`) end-to-end through the Skyline MCP. The runbook
+> is `ai/todos/active/TODO-20260722_mcp_tutorial_testing.md` — read it and follow §3
+> prerequisites and §4 methodology **exactly**. Every `TEST-<Name>.md` (including
+> the one you create) lives in `ai/todos/active/TODO-20260722_mcp_tutorial_testing/`.
 >
 > 1. **Load tools.** The `mcp__skyline__*` tools are deferred — load what you need
 >    via ToolSearch (README §4 names the verbs).
