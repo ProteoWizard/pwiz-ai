@@ -24,10 +24,10 @@
 | s-08 | Manage Reports (Share) | | |
 | s-09 | Manage Reports Overview selected | | |
 | s-10 | Export Report (removed) | | |
-| s-11 | Edit Report copy (Study 7) | BLOCKED (UI) | |
-| s-12 | Edit Report Study 7 full | BLOCKED (UI) | |
-| s-13 | Preview pivoted | | |
-| s-14 | Export Report Study 7 | | |
+| s-11 | Edit Report copy (Study 7) | BLOCKED (UI) | Copy dropdown "Open View Editor" unreachable (Finding #2) + column tree unbuildable (Finding #1) |
+| s-12 | Edit Report Study 7 full | BLOCKED (UI) | Built 25-col Study 7 via add_report workaround |
+| s-13 | Preview pivoted | PASS (data) | pivot_isotope_label verified: light/heavy prefixed columns (light/heavy BestRetentionTime, TotalArea, PrecursorMz, Area...) in single rows |
+| s-14 | Export Report Study 7 | PASS | Study 7 appears in report list |
 | s-15 | Manage Reports Summary Statistics | | |
 | s-16 | Document Grid Reports menu | | |
 | s-17 | Document Grid Summary Statistics | | |
@@ -65,3 +65,16 @@
 ### Exporting Report Data to a File — PASS (CLI workaround)
 - UI path (select Overview -> Export -> native Save dialog) blocked at the nested-node selection above. Exported faithfully via `skyline_run_command --report-name="Overview" --report-file="...\Overview_Study7_example.csv"`.
 - Verified on disk: **21 lines** (1 header + 20 data rows). Header = `Peptide Sequence,Isotope Label Type,7_2_ D_ 01 Best Retention Time,7_2_ D_ 01 Total Area,...` across all 28 replicates. Column headers present (the tutorial's key point about export vs copy/paste). **PASS.**
+
+### Sharing Report Templates — PASS
+- Export Report -> Edit list -> Manage Reports. `ChooseViewsControl.get_children` -> inner `ListView` (listView1). `select_item "Overview"` on that ListView **WORKS** (ListView searches all items — unlike the top-level-only tree). Share -> native **Save As** dialog -> set path -> accept.
+- `Overview.skyr` written and verified on disk: `<view name="Overview" rowsource="...Precursor">` with columns Peptide.Sequence, IsotopeLabelType, Results!*.Value.BestRetentionTime, Results!*.Value.TotalArea. (s-08 PASS; the form captured clean, not cyan.)
+
+### Managing Report Templates — PASS (round-trip)
+- Remove: select Overview in ListView -> Remove -> "Are you sure?" AlertDlg -> accept. Overview gone.
+- Import: Import button -> native **Open** dialog -> set Overview.skyr path -> accept -> OK. **Overview restored** in the Export Report list (s-10 PASS, captured). Full delete+reimport round-trip works via addressable buttons + native dialogs.
+
+### Modifying Existing Report Templates — s-11/s-12 UI BLOCKED; s-13 data PASS (workaround)
+- **Copy dropdown unreachable:** select Overview -> `Copy` posts and opens a **dropdown ContextMenuStrip** ("Open View Editor"), but `click_form_button` errors "ContextMenuStrip is not a form" and `click_control_menu_item control=Copy` errors "&Copy... has no context menu". The Copy dropdown's items can't be invoked. **Finding #2.** (Moot anyway — the destination ViewEditor tree is unbuildable per Finding #1.)
+- **Workaround:** `add_report "Study 7"` — 25 columns (ProteinName, PeptideSequence, BestRetentionTime, TotalArea, FileName, SampleName, ReplicateName, AverageMeasuredRetentionTime, PeptideRetentionTime, RatioToStandard, PrecursorCharge/Mz, ProductCharge/Mz, FragmentIon, MaxFwhm, MinStartTime, MaxEndTime, RetentionTime, Fwhm, StartTime, EndTime, Area, Height, UserSetPeak), pivot_isotope_label=true.
+- `get_report_rows Study 7`: **840 transition rows, 1140 cols.** **s-13 pivot-isotope-label VERIFIED** — matching `light`/`heavy` prefixed columns present in single rows (light BestRetentionTime + heavy BestRetentionTime, light/heavy TotalArea, light/heavy PrecursorMz, light/heavy ProductMz, light/heavy Area, ...). Divergence: the report tool ALSO pivoted replicates by default (tutorial's final layout unchecks replicate pivot); the light/heavy teaching point is unaffected. Study 7 appears in the Export Report list (s-14 PASS).
