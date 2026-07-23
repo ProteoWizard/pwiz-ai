@@ -24,6 +24,7 @@ Status: CLAIMED by nickshulman@DESKTOP 2026-07-22
 | s-09 | Wizard: Configure Full-Scan Settings | PASS | Mass Accuracy=20; header text renamed (cosmetic) |
 | s-10 | Wizard: Import FASTA | PASS | FASTA loaded via Browse (native dialog); path prefix differs (folder) |
 | s-11 | Wizard: Adjust Search Settings | PASS | MS1=5ppm MS2=10ppm after explicitly setting Unit combos (Finding #2) |
+| s-12 | Wizard: DDA Search progress | PASS | search runs; "106460 ms2 spectra" matches ref; % differs (timing) |
 
 ## Progress log
 
@@ -59,6 +60,9 @@ Status: CLAIMED by nickshulman@DESKTOP 2026-07-22
 - Next → **Configure Full-Scan** page. Set Mass Accuracy 10→20 via set_value on nested FullScanSettingsControl>Mass Accuracy TextBox. **s-09 PASS** (defaults: charges 2, isotope peaks Count, Peaks 3, Centroided, Use only scans within 5 min). Cosmetic: live header "Configure Full-Scan Chromatogram Extraction" vs reference "Configure Full-Scan Settings" (version text drift — Finding #C tutorial-text).
 - Next → **Import FASTA** page. Browse (nested ImportFastaControl>Browse) → native "Open FASTA" dialog; set full path, dismiss_with_accept_button. **s-10 PASS** (Trypsin [KR | P], 0 missed cleavages).
 - Next → **Adjust Search Settings** page (engine MSAmanda). Set MS1 tolerance=5, MS2 tolerance=10 via set_value on nested TextBoxes. **Finding #2 (MCP fidelity):** the Unit combos stayed BLANK — the UI infers "ppm" on the text box's Leave/Validated event, which `set_value` does not raise. Left blank the search could use a wrong unit. Fixed by explicitly `set_value`-ing both Unit combos to "ppm". **s-11 PASS** after that (matches reference: 5 ppm / 10 ppm, b,y, Default, max var mods 3, max q-value 0.01).
+
+### Wizard — DDA Search (s-12) [LONG RUNNING]
+- Next → started MS Amanda search. **s-12 PASS**: DDA Search page, progress log "Input files contain 106460 ms2 spectra" (matches reference exactly), searching fwd/decoy databases. % differs from ref only by timing. Search running patiently.
 
 ## Findings & fix suggestions
 (to be filled)
