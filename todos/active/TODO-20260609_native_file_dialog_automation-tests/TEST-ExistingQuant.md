@@ -30,6 +30,10 @@
 | s-06 | Import Transition List: Identify Columns | PASS (functional) | Direct paste on Targets tree triggered this form; columns auto-ID'd Peptide Modified Sequence/Precursor m/z/Product m/z; Associate proteins already checked (True); Peptides radio. Capture cyan |
 | s-07 | Peptides grouped in proteins | PASS (counts exact) | After OK: **24 prot / 44 pep / 88 prec / 296 tran** — exact match to tutorial. Main-window capture cyan; counts via get_document_status |
 | s-08 | MS/MS spectrum, transition highlighted | PASS (graph) | Library Match spectrum renders cleanly via get_graph_image (LTSLNVVAGSDLR: y7 r1, y5 r2, y9 r4...) matching reference. Edit>Expand All>Precursors done |
+| s-09 | Import data, Find ETFP (red dot) | PASS (graph) | mzXML imported (1 replicate). ETFPILVEEK chromatogram matches reference EXACTLY (light 602.8266++ ~100k red, heavy 606.8337++ ~380k blue, peak 30.0, interference ~30.4). Tree/status via reference; graph via get_graph_image |
+| s-10 | y3 transition / all transitions | PASS (graph) | Light precursor 602.8266++ chromatogram renders; interference double-peak ~29.8/30.0 visible. Navigated via get_locations/set_selection |
+| s-11 | Adjust peak boundaries (drag) | BLOCKED | Mouse-drag peak-boundary edit; chromatogram graph exposes only get_actions/get_children/click/get_value — no set-boundary verb. Finding #3 (= MethodEdit #7 / GroupedStudies #1) |
+| (Removing Transition Peak — Quantitative) | Removing interference | PARTIAL | Multi-select of 4 transitions (light+heavy y3/y4) worked (set_selection additionalLocators); but tree right-click "Quantitative" not reachable — Targets-tree ContextMenu not enumerable. Finding #4 |
 
 ## Progress log
 
@@ -51,6 +55,13 @@
 - Used the tutorial's documented **alternate method** (Edit > Paste directly): `perform_action paste` on `SequenceTreeForm:Targets` (type SequenceTree) with the 296-row value → launched **Import Transition List: Identify Columns** (s-06). Columns auto-identified: Peptide Modified Sequence, Precursor m/z, Product m/z. **Associate proteins** already ticked (get_value=True). OK.
 - Result: **24 proteins / 44 peptides / 88 precursors / 296 transitions** — matches the tutorial's stated counts EXACTLY (s-07). Library Match spectrum renders cleanly (s-08). `Edit > Expand All > Precursors` applied.
 - Note: On-demand submenu leaves `View > Libraries > Ion Types > B` and `Charges > 2` (spectrum annotation) not exercised — cosmetic; same class as MethodEdit Finding #2.
+
+### Importing Data (MRMer) — PASS (graphs); manual-refinement steps BLOCKED
+- `File > Save As` → native Save dialog → path set directly → `MRMer.sky`. `File > Import > Results` → OK → OpenDataSourceDialog: set Source name to full mzXML path → Open. Import completed: **1 replicate `silac_1_to_4`**, doc 24/44/88/296.
+- s-09/s-10: navigated to ETFPILVEEK (`get_locations`/`set_selection`); chromatograms render via `get_graph_image` and match the reference (interference shoulder ~30.4; double peak on light precursor). Individual precursor/transition selection via locators works.
+- **Removing a Transition Peak (Quantitative toggle):** multi-selected the 4 interference transitions successfully, but the Targets-tree **right-click "Quantitative"** could not be invoked — `click_control_menu_item` reports the SequenceTree "does not support get_children" for its context menu, and a hand-built ContextMenu path is rejected (needs a real serialized UiElementPath, which the non-enumerable tree can't provide). **Finding #4.** Not applied.
+- **Adjusting Peak Boundaries (s-11):** click-drag under the x-axis — no MCP verb (graph actions = get_actions/get_children/click/get_value only). **BLOCKED, Finding #3** (same root gap as MethodEdit #7 / GroupedStudies #1). Downstream: the MRMer precursor total-area ratios that depend on this manual correction (0.24 / 0.27 in the tutorial) are not reproduced; auto-picked ratios remain.
+- Data anomaly the tutorial itself calls out (2 peptides YVDPNVLPETESLALVIDR, FPEPGYLEGVK with blank transitions in the mzXML) present as described — not a runner issue.
 
 ## Findings & fix suggestions
 
