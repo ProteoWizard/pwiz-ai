@@ -82,16 +82,21 @@ would reject. Noted in a comment on `DescribeFileLocks`. Also unaddressed: nothi
 path itself (the test's handle reproduces the `FileShare` case), since a deterministic test for it
 needs a timed release from another thread.
 
-## Regex choice (decided, do not revert)
+## Unified with the shared helper (Matt's review)
 
-`DescribeFileLocks` extracts the locked path with the non-greedy `'([^']+)'`, matching the
-shared `FileLockingProcessFinder.ToFileLockingException`. Copilot asked for this over the
-original greedy `'(.*)'`. A later self-review noted the non-greedy form misparses a path that
-itself contains an apostrophe (e.g. a checkout under `C:\Users\O'Brien\...`), which the greedy
-form handled because the IOException message has exactly one quoted span. Kept non-greedy
-anyway: it is diagnostic-only (the true IOException is preserved as InnerException), LOW
-severity, cannot occur on the build/nightly machines, and staying consistent with the shared
-helper beats introducing a third regex variant. Do not revert to greedy.
+Matt asked whether an existing function already does this. It did: the local `DescribeFileLocks`
+duplicated `FileLockingProcessFinder.ToFileLockingException(x, dirPath)`. They differed only in
+that the shared helper re-extracted the quoted text and located it via
+`Directory.GetFiles(dirPath, bareName, ...)` (assuming a bare filename, as a failed directory
+delete reports), whereas `FileStream` exceptions carry a full path. Rather than keep two copies,
+enhanced the shared helper to use the quoted path directly when it is rooted and exists, falling
+back to the directory search otherwise. Deleted `DescribeFileLocks`; both `AppendToLogFile` and
+`WaitForSkyline` now call the shared helper (passing `Path.GetDirectoryName(filePath)` and `null`
+respectively). Carried the two robustness fixes into the shared helper: return the original
+exception when the locker list is empty, and guard the restart-manager call so it never throws
+(it now runs on the UI thread inside SetDocument). The regex debate is moot — the shared helper's
+existing `'([^']+)'` is used, and the rooted path never needs trimming. `FilesDirTest` still
+covers the bare-name branch and passes.
 
 ## Verification
 
