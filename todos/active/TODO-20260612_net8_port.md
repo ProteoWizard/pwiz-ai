@@ -2057,3 +2057,70 @@ in [[reference_net8_app_port_gotchas]]. **Only genuinely-unportable project left
 **Next session handoff**: For detailed startup protocol (port recipe, build/verify commands incl. the
 full-MSBuild path for COM projects, remaining backlog, vendor-test deployment steps), read
 `ai/.tmp/handoff-20260722c_net8_project_ports.md` before starting work.
+
+## 2026-07-23 - SkylineAiConnector port + merge master + C++->C# BiblioSpec port + DIA-Umpire audit-log re-baseline
+
+Resumed via `/pw-continue` at HEAD `2fff27594f`. Four focused pieces, all committed + dual-pushed
+(origin + `chambem2/pwiz-sharp`); HEAD now **`732197a686`**, working tree clean.
+
+**A - SkylineAiConnector -> net8 (`7a7bef4c72` + `0907f39e6b`).** Ported the MCP AI-Connector tool
+(`Executables/Tools/SkylineMcp/SkylineAiConnector`) **single-target net8.0-windows** (NOT multi-target):
+its `SkylineMcpServer` is already net8 and the tool's own `info.properties` mandates the .NET 8 Desktop
+Runtime, so a net472 build has no purpose. Two real fixes beyond the TFM: (1) the `PackageToolZip` glob
+copied only `*.exe;*.dll;*.config`, dropping the net8 apphost's `runtimeconfig.json`/`deps.json` -> the
+connector exe couldn't launch; added `*.json`. (2) the version stamp read an uncommitted
+`Properties/AssemblyInfo.cs` and silently emitted an empty `Version` -- fixed by extracting a **central
+`pwiz_tools/Skyline/SkylineVersion.targets`** (the YEAR.ORDINAL.BRANCH.DOY composition lifted out of
+Skyline.csproj, verified byte-identical) that BOTH Skyline.csproj and the connector import, so the
+tool-store version tracks Skyline automatically (now 26.1.1.203). `TestSkylineMcp` passes end-to-end
+(47-tool protocol). **Interactive-tools tail SURVEYED but not ported** (Matt redirected to the AI
+connector): ExampleInteractiveTool, TestInteractiveTool, TestCommandLineInteractiveTool (2 have
+functional tests that install checked-in net472 zips -> porting the csproj is inert to those tests
+unless the zips are rebuilt), SkyGadget, MPP Export, SkylineIntegration (4 third-party Tool-Store
+contributions). Still backlog.
+
+**B - Merged origin/master -> net8 branch (`546db8fd96`).** 60 commits (2026-06-30 merge-base ..
+`8a32095c52`), bringing the DIA-NN search wizard, Osprey pass-2, mProphet ReplicateName, full-scan
+viewer. 299 files auto-merged; **13 conflicts** resolved (full playbook in [[reference_net8_master_merge]]):
+csprojs -> ours (net8 SDK globs master's new `<Compile>` items; carried TestPerf's `System.IO.Compression`
+net472 refs; dropped master's win-x86 RIDs); PathEx.cs kept both sides' new methods; MProphetResultsHandler.cs
++ GroupComparisonStrings.zh-Hans.resx were whole-file LF-vs-CRLF conflicts fixed via EOL-normalized
+`git merge-file` (some net8-branch files are accidentally LF). **One semantic gap the build caught:**
+master added `MsDataFileImpl.CaptureOtherParams` to the legacy reader; ported it (~165 lines) into the
+net8 pwiz-sharp sandbox `ProteowizardWrapper.PwizSharp/MsDataFileImpl.cs` (PascalCase pwiz-sharp API,
+`spectrum.Params.CVParams`, no native `using` disposal). Verified: net8 TestFunctional build 0 errors;
+`TestFullScanProperties` (exercises CaptureOtherParams) + `TestSkylineMcp` pass; CommonUtil net472 builds.
+**NOTE:** the net472 *Skyline* build is pre-existingly broken (unconditional net8-only BlibBuild/BlibFilter
+ProjectReference at Skyline.csproj:218) -- byte-identical pre-merge, NOT a merge regression; flagged, not fixed.
+
+**C - BiblioSpec C++ -> C# port (`ff29f64323`).** The merge's ONLY C++ delta (core `pwiz/` C++ untouched
+by master since 2026-06-10, already in the branch) was 2 BiblioSpec files; Matt asked to mirror them in
+the pwiz-sharp C#. `BlibMaker.cs`: empty-result-build (DIA-NN 0 precursors) file-lock hardening --
+non-throwing `File.Delete` in Init()/AbortCurrentLibrary() + `Verbosity.Warn` (parity with cpp error_code
+`bfs::remove`; `_db.Dispose()` with the connection's Pooling=false = the managed `sqlite3_close_v2`).
+`DiaNNSpecLibReader.cs`: tolerate DIA-NN 1.9.1's missing `Flags` column (nullable `FindDataField` defaulting
+to 0; every other column stays required via `MustFindParquetField`). BlibBuild builds 0 errors.
+
+**D - DIA-Umpire tutorial audit-log re-baseline (`732197a686`).** Ran the 4 non-EN audit-log tutorials Matt
+flagged. **3 (TestIrtTutorial / TestMethodRefinementTutorial / TestPeakPickingTutorial) already pass in fr**
+-- the culture-aware tolerance (`fcf2ea59f7`) clears the net8 shortest-round-trip number-format diffs, no
+re-record needed. **TestDiaTtofDiaUmpireTutorial was a different, genuine re-baseline** (NOT culture/formatting):
+its audit-log "Peptides mapped" count was stale at 101 in ALL 5 languages; net8's more-conservative OOP-MSAmanda
+maps 97 (Peptide targets 102->98). Re-recorded en/fr/ja/tr/zh via `recordauditlogs=on perftests=on`
+(~13 min/lang, conversion cache NOT reused across langs, ~67 min total) + re-verified fr passes a normal
+(non-record) comparison. Only the 2 counts changed; localized text unchanged. The `.json` target counts already
+pass on net8 (that's why the run reached the audit-log step). Legit re-baseline per [[reference_net8_rebaseline_vs_fix]].
+
+**Status-map artifact refreshed** (https://claude.ai/code/artifact/eb82129b-c56b-440a-acf7-52343461dce2):
+brought current to HEAD `732197a686` -- ported 36->67, method builders moved out of "out of scope", backlog
+trimmed to ~10 (interactive tools + net7 + SetupDeployProject), BullseyeSharp the sole permanent net472, and
+the tutorial audit-log item marked resolved.
+
+**Remaining backlog:** interactive tools (6, above), net7->net8 (AdvancedEditingCommands, ToolServiceTestHarness),
+SetupDeployProject (verify it's a normal SDK project vs VS-deploy/WiX first), LaunchBatch (deferred, ClickOnce).
+Non-blocking follow-ups: fresh CI run on the merged head `732197a686`; the pre-existing net472 Skyline BlibBuild
+reference (gate to net8 if the net472 Skyline build is wanted); rebuild shipped arg-collector artifacts
+(QuaSAR.dll / MSstats.zip / TurnoveR.zip still net472 zh-CHS).
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260723_net8_merge_aiconnector.md` before starting work.
