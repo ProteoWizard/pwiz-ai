@@ -27,6 +27,10 @@
 | s-11 | Peak Areas raw | PASS | Peak Areas (stacked bars) for CSLPRPWALTFSYGR matches reference; D_103_REP3/D_108_REP2 near-zero as noted. |
 | s-12 | Peak Areas Normalized To Total | PASS | Applied via `Normalized To > Total` on graph right-click menu (control=""); result "Peak Area Percentage" matches reference. NOTE: menu label is **"Normalized To"**, tutorial text says "Normalize To". |
 | s-13,s-14,s-27..s-64 | Manual peak correction | BLOCKED (mouse-drag) | Click-and-drag integration-boundary adjustment for truncated peaks has no MCP verb. `Remove Peak` IS driveable (graph right-click menu). See Finding #1. |
+| s-15 | Find truncated peaks dialog | PASS (state) | Edit>Find; Direction=Down, only "Truncated peaks" checked (get_value confirms). Form image cyan (overlap). |
+| s-16 | Find Results list | PASS (struct) | Find All → Find Results view appears; reference's first entries (905.9565++ CSLPRPWALTFSYGR precursors) match my precursors. Content cyan-overlapped. |
+| s-17,s-18 | Customize Report build (Truncated Precursors) | NOT EXERCISED | ViewEditor AvailableFieldsTree not enumerable via get_children; blind '>'-path guessing for nested "Count Truncated" node risked rabbit-hole. Report-editor tree building is awkward via current verbs (Finding #3). Cancelled. |
+| s-19 | 129 truncated peaks | PASS (128 vs 129) | Verified via `get_report_from_definition`: CountTruncated>0 → **128** precursor-replicate groups (tutorial 129, off by 1; tutorial itself says "may or may not be exactly"). Strong validation of import + auto peak-picking. |
 
 ## Progress log
 
