@@ -35,9 +35,9 @@
 | s-19 | Customize Report filter | BLOCKED (UI) | Add>> needs the nested column selected |
 | s-20 | Document Grid filtered | PASS (EXACT) | Filter CvTotalArea>0.2 via report tool -> 2 rows (LEP 59.3%, MBP 22.4%), matches reference exactly |
 | s-21 | Peak Areas INDISHTQSVSAK | PASS (EXACT) | After Normalized>None + Transitions>All: stacked y7/y12/y11, Rep1~0.4 outlier, totals match reference exactly |
-| s-22 | Results Grid view | | |
-| s-23 | Skyline w/ Results Grid docked | | |
-| s-24 | Results Grid w/ note | | |
+| s-22 | Results Grid view | PASS | Renders clean; Rep1-5 precursor result columns |
+| s-23 | Skyline w/ Results Grid docked | N/A (docking) | Docking is mouse-drag; views exist and render individually |
+| s-24 | Results Grid w/ note | PASS | Rep1 Precursor Replicate Note="Low signal" set via grid; verified. NewResultsGridView column-remove worked via UI |
 | s-25 | Define Annotation Tailing | | |
 | s-26 | Document Settings Annotations | | |
 | s-27 | Customize Report + Tailing | | |
@@ -86,3 +86,9 @@
 - **Filter (s-18/s-19) UI BLOCKED:** `Reports > Edit Report` opens Customize Report (ViewEditor). Filter tab has its OWN `availableFieldsTreeFilter` + `Add >>` button + filter grid. To add the filter I must select nested **Cv Total Area** in that tree — `select_item` fails ("no match"), and selecting it in the right ListView does not sync to the tree (tutorial uses a **double-click** to sync; no double-click verb exists). Finding #1. `Add >>` button itself is addressable but useless without the nested selection.
 - **Workaround (s-20) PASS (EXACT):** `get_report_rows "Summary Statistics"` with filterJson `CvTotalArea > 0.2` -> exactly **2 rows**: LEP INDISHTQSVSAK 59.3% and MBP HGFLPR 22.4%. s-20 reference shows the SAME 2 rows with identical values (confirms Study9pilot IS the screenshot dataset).
 - **s-21 PASS (EXACT):** closed filter; selected INDISHTQSVSAK; View > Peak Areas > Replicate Comparison. Graph was stuck Normalized-To-Heavy (empty; no heavy standards) -> `Normalized To > None` + `Transitions > All` via graph right-click. Result: stacked y7(blue)/y12(purple)/y11(red), Rep1 ~0.4 (outlier), Rep2 ~4.2, Rep3 ~8.7, Rep4 ~8.0, Rep5 ~7.9 — matches reference exactly, showing the reproducibility problem behind the 59.3% CV.
+
+### Results Grid View — PASS (s-22/s-24); column-remove UI WORKS
+- `View > Live Reports > Results Grid`. Selected precursor `Precursor:/LEP/INDISHTQSVSAK/light+++` (467.2440+++). **s-22 PASS:** grid renders clean (Rep1-5; columns Replicate, Precursor Replicate Note, Peak Found Ratio, Best RT, Max Fwhm, Min Start Time, ...).
+- **s-24 PASS:** grid = DataboundGridControl > BoundDataGridViewEx (boundDataGridView). `set_current_cell_address [1,0]` (path-based) + `set_grid_text "Low signal"` -> Rep1 Precursor Replicate Note = "Low signal" (verified via get_grid_text; Rep1 Total Area 470755 vs Rep2-5 4-8M confirms the outlier).
+- **NewResultsGridView (column customize) — WORKS via UI:** Reports > Customize Report; named it; for Min Start Time / Max End Time / Library Dot Product: `select_item` on the right ListView (listViewColumns) + click the **Remove** ToolStripButton (toolStripColumns has Remove/Up/Down). All three removed (verified via get_grid_text). **Important refinement of Finding #1:** column REMOVE and reorder (Up/Down) buttons ARE addressable; only column ADD (checking a nested node in the AvailableFieldsTree) is blocked.
+- s-23 (docked layout) is mouse-drag docking — N/A; the windows exist and render individually.
