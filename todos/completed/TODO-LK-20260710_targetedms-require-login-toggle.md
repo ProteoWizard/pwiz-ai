@@ -1,9 +1,13 @@
 # TODO-LK: Targeted MS Guest Access (site-admin toggle to require login for bot-targeted views)
 
 - **Created**: 2026-07-10
+- **Completed**: 2026-07-23
 - **Module**: targetedms (`server/modules/targetedms`, its own git repo)
-- **Status**: **PR #1259 open and ready for review** — https://github.com/LabKey/targetedms/pull/1259.
-  Built, self-reviewed twice, Selenium test green against a live server. Targets **26.3**.
+- **Status**: **COMPLETE — PR #1259 merged and deployed** — https://github.com/LabKey/targetedms/pull/1259.
+  Built, self-reviewed twice, Selenium test green against a live server, all TeamCity tests passing.
+  Targeted **26.3** directly (no cherry-pick). The two QC-test failures seen mid-review
+  (`TargetedMSQCGuideSetTest` stale SVG element, `TargetedMSQCTest` "Loading..." panel timeout) were
+  confirmed unrelated flakes — this branch touched no QC code — and passed on re-run.
 - **Branch**: `26.3_fb_targetedms-require-login-toggle` off `release26.3-SNAPSHOT`.
 - **Active checkout**: `C:/Users/vsharma/WORK/labkey/release-branch` (run gradle from here).
   - Build: `gradlew :server:modules:targetedms:deployModule`
@@ -102,8 +106,7 @@ the stronger lever.
   break-glass blast radius.
 - **Public access preserved when off.** This is a temporary emergency measure, not a steady state.
 
-## Next steps
+## Outcome
 
-1. Human review once TeamCity is green on the branch. Optional, billed: `/ultrareview 1259`.
-2. After merge: `/pw-complete` (final TODO, move to completed, sync local, delete work branch). Targets
-   26.3 directly, so no cherry-pick to a separate release branch.
+- **2026-07-23** — Human review passed, all TeamCity tests green, PR #1259 merged and deployed on the
+  server. Targeted 26.3 directly, so no cherry-pick to a separate release branch.
