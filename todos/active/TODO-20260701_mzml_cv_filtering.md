@@ -201,6 +201,23 @@ no use outside spectrum filters):
 
 ## Progress Log
 
+### 2026-07-23 - Softened equals/not-equals + resolved stale Copilot review (commit `24552d579`)
+
+- **Second fresh-context self-review** (on the post-fix HEAD `581956c0f`) independently verified the
+  serialization fix is correct/complete and found no critical/high issues. It flagged that `equals`/
+  `notequals` with a numeric-looking operand inferred `double` and so **hard-failed extraction on a
+  string term's non-numeric value** - a finer case than the ordered-comparison hard-fail (#3, retained).
+- **Softened equals/not-equals** (Brian's call, test-first): a numeric operand now compares **per value** -
+  numeric where the term's value is a number (so `1.0e03` still equals `1000`), string otherwise - so a
+  string term meeting a numeric operand is compared as text instead of aborting. Ordered comparisons keep
+  the hard-fail. `SpectrumClassFilter.CompileCvSpec` dispatches per value; `DetermineCvOperandType`
+  simplified (equality handled upstream); new `OperandIsNumeric` helper. Red-first (the `equals 5` on the
+  filter-string term threw), green after. `TestSpectrumClassFilter` + `TestCvSpectrumFilter` pass; gates 0/0.
+- **Stale Copilot review resolved**: its single comment (`GetLocalizedColumnName` ignoring `cultureInfo`,
+  from `3d84de410`) was already fixed by `8d9df0e85`; replied noting that and marked the thread resolved.
+- Branch pushed; PR #4422 now at `24552d579`. Self-review's other two points (userParam named like an
+  accession; lenient fake accession) confirmed as already-documented accepted design - no action.
+
 ### 2026-07-22 - Gates re-run + fresh-context self-review + serialization fix (commit `581956c0f`)
 
 - Re-ran both gates on `C:\Dev\SmartCV`: CodeInspection test green, full-solution ReSharper 0/0.
