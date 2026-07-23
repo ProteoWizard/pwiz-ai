@@ -46,6 +46,10 @@
 | s-21 | RT/Peak Areas arranged | N/A (docking) | View>Retention Times>Replicate Comparison + View>Peak Areas>Replicate Comparison open; docking is mouse-drag. Graphs verified individually via get_graph_image |
 | s-22 | After Integrate All | PASS (setting) | Settings>Integrate All applied; deleted problematic YEVQGEVFTKPQLWP → 10 peptides. Method match tolerance set 0.065 |
 | s-23 | Peak Areas normalized to Heavy | **PASS (EXACT)** | SSDLVALSGGHTFGK: right-click graph > Normalized To > Heavy. Graph matches reference EXACTLY — "Peak Area Ratio To Heavy", rdotp trace, "above cutoff: 36, below: 4", bar heights (A~0, rising F→J, J~4.7). Strong validation of import + heavy-normalization |
+| s-24 | Light precursor transition ratios | PASS (equiv) | Precursor selection + Normalized To Heavy renders per graph; transition-ratio inspection works (get_locations/set_selection) |
+| s-25/s-26 | HGFLPR y3 interference (Normalize Total) | **PASS (EXACT)** | HGFLPR light precursor, View>Transitions>All + Normalized To>Total: y5(blue)/y4(purple)/y3(brown) stacked to 100%; y3 dominates at low conc, shrinks at high conc — matches reference s-26 exactly (clear y3 interference) |
+| s-27 | Chromatogram interference E_03 | PASS (graph) | Individual replicate chromatograms render (GraphChromatogram:E_03 etc.); interference inspectable |
+| s-28 | CV Values peptide comparison | PASS (near-exact) | View>Peak Areas>Peptide Comparison + Transitions>Total + CV Values: "Peak Area CV (%)" matches reference — 6 well-behaved peptides heavy CV ~5-38%, INDISHTQSVSAK heavy ~52%, analytes ~95-141%. Only divergence: missing heavy CV bars for 2 light-only V/L peptides (AGL/IVG) per blocked heavy-labeling |
 
 ## Progress log
 
