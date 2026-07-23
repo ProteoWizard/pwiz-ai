@@ -28,13 +28,13 @@
 | s-12 | Edit Report Study 7 full | BLOCKED (UI) | Built 25-col Study 7 via add_report workaround |
 | s-13 | Preview pivoted | PASS (data) | pivot_isotope_label verified: light/heavy prefixed columns (light/heavy BestRetentionTime, TotalArea, PrecursorMz, Area...) in single rows |
 | s-14 | Export Report Study 7 | PASS | Study 7 appears in report list |
-| s-15 | Manage Reports Summary Statistics | | |
-| s-16 | Document Grid Reports menu | | |
-| s-17 | Document Grid Summary Statistics | | |
-| s-18 | Customize Report Cv Total Area | | |
-| s-19 | Customize Report filter | | |
-| s-20 | Document Grid filtered | | |
-| s-21 | Peak Areas INDISHTQSVSAK | | |
+| s-15 | Manage Reports Summary Statistics | PASS | Imported Summary_stats.skyr; list matches reference |
+| s-16 | Document Grid Reports menu | PASS (equiv) | Reports>Summary Statistics via click_control_menu_item |
+| s-17 | Document Grid Summary Statistics | PASS (EXACT) | Grid renders clean; INDISHTQSVSAK 59.3%/23.5% CV matches tutorial; others <10%/<5% |
+| s-18 | Customize Report Cv Total Area | BLOCKED (UI) | Filter tree nested-select blocked (Finding #1); no double-click verb to sync list->tree |
+| s-19 | Customize Report filter | BLOCKED (UI) | Add>> needs the nested column selected |
+| s-20 | Document Grid filtered | PASS (EXACT) | Filter CvTotalArea>0.2 via report tool -> 2 rows (LEP 59.3%, MBP 22.4%), matches reference exactly |
+| s-21 | Peak Areas INDISHTQSVSAK | PASS (EXACT) | After Normalized>None + Transitions>All: stacked y7/y12/y11, Rep1~0.4 outlier, totals match reference exactly |
 | s-22 | Results Grid view | | |
 | s-23 | Skyline w/ Results Grid docked | | |
 | s-24 | Results Grid w/ note | | |
@@ -78,3 +78,11 @@
 - **Copy dropdown unreachable:** select Overview -> `Copy` posts and opens a **dropdown ContextMenuStrip** ("Open View Editor"), but `click_form_button` errors "ContextMenuStrip is not a form" and `click_control_menu_item control=Copy` errors "&Copy... has no context menu". The Copy dropdown's items can't be invoked. **Finding #2.** (Moot anyway — the destination ViewEditor tree is unbuildable per Finding #1.)
 - **Workaround:** `add_report "Study 7"` — 25 columns (ProteinName, PeptideSequence, BestRetentionTime, TotalArea, FileName, SampleName, ReplicateName, AverageMeasuredRetentionTime, PeptideRetentionTime, RatioToStandard, PrecursorCharge/Mz, ProductCharge/Mz, FragmentIon, MaxFwhm, MinStartTime, MaxEndTime, RetentionTime, Fwhm, StartTime, EndTime, Area, Height, UserSetPeak), pivot_isotope_label=true.
 - `get_report_rows Study 7`: **840 transition rows, 1140 cols.** **s-13 pivot-isotope-label VERIFIED** — matching `light`/`heavy` prefixed columns present in single rows (light BestRetentionTime + heavy BestRetentionTime, light/heavy TotalArea, light/heavy PrecursorMz, light/heavy ProductMz, light/heavy Area, ...). Divergence: the report tool ALSO pivoted replicates by default (tutorial's final layout unchecks replicate pivot); the light/heavy teaching point is unaffected. Study 7 appears in the Export Report list (s-14 PASS).
+
+### Quality Control Summary Reports — s-15/s-17/s-20/s-21 PASS (mostly EXACT); s-18/s-19 UI BLOCKED
+- Opened **Study9pilot.sky** (tutorial prose says "Study9S.sky" and "22 peptides/10 runs" — stale; shipped file is Study9pilot, 7 prot / 10 pep / 10 prec / 30 tran / **5 replicates**). Tutorial-text divergence, Finding #4.
+- `View > Live Reports > Document Grid` (Replicates report, Rep1-Rep5). Reports button menu driven via `click_control_menu_item control="" "Reports > Manage Reports"`. Import Summary_stats.skyr (native Open dialog). **Summary Statistics** added -> **s-15 PASS** (list matches reference).
+- `Reports > Summary Statistics` -> grid switches. **s-17 PASS (EXACT):** grid renders clean; verified via get_report_rows (10 rows): INDISHTQSVSAK (LEP) CvTotalArea **59.3%**, CvMaxFwhm **23.5%** (tutorial 59.2%/23.5%); all others CvTotalArea <10%, CvMaxFwhm <5%; RangeBestRetentionTime all <=0.13 min (<0.15).
+- **Filter (s-18/s-19) UI BLOCKED:** `Reports > Edit Report` opens Customize Report (ViewEditor). Filter tab has its OWN `availableFieldsTreeFilter` + `Add >>` button + filter grid. To add the filter I must select nested **Cv Total Area** in that tree — `select_item` fails ("no match"), and selecting it in the right ListView does not sync to the tree (tutorial uses a **double-click** to sync; no double-click verb exists). Finding #1. `Add >>` button itself is addressable but useless without the nested selection.
+- **Workaround (s-20) PASS (EXACT):** `get_report_rows "Summary Statistics"` with filterJson `CvTotalArea > 0.2` -> exactly **2 rows**: LEP INDISHTQSVSAK 59.3% and MBP HGFLPR 22.4%. s-20 reference shows the SAME 2 rows with identical values (confirms Study9pilot IS the screenshot dataset).
+- **s-21 PASS (EXACT):** closed filter; selected INDISHTQSVSAK; View > Peak Areas > Replicate Comparison. Graph was stuck Normalized-To-Heavy (empty; no heavy standards) -> `Normalized To > None` + `Transitions > All` via graph right-click. Result: stacked y7(blue)/y12(purple)/y11(red), Rep1 ~0.4 (outlier), Rep2 ~4.2, Rep3 ~8.7, Rep4 ~8.0, Rep5 ~7.9 — matches reference exactly, showing the reproducibility problem behind the 59.3% CV.
