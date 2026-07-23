@@ -31,6 +31,11 @@
 | s-16 | Find Results list | PASS (struct) | Find All → Find Results view appears; reference's first entries (905.9565++ CSLPRPWALTFSYGR precursors) match my precursors. Content cyan-overlapped. |
 | s-17,s-18 | Customize Report build (Truncated Precursors) | NOT EXERCISED | ViewEditor AvailableFieldsTree not enumerable via get_children; blind '>'-path guessing for nested "Count Truncated" node risked rabbit-hole. Report-editor tree building is awkward via current verbs (Finding #3). Cancelled. |
 | s-19 | 129 truncated peaks | PASS (128 vs 129) | Verified via `get_report_from_definition`: CountTruncated>0 → **128** precursor-replicate groups (tutorial 129, off by 1; tutorial itself says "may or may not be exactly"). Strong validation of import + auto peak-picking. |
+| s-65,s-66 | Define SubjectId annotation | PASS (state) | Settings>Document Settings>Edit List>Add: Name=SubjectId, Applies to=Replicates (verified). NOTE: SubjectId/BioReplicate/Condition definitions already persisted in user settings ("already defined") — just checked them on. Captures cyan. |
+| s-67..s-69 | MSstats / BioReplicate+Condition defs | N/A / PASS | Tool Store MSstats install not attempted (network/external-tool). BioReplicate+Condition annotation defs already existed in user settings. |
+| s-70 | Document Settings (3 checked) | PASS (state) | SubjectId, BioReplicate, Condition all checked (matches reference). Capture cyan. |
+| s-71,s-72 | Replicates grid | PASS | Document Grid > Replicates report shows 42 replicates + empty annotation columns. |
+| s-73 | Annotation values pasted | PASS (constructed) | **Annotations.xlsx MISSING from data** (only ProteinNames.csv). Constructed values from replicate names and pasted via `set_grid_text`: SubjectId=subject#, BioReplicate=subject#, Condition. **Finding:** Condition value-list allows "Disease"/"Healthy" (pre-existing user-settings def) — tutorial text/screenshots say "Diseased". Used "Disease". All 42 rows set correctly. |
 
 ## Progress log
 
