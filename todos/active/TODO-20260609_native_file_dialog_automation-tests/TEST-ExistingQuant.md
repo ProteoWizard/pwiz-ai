@@ -41,6 +41,11 @@
 | s-16 | Edit Isotope Modification (Label:13C on V) | BLOCKED | Edit>Modify Peptide opens; but per-residue "Isotope heavy" dropdowns are caption-less LiteDropDownLists, not uniquely addressable (set_form_value=label-only; get_children=[]). Finding #5 |
 | s-17 | Edit Modifications form | BLOCKED | Same as s-16 |
 | s-18 | Add heavy precursor via pick list | BLOCKED | Hover drop-arrow + pick-list popup — no MCP verb (tree pop-up pick-list, = MethodEdit #7). 3 V/L peptides stay light-only (19 prec vs tutorial's 22) |
+| s-19 | Multi-sample WIFF Choose Samples | PASS (exact) | 57 samples listed; unchecked Blank(1)/QC(4)/gradientwash(4)/A2(4)/A3(4) via uncheck_item → exactly **40** (A–J ×4) remain, matches tutorial. Capture cyan; verified via get_value |
+| s-20 | Remove common prefix "7_3_" | PASS | ImportResultsNameDlg: prefix "7_3_" auto-detected; Remove radio + OK. Replicates named A_01..J_04 |
+| s-21 | RT/Peak Areas arranged | N/A (docking) | View>Retention Times>Replicate Comparison + View>Peak Areas>Replicate Comparison open; docking is mouse-drag. Graphs verified individually via get_graph_image |
+| s-22 | After Integrate All | PASS (setting) | Settings>Integrate All applied; deleted problematic YEVQGEVFTKPQLWP → 10 peptides. Method match tolerance set 0.065 |
+| s-23 | Peak Areas normalized to Heavy | **PASS (EXACT)** | SSDLVALSGGHTFGK: right-click graph > Normalized To > Heavy. Graph matches reference EXACTLY — "Peak Area Ratio To Heavy", rdotp trace, "above cutoff: 36, below: 4", bar heights (A~0, rising F→J, J~4.7). Strong validation of import + heavy-normalization |
 
 ## Progress log
 
