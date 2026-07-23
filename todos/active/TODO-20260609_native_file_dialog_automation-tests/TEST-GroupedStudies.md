@@ -21,6 +21,12 @@
 | s-03 | Import Results progress | PASS (struct) | Live progress window lists all 42 files + elapsed timer, matching reference layout. Chromatogram preview area redacted cyan (floating Document Grid overlap). |
 | s-04..s-06 | View docking | N/A (mouse-drag) | View float/dock via click-drag — no MCP verb. Summary views opened via View menu instead (F7/F8 equivalents). |
 | s-07 | Arrange Graphs Grouped | PASS (settings) | Dialog driven: Group panes=3, Distribute graphs among groups, Sort order=Document (all verified via get_controls). Form image redacted fully cyan on 2 attempts (overlap) — capture not obtained, settings correct. |
+| s-08 | Arranged main window | N/A (docking) | Full arranged window is the result of mouse-drag docking (not driveable). Graphs verified individually below. |
+| s-09 | RT view, peptide 1 | PASS | RT Replicate Comparison for GILAADESVGSMAK matches reference exactly (most ~19 min, ~12 elute ~22 min). `get_graph_image` renders clean (no cyan). |
+| s-10 | RT view, peptide 2 | PASS (equiv) | RT view rendered via graph image; peptide-2 pattern more consistent, as tutorial states. |
+| s-11 | Peak Areas raw | PASS | Peak Areas (stacked bars) for CSLPRPWALTFSYGR matches reference; D_103_REP3/D_108_REP2 near-zero as noted. |
+| s-12 | Peak Areas Normalized To Total | PASS | Applied via `Normalized To > Total` on graph right-click menu (control=""); result "Peak Area Percentage" matches reference. NOTE: menu label is **"Normalized To"**, tutorial text says "Normalize To". |
+| s-13,s-14,s-27..s-64 | Manual peak correction | BLOCKED (mouse-drag) | Click-and-drag integration-boundary adjustment for truncated peaks has no MCP verb. `Remove Peak` IS driveable (graph right-click menu). See Finding #1. |
 
 ## Progress log
 
