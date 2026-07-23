@@ -82,6 +82,17 @@ would reject. Noted in a comment on `DescribeFileLocks`. Also unaddressed: nothi
 path itself (the test's handle reproduces the `FileShare` case), since a deterministic test for it
 needs a timed release from another thread.
 
+## Regex choice (decided, do not revert)
+
+`DescribeFileLocks` extracts the locked path with the non-greedy `'([^']+)'`, matching the
+shared `FileLockingProcessFinder.ToFileLockingException`. Copilot asked for this over the
+original greedy `'(.*)'`. A later self-review noted the non-greedy form misparses a path that
+itself contains an apostrophe (e.g. a checkout under `C:\Users\O'Brien\...`), which the greedy
+form handled because the IOException message has exactly one quoted span. Kept non-greedy
+anyway: it is diagnostic-only (the true IOException is preserved as InnerException), LOW
+severity, cannot occur on the build/nightly machines, and staying consistent with the shared
+helper beats introducing a third regex variant. Do not revert to greedy.
+
 ## Verification
 
 - Red/green confirmed both ways: with `FileShare.None` restored, `TestAuditLog`
