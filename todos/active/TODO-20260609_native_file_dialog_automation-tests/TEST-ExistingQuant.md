@@ -50,6 +50,9 @@
 | s-25/s-26 | HGFLPR y3 interference (Normalize Total) | **PASS (EXACT)** | HGFLPR light precursor, View>Transitions>All + Normalized To>Total: y5(blue)/y4(purple)/y3(brown) stacked to 100%; y3 dominates at low conc, shrinks at high conc — matches reference s-26 exactly (clear y3 interference) |
 | s-27 | Chromatogram interference E_03 | PASS (graph) | Individual replicate chromatograms render (GraphChromatogram:E_03 etc.); interference inspectable |
 | s-28 | CV Values peptide comparison | PASS (near-exact) | View>Peak Areas>Peptide Comparison + Transitions>Total + CV Values: "Peak Area CV (%)" matches reference — 6 well-behaved peptides heavy CV ~5-38%, INDISHTQSVSAK heavy ~52%, analytes ~95-141%. Only divergence: missing heavy CV bars for 2 light-only V/L peptides (AGL/IVG) per blocked heavy-labeling |
+| s-29 | Document Grid concentration values | **PASS (EXACT)** | Document Grid > Replicates report (40 rows). set_grid_text filled Sample Type + Analyte Concentration: A=Blank/0, B=60, C=175, D=513, E=1500, F=2760, G=4980, H=9060, I=16500, J=30000 — matches tutorial table exactly. Grid read-back confirms |
+| s-30 | Peak Areas grouped by Concentration (CV) | PASS | Group By > **Analyte Concentration** (tutorial says "Concentration") + Normalized To Heavy, CV on: CV% bars ~30/9/12% at 0/60/175, low above — match reference; minor rdotp-trace difference (un-refined doc) |
+| s-31 | Grouped by Concentration (mean+whiskers) | PASS | CV Values off: "Peak Area Ratio To Heavy" calibration curve rising to ~4.7 at 30000 — bars match reference; minor rdotp-trace difference |
 
 ## Progress log
 
@@ -89,6 +92,12 @@
 - `Edit > Modify Peptide` opens the Edit Modifications form (main-menu path works), but the per-residue **Isotope heavy** dropdowns are caption-less `LiteDropDownList`s: only residues that already carry a mod expose a label; the V/L residues needing a new `Label:13C` are unlabeled and share the same type, and `set_form_value` matches by label (internal name `comboHeavy8_1` errors "No control matching"), `get_children`=[]. So the V/L labels can't be applied (Finding #5).
 - The subsequent **heavy-precursor pick-list** (hover the peptide's drop-arrow → check "747.3481++ (heavy)") has no MCP verb (tree pop-up pick-list, = MethodEdit #7). Finding #6.
 - **Impact:** the 3 V/L peptides (AGLCQTFVYGGCR, IVGGWECEK, YEVQGEVFTKPQLWP) stay light-only → 19 precursors vs the tutorial's 22. Light-form analysis downstream is unaffected; light:heavy ratios for these 3 are unavailable.
+
+### Importing Data from WIFF + Peak Areas analysis (Study 7) — PASS (strong)
+- **Multi-sample WIFF (s-19/s-20):** Import Results → OK → OpenDataSourceDialog set Source name to the .wiff path → Open → **Choose Samples** listed 57 samples; unchecked Blank/QC×4/gradientwash×4/A2×4/A3×4 (`uncheck_item`) → exactly **40** kept (verified). Prefix "7_3_" removed → replicates A_01..J_04. All 40 chromatograms extracted.
+- Deleted problematic **YEVQGEVFTKPQLWP** (`Edit > Delete`) → 10 peptides. Method match tolerance 0.065; `Settings > Integrate All`.
+- **Peak Areas (get_graph_image renders clean throughout):** s-23 Normalized-To-Heavy **EXACT**; s-26 y3-interference (Transitions>All + Normalized>Total) **EXACT**; s-28 CV Values (Peptide Comparison + Transitions>Total) matches (heavy CVs 5-52%); graph right-click menus driven via `click_control_menu_item control=""` (Normalized To, Group By, CV Values, Order).
+- **Settings Concentration Values (s-29):** Document Grid Replicates report; grid path via `get_children` (BoundDataGridViewEx); `set_current_cell_address`+`set_grid_text` filled all 40 rows Sample Type + Analyte Concentration **exactly** per the tutorial table. s-30/s-31: Group By Analyte Concentration ± CV Values reproduce the calibration/CV graphs.
 
 ## Findings & fix suggestions
 
