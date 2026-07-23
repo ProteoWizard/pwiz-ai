@@ -1,11 +1,13 @@
 # TODO-LK: panoramapublic modification web parts exposed an unbounded "All Folders" aggregate query
 
-- **Status**: PR OPEN, awaiting review/merge.
-- **PR**: #662 (https://github.com/LabKey/MacCossLabModules/pull/662)
+- **Status**: Completed. Merged and deployed on the server.
+- **PR**: [#662](https://github.com/LabKey/MacCossLabModules/pull/662) (merged 2026-07-14 as `501ba21`)
 - **Branch**: `26.3_fb_panoramapublic-disable-cross-folder-query`, off `release26.3-SNAPSHOT`
 - **Module**: panoramapublic (`server/modules/MacCossLabModules/panoramapublic`)
 - **Origin**: PanoramaWeb scraping incident, 2026-07-08/09. The longest request was a
   `query-executeQuery.view` on the modification query, running 1,006 s at HTTP 200.
+- **Motivation**: Primarily to control bots. The site-wide aggregate was being hit by scraping traffic, and
+  this scopes it so a crawler (or a hand-built URL) can no longer run it across every folder on the server.
 
 ## Problem
 
@@ -27,7 +29,12 @@ dropdown. This affects both the executeQuery grid and the standalone web part gr
 - Tests in `PanoramaPublicModificationsTest.testAddModInfo`: `verifyModificationQueryScopeIsRestricted` and
   `verifyModificationWebPartScopeIsRestricted`. Red on unfixed code, green after.
 
-## Open items
+## Progress Log
 
-- **PR #662** review and merge. Optional Copilot pass, then `/pw-respond 662`.
+### 2026-07-14 - Merged and deployed
+
+PR #662 merged as `501ba21` into `release26.3-SNAPSHOT` and deployed on the server. Shipped the
+`limitContainerScope` helper applied via `getContainerFilter()` overrides on both the executeQuery grid
+(`PanoramaPublicSchema.createView`) and the standalone web parts (`ModificationsView`), clamping any scope
+wider than `CurrentAndSubfolders` back down to `CurrentAndSubfolders`, plus the two Selenium checks.
 
