@@ -36,6 +36,12 @@
 | s-70 | Document Settings (3 checked) | PASS (state) | SubjectId, BioReplicate, Condition all checked (matches reference). Capture cyan. |
 | s-71,s-72 | Replicates grid | PASS | Document Grid > Replicates report shows 42 replicates + empty annotation columns. |
 | s-73 | Annotation values pasted | PASS (constructed) | **Annotations.xlsx MISSING from data** (only ProteinNames.csv). Constructed values from replicate names and pasted via `set_grid_text`: SubjectId=subject#, BioReplicate=subject#, Condition. **Finding:** Condition value-list allows "Disease"/"Healthy" (pre-existing user-settings def) — tutorial text/screenshots say "Diseased". Used "Disease". All 42 rows set correctly. |
+| (global std) | Set VVLSGSDATLAYSAFK global standard | PASS | Not an explicit tutorial UI step, but required for "Ratio to Global Standards". Targets tree right-click `Set Standard Type > Global Standard`; `click_control_menu_item` text-path failed (on-demand submenu) → used `perform_action click` with enumerated path → StandardType=Normalization confirmed. |
+| s-91 | Edit Group Comparison | PASS | Name=Healthy v. Diseased, Control=Condition/Healthy, compare=Disease, Identity=SubjectId, Norm=**Global standards** (combo label; tutorial says "Ratio to Global Standards"), Confidence=99, Scope=Protein — all verified, matches reference. |
+| s-92 | Document Settings group comps | PASS | Group comparison added and OK'd. |
+| s-93 | Group comparison grid | PASS (engine) | 49 rows of Fold Change Result + Adjusted P-Value produced. Tutorial shows 48 rows/proteins. Values differ (un-refined doc, manual peak corrections skipped). Statistical engine ran end-to-end. |
+| s-94 | Fold Change Bar Graph | PASS | Bar Graph button → FoldChangeBarGraph; Log2 Fold Change per protein with CI whiskers; same protein ordering + major features (NP_036828 tall +; NP_036714/NP_150641/NP_058716 deep −) match reference. |
+| s-95 | Adjusted P<0.01 filter → 11 | PARTIAL (14 vs 11) | Counted from grid: **14** proteins with Adjusted P-Value < 0.01 (tutorial 11). Divergence from skipped manual peak refinement + un-refined 137-peptide set. |
 
 ## Progress log
 
