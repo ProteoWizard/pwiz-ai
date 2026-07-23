@@ -34,6 +34,13 @@
 | s-10 | y3 transition / all transitions | PASS (graph) | Light precursor 602.8266++ chromatogram renders; interference double-peak ~29.8/30.0 visible. Navigated via get_locations/set_selection |
 | s-11 | Adjust peak boundaries (drag) | BLOCKED | Mouse-drag peak-boundary edit; chromatogram graph exposes only get_actions/get_children/click/get_value — no set-boundary verb. Finding #3 (= MethodEdit #7 / GroupedStudies #1) |
 | (Removing Transition Peak — Quantitative) | Removing interference | PARTIAL | Multi-select of 4 transitions (light+heavy y3/y4) worked (set_selection additionalLocators); but tree right-click "Quantitative" not reachable — Targets-tree ContextMenu not enumerable. Finding #4 |
+| s-12 | Edit Isotope Modification (13C(6) C-term R) | BLOCKED→worked around | Same duplicate-button gap (Finding #1); defined Label:13C(6) (C-term R) via settings XML. Checked it, unchecked 15N4-R, kept K. |
+| s-13 | Study 7 Identify Columns | PASS (functional) | Direct paste of 57-row/6-col Simple list; Skyline auto-mapped precursor m/z, product m/z, **peptide+protein parsed from col D dotted notation**, other cols Ignore. Capture cyan |
+| s-14 | Max m/z error | PASS (exact) | On OK: error "product m/z 1519.78 is out of range... Check the Instrument tab" (get_grid_text) — matches tutorial exactly |
+| s-15 | Peptide view after paste | PASS (structure exact) | After Max m/z=1800 + re-paste + Collapse All>Peptides: **7 groups/11 pep/19 prec/57 tran**; group+peptide layout (APR/LEP/MYO/MBP×2/PSA×2/HRP/CRP×3) matches reference s-15 exactly |
+| s-16 | Edit Isotope Modification (Label:13C on V) | BLOCKED | Edit>Modify Peptide opens; but per-residue "Isotope heavy" dropdowns are caption-less LiteDropDownLists, not uniquely addressable (set_form_value=label-only; get_children=[]). Finding #5 |
+| s-17 | Edit Modifications form | BLOCKED | Same as s-16 |
+| s-18 | Add heavy precursor via pick list | BLOCKED | Hover drop-arrow + pick-list popup — no MCP verb (tree pop-up pick-list, = MethodEdit #7). 3 V/L peptides stay light-only (19 prec vs tutorial's 22) |
 
 ## Progress log
 
@@ -62,6 +69,17 @@
 - **Removing a Transition Peak (Quantitative toggle):** multi-selected the 4 interference transitions successfully, but the Targets-tree **right-click "Quantitative"** could not be invoked — `click_control_menu_item` reports the SequenceTree "does not support get_children" for its context menu, and a hand-built ContextMenu path is rejected (needs a real serialized UiElementPath, which the non-enumerable tree can't provide). **Finding #4.** Not applied.
 - **Adjusting Peak Boundaries (s-11):** click-drag under the x-axis — no MCP verb (graph actions = get_actions/get_children/click/get_value only). **BLOCKED, Finding #3** (same root gap as MethodEdit #7 / GroupedStudies #1). Downstream: the MRMer precursor total-area ratios that depend on this manual correction (0.24 / 0.27 in the tutorial) are not reproduced; auto-picked ratios remain.
 - Data anomaly the tutorial itself calls out (2 peptides YVDPNVLPETESLALVIDR, FPEPGYLEGVK with blank transitions in the mzXML) present as described — not a runner issue.
+
+### Preparing / Pasting the Study 7 Transition List — PASS (structure exact)
+- New Document. Study 7 isotope mod `Label:13C(6) (C-term R)` defined via settings XML (duplicate-button gap again). Peptide Settings: checked K+15N2 and 13C(6)-R, unchecked 15N4-R and the Yeast_mini library, Background proteome → None.
+- Extracted the "Simple" sheet (57 rows × 6 cols) from `Study7 transition list.xls`. Direct-paste on the tree → Identify Columns: precursor m/z / product m/z auto-detected; **col D `PROT.PEPTIDE.frag.label` parsed into both Protein Name and Peptide** (7 groups); other cols Ignore. (s-13)
+- OK → error **"product m/z 1519.78 is out of range… Check the Instrument tab"** (s-14, exact). Cancel; Transition Settings > Instrument > Max m/z=1800; re-paste; OK. Collapse All > Peptides.
+- Result **7/11/19/57**; s-15 layout matches reference EXACTLY.
+
+### Adjusting Modifications Manually (s-16–s-18) — BLOCKED
+- `Edit > Modify Peptide` opens the Edit Modifications form (main-menu path works), but the per-residue **Isotope heavy** dropdowns are caption-less `LiteDropDownList`s: only residues that already carry a mod expose a label; the V/L residues needing a new `Label:13C` are unlabeled and share the same type, and `set_form_value` matches by label (internal name `comboHeavy8_1` errors "No control matching"), `get_children`=[]. So the V/L labels can't be applied (Finding #5).
+- The subsequent **heavy-precursor pick-list** (hover the peptide's drop-arrow → check "747.3481++ (heavy)") has no MCP verb (tree pop-up pick-list, = MethodEdit #7). Finding #6.
+- **Impact:** the 3 V/L peptides (AGLCQTFVYGGCR, IVGGWECEK, YEVQGEVFTKPQLWP) stay light-only → 19 precursors vs the tutorial's 22. Light-form analysis downstream is unaffected; light:heavy ratios for these 3 are unavailable.
 
 ## Findings & fix suggestions
 
