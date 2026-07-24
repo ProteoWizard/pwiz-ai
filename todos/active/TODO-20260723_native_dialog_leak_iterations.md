@@ -385,3 +385,32 @@ specifically, but it does not address the real nightly failure, so mute is the p
 - Plan once the plateau question is answered: revert the test split (it was diagnostic, does not
   fix nightly), keep the chosen diagnostic (HeapProbe and/or the test), and apply the
   warm-up-or-mute fix to the native-dialog family.
+
+## UPDATE 2026-07-24 (evening): TestMcpConnectorBackgroundDialog root cause found
+
+Full 07/24 nightly (10 machines via LabKey MCP) gives the real magnitudes — the earlier
+"spiky near threshold" read was WRONG. TestMcpConnectorBackgroundDialog leaks **25,056 /
+42,624 / 47,385 / 104,235 bytes** across DT1/DEV4/... — mean ~55 KB, every reading ABOVE the
+20 KB threshold (up to 5x), on 6/10 machines.
+
+**Root cause (not the OS file dialog, not our logic):** the test pastes 50,000 rows x 2 columns
+into a grid; `DataGridViewPasteHandler.TrySetValue` runs per cell and does
+`CurrentCell = cell; BeginEdit(true); ...; EndEdit()` -- one editing-control (Win32 window)
+create/destroy PER CELL, up to ~100,000 per run.
+
+Proven with `GridEditProbe` (scratchpad, no Skyline code -- bare DataGridView BeginEdit/EndEdit
+loop): on a CONSOLE session it grows **~0.028 KB/edit, roughly linear, no plateau** (239->931 KB
+over 8k->32k edits), user handles flat (native heap, not a handle leak). So it is WinForms/
+platform window-churn, the same family as the native-dialog leak, arriving via grid editing
+controls instead of file dialogs.
+
+This explains everything: no native dialog yet leaks (it's the grid); 4x variance (paste is
+cancelled at a nondeterministic point, so the edit count -- and growth -- varies with machine
+speed); above threshold on most machines (ExpandedLeakCheck cannot fix a workload-scaled growth).
+
+**Fix implication — the ExpandedLeakCheck entry added earlier is WRONG and must be reverted.**
+Options: (a) mute this test from the HEAP check like the native-dialog family (plain, not
+TS-gated, since it grows on console too -- though the test stays under threshold on console
+because it cancels early); or (b) drop PROPERTY_COUNT so far fewer edits run before the
+connector cancels. Decide with tomorrow's fleet data. `GridEditProbe` is ready for the RDP
+machine to confirm TS amplification.
