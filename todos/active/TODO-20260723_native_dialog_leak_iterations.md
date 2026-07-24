@@ -63,6 +63,34 @@ allocate (the codebase already notes RDP-specific native-dialog behavior — see
 regression #4229). The common file dialog's shell/preview/thumbnail handlers are a plausible
 per-dialog allocator that behaves differently over a remoted display.
 
+## PRECEDENT: the #4265 RDP/accessibility GC-LEAK fix
+
+Commit `9df041524b60cfd096f0d7bfe67b6708fd1a31f6` ("Fixed spurious GC-LEAK reports by opting
+the test host into the latest accessibility level", #4265) fixed a related-but-different
+problem:
+- At the framework-default WinForms accessibility level, closing a window did not release the
+  UI Automation accessible-object **provider handles**, which transitively pinned
+  SkylineWindow/SrmDocument. Surfaced as a **GC-LEAK** (managed objects not collected), only on
+  the Windows Server 2022 agent (TCA1).
+- **It was NOT a real leak** — a *fixed* set of objects held by accessibility; the count did not
+  grow over time. Fixed by `TestRunner.Main` setting all four `Switch.UseLegacyAccessibilityFeatures*`
+  to false (opt into the latest accessibility level, where providers are released on close).
+
+How the current problem differs:
+- That fix is **already in `TestRunner.Main`**, yet the current growth still happens → not the
+  same code path.
+- #4265 was **WinForms** accessibility. The current leak is the native **shell** common file
+  dialog (`#32770`), whose UIA providers are *outside* the `UseLegacyAccessibilityFeatures`
+  switch's scope.
+- Symptom: #4265 was managed **GC-leak, fixed count**; this is native **committed heap, growing**
+  (~45 KB/iter, 9→16.6 MB non-saturating).
+
+Refined hypothesis: under RDP, the accessibility/UIA bridge queries the native file dialog, and
+the shell instantiates **native** UIA/COM provider objects per dialog that accumulate on the
+process heap. Same family (RDP + accessibility), different layer (shell/native vs WinForms/managed).
+**Open question to answer: is the count truly growing (real leak) or a fixed hold that looks like
+growth (as in #4265)?**
+
 ## FOR THE OTHER MACHINE (task for Claude on the leaking machine)
 
 Please help confirm the cause. Pull branch `Skyline/work/20260723_native_dialog_leak_iterations`
@@ -100,6 +128,13 @@ and build TestFunctional + TestRunner.
    the answer is to make these tests tolerant of that environment (warm-up before the leak
    window, or expanded iterations / muting for the native-file-dialog tests), not to chase a
    nonexistent code leak.
+
+5. **Real growth vs fixed hold (the #4265 distinction).** If it does leak, determine whether the
+   growth is unbounded or plateaus. Let `TestNativeOpenFileDialogLeak` run for many more
+   iterations (e.g. `pass1 wait=on`, or a large `loop=`) and watch the committed heap (2nd MB
+   number): does it keep climbing indefinitely (real leak) or flatten at a ceiling (a fixed
+   accessibility/shell hold that merely looks like a leak within 24 iterations, as in #4265)?
+   `HeapProbe save 500` is a fast harness-free way to see whether it ever saturates.
 
 Please write your findings back into this TODO (a "Results from <machine>" section with the
 heap deltas for steps 1–4 and the RDP-vs-console outcome), and note the Windows build/version
