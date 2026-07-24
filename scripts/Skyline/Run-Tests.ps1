@@ -155,7 +155,10 @@ param(
     [string]$SourceRoot = $null,  # Path to pwiz root (auto-detected if not specified)
 
     [Parameter(Mandatory=$false)]
-    [switch]$Summary = $false  # Show only errors and final result (suppresses verbose test output)
+    [switch]$Summary = $false,  # Show only errors and final result (suppresses verbose test output)
+
+    [Parameter(Mandatory=$false)]
+    [string]$Pass = ""  # Which passes to run, e.g. "1" or "0,1,2" (default: TestRunner's own default, pass 2 only)
 )
 
 # Script location: ai/scripts/Skyline/
@@ -592,6 +595,15 @@ try {
                 }
             }
             $runnerArgs = @("loop=$loopValue") + $commonArgs
+        }
+
+        # Pass 0 is the edge-case pass (French, no vendor readers, no internet), pass 1 is the
+        # leak-detection pass that repeats each test, pass 2 is the normal pass that loops
+        if ($Pass) {
+            $requestedPasses = $Pass -split '[,\s]+' | Where-Object { $_ -ne '' }
+            foreach ($p in 0, 1, 2) {
+                $runnerArgs += "pass$p=$(if ($requestedPasses -contains "$p") { 'on' } else { 'off' })"
+            }
         }
 
         if ($TakeScreenshots) {
