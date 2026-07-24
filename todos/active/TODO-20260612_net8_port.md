@@ -70,6 +70,92 @@ Template csproj (drop the legacy 600-line XML, replace with ~40 lines):
 4. **NHibernate** — versions ≥5.5 support net6+. Multi-target by package version
    if legacy needed.
 
+## Status (2026-07-24, session: DIA-NN tutorial perf test CI failure -> DocDir move)
+
+Resumed via `/pw-continue`. **The progress log had gone stale at the 07-23b `efe6f7824c` entry; HEAD had
+advanced 8 commits** (all committed + dual-pushed to origin + `chambem2/pwiz-sharp`), logged only in
+handoffs/memory until now:
+- `3420b0e7aa` add `pwiz_tools/Skyline/tc-perftests.bat` (TeamCity entry point: build + stage + run
+  `TestPerf.dll` and `TestTutorial.dll` with `perftests=on`; `SKYLINE_TEST_ARGS` escape hatch runs one scoped
+  test instead). `3b6a1d552f` point the nightly smart-trigger's master Skyline perf/tutorial target at the net8
+  config `ProteoWizard_SkylineWindowsNetPerfTutorialTests`.
+- `7e0ec4487a`/`a8f0cac4b1` pin peptdeep to 1.5.0, re-record AlphaPeptDeep baselines, deterministic
+  cross-machine fragment sort.
+- `8a8653b6f2`/`102061978d`/`6ccaf02b29` vendor-reader finalizers (Bruker/Thermo/Sciex/Mobilion) + an
+  undisposed-open regression guard in `VendorReaderTestHarness` (memory `reference_net8_vendor_reader_finalizers`).
+- Main net8 CI (`ProteoWizard_SkylineWindowsNet`) green through #61 (`a8f0cac4b1`).
+
+**DIA-NN tutorial perf test (`TestDiannSearchTutorial`) fixed -- committed + dual-pushed (`288e1d5f4b` fix,
+`4aee5f1704` diagnostic removal; net change of the session = one line).** It failed CI-only in the new
+perf/tutorial config (builds #0-#3 all red) with "Some results files are still missing" at the
+ImportPeptideSearchDlg chromatograms page; passed locally. Root-caused with a scoped CI diagnostic
+(`SKYLINE_TEST_ARGS=test=TestDiannSearchTutorial`, dumping doc-lib sources + FOUND/MISSING + CacheDir/DocDir
+listings): the blib recorded **6 unfindable `.raw` source files** (the full 6-file ProteoBench set incl the
+`_03` replicates the test never searches) while the 4 searched `.half.mzML` were correctly prefilled. The
+`.half.mzML` subsets internally name their source `.raw` (`<sourceFile name="..._01.raw">`); `DiaNNSpecLibReader`'s
+`stats.tsv` remap rewrites those to the disk name but only for runs in the current stats. The 6-run attribution
+came from a **stale `diann-output-lib.parquet` in the test's persistent DocDir**
+(`%LocalAppData%/SkylinePerfTests/DiannPerfDoc-stable`) on the CI agent from an earlier full-dataset run;
+DIA-NN's `--use-quant --reanalyse` **reuses the output library and never rebuilds it** (deleting it just breaks
+the search: "DIA-NN search did not produce a spectral library output" -- first fix attempt `93e296d58e`, reverted
+`9562f64288`), so the poison was reused every run. Not a prefill bug; CacheDir was clean; LFQbench uses a
+different DocDir. **Fix (Matt's call): `DocDir` -> `TestContext.GetTestResultsPath(@"DiannPerfDoc")` (ephemeral
+per run)** so no stale lib persists; `.quant` + predicted library stay in the persistent CacheDir; the wizard's
+real search of file[0] rebuilds the lib fresh. **Confirmed green: scoped CI build 4107764,
+`TestDiannSearchTutorial-en` 0 failures / 1025s.** Memory: `reference_net8_diann_tutorial_docdir`.
+
+**Still open (separate, NOT DIA-NN):** `TestDiaTtofDiaUmpireTutorial` red in the same perf run -- a `+/-2` count
+drift (Expected 12221, Actual 12223, `DiaUmpireTutorialTest.cs:634` LibraryPeptideCount), an OOP-MSAmanda
+re-baseline nit. No full net8 perf/tutorial sweep has run since the trigger repoint; the scoped/manual runs only
+surfaced these two.
+
+## Status (2026-07-23b, session: net8 BiblioSpec DIA-NN reader CI #57 fixes)
+
+Resumed via `/pw-continue`; took the user's ask to fix CI build #57
+(`ProteoWizard_SkylineWindowsNet` / PR #4178, commit `ff29f64323`), which had 2 failures
+of 1715 -- both `DiannSearchTest` variants in the managed BlibBuild's DIA-NN reader.
+(NOTE: this progress log had gone stale at 2026-07-15; true head/state was in
+`ai/.tmp/handoff-20260723_net8_merge_aiconnector.md`. Sessions 07-17..07-23 were logged
+only in handoffs, not here.)
+
+**Both were faithful-port divergences from `DiaNNSpecLibReader.cpp` (introduced with the
+`ff29f64323` parquet-report port, which only verified compilation). FIXED + VERIFIED,
+committed + dual-pushed (`efe6f7824c`, origin + chambem2/pwiz-sharp).**
+
+1. **`TestDiannSearch1_9_1` -- "not a parquet file, head: 46696c65".** DIA-NN 1.9.1 honours
+   the literal `--out diann-output.parquet` filename Skyline passes (`DiannHelpers.cs:717`,
+   version-agnostic) but writes a **TSV** report into it. The C# reader dispatched
+   parquet-vs-TSV on the `.parquet` EXTENSION -> fed the TSV to Parquet.Net. cpp dispatches
+   on CONTENT via `ParquetReader::is_parquet` (`arrow::OpenFile().ok()`, cpp:731/667). Fix:
+   added `IsParquet()` content-sniff; routed `ReadDiannReport` / `HasRequiredHeaders` /
+   `FindLibParquet` through it.
+2. **`TestDiannSearch` (2.5.0) -- "could not find precursorId 'VTHAVVTVPAYFNDAQR3' in
+   speclib".** DIA-NN reports precursors absent from the spectral library; cpp SKIPS them at
+   the `psmByPrecursorId` lookup (cpp:1376-1380, PR #4189) and THROWS only at the
+   `entryByModPeptideAndCharge` lookup (cpp:1418-1420). The port had these two swapped. Fix:
+   restored cpp order.
+
+One file (`DiaNNSpecLibReader.cs`, +53/-20). Verified green on net8 via real DIA-NN searches:
+`TestDiannSearch`, `TestDiannSearch1_9_1`, and `TestDiannSearchEmptyResults1_9_1` (regression
+guard) -- all 0 failures. A fresh CI run on `efe6f7824c` should clear #57's 2 failures.
+
+**Perf-suite status re-checked (perf tests are NOT in the per-commit CI; build #57 = Test +
+TestFunctional only).** Added `pwiz_tools/Skyline/tc-perftests.bat` (`3420b0e7aa`, origin +
+chambem2) -- a TeamCity entry point that builds Skyline + TestPerf + TestTutorial + TestRunner
+(+ best-effort native Hardklor), stages them, and runs `TestPerf.dll` and `TestTutorial.dll` with
+`perftests=on` (each filtered to its own DLL so co-staged TestFunctional/TestUtil DLLs don't run).
+Mirrors build.bat's flags/helpers + a SKYLINE_TEST_ARGS escape hatch; validated end-to-end (build ->
+stage -> run). Next: create the TeamCity build config that calls it (`--i-agree-to-the-vendor-licenses
+--automated`, optionally `--parallel`).
+
+**CORRECTION to the 07-17/07-22 handoffs:** `TestSciexPrmCeOptimization` -- flagged there as THE open
+product perf bug (wiff2 PRM `IsolationHalfWidth`=0) -- now PASSES on net8 (0 failures, ~25s, verified
+twice this session). The SWATH isolation-halfwidth logic already in `WiffFile.cs:612` covers the PRM
+case; `WiffFile.cs` was never the blocker by the time of the merge. Remaining perf non-passes are
+environment-blocked only (`TestOrbiPrmArdia` = Ardia creds; `TestAlphaPeptDeepBuildLibrary` =
+AlphaPeptDeep Python env), NOT product bugs. No fresh FULL perf sweep has been run yet -- the new
+tc-perftests.bat is the way to get one under CI.
+
 ## Status (2026-07-15, session: DIA-Umpire FullFileset root-cause + rewirings + cache-reuse fix + engine experiment)
 
 Resumed via `/pw-continue` from the 2026-07-14 DIA-Umpire recording handoff. Committed the held verified
