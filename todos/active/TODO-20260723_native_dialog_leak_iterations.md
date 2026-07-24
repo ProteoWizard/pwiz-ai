@@ -190,6 +190,96 @@ and whether the session was RDP or console.
 - `HeapProbe save 120`: ~5 KB/iter decaying to ~2.6, plateaued.
 - Session: physical console (not RDP). Did not reproduce the leak.
 
-## Results from <other machine>
+## Results from nicksh's machine — RDP SESSION (SAME MACHINE, leak reproduced)
 
-(To be filled in by Claude on the leaking machine — see "FOR THE OTHER MACHINE" above.)
+**This is the decisive same-machine A/B for the RDP hypothesis.** The console-session
+results above (no leak, HeapProbe plateaus by ~iter 20) and the results below were produced
+on the *same* physical machine on the *same* day with the *same* `HeapProbe.cs`. The only
+difference is the session type.
+
+Session verified as Remote Desktop: `SESSIONNAME=RDP-Tcp#0`,
+`SystemInformation.TerminalServerSession=True`, `CLIENTNAME=NICKSH-ELITEBOO`. `query session`
+showed a separate `console` session (ID 2) with no interactive user, and our active session
+`rdp-tcp#0` (ID 3). Windows 11 Pro 26200.
+
+### HeapProbe (bare dialogs, NO Skyline code) over RDP
+
+| mode | dialog | growth | per-iter | shape |
+|------|--------|-------:|---------:|-------|
+| `msgbox` (control) | MessageBox | 6–7 KB / 60 | ~0.1 KB | flat |
+| `save` | modern `SaveFileDialog` (IFileDialog) | 302 KB / 60 · 681 KB / 120 | ~5 KB | linear, **no plateau** |
+| `open` | modern `OpenFileDialog` (IFileDialog) | 685 KB / 120 | ~5.7 KB | linear, **no plateau** |
+| `savelegacy` | legacy comdlg32 `GetSaveFileName` | 1656 KB / 60 | ~27.6 KB | linear, **no plateau** |
+| `openlegacy` | legacy comdlg32 `GetOpenFileName` | 3389 KB / 120 | ~28.2 KB | linear, **no plateau** |
+
+Two independent findings:
+
+1. **RDP alone flips the result on this machine.** The console session did not leak (probe
+   plateaued); over RDP the identical bare `SaveFileDialog`/`OpenFileDialog` loop climbs
+   ~5 KB/iteration and never plateaus across 120 dialogs. This confirms the leak is
+   environmental (remoted display), not Skyline/connector/test code — the probe contains none.
+2. **It is NOT the modern shell/preview/thumbnail handlers.** Added an `AutoUpgradeEnabled`
+   switch to the probe (`open`/`save` = modern IFileDialog; `openlegacy`/`savelegacy` = legacy
+   comdlg32). The *legacy* comdlg32 dialog leaks ~5× **worse** (28 KB/iter, dead-linear) than
+   the modern one. So the earlier "modern IFileDialog preview handlers" guess is wrong; the
+   leak lives in the more fundamental common-dialog + remoted-display (GDI/RDP display driver)
+   path, and the legacy dialog is the worse offender.
+
+The `msgbox` control staying flat over RDP is the key negative control: it isolates the growth
+to the **common file dialog** specifically, not "RDP in general" and not the probe's own
+modal-loop / background-thread WM_CLOSE dismissal plumbing (which msgbox exercises identically).
+
+### HeapProbe changes made this session
+
+Added `open`, `openlegacy`, `savelegacy` modes and an `AutoUpgradeEnabled` parameter to
+`ShowSaveDialog`/`ShowOpenDialog` in `HeapProbe.cs` (was `save`/`msgbox` only). Not yet
+committed.
+
+### DISCONNECTED RDP (client disconnected, session left running in `Disc` state)
+
+Launched a detached self-logging probe run, then disconnected the RDP client for ~20 min and
+reconnected. `query session` was captured at every mode boundary and showed our session (ID 3)
+in **`Disc`** state throughout the entire run (log:
+`ai/.tmp/heapprobe_disconnected/disconnected_run.log`, script `Run-DisconnectedProbe.ps1`).
+
+| mode | connected RDP | **disconnected RDP** |
+|------|--------------:|---------------------:|
+| `msgbox` (control) | ~0.1 KB/iter | **0.0 KB/iter (2 KB/60)** flat |
+| `save` (modern) | ~5.0 KB/iter | **4.0 & 5.5 KB/iter** |
+| `open` (modern) | ~5.7 KB/iter | **4.1 KB/iter** |
+| `openlegacy` (comdlg32) | ~28.2 KB/iter | **28.7 & 28.2 KB/iter** |
+| `savelegacy` (comdlg32) | ~27.6 KB/iter | **27.7 KB/iter** |
+
+**The leak persists essentially unchanged while the client is disconnected.** Therefore it is
+NOT the live RDP display transport/encoder or anything about an attached viewer — merely being
+a **disconnected Terminal Services session** (the headless remoted-display driver stack) is
+sufficient. The legacy comdlg32 dialog is again dead-linear at ~28 KB/iter, identical connected
+vs disconnected; the modern IFileDialog is the same ~4–5 KB/iter with more run-to-run noise; the
+MessageBox control stays flat. This is exactly the state nightly machines sit in (logged in over
+RDP, then disconnected → `Disc`), which explains why they leak while the physical console does not.
+
+### Still to run on this machine (not yet done)
+
+- **TestRunner legs (steps 1 & 2)** — needs a TestFunctional + TestRunner build in
+  `sky_fileopendialog`, which was not built this session. Worth doing now that this RDP
+  session reproduces the leak: `TestNativeOpenFileDialogLeak` and the three split
+  `TestNativeMessageBox*` tests should now LEAK here too, giving a harness-level confirmation
+  that matches BRENDANX-UW7.
+- **The clean console leg on this machine** — the console data above was recorded separately;
+  a within-session `tscon`-to-console redirect was deliberately NOT done because it would
+  disconnect the live RDP session. To nail it down, run `HeapProbe.exe openlegacy 120` while
+  physically logged in at the console (28 KB/iter over RDP should collapse to a plateau there).
+- **RDP parameter sweep** (optional) — reconnect with persistent bitmap caching off, lower
+  color depth, or themes/font-smoothing disabled to see whether the per-dialog rate changes;
+  would further localize which remoted-display allocation is responsible.
+
+### Bottom line
+
+The OpenFileDialog/SaveFileDialog inherently leaks process heap **whenever the process runs in
+a Terminal Services (RDP) session — whether the client is connected OR disconnected** — on the
+very machine that is clean at the physical console. The MessageBox control never leaks, so it is
+the common file dialog specifically, via the TS/RDP display-driver stack, not our code. The fix
+belongs in test infrastructure, gated on `SystemInformation.TerminalServerSession` (warm-up
+before the leak-check window, or muting / widened thresholds for the native-file-dialog tests
+under TS), not in a code hunt. Note nightly agents typically run logged-in-then-disconnected
+(`Disc`), which this run reproduces directly.
