@@ -5,9 +5,9 @@
 - **Worktree**: `sky_fixes`
 - **Base**: `master`
 - **Created**: 2026-07-24
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none)
-- **PR**: (pending)
+- **PR**: [#4454](https://github.com/ProteoWizard/pwiz/pull/4454)
 
 ## Problem
 
@@ -68,3 +68,19 @@ occurrence name the offending dialog, which should identify the root cause in on
 ## Files Changed
 
 - `pwiz_tools/Skyline/ToolsUI/DialogWatcher.cs`
+
+## Resolution
+
+### 2026-07-24 — Merged
+PR [#4454](https://github.com/ProteoWizard/pwiz/pull/4454) squash-merged to master as
+`907ab0e59038723bb3d2e01d461b5253390909b6`.
+
+`EnsureCompleted` now throws the dialog's own message when it has one, and falls back to the
+FormId ("TypeName:Title") only when the message is empty — the undiagnosable case that motivated
+the change. A TeamCity failure caught during review (`TestAlertWatch` pins that a native box
+surfaces its BODY, never its caption) was fixed by not prefixing the message when one exists.
+
+**Diagnostic only** — the underlying intermittent `TestJsonToolServer` race is NOT fixed. The
+next nightly occurrence will now name the offending dialog, which should identify the root cause.
+Follow-up lives in this file's investigation notes; watch for a `Dialog:...` FormId (would confirm
+the discarded `MakeNativeDialog` theory).

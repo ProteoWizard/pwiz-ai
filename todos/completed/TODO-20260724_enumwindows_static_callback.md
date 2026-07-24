@@ -5,9 +5,9 @@
 - **Worktree**: `sky_fixes`
 - **Base**: `master`
 - **Created**: 2026-07-24
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none)
-- **PR**: (pending)
+- **PR**: [#4455](https://github.com/ProteoWizard/pwiz/pull/4455)
 
 ## Problem
 
@@ -76,3 +76,15 @@ Real `pwiz.CommonUtil` path, 20,000 calls:
 ## Files Changed
 
 - `pwiz_tools/Shared/CommonUtil/SystemUtil/PInvoke/User32.cs`
+
+## Resolution
+
+### 2026-07-24 — Merged
+PR [#4455](https://github.com/ProteoWizard/pwiz/pull/4455) squash-merged to master as
+`015d8956be02ac18c6a6a2a95080fb19d43edd1e`.
+
+`User32.EnumWindows` / `EnumChildWindows` / `EnumThreadWindows` now pass the list through a
+`GCHandle` in `lParam` and share one static callback delegate for the whole process. Measured
+76 KB of heap drift over 20,000 calls collapse to 4 KB, flat. Also makes the three wrappers
+thread-safe (no shared callback state). Pure hygiene fix, independent of the native-dialog leak
+it was found alongside.

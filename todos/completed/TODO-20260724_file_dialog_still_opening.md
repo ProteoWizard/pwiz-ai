@@ -5,9 +5,9 @@
 - **Worktree**: `sky_fixes`
 - **Base**: `master`
 - **Created**: 2026-07-24
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: (none)
-- **PR**: (pending)
+- **PR**: [#4456](https://github.com/ProteoWizard/pwiz/pull/4456)
 
 ## Problem
 
@@ -85,3 +85,18 @@ file-name field and would wait forever.
 - `pwiz_tools/Skyline/TestFunctional/NativeMessageBoxTest.cs`
 - `pwiz_tools/Skyline/TestPerf/DiaToSrmTutorialTest.cs`
 - `pwiz_tools/Skyline/TestPerf/DiaFragPipeTutorialTest.cs`
+
+## Resolution
+
+### 2026-07-24 — Merged
+PR [#4456](https://github.com/ProteoWizard/pwiz/pull/4456) squash-merged to master as
+`96faedda560150bc53037559b9913a3346c60093`.
+
+The test drivers now wait for the native file dialog's file-name field to appear before typing:
+`WaitForNativeFileDialog()` folds the wait in, and `ResolveNativeFileDialog(actionResult)` covers
+the 4 sites that took the id straight from an ActionResult with no wait. The `"File name"` label
+is a shared const (`NativeFileDialog.FILE_NAME_FIELD`) so product and test code cannot drift.
+
+**Caveat**: the original race only reproduced on a nightly/RDP machine, so local passes cannot
+prove it gone — the fix makes the precondition explicit rather than timing-dependent. Confirm on
+the 2026-07-25 nightly (BSPRATT-UW2 was the machine that failed).
