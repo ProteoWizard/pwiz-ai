@@ -13,6 +13,15 @@
   (Full Scan CCS-error target + golden refresh), `35447af24` (merge origin/master, 9 commits,
   no conflicts). Post-merge green: apex-of-valid + v19-compat unit tests, FullScanGraphTest,
   IonMobilityTest. Full fr suite running separately (developer) to surface other stale goldens.
+- **Tip commits (2026-06-30..07-01), tail after the master syncs above → HEAD `001dae78b`:**
+  `fbc1b2659` (tutorial screenshot seam), `21f719dba` (observed IM/CCS % error → 2 decimals:
+  `Formats.PercentError` + `ObservedValueFormatter` extracted for unit-testing),
+  `516d8b133` (merged the observed-IM tooltip into the existing IM-filtering shot, no figure
+  renumbering; header reworded then reverted), `001dae78b` (tooltip IM row uses axis-style label
+  "Drift Time (ms)" via `IonMobilityUnitsL10NString`; dynamic mobilogram-width floor
+  `EffectiveColumnFraction` so the "Intensity" X-axis title isn't clipped). All green:
+  build + CodeInspection + FullScanGraphTest + ChromPeakTest. "inspect" + `/pw-self-review`
+  running as of 2026-07-01.
 
 ## Objective
 
@@ -22,6 +31,37 @@ parallel to the existing mass-error machinery on the m/z dimension.
 Per JohnF (skyline.ms #774): the intensity center of gravity of IM values across the IM
 extraction band, compared against the target IM, surfaced to the user. Originally framed
 as **% error in IM/CCS**; see design pivot below.
+
+## Review feedback from Nick (2026-07-14) — DONE (commits `30ca73b5c`, `3c1f83626`, pushed 2026-07-24)
+Nick + his Claude flagged the core observed-IM accumulation on PR #4301. Resolved:
+- **Accumulation**: dropped `IonMobilityIntensityBins` / `CogIonMobility` (rank-index COG) and the
+  whole in-extraction idotp guard; observed IM is now a running intensity-weighted mean of raw IM
+  values in native units, like `MeanMassError` (John's requested IM center of gravity, done right).
+  Averaging IM is exact for the linear converters (1/K0, drift time via Mason-Schamp) and negligible
+  for TWIMS over a narrow peak (Jensen ~0.01%); observed CCS derived per-peak where charge is available.
+- **Per-channel**: `SpectrumFilterPair` records each channel's own faithful observed IM; the isotope
+  plumbing (`SetExpectedIsotopeProportions`) is gone.
+- **Interference**: NOT re-added in IM space. Rationale settled with Brian: the observed-IM error is
+  measured only within the IM filter window, so interference bias is bounded by ~half the window
+  (clipping only ever shows up as a large near-ceiling error, a conservative lower bound). Predicted-
+  abundance weighting at the precursor level is the light-touch interference guard we keep.
+- **Surfacing** (product call: users want the ion's IM/CCS, not per-isotope): observed IM/CCS/error is
+  a derived aggregate on `PrecursorResult` (databinding layer — no model/cache/serialization change),
+  MS1 isotopes abundance-weighted, with an offset-corrected MS2-fragment fallback for MS2-only data.
+  Per-transition Document Grid columns removed (`TransitionResult`); the per-transition observed IM
+  stored on `TransitionChromInfo` stays as the internal substrate.
+- Verified green: build, IntensityAccumulator, FullScanGraph (goldens refreshed), ChromPeak,
+  IonMobilityUnit, IonMobility (+ new precursor-aggregate assertion), caption/tooltip gates, CodeInspection.
+- REMAINING: auto-generated report-column docs (`Reports-*.html`) regenerate (columns moved
+  transition→precursor); reply to Nick summarizing the interference/windowing reasoning.
+
+## Mobilopeak metrics (area/height/FWHM) — Tier 1 shipped, Tier 2 deferred
+- Tier 1 (tooltip): `MobilogramPeakMetrics` (baseline-subtracted area/height, FWHM gated on >=3 bins
+  above half-max) + observed-IM tooltip rows, computed from display-time `PlotY2D`. Committed
+  (`be430dc78`, merged/pushed at `9135e8981`). Independent of the extraction histogram, so unaffected
+  by Nick's refactor.
+- Tier 2 (persisted per-peak columns pinned to observed IM): DEFERRED — depended on
+  `IonMobilityIntensityBins`, which Nick's refactor removes. Revisit after the core is settled.
 
 ## Design pivot (2026-05-08, commit `d20822236`)
 
@@ -232,8 +272,53 @@ will be blank for those — by design, asserted in the functional test.
   redundant `(Label)` cast in `PauseAndContinueForm.cs`; redundant `null` arg in
   `IntensityAccumulatorTest.cs`.
 
+## Copilot round 3 + cosmetic cleanup (2026-06-15/16, commit `be50e7c69`)
+- Copilot's pass on `20b2a96d8` had no correctness findings - 3 cosmetic items, all fixed:
+  - `TimeIntensitiesGroup` WriteToStream comment reworded to describe the real
+    HasObservedIonMobilities / MissingObservedIonMobility gating (not "older readers skip").
+  - `Survivers` -> `Survivors` typo in the IntensityAccumulatorTest helper (call + def).
+  - Build + TestIntensityAccumulator + CodeInspection green; threads replied + resolved.
+- PR #4301 now has **0 unresolved review threads** (the 6 ja/zh auto-help threads resolved too).
+- Note: Copilot review is now opt-in/billed (not auto); did not re-trigger it for cosmetics.
+
+## Observed IM/CCS % error precision fix (2026-06-30)
+- Found while watching the SmallMolLibraries mobilogram view: a real observed-vs-target gap
+  (observed IM 33.79 vs target 33.805; CCS 260.88 vs 261) rendered as "0% error" in the
+  Full Scan observed-IM tooltip and the properties pane.
+- Root cause: the value+percent-error formatter reused the ppm-grade `Formats.MASS_ERROR`
+  ("0.#"), rounding sub-0.05% differences to "0".
+- Fix: added `Formats.PercentError` ("0.##", 2 decimals) and extracted the formatting out of
+  `GraphFullScan` into `ObservedValueFormatter.FormatWithPercentError` (now unit-testable;
+  GraphFullScan can't be referenced from the Test project - it derives from DigitalRune's
+  DockableForm). Red→green via new unit test `TestObservedIonMobilityCcsErrorPrecision`.
+  FullScanGraphTest property-sheet expectations updated to 2 decimals (-2.77 / 3.74 / 0.18).
+- NOTE: precision is a display choice (2 decimals). Easy to revisit if a different convention
+  is wanted.
+
+## Tutorial screenshot of the new capability (2026-06-29, commit `fbc1b2659`)
+- Goal: a figure showing observed IM **and CCS** in the mobilogram. DriftTimePredictor is
+  Agilent `.d` but IM-only (no CCS calibration in those 2015 files); SmallMolLibraries is
+  Agilent `.d` lipidomics **with** single-field CCS calibration -> observed CCS populates.
+- Implemented option (b1) - a screenshot seam (precedent: GraphFullScan already has a
+  `#region Test support` with TestGetTooltipTable / TestGetMobilogramTooltipTable / TestMouseClick):
+  - `CursorTrackingTip.ShowAt(anchor, table, keepVisible)` - stage the tip without a live mouse
+    move and hold it past the 3 s auto-hide (OnParentMouseMove shares it).
+  - `GraphFullScan.ShowObservedIonMobilityTooltipForScreenshot()` - builds the observed-IM line
+    tooltip via the existing GetIonMobilityLineTooltipTable and shows it on the dotted line.
+  - `SmallMolLibrariesTutorialTest` adds a post-filter "...observed ion mobility and CCS tooltip"
+    shot on the Agilent heatmap.
+  - Verified: build, FullScanGraphTest, CodeInspection green. NOT verified locally: the actual
+    figure capture (needs a SmallMolLibrariesTutorialTest screenshot run with the Agilent perf data).
+- **Resolved (2026-06-30, commit `516d8b133`):** folded the tooltip into the existing "Full scan
+  graph with IM filtering" shot (#19) instead of a separate figure - the inserted figure had
+  shifted the one downstream shot (LipidCreator tool store) by one, so the stored screenshots
+  were off by one. Merging removes the inserted index: no renumbering, no near-duplicate heatmap.
+  Also reworded the tooltip header "Observed at Peak" -> "Observed Ion Mobility at Peak".
+- **Doc follow-up (remaining):** re-capture s-19 (now carries the observed-IM/CCS tooltip) in
+  en/ja/zh-CHS and update its caption; no figure renumbering needed.
+
 ## Remaining before merge
-- [ ] Address any further Copilot findings on re-review
+- [ ] (Optional) /pw-self-review on the final state; TeamCity green; human review
 - [ ] Produce Release/test build for the requesting user
 - [ ] Consider no-converter IM test data to red→green the scale-source fix directly
       (current functional data has a converter, so that fix is verified by code + the
