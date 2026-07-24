@@ -27,13 +27,34 @@ from a user report or request — see "Crediting Reporters and Requesters" below
 
 | Element | Rule |
 |---------|------|
-| Title | Single line, **past tense** ("Added", "Fixed", "Moved" - NOT "Add", "Fix") |
+| Title | Single line. The **action verb leads in past tense** ("Added", "Fixed", "Moved", "Improved" - NOT "Add", "Fix"). See "Tense" below - past tense is for the *action*, not for describing how the product behaves. |
 | Bullets | 1-5 points, each starting with `* ` (asterisk + space) |
 | TODO reference | `See ai/todos/active/TODO-YYYYMMDD_feature_name.md` |
 | Co-authorship | Exactly `Co-Authored-By: Claude <noreply@anthropic.com>` |
 | Reporter credit | `Reported by <First>.` on its own line when the change came from a user report/request (see below) |
 | Total lines | Maximum 10 lines including blank lines (the reporter-credit line does not count against this) |
 | Prohibited | Emojis, markdown links |
+
+### Tense
+
+Past tense applies to **the action the commit performs** - what was Fixed, Added, Changed,
+Improved, Removed. This is a changelog convention: these titles become the release-notes email,
+which lists the bugs fixed, features added, and behaviors changed in a version (see
+`release-guide.md`). "Fixed a crash", "Added a save prompt", "Changed the default folder" all read
+the way that email reads.
+
+But **describe ongoing product behavior in the present tense** - what the software does from now
+on, not the act of changing it. A single title or bullet often mixes the two on purpose: a
+past-tense action verb, then a present-tense description of the resulting behavior.
+
+- "Added a prompt **asking** which folder to save in" - *Added* is the action (past); the prompt
+  *asks* every time from now on (present).
+- "Fixed a crash by **checking** for a null document" - *Fixed* (past); the code *checks* on every
+  run (present).
+
+Do NOT force behavior into the past tense ("...a prompt that **asked** which folder", "...**checked**
+for null") - that reads as a one-time event rather than how the product now works. The rule is about
+the leading action verb, not every verb in the message.
 
 ### Example
 
@@ -48,6 +69,9 @@ See ai/todos/active/TODO-20251217_alert_timeout.md
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
+
+The title and the "Added…" bullet lead with a past-tense action; "Timer **closes**…" and
+"**Throws**…" describe ongoing behavior in the present tense.
 
 ### Creating Commits with HEREDOC
 
