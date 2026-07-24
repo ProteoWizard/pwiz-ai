@@ -313,6 +313,40 @@ For each, note the **mean KB/iter over the LAST ~100 dialogs** vs the first ~100
   `TestRunner/Program.cs`), ideally gated on `SystemInformation.TerminalServerSession` so the
   console keeps full heap-leak detection.
 
+## RESULTS: plateau experiment (RDP session, 1000 dialogs each) — 2026-07-24
+
+Ran the three modes to N=1000 in this RDP session (`SESSIONNAME=RDP-Tcp#0`, Active). Rates are
+from the `delta-from-baseline` column; raw logs in `ai/.tmp/heapprobe_plateau/*_1000.log`,
+runner `Run-PlateauExperiment.ps1`.
+
+| mode | total growth | first-100 | iters 500–600 | last-100 | shape |
+|------|-------------:|----------:|--------------:|---------:|-------|
+| `save` (modern IFileDialog) | 1,870 KB | 4.30 KB/iter | 1.22 | **0.83 KB/iter** | decays / saturates |
+| `open` (modern IFileDialog) | 1,889 KB | 4.24 KB/iter | 1.99 | **1.11 KB/iter** (last-200: 0.18) | decays / saturates |
+| `savelegacy` (comdlg32) | **26,950 KB (~27 MB)** | 27.20 KB/iter | 27.31 | **27.00 KB/iter** | **dead-linear, zero decay** |
+
+**The fork resolves BOTH ways, split by dialog type:**
+
+- **Modern IFileDialog is a saturating shell cache.** ~4.3 KB/iter early, decaying ~5× to
+  ~0.8–1.1 KB/iter by iter 1000. So the earlier "no plateau over 120" was just too short a run —
+  it flattens by ~iter 500. A warm-up WOULD tame the modern dialog. But it is already under the
+  20 KB threshold, so it is not what fails nightly.
+- **Legacy comdlg32 is a genuine unbounded leak.** Perfectly linear at 27 KB/iter all the way to
+  1000 dialogs (27 MB committed), no decay at any point. **A warm-up cannot help this** — there
+  is no ceiling to pre-fill.
+
+**Magnitude points at the legacy path as the nightly culprit:** functional tests leak
+~30–45 KB/iter, matching the legacy ~27 KB/iter path, NOT the modern ~1–4 KB/iter path.
+
+### DECISION: mute, not warm-up
+
+Per the criteria above, the offending (legacy) path is still linear at 1000 → **warm-up cannot
+work; mute the native-file-dialog family from the HEAP check only**
+(`MutedHeapMemoryLeakTestNames` in `TestRunner/Program.cs`), gated on
+`SystemInformation.TerminalServerSession` so the physical console keeps full heap-leak
+detection. (A warm-up would still be a legitimate option for the modern-dialog tests
+specifically, but it does not address the real nightly failure, so mute is the primary fix.)
+
 ### Notes for whoever implements the fix
 - `TestNativeOpenFileDialogLeak` as written uses a **modern** OpenFileDialog
   (`AutoUpgradeEnabled` defaults true) → only ~5.7 KB/iter under RDP, UNDER the 20 KB threshold,
