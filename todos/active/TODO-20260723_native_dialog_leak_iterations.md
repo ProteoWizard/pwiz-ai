@@ -188,14 +188,25 @@ and whether the session was RDP or console.
   trailing heap delta under 20 KB (worst 18.4 KB), no LEAKED — vs original 153,936 bytes.
 - `TestNativeOpenFileDialogLeak`, pass-1: heap deltas ~4–10 KB, no LEAKED.
 - `HeapProbe save 120`: ~5 KB/iter decaying to ~2.6, plateaued.
-- Session: physical console (not RDP). Did not reproduce the leak.
+- Session: physical console (not RDP). Did not reproduce the leak *at these magnitudes*.
+  **Caveat (reconciled):** this used the MessageBox and modern-`save` paths, which are low-rate /
+  saturating even under RDP. The console is NOT immune — a legacy file-dialog loop grows ~28 KB/run
+  here too (see UPDATE 2026-07-24). The console difference is amplitude, not presence.
 
 ## Results from nicksh's machine — RDP SESSION (SAME MACHINE, leak reproduced)
 
-**This is the decisive same-machine A/B for the RDP hypothesis.** The console-session
-results above (no leak, HeapProbe plateaus by ~iter 20) and the results below were produced
-on the *same* physical machine on the *same* day with the *same* `HeapProbe.cs`. The only
-difference is the session type.
+> **RECONCILED — read this first.** This section was originally written as "the decisive A/B
+> proving RDP is *required*." That overstated it. The later nightly evidence (see UPDATE
+> 2026-07-24: the leak is **universal**, every machine with the test leaks, and this console is
+> "not special" — a raw loop of the old file-dialog test grew ~28 KB/run here too) and the 1000-
+> dialog plateau experiment together show the real picture: **the common file dialog grows the
+> heap in every session; TS/RDP amplifies the magnitude but is not a prerequisite.** The two
+> claims below that survive are the negative control (MessageBox never leaks → it is the file
+> dialog specifically) and the modern-vs-legacy split. Treat the numbers below as valid RDP
+> measurements, not as proof that the console is clean.
+
+These results were produced on nicksh's machine over RDP (`SESSIONNAME=RDP-Tcp#0`), the *same*
+physical machine, same day, same `HeapProbe.cs` as the console-session results above.
 
 Session verified as Remote Desktop: `SESSIONNAME=RDP-Tcp#0`,
 `SystemInformation.TerminalServerSession=True`, `CLIENTNAME=NICKSH-ELITEBOO`. `query session`
@@ -214,10 +225,13 @@ showed a separate `console` session (ID 2) with no interactive user, and our act
 
 Two independent findings:
 
-1. **RDP alone flips the result on this machine.** The console session did not leak (probe
-   plateaued); over RDP the identical bare `SaveFileDialog`/`OpenFileDialog` loop climbs
-   ~5 KB/iteration and never plateaus across 120 dialogs. This confirms the leak is
-   environmental (remoted display), not Skyline/connector/test code — the probe contains none.
+1. **It is not our code — a bare dialog leaks with zero Skyline present.** Over RDP the bare
+   `SaveFileDialog`/`OpenFileDialog` loop climbs; the probe contains no Skyline/connector/test
+   code. *(Original wording claimed "RDP alone flips the result — console does not leak, RDP
+   never plateaus over 120." Both halves are now corrected: the console is not special — see the
+   2026-07-24 universal finding — and "no plateau over 120" was too short a run. The 1000-dialog
+   experiment shows the modern dialog actually saturates by ~iter 500 (4.3 → ~1 KB/iter), while
+   only the legacy comdlg32 dialog stays dead-linear.)*
 2. **It is NOT the modern shell/preview/thumbnail handlers.** Added an `AutoUpgradeEnabled`
    switch to the probe (`open`/`save` = modern IFileDialog; `openlegacy`/`savelegacy` = legacy
    comdlg32). The *legacy* comdlg32 dialog leaks ~5× **worse** (28 KB/iter, dead-linear) than
@@ -273,16 +287,26 @@ RDP, then disconnected → `Disc`), which explains why they leak while the physi
   color depth, or themes/font-smoothing disabled to see whether the per-dialog rate changes;
   would further localize which remoted-display allocation is responsible.
 
-### Bottom line
+### Bottom line (reconciled with the 2026-07-24 universal finding and the plateau experiment)
 
-The OpenFileDialog/SaveFileDialog inherently leaks process heap **whenever the process runs in
-a Terminal Services (RDP) session — whether the client is connected OR disconnected** — on the
-very machine that is clean at the physical console. The MessageBox control never leaks, so it is
-the common file dialog specifically, via the TS/RDP display-driver stack, not our code. The fix
-belongs in test infrastructure, gated on `SystemInformation.TerminalServerSession` (warm-up
-before the leak-check window, or muting / widened thresholds for the native-file-dialog tests
-under TS), not in a code hunt. Note nightly agents typically run logged-in-then-disconnected
-(`Disc`), which this run reproduces directly.
+The OpenFileDialog/SaveFileDialog grows the process heap via the OS common file dialog, not our
+code — the MessageBox control never leaks, isolating it to the file dialog specifically. Two
+facts settle the shape of the fix:
+
+- **The leak is universal, not RDP-gated.** Nightly shows it on every machine that has the test
+  (see UPDATE 2026-07-24); a file-dialog loop grows on this physical console too. **RDP/TS
+  amplifies the per-dialog magnitude but is not required.** (The disconnected-`Disc` run shows a
+  live viewer is not required either — being a TS session is enough to get the amplified rate.)
+- **Modern dialog saturates; legacy dialog does not.** Out to 1000 dialogs the modern IFileDialog
+  decays 4.3 → ~1 KB/iter (a shell cache), but the legacy comdlg32 dialog is dead-linear at
+  27 KB/iter (27 MB, a true unbounded leak). The functional tests' ~30–45 KB/iter matches the
+  legacy path.
+
+**Fix:** because the offending (legacy) path never plateaus, warm-up cannot solve the real
+nightly failure. **Mute the native-file-dialog family from the HEAP check**
+(`MutedHeapMemoryLeakTestNames`), gated on `SystemInformation.TerminalServerSession` so the
+console keeps full detection. See "RESULTS: plateau experiment" and "DECISION: mute, not
+warm-up" below for the numbers and the criteria.
 
 ## NEXT EXPERIMENT (decides warm-up vs. mute) — for the RDP-session Claude
 
