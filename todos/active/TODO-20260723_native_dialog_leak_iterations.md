@@ -54,7 +54,39 @@ two tests LEAK reproducibly across 3 rounds and never saturate:
 
 So the native **file dialog** is the source, and whether it leaks depends on the machine.
 
-## LEADING HYPOTHESIS: Remote Desktop
+## UPDATE 2026-07-24: nightly shows the leak is UNIVERSAL (RDP hypothesis weakened)
+
+The Nightly x64 dashboard (run for 07/23, `end=07/24/2026`) shows `TestNativeMessageBox`
+flagged as a leak (⚠️) on **every machine whose git hash includes the test**
+(hashes `a09ee…` and `a8400…`: BRENDANX-UW5, BRENDANX-DT1, SKYLINE-DEV6, BRENDANX-UW7).
+The only two machines with 0 leaks (BOSS-PC, KAIPOT-PC1) are on an OLDER hash `8a320…`
+from before the test was added — i.e. they don't run it yet, not counter-examples. The
+same column also flags `TestNativeFileDialog`, `TestMcpConnectorBackgroundDialog`, and
+`TestPrmMcpConnector` on multiple machines (the whole native-dialog/connector family).
+
+Implications:
+- **Universal, not machine-specific.** This substantially weakens the RDP hypothesis —
+  if RDP were required, only remoted machines would leak, but every machine that has the
+  test does. (RDP may still *amplify* magnitude — the disconnected experiment still tells
+  us that — but it is no longer the primary lead.)
+- **Corrects an earlier claim** in this TODO/PR: "leaks on the other machine, not on
+  nicksh's console." That compared the *split* tests (1 dialog, borderline-passing) here
+  against the old 2-dialog test elsewhere. A raw loop of the old `TestNativeMessageBox` on
+  nicksh's console also grew ~28 KB/run — this console is not special.
+- **Looks like the Windows shell cache, not a runaway leak.** The nightly memory graph
+  climbs early then plateaus (~380–420 MB) and stays flat through pass 2. Total memory
+  stabilizes — a saturating shell cache, not unbounded growth. Matches HeapProbe's bare
+  SaveFileDialog (grows then plateaus) and uses no Skyline code.
+
+Revised direction: the split alone will not fix nightly (it only trims magnitude, and the
+other machine's split tests still leak). Since the growth is universal and OS-level, the fix
+is test-infrastructure applied to the whole native-dialog family — most likely **muting**
+these from the heap-leak check (`MutedHeapMemoryLeakTestNames` in `TestRunner/Program.cs`) or
+a **warm-up that pre-saturates the shell cache** before the leak-check window — not a code
+hunt. Confirm real-vs-cache with `TestNativeOpenFileDialogLeak` / `HeapProbe` first (does it
+ever plateau?), and note the RDP-vs-console amplitude from the other machine.
+
+## EARLIER HYPOTHESIS (now secondary): Remote Desktop
 
 nicksh's console session does not leak; the machine(s) that do may be driven over
 **Remote Desktop**. RDP remotes the display and changes how native common dialogs render and
