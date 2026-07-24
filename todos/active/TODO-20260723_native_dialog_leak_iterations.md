@@ -283,3 +283,47 @@ belongs in test infrastructure, gated on `SystemInformation.TerminalServerSessio
 before the leak-check window, or muting / widened thresholds for the native-file-dialog tests
 under TS), not in a code hunt. Note nightly agents typically run logged-in-then-disconnected
 (`Disc`), which this run reproduces directly.
+
+## NEXT EXPERIMENT (decides warm-up vs. mute) — for the RDP-session Claude
+
+We now know the leak is the OS common file dialog under a Terminal Services (RDP) session,
+including disconnected (`Disc`). The remaining fork in the FIX is whether the growth ever
+**plateaus** if you show enough dialogs:
+
+- nicksh proposed a one-time **warm-up**: a static "warmed up?" flag; each affected test, on
+  first run in the process, shows/dismisses a native file dialog N times before the leak-check
+  window. This ONLY works if the per-dialog growth decays toward ~0 after enough dialogs.
+- So far it is **dead-linear over 120 dialogs** (no decay). 120 is not 1000, so it is unsettled.
+
+**Please run, in the RDP session (connected or `Disc` is fine), out to ~1000 dialogs and report
+whether the per-iteration rate decays:**
+```
+HeapProbe.exe save 1000
+HeapProbe.exe open 1000
+HeapProbe.exe savelegacy 1000     # the worst offender, ~28 KB/iter so far
+```
+For each, note the **mean KB/iter over the LAST ~100 dialogs** vs the first ~100. Decision:
+- If the last-100 rate collapses to ~0 (it plateaus) → **warm-up is the fix**: implement a
+  shared one-time warm-up (static flag) that shows/dismisses a native file dialog ~N times
+  (N = where it flattened) before the leak window. Tests then pass legitimately, nothing muted.
+  Also report roughly how many dialogs/seconds N costs, so we know if the one-time price is
+  tolerable for nightly.
+- If it is still linear at 1000 (no plateau) → **warm-up cannot work**; the fix is to mute the
+  native-file-dialog family from the HEAP check only (`MutedHeapMemoryLeakTestNames` in
+  `TestRunner/Program.cs`), ideally gated on `SystemInformation.TerminalServerSession` so the
+  console keeps full heap-leak detection.
+
+### Notes for whoever implements the fix
+- `TestNativeOpenFileDialogLeak` as written uses a **modern** OpenFileDialog
+  (`AutoUpgradeEnabled` defaults true) → only ~5.7 KB/iter under RDP, UNDER the 20 KB threshold,
+  so it does **not** currently reproduce the nightly failure. To make it a faithful repro it
+  would need `AutoUpgradeEnabled = false` (legacy comdlg32, ~28 KB/iter) — but then it would be
+  flagged in nightly itself and need muting too. This is a point for keeping HeapProbe (a
+  non-test) as the diagnostic. Keep-vs-drop of this test is still open.
+- Unexplained magnitude gap: functional tests leak ~30–45 KB/iter but a bare modern dialog is
+  only ~5 KB and a bare legacy dialog ~28 KB. The functional number is likely legacy dialogs
+  and/or the per-iteration document save / file I/O also allocating under TS — worth confirming
+  before claiming the bare test is an exact stand-in.
+- Plan once the plateau question is answered: revert the test split (it was diagnostic, does not
+  fix nightly), keep the chosen diagnostic (HeapProbe and/or the test), and apply the
+  warm-up-or-mute fix to the native-dialog family.
