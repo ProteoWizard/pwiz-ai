@@ -3,7 +3,7 @@
 ## Branch Information
 - **Branch**: `Skyline/work/20260707_refine_add_m1_precursor`
 - **Base**: `master`
-- **Status**: Active (started 2026-07-07)
+- **Status**: **COMPLETED — merged in PR #4385 (2026-07-25).**
 - **Checkout**: `C:\git\sky_mminusone`
 - **PR**: [#4385](https://github.com/ProteoWizard/pwiz/pull/4385)
 - **Origin**: Requested by Richard, who wants the M-1 precursor transition present on
