@@ -137,11 +137,44 @@ gendecoy, **file a new Skyline issue to make it possible to avoid generated deco
 Skyline-mProphet** (i.e. accept decoys supplied by a predictive model). Not yet filed --
 gated on the Osprey decision.
 
-### Open sequencing question
+### 2026-07-25 - VERDICT: scope item 1 answered by the paired decoy-win coin
 
-The 12-16% figure predates the intensity-feature root cause
-(`fix/intensity-feature-log-conditioning`, currently checked out in `C:\proj\osprey`;
-un-logged `peak_apex`/`area`/`sharpness` z-score to 100-300 and hijack the pass-1 SVM
-top band). Judging decoy *construction* on top of known-broken feature conditioning
-risks attributing the gap to the wrong cause. Decide whether to re-baseline gendecoy
-with that fix in before ruling on salvage-vs-dead-end.
+The `--model-diagnostics` **paired decoy-win fraction** settles it without any new run.
+Within each target-decoy pair (shared base_id), an honest decoy beats a *known-false*
+entrapment target ~50% of the time. Values read out of the committed HTML reports under
+`D:\test\osprey-runs\_mdiag\*\stellar.model-diagnostics.html` (key `nullBandEnt` /
+`nullBandReal`, low-score null band):
+
+| run | decoy source | entrapment coin | real coin |
+|---|---|---|---|
+| `stellar` | Carafe-predicted (`--decoys-in-library`) | **0.5007** | 0.4778 |
+| `stellar-pfdr` | Carafe-predicted (+ `--protein-fdr`) | **0.5007** | 0.4778 |
+| `stellar-noentrap` | Carafe-predicted, no entrapment | n/a | 0.4708 |
+| `stellar-gendecoy` | **Osprey-generated** | **0.2051** | 0.1612 |
+
+Library-supplied decoys are a fair coin to within 0.07 percentage points. Generated
+decoys lose to a known-false target four times out of five.
+
+**This A/B is internally controlled, which retires the sequencing worry above.** Both
+arms are the same binary, same features, same feature conditioning, and (proven above)
+the same decoy sequences. So the un-logged intensity-feature conditioning
+(`fix/intensity-feature-log-conditioning`) cannot be what makes generated decoys
+non-exchangeable -- predicted decoys are exchangeable under the identical code path.
+The intensity fix may move absolute FDP in both arms; it cannot move 0.5007 to 0.2051.
+
+The paired coin is also a *within-pair ordering* test, so unlike the marginal composite
+densities it carries no population/marginal confound, and it is decoy-independent (the
+ground truth is entrapment, not decoy counts) -- not circular.
+
+Mechanism consistent with all of it: a generated decoy's b<->y-transposed ion ladder
+carrying the target's copied intensities is systematically less able to match anything
+in the spectrum than a model-predicted spectrum for the same sequence. An entrapment
+target -- also absent from the sample -- still has a Carafe-predicted spectrum, so it
+wins. Under libdecoy both sides of the pair are model-predicted and the coin is fair.
+
+**Conclusion: mechanical in-tool decoy generation is a dead end (issue scope item 3),
+not salvageable (item 2).** An honest decoy spectrum requires a spectrum model. Osprey
+has none by design; the "better generator" the issue contemplates *is* the predictive
+model. The remaining question is disposition (remove vs hard-gate) plus whether Osprey
+should offer out-of-process Carafe decoy generation -- see
+[[project_osprey_carafe_library_selfsufficiency]].
