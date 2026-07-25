@@ -117,9 +117,18 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 ## Crediting reporters
 
-When a change came from a user report or request, credit the originator by **first
+When a change came from a report or request **from outside the development team**,
+credit the originator by **first
 name only** in both the commit message and the PR description: `Reported by
 <First>.` / `Requested by <First>.` on its own line (it feeds the release notes).
+
+**Do NOT add the line for the PR's own author, or for a developer of the project
+being changed** — a developer asking for work on code they develop is ordinary
+planning, not an outside request. This is role-scoped: the same person can be an
+outside requester on one project and a developer on another (e.g. Mike requests
+features for Skyline, but is a primary Osprey developer — no credit line on
+Osprey changes). When in doubt, leave it out.
+
 Full rules — placement, looking the name up from a support thread, the Brendan
 exception — in ai/docs/version-control-guide.md ("Crediting Reporters and
 Requesters").

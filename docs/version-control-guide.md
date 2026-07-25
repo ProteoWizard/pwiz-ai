@@ -21,7 +21,9 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
 The `Reported by <First>.` line is included only when the change originated
-from a user report or request — see "Crediting Reporters and Requesters" below.
+from a report or request **outside the development team** — never for the
+author's own work or a project developer's request. See "Crediting Reporters and
+Requesters" below.
 
 ### Format Rules
 
@@ -31,7 +33,7 @@ from a user report or request — see "Crediting Reporters and Requesters" below
 | Bullets | 1-5 points, each starting with `* ` (asterisk + space) |
 | TODO reference | `See ai/todos/active/TODO-YYYYMMDD_feature_name.md` |
 | Co-authorship | Exactly `Co-Authored-By: Claude <noreply@anthropic.com>` |
-| Reporter credit | `Reported by <First>.` on its own line when the change came from a user report/request (see below) |
+| Reporter credit | `Reported by <First>.` on its own line when the change came from an outside-the-dev-team report/request; omit for the author's own work or a project developer's request (see below) |
 | Total lines | Maximum 10 lines including blank lines (the reporter-credit line does not count against this) |
 | Prohibited | Emojis, markdown links |
 
@@ -114,12 +116,15 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
 The `Reported by <First>.` line is included only when the change originated from
-a user report or request — see "Crediting Reporters and Requesters" below.
+a report or request **outside the development team** — never for the author's own
+work or a project developer's request. See "Crediting Reporters and Requesters"
+below.
 
 ## Crediting Reporters and Requesters
 
-When a change originates from a user report or request — a support-board thread,
-a GitHub issue, an email, or a conversation — credit the originator in **both the
+When a change originates from a report or request from **outside the development
+team** — a support-board thread, a GitHub issue, an email, or a conversation —
+credit the originator in **both the
 commit message and the PR description**. This is standard practice: the
 attribution feeds the release notes, where reporters are acknowledged (see
 `ai/docs/release-guide.md`, "Generating Skyline-daily Release Notes", which
@@ -153,6 +158,18 @@ time is the only reliable way to get it there.
     posters to the id — the `core.Users` query is the step that yields the name.
 - **Full identity stays in the link.** The support-thread URL or GitHub issue can
   carry the full name and context; the prose credit is first-name only.
+- **Never credit the PR's own author.** A developer describing what they built is
+  not a reported request. If the person who would be credited is the one who wrote
+  the change, there is no credit line.
+- **Developers of the project are not credited either.** The line marks a request
+  that arrived from *outside* the team building the code — a support-board user, a
+  collaborator, a customer email. What a developer asks for on a project they
+  develop is ordinary planning, not an outside request, so it gets no line.
+  - **This is role-scoped, not person-scoped.** The same person can be an outside
+    requester on one project and a developer on another, so decide per change.
+    Mike, for example, has long been a frequent requester for **Skyline** (credit
+    him there), but is now one of the primary developers of **Osprey** — an Osprey
+    request from him is internal planning and gets **no** `Requested by` line.
 - **Brendan is omitted** (he sends the release email) — consistent with the
   release-notes attribution rule.
 
@@ -240,7 +257,8 @@ git push --force-with-lease
 
 - [ ] Title in past tense
 - [ ] 1-5 bullet points with `* ` prefix
-- [ ] `Reported by <First>.` line if the change came from a user report/request
+- [ ] `Reported by <First>.` line ONLY if the request came from outside the dev
+      team (not the author, not a developer of the project being changed)
 - [ ] TODO reference included
 - [ ] Co-Authored-By line at end
 - [ ] No emojis or markdown links
