@@ -4,9 +4,11 @@
 - **Branch**: `Skyline/work/20260723_auditlog_write_lock`
 - **Base**: `master`
 - **Created**: 2026-07-23
-- **Status**: In Progress
+- **Status**: Merged to master, cherry-pick pending
 - **GitHub Issue**: none
-- **PR**: [#4450](https://github.com/ProteoWizard/pwiz/pull/4450) (labeled `Cherry pick to release`)
+- **PR**: [#4450](https://github.com/ProteoWizard/pwiz/pull/4450) — merged 2026-07-25 (squash `f12b2ae79`)
+- **Cherry-pick PR**: [#4461](https://github.com/ProteoWizard/pwiz/pull/4461) → `Skyline/skyline_26_1`, open, mergeable, awaiting CI
+- **Cleanup pending**: delete work branch (local + remote) and move this TODO to completed once #4461 merges
 
 ## Motivation
 
