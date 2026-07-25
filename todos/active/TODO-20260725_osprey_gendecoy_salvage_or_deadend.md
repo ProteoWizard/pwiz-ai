@@ -178,3 +178,55 @@ has none by design; the "better generator" the issue contemplates *is* the predi
 model. The remaining question is disposition (remove vs hard-gate) plus whether Osprey
 should offer out-of-process Carafe decoy generation -- see
 [[project_osprey_carafe_library_selfsufficiency]].
+
+### 2026-07-25 - Exact algorithm comparison vs Skyline (Brendan's redirect)
+
+Before discarding, establish how Osprey's generator compares to Skyline's, and whether
+Skyline's 2015-standard approach carries the same bias. Skyline has no entrapment oracle
+and no paired-coin diagnostic, so the only way to put it on a real oracle is to
+reproduce its algorithm inside Osprey and measure.
+
+Skyline: `pwiz_tools/Skyline/Model/DecoyGenerator.cs` (`Reverser` is the analog;
+`Shuffler` and `MassShifter` are the other two modes).
+Osprey: `pwiz_tools/Osprey/Osprey.Scoring/DecoyGenerator.cs`.
+
+| step | Osprey gendecoy | Skyline `Reverser` |
+|---|---|---|
+| sequence permutation | `reverse(seq[:-1]) + seq[-1]` | **same formula** (`SequenceMods.Reverse()`, `:330`) |
+| degenerate guard | none up front; reversal -> cycling -> exclude | skip if `seq[:-1]` has <= 1 distinct residue (`:54`) |
+| collision policy | reversed must differ from target AND not be in the **target sequence set**; else cycle 1..10; else exclude | dedups only against **other decoys** (`setDecoyKeys`, `:135`); `Reverser` is deterministic so its 10 retries never re-roll |
+| precursor m/z | **copied from target** (`:384`); reversal preserves composition so the mass is genuinely equal | **shifted +10** (`ALTERED_SEQUENCE_DECOY_MZ_SHIFT`, `:189`) unless `PreservePrecursorMass` |
+| product ion identity | **b<->y swap**, ordinal remapped to `n - ordinal` (`:585-593`) | **same IonType + CleavageOffset** (`:238`) -- a target b3 yields a decoy b3 |
+| product m/z | recomputed from the decoy sequence | recomputed from the decoy sequence; **no** product mass shift for altered sequences |
+| library intensity | **copied from the target fragment** (`:625`) | **copied via `nodeTran.QuantInfo` -> `TransitionLibInfo`** (`:241`) |
+| predicted RT | **copied from target** (`:385-386`) | **resolved through the target's sequence**: `ChangeSourceKey` (`:130-131`) -> `GetSourceTarget` -> `PeptideSettings.cs:479`, `Irt/RCalcIrt.cs:117` |
+| other modes | none | `Shuffler` (random permutation of `seq[:-1]`, multi-cycle), `MassShifter` (sequence kept, random precursor shift +-30 + random product shifts) |
+
+**Shared root property -- the one the paired coin punishes: neither predicts a decoy
+spectrum; both copy the target's library intensities, and both give the decoy the
+target's predicted RT.** That is the same structural defect, arrived at independently.
+So Skyline-mProphet is a priori exposed to the same bias.
+
+Two differences could change its magnitude, and neither is obviously benign:
+* **No b<->y swap** -- Skyline keeps the ion index, so the copied intensity lands on the
+  same-numbered ion of a different sequence.
+* **+10 precursor shift** -- Skyline moves the decoy into a *different isolation window*,
+  so it extracts a genuinely different chromatogram. Osprey's decoy shares the target's
+  window and RT and differs only in fragment m/z.
+
+### Planned experiment: put Skyline's algorithm on the oracle
+
+Reproduce Skyline's decoy construction inside Osprey behind a diagnostic-only switch
+(default OFF, so production output stays byte-identical and the regression golden is
+untouched), then run the Stellar 3-file `--model-diagnostics` cell and read
+`nullBandEnt`. Variants, so the two differences are separable rather than confounded:
+
+| variant | b<->y swap | precursor shift | expected artifact |
+|---|---|---|---|
+| A: Osprey today | yes | none | 0.2051 (measured) |
+| B: same-ion intensity | no | none | isolates the ion-assignment choice |
+| C: full Skyline equivalent | no | +10 | the number that decides the Skyline bug |
+| reference: libdecoy | n/a | n/a | 0.5007 (measured) |
+
+If C is also far from 0.50, file the Skyline issue: mProphet needs to move to
+library-supplied (model-predicted) decoys rather than the 2015 in-tool standard.
