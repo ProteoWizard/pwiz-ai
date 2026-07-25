@@ -138,5 +138,7 @@ unit tests, the >= 3-peptide anchor lever, and the DIA-NN precursor overlap venn
 The recommended configuration (`OSPREY_PICK_LDA=1` +
 `OSPREY_PASS2_QVALUE=protein-compact`) is deliberately NOT the default; flipping it
 on is a **separate coordinated C#+Rust golden re-baseline PR**, tracked with the
-pass-2 default-flip work. Companion Rust PR **maccoss/osprey#57** was still open at
-merge time. Issue #4436 left open for the remaining validation + the default flip.
+pass-2 default-flip work. Companion Rust PR **maccoss/osprey#57** landed the same day as
+`a3d6c3a` on `main` (3/3 GitHub Actions green), so C# and Rust are back in step and the
+side-by-side parity signal is intact. Issue #4436 left open for the remaining validation
++ the default flip.
