@@ -344,6 +344,66 @@ Skyline's RT-copying without Skyline's compensating shift.**
 Prediction recorded before the C2/D2 numbers landed: a faithful shift should make
 **C2 beat B**, reversing the unfaithful-shift ordering.
 
+### 2026-07-25 - C2/D2: the mass-defect fix is a no-op here, and my prediction was wrong
+
+C2 is **byte-identical to C** (`stellar_fdrbench.tsv` compares equal), and D2 to D. On
+unit-resolution Stellar with 4 m/z windows, 4.5 mDa is below every threshold that
+matters: window assignment, fragment binning (fragments are not shifted at all), and the
+precursor tolerance. So the earlier C/D numbers stand as measured, and my claim that the
+integer shift made them pessimistic is **refuted**. The fix was still correct to make --
+at Astral HRAM ppm tolerances 4.5 mDa is ~7.5 ppm at m/z 600 and would matter -- but it
+is immaterial on this dataset.
+
+Final table, all cells faithful:
+
+| cell | ion map | precursor | coin (ent) | FDP @ 1% q | accepted |
+|---|---|---|---|---|---|
+| libdecoy (Carafe) | model-predicted | same | 0.5007 | **1.47%** | 30,242 |
+| B: same ion, no shift | same | same | 0.4733 | **2.40%** | 32,329 |
+| C2: Skyline faithful | same | +10 units | 0.4600 | **3.19%** | 33,447 |
+| A: Osprey today | b<->y swap | same | 0.2051 | **10.86%** | 35,477 |
+| D2: swap + shift | b<->y swap | +10 units | 0.1949 | **20.40%** | 48,276 |
+
+**The recorded prediction (C2 beats B) is falsified.** The shift makes calibration WORSE
+in both rows. Plausible mechanism: a shifted decoy is extracted from a window whose
+co-isolated species its target never faced, so it samples a less competitive environment
+than a real false target does -- a weaker, less representative null. This is not a
+refutation of Dario's design intent, which was formed in a different scoring context;
+it is a measurement inside Osprey's DIA feature set and Percolator SVM.
+
+**The RT axis remains untested and is the likely home of the residual gap.** Every
+variant run so far copies the target's RT. Carafe is the only cell that breaks the RT
+coincidence (a reversed sequence gets its own predicted RT) and the only one under 2%.
+
+### 2026-07-25 - Quote Pass 1, not Pass 2 (Brendan's directive)
+
+Every FDP number above is **Pass 2 - experiment-wide**, which is the inflated view: the
+pass-2 Percolator retrain is known to inflate FDR
+([[project_osprey_pass2_recalibration_inflates_fdr]]) and is being replaced by `transfer`
+or `transfer-compete`. `percolator` remains the shipped default only because the choice
+between the two transfer methods is unmade and switching needs new golden training. So
+pass-2 FDP overstates the true error rate for every cell, and the decision must rest on
+Pass 1.
+
+Pass 1 available so far (only the two Jul-6 reference runs carry Pass 1 views):
+
+| cell | Pass 1 FDP | reported q | accepted |
+|---|---|---|---|
+| libdecoy (Carafe) | **0.90%** | 0.0099 | 26,775 |
+| A: Osprey today | **11.81%** | 0.0098 | 35,627 |
+
+On Pass 1 the Carafe reference is essentially calibrated -- in fact slightly BELOW the
+line (0.90% at a claimed 0.99%) -- which sharpens the comparison rather than weakening it.
+
+The B/C2/D2 runs used `--fdrbench-pass 2` (copied from the reference command line) and so
+emitted only Pass 2 views. Re-running B/C/D plus an A baseline on the current binary with
+`--fdrbench-pass both` (dirs `*-A3/B3/C3/D3-*`); A3 doubles as a control that the current
+binary reproduces the Jul-6 reference.
+
+Brendan's read of the diagnostics, which the data supports: the b<->y swap is the biggest
+issue, and the 2016 Navarro multicenter standard was NOT similarly 10x off in its FDR
+estimation.
+
 ### Next
 
 - [ ] Decide the real fix: make same-ion-map the Osprey default (a golden rebaseline,
