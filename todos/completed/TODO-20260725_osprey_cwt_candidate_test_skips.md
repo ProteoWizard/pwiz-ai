@@ -6,8 +6,8 @@
 - **Branch**: `Skyline/work/20260725_osprey_cwt_candidate_test_skips`
 - **Base**: `master`
 - **Created**: 2026-07-25
-- **Status**: In Progress
-- **PR**: [#4460](https://github.com/ProteoWizard/pwiz/pull/4460)
+- **Status**: Completed
+- **PR**: [#4460](https://github.com/ProteoWizard/pwiz/pull/4460) (merged 2026-07-25)
 
 ## Scope
 
@@ -92,8 +92,8 @@ which scoped the definitions to that call.
 - [x] Review hardening applied; zero-warning inspection green
 - [x] Resume invalidation shared + hard-failing; verified by direct token comparison
 - [x] ai-side committed (pwiz-ai `215d029`)
-- [ ] `regression.ps1 -Dataset Stellar` (modes 1/2/3) - RUNNING, gates item 3
-- [ ] PR description broadened, TeamCity
+- [x] `regression.ps1 -Dataset Stellar` - mode1/2/3 all PASS (blibs byte-identical at 45,064,192)
+- [x] PR broadened to the batch; TeamCity Perf/Regression build #173 SUCCESS (Stellar + Astral)
 
 ## Deliberately NOT in this PR
 
@@ -110,3 +110,30 @@ risk class; needs its own baseline.
 - `pwiz_tools/Osprey/Regression/RegressionData.ps1`, `regression.ps1`
 - `pwiz_tools/Osprey/Osprey.IO/Osprey.IO.csproj`
 - ai: `scripts/Osprey/Measure-CumulativeCoverage.ps1`, `scripts/Osprey/inspect_parquet.py`
+
+## Progress Log
+
+### 2026-07-25 - Merged
+
+PR #4460 merged as commit `099ec2d5` (5 commits squashed). All four batch items
+shipped: the 3 permanently-skipped tests removed (suite 537/534/3 -> 535/535/0), the
+replacement round-trip hardened and relocated to `IOTest` after a `/code-review xhigh`
+pass, `Invoke-ResumeInvalidation` single-sourced into `Regression/RegressionData.ps1`
+with a hard-fail guard, and the `VulnerablePackage` inspection quieted on Parquet.Net.
+
+Gates: unit 535/535, zero-warning inspection, `regression.ps1 -Dataset Stellar`
+mode1/2/3 all PASS, and TeamCity Perf/Regression build #173 SUCCESS on Stellar +
+Astral. The TeamCity run tested `9616d0f3d`; the later `214666f8e` was a two-line XML
+doc-comment change with no executable effect, so the gate held.
+
+Deferred deliberately: bumping the `Snappier` / `System.Text.Json` transitive
+advisories, which is a different risk class because Snappier is the parquet compressor
+and a version change can move the committed byte-identical goldens.
+
+Follow-up issues filed from work this PR surfaced: **#4462** (Parquet.Net transitive
+advisories, incl. Skyline's vendored copies that NuGet audit cannot see), **#4466**
+(intensity-scale PIN feature conditioning - the code comment in
+`PeakShapeCalculators.cs` now points here instead of a backlog TODO path), and
+**#4473** (`regression.ps1` exercises neither `--model-diagnostics`, library decoys,
+nor entrapment - the five-leg cumulative coverage run measured 78.4% overall yet left
+`ModelDiagnosticsReport` at 0%).
