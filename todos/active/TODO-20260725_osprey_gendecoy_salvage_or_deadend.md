@@ -434,6 +434,45 @@ is closed.
 4. The precursor shift costs a little on both rows (1.47->1.96, 11.81->14.96), so on this
    DIA data it is a small net negative inside Osprey's feature set.
 
+### 2026-07-25 - Null-alignment density ratio: how to read it, and what it says
+
+The report's "Null-alignment density ratio (non-parametric)" panel answers "is there a
+slight shift between the target-false distribution and the decoys / entrapment?".
+
+* **purple = target : decoy** density ratio per score bin (log axis). Flat across the
+  null-dominated left region means the decoys track the false-target null in SHAPE;
+  sloping means they do not. It rises where real hits begin -- healthy.
+* **green = p_target : p_decoy** -- entrapment target vs its own decoy, both known-false,
+  so it is a MATCHED NULL: what the statistic looks like when the null is honest by
+  construction. It should ride ~1 flat and never rise (entrapment has no true hits).
+* HTML keys: `flatnessSlope` (the "tilt" tile), `refFlatnessSlope` (reference tilt),
+  `plateauRatio` (pi0), `nullRegionLo/Hi/Bins`, and `pass`.
+
+Pass 1 values (`read_tilt.py`; B3 == B and C3 == C2 exactly, so reruns reproduce):
+
+| cell (Pass 1) | tilt | pi0 | ref tilt | tilt / ref |
+|---|---|---|---|---|
+| B: same ion, no shift | 0.305 | 0.682 | 0.179 | **1.70x** |
+| C2: Skyline faithful | 0.411 | 0.637 | 0.306 | **1.34x** |
+| D2: swap + shift | 4.421 | 0.091 | 4.254 | 1.04x |
+
+So yes -- B has a slight residual shift, ~1.7x the floor set by the matched null. That
+residual is the natural suspect for B's 1.47% vs Carafe's 0.90%.
+
+Two reading cautions:
+* **The ratio is only meaningful when the reference tilt is small.** D2's tilt (4.42) is
+  enormous but so is its floor (4.25), so the ratio collapses to ~1 and looks fine. It is
+  not: `pi0` = 0.091 (only 9% of targets appearing null) shows the statistic has gone
+  degenerate. Do not read D2's 1.04x as healthy.
+* **This is a MARGINAL check**, as the panel states: a target-side score boost that leaves
+  the decoy and entrapment marginals intact is invisible here. The paired decoy-win
+  fraction covers exactly that, which is why the two are complementary, not redundant.
+
+Gap: the panel postdates the Jul-6 reference reports, so there is no tilt for A (Osprey
+today) or for libdecoy (Carafe), the honest reference. A3 is in the running batch;
+`Run-LibdecoyRef.ps1` queues a Carafe re-run on the current binary
+(`_mdiag/stellar-L3-libdecoy`).
+
 ### Next
 
 - [ ] Decide the real fix: make same-ion-map the Osprey default (a golden rebaseline,
