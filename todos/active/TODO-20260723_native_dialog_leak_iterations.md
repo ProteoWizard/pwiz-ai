@@ -679,6 +679,47 @@ leak (2.4 KB before the change), so the local numbers cannot show an improvement
 justified by the window-churn model plus the fact that it is a faster, more deterministic, more
 direct test. Confirmation has to come from the fleet.
 
+## HEADLINE: two agents have reported ZERO leaks in 60 days, across every test
+
+This is the strongest evidence in the whole investigation, and it predates the connector work
+entirely. Nightly x64, 2026-05-25 to 2026-07-25:
+
+| computer | runs | tests passed | **leaked tests** | OS |
+|---|---:|---:|---:|---|
+| **KAIPOT-PC1** | 61 | 563,316 | **0** | 10.0.19045 |
+| **RITACH-DSK** | 54 | 452,505 | **0** | 10.0.19045 |
+| BRENDANX-UW7 | 61 | 764,273 | 16 | 10.0.26200 |
+| SKYLINE-DEV6 | 48 | 579,617 | 15 | 10.0.26200 |
+| BRENDANX-DT1 | 61 | 591,296 | 12 | 10.0.19045 |
+| SKYLINE-DEV4 | 52 | 518,977 | 10 | 10.0.26200 |
+| SKYLINE-DEV1 | 61 | 588,704 | 9 | 10.0.19045 |
+| BRENDANX-UW5 | 61 | 579,561 | 8 | 10.0.19045 |
+| BSPRATT-UW3 | 61 | 637,485 | 8 | 10.0.19045 |
+| BRENDANX-UW6 | 46 | 420,145 | 7 | 10.0.19045 |
+| BSPRATT-UW2 | 60 | 544,187 | 6 | 10.0.19045 |
+| BOSS-PC | 60 | 576,248 | 4 | 10.0.19045 |
+| BSPRATT-UW4 | 19 | 174,499 | 2 | 10.0.26200 |
+
+Two machines ran 61 and 54 full nightlies, passed over a million tests between them, and reported
+**zero** leaked tests. They do not appear in the `memoryleaks` table at all for the whole window,
+while the other eleven agents each accumulated leak rows across 4-6 distinct tests
+(`TestMethodRefinementTutorial`, `TestTicChromatogram`, `ThermoRatioTest`, `TestImportDoc`, ... --
+nothing to do with the connector). OS build does not sort them: the clean pair and most of the
+leaking machines are all on 10.0.19045.
+
+**Conclusion: a large part of what nightly reports as a "memory leak" is a property of the AGENT,
+not of the test.** Whatever KAIPOT-PC1 and RITACH-DSK do differently is the single most valuable
+thing to identify -- replicating it fleet-wide would retire this whole class of report, and would be
+far better than muting tests one at a time.
+
+**Next step (needs a human on the machines):** compare KAIPOT-PC1 / RITACH-DSK against, say,
+BRENDANX-UW7 on: whether the nightly runs in a Terminal Services / RDP session or at the physical
+console (`query session`, `SESSIONNAME`, `SystemInformation.TerminalServerSession`); whether the
+session is left connected or disconnected; display driver and colour depth; and whether a screen
+saver / lock screen engages. Then run `WindowChurnProbe` (added under
+`pwiz_tools/Skyline/Executables/DevTools/WindowChurnProbe/`) on one of each and compare -- if
+`child` is dead-linear on a leaking agent and plateaus on a clean one, the mechanism is settled.
+
 ## The connector's INSPECTION of a native dialog is not the cost -- showing it is
 
 Worth ruling out, because the connector reads a native dialog's whole child-window tree
