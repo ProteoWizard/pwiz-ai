@@ -707,6 +707,10 @@ leak (2.4 KB before the change), so the local numbers cannot show an improvement
 justified by the window-churn model plus the fact that it is a faster, more deterministic, more
 direct test. Confirmation has to come from the fleet.
 
+> Night-session handoff (local only -- `ai/.tmp/` is gitignored):
+> `ai/.tmp/handoff-20260725-connector-heap-leaks.md`, with the session log at
+> `ai/.tmp/night-session-budget-20260724.md`.
+
 ## HEADLINE: two agents have reported ZERO leaks in 60 days, across every test
 
 This is the strongest evidence in the whole investigation, and it predates the connector work
@@ -761,6 +765,17 @@ session is left connected or disconnected; display driver and colour depth; and 
 saver / lock screen engages. Then run `WindowChurnProbe` (added under
 `pwiz_tools/Skyline/Executables/DevTools/WindowChurnProbe/`) on one of each and compare -- if
 `child` is dead-linear on a leaking agent and plateaus on a clean one, the mechanism is settled.
+
+> **Careful: the obvious way to check destroys the thing being measured.** If someone RDPs into
+> RITACH-DSK to find out whether it is a console session, they have just made it a Terminal Services
+> session. The check has to be done *without* an interactive login -- e.g. `query session
+> /server:RITACH-DSK` from another machine, PsExec/WinRM, or simply reading the session line that the
+> run header now logs. (I did not run any remote query myself: these are colleagues' machines and the
+> session was unattended.)
+>
+> This is the strongest practical argument for **pushing the session-header change before the next
+> nightly** -- it collects the answer from every agent, in the exact state nightly runs in, with
+> nobody having to touch anything.
 
 ## The connector's INSPECTION of a native dialog is not the cost -- showing it is
 
