@@ -722,6 +722,20 @@ while the other eleven agents each accumulated leak rows across 4-6 distinct tes
 nothing to do with the connector). OS build does not sort them: the clean pair and most of the
 leaking machines are all on 10.0.19045.
 
+### Corroboration from leaks that have nothing to do with this work
+
+Restricting to the 60-day window and excluding every `*Mcp*` / `*Native*` test leaves 18 leak rows
+(`TestMethodRefinementTutorial`, `TestTicChromatogram`, `ThermoMixedPeptidesTest`, `TestSkyp`,
+`TestImportPeptideSearch`, ...). **Every one of them is on a machine from the leaking set; none is on
+KAIPOT-PC1 or RITACH-DSK.** `TestMethodRefinementTutorial` -- a tutorial test, i.e. heavy UI and many
+dialogs -- leaks 157-355 KB on four different agents, the same signature as the four connector tests
+and long predating them.
+
+Worth stating the strength honestly: those 18 rows alone would not be conclusive (with ~1.4 expected
+rows per machine, two zeros could happen by chance ~6% of the time). But across **all** leak rows in
+the window -- 75 memory-leak rows plus 22 handle-leak rows over 13 agents -- the expected count for
+any one agent is ~7.5, so two agents at exactly zero is a ~1-in-10^6 coincidence. The split is real.
+
 **Conclusion: a large part of what nightly reports as a "memory leak" is a property of the AGENT,
 not of the test.** Whatever KAIPOT-PC1 and RITACH-DSK do differently is the single most valuable
 thing to identify -- replicating it fleet-wide would retire this whole class of report, and would be
