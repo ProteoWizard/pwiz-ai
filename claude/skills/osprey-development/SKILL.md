@@ -148,6 +148,8 @@ Full rules - why the gate exists, MCP availability, the trigger call, and what
 the run uniquely buys over the local Stellar gates - are in
 **ai/docs/osprey-development-guide.md** ("TeamCity Perf/Regression gate").
 
+Backlog overview: `ai/scripts/Osprey/Get-OspreyBacklog.ps1` (see the guide's "Osprey backlog overview").
+
 ## Key Repositories
 
 - `C:\proj\pwiz\pwiz_tools\Osprey` - the C# implementation.

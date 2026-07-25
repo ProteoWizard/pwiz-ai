@@ -1344,3 +1344,34 @@ any change that touches `regression.ps1` / `Regression/*.ps1` themselves, it is
 the only place the `tctest.bat` -> `regression.ps1` path is exercised on the
 actual build agent.
 
+## Osprey backlog overview (`Get-OspreyBacklog.ps1`)
+
+The Osprey backlog lives in **GitHub Issues labelled `osprey`**, not in
+`ai/todos/backlog/`. There is deliberately **no committed markdown index** - it
+would go stale on every issue open or close. Instead there is a stored query you
+run when you want the picture:
+
+```bash
+# open Osprey issues as a self-contained HTML page in ai/.tmp/ (default)
+pwsh -File './ai/scripts/Osprey/Get-OspreyBacklog.ps1'
+
+# open it in the browser when done
+pwsh -File './ai/scripts/Osprey/Get-OspreyBacklog.ps1' -Show
+
+# markdown instead, e.g. to paste into a session note
+pwsh -File './ai/scripts/Osprey/Get-OspreyBacklog.ps1' -Format Markdown
+
+# include closed issues
+pwsh -File './ai/scripts/Osprey/Get-OspreyBacklog.ps1' -State all
+```
+
+It groups the issues by type label (bug / performance / enhancement /
+tech-debt / untyped), links every row to the issue, and shows age plus last-updated
+with a generated-at stamp and totals. The HTML is self-contained (inline CSS, no
+external assets) and follows the browser's light/dark theme.
+
+Output always goes to **`ai/.tmp/`**, never into the repo tree - it is a review
+artifact, not a committed file. Re-running overwrites the same path, so refresh
+the browser rather than saving a copy. `-Label` and `-Repo` let you reuse it for
+another area. Requires `gh`, authenticated.
+
