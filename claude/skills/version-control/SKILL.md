@@ -164,18 +164,27 @@ weigh that overlap against the wasted Copilot pass.)
      distinct offset with a distinct literal and does fail. Reproduce or
      refute each finding against the code. Pushing back with the reason is
      a legitimate outcome; auto-applying is not.
-   - **Pick the level by risk, not habit.** `xhigh` on #4460 took ~10.5 min
-     and ~138k tokens - right for algorithm / FDR / parity / structural
-     work, wasteful for a comment or doc change.
+   - **Default to `max` for code changes.** The effort levels
+     (`low` / `medium` / `high` / `xhigh` / `max`) all run locally on the
+     Max subscription with NO extra billing, so use the highest effort the
+     change warrants. `max` is the ceiling. Drop to a lower level only for
+     genuinely trivial diffs - comment, doc, or rename-only changes - where
+     the wall time is the only thing being spent. For reference, `xhigh` on
+     #4460 took ~10.5 min and ~138k tokens.
 2. **Open the PR** once the branch is green (build + tests + inspection)
    and the findings are settled. Copilot reviews automatically; use
    **`/pw-respond <PR#>`** to address and resolve its threads.
-3. **`/ultrareview <PR#>`** - user-triggered, billed, multi-agent cloud
-   review, stronger than either pass above. Claude Code cannot launch it
-   itself. Reserve it for genuinely risky changes.
+
+**Do NOT use `/code-review ultra` (aka the deprecated `/ultrareview`) on
+this project.** It is a different animal from the effort levels above: a
+**billed** multi-agent **cloud** review, and pwiz is too large for it.
+Brendan's attempts repeatedly ran ~30 minutes, timed out, and returned
+nothing useful while still incurring cost. `max` is both free under the
+subscription and actually completes here, so there is no case for ultra on
+pwiz.
 
 **The AI reviews do not stack.** Copilot plus `/code-review` is already two
-independent passes; do not chain a third by rote.
+independent passes; do not add a third by rote.
 
 Request human review only after the findings are settled and TeamCity is
 green.

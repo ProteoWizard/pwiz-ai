@@ -209,20 +209,32 @@ auto-start something slow, weigh that overlap against the wasted Copilot pass.
      a distinct literal value, so it does fail. Reproduce or refute each finding
      against the code. Pushing back with the reason is a legitimate outcome;
      auto-applying the list is not.
-   - **Choose the level by risk, not by habit.** `xhigh` on #4460 took roughly
-     10.5 minutes and 138k tokens. That is the right spend for algorithm, FDR,
-     cross-impl parity, or structural work, and the wrong spend for a comment or
-     documentation change.
+   - **Default to `max` for any code change.** The effort levels - `low`,
+     `medium`, `high`, `xhigh`, `max` - all run locally against the Max
+     subscription with **no extra billing**, so there is no cost reason to hold
+     back. `max` is the highest effort available for free; use it. Step down
+     only for genuinely trivial diffs (comment, doc, or rename-only), where the
+     wall time is the only thing you are spending. For calibration, `xhigh` on
+     #4460 took roughly 10.5 minutes and 138k tokens.
 2. **Open the PR** once the branch is green (build + tests + zero-warning
    inspection) and the findings are settled. Copilot reviews it automatically;
    use **`/pw-respond <PR#>`** to address its comments and resolve the threads.
-3. **`/ultrareview <PR#>`** - user-triggered, billed, multi-agent cloud review,
-   stronger than either pass above. Claude Code cannot launch it itself. Reserve
-   it for genuinely risky changes.
+
+### Do not use `ultra` on pwiz
+
+**`/code-review ultra`, and its deprecated alias `/ultrareview`, are NOT the top
+of the effort ladder above** - they are a separate, **billed**, multi-agent
+**cloud** review. pwiz is too large for it in practice: Brendan's attempts
+repeatedly ran about half an hour, timed out, and produced no usable findings
+while still incurring cost.
+
+Recommendation for this project: **do not use it.** `max` is free under the
+subscription, runs locally, and actually finishes on a repo this size. If a
+change feels risky enough to want a third opinion, a human reviewer is the
+better spend.
 
 **The AI reviews do not stack.** Copilot plus `/code-review` is already two
-independent passes. Do not chain all three by rote; add `/ultrareview` only when
-the risk justifies a third opinion.
+independent passes; do not add a third by rote.
 
 Request human review only after the findings are settled and TeamCity is green.
 The goal is to spend reviewers' time on judgment calls, not on issues an AI pass
