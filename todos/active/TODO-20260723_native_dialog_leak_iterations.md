@@ -679,6 +679,47 @@ leak (2.4 KB before the change), so the local numbers cannot show an improvement
 justified by the window-churn model plus the fact that it is a faster, more deterministic, more
 direct test. Confirmation has to come from the fleet.
 
+## The connector's INSPECTION of a native dialog is not the cost -- showing it is
+
+Worth ruling out, because the connector reads a native dialog's whole child-window tree
+(`EnumChildWindows` + `GetClassName` + `GetWindowTextNoBlock` + `GetDlgCtrlID` on each) and does it
+repeatedly while `WaitForNativeFileDialogReady` polls. `DialogScanProbe.cs` (session scratchpad)
+shows + closes a real `OpenFileDialog` 60 times, optionally scanning every child 20 times per dialog:
+
+| mode | dialogs | child inspections | delta over 60 dialogs |
+|---|---:|---:|---:|
+| `show` | 60 | 0 | 507,280 B |
+| `scan` (20 scans/dialog, 48 children each) | 60 | **57,600** | **479,808 B** |
+
+Scanning is *within noise of not scanning* -- 57,600 extra child-window inspections added nothing.
+The per-dialog cost is entirely in showing the OS dialog, and it decays (47 KB -> ~3.4 KB/dialog by
+iter 60), i.e. the saturating modern-IFileDialog curve this TODO measured earlier. **The connector's
+Win32 introspection is exonerated**, alongside enumeration, `InternalGetWindowText` and cross-thread
+`Control.Invoke` from part 1.
+
+## Reframing: on a non-TS machine none of the four tests is unusual
+
+Ambient per-run heap growth for an ordinary functional test on the leaking machine is **16-20 KB**.
+On the clean machine (RITACH-DSK) the four tests measured -1.0, -3.1, 19.8 and 19.6 KB -- i.e. all
+**inside the ordinary band**. They are not special there in any way; they only become special on the
+machines that report the leak.
+
+So there is no "file dialog problem" to fix in Skyline code. The entire effect is environmental, and
+the only lever available in our own code is **how many windows a test creates** -- which is why the
+background-dialog test (~100,000 editing controls) was the one worth changing and the other three
+(1-3 dialogs each, inherent to what they test) are not reducible.
+
+### Refined recommendation for PR #4453
+
+An earlier draft of this section argued the mute should be **ungated** because the file-dialog tests
+sit at 19.6-19.8 KB on clean machines. That reasoning was wrong: those values are inside the normal
+16-20 KB band and they *pass*. **TS-gating the mute is fine in principle.** The only real risk is
+whether the gate correctly identifies the affected machines -- and
+`SystemInformation.TerminalServerSession` has already been observed reading **False** in a session
+whose `SESSIONNAME` is `RDP-Tcp#0`. The session line now logged in the run header (commit
+"Logged the session environment in the test run header") answers that from the next nightly: compare
+`TerminalServerSession` against which machines actually report leaks before trusting the gate.
+
 ## WARNING for PR #4453: the TerminalServerSession gate may not fire
 
 On this machine right now: `SESSIONNAME=RDP-Tcp#0` but
