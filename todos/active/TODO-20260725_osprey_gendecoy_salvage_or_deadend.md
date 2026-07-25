@@ -473,6 +473,42 @@ today) or for libdecoy (Carafe), the honest reference. A3 is in the running batc
 `Run-LibdecoyRef.ps1` queues a Carafe re-run on the current binary
 (`_mdiag/stellar-L3-libdecoy`).
 
+### 2026-07-25 - SCOPING LIMIT: every Stellar number was measured with MS1 features OFF
+
+Osprey **zeroes the MS1 features at unit resolution** (`ScoringTest.cs:560`: "Unit
+resolution instruments don't have sufficient MS1 resolution for meaningful precursor
+features"). Stellar runs `--resolution unit`, so `MS1 precursor co-elution` and
+`MS1 isotope dot-product` read deltaMu = 0.0000, coefficient = 0, percent = 0 in EVERY
+cell -- because they are not computed, not because of anything about the decoys.
+
+Consequences:
+
+* The **b<->y finding is unaffected** -- it is a fragment-level effect, and
+  11.81% -> 1.47% stands.
+* The conclusion that the **precursor m/z shift is "more trouble than it is worth" is
+  scoped to MS1-disabled data**. Dario's rationale for the shift was specifically about
+  MS1 power (a decoy at the target's own precursor m/z inherits genuine high-quality MS1
+  signal and isotope distribution, since reversal preserves atomic composition). On
+  Stellar that channel is dead, so C2's 1.96% vs B's 1.47% measures only the
+  window-separation / fragment-side COST of the shift with none of its intended MS1
+  BENEFIT available. The shift could plausibly look better on HRAM.
+
+**Brendan's open question -- can a decoy/entrapment model give MS1 more power than an
+exactly-matching precursor m/z allows -- is therefore untestable on Stellar.** It needs
+Astral (`--resolution hram`).
+
+Feasible: `D:\test\osprey-runs\astral-{gendecoy,libdecoy}\` are staged with `.spectra.bin`
+caches and a pairing manifest. Note pre-existing sibling dirs `astral-shift05`,
+`astral-shift10`, `astral-shiftboth10`, `astral-permute`, `astral-permz` -- prior
+precursor-shift exploration on Astral that should be read before re-running anything.
+Cost ~20 min/cell, and [[reference_osprey_astral_thread_memory_oom]] applies: use
+`--threads 8`, not 30.
+
+Relevant to the same question: Carafe keeps an exactly-matching precursor m/z yet is the
+best-calibrated cell (0.90%), differing by giving the decoy an INDEPENDENTLY PREDICTED
+RT. So the MS1 coincidence may be breakable in the time dimension rather than the m/z
+dimension -- untested, and now known to be untestable on Stellar.
+
 ### Next
 
 - [ ] Decide the real fix: make same-ion-map the Osprey default (a golden rebaseline,
