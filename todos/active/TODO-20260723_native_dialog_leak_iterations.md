@@ -546,8 +546,23 @@ Parsing every `# <test> deltas (n): ... heap = X KB` line:
  20.0 TestSrmSmallMoleculeChromatograms, then ~20 tests in the 16-20 band
 ```
 
-Ambient per-run heap growth for an ordinary functional test on this machine is **16-20 KB**. The
-four leakers are 2-8x that, with a clear gap. They are genuinely special, not the top of a continuum.
+The four leakers are separated from everything else by a clear gap. They are genuinely special, not
+the top of a continuum.
+
+**Correction to an earlier draft of this line:** it said "ambient per-run heap growth for an ordinary
+functional test is 16-20 KB". That is wrong -- 16-20 KB is the *p99 tail*, not the typical test. The
+full distribution of the `heap = X KB` verdicts, both machines:
+
+| log | n | min | p25 | median | p75 | p90 | p99 | max |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| RITACH-DSK (clean) | 896 | -149.9 | -7.2 | **0.0** | 1.1 | 7.2 | 17.1 | **19.9** |
+| BRENDANX-UW7 (leaking) | 1079 | -459.3 | -8.7 | **-0.1** | 0.2 | 8.6 | 18.8 | **171.6** |
+
+The typical test is at ~0 KB on **both** machines, and the two distributions are near-identical all
+the way to p99. They diverge only in the extreme tail: the clean machine's worst test is 19.9 KB
+(nothing crosses the 20 KB bar) while the leaking machine has four tests above it. So the leaking
+agents are **not** globally noisier -- the difference is confined to the window-heavy tests, which is
+what the mechanism below predicts.
 
 ### CORRECTION 1: the RDP/Terminal-Services hypothesis is RESTORED
 
@@ -740,10 +755,10 @@ Win32 introspection is exonerated**, alongside enumeration, `InternalGetWindowTe
 
 ## Reframing: on a non-TS machine none of the four tests is unusual
 
-Ambient per-run heap growth for an ordinary functional test on the leaking machine is **16-20 KB**.
-On the clean machine (RITACH-DSK) the four tests measured -1.0, -3.1, 19.8 and 19.6 KB -- i.e. all
-**inside the ordinary band**. They are not special there in any way; they only become special on the
-machines that report the leak.
+On the clean machine (RITACH-DSK) the four tests measured -1.0, -3.1, 19.8 and 19.6 KB. The upper two
+are in that machine's p99 tail (its overall max is 19.9) rather than being typical, but they **pass**,
+and nothing on that machine crosses the bar. They only become special on the machines that report the
+leak.
 
 So there is no "file dialog problem" to fix in Skyline code. The entire effect is environmental, and
 the only lever available in our own code is **how many windows a test creates** -- which is why the
