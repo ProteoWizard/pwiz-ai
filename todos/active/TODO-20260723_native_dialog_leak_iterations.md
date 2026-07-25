@@ -777,6 +777,21 @@ saver / lock screen engages. Then run `WindowChurnProbe` (added under
 > nightly** -- it collects the answer from every agent, in the exact state nightly runs in, with
 > nobody having to touch anything.
 
+### Ruled out: time of day / "someone was logged in when it ran"
+
+Approximated each run's START hour (`posttime` minus `duration`) over all 705 runs in the window and
+compared runs that reported leaks against runs that did not:
+
+* **Within every machine the two groups have the same median start hour** -- each agent runs on a
+  fixed schedule, and leaking runs are not the late or early ones.
+* **Across machines, overnight runs leak too**: BSPRATT-UW2 starts at 22h and leaks, BRENDANX-UW6 at
+  21h and leaks, BSPRATT-UW4 at 21h and leaks. Meanwhile the two clean agents start at 01h
+  (KAIPOT-PC1) and 22h (RITACH-DSK) -- the same part of the night as several leaking agents.
+
+So it is **not** "a developer happened to be RDP'd in while the run went past". Whatever separates
+KAIPOT-PC1 and RITACH-DSK is a persistent property of how those machines are set up, not a
+time-varying one -- which makes it something a configuration comparison can find.
+
 ## The connector's INSPECTION of a native dialog is not the cost -- showing it is
 
 Worth ruling out, because the connector reads a native dialog's whole child-window tree
