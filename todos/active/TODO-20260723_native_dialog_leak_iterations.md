@@ -559,10 +559,23 @@ full distribution of the `heap = X KB` verdicts, both machines:
 | BRENDANX-UW7 (leaking) | 1079 | -459.3 | -8.7 | **-0.1** | 0.2 | 8.6 | 18.8 | **171.6** |
 
 The typical test is at ~0 KB on **both** machines, and the two distributions are near-identical all
-the way to p99. They diverge only in the extreme tail: the clean machine's worst test is 19.9 KB
-(nothing crosses the 20 KB bar) while the leaking machine has four tests above it. So the leaking
-agents are **not** globally noisier -- the difference is confined to the window-heavy tests, which is
-what the mechanism below predicts.
+the way to p99. So the leaking agents are **not** globally noisier -- the difference is confined to
+the window-heavy tests, which is what the mechanism below predicts.
+
+**Read the top of that table with care -- there is a censoring artifact.** The pass-1 loop *stops as
+soon as a trailing window comes in below the thresholds* (`BelowThresholds` -> `break`), so for any
+test that PASSES, the reported number is whatever the first qualifying window was, and is therefore
+bounded just under 20 KB by construction. That is why both machines report a max of exactly 19.9 KB.
+Consequences:
+
+* The p99 / max columns are not comparable across machines in the usual way. The real difference is
+  simply **how many tests never get under 20 KB**: zero on RITACH-DSK, four on BRENDANX-UW7.
+* A cluster of tests reported in the 17-19.9 KB band (`TestInstrumentInfo` 19.9, `TestPolarityMismatch`
+  19.6, `TestDocumentGrid` 19.4, `TestSkipZoomScans` 19.1, ~14 more) should **not** be read as "about
+  to trip". A noisy test exits at the first window that dips under the bar, which will often be just
+  under it; the value says more about where it stopped than about its true rate.
+* If a stable per-test rate is ever wanted, it needs a fixed iteration count
+  (`IsFixedLeakIterations`, currently hard-coded false) rather than the early-exit loop.
 
 ### CORRECTION 1: the RDP/Terminal-Services hypothesis is RESTORED
 
