@@ -106,7 +106,26 @@ Verified on this machine with the fix in place:
 | TestPrmMcpConnector | +14.8 KB | 25 |
 | TestMcpConnectorBackgroundDialog | +0.6 KB | 12 |
 
-PRM converged at 25 - one past the old 24 ceiling that would have failed it.
+PRM converged on its 25th pass - one past the old 24 ceiling that would have failed it.
+(`deltas (N)` reports `iterationCount + 1`, and `break` skips the increment, so N is the
+1-based pass on which it converged; the old cap only permits passes 1-24.)
+
+Three further trials of each test with the fix:
+
+| Test | Trial 1 | Trial 2 | Trial 3 |
+|---|---|---|---|
+| TestNativeFileDialog | 13.7 KB (24) | 15.7 KB (24) | 15.9 KB (23) |
+| TestNativeMessageBox | -45.8 KB (23) | -47.0 KB (23) | -72.0 KB (24) |
+| TestPrmMcpConnector | 14.1 KB (25) | 17.1 KB (23) | errored, re-ran clean at 16 KB (25) |
+
+Margin on this machine is real but not large: TestNativeFileDialog sits at 13-16 KB
+against the 20 KB threshold. The single -39.9 KB reading was a lucky window, not typical.
+PRM needed pass 25 on three of four runs.
+
+One trial errored outright rather than leaking; an immediate re-run passed and the error
+text was not captured (output was filtered). Intermittent failures in this test family are
+already being worked (#4454, #4456).
+
 CodeInspection passes.
 
 ## Residual risk - the fix is NOT proven for the fleet
@@ -127,11 +146,20 @@ nightly agents sit in DISCONNECTED ones, which is the uncontrolled variable.
 check. Not run unattended - the session cannot be reconnected from inside it, and losing
 it would have ended the night's work.
 
-If a machine still flags at 96, options in order of preference:
-(a) one-time warm-up before the measured window - only works if the growth saturates;
-(b) a per-test heap THRESHOLD override (e.g. 150 KB) so gross leaks are still caught -
-    TestRunner has no such mechanism today, but it preserves more than a mute;
-(c) PR #4453's mute, which gives up heap detection for these tests entirely.
+If a machine still flags at 96, options:
+
+* **Recommended fallback - per-test heap THRESHOLD override** (e.g. 150 KB for these
+  tests) so a gross leak is still caught. TestRunner has only mute lists and iteration
+  overrides today; adding a threshold override is small and preserves far more detection
+  than a mute.
+* **Warm-up before the measured window** - unattractive on the numbers: the 600-dialog
+  curve does not fall near 1 KB/dialog until ~150 dialogs, i.e. 2-3 minutes of setup per
+  test process.
+* **PR #4453's mute** - gives up heap detection for these tests entirely.
+
+Saturation curve (600 dialogs, bare SaveFileDialog loop): 11.30 KB/dialog for the first
+50, 4.66 for 50-100, 3.72 for 100-150, then oscillating around a ~1.4 MB plateau with two
+net-negative blocks and single give-backs of 312 KB and 430 KB.
 
 ## Notes
 
