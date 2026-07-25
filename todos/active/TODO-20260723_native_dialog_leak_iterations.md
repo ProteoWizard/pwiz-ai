@@ -414,3 +414,280 @@ TS-gated, since it grows on console too -- though the test stays under threshold
 because it cancels early); or (b) drop PROPERTY_COUNT so far fewer edits run before the
 connector cancels. Decide with tomorrow's fleet data. `GridEditProbe` is ready for the RDP
 machine to confirm TS amplification.
+
+## UPDATE 2026-07-25 (night session, nicksh's machine): enumeration hypothesis DISPROVEN
+
+nicksh proposed that `TestMcpConnectorBackgroundDialog` -- which involves no native dialog --
+leaks through the way the connector **enumerates window handles**, specifically reading the
+text of windows owned by another thread via `User32.InternalGetWindowText`
+(`GetWindowTextNoBlock`). **Measured directly; it is not the source.**
+
+Probe: `LeakProbe.cs` (session scratchpad, no Skyline code), measuring committed Win32 heap
+exactly the way `RunTests.MemoryManagement` does (`GetProcessHeaps` + `HeapWalk`, summing
+BUSY blocks). A real `Form` runs its own message loop on its own thread, so the cross-thread
+branch of `GetWindowTextNoBlock` is genuinely exercised.
+
+| probe | iterations | committed heap growth |
+|---|---:|---:|
+| `idle` (control) | 200,000 | 368 B, flat |
+| `text` -- `InternalGetWindowText`, cross-thread | 200,000 | **368 B, flat** (identical to control) |
+| `enum` -- full connector enumeration<sup>1</sup> | 20,000 | **2,736 B, flat after iter 2,000** |
+
+<sup>1</sup> `EnumWindows` + `GetWindowThreadProcessId` + `IsWindowVisible` +
+`GetWindowTextNoBlock` + `Control.FromHandle` -- the exact `StandaloneWindow.GetTopLevelWindows`
+sequence.
+
+Three independent lines of evidence agree:
+
+1. The measurement above: the path is a one-time 2.7 KB, then dead flat.
+2. **#4455 already tested this hypothesis** ("Reduce memory churn in EnumWindows", pass the
+   same delegate). Runs on hash `015d8956b` still leak: 21,462 / 32,525 / 60,301 / 65,801 bytes.
+3. **19 of the 21 `*McpConnector*` tests** exercise the identical enumeration path on every
+   `GetOpenForms` and do not leak at all. Only 2 of 21 do.
+
+## What the nightly number actually means (worth pinning down)
+
+`LeakTracking.MeanDelta` telescopes -- it averages consecutive deltas, so it equals
+**(last - first) / 7** over the 8-run window (`LeakTrailingDeltas = 7`). `minDeltas` then keeps
+the running **minimum** across up to 17 such windows (`LeakCheckIterations = 24`). So a
+reported 58 KB heap leak means *every* 8-run window rose >= 410 KB net, and the best one still
+rose 410 KB. That is sustained growth over 24 runs, not a single spike -- which rules out
+"one unlucky iteration" as an explanation.
+
+## The file-dialog explanation does NOT cover TestPrmMcpConnector
+
+Full 07/24 fleet numbers (LabKey `testresults.memoryleaks`, mean bytes):
+
+| test | mean bytes | needs net/8-run | native file dialog per run |
+|---|---:|---:|---|
+| `TestNativeMessageBox` | 131,311 | ~919 KB | 2-3 legacy comdlg32 |
+| `TestMcpConnectorBackgroundDialog` | 58,817 | ~412 KB | **none** |
+| `TestPrmMcpConnector` | 51,607 | ~361 KB | one, **modern** IFileDialog |
+| `TestNativeFileDialog` | 40,997 | ~287 KB | yes |
+
+The legacy-dialog rate (~27-28 KB/dialog, dead-linear) explains `TestNativeMessageBox`
+quantitatively: 2-3 dialogs x ~28 KB x 8 runs ~= 670 KB, right order of magnitude.
+
+It does **not** explain `TestPrmMcpConnector`. That test opens exactly one "Add Input Files"
+dialog per run, and it is the *modern* `IFileDialog` path (`AutoUpgradeEnabled` defaults true),
+measured in this TODO at ~4-5.7 KB/iter under RDP. That is ~5 KB against a ~361 KB requirement
+-- a **70x gap**. So **two** of the four tests are quantitatively unexplained, not one. The
+earlier framing ("the whole native-dialog/connector family is the OS file dialog") is too broad.
+
+## Grid-workload probes (the competing hypothesis for the background-dialog test)
+
+Same probe, console session:
+
+| mode | what it does | result |
+|---|---|---|
+| `grid` | fixed-size grid, `CurrentCell`/`BeginEdit(true)`/`EndEdit` churn, 40,000 edits | rises to ~200 KB by iter 2,000 then **oscillates 195-330 KB**; bytes/iter decays 103 -> 5. Not linear. |
+| `gridgrow` | same but the grid **grows** a row at a time (what the paste does), 40,000 edits | climbs 254 -> 722 KB, ~18 B/edit sustained, no plateau |
+| `gridcycle` | 20 full cycles of *create form+grid -> 2,000 rows pasted -> dispose*, i.e. one cycle == one test run | cumulative delta **oscillates 267-679 KB with no net trend**; consecutive-cycle swings of **+375 / -342 / -204 / +114 KB** |
+
+Reading of this:
+
+- `gridgrow`'s climb is mostly **live row storage**, not a leak -- the grid is holding more
+  rows, and my probe never disposes it. It does not by itself prove a leak.
+- `gridcycle` is the honest model of a test run, and it shows the important thing: the paste
+  workload leaves the process heap swinging by **hundreds of KB between consecutive runs**,
+  an order of magnitude above the 20 KB threshold, while the underlying level is stable.
+- That swing scales with **how many rows were pasted before the connector cancelled**, which
+  races machine speed -- a natural explanation for the 6x spread in the fleet numbers
+  (21,462 to 129,540 bytes on the same commit).
+
+This partially corrects the 2026-07-24 evening entry above: the per-cell editing-control
+create/destroy is **not** an unbounded linear leak (fixed-size grid plateaus). What scales is
+the row count, and across create/dispose cycles there is noise, not monotone growth --
+**at least on this console-like session**.
+
+## Not reproduced locally (important caveat)
+
+`Run-Tests.ps1 -TestName TestMcpConnectorBackgroundDialog -Loop 14 -Configuration Release`
+(pass 2, en-US only) on this machine: heap 5.22 / 5.22 / 5.25 / 6.67 / 6.64 / 6.65 / 6.64 /
+6.65 / 6.60 / ... / 6.61 / 6.60 / 6.63 MB. One step at iteration 5, then flat; consecutive
+deltas +-30 KB with mean ~= 0. **No leak here.** So the mechanism that makes the rise
+*persist* across 24 runs on nightly agents is still unproven, and this session cannot see it.
+
+Note this run used `language=en-US` only, whereas the pass-1 leak check cycles
+en/fr/tr each iteration (`runTests.Language = allLanguages[i % allLanguages.Length]`).
+A pass-1 leak check is running to see whether language cycling is what makes it persist.
+
+## UPDATE 2026-07-25 (night session, part 2): the real leaking log, and two corrections
+
+Pulled the actual nightly logs from LabKey (`testruns.log` is a gzip byte array; decompress it --
+script `getlog.py` in the session scratchpad) for run **84490 (BRENDANX-UW7, leaking)** and run
+**84479 (RITACH-DSK, clean)**, both on hash `a09eea912`.
+
+### The leak is REAL and unbounded -- not heap noise
+
+Heap column across the 25 pass-1 iterations on BRENDANX-UW7:
+
+| test | heap first -> last (MB) | per run | TestRunner verdict |
+|---|---|---:|---:|
+| `TestMcpConnectorBackgroundDialog` | 77.24 -> 82.01 | **212 KB** | 129,540 |
+| `TestNativeMessageBox` | 80.14 -> 84.19 | **180 KB** | 175,723 |
+| `TestPrmMcpConnector` | 79.80 -> 81.36 | **69 KB** | 53,712 |
+| `TestNativeFileDialog` | 78.59 -> 79.97 | **61 KB** | 42,763 |
+
+Dead linear, no plateau, monotone. Meanwhile managed is flat and *total private memory is flat at
+428 MB* -- so this is native heap growth specifically, not process growth.
+
+**This supersedes the "heap-state noise / workload variance" reading in the night-session part 1
+notes above.** That reading came from a console session that does not reproduce.
+
+### Ranked ALL 1065 tests in the run by TestRunner's own metric
+
+Parsing every `# <test> deltas (n): ... heap = X KB` line:
+
+```
+171.6 TestNativeMessageBox          126.5 TestMcpConnectorBackgroundDialog
+ 52.5 TestPrmMcpConnector            41.8 TestNativeFileDialog
+------------------------------------------ threshold 20.0
+ 20.0 TestSrmSmallMoleculeChromatograms, then ~20 tests in the 16-20 band
+```
+
+Ambient per-run heap growth for an ordinary functional test on this machine is **16-20 KB**. The
+four leakers are 2-8x that, with a clear gap. They are genuinely special, not the top of a continuum.
+
+### CORRECTION 1: the RDP/Terminal-Services hypothesis is RESTORED
+
+The "UPDATE 2026-07-24: the leak is UNIVERSAL (RDP hypothesis weakened)" section above is **wrong**.
+It concluded "universal" because the only machines with 0 leaks on 07/23 were on an older hash that
+did not contain the tests. On **07/24 that is no longer true**:
+
+| machine | hash | leakedtests |
+|---|---|---:|
+| **RITACH-DSK** (84479) | a09eea912 | **0** |
+| **KAIPOT-PC1** (84488) | a09eea912 | **0** |
+| every other machine | a09eea912 / 015d8956b | 2-6 |
+
+RITACH-DSK *ran* the tests (8 and 24 iterations logged) and did not leak. Same commit, same tests,
+opposite result -> the difference is **environmental**, which is what the original RDP hypothesis said.
+
+Same test, same commit, two machines:
+
+| test | RITACH-DSK (clean) | BRENDANX-UW7 (leaking) |
+|---|---:|---:|
+| `TestMcpConnectorBackgroundDialog` | **-1.0 KB (flat)** | 126.5 |
+| `TestNativeMessageBox` | **-3.1 KB (flat)** | 171.6 |
+| `TestPrmMcpConnector` | 19.8 (climbing) | 52.5 |
+| `TestNativeFileDialog` | 19.6 (climbing) | 41.8 |
+
+### CORRECTION 2: Skyline never uses the legacy comdlg32 dialog
+
+The DECISION above ("mute, not warm-up") rests on *"the offending (legacy) path never plateaus"*.
+But Skyline never takes that path:
+
+```
+grep -r "AutoUpgradeEnabled" pwiz_tools/   -> no matches
+grep -r "ShowHelp"           pwiz_tools/Skyline -> no matches
+grep -r "ShowReadOnly"       pwiz_tools/Skyline -> no matches
+```
+
+`FileDialog.AutoUpgradeEnabled` defaults to true, and WinForms only falls back to legacy comdlg32
+when it is false, or `ShowHelp` is true, or `OpenFileDialog.ShowReadOnly` is true. None occur. So
+**every Skyline file dialog is the modern IFileDialog** -- the path this TODO's own 1000-dialog
+experiment showed *saturates* (4.3 -> 0.83 KB/iter, flat by ~iter 500). The dead-linear 27 KB/iter
+`savelegacy`/`openlegacy` rate was an artifact of HeapProbe explicitly setting
+`AutoUpgradeEnabled = false`; no Skyline code path reaches it.
+
+Consequence: the magnitudes are NOT explained by "legacy dialog leak" for any of the four tests, and
+the reason given for rejecting warm-up does not apply to what Skyline actually runs.
+
+### Two populations, one plausible mechanism
+
+The 07/24 machine x test matrix separates cleanly:
+
+* **Universal, near-threshold** -- `TestPrmMcpConnector`, `TestNativeFileDialog`: leak on **9/9**
+  machines that ran them, and sit at 19.6-19.8 KB even on the clean machines (i.e. under the 20 KB
+  bar by a hair).
+* **Environment-dependent, large** -- `TestMcpConnectorBackgroundDialog`, `TestNativeMessageBox`:
+  flat on RITACH-DSK, 100-175 KB elsewhere.
+
+A single mechanism fits both: **under a Terminal Services / remoted-display session, Win32 window
+creation+destruction leaks native heap**, and the four tests are exactly the ones that create an
+unusual number of windows per run --
+
+| test | windows created per run |
+|---|---|
+| `TestMcpConnectorBackgroundDialog` | ~100,000 short-lived grid editing controls (50,000 rows x 2 cells) |
+| `TestNativeMessageBox` | 3 native Save dialogs (each ~100 child windows) + 2 message boxes |
+| `TestNativeFileDialog`, `TestPrmMcpConnector` | 1 native file dialog each |
+| the other 19 `*McpConnector*` tests | almost none -- and all are **dead flat**, 0 sec |
+
+Consistent supporting measurements (this console session, which behaves as non-TS):
+* Doubling the background-dialog test's paste workload (a 5 s delay before the connector cancels, so
+  ~2x the cells are pasted) changed the heap delta not at all: **2.3 KB vs 2.4 KB baseline**. On a
+  console, window churn is free -- exactly what the model predicts.
+* Enumeration / `InternalGetWindowText` / cross-thread `Control.Invoke` probes: all flat (part 1).
+
+**Not yet directly measured:** "window create/destroy under TS" itself, and whether RITACH-DSK /
+KAIPOT-PC1 are in fact console sessions. Both need someone on those machines. That is the single
+experiment that would settle this.
+
+## SEPARATE PROVEN BUG: TaskbarProgress leaks COM on the background dialog's dying STA thread
+
+`CommonUtil/SystemUtil/TaskBarProgress.cs` lazily creates an `ITaskbarList3` COM object and **never
+releases it** (not `IDisposable`, no `Marshal.ReleaseComObject`, no finalizer).
+`LongOperationRunner.BackgroundThreadLongWaitDlg` holds
+`private readonly TaskbarProgress _taskbarProgress = new TaskbarProgress()` -- **one per dialog
+instance** -- and `BackgroundEventThreads.CreateThreadForAction` runs that dialog on a thread with
+`SetApartmentState(ApartmentState.STA)` which **exits when the dialog closes**.
+
+Measured with `StaComProbe.cs` (session scratchpad; no Skyline code, same heap accounting as
+TestRunner), 400 iterations each:
+
+| mode | what | result |
+|---|---|---|
+| `thread` | STA thread created + joined, no COM | **1,056 B total, flat** -- thread churn is free |
+| `com` | STA thread creates `ITaskbarList3`, calls it, thread dies | **180,336 B = ~450 B/iter, dead linear** |
+| `comrel` | same + `Marshal.ReleaseComObject` before exit | **~483 B/iter, still linear** -- release does NOT fix it |
+| `commain` | same object created on the long-lived main STA thread | **6,208 B total, flat** -- no leak |
+
+So it is not RCW lifetime; it is *COM initialized on an STA apartment that is then torn down*. The
+fix must be to not create it on that thread, not to dispose it.
+
+**Deliberately not fixed tonight**: at ~450 B/run this is 0.3-2% of the four tests' leak, and every
+fix has a tradeoff worth a human decision -- (a) drop the per-dialog taskbar progress (loses the
+progress bar on the taskbar button during a long operation), (b) route updates to the main window's
+long-lived `TaskbarProgress` (but in this exact scenario the main thread is *blocked*, which is the
+whole point of the dialog, so the update would not land until the work finished), or (c) host one
+`TaskbarProgress` on a dedicated long-lived STA thread (correct but heavier than the bug warrants).
+Also unverifiable from here: the benefit only shows on a machine that reproduces.
+
+## CHANGE MADE: TestMcpConnectorBackgroundDialog no longer pastes 50,000 rows
+
+`McpConnectorBackgroundDialogTest` used a 50,000-row x 2-column grid paste purely as a way to wedge
+the main UI thread so that `LongOperationRunner` would put a `BackgroundThreadLongWaitDlg` on a
+thread of its own. That vehicle created ~100,000 short-lived editing-control windows per run --
+the largest window-churn of any test in the suite, and (under the model above) the reason this test
+is the second-worst heap leaker while `TestListDesigner`, `TestPaste` and `TestPasteTransitionList`
+are all dead flat.
+
+The test now drives `LongOperationRunner` directly with a wait-until-cancelled action. Same class,
+same threading, same dialog, same connector path -- one window instead of 100,000. It also now
+asserts the operation *observed* the cancel (a `ManualResetEvent` the work signals), which is a
+stronger assertion than the old `grid.RowCount < PROPERTY_COUNT` proxy.
+
+**Tradeoff to review:** the test no longer exercises `DataGridViewPasteHandler` + `LongOperationRunner`
+integration. That combination is what a real user hits, and it is now covered only incidentally. If
+that coverage is wanted, it belongs in a test that is not in the leak-check path (or one that is
+muted), because it is inherently a ~100,000-window workload.
+
+**Verification is partial and must be stated plainly:** this console session never reproduced the
+leak (2.4 KB before the change), so the local numbers cannot show an improvement. The change is
+justified by the window-churn model plus the fact that it is a faster, more deterministic, more
+direct test. Confirmation has to come from the fleet.
+
+## WARNING for PR #4453: the TerminalServerSession gate may not fire
+
+On this machine right now: `SESSIONNAME=RDP-Tcp#0` but
+`SystemInformation.TerminalServerSession` reads **False**. Earlier in this TODO the same
+machine over RDP recorded `TerminalServerSession=True`. So the property is not a reliable
+proxy for "this is a remoted session" -- it can read False in a session that is unmistakably
+RDP by every other measure.
+
+If a nightly agent is ever in that state, a mute gated on
+`SystemInformation.TerminalServerSession` **silently will not apply** and the test will be
+reported as leaking anyway. Before relying on the gate, print the property on an actual
+nightly agent and confirm it reads True there.
