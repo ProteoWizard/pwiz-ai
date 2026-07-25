@@ -12,9 +12,13 @@
 ### Companion branch from the 2026-07-25 night session
 - **Branch**: `Skyline/work/20260724_connector_heap_leak_fixes`
 - **Worktree**: `sky_fileopendialog` (nicksh's machine)
-- **PR**: [#4458](https://github.com/ProteoWizard/pwiz/pull/4458) — fixes the one test that was
-  fixable, and adds the diagnostics (session header line, `WindowChurnProbe`) needed to explain the
-  rest. See the 2026-07-25 sections below; two of them correct premises that #4453 rests on.
+- **PR**: [#4458](https://github.com/ProteoWizard/pwiz/pull/4458) - three changes:
+  `TestMcpConnectorBackgroundDialog` no longer pastes 50,000 rows to wedge a thread (a cleanup, not
+  a leak fix - see CORRECTION 3); the test run header logs the session environment; and
+  `LongOperationRunner` gets a missing `return` plus a fix for the taskbar COM leak.
+- **Read CORRECTION 3 before trusting the 2026-07-25 sections**: the night session concluded the
+  growth was a genuine unbounded leak, and that conclusion is withdrawn. Several downstream claims
+  went with it. The measurements themselves stand.
 
 ## Problem
 
@@ -525,7 +529,11 @@ Pulled the actual nightly logs from LabKey (`testruns.log` is a gzip byte array;
 script `getlog.py` in the session scratchpad) for run **84490 (BRENDANX-UW7, leaking)** and run
 **84479 (RITACH-DSK, clean)**, both on hash `a09eea912`.
 
-### The leak is REAL and unbounded -- not heap noise
+### The growth is real and monotone over the sampled window -- NOT heap noise
+
+> **RETRACTED HEADING.** This section was originally titled "The leak is REAL and unbounded". The
+> "unbounded" half is withdrawn; see "CORRECTION 3" immediately below. The measurements themselves
+> stand.
 
 Heap column across the 25 pass-1 iterations on BRENDANX-UW7:
 
@@ -536,11 +544,52 @@ Heap column across the 25 pass-1 iterations on BRENDANX-UW7:
 | `TestPrmMcpConnector` | 79.80 -> 81.36 | **69 KB** | 53,712 |
 | `TestNativeFileDialog` | 78.59 -> 79.97 | **61 KB** | 42,763 |
 
-Dead linear, no plateau, monotone. Meanwhile managed is flat and *total private memory is flat at
-428 MB* -- so this is native heap growth specifically, not process growth.
+Monotone across all 25 samples, with no plateau *within that window*. Managed is flat and total
+private memory is flat at 428 MB, so this is Win32 heap growth specifically, not process growth.
 
 **This supersedes the "heap-state noise / workload variance" reading in the night-session part 1
 notes above.** That reading came from a console session that does not reproduce.
+
+### CORRECTION 3: "unbounded" was an over-extrapolation from 25 samples
+
+Nightly stops at 24 iterations, so 25 samples is the entire window this data can speak to. Monotone
+growth over 25 samples is equally consistent with a curve that saturates at 30, or 100, or 600 --
+and concluding "dead linear, therefore a genuine unbounded leak" reads a trend past the edge of the
+data.
+
+**This is the same mistake this TODO had already recorded once.** The 2026-07-24 RDP section
+concluded "linear, no plateau over 120 dialogs", and the 1000-dialog experiment later showed the
+modern dialog saturating by about iteration 500. The night-session author repeated it.
+
+PR #4459 then measured the thing directly, with instrumentation this session did not have
+(`tsdiscon`, to put a real session into the disconnected state nightly agents sit in):
+
+* A bare `SaveFileDialog` loop plateaus near 1.4 MB by about 600 dialogs, and **hands memory back**
+  -- individual 50-dialog blocks are net negative.
+* The three dialog tests converge at passes **24, 27 and 28** -- just past the 24-iteration ceiling.
+  `TestMcpConnectorBackgroundDialog` converges at pass 12.
+* A connector probe that opens and closes the Import Peptide Search wizard with **no** native dialog
+  measures -2.6 KB.
+
+On that account the tests fail not because anything leaks without bound, but because the leak check
+gives up at 24 iterations, just before the shell cache settles -- which also explains why they pass
+when run interactively.
+
+**Neither account is settled.** #4459 is currently marked draft because a separate review thinks it
+is probably wrong. What IS settled is that the "unbounded" claim in this section was not supported
+by the evidence behind it, and nothing downstream should be built on it.
+
+### What survives the correction, and what does not
+
+| claim | status |
+|---|---|
+| The four tests grow monotonically over the 24-25 samples nightly takes | **stands** (measured) |
+| ...therefore it is a genuine unbounded leak | **withdrawn** -- extrapolation |
+| Enumeration / `InternalGetWindowText` / cross-thread `Invoke` / dialog-tree inspection are not the cause | **stands** -- direct measurement, independent of the above |
+| Skyline never takes the legacy comdlg32 path | **stands**, and #4459 confirms it independently |
+| The reported value for a *passing* test is censored just under 20 KB by the early-exit loop | **stands**, and it supports the convergence account |
+| The growth scales with how many Win32 windows a test creates | **withdrawn** -- see the mechanism section below |
+| `TaskbarProgress` leaks COM on a dying STA thread | **stands** -- separately measured, and now fixed |
 
 ### Ranked ALL 1065 tests in the run by TestRunner's own metric
 
@@ -639,26 +688,37 @@ The 07/24 machine x test matrix separates cleanly:
 * **Environment-dependent, large** -- `TestMcpConnectorBackgroundDialog`, `TestNativeMessageBox`:
   flat on RITACH-DSK, 100-175 KB elsewhere.
 
-A single mechanism fits both: **under a Terminal Services / remoted-display session, Win32 window
-creation+destruction leaks native heap**, and the four tests are exactly the ones that create an
-unusual number of windows per run --
+> **WITHDRAWN HYPOTHESIS.** What follows was proposed as "under a Terminal Services session, Win32
+> window create/destroy leaks native heap, and the four tests are the ones that create the most
+> windows". **It does not survive its own numbers** and should not be built on. Kept here because
+> the individual measurements are still useful and because the way it failed is worth remembering.
+
+The proposal was that the four tests are exactly the ones creating an unusual number of windows:
 
 | test | windows created per run |
 |---|---|
-| `TestMcpConnectorBackgroundDialog` | ~100,000 short-lived grid editing controls (50,000 rows x 2 cells) |
-| `TestNativeMessageBox` | 3 native Save dialogs (each ~100 child windows) + 2 message boxes |
-| `TestNativeFileDialog`, `TestPrmMcpConnector` | 1 native file dialog each |
-| the other 19 `*McpConnector*` tests | almost none -- and all are **dead flat**, 0 sec |
+| `TestMcpConnectorBackgroundDialog` | thousands of short-lived grid editing controls (the paste is cancelled early, so nowhere near the 100,000 an uncancelled paste would produce -- an earlier draft of this section wrongly quoted the ceiling) |
+| `TestNativeMessageBox` | 2 native Save dialogs (each with many child windows) + 2 message boxes |
+| `TestNativeFileDialog` | 3 native file dialogs |
+| `TestPrmMcpConnector` | 1 native file dialog |
+| the other 19 `*McpConnector*` tests | almost none -- and all are flat |
 
-Consistent supporting measurements (this console session, which behaves as non-TS):
-* Doubling the background-dialog test's paste workload (a 5 s delay before the connector cancels, so
-  ~2x the cells are pasted) changed the heap delta not at all: **2.3 KB vs 2.4 KB baseline**. On a
-  console, window churn is free -- exactly what the model predicts.
+**Why it fails: the ordering is wrong.** `TestNativeMessageBox` creates a few hundred windows and
+reports 171.6 KB/run, while the old background-dialog test created *thousands* and reported 126.5
+KB/run. Four orders of magnitude more windows for a smaller number. No constant per-window rate
+produces that, so "leak is proportional to windows created" is falsified by the very table meant to
+support it. Different window kinds evidently cost wildly different amounts, which makes window count
+a poor predictor of anything here.
+
+The supporting measurements are still individually valid, they just do not add up to the mechanism:
+* Doubling the background-dialog test's paste workload (a 5 s delay before the connector cancels)
+  changed the heap delta not at all: **2.3 KB vs 2.4 KB baseline** on this console session.
 * Enumeration / `InternalGetWindowText` / cross-thread `Control.Invoke` probes: all flat (part 1).
+* `WindowChurnProbe` on this console session: every mode plateaus, nothing grows without bound.
 
-**Not yet directly measured:** "window create/destroy under TS" itself, and whether RITACH-DSK /
-KAIPOT-PC1 are in fact console sessions. Both need someone on those machines. That is the single
-experiment that would settle this.
+**Consequence for the fix:** the rewrite of `TestMcpConnectorBackgroundDialog` (below) is justified
+as a cleanup -- it is faster, deterministic, and does not need a 50,000-row paste to wedge a thread
+-- and **not** as a leak fix. #4459 reports that test already converging at pass 12 regardless.
 
 ## SEPARATE PROVEN BUG: TaskbarProgress leaks COM on the background dialog's dying STA thread
 
@@ -746,6 +806,13 @@ while the other eleven agents each accumulated leak rows across 4-6 distinct tes
 nothing to do with the connector). OS build does not sort them: the clean pair and most of the
 leaking machines are all on 10.0.19045.
 
+> **Read this as an observation, not as a mechanism.** The split is solid and the arithmetic below
+> holds. But it does **not** by itself say *what* differs, and in particular it does not require any
+> leak at all: #4459's account explains the same data as "some agents converge within the
+> 24-iteration ceiling and some need a few passes more", which would make these two agents simply the
+> ones that always converge in time. An earlier draft of this section leaned on the split as support
+> for the window-churn mechanism, which is now withdrawn.
+
 ### Corroboration from leaks that have nothing to do with this work
 
 Restricting to the 60-day window and excluding every `*Mcp*` / `*Native*` test leaves 18 leak rows
@@ -769,9 +836,13 @@ far better than muting tests one at a time.
 BRENDANX-UW7 on: whether the nightly runs in a Terminal Services / RDP session or at the physical
 console (`query session`, `SESSIONNAME`, `SystemInformation.TerminalServerSession`); whether the
 session is left connected or disconnected; display driver and colour depth; and whether a screen
-saver / lock screen engages. Then run `WindowChurnProbe` (added under
-`pwiz_tools/Skyline/Executables/DevTools/WindowChurnProbe/`) on one of each and compare -- if
-`child` is dead-linear on a leaking agent and plateaus on a clean one, the mechanism is settled.
+saver / lock screen engages.
+
+`WindowChurnProbe` was written for exactly this comparison but has since been **removed from the
+PR**, along with `HeapProbe`, once the window-churn mechanism it was built to test was withdrawn.
+Neither is in the product tree; `HeapProbe` only ever existed on the closed #4453 branch. Both
+sources are kept on nicksh's machine at `ai/.tmp/memory-leak-probes/` (gitignored, so local only)
+and are recoverable from git history until those branches are deleted.
 
 > **Careful: the obvious way to check destroys the thing being measured.** If someone RDPs into
 > RITACH-DSK to find out whether it is a console session, they have just made it a Terminal Services
@@ -800,9 +871,11 @@ the only thing that fits:
 * **The remedy is completely different**: exclude or remove the offending software, rather than
   change how nightly logs in or mute the tests.
 
-`WindowChurnProbe` now dumps the loaded-module list and anything injected while the churn ran, so a
-single run on a leaking agent and a clean one tests both explanations at once. Reference from
-nicksh's machine: 56 modules at baseline, **none injected during the run**.
+`WindowChurnProbe` dumped the loaded-module list and anything injected while the churn ran, so that a
+single run on a leaking agent and a clean one would test both explanations at once. Reference from
+nicksh's machine: 56 modules at baseline, **none injected during the run**. The probe has since been
+removed (see above); comparing module lists across agents is still a cheap check if the agent split
+ever needs explaining, and needs nothing more than `Process.GetCurrentProcess().Modules`.
 
 ### Ruled out: time of day / "someone was logged in when it ran"
 
