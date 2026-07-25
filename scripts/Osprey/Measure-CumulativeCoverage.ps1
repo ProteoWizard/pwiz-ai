@@ -103,6 +103,11 @@ if (-not (Test-Path $regressionDataPs1)) {
     throw "RegressionData.ps1 not found at $regressionDataPs1 (need the pwiz checkout for the shared resume invalidation)."
 }
 . $regressionDataPs1
+if (-not (Get-Command Invoke-ResumeInvalidation -ErrorAction SilentlyContinue)) {
+    throw ("RegressionData.ps1 at '{0}' does not define Invoke-ResumeInvalidation. That function " +
+           "moved there from regression.ps1 in pwiz PR #4460; this script needs a pwiz checkout " +
+           "that includes it. Update the pwiz checkout (or check out the branch) and retry." -f $regressionDataPs1)
+}
 
 # Coverage filter: Osprey.* production assemblies, drop the test assembly.
 # (Same filter Build-Osprey.ps1 -Coverage uses for the unit leg.)
