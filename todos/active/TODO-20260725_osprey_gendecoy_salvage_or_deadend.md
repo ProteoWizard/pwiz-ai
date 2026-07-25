@@ -300,6 +300,50 @@ Note no cell is perfectly calibrated (libdecoy reads 1.47% at a claimed 0.95%), 
 anti-conservative cells accept more IDs (D: 48,276 vs libdecoy's 30,242) -- the expected
 signature.
 
+### 2026-07-25 - Fidelity bug in my own C/D variants (Brendan caught it)
+
+Skyline does NOT shift the decoy precursor by an integer m/z. `SequenceUtil.cs:145`:
+
+```csharp
+public const double MASS_PEPTIDE_INTERVAL = 1.00045475;
+public static double GetPeptideInterval(int? massShift)
+    => massShift.HasValue ? massShift.Value * MASS_PEPTIDE_INTERVAL : 0.0;
+```
+
+and `TransitionDocNode.cs:72` adds `GetPeptideInterval(DecoyMassShift)` to the **m/z**
+(charge-independent, NOT to the neutral mass). So the real shift is
+10 x 1.00045475 = **10.0045475 m/z**. Shifting by integer units would put the decoy off
+the peptide mass-defect line, making it distinguishable from a real peptide by m/z alone
+-- a systematic handicap of exactly the kind that produced the b<->y result.
+
+My first C and D runs used a flat +10.0, so **they are not faithful and their numbers
+(3.19% / 20.40%) are likely pessimistic**. Re-ran as C2/D2 after changing the knob to
+`OSPREY_DECOY_PRECURSOR_SHIFT_UNITS` (integer units x `MassPeptideInterval`).
+
+### The three-axis picture, and why Skyline shifts at all
+
+Brendan: the shift was Dario Amodei's innovation, not carried by other mProphet
+implementations. Intent was (a) make it likely the decoy's fragments come from a
+DIFFERENT MS/MS isolation window than its target, and (b) stop the decoy inheriting good
+MS1 signal at the target's unchanged predicted RT.
+
+| | fragment intensity map | decoy RT | precursor m/z |
+|---|---|---|---|
+| Osprey gendecoy | b<->y swap (broken) | copied from target | **same as target** |
+| Skyline | same ion | copied via `SourceKey` | **shifted** |
+| Carafe libdecoy | model-predicted | **independently predicted** | same as target |
+
+Osprey's decoy keeps the target's precursor m/z AND the target's RT, so its MS1 evidence
+IS the target's own MS1 peak -- a free pass making decoys look too good, running opposite
+to the b<->y swap making them look too bad. The two partially cancel.
+
+Carafe breaks the MS1 coincidence via RT (a reversed sequence gets its own predicted RT).
+Skyline cannot (it copies RT), so it breaks it via the precursor shift. **Osprey adopted
+Skyline's RT-copying without Skyline's compensating shift.**
+
+Prediction recorded before the C2/D2 numbers landed: a faithful shift should make
+**C2 beat B**, reversing the unfaithful-shift ordering.
+
 ### Next
 
 - [ ] Decide the real fix: make same-ion-map the Osprey default (a golden rebaseline,
