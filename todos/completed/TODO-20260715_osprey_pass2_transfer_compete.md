@@ -3,12 +3,15 @@
 **Created:** 2026-07-15  **Requested by:** Mike
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260715_osprey_pass2_transfer_compete`
+- **Branch**: `Skyline/work/20260722_osprey_pass2_frozen_streaming` (renamed from
+  `Skyline/work/20260715_osprey_pass2_transfer_compete` when the frozen score pass
+  became streaming; this TODO keeps its original date)
 - **Base**: `master`
 - **Created**: 2026-07-15
-- **Status**: In Progress
-- **GitHub Issue**: [#4436](https://github.com/ProteoWizard/pwiz/issues/4436)
-- **PR**: (pending)
+- **Status**: Completed
+- **GitHub Issue**: [#4436](https://github.com/ProteoWizard/pwiz/issues/4436) (left open — tracks the
+  remaining validation + default flip below)
+- **PR**: [#4446](https://github.com/ProteoWizard/pwiz/pull/4446) (merged 2026-07-25)
 
 ## Background / arc of the work
 
@@ -73,7 +76,7 @@ stays honest because protein membership is ~independent of a peptide's own decoy
       **+24% at 1% reported q, FDR controlled**; matched true FDP +19.7% @0.5%, +20.2% @0.75%.
       pass2 now EXCEEDS pass1 (recovering peptides pass1 missed). Reproduces the +25-27% prototype.
 
-## Remaining work
+## Remaining work (all DEFERRED past the #4446 merge — nothing below shipped)
 
 1. **Astral protein-compact validation** (expect a bigger win — Astral is where the DIA-NN gap is).
 2. **The <=1% true-FDP tail** — matched_fdp reports a nonsensical +911% at exactly 1.0% (curve is
@@ -86,7 +89,15 @@ stays honest because protein membership is ~independent of a peptide's own decoy
 5. **DIA-NN precursor overlap venn** (protein-compact vs DIA-NN) — does the recovered depth match
    DIA-NN's precursors? (regular-lib runs for apples-to-apples).
 
-## Separate / blocking: scoring performance regression (NOT this feature's code)
+## Separate / blocking: scoring performance regression (NOT this feature's code) — ADDRESSED
+
+Both planned steps landed on the branch before merge: the experimental
+`--extra-features` scoring was removed (`2ad7a030e`) and master's **#4424**
+(`fc148e446`) came in with the merge commit `f395cfe80`, so the merged code carries
+the scoring-memory optimization. A fresh cold-run benchmark on a quiet machine was
+never recorded here — the 46-min figure below is from the pre-merge branch and should
+not be quoted as the merged state.
+
 Cold Stellar regular-lib is **46 min vs the 12.8 min baseline (3.6x), ~40% CPU, ~32 GB peak** —
 the branch lacks master's **PR #4424** scoring-memory optimization (`consumeInputMzs` MS2 m/z
 free + `float[][]` calibration cache, ~6.6 GB), which on this RAM-constrained box (file
@@ -102,3 +113,30 @@ master (verified); the regression is memory/systemic, not the scoring algorithm.
 - Bench/validation (on Z:): `Z:\osprey-test-data\benchmark-results\` — `Run-ProteinCompact-Entrapment.ps1`,
   `Run-Stellar-Reg-Sweep.ps1`, `prototype_protein_compact.py`, `matched_fdp.py`, `extract_any.py`,
   `rt_boundary_analysis.py`. First DIA-NN comparison run: `run-20260714-213641/`.
+
+## Progress Log
+
+### 2026-07-25 - Merged
+
+PR #4446 merged as commit `dd9e845` (25 files, +3,809/-165), TeamCity 20/20 green.
+What shipped, **all off by default**: the two pass-2 FDR modes behind
+`OSPREY_PASS2_QVALUE` (`transfer-compete` — frozen 1st-pass model over the full
+pre-compaction population, fixing the retrain's anti-conservative FDR; and
+`protein-compact` — that competition constrained to the >= 2-peptide protein
+stratum), both streaming the frozen score pass one file at a time so peak memory
+stays flat in file count; the learned per-platform peak-pick model opt-in via
+`OSPREY_PICK_LDA` (legacy product pick remains the default, so a plain run still
+matches the committed regression golden); the pure-managed GBDT classifier
+(`--fdr-method fasttree`), kept in reserve for future scores a linear model handles
+poorly; and a `BuildSharedBoundaries` fix breaking `run_qvalue` ties between
+gap-filled charge states by lowest charge, which restored C#/Rust blib
+`RetentionTimes` byte-identity (a 20-row Astral transfer-compete divergence).
+
+**Deferred — none of the "Remaining work" items above shipped**: Astral
+protein-compact validation, the <= 1% true-FDP tail investigation, gate-expansion
+unit tests, the >= 3-peptide anchor lever, and the DIA-NN precursor overlap venn.
+The recommended configuration (`OSPREY_PICK_LDA=1` +
+`OSPREY_PASS2_QVALUE=protein-compact`) is deliberately NOT the default; flipping it
+on is a **separate coordinated C#+Rust golden re-baseline PR**, tracked with the
+pass-2 default-flip work. Companion Rust PR **maccoss/osprey#57** was still open at
+merge time. Issue #4436 left open for the remaining validation + the default flip.
