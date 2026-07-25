@@ -509,6 +509,53 @@ best-calibrated cell (0.90%), differing by giving the decoy an INDEPENDENTLY PRE
 RT. So the MS1 coincidence may be breakable in the time dimension rather than the m/z
 dimension -- untested, and now known to be untestable on Stellar.
 
+### 2026-07-25 - ASTRAL HRAM: the MS1 question answered, and my hypothesis refuted
+
+Three cells on Astral (`--resolution hram`, `--threads 30`, ~18 min each) against the
+existing Carafe HRAM reference at `_mdiag/astral`. HRAM computes the MS1 features, so
+this is the only leg that can speak to the precursor-shift rationale.
+
+| cell (Astral, Pass 1) | FDP @1% q | discoveries | coin | tilt | pi0 | ref tilt |
+|---|---|---|---|---|---|---|
+| libdecoy (Carafe) ref | **1.92%** | 82,366 | 0.5011 | -- | -- | -- |
+| A: Osprey today | **7.64%** | 108,174 | 0.4117 | 1.379 | 0.650 | 1.415 |
+| B: same ion, no shift | **2.03%** | 94,280 | 0.4741 | 0.254 | 0.799 | 0.298 |
+| C: Skyline faithful | **3.49%** | 100,396 | 0.4666 | 0.329 | 0.781 | 0.350 |
+
+1. **The b<->y fix holds on HRAM**: 7.64% -> 2.03% (3.8x; Stellar was 7.4x).
+2. **B reaches parity with library decoys on HRAM** (2.03% vs 1.92%), within cross-binary
+   uncertainty -- the Carafe reference is an older build, and that binary gap moved
+   Stellar A by ~8% relative. The residual B-vs-Carafe gap seen on Stellar (1.47% vs
+   0.86%) does NOT reproduce here.
+3. **The shift is clearly harmful with MS1 live**: 2.03% -> 3.49% (1.7x), a LARGER
+   penalty than on Stellar (1.33x).
+
+**My "MS1 free pass" hypothesis is refuted.** I argued a decoy sharing the target's
+precursor m/z AND RT would have identical MS1 evidence, leaving the MS1 features
+degenerate. MS1 `deltaMu` (target-vs-decoy mean separation) says otherwise:
+
+| cell | MS1 isotope dot-product | MS1 precursor co-elution |
+|---|---|---|
+| A: Osprey today | 0.3243 | 0.4669 |
+| B: same ion, no shift | 0.5987 | 0.6434 |
+| C: Skyline faithful | **0.7738** | **0.6912** |
+
+Likely mechanism (inference, not measured): the decoy's peak is picked from its own
+fragment evidence, so it lands at a different apex than its target and the MS1 features
+are evaluated there -- same m/z, different retention position, real separation.
+
+**The shift does exactly what it was designed to do, and that is WHY it hurts.** B -> C
+raises MS1 isotope separation +29%, yet calibration degrades 2.03% -> 3.49%. The extra
+separation is **spurious**: it comes from a handicap applied only to decoys. A real false
+target never has its precursor moved 10 m/z into a window holding nothing of its mass.
+FDR needs decoys EXCHANGEABLE with false targets, not decoys that are easy to beat --
+more target-vs-decoy separation is worse whenever the separation is a decoy-only artifact.
+
+Answer to Brendan's open question: an exactly-matching precursor m/z does NOT starve MS1
+of power (0.60-0.64 separation already in B); buying more power with an m/z offset costs
+calibration. Honest MS1 power requires the decoy to be a plausible peptide whose MS1
+evidence is drawn from the same distribution as a false target's.
+
 ### Next
 
 - [ ] Decide the real fix: make same-ion-map the Osprey default (a golden rebaseline,
