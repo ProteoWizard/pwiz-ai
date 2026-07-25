@@ -175,41 +175,58 @@ time is the only reliable way to get it there.
 
 ## Pre-Review Workflow
 
-**`/pw-self-review` is the mandatory AI review gate** before requesting human
-review — a fresh-context Claude pass that catches logic / cross-impl / spec-
-conformance bugs and can read source repos outside the change. It is required
-on every PR.
+**`/code-review <level>` is the AI review gate** before requesting human review.
+It replaced `/pw-self-review`, retired 2026-07-25. That command was written when
+an early session said it could not give an unbiased review of its own code;
+`/code-review` is the native, upstream-maintained answer to exactly that, and it
+gains capability without us maintaining prose to describe it.
 
-**Copilot review is now OPTIONAL and billed.** It used to be free and ran
-automatically on every PR (which is why self-review was once sequenced to land
-before it). Copilot review now carries a per-use cost — the same category as
-`/ultrareview` — so it is opt-in for extra rigor, not a standing gate. This
-removes the reason to withhold the PR until self-review is done.
+**Run the review BEFORE opening the PR.** `/code-review` diffs `master...HEAD`,
+so it does not need a PR to exist. Reviewing first is materially cheaper:
 
-**The order, updated for that policy:**
+- **Copilot auto-reviews on PR open.** Measured on #4460: PR created 14:44:23,
+  Copilot review submitted 14:46:57, nobody requested it. Open first and that
+  billed pass is spent on code you are about to rewrite.
+- **Every push re-runs CI.** Landing review fixes after opening costs extra
+  TeamCity rounds on states that are obsolete within the hour. #4460 cost three
+  before this ordering was adopted.
+- Copilot then reviews already-hardened code, so it has less left to find and
+  its findings are more likely to be worth acting on.
 
-1. **Open the PR early** (`gh pr create`) as soon as the build is green and
-   tests pass — *before* self-review. Opening the PR kicks off the first round
-   of **TeamCity** CI, so that runs in parallel while self-review proceeds.
-   (Safe now that Copilot no longer auto-reviews on open: there is no automatic
-   pass to waste on a state you are about to change.)
-2. **`/pw-self-review`** — the primary AI gate. Run it on the branch (it diffs
-   `master...HEAD`; a `<PR#>` also works now the PR exists). Address its findings
-   in NEW commits (see "Amending Commits"); PRs are squash-merged, so extra
-   commits cost nothing and preserve the review history.
-   - Developer present: surface findings and agree which to fix.
-   - Autonomous: fix the agreed set in follow-up commits.
-3. **Optional, billed — extra rigor when warranted:**
-   - **Copilot review** — now opt-in (billed). Trigger it deliberately when the
-     change wants idiomatic / API / language scrutiny; then **`/pw-respond <PR#>`**
-     to address comments and resolve threads.
-   - **`/ultrareview <PR#>`** — user-triggered, billed, multi-agent cloud review;
-     stronger than either pass above. Claude Code cannot launch it itself.
+For **Osprey** there is no counter-argument to reordering: the expensive
+Perf/Regression config is manual/overnight and does NOT trigger on PR open, so
+opening early overlaps no long-running job. For a Skyline PR that does
+auto-start something slow, weigh that overlap against the wasted Copilot pass.
 
-Only after self-review is clean (and any optional reviews triggered are
-addressed) on the latest commit, with TeamCity green, should you request human
-review. The goal is to spend reviewers' time on judgment calls, not on issues
-the AI passes would have caught.
+**The order:**
+
+1. **`/code-review <level>`** on the branch, before the PR exists. Fold the
+   resulting fixes into the commits that will open the PR.
+   - **Verify every finding before acting on it.** The reviewer can be
+     confidently wrong. On #4460, 1 of 9 findings asserted that swapping two
+     codec fields would leave every test green - but
+     `TestEncodeMatchesRustByteLayout` pins each field to a distinct offset with
+     a distinct literal value, so it does fail. Reproduce or refute each finding
+     against the code. Pushing back with the reason is a legitimate outcome;
+     auto-applying the list is not.
+   - **Choose the level by risk, not by habit.** `xhigh` on #4460 took roughly
+     10.5 minutes and 138k tokens. That is the right spend for algorithm, FDR,
+     cross-impl parity, or structural work, and the wrong spend for a comment or
+     documentation change.
+2. **Open the PR** once the branch is green (build + tests + zero-warning
+   inspection) and the findings are settled. Copilot reviews it automatically;
+   use **`/pw-respond <PR#>`** to address its comments and resolve the threads.
+3. **`/ultrareview <PR#>`** - user-triggered, billed, multi-agent cloud review,
+   stronger than either pass above. Claude Code cannot launch it itself. Reserve
+   it for genuinely risky changes.
+
+**The AI reviews do not stack.** Copilot plus `/code-review` is already two
+independent passes. Do not chain all three by rote; add `/ultrareview` only when
+the risk justifies a third opinion.
+
+Request human review only after the findings are settled and TeamCity is green.
+The goal is to spend reviewers' time on judgment calls, not on issues an AI pass
+would have caught.
 
 ## Branch Naming Convention
 

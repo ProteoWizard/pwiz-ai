@@ -221,9 +221,10 @@ Reference the issue in commits: `See #$ARGUMENTS` or `Fixes #$ARGUMENTS`
 > and `gh pr create`. Both have format rules (past-tense titles, `* ` bullets,
 > `Co-Authored-By: Claude <noreply@anthropic.com>`, no emoji "Generated with"
 > lines, no "Claude Opus 4.X (1M context)" variants in Co-Authored-By).
-> After `gh pr create` returns the URL, the post-open review chain in the
-> version-control skill (Copilot wait → `/pw-respond` → `/pw-self-review`)
-> is mandatory, not optional.
+> Run `/code-review <level>` on the branch BEFORE `gh pr create` and fold the
+> fixes into the opening commits — see the review chain in the version-control
+> skill. After the PR is open, Copilot auto-reviews it; address those comments
+> with `/pw-respond <PR#>`.
 
 **For pwiz issues:**
 1. Update TODO Progress Log with completion summary
