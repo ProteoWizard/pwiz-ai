@@ -7,7 +7,10 @@ Usage:
     python inspect_parquet.py <path.parquet> [--cwt-only] [--sample N]
 
 Exit code: 0 always (this is a reporter, not a gate). Use -e to exit
-nonzero if CWT population < 50% (matching TestCsScoringPopulatesCwtCandidates).
+nonzero if CWT population < 50%. That 50% threshold was inherited from a
+TestCsScoringPopulatesCwtCandidates unit test that has since been removed (it
+could only run when a scratch parquet happened to be present); it is a
+reporting heuristic here, not a gate anything else enforces.
 """
 import argparse
 import struct
@@ -41,7 +44,7 @@ def main():
                     help='Print N sample rows (after header)')
     ap.add_argument('-e', '--exit-on-empty-cwt', action='store_true',
                     help='Exit 1 if <50%% of rows have CWT candidates '
-                         '(matches TestCsScoringPopulatesCwtCandidates)')
+                         '(reporting heuristic, not enforced by any test)')
     ap.add_argument('-B', '--diff', metavar='OTHER',
                     help='Diff against another parquet; aligns rows by '
                          'entry_id, reports row-set differences and '

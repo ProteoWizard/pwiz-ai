@@ -92,6 +92,18 @@ $buildScript = Join-Path $scriptDir 'Build-Osprey.ps1'
 $summarizeScript = Join-Path $scriptDir 'Summarize-Coverage.ps1'
 $regressionDataPs1 = Join-Path $pwizRoot 'pwiz_tools\Osprey\Regression\RegressionData.ps1'
 
+# Dot-source at SCRIPT scope so Invoke-ResumeInvalidation (and the downloads
+# helpers) are visible to the whole script. Resolve-DataDir also dot-sources
+# this file, but a dot-source inside a function scopes the definitions to that
+# function, so they vanish when it returns. Sharing the pwiz definition is what
+# keeps the resume invalidation from drifting: this script used to carry its own
+# copy keyed on the task CLASS names, which matched zero files and silently
+# produced a "resume" leg that never resumed.
+if (-not (Test-Path $regressionDataPs1)) {
+    throw "RegressionData.ps1 not found at $regressionDataPs1 (need the pwiz checkout for the shared resume invalidation)."
+}
+. $regressionDataPs1
+
 # Coverage filter: Osprey.* production assemblies, drop the test assembly.
 # (Same filter Build-Osprey.ps1 -Coverage uses for the unit leg.)
 $coverFilters = @('/Filters=+:module=Osprey*', '/Filters=-:module=Osprey.Test')
@@ -157,13 +169,9 @@ function Invoke-CoveredRun {
 }
 
 # Invalidate the Stage 5 join + blib so a re-run resumes (mirror regression.ps1).
-function Invoke-ResumeInvalidation {
-    param([string]$WorkDir)
-    Get-ChildItem -Path $WorkDir -File | Where-Object {
-        $_.Name -like '*.FirstJoin.osprey.task' -or
-        $_.Name -eq 'output.blib' -or $_.Name -eq 'output.blib.MergeNode.osprey.task'
-    } | Remove-Item -Force
-}
+# Invoke-ResumeInvalidation comes from RegressionData.ps1 (dot-sourced above),
+# the same definition regression.ps1 mode 2 uses. Do NOT reintroduce a local
+# copy here.
 
 # ----------------------------------------------------------------------------
 if (-not (Test-Path $ospreyExe)) {
