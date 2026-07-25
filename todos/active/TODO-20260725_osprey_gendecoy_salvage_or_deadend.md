@@ -404,6 +404,36 @@ Brendan's read of the diagnostics, which the data supports: the b<->y swap is th
 issue, and the 2016 Navarro multicenter standard was NOT similarly 10x off in its FDR
 estimation.
 
+### 2026-07-25 - DEFINITIVE Pass 1 table
+
+Parser root cause first: reports from the current binary carry **two** `fdpViews` arrays
+(FirstJoinTask writes one blob, MergeNodeTask appends another) and the passes are split
+across them -- the FIRST blob holds Pass 2, the SECOND holds Pass 1. The extractor used
+`html.find('"fdpViews"')`, took only the first, and therefore reported Pass 2 while
+concluding "Pass 1 is absent" for B/C2/D2. Older reports use a single blob with all four
+views, which is why the references worked. Fixed to scan and merge every array; B then
+reads 1.47% @ 28,490, matching the rendered report exactly.
+
+Same structure explains the two paired-coin blocks: the large one sits in the Pass 1
+blob, so **the coin numbers reported earlier were already Pass 1** -- that open question
+is closed.
+
+| cell | ion map | precursor | Pass 1 coin | **Pass 1 FDP @1% q** | discoveries |
+|---|---|---|---|---|---|
+| libdecoy (Carafe) | model-predicted | same | 0.5007 | **0.90%** | 26,775 |
+| B: same ion, no shift | same | same | 0.4733 | **1.47%** | 28,490 |
+| C2: Skyline faithful | same | +10 units | 0.4600 | **1.96%** | 29,454 |
+| A: Osprey today | b<->y swap | same | 0.2051 | **11.81%** | 35,627 |
+| D2: swap + shift | b<->y swap | +10 units | 0.1949 | **14.96%** | 37,145 |
+
+1. **The b<->y swap is the whole problem**: 11.81% -> 1.47% from that one change (8x).
+   A's 11.81% reproduces the issue's "12-16%" figure, confirming the measurement.
+2. **The 2016 Navarro multicenter standard was NOT similarly off**: Skyline's construction
+   is ~2x over the line (1.96%) against Osprey's ~12x.
+3. Carafe remains best and slightly conservative (0.90%).
+4. The precursor shift costs a little on both rows (1.47->1.96, 11.81->14.96), so on this
+   DIA data it is a small net negative inside Osprey's feature set.
+
 ### Next
 
 - [ ] Decide the real fix: make same-ion-map the Osprey default (a golden rebaseline,
