@@ -230,3 +230,51 @@ untouched), then run the Stellar 3-file `--model-diagnostics` cell and read
 
 If C is also far from 0.50, file the Skyline issue: mProphet needs to move to
 library-supplied (model-predicted) decoys rather than the 2015 in-tool standard.
+
+### 2026-07-25 - RESULT: the b<->y swap is the defect; the earlier dead-end call is WRONG
+
+Implemented the two knobs (`OSPREY_DECOY_SAME_ION_MAP`, `OSPREY_DECOY_PRECURSOR_MZ_SHIFT`,
+both default-off and folded into `SearchParameterHash` only when set) and ran the 2x2 on
+Stellar 3-file. Reports under `D:\test\osprey-runs\_mdiag\stellar-gendecoy-{B,C,D}-*\`.
+
+**Reading caveat:** current master emits TWO paired-coin blocks per report; the Jul-6
+reference runs emit one. The first block is a small-population view (~500-6,400
+entrapment pairs); the references' single block has ~238K, matching the variants' SECOND
+block on both population and null-band bounds. Compare block 2. (A first pass at these
+numbers used block 1 and inverted the conclusion.)
+
+| variant | ion map | precursor | entrapment coin | real coin | ent pairs |
+|---|---|---|---|---|---|
+| libdecoy (Carafe) | -- | -- | **0.5007** | 0.4778 | 238K |
+| B: same ion, no shift | same | +0 | **0.4733** | 0.4526 | 243K |
+| C: Skyline equivalent | same | +10 | **0.4600** | 0.4322 | 239K |
+| A: Osprey today | b<->y swap | +0 | **0.2051** | 0.1612 | 231K |
+| D: swap + shift | b<->y swap | +10 | **0.1949** | 0.1504 | 229K |
+
+1. **The b<->y swap is the entire defect.** Dropping it alone moves the coin 0.2051 ->
+   0.4733, from "decoy loses four times out of five" to nearly fair. Confirms the
+   predicted mechanism: the swap transplants the target's intense y-ion intensities onto
+   the decoy's b-ions and the weak b-ion intensities onto its y-ions, inverting the
+   intensity structure relative to any real peptide.
+2. **The +10 precursor shift is nearly irrelevant** (0.4733 -> 0.4600; 0.2051 -> 0.1949),
+   so the isolation-window difference does not drive this on 4 m/z Stellar data.
+3. **Skyline's construction is essentially unbiased here** (0.4600 vs Carafe 0.5007).
+   **No Skyline bug is warranted on this evidence** -- the 2015 standard holds up. The
+   conditional Skyline deliverable recorded earlier is therefore NOT triggered.
+4. **Generated decoys are NOT a dead end.** This supersedes the dead-end conclusion
+   above: fixing the swap recovers a near-honest null with no predictive model, so issue
+   scope item 2 (salvageable -- ship the better generator) is the live branch, not item 3.
+
+Scope caveat: this measures Skyline's decoy *construction* inside Osprey's feature set
+and Percolator SVM, not Skyline-mProphet end to end (mProphet uses its own peak-scoring
+features and an LDA). It is evidence about the construction, not about shipped Skyline FDR.
+
+### Next
+
+- [ ] Decide the real fix: make same-ion-map the Osprey default (a golden rebaseline,
+      since generated-decoy output changes) rather than hard-gating gendecoy
+- [ ] Re-run the FDRBench FDP oracle on variant B to confirm the coin improvement carries
+      to reported-q calibration (12-16% -> ?)
+- [ ] Confirm what the small-population first block in the report actually is, and
+      whether the report should label the two blocks more clearly
+- [ ] Item 4 (move the regression onto libdecoy) still stands on its own merits
