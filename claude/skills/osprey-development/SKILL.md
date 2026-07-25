@@ -134,35 +134,19 @@ and `README.md` are the authoritative gate references.
   on Stellar + Astral (re-runs Rust). This replaces the old `-SkipRust` routine
   use, which `regression.ps1` superseded. See `Compare/README.md`.
 
-## TeamCity Perf/Regression gate (manual - trigger it yourself)
+## TeamCity Perf/Regression gate (manual - ask, then trigger)
 
-The **Osprey Windows .NET Perf/Regression Tests** config
-(`ProteoWizard_OspreyWindowsNetPerfRegressionTests`) runs `regression.ps1`
-mode1/2/3 on **Stellar AND Astral** (straight-through, HPC chain, resume) plus a
-perf leg - about an hour. It is deliberately **manual / overnight**, NOT triggered
-on every commit or push, so opening or pushing a PR does **not** start it. When a
-PR is otherwise ready (self-review clean, the `Osprey Windows .NET` unit build
-green), it must run before human review / merge.
+The **Osprey Windows .NET Perf/Regression Tests** config runs `regression.ps1`
+mode1/2/3 on **Stellar AND Astral** plus a perf leg (~1 hour). It is manual and
+does NOT start on PR open or push, but it must run before human review / merge.
 
-**First check whether you can actually trigger it.** The TeamCity MCP server is not
-configured on every machine -- on Mike's it is absent (`~/.claude.json` defines only
-`labkey`), and `ai/claude/settings.json` pre-approves three read-only teamcity tools
-(`get_build_log`, `get_build_status`, `search_builds`) for a server that does not exist.
-`trigger_build` is not even in that allow-list. If `mcp__teamcity__*` does not resolve,
-say so plainly and hand the trigger to a maintainer rather than claiming the gate is
-pending on nothing.
+**Claude MAY trigger it - but ASK FIRST, every time**, and ask again before any
+re-trigger. Always `branch="pull/<N>"`, never the named `Skyline/work/...`
+branch (a named branch silently builds master).
 
-Where the MCP *is* connected, trigger via:
-`mcp__teamcity__trigger_build(build_type_id="ProteoWizard_OspreyWindowsNetPerfRegressionTests", branch="pull/<N>")`
-
-**Always use `branch="pull/<N>"` (the PR number), NEVER the named
-`Skyline/work/...` branch.** The Osprey configs watch PR refs
-(`refs/pull/<N>/head`); a named branch is not recognized and TeamCity **silently
-falls back to building master** - a green result that tested the wrong commit. (The
-MCP now refuses a named branch for Osprey configs and tells you to use `pull/<N>`.)
-The local Stellar gates (`regression.ps1 -Dataset Stellar` +
-`Compare-EndToEnd-Crossimpl`) already cover Stellar; this CI gate's unique value is
-the **Astral** legs, which are too slow to run locally each session.
+Full rules - why the gate exists, MCP availability, the trigger call, and what
+the run uniquely buys over the local Stellar gates - are in
+**ai/docs/osprey-development-guide.md** ("TeamCity Perf/Regression gate").
 
 ## Key Repositories
 

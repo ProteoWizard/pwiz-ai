@@ -1279,3 +1279,68 @@ EOF
   Stage 5 implementation with the four inlined dumps
 - `pwiz_tools/Osprey/Osprey.Scoring/XcorrScratchPool.cs`
   -- per-window buffer reuse pattern Batch 2a will mirror
+
+## TeamCity Perf/Regression gate (manual - ask, then trigger)
+
+The **Osprey Windows .NET Perf/Regression Tests** config
+(`ProteoWizard_OspreyWindowsNetPerfRegressionTests`) runs `regression.ps1`
+mode1/2/3 on **Stellar AND Astral** (straight-through, HPC chain, resume) plus a
+perf leg - about an hour. It is deliberately **manual / overnight**, NOT triggered
+on every commit or push, so opening or pushing a PR does **not** start it. When a
+PR is otherwise ready (review findings settled, the `Osprey Windows .NET` unit
+build green), it must run before human review / merge.
+
+### Claude MAY trigger it - but ASK FIRST, every time
+
+The rule is **ask-then-trigger, not never-trigger.** The gate exists because
+Claude Code once fired this config on every commit, which was expensive and left
+Brendan hand-cancelling runs in the queue or as they started. One asked-for
+trigger when a PR is genuinely ready is exactly what the config is for; an
+unasked trigger, or a second trigger for the same PR without asking again, is the
+abuse it guards against.
+
+- Ask when the PR is genuinely ready, then trigger on approval. Do **not**
+  silently hand the trigger to a maintainer when you could just ask - that is an
+  over-correction from an earlier, stricter reading of this rule.
+- Ask **again** before any re-trigger of the same PR. One approval is not a
+  standing licence for the branch.
+- Never trigger unprompted, and never as a routine per-commit or per-push step.
+
+Judgment about whether the run is warranted at all still applies: a small
+identity-only follow-up to an already-green PR can reasonably merge on local
+gates. Weigh what the CI run uniquely buys (below) against an hour of a shared,
+contended agent.
+
+### Check whether you can actually trigger it
+
+The TeamCity MCP server is not configured on every machine - on Mike's it is
+absent (`~/.claude.json` defines only `labkey`), and `ai/claude/settings.json`
+pre-approves three read-only teamcity tools (`get_build_log`, `get_build_status`,
+`search_builds`) for a server that does not exist. `trigger_build` is not even in
+that allow-list. If `mcp__teamcity__*` does not resolve, say so plainly and hand
+the trigger to a maintainer rather than claiming the gate is pending on nothing.
+
+Where the MCP *is* connected, trigger via:
+
+```
+mcp__teamcity__trigger_build(
+    build_type_id="ProteoWizard_OspreyWindowsNetPerfRegressionTests",
+    branch="pull/<N>")
+```
+
+### Always use `branch="pull/<N>"`, NEVER the named branch
+
+The Osprey configs watch PR refs (`refs/pull/<N>/head`). A named
+`Skyline/work/...` branch is not recognized and TeamCity **silently falls back to
+building master** - a green result that tested the wrong commit. (The MCP now
+refuses a named branch for Osprey configs and tells you to use `pull/<N>`.)
+
+### What this gate uniquely buys
+
+The local Stellar gates (`regression.ps1 -Dataset Stellar` +
+`Compare-EndToEnd-Crossimpl`) already cover Stellar. This CI gate's unique value
+is the **Astral** legs, which are too slow to run locally each session - plus, for
+any change that touches `regression.ps1` / `Regression/*.ps1` themselves, it is
+the only place the `tctest.bat` -> `regression.ps1` path is exercised on the
+actual build agent.
+
