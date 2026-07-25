@@ -777,6 +777,26 @@ saver / lock screen engages. Then run `WindowChurnProbe` (added under
 > nightly** -- it collects the answer from every agent, in the exact state nightly runs in, with
 > nobody having to touch anything.
 
+### Do not over-commit to "Terminal Services" -- a global window hook fits equally well
+
+Everything established so far says the difference is **a persistent, time-independent property of the
+agent** that makes window create/destroy expensive. Terminal Services is the leading candidate and
+has supporting evidence (this TODO's earlier connected/disconnected RDP measurements), but it is not
+the only thing that fits:
+
+* A **global window hook** (`WH_CBT` / `WH_SHELL` / `WH_GETMESSAGE`) injects its DLL into every
+  process that creates windows -- accessibility tools, screen-capture and remote-support utilities,
+  input-method editors, endpoint-security agents all do this. That DLL then runs on every window
+  create/destroy, and a leak in it would produce exactly this signature.
+* It would be per-machine, persistent, independent of time of day, and invisible to
+  `SystemInformation.TerminalServerSession` -- matching every observation.
+* **The remedy is completely different**: exclude or remove the offending software, rather than
+  change how nightly logs in or mute the tests.
+
+`WindowChurnProbe` now dumps the loaded-module list and anything injected while the churn ran, so a
+single run on a leaking agent and a clean one tests both explanations at once. Reference from
+nicksh's machine: 56 modules at baseline, **none injected during the run**.
+
 ### Ruled out: time of day / "someone was logged in when it ran"
 
 Approximated each run's START hour (`posttime` minus `duration`) over all 705 runs in the window and
