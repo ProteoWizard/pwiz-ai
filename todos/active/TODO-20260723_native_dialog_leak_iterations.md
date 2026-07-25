@@ -7,7 +7,14 @@
 - **Created**: 2026-07-23
 - **Status**: In Progress
 - **GitHub Issue**: (none)
-- **PR**: [#4453](https://github.com/ProteoWizard/pwiz/pull/4453)
+- **PR**: [#4453](https://github.com/ProteoWizard/pwiz/pull/4453) — mutes the family from the heap check
+
+### Companion branch from the 2026-07-25 night session
+- **Branch**: `Skyline/work/20260724_connector_heap_leak_fixes`
+- **Worktree**: `sky_fileopendialog` (nicksh's machine)
+- **PR**: [#4458](https://github.com/ProteoWizard/pwiz/pull/4458) — fixes the one test that was
+  fixable, and adds the diagnostics (session header line, `WindowChurnProbe`) needed to explain the
+  rest. See the 2026-07-25 sections below; two of them correct premises that #4453 rests on.
 
 ## Problem
 
