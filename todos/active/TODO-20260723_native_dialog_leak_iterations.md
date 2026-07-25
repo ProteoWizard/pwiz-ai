@@ -750,6 +750,49 @@ whole point of the dialog, so the update would not land until the work finished)
 `TaskbarProgress` on a dedicated long-lived STA thread (correct but heavier than the bug warrants).
 Also unverifiable from here: the benefit only shows on a machine that reproduces.
 
+## MEASURED: Application.Run instead of ShowDialog does NOT fix it; reusing the thread does
+
+Proposed (nicksh): show `BackgroundThreadLongWaitDlg` with `Application.Run` rather than
+`ShowDialog`, via a virtual method called where `LongWaitDlg.PerformWork` currently calls
+`ShowDialog(parent)`. The theory is sound on its face -- `Application.Run` runs the thread's MAIN
+message loop, whose exit disposes the WinForms `ThreadContext` that owns
+`OleInitialize`/`OleUninitialize`, whereas `ShowDialog` only pushes a NESTED modal loop, so the
+apartment might never be cleanly torn down.
+
+`ShowModeProbe.cs` (session scratchpad) tests it. Each iteration mimics
+`BackgroundEventThreads.CreateThreadForAction` exactly -- fresh STA thread,
+`SetUnhandledExceptionMode`, body, `Application.ExitThread()` in a finally, thread exits -- and
+creates the `ITaskbarList3` from a timer tick DURING the loop, which is where
+`LongWaitDlg.timerUpdate_Tick` really creates it. 200 iterations per run:
+
+| what the thread does | bytes/iteration |
+|---|---:|
+| bare STA thread, no form (earlier `StaComProbe`) | ~0 |
+| form + `ShowDialog`, no COM | 1,121 |
+| form + `Application.Run`, no COM | 1,204 |
+| form + `ShowDialog` + `ITaskbarList3` (what the code did) | 1,947 and 1,935 |
+| form + `Application.Run` + `ITaskbarList3` (the proposal) | 1,779 and 1,965 |
+| **one long-lived STA thread**, `ShowDialog` + `ITaskbarList3` | **179** |
+| **one long-lived STA thread**, `ShowDialog`, no COM | **126** |
+
+**The proposal does not work.** Each COM mode was run twice: `comrun` gave 1,779 and 1,965,
+`comdlg` gave 1,947 and 1,935 -- fully overlapping ranges. Whatever `Application.Run` does to the
+`ThreadContext`, it does not change the outcome.
+
+**Reusing the thread does work** -- 1,940 down to 179 bytes/iteration, about 90% removed. The cost is
+per *thread-with-a-message-loop*, not per show-method, and not primarily COM: a bare STA thread with
+no form leaks nothing, while a form plus a message loop on a dying thread leaks ~1.1 KB before any
+COM is involved.
+
+**This also resizes the TaskbarProgress finding above.** Removing the per-dialog `TaskbarProgress`
+takes out roughly 800 of the ~1,940 bytes, not all of it. Still worth having (it is a real reduction
+and the code is simpler), but the pattern itself is the larger cost.
+
+**Not pursued:** pooling the dialog thread would mean `LongOperationRunner` holding a permanent STA
+thread for the life of the process, with shutdown-ordering and lifetime questions attached, to save
+~1.1 KB per showing of a dialog that only appears in obscure scenarios. Recorded here so the option
+is known and so nobody re-proposes `Application.Run`, which is measured and does not help.
+
 ## CHANGE MADE: TestMcpConnectorBackgroundDialog no longer pastes 50,000 rows
 
 `McpConnectorBackgroundDialogTest` used a 50,000-row x 2-column grid paste purely as a way to wedge
