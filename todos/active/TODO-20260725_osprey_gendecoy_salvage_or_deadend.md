@@ -269,12 +269,46 @@ Scope caveat: this measures Skyline's decoy *construction* inside Osprey's featu
 and Percolator SVM, not Skyline-mProphet end to end (mProphet uses its own peak-scoring
 features and an LDA). It is evidence about the construction, not about shipped Skyline FDR.
 
+### 2026-07-25 - FDP axis: confirms the fix, and walks back the "no Skyline bug" call
+
+Read the in-process FDP calibration curve ("Pass 2 - experiment-wide") out of each
+report at the point where reported q first reaches 1% (scratchpad `read_fdp.py`):
+
+| cell | reported q | combined FDP | paired FDP | accepted |
+|---|---|---|---|---|
+| libdecoy (Carafe) | 0.0095 | **1.47%** | 1.32% | 30,242 |
+| B: same ion, no shift | 0.0096 | **2.40%** | 2.39% | 32,329 |
+| C: Skyline equivalent | 0.0094 | **3.19%** | 3.18% | 33,447 |
+| A: Osprey today | 0.0099 | **10.86%** | 10.84% | 35,477 |
+| D: swap + shift | 0.0100 | **20.40%** | 20.37% | 48,276 |
+
+A at 10.86% reproduces the on-record 12-16% ballpark, confirming this in-process FDP
+measures the same quantity as the FDRBench jar. Removing the swap cuts true FDP 10.9% ->
+2.4% (4.5x), so the coin result carries to reported-q calibration.
+
+**The two diagnostics disagree about Skyline, and FDP is the user-facing one.** C's coin
+is nearly fair (0.4600 vs 0.5007) yet its FDP is 3.19% against libdecoy's 1.47%. A fair
+paired coin is necessary but not sufficient for calibrated q: the coin tests within-pair
+ordering inside the null band, while FDP integrates the whole accepted ranking.
+
+So the earlier "no Skyline bug is warranted" is **withdrawn as too strong**. Defensible
+statement: Skyline's construction is far better than Osprey's current swap (3.2% vs
+10.9%) but still ~2x worse than model-predicted decoys and ~3x anti-conservative in
+absolute terms -- a real, reportable bias, but not a 10x one.
+
+Note no cell is perfectly calibrated (libdecoy reads 1.47% at a claimed 0.95%), and the
+anti-conservative cells accept more IDs (D: 48,276 vs libdecoy's 30,242) -- the expected
+signature.
+
 ### Next
 
 - [ ] Decide the real fix: make same-ion-map the Osprey default (a golden rebaseline,
       since generated-decoy output changes) rather than hard-gating gendecoy
-- [ ] Re-run the FDRBench FDP oracle on variant B to confirm the coin improvement carries
-      to reported-q calibration (12-16% -> ?)
+- [ ] Decide whether B's residual 2.4% (vs libdecoy 1.47%) still justifies preferring
+      library decoys by default, even with the swap fixed
+- [ ] Cross-check variant B against the FDRBench jar (`Run-FdrBench.ps1 -DecoySource
+      Generated`) rather than the in-process curve alone, before any code decision
+- [ ] Decide whether to file the Skyline issue on the weaker (3.2% vs 1.5%) evidence
 - [ ] Confirm what the small-population first block in the report actually is, and
       whether the report should label the two blocks more clearly
 - [ ] Item 4 (move the regression onto libdecoy) still stands on its own merits
