@@ -128,7 +128,29 @@ already being worked (#4454, #4456).
 
 CodeInspection passes.
 
-## Residual risk - the fix is NOT proven for the fleet
+## Disconnected-session experiment (06:05, with the user's go-ahead) - VALIDATES THE FIX
+
+`tsdiscon` on this session (confirmed `Disc` in qwinsta), then re-ran everything.
+
+Bare-probe curve is unchanged by disconnection - 1007 KB at 150 dialogs vs 984 KB
+connected, same per-block decay. So disconnection is NOT what makes the fleet hotter, and
+the connected-session measurements are representative.
+
+But the number of passes needed DOES change, and that is the whole story:
+
+| Test | Disconnected | Connected | Under the old 24-pass cap |
+|---|---|---|---|
+| TestPrmMcpConnector | pass 27, 14.3 KB | pass 23-25 | **would FAIL** |
+| TestNativeFileDialog | pass 28, 16.4 KB | pass 23-24 | **would FAIL** |
+| TestNativeMessageBox | pass 24, 12.5 KB | pass 23-24 | just barely passes |
+
+That is the direct confirmation the fix works in the state the nightly agents run in.
+
+## Remaining risk (reduced, not eliminated)
+
+The disconnected run above settles the mechanism, but it is still ONE machine. The fleet
+runs hotter in absolute terms, so a machine needing far more than 28 passes is still
+possible - though 96 now looks comfortable rather than speculative.
 
 Nightly per-iteration trajectories (first-8 vs last-8 of the 24 pass-1 runs):
 
