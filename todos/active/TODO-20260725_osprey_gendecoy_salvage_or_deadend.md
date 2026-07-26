@@ -1208,3 +1208,18 @@ measurement is invalid regardless (mismatched binaries, see the retraction above
 So this is a real parity defect deserving its own fix, but the cause of any master-vs-master
 divergence is still unestablished. Next session: build BOTH sides from matching code, re-run
 the comparison, and only then attribute.
+
+### 2026-07-26 - Session 2 end
+
+Nothing running; all repos clean, both working branches checked out. PR 1 (#4478) open.
+PR 2 code complete on both sides, blocked behind the parity investigation (its own PR
+first, per Brendan), then the regression redesign, then one golden retrain.
+
+Also this session: `ai/root-CLAUDE.md` gained a rule requiring `get_context_usage` for ANY
+stated context number (the old rule was scoped to handoff talk, which is the loophole that
+let guesses through). Discovered while committing it that `C:\proj\CLAUDE.md` had become
+UNLINKED from `ai/root-CLAUDE.md` -- edits were not reaching the session-loaded file.
+`get_project_status` re-links as a side effect, which is the fix.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260725_osprey_gendecoy_decision.md` before starting work.
