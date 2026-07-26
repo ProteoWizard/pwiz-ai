@@ -1249,3 +1249,27 @@ a green gate must be either waited out or bypassed with `--admin`.
 **This TODO stays in `active/`**: PR 2 (b<->y swap removal, code complete on both C# and
 Rust) is still blocked behind the parity investigation, the regression redesign, and one
 golden retrain. Do not move this file to `completed/` until PR 2 lands.
+
+### 2026-07-26 - PR 2 now has a DOC dependency: #4476 documents the swap
+
+Mike's documentation port merged as `47d0c2c1a` (#4476, 23 files, 6,901 lines under
+`pwiz_tools/Osprey/docs/`). `01-decoy-generation.md` has a section titled
+**"Fragment m/z recalculation (b <-> y swap)"** (line 119) documenting the exact behavior
+PR 2 removes, with line-precise references into `DecoyGenerator.cs`:
+
+* `b-ion -> y-ion`, ordinal `N - ordinal` (`DecoyGenerator.cs:470-473`)
+* `y-ion -> b-ion`, ordinal `N - ordinal` (`DecoyGenerator.cs:475-478`)
+* non-b/y fragments copied verbatim (`:480-490`); out-of-range ordinals dropped (`:492-493`)
+* the swapped annotation carrying charge + neutral loss (`:502-512`)
+
+**PR 2 must update this doc in the same PR**, or master ships code and documentation that
+contradict each other. Two things to fix, not one:
+1. The section itself -- the swap is gone, decoy fragments keep the target's ion type and
+   ordinal. The fragment-overlap gate (0.4, fixed 0.02 Da window, sequence-only ladder)
+   is new behavior with no doc coverage at all.
+2. **Every `DecoyGenerator.cs:NNN` line reference in the file shifts** when the swap block
+   is deleted and the gate added. The doc is line-number-dense throughout, so this is a
+   sweep, not a one-line edit.
+
+Also check `DIVERGENCES.md` -- it catalogues Rust<->C# parity items, and the swap removal
+lands on BOTH sides, so any entry describing the swap needs to move or go.
