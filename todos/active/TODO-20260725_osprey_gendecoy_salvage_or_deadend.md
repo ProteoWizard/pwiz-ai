@@ -697,8 +697,31 @@ Stellar, Pass 1, all cells same-ion + matched precursor:
 `frag<=0.40`'s nominal 1.41% comes with a WORSE tilt (0.363 vs 0.305) and a flat coin, so
 it is not a real improvement. The gates barely bind (52 / 522 / 198 exclusions out of
 494,495) because reversing a typical tryptic peptide already yields a low-overlap ladder;
-the pathological cases other tools guard against are rare on this data. Astral gate runs
-were SKIPPED deliberately -- 3 x 18 min to re-test a hypothesis Stellar already refuted.
+the pathological cases other tools guard against are rare on this data.
+
+**Confirmed on Astral HRAM** (Brendan asked for the HRAM check rather than accepting a
+unit-resolution-only dismissal -- correctly, since my tolerance-based reasoning for
+skipping it turned out to be partly wrong):
+
+| cell (Astral, Pass 1) | FDP @1% q | discoveries | coin | tilt |
+|---|---|---|---|---|
+| B baseline (same-ion) | 2.03% | 94,280 | 0.4741 | 0.254 |
+| G: frag <= 0.40 | 2.05% | 94,133 | 0.4728 | 0.273 |
+| G: frag <= 0.25 | 2.15% | 94,142 | 0.4758 | 0.274 |
+| G: seqid <= 0.50 | 2.03% | 94,367 | 0.4743 | 0.246 |
+| Carafe reference | **1.92%** | 82,366 | 0.5011 | -- |
+
+Same verdict: all within +-0.12 pp, `seqid<=0.50` exactly reproduces baseline,
+`frag<=0.25` is worst. So the gates are refuted on BOTH acquisition modes.
+
+**Library size does not drive exclusions.** Baseline exclusions are **1** on Stellar
+(494,495 targets) and **1** on Astral (3,173,677) -- a 6.4x bigger library gives the
+identical count, because reversed tryptic peptides essentially never collide with another
+real tryptic peptide at these sizes. With a gate on, exclusions scale purely
+proportionally: 52/494,495 = 1.05e-4 (Stellar) vs 339/3,173,677 = 1.07e-4 (Astral) at
+`frag<=0.40`. That also undercuts the tolerance-based prediction that the gate would bind
+less on ppm data -- the all-candidates-fail population is structurally hard peptides
+(palindromes, low-complexity), which occur at a fixed per-peptide rate.
 
 **The RT hypothesis appeared refuted on marginal separation** -- `Retention time
 difference (abs)` deltaMu is -0.582 (generated) vs -0.615 (Carafe), and signed 0.008 vs
@@ -774,13 +797,40 @@ adds to it.
 
 ### Next
 
-- [ ] Decide the real fix: make same-ion-map the Osprey default (a golden rebaseline,
-      since generated-decoy output changes) rather than hard-gating gendecoy
-- [ ] Decide whether B's residual 2.4% (vs libdecoy 1.47%) still justifies preferring
-      library decoys by default, even with the swap fixed
-- [ ] Cross-check variant B against the FDRBench jar (`Run-FdrBench.ps1 -DecoySource
-      Generated`) rather than the in-process curve alone, before any code decision
-- [ ] Decide whether to file the Skyline issue on the weaker (3.2% vs 1.5%) evidence
+**The decided change, not yet written:**
+- [ ] Make same-ion-map the Osprey DEFAULT (drop the b<->y swap). Golden rebaseline: the
+      byte-identity gate is deliberately broken and replaced by the entrapment oracle
+      (Pass 1 FDP + paired coin) as arbiter. Brendan's call, not an unattended change.
+- [ ] Mirror it in Rust osprey (`crates/osprey-scoring/src/lib.rs:3173`) or accept a
+      deliberate C#/Rust divergence -- the swap is in BOTH.
+- [ ] Cross-check the swap-fixed cell against the FDRBench jar
+      (`Run-FdrBench.ps1 -DecoySource Generated`); everything so far rests on the
+      in-process curve, which reproduced the on-record 12-16% for cell A but has not been
+      validated cell-by-cell against the committed oracle.
+
+**Closed this session (do not redo):**
+- Similarity gates (fragment overlap, sequence identity): NO benefit, refuted on Stellar
+  AND Astral. The knobs can stay as diagnostics or be removed.
+- Precursor m/z shift: rejected, net negative on both datasets.
+- RT as a marginal-separation effect: no difference (deltaMu -0.582 vs -0.615).
+
+**Live lead:** within-pair correlation is the residual mechanism (confirmed both datasets;
+the correlation gap tracks the FDP gap). Fixing it needs the decoy DECORRELATED from its
+target, which composition-preserving reversal cannot achieve with any classical
+(composition-based) RT model. Options worth designing before coding: a sequence-order-aware
+RT model; or an explicit decorrelation rule that is defensible rather than arbitrary (the
+m/z-shift experiment shows arbitrary offsets HURT -- they handicap the decoy rather than
+decorrelate it).
+
+**Also open, unrelated to the fix:**
+- [ ] Move the regression onto the libdecoy path (issue scope item 4) -- still stands.
+- [ ] No Skyline bug for the swap (Skyline never had it). Skyline's own construction
+      measured ~2x over the line on both datasets, which is a separate, weaker question.
+- [ ] Osprey generates a decoy once and accepts it; every mature tool validates and
+      regenerates. The gates tested here were that idea and did not pay off, but the
+      SpectraST-style check (decoy spectrum vs OTHER library entries, not its own target)
+      is untested and is a different hypothesis. Note it is incompatible with the lean
+      `omitFragments` path as currently structured.
 - [ ] Confirm what the small-population first block in the report actually is, and
       whether the report should label the two blocks more clearly
 - [ ] Item 4 (move the regression onto libdecoy) still stands on its own merits
