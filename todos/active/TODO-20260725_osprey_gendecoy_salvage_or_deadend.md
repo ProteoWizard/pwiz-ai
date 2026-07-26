@@ -896,6 +896,50 @@ the ranking intact. That is a more tractable problem than "the decoys are bad", 
 consistent with the within-pair correlation mechanism: correlated pairs distort the null's
 SHAPE (breaking q estimation) without hurting the score's ability to rank.
 
+### 2026-07-26 - PR PLAN
+
+Everything is UNCOMMITTED on `Skyline/work/20260725_osprey_gendecoy_decision`
+(4 files, +306/-39). Recommended split into two PRs, because they have different
+risk classes and different gates:
+
+**PR 1 - Calibration progress reporting** (small, independent, ship first)
+* File: `Osprey.Tasks/Calibrator.cs` only (+ `using System.Threading`).
+* Wraps the calibration window-scoring `Parallel.ForEach` in a `ProgressReporter`.
+  Log-only: search results are byte-identical.
+* Fixes ~40 s of silence per file (~50 min on an 82-file run). The window was not
+  uninstrumented -- `[TIMING]`/`[COUNT]` lines exist but `OspreyOutput` filters
+  machine-parseable prefixes out of normal output, so a non-verbose run showed nothing.
+* Status: builds Debug+Release, 535/535 tests, inspection clean.
+  **NOT runtime-verified** -- nobody has yet watched the percent lines appear in that gap.
+* Gates: runtime check, then `regression.ps1 -Dataset Stellar` for byte-identity.
+
+**PR 2 - Drop the b<->y swap** (the real change; golden rebaseline)
+* Make same-ion mapping the DEFAULT in `DecoyGenerator.RecalculateFragments`.
+* **DROP all four experimental knobs** (`OSPREY_DECOY_SAME_ION_MAP`,
+  `..._PRECURSOR_SHIFT_UNITS`, `..._MAX_FRAG_OVERLAP`, `..._MAX_SEQ_IDENTITY`) and their
+  `SearchIdentity` guards. They did their job -- measurement -- and the results are
+  recorded here. Unused env knobs are debt. Keep at most ONE inverted knob
+  (`OSPREY_DECOY_LEGACY_BY_SWAP=1`) if a bisection escape hatch is wanted.
+* The gate INVERTS: byte-identity is deliberately broken, and the entrapment oracle
+  (Pass 1 FDP + paired coin) becomes the arbiter. Regenerate the committed golden under
+  `pwiz_tools/Osprey/osprey-regression.data/`.
+* **Rust decision required**: the swap is in Rust too
+  (`crates/osprey-scoring/src/lib.rs:3173`). Either mirror it there or accept a
+  deliberate C#/Rust divergence -- do not leave it undecided.
+* **CACHE-INVALIDATION TRAP to check before merge**: the fix changes results but NOT
+  `SearchParameterHash` (no config field changes), so pre-fix `.scores.parquet` caches
+  would be silently reused and produce mixed output. Confirm the `osprey.version` stamp
+  in the parquet footer bumps with the build, or add an explicit identity term.
+* Evidence for the PR description: Stellar 10.90% -> 1.47%, Astral 7.64% -> 2.03%
+  (parity with libdecoy's 1.92%), 82-file SEA-AD 2.12% with **+19% IDs at matched TRUE
+  1% FDP** vs libdecoy. Six-tool survey: five of six map intensity to the same ion.
+
+**Not shipping** (measured and refuted; recorded above, do not re-litigate): the
+precursor m/z shift and both similarity gates.
+
+**Open before PR 2**: FDRBench-jar cross-check of the swap-fixed cell; the r=0.1
+82-file comparison (below).
+
 ### Next
 
 **The decided change, not yet written:**
