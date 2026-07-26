@@ -556,6 +556,79 @@ of power (0.60-0.64 separation already in B); buying more power with an m/z offs
 calibration. Honest MS1 power requires the decoy to be a plausible peptide whose MS1
 evidence is drawn from the same distribution as a false target's.
 
+### 2026-07-25 - Open-source decoy survey (six implementations, all read from source)
+
+| | sequence | ion -> intensity mapping | precursor m/z | quality gate |
+|---|---|---|---|---|
+| **Osprey** | reverse (C-term fixed), cycle fallback | **b<->y swap** | matched | exact-collision only |
+| **Skyline** | reverse/shuffle (C-term fixed) | same ion index | **+10 x 1.00045475** | none |
+| **OpenSWATH** | shuffle (default), reverse, pseudo-reverse | same ion *label* | **0.0 default** | sequence identity <= 0.5, retries |
+| **DIA-NN** | **terminal point mutations** (default) | same ion (b->b, y->y) | matched (untouched) | fragment-recognition gate |
+| **EncyclopeDIA** | reverse (**both** termini fixed) -> shuffle | same ion type+index | recalculated (= matched) | **fragment overlap <= 0.4**, 10 tries |
+| **SpectraST** | shuffle, mods held fixed | annotate -> reposition | **matched, deliberately** | **spectrum similarity <= 0.7**, 10 tries |
+
+Source anchors: Skyline `Model/DecoyGenerator.cs:238,241`; OpenMS `MRMDecoy.cpp:683-692`;
+DIA-NN `src/diann.cpp:3590-3642` (`decoy = target`, only fragment m/z touched);
+EncyclopeDIA `LibraryEntry.java:501-540` (`IndexedIonType` map, "make sure ion indices line
+up"); SpectraST `SpectraSTLibEntry.cpp::makeDecoy` + `SpectraSTPeakList::repositionPeaks`
+(parses annotation, keeps ionType+ordinal, moves only `p->mz`).
+
+**Five of six map intensity to the same ion; Osprey's b<->y swap is unique. Five of six
+leave the precursor m/z matched; Skyline's shift is the lone exception** -- and SpectraST
+explicitly rejected that approach:
+
+```cpp
+// deliberately not change the m_mw and m_precursorMz fields -- to maintain the precursor
+// m/z distribution even when the decoyPep has a different mass as the origPep.
+// SHUFFLE
+m_peakList->repositionPeaks();
+// SHIFT
+//  m_peakList->shiftAllPeaks(20);     <-- present but COMMENTED OUT
+```
+
+Mitigations Osprey lacks, strongest first:
+1. **SpectraST spectral-similarity rejection** -- reject if the decoy's peak list is >0.7
+   similar to any real library entry within +-2 Th of its precursor. Compares SPECTRA.
+2. **EncyclopeDIA fragment-overlap rejection** -- <=40% of decoy fragments may match target
+   fragments within tolerance; reshuffle up to 10x.
+3. **SpectraST escalating AA insertion** -- after 3 failed shuffles add 1 residue, after 6
+   add 2, changing length/mass to force a distinct decoy; logs the resulting shift.
+4. **OpenSWATH sequence-identity threshold** (0.5) + whole-peptide exclusion on
+   un-annotatable transitions.
+5. **EncyclopeDIA preserves observed mass error** on repositioned peaks and keeps
+   unannotated peaks at their original m/z, so peak counts stay matched.
+6. **Decoy-sequence uniqueness sets** (SpectraST, EncyclopeDIA); SpectraST caches the
+   accepted shuffle per stripped sequence so all charge states get a consistent decoy.
+
+Through-line: every mature implementation VALIDATES the decoy against the target after
+generating it and regenerates on failure. Osprey generates once and accepts.
+
+### 2026-07-25 - Provenance: the swap is a faithful implementation of a misremembered method
+
+Brendan and Mike both recalled a method that ties fragment intensities to the amino-acid
+RESIDUES (so intensities change with the AA characters), variously attributed to Searle
+(EncyclopeDIA), Amodei (Skyline), and Roest (OpenSWATH). **The code review shows none of
+the six does this.** Mike requested it from memory without a code review.
+
+The swap is that request, implemented literally. The Rust comment
+(`crates/osprey-scoring/src/lib.rs:3173`) reasons "b{i} covers residues 0..i; in the
+reversed sequence this becomes y{seq_len - i}" -- i.e. it asks which decoy ion covers the
+same RESIDUES and moves the intensity there. The spec's FR-1.3.3 wording, "same relative
+intensity pattern as target (reordered appropriately)", is exactly how that request reads.
+
+It fails because **fragment intensity is dominated by ion TYPE, not by residue coverage**:
+y-ions are systematically more intense than b-ions, and that asymmetry swamps
+residue-level effects. Relocating intensity by residue coverage therefore inverts the
+strongest structural feature of the spectrum. The other five tools implicitly encode this
+by keeping intensity on the ion label.
+
+Two closing points:
+* The remembered method DOES exist -- as spectrum prediction. "Intensities that change
+  with the AA characters" is what a fragmentation model does, and the only instance in
+  our measurements is the Carafe-predicted library decoys.
+* **We do not need it.** On Astral, B (same-ion mapping, no residue awareness) reached
+  2.03% vs Carafe's 1.92% -- parity. The fix is to stop doing the extra thing.
+
 ### Next
 
 - [ ] Decide the real fix: make same-ion-map the Osprey default (a golden rebaseline,
