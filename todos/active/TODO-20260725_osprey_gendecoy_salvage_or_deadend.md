@@ -1181,3 +1181,30 @@ decorrelate it).
 - [ ] Confirm what the small-population first block in the report actually is, and
       whether the report should label the two blocks more clearly
 - [ ] Item 4 (move the regression onto libdecoy) still stands on its own merits
+
+### 2026-07-26 - PARITY GAP FOUND: Rust lacks the `transfer` pass-2 mode
+
+Brendan's hypothesis (pwiz#4446 / maccoss/osprey#57 did not maintain comparable env-var
+support) is **CONFIRMED**, with a qualifier.
+
+`crates/osprey/src/pass2_qvalue.rs:63` resolves `OSPREY_PASS2_QVALUE` as:
+
+```rust
+"transfer-compete" => Pass2QValueMode::TransferCompete,
+"protein-compact"  => Pass2QValueMode::ProteinCompact,
+_                  => Pass2QValueMode::Percolator,
+```
+
+C# (`OspreyEnvironment.NormalizePass2QValue`) supports **four** modes: `percolator`,
+**`transfer`**, `transfer-compete`, `protein-compact`. **Rust has no plain `transfer`
+arm** -- `OSPREY_PASS2_QVALUE=transfer` yields transfer q-values in C# and SILENTLY falls
+through to Percolator in Rust. Silent, not an error, which is the worst failure shape.
+Note C# also warns on an unrecognized token (`Pass2QValueUnrecognized`); Rust does not.
+
+**Qualifier: this does NOT explain the observed cross-impl divergence.** With the variable
+unset -- how the cross-impl comparison runs -- both sides default to Percolator. And that
+measurement is invalid regardless (mismatched binaries, see the retraction above).
+
+So this is a real parity defect deserving its own fix, but the cause of any master-vs-master
+divergence is still unestablished. Next session: build BOTH sides from matching code, re-run
+the comparison, and only then attribute.
