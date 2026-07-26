@@ -700,12 +700,11 @@ it is not a real improvement. The gates barely bind (52 / 522 / 198 exclusions o
 the pathological cases other tools guard against are rare on this data. Astral gate runs
 were SKIPPED deliberately -- 3 x 18 min to re-test a hypothesis Stellar already refuted.
 
-**The RT hypothesis is refuted as well**, from the feature tables (no new run needed).
-`Retention time difference (abs)` deltaMu: generated **-0.582** vs Carafe **-0.615**;
-signed: 0.008 vs 0.047. Carafe's independently-predicted decoy RT buys essentially no RT
-discrimination over Osprey's copied RT. So "break the RT coincidence" -- my earlier
-hypothesis and the spec's unimplemented FR-1.3.3 optional bullet -- is not what makes
-Carafe better.
+**The RT hypothesis appeared refuted on marginal separation** -- `Retention time
+difference (abs)` deltaMu is -0.582 (generated) vs -0.615 (Carafe), and signed 0.008 vs
+0.047, i.e. near-identical. **That reading was WRONG**: see the pair-correlation result
+below. deltaMu measures marginal separation and is structurally blind to the effect that
+actually matters here.
 
 **What the data actually says.** EVERY feature's separation is near-identical between the
 two constructions (largest gaps: co-eluting fragment count 1.237 vs 1.160, median-polish
@@ -714,12 +713,41 @@ residual difference is NOT in mean feature separation -- it is in the distributi
 of the decoy score density, which is precisely what the tilt measures and what `deltaMu`
 cannot see.
 
-Leading remaining hypothesis, untested: generated decoys are a deterministic transform of
-their targets (same intensities, same RT, same precursor m/z, permuted sequence), so paired
-target/decoy scores are CORRELATED in a way Carafe's independently-predicted decoys are
-not. Score correlation within a pair distorts the null's shape without moving its mean --
-consistent with equal deltaMu but unequal tilt. Testing it needs the paired per-entry
-scores, not the summary tables.
+### 2026-07-25 - CONFIRMED: within-pair correlation is the residual mechanism
+
+Tested directly from the `.scores.parquet` PIN features, pairing on
+`base_id = entry_id & 0x7FFFFFFF` (scratchpad `pair_correlation.py`, Stellar file _20,
+~485K / ~474K paired base_ids). Pearson r between a target's feature value and its OWN
+decoy's:
+
+| feature | generated (same-ion) | Carafe | ratio |
+|---|---|---|---|
+| `sg_weighted_cosine` | 0.258 | 0.144 | 1.8x |
+| `fragment_coelution_sum` | 0.166 | 0.074 | 2.2x |
+| `median_polish_cosine` | 0.219 | 0.090 | 2.4x |
+| `peak_area` | 0.356 | 0.266 | 1.3x |
+| `xcorr` | 0.059 | 0.041 | 1.4x |
+| **`abs_rt_deviation`** | **0.130** | **0.007** | **19x** |
+
+Generated decoys are more correlated with their own targets on EVERY feature, and the RT
+term is the extreme: Carafe's is essentially zero.
+
+**This reinstates the RT axis with a precise mechanism.** RT independence does not change
+how far apart the target and decoy distributions sit (deltaMu identical); it DECOUPLES each
+decoy from its own target (r 0.130 -> 0.007). Correlated pairs distort the shape of the
+null without moving its mean -- exactly the measured signature (equal deltaMu, 5x worse
+tilt). `deltaMu` cannot see this; correlation can. The lesson generalises: for decoy
+quality, quote a PAIRED statistic (coin, within-pair correlation) alongside any marginal
+one.
+
+**Complication for the obvious fix:** reversal PRESERVES COMPOSITION, so a reversed peptide
+genuinely should elute near its target under any classical (composition-based) RT model. An
+SSRCalc/hydrophobicity-index predictor would hand the decoy back essentially its target's
+RT and decorrelate nothing. Carafe's RT difference comes from a sequence-order-aware deep
+model, and it is worth being honest that some of that difference may be model NOISE rather
+than real chromatography -- it still helps, because what the FDR estimate needs is
+decorrelation, not physical accuracy. Any Osprey-side fix therefore needs either a
+sequence-order-sensitive RT model or an explicit, defensible decorrelation rule.
 
 Perspective: on **Astral this residual gap essentially vanishes** (2.03% vs 1.92%), so it
 may be Stellar-specific and small in practice. The swap fix is the win; nothing else tried
