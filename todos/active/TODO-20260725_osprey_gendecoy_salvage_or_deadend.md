@@ -1072,6 +1072,45 @@ Branches, both pushed and green:
 * C# `Skyline/work/20260725_osprey_gendecoy_decision` -- `0d52a921f` (swap + gate) +
   `166007fb0` (simplification); 535/535 tests.
 
+### 2026-07-26 - Cross-impl comparison: gate ALREADY red on master, and an UNRESOLVED anomaly
+
+Ran `Compare-EndToEnd-Crossimpl.ps1 -Dataset Stellar -Files All` twice.
+
+| run | Rust precursors / blib | C# precursors / blib | result |
+|---|---|---|---|
+| with the change (both branches) | 35,222 / 30,519,296 b | 51,444 / 45,064,192 b | **FAIL** |
+| baseline (`origin/main` + `master`) | 35,222 / 30,519,296 b | 51,444 / 45,064,192 b | **FAIL** |
+
+**1. The cross-impl gate was ALREADY failing before this change.** Identical failure on
+unmodified branches, so the change is NOT implicated. Rust and C# differ by 16,222
+precursors (46%) and 14.5 MB of blib -- structural divergence, not 1e-9 drift compounding.
+Whether that is the expected C#/Rust divergence Mike is driving
+([[project_osprey_parity_removal_sprint]]) or an unnoticed regression is UNKNOWN and needs
+its own investigation. Do not treat the swap-removal PR as the cause.
+
+**2. UNRESOLVED and more concerning: the change produced BYTE-IDENTICAL output to master.**
+Removing the b<->y swap demonstrably alters decoy fragments, scores and FDR -- measured on
+this very dataset at 10.9% -> 1.47% FDP. Identical blib sizes mean the modified code did
+not affect these runs. Ruled out so far:
+* NOT stale workdir caches -- artifacts under
+  `D:\test\osprey-runs\stellar\_endtoend_crossimpl\{cs,rust}\` were freshly written by the
+  baseline run (08:10-08:14) and the earlier run's were overwritten.
+
+Remaining candidates, untested:
+* the comparison script may run a prebuilt exe rather than rebuilding from the checked-out
+  branch (check what binary it invokes and whether it builds);
+* the comparison path may not exercise `DecoyGenerator` at all (e.g. if it supplies library
+  decoys), in which case the swap change is inert there and the harness cannot gate it.
+
+**Either candidate matters beyond this PR**: if the cross-impl harness silently tests a
+stale binary, or never exercises decoy generation, then it has not been gating what we
+believed. Resolve before relying on it again.
+
+**Also found: local Rust `main` was 8 commits BEHIND `origin/main`.** Anyone running the
+cross-impl comparison with local `main` checked out has been comparing stale Rust against
+current C#. The baseline above deliberately used `origin/main` (`a3d6c3a`), the same base
+the change branches from. Worth auditing earlier cross-impl results for this.
+
 ### 2026-07-26 - Session end
 
 Next round requested by Brendan: the same 82-file gendecoy-vs-libdecoy comparison at
