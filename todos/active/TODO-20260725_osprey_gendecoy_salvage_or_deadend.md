@@ -6,7 +6,8 @@
 - **Created**: 2026-07-25
 - **Status**: In Progress
 - **GitHub Issue**: [#4465](https://github.com/ProteoWizard/pwiz/issues/4465)
-- **PR**: (pending)
+- **PR**: PR 1 [#4478](https://github.com/ProteoWizard/pwiz/pull/4478) (merged 2026-07-26);
+  PR 2 (b<->y swap removal) pending
 - **Requester/Reporter**: none (raised internally by the Osprey developers; no credit line)
 
 ## Objective
@@ -982,7 +983,8 @@ honest claim to make for it.
 `Calibrator.cs` only. Runtime-verified: percent lines (0/29/48/87/100%) now fill the former
 ~40 s gap. 535/535 tests, inspection clean, Stellar regression PASS (byte-identical).
 **`/code-review` was NOT run** before opening -- a context-budget call, not a judgment that
-the change did not warrant it. Worth running before merge.
+the change did not warrant it. Worth running before merge. (Merged 2026-07-26 without it --
+see the merge entry at the end.)
 
 **PR 2 - code staged on `Skyline/work/20260725_osprey_gendecoy_decision`, NOT opened.**
 `DecoyGenerator.cs` only (+159/-11):
@@ -1141,6 +1143,7 @@ in a session scratchpad that does not survive.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260725_osprey_gendecoy_decision.md` before starting work.
+(Superseded in part by the PR 1 merge entry at the end of this log.)
 
 ### Next
 
@@ -1223,3 +1226,26 @@ UNLINKED from `ai/root-CLAUDE.md` -- edits were not reaching the session-loaded 
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260725_osprey_gendecoy_decision.md` before starting work.
+
+### 2026-07-26 - PR 1 MERGED (#4478)
+
+Squash-merged as `1d22c732a` on master. Ships the calibration window-scoring
+`ProgressReporter` only (`Calibrator.cs`); search results byte-identical, so nothing in the
+decoy investigation is affected.
+
+Two deviations from the normal gate, both deliberate and Brendan's call:
+* The head branch was 3 commits behind master (#4459, #4474, #4385 -- all unrelated), so
+  `gh pr update-branch` merged master in, which re-triggered the six CodeQL `Analyze` checks.
+* Rather than wait for that re-run, Brendan directed `--admin` ("unlikely to conflict with
+  this small modification"). The 17-check gate WAS fully green on the pre-update head
+  (`ee37bb068`); what was bypassed is the re-run of CodeQL against the same diff rebased on
+  three unrelated commits. `/code-review` was never run on this PR either. Recorded so the
+  evidence behind the merge is not overstated later.
+
+GitHub's repo-level auto-merge is DISABLED on ProteoWizard/pwiz
+(`enablePullRequestAutoMerge` errors), so `gh pr merge --auto` is not an option here --
+a green gate must be either waited out or bypassed with `--admin`.
+
+**This TODO stays in `active/`**: PR 2 (b<->y swap removal, code complete on both C# and
+Rust) is still blocked behind the parity investigation, the regression redesign, and one
+golden retrain. Do not move this file to `completed/` until PR 2 lands.
