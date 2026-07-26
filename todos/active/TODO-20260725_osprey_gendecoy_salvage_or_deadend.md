@@ -740,6 +740,25 @@ tilt). `deltaMu` cannot see this; correlation can. The lesson generalises: for d
 quality, quote a PAIRED statistic (coin, within-pair correlation) alongside any marginal
 one.
 
+Holds on Astral HRAM too (file _49, ~1.44M paired base_ids):
+
+| feature | generated | Carafe | ratio |
+|---|---|---|---|
+| `ms1_isotope_cosine` | 0.225 | 0.148 | 1.5x |
+| `sg_weighted_cosine` | 0.154 | 0.048 | 3.2x |
+| `peak_area` | 0.144 | 0.013 | 11x |
+| `median_polish_cosine` | 0.140 | 0.048 | 2.9x |
+| `abs_rt_deviation` | 0.013 | 0.001 | 13x |
+
+**Internal consistency check: the correlation gap tracks the FDP gap across datasets.**
+Stellar has the larger correlation gap (RT 0.130 vs 0.007) and the larger FDP gap (1.47 vs
+0.86 = 0.61 pp); Astral has the smaller correlation gap (RT 0.013 vs 0.001) and the smaller
+FDP gap (2.03 vs 1.92 = 0.11 pp). Independent support for the mechanism, not a restatement.
+
+On HRAM `ms1_isotope_cosine` is the MOST correlated feature for both constructions
+(0.225 / 0.148) -- expected, since both share the target's precursor m/z and composition,
+so the measured isotope envelope is literally the same one.
+
 **Complication for the obvious fix:** reversal PRESERVES COMPOSITION, so a reversed peptide
 genuinely should elute near its target under any classical (composition-based) RT model. An
 SSRCalc/hydrophobicity-index predictor would hand the decoy back essentially its target's
