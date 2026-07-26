@@ -1004,6 +1004,45 @@ the change did not warrant it. Worth running before merge.
 Plus the cache-invalidation check noted in the PR PLAN section (the fix changes results
 but NOT `SearchParameterHash`).
 
+### 2026-07-26 - Rust side done; golden DEFERRED pending a regression redesign
+
+**Rust swap removal pushed**: `maccoss/osprey` branch `fix/decoy-by-swap-removal`
+(commit `7c8351b`, off `origin/main`). `cargo fmt` + `clippy -D warnings` + tests all
+pass. Committed blob verified LF-only (0 CR bytes via
+`git cat-file blob | tr -cd '\r' | wc -c`, per [[feedback_osprey_lf_line_endings]]).
+
+**Golden regeneration deliberately NOT done.** Brendan wants to redesign the
+`regression.ps1` dataset set first, so the golden is regenerated once rather than twice:
+* one dataset on **libdecoy**, one on **gendecoy** (today both are gendecoy -- the whole
+  reason every parity/determinism signal we have was collected on the construction we do
+  not recommend)
+* probably one carrying **entrapment peptides**
+* possibly **`--model-diagnostics`** on both
+Informed by this session plus the earlier coverage-analysis session.
+
+This **subsumes issue #4465 scope item 4** ("move the regression onto the libdecoy path")
+and is a larger piece of work than that item described. Worth its own issue.
+
+**PR 2 is therefore blocked on the regression redesign**, not on the code. The C# and
+Rust changes are both written, green, and pushed.
+
+**Still undecided: whether the fragment-overlap gate ships with PR 2.** Implementing it in
+Rust surfaced two design problems in the committed C# version:
+1. The Rust `DecoyGenerator` holds only `aa_masses` -- no config, no fragment tolerance --
+   so matching C#'s `config.FragmentTolerance` needs API plumbing through every call site.
+2. Worse, using the SEARCH tolerance makes the decoy set **depend on instrument
+   resolution**: the same library yields different decoys under `unit` vs `hram`. A decoy
+   set should be a pure function of the library. That is a genuine smell in what was
+   committed.
+Fixing it means picking a fixed tolerance AND deciding whether the theoretical ladder
+includes modifications, then implementing both choices byte-identically in two languages
+or cross-impl parity fails on decoy-set differences rather than on anything real.
+
+Recommendation on record: **drop the gate from PR 2** and let the swap removal ship alone.
+The swap fix is the well-measured result (10.9% -> 1.5%); the gate is statistically nil at
+scale and its value (small-library robustness) deserves its own PR, its own golden, and
+measurements at small N where that value actually lives.
+
 ### 2026-07-26 - Session end
 
 Next round requested by Brendan: the same 82-file gendecoy-vs-libdecoy comparison at
