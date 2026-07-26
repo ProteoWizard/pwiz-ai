@@ -940,6 +940,21 @@ precursor m/z shift and both similarity gates.
 **Open before PR 2**: FDRBench-jar cross-check of the swap-fixed cell; the r=0.1
 82-file comparison (below).
 
+### 2026-07-26 - Session end
+
+Next round requested by Brendan: the same 82-file gendecoy-vs-libdecoy comparison at
+**r=0.1 (10% entrapment)**, where ID yield is less suppressed by the marker library --
+the interesting number being IDs at matched TRUE 1% FDP. Both libraries are already
+built (`target+entrapment-r0.1-gendecoy` 3.17 GB, and the stock
+`target+decoy+entrapment-r0.1`). Nothing is running.
+
+Analysis scripts preserved at `ai/.tmp/osprey-decoy-analysis/` (`read_fdp_pass1.py`,
+`read_tilt.py`, `pair_correlation.py`, `check_decoy_sequences.py`) -- they were written
+in a session scratchpad that does not survive.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260725_osprey_gendecoy_decision.md` before starting work.
+
 ### Next
 
 **The decided change, not yet written:**
