@@ -940,6 +940,70 @@ precursor m/z shift and both similarity gates.
 **Open before PR 2**: FDRBench-jar cross-check of the swap-fixed cell; the r=0.1
 82-file comparison (below).
 
+### 2026-07-26 - Why EncyclopeDIA's filter was chosen from the similarity-filter class
+
+Brendan's framing: none of the three filters made a statistical difference, which makes
+sense because they guard EDGE CASES -- and edge cases do not move a large-scale aggregate.
+But every other tool has some form of this protection, and a small-scale failure (a
+targeted assay with 50 peptides, where palindromes and low-complexity runs are a far larger
+fraction) would be both real and confusing. So Osprey should carry one, chosen to be sound
+and not more complicated than what it buys.
+
+**Chosen: EncyclopeDIA's fragment-overlap gate at 0.4** (`PeptideUtils.getSmartDecoy`).
+Now always on; `MAX_FRAGMENT_OVERLAP` in `DecoyGenerator`.
+
+Why it beat the other two:
+* **It measures the right thing.** Fragment-ladder overlap against the candidate's OWN
+  target is what determines whether the decoy can lose the competition on fragment
+  evidence. OpenSWATH's sequence-identity threshold (0.5) is a weaker proxy -- two quite
+  different sequences can still share most fragment masses (I/L, GG/N, transpositions).
+* **It is local to the pair**, so it needs no library-wide index. SpectraST's
+  spectrum-similarity check (<=0.7 against any library entry within +-2 Th) is the most
+  thorough of the three but requires an m/z-indexed scan of the whole library, and it
+  **cannot be computed on the lean `omitFragments` path** -- FirstPassFDR /
+  StopAfterStage5 workers load no fragments, so it would yield a different decoy set there
+  and break HPC mode-3 and resume consistency.
+* **The threshold is a citation, not a number we invented** -- 0.4 is EncyclopeDIA's own.
+* Osprey's existing cycling fallback is already the "regenerate on reject" retry loop the
+  other tools implement, so the gate slots in with no new machinery.
+
+Implementation detail that matters: the overlap is computed from **sequences +
+modifications**, never from loaded fragment lists, so the full and lean library paths
+produce identical decoy sets. `TestDecoyGenerationOmitFragments` asserts that equality.
+
+Measured cost: excludes ~1e-4 of peptides (52 / 494,495 Stellar; 339 / 3,173,677 Astral),
+FDP within noise on both datasets. It buys robustness, not accuracy -- and that is the
+honest claim to make for it.
+
+### 2026-07-26 - PR 1 OPENED; PR 2 code staged
+
+**PR 1 - [#4478](https://github.com/ProteoWizard/pwiz/pull/4478)** on branch
+`Skyline/work/20260726_osprey_calibration_progress`. Calibration progress reporting,
+`Calibrator.cs` only. Runtime-verified: percent lines (0/29/48/87/100%) now fill the former
+~40 s gap. 535/535 tests, inspection clean, Stellar regression PASS (byte-identical).
+**`/code-review` was NOT run** before opening -- a context-budget call, not a judgment that
+the change did not warrant it. Worth running before merge.
+
+**PR 2 - code staged on `Skyline/work/20260725_osprey_gendecoy_decision`, NOT opened.**
+`DecoyGenerator.cs` only (+159/-11):
+* b<->y swap REMOVED outright -- decoy fragments keep the target's ion type and ordinal.
+  No diagnostic switch, per Brendan and Mike: the swap was erroneous, from a gap in
+  understanding when the code was written.
+* Precursor m/z shift REMOVED, no switch (inflates entrapment FDP).
+* Fragment-overlap gate at 0.4, always on (reasoning above).
+* All four experimental env knobs and their `SearchIdentity` guards deleted;
+  `OspreyEnvironment.cs` and `SearchIdentity.cs` are back to master.
+
+**PR 2 cannot open until three things land**, all next-session work:
+1. **Parallel change in maccoss/osprey** (`crates/osprey-scoring/src/lib.rs:3173`) --
+   the swap is in Rust too.
+2. **Cross-tool comparison testing** after both sides change.
+3. **Golden retraining** for `regression.ps1` -- output changes by design, so mode1 is
+   red until the golden is regenerated. The gate then flips from byte-identity to the
+   entrapment oracle.
+Plus the cache-invalidation check noted in the PR PLAN section (the fix changes results
+but NOT `SearchParameterHash`).
+
 ### 2026-07-26 - Session end
 
 Next round requested by Brendan: the same 82-file gendecoy-vs-libdecoy comparison at
