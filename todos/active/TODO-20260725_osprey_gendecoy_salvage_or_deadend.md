@@ -859,6 +859,43 @@ Note this libdecoy reference is BETTER calibrated than the 3-file Astral libdeco
 (0.92% vs 1.92%), so cross-dataset comparison of absolute FDP is not meaningful -- compare
 each gendecoy cell to ITS OWN libdecoy reference.
 
+### 2026-07-26 - 82-FILE RESULT: inflation is stable, and gendecoy WINS on power
+
+Completed in **7 h 28 min**, exit 0, peak memory 38.5 GB managed / 49.3 GB private.
+(Brendan: the earlier 10 h estimate came from a run that used 8 scoring threads AND had to
+build the `.spectra.bin` caches. From scratch with caches present and 30 threads, 7.5 h.)
+
+| cell (82 files, Pass 1 experiment-wide) | FDP @1% q | paired FDP | IDs @1% q | coin | tilt |
+|---|---|---|---|---|---|
+| **gendecoy (same-ion)** | **2.12%** | 2.10% | 53,313 | 0.4567 | 0.373 |
+| libdecoy (Carafe) | **0.92%** | 0.86% | 37,676 | 0.5003 | -0.0065 |
+
+**1. The inflation is STABLE.** Gendecoy Pass-1 FDP is 2.03% (3-file Astral HeLa) ->
+**2.12%** (82-file SEA-AD brain tissue): essentially unchanged across 27x the files and a
+different sample type. It does not drift with scale. What changed is the comparator --
+libdecoy is far better calibrated here (0.92%) than on 3-file Astral (1.92%) -- so the
+RELATIVE gap widened from parity to 2.3x. Different datasets, so that is not attributable
+to file count on this evidence.
+
+**2. At matched TRUE 1% FDP, gendecoy recovers MORE real IDs:**
+
+| | IDs @ claimed 1% q | IDs @ **true** 1% FDP |
+|---|---|---|
+| gendecoy (same-ion) | 53,313 | **45,599** |
+| libdecoy (Carafe) | 37,676 | **38,300** |
+
+**19% more IDs at the same true error rate.** This INVERTS the standing guidance recorded
+in [[project_osprey_libdecoy_vs_gendecoy_calibration]] ("at equal 1% TRUE FDP, library
+decoys yield more real IDs -- Stellar ~1.9x, Astral ~1.3x"), which was measured WITH the
+b<->y swap. With the swap fixed, that no longer holds.
+
+**3. The residual problem is now cleanly separated.** Discrimination is fine -- better than
+libdecoy -- and the deficit is purely **q-value calibration**. The coin (0.4567) and tilt
+(0.373 vs -0.0065) confirm the null is still dishonest, which miscalibrates q while leaving
+the ranking intact. That is a more tractable problem than "the decoys are bad", and it is
+consistent with the within-pair correlation mechanism: correlated pairs distort the null's
+SHAPE (breaking q estimation) without hurting the score's ability to rank.
+
 ### Next
 
 **The decided change, not yet written:**
