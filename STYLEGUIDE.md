@@ -1,5 +1,17 @@
 # Skyline C# Coding Style - Quick Reference
 
+> ## MUST READ THIS FILE BEFORE WRITING OR EDITING ANY C# IN THIS PROJECT
+>
+> Not "know that it exists" — **open it**. A pointer to this file in a skill or
+> CLAUDE.md is not a substitute for reading it, and a one-line summary of its
+> contents is not either. Read it before the first edit, and re-read the relevant
+> section whenever you are about to deviate from what it shows.
+>
+> If you find yourself reasoning "this rule probably doesn't cover my case" or
+> "the surrounding code / a doc-comment example does it this way", that is exactly
+> when to open this file and check. Both of those rationalisations have produced
+> real style violations that reviewers then had to catch by hand.
+
 Essential C# conventions for Skyline. See [ai/docs/style-guide.md](docs/style-guide.md) for comprehensive details and [ai/CRITICAL-RULES.md](CRITICAL-RULES.md) for absolute constraints.
 
 **Universal AI Guidelines**: This file serves as the style guide for all AI tools (Cursor, Claude Code, GitHub Copilot, ChatGPT, etc.).
@@ -50,8 +62,46 @@ if (condition)
 }
 ```
 
-**Rule**: Braceless `if`/`else` is only allowed when the body is a single line.
-If the body expression wraps to multiple lines, always add braces.
+**Rule**: A braceless body is only allowed when the body is a **single line**.
+If the body spans multiple lines, always add braces.
+
+**This applies to every statement that can take a braceless body**, not just
+`if`/`else`: `using`, `foreach`, `for`, `while`, `do`, `lock`, and `fixed`.
+
+The trap is a body that *reads* as one statement but spans many lines — most
+often a `using` wrapping a parallel loop. One call, thirty-five lines, no braces:
+
+```csharp
+// ❌ BAD - one statement, but the body spans 35 lines
+using (var progress = new ProgressReporter("Scoring windows", windows.Count))
+    Parallel.ForEach(windows, new ParallelOptions { MaxDegreeOfParallelism = n },
+        () => CreateScorer(),
+        (kvp, loopState, scorer) =>
+        {
+            // ... 30 more lines ...
+            return scorer;
+        },
+        scorer => { });
+
+// ✅ GOOD - braces, because the body spans multiple lines
+using (var progress = new ProgressReporter("Scoring windows", windows.Count))
+{
+    Parallel.ForEach(windows, new ParallelOptions { MaxDegreeOfParallelism = n },
+        () => CreateScorer(),
+        (kvp, loopState, scorer) =>
+        {
+            // ... 30 more lines ...
+            return scorer;
+        },
+        scorer => { });
+}
+```
+
+Adding the braces costs a re-indent of the body. **Take the bigger diff** — diff
+size is not a reason to leave a multi-line body braceless.
+
+Beware doc-comment examples that show the braceless form: they are usually
+demonstrating a genuinely one-line body. Copy the *rule*, not the shape.
 
 ### File and Member Ordering
 

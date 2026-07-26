@@ -29,9 +29,13 @@ points at:
    resource strings for user-facing text, CRLF line endings,
    `_camelCase` private fields, helpers AFTER public methods that use
    them.
-2. **`ai/STYLEGUIDE.md`** - C# coding conventions: file headers with
-   AI attribution, using-directive ordering, `new[] { ... }` inferred
-   array literals, control-flow rules.
+2. **`ai/STYLEGUIDE.md`** - **MUST READ before writing or editing ANY
+   C#.** Actually open the file - these one-line summaries are a table
+   of contents, NOT a substitute for reading it. C# coding conventions:
+   file headers with AI attribution, using-directive ordering,
+   `new[] { ... }` inferred array literals, control-flow rules
+   (braceless bodies are single-line ONLY - this applies to `using`,
+   `foreach`, `for`, `while`, `lock`, `fixed`, not just `if`/`else`).
 3. **`ai/WORKFLOW.md`** - git workflow, TODO system, commit message
    format (past-tense title, `* ` bullets, `See ai/todos/...`,
    `Co-Authored-By: Claude` line). Osprey commits go through the

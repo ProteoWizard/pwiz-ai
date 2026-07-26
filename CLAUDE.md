@@ -186,9 +186,14 @@ always use `ai/.tmp/`.
 
 Before writing code, read these files:
 
-1. **ai/CRITICAL-RULES.md** - Absolute constraints (NO async/await, resource strings, etc.)
-2. **ai/MEMORY.md** - Project context and gotchas
-3. **ai/docs/build-and-test-guide.md** - Detailed build and test instructions
+1. **ai/STYLEGUIDE.md** - **MUST READ before writing or editing ANY C#.** Open the
+   file; a summary of it is not a substitute. Covers file headers, using-directive
+   ordering, naming, and control flow (braceless bodies are single-line ONLY - and
+   that applies to `using`, `foreach`, `for`, `while`, `lock`, `fixed`, not just
+   `if`/`else`).
+2. **ai/CRITICAL-RULES.md** - Absolute constraints (NO async/await, resource strings, etc.)
+3. **ai/MEMORY.md** - Project context and gotchas
+4. **ai/docs/build-and-test-guide.md** - Detailed build and test instructions
 
 ## Skills - Load Before Starting Work
 

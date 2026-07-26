@@ -29,12 +29,16 @@ Read these files to understand project constraints and patterns:
 1. **ai/CRITICAL-RULES.md** - Absolute constraints (NO async/await, resource strings only, CRLF line endings, naming conventions)
 2. **ai/MEMORY.md** - Project context (900K LOC, 17 years, 8 devs, critical gotchas)
 3. **ai/WORKFLOW.md** - Git workflows, TODO system, commit message format
-4. **ai/STYLEGUIDE.md** - C# coding conventions for Skyline
+4. **ai/STYLEGUIDE.md** - **MUST READ before writing or editing ANY C#.** C# coding conventions for Skyline
 5. **ai/TESTING.md** - Testing rules (translation-proof, test structure)
 
 ## When to Read What
 
-- **Before writing code**: Read CRITICAL-RULES.md, STYLEGUIDE.md
+- **Before writing code**: Read CRITICAL-RULES.md and **STYLEGUIDE.md - open the
+  actual files.** The one-line summaries above are a table of contents, not a
+  substitute. Re-read the relevant section any time you are about to deviate from
+  what it shows, or catch yourself thinking "this rule probably doesn't cover my
+  case" or "the surrounding code does it this way."
 - **Before writing tests**: Read TESTING.md, ai/docs/testing-patterns.md
 - **Before committing**: Read WORKFLOW.md (commit message rules, Co-Authored-By attribution)
 - **Before building/testing**: Read ai/docs/build-and-test-guide.md
