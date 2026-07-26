@@ -1273,3 +1273,65 @@ contradict each other. Two things to fix, not one:
 
 Also check `DIVERGENCES.md` -- it catalogues Rust<->C# parity items, and the swap removal
 lands on BOTH sides, so any entry describing the swap needs to move or go.
+
+### 2026-07-26 - PARITY RESOLVED: there is NO divergence. The blocker is DISSOLVED.
+
+Ran the cross-impl gate twice with **both sides freshly built from matching code** -- the step
+the previous session skipped, and the whole reason its numbers were wrong.
+
+| cell | Rust | C# | delta | verdict |
+|---|---|---|---|---|
+| **baseline**: master `47d0c2c1a` vs main `a3d6c3a` | 51,444 | 51,444 | **0** | **PASS** |
+| **branches**: `166007fb0` vs `fb81bd6` (swap removed) | 35,222 | 35,222 | **0** | **PASS** |
+
+Both are bit-parity at 1e-9 and neither is vacuous:
+* baseline -- RefSpectra 51,444 rows, EVERY column `max_diff=0.000e+000` incl. the binary peak
+  blobs; Modifications 10,005; Proteins 7,042; RefSpectraProteins 56,149; RetentionTimes
+  154,330. Stage 7: 6,265 rows, `best_peptide_score` max_diff 5.3e-15.
+* branches -- RefSpectra 35,222 rows all-exact; Stage 7 4,896 rows, max_diff 7.1e-15.
+
+**The "46% structural divergence" is RETRACTED and fully explained.** Binary timestamps prove
+it: the C# Release exe was **06:35**, the Rust exe **07:54**, and last session's C# edits landed
+between them (only Debug was rebuilt). So it measured **swap-REMOVED Rust (35,222) against
+swap-PRESENT C# (51,444)**. Fresh Rust on `main` reproduces 51,444 exactly, and the two
+swap-removal branches reproduce 35,222 exactly. Every number is accounted for; nothing is broken.
+
+**The byte-identical anomaly is explained by the same root cause** -- the C# binary never
+contained the change, so of course the C# output matched master. Not a harness defect.
+
+**The second candidate is also dead**: `Compare-EndToEnd-Crossimpl.ps1` passes
+`--decoys-in-library` ONLY for the `*LibraryDecoy` datasets (`:125-135`), so plain `Stellar`
+runs generated decoys. The harness DOES exercise `DecoyGenerator` and does gate this change.
+
+Consequences:
+1. **The "parity investigation PR ahead of PR 2" is NOT needed.** There was never a defect.
+2. **PR 2's cross-tool comparison testing (blocker #2) is SATISFIED** by the branch row above --
+   the C# and Rust swap removals are bit-identical in effect on Stellar 3-file.
+3. PR 2's remaining blockers are only the **regression redesign** and **one golden retrain**.
+4. Bonus corroboration for the swap fix itself: 51,444 -> 35,222 is a 31% drop in accepted
+   precursors from removing the swap alone, measured cross-impl. Right direction and magnitude
+   for honest decoys, and independent of the FDP/coin analysis.
+
+**Harness lesson worth keeping**: the script builds NEITHER side (`:83` `Get-OspreyRustExe`,
+`:88` `Get-OspreyExe` are prebuilt-path lookups). Always build both explicitly and use `-Force`
+to wipe the workdir, or it silently compares whatever binaries and caches are on disk.
+
+Also fixed durably: local Rust `main` was still 8 commits behind `origin/main`; fast-forwarded
+to `a3d6c3a`.
+
+### 2026-07-26 - `transfer` gap: the handoff OVERSTATED it
+
+The handoff called Rust's missing `transfer` mode a "known real gap to fix regardless." It is
+not a newly found defect -- [[project_osprey_pass2_default_flip_and_confidence_axes]] records
+`transfer` as **deliberately C#-only** ("Keep it -- Brendan likes the simple table algorithm"),
+with Rust mapping it to percolator a known state.
+
+The actual defect is that Rust does it **SILENTLY**. That already has a home:
+`TODO-20260723_osprey_env_settings_registry.md`, raised by Brendan during the #4446 review,
+with the hard-fail decision recorded verbatim and scoped as its own small PR coordinated
+across C# + Rust. It is INDEPENDENT of PR 2, not a blocker for it.
+
+Found while reading that path: `Pass2FdrSidecar.cs:84` warns
+`"Recognized modes: '{0}', '{1}'."` naming only `percolator` and `transfer` -- but C# accepts
+FOUR (`NormalizePass2QValue`, `OspreyEnvironment.cs:358-372`). The one message meant to catch a
+typo lists half the valid values. Fold into the registry PR.
