@@ -681,6 +681,50 @@ Two guardrails fired while implementing, both legitimate:
 
 Gates: 535/535 tests pass, inspection clean.
 
+### 2026-07-25 - Gate results: NEGATIVE, and the RT hypothesis is refuted too
+
+Stellar, Pass 1, all cells same-ion + matched precursor:
+
+| cell | FDP @1% q | discoveries | coin | tilt |
+|---|---|---|---|---|
+| B3 baseline (same-ion) | 1.47% | 28,490 | 0.4733 | 0.305 |
+| G: frag <= 0.40 | 1.41% | 28,557 | 0.4723 | 0.363 |
+| G: frag <= 0.25 | 1.59% | 28,844 | 0.4684 | 0.323 |
+| G: seqid <= 0.50 | 1.50% | 28,450 | 0.4712 | 0.339 |
+| L3: Carafe reference | **0.86%** | 27,070 | 0.5016 | 0.057 |
+
+**The similarity gates do not help.** All three land within +-0.12 pp of baseline -- noise.
+`frag<=0.40`'s nominal 1.41% comes with a WORSE tilt (0.363 vs 0.305) and a flat coin, so
+it is not a real improvement. The gates barely bind (52 / 522 / 198 exclusions out of
+494,495) because reversing a typical tryptic peptide already yields a low-overlap ladder;
+the pathological cases other tools guard against are rare on this data. Astral gate runs
+were SKIPPED deliberately -- 3 x 18 min to re-test a hypothesis Stellar already refuted.
+
+**The RT hypothesis is refuted as well**, from the feature tables (no new run needed).
+`Retention time difference (abs)` deltaMu: generated **-0.582** vs Carafe **-0.615**;
+signed: 0.008 vs 0.047. Carafe's independently-predicted decoy RT buys essentially no RT
+discrimination over Osprey's copied RT. So "break the RT coincidence" -- my earlier
+hypothesis and the spec's unimplemented FR-1.3.3 optional bullet -- is not what makes
+Carafe better.
+
+**What the data actually says.** EVERY feature's separation is near-identical between the
+two constructions (largest gaps: co-eluting fragment count 1.237 vs 1.160, median-polish
+cosine 0.896 vs 0.843), yet Carafe reaches 0.86% vs 1.47% with a 5x better tilt. So the
+residual difference is NOT in mean feature separation -- it is in the distributional SHAPE
+of the decoy score density, which is precisely what the tilt measures and what `deltaMu`
+cannot see.
+
+Leading remaining hypothesis, untested: generated decoys are a deterministic transform of
+their targets (same intensities, same RT, same precursor m/z, permuted sequence), so paired
+target/decoy scores are CORRELATED in a way Carafe's independently-predicted decoys are
+not. Score correlation within a pair distorts the null's shape without moving its mean --
+consistent with equal deltaMu but unequal tilt. Testing it needs the paired per-entry
+scores, not the summary tables.
+
+Perspective: on **Astral this residual gap essentially vanishes** (2.03% vs 1.92%), so it
+may be Stellar-specific and small in practice. The swap fix is the win; nothing else tried
+adds to it.
+
 ### Next
 
 - [ ] Decide the real fix: make same-ion-map the Osprey default (a golden rebaseline,
