@@ -808,8 +808,17 @@ removed. Is that STABLE at 82 files, or does it drift with file count?
   libraries and the FDP numbers are directly comparable.
 * Config = gendecoy best case: `OSPREY_DECOY_SAME_ION_MAP=1`, no precursor shift, no gates.
 * `--resolution hram --model-diagnostics --fdrbench-pass both --threads 30`
-* Output: `runs\seaad-82files-gendecoy-r1.0-sameion`, detached via `Start-Process`
+* Output: `runs\seaad-82files-gendecoy-r1.0-sameion-v2`, detached via `Start-Process`
   (survives harness reaping, per [[feedback_night_session_detached_runs]]).
+* Runner: **`ai/.tmp/run-82file-gendecoy.ps1`**, mirroring the established
+  `ai/.tmp/run-pass2ab-82.ps1` -- `--timestamp --memstamp` and ALL streams merged into ONE
+  `run.log` via `*>&1 | Tee-Object`. A first attempt hand-rolled `Start-Process` with
+  separate stdout/stderr redirects and no stamps, producing three logs of which only stderr
+  accumulated; Brendan killed it. **Use the existing script pattern for this dataset.**
+  Threads 30 rather than the comparator's 8 -- results are thread-independent (determinism
+  invariant) and 8 would push per-file scoring alone to 12-16 h.
+* The abandoned first attempt left ~12 GB of partial parquets in
+  `runs\seaad-82files-gendecoy-r1.0-sameion` (no `-v2`), safe to delete.
 
 **Gotcha worth recording: this library marks decoys ONLY by a `decoy_` prefix on
 `ProteinID`. The `Decoy` column is 0 for every row**, unlike the Stellar/Astral libraries
