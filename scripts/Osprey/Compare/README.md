@@ -20,11 +20,40 @@ pwiz checkout under `<project root>/osprey`).  Override location
 via `$env:OSPREY_ROOT` or the `-OspreyRoot` parameter on
 `Build-OspreyRust.ps1`.
 
-Build Rust before invoking the gate:
+## BUILD BOTH SIDES FIRST -- the gate builds neither
+
+`Compare-EndToEnd-Crossimpl.ps1` **runs prebuilt binaries**; it does not
+build.  Build both sides explicitly before invoking it:
 
 ```powershell
 pwsh -File ./ai/scripts/Osprey/Compare/Build-OspreyRust.ps1
+pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Release
 ```
+
+Note the **Release**.  The two documented procedures do not compose: the
+Osprey pre-commit gate builds **Debug**
+(`Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection`) while this
+gate runs the **Release** exe.  So "edit, run the gates green, run the
+comparison" silently leaves the C# side stale, and the comparison returns
+entirely plausible numbers measured against the *old* code.
+
+That is not hypothetical.  It produced a "46% cross-impl divergence" that was
+investigated across three sessions before being retracted -- the run had
+compared swap-removed Rust against a swap-present C# binary.  The obvious
+control (check out the baseline branches and re-run) is **inert** here, because
+checking out source does not change which exe runs: it returns byte-identical
+numbers that read as confirmation of a pre-existing divergence.
+
+Since 2026-07-26 the script **hard-fails (exit 3)** when either side's build
+output is older than that side's newest source file, naming both timestamps.
+`-AllowStaleBinaries` overrides it when the mismatch is deliberate.
+
+The freshness check compares against the newest build output *beside* the exe,
+not the exe itself: on net8.0 `Osprey.exe` is only the apphost stub and
+`Osprey.dll` the entry assembly, so a change confined to a dependency project
+(`Osprey.Core`, `.Scoring`, `.FDR`, `.Tasks`, ...) rebuilds only that dll and
+leaves both untouched.  Timestamping the exe alone reports a false "stale"
+right after a successful incremental build.
 
 ## The 1e-9 gate
 

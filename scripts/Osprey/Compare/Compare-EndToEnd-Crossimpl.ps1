@@ -54,6 +54,12 @@
 
 .PARAMETER Threads
     --threads CLI flag. Default 16.
+
+.PARAMETER AllowStaleBinaries
+    Skip the binary-freshness guard. This script RUNS PREBUILT BINARIES and
+    builds neither side, so by default it refuses to run when either exe is
+    older than that side's newest source file. Use only when you deliberately
+    want to compare a binary that does not match the checked-out source.
 #>
 
 param(
@@ -63,6 +69,7 @@ param(
     [switch]$Force,
     [switch]$SkipRust,
     [switch]$SkipCs,
+    [switch]$AllowStaleBinaries,
     [int]$Threads = 16,
     [ValidateSet('net472','net8.0')]
     [string]$Framework = 'net8.0',
@@ -89,6 +96,100 @@ $ospreyShExe = Get-OspreyExe -Framework $Framework
 if (-not (Test-Path $ospreyShExe)) {
     Write-Host "Osprey.exe not found at $ospreyShExe -- build first." -ForegroundColor Red
     exit 2
+}
+
+# --- Binary freshness guard -------------------------------------------------
+# This harness RUNS PREBUILT BINARIES; it builds NEITHER side. That is a silent
+# trap, because the two documented procedures do not compose: the Osprey
+# pre-commit gate builds DEBUG (Build-Osprey.ps1 -Configuration Debug) while this
+# script runs the RELEASE exe. So "edit, run the gates green, run this
+# comparison" leaves the C# side stale, and the comparison returns entirely
+# plausible numbers measured against the OLD code.
+#
+# That is not hypothetical: it produced a "46% cross-impl divergence" that was
+# investigated across three sessions and ultimately retracted -- the run had
+# compared swap-REMOVED Rust against a swap-PRESENT C# binary. Worse, the
+# obvious control (check out the baseline branches and re-run) is INERT here,
+# since checking out source does not change which exe runs; it returns
+# byte-identical numbers that read as confirmation.
+#
+# Hard-fail rather than warn: the output looks trustworthy either way, which is
+# exactly when proceeding is worse than stopping.
+function Get-NewestSourceFile {
+    param([string[]]$Roots, [string[]]$Patterns)
+    $newest = $null
+    foreach ($root in $Roots) {
+        if (-not (Test-Path $root)) { continue }
+        $files = Get-ChildItem -Path $root -Recurse -File -Include $Patterns -ErrorAction SilentlyContinue |
+            Where-Object { ($_.FullName -replace '/', '\') -notmatch '\\(bin|obj|target|\.git|packages)\\' }
+        foreach ($f in $files) {
+            if ($null -eq $newest -or $f.LastWriteTime -gt $newest.LastWriteTime) { $newest = $f }
+        }
+    }
+    return $newest
+}
+
+# The newest build output beside the exe -- NOT the exe itself.
+# On net8.0 `Osprey.exe` is only the apphost stub and `Osprey.dll` is the entry
+# assembly; a change confined to a dependency project (Osprey.Core, .Scoring,
+# .FDR, .Tasks, ...) rebuilds ONLY that dll and leaves both of those untouched.
+# Timestamping the exe therefore reports "stale" immediately after a successful
+# incremental build. MSBuild rebuilds just what changed, so the correct test is
+# that SOME output is at least as new as the newest source: edit-then-build
+# always moves at least one artifact; edit-without-build moves none.
+function Get-NewestBuildArtifact {
+    param([string]$Exe, [string]$Pattern)
+    $dir = Split-Path -Parent $Exe
+    $candidates = @(Get-ChildItem -Path $dir -File -Filter $Pattern -ErrorAction SilentlyContinue)
+    $candidates += (Get-Item $Exe)
+    return ($candidates | Sort-Object LastWriteTime -Descending | Select-Object -First 1)
+}
+
+function Assert-BinaryFresh {
+    param(
+        [string]$Exe, [string]$Label, [string[]]$Roots,
+        [string[]]$Patterns, [string]$ArtifactPattern, [string]$BuildHint
+    )
+    $newest = Get-NewestSourceFile -Roots $Roots -Patterns $Patterns
+    # No sources visible (e.g. a checkout-less CI box): nothing to assert.
+    if ($null -eq $newest) { return }
+    $artifact = Get-NewestBuildArtifact -Exe $Exe -Pattern $ArtifactPattern
+    if ($newest.LastWriteTime -le $artifact.LastWriteTime) { return }
+    Write-Host ""
+    Write-Host ("[{0}] STALE BINARY -- refusing to run." -f $Label) -ForegroundColor Red
+    Write-Host ("    exe      : {0}" -f $Exe) -ForegroundColor Red
+    Write-Host ("    newest   : {0}" -f $artifact.Name) -ForegroundColor Red
+    Write-Host ("    built    : {0}" -f $artifact.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')) -ForegroundColor Red
+    Write-Host ("    source   : {0}" -f $newest.FullName) -ForegroundColor Red
+    Write-Host ("    edited   : {0}" -f $newest.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')) -ForegroundColor Red
+    Write-Host "    This script does NOT build. Comparing a stale binary reports a FALSE" -ForegroundColor Yellow
+    Write-Host "    divergence that is indistinguishable from a real one." -ForegroundColor Yellow
+    Write-Host ("    Rebuild: {0}" -f $BuildHint) -ForegroundColor Cyan
+    Write-Host "    Override (only if the mismatch is deliberate): -AllowStaleBinaries" -ForegroundColor DarkGray
+    Write-Host ""
+    exit 3
+}
+
+if ($AllowStaleBinaries) {
+    Write-Host "[Freshness] -AllowStaleBinaries: binaries NOT checked against source." -ForegroundColor Yellow
+} else {
+    # Only assert on a side this run will actually execute.
+    if (-not $SkipRust) {
+        # Cargo statically links, so any crate change relinks the one binary.
+        Assert-BinaryFresh -Exe $ospreyExe -Label 'Rust' `
+            -Roots @((Get-OspreyRoot)) `
+            -Patterns @('*.rs', 'Cargo.toml', 'Cargo.lock') `
+            -ArtifactPattern 'osprey.exe' `
+            -BuildHint 'pwsh -File ./ai/scripts/Osprey/Compare/Build-OspreyRust.ps1'
+    }
+    if (-not $SkipCs) {
+        Assert-BinaryFresh -Exe $ospreyShExe -Label 'C#' `
+            -Roots @((Join-Path (Get-PwizRoot) 'pwiz_tools/Osprey'),
+                     (Join-Path (Get-PwizRoot) 'pwiz_tools/Shared/PortableUtil')) `
+            -Patterns @('*.cs', '*.csproj') `
+            -ArtifactPattern 'Osprey*.dll' `
+            -BuildHint 'pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1 -Configuration Release'
+    }
 }
 
 $ds = Get-DatasetConfig $Dataset -TestBaseDir $TestBaseDir
