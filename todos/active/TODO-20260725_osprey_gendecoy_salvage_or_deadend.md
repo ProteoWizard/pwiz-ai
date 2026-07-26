@@ -795,6 +795,44 @@ Perspective: on **Astral this residual gap essentially vanishes** (2.03% vs 1.92
 may be Stellar-specific and small in practice. The swap fix is the win; nothing else tried
 adds to it.
 
+### 2026-07-25 - 82-file SEA-AD gendecoy run LAUNCHED (does the inflation hold at scale?)
+
+Question: the 3-file Astral cell measured 2.03% true FDP at a claimed 1% q with the swap
+removed. Is that STABLE at 82 files, or does it drift with file count?
+
+* Data: `D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\mzml` -- 82 files, all 82
+  `.spectra.bin` caches present.
+* Library: **r=1.0** `target+decoy+entrapment` with decoy rows stripped ->
+  `lib\regression\target+entrapment-r1.0-gendecoy\` (6.42 GB from 13.09 GB, 49%).
+  Brendan chose r=1.0 so the entrapment ratio matches the 1:1 Stellar/Astral Carafe
+  libraries and the FDP numbers are directly comparable.
+* Config = gendecoy best case: `OSPREY_DECOY_SAME_ION_MAP=1`, no precursor shift, no gates.
+* `--resolution hram --model-diagnostics --fdrbench-pass both --threads 30`
+* Output: `runs\seaad-82files-gendecoy-r1.0-sameion`, detached via `Start-Process`
+  (survives harness reaping, per [[feedback_night_session_detached_runs]]).
+
+**Gotcha worth recording: this library marks decoys ONLY by a `decoy_` prefix on
+`ProteinID`. The `Decoy` column is 0 for every row**, unlike the Stellar/Astral libraries
+where it is populated. Stripping on the `Decoy` column is a silent no-op that produces a
+byte-identical "stripped" file -- caught only because the output size matched the input
+exactly. Strip on `$6 !~ /^decoy_/`. Verified zero mixed rows (every row is all-decoy or
+no-decoy across a 500K sample).
+
+Progress at launch+10min: PID 13884, 23.5 GB working set, ~3 min/file scoring, per-file
+parquets ~1.8 GB each (projected ~150 GB scores + a similar volume reconciled; D: has
+5.6 TB free).
+
+**Standing risk:** if this run hits a resident first-pass pool path it fails fast by design
+(`OSPREY_ALLOW_UNBOUNDED_MEMORY` defaults off) -- and that would happen only AFTER all 82
+files are scored, ~4 h in. 82-file runs have been done on this box before, so the projected
+path should be fine, but a late failure is the shape to watch for.
+
+Caveat to carry into the read: an entrapment-ratio collapse was previously recorded on THIS
+dataset at r=1.0 ([[project_osprey_entrapment_ratio_fdr_collapse]] -- q floored at 2.5%
+with 0 reported; r=0.1 healthy). If the oracle looks floored rather than merely inflated,
+that is the first thing to suspect, and the run should be re-read against r=0.1 rather than
+treated as a decoy-construction result.
+
 ### Next
 
 **The decided change, not yet written:**
