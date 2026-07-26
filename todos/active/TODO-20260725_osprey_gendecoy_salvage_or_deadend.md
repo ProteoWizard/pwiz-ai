@@ -1043,6 +1043,35 @@ The swap fix is the well-measured result (10.9% -> 1.5%); the gate is statistica
 scale and its value (small-library robustness) deserves its own PR, its own golden, and
 measurements at small N where that value actually lives.
 
+### 2026-07-26 - Gate kept, matched in Rust, and SIMPLIFIED (supersedes the numbers above)
+
+Brendan: keep C# and Rust matching for now, so the gate ships in both. Implementing it in
+Rust forced the two design questions to be settled, and both answers also fix a real defect
+in the first C# version:
+
+* **Match window is now a fixed 0.02 Da**, not the run's fragment tolerance. Keying it to
+  the search tolerance made the DECOY SET DEPEND ON INSTRUMENT RESOLUTION -- the same
+  library produced different decoys under `unit` vs `hram`. A decoy set must be a pure
+  function of the library. The fixed window also removes the need to plumb config into the
+  Rust `DecoyGenerator` (which holds only `aa_masses`), which was the parity blocker.
+* **The ladder ignores modifications.** Mods shift target and decoy ladders alike, so they
+  cannot change whether the two coincide. Dropping them keeps the lean (`omitFragments`)
+  path bit-identical to a full load and makes the C#/Rust rule trivially the same.
+
+**CAUTION -- the exclusion counts recorded earlier no longer describe this code.** The
+52 / 522 / 198 (Stellar) and 339 / 2996 / 1185 (Astral) figures were measured with the
+gate keyed to the SEARCH tolerance (~0.5 Da at unit resolution, ppm on HRAM). A fixed
+0.02 Da window is stricter and will reject fewer. Direction and scale-level impact are
+unchanged (nil), but re-measure before quoting counts. The regression redesign is the
+natural place to do it.
+
+Branches, both pushed and green:
+* Rust `maccoss/osprey` `fix/decoy-by-swap-removal` -- `7c8351b` (swap) + `fb81bd6` (gate);
+  fmt + clippy + tests pass; `.gitattributes` `* text=auto` and local
+  `core.autocrlf=input` verified giving `i/lf w/lf` and 0 CR bytes in every committed blob.
+* C# `Skyline/work/20260725_osprey_gendecoy_decision` -- `0d52a921f` (swap + gate) +
+  `166007fb0` (simplification); 535/535 tests.
+
 ### 2026-07-26 - Session end
 
 Next round requested by Brendan: the same 82-file gendecoy-vs-libdecoy comparison at
