@@ -629,6 +629,48 @@ Two closing points:
 * **We do not need it.** On Astral, B (same-ion mapping, no residue awareness) reached
   2.03% vs Carafe's 1.92% -- parity. The fix is to stop doing the extra thing.
 
+### 2026-07-25 - Decisions taken (Brendan)
+
+* **b<->y swap: rejected.** Dropped from all further testing; B (same-ion map) is the new
+  baseline.
+* **Precursor m/z shift: rejected.** Not adopted for Osprey, and Brendan expects it will
+  likely be **removed from Skyline** in future as well -- it is Amodei's innovation, no
+  other mProphet implementation carries it, SpectraST explicitly disabled its own shift
+  code, and it measured a net negative here on both Stellar (1.47 -> 1.96%) and Astral
+  (2.03 -> 3.49%).
+* No Skyline bug is filed for the swap: Skyline never had it.
+
+### 2026-07-25 - Improving generated decoys beyond the swap fix (autonomous leg)
+
+Baseline B (same-ion, no shift): Stellar 1.47%, Astral 2.03%. Reference Carafe: 0.86% /
+1.92%. Candidates taken from what the survey showed other tools actually do.
+
+Implemented behind default-OFF knobs, both folded into `SearchParameterHash` only when set:
+
+* `OSPREY_DECOY_MAX_FRAG_OVERLAP` -- EncyclopeDIA's `getSmartDecoy` gate. Rejects a
+  candidate whose THEORETICAL singly-charged b/y ladder overlaps its target's by more than
+  the given fraction (within the fragment tolerance); the existing cycling fallback becomes
+  the retry path. EncyclopeDIA rejects above 0.4.
+* `OSPREY_DECOY_MAX_SEQ_IDENTITY` -- OpenSWATH's `shuffle_sequence_identity_threshold`
+  (default 0.5 there). Rejects a candidate retaining more than this fraction of residues in
+  the same positions.
+
+**Critical design constraint:** both gates are computed from SEQUENCES + modifications
+only, never from loaded fragment lists, so the lean (`omitFragments`) library path a
+FirstPassFDR / StopAfterStage5 worker loads produces an identical decoy set to a full load.
+Gating on loaded fragments would silently diverge the two paths and break HPC mode-3 and
+resume consistency -- and `TestDecoyGenerationOmitFragments` asserts exactly that equality.
+
+Two guardrails fired while implementing, both legitimate:
+* ReSharper `PossibleNullReferenceException` on the ladder builder -- restructured the null
+  check so the analyzer can see it.
+* `TestNoUnstableSort` -- the repo forbids `Array.Sort` in production code because .NET's
+  introsort reorders ties differently from Rust's stable `sort_by`. Sorting a private
+  `double[]` purely to binary-search it has no tie-sensitive downstream use, so it took the
+  sanctioned inline `// Array.Sort OK: <reason>` exemption.
+
+Gates: 535/535 tests pass, inspection clean.
+
 ### Next
 
 - [ ] Decide the real fix: make same-ion-map the Osprey default (a golden rebaseline,
