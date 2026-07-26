@@ -1081,7 +1081,23 @@ Ran `Compare-EndToEnd-Crossimpl.ps1 -Dataset Stellar -Files All` twice.
 | with the change (both branches) | 35,222 / 30,519,296 b | 51,444 / 45,064,192 b | **FAIL** |
 | baseline (`origin/main` + `master`) | 35,222 / 30,519,296 b | 51,444 / 45,064,192 b | **FAIL** |
 
-**1. The cross-impl gate was ALREADY failing before this change.** Identical failure on
+**CORRECTION (same session): BOTH RUNS USED THE SAME BINARIES. Neither conclusion below
+stands.** `Compare-EndToEnd-Crossimpl.ps1` **builds NEITHER side** -- line 83
+`Get-OspreyRustExe` and line 88 `Get-OspreyExe` are prebuilt-path lookups
+(`Dataset-Config.ps1:105`). Checking out `origin/main` / `master` for the "baseline"
+changed source but not binaries, so the same pair ran twice and identical output was
+inevitable. The Rust exe was CURRENT with the change (`Build-OspreyRust.ps1` was run
+after both edits); the C# exe was STALE (last Release build predated the final edits --
+only Debug was built after). So the 46% divergence was measured between swap-REMOVED Rust
+and swap-PRESENT C#, i.e. it is consistent with being CAUSED by the half-applied change
+rather than pre-existing. **Master-vs-master parity is untested.** Re-run with both sides
+freshly built from matching code before concluding anything.
+
+**Lesson for the harness: it does not build. Build both sides explicitly first**
+(`Build-Osprey.ps1 -Configuration Release` and `Compare/Build-OspreyRust.ps1`), or the
+comparison silently tests whatever binaries happen to be on disk.
+
+~~1. The cross-impl gate was ALREADY failing before this change.~~ (retracted -- see above) Identical failure on
 unmodified branches, so the change is NOT implicated. Rust and C# differ by 16,222
 precursors (46%) and 14.5 MB of blib -- structural divergence, not 1e-9 drift compounding.
 Whether that is the expected C#/Rust divergence Mike is driving
