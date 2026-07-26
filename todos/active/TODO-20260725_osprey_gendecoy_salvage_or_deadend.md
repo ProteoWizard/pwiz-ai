@@ -66,10 +66,20 @@ Standing Osprey gates still apply to any code change:
 
 ## Regression Test
 
-- **Test name**: (filled in once written)
-- **Test project**: Test | TestData | Osprey regression harness (regression.ps1)
-- **Fails on master**: (pending)
-- **Passes on fix**: (pending)
+- **Test name**: `regression.ps1 -Dataset Stellar` (byte-identity gate for the default-off
+  diagnostic knobs); unit coverage via the existing 535-test Osprey suite
+- **Test project**: Osprey regression harness + Osprey.Test
+- **Byte-identity with knobs off**: **PASS** (2026-07-25) -- mode1 vs golden PASS,
+  mode3 HPC chain == straight PASS, mode2 resume == straight PASS; blib 45,064,192 bytes
+  identical across all three legs
+- **Passes on fix**: n/a yet -- the behavior change (same-ion default) is not written; it
+  will require a golden rebaseline, so the gate flips from "byte-identical" to "golden
+  regenerated + entrapment oracle improved"
+
+Note the standing gate here is inverted from a normal bug fix: while the knobs are
+diagnostic and default-off, the REQUIREMENT is that output does not change. Once
+same-ion-map becomes the default, that gate is deliberately broken and replaced by the
+entrapment oracle (Pass 1 FDP + paired coin) as the arbiter.
 
 Note: the decision itself is measurement-driven (FDRBench entrapment oracle), not
 unit-testable. The concrete testable deliverables are (a) whichever code change the
