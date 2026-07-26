@@ -827,11 +827,28 @@ parquets ~1.8 GB each (projected ~150 GB scores + a similar volume reconciled; D
 files are scored, ~4 h in. 82-file runs have been done on this box before, so the projected
 path should be fine, but a late failure is the shape to watch for.
 
-Caveat to carry into the read: an entrapment-ratio collapse was previously recorded on THIS
-dataset at r=1.0 ([[project_osprey_entrapment_ratio_fdr_collapse]] -- q floored at 2.5%
-with 0 reported; r=0.1 healthy). If the oracle looks floored rather than merely inflated,
-that is the first thing to suspect, and the run should be re-read against r=0.1 rather than
-treated as a decoy-construction result.
+**The r=1.0 collapse caveat I first flagged was STALE** -- Brendan corrected it and the
+data confirms. The old July-09 collapse is fixed; 1:1 libdecoy runs are healthy now.
+
+**The comparator already exists**, and it is ideal: same 82 files, the SAME r=1.0 library I
+stripped, `--decoys-in-library`, with model diagnostics --
+`runs\pass2ab-82file-transfer-5dayTransferPerRunMdiag` (2026-07-20). It differs from the
+running gendecoy job ONLY in decoy source:
+
+| 82-file libdecoy reference (r=1.0, Carafe decoys) | |
+|---|---|
+| Pass 1 experiment-wide FDP @ q=0.0098 | **0.92%** |
+| discoveries | 37,676 |
+| paired coin (entrapment) | **0.5003** (n = 1,377,036) |
+| null-alignment tilt | **-0.0065** |
+
+A fair coin to 0.03 pp and a tilt of essentially zero, at 1:1 entrapment across all 82
+files. So the question the gendecoy run answers is sharp: how far from 0.92% / 0.5003 /
+-0.0065 does the swap-fixed generated-decoy construction land at this scale?
+
+Note this libdecoy reference is BETTER calibrated than the 3-file Astral libdecoy cell
+(0.92% vs 1.92%), so cross-dataset comparison of absolute FDP is not meaningful -- compare
+each gendecoy cell to ITS OWN libdecoy reference.
 
 ### Next
 
