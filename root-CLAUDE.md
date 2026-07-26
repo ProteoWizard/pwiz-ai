@@ -10,8 +10,24 @@ repos, their branches, and dirty state — one call, no arguments needed.
 Use `mcp__status__get_status` for targeted checks on specific directories.
 Do NOT use `git` commands or `gh` to discover branches when status MCP can do it.
 
-**Before suggesting handoff, end-of-session, or `/compact`**, call
-`mcp__status__get_context_usage` first — never estimate from feel.
+**NEVER state a context-remaining number that did not come directly from
+`mcp__status__get_context_usage`.** No estimating, no "roughly", no "~8%",
+no inferring from how long the session feels. Call the tool, then quote what
+it returned. If you have not called it, do not put a number in the message at
+all — say nothing about context, or call the tool first.
+
+This is not a soft preference. A guessed number is indistinguishable from a
+measured one in the transcript, and the user is often on a phone where
+checking the statusline to catch the guess is real work. Stating an invented
+number silently transfers that verification burden to them.
+
+The rule covers **every** mention, not only handoff talk. It is easy to
+rationalize a guess when the number is being used to justify something else —
+scoping work down, skipping a review step, declining to interpret a result.
+Those are exactly the cases where the number must be measured, because it is
+driving a decision.
+
+Call it **before** suggesting handoff, end-of-session, or `/compact` too.
 NEVER mention a next session when context is above 20%, and know that
 many users are comfortable pushing into single digits. The tool returns
 the same number the statusline shows the user, so we share a consistent
