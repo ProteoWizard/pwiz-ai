@@ -2,7 +2,7 @@
 title: Keep heap-leak checking on the native-dialog connector tests
 branch: Skyline/work/20260725_native_dialog_leak_fix
 repo: sky_automation
-status: in_progress
+status: completed
 ---
 
 ## Objective
@@ -182,6 +182,32 @@ If a machine still flags at 96, options:
 Saturation curve (600 dialogs, bare SaveFileDialog loop): 11.30 KB/dialog for the first
 50, 4.66 for 50-100, 3.72 for 100-150, then oscillating around a ~1.4 MB plateau with two
 net-negative blocks and single give-backs of 312 KB and 430 KB.
+
+## COMPLETED 2026-07-26 -- merged as PR #4459
+
+`TestNativeFileDialog`, `TestNativeMessageBox` and `TestPrmMcpConnector` now get
+`ExpandedLeakCheck(LeakCheckIterations * 4)`. `MutedHeapMemoryLeakTestNames` stayed empty, so
+heap-leak detection remains ACTIVE for all three -- the objective at the top of this file.
+
+Changed from what is described above, before merging:
+
+* `TestMcpConnectorBackgroundDialog` was dropped from the list. PR #4458 reworked that test to
+  create one window instead of ~100,000, and it converges in 8 passes on all four agents that
+  reported (UW7 -16.8 KB, DEV6 -33.3 KB, DEV4 -24 KB), so it needs no override.
+* The Terminal Services framing in the code comment was removed. The session headers added by
+  #4458 falsify it: BRENDANX-DT1 reports `TerminalServerSession=False` and leaks all three tests.
+  The "Why the growth is not a leak" section above is still correct about saturation, but its
+  RDP-only premise is not.
+
+**Still unverified:** no nightly has run with #4459 yet. The claim this change rests on -- that
+these tests settle within 96 iterations on the agents that fail at 24 -- is supported by local
+runs and one disconnected-session run, not by fleet data. Check the next nightly.
+
+**Known residual weakness**, recorded in the PR body rather than hidden: a longer ceiling gives a
+genuinely leaking test more chances to exit on a lucky trailing window, because the per-run delta
+is a wide distribution straddling the threshold. A per-test heap THRESHOLD override would be the
+better instrument -- fixed iteration count, still catches a gross leak -- but TestRunner has only
+mute lists and iteration overrides today.
 
 ## Notes
 

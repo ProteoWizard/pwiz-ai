@@ -5,7 +5,7 @@
 - **Worktree**: `sky_fixes` (nicksh's machine)
 - **Base**: `master`
 - **Created**: 2026-07-23
-- **Status**: In Progress
+- **Status**: Completed 2026-07-26 (see "OUTCOME" at the top of the body)
 - **GitHub Issue**: (none)
 - **PR**: [#4453](https://github.com/ProteoWizard/pwiz/pull/4453) — mutes the family from the heap check
 
@@ -19,6 +19,41 @@
 - **Read CORRECTION 3 before trusting the 2026-07-25 sections**: the night session concluded the
   growth was a genuine unbounded leak, and that conclusion is withdrawn. Several downstream claims
   went with it. The measurements themselves stand.
+
+## OUTCOME (2026-07-26) -- resolved by a DIFFERENT PR than this branch
+
+**This branch's own PR #4453 was CLOSED, not merged.** Its approach -- muting the native-dialog
+family from the heap check under Terminal Services -- was abandoned once CORRECTION 2 below showed
+its premise was wrong (Skyline never takes the legacy comdlg32 path, so "the offending path never
+plateaus" did not apply to anything Skyline runs).
+
+What shipped instead, from `Skyline/work/20260725_native_dialog_leak_fix`:
+
+| PR | what | state |
+|---|---|---|
+| #4455 | EnumWindows static callback via lParam | merged |
+| #4456 | wait for the file dialog to finish opening before typing | merged |
+| #4458 | background-dialog test rework, session-header diagnostics, LongOperationRunner return | merged |
+| #4474 | intermittent TestSetItemMcpConnector / TestJsonToolServer failures | merged |
+| #4459 | `ExpandedLeakCheck(96)` for the three file-dialog tests, heap check kept ON | **merged** |
+| #4453 | mute under Terminal Services (this branch) | **closed, superseded** |
+
+Read this file as the evidence base, not as a description of what landed. It contains three
+retracted claims (see the RETRACTED/WITHDRAWN/CORRECTION markers) and they are marked in place.
+
+### Residuals this file should not be filed away without
+
+1. **Two diagnostics in #4453 were never merged**, and closing it dropped them without the
+   keep-vs-drop decision the "Notes for whoever implements the fix" section called for:
+   `Executables/DevTools/HeapProbe/` and `TestFunctional/NativeOpenFileDialogLeakTest.cs`.
+   HeapProbe produced most of the saturation curves this investigation rests on, so if the
+   question comes back it is worth resurrecting from the closed PR rather than rebuilding.
+2. **#4459 is unverified against nightly.** It merged 2026-07-26; no nightly has run with it.
+   Everything about these tests failing was a fleet observation, and the fix is so far supported
+   only by local and disconnected-session runs.
+3. **A per-test heap THRESHOLD override** would beat a raised iteration ceiling -- fixed iteration
+   count, still catches a gross leak, no extra chances at a lucky trailing window. TestRunner
+   supports only mute lists and iteration overrides today.
 
 ## Problem
 
@@ -182,6 +217,120 @@ and build TestFunctional + TestRunner.
 Please write your findings back into this TODO (a "Results from <machine>" section with the
 heap deltas for steps 1–4 and the RDP-vs-console outcome), and note the Windows build/version
 and whether the session was RDP or console.
+
+## UPDATE 2026-07-26: WHAT the growing blocks contain, and warm-up demonstrated on a real test
+
+Two things this investigation had never done: name the actual allocations, and test the
+saturation idea on a real test rather than a bare probe. Both done here, in `sky_fileopendialog`
+on the post-#4474 tree.
+
+### Method: heap-content DELTA, not the built-in absolute dump
+
+`reportheaps` prints ABSOLUTE top-50 block-size and string lists. A ~30 KB/run growth against an
+80 MB heap never reaches those lists, which is why the built-in dump had never named anything.
+Added a temporary block-size histogram snapshot to the pass-1 loop (early at iteration 2,
+re-snapshotted every iteration after, since the loop exits early rather than at a fixed
+iteration) and diffed early vs late.
+
+Cost note for anyone repeating this: do NOT set `MemoryManagement.HeapDiagnostics = true` to get
+the histogram. That single flag also enables a string scan that does a `Marshal.Copy` plus a byte
+walk for EVERY busy block on every heap; against Skyline's heap it takes many minutes per
+snapshot and looks like a hang. Walk the heaps directly for sizes (cheap, no copying), then scan
+strings only inside the specific block sizes that grew.
+
+### The blocks are Explorer's cached shell view
+
+Strings found inside the growing block sizes:
+
+```
+<duixml>  <ViewHost id="atom(clientviewhost)" layout="borderlayout()">
+<ProperTreeModule id="atom(ProperTree)" sheet="documentslayoutstyle" ...>
+<StatusBarModule .../>  <BannerContainer .../>  <DetailsContainer layoutpos="right"/>
+<SyncProviderRecycleBinsContainer ModuleID="RecyleBinModule" .../>
+```
+
+plus the navigated path's own strings (`TestNativeMessageBox`, `TestResults`,
+`sky_fileopendialog`) at ~2 per run -- exactly the 2 file dialogs the test shows per run -- and
+OLE `ncalrpc` endpoint names. This is the modern Explorer-hosted `IFileDialog` shell view being
+parsed and cached per instance on the persistent UI thread, reclaimed only at `CoUninitialize`
+(process exit). It corroborates CORRECTION 2 from the other direction: the content is the
+*modern* Explorer view, not anything comdlg32 would allocate.
+
+### Control test: the growth is dialog-attributable, not ambient
+
+`TestSetItemMcpConnector` -- same connector, same Skyline startup, same 30 ms `DialogWatcher`
+polling, **no native dialog** -- converges and passes (heap 11.9 KB), and shares only ~5.7 KB/run
+of ambient block sizes with `TestNativeMessageBox`. Every signature size is absent from it:
+
+| block size | TestNativeMessageBox | control |
+|---|---|---|
+| 9119, 4959, 3600, 3104, 1560, 773, 768, 432 | 1.0 blocks/run each | absent |
+| 968 / 368 / 128 / 24 | 6.6 / 3.9 / 9.5 / 46.4 per run | absent |
+
+So the connector's enumeration and polling are exonerated a third time, now by a same-harness
+control rather than by a probe.
+
+### Modern vs legacy re-confirmed on this tree
+
+Shared-thread probe, marginal cost at dialog 40: modern `IFileDialog` ~2 KB/dialog and decaying;
+legacy comdlg32 ~29 KB/dialog, dead flat. `AutoUpgradeEnabled = false` is ~14x worse and removes
+the saturation -- it is not a lever, it is the opposite of one.
+
+### Warm-up does NOT work on the real test -- but for a different reason than "mute, not warm-up" gave
+
+> **This section originally read "Warm-up WORKS on the real test" on the strength of one trial at
+> 8 dialogs/run and one at 16. Three trials at 16 dialogs/run fail one time in three. The heading
+> and the conclusion are corrected below; the measurements stand.** This is the third time this
+> TODO has recorded an over-extrapolation from too few samples (see "no plateau over 120" and
+> CORRECTION 3). The pattern to break: this test's per-run heap delta is a wide distribution
+> straddling the 20 KB threshold, so **no** single trial -- passing or failing -- means anything.
+
+The "DECISION: mute, not warm-up" above rests explicitly on *"the offending (legacy) path never
+plateaus"*. CORRECTION 2 later withdrew that premise -- Skyline only ever takes the modern,
+saturating path -- but the decision was never revisited. It should be.
+
+Temporarily made `TestNativeMessageBox` show N extra Save-As cycles per run (env
+`SKY_EXTRA_SAVES`), same navigation and replace-confirm path as the real ones:
+
+| dialogs/run | trials | converged at | verdict |
+|---|---|---|---|
+| 2 (baseline) | 28.9, 36.0 KB | never (24) | **FAIL 2/2** |
+| 8 | 11.7, 18.4 KB | 18, 18 | pass 2/2, but 18.4 against a 20 KB bar |
+| 16 | 8.5, **20.5**, 0.0 KB | 16, 24, 24 | **FAIL 2/3** -- see below |
+
+The 16-dialog trials fail two different ways: trial 2 tripped the HEAP threshold at 20.5 KB, and
+trial 3 came in at heap 0.0 KB but tripped the **total memory** threshold at 179.6 KB. That
+second failure is the one that kills the idea -- extra dialogs per run inflate total memory
+churn, so warm-up trades the heap threshold for the memory threshold rather than removing the
+problem.
+
+What IS real is the underlying cache behaviour, and the histogram shows it directly: at 16
+dialogs/run the Explorer-view sizes drop (9119, 4959, 3104, 1560 all 1.0 -> 0.4 blocks/run
+despite 4x the dialogs) while a small residue scales (3600: 1.0 -> 4.1, 773: 1.0 -> 7.0). The
+cache does saturate. It just does not saturate *reliably enough, within one run,* to put a wide
+distribution safely under a fixed threshold.
+
+**Cost, separately disqualifying.** Per-run warm-up takes the test from 1-2 s to 8 s per
+execution, on every execution forever, not only during pass 1. A one-time per-process warm-up
+would be the efficient form, but convergence needed ~150-250 cumulative dialogs, matching this
+TODO's earlier 2-3 minutes-per-test-process estimate.
+
+**Recommendation:** keep `ExpandedLeakCheck(96)` as the fix, and note that it works for a reason
+warm-up does not. Warm-up shifts the *mean* per-run growth down but leaves the variance, so a
+wide distribution still straddles a fixed threshold. Extra iterations attack the variance
+directly -- the loop keeps sampling trailing windows until one genuinely settles, and costs
+nothing on machines that converge early.
+
+The lasting value of this section is therefore the mechanism, not the fix: the growing blocks are
+named rather than inferred, and the connector is cleared by a same-harness control. On the
+"mute, not warm-up" decision -- its stated premise (*"the offending legacy path never plateaus"*)
+was withdrawn by CORRECTION 2, so the reasoning needed redoing; redone here, the conclusion
+against warm-up survives, on cost and variance instead.
+
+### Local temporary edits (NOT for commit)
+
+`TestRunner/Program.cs` (heap histogram diff + `SKY_HEAP_STRING_SIZES` targeted string scan) and
+`TestFunctional/NativeMessageBoxTest.cs` (`SKY_EXTRA_SAVES` loop). Both need reverting.
 
 ## Files Changed (PR #4453)
 
