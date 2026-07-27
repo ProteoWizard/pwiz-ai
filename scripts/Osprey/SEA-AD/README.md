@@ -109,6 +109,15 @@ visible in that arm's `run.log` and in the chain log.
 Output lands in `<dataset root>\runs\seaad-<N>files-<arm>-r<ratio>-<pass2>[<tag>]\`,
 matching the layout of the runs already there.
 
+**Say which build you mean.** By default the runner takes `Osprey.exe` from the shared
+`pwiz` worktree's `Release/net8.0` output - whatever happens to be built there right now.
+On a machine where someone is actively developing, that couples two sessions in both
+directions: the run measures their in-progress branch instead of master, and it holds
+those DLLs so their next build fails to relink. Both halves are silent. The runner prints
+the build time and branch and warns when it is not master; pass `-SourceRoot <checkout>`
+(or `-Exe`) to pin a tree nobody is building in, the same reasoning behind the pinned
+`pwiz-perfbase` worktree used by the perf gate.
+
 **Repeating an arm needs `-Fresh`.** Osprey adopts per-file caches it finds in the output
 directory, so re-running into an existing one silently resumes and skips stages - fine for
 continuing a crashed run, fatal to a from-scratch memory or timing measurement, and

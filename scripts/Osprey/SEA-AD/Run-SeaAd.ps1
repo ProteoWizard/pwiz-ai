@@ -39,6 +39,13 @@
     re-scoring. Only stage 1-4 suffixes are linked, never Stage 5/6 outputs, so the part
     under test is always regenerated.
 
+.PARAMETER SourceRoot
+    Checkout to take the Release/net8.0 Osprey.exe from. Prefer this over -Exe when what
+    you care about is WHICH TREE: the default is the shared `pwiz` worktree, so a long run
+    can silently measure whatever branch a colleague is mid-refactor on, while holding
+    those DLLs so their rebuilds fail. Point it at a pinned checkout for a run that must
+    not collide with active development.
+
 .PARAMETER Fresh
     Timestamp the output directory name. Use when repeating an arm you have already run:
     Osprey adopts per-file caches it finds in the output directory, so reusing one turns a
@@ -78,6 +85,7 @@ param(
     [string]$CacheDir,
     [string]$OutDir,
     [string]$RunsRoot,
+    [string]$SourceRoot,
     [string]$Exe,
     [string]$LinkFrom = '',
     [switch]$Fresh,
@@ -119,6 +127,18 @@ function Resolve-Location {
 
 $dataDir = Resolve-Location -Explicit $DataDir -EnvName 'OSPREY_SEAAD_DIR' `
                             -Fallbacks @($LAB_SHARE_MZML) -What 'mzML directory'
+
+# -SourceRoot names a checkout; the exe is at its usual place inside it. Prefer this to
+# -Exe when you want a specific TREE, e.g. a pinned worktree rather than the shared
+# default one that other sessions are actively building in. See the banner warning below.
+$EXE_UNDER_ROOT = 'pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0\Osprey.exe'
+if ($SourceRoot -and -not $Exe) {
+    if (-not (Test-Path $SourceRoot)) { throw "-SourceRoot does not exist: '$SourceRoot'." }
+    $Exe = Join-Path $SourceRoot $EXE_UNDER_ROOT
+    if (-not (Test-Path $Exe)) {
+        throw "No Release/net8.0 Osprey.exe under -SourceRoot '$SourceRoot'. Build it there first."
+    }
+}
 $ospreyExe = Resolve-Location -Explicit $Exe -EnvName 'OSPREY_EXE' `
                               -Fallbacks @($REPO_EXE) -What 'Osprey.exe (build Release/net8.0 first)'
 
@@ -223,9 +243,28 @@ if ($CacheDir) { $cliArgs += @('--cache-dir', $CacheDir) }
 if ($DecoyMode -eq 'libdecoy') { $cliArgs += @('--decoys-in-library', '--decoy-pairing-manifest', $manifest) }
 if ($ModelDiagnostics) { $cliArgs += '--model-diagnostics' }
 
+# Which TREE the binary came from matters as much as which flags ran. A multi-hour run
+# against whatever a colleague happens to have built in a shared worktree is measuring
+# their mid-refactor branch, not master - and the run holds those DLLs, blocking their
+# rebuilds. Both directions of that collision are silent, so name the branch out loud.
+$exeBranch = $null
+$exeRepo = Split-Path $ospreyExe -Parent
+try {
+    $exeBranch = (& git -C $exeRepo rev-parse --abbrev-ref HEAD 2>$null)
+    if ($LASTEXITCODE -ne 0) { $exeBranch = $null }
+} catch { $exeBranch = $null }
+
 Write-Host ""
 Write-Host "=== SEA-AD Pilot-MTG run ===" -ForegroundColor Cyan
 Write-Host ("  exe      : {0}" -f $ospreyExe)
+Write-Host ("  built    : {0}{1}" -f (Get-Item $ospreyExe).LastWriteTime.ToString('yyyy-MM-dd HH:mm'),
+            $(if ($exeBranch) { "   branch: $exeBranch" } else { '' }))
+if ($exeBranch -and $exeBranch -ne 'master') {
+    Write-Host ("  WARNING: that build is branch '{0}', not master. A run this long against " -f $exeBranch) -ForegroundColor Yellow
+    Write-Host "           someone else's in-progress build measures their branch, and holds" -ForegroundColor Yellow
+    Write-Host "           its DLLs so they cannot rebuild. Pass -SourceRoot <pinned checkout>" -ForegroundColor Yellow
+    Write-Host "           to use a tree nobody is actively building in." -ForegroundColor Yellow
+}
 Write-Host ("  mzML dir : {0}" -f $dataDir)
 Write-Host ("  files    : {0}; {1} .spectra.bin cache(s) present" -f $mzmls.Count, $cached)
 if ($cached -lt $mzmls.Count) {
