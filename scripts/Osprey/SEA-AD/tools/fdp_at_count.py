@@ -7,6 +7,7 @@ If pass-2 tracks pass-1 up to pass-1's count and only diverges beyond it, the in
 Usage: python fdp_at_count.py <run_dir> [<run_dir> ...]
 """
 import sys, os, re, json
+import _fdrbench
 
 
 def entrap_set(pairing_path):
@@ -49,8 +50,10 @@ def interp(xs, ys, x0):
 
 
 def analyze(run_dir):
-    fb = os.path.join(run_dir, 'fdrbench.tsv')
-    pr = os.path.join(run_dir, 'fdrbench.tsv.pairing.tsv')
+    fb, pr = _fdrbench.resolve(run_dir, 2)
+    if not fb:
+        print(f"\n=== {run_dir} ===\n  {_fdrbench.missing_message(run_dir, 2)}")
+        return
     html = os.path.join(run_dir, 'out.model-diagnostics.html')
     ent, nT_lib, nE_lib = entrap_set(pr)
     r = nE_lib / nT_lib

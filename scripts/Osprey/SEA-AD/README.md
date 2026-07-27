@@ -128,6 +128,11 @@ caches so Stage 5 onward - the part usually under test - always regenerates.
 | `runcount_fdp.py <run_dir>` | FDP by number-of-runs-identified (needs `--model-diagnostics`) |
 | `Compare-Pass2AB.py <a> <b> <out.html>` | two `--model-diagnostics` runs side by side |
 
+Osprey names its FDRBench output by how the run was launched - `fdrbench.tsv` from
+`--fdrbench-pass 2`, `fdrbench.pass2.tsv` from `--fdrbench-pass both` (the runner's
+default). The readers accept either, so a run launched one way is not reported as missing
+by a tool expecting the other.
+
 **Quote Pass 1, not Pass 2.** Pass-2 recalibration inflates FDP; that is a known open
 issue, not a property of your run.
 

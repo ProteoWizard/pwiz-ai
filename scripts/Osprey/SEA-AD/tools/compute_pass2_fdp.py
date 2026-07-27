@@ -15,6 +15,7 @@ q-sweep. This is the same 'combined' estimator the report's pass-1 fdpView uses
 Usage: python compute_pass2_fdp.py <run_dir> [<run_dir> ...]
 """
 import sys, os
+import _fdrbench
 
 
 def load_pairing(path):
@@ -38,10 +39,9 @@ def load_pairing(path):
 
 
 def analyze(run_dir, qs=(0.001, 0.005, 0.01, 0.02, 0.05)):
-    fb = os.path.join(run_dir, 'fdrbench.tsv')
-    pr = os.path.join(run_dir, 'fdrbench.tsv.pairing.tsv')
-    if not (os.path.exists(fb) and os.path.exists(pr)):
-        print(f"\n=== {run_dir} ===\n  MISSING fdrbench.tsv or pairing.tsv")
+    fb, pr = _fdrbench.resolve(run_dir, 2)
+    if not fb:
+        print(f"\n=== {run_dir} ===\n  {_fdrbench.missing_message(run_dir, 2)}")
         return
     seqtype, nT_lib, nE_lib = load_pairing(pr)
     r = nE_lib / nT_lib
