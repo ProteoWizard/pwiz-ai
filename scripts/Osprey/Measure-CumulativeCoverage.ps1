@@ -188,7 +188,7 @@ $env:OSPREY_MAX_PARALLEL_FILES = '1'
 # phases of the HPC chain that no straight-through run can reach. Verified: a
 # single covered Stellar mode-1 run reported Osprey.Scoring 69%, Osprey.FDR 43%,
 # Osprey.Tasks 50% etc., and dotCover logged "Merging snapshots" (>1 process).
-$regressionPs1 = Join-Path $projectRoot "pwiz\pwiz_tools\Ospreyegression.ps1"
+$regressionPs1 = Join-Path $projectRoot (Join-Path "pwiz" (Join-Path "pwiz_tools" (Join-Path "Osprey" "regression.ps1")))
 if (-not (Test-Path $regressionPs1)) { throw "regression.ps1 not found at $regressionPs1" }
 $pwshExe = (Get-Command pwsh).Source
 
