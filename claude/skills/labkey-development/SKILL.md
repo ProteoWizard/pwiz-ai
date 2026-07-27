@@ -38,6 +38,7 @@ Based on the module the user is working on, read the appropriate doc(s):
 |---|---|
 | `testresults` | `ai/docs/labkey/testresults-module.md` |
 | `panoramapublic` | `ai/docs/labkey/panoramapublic-module.md` AND `ai/docs/labkey/panoramapublic/panoramapublic-coding-patterns.md`|
+| `signup` | `ai/docs/labkey/signup/signup-module.md` |
 | Other / unsure | Skip — rely on Key Patterns below |
 
 Also read `ai/docs/labkey-setup/README.md` if environment setup is needed.
