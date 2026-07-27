@@ -199,13 +199,15 @@ if ($SkipHpcChain) { $regressionArgs += "-SkipHpcChain" }
 Write-Host ("[regression] {0} -Dataset {1} under dotCover ..." -f (Split-Path -Leaf $regressionPs1), $Dataset) -ForegroundColor Cyan
 Write-Host  "  (this is the tctest.bat command; expect it to take as long as the TeamCity leg, plus instrumentation)"
 $regSnap = Join-Path $OutDir "regression.dcvr"
-# The pwsh path contains a space, so the /TargetExecutable value must stay quoted.
+# No embedded quotes on the pwsh path: the call operator quotes each array element
+# itself, and a literal quote makes dotCover reject the value outright
+# ("Invalid character '"' (U+0022) in path at index 0").
 $coverArgs = @("cover") + $coverFilters + @(
     "/Output=$regSnap",
     "/ReturnTargetExitCode",
     "/AnalyzeTargetArguments=false",
     "/TargetWorkingDir=$(Split-Path -Parent $regressionPs1)",
-    "/TargetExecutable=`"$pwshExe`"",
+    "/TargetExecutable=$pwshExe",
     "--") + $regressionArgs
 & $dotCover $coverArgs | Out-Host
 $regExit = $LASTEXITCODE
