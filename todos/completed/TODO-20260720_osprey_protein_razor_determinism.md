@@ -5,9 +5,9 @@
   `C:\Dev\pwiz-razor`, cut fresh from `origin/master`).
 - **Base**: `master`
 - **Created**: 2026-07-20
-- **Status**: PR OPEN, all local gates GREEN. Awaiting `/pw-self-review` + human review +
-  the manual TeamCity Perf/Regression trigger on `pull/4442`.
-- **PR**: [#4442](https://github.com/ProteoWizard/pwiz/pull/4442)
+- **Status**: COMPLETED — PR #4442 merged 2026-07-27 as `6d919a080e` (squash);
+  TeamCity Perf/Regression GREEN on the merge commit (build #177).
+- **PR**: [#4442](https://github.com/ProteoWizard/pwiz/pull/4442) (merged 2026-07-27 as `6d919a080e`)
 - **Issue**: [#4441](https://github.com/ProteoWizard/pwiz/issues/4441)
 - **Reported by**: Mike
 
@@ -104,3 +104,23 @@ Files: `Osprey.FDR/ProteinFdr.cs` (razor case rewrite), `Osprey.Test/FdrTest.cs`
 - The uncommitted fix currently lives in the working tree of `C:\Dev\pwiz`
   (`ProteinFdr.cs` + `FdrTest.cs`, unstaged) on the `sparse_xcorr_cache` branch. Do NOT commit it
   there; move it to the fresh branch. Patch backup: `ai/.tmp/razor-determinism-20260720.patch`.
+
+## 2026-07-27 — Merged
+
+PR #4442 merged as commit `6d919a080e` (squash). Reimplemented the C#
+`--shared-peptides razor` rollup as the iterative group-batch greedy set cover
+mirroring Rust `osprey-fdr/src/protein.rs` (global per-round winner, lowest-group-id
+tiebreak, live unique-count cascade), replacing the non-deterministic per-peptide greedy
+that walked `Dictionary` hash order. Shipped with three razor tests (cascade,
+path-independence, lowest-id tiebreak) — the tiebreak test was added at self-review as
+the only one exercising the equal-unique-count case.
+
+Before merge the branch was brought current with master (merge commit `fb7f9c28`),
+which notably pulled in #4480 — that rebaselined the Osprey regression golden — so the
+earlier Perf/Regression green was re-validated against the NEW golden: build + 546 unit
+tests (incl. all 4 razor tests) green; `regression.ps1 -Dataset Stellar` byte-identical
+mode 1/2/3 (blib 30,597,120); fresh TeamCity Perf/Regression (build #177, Stellar +
+Astral + perf) SUCCESS on the merge commit. Issue #4441 auto-closed via `Fixes`.
+
+Follow-up still open (separate pwiz change, NOT shipped here): mark P1/U8 RESOLVED in
+`pwiz_tools/Osprey/docs/DIVERGENCES.md`.
