@@ -8,6 +8,21 @@ cannot find it. Nothing in this folder hardcodes a path.
 This is the pattern for a new dataset: one subfolder under `ai/scripts/Osprey/`, a README
 that says where the data actually lives, and scripts that resolve it rather than assume it.
 
+## Quick start on a new machine
+
+```powershell
+setx OSPREY_SEAAD_DIR  "M:\home\brendanx\data\MacCoss\SEA-AD\Astral-DIA\mzml"
+setx OSPREY_SEAAD_LIB  "D:\test\Pilot-MTG-Tissue-May2026\lib\regression"
+# new shell, then prove the wiring before committing to a multi-hour run
+.\Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -NumFiles 2 -WhatIf
+.\Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -NumFiles 2          # ~minutes, real run
+.\Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0                      # the real thing, ~7.5 h
+```
+
+`-WhatIf` prints the resolved exe, mzML directory, library variant, output directory and
+the exact command line. Read it. Every trap in this folder is a path resolving to
+something you did not intend.
+
 ## Where the data is
 
 **Fastest: the pre-converted lab share.** mzML AND `.spectra.bin` caches, so a first run
@@ -17,34 +32,104 @@ skips both msconvert and the spectra-cache build (which otherwise dominate a col
 M:\home\brendanx\data\MacCoss\SEA-AD\Astral-DIA\mzml      (\\gs-ddn2\maccoss-vol1)
 ```
 
-**Source .raw files** (only if you need to re-convert):
+**Source .raw files** (only if you need to re-convert - see `Convert-SeaAdRaw.ps1`):
 
 ```
 https://panoramaweb.org/_webdav/MacCoss/Collaborations/SEA-AD_2.0/Pilot-MTG-Tissue-May2026/DIA_Data/%40files/RawFiles/
 ```
 
-**Entrapment libraries** (target+decoy+entrapment, the r=1.0 set):
+**Entrapment libraries** (target+decoy+entrapment, the r=1.0 set - every other variant is
+derived from it locally):
 
 ```
 https://panoramaweb.org/_webdav/MacCoss/maccoss/Shared_w_lab/%40files/RawFiles/osprey-testfiles/astral/AstralTest-TargetDecoyLibraries
 ```
 
+Copying the mzML + `.spectra.bin` pair to a local SSD is worth it for repeated runs; the
+share is fine for a one-off.
+
 ## Telling the scripts where it is
 
 In precedence order - first one that resolves wins:
 
-1. `-DataDir` / `-LibraryDir` parameters
-2. `$env:OSPREY_SEAAD_DIR` / `$env:OSPREY_SEAAD_LIB` (recommended: set once per machine)
-3. The lab share path above, if it is reachable
+1. `-DataDir` / `-LibraryDir` / `-Exe` parameters
+2. `$env:OSPREY_SEAAD_DIR` / `$env:OSPREY_SEAAD_LIB` / `$env:OSPREY_EXE`
+3. The lab share (mzML) and the sibling pwiz checkout's Release build (exe)
+
+A location you NAME must exist. An explicit `-DataDir` or `$env:OSPREY_SEAAD_DIR` that
+does not resolve is an error, not a quiet fall-through to the next candidate - a typo
+there would otherwise spend 7.5 h searching the wrong data and still report success.
+
+`$env:OSPREY_SEAAD_LIB` points at the directory that HOLDS the library variants, not at
+one library. The runner picks the variant from `-DecoyMode` and `-Ratio`.
+
+## The library variants
+
+Only the r=1.0 set is downloaded. `New-SeaAdLibrary.ps1` derives the rest and owns the
+naming convention `Run-SeaAd.ps1` resolves, so both sides stay in step:
+
+| folder | arm | built by |
+|---|---|---|
+| `target+decoy+entrapment` | r=1.0 libdecoy | downloaded |
+| `target+decoy+entrapment-r<ratio>` | fractional libdecoy | `subset-entrapment-ratio.py` |
+| `target+entrapment-r<ratio>-gendecoy` | gendecoy | `strip-decoys.py` |
 
 ```powershell
-# per machine, once
-setx OSPREY_SEAAD_DIR "M:\home\brendanx\data\MacCoss\SEA-AD\Astral-DIA\mzml"
-setx OSPREY_SEAAD_LIB "D:\test\Pilot-MTG-Tissue-May2026\lib\regression"
+.\New-SeaAdLibrary.ps1 -Ratio 0.1 -DecoyMode libdecoy   # subset from the 1:1 set
+.\New-SeaAdLibrary.ps1 -Ratio 0.1 -DecoyMode gendecoy   # strip decoys from that subset
 ```
 
-Copying the mzML + `.spectra.bin` pair to a local SSD is worth it for repeated runs; the
-share is fine for a one-off.
+A gendecoy variant derives from the libdecoy variant at the **same ratio** (built first if
+missing), so the two arms differ only in where the decoys come from. Selection is a seeded
+shuffle (default 2024), so the same ratio built on two machines picks the same quartets and
+the runs are comparable across boxes.
+
+Budget for it: the source library is ~13 GB and each variant is a full streamed copy. A
+fresh variant has no `.libcache`, so Osprey builds one on its first use.
+
+## Running
+
+```powershell
+# one arm
+.\Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -Pass2Mode percolator
+
+# a comparison: arms run back to back, because only one Osprey fits on a 64 GB box
+.\Invoke-SeaAdChain.ps1 -DecoyModes libdecoy,gendecoy -Ratios 0.1
+.\Invoke-SeaAdChain.ps1 -Pass2Modes percolator,transfer
+
+# detached, so a harness reap cannot kill a 7.5 h run
+Start-Process pwsh -ArgumentList '-NoProfile','-File',"$PWD\Invoke-SeaAdChain.ps1",
+  '-DecoyModes','libdecoy,gendecoy','-Ratios','0.1' -WindowStyle Hidden
+```
+
+`Invoke-SeaAdChain.ps1` waits for any Osprey already running to exit, then walks the
+cross-product of the arms you gave it. It does not stop on a failed arm - a failure is
+visible in that arm's `run.log` and in the chain log.
+
+Output lands in `<dataset root>\runs\seaad-<N>files-<arm>-r<ratio>-<pass2>[<tag>]\`,
+matching the layout of the runs already there.
+
+**Repeating an arm needs `-Fresh`.** Osprey adopts per-file caches it finds in the output
+directory, so re-running into an existing one silently resumes and skips stages - fine for
+continuing a crashed run, fatal to a from-scratch memory or timing measurement, and
+invisible either way in the output. The runner refuses a non-empty output directory unless
+you say which you meant: `-Fresh` (timestamped new directory) or `-Resume` (continue this
+one). `-LinkFrom <completed run>` is the deliberate version: hard-link only the Stage 1-4
+caches so Stage 5 onward - the part usually under test - always regenerates.
+
+## Reading the results
+
+`tools/` holds the readers. They take run directories and are path-clean:
+
+| script | answers |
+|---|---|
+| `compute_pass2_fdp.py <run_dir>...` | entrapment FDP at reported q, from the pass-2 `fdrbench.tsv` |
+| `fdp_at_count.py <run_dir>...` | FDP against accepted target COUNT, overlaying pass 1 and pass 2 |
+| `runcount_fdp.py <run_dir>` | FDP by number-of-runs-identified (needs `--model-diagnostics`) |
+| `Compare-Pass2AB.py <a> <b> <out.html>` | two `--model-diagnostics` runs side by side |
+
+**Quote Pass 1, not Pass 2.** Pass-2 recalibration inflates FDP; that is a known open
+issue, not a property of your run.
 
 ## Facts worth knowing before you start a run
 
@@ -54,28 +139,62 @@ Measured, not guessed - these cost real time to learn:
   present. Without the caches, add the parse time (~4.5 min/file uncached from HDD).
 * **~150 GB of parquets**, peak ~49 GB private working set. Check free space first.
 * **Run at full threads.** The old `--threads 8` cap was a workaround for a memory problem
-  fixed 2026-07-25; it is obsolete and just makes runs slower.
+  fixed 2026-07-25; it is obsolete and just makes runs slower. Results are
+  thread-independent - determinism is a project invariant - so threads never change a
+  comparison, only its wall time.
 * **Decoys are marked by the `decoy_` ProteinID PREFIX, not the `Decoy` column**, which is
   0 on every row of these Carafe entrapment libraries. Filtering on the column is a silent
-  no-op. Never "fix" the column.
-* Entrapment is **r = 1.0** (~1:1:2 target:entrapment:decoy); entrapment peptides carry a
-  `_p_target` marker.
+  no-op. Never "fix" the column. (`strip-decoys.py` hard-fails when it drops nothing,
+  precisely so this cannot pass unnoticed.)
+* **Arms only compare on ID counts at the same entrapment ratio.** Yield rises as the
+  ratio shrinks - a 1:1 marker library perturbs the search and suppresses detections -
+  while the ratio-corrected FDP estimator stays valid at any r.
+* **Read the COMBINED FDP when r != 1.** The paired estimator needs r=1 AND shuffled
+  twins, so Osprey correctly suppresses the paired curve on a non-1:1 library.
+* SEA-AD entrapment is **shuffle** (target anagrams), which reads higher than
+  foreign-species entrapment because anagrams share the target's composition. Fine for
+  arm-vs-arm; do not cite these as absolute error rates.
 * `--model-diagnostics` forces the RESIDENT first-pass pool at FirstJoin. At 82 files that
-  has OOM'd a 64 GB box - use the projection path (omit it) for a full-scale run, or split
-  with `--task`.
-* Use `--timestamp --memstamp` and tee to a single `run.log`; the memstamp trace is what
+  has OOM'd a 64 GB box - it is **off by default** here. Use it at reduced file counts, or
+  accept the risk knowingly.
+* Runs use `--output-dir`, not `--work-dir`: `--work-dir` would relocate the `.spectra.bin`
+  cache too, so a directory that already has the caches would rebuild all 82. Pass
+  `-CacheDir` when the input directory is genuinely read-only and has no caches.
+* Every run gets `--timestamp --memstamp` teed to one `run.log`; the memstamp trace is what
   `ai/scripts/perfviz.html` renders.
-* Launch long runs detached (`Start-Process -WindowStyle Hidden`) so a harness reap does
-  not kill them.
+* `Clear-StandbyCache.ps1` before a timing run - otherwise the OS file cache makes a cold
+  read look warm.
 
 ## Scripts here
 
-* `Run-SeaAd.ps1` - resolve the data, then run Osprey over N files with the standard
-  flags. `-WhatIf` prints the resolved paths and the command without running.
+| script | purpose |
+|---|---|
+| `Run-SeaAd.ps1` | the runner: decoy arm x ratio x pass-2 mode, resolution, `-WhatIf` |
+| `Invoke-SeaAdChain.ps1` | queue several arms one at a time on a single box |
+| `New-SeaAdLibrary.ps1` | derive ratio-subset and gendecoy library variants |
+| `Convert-SeaAdRaw.ps1` | .raw -> mzML (only if not using the pre-converted share) |
+| `convert-one.cmd` | the msconvert command line, verbatim; cmd-specific quoting |
+| `Clear-StandbyCache.ps1` | evict the OS file cache before a timing run |
+| `tools/*.py` | library derivation and the FDP readers |
+
+### Provenance
+
+These replace the one-off harnesses that produced the runs under
+`D:\test\Pilot-MTG-Tissue-May2026\runs` on the original machine, which lived in the
+gitignored `ai/.tmp/` and so did not travel: `run-82file-decoyarm.ps1`,
+`run-82file-gendecoy.ps1`, `run-pass2ab-82.ps1` and `chain-82file-libdecoy-r01.ps1`. They
+differed only in which arm, ratio and pass-2 mode they selected, so those are parameters
+here rather than four near-identical scripts. If you find the originals, prefer these.
+
+`OSPREY_DECOY_SAME_ION_MAP` appears in the originals as the gendecoy arm's b<->y intensity
+swap fix. The swap was removed from both implementations on 2026-07-27 (pwiz #4480 /
+osprey #58), so on any build from that day forward the variable is a no-op and the runner
+leaves it unset. Set it yourself only when reproducing a pre-fix build.
 
 ## Related
 
 * `ai/docs/osprey-development-guide.md` - FDRBench entrapment validation, the oracle that
   outranks parity for anything that moves the discovery set
+* `pwiz_tools/Osprey/docs/fractional-entrapment.md` - the ratio-corrected FDP estimators
 * `pwiz_tools/Osprey/regression.ps1` - the small published datasets and the CI gate; this
   set is the scale complement to that, not a replacement

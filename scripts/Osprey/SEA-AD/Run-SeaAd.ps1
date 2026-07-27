@@ -3,46 +3,114 @@
     Run Osprey over the SEA-AD Pilot-MTG 82-file Astral DIA set.
 
 .DESCRIPTION
-    Resolves the data location instead of hardcoding it, so the same command works on any
-    machine that has the set: -DataDir, else $env:OSPREY_SEAAD_DIR, else the lab share.
-    Same for the library. Fails with the README pointer when nothing resolves, rather than
-    running against a wrong or empty directory.
+    The single runner for this dataset. It replaces the one-off harnesses that produced
+    every run under D:\test\Pilot-MTG-Tissue-May2026\runs on the original machine
+    (run-82file-decoyarm.ps1, run-82file-gendecoy.ps1, run-pass2ab-82.ps1): they differed
+    only in which decoy arm, entrapment ratio and pass-2 mode they selected, so they are
+    parameters here rather than separate scripts. Running the arms through ONE script with
+    identical logging is what makes them comparable.
 
-    See README.md in this folder for where the data lives and the facts worth knowing
-    before starting a run (wall time, disk, the threads and --model-diagnostics traps).
+    Nothing is hardcoded. Data, library and Osprey.exe are resolved (parameter, then
+    environment variable, then a known fallback) and the run hard-fails with the README
+    pointer if any of them cannot be found, rather than searching a wrong or empty
+    directory for hours.
 
-.PARAMETER NumFiles
-    How many mzML files to process, in sorted order. Default 82 (all). Use a small number
-    to smoke-test the wiring before committing to a multi-hour run.
+    See README.md in this folder for where the data lives, how to build the library
+    variants, and the measured facts (wall time, disk, the --model-diagnostics OOM trap).
+
+.PARAMETER DecoyMode
+    libdecoy : the library supplies Carafe decoys; adds --decoys-in-library and the
+               pairing manifest. No decoy-construction knobs. This is the reference arm.
+    gendecoy : the library has NO decoy rows (stripped); Osprey generates its own.
+
+.PARAMETER Ratio
+    Entrapment ratio of the library to search, as it appears in the library folder name.
+    '1.0' is the unsuffixed 1:1 set. ID yield rises as the ratio shrinks, so two arms are
+    only comparable on ID counts when they share a ratio. See README.
+
+.PARAMETER Pass2Mode
+    percolator : default. Second-pass Percolator retrain on the reconciled pool.
+    transfer   : OSPREY_PASS2_QVALUE=transfer -- frozen first-pass model, TRIC-style
+                 q-value fill-in, no second retrain.
+
+.PARAMETER LinkFrom
+    Optional. Hard-link the Stage 1-4 per-file caches from a COMPLETED run over the same
+    file set so this run resumes from Stage 5 (Pass 1 FDR) without re-parsing or
+    re-scoring. Only stage 1-4 suffixes are linked, never Stage 5/6 outputs, so the part
+    under test is always regenerated.
+
+.PARAMETER Fresh
+    Timestamp the output directory name. Use when repeating an arm you have already run:
+    Osprey adopts per-file caches it finds in the output directory, so reusing one turns a
+    from-scratch run into a silent resume.
+
+.PARAMETER Resume
+    Deliberately continue into a non-empty output directory (e.g. after a crash), adopting
+    whatever caches are there.
 
 .PARAMETER WhatIf
     Print the resolved paths and the full command line, then stop. Do this first on a new
-    machine - it is the cheap way to confirm the data resolved to what you expect.
+    machine - it is the cheap way to confirm everything resolved to what you expect
+    before committing to a multi-hour run.
+
+.EXAMPLE
+    # Prove the wiring on a new machine before trusting it at 82 files.
+    .\Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -NumFiles 2 -WhatIf
+
+.EXAMPLE
+    # The reference arm, detached so a harness reap cannot kill it.
+    Start-Process pwsh -ArgumentList '-NoProfile','-File',
+      'C:/proj/ai/scripts/Osprey/SEA-AD/Run-SeaAd.ps1','-DecoyMode','libdecoy','-Ratio','1.0' `
+      -WindowStyle Hidden
 #>
+#requires -Version 7
 param(
+    [ValidateSet('libdecoy', 'gendecoy')] [string]$DecoyMode = 'libdecoy',
+    [string]$Ratio = '1.0',
+    [ValidateSet('percolator', 'transfer')] [string]$Pass2Mode = 'percolator',
     [int]$NumFiles = 82,
+    [int]$Threads = 30,
+    [ValidateSet('1', '2', 'both')] [string]$FdrBenchPass = 'both',
+    [string]$Tag = '',
     [string]$DataDir,
     [string]$LibraryDir,
     [string]$Library,
+    [string]$CacheDir,
     [string]$OutDir,
-    [int]$Threads = 30,
-    [ValidateSet('percolator', 'transfer')] [string]$Pass2Mode = 'percolator',
-    # OFF by default and deliberately so: at 82 files it forces the resident first-pass
-    # pool at FirstJoin and has OOM'd a 64 GB box. See README.
+    [string]$RunsRoot,
+    [string]$Exe,
+    [string]$LinkFrom = '',
+    [switch]$Fresh,
+    [switch]$Resume,
+    # OFF by default and deliberately so: at 82 files --model-diagnostics forces the
+    # RESIDENT first-pass pool at FirstJoin and has OOM'd a 64 GB box. See README.
     [switch]$ModelDiagnostics,
     [switch]$WhatIf
 )
 
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $readme = Join-Path $PSScriptRoot 'README.md'
 
-# The lab share, last in precedence. Named here once so the README and the code cannot
-# drift apart on the path.
+# Last-resort fallbacks. Named once here so the README and the code cannot drift apart.
 $LAB_SHARE_MZML = 'M:\home\brendanx\data\MacCoss\SEA-AD\Astral-DIA\mzml'
+$REPO_EXE = Join-Path $PSScriptRoot '..\..\..\..\pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0\Osprey.exe'
 
 function Resolve-Location {
     param([string]$Explicit, [string]$EnvName, [string[]]$Fallbacks, [string]$What)
-    foreach ($c in @($Explicit, [Environment]::GetEnvironmentVariable($EnvName)) + $Fallbacks) {
+    # A location the caller NAMED must exist. Falling through to the next candidate when
+    # an explicit path is wrong is how a run spends 7.5 h against the wrong data and still
+    # reports success, so a typo fails here instead.
+    $envValue = [Environment]::GetEnvironmentVariable($EnvName)
+    foreach ($named in @(@{ V = $Explicit; S = 'parameter' }, @{ V = $envValue; S = "`$env:$EnvName" })) {
+        if ($named.V) {
+            if (-not (Test-Path $named.V)) {
+                throw "The SEA-AD $What given by $($named.S) does not exist: '$($named.V)'."
+            }
+            return (Resolve-Path $named.V).Path
+        }
+    }
+    foreach ($c in $Fallbacks) {
         if ($c -and (Test-Path $c)) { return (Resolve-Path $c).Path }
     }
     throw ("Could not locate the SEA-AD $What. Pass it explicitly, or set `$env:$EnvName. " +
@@ -51,59 +119,125 @@ function Resolve-Location {
 
 $dataDir = Resolve-Location -Explicit $DataDir -EnvName 'OSPREY_SEAAD_DIR' `
                             -Fallbacks @($LAB_SHARE_MZML) -What 'mzML directory'
-$libDir  = Resolve-Location -Explicit $LibraryDir -EnvName 'OSPREY_SEAAD_LIB' `
-                            -Fallbacks @() -What 'library directory'
+$ospreyExe = Resolve-Location -Explicit $Exe -EnvName 'OSPREY_EXE' `
+                              -Fallbacks @($REPO_EXE) -What 'Osprey.exe (build Release/net8.0 first)'
 
-# Exactly-one-.tsv unless named: an entrapment library folder often also holds a pairing
-# manifest and a FASTA, so guessing the first .tsv is how you silently search the wrong one.
-if (-not $Library) {
-    $tsv = @(Get-ChildItem -Path $libDir -Filter '*.tsv' -File)
-    if ($tsv.Count -ne 1) {
-        throw ("Expected exactly one .tsv in '$libDir' but found $($tsv.Count). " +
-               "Pass -Library <name> to choose (manifests and FASTAs live here too).")
-    }
-    $libraryPath = $tsv[0].FullName
+# The library ROOT holds the variants; New-SeaAdLibrary.ps1 owns their naming and this
+# reproduces it. Resolving the variant by convention is what lets -Ratio and -DecoyMode
+# be plain parameters instead of another path to pass on every command line.
+$libRoot = Resolve-Location -Explicit $LibraryDir -EnvName 'OSPREY_SEAAD_LIB' `
+                            -Fallbacks @() -What 'library directory'
+$variant = if ($DecoyMode -eq 'gendecoy') {
+    "target+entrapment-r$Ratio-gendecoy"
+} elseif ($Ratio -eq '1.0') {
+    'target+decoy+entrapment'
 } else {
+    "target+decoy+entrapment-r$Ratio"
+}
+
+# -LibraryDir may name either the root holding the variants or one variant directly, so a
+# machine that lays its libraries out differently is not locked out by the convention.
+$libDir = Join-Path $libRoot $variant
+if (-not (Test-Path $libDir)) {
+    if (Test-Path (Join-Path $libRoot 'carafe_spectral_library.tsv')) {
+        $libDir = $libRoot
+    } else {
+        throw ("No library variant '$variant' under '$libRoot', and '$libRoot' is not " +
+               "itself a library directory. Build it with New-SeaAdLibrary.ps1 -Ratio $Ratio " +
+               "-DecoyMode $DecoyMode, or pass -LibraryDir/-Library explicitly. See $readme.")
+    }
+}
+
+# Exactly-one-.tsv unless named: a library folder also holds the pairing manifest and a
+# FASTA, so guessing the first .tsv is how you silently search the wrong one.
+if ($Library) {
     $libraryPath = Join-Path $libDir $Library
     if (-not (Test-Path $libraryPath)) { throw "Library not found: $libraryPath" }
+} else {
+    $named = Join-Path $libDir 'carafe_spectral_library.tsv'
+    if (Test-Path $named) {
+        $libraryPath = $named
+    } else {
+        $tsv = @(Get-ChildItem -Path $libDir -Filter '*.tsv' -File |
+                 Where-Object { $_.Name -notlike '*pairing*' })
+        if ($tsv.Count -ne 1) {
+            throw ("Expected one spectral library .tsv in '$libDir' but found $($tsv.Count). " +
+                   "Pass -Library <name> to choose.")
+        }
+        $libraryPath = $tsv[0].FullName
+    }
+}
+$manifest = Join-Path $libDir 'osprey_library_db_pairing.tsv'
+if ($DecoyMode -eq 'libdecoy' -and -not (Test-Path $manifest)) {
+    throw ("-DecoyMode libdecoy needs the pairing manifest '$manifest'. It ships with the " +
+           "target+decoy+entrapment libraries; see $readme.")
 }
 
 $mzmls = @(Get-ChildItem -Path $dataDir -Filter '*.mzML' -File | Sort-Object Name |
            Select-Object -First $NumFiles | ForEach-Object { $_.FullName })
 if ($mzmls.Count -eq 0) { throw "No .mzML files found in '$dataDir'." }
+if ($mzmls.Count -lt $NumFiles) {
+    throw "Only $($mzmls.Count) mzML found in '$dataDir', need $NumFiles. Convert-SeaAdRaw.ps1 builds them."
+}
 
 # .spectra.bin beside the mzML is the difference between a ~7.5 h run and one that also
-# pays ~4.5 min/file of HDD parsing. Worth saying out loud rather than discovering later.
+# pays ~4.5 min/file of parsing. Worth saying out loud rather than discovering at hour six.
 $cached = @(Get-ChildItem -Path $dataDir -Filter '*.spectra.bin' -File).Count
 
 if (-not $OutDir) {
-    $stamp = (Get-Date).ToString('yyyyMMdd_HHmmss')
-    $OutDir = Join-Path (Join-Path $PSScriptRoot '..\..\..\.tmp') "seaad-$($mzmls.Count)file-$Pass2Mode-$stamp"
+    # Default beside the data: <dataset root>\runs, the layout the original runs used.
+    # $dataDir is <root>\Astral-DIA\mzml, so the root is two up.
+    $runsRootResolved = if ($RunsRoot) { $RunsRoot } else { Join-Path (Split-Path (Split-Path $dataDir -Parent) -Parent) 'runs' }
+    $name = "seaad-$($mzmls.Count)files-$DecoyMode-r$Ratio-$Pass2Mode$Tag"
+    if ($Fresh) { $name += '-' + (Get-Date -Format 'yyyyMMdd_HHmmss') }
+    $OutDir = [System.IO.Path]::GetFullPath((Join-Path $runsRootResolved $name))
 }
 
-$ospreyExe = Join-Path $PSScriptRoot '..\..\..\..\pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0\Osprey.exe'
-if (-not (Test-Path $ospreyExe)) {
-    throw "Osprey.exe not found at $ospreyExe - build Release/net8.0 first (Build-Osprey.ps1)."
+# Osprey ADOPTS per-file caches it finds in the output directory, so re-running an arm
+# into the same directory silently resumes instead of running from scratch - which is
+# invisible in the output and quietly invalidates a from-scratch memory or timing
+# measurement. Make the caller say which one they meant.
+if ((Test-Path $OutDir) -and @(Get-ChildItem -Path $OutDir -File -ErrorAction SilentlyContinue).Count -gt 0 `
+    -and -not $Resume -and -not $LinkFrom) {
+    throw ("Output directory already has files: '$OutDir'. Osprey would adopt its caches " +
+           "and skip stages. Pass -Fresh for a timestamped from-scratch directory, " +
+           "-Resume to deliberately continue this one, or -OutDir to name another.")
 }
-$ospreyExe = (Resolve-Path $ospreyExe).Path
 
-$cliArgs = @()
-foreach ($m in $mzmls) { $cliArgs += @('-i', $m) }
-$cliArgs += @('-l', $libraryPath, '-o', 'out.blib', '--resolution', 'hram',
-              '--protein-fdr', '0.01', '--threads', $Threads.ToString(),
-              '--work-dir', $OutDir, '--timestamp', '--memstamp')
+# --output-dir, NOT --work-dir: --work-dir would also relocate the .spectra.bin cache,
+# so a share that already has the caches would rebuild all 82 of them. Artifacts go to
+# the run dir; the cache stays beside the input unless -CacheDir says otherwise (which
+# is what a genuinely read-only input directory without caches needs).
+$blib = Join-Path $OutDir 'out.blib'
+$cliArgs = @('-i') + $mzmls + @(
+    '-l', $libraryPath,
+    '-o', $blib,
+    '--resolution', 'hram',
+    '--fdr-level', 'precursor',
+    '--threads', "$Threads",
+    '--timestamp', '--memstamp',
+    '--output-dir', $OutDir,
+    '--fdrbench', (Join-Path $OutDir 'fdrbench.tsv'), '--fdrbench-pass', $FdrBenchPass
+)
+if ($CacheDir) { $cliArgs += @('--cache-dir', $CacheDir) }
+if ($DecoyMode -eq 'libdecoy') { $cliArgs += @('--decoys-in-library', '--decoy-pairing-manifest', $manifest) }
 if ($ModelDiagnostics) { $cliArgs += '--model-diagnostics' }
 
 Write-Host ""
 Write-Host "=== SEA-AD Pilot-MTG run ===" -ForegroundColor Cyan
+Write-Host ("  exe      : {0}" -f $ospreyExe)
 Write-Host ("  mzML dir : {0}" -f $dataDir)
-Write-Host ("  files    : {0} of $NumFiles requested; {1} .spectra.bin cache(s) present" -f $mzmls.Count, $cached)
+Write-Host ("  files    : {0}; {1} .spectra.bin cache(s) present" -f $mzmls.Count, $cached)
 if ($cached -lt $mzmls.Count) {
     Write-Host "  NOTE: not every file has a spectra cache; expect ~4.5 min/file extra parse." -ForegroundColor Yellow
 }
 Write-Host ("  library  : {0}" -f $libraryPath)
+Write-Host ("  arm      : {0}  r={1}" -f $DecoyMode, $Ratio)
+Write-Host ("  pass 2   : {0}   fdrbench pass {1}" -f $Pass2Mode, $FdrBenchPass)
+if ($ModelDiagnostics) {
+    Write-Host "  --model-diagnostics ON: forces the resident first-pass pool; OOM risk at 82 files." -ForegroundColor Yellow
+}
 Write-Host ("  out dir  : {0}" -f $OutDir)
-Write-Host ("  pass 2   : {0}{1}" -f $Pass2Mode, $(if ($ModelDiagnostics) { '  +--model-diagnostics (OOM risk at 82 files)' } else { '' }))
 Write-Host ""
 
 if ($WhatIf) {
@@ -112,16 +246,60 @@ if ($WhatIf) {
     return
 }
 
-New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
-$log = Join-Path $OutDir 'run.log'
+New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+$OutDir = (Resolve-Path $OutDir).Path
+
+# Optional Stage 1-4 hard-link resume (same-file-set source only).
+if ($LinkFrom) {
+    if (-not (Test-Path $LinkFrom)) { throw "LinkFrom dir not found: $LinkFrom" }
+    $suffixes = @(
+        '.calibration.json', '.calibration.json.PerFileScoring.osprey.task',
+        '.scores.parquet', '.scores.parquet.PerFileScoring.osprey.task'
+    )
+    $linked = 0; $missing = 0
+    foreach ($f in $mzmls) {
+        $stem = [IO.Path]::GetFileNameWithoutExtension($f)
+        foreach ($suf in $suffixes) {
+            $s = Join-Path $LinkFrom ($stem + $suf)
+            $d = Join-Path $OutDir ($stem + $suf)
+            if (-not (Test-Path $s)) { $missing++; continue }
+            if (Test-Path $d) { Remove-Item $d -Force }
+            New-Item -ItemType HardLink -Path $d -Target $s | Out-Null
+            $linked++
+        }
+    }
+    Write-Host ("LinkFrom: hard-linked {0} stage1-4 file(s), {1} missing, from {2}" -f $linked, $missing, $LinkFrom)
+}
+
+# Strip every experimental lever that must NOT influence this run. A stale env var from an
+# earlier experiment in the same shell is invisible in the output and silently changes the
+# result, so the arms set exactly what they mean and clear the rest.
+foreach ($k in 'OSPREY_EXIT_AFTER_CALIBRATION', 'OSPREY_CAL_SAMPLE_SIZE',
+               'OSPREY_CAL_MEDIANPOLISH', 'OSPREY_PASS2_QVALUE',
+               'OSPREY_DECOY_SAME_ION_MAP', 'OSPREY_DECOY_PRECURSOR_SHIFT_UNITS',
+               'OSPREY_DECOY_MAX_FRAG_OVERLAP', 'OSPREY_DECOY_MAX_SEQ_IDENTITY') {
+    Remove-Item "Env:\$k" -ErrorAction SilentlyContinue
+}
 if ($Pass2Mode -eq 'transfer') { $env:OSPREY_PASS2_QVALUE = 'transfer' }
-else { Remove-Item Env:OSPREY_PASS2_QVALUE -ErrorAction SilentlyContinue }
+# The gendecoy arm's one lever: OSPREY_DECOY_SAME_ION_MAP was the b<->y intensity swap
+# fix. The swap was REMOVED from the product on 2026-07-27 (pwiz #4480 / osprey #58), so
+# on any build from that day forward same-ion mapping is simply the behaviour and the var
+# is a no-op. Kept unset here; set it yourself only when reproducing a pre-fix build.
+
+$log = Join-Path $OutDir 'run.log'
+"[{0}] START arm=$DecoyMode r=$Ratio pass2=$Pass2Mode files=$($mzmls.Count) threads=$Threads mdiag=$([bool]$ModelDiagnostics) linkfrom='$LinkFrom'" -f (Get-Date -Format s) |
+    Set-Content -Path $log
+"Exe: $ospreyExe" | Add-Content -Path $log
+"Library: $libraryPath" | Add-Content -Path $log
+"OutDir: $OutDir" | Add-Content -Path $log
 
 Write-Host "Logging to $log" -ForegroundColor Cyan
 $sw = [Diagnostics.Stopwatch]::StartNew()
-& $ospreyExe @cliArgs 2>&1 | Tee-Object -FilePath $log
+& $ospreyExe @cliArgs *>&1 | Tee-Object -FilePath $log -Append
 $exit = $LASTEXITCODE
 $sw.Stop()
+"[{0}] DONE arm=$DecoyMode r=$Ratio pass2=$Pass2Mode exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min" -f (Get-Date -Format s) |
+    Add-Content -Path $log
 Write-Host ("Osprey exited {0} after {1:hh\:mm\:ss}" -f $exit, $sw.Elapsed) `
     -ForegroundColor $(if ($exit -eq 0) { 'Green' } else { 'Red' })
 exit $exit
