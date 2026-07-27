@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260726_osprey_regression_redesign`
 - **Base**: `master` (47d0c2c1a)
 - **Created**: 2026-07-26
-- **Status**: In Progress
+- **Status**: In Review (both PRs open 2026-07-27)
 - **GitHub Issue**: (pending -- subsumes #4465 scope item 4, "move the regression onto
   the libdecoy path", and is larger than that item described)
-- **PR**: (pending)
+- **PR**: [pwiz #4480](https://github.com/ProteoWizard/pwiz/pull/4480), paired with [maccoss/osprey #58](https://github.com/maccoss/osprey/pull/58) - MUST MERGE TOGETHER
 - **Requester/Reporter**: none (Osprey developers; no credit line)
 
 ## Objective
