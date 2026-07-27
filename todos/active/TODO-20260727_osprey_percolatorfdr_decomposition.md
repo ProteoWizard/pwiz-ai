@@ -77,16 +77,22 @@ training ~1,285. Measured against the post-step-1 file (4,555 lines):
 Revised to **8 collaborators** so nothing lands above ~1,285:
 
 1. ~~Stage-5 diagnostic dumps~~ **DONE**
-2. **Sampling / fold selection** (262) - pure, deterministic, `internal` surface.
-3. **Data types** (279) - `PercolatorConfig` / `Entry` / `Result` / `Results` are
-   plain holders; zero-risk relocation.
-4. **Matrix utilities** (80) - `ExtractRows` / `ExtractRowsInto` / `ExtractRow` /
-   `CopyRow`. Hot path, so move only, no edits.
-5. **FDR competition -> `TargetDecoyCompetition`** (286).
-6. **FDR q-values -> `QValueCalculator`** (778).
-7. **FDR streaming -> `StreamingFdr`** (388).
-8. **Scoring -> `PercolatorScorer`** (1,069).
-9. **Training -> `PercolatorTrainer`** (1,285).
+2. ~~**Sampling / fold selection**~~ (270) **DONE**
+3. ~~**Data types**~~ (286) **DONE** - plain holders, zero call-site churn.
+4. ~~**Matrix utilities**~~ (~65) **DONE** - shared by training AND scoring, so they
+   had to become a common helper rather than travel with either.
+5. **Scoring -> `PercolatorScorer`** (1,069).
+6. **Training -> `PercolatorTrainer`** (1,285).
+7. **FDR competition -> `TargetDecoyCompetition`** (286).
+8. **FDR q-values -> `QValueCalculator`** (778).
+9. **FDR streaming -> `StreamingFdr`** (388).
+
+**Ordering corrected 2026-07-27**: an earlier revision of this list put the three
+FDR extractions at 5-7, ahead of scoring and training. That contradicted the issue,
+which says the parity-critical FDR math goes **last**. Restored to the issue's
+order. (Mechanically either works - the per-step parity gate attributes a break
+to whichever step is in flight - but the FDR math is the hardest place to diagnose
+a subtle break, so it goes last with every simpler move already banked.)
 
 **`RunPercolator` is 558 lines by itself** - 43% of the training cluster. Training
 is not really "a big class", it is one giant Rust-shaped method plus helpers.
@@ -158,6 +164,65 @@ force there. This gap is specific to the diagnostics step.
 - Baseline anchor first: unmodified branch was mode1/2/3 PASS, so a later red is
   attributable to the refactor rather than to a pre-existing break
 
+## Step 2 result - sampling / fold selection (2026-07-27)
+
+New `PercolatorSampling` (public static, 311-line file) holding the five
+training-set selection primitives, moved verbatim (264 lines, diff-verified):
+`BestPrecursorPerPeptide`, `CreateStratifiedFoldsByPeptide`, `BuildTrainingSubset`,
+`SelectBestPerPrecursor`, `SubsampleByPeptideGroup`.
+
+`PercolatorFdr.cs`: 4,555 -> **4,285**. Unlike step 1 these had callers outside the
+file: 8 inside `PercolatorFdr`, 2 in `PercolatorEngine`, 3 in `FdrTest`, plus
+doc-comment crefs. Accessibility preserved (`InternalsVisibleTo Osprey.Test` already
+lets the tests reach the `internal` ones).
+
+Two things the gates caught that review would not have:
+
+- **The compiler**: the block referenced `BASE_ID_MASK` in 5 places (now qualified
+  as `PercolatorFdr.BASE_ID_MASK`).
+- **The inspection**: 7 `InvalidXmlDocComment` findings - crefs broken in *both*
+  directions by the move. Those compile fine and would have rotted silently.
+
+Gates: build PASS, 543/543 tests, 0 inspection warnings, Stellar mode1/2/3 PASS,
+blib byte-identical. Committed `58bb8247b`.
+
+## Step 3 result - data types (2026-07-27)
+
+Split the four public holders into their own files, moved verbatim (diff-verified):
+`PercolatorConfig.cs` (146), `PercolatorEntry.cs` (45), `PercolatorResults.cs` (95,
+holding `PercolatorResult` + `PercolatorResults` - separating a per-entry result
+from its aggregate would be noise).
+
+`PercolatorFdr.cs`: 4,285 -> **3,999**. Zero call-site changes: same namespace, so
+nothing referencing these types had to move. Only fix needed was a `using System;`
+for `Environment.ProcessorCount`, caught by the compiler.
+
+Gates: build PASS, 543/543 tests, 0 inspection warnings, Stellar parity (running).
+
+## Step 4 result - shared matrix row helpers (2026-07-27)
+
+New `MatrixRows` (internal static) holding `ExtractRows`, `ExtractRowsInto`,
+`ExtractRow`, `CopyRow`. `PercolatorFdr.cs`: 3,999 -> **3,933**.
+
+These were `private` and lived in two separate regions of the file. Checking their
+call sites is what determined the destination: they are used by **both** training
+(lines 174, 424-463, 2198-2273) and scoring (1969-2011), so they belong to neither
+and had to become a shared helper - otherwise steps 5 and 6 would have had to
+duplicate them or reach across into each other.
+
+This is also the hottest code in Percolator (`ExtractRows` runs ~540x per file on
+200K x 21 matrices), so it was moved with no edits at all beyond `private` ->
+`internal`.
+
+**Process note**: the sed line ranges were off by one, leaving `ExtractRowsInto`'s
+closing brace behind in `PercolatorFdr.cs` as an orphan and missing from the new
+file. Caught by reading the seam immediately after the cut, before building. Worth
+keeping the habit of printing both seams after every extraction rather than
+trusting the range arithmetic.
+
+Gates: build PASS, 543/543 tests, 0 inspection warnings, bodies diff-verified
+verbatim, Stellar parity (running).
+
 ## Follow-up noticed (not fixed here)
 
 `BASE_ID_MASK` is defined twice - `PercolatorFdr` (`static readonly`) and
@@ -166,7 +231,10 @@ minimal; fold into a later step.
 
 ## Tasks
 
-- [x] Step 1: extract Stage-5 diagnostic dumps
+- [x] Step 1: extract Stage-5 diagnostic dumps (223)
+- [x] Step 2: extract sampling / fold selection (270)
+- [x] Step 3: extract the data types (286)
+- [x] Step 4: extract the shared matrix row helpers (~65)
 - [ ] Step 2: extract sampling / fold selection
 - [ ] Step 3: extract training orchestration
 - [ ] Step 4: extract scoring / model application
