@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260726_osprey_regression_redesign`
 - **Base**: `master` (47d0c2c1a)
 - **Created**: 2026-07-26
-- **Status**: In Review (both PRs open 2026-07-27)
+- **Status**: Completed
 - **GitHub Issue**: (pending -- subsumes #4465 scope item 4, "move the regression onto
   the libdecoy path", and is larger than that item described)
-- **PR**: [pwiz #4480](https://github.com/ProteoWizard/pwiz/pull/4480), paired with [maccoss/osprey #58](https://github.com/maccoss/osprey/pull/58) - MUST MERGE TOGETHER
+- **PR**: [pwiz #4480](https://github.com/ProteoWizard/pwiz/pull/4480) (merged 2026-07-27 as 55cedad2), paired with [maccoss/osprey #58](https://github.com/maccoss/osprey/pull/58) (merged 2026-07-27 as eb26b322)
 - **Requester/Reporter**: none (Osprey developers; no credit line)
 
 ## Objective
@@ -55,10 +55,10 @@ content hash, because `--decoys-in-library` skips `DecoyGenerator` entirely.
 - [x] Add `Regression/DiagnosticsGolden.ps1` with two-tier assertions
 - [x] Add the whole-run read-only data folder assertion (proven to bite)
 - [x] Generate the `StellarLibDecoy` golden
-- [ ] Verify the compare round-trip (capture proven; compare in flight)
+- [x] Verify the compare round-trip
 - [x] Gate B: timing is a non-issue -- see below
 - [x] Build `osprey-testfiles-mzML-v2.zip` AND `osprey-testfiles-v2.zip`
-- [ ] Gate C: upload (Brendan, in progress) + verify clean-machine acquisition
+- [x] Gate C: upload + verify clean-machine acquisition
 - [x] Update `Regression/README.md` and `osprey-regression.data/README.md`
 
 ## Gate
@@ -456,3 +456,35 @@ already used.
   **all 94 stale `file.cs:NNN` line references stripped** in favour of symbol names
   (they were wrong within one PR of being written); `DIVERGENCES.md` decoy row corrected
   and two rows added; `tctest.bat` header described the v1 zip and two datasets.
+
+### 2026-07-27 - Merged
+
+pwiz #4480 merged as 55cedad2; maccoss/osprey #58 merged as eb26b322. They landed together,
+as required - re-recording the C# goldens is only defensible alongside the Rust change.
+
+What shipped: the b<->y decoy intensity swap removed from both implementations, EncyclopeDIA
+'s 0.4 fragment-overlap gate, a 6-residue minimum peptide length enforced on every library
+load path (C#: TSV + blib; Rust: TSV + blib + elib), the theoretical-ladder suffix-sum fix,
+two new regression datasets (StellarLibDecoy, StellarGenDecoyEntrap) with mode-1b
+FDR-calibration spot checks whose tier-2 bounds -CreateGolden cannot regenerate, 8 new unit
+tests split evenly across the two implementations, and all seven /code-review items plus a
+Copilot round.
+
+Two findings beyond the planned scope, both caught by the new coverage rather than by review:
+
+1. The ladder fix was NOT the predicted no-op. The Astral library carries 60 selenocysteine
+   peptides and Stellar carries none, so three of them had been getting a degraded cycled
+   decoy. Astral was re-recorded a second time (126,474 -> 126,680 IDs).
+2. A PRE-EXISTING production bug: the HPC merge node skipped the pairing manifest, so
+   distributed runs with --decoy-pairing-manifest wrote _pep-suffixed accessions to the blib
+   and computed protein parsimony / picked-protein FDR on them (since #4196/#4215, May 2026).
+   Rust was always correct, so the fix restores parity. Peptide/precursor results unaffected.
+
+Gates: TeamCity Perf/Regression 4110344 SUCCESS on the merged tip; cross-impl parity OVERALL
+PASS at 1e-9 on Stellar (35,222 = 35,222) and Astral (126,680 = 126,680); 543 C# tests and a
+zero-warning inspection; Rust fmt + clippy + tests.
+
+Deferred: nothing from the stated scope. Follow-up worth filing separately - the merge-node
+manifest bug deserves Mike's attention as a product issue independent of this PR, and the
+cumulative-coverage script was made DRY in pwiz-ai (b4dd47d) but its measurement is still
+running.
