@@ -31,6 +31,22 @@ golden regeneration that we want to do ONCE, after the dataset set is settled.
 | Astral entrapment | **Not added** (+12.8 GB / ~1.3 GB zipped). Astral stays gendecoy with structural diagnostics only -- no FDP curve, no paired coin. |
 | Zip publishing | **New name `osprey-testfiles-mzML-v2.zip`.** Acquisition is skip-if-present on the extracted root, so re-publishing under the same name would never reach a machine that already has the tree; a new name also leaves older branches on the v1 URL working unchanged. |
 
+## RESTRUCTURED 2026-07-26: this is now ONE combined PR
+
+Originally planned as a harness-only PR off master, with PR 2 (the b<->y swap removal)
+following. Brendan rejected that: calibrating the new tier-2 bounds against master means
+calibrating them against known-broken code, and the Astral tilt bound made that visible --
+it needed a 1.5 "ratchet" purely because master still had the swap.
+
+So the swap-removal commits are cherry-picked onto this branch and the goldens are recorded
+once, against fixed code. Astral's tilt bound is now an honest 0.5 (measured 0.236) instead
+of a ratchet. **The matching Rust PR is [maccoss/osprey#58](https://github.com/maccoss/osprey/pull/58)
+and the two must land together** -- re-recording the C# golden is only defensible alongside it.
+
+Golden accounting, measured not assumed: `stellar` and `astral` are retrained exactly ONCE
+(this PR); `stellar-libdecoy` is byte-identical before and after the swap removal, proven by
+content hash, because `--decoys-in-library` skips `DecoyGenerator` entirely.
+
 ## Tasks
 
 - [x] Gate A: prove `--model-diagnostics` is output-neutral
@@ -235,3 +251,101 @@ mix -- `scores-reconciled.parquet`, `reconciliation.json`, `.osprey.task` validi
 markers, a `.libcache`, with most payload files absent -- is consistent with a
 `Run-Osprey` invocation without `--work-dir` ([[feedback_run_osprey_pollutes_source_dir]]).
 The new whole-run assertion is what keeps this attributable going forward.
+
+### 2026-07-26 - Both zips built and PUBLISHED; Gate C passed against the live URL
+
+| zip | size | build |
+|---|---|---|
+| `osprey-testfiles-mzML-v2.zip` | 14.0 GB | 10m56s |
+| `osprey-testfiles-v2.zip` (raw) | 20.5 GB | 14m15s |
+
+Brendan uploaded both. Gate C then ran the FULL clean-machine path -- 14,327 MB downloaded
+from the published URL in 130s, extracted, Stellar mode 1 PASS against the committed golden.
+
+Both carry the identical `stellar-libdecoy/libdecoy-entrapment.zip`, so the raw variant gains
+the new dataset the moment the raw reader lands, with no second packaging pass.
+
+**Pre-existing bug fixed in both**: `astral/readme.txt` and `stellar/readme.txt` had their
+contents SWAPPED (each documented the other dataset's command line), and the raw variant's
+additionally said `-i *.mzML` for a folder of `.raw`.
+
+### 2026-07-26 - /code-review max found real bugs; two CONFIRMED by direct test
+
+The review was high quality. Two findings reproduced by running the thing:
+
+1. **Mode 2 (resume) hard-failed on every `ModelDiagnostics` dataset**, i.e. `-Dataset All`,
+   which is what `tctest.bat` runs nightly. `--model-diagnostics` on a resume needs the
+   RESIDENT first-pass pool (the invalidation leaves the `1st-pass.fdr_scores.bin` sidecars
+   in place), and `OSPREY_ALLOW_UNBOUNDED_MEMORY` was armed only around the HPC chain.
+   **Missed by my own testing** because every `-Dataset All` run used `-SkipResume` and the
+   one full three-leg run was Stellar, which has no diagnostics. FIXED and verified.
+2. **A throw escapes the try/finally**, so the summary and `##teamcity[buildProblem]` never
+   print -- a CI failure surfaces as a bare stack trace. Confirmed: the failing run above
+   produced no summary at all. NOT YET FIXED.
+
+Also fixed from the review:
+* **`-CreateGolden`'s refusal was cosmetic** -- both goldens were written BEFORE the sanity
+  check, so "REFUSING to bless" left a full set of updated files on disk, indistinguishable
+  in `git status` from a legitimate rebaseline. That defeats the ONE scenario tier 2 exists
+  for. Sanity now runs first and a failure writes nothing.
+* **Tier-2 bounds failed OPEN** -- `[double]$null` is 0.0 and there is no StrictMode, so a
+  renamed JSON field would have made every bound silently pass forever; `NaN` (a documented
+  value of this payload) did the same. All bounds now fail closed on missing/non-finite, and
+  an entrapment dataset with no usable FDP curve is a failure rather than a skip.
+
+### 2026-07-26 - The gate's own blind spot, and Brendan's fix for it
+
+The review's sharpest finding: **the FDP ceiling could never catch a `DecoyGenerator`
+regression.** The only entrapment dataset was `StellarLibDecoy`, which bypasses
+`DecoyGenerator` entirely -- the very fact proven earlier. The other two datasets call it but
+have no entrapment to measure against. So the guard this PR is built around could not see the
+failure class it was built for.
+
+Brendan's fix: **a fourth dataset with the decoys stripped from the entrapment library**, so
+Osprey generates them while the entrapment peptides survive. Added as `StellarGenDecoyEntrap`,
+derived at runtime into gitignored scratch (no zip change, no re-upload), stripping on the
+`decoy_` ProteinID prefix -- NOT the `Decoy` column, which is 0 throughout -- and hard-failing
+if the strip removes nothing. Dropped 9,211,147 of 18.4M rows, the expected ~50% for 1:1:2.
+
+It reproduces the investigation's gendecoy cell almost exactly:
+
+| | this dataset | investigation cell B |
+|---|---|---|
+| Pass-1 FDP | **1.448%** | 1.47% |
+| entrapment coin | 0.4707 | 0.4733 |
+| tilt | 0.311 | 0.305 |
+
+**Pre-fix this cell measured 11.81%**, so the 2.0% ceiling would have caught the b<->y swap
+by 6x. The guard now genuinely covers `DecoyGenerator`.
+
+### 2026-07-26 - Minimum peptide length: enforce the invariant instead of defending against it
+
+The review claimed the overlap gate rejects EVERY length-3 tryptic peptide (the invariant y1
+and b_{n-1} rungs floor the ratio at 1/(n-1) = 0.5). The arithmetic is right; the premise is
+not. **Measured: the Stellar library's shortest peptide is 7 residues** across 180,212
+distinct peptides.
+
+I had "fixed" it by excluding the invariant rungs from the measure. Brendan's call, and it is
+the better one: that changes EncyclopeDIA's statistic while still claiming their 0.4
+threshold, to fix a case real libraries cannot produce. **Reverted.**
+
+Instead, per the Skyline habit of encoding a judgement and waiting for someone to challenge
+it: **`DiannTsvLoader.MIN_PEPTIDE_LENGTH = 6`**, a constant with no setting, hard-failing at
+library load with a message naming the offending peptide. MaxQuant uses 6; Carafe starts at 7;
+so it cannot fire on real input, and downstream code may now RELY on the bound rather than
+defend against it. Three tests (538 total): constant pinned at 6, a 5-mer throws, a 6-mer
+loads. The full-ladder rule stays exactly as published.
+
+**Kept from that pass** -- a genuine bug independent of length: `TheoreticalLadder` derived y
+ions as `total - prefix[...]`, so ONE unknown residue made `total` NaN and killed EVERY y ion
+(the doc two lines above promised only spanning ions would drop), and a LEADING unknown
+emptied the ladder, which the caller reads as "accept" and silently bypasses the gate.
+Selenocysteine peptides (GPX1/GPX4/SELENOP/TXNRD1) are real in UniProt-derived libraries. Now
+uses suffix sums so only spanning ions drop.
+
+**Measured prediction to verify next session**: the Stellar library contains NO non-standard
+residues, so the ladder fix should be a **no-op on this data and the goldens should not move
+at all**. That is a testable claim, not an assumption -- check it.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260726_osprey_regression_redesign.md` before starting work.
