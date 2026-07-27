@@ -71,12 +71,12 @@
     Slow under instrumentation (hours); this is the real cumulative number.
 #>
 param(
-    [ValidateSet('Stellar', 'StellarLibDecoy', 'StellarGenDecoyEntrap', 'Astral', 'All')] [string]$Dataset = 'Stellar',
-    [ValidateSet('Single', 'All', 'Mixed')] [string]$Files = 'Single',
+    # Passed straight through to regression.ps1; keep this ValidateSet in step with
+    # ITS ValidateSet (the only remaining coupling, and it fails loudly, not silently).
+    [ValidateSet('Stellar', 'StellarLibDecoy', 'StellarGenDecoyEntrap', 'Astral', 'All')] [string]$Dataset = 'All',
     [switch]$SkipUnit,
     [switch]$SkipResume,
-    [int]$Threads = 16,
-    [string]$DataRoot,
+    [switch]$SkipHpcChain,
     [string]$OutDir
 )
 
@@ -92,22 +92,9 @@ $buildScript = Join-Path $scriptDir 'Build-Osprey.ps1'
 $summarizeScript = Join-Path $scriptDir 'Summarize-Coverage.ps1'
 $regressionDataPs1 = Join-Path $pwizRoot 'pwiz_tools\Osprey\Regression\RegressionData.ps1'
 
-# Dot-source at SCRIPT scope so Invoke-ResumeInvalidation (and the downloads
-# helpers) are visible to the whole script. Resolve-DataDir also dot-sources
-# this file, but a dot-source inside a function scopes the definitions to that
-# function, so they vanish when it returns. Sharing the pwiz definition is what
-# keeps the resume invalidation from drifting: this script used to carry its own
-# copy keyed on the task CLASS names, which matched zero files and silently
-# produced a "resume" leg that never resumed.
-if (-not (Test-Path $regressionDataPs1)) {
-    throw "RegressionData.ps1 not found at $regressionDataPs1 (need the pwiz checkout for the shared resume invalidation)."
-}
-. $regressionDataPs1
-if (-not (Get-Command Invoke-ResumeInvalidation -ErrorAction SilentlyContinue)) {
-    throw ("RegressionData.ps1 at '{0}' does not define Invoke-ResumeInvalidation. That function " +
-           "moved there from regression.ps1 in pwiz PR #4460; this script needs a pwiz checkout " +
-           "that includes it. Update the pwiz checkout (or check out the branch) and retry." -f $regressionDataPs1)
-}
+# Dot-source at SCRIPT scope for the downloads-folder helper. The regression leg
+# now invokes regression.ps1 directly, so this script no longer reimplements the
+# resume invalidation or the dataset layout - the pwiz harness owns both.
 
 # Coverage filter: Osprey.* production assemblies, drop the test assembly.
 # (Same filter Build-Osprey.ps1 -Coverage uses for the unit leg.)
@@ -128,70 +115,6 @@ function Resolve-DotCover {
 }
 
 # --- Dataset table (mirrors regression.ps1 / Dataset-Config) -----------------
-# Mirrors regression.ps1's table. Kept in sync BY HAND, which is exactly how this
-# script went stale once: it knew only Stellar/Astral long after the regression
-# gained the two entrapment datasets, so the reported number silently excluded the
-# decoy-pairing / library-decoy / diagnostics paths. If you add a dataset there,
-# add it here.
-$datasets = [ordered]@{
-    Stellar = @{ Folder = 'stellar'; Resolution = 'unit' }
-    StellarLibDecoy = @{
-        Folder = 'stellar'; LibraryFolder = 'stellar-libdecoy'
-        Library = 'carafe_spectral_library.tsv'
-        Manifest = 'osprey_library_db_pairing.tsv'
-        Resolution = 'unit'; DecoysInLibrary = $true; ModelDiagnostics = $true
-    }
-    # Library is DERIVED by regression.ps1 into gitignored scratch and cached there;
-    # this script does not rebuild it (run regression.ps1 -Dataset StellarGenDecoyEntrap once).
-    StellarGenDecoyEntrap = @{
-        Folder = 'stellar'
-        DerivedLibrary = 'carafe_spectral_library.nodecoy.tsv'
-        Resolution = 'unit'; ModelDiagnostics = $true
-    }
-    Astral  = @{ Folder = 'astral';  Resolution = 'hram' }
-}
-
-function Resolve-DataDir {
-    param([string]$Folder)
-    if (-not $DataRoot) {
-        # Reuse the harness's downloads-folder logic when present.
-        if (Test-Path $regressionDataPs1) {
-            . $regressionDataPs1
-            $DataRoot = Join-Path (Get-WindowsDownloadsFolder) 'Perftests\osprey-testfiles-mzML-v2'
-        } else {
-            $DataRoot = Join-Path (Join-Path $env:USERPROFILE 'Downloads') 'Perftests\osprey-testfiles-mzML-v2'
-        }
-    }
-    $dir = Join-Path $DataRoot $Folder
-    if (-not (Test-Path $dir)) {
-        throw "Dataset data not found: $dir (run the regression once to download, or pass -DataRoot)."
-    }
-    return $dir
-}
-
-# --- Run Osprey.exe once under dotCover -> a .dcvr snapshot --------------
-function Invoke-CoveredRun {
-    param([string]$DotCover, [string[]]$Mzmls, [string]$Library, [string]$Resolution,
-          [string]$WorkDir, [string]$Snapshot, [string[]]$ExtraArgs = @())
-    New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
-    $targetArgs = @()
-    foreach ($m in $Mzmls) { $targetArgs += @('-i', $m) }
-    $targetArgs += @('-l', $Library, '-o', 'output.blib', '--resolution', $Resolution,
-                     '--protein-fdr', '0.01', '--threads', $Threads.ToString(), '--work-dir', $WorkDir)
-    $targetArgs += $ExtraArgs
-    # /TargetWorkingDir sets the CWD so -o output.blib + dumps land in the work dir.
-    $coverArgs = @('cover') + $coverFilters + @(
-        "/Output=$Snapshot",
-        '/ReturnTargetExitCode',
-        '/AnalyzeTargetArguments=false',
-        "/TargetWorkingDir=$WorkDir",
-        "/TargetExecutable=$ospreyExe",
-        '--') + $targetArgs
-    & $DotCover $coverArgs | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Covered Osprey run failed (exit $LASTEXITCODE)" }
-    if (-not (Test-Path $Snapshot)) { throw "dotCover produced no snapshot at $Snapshot" }
-}
-
 # Invalidate the Stage 5 join + blib so a re-run resumes (mirror regression.ps1).
 # Invoke-ResumeInvalidation comes from RegressionData.ps1 (dot-sourced above),
 # the same definition regression.ps1 mode 2 uses. Do NOT reintroduce a local
@@ -206,10 +129,9 @@ $stamp = (Get-Date).ToString('yyyyMMdd_HHmmss')
 if (-not $OutDir) { $OutDir = Join-Path $projectRoot "ai\.tmp\osprey-cumcov-$stamp" }
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
 
-$selected = if ($Dataset -eq 'All') { @($datasets.Keys) } else { @($Dataset) }
 
 Write-Host ""
-Write-Host "=== Osprey cumulative coverage (datasets: $($selected -join ', '); files=$Files) ===" -ForegroundColor Cyan
+Write-Host "=== Osprey cumulative coverage (regression -Dataset $Dataset + unit tests) ===" -ForegroundColor Cyan
 Write-Host "  dotCover : $dotCover"
 Write-Host "  out dir  : $OutDir"
 Write-Host ""
@@ -252,60 +174,48 @@ if (-not $SkipUnit) {
 # TODO-20260611_ospreysharp_serialize_astral_runners.md.
 $env:OSPREY_MAX_PARALLEL_FILES = '1'
 
-# ---- 2. Per-dataset regression legs (straight-through + resume) ----
-foreach ($name in $selected) {
-    $cfg = $datasets[$name]
-    $dataDir = Resolve-DataDir -Folder $cfg.Folder
-    $allMzml = @(Get-ChildItem -Path $dataDir -Filter '*.mzML' -File | Sort-Object Name | ForEach-Object { $_.FullName })
-    # Mixed = Stellar (unit) all-files, Astral (hram) single-file -- the cheap
-    # tctest+regression estimate (see -Files help).
-    $fileMode = if ($Files -eq 'Mixed') { if ($cfg.Resolution -eq 'hram') { 'Single' } else { 'All' } } else { $Files }
-    $mzmls = if ($fileMode -eq 'Single') { @($allMzml[0]) } else { $allMzml }
+# ---- 2. Regression leg: cover the EXACT command TeamCity runs --------------
+# tctest.bat runs `regression.ps1 -TeamCity -Dataset All`. We cover that literal
+# command rather than re-implementing its runs, because re-implementing them is
+# what made this script silently wrong before: it kept its own dataset table and
+# flag list, and went on reporting a number that excluded the entrapment datasets,
+# --model-diagnostics, the Stage-7 protein dump and the whole mode-3 HPC chain long
+# after the harness grew them. There is now nothing here to keep in sync - add a
+# dataset or a mode to regression.ps1 and this measurement picks it up for free.
+#
+# dotCover instruments the target process AND its children, so covering pwsh
+# captures every Osprey.exe the harness spawns, including the four --task worker
+# phases of the HPC chain that no straight-through run can reach. Verified: a
+# single covered Stellar mode-1 run reported Osprey.Scoring 69%, Osprey.FDR 43%,
+# Osprey.Tasks 50% etc., and dotCover logged "Merging snapshots" (>1 process).
+$regressionPs1 = Join-Path $projectRoot "pwiz\pwiz_tools\Ospreyegression.ps1"
+if (-not (Test-Path $regressionPs1)) { throw "regression.ps1 not found at $regressionPs1" }
+$pwshExe = (Get-Command pwsh).Source
 
-    # Library resolution, in the same three flavours regression.ps1 uses. The
-    # exactly-one-tsv rule cannot apply to the libdecoy folder, which also holds the
-    # pairing manifest and a FASTA, so those datasets name their library explicitly.
-    $extraArgs = @()
-    if ($cfg.DerivedLibrary) {
-        $derivedDir = Join-Path $projectRoot 'pwiz\pwiz_tools\Osprey\TestResults\_derived'
-        $library = Join-Path $derivedDir $cfg.DerivedLibrary
-        if (-not (Test-Path $library)) {
-            throw ("Derived library not found: $library. It is built and cached by " +
-                   "regression.ps1; run '.egression.ps1 -Dataset $name' once first.")
-        }
-    } elseif ($cfg.Library) {
-        $libDir = if ($cfg.LibraryFolder) { Resolve-DataDir -Folder $cfg.LibraryFolder } else { $dataDir }
-        $library = Join-Path $libDir $cfg.Library
-        if (-not (Test-Path $library)) { throw "Library not found: $library" }
-        if ($cfg.Manifest) {
-            $manifest = Join-Path $libDir $cfg.Manifest
-            if (-not (Test-Path $manifest)) { throw "Pairing manifest not found: $manifest" }
-            $extraArgs += @('--decoy-pairing-manifest', $manifest)
-        }
-    } else {
-        $library = @(Get-ChildItem -Path $dataDir -Filter '*.tsv' -File)[0].FullName
-    }
-    if ($cfg.DecoysInLibrary) { $extraArgs += '--decoys-in-library' }
-    # --model-diagnostics is output-neutral but lights up the whole diagnostics
-    # assembly, which is a real slice of the regression's coverage.
-    if ($cfg.ModelDiagnostics) { $extraArgs += '--model-diagnostics' }
+$regressionArgs = @("-NoProfile", "-File", $regressionPs1, "-Dataset", $Dataset, "-NoBuild")
+if ($SkipResume)   { $regressionArgs += "-SkipResume" }
+if ($SkipHpcChain) { $regressionArgs += "-SkipHpcChain" }
 
-    Write-Host ("[$name] straight-through under dotCover ($($mzmls.Count) file(s), $($cfg.Resolution)) ..." ) -ForegroundColor Cyan
-    $straightDir = Join-Path $OutDir "$name\straight"
-    $straightSnap = Join-Path $OutDir "$name-straight.dcvr"
-    Invoke-CoveredRun -DotCover $dotCover -Mzmls $mzmls -Library $library -Resolution $cfg.Resolution `
-        -WorkDir $straightDir -Snapshot $straightSnap -ExtraArgs $extraArgs
-    $snapshots.Add($straightSnap)
-
-    if (-not $SkipResume) {
-        Write-Host "[$name] resume under dotCover ..." -ForegroundColor Cyan
-        Invoke-ResumeInvalidation -WorkDir $straightDir
-        $resumeSnap = Join-Path $OutDir "$name-resume.dcvr"
-        Invoke-CoveredRun -DotCover $dotCover -Mzmls $mzmls -Library $library -Resolution $cfg.Resolution `
-            -WorkDir $straightDir -Snapshot $resumeSnap -ExtraArgs $extraArgs
-        $snapshots.Add($resumeSnap)
-    }
+Write-Host ("[regression] {0} -Dataset {1} under dotCover ..." -f (Split-Path -Leaf $regressionPs1), $Dataset) -ForegroundColor Cyan
+Write-Host  "  (this is the tctest.bat command; expect it to take as long as the TeamCity leg, plus instrumentation)"
+$regSnap = Join-Path $OutDir "regression.dcvr"
+# The pwsh path contains a space, so the /TargetExecutable value must stay quoted.
+$coverArgs = @("cover") + $coverFilters + @(
+    "/Output=$regSnap",
+    "/ReturnTargetExitCode",
+    "/AnalyzeTargetArguments=false",
+    "/TargetWorkingDir=$(Split-Path -Parent $regressionPs1)",
+    "/TargetExecutable=`"$pwshExe`"",
+    "--") + $regressionArgs
+& $dotCover $coverArgs | Out-Host
+$regExit = $LASTEXITCODE
+if (-not (Test-Path $regSnap)) { throw "dotCover produced no regression snapshot at $regSnap" }
+# A red regression still yields a valid snapshot; report the coverage but say so,
+# because a failed run covers less code and the number would otherwise mislead.
+if ($regExit -ne 0) {
+    Write-Host "  WARNING: regression.ps1 exited $regExit (FAILED). Coverage below is from a RED run." -ForegroundColor Yellow
 }
+$snapshots.Add($regSnap)
 
 # ---- 4. Merge ----
 Write-Host "[4] Merging $($snapshots.Count) snapshot(s) ..." -ForegroundColor Cyan
