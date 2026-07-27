@@ -349,3 +349,110 @@ at all**. That is a testable claim, not an assumption -- check it.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260726_osprey_regression_redesign.md` before starting work.
+
+### 2026-07-26/27 (night) - the ladder fix is NOT a no-op, and the reason is selenocysteine
+
+The prediction on record was that the suffix-sum ladder fix would be a no-op because the
+Stellar library has no non-standard residues. **Half right, and the half that was wrong is
+the interesting half.**
+
+`regression.ps1 -Dataset All -NoBuild -SkipResume -SkipHpcChain` against the committed
+goldens:
+
+| dataset | mode 1 | mode 1b |
+|---|---|---|
+| Stellar | PASS | (no diagnostics) |
+| StellarLibDecoy | PASS | PASS + sanity PASS |
+| StellarGenDecoyEntrap | PASS | PASS + sanity PASS |
+| **Astral** | **FAIL (64 issues)** | **FAIL (7)**, sanity PASS |
+
+Root cause, measured not inferred. The Astral library
+(`astral/SkylineAI_spectral_library.tsv`, 1,148,928 distinct peptides) contains **60
+peptides with selenocysteine (U)**; the Stellar library contains **none**. That is the
+entire difference.
+
+Under the old `y = total - prefix` derivation, one `U` anywhere makes `total` NaN, so
+EVERY y ion is dropped and the ladder is b-ions only - roughly half its proper size. A
+smaller ladder inflates the overlap ratio (the two invariant rungs are a bigger share of
+it), which pushed the plain reversal past the 0.4 threshold and forced the cycling
+fallback. With suffix sums the y ions come back and the reversal is accepted again:
+
+```
+GPSPPPMAGGUGR       old -> PSPPPMAGGUGGR   (cycle 1)   new -> GUGGAMPPPSPGR  (reversal)
+GFVCIVTNVASQUGK     old -> FVCIVTNVASQUGGK             new -> GUQSAVNTVICVFGK
+SYSSKPPLWAAELCVTUSS old -> YSSKPPLWAAELCVTUSSS         new -> SUTVCLEAAWLPPKSSYSS
+```
+
+So the old code was silently handing selenocysteine peptides a degraded decoy. 3 changed
+decoys out of ~1.19M perturb the SVM hyperplane (every score moves ~1e-3), which flips
+borderline IDs: 7 out / 6 in of the golden's 1074-row subset, `nDecoy` 1,186,769 ->
+1,186,768.
+
+**Consequence: the Astral golden is re-recorded a second time in this PR.** The other
+three goldens are untouched and proven so by a full compare, which is the control - only
+the dataset whose library has non-standard residues moved. Astral's tier-2 tilt reads
+0.244 against its 0.5 ceiling, so `-CreateGolden` blesses it rather than refusing.
+
+Verification harness (standalone, reproduces the C# gate arithmetic in Python over the
+real library) is inline in the session log; the durable pin is the new
+`DecoyConstructionTest.LadderDropsOnlyTheIonsSpanningAnUnknownResidue` and its Rust twin,
+which assert the same 8 / 7 / 14 / 0 rung counts on both sides.
+
+### 2026-07-26/27 (night) - the 6-residue invariant was enforced on ONE of two paths
+
+`DiannTsvLoader` enforced `MIN_PEPTIDE_LENGTH`, `BlibLoader` did not - so a `.blib`
+library reached `DecoyGenerator` without the bound its overlap gate now relies on, and
+the `DecoyGenerator` comment referred to a `LibraryValidation` class that did not exist.
+Now `Osprey.IO/LibraryValidation.cs` (`MIN_PEPTIDE_LENGTH` + `ValidatePeptideLength`),
+called by BOTH C# loaders and by all THREE Rust loaders (diann, blib, elib). Measured:
+the Astral library's shortest peptide is 7 residues, so the bound cannot fire on real
+input - it exists so a malformed library fails loudly instead of quietly changing what
+gets searched.
+
+### 2026-07-26/27 (night) - test coverage for the two decoy rules (there was none)
+
+Neither the swap removal nor the overlap gate had a single unit test on either side. Added
+`Osprey.Test/DecoyConstructionTest.cs` (4 tests) and the same 4 in Rust:
+
+* decoy fragment keeps ion type + ordinal, m/z read off the decoy's own ladder (a b3
+  coming back as y5 is the swap returning)
+* the gate rejects an isobaric near-duplicate (`AILLAK` -> `ALLIAK`: I and L are
+  isobaric, so every rung coincides) AND accepts an ordinary tryptic reversal, so a gate
+  that rejected everything cannot pass
+* generation never emits the rejected candidate (proves the gate is wired in, not just
+  present)
+* the ladder drops only the ions spanning an unknown residue
+
+`IsCandidateAcceptable` / `TheoreticalLadder` became `internal` with
+`InternalsVisibleTo("Osprey.Test")` on Osprey.Scoring, matching the pattern Osprey.IO
+already used.
+
+### 2026-07-26/27 (night) - remaining /code-review items, all closed
+
+* **throw escaped the try/finally** -> a `catch` now records the abort, prints the
+  summary and emits `##teamcity[buildProblem]`; a red CI gate is no longer a bare stack
+  trace. Not per-dataset: a throw is usually the environment or the binary.
+* **`--fdrbench-pass both` was inert AND warned every run.** Confirmed by reading the
+  code: `FdrBenchInputWriter` returns early on an empty `OutputFdrBench`, and both
+  resident-pool gates are `!IsNullOrEmpty(OutputFdrBench) && FdrBenchPass == 1`. Dropped;
+  the comment claiming it was required for the Pass-1 FDP views was wrong.
+* **`DiagnosticsGolden.ps1` duplicated BlibGolden's TSV layer and diverged on culture.**
+  Now dot-sources BlibGolden and uses `Write-Tsv` / `Read-Tsv` + invariant parsing.
+  Measured on de-DE: `'0.236'` and `'2.36'` BOTH parse to 236, diff 0 - the old
+  comparator would have silently blessed a 10x tilt regression, which is the exact
+  failure class tier 2 exists for. (`Set-Content -Encoding UTF8` also BOMs under 5.1.)
+* **`CoinTolerance` never plumbed through** -> `Get-SanityBounds` builds a splattable
+  hashtable from the dataset spec, used by BOTH the `-CreateGolden` refusal and mode 1b,
+  so the two cannot drift. Documented in the dataset-table comment.
+* **`$goldenFolder` silently collided** -> the whole table is checked for duplicate
+  golden folders at startup and throws.
+* **Astral's tier-2 comment block sat above the wrong dataset** (it described Astral but
+  preceded `StellarGenDecoyEntrap`); moved. Same defect in Rust, where the gate commit
+  left `generate_all_with_collision_detection`'s doc comment orphaned onto
+  `MAX_FRAGMENT_OVERLAP`; moved back.
+* **docs**: `osprey-regression.data/README.md` gains the fourth dataset and the
+  -31.5% / -23.6% ID drop with the entrapment numbers that justify it;
+  `docs/01-decoy-generation.md` swap section rewritten + a new overlap-gate section, and
+  **all 94 stale `file.cs:NNN` line references stripped** in favour of symbol names
+  (they were wrong within one PR of being written); `DIVERGENCES.md` decoy row corrected
+  and two rows added; `tctest.bat` header described the v1 zip and two datasets.
