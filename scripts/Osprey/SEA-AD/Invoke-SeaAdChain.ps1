@@ -46,6 +46,7 @@ param(
     [switch]$NoWaitForIdle,
     [switch]$Fresh,
     [switch]$Resume,
+    [switch]$NoModelDiagnostics,
     [switch]$WhatIf
 )
 
@@ -79,6 +80,7 @@ $plan = @($plan)
 $passThrough = @()
 if ($Fresh) { $passThrough += '-Fresh' }
 if ($Resume) { $passThrough += '-Resume' }
+if ($NoModelDiagnostics) { $passThrough += '-NoModelDiagnostics' }
 
 Write-Chain ("chain start: {0} arm(s) at {1} files, threads {2}" -f $plan.Count, $NumFiles, $Threads)
 foreach ($a in $plan) { Write-Chain ("  planned: {0} r={1} pass2={2}" -f $a.DecoyMode, $a.Ratio, $a.Pass2Mode) }

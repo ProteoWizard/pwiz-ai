@@ -145,6 +145,17 @@ by a tool expecting the other.
 **Quote Pass 1, not Pass 2.** Pass-2 recalibration inflates FDP; that is a known open
 issue, not a property of your run.
 
+**Pass-1 FDP comes from the `--model-diagnostics` HTML, not from FDRBench.** Despite what
+`--fdrbench-pass both` promises, no pass-1 TSV is written on the normal (projection) path:
+Osprey gates the pre-compaction pool on `FdrBenchPass == 1` exactly, so the `both` bitmask
+(3) misses the test and only pass 2 is emitted, silently. Verified on three runs including
+one with `--model-diagnostics`, so it is not an mdiag interaction - see
+`PerFileScoringTask.NeedsResidentPool` and `FirstJoinTask.WriteFdrBenchPass1IfRequested`.
+This is a product bug, reported separately; until it is fixed, keep `--model-diagnostics`
+on if you want pass-1 numbers, and read them from the report's `fdpViews` (which carry an
+explicit `pass` field - select on it) via `fdp_at_count.py` / `runcount_fdp.py`.
+`--fdrbench-pass 1` alone does emit the pass-1 TSV, but only by forcing the resident pool.
+
 ## Facts worth knowing before you start a run
 
 Measured, not guessed - these cost real time to learn:
@@ -168,9 +179,12 @@ Measured, not guessed - these cost real time to learn:
 * SEA-AD entrapment is **shuffle** (target anagrams), which reads higher than
   foreign-species entrapment because anagrams share the target's composition. Fine for
   arm-vs-arm; do not cite these as absolute error rates.
-* `--model-diagnostics` forces the RESIDENT first-pass pool at FirstJoin. At 82 files that
-  has OOM'd a 64 GB box - it is **off by default** here. Use it at reduced file counts, or
-  accept the risk knowingly.
+* `--model-diagnostics` is **on by default** here, and the warning that it OOMs a 64 GB
+  box at 82 files is **obsolete**. It now streams its pass-1 report off the projection
+  path rather than holding the whole-run pool resident; an 82-file mdiag run completed in
+  448 min at ~43 GB peak private on 2026-07-26. It does still force the resident pool on a
+  **full resume** (every `.1st-pass` sidecar already on disk) - that is the case to avoid
+  at scale. `-NoModelDiagnostics` turns it off.
 * Runs use `--output-dir`, not `--work-dir`: `--work-dir` would relocate the `.spectra.bin`
   cache too, so a directory that already has the caches would rebuild all 82. Pass
   `-CacheDir` when the input directory is genuinely read-only and has no caches.

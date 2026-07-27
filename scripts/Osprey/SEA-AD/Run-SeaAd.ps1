@@ -39,6 +39,17 @@
     re-scoring. Only stage 1-4 suffixes are linked, never Stage 5/6 outputs, so the part
     under test is always regenerated.
 
+.PARAMETER NoModelDiagnostics
+    Turn OFF the --model-diagnostics HTML report, which is on by default here.
+
+    Leave it on unless you have a reason: it is the only place pass-1 entrapment FDP is
+    reported today, and pass 1 is the number worth quoting. The old warning that it OOMs
+    a 64 GB box at 82 files is obsolete - it now streams its pass-1 report off the
+    projection path instead of holding the whole-run pool resident, and an 82-file mdiag
+    run completed in 448 min at ~43 GB peak on 2026-07-26. It DOES still force the
+    resident pool on a full resume (every .1st-pass sidecar already present), which is
+    the case to avoid at scale.
+
 .PARAMETER SourceRoot
     Checkout to take the Release/net8.0 Osprey.exe from. Prefer this over -Exe when what
     you care about is WHICH TREE: the default is the shared `pwiz` worktree, so a long run
@@ -90,9 +101,10 @@ param(
     [string]$LinkFrom = '',
     [switch]$Fresh,
     [switch]$Resume,
-    # OFF by default and deliberately so: at 82 files --model-diagnostics forces the
-    # RESIDENT first-pass pool at FirstJoin and has OOM'd a 64 GB box. See README.
-    [switch]$ModelDiagnostics,
+    # ON by default, matching the harness that produced the recorded runs. It is also the
+    # ONLY source of pass-1 FDP today (see -NoModelDiagnostics), and it no longer forces
+    # the resident first-pass pool on a straight-through run. See README.
+    [switch]$NoModelDiagnostics,
     [switch]$WhatIf
 )
 
@@ -241,7 +253,8 @@ $cliArgs = @('-i') + $mzmls + @(
 )
 if ($CacheDir) { $cliArgs += @('--cache-dir', $CacheDir) }
 if ($DecoyMode -eq 'libdecoy') { $cliArgs += @('--decoys-in-library', '--decoy-pairing-manifest', $manifest) }
-if ($ModelDiagnostics) { $cliArgs += '--model-diagnostics' }
+$mdiag = -not $NoModelDiagnostics
+if ($mdiag) { $cliArgs += '--model-diagnostics' }
 
 # Which TREE the binary came from matters as much as which flags ran. A multi-hour run
 # against whatever a colleague happens to have built in a shared worktree is measuring
@@ -272,9 +285,19 @@ if ($cached -lt $mzmls.Count) {
 }
 Write-Host ("  library  : {0}" -f $libraryPath)
 Write-Host ("  arm      : {0}  r={1}" -f $DecoyMode, $Ratio)
-Write-Host ("  pass 2   : {0}   fdrbench pass {1}" -f $Pass2Mode, $FdrBenchPass)
-if ($ModelDiagnostics) {
-    Write-Host "  --model-diagnostics ON: forces the resident first-pass pool; OOM risk at 82 files." -ForegroundColor Yellow
+Write-Host ("  pass 2   : {0}   fdrbench pass {1}   model-diagnostics {2}" -f
+            $Pass2Mode, $FdrBenchPass, $(if ($mdiag) { 'on' } else { 'OFF' }))
+# --fdrbench-pass 1/both asks for a pass-1 TSV that the projection path does not emit
+# (Osprey gates the pre-compaction pool on FdrBenchPass == 1 exactly, so the `both`
+# bitmask misses it). Say so rather than let an absent file read as a failed run.
+if ($FdrBenchPass -ne '2') {
+    Write-Host ("  NOTE: --fdrbench-pass {0} currently yields only the pass-2 TSV; the pass-1" -f $FdrBenchPass) -ForegroundColor Yellow
+    Write-Host "        pool is not emitted off the projection path. Pass-1 FDP comes from the" -ForegroundColor Yellow
+    Write-Host "        --model-diagnostics report instead." -ForegroundColor Yellow
+}
+if (-not $mdiag) {
+    Write-Host "  NOTE: no --model-diagnostics, so this run yields NO pass-1 FDP - and pass 1 is" -ForegroundColor Yellow
+    Write-Host "        the number to quote (pass-2 recalibration inflates FDP)." -ForegroundColor Yellow
 }
 Write-Host ("  out dir  : {0}" -f $OutDir)
 Write-Host ""
@@ -326,7 +349,7 @@ if ($Pass2Mode -eq 'transfer') { $env:OSPREY_PASS2_QVALUE = 'transfer' }
 # is a no-op. Kept unset here; set it yourself only when reproducing a pre-fix build.
 
 $log = Join-Path $OutDir 'run.log'
-"[{0}] START arm=$DecoyMode r=$Ratio pass2=$Pass2Mode files=$($mzmls.Count) threads=$Threads mdiag=$([bool]$ModelDiagnostics) linkfrom='$LinkFrom'" -f (Get-Date -Format s) |
+"[{0}] START arm=$DecoyMode r=$Ratio pass2=$Pass2Mode files=$($mzmls.Count) threads=$Threads mdiag=$mdiag linkfrom='$LinkFrom'" -f (Get-Date -Format s) |
     Set-Content -Path $log
 "Exe: $ospreyExe" | Add-Content -Path $log
 "Library: $libraryPath" | Add-Content -Path $log
