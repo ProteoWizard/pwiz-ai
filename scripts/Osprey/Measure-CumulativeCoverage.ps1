@@ -54,7 +54,7 @@
 
 .PARAMETER DataRoot
     Extracted regression data root (default:
-    <Downloads>\Perftests\osprey-testfiles-mzML, resolved like the regression
+    <Downloads>\Perftests\osprey-testfiles-mzML-v2, resolved like the regression
     harness). Must already be present (this does not download).
 
 .PARAMETER OutDir
@@ -71,7 +71,7 @@
     Slow under instrumentation (hours); this is the real cumulative number.
 #>
 param(
-    [ValidateSet('Stellar', 'Astral', 'All')] [string]$Dataset = 'Stellar',
+    [ValidateSet('Stellar', 'StellarLibDecoy', 'StellarGenDecoyEntrap', 'Astral', 'All')] [string]$Dataset = 'Stellar',
     [ValidateSet('Single', 'All', 'Mixed')] [string]$Files = 'Single',
     [switch]$SkipUnit,
     [switch]$SkipResume,
@@ -128,8 +128,26 @@ function Resolve-DotCover {
 }
 
 # --- Dataset table (mirrors regression.ps1 / Dataset-Config) -----------------
-$datasets = @{
+# Mirrors regression.ps1's table. Kept in sync BY HAND, which is exactly how this
+# script went stale once: it knew only Stellar/Astral long after the regression
+# gained the two entrapment datasets, so the reported number silently excluded the
+# decoy-pairing / library-decoy / diagnostics paths. If you add a dataset there,
+# add it here.
+$datasets = [ordered]@{
     Stellar = @{ Folder = 'stellar'; Resolution = 'unit' }
+    StellarLibDecoy = @{
+        Folder = 'stellar'; LibraryFolder = 'stellar-libdecoy'
+        Library = 'carafe_spectral_library.tsv'
+        Manifest = 'osprey_library_db_pairing.tsv'
+        Resolution = 'unit'; DecoysInLibrary = $true; ModelDiagnostics = $true
+    }
+    # Library is DERIVED by regression.ps1 into gitignored scratch and cached there;
+    # this script does not rebuild it (run regression.ps1 -Dataset StellarGenDecoyEntrap once).
+    StellarGenDecoyEntrap = @{
+        Folder = 'stellar'
+        DerivedLibrary = 'carafe_spectral_library.nodecoy.tsv'
+        Resolution = 'unit'; ModelDiagnostics = $true
+    }
     Astral  = @{ Folder = 'astral';  Resolution = 'hram' }
 }
 
@@ -139,9 +157,9 @@ function Resolve-DataDir {
         # Reuse the harness's downloads-folder logic when present.
         if (Test-Path $regressionDataPs1) {
             . $regressionDataPs1
-            $DataRoot = Join-Path (Get-WindowsDownloadsFolder) 'Perftests\osprey-testfiles-mzML'
+            $DataRoot = Join-Path (Get-WindowsDownloadsFolder) 'Perftests\osprey-testfiles-mzML-v2'
         } else {
-            $DataRoot = Join-Path (Join-Path $env:USERPROFILE 'Downloads') 'Perftests\osprey-testfiles-mzML'
+            $DataRoot = Join-Path (Join-Path $env:USERPROFILE 'Downloads') 'Perftests\osprey-testfiles-mzML-v2'
         }
     }
     $dir = Join-Path $DataRoot $Folder
@@ -154,12 +172,13 @@ function Resolve-DataDir {
 # --- Run Osprey.exe once under dotCover -> a .dcvr snapshot --------------
 function Invoke-CoveredRun {
     param([string]$DotCover, [string[]]$Mzmls, [string]$Library, [string]$Resolution,
-          [string]$WorkDir, [string]$Snapshot)
+          [string]$WorkDir, [string]$Snapshot, [string[]]$ExtraArgs = @())
     New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
     $targetArgs = @()
     foreach ($m in $Mzmls) { $targetArgs += @('-i', $m) }
     $targetArgs += @('-l', $Library, '-o', 'output.blib', '--resolution', $Resolution,
                      '--protein-fdr', '0.01', '--threads', $Threads.ToString(), '--work-dir', $WorkDir)
+    $targetArgs += $ExtraArgs
     # /TargetWorkingDir sets the CWD so -o output.blib + dumps land in the work dir.
     $coverArgs = @('cover') + $coverFilters + @(
         "/Output=$Snapshot",
@@ -187,7 +206,7 @@ $stamp = (Get-Date).ToString('yyyyMMdd_HHmmss')
 if (-not $OutDir) { $OutDir = Join-Path $projectRoot "ai\.tmp\osprey-cumcov-$stamp" }
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
 
-$selected = if ($Dataset -eq 'All') { @('Stellar', 'Astral') } else { @($Dataset) }
+$selected = if ($Dataset -eq 'All') { @($datasets.Keys) } else { @($Dataset) }
 
 Write-Host ""
 Write-Host "=== Osprey cumulative coverage (datasets: $($selected -join ', '); files=$Files) ===" -ForegroundColor Cyan
@@ -242,21 +261,48 @@ foreach ($name in $selected) {
     # tctest+regression estimate (see -Files help).
     $fileMode = if ($Files -eq 'Mixed') { if ($cfg.Resolution -eq 'hram') { 'Single' } else { 'All' } } else { $Files }
     $mzmls = if ($fileMode -eq 'Single') { @($allMzml[0]) } else { $allMzml }
-    $library = @(Get-ChildItem -Path $dataDir -Filter '*.tsv' -File)[0].FullName
+
+    # Library resolution, in the same three flavours regression.ps1 uses. The
+    # exactly-one-tsv rule cannot apply to the libdecoy folder, which also holds the
+    # pairing manifest and a FASTA, so those datasets name their library explicitly.
+    $extraArgs = @()
+    if ($cfg.DerivedLibrary) {
+        $derivedDir = Join-Path $projectRoot 'pwiz\pwiz_tools\Osprey\TestResults\_derived'
+        $library = Join-Path $derivedDir $cfg.DerivedLibrary
+        if (-not (Test-Path $library)) {
+            throw ("Derived library not found: $library. It is built and cached by " +
+                   "regression.ps1; run '.egression.ps1 -Dataset $name' once first.")
+        }
+    } elseif ($cfg.Library) {
+        $libDir = if ($cfg.LibraryFolder) { Resolve-DataDir -Folder $cfg.LibraryFolder } else { $dataDir }
+        $library = Join-Path $libDir $cfg.Library
+        if (-not (Test-Path $library)) { throw "Library not found: $library" }
+        if ($cfg.Manifest) {
+            $manifest = Join-Path $libDir $cfg.Manifest
+            if (-not (Test-Path $manifest)) { throw "Pairing manifest not found: $manifest" }
+            $extraArgs += @('--decoy-pairing-manifest', $manifest)
+        }
+    } else {
+        $library = @(Get-ChildItem -Path $dataDir -Filter '*.tsv' -File)[0].FullName
+    }
+    if ($cfg.DecoysInLibrary) { $extraArgs += '--decoys-in-library' }
+    # --model-diagnostics is output-neutral but lights up the whole diagnostics
+    # assembly, which is a real slice of the regression's coverage.
+    if ($cfg.ModelDiagnostics) { $extraArgs += '--model-diagnostics' }
 
     Write-Host ("[$name] straight-through under dotCover ($($mzmls.Count) file(s), $($cfg.Resolution)) ..." ) -ForegroundColor Cyan
-    $straightDir = Join-Path $OutDir "$($cfg.Folder)\straight"
-    $straightSnap = Join-Path $OutDir "$($cfg.Folder)-straight.dcvr"
+    $straightDir = Join-Path $OutDir "$name\straight"
+    $straightSnap = Join-Path $OutDir "$name-straight.dcvr"
     Invoke-CoveredRun -DotCover $dotCover -Mzmls $mzmls -Library $library -Resolution $cfg.Resolution `
-        -WorkDir $straightDir -Snapshot $straightSnap
+        -WorkDir $straightDir -Snapshot $straightSnap -ExtraArgs $extraArgs
     $snapshots.Add($straightSnap)
 
     if (-not $SkipResume) {
         Write-Host "[$name] resume under dotCover ..." -ForegroundColor Cyan
         Invoke-ResumeInvalidation -WorkDir $straightDir
-        $resumeSnap = Join-Path $OutDir "$($cfg.Folder)-resume.dcvr"
+        $resumeSnap = Join-Path $OutDir "$name-resume.dcvr"
         Invoke-CoveredRun -DotCover $dotCover -Mzmls $mzmls -Library $library -Resolution $cfg.Resolution `
-            -WorkDir $straightDir -Snapshot $resumeSnap
+            -WorkDir $straightDir -Snapshot $resumeSnap -ExtraArgs $extraArgs
         $snapshots.Add($resumeSnap)
     }
 }
