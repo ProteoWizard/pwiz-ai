@@ -1,10 +1,17 @@
 # Osprey Pre-Commit Validation
 
 Required validation before committing Osprey changes.  The project
-holds zero ReSharper warnings; the Osprey test suite is small
-enough that the inspection completes in ~20 seconds.  Catching issues
-here takes a few seconds; catching them after commit requires a
-cleanup commit later.
+holds zero ReSharper warnings.  Catching issues here takes a couple of
+minutes; catching them after commit requires a cleanup commit later.
+
+The inspection runs `jb inspectcode` once per target framework
+(net472 and net8.0) and unions the results.  That is deliberate: a
+single all-frameworks pass analyzes each file in both preprocessor
+contexts at once, and inline `// ReSharper disable` suppressions are
+then honored nondeterministically - the gate reported 0 or 9 warnings
+at random on an unchanged `SystemMemory.cs` (GitHub issue #4379).
+One framework per pass is deterministic.  Budget ~2-3 minutes for the
+inspection, not seconds.
 
 ## Required Pre-Commit Command
 
@@ -16,10 +23,12 @@ This single command:
 
 1. Builds `Osprey.sln` in Debug|x64
 2. Runs the unit-test suite via `vstest.console.exe`
-3. Runs `jb inspectcode` against `Osprey.sln.DotSettings`
+3. Runs `jb inspectcode` against `Osprey.sln.DotSettings`, once per
+   target framework, and unions the findings
 
 Exit code 0 = safe to commit.  Non-zero = fix issues before committing.
-Typical wall under 30 seconds from a warm incremental build.
+Typical wall is a few minutes from a warm incremental build, dominated
+by the two inspection passes.
 
 Common LLM-introduced inspection findings (caught here, not after):
 

@@ -243,55 +243,90 @@ try {
             exit 1
         }
 
-        Write-Host "Inspecting Osprey.sln (typically 1-3 minutes)..." -ForegroundColor Cyan
+        Write-Host "Inspecting Osprey.sln, one pass per target framework (typically 2-5 minutes)..." -ForegroundColor Cyan
         $inspectStart = Get-Date
 
-        # Inspection args match TeamCity configuration:
+        # Osprey multi-targets net472;net8.0 (pwiz_tools/Osprey/Directory.Build.props),
+        # and inspectcode defaults to --target-framework "all frameworks", analyzing
+        # every file once per framework in a single parallel pass. When it does that,
+        # whether a file's inline "// ReSharper disable" region is honored comes out
+        # nondeterministic: this gate reported either 0 or 9 warnings, at random, on an
+        # unchanged SystemMemory.cs (measured ~47% red over 43 project-scope runs, and
+        # never a partial count - the suppressions are applied wholesale or not at all).
+        # Inspecting one framework per pass gives each pass a single preprocessor
+        # context, which removes the race: 0/30 red measured. No suppression form in the
+        # source fixes this - inline comments, [SuppressMessage], and even a compiler
+        # #pragma are all dropped on a racing run. See GitHub issue #4379.
+        #
+        # The per-framework results are unioned below, so the second pass costs time but
+        # loses no coverage: each pass reports its own branch of an #if, and together
+        # they report exactly what a single all-frameworks pass reports.
+        $targetFrameworks = @("net472", "net8.0")
+
+        # Inspection args otherwise match TeamCity configuration:
         # --severity WARNING: report warnings and errors only
         # --no-swea: disable solution-wide analysis
         # --no-build: solution already built by MSBuild above
         # --caches-home: persistent cache for faster subsequent runs
-        $inspectArgs = @(
-            "inspectcode", $slnPath,
-            "--profile=$dotSettings",
-            "--output=$inspectionOutput",
-            "--format=Xml",
-            "--severity=WARNING",
-            "--no-swea",
-            "--no-build",
-            "--caches-home=$cacheDir",
-            "--properties=Configuration=$Configuration",
-            "--verbosity=WARN"
-        )
-        & jb $inspectArgs
+        $inspectionOutputs = @()
+        foreach ($tfm in $targetFrameworks) {
+            $tfmOutput = [System.IO.Path]::ChangeExtension($inspectionOutput, ".$tfm.xml")
+            $inspectArgs = @(
+                "inspectcode", $slnPath,
+                "--profile=$dotSettings",
+                "--output=$tfmOutput",
+                "--format=Xml",
+                "--severity=WARNING",
+                "--no-swea",
+                "--no-build",
+                "--caches-home=$cacheDir",
+                "--properties=Configuration=$Configuration",
+                "--target-framework=$tfm",
+                "--verbosity=WARN"
+            )
+            Write-Host "  target framework: $tfm" -ForegroundColor Gray
+            & jb $inspectArgs
+
+            if (-not (Test-Path $tfmOutput)) {
+                Write-Host "Inspection output not found: $tfmOutput" -ForegroundColor Red
+                exit 1
+            }
+            $inspectionOutputs += $tfmOutput
+        }
         $inspectDuration = (Get-Date) - $inspectStart
 
-        if (-not (Test-Path $inspectionOutput)) {
-            Write-Host "Inspection output not found: $inspectionOutput" -ForegroundColor Red
-            exit 1
-        }
-
-        # Parse XML results
-        [xml]$xml = Get-Content $inspectionOutput
-        $issueTypes = $xml.GetElementsByTagName("IssueType")
-        $severities = @{}
-        foreach ($issueType in $issueTypes) {
-            $severities[$issueType.Id] = $issueType.Severity
-        }
-
+        # Parse and union the XML results from every per-framework pass. Code shared by
+        # both frameworks is reported once per pass, so de-duplicate on file/line/rule/
+        # message; that keeps the counts a developer sees the same as before this became
+        # a two-pass inspection. Issues that exist in only one framework's branch of an
+        # #if survive because only exact duplicates are dropped.
         $allIssues = @()
-        $projects = $xml.GetElementsByTagName("Project")
-        foreach ($project in $projects) {
-            foreach ($issue in $project.ChildNodes) {
-                if ($issue.Name -eq "Issue") {
-                    $severity = $severities[$issue.TypeId]
-                    if ($severity -eq "WARNING" -or $severity -eq "ERROR") {
-                        $allIssues += [PSCustomObject]@{
-                            File = $issue.File
-                            Line = $issue.Line
-                            TypeId = $issue.TypeId
-                            Message = $issue.Message
-                            Severity = $severity
+        $seenIssues = @{}
+        foreach ($outputPath in $inspectionOutputs) {
+            [xml]$xml = Get-Content $outputPath
+            $issueTypes = $xml.GetElementsByTagName("IssueType")
+            $severities = @{}
+            foreach ($issueType in $issueTypes) {
+                $severities[$issueType.Id] = $issueType.Severity
+            }
+
+            $projects = $xml.GetElementsByTagName("Project")
+            foreach ($project in $projects) {
+                foreach ($issue in $project.ChildNodes) {
+                    if ($issue.Name -eq "Issue") {
+                        $severity = $severities[$issue.TypeId]
+                        if ($severity -eq "WARNING" -or $severity -eq "ERROR") {
+                            $issueKey = "$($issue.File)|$($issue.Line)|$($issue.TypeId)|$($issue.Message)"
+                            if (-not $seenIssues.ContainsKey($issueKey)) {
+                                $seenIssues[$issueKey] = $true
+                                $allIssues += [PSCustomObject]@{
+                                    File = $issue.File
+                                    Line = $issue.Line
+                                    TypeId = $issue.TypeId
+                                    Message = $issue.Message
+                                    Severity = $severity
+                                }
+                            }
                         }
                     }
                 }
@@ -320,7 +355,7 @@ try {
             }
 
             Write-Host ""
-            Write-Host "Full details: $inspectionOutput" -ForegroundColor Gray
+            Write-Host "Full details: $($inspectionOutputs -join ', ')" -ForegroundColor Gray
             Write-Host ""
             Write-Host "Code inspection FAILED - $($allIssues.Count) issue(s) found" -ForegroundColor Red
             exit 1
