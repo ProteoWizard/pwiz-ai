@@ -266,9 +266,31 @@ would have missed them; the build then confirmed.
 Gates: build PASS, 543/543 tests, 0 inspection warnings, Stellar mode1/2/3 PASS
 (blib byte-identical at 30,597,120). Committed `e78da071c`.
 
-Perf gate running now rather than at the end: this step moves the hot path, and a
+Perf gate attempted now rather than at the end: this step moves the hot path, and a
 perf regression discovered after several more extractions would not be attributable
 to any one of them. Baseline is the pinned `pwiz-perfbase` worktree at `f4de68645`.
+
+### PERF GATE STILL OUTSTANDING - blocked, not failed
+
+The run exited 1 with `MSB3027` / `MSB3021`: it could not relink `C:\proj\pwiz`
+because a **different session's** Osprey process (PID 25468) held the Release DLLs.
+Identified before touching anything - it was launched by
+`ai/scripts/Osprey/SEA-AD/Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -NumFiles 2
+-Tag -smoke`, an Astral SEA-AD entrapment smoke run at 30 threads / 23 GB, ~9
+minutes in and actively burning ~9.5 cores. Killing it to unblock the gate would
+have destroyed real work. **No perf number exists for step 5 yet.**
+
+**Cross-session hazard worth fixing separately**: `Run-SeaAd.ps1` runs
+`C:\proj\pwiz\...\Release\net8.0\Osprey.exe`, i.e. whatever is currently built in
+the shared default worktree. That session is therefore smoke-testing SEA-AD against
+this branch's mid-refactor binaries rather than master. Byte-parity means the
+numbers should be unaffected, but the coupling is real in both directions: their run
+blocks my builds, and my rebuilds swap binaries under theirs. The pinned
+`pwiz-perfbase` pattern exists precisely to avoid this; SEA-AD runs should probably
+take a `-SourceRoot` too.
+
+Re-run the perf gate when that worktree is free, before step 6 stacks another hot
+path change on top.
 
 ## Follow-up noticed (not fixed here)
 
