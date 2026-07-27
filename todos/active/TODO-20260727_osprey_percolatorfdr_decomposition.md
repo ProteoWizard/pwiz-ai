@@ -223,6 +223,53 @@ trusting the range arithmetic.
 Gates: build PASS, 543/543 tests, 0 inspection warnings, bodies diff-verified
 verbatim, Stellar parity (running).
 
+## Step 5 result - scoring / model application (2026-07-27)
+
+New `PercolatorScorer` (public static, 1,136-line file). `PercolatorFdr.cs`:
+3,933 -> **2,845** (-1,088). 1,087 moved lines diff-verified verbatim under only
+the intended transforms.
+
+The members were in three contiguous runs, not truly scattered: 603-795
+(`ScorePopulationAndComputeFdr`), 1016-1799 (the projection-native path,
+`RunStreamingFirstPass`, `FirstPassDedupRow`, `RowBuffer`, `ComputeStreamedScore`,
+`GroupIndicesByFileName`, `ResolveFeatureRow`) and 2256-2363 (the per-row model
+application primitives).
+
+### Two seams that are NOT clean, stated rather than hidden
+
+1. **`ScoreWithFoldModel` straddles.** It is called from `RunPercolator` (training,
+   which stays) at three sites, so it moved to the scorer as `internal` rather than
+   `private`. That is the right direction - applying a fold model to rows IS
+   scoring, and training legitimately asks for it to evaluate held-out folds - but
+   it is a real dependency from training onto scoring, not an accident.
+2. **Four `private` q-value helpers had to widen to `internal`**:
+   `ComputeStreamingCompetitionQvalues`, `UpdateExperimentQClampFloor`,
+   `ComputePerFileRunQvalues`, `QProgress`. The scorer's entry points compute
+   q-values as well as scores - their names say so - so this is pre-existing
+   scoring/FDR conflation surfacing, not new coupling. All four are destined for
+   the FDR collaborators in steps 7-9, at which point they are cross-class calls
+   anyway and the widening stops being a compromise.
+
+### Method
+
+Rather than pre-enumerating cross-class references by hand, the cut was made and
+the **compiler asked**: one build produced the complete list of CS0103 / CS0117 /
+CS0246 in both directions, which drove the qualification pass. Then the inspection
+caught 7 more broken doc-comment crefs and 2 usings the move made redundant - none
+of which the compiler cares about.
+
+A `grep -rl` sweep for the moved names caught four more callers outside the files
+I had thought to check (`FrozenModelScorer`, `FdrProjectionOutput`,
+`PercolatorEntryBuilder`, `PercolatorConfig`). Enumerating caller files by hand
+would have missed them; the build then confirmed.
+
+Gates: build PASS, 543/543 tests, 0 inspection warnings, Stellar mode1/2/3 PASS
+(blib byte-identical at 30,597,120). Committed `e78da071c`.
+
+Perf gate running now rather than at the end: this step moves the hot path, and a
+perf regression discovered after several more extractions would not be attributable
+to any one of them. Baseline is the pinned `pwiz-perfbase` worktree at `f4de68645`.
+
 ## Follow-up noticed (not fixed here)
 
 `BASE_ID_MASK` is defined twice - `PercolatorFdr` (`static readonly`) and
@@ -235,6 +282,7 @@ minimal; fold into a later step.
 - [x] Step 2: extract sampling / fold selection (270)
 - [x] Step 3: extract the data types (286)
 - [x] Step 4: extract the shared matrix row helpers (~65)
+- [x] Step 5: extract scoring / model application (1,088)
 - [ ] Step 2: extract sampling / fold selection
 - [ ] Step 3: extract training orchestration
 - [ ] Step 4: extract scoring / model application
