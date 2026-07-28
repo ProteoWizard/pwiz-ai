@@ -414,11 +414,36 @@ deletion would rest entirely on the null-impossibility argument with no gate beh
 it - which is the standard every other step here was held to. Suppressing a true
 finding to keep the gate green would be worse.
 
-**Needs a decision** (Brendan): remove the two dead `else` branches as a separate,
-explicitly-justified change (after which increment B and any further
-`RunPercolator` decomposition can proceed), or keep the defensive branches and
-accept that `RunPercolator` cannot shrink much past 440 lines without tripping the
-zero-warning gate.
+**DECIDED 2026-07-27 (Brendan): cleared to remove the unreachable branches.**
+
+Removed in `419a72c03`. There were **three** sites, not two - the scoring block had
+its own `if (trainSubset != null) ... else { // No subsampling }`. Net -58 / +36
+lines, no live-path logic touched (`git diff -w` shows only the declaration collapse
+to `var`, the branch removals and comments). Stellar mode1/2/3 PASS.
+
+On Brendan's question about a ReSharper guard: `[NotNull]` (JetBrains.Annotations)
+does exist and pwiz already references it from `Shared/CommonUtil` via a HintPath,
+but it was **not** used here for two reasons:
+
+1. `Osprey.FDR` does not reference it, and Osprey ships as a standalone
+   redistributable - adding a third-party assembly to the shipped dependency set to
+   annotate one return is a poor trade.
+2. It would not avoid a warning, it would *cause* one: annotating `[NotNull]` makes
+   `if (x != null)` provably redundant, which is the same warning class being
+   resolved. The annotation documents deadness rather than making it acceptable.
+
+So the guarantee is documented in prose instead - a `<returns>` block on
+`BuildTrainingSubset` stating it is never null, why (both paths return materialized
+arrays), and that callers must not test for null because that reads as a real
+alternative path and hides dead code.
+
+The code comment also carries the caveat that outlives this conversation: an
+unreachable branch is invisible to the golden, so the removal rests on
+`BuildTrainingSubset`'s return paths, **not** on a green gate.
+
+**Increment B re-applied** after the cleanup and now passes (the dead code was the
+blocker): `ScoreEntriesWithFoldModels`, 46 lines moved verbatim.
+**`RunPercolator` 546 -> 368 lines** over the phase.
 
 ## Follow-up noticed (not fixed here)
 
