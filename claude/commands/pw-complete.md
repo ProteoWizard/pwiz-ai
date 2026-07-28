@@ -43,7 +43,9 @@ ls C:/proj/ai/todos/active/ | grep -i "$(date +%Y)"   # narrow the list
 From the gh output capture:
 - **PR number** and **URL** (for the TODO note)
 - **headRefName** (must match the local branch) — proves you're completing the right branch
-- **state** — must be `MERGED`; if `OPEN` or `CLOSED`-not-merged, STOP and tell the user
+- **state** — `MERGED`, `OPEN`, or `CLOSED`; branch per the state table below. Do NOT
+  stop on `OPEN` — merging an open PR is this command's job (see the intro). Only
+  `CLOSED`-not-merged is a hard stop.
 - **mergeCommit.oid** — the SHA on `master` that carries the squashed work (this is what we'll verify after `git pull`)
 
 Resolve the TODO file by reading branch name → date + slug. The TODO

@@ -46,7 +46,13 @@ For each item in `suggested-actions.md`:
 - Present the analysis to the reviewer
 - Ask the reviewer who to assign the issue to (common assignees: nickshulman, bspratt, chambm, brendanx67)
 - On approval, create the issue with `gh issue create --label bug --label skyline --assignee <handle>`
-- Always include both `bug` and `skyline` labels by default
+- **Default to `bug` + `skyline`.** This is a Skyline daily report, not a
+  ProteoWizard-wide one: all three sources are Skyline — Skyline nightly tests,
+  Skyline user exception reports, and the Skyline support board — so `skyline` is
+  the correct module for effectively everything it surfaces. Reach for `osprey` or
+  `pwiz` only if a finding is plainly outside Skyline. The module label feeds the
+  PR label and the `<module>: ` squash-subject prefix; see
+  ai/docs/version-control-guide.md, "Module Tagging".
 - Record the issue tracking with `record_exception_issue()` or `record_test_issue()`
 
 **Exception Fixes to Record:**
