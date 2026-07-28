@@ -14,6 +14,26 @@
 Stop holding the rarely-used `TransitionChromInfo` and `TransitionGroupChromInfo` values in
 memory, reading them back from the .skyd on demand per peptide instead.
 
+## Architecture
+
+A `DocNode` stops being the place complete result information comes from. It reliably
+exposes only **retention time, area, and a few flags** (e.g. truncated). Everything else
+lives in the .skyd and is reached through a new object that represents **one
+`PeptideDocNode` plus all of its result information for all replicates**. Callers build
+one, calculate with it, and let it go.
+
+The conversion of existing readers is the bulk of the work, not a side effect of it.
+Nothing can be dropped from `TransitionChromInfo` until its readers go through the facade.
+
+`TransitionChromInfo`'s peak-derived fields are exactly the contents of one `ChromPeak`
+(~48 of its 104 bytes): MassError, RetentionTime, Start/EndRetentionTime, Area,
+BackgroundArea, Height, Fwhm, IsFwhmDegenerate, IsTruncated, PointsAcrossPeak,
+IsForcedIntegration, PeakShapeValues, Identified. The rest - FileId, OptimizationStep,
+IonMobility, Rank, RankByLevel, Annotations, UserSet - is not peak data and stays.
+
+Rejected along the way: abstract base with compact/full subclasses; per-object lazy
+loading behind a resolver back-pointer.
+
 ## Task Checklist
 
 ### Completed
@@ -23,13 +43,20 @@ memory, reading them back from the .skyd on demand per peptide instead.
 - [x] `PeptidePeakLoader` / `LoadedPeptidePeaks` - read every candidate peak for a peptide
 - [x] `PeptidePeakLoaderTest` - prove cache values reproduce `TransitionChromInfo` exactly
 
+- [x] Key candidate peaks by optimization step (`PeakKey`) - each step is its own
+      chromatogram with its own candidate peaks
+
 ### In Progress
-- [ ] Nothing - stopped after commit 1
+- [ ] Grow the loader into the facade: one object per `PeptideDocNode` carrying all
+      result information for all replicates, including the group-level values
 
 ### Remaining
-- [ ] Handle optimization steps in `PeakKey` (currently collides for CE-optimized documents)
-- [ ] Commit 2: compact storage - `Area` + nullable custom-peak ref per transition cell,
-      `PeakIndex` on the group; existing properties keep working by materializing on access
+- [ ] Convert the readers to the facade. Ordering matters: the document cannot be put
+      into compact format until the readers stop reading dropped values off the DocNode,
+      so Reintegrate is the LAST step of this sequence, not the first
+- [ ] Commit N-2: compact storage - `Area` + nullable custom-peak ref per transition cell,
+      `PeakIndex` on the group
+- [ ] Commit N-1: make Refine > Reintegrate produce the compact form
 - [ ] Commits 3..n: convert readers - reports/databinding, results grid, scoring and
       reintegration, export
 - [ ] Commit N: delete the obscure properties from `TransitionChromInfo`
