@@ -146,8 +146,27 @@ Discussion-first (Mike/Brendan want the methodology settled before the flip).
 - **Harness**: added `-Pass2QValue` to `ai/scripts/Osprey/Run-FdrBench.ps1`
   (sets/restores OSPREY_PASS2_QVALUE, folds into OutName + metrics.csv). Built a
   fresh Release net8.0 Osprey in pwiz-work1 (master-equivalent; HEAD == origin/master).
-- **Oracle run launched** (background): 3-way `transfer` / `transfer-compete` /
-  `protein-compact` on Stellar 3-file libdecoy, matched (precursor, pass 2,
-  --protein-fdr 0.01, --fragment-tolerance 0.4). `transfer` doubles as the #4363
-  cell-E anchor (~0.86%). Driver: `ai/.tmp/run-pass2-oracle-3way.ps1`;
-  log `ai/.tmp/pass2-oracle-3way.driver.log`. Results pending.
+- **Oracle 3-way results** (branch build; matched precursor / pass 2 /
+  --protein-fdr 0.01; Stellar +tol0.4, Astral calibrated). disc @ TRUE 1% FDP:
+
+  | mode | Stellar (true FDP) | Astral (true FDP) |
+  |---|---|---|
+  | transfer | 27348 (0.94%) | 84659 (0.85%) |
+  | transfer-compete | 27738 (0.69%) | 85042 (0.87%) |
+  | protein-compact | **30433 (0.90%)** | **105883 (0.77%)** |
+
+  Findings: (1) transfer-compete is NOT anti-conservative (conservative both) —
+  the reconciliation asymmetry doesn't bite; full pre-compaction null is
+  decoy-rich. (2) protein-compact dominates: +9.7% (Stellar) / +24.5% (Astral)
+  disc @ matched TRUE FDP, calibrated both, reproduces #4436. (3) transfer ≈
+  transfer-compete (fresh competition adds ~nothing); gain is the protein stratum.
+  (4) **transfer resident-pool trip is a regression**: #4438 removed
+  `|| Pass2TransferQ` from NeedsResidentPool (transfer streams via per-file
+  score→run-q table); #4446 re-added it (`PerFileScoringTask.cs:1513`, merge
+  artifact) contradicting its own docstring. transfer numbers ran resident under
+  the memory override; lean==fat by #4438's invariant so they stand.
+- **Recommendation**: default → `protein-compact` (both datasets agree); retire
+  `percolator`; keep transfer/transfer-compete opt-in; fix the #4446 regression
+  first. Full analysis + tables: `ai/.tmp/pass2-fdr-default-validity.md`.
+- Driver: `ai/.tmp/run-pass2-oracle-3way.ps1` (-Dataset param); logs
+  `ai/.tmp/pass2-oracle-3way.{stellar,astral}.driver.log`.
