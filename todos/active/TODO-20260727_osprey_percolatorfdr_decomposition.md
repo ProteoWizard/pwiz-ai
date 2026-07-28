@@ -100,6 +100,19 @@ Decomposing it into named phases is its own step, kept separate because it chang
 code *shape* rather than just relocating code. Permitted: the gate is output-only
 (see Constraint above).
 
+**Decided 2026-07-27 (Brendan): the `RunPercolator` decomposition stays in THIS PR**,
+not a follow-up. Leaving training at ~1,340 lines with a 558-line method inside is
+the shape the size concern was about, and splitting would cost a second review cycle
+without changing the risk.
+
+**Verification note for that step**: every step so far has had TWO independent
+checks - a verbatim body-for-body diff proving the move changed nothing, plus
+byte-identical parity. An internal decomposition forfeits the verbatim diff, since
+the text legitimately changes. Parity becomes the sole verifier, on the most
+intricate method in the file. Mitigation: decompose in SMALL increments with a
+parity run each, rather than one reshape, so a break stays attributable. Run
+`-Dataset All` before the PR, not just Stellar.
+
 **End state**: `PercolatorFdr.cs` becomes a facade well under 200 lines, or goes
 away entirely if the public entry points read better on the collaborators.
 
@@ -324,11 +337,68 @@ take a `-SourceRoot` too.
 Re-run the perf gate when that worktree is free, before step 6 stacks another hot
 path change on top.
 
+## Step 6 result - training orchestration (2026-07-27)
+
+New `PercolatorTrainer` (public static, 1,343-line file) holding `RunPercolator`,
+`TrainFold`, `TrainFoldGbt`, `TrainProgressReporter`, `SelectPositiveTrainingSet`,
+`FindBestInitialFeature`, `GridSearchC`, `CalibrateScoresBetweenFolds`,
+`FindScoreAtFdr`, the C-grid console formatters, and `MIN_POSITIVE`.
+
+`PercolatorFdr.cs`: 2,845 -> **1,561**, and what remains is purely FDR math.
+1,291 moved lines diff-verified verbatim.
+
+### The seam is the messiest yet, and that is informative
+
+Training needed **6 more private FDR members widened to `internal`** - `CompeteAll`,
+`ComputeQvalues`, and the four per-run / experiment q-value functions - on top of the
+4 the scorer already needed. Ten widenings total.
+
+That is not accidental coupling: `RunPercolator` **is** the train -> score -> FDR
+monolith, so extracting it exposes how far it reaches into q-value math. It is the
+measurable argument for decomposing the method rather than just relocating it, and
+steps 7-9 should convert most of those widenings back into ordinary cross-class
+calls.
+
+### Tooling: a brace-aware extractor replaced hand-computed line ranges
+
+Manual `sed` ranges had already caused two errors (an orphaned closing brace in step
+4; a cut that took the NEXT member's doc comment in step 5). For a four-run,
+~1,290-line cut that was no longer acceptable, so the members were located by brace
+matching instead (`ai/.tmp/extract_members.py`, reporting each member's extent and
+asserting no overlaps).
+
+It immediately earned itself: **`TrainFoldGbt` has a `///` doc block followed by a
+plain `//` note before its declaration**, so a walk-back that only accepted `///`
+stopped early and would have silently orphaned 19 lines of documentation into the
+FDR file. Fixed the walk-back to accept plain `//` too.
+
+Gates: build PASS, 543/543 tests, 0 inspection warnings (after removing two usings
+the move made redundant), Stellar mode1/2/3 PASS with the blib byte-identical at
+30,597,120. Committed `8a55e0e1b`.
+
+## Endgame: PercolatorFdr does not survive
+
+Bucketing the 1,561 lines left after step 6 gives **competition 286 / streaming 388
+/ q-values 782, and zero unclassified**. So once steps 7-9 land, `PercolatorFdr` has
+no members at all - it does not become a thin facade, it goes away.
+
+That settles the `BASE_ID_MASK` question below: the constant has to be rehomed as
+part of step 9 rather than left where it is, because its current home ceases to
+exist. Candidates: alongside the entry-id concept it masks, or as a shared constant
+the four consumers and `ModelDiagnosticsData` can both reference.
+
 ## Follow-up noticed (not fixed here)
 
 `BASE_ID_MASK` is defined twice - `PercolatorFdr` (`static readonly`) and
-`ModelDiagnosticsData` (`const`). Left alone to keep this step's parity surface
-minimal; fold into a later step.
+`ModelDiagnosticsData` (`const`) - and is now referenced from four classes. Step 9
+forces the issue since `PercolatorFdr` disappears; `Osprey.FDR` does not reference
+`Osprey.Scoring`, so unifying with the `CalibrationScorer` side would need a shared
+home in Core/ML and is a separate change.
+
+`CalibrationScorer` also has its own private `CreateStratifiedFoldsByPeptide`, a
+second implementation of the fold split extracted in step 2. Whether the two are
+actually identical is worth answering, but merging them moves behavior across an
+assembly boundary and does not belong in a structural-only PR.
 
 ## Tasks
 
@@ -337,6 +407,7 @@ minimal; fold into a later step.
 - [x] Step 3: extract the data types (286)
 - [x] Step 4: extract the shared matrix row helpers (~65)
 - [x] Step 5: extract scoring / model application (1,088)
+- [x] Step 6: extract training orchestration (1,284)
 - [ ] Step 2: extract sampling / fold selection
 - [ ] Step 3: extract training orchestration
 - [ ] Step 4: extract scoring / model application
