@@ -138,10 +138,10 @@ SkylineTester and `Run-Tests.ps1` share the test list file for bidirectional wor
 
 ```powershell
 # Run tests selected in SkylineTester UI (from pwiz_tools/Skyline/SkylineTester test list.txt)
-./pwiz_tools/Skyline/ai/Run-Tests.ps1 -UseTestList
+pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -UseTestList
 
 # Update test list and run (tests appear pre-checked in SkylineTester)
-./pwiz_tools/Skyline/ai/Run-Tests.ps1 -TestName TestFoo,TestBar -UpdateTestList
+pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestFoo,TestBar -UpdateTestList
 ```
 
 **Workflows:**

@@ -35,7 +35,7 @@ PR #3666, 2025-11-05): core files 707 -> 1,056 lines (+49%) in ~9 months.
 ### P0 - actively wrong instructions (no owner decision needed)
 - [x] WI-1 - contradictory/destructive instructions (DONE 2026-07-28; 2 of 3 real,
       the third was a false positive - see Progress Log)
-- [ ] WI-2 - fix the measuring stick (BLOCKED on decision 4: `ai/` root policy)
+- [x] WI-2 - fix the measuring stick (DONE 2026-07-28)
 - [ ] WI-3 - add the 5 missing content verifiers to `audit-docs.ps1`
 - [ ] WI-4 - repo-wide `&` call-operator sweep (see decision 10)
 - [ ] WI-5 - relative-link normalization
@@ -62,6 +62,29 @@ PR #3666, 2025-11-05): core files 707 -> 1,056 lines (+49%) in ~9 months.
 
 ### P4
 - [ ] WI-20 - stale-fact sweep
+
+## Owner decisions (2026-07-28)
+
+Answers to §5 of the audit plan. Recorded here so later sessions do not re-ask.
+
+1. **New docs vs. reuse** -> **create all four**: `docs/pr-report-guide.md`,
+   `docs/code-review-guide.md`, `docs/autonomous-session-guide.md`,
+   `docs/mcp/computers.md`. The version-control reuse precedent held because genuine
+   homes already existed; these have none.
+3. **night-session** -> **split doctrine from mechanism.** Investigative posture and
+   evidence bar move to `docs/autonomous-session-guide.md` (passes the
+   non-Claude-Code test); context budget, MCP calls and task chips stay in the skill.
+   NOT an exemption.
+4. **`ai/` root policy** -> **limit CLAUDE.md (<250); exempt TOC.md (generated),
+   root-CLAUDE.md (mirror), README.md (navigation).** Root is a closed set of nine.
+   CLAUDE.md is the one platform file that is hand-maintained prose, so it alone
+   carries a limit. It is NOT part of the core-five <1000 budget.
+5. **C# member ordering** -> the **"interface" variant** (`docs/style-guide.md:35`)
+   is canonical: item 2 is "static public **interface** methods", item 5 is
+   "public **interface (instance)** methods and properties". WI-16 collapses the
+   five copies to this wording.
+
+Still open: decisions 2, 6, 7, 8, 9, 10, 11, 12.
 
 ## Progress Log
 
@@ -102,6 +125,39 @@ Applied WI-1, three actively-wrong instructions:
    about the workflow's actual scope.
 
 Full audit plan retained below (was written to `ai/.tmp/`, which is gitignored).
+
+### 2026-07-28 - WI-2 applied (measuring stick)
+
+The theme: **every hand-maintained count in the corpus had rotted, and the fix is
+to delete the number, not refresh it.**
+
+- `documentation-maintenance.md` - removed the "Current" column (read 707 vs an
+  actual 1,056) and the budget arithmetic that consumed it (offered 293 lines of
+  headroom against a budget 56 over). Both now point at `audit-docs.ps1`.
+  Enumerated `ai/` root as a closed set of nine per decision 4. Corrected the
+  `pwiz_tools/Skyline/ai/` directory - which does not exist - to
+  `ai/scripts/<Project>/`.
+- `Generate-TOC.ps1` - three bugs. (a) `Measure-Object -Line` counts NON-BLANK
+  lines, reading ~25% under (WORKFLOW.md 231 vs 307), so over-limit core files
+  looked compliant in the very index used to check them; now `(Get-Content).Count`,
+  matching `wc -l` and `audit-docs.ps1`. (b) The subdomain list was hardcoded to
+  `labkey/` only, so TOC reported "Subdomains 1" while `callgraph/` and
+  `labkey-setup/` had READMEs for months - now discovered from disk. (c) A fenced
+  code block inside a double-quoted here-string collapsed ``` to `p (backtick is
+  PowerShell's escape char), rendering the block as inline code - now a
+  single-quoted here-string.
+- `audit-docs.ps1` - added the CLAUDE.md 250-line limit, kept OUT of the core-five
+  <1000 budget via a new `-BudgetFiles` parameter (folding it in would have
+  silently raised the bar the five are measured against).
+- `README.md` / `CLAUDE.md` - replaced stale counts ("all 58 documents", "~170
+  lines", "Total: <500") with limits and a pointer to generated metrics.
+- `pw-auditdocs.md` - documented BOTH tiers; it previously described only the
+  platform limits, so a reader concluded an 18,962-char command was fine.
+- `ai-repository-strategy.md` - phantom `helpers/` dir corrected to
+  `scripts/Skyline/scripts/`; 3 of 8 script dirs listed -> all 8.
+- Beyond the audit's list: `skylinetester-guide.md` had two *runnable* commands
+  using the phantom path, and `scripts/AutoQC/README.md` +
+  `scripts/SkylineBatch/README.md` cited it as the pattern to follow.
 
 ---
 

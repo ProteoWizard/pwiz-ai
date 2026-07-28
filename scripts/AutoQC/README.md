@@ -84,8 +84,8 @@ AutoQC uses **standard MSTest** for testing:
 
 ## Purpose
 
-This directory follows the pattern established in `pwiz_tools/Skyline/ai/`:
-- **Project-specific tooling** lives in project's `ai/` directory
+This directory follows the pattern established in `ai/scripts/Skyline/`:
+- **Per-project tooling** lives in `ai/scripts/<Project>/`
 - **Repository-wide guidance** lives in `/ai/` at repository root
 
 See [../../../../ai/docs/documentation-maintenance.md](../../../../ai/docs/documentation-maintenance.md) for the full LLM documentation system architecture.

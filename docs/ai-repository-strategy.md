@@ -172,21 +172,31 @@ ai/
 ├── claude/                 <- Commands/skills (exposed via .claude junction)
 │   ├── commands/
 │   └── skills/
-├── scripts/                <- Build and utility scripts
+├── scripts/                <- Build and utility scripts (8 per-project dirs)
 │   ├── Skyline/
 │   │   ├── Build-Skyline.ps1
 │   │   ├── Run-Tests.ps1
-│   │   └── helpers/
-│   ├── AutoQC/
-│   └── SkylineBatch/
+│   │   └── scripts/        <- Analyze-Coverage.ps1, Sync-DotSettings.ps1, ...
+│   ├── AutoQC/   Osprey/   PRReport/
+│   ├── SkylineBatch/   Usage/   callgraph/   lsp/
+│   └── *.ps1               <- Corpus-wide: audit-docs.ps1, Generate-TOC.ps1
 ├── docs/                   <- All documentation
 ├── mcp/                    <- MCP servers
 ├── todos/                  <- Work tracking
-├── CLAUDE.md               <- Critical configuration
+├── CLAUDE.md               <- Claude Code session configuration
 ├── CRITICAL-RULES.md       <- Absolute constraints
 ├── MEMORY.md               <- Project context
-└── TOC.md                  <- Documentation index
+├── STYLEGUIDE.md           <- C# coding conventions
+├── TESTING.md              <- Testing essentials
+├── WORKFLOW.md             <- Git workflows, TODO system
+├── README.md               <- Entry point
+├── root-CLAUDE.md          <- Mirror of the project-root CLAUDE.md
+└── TOC.md                  <- Documentation index (generated)
 ```
+
+The nine `ai/` root `.md` files above are the complete, closed set - see
+`documentation-maintenance.md`, "The rest of ai/ root", for which carry line
+limits and which are exempt.
 
 ---
 

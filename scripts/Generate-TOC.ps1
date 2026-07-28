@@ -95,12 +95,18 @@ function Get-FrontmatterDescription {
     return $null
 }
 
-# Get line count for a file
+# Get line count for a file.
+#
+# Counts EVERY line, the way `wc -l` and audit-docs.ps1 do. Do not switch this
+# back to `Measure-Object -Line`: that counts non-blank lines only, which read
+# ~25% under on a typical markdown file (WORKFLOW.md: 231 vs 307). The core-file
+# limits in ai/docs/documentation-maintenance.md are written in wc -l terms, so
+# an undercounting TOC made over-limit files look compliant.
 function Get-LineCount {
     param([string]$FilePath)
 
     if (-not (Test-Path $FilePath)) { return 0 }
-    return (Get-Content $FilePath | Measure-Object -Line).Lines
+    return @(Get-Content $FilePath).Count
 }
 
 # Get character count for a file
@@ -212,22 +218,33 @@ $commandFiles = Get-ChildItem -Path (Join-Path $claudeRoot "commands") -Filter "
     Select-Object -ExpandProperty FullName
 
 # Subdomains: documentation subdirectories with their own entry point (README.md).
-# Listed explicitly so the main TOC stays compact — the subdirectory's README
-# is responsible for indexing its own contents.
-$subdomains = @(
-    @{ LinkPath = 'docs/labkey/README.md'; DisplayName = 'LabKey / Panorama' }
-)
+# The subdirectory's README indexes its own contents so the main TOC stays compact.
+#
+# DISCOVERED from disk, not hand-listed. The previous hardcoded list named only
+# docs/labkey/, so TOC.md reported "Subdomains 1" while docs/callgraph/ and
+# docs/labkey-setup/ had had READMEs for months - the same rot that a
+# hand-maintained count always produces. A directory without a README.md is not a
+# subdomain and is skipped automatically (docs/archive/).
+#
+# docs/mcp/ is excluded here because it gets its own dedicated section below.
+$subdomainDisplayNames = @{
+    'labkey'       = 'LabKey / Panorama'
+    'labkey-setup' = 'LabKey Setup'
+    'callgraph'    = 'Call Graph'
+}
 
-# Validate each subdomain entry actually exists
-$subdomainEntries = @($subdomains | Where-Object {
-    $fullPath = Join-Path $aiRoot $_.LinkPath
-    if (Test-Path $fullPath) {
-        $true
-    } else {
-        Write-Warning "Subdomain README missing, skipping: $($_.LinkPath)"
-        $false
-    }
-})
+$subdomainEntries = @(
+    Get-ChildItem -Path (Join-Path $aiRoot 'docs') -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -ne 'mcp' -and (Test-Path (Join-Path $_.FullName 'README.md')) } |
+        Sort-Object Name |
+        ForEach-Object {
+            $name = $_.Name
+            @{
+                LinkPath    = "docs/$name/README.md"
+                DisplayName = if ($subdomainDisplayNames.ContainsKey($name)) { $subdomainDisplayNames[$name] } else { $name }
+            }
+        }
+)
 
 # Generate TOC content
 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm"
@@ -354,7 +371,12 @@ Slash commands for specific workflows. Invoke with `/<command-name>`.
 $commandRows = New-TableRows -Files $commandFiles -BaseDir ".claude/commands" -LinkPrefix "../.claude/commands/" -ExistingDescriptions $existingDescriptions -UseCharCount -ExtractFromFrontmatter
 $tocContent += "`n" + ($commandRows -join "`n")
 
-$tocContent += @"
+# Single-quoted here-string (@'...'@) on purpose: this block contains a fenced
+# code block, and in a DOUBLE-quoted here-string the backtick is PowerShell's
+# escape character, so ``` collapsed to `p and the fence rendered as inline code
+# in TOC.md. Nothing here interpolates, so the literal form is both correct and
+# safe from that trap. Do not convert this back to @"..."@.
+$tocContent += @'
 
 
 ---
@@ -374,7 +396,7 @@ Run this after adding, removing, or renaming documentation files.
 - **NEW files**: Review the file and add a one-line description
 - **Renamed files**: Appear as NEW (old entry auto-removed)
 - **Content changes**: Update description if purpose changed significantly
-"@
+'@
 
 # Write the TOC
 $tocContent | Set-Content -Path $tocPath -Encoding UTF8

@@ -70,10 +70,16 @@ param(
     [int]$ReviewThreshold = 2000
 )
 
-# Per-file line limits for the five core files, from
-# ai/docs/documentation-maintenance.md ("The Five Core Files (NEVER exceed limits)").
-# Files in ai/*.md not listed here (README.md, CLAUDE.md, TOC.md) are entry
-# points or generated, and carry no declared limit.
+# Per-file line limits from ai/docs/documentation-maintenance.md.
+#
+# The five core files ALSO share a combined <1000-line budget. CLAUDE.md carries
+# its own per-file limit but is deliberately NOT part of that budget: it is a
+# Claude Code platform file, not one of the five, and folding it into the sum
+# would silently raise the bar the five are measured against.
+#
+# TOC.md (generated), root-CLAUDE.md (mirror of the project-root file) and
+# README.md (navigation entry point) are exempt by design - see
+# documentation-maintenance.md, "The rest of ai/ root".
 $CoreFileLimits = @{
     "CRITICAL-RULES.md" = 100
     "MEMORY.md"         = 200
@@ -82,6 +88,11 @@ $CoreFileLimits = @{
     "TESTING.md"        = 200
 }
 $CoreTotalLimit = 1000
+
+# Checked per-file, excluded from the $CoreTotalLimit budget above.
+$PlatformFileLimits = @{
+    "CLAUDE.md" = 250
+}
 
 # Determine repo root
 $scriptPath = $PSScriptRoot
@@ -217,7 +228,8 @@ function Show-LineReport
         [string]$Title,
         [array]$Results,
         [hashtable]$Limits,
-        [int]$TotalLimit = 0
+        [int]$TotalLimit = 0,
+        [string[]]$BudgetFiles = @()
     )
 
     $hasLimits = ($null -ne $Limits -and $Limits.Count -gt 0)
@@ -254,7 +266,9 @@ function Show-LineReport
 
             if ($null -ne $limit)
             {
-                $limitedLines += $item.Lines
+                # Only files named in -BudgetFiles count toward the combined
+                # budget; other limited files (CLAUDE.md) are per-file only.
+                if ($BudgetFiles -contains $item.Name) { $limitedLines += $item.Lines }
                 $limitText = "$limit"
                 if ($item.Lines -gt $limit)
                 {
@@ -358,8 +372,10 @@ if ($Section -eq "all" -or $Section -eq "ai")
     if (Test-Path $aiPath)
     {
         $aiResults = Get-FileStats -Path $aiPath -Filter "*.md"
+        $allRootLimits = $CoreFileLimits.Clone()
+        foreach ($k in $PlatformFileLimits.Keys) { $allRootLimits[$k] = $PlatformFileLimits[$k] }
         $summary["ai"] = Show-LineReport -Title "AI Root (ai/*.md)" -Results $aiResults `
-            -Limits $CoreFileLimits -TotalLimit $CoreTotalLimit
+            -Limits $allRootLimits -TotalLimit $CoreTotalLimit -BudgetFiles @($CoreFileLimits.Keys)
     }
 }
 

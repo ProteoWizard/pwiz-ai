@@ -162,7 +162,7 @@ some_command > $null
 ## Documentation Discovery
 
 **Unsure what documentation exists?** Consult **[ai/TOC.md](TOC.md)** - a comprehensive table of contents with:
-- All 58 documents (core files, guides, skills, commands)
+- Every document (core files, guides, subdomains, MCP sources, skills, commands)
 - One-line descriptions of each
 - Size metrics (line/character counts)
 
