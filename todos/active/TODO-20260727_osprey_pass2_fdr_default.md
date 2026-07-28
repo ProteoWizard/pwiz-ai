@@ -179,11 +179,15 @@ reported-pool score histogram from the model build so it shows under transfer.
   fire is queued (machine was busy on the 82-file run).
 - **82-file protein-compact run LAUNCHED** (detached, `run-pass2-82-4way.ps1 -Mode protein-compact`,
   stage1-4 resume CONFIRMED "skipping (outputs valid)"). Out:
-  `D:\test\Pilot-MTG-Tissue-May2026\runs\pass2-82-4way-protein-compact\`. ETA ~03:25.
-  EXTRACT the result: open `out.model-diagnostics.html` -> Pass 2 tab -> FDR calibration card
-  = entrapment true-FDP @ reported q (the KEY number: is protein-compact calibrated at 82-file
-  scale? compare to percolator ~9% and 3-file protein-compact 0.90%). Backup: `fdrbench.tsv`
-  (--fdrbench) via the FDRBench jar or compute_pass2_fdp.py.
+  `D:\test\Pilot-MTG-Tissue-May2026\runs\pass2-82-4way-protein-compact\`.
+  **DONE 03:37: 37,232 disc @1%q, true FDP 1.51%, 33,722 disc @ TRUE 1% FDP.**
+  **KEY: 3-file protein-compact was 0.90% (calibrated); 82-file is 1.51% (ANTI-CONSERVATIVE)
+  — inflation grows with run count as predicted.** Still far better than percolator ~9%, but
+  NOT calibrated at scale -> the 3-file "protein-compact default" lean is unsafe for hundreds
+  of runs; `transfer` (freezes experiment q, prior 82f ~0.94%) is the calibration-holding
+  candidate. Full 4-way table + interpretation: `ai/.tmp/pass2-82-4way-results.md`.
+  transfer-compete RUNNING (Monitor bzlvxtvh6); then rerun transfer (current binary).
+  Persist VERIFIED at 82-file ("Persisted 1st-pass model ... 82 file sidecar(s)").
 - **Full 4-way**: launch the other 3 modes with `run-pass2-82-4way.ps1 -Mode {percolator|transfer|
   transfer-compete}` (sequential, one Osprey at a time). Each ~3h40m straight-through; OR fast via
   --task SecondPassFDR once stratum persistence lands (protein-compact) / for transfer-compete now.
