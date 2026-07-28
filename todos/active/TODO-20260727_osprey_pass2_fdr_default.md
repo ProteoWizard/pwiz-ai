@@ -110,6 +110,53 @@ regression tests; capture their on-disk paths in the Progress Log.
 - maccoss/osprey#57 -- Rust port of the frozen modes
 - `pwiz_tools/Osprey/docs/12-second-pass-fdr.md`, `Osprey.Core/OspreyEnvironment.cs`
 
+## Build work (prerequisite for the flip): HPC-ready frozen 2nd-pass
+
+Decision deferred (Mike + Brendan not rushing; may re-run the oracle on a larger
+dataset). Confident percolator must go; exact winner (protein-compact vs a
+co-monotone stratum, and future run-count features) may take >1 PR. Tonight's
+build makes the frozen modes usable at scale so the experiment can iterate.
+
+### Piece 1 — persist + reload the 1st-pass model (frozen modes in the merge node)
+
+Root cause: the frozen 2nd-pass modes need the in-process 1st-pass Percolator
+model (`ctx.Publish` in FirstJoinTask); a distributed `--task SecondPassFDR` merge
+node never trained pass 1, so `Pass2FdrSidecar` fail-fasts. This blocks
+`--task SecondPassFDR` for frozen modes AND blocks the pass-2-only experiment.
+
+Implemented (branch build):
+- `FeatureStandardizer.FromMeansStds` factory (Osprey.ML) to reconstruct from persisted means/stds.
+- `Osprey.Tasks/FirstPassModelIO.cs`: per-file `<stem>.1st-pass.model.json` sidecar
+  (standardizer + fold weights/biases) via Newtonsoft + RoundtripDoubleConverter
+  (byte-exact). Per-file (not join-wide) so the merge node finds it by the same
+  input-stem derivation as every other reconciled sidecar. SVM only; GBDT declines
+  (merge-node GBDT stays fail-fast, unchanged).
+- Persist in FirstJoinTask (stage 5, beside reconciliation.json).
+- Reload in Pass2FdrSidecar.ComputeAndPersist: when a frozen mode is requested and
+  the model isn't in ctx, LoadFromAny(perFileParquetPaths) + Publish.
+- regression.ps1 phase-4 copy loop ships the model sidecar to the merge node.
+
+Verified:
+- Unit test `FirstPassModelIoTest` (3 tests green): round-trip is score-bit-identical;
+  Save declines GBDT/degenerate; Load of a missing path returns null.
+- Straight-through protein-compact byte-unchanged with the change (30,130 @ 0.90%
+  reproduced exactly) -> persist/reload is byte-neutral for the in-process path.
+- Persist writes a valid 21-feature model sidecar (JSON inspected).
+- Standing gate: regression.ps1 -Dataset Stellar (byte-identity + HPC chain) — running.
+- Live frozen-mode merge-node reload: to prove via `OSPREY_PASS2_QVALUE=protein-compact
+  regression.ps1 -Dataset Stellar -KeepOutput` (self-consistent config; check phase4.log)
+  — the manual `--task`/resume staging hit pre-existing search_hash / rehydrate
+  requirements unrelated to this change.
+
+### Piece 2 — 2nd-pass `--model-diagnostics` HTML (mostly existing)
+
+`MergeNodeTask.cs:230` already calls `ModelDiagnosticsReport.WritePass2AndFinalize`
+building a Pass2Data bundle (FDR calibration incl. entrapment true-FDP, id-yield,
+cross-run, per-file) rendered with a Pass 1/Pass 2 switch. Q-driven cards need no
+first-pass data. Remaining: confirm it renders for frozen modes in a merge-node-only
+run (structural retrain-only cards correctly show "n/a"); optional: split the
+reported-pool score histogram from the model build so it shows under transfer.
+
 ## Progress Log
 
 ### 2026-07-27 - Session Start
