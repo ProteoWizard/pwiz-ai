@@ -54,7 +54,8 @@ but from a statistically VALID transform (symmetric decoys, self-calibrating in 
       aggScore fed in / entry.Score overwrite; separate increment).
 - [ ] Streaming-path mirrors (bounded/HPC).
 - [ ] Unit tests (aggregation + floor + 1-run demotion + decoy symmetry).
-- [ ] Flag-off byte-identity regression (Stellar mode1/2/3) — golden unchanged.
+- [x] Flag-off byte-identity regression (Stellar mode1/2/3) — golden unchanged. PASSED 2026-07-28
+      (blib 30,597,120 all 3 modes) on commit dd8cd2136e; confirms mean-best-2 is golden-neutral off.
 - [ ] Flag-on oracle A/B vs transfer (82f/164f, matched TRUE FDP) — Brendan-driven.
       **PROTOCOL (Brendan 2026-07-28): flag-on runs MUST use OSPREY_PASS2_QVALUE=transfer** (only
       transfer carries the mean-best-2 1st-pass experiment q through; percolator re-derives and
