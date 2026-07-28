@@ -163,10 +163,17 @@ reported-pool score histogram from the model build so it shows under transfer.
   Byte-identity regression PASSED; unit tests green; persist verified firing in the HPC
   chain (phase-2 writes `<stem>.1st-pass.model.json`). Enables `transfer`/`transfer-compete`
   in the merge node.
-- **KNOWN GAP (follow-up)**: `protein-compact` merge-node also needs the **protein stratum**
-  (`ProteinCompactStratum`, a set of base_ids) persisted like the model — `Pass2FdrSidecar.cs:665`.
-  Same shape as FirstPassModelIO. Until then protein-compact fail-fasts in the merge node
-  (straight-through is fine — model+stratum in-process).
+- **KNOWN GAP (follow-up, ~15 min)**: `protein-compact` merge-node also needs the **protein
+  stratum** persisted like the model. SPEC: `ProteinCompactStratum { HashSet<uint> BaseIds }`
+  (`PipelineByproducts.cs:194`), published at `FirstJoinTask.cs:1611`. Implement:
+  (1) a per-file `<stem>.1st-pass.stratum.json` (uint[] base_ids) via Newtonsoft — or fold
+  base_ids into FirstPassModelIO's DTO; (2) persist beside the model in FirstJoinTask (the
+  stratum is available where it's published, ~1611); (3) in `Pass2FdrSidecar.ComputeAndPersist`,
+  alongside the model reload, when `Pass2ProteinCompact && !ctx.TryGet<ProteinCompactStratum>`,
+  load the base_ids + `ctx.Publish(new ProteinCompactStratum(set))`. Then the frozen dispatch at
+  `Pass2FdrSidecar.cs:665` finds it. Straight-through is unaffected (both in-process). Gate:
+  regression byte-identity + a protein-compact chain run (`OSPREY_PASS2_QVALUE=protein-compact
+  regression.ps1 -Dataset Stellar -KeepOutput`, add the stratum sidecar to phase-4 copy).
 - **Live merge-node reload**: frozen chain proof revealed the harness sourced the model from
   the wrong phase (fixed, acc8112ece); a `transfer-compete` chain rerun to watch the reload
   fire is queued (machine was busy on the 82-file run).
