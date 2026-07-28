@@ -203,7 +203,41 @@ Measured, not guessed - these cost real time to learn:
 | `Convert-SeaAdRaw.ps1` | .raw -> mzML (only if not using the pre-converted share) |
 | `convert-one.cmd` | the msconvert command line, verbatim; cmd-specific quoting |
 | `Clear-StandbyCache.ps1` | evict the OS file cache before a timing run |
+| `Test-SpectraCache.ps1` | verify `.spectra.bin` are complete and will actually be USED |
+| `Measure-Stage6Rescore.ps1` | measure one stage's resident memory vs file count (#4472) |
 | `tools/*.py` | library derivation and the FDP readers |
+
+### Copying caches between machines
+
+`.spectra.bin` are portable - a cache built on one box streams on another, with no
+re-parse. Nothing in the format is machine- or path-specific, and it is
+**settings-independent**, so one cache per mzML serves every arm/ratio/pass-2 mode. Two
+conditions, and both fail SILENTLY (Osprey logs `Spectra cache stale or invalid;
+re-parsing mzML` and carries on, so you see a slow run, not an error):
+
+1. **Format version must match exactly.** v4 landed 2026-07-16; a cache written before
+   that bump is rejected outright regardless of anything else.
+2. **The mzML's size AND last-write-time must match** what the writing machine saw.
+   Size survives any copy; mtime only survives a timestamp-preserving one
+   (`robocopy /COPY:DAT`). A plain stream download does not preserve it.
+
+`Test-SpectraCache.ps1` answers both in seconds - it reads only the header plus the
+footer, and verifies the exact v4 size identity
+(`fileLength == indexOffset + nMs2*40 + 16`), so a truncated or still-uploading cache
+reads as INCOMPLETE rather than being copied and trusted. Run it against the SHARE
+before pulling hundreds of GB:
+
+```powershell
+.\Test-SpectraCache.ps1 -CacheDir M:\...\mzml   # vet in place, then copy the good ones
+.\Test-SpectraCache.ps1 -Quiet                  # after copying: only non-ACCEPT is printed
+```
+
+**Copy mzML with timestamps preserved.** A file copied while its upload was still in
+flight keeps the in-progress mtime, and the uploader then stamps the ORIGINAL time on the
+source when it finishes - leaving the local copy NEWER than the source, which
+`robocopy /XO` would then skip forever. If it happens, the repair is free: when the size
+matches, only the timestamp is wrong, so restamping it from the source fixes every cache
+without re-transferring a byte.
 
 ### Provenance
 
