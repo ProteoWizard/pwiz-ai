@@ -387,6 +387,39 @@ part of step 9 rather than left where it is, because its current home ceases to
 exist. Candidates: alongside the entry-id concept it masks, or as a shared constant
 the four consumers and `ModelDiagnosticsData` can both reference.
 
+## RunPercolator decomposition (2026-07-27)
+
+**Increment A - DONE** (`9f427d3c3`): `TrainFoldModels` takes the fold-index
+precompute, scratch pool, parallel fold training and per-fold reporting.
+`RunPercolator` 546 -> **440** lines. `foldElapsed` / `foldBestC` moved with it -
+declared above the phase but used only inside it, so block state not caller state,
+which only the compiler caught. Stellar mode1/2/3 PASS.
+
+**Increment B - ATTEMPTED AND REVERTED.** Extracting `ScoreEntriesWithFoldModels`
+(64 lines, held-out-fold scoring) built and tested clean but turned the inspection
+red with 6 findings: `ConditionIsAlwaysTrueOrFalse` plus `HeuristicUnreachableCode`
+at two `if (trainSubset != null)` sites in `RunPercolator`.
+
+They are correct. `PercolatorSampling.BuildTrainingSubset` returns `.ToArray()` on
+both of its return paths and can never be null, so **both `else` branches are dead
+code** - the "no subsampling" clone path and the un-remapped calibration call. This
+is **pre-existing**, not introduced: shrinking `RunPercolator` far enough let
+ReSharper's data-flow analysis complete where it previously gave up. A real side
+benefit of the decomposition, and an argument for it beyond readability.
+
+**Why it was reverted rather than fixed**: removing those branches is not something
+this PR's verifier can check. If `trainSubset` is never null then both versions
+behave identically on Stellar, so a green parity run is evidence of *nothing*. The
+deletion would rest entirely on the null-impossibility argument with no gate behind
+it - which is the standard every other step here was held to. Suppressing a true
+finding to keep the gate green would be worse.
+
+**Needs a decision** (Brendan): remove the two dead `else` branches as a separate,
+explicitly-justified change (after which increment B and any further
+`RunPercolator` decomposition can proceed), or keep the defensive branches and
+accept that `RunPercolator` cannot shrink much past 440 lines without tripping the
+zero-warning gate.
+
 ## Follow-up noticed (not fixed here)
 
 `BASE_ID_MASK` is defined twice - `PercolatorFdr` (`static readonly`) and
