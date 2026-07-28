@@ -4,7 +4,9 @@
 - **Branch**: `Skyline/work/20260727_osprey_percolatorfdr_decomposition`
 - **Base**: `master` (1c1ae8532)
 - **Created**: 2026-07-27
-- **Status**: PR open, gates green (final Stellar on HEAD PASS; perf re-run in flight)
+- **Status**: PR open, MERGEABLE. All local gates green (All 18/18, Stellar-on-HEAD,
+  perf re-run PASS vs merge-base). Copilot feedback addressed. Awaiting TeamCity
+  Perf/Regression gate (not yet triggered) + human review.
 - **Worktree**: `C:\proj\pwiz`
 - **GitHub Issue**: [#4468](https://github.com/ProteoWizard/pwiz/issues/4468)
 - **PR**: [#4490](https://github.com/ProteoWizard/pwiz/pull/4490)
@@ -539,21 +541,29 @@ assembly boundary and does not belong in a structural-only PR.
 
 ## Tasks
 
-- [x] Step 1: extract Stage-5 diagnostic dumps (223)
-- [x] Step 2: extract sampling / fold selection (270)
-- [x] Step 3: extract the data types (286)
-- [x] Step 4: extract the shared matrix row helpers (~65)
-- [x] Step 5: extract scoring / model application (1,088)
-- [x] Step 6: extract training orchestration (1,284)
-- [ ] Step 2: extract sampling / fold selection
-- [ ] Step 3: extract training orchestration
-- [ ] Step 4: extract scoring / model application
-- [ ] Step 5: extract TDC / FDR math
-- [ ] Full `-Dataset All` regression + perf gate before PR
-- [ ] `/code-review max` before `gh pr create`
+Extraction (9-collaborator plan, revised 2026-07-27):
 
-Steps 3-5 are large; if the session ends before they are done, the branch should be
-left at a green, byte-identical intermediate state rather than mid-extraction.
+- [x] Step 1: Stage-5 diagnostic dumps (223) - `045fe23c9`
+- [x] Step 2: sampling / fold selection (270) - `58bb8247b`
+- [x] Step 3: data types (286) - `42a690203`
+- [x] Step 4: shared matrix row helpers (~65) - `4ecd1bed1`
+- [x] Step 5: scoring -> `PercolatorScorer` (1,088) - `e78da071c`
+- [x] Step 6: training -> `PercolatorTrainer` (1,284) - `8a55e0e1b`
+- [x] Step 7: TDC competition -> `TargetDecoyCompetition` (286) - `32e5e9c06`
+- [x] Step 8: FDR streaming -> `StreamingFdr` (388) - `0786e4ddd`
+- [x] Step 9: FDR q-values -> `PercolatorQValues`; `PercolatorFdr` dissolved,
+  base-id mask rehomed (778) - `501f5fa06`
+- [x] `RunPercolator` internal decomposition + dead-branch removal - `9f427d3c3`,
+  `419a72c03`
+
+Gates / review:
+
+- [x] `-Dataset All` regression: 18/18 PASS + Stellar-on-HEAD PASS
+- [x] Perf gate vs merge-base `1c1ae8532`: PASS (stage5 +0.1%, total -1.0%)
+- [x] `/code-review max`: findings triaged, real ones fixed - `96135dd6e`
+- [x] Copilot review feedback addressed - `3dae6b659`
+- [ ] TeamCity Perf/Regression gate on `pull/4490` (ASK Brendan first - not yet run)
+- [ ] Human review approval + squash-merge (`/pw-complete`)
 
 ## Regression Test
 
@@ -570,6 +580,31 @@ exactly the right verifier. A new test asserting new structure would only pin th
 refactor's own shape.
 
 ## Progress Log
+
+### 2026-07-28 - Perf re-run PASS + Copilot feedback (post-PR)
+
+Two events after the "Final gate results" section above, recorded here so the TODO
+matches the committed branch:
+
+**Perf gate re-run PASSED** against a baseline pinned to the exact merge-base
+(`pwiz-work2` at `1c1ae8532`, verified with `git merge-base` = HEAD), closing the
+step-5 non-attribution concern (the earlier stale `pwiz-perfbase` baseline was 58
+commits behind). 3-rep median, Stellar: **stage5 +0.1%** (the stage holding the
+extracted code), **total -1.0%** - PASS, no regression. Log:
+`ai/.tmp/perfgate-final.log`; verdict `ai/.tmp/perf-gate/20260728-145355Z/verdict.md`.
+
+**Copilot review feedback addressed** in `3dae6b659`: removed a duplicated sentence
+fragment from `ScoreProjectionAndComputeFdrInPlace`'s XML doc in `PercolatorScorer.cs`
+(3 deletions, comment-only). Behavior-inert, so the Stellar-on-HEAD coverage at
+`96135dd6e` still holds - no re-run needed for a doc-comment deletion.
+
+**Current CI**: PR #4490 MERGEABLE, no failing checks; the 6 CodeQL `Analyze` jobs
+re-triggered by `3dae6b659` were IN_PROGRESS at last check. `reviewDecision` empty.
+
+**Not yet done**: TeamCity Perf/Regression gate (must run before human review/merge;
+ASK Brendan first per the Osprey skill). Deferred follow-ups from the code-review
+triage remain out of scope for this byte-identical PR - see the "/code-review max
+triage" section's "Logged, not done" list.
 
 ### 2026-07-27 - Session Start
 
