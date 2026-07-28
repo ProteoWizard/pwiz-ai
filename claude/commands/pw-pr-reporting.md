@@ -25,10 +25,11 @@ before proceeding — don't guess the login.
 
 ## Levels
 
-- **individual** (default) — just your slice: PRs awaiting your review, your open PRs (with a
-  self pile-up warning if your non-draft open PRs ≥ 3), issues assigned to you, your TODOs.
-- **team** — the full cross-team report (everyone's open PRs, pile-up callout, all recent
-  activity, full TODO inventory), with your review queue on top.
+- **individual** (default) — your slice only
+- **team** — the full cross-team report, with your review queue on top
+
+Defined in [ai/docs/pr-report-guide.md](../../docs/pr-report-guide.md), "Reporting
+levels", which also owns the pile-up threshold the self-warning keys off.
 
 ## Preflight (always)
 
@@ -44,11 +45,10 @@ before proceeding — don't guess the login.
    - `"Ok":false` with a marker mismatch → the resolver found a **private** `Claude\PRReport`
      the user made by hand. **Stop** — have them remove/rename it and join the shared one.
 
-   **Sharing fix:** the owner (brendanx@proteinms.net) shares the `Claude` folder with edit
-   access. In Google Drive on the **web**, right-click the shared **`Claude`** folder →
-   **“Add shortcut to Drive”** → place it under **My Drive**, so it appears at
-   `<drive>:\My Drive\Claude\PRReport` once Drive for Desktop syncs. **Do NOT create a
-   `Claude\PRReport` folder by hand** — that produces the private-duplicate failure above.
+   **Sharing fix:** see `ai/scripts/PRReport/README.md`, which owns the Drive-sharing
+   procedure. The short version: add a *shortcut* to the owner's shared `Claude` folder
+   under My Drive — never create `Claude\PRReport` by hand, which produces exactly the
+   private-duplicate failure above.
 
 ## `on`
 

@@ -41,7 +41,7 @@ PR #3666, 2025-11-05): core files 707 -> 1,056 lines (+49%) in ~9 months.
 - [x] WI-5 - relative-link normalization + dangling `/pw-*` refs (DONE 2026-07-28)
 
 ### P1 - knowledge existing ONLY in ai/claude (fails the owner's test)
-- [ ] WI-6 - create `docs/pr-report-guide.md`
+- [x] WI-6 - create `docs/pr-report-guide.md` (DONE 2026-07-28; -24,429 chars from ai/claude)
 - [ ] WI-7 - create `docs/code-review-guide.md`
 - [ ] WI-8 - rehome orphan knowledge from skills/commands
 
@@ -147,6 +147,34 @@ Applied WI-1, three actively-wrong instructions:
    about the workflow's actual scope.
 
 Full audit plan retained below (was written to `ai/.tmp/`, which is gitignored).
+
+### 2026-07-28 - WI-6 applied (first P1 item: PR-report pipeline gets an ai/docs home)
+
+New `docs/pr-report-guide.md` (21,535 chars, 545 lines). First work item that fixes the
+*owner's test* rather than a size number: the whole PR-report pipeline previously existed
+only as slash commands, so a non-Claude-Code LLM handed the knowledge base could not have
+run it at all.
+
+| File | Before | After |
+|---|---:|---:|
+| `pw-pr-research.md` | 15,826 | **1,680** |
+| `pw-pr-email.md` | 11,556 | **1,446** |
+| `pw-pr-reporting.md` | 4,046 | 3,873 |
+
+-24,429 chars out of `ai/claude/`. Commands total 167,651 -> 146,672; REFACTOR tier 11 -> 9.
+
+`pw-pr-reporting.md` stays mid-sized on purpose: what remains is the on/off/status
+procedure and the store preflight, which IS that command's job. Only the duplicated level
+definitions and the expanded Drive-sharing prose moved out (the PRReport README already
+owned the latter and was linked twice from the same file).
+
+**Collapsed the drift WI-6 flagged.** Reporting levels were defined three times
+(`PRReport/README.md`, `pw-pr-reporting.md`, `pw-pr-email.md`) with wording that had
+diverged; the `>= 3` pile-up threshold was restated in seven places. The guide now states
+each once, and the threshold section explains *why* the two renderings must agree - a
+recipient told "you're on the list" in their individual report has to appear on the team
+list too. That was the risk called out in the work item, so it is stated as a rule rather
+than left implicit in two computations.
 
 ### 2026-07-28 - Content checks fully green (WI-17/WI-20 link+phrase parts)
 
