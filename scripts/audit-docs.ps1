@@ -118,6 +118,7 @@ $RuleDefiningFiles = @(
     "TOC.md"                        # generated index; legitimately links every skill
     "audit-docs.ps1"                # this file - $BannedPhrases below spells them out
     "documentation-maintenance.md"  # governing design doc; quotes the patterns it forbids
+    "pw-auditdocs.md"               # documents these very checks, including their WRONG forms
 )
 
 # Phrases banned by C:\proj\CLAUDE.md ("Language and Tone").

@@ -5,7 +5,7 @@ A C# MCP server that exposes screenshot diff capabilities to Claude Code, enabli
 ## Quick Start
 
 ```bash
-pwsh -Command "& './ai/mcp/ImageComparerMcp/Setup-ImageComparerMcp.ps1'"
+pwsh -File './ai/mcp/ImageComparerMcp/Setup-ImageComparerMcp.ps1'
 ```
 
 This builds the project and registers it with Claude Code. Restart Claude Code after running.
@@ -59,7 +59,7 @@ Backslashes are JSON escape characters and cause silent failures in MCP JSON-RPC
 
 1. Run a tutorial test with auto-screenshots:
    ```bash
-   pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestAbsoluteQuantificationTutorial -TakeScreenshots"
+   pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestAbsoluteQuantificationTutorial -TakeScreenshots
    ```
 
 2. List what changed:
@@ -80,7 +80,7 @@ Backslashes are JSON escape characters and cause silent failures in MCP JSON-RPC
 ## Unregister
 
 ```bash
-pwsh -Command "& './ai/mcp/ImageComparerMcp/Setup-ImageComparerMcp.ps1' -Unregister"
+pwsh -File './ai/mcp/ImageComparerMcp/Setup-ImageComparerMcp.ps1' -Unregister
 ```
 
 ## Documentation

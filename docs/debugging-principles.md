@@ -155,7 +155,7 @@ Once you add printf instrumentation, **the logged output becomes your primary so
 
 ```bash
 # Run the test
-pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestSomething"
+pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestSomething
 
 # Then READ the log file - don't just grep for fragments
 Read("C:\proj\pwiz\pwiz_tools\Skyline\bin\x64\Debug\TestSomething.log")

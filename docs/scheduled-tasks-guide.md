@@ -174,16 +174,16 @@ The email session starts immediately after research completes. Each session has 
 
 ```powershell
 # Run both phases sequentially (default)
-pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1'"
+pwsh -File './ai/scripts/Invoke-DailyReport.ps1'
 
 # Run research phase only (no email)
-pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Phase research"
+pwsh -File './ai/scripts/Invoke-DailyReport.ps1' -Phase research
 
 # Run email phase only (reads research findings)
-pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Phase email"
+pwsh -File './ai/scripts/Invoke-DailyReport.ps1' -Phase email
 
 # Preview without executing
-pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -DryRun"
+pwsh -File './ai/scripts/Invoke-DailyReport.ps1' -DryRun
 ```
 
 ### Parameters
@@ -205,14 +205,14 @@ The script can register itself as a Windows Task Scheduler task. Run from an ele
 
 ```powershell
 # Schedule default (both phases sequentially) at 8:05 AM
-pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Schedule '8:05AM'"
+pwsh -File './ai/scripts/Invoke-DailyReport.ps1' -Schedule '8:05AM'
 
 # Schedule with custom recipient
-pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Schedule '8:05AM' -Recipient 'team@example.com'"
+pwsh -File './ai/scripts/Invoke-DailyReport.ps1' -Schedule '8:05AM' -Recipient 'team@example.com'
 
 # Schedule individual phases separately (if needed)
-pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Phase research -Schedule '8:05AM'"
-pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Phase email -Schedule '9:00AM'"
+pwsh -File './ai/scripts/Invoke-DailyReport.ps1' -Phase research -Schedule '8:05AM'
+pwsh -File './ai/scripts/Invoke-DailyReport.ps1' -Phase email -Schedule '9:00AM'
 ```
 
 The `-Schedule` parameter:
@@ -243,10 +243,10 @@ Create one task:
 ```powershell
 cd <your project root>
 # Preview what will run
-pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -DryRun"
+pwsh -File './ai/scripts/Invoke-DailyReport.ps1' -DryRun
 
 # Run manually to verify
-pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1'"
+pwsh -File './ai/scripts/Invoke-DailyReport.ps1'
 ```
 
 ### Migrating from Two-Task Setup
@@ -256,7 +256,7 @@ If you have the old separate research and email tasks:
 ```powershell
 # The -Schedule parameter with -Phase both handles this automatically:
 # it removes "Daily Report - Research", "Daily Report - Email", and "Daily Report - Both"
-pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Schedule '8:05AM'"
+pwsh -File './ai/scripts/Invoke-DailyReport.ps1' -Schedule '8:05AM'
 ```
 
 Or manually:
@@ -274,7 +274,7 @@ Unregister-ScheduledTask -TaskName "Daily Report - Email" -Confirm:$false
 Pass the `-Recipient` parameter:
 
 ```powershell
-pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Schedule '8:05AM' -Recipient 'team@example.com'"
+pwsh -File './ai/scripts/Invoke-DailyReport.ps1' -Schedule '8:05AM' -Recipient 'team@example.com'
 ```
 
 ### Change Schedule
@@ -282,7 +282,7 @@ pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Schedule '8:05AM' -Recip
 Simply re-run with the new time — existing tasks are removed automatically:
 
 ```powershell
-pwsh -Command "& './ai/scripts/Invoke-DailyReport.ps1' -Schedule '7:30AM'"
+pwsh -File './ai/scripts/Invoke-DailyReport.ps1' -Schedule '7:30AM'
 ```
 
 ## Troubleshooting

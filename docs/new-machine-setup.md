@@ -68,7 +68,7 @@ You don't need to do anything special to record these. I'll take notes as we go 
   **Once `ai/` is cloned**, run the verification script to get a comprehensive status report:
 
   ```powershell
-  pwsh -Command "& './ai/scripts/Verify-Environment.ps1'"
+  pwsh -File './ai/scripts/Verify-Environment.ps1'
   ```
 
   This script checks all prerequisites and reports what's OK, missing, or needs attention. Use the output to:
@@ -880,7 +880,7 @@ Tell the user:
 
 Verify the AI build scripts work correctly (from your project root):
 ```powershell
-pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
+pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1'
 ```
 
 This builds the entire Skyline solution using MSBuild (matching Visual Studio's Ctrl+Shift+B). The script auto-detects the `pwiz/` folder as a sibling to `ai/`.
@@ -889,7 +889,7 @@ This builds the entire Skyline solution using MSBuild (matching Visual Studio's 
 
 Run the CodeInspection test to verify test execution works:
 ```powershell
-pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName CodeInspection"
+pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName CodeInspection
 ```
 
 This validates that ReSharper code inspection passes. Success means the environment is fully working.
@@ -919,7 +919,7 @@ The AI tooling is already set up from Phase 1.9 (sibling mode). This phase confi
 
 Run the verification script to check all AI tooling components (from your project root):
 ```powershell
-pwsh -Command "& './ai/scripts/Verify-Environment.ps1'"
+pwsh -File './ai/scripts/Verify-Environment.ps1'
 ```
 
 This checks for all required tools and reports any missing components.
@@ -930,7 +930,7 @@ This checks for all required tools and reports any missing components.
 
 ```powershell
 # Skip netrc if deferring LabKey API setup
-pwsh -Command "& './ai/scripts/Verify-Environment.ps1' -Skip netrc"
+pwsh -File './ai/scripts/Verify-Environment.ps1' -Skip netrc
 ```
 
 > **For LLM assistants:** You MUST achieve a passing verification (exit code 0) before continuing to Phase 8. If the user chooses to skip optional components, use the `-Skip` parameter explicitly. Do not proceed with MISSING or ERROR items.

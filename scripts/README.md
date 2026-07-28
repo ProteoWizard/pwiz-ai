@@ -77,20 +77,20 @@ See [Skyline/README.md](Skyline/README.md) for detailed Skyline build/test docum
 ### Before Committing LLM-Generated Code
 
 ```powershell
-pwsh -Command "& './ai/scripts/fix-crlf.ps1'"                 # Fix line endings
-pwsh -Command "& './ai/scripts/validate-bom-compliance.ps1'"   # Check BOMs
+pwsh -File './ai/scripts/fix-crlf.ps1'                 # Fix line endings
+pwsh -File './ai/scripts/validate-bom-compliance.ps1'   # Check BOMs
 ```
 
 ### If BOM Validation Fails
 
 ```powershell
-pwsh -Command "& './ai/scripts/remove-bom.ps1' -Execute"
+pwsh -File './ai/scripts/remove-bom.ps1' -Execute
 ```
 
 ### Regenerate Documentation TOC
 
 ```powershell
-pwsh -Command "& './ai/scripts/Generate-TOC.ps1'"
+pwsh -File './ai/scripts/Generate-TOC.ps1'
 ```
 
 ## UTF-8 Output for PowerShell Scripts

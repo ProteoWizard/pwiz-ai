@@ -69,7 +69,7 @@ claude mcp add imagecomparer -- C:/proj/pwiz/pwiz_tools/Skyline/Executables/DevT
 
 1. **Run a tutorial test with auto-screenshots:**
    ```bash
-   pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestAbsoluteQuantificationTutorial -TakeScreenshots"
+   pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestAbsoluteQuantificationTutorial -TakeScreenshots
    ```
 
 2. **List changed screenshots:**

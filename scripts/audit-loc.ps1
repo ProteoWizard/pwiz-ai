@@ -13,10 +13,10 @@
     Show one extra level of detail - breakdown by subdirectory within each category.
 
 .EXAMPLE
-    pwsh -Command "& './ai/scripts/audit-loc.ps1'"
+    pwsh -File './ai/scripts/audit-loc.ps1'
 
 .EXAMPLE
-    pwsh -Command "& './ai/scripts/audit-loc.ps1' -Drilldown"
+    pwsh -File './ai/scripts/audit-loc.ps1' -Drilldown
 
 .NOTES
     Requires cloc: winget install AlDanial.Cloc

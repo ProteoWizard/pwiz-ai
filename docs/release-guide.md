@@ -642,7 +642,7 @@ branch via PR, then cherry-pick to master.
 3. **Replace "Skyline-daily" assembly references in all RESX files** with "Skyline":
 
    ```bash
-   pwsh -Command "& 'ai/scripts/Skyline/Replace-SkylineDailyResx.ps1' -SkylineDir 'pwiz_tools/Skyline'"
+   pwsh -File 'ai/scripts/Skyline/Replace-SkylineDailyResx.ps1' -SkylineDir 'pwiz_tools/Skyline'
    ```
 
    This replaces `Skyline-daily, Version=XX.X.X.XXX,` with `Skyline, Version=1.0.0.0,`

@@ -6,7 +6,7 @@ Archive completed TODO files from ai/todos/completed/ into year/month subfolders
 Run the archive script:
 
 ```bash
-pwsh -Command "& './ai/scripts/Archive-CompletedTodos.ps1'"
+pwsh -File './ai/scripts/Archive-CompletedTodos.ps1'
 ```
 
 This keeps the most recent 2 months of TODOs at the root level and moves everything older into ai/todos/completed/YYYY/MM/ subfolders using git mv.

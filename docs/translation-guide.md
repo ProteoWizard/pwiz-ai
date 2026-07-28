@@ -75,10 +75,10 @@ After running the Boost Build targets, some files may have whitespace-only chang
 
 ```powershell
 # Preview which files would be reverted
-pwsh -Command "& './ai/scripts/revert-whitespace-only-files.ps1' -WhatIf"
+pwsh -File './ai/scripts/revert-whitespace-only-files.ps1' -WhatIf
 
 # Revert whitespace-only changes
-pwsh -Command "& './ai/scripts/revert-whitespace-only-files.ps1'"
+pwsh -File './ai/scripts/revert-whitespace-only-files.ps1'
 ```
 
 ## Generating Translation CSVs
@@ -104,10 +104,10 @@ After running `FinalizeResxFiles` and generating CSVs, validate that all CSV ent
 
 ```powershell
 # Validate Japanese - every CSV entry should exist in .ja.resx files
-pwsh -Command "& './ai/scripts/Skyline/scripts/Validate-TranslationCsvSync.ps1' -CsvPath 'pwiz_tools/Skyline/Translation/Scratch/localization.ja.csv' -Language ja"
+pwsh -File './ai/scripts/Skyline/scripts/Validate-TranslationCsvSync.ps1' -CsvPath 'pwiz_tools/Skyline/Translation/Scratch/localization.ja.csv' -Language ja
 
 # Validate Chinese - every CSV entry should exist in .zh-CHS.resx files
-pwsh -Command "& './ai/scripts/Skyline/scripts/Validate-TranslationCsvSync.ps1' -CsvPath 'pwiz_tools/Skyline/Translation/Scratch/localization.zh-CHS.csv' -Language zh-CHS"
+pwsh -File './ai/scripts/Skyline/scripts/Validate-TranslationCsvSync.ps1' -CsvPath 'pwiz_tools/Skyline/Translation/Scratch/localization.zh-CHS.csv' -Language zh-CHS
 ```
 
 **Expected result**: SUCCESS with 0 missing entries. If entries are missing, there's a bug in `FinalizeResxFiles` or the export process (e.g., missing `--overrideAll` flag).

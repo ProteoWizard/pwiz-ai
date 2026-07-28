@@ -42,7 +42,7 @@ If no regression test is staged, stop and ask the developer why before proposing
 
 **CRLF Warning**: If git shows `LF will be replaced by CRLF the next time Git touches it`:
 ```powershell
-pwsh -Command "& './ai/scripts/fix-crlf.ps1'"
+pwsh -File './ai/scripts/fix-crlf.ps1'
 git add <fixed-files>
 ```
 This ensures consistent line endings before commit.

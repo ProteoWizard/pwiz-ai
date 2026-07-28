@@ -176,7 +176,7 @@ For LLM-assisted IDEs that can execute PowerShell, build/test helper scripts are
 
 **Pre-commit validation** (recommended before committing):
 ```powershell
-pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1' -RunInspection -RunTests -TestName CodeInspection"
+pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1' -RunInspection -RunTests -TestName CodeInspection
 ```
 
 See [scripts/Skyline/PRE-COMMIT.md](scripts/Skyline/PRE-COMMIT.md) for complete workflow.

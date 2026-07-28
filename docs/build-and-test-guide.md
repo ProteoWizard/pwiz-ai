@@ -34,10 +34,10 @@ This means scripts work without configuration in both setups:
 
 ```powershell
 # From your project root (sibling mode) - auto-detects sibling pwiz/
-pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
+pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1'
 
 # From your pwiz checkout (child mode) - auto-detects pwiz_tools/
-pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
+pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1'
 ```
 
 ### Using -SourceRoot for Non-Standard Layouts
@@ -46,10 +46,10 @@ If pwiz is in an unusual location, use `-SourceRoot`:
 
 ```powershell
 # Explicit path to pwiz root
-pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1' -SourceRoot 'C:\other\location\pwiz'"
+pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1' -SourceRoot 'C:\other\location\pwiz'
 
 # Useful for multiple checkouts with different names
-pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1' -SourceRoot './skyline_26_1'"
+pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1' -SourceRoot './skyline_26_1'
 ```
 
 ## ⚠️ CRITICAL: Never Call MSBuild Directly

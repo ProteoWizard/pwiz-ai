@@ -80,7 +80,7 @@ Keep in mind that you aren't just running a simple script, so if things start to
 If you have the AI tooling repository cloned, verify your environment:
 
 ```powershell
-pwsh -Command "& './ai/scripts/Verify-Environment.ps1'"
+pwsh -File './ai/scripts/Verify-Environment.ps1'
 ```
 
 Any `[MISSING]` items will show the command needed to fix them.
@@ -119,8 +119,8 @@ Before making changes, read these files:
 - ai/STYLEGUIDE.md - Coding conventions
 - ai/MEMORY.md - Project context and gotchas
 
-Build with: pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
-Test with: pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName <TestName>"
+Build with: pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1'
+Test with: pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName <TestName>
 ```
 
 ---

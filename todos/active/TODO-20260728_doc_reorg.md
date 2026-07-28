@@ -37,8 +37,7 @@ PR #3666, 2025-11-05): core files 707 -> 1,056 lines (+49%) in ~9 months.
       the third was a false positive - see Progress Log)
 - [x] WI-2 - fix the measuring stick (DONE 2026-07-28)
 - [x] WI-3 - add the 5 missing content verifiers to `audit-docs.ps1` (DONE 2026-07-28)
-- [ ] WI-4 - repo-wide `&` call-operator sweep - 47 hits; decision 10 RESOLVED, no
-      exemption needed (see Progress Log)
+- [x] WI-4 - repo-wide `&` call-operator sweep (DONE 2026-07-28; 47 -> 0)
 - [ ] WI-5 - relative-link normalization
 
 ### P1 - knowledge existing ONLY in ai/claude (fails the owner's test)
@@ -100,13 +99,14 @@ Still open: decisions 2, 6, 7, 8, 9, 11, 12.
 `pwsh -File ./ai/scripts/audit-docs.ps1 -Section checks` - 301 files, **84 violations**.
 This is the WI-4/WI-5 work list; re-run to measure progress.
 
-| Check | Count | Work item |
-|---|---:|---|
-| call-operator (`-Command "&"` → `-File`) | 47 | WI-4 |
-| broken-link | 22 | WI-5 |
-| dangling-command (`/pw-*` with no file) | 9 | WI-5 |
-| docs-to-skill | 3 | WI-17 |
-| banned-phrase | 3 | WI-20 |
+| Check | At WI-3 | Now | Work item |
+|---|---:|---:|---|
+| call-operator (`-Command "&"` → `-File`) | 47 | **0** | WI-4 DONE |
+| broken-link | 22 | 22 | WI-5 |
+| dangling-command (`/pw-*` with no file) | 9 | 9 | WI-5 |
+| docs-to-skill | 3 | 3 | WI-17 |
+| banned-phrase | 3 | 3 | WI-20 |
+| **Total** | **84** | **37** | |
 
 ## Progress Log
 
@@ -147,6 +147,25 @@ Applied WI-1, three actively-wrong instructions:
    about the workflow's actual scope.
 
 Full audit plan retained below (was written to `ai/.tmp/`, which is gitignored).
+
+### 2026-07-28 - WI-4 applied (call-operator sweep)
+
+47 -> 0 across 15 files. `pwsh -Command "& '<path>' <args>"` -> `pwsh -File '<path>' <args>`.
+Safe as a single regex because the inner content is single-quoted throughout, so the
+closing double quote is unambiguous: `-Command "&[[:space:]]*\([^"]*\)"` -> `-File \1`.
+
+Edge cases verified by hand after the sweep: trailing comments preserved
+(`scripts/README.md:80` keeps `# Fix line endings`), Windows paths with backslashes
+(`build-and-test-guide.md:49`, `-SourceRoot 'C:\other\location\pwiz'`), and the
+no-leading-`./` variant (`release-guide.md:645`). Both modified `.ps1` files re-parsed
+clean via `[Parser]::ParseFile`; the only `.ps1` hits were in comment-based help, so no
+behavior changed.
+
+`claude/commands/pw-auditdocs.md` was added to `$RuleDefiningFiles` rather than swept -
+it documents these checks and necessarily shows the WRONG form, exactly like
+`ai/CLAUDE.md`.
+
+Content violations now 84 -> 37.
 
 ### 2026-07-28 - WI-3 applied (content verifiers)
 

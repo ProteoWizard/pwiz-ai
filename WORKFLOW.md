@@ -244,13 +244,13 @@ Use /pw-startissue <number> to begin work."
 
 ```powershell
 # Build entire solution (default)
-pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1'"
+pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1'
 
 # Pre-commit validation
-pwsh -Command "& './ai/scripts/Skyline/Build-Skyline.ps1' -RunTests -TestName CodeInspection"
+pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1' -RunTests -TestName CodeInspection
 
 # Run specific test
-pwsh -Command "& './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestPanoramaDownloadFile"
+pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestPanoramaDownloadFile
 ```
 
 See [docs/build-and-test-guide.md](docs/build-and-test-guide.md) for complete reference.
