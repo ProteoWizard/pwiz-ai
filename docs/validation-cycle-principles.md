@@ -77,4 +77,4 @@ Every principle above is a longer way of saying that one thing.
 
 - [ai/docs/debugging-principles.md](debugging-principles.md) — debugging methodology that implements these principles for the bug-fix loop (cycle time, bisection, instrumentation, failing-test-first).
 - [ai/CRITICAL-RULES.md](../CRITICAL-RULES.md) — the project's hard rules; each is intended to be backed by a verifier (build, test, inspection).
-- [ai/claude/skills/debugging/SKILL.md](../claude/skills/debugging/SKILL.md) — the loaded-on-demand debugging skill.
+- The `debugging` skill loads this material on demand in Claude Code sessions. Its content lives in the two documents above — the skill points here, not the reverse.

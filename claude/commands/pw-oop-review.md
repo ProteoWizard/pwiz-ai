@@ -111,9 +111,9 @@ Also call out, separately:
   conditionals, methods that span hundreds of lines, state mutations
   happening in non-obvious places, hidden global state, back-references
   between classes that should be peers.
-- **Promising patterns**: places where the existing design is
-  load-bearing and worth preserving / extending — these are the seams
-  Phase N+1 should build on.
+- **Promising patterns**: places where the existing design is sound
+  and worth preserving / extending — these are the seams Phase N+1
+  should build on.
 
 ## Step 4 — Present findings
 

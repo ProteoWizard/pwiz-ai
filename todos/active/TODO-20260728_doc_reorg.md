@@ -104,9 +104,9 @@ This is the WI-4/WI-5 work list; re-run to measure progress.
 | call-operator (`-Command "&"` → `-File`) | 47 | **0** | WI-4 DONE |
 | broken-link | 22 | **0** | WI-5 DONE |
 | dangling-command (`/pw-*` with no file) | 9 | **0** | WI-5 DONE |
-| docs-to-skill | 3 | 3 | WI-17 |
-| banned-phrase | 3 | 3 | WI-20 |
-| **Total** | **84** | **6** | |
+| docs-to-skill | 3 | **0** | WI-17 (link part done) |
+| banned-phrase | 3 | **0** | WI-20 (phrase part done) |
+| **Total** | **84** | **0** | all checks green, exit 0 |
 
 ## Progress Log
 
@@ -147,6 +147,29 @@ Applied WI-1, three actively-wrong instructions:
    about the workflow's actual scope.
 
 Full audit plan retained below (was written to `ai/.tmp/`, which is gitignored).
+
+### 2026-07-28 - Content checks fully green (WI-17/WI-20 link+phrase parts)
+
+Cleared the last 6 so `-Section checks` exits 0. A check parked permanently red is
+one people learn to skip, which would have wasted WI-3 entirely.
+
+**Banned phrases (3)** - rewritten per the mappings in `C:\proj\CLAUDE.md`, not
+word-swapped: `pw-oop-review.md` "design is load-bearing" -> "design is sound";
+`night-session/SKILL.md` "load-bearing finding" -> "consequential finding";
+`leak-debugging-guide.md` "revealed the smoking gun" -> "revealed the mismatch"
+(the finding IS a 2:1 Start/Stop ratio mismatch, so the specific word is also the
+accurate one).
+
+**docs -> skill links (3)** - these were both backwards AND redundant: the
+`skyline-screenshots` and `debugging` skills already point INTO
+`screenshot-update-workflow.md` and `debugging-principles.md`. In
+`tutorial-workflow-guide.md` the correct doc was already named in the same
+sentence, so the skill link was pure duplication. `validation-cycle-principles.md`
+now mentions the skill exists without linking to it - the fact is useful, the
+inverted link is not.
+
+NOTE: this clears the check-visible parts only. WI-17 (reachability) and WI-20
+(stale-fact sweep) remain open for the parts no verifier can see.
 
 ### 2026-07-28 - WI-5 applied (links + dangling command refs)
 

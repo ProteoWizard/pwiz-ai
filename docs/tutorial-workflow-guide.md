@@ -73,9 +73,9 @@ test. Tests with overrides — DdaTutorialTest, DiaUmpireTutorialTest,
 DiaSearchTutorialTest, AcquisitionComparisonTutorialTest,
 ExistingExperimentsTutorialTest — must capture and return
 `base.ProcessCoverShot(bmp)` on Win11 (it returns a new Bitmap, not the
-original). See the
-[`skyline-screenshots`](../claude/skills/skyline-screenshots/SKILL.md)
-skill notes and `screenshot-update-workflow.md` § "Cover Shot System".
+original). See
+[`screenshot-update-workflow.md`](screenshot-update-workflow.md)
+§ "Cover Shot System".
 
 ## Win11 machine setup
 
@@ -85,8 +85,7 @@ For consistent screenshots:
 - Display scaling: **100%** (96 DPI)
 - Mode: **Light**
 
-Details in the [`skyline-screenshots`](../claude/skills/skyline-screenshots/SKILL.md)
-skill.
+Details in [`screenshot-update-workflow.md`](screenshot-update-workflow.md).
 
 ## Skills that auto-load
 

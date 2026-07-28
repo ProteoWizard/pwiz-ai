@@ -14,7 +14,7 @@ shift into night-session posture.
 The user is going to bed. They will wake in 5-8 hours (sometimes longer).
 They are running Max 20x or equivalent — **cost is essentially a
 non-concern**. What matters is that they wake to **the most precise,
-load-bearing finding you can produce** with that time budget.
+consequential finding you can produce** with that time budget.
 
 A bad outcome is waking to find you stopped at a checkpoint and waited.
 The user has explicitly stated: "Good developers don't just stop dead

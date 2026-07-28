@@ -290,7 +290,7 @@ This narrowed it down to `FileSystemWatcher.EnableRaisingEvents = true`.
 
 > **Note:** This case study used a debugger, but printf debugging would have been equally effective and faster. Adding `Console.WriteLine($"Start called for {directoryPath}, Thread: {Thread.CurrentThread.ManagedThreadId}")` would have revealed the 2:1 ratio in the test output directly. See [debugging-principles.md](debugging-principles.md) for the self-sufficiency principle: never ask the user about runtime behavior you can observe yourself.
 
-Breakpoints revealed the smoking gun:
+Breakpoints revealed the mismatch:
 - **2 calls to `ManagedFileSystemWatcher.Start()`** for every **1 call to `StopWatching()`**
 - All 3 calls were for the **same directory path**
 - All 3 calls were on the **same `LocalFileSystemService` instance**
