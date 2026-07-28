@@ -274,6 +274,61 @@ residual parameterization from the dual-tree era:
 When extending these scripts, the canonical Rust root is
 `C:\proj\osprey`. Do not reintroduce the `osprey-mm` name.
 
+## Long runs lock Osprey.exe - snapshot the binary first
+
+**Windows locks a running executable.** A long Osprey run holds
+`Osprey\bin\x64\Release\net8.0\Osprey.exe` open for its whole duration, so MSBuild cannot
+relink and **every build fails until the run ends**. On an overnight regression or a
+multi-hour large-file run that blocks all code work - you cannot respond to review
+feedback, cannot try a fix, cannot even build to check a compile error. Sessions have
+promised to "address Copilot comments while the test runs" and then discovered they could
+not build.
+
+**Copy the binaries somewhere off the build tree and run the long job from the copy.**
+
+```powershell
+$src  = 'C:\proj\pwiz\pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0'
+$snap = 'D:\test\osprey-runs\_bin\master-snapshot'
+New-Item -ItemType Directory -Path $snap -Force | Out-Null
+Copy-Item "$src\*" $snap -Recurse -Force
+```
+
+That output directory is self-contained (~27 MB, about a second). Point the long job at it:
+
+```powershell
+# Both harnesses take -Exe (or -SourceRoot for a whole checkout)
+.\Run-SeaAd.ps1            -Exe "$snap\Osprey.exe" ...
+.\Measure-Stage6Rescore.ps1 -Exe "$snap\Osprey.exe" ...
+```
+
+The build tree is then free the entire time.
+
+**The snapshot is also a pinned baseline.** After three more commits you still know exactly
+which binary produced the numbers in that run - which is what makes a before/after A/B
+meaningful. This is the same reasoning as the pinned `pwiz-perfbase` worktree
+`Test-PerfGate.ps1` uses, one level down: worktree for a perf A/B, binary copy for "do not
+block my build".
+
+**Two traps that cost real runs:**
+
+1. **Do not rebuild while a GATE is running, even if the build succeeds.** If the long job
+   runs from the snapshot, your build will succeed - but `regression.ps1` launches
+   `Osprey.exe` from the BUILD TREE once per phase, so rebuilding mid-run silently mixes
+   two binaries across phases and the parity result is meaningless. Either wait, or run the
+   gate itself from a snapshot too. A parity run was discarded for exactly this.
+2. **A snapshot taken on a different day fails the version check.** Osprey stamps a daily
+   version (`YEAR.ORDINAL.BRANCH.DOY`) into every `.scores.parquet` and refuses to consume
+   one written by a different daily build - `osprey version mismatch: parquet was scored
+   with 26.1.1.208 but current binary is 26.1.1.209`. Prep artifacts one day and measure the
+   next and it hard-fails in a way that looks like a code bug. Pin
+   `OSPREY_VERSION_OVERRIDE` to the version that wrote the artifacts (`regression.ps1` pins
+   `26.1.1.0` for the same reason; `Measure-Stage6Rescore.ps1` takes `-VersionOverride` and
+   auto-detects from the prep log).
+
+Related: `Run-SeaAd.ps1`'s `-SourceRoot` warning covers the sibling hazard - taking the exe
+from a shared worktree someone else is actively developing in means the run measures THEIR
+in-progress branch and holds THEIR DLLs so their builds fail. Both halves are silent.
+
 ## Test data locations
 
 Not committed; lives on the developer workstation:
