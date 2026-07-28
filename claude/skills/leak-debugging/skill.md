@@ -1,9 +1,16 @@
 ---
 name: leak-debugging
-description: Load when investigating handle leaks, memory leaks, or GC-LEAK failures. Covers handle counting, dotMemory profiling, and GC leak tracker workflows.
+description: Load when investigating handle leaks, GC-LEAK failures, or memory NOT released after work completes. Covers handle counting, dotMemory profiling, and GC leak tracker workflows. For memory that grows with WORKLOAD SIZE (more files/rows) and is freed at exit, that is a scaling problem, not a leak - see ai/docs/memory-band-guide.md.
 ---
 
 # Leak Debugging
+
+> **First, decide which problem you have.** A leak is "never released". Memory that grows
+> with the SIZE of the workload - more files, more rows - and is freed when the run ends is
+> a SCALING problem, and none of the tools below will find it. For that, read the memory
+> band: run with `--timestamp --memstamp` and use `ai/scripts/perfviz.py` (numbers) or
+> `ai/scripts/perfviz.html` (plot) to see whether each unit of work returns to the same
+> memory floor. Full method: **[ai/docs/memory-band-guide.md](../../../ai/docs/memory-band-guide.md)**.
 
 Specialized workflows for investigating handle leaks, managed memory leaks, and
 GC leak tracker failures in Skyline tests.

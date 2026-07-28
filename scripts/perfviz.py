@@ -13,8 +13,8 @@ to decide, to diff two runs, or to check a run from a terminal / an agent that
 cannot open a browser.
 
 Zero dependencies - stdlib only, like every other tool in this repo, so it runs on
-a fresh machine with nothing installed. The PNG is written by hand (PNG is just
-zlib-compressed scanlines); there is no matplotlib here on purpose.
+a fresh machine with nothing installed. The numeric summary is stdlib-only, so it runs
+anywhere; only --png needs matplotlib (pip install matplotlib).
 
 REFUSES TO REPORT on a failed run unless --force. A log that died early still
 produces a beautiful "0 gaps, flat memory" summary, which is worse than no summary
@@ -33,9 +33,7 @@ import argparse
 import datetime
 import os
 import re
-import struct
 import sys
-import zlib
 
 LINE_RE = re.compile(
     r'^\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})\]\t(\d+)\t(\d+)\t(.*)$')
@@ -182,76 +180,66 @@ def summarize(path, threshold, force, files=0):
     return 0
 
 
-# --- minimal PNG output (stdlib only) ---------------------------------------
-
-def _png(path, w, h, px):
-    raw = b''.join(b'\x00' + bytes(px[y * w * 3:(y + 1) * w * 3]) for y in range(h))
-
-    def chunk(tag, data):
-        c = struct.pack('>I', len(data)) + tag + data
-        return c + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff)
-
-    with open(path, 'wb') as fh:
-        fh.write(b'\x89PNG\r\n\x1a\n')
-        fh.write(chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)))
-        fh.write(chunk(b'IDAT', zlib.compress(raw, 6)))
-        fh.write(chunk(b'IEND', b''))
-
+# --- PNG output (matplotlib; optional dependency) ----------------------------
 
 def plot(path, samples, out):
-    W, H, M = 1400, 560, 40
-    px = bytearray([255]) * (W * H * 3)
+    """Render the same three series perfviz.html draws, so a PNG can be handed
+    straight to a person instead of asking them to locate the log and paste it
+    into the page.
 
-    def dot(x, y, rgb):
-        if 0 <= x < W and 0 <= y < H:
-            i = (y * W + x) * 3
-            px[i], px[i + 1], px[i + 2] = rgb
+    matplotlib is imported HERE, not at module scope, so the numeric summary -
+    which is what actually decides anything - keeps working on a machine with
+    nothing installed. Only --png needs the dependency.
+    """
+    try:
+        import matplotlib
+        matplotlib.use('Agg')                     # no display on a build agent
+        import matplotlib.pyplot as plt
+        import matplotlib.dates as mdates
+    except ImportError:
+        print('png           : skipped, matplotlib not installed'
+              ' (pip install matplotlib). Text summary above is unaffected.')
+        return
 
-    def line(x0, y0, x1, y1, rgb):
-        dx, dy = abs(x1 - x0), abs(y1 - y0)
-        sx, sy = (1 if x0 < x1 else -1), (1 if y0 < y1 else -1)
-        err = dx - dy
-        while True:
-            dot(x0, y0, rgb)
-            dot(x0, y0 + 1, rgb)
-            if x0 == x1 and y0 == y1:
-                break
-            e2 = 2 * err
-            if e2 > -dy:
-                err -= dy
-                x0 += sx
-            if e2 < dx:
-                err += dx
-                y0 += sy
+    ts = [s.t for s in samples]
+    managed = [s.managed for s in samples]
+    total = [s.total for s in samples]
+    # Time gap belongs to the interval ENDING at each sample; the first has none.
+    gapx = ts[1:]
+    gapy = [(samples[i].t - samples[i - 1].t).total_seconds()
+            for i in range(1, len(samples))]
 
-    for x in range(M, W - M):
-        dot(x, H - M, (0, 0, 0))
-    for y in range(M, H - M):
-        dot(M, y, (0, 0, 0))
+    fig, ax = plt.subplots(figsize=(16, 6.5))
+    ax2 = ax.twinx()
+    # Same colours and z-order as perfviz.html so the two are read the same way.
+    ax2.plot(gapx, gapy, '-o', color='#1f77b4', ms=2.0, lw=0.8,
+             label='Time gap (sec)', zorder=1)
+    ax.plot(ts, managed, '-o', color='#ff7f0e', ms=2.0, lw=0.8,
+            label='Managed memory (MB)', zorder=2)
+    ax.plot(ts, total, '-o', color='#2ca02c', ms=2.0, lw=0.8,
+            label='Private memory (MB)', zorder=3)
 
-    t0 = samples[0].t
-    span = (samples[-1].t - t0).total_seconds() or 1.0
-    vmax = max(max(s.managed, s.total) for s in samples) or 1
-    for y in range(1, 5):                       # gridlines at 20/40/60/80%
-        gy = int(H - M - (H - 2 * M) * y / 5.0)
-        for x in range(M, W - M, 6):
-            dot(x, gy, (210, 210, 210))
+    ax.set_ylabel('Memory (MB)')
+    ax2.set_ylabel('Time gap (sec)')
+    ax.set_xlabel('')
+    ax.set_ylim(bottom=0)
+    ax2.set_ylim(bottom=0)
+    ax.grid(True, alpha=0.25, lw=0.5)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+    fig.autofmt_xdate()
 
-    def xy(s, val):
-        return (int(M + (s.t - t0).total_seconds() / span * (W - 2 * M)),
-                int(H - M - val / float(vmax) * (H - 2 * M)))
+    h1, l1 = ax.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    ax.legend(h1 + h2, l1 + l2, loc='upper center', bbox_to_anchor=(0.5, -0.12),
+              ncol=3, frameon=False)
 
-    for key, rgb in ((lambda s: s.total, (44, 160, 44)),
-                     (lambda s: s.managed, (255, 127, 14))):
-        prev = None
-        for s in samples:
-            cur = xy(s, key(s))
-            if prev:
-                line(prev[0], prev[1], cur[0], cur[1], rgb)
-            prev = cur
-    _png(out, W, H, px)
-    print('png           : %s   (green=total, orange=managed, y-max %.1f GB)'
-          % (out, vmax / 1024.0))
+    peak = max(max(managed), max(total))
+    ax.set_title('%s   -   peak %.1f GB, max gap %.0fs, %d samples'
+                 % (os.path.basename(path), peak / 1024.0, max(gapy), len(samples)))
+    fig.tight_layout()
+    fig.savefig(out, dpi=110)
+    plt.close(fig)
+    print('png           : %s' % out)
 
 
 def main():

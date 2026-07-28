@@ -47,8 +47,15 @@ python ai/scripts/perfviz.py run.log --files 20 --png run.png
 python ai/scripts/perfviz.py before.log after.log       # A/B two runs
 ```
 
-`perfviz.py` is stdlib-only (it writes the PNG by hand via `zlib`), so it runs on a fresh
-machine with nothing installed.
+The **numeric summary is stdlib-only**, so it runs on a fresh machine with nothing
+installed. `--png` additionally needs matplotlib (`pip install matplotlib`); the import is
+inside the plotting function, so without it you still get every number and just a note that
+the plot was skipped.
+
+The PNG exists so a plot can be handed to a person directly, rather than asking them to
+find the log and paste it into `perfviz.html`. It draws the same three series with a second
+y-axis for the time gap. For deciding anything, read the numbers - they are less lossy than
+a picture, and they are what a CI check can assert on.
 
 ### What the shape means
 

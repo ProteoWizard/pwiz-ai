@@ -43,6 +43,15 @@ points at:
 4. **`ai/TESTING.md`** - translation-proof tests, consolidated
    `[TestMethod]` structure, `AssertEx` over `Assert`.
 
+Memory or scaling work ("does this fit at N files?", a run that looks hung) needs:
+- **`ai/docs/memory-band-guide.md`** - run with `--timestamp --memstamp`, then
+  `ai/scripts/perfviz.py <log> --files N` for the numbers (peak, memory-floor drift per
+  file, every reporting gap over 30s) or `ai/scripts/perfviz.html` for the plot. A sawtooth
+  whose FLOOR returns to the same level is bounded; a rising floor is O(files) accumulation.
+  Shared with Skyline - both emit the format from the same `CommandStatusWriter`. The guide
+  also covers `OSPREY_LOG_MEMORY=1` post-GC probes, which are what answer "will it fit"
+  (`--memstamp` includes uncollected garbage, so it shows shape, not magnitude).
+
 Cross-impl parity work additionally needs:
 - **`ai/docs/osprey-development-guide.md`** - steel-thread parity
   doctrine, Stage 1-5 diagnostic dumps, bisection methodology, and the
@@ -105,6 +114,15 @@ Rust-only TODOs live at `ai/todos/active/TODO-OR-*.md`
    `ai/todos/active/TODO-*_osprey*.md`.
 
 ## Build, Test, and Commit
+
+**Starting a long run? Snapshot the exe first.** Windows locks a running executable, so a
+regression or large-file run holds `Osprey\bin\x64\Release\net8.0\Osprey.exe` and **every
+build fails until it finishes** - you cannot address review feedback or try a fix mid-run.
+Copy that output dir (~27 MB, one second) somewhere off the build tree and pass
+`-Exe <snapshot>\Osprey.exe`; the build tree stays free, and the snapshot doubles as a
+pinned baseline for an A/B. Do NOT rebuild while a `regression.ps1` gate is running even if
+the build succeeds - it launches the exe from the build tree per phase and would mix
+binaries. See "Long runs lock Osprey.exe" in ai/docs/osprey-development-guide.md.
 
 You can and should build, test, and run Osprey yourself - the wrapper
 scripts in `ai/scripts/Osprey/` exist for exactly that. Do not ask the

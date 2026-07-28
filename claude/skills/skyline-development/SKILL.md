@@ -42,6 +42,11 @@ Read these files to understand project constraints and patterns:
 - **Before writing tests**: Read TESTING.md, ai/docs/testing-patterns.md
 - **Before committing**: Read WORKFLOW.md (commit message rules, Co-Authored-By attribution)
 - **Before building/testing**: Read ai/docs/build-and-test-guide.md
+- **Investigating memory or slow/silent CLI runs**: Read ai/docs/memory-band-guide.md.
+  `SkylineCmd --timestamp --memstamp` teed to a log, read with `ai/scripts/perfviz.py`
+  (peak, memory-floor drift per unit of work, and every reporting gap over 30s) or
+  `ai/scripts/perfviz.html` (plot). This is how memory that scales with workload size gets
+  found without a profiler; it is a different problem from a leak (see leak-debugging).
 - **For detailed patterns**: Read files in ai/docs/
 
 ## Key Constraints (Quick Reference)
