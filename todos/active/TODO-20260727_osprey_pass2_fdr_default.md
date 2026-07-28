@@ -309,6 +309,39 @@ Two Copilot inline comments, both to FIX (real + trivial). Turnkey:
 
 ## Progress Log
 
+### 2026-07-28 - PR #4487 /code-review max + hardening (checkpoint-merge prep)
+
+Ran `/code-review max` on the branch (6 findings). Verified each against source before acting.
+Brendan's call: fold the 3 small golden-neutral fixes, defer the 2 refactors. Commit `f4aa3a3e13`:
+- **#1 (CONFIRMED bug)** `regression.ps1:686` read the model sidecar from the already-deleted
+  `$ph2` (line 668), so the frozen-mode merge-node reload was NEVER exercised — the exact reason
+  the handoff called it "unverified". Fixed: relay the model `$ph2->$ph3->$ph4` like the sibling
+  Stage-5 sidecars. **PROVEN**: `transfer`-mode chain **mode3 (HPC chain==straight): PASS** (byte
+  26,787,840) + merge-node `phase4.log` logs "Reloaded persisted 1st-pass model sidecar" — reload
+  fires and is bit-identical to the in-process path. (mode1 vs the percolator golden FAILs by
+  design — different mode.)
+- **#3** `Pass2FdrSidecar.cs:104` dropped protein-compact from `wantsFrozenModel`: it reloaded +
+  logged a false "reloaded" success then fail-fasted on the still-missing stratum. Now excluded
+  until the stratum is persisted.
+- **#2+#6** `FirstPassModelIO.Load` now validates fold widths + consumes the previously-dead
+  `NumFeatures` as a consistency check (corrupt sidecar -> null, not a merge-node crash). New unit
+  test `TestFirstPassModelLoadRejectsCorruptOrInconsistent`.
+
+**Deferred to the frozen-mode-completion piece** (pair with stratum persistence): #4 (ride
+`reconciliation.json` instead of N per-file model copies), #5 (extract the shared canonical-JSON
+writer from `ReconciliationFile.Save`), and #2's deeper "model width vs current PIN feature count"
+hard-fail at the consumer.
+
+Gates on `f4aa3a3e13`: build Release/net8.0 clean, inspection 0/0, **550/550** unit tests,
+**Stellar byte-identity regression PASS** (mode1/2/3, blib 30,597,120 — fixes are golden-neutral).
+TeamCity Perf/Regression re-triggered on `pull/4487` (build 4111956, ~1h) after cancelling the
+stale 4111950. Merge is checkpoint-only — does NOT close #4484.
+
+**Surfaced (default-flip prerequisite, NOT this checkpoint)**: `transfer` trips `GuardResidentPool`
+(`PerFileScoringTask.cs:1557`) and needs `OSPREY_ALLOW_UNBOUNDED_MEMORY=1` — the #4438-removed /
+#4446-re-added guard. Making `transfer` the DEFAULT requires restoring its streaming path first
+(per-file score->run-q table) or every default run demands unbounded memory (won't scale to 164f).
+
 ### 2026-07-28 - PR #4487 Copilot review addressed
 
 Applied both Copilot inline fixes in a NEW commit `5de9896d81` (never amend post-review):
