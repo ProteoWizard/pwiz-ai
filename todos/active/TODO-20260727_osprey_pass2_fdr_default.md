@@ -231,6 +231,8 @@ unquantifiable and high-FDP anyway.
   (mdiag HTMLs). Extract: python parse of `out.model-diagnostics.html` pass2.fdpViews[0]
   (experiment): q[], combined[], nTargetAccepted[]. Driver: `ai/.tmp/run-pass2-82-4way.ps1`.
 
+**Next session handoff**: read `ai/.tmp/handoff-20260728.md` for the startup protocol before starting work.
+
 ## DIRECTION (2026-07-28 morning, Brendan awake) — DECISION LEANING
 
 - **Default = `transfer`** (strong lean). The only statistically defensible option: it inherits
