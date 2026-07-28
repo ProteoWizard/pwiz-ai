@@ -157,6 +157,80 @@ first-pass data. Remaining: confirm it renders for frozen modes in a merge-node-
 run (structural retrain-only cards correctly show "n/a"); optional: split the
 reported-pool score histogram from the model build so it shows under transfer.
 
+## EVIDENCE SUMMARY (2026-07-28) — write-up seed for the transfer decision
+
+### 82-file SEA-AD entrapment 4-way (current binary, experiment scope, FDRBench-validated)
+| mode | disc @ 1% q | true FDP @ 1% q | disc @ TRUE 1% FDP | verdict |
+|---|---|---|---|---|
+| **transfer ≈ Pass-1** | **37,676** | **0.92%** | (calibrated) | WINS both axes |
+| protein-compact | 37,232 | 1.51% | 33,722 | anti-conservative, ~flat sensitivity |
+| transfer-compete | 33,984 | 1.96% | 28,185 | worst: anti-conservative AND least sensitive |
+| percolator | — | ~9% (prior 82f) | — | catastrophic (depleted null) |
+
+**VERDICT: every re-derivation mode is anti-conservative at scale; only `transfer` (freezes
+Pass-1 experiment q, never re-derives) holds calibration AND is the most sensitive. Pass 2 is a
+net LOSS at 82 files** (protein-compact 37,232 < Pass-1 37,676 @ 0.92%). 3-file was misleading
+(protein-compact 0.90% looked best); the inflation grows with run count as predicted.
+
+### Why (diagnostic evidence, from the model-diagnostics HTML — FDRBench is blind to this)
+- **Per-run q can't gate the experiment**: per-run q<=1% -> 65,116 disc @ **13.05% true FDP**;
+  worsens with N (per-run falses are distinct singletons, trues overlap: union FDP ~ N*alpha).
+- **Run-count histogram k=1 slice** (the tell): per-run 12,852 (20%) @ **47.2% FDP**; even
+  experiment-wide q (best-of-runs) leaves 639 (2%) @ **20.6% FDP** — bounds the left end but
+  doesn't remove the 1-run accumulation, and it WORSENS with N (more lucky-single-run falses clear
+  a reproducibility-blind max-score gate as max-of-N-null grows).
+- **Reproducibility frontier**: peak ~44,900 @ 1% true FDP (per-run peak >=2 runs Q*0.5%; exp-wide
+  peak >=4 Q*10%) = **+19% over exp-wide-q standard 37,763** at same true FDP, 92% same peptides.
+  "Reproducibility, not the q statistic, selects them." At >=4 runs even a 10% q holds 1% FDP.
+
+### Validity argument (core of the write-up — why transfer-compete/protein-compact are invalid)
+TDC needs a decoy score to be an HONEST NULL DRAW (conditional exchangeability). **Pairing gives
+matched COUNTS, not exchangeability.** A decoy transform is valid iff it is a function of the
+decoy's OWN data alone; it is invalid the moment it reads the target's q / RT / protein-detection.
+- **transfer-compete**: reconciliation (consensus RT + gap-fill) is gated on the TARGET's run-q
+  <=0.01 (`ConsensusRts.Qualifies` excludes decoys :99-133; `GapFillTargetIdentifier` targets-only
+  :103-197); the paired decoy is rescored at the TARGET's chosen RT -> a reproducible-interference
+  false target gets boosted, its decoy at the same RT measures unrelated (different-m/z) noise and
+  is NOT boosted -> decoy undercounts false targets -> anti-conservative (1.96% @ 82f).
+- **protein-compact**: the >=2-peptide stratum gate is TARGET-only (`BuildProteinCompactStratum`
+  `FirstJoinTask.cs:1566`: peptide->protein map from `!e.IsDecoy`; `present2` from target
+  `DetectedPeptides`); decoys enter ONLY by base_id pairing. Selection is target-driven + q-gated
+  -> stratum decoy null is not symmetric -> anti-conservative (1.51% @ 82f). NOT pair-symmetric in
+  the way the code comment claims (membership is symmetric; SELECTION is target-only).
+- **percolator**: compaction depletes decoys -> retrain on a thin null -> anti-conservative.
+- This is Mike's recurring "pairing == equal treatment" error: two failure modes (depleted-null
+  COUNT asymmetry + conditioned-selection DISTRIBUTION asymmetry), one belief, surviving because he
+  re-derives FDR in Pass 2. Neither the pairing nor the Pass-2 venue makes an estimator honest.
+
+### The lever (valid sensitivity, the honest route to Mike's gains) — NEXT IMPLEMENTATION
+`mean(best-2 runs)` = experiment-wide peptide score; `mean(best-2 peptides)` = protein score;
+replace best-peak(max) aggregation IN THE 1ST PASS (null intact). Symmetric by construction (decoy
+uses its OWN two best runs/peptides — no target conditioning), self-calibrating in N (decoys ride
+the same order-statistic, so valid at ANY N; power gently fades at huge N, never validity),
+generalizes to `mean(best-ceil(f*N))` for the very-large-N fraction. Also aligns detection with the
+MIN quant requirement (2 measurements: no CV/ratio from 1 point) — reproducibility governs FDR AND
+quant usability, so requiring it is not a sensitivity tax; the lost 1-few-run detections were
+unquantifiable and high-FDP anyway.
+
+### FUTURE WORK (from Brendan, 2026-07-28)
+1. **Write-up** justifying `transfer` default over transfer-compete/protein-compact (evidence above).
+2. **FDRBench PR** (pressing, not started): add the best diagnostic plots to FDRBench — run-count
+   histogram + per-k FDP (incl. the decoy-based entrapment-free version #4489), reproducibility
+   frontier, per-run-vs-experiment calibration. Needed for side-by-side DIA-NN comparison; harder to
+   game than the x=y metric (Fig 4 of the FDRBench paper s41592-025-02719-x: Spectronaut/EncyclopeDIA
+   flat-q plateaus, all tools anti-conservative, DIA-NN tuned by Vadim to pass x=y).
+3. **DIA-NN side-by-side** (not started). EncyclopeDIA finding: two-stage Percolator (per-file
+   mProphet LDA + global `getGlobalVersion` run); likely depleted global null (matches its Fig-4
+   plateau) — confirm the global MProphetDataset target/decoy population to make it airtight.
+4. **Scaling proof** on a 2nd test machine (Mike's larger datasets): 200 (today) / 300 / 500 runs.
+   Expect re-derivation modes to worsen and `transfer` to hold; validate `mean(best-2)` at scale.
+
+### Artifacts
+- Analysis: `ai/.tmp/pass2-fdr-default-validity.md`, `ai/.tmp/pass2-82-4way-results.md`.
+- Runs: `D:\test\Pilot-MTG-Tissue-May2026\runs\pass2-82-4way-{protein-compact,transfer-compete}\`
+  (mdiag HTMLs). Extract: python parse of `out.model-diagnostics.html` pass2.fdpViews[0]
+  (experiment): q[], combined[], nTargetAccepted[]. Driver: `ai/.tmp/run-pass2-82-4way.ps1`.
+
 ## DIRECTION (2026-07-28 morning, Brendan awake) — DECISION LEANING
 
 - **Default = `transfer`** (strong lean). The only statistically defensible option: it inherits
