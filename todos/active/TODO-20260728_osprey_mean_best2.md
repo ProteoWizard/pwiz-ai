@@ -31,6 +31,17 @@ but from a statistically VALID transform (symmetric decoys, self-calibrating in 
 - Floor: decoy **median** (default); decoy mean / low decoy percentile = A/B variants.
 - Flag: `OSPREY_EXPERIMENT_AGG` = `max` (default, byte-identical golden) vs `mean-best-2`.
 
+## FUTURE REFINEMENT — size-threshold / scale-adaptive demotion (Brendan 2026-07-28)
+
+3-file result showed a modest NEGATIVE (disc@1%q 27,201→25,871, −4.9%; true FDP 0.86%→0.76%):
+at small N, "detected in only 1 run" is weak FDR-leakage evidence, so demoting it costs good IDs
+without much calibration gain. At larger N, 1-of-N is a strong leakage signal. So we likely want
+mean(best-2) to engage only above a run-count threshold. The earlier `mean(best-⌈f·N⌉)`
+generalization implements this NATURALLY: pick f so ⌈f·N⌉=1 at small N (= max, no demotion) and
+grows with N (e.g. f≈0.1: N≤10→1 [max], N=20→2, N=82→9). One knob unifies "threshold" +
+"scale-adaptive reproducibility bar." DECIDE the threshold/f from the run-count-vs-benefit curve
+(3f done, 20f running, then 200/300/500 on the 2nd machine) — don't hard-code yet.
+
 ## Implementation seams (mapped — see spec)
 
 - Resident: thread existing `fileNames[]` into `ComputeExperimentPrecursorQMap`/`CompeteAll`/
