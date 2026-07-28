@@ -309,6 +309,26 @@ Two Copilot inline comments, both to FIX (real + trivial). Turnkey:
 
 ## Progress Log
 
+### 2026-07-28 - PR #4487 Copilot review addressed
+
+Applied both Copilot inline fixes in a NEW commit `5de9896d81` (never amend post-review):
+- `FirstPassModelIO.Load`: wrapped read/parse/construct in try/catch → null (honors the
+  documented "unreadable → null" contract instead of throwing and crashing the merge node);
+  added shape validation (`SchemaVersion == 1`, `Means.Length == Stds.Length`, `FoldWeights`
+  non-empty, `FoldBiases.Length == FoldWeights.Length`). `NumFeatures` intentionally NOT a
+  load-blocking invariant — reconstruction derives it from `Means` via `FromMeansStds`.
+- `FirstPassModelIoTest.cs`: `NumFeatures` now asserted with `Assert.AreEqual` (int equality)
+  not the double bit-parity helper.
+
+Gate (pwiz-work1, Debug): build clean, **549/549 tests passed**, inspection **0 warnings/0
+errors** (re-confirmed the earlier dangling-cref fix holds). Build's fix-crlf step converted
+both files LF→CRLF, so the handoff's CRLF gotcha is now resolved for these two files.
+Replied `Fixed in 5de9896d81` + resolved both threads (3663404408, 3663404459). Added the
+missing `osprey` module label and `osprey:` title prefix to the PR.
+
+**Still pending before human review**: `/code-review max` on the branch (deferred overnight);
+protein-compact stratum persistence follow-up (~15 min, spec above).
+
 ### 2026-07-27 - Session Start
 
 Starting work on this issue. Created branch
