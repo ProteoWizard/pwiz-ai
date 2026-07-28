@@ -178,6 +178,22 @@ reported-pool score histogram from the model build so it shows under transfer.
   plateaus + all tools anti-conservative, DIA-NN tuned by Vadim to pass x=y).
 - Diagnostics HTML (mdiag) is the load-bearing tool here (FDRBench is blind to per-k / reproducibility).
 
+## PR #4487 Copilot review follow-up (/pw-respond, pending machine free + build gate)
+
+Two Copilot inline comments, both to FIX (real + trivial). Turnkey:
+- **#1 (real bug)** `FirstPassModelIO.Load` (`:170`): documented "null when absent OR unreadable"
+  but THROWS on invalid JSON / IO -> can crash the merge node. FIX: wrap ReadAllText +
+  DeserializeObject + construction in `try { ... } catch (Exception) { return null; }` (matches the
+  FirstJoinTask persist pattern), and tighten the check to `dto == null || dto.SchemaVersion != 1 ||
+  Means/Stds null || Means.Length != Stds.Length || FoldWeights null/empty || FoldBiases.Length !=
+  FoldWeights.Length -> null`. Thread id 3663404408.
+- **#2 (trivial)** `FirstPassModelIoTest.cs:93`: NumFeatures is int, asserted via AssertBitEqual
+  (coerces to double). FIX: `Assert.AreEqual(model.Standardizer.NumFeatures, reloaded.Standardizer.NumFeatures)`.
+  Thread id 3663404459.
+- Gate: `Build-Osprey.ps1 -RunInspection -RunTests` (needs the Release dir free -> after the 82-file
+  transfer-compete run finishes). Commit "Addressed Copilot review feedback on PR #4487" (NEW commit,
+  never amend). Reply `Fixed in <SHA>` + resolve both threads (see /pw-respond step 3).
+
 ## Night 2026-07-27/28 outcome + morning playbook
 
 - **PR #4487 opened**: HPC 1st-pass model persistence (commits fb36ef7f12, acc8112ece).
