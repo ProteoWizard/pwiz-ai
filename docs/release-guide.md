@@ -1201,6 +1201,11 @@ major releases. The 25.1 entry is a good reference for scope and formatting.
 
 ### Release Notes Templates
 
+These are the **markdown** bodies for the skyline.ms announcement (Step 2 under "Writing
+and Posting Release Notes"). The **MailChimp email** uses the same content in a specific
+HTML wrapping — see **Step 4: MailChimp email** below for the required HTML structure.
+Generate both; they are separate deliverables.
+
 **FEATURE COMPLETE:**
 ```
 Dear Skyline-daily Users,
@@ -1353,15 +1358,36 @@ MailChimp designer's code view.
 
 **Generate the HTML file:**
 
-Using the same release notes content from Step 1, generate an HTML file formatted for
-MailChimp's email template. Each text element must be wrapped in
-`<span style="font-size: 13px">` inside `<p>` tags, and list items use
-`<li><p><span>` nesting to match the established email style:
+Using the same release notes content from Step 1, generate a paste-ready HTML file.
+**Follow the exact structure below — do not improvise the markup or eyeball a previous
+email.** The MailChimp editor is picky about the wrapping: every run of text
+(greeting, each paragraph, each list item, and the sign-off) is wrapped in
+`<span style="font-size: 13px">…</span>` inside a `<p>`; list items nest as
+`<li><p><span>…</span></p></li>`; and blank `<p></p>` lines separate the closing
+paragraphs.
 
 ```python
 # Generate from the approved release-notes markdown
 Write("ai/.tmp/release-notes-26.1.1.082-email.html.txt", html_content)
 ```
+
+**Two list-item forms** — the `New!` marker is the piece most often gotten wrong:
+
+- **`New!` item** — the marker is its **own** `<strong><span>`, and the description
+  continues in a **separate** `<span>` (keep the leading space before the description).
+  Do **not** collapse this into `<span><b>New!</b> …</span>` — that is not what the
+  established emails use:
+  ```html
+  <li>
+    <p><strong><span style="font-size: 13px">New!</span></strong><span style="font-size: 13px"> Description of the new feature. (thanks to Nick)</span></p>
+  </li>
+  ```
+- **Regular item** — a single `<span>` holding the whole line:
+  ```html
+  <li>
+    <p><span style="font-size: 13px">Description of change. (reported by Philip, thanks to Brian)</span></p>
+  </li>
+  ```
 
 The HTML file should follow this exact structure:
 
@@ -1370,19 +1396,32 @@ The HTML file should follow this exact structure:
 <p><span style="font-size: 13px">I have just released Skyline-daily 26.1.1.082. This release contains the following improvements over the last release:</span></p>
 <ul>
   <li>
-    <p><span style="font-size: 13px"><b>New!</b> Description of new feature.</span></p>
+    <p><strong><span style="font-size: 13px">New!</span></strong><span style="font-size: 13px"> Added a new feature that does something useful. (thanks to Nick)</span></p>
   </li>
   <li>
-    <p><span style="font-size: 13px">Description of change. (thanks to Developer)</span></p>
+    <p><span style="font-size: 13px">Fixed an unexpected error opening some dialog. (reported by Philip, thanks to Brian)</span></p>
   </li>
 </ul>
 <p></p>
 <p><span style="font-size: 13px">Skyline-daily should ask to update automatically when you next restart or use Help &gt; Check for Updates.</span></p>
 <p></p>
-<p><span style="font-size: 13px">Thanks for using Skyline-daily and reporting the issues you find.</span></p>
+<p><span style="font-size: 13px">Thanks for using Skyline-daily and reporting the issues you find as we make Skyline even better.</span></p>
 <p></p>
 <p><span style="font-size: 13px">--Brendan</span></p>
 ```
+
+Rules that keep it matching the established style:
+- Wrap **every** text run in `<span style="font-size: 13px">`, including the greeting
+  and the `--Brendan` sign-off — no bare text inside `<p>` or `<li>`.
+- Use `<strong>` (not `<b>`), and only around the `New!` marker's own span.
+- Keep the list **flat**; only nest a `<ul>` under an item when a bullet has a genuine
+  sub-point (rare — most releases have none).
+- Escape `>` as `&gt;` (as in "Help &gt; Check for Updates").
+- The greeting, closing update line, and sign-off text match the markdown templates
+  above (including "…as we make Skyline even better.").
+- Verify against the previous release email if unsure — fetch it with
+  `get_support_thread` on the `/home/software/Skyline/daily` container, but the
+  structure above is authoritative.
 
 **Developer workflow in MailChimp:**
 
