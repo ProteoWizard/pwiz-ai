@@ -157,6 +157,32 @@ first-pass data. Remaining: confirm it renders for frozen modes in a merge-node-
 run (structural retrain-only cards correctly show "n/a"); optional: split the
 reported-pool score histogram from the model build so it shows under transfer.
 
+## Night 2026-07-27/28 outcome + morning playbook
+
+- **PR #4487 opened**: HPC 1st-pass model persistence (commits fb36ef7f12, acc8112ece).
+  Byte-identity regression PASSED; unit tests green; persist verified firing in the HPC
+  chain (phase-2 writes `<stem>.1st-pass.model.json`). Enables `transfer`/`transfer-compete`
+  in the merge node.
+- **KNOWN GAP (follow-up)**: `protein-compact` merge-node also needs the **protein stratum**
+  (`ProteinCompactStratum`, a set of base_ids) persisted like the model — `Pass2FdrSidecar.cs:665`.
+  Same shape as FirstPassModelIO. Until then protein-compact fail-fasts in the merge node
+  (straight-through is fine — model+stratum in-process).
+- **Live merge-node reload**: frozen chain proof revealed the harness sourced the model from
+  the wrong phase (fixed, acc8112ece); a `transfer-compete` chain rerun to watch the reload
+  fire is queued (machine was busy on the 82-file run).
+- **82-file protein-compact run LAUNCHED** (detached, `run-pass2-82-4way.ps1 -Mode protein-compact`,
+  stage1-4 resume CONFIRMED "skipping (outputs valid)"). Out:
+  `D:\test\Pilot-MTG-Tissue-May2026\runs\pass2-82-4way-protein-compact\`. ETA ~03:25.
+  EXTRACT the result: open `out.model-diagnostics.html` -> Pass 2 tab -> FDR calibration card
+  = entrapment true-FDP @ reported q (the KEY number: is protein-compact calibrated at 82-file
+  scale? compare to percolator ~9% and 3-file protein-compact 0.90%). Backup: `fdrbench.tsv`
+  (--fdrbench) via the FDRBench jar or compute_pass2_fdp.py.
+- **Full 4-way**: launch the other 3 modes with `run-pass2-82-4way.ps1 -Mode {percolator|transfer|
+  transfer-compete}` (sequential, one Osprey at a time). Each ~3h40m straight-through; OR fast via
+  --task SecondPassFDR once stratum persistence lands (protein-compact) / for transfer-compete now.
+- Cosmetic: new .cs files are LF; run fix-crlf before merge. `/code-review max` + inspection
+  re-verify (one pre-existing cref fixed) pending. Handoff: `ai/.tmp/handoff-20260728-pass2-hpc.md`.
+
 ## Progress Log
 
 ### 2026-07-27 - Session Start
