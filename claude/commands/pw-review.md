@@ -101,33 +101,19 @@ Don't review the diff in isolation. For each substantially changed file, read th
 
 ### 6c. Evaluate against quality criteria
 
-Review for:
+Full criteria — correctness, architecture, style, test coverage, and the
+Skyline-specific rules **with their real sources** — are in
+[ai/docs/code-review-guide.md](../../docs/code-review-guide.md) § "Pull request review
+criteria".
 
-**Correctness**
-- Does the logic do what the PR description claims?
-- Are edge cases handled?
-- Are there off-by-one errors, null reference risks, or race conditions?
+Summary: does the logic do what the description claims; does the change follow existing
+patterns rather than duplicating helpers; no `async`/`await`, no hardcoded UI strings, no
+`MessageBox.Show()`, no `System.Windows.Forms` in the Model layer, zero warnings; are new
+features and fixes covered by tests.
 
-**Architecture & Design**
-- Does the change follow existing patterns in the codebase?
-- Is there unnecessary duplication that should use existing helpers?
-- Are new abstractions justified or premature?
-
-**Skyline-Specific Rules** (from CRITICAL-RULES.md)
-- No `async`/`await` — must use `ActionUtil.RunAsync()`
-- No hardcoded UI strings — must use `.resx` resources
-- No `MessageBox.Show()` — must use `MessageDlg`
-- No new `using System.Windows.Forms` in Model layer
-- Solution must build with zero warnings
-
-**Style & Consistency**
-- Follows existing naming conventions
-- No unrelated formatting changes
-- Comments only where logic isn't self-evident
-
-**Test Coverage**
-- Are new features/fixes covered by tests?
-- Do existing tests need updating for the changes?
+Check each rule at its stated source rather than trusting a restated copy — this list has
+drifted before, with two rules attributed to `CRITICAL-RULES.md` that actually live in
+`ai/docs/architecture-error-handling.md`.
 
 ## Step 7: Present Findings
 

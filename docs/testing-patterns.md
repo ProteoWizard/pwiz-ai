@@ -11,7 +11,8 @@
 8. [HTTP Recording/Playback Pattern](#http-recordingplayback-pattern)
 9. [Translation-Proof Testing](#translation-proof-testing)
 10. [Test Performance Considerations](#test-performance-considerations)
-11. [Code Coverage Validation](#code-coverage-validation)
+11. [Assessing Test Coverage by Reading](#assessing-test-coverage-by-reading)
+12. [Code Coverage Validation](#code-coverage-validation)
 
 ---
 
@@ -1818,6 +1819,100 @@ protected override void DoTest()
 - Tests validate different aspects of same feature
 - Tests can share SkylineWindow instance
 - Tests execute sequentially anyway
+
+---
+
+## Assessing Test Coverage by Reading
+
+The by-eye complement to the dotCover workflow in the next section — useful when an LLM
+assessment is faster, or when the coverage tool is not available. The question is not
+"are there tests?" but **"would the existing tests catch the kinds of regressions a
+reasonable maintainer would worry about?"**
+
+The review posture this depends on — be honest, evidence or it does not count, do not pad
+— is in `code-review-guide.md` § "Posture: be honest, even uncomfortable". Concretely
+here:
+
+- If a module has tests but they are smoke-only or mock-heavy enough to be
+  **inverse-coverage**, say so. Lots of green dots can hide zero confidence.
+- If a critical piece of code has no tests, **name it**. Do not bury the finding under
+  "consider adding tests for X."
+- If the code is well-covered, say that plainly with specifics. Padded "here are also
+  some places you might want to test" recommendations are exactly the noise this is meant
+  to filter out.
+
+### The five lenses, in priority order
+
+1. **Public surface coverage.** Every public type / method / entry point should be
+   exercised by at least one test that would fail if the contract changed. If a public API
+   is not called from any test, it is untested — regardless of whether lines inside it
+   happen to execute via some indirect path.
+2. **Behavior vs. shape testing.** Do tests assert on outputs and side effects, or only
+   that a method "ran without throwing"? Tests with no assertions, or only
+   `Assert.IsNotNull`-style structural checks, give a false coverage signal.
+3. **Edge / error path coverage.** For each non-trivial method, the genuine edge cases:
+   empty inputs, max sizes, null or missing optional parameters, error conditions, race
+   conditions where concurrency is in play. Untested error paths are where real bugs hide.
+4. **Regression gates.** Beyond unit tests — snapshot regression, golden-file comparison,
+   cross-impl parity, integration tests. These often catch what unit tests miss. Note
+   their presence *and* effectiveness.
+5. **Test quality.** Are tests resistant to coincidental change (they do not break on
+   cosmetic refactors) AND sensitive to real regressions (they DO break when behavior
+   changes)? A test that breaks on every refactor is over-coupled to implementation
+   detail; one that survives a behavior change is under-coupled.
+
+### Procedure
+
+**Step 1 — Inventory the code.** Public surface (the contract that ought to be tested);
+critical paths (complex logic, parsing, concurrency, file I/O, state machines,
+protocol/format handling — the high-leverage targets); and low-risk code (simple getters,
+thin wrappers, glue) which needs no direct test if its callers are tested. Do not pad
+recommendations with "add a test for property X."
+
+**Step 2 — Inventory the tests.** Look for a sibling `*.Test/` or `*Tests/` project;
+`[TestClass]`/`[TestMethod]` (MSTest), `Fact`/`Theory` (xUnit), `Test` (NUnit), `#[test]`
+(Rust), `def test_*` (pytest); integration or regression scripts under `ai/scripts/`; and
+snapshot / golden-file harnesses. For each: what surface does it test, how many tests and
+of what shape, and are they doing real work or are they shape-only?
+
+**Step 3 — Map tests to surface.** For each public surface item, classify:
+
+- **Directly tested** — a test calls it and asserts on its output.
+- **Indirectly tested** — a higher-level test exercises the path with meaningful
+  assertions. **Name the protecting test**, because if it goes away so does the coverage.
+- **Untested** — nothing exercises this surface. Flag it.
+
+Indirect coverage is real coverage when the higher-level test would break if the
+underlying code broke.
+
+**Step 4 — Grade each lens** (Strong / Adequate / Weak / Failing) with `file:line`
+citations from both production and test code. Then call out separately:
+
+- **Tests that look like coverage but are not** — no assertions, mocking the very thing
+  they should validate, or a green dot that means nothing because the failure mode the
+  test would have to catch is structurally unreachable. Name them with `file:line`.
+- **Tests that earn their keep** — well-designed tests that should be the template for
+  new ones. Naming these is a service to the next contributor.
+- **Coverage gaps with high consequence** — untested code that would cause silent wrong
+  output or a production crash if it broke, not merely untested code. Order
+  recommendations by this signal.
+
+**Step 5 — Present.** Headline assessment (one unhedged paragraph); per-lens findings
+(grade, evidence, what is missing); **top three places to add tests** — ruthlessly
+prioritized, each with what to test, the test shape, and effort vs. payoff. Fewer than
+three is fine; padding is not. Close with open questions.
+
+### Rules
+
+- **Indirect coverage counts only when you can name the protecting test.** "It's probably
+  exercised by the integration tests" is not coverage.
+- **A test that mocks the dependency it is supposed to exercise is often anti-coverage.**
+  The risk is real: mocked tests pass while the real path breaks.
+- **Snapshot / regression / cross-impl gates count as coverage** when they exist and run.
+  Note their dataset and scope so the reader knows the protection boundary.
+- **Match scope to the argument.** A single file → which methods lack tests. A project or
+  large folder → which subsystems have weak coverage.
+- **No emojis. No "Overall, …" wrap-ups.**
 
 ---
 

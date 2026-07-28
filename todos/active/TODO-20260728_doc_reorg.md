@@ -42,7 +42,7 @@ PR #3666, 2025-11-05): core files 707 -> 1,056 lines (+49%) in ~9 months.
 
 ### P1 - knowledge existing ONLY in ai/claude (fails the owner's test)
 - [x] WI-6 - create `docs/pr-report-guide.md` (DONE 2026-07-28; -24,429 chars from ai/claude)
-- [ ] WI-7 - create `docs/code-review-guide.md`
+- [x] WI-7 - create `docs/code-review-guide.md` (DONE 2026-07-28; -12,561 chars)
 - [ ] WI-8 - rehome orphan knowledge from skills/commands
 
 ### P2 - duplication that is actively drifting
@@ -147,6 +147,41 @@ Applied WI-1, three actively-wrong instructions:
    about the workflow's actual scope.
 
 Full audit plan retained below (was written to `ai/.tmp/`, which is gitignored).
+
+### 2026-07-28 - WI-7 applied (review rubrics get an ai/docs home)
+
+New `docs/code-review-guide.md` (9,487 chars) + a new "Assessing Test Coverage by
+Reading" section in `docs/testing-patterns.md` (2,230 -> 2,325 lines).
+
+| File | Before | After |
+|---|---:|---:|
+| `pw-oop-review.md` | 7,864 | **1,973** |
+| `pw-test-review.md` | 8,581 | **2,108** |
+| `pw-review.md` | 5,432 | 5,235 |
+
+-12,561 chars from `ai/claude/`; REFACTOR tier 9 -> 7.
+
+**The split was deliberate and not obvious.** The coverage rubric did NOT go in the new
+guide: it belongs beside the tool-based dotCover workflow in `testing-patterns.md`,
+because `pw-test-review` framed itself from the start as the by-eye complement to
+dotCover. Someone assessing coverage should find both approaches in one place. Only the
+*shared posture* is centralized, with the coverage section pointing at it.
+
+**Removed a command-to-command dependency.** `pw-test-review.md:18` read "Same as
+`/pw-oop-review`" for its posture - one slash command citing another as its knowledge
+source, which is exactly the coupling the thin-pointer rule is meant to eliminate. Both
+now point at the guide.
+
+**Fixed a real misattribution while here.** `pw-review.md` listed five rules "from
+CRITICAL-RULES.md"; two of them - `MessageBox.Show`/`MessageDlg` and
+`System.Windows.Forms` in the Model layer - are not there. They live at
+`docs/architecture-error-handling.md:427`. The guide now gives each rule its real source
+in a table, and both the guide and the command say to check the source rather than trust
+a restated copy. Verified by grepping both files, not assumed from the audit.
+
+`pw-review.md` stays at 5,235 (just over the threshold) because what remains is genuine
+PR-review procedure - fetch, read the diff, present, resolve threads. WI-14 can judge
+whether more should move.
 
 ### 2026-07-28 - WI-6 applied (first P1 item: PR-report pipeline gets an ai/docs home)
 
