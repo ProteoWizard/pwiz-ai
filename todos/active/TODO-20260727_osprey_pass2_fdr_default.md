@@ -157,6 +157,27 @@ first-pass data. Remaining: confirm it renders for frozen modes in a merge-node-
 run (structural retrain-only cards correctly show "n/a"); optional: split the
 reported-pool score histogram from the model build so it shows under transfer.
 
+## DIRECTION (2026-07-28 morning, Brendan awake) — DECISION LEANING
+
+- **Default = `transfer`** (strong lean). The only statistically defensible option: it inherits
+  Pass-1's honest experiment q, never re-derives FDR on a conditioned/depleted null. percolator
+  (depleted null) + transfer-compete/protein-compact (target-conditioned selection: stratum ≥2 gate
+  is target-only, decoys ride by base_id — `FirstJoinTask.cs:1566` BuildProteinCompactStratum) are
+  NOT symmetric-treatment-valid. 82-file confirmed protein-compact 1.51% (anti-conservative) AND
+  slightly LESS sensitive than Pass 1 (37,232 vs Pass-1 37,676 @ 0.92%) — Pass 2 is a net loss at scale.
+- **Sensitivity lever (the honest route to Mike's gains) = reproducibility in the 1st-pass
+  experiment/protein score**: experiment-wide peptide = `mean(best-2 runs)`, protein = `mean(best-2
+  peptides)`. Replaces best-peak(max) aggregation. Symmetric by construction (decoy computes its OWN
+  mean-best-2, no target conditioning), self-calibrating in N (decoys ride the same order-statistic),
+  and encodes the reproducibility that the run-count/frontier plots prove is decisive (frontier: ≥2
+  runs + floated q = 44,966 = +19% over exp-wide-q std 37,763 at same true FDP; k=1 slice = 20.6% FDP
+  even with exp-wide q). Generalizes to `mean(best-⌈f·N⌉)` for very large N. NEXT IMPLEMENTATION.
+- **#4489 (opened, assigned brendanx67)**: decoy-based per-k FDP — entrapment-free run-count
+  diagnostic (N_D(k)/N_T(k)); to be proposed to FDRBench authors as a harder-to-game truth metric
+  (the x=y metric is gameable — Fig 4 of the FDRBench paper shows Spectronaut/EncyclopeDIA flat-q
+  plateaus + all tools anti-conservative, DIA-NN tuned by Vadim to pass x=y).
+- Diagnostics HTML (mdiag) is the load-bearing tool here (FDRBench is blind to per-k / reproducibility).
+
 ## Night 2026-07-27/28 outcome + morning playbook
 
 - **PR #4487 opened**: HPC 1st-pass model persistence (commits fb36ef7f12, acc8112ece).
