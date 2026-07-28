@@ -86,10 +86,6 @@ param(
     # run, the same trick regression.ps1 uses (it pins 26.1.1.0) to keep its committed golden
     # comparable across days. Default: auto-detect from the prepared artifacts.
     [string]$VersionOverride,
-    # Run the measured stage with --model-diagnostics. The mdiag report is built from the
-    # PRE-compaction entries, so it is the case most likely to reintroduce an O(files) hold;
-    # measuring with it ON is the only way to show the streaming feed is actually bounded.
-    [switch]$ModelDiagnostics,
     [switch]$Prepare,
     # Build the Stage 1-5 artifacts and stop. Stage 1-5 is UPSTREAM of Stage 6, so its
     # artifacts are valid for any build whose changes are confined to Stage 6 -- prepare
@@ -285,9 +281,8 @@ foreach ($n in $counts) {
     Get-ChildItem $phaseDir -Filter '*.2nd-pass.fdr_scores.bin' -File -ErrorAction SilentlyContinue | Remove-Item -Force
     Get-ChildItem $phaseDir -Filter '*.scores-reconciled.parquet' -File -ErrorAction SilentlyContinue | Remove-Item -Force
 
-    $log = if ($ModelDiagnostics) { "stage6-${n}f-mdiag.log" } else { "stage6-${n}f.log" }
-    $mdiagArgs = if ($ModelDiagnostics) { @('--model-diagnostics') } else { @() }
-    $a = @('--task', 'PerFileRescoring') + ((& $scoresFor $n) | ForEach-Object { @('--input-scores', $_.Name) } | ForEach-Object { $_ }) + $mdiagArgs + @(
+    $log = "stage6-${n}f.log"
+    $a = @('--task', 'PerFileRescoring') + ((& $scoresFor $n) | ForEach-Object { @('--input-scores', $_.Name) } | ForEach-Object { $_ }) + @(
         '-l', (Split-Path $libPath -Leaf), '-o', 'output.blib', '--resolution', 'hram',
         '--decoys-in-library', '--decoy-pairing-manifest', (Split-Path $manifestPath -Leaf),
         '--protein-fdr', '0.01', '--threads', $Threads.ToString(),
