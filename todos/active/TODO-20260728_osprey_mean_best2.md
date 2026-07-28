@@ -56,6 +56,10 @@ but from a statistically VALID transform (symmetric decoys, self-calibrating in 
 - [ ] Unit tests (aggregation + floor + 1-run demotion + decoy symmetry).
 - [ ] Flag-off byte-identity regression (Stellar mode1/2/3) — golden unchanged.
 - [ ] Flag-on oracle A/B vs transfer (82f/164f, matched TRUE FDP) — Brendan-driven.
+      **PROTOCOL (Brendan 2026-07-28): flag-on runs MUST use OSPREY_PASS2_QVALUE=transfer** (only
+      transfer carries the mean-best-2 1st-pass experiment q through; percolator re-derives and
+      confounds it). Clean A/B = `transfer` (max) vs `mean-best-2`+`transfer`. Until the streaming
+      mirror lands, also force the resident path: OSPREY_FDR_PROJECTION=0 + OSPREY_ALLOW_UNBOUNDED_MEMORY=1.
 
 ## Regression Test
 - Flag-off: committed golden byte-identity (regression.ps1). Flag-on: entrapment-oracle A/B is
