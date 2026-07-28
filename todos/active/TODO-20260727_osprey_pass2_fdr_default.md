@@ -254,6 +254,31 @@ unquantifiable and high-FDP anyway.
   plateaus + all tools anti-conservative, DIA-NN tuned by Vadim to pass x=y).
 - Diagnostics HTML (mdiag) is the load-bearing tool here (FDRBench is blind to per-k / reproducibility).
 
+## mean(best-2) design — PINNED (2026-07-28, with Brendan)
+
+Full spec: `ai/.tmp/mean-best2-spec.md`. The honest sensitivity lever; flag-gated A/B vs the
+current max; C#-only for now (Rust match if it becomes a PR); golden-changing but gated.
+
+- **Reproducibility primitive = a single PRECURSOR across runs.** mean(best-2) applies ONLY at
+  the precursor level; peptide + protein are MAX roll-ups (refines the earlier loose "mean at
+  peptide/protein" wording).
+  1. Precursor (ModSeq+Charge) score = mean of best-2 per-run scores (best peak per run, 2
+     highest distinct runs). **1 valid run → mean(score, 0) = score/2** (0 = SVM no-evidence
+     point; multi-run experiments only; symmetric decoys).
+  2. Peptide score = MAX over its precursors' scores.
+  3. Protein score = MAX over its peptides' scores.
+  4. TDC + q on the rolled-up scores; symmetric for decoys (each decoy computes its OWN
+     precursor mean-best-2). Valid because the transform reads only each unit's own per-run data.
+- **Key structural task**: `FdrEntry` has NO file/run id; the experiment competition flat-pools
+  entries and drops file identity. mean(best-2 RUNS) needs per-run grouping threaded in (reuse
+  the `nRunsDetected` machinery). Sites: `CompeteFromIndices` :2703, `BestPrecursorPerPeptide`
+  :4216 (flat max → rebuild as roll-up), `ComputeProteinFdr` :664, streaming mirrors
+  `StreamingFirstPassQ.Add` :4071 + `FirstPassProteinFdrAccumulator.Add` :200.
+- Scoring is SPARSE (entry only where a peak passes apex-acceptance + the ≥2-fragment signal
+  pre-filter; no score cutoff) → 1-run units are real (k=1 ~20% per-run in the run-count
+  histogram) and are exactly what the zero-fill demotion targets.
+- Executes on a FRESH branch off master after #4487 merges (not on this branch).
+
 ## PR #4487 Copilot review follow-up (/pw-respond, pending machine free + build gate)
 
 Two Copilot inline comments, both to FIX (real + trivial). Turnkey:
