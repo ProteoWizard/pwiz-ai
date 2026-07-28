@@ -20,6 +20,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 ## Checklist
 - [ ] **Past tense title** ("Added", "Fixed", "Moved" - not "Add", "Fix")
+- [ ] **Module prefix NOT needed here.** `<module>: ` (`skyline`/`pwiz`/`osprey`)
+      is required on the **PR title** and the **squash-merge subject**, not on
+      intermediate branch commits — squash-merge discards these. Adding it is
+      harmless but noisy. See ai/docs/version-control-guide.md, "Module Tagging".
 - [ ] **Bullet points** (1-5 points, each starting with `* `)
 - [ ] **Reporter credit** (`Reported by <First>.`) if the change came from a user report/request — see ai/docs/version-control-guide.md, "Crediting Reporters and Requesters"
 - [ ] **TODO reference** (`See ai/todos/active/TODO-YYYYMMDD_feature.md`)

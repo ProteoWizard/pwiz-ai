@@ -2,6 +2,138 @@
 
 Detailed conventions for Git commits, PRs, and branch management in Skyline/ProteoWizard.
 
+## Module Tagging
+
+The `ProteoWizard/pwiz` repository carries three high-flow streams of work, and
+every PR belongs to exactly one of them:
+
+| Module | Covers | Typical paths |
+|--------|--------|---------------|
+| `skyline` | The Skyline application and everything shipped or tested with it | `pwiz_tools/Skyline`, `Test*/`, SkylineTester, SkylineNightly, `pwiz_tools/Shared` when consumed by Skyline |
+| `pwiz` | ProteoWizard core: msconvert, the C++ libraries, vendor readers, BiblioSpec, the build system | `pwiz/`, `pwiz_aux/`, vendor reader code |
+| `osprey` | Osprey / OspreySharp, the DIA proteomics search tool | `pwiz_tools/Osprey` |
+
+These are the **same three labels already used on GitHub Issues** — the module
+name, the label name, and the title prefix are all one string. There is no
+mapping table to remember.
+
+### Two carriers, because they serve different readers
+
+Every pwiz PR gets the module recorded **twice**, and both are required:
+
+1. **A GitHub label** on the PR (`skyline`, `pwiz`, or `osprey`). This is the
+   machine-readable copy — it makes PRs filterable in the GitHub UI, in
+   `gh pr list --label`, and in the daily PR report.
+2. **A title prefix** on the PR title *and* the squash-merge subject
+   (`skyline: Fixed …`). This is the copy that survives.
+
+The prefix is not redundant with the label. **Git history has no labels.** Once
+a PR is squash-merged, the label lives only on the PR; `git log --oneline`,
+`git blame`, `git log --grep`, and every release-notes pass see nothing but the
+subject line. That is exactly where the module signal is needed and exactly
+where it is currently missing:
+
+```
+Fixed intermittent failures in TestSetItemMcpConnector and TestJsonToolServer (#4474)
+Bumped BullseyeSharp submodule to pick up build-output .gitignore (#4432)
+Warned on unrecognized rows during --import-peak-boundaries (#4440)
+```
+
+Nothing in those titles says which part of the repository was being worked on.
+Osprey work is currently findable in the log only because the word "Osprey"
+tends to appear in the prose by luck, not by rule.
+
+### Format
+
+```
+<module>: <Title line in past tense> (#NNNN)
+```
+
+- Lowercase, exactly the label token, followed by a colon and one space
+- The past-tense action verb still leads the title itself — the prefix sits in
+  front of it and is not part of the sentence
+- The ` (#NNNN)` suffix rule is unchanged; prefix and suffix compose
+
+```
+skyline: Fixed TestDiaToSrmTutorial failing in Japanese on English combo box literals (#4483)
+osprey: Made the OspreySharp protein razor peptide rollup deterministic (#4442)
+pwiz: Warned on unrecognized rows during --import-peak-boundaries (#4440)
+```
+
+### Where it is required
+
+| Artifact | Module label | Title prefix |
+|----------|--------------|--------------|
+| GitHub Issue | **Required** (already the practice) | Not used |
+| PR on `ProteoWizard/pwiz` | **Required** | **Required** |
+| Squash-merge subject (`/pw-complete`) | n/a | **Required** |
+| Cherry-pick PR to a release branch | **Required** (inherit from the original) | **Required** (inherit from the original) |
+| Intermediate commits on a work branch | n/a | Optional |
+| Commits on `pwiz-ai` (`ai/`) | Not used | Not used |
+
+**Intermediate branch commits are optional** because squash-merge discards
+them — tagging every WIP commit is typing that never reaches `master`. Tag the
+two artifacts that persist: the PR title and the squash subject.
+
+**`pwiz-ai` (`ai/`) is exempt entirely.** That repository is a single module —
+AI tooling and documentation — so a prefix on every commit would carry no
+information. It also has no module labels defined.
+
+### Choosing the module
+
+- **From a GitHub Issue**: use the issue's module label. `/pw-startissue`
+  reads it and records it; see "Carrying the module through the workflow" below.
+- **Without an issue**: pick from the paths the change touches, using the table
+  above.
+- **A change spanning two modules**: pick the **primary** one — where the intent
+  of the change lives, not merely where the most lines moved. A Skyline feature
+  that needs a one-line fix in a pwiz reader is `skyline`. Apply the additional
+  label too if it genuinely helps triage, but **the title carries exactly one
+  prefix.**
+
+### Carrying the module through the workflow
+
+The module is decided at the *start* of the work and must still be known at
+`gh pr create` and at squash-merge — often many hours and a context compaction
+later. The TODO file is the carrier:
+
+```markdown
+## Branch Information
+- **Branch**: `Skyline/work/YYYYMMDD_<description>`
+- **Module**: `skyline` | `pwiz` | `osprey`
+- ...
+```
+
+Every command that opens a PR or writes a squash subject reads the `Module`
+field from the TODO rather than re-deriving it from the diff. Re-deriving is
+where the module silently drifts between the issue, the PR, and the commit.
+
+### One prefix, not two
+
+The log already contains ad-hoc sub-area prefixes — `OspreySharp:`,
+`msconvert:`, `ColorGrid:`, `Volcano plot:`, `SkylineNightlyShim:`. **These are
+retired.** Exactly one prefix, always a module. The sub-area belongs in the
+prose, where it reads better and does not compete with the title for length:
+
+- ❌ `osprey: OspreySharp: Made the protein razor rollup deterministic`
+- ✅ `osprey: Made the OspreySharp protein razor peptide rollup deterministic`
+- ❌ `skyline: Volcano plot: Allowed per-trait formatting`
+- ✅ `skyline: Allowed independent per-trait formatting in the volcano plot`
+
+### What this does not change
+
+- **Branch naming is unaffected.** `Skyline/work/YYYYMMDD_<name>` is a
+  repository-level namespace, not a module marker, and TeamCity configurations
+  key off it. Osprey and pwiz work both use `Skyline/work/` branches. Do not
+  "helpfully" rename branches to match the module.
+- **Release notes are unaffected, and get easier.** `release-guide.md` builds
+  Skyline-daily notes from `git log --oneline` and must exclude everything not
+  user-visible. The prefix lets that pass drop `osprey:` wholesale and
+  concentrate on `skyline:` and `pwiz:`. Step 2 rewrites each line into
+  user-facing prose anyway, so the prefix never reaches a user.
+- **History is not retroactively fixed.** Commits already on `master` keep
+  their untagged titles; this convention only improves the log going forward.
+
 ## Commit Message Format
 
 All commits MUST follow this exact format:
@@ -96,6 +228,21 @@ EOF
 
 ## Pull Request Format
 
+**Title**: `<module>: <Title line in past tense>` — see "Module Tagging" above.
+**Label**: the matching module label (`skyline`, `pwiz`, or `osprey`).
+
+```bash
+gh pr create \
+  --title "skyline: Fixed alert dialog timeout in functional tests" \
+  --label skyline \
+  --body "$(cat <<'EOF'
+...
+EOF
+)"
+```
+
+Body:
+
 ```markdown
 ## Summary
 - Bullet point summarizing change 1
@@ -113,6 +260,13 @@ Fixes #XXXX
 See ai/todos/active/TODO-YYYYMMDD_feature_name.md
 
 Co-Authored-By: Claude <noreply@anthropic.com>
+```
+
+If the PR is already open and missing its label, add it without reopening the
+description:
+
+```bash
+gh pr edit <N> --add-label skyline
 ```
 
 The `Reported by <First>.` line is included only when the change originated from
@@ -285,6 +439,10 @@ git push --force-with-lease
 ## Checklist Before Commit
 
 - [ ] Title in past tense
+- [ ] Module prefix (`skyline: ` / `pwiz: ` / `osprey: `) on a PR title or
+      squash-merge subject — optional on intermediate branch commits, never on
+      `pwiz-ai` commits
+- [ ] Module label applied to the PR, matching the prefix
 - [ ] 1-5 bullet points with `* ` prefix
 - [ ] `Reported by <First>.` line ONLY if the request came from outside the dev
       team (not the author, not a developer of the project being changed)
@@ -322,10 +480,21 @@ git cherry-pick <merge-commit-hash>
 
 # 4. Push and create PR
 git push -u origin Skyline/work/YYYYMMDD_feature_release
-gh pr create --base Skyline/skyline_XX_X --title "Cherry-pick: <title>" --body "..."
+gh pr create --base Skyline/skyline_XX_X \
+  --title "<module>: Cherry-pick: <title>" \
+  --label <module> \
+  --body "..."
 ```
 
 ### Cherry-Pick PR Format
+
+**A cherry-pick inherits the original PR's module** — both the label and the
+prefix. The prefix leads, before `Cherry-pick:`, so the release branch's log
+sorts and greps the same way `master` does:
+
+```
+skyline: Cherry-pick: Fixed a NullReferenceException in the chromatogram totals graph
+```
 
 ```markdown
 ## Summary

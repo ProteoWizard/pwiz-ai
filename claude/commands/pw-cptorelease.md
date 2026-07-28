@@ -29,10 +29,26 @@ Cherry-pick PR #$ARGUMENTS to the release branch:
    ```
 
 4. **Push and create PR**
+
+   **The cherry-pick inherits the original PR's module** — both the label and
+   the title prefix. Read it from the original: `gh pr view $ARGUMENTS --json
+   labels,title`. The `<module>: ` prefix leads, before `Cherry-pick:`, so the
+   release branch's log greps and sorts the same way `master` does:
+
+   ```
+   skyline: Cherry-pick: Fixed a NullReferenceException in the chromatogram totals graph
+   ```
+
    ```bash
    git push -u origin <branch-name>
-   gh pr create --base <release-branch> --title "Cherry-pick: <original-title>" --body "..."
+   gh pr create --base <release-branch> \
+     --title "<module>: Cherry-pick: <original-title>" \
+     --label <module> \
+     --body "..."
    ```
+
+   If the original PR predates module tagging and carries neither a label nor a
+   prefix, infer the module from the diff and state the inference to the user.
 
 5. **PR body format**
    ```markdown

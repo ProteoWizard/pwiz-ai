@@ -53,6 +53,20 @@ exist, ask the user which one. If none, check
 `ai/todos/completed/` — the TODO may already be moved (someone ran
 this workflow partially) — and skip Step 3's move.
 
+**Read the `Module` field** from the TODO's Branch Information
+(`skyline` | `pwiz` | `osprey`). The squash subject in Step 1b.2 must
+carry it as a prefix. Fallbacks, in order:
+
+1. The TODO's `Module` field (authoritative — it was set from the issue
+   label at `/pw-startissue` time).
+2. The PR's module label, if the TODO predates this convention:
+   `gh pr view <N> --json labels`.
+3. Infer from the diff (`gh pr diff <N> --name-only`) — `pwiz_tools/Skyline`
+   → `skyline`, `pwiz_tools/Osprey` → `osprey`, `pwiz/` + vendor readers +
+   msconvert → `pwiz` — then **state the inference to the user** as part of
+   the Step 1b.3 approval, and backfill both the TODO field and the PR label
+   (`gh pr edit <N> --add-label <module>`).
+
 State-driven branching for the rest of this command:
 
 | `state`              | Next step                                       |
@@ -102,7 +116,7 @@ a single commit on `master`. That commit must follow the team
 standard from `ai/docs/version-control-guide.md`:
 
 ```
-<Title line in past tense> (#NNNN)
+<module>: <Title line in past tense> (#NNNN)
 
 * <bullet point 1>
 * <bullet point 2>
@@ -115,8 +129,18 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 Format rules (also in `version-control-guide.md`):
 
-- Title: past tense ("Added", "Fixed", "Refactored" — NOT "Add", "Fix")
+- Title MUST begin with `<module>: ` — `skyline: `, `pwiz: `, or `osprey: `,
+  lowercase, from Step 1. This is the **only** record of the module that
+  survives the merge: the PR's label stays on the PR, while this subject is
+  what `git log --oneline`, `git blame`, and the release-notes pass read
+  forever after. See the subject rule below.
+- Title: past tense ("Added", "Fixed", "Refactored" — NOT "Add", "Fix"); the
+  verb leads the title itself, after the prefix
 - Title MUST end with ` (#NNNN)` — see the subject rule below
+- Exactly one prefix. If the PR title carries a legacy sub-area prefix
+  (`OspreySharp:`, `msconvert:`, `Volcano plot:`), replace it with the module
+  and fold the sub-area into the prose:
+  `osprey: Made the OspreySharp protein razor rollup deterministic`
 - Bullets: 1-5, each `* `-prefixed; what shipped, not how
 - TODO reference: a `See ai/todos/active/TODO-...md` line, even
   though Step 3 moves the file to `completed/` — the commit lands
@@ -127,14 +151,16 @@ Format rules (also in `version-control-guide.md`):
 
 Generate a draft using this priority order:
 
-1. **Subject**: `<PR title> (#NNNN)`. **You MUST include the
+1. **Subject**: `<module>: <PR title> (#NNNN)`. **You MUST include the
    ` (#NNNN)` suffix yourself** — when `gh pr merge --squash` is
    invoked with an explicit `--subject`, GitHub does NOT auto-append
    the PR number, so an explicit subject without `(#NNNN)` lands a
    commit message with no PR reference in the title, breaking
    `git log --oneline` discoverability and diverging from every other
    squash commit on `master`. If the PR title is not in past tense,
-   rewrite it before adding the suffix.
+   rewrite it before adding the suffix. If the PR title already carries
+   the module prefix (it should — `/pw-startissue` sets it at
+   `gh pr create` time), do not double it.
 2. **Body bullets**: prefer the bullets under `## Summary` in the PR
    description; if absent, derive them from the first ("foundation")
    commit on the branch. Trim sub-bullets and redundant "addressed
@@ -172,11 +198,13 @@ git -C C:/proj/pwiz fetch origin master
 git -C C:/proj/pwiz log origin/master --oneline -1
 ```
 
-The first line must end with ` (#<N>)`. If it doesn't, the subject
-was passed without the PR-number suffix and the commit is now on
-`master` without it — flag this to the user immediately. Do not
-attempt to rewrite the merge commit; surface it so they can decide
-whether to leave it or hand-amend on the next push window.
+The first line must **begin with `<module>: `** and **end with ` (#<N>)`**.
+If either is missing, the subject was passed malformed and the commit is
+now on `master` that way — flag it to the user immediately. Do not attempt
+to rewrite the merge commit; surface it so they can decide whether to leave
+it or hand-amend on the next push window. A missing module prefix is not
+recoverable from the PR later: the label stays on the PR, but the log line
+is what every future reader sees.
 
 If the user wants the merge to wait for pending checks instead of
 firing immediately, append `--auto`.
@@ -380,6 +408,13 @@ they don't get lost.
 - **Never squash-merge without explicit user approval** of the exact
   subject and body in Step 1b.3. Auto-merging "because the PR looks
   ready" replaces author intent with model guesswork.
+- **Always prefix the squash subject with the module** (`skyline: `,
+  `pwiz: `, `osprey: `), read from the TODO's `Module` field. The squash
+  subject is the only carrier of the module that outlives the PR — labels
+  do not exist in git history, so a subject that ships without the prefix
+  loses the module permanently for `git log`, `git blame`, and release
+  notes. Never guess silently: if the TODO has no `Module` field, infer it
+  from the diff and say so in the Step 1b.3 approval.
 - **Always include ` (#NNNN)` in the squash subject.** GitHub auto-
   appends the PR number only when no explicit `--subject` is passed.
   This command always passes one, so the model must include the

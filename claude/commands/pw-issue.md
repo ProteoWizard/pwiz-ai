@@ -36,9 +36,9 @@ $ARGUMENTS = One of:
    - Preserve code blocks with proper formatting
 
 3. **Determine labels** (apply ALL that fit):
-   - **Repository**: `skyline` (Skyline app) or `pwiz` (ProteoWizard/msconvert)
+   - **Module** (exactly one): `skyline` (Skyline app), `pwiz` (ProteoWizard/msconvert), or `osprey` (Osprey/OspreySharp)
    - **Type**: `bug`, `enhancement`, `todo`, `tutorial`, `performance`
-   - Most issues need at least: repository label + type label
+   - Most issues need at least: module label + type label
 
 4. **Ask about assignee** (default: assign):
    - "Should I assign this to someone? Team members: brendanx67, nickshulman, bspratt, rita-gwen, etc."
@@ -88,7 +88,7 @@ $ARGUMENTS = One of:
    - Priority, Area, Milestone (as labels if applicable)
 
 3. **Determine labels** (apply ALL that fit):
-   - **Repository**: `skyline` (Skyline app) or `pwiz` (ProteoWizard/msconvert)
+   - **Module** (exactly one): `skyline` (Skyline app), `pwiz` (ProteoWizard/msconvert), or `osprey` (Osprey/OspreySharp)
    - **Type**: `bug`, `enhancement`, `todo`, `tutorial`, `performance`
    - Map skyline.ms Priority/Area to labels where applicable
 
@@ -140,7 +140,7 @@ When no file/issue is specified, or a descriptive phrase is given:
    - Ask user to confirm or modify before creating
 
 3. **Determine labels** (apply ALL that fit):
-   - **Repository**: `skyline` (Skyline app) or `pwiz` (ProteoWizard/msconvert)
+   - **Module** (exactly one): `skyline` (Skyline app), `pwiz` (ProteoWizard/msconvert), or `osprey` (Osprey/OspreySharp)
    - **Type**: `bug` (for exceptions/defects), `enhancement`, `performance`
    - For exceptions: typically `skyline,bug`
 
@@ -214,7 +214,7 @@ When creating issues for unhandled exceptions:
 - **Complete transfer**: The GitHub Issue must contain ALL information from the source. No summarizing or omitting technical details.
 - **Self-contained**: After migration, the issue should be usable without referencing the original TODO file.
 - **Deletable source**: The goal is that `ai/todos/backlog/` ceases to exist - all backlog items live in GitHub Issues.
-- **Labels required**: Always add repository label (`skyline` or `pwiz`) + type label (`bug`, `enhancement`, etc.)
+- **Labels required**: Always add exactly one module label (`skyline`, `pwiz`, or `osprey`) + a type label (`bug`, `enhancement`, etc.). The module label is the head of the chain: `/pw-startissue` pulls it into the TODO's `Module` field, which becomes the PR's label and the `<module>: ` prefix on the PR title and squash-merge subject. See ai/docs/version-control-guide.md, "Module Tagging".
 - **Assignee by default**: Ask about assignment and default to assigning unless user declines
 - The created issue becomes the backlog item - TODO files are only created when work actively starts via `/pw-startissue`
 

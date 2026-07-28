@@ -78,10 +78,19 @@ may differ from the Skyline defaults in this file.
 - **Created**: YYYY-MM-DD
 - **Status**: In Progress | Completed
 - **GitHub Issue**: [#NNNN](https://github.com/ProteoWizard/pwiz/issues/NNNN)
+- **Module**: `skyline` | `pwiz` | `osprey`
 - **PR**: [#NNNN](https://github.com/ProteoWizard/pwiz/pull/NNNN) | (pending)
 ```
 
 **Note**: GitHub Issue and PR references must be Markdown links in the format `[#NNNN](URL)`, not raw URLs.
+
+**Note**: `Module` is set once — from the GitHub Issue's module label, or from
+the paths the work touches when there is no issue — and is then read by every
+command that opens a PR or writes a squash-merge subject. It becomes both the
+PR's label and the `<module>: ` prefix on the PR title and the squash subject,
+which is the only record of the module that survives into `master`'s history.
+Omit the field for pwiz-ai (`ai/`) TODOs; that repository is a single module.
+See `ai/docs/version-control-guide.md`, "Module Tagging".
 
 ## Key Workflows
 

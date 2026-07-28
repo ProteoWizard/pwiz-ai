@@ -23,6 +23,61 @@ Before staging and committing, verify:
 
 If the LLM has not built/tested the code itself, ask the developer: "Has this been built and tested since the last change?" Do not skip this step even for small fixes - even a small change can introduce a build error or break a test.
 
+## Module Tagging — every pwiz PR
+
+`ProteoWizard/pwiz` carries three streams of work. Every PR belongs to exactly
+one, recorded **twice**:
+
+| Module | Covers |
+|--------|--------|
+| `skyline` | Skyline app and everything shipped/tested with it (`pwiz_tools/Skyline`, `Test*/`, SkylineTester/Nightly) |
+| `pwiz` | ProteoWizard core: msconvert, C++ libraries, vendor readers, BiblioSpec, build system |
+| `osprey` | Osprey / OspreySharp (`pwiz_tools/Osprey`) |
+
+Same three strings as the GitHub Issue labels — module, label, and prefix are
+one token, no mapping table.
+
+1. **Label the PR** with the module (`gh pr create --label skyline`, or
+   `gh pr edit <N> --add-label skyline` after the fact).
+2. **Prefix the title AND the squash-merge subject**:
+
+```
+<module>: <Title in past tense> (#NNNN)
+```
+
+```
+skyline: Fixed TestDiaToSrmTutorial failing in Japanese (#4483)
+osprey: Made the OspreySharp protein razor rollup deterministic (#4442)
+pwiz: Warned on unrecognized rows during --import-peak-boundaries (#4440)
+```
+
+**Both, because git history has no labels.** After squash-merge the label lives
+only on the PR — `git log --oneline`, `git blame`, and the release-notes pass
+see nothing but the subject. Lowercase, exact label token, colon, one space.
+The past-tense verb still leads the title; the prefix is not part of the
+sentence.
+
+**Where required**: PR title, squash-merge subject, cherry-pick PR title (which
+inherits the original's module). **Optional**: intermediate branch commits —
+squash-merge discards them. **Never**: `pwiz-ai` (`ai/`) commits — that repo is
+one module and has no module labels.
+
+**Choosing it**: from the issue's label when there is an issue; otherwise from
+the paths touched. Spanning two modules → the **primary** one (where the intent
+lives, not where the most lines moved); exactly one prefix on the title.
+
+**Carry it in the TODO** so it survives compaction — `- **Module**: `skyline``
+in Branch Information. Commands that open a PR or write a squash subject read
+that field instead of re-deriving from the diff.
+
+**One prefix, not two.** The legacy sub-area prefixes (`OspreySharp:`,
+`msconvert:`, `ColorGrid:`, `Volcano plot:`) are retired — put the sub-area in
+the prose: `osprey: Made the OspreySharp protein razor rollup deterministic`,
+not `osprey: OspreySharp: Made the protein razor rollup deterministic`.
+
+**Branch naming is unaffected** — `Skyline/work/...` is a repo namespace that
+TeamCity keys off, not a module marker. Osprey and pwiz work use it too.
+
 ## Commit Message Format
 
 ```
@@ -92,6 +147,12 @@ then push. Do not fall back to a merge to avoid the conflict.
 
 ## PR Description Format
 
+Title and label carry the module — see "Module Tagging" above:
+
+```bash
+gh pr create --title "skyline: Fixed ..." --label skyline --body "..."
+```
+
 ```
 ## Summary
 
@@ -110,6 +171,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
 **Rules:**
+- Title prefixed with the module; matching module label applied
 - Use `Co-Authored-By: Claude <noreply@anthropic.com>` at the end (not emoji "Generated with" lines)
 - Bullet points use `* ` prefix in Summary
 - Test plan uses `- [x]` checkboxes
@@ -199,7 +261,11 @@ When in FEATURE COMPLETE or patch mode, bug fix PRs should be cherry-picked to t
 
 1. Check current release phase in `ai/docs/release-cycle-guide.md`
 2. If fixing a bug during FEATURE COMPLETE: add label `Cherry pick to release`
+   (this is orthogonal to the module label — the PR carries both)
 3. The cherry-pick happens automatically after PR merge
+
+A manual cherry-pick PR (`/pw-cptorelease`) **inherits the original's module** —
+label and prefix: `skyline: Cherry-pick: Fixed ...`
 
 **Current release branch**: `Skyline/skyline_26_1` (check release-cycle-guide.md for updates)
 

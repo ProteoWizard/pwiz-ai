@@ -45,7 +45,21 @@ gh issue view $ARGUMENTS
 ```
 
 Review the issue and note:
-- **Labels**: Check for `skyline`, `pwiz`, `tutorial`, etc. (determines which skill to load in Step 5)
+- **Module label**: exactly one of `skyline`, `pwiz`, `osprey`. **Capture it
+  now** — it determines which skill to load (Step 5), becomes the TODO's
+  `Module` field (Step 3), and is later required as both the PR's label and its
+  title prefix. This is the pull-through: the module is decided once, on the
+  issue, and every downstream artifact reads it rather than re-deriving it.
+  - **If the issue has no module label**, infer it from the paths the work will
+    touch (`skyline` = `pwiz_tools/Skyline` + tests; `pwiz` = msconvert, C++
+    libraries, vendor readers, BiblioSpec; `osprey` = `pwiz_tools/Osprey`),
+    state the inference to the user, and fix the issue so the next reader gets
+    it for free: `gh issue edit <N> --add-label <module>`.
+  - **If the issue has two module labels**, pick the primary one — where the
+    intent of the work lives, not where the most lines will move — and say
+    which you picked. The title carries exactly one prefix.
+- **Other labels**: `tutorial`, `performance`, `vendor`, `tech-debt`, `bug`,
+  `enhancement` are orthogonal to the module and also worth carrying to the PR
 - **Scope**: What work is described
 - **Repository**: pwiz (code changes) or pwiz-ai (AI tooling/docs)
 - **Reporter/requester**: Scan the issue body for a support-thread link
@@ -103,6 +117,7 @@ Create `ai/todos/active/TODO-YYYYMMDD_<issue_title_slug>.md`:
 - **Created**: YYYY-MM-DD
 - **Status**: In Progress
 - **GitHub Issue**: [#NNNN](https://github.com/ProteoWizard/pwiz/issues/NNNN)
+- **Module**: `skyline` | `pwiz` | `osprey` — from the issue label (Step 1); omit for pwiz-ai
 - **PR**: (pending)
 - **Requester/Reporter**: <First> (from support thread rowId NNNNN) — omit if not user-originated; feeds the commit/PR credit line
 
@@ -120,6 +135,13 @@ Create `ai/todos/active/TODO-YYYYMMDD_<issue_title_slug>.md`:
 
 Starting work on this issue...
 ```
+
+**The `Module` field is not decoration.** It is how the module survives from
+here to `gh pr create` and on to the squash-merge — often hours later, across a
+context compaction, when the issue is no longer in the conversation. Every
+command that opens a PR or writes a squash subject reads this field instead of
+re-deriving the module from the diff, which is where the module silently drifts
+between the issue, the PR, and the commit that lands on `master`.
 
 **For exception/nightly-test issues**: Copy tracking fields from the GitHub issue into the Branch Information section so fixes can be recorded when the PR merges:
 
@@ -191,6 +213,7 @@ gh issue comment $ARGUMENTS --body "Starting work.
 | Label | Skill to Load | Command |
 |-------|---------------|---------|
 | `skyline` | skyline-development | `/skyline-development` |
+| `osprey` | osprey-development | `/osprey-development` |
 | `tutorial` | tutorial-documentation | `/tutorial-documentation` |
 | `pwiz` | *(no skill yet)* | Read ai/CRITICAL-RULES.md, ai/MEMORY.md manually |
 
@@ -231,7 +254,20 @@ Reference the issue in commits: `See #$ARGUMENTS` or `Fixes #$ARGUMENTS`
 2. **For exception/nightly-fix issues**: confirm the Regression Test section is filled with a test name, project, and red->green verification (or an explicit rationale if no test was added). See [ai/docs/validation-cycle-principles.md](../../docs/validation-cycle-principles.md).
 3. Move TODO: `git mv todos/active/TODO-*.md todos/completed/`
 4. Commit to pwiz-ai master (format per `/version-control`)
-5. Create PR to pwiz master (use `Fixes #$ARGUMENTS` to auto-close issue; description per `/version-control`)
+5. Create PR to pwiz master — **title prefixed with the module and the matching
+   module label applied**, both read from the TODO's `Module` field (use
+   `Fixes #$ARGUMENTS` to auto-close the issue; description per
+   `/version-control`):
+
+   ```bash
+   gh pr create \
+     --title "<module>: <Title in past tense>" \
+     --label <module> \
+     --body "..."
+   ```
+
+   Carry any other issue labels that still apply (`performance`, `vendor`,
+   `tech-debt`, `tutorial`) in the same `--label` list.
 
 **For pwiz-ai issues:**
 1. Update TODO Progress Log with completion summary
