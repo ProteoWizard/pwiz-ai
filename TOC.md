@@ -52,6 +52,7 @@ In-depth documentation on specific topics.
 | [developer-setup-guide.md](docs/developer-setup-guide.md) | Environment setup: Visual Studio, Git, GitHub CLI, tools | 112 |
 | [documentation-maintenance.md](docs/documentation-maintenance.md) | How to maintain ai/ documentation: structure, line limits, validation | 380 |
 | [leak-debugging-guide.md](docs/leak-debugging-guide.md) | Handle and memory leak investigation techniques | 660 |
+| [memory-band-guide.md](docs/memory-band-guide.md) | Reading the --timestamp --memstamp memory band (Skyline + Osprey); perfviz.html / perfviz.py | 120 |
 | [native-file-dialog-automation.md](docs/native-file-dialog-automation.md) | Automating Skyline's native Win32 Open/Save dialogs via UI Automation (not WinForms): NativeDialogAutomation classes + cross-Windows control-ID re-dump checklist | 207 |
 | [new-machine-bootstrap.md](docs/new-machine-bootstrap.md) | Quick start: 1-hour AI-assisted setup from pristine Windows | 135 |
 | [new-machine-setup.md](docs/new-machine-setup.md) | Full development environment setup from scratch | 1,077 |

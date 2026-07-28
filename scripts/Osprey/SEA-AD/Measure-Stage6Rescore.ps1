@@ -73,8 +73,19 @@ param(
     [string]$LibraryDir,
     [string]$Ratio = '1.0',
     [string]$WorkRoot,
+    # Use an EXISTING phase dir instead of one named for the largest count. Lets a big
+    # prep (say 82 files) serve smaller measurements without re-preparing, since each
+    # count just takes the first N parquets.
+    [string]$PhaseDir,
     [string]$SourceRoot,
     [string]$Exe,
+    # Osprey stamps a daily version (YEAR.ORDINAL.BRANCH.DOY) into every .scores.parquet and
+    # REFUSES to consume one written by a different daily build. Preparing artifacts on one
+    # day and measuring on the next therefore hard-fails with "osprey version mismatch",
+    # which looks like a code bug and is not. Pin the version for every Osprey call in the
+    # run, the same trick regression.ps1 uses (it pins 26.1.1.0) to keep its committed golden
+    # comparable across days. Default: auto-detect from the prepared artifacts.
+    [string]$VersionOverride,
     [switch]$Prepare,
     # Build the Stage 1-5 artifacts and stop. Stage 1-5 is UPSTREAM of Stage 6, so its
     # artifacts are valid for any build whose changes are confined to Stage 6 -- prepare
@@ -129,9 +140,30 @@ $counts = @($FileCounts -split '[,\s]+' | Where-Object { $_ } | ForEach-Object {
 } | Sort-Object -Unique)
 if (-not $counts) { throw "-FileCounts resolved to nothing; expected something like '4,8,16'." }
 
-if (-not $WorkRoot) { $WorkRoot = Join-Path (Split-Path $dataDir -Parent) 'stage6' }
+# Same output root Run-SeaAd.ps1 uses and the README documents: <dataset root>\runs\.
+# Do NOT invent a sibling ("stage6\", "_runs\"): someone looking for a run on another
+# machine should find every one of them in one predictable place.
+if (-not $WorkRoot) { $WorkRoot = Join-Path (Split-Path $dataDir -Parent) 'runs' }
 $maxN    = ($counts | Measure-Object -Maximum).Maximum
-$phaseDir = Join-Path $WorkRoot "stage6-${maxN}files"
+$phaseDir = if ($PhaseDir) {
+    if (-not (Test-Path $PhaseDir)) { throw "-PhaseDir does not exist: '$PhaseDir'." }
+    (Resolve-Path $PhaseDir).Path
+} else {
+    Join-Path $WorkRoot "stage6-${maxN}files"
+}
+
+# Resolve the version to pin (see -VersionOverride). Auto-detect from the prep log that
+# actually wrote these artifacts, so a measurement run on a later day still matches them.
+$script:versionPin = $VersionOverride
+if (-not $script:versionPin) {
+    $prepLog = Join-Path $phaseDir 'phase1-scoring.log'
+    if (Test-Path $prepLog) {
+        $m = Select-String -Path $prepLog -Pattern 'osprey_version[=: ]+(\d+\.\d+\.\d+\.\d+)|Osprey (\d+\.\d+\.\d+\.\d+)' |
+             Select-Object -First 1
+        if ($m) { $script:versionPin = ($m.Matches[0].Groups | Where-Object { $_.Success -and $_.Value -match '^\d+\.\d+\.\d+\.\d+$' } | Select-Object -First 1).Value }
+    }
+}
+if ($script:versionPin) { Write-Host ("  version   : pinned {0} (matches the prepared artifacts)" -f $script:versionPin) }
 
 $mzmls = @(Get-ChildItem $dataDir -Filter *.mzML -File | Sort-Object Name | Select-Object -First $maxN)
 if ($mzmls.Count -lt $maxN) { throw "Need $maxN mzML in '$dataDir' but found $($mzmls.Count); see $readme." }
@@ -187,7 +219,9 @@ foreach ($p in @($libPath, ($libPath + '.libcache'), $manifestPath)) {
 function Invoke-OspreyTask {
     param([string[]]$CliArgs, [string]$LogName, [switch]$LogMemory)
     $prev = $env:OSPREY_LOG_MEMORY
+    $prevVer = $env:OSPREY_VERSION_OVERRIDE
     if ($LogMemory) { $env:OSPREY_LOG_MEMORY = '1' }
+    if ($script:versionPin) { $env:OSPREY_VERSION_OVERRIDE = $script:versionPin }
     Push-Location $phaseDir
     try {
         $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -197,6 +231,7 @@ function Invoke-OspreyTask {
     } finally {
         Pop-Location
         $env:OSPREY_LOG_MEMORY = $prev
+        $env:OSPREY_VERSION_OVERRIDE = $prevVer
     }
     if ($exit -ne 0) { throw "Osprey $($CliArgs[1]) exited $exit (see $(Join-Path $phaseDir $LogName))" }
     return $sw.Elapsed

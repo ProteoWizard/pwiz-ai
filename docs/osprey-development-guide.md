@@ -911,6 +911,22 @@ Catches regressions during refactors months later.
 
 ## Performance patterns
 
+### Memory: read the band before you profile
+
+For any question of the form "does this scale to N files?", the first tool is
+`--timestamp --memstamp` teed to a log, read with `ai/scripts/perfviz.html` (visual) or
+`ai/scripts/perfviz.py` (numbers: peak, floor drift, MB/file, reporting-gap list). A
+sawtooth whose FLOOR returns to the same level is bounded; a rising floor is O(files)
+accumulation. This is the metric that found the Stage-6 accumulation and the resume-path
+rehydrate peak, and it needs no profiler.
+
+**Full method, and the six traps that have each produced a wrong conclusion, are in
+[memory-band-guide.md](memory-band-guide.md)** - including why `--memstamp` shows shape but
+not magnitude (it includes uncollected garbage; `OSPREY_LOG_MEMORY=1` gives the post-GC
+live set that answers "will it fit"), and why a per-stem driver flattens the band by
+construction. The guide is shared with Skyline: both tools emit this format from the same
+`CommandStatusWriter`.
+
 ### Allocation hotspots
 
 On .NET Framework 4.7.2, the two worst hot-path patterns are:

@@ -35,6 +35,13 @@ This separation of concerns allows efficient collaboration: the human leverages 
 
 ## Overview
 
+> **Not a leak - a scaling problem?** If memory grows with the SIZE of the workload (more
+> files, more rows) and is released when the run ends, that is not a leak and the tools here
+> will not find it. Read the memory band instead: `--timestamp --memstamp` plus
+> `ai/scripts/perfviz.py` shows whether each unit of work returns to the same floor. See
+> [memory-band-guide.md](memory-band-guide.md). Leaks are "never released"; scaling problems
+> are "released, but not until the run ends".
+
 Handle leaks occur when Windows handles (HWNDs, GDI objects, kernel objects) are allocated but not properly released. Over time, leaked handles accumulate and can cause:
 - Memory growth
 - Resource exhaustion

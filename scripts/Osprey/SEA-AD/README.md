@@ -109,6 +109,24 @@ visible in that arm's `run.log` and in the chain log.
 Output lands in `<dataset root>\runs\seaad-<N>files-<arm>-r<ratio>-<pass2>[<tag>]\`,
 matching the layout of the runs already there.
 
+## Where everything lives
+
+**Every run goes under `<dataset root>\runs\`.** One place, so someone on another machine
+finds a run without being told where to look. `Measure-Stage6Rescore.ps1` uses the same root
+(`runs\stage6-<N>files\`); pass `-WorkRoot` or `-PhaseDir` to override, e.g. to reuse an
+existing prep.
+
+```
+<dataset root>\                       # $env:OSPREY_SEAAD_DIR's parent
+  mzml\                               # the 82 .mzML + their .spectra.bin caches
+  lib\<variant>\                      # library variants, see "The library variants"
+  runs\<run name>\                    # ALL run output and logs
+```
+
+A Stage-6 phase dir under `runs\` hard-links the mzML and caches rather than copying them,
+so its apparent size double-counts the data - `du`-style totals will look far larger than
+the disk actually consumed.
+
 **Say which build you mean.** By default the runner takes `Osprey.exe` from the shared
 `pwiz` worktree's `Release/net8.0` output - whatever happens to be built there right now.
 On a machine where someone is actively developing, that couples two sessions in both
