@@ -34,6 +34,38 @@ IonMobility, Rank, RankByLevel, Annotations, UserSet - is not peak data and stay
 Rejected along the way: abstract base with compact/full subclasses; per-object lazy
 loading behind a resolver back-pointer.
 
+### What compact actually buys, exactly
+
+`TransitionChromInfo` today, x64, 104 bytes:
+
+| part | bytes |
+|---|---:|
+| object header | 16 |
+| `FileId`, `IonMobility`, `Annotations` (3 refs) | 24 |
+| `OptimizationStep`, `Rank`, `RankByLevel`, `_flags` (4 shorts) | 8 |
+| `_massError`, `_pointsAcrossPeak` (2 shorts) | 4 |
+| 7 floats: RetentionTime, Start, End, Area, BackgroundArea, Height, Fwhm | 28 |
+| `PeakShapeValues` | 16 |
+| `UserSet` | 4 |
+| | **104** (100 padded) |
+
+Moving the peak payload behind a reference and keeping only Area + RetentionTime:
+
+- compact row: **~72 bytes**, a 31% saving
+- custom-peak row: **~144 bytes** (72 + a separate ~72 byte peak object), 38% *worse*
+
+So the win rides entirely on most peaks being Skyline-detected. On the reference
+document that is ~31% of 14 GB, roughly **4.3 GB**.
+
+To get past that the three references have to go too. `IonMobility` and `Annotations`
+are almost always the shared EMPTY singletons, and ion mobility is already aggregated
+up to the group (`IonMobilityInfo.AddIonMobilityFilterInfo`). Moving both to the group
+takes a compact row to **~52 bytes**, a 50% saving, ~7 GB.
+
+`ChromPeak` itself is ~52 bytes (7 floats + flags + massError + pointsAcross + 4
+peak-shape floats), so storing one inline as a transitional step costs +4 bytes per
+row before any of the saving arrives.
+
 ## Task Checklist
 
 ### Completed
