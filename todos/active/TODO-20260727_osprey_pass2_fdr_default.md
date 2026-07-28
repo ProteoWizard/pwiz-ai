@@ -263,8 +263,9 @@ current max; C#-only for now (Rust match if it becomes a PR); golden-changing bu
   the precursor level; peptide + protein are MAX roll-ups (refines the earlier loose "mean at
   peptide/protein" wording).
   1. Precursor (ModSeq+Charge) score = mean of best-2 per-run scores (best peak per run, 2
-     highest distinct runs). **1 valid run → mean(score, 0) = score/2** (0 = SVM no-evidence
-     point; multi-run experiments only; symmetric decoys).
+     highest distinct runs). **1 valid run → mean(score, decoy-median floor)** (the typical null
+     score, negative; NOT 0 which is the decision boundary; multi-run experiments only; symmetric
+     decoys). A/B variants: decoy mean, low decoy percentile.
   2. Peptide score = MAX over its precursors' scores.
   3. Protein score = MAX over its peptides' scores.
   4. TDC + q on the rolled-up scores; symmetric for decoys (each decoy computes its OWN
