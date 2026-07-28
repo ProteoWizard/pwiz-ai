@@ -7,7 +7,8 @@
 - **Status**: In Progress - characterization phase
 - **Worktree**: `C:\proj\pwiz` (BRENDANX-UW8)
 - **GitHub Issue**: [#4472](https://github.com/ProteoWizard/pwiz/issues/4472)
-- **PR**: (pending)
+- **PR**: [#4488](https://github.com/ProteoWizard/pwiz/pull/4488) (DRAFT - `-Dataset All` and the
+  82-file proof run still outstanding; do not mark ready until both land)
 - **Requester/Reporter**: none (Osprey developers; no credit line per version-control-guide
   "Crediting Reporters and Requesters" - role-scoped, Osprey developers are not outside requesters)
 
@@ -62,6 +63,49 @@ artifacts built once. Two traps, both silent:
 Slope needs no extra generation: vary how many `--input-scores` are passed (4 / 8 / 16)
 against ONE set of artifacts.
 
+## Design findings (2026-07-27, sub-agent; full doc was ai/.tmp/stage6-streaming-design.md)
+
+**The issue's premise is partly WRONG. Three corrections, all code-verified:**
+
+1. **`PerFileConsensusTargets` / `ReconciliationActions` / `PerFileGapFillForRescore` are
+   keyed BY FILE**, i.e. O(files x targets) - NOT the O(distinct) the issue assumes. Only
+   `PeptideConsensusRT` is genuinely bounded.
+2. **The slope driver is not the survivor stubs.** Stage-6 entry survivors are LEAN (~184 B;
+   `LoadFdrStubsFromParquet` reads 10 scalar columns). The growth is the FAT payload Stage 6
+   *attaches and never releases* - `Features` / `CwtCandidates` / `Fragment*` /
+   `ReferenceXic*`, ~1-3 KB per rescored + gap-filled entry. Its only post-Stage-6 reader is
+   `ReconciledParquetWriter`, per file, milliseconds later; Stage 7 reloads features from the
+   reconciled parquet. The code already names this "the next memory lever" at
+   `PerFileRescoreTask.cs:829-838`.
+3. **`RescoredEntries` has exactly ONE consumer** - `MergeNodeTask.cs:125` - fanning out to
+   seven genuinely run-wide reductions (2nd-pass Percolator, protein FDR/parsimony,
+   `ClampExperimentQToBestRun`, the blib cross-file reductions, FDRBench, mdiag). None can
+   become per-file inside this scope, so **the milestone must stay all-files**. Stage 7 is #4486.
+
+**Two more corrections, to the gates:**
+
+- The `--allow-unbounded-memory` guard does **NOT** exempt `ExpectReconciledInput` - it names
+  it as trigger #1 and throws; `regression.ps1:841` opts mode 3 out. (The earlier note in this
+  TODO said the opposite; it was inverted.)
+- **Mode 3 never exercises the multi-file Stage-6 loop.** It runs one rescore worker per stem
+  (`regression.ps1:625-666`), so `_perFileEntries` holds ONE file. **Modes 1 and 2 are the
+  only gates for scope A.**
+
+## Levers
+
+- **L1 (taken first)**: release the six fat arrays per file right after its reconciled parquet
+  is written. ~20 lines, no ordering/arithmetic/IO change. Kills the growth term.
+- **L2**: publish a bounded `FirstPassSurvivorSource`, load/release survivors per file, rebuild
+  for MergeNode via the resume path's own `OverlayReconciledIntoBuffer` +
+  `SortFileEntriesCanonical` (byte-safe by construction - mode 2 already asserts warm == cold).
+
+**L1-specific risk (R2, LOW detectability):** `ComputePass2Resident` lets an unmapped identity
+keep stale `Features`; after L1 that becomes null -> basic-feature fallback. Only bites under
+`OSPREY_FDR_PROJECTION=0`, **which regression never runs** - a green gate would NOT catch it.
+Mitigation: nulling happens only after a SUCCESSFUL `WriteReconciledAndStamp` (which is the
+guarantee the identity IS in the parquet), plus an explicit manual A/B with
+`OSPREY_FDR_PROJECTION=0` on Stellar.
+
 ## Tasks
 
 - [x] Verify issue line refs against master (`:113`, `:201`, `:208`, probe `:593`) - all correct
@@ -84,6 +128,37 @@ against ONE set of artifacts.
   FirstPassFDR band now is. Confirm the 500-file projection clears 64 GB.
 - **Fails on master**: (to verify - the slope IS the failure)
 - **Passes on fix**: (to verify)
+
+## Measured: two DIFFERENT growth terms (2026-07-28 01:25)
+
+16-file SEA-AD artifacts, post-GC `reconciliation-resident`, identical rescored counts
+before/after (268046 / 539804 / 1082875 - so no behavior change):
+
+| files | baseline | after L1 |
+|---|---|---|
+| 4  | 4.82 GB | 4.68 GB |
+| 8  | 5.25 GB | 4.93 GB |
+| 16 | 5.86 GB | 5.28 GB |
+
+across-run slope **0.087 -> 0.050 GB/file**; 500-file projection 47.8 -> 29.5 GB.
+
+**The across-run slope and the within-run band are not the same quantity, and only the
+second is what perfviz draws.** From the `[MEM]` probes:
+
+- `library-resident` = **4.38 GB in BOTH the 4- and 16-file runs** - a constant floor, ~85%
+  of resident, not file-dependent at all.
+- Within the 16-file run, `perfile-rescore-live` goes **5.19 -> 5.35 GB over all 16 files**
+  = **0.010 GB/file** during the loop.
+- The 4-file run's first `perfile-rescore-live` is 4.74 vs 5.19 for 16 files: **0.037
+  GB/file of the across-run slope is UP-FRONT state**, materialized before the rescore loop
+  runs at all (all-files lean survivor stubs + the per-file-keyed planning maps).
+
+So: 0.050 across-run ~= 0.037 up-front + 0.010 during-loop. L1 attacked the during-loop
+term and cut it ~5x (0.050 -> 0.010). **No per-file release inside the loop can fix the
+up-front 0.037** - that requires not materializing all-files state, i.e. L2.
+
+Implication for the goal: over 82 files the band should climb ~0.8 GB instead of ~4.1 GB.
+Whether that reads as "level" is what the 82-file run answers - do not assert it before.
 
 ## Progress Log
 
