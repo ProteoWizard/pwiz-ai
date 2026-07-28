@@ -137,6 +137,36 @@ Osprey reads mzML only (`Osprey.IO` has no `.raw` reader), so **every raw datase
 msconvert pass**. See `ai/scripts/Osprey/SEA-AD/Convert-SeaAdRaw.ps1` and `convert-one.cmd`
 for the exact command line already in use.
 
+## How to get these numbers for a new dataset
+
+The counts and sizes here are not read off a portal page - they are computed from WebDAV
+metadata, which is why they can be broken down by extension and by subfolder.
+
+**1. Turn the portal URL into a WebDAV URL.** Insert `_webdav/` after the host, drop the
+`.view` action, append `%40files/` (LabKey's `@files` root):
+
+```
+https://panoramaweb.org/<container path>/project-begin.view
+->  https://panoramaweb.org/_webdav/<container path>/%40files/
+```
+
+Spaces stay `%20`. A wrong path returns 404, so a successful listing IS the verification
+that you derived it correctly.
+
+**2. PROPFIND it.** `Depth: 1` returns one `<d:response>` per child with `getcontentlength`
+(exact bytes) and `resourcetype` (file vs collection):
+
+```powershell
+curl.exe -s --netrc -o out.xml -w "%{http_code}" -X PROPFIND -H "Depth: 1" <webdav-url>
+```
+
+Sum the lengths, count the entries. `ai/scripts/Osprey/Get-PanoramaFiles.ps1 -WhatIf` does
+exactly this and prints the inventory without downloading.
+
+**3. Descend to find the raw files.** There is no naming convention - the four datasets
+here use `RawFiles/`, `RAW data files/`, and `RawFiles/raw_files/Plate<N>_quant/`
+respectively. List each level rather than assuming.
+
 ## Getting access to a container that returns 403
 
 The account authenticates (a 401 would mean no credentials); 403 means the container is not
