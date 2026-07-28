@@ -614,7 +614,7 @@ The current workflow requires a human to review nightly test results and select 
 1. **Automatic leak detection**: MCP server queries nightly results, compares Integration vs Master
 2. **Optimal test selection**: Calculates "handles leaked per second" for all leaking tests
 3. **Investigation recommendations**: Returns ranked list of tests worth investigating
-4. **New slash command**: `/pw-review-leaks` would:
+4. **New slash command**: `pw-review-leaks` (proposed, not built) would:
    - Fetch last night's test results via MCP
    - Identify tests with significant handle leaks
    - Recommend which test to investigate first
@@ -628,7 +628,7 @@ The current workflow requires a human to review nightly test results and select 
 - [x] dotMemory snapshot integration in TestRunnerLib (January 2026)
 - [x] Command-line arguments for dotMemory properties (January 2026)
 - [x] Snapshot-on-leak mode for intermittent GC leaks (February 2026)
-- [ ] `/pw-review-leaks` slash command
+- [ ] `pw-review-leaks` slash command
 - [ ] Autonomous investigation mode
 
 ## GC Leak Tracker: Object Lifecycle Verification (February 2026)

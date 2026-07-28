@@ -123,7 +123,7 @@ For Visual Studio installation, you'll need to interact with the installer GUI d
 
 ## Alternative: Manual Setup
 
-If you prefer to set up without AI assistance, see the traditional guide: [How to Build Skyline](wiki-page.view?name=HowToBuildSkylineTip)
+If you prefer to set up without AI assistance, see the traditional guide: [How to Build Skyline](https://skyline.ms/home/software/Skyline/wiki-page.view?name=HowToBuildSkylineTip)
 
 ---
 

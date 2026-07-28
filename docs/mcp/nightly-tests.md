@@ -469,5 +469,5 @@ To add new custom queries (like `handleleaks_by_computer`), see [MCP Development
 - [Exceptions](exceptions.md) - User-reported crash analysis
 - [Wiki](wiki.md) - Documentation access
 - [Support](support.md) - Support board access
-- [LabKey MCP Server README](../mcp/LabKeyMcp/README.md) - Setup instructions
-- [Query Documentation](../mcp/LabKeyMcp/queries/README.md) - Server-side query reference
+- [LabKey MCP Server README](../../mcp/LabKeyMcp/README.md) - Setup instructions
+- [Query Documentation](../../mcp/LabKeyMcp/queries/README.md) - Server-side query reference

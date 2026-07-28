@@ -38,7 +38,7 @@ PR #3666, 2025-11-05): core files 707 -> 1,056 lines (+49%) in ~9 months.
 - [x] WI-2 - fix the measuring stick (DONE 2026-07-28)
 - [x] WI-3 - add the 5 missing content verifiers to `audit-docs.ps1` (DONE 2026-07-28)
 - [x] WI-4 - repo-wide `&` call-operator sweep (DONE 2026-07-28; 47 -> 0)
-- [ ] WI-5 - relative-link normalization
+- [x] WI-5 - relative-link normalization + dangling `/pw-*` refs (DONE 2026-07-28)
 
 ### P1 - knowledge existing ONLY in ai/claude (fails the owner's test)
 - [ ] WI-6 - create `docs/pr-report-guide.md`
@@ -102,11 +102,11 @@ This is the WI-4/WI-5 work list; re-run to measure progress.
 | Check | At WI-3 | Now | Work item |
 |---|---:|---:|---|
 | call-operator (`-Command "&"` → `-File`) | 47 | **0** | WI-4 DONE |
-| broken-link | 22 | 22 | WI-5 |
-| dangling-command (`/pw-*` with no file) | 9 | 9 | WI-5 |
+| broken-link | 22 | **0** | WI-5 DONE |
+| dangling-command (`/pw-*` with no file) | 9 | **0** | WI-5 DONE |
 | docs-to-skill | 3 | 3 | WI-17 |
 | banned-phrase | 3 | 3 | WI-20 |
-| **Total** | **84** | **37** | |
+| **Total** | **84** | **6** | |
 
 ## Progress Log
 
@@ -147,6 +147,53 @@ Applied WI-1, three actively-wrong instructions:
    about the workflow's actual scope.
 
 Full audit plan retained below (was written to `ai/.tmp/`, which is gitignored).
+
+### 2026-07-28 - WI-5 applied (links + dangling command refs)
+
+Both checks 22 -> 0 and 9 -> 0. Content violations now 37 -> 6.
+
+**Two more checker bugs surfaced first, and finding them mattered more than the
+fixes.** Neither would have been caught by trusting the tool:
+
+1. **Fenced code blocks were being link-checked.** Five hits in
+   `documentation-maintenance.md` were *illustrative markdown* inside ``` fences,
+   showing what a pointer from `ai/` root should look like
+   (`See [docs/topic.md](docs/topic.md)`). "Fixing" them would have corrupted the
+   examples that teach the convention. Link checks now skip fences; the
+   call-operator, `/pw-*` and banned-phrase checks deliberately still apply inside
+   them, since a wrong `pwsh` invocation in a ```powershell block is exactly the
+   target.
+2. **`/pw-` was matching inside paths.** `.claude/commands/pw-daily-$P.md` in
+   `Invoke-DailyReport.ps1` contains the substring `/pw-daily-`. Fixed with a
+   lookbehind so a command token must start at a real boundary and end
+   alphanumerically.
+
+**Convention established:** the leading `/` means *invocable*. A retired or
+not-yet-built command is named WITHOUT it - `pw-self-review` (retired 2026-07-25),
+`pw-review-leaks` / `pw-tutorial-sync` (proposed, never built). Previously these
+read as runnable commands. Documented in `pw-auditdocs.md`.
+
+Genuine fixes, each verified against the filesystem rather than just satisfying
+the checker:
+
+- Wrong depth: `docs/mcp/{exceptions,nightly-tests}.md` (`../mcp/` -> `../../mcp/`),
+  `skyline-tester/SKILL.md` (skills nest one deeper: `../../../docs/`),
+  `mcp/LabKeyMcp/scripts/README.md`, `labkey-setup/reference/` (self-referencing
+  `./reference/`).
+- Over-deep: `scripts/{AutoQC,SkylineBatch}/README.md` had `../../../../ai/docs/...`
+  from the pre-sibling layout. Their link *text* also spelled the old path, so
+  text and target had to change together - a target-only fix leaves them lying.
+- Stale locations: `team-city.md` pointed at a TODO since moved to
+  `todos/completed/2026/02/`; `osprey-crossimpl-validation-guide.md` missed the
+  `Compare/` subdirectory (`Build-OspreyRust.ps1` is real, just nested).
+- `ai/README.md` "See Also" pointed at `../README.md`, `../.cursorrules`, `../doc/` -
+  correct when `ai/` was a CHILD of pwiz, wrong since it became a sibling. Now
+  `../pwiz/...`.
+- `new-machine-bootstrap.md` had a bare `wiki-page.view?name=...`; replaced with the
+  full skyline.ms URL already used in `developer-setup-guide.md`.
+
+Remaining 6 belong to other work items: 3 docs-to-skill (WI-17), 3 banned-phrase
+(WI-20).
 
 ### 2026-07-28 - WI-4 applied (call-operator sweep)
 

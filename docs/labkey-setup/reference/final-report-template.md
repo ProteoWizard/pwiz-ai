@@ -135,8 +135,8 @@ Recommended actions after this setup:
 
 - [LabKey Developer Documentation](https://www.labkey.org/Documentation/wiki-page.view?name=devMachine)
 - [MacCoss Lab Build Notes](https://skyline.ms/home/development/wiki-page.view?name=build_and_deploy)
-- [Gradle Commands Reference](./reference/gradle-commands.md)
-- [Troubleshooting Guide](./reference/troubleshooting.md)
+- [Gradle Commands Reference](./gradle-commands.md)
+- [Troubleshooting Guide](./troubleshooting.md)
 
 ---
 

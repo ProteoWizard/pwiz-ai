@@ -81,7 +81,11 @@ param(
     [Parameter(Mandatory=$false)]
     [int]$RefactorThreshold = 5000,
     [Parameter(Mandatory=$false)]
-    [int]$ReviewThreshold = 2000
+    [int]$ReviewThreshold = 2000,
+    # How many example violations to list per content check. The default keeps the
+    # report readable; raise it when you are actually working through the list.
+    [Parameter(Mandatory=$false)]
+    [int]$MaxDetail = 6
 )
 
 # Per-file line limits from ai/docs/documentation-maintenance.md.
@@ -368,7 +372,8 @@ function Test-CorpusRules
     param(
         [string]$AiRoot,
         [string[]]$RuleDefiningFiles,
-        [array]$BannedPhrases
+        [array]$BannedPhrases,
+        [int]$MaxDetail = 6
     )
 
     Write-Host ""
@@ -395,11 +400,20 @@ function Test-CorpusRules
         $isRuleDef = $RuleDefiningFiles -contains $file.Name
         $isMarkdown = $file.Extension -eq ".md"
         $lines = @(Get-Content -LiteralPath $file.FullName -ErrorAction SilentlyContinue)
+        $inFence = $false
 
         for ($i = 0; $i -lt $lines.Count; $i++)
         {
             $line = $lines[$i]
             $lineNo = $i + 1
+
+            # Track fenced code blocks. LINK checks skip them: a fence in a guide is
+            # illustrative markdown ("See [docs/topic.md](docs/topic.md)" showing what
+            # a pointer should look like from ai/ root), and resolving it from the
+            # containing file's directory is meaningless. The call-operator, /pw-* and
+            # banned-phrase checks deliberately still apply inside fences - a wrong
+            # pwsh invocation in a ```powershell block is exactly what we are hunting.
+            if ($line -match '^\s*```') { $inFence = -not $inFence }
 
             # --- Check 1: the `&` call operator breaks Claude Code permission matching
             if (-not $isRuleDef -and $line -match '-Command\s+"\s*&')
@@ -422,7 +436,12 @@ function Test-CorpusRules
             }
 
             # --- Check 3: every /pw-* token names a command that exists
-            foreach ($m in [regex]::Matches($line, '/pw-[a-z0-9][a-z0-9-]*'))
+            # A slash command appears at a token boundary (start of line, after
+            # whitespace, backtick, quote or paren). The lookbehind stops the same
+            # pattern matching INSIDE a path - ".claude/commands/pw-daily-$P.md"
+            # contains "/pw-daily-" but is a filename, not a command reference.
+            # Requiring an alphanumeric last char rejects the interpolation stub.
+            foreach ($m in [regex]::Matches($line, '(?<![\w./-])/pw-[a-z0-9-]*[a-z0-9]'))
             {
                 $cmdName = $m.Value.TrimStart('/')
                 if (-not (Test-Path -LiteralPath (Join-Path $commandsDir "$cmdName.md")))
@@ -432,7 +451,7 @@ function Test-CorpusRules
                 }
             }
 
-            if (-not $isMarkdown) { continue }
+            if (-not $isMarkdown -or $inFence) { continue }
 
             foreach ($m in [regex]::Matches($line, '\]\(([^)]+)\)'))
             {
@@ -517,7 +536,7 @@ function Test-CorpusRules
         }
 
         Write-Host ("  FAIL  {0}: {1}" -f $check.Label, $hits.Count) -ForegroundColor Red
-        $shown = $hits | Select-Object -First 6
+        $shown = $hits | Select-Object -First $MaxDetail
         foreach ($h in $shown)
         {
             Write-Host ("          {0}:{1}  {2}" -f $h.File, $h.Line, $h.Detail) -ForegroundColor DarkGray
@@ -622,7 +641,7 @@ if ($Section -eq "all" -or $Section -eq "checks")
     if (Test-Path $aiRootPath)
     {
         $summary["checks"] = Test-CorpusRules -AiRoot $aiRootPath `
-            -RuleDefiningFiles $RuleDefiningFiles -BannedPhrases $BannedPhrases
+            -RuleDefiningFiles $RuleDefiningFiles -BannedPhrases $BannedPhrases -MaxDetail $MaxDetail
     }
 }
 

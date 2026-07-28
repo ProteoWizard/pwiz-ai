@@ -36,7 +36,7 @@ The Osprey script directory has three flavors of tool:
 ## Standard flow
 
 1. **Build both implementations.** Rust via
-   [`Build-OspreyRust.ps1`](../scripts/Osprey/Build-OspreyRust.ps1);
+   [`Build-OspreyRust.ps1`](../scripts/Osprey/Compare/Build-OspreyRust.ps1);
    C# via [`Build-Osprey.ps1`](../scripts/Osprey/Build-Osprey.ps1).
    Profile output paths in `Compare-*` scripts assume the release builds at
    their default locations (sibling `osprey/target/release/osprey.exe` and

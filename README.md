@@ -185,9 +185,9 @@ See [scripts/Skyline/PRE-COMMIT.md](scripts/Skyline/PRE-COMMIT.md) for complete 
 
 ## See Also
 
-- **Root [README.md](../README.md)** - ProteoWizard project overview (for humans)
-- **Root [.cursorrules](../.cursorrules)** - Cursor IDE configuration
-- **[doc/](../doc/)** - ProteoWizard website and documentation (for humans)
+- **Root [README.md](../pwiz/README.md)** - ProteoWizard project overview (for humans)
+- **Root [.cursorrules](../pwiz/.cursorrules)** - Cursor IDE configuration
+- **[doc/](../pwiz/doc/)** - ProteoWizard website and documentation (for humans)
 - **[scripts/Skyline/](scripts/Skyline/)** - Skyline-specific build and test scripts
 
 ---

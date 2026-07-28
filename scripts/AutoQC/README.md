@@ -88,5 +88,5 @@ This directory follows the pattern established in `ai/scripts/Skyline/`:
 - **Per-project tooling** lives in `ai/scripts/<Project>/`
 - **Repository-wide guidance** lives in `/ai/` at repository root
 
-See [../../../../ai/docs/documentation-maintenance.md](../../../../ai/docs/documentation-maintenance.md) for the full LLM documentation system architecture.
+See [documentation-maintenance.md](../../docs/documentation-maintenance.md) for the full LLM documentation system architecture.
 

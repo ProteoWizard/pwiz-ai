@@ -204,7 +204,7 @@ This saves a full report to `ai/.tmp/exceptions-report-YYYYMMDD.md` with:
 - [Nightly Tests](nightly-tests.md) - Test results data access
 - [Wiki](wiki.md) - Documentation access
 - [Support](support.md) - Support board access
-- [LabKey MCP Server README](../mcp/LabKeyMcp/README.md) - Setup instructions
-- [Query Documentation](../mcp/LabKeyMcp/queries/README.md) - Server-side query reference
+- [LabKey MCP Server README](../../mcp/LabKeyMcp/README.md) - Setup instructions
+- [Query Documentation](../../mcp/LabKeyMcp/queries/README.md) - Server-side query reference
 - [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
 - [LabKey Python API](https://github.com/LabKey/labkey-api-python)

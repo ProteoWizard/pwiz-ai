@@ -39,7 +39,7 @@ The test list file is shared between SkylineTester, Run-Tests.ps1, and Visual St
 - LLM updates test list with `-UpdateTestList` → Developer sees tests pre-checked in SkylineTester
 - VS debugger can be configured to read TestRunner.exe tests from this file
 
-See [skylinetester-guide.md](../docs/skylinetester-guide.md#the-test-list-as-a-shared-resource) for details.
+See [skylinetester-guide.md](../../../docs/skylinetester-guide.md#the-test-list-as-a-shared-resource) for details.
 
 ## Common Tasks
 

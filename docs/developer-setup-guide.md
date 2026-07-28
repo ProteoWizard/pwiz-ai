@@ -102,7 +102,7 @@ If you prefer Cursor, VS Code + Copilot, or another AI-assisted IDE:
 
 These require Claude Code and won't work in other tools:
 
-- **Slash commands** (`/pw-daily`, `/pw-commit`, etc.)
+- **Slash commands** (`/pw-daily`, `/pw-pcommit`, etc.)
 - **Skills** (context-loading prompts)
 - **MCP servers** (LabKey, Status, Gmail integration)
 - **Statusline** (custom status display)

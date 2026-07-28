@@ -198,7 +198,7 @@ Requesters").
 ## Review chain: review BEFORE opening the PR
 
 **`/code-review <level>` is the AI review gate.** It replaced the retired
-`/pw-self-review` (2026-07-25), which existed only because an early session
+`pw-self-review` (2026-07-25), which existed only because an early session
 claimed it could not give an unbiased review of its own code. `/code-review`
 is the native, maintained answer to that, and it gains capability upstream
 without us maintaining prose.

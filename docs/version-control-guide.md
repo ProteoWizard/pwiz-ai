@@ -330,7 +330,7 @@ time is the only reliable way to get it there.
 ## Pre-Review Workflow
 
 **`/code-review <level>` is the AI review gate** before requesting human review.
-It replaced `/pw-self-review`, retired 2026-07-25. That command was written when
+It replaced `pw-self-review`, retired 2026-07-25. That command was written when
 an early session said it could not give an unbiased review of its own code;
 `/code-review` is the native, upstream-maintained answer to exactly that, and it
 gains capability without us maintaining prose to describe it.

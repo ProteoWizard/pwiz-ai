@@ -167,5 +167,5 @@ The wiki maintains full version history, so changes can be reverted if needed.
 
 ## Future Enhancements
 
-- Tutorial sync workflow (`/pw-tutorial-sync`) for coordinating Git and wiki updates
+- Tutorial sync workflow (`pw-tutorial-sync`, proposed) for coordinating Git and wiki updates
 - Attachment upload capability

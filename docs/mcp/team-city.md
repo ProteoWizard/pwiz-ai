@@ -143,5 +143,5 @@ This is why the Docker build shows "Expected - Waiting for status" on GitHub whi
 ## Related
 
 - [setup.md](setup.md#teamcity-mcp) - Installation instructions
-- [TODO-20260226_teamcity_mcp_server.md](../../todos/active/TODO-20260226_teamcity_mcp_server.md) - Implementation plan (Phase 2: PR integration)
+- [TODO-20260226_teamcity_mcp_server.md](../../todos/completed/2026/02/TODO-20260226_teamcity_mcp_server.md) - Implementation plan (Phase 2: PR integration)
 - [Tool Hierarchy](tool-hierarchy.md) - When to use MCP vs built-in tools

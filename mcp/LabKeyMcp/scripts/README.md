@@ -42,8 +42,8 @@ See comments in the script for detailed documentation.
 
 ## Related Documentation
 
-- [Nightly Tests MCP Tools](../../docs/mcp/nightly-tests.md)
-- [save_run_metrics_csv tool](tools/nightly.py) - generates input data
+- [Nightly Tests MCP Tools](../../../docs/mcp/nightly-tests.md)
+- [save_run_metrics_csv tool](../tools/nightly.py) - generates input data
 
 ## Historical Context
 

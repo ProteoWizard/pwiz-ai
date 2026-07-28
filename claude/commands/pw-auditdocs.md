@@ -45,6 +45,7 @@ written down, followed for a while, then quietly stopped being followed:
 | call-operator | `pwsh -Command "& ..."` breaks Claude Code permission matching; use `-File` |
 | broken-link | Relative markdown links must resolve |
 | dangling-command | Every `/pw-*` reference names a real `claude/commands/<name>.md` |
+| | *Convention: the leading `/` means **invocable**. Name a retired or not-yet-built command WITHOUT the slash (`` `pw-self-review` ``, `` `pw-review-leaks` ``) so a reader does not try to run it - and so this check stays meaningful.* |
 | docs-to-skill | `ai/docs` must not link into `ai/claude/skills` - pointers run skills → docs |
 | banned-phrase | "load-bearing", "smoking gun" per `C:\proj\CLAUDE.md` |
 

@@ -63,6 +63,6 @@ Read these files to understand project constraints and patterns:
 
 Type `/pw-` to see all project-specific commands. Key ones:
 - `/pw-context` - Full context reload
-- `/pw-rcrw` - Review critical rules and workflow
+- `/pw-rules` - Re-read the critical rules to correct drift
 - `/pw-pcommitfull` - Pre-commit with TODO update
 - `/pw-help` - Full command reference
