@@ -445,6 +445,51 @@ unreachable branch is invisible to the golden, so the removal rests on
 blocker): `ScoreEntriesWithFoldModels`, 46 lines moved verbatim.
 **`RunPercolator` 546 -> 368 lines** over the phase.
 
+## /code-review max triage (2026-07-28)
+
+15 findings. The review verified the decomposition itself as faithful (72 old method
+bodies diffed against the 11 new files; only `RunPercolator` differs substantively).
+
+**Fixed in `96135dd6e`** - all were introduced by this branch:
+
+| Finding | Why it mattered |
+|---|---|
+| `QValueCalculator` name collision | `pwiz.Osprey.ML.QValueCalculator` already exists; the FDR namespace shadowed it, and the two entry points differ only by one letter's case (`ComputeQValues` vs `ComputeQvalues`) while computing different FDR formulas. Renamed `PercolatorQValues`. |
+| Six mangled class summaries | An earlier bulk `sed` ate "extracted from", so `MatrixRows` read as though `Matrix` were the god class. Restored + trailing whitespace. |
+| Two mis-pointed comments | `FrozenModelScorer`'s averaged-model warning and `FdrTest`'s index-alignment contract pointed at the wrong class after the rename. The earlier "corrected two doc pointers" commit caught two and missed these. |
+| `CompeteFromIndices` public-in-internal | Effective visibility silently narrowed cross-assembly with nothing in the diff to show it. |
+| Uncommitted extraction + vestigial `{ }` | `ScoreEntriesWithFoldModels` had never been committed; its leftover brace pair from the removed `if` left the body over-indented, and its "see above" comment referenced a proof that had moved methods away. |
+
+**NOT fixed - pre-existing, and out of scope for a byte-identical PR:**
+
+- **`--fdr-method gbdt` config drop** (`PercolatorScorer.RunStreamingFirstPass`): hand-builds
+  its train config and never copies `UseGradientBoostedTrees` / `GbtParams` / `NThreads`, so a
+  gbdt run silently trains a linear SVM. **Verified pre-existing** - it sits at old-file line
+  1799 and moved verbatim. Real bug, needs its own issue; the one-line fix
+  (`percConfig.CloneForTrainOnly()`) changes behavior and would need a golden rebaseline.
+- **`captureModel` invoked before the `DiagnosticAbort` check** (`PercolatorEngine`): hands the
+  pass-2 transfer hook an all-default `PercolatorResults` on a diagnostic-only run. The sibling
+  path in `PercolatorScorer` checks first, so the two disagree. Provenance not yet verified.
+
+**Logged, not done** (context-limited, all real):
+
+- **Dependency cycle** `PercolatorScorer` <-> `PercolatorTrainer` - the only cycle among the 11
+  classes, because `RunStreamingFirstPass` (a train-then-score driver) sits on the scorer while
+  its two siblings live in `PercolatorEngine`. Moving it breaks the cycle and would let the two
+  largest files separate, which is the stated goal of the extraction.
+- ~50 stale `PercolatorFdr.cs:NNN` citations across `pwiz_tools/Osprey/docs/`, `DIVERGENCES.md`,
+  `ai/docs/osprey-development-guide.md` (auto-loaded by the osprey skill) and an active TODO.
+- `ai/scripts/Osprey/Combine-Stage5-Profile.ps1` symbol map keys on `PercolatorFdr.*`; two rows
+  silently stop matching. A live tooling break, not a doc rot - and it is in the shared `ai/`
+  checkout, so it needs committing promptly once fixed.
+- `TrainFoldModels` takes 14 positional parameters with adjacent same-typed ints, two derivable
+  from arguments already passed.
+
+**Process note**: while fixing the vestigial block, a brace-matching bug in my own fix script
+dedented 867 lines instead of 43. Caught by checking indentation before building, restored from
+git, redone with real brace counting plus a size assertion. Worth recording because a scripted
+"cleanup" corrupted more than the thing it was cleaning.
+
 ## Follow-up noticed (not fixed here)
 
 `BASE_ID_MASK` is defined twice - `PercolatorFdr` (`static readonly`) and
