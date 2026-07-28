@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260727_osprey_percolatorfdr_decomposition`
 - **Base**: `master` (1c1ae8532)
 - **Created**: 2026-07-27
-- **Status**: In Progress
+- **Status**: PR open, gates green (final Stellar on HEAD PASS; perf re-run in flight)
 - **Worktree**: `C:\proj\pwiz`
 - **GitHub Issue**: [#4468](https://github.com/ProteoWizard/pwiz/issues/4468)
-- **PR**: (pending)
+- **PR**: [#4490](https://github.com/ProteoWizard/pwiz/pull/4490)
 - **Requester/Reporter**: none - filed by Brendan, an Osprey developer, so no credit line
 
 ## Objective
@@ -444,6 +444,13 @@ unreachable branch is invisible to the golden, so the removal rests on
 **Increment B re-applied** after the cleanup and now passes (the dead code was the
 blocker): `ScoreEntriesWithFoldModels`, 46 lines moved verbatim.
 **`RunPercolator` 546 -> 368 lines** over the phase.
+
+## Final gate results (2026-07-28)
+
+- `-Dataset All`: **18/18 PASS** (below)
+- `-Dataset Stellar` on the exact committed HEAD (`96135dd6e`): modes 1/2/3 **PASS** -
+  closes the gap left by the All run having built before the code-review fixes
+- **PR [#4490](https://github.com/ProteoWizard/pwiz/pull/4490) opened**
 
 ## Full regression suite: PASSED (2026-07-28)
 
