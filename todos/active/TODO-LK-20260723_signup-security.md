@@ -7,12 +7,12 @@
 | `MacCossLabModules` | `26.7_fb_signup-security` | [#667](https://github.com/LabKey/MacCossLabModules/pull/667) | `release26.7-SNAPSHOT` |
 
 - **Created**: 2026-07-23
-- **Last updated**: 2026-07-26
-- **Status**: PR #667 open and marked ready for review. All four in-scope findings
-  fixed; `SignUpGroupChangeSecurityTest` (SIGNUP-1) passes on 26.7. Three review
-  rounds done and addressed (`/pw-self-review`, LabKey's own `review-pr.md`, and
-  Copilot). Awaiting LabKey reviewer approval and merge; deploy-time wiki edits still
-  pending (see Client contract).
+- **Last updated**: 2026-07-28
+- **Status**: PR #667 merged into `release26.7-SNAPSHOT` on 2026-07-28 (merge commit
+  `0a21a77`). All four in-scope findings are fixed and `SignUpGroupChangeSecurityTest`
+  (SIGNUP-1) passes on 26.7. Four review rounds addressed (`/pw-self-review`, LabKey's
+  own `review-pr.md`, Copilot, and Josh's review). Awaiting the 26.7 installer build and
+  deployment to skyline.ms, then the one deploy-time wiki edit (see Client contract).
 
 ### Notes
 - **Working tree**: clean except untracked scratch under `signup/wiki/` (never commit).
@@ -25,7 +25,7 @@ All production changes live in `signup/src/org/labkey/signup/SignUpController.ja
 ## Findings status
 | Finding | Status |
 |---|---|
-| SIGNUP-1 self-service group change could be steered into a privileged/site/other-project group | Fixed. `validateGroupChangeTarget` requires both to be project groups in the same project and rejects a target holding `AdminPermission` in the project or any subfolder. Rejection returns a distinct status `TARGET_NOT_ALLOWED` (kept apart from `NO_PERMISSIONS`, which covers the not-eligible cases: caller not in the source group, or no rule configured). Rejections are logged; each successful move is audited. |
+| SIGNUP-1 self-service group change could be steered into a privileged/site/other-project group | Fixed. `validateGroupChangeTarget` requires both to be project groups in the same project and rejects a target that grants more than read access (write or admin permission) anywhere in the project tree. A rejection returns the generic `NO_PERMISSIONS` (the same status as the not-eligible cases, so the response does not reveal which rules are misconfigured) and logs the specific reason server-side. Each successful move is audited. |
 | SIGNUP-2 response distinguished an existing account (user enumeration) | Fixed. Both signup paths funnel the existing/new branches through one try/catch: mail OK returns `SUCCESS` for both, a send failure returns the same generic `ERROR` for both. The existing-account path emails the real owner and never touches the account. No automated test (not feasible - see Test coverage); manual Dumbster check + code review. |
 | SIGNUP-3 admin config changes not audited | Fixed. The four admin actions emit a `ClientApiAuditEvent` on success. |
 | SIGNUP-4 raw mail-send exception returned to caller | Fixed. Both catch blocks log server-side and return only the generic message. |
@@ -52,16 +52,16 @@ Implementation notes worth keeping in mind:
   `RuntimeSQLException`, which the signup catch clauses do not include.
 
 ## Client contract - action needed at deploy
-Two live skyline.ms wiki pages need edits at/after deploy. Do NOT touch the live wikis
+One live skyline.ms wiki page needs an edit at/after deploy. Do NOT touch the live wikis
 without the user. Dev copies are under `signup/wiki/`.
 1. `signup-form` (`/home/support`) still keys success off `USER_ADDED`. It must check
    `json.status == 'SUCCESS'` and drop the `USER_EXISTS` branch, or the confirmation
    message won't show.
-2. `register-form` (`/home/software/Skyline/daily/register-form/`) branches only on
-   `USER_MOVED_SUCCESS`/`USER_MOVED_ERROR`/`NO_PERMISSIONS` with no `else`, so
-   `TARGET_NOT_ALLOWED` currently shows no message (silent, fails safe). Add a
-   `TARGET_NOT_ALLOWED` branch (reuse the `nopermission` "contact the administrator"
-   text) and ideally an `else` fallback for any unknown status.
+
+The `register-form` page (`/home/software/Skyline/daily/register-form/`) needs no change.
+It already handles `NO_PERMISSIONS`, which is now the status a refused group change
+returns, so a misconfigured rule shows the existing "contact the administrator" message
+instead of failing silently.
 
 ## Test coverage
 - **SIGNUP-1**: `SignUpGroupChangeSecurityTest` (`signup/test/src/org/labkey/test/tests/signup/`,
@@ -69,9 +69,9 @@ without the user. Dev copies are under `signup/wiki/`.
   One `@Test` drives the actions directly: an admin form POST plants each dangerous
   transition rule, then a non-admin user calls `ChangeGroupsApi` over a remote-API
   `Connection`. It asserts every rejection branch (admin-in-project, admin-in-subfolder,
-  nested-group, cross-project, site-group) returns `TARGET_NOT_ALLOWED` with membership
-  unchanged, a no-rule target returns `NO_PERMISSIONS`, and the happy path returns
-  `USER_MOVED_SUCCESS`. Audit assertions use before/after deltas (root-container events
+  nested-group, cross-project, write-enabled Editor, site-group) returns `NO_PERMISSIONS`
+  with membership unchanged, a no-rule target also returns `NO_PERMISSIONS`, and the happy
+  path returns `USER_MOVED_SUCCESS`. Audit assertions use before/after deltas (root-container events
   survive project cleanup, so absolute counts are unreliable). The site-global
   `SIGNUP_GROUP_TO_GROUP` property is restored in `@After` (survives `clean=false`).
 - **SIGNUP-2**: no automated test. The useful end-to-end flow is not testable under our
@@ -92,13 +92,15 @@ Dumbster** -> "Record email messages sent". Group-move path confirmed working
   responses; only the generic message is shown to the caller (SIGNUP-4).
 
 ## Tasks
-- [x] SIGNUP-1: `validateGroupChangeTarget` + `TARGET_NOT_ALLOWED` status.
+- [x] SIGNUP-1: `validateGroupChangeTarget` read-only enforcement (rejects write or admin targets); refused move returns `NO_PERMISSIONS`.
 - [x] SIGNUP-2: uniform response (both->ERROR), existing-account owner email.
 - [x] SIGNUP-3: audit the four admin actions.
 - [x] SIGNUP-4: generic mail-error message, log server-side only.
 - [x] `SignUpGroupChangeSecurityTest` written and passing on 26.7.
-- [x] Three review rounds addressed (`/pw-self-review`, LabKey `review-pr.md`, Copilot).
+- [x] Four review rounds addressed (`/pw-self-review`, LabKey `review-pr.md`, Copilot, Josh's review).
 - [x] Mark PR #667 ready for review.
-- [ ] LabKey reviewer approval + merge.
+- [x] LabKey reviewer (Josh) approved PR #667.
+- [x] Merge PR #667 (merged 2026-07-28, merge commit `0a21a77`).
 - [x] Manual verification: enumeration parity passed in both mail modes (2026-07-26).
-- [ ] At/after deploy: update the two live skyline.ms wiki pages (see Client contract).
+- [ ] Await the 26.7 installer build and deployment to skyline.ms.
+- [ ] At/after deploy: update the remaining live skyline.ms wiki page (`signup-form`; see Client contract).

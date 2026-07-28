@@ -202,15 +202,15 @@ How it works:
    configured target group, records a `movedusers` row, and returns
    `USER_MOVED_SUCCESS`. The page then redirects to the Skyline-daily download.
 4. `NO_PERMISSIONS` or `USER_MOVED_ERROR` shows an error pointing the user to the
-   site administrator. `TARGET_NOT_ALLOWED` (a configured rule pointing at a
-   disallowed target) has no branch on the current live page, so it shows no
-   message - it fails safe.
+   site administrator. A configured rule pointing at a disallowed target is
+   refused with the same `NO_PERMISSIONS`, so it shows the same "contact the
+   administrator" message.
 
 So the transition means "grant myself access to the Skyline-daily development
 release by accepting the license." It is a distinct, explicit user action and is
 **not** triggered by the signup confirmation email. On skyline.ms both the source
 and target groups are project groups in the same project, and the target is a
-non-admin group (read-only access, no administrative permission).
+read-only group (Reader access, no write or administrative permission).
 
 ### What ChangeGroupsApiAction validates
 
@@ -223,14 +223,15 @@ In order (`SignUpController.ChangeGroupsApiAction.execute`):
 4. `validateGroupChangeTarget(oldgroup, newgroup)` re-validates the resolved groups
    before any membership change. It rejects when either group is missing, either is
    a site group (not a project group), the two groups are in different projects, or
-   the target carries `AdminPermission` in its project. On rejection it returns
-   `TARGET_NOT_ALLOWED`, distinct from the `NO_PERMISSIONS` returned in steps 2-3.
+   the target grants more than read access (write or admin permission) anywhere in
+   its project tree. On rejection it returns the generic `NO_PERMISSIONS` (the same
+   status as steps 2-3) and logs the specific reason server-side only.
 5. Inside a transaction, `addMember(newgroup)` then `deleteMember(oldgroup)`, insert
    a `movedusers` audit row, and write a `ClientApiAuditEvent`.
 
 The live skyline.ms transition satisfies step 4 because both groups are in the
-same project and the target is non-admin. The admin UI can express a
-cross-project rule, which step 4 would reject.
+same project and the target is read-only. The admin UI can express a rule pointing
+at a write-enabled, admin, site, or cross-project target, which step 4 would reject.
 
 ---
 
