@@ -445,6 +445,33 @@ unreachable branch is invisible to the golden, so the removal rests on
 blocker): `ScoreEntriesWithFoldModels`, 46 lines moved verbatim.
 **`RunPercolator` 546 -> 368 lines** over the phase.
 
+## Full regression suite: PASSED (2026-07-28)
+
+`regression.ps1 -Dataset All` - **18/18 checks PASS** across all four datasets:
+
+| Dataset | mode1 | mode1b | mode3 | mode2 |
+|---|---|---|---|---|
+| Stellar | PASS | - | PASS | PASS |
+| StellarLibDecoy | PASS | PASS x2 | PASS | PASS |
+| StellarGenDecoyEntrap | PASS | PASS x2 | PASS | PASS |
+| Astral | PASS | PASS x2 | PASS | PASS |
+
+Log: `ai/.tmp/regression-all-20260728.log`.
+
+**Caveat**: this run built at launch, i.e. before the code-review fixes. It validates
+the decomposition and the dead-branch removal - the two changes carrying real risk -
+but not the exact committed HEAD. Everything after it is an identifier rename,
+comments, an assembly-internal visibility narrowing and a pure dedent. A final
+Stellar run on the committed HEAD closes that gap rather than relying on the
+"behaviour-neutral" argument.
+
+**Launch method matters**: the first two `-Dataset All` attempts were launched as
+background *bash* and reaped - the first lost ~35 minutes of work AND its captured
+output, so a run that had completed 3 of 4 datasets could not be claimed at all. The
+successful run used `Start-Process` (detached) and survived **two** watcher kills
+with its log intact. See [[feedback_night_session_detached_runs]], now broadened
+beyond night sessions.
+
 ## /code-review max triage (2026-07-28)
 
 15 findings. The review verified the decomposition itself as faithful (72 old method
