@@ -18,6 +18,9 @@ pwsh -File ai/scripts/audit-docs.ps1 -Section commands
 pwsh -File ai/scripts/audit-docs.ps1 -Section ai
 pwsh -File ai/scripts/audit-docs.ps1 -Section docs
 pwsh -File ai/scripts/audit-docs.ps1 -Section mcp
+
+# Content checks only (rules, not sizes)
+pwsh -File ai/scripts/audit-docs.ps1 -Section checks
 ```
 
 ## Sections
@@ -29,6 +32,33 @@ pwsh -File ai/scripts/audit-docs.ps1 -Section mcp
 | ai | ai/*.md | Lines, against per-file limits |
 | docs | ai/docs/*.md | Lines (no limit - unlimited by design) |
 | mcp | ai/docs/mcp/*.md | Lines (no limit) |
+| checks | ai/**/*.md, ai/**/*.ps1 | Content rules, not sizes |
+
+## Content checks
+
+`-Section checks` verifies rules that nothing previously measured. Per
+CRITICAL-RULES.md, *a rule without a verifier drifts* - each of these was
+written down, followed for a while, then quietly stopped being followed:
+
+| Check | Rule |
+|---|---|
+| call-operator | `pwsh -Command "& ..."` breaks Claude Code permission matching; use `-File` |
+| broken-link | Relative markdown links must resolve |
+| dangling-command | Every `/pw-*` reference names a real `claude/commands/<name>.md` |
+| docs-to-skill | `ai/docs` must not link into `ai/claude/skills` - pointers run skills → docs |
+| banned-phrase | "load-bearing", "smoking gun" per `C:\proj\CLAUDE.md` |
+
+Link resolution tries three views before reporting a failure: the file's own
+directory, repo-root-relative (the project's documented path convention), and -
+for files under `ai/claude/` - the `.claude/` junction view, since command
+authors reasonably write links relative to the path Claude Code loads them from.
+
+**Excluded**: `todos/` and `docs/archive/`. Both are frozen records; "fixing"
+their links would falsify history, and a check that fails forever gets muted.
+
+**Whitelisted**: files that DEFINE a prohibition necessarily contain it as their
+WRONG example (`ai/CLAUDE.md`, `root-CLAUDE.md`, `documentation-maintenance.md`,
+`audit-docs.ps1` itself, and generated `TOC.md`).
 
 ## Two tiers of limits - read both
 
@@ -61,9 +91,10 @@ the normal case here, not an edge case.
 
 ## Exit code
 
-`0` unless a **hard** limit is breached - a platform ERROR, or a core file (or
-the core total) over its line limit. REFACTOR/REVIEW are real debt and are
-reported prominently, but do not fail the run.
+`0` unless a **hard** failure occurs - a platform ERROR, a core file (or the
+core total) over its line limit, or any content-check violation. REFACTOR/REVIEW
+are real debt and are reported prominently, but do not fail the run: 16 files sit
+in that state today, and a script that always exits 1 gets ignored.
 
 ## Fixing size issues
 

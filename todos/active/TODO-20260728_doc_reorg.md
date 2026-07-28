@@ -36,8 +36,9 @@ PR #3666, 2025-11-05): core files 707 -> 1,056 lines (+49%) in ~9 months.
 - [x] WI-1 - contradictory/destructive instructions (DONE 2026-07-28; 2 of 3 real,
       the third was a false positive - see Progress Log)
 - [x] WI-2 - fix the measuring stick (DONE 2026-07-28)
-- [ ] WI-3 - add the 5 missing content verifiers to `audit-docs.ps1`
-- [ ] WI-4 - repo-wide `&` call-operator sweep (see decision 10)
+- [x] WI-3 - add the 5 missing content verifiers to `audit-docs.ps1` (DONE 2026-07-28)
+- [ ] WI-4 - repo-wide `&` call-operator sweep - 47 hits; decision 10 RESOLVED, no
+      exemption needed (see Progress Log)
 - [ ] WI-5 - relative-link normalization
 
 ### P1 - knowledge existing ONLY in ai/claude (fails the owner's test)
@@ -84,7 +85,28 @@ Answers to §5 of the audit plan. Recorded here so later sessions do not re-ask.
    "public **interface (instance)** methods and properties". WI-16 collapses the
    five copies to this wording.
 
-Still open: decisions 2, 6, 7, 8, 9, 10, 11, 12.
+10. **`scheduled-tasks-guide.md`'s 13 `-Command "&"` occurrences** -> **RESOLVED by
+    inspection, no exemption needed.** The guide contains no
+    `New-ScheduledTaskAction` / `Register-ScheduledTask` / `-Argument` / `schtasks`
+    at all; all 13 are plain CLI invocations a developer would type. The real
+    Task Scheduler action is built in `scripts/Invoke-DailyReport.ps1:170`, and it
+    already uses `-Execute "pwsh" -Argument "... -File `"$ScriptPath`" ..."`. So the
+    WI-4 sweep converts all 13 to `-File` with no whitelist.
+
+Still open: decisions 2, 6, 7, 8, 9, 11, 12.
+
+## Content-check baseline (2026-07-28, after WI-3)
+
+`pwsh -File ./ai/scripts/audit-docs.ps1 -Section checks` - 301 files, **84 violations**.
+This is the WI-4/WI-5 work list; re-run to measure progress.
+
+| Check | Count | Work item |
+|---|---:|---|
+| call-operator (`-Command "&"` → `-File`) | 47 | WI-4 |
+| broken-link | 22 | WI-5 |
+| dangling-command (`/pw-*` with no file) | 9 | WI-5 |
+| docs-to-skill | 3 | WI-17 |
+| banned-phrase | 3 | WI-20 |
 
 ## Progress Log
 
@@ -125,6 +147,38 @@ Applied WI-1, three actively-wrong instructions:
    about the workflow's actual scope.
 
 Full audit plan retained below (was written to `ai/.tmp/`, which is gitignored).
+
+### 2026-07-28 - WI-3 applied (content verifiers)
+
+Added `-Section checks` to `audit-docs.ps1` with the five verifiers. Content
+violations are fatal (exit 1) - unlike REFACTOR/REVIEW, they are correctness bugs,
+not size debt.
+
+**Writing the checks was mostly writing the exemptions.** Naive versions reported
+128 violations; 44 of those were the checker's fault, and each false-positive class
+had to be understood before the number meant anything:
+
+- **The junction.** `ai/claude/` is surfaced as `<repoRoot>/.claude/` and command
+  authors write links relative to THAT path, so `../../ai/docs/x.md` from
+  `.claude/commands/` is correct for the primary consumer but resolves to
+  `ai/ai/docs/x.md` physically. **19 false positives.** Links now resolve
+  lexically against three views (own dir, repo root, junction) and fail only if
+  none work.
+- **Repo-root-relative paths** like `[Wiki MCP](ai/docs/mcp/wiki.md)` from
+  `claude/commands/` are the project's documented convention, not errors.
+- **Template placeholders** - `**Issue**: [#NNN](url)` in `pw-handoff.md` is a
+  fill-in-the-blank form, not a broken link.
+- **Self-reference.** `audit-docs.ps1` flagged ITSELF, because `$BannedPhrases`
+  spells the phrases out. The whitelist existed for exactly this and I had not
+  applied it to my own file. Same for `documentation-maintenance.md`.
+- **Frozen records.** `todos/` and `docs/archive/` excluded - an archived doc is
+  kept *because* it is superseded, so its stale links are the record working as
+  intended. 16 violations, all of which would have made the check cry wolf forever.
+
+The surviving 84 are the WI-4/WI-5 work list (table above). Spot-checked several
+against the files by hand; e.g. `docs/mcp/exceptions.md:207` links
+`../mcp/LabKeyMcp/README.md`, which really is wrong - the file is at
+`ai/mcp/LabKeyMcp/README.md`, so the link needs `../../`.
 
 ### 2026-07-28 - WI-2 applied (measuring stick)
 
