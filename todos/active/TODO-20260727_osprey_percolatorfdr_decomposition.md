@@ -270,7 +270,39 @@ Perf gate attempted now rather than at the end: this step moves the hot path, an
 perf regression discovered after several more extractions would not be attributable
 to any one of them. Baseline is the pinned `pwiz-perfbase` worktree at `f4de68645`.
 
-### PERF GATE STILL OUTSTANDING - blocked, not failed
+### PERF GATE RESULT - stage 5 neutral (+0.6%)
+
+Measured against a baseline pinned to **this branch's exact merge-base**
+(`1c1ae8532`, verified with `git merge-base`), so the only delta is the five
+refactor commits:
+
+| Stage | Median delta | per-rep | Read |
+|---|---:|---|---|
+| **stage5 (Percolator)** | **+0.6%** | +0.6, -0.4, +0.9 | neutral - the stage that holds the extracted code |
+| stage6 | 0.0% | -7.6, 0.0, +2.2 | neutral |
+| stage7 | +1.2% | -0.6, +1.2, +3.1 | neutral |
+| stage1to4 | -9.6% | +14.1, -9.6, -19.8 | noise; I/O bound, untouched by this work |
+| total | -5.3% | +7.1, -5.3, -9.1 | dominated by the stage1to4 noise |
+
+No JIT-inlining penalty from the new class boundary, which was the one real risk in
+moving hot-path code (`ScoreWithFoldModel`, `MatrixRows`) across classes.
+
+**The default invocation of this gate was misleading and should not have been
+trusted.** `Test-PerfGate.ps1` defaults to `C:\proj\pwiz-perfbase`, pinned at
+`f4de68645` - **19 days and 58 commits behind this branch point, 33 of them
+touching Osprey**. Against that baseline the same branch reported stage5 **-17.7%**
+and stage7 **-46%**, which is master's own work since 2026-07-08, not this refactor.
+A structural, byte-identical move cannot make stage7 46% faster. The risk is not the
+flattering number, it is that a real regression from these commits could hide inside
+a comparison dominated by 33 unrelated Osprey commits.
+
+Re-run with `-BaselineRoot` pointed at a worktree checked out to the merge-base.
+The shared `pwiz-perfbase` was deliberately **not** re-pointed: refreshing it changes
+the meaning of every other developer's perf comparison and is not a side decision to
+make mid-task. Worth raising separately - a baseline this stale makes the routine
+per-PR gate close to non-attributing.
+
+### Earlier attempt: blocked, not failed
 
 The run exited 1 with `MSB3027` / `MSB3021`: it could not relink `C:\proj\pwiz`
 because a **different session's** Osprey process (PID 25468) held the Release DLLs.
