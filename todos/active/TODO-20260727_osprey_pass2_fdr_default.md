@@ -118,3 +118,36 @@ Starting work on this issue. Created branch
 `Skyline/work/20260727_osprey_pass2_fdr_default` in pwiz-work1. This is the
 umbrella default-flip decision anticipated in prior pass-2 work; #4446 (C#) and
 osprey#57 (Rust) already shipped the frozen modes off by default.
+
+### 2026-07-27 - Statistical-validity analysis + oracle run launched
+
+Discussion-first (Mike/Brendan want the methodology settled before the flip).
+
+- Mechanical flip is trivial: `OspreyEnvironment.NormalizePass2QValue` returns
+  `PASS2_QVALUE_PERCOLATOR` on empty input (`OspreyEnvironment.cs:361`); all four
+  modes + `OSPREY_PROTEIN_COMPACT_RETRAIN` already present. Substance = the decision.
+- **Verified transfer-compete competes over the full PRE-compaction population**
+  (`PercolatorFdr.cs:2928-2929`) — not decoy-depleted, not retrained. Both
+  `percolator` sins gone; if reconciliation moved nothing it reproduces pass-1 q.
+- **Verified reconciliation is structurally target/decoy asymmetric.** Every gate
+  that selects what gets reconciled / where it re-integrates is a target-only q
+  quantity: consensus qualification excludes decoys (`ConsensusRts.cs:99-133`),
+  planner gated on target min-q (`ReconciliationPlanner.cs:131-144`), gap-fill
+  targets-only at the target's ExpectedRt (`GapFillTargetIdentifier.cs:103-197`).
+  Direction: harmless for true targets, anti-conservative for reproducible false
+  targets → `transfer` (experiment-q frozen) is immune by construction;
+  `transfer-compete` is exposed. Confirms Brendan's "only targets can carry a q".
+- Orthogonal-axes analysis (protein corroboration = mean-top-2/posterior-product;
+  reproducibility = binomial-tail not raw count, scale-correct; overlap → joint
+  CV-trained feature model, not more q-cutoff modes; decoy-fairness constraint).
+- **Write-up captured**: `ai/.tmp/pass2-fdr-default-validity.md` (Task 2, the
+  statistical-validity deliverable; pre-measurement draft — distill to
+  `docs/12-second-pass-fdr.md` after testing).
+- **Harness**: added `-Pass2QValue` to `ai/scripts/Osprey/Run-FdrBench.ps1`
+  (sets/restores OSPREY_PASS2_QVALUE, folds into OutName + metrics.csv). Built a
+  fresh Release net8.0 Osprey in pwiz-work1 (master-equivalent; HEAD == origin/master).
+- **Oracle run launched** (background): 3-way `transfer` / `transfer-compete` /
+  `protein-compact` on Stellar 3-file libdecoy, matched (precursor, pass 2,
+  --protein-fdr 0.01, --fragment-tolerance 0.4). `transfer` doubles as the #4363
+  cell-E anchor (~0.86%). Driver: `ai/.tmp/run-pass2-oracle-3way.ps1`;
+  log `ai/.tmp/pass2-oracle-3way.driver.log`. Results pending.

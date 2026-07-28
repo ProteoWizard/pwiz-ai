@@ -66,6 +66,13 @@
     FDRBench -level. Peptide level has historically errored in FDRBench
     ("entrapment hits > k=1") on these libraries; precursor is the trusted path.
 
+.PARAMETER Pass2QValue
+    Sets OSPREY_PASS2_QVALUE for the run (percolator | transfer |
+    transfer-compete | protein-compact). Empty (default) leaves the env var
+    untouched, inheriting the shipped default (percolator). Use to A/B the
+    frozen 2nd-pass modes under the entrapment oracle (pwiz#4484). Restored
+    after the run so it never leaks into a later cell.
+
 .PARAMETER FragmentTolerance
     Optional --fragment-tolerance value (e.g. 0.4 for Stellar's controlled
     tolerance). Omitted => Osprey's calibrated tolerance.
@@ -113,6 +120,12 @@ param(
 
     [ValidateSet('precursor', 'peptide')]
     [string]$Level = 'precursor',
+
+    # 2nd-pass q-value mode (OSPREY_PASS2_QVALUE). Empty leaves the env var
+    # untouched (inherits the shipped default = percolator). Set explicitly to
+    # A/B the frozen modes under the entrapment oracle (pwiz#4484).
+    [ValidateSet('', 'percolator', 'transfer', 'transfer-compete', 'protein-compact')]
+    [string]$Pass2QValue = '',
 
     [string]$FragmentTolerance = $null,
     [string]$FragmentUnit = 'mz',
@@ -288,8 +301,9 @@ if (-not (Test-Path $library)) { throw "Spectral library not found: $library" }
 if (-not $OutName) {
     $tol = if ($FragmentTolerance) { "_tol$FragmentTolerance" } else { '' }
     $prot = if ($ProteinFdr) { '_prot' } else { '_noprot' }
-    $OutName = "{0}_{1}_{2}_pass{3}{4}{5}" -f `
-        $ds.Name, $DecoySource.ToLower(), $Level, $Pass, $prot, $tol
+    $p2 = if ($Pass2QValue) { "_$Pass2QValue" } else { '' }
+    $OutName = "{0}_{1}_{2}_pass{3}{4}{5}{6}" -f `
+        $ds.Name, $DecoySource.ToLower(), $Level, $Pass, $prot, $tol, $p2
 }
 if (-not $OutDir) {
     $OutDir = Join-Path (Split-Path -Parent $ds.TestDir) (Join-Path '_fdrbench' $OutName)
@@ -304,6 +318,7 @@ Write-Host "  Dataset      : $($ds.Name) ($Files, $($mzml.Count) file(s))"
 Write-Host "  Decoy source : $DecoySource"
 Write-Host "  Library      : $library"
 Write-Host "  Level / pass : $Level / pass $Pass"
+Write-Host "  Pass-2 q mode: $(if ($Pass2QValue) { $Pass2QValue } else { '(default: percolator)' })"
 Write-Host "  Protein FDR  : $(if ($ProteinFdr) { $ProteinFdr } else { '(off)' })"
 Write-Host "  Output dir   : $OutDir"
 
@@ -335,9 +350,21 @@ else {
 
     $runLog = Join-Path $OutDir 'run.log'
     Write-Host "  [osprey] running (log: $runLog) ..."
+    # Select the 2nd-pass q-value mode for this run only; restore afterward so a
+    # mode never leaks into a later invocation in the same session.
+    $prevPass2 = $env:OSPREY_PASS2_QVALUE
+    if ($Pass2QValue) { $env:OSPREY_PASS2_QVALUE = $Pass2QValue }
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    & $exe @ospreyArgs *>&1 | Tee-Object -FilePath $runLog | Out-Null
-    $sw.Stop()
+    try {
+        & $exe @ospreyArgs *>&1 | Tee-Object -FilePath $runLog | Out-Null
+    }
+    finally {
+        $sw.Stop()
+        if ($Pass2QValue) {
+            if ($null -eq $prevPass2) { Remove-Item Env:\OSPREY_PASS2_QVALUE -ErrorAction SilentlyContinue }
+            else { $env:OSPREY_PASS2_QVALUE = $prevPass2 }
+        }
+    }
     if ($LASTEXITCODE -ne 0) {
         throw "Osprey exited $LASTEXITCODE (see $runLog). If -Pass 1, note --fdrbench-pass is not on master."
     }
@@ -378,6 +405,7 @@ $metricsCsv = Join-Path $OutDir 'metrics.csv'
     decoy_source       = $DecoySource
     level              = $Level
     pass               = $Pass
+    pass2_qvalue       = if ($Pass2QValue) { $Pass2QValue } else { 'percolator' }
     protein_fdr        = if ($ProteinFdr) { $ProteinFdr } else { 'off' }
     n_rows             = $m.NRows
     'disc@1%q'         = $m.DiscAt1PctQ
