@@ -7,6 +7,11 @@
 - **Status**: In Progress - both halves done and green, two AI review rounds addressed, not pushed
 - **GitHub Issue**: (none)
 - **PR**: https://github.com/ProteoWizard/pwiz/pull/4498
+- **Cherry-pick to release**: no - Brian decided 2026-07-29, do not add the label
+- **Copilot review**: 2 comments, both refuted and resolved. Both claimed `int? > int`
+  yields `bool?` and would not compile; lifted relational operators return `bool`, false
+  when either operand is null, and the solution builds clean. That behavior is the
+  mechanism the fix relies on - see the replies on the PR.
 
 ## Objective
 
