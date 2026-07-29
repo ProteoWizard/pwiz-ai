@@ -77,9 +77,10 @@ row before any of the saving arrives.
 
 - [x] Key candidate peaks by optimization step - each step is its own chromatogram with
       its own candidate peaks
-- [x] `MaterializedPeptideResults` - one object per `PeptideDocNode` carrying all result
-      information for all replicates, laid out in the flat positions the columnar classes
-      use, with an interned `ChromFileIds` per transition
+- [x] `MoleculeResults` - one object per `PeptideDocNode` carrying all result information
+      for all replicates, laid out in the flat positions the columnar classes use, with an
+      interned `ChromFileIds` per transition. Constructed from a `SrmSettings` and a
+      `PeptideDocNode` and reads the .skyd on first use; there is no separate loader class
 - [x] Rebuild complete `TransitionChromInfo` objects from the cache (`MakeTransitionChromInfo`)
 - [x] Rebuild the group level values by driving the existing calculator
       (`TransitionGroupChromInfoListCalculator`, made internal) rather than a second copy
@@ -118,8 +119,9 @@ row before any of the saving arrives.
 
 ## Key Files
 
-- `pwiz_tools/Skyline/Model/Results/PeptidePeakLoader.cs` - new; the loader and its result
-- `pwiz_tools/Skyline/TestData/Results/PeptidePeakLoaderTest.cs` - new; validation test
+- `pwiz_tools/Skyline/Model/Results/MoleculeResults.cs` - new; all result information for
+  one molecule, plus `TransitionPeaks` and `TransitionGroupChromInfos`
+- `pwiz_tools/Skyline/TestData/Results/MoleculeResultsTest.cs` - new; validation test
 - `pwiz_tools/Skyline/Model/Results/DocNodeChromInfo.cs` - `TransitionChromInfo` (104 bytes),
   `TransitionGroupChromInfo` (144 bytes); where the compact storage lands
 - `pwiz_tools/Skyline/Model/TransitionGroupDocNode.cs` - `TransitionGroupChromInfoCalculator`
@@ -223,14 +225,35 @@ stays, but the memory estimate should assume 4 bytes per position for it.
 and that dominates. Reading extra peaks is comparatively cheap, and in the usual case
 GraphChromatogram needs all of them anyway. Do not optimize peak reading without measuring.
 
-**Materializing does not touch the library.** Library intensities and isotope proportions
-come off `TransitionDocNode.LibInfo` / `IsotopeDistInfo`, which are per-transition static
-data that do not vary by replicate, so the dot products need no library file access.
+**Reading does not touch the library.** Library intensities and isotope proportions come
+off `TransitionDocNode.LibInfo` / `IsotopeDistInfo`, which are per-transition static data
+that do not vary by replicate, so the dot products need no library file access.
+
+### 2026-07-29 - Session 3
+
+Both result forms now live on the doc nodes at once (`AbbreviatedResults` derived from
+`Results` on first use), so readers convert one at a time. Setting `Results` discards the
+derived form, which matters because `ImClone` would otherwise copy the cache belonging to
+the results being replaced.
+
+Renamed away from "materialize": `MaterializedPeptideResults` + `PeptideResultsMaterializer`
+are now one class, `MoleculeResults`, constructed from a `SrmSettings` and a
+`PeptideDocNode` and reading the .skyd on first use. `MaterializedTransition` is
+`TransitionPeaks`, `MaterializedTransitionGroup` is `TransitionGroupChromInfos`.
+`MzMatchTolerance` is no longer settable: it is always
+`TransitionInstrument.MzMatchTolerance`, and anywhere that used a different one was a bug.
+
+**Do not key dictionaries on `GlobalIndex`.** Use `ReferenceValue<T>`, which matches on the
+same thing but keeps the type: an `int` key does not say which kind of object it came from,
+so the wrong kind still compiles, and it does not lead back to the object in a debugger.
+`architecture-data-model.md` used to recommend `GlobalIndex` first and now recommends
+`ReferenceValue<T>`, with `GlobalIndex` still allowed for existing code.
 
 ## Context for Next Session
 
-Commit 1 is committed on the branch. Nothing consumes the loader yet, and no memory has
-been saved yet - it exists to prove the premise and to be built on.
+`MoleculeResults` is on the branch and is what `OnDemandFeatureCalculator` and
+`GraphChromatogram` read chromatograms through. No memory has been saved yet, because the
+doc nodes still carry both forms - the saving lands when `Results` comes off them.
 
 Known gaps:
 - `AgilentMix.zip` has no spectral library, no isotope distribution and no optimization

@@ -226,16 +226,15 @@ This is why Identity provides `GlobalIndex` - it uniquely identifies an identity
 - Assigned via `Interlocked.Increment()` - **guaranteed unique** per Identity instance
 - 32-bit integer with billions of headroom (documents rarely exceed millions of nodes)
 - In-memory only, never persisted to disk
-- Use for dictionary keys when you need to match nodes by identity across documents
 
-```csharp
-// Build a map of nodes by their identity
-var nodesByIdentity = new Dictionary<int, PeptideGroupDocNode>();
-foreach (var protein in doc.MoleculeGroups)
-    nodesByIdentity[protein.Id.GlobalIndex] = protein;
-```
+It works as a dictionary or set key, and plenty of existing code uses it that way, but
+prefer wrapping the Identity in `ReferenceValue<T>` (see below) for new code. An integer
+key is untyped: nothing in a `Dictionary<int, ...>` says whether those integers came from
+peptides or from transitions, so passing the wrong kind still compiles, and a key seen in
+the debugger is a bare number rather than the object it came from.
+`ReferenceValue<Peptide>` matches on exactly the same thing while keeping both.
 
-**IMPORTANT**: Matching by GlobalIndex tells you the nodes have the same *identity* - it does NOT tell you they are the same object reference. Two different DocNode objects can share the same Identity if one is a modified clone of the other.
+**IMPORTANT**: Matching by identity tells you the nodes have the same *identity* - it does NOT tell you they are the same object reference. Two different DocNode objects can share the same Identity if one is a modified clone of the other.
 
 ### WARNING: Do NOT Use RuntimeHelpers.GetHashCode() as a Key
 
@@ -256,22 +255,9 @@ foreach (var protein in doc.MoleculeGroups)
 
 There are two correct approaches for reference equality in sets and dictionaries:
 
-#### Approach 1: Use Identity.GlobalIndex (Preferred for DocNodes)
+#### Approach 1: Use ReferenceValue<T> (Preferred)
 
-For any object with an `Identity Id` property, use `GlobalIndex` as the key:
-
-```csharp
-// CORRECT: GlobalIndex is guaranteed unique per Identity instance
-var nodeSet = new HashSet<int>();
-foreach (var protein in doc.MoleculeGroups)
-    nodeSet.Add(protein.Id.GlobalIndex); // Always works!
-```
-
-This is the preferred approach for `DocNode` and `XmlNamedIdElement` objects because `GlobalIndex` was specifically designed for this purpose.
-
-#### Approach 2: Use ReferenceValue<T> Wrapper (General Purpose)
-
-For any reference type (not just those with Identity), the `ReferenceValue<T>` wrapper provides reference equality:
+For any reference type, with or without an Identity, the `ReferenceValue<T>` wrapper provides reference equality:
 
 ```csharp
 // From pwiz.Common.Collections.ReferenceValue
@@ -300,12 +286,44 @@ nodeSet.Add(peptide2); // Works even if same hash - ReferenceEquals distinguishe
 
 **The key insight**: Using `RuntimeHelpers.GetHashCode()` as **the key itself** fails when collisions occur. The correct pattern uses it as **the hash function for a wrapper** that uses `ReferenceEquals` for equality.
 
+There is an implicit conversion both ways, so a `Dictionary<ReferenceValue<Transition>, T>`
+is indexed with a plain `Transition` and reads no differently at the call site than an
+integer-keyed one would.
+
+```csharp
+// Keyed on the Transition identity, which survives the doc node being cloned
+var peaksByTransition = new Dictionary<ReferenceValue<Transition>, TransitionPeaks>();
+peaksByTransition[nodeTran.Transition] = transitionPeaks;
+```
+
+Key the dictionary on whichever object is meant to be matched: the `Identity` (`Peptide`,
+`TransitionGroup`, `Transition`) when the match has to survive the doc node being replaced
+by a modified clone, and the `DocNode` itself when it must not.
+
+#### Approach 2: Use Identity.GlobalIndex
+
+For any object with an `Identity Id` property, `GlobalIndex` also works as a key, and
+much of the existing code uses it:
+
+```csharp
+// Also correct: GlobalIndex is guaranteed unique per Identity instance
+var nodeSet = new HashSet<int>();
+foreach (var protein in doc.MoleculeGroups)
+    nodeSet.Add(protein.Id.GlobalIndex);
+```
+
+The limitation is that the key is a bare `int`. The collection type no longer records what
+kind of object it identifies, so mixing up two kinds of index is a mistake the compiler
+cannot catch, and debugging is harder because the key does not lead back to the object.
+Prefer Approach 1 for new code; there is no need to churn working code that already does
+this.
+
 #### Comparison
 
-| Approach | Collection Type | When to Use |
-|----------|-----------------|-------------|
-| `GlobalIndex` | `HashSet<int>` | DocNodes, XmlNamedIdElement, anything with Identity |
-| `ReferenceValue<T>` | `HashSet<ReferenceValue<T>>` | Any reference type without Identity |
+| Approach | Collection Type | Trade-off |
+|----------|-----------------|-----------|
+| `ReferenceValue<T>` | `HashSet<ReferenceValue<T>>` | Typed and debuggable; works for any reference type |
+| `GlobalIndex` | `HashSet<int>` | Untyped key, harder to debug; only for objects with an Identity |
 
 See `pwiz_tools/Shared/CommonUtil/Collections/ReferenceValue.cs` for the full implementation.
 
@@ -332,14 +350,14 @@ public abstract class XmlNamedIdElement : XmlNamedElement, IIdentiyContainer
 - `ChromatogramSet` - identifies a replicate (extends `XmlNamedIdElement`)
 - `ChromatogramSetId` - the Identity subclass for ChromatogramSet
 
-This means `ChromatogramSet` also has `Id.GlobalIndex` for efficient identity-based lookups:
+This means `ChromatogramSet` also has an `Id` to key identity-based lookups on:
 
 ```csharp
 // Build map of ChromatogramSets by identity for O(1) lookup
-var chromById = measuredResults.Chromatograms.ToDictionary(c => c.Id.GlobalIndex);
+var chromById = measuredResults.Chromatograms.ToDictionary(c => ReferenceValue.Of(c.Id));
 
 // Two-phase check: find by identity, then verify unchanged
-if (chromById.TryGetValue(cachedChromSet.Id.GlobalIndex, out var currentChromSet) &&
+if (chromById.TryGetValue(cachedChromSet.Id, out var currentChromSet) &&
     ReferenceEquals(currentChromSet, cachedChromSet))
 {
     // ChromatogramSet is unchanged
