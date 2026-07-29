@@ -436,6 +436,20 @@ This is a personal preference setting, but most developers find it useful.
 
 Example statusline output: `pwiz [Skyline/work/20260113_feature] | Opus | 36% used`
 
+> **The statusline runs ONLY in the Claude Code console application - NOT in Claude Desktop.**
+> This matters more than it looks. `mcp__status__get_context_usage` reads the snapshot file the
+> statusline writes on each tick, so **in a Claude Desktop session that MCP tool always returns
+> `Context state file not found` and context is simply unmeasurable.** Combined with the root
+> `CLAUDE.md` rule *"NEVER state a context-remaining number that did not come from
+> `mcp__status__get_context_usage`"*, the correct behaviour in Desktop is to say nothing about
+> context at all and ask the developer if it matters.
+>
+> Assistants should NOT diagnose this as a broken statusline path. Observed 2026-07-29: a
+> Desktop session found a stale `ai/.tmp/context-state-<pid>.json` from seven weeks earlier plus
+> a double-backslash `command` path, and concluded the path formatting was the cause. It was not
+> - Desktop never invokes the statusline at all. Confirm which application is in use before
+> attributing a cause. Fixing the path is still worthwhile, but it only affects console sessions.
+
 > **Existing mode**: Check if statusline is already configured:
 > ```powershell
 > Get-Content ~/.claude/settings.json | Select-String "statusLine"
@@ -639,6 +653,23 @@ winget install Notepad++.Notepad++ --accept-source-agreements --accept-package-a
 These are useful but not required.
 
 > **For LLM assistants:** You MUST explicitly offer these to the user. Do not skip this section. Ask: "Would you like me to install the optional utilities (WinMerge, EmEditor, WinSCP)? They're quick winget installs and useful for development."
+
+> **Do NOT probe for these with `Test-Path "C:\Program Files\<tool>\<tool>.exe"`.** All three
+> commonly install somewhere else — WinMerge in particular registers as
+> *"WinMerge x64 (Current user, 64-bit)"* under `%LOCALAPPDATA%`, and EmEditor ships as an MSI.
+> Verified 2026-07-29: all three `Test-Path` probes returned False on a machine where all three
+> were **already installed**, so an assistant following them will re-offer tools the developer
+> already has. Check the package database instead, which is where winget itself looks:
+>
+> ```powershell
+> winget list --id WinMerge.WinMerge
+> winget list --id Emurasoft.EmEditor
+> winget list --id WinSCP.WinSCP
+> ```
+>
+> Re-running `winget install` on an installed package is harmless — it upgrades in place and
+> reports *"Found an existing package already installed. Trying to upgrade..."* — so a wrong
+> probe wastes time rather than breaking anything.
 
 **WinMerge** - File and folder comparison tool:
 ```powershell
@@ -941,6 +972,25 @@ Follow the detailed instructions in **[ai/docs/mcp/setup.md](mcp/setup.md)** to 
 
 - **Core servers** (required): StatusMcp, LabKey MCP
 - **Optional servers**: TeamCity MCP (PR build monitoring), Gmail (automated reports), ImageComparer (tutorial screenshots)
+
+> **`claude mcp add` registers PER PROJECT, into the current directory's scope.** Registrations
+> live in `~/.claude.json` under `projects.<path>.mcpServers`, keyed by the directory Claude was
+> launched from - not globally. Two consequences, both observed on a working machine 2026-07-29:
+>
+> - **Run `claude mcp add` from the project root** (the same directory the root `CLAUDE.md`
+>   requires you to launch from). Running it from a subdirectory such as `<root>\pwiz` silently
+>   registers the server into a *different* project scope, where the session will never see it.
+> - **`claude mcp list` also resolves by current directory**, so a correctly-registered server
+>   can appear absent purely because of your shell's cwd. On the machine above, `status` was
+>   registered under `C:/proj` and working, yet `claude mcp list` run from `C:/proj/pwiz` did not
+>   list it at all. Verify against the file before concluding anything is missing:
+>
+>   ```powershell
+>   python -c "import json;d=json.load(open(r'$env:USERPROFILE\.claude.json'));[print(k,sorted((v.get('mcpServers') or {}).keys())) for k,v in (d.get('projects') or {}).items() if v.get('mcpServers')]"
+>   ```
+>
+> If a sibling checkout is also registered as its own project, its server list can legitimately
+> differ from the root's. That is not drift to "fix" - just confirm the root scope is complete.
 
 The setup guide covers LabKey API credentials (`~/.netrc`), TeamCity API tokens (`~/.teamcity-mcp/config.json`), server registration commands, and verification steps.
 
