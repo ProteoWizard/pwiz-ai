@@ -146,9 +146,11 @@ count, exactly the reproducibility thesis (1-of-N detection is strong FDR-leakag
 This is the first large-scale proof + a usable, bounded-memory (streaming) implementation.
 
 SELF-CONSISTENT (both arms my build, same parquets): confirmed - my-build MAX == source-199 MAX EXACTLY
-(37,676 @0.918% / 38,300, +0.0%), so the max path is build-stable and the A/B is clean. FLOOR robustness:
-decoy MEAN floor == decoy MEDIAN (default) EXACTLY (42,045 / 43,873) - near-symmetric decoy null, so the
-+14.6% is not a floor-tuning artifact (5th-pct harder-cut variant also run; see budget log).
+(37,676 @0.918% / 38,300, +0.0%), so the max path is build-stable and the A/B is clean. FLOOR A/B (median
+default / mean / 5th-pct) ALL give identical decision metrics (42,045 / 43,873); the floors demonstrably
+apply (pass-1 true-FDP arrays differ slightly) but are immaterial at N=82 (the floor shifts single-run
+targets AND decoys equally, preserving the ranking). => +14.6% is the reproducibility mechanism, not floor
+tuning; the floor is not a lever at large N.
 
 
 
