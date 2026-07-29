@@ -44,11 +44,11 @@
     with no ProteoWizard dependency at all.
 
     Requires pwiz_tools/Shared/ProteowizardWrapper to be built for x64 and its
-    obj/x64 staged with pwiz_data_cli, which a bjam build does (bs.bat, or the
-    pwiz_data_cli + vendor-dependency install targets). This script verifies
-    that up front and builds the wrapper for x64 if only that step is missing,
-    because the failure mode otherwise is ~20 CS0234 "namespace CLI does not
-    exist" errors that say nothing about the real cause.
+    obj/x64 staged with pwiz_data_cli, which comes from a bjam build via the
+    tracked quickbuild.bat (the exact invocation is printed if it is missing).
+    This script verifies that up front and builds the wrapper for x64 if only
+    that step is missing, because the failure mode otherwise is ~20 CS0234
+    "namespace CLI does not exist" errors that say nothing about the real cause.
 
 .EXAMPLE
     .\Build-Osprey.ps1
@@ -236,10 +236,22 @@ try {
         $wrapperDir = Join-Path $pwizRoot 'pwiz_tools/Shared/ProteowizardWrapper'
         $stagedCli = Join-Path $wrapperDir "obj/$Platform/pwiz_data_cli.dll"
         if (-not (Test-Path $stagedCli)) {
+            $addressModel = if ($Platform -eq 'x64') { 64 } else { 32 }
+            $variant = if ($Configuration -eq 'Debug') { 'debug' } else { 'release' }
             Write-Host "-VendorReader needs pwiz_data_cli staged, but it is missing:" -ForegroundColor Red
             Write-Host "  $stagedCli"
-            Write-Host "Run a full build first (bs.bat at the pwiz root), or just the pieces:" -ForegroundColor Yellow
-            Write-Host "  b.bat pwiz\utility\bindings\CLI//pwiz_data_cli"
+            Write-Host ""
+            Write-Host "Stage it with the tracked bjam entry point (from the pwiz root):" -ForegroundColor Yellow
+            # quickbuild.bat is in the repo; b.bat / bs.bat are personal shortcuts
+            # (gitignored) and do not exist on a fresh clone or on TeamCity, so the
+            # portable invocation is spelled out here. This mirrors the argument set
+            # Skyline's own TeamCity step uses via scripts\misc\tcbuild.bat.
+            Write-Host "  quickbuild.bat pwiz\utility\bindings\CLI//pwiz_data_cli ``"
+            Write-Host "      --i-agree-to-the-vendor-licenses -j$env:NUMBER_OF_PROCESSORS ``"
+            Write-Host "      toolset=msvc-14.5 address-model=$addressModel $variant --without-compassxtract"
+            Write-Host ""
+            Write-Host "A full Skyline build stages it too, as a side effect of" -ForegroundColor DarkGray
+            Write-Host "pwiz_tools\Skyline//Skyline.exe's install-native-dependencies." -ForegroundColor DarkGray
             exit 1
         }
 

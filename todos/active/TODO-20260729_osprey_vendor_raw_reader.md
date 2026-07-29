@@ -401,7 +401,43 @@ Checked build 4084490 (`ProteoWizard_OspreyWindowsNetPerfRegressionTests`, SUCCE
 * Regression data is already on the agent at
   `c:\skyline-downloads\Perftests\osprey-testfiles-mzML`, with a 3-file Stellar mzML dataset.
 
-Options for making the Osprey PR safe on TeamCity:
+### Decided (Brendan): split the two CI configs
+
+* **Unit config** builds with the vendor reader OFF, so it needs no ProteoWizard at all. This is the
+  default, verified: a clean tree with no `ProteowizardWrapper/bin` builds and passes 554/554, and
+  the wrapper is not built.
+* **Perf/Regression** builds the full net472 vendor configuration and runs the mzML round-trip test.
+
+Implemented as `/p:OspreyVendorReader=true` (opt-in property, off by default) plus
+`Build-Osprey.ps1 -VendorReader`. Opting in by property rather than probing for the DLL keeps a
+missing staged assembly a hard error in the config that asked for the capability, instead of
+silently producing an Osprey that cannot read raw files.
+
+### The staging step must use TRACKED entry points
+
+`b.bat` / `bs.bat` are **gitignored personal shortcuts** (`.gitignore:442-449`) and do not exist on
+a fresh clone or on TeamCity. Decomposed by reading how Skyline actually builds there
+(build 4111964, `bt209`):
+
+    C:\pwiz\scripts\misc\tcbuild.bat pwiz_tools\Skyline//Test ... ^
+        --i-agree-to-the-vendor-licenses -j8 toolset=msvc-14.5 address-model=64 release ^
+        --without-compassxtract --teamcity-test-decoration --automated --official
+
+run from `C:\pwiz\build-nt-x86`. `tcbuild.bat` cleans, builds bjam, then calls `quickbuild.bat`;
+later steps call `quickbuild.bat` directly with `--incremental`. Both `scripts/misc/tcbuild.bat` and
+`quickbuild.bat` are tracked; `pwiz_tools/build-apps.bat` is too (it is what `b.bat` wraps).
+
+So the Osprey Perf/Regression staging step is a `quickbuild.bat` invocation, NOT a personal batch
+file:
+
+    quickbuild.bat pwiz\utility\bindings\CLI//pwiz_data_cli ^
+        --i-agree-to-the-vendor-licenses -j%NUMBER_OF_PROCESSORS% ^
+        toolset=msvc-14.5 address-model=64 release --without-compassxtract
+
+plus whatever target installs the vendor runtime DLLs next to `Osprey.exe` (the 78 files listed
+above). `Build-Osprey.ps1 -VendorReader` prints exactly this command when staging is absent.
+
+Earlier options considered, for the record:
 
 1. **Switch the config's build step to bjam** (`bo.bat`'s target), so the Jamfile stages the wrapper
    deps as Skyline's does. Cleanest and matches the intended `bo.bat` end state, but the first build
