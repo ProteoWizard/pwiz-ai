@@ -259,6 +259,37 @@ their exact existing text.
 Note the fix is intentionally conservative on formatting: output is byte-identical to today
 wherever today's output already round-trips, so only genuinely-truncated values move.
 
+## Result: raw vs mzML parity after both precision fixes
+
+Verified end to end on `2025-0724-TDP43-PlasmaEV-PLT1-A01-365-001.raw` (3.07 GB), comparing a
+raw-sourced `.spectra.bin` against one built from the mzML msconvert produced from that same raw
+file, both with the fixed pwiz:
+
+| MS2 field (of 161,099 records) | before fixes | after fixes |
+|---|---|---|
+| retentionTime | 9,269 | **2** |
+| scanNumber, precursorMz, isoCenter, isoLower, isoUpper, peakCount, m/z, intensity | 0 | **0** |
+| MS1 count | 965 = 965 | 965 = 965 |
+
+Worst residual `|dRT|` = **1.11e-16 minutes** (relative 1.28e-16, a half ULP), down from 3.55e-15.
+
+**Two records remain unexplained** (0.001%): record 129320 / spectrum index 5679 and record 155352
+/ index 6378. For both, the RAW value is the clean one (`0.86653405`) and the mzML-sourced value is
+perturbed (`0.8665340500000001`), which is the opposite direction from the original defect. The
+mzML text for index 5679 is `value="0.86653405"` with `unitName="minute"`, which should parse
+exactly, and `0.86653405 * 60 / 60` round-trips cleanly, so neither the truncation nor the unit
+round-trip explains it. Left open rather than guessed at; it does not affect the conclusion, but it
+is a loose end for whoever picks this up.
+
+**Cost of the msconvert fix**: 2,593,206,083 vs 2,590,796,882 bytes on this file - **+2.4 MB on
+2.41 GB (+0.09%)**. The two candidate implementations (snprintf and the shipped locale-safe
+ostringstream) produced byte-identical output sizes, confirming the rewrite did not change the
+digits.
+
+Verification was done on a throwaway `tmp-verify-combined` branch (osprey branch + cherry-picked
+pwiz commit), because the demonstration needs both changes at once while the two PR branches stay
+independent.
+
 ## Progress Log
 
 ### 2026-07-29 - Reader implemented; vendor runtime deployment identified
