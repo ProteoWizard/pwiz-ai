@@ -261,10 +261,28 @@ value survives only because `TransitionChromInfo.Equivalent` does not compare
 resulting start and end times. Everything else comes back exactly, which
 `TestMoleculeResultsWithUserSetPeakBounds` proves by moving every peak in a replicate.
 
-**Cost note**: `OnDemandFeatureCalculator` makes one `MoleculeResults` per peptide *and
-replicate*, and each one now reads every replicate. Scoring a whole document is therefore
-n times the reading it was. Not addressed yet, in keeping with correctness first, but this
-is the first place that will need it.
+`MoleculeResults` holds only the chromatograms (`ImmutableList<ReplicateMap<ChromatogramGroupInfo>>`,
+one per transition group in child order) and the `TransitionGroupIntegrator` per file. Every
+chrom info is rebuilt per call, at all three levels:
+
+- `GetTransitionResults` / `GetTransitionChromInfos` from the `ChromPeak` records, integrating
+  again through `TransitionGroupIntegrator` for peaks with custom boundaries
+- `GetTransitionGroupResults` / `GetTransitionGroupChromInfos` by driving
+  `TransitionGroupChromInfoListCalculator`
+- `GetPeptideResults` / `GetPeptideChromInfos` by driving `PeptideChromInfoListCalculator`
+  (now internal, with overloads taking the chrom info lists rather than reading them off the
+  doc node)
+
+Asking for one transition rebuilds its whole group, because the ranks and the dot products
+come from all of the transitions together. `ExcludeFromCalibration` and `AnalyteConcentration`
+are carried forward from the doc node, the way `CopyChromInfoAttributes` does - they say
+nothing about the chromatogram, so they belong in the columnar form eventually.
+
+**Cost notes**, both deliberate and both to be fixed by *fewer callers needing chrom infos at
+all* rather than by caching:
+- Nothing is cached, so repeated asks re-read and re-aggregate.
+- `OnDemandFeatureCalculator` makes one `MoleculeResults` per peptide *and replicate*, and each
+  reads every replicate. Scoring a whole document is n times the reading it was.
 
 **Do not key dictionaries on `GlobalIndex`.** Use `ReferenceValue<T>`, which matches on the
 same thing but keeps the type: an `int` key does not say which kind of object it came from,
