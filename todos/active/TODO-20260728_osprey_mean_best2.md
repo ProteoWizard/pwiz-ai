@@ -148,8 +148,19 @@ resident A/B byte-for-byte on all three metrics: max 45,015 @0.876% / 46,496 -> 
 = +2.6%. Streaming-mb2 == resident-mb2 EXACTLY (+0.0%); the bounded floor histogram introduced zero
 divergence. An independent code review of the diff (ai/.tmp/agent-mb2stream-review.md) found no
 correctness bug. So the streaming mirror reproduces the validated resident result exactly - the bounded
-(N=82-capable) implementation is proven. N=82 A/B launching next (`ai/.tmp/run-mb2-stream-n82.ps1`); exe
-snapshot at `D:\test\osprey-exe-snapshots\mb2stream-20260728\`.
+(N=82-capable) implementation is proven.
+
+**N=82 recipe (corrected - the handoff's fast path OOMs).** The `--task FirstPassFDR --input-scores`
+from-parquets path pre-loads ALL features resident (~1.5 GB/file -> ~130 GB at N=82); it does NOT stream
+(the handoff's "~49 GB" was the full-pipeline flow). WORKING streaming path on the 63.7 GB box:
+`Run-SeaAd.ps1 -LinkFrom <source parquets> -FdrBenchPass 2` (NOT 1 - `--fdrbench-pass 1` trips
+`GuardResidentPool`, which needs the O(files) resident pool). `-LinkFrom` adopts Stage 1-4 caches (incl.
+`.osprey.task` markers) -> `PerFileScoring:skipping` -> streaming FirstJoin (~14-40 GB). The pass-1
+experiment fdpView comes from `--model-diagnostics` (streams; Deliverable B), written at FirstJoin. Needs
+`OSPREY_VERSION_OVERRIDE=26.1.1.199` + `OSPREY_EXPERIMENT_AGG=mean-best-2`. Max N=82 baseline already in
+the source run's mdiag HTML: **37,676 @0.918% / matched-TRUE 38,300** (== Brendan's 37,763 @0.92%), so
+only the mb2 arm is needed. mb2 arm running (out `seaad-82files-libdecoy-r1.0-percolator-mb2stream82b`);
+extractor `ai/.tmp/extract_pass1_fdp.py`; exe snapshot `D:\test\osprey-exe-snapshots\mb2stream-20260728\`.
 
 ### 2026-07-28 - Night-session handoff: streaming mirror + N=82 A/B
 
