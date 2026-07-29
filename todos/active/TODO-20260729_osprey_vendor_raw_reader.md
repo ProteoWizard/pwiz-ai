@@ -327,13 +327,49 @@ one-time discontinuity for archived data - an argument for landing A deliberatel
 **Recommended sequencing:** (1) Osprey PR + B, self-contained and green; (2) A to Matt separately on
 its own merits (precision preservation + the 1,097 baseline values).
 
-### Still to verify where the data lives: Stellar
+### Verified on Stellar too
 
-Everything proven so far is Astral-class data (TDP-43 and SEA-AD). The Stellar dataset is NOT on this
-machine (`c:\skyline-downloads` absent; only `sea-ad` and `tdp43-plasma-ev` under
-`D:\test\osprey-runs`), so **"does the test pass on the existing Stellar mzML" is unanswered.** Run it
-once on Stellar before wiring the CI test in: unit-resolution data has different RT digit patterns,
-and every divergence found in this issue was data-dependent (2 of 161,099).
+(I first reported Stellar as absent from this machine - wrong. `regression.ps1` acquires it to
+`<Downloads>\Perftests\osprey-testfiles-mzML-v2\stellar\`, i.e.
+`D:\Users\brendanx\Downloads\Perftests\...` here. My search was capped at depth 5 and that path is
+depth 6.)
+
+| dataset | mode | mzML written by | reader-vs-reader result |
+|---|---|---|---|
+| TDP-43 PlasmaEV | Astral | post-fix msconvert | `PARITY` 2,260,174,556 bytes |
+| SEA-AD | Astral | **pre-fix** msconvert | `PARITY` 4,368,477,008 bytes |
+| **Stellar** file 22 | **unit** | **pre-fix** msconvert | `PARITY` 1,122,449,320 bytes |
+
+Stellar: ms2=97,500, ms1=780. Its RTs are 11-12 fractional digits (`0.001708192067`), so it is
+pre-A output and passes anyway - consistent with the read path never touching `toString`.
+
+**Cost on the Stellar file: ~34 s total** - 11.7 s hand-rolled parse, 20.4 s via ProteoWizard,
+1.3 s to compare 1.12 GB.
+
+### Wiring it into regression.ps1
+
+`regression.ps1` already owns everything the test needs:
+
+* `-Dataset {Stellar, StellarLibDecoy, StellarGenDecoyEntrap, Astral, All}`, `-DownloadsPath`,
+  `-TeamCity`, `-NoBuild`, `-Threads`.
+* Data acquisition via `Get-RegressionData` (`Osprey/Regression/RegressionData.ps1`) from the
+  Panorama zip `osprey-testfiles-mzML-v2.zip`, skip-if-present on the extracted root, with the URL's
+  `perftests` segment mapping to `<Downloads>\Perftests`. So the Stellar mzML path comes for free and
+  works identically on TeamCity (which logged "data present, skipping download").
+
+Proposed: a `-ReaderParity` mode that takes ONE file from the selected dataset's mzML folder, runs
+`--task SpectraCache` twice into two temp cache dirs (default, then `OSPREY_MZML_VIA_PWIZ=1`), and
+byte-compares.
+
+Two design notes:
+
+1. **No fingerprint masking is needed here.** Both runs read the SAME source file, so
+   `source_size`/`source_mtime` match too - a plain full-file byte comparison is valid and strictly
+   stronger than `Compare-SpectraCache.ps1`'s masked compare. Keep the masked comparator for the
+   raw-vs-mzML case, where the fingerprints must differ.
+2. **It requires the vendor-enabled build.** On a build without it, `OSPREY_MZML_VIA_PWIZ=1` raises a
+   clear `NotSupportedException` naming `/p:OspreyVendorReader=true`, so the mode can detect that and
+   fail loudly in the config that is supposed to have the capability rather than silently pass.
 
 ## Earlier result (before the strtod fix), kept for the record
 
