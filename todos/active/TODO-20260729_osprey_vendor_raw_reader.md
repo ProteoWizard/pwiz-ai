@@ -284,6 +284,57 @@ The `strtod` fix also removes a cross-target-framework divergence: net472 and ne
 produce identical `.spectra.bin` from one mzML, so golden baselines stop being TFM-specific - which
 matters for the .NET 8 port independently of vendor raw reading.
 
+## PR sequencing: we are NOT gated on Matt's review
+
+The pwiz branch carries two INDEPENDENT fixes, and only one is Matt's:
+
+* **A** - `pwiz/utility/misc/String.cpp` `toString` round-trip. C++, ProteoWizard core, Matt's review.
+* **B** - `pwiz_tools/Shared/ProteowizardWrapper/MsDataFileImpl.cs` `GetStartTime`. **C#, Skyline-side,
+  ours to review.**
+
+**The proposed CI test needs B and C (the net472 `strtod` parse) only, NOT A.** Verified in the source:
+reading an mzML does `getAttribute(attributes, "value", cvParam->value)` (`pwiz/data/msdata/IO.cpp:208`)
+- the value attribute is copied **verbatim as a string**. `toString` is only reached when
+CONSTRUCTING a CVParam from a number, i.e. writing an mzML or building params from a vendor API. It is
+never on the mzML read path.
+
+**Verified empirically too**, which matters more than the reasoning given how often the reasoning was
+wrong today. The SEA-AD mzML files were converted 2026-07-09 by **pre-A msconvert** (max 12
+fractional digits in their `scan start time` text, confirmed). Reader-vs-reader on one of them:
+
+    PARITY: 4,368,477,008 bytes identical    n_ms2=162,620  n_ms1=974  compared in 2.0s
+
+So the CI test passes against an mzML written WITHOUT Matt's fix, on a second dataset. No stacking,
+no gate.
+
+### Raw-vs-mzML without A: depends on CONSISTENCY, not on A itself
+
+| msconvert that wrote the mzML | pwiz reading the raw | result |
+|---|---|---|
+| no A | no A | **parity** (both at 12-digit precision) |
+| A | A | **parity** (both at full precision) |
+| no A | A | **mismatch** |
+
+Without A anywhere, the raw path's in-memory CVParam is truncated by the same `toString`, so both
+sides land on the identical decimal - which is why the original 9,269 differences were `GetStartTime`
+and not truncation. The mixed row is the case actually observed: after fixing `toString`, the old
+12-digit mzML vs the full-precision raw diverged from record 0.
+
+**Consequence to tell Matt:** every mzML already archived was written by pre-A msconvert, so once A
+lands, reading those raws directly will no longer byte-match those stored mzML files. That is a
+one-time discontinuity for archived data - an argument for landing A deliberately, not against it.
+
+**Recommended sequencing:** (1) Osprey PR + B, self-contained and green; (2) A to Matt separately on
+its own merits (precision preservation + the 1,097 baseline values).
+
+### Still to verify where the data lives: Stellar
+
+Everything proven so far is Astral-class data (TDP-43 and SEA-AD). The Stellar dataset is NOT on this
+machine (`c:\skyline-downloads` absent; only `sea-ad` and `tdp43-plasma-ev` under
+`D:\test\osprey-runs`), so **"does the test pass on the existing Stellar mzML" is unanswered.** Run it
+once on Stellar before wiring the CI test in: unit-resolution data has different RT digit patterns,
+and every divergence found in this issue was data-dependent (2 of 161,099).
+
 ## Earlier result (before the strtod fix), kept for the record
 
 Verified end to end on `2025-0724-TDP43-PlasmaEV-PLT1-A01-365-001.raw` (3.07 GB), comparing a
