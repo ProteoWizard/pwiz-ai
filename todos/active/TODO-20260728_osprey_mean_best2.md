@@ -128,7 +128,25 @@ grows with N (e.g. f≈0.1: N≤10→1 [max], N=20→2, N=82→9). One knob unif
 
 ## Progress Log
 
-### 2026-07-28 (night) - Streaming mirror LANDED + N=82 A/B in flight
+### 2026-07-28 (night) - Streaming mirror LANDED + N=82 A/B: mean(best-2) DOMINATES (+14.6%)
+
+**N=82 RESULT (first large-scale measurement, streaming path).** mean(best-2) pass-1 experiment score
+vs MAX at N=82 (same 82 Stage-4 parquets, `target+decoy+entrapment` lib, entrapment oracle):
+
+| metric | max | mean-best-2 | delta |
+|---|---|---|---|
+| disc @ 1% experiment q | 37,676 @0.918% | 42,045 @0.794% | +4,369 (+11.6%), LOWER true FDP |
+| disc @ matched 1% TRUE FDP | 38,300 | 43,873 | +5,573 (+14.6%) |
+
+mean(best-2) gives MORE discoveries at a BETTER-calibrated (lower) true FDP. **Trend confirmed and
+strengthening: N=3 -4.9% -> N=20 +2.6% -> N=82 +14.6%** (matched true FDP) - the advantage grows with run
+count, exactly the reproducibility thesis (1-of-N detection is strong FDR-leakage evidence at large N).
+43,873 reaches ~85% of the way from the max floor (38,300) to the reproducibility frontier
+(44,861 @1% true FDP) AUTOMATICALLY at a well-calibrated 1% q - no manual run-count filter / q-floating.
+This is the first large-scale proof + a usable, bounded-memory (streaming) implementation. (my-build max
+arm running to confirm 37,676 reproduces off the older 26.1.1.199 baseline -> self-consistent A/B.)
+
+
 
 Implemented the streaming-path mean(best-2) mirror (commit 7c827899a5, pwiz-work1): `StreamingFirstPassQ`
 gains top-2 per-(base_id,side) accumulators + a bounded O(bins) decoy-floor histogram (mean exact via
