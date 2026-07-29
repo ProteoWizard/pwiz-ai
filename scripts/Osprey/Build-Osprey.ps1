@@ -31,6 +31,25 @@
 .PARAMETER SourceRoot
     Path to pwiz root (auto-detected if not specified)
 
+.PARAMETER TargetFramework
+    Which test assembly to RUN: net472 (default) or net8.0. Note this does NOT
+    limit what is COMPILED - Osprey.sln builds every target framework the
+    projects declare, so a solution build always compiles both net472 and
+    net8.0 regardless of this value. (The TeamCity Osprey step is labelled
+    "net8.0" for the same reason and still compiles net472.)
+
+.PARAMETER VendorReader
+    Build the net472 configuration WITH the ProteoWizard vendor-raw reader
+    (/p:OspreyVendorReader=true, issue #4496). Off by default so Osprey builds
+    with no ProteoWizard dependency at all.
+
+    Requires pwiz_tools/Shared/ProteowizardWrapper to be built for x64 and its
+    obj/x64 staged with pwiz_data_cli, which a bjam build does (bs.bat, or the
+    pwiz_data_cli + vendor-dependency install targets). This script verifies
+    that up front and builds the wrapper for x64 if only that step is missing,
+    because the failure mode otherwise is ~20 CS0234 "namespace CLI does not
+    exist" errors that say nothing about the real cause.
+
 .EXAMPLE
     .\Build-Osprey.ps1
     Build Osprey in Release configuration
@@ -67,6 +86,10 @@
 .EXAMPLE
     .\Build-Osprey.ps1 -Coverage
     Build, run all unit tests under dotCover, and export a coverage JSON
+
+.EXAMPLE
+    .\Build-Osprey.ps1 -VendorReader -RunTests
+    Build with vendor raw reading enabled (needs a prior bjam build) and test
 #>
 
 param(
@@ -101,7 +124,10 @@ param(
     [switch]$Coverage = $false,
 
     [Parameter(Mandatory=$false)]
-    [string]$CoverageOutputPath = ""
+    [string]$CoverageOutputPath = "",
+
+    [Parameter(Mandatory=$false)]
+    [switch]$VendorReader = $false
 )
 
 # Coverage is meaningless without running the tests - imply -RunTests
@@ -201,6 +227,46 @@ try {
         "/nologo",
         "/verbosity:$Verbosity"
     )
+
+    if ($VendorReader) {
+        # Vendor raw reading references the x64 ProteowizardWrapper build, which in
+        # turn resolves pwiz_data_cli and the vendor assemblies out of its obj\x64.
+        # Only a bjam build stages those, so check before handing MSBuild a build
+        # that would fail with a wall of CS0234s naming none of this.
+        $wrapperDir = Join-Path $pwizRoot 'pwiz_tools/Shared/ProteowizardWrapper'
+        $stagedCli = Join-Path $wrapperDir "obj/$Platform/pwiz_data_cli.dll"
+        if (-not (Test-Path $stagedCli)) {
+            Write-Host "-VendorReader needs pwiz_data_cli staged, but it is missing:" -ForegroundColor Red
+            Write-Host "  $stagedCli"
+            Write-Host "Run a full build first (bs.bat at the pwiz root), or just the pieces:" -ForegroundColor Yellow
+            Write-Host "  b.bat pwiz\utility\bindings\CLI//pwiz_data_cli"
+            exit 1
+        }
+
+        # The wrapper itself is a plain csproj that bjam does not build directly;
+        # build it here for x64 if it is absent or older than the staged CLI. An
+        # SDK-style project cannot get Platform across a ProjectReference to an
+        # old-style one, which is why Osprey.IO references the built DLL and this
+        # has to exist beforehand.
+        $wrapperDll = Join-Path $wrapperDir "bin/$Platform/$Configuration/ProteowizardWrapper.dll"
+        if (-not (Test-Path $wrapperDll) -or
+            (Get-Item $wrapperDll).LastWriteTime -lt (Get-Item $stagedCli).LastWriteTime) {
+            if (-not $Summary) {
+                Write-Host "Building ProteowizardWrapper ($Configuration|$Platform) for -VendorReader" -ForegroundColor Cyan
+            }
+            & $msbuildPath (Join-Path $wrapperDir 'ProteowizardWrapper.csproj') `
+                "/p:Configuration=$Configuration" "/p:Platform=$Platform" "/nologo" "/verbosity:$Verbosity"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "ProteowizardWrapper build failed with exit code $LASTEXITCODE" -ForegroundColor Red
+                exit $LASTEXITCODE
+            }
+        }
+
+        $buildArgs += "/p:OspreyVendorReader=true"
+        if (-not $Summary) {
+            Write-Host "Vendor raw reading: ENABLED (net472 only)" -ForegroundColor Cyan
+        }
+    }
 
     & $msbuildPath @buildArgs
     if ($LASTEXITCODE -ne 0) {
