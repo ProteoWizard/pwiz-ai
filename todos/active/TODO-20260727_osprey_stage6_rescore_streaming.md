@@ -426,3 +426,51 @@ report is built.
 Peak moved only 35.2 -> 33.9 GB, which is correct: peak is set during the
 hydrate while the accumulator is necessarily resident. F4 buys floor and drift,
 not peak.
+
+### Plain control run (04:53) — corrects the mdiag claim above
+
+Ran the non-mdiag 82-file control on the SAME final build to localize the
+unattributed managed-heap gain. It did localize something, but not what I
+expected.
+
+| | pre plain | pre mdiag | final mdiag | **final plain (control)** |
+|---|---|---|---|---|
+| peak private | 32.2 GB | 35.2 GB | 33.9 GB | **33.5 GB** |
+| private /file | +19 MB | +36 MB | +21 MB | **+7 MB** |
+| managed /file | +18 MB | +26 MB | +1 MB | **+23 MB** |
+| total drift | +1.49 GB | +2.87 GB | +1.71 GB | **+0.55 GB** |
+| rescored | 6,954,057 | 6,954,057 | 6,954,057 | **6,954,057** |
+| wall | 2:45:12 | 2:47:27 | 2:47:39 | **2:45:22** |
+
+**Two runs of identical code on the plain path differ 3x in private floor drift
+(+19 vs +7 MB/file).** Nothing in the fix set touches that path - the harness
+deletes `*.scores-reconciled.parquet` before each measurement so no resume arm
+runs, and F1/F6/F7/F11 are correctness or typing. That spread is run-to-run
+variance in the floor fit.
+
+**This corrects the entry above.** I wrote "the mdiag penalty on drift is gone:
++36 -> +21, landing on the plain run's +19" - but that compared tonight's mdiag
+against the PRE-fix plain baseline. Within the same build it is mdiag +21 vs
+plain +7, i.e. mdiag still costs ~+14 MB/file against ~+17 MB/file before. A
+modest reduction, not elimination. The managed column points the other way
+(mdiag +1 vs plain +23 on the same build), so the two axes disagree in
+direction.
+
+**Conclusion: per-file floor drift is too noisy at n=1 to support a precise
+improvement figure**, and the PR body has been rewritten to say so.
+
+What remains solid across all four runs:
+* no O(files) growth anywhere - against a ~197 GB projection for the unbounded path
+* **0 reporting gaps >= 30 s**
+* **6,954,057 rescored, identical in all four**
+* report byte-identical except its embedded `generatedUtc`
+* no wall-clock cost (2:47:39 vs 2:47:27; 2:45:22 vs 2:45:12)
+
+The accumulator release is still clearly real mid-run: the elapsed-matched A/B
+shows the pre-fix baseline climbing monotonically 26 -> 33 GB through the rescore
+loop while the fixed build stays flat. It is the *magnitude* that the floor-drift
+metric cannot resolve, not the direction.
+
+**If a precise figure is ever needed, it needs replicates** (3 runs per arm,
+report the median and spread). One run per arm cannot separate a ~10 MB/file
+effect from ~12 MB/file of noise.
