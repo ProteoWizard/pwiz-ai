@@ -104,8 +104,16 @@ grows with N (e.g. f≈0.1: N≤10→1 [max], N=20→2, N=82→9). One knob unif
       (peptide) consume it. Replaced the precursor-only CompeteFromIndicesMeanBest2. 548/548 green.
 - [ ] Protein uses the peptide rollup score (ProteinFdr operates on FdrEntry.Score — needs the
       aggScore fed in / entry.Score overwrite; separate increment).
-- [ ] Streaming-path mirrors (bounded/HPC).
-- [ ] Unit tests (aggregation + floor + 1-run demotion + decoy symmetry).
+- [x] Streaming-path mirror (precursor + peptide) — commit 7c827899a5. `StreamingFirstPassQ`
+      accumulates top-2 per (base_id, side) + a bounded decoy-floor histogram when mean-best-2;
+      the experiment precursor/peptide q-map branches reduce to mean(best-2) + max roll-up,
+      matching the resident path (exact for multi-run; floor is a bounded quantile). PEP + max
+      path untouched. Flag-OFF Stellar byte-identity PASS (blib 30,597,120). Protein streaming
+      still pending (with the resident protein increment).
+- [x] Unit tests — commit 7c827899a5 (FdrTest.cs): `TestStreamingMeanBest2MatchesResident`
+      (exact streaming==resident maps on a >=2-run fixture, floor unused) +
+      `TestStreamingMeanBest2DemotesSingleRun` (single-run floor demotion). 550/550 green.
+      (Resident aggregation/floor/1-run already in PercolatorMeanBest2Test.)
 - [x] Flag-off byte-identity regression (Stellar mode1/2/3) — golden unchanged. PASSED 2026-07-28
       (blib 30,597,120 all 3 modes) on commit dd8cd2136e; confirms mean-best-2 is golden-neutral off.
 - [ ] Flag-on oracle A/B vs transfer (82f/164f, matched TRUE FDP) — Brendan-driven.
@@ -119,6 +127,24 @@ grows with N (e.g. f≈0.1: N≤10→1 [max], N=20→2, N=82→9). One knob unif
   decision evidence, not a regression test.
 
 ## Progress Log
+
+### 2026-07-28 (night) - Streaming mirror LANDED + N=82 A/B in flight
+
+Implemented the streaming-path mean(best-2) mirror (commit 7c827899a5, pwiz-work1): `StreamingFirstPassQ`
+gains top-2 per-(base_id,side) accumulators + a bounded O(bins) decoy-floor histogram (mean exact via
+running sum; median/percentile via a fixed 0.001-width histogram over [-100,100] with over/underflow
+counts), gated on `OSPREY_EXPERIMENT_AGG=mean-best-2`. `BuildExperimentPrecursorQMap` /
+`BuildExperimentPeptideQMap` reduce the top-2 to mean(best-2) and roll peptides up by max, mirroring the
+resident `ComputeBaseIdMeanBest2` path. PEP + the default max path untouched. `MeanBest2Acc` made internal
+so the streaming struct can hold it. GATES: build clean (0 new inspection); full suite 550/550 (net8.0);
+flag-OFF Stellar byte-identity mode1/2/3 PASS (blib 30,597,120). Two new streaming unit tests
+(streaming==resident exact on >=2-run; single-run demotion).
+
+Validated `ai/.tmp/extract_pass1_fdp.py` against the resident N=20 reference (reproduces max 45,015 @0.876%
+/ matched-TRUE 46,496 -> mb2 45,863 @0.763% / 47,685 = +2.6%). N=20 STREAMING cross-check running (dirs
+`mb2-fpstream-20-{maxstream,mb2stream}`) to confirm the streaming impl reproduces resident before the N=82
+run. N=82 runner ready (`ai/.tmp/run-mb2-stream-n82.ps1`). Exe snapshot at
+`D:\test\osprey-exe-snapshots\mb2stream-20260728\`.
 
 ### 2026-07-28 - Night-session handoff: streaming mirror + N=82 A/B
 
