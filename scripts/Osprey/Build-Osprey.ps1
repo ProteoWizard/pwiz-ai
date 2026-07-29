@@ -255,23 +255,22 @@ try {
             exit 1
         }
 
-        # The wrapper itself is a plain csproj that bjam does not build directly;
-        # build it here for x64 if it is absent or older than the staged CLI. An
-        # SDK-style project cannot get Platform across a ProjectReference to an
-        # old-style one, which is why Osprey.IO references the built DLL and this
-        # has to exist beforehand.
-        $wrapperDll = Join-Path $wrapperDir "bin/$Platform/$Configuration/ProteowizardWrapper.dll"
-        if (-not (Test-Path $wrapperDll) -or
-            (Get-Item $wrapperDll).LastWriteTime -lt (Get-Item $stagedCli).LastWriteTime) {
-            if (-not $Summary) {
-                Write-Host "Building ProteowizardWrapper ($Configuration|$Platform) for -VendorReader" -ForegroundColor Cyan
-            }
-            & $msbuildPath (Join-Path $wrapperDir 'ProteowizardWrapper.csproj') `
-                "/p:Configuration=$Configuration" "/p:Platform=$Platform" "/nologo" "/verbosity:$Verbosity"
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "ProteowizardWrapper build failed with exit code $LASTEXITCODE" -ForegroundColor Red
-                exit $LASTEXITCODE
-            }
+        # The wrapper is a plain csproj that must be built for x64 separately: an
+        # SDK-style project cannot pass Platform across a ProjectReference to an
+        # old-style one, so Osprey.IO references the built DLL and it has to exist
+        # first. Always invoke the build and let its own up-to-date check decide
+        # (a couple of seconds when current). Do NOT try to outsmart it by
+        # timestamping against the staged CLI: that misses edits to the wrapper's
+        # own sources, which is how a stale ProteowizardWrapper.dll silently
+        # invalidated a parity comparison during #4496.
+        if (-not $Summary) {
+            Write-Host "Building ProteowizardWrapper ($Configuration|$Platform) for -VendorReader" -ForegroundColor Cyan
+        }
+        & $msbuildPath (Join-Path $wrapperDir 'ProteowizardWrapper.csproj') `
+            "/p:Configuration=$Configuration" "/p:Platform=$Platform" "/nologo" "/verbosity:$Verbosity"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "ProteowizardWrapper build failed with exit code $LASTEXITCODE" -ForegroundColor Red
+            exit $LASTEXITCODE
         }
 
         $buildArgs += "/p:OspreyVendorReader=true"
