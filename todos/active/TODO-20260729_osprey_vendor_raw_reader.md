@@ -100,20 +100,85 @@ baseline.
 
 ## Regression Test
 
+Two tiers, both required. Brendan set the primary one (2026-07-29): prove parity on a **real file
+from the actual target dataset**, at the `.spectra.bin` level, end to end.
+
+### Tier 1 (primary) — end-to-end `.spectra.bin` parity on real TDP-43 data
+
+Target: `D:\test\osprey-runs\tdp43-plasma-ev\raw\2025-0724-TDP43-PlasmaEV-PLT1-A01-365-001.raw`
+(3.07 GB; one of the 164 files / 784.2 GB staged locally). The end goal is running Osprey on that
+whole directory with no mzML conversion, so the test data is the goal's data.
+
+1. **Stage-1-only path** — run just the input -> `.spectra.bin` conversion. **This does not exist
+   yet**: the CLI has exactly four tasks (`PerFileScoring`, `FirstPassFDR`, `PerFileRescoring`,
+   `SecondPassFDR`, `Program.cs:293-315`), and the smallest, `PerFileScoring`, also runs
+   calibration + scoring + parquet and *requires* `--library` (`Program.cs:365`). Proposed:
+   **`--task SpectraCache`**, which calls the existing `EnsureSpectraCache`
+   (`PerFileScoringTask.cs:2413`) and exits — no `--library` needed, since cache building does not
+   use one. Worth doing as a real task rather than test scaffolding: it is precisely the staging
+   primitive that replaces the msconvert step (point it at 164 raws, get 164 caches), and it makes
+   the parity check a pure CLI exercise — one binary, two inputs, two outputs.
+2. **Convert to mzML** with the standard proven command line: `convert-one.cmd <raw> <outdir>
+   <msconvert.exe>` (`ai/scripts/Osprey/SEA-AD/convert-one.cmd`). Invoke it directly rather than
+   `Convert-SeaAdRaw.ps1`, which is hard-wired to the SEA-AD `Astral-DIA\` layout.
+3. Run the Stage-1-only path on the **mzML** -> `.spectra.bin`.
+4. Run the Stage-1-only path on the **`.raw`** -> `.spectra.bin`.
+5. **Compare** with `ai/scripts/Osprey/Compare/Compare-SpectraCache.ps1` (written and validated
+   2026-07-29, see below).
+
+**GOTCHA — the two caches collide by default.** `SpectraCache.GetCachePath` is
+`Path.GetFileNameWithoutExtension(inputFile) + ".spectra.bin"` (`SpectraCache.cs:261`), so
+`FOO.raw` and `FOO.mzML` both resolve to `FOO.spectra.bin`. Runs 3 and 4 MUST write to different
+directories (separate mzML/raw dirs, or the `ArtifactPaths` cache-dir redirect). Worse than
+overwriting: whichever runs second would find the first's cache, reject it on the fingerprint, and
+silently re-parse — looking like success while proving nothing.
+
+#### Comparison method: masked byte compare — no Osprey change, no semantic comparator
+
+The concern about needing "consistent identifying cache information" resolves better than expected.
+The v4 header (`SpectraCache.cs:153-158`) is:
+
+| offset | size | field |
+|---|---|---|
+| 0 | 8 | magic `OSPRSPC\0` |
+| 8 | 4 | version (u32) |
+| 12 | 8 | **source_size (u64)** |
+| 20 | 8 | **source_mtime_ms (i64)** |
+| 28 | 4 | n_ms2 (u32) |
+| 32 | 4 | n_ms1 (u32) |
+
+`ComputeSourceFingerprint` (`SpectraCache.cs:440-441`) is just `fi.Length` +
+`LastWriteTimeUtc`, so **bytes 12..27 are the only bytes derived from the source file's identity
+rather than its contents.** Mask those 16 bytes and byte-compare the rest. That needs no production
+change and is *stronger* than a field-by-field comparator: it covers every byte the cache stores,
+including the MS2 record body, the MS1 section, the 40-byte-per-record index block and the footer.
+
+`n_ms2` / `n_ms1` are deliberately **not** masked — a spectrum-count difference is the most likely
+real defect (any converter filter that drops or reorders spectra shifts every later record), and it
+should fail loudly and early.
+
+`Compare-SpectraCache.ps1` does exactly this. Validated against real v4 caches on 2026-07-29:
+- negative case (two different SEA-AD caches) -> `DIFFERENT SPECTRUM COUNTS`, n_ms2 162,620 vs
+  165,699, exit 1, before touching the body
+- positive case (3.8 GB cache vs itself) -> `PARITY: 3,834,851,952 bytes identical`, **15.9 s**,
+  exit 0
+
+15.9 s for ~4 GB makes this cheap enough to run per file, not just once.
+
+### Tier 2 (permanent guard) — committed unit test, net472 leg of Osprey.Test
+
+Tier 1 needs 3 GB of off-repo data and an msconvert run, so it cannot gate CI. A small committed
+test keeps the field mapping honest afterwards:
+`pwiz/data/vendor_readers/Thermo/Reader_Thermo_Test.data/source_cid_test_3scans.raw` with its
+tracked `source_cid_test_3scans-centroid.mzML` (already in the repo, nothing new to commit; all 3
+spectra carry `MS:1000827/828/829`). Caveat: that fixture's arrays are 32-bit for **both** m/z and
+intensity, so it pins the mapping and the isolation-window semantics but cannot catch an f64 m/z
+precision defect — which is exactly what Tier 1 covers.
+
 - **Test name**: (filled in once written)
 - **Test project**: Osprey.Test, net472 leg only
-- **Fixture**: `pwiz/data/vendor_readers/Thermo/Reader_Thermo_Test.data/source_cid_test_3scans.raw`
-  paired with the committed `source_cid_test_3scans-centroid.mzML` — **already tracked, nothing new
-  to commit** (see the fixture survey above)
 - **Fails on master**: (pending)
 - **Passes on fix**: (pending)
-
-Shape: read the `.raw` through the new reader (`requireVendorCentroidedMS1/MS2: true`,
-`simAsSpectra: true` — the `convert-one.cmd` mapping) and the `-centroid.mzML` through
-`MzmlReader`, then assert the `SpectraCache` v4 fields agree per spectrum: scan number, RT,
-precursor m/z, isolation centre/lower/upper offsets, m/z + intensity arrays. That is the parity
-acceptance criterion made permanent, and it is the **first** deliverable on the branch: write it,
-watch it fail with no raw reader, then make it pass.
 
 ## Progress Log
 
