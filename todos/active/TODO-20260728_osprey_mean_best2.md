@@ -31,6 +31,29 @@ but from a statistically VALID transform (symmetric decoys, self-calibrating in 
 - Floor: decoy **median** (default); decoy mean / low decoy percentile = A/B variants.
 - Flag: `OSPREY_EXPERIMENT_AGG` = `max` (default, byte-identical golden) vs `mean-best-2`.
 
+## RESULT — crosses positive at scale (2026-07-28, 1st-pass only, reused parquets)
+
+Fast workflow (Brendan's idea): hard-link a prior 82-file run's Stage-4 parquets
+(`pass2ab-82file-percolator-5day`, `OSPREY_VERSION_OVERRIDE=26.1.1.199` past the daily guard) +
+`--task FirstPassFDR --model-diagnostics --fdrbench-pass 1`, resident (`OSPREY_FDR_PROJECTION=0`),
+first-20 files. ~15 min/arm, NO PerFileScoring. Driver: `ai/.tmp/mb2-firstpass-arm.ps1`.
+Pass-1 experiment fdpView from each arm's `out.model-diagnostics.data.json`.
+
+| metric | max | mean-best-2 | Δ |
+|---|---|---|---|
+| disc @ 1% experiment q | 45,015 | 45,863 | +848 (+1.9%) |
+| true FDP @ 1% q | 0.88% | 0.76% | better calibrated |
+| disc @ matched 1% TRUE FDP | 46,496 | 47,685 | +1,189 (+2.6%) |
+
+**mean-best-2 DOMINATES max at N=20** — more discoveries at a LOWER true FDP. Trend: N=3 = −4.9%
+(net negative), N=20 = +2.6% (net positive) → crosses positive as run count grows; magnitude should
+climb toward N=82 (frontier suggested ~+19%). Run-count histogram (N=20) confirms the threshold
+basis: a 1-run detection is 16.75% FDP (per-run), leaky enough that demotion is justified — unlike N=3.
+
+**NEXT (all cheap via the fast workflow)**: N=82 (all 82 parquets), floor A/B (decoy mean/median/
+low-percentile), then 200/300/500 on the 2nd machine. Streaming-path mirror still needed for a
+production default (resident-only today).
+
 ## FUTURE REFINEMENT — size-threshold / scale-adaptive demotion (Brendan 2026-07-28)
 
 3-file result showed a modest NEGATIVE (disc@1%q 27,201→25,871, −4.9%; true FDP 0.86%→0.76%):
