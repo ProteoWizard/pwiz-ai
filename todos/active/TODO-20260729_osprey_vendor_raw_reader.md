@@ -463,9 +463,11 @@ Cheapest possible form of what was verified by hand today:
 * Runtime is dominated by two parses of one file - seconds, not the hour the full Perf/Regression
   leg takes.
 
-**This test cannot pass on net472 until the parse defect is addressed**, because the two readers
-disagree on exactly the values .NET Framework misparses. It WOULD pass on net8.0 today. So the test
-and the parse fix have to land together, or the test starts life red.
+**UPDATE - it passes now.** With the CRT `strtod` parse in place, the reader-vs-reader comparison on
+the full 2.41 GB TDP-43 mzML is **`PARITY: 2,260,174,556 bytes identical`** (n_ms2=161,099,
+n_ms1=965, compared in 1.8 s). Both readers on net472 produce a byte-identical `.spectra.bin` from
+the same file, so the test can land green rather than red-until-fixed as feared. The comparison
+itself took under two seconds on 2.26 GB, so the CI cost is dominated by the two parses.
 
 ## Progress Log
 
