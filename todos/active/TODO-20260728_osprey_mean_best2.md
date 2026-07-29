@@ -31,6 +31,24 @@ but from a statistically VALID transform (symmetric decoys, self-calibrating in 
 - Floor: decoy **median** (default); decoy mean / low decoy percentile = A/B variants.
 - Flag: `OSPREY_EXPERIMENT_AGG` = `max` (default, byte-identical golden) vs `mean-best-2`.
 
+## BLOCKER — N=82 needs the streaming mirror (resident OOMs on the 63GB box)
+
+N=82 resident FirstPassFDR committed **103.6 GB** (private); this machine has **63.7 GB** RAM →
+pagefile thrash, killed. (The MEMORY note's "82-file peak 49GB" was the STREAMING path; the RESIDENT
+path mean-best-2 requires is O(files) ~104GB at N=82.) So resident mean-best-2 caps at ~N≈25-30 here.
+**The streaming-path mirror is now CRITICAL PATH for the N=82 measurement** (not just production
+polish): thread the run id into `StreamingFirstPassQ.Add` (:4071), accumulate best-per-(base_id,run),
+reduce to mean-best-2. Same work a production default needs. Alternative: run N=82 resident on the
+larger-RAM machine. N=20 (below) already validates the lever; N=82 quantifies the full recovery vs
+the 37,763 floor / 44,861 frontier.
+
+### Target bars for N=82 (from Brendan's diagnostics, max/min-q arm)
+- max exp-wide 1% q floor = **37,763** (down from ~45,015 @ N=20 — max LOSES 16% sensitivity as N
+  grows; max-of-N null inflates). k=1 slice FDP: 7.6% @ N=20 → **14.1% @ N=82** (spikes).
+- Reproducibility frontier (≥4 runs, floated q=10%) = **44,861 @ 1% true FDP = +7,098 (+18.8%)**;
+  ≥2 runs ≈ 43,866. "Reproducibility, not the q statistic, selects them." Goal: mean(best-2) reaches
+  ~43-45k at a WELL-CALIBRATED 1% q automatically (no manual run-count filter / q-floating).
+
 ## RESULT — crosses positive at scale (2026-07-28, 1st-pass only, reused parquets)
 
 Fast workflow (Brendan's idea): hard-link a prior 82-file run's Stage-4 parquets
