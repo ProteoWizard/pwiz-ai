@@ -12,6 +12,9 @@
   [#4500](https://github.com/ProteoWizard/pwiz/pull/4500) (`pwiz`)
 - **Requester**: Brendan (issue author, Osprey developer) — NO credit line.
 
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260729_osprey_vendor_raw_reader.md` before starting work.
+
 ## HANDOFF - state as of 2026-07-29 end of session
 
 **Three draft PRs are open, all marked experimental / not ready for review:**
