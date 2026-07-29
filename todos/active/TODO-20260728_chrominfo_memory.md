@@ -94,8 +94,13 @@ row before any of the saving arrives.
 - [x] `OriginalPeak` derived rather than stored - `ChangeResults` recalculates it from the
       chromatogram every time, so it needs no home in the columnar classes
 
+- [x] `ReintegratedPeak` resolved: the bounds are not needed. What is needed is the peak
+      *index*, for retention time alignment and peak imputation. `TransitionGroupResults`
+      now has `ChosenPeakIndexes` (renamed from `CandidatePeakIndexes`, since it holds the
+      currently chosen peak), `OriginalPeakIndexes` and `ReintegratedPeakIndexes`
+
 ### In Progress
-- [ ] Decide where `ReintegratedPeak` lives - see below
+- [ ] Convert `TransitionDocNode`/`TransitionGroupDocNode` to hold the columnar classes
 
 ### Remaining
 - [ ] Convert the readers to the facade. Ordering matters: the document cannot be put
@@ -232,13 +237,9 @@ Known gaps:
   function, so the dot products and the optimization step positions are NOT covered - both
   sides of those assertions are null. `BlibDriftTimeTest.zip` has a library,
   `FullScan.zip` has isotope distributions, `AgilentCEOpt.zip` has optimization steps.
-- `ReintegratedPeak` (`ScoredPeakBounds`) still has no home. Unlike `OriginalPeak` it is
-  not derivable: reintegration sets it, and `ChangeResults` reads it back to choose the
-  candidate peak inside those bounds and mark it REINTEGRATED. **Worth asking whether it
-  is still needed at all** once `CandidatePeakIndexes` stores the chosen peak directly -
-  its only job is to re-derive a choice which would then already be recorded. If it is
-  still needed it wants its own list rather than `CustomPeak`, since after a reintegrate
-  most precursors below the cutoff have one.
+- The three peak index lists often hold the same indexes, so `ShareEqualIndexes` stores an
+  incoming list equal to one already present as that same instance. Worth keeping in mind
+  when estimating memory: usually one list, not three.
 - `GetTransitionPeakBounds` on `OnDemandFeatureCalculator` is `virtual` with no subclass
   anywhere - vestigial, not a constraint.
 
