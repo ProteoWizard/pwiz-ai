@@ -130,6 +130,31 @@ grows with N (e.g. f≈0.1: N≤10→1 [max], N=20→2, N=82→9). One knob unif
 
 ## Progress Log
 
+### 2026-07-29 (morning) - mean(best-N) generalization + Axis-1 N-curve
+
+Generalized best-2 -> best-N (commit b7c375b905): `OSPREY_EXPERIMENT_AGG=mean-best-<N>` carries N;
+top-2 accumulator -> fixed-capacity top-N buffer (MeanBestNAcc); aggregate = mean(top-min(k,N) per-run
+scores + (N-k) floor). Resident (ComputeBaseIdMeanBestN) + streaming both generalized; N=2 bit-identical
+to old best-2 (commutative add). OspreyEnvironment: MeanBestN int + ExperimentAggMeanBest. Tests: resident
+N=3 + streaming==resident EXACT at N=2/3/4; 553/553 green. Flag-off untouched by construction; -Dataset All
+byte-identity PENDING (machine busy with the sweep). Exe snapshot D:\test\osprey-exe-snapshots\mbN-20260729.
+
+**AXIS 1 - vary aggregation N at 82 files (disc @ matched 1% true FDP), toward frontier expPeak ~44,938:**
+| agg | matched-TRUE | vs max | step |
+|---|---|---|---|
+| max | 38,300 | - | |
+| best-2 | 43,873 | +14.6% | |
+| best-3 | 44,260 | +15.6% | +387 |
+| best-4 | 44,469 | +16.1% | +209 |
+Diminishing, converging on the frontier (soft approach). Sweep N=6/8/12/20 running (ai/.tmp/sweep-mbN.ps1)
+to map the peak + tail. k=1 acceptances deplete with N (639->194->76->31); k=1 FDP% is small-count noise at high N.
+
+**AXIS 2 (queued) - vary FILE COUNT at best-2 to find the worse<->better crossover** (3f=-4.9%, 20f=+2.6%):
+bisect ~10 first. Small file counts fit the resident from-parquets path (fast). Informs the auto-N threshold
+(crossover moves UP with N). Domain (Brendan): only too-large-N worry = drug-perturbation batches-of-3 where a
+real signal is in exactly 3 plates; otherwise larger N just favors reproducibly-quantifiable peptides.
+
+
 ### 2026-07-28 (night) - Streaming mirror LANDED + N=82 A/B: mean(best-2) DOMINATES (+14.6%)
 
 **N=82 RESULT (first large-scale measurement, streaming path).** mean(best-2) pass-1 experiment score
