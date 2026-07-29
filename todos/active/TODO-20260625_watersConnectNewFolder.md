@@ -82,6 +82,33 @@ was a no-op (RetryFetch doesn't invalidate) - fixed with ClearResultsFor + refet
 red->green regression test (stateful mock asserts the folder appears). Also hardened cancel/inline-edit
 placeholder (LOWs). 4 commits pushed; deferred LOW addressed too. Pending: TeamCity green, human review.
 
+### 2026-07-05 - Added Refresh button (follow-up feature, requested by Stephen)
+
+Second user-requested feature on the same dialog: a Refresh button to re-pull the file/folder listing
+from the server. Mirrors the New Folder pattern:
+- `BaseFileDialogNE`: hidden-by-default `refreshButton` on `navToolStrip` (Designer + field), text/tooltip
+  from new `CommonFileDialogResources.BaseFileDialogNE_Refresh`, `refreshButton_Click` -> new
+  `protected virtual RefreshFromServer()` (base = `RefreshCurrentDirectory()`).
+- `WatersConnectSaveMethodFileDialog`: shows the button with a Refresh icon; overrides `RefreshFromServer`
+  to invalidate the current dir's cache then repopulate. Test seam `RefreshForTest()` + `RefreshButtonVisible`.
+- `WatersConnectSession.RefreshContents(url)`: `ClearResultsFor` the current dir's cached responses
+  (root folders / sample sets / injections - types verified against `AsyncFetchContents`), so the
+  repopulate re-fetches. Needed because `RefreshCurrentDirectory()`/`RetryFetch` are no-ops on cached
+  success (same gotcha the New Folder refresh hit).
+- Icon: added `Refresh.png` to Skyline `Resources/` + `Resources.resx`/`.Designer.cs` (`Refresh` bitmap).
+- Test: `WatersConnectMethodExportTest.VerifyRefresh` - stateful mock adds a server-side folder after the
+  listing is cached; asserts it appears only after Refresh. Red->green verified (neutered the cache-clear
+  -> "did not appear after refresh" timeout). Build green, TestWatersConnectExportMethodDlg passes,
+  CodeInspection test passes.
+
+Committed `c1a09636f1` (feature) then ran `/pw-self-review` (fresh-context agent) on that commit: all findings
+LOW. Applied the one worth fixing - RefreshContents now resolves the sample-set/injection child URLs BEFORE
+clearing the root cache (a path-only URL could otherwise skip its own invalidation; safe today but latent) -
+in `c1814f4f0a`. Dismissed: satellite-resx omission (consistent with New Folder strings), double-click double
+fetch (harmless). Deferred (optional): a sample_set->injections refresh test (needs a stateful mock methods
+handler). Clean build + CodeInspection + TestWatersConnectExportMethodDlg all green; both commits pushed.
+PENDING: TeamCity green on c1814f4f0a; then human review.
+
 ### 2026-06-30 - Fixed code-inspection failure after master merge
 
 TeamCity ReSharper build #18696 failed with 2 LocalizableElement warnings: the 'NewTestFolder'
