@@ -248,13 +248,14 @@ their exact existing text.
 1. **Scope** - whether the round-trip guarantee should apply to all double cvParams (as
    implemented) or only to selected CVIDs such as scan start time. All-cvParams is the principled
    answer; per-CVID is arbitrary but churn-free.
-2. **Baseline regeneration.** The committed vendor-reader baselines contain values sitting exactly
-   at the truncation boundary - e.g. `scan start time" value="0.259556549483"` in
-   `Reader_Thermo_Test.data/source_cid_test_3scans.mzML` - and **1,097 values with exactly 12
-   fractional digits** across the Thermo baselines alone. Wherever those were truncated, the fixed
-   msconvert emits more digits, so those baselines need regenerating. That is a deliberate
-   consequence (the old baselines encode the lossy values), but it is real work across every vendor
-   reader and should be agreed before the PR, not discovered in CI.
+2. ~~**Baseline regeneration.**~~ **WRONG - measured, and no regeneration is needed.** The concern
+   was that the committed baselines hold values at the truncation boundary (1,097 with exactly 12
+   fractional digits across the Thermo `.mzML` baselines), so more digits would break them. It does
+   not, because `VendorReaderTestHarness.cpp:382` compares with
+   `Diff<MSData, DiffConfig>` - a **semantic diff of parsed MSData with a configurable precision**
+   (`diffConfig.precision`), not a byte comparison of mzML text. Extra digits parse to the same
+   value. `Reader_Thermo_Test` **passes** with the change. Counting text patterns was a bad proxy
+   for "will the tests fail"; running them was the answer.
 
 Note the fix is intentionally conservative on formatting: output is byte-identical to today
 wherever today's output already round-trips, so only genuinely-truncated values move.
@@ -283,6 +284,37 @@ The three defects, all in our own code, all now fixed:
 The `strtod` fix also removes a cross-target-framework divergence: net472 and net8.0 Osprey now
 produce identical `.spectra.bin` from one mzML, so golden baselines stop being TFM-specific - which
 matters for the .NET 8 port independently of vendor raw reading.
+
+## Branch split (2026-07-29) and pwiz test results
+
+Three branches, each verified standing alone off master. All use `Skyline/work/YYYYMMDD_*`, which is
+the convention for **every** module here - `Skyline/` is a repo namespace TeamCity keys off, not a
+module marker (166 of ~180 remote branches use it; the exceptions are Matt's own `chambem2/*`, a few
+`feature/*` and `misc/*`, and generated copilot/backport/revert branches). The module is carried by
+the PR title prefix and label instead.
+
+| branch | module | scope | verification |
+|---|---|---|---|
+| `Skyline/work/20260729_pwiz_tostring_roundtrip` | `pwiz` | 3 files, +197 | `StringTest.passed`; msdata suite clean |
+| `Skyline/work/20260729_wrapper_rt_precision` | `skyline` | 1 file, +9 | compiles clean |
+| `Skyline/work/20260729_osprey_vendor_raw_reader` | `osprey` | 15 files, +1130 | 554/554, zero inspection warnings |
+
+### pwiz test results for the toString change
+
+Ran `pwiz\data\msdata` + `pwiz\utility\misc` (103-505 targets depending on incrementality):
+
+* **One failure, pre-existing and unrelated**: `ReaderTest.cpp:270` asserts the reader-type set
+  contains `Bruker FID`, `Bruker U2`, `Bruker YEP`, and `--without-compassxtract` (which
+  `build-apps.bat` passes by default) removes exactly those three readers. **Fails identically on
+  master**, verified as a control.
+* **No new failures from the change.** `Serializer_mzML_Test`, `IOTest`, `DiffTest`, `MSDataTest`,
+  `SpectrumList_mzML_Test`, `ChromatogramList_mzML_Test`, `Serializer_mzXML_Test` all pass - i.e.
+  the mzML round-trip and diff tests are unaffected, which is expected since round-tripping a value
+  that now keeps more digits still compares equal.
+
+Process note: the first of these runs was accidentally executed on the WRAPPER branch (which touches
+no C++), so it tested nothing about `toString` - but it doubled as the master-equivalent control that
+established the `ReaderTest` failure as pre-existing.
 
 ## PR sequencing: we are NOT gated on Matt's review
 
