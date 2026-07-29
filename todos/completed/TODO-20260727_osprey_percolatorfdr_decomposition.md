@@ -9,7 +9,7 @@
   Perf/Regression gate (not yet triggered) + human review.
 - **Worktree**: `C:\proj\pwiz`
 - **GitHub Issue**: [#4468](https://github.com/ProteoWizard/pwiz/issues/4468)
-- **PR**: [#4490](https://github.com/ProteoWizard/pwiz/pull/4490)
+- **PR**: [#4490](https://github.com/ProteoWizard/pwiz/pull/4490) (merged 2026-07-28 as 520d559fd)
 - **Requester/Reporter**: none - filed by Brendan, an Osprey developer, so no credit line
 
 ## Objective
@@ -611,3 +611,30 @@ triage" section's "Logged, not done" list.
 Branch created in `C:\proj\pwiz` (freed by PR #4480 merging). Confirmed the issue's
 line counts against master and surveyed the file into the responsibility clusters
 above. Starting with the Stage-5 diagnostic dumps.
+
+### 2026-07-28 - Merged
+
+PR #4490 merged as `520d559fd` with all 21 checks green, including the TeamCity
+PR/Regression build. `PercolatorFdr.cs` - 4,778 lines and 36% of the `Osprey.FDR`
+assembly - no longer exists; it is eleven collaborators, none over 1,343 lines, and
+`RunPercolator` went 546 -> 368. Output is byte-identical: `-Dataset All` 18/18, a
+final Stellar on the exact committed HEAD, per-step Stellar after all nine
+extractions, and a perf gate against the merge-base showing stage5 at +0.1%.
+
+**Deferred deliberately**, all filed rather than folded in: the `--fdr-method gbdt`
+train-config drop (#4491, a real bug in master), the three-way PEP fit-order
+disagreement (#4492), the `captureModel` / `DiagnosticAbort` ordering (#4493), and
+the structural follow-ups - scorer/trainer cycle, ~50 stale doc citations, the
+broken `Combine-Stage5-Profile.ps1` symbol map, `BASE_ID_MASK` x5 (#4494). Three
+Copilot threads were answered with provenance and left unresolved on purpose.
+
+**Open contingency - the Rust companion.** maccoss/osprey#59 removes the same dead
+`train_subset` `None` arms from the Rust `run_percolator`, left open for Mike. It is
+a decision point, not a formality: **if Mike does NOT simply accept it, that is a
+strong signal the branches were guarding something real, and the C# code removed
+here should be restored.** The removal was the one change in this PR that the
+byte-identical golden structurally could not verify - an unreachable branch is
+invisible to any test - so Mike's answer is the only remaining oracle for it. A
+sub-agent traced the Rust arms dead to commit `9d3eb5b`, which flipped the `else`
+from `None` to `Some(dedup_indices)` when best-per-precursor dedup landed, making
+them porting residue in both implementations.
