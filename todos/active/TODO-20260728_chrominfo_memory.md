@@ -278,6 +278,18 @@ come from all of the transitions together. `ExcludeFromCalibration` and `Analyte
 are carried forward from the doc node, the way `CopyChromInfoAttributes` does - they say
 nothing about the chromatogram, so they belong in the columnar form eventually.
 
+**Positions are found, never counted.** `ChromFileIds.IndexOfFile(replicateIndex, fileId)` is
+how a caller gets a position, and `TransitionResults`/`TransitionGroupResults` expose it. The
+entries of a replicate are in no order a caller can rely on, and a replicate almost always has
+exactly one entry, so the linear search is cheap. The same applies to matching the doc node's
+chrom infos while rebuilding: found by file and optimization step, not by index.
+
+**The columnar classes hold optimization step zero only**, one entry per file per replicate.
+The user cannot set peak boundaries or annotations for a single step, and everything else is
+read back from the .skyd, which has every step. So every step of a file gets the step zero
+annotations and user set when a chrom info is rebuilt. `AgilentCEOpt` confirms this: its
+non-zero steps come back equal to the document's.
+
 **Cost notes**, both deliberate and both to be fixed by *fewer callers needing chrom infos at
 all* rather than by caching:
 - Nothing is cached, so repeated asks re-read and re-aggregate.
