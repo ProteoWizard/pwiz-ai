@@ -228,3 +228,60 @@ Machine brought up for large-scale Osprey testing:
   (`$env:OSPREY_SEAAD_LIB\target+decoy+entrapment\`); `Run-SeaAd.ps1 -WhatIf` resolves clean.
 
 Issue #4472 re-verified against master; scope split recorded above.
+
+## 2026-07-28 — `/code-review max` findings + fix pass (session end)
+
+All local gates were GREEN on the 4 committed commits before review:
+`regression.ps1 -Dataset All` 18/18 byte-identical at 1e-9; `Build-Osprey.ps1
+-RunTests -RunInspection` 547/547 with zero inspection warnings; 82-file Stage 6
+at 32.2 GB peak, 0 reporting gaps >=30s, +19 MB/file; 82-file with
+`--model-diagnostics` at 35.2 GB peak, identical 6,954,057 rescored entries.
+
+**Then `/code-review max` found 15 verified findings.** Three of the four commits
+had real defects. The core streaming/compaction/ordering mechanism was verified
+clean by two independent angles — every finding is in the wrappers around it.
+
+Most severe, in order:
+
+1. **`PerFileScoringTask.cs:1240` — guard throws for legitimate tasks.**
+   `--task SecondPassFDR`, a `--task FirstPassFDR` re-run, and
+   `OSPREY_DUMP_PERCOLATOR` all trip `GuardResidentPool` and hard-fail.
+   **Masked locally because `regression.ps1:857` and `:889` set
+   `OSPREY_ALLOW_UNBOUNDED_MEMORY=1` around the whole HPC chain** — so mode 3
+   passing is NOT evidence the guard is safe. Decision: throw only for genuinely
+   new O(files) situations; warn, naming the consumer, for the deferred paths.
+2. **`ReleaseRescoredPayload` misses both resume arms** — the early return at
+   `PerFileRescoreTask.cs:655-656` and `Rehydrate` at `:364-403`. O(files)
+   retention is fully intact on any resume.
+3. **Release is unconditional after a `WriteReconciledAndStamp` that can no-op.**
+   When it no-ops, 2nd-pass Percolator trains on `BuildBasicFeatures` — 1 real
+   dimension out of 21 — silently, with no error.
+4. **mdiag accumulator pinned in `PipelineContext._byproducts`** with zero
+   remaining readers, ~1-2 GB at 82 files. This is a large part of the measured
+   +2.2 GB mdiag floor and the +36 vs +19 MB/file drift.
+5. `TotalPreCompactionStubs` is an unchecked `int` — overflows past ~505 files.
+6. The parity test asserts action `GetType()` only, never payloads, and its
+   fixture injects both hooks so no production wiring is exercised.
+7. `--memstamp` snapshots every process on the machine per log line; the comment
+   claiming it "is noise" was never measured.
+
+A sub-agent was applying all 12 fixes when this session ended — **its state is
+unverified**. See the handoff for how to check.
+
+Ordering decision (user): keep PR #4488 in **draft** until the fixes land and the
+gates are re-run. Copilot auto-reviews on the ready flip (~2.5 min, observed on
+#4460); flipping early would spend that pass re-finding these 15 on code being
+actively rewritten.
+
+Remaining to merge: verify the fix diff → `git merge origin/master` (3 commits;
+**#4487 touches `FirstJoinTask.cs` AND `regression.ps1`**, both heavily modified
+here, and is semantically adjacent — it changes what the merge node does with the
+1st-pass model) → build + `-RunInspection` → `regression.ps1 -Dataset All` →
+push → mark ready → **ask** before triggering TeamCity on `branch="pull/4488"`.
+
+Not in this PR, deliberately: Stage 7 / `ExpectReconciledInput` (#4486, and
+Percolator is being removed from that task anyway) and the residual ~19 MB/file
+all-files lean survivor list (#4472 L2).
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260727_osprey_stage6_rescore_streaming.md` before starting work.
