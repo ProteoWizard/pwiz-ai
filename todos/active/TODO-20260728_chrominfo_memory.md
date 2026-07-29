@@ -88,8 +88,14 @@ row before any of the saving arrives.
 - [x] Converge the other readers onto it: `OnDemandFeatureCalculator` (and so
       `CandidatePeakForm` through `CandidatePeakGroupFactory`) and `GraphChromatogram`
 
+- [x] Cover the paths `AgilentMix` cannot reach: optimization steps (`AgilentCEOpt`) and
+      the dot products (`BlibDriftTimeTest`), each with a guard so the new assertions
+      cannot pass vacuously
+- [x] `OriginalPeak` derived rather than stored - `ChangeResults` recalculates it from the
+      chromatogram every time, so it needs no home in the columnar classes
+
 ### In Progress
-- [ ] Cover the paths the test document cannot reach
+- [ ] Decide where `ReintegratedPeak` lives - see below
 
 ### Remaining
 - [ ] Convert the readers to the facade. Ordering matters: the document cannot be put
@@ -226,8 +232,13 @@ Known gaps:
   function, so the dot products and the optimization step positions are NOT covered - both
   sides of those assertions are null. `BlibDriftTimeTest.zip` has a library,
   `FullScan.zip` has isotope distributions, `AgilentCEOpt.zip` has optimization steps.
-- `OriginalPeak`/`ReintegratedPeak` (`ScoredPeakBounds`) are carried forward through
-  materializing but have no home in the columnar classes yet.
+- `ReintegratedPeak` (`ScoredPeakBounds`) still has no home. Unlike `OriginalPeak` it is
+  not derivable: reintegration sets it, and `ChangeResults` reads it back to choose the
+  candidate peak inside those bounds and mark it REINTEGRATED. **Worth asking whether it
+  is still needed at all** once `CandidatePeakIndexes` stores the chosen peak directly -
+  its only job is to re-derive a choice which would then already be recorded. If it is
+  still needed it wants its own list rather than `CustomPeak`, since after a reintegrate
+  most precursors below the cutoff have one.
 - `GetTransitionPeakBounds` on `OnDemandFeatureCalculator` is `virtual` with no subclass
   anywhere - vestigial, not a constraint.
 
