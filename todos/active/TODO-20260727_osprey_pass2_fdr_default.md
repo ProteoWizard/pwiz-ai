@@ -335,6 +335,23 @@ Two Copilot inline comments, both to FIX (real + trivial). Turnkey:
 
 ## Progress Log
 
+### 2026-07-28 - PR #4487 MERGED (checkpoint)
+
+Squash-merged #4487 (merge commit ebe24eeb68) after all gates green: local build/tests/inspection,
+Stellar byte-identity regression, /code-review max (3 findings folded), Copilot resolved, and the
+full **TeamCity Perf/Regression finished-SUCCESS** (Stellar + Astral mode1/2/3 + perf, build 4111956).
+Branch `Skyline/work/20260727_osprey_pass2_fdr_default` deleted (local + remote).
+
+**#4484 umbrella STAYS OPEN** — #4487 was Piece 1 (HPC 1st-pass model persistence enabling frozen
+2nd-pass modes in the merge node), not the umbrella decision. Remaining under #4484: the default flip
+off `percolator` (lead = `transfer`), pending the 164-file confirmation; and the `mean(best-2)`
+sensitivity lever (separate branch `Skyline/work/20260728_osprey_mean_best2`, TODO-20260728_osprey_mean_best2).
+Future #4484 default-flip work needs a NEW branch off master (this one is consumed).
+
+**Known follow-up now on master**: protein-compact merge-node still needs its ProteinCompactStratum
+persisted (spec in the "Night" section below) — deferred; `transfer`/`transfer-compete` merge-node
+reload works and is proven.
+
 ### 2026-07-28 - PR #4487 /code-review max + hardening (checkpoint-merge prep)
 
 Ran `/code-review max` on the branch (6 findings). Verified each against source before acting.
