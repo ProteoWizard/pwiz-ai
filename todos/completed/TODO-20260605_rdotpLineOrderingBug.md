@@ -74,6 +74,9 @@ change and keeps the three paths consistent.
 - [x] QuickInspection before push - clean for my files (only the pre-existing
       `ExportMethodDlg.cs` ambiguous-reference errors from the master merge remain).
 - [x] Committed (`b283594d24`), pushed, PR #4279 opened against master.
+- [x] Copilot review addressed: one inline finding (NaN rdotp values included in the
+      group average). Fixed in `704f147f59` (filter `!double.IsNaN` before averaging),
+      pushed; replied with the SHA and resolved the thread.
 - [x] Post-open review chain complete; PR reviewed and merged.
 
 ## Session Log
