@@ -75,12 +75,21 @@ row before any of the saving arrives.
 - [x] `PeptidePeakLoader` / `LoadedPeptidePeaks` - read every candidate peak for a peptide
 - [x] `PeptidePeakLoaderTest` - prove cache values reproduce `TransitionChromInfo` exactly
 
-- [x] Key candidate peaks by optimization step (`PeakKey`) - each step is its own
-      chromatogram with its own candidate peaks
+- [x] Key candidate peaks by optimization step - each step is its own chromatogram with
+      its own candidate peaks
+- [x] `MaterializedPeptideResults` - one object per `PeptideDocNode` carrying all result
+      information for all replicates, laid out in the flat positions the columnar classes
+      use, with an interned `ChromFileIds` per transition
+- [x] Rebuild complete `TransitionChromInfo` objects from the cache (`MakeTransitionChromInfo`)
+- [x] Rebuild the group level values by driving the existing calculator
+      (`TransitionGroupChromInfoListCalculator`, made internal) rather than a second copy
+- [x] Assign ranks and calculate dot products while materializing
+- [x] One factory for all replicates or a single one
+- [x] Converge the other readers onto it: `OnDemandFeatureCalculator` (and so
+      `CandidatePeakForm` through `CandidatePeakGroupFactory`) and `GraphChromatogram`
 
 ### In Progress
-- [ ] Grow the loader into the facade: one object per `PeptideDocNode` carrying all
-      result information for all replicates, including the group-level values
+- [ ] Cover the paths the test document cannot reach
 
 ### Remaining
 - [ ] Convert the readers to the facade. Ordering matters: the document cannot be put
@@ -179,17 +188,44 @@ Height, Fwhm and MassError all match the cache exactly.
 
 Build succeeds; `TestLoadedPeaksMatchTransitionChromInfo` passes in 1 second.
 
+### 2026-07-28 - Session 2
+
+The columnar sketch (`TransitionGroupResults`, `TransitionResults`, `ChromFileIds`) is the
+agreed shape and supersedes shrinking `TransitionChromInfo` in place. A cell stops being an
+object and becomes 4 bytes in a flat float array: the transition level goes from ~15.1 GB
+to roughly 660 MB, the precursor level from 1.8 GB to ~180 MB. Layout arithmetic, not a
+measurement.
+
+Added to the sketch: `CustomPeak` (sparse, carries annotations and the user's peak
+boundaries - the thing that makes a user-set peak recoverable, since re-integrating needs
+the boundaries as input), `UserSets` and `QValues`/`ZScores` lists, and `ChromFileIds.Intern`
+via `ValueCache`. Scores are `float` with NaN for absent: 4 bytes rather than the 8 a
+nullable float costs, and an unscored document collapses to a constant list.
+`CandidatePeakIndexes` goes through `MaybeConstant` too, since it is usually all the same
+value.
+
+**Where the cost actually is**: reading `TimeIntensitiesGroup` involves decompressing data,
+and that dominates. Reading extra peaks is comparatively cheap, and in the usual case
+GraphChromatogram needs all of them anyway. Do not optimize peak reading without measuring.
+
+**Materializing does not touch the library.** Library intensities and isotope proportions
+come off `TransitionDocNode.LibInfo` / `IsotopeDistInfo`, which are per-transition static
+data that do not vary by replicate, so the dot products need no library file access.
+
 ## Context for Next Session
 
 Commit 1 is committed on the branch. Nothing consumes the loader yet, and no memory has
 been saved yet - it exists to prove the premise and to be built on.
 
-Known gaps in commit 1:
-- `PeakKey` has no optimization-step component, so CE-optimized documents would collide.
-  Fix before trusting this broadly.
-- The test document is small (4 peptides, 5 precursors, 20 transitions, 1 replicate). It
-  proves the mechanism, not scale, and does not exercise multi-replicate or optimization
-  paths.
+Known gaps:
+- `AgilentMix.zip` has no spectral library, no isotope distribution and no optimization
+  function, so the dot products and the optimization step positions are NOT covered - both
+  sides of those assertions are null. `BlibDriftTimeTest.zip` has a library,
+  `FullScan.zip` has isotope distributions, `AgilentCEOpt.zip` has optimization steps.
+- `OriginalPeak`/`ReintegratedPeak` (`ScoredPeakBounds`) are carried forward through
+  materializing but have no home in the columnar classes yet.
+- `GetTransitionPeakBounds` on `OnDemandFeatureCalculator` is `virtual` with no subclass
+  anywhere - vestigial, not a constraint.
 
 Open questions for the developer:
 - Is `NumPeaks = 1` typical, or specific to how the reference document was produced? It
