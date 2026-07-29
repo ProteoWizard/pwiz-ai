@@ -114,8 +114,10 @@ grows with N (e.g. f≈0.1: N≤10→1 [max], N=20→2, N=82→9). One knob unif
       (exact streaming==resident maps on a >=2-run fixture, floor unused) +
       `TestStreamingMeanBest2DemotesSingleRun` (single-run floor demotion). 550/550 green.
       (Resident aggregation/floor/1-run already in PercolatorMeanBest2Test.)
-- [x] Flag-off byte-identity regression (Stellar mode1/2/3) — golden unchanged. PASSED 2026-07-28
-      (blib 30,597,120 all 3 modes) on commit dd8cd2136e; confirms mean-best-2 is golden-neutral off.
+- [x] Flag-off byte-identity regression — golden unchanged. Streamlined commit 7c827899a5 PASSED
+      **regression.ps1 -Dataset All** (2026-07-29): Stellar + StellarLibDecoy + StellarGenDecoyEntrap +
+      Astral, every mode (golden/resume/HPC/diagnostics) - the full correctness gate is banked for a PR.
+      (Earlier dd8cd2136e passed Stellar-only, blib 30,597,120.)
 - [ ] Flag-on oracle A/B vs transfer (82f/164f, matched TRUE FDP) — Brendan-driven.
       **PROTOCOL (Brendan 2026-07-28): flag-on runs MUST use OSPREY_PASS2_QVALUE=transfer** (only
       transfer carries the mean-best-2 1st-pass experiment q through; percolator re-derives and
