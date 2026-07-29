@@ -140,7 +140,9 @@ per precursor. Files: .sky 17.8 GB (XML, compact `<transition_data>` format), .s
 
 **Findings**
 - `NumPeaks` is 1 for essentially every chromatogram group in this document
-  (transition-weighted mean 1.000008). Unknown whether that is typical.
+  (transition-weighted mean 1.000008), but that is **not** typical. Skyline did not do its
+  own peak picking here - it took the peak boundaries from the spectral library, so there
+  is only zero or one peak for everything. Normally there are about **10** candidate peaks.
 - `ChromTransition` is 96x redundant byte for byte. Verified by comparing the 11-transition
   blocks for precursor 507.2548 across files 0-5: all 24 bytes identical, ion mobility
   included. ~33 MB of the 3.2 GB is unique. Deduplicating at load needs no file format
@@ -201,8 +203,10 @@ boundaries - the thing that makes a user-set peak recoverable, since re-integrat
 the boundaries as input), `UserSets` and `QValues`/`ZScores` lists, and `ChromFileIds.Intern`
 via `ValueCache`. Scores are `float` with NaN for absent: 4 bytes rather than the 8 a
 nullable float costs, and an unscored document collapses to a constant list.
-`CandidatePeakIndexes` goes through `MaybeConstant` too, since it is usually all the same
-value.
+`CandidatePeakIndexes` goes through `MaybeConstant` as well, but do **not** expect that to
+collapse: with about 10 candidate peaks in a normally picked document the chosen index
+really does vary by position. `MaybeConstant` costs nothing when it cannot collapse, so it
+stays, but the memory estimate should assume 4 bytes per position for it.
 
 **Where the cost actually is**: reading `TimeIntensitiesGroup` involves decompressing data,
 and that dominates. Reading extra peaks is comparatively cheap, and in the usual case
@@ -228,8 +232,6 @@ Known gaps:
   anywhere - vestigial, not a constraint.
 
 Open questions for the developer:
-- Is `NumPeaks = 1` typical, or specific to how the reference document was produced? It
-  decides whether `PeakIndex` carries real information.
 - Are the stored `<precursor_peak>` values used after load, or recalculated from the
   children anyway? Trace `UpdateResults` / `CalcChromInfoList` in `TransitionGroupDocNode`.
   `DocumentReader` already discards the stored `user_set` on the grounds that "all values
