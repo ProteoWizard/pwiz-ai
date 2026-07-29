@@ -189,7 +189,33 @@ The raw-vs-mzML parity census came out clean on every field except retention tim
 | scanNumber, precursorMz, isoCenter, isoLower, isoUpper, peakCount, m/z, intensity | **0** |
 | **retentionTime** | **9,269** (5.8%), worst \|dRT\| 3.55e-15 min (1 ULP) |
 
-**Root cause is in pwiz, not Osprey.** `pwiz::util::toString(double)`
+**CORRECTION (later the same day).** The first diagnosis below - that msconvert's 12-digit
+truncation caused the RT gap, and that the raw path was therefore the more accurate one - was
+**wrong**, and the opposite of the truth. Both paths read the SAME truncated text, so the
+truncation cancelled out. The actual cause is in the wrapper:
+
+`MsDataFileImpl.GetStartTime` (`pwiz_tools/Shared/ProteowizardWrapper/MsDataFileImpl.cs:2097`) did
+`return param.timeInSeconds() / 60;` on a value the Thermo reader had already recorded in
+**minutes** - converting minutes -> seconds -> minutes. That is not an identity in floating point:
+
+    0.5903117      * 60 / 60 = 0.5903116999999999   (differs)
+    1.811994433333 * 60 / 60 = 1.8119944333330003   (differs)
+
+`0.5903116999999999` is **exactly** the raw-path value the census reported against a reference of
+`0.5903117`. So the raw path was the LESS accurate one, and it affected every vendor reader that
+records scan start time in `UO_minute`. Fixed by returning the recorded value directly when the
+unit is already minutes.
+
+This became visible only after fixing `toString`: with the mzML text made exact, the wrapper's
+round-trip no longer cancelled, and the first differing record moved from #23 to #0.
+
+**Both defects are real and independent:**
+
+1. `MsDataFileImpl.GetStartTime` unit round-trip (the cause of the observed 9,269 differences).
+2. `toString` 12-digit truncation (a genuine precision loss in what pwiz stores, inherited by both
+   paths; it was masked because both paths read the same truncated text).
+
+**Second defect, still worth fixing on its own merits.** `pwiz::util::toString(double)`
 (`pwiz/utility/misc/String.cpp`) uses a boost::spirit::karma `double12_policy` with
 `precision(T) { return 12; }` - **12 fractional digits**. `ParamContainer::set(CVID, double, CVID)`
 (`pwiz/data/common/ParamTypes.cpp:279`) routes every double cvParam through it, so
@@ -217,8 +243,21 @@ every value `toString` writes must `strtod` back equal, over the motivating Ther
 extremes, and 20,000 generated values across 40 decades - plus a test that ordinary values keep
 their exact existing text.
 
-**Open question for Matt Chambers' review**: whether the round-trip guarantee should apply to all
-double cvParams (as here) or only to selected ones.
+**Open questions for Matt Chambers' review** (both are his call, not ours):
+
+1. **Scope** - whether the round-trip guarantee should apply to all double cvParams (as
+   implemented) or only to selected CVIDs such as scan start time. All-cvParams is the principled
+   answer; per-CVID is arbitrary but churn-free.
+2. **Baseline regeneration.** The committed vendor-reader baselines contain values sitting exactly
+   at the truncation boundary - e.g. `scan start time" value="0.259556549483"` in
+   `Reader_Thermo_Test.data/source_cid_test_3scans.mzML` - and **1,097 values with exactly 12
+   fractional digits** across the Thermo baselines alone. Wherever those were truncated, the fixed
+   msconvert emits more digits, so those baselines need regenerating. That is a deliberate
+   consequence (the old baselines encode the lossy values), but it is real work across every vendor
+   reader and should be agreed before the PR, not discovered in CI.
+
+Note the fix is intentionally conservative on formatting: output is byte-identical to today
+wherever today's output already round-trips, so only genuinely-truncated values move.
 
 ## Progress Log
 
