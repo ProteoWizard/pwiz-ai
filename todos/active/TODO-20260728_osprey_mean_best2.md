@@ -120,6 +120,16 @@ grows with N (e.g. f≈0.1: N≤10→1 [max], N=20→2, N=82→9). One knob unif
 
 ## Progress Log
 
+### 2026-07-28 - Night-session handoff: streaming mirror + N=82 A/B
+
+**Next session handoff**: read `ai/.tmp/handoff-20260728-streaming.md` for the full startup protocol,
+the streaming-mirror implementation plan (plug the existing `MeanBest2Acc` top-2 reducer into
+`StreamingFirstPassQ.Add` + a streaming decoy-median floor — O(base_ids), ~49GB, fits 63GB), the
+resident==streaming N=20 cross-check gate, and the N=82 A/B recipe + decision bars (beat 37,763,
+approach 44,861). Resident mean-best-2 (precursor+peptide) is done + validated at N=20 (+2.6%);
+N=82 is blocked on resident (104GB) and needs the streaming path. Goal: first large-scale
+measurement + a usable (bounded-memory) implementation, not just POC.
+
 ### 2026-07-28 - Branch created, design pinned
 Branched off clean master (independent of #4487, which is a separate 2nd-pass model-persistence
 checkpoint awaiting TeamCity). Design fully pinned with Brendan (precursor mean-best-2 + max rollup +
