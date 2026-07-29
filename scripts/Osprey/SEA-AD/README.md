@@ -121,7 +121,19 @@ existing prep.
   mzml\                               # the 82 .mzML + their .spectra.bin caches
   lib\<variant>\                      # library variants, see "The library variants"
   runs\<run name>\                    # ALL run output and logs
+  runs\<group>\<run name>\            # ...grouped when a set of runs belong together,
+                                     #    e.g. runs\stage6\stage6-82files\
 ```
+
+A related SET of runs gets a grouping subfolder INSIDE `runs\` - never a new sibling of it.
+`Measure-Stage6Rescore.ps1` defaults to `runs\stage6\`. The rule: someone on another machine
+finds every run under `runs\` without having to know which experiment invented which
+top-level directory name.
+
+**The lab share is the FALLBACK when `$env:OSPREY_SEAAD_DIR` is unset**, so a machine with no
+env var reads every spectrum over SMB - correct, but I/O-bound on the network and markedly
+slower than local disk, with nothing in the output saying so. `Run-SeaAd.ps1` now warns when
+the resolved data directory is a network path. Set the env var to a local copy for real work.
 
 A Stage-6 phase dir under `runs\` hard-links the mzML and caches rather than copying them,
 so its apparent size double-counts the data - `du`-style totals will look far larger than

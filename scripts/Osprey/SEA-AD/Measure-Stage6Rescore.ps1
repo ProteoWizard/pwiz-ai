@@ -147,7 +147,7 @@ if (-not $counts) { throw "-FileCounts resolved to nothing; expected something l
 # Same output root Run-SeaAd.ps1 uses and the README documents: <dataset root>\runs\.
 # Do NOT invent a sibling ("stage6\", "_runs\"): someone looking for a run on another
 # machine should find every one of them in one predictable place.
-if (-not $WorkRoot) { $WorkRoot = Join-Path (Split-Path $dataDir -Parent) 'runs' }
+if (-not $WorkRoot) { $WorkRoot = Join-Path (Join-Path (Split-Path $dataDir -Parent) 'runs') 'stage6' }
 $maxN    = ($counts | Measure-Object -Maximum).Maximum
 $phaseDir = if ($PhaseDir) {
     if (-not (Test-Path $PhaseDir)) { throw "-PhaseDir does not exist: '$PhaseDir'." }

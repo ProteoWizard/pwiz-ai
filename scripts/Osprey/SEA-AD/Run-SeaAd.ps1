@@ -279,6 +279,17 @@ if ($exeBranch -and $exeBranch -ne 'master') {
     Write-Host "           to use a tree nobody is actively building in." -ForegroundColor Yellow
 }
 Write-Host ("  mzML dir : {0}" -f $dataDir)
+# The lab-share fallback is a convenience for a one-off, but a multi-hour run reading every
+# spectrum over SMB is I/O-bound on the network and silently much slower than local disk -
+# and nothing in the output says so, which is how a machine ends up running the whole set
+# off the share without anyone noticing. Say it out loud.
+if ($dataDir -like '\\\\*' -or (@('A','B','C','D') -notcontains $dataDir[0] -and
+    (Get-PSDrive $dataDir[0] -ErrorAction SilentlyContinue).DisplayRoot)) {
+    Write-Host ("  WARNING: that is a NETWORK path. Every spectrum read crosses the wire; a" ) -ForegroundColor Yellow
+    Write-Host ("           full run will be markedly slower than from local disk. Copy the" ) -ForegroundColor Yellow
+    Write-Host ("           mzML + .spectra.bin locally and set `$env:OSPREY_SEAAD_DIR to it" ) -ForegroundColor Yellow
+    Write-Host ("           for repeated runs; see the README." ) -ForegroundColor Yellow
+}
 Write-Host ("  files    : {0}; {1} .spectra.bin cache(s) present" -f $mzmls.Count, $cached)
 if ($cached -lt $mzmls.Count) {
     Write-Host "  NOTE: not every file has a spectra cache; expect ~4.5 min/file extra parse." -ForegroundColor Yellow
