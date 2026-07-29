@@ -141,10 +141,15 @@ flag-OFF Stellar byte-identity mode1/2/3 PASS (blib 30,597,120). Two new streami
 (streaming==resident exact on >=2-run; single-run demotion).
 
 Validated `ai/.tmp/extract_pass1_fdp.py` against the resident N=20 reference (reproduces max 45,015 @0.876%
-/ matched-TRUE 46,496 -> mb2 45,863 @0.763% / 47,685 = +2.6%). N=20 STREAMING cross-check running (dirs
-`mb2-fpstream-20-{maxstream,mb2stream}`) to confirm the streaming impl reproduces resident before the N=82
-run. N=82 runner ready (`ai/.tmp/run-mb2-stream-n82.ps1`). Exe snapshot at
-`D:\test\osprey-exe-snapshots\mb2stream-20260728\`.
+/ matched-TRUE 46,496 -> mb2 45,863 @0.763% / 47,685 = +2.6%).
+
+**N=20 STREAMING cross-check PASSED (exact).** Streaming A/B (`mb2-fpstream-20-{maxstream,mb2stream}`) ==
+resident A/B byte-for-byte on all three metrics: max 45,015 @0.876% / 46,496 -> mb2 45,863 @0.763% / 47,685
+= +2.6%. Streaming-mb2 == resident-mb2 EXACTLY (+0.0%); the bounded floor histogram introduced zero
+divergence. An independent code review of the diff (ai/.tmp/agent-mb2stream-review.md) found no
+correctness bug. So the streaming mirror reproduces the validated resident result exactly - the bounded
+(N=82-capable) implementation is proven. N=82 A/B launching next (`ai/.tmp/run-mb2-stream-n82.ps1`); exe
+snapshot at `D:\test\osprey-exe-snapshots\mb2stream-20260728\`.
 
 ### 2026-07-28 - Night-session handoff: streaming mirror + N=82 A/B
 
