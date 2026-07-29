@@ -7,8 +7,47 @@
 - **Created**: 2026-07-29
 - **Status**: In Progress
 - **GitHub Issue**: [#4496](https://github.com/ProteoWizard/pwiz/issues/4496)
-- **PR**: (pending)
+- **PR**: [#4502](https://github.com/ProteoWizard/pwiz/pull/4502) (draft/experimental), with
+  companions [#4501](https://github.com/ProteoWizard/pwiz/pull/4501) (`skyline`) and
+  [#4500](https://github.com/ProteoWizard/pwiz/pull/4500) (`pwiz`)
 - **Requester**: Brendan (issue author, Osprey developer) — NO credit line.
+
+## HANDOFF - state as of 2026-07-29 end of session
+
+**Three draft PRs are open, all marked experimental / not ready for review:**
+
+| PR | module | branch | state |
+|---|---|---|---|
+| [#4500](https://github.com/ProteoWizard/pwiz/pull/4500) | `pwiz` | `Skyline/work/20260729_pwiz_tostring_roundtrip` | complete; informational for Matt, may be mooted by #4178 |
+| [#4501](https://github.com/ProteoWizard/pwiz/pull/4501) | `skyline` | `Skyline/work/20260729_wrapper_rt_precision` | complete; 9 lines; needs Skyline suite on CI |
+| [#4502](https://github.com/ProteoWizard/pwiz/pull/4502) | `osprey` | `Skyline/work/20260729_osprey_vendor_raw_reader` | **incomplete** - build integration unfinished |
+
+### What to do next, in order
+
+1. **Watch TeamCity on all three.** #4502's net472 build is EXPECTED to fail: the Osprey CI config
+   runs no bjam, so `ProteowizardWrapper/obj/x64` is never staged there. That is the whole reason
+   these went up experimental.
+2. **Add the staging step** to the Perf/Regression config (see the "tracked entry points" section).
+   `quickbuild.bat`, not `b.bat`/`bs.bat` - those are gitignored personal shortcuts.
+3. **Jamfile work** for #4502: the `<assembly>` reference and `install-vendor-api-dependencies` for
+   the 78 native runtime files.
+4. **`-ReaderParity` mode in `regression.ps1`** (design in this file). ~34 s on one Stellar file.
+5. **Bruker/ReaderTest failures**: 4 of 52 Bruker cases and `ReaderTest` fail LOCALLY with
+   `--without-compassxtract` (`Bruker API was built with only BAF and TDF support`). `ReaderTest` was
+   confirmed to fail identically on master; the Bruker four were NOT yet controlled against master,
+   though the error names the build configuration and cannot be caused by number formatting. Let
+   TeamCity settle it.
+
+### Loose ends not owned by any PR
+
+* `C:\proj\pwiz` has two modified submodule pointers (`BullseyeSharp`, `Hardklor`) that may be from
+  an accidental build there early in the session. Not investigated; nothing lost.
+* ~22 GB of test artifacts under `D:\test\osprey-runs\tdp43-plasma-ev\` (`mzml`, `mzml-roundtrip`,
+  `mzml-final`, `cache-*`) and `sea-ad\readercheck\`, plus `C:\proj\ai\.tmp\stellar-readercheck\`.
+  Safe to delete.
+* `.claude/hooks/Deny-DirectBuildTest.ps1` is registered on the **Bash** tool only, so build commands
+  issued through the PowerShell tool bypass it. It also matches on command TEXT, so it blocks commit
+  messages that merely mention `MSBuild` or `b.bat`.
 
 ## Objective
 
