@@ -101,19 +101,19 @@ baseline.
 ## Regression Test
 
 - **Test name**: (filled in once written)
-- **Test project**: Osprey.Test (net472-conditional) — TBD
+- **Test project**: Osprey.Test, net472 leg only
+- **Fixture**: `pwiz/data/vendor_readers/Thermo/Reader_Thermo_Test.data/source_cid_test_3scans.raw`
+  paired with the committed `source_cid_test_3scans-centroid.mzML` — **already tracked, nothing new
+  to commit** (see the fixture survey above)
 - **Fails on master**: (pending)
 - **Passes on fix**: (pending)
 
-Planned shape: a net472-only test that reads a small vendor `.raw` and its msconvert-produced mzML
-through both readers and asserts the `SpectraCache` v4 fields agree (scan number, RT, precursor m/z,
-isolation centre/lower/upper offsets, m/z + intensity arrays). That test is the parity acceptance
-criterion made permanent, and it is the natural **first** deliverable on the branch: write it, watch
-it fail with no raw reader, then make it pass.
-
-Open question to settle early: whether a small enough vendor raw file is available to the test
-suite, or whether the parity check has to stay a manual/perf-tier verification. Record the answer
-here either way rather than silently omitting the test.
+Shape: read the `.raw` through the new reader (`requireVendorCentroidedMS1/MS2: true`,
+`simAsSpectra: true` — the `convert-one.cmd` mapping) and the `-centroid.mzML` through
+`MzmlReader`, then assert the `SpectraCache` v4 fields agree per spectrum: scan number, RT,
+precursor m/z, isolation centre/lower/upper offsets, m/z + intensity arrays. That is the parity
+acceptance criterion made permanent, and it is the **first** deliverable on the branch: write it,
+watch it fail with no raw reader, then make it pass.
 
 ## Progress Log
 
@@ -131,3 +131,108 @@ Starting work on this issue.
   lines here, issue said 874 — master has moved), `Osprey.Tasks/PerFileScoringTask.cs`,
   `Osprey/Directory.Build.props`, `Osprey/Jamfile.jam`, `Osprey.IO/SpectraCache.cs`,
   `Shared/ProteowizardWrapper/ProteowizardWrapper.csproj`, `Osprey/regression.ps1` — all present.
+
+#### Verification of the issue's technical claims (all hold)
+
+- **One call site, one seam.** `MzmlReader.LoadAllSpectra` is called from exactly one place in
+  production code: `PerFileScoringTask.cs:2455`, inside `EnsureSpectraCache` (cache-miss path,
+  behind `s_mzmlReadGate`). `Osprey.Test/IOTest.cs` has three more. So format selection has a
+  single natural home.
+- **Isolation-window semantics match exactly** — confirmed at `MsDataFileImpl.cs:2187-2188`:
+  `IsolationWindowLower/Upper = GetIsolationWindowValue(p, CVID.MS_isolation_window_lower_offset /
+  _upper_offset)`. OFFSETs, same as Osprey's `IsolationWindow(center, lowerOffset, upperOffset)`.
+  The single detail most likely to be silently wrong is correct through the wrapper.
+- **`ScanNumber` is the mzML `index` attribute, not a vendor scan number** — `MzmlReader` sets
+  `ScanNumber = Index` (the 0-based position in the file) for both MS1 and MS2. The wrapper's
+  `MsDataSpectrum.Index` is the same 0-based file index, so they line up **only if the raw file
+  yields the same spectrum set in the same order as the mzML**. Any msconvert filter that drops or
+  reorders spectra shifts every index. See the centroiding/`--simAsSpectra` note below — this is
+  the top parity risk, ahead of the numerics.
+- **Intensity narrowing is f64 -> f32.** `MsDataSpectrum.Intensities` is `double[]`
+  (`MsDataFileImpl.cs:2414-2418`), Osprey's `Spectrum.Intensities` is `float[]`. Vendor intensities
+  originate as float32, so widen-then-narrow should be exact; worth asserting rather than assuming.
+- **The msconvert settings we must reproduce are known exactly.**
+  `ai/scripts/Osprey/SEA-AD/convert-one.cmd:11` is
+  `--zlib --simAsSpectra --filter "peakPicking vendor msLevel=1-"` (+ a `titleMaker` filter that
+  affects only spectrum titles). Mapping onto the `MsDataFileImpl` constructor
+  (`MsDataFileImpl.cs:167-175`):
+  | msconvert | MsDataFileImpl |
+  |---|---|
+  | `--filter "peakPicking vendor msLevel=1-"` | `requireVendorCentroidedMS1: true, requireVendorCentroidedMS2: true` |
+  | `--simAsSpectra` | `simAsSpectra: true` |
+  | `--zlib` | n/a (mzML encoding only) |
+  Getting these wrong yields profile data or a different spectrum set — i.e. the index shift above,
+  not a subtle numeric drift.
+
+#### The real cost is the build seam, not the adapter
+
+The C# is genuinely an adapter (~7 scalars + 2 arrays, all present on the wrapper). The
+integration cost is elsewhere, and the issue does not call it out:
+
+`ProteowizardWrapper.csproj` is an **old-style, non-SDK, v4.7.2** project that references
+`pwiz_data_cli` from `obj\$(Platform)\pwiz_data_cli.dll` (`:91-94`), plus `MassSpecDataReader`,
+`SCIEX.Apis.Data.v1` and Thermo assemblies from the same staged directory, and it
+ProjectReferences `CommonUtil`. **Those DLLs are bjam build products, not checked in** — verified:
+`pwiz-work1` (fresh clone) has no `ProteowizardWrapper/obj/x64/pwiz_data_cli.dll`; the built
+`C:\proj\pwiz` checkout does. Skyline stages them via
+`Skyline/Jamfile.jam:449-463` (`install install-native-dependencies` ->
+`<location>$(PWIZ_WRAPPER_PATH)/obj/$(PLATFORM)`).
+
+Every existing consumer of the wrapper (Skyline, MSConvertGUI, BullseyeSharp, the Test projects)
+lives inside a solution that bjam builds *after* that staging. **Osprey does not** — its Jamfile
+(`:71`) just shells `msbuild Osprey.sln`, and the everyday gate
+(`ai/scripts/Osprey/Build-Osprey.ps1`, default `-TargetFramework net472`) builds the solution
+standalone with no bjam prerequisite. Taking a ProjectReference on the wrapper therefore makes a
+prior full pwiz build a hard prerequisite of the ~30s Osprey pre-commit gate, on every machine and
+every fresh clone.
+
+**Resolved by Brendan (2026-07-29): follow Skyline's example — take the ProjectReference.** The
+bjam staging step is not a new burden, it is the established way a checkout is set up for iterative
+development:
+
+1. **full build once** — `bs.bat` at the repo root (`b.bat pwiz_tools\Skyline//Skyline.exe` ->
+   `pwiz_tools/build-apps.bat 64 --i-agree-to-the-vendor-licenses toolset=msvc-14.5`). Brendan
+   normally runs this himself to prepare a checkout.
+2. **iterate from there** in the solution (`Skyline.sln` for Skyline; `Osprey.sln` for Osprey).
+
+Skyline.exe depends on `install-native-dependencies`, so `bs.bat` is exactly what stages
+`ProteowizardWrapper/obj/x64`. Osprey adopts the same shape. **No conditional compilation, no
+per-machine capability drift.**
+
+### Build plan (Skyline's pattern, copied)
+
+* `Osprey.IO.csproj`: `ProjectReference` on `ProteowizardWrapper.csproj` under
+  `Condition="'$(TargetFramework)' == 'net472'"`; add ProteowizardWrapper + CommonUtil to
+  `Osprey.sln`.
+* `Osprey/Jamfile.jam`: add `<assembly>../../pwiz/utility/bindings/CLI//pwiz_data_cli`, a
+  `<dependency>` that stages the wrapper's `obj/$(PLATFORM)` (Skyline declares this as
+  `install install-native-dependencies` at `Jamfile.jam:449-463`), and an Osprey variant of
+  `<conditional>@install-vendor-api-dependencies-to-debug-and-release`.
+* The underlying rule **`install-vendor-api-dependencies-to-locations` is in `Jamroot.jam:801`**
+  and takes arbitrary locations, so Osprey's variant is a ~4-line rule pointing at Osprey's own
+  output dirs (note the TFM subdir: `bin/x64/{Debug,Release}/net472`). `PWIZ_WRAPPER_PATH` is
+  Skyline-local (`Skyline/Jamfile.jam:26`), so Osprey declares its own path-constant. This is the
+  same copy-from-Skyline precedent the Osprey Jamfile already documents at `:39`/`:43`.
+
+**Prerequisite not yet met in this checkout**: `pwiz-work1` has never had a full build, so
+`ProteowizardWrapper/obj/x64/` is empty and nothing net472-against-the-wrapper can compile here
+yet. `bs.bat` must run before the first build of the new reference.
+
+### Parity test fixture — already in the repo, nothing to commit
+
+The survey question is closed: `pwiz/data/vendor_readers/Thermo/Reader_Thermo_Test.data/` ships
+small tracked Thermo `.raw` files (76 KB `FT-HCD-MSX.raw` up to 343 KB `BSA-FT-HCD.raw`), and
+`source_cid_test_3scans.raw` (290 KB) comes with **both** `source_cid_test_3scans.mzML` and
+`source_cid_test_3scans-centroid.mzML` — the `-centroid` pair being the vendor-centroided form that
+matches `requireVendorCentroidedMS1/MS2: true`.
+
+Verified in `source_cid_test_3scans-centroid.mzML`: 3 spectra, and all 3 carry
+`MS:1000827/828/829` (isolation window target + lower + upper offset), so `MzmlReader` can read it
+without tripping its fail-fast on missing offsets, and the isolation-window comparison is
+exercisable.
+
+**Caveat to record**: this fixture's binary arrays are **32-bit** for BOTH m/z and intensity (8
+`MS:1000521`, 0 `MS:1000523`). Production data has f64 m/z, so this test pins the field mapping and
+the isolation-window semantics but will NOT catch an f64 m/z precision defect. The full-file
+Stage-4 parquet parity check remains the acceptance criterion for that; the unit test is the
+permanent guard for the mapping.
