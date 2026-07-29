@@ -4,11 +4,11 @@
 - **Branch**: `Skyline/work/20260727_osprey_stage6_rescore_streaming`
 - **Base**: `master` (at `6d919a080e`, after #4442 merged)
 - **Created**: 2026-07-27
-- **Status**: ALL GATES GREEN, PR open as DRAFT awaiting `/code-review max` + human review
+- **Status**: Completed
+- **Module**: `osprey`
 - **Worktree**: `C:\proj\pwiz` (BRENDANX-UW8)
 - **GitHub Issue**: [#4472](https://github.com/ProteoWizard/pwiz/issues/4472)
-- **PR**: [#4488](https://github.com/ProteoWizard/pwiz/pull/4488) (DRAFT - `-Dataset All` and the
-  82-file proof run still outstanding; do not mark ready until both land)
+- **PR**: [#4488](https://github.com/ProteoWizard/pwiz/pull/4488) (merged 2026-07-29 as `2a9e1b0047`)
 - **Requester/Reporter**: none (Osprey developers; no credit line per version-control-guide
   "Crediting Reporters and Requesters" - role-scoped, Osprey developers are not outside requesters)
 
@@ -110,14 +110,19 @@ guarantee the identity IS in the parquet), plus an explicit manual A/B with
 
 - [x] Verify issue line refs against master (`:113`, `:201`, `:208`, probe `:593`) - all correct
 - [x] Stage the 82-file SEA-AD set locally: 82 mzML + 82 `.spectra.bin`, all caches ACCEPT
-- [ ] Add the Stage-6 harness to `ai/scripts/Osprey/SEA-AD/` (shared + portable, per README)
-- [ ] Build Stage 1-5 artifacts once for 16 files
-- [ ] Measure the resident band at 4 / 8 / 16 files; confirm positive slope in file count
-- [ ] `[MEM]` probe to attribute the slope to `_perFileEntries` vs transients
-- [ ] Per-file bytes/row -> exact 500-file projection
-- [ ] Design the fix: separate bounded cross-file state from per-file survivor reload
+- [x] Add the Stage-6 harness to `ai/scripts/Osprey/SEA-AD/` (shared + portable, per README)
+      - `Measure-Stage6Rescore.ps1`
+- [x] Build Stage 1-5 artifacts once for 16 files - and for all 82 (~5 h, reusable via `-PhaseDir`)
+- [x] Measure the resident band at 4 / 8 / 16 files; confirm positive slope in file count
+- [x] `[MEM]` probe to attribute the slope to `_perFileEntries` vs transients - the driver was
+      the FAT payload Stage 6 attaches and never releases, not the lean survivor stubs
+- [x] Per-file bytes/row -> exact 500-file projection - ~1.19 GB/file, i.e. ~197 GB at 82 files
+      on the unbounded path
+- [x] Design the fix: separate bounded cross-file state from per-file survivor reload
       (`ReloadFirstPassSurvivors` already does the per-file reload)
-- [ ] Implement; keep the canonical `(EntryId, Charge, ScanNumber, ParquetIndex)` sort
+- [x] Implement; keep the canonical `(EntryId, Charge, ScanNumber, ParquetIndex)` sort
+- [ ] L2: bounded `FirstPassSurvivorSource` for the residual ~19-21 MB/file all-files lean
+      survivor list - DEFERRED, still open on #4472
 
 ## Regression Test
 
@@ -474,3 +479,60 @@ metric cannot resolve, not the direction.
 **If a precise figure is ever needed, it needs replicates** (3 runs per arm,
 report the median and spread). One run per arm cannot separate a ~10 MB/file
 effect from ~12 MB/file of noise.
+
+### 2026-07-29 - Merged
+
+PR #4488 merged as commit `2a9e1b0047`,
+`osprey: Bounded Stage 6 rescore memory so it no longer grows with file count (#4488)`
+(9 commits squashed).
+
+**What shipped:** the per-entry rescore payload is released once each file's
+reconciled parquet is on disk, on the fresh path and both resume arms; the
+reconciled-bundle rehydrate streams and compacts one file at a time instead of
+materializing every file's pre-compaction pool; PIN features the rehydrate never
+reads are no longer loaded; `--model-diagnostics` is bounded by folding
+pre-compaction rows into an accumulator that is released once its report is
+written; and the `--input-scores` resident-pool throw became a warning naming the
+consumer, which let the mode 3 `OSPREY_ALLOW_UNBOUNDED_MEMORY` opt-in be removed.
+
+**Measured at 82 files** (SEA-AD Astral, `--task PerFileRescoring`): peak
+33.9 GB with `--model-diagnostics` against a ~197 GB projection for the
+unbounded path, 0 reporting gaps >= 30 s, 6,954,057 entries rescored identically
+across all four measurement runs, and the diagnostics report byte-identical to
+its baseline except the embedded `generatedUtc`.
+
+**Deliberately NOT claimed:** that the `--model-diagnostics` memory penalty is
+eliminated. A non-mdiag control on the final build re-measured the untouched
+non-mdiag path at +7 MB/file where an earlier run measured +19 - a 3x spread on
+a path this PR does not touch - so per-file floor drift is too noisy at n=1 to
+support a precise figure. Reduced, by an amount the measurement cannot resolve.
+A precise number would need 3 replicates per arm.
+
+**Gate coverage, stated precisely.** On the merged head `37fee82616af`: build
+clean, 551/551 unit tests, zero-warning inspection (re-verified after the
+ReSharper CLI was updated 2025.3.1 -> 2026.2.0), and all 16 required GitHub
+checks green. **TeamCity Perf/Regression passed on `712f4e59dcf0`, the commit
+BEFORE** Brendan's GitHub "Update branch" merge brought in #4490 (the
+PercolatorFdr god-class decomposition: `PercolatorFdr.cs` deleted, ~13 new files,
+5,316 insertions / 4,846 deletions in `Osprey.FDR`). `regression.ps1 -Dataset All`
+18/18 likewise predates that merge. Brendan's call, made with the change in hand:
+Perf/Regression is not a required check (it would show as a 17th), #4490 was
+separately gated, and an 85-minute re-run was not worth the wait. Recorded here
+because the merged combination of #4488 + #4490 in the FDR layer was never gated
+together, and a future bisect should know that.
+
+**Deferred, tracked elsewhere:**
+* Stage 7 / `SecondPassFDR` `ExpectReconciledInput` resident pool - [#4486](https://github.com/ProteoWizard/pwiz/issues/4486).
+  Now emits the named warning rather than being silently unchecked.
+* Residual ~19-21 MB/file all-files lean survivor list - #4472's L2, still open.
+* `--model-diagnostics` on a FULL resume still forces the resident pool, so
+  `regression.ps1` mode 2 keeps a scoped `OSPREY_ALLOW_UNBOUNDED_MEMORY` opt-in.
+  The guard is correct to throw there. Issue drafted but NOT filed at
+  `ai/.tmp/issue-osprey-mdiag-full-resume.md` (~40-60 lines, reusing the
+  accumulator plumbing this PR built). **Filing is Brendan's call.**
+
+**Tooling that came out of this work:** `ai/scripts/perfviz.py` gained an
+elapsed-matched A/B mode (two logs -> delta table aligned on
+seconds-since-first-sample, usable mid-run; it reports when the sign is mixed and
+defers to floor drift). `ai/docs/memory-band-guide.md` documents the method and
+that managed and private bytes can move in opposite directions.
