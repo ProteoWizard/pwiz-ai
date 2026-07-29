@@ -122,6 +122,49 @@ that is not there.
   single `--task` at several file counts, so one stage's scaling is measurable in minutes
   instead of a multi-hour full run.
 
+## A/B-ing two runs (elapsed-matched)
+
+Pass **two** logs and perfviz adds an elapsed-matched comparison after the two
+summaries:
+
+```bash
+python ai/scripts/perfviz.py before.log after.log --files 82 --every 20
+```
+
+Two runs of the same workload start at different wall-clock times, so their
+timestamps are not comparable. This aligns both on seconds-since-first-sample and
+reports the delta at fixed offsets.
+
+**It works on a run still in progress.** The table stops at whatever the shorter
+log has reached, so you get an A/B verdict long before the slower run finishes -
+on a 2h45m run, the answer was readable at 36 minutes. Do not sit through a long
+run to learn something the first half already showed.
+
+**Read the sign, not the magnitude.** Private bytes swing enormously *within* a
+run, because each sample catches the per-file transient at a different phase - a
+single pair of readings proves nothing, and two samples 20 minutes apart in the
+same healthy run can differ by 10 GB. What is diagnostic is whether the sign
+holds across many offsets. GC-timing noise flips sign; a real retention
+difference does not. perfviz says so explicitly and tells you when a mixed sign
+means "inconclusive - read the floor drift instead".
+
+**The floor drift is the verdict; the delta table is the early read.** If the two
+disagree, believe the floor drift. It is fitted across the whole run; the table
+is point samples.
+
+### Managed vs private: they can move in opposite directions
+
+Report BOTH columns. On one measured change the private-bytes peak improved only
+3% (35.2 -> 33.9 GB) while managed-heap drift went from +26 MB/file to
+**+1 MB/file, LEVEL** - the same change looked marginal on one axis and decisive
+on the other. Managed is the post-GC "will it fit" number; private includes
+allocator retention the GC has released but not returned. Quoting only the peak
+would have hidden the actual result.
+
+Also expect a fix that releases something mid-run to move the FLOOR and not the
+PEAK, when the peak is set by a transient before the release point. That is not a
+failed fix - check which phase sets the peak before concluding anything.
+
 ## Related
 
 * `ai/docs/leak-debugging-guide.md` - handle/GC leaks in tests. Different problem: that is

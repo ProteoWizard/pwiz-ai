@@ -242,6 +242,92 @@ def plot(path, samples, out):
     print('png           : %s' % out)
 
 
+def compare(path_a, path_b, force, every_min=10):
+    """Elapsed-matched A/B of two runs.
+
+    Two runs of the same workload start at different wall-clock times, so their
+    timestamps cannot be compared directly. This aligns both on seconds-since-
+    first-sample and reports the delta at fixed elapsed offsets.
+
+    Why per-sample and not just the summary: memstamp private bytes swing widely
+    WITHIN a run (each sample catches the per-file transient at a different
+    phase), so any single pair of readings proves nothing. What is diagnostic is
+    the SIGN holding across many offsets - GC-timing noise flips sign, a real
+    retention difference does not.
+
+    It also works on a run still in progress: the table stops at whatever the
+    shorter log has reached, so an A/B verdict is available long before the
+    slower run finishes. That is the point - a 2h45m run should not have to
+    finish before you learn whether the fix worked.
+    """
+    a_s, a_failed, _ = parse(path_a)
+    b_s, b_failed, _ = parse(path_b)
+    if not a_s or not b_s:
+        print('COMPARE: need samples in both logs')
+        return 1
+    if (a_failed or b_failed) and not force:
+        print('COMPARE SKIPPED - one of these logs shows a failure. Comparing a')
+        print('dead run against a healthy one produces a meaningless delta. Use')
+        print('--force once you know why it failed.')
+        return 1
+
+    def elapsed(samples):
+        t0 = samples[0].t
+        return [((s.t - t0).total_seconds(), s.managed, s.total) for s in samples]
+
+    ea, eb = elapsed(a_s), elapsed(b_s)
+
+    def at(rows, sec):
+        best = None
+        for e, mg, tot in rows:
+            if e > sec:
+                break
+            best = (e, mg, tot)
+        return best
+
+    horizon = min(ea[-1][0], eb[-1][0])
+    print()
+    print('=' * 72)
+    # Same basename is the COMMON case, not an edge case: an A/B of one harness
+    # is two runs of the same log name in different directories. Disambiguate
+    # with the parent directory so the header is not "A=x B=x".
+    label_a, label_b = os.path.basename(path_a), os.path.basename(path_b)
+    if label_a == label_b:
+        label_a = os.path.join(os.path.basename(os.path.dirname(path_a)), label_a)
+        label_b = os.path.join(os.path.basename(os.path.dirname(path_b)), label_b)
+    print('ELAPSED-MATCHED COMPARE')
+    print('  A = %s' % label_a)
+    print('  B = %s' % label_b)
+    print('=' * 72)
+    print('elapsed |    A managed/total MB |    B managed/total MB |   delta total')
+    print('-' * 72)
+    signs = []
+    for mins in range(0, int(horizon // 60) + 1, every_min):
+        ra, rb = at(ea, mins * 60), at(eb, mins * 60)
+        if not ra or not rb:
+            continue
+        d = rb[2] - ra[2]
+        if mins:
+            signs.append(d)
+        print('%5d m | %9d / %9d | %9d / %9d | %+9d MB'
+              % (mins, ra[1], ra[2], rb[1], rb[2], d))
+    print('-' * 72)
+    print('peak within the compared window:  A total %d MB   B total %d MB'
+          % (max(r[2] for r in ea if r[0] <= horizon),
+             max(r[2] for r in eb if r[0] <= horizon)))
+    if signs:
+        neg = sum(1 for d in signs if d < 0)
+        print('B below A at %d of %d offsets%s' % (
+            neg, len(signs),
+            '  (consistent sign - a real retention difference, not GC noise)'
+            if neg == len(signs) or neg == 0 else
+            '  (mixed sign - treat as inconclusive; read the floor drift above)'))
+    if ea[-1][0] != eb[-1][0]:
+        print('NOTE: runs differ in length; compared only the first %.0f min.'
+              % (horizon / 60))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -253,6 +339,9 @@ def main():
                     help='file count, to report floor drift per file (the scaling number)')
     ap.add_argument('--force', action='store_true',
                     help='report statistics even when the log shows a failure')
+    ap.add_argument('--every', type=int, default=10, metavar='MIN',
+                    help='elapsed-matched compare interval in minutes (default 10); '
+                         'only used when exactly two logs are given')
     a = ap.parse_args()
 
     rc = 0
@@ -266,6 +355,8 @@ def main():
             s, failed, _ = parse(p)
             if len(s) >= 2 and (not failed or a.force):
                 plot(p, s, a.png)
+    if len(a.logs) == 2 and all(os.path.exists(p) for p in a.logs):
+        rc |= compare(a.logs[0], a.logs[1], a.force, a.every)
     return rc
 
 
