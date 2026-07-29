@@ -180,6 +180,46 @@ precision defect — which is exactly what Tier 1 covers.
 - **Fails on master**: (pending)
 - **Passes on fix**: (pending)
 
+## Companion work: msconvert round-trip cvParam values (separate PR, module `pwiz`)
+
+The raw-vs-mzML parity census came out clean on every field except retention time:
+
+| field | differing records (of 161,099) |
+|---|---|
+| scanNumber, precursorMz, isoCenter, isoLower, isoUpper, peakCount, m/z, intensity | **0** |
+| **retentionTime** | **9,269** (5.8%), worst \|dRT\| 3.55e-15 min (1 ULP) |
+
+**Root cause is in pwiz, not Osprey.** `pwiz::util::toString(double)`
+(`pwiz/utility/misc/String.cpp`) uses a boost::spirit::karma `double12_policy` with
+`precision(T) { return 12; }` - **12 fractional digits**. `ParamContainer::set(CVID, double, CVID)`
+(`pwiz/data/common/ParamTypes.cpp:279`) routes every double cvParam through it, so
+`SpectrumList_Thermo.cpp:260`'s `scan.set(MS_scan_start_time, raw->rt(ie.scan), UO_minute)` stores
+an already-truncated string. Confirmed directly in the mzML text: `value="0.001232516667"`,
+`value="0.5903117"`.
+
+So the mzML cannot reproduce the RT of the raw file it was converted from, and the raw-sourced
+value is the *more* accurate one. The 12-digit policy exists to avoid `lexical_cast` noise like
+`123.00000000007` - an aim that shortest-round-trip formatting satisfies while also being exact.
+
+**Fix (branch `Skyline/work/20260729_pwiz_roundtrip_cvparam`, off master):** in the `AutoNotation`
+path, keep the karma 12-digit text whenever it already reloads bit-exact, and fall back to the
+shortest round-tripping form (`%.15g` -> `%.16g` -> `%.17g`, first that reloads equal) only when it
+does not. Existing output and file sizes are therefore unchanged except where today's output is
+silently lossy.
+
+Deliberately **not** `std::to_chars`: floating-point `to_chars` is C++17 but library support is not
+universal across the toolsets pwiz builds with (`Jamroot.jam:393-396` sets `-std=c++17` for msvc,
+gcc, darwin and clang; libstdc++ needs GCC 11, libc++ a recent LLVM). `snprintf`/`strtod` are
+available everywhere and the slow path is rare.
+
+New `pwiz/utility/misc/StringTest.cpp` (registered in that Jamfile) asserts the property directly:
+every value `toString` writes must `strtod` back equal, over the motivating Thermo RTs, range
+extremes, and 20,000 generated values across 40 decades - plus a test that ordinary values keep
+their exact existing text.
+
+**Open question for Matt Chambers' review**: whether the round-trip guarantee should apply to all
+double cvParams (as here) or only to selected ones.
+
 ## Progress Log
 
 ### 2026-07-29 - Reader implemented; vendor runtime deployment identified
