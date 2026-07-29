@@ -182,6 +182,53 @@ precision defect — which is exactly what Tier 1 covers.
 
 ## Progress Log
 
+### 2026-07-29 - Reader implemented; vendor runtime deployment identified
+
+**`--task SpectraCache`** (commit `691f0c3aea`): Stage 1 alone, no `--library`. `EnsureSpectraCache`
+moved from `PerFileScoringTask` to `ScoringTaskShared` so the staging and scoring paths write caches
+through the identical method.
+
+**`ProteowizardWrapper` reference** (commit `82bdc03302`): net472 only. The x64 mapping had to go in
+**Osprey.sln**, not the csproj: an SDK-style project does not pass `Platform` across a
+ProjectReference to an old-style one, and neither `AdditionalProperties` nor `SetPlatform` metadata
+had any effect. The wrapper resolves `pwiz_data_cli` from `obj\$(Platform)\` and only `obj\x64\` is
+staged, so an AnyCPU build fails on every `pwiz.CLI` type. Skyline.sln does exactly this mapping.
+Consequence: **Osprey must be built through the solution**; a bare csproj build would fail.
+
+**`SpectrumBuilder`** (new): the single definition of what a spectrum IS - peak sort order, the
+isolation-window fail-fast, the precursor-m/z fallback - extracted from `MzmlReader` and shared with
+the vendor reader. Without it, a raw-vs-mzML difference could come from two code paths assembling
+equivalent data differently, which would make the whole comparison meaningless.
+
+**Refactor verified byte-identical on real data**: rebuilt the TDP-43 mzML cache after the
+extraction and compared to the pre-refactor copy - `PARITY: 2,260,174,556 bytes identical`,
+n_ms2=161,099, n_ms1=965. The extraction changed nothing.
+
+**`VendorRawReader`** (new, net472 only) + **`SpectrumFileReader`** (both TFMs, dispatches by
+extension; net8.0 raises a clear error for a vendor path rather than silently producing nothing).
+
+#### Vendor runtime deployment - the real remaining build work
+
+`pwiz_data_cli.dll` being present next to `Osprey.exe` is NOT sufficient. It is a mixed-mode
+assembly and the first raw run failed with:
+
+> Could not load file or assembly 'pwiz_data_cli.dll' or one of its dependencies.
+
+The MSBuild copy brings 101 files to the Osprey output; `ProteowizardWrapper/obj/x64` holds 135.
+**78 are missing**, and they are exactly what a vendor-enabled deployment needs:
+
+* **Vendor native**: `MassLynxRaw.dll` (Waters), `timsdata.dll` + `baf2sql_c.dll` (Bruker),
+  `Clearcore2.*.dll` + `Sciex.Data.SimpleTypes.dll` (Sciex), `MassSpecDataReader`/`cdt.dll`/
+  `MSMSDBCntl.dll`/`IOModuleQTFL.dll`/`PeakItgLSS.dll` (Agilent), `MBI_SDK.dll`, `msparser[D].dll`
+* **C/C++ runtime**: `msvcp110/120/140`, `msvcr110/120`, `vcruntime140[_1]`, `vcomp110/140`,
+  `ucrtbase.dll`, and ~40 `api-ms-win-*` apiset shims
+* **Other**: `SQLite.Interop.dll`, `CABINET.dll`, `msconvert.exe`, `PrmPasefScheduler.dll`
+
+This is the set `install-vendor-api-dependencies` must install into Osprey's output, and it is why
+the Jamfile work is a real task rather than a formality. Discovered empirically (copy from
+`obj\x64` and re-run) rather than inferred from Skyline's Jamfile, which is what having a Skyline
+build in place first bought.
+
 ### 2026-07-29 - Session Start
 
 Starting work on this issue.
