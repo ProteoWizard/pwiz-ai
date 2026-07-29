@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260727_osprey_stage6_rescore_streaming`
 - **Base**: `master` (at `6d919a080e`, after #4442 merged)
 - **Created**: 2026-07-27
-- **Status**: In Progress - characterization phase
+- **Status**: ALL GATES GREEN, PR open as DRAFT awaiting `/code-review max` + human review
 - **Worktree**: `C:\proj\pwiz` (BRENDANX-UW8)
 - **GitHub Issue**: [#4472](https://github.com/ProteoWizard/pwiz/issues/4472)
 - **PR**: [#4488](https://github.com/ProteoWizard/pwiz/pull/4488) (DRAFT - `-Dataset All` and the
@@ -159,6 +159,58 @@ up-front 0.037** - that requires not materializing all-files state, i.e. L2.
 
 Implication for the goal: over 82 files the band should climb ~0.8 GB instead of ~4.1 GB.
 Whether that reads as "level" is what the 82-file run answers - do not assert it before.
+
+## RESULT (2026-07-28) - what actually landed
+
+Four commits on `Skyline/work/20260727_osprey_stage6_rescore_streaming`, pushed:
+
+| commit | change |
+|---|---|
+| `83ef15dbd6` | release the six fat arrays after the per-file reconciled parquet write |
+| `4a9af7fc90` | stop loading PIN features the rehydrate never reads |
+| `cdcaa15dcb` | stream the rehydrate - compact one file at a time (861 lines) |
+| `62e7792736` | guard `--input-scores`, bound `--model-diagnostics`, memstamp in regression.ps1 |
+
+**82-file SEA-AD Astral, `--task PerFileRescoring`, identical Stage 1-5 artifacts:**
+
+| | before | after | after + mdiag |
+|---|---|---|---|
+| peak private | ~197 GB projected | **32.2 GB** | **35.2 GB** |
+| floor drift | 1.19 GB/file | +19 MB/file | +36 MB/file |
+| gaps >= 30s | 4 (68/33/59/56s @ 16 files) | **0** (max 12s) | **0** (max 11s) |
+| rescored | - | 6,954,057 | 6,954,057 (identical) |
+| wall | - | 2:45:13 | 2:47:28 |
+
+**Gates, all green on the full branch:** `regression.ps1 -Dataset All` 18/18 byte-identical
+(modes 1/1b/2/3, four datasets); `Build-Osprey.ps1 -RunTests -RunInspection` 547/547 zero
+warnings; `OSPREY_FDR_PROJECTION=0` on Stellar (the path the normal gate misses).
+
+**Scope resolved with Brendan:** Stage 7 (`SecondPassFDR` / `ExpectReconciledInput`) is OUT.
+It is a bounded-height bulge (~51 GB peak in a full 64 GB run), not a growth curve, so it
+does not block an 82-file run - and Percolator is being removed from that stage, so
+hardening it now would harden code about to be replaced. `regression.ps1:841` keeps its
+`OSPREY_ALLOW_UNBOUNDED_MEMORY=1` opt-out for that reason. Tracked as
+[#4486](https://github.com/ProteoWizard/pwiz/issues/4486).
+
+## Remaining
+
+- [ ] `/code-review max` (user-invoked), then flip #4488 out of draft
+- [ ] TeamCity Perf/Regression on `pull/4488` - manual, ASK before triggering
+- [ ] Residual ~19 MB/file (all-files lean survivor list, ~184 B/entry) - #4472's L2, not a
+      blocker at 500 files (~10 GB rise, inside 64 GB)
+- [ ] **Unread by the parent session**: the `PreCompactionTally` plumbing in `cdcaa15dcb`
+      that feeds the `totalScored` zero-guard. The retain-set logic and the gate WERE read.
+
+## Review risks, highest first
+
+1. **`ShouldStreamCompaction`** (`PerFileScoringTask.cs`) - streaming must never hand a
+   pre-compacted pool to a consumer expecting pre-compaction. Requires
+   `hasReconSidecars && NoJoin && !NeedsResidentPool && !DumpPercolator`. Any future consumer
+   inserted between `PerFileScoring` and FirstJoin's compaction re-opens it SILENTLY, and no
+   gate we have would catch it.
+2. **mdiag `Add` ordering** - both paths must feed the accumulator in identical order or
+   `BuildScoreHistogram`'s floating-point sums drift. Test asserts it; subtlest claim here.
+3. `cdcaa15dcb` is 861 sub-agent-written lines.
 
 ## Progress Log
 
