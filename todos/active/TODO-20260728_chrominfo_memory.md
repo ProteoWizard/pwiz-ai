@@ -243,6 +243,29 @@ are now one class, `MoleculeResults`, constructed from a `SrmSettings` and a
 `MzMatchTolerance` is no longer settable: it is always
 `TransitionInstrument.MzMatchTolerance`, and anywhere that used a different one was a bug.
 
+`MoleculeResults` now answers about any replicate rather than being restricted to one:
+`GetTransitionResults(TransitionGroup, Transition)` and
+`GetTransitionGroupResults(TransitionGroup)`, plus the single replicate
+`Get*ChromInfos(..., replicateIndex)`. A peak which is one of the candidate peaks costs only
+the `ChromPeak` records; a peak whose boundaries the user set is integrated again through
+`TransitionGroupIntegrator`, which decompresses the chromatogram, so those integrators are
+kept once made.
+
+**`ShapeCorrelation` cannot be reproduced from a user set peak's stored boundaries.**
+Integration snaps the boundaries to the nearest chromatogram points, but the shape
+correlation is measured against a median chromatogram sampled between the boundaries it was
+*asked* for. The document keeps the snapped ones. Skyline has the same gap already:
+`ChangeResults` re-integrates user set peaks from the stored boundaries, and the original
+value survives only because `TransitionChromInfo.Equivalent` does not compare
+`PeakShapeValues`. So `CustomPeak` should carry the boundaries the user gave, not the peak's
+resulting start and end times. Everything else comes back exactly, which
+`TestMoleculeResultsWithUserSetPeakBounds` proves by moving every peak in a replicate.
+
+**Cost note**: `OnDemandFeatureCalculator` makes one `MoleculeResults` per peptide *and
+replicate*, and each one now reads every replicate. Scoring a whole document is therefore
+n times the reading it was. Not addressed yet, in keeping with correctness first, but this
+is the first place that will need it.
+
 **Do not key dictionaries on `GlobalIndex`.** Use `ReferenceValue<T>`, which matches on the
 same thing but keeps the type: an `int` key does not say which kind of object it came from,
 so the wrong kind still compiles, and it does not lead back to the object in a debugger.
