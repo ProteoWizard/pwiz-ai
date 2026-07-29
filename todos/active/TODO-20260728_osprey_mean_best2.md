@@ -130,6 +130,64 @@ grows with N (e.g. f≈0.1: N≤10→1 [max], N=20→2, N=82→9). One knob unif
 
 ## Progress Log
 
+### 2026-07-29 (afternoon) - BOTH SWEEPS COMPLETE: N-curve peak + crossover is F=4, not a fraction
+
+All 17 probe arms plus the Axis-1@82 tail finished unattended (last mdiag 09:55; machine now free).
+Harvest: `python ai/.tmp/extract_all.py` (re-runnable). Numbers are pass-1 experiment fdpView,
+`disc @ matched 1% TRUE FDP` (oracle-fair) with `disc @ 1% reported q` / trueFDP alongside.
+
+**AXIS 1 - N-curve (disc @ matched 1% true FDP; frontier expPeak ~44,938):**
+| N | 82 files (max 38,300) | vs max | 20 files (max 46,496) | vs max |
+|---|---|---|---|---|
+| best-2 | 43,873 | +14.6% | 47,685 | +2.6% |
+| best-3 | 44,260 | +15.6% | **47,716** | **+2.6% (peak)** |
+| best-4 | 44,469 | +16.1% | 47,488 | +2.1% |
+| best-6 | **44,581** | **+16.4% (peak)** | 47,054 | +1.2% |
+| best-8 | 44,275 | +15.6% | - | |
+| best-12 | 43,658 | +14.0% | - | |
+| best-20 | 42,825 | +11.8% | - | |
+
+- Broad, gentle peak; overshooting N is cheap (best-20 at 82f still +11.8%). **N* grows SUBLINEARLY
+  with F**: N*=2-3 @ F=20 (f=0.10-0.15), N*=6 @ F=82 (f=0.073) - so f* is not constant either.
+- **Second-order finding: large N over-conservatizes the reported q.** trueFDP @ 1% q falls
+  monotonically with N (82f: 0.918% max -> 0.794% @2 -> 0.729% @12 -> 0.691% @20; 20f: 0.876% ->
+  0.763% -> 0.602% @6). So at the operating point a user actually ships (1% reported q), the optimum
+  is LOWER than the matched-TRUE optimum: 82f disc@1%q peaks at N=4 (42,622) vs matched-TRUE peak
+  N=6; 20f peaks at N=2 (45,863). Both metrics matter - matched-TRUE for the mechanism, disc@1%q for
+  what ships.
+
+**AXIS 2 - best-2 vs max by file count (matchedTRUE, trueFDP@1%q in parens):**
+| F | max | best-2 | delta | f=2/F |
+|---|---|---|---|---|
+| 3 | (prior anchor) | | **-4.9%** | 0.667 |
+| 4 | 42,304 (0.77%) | 43,490 (0.58%) | **+2.8%** | 0.500 |
+| 5 | 40,893 (0.85%) | 44,510 (0.56%) | +8.8% | 0.400 |
+| 6 | 40,535 (0.81%) | 44,398 (0.64%) | +9.5% | 0.333 |
+| 8 | 44,387 (0.83%) | 47,672 (0.70%) | +7.4% | 0.250 |
+| 10 | 42,805 (0.83%) | 46,182 (0.74%) | +7.9% | 0.200 |
+| 12 | 42,572 (0.87%) | 44,092 (0.76%) | +3.6% | 0.167 |
+| 20 | 46,496 (0.88%) | 47,685 (0.76%) | +2.6% | 0.100 |
+| 82 | 38,300 (0.92%) | 43,873 (0.79%) | +14.6% | 0.024 |
+
+- **The crossover is between F=3 and F=4 - it is NOT a fraction f\*.** best-2 wins at EVERY measured
+  F>=4, including f=2/4=0.50 (+2.8%) and f=2/5=0.40 (+8.8%), which the working `f*` hypothesis
+  predicted would still be negative. The hypothesis is dead as a *threshold* criterion; f only
+  survives as a possible shape for N*(F), and even there it is not constant (0.15 -> 0.073).
+- best-2 also LOWERS true FDP at every F, F=3 included - the calibration gain is universal; only the
+  ID count flips sign, and only at F=3.
+- CAVEAT on the delta-vs-F shape: the max baseline itself swings 38.3k-46.5k across cohorts (first-F
+  subsets differ in content), so the non-monotonic magnitude (+9.5% @6, +2.6% @20, +14.6% @82) is
+  cohort composition, not an N-dependence. Each row is a clean within-cohort A/B; the *trend* across
+  rows is not. The deferred 2-D (N, F) harness with a fixed cohort per F is what makes the surface
+  publishable.
+- Implication for auto-N: gate on F (engage at F>=4, keep max at F<=3 - matching Brendan's
+  batches-of-3 domain worry exactly), then let N grow sublinearly. N=2 is safe everywhere F>=4 and
+  already captures 14.6 of the 16.4 points at F=82, so a conservative first default is defensible
+  even before the surface is mapped.
+
+Code state unchanged (4 commits, tree clean). Still open: `-Dataset All` flag-off byte-identity on
+b7c375b905, the protein roll-up increment, then the 2-D harness / PR.
+
 ### 2026-07-29 (morning) - mean(best-N) generalization + Axis-1 N-curve
 
 Generalized best-2 -> best-N (commit b7c375b905): `OSPREY_EXPERIMENT_AGG=mean-best-<N>` carries N;

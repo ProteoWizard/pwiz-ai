@@ -87,6 +87,10 @@ param(
     [string]$Ratio = '1.0',
     [ValidateSet('percolator', 'transfer')] [string]$Pass2Mode = 'percolator',
     [int]$NumFiles = 82,
+    # Take the $NumFiles files AFTER skipping this many, so cohorts of the same size can be
+    # drawn from disjoint slices of the dataset (replicate cohorts for a size-vs-effect study).
+    # Pass -Tag to keep the run directories apart: the name only carries the file COUNT.
+    [int]$SkipFirstFiles = 0,
     [int]$Threads = 30,
     [ValidateSet('1', '2', 'both')] [string]$FdrBenchPass = 'both',
     [string]$Tag = '',
@@ -206,10 +210,11 @@ if ($DecoyMode -eq 'libdecoy' -and -not (Test-Path $manifest)) {
 }
 
 $mzmls = @(Get-ChildItem -Path $dataDir -Filter '*.mzML' -File | Sort-Object Name |
-           Select-Object -First $NumFiles | ForEach-Object { $_.FullName })
+           Select-Object -Skip $SkipFirstFiles -First $NumFiles | ForEach-Object { $_.FullName })
 if ($mzmls.Count -eq 0) { throw "No .mzML files found in '$dataDir'." }
 if ($mzmls.Count -lt $NumFiles) {
-    throw "Only $($mzmls.Count) mzML found in '$dataDir', need $NumFiles. Convert-SeaAdRaw.ps1 builds them."
+    throw ("Only $($mzmls.Count) mzML available in '$dataDir' after skipping $SkipFirstFiles, " +
+           "need $NumFiles. Convert-SeaAdRaw.ps1 builds them.")
 }
 
 # .spectra.bin beside the mzML is the difference between a ~7.5 h run and one that also
