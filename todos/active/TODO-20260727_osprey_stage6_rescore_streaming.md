@@ -285,3 +285,144 @@ all-files lean survivor list (#4472 L2).
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260727_osprey_stage6_rescore_streaming.md` before starting work.
+
+## 2026-07-28 night session — review fixes landed, merged master, gate re-run
+
+**21:30 start.** Fix agent's 12 fixes were present in the working tree; I read the
+full diff rather than trusting the report, and it matched on all twelve.
+
+**Merged `origin/master`** (3 commits) — clean, including both files #4487 also
+touched. Its `regression.ps1` change turned out to be purely additive Stage-5
+sidecar relaying (`$s.1st-pass.model.json` through the ph2->ph3->ph4 hops), with
+no interaction with the guard work.
+
+**Inspection caught two real defects the agent's "build clean" check missed** —
+it ran the compiler and unit tests but never `-RunInspection`:
+
+* `ShouldStreamCompaction` passed `hasReconSidecars` into
+  `PreCompactionPoolReason` from the right side of an `&&` that had already
+  tested it, so the helper's own `hasReconSidecars` clause was dead code.
+  Restructured: the helper now owns the whole predicate and reports a
+  "no reconciled bundle" reason of its own.
+* `TryHydrateRescoreBundle` returned `true` whenever `hydrate()` didn't throw —
+  including on a null return — leaving every caller dereferencing a field whose
+  non-nullness could only be established inside the callee. Turned into
+  `HydrateRescoreBundleOrNull`, so the null test sits at the use site.
+
+**Reverted the memstamp change** (F12). Measured 1.01 -> 0.95 ms/line: at one
+log line every 2-5 seconds that is nothing, so the comment the finding attacked
+("this is noise") was right and the finding's premise was wrong. It also traded
+an obviously-correct call for a cached `Process` whose silent-failure mode is a
+frozen, flat memory curve — a false "bounded memory" result on the very
+instrument used to prove bounded memory. Not a trade worth 6%.
+
+**Removed `OSPREY_ALLOW_UNBOUNDED_MEMORY` from `regression.ps1`** (modes 2 and
+3), which was the user's stated precondition for merge. Now possible because the
+`--input-scores` resident-pool path warns instead of throwing. The mode 3 opt-in
+had wrapped the entire HPC chain and would have masked a real guard regression
+on any `--input-scores` worker — exactly what mode 3 exists to catch.
+
+Gate: **551/551 unit tests, zero inspection warnings.** Full
+`regression.ps1 -Dataset All` running from 21:47 — the first run ever with the
+guard armed on modes 2 and 3.
+
+**Note for the 82-file re-measure:** the harness runs **Release net8.0**
+(`Measure-Stage6Rescore.ps1:107`), not the Debug build the pre-commit gate uses.
+A Release build + `-Exe` snapshot is required before the measurement, and
+`-VersionOverride 26.1.1.208` because the phase-dir artifacts predate today's
+daily build.
+
+### Regression run 1 found a real gap: mdiag on a FULL resume is still O(files)
+
+Removing both `OSPREY_ALLOW_UNBOUNDED_MEMORY` opt-ins made `-Dataset All` abort
+at **StellarLibDecoy mode 2** ("Osprey exited 1"). Everything before it passed:
+Stellar mode1/2/3, StellarLibDecoy mode1/1b/1b/3.
+
+`PerFileScoringTask.cs`, `--input-files` rehydrate:
+
+```csharp
+bool needsResidentPool = NeedsResidentPool(config) ||
+                         (config.ModelDiagnostics && FirstPassSidecarsPresent(config));
+```
+
+Mode 2's invalidation leaves every `.1st-pass.fdr_scores.bin` on disk, so
+FirstJoin skips the first-pass score pass and emits the report through the batch
+`ModelDiagnosticsReport.Write`, which reads the RESIDENT per-file entries.
+StellarLibDecoy is the only dataset with a diagnostics golden, which is why
+Stellar passed and it did not.
+
+**The guard is right.** That path genuinely is O(files); the standard for this
+work is that such a path must error unless the flag is set. This is not a
+regression introduced here — the env var had been hiding it.
+
+**Two things this does NOT affect**, and the distinction matters:
+
+* `--model-diagnostics` over `--input-scores` — the scale path, what an 82-file
+  run uses — streams off `ModelDiagnosticsData.Accumulator` one file at a time
+  and needs no opt-in at any file count.
+* `--model-diagnostics` on a `-LinkFrom` (Stage 1-4) resume: sidecars are
+  absent, FirstPassFDR re-runs, report streams. Also unaffected.
+
+Only a FULL resume of an already-complete run is affected.
+
+**Positive evidence from the same run:** StellarLibDecoy **mode 1b (diagnostics
+vs golden) PASSED with the guard armed and no opt-in** — the diagnostics golden
+comparison on a compute run. That is direct proof the accumulator report is both
+bounded and byte-identical to the batch report, on the same mechanism the
+82-file run exercises at scale.
+
+**Resolution taken:** mode 3 keeps NO opt-in (its old one wrapped the entire HPC
+chain and would mask a guard regression on any `--input-scores` worker — exactly
+what mode 3 exists to catch). mode 2 keeps a scoped one, commented with the
+reason and the boundary. Follow-up drafted at
+`ai/.tmp/issue-osprey-mdiag-full-resume.md` — NOT filed, that is the user's
+call. The fix is ~40-60 lines reusing `BuildModelDiagnosticsAccumulator` /
+`FeedModelDiagnostics` / `WriteFromAccumulator` that this PR already built.
+
+### 82-file Stage-6 re-measure on the post-review-fix build (2026-07-29 02:07)
+
+Run on the pinned Release snapshot `D:\test\osprey-runs\_bin\stage6-pr4488\`,
+same phase dir, `-VersionOverride 26.1.1.208`. Baselines preserved under
+`stage6-82files/baseline-pre-review-fixes/`.
+
+| | plain baseline | mdiag baseline | **mdiag tonight** |
+|---|---|---|---|
+| total peak | 32.2 GB | 35.2 GB | **33.9 GB** |
+| total floor | 16.3 -> 17.8 GB | 18.5 -> 21.3 GB | **17.1 -> 18.8 GB** |
+| total drift | +1.49 GB | +2.87 GB | **+1.71 GB** |
+| total per file | +19 MB LEVEL | +36 MB RISING | **+21 MB** |
+| managed peak | 22.3 GB | 26.3 GB | **21.9 GB** |
+| managed drift | +1.42 GB | +2.06 GB | **+0.09 GB** |
+| managed per file | +18 MB | +26 MB | **+1 MB LEVEL** |
+| gaps >= 30s | 0 (max 12s) | 0 (max 11s) | **0 (max 11s)** |
+| rescored | - | 6,954,057 | **6,954,057 (identical)** |
+| actions | - | 6,472,914 | **6,472,914 (identical)** |
+| wall | 2:45:12 | 2:47:27 | **2:47:39** |
+
+**The mdiag penalty on drift is gone**: +36 -> +21 MB/file, landing on the plain
+run's +19. That was the stated prediction and it held.
+
+**Managed heap is now LEVEL at +1 MB/file** (drift +0.09 GB over 82 files) - the
+post-GC "will it fit" measure, and the strongest number here.
+
+**The model-diagnostics report is byte-identical except its embedded
+`generatedUtc`.** Verified by `cmp` + `diff`: exactly one differing line, the
+`osprey-data` JSON header; `ospreyVersion`, `fileCount`, `featureCount`,
+`runFdr` all match. That proves F4 releases the accumulator strictly AFTER the
+report is built.
+
+**No perf cost**: 2:47:39 vs 2:47:27.
+
+#### Two honest caveats
+
+1. **The managed result beats even the PLAIN baseline** (+1 vs +18 MB/file). F4
+   cannot explain that - the plain baseline had no accumulator to release. NOT
+   attributed to a specific fix. A plain 82-file control on the new build was
+   started 02:10 (ETA ~05:00) to localize it.
+2. **The ~2.2 GB prediction undershot.** Elapsed-matched sampling showed a 3-9 GB
+   floor gap. Direction right, magnitude wrong; the surplus is the same
+   unattributed effect as (1).
+
+Peak moved only 35.2 -> 33.9 GB, which is correct: peak is set during the
+hydrate while the accumulator is necessarily resident. F4 buys floor and drift,
+not peak.
