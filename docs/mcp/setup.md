@@ -43,28 +43,70 @@ See [README.md](README.md) for tool documentation.
 
 Monitors PR builds on `teamcity.labkey.org` — build status, test failures, build logs.
 
-1. **Create a TeamCity API token:**
-   - Go to `https://teamcity.labkey.org`
-   - Click your profile icon (lower-left) > **Profile** > **Access Tokens** (top-left sidebar) > **Create access token**
-   - Name it "Claude Code MCP" (read-only permissions are sufficient)
-   - **Save the token immediately** — once you dismiss the dialog, TeamCity won't show it again. Store it in a password manager (e.g., LastPass password notes).
+> **For LLM assistants:** Do not just create the `.teamcity-mcp` folder and tell the developer
+> to "add a config.json" — that leaves someone who has never seen the TeamCity UI with no idea
+> what to click or where the file goes. Create the **template file with the placeholder in it**
+> (step 2), then walk them through the web UI (step 1). Never ask for the token itself, and
+> never write a file containing a real token — the developer pastes it into the template.
+> If a config file already exists, **do not overwrite it**: it holds a live credential.
 
-2. **Store the token:**
+1. **Create a TeamCity API token** (in the browser):
+   - Go to `https://teamcity.labkey.org` and sign in.
+   - Click your **profile icon in the LOWER-LEFT corner** → **Profile**.
+     (It is bottom-left, not top-right as on most sites — this is the step people miss.)
+   - In the left sidebar choose **Access Tokens** → **Create access token**.
+   - Name it `Claude Code MCP`. **Permissions: "Same as current user" / read-only is enough** —
+     triggering a build counts as read-only usage of the REST API here.
+   - Optionally set an expiry. If you set one, note it: an expired token fails exactly like a
+     wrong one (see troubleshooting below).
+   - Click **Create**, then **copy the token immediately**. TeamCity shows it **once** and never
+     again. Store it in a password manager.
+
+2. **Create the config template, then paste the token into it:**
    ```powershell
-   New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.teamcity-mcp"
-   ```
-   Create `~/.teamcity-mcp/config.json`:
-   ```json
+   New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.teamcity-mcp" | Out-Null
+   @'
    {
      "url": "https://teamcity.labkey.org",
-     "token": "YOUR_TOKEN_HERE"
+     "token": "PASTE_YOUR_TOKEN_HERE"
    }
+   '@ | Set-Content "$env:USERPROFILE\.teamcity-mcp\config.json" -Encoding utf8
+   notepad "$env:USERPROFILE\.teamcity-mcp\config.json"
    ```
+   Replace `PASTE_YOUR_TOKEN_HERE` with the token, keeping the surrounding quotes. Save.
 
-3. **Register:**
+3. **Register** (from the **project root** — registration is per-project; see the scope note in
+   `new-machine-setup.md` Phase 7.2):
    ```powershell
    claude mcp add teamcity -- python ./ai/mcp/TeamCityMcp/server.py
    ```
+
+4. **Restart** Claude Code / Claude Desktop. MCP servers and their config are read at session
+   start, so a newly added server never appears mid-session.
+
+5. **Verify** — this catches a bad token in seconds instead of at the moment you need a build:
+   ```powershell
+   python -c "import json,os,urllib.request;c=json.load(open(os.path.expanduser(r'~\.teamcity-mcp\config.json')));r=urllib.request.urlopen(urllib.request.Request(c['url'].rstrip('/')+'/app/rest/server',headers={'Authorization':'Bearer '+c['token'],'Accept':'application/json'}),timeout=20);print('AUTH OK',json.load(r).get('version'))"
+   ```
+
+### Troubleshooting: HTTP 401 Unauthorized
+
+The server registers and starts fine but every tool returns `401 Unauthorized`.
+
+**401 means the credential was rejected, not that anything is misconfigured.** Confirm the file
+itself is sound before touching the MCP setup — a valid TeamCity token is a 3-part
+dot-separated value whose first segment decodes to `{"typ": "TCV2"}`:
+
+```powershell
+python -c "import json,os,base64;t=json.load(open(os.path.expanduser(r'~\.teamcity-mcp\config.json')))['token'];print('segments',[len(x) for x in t.split('.')]);print('header',base64.b64decode(t.split('.')[0]+'==').decode('utf-8','replace'))"
+```
+
+Expect three segments and `{"typ": "TCV2"}`. If you get that and still see 401, the file is
+fine and the **token is revoked, expired, or from a different TeamCity server** — regenerate it
+(step 1). A single mistyped character produces exactly this symptom, because the structure
+still validates.
+
+Note the token is standard base64, so `+` and `/` are normal characters — do not "fix" them.
 
 See [team-city.md](team-city.md) for tool documentation.
 
