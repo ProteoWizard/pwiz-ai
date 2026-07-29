@@ -341,6 +341,96 @@ established.
 next step is a single-spectrum reproduction to distinguish a parse bug from state leaking across
 spectra in the producer/consumer decode, not more hypothesising.
 
+## SOLVED: the 2 records are a .NET Framework double-parsing defect
+
+`MzmlReader` on **net472** parses `value="0.86653405"` to a double 1 ULP away from the correctly
+rounded value. Confirmed by bit pattern, which is the only representation that does not lie here:
+
+| decimal text | .NET Framework 4.8 | .NET 10 (and C++ `strtod`) |
+|---|---|---|
+| `0.86653405` | `0x3FEBBAA59DB3DA8E` | `0x3FEBBAA59DB3DA8D` |
+| `0.97263695` | `0x3FEF1FD7866432B0` | `0x3FEF1FD7866432AF` |
+| `0.5903117`  | `0x3FE2E3D55CBE46F8` | `0x3FE2E3D55CBE46F8` (same) |
+
+.NET Framework's string->double conversion is **not correctly rounded** for certain decimals;
+`XmlConvert.ToDouble` inherits it. .NET Core 3.0 fixed both parsing and `"R"` formatting. Only some
+values are affected, which is why 2 of 161,099 diverged rather than thousands.
+
+**The `TryParseXmlDouble` doc comment is wrong**: it says "XmlConvert.ToDouble is required by XML
+schema spec to be IEEE-correct". That holds on .NET Core, not on .NET Framework. The comment is the
+reason this looked impossible for so long.
+
+Consequences beyond this issue:
+
+* **The net472 and net8.0 Osprey builds produce DIFFERENT `.spectra.bin` from the same mzML.** Any
+  golden-file baseline is implicitly TFM-specific, which matters for the .NET 8 port.
+* An mzML-vs-raw or mzML-vs-pwiz divergence is not necessarily a reader-logic bug; on net472 it can
+  be the runtime's parser. The issue's "a divergence is an Osprey bug" doctrine needs this caveat.
+* Bit-exact parity between net472 Osprey and pwiz is **unreachable** for such values without a
+  correctly-rounded parse.
+
+### Two diagnostic traps that cost real time here (worth remembering)
+
+1. **`double.ToString("R")` is also inexact on .NET Framework.** A probe printing `"R"` showed the
+   parsed value and the literal as identical text when they were different doubles. Compare bit
+   patterns (`BitConverter.DoubleToInt64Bits`), not formatted strings.
+2. **A self-referential assertion passes for the wrong reason.** The first version of
+   `TestMzmlReaderRetentionTimePrecision` compared the reader's value against
+   `XmlConvert.ToDouble(text)` - the same buggy conversion - so it passed while the defect was live.
+   Assert against a compiled literal or a known-good reference, never against the code under test.
+
+**Fix options (Brendan's call, none applied yet):**
+
+* **P/Invoke `strtod`** on net472 - literally the function pwiz uses, so cross-impl parity by
+  construction. Adds native interop (CRITICAL-RULES wants PInvoke isolated in one place).
+* **Correctly-rounded managed parse** for net472 (BigInteger/decimal based). No interop, more code.
+* **Accept and document** - net472 stays 1 ULP off on rare values; requires the parity tests below
+  to tolerate it, which weakens them.
+
+## TeamCity: the Osprey PR will break the build as written
+
+Checked build 4084490 (`ProteoWizard_OspreyWindowsNetPerfRegressionTests`, SUCCESS):
+
+* **net472 IS built.** The step is *labelled* `Building Osprey (Release, net8.0)`, but it builds
+  `Osprey.sln`, and the projects are multi-targeted, so both TFMs compile - including
+  `Osprey\bin\x64\Release\net472\Osprey.exe`. The `-TargetFramework` parameter only selects which
+  test assembly runs, not what compiles.
+* **No bjam, no Skyline build.** Steps go from "Set PYTHON_HOME" straight to `Build-Osprey.ps1`.
+  So `pwiz_tools/Shared/ProteowizardWrapper/obj/x64` is **never staged** in that workspace, and the
+  net472 leg of `Osprey.IO` cannot resolve `pwiz_data_cli`. **The PR fails there as written.**
+* Regression data is already on the agent at
+  `c:\skyline-downloads\Perftests\osprey-testfiles-mzML`, with a 3-file Stellar mzML dataset.
+
+Options for making the Osprey PR safe on TeamCity:
+
+1. **Switch the config's build step to bjam** (`bo.bat`'s target), so the Jamfile stages the wrapper
+   deps as Skyline's does. Cleanest and matches the intended `bo.bat` end state, but the first build
+   on each agent becomes a full native pwiz compile.
+2. **Add a staging step** before `Build-Osprey.ps1` that builds only what is needed
+   (`pwiz/utility/bindings/CLI//pwiz_data_cli` plus the vendor-dependency install). Much cheaper
+   than a full Skyline build; still a config change.
+3. **Make the ProjectReference conditional on the staged DLL existing.** No CI change, but Osprey
+   silently loses vendor-raw support wherever staging is absent - including the very parity test
+   below - which is the per-machine capability drift rejected earlier.
+
+Recommendation: **2** for the immediate PR (smallest CI change that keeps one capability), with 1 as
+the follow-up once `bo.bat` exists.
+
+## Proposed TeamCity test: mzML through both readers, one Stellar file
+
+Cheapest possible form of what was verified by hand today:
+
+* One Stellar mzML from `osprey-testfiles-mzML` (the smallest of the three).
+* `--task SpectraCache` twice: once default, once with `OSPREY_MZML_VIA_PWIZ=1`, into two cache dirs.
+* Assert byte equality with `ai/scripts/Osprey/Compare/Compare-SpectraCache.ps1` (masks only the
+  16-byte source fingerprint; the two runs share a source file so even that could be compared).
+* Runtime is dominated by two parses of one file - seconds, not the hour the full Perf/Regression
+  leg takes.
+
+**This test cannot pass on net472 until the parse defect is addressed**, because the two readers
+disagree on exactly the values .NET Framework misparses. It WOULD pass on net8.0 today. So the test
+and the parse fix have to land together, or the test starts life red.
+
 ## Progress Log
 
 ### 2026-07-29 - Reader implemented; vendor runtime deployment identified
