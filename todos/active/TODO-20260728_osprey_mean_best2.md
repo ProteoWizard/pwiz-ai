@@ -143,8 +143,12 @@ strengthening: N=3 -4.9% -> N=20 +2.6% -> N=82 +14.6%** (matched true FDP) - the
 count, exactly the reproducibility thesis (1-of-N detection is strong FDR-leakage evidence at large N).
 43,873 reaches ~85% of the way from the max floor (38,300) to the reproducibility frontier
 (44,861 @1% true FDP) AUTOMATICALLY at a well-calibrated 1% q - no manual run-count filter / q-floating.
-This is the first large-scale proof + a usable, bounded-memory (streaming) implementation. (my-build max
-arm running to confirm 37,676 reproduces off the older 26.1.1.199 baseline -> self-consistent A/B.)
+This is the first large-scale proof + a usable, bounded-memory (streaming) implementation.
+
+SELF-CONSISTENT (both arms my build, same parquets): confirmed - my-build MAX == source-199 MAX EXACTLY
+(37,676 @0.918% / 38,300, +0.0%), so the max path is build-stable and the A/B is clean. FLOOR robustness:
+decoy MEAN floor == decoy MEDIAN (default) EXACTLY (42,045 / 43,873) - near-symmetric decoy null, so the
++14.6% is not a floor-tuning artifact (5th-pct harder-cut variant also run; see budget log).
 
 
 
