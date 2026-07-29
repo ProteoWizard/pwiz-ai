@@ -147,6 +147,13 @@ count, exactly the reproducibility thesis (1-of-N detection is strong FDR-leakag
 (44,861 @1% true FDP) AUTOMATICALLY at a well-calibrated 1% q - no manual run-count filter / q-floating.
 This is the first large-scale proof + a usable, bounded-memory (streaming) implementation.
 
+**k=1 over-admission slice (crossRun.experiment, the decision bar) - mean(best-2) controls the spike:**
+accepted 1-run precursors 639 -> 194 (-70%); their entrapment hits 72 -> 11 (-85%); k=1 slice FDP
+20.6% -> 10.9%. The accepted-set run-count histogram shifts from k=1-heavy (max) to k>=2-enriched
+(mean-best-2). So the +14.6% net gain comes WITH a large reduction in the leaky 1-run admissions - it is
+reproducibility, not just more IDs. `frontier`: peakK=2, bestPeak 42,095 @0.79%. (Tools:
+scratchpad/k1_slice.py, dump_crossrun.py.)
+
 SELF-CONSISTENT (both arms my build, same parquets): confirmed - my-build MAX == source-199 MAX EXACTLY
 (37,676 @0.918% / 38,300, +0.0%), so the max path is build-stable and the A/B is clean. FLOOR A/B (median
 default / mean / 5th-pct) ALL give identical decision metrics (42,045 / 43,873); the floors demonstrably
