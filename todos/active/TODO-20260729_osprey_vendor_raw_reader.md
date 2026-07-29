@@ -259,7 +259,32 @@ their exact existing text.
 Note the fix is intentionally conservative on formatting: output is byte-identical to today
 wherever today's output already round-trips, so only genuinely-truncated values move.
 
-## Result: raw vs mzML parity after both precision fixes
+## FINAL RESULT: exact byte parity, both comparisons
+
+With all three precision fixes in place, on
+`2025-0724-TDP43-PlasmaEV-PLT1-A01-365-001.raw` (3.07 GB, 161,099 MS2 + 965 MS1):
+
+| comparison | result |
+|---|---|
+| **raw-sourced vs mzML-sourced** `.spectra.bin` | `PARITY: 2,260,174,556 bytes identical` |
+| **same mzML through MzmlReader vs ProteoWizard** | `PARITY: 2,260,174,556 bytes identical` |
+
+Acceptance criterion 2 of the issue ("byte-parity ... OR the differences are characterized and
+understood") is met in its **strong** form. No tolerance, no characterization needed.
+
+The three defects, all in our own code, all now fixed:
+
+| defect | records affected | fix |
+|---|---|---|
+| `MsDataFileImpl.GetStartTime` did `timeInSeconds()/60` on a value already in minutes | 9,269 RTs | return the recorded value when the unit is `UO_minute` |
+| .NET Framework misparses some decimals; `XmlConvert.ToDouble` inherits it | 2 RTs | net472 parses via the CRT's `strtod` (`NativeStrtod`) |
+| `pwiz::util::toString` truncated double cvParams to 12 fractional digits | lossy storage; masked the other two | shortest round-tripping form when 12 digits would lose information |
+
+The `strtod` fix also removes a cross-target-framework divergence: net472 and net8.0 Osprey now
+produce identical `.spectra.bin` from one mzML, so golden baselines stop being TFM-specific - which
+matters for the .NET 8 port independently of vendor raw reading.
+
+## Earlier result (before the strtod fix), kept for the record
 
 Verified end to end on `2025-0724-TDP43-PlasmaEV-PLT1-A01-365-001.raw` (3.07 GB), comparing a
 raw-sourced `.spectra.bin` against one built from the mzML msconvert produced from that same raw
