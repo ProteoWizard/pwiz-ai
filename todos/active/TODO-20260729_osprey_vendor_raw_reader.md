@@ -290,6 +290,57 @@ Verification was done on a throwaway `tmp-verify-combined` branch (osprey branch
 pwiz commit), because the demonstration needs both changes at once while the two PR branches stay
 independent.
 
+## Reader-vs-reader isolation: OSPREY_MZML_VIA_PWIZ
+
+`OSPREY_MZML_VIA_PWIZ=1` (commit `7aad6bba1c`) routes mzML through ProteoWizard instead of
+`MzmlReader`, so the two readers can be compared against ONE fixed input file. Raw-vs-mzML varies
+reader and file together; this varies only the reader, so any difference is unambiguously a
+`MzmlReader` defect.
+
+Vendor centroiding is NOT requested on the mzML path: `MsDataFileImpl` centroids through a
+`VendorOnlyPeakDetector` that **throws when no vendor API is behind the data**
+(`MsDataFileImpl.cs:783-786`), and the mzML is already centroided by the conversion. That also makes
+it a pure reader comparison rather than a centroiding comparison.
+
+**Result on the same 2.41 GB mzML, both readers, all precision fixes applied:**
+
+| MS2 field (of 161,099) | differing records |
+|---|---|
+| retentionTime | **2** |
+| scanNumber, precursorMz, isoCenter, isoLower, isoUpper, peakCount, m/z, intensity | **0** |
+
+Identical file lengths (2,260,174,556). MS1 counts equal. So **161,097 of 161,099 records are
+byte-identical between the hand-written reader and ProteoWizard**, and the residual is entirely
+`MzmlReader`'s - the same 2 records, same values, as the raw-vs-mzML comparison, which confirms the
+raw path was never implicated in them.
+
+### The 2 records: what is known, and what is NOT
+
+Records 129320 (spectrum index 5679) and 155352 (index 6378). `MzmlReader` yields
+`0.8665340500000001` / `0.9726369500000001`; ProteoWizard yields `0.86653405` / `0.97263695`.
+
+Established facts:
+
+* The arithmetic matches a seconds->minutes division **exactly**:
+  `51.992043 / 60 == 0.8665340500000001` and `58.358217 / 60 == 0.9726369500000001`. Both hit their
+  observed value bit-for-bit, which is not coincidence.
+* BUT neither `51.992043` nor `58.358217` appears anywhere in the mzML.
+* Spectrum 5679's `<scanList>` contains exactly ONE retention time:
+  `MS:1000016 value="0.86653405" unitName="minute"`. No `MS:1000894`, no seconds-valued param.
+* `XmlConvert.ToDouble("0.86653405") == 0.86653405` exactly, so the documented parse of the actual
+  text cannot produce the observed value.
+
+`MzmlReader` has two RT branches - `MS:1000016` (divided by 60 when `unitName` contains "second")
+and `MS:1000894` (always divided by 60) - and a seconds division is clearly implicated by the
+arithmetic. Worth noting `MS:1000927 ion injection time` carries `unitName="millisecond"`, which
+**contains the substring "second"**; whether that can reach the scan-start-time branch was not
+established.
+
+**Not diagnosed. Do not treat the seconds-division story as confirmed** - the two facts above
+(no seconds text in the file, clean parse of the real text) contradict the simple version of it. The
+next step is a single-spectrum reproduction to distinguish a parse bug from state leaking across
+spectra in the producer/consumer decode, not more hypothesising.
+
 ## Progress Log
 
 ### 2026-07-29 - Reader implemented; vendor runtime deployment identified
