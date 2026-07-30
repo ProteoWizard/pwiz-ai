@@ -113,9 +113,24 @@ def main():
     print(f'\n  -> acceptances {100 * (acc.sum() - base.sum()) / max(base.sum(), 1):+.1f}% '
           f'on IDENTICAL evidence; the reported q still says 1% while the true error is '
           f'{sub_false[acc].mean() / max(t_is_false[base].mean(), 1e-9):.1f}x the baseline.')
-    # WHY: the gate selects targets on SCORE but keeps their decoys unconditioned, so inside the
-    # subset the null no longer represents the target population it is being asked to calibrate.
-    # Count the null support that survives near the operating point.
+    # WHY, in counting terms. TDC reads the RATIO of decoys to targets ABOVE a score. Selecting
+    # targets by q keeps ~every target above the cut but only a pairing-determined sample of the
+    # decoys above it. Overall the subset is still 1:1 (one decoy per kept target) - which is
+    # exactly why "we kept the paired decoys, so it is symmetric" is wrong: the symmetry that
+    # matters is above the threshold, not in total.
+    s_gate = t_scores[gate].min() if gate.any() else np.inf
+    tf, df = int((t_scores >= s_gate).sum()), int((d_scores >= s_gate).sum())
+    ts, ds = int((t_scores[gate] >= s_gate).sum()), int((d_scores[gate] >= s_gate).sum())
+    print(f'\n  counting view at the gate score cut ({s_gate:.2f}):')
+    print(f'    full population : {tf:>7,} targets, {df:>6,} decoys above the cut  '
+          f'-> ratio {df / max(tf, 1):.4f}')
+    print(f'    retained subset : {ts:>7,} targets, {ds:>6,} decoys above the cut  '
+          f'-> ratio {ds / max(ts, 1):.4f}')
+    print(f'    targets above the cut retained {100 * ts / max(tf, 1):5.1f}%, '
+          f'decoys above the cut retained {100 * ds / max(df, 1):5.1f}%  '
+          f'<- the asymmetry, with NO model retraining involved')
+    print(f'    (subset is 1:1 overall: {int(gate.sum()):,} targets and {int(gate.sum()):,} decoys)')
+
     s1 = t_scores[base].min() if base.any() else np.inf
     print(f'  -> null support at the baseline 1% score cut ({s1:.2f}): '
           f'{int((d_scores >= s1).sum()):,} decoys against {int((t_scores >= s1).sum()):,} targets '
