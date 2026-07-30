@@ -248,10 +248,20 @@ BY CONSTRUCTION (every decoy and false target drawn from the same null):
 
 **+40.6% acceptances on identical evidence, still reporting 1%, true error 5.3x the baseline.**
 Null support at the baseline 1% score cut: **95 decoys against 9,519 targets in the full
-competition, 1 inside the gate.** The decoys were never selected; the targets were. In a real
-competition it is worse still, since a target clears the gate partly by beating its own decoy.
-This is protein-compact's failure mode with the biology removed - which is why the protein story
-is not what makes it work.
+competition, 1 inside the gate.** The decoys were never selected; the targets were.
+
+The manipulation is a pure RELABELING - sweeping the gate gives 2% -> true 2.02%, 5% -> 5.05%,
+10% -> 9.72%, and in every case the ENTIRE gated set clears "1%". Whatever you admit at the gate
+becomes your 1% set; the +40.6% is just the consequence of choosing 5%.
+
+**Which failure this models (Brendan, 2026-07-30): the EncyclopeDIA / Spectronaut / original-Osprey
+pass-2 case, NOT protein-compact.** A q-based gate sweeps entrapment in at the false-target rate -
+measured here: 332 entrapment at a 1% gate, 647 at 2%, **1,294 at 5%**, 2,225 at 10% - so the
+relabelled pool still contains them and the oracle REPORTS the inflation (this is why those tools
+show the Fig-4a plateau). The >=2-peptide protein stratum contains **37** entrapment peptides:
+~35x less oracle visibility, no plateau, metrics look clean. Same estimator error, opposite
+detectability. The organising rule and the detector split are in
+[[TODO-osprey_selected_null_diagnostics]].
 
 ### CURVE SHAPE (2026-07-30): protein-compact does NOT show the Fig-4a plateau
 `CohortAnalysis/plateau_check.py`, estimated FDP vs nominal threshold, 82-file runs:

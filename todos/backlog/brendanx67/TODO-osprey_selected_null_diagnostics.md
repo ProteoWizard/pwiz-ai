@@ -22,6 +22,30 @@ while DIA-NN's curve rises with the threshold. A flat curve means the reported q
 discriminating: sweeping the nominal threshold returns nearly the same set, pinned at whatever
 true error the first-pass filter admitted.
 
+## THE ORGANISING RULE (Brendan, 2026-07-30) - what decides whether anyone can catch it
+
+**An entrapment oracle can audit a selection rule if and only if the rule is a function of
+properties the entrapment peptides POSSESS.** Both failure modes below share one estimator error -
+a null conditioned on target survival - but they split on this, and the split decides the detector.
+
+| selection criterion | do entrapment peptides have it? | consequence |
+|---|---|---|
+| target score / q threshold | YES - entrapment IS a false target | rides into the pool at the false-target rate; oracle SEES the inflation (shows up as the Fig-4a plateau) |
+| protein co-membership (>=2 peptides) | NO - no coherent protein | cannot ride along; oracle goes BLIND, no plateau, metrics look fine |
+| run count / reproducibility | YES - 48-73% of accepted entrapment has k>=2 | auditable; this is why mean(best-N) can be validated |
+| reconciliation / consensus RT | PARTLY - has an RT, but consensus is gated on target q | partially auditable |
+
+Measured on the same 82-file data:
+- q-gate at 5% sweeps **1,294 entrapment peptides** into the pool (332 at 1%, 647 at 2%, 2,225 at
+  10% - the count roughly doubles as the gate doubles, implied FDP 1.96 / 3.20 / 5.01 / 7.09%).
+  Relabel that pool as "1%" and those 1,294 are still inside it: the oracle reports ~5%.
+- the >=2-peptide protein stratum contains **37**. A **~35x difference in oracle visibility.**
+
+So the q-gate reductio below models the **EncyclopeDIA / Spectronaut / original-Osprey-pass-2**
+failure (detectable, plateaus), NOT protein-compact (undetectable by entrapment, no plateau).
+Class A needs the SHAPE test; class B needs provenance + auditability. A suite with only one of
+them has a hole exactly where the most elusive method sits.
+
 ## Why FDRBench alone will not catch every form
 
 Two independent escape routes, both measured on our own data:
