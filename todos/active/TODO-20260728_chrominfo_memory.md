@@ -290,9 +290,22 @@ read back from the .skyd, which has every step. So every step of a file gets the
 annotations and user set when a chrom info is rebuilt. `AgilentCEOpt` confirms this: its
 non-zero steps come back equal to the document's.
 
-**`UpdateResults` now populates the columnar results itself**, including
-`ChosenPeakIndexes`, which it is the only place that can: it has the chromatograms in hand while
-it picks each peak. `ChangeAbbreviatedResults` on both doc nodes sets them; every other path
+**Conversion lives in `MoleculeResults.ConvertResults`** (2026-07-30), called by `UpdateResults`
+once the columnar results are built. A file converts only when the boundaries of *every* one of
+the precursor's transition peaks match a candidate peak, and the same one; if any does not, they
+are all treated as peaks whose boundaries the user set. Empty peaks say nothing either way.
+
+Two things that had to be got right:
+- **`MeasuredResults.IsLoaded` is false during the pass that recalculates results** - it wants the
+  final joined cache - so guarding on it meant conversion never ran at all. The guard is now per
+  file, inside `ConvertResults`: a file whose chromatograms could not be read leaves every
+  transition's chrom infos alone, since integrating a custom peak needs the chromatogram too.
+- **`UpdateResults` only replaces the columnar form when the results really changed.** Otherwise
+  it overwrote a converted form with an unconverted one, and made an unchanged document a new
+  object, which `TestMProphetResultsHandler` catches with `Assert.AreSame`.
+
+**`UpdateResults` used to populate `ChosenPeakIndexes` itself**, capturing the index inline while
+it picked each peak. `ChangeAbbreviatedResults` on both doc nodes sets them; every other path
 (reading a document, merging, the many `ChangeResults` callers) still leaves them to be derived
 from the chrom infos, without the indexes.
 
