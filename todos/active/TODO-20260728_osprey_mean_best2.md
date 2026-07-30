@@ -183,8 +183,16 @@ spread17 A .52/B .23 -> +11.8%). Residual: F=5/6 under-predicted by ~3.7 pts.
   large as anything attributable to size. (An earlier entry called fixed-size behaviour
   "essentially deterministic" off the 20-file quartet alone; that was luck of the draw.) Any single
   cohort's number - including the 82-file +14.6% - is one draw from a wide distribution.
-- Real size dependence DOES exist at the small end and survives replication: every 10-file cohort
-  (+4.2..+7.9%) beat every 20-file cohort (+2.5..+3.8%).
+- **FINAL SIZE CURVE (81 arms, 35 cohort comparisons, replicates at 6 sizes -
+  `CohortAnalysis/sizecurve.py`)**: F=5 n=4 mean +7.0% (+5.4..+8.8) | F=10 n=4 +5.9% (+4.2..+7.9) |
+  F=12 n=2 +4.7% | F=15 n=2 **+5.0/+5.0** | F=20 n=4 +2.9% (+2.5..+3.8) | F=40 n=3 +6.4%
+  (+2.9/+3.3/+12.9) | F=60 n=2 +4.3% | F=75 n=2 +8.5% (+6.7/+10.3) | F=82 n=1 +14.6%.
+  Median **+5.6%**, range +1.8..+14.6%.
+  - A real MINIMUM near 20 files: the four 20-file cohorts sit entirely below the two 15-file and
+    four 5-file cohorts with no overlap, so the small-cohort hump replicates and is not noise.
+  - **The number to quote when anyone cites a single cohort**: the largest within-size spread
+    (9.9 pts at F=40) EXCEEDS half the total range across all sizes (6.4 pts). Cohort composition
+    matters more than cohort size.
 - UNION EFFICIENCY is the cleanest cross-cohort summary (share of run-level detections surviving
   the experiment cut; the union is aggregation-independent so sizes are comparable):
   F=4 93.0% -> 95.6%, F=20 79.6% -> 81.6%, F=40 74.2% -> 76.4%, F=60 70.6% -> 74.6%,
