@@ -202,6 +202,44 @@ decoy's OWN data alone; it is invalid the moment it reads the target's q / RT / 
   COUNT asymmetry + conditioned-selection DISTRIBUTION asymmetry), one belief, surviving because he
   re-derives FDR in Pass 2. Neither the pairing nor the Pass-2 venue makes an estimator honest.
 
+### HOW protein-compact actually depletes the null (code read + Brendan, 2026-07-30)
+`BuildProteinCompactStratum` (`FirstJoinTask.cs:1540`) builds `pepProteins` from TARGET entries
+only (`!e.IsDecoy`), counts DETECTED target peptides per protein, keeps proteins with >=2, then
+adds `e.Id & ~LibraryEntry.DECOY_ID_BIT` - a BASE_ID. Target and decoy share that base_id, so the
+stratum removes and retains COMPLETE PAIRS. There is no decoy-side tally anywhere: a decoy peptide
+can never contribute to any protein's count.
+
+So the failure is NOT pass-through retention of decoys whose targets passed (our isolation
+experiment's fatal arm); pair-complete removal by itself is harmless (CONTROL 2). It is
+**CORRELATION**:
+- a high-scoring TARGET is probably a real peptide of a really-present protein, so its protein
+  probably has >=2 other detected peptides -> retained;
+- a high-scoring DECOY sits on a qualifying protein only by luck, since qualification is decided by
+  its PAIRED TARGET's protein, which knows nothing about the decoy's score -> retained at the base rate.
+Retention above the cut is therefore higher for targets than decoys, D(s)/T(s) falls, q is
+optimistic. **Pair-symmetric membership with a target-correlated criterion is the trap** - which is
+exactly what the code comment ("target and paired decoy share a base_id, so this is pair-symmetric")
+asserts as its defence.
+
+Second channel, same cause, seen from the ADDED peptides: the sub-1% targets admitted via the
+protein rule were not selected for beating their decoys, but they are scored against a null that
+has lost every high decoy whose pair sat on a non-qualifying protein.
+
+**Rule of thumb that falls out (Brendan)**: re-admit every target AND decoy down to the lowest
+score just added and nothing changes - counts above every threshold in play are whole again. So
+**any pass-2 scheme whose q differs from full-population TDC differs only because of what it
+deleted. The gain IS the deletion.**
+
+Candidate fix (unmeasured): convert the target q cutoff to a composite score s*, then require the
+selection trait per class on its OWN peptides - a target protein qualifies on >=2 target peptides
+above s*, a decoy protein on >=2 DECOY peptides above s* - and retain all decoys down to s*
+regardless. Implementable: the pairing manifest gives decoys source-protein accessions. CAUTION:
+decoy proteins clear >=2 essentially only by fluke, and conditioning on a fluke selects unusually
+high-scoring decoy groups, so this could overshoot into CONSERVATIVE rather than land calibrated.
+Measure both strata at the same s* (qualifying target vs decoy protein counts) plus the entrapment
+oracle before believing either direction. Note it does NOT fix auditability - entrapment proteins
+still cannot reach >=2 peptides, so the oracle stays blind either way.
+
 ### MEASURED 2026-07-30: the entrapment oracle is STRUCTURALLY BLIND to the protein stratum
 Brendan's point — keeping a paired decoy does not preserve symmetry when the decoy is kept ONLY
 because its target was kept — has a measurable consequence for the ORACLE, not just the decoy null.
