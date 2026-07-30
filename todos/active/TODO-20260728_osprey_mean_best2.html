@@ -1,0 +1,455 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Osprey mean(best-N): sensitivity loss and recovery</title></head><body><style>
+  :root {
+    --bg: #ffffff; --ink: #16181d; --ink2: #52565f; --muted: #8b8f99; --grid: #e6e8ec;
+    --card: #fbfbfc; --edge: #e0e2e8; --max: #b0511f; --agg: #1f6f8b; --accent: #6b4fa8;
+    --good: #2f7d4f; --warn: #b3541e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14161a; --ink: #eef0f4; --ink2: #b9bec8; --muted: #7d838f; --grid: #2a2e36;
+            --card: #1b1e24; --edge: #2f343d; --max: #e08a5a; --agg: #6fc0d8; --accent: #b39bdd;
+            --good: #74c48f; --warn: #e8a35e; }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161a; --ink: #eef0f4; --ink2: #b9bec8; --muted: #7d838f; --grid: #2a2e36;
+    --card: #1b1e24; --edge: #2f343d; --max: #e08a5a; --agg: #6fc0d8; --accent: #b39bdd;
+    --good: #74c48f; --warn: #e8a35e;
+  }
+  :root[data-theme="light"] {
+    --bg: #ffffff; --ink: #16181d; --ink2: #52565f; --muted: #8b8f99; --grid: #e6e8ec;
+    --card: #fbfbfc; --edge: #e0e2e8; --max: #b0511f; --agg: #1f6f8b; --accent: #6b4fa8;
+    --good: #2f7d4f; --warn: #b3541e;
+  }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.55 "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 30px 22px 70px; }
+  h1 { font-size: 25px; margin: 0 0 4px; letter-spacing: -0.2px; }
+  h2 { font-size: 18px; margin: 34px 0 2px; }
+  .sub { color: var(--ink2); font-size: 13.5px; margin: 0 0 18px; }
+  .note { color: var(--ink2); font-size: 13.5px; margin: 6px 0 12px; }
+  .card { background: var(--card); border: 1px solid var(--edge); border-radius: 9px;
+          padding: 14px 14px 8px; margin: 12px 0 0; overflow-x: auto; }
+  .lead { border-left: 3px solid var(--accent); padding-left: 12px; margin: 16px 0 22px; }
+  .lead b { color: var(--ink); }
+  .key { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 12.5px;
+         color: var(--ink2); margin: 2px 0 8px; }
+  .key i { width: 22px; height: 3px; display: inline-block; vertical-align: 2px; margin-right: 5px; }
+  .key .sq { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 5px; }
+  table { border-collapse: collapse; font-size: 12.5px; width: 100%; }
+  th, td { text-align: right; padding: 4px 9px; border-bottom: 1px solid var(--grid);
+           white-space: nowrap; }
+  th { color: var(--ink2); font-weight: 600; }
+  td.l, th.l { text-align: left; }
+  .pos { color: var(--good); } .neg { color: var(--warn); }
+  #tip { position: fixed; pointer-events: none; opacity: 0; transition: opacity .1s;
+         background: var(--ink); color: var(--bg); font-size: 12px; padding: 7px 9px;
+         border-radius: 6px; max-width: 300px; z-index: 9; line-height: 1.45; }
+  .toggles { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 0; }
+  button { font: inherit; font-size: 12.5px; padding: 4px 11px; border-radius: 999px;
+           border: 1px solid var(--edge); background: transparent; color: var(--ink2);
+           cursor: pointer; }
+  button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  svg text { fill: var(--ink2); font-size: 11px; }
+  svg .ax { stroke: var(--edge); }
+  svg .gl { stroke: var(--grid); }
+  svg .lbl { fill: var(--ink); font-size: 11.5px; }
+  details { margin-top: 10px; } summary { cursor: pointer; color: var(--ink2); font-size: 13px; }
+</style>
+
+<div class="wrap">
+<h1>Reproducibility aggregation in Osprey: what the sensitivity loss is, and what mean(best-N) recovers</h1>
+<p class="sub">SEA-AD Pilot-MTG Astral DIA, entrapment oracle (1:1 library decoys + entrapment).
+Every point is one Osprey first-pass arm; <b>discoveries are counted at matched 1% TRUE FDP</b> so
+arms are compared at equal honesty. Generated <span id="gen"></span> from
+<span id="narms"></span> arms across <span id="ncoh"></span> cohorts.</p>
+
+<div class="lead">
+<p><b>The loss.</b> As runs accumulate the real proteome saturates while the null keeps accruing at
+a roughly constant rate, so each added file contributes fewer new real precursors and about as many
+new false ones. An experiment-wide <i>max</i> score accepts a precursor on the strength of one good
+run, so it inherits that collapsing purity and the 1% threshold must tighten &mdash; which costs
+identifications in every file.</p>
+<p><b>The recovery.</b> mean(best-N) demotes acceptances resting on a single run and spends the
+freed FDR headroom on reproducible precursors. It returns a minority of what scale costs.</p>
+<p><b>The caveat that dominates everything.</b> The size of that recovery is set by <i>which files
+are in the cohort</i>, not by how many. Five different 40-file cohorts range from +2.9% to +12.9%,
+and even at large scale the magnitude does not settle: three cohorts of 75&ndash;82 files give
+<b>+6.7%, +10.3% and +14.6%</b> &mdash; the two 75-file sets differ by 3.6 points despite sharing
+91% of their files. Quote the range with a per-cohort uncertainty of roughly &plusmn;4 points; never
+a single cohort's number.</p>
+<p><b>And it is not bought by loose FDR.</b> Panel 2: every arm measured sits below the nominal 1%,
+and mean(best-2) is the <i>more</i> conservative member of the pair in most cohorts. The extra
+identifications come with better calibration, not worse.</p>
+</div>
+
+<h2>1 &middot; The loss of sensitivity, and how much is recovered</h2>
+<p class="note">Union efficiency = share of run-level detections that survive the experiment-wide
+cut. The union is computed from per-file passing, which the aggregation provably does not touch
+(verified byte-identical between arms), so cohorts of different size and quality are comparable.</p>
+<div class="card"><div class="key">
+  <span><i style="background:var(--max)"></i>max (best of runs)</span>
+  <span><i style="background:var(--agg)"></i>mean(best-2)</span>
+  <span style="color:var(--muted)">hover any point for the cohort</span>
+</div><svg id="p1" viewBox="0 0 1080 380"></svg></div>
+
+<h2>2 &middot; Calibration: is the sensitivity bought by under-reporting FDR?</h2>
+<p class="note">True entrapment FDP measured at the reported q &le; 1% cut. <b>Below the dashed line
+is conservative</b> (the reported q overstates the error); above it would mean the reported q is
+optimistic and any extra identifications are illusory. This is the panel that decides whether the
+recovery is real &mdash; a method that gained sensitivity by drifting above 1% would be worthless.</p>
+<div class="card"><div class="key">
+  <span><i style="background:var(--max)"></i>max</span>
+  <span><i style="background:var(--agg)"></i>mean(best-2)</span>
+  <span><i style="background:var(--muted);height:0;border-top:2px dashed var(--muted)"></i>nominal 1%</span>
+</div><svg id="p2" viewBox="0 0 1080 380"></svg></div>
+
+<h2>3 &middot; Why it depends on the file set, not the file count</h2>
+<p class="note">Every cohort measured, by size. Marker shape encodes how the cohort was drawn.
+Cohorts at the same size sit in vertical stacks &mdash; the spread within a stack is what a single
+number like &ldquo;+14.6% at 82 files&rdquo; hides.</p>
+<div class="card"><div class="key">
+  <span><span class="sq" style="background:var(--agg)"></span>contiguous (first N files)</span>
+  <span><span class="sq" style="background:var(--accent)"></span>disjoint slice</span>
+  <span><span class="sq" style="background:var(--max)"></span>sparse (every k-th file)</span>
+  <span><span class="sq" style="background:var(--good)"></span>pools excluded</span>
+</div><svg id="p3" viewBox="0 0 1080 400"></svg>
+<div class="toggles">
+  <button id="b3a" aria-pressed="true">gain vs max</button>
+  <button id="b3b" aria-pressed="false">absolute discoveries</button>
+</div></div>
+
+<h2>4 &middot; The same files, sampled two ways</h2>
+<p class="note">Matched-size pairs. Sparse sampling spans the whole acquisition series; contiguous
+takes a block. At 17 files sparse more than doubles the gain; at 28 files it halves it. The max
+baseline is what moves &mdash; and it moves with file choice, not file count.</p>
+<div class="card"><svg id="p4" viewBox="0 0 1080 300"></svg></div>
+
+<h2>5 &middot; How deep should N go?</h2>
+<p class="note">Aggregation depth swept within single cohorts. N=1 is max by definition
+(mean of the best 1 per-run score). Both large cohorts peak at N=3&ndash;6 rather than N=2, and the
+curve is forgiving above the peak but not below it.</p>
+<div class="card"><svg id="p5" viewBox="0 0 1080 340"></svg></div>
+
+<h2>6 &middot; Mechanism</h2>
+<p class="note">Left: purity of what the last ~10 files add to the accepted union &mdash; the
+marginal file contributes almost entirely false precursors once cohorts get large (the 1:1
+estimator saturates at 100%). Right: where mean(best-2) moves acceptances, by the number of runs
+each acceptance rests on. Singletons always leave; the freed headroom goes to 2-run precursors in
+small cohorts and 6+-run precursors in large ones.</p>
+<div class="card"><svg id="p6" viewBox="0 0 1080 340"></svg></div>
+
+<h2>7 &middot; Every measurement</h2>
+<div class="card"><table id="tbl"></table></div>
+<details><summary>What was tested and rejected</summary>
+<div class="note" id="rejected"></div></details>
+<p class="note" style="margin-top:26px;border-top:1px solid var(--edge);padding-top:12px">
+Permanent record accompanying <code>ai/todos/active/TODO-20260728_osprey_mean_best2.md</code>
+(read its 2026-07-30 night-session entry for the written analysis, including the hypotheses that
+were tested and rejected). Data embedded in this file, read directly from the run directories under
+<code>D:\test\Pilot-MTG-Tissue-May2026\runs</code>; regenerate with
+<code>python ai/.tmp/make_report.py</code>. Branch
+<code>Skyline/work/20260728_osprey_mean_best2</code>.</p>
+</div>
+<div id="tip"></div>
+
+<script>
+const DATA = [{"cohort":"20","F":20,"kind":"contiguous","desc":"files 1-20","arms":{"1":{"matched":46496,"disc_q1":45015,"fdp_q1":0.8760175814088026,"k1_fdp":7.623410400970945,"k1_share":3.8156579677956692,"gain":0.0,"eff":79.56738996509002},"2":{"matched":47685,"disc_q1":45863,"fdp_q1":0.7632402055470645,"k1_fdp":3.1353546527635805,"k1_share":1.2508171714970582,"gain":2.557209222298692,"eff":81.60209459921965},"3":{"matched":47716,"disc_q1":45315,"fdp_q1":0.7012426370369637,"k1_fdp":0.9231877588692766,"k1_share":0.4828255214074695,"gain":2.62388162422574,"eff":81.65514408926005},"4":{"matched":47488,"disc_q1":44243,"fdp_q1":0.6360930482227588,"k1_fdp":0.0,"k1_share":0.1715730540003612,"gain":2.1335168616655196,"eff":81.26497364638237},"6":{"matched":47054,"disc_q1":42750,"fdp_q1":0.6015781417265104,"k1_fdp":0.0,"k1_share":0.058355313834877805,"gain":1.2001032346868548,"eff":80.52228078581696}},"union":58436,"unionFdp":3.9231645207994728,"dmu":0.15645062998394618,"margFdp":14.726989079563182,"kslice_max":{"k=1":1718,"k=2":1915,"k=3-5":5679,"k>=6":35713},"kslice_b2":{"k=1":574,"k=2":2397,"k=3-5":6820,"k>=6":36099},"kdelta":{"k=1":-1144,"k=2":482,"k=3-5":1141,"k>=6":386}},{"cohort":"82","F":82,"kind":"contiguous","desc":"files 1-82","arms":{"1":{"matched":38300,"disc_q1":37676,"fdp_q1":0.9176506325114853,"k1_fdp":20.56722095708768,"k1_share":1.6921325106585812,"gain":0.0,"eff":58.74233128834356},"12":{"matched":43658,"disc_q1":41074,"fdp_q1":0.7291978416569707,"k1_fdp":101.55065347562042,"k1_share":0.007280846519755363,"gain":13.989556135770234,"eff":66.9601226993865},"20":{"matched":42825,"disc_q1":39551,"fdp_q1":0.6908904006051886,"k1_fdp":67.70043565041361,"k1_share":0.010092344956350608,"gain":11.81462140992167,"eff":65.68251533742331},"2":{"matched":43873,"disc_q1":42045,"fdp_q1":0.7939283498449359,"k1_fdp":10.898118909578775,"k1_share":0.4608623351942036,"gain":14.550913838120104,"eff":67.2898773006135},"3":{"matched":44260,"disc_q1":42552,"fdp_q1":0.8176534218615632,"k1_fdp":7.71270785890788,"k1_share":0.1781236084093093,"gain":15.56135770234987,"eff":67.88343558282209},"4":{"matched":44469,"disc_q1":42622,"fdp_q1":0.7974063932649792,"k1_fdp":23.21157793728467,"k1_share":0.07248749006219894,"gain":16.10704960835509,"eff":68.20398773006134},"6":{"matched":44581,"disc_q1":42612,"fdp_q1":0.7928637476532229,"k1_fdp":76.16299010671533,"k1_share":0.011716736185968036,"gain":16.39947780678851,"eff":68.37576687116564},"8":{"matched":44275,"disc_q1":42054,"fdp_q1":0.7937591048332443,"k1_fdp":87.0434172648175,"k1_share":0.009481593855927182,"gain":15.600522193211487,"eff":67.90644171779141}},"union":65200,"unionFdp":13.049995711938017,"dmu":0.1631024964581892,"margFdp":100.0,"kslice_max":{"k=1":639,"k=2":514,"k=3-5":1357,"k>=6":35253},"kslice_b2":{"k=1":194,"k=2":684,"k=3-5":2364,"k>=6":38853},"kdelta":{"k=1":-445,"k=2":170,"k=3-5":1007,"k>=6":3600}},{"cohort":"10","F":10,"kind":"contiguous","desc":"files 1-10","arms":{"1":{"matched":42805,"disc_q1":41842,"fdp_q1":0.826656594117587,"k1_fdp":5.745537994871502,"k1_share":6.807057756130172,"gain":0.0,"eff":82.05064310222546},"2":{"matched":46182,"disc_q1":43466,"fdp_q1":0.74488170155867,"k1_fdp":3.017850028993178,"k1_share":4.567164179104478,"gain":7.889265272748511,"eff":88.52383599455615}},"union":52169,"unionFdp":2.923866843567012,"dmu":0.21632962651533436,"margFdp":5.799890049477735,"kslice_max":{"k=1":2851,"k=2":3052,"k=3-5":8726,"k>=6":27254},"kslice_b2":{"k=1":1989,"k=2":4435,"k=3-5":9793,"k>=6":27333},"kdelta":{"k=1":-862,"k=2":1383,"k=3-5":1067,"k>=6":79}},{"cohort":"10+10","F":10,"kind":"slice","desc":"files 11-20","arms":{"1":{"matched":45154,"disc_q1":43018,"fdp_q1":0.7854097084834368,"k1_fdp":4.658286856679836,"k1_share":6.911417049089139,"gain":0.0,"eff":84.16873264115421},"2":{"matched":47554,"disc_q1":44305,"fdp_q1":0.6306500542103646,"k1_fdp":1.6432144575343108,"k1_share":4.14319830577209,"gain":5.315143730345041,"eff":88.6424217570414}},"union":53647,"unionFdp":2.7744855867764655,"dmu":0.3876367433418946,"margFdp":5.7358135154226515,"kslice_max":{"k=1":2982,"k=2":3106,"k=3-5":8621,"k>=6":28437},"kslice_b2":{"k=1":1839,"k=2":4377,"k=3-5":9666,"k>=6":28504},"kdelta":{"k=1":-1143,"k=2":1271,"k=3-5":1045,"k>=6":67}},{"cohort":"10+30","F":10,"kind":"slice","desc":"files 31-40","arms":{"1":{"matched":40375,"disc_q1":39975,"fdp_q1":0.9557351611837595,"k1_fdp":4.226690974922853,"k1_share":11.289959759054213,"gain":0.0,"eff":79.4314381270903},"2":{"matched":42919,"disc_q1":40624,"fdp_q1":0.7918276685199053,"k1_fdp":2.1112401969983456,"k1_share":7.017543859649122,"gain":6.3009287925696595,"eff":84.43635648239228}},"union":50830,"unionFdp":2.7784306083365635,"dmu":0.27399245023226515,"margFdp":5.142131312688888,"kslice_max":{"k=1":4517,"k=2":3672,"k=3-5":9008,"k>=6":22812},"kslice_b2":{"k=1":2856,"k=2":5050,"k=3-5":9928,"k>=6":22864},"kdelta":{"k=1":-1661,"k=2":1378,"k=3-5":920,"k>=6":52}},{"cohort":"10+50","F":10,"kind":"slice","desc":"files 51-60","arms":{"1":{"matched":30372,"disc_q1":29091,"fdp_q1":0.7720103099646508,"k1_fdp":4.5941860196322155,"k1_share":7.118097264646326,"gain":0.0,"eff":80.80453348232102},"2":{"matched":31638,"disc_q1":30015,"fdp_q1":0.8020526822591644,"k1_fdp":3.5901746178249643,"k1_share":3.877591706539075,"gain":4.168312919794547,"eff":84.17271929124432}},"union":37587,"unionFdp":2.6978516083618476,"dmu":0.20293715205583326,"margFdp":5.262513768204626,"kslice_max":{"k=1":2074,"k=2":2359,"k=3-5":6596,"k>=6":18108},"kslice_b2":{"k=1":1167,"k=2":3321,"k=3-5":7441,"k>=6":18167},"kdelta":{"k=1":-907,"k=2":962,"k=3-5":845,"k>=6":59}},{"cohort":"12","F":12,"kind":"contiguous","desc":"files 1-12","arms":{"1":{"matched":42572,"disc_q1":41629,"fdp_q1":0.8744106592174736,"k1_fdp":6.421320184248823,"k1_share":6.535602972908175,"gain":0.0,"eff":83.17117961942719},"2":{"matched":44092,"disc_q1":42284,"fdp_q1":0.7560908180174368,"k1_fdp":3.0252056553333095,"k1_share":3.4316847095450362,"gain":3.570421873531899,"eff":86.14074160903373}},"union":51186,"unionFdp":3.2100691107891093,"dmu":0.1846440680560114,"margFdp":9.05821037950525,"kslice_max":{"k=1":2726,"k=2":2747,"k=3-5":7467,"k>=6":28770},"kslice_b2":{"k=1":1455,"k=2":3697,"k=3-5":8383,"k>=6":28864},"kdelta":{"k=1":-1271,"k=2":950,"k=3-5":916,"k>=6":94}},{"cohort":"17","F":17,"kind":"contiguous","desc":"files 1-17","arms":{"1":{"matched":45898,"disc_q1":43878,"fdp_q1":0.8022252658112209,"k1_fdp":5.681155439195548,"k1_share":4.4261474775963245,"gain":0.0,"eff":81.1434834877307},"2":{"matched":48267,"disc_q1":45279,"fdp_q1":0.7374288277210356,"k1_fdp":3.0345979693888707,"k1_share":2.0351913917798554,"gain":5.161444943134777,"eff":85.3316597128916}},"union":56564,"unionFdp":3.763745763185821,"dmu":0.15357624250561475,"margFdp":12.67267952962667,"kslice_max":{"k=1":1946,"k=2":2196,"k=3-5":6109,"k>=6":33715},"kslice_b2":{"k=1":923,"k=2":3048,"k=3-5":7396,"k>=6":33985},"kdelta":{"k=1":-1023,"k=2":852,"k=3-5":1287,"k>=6":270}},{"cohort":"spread17","F":17,"kind":"sparse","desc":"every 5th file across the whole series","arms":{"1":{"matched":36251,"disc_q1":34874,"fdp_q1":0.8351872808549512,"k1_fdp":9.047889406972043,"k1_share":4.6586069907685275,"gain":0.0,"eff":76.87625914537165},"2":{"matched":40522,"disc_q1":37965,"fdp_q1":0.7886808550569004,"k1_fdp":5.167241731621675,"k1_share":3.620753032610408,"gain":11.781743951890983,"eff":85.9336231576715}},"union":47155,"unionFdp":4.374476721004877,"dmu":0.16052474536020175,"margFdp":35.36137198856676,"kslice_max":{"k=1":1630,"k=2":1815,"k=3-5":5874,"k>=6":25670},"kslice_b2":{"k=1":1379,"k=2":3305,"k=3-5":7478,"k>=6":25924},"kdelta":{"k=1":-251,"k=2":1490,"k=3-5":1604,"k>=6":254}},{"cohort":"20+20","F":20,"kind":"slice","desc":"files 21-40","arms":{"1":{"matched":45619,"disc_q1":43881,"fdp_q1":0.7929862846029425,"k1_fdp":3.167833217247287,"k1_share":6.326316748678695,"gain":0.0,"eff":79.45623018775909},"2":{"matched":46772,"disc_q1":43431,"fdp_q1":0.7733288289080895,"k1_fdp":2.1891158833067874,"k1_share":1.8990251977193304,"gain":2.5274556654025733,"eff":81.4644511791549}},"union":57414,"unionFdp":3.5862257258611465,"dmu":0.2521353858146263,"margFdp":10.333292033205304,"kslice_max":{"k=1":2777,"k=2":2174,"k=3-5":5816,"k>=6":33129},"kslice_b2":{"k=1":826,"k=2":2498,"k=3-5":6777,"k>=6":33395},"kdelta":{"k=1":-1951,"k=2":324,"k=3-5":961,"k>=6":266}},{"cohort":"20+40","F":20,"kind":"slice","desc":"files 41-60","arms":{"1":{"matched":34176,"disc_q1":33180,"fdp_q1":0.8897794759311399,"k1_fdp":7.29081614696762,"k1_share":3.955039971148645,"gain":0.0,"eff":76.52828160687895},"2":{"matched":35085,"disc_q1":33960,"fdp_q1":0.8753596658114874,"k1_fdp":3.922557430388771,"k1_share":1.343920011762976,"gain":2.659761235955056,"eff":78.56375117560124}},"union":44658,"unionFdp":4.090903102098453,"dmu":0.18443853182420256,"margFdp":22.245322245322246,"kslice_max":{"k=1":1316,"k=2":1575,"k=3-5":4632,"k>=6":25751},"kslice_b2":{"k=1":457,"k=2":1943,"k=3-5":5591,"k>=6":26014},"kdelta":{"k=1":-859,"k=2":368,"k=3-5":959,"k>=6":263}},{"cohort":"20+60","F":20,"kind":"slice","desc":"files 61-80","arms":{"1":{"matched":33797,"disc_q1":33135,"fdp_q1":0.897058233334307,"k1_fdp":5.7611293673722,"k1_share":6.917025829591006,"gain":0.0,"eff":73.02091435485265},"2":{"matched":35098,"disc_q1":33976,"fdp_q1":0.8393845965391142,"k1_fdp":2.7104266941891573,"k1_share":3.2586019451708634,"gain":3.8494540935585997,"eff":75.83182093163944}},"union":46284,"unionFdp":4.017464117337857,"dmu":0.18170883611660035,"margFdp":7.294999542919828,"kslice_max":{"k=1":2295,"k=2":1827,"k=3-5":5007,"k>=6":24050},"kslice_b2":{"k=1":1109,"k=2":2357,"k=3-5":6200,"k>=6":24367},"kdelta":{"k=1":-1186,"k=2":530,"k=3-5":1193,"k>=6":317}},{"cohort":"spread21","F":21,"kind":"sparse","desc":"every 4th file across the whole series","arms":{"1":{"matched":43161,"disc_q1":41778,"fdp_q1":0.8279177927641228,"k1_fdp":4.038529241619034,"k1_share":6.4744936950706915,"gain":0.0,"eff":78.53594628527757},"2":{"matched":43918,"disc_q1":40752,"fdp_q1":0.7052473611550888,"k1_fdp":2.835170528507169,"k1_share":1.9015687330217077,"gain":1.7538981951298627,"eff":79.91338682970323}},"union":54957,"unionFdp":3.4619128156775627,"dmu":0.1285717252273647,"margFdp":37.64705882352941,"kslice_max":{"k=1":2711,"k=2":2072,"k=3-5":5885,"k>=6":31204},"kslice_b2":{"k=1":777,"k=2":2126,"k=3-5":6535,"k>=6":31423},"kdelta":{"k=1":-1934,"k=2":54,"k=3-5":650,"k>=6":219}},{"cohort":"28","F":28,"kind":"contiguous","desc":"files 1-28","arms":{"1":{"matched":41623,"disc_q1":41091,"fdp_q1":0.9005073211241235,"k1_fdp":16.985990599339388,"k1_share":2.473180913547886,"gain":0.0,"eff":72.01834068691063},"2":{"matched":47624,"disc_q1":45371,"fdp_q1":0.7714852912033345,"k1_fdp":4.387991199563846,"k1_share":1.3965988192792316,"gain":14.41750955000841,"eff":82.40159183320357}},"union":57795,"unionFdp":7.153722688709093,"dmu":0.20934446898609863,"margFdp":40.818783865141484,"kslice_max":{"k=1":1019,"k=2":1114,"k=3-5":3668,"k>=6":35401},"kslice_b2":{"k=1":634,"k=2":2228,"k=3-5":5988,"k>=6":36546},"kdelta":{"k=1":-385,"k=2":1114,"k=3-5":2320,"k>=6":1145}},{"cohort":"spread28","F":28,"kind":"sparse","desc":"every 3th file across the whole series","arms":{"1":{"matched":40835,"disc_q1":40055,"fdp_q1":0.9136429207221044,"k1_fdp":7.105316054177894,"k1_share":5.288712930454919,"gain":0.0,"eff":73.14954141587847},"2":{"matched":43840,"disc_q1":42453,"fdp_q1":0.8527663244574993,"k1_fdp":4.084304161725136,"k1_share":2.522056228678979,"gain":7.35888331088527,"eff":78.53253081112067}},"union":55824,"unionFdp":5.614286010200471,"dmu":0.2435429800114035,"margFdp":72.046783625731,"kslice_max":{"k=1":2124,"k=2":1648,"k=3-5":4588,"k>=6":31801},"kslice_b2":{"k=1":1072,"k=2":2511,"k=3-5":6493,"k>=6":32429},"kdelta":{"k=1":-1052,"k=2":863,"k=3-5":1905,"k>=6":628}},{"cohort":"30","F":30,"kind":"contiguous","desc":"files 1-30","arms":{"1":{"matched":45832,"disc_q1":44396,"fdp_q1":0.8019794943780486,"k1_fdp":10.039853909259069,"k1_share":2.6347708894878705,"gain":0.0,"eff":75.94869585390913},"2":{"matched":48431,"disc_q1":46002,"fdp_q1":0.7653245714119004,"k1_fdp":4.953690413444899,"k1_share":0.69548586207646,"gain":5.670710420666783,"eff":80.25552646405727}},"union":60346,"unionFdp":6.2500739474892795,"dmu":0.24490438489694452,"margFdp":33.78378378378378,"kslice_max":{"k=1":1173,"k=2":1380,"k=3-5":4201,"k>=6":37766},"kslice_b2":{"k=1":320,"k=2":1741,"k=3-5":5436,"k>=6":38514},"kdelta":{"k=1":-853,"k=2":361,"k=3-5":1235,"k>=6":748}},{"cohort":"40","F":40,"kind":"contiguous","desc":"files 1-40","arms":{"1":{"matched":47290,"disc_q1":43967,"fdp_q1":0.7914412378081385,"k1_fdp":7.3769408243495525,"k1_share":2.834928501602746,"gain":0.0,"eff":74.18504690490384},"2":{"matched":48672,"disc_q1":45562,"fdp_q1":0.7771110636129862,"k1_fdp":5.489224512195698,"k1_share":0.7878151260504201,"gain":2.9223937407485727,"eff":76.35302607222414}},"union":63746,"unionFdp":4.733128347753648,"dmu":0.23653525766577085,"margFdp":13.264248704663212,"kslice_max":{"k=1":1247,"k=2":899,"k=3-5":2739,"k>=6":39102},"kslice_b2":{"k=1":360,"k=2":983,"k=3-5":3673,"k>=6":40680},"kdelta":{"k=1":-887,"k=2":84,"k=3-5":934,"k>=6":1578}},{"cohort":"40+20","F":40,"kind":"slice","desc":"files 21-60","arms":{"1":{"matched":43178,"disc_q1":42063,"fdp_q1":0.8750014881080799,"k1_fdp":6.657144621173507,"k1_share":3.9871992414365294,"gain":0.0,"eff":69.33885757415169},"2":{"matched":44601,"disc_q1":43735,"fdp_q1":0.9061450038115044,"k1_fdp":6.333720590995037,"k1_share":1.065069823783512,"gain":3.2956598267636297,"eff":71.62403044755986}},"union":62271,"unionFdp":6.787487797498161,"dmu":0.2817604286323316,"margFdp":70.87794432548179,"kslice_max":{"k=1":1682,"k=2":1295,"k=3-5":3698,"k>=6":35510},"kslice_b2":{"k=1":466,"k=2":1478,"k=3-5":4871,"k>=6":36938},"kdelta":{"k=1":-1216,"k=2":183,"k=3-5":1173,"k>=6":1428}},{"cohort":"40+30","F":40,"kind":"slice","desc":"files 31-70","arms":{"1":{"matched":33484,"disc_q1":33164,"fdp_q1":0.9508944743215357,"k1_fdp":10.840376505986475,"k1_share":4.640461940994256,"gain":0.0,"eff":66.42596413267735},"2":{"matched":37792,"disc_q1":36593,"fdp_q1":0.8126263506214589,"k1_fdp":3.4792515109420274,"k1_share":2.5028627515131685,"gain":12.865846374387766,"eff":74.97222663069354}},"union":50408,"unionFdp":8.648682434656827,"dmu":0.22257081273850587,"margFdp":68.22429906542057,"kslice_max":{"k=1":1543,"k=2":1204,"k=3-5":3117,"k>=6":27387},"kslice_b2":{"k=1":918,"k=2":2034,"k=3-5":5081,"k>=6":28645},"kdelta":{"k=1":-625,"k=2":830,"k=3-5":1964,"k>=6":1258}},{"cohort":"spread41","F":41,"kind":"sparse","desc":"every 2th file across the whole series","arms":{"1":{"matched":43687,"disc_q1":42723,"fdp_q1":0.8426850804718042,"k1_fdp":5.749193228886513,"k1_share":4.1763178212957115,"gain":0.0,"eff":71.17812861495348},"2":{"matched":45420,"disc_q1":44001,"fdp_q1":0.8640848561142657,"k1_fdp":4.306034776351397,"k1_share":1.2556379048525645,"gain":3.9668551285279374,"eff":74.00166186030597}},"union":61377,"unionFdp":7.237548341038797,"dmu":0.19744473066830384,"margFdp":77.50611246943765,"kslice_max":{"k=1":1785,"k=2":1419,"k=3-5":3975,"k>=6":35562},"kslice_b2":{"k=1":554,"k=2":1640,"k=3-5":5177,"k>=6":36750},"kdelta":{"k=1":-1231,"k=2":221,"k=3-5":1202,"k>=6":1188}},{"cohort":"42+40","F":42,"kind":"slice","desc":"files 41-82","arms":{"1":{"matched":34373,"disc_q1":32769,"fdp_q1":0.8087012526022052,"k1_fdp":8.068723885690613,"k1_share":2.5800548947849955,"gain":0.0,"eff":66.77221337270291},"2":{"matched":36305,"disc_q1":34425,"fdp_q1":0.7640911562338679,"k1_fdp":4.470783486348069,"k1_share":0.9006660874601795,"gain":5.620690658365578,"eff":70.52527293212634}},"union":51478,"unionFdp":6.455785599375508,"dmu":0.24341444638382445,"margFdp":24.24500212675457,"kslice_max":{"k=1":846,"k=2":754,"k=3-5":2418,"k>=6":28772},"kslice_b2":{"k=1":311,"k=2":822,"k=3-5":3185,"k>=6":30212},"kdelta":{"k=1":-535,"k=2":68,"k=3-5":767,"k>=6":1440}},{"cohort":"4","F":4,"kind":"contiguous","desc":"files 1-4","arms":{"1":{"matched":42304,"disc_q1":40459,"fdp_q1":0.7701376719397998,"k1_fdp":2.6785624438165003,"k1_share":17.913026309294633,"gain":0.0,"eff":93.0044409268786},"2":{"matched":43490,"disc_q1":39833,"fdp_q1":0.5796067036934303,"k1_fdp":1.777547905245868,"k1_share":15.305305305305305,"gain":2.803517397881997,"eff":95.61183660906653}},"union":45486,"unionFdp":1.515681395158514,"dmu":0.2940103167829846,"margFdp":3.1209715720198115,"kslice_max":{"k=1":7258,"k=2":6840,"k=3-5":26420,"k>=6":0},"kslice_b2":{"k=1":6116,"k=2":7341,"k=3-5":26503,"k>=6":0},"kdelta":{"k=1":-1142,"k=2":501,"k=3-5":83,"k>=6":0}},{"cohort":"5","F":5,"kind":"contiguous","desc":"files 1-5","arms":{"1":{"matched":40893,"disc_q1":39595,"fdp_q1":0.8479368465055198,"k1_fdp":3.6143742788057556,"k1_share":15.1930701820845,"gain":0.0,"eff":88.47851486433856},"2":{"matched":44510,"disc_q1":40634,"fdp_q1":0.5632426359116061,"k1_fdp":1.6195726886169528,"k1_share":14.379872605199084,"gain":8.845034602499204,"eff":96.30447011986672}},"union":46218,"unionFdp":2.0273586033604283,"dmu":0.32579463283546917,"margFdp":4.126285748260895,"kslice_max":{"k=1":6016,"k=2":5616,"k=3-5":27965,"k>=6":0},"kslice_b2":{"k=1":5847,"k=2":6573,"k=3-5":28241,"k>=6":0},"kdelta":{"k=1":-169,"k=2":957,"k=3-5":276,"k>=6":0}},{"cohort":"5+5","F":5,"kind":"slice","desc":"files 6-10","arms":{"1":{"matched":40389,"disc_q1":38974,"fdp_q1":0.8407198417339794,"k1_fdp":3.9149200522143386,"k1_share":12.895545314900154,"gain":0.0,"eff":88.56265760333297},"2":{"matched":42583,"disc_q1":39457,"fdp_q1":0.733421386212814,"k1_fdp":2.5004342086912343,"k1_share":10.744971191751743,"gain":5.432172126073931,"eff":93.37353360377152}},"union":45605,"unionFdp":1.835904124024167,"dmu":0.22813461381339084,"margFdp":3.4972937607803485,"kslice_max":{"k=1":5037,"k=2":4980,"k=3-5":29043,"k>=6":0},"kslice_b2":{"k=1":4252,"k=2":6024,"k=3-5":29296,"k>=6":0},"kdelta":{"k=1":-785,"k=2":1044,"k=3-5":253,"k>=6":0}},{"cohort":"60","F":60,"kind":"contiguous","desc":"files 1-60","arms":{"1":{"matched":41314,"disc_q1":38724,"fdp_q1":0.7993029288149767,"k1_fdp":9.450881984044965,"k1_share":2.697679221416217,"gain":0.0,"eff":70.62222222222222},"2":{"matched":43654,"disc_q1":41021,"fdp_q1":0.7448823800067368,"k1_fdp":5.9735678515070845,"k1_share":1.2031500656263672,"gain":5.663939584644431,"eff":74.62222222222222}},"union":58500,"unionFdp":9.973326966396817,"dmu":0.07677842532503679,"margFdp":100.0,"kslice_max":{"k=1":1045,"k=2":814,"k=3-5":2282,"k>=6":34596},"kslice_b2":{"k=1":495,"k=2":1035,"k=3-5":3313,"k>=6":36299},"kdelta":{"k=1":-550,"k=2":221,"k=3-5":1031,"k>=6":1703}},{"cohort":"60+22","F":60,"kind":"slice","desc":"files 23-82","arms":{"1":{"matched":41147,"disc_q1":40883,"fdp_q1":0.9542933158435457,"k1_fdp":7.881157585258074,"k1_share":3.68896484375,"gain":0.0,"eff":67.01684093944428},"2":{"matched":42331,"disc_q1":42056,"fdp_q1":0.97085673728408,"k1_fdp":3.4675832894114293,"k1_share":0.9564949089787103,"gain":2.877488030719129,"eff":68.94524251604287}},"union":61398,"unionFdp":8.788661151594795,"dmu":0.21618482744857942,"margFdp":67.12962962962963,"kslice_max":{"k=1":1511,"k=2":1288,"k=3-5":3375,"k>=6":34786},"kslice_b2":{"k=1":403,"k=2":1354,"k=3-5":4181,"k>=6":36195},"kdelta":{"k=1":-1108,"k=2":66,"k=3-5":806,"k>=6":1409}},{"cohort":"6","F":6,"kind":"contiguous","desc":"files 1-6","arms":{"1":{"matched":40535,"disc_q1":38018,"fdp_q1":0.8140866092986784,"k1_fdp":5.243104391404315,"k1_share":9.428503800331379,"gain":0.0,"eff":86.01774042950514},"2":{"matched":44398,"disc_q1":39917,"fdp_q1":0.6441380976627606,"k1_fdp":2.3415806019863936,"k1_share":8.140726118787637,"gain":9.530035771555445,"eff":94.21526186232069}},"union":47124,"unionFdp":1.866135513081984,"dmu":0.18168769408979354,"margFdp":3.7982126058325494,"kslice_max":{"k=1":3585,"k=2":4158,"k=3-5":13683,"k>=6":16597},"kslice_b2":{"k=1":3258,"k=2":5763,"k=3-5":14398,"k>=6":16602},"kdelta":{"k=1":-327,"k=2":1605,"k=3-5":715,"k>=6":5}},{"cohort":"75+7","F":75,"kind":"slice","desc":"files 8-82","arms":{"1":{"matched":41879,"disc_q1":40954,"fdp_q1":0.8985909632712427,"k1_fdp":11.294040631595863,"k1_share":2.44390243902439,"gain":0.0,"eff":64.65502601392555},"2":{"matched":44687,"disc_q1":43273,"fdp_q1":0.7854565863541002,"k1_fdp":3.9954355465817875,"k1_share":0.6904195626573071,"gain":6.705031161202512,"eff":68.99016565544285}},"union":64773,"unionFdp":11.598439897078693,"dmu":0.21171708349778898,"margFdp":100.0,"kslice_max":{"k=1":1002,"k=2":763,"k=3-5":2249,"k>=6":36986},"kslice_b2":{"k=1":299,"k=2":845,"k=3-5":3110,"k>=6":39053},"kdelta":{"k=1":-703,"k=2":82,"k=3-5":861,"k>=6":2067}},{"cohort":"nopool75","F":75,"kind":"nopool","desc":"all donors, the 7 pooled QC injections excluded","arms":{"1":{"matched":39523,"disc_q1":39397,"fdp_q1":0.9696899664978659,"k1_fdp":17.44190613130885,"k1_share":2.4274058683423707,"gain":0.0,"eff":63.26919382723955},"2":{"matched":43609,"disc_q1":41964,"fdp_q1":0.7762447577246238,"k1_fdp":6.322219671633957,"k1_share":0.5921662821945826,"gain":10.33828403714293,"eff":69.81014279311007},"3":{"matched":44290,"disc_q1":42075,"fdp_q1":0.7550413239094718,"k1_fdp":10.978449024391397,"k1_share":0.16597510373443983,"gain":12.06133137666675,"eff":70.9003009540885},"4":{"matched":44087,"disc_q1":42021,"fdp_q1":0.7416147307763151,"k1_fdp":24.61834023651404,"k1_share":0.06879863351679635,"gain":11.547706398805758,"eff":70.5753345713005}},"union":62468,"unionFdp":11.923372489332081,"dmu":0.14258422439683915,"margFdp":57.26210350584307,"kslice_max":{"k=1":958,"k=2":804,"k=3-5":2087,"k>=6":35617},"kslice_b2":{"k=1":249,"k=2":915,"k=3-5":3079,"k>=6":37806},"kdelta":{"k=1":-709,"k=2":111,"k=3-5":992,"k>=6":2189}},{"cohort":"8","F":8,"kind":"contiguous","desc":"files 1-8","arms":{"1":{"matched":44387,"disc_q1":42842,"fdp_q1":0.8309505328796873,"k1_fdp":4.4238904353060295,"k1_share":9.303570597272008,"gain":0.0,"eff":85.17452459079308},"2":{"matched":47672,"disc_q1":44329,"fdp_q1":0.6985859440569185,"k1_fdp":2.025489008579918,"k1_share":7.368421052631579,"gain":7.400815554103679,"eff":91.47813405484236}},"union":52113,"unionFdp":2.479239563974432,"dmu":0.2882800378487122,"margFdp":4.901494241933949,"kslice_max":{"k=1":3997,"k=2":4096,"k=3-5":11176,"k>=6":23693},"kslice_b2":{"k=1":3276,"k=2":5643,"k=3-5":11831,"k>=6":23710},"kdelta":{"k=1":-721,"k=2":1547,"k=3-5":655,"k>=6":17}}];
+const NS = 'http://www.w3.org/2000/svg';
+const KCOL = {contiguous: 'var(--agg)', slice: 'var(--accent)', sparse: 'var(--max)', nopool: 'var(--good)'};
+const SHAPE = {contiguous: 'circle', slice: 'square', sparse: 'triangle', nopool: 'diamond'};
+const tip = document.getElementById('tip');
+
+function el(p, n, a) { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); p.appendChild(e); return e; }
+function hov(node, html) {
+  node.addEventListener('mousemove', ev => { tip.innerHTML = html; tip.style.opacity = 1;
+    tip.style.left = Math.min(ev.clientX + 14, innerWidth - 310) + 'px';
+    tip.style.top = (ev.clientY + 16) + 'px'; });
+  node.addEventListener('mouseleave', () => tip.style.opacity = 0);
+}
+function mark(g, kind, x, y, r, fill) {
+  const c = fill || KCOL[kind], s = SHAPE[kind];
+  if (s === 'square') return el(g, 'rect', {x: x - r, y: y - r, width: 2 * r, height: 2 * r, rx: 1, fill: c, stroke: 'var(--card)', 'stroke-width': 1.5});
+  if (s === 'triangle') return el(g, 'polygon', {points: `${x},${y - r - 1} ${x + r + 1},${y + r} ${x - r - 1},${y + r}`, fill: c, stroke: 'var(--card)', 'stroke-width': 1.5});
+  if (s === 'diamond') return el(g, 'polygon', {points: `${x},${y - r - 1} ${x + r + 1},${y} ${x},${y + r + 1} ${x - r - 1},${y}`, fill: c, stroke: 'var(--card)', 'stroke-width': 1.5});
+  return el(g, 'circle', {cx: x, cy: y, r: r, fill: c, stroke: 'var(--card)', 'stroke-width': 1.5});
+}
+// log axis over file counts, linear axis for values
+function axes(svg, o) {
+  const W = 1080, H = +svg.getAttribute('viewBox').split(' ')[3];
+  const L = 62, R = 22, T = 16, B = 46;
+  const xs = v => L + (Math.log(v) - Math.log(o.x0)) / (Math.log(o.x1) - Math.log(o.x0)) * (W - L - R);
+  const ys = v => H - B - (v - o.y0) / (o.y1 - o.y0) * (H - T - B);
+  (o.yticks || []).forEach(t => {
+    el(svg, 'line', {x1: L, x2: W - R, y1: ys(t), y2: ys(t), class: 'gl'});
+    el(svg, 'text', {x: L - 8, y: ys(t) + 4, 'text-anchor': 'end'}).textContent = o.yfmt ? o.yfmt(t) : t;
+  });
+  (o.xticks || []).forEach(t => {
+    el(svg, 'text', {x: xs(t), y: H - B + 18, 'text-anchor': 'middle'}).textContent = t;
+  });
+  el(svg, 'line', {x1: L, x2: W - R, y1: ys(o.y0), y2: ys(o.y0), class: 'ax'});
+  el(svg, 'text', {x: (L + W - R) / 2, y: H - 8, 'text-anchor': 'middle', class: 'lbl'}).textContent = o.xlab;
+  const yl = el(svg, 'text', {x: 14, y: (T + H - B) / 2, 'text-anchor': 'middle', class: 'lbl',
+                              transform: `rotate(-90 14 ${(T + H - B) / 2})`});
+  yl.textContent = o.ylab;
+  return {xs, ys, L, R, T, B, W, H};
+}
+const cohorts = DATA.slice().sort((a, b) => a.F - b.F);
+const withB2 = cohorts.filter(c => c.arms['2']);
+const fmtN = n => n.toLocaleString();
+
+// Panel 1 - union efficiency
+(function () {
+  const svg = document.getElementById('p1');
+  const a = axes(svg, {x0: 3.4, x1: 95, y0: 55, y1: 100, xlab: 'files in cohort',
+    ylab: 'union efficiency (% of run-level detections kept)',
+    yticks: [60, 70, 80, 90, 100], yfmt: t => t + '%', xticks: [4, 6, 10, 17, 20, 28, 40, 60, 82]});
+  [['1', 'var(--max)'], ['2', 'var(--agg)']].forEach(([n, col]) => {
+    const pts = withB2.filter(c => c.arms[n] && c.arms[n].eff).sort((x, y) => x.F - y.F);
+    const cont = pts.filter(c => c.kind === 'contiguous');
+    el(svg, 'polyline', {points: cont.map(c => `${a.xs(c.F)},${a.ys(c.arms[n].eff)}`).join(' '),
+                         fill: 'none', stroke: col, 'stroke-width': 2, opacity: 0.85});
+    pts.forEach(c => {
+      const m = mark(svg, c.kind, a.xs(c.F), a.ys(c.arms[n].eff), 4.5, col);
+      hov(m, `<b>${c.cohort}</b> &middot; ${c.desc}<br>${n === '1' ? 'max' : 'mean(best-2)'}
+        efficiency <b>${c.arms[n].eff.toFixed(1)}%</b><br>${fmtN(c.arms[n].matched)} of
+        ${fmtN(c.union)} detected<br>true FDP at 1% q: ${c.arms[n].fdp_q1.toFixed(3)}%`);
+    });
+  });
+  const f4 = cohorts.find(c => c.cohort === '4'), f82 = cohorts.find(c => c.cohort === '82');
+  if (f4 && f82) {
+    el(svg, 'text', {x: a.W - a.R, y: a.ys(99.5), 'text-anchor': 'end', class: 'lbl'}).textContent =
+      `scale costs ${(f4.arms['1'].eff - f82.arms['1'].eff).toFixed(0)} points of efficiency; ` +
+      `mean(best-2) returns ${(f82.arms['2'].eff - f82.arms['1'].eff).toFixed(1)} of them at 82 files`;
+  }
+})();
+
+// Panel 2 - calibration
+(function () {
+  const svg = document.getElementById('p2');
+  const a = axes(svg, {x0: 3.4, x1: 95, y0: 0.5, y1: 1.06, xlab: 'files in cohort',
+    ylab: 'true entrapment FDP at reported q ≤ 1%',
+    yticks: [0.6, 0.7, 0.8, 0.9, 1.0], yfmt: t => t.toFixed(1) + '%',
+    xticks: [4, 6, 10, 17, 20, 28, 40, 60, 82]});
+  el(svg, 'line', {x1: a.L, x2: a.W - a.R, y1: a.ys(1.0), y2: a.ys(1.0), stroke: 'var(--muted)',
+                   'stroke-width': 2, 'stroke-dasharray': '5 4'});
+  el(svg, 'text', {x: a.L + 6, y: a.ys(1.0) - 7}).textContent =
+    'nominal 1% — above this line the reported q would be optimistic and the extra IDs illusory';
+  [['1', 'var(--max)'], ['2', 'var(--agg)']].forEach(([n, col]) => {
+    withB2.filter(c => c.arms[n]).forEach(c => {
+      const m = mark(svg, c.kind, a.xs(c.F), a.ys(c.arms[n].fdp_q1), 4.5, col);
+      hov(m, `<b>${c.cohort}</b> &middot; ${c.desc}<br>${n === '1' ? 'max' : 'mean(best-2)'}:
+        true FDP <b>${c.arms[n].fdp_q1.toFixed(3)}%</b> at nominal 1%<br>
+        ${(1 - c.arms[n].fdp_q1).toFixed(3)} points conservative<br>
+        singleton-slice FDP ${c.arms[n].k1_fdp ? c.arms[n].k1_fdp.toFixed(1) + '%' : 'n/a'}`);
+    });
+  });
+  const worse = withB2.filter(c => c.arms['2'].fdp_q1 > c.arms['1'].fdp_q1).length;
+  el(svg, 'text', {x: a.L + 8, y: a.ys(0.55), class: 'lbl'}).textContent =
+    `every arm is conservative; mean(best-2) is the more conservative of the pair in ` +
+    `${withB2.length - worse} of ${withB2.length} cohorts`;
+})();
+
+// Panel 3 - gain (or absolute) by size, all cohorts
+let p3mode = 'gain';
+function drawP3() {
+  const svg = document.getElementById('p3');
+  svg.innerHTML = '';
+  const gainMode = p3mode === 'gain';
+  const vals = withB2.map(c => gainMode ? c.arms['2'].gain : c.arms['2'].matched);
+  const a = axes(svg, {x0: 3.4, x1: 95, y0: gainMode ? 0 : 30000, y1: gainMode ? 16 : 50000,
+    xlab: 'files in cohort',
+    ylab: gainMode ? 'mean(best-2) gain vs max (%)' : 'discoveries at matched 1% true FDP',
+    yticks: gainMode ? [0, 4, 8, 12, 16] : [30000, 35000, 40000, 45000, 50000],
+    yfmt: t => gainMode ? t + '%' : (t / 1000) + 'k', xticks: [4, 6, 10, 17, 20, 28, 40, 60, 82]});
+  // stacks at the same size make the within-size spread visible
+  const bySize = {};
+  withB2.forEach(c => (bySize[c.F] = bySize[c.F] || []).push(c));
+  Object.values(bySize).forEach(g => {
+    if (g.length < 2) return;
+    const v = g.map(c => gainMode ? c.arms['2'].gain : c.arms['2'].matched);
+    el(svg, 'line', {x1: a.xs(g[0].F), x2: a.xs(g[0].F), y1: a.ys(Math.min(...v)),
+                     y2: a.ys(Math.max(...v)), stroke: 'var(--grid)', 'stroke-width': 7,
+                     'stroke-linecap': 'round'});
+  });
+  withB2.forEach(c => {
+    const v = gainMode ? c.arms['2'].gain : c.arms['2'].matched;
+    const m = mark(svg, c.kind, a.xs(c.F), a.ys(v), 5.5);
+    hov(m, `<b>${c.cohort}</b> &middot; ${c.desc}<br>gain <b>${c.arms['2'].gain.toFixed(1)}%</b>
+      &nbsp; ${fmtN(c.arms['1'].matched)} → ${fmtN(c.arms['2'].matched)}<br>
+      true FDP at 1% q: ${c.arms['1'].fdp_q1.toFixed(3)}% → ${c.arms['2'].fdp_q1.toFixed(3)}%<br>
+      union ${fmtN(c.union)}, efficiency ${c.arms['1'].eff.toFixed(1)}% → ${c.arms['2'].eff.toFixed(1)}%`);
+  });
+  if (gainMode && bySize[40]) {
+    const g = bySize[40], v = g.map(c => c.arms['2'].gain);
+    el(svg, 'text', {x: a.xs(40) + 12, y: a.ys(Math.max(...v)) - 6, class: 'lbl'}).textContent =
+      `five 40-file cohorts: +${Math.min(...v).toFixed(1)}% to +${Math.max(...v).toFixed(1)}%`;
+  }
+}
+document.getElementById('b3a').onclick = () => { p3mode = 'gain'; sync3(); };
+document.getElementById('b3b').onclick = () => { p3mode = 'abs'; sync3(); };
+function sync3() {
+  document.getElementById('b3a').setAttribute('aria-pressed', p3mode === 'gain');
+  document.getElementById('b3b').setAttribute('aria-pressed', p3mode !== 'gain');
+  drawP3();
+}
+drawP3();
+
+// Panel 4 - matched-size pairs, contiguous vs sparse
+(function () {
+  const svg = document.getElementById('p4'), W = 1080, H = 300;
+  const pairs = [['17', 'spread17'], ['20', 'spread21'], ['28', 'spread28'], ['40', 'spread41']];
+  const rows = pairs.map(([a, b]) => [cohorts.find(c => c.cohort === a), cohorts.find(c => c.cohort === b)])
+                    .filter(r => r[0] && r[1] && r[0].arms['2'] && r[1].arms['2']);
+  const L = 150, T = 24, gapY = (H - T - 40) / rows.length, x0 = L, x1 = W - 210;
+  const lo = 0, hi = 16, xs = v => x0 + (v - lo) / (hi - lo) * (x1 - x0);
+  [0, 4, 8, 12, 16].forEach(t => {
+    el(svg, 'line', {x1: xs(t), x2: xs(t), y1: T - 6, y2: H - 34, class: 'gl'});
+    el(svg, 'text', {x: xs(t), y: H - 16, 'text-anchor': 'middle'}).textContent = t + '%';
+  });
+  el(svg, 'text', {x: (x0 + x1) / 2, y: H - 2, 'text-anchor': 'middle', class: 'lbl'}).textContent =
+    'mean(best-2) gain vs max';
+  rows.forEach((r, i) => {
+    const y = T + gapY * i + gapY / 2;
+    el(svg, 'text', {x: 8, y: y + 4, class: 'lbl'}).textContent =
+      r[0].F === r[1].F ? `${r[0].F} files` : `${r[0].F} vs ${r[1].F} files`;
+    el(svg, 'line', {x1: xs(Math.min(r[0].arms['2'].gain, r[1].arms['2'].gain)),
+                     x2: xs(Math.max(r[0].arms['2'].gain, r[1].arms['2'].gain)), y1: y, y2: y,
+                     stroke: 'var(--grid)', 'stroke-width': 5, 'stroke-linecap': 'round'});
+    r.forEach(c => {
+      const m = mark(svg, c.kind, xs(c.arms['2'].gain), y, 6);
+      hov(m, `<b>${c.cohort}</b> &middot; ${c.desc}<br>gain <b>${c.arms['2'].gain.toFixed(1)}%</b><br>
+        max ${fmtN(c.arms['1'].matched)} → ${fmtN(c.arms['2'].matched)}<br>
+        true FDP at 1% q ${c.arms['1'].fdp_q1.toFixed(3)}% → ${c.arms['2'].fdp_q1.toFixed(3)}%`);
+    });
+    const d = r[1].arms['2'].gain - r[0].arms['2'].gain;
+    el(svg, 'text', {x: x1 + 14, y: y + 4}).textContent =
+      `sparse ${d >= 0 ? '+' : ''}${d.toFixed(1)} pts vs contiguous`;
+  });
+})();
+
+// Panel 5 - N depth
+(function () {
+  const svg = document.getElementById('p5');
+  const deep = cohorts.filter(c => Object.keys(c.arms).length > 2);
+  const a = axes(svg, {x0: 0.9, x1: 24, y0: -1, y1: 18, xlab: 'aggregation depth N (N=1 is max)',
+    ylab: 'gain vs max (%)', yticks: [0, 4, 8, 12, 16], yfmt: t => t + '%',
+    xticks: [1, 2, 3, 4, 6, 8, 12, 20]});
+  el(svg, 'line', {x1: a.L, x2: a.W - a.R, y1: a.ys(0), y2: a.ys(0), stroke: 'var(--muted)',
+                   'stroke-dasharray': '4 4'});
+  const cols = ['var(--agg)', 'var(--max)', 'var(--accent)', 'var(--good)'];
+  deep.forEach((c, i) => {
+    const ns = Object.keys(c.arms).map(Number).sort((x, y) => x - y);
+    const col = cols[i % cols.length];
+    el(svg, 'polyline', {points: ns.map(n => `${a.xs(n)},${a.ys(c.arms[n].gain)}`).join(' '),
+                         fill: 'none', stroke: col, 'stroke-width': 2.2});
+    let best = ns[0];
+    ns.forEach(n => { if (c.arms[n].gain > c.arms[best].gain) best = n; });
+    ns.forEach(n => {
+      const m = el(svg, 'circle', {cx: a.xs(n), cy: a.ys(c.arms[n].gain), r: n === best ? 6 : 4,
+        fill: col, stroke: 'var(--card)', 'stroke-width': n === best ? 2.5 : 1.5});
+      hov(m, `<b>${c.cohort}</b> &middot; ${c.desc}<br>N=${n}: gain
+        <b>${c.arms[n].gain.toFixed(1)}%</b>${n === best ? ' (peak)' : ''}<br>
+        ${fmtN(c.arms[n].matched)} discoveries<br>
+        true FDP at 1% q ${c.arms[n].fdp_q1.toFixed(3)}%`);
+    });
+    const last = ns[ns.length - 1];
+    el(svg, 'text', {x: a.xs(last) + 8, y: a.ys(c.arms[last].gain) + 4, fill: col})
+      .textContent = `${c.cohort} (${c.F}f)`;
+  });
+})();
+
+// Panel 6 - mechanism: marginal purity + k-slice deltas
+(function () {
+  const svg = document.getElementById('p6'), H = 340, mid = 520;
+  const withM = cohorts.filter(c => c.margFdp != null && c.kind === 'contiguous');
+  const L = 62, T = 18, B = 52;
+  const bw = (mid - L - 20) / withM.length;
+  [0, 25, 50, 75, 100].forEach(t => {
+    const y = H - B - t / 100 * (H - T - B);
+    el(svg, 'line', {x1: L, x2: mid - 20, y1: y, y2: y, class: 'gl'});
+    el(svg, 'text', {x: L - 8, y: y + 4, 'text-anchor': 'end'}).textContent = t + '%';
+  });
+  withM.forEach((c, i) => {
+    const h = c.margFdp / 100 * (H - T - B), x = L + i * bw + 4;
+    const r = el(svg, 'rect', {x: x, y: H - B - h, width: bw - 8, height: h, rx: 3,
+      fill: 'var(--max)', opacity: 0.8});
+    hov(r, `<b>${c.cohort}</b> &middot; ${c.desc}<br>the last ~10 files add union members that are
+      <b>${c.margFdp.toFixed(0)}% false</b><br>union FDP overall ${c.unionFdp.toFixed(2)}%`);
+    el(svg, 'text', {x: x + (bw - 8) / 2, y: H - B + 16, 'text-anchor': 'middle'}).textContent = c.F;
+  });
+  el(svg, 'text', {x: (L + mid - 20) / 2, y: H - 8, 'text-anchor': 'middle', class: 'lbl'})
+    .textContent = 'files in cohort';
+  el(svg, 'text', {x: L, y: T + 4, class: 'lbl'}).textContent =
+    'purity of what the marginal file adds';
+
+  const kc = ['10', '20', '40', '82'].map(l => cohorts.find(c => c.cohort === l))
+    .filter(c => c && c.kdelta);
+  const keys = ['k=1', 'k=2', 'k=3-5', 'k>=6'];
+  const L2 = mid + 60, x1 = 1080 - 24;
+  const all = kc.flatMap(c => keys.map(k => c.kdelta[k]));
+  const lo = Math.min(-100, ...all), hi = Math.max(...all);
+  const ys = v => H - B - (v - lo) / (hi - lo) * (H - T - B);
+  el(svg, 'line', {x1: L2, x2: x1, y1: ys(0), y2: ys(0), class: 'ax'});
+  el(svg, 'text', {x: L2, y: T + 4, class: 'lbl'}).textContent =
+    'acceptances moved by mean(best-2), by runs supporting them';
+  // Compact legend for the four run-count bands, so the bars need no inline labels.
+  keys.forEach((k, j) => {
+    const bx = L2 + j * 96;
+    el(svg, 'rect', {x: bx, y: T + 14, width: 9, height: 9, rx: 2,
+      fill: j === 0 ? 'var(--max)' : 'var(--agg)', opacity: 0.85});
+    el(svg, 'text', {x: bx + 13, y: T + 22, 'font-size': 10.5}).textContent =
+      k === 'k=1' ? '1 run' : (k === 'k=2' ? '2 runs' : (k === 'k=3-5' ? '3-5 runs' : '6+ runs'));
+  });
+  const gw = (x1 - L2) / kc.length;
+  kc.forEach((c, i) => {
+    keys.forEach((k, j) => {
+      const v = c.kdelta[k], w = gw / (keys.length + 0.6);
+      const x = L2 + i * gw + j * w + 6;
+      const r = el(svg, 'rect', {x: x, y: Math.min(ys(v), ys(0)), width: w - 3,
+        height: Math.abs(ys(v) - ys(0)), rx: 2,
+        fill: v < 0 ? 'var(--max)' : 'var(--agg)', opacity: 0.85});
+      hov(r, `<b>${c.cohort}</b> (${c.F} files) &middot; ${k}<br>
+        ${v >= 0 ? '+' : ''}${fmtN(v)} acceptances<br>
+        ${v < 0 ? 'demoted (leaky singletons)' : 'admitted with the freed FDR headroom'}`);
+    });
+    el(svg, 'text', {x: L2 + i * gw + gw / 2, y: H - B + 34, 'text-anchor': 'middle'})
+      .textContent = `${c.F} files`;
+  });
+})();
+
+// Panel 7 - table
+(function () {
+  const t = document.getElementById('tbl');
+  t.innerHTML = `<thead><tr><th class="l">cohort</th><th class="l">files drawn</th><th>F</th>
+    <th>union</th><th>max</th><th>best-2</th><th>gain</th><th>eff max</th><th>eff best-2</th>
+    <th>FDP@1%q max</th><th>FDP@1%q best-2</th><th>singleton FDP max</th></tr></thead>`;
+  const b = el(document.createElementNS(NS, 'g'), 'g'); // unused; build rows as HTML
+  const rows = withB2.slice().sort((a, c) => a.F - c.F || a.cohort.localeCompare(c.cohort))
+    .map(c => `<tr><td class="l">${c.cohort}</td><td class="l">${c.desc}</td><td>${c.F}</td>
+      <td>${fmtN(c.union)}</td><td>${fmtN(c.arms['1'].matched)}</td>
+      <td>${fmtN(c.arms['2'].matched)}</td>
+      <td class="${c.arms['2'].gain >= 0 ? 'pos' : 'neg'}">${c.arms['2'].gain >= 0 ? '+' : ''}${c.arms['2'].gain.toFixed(1)}%</td>
+      <td>${c.arms['1'].eff.toFixed(1)}%</td><td>${c.arms['2'].eff.toFixed(1)}%</td>
+      <td>${c.arms['1'].fdp_q1.toFixed(3)}%</td><td>${c.arms['2'].fdp_q1.toFixed(3)}%</td>
+      <td>${c.arms['1'].k1_fdp != null ? c.arms['1'].k1_fdp.toFixed(1) + '%' : ''}</td></tr>`).join('');
+  t.insertAdjacentHTML('beforeend', `<tbody>${rows}</tbody>`);
+})();
+
+document.getElementById('rejected').innerHTML = `
+  <b>&ldquo;The advantage grows with run count.&rdquo;</b> At constant content span the series is
+  +11.8% (17 files), +1.8% (21), +7.4% (28), +4.0% (41), +14.6% (82) &mdash; non-monotone.<br>
+  <b>Predictors of the effect size.</b> Run count, singleton leakage, reservoir, union FDP, model
+  target&ndash;decoy separation and max efficiency all give |Spearman| &le; 0.22 over 20+ cohorts.
+  A two-factor product (removable singleton leakage &times; backfill reservoir) reaches
+  &rho;&nbsp;&asymp;&nbsp;0.54 out-of-sample with mean error 2.7 points and flagged both extreme
+  cohorts in advance &mdash; usable as a screen, not as an estimate.<br>
+  <b>&ldquo;Bad files cause it.&rdquo;</b> The drifted half of the series at matched size gives
+  +5.6%; removing all 7 pooled QC injections <i>raised</i> singleton leakage to 17.4%.<br>
+  <b>&ldquo;mean(best-2) stabilises yield.&rdquo;</b> Normalised by union, scatter is identical
+  (sd 8.11 for max vs 8.15 for best-2).<br>
+  <b>&ldquo;Fixed size is deterministic.&rdquo;</b> True at 20 files (spread 1.3 points), false at
+  40 files (spread 10 points).`;
+document.getElementById('gen').textContent = "the night session of 2026-07-29/30";
+document.getElementById('narms').textContent = DATA.reduce((s, c) => s + Object.keys(c.arms).length, 0);
+document.getElementById('ncoh').textContent = DATA.length;
+</script>
+</body></html>
