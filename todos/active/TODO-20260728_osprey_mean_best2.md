@@ -270,6 +270,11 @@ unreliable to +/-4 points" - never the maximum alone.
 over-prediction, worst 5.0.** It called both extreme highs in advance (28f, files 31-70) and both
 75-file cohorts within 2.8 pts. Screen, not estimate.
 
+**Next session handoff**: For the detailed startup protocol, read
+`ai/.tmp/handoff-20260728_osprey_mean_best2.md` before starting work. It covers BOTH threads this
+session touched - this branch (mean(best-N), PR-ready) and the pass-2 default decision
+(TODO-20260727), where a one-line regression in shipped master is now the top action.
+
 **PROTEIN ROLL-UP - deliberately NOT implemented tonight.** Brendan's design (add
 `double? AggregateScore`; protein path takes `Max(AggregateScore ?? Score)`; the peptide code stamps
 it when mean(best-N) is active; null default keeps flag-off byte-identical) runs into a wrinkle I

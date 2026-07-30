@@ -192,6 +192,19 @@ transfer arm still fails in ~25 s on `GuardResidentPool` despite the fix being i
 `|| OspreyEnvironment.Pass2TransferQ` is a one-line defect fix in shipped code and is the
 prerequisite for the default flip - then re-confirm the 82-file transfer arm on master.
 
+**IT IS A REGRESSION, proven by `git log -S Pass2TransferQ -- pwiz_tools/Osprey/Osprey.Tasks/FirstJoinTask.cs`**
+(three commits, newest first): `dd9e84581` #4446, `8a32095c5` #4438, `2985b4d06` #4410.
+- **#4438 REMOVED it**: `-                OspreyEnvironment.Pass2TransferQ;` from
+  `needsResidentFirstPassPool` - which is why the 2026-07-20 run peaked at ~42 GB.
+- **#4446 RE-ADDED it**: `+                OspreyEnvironment.Pass2TransferQ;` while introducing
+  transfer-compete / protein-compact. Almost certainly a merge artifact, not intent - the same hunk
+  adds the NOTE reasoning that transfer-compete does NOT need the resident pool.
+So the memory-bounding shipped in #4438 was silently undone six days later, and the 4-way (07-28)
+ran on the re-broken build - which is exactly why its transfer arm never completed while the 07-20
+run had. PR = revert that one line, then re-run
+`ai/.tmp/run-pass2-82-4way.ps1 -Mode transfer` (expect ~42 GB, ~3.5 h) and compare to the ladder
+above.
+
 ### 82-file SEA-AD entrapment 4-way (current binary, experiment scope, FDRBench-validated)
 | mode | disc @ 1% q | true FDP @ 1% q | disc @ TRUE 1% FDP | verdict |
 |---|---|---|---|---|
