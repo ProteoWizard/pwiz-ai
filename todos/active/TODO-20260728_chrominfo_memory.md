@@ -290,6 +290,20 @@ read back from the .skyd, which has every step. So every step of a file gets the
 annotations and user set when a chrom info is rebuilt. `AgilentCEOpt` confirms this: its
 non-zero steps come back equal to the document's.
 
+**The chosen candidate peak comes from `TransitionGroupResults.ChosenPeakIndexes`**, one index
+per file covering every transition and every optimization step: a transition whose peak is a
+different one has boundaries the user set, and so a `CustomPeak` of its own. Nothing populates
+that list yet, so `MoleculeResults` falls back to searching for the index whose area matches at
+*every* transition of the precursor. One transition alone is not enough - a transition with
+little or no signal has an area several candidate peaks could produce - and the fallback goes
+away when the list is populated.
+
+**Tests deliberately cut back to two** (2026-07-29), one per peak selection path, because this
+code is changing every session and re-verifying costs more than it catches right now. Dropped,
+and worth restoring when the design settles: optimization step positions (AgilentCEOpt),
+the dot products (BlibDriftTimeTest), and the stored `ChosenPeakIndexes` path. The class comment
+on `MoleculeResultsTest` lists the same gaps.
+
 **The transition level no longer reads the doc node's chrom infos at all.** It works from
 `TransitionResults` plus the cache, which is the property the whole design rests on. Two things
 had to move into `CustomPeak` to make that true:
