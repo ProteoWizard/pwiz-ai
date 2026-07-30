@@ -290,6 +290,25 @@ read back from the .skyd, which has every step. So every step of a file gets the
 annotations and user set when a chrom info is rebuilt. `AgilentCEOpt` confirms this: its
 non-zero steps come back equal to the document's.
 
+**The transition level no longer reads the doc node's chrom infos at all.** It works from
+`TransitionResults` plus the cache, which is the property the whole design rests on. Two things
+had to move into `CustomPeak` to make that true:
+- the peak boundaries, recorded for any chrom info whose `UserSet` is not FALSE, since those are
+  the peaks which may not be candidate peaks
+- `Identified`, because integrating between boundaries cannot rediscover it
+
+Which candidate peak was chosen is found from the stored **areas**, since that is the only thing
+about the peak the columnar results keep. It is decided once per file, at the group level, using
+the transition with the largest area: a transition with little or no signal has an area which
+several candidate peaks could produce (a zero area peak inside a chosen peak group is common, and
+was the first thing that broke). This is the stand-in for `ChosenPeakIndexes`; populating that
+list removes the search and the ambiguity with it. Only a place that has the cache can populate
+it, so it cannot happen in `FromChromInfos`.
+
+Still bridged through the doc node, both documented in the code: the group level carries scores,
+annotations and the reintegrated peak forward from `nodeGroup.Results`, and
+`ExcludeFromCalibration`/`AnalyteConcentration` come from `PeptideDocNode.Results`.
+
 **Cost notes**, both deliberate and both to be fixed by *fewer callers needing chrom infos at
 all* rather than by caching:
 - Nothing is cached, so repeated asks re-read and re-aggregate.
