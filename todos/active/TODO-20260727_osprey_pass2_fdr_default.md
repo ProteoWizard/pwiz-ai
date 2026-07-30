@@ -202,6 +202,38 @@ decoy's OWN data alone; it is invalid the moment it reads the target's q / RT / 
   COUNT asymmetry + conditioned-selection DISTRIBUTION asymmetry), one belief, surviving because he
   re-derives FDR in Pass 2. Neither the pairing nor the Pass-2 venue makes an estimator honest.
 
+### MEASURED 2026-07-30: the entrapment oracle is STRUCTURALLY BLIND to the protein stratum
+Brendan's point — keeping a paired decoy does not preserve symmetry when the decoy is kept ONLY
+because its target was kept — has a measurable consequence for the ORACLE, not just the decoy null.
+`CohortAnalysis/gate_audit.py` on the recorded 82-file runs (reproduces the recorded FDPs:
+protein-compact 37,624 @ **1.53%**, transfer-compete 34,325 @ **1.96%**):
+
+| accepted-set proteins | real | entrapment |
+|---|---|---|
+| clear the >=2-peptide gate | **73.7%** (4,256) | **6.4%** (18) |
+| accepted peptides inside those proteins | **37,389** | **37** |
+
+The library is ~1:0.97 target:entrapment; **inside the protein stratum it is ~1000:1**. A real
+protein is 11.5x more likely to clear the gate (48x in the transfer-compete run). So the FDRBench
+entrapment set barely exists in the population protein-compact expands over, and **the measured
+1.51-1.53% is a LOWER BOUND** on the inflation: the (1 + 1/r) estimator assumes entrapment samples
+the false population at library ratio, but in the stratum it samples at ~1/1000th of that. Of the
+283 entrapment acceptances at most ~37 can be in the stratum at all.
+
+The expansion itself: protein-compact reports **647,139 rows transfer-compete does not, 20.7% of
+them entrapment** (vs 0.75% in the accepted set), none clearing 1% q today. So at the current
+operating point the gain is re-competition with off-stratum decoys removed, not admission of the
+expansion - and that expansion sits just outside the gate as a one-fifth-entrapment reservoir. Any
+loosening of the cutoff, or any drift of stratum q with run count, starts drawing on it.
+
+**Consequence for method assessment generally**: an entrapment oracle can only audit a selection
+rule if the entrapment set is exchangeable with the false-target population UNDER THAT RULE. Priors
+built on protein grouping are unauditable by a per-peptide entrapment set. The repair is
+protein-level entrapment (a foreign proteome retains real multi-peptide proteins - see the natural
+Arabidopsis entrapment work) with a peptide-count distribution matched to the targets. Reproducibility
+priors do NOT have this problem: 48-73% of accepted entrapment hits rest on >=2 runs, so the oracle
+can see them (measured 2026-07-30, see TODO-20260728_osprey_mean_best2).
+
 ### The lever (valid sensitivity, the honest route to Mike's gains) — NEXT IMPLEMENTATION
 `mean(best-2 runs)` = experiment-wide peptide score; `mean(best-2 peptides)` = protein score;
 replace best-peak(max) aggregation IN THE 1ST PASS (null intact). Symmetric by construction (decoy

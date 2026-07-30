@@ -29,9 +29,15 @@
     only comparable on ID counts when they share a ratio. See README.
 
 .PARAMETER Pass2Mode
-    percolator : default. Second-pass Percolator retrain on the reconciled pool.
-    transfer   : OSPREY_PASS2_QVALUE=transfer -- frozen first-pass model, TRIC-style
-                 q-value fill-in, no second retrain.
+    percolator      : default. Second-pass Percolator retrain on the reconciled pool.
+    transfer        : OSPREY_PASS2_QVALUE=transfer -- frozen first-pass model, TRIC-style
+                      q-value fill-in, no second retrain.
+    transfer-compete: frozen model, then a fresh target-decoy competition over the full
+                      reconciled population (non-depleted null).
+    protein-compact : frozen model, competition CONSTRAINED to peptides of proteins detected
+                      in the first pass (>= 2 peptides), target+decoy pairs kept.
+    The mode is passed through OSPREY_PASS2_QVALUE, which this script clears first so a stale
+    shell variable can never silently change an arm.
 
 .PARAMETER LinkFrom
     Optional. Hard-link the Stage 1-4 per-file caches from a COMPLETED run over the same
@@ -85,7 +91,8 @@
 param(
     [ValidateSet('libdecoy', 'gendecoy')] [string]$DecoyMode = 'libdecoy',
     [string]$Ratio = '1.0',
-    [ValidateSet('percolator', 'transfer')] [string]$Pass2Mode = 'percolator',
+    [ValidateSet('percolator', 'transfer', 'transfer-compete', 'protein-compact')]
+    [string]$Pass2Mode = 'percolator',
     [int]$NumFiles = 82,
     # Take the $NumFiles files AFTER skipping this many, so cohorts of the same size can be
     # drawn from disjoint slices of the dataset (replicate cohorts for a size-vs-effect study).
@@ -377,7 +384,7 @@ foreach ($k in 'OSPREY_EXIT_AFTER_CALIBRATION', 'OSPREY_CAL_SAMPLE_SIZE',
                'OSPREY_DECOY_MAX_FRAG_OVERLAP', 'OSPREY_DECOY_MAX_SEQ_IDENTITY') {
     Remove-Item "Env:\$k" -ErrorAction SilentlyContinue
 }
-if ($Pass2Mode -eq 'transfer') { $env:OSPREY_PASS2_QVALUE = 'transfer' }
+if ($Pass2Mode -ne 'percolator') { $env:OSPREY_PASS2_QVALUE = $Pass2Mode }
 # The gendecoy arm's one lever: OSPREY_DECOY_SAME_ION_MAP was the b<->y intensity swap
 # fix. The swap was REMOVED from the product on 2026-07-27 (pwiz #4480 / osprey #58), so
 # on any build from that day forward same-ion mapping is simply the behaviour and the var
