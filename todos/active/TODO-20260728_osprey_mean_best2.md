@@ -211,9 +211,16 @@ spread17 A .52/B .23 -> +11.8%). Residual: F=5/6 under-predicted by ~3.7 pts.
   the AGGREGATE score distribution that the experiment q is computed from.
 
 **Headline framing for the paper/default decision**: gains span +1.8% to +14.6% (median ~+5.7%,
-n=20 cohorts) with only F=3 negative (-4.9%) - asymmetric payoff, as Brendan put it: rarely
-harmful, sometimes a large recovery. The +14.6% is one draw, NOT a property of "82 files"; quote
-the distribution and the A x B model, not the maximum.
+n=28 cohorts) with only F=3 negative (-4.9%) - asymmetric payoff, as Brendan put it: rarely
+harmful, sometimes a large recovery. **The +14.6% is one draw and even the LARGE-cohort magnitude
+does not reproduce**: three cohorts at 75-82 files give **+6.7% / +10.3% / +14.6%**, and the two
+75-file sets differ by 3.6 points despite 91% file overlap (files 1-75 donors-only +10.3%; files
+8-82 +6.7%). Quote "roughly +7 to +15% on large cohorts, ~+3-6% typical, one cohort's number
+unreliable to +/-4 points" - never the maximum alone.
+
+**Out-of-sample record of the A x B screen, final: 9 tests, mean |err| 2.6 pts, systematic -1.4 pt
+over-prediction, worst 5.0.** It called both extreme highs in advance (28f, files 31-70) and both
+75-file cohorts within 2.8 pts. Screen, not estimate.
 
 **PROTEIN ROLL-UP - deliberately NOT implemented tonight.** Brendan's design (add
 `double? AggregateScore`; protein path takes `Max(AggregateScore ?? Score)`; the peptide code stamps
