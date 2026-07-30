@@ -4,6 +4,19 @@ Datasets bigger than the 82-file SEA-AD Pilot set, for scaling and cross-sample 
 work. SEA-AD is the current standard >3-file set (see
 `ai/scripts/Osprey/SEA-AD/README.md`); this is the shortlist for what comes after it.
 
+**Before starting a run at any of these sizes**, read the operational guidance - at 164+ files
+a mistake costs a day, not a coffee break:
+
+* `ai/docs/osprey-development-guide.md` -> "Long runs lock Osprey.exe" - snapshot the binary to
+  `D:\test\osprey-runs\_bin\<tag>` and run from the copy (otherwise the build tree is locked for
+  the whole run), plus the `OSPREY_VERSION_OVERRIDE` trap that makes a `-LinkFrom` resume
+  silently re-run Stage 1-4.
+* `ai/docs/memory-band-guide.md` - run with `--timestamp --memstamp`, then `ai/scripts/perfviz.py
+  <log> --files N` for peak / floor-drift / reporting gaps. Judge floor drift WITHIN a per-file
+  phase; across phase boundaries a rising floor is expected, not an O(files) leak.
+* Which resident paths are still O(files), and so will refuse to run at scale without naming a
+  token: `OSPREY_ALLOW_UNFIXED_RESIDENT` and `ResidentPaths.KNOWN_UNFIXED` in the code.
+
 **Every count and size below was MEASURED with a WebDAV PROPFIND**, not estimated from a
 portal page. Verified 2026-07-28 from BRENDANX-UW8.
 

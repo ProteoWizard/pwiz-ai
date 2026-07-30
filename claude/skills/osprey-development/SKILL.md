@@ -118,11 +118,17 @@ Rust-only TODOs live at `ai/todos/active/TODO-OR-*.md`
 **Starting a long run? Snapshot the exe first.** Windows locks a running executable, so a
 regression or large-file run holds `Osprey\bin\x64\Release\net8.0\Osprey.exe` and **every
 build fails until it finishes** - you cannot address review feedback or try a fix mid-run.
-Copy that output dir (~27 MB, one second) somewhere off the build tree and pass
-`-Exe <snapshot>\Osprey.exe`; the build tree stays free, and the snapshot doubles as a
-pinned baseline for an A/B. Do NOT rebuild while a `regression.ps1` gate is running even if
-the build succeeds - it launches the exe from the build tree per phase and would mix
-binaries. See "Long runs lock Osprey.exe" in ai/docs/osprey-development-guide.md.
+Copy that output dir (~27 MB, one second) to **`D:\test\osprey-runs\_bin\<tag>`** (the
+canonical spot - don't invent a new one per session) and pass `-Exe <snapshot>\Osprey.exe`;
+the build tree stays free, and the snapshot doubles as a pinned baseline for an A/B. Do NOT
+rebuild while a `regression.ps1` gate is running even if the build succeeds - it launches the
+exe from the build tree per phase and would mix binaries.
+
+**Consuming artifacts written by another day's build? Set `OSPREY_VERSION_OVERRIDE`.** Osprey
+stamps a daily version into every `.scores.parquet` / `.osprey.task` and REFUSES a mismatch, so
+a `-LinkFrom` resume silently re-runs Stage 1-4 for hours (or hard-fails in a way that reads
+like a code bug). Read the version out of a source `.osprey.task` and pin it. See "Long runs
+lock Osprey.exe" in ai/docs/osprey-development-guide.md for both traps in full.
 
 You can and should build, test, and run Osprey yourself - the wrapper
 scripts in `ai/scripts/Osprey/` exist for exactly that. Do not ask the
