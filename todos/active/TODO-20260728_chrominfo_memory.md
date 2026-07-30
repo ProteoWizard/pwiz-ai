@@ -290,13 +290,31 @@ read back from the .skyd, which has every step. So every step of a file gets the
 annotations and user set when a chrom info is rebuilt. `AgilentCEOpt` confirms this: its
 non-zero steps come back equal to the document's.
 
-**The chosen candidate peak comes from `TransitionGroupResults.ChosenPeakIndexes`**, one index
-per file covering every transition and every optimization step: a transition whose peak is a
-different one has boundaries the user set, and so a `CustomPeak` of its own. Nothing populates
-that list yet, so `MoleculeResults` falls back to searching for the index whose area matches at
-*every* transition of the precursor. One transition alone is not enough - a transition with
-little or no signal has an area several candidate peaks could produce - and the fallback goes
-away when the list is populated.
+**`UpdateResults` now populates the columnar results itself**, including
+`ChosenPeakIndexes`, which it is the only place that can: it has the chromatograms in hand while
+it picks each peak. `ChangeAbbreviatedResults` on both doc nodes sets them; every other path
+(reading a document, merging, the many `ChangeResults` callers) still leaves them to be derived
+from the chrom infos, without the indexes.
+
+Three things that had to be got right, each of which broke something first:
+- **Not every pass looks at a chromatogram.** A pass which only reuses what the node has knows no
+  indexes and was stamping -1 over the real ones. `GetChosenPeakIndex` carries forward what the
+  node already knew, mapping through `GetOldPosition` in case the replicate moved.
+- **A negative index reads back as null**, meaning "not known", not "no candidate peak". A peak
+  which really is not a candidate peak is the user's and says so with a `CustomPeak`.
+- **`ChangeAbbreviatedResults` returns `this` when nothing changed**, which needs value equality
+  on `TransitionGroupResults` and `TransitionResults`. Without it every recalculation produced new
+  node instances and `TestMProphetResultsHandler` failed on
+  `Assert.AreSame(docRepeat, docNew)` - reference equality of an unchanged document is relied on
+  all over Skyline.
+
+`MoleculeResults` still has the area search as a fallback for the paths which store no indexes.
+The test asserts a non-zero count of stored indexes, because everything passed through the
+fallback before that assertion was added.
+
+**Still to do for the actual ask**: `UpdateResults` populates the columnar results *in addition
+to* the chrom infos, not instead of them. Dropping the chrom infos breaks every reader of
+`nodeGroup.Results` / `nodeTran.Results`, which is the conversion this scaffold exists for.
 
 **Tests deliberately cut back to two** (2026-07-29), one per peak selection path, because this
 code is changing every session and re-verifying costs more than it catches right now. Dropped,
