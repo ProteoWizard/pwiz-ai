@@ -79,8 +79,8 @@ transfer case, so a transfer run falls through to the generic `"this configurati
 - [x] Extend `ResidentPoolGuardTest` to pin the trigger set.
 - [x] Pre-commit gate: build Debug clean, 556/556 tests, inspection 0 warnings / 0 errors
       (`ai/.tmp/transfer-guard-inspection.log`).
-- [ ] `regression.ps1 -Dataset Stellar` byte-identity (default path must be untouched - transfer
-      is off by default, so the golden must not move).
+- [x] `regression.ps1 -Dataset Stellar` byte-identity PASS - mode1 (vs golden), mode2 (resume),
+      mode3 (HPC chain), all blib 30,597,120. Log `ai/.tmp/transfer-guard-regression-stellar.log`.
 - [ ] 82-file transfer arm: `ai/.tmp/run-pass2-82-4way.ps1 -Mode transfer`. PASS = completes
       (not ~25 s on the guard), peaks ~42 GB not ~104 GB, and reproduces the 2026-07-20 ladder
       recorded in TODO-20260727 (0.11 / 0.18 / 0.42 / **0.92** / 1.80 / 4.83% true FDP at
@@ -97,3 +97,51 @@ analysis). Reverted, extracted the testable core, extended the guard test. Pre-c
 
 Remaining: the Stellar byte-identity gate, then the 82-file transfer arm - which is the only
 verifier that actually proves the defect fixed, since a unit test structurally cannot.
+
+### 2026-07-30 (later) - Stellar PASS; 82-file arm CLEARS THE GUARD
+
+Stellar byte-identity PASS on all three modes (blib 30,597,120 throughout - the golden did not
+move, as required with transfer off by default).
+
+82-file transfer arm launched detached (`Start-Process`, PID 17456) on a snapshot exe
+(`D:\test\osprey-exe-snapshots\transferguard-20260730\`) so the build tree stays free. Out dir
+`D:\test\Pilot-MTG-Tissue-May2026\runs\pass2-82-4way-transfer-guardfix\`. Needed
+`OSPREY_VERSION_OVERRIDE=26.1.1.199` - the linked stage-1-4 `.osprey.task` markers pin that
+version, and without it the resume invalidates and Stage 1-4 re-runs for hours.
+
+**Criterion (a) PASS, the defect is fixed.** From `run.log`:
+```
+[15:26:15]  10     80     [TASK] PerFileScoring:skipping (outputs valid)
+[15:28:29]  13731  23716  Streaming first-pass ingest from 82 file(s)...
+```
+It took the STREAMING path where master dies at ~25 s on `GuardResidentPool`, and it did so on
+the exact failing path (`-LinkFrom` resume -> PerFileScoring skip -> `RehydrateFromOwnOutputs`).
+Peak private 30.7 GB at t+19 min, tracking toward the ~42 GB reference, not the ~104 GB a
+resident pool implies. Ladder + final peak pending completion (~3.5 h).
+
+### FOLLOW-UP APPROVED (Brendan, 2026-07-30): ratchet the escape hatch
+
+`OSPREY_ALLOW_UNBOUNDED_MEMORY` did not catch this regression - it MASKED it. It is a single
+boolean with exactly one consumer (`ResidentPoolGuardError`), thrown over a predicate whose
+trigger set can silently grow, and both pass-2 TODOs record developers routinely setting it to
+get transfer running. So a re-broken memory bound looked like normal operating procedure for
+ten days.
+
+Approved replacement: `OSPREY_ALLOW_UNFIXED_RESIDENT`, a high-water ratchet.
+- **Value names the path** (`=stage7-survivors`), never `1`. A different resident path errors
+  even with the var set - one exemption, not amnesty.
+- **A committed `static readonly` token set is the high-water mark**; anything off it hard-errors
+  regardless of the env var. A unit test pins the set exactly, so shrinking it is a deliberate
+  edit and GROWING it shows in review as the ratchet running backwards.
+- **CI refusal is enforced, not implied**: reject the var when `TEAMCITY_VERSION` is present.
+- Would have caught this bug: transfer would have needed to be ON the known-unfixed list, and
+  #4438 had already taken it off - hard error in June instead of a boolean waving it through.
+
+**Why the list has exactly one entry, and why it expires (Brendan)**: Stage 7/8's resident
+survivor buffer (`PercolatorScorer.cs:569`, `FdrProjection.cs:291`) was never fully fixed
+BECAUSE pass-2 Percolator is going away as an option - which is what the #4484 sprint is
+expected to achieve. So this is not debt to pay down but debt with a named owner and an end
+date; the sprint drives the list to empty and the env var to deletion.
+
+Brendan's call on CI: if the ratchet reds TeamCity when the PR opens, that is the guard working;
+fix it before merge rather than weakening the guard.
