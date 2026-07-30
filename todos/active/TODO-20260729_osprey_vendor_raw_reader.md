@@ -33,12 +33,12 @@
    failure belongs to the **Perf/Regression** config, which is manual and has NOT run — Brendan is
    holding that trigger until the Jamfile + staging work below is in place, so the vendor-enabled
    net472 build is still untested on CI. #4500 was red on Linux only; fixed and pushed.
-2. **Change the Perf/Regression config to ONE bjam step** - no longer a separate staging step plus
-   `Build-Osprey.ps1`. With the Jamfile work done, `quickbuild.bat pwiz_tools\Osprey//Osprey
-   --i-agree-to-the-vendor-licenses ... --without-compassxtract` stages `obj/x64`, builds the
-   wrapper, deploys the vendor runtime, and builds Osprey. Keep the first step non-incremental (or
-   pass `--force-generate-version`) - see the Version.cpp gotcha in the progress log. This is
-   option 1 from "Earlier options considered", which the Jamfile work has now made the cheap one.
+2. **Wire the Perf/Regression config** - see "How the Osprey and Skyline CI configs actually invoke
+   the build" below, which corrects the earlier reading of this config and settles where the
+   vendor-license flag may live. Two parts: a NEW config step calling `quickbuild.bat` with the
+   flags in the step's Command parameters, and a small tracked change so `tctest.bat` can be told
+   `-NoBuild`. **Blocked on a real problem**: `regression.ps1` runs the **net8.0** exe, and the
+   vendor reader is net472-only.
 3. ~~**Jamfile work**~~ **DONE** - commit `de922c9d60`, see progress log. The "78 native runtime
    files" framing was wrong; the necessary set is much smaller and `dumpbin /dependents` names it.
 4. **`-ReaderParity` mode in `regression.ps1`** (design in this file). ~34 s on one Stellar file.
@@ -586,6 +586,80 @@ Consequences beyond this issue:
 * **Correctly-rounded managed parse** for net472 (BigInteger/decimal based). No interop, more code.
 * **Accept and document** - net472 stays 1 ULP off on rare values; requires the parity tests below
   to tolerate it, which weakens them.
+
+## How the Osprey and Skyline CI configs actually invoke the build (2026-07-29, from screenshots)
+
+### CORRECTION: the Osprey Perf/Regression config does NOT call Build-Osprey.ps1
+
+Its build steps are just two:
+
+1. `Set PYTHON_HOME if unset by agent` (custom script)
+2. Command executable `pwiz_tools/Osprey/tctest.bat`, **Command parameters: not specified**
+
+`tctest.bat` is TRACKED and runs `pwsh -NoProfile -File regression.ps1 -TeamCity -Dataset All`.
+`regression.ps1:308-310` then calls the tracked `pwiz_tools/Osprey/build.ps1
+-Configuration Release -Framework net8.0 -NoTests`.
+
+The earlier claim that the steps went "from Set PYTHON_HOME straight to `Build-Osprey.ps1`" was a
+misreading: `Building Osprey (Release, net8.0)` is a `Write-Progress-Tc` message emitted by
+`regression.ps1` INSIDE the `tctest.bat` step, not a TeamCity step name, and the script it runs is
+`pwiz_tools/Osprey/build.ps1` (in-repo), not `ai/scripts/Osprey/Build-Osprey.ps1`.
+
+### The vendor-license flag must NEVER be committed (Brendan, 2026-07-29)
+
+`--i-agree-to-the-vendor-licenses` belongs in the **TeamCity config's Command parameters**, never in a
+tracked script. Agreeing to the vendor licenses has to be an explicit act by whoever runs the build;
+a committed flag would accept the licenses on behalf of everyone who builds the project. **This is
+why `b.bat` / `bs.bat` are small private gitignored files - creating one IS the act of agreeing.**
+
+Skyline's config is the model. Its steps put every such argument in the config:
+
+    Step 2  exe: %teamcity.build.checkoutDir%/scripts/misc/tcbuild.bat   workdir: build-nt-x86
+            params: pwiz_tools\Skyline//Test pwiz_tools\Skyline//TestData
+                    pwiz_tools\Skyline//Skyline.passed ... --i-agree-to-the-vendor-licenses
+                    -j%env.NUMBER_OF_CORES% %env.toolset_property% %env.address_model_property%
+                    %env.architecture_property% %env.variant_property% %env.link_property%
+                    --without-compassxtract --teamcity-test-decoration --automated --official
+
+    Step 3  exe: %teamcity.build.checkoutDir%/quickbuild.bat             workdir: build-nt-x86
+            params: pwiz_tools\Skyline//TestFunctional --abbreviate-paths --verbose-test
+                    --incremental --i-agree-to-the-vendor-licenses -j... (same env properties)
+                    --without-compassxtract --teamcity-test-decoration --automated
+
+Note step 3 passes `--incremental` AFTER the non-incremental step 2 - which is exactly the ordering
+the `Version.cpp` generation gotcha requires, and confirms the agent-provided
+`%env.*_property%` values are how toolset/variant/address-model reach bjam.
+
+**The Jamfile change is consistent with this**: it READS ARGV to see whether the flag was supplied
+and never supplies it, so the vendor capability turns on only for someone who agreed.
+
+### Revised plan for the Osprey config - TWO steps, not one
+
+* **New step** before the `tctest.bat` step: exe `%teamcity.build.checkoutDir%/quickbuild.bat`,
+  working directory `build-nt-x86`, params
+  `pwiz_tools\Osprey//Osprey --i-agree-to-the-vendor-licenses -j%env.NUMBER_OF_CORES%
+  %env.toolset_property% %env.address_model_property% %env.variant_property%
+  --without-compassxtract`. Non-incremental, so `Version.cpp` is generated.
+* **`tctest.bat` forwards `%*`** to `regression.ps1` (a tracked change carrying NO flag), so the
+  config can append `-NoBuild` - and later `-ReaderParity` - without another repo change.
+
+### BLOCKER for -ReaderParity: the regression gate runs net8.0, the reader is net472
+
+`regression.ps1:137-138` hardcodes
+
+    $ospreyBinDir = Osprey\bin\x64\Release\net8.0
+    $ospreyExe    = $ospreyBinDir\Osprey.exe
+
+and `build.ps1` is invoked with `-Framework net8.0`. Verified: there is no `pwiz_data_cli.dll` in the
+net8.0 output, correctly - it is a net472-only mixed-mode assembly. So **`-ReaderParity` cannot use
+`$ospreyExe`**; it needs the net472 exe, and `build.ps1` has no vendor switch (its params are
+`Configuration`, `Framework {net8.0|net472|both}`, `NoTests`, `Coverage`, `TeamCity`, `Verbosity`).
+
+Design that follows: `-ReaderParity` resolves its own net472 exe path rather than reusing
+`$ospreyExe`, and fails loudly if the vendor runtime is absent (the `NotSupportedException` naming
+`/p:OspreyVendorReader=true` already gives it a clean signal). Do NOT switch the whole regression to
+net472 to make this convenient - the mzML-driven gate is net8.0 for good reasons and the strtod fix
+made the two TFMs produce identical caches anyway.
 
 ## TeamCity: the Osprey PR will break the build as written
 
