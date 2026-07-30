@@ -159,6 +159,30 @@ reported-pool score histogram from the model build so it shows under transfer.
 
 ## EVIDENCE SUMMARY (2026-07-28) — write-up seed for the transfer decision
 
+### TRANSFER AT 82 FILES IS MEASURED, NOT INFERRED (found 2026-07-30)
+`D:\test\Pilot-MTG-Tissue-May2026\runs\pass2ab-82file-transfer-5dayTransferPerRunMdiag\` (run
+2026-07-20, 07:40->11:19, peak ~42 GB, threads 8, LinkFrom resume + `--model-diagnostics` +
+`--fdrbench-pass 2`). Log confirms the per-run-only path: "pass-2 carries the pass-1 q through and
+re-maps ONLY the per-run q of reconciliation-moved peaks". Pass-2 calibration across the ladder
+(`CohortAnalysis/plateau_check.py`):
+
+| nominal | 0.1% | 0.25% | 0.5% | 1% | 2% | 5% |
+|---|---|---|---|---|---|---|
+| true FDP | 0.11% | 0.18% | 0.42% | **0.92%** | 1.80% | **4.83%** |
+
+Segment slopes 0.48 / 0.96 / 1.00 / 0.88 / **1.01** - tracks the diagonal the whole way, INCLUDING
+past 2% where pass 1's pool is exhausted. No plateau, conservative at the operating point. Against
+transfer-compete (1.96%, pool 12.8% contaminated) and protein-compact (1.51%, pool 38.5%) this is
+not close.
+
+**MERGE DEPENDENCY**: that run used the pwiz tree carrying **PR #4438** (per-run-only q). Master at
+`61fa751304` - and therefore the mean_best2 branch - does NOT have it, so `FirstJoinTask.cs:288-290`
+still forces the resident pool for transfer (`|| OspreyEnvironment.Pass2TransferQ`) and an 82-file
+transfer arm fails there in ~25 s on `GuardResidentPool`. The comment directly above that line
+already documents that the structure requiring it was dropped. **So the default flip is gated on
+#4438 merging, not on new engineering** - after which the stale disjunct should be deleted and the
+82-file transfer arm re-confirmed on master.
+
 ### 82-file SEA-AD entrapment 4-way (current binary, experiment scope, FDRBench-validated)
 | mode | disc @ 1% q | true FDP @ 1% q | disc @ TRUE 1% FDP | verdict |
 |---|---|---|---|---|
