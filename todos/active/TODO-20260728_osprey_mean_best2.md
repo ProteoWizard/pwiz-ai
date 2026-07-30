@@ -156,7 +156,13 @@ precursors - on k=2 at F<=10 (+957..+1,605) and on k>=6 at F>=40 (+1,578..+3,600
 lever is the threshold shift: substituting mean-of-top-2 for max lowers all scores but lowers the
 NULL's more (its highs are single lucky runs), so separation improves and more targets clear 1% q.
 
-**THE GAIN IS A PRODUCT OF TWO FACTORS (main result).**
+**THE TWO-FACTOR MODEL - PROPOSED, THEN FALSIFIED OUT-OF-SAMPLE (do not quote it).** It was fitted
+on 20 cohorts and then pre-registered against new ones as they ran; both tests missed badly:
+contiguous-28 predicted +10.4% -> actual **+14.4%** (err +4.0); files 61-80 predicted +8.9% ->
+actual **+3.8%** (err -5.0). Errors of 4-5 points on a quantity whose whole range is 1.8-14.6%,
+versus an in-sample mean residual of 1.85 - i.e. two free parameters over-fitted to data already
+seen. **Conclusion: NOTHING measured at cohort level predicts the effect size**, A x B included.
+The fit is kept below only as the record of what was tried.
   A = share of accepted FALSE hits resting on a single run  (the removable population)
   B = (union - accepted) / union                            (reservoir available to backfill)
 Over 20 cohorts: A alone Spearman +0.55, B alone +0.16, **A x B: Pearson +0.79 / Spearman +0.75**,
@@ -168,9 +174,19 @@ leakage but no reservoir (spread21 A .32/B .22 -> +1.8%) or both (82f A .41/B .4
 spread17 A .52/B .23 -> +11.8%). Residual: F=5/6 under-predicted by ~3.7 pts.
 
 **Cohort-structure facts established tonight** (all disc @ matched 1% true FDP):
-- Fixed size is REPRODUCIBLE: three disjoint 20-file cohorts gave +2.6 / +2.5 / +2.7% though their
-  absolute yields spanned 26% (46,496 / 45,619 / 34,176). The gain is near-deterministic per cohort
-  shape and independent of content quality.
+- Fixed size is REPRODUCIBLE: four disjoint 20-file cohorts gave +2.6 / +2.5 / +2.7 / +3.8% though
+  their absolute yields spanned 26% (46,496 / 45,619 / 34,176 / ...). The gain is near-deterministic
+  per cohort shape and independent of content quality.
+- UNION EFFICIENCY is the cleanest cross-cohort summary (share of run-level detections surviving
+  the experiment cut; the union is aggregation-independent so sizes are comparable):
+  F=4 93.0% -> 95.6%, F=20 79.6% -> 81.6%, F=40 74.2% -> 76.4%, F=60 70.6% -> 74.6%,
+  F=75 63.3% -> 69.8%, F=82 58.7% -> 67.3% (max -> best-2). **Scale costs ~34 points of efficiency;
+  mean(best-2) recovers 1.4-10.4 of them.** The loss is large and mostly UNADDRESSED - a better
+  framing for the paper than any single gain percentage.
+- REJECTED: "best-2 is a stabiliser". The nested contiguous series looked like it (max 46,496 /
+  41,623 / 45,832 / 47,290 at 20/28/30/40 files vs best-2 47,685 / 47,617 / 48,431 / 48,672), but
+  normalised by the union across 21 cohorts the scatter is identical (max/union sd 8.11 vs
+  best2/union sd 8.15). F=28 is a local anomaly where max dipped and best-2 held.
 - Run count is NOT the driver: at constant content span (every 5th/4th/3rd/2nd/all) the series is
   +11.8% (17f) / +1.8% (21f) / +7.4% (28f) / +4.0% (41f) / +14.6% (82f) - non-monotone, neighbours
   differing 6-10 pts.
