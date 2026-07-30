@@ -175,13 +175,22 @@ past 2% where pass 1's pool is exhausted. No plateau, conservative at the operat
 transfer-compete (1.96%, pool 12.8% contaminated) and protein-compact (1.51%, pool 38.5%) this is
 not close.
 
-**MERGE DEPENDENCY**: that run used the pwiz tree carrying **PR #4438** (per-run-only q). Master at
-`61fa751304` - and therefore the mean_best2 branch - does NOT have it, so `FirstJoinTask.cs:288-290`
-still forces the resident pool for transfer (`|| OspreyEnvironment.Pass2TransferQ`) and an 82-file
-transfer arm fails there in ~25 s on `GuardResidentPool`. The comment directly above that line
-already documents that the structure requiring it was dropped. **So the default flip is gated on
-#4438 merging, not on new engineering** - after which the stale disjunct should be deleted and the
-82-file transfer arm re-confirmed on master.
+**STALE GUARD IN SHIPPED MASTER (verified 2026-07-30 at master `520d559fd`)**: #4438 (per-run-only q)
+IS merged, but `FirstJoinTask.cs:288-290` still reads
+
+```csharp
+bool needsResidentFirstPassPool =
+    (!string.IsNullOrEmpty(config.OutputFdrBench) && config.FdrBenchPass == 1) ||
+    OspreyEnvironment.Pass2TransferQ;
+```
+
+The comment immediately above it already documents that the full pre-compaction score->q table -
+the only reason transfer needed the resident pool - was dropped, and the NOTE below reasons that
+transfer-compete does not need it. The 2026-07-20 transfer run peaked at **~42 GB**, not the ~104 GB
+a resident pool implies, so that build was not taking this path. **On master today an 82-file
+transfer arm still fails in ~25 s on `GuardResidentPool` despite the fix being in.** Deleting
+`|| OspreyEnvironment.Pass2TransferQ` is a one-line defect fix in shipped code and is the
+prerequisite for the default flip - then re-confirm the 82-file transfer arm on master.
 
 ### 82-file SEA-AD entrapment 4-way (current binary, experiment scope, FDRBench-validated)
 | mode | disc @ 1% q | true FDP @ 1% q | disc @ TRUE 1% FDP | verdict |
