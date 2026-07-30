@@ -72,6 +72,46 @@ basis: a 1-run detection is 16.75% FDP (per-run), leaky enough that demotion is 
 low-percentile), then 200/300/500 on the 2nd machine. Streaming-path mirror still needed for a
 production default (resident-only today).
 
+## IDEA (Brendan 2026-07-30): extend mean(best-N) from RUNS to PROTEINS — `mean-2-prot`
+
+`mean-2-prot` = mean of (this peptide's score, the best OTHER peptide of its protein), with the same
+decoy mean/median floor when a protein has only one peptide. Brendan: "not at all sure this is a
+good idea... but it seems like the fairer starting point for a truly symmetric model".
+
+**Why it is the right instinct.** It does by SCORING what protein-compact does by SELECTION. A
+decoy peptide would use its own decoy-protein's best decoy peptide - own data only, no target
+conditioning - so it is symmetric by construction in the same way mean(best-N) over runs is. Decoy
+proteins are well defined here (the pairing manifest gives decoys their source-protein accessions)
+and carry matched peptide complements in a 1:1 library, so TDC validity is plausible.
+
+**Design points to settle first**
+- **Leave-one-out is required.** "Best peptide of the protein" must exclude self, else the protein's
+  own best peptide boosts a second peptide which boosts it back - mutual inflation. If the current
+  peptide IS the best, use the second best.
+- Floor: reuse the decoy-median floor for single-peptide proteins, exactly as the 1-run case.
+- Protein grouping must be identical in construction for target and decoy (true in libdecoy; check
+  gendecoy, where decoys are generated per peptide).
+- Peptides of one protein become score-correlated, which double-counts evidence downstream in
+  protein-level FDR. Needs thought before it feeds ProteinFdr.
+
+**The argument that does NOT carry over from runs.** For runs, requiring 2 observations is free
+because 1 measurement yields no CV or ratio - detection and quant usability coincide. For proteins
+that is false: a single well-measured peptide IS quantifiable. So `mean-2-prot` really does cost
+sensitivity for single-good-peptide proteins with no compensating quant argument, unlike
+`mean-best-2` over runs. That weakens the "not a sensitivity tax" case considerably.
+
+**BLOCKING PROBLEM - we cannot currently validate it.** Entrapment peptides belong to entrapment
+proteins that are ABSENT from the sample; real false targets very often belong to proteins that ARE
+present. Any protein-level score boosts the second class and not the first, so entrapment stops
+representing the false-target population and the oracle UNDER-reports. That is the same blindness as
+protein-compact ([[TODO-osprey_selected_null_diagnostics]]), reached through scoring instead of
+selection - and it means a favourable entrapment result for `mean-2-prot` would not be trustworthy.
+**Design consequence, useful beyond this idea: to audit ANY protein-level prior the entrapment set
+must contain false peptides attributed to PRESENT proteins** - i.e. entrapment inserted into real,
+detected proteins - not a foreign proteome, which only supplies false peptides in absent proteins
+(the easy case). That is a different entrapment design from `fractional-entrapment.md` and should be
+built before this lever is measured.
+
 ## FUTURE REFINEMENT — size-threshold / scale-adaptive demotion (Brendan 2026-07-28)
 
 3-file result showed a modest NEGATIVE (disc@1%q 27,201→25,871, −4.9%; true FDP 0.86%→0.76%):

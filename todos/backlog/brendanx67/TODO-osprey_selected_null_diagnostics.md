@@ -105,7 +105,40 @@ loss. `transfer` satisfies it trivially by never recomputing.
 
 ## Proposed diagnostics (the HTML work)
 
-**D1 - Populate the pass-2 distribution + competition panels.** Today `pass2` carries only the
+**D1 (PRIMARY, Brendan 2026-07-30: "I really would like the composite score histograms for pass 2
+even when the model is not retrained") - the gating is an over-restriction, not a data problem.**
+`ModelDiagnosticsData.BuildPass2` (`ModelDiagnosticsData.cs:672-678`):
+
+```csharp
+pass2.Model = BuildModelPass2(perFileEntries, pass2Contributions, classByBaseId, pairByBaseId);
+if (pass2.Model != null)                       // null in EVERY frozen mode
+{
+    pass2.DensityRatio = BuildDensityRatio(pass2.Model.Scores, hasEntrapment);
+    pass2.WinFraction  = BuildWinFraction(perFileEntries, classByBaseId, haveManifest);
+}
+```
+
+- the score histogram lives INSIDE `Model` (`pass2.Model.Scores`) so it dies with the model, even
+  though pass 1 builds its own model-independently: `data.Scores = BuildScoreHistogram(precs)`, and
+  `precs` is already in hand at line 653;
+- **`BuildWinFraction` does not take contributions at all** - the paired-coin diagnostic is gated on
+  a condition it has no dependency on;
+- frozen modes DO have scores (entries carry the frozen 1st-pass model's score), and that is exactly
+  the distribution the pass-2 competition consumed.
+
+Change (~4 lines + a `Scores` property on `Pass2Data` + un-gating three HTML cards):
+```csharp
+pass2.Scores      = BuildScoreHistogram(precs);                                   // model-independent
+pass2.WinFraction = BuildWinFraction(perFileEntries, classByBaseId, haveManifest);
+pass2.DensityRatio= BuildDensityRatio(pass2.Scores, hasEntrapment);
+pass2.Model       = BuildModelPass2(...);   // stays null when frozen - feature weights really don't exist
+```
+Keep `Model` gated (no retrain => no weights); un-gate distributions, density ratio and paired coin.
+Golden impact: the mdiag payload gains fields, so `Regression/DiagnosticsGolden.ps1` will diff and
+the diagnostics golden needs rebaselining. FDR output itself is untouched. mdiag is C#-only, so no
+Rust port. Do it on its own branch off clean master in `C:\proj\pwiz`, NOT in the mean_best2 tree.
+
+**D1b - Populate the pass-2 distribution + competition panels.** Today `pass2` carries only the
 q-driven half (`fdpViews`, `idYield`, `crossRun`, `perFile`, `model`); `winFraction` and
 `densityRatio` exist as keys but are EMPTY, and there is no pass-2 score histogram or class count
 (`ModelDiagnosticsData.cs:639` documents the split). So the plots that would show a depleted null
@@ -158,6 +191,61 @@ TODO-20260727): run-count histogram + per-k FDP, reproducibility frontier, per-r
 experiment-wide calibration, plus D3's segment-slope reading. Fig 4a's x=y test is what DIA-NN was
 tuned to pass; these are the ones that would separate reproducible signal from single-run
 accumulation.
+
+## REGENERATING THE 82-FILE DIAGNOSTICS HTML (transfer-compete and protein-compact)
+
+The two runs whose HTML we want to improve are
+`D:\test\Pilot-MTG-Tissue-May2026\runs\pass2-82-4way-{protein-compact,transfer-compete}\`
+(2026-07-28, 1,074 files each). mdiag is built IN-PROCESS from `RescoredEntries`, so there is no
+way to rebuild the HTML from saved artifacts - each mode must re-run Stage 5/6. Route, cheapest
+first:
+
+1. **Develop and validate at 20 files, not 82.** All modes run there, the resident pool fits, and a
+   pair of arms costs ~30-40 min instead of ~2-3 h. `Run-SeaAd.ps1 -NumFiles 20 -Pass2Mode
+   <mode> -LinkFrom <the 82-file parquets> -FdrBenchPass 2` (the `-Pass2Mode` ValidateSet now
+   accepts all four modes; it sets `OSPREY_PASS2_QVALUE`, which the script clears first so a stale
+   shell variable cannot change an arm silently).
+2. **For the 82-file regeneration use the driver that demonstrably worked**:
+   `ai/.tmp/run-pass2-82-4way.ps1 -Mode protein-compact|transfer-compete` - hard-links stage 1-4
+   from `pass2ab-82file-percolator-5day`, `--threads 8`, `--protein-fdr 0.01`, `--fdrbench-pass 2`,
+   `--model-diagnostics`, fresh `--output-dir` per mode (the `.2nd-pass` sidecar is NOT mode-tagged,
+   so never reuse a directory). Budget ~2-3 h per mode from the reconciled-parquet timestamps; run
+   ONE at a time on the 64 GB box.
+3. **Two gotchas that cost time on 2026-07-30:**
+   - **`transfer` cannot run at 82 files here.** It needs the full pre-compaction score->q table
+     resident (`GuardResidentPool`, ~104 GB vs 63.7 GB RAM). That is why there is no
+     `pass2-82-4way-transfer` directory and why the evidence table lists transfer as ~= pass 1.
+     `transfer-compete` and `protein-compact` stream and are fine.
+   - **The exe matters.** The 07-27 build tree exe produced both HTMLs with `--model-diagnostics` on
+     a `-LinkFrom` resume; the 2026-07-29 snapshot refused the same combination with
+     "`--model-diagnostics` on a full resume requires the RESIDENT first-pass pool". Resolve which
+     guard changed (or pin the exe) BEFORE scheduling a multi-hour run - it fails in ~25 s, so test
+     the combination first with a 2-file arm.
+4. `OSPREY_ALLOW_UNBOUNDED_MEMORY=1` is NOT a workaround at 82 files; it accepts ~104 GB of demand
+   and will thrash.
+
+## MEASURED 2026-07-30: where each mode's inflation actually comes from
+Accepted sets at 1% q, 82 files, split by which mode accepted them (`fdrbench.tsv`, entrapment by
+`_p_target`):
+
+| set | n | entrapment | implied FDP |
+|---|---|---|---|
+| shared by both modes | 33,968 | 157 | **0.94%** |
+| only protein-compact | 3,656 | 126 | **7.00%** |
+| only transfer-compete | 357 | 175 | **99.56%** |
+
+- **transfer-compete's inflation is concentrated in 357 near-100%-false acceptances** - 1% of its
+  IDs carrying 53% of its entrapment hits. That is the reconciliation boost (false targets rescored
+  at the TARGET's chosen consensus RT), a specific pathology.
+- **protein-compact's is broad**: 3,656 re-ranked acceptances at 7% FDP, supplying 45% of its error.
+  These are NOT stratum expansions - every one appears in transfer-compete's report too, just with
+  worse q, so they are ordinary library peptides the oracle CAN see. The stratum-only rows (647,139,
+  20.7% entrapment) contribute nothing at 1% today: the blindness is a LATENT reservoir, not the
+  current driver.
+- **So protein-compact's better headline (1.51% vs 1.96%) is not earned** - it comes from escaping
+  transfer-compete's 357, not from being sound. Whole-pool contamination runs the other way:
+  protein-compact's reported pool is 737,602 rows at **38.5%** FDP vs transfer-compete's 90,463 at
+  **12.8%**.
 
 ## Tools that already exist (ai/scripts/Osprey/CohortAnalysis/)
 - `gate_audit.py` - the >=2-peptide gate rate for real vs entrapment proteins; the D5 measurement.
