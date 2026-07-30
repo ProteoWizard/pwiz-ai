@@ -745,6 +745,82 @@ itself took under two seconds on 2.26 GB, so the CI cost is dominated by the two
 
 ## Progress Log
 
+### 2026-07-29 (evening) - Full regression gate GREEN; non-opt-in cache consumption
+
+**Standing gate result on this branch: 18 checks, 0 failures**, across all four datasets. This was
+the gap for a checkpoint merge, since the branch refactors the SHARED mzML read path
+(`SpectrumBuilder` extraction, `EnsureSpectraCache` moved to `ScoringTaskShared`).
+
+| dataset | modes |
+|---|---|
+| Stellar | mode1 vs golden, mode3 HPC chain, mode2 resume - PASS |
+| StellarLibDecoy | mode1, mode1b diagnostics, mode1b FDR bounds, mode3, mode2 - PASS |
+| StellarGenDecoyEntrap | mode1, mode1b diagnostics, mode1b FDR bounds, mode3, mode2 - PASS |
+| Astral | mode1, mode1b diagnostics, mode1b FDR bounds, mode3, mode2 - PASS |
+
+**`Test-PerfGate.ps1` still NOT run**: it needs the pinned `C:\proj\pwiz-perfbase` worktree, which
+does not exist on this machine. Either create it (the documented setup, and what makes perf numbers
+comparable across sessions) or pass `-BaselineRoot C:\proj\pwiz` (on master, but a baseline that
+moves whenever that checkout does). The perf gate matters here specifically because
+`SpectrumBuilder` was extracted into the hot per-spectrum assembly loop.
+
+#### A false alarm that was MY fault, and the real bug it exposed
+
+The first `-Dataset All` run aborted on StellarGenDecoyEntrap with
+`Missing PrecursorCharge at row 249759`. Cause: **I killed an earlier invocation with `TaskStop`**
+(to move it off a `tail` pipe) while it was deriving
+`TestResults/_derived/carafe_spectral_library.nodecoy.tsv`. That left the file truncated mid-field
+(249,758 complete lines, last line ending `...^IEAVLHACR^I47`), and because the derived library is
+reused skip-if-present, every later run consumed the corrupt copy. Deleting it made the dataset pass
+all five checks. **Not a branch regression.**
+
+The underlying defect is real and independent of my mishap: the derivation wrote **directly to the
+final path**, so any interruption - Ctrl-C, a cancelled TeamCity build (we watched one get
+`Canceled (Retry attempt 1/3)` today), an agent reboot - leaves a truncated file whose mtime is
+NEWER than the source, so the staleness check accepts it forever. Fixed by writing to
+`$stripped.tmp` and `Move-Item`-ing into place only after the `$dropped -eq 0` sanity check passes.
+
+Second tooling gap noted: a LOCAL failure loses its own evidence. The run dir is pruned
+(`-KeepRunDirs 0`) and the design assumes the diagnosis lives in the TeamCity build log, so the
+console pointed at a `straight.log` that no longer existed. Re-running with `-KeepOutput` was the
+only way to read it.
+
+#### Non-opt-in builds can consume raw-derived caches (Brendan's requirement)
+
+Goal: stage `.spectra.bin` once on a vendor-capable machine, then run any build - net8.0, or net472
+without the flag - against the SAME `.raw` inputs with no mzML conversion.
+
+**It already worked, for file-based formats.** `EnsureSpectraCache` checks the cache and returns
+(`ScoringTaskShared.cs:150`) before `SpectrumFileReader.LoadAllSpectra` (line 176), and nothing
+upstream filters by extension - `-i` appends tokens verbatim (`OspreyCommandArgs.cs:79`). The
+fingerprint still protects a Thermo `.raw`, so a STALE cache is still caught and then fails with the
+clear vendor-reader error instead of using stale data.
+
+Three changes (commit `8b59effee3`):
+
+1. **Directory inputs accepted.** `Program.cs` validated with `File.Exists` alone, and Agilent `.d`,
+   Bruker `.d` and Waters `.raw` are DIRECTORIES - so they were rejected with "Input file not found"
+   on EVERY build, opt-in or not. Only file-based formats (Thermo `.raw`, Sciex `.wiff`) could reach
+   the reader at all. That is a real limitation of the feature as first written, not just a
+   non-opt-in issue.
+2. **Directory fingerprint.** `FileInfo.Exists` is false for a directory, so
+   `ComputeSourceFingerprint` returned 0/0 - and the read side SKIPS the staleness comparison when
+   the stored size is 0 (`SpectraCache.cs:308`), meaning a directory-sourced cache was accepted no
+   matter how the source changed. Now sums content sizes and takes the newest write time. The file
+   branch is byte-for-byte unchanged, so existing caches stay valid.
+   Trade-off recorded in the code: a vendor SDK that writes a sidecar into the bundle on read would
+   move the fingerprint and cost a re-parse - a performance cost that announces itself in the log,
+   versus silently trusting a stale cache. **Verified Agilent does not mutate on read**: msconvert
+   read a tracked `.d` and `git status` showed nothing modified inside it. Bruker TDF/sqlite is
+   untested (no local data) and stays a known residual.
+3. **`TestVendorCacheUsableWithoutVendorReader`** pins the ordering, which nothing else did - an
+   up-front extension check added for a friendlier error message would have broken the workflow with
+   every other test green. **Proved it can fail**: temporarily inserting exactly that check made it
+   fail at `ScoringTaskShared.cs:142`, then reverted. The test is also sound in both build
+   configurations - a cache MISS throws either way, so it cannot pass for the wrong reason.
+
+**Gate**: 555/555 (the +1 is the new test), inspection clean, both target frameworks.
+
 ### 2026-07-29 (later still) - Jamfile vendor deployment DONE and proven end to end
 
 Commit `de922c9d60`. **`--task SpectraCache` on a vendor `.raw` now works from a pure bjam build**,
