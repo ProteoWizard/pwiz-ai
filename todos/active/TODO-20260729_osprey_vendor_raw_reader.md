@@ -745,6 +745,65 @@ itself took under two seconds on 2.26 GB, so the CI cost is dominated by the two
 
 ## Progress Log
 
+### 2026-07-30 (night session) - Merged master, PR READY FOR REVIEW, TeamCity fired
+
+Night session goal: get #4502 as close to merge-ready as possible against the bar
+**"safe to merge with opt-in OFF by default"**, plus stage `.spectra.bin` for the whole
+TDP-43 raw set. Brendan runs `/code-review` himself in the morning.
+
+**Where #4502 stands:**
+
+| item | state |
+|---|---|
+| `regression.ps1 -Dataset All` | **18/18 PASS** in one clean run over `8b59effee3` |
+| master merged in (`0672018888`) | clean, no conflicts |
+| post-merge unit gate | **556/556**, zero inspection warnings, both TFMs |
+| PR body | rewritten; no longer says "experimental" |
+| PR state | **READY FOR REVIEW** (Copilot will auto-review) |
+| TeamCity Perf/Regression | triggered on `pull/4502`, **build 4114865** |
+| `Test-PerfGate.ps1` | still NOT run - no `pwiz-perfbase` worktree on this machine |
+
+**The merge mattered more than it looked.** master gained #4488 (Stage-6 memory bounding),
+which rewrote `PerFileScoringTask.cs` (+473) and `RescoreHydration.cs` (+625) - and this
+branch MOVED `EnsureSpectraCache` out of `PerFileScoringTask`. `git merge-tree` predicted a
+clean merge and the merge was clean, but textual cleanliness does not rule out a semantic
+conflict, so it was verified explicitly afterwards: the atomic-write change, the new test,
+and `EnsureSpectraCache` living only in `ScoringTaskShared` (count 1 there, 0 in
+`PerFileScoringTask`). No goldens changed in #4488, as expected for behavior-preserving
+memory work.
+
+**Deliberately did NOT re-run the local regression after the merge.** TeamCity
+Perf/Regression on `pull/4502` builds GitHub's MERGE ref, so it runs
+`regression.ps1 -Dataset All` against exactly the merged state, in the cloud, with no
+contention against the 164-file caching run using this machine's disks. That is the
+stronger artifact and it is already in flight.
+
+#### Provenance trap caught before the caching run
+
+The staged `obj/x64/pwiz_data_cli.dll` was the **fix-A** build left over from the Agilent
+investigation on the `pwiz` branch. Since #4500 is parked, master will NOT have fix A, so
+caches built with that binding would embed full-precision RTs that **no post-merge build
+could reproduce**. Rebuilt the binding from this branch first (`String.obj` recompiled,
+14,582,784 bytes vs 14,585,344 with fix A) and moved the one pre-existing cache aside to
+`tdp43-plasma-ev/cache-preA-reference/`, so all 164 caches come from one stock binary.
+
+#### The 164-file SpectraCache run
+
+* 164 `.raw` files, 787 GB (Brendan said 162; the set is 164).
+* Runs from a SNAPSHOT at `D:\test\osprey-runs\_bin\vendor-pr4502\` (178 files), so
+  rebuilding the working tree cannot disturb it.
+* Caches land BESIDE each `.raw` - Osprey's default cache dir - so a morning run pointed
+  at the same inputs finds them with no extra flags.
+* Launcher `ai/.tmp/run-spectracache-164.ps1`; log
+  `D:\test\osprey-runs\tdp43-plasma-ev\spectracache-164.log`.
+* `--timestamp --memstamp` are on, so `ai/scripts/perfviz.py` can read the log: this
+  doubles as a **scaling measurement** over 164 files. A per-file memory floor that RISES
+  across the set would be an O(files) regression worth knowing about.
+* `SpectraCacheTask` iterates `foreach` (sequential), so memory stays bounded to one file -
+  checked before launching 164 of them unattended.
+* Pre-flight: the snapshot read a committed Thermo `.raw` and wrote a cache before the big
+  run started.
+
 ### 2026-07-29 (evening) - Full regression gate GREEN; non-opt-in cache consumption
 
 **Standing gate result on this branch: 18 checks, 0 failures**, across all four datasets. This was
