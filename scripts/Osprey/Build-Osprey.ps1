@@ -50,6 +50,14 @@
     that step is missing, because the failure mode otherwise is ~20 CS0234
     "namespace CLI does not exist" errors that say nothing about the real cause.
 
+    It does NOT deploy the vendor runtime (the vendor APIs, the C/C++ runtimes
+    and msparser) next to Osprey.exe - only the bjam target
+    pwiz_tools/Osprey//Osprey installs those. So -VendorReader COMPILES the
+    reader but the resulting Osprey cannot read a raw file until that target has
+    run once in the checkout; it fails with "Could not load file or assembly
+    'pwiz_data_cli.dll' or one of its dependencies". After one bjam run, this
+    script is the fast way to iterate - the installed runtime files survive.
+
 .EXAMPLE
     .\Build-Osprey.ps1
     Build Osprey in Release configuration
@@ -244,14 +252,23 @@ try {
             Write-Host "Stage it with the tracked bjam entry point (from the pwiz root):" -ForegroundColor Yellow
             # quickbuild.bat is in the repo; b.bat / bs.bat are personal shortcuts
             # (gitignored) and do not exist on a fresh clone or on TeamCity, so the
-            # portable invocation is spelled out here. This mirrors the argument set
-            # Skyline's own TeamCity step uses via scripts\misc\tcbuild.bat.
-            Write-Host "  quickbuild.bat pwiz\utility\bindings\CLI//pwiz_data_cli ``"
+            # portable invocation is spelled out here.
+            #
+            # This MUST be the Osprey target, not pwiz_data_cli. Building
+            # pwiz\utility\bindings\CLI//pwiz_data_cli puts the DLL in build-nt-x86
+            # and nothing under pwiz\ ever copies it to ProteowizardWrapper\obj -
+            # so that command leaves the very check above still failing. The Osprey
+            # target stages obj (through Skyline's install-native-dependencies),
+            # builds the wrapper, and installs the vendor runtime next to
+            # Osprey.exe, which is the part -VendorReader alone cannot do.
+            Write-Host "  quickbuild.bat pwiz_tools\Osprey//Osprey ``"
             Write-Host "      --i-agree-to-the-vendor-licenses -j$env:NUMBER_OF_PROCESSORS ``"
             Write-Host "      toolset=msvc-14.5 address-model=$addressModel $variant --without-compassxtract"
             Write-Host ""
-            Write-Host "A full Skyline build stages it too, as a side effect of" -ForegroundColor DarkGray
-            Write-Host "pwiz_tools\Skyline//Skyline.exe's install-native-dependencies." -ForegroundColor DarkGray
+            Write-Host "Add --incremental --force-generate-version to skip the submodule" -ForegroundColor DarkGray
+            Write-Host "update; --incremental alone disables Version.cpp generation and the" -ForegroundColor DarkGray
+            Write-Host "build then fails on a missing Version.cpp. A full Skyline build" -ForegroundColor DarkGray
+            Write-Host "stages obj too, as a side effect of install-native-dependencies." -ForegroundColor DarkGray
             exit 1
         }
 

@@ -33,10 +33,14 @@
    failure belongs to the **Perf/Regression** config, which is manual and has NOT run — Brendan is
    holding that trigger until the Jamfile + staging work below is in place, so the vendor-enabled
    net472 build is still untested on CI. #4500 was red on Linux only; fixed and pushed.
-2. **Add the staging step** to the Perf/Regression config (see the "tracked entry points" section).
-   `quickbuild.bat`, not `b.bat`/`bs.bat` - those are gitignored personal shortcuts.
-3. **Jamfile work** for #4502: the `<assembly>` reference and `install-vendor-api-dependencies` for
-   the 78 native runtime files.
+2. **Change the Perf/Regression config to ONE bjam step** - no longer a separate staging step plus
+   `Build-Osprey.ps1`. With the Jamfile work done, `quickbuild.bat pwiz_tools\Osprey//Osprey
+   --i-agree-to-the-vendor-licenses ... --without-compassxtract` stages `obj/x64`, builds the
+   wrapper, deploys the vendor runtime, and builds Osprey. Keep the first step non-incremental (or
+   pass `--force-generate-version`) - see the Version.cpp gotcha in the progress log. This is
+   option 1 from "Earlier options considered", which the Jamfile work has now made the cheap one.
+3. ~~**Jamfile work**~~ **DONE** - commit `de922c9d60`, see progress log. The "78 native runtime
+   files" framing was wrong; the necessary set is much smaller and `dumpbin /dependents` names it.
 4. **`-ReaderParity` mode in `regression.ps1`** (design in this file). ~34 s on one Stellar file.
 5. **Bruker/ReaderTest failures**: 4 of 52 Bruker cases and `ReaderTest` fail LOCALLY with
    `--without-compassxtract` (`Bruker API was built with only BAF and TDF support`). `ReaderTest` was
@@ -114,26 +118,33 @@ this.
 
 ## Tasks
 
-- [ ] Add a vendor-raw reader to `Osprey.IO` behind the same contract `MzmlReader` provides —
+- [x] Add a vendor-raw reader to `Osprey.IO` behind the same contract `MzmlReader` provides —
       `LoadAllSpectra(path) -> MzmlResult { Ms2Spectra, Ms1Spectra, UnsortedSpectrumCount }`
-- [ ] Select the reader by file extension in `PerFileScoringTask` (call site is the current
+      (`VendorRawReader`, net472 only)
+- [x] Select the reader by file extension in `PerFileScoringTask` (call site is the current
       `MzmlReader` invocation) so nothing downstream is aware of the source format
-- [ ] Wire `pwiz_data_cli.dll` into the **net472** configuration only, via
+      (`SpectrumFileReader`, both TFMs)
+- [x] Wire `pwiz_data_cli.dll` into the **net472** configuration only, via
       `pwiz_tools/Shared/ProteowizardWrapper` (already `v4.7.2`), not a direct CLI assembly binding
-- [ ] Add the assembly reference + vendor-dependency conditional to `pwiz_tools/Osprey/Jamfile.jam`,
-      following the `Skyline/Jamfile.jam` precedent
-- [ ] Keep `MzmlReader` and the net8.0 target-framework path intact
+- [x] Add the assembly reference + vendor-dependency conditional to `pwiz_tools/Osprey/Jamfile.jam`,
+      following the `Skyline/Jamfile.jam` precedent — commit `de922c9d60`, proven by a raw read from
+      a pure bjam build
+- [x] Keep `MzmlReader` and the net8.0 target-framework path intact (both TFMs compile in every
+      build; `MzmlReader` is still the only net8.0 path)
 
 ## Acceptance (from the issue)
 
-- [ ] `--task PerFileScoring -i <file>.raw` produces `.spectra.bin` + `.scores.parquet` equivalent
-      to the same file converted to mzML first
-- [ ] Byte-parity: a raw-sourced run and an mzML-sourced run of the same file agree at the Stage-4
-      parquet, or the differences are characterized and understood (vendor centroiding vs the
-      msconvert `peakPicking vendor msLevel=1-` filter is the obvious candidate — see
-      `ai/scripts/Osprey/SEA-AD/convert-one.cmd` for the settings in use)
-- [ ] `regression.ps1 -Dataset All` unaffected (it is mzML-driven and must stay green)
-- [ ] net8.0 configuration still builds and runs on master via `MzmlReader`
+- [~] `--task PerFileScoring -i <file>.raw` produces `.spectra.bin` + `.scores.parquet` equivalent
+      to the same file converted to mzML first — **`.spectra.bin` half verified** (`--task
+      SpectraCache`, byte-identical); the `.scores.parquet` half has NOT been run from a `.raw`
+- [x] Byte-parity: a raw-sourced run and an mzML-sourced run of the same file agree at the Stage-4
+      parquet, or the differences are characterized and understood — met in the **strong** form, no
+      tolerance: `PARITY 2,260,174,556 bytes` on the 3.07 GB TDP-43 file, and `PARITY 12,784 bytes`
+      on the committed Thermo fixture from a pure bjam build
+- [ ] `regression.ps1 -Dataset All` unaffected (it is mzML-driven and must stay green) — NOT run
+      since the Jamfile change
+- [~] net8.0 configuration still builds and runs on master via `MzmlReader` — **builds** in every
+      configuration exercised; a net8.0 RUN has not been re-verified since the strtod commit
 
 **A divergence here is an Osprey bug, not a tolerance question.** ProteoWizard reliably produces the
 same results from raw as from the mzML it writes — Skyline depends on this directly. So if a
@@ -659,6 +670,97 @@ the same file, so the test can land green rather than red-until-fixed as feared.
 itself took under two seconds on 2.26 GB, so the CI cost is dominated by the two parses.
 
 ## Progress Log
+
+### 2026-07-29 (later still) - Jamfile vendor deployment DONE and proven end to end
+
+Commit `de922c9d60`. **`--task SpectraCache` on a vendor `.raw` now works from a pure bjam build**,
+and the `.spectra.bin` is byte-identical to the one built from the tracked centroided mzML:
+
+    PARITY: 12,784 bytes identical (source fingerprint masked)   n_ms2=3  n_ms1=0
+
+on `pwiz/data/vendor_readers/Thermo/Reader_Thermo_Test.data/source_cid_test_3scans.raw` vs its
+committed `-centroid.mzML`. **That is raw-vs-mzML parity on data already in the repo**, which is the
+Tier-2 fixture - so the permanent unit test has a proven assertion to make, not a hoped-for one.
+
+**Three pieces in `pwiz_tools/Osprey/Jamfile.jam`:**
+
+1. **Capability gate** - `OSPREY_VENDOR_READER` is true only with
+   `--i-agree-to-the-vendor-licenses`, the flag every other vendor-API consumer keys off
+   (`Skyline/Jamfile.jam:22`). Verified for real, not just `-n`: a no-flag
+   `bjam pwiz_tools/Osprey//Osprey` updated 1 target and pulled in no native pwiz build at all, so
+   the everyday Osprey build stays ProteoWizard-free.
+2. **`do_osprey`** builds `ProteowizardWrapper.csproj` for x64 first when the capability is on (it is
+   not in `Osprey.sln`, and `Osprey.IO` references its built output by HintPath), then passes
+   `OspreyVendorReader=` to the solution build.
+3. **`install-vendor-api-dependencies-to-osprey-net472`** + two `install-osprey-native-runtime-*`
+   targets, into `Osprey/bin/x64/{Debug,Release}/net472`.
+
+**Staging is REUSED from Skyline's `install-native-dependencies`, not redeclared.** Two installs
+writing the same files to the same location would collide as duplicate targets in any build
+requesting both, and Skyline's is the exact staging every parity result here was produced against.
+Cost: an Osprey vendor build also builds `msconvert` and `TestDiagnostics`. Lifting the shared rules
+to a common Jamfile stays the follow-up cleanup.
+
+#### The 78-file list was necessary-vs-sufficient, and the real answer is much smaller
+
+The earlier list came from copying all of `obj/x64` and re-running, which proves sufficiency, not
+necessity. `dumpbin /dependents` on `pwiz_data_cli.dll` gives the actual imports: `timsdata.dll`,
+`MSVCP140`, `VCRUNTIME140[_1]`, `MassLynxRaw.dll`, `msparser.dll`, `baf2sql_c.dll`, `MBI_SDK.dll`,
+the `api-ms-win-crt-*` shims, plus system DLLs. **`msconvert.exe`, `PrmPasefScheduler.dll`,
+`TestDiagnostics.dll`, `msparserD.dll` and the `H5*.exe` are NOT needed** - they were only in
+`obj/x64` because Skyline puts them there.
+
+Two rounds of "still could not load" were needed, each diagnosed rather than guessed:
+
+* **C/C++ runtimes.** `install-vendor-api-dependencies-to-locations` installs the vendor APIs but not
+  the runtimes they link against (VC110/VC120 for Sciex/Agilent/Waters, the VC140 UCRT apisets).
+  Jamroot's `install-msvc-runtime-dlls` (`Jamroot.jam:1585`) has the file list but **cannot be
+  retargeted** with a location-qualified `<dependency>` the way the vendor installs can
+  (`Skyline/Jamfile.jam:526`): its requirements include `<conditional>@install-location`, which
+  returns `<location>` unconditionally, so an override hands `stage.jam` two locations and bjam dies
+  inside `path.relative`. Hence Osprey-local installs that share only the source list.
+* **`msparser.dll`.** `pwiz_data_cli` imports it directly, and the Mascot parser is not a `pwiz_aux`
+  vendor API, so no vendor rule carries it. Skyline gets it from the `msparser` searched-lib's
+  `<assembly-dependency>` (`Jamroot.jam:1391`) via `install-dependencies`; Osprey's output is
+  populated by the solution build instead, so it is installed explicitly (the real 11.8 MB one -
+  note `msparserD.dll` in `obj/x64` is the 116-byte FAKE Skyline makes at `Jamfile.jam:395`).
+
+**The failure mode gives you nothing to go on.** `pwiz_data_cli` is mixed-mode, so a missing native
+import surfaces only as `Could not load file or assembly 'pwiz_data_cli.dll' or one of its
+dependencies`, naming none of them. `dumpbin /dependents` against the deployed directory is the tool;
+do not iterate by copying files.
+
+#### bjam invocation gotcha: --incremental disables Version.cpp generation
+
+`generate-version.jam:33` skips generation unless the build is non-incremental or passes
+`--force-generate-version`, and regeneration DELETES the file first. A `--incremental` build in a
+checkout without generated `Version.cpp` files fails with `Unable to find file or target named
+'Version.cpp'` from `pwiz/analysis` - nothing to do with the Osprey change. TeamCity gets this right
+by making the first step non-incremental. Locally, `--incremental --force-generate-version` is the
+combination that both generates versions and skips the `git submodule update --init --recursive` that
+merely LOADING Skyline's Jamfile triggers (`Skyline/Jamfile.jam:45-49`) - which is the likely origin
+of the modified `BullseyeSharp`/`Hardklor` submodule pointers noted as a loose end in `C:\proj\pwiz`.
+
+#### Build-Osprey.ps1 guidance was wrong, now corrected
+
+When `obj/x64/pwiz_data_cli.dll` was missing the script told you to run
+`quickbuild.bat pwiz\utility\bindings\CLI//pwiz_data_cli`. **Nothing under `pwiz/` references
+`ProteowizardWrapper`** - that target builds the DLL into `build-nt-x86` and never copies it to the
+path the script then tests for, so following its own instructions left the check still failing. Now
+points at `pwiz_tools\Osprey//Osprey`, and documents that `-VendorReader` COMPILES the reader but
+never deploys the vendor runtime, so an Osprey built that way cannot read a raw file until the bjam
+target has run once in the checkout.
+
+#### Two inspection warnings fixed (were NOT clean before this session)
+
+The TODO's "zero inspection warnings" predates commit `eb727aedeb`, which landed with two:
+
+* `MzmlReader.cs:698` - `<see cref="NativeStrtod"/>` cannot resolve in the net8.0 pass, because
+  `NativeStrtod.cs` is entirely `#if NET472`. Now `<c>NativeStrtod</c>`.
+* `IOTest.cs:31` - `using System.Xml;` left over from switching that test off `XmlConvert` as its
+  oracle; referenced only in comments now.
+
+**Gate after the fixes**: 554/554, inspection clean, both target frameworks.
 
 ### 2026-07-29 (later) - CI results on all three PRs; StringTest DBL_MAX defect fixed
 
