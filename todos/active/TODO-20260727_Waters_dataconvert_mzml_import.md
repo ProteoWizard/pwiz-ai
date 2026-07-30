@@ -348,7 +348,11 @@ Remaining:
 - [x] `TestWatersCalibrationSpectrum` and `TestTicChromatogram` green (Release; the clean build
       was Release, and `Run-Tests.ps1` defaults to Debug - it reports "TestRunner.exe not found"
       and still exits 0, so check its output rather than trusting the exit code)
-- [ ] `CodeInspection`
+- [x] `CodeInspection` green, and the full ReSharper whole-solution inspection re-run on the
+      final head (2026-07-30): **0 errors, 0 warnings solution-wide**. Verified against
+      `bin/x64/Release/InspectCodeOutput.xml` directly - 336 bytes, zero `Issue` elements -
+      not just the script's summary line. Stronger than the earlier rounds, which only
+      established zero findings on changed lines.
 - [ ] Commit, push, and replace the PR #4498 body with `ai/.tmp/pr-body.md` (rewritten to match
       "Nothing here writes it", and corrected twice since: it listed `SpectrumList_FilterTest`,
       which has no test target, and described two fixtures rather than three)
