@@ -357,11 +357,23 @@ Still bridged through the doc node, both documented in the code: the group level
 annotations and the reintegrated peak forward from `nodeGroup.Results`, and
 `ExcludeFromCalibration`/`AnalyteConcentration` come from `PeptideDocNode.Results`.
 
-**Cost notes**, both deliberate and both to be fixed by *fewer callers needing chrom infos at
-all* rather than by caching:
-- Nothing is cached, so repeated asks re-read and re-aggregate.
-- `OnDemandFeatureCalculator` makes one `MoleculeResults` per peptide *and replicate*, and each
-  reads every replicate. Scoring a whole document is n times the reading it was.
+**`MoleculeResults` remembers what it works out** (2026-07-30), one entry per transition group.
+Both levels come out of the same pass, so `GetTransitionResults` and `GetTransitionGroupResults`
+share it and asking twice returns the same instance, which the test asserts.
+
+Who holds one, from the developer:
+- `Databinding.Entities.Peptide` holds one
+- windows such as `GraphChromatogram` and `CandidatePeakForm` hold one for the selected molecule
+- otherwise they are not held: `TransitionGroupDocNode.ChangeSettings` will take one as a
+  parameter and pass it on to `UpdateResults`
+
+`UpdateResults` is expected to get a lot smaller once that happens, because much of what it
+calculates is thrown away immediately.
+
+**Cost note**: `OnDemandFeatureCalculator` makes one `MoleculeResults` per peptide *and
+replicate*, and each reads every replicate. Scoring a whole document is n times the reading it
+was. Caching within one instance does not help that - it needs one instance per molecule shared
+across replicates.
 
 **Do not key dictionaries on `GlobalIndex`.** Use `ReferenceValue<T>`, which matches on the
 same thing but keeps the type: an `int` key does not say which kind of object it came from,
