@@ -745,6 +745,54 @@ itself took under two seconds on 2.26 GB, so the CI cost is dominated by the two
 
 ## Progress Log
 
+### 2026-07-30 (morning) - /code-review findings addressed (commit `68cd2fe703`)
+
+15 findings; 11 fixed, 2 deferred by Brendan, 2 out of scope. 556/556, inspection clean.
+
+**The one that mattered: a silently GREEN broken build.** `IF ERRORLEVEL 1 exit %ERRORLEVEL%`
+inside a parenthesized cmd `IF` block returns **0** on a command that exits 7 - cmd parses the
+whole block first, so `%ERRORLEVEL%` is substituted at PARSE time - and `exit` without `/b`
+kills the action, so `msbuild Osprey.sln` never ran while bjam recorded success. Reproduced
+independently before fixing. Now a `GOTO` with the check at top level, exactly as
+`Skyline/Jamfile.jam:185` does it, verified to return 7.
+
+**Two corrections to the review itself:**
+
+1. Of the four `ReaderConfig` values it flagged, only `combineIonMobilitySpectra` is settable.
+   `acceptZeroLengthSpectra` already defaults to true (matching pwiz), and
+   `ignoreCalibrationScans` / `allowMsMsWithoutPrecursor` are **hardcoded in the wrapper's
+   ReaderConfig initializer**, not constructor parameters - changing them would change shared
+   Skyline behavior. Set the one that is settable; documented the two that are not as bounding
+   the parity claim to Thermo, where it was actually measured.
+2. The first fix for the fingerprint hole **broke `TestSpectraCacheFingerprint`**, which
+   deliberately asserts that a cache written with NO fingerprint is accepted even when a
+   source is supplied. That is a contract, not an oversight. Final design distinguishes "no
+   source given" (0, still trusted) from "source exists but unmeasurable"
+   (`FINGERPRINT_UNMEASURABLE = ulong.MaxValue`, always rejected) - closing the hole on both
+   read and write sides with no version bump, since an older reader just mismatches the
+   sentinel and re-parses.
+
+**Deferred by Brendan**: the `run.raw` / `run.mzML` stem collision (#6) - his reasoning:
+`run.raw.spectra.bin` is awkward when the 98% case is one data file per directory, or the same
+data matching by base name; and `precursors[0]` vs `MzmlReader`'s effective LAST precursor
+(#10), which needs a decision about which side is correct before either is called a bug.
+
+**NOT bumping `SpectraCache.VERSION`** (Brendan's call - it would invalidate every existing
+cache including the 163-file set). Exposure is narrow: a cache is only at risk if written by a
+**net472** build from an **mzML** source **before** `eb727aedeb` with the source unchanged.
+net8.0 never had the defect and raw-sourced caches get values from pwiz, so the 163 are
+unaffected. The one real bite: a raw-vs-mzML parity check run against such a warm cache
+reports a SPURIOUS difference. Remedy is deleting those specific caches, not a global bump.
+
+**Out of scope** (they arrived with the #4488 merge, not this PR's diff): the rescore payload
+decode-then-discard, and mode 3 being warn-only with nothing in CI scanning warnings. Both
+look real; worth follow-up issues.
+
+**Pre-existing hazard noted in passing, worth an issue**: an exception escaping
+`ParseSpectrumRaw` (`MzmlReader.cs:127`) bypasses `queue.CompleteAdding()`, leaving the
+consumer `Parallel.ForEach` blocked forever on an undisposed `BlockingCollection`. This diff
+adds new throw sites on that path.
+
 ### 2026-07-30 (morning) - ProteoWizard is now the reader for EVERY format in the opt-in build
 
 Commit `f37a6a4b1c`. Brendan's call, and the direction it sets: in a build that has
@@ -862,9 +910,16 @@ Both threads replied to with the SHA and resolved. 556/556 and inspection clean 
 * Pre-flight: the snapshot read a committed Thermo `.raw` and wrote a cache before the big
   run started.
 
-**Result at 05:23 (still running): 111 caches from 112 files attempted, 6h57m elapsed,
-~3.8 min/file.** It will NOT finish before Brendan wakes - roughly 51 files (~3 h) remain,
-projecting ~08:30. It is safe to leave running; it uses only the snapshot.
+**FINAL: `Cached 163 of 164 file(s) in 36,024.4s`** - 10h 00m, finished 08:26:59, exit 1.
+
+The exit code is CORRECT, not a failure: `SpectraCacheTask` logs an unreadable input,
+continues the sweep, and still fails the run at the end, which is what the one corrupt file
+produced. 163 caches now sit beside their `.raw` files, so a run pointed at those inputs
+finds them with no extra flags and no mzML anywhere.
+
+Throughput for planning: 787 GB in 10 h is **~22 MB/s end to end**, well under the ~55 MB/s
+projected from the Stellar mzML timing - raw parsing plus a ~3 GB cache write per file is
+heavier than reading mzML. Budget ~3.7 min/file on this hardware.
 
 **The one failure is a deliberately corrupt input, not a defect.**
 `2025-0724-TDP43-PlasmaEV-PLT2-C03-5112-027-bad.raw` - note the `-bad` suffix - fails with
