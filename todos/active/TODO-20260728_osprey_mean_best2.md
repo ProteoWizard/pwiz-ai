@@ -130,6 +130,66 @@ grows with N (e.g. f≈0.1: N≤10→1 [max], N=20→2, N=82→9). One knob unif
 
 ## Progress Log
 
+### 2026-07-29 (evening) - REVISION: the "gain grows with N" trend does NOT survive the filled-in middle
+
+Brendan asked for the missing 30/40 file counts before trusting the 20f -> 82f jump. Filling them
+in (plus F=60) **contradicts the recorded monotone-growth conclusion**. best-2 vs max at matched
+1% true FDP, all cohorts measured so far:
+
+| F | 4 | 5 | 6 | 8 | 10 | 12 | 20 | 30 | 40 | 60 | 82 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| gain | +2.8% | +8.8% | +9.5% | +7.4% | +7.9% | +3.6% | +2.6% | +5.7% | +2.9% | +5.7% | **+14.6%** |
+
+**F=4 through F=60 sit in a flat 2.6-9.5% band with no trend in F. F=82 is an outlier, not the end
+of a ramp.** The earlier "N=3 -4.9% -> N=20 +2.6% -> N=82 +14.6%, the advantage grows with run
+count" reading came from three anchors with a 60-file hole in the middle; the hole is now filled and
+it is flat. DO NOT restate the growth claim. New arms: F=30 max 45,832 / best-2 48,431; F=40 max
+47,290 / best-2 48,672; F=60 max 41,314 / best-2 43,654.
+
+**Why F=82 differs is now the whole question.** It is uniquely mis-calibrated in the max arm: true
+FDP 0.918% at 1% reported q (every other cohort 0.77-0.88%) and a k=1 slice FDP of 20.6% (elsewhere
+7-10%). Over F=60 it adds exactly the 7 pooled QC injections plus the last ~15 (most drifted) donors.
+
+**ROOT CAUSE of the cohort confound: this dataset drifts hard across its acquisition series, and
+`-NumFiles F` takes the FIRST F files by name, which is also the EARLIEST (best) F acquisitions.**
+The 7 QC pools are the same sample injected 7 times across the series and their passing targets fall
+monotonically 23,472 / 23,855 / 23,731 / 17,842 / 15,598 / 14,012 / **10,882** (acq order 009->098) --
+pure instrument/column degradation, >2x. Files 1-40 pass a median 27,074 targets vs 19,173 for files
+41-82 (-29%; 19,269 excluding pools, so it is not just the pools). The pools sort to positions 76-82,
+so they enter ONLY the 82-file cohort. Cohort SIZE and cohort QUALITY are therefore confounded in
+every F-trend measured to date.
+
+**Second finding: the trained first-pass model varies 3x in quality, NON-monotonically with F.**
+`modelComposite` (FeatureContributions.cs:287 = Delta-mu of the composite score, i.e. target-decoy
+separation): 0.156 (F=20), 0.245 (30), 0.237 (40), **0.077 (60)**, 0.163 (82). Per-file run-level
+passing (a clean control - run q is computed WITHIN a file, so the only cross-file channel is the
+shared model; mean-best-N leaves it byte-identical) tracks it exactly: 20->40 **+0.5%** (no cost),
+40->60 **-13.6% with 40/40 files losing**, 60->82 **+5.9% with 0/60 losing**. So adding files 41-60
+craters the shared model for every file and 61-82 partially repairs it. The uniformity across files
+means the symptom is global (shared model), NOT a few files dragging an average - though a few files
+could still be the cause of the model damage.
+
+**Model weakness is NOT the mechanism for the gain**: F=60 has the worst model (0.077) and F=30 the
+best (0.245), and both give exactly +5.7%. Killed that confound.
+
+Tooling (all re-runnable, no new runs needed): `ai/.tmp/mbn_surface.py` (generic arm discovery from
+directory names -> tidy CSV + the 4-panel figure incl. the k=1 mechanism panel),
+`ai/.tmp/perfile_audit.py` (per-file outliers + cohort-step contamination), `ai/.tmp/cohort_split.py`
+(pools vs donors, acquisition halves), `ai/.tmp/model_health.py` (Delta-mu per cohort).
+`Run-SeaAd.ps1` gained `-SkipFirstFiles`, `-EveryNthFile`, `-ExcludePattern` (all dry-run verified) so
+cohorts can be drawn at matched size but different content.
+
+**IN FLIGHT (single serial driver `ai/.tmp/run-interactive-queue.ps1`)**: files 41-82 as a 42-file
+cohort (matched size vs F=40, degraded content); `spread41` = every 2nd file (matched size, spans the
+whole acquisition); `nopool75` = 82 minus the 7 pools (does the headline collapse without them?).
+Whatever they say, the claim must be conditioned on cohort character, not run count.
+
+PROCESS NOTE: two bugs in my own queue scripts cost ~10 min of machine time - an UNANCHORED wait
+sentinel ('GRID ALL DONE' matched the waiter's own "waiting for 'GRID ALL DONE'" log line, so the
+wait fell through) and a blanket `Get-Process Osprey | Stop-Process` that killed an unrelated
+in-flight arm. Both fixed (anchored `^=== ... ALL DONE`, kills scoped to the arm's own output-dir
+tag) and all probes now run from ONE serial driver - no cross-process coordination.
+
 ### 2026-07-29 (afternoon) - BOTH SWEEPS COMPLETE: N-curve peak + crossover is F=4, not a fraction
 
 All 17 probe arms plus the Axis-1@82 tail finished unattended (last mdiag 09:55; machine now free).

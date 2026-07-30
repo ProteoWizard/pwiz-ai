@@ -91,6 +91,14 @@ param(
     # drawn from disjoint slices of the dataset (replicate cohorts for a size-vs-effect study).
     # Pass -Tag to keep the run directories apart: the name only carries the file COUNT.
     [int]$SkipFirstFiles = 0,
+    # Keep every Nth file instead of a contiguous block. Name order tracks acquisition order in
+    # this dataset, and instrument response drifts across it, so a contiguous first-F cohort is
+    # also the EARLIEST (best) F files -- size and quality are confounded. -EveryNthFile 2 draws
+    # a cohort that spans the whole acquisition at half the size, separating the two.
+    [int]$EveryNthFile = 1,
+    # Drop files whose name matches this regex (e.g. 'pool' for the pooled QC injections, which
+    # sort last and therefore only enter the largest cohorts).
+    [string]$ExcludePattern = '',
     [int]$Threads = 30,
     [ValidateSet('1', '2', 'both')] [string]$FdrBenchPass = 'both',
     [string]$Tag = '',
@@ -209,8 +217,19 @@ if ($DecoyMode -eq 'libdecoy' -and -not (Test-Path $manifest)) {
            "target+decoy+entrapment libraries; see $readme.")
 }
 
-$mzmls = @(Get-ChildItem -Path $dataDir -Filter '*.mzML' -File | Sort-Object Name |
-           Select-Object -Skip $SkipFirstFiles -First $NumFiles | ForEach-Object { $_.FullName })
+$allMzml = @(Get-ChildItem -Path $dataDir -Filter '*.mzML' -File | Sort-Object Name)
+if ($ExcludePattern) {
+    $before = $allMzml.Count
+    $allMzml = @($allMzml | Where-Object { $_.Name -notmatch $ExcludePattern })
+    Write-Host ("  excluded : $($before - $allMzml.Count) file(s) matching '$ExcludePattern'")
+}
+if ($EveryNthFile -gt 1) {
+    $keep = @(0..($allMzml.Count - 1) | Where-Object { $_ % $EveryNthFile -eq 0 })
+    $allMzml = @($keep | ForEach-Object { $allMzml[$_] })
+    Write-Host ("  every    : $EveryNthFile-th file -> $($allMzml.Count) candidate(s)")
+}
+$mzmls = @($allMzml | Select-Object -Skip $SkipFirstFiles -First $NumFiles |
+           ForEach-Object { $_.FullName })
 if ($mzmls.Count -eq 0) { throw "No .mzML files found in '$dataDir'." }
 if ($mzmls.Count -lt $NumFiles) {
     throw ("Only $($mzmls.Count) mzML available in '$dataDir' after skipping $SkipFirstFiles, " +
