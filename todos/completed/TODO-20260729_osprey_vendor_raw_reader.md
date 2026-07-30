@@ -9,7 +9,7 @@
 - **GitHub Issue**: [#4496](https://github.com/ProteoWizard/pwiz/issues/4496)
 - **PR**: [#4502](https://github.com/ProteoWizard/pwiz/pull/4502) (merged 2026-07-30 as
   `c4670c1e3d`), with companions [#4501](https://github.com/ProteoWizard/pwiz/pull/4501)
-  (`skyline`, green, separate) and [#4500](https://github.com/ProteoWizard/pwiz/pull/4500)
+  (`skyline`, merged 2026-07-30 as `72e0401523`) and [#4500](https://github.com/ProteoWizard/pwiz/pull/4500)
   (`pwiz`, PARKED - see the merge entry)
 - **Requester**: Brendan (issue author, Osprey developer) — NO credit line.
 
