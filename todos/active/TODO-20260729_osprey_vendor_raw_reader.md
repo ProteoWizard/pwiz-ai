@@ -21,15 +21,18 @@
 
 | PR | module | branch | state |
 |---|---|---|---|
-| [#4500](https://github.com/ProteoWizard/pwiz/pull/4500) | `pwiz` | `Skyline/work/20260729_pwiz_tostring_roundtrip` | complete; informational for Matt, may be mooted by #4178 |
+| [#4500](https://github.com/ProteoWizard/pwiz/pull/4500) | `pwiz` | `Skyline/work/20260729_pwiz_tostring_roundtrip` | complete; `DBL_MAX` round-trip defect found by CI on Linux and fixed (`27e91d2bc9`), awaiting re-run; informational for Matt, may be mooted by #4178 |
 | [#4501](https://github.com/ProteoWizard/pwiz/pull/4501) | `skyline` | `Skyline/work/20260729_wrapper_rt_precision` | complete; 9 lines; needs Skyline suite on CI |
 | [#4502](https://github.com/ProteoWizard/pwiz/pull/4502) | `osprey` | `Skyline/work/20260729_osprey_vendor_raw_reader` | **incomplete** - build integration unfinished |
 
 ### What to do next, in order
 
-1. **Watch TeamCity on all three.** #4502's net472 build is EXPECTED to fail: the Osprey CI config
-   runs no bjam, so `ProteowizardWrapper/obj/x64` is never staged there. That is the whole reason
-   these went up experimental.
+1. ~~**Watch TeamCity on all three.**~~ **DONE 2026-07-29 (see progress log).** #4502 came back
+   green, which is the *expected* result and confirms the config split worked: the Osprey **unit**
+   config was deliberately built so it needs no `ProteowizardWrapper` at all. The predicted net472
+   failure belongs to the **Perf/Regression** config, which is manual and has NOT run — Brendan is
+   holding that trigger until the Jamfile + staging work below is in place, so the vendor-enabled
+   net472 build is still untested on CI. #4500 was red on Linux only; fixed and pushed.
 2. **Add the staging step** to the Perf/Regression config (see the "tracked entry points" section).
    `quickbuild.bat`, not `b.bat`/`bs.bat` - those are gitignored personal shortcuts.
 3. **Jamfile work** for #4502: the `<assembly>` reference and `install-vendor-api-dependencies` for
@@ -656,6 +659,72 @@ the same file, so the test can land green rather than red-until-fixed as feared.
 itself took under two seconds on 2.26 GB, so the CI cost is dominated by the two parses.
 
 ## Progress Log
+
+### 2026-07-29 (later) - CI results on all three PRs; StringTest DBL_MAX defect fixed
+
+**TeamCity / GitHub checks read on all three PRs:**
+
+| PR | module | verdict |
+|---|---|---|
+| #4502 | osprey | **15 SUCCESS, 0 failing.** Expected. The unit config builds with the vendor reader off (`/p:OspreyVendorReader=true` not passed), so it never needs staged `pwiz_data_cli`. **This does NOT exercise the net472 vendor build** - that is the manual Perf/Regression config, deliberately not triggered yet. |
+| #4501 | skyline | 12 SUCCESS, 3 Windows legs still running, none failing. |
+| #4500 | pwiz | **2 red, one cause** - the new `StringTest`, on Linux only. |
+
+#### Root cause of the #4500 Linux failure: the round-trip check accepted overflowing text
+
+    [pwiz/utility/misc/StringTest.cpp:69] Assertion failed:
+        expected "1.7976931348623157e+308" but got "inf" (reloaded)
+
+Both red legs (GitHub `Build with latest g++ on ubuntu-latest`, and `teamcity - Core Linux x86_64`
+at 271 passed / 1 new failure) are this same assertion; Bumbershoot Linux was only cancelled
+downstream. **No compile errors** - gcc 13 built `StringTest.o` fine.
+
+`toRoundTripString` validated each candidate with `parseClassic`, i.e. `istringstream >> double`.
+**C++11 requires an out-of-range extraction to set `failbit` AND store the largest representable
+value**, so `"1.79769313486232e+308"` - the 15-significant-digit form of `DBL_MAX`, about 21 ULP
+*above* it - reads back as exactly `DBL_MAX` and compares equal. The loop returned at 15 digits and
+never tried 17. A consumer reading that text with `strtod`, as the test does, gets `inf`.
+
+The chain is forced by the failure message alone, no platform guessing: the karma 12-digit output
+(`1.797693134862e+308`) reloads finite-but-unequal, so the fallback ran; of its three candidates
+only the 15- and 16-digit forms `strtod` to `inf`; therefore `parseClassic` returned exactly
+`DBL_MAX` for a decimal that exceeds it, which is only possible by clamping.
+
+**Why it passed on Windows**: MSVC's `num_get` does not store the clamped value, so the loop there
+correctly advanced to 17 digits. Windows was never wrong, which is why local `StringTest.passed`
+and the Linux red are both true.
+
+**This was a production defect, not just a test bug**: on glibc, `toString(DBL_MAX)` wrote text that
+reloads as `inf` - the exact property the change exists to guarantee.
+
+**Fix** (commit `27e91d2bc9`): `parseClassic` -> `reloadsExactly(text, value)`, returning
+`!iss.fail() && reloaded == value`. The `failbit` test is not redundant with the equality test, and
+the comment says so. Correct under both implementations: MSVC stores `inf` (unequal), libstdc++
+clamps but sets `failbit`. **The behavior that caused the bug is what guarantees the fix detects
+it** - the standard sets `failbit` in the same clause that mandates the clamping.
+
+**Verified without a Linux box** (no WSL on this machine) by emulating libstdc++'s clamping
+semantics in a probe (`ai/.tmp/dblmax-probe/`), running both predicates against it:
+
+| value | old predicate | new predicate |
+|---|---|---|
+| `DBL_MAX` | `1.79769313486232e+308` -> **inf** | `1.7976931348623157e+308` -> exact |
+| `-DBL_MAX` | `-1.79769313486232e+308` -> **inf** | `-1.7976931348623157e+308` -> exact |
+| `DBL_MIN`, the Thermo RTs, `0.10000000000000002`, `1e9` | exact | **identical text** |
+
+The new text is character-for-character what the CI assertion said it expected, and no in-range
+value's text moves - so the "byte-identical output wherever today's output round-trips" promise
+survives the fix.
+
+**Gate**: `quickbuild.bat pwiz/utility/misc pwiz/data/msdata` -> 1303 targets, `StringTest` passes,
+one failure: `ReaderTest.cpp:270` (Bruker FID/U2/YEP under `--without-compassxtract`), the
+documented pre-existing failure already controlled against master. Windows `toString(DBL_MAX)` text
+is unchanged by the fix, and `testFastPathTextUnchanged` still pins the 12-digit fast path.
+
+**Lesson worth keeping**: the test caught this only because its oracle is `strtod` - a reader
+*independent* of the one production validates with. An `istringstream`-based oracle would have
+agreed with the defect and gone green. Same trap as `TestMzmlReaderRetentionTimePrecision` earlier
+in this sprint, one layer down.
 
 ### 2026-07-29 - Reader implemented; vendor runtime deployment identified
 
