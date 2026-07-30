@@ -130,6 +130,79 @@ grows with N (e.g. f≈0.1: N≤10→1 [max], N=20→2, N=82→9). One knob unif
 
 ## Progress Log
 
+### 2026-07-30 (night session) - MECHANISM found; the gain is a TWO-FACTOR product, not a scale law
+
+Autonomous night session (start 21:49). Goal from Brendan: "what causes the loss of sensitivity and
+the apparent recovery with mean-N". Running record + timeline:
+`ai/.tmp/night-session-budget-20260729.md`. Analysis scripts (re-runnable, all in `ai/.tmp/`):
+`mbn_surface.py` (harvest + figure), `mechanism.py`, `perfile_audit.py`, `entrap_k.py`,
+`twofactor.py`, `predict.py`, `kcompare.py`, `brief.py`.
+
+**WHY SENSITIVITY IS LOST (mechanism, from fields already in every mdiag).**
+`crossRun.perRun.unionFdp` / `cumUnion` / `cumUnionEntrapment` give the accepted union's purity as
+files accumulate. The real proteome SATURATES while the null accrues at a roughly CONSTANT rate:
+new real precursors per added file fall 920 (F=4) -> 86 (F=82) while new entrapment per file stays
+~27-65 throughout. Applying the tool's own FDP estimator to the increment, the marginal file's new
+union members go from ~4% false (F<=8) to essentially ALL false (F>=60; the 1:1 estimator saturates
+past 100%). A max-of-runs statistic accepts on the strength of ONE good run, so the accepted pool
+inherits that collapsing purity and the 1% cut must tighten - which costs IDs in every file. By
+F=82, **41.3% of everything detected at run level (union 65,200) fails the experiment cut (38,300)**,
+vs 7.0% at F=4. Note the reported q stays CONSERVATIVE at every scale (true FDP 0.77-0.97% at
+nominal 1%), so this is a SENSITIVITY loss, not an FDR violation.
+
+**WHAT mean(best-N) RECOVERS.** Acceptance delta by run-count slice (max -> best-2): k=1 is negative
+in all 20 cohorts (leaky singletons demoted) and the freed FDR headroom is spent on reproducible
+precursors - on k=2 at F<=10 (+957..+1,605) and on k>=6 at F>=40 (+1,578..+3,600 at F=82). The
+lever is the threshold shift: substituting mean-of-top-2 for max lowers all scores but lowers the
+NULL's more (its highs are single lucky runs), so separation improves and more targets clear 1% q.
+
+**THE GAIN IS A PRODUCT OF TWO FACTORS (main result).**
+  A = share of accepted FALSE hits resting on a single run  (the removable population)
+  B = (union - accepted) / union                            (reservoir available to backfill)
+Over 20 cohorts: A alone Spearman +0.55, B alone +0.16, **A x B: Pearson +0.79 / Spearman +0.75**,
+fit `gain% = 82.8*(A*B) - 1.24`, mean |residual| 1.85 pts. Both factors read off the MAX arm, so
+`predict.py` pre-registers a prediction before each cohort's best-2 arm lands (out-of-sample, not a
+refit). This explains why EVERY single-factor predictor failed (all |rho| <= 0.22: run count,
+k=1 leakage, reservoir, union FDP, model Delta-mu, max efficiency) - a cohort can have removable
+leakage but no reservoir (spread21 A .32/B .22 -> +1.8%) or both (82f A .41/B .41 -> +14.6%;
+spread17 A .52/B .23 -> +11.8%). Residual: F=5/6 under-predicted by ~3.7 pts.
+
+**Cohort-structure facts established tonight** (all disc @ matched 1% true FDP):
+- Fixed size is REPRODUCIBLE: three disjoint 20-file cohorts gave +2.6 / +2.5 / +2.7% though their
+  absolute yields spanned 26% (46,496 / 45,619 / 34,176). The gain is near-deterministic per cohort
+  shape and independent of content quality.
+- Run count is NOT the driver: at constant content span (every 5th/4th/3rd/2nd/all) the series is
+  +11.8% (17f) / +1.8% (21f) / +7.4% (28f) / +4.0% (41f) / +14.6% (82f) - non-monotone, neighbours
+  differing 6-10 pts.
+- Size alone is NOT the driver either: contiguous-17 = +5.2% vs spread17 (same size, spread across
+  the acquisition) = +11.8%.
+- Rejected: "adjacent runs repeat their interferences" - the entrapment k>=2 share supports it only
+  for the 17-file pair (+20.4 pts), not 20/21 (-2.6) or 40/41 (+1.9).
+- NEGATIVE RESULT, do not retry: the `frontier` block is NOT a usable upper bound (`expPeak` differs
+  between the max and best-N arms of the same cohort, and 4 cohorts sit ABOVE their own frontier -
+  it is scoped differently from the fdpView). **The earlier "43,873 = ~85% of the way to the 44,861
+  frontier" line in this TODO compares incommensurate quantities and should not be repeated.**
+- Diagnostics gap worth filing: `scores.decoyMean` is byte-identical between max and best-N arms in
+  every cohort, i.e. the score histogram is the per-precursor raw best score. The mdiag never shows
+  the AGGREGATE score distribution that the experiment q is computed from.
+
+**Headline framing for the paper/default decision**: gains span +1.8% to +14.6% (median ~+5.7%,
+n=20 cohorts) with only F=3 negative (-4.9%) - asymmetric payoff, as Brendan put it: rarely
+harmful, sometimes a large recovery. The +14.6% is one draw, NOT a property of "82 files"; quote
+the distribution and the A x B model, not the maximum.
+
+**PROTEIN ROLL-UP - deliberately NOT implemented tonight.** Brendan's design (add
+`double? AggregateScore`; protein path takes `Max(AggregateScore ?? Score)`; the peptide code stamps
+it when mean(best-N) is active; null default keeps flag-off byte-identical) runs into a wrinkle I
+had not noticed: the field would go on `FdrEntry` (`Osprey.Core\FdrEntry.cs:33`), which is
+documented as mapping to Rust `osprey-core/src/types.rs FdrEntry`, so it is a cross-impl parity
+type (see the side-by-side preservation note in memory). A C#-only nullable that is never
+serialized is probably safe, but "probably" plus no `regression.ps1 -Dataset All` gate (the machine
+was saturated with measurement arms all night) is not a combination worth committing unattended.
+Morning task, ~20 min with the gate free: decide the parity question, add the field, stamp it in
+the peptide roll-up, `Max(AggregateScore ?? Score)` in `ProteinFdr.ComputeProteinFdr`, unit test,
+then the gate.
+
 ### 2026-07-29 (evening) - REVISION: the "gain grows with N" trend does NOT survive the filled-in middle
 
 Brendan asked for the missing 30/40 file counts before trusting the 20f -> 82f jump. Filling them
