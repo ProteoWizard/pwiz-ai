@@ -777,7 +777,7 @@ decode-then-discard and the warn-only mode 3 with nothing in CI scanning warning
 escaping exception bypasses `queue.CompleteAdding()` and blocks the consumer forever.
 
 **Also delivered**: 163 `.spectra.bin` caches for the 164-file TDP-43 raw set (10 h, ~22 MB/s
-end to end), staged with no mzML anywhere; the 164th input is deliberately corrupt.
+end to end), staged with no mzML anywhere; the 164th is an aborted acquisition the depositor marked -bad.
 
 ### 2026-07-30 (morning) - /code-review findings addressed (commit `68cd2fe703`)
 
@@ -955,7 +955,7 @@ Throughput for planning: 787 GB in 10 h is **~22 MB/s end to end**, well under t
 projected from the Stellar mzML timing - raw parsing plus a ~3 GB cache write per file is
 heavier than reading mzML. Budget ~3.7 min/file on this hardware.
 
-**The one failure is a deliberately corrupt input, not a defect.**
+**The one failure is a aborted acquisition marked bad by the depositor, not a defect.**
 `2025-0724-TDP43-PlasmaEV-PLT2-C03-5112-027-bad.raw` - note the `-bad` suffix - fails with
 `[RawFileImpl::ctor()] Corrupt RAW file`. Osprey logged it and **continued to the next
 file** rather than aborting the staging pass, which is the behavior a 164-file run needs.
