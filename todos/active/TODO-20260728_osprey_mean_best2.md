@@ -156,13 +156,15 @@ precursors - on k=2 at F<=10 (+957..+1,605) and on k>=6 at F>=40 (+1,578..+3,600
 lever is the threshold shift: substituting mean-of-top-2 for max lowers all scores but lowers the
 NULL's more (its highs are single lucky runs), so separation improves and more targets clear 1% q.
 
-**THE TWO-FACTOR MODEL - PROPOSED, THEN FALSIFIED OUT-OF-SAMPLE (do not quote it).** It was fitted
-on 20 cohorts and then pre-registered against new ones as they ran; both tests missed badly:
-contiguous-28 predicted +10.4% -> actual **+14.4%** (err +4.0); files 61-80 predicted +8.9% ->
-actual **+3.8%** (err -5.0). Errors of 4-5 points on a quantity whose whole range is 1.8-14.6%,
-versus an in-sample mean residual of 1.85 - i.e. two free parameters over-fitted to data already
-seen. **Conclusion: NOTHING measured at cohort level predicts the effect size**, A x B included.
-The fit is kept below only as the record of what was tried.
+**THE TWO-FACTOR MODEL - MODERATE OUT-OF-SAMPLE SKILL, USABLE ONLY AS AN EXTREME-CASE SCREEN.**
+Fitted on 20 cohorts, then pre-registered against every later cohort from its MAX arm alone (both
+factors are max-arm quantities, so no refit): 7 tests, errors +4.0 (28f), -5.0 (20+60), +1.1
+(10+10), -1.1 (10+30), -1.5 (10+50), -3.2 (40+20), -1.3 (40+30). **Mean |err| 2.5 pts, worst 5.0,
+out-of-sample Spearman ~0.54.** It is unreliable in the middle of the range, but it flagged BOTH
+extreme cohorts in advance - contiguous-28 (+14.4% actual) and files 31-70 (+12.9% actual), each
+~4x its neighbours. So do NOT quote it as an effect-size predictor; it may be worth keeping as a
+cheap screen that says "this cohort is a large-recovery candidate" from the max arm alone. (An
+earlier entry called it outright falsified after only the first two tests - that was premature.)
   A = share of accepted FALSE hits resting on a single run  (the removable population)
   B = (union - accepted) / union                            (reservoir available to backfill)
 Over 20 cohorts: A alone Spearman +0.55, B alone +0.16, **A x B: Pearson +0.79 / Spearman +0.75**,
@@ -174,9 +176,15 @@ leakage but no reservoir (spread21 A .32/B .22 -> +1.8%) or both (82f A .41/B .4
 spread17 A .52/B .23 -> +11.8%). Residual: F=5/6 under-predicted by ~3.7 pts.
 
 **Cohort-structure facts established tonight** (all disc @ matched 1% true FDP):
-- Fixed size is REPRODUCIBLE: four disjoint 20-file cohorts gave +2.6 / +2.5 / +2.7 / +3.8% though
-  their absolute yields spanned 26% (46,496 / 45,619 / 34,176 / ...). The gain is near-deterministic
-  per cohort shape and independent of content quality.
+- WITHIN-SIZE VARIANCE IS SOMETIMES HUGE - the single most important caveat for any effect-size
+  claim. Four disjoint 20-file cohorts were tight (+2.6 / +2.5 / +2.7 / +3.8%, spread 1.3 pts) and
+  four 10-file cohorts moderate (+7.9 / +5.3 / +6.3 / +4.2%, spread 3.7 pts), but FIVE ~40-file
+  cohorts spanned **+2.9 / +3.3 / +12.9 / +5.6 / +4.0%** - a 10-point spread at fixed size, as
+  large as anything attributable to size. (An earlier entry called fixed-size behaviour
+  "essentially deterministic" off the 20-file quartet alone; that was luck of the draw.) Any single
+  cohort's number - including the 82-file +14.6% - is one draw from a wide distribution.
+- Real size dependence DOES exist at the small end and survives replication: every 10-file cohort
+  (+4.2..+7.9%) beat every 20-file cohort (+2.5..+3.8%).
 - UNION EFFICIENCY is the cleanest cross-cohort summary (share of run-level detections surviving
   the experiment cut; the union is aggregation-independent so sizes are comparable):
   F=4 93.0% -> 95.6%, F=20 79.6% -> 81.6%, F=40 74.2% -> 76.4%, F=60 70.6% -> 74.6%,
