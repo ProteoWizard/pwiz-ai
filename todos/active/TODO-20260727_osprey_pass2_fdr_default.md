@@ -234,6 +234,38 @@ Arabidopsis entrapment work) with a peptide-count distribution matched to the ta
 priors do NOT have this problem: 48-73% of accepted entrapment hits rest on >=2 runs, so the oracle
 can see them (measured 2026-07-30, see TODO-20260728_osprey_mean_best2).
 
+### REDUCTIO (2026-07-30): the inflation needs no biology at all
+Brendan's construction: accept at q<=5%, then re-compete using ONLY the paired decoys of the
+accepted targets. `CohortAnalysis/paired_recal_demo.py` simulates it on this dataset's measured
+pass-1 score histograms with the measured false fraction (plateauRatio 0.922), equal-chance holding
+BY CONSTRUCTION (every decoy and false target drawn from the same null):
+
+| step | accepted @1% | true FDP |
+|---|---|---|
+| baseline full competition | 9,519 | **0.96%** (calibrated) |
+| gate at q<=5% | 13,385 | 5.05% |
+| re-compete inside the gate, paired decoys only | **13,385** | **5.05%** |
+
+**+40.6% acceptances on identical evidence, still reporting 1%, true error 5.3x the baseline.**
+Null support at the baseline 1% score cut: **95 decoys against 9,519 targets in the full
+competition, 1 inside the gate.** The decoys were never selected; the targets were. In a real
+competition it is worse still, since a target clears the gate partly by beating its own decoy.
+This is protein-compact's failure mode with the biology removed - which is why the protein story
+is not what makes it work.
+
+### CURVE SHAPE (2026-07-30): protein-compact does NOT show the Fig-4a plateau
+`CohortAnalysis/plateau_check.py`, estimated FDP vs nominal threshold, 82-file runs:
+- pass 1: segment slopes 0.60 / 0.89 / 1.00 / 0.92 then frozen -> tracks; overconfidence 0.92x.
+- protein-compact pass 2: 1.85 / 1.48 / 1.37 / 1.03 / 0.63 -> **tracks**; overconfidence **1.51x**.
+- transfer-compete pass 2: same shape; overconfidence **1.96x**.
+So the plateau test that exposes EncyclopeDIA/Spectronaut (Wen Fig 4a: flat ~1.3% across a 0-5%
+sweep) **passes protein-compact** - its q still discriminates, it is merely inflated. Catching it
+needs the auditability check (D5) and the null-provenance panel, not the curve shape. Full
+diagnostic programme: [[TODO-osprey_selected_null_diagnostics]].
+**GOTCHA for anyone re-running this**: a q-filtered report goes flat when it runs out of pool, and
+that is not a plateau - pass 1 gains 5,864 discoveries from 1%->2% then exactly ONE more out to 5%.
+Judge flatness per segment, only where the accepted set is still growing.
+
 ### The lever (valid sensitivity, the honest route to Mike's gains) — NEXT IMPLEMENTATION
 `mean(best-2 runs)` = experiment-wide peptide score; `mean(best-2 peptides)` = protein score;
 replace best-peak(max) aggregation IN THE 1ST PASS (null intact). Symmetric by construction (decoy
