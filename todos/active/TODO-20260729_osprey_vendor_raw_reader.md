@@ -745,6 +745,40 @@ itself took under two seconds on 2.26 GB, so the CI cost is dominated by the two
 
 ## Progress Log
 
+### 2026-07-30 (morning) - ProteoWizard is now the reader for EVERY format in the opt-in build
+
+Commit `f37a6a4b1c`. Brendan's call, and the direction it sets: in a build that has
+ProteoWizard, all mass spec data flows through it, mzML included. `MzmlReader` survives only
+because `pwiz_data_cli` has no .NET 8 build; when **#4178** lands it should be deleted
+outright and `SpectrumFileReader` stops having a decision to make.
+
+**The switch inverted rather than disappeared.** `OSPREY_MZML_VIA_PWIZ` (opt IN to
+ProteoWizard) is now `OSPREY_MZML_VIA_MZMLREADER` (opt OUT of it). It has to survive in some
+form: it is the only thing that makes the reader-vs-reader parity check expressible - the
+same mzML read both ways, byte-compared - which is the check that justified this change in
+the first place. In a build WITHOUT ProteoWizard it is a no-op rather than an error, since
+it asks for what already happens.
+
+**Verified the new default empirically, not from the `#if`.** Both readers log the identical
+"Reading X.mzML..." line, so the log cannot tell them apart, and a byte comparison alone
+would pass vacuously if the switch did nothing. The discriminator: **remove
+`pwiz_data_cli.dll` from the output directory.**
+
+| run | pwiz_data_cli present? | result |
+|---|---|---|
+| default | removed | **FAILS** - `Could not load file or assembly 'pwiz_data_cli...'` |
+| `OSPREY_MZML_VIA_MZMLREADER=1` | removed | **SUCCEEDS** - ms2=3 cached |
+
+So the default path genuinely is ProteoWizard and the switch genuinely selects `MzmlReader`.
+With that established, the two readers' caches byte-compare:
+`PARITY: 12,784 bytes identical`.
+
+**One inspection consequence**: the `#else` branch no longer touches `OspreyEnvironment`, so
+`using pwiz.Osprey.Core;` became a redundant-using warning in the default build. It is now
+wrapped in `#if OSPREY_VENDOR_READER`.
+
+Gates: 556/556 and inspection clean in the default build; vendor build compiles and runs.
+
 ### 2026-07-30 (night session) - Merged master, PR READY FOR REVIEW, TeamCity fired
 
 Night session goal: get #4502 as close to merge-ready as possible against the bar
