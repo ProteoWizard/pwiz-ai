@@ -312,9 +312,25 @@ Three things that had to be got right, each of which broke something first:
 The test asserts a non-zero count of stored indexes, because everything passed through the
 fallback before that assertion was added.
 
+**`TransitionResults.ChromInfos` is the unconverted state** (2026-07-30). A document read from a
+file arrives with every chrom info kept there, because which candidate peak each peak is cannot
+be told without the chromatograms. Loading them is what gets rid of it: `UpdateResults` works out
+`ChosenPeakIndexes` and then drops the chrom infos. `IsConverted` says which state a transition
+is in.
+
+They are dropped only where every one of them can be got back, which
+`CanDropChromInfos(groupResults)` decides per chrom info: empty peaks come back as empty, a peak
+whose boundaries the user set comes back by integrating between them, and everything else needs
+the precursor to know its candidate peak index. A pass which never looked at a chromatogram knows
+no index and leaves the chrom infos alone rather than losing them.
+
+Note this means the columnar form costs *more* than the chrom infos until conversion, and nothing
+after it. That is the right way round: the saving is for documents whose .skyd is loaded, which is
+every document being worked on.
+
 **Still to do for the actual ask**: `UpdateResults` populates the columnar results *in addition
-to* the chrom infos, not instead of them. Dropping the chrom infos breaks every reader of
-`nodeGroup.Results` / `nodeTran.Results`, which is the conversion this scaffold exists for.
+to* the chrom infos on the doc node, not instead of them. Dropping `Results` breaks every reader
+of `nodeGroup.Results` / `nodeTran.Results`, which is the conversion this scaffold exists for.
 
 **Tests deliberately cut back to two** (2026-07-29), one per peak selection path, because this
 code is changing every session and re-verifying costs more than it catches right now. Dropped,
