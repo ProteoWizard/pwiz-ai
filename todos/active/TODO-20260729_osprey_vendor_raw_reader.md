@@ -787,6 +787,30 @@ could reproduce**. Rebuilt the binding from this branch first (`String.obj` reco
 14,582,784 bytes vs 14,585,344 with fix A) and moved the one pre-existing cache aside to
 `tdp43-plasma-ev/cache-preA-reference/`, so all 164 caches come from one stock binary.
 
+#### TeamCity Perf/Regression GREEN on the merged state
+
+Build **4114865** on `pull/4502` (commit `0672018888`, i.e. GitHub's merge ref):
+**SUCCESS**, and verified it actually ran rather than skipping - the log shows all four
+datasets from 22:27 to 23:51 and `Osprey regression PASSED`. A ~23-minute apparent runtime
+was my own clock error; the real run was 84 minutes.
+
+The only commit after it is `2b55d0963b`, which is **comments and two log strings only**
+(the Copilot doc fixes). Deliberately did NOT re-fire the config for a doc-only delta - a
+re-trigger is a fresh ask under the ask-first rule, and the regression compares blib and
+parquet output, not log text.
+
+#### Copilot review addressed (commit `2b55d0963b`)
+
+Two inline comments, both legitimate and both documentation accuracy:
+
+* `ScoringTaskShared.EnsureSpectraCache` doc said a cache miss "re-parses mzML", and two
+  runtime log messages said the same, when the input can now be a vendor raw. Also fixed
+  the adjacent comment on `s_mzmlReadGate`, which serializes vendor-raw parses too; the
+  FIELD NAME was left alone deliberately to keep the diff doc-only.
+* `Program.cs` said per-file parquet lands "next to each input mzML".
+
+Both threads replied to with the SHA and resolved. 556/556 and inspection clean afterwards.
+
 #### The 164-file SpectraCache run
 
 * 164 `.raw` files, 787 GB (Brendan said 162; the set is 164).
@@ -803,6 +827,32 @@ could reproduce**. Rebuilt the binding from this branch first (`String.obj` reco
   checked before launching 164 of them unattended.
 * Pre-flight: the snapshot read a committed Thermo `.raw` and wrote a cache before the big
   run started.
+
+**Result at 05:23 (still running): 111 caches from 112 files attempted, 6h57m elapsed,
+~3.8 min/file.** It will NOT finish before Brendan wakes - roughly 51 files (~3 h) remain,
+projecting ~08:30. It is safe to leave running; it uses only the snapshot.
+
+**The one failure is a deliberately corrupt input, not a defect.**
+`2025-0724-TDP43-PlasmaEV-PLT2-C03-5112-027-bad.raw` - note the `-bad` suffix - fails with
+`[RawFileImpl::ctor()] Corrupt RAW file`. Osprey logged it and **continued to the next
+file** rather than aborting the staging pass, which is the behavior a 164-file run needs.
+So 163 usable caches are the expected final count, not 164.
+
+**`--task SpectraCache` is memory-BOUNDED over the set** (`perfviz --files 164 --force`;
+`--force` needed because the corrupt-file `[ERROR]` makes perfviz refuse by default):
+
+| | peak | floor | drift | verdict |
+|---|---|---|---|---|
+| managed | 11.9 GB | 0.8 -> 1.2 GB | +0.43 GB (+3 MB/file) | RISING but trivial |
+| total (private) | 14.8 GB | 5.1 -> 3.6 GB | -1.49 GB (-9 MB/file) | **FALLING** |
+
+**Correction worth recording**: two raw `--memstamp` samples (151 MB at file 1 vs 8.9 GB at
+file 113) looked like severe O(files) accumulation, and the computed FLOOR refutes it. That
+is exactly the trap `ai/docs/memory-band-guide.md` names - point samples catch the per-file
+transient at different phases. Trust the floor, never two stamps.
+
+10 reporting gaps >= 30 s (max 81 s), every one immediately after a file reaches 100%, so
+they are the multi-GB cache write plus index pass, not stalls.
 
 ### 2026-07-29 (evening) - Full regression gate GREEN; non-opt-in cache consumption
 
