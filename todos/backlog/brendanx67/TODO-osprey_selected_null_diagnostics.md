@@ -67,6 +67,34 @@ are complementary and a suite must cover both. This is the "almost designed to e
 FDRBench metrics" property: mild enough to keep a rising curve, structured so the entrapment set
 cannot audit it.
 
+## THE ISOLATION EXPERIMENT (Brendan, 2026-07-30) - what exactly is fatal
+
+Three arms at the SAME truncation depth, same scores, same counting estimator, no retraining
+(`paired_recal_demo.py`; the pool is simulated from this dataset's measured score histograms with
+equal chance holding by construction):
+
+| arm | targets | decoys | accepted @1% | true FDP |
+|---|---|---|---|---|
+| baseline, no truncation | 400,000 | 400,000 | 9,519 | 0.96% |
+| symmetric, kept on own merit | 13,385 | 669 | **9,519** | **0.96%** |
+| symmetric + pair completion | 14,028 | 14,028 | **9,519** | **0.96%** |
+| **paired to selected targets** | 13,385 | 13,385 | **13,385** | **5.05%** |
+
+**Truncation is harmless. Pair completion is harmless. One-sided SELECTION is fatal.** The third
+arm carries essentially the same decoy count as the fourth (14,028 vs 13,385), so it is not how
+many decoys you keep - it is WHY each one is there.
+
+Why the harmless arms are harmless: TDC counts right-to-left, so discarding anything below a score
+changes no count above it, and T(s)/D(s) are identical for every s >= cut. Pair completion adds
+partners BELOW the cut, which cannot change counts above it; those additions skew decoy-heavy down
+there, but q is a MINIMUM over lower thresholds, so a worse region below can never pull a q down.
+
+**DESIGN RULE (checkable, unlike "is the null still exchangeable"): an entry may be retained
+because of its own score, or because its partner was retained - but NEVER because of whether the
+other side of its pair passed a threshold the entry itself was not held to.** Compaction that obeys
+this is safe to recompute on, which is the practical payoff: memory savings without calibration
+loss. `transfer` satisfies it trivially by never recomputing.
+
 ## Severity ladder the suite must span (all measured or published)
 | form | mechanism | true FDP at nominal 1% | curve shape |
 |---|---|---|---|

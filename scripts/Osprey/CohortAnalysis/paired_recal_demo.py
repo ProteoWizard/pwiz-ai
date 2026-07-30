@@ -131,6 +131,39 @@ def main():
           f'<- the asymmetry, with NO model retraining involved')
     print(f'    (subset is 1:1 overall: {int(gate.sum()):,} targets and {int(gate.sum()):,} decoys)')
 
+    # CONTROL: truncate BOTH sides at the same score. Every count above any threshold s >= cut is
+    # untouched (all targets AND all decoys above it are still present), so the right-to-left walk
+    # is preserved and q is unchanged for everything retained. Truncation is not the problem;
+    # one-sided SELECTION is. The only thing lost is the ability to quote q below the cut.
+    sym_t = t_scores >= s_gate
+    sym_d = d_scores >= s_gate
+    sym_sc = np.concatenate([t_scores[sym_t], d_scores[sym_d]])
+    sym_dec = np.concatenate([np.zeros(sym_t.sum(), bool), np.ones(sym_d.sum(), bool)])
+    q_sym = tdc_q(sym_sc, sym_dec)[:sym_t.sum()]
+    sym_acc = q_sym <= 0.01
+    sym_false = t_is_false[sym_t]
+    print(f'\n  CONTROL, symmetric truncation at the same score '
+          f'({int(sym_t.sum()):,} targets + {int(sym_d.sum()):,} decoys kept on their OWN merit):')
+    print(f'    accepted@1% {int(sym_acc.sum()):>7,}   true FDP {100 * sym_false[sym_acc].mean():5.2f}%'
+          f'   -> baseline was {int(base.sum()):,} at {100 * t_is_false[base].mean():.2f}%')
+
+    # CONTROL 2: symmetric truncation PLUS pair completion - keep every entry above the cut on its
+    # own merit AND its partner, wherever that partner scored. Both sides then get the same rule,
+    # so an entry is retained iff EITHER member of its pair cleared the cut: the masks are equal.
+    # Counts above any s >= cut are still untouched (the added partners sit below the cut), and the
+    # extra below-cut entries cannot lower a q, because q is a MINIMUM over lower thresholds and
+    # those regions only get worse. Pairing is harmless; one-sided selection is not.
+    keep = sym_t | sym_d
+    pc_sc = np.concatenate([t_scores[keep], d_scores[keep]])
+    pc_dec = np.concatenate([np.zeros(keep.sum(), bool), np.ones(keep.sum(), bool)])
+    q_pc = tdc_q(pc_sc, pc_dec)[:keep.sum()]
+    pc_acc = q_pc <= 0.01
+    pc_false = t_is_false[keep]
+    print(f'\n  CONTROL 2, symmetric + pair completion '
+          f'({int(keep.sum()):,} targets + {int(keep.sum()):,} decoys):')
+    print(f'    accepted@1% {int(pc_acc.sum()):>7,}   true FDP {100 * pc_false[pc_acc].mean():5.2f}%'
+          f'   -> baseline was {int(base.sum()):,} at {100 * t_is_false[base].mean():.2f}%')
+
     s1 = t_scores[base].min() if base.any() else np.inf
     print(f'  -> null support at the baseline 1% score cut ({s1:.2f}): '
           f'{int((d_scores >= s1).sum()):,} decoys against {int((t_scores >= s1).sum()):,} targets '
