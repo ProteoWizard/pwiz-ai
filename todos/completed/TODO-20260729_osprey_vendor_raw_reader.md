@@ -5,15 +5,13 @@
 - **Base**: `master` (520d559fd6)
 - **Module**: `osprey`
 - **Created**: 2026-07-29
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4496](https://github.com/ProteoWizard/pwiz/issues/4496)
-- **PR**: [#4502](https://github.com/ProteoWizard/pwiz/pull/4502) (draft/experimental), with
-  companions [#4501](https://github.com/ProteoWizard/pwiz/pull/4501) (`skyline`) and
-  [#4500](https://github.com/ProteoWizard/pwiz/pull/4500) (`pwiz`)
+- **PR**: [#4502](https://github.com/ProteoWizard/pwiz/pull/4502) (merged 2026-07-30 as
+  `c4670c1e3d`), with companions [#4501](https://github.com/ProteoWizard/pwiz/pull/4501)
+  (`skyline`, green, separate) and [#4500](https://github.com/ProteoWizard/pwiz/pull/4500)
+  (`pwiz`, PARKED - see the merge entry)
 - **Requester**: Brendan (issue author, Osprey developer) — NO credit line.
-
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260729_osprey_vendor_raw_reader.md` before starting work.
 
 ## HANDOFF - state as of 2026-07-29 end of session
 
@@ -744,6 +742,42 @@ the same file, so the test can land green rather than red-until-fixed as feared.
 itself took under two seconds on 2.26 GB, so the CI cost is dominated by the two parses.
 
 ## Progress Log
+
+### 2026-07-30 - Merged
+
+PR #4502 merged as `c4670c1e3d`. Osprey reads vendor instrument files directly in the net472
+configuration through `ProteowizardWrapper`, opt-in at build time
+(`/p:OspreyVendorReader=true`) and **off by default**, so nothing that does not opt in
+changes. `--task SpectraCache` ships as the staging pass that replaces msconvert, and in a
+build that HAS ProteoWizard it is now the reader for every format including mzML - the
+direction toward deleting `MzmlReader` once #4178 gives ProteoWizard a .NET 8 build.
+
+Gates at merge: `regression.ps1 -Dataset All` 18/18 locally, TeamCity Perf/Regression SUCCESS
+on the exact merged commit (build 4114985, full four-dataset run verified in the log rather
+than inferred from a green light), 556/556 unit tests, zero inspection warnings, 18/18
+automatic PR checks. Byte parity proven three ways: raw vs mzML on a 3.07 GB TDP-43 file
+(2,260,174,556 bytes identical), reader vs reader on the same mzML, and raw vs mzML on the
+committed Thermo fixture from a pure bjam build.
+
+**Deferred deliberately, not shipped**: the `run.raw` / `run.mzML` cache-stem collision
+(Brendan: `run.raw.spectra.bin` is awkward when the 98% case is one data file per directory);
+`precursors[0]` vs `MzmlReader`'s effective LAST precursor, which needs a decision about which
+side is correct before either is called a bug; and the `SpectraCache.VERSION` bump, whose
+narrow exposure is documented above.
+
+**`Test-PerfGate.ps1` was never run** - no `pwiz-perfbase` worktree on the machine. Brendan
+merged with that known, reasoning that the gate is dominated by everything AFTER
+`.spectra.bin` is built, and that raw -> `.spectra.bin` cannot plausibly be slower than
+raw -> mzML -> `.spectra.bin`, which also carries a large disk cost unless the mzML is
+discarded.
+
+**Follow-ups worth filing** (none are this PR's to fix): the rescore payload
+decode-then-discard and the warn-only mode 3 with nothing in CI scanning warnings (both
+#4488, which arrived via the merge), and the pre-existing `ParseSpectrumRaw` hang where an
+escaping exception bypasses `queue.CompleteAdding()` and blocks the consumer forever.
+
+**Also delivered**: 163 `.spectra.bin` caches for the 164-file TDP-43 raw set (10 h, ~22 MB/s
+end to end), staged with no mzML anywhere; the 164th input is deliberately corrupt.
 
 ### 2026-07-30 (morning) - /code-review findings addressed (commit `68cd2fe703`)
 
