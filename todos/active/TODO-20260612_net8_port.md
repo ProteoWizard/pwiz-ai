@@ -2210,3 +2210,102 @@ reference (gate to net8 if the net472 Skyline build is wanted); rebuild shipped 
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260723_net8_merge_aiconnector.md` before starting work.
+
+---
+
+## 2026-07-30 — CI greening on the new AWS agent fleet; Waters TIC root-caused
+
+Branch head `6fd75a5e16`. Core Windows .NET went from 13 failures to 2; every remaining failure is
+understood. Everything below is pushed to both `Skyline/work/20260612_net8_port` and `chambem2/pwiz-sharp`.
+
+**A - Bruker DDA-PASEF IM-range (`bea9869f81`).** `TdfData.FillSpectrum` gated the `ion mobility
+lower/upper limit` userParams on `preferCentroid && tag.Combined`, but cpp `SpectrumList_Bruker.cpp:382-387`
+emits them for EVERY combined TDF spectrum, independent of centroid and before the FullData block. The
+test doc is `precursor_mass_analyzer="tof"`, so Skyline never requests vendor-centroided MS1 and the range
+was dropped; `SpectrumFilterPair.IsOutsideSpectraRangeIM` then could not tell "library IM outside the
+instrument ramp (no value)" from "no signal in range (zero)" and mis-filtered row 0 of the report
+(heavy `ILDDLSPR`, library IM 0.825 vs ramp min 0.8505). Verified: `BrukerPrmPasefImportTest` passes.
+
+**B - Core-build Bruker references (`b46ec2709c`).** The reader emits the canonical 4-field combined-IMS
+native id (`merged=N frame=F scanStart=S scanEnd=E`, cpp `:785`, upstream since 597f6124ab/2019); the
+*profile* combineIMS reference mzMLs in `Reader_Bruker_Test.data.tar.bz2` still had plain `merged=N` AND
+lacked the IM-range userParams, while the `-centroid` siblings were already correct. That archive is
+gitignored + extracted at build time, so the fix is the sanctioned per-project override:
+`pwiz-sharp/pwiz/test/Bruker.Tests/Reference/` (plus a `None Update="Reference\*.mzML"` item, a README, and
+the hardcoded `TimsBinaryDataSmokeTests` assertion). **Remove once the .tar.bz2 is regenerated.**
+
+**C - Agilent x11: VC++ 2013 runtime (`fd93d30f57`).** Every Agilent test failed on a fresh agent with
+`Could not load ... BaseTof.dll. The specified module could not be found.` That is ERROR_MOD_NOT_FOUND
+(0x8007007E) = a missing DEPENDENCY, not a missing file (0x80070002). `BaseTof.dll` is the only
+mixed-mode (C++/CLI) DLL in Agilent's MHDAC set - its PE import table lists MSVCR120/MSVCP120 - while the
+others are pure managed, which is why the tests reached `CalibrationMgr..ctor()` first. Now staged
+app-local from the copies pwiz already vendors (`pwiz_tools/Shared/Lib/Microsoft.VC120.CRT/x64`). These
+also flow into MsConvert's output, so `installer/Setup.iss`'s StagingDir glob ships them to END USERS.
+Verified on a bare AWS agent: 11/11 pass.
+
+**D - Inno Setup bootstrap (`3b338d3805`).** `jrsoftware.org/download.php/is.exe` no longer redirects to
+the binary - it lands on the `isdl.php` HTML page (10 KB `text/html`, first bytes `3C 21`). The script
+saved that as `.exe` and failed to launch it ("file or directory is corrupted"). Now pins the official
+GitHub release (innosetup-6.7.3.exe) and VALIDATES every download (size, PE `MZ` magic, Authenticode)
+with retries. Confirmed in CI: ISCC installs and the installer compiles.
+
+**E - Linux port committed + scripts (`544af26cb6`, `77c67ff184`, `3651d8dcf2`).** Committed another
+agent's Linux work after review: central `$(SevenZaExe)` (7za.exe/7zz per OS), new
+`$(NativeVendorsAvailable)` (= licenses AND Windows; Thermo's SDK is managed/cross-platform, the rest wrap
+native Windows DLLs), forward-slash paths, `lockmassRefiner` gating, plus two real bug fixes (POSIX
+`file:///` parsing that silently dropped every MS_SHA_1; a `WiffFile` finalizer null-guard). Added
+`pwiz-sharp/build.sh` + `tcbuild.sh` (mode 100755) mirroring the .bat files minus the Windows-only legs
+(installer, NativeAOT/CTest, dotCover), with dotnet-location probing.
+**CAUTION learned the hard way:** commit `51606950e1` shipped half of that agent's change (an
+auto-normalized `Agilent.csproj` that DROPPED the `SevenZaExe` property) without the
+`Directory.Build.props` half -> empty 7-zip command -> exit 9009 -> 0 tests -> test-count guard failed BOTH
+agents. Always diff the whole working tree against the last good commit before committing someone else's
+edits.
+
+**F - `41a3558634` regression fix.** My own E commit broke Waters/Bruker/Sciex on Windows: the Linux
+`file:///` fix assumed 3 slashes, but Waters/Bruker/Sciex emit `file://` + path (cpp is inconsistent), so
+`C:\dir` fell into the POSIX branch as `/C:\dir` and every MS_SHA_1 vanished. Handles all three shapes now.
+Waters 13->0 failed, Bruker 3->0, Sciex 7->0.
+
+**G - Waters TIC discrepancy: ROOT-CAUSED, fix not yet written.** `ATEHLSTLSEK_LM_684/785` spectrum[5]
+`MS_TIC` = ours `1.63409e05` vs reference `1.63408e05` on CI, but PASSES locally at the same commit.
+Falsified in order: (1) formatter tie-break - an Agilent tie (`163526.5` -> ref `163527`) proves cpp rounds
+away-from-zero, which `PwizFloat` already does, and switching to half-to-even fixed Waters but broke
+Agilent; (2) the lossy `value / Math.Pow(10, exp)` mantissa division in `PwizFloat.Format` - real (it turns
+the exact tie 163408.5 into 1.63408500000000000973) but NOT the cause, since away-from-zero yields 163409
+either way; (3) wrong TIC branch - a diagnostic showed BOTH machines take source A with identical
+`defaultArrayLength=1154`. **Actual cause:** we read the scan stat as TEXT
+(`WatersRawFile.GetScanItem` -> `TryParseDouble`) and MassLynx's own float->string formatting puts
+`163408.5` on a rounding tie, so the SDK returns `"163408"` on one machine and `"163409"` on another
+(every non-tie scan matches byte-for-byte). **cpp is immune because it reads the value numerically:**
+`pwiz/data/vendor_readers/Waters/SpectrumList_Waters.cpp:240` uses
+`GetScanStat<double>(..., MassLynxScanItem::TOTAL_ION_CURRENT)`. That is why bt83/bt17 pass on the SAME
+AWS agents against the SAME reference mzML.
+**=> The fix is to add a typed numeric scan-stat accessor to `WatersRawFile` and use it instead of parsing
+the SDK's formatted string** (`SpectrumList_Waters.cs:471-483` also reads base peak m/z, base peak
+intensity and PeaksInScan the same lossy way). NOT a `DiffPrecision` loosening and NOT a re-baseline -
+both would paper over a genuine port defect. `TicSourceDiagnostic.cs` (`67b9b2ed68` + `6fd75a5e16`) is
+TEMPORARY and must be deleted with that fix.
+
+**H - VCS trigger (`6fd75a5e16`).** `pwiz-sharp/.*` now triggers Core Linux .NET as well as Core Windows
+.NET (was Windows-only, so cross-platform regressions only surfaced by luck).
+
+**Agent-fleet findings (not code):** a stale AWS Windows instance had only SDK 9.0.311 while
+`pwiz-sharp/global.json` pins `8.0.100` with `rollForward: latestFeature` (rolls forward only inside
+8.0.x, NOT to 9.x) -> build dies before compiling, 0 tests, test-count guard fails. The Linux agents have
+NO dotnet at all (probed /usr/bin, /usr/local/bin, /usr/share/dotnet, /usr/lib/dotnet, $DOTNET_ROOT,
+~/.dotnet - and no dangling symlink either), so `build.sh`/`tcbuild.sh` are still unvalidated end-to-end.
+The Linux VCS checkout dir is literally `/home/teamcity/agent/work/C:/pwiz` (a `C:` directory on Linux).
+
+**Also investigated, do NOT redo:** Waters MassLynx SDK 5.0.0 was trialled and REVERTED (archive
+byte-identical to HEAD). It does not fix the TIC (both 4.9.0.0 and 5.0.0 return the same scan-stat), and
+it requires a Waters license key (`createRawReaderFromPath` gained a `userLicense` arg; without it every
+read fails "License invalid"), removes 12 exports the cpp tree links against (`centroidRaw` etc.), drops
+`cdt.dll`, and newly fails 2 tests by returning `SET_MASS` at full float precision. Benchmarked PR #4500
+(cpp `toString` round-trip) at **+1.4-1.8% (~3-4 s on 221 s)** for a 2.5 GB Thermo DIA .raw->mzML.
+
+**Current CI:** Core Windows .NET 414/416 (only the 2 Waters TIC). Core Linux .NET blocked on dotnet.
+Full local pwiz-sharp suite is green on the branch as pushed.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260730_net8_aws_agents_waters_tic.md` before starting work.
