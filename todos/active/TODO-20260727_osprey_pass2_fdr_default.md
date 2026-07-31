@@ -556,7 +556,51 @@ them and they do not help.
 Note `-LinkFrom` is UNAVAILABLE for any PICK_LDA arm: the pick moves at PerFileScoring, so Stage-4
 parquets cannot be reused and every arm is a full pipeline from mzML (~2 h per 20-file arm here).
 
-### HEADLINE: PICK_LDA hurts PASS 1 consistently, but GAINS at 20-file PASS 2 - the sign flips
+### FINAL HEADLINE (after a disjoint replication): PICK_LDA is a SMALL change of INCONSISTENT SIGN
+
+**Read this before the two superseded headlines below it.** A disjoint 6-file cohort (files 21-26,
+no overlap with the 20-file cohort) was run specifically to test the "sign flips between pass 1 and
+pass 2" reading. **It failed to replicate, and so did the model-degradation story:**
+
+| | 20 files (1-20) | 6 files (21-26) |
+|---|---|---|
+| pass-1 exp, delta disc @ matched TRUE | -3.5% | -0.4% |
+| pass-2, delta disc @ matched TRUE | **+1.8%** | **-1.1%** |
+| `modelComposite` | **-16%** | **+20.5%** |
+
+All seven comparisons made this session:
+
+| arm | delta disc @ matched 1% TRUE |
+|---|---|
+| Stellar libdecoy 3f, pass 2 | -0.3% |
+| Astral libdecoy 3f, pass 2 | -0.7% |
+| Stellar gendecoy 3f, pass 2 | -1.3% |
+| SEA-AD 6f (21-26), pass 1 exp | -0.4% |
+| SEA-AD 6f (21-26), pass 2 | -1.1% |
+| SEA-AD 20f (1-20), pass 1 exp | -3.5% |
+| SEA-AD 20f (1-20), pass 2 | **+1.8%** |
+
+**Six of seven negative, spanning -0.3% to -3.5%; one positive at +1.8%; none large.** That is the
+whole result. Do not build a mechanism on it.
+
+This is exactly what the disagreement-rate measurement predicts (the one finding that HAS held):
+relocating ~44% of picked peaks moves discoveries ~1% in either direction. When the effect is that
+small, per-cohort variation dominates - and TODO-20260728 measured within-size spreads up to 9.9
+points on this dataset, several times the entire PICK_LDA effect. Two mechanism narratives were
+read out of that noise tonight before the replication killed them.
+
+**Consequence for the default decision.** PICK_LDA is not a sensitivity lever in either direction.
+Keep it OUT of the coordinated golden re-baseline - not because it costs sensitivity, but because
+it buys nothing measurable while forcing a re-baseline, and its per-cohort sign is unstable enough
+that any single validation run will mislead whoever reads it.
+
+**`modelComposite` is not trustworthy as a single-cohort statistic.** -16% one cohort, +20.5% the
+next. TODO-20260728 already recorded it swinging 3x non-monotonically with file count. Do not
+quote one cohort's value as evidence of anything.
+
+---
+
+### SUPERSEDED (kept so the reasoning trail is auditable): "the sign flips between pass 1 and 2"
 
 | arm | delta disc @ matched 1% TRUE |
 |---|---|
