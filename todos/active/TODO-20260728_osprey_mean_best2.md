@@ -207,6 +207,27 @@ Test-file rename rationale: `PercolatorMeanBest2Test` named a class #4490 delete
 code stopped being restricted to at `b7c375b905`.
 
 GATES: Debug build + **563/563** + inspection 0 warnings (master 556 + 7 new).
+**`regression.ps1 -Dataset All` PASSED** (18/18 legs: Stellar / StellarLibDecoy /
+StellarGenDecoyEntrap / Astral x golden, resume, HPC chain, diagnostics). 1 h 48 m, contended.
+
+**PR [#4509](https://github.com/ProteoWizard/pwiz/pull/4509)** opened, label `osprey`. The remote
+branch was force-pushed off `2560e04979` (only the 1st original commit was ever pushed, no PR
+existed) using `--force-with-lease` pinned to that exact SHA.
+
+**Copilot did NOT review #4509**: "unable to review this pull request because the user who
+requested the review has reached their quota limit." So the PR currently has **no independent AI
+review**. Re-request it once quota resets, or run `/code-review max` on the branch.
+
+**FLAG-ON LIVENESS - the gap byte-identity cannot close.** Flag-off byte-identity proves the
+default path is untouched, but a flag that was never wired would pass that gate identically. So
+`regression.ps1 -Dataset Stellar` was run WITH `OSPREY_EXPERIMENT_AGG=mean-best-2` expecting an
+intentional RED, and got one: **74 issues**, `RetentionTimes.score` differing on 894/906 rows,
+`OspreyRunScores` 9 keys only-in-golden and 9 only-in-run (the reported set changed membership),
+16 `bestSpectrum` rows. The RT / peak-boundary shifts (~0.03 min on a few rows) are NOT aggregation
+leaking into peak picking - the experiment-precursor q gates Stage 6 reconciliation and the
+calibration refit, so a changed q changes the consensus and can change a 2nd-pass picked peak. That
+is the documented contract of `ComputeExperimentPrecursorQMap`. Log:
+`ai/.tmp/liveness-meanbest2-20260731.log`. Re-run this whenever the flag is refactored.
 
 ### 2026-07-30 (night session) - MECHANISM found; the gain is a TWO-FACTOR product, not a scale law
 
