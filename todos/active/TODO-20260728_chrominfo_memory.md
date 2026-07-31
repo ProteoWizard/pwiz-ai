@@ -416,3 +416,46 @@ Open questions for the developer:
   children anyway? Trace `UpdateResults` / `CalcChromInfoList` in `TransitionGroupDocNode`.
   `DocumentReader` already discards the stored `user_set` on the grounds that "all values
   are still calculated from the child transitions".
+
+### 2026-07-30 - Session 4
+
+Branch pushed to origin for the first time (`Skyline/work/20260728_chrominfo_memory`).
+
+**The columnar results are now what a transition has.** `TransitionDocNode.Results` is always
+empty and `AbbreviatedResults` is a plain property, not derived from anything. Reading a document
+written the old way turns its chrom infos into columnar results as it goes. `File > Save` writes
+the columnar form; sharing still writes every chrom info attribute for Panorama, which means
+`DocumentWriter` works them out again through a `MoleculeResults` per molecule.
+
+A precursor carries its transitions' areas in a `transition_areas` attribute and those transitions
+are not written at all, but only where every one of them is ordinary at that file. A transition
+left out has exactly the files the precursor carried areas for, which is what lets the reader know
+which positions it owns.
+
+`GraphChromatogram` gets its chrom infos from `MoleculeResults`, keyed on the `IdentityPath` to the
+molecule. `_document` is what the graph thinks the document is, taken when it updates;
+`OnDocumentUIChanged` compares against it rather than `e.DocumentPrevious`, which differ whenever
+the graph missed an update.
+
+**TestRescore hangs, and it is not a slow loop.** Bisected: not the compact save format, not the
+graph changes, not the `AbbreviatedResults` simplification. It is the "Results always empty" change
+in `07e082999`. The developer found the cause: an `ObjectDisposedException` reading peaks from a
+`ChromatogramGroupInfo` whose cache stream has been closed, inside `CalcResultsForReplicate` during
+`UpdateResultsSummaries`, while the rescore is replacing the cache. `ParallelEx.For` propagates it
+correctly, so something further up - the chromatogram loader - is catching and retrying forever.
+
+Two effects of this work widen the window: `Results` being empty means `CalcResultsForReplicate`
+reads peaks it used to reuse, and `ConvertResults` reads every chromatogram of a molecule during
+the settings pass. Note also that `MoleculeResults` *holds* `ChromatogramGroupInfo` objects across
+calls, so anything keeping one across a cache swap has the same use-after-close exposure -
+`DocumentWriter` keeps one per molecule while writing, `GraphChromatogram` one per molecule.
+
+**Known failing**: `TestRescore` (above) and `TestCandidatePeaks` (an in-session peak edit does not
+survive `UpdateResults`, since nothing rebuilds chrom infos from the columnar results yet).
+
+**Lesson worth keeping**: three code-level hypotheses about the hang were all wrong, and each cost
+a four minute build-and-run cycle. The stack trace settled it immediately. Get the exception before
+theorising about a hang.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260728_chrominfo_memory.md` before starting work.
