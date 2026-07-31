@@ -493,6 +493,64 @@ Two Copilot inline comments, both to FIX (real + trivial). Turnkey:
 
 ## Progress Log
 
+### 2026-07-31 (night session) - PICK_LDA measurement started: a small NEGATIVE on both 3-file entrapment sets
+
+Measurement only; no default flipped, no golden rebaselined. Full session record:
+`ai/.tmp/handoff-20260731_meanN_picklda.md`.
+
+**What PICK_LDA is, verified against source** (`Osprey.Scoring/PeakDataExtractor.cs:319-339`,
+`Osprey.Scoring/PickLdaModel.cs:76-84`) rather than taken from a prior summary. Both paths compute
+the same four raw terms per CWT candidate and the argmax + tie-break are unchanged; only the rank
+function differs:
+* default: `coelution * rt_penalty * ln(1 + apex_intensity)` - median_polish absent entirely
+* PICK_LDA: `w0*z(coelution) + w1*z(ln_intensity) + w2*z(rt_penalty) + w3*z(median_polish)`
+
+Frozen resolution-keyed weights. **Astral/HRAM**: coelution 0.535, ln_intensity **0.0041**,
+rt_penalty 0.335, median_polish **0.776**. **Stellar/unit**: coelution **0.993**, ln_intensity
+0.047, rt_penalty 0.027, median_polish 0.102. So "PICK_LDA" is not one behaviour - on Astral it is
+cosine-led, on Stellar it is essentially the coelution term alone.
+
+**RESULT (3 files each, `Run-FdrBench.ps1 -DecoySource Library -ProteinFdr ''`, pass-2 reported
+set, FDRBench oracle).** `-ProteinFdr ''` deliberately: the 0.01 default enables the pass-2
+Percolator recalibration that independently inflates FDR, which would swamp the pick effect.
+
+| | default | PICK_LDA | delta |
+|---|---|---|---|
+| Stellar disc @ matched 1% TRUE | 27,541 | 27,452 | **-89 (-0.3%)** |
+| Stellar true FDP @ 1% q | 1.47% | 1.51% | +0.04 pts |
+| Astral disc @ matched 1% TRUE | 86,304 | 85,670 | **-634 (-0.7%)** |
+| Astral true FDP @ 1% q (paired) | 1.36% (1.27%) | 1.37% (1.27%) | +0.01 pts (unchanged) |
+
+**A small negative on both, calibration essentially unchanged.** Quote the matched-TRUE row: both
+baselines are already anti-conservative (1.47% / 1.36% true at nominal 1%), so a reported-q
+comparison rewards whichever arm is more miscalibrated.
+
+**A PRE-REGISTERED PREDICTION FAILED, and that is the durable lesson.** From the weights I
+predicted Stellar would barely move (it did not, -0.3%) and **Astral would move a lot. It did not
+(-0.7%).** The error was equating weight magnitude with decision change. The pick is an ARGMAX over
+candidates inside ONE precursor's RT window, and those candidates' four features are strongly
+correlated - the best-coelution candidate usually also has the best library cosine, since both
+measure "this looks like the real peptide". A rank function can be radically re-weighted and still
+select the same candidate almost every time; the achievable gain is bounded by the DISAGREEMENT
+RATE, about which the weights say nothing. **Do not repeat the inference "the Astral weights differ
+hugely, so the discovery set must move hugely".** To get the disagreement rate directly, use
+`OSPREY_PICK_DUMP_CANDIDATES` and compute argmax(product) vs argmax(LDA) offline - no second search
+needed.
+
+The flag is live: all four numbers differ between arms, so peaks did move. There are just few of
+them and they do not help.
+
+**20-file SEA-AD arm** (the cohort we understand, pass-1 experiment scope) was still running at the
+time of writing - see the handoff for the result. Note `-LinkFrom` is UNAVAILABLE for any PICK_LDA
+arm: the pick moves at PerFileScoring, so Stage-4 parquets cannot be reused and every arm is a full
+pipeline from mzML.
+
+**Tooling**: `ai/.tmp/picklda_compare.py` A/Bs two runs on the mdiag at BOTH pass-1 scopes (run and
+experiment), calibration before sensitivity, plus per-file targets and entrapment. Validated
+against the known mean-N A/B before use - which caught two bugs in it, including a first-crossing
+scan for matched-true FDP that returned 1 (the curve is noise at tiny counts; the correct
+convention, copied from `extract_pass1_fdp.disc_at_fdp`, is the MAX qualifying grid point).
+
 ### 2026-07-28 - PR #4487 MERGED (checkpoint)
 
 Squash-merged #4487 (merge commit ebe24eeb68) after all gates green: local build/tests/inspection,
