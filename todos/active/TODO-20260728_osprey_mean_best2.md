@@ -176,6 +176,38 @@ grows with N (e.g. f≈0.1: N≤10→1 [max], N=20→2, N=82→9). One knob unif
 
 ## Progress Log
 
+### 2026-07-31 (night session) - PORTED onto post-#4490 master
+
+`#4490` deleted `PercolatorFdr.cs` and split it into ~10 files, so the 4-commit branch could not
+rebase (delete-vs-modify on all 425 FDR lines). Re-landed hunk-by-hunk as ONE commit
+(`1d85c1726f`) on `Skyline/work/20260728_osprey_mean_best2`, reset onto master `4641fe4b77`:
+
+| what | new home |
+|---|---|
+| `ComputeBaseIdMeanBestN` + `MeanBestNAcc` + decoy floor + `PercentileOfSorted` | `Osprey.FDR/TargetDecoyCompetition.cs` (end of class) |
+| experiment-precursor + experiment-peptide mean-best-N branches | `Osprey.FDR/PercolatorQValues.cs` |
+| `StreamingFirstPassQ` top-N accumulators, `Mb2Entry`, `StreamingDecoyFloor` | `Osprey.FDR/StreamingFdr.cs` |
+| `new StreamingFirstPassQ(OspreyEnvironment.MeanBestN)` | `Osprey.FDR/PercolatorScorer.cs:794` |
+| flag + `MeanBestN` + floor toggles (+70, unchanged) | `Osprey.Core/OspreyEnvironment.cs` |
+| streaming==resident tests | `Osprey.Test/FdrTest.cs` |
+| aggregation/floor tests | `Osprey.Test/MeanBestNAggregationTest.cs` (renamed from `PercolatorMeanBest2Test.cs`) |
+
+**Port fidelity was verified mechanically, not by eye** (`ai/.tmp/verify-port.ps1` pattern, script
+kept in the session scratchpad): normalize both sides' added lines by stripping the qualifiers the
+decomposition forced onto formerly intra-class calls (`TargetDecoyCompetition.`,
+`PercolatorQValues.`, `PercolatorSampling.`, `PercolatorEntry.`, `StreamingFdr.`), collapse
+whitespace, diff the multisets. Residual = comment re-wrapping plus exactly four intended deltas:
+`ComputeBaseIdMeanBestN` `public`->`internal` (host class is internal), `using pwiz.Osprey.Core` in
+`StreamingFdr.cs` (needs `OspreyEnvironment`), one `<see cref="ComputeFloorFromDecoyScores"/>` ->
+`<c>...</c>` (now private in another class, so the cref would not resolve), and the test-class
+rename. **No executable-code difference.** Re-run that comparison before trusting any future
+restatement of this port.
+
+Test-file rename rationale: `PercolatorMeanBest2Test` named a class #4490 deleted, and an N the
+code stopped being restricted to at `b7c375b905`.
+
+GATES: Debug build + **563/563** + inspection 0 warnings (master 556 + 7 new).
+
 ### 2026-07-30 (night session) - MECHANISM found; the gain is a TWO-FACTOR product, not a scale law
 
 Autonomous night session (start 21:49). Goal from Brendan: "what causes the loss of sensitivity and
