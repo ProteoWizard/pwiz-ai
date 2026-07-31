@@ -85,7 +85,19 @@ transfer case, so a transfer run falls through to the generic `"this configurati
       (not ~25 s on the guard), peaks ~42 GB not ~104 GB, and reproduces the 2026-07-20 ladder
       recorded in TODO-20260727 (0.11 / 0.18 / 0.42 / **0.92** / 1.80 / 4.83% true FDP at
       0.1 / 0.25 / 0.5 / 1 / 2 / 5% nominal).
-- [ ] Open the PR; ask before triggering the TeamCity Perf/Regression gate on `pull/<N>`.
+- [x] Ratchet the escape hatch (Brendan-approved follow-up, folded into this PR):
+      `OSPREY_ALLOW_UNFIXED_RESIDENT=<token>` replaces the blanket
+      `OSPREY_ALLOW_UNBOUNDED_MEMORY=1`; `ResidentPaths.KNOWN_UNFIXED` is the high-water mark;
+      an unlisted resident path is refused unconditionally. Commits b5f59fe13 + bc6d6e95a.
+- [x] Filed the missing tracking issues: #4505 (mdiag on a full resume - verified fix parked on
+      the closed #4437 branch) and #4507 (`--fdrbench-pass 1`). Both were previously tracked
+      only in a closed-PR comment / not at all, which is why sessions kept re-deciding whether
+      they were fixed.
+- [ ] `regression.ps1 -Dataset All` - REQUIRED before the PR: mode 2 now sets
+      `OSPREY_ALLOW_UNFIXED_RESIDENT=mdiag-full-resume` instead of the blanket, and that change
+      is unexercised until this runs.
+- [ ] Open the PR (Copilot auto-reviews on open). Brendan runs `/code-review`, triggers the
+      TeamCity Perf/Regression gate on `pull/<N>`, and reviews the transfer mdiag HTML.
 
 ## Progress Log
 
@@ -145,3 +157,36 @@ date; the sprint drives the list to empty and the env var to deletion.
 
 Brendan's call on CI: if the ratchet reds TeamCity when the PR opens, that is the guard working;
 fix it before merge rather than weakening the guard.
+
+### 2026-07-30 (later) - Ratchet implemented; the audit corrected three of my own claims
+
+**Implemented** (b5f59fe13, bc6d6e95a): `OSPREY_ALLOW_UNFIXED_RESIDENT=<token>` replaces the
+blanket boolean; `Osprey.Core/ResidentPaths.cs` holds the five tokens with each one's tracking
+issue; a resident path with NO token is refused unconditionally; `regression.ps1` mode 2 names
+`mdiag-full-resume`; `ResidentPoolGuardTest` asserts the WHOLE list via `CollectionAssert` so a
+addition reads as the ratchet running backwards. Gate green both times (556/556, inspection 0/0).
+
+`OSPREY_FDR_PROJECTION=0` became its own token (`projection-off`) rather than keeping its
+automatic exemption - it outranks the config-driven triggers because it selects the legacy
+implementation for the whole run, but it must now be stated. That closes the last route to a
+resident pool nobody had to ask for.
+
+**Audit findings - three claims I made this session were wrong, all corrected:**
+1. "Dangling TODO reference" - WRONG. `TODO-osprey_stage6_rescored_buffer_streaming.md` exists as
+   `completed/TODO-20260727_osprey_stage6_rescore_streaming.md`; my glob missed the datestamp that
+   active work adds. The comment was stale in a different way: it cited COMPLETED work as tracking
+   what remains.
+2. "Stage 7/8 is O(survivors), not a memory problem" - OVER-CORRECTED. It is not gated by
+   `GuardResidentPool` (true), but #4486 is open and records SecondPassFDR as the whole-run peak
+   at ~45 GB / 82 files. Today's arm peaked 41.3 GB, corroborating it.
+3. "CI keeps the two projection paths identical" (accepting Brendan's premise) - NOT TRUE TODAY.
+   Nothing sets `OSPREY_FDR_PROJECTION=0`: not regression.ps1, not ai/scripts, not a unit test,
+   despite the docstring saying the property is settable so tests can A/B both paths. The legacy
+   machinery is exercised incidentally via mdiag/fdrbench, but the byte-identity claim is not
+   re-verified by anything. Adding a projection-off regression leg would be the fix; not in scope
+   here, and worth its own decision since it doubles a gate leg.
+
+**Also established**: `--model-diagnostics` is NOT one thing. The scale case was streamed by
+#4420 (today's 82-file arm runs with mdiag on, streaming, 41.3 GB); only the full-resume batch
+report remains (#4505). Sessions kept flipping between "fixed" and "broken" because both are
+true of different paths.
