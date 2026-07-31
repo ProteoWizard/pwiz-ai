@@ -6,8 +6,9 @@
   `ProteowizardWrapper`; the pwiz-side changes (TIC, wrapper forwarding) are in support of it
 - **Base**: `master` @ `55cedad25`
 - **Created**: 2026-07-27
-- **Status**: In Progress - read side only; the writing half was withdrawn (Phase 6), revert
-  staged and uncommitted, awaiting a clean build to re-verify
+- **Status**: In Progress - read side only (the writing half was withdrawn in Phase 6). Phases 1-8
+  committed and pushed; Phase 9 (DATA Convert 5.x intensity-ordered peaks) complete and green but
+  **uncommitted**
 - **GitHub Issue**: (none)
 - **PR**: https://github.com/ProteoWizard/pwiz/pull/4498
 - **Cherry-pick to release**: no - Brian decided 2026-07-29, do not add the label
@@ -452,7 +453,146 @@ failed. Never read a bjam exit code as a test result - grep for `assertion faile
 `**passed**` under-reports the suite. Saved as
 [[reference_quickbuild_exit_code_hides_test_failure]].
 
+### Phase 9: DATA Convert 5.x writes peaks in intensity order, not m/z order (IN PROGRESS)
+
+Brian, 2026-07-30: `D:\Data\Lockmass\09_MS\MS1xMRTmzML_BSP.sky` extracted a puzzlingly low chromatogram.
+It was not low, it was **exactly zero** at all 5998 points, `TotalArea=0`.
+
+**Root cause: Waters DATA Convert 5.0.0.2900 writes each spectrum's peak arrays sorted by ascending
+INTENSITY rather than ascending m/z.** Skyline's extraction binary searches the m/z axis
+(`SpectrumFilterPair.cs:373`), which is only valid on a sorted array; on this input the search lands
+at an arbitrary index, the scan loop starts past the window, and nothing accumulates. No error.
+
+Ascending m/z is nowhere in the mzML spec - it is a de facto standard everything assumes.
+
+**Evidence, four independent methods, all agreeing:**
+
+| method | pwiz in path? | result |
+|---|---|---|
+| raw base64+zlib decode of the vendor bytes, .NET only | **no** | n=598, **296** m/z descents |
+| `mscat` (built from `pwiz_tools/examples`) | yes | m/z unordered, intensity ascending |
+| `msaccess -x "binary index=0"` | yes | same |
+| `msconvert --ms1` text writer | yes | 296 m/z descents, **0 intensity descents** |
+
+Sharper than "unsorted": 598 peaks, **zero** intensity descents, terminating at the base peak
+(441,159 at m/z 212.075). The wrong sort *key*, not corruption.
+
+**It is a regression in 5.0.0.2900.** 06_DDA from DATA Convert 4.0.0.2619 has 0 descents in 1506
+pairs; 03_MSMS and our own msconvert output are clean too.
+
+**Why it stayed invisible:** `basePeakMZ`, `basePeakIntensity`, `mzLow`/`mzHigh` and TIC are all
+computed by scanning, so they are correct regardless of order. Only consumers that binary search
+the m/z axis break, and they break to zero rather than to an error. In metabolomics (this is an
+itaconic acid standard on a Xevo MRT) a user reads that as "compound not detected".
+
+**Decision (Brian, 2026-07-31): fix only in code we control.** Waters can ship a converter fix and
+users re-run their raw data, which is a better remedy than anything we could offer downstream, and
+pwiz fixes would not reach other packages in time to matter. So: Skyline and BiblioSpec.
+
+- [x] **Skyline**: `MsDataSpectrum.SetArrays` calls `EnsureMzAscending` for 2-array spectra.
+      Combined IMS is excluded deliberately - **it is legitimately not globally m/z sorted**.
+      Measured on `HDDDA_Short_noLM-combineIMS.mzML`: 521,802 points, **180** m/z descents, every
+      one a full roll-over (smallest drop 1950 Da), against **181** ion-mobility runs with 0 IM
+      descents. So it is m/z ascending *within* each mobility bin, 181 bins. A global sort would
+      shred it. Skyline already flat sorts those separately on dedicated threads
+      (`SpectraChromDataProvider.EnsureSortedMzs`, `ScanProvider.cs:242`), which this leaves alone.
+- [x] Placed in `SetArrays` rather than in `GetSpectrum` on Brian's prompting: `SetArrays` accepts
+      `scanningQuadMzLows`/`scanningQuadMzHighs` and **assigns neither** (dead parameters, evidently
+      meant for SONAR). If they are ever wired up they become a fourth per-peak array; putting the
+      sort where the arrays are assigned means whoever adds it is looking straight at the warning.
+- [x] Reused the #4157 sort (`eb1e95f50`, "Speed up IMS chromatogram extraction with custom m/z
+      sort") rather than hand-rolling: moved its double-specialised core to
+      `CommonUtil/Collections/ParallelDoubleSort.cs` (`pwiz.Common.Collections`), with
+      `ArrayUtil.Sort`/`IsSorted` delegating. No new dependency - `ProteowizardWrapper` already
+      references `CommonUtil` - `ArrayUtil`'s public surface is unchanged so none of the 51 files
+      using it were touched, and `MsDataFileImpl` already had the using directive.
+- [x] `TestUnsortedMzArrays` in `PwizFileInfoTest`, over a synthesized fixture (invented peaks, no
+      customer data) whose peaks are deliberately intensity-ordered. Asserts the m/z **and** the
+      intensity pairing, since sorting m/z alone leaves every value plausible and every pairing
+      wrong. Went red (element 0: 500.5 where 200.2 expected) then green.
+- [x] **Acceptance**: on the real file, extraction went from all-zero to matching an independent
+      msconvert XIC with **largest per-point difference 0.0** across 400 points.
+- [x] Waters suite green incl. all three combined-IMS tests; CodeInspection green.
+- [x] **BiblioSpec**: sort in `Spectrum::setRawPeaks` - the one choke point every source funnels
+      through, which matters because **libraries already built from 5.x data carry the bad order
+      inside the .blib**; fixing only at pwiz ingestion would leave those broken. Two defects there,
+      not one: `binPeaks` merges only *adjacent* equal bins, so on intensity-ordered input same-bin
+      peaks never merge (corrupting intensities even when `isClearPrecursor_` is off), and
+      `removePrecursorPeaks` then binary searches the unsorted result and erases the wrong range.
+      New `SpectrumTest` unit test (`lib blib` links `Spectrum.cpp`, so no test-data tarball
+      repacking needed - note `inputs/` is packaged as `inputs.tar.bz2`, which is why the
+      end-to-end `blib-test-build-basic` route was not taken; it is the first unit test in
+      BiblioSpec's `src/Jamfile.jam`, `TestWeibull.cpp` having never been wired up).
+      Mutation-verified: disabling the sort fails it at `SpectrumTest.cpp:65`,
+      `|200.2 - 500.5| < 1e-09`.
+
+**Checked and found NOT at risk**, so the blast radius is smaller than first feared: `threshold`
+sorts by intensity itself and re-sorts by m/z on output (`ThresholdFilter.cpp:423`); `peakPicking
+cwt` sorts explicitly (`CwtPeakDetector.cpp:82`); the default `LocalMaximumPeakDetector` compares
+array neighbours and *would* be vulnerable, but `SpectrumList_PeakPicker.cpp:252` returns centroided
+spectra as-is and DATA Convert 5.x output is centroided, so it is unreachable. `SpectrumList_MZWindow`
+already calls `sort_together`. Verified empirically - peakPicking on the real file was a no-op,
+234,489 peaks in and out.
+
+**`/code-review max` (2026-07-31) found a real hole in the BiblioSpec fix.** `setRawPeaks` is NOT on
+BlibBuild's path: `BuildParser.cpp:471` declares a `SpecData`, `PwizReader::getSpectrum(int,
+SpecData&)` calls `transferSpec` which copies `specInfo->data` in file order, and
+`BuildParser.cpp:649` hands those arrays to `insertPeaks` - no `BiblioSpec::Spectrum` is ever built.
+A library built from a 5.x file would have been stored intensity-ordered. Verified both halves
+before acting. Fixed by sorting in `PwizReader::ensureMzAscending`, called after both
+`SpectrumInfo::update` sites - the one point `transferSpec` and `transferSpectrum` share.
+`setRawPeaks` stays for the `.blib` re-read and copy paths.
+
+Also from that review, acted on: `unit-test` -> `unit-test-if-exists` (the BiblioSpec source tarball
+ships the Jamfile but strips `*Test.?pp`); `TestFilesDir` given `suffix: "-unsorted"` because
+`TestWatersCalibrationSpectrum` extracts the same zip and the ctor deletes the directory it finds;
+and `TestUnsortedMzArrays` now decodes the fixture's m/z array from the mzML text and asserts it is
+NOT ascending - every other assertion in it is satisfied by an already-sorted file, so without that
+the fixture could be regenerated in order and the test would pass covering nothing.
+
+**Rejected from that review: "the pwiz-core seam was available and not taken".** That is the scope
+decision recorded above, not a defect - Waters ships a converter fix and users re-run their raw
+data. Worth stating in the PR so it is not re-raised.
+
+Still open from it, not yet acted on: `std::sort` is UB on NaN m/z and `is_sorted` cannot screen it
+(`LibReader::getUncompressedPeaks` does no validation while `BlibFilter`'s twin explicitly rejects
+NaN); the C# guarantee is advisory rather than an invariant (public setters, six construction sites
+bypass `SetArrays`); `EnsureMzAscending`'s length-mismatch guard returns silently; and nothing pins
+the `IonMobilities == null` carve-out.
+
+**Two traps worth remembering.** Skyline caches chromatograms in a `.skyd` next to the *input*
+document, so repeated `SkylineCmd --in=X.sky --import-file=...` runs serve stale results - several
+early "still zero" variant results were cache artifacts, not real. Delete `*.skyd` between runs.
+And a `sorted` check that only compares first vs last element proves nothing; it hid this for
+several rounds.
+
 ## Open Questions / Unresolved
+
+- **Tell Hans about the DATA Convert 5.0.0.2900 sort-order regression.** Peaks ordered by ascending
+  intensity instead of ascending m/z; 4.0.0.2619 is correct. Silent - every extraction reads as zero,
+  and in metabolomics that looks like "compound not detected". Users can re-run their raw data once
+  Waters ships a fix, which is the real remedy.
+- `MsDataSpectrum.SetArrays` accepts `scanningQuadMzLows`/`scanningQuadMzHighs` and assigns neither.
+  **Investigated 2026-07-31: vestigial, not a defect** - an earlier session note called this "SONAR
+  quad ranges silently discarded", which is wrong. pwiz writes both bound arrays
+  (`SpectrumList_Waters.cpp:361,363`) and Skyline reads only the lower one (`MsDataFileImpl.cs:1314`)
+  as the per-peak position axis - with `reportSonarBins = true` (line 199) that is bin numbers. The
+  m/z <-> bin mapping lives in pwiz and Skyline asks for it on demand via `SonarMzToBinRange` /
+  `SonarBinToPrecursorMz`, so the per-peak upper-bound array is genuinely redundant. Worth deleting
+  the two dead parameters for tidiness; nothing is lost.
+  Also confirms the Phase 9 gate is right for SONAR: those spectra arrive with `IonMobilities`
+  non-null (it holds the quad/bin axis), so they are excluded from `EnsureMzAscending` - correct,
+  since SONAR spectra are blocked by quad bin exactly as IMS is blocked by drift bin.
+- The #4157 NaN caveat came across to `ParallelDoubleSort` unchanged. `SetArrays` is a broader entry
+  point than "chromatogram extraction" (it is every spectrum Skyline materialises), so the original
+  "no NaN can reach here" justification is stretched, though a NaN m/z means a corrupt file. No guard
+  added; decide whether one is wanted.
+- `Spectrum::getSignalToNoise` sorts `rawPeaks_` by intensity in place - a mutation inside an
+  accessor. Harmless today: its only caller is `compSpecPtrSignalToNoise`, which has no users.
+- #4498 now spans Skyline, pwiz, BiblioSpec and Common under a `skyline` prefix. Coherent as one
+  Waters story but against the one-module convention; a reviewer may want BiblioSpec split out.
+- Stray untracked `Spectrum.cpp.bak` and `MsDataFileImpl.cs.bak` appeared in the tree - not created
+  by the session, left alone.
 
 - **SONAR regression, unexplained.** In an earlier experiment (offset mapping, since
   reverted) the SONAR pulse import failed with `OverflowException: Array dimensions
