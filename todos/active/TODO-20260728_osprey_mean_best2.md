@@ -226,7 +226,9 @@ corrupted rather than failed. Added `OspreyEnvironment.ExperimentAggUnrecognized
 `ctx.LogWarning` at the head of `FirstJoinTask`'s Stage-5 block, mirroring the
 `OSPREY_PASS2_QVALUE` treatment already in the same file. **Warn, not throw**, to match the
 established in-repo bar for this class of flag; a hard failure for measurement flags specifically
-would be a defensible one-line overrule. Gate re-run: 563/563, 0 inspection warnings.
+would be a defensible one-line overrule. Gate re-run: 563/563, 0 inspection warnings, and
+**`regression.ps1 -Dataset Stellar` PASSED** (modes 1/2/3) so the byte-identity claim for this
+commit is measured, not just argued from "the warning cannot fire in a golden run".
 
 **FLAG-ON LIVENESS - the gap byte-identity cannot close.** Flag-off byte-identity proves the
 default path is untouched, but a flag that was never wired would pass that gate identically. So
