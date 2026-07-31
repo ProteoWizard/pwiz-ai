@@ -5,10 +5,10 @@
 - **Base**: `master` (61fa751304)
 - **Module**: `osprey`
 - **Created**: 2026-07-28
-- **Status**: In Progress
+- **Status**: Completed
 - **Parent issue**: [#4484](https://github.com/ProteoWizard/pwiz/issues/4484) (pass-2 FDR default
   decision — this is the honest sensitivity lever vs. the invalid transfer-compete/protein-compact)
-- **PR**: [#4509](https://github.com/ProteoWizard/pwiz/pull/4509) (open 2026-07-31)
+- **PR**: [#4509](https://github.com/ProteoWizard/pwiz/pull/4509) (merged 2026-07-31 as d030522344)
 - **Requester**: Mike + Brendan (Osprey developers) — NO credit line.
 
 ## Objective
@@ -175,6 +175,31 @@ grows with N (e.g. f≈0.1: N≤10→1 [max], N=20→2, N=82→9). One knob unif
   decision evidence, not a regression test.
 
 ## Progress Log
+
+### 2026-07-31 - Merged
+
+PR #4509 merged as commit `d030522344`. Shipped the opt-in `OSPREY_EXPERIMENT_AGG=mean-best-<N>`
+experiment-score aggregation on BOTH the resident and bounded streaming first-pass paths, plus the
+unrecognized-value warning. Gates: 563/563 unit tests, 0 inspection warnings,
+`regression.ps1 -Dataset All` green locally AND on TeamCity build 4116428 (18/18 legs, Stellar +
+StellarLibDecoy + StellarGenDecoyEntrap + Astral x golden/resume/HPC/diagnostics), plus the
+intentional-RED flag-ON liveness check.
+
+**DEFERRED, not shipped** - the protein roll-up (task below stays unchecked). It needs
+`double? AggregateScore` on `FdrEntry`, a documented cross-impl parity type mapping to Rust
+`osprey-core/src/types.rs`; that decision was deliberately left out of this PR and is its own
+increment.
+
+**Gap carried forward: #4509 never got an AI review.** Copilot declined on a quota limit, and the
+`/code-review max` run that day covered this session's `ai/` scripts and TODOs - all 15 findings
+were in those files - not the C# port on the PR branch. The port's assurance rests instead on the
+mechanical fidelity check (`ai/scripts/Osprey/Verify-PortFidelity.ps1`), the byte-identity gates,
+and the liveness check. Worth a retrospective `/code-review max` from a pwiz checkout if the
+protein-roll-up increment touches the same code.
+
+**Also still open**: the Rust-side match (if parity is still required - see
+`project_ospreysharp_official_rust_retired`) and any default flip, which remains a separate
+coordinated golden re-baseline. Nothing in this PR changes a default.
 
 ### 2026-07-31 (night session) - PORTED onto post-#4490 master
 
