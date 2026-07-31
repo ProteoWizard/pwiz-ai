@@ -10,8 +10,14 @@ How to set up all MCP servers for Claude Code. Referenced from [new-machine-setu
 
 Install Python packages:
 ```powershell
-pip install mcp labkey Pillow
+pip install "mcp<2" labkey Pillow
 ```
+
+> **Pin `mcp` below 2.0.** mcp 2.0.0 removed `mcp.server.fastmcp`, which every server here imports.
+> An unpinned install makes StatusMcp and LabKeyMcp crash at startup, and `claude mcp list` reports
+> only `✘ Failed to connect — -32000: Connection closed`. Confirm the real cause by running a server
+> directly (`python ./ai/mcp/StatusMcp/server.py`), then fix with `pip install "mcp<2"`.
+> Verified 2026-07-30: 1.29.0 works, 2.0.0 does not.
 
 ## Core Servers (Required)
 

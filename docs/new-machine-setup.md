@@ -277,6 +277,14 @@ Test-Path ~/.ssh/id_ed25519.pub
 ```
 
 If no key exists, guide the user:
+
+0. **Create `~/.ssh` first if it is missing.** On a pristine machine the directory does not
+   exist yet and `ssh-keygen` does not create it — it fails with
+   `Saving key "C:\Users\<user>\.ssh\id_ed25519" failed: No such file or directory`.
+   Observed 2026-07-30 on a fresh Windows 11 install:
+   ```powershell
+   New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.ssh" | Out-Null
+   ```
 1. Generate a key: `ssh-keygen -t ed25519 -C "their-email@example.com"`
 2. Accept default location, set a passphrase
 3. Display the public key: `Get-Content ~/.ssh/id_ed25519.pub`
@@ -531,6 +539,23 @@ The `--passive` flag shows progress without requiring interaction.
 > `cl.exe`. Always verify against the filesystem after install, and repair with an
 > explicit component add if needed:
 >
+> **FIRST, though — check whether the installer is still running.** winget frequently returns
+> *"Successfully installed"* while `setup.exe` continues in the background, so an immediate check
+> shows exactly the same symptoms as a genuinely failed install: `isComplete=0`, empty
+> `VC\Tools\MSVC`, no `cl.exe`. Firing the repair recipe below at that moment launches a **second,
+> conflicting installer**. Verified 2026-07-30 (Win 11 26200 / VS 17.14.37): two `setup` processes
+> were still active with 45s of CPU; ~5 minutes later `cl.exe` appeared and `isComplete` flipped
+> to 1 with no intervention at all.
+>
+> ```powershell
+> # If this returns anything, the install is still in progress - poll, do not repair.
+> Get-Process setup, vs_installer -ErrorAction SilentlyContinue |
+>     Select-Object Name, Id, @{L='CPU';E={[math]::Round($_.CPU,1)}}
+> ```
+>
+> Poll until `cl.exe` exists **and** no installer processes remain. Only then treat a missing
+> compiler as a real failure.
+>
 > ```powershell
 > # Verify cl.exe actually exists (checkboxes/"installed" status can lie):
 > Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\*\bin\Hostx64\x64\cl.exe"
@@ -736,9 +761,18 @@ dotnet tool update -g JetBrains.ReSharper.GlobalTools
 # Existing mode check:
 dotCover --version
 
-# Install if missing:
-dotnet tool install --global JetBrains.dotCover.CommandLineTools
+# Install if missing (pin the version - see note):
+dotnet tool install --global JetBrains.dotCover.CommandLineTools --version 2025.1.7
 ```
+
+> **Pin 2025.1.7.** An unversioned install takes the latest (2026.2.0.1 as of 2026-07-30), and
+> `Verify-Environment.ps1` then WARNs that 2025.3.0+ carries a JSON export bug and asks for
+> 2025.1.7 — so the unpinned command in this guide produces an install its own verifier rejects.
+> To correct an existing machine:
+> ```powershell
+> dotnet tool uninstall --global JetBrains.dotCover.CommandLineTools
+> dotnet tool install --global JetBrains.dotCover.CommandLineTools --version 2025.1.7
+> ```
 
 **dotMemory CLI** - Memory profiling (optional, for leak investigation):
 ```powershell
@@ -767,11 +801,25 @@ dotnet tool install --global JetBrains.dotTrace.GlobalTools
 **Python packages** - For MCP servers and LabKey integration:
 ```powershell
 # Existing mode check:
-python -c "import mcp; import labkey; print('OK')"
+python -c "from mcp.server.fastmcp import FastMCP; import labkey; print('OK')"
 
 # Install if missing:
-pip install mcp labkey
+pip install "mcp<2" labkey Pillow
 ```
+
+> **CRITICAL — pin `mcp` below 2.0.** An unpinned `pip install mcp` now resolves to **mcp 2.0.0**,
+> which **removed the `mcp.server.fastmcp` module** that both StatusMcp and LabKeyMcp import. The
+> servers then crash on startup and `claude mcp list` reports the unhelpful
+> `✘ Failed to connect — -32000: MCP error -32000: Connection closed`, which names neither the
+> module nor the version. Run the server by hand to see the real cause:
+>
+> ```powershell
+> python ./ai/mcp/StatusMcp/server.py     # ModuleNotFoundError: No module named 'mcp.server.fastmcp'
+> ```
+>
+> Fix with `pip install "mcp<2"`. Verified 2026-07-30: mcp 1.29.0 works, 2.0.0 does not.
+> Note the "existing mode check" above deliberately imports `mcp.server.fastmcp` rather than bare
+> `mcp` — a bare `import mcp` succeeds on 2.0.0 and hides the breakage.
 
 ---
 
@@ -836,7 +884,16 @@ Tell the user:
    ```
    > **PowerShell:** run `.\bs.bat` (with the leading `.\`). PowerShell does not run
    > scripts from the current directory without it, and errors with
-   > *"bs.bat is not recognized"*. In Command Prompt, plain `bs.bat` works.
+   > *"bs.bat is not recognized"*.
+   >
+   > **Command Prompt usually accepts plain `bs.bat` — but not always.** If the machine has
+   > `NoDefaultCurrentDirectoryInExePath=1` set (checked with `echo %NoDefaultCurrentDirectoryInExePath%`,
+   > or `$env:NoDefaultCurrentDirectoryInExePath` in PowerShell), cmd drops the current directory
+   > from its search path and fails with the **identical** message:
+   > *'bs.bat' is not recognized as an internal or external command*. Observed 2026-07-30 on a
+   > fresh Windows 11 install. **Use `.\bs.bat` in both shells** — it is always correct and costs
+   > nothing. Do not read this error as a missing or misnamed batch file; confirm with
+   > `dir bs.bat` before investigating further.
 3. Wait for the build to complete (10-20 minutes on first run)
 4. The build downloads vendor SDKs on first run
 
@@ -954,6 +1011,18 @@ pwsh -File './ai/scripts/Verify-Environment.ps1'
 ```
 
 This checks for all required tools and reports any missing components.
+
+> **A stale PATH produces false MISSINGs.** The verifier resolves tools through the calling
+> shell's PATH, and a shell started before an install never sees it. Observed 2026-07-30: right
+> after installing them, Node.js, npm, and GitHub CLI all reported MISSING while being perfectly
+> installed. Either open a fresh terminal, or refresh PATH in place before running the script:
+>
+> ```powershell
+> $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+>             [Environment]::GetEnvironmentVariable("Path","User") + ";$env:USERPROFILE\.dotnet\tools"
+> ```
+>
+> Re-run before chasing any MISSING that you believe you just installed.
 
 **The verification must PASS before proceeding.** If any items are missing:
 - Fix the missing items, OR
@@ -1491,6 +1560,22 @@ The setup is complete when:
    for `Skyline.exe` reports a false failure on a perfectly good build; `TestRunner.exe` should
    be there too)
 4. Visual Studio can build the solution without errors
-5. `TestRunner.exe test=TestA` passes
+5. A real test passes, run through the AI script rather than `TestRunner.exe` directly:
+   ```powershell
+   pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName CodeInspection
+   pwsh -File './ai/scripts/Skyline/Run-Tests.ps1' -TestName TestAuditLogSerialization
+   ```
+
+   > **This criterion used to read `TestRunner.exe test=TestA`. There is no test named `TestA`** —
+   > `grep` for `class TestA` / `TestA\b` under `pwiz_tools/Skyline` returns nothing, and TestRunner
+   > answers *"No tests found"* and exits 1. An assistant taking that literally will report a
+   > perfectly good environment as broken. Corrected 2026-07-30.
+   >
+   > Note also that **`AaantivirusTestExclusion` is a poor smoke test for a fresh machine.** It
+   > writes an EICAR probe file and fails by design if Defender quarantines it — so on any checkout
+   > without an antivirus exclusion it fails for environmental reasons, not build reasons. Add the
+   > exclusion (Phase 8.3) before treating its failure as meaningful; the exclusion is worth adding
+   > on every development machine, not just nightly test boxes, because Defender's file locking
+   > interferes with the wider test suite.
 
 Congratulate the user and let them know they're ready to develop Skyline!
