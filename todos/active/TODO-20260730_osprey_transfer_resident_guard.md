@@ -96,8 +96,26 @@ transfer case, so a transfer run falls through to the generic `"this configurati
 - [ ] `regression.ps1 -Dataset All` - REQUIRED before the PR: mode 2 now sets
       `OSPREY_ALLOW_UNFIXED_RESIDENT=mdiag-full-resume` instead of the blanket, and that change
       is unexercised until this runs.
-- [ ] Open the PR (Copilot auto-reviews on open). Brendan runs `/code-review`, triggers the
-      TeamCity Perf/Regression gate on `pull/<N>`, and reviews the transfer mdiag HTML.
+- [x] Opened **PR #4508**. Copilot reviewed on open (one finding: a stale class docstring in
+      `ResidentPoolGuardTest` - real, fixed in 63f84b0b4).
+- [x] `/code-review max`: 15 findings, verified individually. **The critical one:**
+      `ResidentPaths.KNOWN_UNFIXED` had ZERO production readers - the guard compared the env value
+      against `ResidentPoolTrigger`'s return and never consulted the committed list, so the ratchet
+      was documentation, not a mechanism, and the `OspreyEnvironment` claim that "the ONLY way to
+      re-admit one is to add it to the committed list" was false. Fixed in 3f289c368 along with the
+      mdiag catch-all, the literal pinning, the two stale transfer-needs-the-pool docs, the
+      typo-vs-unset ambiguity, and const->static readonly.
+- [ ] **DECISION FOR BRENDAN**: revert the `projection-off` token? It breaks live A/B-oracle
+      recipes (see the corrected audit below), and `GuardResidentPool` sits AFTER the per-file
+      scoring loop (~6h36m into an 82-file run), so a refused run wastes most of a day. It was
+      approved on the premise that CI keeps the two paths identical, which turned out false.
+- [ ] Remaining review findings, deliberately not fixed here: `--fdrbench-pass both` pass-1 output
+      and `OSPREY_DUMP_PERCOLATOR` were only working for transfer BECAUSE the regression forced the
+      resident branch (both belong with #4507); `regression.ps1` mode 2 overwrites an
+      operator-supplied token; guard placement should hoist to `ValidateArgs`; `FirstJoinTask`
+      keeps an untested duplicate of the predicate.
+- [ ] Brendan: TeamCity Perf/Regression on `pull/4508`, and the transfer mdiag HTML at
+      `D:\test\Pilot-MTG-Tissue-May2026\runs\pass2-82-4way-transfer-guardfix\out.model-diagnostics.html`.
 
 ## Progress Log
 
@@ -179,12 +197,14 @@ resident pool nobody had to ask for.
 2. "Stage 7/8 is O(survivors), not a memory problem" - OVER-CORRECTED. It is not gated by
    `GuardResidentPool` (true), but #4486 is open and records SecondPassFDR as the whole-run peak
    at ~45 GB / 82 files. Today's arm peaked 41.3 GB, corroborating it.
-3. "CI keeps the two projection paths identical" (accepting Brendan's premise) - NOT TRUE TODAY.
-   Nothing sets `OSPREY_FDR_PROJECTION=0`: not regression.ps1, not ai/scripts, not a unit test,
-   despite the docstring saying the property is settable so tests can A/B both paths. The legacy
-   machinery is exercised incidentally via mdiag/fdrbench, but the byte-identity claim is not
-   re-verified by anything. Adding a projection-off regression leg would be the fix; not in scope
-   here, and worth its own decision since it doubles a gate leg.
+3. "CI keeps the two projection paths identical" (accepting Brendan's premise) - NOT TRUE, but my
+   supporting audit was ALSO WRONG and is corrected here. No CI leg sets `OSPREY_FDR_PROJECTION=0`
+   (not regression.ps1, not ai/scripts, not a unit test), so the byte-identity claim is not
+   re-verified by anything. **But I then generalized that to "nothing anywhere sets it", which is
+   false**: `ai/.tmp/run-mdiag-ab3.ps1:24` sets it, as do `ai/.tmp/run-mb2-20file.ps1` and the open
+   protocol in TODO-20260728 line 165. I had grepped `ai/scripts`, `ai/docs` and `pwiz` but NOT
+   `ai/.tmp`. Caught by `/code-review`. Consequence: making projection-off require a token breaks
+   those live A/B-oracle recipes, which is why reverting that token is now on the table.
 
 **Also established**: `--model-diagnostics` is NOT one thing. The scale case was streamed by
 #4420 (today's 82-file arm runs with mdiag on, streaming, 41.3 GB); only the full-resume batch
