@@ -161,11 +161,14 @@ grows with N (e.g. f≈0.1: N≤10→1 [max], N=20→2, N=82→9). One knob unif
 - [ ] Flag-on oracle A/B vs transfer (82f/164f, matched TRUE FDP) — Brendan-driven.
       **PROTOCOL (Brendan 2026-07-28): flag-on runs MUST use OSPREY_PASS2_QVALUE=transfer** (only
       transfer carries the mean-best-2 1st-pass experiment q through; percolator re-derives and
-      confounds it). Clean A/B = `transfer` (max) vs `mean-best-2`+`transfer`. Until the streaming
-      mirror lands, also force the resident path: OSPREY_FDR_PROJECTION=0 +
-      **OSPREY_ALLOW_UNFIXED_RESIDENT=projection-off** (PR #4508 retired the blanket
-      `OSPREY_ALLOW_UNBOUNDED_MEMORY=1`; the resident path must now be named, and
-      `projection-off` is the token whenever OSPREY_FDR_PROJECTION=0 is set).
+      confounds it). Clean A/B = `transfer` (max) vs `mean-best-2`+`transfer`.
+      **OBSOLETE (corrected 2026-07-30): do NOT force the resident path.** This line used to read
+      "until the streaming mirror lands, also force the resident path: OSPREY_FDR_PROJECTION=0 +
+      OSPREY_ALLOW_UNBOUNDED_MEMORY=1". The streaming mirror LANDED in `7c827899a5` (task marked
+      [x] above), and the 82-file arm has since run on the streaming path, so flag-on runs need
+      NO resident forcing and NO `OSPREY_ALLOW_UNFIXED_RESIDENT` token at all. If a run demands a
+      token, that is a signal it is on a path you did not intend - diagnose rather than name it.
+      (The blanket `OSPREY_ALLOW_UNBOUNDED_MEMORY=1` is a silent no-op since #4508 regardless.)
 
 ## Regression Test
 - Flag-off: committed golden byte-identity (regression.ps1). Flag-on: entrapment-oracle A/B is
