@@ -105,10 +105,19 @@ transfer case, so a transfer run falls through to the generic `"this configurati
       re-admit one is to add it to the committed list" was false. Fixed in 3f289c368 along with the
       mdiag catch-all, the literal pinning, the two stale transfer-needs-the-pool docs, the
       typo-vs-unset ambiguity, and const->static readonly.
-- [ ] **DECISION FOR BRENDAN**: revert the `projection-off` token? It breaks live A/B-oracle
-      recipes (see the corrected audit below), and `GuardResidentPool` sits AFTER the per-file
-      scoring loop (~6h36m into an 82-file run), so a refused run wastes most of a day. It was
-      approved on the premise that CI keeps the two paths identical, which turned out false.
+- [x] **RESOLVED (Brendan, 2026-07-30): keep the `projection-off` token; update the callers.**
+      Rather than reverting the guard, the recipes now name the path. Updated:
+      `ai/.tmp/run-mdiag-ab3.ps1` (resident arm), `ai/.tmp/run-mb2-20file.ps1` (replacing the
+      retired blanket), and the flag-on protocol in TODO-20260728 line 165.
+      The 6h36m guard-placement concern does NOT bite these: the mdiag A/B is 3 files (fails in
+      minutes if mis-set), and a projection-off run at 82 files would need ~104 GB regardless.
+      Hoisting the guard into `ValidateArgs` remains the right general fix - see the open items.
+      **Why the mdiag A/B is worth keeping alive**: it runs the same 3 files twice -
+      `-Mode resident` (OSPREY_FDR_PROJECTION=0, report from the batch
+      `ModelDiagnosticsReport.Write`) vs `-Mode projection` (report from
+      `ModelDiagnosticsData.Accumulator`) - then diffs the two HTMLs. That is precisely the
+      acceptance oracle for **#4505**, streaming the mdiag full-resume report off the parked
+      #4437 branch. It is the next piece of work's test, not a stale artifact.
 - [ ] Remaining review findings, deliberately not fixed here: `--fdrbench-pass both` pass-1 output
       and `OSPREY_DUMP_PERCOLATOR` were only working for transfer BECAUSE the regression forced the
       resident branch (both belong with #4507); `regression.ps1` mode 2 overwrites an
