@@ -5,10 +5,10 @@
 - **Base**: `master` (f823e95294)
 - **Module**: `osprey`
 - **Created**: 2026-07-30
-- **Status**: In Progress
+- **Status**: Completed
 - **Parent issue**: [#4484](https://github.com/ProteoWizard/pwiz/issues/4484) - prerequisite for
   the pass-2 FDR default flip (see `TODO-20260727_osprey_pass2_fdr_default.md`)
-- **PR**: (pending)
+- **PR**: [#4508](https://github.com/ProteoWizard/pwiz/pull/4508) (merged 2026-07-30 as `4641fe4b7`)
 - **Requester**: Mike + Brendan (Osprey developers) - NO credit line.
 
 ## Objective
@@ -81,10 +81,13 @@ transfer case, so a transfer run falls through to the generic `"this configurati
       (`ai/.tmp/transfer-guard-inspection.log`).
 - [x] `regression.ps1 -Dataset Stellar` byte-identity PASS - mode1 (vs golden), mode2 (resume),
       mode3 (HPC chain), all blib 30,597,120. Log `ai/.tmp/transfer-guard-regression-stellar.log`.
-- [ ] 82-file transfer arm: `ai/.tmp/run-pass2-82-4way.ps1 -Mode transfer`. PASS = completes
-      (not ~25 s on the guard), peaks ~42 GB not ~104 GB, and reproduces the 2026-07-20 ladder
-      recorded in TODO-20260727 (0.11 / 0.18 / 0.42 / **0.92** / 1.80 / 4.83% true FDP at
-      0.1 / 0.25 / 0.5 / 1 / 2 / 5% nominal).
+- [x] 82-file transfer arm PASSED (`exit=0`, 3 h 55 min): cleared the guard on the streaming path,
+      memory floor LEVEL (-0 MB/file) with peak 49.0 GB vs the ~104 GB a resident pool implies,
+      and reproduced the 2026-07-20 ladder EXACTLY
+      (0.11 / 0.18 / 0.42 / **0.92** / 1.80 / 4.83% true FDP at 0.1 / 0.25 / 0.5 / 1 / 2 / 5%).
+      CAVEAT: peak 49.0 GB is above the ~42 GB recorded on 07-20 and that gap is unexplained -
+      identical ladder argues accounting (different binary + GC timing), but no same-build A/B
+      was run. Out `D:\test\Pilot-MTG-Tissue-May2026\runs\pass2-82-4way-transfer-guardfix\`.
 - [x] Ratchet the escape hatch (Brendan-approved follow-up, folded into this PR):
       `OSPREY_ALLOW_UNFIXED_RESIDENT=<token>` replaces the blanket
       `OSPREY_ALLOW_UNBOUNDED_MEMORY=1`; `ResidentPaths.KNOWN_UNFIXED` is the high-water mark;
@@ -93,9 +96,12 @@ transfer case, so a transfer run falls through to the generic `"this configurati
       the closed #4437 branch) and #4507 (`--fdrbench-pass 1`). Both were previously tracked
       only in a closed-PR comment / not at all, which is why sessions kept re-deciding whether
       they were fixed.
-- [ ] `regression.ps1 -Dataset All` - REQUIRED before the PR: mode 2 now sets
-      `OSPREY_ALLOW_UNFIXED_RESIDENT=mdiag-full-resume` instead of the blanket, and that change
-      is unexercised until this runs.
+- [x] `regression.ps1 -Dataset All` PASSED twice - once on the pre-review-fix commit and again on
+      the final HEAD `3f289c368`. All four datasets (Stellar, StellarLibDecoy,
+      StellarGenDecoyEntrap, Astral), every mode incl. diagnostics + FDR sanity bounds; goldens
+      unmoved. Mode 2 is the leg that exercises the new token
+      (`OSPREY_ALLOW_UNFIXED_RESIDENT=mdiag-full-resume` in place of the blanket).
+      Log `ai/.tmp/transfer-guard-regression-all2.log`.
 - [x] Opened **PR #4508**. Copilot reviewed on open (one finding: a stale class docstring in
       `ResidentPoolGuardTest` - real, fixed in 63f84b0b4).
 - [x] `/code-review max`: 15 findings, verified individually. **The critical one:**
@@ -123,7 +129,8 @@ transfer case, so a transfer run falls through to the generic `"this configurati
       resident branch (both belong with #4507); `regression.ps1` mode 2 overwrites an
       operator-supplied token; guard placement should hoist to `ValidateArgs`; `FirstJoinTask`
       keeps an untested duplicate of the predicate.
-- [ ] Brendan: TeamCity Perf/Regression on `pull/4508`, and the transfer mdiag HTML at
+- [x] TeamCity Perf/Regression on `pull/4508`: PASSED (Brendan-triggered). Brendan also reviewed
+      the transfer mdiag HTML at
       `D:\test\Pilot-MTG-Tissue-May2026\runs\pass2-82-4way-transfer-guardfix\out.model-diagnostics.html`.
 
 ## Progress Log
@@ -219,3 +226,38 @@ resident pool nobody had to ask for.
 #4420 (today's 82-file arm runs with mdiag on, streaming, 41.3 GB); only the full-resume batch
 report remains (#4505). Sessions kept flipping between "fixed" and "broken" because both are
 true of different paths.
+
+### 2026-07-30 - Merged
+
+PR #4508 merged as `4641fe4b7`. Shipped: the `transfer` resident-pool revert at all THREE sites
+(the third, `PreCompactionPoolReason`, added by #4488 two days earlier and absent from the original
+analysis - reverting only the two documented sites would have left the 82-file arm broken); the
+`OSPREY_ALLOW_UNFIXED_RESIDENT` named-token ratchet replacing the blanket
+`OSPREY_ALLOW_UNBOUNDED_MEMORY`, with the guard refusing any resident path absent from the
+committed `ResidentPaths.KNOWN_UNFIXED` list; `OSPREY_FDR_PROJECTION=0` converted from an automatic
+exemption to the `projection-off` token, with its callers updated rather than the guard weakened.
+
+Verification: build + 556 unit tests + zero-warning inspection on every commit; `regression.ps1
+-Dataset All` green (all four datasets, all modes) on the final HEAD; TeamCity Perf/Regression
+green on `pull/4508`; and the 82-file SEA-AD transfer arm completing in 3 h 55 min (master dies in
+~25 s) with a LEVEL memory floor (-0 MB/file) and a pass-2 calibration ladder reproducing the
+2026-07-20 run exactly (0.11 / 0.18 / 0.42 / 0.92 / 1.80 / 4.83 %).
+
+Reviews: Copilot found one real finding (a stale class docstring describing the removed opt-in).
+`/code-review max` returned 15; six were fixed, the most important being that
+`ResidentPaths.KNOWN_UNFIXED` had ZERO production readers - the guard never consulted the committed
+list, so the ratchet was documentation rather than a mechanism until 3f289c368.
+
+Deferred, and NOT shipped here: hoisting `GuardResidentPool` out of the post-scoring-loop position
+(a refused run currently pays the full per-file scoring cost first, ~6h36m at 82 files);
+`regression.ps1` mode 2 overwriting an operator-supplied token; `FirstJoinTask`'s untested duplicate
+of the resident predicate; and the pre-existing `--fdrbench-pass both` bitmask-vs-equality defect,
+which removing the transfer term exposed rather than caused (folded into #4507 by another session).
+
+Follow-ups filed: #4505 (mdiag on a full resume - the verified fix is parked on the closed #4437
+branch, now findable) and #4507 (`--fdrbench-pass 1` streaming). Memory characterization for #4486
+posted from this branch's 82-file run: the 49.0 GB peak is Stage 7 `TransferPerRunQ`, decomposing
+as ~13 GB live + ~9.5 GB sawtooth garbage + ~26 GB committed-but-free, with 11 GC cycles at ~35 s
+and 9.5 GB amplitude. Unresolved: the 49.0 GB peak versus the ~42 GB recorded on 2026-07-20 is
+unexplained - the identical ladder argues accounting rather than behavior, but no same-build A/B
+was run to prove it.
