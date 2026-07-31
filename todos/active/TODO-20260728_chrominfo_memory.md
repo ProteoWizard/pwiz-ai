@@ -625,6 +625,38 @@ settings pass still reaches `UpdateResults`. Giving conversion an explicit home 
 .skyd finishes loading, which is what the developer described - is now the next thing the memory
 saving depends on.
 
+**The precursor gives up its chrom infos** (2026-07-31), which is the precursor level saving -
+1.8 GB of the 21 GB on the reference document. `ConvertResults` already had the right gate,
+`everyFileRead`, and was using it to drop the transitions' chrom infos while leaving the
+precursor's; it now drops both.
+
+It has to be the same pass, not a later one. The peak indexes are found by matching the
+transitions' peak boundaries, so once the transitions are converted there is nothing left to match
+against. For the same reason `NeedsConverting` still asks only about the transitions: letting a
+precursor whose transitions were already converted come back through would recompute every index as
+-1 and overwrite the real ones.
+
+**Three test helpers had to stop reading what the document no longer holds.** Worth recording,
+because each one shows what the check has to become:
+- `CheckTransitionGroup` compared the rebuilt chrom infos against the document's. It now compares
+  them against the columnar values position by position - file, area, retention time, q value - and
+  asserts `IsConverted`, so it actively proves the chrom infos were given up rather than merely
+  surviving their absence.
+- `CheckPeptide` compared against `PeptideDocNode.Results`. The molecule level is derived all the
+  way down now, so there is no stored form to compare with; it checks that the results are there
+  for exactly the replicates `GetReplicatesWithResults` says have them, and that asking for all
+  replicates and asking for one agree.
+- `MoveEveryPeak` read the peak bounds off the chrom infos; it reads them from a `MoleculeResults`.
+
+`Test.dll` still gives **22 failures**, the same as before this change and the same as at the
+commit before the `UpdateResultsSummaries` removal.
+
+**Knock-on worth knowing**: `PeptideChromInfoListCalculator.AddChromInfoList` reads the precursor
+chrom infos, which are now gone, so `PeptideDocNode.Results` comes out empty after a settings pass.
+That is where the design is going anyway, but it is currently empty by accident rather than by
+declaration, and should be made explicit the way `TransitionDocNode.Results` and
+`TransitionGroupDocNode.Results` were.
+
 `SameScoredPeaks` currently starts with an unconditional `return true;` (the developer's
 workaround for a StackOverflowException). Underneath it, `GetScoredPeaks` now yields
 `ImmutableList` rather than a bare sequence: `SequenceEqual` compares the elements - whole lists -
