@@ -556,24 +556,45 @@ them and they do not help.
 Note `-LinkFrom` is UNAVAILABLE for any PICK_LDA arm: the pick moves at PerFileScoring, so Stage-4
 parquets cannot be reused and every arm is a full pipeline from mzML (~2 h per 20-file arm here).
 
-### HEADLINE: PICK_LDA never wins, in any cell measured
+### HEADLINE: PICK_LDA hurts PASS 1 consistently, but GAINS at 20-file PASS 2 - the sign flips
 
 | arm | delta disc @ matched 1% TRUE |
 |---|---|
-| Stellar, library decoys (3f) | -0.3% |
-| Astral, library decoys (3f) | -0.7% |
-| Stellar, generated decoys (3f) | -1.3% |
-| SEA-AD 20-file, run scope | -2.1% |
-| SEA-AD 20-file, experiment scope | -3.5% |
+| Stellar, library decoys (3f), pass 2 | -0.3% |
+| Astral, library decoys (3f), pass 2 | -0.7% |
+| Stellar, generated decoys (3f), pass 2 | -1.3% |
+| SEA-AD 20-file, pass 1 run scope | -2.1% |
+| SEA-AD 20-file, pass 1 experiment scope | -3.5% |
+| **SEA-AD 20-file, pass 2 (reported set)** | **+1.8%** |
 
-**Five comparisons, three datasets, two decoy sources, two scopes - all negative, and the loss
-grows with cohort size.** Every arm is also slightly MORE conservative on calibration, which the
-matched-TRUE accounting already credits it for; the negative is what remains after that credit.
+| 20-file pass 2 | default | PICK_LDA |
+|---|---|---|
+| disc @ 1% reported q | 61,715 | 61,212 (-0.8%) |
+| true FDP @ 1% q | 3.289% | 2.983% (better) |
+| paired FDP @ 1% q | 3.059% | 2.782% |
+| **disc @ matched 1% TRUE** | **41,364** | **42,122 (+1.8%)** |
 
-**Consequence for this TODO's default decision.** The planned coordinated golden re-baseline was to
-flip protein-compact + **LDA-pick** + frozen-model together. On this evidence the LDA-pick
-component costs sensitivity everywhere it can be measured. It should be split out of that bundle
-and decided on its own evidence, not carried along with the other two.
+**AN EARLIER LINE IN THIS SESSION SAID "PICK_LDA NEVER WINS". THAT WAS WRONG** - correct for the
+cells then in hand (all pass-2 at 3 files, plus 20-file pass 1), falsified by the 20-file pass-2
+cell run afterwards. Do not quote it.
+
+**The pattern that fits: PICK_LDA damages the FIRST-PASS model, and at 20 files the pass-2 stage
+more than reverses it.** Both pass-2 arms are badly anti-conservative (2.98-3.29% true at a nominal
+1%) - the known pass-2 recalibration inflation, equally present in both, so it does not explain the
+DELTA. But it does mean the +1.8% is delivered by a stage this TODO is separately considering
+changing.
+
+**Consequence for the default decision - STRENGTHENED, not weakened.** The planned coordinated
+re-baseline was to flip protein-compact + **LDA-pick** + frozen-model together. LDA-pick's SIGN
+depends on which pass-2 mode is in force, so bundling it with a pass-2 change means neither can be
+attributed. Split LDA-pick out and decide it on its own evidence, against a fixed pass-2 mode.
+
+**Convention warning for anyone extending this table.** `disc @ 1% TRUE` is
+`max(n_t)` over rows with `combined_fdp <= 0.01`, exactly as `Run-FdrBench.ps1`'s `Get-FdpMetrics`
+computes it - that is what makes these cells comparable. That script's `disc @ 1% q` is a ROW COUNT
+(`($atQ | Measure-Object).Count`), not `max(n_t)`, and its FDP-at-1%-q is read off the LAST row
+sorted by q, not the max-n_t row. An ad-hoc reimplementation that uses `max(n_t)` for the q column
+gives 60,700 where the script gives 61,715 on the same file. Copy the script's semantics.
 
 ### A SECOND PRE-REGISTERED HYPOTHESIS, FALSIFIED (wrong sign)
 
