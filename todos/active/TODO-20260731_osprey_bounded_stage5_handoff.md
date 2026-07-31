@@ -101,24 +101,47 @@ so re-reading a parquet that Stage 6 opens anyway is noise against that. `PerFil
 already made this move - it never holds all features resident
 (`PerFileScoringTask.cs:1362-1366` records that loading 21 doubles per row cost ~800 MB/file).
 
-## Risk to resolve BEFORE implementing: the merge node
+## The merge node - NOT a blocker, because pass-2 Percolator is being removed
 
 `ResidentPaths.HPC_MERGE` ("the HPC reconciled-input merge (`--task SecondPassFDR`), which
-loads every worker's entries to reconcile them", tracked by **#4486**) is ALREADY a known
-resident path. So "use the HPC path always" bounds Stage 5 and Stage 6 but may just move the
-residency into the merge, which is resident by its own admission.
+loads every worker's entries to reconcile them", tracked by **#4486**) is already a known
+resident path, so the obvious worry is that "use the HPC path always" merely relocates the
+residency into the merge.
 
-Mitigating evidence, to be confirmed rather than assumed: the in-process merge under
-`protein-compact` already streams -
+**It does not, and the reason is a product decision rather than a memory argument.**
+Brendan and Mike have settled that `OSPREY_PASS2_QVALUE=percolator` must GO: the 2nd-pass
+Percolator retrain fits on the decoy-DEPLETED, target-selected reported pool, which makes
+the model over-confident and the q-values **anti-conservative** (Stellar true FDP 1.08%,
+Astral 1.24% at 1% reported q). Written up in the completed TODOs:
+
+* `TODO-20260710_osprey_pass2_recalibration_fix.md:146` - "the null is decoy-depleted and
+  target-selected. Retraining on it makes the model over-confident and the q-values
+  anti-conservative" ... ":149" - "Step 2 is the entire anti-conservative source".
+* `TODO-20260720_osprey_pass2_per_run_qvalue.md:127` - same conclusion on the per-run path.
+* `TODO-20260715_osprey_pass2_transfer_compete.md` - the frozen-model replacements
+  (`transfer`, `transfer-compete`, `protein-compact`) and their measured FDP recovery.
+
+The replacement has not been chosen, but **every candidate is a FROZEN-model mode, and those
+already stream**. Observed on this very 163-file run:
 
 ```
 OSPREY_PASS2_QVALUE=protein-compact: recomputing q/PEP by streaming 163 file(s),
-frozen-model scores swapped in for ... -- no retrain, one file resident at a time
+frozen-model scores swapped in for 2234621 reconciled survivors
+-- no retrain, one file resident at a time, competition CONSTRAINED to the
+   458345-base_id protein stratum
 ```
 
-So the frozen-model pass-2 modes appear bounded; the `percolator` retrain is the open
-question. **Answer this first** - if the merge needs the whole pool for a retrain, this work
-bounds two of three phases and #4486 becomes the blocker for the third.
+So the only pass-2 mode that plausibly needs the whole pool resident is the one being
+deleted. **Do NOT design this work around keeping `percolator` viable** - that is the
+opposite of where the product is heading, and preserving it would be the reason to keep a
+resident merge. Scope accordingly: bound Stage 5 and Stage 6 here, and expect the merge to
+follow for free once `percolator` is gone (#4486 then covers only the true HPC
+`--task SecondPassFDR` merge, not the in-process path).
+
+Practical consequence for this branch: the parity A/B and the regression gate should run
+with a frozen-model pass-2 mode as the primary configuration. `percolator` remains the
+regression golden's mode today, so byte-identity against the committed golden still has to
+hold - but it is a compatibility check on a doomed path, not a design constraint.
 
 ## Parity requirement
 
@@ -169,8 +192,10 @@ reasoning as `-PickLda`: an unrecorded setting makes a finished run unattributab
 
 ## Open questions
 
-1. Does the `percolator` pass-2 retrain need the whole rescored pool? (decides whether #4486
-   blocks the third phase)
+1. ~~Does the `percolator` pass-2 retrain need the whole rescored pool?~~ **Moot** - pass-2
+   Percolator is being removed (see "The merge node" above). Every replacement candidate is a
+   frozen-model mode and those stream one file at a time. Do not preserve `percolator`
+   viability as a design constraint.
 2. What is the 28 GB actually MADE of - 88.9 M bare objects at ~150 B, or arrays still hanging
    off `FdrEntry`'s six reference fields (`Features`, `CwtCandidates`, `FragmentMzs`,
    `FragmentIntensities`, `ReferenceXicRts`, `ReferenceXicIntensities`)? `FirstJoinTask`
