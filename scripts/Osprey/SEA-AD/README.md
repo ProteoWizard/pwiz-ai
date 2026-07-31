@@ -116,6 +116,11 @@ finds a run without being told where to look. `Measure-Stage6Rescore.ps1` uses t
 (`runs\stage6-<N>files\`); pass `-WorkRoot` or `-PhaseDir` to override, e.g. to reuse an
 existing prep.
 
+The dataset root is the data directory's **parent**, and the runner now derives it that way.
+(It previously walked two levels up, which contradicted this README and, on a
+`<root>\<dataset>\<data>` layout, resolved to a `runs\` OUTSIDE the dataset root. Pass
+`-RunsRoot` to override.)
+
 ```
 <dataset root>\                       # $env:OSPREY_SEAAD_DIR's parent
   mzml\                               # the 82 .mzML + their .spectra.bin caches
@@ -218,6 +223,18 @@ Measured, not guessed - these cost real time to learn:
 * Runs use `--output-dir`, not `--work-dir`: `--work-dir` would relocate the `.spectra.bin`
   cache too, so a directory that already has the caches would rebuild all 82. Pass
   `-CacheDir` when the input directory is genuinely read-only and has no caches.
+  The mechanism, since the resulting error points somewhere else entirely: `--work-dir`
+  sets **both** `OutputDir` and `CacheDir` (`OspreyCommandArgs.cs`,
+  `_config.CacheDir = _cacheDir ?? _workDir`), and an explicit `CacheDir` wins outright in
+  `ArtifactPaths.ResolveCacheDir` - the "beside the data file if writable" preference below
+  it is only reached when `CacheDir` is empty. On a vendor-raw dataset the symptom is a hard
+  failure on file 1 naming `/p:OspreyVendorReader=true`, which reads as "you need a vendor
+  build" when it actually means "the cache is not where Osprey looked".
+* **The learned peak-pick model (`-PickLda`) is nowhere in Osprey's log.** The runner prints
+  it in the banner, writes it to the `run.log` START line and the run directory name, and
+  clears `OSPREY_PICK_LDA` when the switch is off. Without that, a finished run cannot be
+  attributed after the fact. The recorded 82-file runs predate the switch and all used the
+  default product-form pick.
 * Every run gets `--timestamp --memstamp` teed to one `run.log`; the memstamp trace is what
   `ai/scripts/perfviz.html` renders.
 * `Clear-StandbyCache.ps1` before a timing run - otherwise the OS file cache makes a cold
@@ -227,7 +244,8 @@ Measured, not guessed - these cost real time to learn:
 
 | script | purpose |
 |---|---|
-| `Run-SeaAd.ps1` | the runner: decoy arm x ratio x pass-2 mode, resolution, `-WhatIf` |
+| `../Common/OspreyDatasetRun.psm1` | the shared runner engine, also used by `../TDP43/` |
+| `Run-SeaAd.ps1` | the runner: decoy arm x ratio x pass-2 mode x pick model, `-WhatIf` |
 | `Invoke-SeaAdChain.ps1` | queue several arms one at a time on a single box |
 | `New-SeaAdLibrary.ps1` | derive ratio-subset and gendecoy library variants |
 | `Convert-SeaAdRaw.ps1` | .raw -> mzML (only if not using the pre-converted share) |
