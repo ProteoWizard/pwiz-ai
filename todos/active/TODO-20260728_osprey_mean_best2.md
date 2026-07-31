@@ -218,6 +218,16 @@ existed) using `--force-with-lease` pinned to that exact SHA.
 requested the review has reached their quota limit." So the PR currently has **no independent AI
 review**. Re-request it once quota resets, or run `/code-review max` on the branch.
 
+**SELF-REVIEW FINDING, FIXED (`67217afcc9`, 2nd commit on the PR).** Copilot never ran, so I
+reviewed the diff myself. `OSPREY_EXPERIMENT_AGG` fell back to the max default SILENTLY on any
+unparseable value (`mean-best-1`, `meanbest2`, `mean`). For a flag that exists only to be A/B'd
+that is the worst failure mode: the operator records the arm as mean(best-N) and the comparison is
+corrupted rather than failed. Added `OspreyEnvironment.ExperimentAggUnrecognized` + a one-line
+`ctx.LogWarning` at the head of `FirstJoinTask`'s Stage-5 block, mirroring the
+`OSPREY_PASS2_QVALUE` treatment already in the same file. **Warn, not throw**, to match the
+established in-repo bar for this class of flag; a hard failure for measurement flags specifically
+would be a defensible one-line overrule. Gate re-run: 563/563, 0 inspection warnings.
+
 **FLAG-ON LIVENESS - the gap byte-identity cannot close.** Flag-off byte-identity proves the
 default path is untouched, but a flag that was never wired would pass that gate identically. So
 `regression.ps1 -Dataset Stellar` was run WITH `OSPREY_EXPERIMENT_AGG=mean-best-2` expecting an
