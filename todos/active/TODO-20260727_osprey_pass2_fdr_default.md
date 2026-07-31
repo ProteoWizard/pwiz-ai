@@ -540,10 +540,59 @@ needed.
 The flag is live: all four numbers differ between arms, so peaks did move. There are just few of
 them and they do not help.
 
-**20-file SEA-AD arm** (the cohort we understand, pass-1 experiment scope) was still running at the
-time of writing - see the handoff for the result. Note `-LinkFrom` is UNAVAILABLE for any PICK_LDA
-arm: the pick moves at PerFileScoring, so Stage-4 parquets cannot be reused and every arm is a full
-pipeline from mzML.
+**20-file SEA-AD arm, pass-1 (the cohort we understand):**
+
+| | default | PICK_LDA | delta |
+|---|---|---|---|
+| RUN scope true FDP @ 1% q | 3.918% | 3.896% | better |
+| RUN disc @ matched 1% TRUE | 46,223 | 45,249 | **-974 (-2.1%)** |
+| EXP scope true FDP @ 1% q | 0.876% | 0.778% | better |
+| EXP disc @ matched 1% TRUE | 46,496 | 44,860 | **-1,636 (-3.5%)** |
+| `modelComposite` (target-decoy delta-mu) | 0.1565 | 0.1315 | **-16.0%** |
+| exp-accepted / run-accepted | 77.1% | 73.2% | -3.9 pts |
+| per-file targets | 608,520 | 605,407 | -0.5% (8 up, 12 down) |
+| entrapment / target | 0.371% | 0.361% | -0.010 pts |
+
+Note `-LinkFrom` is UNAVAILABLE for any PICK_LDA arm: the pick moves at PerFileScoring, so Stage-4
+parquets cannot be reused and every arm is a full pipeline from mzML (~2 h per 20-file arm here).
+
+### HEADLINE: PICK_LDA never wins, in any cell measured
+
+| arm | delta disc @ matched 1% TRUE |
+|---|---|
+| Stellar, library decoys (3f) | -0.3% |
+| Astral, library decoys (3f) | -0.7% |
+| Stellar, generated decoys (3f) | -1.3% |
+| SEA-AD 20-file, run scope | -2.1% |
+| SEA-AD 20-file, experiment scope | -3.5% |
+
+**Five comparisons, three datasets, two decoy sources, two scopes - all negative, and the loss
+grows with cohort size.** Every arm is also slightly MORE conservative on calibration, which the
+matched-TRUE accounting already credits it for; the negative is what remains after that credit.
+
+**Consequence for this TODO's default decision.** The planned coordinated golden re-baseline was to
+flip protein-compact + **LDA-pick** + frozen-model together. On this evidence the LDA-pick
+component costs sensitivity everywhere it can be measured. It should be split out of that bundle
+and decided on its own evidence, not carried along with the other two.
+
+### A SECOND PRE-REGISTERED HYPOTHESIS, FALSIFIED (wrong sign)
+
+To explain the -16% `modelComposite`, I proposed: Carafe LIBRARY decoys carry their own library
+spectra, so a cosine-led pick lifts decoy candidates as much as targets and compresses separation;
+therefore PICK_LDA should do BETTER under GENERATED decoys, which have no real spectrum to score a
+cosine against. Ran it (same dataset, same entrapment, only the decoy source changes):
+**library -0.3% vs generated -1.3% - four times WORSE, the opposite sign.** Hypothesis dead.
+
+Both of tonight's failed predictions came from the same bad habit: reasoning about what a scoring
+change OUGHT to do (from weight magnitudes, then from the decoy channel) instead of measuring what
+it DID. Treat any mechanism story about the pick model as a lead until a cell confirms it.
+
+**The -16% model degradation is therefore OPEN, not explained.** Next candidate worth testing:
+the pick model was trained to select the CORRECT peak, but the downstream SVM needs SEPARABLE
+peaks - and intensity, while a weak per-candidate correctness cue, may proxy measurement quality
+(brighter peaks give cleaner coelution and cosine estimates), so dropping its weight to ~0.004 may
+hand the SVM noisier features across the board. Testable offline from an
+`OSPREY_PICK_DUMP_CANDIDATES` dump; no new search required.
 
 **Tooling**: `ai/.tmp/picklda_compare.py` A/Bs two runs on the mdiag at BOTH pass-1 scopes (run and
 experiment), calibration before sensitivity, plus per-file targets and entrapment. Validated
