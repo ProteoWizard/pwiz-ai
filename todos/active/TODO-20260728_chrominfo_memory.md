@@ -591,6 +591,40 @@ match as the decider, and use `UserSet` only to skip work for `TRUE`/`IMPORTED`,
 match. Keying on `UserSet.FALSE` alone would exclude `REINTEGRATED` and `MATCHED` peaks, which are
 candidate peaks - and reintegrated documents are the large ones this work is for.
 
+**Quantification reads the columnar results** (2026-07-31). `TransitionResults` gained `Truncated`
+and `EmptyPeaks`, both through `MaybeConstant`. `Truncated` is tri-state because
+`TransitionChromInfo.IsTruncated` is backed by two flag bits, so null is a state of its own.
+`EmptyPeaks` was the one the developer had not expected: `TransitionChromInfo.IsEmpty` is
+`EndRetentionTime == 0`, quantification counts an empty peak as missing and a zero area peak as
+measured, and `Areas` is zero either way, so it cannot be derived. Both are per position rather
+than on `CustomPeak`, because quantification runs over the whole document and must not read a
+chromatogram to get them.
+
+`QuantifiablePeak` - file, area, truncated, empty - is what `PeptideQuantifier` and
+`NormalizationData` read now, through `TransitionResults.GetQuantifiablePeaks(replicateIndex)`.
+The optimization step filtering went away with it, since the columnar form holds step zero only.
+Q values come from `TransitionGroupResults`, where the scores already were. Quantifying a document
+now reads no chromatograms.
+
+**`SrmDocument.UpdateResultsSummaries` is gone** (2026-07-31), along with both call sites -
+`OnChangingChildren` and `ReadXml`. Nothing keeps what it worked out any more: it is either in the
+columnar results already or read back on demand through a `MoleculeResults`.
+
+It was also doing the work twice. `ChangeSettingsInternalOrThrow` calls `ChangeSettings` on every
+molecule and then calls `ChangeChildren`, which came straight back through `OnChangingChildren`
+into `UpdateResultsSummaries` to call `ChangeSettings` on every molecule again. The
+`dictPeptideIdPeptide` guard only skipped nodes reference equal to the *previous* document's, which
+after a settings change they never are.
+
+Verified rather than assumed: `Test.dll` gives **22 failures with the removal and 22 without it**,
+the same tests either way, and the results tests are unchanged. Not yet run: `TestData.dll` and the
+functional suites.
+
+Note this leaves nothing driving `ConvertResults`, so `ChosenPeakIndexes` is populated only where a
+settings pass still reaches `UpdateResults`. Giving conversion an explicit home - run it when the
+.skyd finishes loading, which is what the developer described - is now the next thing the memory
+saving depends on.
+
 `SameScoredPeaks` currently starts with an unconditional `return true;` (the developer's
 workaround for a StackOverflowException). Underneath it, `GetScoredPeaks` now yields
 `ImmutableList` rather than a bare sequence: `SequenceEqual` compares the elements - whole lists -
