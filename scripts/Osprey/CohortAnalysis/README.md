@@ -46,6 +46,26 @@ Harvest and reporting:
 - **`make_report.py`** - builds the self-contained interactive HTML summary (no CDN; data
   embedded). This is what produced the report committed beside the TODO.
 
+Two-arm A/B (any pair of runs, not just cohort arms):
+
+- **`mdiag_ab.py <baseline_run_dir> <variant_run_dir>`** - A/Bs two runs on the pass-1
+  model-diagnostics at BOTH scopes, calibration before sensitivity, plus `modelComposite`,
+  per-file targets and per-file entrapment. **Report both scopes**: a change that acts at
+  PerFileScoring (peak picking) shows up at RUN scope, while one that acts after aggregation
+  (mean-best-N) leaves run scope untouched - quoting only the experiment number confuses "the
+  scoring got better" with "aggregation liked the result". Matched-true-FDP uses the same
+  convention as `../../../.tmp/extract_pass1_fdp.py` (MAX qualifying grid point, because the
+  curve is noise at tiny counts), so numbers splice into the existing cohort series. Its
+  "experiment-accepted / run-accepted" ratio is NOT the union-efficiency statistic in
+  TODO-20260728 - do not mix them.
+- **`pick_disagreement.py <file.pick_candidates.tsv> [astral|stellar]`** - how often the learned
+  pick model actually chooses a different candidate than the default product form, split
+  target vs decoy. Needs ONE run with `OSPREY_PICK_DUMP_CANDIDATES=1`: both argmaxes are
+  recomputed offline from the same candidate set, so there is no confound from two arms having
+  scored different populations. Streams the (large) dump group by group. Measured 2026-07-31 on
+  one Astral file: the two picks differ on ~44% of contested precursors while the discovery set
+  moves under 1% - a ceiling on what pick-model tuning can buy.
+
 Mechanism:
 
 - **`mechanism.py [--plot]`** - the core one. Union-FDP growth as files accumulate, the marginal
