@@ -459,3 +459,61 @@ theorising about a hang.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260728_chrominfo_memory.md` before starting work.
+
+### 2026-07-30 - Session 5
+
+**The TestRescore hang is fixed.** `TestRescore` passes again in 20 seconds. The other four
+rescore tests (`TestRescoreImportDocument`, `TestRescoreSimultaneous`, `TestRescoreInPlace`,
+`TestRescoreRawChromatograms`) pass as well, as do the five verification tests from the handoff.
+
+**Where the exception went.** The previous session's guess - that the chromatogram loader catches
+and retries forever - was wrong, and the diagnostic was worth the two build cycles it cost.
+`Loader.FinishLoad` does rethrow the `ObjectDisposedException`, because
+`ExceptionUtil.IsProgrammingDefect` is true for it, but the throw happens on the
+**`Commit loaded files`** thread - the `QueueWorker` inside `FileLoadCompletionAccumulator`.
+`QueueWorker.Consume` catches everything into its `Exception` property and calls `Abort()`, and
+nobody ever reads that property. So the commit worker stops, no further completions are
+committed, the document never becomes loaded, and `WaitForDocumentLoaded` waits forever. A
+silent worker abort, not a retry loop. `FinishLoadSynch`'s `do/while` was never looping: it
+printed "pass 1" on every call.
+
+**The fix is in `ChromatogramCache.CallWithStream`.** It handed out `ReadStream.Stream` and read
+from it without holding anything that stops `CloseRemovedStreams` disposing it underneath -
+`PooledFileStream.Disconnect` takes the connection pool's monitor and the stream's write lock,
+neither of which `CallWithStream`'s `lock (ReadStream)` excludes. It now retries once on
+`ObjectDisposedException`, which either reconnects to the file or, when the file on disk has been
+replaced, throws the `FileModifiedException` from `PooledFileStream.Connect` that
+`CalcResultsForReplicate` and `UpdateResults` already catch and fall back from. Converting the
+race into the signal the existing handlers were built for, rather than inventing a new one.
+
+Rejected: taking `ReadStream.ReaderWriterLock.GetReadLock()` around the read, the way
+`ReadDataForAll` does. It is the tidier fix but it nests the connection pool's monitor inside the
+read lock, while `ConnectionPool.DisconnectWhile` takes them the other way round - a lock order
+inversion. Worth revisiting deliberately rather than as a side effect of this branch.
+
+**The silent swallow is fixed too**, at the developer's direction, on this branch rather than its
+own. `FileLoadCompletionAccumulator.Commit` is the one place every batch of loaded files is handed
+to the loader, from either the "Commit loaded files" worker or the "Load file" worker when there
+is nothing to accumulate. Both are `QueueWorker` threads, which put anything thrown into an
+`Exception` property nothing reads. It now catches and reports the failure **as a file which
+could not be loaded** - a `Completion` carrying `ChangeErrorException` - so `FinishCacheBuild`
+routes it to `MeasuredResults.Loader.Fail`, and from there to the load monitor. The user sees the
+ordinary "Failed importing results into '<document>'" error with the exception attached, and
+committing goes on to the next batch instead of stopping for the session.
+
+Not `Program.ReportException`, which is for actual defects in Skyline; most of what can arrive
+here is a user-actionable load failure. Verified by backing the `CallWithStream` fix out again:
+the hang became a `MessageDlg` reading "Failed importing results into 'Rat_plasma.sky'. Cannot
+access a closed file." and a test failure in 17 seconds.
+
+That verification also turned up a **second** racing read the first stack trace never showed:
+`MoleculeResults.ConvertResults` -> `FindChosenPeakIndex` -> `IndexOfPeak`
+(`MoleculeResults.cs:383`), reached from `UpdateTransitionGroupNode`, distinct from the
+`CalcResultsForReplicate` path. Both are covered, because the fix is at the read boundary rather
+than at either call site. Worth remembering that this branch has more than one place where the
+settings pass reads a chromatogram that may be swapped underneath it.
+
+**Known failing**: `TestCandidatePeaks` only, unchanged - the in-session peak edit does not
+survive `UpdateResults` (expected 60, got 109.88 at `CandidatePeakTest.cs:92`). That is the next
+job: `UpdateResults` should rebuild from `ChosenPeakIndexes`/`CustomPeaks` rather than re-picking
+peaks from the .skyd.
