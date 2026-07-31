@@ -11,7 +11,7 @@ the experiment number would confuse "the pick got better" with "aggregation like
 Calibration is reported before sensitivity on purpose: a discovery count is only meaningful once
 the true FDP behind it is known.
 
-Usage: python picklda_compare.py <baseline_run_dir> <variant_run_dir>
+Usage: python mdiag_ab.py <baseline_run_dir> <variant_run_dir>
 """
 import json
 import os
@@ -37,7 +37,10 @@ def load_mdiag(run_dir):
 
 
 def view(d, scope, which_pass=1):
-    for v in d.get('fdpViews', []):
+    # `or []`, not a default: the producer writes an explicit null (FdpViews is only assigned
+    # when HasEntrapment, and both serializers use NullValueHandling.Include), so a
+    # non-entrapment run yields "fdpViews":null and `.get(k, [])` would return None.
+    for v in (d.get('fdpViews') or []):
         if v.get('pass') == which_pass and v.get('scope') == scope:
             return v
     return None
@@ -109,7 +112,8 @@ def summarize(run_dir):
         if v is None:
             continue
         disc, fdp = at_q(v)
-        out[scope] = {'disc_at_q': disc, 'true_fdp_at_q': fdp, 'disc_at_true': at_true_fdp(v)}
+        out[scope] = {'disc_at_q': disc, 'true_fdp_at_q': fdp, 'disc_at_true': at_true_fdp(v),
+                      'ratio': v.get('entrapmentRatio')}
     per_file = d.get('perFile') or []
     out['perFile'] = {r.get('file'): r.get('targets') for r in per_file if isinstance(r, dict)}
     # Per-file entrapment/target ratio is a file-level calibration readout that needs no oracle
@@ -129,7 +133,25 @@ def main():
     print('baseline : %s  (%s files)' % (a['name'], a['files']))
     print('variant  : %s  (%s files)' % (b['name'], b['files']))
     if a['files'] != b['files']:
-        print('  !! file counts differ - these arms are NOT comparable')
+        raise SystemExit('  !! file counts differ (%s vs %s) - these arms are NOT comparable.\n'
+                         '     Refusing to print deltas: the rows get copied into TODO tables and '
+                         'the warning does not travel with them.' % (a['files'], b['files']))
+    # The entrapment ratio r sets the FDP scale: combined = (1 + 1/r) * n_p / (n_t + n_p). Two arms
+    # searched against libraries with different r are thresholded on incomparable curves, so a
+    # "matched 1% TRUE" delta would be measuring the library difference, not the code change.
+    for scope in ('run', 'experiment'):
+        ra = (a.get(scope) or {}).get('ratio')
+        rb = (b.get(scope) or {}).get('ratio')
+        if ra is not None and rb is not None and abs(ra - rb) > 1e-9:
+            raise SystemExit('  !! entrapment ratio differs at %s scope (%s vs %s) - the FDP scales '
+                             'are incomparable.' % (scope, ra, rb))
+    print('')
+    print('NOTE: the mdiag fdpViews curves are THINNED for charting (<=350 points below q=2%,')
+    print('      120 in the tail), so nTargetAccepted is quantized - typically ~130-200 discoveries')
+    print('      per retained point at these cohort sizes, and each arm is thinned on its own grid')
+    print('      so the error does NOT cancel in the delta. A delta of a few hundred is inside the')
+    print('      quantization; for those, read the un-thinned per-precursor FDRBench fdp.csv')
+    print('      instead (Run-FdrBench.ps1 Get-FdrBenchCalibration).')
     print('')
 
     for scope in ('run', 'experiment'):
@@ -153,7 +175,8 @@ def main():
     print('  modelComposite (target-decoy delta-mu) : %.4f  ->  %.4f   %s'
           % (a['modelComposite'] or 0, b['modelComposite'] or 0,
              pct(b['modelComposite'], a['modelComposite'])))
-    if 'run' in a and 'run' in b and a['run']['disc_at_q'] and b['run']['disc_at_q']:
+    have_both = all(s in x for x in (a, b) for s in ('run', 'experiment'))
+    if have_both and a['run']['disc_at_q'] and b['run']['disc_at_q']:
         ea = 100.0 * a['experiment']['disc_at_q'] / a['run']['disc_at_q']
         eb = 100.0 * b['experiment']['disc_at_q'] / b['run']['disc_at_q']
         print('  experiment-accepted / run-accepted     : %7.1f%%  ->  %7.1f%%   %+.1f pts'

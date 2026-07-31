@@ -54,17 +54,28 @@ Two-arm A/B (any pair of runs, not just cohort arms):
   PerFileScoring (peak picking) shows up at RUN scope, while one that acts after aggregation
   (mean-best-N) leaves run scope untouched - quoting only the experiment number confuses "the
   scoring got better" with "aggregation liked the result". Matched-true-FDP uses the same
-  convention as `../../../.tmp/extract_pass1_fdp.py` (MAX qualifying grid point, because the
-  curve is noise at tiny counts), so numbers splice into the existing cohort series. Its
+  convention as `Run-FdrBench.ps1`'s `Get-FdrBenchCalibration` (:217) - MAX qualifying grid point,
+  because the curve is noise at tiny counts - so numbers splice into the existing cohort series.
+  **It adds one thing the references do not have**: it returns `n/a` instead of a number when the
+  only qualifying points are low-count noise, so a weak arm shows a blank where the committed
+  cohort series would show a value. **The mdiag curves are also THINNED** (470 points; ~130-200
+  discoveries per point at these cohort sizes), so a delta of a few hundred is inside the
+  quantization - the tool prints that warning on every run. Its
   "experiment-accepted / run-accepted" ratio is NOT the union-efficiency statistic in
   TODO-20260728 - do not mix them.
 - **`pick_disagreement.py <file.pick_candidates.tsv> [astral|stellar]`** - how often the learned
   pick model actually chooses a different candidate than the default product form, split
   target vs decoy. Needs ONE run with `OSPREY_PICK_DUMP_CANDIDATES=1`: both argmaxes are
   recomputed offline from the same candidate set, so there is no confound from two arms having
-  scored different populations. Streams the (large) dump group by group. Measured 2026-07-31 on
-  one Astral file: the two picks differ on ~44% of contested precursors while the discovery set
-  moves under 1% - a ceiling on what pick-model tuning can buy.
+  scored different populations. Streams the (large) dump group by group, uses the extractor's
+  IEEE-754 total-order tie-break (Python's `max` treats -0.0 == +0.0, which is exactly what
+  `PeakDataExtractor.cs:361-370` fixes, and 24% of rows have a zero intensity term), and validates
+  its own replication against the dump's `is_picked` column - refusing to print a rate on any
+  mismatch. Measured 2026-07-31 on one Astral file: the two picks differ on **~44% of contested
+  precursors** (target 43.2%, decoy 45.5%) while discoveries move only about **1-3%** across the
+  seven arms in TODO-20260727 (-0.3% to -3.5%, one +1.8%) - a ceiling on what pick-model tuning
+  can buy. **Do not quote "under 1%"**: that is true only of the single Astral 3-file arm this
+  dump came from.
 
 Mechanism:
 

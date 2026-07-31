@@ -16,9 +16,19 @@ good-looking peak, which compresses target-decoy separation and would explain a 
 model without any appeal to library spectra.
 
 Usage: python pick_disagreement.py <file.pick_candidates.tsv> [astral|stellar]
+
+VALIDATION: the dump's own `is_picked` column records the argmax the run actually took, so on a
+DEFAULT-pick dump argmax(product) must reproduce it exactly. This script checks that and refuses to
+print a rate if it does not - the check is free, it sits in the same file, and it catches a wrong
+tie-break, a transposed feature column, or the wrong instrument model, none of which are otherwise
+visible. (It caught exactly that: an earlier version used Python's `max`, whose -0.0 == +0.0
+blindness is the thing PeakDataExtractor.cs:361-369 deliberately fixed with IEEE-754 total order.
+24.3% of rows in a real Astral dump have ln_intensity exactly 0, so the product is +/-0.0 and the
+tie-break decides; it mismatched is_picked on 80,018 of 3.3M groups and shifted the published
+rate by ~0.5 points.)
 """
+import struct
 import sys
-from collections import defaultdict
 
 # Verbatim from Osprey.Scoring/PickLdaModel.cs:76-84 (weights, means, scales), feature order
 # coelution, ln_intensity, rt_penalty, median_polish.
@@ -45,14 +55,32 @@ def product_score(feats):
     return feats[0] * feats[2] * feats[1]
 
 
+def total_order_key(x):
+    """IEEE-754 total order as a sortable integer, matching Osprey's TotalOrder.Greater.
+
+    PeakDataExtractor.cs:370 picks with TotalOrder.Greater, NOT `>`, because when intensityWeight
+    is 0 the product is -0.0 or +0.0 depending on the sign of coelution, and `>` treats those as
+    equal - which produced divergent picks vs Rust. Python's max() has the same blindness, so the
+    comparison has to go through the bit pattern: negatives invert, positives set the sign bit,
+    giving -0.0 < +0.0.
+    """
+    i = struct.unpack('<Q', struct.pack('<d', x))[0]
+    return (~i & 0xFFFFFFFFFFFFFFFF) if i & 0x8000000000000000 else (i | 0x8000000000000000)
+
+
 def main():
     if len(sys.argv) < 2:
         raise SystemExit(__doc__)
     path = sys.argv[1]
-    mdl = MODELS[(sys.argv[2] if len(sys.argv) > 2 else 'astral').lower()]
+    model_name = (sys.argv[2] if len(sys.argv) > 2 else 'astral').lower()
+    if model_name not in MODELS:
+        raise SystemExit('unknown model %r; expected one of: %s\n%s'
+                         % (model_name, ', '.join(sorted(MODELS)), __doc__))
+    mdl = MODELS[model_name]
 
     stats = {'target': {'n': 0, 'multi': 0, 'disagree': 0},
              'decoy': {'n': 0, 'multi': 0, 'disagree': 0}}
+    oracle = {'checked': 0, 'mismatch': 0}
 
     def finish(key, cands):
         """Score one precursor's candidate set. Called once per group as the file streams."""
@@ -64,11 +92,17 @@ def main():
         if len(cands) < 2:
             return  # One candidate: no choice to make, so no rank function can differ.
         st['multi'] += 1
-        # argmax with the same first-wins tie-break the extractor uses (strict >).
-        best_p = max(cands, key=lambda c: (product_score(c[1]), -c[0]))
-        best_l = max(cands, key=lambda c: (lda_score(c[1], mdl), -c[0]))
+        # argmax with the extractor's first-wins total-order tie-break (see total_order_key).
+        best_p = max(cands, key=lambda c: (total_order_key(product_score(c[1])), -c[0]))
+        best_l = max(cands, key=lambda c: (total_order_key(lda_score(c[1], mdl)), -c[0]))
         if best_p[0] != best_l[0]:
             st['disagree'] += 1
+        # Free oracle: on a default-pick dump the product argmax IS what the run picked.
+        picked = [c[0] for c in cands if c[2]]
+        if len(picked) == 1:
+            oracle['checked'] += 1
+            if picked[0] != best_p[0]:
+                oracle['mismatch'] += 1
 
     # PickCandidateDump.Flush writes rows ordered by (base_id, target-before-decoy, cand_index),
     # so consecutive rows sharing a key ARE one precursor's candidate set. Streaming group by
@@ -87,10 +121,26 @@ def main():
                 cur_key, cur = key, []
             cur.append((int(p[col['cand_index']]),
                         (float(p[col['coelution']]), float(p[col['ln_intensity']]),
-                         float(p[col['rt_penalty']]), float(p[col['median_polish']]))))
+                         float(p[col['rt_penalty']]), float(p[col['median_polish']])),
+                        p[col['is_picked']].strip().lower() in ('1', 'true')))
         finish(cur_key, cur)
 
     print('candidate dump: %s' % path)
+    print('model         : %s (weights from PickLdaModel.cs; NOT recorded in the TSV, so this is'
+          % model_name)
+    print('                asserted by the caller - a Stellar dump scored with astral weights')
+    print('                still prints a plausible-looking rate)')
+    if oracle['checked']:
+        bad = oracle['mismatch']
+        print('oracle check  : product argmax vs the dump\'s own is_picked: %d/%d mismatched'
+              % (bad, oracle['checked']))
+        if bad:
+            print('')
+            print('  REFUSING to report a rate. On a DEFAULT-pick dump these must agree exactly.')
+            print('  A mismatch means the replication is wrong (tie-break, feature column order,')
+            print('  or the wrong model) OR the dump came from a PICK_LDA run, in which case the')
+            print('  product argmax is not what was picked and this comparison is meaningless.')
+            raise SystemExit(2)
     print('')
     for side in ('target', 'decoy'):
         st = stats[side]

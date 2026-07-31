@@ -495,8 +495,9 @@ Two Copilot inline comments, both to FIX (real + trivial). Turnkey:
 
 ### 2026-07-31 (night session) - PICK_LDA measurement started: a small NEGATIVE on both 3-file entrapment sets
 
-Measurement only; no default flipped, no golden rebaselined. Full session record:
-`ai/.tmp/handoff-20260731_meanN_picklda.md`.
+Measurement only; no default flipped, no golden rebaselined. This TODO is the durable record;
+`ai/.tmp/handoff-20260731_meanN_picklda.md` is the session-to-session handoff and is GITIGNORED
+(see CRITICAL-RULES.md) - do not treat it as the source of truth.
 
 **What PICK_LDA is, verified against source** (`Osprey.Scoring/PeakDataExtractor.cs:319-339`,
 `Osprey.Scoring/PickLdaModel.cs:76-84`) rather than taken from a prior summary. Both paths compute
@@ -634,11 +635,38 @@ depends on which pass-2 mode is in force, so bundling it with a pass-2 change me
 attributed. Split LDA-pick out and decide it on its own evidence, against a fixed pass-2 mode.
 
 **Convention warning for anyone extending this table.** `disc @ 1% TRUE` is
-`max(n_t)` over rows with `combined_fdp <= 0.01`, exactly as `Run-FdrBench.ps1`'s `Get-FdpMetrics`
-computes it - that is what makes these cells comparable. That script's `disc @ 1% q` is a ROW COUNT
-(`($atQ | Measure-Object).Count`), not `max(n_t)`, and its FDP-at-1%-q is read off the LAST row
-sorted by q, not the max-n_t row. An ad-hoc reimplementation that uses `max(n_t)` for the q column
-gives 60,700 where the script gives 61,715 on the same file. Copy the script's semantics.
+`max(n_t)` over rows with `combined_fdp <= 0.01`, exactly as `Run-FdrBench.ps1`'s
+**`Get-FdrBenchCalibration`** (:217) computes it - that is what makes these cells comparable. That
+function's `disc @ 1% q` is a ROW COUNT (`($atQ | Measure-Object).Count`), not `max(n_t)`, and its
+FDP-at-1%-q is read off the LAST row sorted by q, not the max-n_t row. An ad-hoc reimplementation
+using `max(n_t)` for the q column gives 60,700 where the function gives 61,715 on the same file.
+Copy its semantics. (An earlier revision of this paragraph named the function `Get-FdpMetrics`,
+which does not exist anywhere in the file - corrected 2026-07-31 after a code review flagged it as
+ungreppable.)
+
+### THINNING CAVEAT - which of these cells are safe to quote
+
+**The mdiag `fdpViews` curves are THINNED for charting** (`ModelDiagnosticsData.cs` `ThinFdpIndices`:
+<=350 points below q=2% + 120 in the tail, 470 total), so `nTargetAccepted` is quantized. Measured
+on these very runs: median stride **148** discoveries per retained point at 20 files (experiment
+scope), **127** at 6 files. Each arm is thinned on its own grid, so the error does NOT cancel in a
+delta.
+
+| cell | source | delta in strides | verdict |
+|---|---|---|---|
+| 20f pass-1 exp -1,636 | mdiag (thinned) | ~11 | safe |
+| 20f pass-1 run -974 | mdiag (thinned) | ~5 | safe |
+| **6f pass-1 exp -141 (-0.4%)** | mdiag (thinned) | **~1.1** | **INSIDE quantization - do not quote** |
+| all pass-2 cells, all 3-file cells | FDRBench `fdp.csv` (per-precursor, NOT thinned) | n/a | safe |
+
+**The conclusions are unaffected**, because the sign-flip falsification rests on the pass-2 pair
+(6f **-1.1%** vs 20f **+1.8%**, both from un-thinned `fdp.csv`) and on `modelComposite` (a scalar,
+not a curve). Only the 6f pass-1 number is unreliable and it is not load-bearing for anything.
+**For any delta of a few hundred discoveries, read `fdp.csv` and not the mdiag curve.**
+
+Worth checking against TODO-20260728's mean-N cohort series, which is entirely mdiag-derived: its
+smallest gain (+1.8% ~ 837 discoveries) is ~5.7 strides, so that series survives - but it is a
+tighter margin than anyone realised when it was recorded.
 
 ### A SECOND PRE-REGISTERED HYPOTHESIS, FALSIFIED (wrong sign)
 
@@ -655,16 +683,27 @@ it DID. Treat any mechanism story about the pick model as a lead until a cell co
 ### MEASURED: the pick relocates ~44% of peaks and it barely matters
 
 One Astral file with `OSPREY_PICK_DUMP_CANDIDATES=1`, then both argmaxes recomputed OFFLINE from the
-same candidate set (`ai/.tmp/pick_disagreement.py`). One run, no second search, so there is no
-confound from two arms having scored different populations:
+same candidate set (`ai/scripts/Osprey/CohortAnalysis/pick_disagreement.py`). One run, no second
+search, so there is no confound from two arms having scored different populations. Verbatim output:
 
 ```
-target  precursors 2,152,584   with >1 candidate 1,679,273 (78.0%)
-        product vs LDA pick DIFFERS on 733,267 = 43.7% of contested
-decoy   precursors 2,096,478   with >1 candidate 1,622,739 (77.4%)
-        product vs LDA pick DIFFERS on 746,200 = 46.0% of contested
-decoy - target disagreement: +2.3 pts
+oracle check  : product argmax vs the dump's own is_picked: 0/3301987 mismatched
+
+target  precursors 2152584   with >1 candidate 1679273 (78.0%)
+        product vs LDA pick DIFFERS on 724950  = 43.2% of contested, 33.7% of all
+decoy   precursors 2096478   with >1 candidate 1622739 (77.4%)
+        product vs LDA pick DIFFERS on 737577  = 45.5% of contested, 35.2% of all
+
+decoy-minus-target disagreement on contested precursors: +2.3 pts
 ```
+
+**These numbers were corrected on 2026-07-31** from 43.7% / 46.0%. The first version used Python's
+`max`, which treats -0.0 == +0.0; `PeakDataExtractor.cs:361-370` deliberately uses IEEE-754 total
+order there precisely because a zero `ln_intensity` makes the product +/-0.0 and the tie-break
+decides the pick. 24.3% of rows in this dump have `ln_intensity` exactly 0, and the wrong tie-break
+mis-picked 80,018 of 3.3M groups. The script now validates against the dump's own `is_picked`
+column - a free oracle that was sitting unused in the same file - and REFUSES to print a rate on
+any mismatch. It now reproduces the run's actual picks on **0/3,301,987 mismatched**.
 
 **This kills my OTHER explanation.** I had said the effect was small because the argmax rarely
 changes despite different weights. It changes on ~44% of contested precursors. So:
@@ -697,7 +736,7 @@ peaks - and intensity, while a weak per-candidate correctness cue, may proxy mea
 hand the SVM noisier features across the board. Testable offline from an
 `OSPREY_PICK_DUMP_CANDIDATES` dump; no new search required.
 
-**Tooling**: `ai/.tmp/picklda_compare.py` A/Bs two runs on the mdiag at BOTH pass-1 scopes (run and
+**Tooling**: `ai/scripts/Osprey/CohortAnalysis/mdiag_ab.py` A/Bs two runs on the mdiag at BOTH pass-1 scopes (run and
 experiment), calibration before sensitivity, plus per-file targets and entrapment. Validated
 against the known mean-N A/B before use - which caught two bugs in it, including a first-crossing
 scan for matched-true FDP that returned 1 (the curve is noise at tiny counts; the correct

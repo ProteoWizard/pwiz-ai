@@ -8,7 +8,7 @@
 - **Status**: In Progress
 - **Parent issue**: [#4484](https://github.com/ProteoWizard/pwiz/issues/4484) (pass-2 FDR default
   decision — this is the honest sensitivity lever vs. the invalid transfer-compete/protein-compact)
-- **PR**: (pending)
+- **PR**: [#4509](https://github.com/ProteoWizard/pwiz/pull/4509) (open 2026-07-31)
 - **Requester**: Mike + Brendan (Osprey developers) — NO credit line.
 
 ## Objective
@@ -192,8 +192,9 @@ rebase (delete-vs-modify on all 425 FDR lines). Re-landed hunk-by-hunk as ONE co
 | streaming==resident tests | `Osprey.Test/FdrTest.cs` |
 | aggregation/floor tests | `Osprey.Test/MeanBestNAggregationTest.cs` (renamed from `PercolatorMeanBest2Test.cs`) |
 
-**Port fidelity was verified mechanically, not by eye** (`ai/.tmp/verify-port.ps1` pattern, script
-kept in the session scratchpad): normalize both sides' added lines by stripping the qualifiers the
+**Port fidelity was verified mechanically, not by eye** (`ai/scripts/Osprey/Verify-PortFidelity.ps1`, committed
+2026-07-31 - it had been left in the disposable session scratchpad, which made the sole evidence
+for this port-fidelity claim unreproducible): normalize both sides' added lines by stripping the qualifiers the
 decomposition forced onto formerly intra-class calls (`TargetDecoyCompetition.`,
 `PercolatorQValues.`, `PercolatorSampling.`, `PercolatorEntry.`, `StreamingFdr.`), collapse
 whitespace, diff the multisets. Residual = comment re-wrapping plus exactly four intended deltas:
