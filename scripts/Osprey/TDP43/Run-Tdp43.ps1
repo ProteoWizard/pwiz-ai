@@ -66,6 +66,7 @@ param(
     [int]$EveryNthFile = 1,
     [string]$ExcludePattern,
     [int]$Threads = 30,
+    [int]$ParallelFiles = 0,
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
     [string]$Tag = '',
     [string]$DataDir,

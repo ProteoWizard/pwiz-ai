@@ -162,6 +162,13 @@ function Invoke-OspreyDatasetRun {
         [int]$EveryNthFile = 1,
         [string]$ExcludePattern,
         [int]$Threads = 30,
+        # OUTER parallelism: how many input files are scored at once. 0 leaves it off
+        # (Osprey's default, one file at a time). NOTE that --threads is a PER-FILE budget
+        # DIVIDED across concurrent files, so this does not add cores - it overlaps the
+        # per-file work that does not saturate them. On this dataset calibration (31% of
+        # per-file scoring time) and the parquet write (14%) are the candidates; the main
+        # search (55%) should be roughly throughput-neutral.
+        [int]$ParallelFiles = 0,
         [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
         [string]$Tag = '',
         [string]$DataDir,
@@ -315,6 +322,7 @@ function Invoke-OspreyDatasetRun {
     if ($FdrBenchPass -ne 'none') {
         $cliArgs += @('--fdrbench', (Join-Path $OutDir 'fdrbench.tsv'), '--fdrbench-pass', $FdrBenchPass)
     }
+    if ($ParallelFiles -gt 0) { $cliArgs += @('--parallel-files', "$ParallelFiles") }
     if ($CacheDir) { $cliArgs += @('--cache-dir', $CacheDir) }
     if ($DecoyMode -eq 'libdecoy') { $cliArgs += @('--decoys-in-library', '--decoy-pairing-manifest', $manifest) }
     $mdiag = -not $NoModelDiagnostics
@@ -360,6 +368,11 @@ function Invoke-OspreyDatasetRun {
     }
     Write-Host ("  library  : {0}" -f $libraryPath)
     Write-Host ("  arm      : {0}  r={1}" -f $DecoyMode, $Ratio)
+    Write-Host ("  files at once: {0}   threads {1}{2}" -f
+                $(if ($ParallelFiles -gt 0) { $ParallelFiles } else { '1 (sequential)' }), $Threads,
+                $(if ($ParallelFiles -gt 1) {
+                    " -> ~$([int]($Threads / $ParallelFiles)) per file (--threads is DIVIDED across them)" }
+                  else { '' }))
     Write-Host ("  pass 2   : {0}   fdrbench pass {1}   model-diagnostics {2}" -f
                 $Pass2Mode, $FdrBenchPass, $(if ($mdiag) { 'on' } else { 'OFF' }))
     # Nothing Osprey logs records the pick model, so this banner line and the run.log START
@@ -435,7 +448,8 @@ function Invoke-OspreyDatasetRun {
 
     $log = Join-Path $OutDir 'run.log'
     ("[{0}] START dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
-     "picklda=$([bool]$PickLda) files=$($inputs.Count) threads=$Threads mdiag=$mdiag " +
+     "picklda=$([bool]$PickLda) files=$($inputs.Count) threads=$Threads " +
+     "parallelfiles=$ParallelFiles mdiag=$mdiag " +
      "fdrbench=$FdrBenchPass linkfrom='$LinkFrom'") -f (Get-Date -Format s) |
         Set-Content -Path $log
     "Exe: $ospreyExe" | Add-Content -Path $log
@@ -448,7 +462,7 @@ function Invoke-OspreyDatasetRun {
     $exit = $LASTEXITCODE
     $sw.Stop()
     ("[{0}] DONE dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
-     "picklda=$([bool]$PickLda) exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
+     "picklda=$([bool]$PickLda) parallelfiles=$ParallelFiles exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
         Add-Content -Path $log
     Write-Host ("Osprey exited {0} after {1:hh\:mm\:ss}" -f $exit, $sw.Elapsed) `
         -ForegroundColor $(if ($exit -eq 0) { 'Green' } else { 'Red' })
