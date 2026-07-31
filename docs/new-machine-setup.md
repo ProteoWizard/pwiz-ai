@@ -1245,9 +1245,18 @@ environment variable with a fallback:
 named `pwiz`. In multi-checkout layouts the clone is named something else and
 contains `pwiz_tools` directly, so that segment lives inside the `:-` default.
 
-- **Single-clone layout** (one `pwiz/` clone beside `ai/`): do nothing.
-  `PWIZ_LSP_DIR` stays unset and the workspace falls back to
-  `${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools` — the original zero-config behavior.
+- **Single-clone layout** (one `pwiz/` clone beside `ai/`): **set `PWIZ_LSP_DIR` anyway.**
+  The documented zero-config fallback to `${CLAUDE_PROJECT_DIR}/pwiz/pwiz_tools` was
+  **confirmed broken on 2026-07-30** — see the nested-default caveat below. One-time
+  setup, then restart Claude Code from a **new** terminal:
+
+  ```powershell
+  [Environment]::SetEnvironmentVariable("PWIZ_LSP_DIR", "<project root>\pwiz\pwiz_tools", "User")
+  ```
+
+  A User-scope variable is only inherited by processes started afterwards, so the terminal
+  that ran the command — and any Claude Code session already open — will not see it. Verify
+  with `$env:PWIZ_LSP_DIR` in the new terminal before launching.
 - **Multi-checkout layout** (many named clones beside `ai/` — e.g. `BugFix/`,
   `IMoffset/`, `master_clean/` — and no `pwiz/` folder): set `PWIZ_LSP_DIR` to
   that checkout's `pwiz_tools` folder *before* launching Claude Code. Dot-source the
@@ -1270,12 +1279,30 @@ contains `pwiz_tools` directly, so that segment lives inside the `:-` default.
   derives the project root from its own location, so it needs no per-developer
   path edits.
 
-> **Nested-default caveat.** `${VAR:-default}` is documented for `.mcp.json` and
-> LSP config claims parity, but the *nested* `${CLAUDE_PROJECT_DIR}` inside the
-> default is not separately documented. Multi-checkout machines always set
-> `PWIZ_LSP_DIR`, so they are unaffected. If a single-clone machine ever indexes
-> nothing on a bare `claude`, set `PWIZ_LSP_DIR` explicitly (or use `skyclaude`)
-> and confirm the resolved path in the Roslyn log under `ai/.tmp/state/roslyn-logs/`.
+> **Nested-default caveat — CONFIRMED BROKEN, not hypothetical (2026-07-30).**
+> `${VAR:-default}` is documented for `.mcp.json` and LSP config claims parity, but the
+> *nested* `${CLAUDE_PROJECT_DIR}` inside the default is not separately documented — and on a
+> clean single-clone machine (`D:\Dev` with `ai/` + `pwiz/`, plugin v0.5.1) it **did not resolve**.
+> The server started and stayed up, but no workspace was ever loaded. Multi-checkout machines
+> always set `PWIZ_LSP_DIR`, so they were never affected; **single-clone machines are the ones
+> this hits**, which is the opposite of what the previous wording implied.
+>
+> **How it presents** — easy to misread as slow indexing, because the server looks alive:
+>
+> | Signal | Broken (no workspace) | Healthy |
+> |---|---|---|
+> | `findReferences` on `SrmDocument` | ~101 refs, **all in `SrmDocument.cs`** | **3317 refs across 577 files** |
+> | `workspaceSymbol` | "No symbols found in workspace" | resolves |
+> | Working set | flat ~340 MB | climbs to 1.3–3 GB, then plateaus |
+> | CPU | static (8.0 s → 8.2 s over a full minute) | accumulates while indexing |
+> | `ai/.tmp/state/roslyn-logs/` | empty | written |
+>
+> The same-file-only result is the tell: Roslyn serves those from the single open document
+> without any workspace, so a partial answer is not necessarily a partial *index*.
+>
+> **Fix:** set `PWIZ_LSP_DIR` to the full `pwiz_tools` path (see the single-clone bullet above),
+> then relaunch Claude Code from a new terminal. Verified 2026-07-30: the same query went from
+> 101 same-file references to **3317 across 577 files**.
 
 **Memory pressure.** Roslyn LSP on the full pwiz_tools workspace can sit at
 2-3 GB resident. If that becomes a problem, `/plugin disable csharp-lsp@pwiz-lsp`
