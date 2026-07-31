@@ -517,3 +517,83 @@ settings pass reads a chromatogram that may be swapped underneath it.
 survive `UpdateResults` (expected 60, got 109.88 at `CandidatePeakTest.cs:92`). That is the next
 job: `UpdateResults` should rebuild from `ChosenPeakIndexes`/`CustomPeaks` rather than re-picking
 peaks from the .skyd.
+
+### 2026-07-31 - Session 6 (uncommitted)
+
+**The columnar results are now what a precursor has.** `TransitionGroupDocNode.AbbreviatedResults`
+is the authoritative field, and `Results` always reports an empty list per replicate, the way
+`TransitionDocNode.Results` already did. `TransitionGroupResults` gained `ChromInfos` (kept as a
+`Results<TransitionGroupChromInfo>` rather than flattened, so an unconverted reader can be handed
+it unchanged), `IsConverted` and `ChangeChromInfos`, both in `Equals`/`GetHashCode`.
+
+`Results` survives only so unconverted readers still compile and run. It tells them the precursor
+has no peaks - wrong but quiet - and it goes when the last of them is converted.
+
+**`UpdateResultsToEmpty` was the hard part**, and two wrong attempts are worth recording:
+- Its `keepColumnarResults = !HasResults` rested on "where there are chrom infos the columnar
+  results are derived from them", which is exactly what stopped being true. The columnar results
+  are now kept whatever the precursor has.
+- Restoring them wholesale then put back their *old* `ChromInfos` alongside emptied results, so the
+  precursor claimed peaks it no longer had. The faithful translation of the old two-field state is
+  `columnarResults.ChangeChromInfos(empty)`.
+
+Both were found by instrumenting rather than reading: a stack trace printed from `ChangeResults`
+when a non-empty set of areas was about to be replaced by an empty one named
+`UpdateResultsToEmpty` in one run, after a whole session of wrong guesses about it.
+
+**The `MoleculeResults` accessors are now named for what they return** (2026-07-31). The three
+all-replicate getters were `GetTransitionResults`, `GetTransitionGroupResults` and
+`GetPeptideResults`, which read as returning the columnar classes - `TransitionResults` and
+`TransitionGroupResults` are types of their own - when what they return is
+`Results<TransitionChromInfo>` and so on. They are `GetTransitionChromInfos`,
+`GetTransitionGroupChromInfos` and `GetPeptideChromInfos` now, overloaded with the single replicate
+versions on whether a replicate index is passed. "Results" is left to mean the columnar form
+everywhere. Seven call sites, done while it was still cheap; the reader conversion will multiply
+them. Pure rename, verified by the failure counts being identical either side of it.
+
+So the three things a converted reader uses instead of the doc node:
+
+| instead of | use |
+|---|---|
+| `TransitionDocNode.Results` | `MoleculeResults.GetTransitionChromInfos(transitionGroup, transition)` |
+| `TransitionGroupDocNode.Results` | `MoleculeResults.GetTransitionGroupChromInfos(transitionGroup)` |
+| `PeptideDocNode.Results` | `MoleculeResults.GetPeptideChromInfos()` |
+
+**Readers converted so far**: `TransitionGroupResultsCalculator.UpdateTransitionGroupNode` (the
+merge), `GetScoredPeaks`, `PeptideChromInfoListCalculator.AddChromInfoList` (which is what
+aggregates the peptide level and was silently producing nothing), and `MoleculeResultsTest`'s
+`CheckTransitionGroup`, `CountChosenPeakIndexes` and `MoveEveryPeak`. All read
+`AbbreviatedResults?.ChromInfos` now.
+
+**State**: `TestMoleculeResultsMatchTransitionChromInfo` passes. Failing:
+`TestMoleculeResultsWithUserSetPeakBounds`, `TestColumnarResultsRoundTrip`,
+`TestSaveColumnarResults`, `TestChromUI`.
+
+**One open question, and it is semantic rather than mechanical.**
+`TestMoleculeResultsWithUserSetPeakBounds` moves every peak in the document's single replicate and
+then expects *no* precursor to have a chosen peak index, since every peak is now the user's. Five
+still do. `MoveEveryPeak` skips nothing - verified, the diagnostic never fired - so the five are
+assigned by the conversion path after the move, not left behind by the test. Either those five
+moved peaks still match a candidate peak exactly, or `FindChosenPeakIndex` assigns an index for a
+precursor whose transitions have been converted and so have no chrom info to compare. Worth
+settling before trusting `ChosenPeakIndexes` on a document the user has integrated by hand.
+
+`TestColumnarResultsRoundTrip` fails at `Assert.AreNotEqual(0, sharedAreasChecked)`
+(`ColumnarResultsSerializationTest.cs:185`) - no transition areas are riding on their precursor
+any more, which points at the writer's `GetSharedTransitionAreas` rather than at the doc node.
+
+**Still to do**: the reader conversion proper - roughly 20-25 files, largest being `ChromInfoData`,
+`AbstractTransitionResultFinder`, `RefinementSettings`, `ResultRef`, `ComparePeakBoundaries`,
+`PrecursorResult`, `NormalizedValueCalculator`, `DocumentAnnotationUpdater`, the graph panes and
+`PeptideQuantifier` - and then the group conversion itself, which is what actually drops the chrom
+infos and delivers the memory saving. Criterion agreed with the developer: keep the exact boundary
+match as the decider, and use `UserSet` only to skip work for `TRUE`/`IMPORTED`, which can never
+match. Keying on `UserSet.FALSE` alone would exclude `REINTEGRATED` and `MATCHED` peaks, which are
+candidate peaks - and reintegrated documents are the large ones this work is for.
+
+`SameScoredPeaks` currently starts with an unconditional `return true;` (the developer's
+workaround for a StackOverflowException). Underneath it, `GetScoredPeaks` now yields
+`ImmutableList` rather than a bare sequence: `SequenceEqual` compares the elements - whole lists -
+with the default comparer, and a bare `IEnumerable` has no value equality, so the fallback could
+never return true and termination rested entirely on `ReferenceEquals(Results, other.Results)`.
+That is why losing reference stability turned into unbounded recursion.
