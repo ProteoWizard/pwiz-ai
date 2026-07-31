@@ -587,6 +587,44 @@ Both of tonight's failed predictions came from the same bad habit: reasoning abo
 change OUGHT to do (from weight magnitudes, then from the decoy channel) instead of measuring what
 it DID. Treat any mechanism story about the pick model as a lead until a cell confirms it.
 
+### MEASURED: the pick relocates ~44% of peaks and it barely matters
+
+One Astral file with `OSPREY_PICK_DUMP_CANDIDATES=1`, then both argmaxes recomputed OFFLINE from the
+same candidate set (`ai/.tmp/pick_disagreement.py`). One run, no second search, so there is no
+confound from two arms having scored different populations:
+
+```
+target  precursors 2,152,584   with >1 candidate 1,679,273 (78.0%)
+        product vs LDA pick DIFFERS on 733,267 = 43.7% of contested
+decoy   precursors 2,096,478   with >1 candidate 1,622,739 (77.4%)
+        product vs LDA pick DIFFERS on 746,200 = 46.0% of contested
+decoy - target disagreement: +2.3 pts
+```
+
+**This kills my OTHER explanation.** I had said the effect was small because the argmax rarely
+changes despite different weights. It changes on ~44% of contested precursors. So:
+
+**PICK_LDA relocates roughly half the picked peaks and moves the Astral discovery set by under 1%.**
+The choice of peak among CWT candidates is far LESS consequential than the weights or intuition
+suggest - downstream scoring and FDR absorb nearly all of it. Likely reading (inference, not
+measured): most relocations are between near-identical candidates (adjacent apexes, shoulders)
+whose downstream features barely differ, so large index-level churn yields a small feature-level
+change.
+
+**This is the most reusable result of the night: it sets a CEILING on what any pick-model work can
+buy.** Tuning the rank function is not where the sensitivity is. Weigh that before funding more
+pick-model training.
+
+The surviving asymmetry: decoys are relocated **2.3 pts more often** than targets, the right
+direction to compress target-decoy separation and at least consistent with the -16%
+`modelComposite`. NOT claimed as the explanation - this dump is library-decoy Astral, and the
+library-decoy story already failed once tonight. A gendecoy dump would test whether the asymmetry
+survives.
+
+**SCORE FOR THE NIGHT: three mechanism stories proposed, three corrected by measurement** (weights
+=> big effect; argmax rarely changes; cosine lifts library decoys). Every measurement held. Treat
+pick-model reasoning as a lead until a cell confirms it.
+
 **The -16% model degradation is therefore OPEN, not explained.** Next candidate worth testing:
 the pick model was trained to select the CORRECT peak, but the downstream SVM needs SEPARABLE
 peaks - and intensity, while a weak per-candidate correctness cue, may proxy measurement quality
