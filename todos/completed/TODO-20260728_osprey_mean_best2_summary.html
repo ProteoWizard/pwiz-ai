@@ -1,0 +1,222 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Osprey mean(best-N): two datasets, opposite results</title><style>
+:root{--bg:#fff;--ink:#16181d;--ink2:#52565f;--muted:#8b8f99;--grid:#e6e8ec;--card:#fbfbfc;
+--edge:#e0e2e8;--pos:#1f6f8b;--neg:#b0511f;--accent:#6b4fa8;--good:#2f7d4f;--bad:#a4243b}
+@media (prefers-color-scheme:dark){:root{--bg:#14161a;--ink:#eef0f4;--ink2:#b9bec8;--muted:#7d838f;
+--grid:#2a2e36;--card:#1b1e24;--edge:#2f343d;--pos:#6fc0d8;--neg:#e08a5a;--accent:#b39bdd;
+--good:#74c48f;--bad:#e07a8c}}
+:root[data-theme="dark"]{--bg:#14161a;--ink:#eef0f4;--ink2:#b9bec8;--muted:#7d838f;--grid:#2a2e36;
+--card:#1b1e24;--edge:#2f343d;--pos:#6fc0d8;--neg:#e08a5a;--accent:#b39bdd;--good:#74c48f;--bad:#e07a8c}
+:root[data-theme="light"]{--bg:#fff;--ink:#16181d;--ink2:#52565f;--muted:#8b8f99;--grid:#e6e8ec;
+--card:#fbfbfc;--edge:#e0e2e8;--pos:#1f6f8b;--neg:#b0511f;--accent:#6b4fa8;--good:#2f7d4f;--bad:#a4243b}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 "Segoe UI",system-ui,sans-serif}
+.wrap{max-width:1120px;margin:0 auto;padding:32px 22px 70px}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:-.2px}
+h2{font-size:19px;margin:38px 0 4px}
+h3{font-size:15px;margin:20px 0 2px}
+.sub{color:var(--ink2);font-size:13.5px;margin:0 0 20px}
+.note{color:var(--ink2);font-size:13.5px;margin:6px 0 12px}
+.card{background:var(--card);border:1px solid var(--edge);border-radius:9px;padding:14px 16px 10px;
+margin:12px 0 0;overflow-x:auto}
+.lead{border-left:3px solid var(--accent);padding-left:14px;margin:18px 0 24px}
+.lead b{color:var(--ink)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px}
+@media(max-width:760px){.two{grid-template-columns:1fr}}
+.pane{background:var(--card);border:1px solid var(--edge);border-radius:9px;padding:14px 16px}
+.pane h3{margin-top:0}
+.big{font-size:30px;font-weight:600;letter-spacing:-.5px;line-height:1.15}
+.big.p{color:var(--good)}.big.n{color:var(--bad)}
+table{border-collapse:collapse;font-size:13.5px;width:100%}
+th,td{padding:6px 10px;text-align:right;border-bottom:1px solid var(--edge);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+th{color:var(--ink2);font-weight:600}
+.pos{color:var(--good)}.neg{color:var(--bad)}
+text{fill:var(--ink2);font:12px "Segoe UI",system-ui,sans-serif}
+text.lbl{fill:var(--muted);font-size:11.5px}
+.gl{stroke:var(--grid);stroke-width:1}
+.key{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;color:var(--ink2);margin:6px 0 4px}
+.key i{width:11px;height:11px;border-radius:2px;display:inline-block;margin-right:6px;vertical-align:-1px}
+footer{margin-top:44px;color:var(--muted);font-size:12.5px;border-top:1px solid var(--edge);padding-top:14px}
+code{background:var(--card);border:1px solid var(--edge);border-radius:4px;padding:1px 5px;font-size:12.5px}
+ul{margin:6px 0 12px;padding-left:22px}li{margin:4px 0}
+</style></head><body><div class="wrap">
+<h1>mean(best-N): one dataset where it pays, one where it does not</h1>
+<p class="sub">Two-dataset synthesis &#183; SEA-AD Pilot-MTG (82 files) vs TDP-43 Plasma EV-Quant
+(163 files) &#183; first-pass experiment-wide scope, entrapment oracle</p>
+
+<div class="lead">
+<p><b>mean(best-N) replaces the experiment-wide &#8220;best score over runs&#8221; with the mean
+of a precursor's best N per-run scores, so that a detection resting on a single run is demoted.
+On SEA-AD it recovered +14.6% more identifications at N=2 and peaked at +16.4%. On TDP-43, at
+twice the file count, it is &#8722;0.2% at N=2 and only falls from there.</b></p>
+<p>The two results are not in conflict, and the difference is not cohort size, cohort quality or
+statistical noise. A reproducibility lever can only pay when <b>irreproducibility is a dominant
+source of the surviving false discoveries</b>. That condition held on SEA-AD and does not hold
+on TDP-43 &#8212; and it can be checked from a single ordinary run, before committing to any
+A/B.</p>
+</div>
+
+<h2>1 &#183; The two curves</h2>
+<div class="key"><span><i style="background:var(--pos)"></i>SEA-AD, 82 files &#8212; the positive
+result</span><span><i style="background:var(--neg)"></i>TDP-43 Plasma EV, 163 files &#8212; the
+counter-example</span></div>
+<div class="card"><svg viewBox="0 0 1060 340" width="100%"><line class="gl" x1="66" x2="1036" y1="275.0" y2="275.0"/><text x="57" y="279.0" text-anchor="end">-10%</text><line class="gl" x1="66" x2="1036" y1="232.5" y2="232.5"/><text x="57" y="236.5" text-anchor="end">-5%</text><line class="gl" x1="66" x2="1036" y1="190.0" y2="190.0"/><text x="57" y="194.0" text-anchor="end">+0%</text><line class="gl" x1="66" x2="1036" y1="147.5" y2="147.5"/><text x="57" y="151.5" text-anchor="end">+5%</text><line class="gl" x1="66" x2="1036" y1="105.0" y2="105.0"/><text x="57" y="109.0" text-anchor="end">+10%</text><line class="gl" x1="66" x2="1036" y1="62.5" y2="62.5"/><text x="57" y="66.5" text-anchor="end">+15%</text><line class="gl" x1="66" x2="1036" y1="20.0" y2="20.0"/><text x="57" y="24.0" text-anchor="end">+20%</text><line x1="66" x2="1036" y1="190.0" y2="190.0" stroke="var(--muted)" stroke-width="2" stroke-dasharray="5 4"/><text x="66.0" y="310" text-anchor="middle">1</text><text x="290.4" y="310" text-anchor="middle">2</text><text x="421.7" y="310" text-anchor="middle">3</text><text x="514.9" y="310" text-anchor="middle">4</text><text x="646.2" y="310" text-anchor="middle">6</text><text x="739.3" y="310" text-anchor="middle">8</text><text x="870.6" y="310" text-anchor="middle">12</text><text x="1036.0" y="310" text-anchor="middle">20</text><text x="551" y="330" text-anchor="middle" class="lbl">aggregation depth N &#8212; N=1 is plain max</text><text x="15" y="156" text-anchor="middle" class="lbl" transform="rotate(-90 15 156)">gain vs max @ matched 1% true FDP</text><polyline points="66.0,190.0 290.4,66.3 421.7,57.7 514.9,53.1 646.2,50.6 739.3,57.4 870.6,71.1 1036.0,89.6" fill="none" stroke="var(--pos)" stroke-width="2.6" opacity=".92"/><circle cx="66.0" cy="190.0" r="4.8" fill="var(--pos)" stroke="var(--card)" stroke-width="1.6"><title>SEA-AD 82 files &#183; N=1 &#183; +0.00%</title></circle><circle cx="290.4" cy="66.3" r="4.8" fill="var(--pos)" stroke="var(--card)" stroke-width="1.6"><title>SEA-AD 82 files &#183; N=2 &#183; +14.55%</title></circle><circle cx="421.7" cy="57.7" r="4.8" fill="var(--pos)" stroke="var(--card)" stroke-width="1.6"><title>SEA-AD 82 files &#183; N=3 &#183; +15.56%</title></circle><circle cx="514.9" cy="53.1" r="4.8" fill="var(--pos)" stroke="var(--card)" stroke-width="1.6"><title>SEA-AD 82 files &#183; N=4 &#183; +16.11%</title></circle><circle cx="646.2" cy="50.6" r="4.8" fill="var(--pos)" stroke="var(--card)" stroke-width="1.6"><title>SEA-AD 82 files &#183; N=6 &#183; +16.40%</title></circle><circle cx="739.3" cy="57.4" r="4.8" fill="var(--pos)" stroke="var(--card)" stroke-width="1.6"><title>SEA-AD 82 files &#183; N=8 &#183; +15.60%</title></circle><circle cx="870.6" cy="71.1" r="4.8" fill="var(--pos)" stroke="var(--card)" stroke-width="1.6"><title>SEA-AD 82 files &#183; N=12 &#183; +13.99%</title></circle><circle cx="1036.0" cy="89.6" r="4.8" fill="var(--pos)" stroke="var(--card)" stroke-width="1.6"><title>SEA-AD 82 files &#183; N=20 &#183; +11.81%</title></circle><polyline points="66.0,190.0 290.4,191.7 421.7,218.5 514.9,241.6 646.2,269.6" fill="none" stroke="var(--neg)" stroke-width="2.6" opacity=".92"/><circle cx="66.0" cy="190.0" r="4.8" fill="var(--neg)" stroke="var(--card)" stroke-width="1.6"><title>TDP-43 163 files &#183; N=1 &#183; +0.00%</title></circle><circle cx="290.4" cy="191.7" r="4.8" fill="var(--neg)" stroke="var(--card)" stroke-width="1.6"><title>TDP-43 163 files &#183; N=2 &#183; -0.20%</title></circle><circle cx="421.7" cy="218.5" r="4.8" fill="var(--neg)" stroke="var(--card)" stroke-width="1.6"><title>TDP-43 163 files &#183; N=3 &#183; -3.36%</title></circle><circle cx="514.9" cy="241.6" r="4.8" fill="var(--neg)" stroke="var(--card)" stroke-width="1.6"><title>TDP-43 163 files &#183; N=4 &#183; -6.07%</title></circle><circle cx="646.2" cy="269.6" r="4.8" fill="var(--neg)" stroke="var(--card)" stroke-width="1.6"><title>TDP-43 163 files &#183; N=6 &#183; -9.36%</title></circle><text x="646.2" y="38.6" text-anchor="middle" class="lbl" fill="var(--pos)">peak +16.4% at N=6</text><text x="646.2" y="289.6" text-anchor="middle" class="lbl" fill="var(--neg)">&#8722;9.4% at N=6</text></svg></div>
+<p class="note">Gain is measured at a <b>matched 1% true entrapment FDP</b>: the two arms
+calibrate differently, so comparing them at the reported q would confound calibration with
+sensitivity. On TDP-43 the optimum is <b>N&#160;=&#160;1</b> &#8212; there is no depth that pays,
+and the knee sits between N=2 and N=3.</p>
+
+<div class="two">
+<div class="pane"><h3>SEA-AD, 82 files</h3><div class="big p">+14.6%</div>
+<p class="note">at N=2; peak +16.4% at N=6<br>38,300 &#8594; 43,873 identifications</p></div>
+<div class="pane"><h3>TDP-43 Plasma EV, 163 files</h3><div class="big n">&#8722;0.2%</div>
+<p class="note">at N=2; &#8722;9.4% by N=6<br>30,616 &#8594; 30,555 identifications</p></div>
+</div>
+
+<h2>2 &#183; Why they differ</h2>
+<p class="note">A reproducibility lever needs two things to be true at once. Both held on
+dataset 1; neither holds on dataset 2.</p>
+<div class="card"><table>
+<tr><th>condition</th><th>SEA-AD 82f</th><th>TDP-43 163f</th></tr>
+<tr><td><b>(a) The single-run population is substantially false</b> &#8212; there is error worth
+removing</td>
+<td class="pos">k=1 slice <b>20.6%</b> false<sup>&#8224;</sup></td>
+<td class="neg">k=1 slice <b>4.24%</b> false &#8212; about <b>60</b> recoverable false
+identifications in total</td></tr>
+<tr><td><b>(b) Reproducibility discriminates</b> &#8212; false things fail to repeat</td>
+<td class="pos">assumed and consistent with the gain</td>
+<td class="neg"><b>76.9%</b> of measured false hits repeat in &#8805;2 runs; <b>55.4%</b> in
+&#8805;6</td></tr>
+</table></div>
+<p class="note"><sup>&#8224;</sup> Dataset 1's k-slice figures are quoted as published. Their
+array-indexing convention has <b>not</b> been re-verified against the source run (see
+&#8220;Open&#8221; below); dataset 2's have been, against the rendered report.</p>
+
+<p>The lever is not failing to engage on TDP-43. It demotes <b>76%</b> of the single-run
+acceptances (1,407&#8594;340) and pulls that slice's measured FDP from 4.24% to 1.78%,
+essentially to the 1% nominal &#8212; comparable engagement to SEA-AD's &#8722;69.6%. It fires
+correctly, frees roughly 60 false identifications, and costs 61 real ones. <b>The mechanism
+works; the payoff is not there.</b></p>
+
+<h2>3 &#183; The distributions overlap &#8212; reproducibility is a weak discriminator here</h2>
+<p class="note">Where each accepted population sits on the run-count axis, TDP-43 163 files,
+plain max arm. If false discoveries did not repeat, the entrapment column would concentrate at
+k=1. It does not: its mode is k=6&#8211;20.</p>
+<div class="card"><table>
+<tr><th>detected in k runs</th><th>% of accepted real targets</th>
+<th>% of accepted entrapment (measured false)</th></tr>
+<tr><td>k = 1</td><td>4.7%</td><td>23.1%</td></tr>
+<tr><td>k = 2</td><td>4.8%</td><td>7.7%</td></tr>
+<tr><td>k = 3&#8211;5</td><td>10.3%</td><td>13.8%</td></tr>
+<tr><td>k = 6&#8211;20</td><td>23.7%</td><td><b>34.6%</b></td></tr>
+<tr><td>k = 21&#8211;80</td><td>27.2%</td><td>13.8%</td></tr>
+<tr><td>k &#8805; 81</td><td>29.3%</td><td>6.9%</td></tr>
+<tr><td><b>k &#8805; 6 (total)</b></td><td><b>80.3%</b></td><td><b>55.4%</b></td></tr>
+</table></div>
+<p class="note">Reproducibility does carry signal &#8212; 80.3% of real targets reach k&#8805;6
+against 55.4% of entrapment &#8212; but the separation is modest and the distributions overlap
+heavily. A weak discriminator applied to a small false population cannot produce a large gain,
+which is precisely what the curve shows.</p>
+
+<h2>4 &#183; What the left-hand pile-up actually is</h2>
+<p class="note">The per-run view of this dataset looks alarming: 10,450 single-run detections
+(23% of the union) measuring 38.2% FDP, and a union that never levels off. That is the picture
+that motivates a reproducibility lever. But it describes the population <i>before</i>
+experiment-wide control, and the ordinary max gate already removes most of it &#8212; down to
+1,407 singletons at 4.24%.</p>
+<p class="note">To ask whether what remains is real, two 6-file cohorts were run: the six Pool
+injections (one sample, six times &#8212; zero biological variability by construction) against
+six donors from adjacent acquisition positions.</p>
+<div class="card"><table>
+<tr><th>cohort</th><th>accepted</th><th>k=1</th><th>k=1 share</th><th>k=1 FDP</th>
+<th>detected in all 6</th></tr>
+<tr><td>pools &#215;6 (one sample)</td><td>16,400</td><td>1,693</td><td><b>10.3%</b></td>
+<td><b>1.34%</b></td><td>7,868 (48.0%)</td></tr>
+<tr><td>donors &#215;6 (six people)</td><td>15,596</td><td>2,203</td><td><b>14.1%</b></td>
+<td><b>1.17%</b></td><td>5,159 (33.1%)</td></tr>
+</table></div>
+<ul>
+<li><b>Not mostly biology.</b> The pools retain 10.3% singletons with zero biological
+variability; donor-to-donor biology explains only the ~3.8&#8209;point difference.</li>
+<li><b>Not mostly false discovery.</b> The k=1 slice measures 1.34% / 1.17% FDP &#8212;
+essentially the 1% nominal. It is being controlled correctly.</li>
+<li><b>What remains is measurement variability and the detection limit</b> &#8212; real,
+low-abundance peptides crossing threshold in some injections and not others.</li>
+</ul>
+<p class="note"><b>Caveats.</b> Six runs is a weak instrument &#8212; k takes only six values.
+And the six pools are not pure technical replicates: three sit at acquisition positions
+76&#8211;78 and three at 161&#8211;163, so they carry instrument drift across most of the series.
+Pure injection-to-injection stochasticity is therefore below 10.3%, and correspondingly more of
+the donor singletons are biological than the 3.8&#8209;point figure implies. The direction holds;
+the split is softer than the numbers look.</p>
+
+<h2>5 &#183; Deciding in advance, without an A/B</h2>
+<p class="note">Both checks below are computable from a <b>single ordinary run</b> with an
+entrapment library. On TDP-43 both correctly indicate &#8220;no gain available&#8221;, agreeing
+with the arms by two independent routes.</p>
+<div class="card"><table>
+<tr><th>check</th><th>where</th><th>reading on TDP-43 163f</th></tr>
+<tr><td><b>Reproducibility frontier, experiment-wide route</b> &#8212; yield at fixed FDP as the
+run requirement rises</td><td>already rendered in every model-diagnostics report</td>
+<td class="neg">peaks at <b>k=1</b>, &#8722;3.75% at k&#8805;2, monotone after &#8212; requiring
+reproducibility cannot beat the plain gate</td></tr>
+<tr><td><b>Entrapment run-count spread</b> &#8212; is the measured false population concentrated
+at low k?</td><td><code>crossRun.experiment.entrapmentRunCountHistogram</code></td>
+<td class="neg"><b>55.4%</b> of it reproduces in &#8805;6 runs &#8212; reproducibility does not
+separate true from false</td></tr>
+</table></div>
+<p class="note">The frontier reading is a yes/no; the entrapment spread is graded, so it also
+says <i>how much</i> signal is present. Note both are one dataset deep as gates &#8212; they
+should be tested on a cohort where mean(best-N) <b>did</b> pay before being relied on.</p>
+
+<h2>6 &#183; The lesson</h2>
+<div class="lead">
+<p><b>For a lever to add value in FDR control it must act on a dominant source of the surviving
+false discoveries.</b> On TDP-43 irreproducibility is not that source. Three things account for
+it: ordinary measurement variability; a high proportion of genuine peptides sitting near the
+instrument detection limit, which makes real identifications sporadic; and a substantial
+population of false identifications that reproduce anyway.</p>
+<p>The corollary matters more than the individual numbers. <b>File count does not predict
+whether the lever helps.</b> TDP-43 has twice SEA-AD's files and a max-arm union efficiency of
+67.2% &#8212; already as high as SEA-AD's <i>best-2</i> efficiency at 82 files. The
+scale-driven efficiency loss this lever repairs is a property of the matrix, the library and the
+instrument series, not of N. So a rule of the form &#8220;enable above N files&#8221; is not
+supportable on this evidence; a per-dataset check is.</p>
+<p><b>Recommendation: keep <code>OSPREY_EXPERIMENT_AGG</code> opt-in.</b> Two datasets are not
+enough to settle a default in either direction &#8212; but they are enough to show the sign can
+flip, which is what rules out a blanket default.</p>
+</div>
+
+<h2>7 &#183; Open, and what would settle it</h2>
+<ul>
+<li><b>Re-read dataset 1's <code>crossRun</code> arrays under a checked convention.</b> These
+arrays have length n and are indexed by <b>k&#8722;1</b>; an earlier analysis of dataset 2 read
+them as if indexed by k, reporting every k=2 quantity under the k=1 label. Dataset 2 has been
+corrected and verified against its rendered report; dataset 1's published k-slice figures have
+not been re-checked. This also decides whether the <b>A&#215;B screen</b> from dataset 1 survives
+&#8212; on corrected dataset-2 indexing it predicts +4.9% against &#8722;0.2% observed, so it is
+currently <b>withdrawn as unvalidated</b>.</li>
+<li><b>Test both gates where the lever paid.</b> The frontier and entrapment-spread checks agree
+with the arms on the dataset where mean(best-N) fails; neither has been tried on one where it
+succeeds.</li>
+<li><b>Entrapment design.</b> In this library entrapment is <i>shuffled</i> and decoys are
+<i>reversed</i>, both generated in silico from the same target sequences. A shuffled peptide
+carries its target's precursor mass and is co-isolated with it, which plausibly inflates the
+55.4% reproducible-false figure. Drawing both entrapment and decoys from another species would
+remove that artifact and give decoys realistic fragment behaviour. It would <i>not</i> address
+the remaining gap: a real absent human peptide whose isoforms and modified forms are present has
+no analogue in either design, and auditing that needs entrapment attributed to <b>present</b>
+proteins.</li>
+<li><b>Cohort composition on dataset 2.</b> Nine <code>Total-*</code> samples (acquisition
+positions 152&#8211;160) yield 4,371 identifications against a 10,095 median &#8212; a different
+preparation, not instrument decay (the pools that follow them are normal). A 154-file EV-only
+cohort would test whether that heterogeneity suppresses the gain. Not yet run.</li>
+</ul>
+
+<footer>Detail reports: <code>TODO-20260728_osprey_mean_best2_seaad.html</code> (dataset 1) and
+<code>TODO-20260728_osprey_mean_best2_tdp43.html</code> (dataset 2), alongside
+<code>TODO-20260728_osprey_mean_best2.md</code>. Dataset 2 measured 2026-07-31/08-01 on Osprey
+master <code>a49747d450</code>; arms are Stage-5-only re-runs
+(<code>--task FirstPassFDR --model-diagnostics</code>) over one shared set of hard-linked
+Stage&#160;1&#8211;4 parquets, so <code>OSPREY_EXPERIMENT_AGG</code> is the only variable. The
+max arm reproduces the completed full pipeline bit-for-bit on all 12 extracted fields.</footer>
+</div></body></html>

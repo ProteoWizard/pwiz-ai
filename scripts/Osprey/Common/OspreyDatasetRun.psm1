@@ -176,6 +176,13 @@ function Invoke-OspreyDatasetRun {
                      'SecondPassFDR')]
         [string]$Task,
         [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
+        # First-pass EXPERIMENT-score aggregation: '' (the max default) or 'mean-best-<N>'.
+        # A first-class parameter rather than a caller-exported OSPREY_EXPERIMENT_AGG because
+        # an N-curve is a series of arms that differ in NOTHING ELSE - same files, same
+        # parquets, same pass-2 mode - so an unrecorded value makes finished arms literally
+        # indistinguishable from each other. This lands in the banner, the run.log START line,
+        # and the default output-directory name.
+        [string]$ExperimentAgg = '',
         [string]$Tag = '',
         [string]$DataDir,
         [string]$LibraryDir,
@@ -295,7 +302,12 @@ function Invoke-OspreyDatasetRun {
         # OUTSIDE the dataset root on a <root>\<dataset>\<data> layout.) -RunsRoot overrides.
         $runsRootResolved = if ($RunsRoot) { $RunsRoot } else { Join-Path (Split-Path $dataDir -Parent) 'runs' }
         $pick = if ($PickLda) { '-picklda' } else { '' }
-        $name = "$($Dataset.Key)-$($inputs.Count)files-$DecoyMode-r$Ratio-$Pass2Mode$pick$Tag"
+        # The aggregation is part of the NAME, not just the log: an N-curve runs many arms that
+        # are identical in every other naming component, so without this they would all resolve
+        # to one directory and the guard below would reject arm 2 (or -Resume would silently
+        # overlay it onto arm 1's artifacts).
+        $agg = if ($ExperimentAgg) { "-$ExperimentAgg" } else { '' }
+        $name = "$($Dataset.Key)-$($inputs.Count)files-$DecoyMode-r$Ratio-$Pass2Mode$pick$agg$Tag"
         if ($Fresh) { $name += '-' + (Get-Date -Format 'yyyyMMdd_HHmmss') }
         $OutDir = [System.IO.Path]::GetFullPath((Join-Path $runsRootResolved $name))
     }
@@ -399,6 +411,9 @@ function Invoke-OspreyDatasetRun {
     Write-Host ("  peak pick: {0}" -f $(if ($PickLda) {
                 'LEARNED linear model (OSPREY_PICK_LDA=1) - moves the discovery set' }
                 else { 'default product form (coelution * rt_penalty * ln_intensity)' }))
+    Write-Host ("  exp agg  : {0}" -f $(if ($ExperimentAgg) {
+                "$ExperimentAgg (OSPREY_EXPERIMENT_AGG) - moves the experiment-wide discovery set" }
+                else { 'max (default, best of runs)' }))
     if ($FdrBenchPass -eq '1') {
         Write-Host "  WARNING: --fdrbench-pass 1 forces the RESIDENT first-pass pool, which grows" -ForegroundColor Yellow
         Write-Host "           O(files) and does not scale to a large cohort. See the README." -ForegroundColor Yellow
@@ -473,17 +488,40 @@ function Invoke-OspreyDatasetRun {
     foreach ($k in 'OSPREY_EXIT_AFTER_CALIBRATION', 'OSPREY_CAL_SAMPLE_SIZE',
                    'OSPREY_CAL_MEDIANPOLISH', 'OSPREY_PASS2_QVALUE',
                    'OSPREY_PICK_LDA', 'OSPREY_PICK_LDA_MODEL',
-                   'OSPREY_PROTEIN_COMPACT_RETRAIN',
+                   'OSPREY_PROTEIN_COMPACT_RETRAIN', 'OSPREY_EXPERIMENT_AGG',
                    'OSPREY_DECOY_SAME_ION_MAP', 'OSPREY_DECOY_PRECURSOR_SHIFT_UNITS',
                    'OSPREY_DECOY_MAX_FRAG_OVERLAP', 'OSPREY_DECOY_MAX_SEQ_IDENTITY') {
         Remove-Item "Env:\$k" -ErrorAction SilentlyContinue
     }
     if ($Pass2Mode -ne 'percolator') { $env:OSPREY_PASS2_QVALUE = $Pass2Mode }
     if ($PickLda) { $env:OSPREY_PICK_LDA = '1' }
+    if ($ExperimentAgg) { $env:OSPREY_EXPERIMENT_AGG = $ExperimentAgg }
 
     $log = Join-Path $OutDir 'run.log'
+    # NEVER truncate an existing run.log - rotate it to run-<stamp>.log first. A run.log is the
+    # ONLY record of a run's timing and memory profile, it is not reproducible without spending
+    # the hours again, and the START line below is a Set-Content: one -Resume into the wrong
+    # directory silently destroyed an 18-hour run's 1.8 MB log this way. Recovered that time
+    # only because a human happened to have it open in an editor.
+    #
+    # The stamp is the OLD log's last-write time, not "now": it names when that run ENDED,
+    # which is what someone looking for a particular run is actually searching by.
+    if (Test-Path $log) {
+        $stamp = (Get-Item $log).LastWriteTime.ToString('yyyyMMdd_HHmmss')
+        $rotated = Join-Path $OutDir "run-$stamp.log"
+        # Two runs finishing inside the same second is unlikely but a collision would resume
+        # the data loss this whole block exists to prevent, so disambiguate rather than clobber.
+        $n = 1
+        while (Test-Path $rotated) {
+            $rotated = Join-Path $OutDir "run-$stamp-$n.log"
+            $n++
+        }
+        Move-Item -Path $log -Destination $rotated
+        Write-Host ("  rotated previous run.log -> {0}" -f (Split-Path $rotated -Leaf)) -ForegroundColor Cyan
+    }
     ("[{0}] START dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
-     "picklda=$([bool]$PickLda) files=$($inputs.Count) threads=$Threads " +
+     "picklda=$([bool]$PickLda) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
+     "files=$($inputs.Count) threads=$Threads " +
      "parallelfiles=$ParallelFiles task='$Task' mdiag=$mdiag " +
      "fdrbench=$FdrBenchPass linkfrom='$LinkFrom'") -f (Get-Date -Format s) |
         Set-Content -Path $log
@@ -499,7 +537,8 @@ function Invoke-OspreyDatasetRun {
     $exit = $LASTEXITCODE
     $sw.Stop()
     ("[{0}] DONE dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
-     "picklda=$([bool]$PickLda) parallelfiles=$ParallelFiles exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
+     "picklda=$([bool]$PickLda) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
+     "parallelfiles=$ParallelFiles exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
         Add-Content -Path $log
     Write-Host ("Osprey exited {0} after {1:hh\:mm\:ss}" -f $exit, $sw.Elapsed) `
         -ForegroundColor $(if ($exit -eq 0) { 'Green' } else { 'Red' })

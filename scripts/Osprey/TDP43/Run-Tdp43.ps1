@@ -34,6 +34,18 @@
     MOVES THE DISCOVERY SET and is recorded in the banner and run.log, because Osprey logs
     nothing that says which pick model a run used.
 
+.PARAMETER ExperimentAgg
+    First-pass EXPERIMENT-score aggregation. Empty (the default) means max - the best score
+    over runs. 'mean-best-<N>' scores a precursor as the mean of its best N per-run scores,
+    with a decoy floor standing in for a missing run (OSPREY_EXPERIMENT_AGG, shipped opt-in by
+    #4509). This MOVES THE DISCOVERY SET, so it is recorded in the banner, the run.log START
+    line, and the default output-directory name - the arms of an N-curve differ in nothing
+    else, and an unrecorded one would be unattributable after the fact.
+
+    Validated against '^mean-best-\d+$' HERE rather than left to Osprey: an unrecognized value
+    only WARNS and falls back to max (#4509's self-review finding), which for a measurement
+    flag corrupts the comparison instead of failing it.
+
 .PARAMETER FdrBenchPass
     Defaults to 'none' here. --fdrbench-pass 1 forces the RESIDENT O(files) first-pass pool
     and does not scale to this cohort; 'both' and '2' are memory-safe but emit only the
@@ -70,6 +82,7 @@ param(
     [ValidateSet('SpectraCache','PerFileScoring','FirstPassFDR','PerFileRescoring','SecondPassFDR')]
     [string]$Task,
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
+    [ValidatePattern('^$|^mean-best-\d+$')] [string]$ExperimentAgg = '',
     [string]$Tag = '',
     [string]$DataDir,
     [string]$LibraryDir,
