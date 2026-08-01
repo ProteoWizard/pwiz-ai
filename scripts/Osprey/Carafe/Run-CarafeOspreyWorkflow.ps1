@@ -97,7 +97,6 @@ param(
     [string]$CarafeJar,
     [string]$VenvPython,
     [string]$OspreyExe,
-    [string]$Python,
 
     [int]$Threads = 16,
     [string]$ProteinFdr = '0.01',
@@ -292,11 +291,6 @@ if (-not (Test-Path $OspreyExe)) {
            'pwsh -File ./ai/scripts/Osprey/Build-Osprey.ps1')
 }
 
-if (-not $Python) {
-    $Python = (Get-Command python -ErrorAction SilentlyContinue)?.Source
-    if (-not $Python) { $Python = (Get-Command python3 -ErrorAction SilentlyContinue)?.Source }
-}
-
 $env:JAVA_HOME = Split-Path -Parent (Split-Path -Parent $Java)
 
 # ---------------------------------------------------------------------------
@@ -335,7 +329,6 @@ Write-Host "`n--- Carafe/Osprey library workflow ---" -ForegroundColor Cyan
     CarafeJar        = $CarafeJar
     VenvPython       = $VenvPython
     Osprey           = $OspreyExe
-    Python           = $Python
     Resolution       = "$($preset.Resolution) / $($preset.FragTol) $($preset.FragUnit)"
 } | Format-List
 
