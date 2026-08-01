@@ -168,6 +168,34 @@ resident-path perf) remain by design. `/code-review max` from `C:\proj\pwiz` is 
 step before merge - it is user-invoked and two prior rounds of it found real bugs every automated
 gate missed.
 
+### Final state of the night session
+
+Branch pushed as `b1d75bffa` (three of my commits plus a merge of master, which had been merged into
+the PR branch remotely while I worked). PR #4512 body updated. **TeamCity Osprey Perf/Regression
+triggered on `pull/4512`, build 4118112.**
+
+| Gate (on `b1d75bffa`) | Result |
+|---|---|
+| Debug build, tests, inspection | 572/572, 0 warnings |
+| `regression.ps1 -Dataset Stellar` | PASSED - all five legs incl. the two new ones |
+| Flag-ON liveness | mode1 FAIL (52 issues) + mode2/3/4 PASS - the correct pattern |
+
+An independent fresh-context review found **no Critical issues** and confirmed the headline claims.
+Three of its findings were fixed (`ProgramTests` ambient-environment isolation - a hole this very
+branch created by moving the validation into `ValidityArgs`; an ungated `MeanBestN` read in
+`RunStreamingFirstPass`; and the missing pass-label mapping test). Four are carried forward in
+`ai/.tmp/handoff-20260801_osprey_mean_best2-fix.md` - chiefly **M2**, making `applyExperimentAgg` a
+REQUIRED parameter so the compiler forces every call site to state its intent, since a pass-scoped
+flag defaulting to "aggregate" is what produced both prior regressions.
+
+**A recurring trap worth internalizing, since it caught me twice tonight**: conservative q is a
+function of the target/decoy SEQUENCE down the ranked list and nothing else. An aggregation change
+that reorders units without crossing a target past a decoy produces ZERO q difference. Two
+separate first-draft fixtures looked like they exercised mean(best-N) and provably did not; both
+were caught only by an explicit non-vacuity assertion written into the test. Any future
+mean(best-N) fixture needs a deliberate target-crosses-decoy construction, and the test should
+assert that it happened.
+
 
 ### 2026-07-31 - PR #4512 open, but DO NOT MERGE YET
 
