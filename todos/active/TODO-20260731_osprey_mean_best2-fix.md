@@ -7,7 +7,8 @@
 - **Created**: 2026-07-31
 - **Status**: In Progress
 - **Fixes**: defects in [#4509](https://github.com/ProteoWizard/pwiz/pull/4509) (merged 2026-07-31)
-- **PR**: (pending)
+- **PR**: [#4512](https://github.com/ProteoWizard/pwiz/pull/4512) (open 2026-07-31)
+- **Follow-on issue**: [#4511](https://github.com/ProteoWizard/pwiz/issues/4511)
 - **Requester**: Brendan (Osprey developer) - NO credit line.
 
 Naming note: `ai/WORKFLOW.md` Workflow 3a says to add a "Bug Fixes" section to the ORIGINAL TODO
@@ -94,16 +95,16 @@ Severity order, review's numbering in brackets.
 
 ## Tasks
 
-- [ ] [3] Fold `OSPREY_EXPERIMENT_AGG` into `FirstJoinTask.ValidityKey`
-- [ ] [5] NaN + negative-bin guard in `StreamingDecoyFloor.Add`
-- [ ] [6] NaN guard in `MeanBestNAcc.Add`
-- [ ] [4] Overflow bin + percentile-range validation in the streaming floor
-- [ ] [1][2] Scope mean-best-N to the FIRST pass; refuse the combination that would mix schemes
-- [ ] [11] Make the floor toggles injectable so tests do not read ambient env
-- [ ] [7] De-degenerate the N=4 fixture + add an eviction value oracle
-- [ ] [12] Floor-path parity coverage (groups with < N observations) + assert the PEP map
-- [ ] [9][13][14] Doc + shadowing fixes
-- [ ] Gates: Build-Osprey -RunTests -RunInspection, then `regression.ps1 -Dataset All`
+- [x] [3] Fold `OSPREY_EXPERIMENT_AGG` into `FirstJoinTask.ValidityKey` (+ floor vars, gated)
+- [x] [5] NaN + negative-bin guard in `StreamingDecoyFloor.Add`
+- [x] [6] NaN guard in `MeanBestNAcc.Add`
+- [~] [4] Overflow bin counted; percentile-range validation INCOMPLETE (see below)
+- [~] [1][2] Pass-1 scoping HALF-DONE (projection gated, resident not); protein-compact refused
+- [x] [11] Make the floor toggles injectable so tests do not read ambient env
+- [x] [7] De-degenerate the N=4 fixture + add an eviction value oracle
+- [x] [12] PEP map asserted. Floor-path parity coverage STILL MISSING (see below)
+- [~] [9] Both-floors refusal added (gated). [13][14] docs NOT done
+- [x] Gates: 566/566, 0 inspection warnings, `regression.ps1 -Dataset All` 18/18
 
 ## Regression Test
 
@@ -111,6 +112,64 @@ Flag-off byte-identity must hold exactly as before (`regression.ps1 -Dataset All
 coverage is flag-ON: eviction oracle, floor-path parity, PEP map assertion, and NaN robustness.
 
 ## Progress Log
+
+### 2026-07-31 - PR #4512 open, but DO NOT MERGE YET
+
+Two commits: `c0408d0c2` (the review fixes) and `73af9f8ba` (two default-path regressions in the
+first one). Gates green: 566/566, 0 inspection warnings, `regression.ps1 -Dataset All` 18/18.
+
+**A SECOND `/code-review max` on `c0408d0c2` found 15 more findings, including two DEFAULT-path
+regressions I introduced** - the first PR (#4509) had none. Both fixed in `73af9f8ba`:
+
+* `ValidityKey` appended `;expagg=max` UNCONDITIONALLY. `NormalizeExperimentAgg` returns the
+  constant `"max"` when the variable is unset, so every output directory produced before the commit
+  would fail `IsValid` and re-run Stage 5 FDR + protein FDR + compaction - hours at 82 files - to
+  reproduce byte-identical output. Now appended only when the aggregation is engaged, and covering
+  the floor toggles too.
+* The both-floor-flags refusal fired on DEFAULT runs that never read those variables, so an operator
+  who left a sweep exported could not run an ordinary analysis. Now gated on `ExperimentAggMeanBest`.
+* Also: `MeanBestNAcc.First` had no guard, so a NaN as a base_id's FIRST observation still poisoned
+  the group (my own test put the NaN second, so it passed). Infinity excluded too - `0 * Inf` makes
+  the missing-run term NaN for even fully-detected groups. `MeanBestFloorOverspecified` made
+  computed rather than snapshotted, since the toggles are now settable properties.
+
+**GATE GAP, worth fixing independently**: `regression.ps1 -Dataset All` passed 18/18 on the commit
+that had broken warm-resume for every existing output directory, because the gate always uses FRESH
+directories. **The byte-identity gate is structurally blind to cache-invalidation regressions.**
+
+### STILL OPEN on this branch - finish before merging
+
+Full detail in [#4511](https://github.com/ProteoWizard/pwiz/issues/4511); the blocker is the first:
+
+1. **The pass-1 scoping is HALF-DONE.** The full-length wrappers
+   `PercolatorQValues.ComputeExperimentPrecursorQvalues` / `ComputeExperimentPeptideQvalues` never
+   got the `applyExperimentAgg` parameter, so the RESIDENT 2nd pass still re-aggregates. The
+   projection path IS gated - so the resident and projection paths, which `Pass2FdrSidecar` treats
+   as a byte-identity oracle for each other, now DISAGREE under the flag. This is a correctness bug
+   in the fix itself.
+2. `transfer-compete` + mean(best-N) is still unguarded (only `protein-compact` is refused), and the
+   refusal infers the cached pass-1 arm from the CURRENT process env - wrong on a merge node.
+3. `MergeNodeTask` / `PerFileRescoreTask` validity keys not updated alongside `FirstJoinTask`.
+4. Streaming floor: `pct >= 100` / `pct <= 0` early returns bypass the new refusals, and the new
+   throws abort where the resident twin clamps (single-decoy) - they can kill a multi-hour run at
+   the end of Stage 5. Mirror the resident semantics instead of throwing; validate at startup.
+5. `FdrTest` still reads ambient env (no `[TestInitialize]`); the missing-run floor still has ZERO
+   streaming-vs-resident parity coverage.
+
+### DECIDED with Brendan (design settled, not yet implemented)
+
+* **Gap-fill rows must be EXCLUDED from the aggregation's run count.** Gap-fill changes k, which
+  REMOVES A FLOOR TERM - the largest single move the aggregate can make, right at the decision
+  boundary. Decoys are not gap-filled, so under mean(best-N) that boost is target-only against an
+  unmoved null: systematically anti-conservative. Under max the same asymmetry was near-harmless
+  (max ignores weak additions). Once this holds, the protein-compact refusal can be REPLACED by a
+  mean-best-N-aware re-competition.
+* **An experiment-level score->q ladder sidecar** lets `transfer` work under mean(best-N), whose
+  changing k breaks transfer's "experiment q is invariant to reconciliation" premise. It is
+  **O(precursors), not O(files x precursors)** - NOT the artifact #4438 removed. Must be **written
+  to disk** (the HPC merge node never trained pass 1), **join-wide not per-file** (per-file
+  replication would restore the O(files x precursors) footprint on disk), and should carry a
+  **provenance header** naming the pass-1 arm + floor mode - which also fixes item 2 above.
 
 ### 2026-07-31 - Branch created
 
