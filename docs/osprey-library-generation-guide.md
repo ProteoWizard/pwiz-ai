@@ -8,9 +8,12 @@ Driver: [`ai/scripts/Osprey/Carafe/Run-CarafeOspreyWorkflow.ps1`](../scripts/Osp
 Start with `-Preflight`; it resolves every tool and prints what it found without
 doing any work.
 
-> **Status.** The Stellar recipe is **validated** - we reproduced it end to end
-> on 2026-07-04/06 with Stage 1 byte-identical to Mike's delivered files. The
-> Astral preset is **not** validated; see [Open questions](#open-questions).
+> **Status.** The **digest** (stage 1) is validated on both datasets - an ungated
+> rebuild reproduces Mike's delivered peptide FASTA byte for byte on Stellar
+> (2026-07-04) and on Astral (2026-08-01, SHA256 over 349 MB, all 1,390,979
+> manifest quartets identical). The **prediction** stages are validated on Stellar
+> only; Astral's Carafe `-itol` is an instrument-appropriate assumption because no
+> Astral Carafe log exists. See [Open questions](#open-questions).
 
 ---
 
@@ -152,6 +155,59 @@ the peptdeep model.
 
 ---
 
+## The similarity gate
+
+Every generated decoy and entrapment sequence must pass a fragment-overlap check:
+a candidate is rejected when more than **0.4** of its theoretical b/y ladder falls
+within **0.02 Da** of its target's. This is a transcription of the gate Osprey
+already applies in C# and Rust (pwiz #4480 / maccoss/osprey #58), with the same
+constants; Carafe builds the libraries Osprey actually searches, so until
+2026-08-01 the protection existed only on the path nobody uses.
+
+**What it fixes.** `shufflePreservingCterm` was called once, with no retry, and
+the only rejection was an exact string collision with a real target. An entrapment
+peptide could therefore land close enough to its own target to be detected
+wherever the target is - which makes it not a false peptide at all, while the FDP
+estimator still counts it as one. Measured over the pass-1 accepted sets of two
+datasets, ~27% of accepted entrapment was a rejectable near-copy, about half of
+them shadowing a target that was itself accepted and co-eluting within 0.05 min.
+That inflates measured FDP by roughly 25%.
+
+**Not sequence identity.** Detection is driven by fragment evidence, not
+positional string similarity. `EIVELEK`/`EEVEILK` has identity 0.571 but overlap
+0.333 - shadows nothing. `LMDLIGDR`/`IMDLLGDR` has identity 0.750 but overlap
+1.000 (isobaric L/I) - the overlap gate catches it, identity nearly misses it.
+Adding an identity gate on top caught 9 extra cases across both datasets, all 9
+with a source target that was *not* accepted: zero demonstrated shadowing.
+
+**What it costs**, measured on Astral (1,392,350 digested targets):
+
+| | count | of targets |
+|---|---|---|
+| entrapment sequences changed | 58,319 | 4.19% |
+| decoy sequences changed | 24,257 | 1.74% |
+| dropped, no acceptable entrapment | 155 | 0.011% |
+| dropped, no acceptable decoy | 449 | 0.032% |
+
+The 4.19% independently reproduces the 4.15% library-wide gate rate measured by
+the separate Python audit tooling, which cross-validates the Java port.
+
+The dropped set is **structured, and benignly so**: 60% of dropped peptides are
+≥50% a single residue, against 0.7% of kept ones (median single-residue fraction
+0.571 vs 0.200). They are poly-A, poly-G, poly-E, poly-Q and collagen-like repeats
+- `GGGGGGGGDGGGR`, `QQQRQQQQQQQQK`, `PGSPGPPGSPGPR`, `RPPPPPPPPPPR`. No
+permutation of 17 alanines is a valid entrapment peptide, so dropping them is the
+correct answer rather than a loss.
+
+**The retry more than pays for the gate.** Because the bounded retry also rescues
+peptides the old one-shot shuffle dropped on an exact collision, the gated Astral
+build keeps **1,391,732** targets against the delivered library's **1,390,979** -
+a net *gain* of 753.
+
+`-no_similarity_gate` reproduces the pre-gate behaviour. It is an audit switch,
+not a tuning knob: it is what proves a rebuilt library differs from the delivered
+one only by the gate, and a library built with it should not be searched.
+
 ## Natural (foreign-species) entrapment
 
 ### Why
@@ -170,23 +226,51 @@ through target-decoy competition, so they must stay mass-matched.
 
 ### The algorithm
 
-[`tools/make_natural_entrapment.py`](../scripts/Osprey/Carafe/tools/make_natural_entrapment.py)
-emits the same quartet/manifest schema as `EntrapmentFastaGear`, so stages 2-6
-and FDRBench consume it unchanged. Only the `p_target` source changes.
+Since 2026-08-01 this lives **inside Carafe** as `-entrapment_db <fasta>`
+(`ForeignEntrapmentSource`), so stage 1b emits a final manifest and FASTA with no
+post-processing step. `tools/make_natural_entrapment.py` is the earlier
+post-processing prototype, kept because it can retrofit an existing library
+without a Carafe rebuild; new work should use the Carafe option.
 
 1. Digest the foreign proteome with identical enzyme/length params.
-2. **Absence filter**: drop any foreign peptide that equals a human target.
-3. **Matched 1:1 draw**: pair each target with one *unique* foreign peptide of
-   matched neutral mass (`strict` also matches length). This is the DIA-correct
-   control - a library entry is only scored in the isolation window containing
-   its precursor m/z, so entrapment must span the same m/z distribution or it
-   samples a different difficulty regime.
-4. Uncovered targets fall back to a C-term-preserving shuffle, counted and
-   reported.
+2. **Absence filter**: drop any foreign peptide that equals a real target (2,608
+   of 1.45M on Arabidopsis vs the human Astral target set).
+3. **Co-location assignment**: pair each target with one *unique* foreign peptide
+   in the same isolation window. See below - the choice of algorithm matters more
+   than it looks.
+4. Every candidate passes the same fragment-overlap
+   [similarity gate](#the-similarity-gate) as generated decoys.
 5. `p_decoy` stays the reverse+cycle of the drawn `p_target`, preserving symmetry.
+6. `-entrapment_ratio` selects a seeded subset when entrapment should be a thin
+   overlay rather than half the library.
 
-Fully deterministic: seeded fallback shuffle (`seed ^ crc32(seq)`), sorted
-candidate lists, seeded ratio selection. Same inputs, same output, any machine.
+#### Optimize co-location count, not mass displacement
+
+An entrapment peptide only samples the same difficulty as its target if it lands
+in the same DIA isolation window, because that is the only window it competes in.
+So the objective is to **maximize the number of pairs inside the window** - a
+threshold - not to minimize total mass displacement. Those are different problems
+and they want different algorithms. Measured on Astral, 1,392,350 targets against
+1,454,810 Arabidopsis candidates (a 4.3% surplus):
+
+| assignment | co-located | median \|Δm\| | 99th | max |
+|---|---|---|---|---|
+| nearest-available, sequence order | 94.64% | 0.0025 Da | 137 Da | 1278 Da |
+| nearest-available, mass order | 80.95% | 0.042 Da | 82 Da | 2030 Da |
+| quantile map (optimal transport) | 48.89% | 6.05 Da | 10.9 Da | 85 Da |
+| **bin-based co-location** (shipped) | **99.86%** | 0.043 Da | 1.16 Da | 605 Da |
+
+- Sweeping in **mass order** lets each target consume supply just above it, so a
+  deficit accumulates and every later target is dragged further off.
+- The **quantile map** is the optimal monotone transport and has by far the best
+  worst case, but it spreads its error evenly so most pairs sit several Da off.
+  Optimal for total displacement, wrong for a threshold.
+- Binning the pool at 0.25 Da and serving from the nearest non-empty bin wins
+  because inside the window every candidate is equally good, so no search is
+  needed, while preferring nearer bins keeps the mass match tight anyway.
+
+Fully deterministic: bins filled in mass-sorted order, consumed in a fixed order,
+seeded ratio subset. Same inputs, same output, any machine.
 
 ### Results (Stellar, precursor level, 1% q)
 
@@ -249,10 +333,11 @@ As of 2026-08-01, on BRENDANX-UW25:
 
 | Artifact | Location |
 |---|---|
-| Arabidopsis proteome (UP000006548, 39k proteins) | `D:\test\entrapment\arabidopsis\UP000006548.fasta` |
+| Arabidopsis proteome (UP000006548, 39,273 proteins) | `D:\test\entrapment\arabidopsis\UP000006548.fasta` |
 | Stellar rebuild work dir | `D:\test\carafe-repro\stellar\` |
-| Shuffle originals of the 1b outputs | `D:\test\carafe-repro\stellar\osprey_library_db_*.shuffle.bak` |
-| FDRBench inputs + FDP results for every arm above | `D:\test\carafe-repro\stellar\osprey_project\FDRBench\` |
+| Shuffle originals of the Stellar 1b outputs | `D:\test\carafe-repro\stellar\osprey_library_db_*.shuffle.bak` |
+| FDRBench inputs + FDP results for every Stellar arm | `D:\test\carafe-repro\stellar\osprey_project\FDRBench\` |
+| Astral rebuild work dir (both 2026-08-01 variants) | `D:\test\carafe-repro\astral\` |
 | Mike's delivered Stellar / Astral libraries | `D:\test\{Stellar,Astral}Test-TargetDecoyLibraries\` |
 
 **The natural-entrapment libraries themselves no longer exist.** The generator
@@ -271,29 +356,36 @@ Sharing a built library across machines: the delivered libraries are 2.5 GB
 
 ## Open questions
 
-1. **The Astral preset is unvalidated.** Mike's `carafe_log.txt` covers Stellar
-   only - it contains no Astral run, so `-itol`/`-itolu` for Astral is an
-   instrument-appropriate assumption (20 ppm), not a transcribed value. The
-   driver warns loudly when `-Dataset Astral` is used. The clean fix is to ask
-   Mike for an Astral Carafe log; failing that, treat an Astral build as a new
-   library rather than a reproduction. The Astral FASTA is much larger
-   (`uniprot_human_jan2025_yeastENO1_contam_ADpeps.fasta`, 13.7 MB vs Stellar's
-   3.1 MB), which is why the Astral library is 13 GB.
-2. **No Arabidopsis library has ever been built for Astral.** The entire natural
-   entrapment result set above is Stellar. Whether the shuffle-vs-natural gap
-   holds at high mass accuracy is untested and is the main open scientific
-   question. See
-   [`TODO-osprey_foreign_decoys_honest_ms1_power.md`](../todos/backlog/brendanx67/TODO-osprey_foreign_decoys_honest_ms1_power.md).
-3. **Stage-2 parity with Mike** would tighten if we matched his peptdeep
+1. **Astral PREDICTION parameters are assumed.** The digest is verified byte for
+   byte, but Mike's `carafe_log.txt` covers Stellar only, so `-itol`/`-itolu` for
+   stages 2 and 4-5 on Astral is instrument-appropriate (20 ppm) rather than
+   transcribed. The driver warns when `-Dataset Astral` is used. The clean fix is
+   to ask Mike for an Astral Carafe log; failing that, an Astral library's
+   predicted spectra are ours, not a reproduction of his. (The Astral FASTA is
+   `uniprot_human_jan2025_yeastENO1_contam_ADpeps.fasta`, 13.7 MB vs Stellar's
+   3.1 MB, which is why the Astral library is 13 GB.)
+2. **Stage-2 parity with Mike** would tighten if we matched his peptdeep
    pretrained model. Currently ~99.85% peptide overlap, ~13% fewer fragment rows.
-4. **RT/property matching.** Natural entrapment is matched on mass and length
-   only. Matching the target RT distribution too would make the peptides equally
-   "findable".
-5. **Upstream.** Steps 1c and the ratio parameter are ours, applied after
-   Carafe. If they prove durable they belong in `EntrapmentFastaGear` as an
-   `-entrapment_source` mode so shuffle stays the default and the two are
-   switchable for head-to-head. Two Carafe issues were already filed from this
-   work (`ai/.tmp/carafe-issue-{1-nterm-met,2-pairing-manifest}.md`).
+3. **RT/property matching.** Natural entrapment is matched on mass only (length
+   follows closely). Matching the target RT distribution too would make the
+   peptides equally "findable"; mass co-location is the first-order control
+   because it decides which isolation window scores the entry at all.
+4. **The identity gate stays unbuilt, on evidence rather than on principle.** The
+   identity-only groups were n=6 and n=3, and "source target not accepted" is not
+   proof of harmlessness - the target could be present but sub-threshold. Audit
+   tooling reports overlap, so revisit if a dataset ever shows an identity-only
+   case that shadows an accepted target and co-elutes.
+5. **Upstream.** The gate, the bounded retry, `-entrapment_db` and
+   `-entrapment_ratio` live on the `feature/decoy-similarity-gate` branch of
+   `maccoss/Carafe`. Shuffle remains the default, so the two are switchable for
+   head-to-head. Two earlier Carafe issues from this line of work are still open
+   (`ai/.tmp/carafe-issue-{1-nterm-met,2-pairing-manifest}.md`).
+6. **Skyline's shuffle is a separate instance of the same defect.**
+   `Model/DecoyGenerator.cs` has no gate, and its shuffle is `n` random
+   transpositions - a random-transposition walk that at only `n` swaps is far from
+   uniform and biased toward permutations close to the identity, which is exactly
+   the near-copy failure mode. Fisher-Yates plus the gate; tracked in
+   [`TODO-20260801_decoy_similarity_gate.md`](../todos/active/TODO-20260801_decoy_similarity_gate.md).
 
 ---
 

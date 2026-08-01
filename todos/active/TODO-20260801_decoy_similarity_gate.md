@@ -101,24 +101,22 @@ target and co-elutes.
 
 ## Tasks
 
-- [ ] **Carafe entrapment gate** (`EntrapmentFastaGear.shufflePreservingCterm` + caller). Add the
-      bounded retry the path entirely lacks: derive the seed as `SHA-1(masterSeed:seq:attempt)` so
-      it stays deterministic, re-shuffle, accept when overlap is under threshold, drop the quartet
-      after N attempts using the collision-drop policy already present. Dropping is correct for
-      `AAAAAAAAAAAAAAAAGATCLER` - no permutation of 17 alanines is a valid entrapment peptide.
-- [ ] **Carafe decoy gate** (`generateReverseDecoy`). The cycling retry already exists; add the
-      gate to both accept conditions, mirroring C#'s two call sites exactly.
-- [ ] **Port `IsCandidateAcceptable` to Java** - transcription, not design. Keep the C#/Rust
-      constants and rationale verbatim: `MAX_FRAGMENT_OVERLAP = 0.4`, `LADDER_MATCH_TOLERANCE =
-      0.02` Da (deliberately NOT the search tolerance, so the decoy set stays a pure function of
-      the library), stripped sequences only, full ladder.
+- [x] **Carafe entrapment gate** (`EntrapmentFastaGear.shufflePreservingCterm` + caller). Bounded
+      retry, 20 attempts, seed `SHA-1(masterSeed:seq:attempt)`. **Deviation, deliberate**: attempt 0
+      keeps the original two-part `SHA-1(masterSeed:seq)` derivation, so only peptides the gate
+      actually rejects get a new entrapment and a rebuilt library stays a clean differential against
+      the old one. Poly-alanine drops as intended.
+- [x] **Carafe decoy gate** (`generateReverseDecoy`), on both accept conditions.
+- [x] **Port `IsCandidateAcceptable` to Java** - `DecoySimilarityGate`, constants verbatim. Uses
+      Carafe's existing residue-mass table rather than duplicating Osprey's: they agree to 5 dp,
+      which is 1e-5 Da against a 0.02 Da window, so no verdict can differ and there is one table
+      instead of two that can drift.
 - [ ] **Skyline: add the gate** to `SequenceMods.Shuffle`'s `while` condition, which currently
       tests only `newSequence.Equals(Sequence)`. Also applies to `Reverser`.
 - [ ] **Skyline: replace the shuffle with Fisher-Yates** (see below).
-- [ ] **Measure the cost**: how many peptides get dropped from the entrapment set at 0.4, and
-      whether the loss is structured (low-complexity sequences - poly-G, poly-E, collagen-like -
-      are exactly the ones that fail). Acceptable for entrapment since it only shrinks `r`, which
-      is recomputed, but quantify before building.
+- [x] **Measure the cost**: done on Astral before building - 4.19% of entrapment changed, 0.043% of
+      quartets dropped, loss confirmed structured (60% of dropped are >=50% one residue vs 0.7% of
+      kept). Net target count actually RISES by 753 because the retry rescues old collision drops.
 - [ ] **Rebuild both libraries and re-audit** with `ai/scripts/Osprey/Entrapment/` to verify the
       contamination actually cleared before spending a search on them.
 - [ ] **Re-run both datasets' mean(best-N) arms** against a clean library. The +16.4% on SEA-AD
@@ -216,6 +214,61 @@ below 0.695%.
 Tool: `ai/scripts/Osprey/Entrapment/contamination_corrected.py`.
 
 ## Progress Log
+
+### 2026-08-01 (later) - Carafe half implemented and validated; libraries building
+
+Branch `feature/decoy-similarity-gate` on `maccoss/Carafe` (commits `037980b`, `c3f8fc2`).
+Full suite green: 116 tests, 0 failures, including 11 new ones.
+
+**Implemented**: `DecoySimilarityGate` (transcription of the C#/Rust rule, same 0.4 / 0.02 Da
+constants, sharing Carafe's existing residue-mass table because a 1e-5 Da difference cannot move a
+0.02 Da window); bounded retry (20 attempts) on the entrapment shuffle; the gate on both
+`generateReverseDecoy` accept conditions; and `-entrapment_db` / `-entrapment_ratio` for
+foreign-species entrapment.
+
+**The validation that matters**: `-no_similarity_gate` reproduces the pre-gate behaviour, and an
+ungated Astral rebuild reproduces Mike's delivered library **exactly** - `osprey_library_db_peptides.fasta`
+byte-identical by SHA256 over 349 MB, and all **1,390,979** manifest quartets identical in target,
+p_target, decoy and p_decoy. So the digest parameters are confirmed and the gated library differs
+from the delivered one **only** by the gate. That converts every number below from an inference
+into a measurement.
+
+**Cost of the gate on Astral** (1,392,350 digested targets):
+
+| | count | of targets |
+|---|---|---|
+| entrapment changed | 58,319 | **4.19%** |
+| decoy changed | 24,257 | 1.74% |
+| dropped, no acceptable entrapment | 155 | 0.011% |
+| dropped, no acceptable decoy | 449 | 0.032% |
+
+The 4.19% independently reproduces the 4.15% library-wide rate measured by the Python audit
+tooling - two implementations, same answer.
+
+**The loss is structured and benign**, as predicted: 60% of dropped peptides are >=50% a single
+residue against 0.7% of kept ones (median single-residue fraction 0.571 vs 0.200) - poly-A/G/E/Q
+and collagen-like repeats (`GGGGGGGGDGGGR`, `QQQRQQQQQQQQK`, `PGSPGPPGSPGPR`, `RPPPPPPPPPPR`).
+
+**The retry more than pays for the gate.** It also rescues peptides the old one-shot shuffle
+dropped on an exact collision, so the gated build keeps **1,391,732** targets vs the delivered
+**1,390,979** - a net GAIN of 753. Cost/benefit on this task is better than the TODO assumed.
+
+**A finding worth keeping, on the foreign-entrapment assignment.** The objective is to maximize the
+NUMBER of target/entrapment pairs sharing an isolation window - a threshold - not to minimize total
+mass displacement, and the two want different algorithms. Nearest-available in mass order
+accumulates a deficit and reaches 81%; the quantile map is the optimal monotone transport and has
+the best worst case but spreads error evenly across every pair, reaching only 49%; nearest-available
+in sequence order gets 95% with a bad tail. Binning at 0.25 Da and serving from the nearest
+non-empty bin gets **99.86%** (median |dm| 0.043 Da, 99th 1.16 Da). Optimizing the average when the
+criterion is a threshold was the wrong instinct and cost two rebuilds to see.
+
+**Arabidopsis at r=1.0 on Astral is feasible**, which was not obvious: the pool is 1,454,810
+candidates against 1,392,350 targets, only 4.3% headroom, and all targets matched. Zero entrapment
+gate failures on the foreign path against 155 on the shuffle path - direct evidence that foreign
+peptides do not shadow their targets the way anagrams do.
+
+**Still to do here**: both Astral libraries are building (stages 1a/2/3 shared, then one stage 4-5
+per variant). Then re-audit, and the Skyline half (Fisher-Yates + gate) is untouched.
 
 ### 2026-08-01 - Problem isolated, landscape surveyed, decision taken
 

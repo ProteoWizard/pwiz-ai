@@ -16,13 +16,14 @@
 
         1a    digest FASTA -> target+decoy training peptides   (entrapment-free)
         1b    digest FASTA -> target+decoy+entrapment peptides (quartets)
-        1c    replace the 1b shuffle entrapment with matched foreign peptides
-              (only when -EntrapmentSource natural)
         2     Carafe predict a GENERIC library from the 1a training peptides
         3     Osprey search ONE training run with the generic library -> blib
         4-5   Carafe fine-tune RT+MS2 on that blib, predict the FINAL library
-              from the 1b/1c entrapment peptides
+              from the 1b entrapment peptides
         6     Osprey search ALL runs with the final library (+ FDRBench input)
+
+    Stages 1a, 2 and 3 are entrapment-free, so several entrapment variants can share them:
+    build the first variant fully, then run later ones with -Stages 1b,4-5 -Variant <name>.
 
     Fine-tuning trains on the entrapment-FREE database on purpose, so the RT
     and MS2 models never see entrapment sequences; the entrapment database is
@@ -38,11 +39,12 @@
     flags for both Carafe and Osprey.
 
 .PARAMETER EntrapmentSource
-    shuffle : Carafe's deterministic C-term-preserving anagram (the default,
-              and what Mike's delivered libraries contain).
-    natural : matched foreign-species peptides drawn by
-              tools/make_natural_entrapment.py. Requires -ForeignFasta and
-              implies stage 1c.
+    shuffle : Carafe's deterministic C-term-preserving anagram (the default).
+    natural : real peptides from a foreign proteome, mass-matched 1:1 to the
+              targets so they co-locate in the same isolation window. Requires
+              -ForeignFasta. A shuffled entrapment is an anagram of its own
+              target and shares its fragment masses, so it is over-identified
+              and over-estimates FDP; a foreign peptide is not.
 
 .PARAMETER EntrapmentRatio
     Fraction of targets carrying an entrapment peptide (natural source only).
@@ -57,9 +59,9 @@
     pwsh -File ./ai/scripts/Osprey/Carafe/Run-CarafeOspreyWorkflow.ps1 -Preflight
 
 .EXAMPLE
-    # Natural (Arabidopsis) entrapment at r=0.1, reusing an existing stage 1a/2/3.
+    # Arabidopsis entrapment, reusing an already-built stage 1a/2/3 in the same work dir.
     pwsh -File ./ai/scripts/Osprey/Carafe/Run-CarafeOspreyWorkflow.ps1 `
-        -Stages 1b,1c,4-5,6 -EntrapmentSource natural -EntrapmentRatio 0.1 `
+        -Dataset Astral -Stages 1b,4-5 -Variant arab -EntrapmentSource natural `
         -ForeignFasta D:\test\entrapment\arabidopsis\UP000006548.fasta
 
 .NOTES
@@ -79,9 +81,10 @@ param(
 
     [ValidateSet('shuffle', 'natural')] [string]$EntrapmentSource = 'shuffle',
     [string]$ForeignFasta,
-    [ValidateSet('strict', 'relaxed')] [string]$EntrapmentMethod = 'relaxed',
     [double]$EntrapmentRatio = 1.0,
-    [int]$Seed = 2024,
+    # Names the per-variant artifacts so several entrapment variants can share one work dir's
+    # stages 1a/2/3. Empty keeps the canonical unsuffixed names.
+    [string]$Variant = '',
 
     # Dataset overrides - each defaults from the -Dataset preset.
     [string]$InputFasta,
@@ -149,6 +152,9 @@ $presets = @{
         CarafeItolU  = 'ppm'
         MinPepMz     = '400'
         MaxPepMz     = '900'
+        # Digest params ARE verified: an ungated rebuild reproduced the delivered
+        # osprey_library_db_peptides.fasta byte for byte (SHA256, 349 MB) and all 1,390,979
+        # manifest quartets. Only the Carafe PREDICTION tolerance above is assumed.
         Validated    = $false
     }
 }
@@ -297,28 +303,18 @@ $env:JAVA_HOME = Split-Path -Parent (Split-Path -Parent $Java)
 # Stage list
 # ---------------------------------------------------------------------------
 $StageList = $Stages -split '\s*,\s*' | Where-Object { $_ }
-$validStages = @('1a', '1b', '1c', '2', '3', '4-5', '6')
+$validStages = @('1a', '1b', '2', '3', '4-5', '6')
 foreach ($s in $StageList) {
     if ($validStages -notcontains $s) {
         throw "Unknown stage '$s' (valid: $($validStages -join ', '))."
     }
 }
-# Natural entrapment implies the rewrite; asking for it without the source is a
-# silent no-op that would produce a shuffle library under a "natural" name.
-if ($EntrapmentSource -eq 'natural' -and $StageList -contains '1b' -and $StageList -notcontains '1c') {
-    $StageList += '1c'
-    Write-Host 'Note: -EntrapmentSource natural added stage 1c.' -ForegroundColor DarkGray
-}
-if ($StageList -contains '1c') {
-    if ($EntrapmentSource -ne 'natural') {
-        throw 'Stage 1c is the natural-entrapment rewrite; pass -EntrapmentSource natural.'
-    }
+if ($EntrapmentSource -eq 'natural') {
     if (-not $ForeignFasta) {
-        throw ('Stage 1c needs -ForeignFasta (the foreign-species proteome, e.g. the ' +
-               'Arabidopsis UP000006548 FASTA). See $guide.')
+        throw ("-EntrapmentSource natural needs -ForeignFasta (the foreign-species proteome, " +
+               "e.g. the Arabidopsis UP000006548 FASTA). See $guide.")
     }
     if (-not (Test-Path $ForeignFasta)) { throw "ForeignFasta not found: $ForeignFasta" }
-    if (-not $Python) { throw 'Stage 1c needs python on PATH, or pass -Python.' }
 }
 
 # ---------------------------------------------------------------------------
@@ -345,10 +341,12 @@ Write-Host "`n--- Carafe/Osprey library workflow ---" -ForegroundColor Cyan
 
 if (-not $preset.Validated) {
     Write-Warning (
-        "The $Dataset preset is UNVALIDATED. We reproduced Mike's recipe on Stellar only; " +
-        "no Astral Carafe log exists, so -itol $($preset.CarafeItol) $($preset.CarafeItolU) " +
-        'is an instrument-appropriate assumption, NOT a transcribed value. A library built ' +
-        "with it is usable but is not a reproduction of anything. See $guide.")
+        "$Dataset PREDICTION parameters are unvalidated. The digest (stage 1a/1b) IS verified - " +
+        "an ungated rebuild reproduces the delivered osprey_library_db_peptides.fasta byte for " +
+        "byte - but no Astral Carafe log exists, so -itol $($preset.CarafeItol) " +
+        "$($preset.CarafeItolU) for stages 2 and 4-5 is an instrument-appropriate assumption, " +
+        "NOT a transcribed value. Predicted spectra are therefore ours, not a reproduction of " +
+        "Mike's. See $guide.")
 }
 if ($Preflight) {
     Write-Host 'Preflight only - stopping before any work.' -ForegroundColor Yellow
@@ -408,14 +406,18 @@ $ospreyCommon = @(
     '--shared-peptides', 'all', '--threads', "$Threads")
 if ($ProteinFdr) { $ospreyCommon += @('--protein-fdr', $ProteinFdr) }
 
+# Stages 1a / 2 / 3 are entrapment-FREE and therefore shared by every variant built in this
+# work dir; only the entrapment DB and the final library are per-variant. That is what makes
+# an A/B affordable - the expensive training search runs once, not once per variant.
+$suffix = if ($Variant) { "_$Variant" } else { '' }
 $trainFasta   = Join-Path $WorkDir 'osprey_train_db_peptides.fasta'
 $trainPairing = Join-Path $WorkDir 'osprey_train_db_pairing.tsv'
-$libFasta     = Join-Path $WorkDir 'osprey_library_db_peptides.fasta'
-$libPairing   = Join-Path $WorkDir 'osprey_library_db_pairing.tsv'
+$libFasta     = Join-Path $WorkDir "osprey_library_db_peptides$suffix.fasta"
+$libPairing   = Join-Path $WorkDir "osprey_library_db_pairing$suffix.tsv"
 $initialLib   = Join-Path $WorkDir 'osprey_initial_library'
 $trainBlib    = Join-Path $WorkDir 'osprey_train\osprey.blib'
-$newLib       = Join-Path $WorkDir 'osprey_new_library'
-$projectDir   = Join-Path $WorkDir 'osprey_project'
+$newLib       = Join-Path $WorkDir "osprey_new_library$suffix"
+$projectDir   = Join-Path $WorkDir "osprey_project$suffix"
 
 $digestCommon = @(
     '-enzyme', '2', '-miss_c', '1', '-minLength', '7', '-maxLength', '35',
@@ -429,29 +431,20 @@ if ($StageList -contains '1a') {
 }
 
 # --- Stage 1b: digest -> target+decoy+entrapment library FASTA ---
+# Carafe generates the entrapment itself, including the foreign-species variant
+# (-entrapment_db), so there is no post-processing step: the manifest and FASTA it
+# writes are already final. Both paths apply the fragment-overlap similarity gate.
 if ($StageList -contains '1b') {
-    Invoke-Step 'Stage 1b: library FASTA (target+decoy+entrapment)' $Java (@(
-        '-jar', $CarafeJar, '-build_entrapment_fasta', $libFasta, '-db', $InputFasta,
-        '-manifest', $libPairing) + $digestCommon + @('-entrapment'))
-}
-
-# --- Stage 1c: swap the shuffle entrapment for matched foreign peptides ---
-# make_natural_entrapment.py rewrites the 1b outputs IN PLACE and backs the
-# originals up once as *.shuffle.bak. Restore from that backup first so the
-# stage is idempotent - re-running it against an already-rewritten manifest
-# would draw foreign peptides to match foreign peptides.
-if ($StageList -contains '1c') {
-    foreach ($p in @($libPairing, $libFasta)) {
-        $bak = "$p.shuffle.bak"
-        if (Test-Path $bak) {
-            Write-Host "Restoring shuffle original: $(Split-Path -Leaf $p)" -ForegroundColor DarkGray
-            Copy-Item $bak $p -Force
-        }
+    $entrapArgs = @('-entrapment')
+    if ($EntrapmentSource -eq 'natural') {
+        $entrapArgs += @('-entrapment_db', $ForeignFasta)
     }
-    $gen = Join-Path $PSScriptRoot 'tools\make_natural_entrapment.py'
-    Invoke-Step 'Stage 1c: natural entrapment' $Python @(
-        $gen, '--method', $EntrapmentMethod, '--foreign', $ForeignFasta,
-        '--workdir', $WorkDir, '--ratio', "$EntrapmentRatio", '--seed', "$Seed")
+    if ($EntrapmentRatio -ne 1.0) {
+        $entrapArgs += @('-entrapment_ratio', "$EntrapmentRatio")
+    }
+    Invoke-Step "Stage 1b: library FASTA ($EntrapmentSource entrapment)" $Java (@(
+        '-Xmx48g', '-jar', $CarafeJar, '-build_entrapment_fasta', $libFasta, '-db', $InputFasta,
+        '-manifest', $libPairing) + $digestCommon + $entrapArgs)
 }
 
 # --- Stage 2: Carafe initial (generic) library from the TRAIN FASTA ---
