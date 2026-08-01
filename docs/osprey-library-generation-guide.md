@@ -155,6 +155,49 @@ the peptdeep model.
 
 ---
 
+## The 2026-08-01 Astral rebuild
+
+Two libraries built from `uniprot_human_jan2025_yeastENO1_contam_ADpeps.fasta`,
+both with the similarity gate on, differing only in entrapment source. Stages
+1a/2/3 are entrapment-free and were therefore run once and shared, which is what
+makes an A/B affordable.
+
+| | delivered | library 1 (gated shuffle) | library 2 (Arabidopsis r=1.0) |
+|---|---|---|---|
+| quartets | 1,390,979 | 1,391,732 | 1,391,734 |
+| peptide entries | - | 5,566,928 | 5,566,936 |
+| library size | 13.09 GB | 11.84 GB | 11.97 GB |
+| rejectable entrapment | 4.05% | **0%** | **0%** |
+| rejectable decoys | 1.70% | **0%** | **0%** |
+| median entrapment overlap | 0.100 | 0.100 | **0.024** |
+
+Audited in full, not sampled. Both keep MORE targets than the delivered library,
+because the retry rescues more old collision-drops than the gate costs.
+
+Shared training run (`Ast-...-55.mzML`, one file): 3,167,149 initial-library
+entries loaded, 77,076 precursors at 1% run FDR, 68,017 peptides at 1% experiment
+FDR, 7,933 protein groups, 95,842 spectra written to the training blib. Fine-tune
+from that blib: **RT R² 0.850 -> 0.9971**, **MS2 median COS 0.9653 -> 0.9778**,
+both fine-tuned models selected. The metrics are identical for both variants, as
+they must be - same blib, same seed - so the RT/MS2 model is held constant and the
+only difference between the two libraries is which peptides were predicted.
+
+Wall clock on an RTX 4070: stage 1a ~1 min, stage 2 6.0 min, stage 3 7.7 min,
+stage 4-5 15.1 min per variant. Under an hour for both - far cheaper than the
+Stellar timings suggest, because Osprey's search is fast and stages 1a/2/3 are
+shared.
+
+**One failure worth knowing about.** The second variant's prediction died with a
+native Windows fault (`0xC0000409`, no Python traceback) while several prediction
+workers were loading models onto the GPU, seconds after the first variant's
+fine-tuning released it. The data was ruled out first - both peptide FASTAs have
+an identical residue alphabet, identical 7-35 length range, and entry counts
+within 8 of each other - and a clean retry succeeded in the same 15.1 min. Treat
+it as a transient GPU resource fault; if it recurs, lower Carafe's prediction
+parallelism rather than looking for a data cause.
+
+---
+
 ## The similarity gate
 
 Every generated decoy and entrapment sequence must pass a fragment-overlap check:

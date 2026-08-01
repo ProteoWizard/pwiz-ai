@@ -267,8 +267,41 @@ candidates against 1,392,350 targets, only 4.3% headroom, and all targets matche
 gate failures on the foreign path against 155 on the shuffle path - direct evidence that foreign
 peptides do not shadow their targets the way anagrams do.
 
-**Still to do here**: both Astral libraries are building (stages 1a/2/3 shared, then one stage 4-5
-per variant). Then re-audit, and the Skyline half (Fisher-Yates + gate) is untouched.
+**Both Astral libraries are BUILT and audited clean.** Under an hour total on an RTX 4070
+(stage 2 6.0 min, stage 3 7.7 min, stage 4-5 15.1 min per variant) because stages 1a/2/3 are
+entrapment-free and shared.
+
+| | delivered | library 1 (gated shuffle) | library 2 (Arabidopsis r=1.0) |
+|---|---|---|---|
+| quartets | 1,390,979 | 1,391,732 | 1,391,734 |
+| library size | 13.09 GB | 11.84 GB | 11.97 GB |
+| rejectable entrapment | 4.05% | **0%** | **0%** |
+| rejectable decoys | 1.70% | **0%** | **0%** |
+| median entrapment overlap | 0.100 | 0.100 | **0.024** |
+
+Audited in FULL (all 1.39M quartets), not sampled, with the new
+`ai/scripts/Osprey/Entrapment/library_overlap_audit.py`. Packaged as drop-in replacements at
+`D:\test\AstralTest-TargetDecoyLibraries\target+decoy+entrapment-{gated,arabidopsis}\`, each with
+a PROVENANCE.txt and a transport zip.
+
+The fine-tune metrics are **identical between the two variants** (RT R² 0.9971, MS2 COS 0.9778)
+because both use the same training blib and seed - so the RT/MS2 model is held constant and the
+only difference between the libraries is which peptides were predicted. That is what makes them a
+controlled A/B rather than two separate builds.
+
+**Two effects to keep separate.** The gate removes the *tail* - by construction nothing survives
+above 0.4. Foreign entrapment shifts the *whole distribution*: median overlap 0.024 vs 0.100 and
+median positional identity 3.2x lower, before any gating. A shuffle is an anagram of its target
+and shares its fragment masses however it is permuted; a real foreign peptide does not.
+
+**Transient GPU fault worth knowing about**: variant 2's prediction died with a native
+`0xC0000409` (no Python traceback) while several workers loaded models onto the GPU seconds after
+variant 1 released it. Data was ruled out first (identical alphabet, identical 7-35 length range,
+entry counts within 8); a clean retry succeeded in the same 15.1 min.
+
+**Still to do**: a validation search of the new libraries (the accepted-set audit, ~27% -> ~0, needs
+a real run - the library-level audit above cannot measure enrichment among hits); re-running both
+datasets' mean(best-N) arms; and the Skyline half (Fisher-Yates + gate), which is untouched.
 
 ### 2026-08-01 - Problem isolated, landscape surveyed, decision taken
 
