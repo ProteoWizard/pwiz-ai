@@ -182,6 +182,39 @@ their own coverage:
 - **Library-level**: `ai/scripts/Osprey/Entrapment/` on a rebuilt library - the accepted-entrapment
   rejectable fraction should fall from ~27% to ~0.
 
+## How much does the contamination actually move the science?
+
+Answered without a library rebuild: every arm kept its 163 pass-1 sidecars, so each arm's FDP
+curve was rebuilt twice - once with the full entrapment set, once with overlap-gated near-copies
+removed and `r` recomputed (0.9699 -> 0.9296, from a library-wide gate rate of 4.15%).
+
+| arm | gain as reported | gain, near-copies removed | shift |
+|---|---|---|---|
+| mean-best-2 | -0.52% | **-0.16%** | +0.36 |
+| mean-best-3 | -3.23% | -2.67% | +0.56 |
+| mean-best-4 | -6.47% | -5.26% | +1.21 |
+| mean-best-6 | -9.33% | -8.94% | +0.40 |
+
+**The contamination biases AGAINST mean(best-N), as predicted, but only by 0.4-1.2 points and no
+conclusion changes**: N* = 1 still, mean-best-2 still negative, curve shape unchanged. Crucially a
+~1 pt correction against SEA-AD's **+16.4%** is noise, so **dataset 1's positive result is not an
+artifact of entrapment contamination** - re-running it after the fix is about precision, not
+validity.
+
+Measured FDP falls 0.894% -> 0.695% (-22% relative). The other machine, substituting Arabidopsis
+entrapment on Stellar, measured 1.62% -> 1.15% (-29% relative). **Two methods, two datasets, two
+instruments, same ~25% over-estimate by shuffle entrapment.**
+
+The gate rejects **4.15%** of library entrapment but ~**27%** of the ACCEPTED set - a 6.5x
+enrichment of near-copies among hits, the shadowing effect as a single ratio.
+
+Caveats: this reimplements the estimator (rebuilt max arm 30,584 matched vs Osprey's 30,616), so
+the DIFFERENTIAL is reliable and the absolutes drift; and removing near-copies is a NON-random
+subsample, so it is the lower bound on the correction - the Arabidopsis result implies true FDP is
+below 0.695%.
+
+Tool: `ai/scripts/Osprey/Entrapment/contamination_corrected.py`.
+
 ## Progress Log
 
 ### 2026-08-01 - Problem isolated, landscape surveyed, decision taken
