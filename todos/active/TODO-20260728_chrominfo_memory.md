@@ -103,10 +103,68 @@ row before any of the saving arrives.
 ### In Progress
 - [ ] Convert `TransitionDocNode`/`TransitionGroupDocNode` to hold the columnar classes
 
-### Remaining
+### Remaining - columnar storage shape (decided 2026-07-31)
+
+The direction: **dense values that every peak has go in one struct; sparse values that
+only some peaks have get a `ChromFileIdMap` each.** The map-per-column shape that
+`TransitionResults` and `PeptideResults` now have is a step towards this, not the
+destination.
+
+- [ ] `TransitionGroupResults`: one struct for the dense values - `RetentionTime`,
+      `StartTime`, `EndTime`, `ChosenPeakIndex` - held as a single
+      `ChromFileIdMap<ThatStruct>` rather than four parallel lists. Every peak has all
+      four, so nothing is wasted by keeping them together, and it is one indirection per
+      peak instead of four
+- [ ] `TransitionGroupResults`: the sparse values keep a `ChromFileIdMap` each -
+      `Annotations`, `QValues`, `ZScores`, `UserSets`, `OriginalPeakIndexes`,
+      `ReintegratedPeakIndexes`. These are absent or uniform in most documents, which is
+      what `MaybeConstant()` collapses; putting them in the dense struct would undo that
+- [ ] `TransitionResults`: eventually **no positionally-matched lists at all**. A
+      transition stores a value only where the user moved *that transition's* peak
+      boundaries independently of the rest of its precursor's. Everything else -
+      `Areas`, `Truncated`, `EmptyPeaks`, `Identified`, `ForcedIntegration` - comes back
+      from the .skyd via the precursor's chosen peak index.
+      NOTE: this partly undoes the current map-per-column work on `TransitionResults`.
+      Decide the transition-level shape before converting anything else there
+- [ ] `CustomPeak`: drop `Annotations` (a `ChromFileIdMap<Annotations>` on
+      `TransitionResults` instead, mirroring the precursor). Then `StartTime`/`EndTime`
+      stop being nullable - a `CustomPeak` without bounds cannot exist - and
+      `HasPeakBounds`/`IsEmpty` go with them, since a null entry in the list already
+      means "no custom peak"
+- [ ] `ChromFileIdMap.Join<TOther>(other)` for walking two maps over *different*
+      `ChromFileIds` - precursor against transition, which is where position leakage
+      lives. Proposed shape:
+      `IEnumerable<(int ReplicateIndex, ChromFileInfoId FileId, T Value, TOther OtherValue)>`,
+      a value tuple rather than `Tuple<>`. Open: inner join only, or surface the miss?
+      Inner covers `GetSharedTransitionAreas`; keep `TryGetValue` for single lookups.
+      Maps over the *same* `ChromFileIds` need no join - they are aligned by construction
+- [ ] Finish removing `IndexOfFile` from the results classes. Still public on
+      `TransitionResults`, `TransitionGroupResults`, `PeptideResults`, and these callers
+      still find-then-index: `PeptideQuantifier.FindQValue`; `MoleculeResults` 431, 482,
+      563, 604 (563 stores a position per transition in an array and reads it back at 649
+      - the most fragile); `PeptideDocNode` 386 and 1635; `PeptideResult` 197;
+      `TransitionGroupDocNode.GetPrecursorAnnotationPosition`; `MoleculeResultsTest` 249.
+      `ChromFileIds.IndexOfFile` itself stays - `MergeSource.Build` needs it to align two
+      layouts, which is the one place a raw position is the actual subject
+
+Traps, both of which have already cost time:
+- `ChromFileIdMap` is an `IReadOnlyList<IEnumerable<T>>`, so `map.Count` is the
+  **replicate** count and `map.ToArray()` is an array of enumerables. Test comparisons
+  need `.Values.ToArray()`
+- Do not use `perl -0pi` with `s|...|...|` on these files; an unescaped `|` in a
+  replacement clobbered the head of `TransitionGroupResults.cs`
+
+### Remaining - the rest
 - [ ] Convert the readers to the facade. Ordering matters: the document cannot be put
       into compact format until the readers stop reading dropped values off the DocNode,
       so Reintegrate is the LAST step of this sequence, not the first
+- [ ] The four accessor families still backed by `LegacyChromInfos`, which is null for any
+      normally-loaded document: `TransitionGroupDocNode.ChromInfos`, `GetSafeChromInfo`,
+      `GetChromInfoEntry`, and the `Average*` properties. ~150 call sites; each needs a
+      `MoleculeResults`. Until then they answer "no peaks" wherever they are read
+- [ ] The ~130 test sites now saying `.EmptyResults` - each is a test asserting about no
+      peaks, and needs moving onto a `MoleculeResults`. `RefineTest` and `AnnotationTest`
+      are currently passing vacuously
 - [ ] Commit N-2: compact storage - `Area` + nullable custom-peak ref per transition cell,
       `PeakIndex` on the group
 - [ ] Commit N-1: make Refine > Reintegrate produce the compact form
@@ -663,3 +721,35 @@ workaround for a StackOverflowException). Underneath it, `GetScoredPeaks` now yi
 with the default comparer, and a bare `IEnumerable` has no value equality, so the fallback could
 never return true and termination rested entirely on `ReferenceEquals(Results, other.Results)`.
 That is why losing reference stability turned into unbounded recursion.
+
+### 2026-07-31 - Session 5
+
+Commits `0a22318a0`..`1860a68cb`, all pushed.
+
+Landed: `StripAnnotationValues` on the columnar results; every reader of
+`TransitionGroupDocNode.Results` converted and the property removed (what survives is
+`EmptyResults`, named for holding nothing, which says whether the node was built from
+chrom infos - `HasResults` cannot become `AbbreviatedResults != null`, that broke
+`TestMoleculeResultsMatchTransitionChromInfo`); `ChromInfos` renamed `LegacyChromInfos` on
+both results classes, since it is populated only between reading a document and reading
+its .skyd; precursor gained `StartTimes`/`EndTimes` and lost `Areas` (a precursor's area is
+the sum of its transitions', and one number cannot answer the MS1 and MS2 sums separately);
+precursor annotations became a plain `ImmutableList<Annotations>` and `CustomPeak` lost its
+`Position`; `ReplicatePositions` became `IReadOnlyList<IEnumerable<int>>`; `ReplicateMap`
+replaced by `ChromFileIdMap<T>`, which `TransitionResults` and `PeptideResults` now use.
+
+Bugs found on the way, all fixed: `DocumentAnnotationUpdater.UpdateTransition` guarded on
+`_precursorResultUpdater` instead of `_transitionResultUpdater`; the precursor wrote
+annotations (child elements) before `transition_areas` (an attribute), which `XmlWriter`
+refuses once an element has content; the generic three-argument
+`WriteAttribute<TAttr>(name, value, defaultValue)` formats with plain `ToString()` and so
+loses float precision - use `WriteAttributeNullable`; `GetSharedTransitionAreas` held a
+*precursor* position and read a *transition* with it.
+
+Test-result gotcha: the "N failures" column in the run summary is a **running total**, not
+per-test. Count the `!!! ... FAILED` markers instead.
+
+Still failing at baseline, unchanged by any of this: `TestColumnarResultsRoundTrip`
+(`CheckUserSetPeakStillWritten`, line 206), `TestSaveColumnarResults`,
+`TestMoleculeResultsWithUserSetPeakBounds` (5 surviving `ChosenPeakIndexes`),
+`TestAnnotations`, `TestImportAnnotations`, `TestPeakBoundaryCompare` (MessageDlg timeout).
