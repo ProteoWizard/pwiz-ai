@@ -169,6 +169,12 @@ function Invoke-OspreyDatasetRun {
         # per-file scoring time) and the parquet write (14%) are the candidates; the main
         # search (55%) should be roughly throughput-neutral.
         [int]$ParallelFiles = 0,
+        # HPC split: run exactly ONE pipeline task instead of the whole run. Combined with
+        # -LinkFrom this makes a single-phase re-measurement cost only that phase - e.g. Stage 5
+        # at 163 files is ~75 min instead of the 18 h a full run takes.
+        [ValidateSet('SpectraCache', 'PerFileScoring', 'FirstPassFDR', 'PerFileRescoring',
+                     'SecondPassFDR')]
+        [string]$Task,
         [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
         [string]$Tag = '',
         [string]$DataDir,
@@ -310,7 +316,19 @@ function Invoke-OspreyDatasetRun {
     # naming the vendor reader. Artifacts go to the run dir; the cache stays beside the data
     # unless -CacheDir says otherwise (what a genuinely read-only data directory needs).
     $blib = Join-Path $OutDir 'out.blib'
-    $cliArgs = @('-i') + $inputs + @(
+    # The HPC per-task modes AFTER PerFileScoring consume .scores.parquet, not the raw inputs:
+    # "--task FirstPassFDR cannot be combined with --input. Use --input-scores instead."
+    # With -LinkFrom the parquets are already hard-linked into $OutDir, so that directory IS
+    # the score input. Mutually exclusive with -i, hence the branch rather than an extra flag.
+    $POST_SCORING_TASKS = @('FirstPassFDR', 'PerFileRescoring', 'SecondPassFDR')
+    $useScores = $Task -and ($POST_SCORING_TASKS -contains $Task)
+    if ($useScores -and -not $LinkFrom -and -not $Resume) {
+        throw ("-Task $Task consumes .scores.parquet, not raw input. Pass -LinkFrom <a completed " +
+               "run over the same files> so the Stage 1-4 parquets are linked into the output " +
+               "directory first, or -Resume into a directory that already has them.")
+    }
+    $cliArgs = if ($useScores) { @('--input-scores', $OutDir) } else { @('-i') + $inputs }
+    $cliArgs += @(
         '-l', $libraryPath,
         '-o', $blib,
         '--resolution', 'hram',
@@ -322,6 +340,7 @@ function Invoke-OspreyDatasetRun {
     if ($FdrBenchPass -ne 'none') {
         $cliArgs += @('--fdrbench', (Join-Path $OutDir 'fdrbench.tsv'), '--fdrbench-pass', $FdrBenchPass)
     }
+    if ($Task) { $cliArgs += @('--task', $Task) }
     if ($ParallelFiles -gt 0) { $cliArgs += @('--parallel-files', "$ParallelFiles") }
     if ($CacheDir) { $cliArgs += @('--cache-dir', $CacheDir) }
     if ($DecoyMode -eq 'libdecoy') { $cliArgs += @('--decoys-in-library', '--decoy-pairing-manifest', $manifest) }
@@ -411,6 +430,22 @@ function Invoke-OspreyDatasetRun {
     # Optional Stage 1-4 hard-link resume (same-file-set source only).
     if ($LinkFrom) {
         if (-not (Test-Path $LinkFrom)) { throw "LinkFrom dir not found: $LinkFrom" }
+        # Osprey stamps a daily version into every .osprey.task and refuses to consume
+        # artifacts from a different build ("osprey version mismatch"). A -LinkFrom re-run on a
+        # newer binary is EXACTLY that case, so pin the source's version unless the caller
+        # already chose one. Without this the failure reads like a code bug.
+        if (-not $env:OSPREY_VERSION_OVERRIDE) {
+            $srcTask = Get-ChildItem (Join-Path $LinkFrom '*.osprey.task') -ErrorAction SilentlyContinue |
+                       Select-Object -First 1
+            if ($srcTask) {
+                $srcVer = (Get-Content $srcTask.FullName -Raw | Select-String -Pattern '\d+\.\d+\.\d+\.\d+' |
+                           Select-Object -First 1).Matches[0].Value
+                if ($srcVer) {
+                    $env:OSPREY_VERSION_OVERRIDE = $srcVer
+                    Write-Host ("  LinkFrom: pinned OSPREY_VERSION_OVERRIDE={0} from the source run" -f $srcVer)
+                }
+            }
+        }
         $suffixes = @(
             '.calibration.json', '.calibration.json.PerFileScoring.osprey.task',
             '.scores.parquet', '.scores.parquet.PerFileScoring.osprey.task'
@@ -449,7 +484,7 @@ function Invoke-OspreyDatasetRun {
     $log = Join-Path $OutDir 'run.log'
     ("[{0}] START dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "picklda=$([bool]$PickLda) files=$($inputs.Count) threads=$Threads " +
-     "parallelfiles=$ParallelFiles mdiag=$mdiag " +
+     "parallelfiles=$ParallelFiles task='$Task' mdiag=$mdiag " +
      "fdrbench=$FdrBenchPass linkfrom='$LinkFrom'") -f (Get-Date -Format s) |
         Set-Content -Path $log
     "Exe: $ospreyExe" | Add-Content -Path $log
@@ -458,7 +493,9 @@ function Invoke-OspreyDatasetRun {
 
     Write-Host "Logging to $log" -ForegroundColor Cyan
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    & $ospreyExe @cliArgs *>&1 | Tee-Object -FilePath $log -Append
+    # Out-Host, or Tee-Object's pipeline output becomes this function's return value and
+    # the caller's `exit $exitCode` receives the whole transcript instead of the code.
+    & $ospreyExe @cliArgs *>&1 | Tee-Object -FilePath $log -Append | Out-Host
     $exit = $LASTEXITCODE
     $sw.Stop()
     ("[{0}] DONE dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +

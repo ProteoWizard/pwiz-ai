@@ -67,6 +67,8 @@ param(
     [string]$ExcludePattern,
     [int]$Threads = 30,
     [int]$ParallelFiles = 0,
+    [ValidateSet('SpectraCache','PerFileScoring','FirstPassFDR','PerFileRescoring','SecondPassFDR')]
+    [string]$Task,
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
     [string]$Tag = '',
     [string]$DataDir,
@@ -104,4 +106,7 @@ $dataset = @{
     Readme                = (Join-Path $PSScriptRoot 'README.md')
 }
 
-Invoke-OspreyDatasetRun -Dataset $dataset @PSBoundParameters
+$exitCode = Invoke-OspreyDatasetRun -Dataset $dataset @PSBoundParameters
+# Propagate Osprey's exit code. Without this a failed run exits 0 and every
+# caller - including an overnight harness - reads the failure as success.
+if ($null -ne $exitCode) { exit $exitCode }
