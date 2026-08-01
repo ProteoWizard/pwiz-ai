@@ -34,6 +34,11 @@ ai/scripts/Osprey/
   Combine-Stage5-Profile.ps1    merge dotTrace + samply outputs into a table
   samply-to-csv.py              samply JSON -> flat per-function CSV
 
+  Carafe/                       build spectral libraries from a protein FASTA
+    README.md                   driver usage + per-machine configuration
+    Run-CarafeOspreyWorkflow.ps1  6-stage Carafe + Osprey library build
+    tools/                      natural-entrapment generator, m/z occupancy
+
   Compare/                      cross-impl bridge (used rarely now)
     README.md                   when/how to use the cross-impl gate
     Build-OspreyRust.ps1
@@ -168,6 +173,23 @@ Requires an entrapment dataset (`*LibraryDecoy`); precursor level is the
 trusted path.  The zoomed q-q calibration *plots* remain a Python helper
 (matplotlib, reads each cell's `fdp.csv`); the numeric gate above does
 not need it.
+
+## Library generation (Carafe)
+
+The entrapment datasets above depend on Carafe-built libraries.  `Carafe/`
+builds them from a protein FASTA instead of depending on a delivered drop,
+which is also what makes the *natural* (foreign-species) entrapment variant
+possible.  Recipe, prerequisites, and validation:
+[../../docs/osprey-library-generation-guide.md](../../docs/osprey-library-generation-guide.md).
+
+```powershell
+# Confirm this machine has JDK 21+, carafe.jar, the peptdeep venv, Osprey.exe
+pwsh -File ./ai/scripts/Osprey/Carafe/Run-CarafeOspreyWorkflow.ps1 -Preflight
+```
+
+To *derive* a variant from a library you already have (entrapment ratio subset,
+decoy strip), use [`SEA-AD/New-SeaAdLibrary.ps1`](SEA-AD/New-SeaAdLibrary.ps1)
+instead -- no Carafe, no GPU.
 
 ## Performance
 

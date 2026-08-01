@@ -52,6 +52,17 @@ Memory or scaling work ("does this fit at N files?", a run that looks hung) need
   also covers `OSPREY_LOG_MEMORY=1` post-GC probes, which are what answer "will it fit"
   (`--memstamp` includes uncollected garbage, so it shows shape, not magnitude).
 
+Spectral-library or entrapment work ("rebuild the library", "change the
+entrapment", "why is measured FDP X?") needs:
+- **`ai/docs/osprey-library-generation-guide.md`** - the Carafe recipe for building a
+  library from a protein FASTA, its prerequisites, and the validation numbers from our
+  own reproduction. Also covers **natural (foreign-species) entrapment**: shuffle
+  entrapment is an anagram of its own target, so it shares the target's fragment masses,
+  is over-identified, and over-estimates FDP by ~1.6x where real Arabidopsis peptides
+  give ~1.1x. Driver: `ai/scripts/Osprey/Carafe/Run-CarafeOspreyWorkflow.ps1 -Preflight`.
+  To *derive* a variant from an existing library instead of building one, use
+  `ai/scripts/Osprey/SEA-AD/New-SeaAdLibrary.ps1` (no Carafe, no GPU).
+
 Cross-impl parity work additionally needs:
 - **`ai/docs/osprey-development-guide.md`** - steel-thread parity
   doctrine, Stage 1-5 diagnostic dumps, bisection methodology, and the

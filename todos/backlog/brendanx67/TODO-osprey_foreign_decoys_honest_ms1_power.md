@@ -137,16 +137,21 @@ accepted entrapment by source, or run twice) — **the non-trivial tooling; scop
    (`D:/test/entrapment/arabidopsis/UP000006548.fasta`), homology-filter against the human target set,
    mass-match to human targets (co-locate in the same isolation window; native m/z — do NOT shift, do
    NOT collision-avoid), draw disjoint 1:1 sets: decoy set A (for A/B) and entrapment set B (for B).
-   Reuse/adapt `ai/.tmp/make_natural_entrapment.py` (it already digests + homology-filters + mass-matches
-   Arabidopsis; extend to emit two disjoint sets + a decoy set). Distribution-match on length + charge +
-   precursor-mass so the only intended difference from targets is "not really present."
+   Reuse/adapt `ai/scripts/Osprey/Carafe/tools/make_natural_entrapment.py` (it already digests +
+   homology-filters + mass-matches Arabidopsis; extend to emit two disjoint sets + a decoy set).
+   Distribution-match on length + charge + precursor-mass so the only intended difference from
+   targets is "not really present."
 2. **Carafe spectral prediction + library assembly (GPU, ~1–2 h).** Predict fragment intensities + RT
    for the Arabidopsis peptides (peptdeep) and assemble the search library with the foreign peptides as
    decoys (and, for B, as a second entrapment). Use the Carafe workflow — see
-   [[project_osprey_carafe_library_selfsufficiency]] and the recipe at
-   `ai/.tmp/osprey-library-generation-recipe.md`; orchestrator `ai/.tmp/Run-CarafeOspreyWorkflow.ps1`;
+   [[project_osprey_carafe_library_selfsufficiency]], the recipe at
+   `ai/docs/osprey-library-generation-guide.md`, and the driver
+   `ai/scripts/Osprey/Carafe/Run-CarafeOspreyWorkflow.ps1` (start with `-Preflight`);
    `maccoss/Carafe` → `C:\proj\Carafe-mm`. The pairing manifest must label targets / foreign-decoys /
    entrapment correctly for `--decoys-in-library --decoy-pairing-manifest`.
+   **NOTE (2026-08-01):** the Astral preset in that driver is UNVALIDATED — no Astral Carafe log
+   exists, so its `-itol` is an assumption. See the guide's Open questions before trusting a
+   rebuilt Astral library as a reproduction of the delivered one.
 3. **Osprey run + extract (async).** Run on the 3 Astral mzML at `--threads 8` (see gotchas), then
    `python ai/.tmp/extract_mdiag.py <out>/astral.model-diagnostics.html` for MS1 weights + FDP, and the
    inline true-FDP snippet (below) for IDs@true-FDP=1%.
@@ -182,11 +187,15 @@ accepted entrapment by source, or run twice) — **the non-trivial tooling; scop
   `osprey_library_db_pairing.tsv`, 3× `Ast-*.mzML`. Baseline report already computed:
   `D:/test/osprey-runs/_mdiag/astral/astral.model-diagnostics.html`.
 - **Arabidopsis FASTA**: `D:/test/entrapment/arabidopsis/UP000006548.fasta` (39k prot).
-- **Scripts (all in `ai/.tmp/`)**: `make_natural_entrapment.py` (digest+homology+mass-match — the base
-  for Phase 1), `occupancy_test.py` (the saturation measurement), `extract_mdiag.py` (MS1 weights +
-  FDP@q from the report JSON), `shift_decoy_mz.py` / `permute_decoy_mz*.py` (proxy generators — NOT for
-  this experiment, keep anagram fragments), `mass_defect_analysis.py`, `mem-sampler.ps1`,
-  `job-probe.ps1`, `run_permz.ps1` (detached-launch template), `Run-CarafeOspreyWorkflow.ps1`.
+- **Scripts, COMMITTED (2026-08-01)**: `ai/scripts/Osprey/Carafe/Run-CarafeOspreyWorkflow.ps1`
+  (the 6-stage driver), `ai/scripts/Osprey/Carafe/tools/make_natural_entrapment.py`
+  (digest+homology+mass-match — the base for Phase 1), and
+  `ai/scripts/Osprey/Carafe/tools/occupancy_test.py` (the saturation measurement).
+- **Scripts still only in `ai/.tmp/`** (uncommitted, may not exist on another machine):
+  `extract_mdiag.py` (MS1 weights + FDP@q from the report JSON), `shift_decoy_mz.py` /
+  `permute_decoy_mz*.py` (proxy generators — NOT for this experiment, keep anagram fragments),
+  `mass_defect_analysis.py`, `mem-sampler.ps1`, `job-probe.ps1`, `run_permz.ps1`
+  (detached-launch template).
 - **Reports/PDFs**: `night-report-decoy-mz-collision.md`, `night-lit-report.md`,
   `poster_bernhardt.txt` (Biognosys 2016), `biorxiv2026.txt` (diagFDR), `s41592-025-02719-x.pdf` (Wen).
 - **PDF reading**: `pypdf` is installed; `python -c "from pypdf import PdfReader; ..."` (console is
