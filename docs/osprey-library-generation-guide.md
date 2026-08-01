@@ -49,6 +49,21 @@ Two things are easy to confuse:
 Point the driver at non-default locations with the environment variables listed
 in [`Carafe/README.md`](../scripts/Osprey/Carafe/README.md#machine-configuration).
 
+### Traps that cost time on a fresh machine
+
+- **A JDK 17 on `JAVA_HOME` fails deep inside stage 1**, with an
+  `UnsupportedClassVersionError`, because Carafe's pom targets release 21. The
+  driver probes each candidate's version and takes the first 21+, so
+  `-Preflight` will tell you which it picked - but a raw `java -jar carafe.jar`
+  will not. A JetBrains-bundled JBR 21+ works.
+- **Maven may only exist inside IntelliJ**:
+  `<IDEA>\plugins\maven\lib\maven3\bin\mvn.cmd`. There is no separate install on
+  the development machine this recipe came from.
+- **`mvn -o test` fails even with a warm `.m2`** if `surefire-testng` was never
+  fetched; `mvn -o package` is fine. Run tests online once.
+- **`Compress-Archive` cannot zip these libraries** - it dies with "Stream was
+  too long" on a >4 GB member and they are ~12 GB. Use 7-Zip.
+
 ---
 
 ## The pipeline
