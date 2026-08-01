@@ -38,7 +38,15 @@ Two specific traps in using the blib for this:
 ```powershell
 python pass1_entrap.py  <run_dir> <out.json> [parquet_dir]   # harvest accepted set (q <= 1%)
 python pass1_compare.py <out.json> "<label>"                 # pair to targets, score, compare peaks
+
+python library_overlap_audit.py <osprey_library_db_pairing.tsv> --label NAME [--sample N]
 ```
+
+`library_overlap_audit.py` needs **no run**: it audits the library's own pairing manifest, so it
+can confirm a rebuilt library cleared the contamination before a multi-hour search is spent on it.
+The library-wide rejectable fraction is the honest denominator; the accepted-set fraction the two
+pass-1 tools measure is ~6.5x higher, because near-copies are enriched among hits, and only a real
+run can show that.
 
 `parquet_dir` is separate because a `-LinkFrom` arm keeps its parquets in the linked directory
 while writing sidecars to its own.
@@ -76,3 +84,22 @@ RT, which differs because the sequences differ. Gate on identity **and** overlap
 **Severity note.** Peak assignment is non-exclusive: in the 41.1% same-peak cases both the
 entrapment and its target hold a peak at that apex and both are accepted. The contamination
 inflates the measured false count but does **not** suppress real identifications.
+
+## Reference result (Astral library, library-level, 2026-08-01)
+
+`library_overlap_audit.py` over the first 150,000 quartets of each Astral pairing manifest. The
+ungated build reproduces the delivered library exactly, so its row IS the delivered library.
+
+| | median overlap | 99th | max | rejectable | median identity |
+|---|---|---|---|---|---|
+| shuffle, ungated (= delivered) | 0.1000 | 0.5714 | 1.0000 | **4.05%** | 0.1923 |
+| shuffle, gated | 0.1000 | 0.3750 | 0.4000 | **0%** | 0.1875 |
+| Arabidopsis r=1.0, gated | **0.0208** | 0.2000 | 0.4000 | **0%** | **0.0588** |
+| decoys, ungated | 0.0833 | 0.4545 | 1.0000 | 1.70% | - |
+| decoys, gated | 0.0833 | 0.3333 | 0.4000 | **0%** | - |
+
+Two things worth separating. The gate removes the **tail** - it is a filter, so by construction
+nothing survives above 0.4. Foreign entrapment shifts the **whole distribution**: median overlap
+0.0208 vs 0.1000 is 4.8x lower, and median positional identity 3.2x lower, before any gating. A
+shuffled entrapment is an anagram of its target and shares its fragment masses no matter how it is
+permuted; a real foreign peptide simply does not.
