@@ -168,6 +168,45 @@ resident-path perf) remain by design. `/code-review max` from `C:\proj\pwiz` is 
 step before merge - it is user-invoked and two prior rounds of it found real bugs every automated
 gate missed.
 
+### DECIDED 2026-08-01 (Brendan): ship this PR, defer early-erroring
+
+Confirmed reading of what this PR achieves: the mean(best-N) experiment q is carried through to the
+REPORTED output **only under `OSPREY_PASS2_QVALUE=transfer`**, which writes
+`entry.ExperimentPrecursorQvalue = rec1.ExperimentPrecursorQvalue` straight from the pass-1
+`.1st-pass.fdr_scores.bin` record. The other three modes do not:
+
+| mode | reported experiment q under mean(best-N) |
+|---|---|
+| `transfer` | mean(best-N), carried through - **the only end-to-end supported mode** |
+| `percolator` (default) | MAX - the statistic is silently lost after pass 1 |
+| `transfer-compete` | refused by this PR |
+| `protein-compact` | refused by this PR |
+
+Making `transfer-compete` / `protein-compact` aggregate-aware is a follow-up sprint (it depends on
+the gap-fill run-count exclusion, #4511).
+
+**Brendan proposed erroring at the START of the run for every mode that is not `transfer`,
+`percolator` included, so the incompatibility is immediate rather than discovered hours in.
+DEFERRED on purpose** - it is not being done in this PR. Two reasons: it would break the existing
+mean-N sweep workflow (pass-1 outputs carry mean(best-N) regardless of pass-2 mode, and the
+35-cohort series / PICK_LDA cells read the pass-1 `fdpView`, so those scripts would each need
+`OSPREY_PASS2_QVALUE=transfer` added), and a new commit invalidates a TeamCity result that took
+~4.5h to get an agent.
+
+**It should land AFTER [TODO-20260727_osprey_pass2_fdr_default.md](TODO-20260727_osprey_pass2_fdr_default.md)**,
+which retires `percolator`. That is the priority, and it collapses the matrix above from four modes
+to two or three, so the erroring becomes a much smaller and less disruptive change.
+
+Implementation notes for whoever writes it (both were established while scoping it):
+* It must be TWO-TIER. A startup check can only read THIS process's environment, which on a
+  `--task SecondPassFDR` merge node says nothing about what pass 1 did - the exact unsound inference
+  this PR removed. So: startup refusal for the straight-through case, with the existing
+  provenance-based check (gating on the arm recorded in `<stem>.1st-pass.model.json`) kept as the
+  merge-node backstop. Same shape as the `ValidateExperimentAggSettings` double-call already here.
+* It must be scoped by `SelectedTask`. `--task FirstPassFDR` stops after Stage 5 and never reaches
+  pass 2, so a blanket startup error would refuse a valid FirstJoin-only HPC leg. Same switch as
+  `Program.ExperimentAggFileCount`.
+
 ### Final state of the night session
 
 Branch pushed as `b1d75bffa` (three of my commits plus a merge of master, which had been merged into

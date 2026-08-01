@@ -870,3 +870,31 @@ Discussion-first (Mike/Brendan want the methodology settled before the flip).
   first. Full analysis + tables: `ai/.tmp/pass2-fdr-default-validity.md`.
 - Driver: `ai/.tmp/run-pass2-oracle-3way.ps1` (-Dataset param); logs
   `ai/.tmp/pass2-oracle-3way.{stellar,astral}.driver.log`.
+
+## 2026-08-01: this TODO is now the priority, and it simplifies a downstream change
+
+Brendan (2026-08-01, closing the mean(best-N) night session): retiring `percolator` here is the
+priority, ahead of further hardening in the mean(best-N) work.
+
+Two concrete things that land on this TODO from
+[TODO-20260731_osprey_mean_best2-fix.md](TODO-20260731_osprey_mean_best2-fix.md) (PR #4512):
+
+1. **Removing the `percolator` retrain deletes `applyExperimentAgg` entirely.** Verified against the
+   call graph: every production site passing a non-first-pass label is in `Pass2FdrSidecar.cs`
+   (`:901` resident retrain, `:1056` projection retrain, `:1054` the sink label), and
+   `applyExperimentAgg` is always `passLabel == PercolatorEngine.FIRST_PASS_LABEL`. So the ONLY way
+   it is ever false is the 2nd-pass retrain. Remove that and the parameter is constant true, which
+   deletes: the `= true` default on 7 signatures (`PercolatorQValues` x4, `PercolatorScorer` x2,
+   `StreamingFdr` x1), the 3 `applyExperimentAgg:` arguments in `PercolatorEngine`, the pass gate on
+   `FIRST_PASS_LABEL`, the gate in `PercolatorScorer.RunStreamingFirstPass`, and
+   `FdrTest.TestSecondPassIgnoresExperimentAggregation`. It also retires review finding **M2**
+   (making that parameter required), which is therefore NOT worth doing first - it would be
+   hardening code slated for deletion.
+2. **It shrinks the mode matrix for the deferred "refuse incompatible pass-2 modes at startup"
+   change** described in that TODO. With `percolator` gone the matrix is two or three modes instead
+   of four, and the most disruptive case (erroring on the DEFAULT mode, which would have forced
+   `OSPREY_PASS2_QVALUE=transfer` into every existing mean-N sweep script) disappears.
+
+Note the removal targets the pass-2 **q-value** step, not the Stage-6 peak RE-SCORING, which is the
+part that actually adds IDs and is kept in all modes - worth stating explicitly in the PR so it does
+not read as "we deleted the second pass".
