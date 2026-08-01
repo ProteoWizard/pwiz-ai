@@ -113,6 +113,62 @@ coverage is flag-ON: eviction oracle, floor-path parity, PEP map assertion, and 
 
 ## Progress Log
 
+### 2026-08-01 (night session) - all 12 handoff items implemented
+
+Commit `51d66c0b9` (20 files, +1192/-162) on top of `4a0e8cd5d`. Gates: **571/571 tests, 0
+inspection warnings.** Handoff for the next session:
+`ai/.tmp/handoff-20260801_osprey_mean_best2-fix.md`.
+
+**Phase 1 (correctness)** - all five done. The blocker (item 1) is closed: `applyExperimentAgg`
+now threads through the RESIDENT path (`RunPercolatorStreaming` ->
+`ScorePopulationAndComputeFdr` -> `ComputeStreamingCompetitionQvalues` -> both full-length
+wrappers), gated on `passLabel == FIRST_PASS_LABEL` exactly as the projection path is, so the two
+byte-identity oracles agree again under the flag.
+
+**Item 3 got a stronger fix than planned.** Rather than "narrow the check and say it is inferred",
+the pass-1 arm is now RECORDED in the 1st-pass model sidecar (`FirstPassModelIO`, new optional
+`ExperimentAgg` field) and carried on the `FirstPassPercolatorModel` byproduct, so a merge node
+gates on the arm that TRAINED the model instead of its own environment - killing the false
+negative (mixed column, no refusal) AND the false positive (stale exported variable aborts a
+consistent run). Added WITHOUT bumping `SchemaVersion` on purpose: `FirstPassModelIoTest` pins
+that version 2 loads as null, so a bump would make every pre-existing sidecar unreadable, which on
+a merge node is the hard fail-fast rather than graceful degradation. Legacy sidecars report null =
+UNKNOWN and the refusal falls back to the process env, saying so in the message.
+
+**Item 2**: `transfer-compete` refused alongside `protein-compact`. protein-compact yields a MIXED
+column (two aggregations, unauditable); transfer-compete yields a uniformly-MAX column, which is
+internally consistent but makes a mean(best-N) run indistinguishable from a default run in its own
+output. Both refused; the false comment about "the other frozen modes" corrected.
+
+**Three findings worth keeping** (full detail in the handoff):
+
+1. **The streaming-vs-resident floor bound is `bin width + local decoy spacing`, not bin width.**
+   Asserting bin width alone fails by ~18x on a sparse fixture: the resident estimator interpolates
+   BETWEEN two observed decoy scores, the streaming one WITHIN one histogram bin, so where decoys
+   are sparser than bins the disagreement is set by the DATA SPACING. Production (millions of
+   decoys, narrow range, several per bin) does collapse to the bin width. The "~5.8e-4 on this PR's
+   own fixture" figure in finding [4] above was a dense-fixture number, not a bound.
+2. **Conservative q depends only on the target/decoy SEQUENCE down the ranked list.** An
+   aggregation that reorders units without crossing a target past a decoy leaves every q identical -
+   so a mean(best-N) fixture that does not force a crossing is VACUOUS. The first version of the
+   wrapper/map test was exactly that.
+3. **[14] confirmed and fixed: mean(best-N) is NOT rolled up to protein.**
+   `ProteinFdr.CollectBestPeptideScores` ranks protein groups by the max RAW per-peptide SVM score
+   and never reads the aggregate; the flag reaches protein results only through which peptides
+   clear the experiment-q gate. The `EXPERIMENT_AGG_MEAN_BEST_PREFIX` doc comment claimed a protein
+   max roll-up that does not exist; comment and `TargetDecoyCompetition` class spec both corrected.
+
+**Testability change to review**: `OspreyEnvironment.MeanBestN` is now a settable property
+(env-initialized, mirroring the floor toggles), and `ExperimentAgg` / `ExperimentAggMeanBest` are
+COMPUTED from it rather than separately snapshotted - which is what made the validation,
+description and validity-key logic testable at all. Nothing in the pipeline writes it.
+
+**Still outstanding**: #4511 items 2/3/4 (gap-fill run-count exclusion, experiment-level q ladder,
+resident-path perf) remain by design. `/code-review max` from `C:\proj\pwiz` is the required next
+step before merge - it is user-invoked and two prior rounds of it found real bugs every automated
+gate missed.
+
+
 ### 2026-07-31 - PR #4512 open, but DO NOT MERGE YET
 
 Two commits: `c0408d0c2` (the review fixes) and `73af9f8ba` (two default-path regressions in the
