@@ -171,6 +171,12 @@ Full detail in [#4511](https://github.com/ProteoWizard/pwiz/issues/4511); the bl
   replication would restore the O(files x precursors) footprint on disk), and should carry a
   **provenance header** naming the pass-1 arm + floor mode - which also fixes item 2 above.
 
+**Next session handoff**: For the detailed startup protocol, phase-ordered work plan and gate list,
+read `ai/.tmp/handoff-20260731_osprey_mean_best2-fix.md` before starting work. It is scoped for a
+`/night-session`: finish #4512 to merge-ready and make mean(best-N) genuinely user-consumable behind
+the flag (logging of the active mode, N bounds, docs for all three env vars, floor-path test
+coverage, and a warm-rerun regression leg to close the gate gap that hid the last regression).
+
 ### 2026-07-31 - Branch created
 
 Off master `d030522344` (the #4509 squash). Review output and full triage in the conversation of
