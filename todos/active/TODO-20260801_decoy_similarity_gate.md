@@ -502,6 +502,47 @@ machine's 735 are both correct (rows vs distinct); the gap is duplicate entrapme
 decoys against entrapment, so it bears on FDR only where entrapment faithfully proxies
 target-false, which it did not. Everything here is a repair to the measuring instrument.
 
+#### 12. WITHIN-CLASS duplication: targets are never filtered against themselves (Brendan, 2026-08-02)
+
+**The observation.** All filtering so far is CROSS-class (entrapment vs target). Nothing filters
+targets against each other. If the target list contains near-duplicate pairs - paralogs and
+isoforms such as tubulin isotypes, actins, histone variants - one real peptide's signal can
+satisfy two library entries and yield two IDs. Entrapment has no equivalent, because **shuffling
+destroys paralogy**: two near-duplicate targets A~B become shuffles A' and B' sharing
+composition but not order. That is a "duplication advantage" in the FDP DENOMINATOR, and the
+recent filtering sharpened it by stripping duplication from the oracle side only.
+
+**Measured, library-level, ~34,700 sampled per class (overlap > 0.70 and dm <= 5 Da, I/L-normalised):**
+
+| library | target near-dup rate | entrapment near-dup rate |
+|---|---|---|
+| gated-no-il (**shuffle**) | **0.49%** | **0.08%** (6x lower) |
+| arabidopsis-no-il (**foreign**) | **0.49%** | **0.68%** (slightly higher) |
+
+**Confirmed for shuffle entrapment**, and with a twist that runs against intuition: **foreign
+species entrapment does NOT have this defect.** Arabidopsis carries its own gene-family
+paralogs, so it is BETTER matched to the target population on this axis than shuffle is. That is
+a structural argument in favour of foreign entrapment, and it is independent of every other
+finding here.
+
+**Magnitude is small, and stated as a bound.** At the accepted level 110 of 22,786 targets
+(**0.48%**) have an also-accepted near-duplicate versus 0 of 95 entrapment (that comparison has
+no power - 0.48% of 95 is an expected 0.46). A 0.48% inflated denominator deflates FDP by ~0.4%
+relative, **negligible against the 12-30% contamination effects**.
+
+**Limitation that prevents calling it a measurement**: co-acceptance is not proof of redundancy.
+Tubulin isotypes can BOTH genuinely be present, so two accepted near-duplicates may be two real
+peptides rather than one signal double-counted. **0.48% is an upper bound on the bias.**
+Separating the two needs peak-level evidence - whether the two entries share a chromatographic
+feature - which the pass-1 harvest does retain (`peaks` carries apex RT per file), so this is
+answerable without a new run.
+
+**Not actionable as a filter.** Removing near-duplicate targets would delete real, quantifiable
+peptides to fix a ~0.4% estimator bias - a bad trade. The value here is as a **caveat on
+cross-design comparisons**: shuffle-entrapment FDP is biased low by this effect and
+foreign-entrapment FDP is not, so a shuffle-vs-foreign difference of a few tenths of a percent
+should not be attributed to entrapment quality.
+
 #### Predictions vs outcomes
 
 | step | predicted | measured | verdict |
