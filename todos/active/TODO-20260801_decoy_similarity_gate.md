@@ -647,6 +647,60 @@ correcting the oracle slightly INCREASES the measured benefit of the gate.
 **Nothing in this experiment separates the two readings for the REMAINING +17.7%.** See "Open
 questions" below.
 
+#### 7. THE I/L FIX MEASURED DIRECTLY - and it REVERSES the Arabidopsis surprise
+
+The Carafe machine shipped the I/L gate same-day; `-arabidopsis-no-il` was searched on the same
+40 files (3 h 11 m, v26.1.1.213).
+
+| variant | disc@1%q | trueFDP% | matched@1% | eff% | matched-disc FDP vs ungated |
+|---|---|---|---|---|---|
+| ungated | 24,413 | 0.837 | 25,193 | 78.78 | - |
+| gated | 25,064 | 0.743 | 26,379 | 80.18 | **-28.7%** |
+| arabidopsis | 23,385 | 1.183 | 22,550 | 69.24 | **+60.9%** |
+| **arabidopsis-no-il** | **26,085** | **0.992** | **26,085** | **78.71** | **-17.3%** |
+
+**Removing I/L collisions takes the Arabidopsis arm from +60.9% WORSE than the shuffle baseline
+to 17.3% BETTER**, while gaining **+11.5% discoveries** and **+9.5 points** of union efficiency.
+**Finding 5's surprise was an artifact of I/L contamination, not a property of foreign-species
+entrapment.** With the contamination removed, foreign entrapment behaves as the guide and the
+Stellar result predicted - which substantially defuses open question 1.
+
+Fix verified end to end: `il_collision_correction.py` finds **0** colliders in the library and
+**0** among 459 accepted entrapment, and is a no-op on this arm (identical numbers before and
+after) - the behaviour a clean library must show.
+
+**Decomposition: most of the gain is the DECOY half, not the entrapment half.** Entrapment
+removal cannot change the discovery set - it only relabels which accepted precursors count as
+false - so any discovery gain is attributable to the decoys:
+
+| | predicted, entrapment only | measured, both | attributable to decoys |
+|---|---|---|---|
+| matched@1% | 22,273 -> 23,505 (**+5.5%**) | 22,550 -> 26,085 (**+15.7%**) | **~+10 pts** |
+| disc@1%q | unchanged by construction | 23,385 -> 26,085 (**+11.5%**) | **all of it** |
+
+The magnitude is arithmetically consistent: at 1% FDR with ~26,000 targets there are ~260
+decoys at threshold; if colliding decoys are accepted at the rate colliding entrapment were
+(3.7% of 792 ~ 30), removing ~30 of ~260 threshold decoys relaxes the cutoff by ~11.5%, matching
+the observed gain. **This is a consistency argument, not a measurement** - confirming it needs
+the decoy-side accepted counts, which the pass-1 harvest does not currently retain.
+
+**If it holds, colliding decoys were costing ~11.5% of all discoveries at 1% q** - a larger
+practical win than the entrapment fix, and one nobody was looking for.
+
+**The pre-registered caveat is what made this readable.** Before the arm ran, it was recorded
+that "if the result overshoots the -20.7% prediction, the decoy half is the first thing to
+suspect rather than the competition effect". It overshot to **-48.6%** at matched discoveries -
+more than double - and the decoy attribution follows from the structural fact that oracle
+surgery cannot move discoveries.
+
+**CORRECTION to the power analysis that ordered these arms.** `gated-no-il` was scheduled second
+on the grounds that its predicted entrapment-only effect (-5.3%) sits under Poisson noise and so
+"cannot resolve its own prediction". That reasoning covered only the entrapment half and
+**understated the arm's value**: the decoy correction is the larger effect, is not subject to
+that noise floor, and `gated-no-il` vs `arabidopsis-no-il` is now the ONLY clean comparison of
+anagram vs foreign entrapment, since `gated` still carries 678 colliders. The ordering happened
+to be right for the wrong reason.
+
 #### Confounds closed by measurement before the arms ran
 
 * **Shared prediction basis, verified for BOTH controlled steps.** `ungated` vs `gated`:
@@ -734,11 +788,16 @@ live on the other machine.
    complementary to, the fragment-overlap gate - which does not catch it. This is the most
    actionable result of the series.
 
-1. **Astral vs Stellar disagree on Arabidopsis entrapment, in opposite directions.** Same
-   substitution, -29% there and +125% here. **Re-check the Stellar result for I/L collisions
-   first** - if its Arabidopsis library had few, that alone could reverse the sign, and it is a
-   cheap check on an existing library. Reconciling these remains the most important open item;
-   one of the two results is measuring something other than FDP.
+1. ~~**Astral vs Stellar disagree on Arabidopsis entrapment.**~~ **LARGELY RESOLVED by finding
+   7**: with I/L collisions removed, Arabidopsis goes from +60.9% worse than shuffle to 17.3%
+   BETTER, i.e. back to the direction Stellar reported. The Astral +125% was contamination, not
+   a contradiction. Residual work is only to confirm the Stellar library's collider count for
+   completeness.
+
+1b. **Measure the colliding-DECOY effect directly.** Finding 7 attributes ~11.5% of discoveries
+   to colliding decoys by a consistency argument, not a measurement. Retaining decoy-side
+   accepted counts in `pass1_entrap.py` would let the threshold-decoy count be checked directly.
+   If it holds it is the largest practical win in this whole series.
 2. **Test whether shuffled sequences are under-identified because peptdeep predicts them
    poorly.** Compare predicted-spectrum properties (fragment counts, intensity distribution)
    between shuffled and real-peptide entrapment in the same library build. This is the
