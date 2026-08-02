@@ -452,6 +452,87 @@ so the wrong kind still compiles, and it does not lead back to the object in a d
 `architecture-data-model.md` used to recommend `GlobalIndex` first and now recommends
 `ReferenceValue<T>`, with `GlobalIndex` still allowed for existing code.
 
+
+### Session 6 (2026-08-01) - ownership move, encapsulation, chrom infos off the nodes
+
+Three commits on `sky_memory`, all built and tested against the recorded baseline:
+
+1. `f0035d174` **A transition's results moved onto its precursor.**
+   `TransitionGroupResults.Transitions` holds one entry per transition, in the order of
+   the precursor's children; `TransitionDocNode.AbbreviatedResults` is gone. The .sky file
+   already wrote the transition areas once per precursor - holding them per node was where
+   that sharing got undone, and `ApplySharedTransitionAreas` was the code doing the
+   undoing.
+   Alignment is kept in ONE place: `TransitionGroupDocNode.OnChangingChildren`, matching
+   transitions by `Identity`. There are 29 call sites across 13 files which change a
+   precursor's children; none of them had to learn about the results. A
+   reference-comparison fast path means the dictionary is only built when the shape
+   actually changes.
+   Three things had to move up a level rather than be re-pointed: `MergeUserInfo` (the
+   transition node now merges only annotations), `StripAnnotationValues` (the precursor
+   strips its transitions' peak annotations with its own), and
+   `DocumentAnnotationUpdater.UpdateTransitionResults`.
+
+2. `b7ec190da` **`TransitionResults` is now `private class` nested in
+   `TransitionGroupResults`.** Nothing outside can name or hold one. Callers ask the
+   precursor for a value with the transition's index. The value types crossing the
+   boundary - `TransitionPeak`, `CustomPeak`, `QuantifiablePeak`, `ChromFileIds` - were
+   already public, so only the container got hidden.
+   `DocumentWriter.GetSharedTransitionAreas` moved onto `TransitionGroupResults`.
+   `DocumentReader` keeps a private `TransitionResultsData` (either the columnar values or
+   the chrom infos) until the precursor has its children and can be told.
+   The chrom-info factory had to be split in two, and folding them back together WILL
+   break the reader: `ChangeTransitionFromChromInfos` is unconditional, while
+   `UpdateTransitionFromChromInfos` keeps the "says the same" guard which stops every
+   settings pass re-converting the molecule. The reader needs the unguarded one because a
+   transition whose chrom infos have no step-zero peaks must still keep them.
+
+3. `a5c5d9696` **Transition nodes no longer carry chrom infos of their own.** The compact
+   (proto) reader was the last path putting them on the node - the XML reader already
+   passed `null` and gave them only to the columnar form. `FromTransitionProto` now hands
+   them back for the precursor.
+   The two results passes which reuse what the document already has rather than reading
+   the .skyd - `canUseOldResults`, and the `chromGroupInfos.Count == 0` branch - read them
+   back through `TransitionGroupResults.GetTransitionLegacyChromInfos(iTran,
+   chromatograms)`. That takes a `ChromatogramSet` rather than a replicate index because
+   `LegacyChromInfos` is flat and its entries know their file, not their replicate.
+
+**Where the `TransitionChromInfo` objects live now.** After a successful load: nowhere.
+`ConvertResults` drops both the transitions' and the precursor's once the chosen peak
+indexes are worked out. Before that pass they exist once (they used to exist twice for
+compact-format documents). `TransitionDocNode.Results` is now only ever
+`MeasuredResults.EmptyTransitionResults` or null, except transiently between a peak edit
+and the next results pass.
+
+**Known bounded retention, NOT fixed.** `ConvertResults` releases all-or-nothing per
+precursor, gated on `everyFileRead`. That goes false if any replicate is `!IsLoaded`
+(transient, resolves on a later pass) or if `FindChromatogramGroupInfo` returns null for
+any single position (persistent). In the persistent case the precursor keeps every chrom
+info AND `NeedsConverting` stays true, so every settings pass re-reads all of the
+molecule's chromatograms.
+Per-file release is NOT a small change: `chosenPeakIndexes` is rebuilt from scratch each
+pass and `ChangeChosenPeakIndexes` replaces all of them, so a second pass over
+partially-cleared chrom infos would reset already-found indexes to -1. Preserving the
+existing indexes for positions not recomputed has to come first.
+
+**`TestReintegrateDlg` is flaky AND order-dependent - do not use it as a regression
+signal.** Six samples while checking these commits: baseline gave "diff at line 987" in a
+three-test batch and line 81 twice when run alone; HEAD gave no result line at all in a
+batch, then line 1107 and line 1176 when run alone. It fails on both builds either way.
+HEAD diverges *later* than baseline in every comparable sample, so nothing here suggests a
+regression. Same family as `TestPeakBoundaryCompare` and `TestMultiInjectRescore`.
+`TestRemovePeakFromAll` and `TestReimportResults` were also confirmed failing at
+`c6e2694ab`; both read `nodeTran.Results[...]`, empty since `07e082999`.
+
+**Why `TransitionDocNode.Results` cannot simply be forced empty yet.** It is still the
+write target of `ChangePeak`/`RemovePeak` and of the databinding
+`TransitionResult.ChangeChromInfo`, and `SrmDocument.ChangePeak` ends at `ReplaceChild`
+with no results pass and no columnar write. So immediately after a peak edit the new peak
+exists ONLY there; the next pass picks it up through `canUseOldResults`. Forcing it empty
+would silently discard peak edits. Order to fix: `ChangePeak`/`RemovePeak` write the
+columnar form directly, then the reuse path stops needing chrom infos at all, then
+`Results` can go.
+
 ## Context for Next Session
 
 `MoleculeResults` is on the branch and is what `OnDemandFeatureCalculator` and
