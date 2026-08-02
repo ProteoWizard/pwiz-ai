@@ -186,6 +186,50 @@ owns the PR. Kept current with this TODO; re-read it after any finding that chan
       FASTA path with Browse/Download, and ratio spinner under the existing checkbox, hidden rather
       than disabled so the panel is unchanged when entrapment is off. Spec:
       `TODO-20260801_decoy_similarity_gate-carafe-spec.html`.
+- [ ] **NEXT STEP on this PR - converge Carafe and Osprey on ONE decoy sequence set, then gate on
+      it.** Goal: given the same input sequences, Carafe and Osprey emit the **identical** decoy
+      set. That is the strongest available gate, and it buys something specific - it reduces
+      "Carafe decoys vs Osprey decoys" to a single variable, namely **predicted spectra + predicted
+      RT (Carafe) versus spectra + RT inherited from the target (Osprey)**. Today that comparison
+      silently mixes in a second variable, because the two can generate different sequences.
+
+      **Feasible, and closer than it looks - the permutation algorithms are ALREADY identical.**
+      Verified line by line 2026-08-02; Carafe's were written from Osprey's and never diverged:
+
+      | | Osprey C# | Carafe |
+      |---|---|---|
+      | reverse | reverse 0..len-2, keep len-1 | same |
+      | cycle | `mid[(i+c) % (len-1)]`, C-term appended | identical formula |
+      | retry ladder | cycle 1..min(len,10) | identical |
+      | edge cases | len<=2 or c==0 -> unchanged | identical |
+      | overlap gate | 0.40 over b/y within 0.02 Da | identical |
+
+      **Four deltas remain, and only the first is a real defect:**
+      1. **I/L normalisation** - Carafe has it, Osprey does not (see the task below). Must land
+         first; without it the two cannot agree by construction.
+      2. **Residue mass tables differ in the 6th decimal** (Osprey `71.037114` vs Carafe
+         `71.03711`). As a FILTER this cannot matter - 4e-6 Da per residue against a 0.02 Da
+         window. For a BIT-IDENTICAL gate it is not provably harmless across 1.4M sequences: a
+         decoy whose overlap ratio sits exactly on the 0.40 boundary could flip if one rung sits
+         within ~1e-4 Da of the tolerance edge. Unify the table before claiming parity. **My
+         earlier note that this "cannot change a verdict" was right for a filter and too loose for
+         a gate.**
+      3. **Enzyme handling** - Osprey conditions C-term preservation on
+         `_enzyme.PreservesCTerminus()`; Carafe always preserves. Agree for trypsin, may not for
+         other enzymes. Either match the condition or scope the gate to tryptic.
+      4. **Collision universe** - Carafe checks against targets + entrapment, Osprey against the
+         library's target sequences, and Osprey additionally skips entries with no fragments. These
+         are INPUT differences, not algorithmic ones; the gate should feed both the same sequence
+         list so they fall away.
+
+      **The gate**: a committed list of input sequences (include the nasty ones - poly-A, poly-G,
+      collagen repeats, I/L palindromes, len 7 and len 35) plus the expected decoy for each, checked
+      by a unit test in Carafe, Osprey C# and Osprey Rust. Cheap, no spectra, no GPU, and it fails
+      the moment any implementation drifts. It also subsumes the existing ad-hoc claim that the
+      three "agree" - which turned out to be false for I/L precisely because nothing tested it.
+
+      **Then the real experiment becomes clean**: same sequences, same decoys, and the only
+      difference between the two libraries is where each decoy's spectrum and RT came from.
 - [ ] **NEW 2026-08-02 - Osprey I/L gap (C# AND Rust), needs a decision before implementing.**
       Neither has I/L-normalised collision rejection; both check exact strings only. Measured 742
       colliding decoys (0.0534%) in a simulation of Osprey's own gendecoy path over the Astral
