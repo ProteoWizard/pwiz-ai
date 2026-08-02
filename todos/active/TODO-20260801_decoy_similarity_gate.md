@@ -335,6 +335,25 @@ BY CONSTRUCTION, and foreign-species entrapment is not. Proline especially drive
 behaviour. Modest, and probably not sufficient alone for +60%, but it is a real measured
 asymmetry in the null model.
 
+**What gets ACCEPTED differs sharply, from identical pools.** Both entrapment pools have the
+same length distribution (shuffle is target-matched by construction, 15.73; Arabidopsis 15.69),
+so any difference in the accepted set is a property of matching, not of the pool:
+
+| arm | accepted entrapment mean len | len<=8 | accepted targets mean len | len<=8 |
+|---|---|---|---|---|
+| ungated (shuffle) | **9.98** | **48.5%** | 12.47 | 15.5% |
+| gated (shuffle) | 10.69 | 41.0% | 12.58 | 14.6% |
+| **arabidopsis (real)** | **11.53** | **27.8%** | 12.55 | 14.9% |
+
+All entrapment is short-skewed relative to its pool - short peptides carry fewer fragments and
+are matched spuriously more often, as expected. But **shuffle entrapment's acceptances are
+concentrated in trivially short peptides (48.5% at <=8 residues) while Arabidopsis's sit much
+closer to the real target profile (27.8%)**. Arabidopsis does not merely produce MORE false
+positives; it produces more TARGET-LIKE ones. That is what a null modelling genuine false
+discovery should look like, and it is a point in favour of reading 1 - though it does not settle
+it, because a composition-driven matching advantage would also raise acceptance at longer
+lengths.
+
 **The two readings, both consequential, not yet separated:**
 
 1. **Arabidopsis is the more honest null and shuffle UNDER-estimates FDP.** Shuffled sequences
@@ -345,13 +364,41 @@ asymmetry in the null model.
    distinguishes a foreign proteome makes its peptides easier to match spuriously than the
    absent human peptides they are meant to model.
 
-These have opposite implications for how FDR should be validated, and **nothing in this
-experiment separates them.** See "Open questions" below.
+These have opposite implications for how FDR should be validated.
+
+**Reading 1's proposed MECHANISM was tested directly and is too weak to carry the effect.**
+`predicted_spectrum_quality.py` compares the predicted spectra in the libraries themselves, no
+search needed (sampled by sequence hash, ~800 precursors per class):
+
+| library / class | nfrag | entropy | top ion % |
+|---|---|---|---|
+| ungated / target | 14.82 | 2.1658 | 28.34 |
+| ungated / **entrapment (shuffle)** | **14.57** | **2.1445** | **29.02** |
+| arabidopsis / target | 14.81 | 2.1663 | 28.31 |
+| arabidopsis / **entrapment (real)** | **15.11** | **2.1968** | **27.77** |
+
+Targets agree across libraries to 4 significant figures, re-confirming the shared prediction
+basis. And the direction is exactly what reading 1 predicts: shuffled entrapment gets slightly
+POORER predicted spectra than real peptides (fewer fragments, lower entropy, more dominated by
+a single ion) while real Arabidopsis entrapment gets slightly RICHER ones. **But the magnitudes
+are 1-3%**, which cannot plausibly produce a 35% difference in acceptance rate or 125% in FDP.
+
+**Important limit of this test**: fragment count and entropy measure spectrum RICHNESS, not
+ACCURACY. A shuffled peptide could receive a perfectly rich prediction that is simply WRONG,
+and this test would not see it. So it rules out "shuffles get obviously degenerate predictions"
+but not "shuffles get confidently wrong ones" - which remains reading 1's live mechanism and
+needs ground-truth spectra to test.
+
+**Nothing in this experiment separates the two readings.** See "Open questions" below.
 
 #### Confounds closed by measurement before the arms ran
 
-* **Shared prediction basis** (`ungated` vs `gated`): **3,126/3,126 (100.0%)** identical target
-  fragment m/z lists, RT identical to 4 decimals.
+* **Shared prediction basis, verified for BOTH controlled steps.** `ungated` vs `gated`:
+  **3,126/3,126 (100.0%)** identical target fragment m/z lists, RT identical to 4 decimals.
+  `ungated` vs **`arabidopsis`**: **3,126/3,126 (100.0%)** likewise. So all three controlled
+  arms carry byte-identical target predictions, and **the +125% arabidopsis result cannot be
+  attributed to a different prediction basis.** (For contrast, `delivered` vs `ungated` is only
+  **15.9%** identical - which is why delivered is a reference and not a baseline.)
 * **Ratio**: all three manifests are perfect quartets, **r = 1.000000**, arms differing by only
   753-755 quartets (0.054%).
 * **Arabidopsis/human sequence collisions**: **0 (0.0000%)** in all three libraries - a failure
