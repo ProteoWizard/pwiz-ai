@@ -71,6 +71,12 @@ library where every peptide was seen in every one of hundreds of runs dominates 
 - Every call site already had the file's index in hand and was converting it to an id with
   `_librarySourceFiles[j].Id`, so most sites got shorter.
 
+`BiblioLiteSpectrumInfo.SpectrumSourceId` became `SpectrumSourceIndex` for the same reason.
+The two `BlibDb` factories pass null for it, because the library they build has no
+`LibraryFiles` to index into until it is loaded back from the file being written - which is
+also why the value they used to store was unreachable (`GetDataFileDetails` looked it up in
+a dictionary built from an empty source file list).
+
 Guarding against the id/index mix-up (both are `int`, so the compiler cannot tell them
 apart): the properties were renamed `RetentionTimesByFileId` -> `RetentionTimesByFileIndex`
 and `IonMobilitiesByFileId` -> `IonMobilitiesByFileIndex`, which turned every read site
