@@ -10,8 +10,23 @@
 - **PR**: (pending)
 
 Most of the work lands in **maccoss/Carafe** (Java), which is where the affected libraries are
-built. The Skyline half is a separate, smaller change to `Model/DecoyGenerator.cs`. Osprey C# and
-Rust need **no change** - they are already correct and already agree.
+built. The Skyline half has moved out to
+[pwiz #4516](https://github.com/ProteoWizard/pwiz/issues/4516).
+
+> **CORRECTION 2026-08-02.** This file previously said Osprey C# and Rust need **no change** -
+> "they are already correct and already agree". That was true of the *fragment-overlap gate* and is
+> now **stale**: it predates the I/L finding, which is an independent defect neither implementation
+> has. Both still use an EXACT-string collision check
+> (`DecoyGenerator.cs:264,280`; `osprey-scoring/src/lib.rs:3440,3463`) and neither normalises I to L
+> anywhere. Simulating Osprey's own gendecoy path (reverse -> cycle, **overlap gate ON**) over the
+> 1,390,979-target Astral set gives **0 exact** collisions and **742 I/L-isobaric** ones (0.0534%) -
+> e.g. `AAEESLR -> LSEEAAR`, `ADILLLR -> LLLIDAR`. That rate matches the 792 measured in Carafe's
+> library decoys, and it is empirical proof the overlap gate does NOT catch this, since the gate
+> compares a candidate to its OWN source while a collision is a match to a DIFFERENT target.
+>
+> This matters more for decoys than for entrapment: decoys drive the FDR *estimate* through
+> target-decoy competition, so a decoy indistinguishable from a real target wins on that target's
+> own signal. See "Osprey I/L gap" in the task list.
 
 ## Problem
 
@@ -171,6 +186,21 @@ owns the PR. Kept current with this TODO; re-read it after any finding that chan
       FASTA path with Browse/Download, and ratio spinner under the existing checkbox, hidden rather
       than disabled so the panel is unchanged when entrapment is off. Spec:
       `TODO-20260801_decoy_similarity_gate-carafe-spec.html`.
+- [ ] **NEW 2026-08-02 - Osprey I/L gap (C# AND Rust), needs a decision before implementing.**
+      Neither has I/L-normalised collision rejection; both check exact strings only. Measured 742
+      colliding decoys (0.0534%) in a simulation of Osprey's own gendecoy path over the Astral
+      target set, with the overlap gate on.
+      **Why this is not a quick fix.** It changes generated decoy sequences, so it changes output:
+      it needs a deliberate golden re-baseline via `regression.ps1`, and it must land in C# and
+      Rust **together** to keep the cross-impl parity gate meaningful. That is a different class of
+      change from the Carafe work, which had no golden to break.
+      **Scope question to settle first**: production searches use `--decoys-in-library` with
+      Carafe-supplied decoys, which are now gated at the source, so this only bites runs that let
+      Osprey generate its own decoys. Worth confirming how much that path is still used before
+      spending a re-baseline on it.
+- [ ] ~~**Skyline**~~ - MOVED to [pwiz #4516](https://github.com/ProteoWizard/pwiz/issues/4516),
+      which also covers making the shuffle Fisher-Yates (consistent with Carafe) and removing
+      `ADD_RANDOM` entirely. Original note kept below for context.
 - [ ] **Skyline: add the gate** to `SequenceMods.Shuffle`'s `while` condition, which currently
       tests only `newSequence.Equals(Sequence)`. Also applies to `Reverser`. Consider the I/L
       check here too - same reasoning, though Skyline decoys are not compared against an
