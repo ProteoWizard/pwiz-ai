@@ -804,6 +804,73 @@ accepted, so two or three entrapment hits at ranks 1-3 drive the ratio to ~1% be
 count grows enough to wash it out. The headline 1%-q number barely moves; the low-q calibration
 shape is dominated by it.
 
+**THE SPIKE, MEASURED AT THE SIDECAR'S OWN FIRST GRID POINT.** The plot's visible 2.6% / 1.0%
+is where the curve returns ON SCALE; the true first point is far above the axis cap:
+
+| arm | entrapment present at the top q | first-point FDP |
+|---|---|---|
+| ungated (shuffle) | **0** | **0.00%** |
+| gated (shuffle) | **0** | **0.00%** |
+| arabidopsis | **7** | **177.8%** |
+| arabidopsis-no-il | **3** | **152.4%** |
+
+**The shuffle libraries have literally zero entrapment among their top-scoring precursors**;
+Arabidopsis had seven and the I/L fix removed four. Independently confirmed: solving the
+combined-FDP formula at 1 accepted target gives n_ent = 7.03 and 3.00, matching the per-entry
+harvest exactly. On the shuffle side the first entrapment does not appear until **11,216
+(ungated) / 10,606 (gated)** targets have been accepted.
+
+**All three survivors exceed 0.40 against SOME human target** - so an all-targets gate at the
+EXISTING threshold removes the entire residual spike:
+
+| entrapment | 8-mer index | **true max overlap** | matching human target |
+|---|---|---|---|
+| `EILHIQGGQCGNQIGAK` | 0.750 | **0.750** | `EIVHIQAGQCGNQIGAK` TBB5 (beta-tubulin) |
+| `IVLIGDSGVGK` | 0.500 | **0.900** | `VIILGDSGVGK` **RAB7A** |
+| `WVILGHSER` | *no match* | **0.438** | `ADVLEGTAER` MYLK3 |
+
+`IVLIGDSGVGK` vs `VIILGDSGVGK` differ only in the ORDER of the first three residues; everything
+from position 4 is identical, so almost the whole y-series is shared with an abundant ubiquitous
+GTPase.
+
+**The 2.7% figure above is a FLOOR, not an estimate.** The prefix/suffix index both understates
+overlap (0.500 vs a true 0.900 for `IVLIGDSGVGK`) and misses cases outright (`WVILGHSER` scored
+0.0 by index, 0.438 in truth). An exhaustive all-targets scan will find more.
+
+**THE THREE CALIBRATION PLOTS, AND WHAT THEY SAY TOGETHER.** Brendan compared all three
+experiment-wide FDR tabs directly:
+
+| arm | entrapment at top q | spike | curve vs y=x | FDP @1% q |
+|---|---|---|---|---|
+| **gated** (shuffle) | **0** | **none** | **below throughout - conservative** | **0.74%** |
+| arabidopsis-no-il | 3 | 152% (clipped) | approximately ON the line | 0.99% |
+| arabidopsis | 7 | 178% (clipped) | **above throughout - anti-conservative** | 1.18% |
+
+The shuffle arm is spike-free AND conservative across the whole range **even with its 678 I/L
+colliders still present** - the contamination that wrecks the foreign-species arm barely
+perturbs it, because anagram entrapment almost never resembles a DIFFERENT human peptide.
+
+**THIS LARGELY SETTLES THE "TWO READINGS" QUESTION FROM FINDING 5.** The two nulls disagreed
+badly (0.74% vs 1.18%, ~60%) and it was unclear whether shuffle under-reports or foreign
+over-reports. With BOTH contamination classes accounted for they nearly converge:
+
+| null | FDP @1% q | state |
+|---|---|---|
+| shuffle (`gated`) | **0.74%** | measured; its own I/L contamination is small here |
+| foreign, I/L removed | **0.99%** | measured (`arabidopsis-no-il`) |
+| foreign, I/L **and** cross-target removed | **~0.88%** | ESTIMATED (finding 9's -14.9%) |
+
+**Both nulls then say the same thing: Osprey's reported q is MILDLY CONSERVATIVE at the 1%
+operating point, with true FDP somewhere around 0.75-0.90%.** The apparent contradiction was
+contamination in the foreign null, not a disagreement about FDR. Reading 2 ("Arabidopsis is a
+biased null that over-reports") is essentially confirmed - but the bias is a specific,
+fixable library-generation defect rather than an intrinsic property of foreign-species
+entrapment.
+
+**The ~0.88% is an ESTIMATE from post-hoc correction, not a measurement.** Confirming it needs
+the all-targets gate implemented and a fresh run. That is the one remaining experiment in this
+line.
+
 **Actionable fix**: gate entrapment candidates against **all** targets, not just the paired one.
 A fragment-mass index over the target set makes this tractable - the same index would catch the
 I/L class as a special case. This is the natural next step for the Carafe similarity gate and
