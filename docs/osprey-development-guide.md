@@ -667,6 +667,45 @@ Parquet interop gotchas:
 
 ## Environment variable reference
 
+### What an env var IS here, and how much hardening it deserves
+
+**Environment variables are development and diagnostic instrumentation. They are not a
+supported user interface, and they are not held to one.** They exist to serve the
+development cycle: turning an experiment on, pinning an A/B arm, forcing a code path for
+measurement. The audience is the developer who set them.
+
+**When a capability becomes genuinely user-facing it gets PROMOTED to a command argument**,
+and *that* is the point at which it earns bulletproofing - full validation, a stable
+contract, localized messages, and its own tests. A promoted capability often also becomes
+default behavior, at which point its environment variable is **sunset** rather than kept
+alive in parallel.
+
+The practical consequence, which reviewers and AI review passes get wrong repeatedly:
+
+* **Do NOT spend code hardening env vars against abuse.** A malformed value, an
+  out-of-range number, a typo, a stale export, someone setting a test seam from outside -
+  these are developer errors found by the developer, in a loop measured in minutes.
+  Guarding them costs real complexity in exchange for protecting a scenario that does not
+  reach a user.
+* **A review finding of the form "env var X accepts a bad value and does something
+  unhelpful" is usually NOT worth acting on.** Weigh it as instrumentation, not as
+  interface. Say so and move on rather than adding a validator.
+* **What DOES still matter**, because it is not env-var hardening even when an env var is
+  the trigger:
+  * **Docs that describe a guard which does not exist**, or a behavior that is not the
+    behavior. A wrong doc is worse than no doc.
+  * **Destructive or expensive side effects.** Losing hours of cached pipeline state, or
+    corrupting a measurement an operator will trust, is a real cost regardless of what
+    triggered it. Order checks before destructive steps.
+  * **Silently reporting one arm's numbers as another's.** The whole reason these
+    variables exist is measurement; output that misattributes an arm defeats their
+    purpose. This is the one place a hard failure is usually right.
+
+Example of the lifecycle: `OSPREY_EXPERIMENT_AGG=mean-best-<N>` (issue #4484) is at the
+instrumentation stage - still establishing whether the method is worth having. If it proves
+out it is expected to become default behavior with a command argument, and the environment
+variable goes away. Hardening its parsing today would be work thrown away at promotion.
+
 ### Control / throttling
 
 | Name | Purpose |

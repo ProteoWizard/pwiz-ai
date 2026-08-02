@@ -207,6 +207,41 @@ Implementation notes for whoever writes it (both were established while scoping 
   pass 2, so a blanket startup error would refuse a valid FirstJoin-only HPC leg. Same switch as
   `Program.ExperimentAggFileCount`.
 
+### 2026-08-02 - `/code-review max`, master merge, and the final fix round
+
+Brendan ran `/code-review max` (15 findings) and merged #4513 ahead of this PR, which put the branch
+in conflict. Both handled:
+
+* **Merged master** (`00cd48c93`). One conflicting file, `Pass2FdrSidecar.cs`: #4513 wrapped the
+  streamed competition in a per-file `ProgressReporter` and moved `ReadFile` inside it. Resolved by
+  keeping #4513's structure verbatim and hoisting the mean(best-N) refusal above it, so the refusal
+  fires before the reporter is constructed.
+* **Acted on 4 findings** (`ab8ff4bb5`), chosen on risk/reward rather than count - see
+  `ai/.tmp/review-max-4512-triage.md` for the full disposition of all 15.
+
+**Governing principle Brendan stated, now written into `ai/docs/osprey-development-guide.md`:**
+environment variables here are **development and diagnostic instrumentation, not a supported user
+interface**. Bulletproofing is deferred until a capability is promoted to a command argument (at
+which point the env var is typically sunset). That single principle retires five of the fifteen
+findings, and it is why `protein-compact` + `OSPREY_PROTEIN_COMPACT_RETRAIN` was fixed as a
+DOCUMENTATION correction rather than by adding a guard to the A/B lever.
+
+**A finding that turned out to be narrower than reported, worth remembering:** the review said the
+floor path at N=2 - the arm #4484 actually measures - was untested, because the parity fixture gave
+every unit the same floor weight. I changed the fixture, then mutation-tested it by shifting BOTH
+floor estimators by +7.0, and the parity test **still passed**. The reason is structural: a parity
+test compares two implementations against each other and is blind to an error they SHARE. What did
+go red was the value-oracle set (`TestMeanBest2AggregationAndFloor`, `TestMeanBest3Aggregation`),
+which asserts exact aggregates against a known decoy median and does cover N=2. **So floor
+correctness at N=2 was never untested**; the reviewer had examined only the parity test. The fixture
+change was kept on the narrower ground that assertion (2) was degenerate at N=2 (one uniform weight
+makes the aggregate a monotonic transform, so it could not report even a between-path divergence).
+
+Deliberately NOT done, each a risk/reward call: the parity tests still oracle against test-local
+re-implementations (rewiring risks a `CompeteAll` vs `CompeteFromIndices` rabbit hole with no review
+left to catch it); `regression.ps1` mode-4 ordering (TeamCity #187 already ran mode 4 green, and its
+failure mode cannot produce a false GREEN); and the env-var hardening class above.
+
 ### Final state of the night session
 
 Branch pushed as `b1d75bffa` (three of my commits plus a merge of master, which had been merged into
