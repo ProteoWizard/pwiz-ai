@@ -701,6 +701,48 @@ that noise floor, and `gated-no-il` vs `arabidopsis-no-il` is now the ONLY clean
 anagram vs foreign entrapment, since `gated` still carries 678 colliders. The ordering happened
 to be right for the wrong reason.
 
+#### 8. THE COLLIDING-DECOY EFFECT, MEASURED - and it is a UNIVERSAL win, not an Arabidopsis rescue
+
+Finding 7 attributed the discovery gain to colliding decoys by a consistency argument, and
+recorded as open work that `pass1_entrap.py` would need to retain decoy-side counts. **That was
+wrong - it already does**, and the correction script was simply skipping them. No re-harvest, no
+new run:
+
+| arm | decoys at q<=0.01 | I/L-colliding | fraction |
+|---|---|---|---|
+| ungated | 258 | 21 | **8.1%** |
+| gated | 262 | 15 | **5.7%** |
+| arabidopsis | 251 | 19 | **7.6%** |
+| **arabidopsis-no-il** | 278 | **1** | **0.4%** |
+
+Predicted ~30 of ~260 from the consistency argument; **measured 19 of 251**. Mechanism confirmed,
+magnitude the right order: a **7.6%** cut in effective threshold decoys against an observed
+**+11.5%** discovery gain, the remainder plausibly from cleaner SVM negatives sharpening the
+ranking.
+
+**The decoy contamination is ROUGHLY EQUAL ACROSS ALL LIBRARIES** (8.1% / 5.7% / 7.6%), unlike
+the entrapment contamination which hit Arabidopsis ~4x harder (8.26% vs 2.20% of accepted
+entrapment). **So the decoy half of the I/L fix is a universal win that applies to the shuffle
+libraries too** - it is not an Arabidopsis-specific rescue, and it is the part with direct
+practical value for every user.
+
+Internal consistency check passes: decoys/targets at q<=0.01 is **1.07%** for both `arabidopsis`
+(251/23,385) and `arabidopsis-no-il` (278/26,085) - the identical ratio a 1% FDR threshold must
+produce. The FDR machinery was behaving correctly; it was being fed 19 fake decoys.
+
+**PRE-REGISTERED PREDICTION for `gated-no-il`** (recorded before it landed). If the decoy
+mechanism is right and universal, `gated-no-il` should gain discoveries over `gated` at roughly
+the colliding-decoy fraction, scaled as Arabidopsis did (7.6% colliders -> +11.5% discoveries,
+~1.5x):
+
+* `gated` removes **5.7%** of threshold decoys -> predicted **+7 to +9%** discoveries,
+  i.e. disc@1%q **25,064 -> ~26,800-27,300**;
+* entrapment-side effect should be small (only 11/383 accepted entrapment were colliders), so
+  the FDP drop at matched discoveries should be modest, **-5 to -10%**.
+
+**A large FDP drop with a small discovery gain would falsify the decoy attribution** and send
+the explanation back to the entrapment side.
+
 #### Confounds closed by measurement before the arms ran
 
 * **Shared prediction basis, verified for BOTH controlled steps.** `ungated` vs `gated`:
@@ -794,10 +836,9 @@ live on the other machine.
    a contradiction. Residual work is only to confirm the Stellar library's collider count for
    completeness.
 
-1b. **Measure the colliding-DECOY effect directly.** Finding 7 attributes ~11.5% of discoveries
-   to colliding decoys by a consistency argument, not a measurement. Retaining decoy-side
-   accepted counts in `pass1_entrap.py` would let the threshold-decoy count be checked directly.
-   If it holds it is the largest practical win in this whole series.
+1b. ~~**Measure the colliding-DECOY effect directly.**~~ **RESOLVED - see finding 8. No new run
+   was needed; `pass1_entrap.py` already retains decoys and the claim that it did not was
+   wrong.**
 2. **Test whether shuffled sequences are under-identified because peptdeep predicts them
    poorly.** Compare predicted-spectrum properties (fragment counts, intensity distribution)
    between shuffled and real-peptide entrapment in the same library build. This is the
