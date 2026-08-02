@@ -524,6 +524,55 @@ sits ABOVE q=0.01, so a 0.01 harvest truncates the search and the frontier satur
 q<=0.01 count **by construction** - reading as a result rather than a truncation. The 163-file
 `arm_*.json` were harvested to 0.03; use 0.03 for anything compared against them.
 
+#### 7. mean(best-N) beats a POST-HOC REPRODUCIBILITY CUTOFF at every threshold (2026-08-02, Brendan)
+
+Added after the series. The "N* = 1" conclusion was drawn from **total experiment-wide
+detections**, a metric that counts a precursor found in 1 of 163 runs equally with one found in
+163. For a quantitative experiment that is the wrong weighting - quantifying a 1-of-163 detection
+means gap-filling 162 runs.
+
+**The comparison that matters is against the lever this actually competes with.** Running plain
+`max` and then keeping only precursors seen in >= N runs IS the standard post-hoc reproducibility
+cutoff. So the `max` column below is not a neutral baseline - it is the competing method.
+
+Accepted precursors at or above a run-count threshold, TDP-43 163 files, each arm at its own
+1% experiment-wide q:
+
+| bar | post-hoc cutoff (`max`) | best mean-best-N | gain over the cutoff |
+|---|---|---|---|
+| k>=1 (total) | **30,070** | 29,501 (mb2) | **-1.89%** (the headline decline) |
+| k>=2 | 28,663 | **29,161** (mb2) | **+498 (+1.74%)** |
+| k>=3 | 27,224 | **28,080** (mb3) | **+856 (+3.14%)** |
+| k>=5 | 25,033 | **25,836** (mb4) | **+803 (+3.21%)** |
+| k>=9 | 21,928 | **22,400** (mb6) | **+472 (+2.15%)** |
+| k>=17 | 18,194 | **18,354** (mb6) | +160 (+0.88%) |
+| k>=41 | 13,079 | 13,094 | +0.11% |
+
+**The optimal N tracks the reproducibility bar**: mb2 at k>=2, mb3 at k>=3, mb4 at k>=5, mb6 at
+k>=9 and above. Monotone. A single N* is the wrong summary; N should be chosen for the
+reproducibility requirement.
+
+**Mechanism - the two levers have different powers.** A post-hoc cutoff can only REMOVE: a
+precursor rejected at the q stage never reaches the filter, however reproducible it was.
+mean(best-N) lets reproducibility contribute to the q itself, so it can also PROMOTE - a
+precursor marginal on best-single-run score but consistent across runs clears the line. Filtering
+after the fact discards that information; scoring with it does not. That is why it wins at every
+bar even on the dataset where it loses on total count.
+
+**Caveat, and it limits how strongly this can be stated.** This is matched on the *q cut*, not on
+FDP. At k>=2 the cutoff measures 0.360% and mb2 0.421%, so the +498 is partly bought with FDR
+budget; the marginal precursors are ~3.9% false (+19 entrapment for +498 targets). Both figures
+sit far under the 1% the user asked for, so the cutoff is leaving budget unspent - but a
+matched-FDP comparison is the rigorous form and this is not it.
+
+**Blocked on a diagnostics gap, not on a search.** The matched-FDP version needs run-count
+histograms across the q sweep; `crossRun` currently emits them only at the 1% cut. That is a
+small `--model-diagnostics` addition and would make this comparison rigorous without new runs.
+
+**Not yet checked on SEA-AD**, where mean(best-N) wins on total count outright (+14.6% at N=2,
++16.4% at N=6) - so the threshold analysis there should be strictly more favourable, but the arms
+live on the other machine.
+
 #### Open questions
 
 0. **SHIP THE I/L GATE** (finding 6). Reject any entrapment candidate whose I->L normalised

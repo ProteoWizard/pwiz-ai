@@ -76,18 +76,43 @@ seconds. Turns a silent bias into a visible one without changing anyone's number
 
 ---
 
-## P2 - Keep `OSPREY_EXPERIMENT_AGG` opt-in; do NOT make mean(best-N) a default
+## P2 - mean(best-N) is the better REPRODUCIBILITY LEVER; defaulting it is a product question
 
-Two datasets, **opposite signs**:
+**REVISED 2026-08-02.** The earlier version of this recommendation said "the sign flips between
+datasets, so no default is supportable". That rested on **total experiment-wide detections** - a
+metric that counts a precursor found in 1 of 163 runs equally with one found in 163. For
+quantitative work that is the wrong weighting: quantifying a 1-of-163 detection means gap-filling
+162 runs.
 
-| | SEA-AD 82f | TDP-43 163f |
-|---|---|---|
-| N=2 | +14.6% | **-0.20%** |
-| N=6 | **+16.4%** (its peak) | **-9.36%** |
-| optimum | N* = 6 | **N* = 1 (plain max)** |
+**Against the lever it actually competes with, the sign does not flip.** Running plain `max` and
+keeping only precursors seen in >= N runs IS the standard post-hoc reproducibility cutoff. At
+every reproducibility bar on TDP-43 - the dataset where mean(best-N) "lost" - it beats that
+cutoff:
 
-The sign flips, so no blanket default is supportable in either direction. Two datasets is also
-not enough to settle it - this one is a single draw exactly as the +14.6% was.
+| bar | post-hoc cutoff | best mean-best-N | gain |
+|---|---|---|---|
+| k>=1 (total) | **30,070** | 29,501 | **-1.89%** |
+| k>=2 | 28,663 | **29,161** (mb2) | **+1.74%** |
+| k>=3 | 27,224 | **28,080** (mb3) | **+3.14%** |
+| k>=5 | 25,033 | **25,836** (mb4) | **+3.21%** |
+| k>=9 | 21,928 | **22,400** (mb6) | **+2.15%** |
+
+And the optimal N tracks the bar (mb2 at k>=2, mb3 at k>=3, mb4 at k>=5, mb6 at k>=9+), so a
+single N* was the wrong summary. On SEA-AD it wins on total count outright as well.
+
+**Why**: a post-hoc cutoff can only REMOVE - a precursor rejected at the q stage never reaches
+the filter. mean(best-N) lets reproducibility contribute to the q, so it can also PROMOTE.
+
+**So the honest statement is narrower and more useful than the old one:** mean(best-N) is a
+better way to select for reproducibility than post-hoc filtering. **Whether to default it is a
+product question - do you want reproducibility selection on by default? - not a measurement
+question.** For a quantitative workflow the answer is plausibly yes; for a discovery workflow
+maximising raw identifications, plausibly no.
+
+Caveat: matched on the q cut, not on FDP (k>=2: 0.360% cutoff vs 0.421% mb2, marginal population
+~3.9% false, both far under the 1% requested). The matched-FDP comparison needs run-count
+histograms across the q sweep, which `crossRun` emits only at the 1% cut - a small mdiag addition,
+no new searches. See TODO-20260801 finding 7.
 
 **A file-count rule is specifically ruled out.** TDP-43 has twice the files and a max-arm union
 efficiency of 67.2%, already as high as SEA-AD's *best-2* efficiency at 82 files. The
