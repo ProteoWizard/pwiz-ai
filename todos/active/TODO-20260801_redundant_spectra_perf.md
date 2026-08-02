@@ -67,7 +67,20 @@ library where every peptide was seen in every one of hundreds of runs dominates 
   per file per spectrum. The tradeoff is that space is proportional to the highest index
   used, so the keys have to be small numbers - which is why the key changed from the
   database id to the index into `LibraryFiles`.
-- `IndexedRetentionTimes` and `IndexedIonMobilities` are now thin wrappers over it.
+- `IndexedRetentionTimes` and `IndexedIonMobilities` are gone; the entries hold
+  `IndexedMultiArray<float>` and `IndexedMultiArray<IonMobilityAndCCS>` directly. The few
+  helpers that were on them either moved onto `IndexedMultiArray` (`GetCount`, `Merge`,
+  `ValueFromCache`) or became private methods where they are used: `AppendTimesTo` and
+  `LowerMinTimes` in `BiblioSpecLiteLibrary`, the cache read/write in `ChromLibSpectrumInfo`.
+- `ExplicitPeakBoundsDict` dropped its type parameter and its `ImmutableList<TKey>` for a
+  `ReplicatePositions` over the file indexes, so it shares the same shape and the same
+  sharing as the other two. It was only ever used as `ExplicitPeakBoundsDict<int>` by
+  `BiblioSpecLiteLibrary`, and it is now keyed by file index rather than file id, so
+  nothing in a library entry is keyed by id any more.
+- The load pass runs every entry's arrays through the `ValueCache` it already had for peak
+  bounds. `ReplicatePositions` compares and hashes by value (its `ImmutableList<int>` does),
+  so entries with values in the same files end up sharing one positions object - which is
+  what makes the flat layout actually save memory rather than just move it around.
 - Every call site already had the file's index in hand and was converting it to an id with
   `_librarySourceFiles[j].Id`, so most sites got shorter.
 
