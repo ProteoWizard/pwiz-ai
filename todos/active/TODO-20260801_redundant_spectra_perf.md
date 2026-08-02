@@ -91,8 +91,11 @@ Producers which had to learn the mapping:
 - `BlibDb.CreateLibraryFromSpectra` collects ion mobilities by source file id during its
   parallel insert loop and indexes them afterwards, once all the file ids are known.
 
-The ChromLib cache format changed (it serializes `IndexedRetentionTimes`), so
-`CURRENT_VERSION`/`MIN_READABLE_VERSION` went 5 -> 6.
+The ChromLib cache still writes retention times by file id, so its format and its
+`CURRENT_VERSION` of 5 are unchanged: `IndexedRetentionTimes.Write` takes the file ids in
+file index order, and `Read` takes a fileId -> index dictionary. Verified byte for byte
+against the old layout, including that `Read` follows the ids rather than the positions
+when the file order differs.
 
 Also removed while converting: `BiblioSpecLiteLibrary.GetMinRetentionTime` (no callers) and
 `IndexedIonMobilities.Write`/`Read` (no callers since the .slc cache was dropped in #3478).
