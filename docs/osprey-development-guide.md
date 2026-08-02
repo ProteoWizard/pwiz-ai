@@ -706,6 +706,27 @@ instrumentation stage - still establishing whether the method is worth having. I
 out it is expected to become default behavior with a command argument, and the environment
 variable goes away. Hardening its parsing today would be work thrown away at promotion.
 
+**Changing or REMOVING an env var needs no deprecation ceremony.** The same reasoning that
+says do not harden them says do not preserve them. A value, a name, or a whole variable can
+change when the algorithm behind it changes; there is no compatibility promise to keep, no
+deprecation window to serve, and no alias to carry forward. A command argument would earn
+all three - that is the difference the promotion step buys.
+
+What a removal DOES owe, and it is the same short list as above:
+
+* **Fail loudly on the removed spelling.** A caller still passing it must not silently get
+  the new default under the old name - that is the "reporting one arm's numbers as another's"
+  case, and it is exactly where these variables have to be strict. Prefer aborting at
+  startup over aborting deep in the pipeline: a stale sweep script should die in seconds,
+  not after Stage 1-5.
+* **Fix the docs in the same change.** A doc describing a variable that no longer exists is
+  the "wrong doc is worse than no doc" case.
+
+Worked example: `OSPREY_PASS2_QVALUE=percolator` was removed outright in #4484 rather than
+aliased to the new default, and an unrecognized value became a startup error instead of a
+warn-and-fall-back. Existing sweep scripts that passed it now fail immediately and say what
+to use instead.
+
 ### Control / throttling
 
 | Name | Purpose |

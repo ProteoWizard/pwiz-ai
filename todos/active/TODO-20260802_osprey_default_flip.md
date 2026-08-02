@@ -152,11 +152,102 @@ Unit coverage added:
 - `DecoyConstructionTest.CollisionCheckRejectsADecoyIsobaricToADifferentTarget` and its Rust twin
   `test_collision_check_rejects_a_decoy_isobaric_to_a_different_target`.
 
+## BLOCKER: mode 3 (HPC chain == straight-through) fails under protein-compact
+
+**The golden re-baseline is NOT safe to take yet.** `regression.ps1` mode 3 is a
+SELF-CONSISTENCY check - the HPC 4-task chain must reproduce the straight-through run - so a
+re-baseline cannot fix it; it would freeze the divergence into the committed baseline.
+
+It passed on master and passes with the stratum-persistence commit alone. With
+`protein-compact` as the default it fails on **exactly one precursor** (`DAADLLSPLALLR2`, 12
+issues, all the same precursor): the straight-through run takes its best spectrum from file
+_21, the HPC chain from file _22, on near-identical q (1.515e-4 vs 1.032e-4).
+
+### Narrowed by experiment (Stellar 3-file, `-SkipResume -SkipWarmRerun`)
+
+| pass-2 mode | stratum? | q source | mode 3 |
+|---|---|---|---|
+| `transfer` | no | pass-1 q carried through, every survivor | **PASS** |
+| `transfer-compete` | no | frozen full-population competition, every survivor | **PASS** |
+| `protein-compact` | **yes** | frozen competition CONSTRAINED to the stratum | **FAIL** |
+
+Both neighbours pass, and the only difference in `ComputePass2TransferCompeteFull` between
+transfer-compete and protein-compact is `stratumBaseIds` being non-null. **Stratum membership
+for one base_id differs between the in-process path and the merge node.**
+
+### Hypotheses raised and REFUTED against source - do not re-run these
+
+1. **The stratum is mutated after publication.** No: `_proteinCompactStratum` is written once
+   (`FirstJoinTask.cs:1751`) and thereafter only `.Contains`-tested (:957) or passed by
+   reference (:1989).
+2. **The learned pick causes it.** No: mode 3 fails identically with `OSPREY_PICK_LDA=0`.
+3. **HashSet enumeration order leaks into the result.** No: `StreamingFdr` only ever
+   `.Contains`-tests the stratum (:211, :235); it never iterates it. Set order cannot reach
+   the output.
+4. **Pass-1 q itself diverges between straight-through and the HPC chain**, masked by
+   transfer-compete rewriting every survivor. No: `transfer` carries pass-1 q through for
+   EVERY survivor and mode 3 PASSES.
+
+### Leading mechanism, not yet confirmed
+
+`BuildProteinCompactStratum` keeps proteins with **>=2** detected peptides - a THRESHOLD. A
+protein sitting exactly on that boundary flips on one detected peptide, and when it flips,
+EVERY peptide of that protein enters or leaves the constrained competition. So a sub-threshold
+difference between the two paths in an internal quantity (`result.DetectedPeptides`) - one
+invisible in reported output under transfer and transfer-compete, which is exactly why both
+pass - is amplified by protein-compact into a visible output difference.
+
+If that is right, the underlying difference is **pre-existing in shipped code** and this work
+only made it visible by promoting a frozen mode to the default. Compare
+[[project_osprey_firstjoin_order_sensitivity]], which records that mode 3 pins the
+`--input-scores` order and thereby masks a latent HPC production-parity risk.
+
+**This property is worth knowing regardless of the bug**: protein-compact is a threshold
+amplifier. Internal noise that no other mode can express becomes reported-output noise under it.
+
+### Next step (mechanical)
+
+Instrument, do not reason further. `BuildProteinCompactStratum` already logs
+`"protein-compact: {N} proteins with >=2 detected peptides -> stratum of {M} base_ids (from {K}
+detected peptides)"`. Capture that line from the straight-through run and from HPC phase 2, plus
+the `"Reloaded the persisted protein-compact stratum ({M} base ids)"` line the merge node now
+logs, and compare N / M / K. Equal M with a failing mode 3 would refute the membership story
+outright; different M localises it to `DetectedPeptides`. The regression run dir self-cleans, so
+this needs `-KeepOutput` / `-KeepRunDirs`.
+
+Then decide: fix here, or re-baseline with mode 3 knowingly red and fix in a follow-up. That is
+Brendan's call, not an implementation detail - it is the difference between shipping a default
+whose HPC and straight-through paths agree and one whose paths are known not to.
+
 ## Progress Log
 
-### 2026-08-02 - Implemented; gates green pending the re-baseline
+### 2026-08-02 - Implemented; gates green except mode 3, which blocks the re-baseline
 
 C# 573/573 unit tests, ReSharper inspection 0 warnings / 0 errors. Rust: all crate tests green,
 `cargo fmt --check` and `clippy -D warnings` clean.
 
-Still to run: the golden re-baseline, the perf gate, and the cross-impl comparison.
+**Measured cost of the flip on Stellar 3-file** (straight-through blib bytes; the golden is the
+master cell):
+
+| `OSPREY_PASS2_QVALUE` | pick | blib | vs master |
+|---|---|---|---|
+| `percolator` (master / golden) | off | 30,597,120 | - |
+| `transfer` | off | 26,628,096 | -13% |
+| `transfer` | on | 26,963,968 | -12% |
+| `transfer-compete` | on | 24,670,208 | -19% |
+| **`protein-compact` (shipped default)** | **on** | **25,636,864** | **-16%** |
+| `protein-compact` | off | 10,231,808 | **-67%** |
+
+The shipped default is **-16%**, the direction expected when an anti-conservative retrain is
+replaced by a calibrated frozen competition. **Caveat: 3 files is the misleading cohort size** -
+3-file protein-compact previously read 0.90% and calibrated where 82-file read 1.51% and
+anti-conservative. Treat these as a smoke test, not as the production effect.
+
+The last row is not a shipped combination, but its size is worth recording: turning the pick off
+under protein-compact costs two thirds of the output, while under transfer it costs nothing.
+That interaction is the same threshold-amplification described above - the pick changes
+first-pass detections, which move proteins across the >=2 gate, which moves whole proteins'
+peptides in and out of the competition.
+
+Still to run: the golden re-baseline (BLOCKED on mode 3), the perf gate, the memory-band check,
+and the cross-impl comparison.
