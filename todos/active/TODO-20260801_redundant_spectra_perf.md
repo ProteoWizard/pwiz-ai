@@ -54,24 +54,56 @@ don't support getting redundant spectra" fallback covers the single-option case.
 
 `RetentionTimesPsmCount` is still used for library details, just no longer per selection.
 
-### Part 2: key IndexedRetentionTimes/IndexedIonMobilities by file index (planned)
+### Part 2: key IndexedRetentionTimes/IndexedIonMobilities by file index (done)
 
-Both classes map `fileId` (a `SpectrumSourceFiles` primary key, an arbitrary integer) to an
-array of values. Change them to key off the index into `LibraryFiles` instead, and store
-the values as a `ReplicatePositions` plus one flat array, which suits a multimap from
-dense zero-based keys when the value count is comparable to the key count.
+Both mapped `fileId` (a `SpectrumSourceFiles` primary key) to an array of values, using an
+`ImmutableSortedList<int, T[]>`. That is one object per file per spectrum, which on a
+library where every peptide was seen in every one of hundreds of runs dominates the memory.
 
-Risk: old key and new key are both `int`, so a mix-up will not be caught by the compiler.
+- New `IndexedMultiArray<T>` (Model/Results, next to its `ReplicatePositions` dependency):
+  an `IReadOnlyList<IList<T>>` laid out by a `ReplicatePositions` over one flat
+  `ImmutableList<T>`, the same shape as `ChromFileIdMap`, with the indexer handing back a
+  `ReadOnlyList.Create` view rather than copying. Two objects per spectrum instead of two
+  per file per spectrum. The tradeoff is that space is proportional to the highest index
+  used, so the keys have to be small numbers - which is why the key changed from the
+  database id to the index into `LibraryFiles`.
+- `IndexedRetentionTimes` and `IndexedIonMobilities` are now thin wrappers over it.
+- Every call site already had the file's index in hand and was converting it to an id with
+  `_librarySourceFiles[j].Id`, so most sites got shorter.
+
+Guarding against the id/index mix-up (both are `int`, so the compiler cannot tell them
+apart): the properties were renamed `RetentionTimesByFileId` -> `RetentionTimesByFileIndex`
+and `IonMobilitiesByFileId` -> `IonMobilitiesByFileIndex`, which turned every read site
+into a compile error that had to be visited. Note that `PeakBoundariesByFileId` is
+deliberately still keyed by id, and `ChromLibSpectrumInfo.SampleFileId` still holds an id.
+
+Producers which had to learn the mapping:
+- `RetentionTimeReader` gained a `FileIndexesById` property, set from the
+  `SpectrumSourceFiles` rows which are already read before the retention times.
+- `ChromatogramLibrary` had to move its `SampleFile` query ahead of the precursor query,
+  since it previously read the sample files after building the entries.
+- `BlibDb.CreateLibraryFromSpectra` collects ion mobilities by source file id during its
+  parallel insert loop and indexes them afterwards, once all the file ids are known.
+
+The ChromLib cache format changed (it serializes `IndexedRetentionTimes`), so
+`CURRENT_VERSION`/`MIN_READABLE_VERSION` went 5 -> 6.
+
+Also removed while converting: `BiblioSpecLiteLibrary.GetMinRetentionTime` (no callers) and
+`IndexedIonMobilities.Write`/`Read` (no callers since the .slc cache was dropped in #3478).
 
 ## Tests
 
-Existing coverage only. TestRedundantComboBox, TestBuildLibraryShare, TestLibraryExplorer,
-TestLibraryExplorerAsSmallMolecules, TestMinimizeIrt, TestMinimizeWithEmptyFiles pass.
+Existing coverage only. Passing: TestAddLibrary, TestAddMixedLibrary, TestLibraryExplorer,
+TestLibraryExplorerAsSmallMolecules, TestSplitGraph, TestIonMobility,
+TestRetentionTimeAlignment, the LibraryLoadTest set, DocLoadLibrary, TestBlibDriftTimes,
+the MeasuredDriftValues set, TestRedundantComboBox, TestBuildLibraryShare, TestMinimizeIrt,
+TestMinimizeWithEmptyFiles, CodeInspection.
 
 ## Status
 
 - [x] Part 1 implementation complete
+- [x] Part 2 implementation complete
 - [x] Build clean
 - [x] Tests pass
-- [ ] Part 2 implementation
+- [ ] Measure the memory improvement on imputation_template.blib
 - [ ] PR created
