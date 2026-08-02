@@ -488,6 +488,39 @@ So SHIP #2 needs a design decision before code: gate against a curated high-abun
 adopt mass-matched-high-overlap and measure the resulting library empirically rather than tuning
 a threshold on this one 40-file cohort.
 
+**AND A PRIOR QUESTION THAT MUST BE ANSWERED FIRST - the two filters rest on DIFFERENT logic,
+and only one of them is unambiguous.**
+
+| | what the peptide is | removing it is... |
+|---|---|---|
+| **I/L-identical** (SHIP #1) | mass- AND fragment-identical to a PRESENT target; the detection IS that target | **a correction.** Counting it false is simply an error. Unambiguous. |
+| **merely similar** (SHIP #2, overlap 0.70) | genuinely **ABSENT**; detected via interference from a present peptide | **a bias correction, and only if justified.** An absent peptide WAS reported - that is a real false discovery of exactly the kind FDR must control. |
+
+SHIP #2 is therefore justified only by the argument that **shuffles OVER-REPRESENT the near-copy
+class** relative to the true absent-peptide population - which they plainly do, being anagrams of
+something present, where a random absent human peptide is not.
+
+**That argument does not obviously transfer to foreign-species entrapment.** The human proteome
+contains many absent-but-homologous peptides (proteins not expressed in this tissue whose
+peptides resemble expressed paralogs). A conserved Arabidopsis ortholog of tubulin may be a FAIR
+model of that class rather than an artifact. If so, gating it out pushes measured FDP BELOW
+truth - the mirror image of the contamination this series started with, and much harder to
+detect because the curve would simply look conservative.
+
+**This also puts a caveat on the already-measured pairwise gate result.** Its -24.6% was read as
+"the gate removes over-estimation". That reading depends on the same over-representation
+argument. If some of those near-copies were valid false-discovery models, part of the -24.6% is
+bias, not correction. The Arabidopsis arm was supposed to test this independently and could not,
+because it turned out to be contaminated by I/L collisions and conserved orthologs.
+
+**Recommended sequencing**: ship #1 now, and treat #2 as blocked on evidence rather than on a
+threshold. The discriminating question is whether near-copy entrapment detections are
+DISPROPORTIONATE relative to how often genuinely absent human peptides are detected through the
+same interference route - which is measurable on the existing runs by comparing the accepted
+rate of near-copy entrapment against the accepted rate of entrapment with no similar target, per
+similarity bin, and asking whether the excess exceeds what the shuffle design's anagram
+enrichment predicts.
+
 **Tools available** (all committed to pwiz-ai, `ai/scripts/Osprey/Entrapment/`):
 `entrapment_target_collision.py` (exact collisions), `il_collision_correction.py` (I/L, with
 oracle-surgery correction), `entrapment_composition.py` (length/composition matching),
