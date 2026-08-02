@@ -743,6 +743,73 @@ the colliding-decoy fraction, scaled as Arabidopsis did (7.6% colliders -> +11.5
 **A large FDP drop with a small discovery gain would falsify the decoy attribution** and send
 the explanation back to the entrapment side.
 
+#### 9. THE EARLY FDP SPIKE: conserved orthologs, and the gate's THIRD blind spot
+
+Brendan spotted an early jump to ~1% FDP at q~0 in the `arabidopsis-no-il` calibration plot -
+otherwise very well calibrated, resolving to 0.99% at 1% q. That shape means one or two
+entrapment peptides scoring near the very top. It does.
+
+**The top three accepted precursors in the entire run are entrapment** (ranks 1, 2, 3 of 31,320,
+tied at q = 1.6e-04), and the identities are diagnostic:
+
+| entrapment | max overlap | matching HUMAN target | protein |
+|---|---|---|---|
+| `GILAADESTGTIGKR` | **0.857** | `GILAADESTGSIAKR` | **ALDOA_HUMAN** (aldolase A) |
+| `GILAADESTGTIGK` | **0.846** | `GILAADESTGSIAK` | **ALDOA_HUMAN** |
+| `EILHIQGGQCGNQIGAK` | **0.750** | `EIVHIQAGQCGNQIGAK` | **TBB5_HUMAN** (beta-tubulin) |
+| `AAGWGVMVSHR` | **0.650** | `AAQDSFAAGWGVMVSHR` | **ENO1_YEAST** (the spiked RT standard) |
+| `GHYTEGAELIDSVLDVVRK` | 0.500 | `GHYTEGAELVDSVLDVVRK` | **TBB5_HUMAN** |
+| `IVLIGDSGVGK` | 0.500 | `DDEYDYLFKVVLIGDSGVGK` | RB11A_HUMAN (Rab11) |
+| `GQETSTNSIASIFAWTR` | 0.500 | `GQETSTNPIASIFAWTR` | IDHC_HUMAN |
+
+Every one is **above the 0.40 gate threshold**, and every one is a near-copy of an **abundant,
+reliably present** protein - tubulin, aldolase, enolase, Rab GTPase. `AAGWGVMVSHR` is a
+C-terminal sub-peptide of the yeast enolase RT standard, so its entire y-ion series is shared.
+
+**Note the `_p_target` protein names are the arbitrary human PAIRING partners** (PATZ1, MOCS1,
+ZN721), not the Arabidopsis source, so they actively mislead when reading this table.
+
+**Root cause - the gate is PAIRWISE but the contamination is SET-WISE.**
+`EILHIQGGQCGNQIGAK` was paired with a PATZ1 peptide, so the gate compared it to PATZ1, found low
+overlap, and passed it. It never compared it to beta-tubulin, a different target entirely.
+**This is the same structural blind spot as the I/L bug** (finding 6), which was also an exact
+isobaric match to a DIFFERENT target. Three manifestations of one root cause:
+
+| # | contamination | caught by current gate? |
+|---|---|---|
+| 1 | near-copy of its OWN paired target | **yes** |
+| 2 | I/L-isobaric with ANY target | no - fixed by the no-il libraries |
+| 3 | high fragment overlap with ANY OTHER target | **no - still open** |
+
+**Why foreign-species entrapment is hit hardest**: shuffled human peptides are anagrams, which
+essentially never resemble a DIFFERENT human peptide; real Arabidopsis peptides from conserved
+proteins are near-identical to their human orthologs **by evolution**.
+
+| arm | accepted entrapment | overlap>0.40 with SOME OTHER target | |
+|---|---|---|---|
+| ungated (shuffle) | 826 | **1** | 0.1% |
+| gated (shuffle) | 913 | **1** | 0.1% |
+| arabidopsis | 879 | **33** | 3.8% |
+| arabidopsis-no-il | 917 | **25** | **2.7%** |
+
+**~30x worse for foreign entrapment**, and this is a LOWER BOUND - the index only catches
+peptides sharing an 8-mer prefix or suffix, so internal similarity is missed.
+
+**Impact is far larger than the 2.7% share implies, because these sit at the TOP of the score
+distribution**: removing the 22 identified cross-target near-copies moves FDP
+**1.037% -> 0.883% (-14.9%)** and matched discoveries **25,955 -> 26,732 (+3.0%)**.
+
+**This is what produces the spike Brendan saw.** At q~0 only a few hundred precursors are
+accepted, so two or three entrapment hits at ranks 1-3 drive the ratio to ~1% before the target
+count grows enough to wash it out. The headline 1%-q number barely moves; the low-q calibration
+shape is dominated by it.
+
+**Actionable fix**: gate entrapment candidates against **all** targets, not just the paired one.
+A fragment-mass index over the target set makes this tractable - the same index would catch the
+I/L class as a special case. This is the natural next step for the Carafe similarity gate and
+would benefit the shuffle libraries slightly (1 accepted near-copy each) and the foreign-species
+libraries substantially.
+
 #### Confounds closed by measurement before the arms ran
 
 * **Shared prediction basis, verified for BOTH controlled steps.** `ungated` vs `gated`:
