@@ -367,6 +367,61 @@ Tool: `ai/scripts/Osprey/Entrapment/contamination_corrected.py`.
 
 ## Progress Log
 
+### 2026-08-02 - Carafe half implemented end to end; five Astral libraries delivered
+
+**Carafe branch `feature/decoy-similarity-gate`, 8 commits, LOCAL AND UNPUSHED, 121 tests green.**
+Cannot push: `maccoss/Carafe` reports `push: false` for brendanx67 and no fork exists. Either
+request collaborator access (recommended - matches the `maccoss/osprey` arrangement, and this will
+not be the last Carafe change) or fork. **Not done unilaterally; it is a decision about a repo we
+do not own.**
+
+Commits: overlap gate + bounded retry; co-location assignment for foreign entrapment; two seed
+reviewer-notes; ratio floor; I/L collision rejection; GUI; GUI layout fix.
+
+**Five Astral libraries built, audited and delivered** to
+`D:\test\AstralTest-TargetDecoyLibraries\` and copied to
+`M:\home\brendanx\data\MacCoss\Osprey\AstralLib` (6 zips, each byte-count verified):
+
+| library | quartets | near-copies | I/L colliders (ent / dec) |
+|---|---|---|---|
+| `-ungated` (baseline) | 1,390,979 | 4.22% | 742 / 792 |
+| `-gated` | 1,391,732 | 0% | 678 ent |
+| `-gated-no-il` | 1,391,588 | **0%** | **0 / 0** |
+| `-arabidopsis` | 1,391,734 | 0% | 1,043 ent |
+| `-arabidopsis-no-il` | 1,391,655 | **0%** | **0 / 0** |
+
+All five share ONE prediction basis - fine-tuned `ms2_model.pt`/`rt_model.pt` byte-identical by
+SHA-256 across five separate Carafe invocations - so `ungated -> gated -> gated-no-il` and
+`-> arabidopsis -> arabidopsis-no-il` are each single-variable chains.
+
+**Findings worth keeping:**
+
+1. **Fine-tuning is deterministic given the same blib and seed.** Three separate invocations
+   produced byte-identical models and 100.0% identical target predictions (3,126/3,126 fragment
+   m/z lists, RT identical). So a controlled comparison needs a shared prediction BASIS, not
+   literally one invocation - which is worth knowing because "must share one run" would force
+   rebuilds that are not necessary. Across peptdeep model VERSIONS it collapses to 56.3%.
+2. **The foreign-entrapment assignment optimises a threshold, not an average, and the two want
+   different algorithms.** Nearest-available in mass order 81% co-location; quantile map (optimal
+   transport) 49%; nearest-available in sequence order 95%; bin-based 99.86%. Optimising mean
+   displacement was the wrong instinct and cost two rebuilds.
+3. **The audit tooling gained I/L detection and a p_decoy relationship**, and both confirmed draft
+   claims that were previously uncheckable: p_decoy 1.8889% -> 0% (draft said 1.86%), and a
+   colliding DECOY population nobody had measured (792, alongside 742 entrapment, both 0 exact).
+4. **Every rate in the PR draft is sample-based and runs slightly under the full-manifest value**
+   (4.05/4.22, 1.70/1.74, 1.86/1.89). Both are now given in the draft.
+5. **`-no_similarity_gate` had to mean "reproduce the pre-FIX generator"**, skipping I/L as well as
+   the overlap gate, or the byte-reproduction oracle would have been spent. Verified still intact.
+
+**Skyline half moved out** to [pwiz #4516](https://github.com/ProteoWizard/pwiz/issues/4516), which
+also covers Fisher-Yates (consistent with Carafe) and removing `ADD_RANDOM` entirely.
+
+**Osprey is NOT as rigorous as Carafe** - see the correction at the top of this file and the two
+new tasks. 742 I/L-colliding decoys measured by simulating its own gendecoy path.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260802_decoy_similarity_gate.md` before starting work.
+
 ### 2026-08-02 (night session) - FDP series measured on Astral, 40 files, three libraries
 
 Same 40-file TDP-43 cohort searched against three libraries differing in one variable at a time,
