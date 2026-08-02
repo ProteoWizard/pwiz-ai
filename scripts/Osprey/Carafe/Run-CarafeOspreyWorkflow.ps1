@@ -47,8 +47,12 @@
               and over-estimates FDP; a foreign peptide is not.
 
 .PARAMETER EntrapmentRatio
-    Fraction of targets carrying an entrapment peptide (natural source only).
-    1.0 pairs every target; smaller values perturb the target search less.
+    Fraction of targets carrying an entrapment peptide, in [0.1, 1.0]. 1.0 pairs
+    every target; smaller values perturb the target search less, and the combined
+    FDP estimate stays stable down to 0.1. Below 0.1 Carafe rejects the build as
+    untested rather than silently producing an entrapment set too small to
+    estimate from. The bound is enforced in Carafe, not duplicated here, so there
+    is a single place to widen it if a real case needs one.
 
 .EXAMPLE
     # Full Stellar rebuild with the stock shuffle entrapment.

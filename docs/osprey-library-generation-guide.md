@@ -438,6 +438,13 @@ target-anagram shuffles.**
 Caveat: low power at small r (N_E=32 at r=0.1). The invariance is the robust
 signal, not the third significant figure.
 
+**0.1 is therefore a hard floor**, enforced by Carafe with an error explaining
+why rather than silently accepting a ratio nobody has characterised. The sweep
+covers r = 1, 0.5, 0.25 and 0.1; at 0.1 the accepted entrapment set is already
+down to 32 peptides, so below that the estimate is dominated by counting noise.
+This is a bound on an *untested* region, not a claim that lower cannot work - if
+a real case needs one, widen it deliberately and record what was measured.
+
 ### Caveats on the whole approach
 
 - Entrapment lives *inside* the searched library, so changing it perturbs the
