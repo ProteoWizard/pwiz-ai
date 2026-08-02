@@ -877,6 +877,58 @@ I/L class as a special case. This is the natural next step for the Carafe simila
 would benefit the shuffle libraries slightly (1 accepted near-copy each) and the foreign-species
 libraries substantially.
 
+#### 10. WHAT THE FDP:q PLOT ACTUALLY MEASURES - and why that matters for every conclusion above
+
+**Brendan's framing, recorded because it governs how all of finding 9 should be read.** Three
+distributions are in play:
+
+| | |
+|---|---|
+| **D** | decoys - what Osprey's reported q is derived from |
+| **E** | entrapment - what the measured "true FDP" is derived from |
+| **F** | target-false - the real false positives among targets. **Unobservable.** |
+
+**FDR validity is a claim about D ~ F. The FDP:q plot measures D vs E.** It is evidence about
+FDR only to the extent that **E ~ F**.
+
+So a curve deviating from y=x says *the decoys do not model the entrapment*. Whether that is
+also a statement about the decoys failing to model target-false depends entirely on whether the
+entrapment is a faithful proxy - and **here it demonstrably was not**: E was polluted with
+sequences behaving like target-TRUE (I/L isobars, conserved orthologs of abundant proteins).
+
+**Therefore the anti-conservative Arabidopsis curve diagnosed a broken INSTRUMENT, not
+necessarily broken FDR.** Findings 5-9 should be read as "the entrapment null was contaminated
+and has been repaired", NOT as "Osprey's FDR was wrong and has been fixed". Nothing in this
+series demonstrated an FDR failure.
+
+**Corroborating evidence that the two diagnostics probe different regions.** The null-band
+D-vs-E checks PASSED for every arm including the badly polluted one (`plateauRatio` 0.9564,
+entrapment decoy-win **0.4981**, real-target **0.4974** - fair coin flips), while the FDP:q curve
+failed badly. Both are D-vs-E comparisons; the null-band ones sample the LOW-scoring region and
+the pollution lives at the CONFIDENT end. **The two disagreeing is itself the localizing
+signal**, and is the reason both diagnostics are worth keeping.
+
+**A run-count sanity check for E-pollution: proposed, ATTEMPTED, and NOT YET VALID.** The idea
+is sound - a genuine false positive is detected sporadically, while a conserved ortholog of an
+abundant protein is detected reproducibly like a real peptide - so the polluted subset should
+sit at high k. The attempt made here used the `peaks` map in the pass-1 harvest and is
+**INVALID**: `peaks` is the EXTRACTED peak set, not independent detections. Stage 6 fills a peak
+for nearly every run, so everything reads 26-36 of 40 and even targets reach only 36.5. This is
+precisely the trap the Entrapment README documents about `NRunsDetected` being
+post-reconciliation, and it was walked into anyway. The numbers it produced show no separation
+and must not be quoted.
+
+The aggregate mdiag `crossRun` histogram IS in the correct domain and confirms entrapment
+behaves like false positives overall (**30-33% at k=1 versus 8-11% for all accepted**), but it
+is far too diluted to isolate a 2.7% polluted subset - I/L removal moved the k>=6 share only
+47% -> 40%, and `ungated` (45%) sits above `gated` (37%), so the ordering is not even monotone
+in contamination.
+
+**To do it properly**: retain per-file `run_prec_q` in `pass1_entrap.py` so each accepted entry
+carries a true independent-detection count, then compare the run-count distribution of the
+identified polluted subset against clean entrapment. That is a harvest change, not a
+re-analysis.
+
 #### Confounds closed by measurement before the arms ran
 
 * **Shared prediction basis, verified for BOTH controlled steps.** `ungated` vs `gated`:
