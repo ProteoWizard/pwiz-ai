@@ -4,9 +4,14 @@
 - **Branch**: `Skyline/work/20260730_osprey_libcache_string_table`
 - **Base**: `master`
 - **Created**: 2026-07-30
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4513](https://github.com/ProteoWizard/pwiz/pull/4513) (merged 2026-08-01)
+
+**Note on the branch**: the work shipped from
+`Skyline/work/20260731_osprey_bounded_stage5_handoff`, rebased onto post-#4508 master. That
+branch's own TODO (`TODO-20260731_osprey_bounded_stage5_handoff.md`) delivered NONE of its
+scope in #4513 and remains open - the O(files) Stage-5 memory growth is still unfixed.
 
 ## Problem
 
@@ -180,3 +185,34 @@ sequences are well over 4 bytes each). **Measure, do not promise a number.**
 Found while validating settings for the first TDP-43 Plasma EV-Quant (164-file) runs, not
 by looking for it - the 168 s showed up as the largest reporting gap in
 `ai/scripts/perfviz.py` output. See `ai/scripts/Osprey/TDP43/README.md`.
+
+## Progress Log
+
+### 2026-08-01 - Merged
+
+PR #4513 merged as commit `0245ad7a21`. **Item 1 shipped and was extended well past its
+original scope; item 2 was deliberately DROPPED on measurement** and is not deferred work.
+
+Shipped: progress reporting for `LibraryCache.LoadCache` (per entry) and `DiannTsvLoader.Load`
+(bytes, via `ProgressStream`); the frozen-model pass-2 reload and the streamed full-population
+competition in `Pass2FdrSidecar`; and the whole cold path - "Building library entries",
+"Deduplicating library entries", "Writing library cache". Plus a real performance fix surfaced
+in review: `StreamReader` kept the BCL 1 KB byte buffer, so the LOCKING `Report` ran once per
+KB - ~13.6M calls on the 13 GB library - now a 1 MB reader buffer with `FileStream` buffering
+disabled underneath, which also removes a 16 MB LOH block from every load including the
+~200-byte fixtures the unit tests parse.
+
+Gaps closed on the 163-file run: **83 s** (library load), **2,091 s** (frozen-model reload),
+**576 s** (streamed competition). Verified by OBSERVATION on the real 6,324,700-entry library -
+the test framework captures `OspreyOutput.Out`, so a green unit test cannot prove these lines
+appear, and the first Stellar regression passed without ever reaching the frozen-model branch.
+
+Dropped: the `.libcache` string table. Its premise was a 168 s load; measured properly the
+cache loads in **11-12 s cold or warm, ~6x FASTER than parsing its source**, and the 168 s was
+a single production log taken while another run's I/O was still draining. 21.2M occurrences of
+10.5M distinct strings is ordinary duplication, not a pathology.
+
+Carried forward, unfixed, so they are not lost: `ProgressReporter.Dispose` prints "100%" while
+unwinding an exception (~30 existing `using`-based call sites; the sites added here use
+construct/`Dispose()` and avoid it); `BlibLoader` remains silent because no `.blib` was
+available to exercise it; and the `AI assistance:` headers on the touched files are stale.
