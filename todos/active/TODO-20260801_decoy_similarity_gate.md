@@ -871,11 +871,46 @@ entrapment.
 the all-targets gate implemented and a fresh run. That is the one remaining experiment in this
 line.
 
-**Actionable fix**: gate entrapment candidates against **all** targets, not just the paired one.
-A fragment-mass index over the target set makes this tractable - the same index would catch the
-I/L class as a special case. This is the natural next step for the Carafe similarity gate and
-would benefit the shuffle libraries slightly (1 accepted near-copy each) and the foreign-species
-libraries substantially.
+**PROPOSED FIX, AND WHY IT IS NOT YET A SPEC.** The obvious move is to gate entrapment
+candidates against **all** targets rather than the paired one. Do NOT hand that over as written -
+the 0.40 threshold was calibrated for a PAIRWISE test and is meaningless applied set-wise
+against 1.39M targets:
+
+| criterion | gated | arabidopsis-no-il |
+|---|---|---|
+| overlap > 0.40, any mass | **305 (33.4%)** | **253 (27.6%)** |
+| overlap > 0.40, dm <= 5 Da | 50 (5.5%) | 39 (4.3%) |
+| overlap > 0.70, dm <= 5 Da | **34 (3.7%)** | **15 (1.6%)** |
+| overlap > 0.70, dm <= 1 Da | 34 (3.7%) | 15 (1.6%) |
+
+**A precursor-mass constraint is essential and was missing from the first formulation.** All
+three confirmed offenders are mass-matched by construction - `EILHIQGGQCGNQIGAK` vs
+`EIVHIQAGQCGNQIGAK` is V->L (+14) with A->G (-14), net **zero**; `GILAADESTGTIGK` vs
+`GILAADESTGSIAK` is S->T with A->G, net **zero**; `IVLIGDSGVGK` vs `VIILGDSGVGK` is an anagram,
+**identical**. Mass matching is WHY they co-isolate and get detected; a chance 40% fragment
+overlap at an unrelated mass is harmless. Adding it collapses the flag rate ~6x, and counts are
+stable from 0.60 to 0.70, so there is clean separation rather than a threshold cliff.
+
+**The blocking problem: the criterion does not yet predict the harm.** It flags MORE in `gated`
+(3.7%) than in `arabidopsis-no-il` (1.6%), while the observed pathology is the reverse - `gated`
+has zero entrapment at the top q and is conservative throughout, `arabidopsis-no-il` spikes. The
+missing factor is that the Arabidopsis offenders match **tubulin, aldolase, enolase and RAB7A**,
+the most abundant proteins present, while the shuffle offenders match whatever target sits
+nearby in mass. **Abundance/detectability is sample-dependent and not a library property**, so a
+purely library-level filter cannot currently be threshold-tuned from this evidence.
+
+**ALSO CORRECTED: the earlier "shuffle is clean at 0.1%" figure was an indexing artifact.** It
+used raw 8-mer prefix/suffix keys; with a **k=6 I/L-NORMALISED** index the same measure gives
+33.4%. The index must be built on I/L-normalised sequences or it misses exactly the class it
+hunts - `IVLIGDSGVGK`'s C-terminal 8-mer is `IGDSGVGK` against the target's `LGDSGVGK`, so the
+raw index scored it 0.500 when the truth is **0.900**.
+
+**What IS ready to hand over**: the I/L rule (implemented, validated, 0 residual in both new
+libraries), the problem statement with named examples, and the structural insight that the gate
+is pairwise while contamination is set-wise. **What is NOT ready**: a numeric threshold for the
+all-targets gate. Settling it needs the abundance question resolved - e.g. gate against a
+curated high-abundance subset, or accept a mass-matched-high-overlap rule and measure the
+resulting library empirically rather than tuning on this cohort.
 
 #### 10. WHAT THE FDP:q PLOT ACTUALLY MEASURES - and why that matters for every conclusion above
 
