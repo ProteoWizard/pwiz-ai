@@ -87,16 +87,20 @@ inflates the measured false count but does **not** suppress real identifications
 
 ## Reference result (Astral library, library-level, 2026-08-01)
 
-`library_overlap_audit.py` over the first 150,000 quartets of each Astral pairing manifest. The
-ungated build reproduces the delivered library exactly, so its row IS the delivered library.
+`library_overlap_audit.py` over each Astral pairing manifest. The ungated build reproduces the
+delivered library's sequences exactly, so its row IS the delivered library.
 
 | | median overlap | 99th | max | rejectable | median identity |
 |---|---|---|---|---|---|
-| shuffle, ungated (= delivered) | 0.1000 | 0.5714 | 1.0000 | **4.05%** | 0.1923 |
+| shuffle, ungated (= delivered) | 0.1000 | 0.5714 | 1.0000 | **4.22%** | 0.1923 |
 | shuffle, gated | 0.1000 | 0.3750 | 0.4000 | **0%** | 0.1875 |
-| Arabidopsis r=1.0, gated | **0.0208** | 0.2000 | 0.4000 | **0%** | **0.0588** |
-| decoys, ungated | 0.0833 | 0.4545 | 1.0000 | 1.70% | - |
+| Arabidopsis r=1.0, gated | **0.0238** | 0.2000 | 0.4000 | **0%** | **0.0588** |
+| decoys, ungated | 0.0833 | 0.4545 | 1.0000 | 1.74% | - |
 | decoys, gated | 0.0833 | 0.3333 | 0.4000 | **0%** | - |
+
+Rejectable rates and median overlap are over ALL ~1.39M quartets; the percentile and identity
+columns are from a 150,000-quartet sample. Sampling matters: the same 150k sample reads 4.05%
+rejectable against 4.22% for the full manifest, so quote the full number when it is the headline.
 
 Two things worth separating. The gate removes the **tail** - it is a filter, so by construction
 nothing survives above 0.4. Foreign entrapment shifts the **whole distribution**: median overlap

@@ -228,13 +228,21 @@ ungated  ->  gated  ->  arabidopsis
 |---|---|---|---|---|
 | quartets | 1,390,979 | 1,390,979 | 1,391,732 | 1,391,734 |
 | library size | 13.09 GB | 11.84 GB | 11.84 GB | 11.97 GB |
-| rejectable entrapment | 4.05% | 4.05% | **0%** | **0%** |
-| rejectable decoys | 1.70% | 1.70% | **0%** | **0%** |
+| rejectable entrapment | 4.22% | 4.22% | **0%** | **0%** |
+| rejectable decoys | 1.74% | 1.74% | **0%** | **0%** |
 | median entrapment overlap | 0.100 | 0.100 | 0.100 | **0.024** |
 | shares our prediction basis | **no** | yes | yes | yes |
 
-Audited in full, not sampled. The gated variants keep MORE targets than the
-baseline, because the retry rescues more old collision-drops than the gate costs.
+Every row audited over ALL quartets, not sampled - a 150k-quartet sample reads
+4.05% / 1.70%, so quote the full number. The delivered and ungated columns are
+identical by construction: their peptide sequences are the same set, proven byte
+for byte. The gated variants keep MORE targets than the baseline, because the
+retry rescues more old collision-drops than the gate costs.
+
+Internal consistency check: the baseline holds **58,704** rejectable entrapment
+peptides, and the gate changed **58,319** entrapment sequences. The difference is
+peptides dropped outright rather than replaced, plus the small target-set
+difference - the two independent counts agree.
 
 **The delivered library is not the baseline.** Its peptide *sequences* are
 identical to the ungated arm's (proven byte for byte), but it was predicted with
