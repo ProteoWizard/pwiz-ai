@@ -15,8 +15,28 @@ ai/scripts/Osprey/Carafe/
   Run-CarafeOspreyWorkflow.ps1     6-stage end-to-end driver (Carafe + Osprey)
   tools/
     make_natural_entrapment.py     swap shuffle entrapment -> matched foreign peptides
+                                   (superseded by Carafe's own -entrapment_db; kept
+                                   because it can retrofit an existing library)
     occupancy_test.py              precursor m/z saturation measurement
+    compare_target_predictions.py  are two libraries a controlled comparison?
 ```
+
+## Before trusting a library A/B
+
+Two libraries only isolate one variable if they share a prediction basis. Targets are
+untouched by both the similarity gate and the entrapment source, so any target-side
+difference between them is the prediction run, not the variable under test:
+
+```powershell
+python tools/compare_target_predictions.py <libA.tsv> <libB.tsv>
+```
+
+Expect **100%** identical fragment m/z lists. Anything less and the comparison is
+confounded - across peptdeep model versions it drops to ~56%, because Carafe writes a
+top-N fragment set and shifted intensities reorder it. Separate Carafe invocations are
+fine as long as the training blib, seed, parameters and peptdeep model match; the
+fine-tuned `ms2_model.pt` / `rt_model.pt` will be byte-identical when they do. See the
+guide's "Controlled comparisons need a shared prediction basis".
 
 ## Quick start
 

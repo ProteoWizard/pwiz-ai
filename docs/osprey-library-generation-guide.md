@@ -168,6 +168,46 @@ following this guide get functionally equivalent, not identical, libraries. If
 you need identical, share the built library rather than rebuilding it, and pin
 the peptdeep model.
 
+### Controlled comparisons need a shared prediction basis
+
+This is the rule that matters when a library A/B is meant to isolate one
+variable, and it is easy to get wrong because the sequences can be byte-identical
+while the libraries are not comparable.
+
+Targets are untouched by the similarity gate and by the entrapment source, so any
+target-side difference between two libraries is the *prediction*, not the variable
+under test. Two measurements, on the same 13-column libraries:
+
+| target precursors compared | identical fragment m/z list |
+|---|---|
+| delivered (Mike's peptdeep model) vs our rebuild | **56.3%** |
+| our two rebuilds, same training blib + seed | **100.0%** |
+
+The first was measured on the other machine over ~3,000 shared target precursors:
+44% of targets report a *different* fragment set, with a median relative intensity
+difference of 2.3% (p90 8.4%, p99 19.5%). Carafe emits a top-N fragment set, so
+once predicted intensities shift the ranking changes and different fragments get
+written. The search scores against that list, so these are genuinely different
+search inputs, not the same library with jitter.
+
+The second was measured here over 3,129 shared target precursors sampled by
+sequence hash: **every fragment m/z, every intensity and every RT identical, at
+every percentile** - and the fine-tuned `ms2_model.pt` / `rt_model.pt` are
+byte-identical by SHA256 across the two separate Carafe invocations.
+
+**So the requirement is a shared prediction BASIS, not literally one invocation.**
+Separate runs are fine when they share the training blib, the seed, the Carafe
+parameters and the peptdeep model - fine-tuning is deterministic under those, and
+that is verifiable in two cheap ways before trusting a comparison:
+
+1. hash the fine-tuned `ms2_model.pt` / `rt_model.pt` in each output directory;
+2. compare the target side directly, which is what
+   `compare_target_predictions.py` does.
+
+What is *not* comparable is anything built against a different peptdeep model
+version - which is exactly what the delivered library is. Use it as a reference
+arm, label it confounded, and put the baseline arm through your own pipeline.
+
 ---
 
 ## The 2026-08-01 Astral rebuild
