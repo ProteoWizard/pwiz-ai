@@ -26,7 +26,14 @@ import pyarrow.parquet as pq
 REC = np.dtype([('entry_id', '<u4'), ('svm', '<f8'), ('run_prec_q', '<f8'), ('run_pep_q', '<f8'),
                 ('exp_prec_q', '<f8'), ('exp_pep_q', '<f8'), ('pep', '<f8'), ('run_prot_q', '<f8')])
 assert REC.itemsize == 60
-QCUT = 0.01
+# Harvest cut on experiment_precursor_qvalue. Overridable because it silently bounds what any
+# DOWNSTREAM tool can compute: a frontier metric like "discoveries at a matched 1% TRUE FDP"
+# scans for the largest acceptance whose measured FDP is still under the cut, and that point
+# routinely sits ABOVE q = 0.01. Harvest at 0.01 and the frontier saturates at the q <= 0.01
+# discovery count by construction, which reads as a real result rather than a truncation.
+# The 163-file arm_*.json files were harvested to q = 0.03 (18.4% of their entries lie above
+# 0.01), so anything compared against them must use the same cut.
+QCUT = float(os.environ.get('OSPREY_PASS1_QCUT', '0.01'))
 
 
 def read_sidecar(path):
