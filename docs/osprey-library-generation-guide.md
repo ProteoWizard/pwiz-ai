@@ -329,9 +329,52 @@ peptides the old one-shot shuffle dropped on an exact collision, the gated Astra
 build keeps **1,391,732** targets against the delivered library's **1,390,979** -
 a net *gain* of 753.
 
-`-no_similarity_gate` reproduces the pre-gate behaviour. It is an audit switch,
+`-no_similarity_gate` reproduces the pre-fix behaviour. It is an audit switch,
 not a tuning knob: it is what proves a rebuilt library differs from the delivered
-one only by the gate, and a library built with it should not be searched.
+one only by the fix, and a library built with it should not be searched.
+
+## The I/L collision check
+
+A second, independent rejection, added 2026-08-02. **Isoleucine and leucine have
+identical residue masses** (113.08406), so a generated sequence differing from a
+real target only by I↔L is mass-identical to it AND produces an identical b/y
+ladder. Mass spectrometry cannot tell them apart at all. Such a peptide is not a
+model of a false discovery: it is detected wherever its twin is present, and
+every one of those detections is counted as false when it is not.
+
+**The overlap gate cannot catch this**, which is why it needs its own check: the
+gate compares each candidate to its OWN paired target, while a collision is an
+exact isobaric match to a DIFFERENT one. It needs a set lookup, not a pairwise
+comparison. An exact-string collision audit also reads clean, because the
+sequences are not equal - only isobaric.
+
+Comparing I→L normalised forms **subsumes** exact comparison, since a sequence
+without isoleucine normalises to itself, so this replaces the existing collision
+check rather than adding a second lookup. One hash set per run.
+
+Measured on Astral, reproducing counts derived independently from search output:
+
+| | colliders measured in the library | what the check does |
+|---|---|---|
+| gated shuffle | 678 | 663 sequences changed + 10 dropped = **673** |
+| Arabidopsis r=1.0 | 1,043 | **1,116** dropped from the pool |
+
+The Arabidopsis figures differ because the check filters the whole pool while the
+measurement counted only assigned peptides; the pool is ~95.7% consumed and
+1,043/1,116 = 93.5% matches that. **2,608 EXACT matches were already being
+filtered** - which is precisely why an exact-string audit reported zero while the
+isobaric ones went through.
+
+Applied to decoys as well as entrapment (1,562 changed). The argument is the
+same: a decoy indistinguishable from a real target is not a valid null either, it
+just inflates the decoy count rather than the entrapment count.
+
+**Foreign-species entrapment needs this most.** Plant and human share conserved
+proteins whose tryptic peptides differ by exactly such conservative
+substitutions, which is why Arabidopsis carries the most colliders and shows the
+largest FDP over-estimate from them (~20.7%, against 4-5% for shuffle). Offering
+a FASTA entrapment source without this check would hand users the failure mode
+that option is most exposed to.
 
 ## Natural (foreign-species) entrapment
 

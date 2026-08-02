@@ -136,9 +136,25 @@ owns the PR. Kept current with this TODO; re-read it after any finding that chan
       Carafe's existing residue-mass table rather than duplicating Osprey's: they agree to 5 dp,
       which is 1e-5 Da against a 0.02 Da window, so no verdict can differ and there is one table
       instead of two that can drift.
-- [ ] **NEW 2026-08-02, HIGHEST VALUE REMAINING - Carafe I/L-normalised collision rejection.**
+- [x] **DONE 2026-08-02 - Carafe I/L-normalised collision rejection.** Commit `fe25b55`.
       Reject any entrapment candidate whose **I->L normalised** sequence appears in the I->L
       normalised TARGET set. One hash set at generation time.
+      **Implementation notes.** The normalised comparison SUBSUMES the exact one (a sequence with
+      no isoleucine normalises to itself), so it replaces the existing collision check rather than
+      adding a second lookup. Applied to **decoys as well as entrapment** - the same argument
+      holds, a decoy indistinguishable from a real target is not a valid null either, it just
+      inflates the decoy count instead of the entrapment count.
+      **`-no_similarity_gate` had to mean "reproduce the pre-FIX generator"**, skipping I/L
+      rejection too and not merely the overlap gate. Making I/L unconditional would have broken the
+      byte-reproduction oracle; verified still intact, an audit build reproduces the delivered
+      `osprey_library_db_peptides.fasta` at identical SHA-256 over 349 MB.
+      **Measured on Astral, against the night session's independent counts:**
+      gated shuffle **663** entrapment sequences changed + **10** more dropped for having no
+      acceptable alternative = 673, vs **678** colliders measured in that library. Arabidopsis
+      **1,116** candidates dropped from the pool vs **1,043** measured in the built library - the
+      pool is only ~95.7% consumed and 1,043/1,116 = 93.5% matches the assignment rate. Also
+      **1,562** decoys changed. And the reason an exact-string audit read clean: **2,608** exact
+      matches were ALREADY being filtered, so only the isobaric ones survived to be counted.
       **Independent of the fragment-overlap gate, which cannot catch this**: the gate compares each
       entrapment to its OWN paired target, while a collision is an exact isobaric match to a
       DIFFERENT one. An exact-string audit reports 0 for every library and misses it entirely.
@@ -146,10 +162,15 @@ owns the PR. Kept current with this TODO; re-read it after any finding that chan
       **41.7x / 58.9x / 110.3x** among ACCEPTED entrapment - the signature of a peptide that is
       genuinely present. Removes a **4-5%** FDP over-estimate on shuffle libraries and **~20.7%**
       on foreign-species ones.
-      **Ship it WITH `--entrapment-fasta`, not after**: foreign proteomes are hit hardest, because
+      Shipped WITH the FASTA source flag, as required: foreign proteomes are hit hardest, because
       plant and human share conserved proteins whose tryptic peptides differ by conservative
-      I<->L substitutions. Offering the source flag without this check hands users the failure
-      mode that flag is most exposed to.
+      I<->L substitutions. A regression test asserts the overlap gate PASSES a candidate the
+      collision index rejects, which is the property proving the two checks are independent rather
+      than redundant.
+- [x] **DONE 2026-08-02 - Carafe GUI for the entrapment options.** Commit `9fc114c`. Source combo,
+      FASTA path with Browse/Download, and ratio spinner under the existing checkbox, hidden rather
+      than disabled so the panel is unchanged when entrapment is off. Spec:
+      `TODO-20260801_decoy_similarity_gate-carafe-spec.html`.
 - [ ] **Skyline: add the gate** to `SequenceMods.Shuffle`'s `while` condition, which currently
       tests only `newSequence.Equals(Sequence)`. Also applies to `Reverser`. Consider the I/L
       check here too - same reasoning, though Skyline decoys are not compared against an
