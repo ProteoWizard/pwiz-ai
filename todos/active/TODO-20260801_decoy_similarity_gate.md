@@ -977,8 +977,44 @@ re-analysis.
 | arabidopsis | 23,385 | 1.183 | 22,550 | 69.24 | +60.9% |
 | arabidopsis-no-il | 26,085 | 0.992 | 26,085 | 78.71 | -17.3% |
 
-**`gated-no-il` is the best-calibrated arm in the series** - 0.356% true FDP at a matched 23,385
-discoveries, less than half the shuffle baseline's 0.736%.
+**CORRECTED CLAIM (Brendan caught this).** An earlier version of this entry called `gated-no-il`
+"the best-calibrated arm in the series - 0.356% true FDP, less than half the shuffle baseline".
+That figure is evaluated at **N = 23,385 discoveries, which is ARABIDOPSIS's operating point,
+not gated's**, and the matched-discovery control's common point moves whenever an arm is added
+to the set. Quoting it as the arm's FDP was cherry-picking the most favourable evaluation point.
+
+**On the metrics a user actually ships, `gated` and `gated-no-il` are near-identical:**
+
+| | gated | gated-no-il |
+|---|---|---|
+| FDP @1% q | 0.743% | 0.739% |
+| matched @1% true FDP | 26,379 | **26,348** (marginally worse) |
+| union efficiency | 80.18 | **78.27** (worse by 1.9 pts) |
+| disc @1% q | 25,064 | 25,454 (**+1.6%**) |
+
+The gain is **+1.6% discoveries at equal FDP**, not a halving of false discovery.
+
+**The improvement IS real in direction but strongly point-dependent** - `gated-no-il` has lower
+FDP at every matched discovery count, but the magnitude collapses toward the operating point:
+
+| N discoveries | gated | gated-no-il | delta |
+|---|---|---|---|
+| 20,000 | 0.314% | 0.182% | -42.1% |
+| 22,000 | 0.449% | 0.240% | -46.5% |
+| 23,385 | 0.525% | 0.356% | -32.1% |
+| 24,000 | 0.616% | 0.426% | -30.8% |
+| 25,000 | 0.738% | 0.624% | -15.4% |
+| **25,064** (gated's own 1% q) | 0.743% | 0.650% | **-12.6%** |
+
+The headline-sized percentages come from the low-count region where nEnt is 35-39 and Poisson
+error is **+-16%**, so they are 2-3 sigma at best. **Report -12.6% at the operating point, or
+report the whole curve - never the single most favourable point.**
+
+**LESSON FOR THIS TABLE GENERALLY**: the matched-discovery control is the right idea (it removes
+the operating-point confound) but its common point is set by the WORST arm in the set and
+therefore moves as arms are added. The `gated` figure was quoted as -24.6% at one stage and
+-28.7% at another purely because arabidopsis joined the comparison. **Always state N alongside a
+matched-discovery percentage.**
 
 **THE PRE-REGISTERED PREDICTION FAILED, ON ITS OWN STATED FALSIFICATION CONDITION.**
 
