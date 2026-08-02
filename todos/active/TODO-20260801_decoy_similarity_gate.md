@@ -203,8 +203,24 @@ Measured FDP falls 0.894% -> 0.695% (-22% relative). The other machine, substitu
 entrapment on Stellar, measured 1.62% -> 1.15% (-29% relative). **Two methods, two datasets, two
 instruments, same ~25% over-estimate by shuffle entrapment.**
 
-The gate rejects **4.15%** of library entrapment but ~**27%** of the ACCEPTED set - a 6.5x
+The gate rejects **4.15%** of library entrapment and **7.7%** of the ACCEPTED set - a **1.9x**
 enrichment of near-copies among hits, the shadowing effect as a single ratio.
+
+> **Corrected 2026-08-01 (night session).** This line previously read "~27% of the ACCEPTED
+> set - a 6.5x enrichment". That is not reproducible: `contamination_corrected.py` itself
+> prints `accepted entrapment sequences across all arms: 1,638   gated as near-copy: 126
+> (7.7%)`, and `posthoc_gate_prediction.py` independently measures 90/1,103 = 8.2% on the max
+> arm alone. Every other number this tool emits still reproduces exactly (the full
+> mean-best-N gain table above, and 0.894% -> 0.695%), so the enrichment figure was an
+> isolated error and no conclusion depends on it. The shadowing effect is real but ~2x, not
+> ~6.5x.
+>
+> **The enrichment figure is strongly sensitive to which accepted population is measured**,
+> which is probably how a much larger number arose. Near-copies are concentrated among
+> high-confidence hits, so a narrower q cut inflates the ratio. On the delivered library,
+> 40-file cohort: **2.7x** at a q<=0.01 harvest but **1.5x** at q<=0.03; on the 163-file
+> arms at q<=0.03 it is **2.0x**. None of these approaches 6.5x. Any future quote of this
+> number must state the accepted population and the q cut it was measured at.
 
 Caveats: this reimplements the estimator (rebuilt max arm 30,584 matched vs Osprey's 30,616), so
 the DIFFERENTIAL is reliable and the absolutes drift; and removing near-copies is a NON-random
@@ -214,6 +230,163 @@ below 0.695%.
 Tool: `ai/scripts/Osprey/Entrapment/contamination_corrected.py`.
 
 ## Progress Log
+
+### 2026-08-02 (night session) - FDP series measured on Astral, 40 files, three libraries
+
+Same 40-file TDP-43 cohort searched against three libraries differing in one variable at a time,
+Stage 1-5 only (`--task FirstPassFDR`, which preserves the pass-1 mdiag sidecar). Osprey
+**v26.1.1.213** (pwiz master `0245ad7a21`); `delivered` reused existing parquets at
+**26.1.1.211**. Each arm ~2 h 48 m.
+
+#### Predictions vs outcomes
+
+| step | predicted | measured | verdict |
+|---|---|---|---|
+| ungated -> gated | FDP falls **20-25%** | **-24.6%** | **CONFIRMED**, top of band |
+| gated -> arabidopsis | falls a further **5-10%** | **+125%** | **FALSIFIED, opposite direction** |
+| arabidopsis absolute | ~**0.65-0.70%** | **1.183%** | **FALSIFIED** |
+| delivered vs ungated | isolates peptdeep model version | **0.837% vs 0.837%** | **no effect** |
+
+#### The series
+
+| variant | disc@1%q | trueFDP% | nEnt | matched@1% | eff% |
+|---|---|---|---|---|---|
+| delivered *(confounded ref)* | 24,153 | 0.837 | 196 | 25,173 | 76.36 |
+| **ungated** *(baseline)* | 24,413 | 0.837 | 198 | 25,193 | 78.78 |
+| **gated** | 25,064 | 0.743 | 180 | **26,379** | **80.18** |
+| **arabidopsis** | 23,385 | **1.183** | 268 | 22,550 | 69.24 |
+
+**Matched-discovery control** (all arms at 23,385 accepted targets) - this is the comparison
+that isolates the entrapment change, because the arms do not accept the same number of targets
+at matched q:
+
+| | FDP | vs ungated |
+|---|---|---|
+| ungated | 0.736% | - |
+| **gated** | **0.525%** | **-28.7%** |
+| arabidopsis | 1.183% | **+60.9%** |
+| delivered | 0.705% | -4.2% |
+
+#### 1. The gate works, and both axes improve at once
+
+At matched discoveries the gate cuts measured FDP **24.6%** (at the 24,413 common point) to
+**28.7%** (at 23,385) - squarely in the pre-registered band and consistent with the post-hoc
+estimate. **At matched reported q the drop reads only -11.2%**, because gated also accepts
++2.67% more targets and therefore sits further along its own curve. Both are true; only the
+matched-discovery figure isolates the entrapment change. Report both, lead with the control.
+
+Gated simultaneously finds MORE: disc@1%q **+2.67%**, matched@1% **+4.71%**, union efficiency
+78.78 -> **80.18**. Not a sensitivity/accuracy trade.
+
+Gate confirmed in the ACCEPTED set, not just library-wide: **0 near-copies among 913 accepted
+entrapment** vs ungated's 59/826 (7.1%, **1.8x** enriched).
+
+#### 2. The +4.7% gain is ORACLE CORRECTION, not extra detection
+
+Post-hoc near-copy removal on the ungated run predicted matched **+4.6%**; the gated arm
+measured **+4.71%**. Post-hoc surgery never touches the search - it only cleans the oracle of an
+unchanged run - so reproducing the whole gain without changing the search shows these are not
+newly detected peptides. They are peptides the contaminated oracle was falsely flagging,
+recovered once the 1%-true-FDP frontier stops being dragged in by near-copy hits.
+
+#### 3. The competition effect is bounded SMALL
+
+Post-hoc predicted **-19.2%**, measured **-24.6%**: directionally larger, as genuine competition
+would produce. Sized honestly, that is **11 more entrapment removed than predicted against a
+Poisson sigma of ~13-14 - under 1 sigma**. Bounded small, not shown absent. Settling it needs a
+larger cohort.
+
+#### 4. The peptdeep model version is worth ~nothing in measured FDP
+
+`delivered` and `ungated` share only **15.9%** of target fragment lists, **0%** at identical
+intensities, differ by 2.8M fragment rows and up to 0.33 min in RT - and report **the same FDP
+to three decimals (0.837%)**, with matched discoveries **+0.08%**. Verified across the sweep,
+where intermediate cuts differ in both directions (+19% at q<=0.005, -6% at q<=0.015, ~1.2
+sigma). **Measured FDP is robust to the prediction basis**, so past cross-model comparisons are
+less compromised than feared. Only efficiency moved (76.36 -> 78.78).
+
+#### 5. THE SURPRISE: real Arabidopsis entrapment measures MUCH HIGHER FDP, not lower
+
+**This contradicts both the prior expectation and the other machine's Stellar result**, which
+measured 1.62% -> 1.15% (**-29%**) substituting Arabidopsis entrapment. Here the same
+substitution goes the other way: `gated -> arabidopsis` is **0.525% -> 1.183% at matched
+discoveries (+125%)**.
+
+It is not noise and not an arithmetic artifact:
+
+* arabidopsis is higher at **every** cut of the sweep (0.508/0.631/0.955/1.183/1.798/2.357 vs
+  ungated 0.220/0.466/0.636/0.837/1.209/1.606) - consistent separation, nEnt 268 at 1% (+-6.1%);
+* **`r` is identical to three decimals** across arms (0.96993 / 0.96969 / 0.96903), and targets
+  match to 0.04%;
+* arabidopsis carries only **+1.6%** more entrapment in the library but gets **+35%** more of it
+  ACCEPTED - a per-entry acceptance-rate effect;
+* **0 near-copies** among its accepted entrapment, so contamination cannot explain it;
+* **0 sequence collisions** with the human target set (checked over all three libraries), so
+  these are not genuinely-present peptides.
+
+Arabidopsis is also WORSE on sensitivity: matched **25,193 -> 22,550 (-10.5%)**, efficiency
+**78.78 -> 69.24 (-9.5 pts)**.
+
+**What is ruled out so far.** Peptide LENGTH is matched (entrapment mean 15.691 vs target
+15.726; len<=8 16.49% vs 16.41%). What is NOT matched is amino-acid composition:
+**P -1.392, Q -1.383, S +1.012, I +0.887, N +0.777, D +0.738** percentage points. The shuffle
+libraries score **exactly 0.000 on every residue** - the anagram design is composition-matched
+BY CONSTRUCTION, and foreign-species entrapment is not. Proline especially drives fragmentation
+behaviour. Modest, and probably not sufficient alone for +60%, but it is a real measured
+asymmetry in the null model.
+
+**The two readings, both consequential, not yet separated:**
+
+1. **Arabidopsis is the more honest null and shuffle UNDER-estimates FDP.** Shuffled sequences
+   are unnatural and out-of-distribution for peptdeep, so their predicted spectra may be poor
+   and they may be under-identified. If so true FDP at 1% reported q is ~1.18%, not 0.84%, and
+   Osprey is mildly anti-conservative rather than conservative.
+2. **Arabidopsis is a biased null that over-reports.** The composition skew and whatever else
+   distinguishes a foreign proteome makes its peptides easier to match spuriously than the
+   absent human peptides they are meant to model.
+
+These have opposite implications for how FDR should be validated, and **nothing in this
+experiment separates them.** See "Open questions" below.
+
+#### Confounds closed by measurement before the arms ran
+
+* **Shared prediction basis** (`ungated` vs `gated`): **3,126/3,126 (100.0%)** identical target
+  fragment m/z lists, RT identical to 4 decimals.
+* **Ratio**: all three manifests are perfect quartets, **r = 1.000000**, arms differing by only
+  753-755 quartets (0.054%).
+* **Arabidopsis/human sequence collisions**: **0 (0.0000%)** in all three libraries - a failure
+  mode the fragment-overlap gate cannot catch, since it compares each entrapment only to its own
+  paired target.
+* **Cohort identity**: all arms use the same 40 files, verified file-by-file.
+
+#### Tooling added (pwiz-ai)
+
+`entrapment_target_collision.py`, `posthoc_gate_prediction.py` (cohort-matched post-hoc,
+validated against the 163-file -22.3%), `entrapment_composition.py`, `libseries.ps1` (serial
+idempotent driver), and `pass1_entrap.py` gained `OSPREY_PASS1_QCUT`.
+
+**Trap fixed**: `pass1_entrap.py` hardcoded `QCUT = 0.01`, but the matched-true-FDP frontier
+sits ABOVE q=0.01, so a 0.01 harvest truncates the search and the frontier saturates at the
+q<=0.01 count **by construction** - reading as a result rather than a truncation. The 163-file
+`arm_*.json` were harvested to 0.03; use 0.03 for anything compared against them.
+
+#### Open questions
+
+1. **Astral vs Stellar disagree on Arabidopsis entrapment, in opposite directions.** Same
+   substitution, -29% there and +125% here. Reconciling these is now the most important open
+   item in this programme - one of the two results is measuring something other than FDP.
+2. **Test whether shuffled sequences are under-identified because peptdeep predicts them
+   poorly.** Compare predicted-spectrum properties (fragment counts, intensity distribution)
+   between shuffled and real-peptide entrapment in the same library build. This is the
+   discriminating experiment for reading 1 vs reading 2, and it needs no new search.
+3. **The gate's discovery gain is not attributable to entrapment alone** - the gate was applied
+   to DECOYS as well (rejectable decoys 1.5840% -> 0%), and reported q comes from the
+   decoy-trained model. The matched-discovery FDP result is unaffected; the +2.67% disc@1%q
+   should be described as "gate applied to both populations".
+4. Competition effect needs a larger cohort to move from bounded-small to measured.
+
+Raw diagnostics preserved: `ai/.tmp/mdiag-archive/<variant>.model-diagnostics.{html,data.json}`
+for all four arms, plus 40/40 `.1st-pass.fdr_scores.bin` and `.scores.parquet` per arm on D:.
 
 ### 2026-08-01 (later) - Carafe half implemented and validated; libraries building
 
