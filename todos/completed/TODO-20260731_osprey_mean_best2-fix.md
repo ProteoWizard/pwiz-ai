@@ -5,9 +5,9 @@
 - **Base**: `master` (d030522344)
 - **Module**: `osprey`
 - **Created**: 2026-07-31
-- **Status**: In Progress
+- **Status**: Completed
 - **Fixes**: defects in [#4509](https://github.com/ProteoWizard/pwiz/pull/4509) (merged 2026-07-31)
-- **PR**: [#4512](https://github.com/ProteoWizard/pwiz/pull/4512) (open 2026-07-31)
+- **PR**: [#4512](https://github.com/ProteoWizard/pwiz/pull/4512) (merged 2026-08-02 as `9804e9015`)
 - **Follow-on issue**: [#4511](https://github.com/ProteoWizard/pwiz/issues/4511)
 - **Requester**: Brendan (Osprey developer) - NO credit line.
 
@@ -98,13 +98,13 @@ Severity order, review's numbering in brackets.
 - [x] [3] Fold `OSPREY_EXPERIMENT_AGG` into `FirstJoinTask.ValidityKey` (+ floor vars, gated)
 - [x] [5] NaN + negative-bin guard in `StreamingDecoyFloor.Add`
 - [x] [6] NaN guard in `MeanBestNAcc.Add`
-- [~] [4] Overflow bin counted; percentile-range validation INCOMPLETE (see below)
-- [~] [1][2] Pass-1 scoping HALF-DONE (projection gated, resident not); protein-compact refused
+- [x] [4] Overflow bin counted; percentile range now validated once at startup
+- [x] [1][2] Pass-1 scoping COMPLETE - resident path gated on the pass label like the projection
 - [x] [11] Make the floor toggles injectable so tests do not read ambient env
 - [x] [7] De-degenerate the N=4 fixture + add an eviction value oracle
-- [x] [12] PEP map asserted. Floor-path parity coverage STILL MISSING (see below)
-- [~] [9] Both-floors refusal added (gated). [13][14] docs NOT done
-- [x] Gates: 566/566, 0 inspection warnings, `regression.ps1 -Dataset All` 18/18
+- [x] [12] PEP map asserted; floor-path parity now covered (see the caveat in the merge entry)
+- [x] [9] Both-floors refusal added (gated); [13][14] docs written and the false claims corrected
+- [x] Gates: 572/572, 0 inspection warnings, Stellar regression all five legs, TeamCity #188 green
 
 ## Regression Test
 
@@ -341,3 +341,41 @@ coverage, and a warm-rerun regression leg to close the gate gap that hid the las
 
 Off master `d030522344` (the #4509 squash). Review output and full triage in the conversation of
 2026-07-31; the merged TODO is `ai/todos/completed/TODO-20260728_osprey_mean_best2.md`.
+
+### 2026-08-02 - Merged
+
+PR #4512 merged as commit `9804e9015`. What shipped: the pass-1 scoping completed so the RESIDENT
+score pass gates on the pass label exactly as the projection pass does (the two are each other's
+byte-identity oracle and had disagreed under the flag); the pass-1 aggregation arm recorded in the
+`.1st-pass.model.json` sidecar so a merge node gates on the arm that trained the model rather than
+its own environment; `transfer-compete` and `protein-compact` refused under mean(best-N); one shared
+validity-key suffix across `FirstJoinTask`, `PerFileRescoreTask` and `MergeNodeTask`; the streaming
+decoy floor's mid-run throws replaced with resident-mirroring min/max; N bounded to [2, 64] with the
+active arm logged in the startup settings block; a warm-rerun leg (mode 4) added to `regression.ps1`;
+and all three environment variables documented, with two claims that were wrong in the shipped code
+corrected (mean(best-N) is NOT rolled up to protein, and the class spec no longer describes N=2 only).
+
+Verification beyond the standard gates: 572/572 unit tests, 0 inspection warnings, Stellar regression
+green on all five legs (re-run after the `FirstJoinTask.Run` statement reorder, since that is
+production ordering), TeamCity Perf/Regression **#188 green on the final commit** (Stellar + Astral +
+perf), and a flag-ON liveness run that produced the intended PATTERN rather than merely going red -
+mode 1 fails against the flag-off golden with `OspreyExperimentScores.ExperimentQValue` differing on
+303/303 rows, while modes 2, 3 and 4 pass, so the flag breaks neither HPC-chain equivalence, resume,
+nor cache invalidation.
+
+**Caveat recorded honestly**: a mutation test showed the floor-path PARITY test cannot detect an
+error shared by both estimators (shifting both floors by +7.0 leaves it green). Floor correctness is
+pinned instead by the value-oracle tests, which do cover N=2. The `/code-review max` finding that
+called the N=2 floor path untested was therefore narrower than it read.
+
+DEFERRED, not shipped: making `applyExperimentAgg` a required parameter (it is deleted outright by
+the `percolator` retirement, so hardening it first would be wasted); refusing the incompatible pass-2
+modes at STARTUP rather than mid-run; the parity tests still oracle against test-local
+re-implementations; and `regression.ps1` mode-4 ordering. Full disposition of all 15 review findings,
+with the reason each was or was not acted on, is in `ai/.tmp/review-max-4512-triage.md`.
+
+FOLLOW-ON: [#4511](https://github.com/ProteoWizard/pwiz/issues/4511) remains open by design (gap-fill
+run-count exclusion, the experiment-level q ladder, resident-path perf). The stated next priority is
+[TODO-20260727_osprey_pass2_fdr_default.md](TODO-20260727_osprey_pass2_fdr_default.md), which retires
+`OSPREY_PASS2_QVALUE=percolator`; that TODO now records that doing so deletes `applyExperimentAgg`
+entirely and shrinks the deferred startup-erroring matrix from four modes to two or three.
