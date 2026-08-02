@@ -110,8 +110,18 @@ file index order, and `Read` takes a fileId -> index dictionary. Verified byte f
 against the old layout, including that `Read` follows the ids rather than the positions
 when the file order differs.
 
-Also removed while converting: `BiblioSpecLiteLibrary.GetMinRetentionTime` (no callers) and
-`IndexedIonMobilities.Write`/`Read` (no callers since the .slc cache was dropped in #3478).
+Also removed while converting: `BiblioSpecLiteLibrary.GetMinRetentionTime` (no callers),
+`IndexedIonMobilities.Write`/`Read` (no callers since the .slc cache was dropped in #3478),
+and `GetAllRetentionTimes(int fileIndex)` with its two overrides. That last one was only
+ever reached from `AlignmentForm.GetRetentionTimes`, a private method with no callers, so it
+was serving dead code from the moment the one-file/all-files split created it.
+
+`GetAllRetentionTimes()` takes the minimum per target and file with LINQ over the entries,
+rather than accumulating into an array of minimums and tracking which ones moved. Measured
+at about 2.9x the cost of the array version on the dense DIA-NN shape (2,000 targets x 936
+files: 316 ms against 109 ms, Debug), which extrapolates to roughly 27 s against 9 s on
+imputation_template.blib. Worth it for the far simpler loop, on a method that runs at load
+time on a library which already takes minutes to open.
 
 ## Tests
 
