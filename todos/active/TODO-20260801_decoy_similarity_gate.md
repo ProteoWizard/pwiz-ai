@@ -389,7 +389,48 @@ and this test would not see it. So it rules out "shuffles get obviously degenera
 but not "shuffles get confidently wrong ones" - which remains reading 1's live mechanism and
 needs ground-truth spectra to test.
 
-**Nothing in this experiment separates the two readings.** See "Open questions" below.
+#### 6. ROOT CAUSE, PARTIAL: I/L-isobaric entrapment is genuinely PRESENT, and no gate catches it
+
+**Leucine and isoleucine have identical residue masses (113.08406).** An entrapment peptide
+differing from a human target only by I<->L is mass-identical AND produces an identical fragment
+ladder - **indistinguishable by mass spectrometry**. It is not a model of a false discovery; it
+will be detected wherever its human twin is, and every such detection is counted as false when
+it is not.
+
+The exact-string collision audit run earlier reported **0** for all three libraries and missed
+this completely. Under I->L normalisation:
+
+| arm | library colliding | **accepted** colliding | enrichment vs library | FDP corrected |
+|---|---|---|---|---|
+| ungated | 735 (0.0529%) | 8/363 (2.20%) | **41.7x** | 0.868% -> 0.835% (**-3.8%**) |
+| gated | 678 (0.0487%) | 11/383 (2.87%) | **58.9x** | 0.758% -> 0.718% (**-5.3%**) |
+| **arabidopsis** | 1,043 (0.0749%) | **39/472 (8.26%)** | **110.3x** | 1.240% -> **0.983%** (**-20.7%**) |
+
+**The 40-110x enrichment among ACCEPTED entrapment is the proof.** If these were ordinary
+entrapment they would be accepted at roughly the library base rate. Being accepted 40-110x more
+often is what "genuinely present in the sample" looks like.
+
+**This explains roughly HALF the Arabidopsis excess.** After correction the gap against ungated
+narrows from **+42.9% to +17.7%**. And the reason foreign-species entrapment is hit hardest is
+the conserved-protein route flagged before the arms ran: plant and human share conserved
+proteins whose tryptic peptides differ by conservative I<->L substitutions. **That concern was
+correct; it was tested with too strict a comparison** (exact string equality) and so read as
+clean.
+
+**The similarity gate does not catch this** - `gated` still carries 678 colliders, because the
+fragment-overlap gate compares each entrapment to its OWN paired target while a collision is an
+exact isobaric match to a DIFFERENT one.
+
+**Actionable**: the entrapment generator should reject any candidate whose I->L normalised
+sequence appears in the target set. Cheap (one hash set), and it removes a 4-5% FDP
+over-estimate on shuffle libraries and ~21% on foreign-species ones.
+
+**The gate conclusion is robust to this correction** - on I/L-corrected numbers the gate still
+moves 0.835% -> 0.718% (**-14.0%** in reimplementation terms, vs -12.7% uncorrected), so
+correcting the oracle slightly INCREASES the measured benefit of the gate.
+
+**Nothing in this experiment separates the two readings for the REMAINING +17.7%.** See "Open
+questions" below.
 
 #### Confounds closed by measurement before the arms ran
 
@@ -401,9 +442,13 @@ needs ground-truth spectra to test.
   **15.9%** identical - which is why delivered is a reference and not a baseline.)
 * **Ratio**: all three manifests are perfect quartets, **r = 1.000000**, arms differing by only
   753-755 quartets (0.054%).
-* **Arabidopsis/human sequence collisions**: **0 (0.0000%)** in all three libraries - a failure
-  mode the fragment-overlap gate cannot catch, since it compares each entrapment only to its own
-  paired target.
+* **Arabidopsis/human sequence collisions**: **0 (0.0000%)** on EXACT sequence in all three
+  libraries - a failure mode the fragment-overlap gate cannot catch, since it compares each
+  entrapment only to its own paired target. **But see finding 6: this test was too strict.**
+  Under I->L normalisation (the two residues are isobaric, so such peptides are
+  indistinguishable by MS) the counts are **735 / 678 / 1,043**, and they are enriched
+  **40-110x** among accepted entrapment. The exact-match result above is correct but
+  insufficient, and should never be quoted on its own.
 * **Cohort identity**: all arms use the same 40 files, verified file-by-file.
 
 #### Tooling added (pwiz-ai)
@@ -419,9 +464,17 @@ q<=0.01 count **by construction** - reading as a result rather than a truncation
 
 #### Open questions
 
+0. **SHIP THE I/L GATE** (finding 6). Reject any entrapment candidate whose I->L normalised
+   sequence is in the target set. One hash set at generation time; removes a **4-5%** FDP
+   over-estimate on shuffle libraries and **~21%** on foreign-species ones. Independent of, and
+   complementary to, the fragment-overlap gate - which does not catch it. This is the most
+   actionable result of the series.
+
 1. **Astral vs Stellar disagree on Arabidopsis entrapment, in opposite directions.** Same
-   substitution, -29% there and +125% here. Reconciling these is now the most important open
-   item in this programme - one of the two results is measuring something other than FDP.
+   substitution, -29% there and +125% here. **Re-check the Stellar result for I/L collisions
+   first** - if its Arabidopsis library had few, that alone could reverse the sign, and it is a
+   cheap check on an existing library. Reconciling these remains the most important open item;
+   one of the two results is measuring something other than FDP.
 2. **Test whether shuffled sequences are under-identified because peptdeep predicts them
    poorly.** Compare predicted-spectrum properties (fragment counts, intensity distribution)
    between shuffled and real-peptide entrapment in the same library build. This is the
