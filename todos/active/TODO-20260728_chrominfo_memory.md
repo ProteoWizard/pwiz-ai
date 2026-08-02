@@ -533,6 +533,83 @@ would silently discard peak edits. Order to fix: `ChangePeak`/`RemovePeak` write
 columnar form directly, then the reuse path stops needing chrom infos at all, then
 `Results` can go.
 
+
+### Session 7 (2026-08-02) - the retention was three separate holders, not one
+
+The memory never dropped for `F:\skydata\20110215_MikeB\Bereman_5proteins_spikein.sky`
+(format_version 1.4, 39 replicates, 442 transitions, 205 MB .skyd) across four dotMemory
+snapshots. It turned out to be three unrelated holders, found one at a time. **Anything
+claiming "the retention is fixed" should be treated as unverified until a profiler run on
+a real document says so** - every claim of that kind this session was wrong at least once.
+
+**1. `7fe9cc8c3` - an opened document was never converted at all.** `Chromatogram.cs` has
+two paths, and the one for a document read from a file is
+`docCurrent.ChangeSettingsNoDiff(...)` under the comment "Skip settings change for
+deserialized document when it first becomes connected with its cache". No settings change
+means no results pass, which means `ConvertResults` never runs. Import used the diffing
+path, which is why every test was green while nothing was released in practice.
+`MoleculeResults.ConvertDocumentResults` now runs on that path.
+NOTE: that branch is gated on `FormatVersion >= VERSION_3_53`, so a genuinely old document
+does NOT take it - it falls to the `else` branch and converts through the ordinary results
+pass. Both paths had to work.
+
+**2. `b0868511f` - hidden chromatogram graphs pinned the document they last drew.**
+`GraphChromatogram._document` held an `SrmDocument`, and a graph on a tab which is not
+showing never hears `OnDocumentUIChanged`, so it held that document - and every result
+hanging off it - forever. With 39 replicates that is 39 graphs. The arithmetic gave it
+away: 34.8 K retained `TransitionChromInfo` against 17,238 transition results in the
+document, almost exactly 2x, so two whole documents were alive. Fixed by keeping
+`SrmDocument.ReferenceId` and reading the current document from the container.
+`GraphChromatogram.IsCurrent` is gone with it - any document which is not the one last
+drawn is now redrawn.
+
+**3. `04e3c438b` - `MoleculeResults` kept for molecules no longer charted.**
+`GraphChromatogram.UpdateUI` now prunes `_moleculeResultsByPeptide` to the molecules under
+the current selection, expanding each selected node with
+`EnumeratePathsAtLevel(node.Path, Level.Molecules)`. One `MoleculeResults` holds every
+chromatogram it read, so this was the most expensive thing the graph could hold.
+
+**`everyFileRead` is gone (`b0868511f`).** It gated the release on every file of a
+precursor being readable, so one unresolvable file kept the whole precursor - and since
+`UpdateTransitionGroupNode` rebuilds the chrom infos on every pass while the release was
+conditional, each failed pass ratcheted the retention up. Now anything which cannot be
+matched to a candidate peak carries its boundaries into a `CustomPeak` instead, so there
+is no case left where they must be kept and the release is unconditional.
+
+**A user set peak can be one of the candidate peaks.** A comment in
+`SearchForChosenPeakIndex` claimed otherwise. The user may have picked a different
+candidate whose boundaries match exactly, and then the index reproduces it and the stored
+bounds are a second copy - `DropTransitionPeakBounds` drops them. Do not reintroduce the
+assumption that user set peaks never match.
+
+**Other work**: `3190ae693` batches the peak read through
+`ChromatogramGroupInfo.LoadPeaksForAll` and walks molecules with `ParallelEx.For` - note
+`ReadDataForAll` takes a read lock and opens its own stream, while the lazy per-group
+`ReadPeaks` uses the shared pooled stream, so the batching is what makes the parallel walk
+safe. `192e5632e` finds the chosen peak from boundaries alone, with no
+`GetTransitionInfo`/`GetAllTransitionInfo` call at all - those are the expensive calls,
+`FindTransitionChromInfo` is not. `c3f98c18d`/`237401548` report progress 0..99.
+`4913a50fd` gathers a precursor's chromatograms, calculated results and integrators into
+one `GroupResults`. `6b04a7df7` makes `LegacyChromInfos` a `ChromFileIdMap` holding
+optimization step zero only. `ef594f1eb` deletes `ChromFileIds.IndexOfFile(fileId)` - the
+replicate is always known.
+
+**Traps hit this session, all of which cost real time:**
+- A `ResultsTestDocumentContainer` does NOT load the cache unless the document is handed to
+  it as a change: `new ResultsTestDocumentContainer(docOld, path)` then
+  `SetDocument(docNew, docOld, true)`. Constructing with the target document and calling
+  `AssertComplete()` reports loaded while `Chromatograms[i].IsLoaded` is false, and every
+  conclusion drawn from that run is worthless.
+- `TestMoleculeResults*` use a ONE replicate document. `everyFileRead` needs every
+  replicate to resolve, so a one-replicate test cannot see the failure that dominates a
+  39-replicate document. Any test of the retention needs several replicates.
+- `Run-Tests.ps1` takes `-TestName` (singular, comma separated) and builds the log file
+  name from it, so more than about four names exceeds MAX_PATH and the run dies before
+  starting. The code inspection test is named `CodeInspection`, not `TestCodeInspection`.
+- `TestReintegrateDlg` is flaky AND order dependent - six samples gave line 987 (batch),
+  81, 81 (alone) at baseline and no result (batch), 1107, 1176 (alone) at HEAD. It fails on
+  both. Never use it as a regression signal.
+
 ## Context for Next Session
 
 `MoleculeResults` is on the branch and is what `OnDemandFeatureCalculator` and
@@ -834,3 +911,6 @@ Still failing at baseline, unchanged by any of this: `TestColumnarResultsRoundTr
 (`CheckUserSetPeakStillWritten`, line 206), `TestSaveColumnarResults`,
 `TestMoleculeResultsWithUserSetPeakBounds` (5 surviving `ChosenPeakIndexes`),
 `TestAnnotations`, `TestImportAnnotations`, `TestPeakBoundaryCompare` (MessageDlg timeout).
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260728_chrominfo_memory.md` before starting work.
