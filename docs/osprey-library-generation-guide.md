@@ -212,35 +212,54 @@ arm, label it confounded, and put the baseline arm through your own pipeline.
 
 ## The 2026-08-01 Astral rebuild
 
-Two libraries built from `uniprot_human_jan2025_yeastENO1_contam_ADpeps.fasta`,
-both with the similarity gate on, differing only in entrapment source. Stages
-1a/2/3 are entrapment-free and were therefore run once and shared, which is what
-makes an A/B affordable.
+Three libraries built from `uniprot_human_jan2025_yeastENO1_contam_ADpeps.fasta`,
+forming a single-variable series. Stages 1a/2/3 are entrapment-free and were run
+once and shared, which is what makes the series affordable and controlled.
 
-| | delivered | library 1 (gated shuffle) | library 2 (Arabidopsis r=1.0) |
-|---|---|---|---|
-| quartets | 1,390,979 | 1,391,732 | 1,391,734 |
-| peptide entries | - | 5,566,928 | 5,566,936 |
-| library size | 13.09 GB | 11.84 GB | 11.97 GB |
-| rejectable entrapment | 4.05% | **0%** | **0%** |
-| rejectable decoys | 1.70% | **0%** | **0%** |
-| median entrapment overlap | 0.100 | 0.100 | **0.024** |
+```
+ungated  ->  gated  ->  arabidopsis
+   |           |             |
+   |           |             +- removes the anagram relationship  (median overlap 0.100 -> 0.024)
+   |           +- removes the near-copy tail                      (4.05% -> 0%)
+   +- the pre-gate state of the world, in the same prediction basis
+```
 
-Audited in full, not sampled. Both keep MORE targets than the delivered library,
-because the retry rescues more old collision-drops than the gate costs.
+| | delivered (reference) | ungated (baseline) | gated | Arabidopsis r=1.0 |
+|---|---|---|---|---|
+| quartets | 1,390,979 | 1,390,979 | 1,391,732 | 1,391,734 |
+| library size | 13.09 GB | 11.84 GB | 11.84 GB | 11.97 GB |
+| rejectable entrapment | 4.05% | 4.05% | **0%** | **0%** |
+| rejectable decoys | 1.70% | 1.70% | **0%** | **0%** |
+| median entrapment overlap | 0.100 | 0.100 | 0.100 | **0.024** |
+| shares our prediction basis | **no** | yes | yes | yes |
+
+Audited in full, not sampled. The gated variants keep MORE targets than the
+baseline, because the retry rescues more old collision-drops than the gate costs.
+
+**The delivered library is not the baseline.** Its peptide *sequences* are
+identical to the ungated arm's (proven byte for byte), but it was predicted with
+a different peptdeep model version, so only 56.3% of its target precursors report
+the same fragment set as ours - see
+[Controlled comparisons](#controlled-comparisons-need-a-shared-prediction-basis).
+Treat it as a labelled reference arm and use **ungated** as the baseline. The
+ungated arm exists precisely so the gate step is measured against something that
+differs from it *only* by the gate.
 
 Shared training run (`Ast-...-55.mzML`, one file): 3,167,149 initial-library
 entries loaded, 77,076 precursors at 1% run FDR, 68,017 peptides at 1% experiment
 FDR, 7,933 protein groups, 95,842 spectra written to the training blib. Fine-tune
-from that blib: **RT R² 0.850 -> 0.9971**, **MS2 median COS 0.9653 -> 0.9778**,
-both fine-tuned models selected. The metrics are identical for both variants, as
-they must be - same blib, same seed - so the RT/MS2 model is held constant and the
-only difference between the two libraries is which peptides were predicted.
+from that blib: **RT R² 0.850 -> 0.9971**, **MS2 median COS 0.9653 -> 0.9778**.
+
+The three variants were three separate Carafe invocations, and their fine-tuned
+`ms2_model.pt` and `rt_model.pt` are **byte-identical by SHA256 across all
+three** - fine-tuning is deterministic given the same blib and seed. So the
+RT/MS2 model is held constant and the only difference between the libraries is
+which peptides were predicted.
 
 Wall clock on an RTX 4070: stage 1a ~1 min, stage 2 6.0 min, stage 3 7.7 min,
-stage 4-5 15.1 min per variant. Under an hour for both - far cheaper than the
-Stellar timings suggest, because Osprey's search is fast and stages 1a/2/3 are
-shared.
+stage 4-5 15-16 min per variant. Well under two hours for all three - far cheaper
+than the Stellar timings suggest, because Osprey's search is fast and stages
+1a/2/3 are shared.
 
 **One failure worth knowing about.** The second variant's prediction died with a
 native Windows fault (`0xC0000409`, no Python traceback) while several prediction
