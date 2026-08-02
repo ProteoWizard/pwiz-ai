@@ -99,6 +99,18 @@ of harmlessness (the target could be present but sub-threshold). Compute and REP
 the audit tooling; revisit if a dataset ever shows an identity-only case that shadows an accepted
 target and co-elutes.
 
+## PR description draft
+
+`TODO-20260801_decoy_similarity_gate-pr-description.md`, beside this file. Written for **Carafe
+maintainers** rather than Osprey developers - it presents this as a library-generation defect
+affecting any consumer, and leads on the fact that EncyclopeDIA / OpenSWATH / SpectraST already
+apply these filters and Carafe is the outlier.
+
+It carries the full evidence chain (defect -> in-data demonstration on both datasets -> the fix
+-> what was deliberately not done), the measured caveats, and the reasoning for gating both
+populations. **A draft to adapt, not final text** - the session implementing the Carafe change
+owns the PR. Kept current with this TODO; re-read it after any finding that changes a number.
+
 ## Tasks
 
 - [x] **Carafe entrapment gate** (`EntrapmentFastaGear.shufflePreservingCterm` + caller). Bounded
@@ -111,8 +123,24 @@ target and co-elutes.
       Carafe's existing residue-mass table rather than duplicating Osprey's: they agree to 5 dp,
       which is 1e-5 Da against a 0.02 Da window, so no verdict can differ and there is one table
       instead of two that can drift.
+- [ ] **NEW 2026-08-02, HIGHEST VALUE REMAINING - Carafe I/L-normalised collision rejection.**
+      Reject any entrapment candidate whose **I->L normalised** sequence appears in the I->L
+      normalised TARGET set. One hash set at generation time.
+      **Independent of the fragment-overlap gate, which cannot catch this**: the gate compares each
+      entrapment to its OWN paired target, while a collision is an exact isobaric match to a
+      DIFFERENT one. An exact-string audit reports 0 for every library and misses it entirely.
+      Measured (night session 2026-08-02): 735 / 678 / 1,043 colliders per library, enriched
+      **41.7x / 58.9x / 110.3x** among ACCEPTED entrapment - the signature of a peptide that is
+      genuinely present. Removes a **4-5%** FDP over-estimate on shuffle libraries and **~20.7%**
+      on foreign-species ones.
+      **Ship it WITH `--entrapment-fasta`, not after**: foreign proteomes are hit hardest, because
+      plant and human share conserved proteins whose tryptic peptides differ by conservative
+      I<->L substitutions. Offering the source flag without this check hands users the failure
+      mode that flag is most exposed to.
 - [ ] **Skyline: add the gate** to `SequenceMods.Shuffle`'s `while` condition, which currently
-      tests only `newSequence.Equals(Sequence)`. Also applies to `Reverser`.
+      tests only `newSequence.Equals(Sequence)`. Also applies to `Reverser`. Consider the I/L
+      check here too - same reasoning, though Skyline decoys are not compared against an
+      entrapment set.
 - [ ] **Skyline: replace the shuffle with Fisher-Yates** (see below).
 - [x] **Measure the cost**: done on Astral before building - 4.19% of entrapment changed, 0.043% of
       quartets dropped, loss confirmed structured (60% of dropped are >=50% one residue vs 0.7% of
