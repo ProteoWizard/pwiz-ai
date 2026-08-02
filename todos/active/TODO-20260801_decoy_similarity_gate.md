@@ -616,6 +616,30 @@ exact isobaric match to a DIFFERENT one.
 sequence appears in the target set. Cheap (one hash set), and it removes a 4-5% FDP
 over-estimate on shuffle libraries and ~21% on foreign-species ones.
 
+**IMPLEMENTED on the Carafe machine same day**, with two new libraries delivered:
+`-gated-no-il` (1,391,588 quartets) and `-arabidopsis-no-il` (1,391,655). Independently
+verified here from the manifests: **0 entrapment collisions, 0 decoy collisions, 0 exact** in
+both. All five arms share one prediction basis (fine-tuned `ms2_model.pt` / `rt_model.pt`
+byte-identical by SHA256 across all five Carafe invocations), so
+`ungated -> gated -> gated-no-il` and `ungated -> arabidopsis -> arabidopsis-no-il` are both
+single-variable chains.
+
+**COLLIDING DECOYS - a second population, not previously measured.** The Carafe machine's
+extended audit surfaced **792** I/L-colliding DECOYS in the ungated baseline (789 distinct).
+Same mechanism, different consequence: a decoy that is isobaric with a real target is really a
+target, so it scores well and is counted as a decoy win - **inflating the decoy count at good
+scores and making reported q too CONSERVATIVE**. That is the opposite direction from colliding
+entrapment (which inflates measured FDP), so the two contaminations distort the reported-q axis
+and the true-FDP axis independently. `-gated-no-il` and `-arabidopsis-no-il` clear **both**, so
+they test the combined effect rather than the entrapment half alone.
+
+**Counting convention, agreed across machines.** The Carafe audit reports **742** entrapment
+colliders where this machine measured **735**. Both are correct: 742 is ROWS, 735 is DISTINCT
+sequences, and the 7-count gap is exactly the duplicate-entrapment population measured earlier
+(324 sequences appearing more than once in the ungated shuffle pool). Decoys likewise 792 rows /
+789 distinct. **Prefer DISTINCT sequences as the contamination denominator** - a sequence
+duplicated across charge states is one contaminated peptide, not two.
+
 **The gate conclusion is robust to this correction** - on I/L-corrected numbers the gate still
 moves 0.835% -> 0.718% (**-14.0%** in reimplementation terms, vs -12.7% uncorrected), so
 correcting the oracle slightly INCREASES the measured benefit of the gate.
