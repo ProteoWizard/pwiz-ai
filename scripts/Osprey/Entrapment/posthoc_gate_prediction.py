@@ -100,7 +100,8 @@ def main():
                'nAcceptedEntrapment': len(ent_seq), 'nNearCopy': len(near),
                'full': {'disc': d_full, 'fdp': f_full, 'matched': m_full},
                'filt': {'disc': d_filt, 'fdp': f_filt, 'matched': m_filt}},
-              open(os.path.splitext(a.arm)[0] + '.posthoc.json', 'w'), indent=1)
+              open(os.path.join(os.path.dirname(os.path.abspath(a.arm)),
+                                'posthoc.' + os.path.basename(a.arm)), 'w'), indent=1)
 
 
 if __name__ == '__main__':
