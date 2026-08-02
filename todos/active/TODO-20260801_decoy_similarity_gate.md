@@ -99,6 +99,19 @@ of harmlessness (the target could be present but sub-threshold). Compute and REP
 the audit tooling; revisit if a dataset ever shows an identity-only case that shadows an accepted
 target and co-elutes.
 
+## UI spec
+
+`TODO-20260801_decoy_similarity_gate-carafe-spec.html`, beside this file - open it in a browser.
+Traced from the running Carafe 2.2.0 Osprey tab, so the mockups match real row heights and label
+column rather than approximating them. Covers the three progressive-disclosure states, a
+control reference with settings keys and CLI mapping, validation, and what is deliberately NOT
+exposed on the panel.
+
+The part worth reading even if you do not care about UI: hiding rows means a hidden field keeps
+its value, so the command must be built from the LOGICAL state (checkbox on AND source is FASTA)
+rather than from field contents. Otherwise switching the source back to Shuffle silently builds a
+foreign-entrapment library. Same class of bug as any stale-state-leaks-into-output defect.
+
 ## PR description draft
 
 `TODO-20260801_decoy_similarity_gate-pr-description.md`, beside this file. Written for **Carafe

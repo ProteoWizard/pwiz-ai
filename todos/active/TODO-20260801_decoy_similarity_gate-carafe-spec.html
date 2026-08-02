@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carafe Osprey panel - entrapment source controls</title>
+<style>
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  :root {
+    --ground: #f6f8fa;
+    --card: #ffffff;
+    --ink: #16222c;
+    --muted: #5d6f7c;
+    --rule: #d6dfe6;
+    --accent: #2f86c5;
+    --accent-soft: #e8f2fa;
+    --added: #1f7a4d;
+    --added-soft: #e8f5ee;
+    --warn: #9a5b12;
+    --warn-soft: #fbf1e2;
+    --swing-panel: #f0f0f0;
+    --swing-field: #ffffff;
+    --swing-border: #b8c2c9;
+    --swing-ink: #1a1a1a;
+    --swing-disabled: #9aa5ad;
+    --ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #10171d;
+      --card: #171f26;
+      --ink: #e4ecf2;
+      --muted: #93a4b1;
+      --rule: #2a353f;
+      --accent: #62b0e0;
+      --accent-soft: #172530;
+      --added: #59c48d;
+      --added-soft: #14251c;
+      --warn: #d9a45f;
+      --warn-soft: #251c10;
+      --swing-panel: #222b33;
+      --swing-field: #1a222a;
+      --swing-border: #3b4853;
+      --swing-ink: #dfe7ee;
+      --swing-disabled: #6b7883;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #10171d; --card: #171f26; --ink: #e4ecf2; --muted: #93a4b1;
+    --rule: #2a353f; --accent: #62b0e0; --accent-soft: #172530;
+    --added: #59c48d; --added-soft: #14251c; --warn: #d9a45f; --warn-soft: #251c10;
+    --swing-panel: #222b33; --swing-field: #1a222a; --swing-border: #3b4853;
+    --swing-ink: #dfe7ee; --swing-disabled: #6b7883;
+  }
+  :root[data-theme="light"] {
+    --ground: #f6f8fa; --card: #ffffff; --ink: #16222c; --muted: #5d6f7c;
+    --rule: #d6dfe6; --accent: #2f86c5; --accent-soft: #e8f2fa;
+    --added: #1f7a4d; --added-soft: #e8f5ee; --warn: #9a5b12; --warn-soft: #fbf1e2;
+    --swing-panel: #f0f0f0; --swing-field: #ffffff; --swing-border: #b8c2c9;
+    --swing-ink: #1a1a1a; --swing-disabled: #9aa5ad;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--ui);
+    font-size: 16px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 40px 24px 80px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
+
+  header .eyebrow {
+    font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; margin: 0 0 8px;
+  }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 10px; text-wrap: balance; font-weight: 650; }
+  header p { margin: 0; color: var(--muted); max-width: 68ch; }
+
+  h2 {
+    font-size: 19px; margin: 0 0 4px; font-weight: 620;
+    padding-bottom: 8px; border-bottom: 1px solid var(--rule);
+  }
+  section > p:first-of-type { margin-top: 10px; }
+  p { max-width: 72ch; }
+
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(390px, 1fr)); gap: 24px; }
+
+  /* --- Swing panel mockup ------------------------------------------------ */
+  .mock {
+    background: var(--swing-panel);
+    border: 1px solid var(--swing-border);
+    border-radius: 4px;
+    padding: 14px 16px;
+    font-size: 13px;
+    color: var(--swing-ink);
+    overflow-x: auto;
+  }
+  .mock-title {
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600; margin: 0 0 10px;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 168px 1fr auto;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 4px;
+    border-radius: 3px;
+    min-width: 420px;
+  }
+  .row + .row { margin-top: 3px; }
+  .row.new { background: var(--added-soft); box-shadow: inset 3px 0 0 var(--added); }
+  .row.indent .lab { padding-left: 20px; }
+  .lab { color: var(--swing-ink); white-space: nowrap; }
+  .row.off .lab, .row.off .field, .row.off .btn { color: var(--swing-disabled); }
+  .field {
+    background: var(--swing-field);
+    border: 1px solid var(--swing-border);
+    border-radius: 2px;
+    padding: 3px 7px;
+    min-height: 21px;
+    font-size: 12.5px;
+  }
+  .row.off .field { background: color-mix(in srgb, var(--swing-panel) 70%, var(--swing-field)); }
+  .field.combo::after { content: "⌄"; float: right; color: var(--muted); }
+  .field.spin { max-width: 96px; }
+  .field.spin::after { content: "⌃⌄"; float: right; font-size: 9px; color: var(--muted); letter-spacing: -1px; }
+  .btns { display: flex; gap: 6px; }
+  .btn {
+    border: 1px solid var(--swing-border); border-radius: 12px;
+    padding: 2px 12px; font-size: 12px; background: var(--card); white-space: nowrap;
+  }
+  .check { display: flex; align-items: center; gap: 8px; grid-column: 1 / -1; }
+  .box {
+    width: 13px; height: 13px; border: 1px solid var(--swing-border);
+    border-radius: 2px; background: var(--swing-field); display: inline-block; flex: none;
+  }
+  .box.on { background: var(--accent); border-color: var(--accent); position: relative; }
+  .box.on::after {
+    content: ""; position: absolute; left: 3.5px; top: .5px;
+    width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
+  .chip {
+    font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; font-weight: 700;
+    color: var(--added); background: var(--card); border: 1px solid var(--added);
+    border-radius: 8px; padding: 0 6px; margin-left: 8px; vertical-align: 1px;
+  }
+
+  /* --- tables ------------------------------------------------------------ */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--card); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 720px; }
+  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th {
+    font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--muted); font-weight: 650; background: color-mix(in srgb, var(--ground) 60%, var(--card));
+  }
+  tr:last-child td { border-bottom: none; }
+  td code, .mono { font-family: var(--mono); font-size: 12.5px; }
+  code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: var(--accent-soft); color: var(--ink);
+    padding: 1px 5px; border-radius: 3px;
+  }
+  .nowrap { white-space: nowrap; }
+
+  .note {
+    border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: 12px 16px; border-radius: 0 5px 5px 0;
+  }
+  .note.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .note p { margin: 0; max-width: 74ch; }
+  .note p + p { margin-top: 8px; }
+  .note .h {
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+    font-weight: 700; color: var(--muted); display: block; margin-bottom: 5px;
+  }
+
+  ul { padding-left: 20px; max-width: 72ch; }
+  li { margin: 5px 0; }
+  .q { font-weight: 600; }
+  .err {
+    font-family: var(--mono); font-size: 12px; white-space: pre-wrap;
+    background: var(--swing-panel); border: 1px solid var(--swing-border);
+    border-radius: 4px; padding: 11px 13px; overflow-x: auto; color: var(--swing-ink);
+  }
+  footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--rule); padding-top: 16px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Carafe 2.2.0 · Osprey tab · UI change spec</p>
+  <h1>Entrapment source controls</h1>
+  <p style="margin-bottom:10px">
+    Companion to
+    <span class="mono">TODO-20260801_decoy_similarity_gate.md</span> and
+    <span class="mono">-pr-description.md</span> beside it. Open this file directly in a browser.
+  </p>
+  <p>
+    Entrapment is currently one checkbox. The CLI now takes an entrapment source FASTA and a
+    ratio; this brings both to the panel. Mockups below are traced from the running Osprey tab,
+    so row heights, label column and control styling match what is there today.
+  </p>
+</header>
+
+<section>
+  <h2>What changes</h2>
+  <div class="cols">
+    <div>
+      <p class="mock-title">Today</p>
+      <div class="mock">
+        <div class="row"><span class="lab">Initial library predictor:</span><span class="field combo">Carafe (local AlphaPepDeep)</span><span></span></div>
+        <div class="row"><span class="lab">Koina server URL:</span><span class="field">https://koina.wilhelmlab.org</span><span></span></div>
+        <div class="row"><span class="check"><span class="box"></span> Include entrapment peptides (Osprey)</span></div>
+        <div class="row"><span class="lab">Resolution:</span><span class="field combo">hram</span><span></span></div>
+        <div class="row"><span class="lab">FDR level:</span><span class="field combo">precursor</span><span></span></div>
+      </div>
+    </div>
+    <div>
+      <p class="mock-title">Proposed — checkbox on, source = FASTA</p>
+      <div class="mock">
+        <div class="row"><span class="lab">Initial library predictor:</span><span class="field combo">Carafe (local AlphaPepDeep)</span><span></span></div>
+        <div class="row"><span class="lab">Koina server URL:</span><span class="field">https://koina.wilhelmlab.org</span><span></span></div>
+        <div class="row"><span class="check"><span class="box on"></span> Include entrapment peptides (Osprey)</span></div>
+        <div class="row indent new"><span class="lab">Entrapment source:<span class="chip">new</span></span><span class="field combo">Peptides from FASTA…</span><span></span></div>
+        <div class="row indent new"><span class="lab">Entrapment FASTA:<span class="chip">new</span></span><span class="field">UP000006548.fasta</span><span class="btns"><span class="btn">Browse</span><span class="btn">Download</span></span></div>
+        <div class="row indent new"><span class="lab">Entrapment ratio:<span class="chip">new</span></span><span class="field spin">1.00</span><span></span></div>
+        <div class="row"><span class="lab">Resolution:</span><span class="field combo">hram</span><span></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Progressive disclosure</h2>
+  <p>
+    The new rows are <strong>hidden, not greyed</strong>. Unchecked, the panel is identical to
+    today's — not a quieter version of a busier form, the same form. Checking the box reveals the
+    source and ratio; choosing a FASTA source reveals the file row. Three states, each showing only
+    what applies.
+  </p>
+  <div class="cols">
+    <div>
+      <p class="mock-title">1 · Unchecked — unchanged from today</p>
+      <div class="mock">
+        <div class="row"><span class="lab">Koina server URL:</span><span class="field">https://koina.wilhelmlab.org</span><span></span></div>
+        <div class="row"><span class="check"><span class="box"></span> Include entrapment peptides (Osprey)</span></div>
+        <div class="row"><span class="lab">Resolution:</span><span class="field combo">hram</span><span></span></div>
+        <div class="row"><span class="lab">FDR level:</span><span class="field combo">precursor</span><span></span></div>
+      </div>
+    </div>
+    <div>
+      <p class="mock-title">2 · Checked, shuffle — two rows appear</p>
+      <div class="mock">
+        <div class="row"><span class="lab">Koina server URL:</span><span class="field">https://koina.wilhelmlab.org</span><span></span></div>
+        <div class="row"><span class="check"><span class="box on"></span> Include entrapment peptides (Osprey)</span></div>
+        <div class="row indent new"><span class="lab">Entrapment source:</span><span class="field combo">Shuffle target sequence</span><span></span></div>
+        <div class="row indent new"><span class="lab">Entrapment ratio:</span><span class="field spin">1.00</span><span></span></div>
+        <div class="row"><span class="lab">Resolution:</span><span class="field combo">hram</span><span></span></div>
+      </div>
+    </div>
+    <div>
+      <p class="mock-title">3 · Source = FASTA — file row appears between them</p>
+      <div class="mock">
+        <div class="row"><span class="lab">Koina server URL:</span><span class="field">https://koina.wilhelmlab.org</span><span></span></div>
+        <div class="row"><span class="check"><span class="box on"></span> Include entrapment peptides (Osprey)</span></div>
+        <div class="row indent new"><span class="lab">Entrapment source:</span><span class="field combo">Peptides from FASTA…</span><span></span></div>
+        <div class="row indent new"><span class="lab">Entrapment FASTA:</span><span class="field">UP000006548.fasta</span><span class="btns"><span class="btn">Browse</span><span class="btn">Download</span></span></div>
+        <div class="row indent new"><span class="lab">Entrapment ratio:</span><span class="field spin">1.00</span><span></span></div>
+        <div class="row"><span class="lab">Resolution:</span><span class="field combo">hram</span><span></span></div>
+      </div>
+    </div>
+  </div>
+  <div class="note" style="margin-top:18px">
+    <span class="h">Implementation</span>
+    <p>
+      <span class="mono">GridBagLayout</span> skips invisible components, so
+      <span class="mono">setVisible(false)</span> collapses each row rather than leaving a gap —
+      state 1 is the current layout exactly, not an approximation of it. Toggling calls
+      <span class="mono">revalidate()</span> then <span class="mono">repaint()</span> on the panel;
+      the tab already sits in a scroll pane, so nothing below needs repositioning by hand.
+    </p>
+  </div>
+  <div class="note warn" style="margin-top:14px">
+    <span class="h">The hazard this paradigm introduces</span>
+    <p>
+      A hidden field keeps its value. If someone picks a FASTA, switches the source back to
+      Shuffle, and runs, the path is still in the model — and a command builder that asks
+      <em>“is the FASTA field non-empty?”</em> will silently pass
+      <code>-entrapment_db</code> and build a foreign-entrapment library the user did not ask for.
+    </p>
+    <p>
+      So <span class="mono">buildEntrapmentFastaCommand</span> keys off the logical state, not the
+      field contents: emit <code>-entrapment_db</code> only when the checkbox is on
+      <strong>and</strong> the source combo reads FASTA. Same for
+      <code>-entrapment_ratio</code>, which is emitted only when entrapment is on and the value is
+      not 1.00. Values are still persisted, so the path survives a round trip — it just does not
+      reach the command line while hidden.
+    </p>
+  </div>
+</section>
+
+<section>
+  <h2>Control reference</h2>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Control</th><th>Type</th><th>Default</th><th>Visible when</th><th>Settings key</th><th>Emits</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Include entrapment peptides (Osprey)</td>
+          <td>Checkbox</td>
+          <td>Off</td>
+          <td>Always</td>
+          <td class="mono nowrap">osprey_include_entrapment</td>
+          <td><code>-entrapment</code></td>
+        </tr>
+        <tr>
+          <td>Entrapment source</td>
+          <td>Combo — <em>Shuffle target sequence</em> / <em>Peptides from FASTA…</em></td>
+          <td>Shuffle target sequence</td>
+          <td>Checkbox on</td>
+          <td class="mono nowrap">osprey_entrapment_source</td>
+          <td>nothing, or <code>-entrapment_db</code></td>
+        </tr>
+        <tr>
+          <td>Entrapment FASTA</td>
+          <td>Text field + <em>Browse</em> + <em>Download</em></td>
+          <td>Empty</td>
+          <td>Checkbox on <strong>and</strong> source = FASTA</td>
+          <td class="mono nowrap">osprey_entrapment_db</td>
+          <td><code>-entrapment_db &lt;path&gt;</code></td>
+        </tr>
+        <tr>
+          <td>Entrapment ratio</td>
+          <td>Spinner, 0.10–1.00, step 0.05, 2 dp</td>
+          <td>1.00</td>
+          <td>Checkbox on</td>
+          <td class="mono nowrap">osprey_entrapment_ratio</td>
+          <td><code>-entrapment_ratio</code>, omitted at 1.00</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note" style="margin-top:16px">
+    <span class="h">Reuses what is already there</span>
+    <p>
+      <em>Browse</em> is <code>createBrowseButton</code> with a <span class="mono">fasta / fa / fasta.gz</span>
+      filter. <em>Download</em> opens the existing <span class="mono">UniProtDownloadDialog</span>, which
+      already offers human, mouse, yeast, <em>E. coli</em> and <em>Arabidopsis thaliana</em>
+      (UP000006548) — the proteome this feature was built and measured against. The same
+      Browse + Download pairing sits beside Train and Library Protein Database on the Workflow tab,
+      so the row needs no new vocabulary.
+    </p>
+  </div>
+</section>
+
+<section>
+  <h2>Validation</h2>
+  <p>
+    Two checks, both before the run starts rather than partway through a multi-hour build.
+  </p>
+  <ul>
+    <li><span class="q">Source = FASTA with no file.</span> Block Run and focus the field:
+      <em>“Select an entrapment FASTA, or set Entrapment source back to Shuffle target sequence.”</em></li>
+    <li><span class="q">Ratio below 0.10.</span> Unreachable from the spinner, which is bounded — but
+      Carafe enforces it anyway, because <em>Carafe additional options</em> can pass the flag directly:</li>
+  </ul>
+  <div class="err">-entrapment_ratio 0.0500 is below the tested minimum of 0.10.
+Ratios down to 0.10 are characterised - the combined FDP estimate is stable
+across r = 1, 0.5, 0.25 and 0.1 - but at 0.10 only ~32 entrapment peptides were
+accepted at 1% q, so below it the estimate is dominated by counting noise and
+has not been validated.
+If you have a case that needs a lower ratio, raise it so the bound can be
+widened deliberately.</div>
+  <p style="margin-top:14px">
+    The bound lives in Carafe, not in the panel. One place to widen it when someone makes the case,
+    and the spinner range simply reflects it.
+  </p>
+</section>
+
+<section>
+  <h2>Deliberately not exposed</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Behaviour</th><th>Why it stays off the panel</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="nowrap">Fragment-overlap<br>similarity gate</td>
+          <td>Always on, no flag. It is a correctness fix, not a preference — a library built without
+              it carries entrapment peptides that are near-copies of their own targets.</td>
+        </tr>
+        <tr>
+          <td class="nowrap">I/L collision<br>rejection</td>
+          <td>Always on, no flag. Same reasoning, and it matters most exactly when someone uses the new
+              FASTA source: conserved plant/human proteins yield tryptic peptides differing only by
+              I↔L, which are mass-identical to a real target and detected wherever it is.</td>
+        </tr>
+        <tr>
+          <td class="nowrap"><code>-no_similarity_gate</code></td>
+          <td>CLI only. It reproduces pre-gate behaviour for audit comparison and produces a library
+              that should not be searched. Putting it on a settings panel invites exactly the use it
+              must not have.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Notes</h2>
+  <ul>
+    <li>
+      The panel has no button column today, so the Browse/Download row widens the layout slightly
+      when it appears. That is why the FASTA row is the only new row carrying buttons — the source
+      and ratio rows stay inside the existing two-column grid.
+    </li>
+    <li>
+      Switching source back to Shuffle collapses the FASTA row but keeps the path, so toggling
+      between the two arms of an A/B does not mean re-picking the file each time.
+    </li>
+    <li>
+      Nothing here changes what a run does when entrapment is off. Unchecked, the emitted command
+      is byte-identical to today's.
+    </li>
+  </ul>
+</section>
+
+<footer>
+  Traced from Carafe 2.2.0, Osprey tab, on the <span class="mono">feature/decoy-similarity-gate</span>
+  branch. Backing measurements and the recipe live in
+  <span class="mono">ai/docs/osprey-library-generation-guide.md</span>.
+  Implemented in <span class="mono">CarafeGUI.createOspreyPanel</span> /
+  <span class="mono">updateEntrapmentRowVisibility</span>.
+</footer>
+
+</div>
+</body>
+</html>
