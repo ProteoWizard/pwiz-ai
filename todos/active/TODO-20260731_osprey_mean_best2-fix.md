@@ -253,8 +253,8 @@ triggered on `pull/4512`, build 4118112.**
 | Debug build, tests, inspection | 572/572, 0 warnings |
 | `regression.ps1 -Dataset Stellar` | PASSED - all five legs incl. the two new ones |
 | Flag-ON liveness | mode1 FAIL + mode2/3/4 PASS - the correct pattern |
-| **TeamCity Osprey Perf/Regression** | **SUCCESS** - build #187 (4118112), Stellar + Astral + perf |
-| **PR #4512 checks** | **18/18 SUCCESS, MERGEABLE, none pending** |
+| **TeamCity Osprey Perf/Regression** | **SUCCESS** - build #188 (4118322) on `ab8ff4bb5`, the FINAL commit covering the master merge and the review fixes (#187 was green on the pre-merge commit) |
+| **PR #4512 checks** | **21/21 SUCCESS, MERGEABLE, none pending** - ready for `/pw-complete 4512` |
 
 An independent fresh-context review found **no Critical issues** and confirmed the headline claims.
 Three of its findings were fixed (`ProgramTests` ambient-environment isolation - a hole this very
