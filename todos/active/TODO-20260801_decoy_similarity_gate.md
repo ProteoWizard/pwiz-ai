@@ -429,6 +429,79 @@ Stage 1-5 only (`--task FirstPassFDR`, which preserves the pass-1 mdiag sidecar)
 **v26.1.1.213** (pwiz master `0245ad7a21`); `delivered` reused existing parquets at
 **26.1.1.211**. Each arm ~2 h 48 m.
 
+#### HANDOFF BRIEF FOR THE IMPLEMENTING SESSION - read this section only
+
+Findings 1-11 below are the research record, and they contain **three withdrawn claims**
+(findings 5, 8, and part of 7). Do not mine them for requirements. Everything an implementer
+needs is here.
+
+**DECISION: apply the same filtering to BOTH entrapment designs** (Brendan, 2026-08-02). The
+measured benefit on shuffle entrapment is small (+1.6% discoveries, FDP 0.743% -> 0.739% at the
+1% operating point) but the filter is correct on its own terms - those entrapment peptides are
+genuinely present, so counting them as false discoveries is simply wrong - and uniform
+processing means shuffle and foreign-species libraries stay comparable. Divergent filtering
+would reintroduce exactly the kind of confound this series spent a night eliminating. **Foreign
+species additionally needs more aggressive filtering because of conserved biology across
+species** (see SHIP #2), but that is an ADDITION to a common base, not a different pipeline.
+
+**SHIP #1 - the I/L filter. DONE, validated, keep it.**
+Reject any entrapment or decoy candidate whose I->L normalised sequence appears in the
+I->L normalised target set. I and L are isobaric (both 113.08406), so such a peptide is
+mass-identical AND fragment-identical to a real target - indistinguishable by MS, genuinely
+present, and therefore not a model of a false discovery.
+* Already implemented on the Carafe machine; `-gated-no-il` and `-arabidopsis-no-il` verified
+  here at **0 entrapment collisions, 0 decoy collisions, 0 exact**.
+* Effect on foreign-species entrapment is large (FDP 1.183% -> 0.992% at 1% q, +11.5%
+  discoveries); on shuffle it is small (+1.6% discoveries). Both directions are favourable.
+* **Any k-mer index used to find these MUST be built on I/L-normalised sequences.** A raw index
+  misses the class it is hunting: `IVLIGDSGVGK`'s C-terminal 8-mer is `IGDSGVGK` against the
+  target's `LGDSGVGK`, so a raw index scored it 0.500 when the truth is 0.900.
+
+**SHIP #2 - an all-targets similarity gate. DESIGN QUESTION, NOT YET A SPEC.**
+The existing fragment-overlap gate is **pairwise** (each entrapment vs its OWN paired target)
+but the contamination is **set-wise**. Confirmed offenders in `arabidopsis-no-il`, all scoring
+in the top three accepted precursors of the entire run:
+
+| entrapment | overlap | matching human target | protein |
+|---|---|---|---|
+| `GILAADESTGTIGK` | 0.846 | `GILAADESTGSIAK` | ALDOA (aldolase A) |
+| `EILHIQGGQCGNQIGAK` | 0.750 | `EIVHIQAGQCGNQIGAK` | TBB5 (beta-tubulin) |
+| `IVLIGDSGVGK` | 0.900 | `VIILGDSGVGK` | RAB7A |
+| `AAGWGVMVSHR` | 0.650 | `AAQDSFAAGWGVMVSHR` | ENO1_YEAST (spiked RT standard) |
+
+**DO NOT implement "reject overlap > 0.40 against any target".** That threshold was calibrated
+for a pairwise test; applied set-wise against 1.39M targets it flags **33.4%** of accepted
+entrapment in `gated` and 27.6% in `arabidopsis-no-il` - chance matches dominate.
+
+Two things are known about the right rule:
+1. **A precursor-mass constraint is essential.** All confirmed offenders are mass-matched by
+   construction (V->L with A->G is net zero; an anagram is exact), which is why they co-isolate.
+   Adding `dm <= 5 Da` collapses the flag rate ~6x, to 3.7% (gated) / 1.6% (arabidopsis-no-il),
+   and counts are stable between overlap 0.60 and 0.70 - clean separation, not a cliff.
+2. **That criterion still does not predict the harm.** It flags MORE in `gated` (3.7%) than
+   `arabidopsis-no-il` (1.6%), while the observed pathology is the reverse. The missing factor is
+   that the Arabidopsis offenders match tubulin/aldolase/enolase/RAB7A - abundant proteins that
+   are always present - while shuffle's matches are to whatever sits nearby in mass.
+   **Abundance is sample-dependent, not a library property.**
+
+So SHIP #2 needs a design decision before code: gate against a curated high-abundance subset, or
+adopt mass-matched-high-overlap and measure the resulting library empirically rather than tuning
+a threshold on this one 40-file cohort.
+
+**Tools available** (all committed to pwiz-ai, `ai/scripts/Osprey/Entrapment/`):
+`entrapment_target_collision.py` (exact collisions), `il_collision_correction.py` (I/L, with
+oracle-surgery correction), `entrapment_composition.py` (length/composition matching),
+`posthoc_gate_prediction.py` (cohort-matched near-copy correction),
+`predicted_spectrum_quality.py`. `library_overlap_audit.py` on the Carafe machine now also
+reports I/L collisions.
+
+**Counting convention**: report DISTINCT sequences, not rows. The Carafe audit's 742 and this
+machine's 735 are both correct (rows vs distinct); the gap is duplicate entrapment sequences.
+
+**What this series did NOT show**: an FDR failure. See finding 10 - the FDP:q plot compares
+decoys against entrapment, so it bears on FDR only where entrapment faithfully proxies
+target-false, which it did not. Everything here is a repair to the measuring instrument.
+
 #### Predictions vs outcomes
 
 | step | predicted | measured | verdict |
@@ -701,7 +774,13 @@ that noise floor, and `gated-no-il` vs `arabidopsis-no-il` is now the ONLY clean
 anagram vs foreign entrapment, since `gated` still carries 678 colliders. The ordering happened
 to be right for the wrong reason.
 
-#### 8. THE COLLIDING-DECOY EFFECT, MEASURED - and it is a UNIVERSAL win, not an Arabidopsis rescue
+#### 8. ~~THE COLLIDING-DECOY EFFECT~~ **WITHDRAWN by finding 11 - do not cite this section**
+
+> **This finding's conclusion was falsified.** The measurement of colliding decoys at threshold
+> (21/258, 15/262, 19/251, 1/278) is sound and still useful; the ATTRIBUTION of the discovery
+> gain to those decoys is wrong - `gated-no-il` cleared its decoys equally and gained only
+> +1.6%. See finding 11. The pre-registered prediction below failed on its own falsification
+> condition.
 
 Finding 7 attributed the discovery gain to colliding decoys by a consistency argument, and
 recorded as open work that `pass1_entrap.py` would need to retain decoy-side counts. **That was
@@ -1081,7 +1160,7 @@ sits ABOVE q=0.01, so a 0.01 harvest truncates the search and the frontier satur
 q<=0.01 count **by construction** - reading as a result rather than a truncation. The 163-file
 `arm_*.json` were harvested to 0.03; use 0.03 for anything compared against them.
 
-#### 7. mean(best-N) beats a POST-HOC REPRODUCIBILITY CUTOFF at every threshold (2026-08-02, Brendan)
+#### SEPARATE THREAD (not part of the entrapment findings 1-11): mean(best-N) beats a post-hoc reproducibility cutoff at every threshold (2026-08-02, Brendan)
 
 Added after the series. The "N* = 1" conclusion was drawn from **total experiment-wide
 detections**, a metric that counts a precursor found in 1 of 163 runs equally with one found in
