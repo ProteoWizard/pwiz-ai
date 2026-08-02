@@ -964,6 +964,57 @@ carries a true independent-detection count, then compare the run-count distribut
 identified polluted subset against clean entrapment. That is a harvest change, not a
 re-analysis.
 
+#### 11. FINAL MATRIX - and the decoy attribution in finding 7/8 is WITHDRAWN
+
+`gated-no-il` completed (3 h 01 m). Full series, all six arms:
+
+| variant | disc@1%q | trueFDP% | matched@1% | eff% | matched-disc FDP vs ungated |
+|---|---|---|---|---|---|
+| delivered | 24,153 | 0.837 | 25,173 | 76.36 | -4.2% |
+| **ungated** (baseline) | 24,413 | 0.837 | 25,193 | 78.78 | - |
+| gated | 25,064 | 0.743 | 26,379 | 80.18 | -28.7% |
+| **gated-no-il** | 25,454 | **0.739** | 26,348 | 78.27 | **-51.5%** |
+| arabidopsis | 23,385 | 1.183 | 22,550 | 69.24 | +60.9% |
+| arabidopsis-no-il | 26,085 | 0.992 | 26,085 | 78.71 | -17.3% |
+
+**`gated-no-il` is the best-calibrated arm in the series** - 0.356% true FDP at a matched 23,385
+discoveries, less than half the shuffle baseline's 0.736%.
+
+**THE PRE-REGISTERED PREDICTION FAILED, ON ITS OWN STATED FALSIFICATION CONDITION.**
+
+| | predicted | measured |
+|---|---|---|
+| disc@1%q | 25,064 -> **~26,800-27,300 (+7 to +9%)** | 25,454 (**+1.6%**) |
+| FDP at matched discoveries | -5 to -10% | **-32%** |
+
+Finding 8 registered: *"a large FDP drop with a small discovery gain would falsify the decoy
+attribution and send the explanation back to the entrapment side."* That is exactly what
+happened. **The claim in findings 7 and 8 that colliding decoys cost ~11.5% of discoveries is
+WITHDRAWN.**
+
+The disproof is direct - both arms cleared their colliders, but nearly equal decoy removal gave
+7x different discovery gains:
+
+| arm | decoys q<=.01 | colliding | entrapment q<=.01 | colliding | disc gain |
+|---|---|---|---|---|---|
+| gated -> gated-no-il | 262 -> 268 | 15 -> **0** | 94 -> 95 | 5 -> **0** | **+1.6%** |
+| arabidopsis -> arabidopsis-no-il | 251 -> 278 | 19 -> **1** | 144 -> 134 | 30 -> **0** | **+11.5%** |
+
+**What survives**: the discovery gain tracks ACCEPTED ENTRAPMENT colliders (5 vs 30, ~6x) far
+better than decoy colliders (15 vs 19, ~1.3x), so the entrapment side is the better candidate.
+**What does not survive**: any quantitative mechanism. 30 accepted colliders cannot mechanically
+free 2,700 discoveries, so this is not simple one-for-one competition either. **The mechanism
+behind the Arabidopsis discovery gain is UNRESOLVED.**
+
+**What is solid across both arms regardless of mechanism**: the I/L fix cleans the TOP of the
+entrapment score distribution, which is why the matched-discovery FDP improves sharply
+(gated -28.7% -> gated-no-il **-51.5%**) while FDP at matched q barely moves (0.743% ->
+0.739%). The confident end is where the colliders lived, and it is where the fix acts.
+
+Note also `gated-no-il` union efficiency FELL (80.18 -> 78.27) with matched flat (26,379 ->
+26,348), so on the shuffle side the fix is close to a pure oracle correction - the opposite of
+the Arabidopsis arm. That asymmetry is the unexplained part.
+
 #### Confounds closed by measurement before the arms ran
 
 * **Shared prediction basis, verified for BOTH controlled steps.** `ungated` vs `gated`:
