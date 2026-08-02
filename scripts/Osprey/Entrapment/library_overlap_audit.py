@@ -83,6 +83,21 @@ def overlap(target, candidate):
     return matches / len(cand)
 
 
+def il_normalize(seq):
+    """I->L normalised form.
+
+    I and L are isobaric (113.08406), so two sequences differing only by I<->L are
+    mass-identical AND produce identical b/y ladders - MS cannot separate them. An entrapment
+    peptide I/L-identical to ANY real target is detected wherever that target is, so every one
+    of those detections is counted false when it is not.
+
+    This is invisible to both of the other checks here. Exact string comparison says the
+    sequences differ, and the overlap gate compares a candidate to its OWN paired target while
+    a collision is a match to a DIFFERENT one.
+    """
+    return seq.replace('I', 'L')
+
+
 def identity(a, b):
     """Positional identity, reported for context only - it is NOT gated on. It is a weakly
     correlated proxy that both misses real harm and flags harmless cases."""
@@ -112,14 +127,41 @@ def main():
     if a.sample:
         keys = keys[:a.sample]
 
-    ent_over, dec_over, ent_ident = [], [], []
-    ent_rejectable, dec_rejectable = 0, 0
+    # Collision indexes over the FULL target set, not the audited sample - a collision is a match
+    # to any target anywhere, so sampling the index would under-report it.
+    all_targets = set()
+    for g in groups.values():
+        t = g.get('target')
+        if t:
+            all_targets.add(t)
+    targets_il = {il_normalize(t) for t in all_targets}
+
+    ent_over, dec_over, pdec_over, ent_ident = [], [], [], []
+    ent_rejectable, dec_rejectable, pdec_rejectable = 0, 0, 0
+    ent_exact_collide, ent_il_collide = 0, 0
+    dec_exact_collide, dec_il_collide = 0, 0
+    il_examples = []
     worst = []
     for k in keys:
         g = groups[k]
         t = g.get('target')
         if not t:
             continue
+        for seq, kind in ((g.get('p_target'), 'ent'), (g.get('decoy'), 'dec')):
+            if not seq:
+                continue
+            if seq in all_targets:
+                if kind == 'ent':
+                    ent_exact_collide += 1
+                else:
+                    dec_exact_collide += 1
+            elif il_normalize(seq) in targets_il:
+                if kind == 'ent':
+                    ent_il_collide += 1
+                    if len(il_examples) < 6:
+                        il_examples.append((t, seq))
+                else:
+                    dec_il_collide += 1
         pt = g.get('p_target')
         if pt:
             o = overlap(t, pt)
@@ -135,6 +177,16 @@ def main():
             dec_over.append(o)
             if o > MAX_FRAGMENT_OVERLAP:
                 dec_rejectable += 1
+        # The entrapment population's own decoy, measured against the entrapment it was derived
+        # from - not against the target. Entrapment competes against p_decoy exactly as targets
+        # compete against decoy, so leaving this relationship unmeasured would hide the same
+        # asymmetry one level down.
+        pd = g.get('p_decoy')
+        if pt and pd:
+            o = overlap(pt, pd)
+            pdec_over.append(o)
+            if o > MAX_FRAGMENT_OVERLAP:
+                pdec_rejectable += 1
 
     def summarize(name, vals, rejectable):
         if not vals:
@@ -151,8 +203,9 @@ def main():
     print(f"=== library overlap audit {('- ' + a.label) if a.label else ''} ===")
     print(f"manifest: {a.manifest}")
     print(f"quartets audited: {len(keys):,}")
-    summarize('target vs entrapment', ent_over, ent_rejectable)
+    summarize('target vs entrapment (p_target)', ent_over, ent_rejectable)
     summarize('target vs decoy', dec_over, dec_rejectable)
+    summarize('entrapment vs its decoy (p_decoy)', pdec_over, pdec_rejectable)
     if ent_ident:
         si = sorted(ent_ident)
         print(f"\nentrapment positional identity (context only, not gated)")
@@ -161,6 +214,16 @@ def main():
         print("\nworst surviving entrapment overlaps:")
         for o, t, pt in sorted(worst, reverse=True):
             print(f"  {o:.4f}  {t} -> {pt}")
+
+    print("\nindistinguishable-from-a-target collisions (any target, not just the paired one)")
+    print(f"  entrapment: {ent_exact_collide:,} exact, {ent_il_collide:,} I/L-isobaric")
+    print(f"  decoy     : {dec_exact_collide:,} exact, {dec_il_collide:,} I/L-isobaric")
+    if il_examples:
+        print("  examples (target -> entrapment, mass-identical with the same ladder):")
+        for t, pt in il_examples:
+            print(f"    {t} -> {pt}")
+    if ent_exact_collide == 0 and ent_il_collide > 0:
+        print("  NOTE: an exact-string audit would report this library CLEAN. It is not.")
 
 
 if __name__ == '__main__':

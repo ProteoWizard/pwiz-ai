@@ -4,6 +4,36 @@ Draft for the maccoss/Carafe PR. Written for **Carafe maintainers**, not Osprey 
 this is a library-generation defect that affects any tool consuming these libraries, and the
 filters proposed are already standard practice elsewhere in the field.
 
+> **Implementation status, 2026-08-02.** All five changes are implemented on
+> `feature/decoy-similarity-gate` in `maccoss/Carafe` (8 commits, not yet pushed). Where the code
+> diverged from this draft, the draft has been corrected to match the code, EXCEPT the items
+> listed here which are code decisions a reviewer may want to revisit:
+>
+> * **Flag names follow Carafe's convention, not this draft's original.** Carafe uses single-dash
+>   with underscores throughout (`db`, `itol`, `min_pep_charge`, `build_entrapment_fasta`) and has
+>   no `--double-dash` or hyphenated option anywhere, so the draft's `--entrapment-fasta` /
+>   `--entrapment-ratio` would have been the only ones. Shipped as **`-entrapment_db`** (parallel
+>   to the existing `-db`) and **`-entrapment_ratio`**.
+> * **A third flag exists that this draft does not mention: `-no_similarity_gate`.** An AUDIT
+>   switch that reproduces the pre-fix generator so a rebuild can be proved to differ from a
+>   delivered library only by this change. It is what verified the digest parameters here - an
+>   ungated rebuild reproduces the delivered `osprey_library_db_peptides.fasta` byte for byte
+>   (SHA-256 over 349 MB, all 1,390,979 quartets). It necessarily skips the I/L check too, since
+>   its whole purpose is byte-reproduction of a historical library. A library built with it carries
+>   the contamination and should not be searched.
+> * **The retry seed keeps its original derivation on attempt 0.** The draft says the seed is
+>   re-derived per attempt; attempt 0 deliberately keeps the original two-part
+>   `SHA-1(masterSeed:seq)` form, with `:attempt` appended only for retries. This is what lets
+>   `-no_similarity_gate` reproduce a pre-fix library exactly, and it keeps a before/after FDP
+>   comparison nearly paired, since only the ~4% of entrapment the gate rejects changes rather than
+>   all of it.
+> * **`-entrapment_ratio` is bounded to [0.10, 1.00]** and errors below 0.10 explaining that the
+>   region is untested rather than silently accepting it - the sweep covers r = 1, 0.5, 0.25, 0.1
+>   and at 0.1 only ~32 entrapment peptides were accepted at 1% q.
+>
+> Rates in this draft are from 200-250k samples. Full-manifest audits over all ~1.39M quartets read
+> slightly higher and are given alongside them below.
+
 ---
 
 ## Title
@@ -194,7 +224,7 @@ dropped only after all attempts fail, using the collision-drop policy already pr
 The fixed tolerance is deliberate: keying it to a search tolerance would make the same library
 produce different sequences for different downstream settings.
 
-**2. `--entrapment-fasta` - entrapment from a foreign proteome.**
+**2. `-entrapment_db` - entrapment from a foreign proteome.**
 A gated shuffle still shares the target's exact amino-acid composition and precursor mass, so it
 co-isolates with the target in every DIA window. The gate removes the tail of that distribution
 but not the relationship: median target/entrapment fragment overlap is **0.100 ungated, 0.100
@@ -248,20 +278,52 @@ a peptide that is genuinely present:
 
 Foreign proteomes are hit hardest because plant and human share conserved proteins whose tryptic
 peptides differ by conservative I<->L substitutions. **This is why the I/L check ships alongside
-`--entrapment-fasta` rather than after it** - offering a foreign-proteome source without it would
+`-entrapment_db` rather than after it** - offering a foreign-proteome source without it would
 introduce the failure mode it is most exposed to.
 
-Implementation is one hash set at generation time: reject any candidate whose I->L normalised
-sequence appears in the I->L normalised target set.
+**Decoys collide too, and at a similar rate** - a population not previously measured. Full audit of
+the ungated library, checking every generated sequence against the whole target set rather than
+only its own pair:
 
-**4. `--entrapment-ratio` - entrapment:target ratio.**
+| population | exact collisions | I/L-isobaric collisions |
+|---|---|---|
+| entrapment | **0** | **742** |
+| decoy | **0** | **792** |
+
+The zeros are the point: an exact-string audit reports this library clean, and it is not. A decoy
+that is I/L-identical to a real target is not a valid null either - it wins target-decoy
+competition on the target's own signal, inflating the decoy count rather than the entrapment
+count, which is why the check is applied to both populations for the same reason the overlap gate
+is. Both read **0 / 0** after the fix.
+
+Implementation is one hash set at generation time: reject any candidate whose I->L normalised
+sequence appears in the I->L normalised target set. The normalised comparison **subsumes** the
+exact one, since a sequence containing no isoleucine normalises to itself, so it replaces the
+existing collision check rather than adding a second lookup.
+
+Verified against the independently derived counts: on the gated shuffle library 663 entrapment
+sequences changed and 10 more were dropped for having no acceptable alternative (673 against 678
+colliders measured from search output), and on Arabidopsis 1,116 candidates were excluded from the
+pool against 1,043 measured in the built library - the pool is only ~95.7% consumed, and
+1,043/1,116 = 93.5% matches that assignment rate. **2,608 EXACT matches were already being
+filtered**, which is precisely why an exact-string audit read clean while the isobaric ones went
+through.
+
+**4. `-entrapment_ratio` - entrapment:target ratio.**
 At r=1 the entrapment pool is half the searched library and demonstrably perturbs the target
 search (targets recovered 27,931 at r=1.0 vs 30,654 at r=0.1). Combined FDP is ratio-invariant at
 ~1.1% across a 10x pool-size change once `r` is factored into the estimate, so a small-r overlay
 measures without distorting. r <= 0.25 is preferable when the goal is measurement rather than a
 1:1 library.
 
-**5. UI support** for the flags.
+**5. UI support** for the flags. Three controls under the existing "Include entrapment peptides"
+checkbox: source (shuffle or FASTA), the FASTA path with Browse and a Download button wired to
+Carafe's existing UniProt dialog, and the ratio. They are **hidden rather than disabled** when
+they do not apply, so the panel is unchanged for anyone not using entrapment, and the FASTA row
+appears only once a FASTA source is chosen. The emitted command is built from that logical state
+rather than from field contents, so a path left behind after switching back to Shuffle cannot
+reach the command line. Spec with mockups traced from the running app:
+`TODO-20260801_decoy_similarity_gate-carafe-spec.html`.
 
 ## Why the gate must apply to BOTH generated populations
 
@@ -285,11 +347,14 @@ Entrapment competes against `p_decoy` exactly as targets compete against `decoy`
 pair ungated would put the entrapment competition on a different footing from the target
 competition - the same asymmetry one level down. Measured against the source each is derived from:
 
-| relationship | generation method | ungated | gated |
+| relationship | generation method | ungated (sample / full) | gated |
 |---|---|---|---|
-| target -> entrapment (`p_target`) | C-term-preserving **shuffle** | **4.05%** | **0%** |
-| target -> decoy | **reverse** + cycle | **1.70%** | **0%** |
-| entrapment -> its decoy (`p_decoy`) | **reverse** + cycle | **1.86%** | **0%** |
+| target -> entrapment (`p_target`) | C-term-preserving **shuffle** | **4.05% / 4.22%** | **0%** |
+| target -> decoy | **reverse** + cycle | **1.70% / 1.74%** | **0%** |
+| entrapment -> its decoy (`p_decoy`) | **reverse** + cycle | **1.86% / 1.89%** | **0%** |
+
+The second figure in each row is a full audit over all 1,390,979 quartets rather than a sample;
+all three "gated" columns are likewise full audits, not sampled.
 
 **The magnitude tracks the generation method, not the population.** The two reverse-derived
 relationships sit at 1.70% and 1.86%; the shuffle-derived one is more than double at 4.05%
