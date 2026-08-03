@@ -381,6 +381,54 @@ Tool: `ai/scripts/Osprey/Entrapment/contamination_corrected.py`.
 
 ## Progress Log
 
+### 2026-08-02 (later) - the SHIP #2 open question answered: reading (2) holds, gate by length
+
+The Carafe session's 60x cost correction is **confirmed, and my 0.013% estimate was wrong for the
+reason they identified.** Re-measured with THEIR method - a mass-sorted index scanned exhaustively
+within the isobaric window - entrapment shadowing is **0.835%**, against their Java **0.814%** and
+their independent Python **0.875%**. Three implementations agree.
+
+**My error was candidate generation, not arithmetic.** I filtered candidates through a 6-mer
+prefix/suffix index, which is NOT a superset of "isobaric AND overlap > 0.70" - it misses pairs
+sharing no terminal 6-mer. Their own example proves it: `EAQALAR` shadows `EAGAAALR` (overlap
+0.833, dMass 1e-5, the Q -> G+A isobar) and shares neither a 6-mer prefix nor suffix, so my index
+never compared them. The length skew they found is real and compounds it, but the root cause is
+that a k-mer terminal index cannot enumerate compositional isobars.
+
+**THE CONTROL THEY ASKED FOR - targets shadow each other MORE than entrapment shadows targets, at
+every length** (mass-sorted exhaustive, isobaric 0.01 Da, overlap > 0.70, 1-in-60 of
+`gated-no-il`):
+
+| length | **TARGET vs other targets** | ENTRAPMENT vs targets | ratio |
+|---|---|---|---|
+| 7 | **7.67%** | 5.13% | 0.67 |
+| 8 | **5.75%** | 4.78% | 0.83 |
+| 9 | **1.99%** | 0.38% | 0.19 |
+| 10 | **0.76%** | 0.06% | 0.08 |
+| 11+ | **0.25%** | 0.00% | 0.00 |
+| **overall** | **1.486%** | **0.835%** | **0.56** |
+
+**Reading (2) is supported: the ambiguity is a property of the peptide space, not of the
+entrapment design.** The entrapment population is ALREADY less ambiguous than the targets it
+models, at every length. Gating it toward zero widens that gap, and by finding 12 that biases
+measured FDP DOWNWARD - entrapment loses duplicate-ID exposure the targets keep.
+
+**But the length structure says where the gate genuinely earns its keep.** At 7-8 the rates are
+comparable (5.13 vs 7.67, 4.78 vs 5.75) - normal background the two populations share. At 11+
+targets sit at 0.25% while entrapment is ~0.00%, and **that is exactly where the observed harm
+lives**: the three spike drivers are lengths **17, 11 and 9**, and 6 of the 7 confirmed offenders
+are >= 11.
+
+**RECOMMENDATION - make the gate length-aware.** Applying it only at length >= 9 cuts quartets
+changed from ~49,900 to ~489 (their table), and >= 11 gives 163, while still catching every spike
+driver. That is a 100-300x reduction in collateral for the same demonstrated benefit.
+
+**Caveat, stated because the same error class bit me twice today**: this control is one library,
+one cohort, and the >= 9 cut would miss `IELISSLK` (length 8, overlap 0.857, accepted at
+q = 2.8e-03). It is not a spike driver but it is a real shadow. **The right threshold is a science
+call between the measured background above and how much short-peptide shadowing is tolerable -
+not something to read off this table alone.**
+
 ### 2026-08-03 - Both -no-iso Astral libraries DELIVERED for validation
 
 `maccoss/Carafe` `feature/decoy-similarity-gate` @ `95e1f1c` (10 commits, still local). Stages
