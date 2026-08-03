@@ -381,6 +381,43 @@ Tool: `ai/scripts/Osprey/Entrapment/contamination_corrected.py`.
 
 ## Progress Log
 
+### 2026-08-03 - Both -no-iso Astral libraries DELIVERED for validation
+
+`maccoss/Carafe` `feature/decoy-similarity-gate` @ `95e1f1c` (10 commits, still local). Stages
+1a/2/3 were NOT re-run - only the digest (1b, 2.1 min each) and the prediction (4/5, 16.3 and
+15.4 min) - so both share the existing prediction basis.
+
+| library | quartets | vs its -no-il comparator | zip |
+|---|---|---|---|
+| `target+decoy+entrapment-gated-no-iso` | 1,390,160 | -1,428 | 1.36 GB |
+| `target+decoy+entrapment-arabidopsis-no-iso` | 1,391,007 | -648 | 1.39 GB |
+
+In `D:\test\AstralTest-TargetDecoyLibraries\`, copied to
+`M:\home\brendanx\data\MacCoss\Osprey\AstralLib`, byte counts verified after copy, archives
+re-opened and confirmed to hold the same flat four-entry layout as every previous drop.
+
+**Verified rather than asserted, because a confounded arm is worse than no arm:**
+
+| check | result |
+|---|---|
+| fine-tuned `ms2_model.pt` / `rt_model.pt` vs the -no-il builds | **byte-identical** (SHA-256 `6E7D8D93...` / `EA32BC83...`) |
+| `compare_target_predictions.py`, both arms | **100.0%** identical fragment m/z lists (3,128/3,128) |
+| `library_overlap_audit.py`, both arms | 0 rejectable near-copies, 0 exact and 0 I/L collisions |
+| median target/entrapment overlap | 0.100 shuffle, 0.024 foreign - unchanged from -no-il |
+
+**GOTCHA that cost a full packaging pass**: `Compress-Archive` fails with "Stream was too long" on
+the 12 GB `carafe_spectral_library.tsv`. Use
+`[System.IO.Compression.ZipFile]::CreateFromDirectory`, built OUTSIDE the staged folder and moved
+in - it streams, writes Zip64, and is ~10x faster besides (78 s against a Compress-Archive attempt
+that never finished).
+
+**What the validating session should measure**, in priority order:
+1. FDP on `arabidopsis-no-iso` vs `arabidopsis-no-il` - the prediction is a noticeable fall
+   concentrated at LOW q.
+2. FDP on `gated-no-iso` vs `gated-no-il` - the prediction is little change. A large move here
+   falsifies the framing and should stop the Osprey port.
+3. Whether the accepted-entrapment enrichment (1 of 95 shuffle, 8 of 134 foreign) goes to zero.
+
 ### 2026-08-02 (late) - SHIP #2 implemented in Carafe; its cost estimate was wrong by ~60x
 
 Implemented as specified - **isobaric within 0.01 Da AND fragment overlap > 0.70, set-wise against
