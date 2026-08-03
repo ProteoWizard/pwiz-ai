@@ -503,6 +503,41 @@ library entries), which is why the overlap cut moves to 0.70 for this scope.
 case in 95 accepted, so the rule is near-inert there - harmless to apply for uniformity, but it
 is not fixing anything measurable on that side.
 
+**EXPECTED DISCARD IF APPLIED TO ALL FOUR CLASSES** (measured, 1-in-60 sample of distinct
+sequences, isobaric + overlap > 0.70 against the target set):
+
+| class | gated-no-il (shuffle) | arabidopsis-no-il (foreign) |
+|---|---|---|
+| `p_target` (entrapment) | 0.013% ~ **180** | 0.013% ~ **179** |
+| `decoy` (of targets) | 0.022% ~ **300** | 0.022% ~ **300** |
+| `p_decoy` (of entrapment) | **0.056% ~ 777** | **0.000% ~ 0** |
+| **total** | **~1,257** | **~479** |
+
+`decoy` matches across libraries because both reverse the SAME human target set. **The `p_decoy`
+split is structural**: a shuffle is an anagram of a human target and reversal preserves
+composition again, so **every shuffle-derived p_decoy is isobaric with a human target by
+construction** - only fragment overlap decides. Arabidopsis p_decoys reverse plant peptides whose
+composition matches no human target, so the population is empty. Another asymmetry of the shuffle
+design, in the same family as the paralogy result in finding 12.
+
+**IMPLEMENT AS RETRY, NOT REMOVAL - otherwise the quartets break.** These libraries are perfect
+quartets with **r = 1.000000**, and the FDP estimator divides by `r`. Dropping 180 entrapment,
+300 decoys and 777 p_decoys from a library would leave the four classes unequal and silently
+rescale every FDP. The existing similarity gate already does the right thing - reject and
+re-generate until the candidate passes (the handoff notes its retry "rescues peptides the
+one-shot shuffle lost to collisions"). Follow that pattern:
+* shuffle entrapment / decoys - re-shuffle;
+* foreign entrapment - draw a different peptide from the source proteome;
+* reversal decoys are deterministic, so a rejected reversal needs a defined fallback (shuffle)
+  rather than a retry loop that cannot converge.
+
+**VERIFY THE PRODUCED LIBRARY on both machines** (Brendan, 2026-08-02) - confirm it still
+overlaps the previous build almost entirely, so the gate has not quietly changed more than
+intended. Run on the delivered library:
+`entrapment_target_collision.py`, `il_collision_correction.py`, `entrapment_composition.py`, and
+a quartet/`r` count; plus `compare_target_predictions.py` against the previous build to confirm
+the target side is untouched (expect 100% identical, as every controlled arm has been).
+
 **THE PROBLEM CASES ARE ALL ISOBARIC - use an isobaric constraint, not a wide mass window
 (Brendan, 2026-08-02).** Every accepted arabidopsis-no-il entrapment with overlap > 0.70 against
 any target, no mass filter applied:
