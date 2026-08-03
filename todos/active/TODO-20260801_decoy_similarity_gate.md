@@ -1183,6 +1183,57 @@ Stage 1-5 only (`--task FirstPassFDR`, which preserves the pass-1 mdiag sidecar)
 **v26.1.1.213** (pwiz master `0245ad7a21`); `delivered` reused existing parquets at
 **26.1.1.211**. Each arm ~2 h 48 m.
 
+#### DECISION 2026-08-03 (Brendan): REVERT the set-wise isobaric gate. Keep the I/L filter.
+
+**This supersedes every SHIP #2 recommendation below, including the one that follows the
+convergence result.** Read this first; the sections beneath are the reasoning that led here, and
+they contradict each other because the position moved several times.
+
+**REVERT**: the set-wise isobaric shadow gate (isobaric + fragment overlap > 0.70 against all
+targets), as applied to shuffle entrapment, the foreign pool, and the decoy ladder. It changes
+~50,000 quartets across four classes to address an effect that did **not** damage the statistic
+the field actually uses - measured FDP at q <= 0.01 stayed under 1% with and without it.
+
+**KEEP**: the I/L-isobaric filter (SHIP #1). Unchanged, unambiguous, already validated. An
+I/L-identical entrapment peptide **is** the target - same mass, same fragment ladder,
+indistinguishable by MS - so scoring it as a false discovery is an error, not a modelling choice.
+
+**The rationale, in Brendan's framing.** The three offending peptides were easy to find and easy
+to understand: Arabidopsis orthologs of abundant human proteins, differing by a mass-compensating
+substitution, biologically backing real discoveries with a slightly-off sequence. That is far
+more likely with a foreign-organism entrapment set because of shared biology. **They were then
+generalised into a protective rule with broad and questionable impact across both entrapment
+designs and the decoy ladder** - a rule derived from the three cases rather than from a
+principle, which is curve-fitting wearing the costume of generality.
+
+**THE STRONGEST ARGUMENT AGAINST THIS DECISION, recorded so it is not lost or re-derived.**
+`gated-no-iso` showed the two entrapment designs converging under the full gate:
+
+| | shuffle | foreign | disagreement |
+|---|---|---|---|
+| before gate | 0.739% | 0.992% | **3.5 sigma** |
+| after gate | 0.895% | 0.895% | **0.0 sigma** |
+
+The gate moved shuffle UP and foreign DOWN, which is the signature of removing design-specific
+bias rather than flattering the estimator. **That is real evidence and it is not refuted by this
+decision.** What it is weighed against:
+* it rests on **one 40-file cohort**, and exact agreement to three decimals is partly luck
+  (+-9.5% on the difference);
+* the cost is **~50,000 quartets regenerated**, union efficiency **-2.64 / -5.18 pts**, and 3.0%
+  of foreign discoveries;
+* the benefit is invisible at the **q <= 0.01 operating point**, which is what the field ships;
+* and the rule's provenance is three observed peptides, not a principle.
+
+**A second dataset showing the same convergence would be grounds to revisit.** That is the
+experiment that would settle it, and it is not this cohort.
+
+**What the `-no-iso` libraries remain useful for**: they are a validated, quartet-balanced pair
+that demonstrably removes the shadow population, so they stay on the share as the evidence base
+for the convergence result and for any future re-litigation. They are not the shipping libraries.
+
+**Do NOT port SHIP #2 to Osprey C# / Rust.** The Carafe-side implementation can stay in the
+branch, unshipped, so the work is not lost if a second dataset reopens it.
+
 #### HANDOFF BRIEF FOR THE IMPLEMENTING SESSION - read this section only
 
 Findings 1-11 below are the research record, and they contain **three withdrawn claims**
