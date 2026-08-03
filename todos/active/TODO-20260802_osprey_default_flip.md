@@ -361,7 +361,51 @@ intent; the straight path faithfully reports a sentinel that was never meant to 
 
 Note the reset exists for Rust parity, so changing it is not free.
 
-### Cross-impl gate: PASS (2026-08-02)
+### FIXED 2026-08-02 - mode 3 PASSES
+
+Commit `8796e7a13`. Changed peaks are admitted into the same competition the on-stratum members
+get, so they earn a q from their recalculated composite score instead of inheriting one or
+keeping the sentinel.
+
+```
+straight-through wall 02:53; blib 25,395,200 bytes
+HPC chain wall 03:33;        blib 25,395,200 bytes
+Stellar mode3 (HPC chain == straight): PASS
+Stellar mode1 (vs golden): FAIL (78)   <- the expected re-baseline, not a defect
+```
+
+**The signal is `survivorScoreOverride`**, keyed `(fileKey, entryId)`. An override exists only
+for peaks re-scored against the reconciled features, so its presence IS "this peak changed" -
+and being ENTRY-ID keyed it means the same thing in-process and on a merge node. That is what
+the failed first attempt lacked; it was already a parameter of the function.
+
+Admission is BY BASE_ID so a target and its paired decoy always enter together - a lone target
+would auto-win its competition and inflate the null.
+
+Unchanged off-stratum peaks still ride through on their 1st-pass q, so **single-hit proteins
+stay detectable exactly as protein-compact intends**. Only peaks whose evidence actually
+changed are re-competed.
+
+Direction of the result confirms the reasoning: the blib is SMALLER than the stale-q chain
+produced (25,395,200 vs 25,636,864). The _22 peak that had been inheriting q=9.67e-05 now
+competes on its recalculated score (-6.679) against its paired decoy (-5.729), loses, and is
+rejected for a real reason instead of accepted for a stale one.
+
+Gate: 573/573 unit tests, inspection 0 warnings / 0 errors.
+
+### Brendan's framing, worth keeping (2026-08-02)
+
+> "I definitely do not think you can pass through a q value from a prior peak to a changed peak
+> with a different score... The peptide experiment-wide q value can get passed through, but not
+> a run-level q value for a peak that has changed... those per-run changed peaks need both
+> recalculated composite scores and re-competition through transfer-compete to have any chance
+> at a valid q value."
+
+That is the rule the fix implements. It also explains why this went unnoticed: the correction
+usually REJECTS a poor peak rather than promoting one, so it removes IDs rather than adding
+them - an invisible loss in single-computer runs, which is all Mike runs.
+
+### Cross-impl gate: PASS (2026-08-02, BEFORE the mode-3 fix)
 
 `Compare-EndToEnd-Crossimpl.ps1 -Dataset Stellar`, both sides rebuilt first:
 
