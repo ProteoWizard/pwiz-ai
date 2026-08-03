@@ -361,6 +361,44 @@ intent; the straight path faithfully reports a sentinel that was never meant to 
 
 Note the reset exists for Rust parity, so changing it is not free.
 
+### Cross-impl gate: PASS (2026-08-02)
+
+`Compare-EndToEnd-Crossimpl.ps1 -Dataset Stellar`, both sides rebuilt first:
+
+```
+precursors: rust=29606  cs=29606  delta=0
+Stage 7 protein FDR (per-col 1e-9): PASS
+Blib content (SQL row+col 1e-9):    PASS
+OVERALL: PASS -- bit-parity at 1e-9 on Stellar 3-file
+```
+
+**The two default flips and the I/L gate are correctly mirrored.** Note the gate compares the
+two STRAIGHT-THROUGH paths, so it does not exercise the merge node where the mode-3 defect
+lives - and both sides land on the same 29,606 precursors, which means **Rust carries the same
+defect**. That follows from the reset's own docstring ("mirror Rust's to_fdr_entry semantics"):
+the post-rescore zeroing is Rust's contract, so protein-compact's off-stratum read is broken
+identically in both implementations. It only SHOWS in C# because only C# has an HPC chain in
+this gate. For Mike, that is the clearest framing: the gap is in the shared design, not in the
+C# port.
+
+Also worth keeping: the gate REFUSED to run first, on a stale C# binary (source edited after
+the exe was built). That guard works and saved a false divergence report.
+
+### ATTEMPTED FIX THAT FAILED - do not repeat as written
+
+Extending the stratum with rescored base_ids (option 1) was implemented and made mode 3
+**WORSE: 12 issues -> 30**. Reverted.
+
+Cause: the rescored set was derived from `ReconciliationActions`, which is keyed
+`(FileName, Index)` - and `FirstJoinTask` documents that those keys "get rebuilt to
+post-compaction indices" on the bundle path. The same key therefore resolves to a DIFFERENT
+entry on the two paths, making the extension itself path-dependent - precisely the property the
+fix was supposed to avoid. The gap-fill half was fine (`GapFillTarget.TargetEntryId` is
+path-independent); the reconciliation half poisoned it.
+
+**Any retry must key off ENTRY IDs only, never indices.** Whether an entry-id-keyed source of
+"was rescored" exists on both paths is the open question.
+
 ### Fix options (unmeasured, in preference order)
 
 1. **Source the off-stratum pass-1 q from the sidecar** rather than the mutated in-memory
