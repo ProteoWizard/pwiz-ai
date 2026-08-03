@@ -479,13 +479,29 @@ gate in any implementation.
 OWN PAIRED target only. `EILHIQGGQCGNQIGAK` was paired with a PATZ1 peptide (low overlap,
 passed) and never compared to beta-tubulin, which it overlaps at 0.750.
 
-**SPEC**: compare each foreign-organism entrapment candidate against **all** targets, not just
-its pair, using the **existing fragment-overlap metric**. For the set-wise comparison use
-**overlap > 0.70 AND precursor mass within ~5 Da** - the 0.40 pairwise threshold is meaningless
-against 1.39M targets (flags 33%), and the mass constraint is what distinguishes a co-isolating
-near-copy from a chance fragment collision. **Do not apply to shuffle entrapment**: after SHIP #1
-they carry 1 marginal case in 95 accepted entrapment, and a set-wise rule would strip ~3.7% of
-valid entrapment for no measured benefit.
+**SPEC**: compare each entrapment candidate against **all** targets, not just its pair, using the
+**existing fragment-overlap metric**, and reject where
+
+> **precursor mass is ISOBARIC (within a few ppm) AND fragment overlap > 0.70**
+
+**Why isobaric and not a DIA-width mass window.** Isobaric means the two peptides have
+**identical MS1 evidence** - same precursor m/z, same isotope envelope, same MS1 chromatogram.
+With >70% fragment overlap on top, they are indistinguishable in BOTH dimensions and the search
+has no feature left to separate them. A non-isobaric near-copy still differs in precursor m/z and
+MS1 XIC, and that discriminates even under wide co-isolation. **Isobaric is the boundary where
+MS1 discrimination fails**, not a tolerance chosen for convenience.
+
+Borne out by the data: the library holds non-isobaric high-overlap entrapment (~119 in
+arabidopsis vs ~179 isobaric) but only **1** was accepted, and that one is 113 Da away and cannot
+co-isolate. Isobaric candidates were accepted at ~5x the rate. Sweeping the tolerance from
++-0.5 Da to +-40 Da changes the discard not at all; only tightening to isobaric does.
+
+The 0.40 pairwise threshold is meaningless set-wise (flags 33% of accepted entrapment, ~130,000
+library entries), which is why the overlap cut moves to 0.70 for this scope.
+
+**Applies to foreign-organism entrapment.** Shuffle entrapment after SHIP #1 carries 1 marginal
+case in 95 accepted, so the rule is near-inert there - harmless to apply for uniformity, but it
+is not fixing anything measurable on that side.
 
 **THE PROBLEM CASES ARE ALL ISOBARIC - use an isobaric constraint, not a wide mass window
 (Brendan, 2026-08-02).** Every accepted arabidopsis-no-il entrapment with overlap > 0.70 against
