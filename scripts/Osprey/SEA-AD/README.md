@@ -91,11 +91,11 @@ fresh variant has no `.libcache`, so Osprey builds one on its first use.
 
 ```powershell
 # one arm
-.\Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -Pass2Mode percolator
+.\Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -Pass2Mode protein-compact
 
 # a comparison: arms run back to back, because only one Osprey fits on a 64 GB box
 .\Invoke-SeaAdChain.ps1 -DecoyModes libdecoy,gendecoy -Ratios 0.1
-.\Invoke-SeaAdChain.ps1 -Pass2Modes percolator,transfer
+.\Invoke-SeaAdChain.ps1 -Pass2Modes protein-compact,transfer
 
 # detached, so a harness reap cannot kill a 7.5 h run
 Start-Process pwsh -ArgumentList '-NoProfile','-File',"$PWD\Invoke-SeaAdChain.ps1",
@@ -232,9 +232,11 @@ Measured, not guessed - these cost real time to learn:
   build" when it actually means "the cache is not where Osprey looked".
 * **The learned peak-pick model (`-PickLda`) is nowhere in Osprey's log.** The runner prints
   it in the banner, writes it to the `run.log` START line and the run directory name, and
-  clears `OSPREY_PICK_LDA` when the switch is off. Without that, a finished run cannot be
-  attributed after the fact. The recorded 82-file runs predate the switch and all used the
-  default product-form pick.
+  exports `OSPREY_PICK_LDA` explicitly in BOTH directions - `1` on, `0` off. Without that, a
+  finished run cannot be attributed after the fact. Clearing the variable used to be enough;
+  it no longer is, because Osprey's own default is now the learned model, so an arm that only
+  set its ON value would run the learned pick in both arms of its own A/B. The recorded
+  82-file runs predate the switch and all used the product-form pick.
 * Every run gets `--timestamp --memstamp` teed to one `run.log`; the memstamp trace is what
   `ai/scripts/perfviz.html` renders.
 * `Clear-StandbyCache.ps1` before a timing run - otherwise the OS file cache makes a cold

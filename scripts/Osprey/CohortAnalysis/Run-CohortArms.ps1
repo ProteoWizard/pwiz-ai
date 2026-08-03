@@ -36,6 +36,13 @@
 [CmdletBinding(PositionalBinding = $false)]
 param(
     [Parameter(Mandatory = $true)] [string[]]$Jobs,
+    # Was hard-coded to 'percolator', which Osprey has since REMOVED - it now raises a startup
+    # error on that value. The mode is part of the run-directory name, so every arm already on
+    # disk carries '-percolator' and stays harvestable under it; a new arm is named for the mode
+    # it actually ran. Arms in different modes are not comparable, so do not mix them in one
+    # surface.
+    [ValidateSet('transfer', 'transfer-compete', 'protein-compact')]
+    [string]$Pass2Mode = 'protein-compact',
     [int]$EveryNthFile = 1,
     [string]$ExcludePattern = '',
     [string]$TagPrefix = 'f',
@@ -61,7 +68,7 @@ if ($VersionOverride) { $env:OSPREY_VERSION_OVERRIDE = $VersionOverride }
 # Osprey: another queue's arm may be mid-run, and losing one costs the whole arm.
 function Stop-Arm([string]$armTag) {
     Get-CimInstance Win32_Process -Filter "Name='Osprey.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -like "*percolator$armTag*" } |
+        Where-Object { $_.CommandLine -like "*$Pass2Mode$armTag*" } |
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 }
 
@@ -86,7 +93,7 @@ foreach ($job in $Jobs) {
     else { Remove-Item Env:\OSPREY_EXPERIMENT_AGG -ErrorAction SilentlyContinue }
 
     $tag = "-$TagPrefix$files" + "n$n" + $(if ($skip) { "s$skip" } else { '' })
-    $dir = Join-Path $RunsDir "seaad-${files}files-libdecoy-r1.0-percolator$tag"
+    $dir = Join-Path $RunsDir "seaad-${files}files-libdecoy-r1.0-$Pass2Mode$tag"
     $djson = Join-Path $dir 'out.model-diagnostics.data.json'
     if (Test-Path $djson) {
         Write-Host "=== ARM $tag already has mdiag; skipping ==="
@@ -96,7 +103,7 @@ foreach ($job in $Jobs) {
 
     Write-Host "=== ARM $tag START $(Get-Date -Format o) ==="
     $a = @('-NoProfile', '-File', $driver, '-DecoyMode', 'libdecoy', '-Ratio', '1.0',
-           '-Pass2Mode', 'percolator', '-NumFiles', "$files", '-SkipFirstFiles', "$skip",
+           '-Pass2Mode', $Pass2Mode, '-NumFiles', "$files", '-SkipFirstFiles', "$skip",
            '-Threads', "$Threads", '-FdrBenchPass', '2', '-LinkFrom', $LinkFrom,
            '-DataDir', $DataDir, '-LibraryDir', $LibraryDir, '-Tag', $tag)
     if ($Exe) { $a += @('-Exe', $Exe) }

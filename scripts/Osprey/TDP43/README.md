@@ -165,7 +165,7 @@ as deferred remaining work that never shipped. SEA-AD and TDP-43 are both Astral
 this pairing here **is** that deferred validation - at 2x the largest scale yet run. Treat
 the result accordingly.
 
-`-PickLda` **moves the discovery set**: it replaces the default product-form peak pick
+`-PickLda` **moves the discovery set**: it replaces the product-form peak pick
 (`coelution * rt_penalty * ln_intensity`) with a frozen linear model over four z-normalized
 terms, in which `median_polish` - a term the default ignores entirely - carries the largest
 Astral weight and `ln_intensity` is effectively switched off. See

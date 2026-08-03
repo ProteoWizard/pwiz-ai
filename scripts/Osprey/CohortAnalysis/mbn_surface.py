@@ -31,12 +31,18 @@ OUT = os.environ.get(
     os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                  '..', '..', '..', '.tmp')))
 
+# The pass-2 mode is a free token because it is no longer always 'percolator' - Osprey removed
+# that mode, so arms taken after the removal are named for whichever mode ran (protein-compact by
+# default). Every arm on disk today is still a percolator one; the widened pattern is what lets a
+# post-removal arm be harvested at all. It does NOT make the two comparable - a surface must be
+# built from one mode.
+MODE = r'[a-z][a-z-]*'
 # Arms from the systematic sweeps: ...-f<F>n<N>[s<SKIP>]  (s = files skipped -> replicate slice)
-ARM_RE = re.compile(r'^seaad-(\d+)files-libdecoy-r1\.0-percolator-f(\d+)n(\d+)(?:s(\d+))?$')
+ARM_RE = re.compile(rf'^seaad-(\d+)files-libdecoy-r1\.0-{MODE}-f(\d+)n(\d+)(?:s(\d+))?$')
 # Content-matched cohorts: ...-spread41n<N> (every 2nd file), ...-nopool75n<N> (pools excluded).
 # These hold size roughly fixed and vary WHICH files are in the cohort, which is the axis that
 # actually moved the effect once F=4..60 turned out to be flat.
-CONTENT_RE = re.compile(r'^seaad-(\d+)files-libdecoy-r1\.0-percolator-([a-z]+)(\d+)n(\d+)$')
+CONTENT_RE = re.compile(rf'^seaad-(\d+)files-libdecoy-r1\.0-{MODE}-([a-z]+)(\d+)n(\d+)$')
 
 # Arms that predate the f<F>n<N> naming, kept so the early anchors stay in the table.
 LEGACY = {

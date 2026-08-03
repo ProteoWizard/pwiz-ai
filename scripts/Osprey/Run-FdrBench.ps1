@@ -67,11 +67,26 @@
     ("entrapment hits > k=1") on these libraries; precursor is the trusted path.
 
 .PARAMETER Pass2QValue
-    Sets OSPREY_PASS2_QVALUE for the run (percolator | transfer |
-    transfer-compete | protein-compact). Empty (default) leaves the env var
-    untouched, inheriting the shipped default (percolator). Use to A/B the
-    frozen 2nd-pass modes under the entrapment oracle (pwiz#4484). Restored
-    after the run so it never leaks into a later cell.
+    Sets OSPREY_PASS2_QVALUE for the run (transfer | transfer-compete |
+    protein-compact), defaulting to protein-compact - the shipped default. Use
+    to A/B the frozen 2nd-pass modes under the entrapment oracle (pwiz#4484).
+    Restored after the run so it never leaks into a later cell.
+
+    It is set on EVERY run, never left to inherit. The old empty default meant
+    "leave the env var alone", and metrics.csv then stamped the cell with the
+    shipped default of the day - so a cell run after the default flipped got
+    labelled with the mode it did NOT use. A benchmark cell that misreports its
+    own configuration is worse than no cell.
+
+    `percolator` is not accepted: Osprey removed the mode and now raises a
+    startup error on it.
+
+.PARAMETER PickLda
+    Use the learned linear peak-pick model (OSPREY_PICK_LDA=1) rather than the
+    product-form pick. Like the pass-2 mode this is set explicitly in BOTH
+    directions and stamped into metrics.csv: the pick MOVES THE DISCOVERY SET,
+    Osprey logs nothing that records it, and its default has flipped - so an
+    inherited value would leave the cell unattributable.
 
 .PARAMETER FragmentTolerance
     Optional --fragment-tolerance value (e.g. 0.4 for Stellar's controlled
@@ -121,11 +136,14 @@ param(
     [ValidateSet('precursor', 'peptide')]
     [string]$Level = 'precursor',
 
-    # 2nd-pass q-value mode (OSPREY_PASS2_QVALUE). Empty leaves the env var
-    # untouched (inherits the shipped default = percolator). Set explicitly to
-    # A/B the frozen modes under the entrapment oracle (pwiz#4484).
-    [ValidateSet('', 'percolator', 'transfer', 'transfer-compete', 'protein-compact')]
-    [string]$Pass2QValue = '',
+    # 2nd-pass q-value mode (OSPREY_PASS2_QVALUE), always exported so the cell
+    # cannot inherit one mode and be stamped with another. A/B the frozen modes
+    # under the entrapment oracle (pwiz#4484).
+    [ValidateSet('transfer', 'transfer-compete', 'protein-compact')]
+    [string]$Pass2QValue = 'protein-compact',
+
+    # Peak-pick model (OSPREY_PICK_LDA), also always exported - see the help.
+    [switch]$PickLda,
 
     [string]$FragmentTolerance = $null,
     [string]$FragmentUnit = 'mz',
@@ -318,7 +336,8 @@ Write-Host "  Dataset      : $($ds.Name) ($Files, $($mzml.Count) file(s))"
 Write-Host "  Decoy source : $DecoySource"
 Write-Host "  Library      : $library"
 Write-Host "  Level / pass : $Level / pass $Pass"
-Write-Host "  Pass-2 q mode: $(if ($Pass2QValue) { $Pass2QValue } else { '(default: percolator)' })"
+Write-Host "  Pass-2 q mode: $Pass2QValue"
+Write-Host "  Peak pick    : $(if ($PickLda) { 'learned linear model' } else { 'product form' })"
 Write-Host "  Protein FDR  : $(if ($ProteinFdr) { $ProteinFdr } else { '(off)' })"
 Write-Host "  Output dir   : $OutDir"
 
@@ -350,20 +369,25 @@ else {
 
     $runLog = Join-Path $OutDir 'run.log'
     Write-Host "  [osprey] running (log: $runLog) ..."
-    # Select the 2nd-pass q-value mode for this run only; restore afterward so a
-    # mode never leaks into a later invocation in the same session.
+    # Select the pass-2 mode and the pick model for this run only; restore both
+    # afterward so neither leaks into a later invocation in the same session.
+    # Both are set UNCONDITIONALLY - an unset variable is no longer a neutral
+    # state, it selects whichever default shipped, and the cell would then be
+    # stamped with a configuration it did not run.
     $prevPass2 = $env:OSPREY_PASS2_QVALUE
-    if ($Pass2QValue) { $env:OSPREY_PASS2_QVALUE = $Pass2QValue }
+    $prevPick = $env:OSPREY_PICK_LDA
+    $env:OSPREY_PASS2_QVALUE = $Pass2QValue
+    $env:OSPREY_PICK_LDA = if ($PickLda) { '1' } else { '0' }
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     try {
         & $exe @ospreyArgs *>&1 | Tee-Object -FilePath $runLog | Out-Null
     }
     finally {
         $sw.Stop()
-        if ($Pass2QValue) {
-            if ($null -eq $prevPass2) { Remove-Item Env:\OSPREY_PASS2_QVALUE -ErrorAction SilentlyContinue }
-            else { $env:OSPREY_PASS2_QVALUE = $prevPass2 }
-        }
+        if ($null -eq $prevPass2) { Remove-Item Env:\OSPREY_PASS2_QVALUE -ErrorAction SilentlyContinue }
+        else { $env:OSPREY_PASS2_QVALUE = $prevPass2 }
+        if ($null -eq $prevPick) { Remove-Item Env:\OSPREY_PICK_LDA -ErrorAction SilentlyContinue }
+        else { $env:OSPREY_PICK_LDA = $prevPick }
     }
     if ($LASTEXITCODE -ne 0) {
         throw "Osprey exited $LASTEXITCODE (see $runLog). If -Pass 1, note --fdrbench-pass is not on master."
@@ -405,7 +429,8 @@ $metricsCsv = Join-Path $OutDir 'metrics.csv'
     decoy_source       = $DecoySource
     level              = $Level
     pass               = $Pass
-    pass2_qvalue       = if ($Pass2QValue) { $Pass2QValue } else { 'percolator' }
+    pass2_qvalue       = $Pass2QValue
+    pick_lda           = [int][bool]$PickLda
     protein_fdr        = if ($ProteinFdr) { $ProteinFdr } else { 'off' }
     n_rows             = $m.NRows
     'disc@1%q'         = $m.DiscAt1PctQ

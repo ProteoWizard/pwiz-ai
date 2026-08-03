@@ -30,13 +30,13 @@
     # The pass-2 q-value A/B, launched detached behind whatever is running now.
     Start-Process pwsh -ArgumentList '-NoProfile','-File',
       'C:/proj/ai/scripts/Osprey/SEA-AD/Invoke-SeaAdChain.ps1',
-      '-Pass2Modes','percolator,transfer' -WindowStyle Hidden
+      '-Pass2Modes','protein-compact,transfer' -WindowStyle Hidden
 #>
 #requires -Version 7
 param(
     [string[]]$DecoyModes = @('libdecoy'),
     [string[]]$Ratios = @('1.0'),
-    [string[]]$Pass2Modes = @('percolator'),
+    [string[]]$Pass2Modes = @('protein-compact'),
     [int]$NumFiles = 82,
     [int]$Threads = 30,
     [string]$Tag = '',

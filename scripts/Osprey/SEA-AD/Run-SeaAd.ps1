@@ -33,13 +33,15 @@
     only comparable on ID counts when they share a ratio. See README.
 
 .PARAMETER Pass2Mode
-    percolator / transfer / transfer-compete / protein-compact. See the module's help;
-    `transfer` is the one that forces the resident O(files) first-pass pool.
+    transfer / transfer-compete / protein-compact, defaulting to protein-compact. See the
+    module's help; `transfer` is the one that forces the resident O(files) first-pass pool.
+    `percolator` was removed from Osprey and is no longer accepted here.
 
 .PARAMETER PickLda
-    Use the learned linear peak-pick model instead of the default product-form pick. This
-    MOVES THE DISCOVERY SET and is recorded in the banner and run.log, because Osprey logs
-    nothing that says which pick model a run used.
+    Use the learned linear peak-pick model instead of the product-form pick. This MOVES THE
+    DISCOVERY SET and is recorded in the banner and run.log, because Osprey logs nothing that
+    says which pick model a run used. The module exports OSPREY_PICK_LDA in both directions,
+    so leaving this off pins the product form rather than inheriting Osprey's flipped default.
 
 .PARAMETER LinkFrom
     Optional. Hard-link the Stage 1-4 per-file caches from a COMPLETED run over the same
@@ -73,8 +75,8 @@
 param(
     [ValidateSet('libdecoy', 'gendecoy')] [string]$DecoyMode = 'libdecoy',
     [string]$Ratio = '1.0',
-    [ValidateSet('percolator', 'transfer', 'transfer-compete', 'protein-compact')]
-    [string]$Pass2Mode = 'percolator',
+    [ValidateSet('transfer', 'transfer-compete', 'protein-compact')]
+    [string]$Pass2Mode = 'protein-compact',
     [switch]$PickLda,
     [int]$NumFiles,
     [int]$SkipFirstFiles = 0,

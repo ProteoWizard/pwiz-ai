@@ -27,13 +27,18 @@ only needs to have reached its pass-1 model-diagnostics write - it can be killed
 Arms are discovered from directory names, so new cohorts need no code change:
 
 ```
-seaad-<F>files-libdecoy-r1.0-percolator-f<F>n<N>[s<SKIP>]   contiguous, or a disjoint slice
-seaad-<F>files-libdecoy-r1.0-percolator-<word><F>n<N>       content-defined (spread17, nopool75)
+seaad-<F>files-libdecoy-r1.0-<pass2mode>-f<F>n<N>[s<SKIP>]   contiguous, or a disjoint slice
+seaad-<F>files-libdecoy-r1.0-<pass2mode>-<word><F>n<N>       content-defined (spread17, nopool75)
 ```
 
 `n0` is the max / best-of-runs baseline and is treated as `N=1` (mean of the best 1 per-run score
 IS max). Every arm sharing a cohort label differs only in `N`, so each comparison is a
 within-cohort A/B.
+
+`<pass2mode>` is `percolator` for every arm on disk today, and the harvest patterns still read
+those. It is a variable rather than a literal because Osprey REMOVED that mode - a new arm runs
+`protein-compact` (or whatever `Run-CohortArms.ps1 -Pass2Mode` selects) and is named for it. The
+two are not comparable: build a surface from one mode.
 
 ## Scripts
 

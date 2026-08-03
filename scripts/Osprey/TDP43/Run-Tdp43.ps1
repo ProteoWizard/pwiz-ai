@@ -30,9 +30,10 @@
     explicitly is what makes a full run exit 0. Pass -ExcludePattern '' to include it.
 
 .PARAMETER PickLda
-    Use the learned linear peak-pick model instead of the default product-form pick. This
-    MOVES THE DISCOVERY SET and is recorded in the banner and run.log, because Osprey logs
-    nothing that says which pick model a run used.
+    Use the learned linear peak-pick model instead of the product-form pick. This MOVES THE
+    DISCOVERY SET and is recorded in the banner and run.log, because Osprey logs nothing that
+    says which pick model a run used. The module exports OSPREY_PICK_LDA in both directions,
+    so leaving this off pins the product form rather than inheriting Osprey's flipped default.
 
 .PARAMETER ExperimentAgg
     First-pass EXPERIMENT-score aggregation. Empty (the default) means max - the best score
@@ -70,8 +71,8 @@
 param(
     [ValidateSet('libdecoy', 'gendecoy')] [string]$DecoyMode = 'libdecoy',
     [string]$Ratio = '1.0',
-    [ValidateSet('percolator', 'transfer', 'transfer-compete', 'protein-compact')]
-    [string]$Pass2Mode = 'percolator',
+    [ValidateSet('transfer', 'transfer-compete', 'protein-compact')]
+    [string]$Pass2Mode = 'protein-compact',
     [switch]$PickLda,
     [int]$NumFiles,
     [int]$SkipFirstFiles = 0,

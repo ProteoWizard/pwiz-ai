@@ -119,24 +119,36 @@ function Resolve-LibraryVariant {
 
 .PARAMETER PickLda
     Use the learned resolution-keyed linear peak-pick model (OSPREY_PICK_LDA=1) instead of
-    the default product-form pick (coelution * rt_penalty * ln_intensity).
+    the product-form pick (coelution * rt_penalty * ln_intensity).
 
     This MOVES THE DISCOVERY SET - it is a different peak choice, not a different report -
     so it is recorded in the banner and the run.log START line. Nothing Osprey logs says
     which pick model a run used, so without that record a finished run is unattributable.
-    OSPREY_PICK_LDA is also cleared when this is off, so an exported shell variable cannot
-    silently apply it to an arm that did not ask for it.
+
+    OSPREY_PICK_LDA is exported EXPLICITLY IN BOTH DIRECTIONS - '1' when this is on, '0'
+    when it is off. Clearing it is no longer enough: Osprey's own default flipped ON, so an
+    UNSET variable now means the learned model, and an A/B that only sets the on arm would
+    run the SAME configuration twice while labelling the arms differently. The runner pins
+    the lever rather than inheriting it, in both directions.
+
+    This switch still defaults OFF, which is deliberately NOT Osprey's default: it keeps
+    every arm measured before the default flip comparable with one measured after.
 
 .PARAMETER Pass2Mode
-    percolator      : default. Second-pass Percolator retrain on the reconciled pool.
     transfer        : frozen first-pass model, TRIC-style q-value fill-in, no retrain.
                       NOTE: forces the RESIDENT first-pass pool (O(files)) - see README.
     transfer-compete: frozen model, then a fresh target-decoy competition over the full
                       reconciled population (non-depleted null).
-    protein-compact : frozen model, competition CONSTRAINED to peptides of proteins detected
-                      in the first pass (>= 2 peptides), target+decoy pairs kept.
+    protein-compact : default. Frozen model, competition CONSTRAINED to peptides of proteins
+                      detected in the first pass (>= 2 peptides), target+decoy pairs kept.
     Passed through OSPREY_PASS2_QVALUE, which this function clears first so a stale shell
-    variable can never silently change an arm.
+    variable can never silently change an arm, and then ALWAYS sets - see below.
+
+    `percolator` is gone. Osprey removed the second-pass Percolator retrain and now raises a
+    startup ERROR on an unrecognized OSPREY_PASS2_QVALUE, so it is out of the ValidateSet
+    here too: a caller that still asks for it fails at parameter binding, in a second,
+    instead of after Stage 1-5. Historical run directories carrying a `-percolator` name
+    component are from before that removal and are not reproducible with a current binary.
 
 .PARAMETER FdrBenchPass
     'none' writes no FDRBench TSV at all. '1' forces the RESIDENT first-pass pool, which
@@ -148,8 +160,8 @@ function Invoke-OspreyDatasetRun {
         [Parameter(Mandatory)] [hashtable]$Dataset,
         [ValidateSet('libdecoy', 'gendecoy')] [string]$DecoyMode = 'libdecoy',
         [string]$Ratio = '1.0',
-        [ValidateSet('percolator', 'transfer', 'transfer-compete', 'protein-compact')]
-        [string]$Pass2Mode = 'percolator',
+        [ValidateSet('transfer', 'transfer-compete', 'protein-compact')]
+        [string]$Pass2Mode = 'protein-compact',
         [switch]$PickLda,
         [int]$NumFiles,
         # Take the $NumFiles files AFTER skipping this many, so cohorts of the same size can
@@ -493,8 +505,13 @@ function Invoke-OspreyDatasetRun {
                    'OSPREY_DECOY_MAX_FRAG_OVERLAP', 'OSPREY_DECOY_MAX_SEQ_IDENTITY') {
         Remove-Item "Env:\$k" -ErrorAction SilentlyContinue
     }
-    if ($Pass2Mode -ne 'percolator') { $env:OSPREY_PASS2_QVALUE = $Pass2Mode }
-    if ($PickLda) { $env:OSPREY_PICK_LDA = '1' }
+    # Both levers are set UNCONDITIONALLY, in both directions. Leaving a variable unset used to
+    # mean "the old default", and both defaults have since flipped - OSPREY_PASS2_QVALUE unset is
+    # now protein-compact and OSPREY_PICK_LDA unset is now the learned model. An arm that only
+    # exported its ON value would therefore run a DIFFERENT configuration than its banner and
+    # run.log claim, and the two arms of an A/B would be the same run under two labels.
+    $env:OSPREY_PASS2_QVALUE = $Pass2Mode
+    $env:OSPREY_PICK_LDA = if ($PickLda) { '1' } else { '0' }
     if ($ExperimentAgg) { $env:OSPREY_EXPERIMENT_AGG = $ExperimentAgg }
 
     $log = Join-Path $OutDir 'run.log'
