@@ -403,6 +403,63 @@ invert the conclusion and stop a port that the evidence supports.
 7-8mer buckets to come back near 1x and the long bucket well above. They came back at 15-24x. The
 mass-matched control is what makes that trustworthy: 51.4% against 3.3% in the same isobaric
 window, with the tool returning 1.0x on a synthetic set where no relationship exists.
+### 2026-08-03 06:39 - `gated-no-iso` LANDS AND SETTLES IT: the two entrapment designs CONVERGE. Ship the gate.
+
+The final arm produced the strongest evidence in this series, and it **reverses the "do not ship"
+recommendation** given a few hours earlier in this same session.
+
+| arm | disc@1%q | trueFDP% | nEnt | matched@1% | eff% | matched-disc FDP |
+|---|---|---|---|---|---|---|
+| gated-no-il (shuffle) | 25,454 | **0.739** | 182 | 26,348 | 78.27 | 0.356% |
+| **gated-no-iso** | 25,998 | **0.895** | 226 | 26,327 | 75.62 | **0.515%** |
+| arabidopsis-no-il (foreign) | 26,085 | **0.992** | 251 | 26,085 | 78.71 | 0.608% |
+| **arabidopsis-no-iso** | 25,304 | **0.895** | 220 | 25,464 | 73.53 | **0.495%** |
+
+**THE GATE MOVED THE TWO DESIGNS IN OPPOSITE DIRECTIONS AND THEY MET.**
+
+| | shuffle | foreign | cross-design disagreement |
+|---|---|---|---|
+| before (`no-il`) | 0.739% | 0.992% | **+34.2% +- 9.7% = 3.5 sigma** |
+| after (`no-iso`) | **0.895%** | **0.895%** | **0.0% = 0.0 sigma** |
+
+Matched-discovery control shows the same collapse: 0.356 vs 0.608 (71% apart) -> 0.515 vs 0.495
+(4% apart).
+
+**Shuffle FDP went UP 21.0%; foreign went DOWN 9.8%.** Two independent nulls - an anagram shuffle
+of the human proteome, and a foreign plant proteome - built by different mechanisms with no
+reason to share a bias, converge on the same value once the same correction is applied to both.
+**That is the classic signature of removing design-specific bias**, and it is the strongest
+evidence obtainable here without ground truth.
+
+**THE PRINCIPAL OBJECTION IS REFUTED BY THIS RESULT.** The case against the gate, argued at
+length above, was that it "removes valid false-discovery models and silently biases every FDP
+estimate downward" - the failure mode that would be least forgivable. **It does not bias
+downward. It moved shuffle UP.** A correction that flattered the estimator could not do that; a
+correction that removes a design-specific artifact must.
+
+Note also which direction each design was wrong in, which the convergence now identifies:
+* **shuffle was reading LOW** (0.739 vs 0.895) - anagram entrapment under-reports;
+* **foreign was reading HIGH** (0.992 vs 0.895) - conserved orthologs over-report.
+
+Both readings appear earlier in this file as competing hypotheses about which null to trust
+(finding 5's "two readings"). **Both were right, about different designs**, and the gate is what
+makes them commensurable.
+
+**FINAL RECOMMENDATION - SHIP THE GATE AS IMPLEMENTED.** Isobaric (0.01 Da) + fragment overlap
+> 0.70, set-wise against all targets, RETRY not removal, **all lengths**, both entrapment designs
+and the decoy ladder. No length cutoff, no exclusion list, no design scoping.
+
+**Costs, stated plainly so nobody is surprised:** union efficiency falls on both arms
+(-2.64 pts shuffle, -5.18 pts foreign); foreign loses 3.0% of discoveries while shuffle gains
+2.1%; ~50,000 quartets are regenerated and 1,428 / 648 are lost. These are real and they are the
+price of an oracle two independent designs agree on.
+
+**What was abandoned along the way, and why - so it is not re-litigated:**
+* *length-aware gate* - no principle behind it; the odds ratio shows short shadows are 15-24x
+  detection-driven, not chance, so a chance-calibrated threshold would not exclude them either;
+* *curated exclusion list* - defensible in isolation but unnecessary once the convergence shows
+  the general rule is correct, and it would not have fixed the shuffle arm's LOW reading at all;
+* *do nothing / document* - would have left a 3.5 sigma disagreement between two nulls standing.
 
 ### 2026-08-03 04:00 - DEFINITIVE: the full gate is right at ALL lengths. My length-aware recommendation is WITHDRAWN.
 
