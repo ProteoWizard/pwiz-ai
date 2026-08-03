@@ -381,6 +381,29 @@ Tool: `ai/scripts/Osprey/Entrapment/contamination_corrected.py`.
 
 ## Progress Log
 
+### 2026-08-03 - RETRACTED before the shuffle arm lands: my "a large shuffle move falsifies it" test
+
+**Do not apply the stop-criterion I wrote into the delivery entry and the shipped PROVENANCE.** It
+said: *"shuffle arm FDP should barely move; a large move falsifies the framing and should stop the
+Osprey port."* That was premised on the shuffle arm's removed population being detected at roughly
+its own share - the same "shared background" assumption the 04:00 measurement below destroys.
+
+Measured, the shuffle arm's short shadows are **18.1x** detection-driven overall (15.3x at length
+7, 22.8x at 8). So a **fall in the shuffle arm's FDP is now the EXPECTED and CORRECT result**, and
+the post-hoc simulation already sized it at -8.3%. Reading such a fall as falsification would
+invert the conclusion and stop a port that the evidence supports.
+
+**What would actually falsify the framing now**, stated properly this time:
+* shuffle-arm FDP falling much MORE than the ~8% the simulation predicts, while discoveries hold -
+  that would suggest the gate is removing something other than shadowing-driven detections;
+* or the odds ratio collapsing toward 1 on the shuffle arm's own accepted set, which it does not
+  (18.1x).
+
+**My prediction was wrong and the tool I built to settle it is what proved it.** I expected the
+7-8mer buckets to come back near 1x and the long bucket well above. They came back at 15-24x. The
+mass-matched control is what makes that trustworthy: 51.4% against 3.3% in the same isobaric
+window, with the tool returning 1.0x on a synthetic set where no relationship exists.
+
 ### 2026-08-03 04:00 - DEFINITIVE: the full gate is right at ALL lengths. My length-aware recommendation is WITHDRAWN.
 
 Ran the Carafe session's `shadow_detection_driver.py` - the measurement they identified as
