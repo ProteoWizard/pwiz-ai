@@ -1,12 +1,17 @@
 # TODO-20260731_osprey_bounded_stage5_handoff.md
 
 ## Branch Information
-- **Branch**: `Skyline/work/20260731_osprey_bounded_stage5_handoff`
-- **Base**: `master` (at `d030522344`, i.e. after #4508 / #4509)
-- **Created**: 2026-07-31
+- **Branch**: `Skyline/work/20260803_osprey_bounded_stage5_handoff`
+- **Base**: `master` (at `9804e90156`, i.e. after #4512)
+- **Created**: 2026-07-31 (branch cut 2026-08-03)
 - **Status**: In Progress
+- **GitHub Issue**: [#4526](https://github.com/ProteoWizard/pwiz/issues/4526)
 - **Module**: `osprey`
 - **PR**: (pending)
+
+> The `Skyline/work/20260731_osprey_bounded_stage5_handoff` branch name on `origin` was
+> reused by the progress-reporting work that became #4513 (merged), so it carries none of
+> this. Work happens on the `20260803_` branch above.
 
 ## Problem
 
@@ -190,18 +195,102 @@ hold, the coupling model is wrong and the planning loop needs its own allocation
 has no `-Task`. Add it (recorded in the banner and the `run.log` START/DONE lines, same
 reasoning as `-PickLda`: an unrecorded setting makes a finished run unattributable).
 
+## Measured 2026-08-03 (answers open questions 2 and 4)
+
+### Q2 - what the 28 GB is made of: bare objects. Answered from code; no dotMemory needed.
+
+Survivors are reloaded by `ParquetScoreCache.LoadFdrStubsFromParquet`
+(`ParquetScoreCache.cs:802-815`), which sets only the 10 scalar columns plus
+`ModifiedSequence`. **All six reference fields are left null** - `Features`,
+`CwtCandidates`, `FragmentMzs`, `FragmentIntensities`, `ReferenceXicRts`,
+`ReferenceXicIntensities`. There is no payload to shed, so a payload fix recovers nothing
+and the architectural change is the only lever on the object count.
+
+`FdrEntry` = 14 doubles + 7 references + 3 small scalars = **~208 B/object** including
+header and the `List<T>` slot -> 88.9 M objects at ~18.5 GB. The remaining ~5-6 GB is one
+`ModifiedSequence` string per row, read from parquet with **no interning on that path**
+(the library-load path interns - `Interned library strings: 10481622 distinct / 21174537
+total (50.5% collapsed)`). **Unverified**: whether Parquet.Net shares dictionary-encoded
+string instances. If it does not, interning there is a cheap independent ~5 GB.
+
+### Q4 (new) - the `protein-compact` stratum is 84% of the buffer
+
+Measured directly from all 163 `.1st-pass.fdr_scores.bin` sidecars, splitting the
+compaction gate (`FirstJoinTask.ComputeFirstPassBaseIds`) into its three clauses
+(script: `ai/.tmp/gate_split.py`):
+
+| gate clause | base_ids | survivor rows |
+|---|---|---|
+| `RunPeptideQvalue <= 0.01` | 58,429 | |
+| `RunProteinQvalue <= 0.01` | 59,857 | |
+| union of the two FDR clauses | **59,857** | **14,501,070** |
+| actual, with `stratum.Contains(baseId)` | **446,343** | **88,875,901** |
+
+The stratum clause admits **386,486 extra base_ids (86.6%) and 74.4 M extra entries
+(84%)** - precursors that passed first-pass FDR in no file, carried resident through the
+whole 5.5-hour rescore. Their consumer, the pass-2 stratified competition, **already
+streams one file at a time**.
+
+**Open, deliberately out of scope for the first PR**: whether stratum-only survivors need
+to be materialized as Stage-6 `FdrEntry` at all, or could travel as a base_id set and be
+materialized at pass 2 from the reconciled parquet. That is a ~6x term on the same buffer,
+independent of the streaming change. Recorded so it is not lost.
+
+### Scaling is super-linear, not linear
+
+The survivor count is O(files x passing base_ids) and the base_id set itself grows with
+files, so the product outruns the file count. Same arm, same library, same dataset:
+
+| files | survivor entries | passing base_ids | entries/file | measured floor |
+|---|---|---|---|---|
+| 3 | 408,685 | 99,560 | 136k | |
+| 6 | 1,140,686 | 133,788 | 190k | |
+| 10 | 2,210,261 | 172,381 | 221k | |
+| 20 | 5,178,890 | 210,126 | 259k | 6.65 GB |
+| 40 | 13,398,508 | 272,526 | 335k | |
+| 163 | 88,875,901 | 446,343 | 545k | 28.17 GB |
+
+20 -> 163 files is **8.2x the files but 17.2x the entries**. This is why the residual
+#4488 measured did not hold: that PR projected ~19 MB/file and "no longer the scaling
+blocker"; this run is **173 MB/file**, and rising.
+
+### Phase split confirms #4488 worked and this is the floor beneath it
+
+`perfviz.py` over the phase-split `run-saved.log`:
+
+| phase | wall | managed floor | verdict |
+|---|---|---|---|
+| `PerFileScoring` | 10:36:13 | 5.2 -> 5.7 GB (+3 MB/file) | LEVEL |
+| `FirstPassFDR` | 1:15:35 | 25.1 -> 28.4 GB, peak 75.9 GB | the handoff is built here |
+| `PerFileRescoring` | 5:31:35 | 28.2 -> 28.9 GB (+4 MB/file) | LEVEL |
+
+## Regression Test
+
+- **Test name**: (filled in once written)
+- **Test project**: Osprey.Test (guard/token pinning) + `regression.ps1` (byte parity)
+- **Fails on master**: (pending)
+- **Passes on fix**: (pending)
+
+Two distinct verifiers are needed, because the change has two halves:
+
+1. **`ResidentPoolGuardTest`** pins `ResidentPaths.KNOWN_UNFIXED` exactly, so adding
+   `compacted-entries-buffer` forces a deliberate test edit - that is the ratchet working.
+   Extend it to cover the post-compaction trigger, so a future unnamed post-compaction
+   resident structure fails a test rather than passing silently.
+2. **Byte parity** is `regression.ps1` (`-Dataset Stellar` mode1/2/3, `-Dataset All`
+   before merge) against the committed golden, which must not move. The memory claim
+   itself is not unit-testable; it is the 20-file A/B plus the ~75 min Stage-5-only
+   `-LinkFrom` re-measure at 163 files.
+
 ## Open questions
 
 1. ~~Does the `percolator` pass-2 retrain need the whole rescored pool?~~ **Moot** - pass-2
    Percolator is being removed (see "The merge node" above). Every replacement candidate is a
    frozen-model mode and those stream one file at a time. Do not preserve `percolator`
    viability as a design constraint.
-2. What is the 28 GB actually MADE of - 88.9 M bare objects at ~150 B, or arrays still hanging
-   off `FdrEntry`'s six reference fields (`Features`, `CwtCandidates`, `FragmentMzs`,
-   `FragmentIntensities`, `ReferenceXicRts`, `ReferenceXicIntensities`)? `FirstJoinTask`
-   already nulls `Features` before compaction; the other five are unverified. If arrays
-   survive, a payload fix might recover most of the 28 GB far more cheaply than the
-   architectural change - worth ONE dotMemory snapshot after `First-pass compaction:` at 60
-   files before committing to the full refactor.
+2. ~~What is the 28 GB actually MADE of?~~ **Answered above** - bare objects, all six
+   reference fields null. No payload fix available.
 3. Should the guard's error text distinguish "unnamed path" from "named but not allowed" for
    post-compaction structures, or is one message enough?
+4. ~~How much of the survivor set is the `protein-compact` stratum?~~ **Answered above** -
+   84% of entries. Follow-up lever, not first-PR scope.
