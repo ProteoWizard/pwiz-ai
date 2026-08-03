@@ -188,32 +188,58 @@ for one base_id differs between the in-process path and the merge node.**
    transfer-compete rewriting every survivor. No: `transfer` carries pass-1 q through for
    EVERY survivor and mode 3 PASSES.
 
-### Leading mechanism, not yet confirmed
+### 5. REFUTED by measurement: the stratum differs between the paths
 
-`BuildProteinCompactStratum` keeps proteins with **>=2** detected peptides - a THRESHOLD. A
-protein sitting exactly on that boundary flips on one detected peptide, and when it flips,
-EVERY peptide of that protein enters or leaves the constrained competition. So a sub-threshold
-difference between the two paths in an internal quantity (`result.DetectedPeptides`) - one
-invisible in reported output under transfer and transfer-compete, which is exactly why both
-pass - is amplified by protein-compact into a visible output difference.
+Instrumented with `-KeepOutput` (run `regression-20260802_171101`), reading
+`Stellar/straight/straight.log`, `Stellar/chain/phase2_firstjoin/phase2.log` and
+`Stellar/chain/phase4_mergenode/phase4.log`:
 
-If that is right, the underlying difference is **pre-existing in shipped code** and this work
-only made it visible by promoting a frozen mode to the default. Compare
-[[project_osprey_firstjoin_order_sensitivity]], which records that mode 3 pins the
-`--input-scores` order and thereby masks a latent HPC production-parity risk.
+| path | proteins >=2 | stratum base_ids | detected peptides |
+|---|---|---|---|
+| straight-through | 4178 | **165006** | 31018 |
+| HPC phase 2 (FirstJoin) | 4178 | **165006** | 31018 |
+| HPC phase 4 (merge node, reloaded) | - | **165006** | - |
 
-**This property is worth knowing regardless of the bug**: protein-compact is a threshold
-amplifier. Internal noise that no other mode can express becomes reported-output noise under it.
+Reconciled survivors 994,899 and mapped survivors 984,531 in BOTH paths.
 
-### Next step (mechanical)
+**The persisted stratum round-trips exactly, so the sidecar work is correct and is NOT the
+cause.** This also kills the threshold-amplification story an earlier revision of this file
+recorded as the leading mechanism: `DetectedPeptides` is identical (31,018 both paths), so no
+protein sits astride the >=2 gate differently. Do not revive that explanation.
 
-Instrument, do not reason further. `BuildProteinCompactStratum` already logs
-`"protein-compact: {N} proteins with >=2 detected peptides -> stratum of {M} base_ids (from {K}
-detected peptides)"`. Capture that line from the straight-through run and from HPC phase 2, plus
-the `"Reloaded the persisted protein-compact stratum ({M} base ids)"` line the merge node now
-logs, and compare N / M / K. Equal M with a failing mode 3 would refute the membership story
-outright; different M localises it to `DetectedPeptides`. The regression run dir self-cleans, so
-this needs `-KeepOutput` / `-KeepRunDirs`.
+### What the divergence actually IS (measured from the two blibs)
+
+Queried both retained blibs for the precursor (`ai/.tmp/probe-precursor.ps1`, diagnosis only):
+
+| file | straight-through | HPC chain |
+|---|---|---|
+| `..._20.mzML` | RT 23.10, score 0.00 | RT 23.10, score 0.00 |
+| `..._21.mzML` | RT 23.08, score 0.00, **bestSpectrum=1** | RT 23.08, score 0.00 |
+| `..._22.mzML` | **RT NULL, score 1.00** | RT 23.01, score 0.00, **bestSpectrum=1** |
+
+Per the blib schema (`docs/08-blib-output-schema.md`), a NULL `retentionTime` means the
+precursor did NOT pass RUN-level FDR in that file. So the real difference is narrow and
+specific: **`DAADLLSPLALLR2` fails run-level FDR in file _22 under the straight-through run and
+passes it in the HPC chain.** Everything else - the experiment-level best-run flip, the
+RefSpectra RT/score rows - follows from that one run-level q.
+
+### Where it must be
+
+Run-level q under protein-compact comes from the STRATUM-FILTERED per-file competition, which is
+the one code path exclusive to the failing mode (`StreamingFdr.cs:207-213` builds a filtered
+`allIdx`, then `CompeteFromIndices` + `ComputeConservativeQvalues` over that subset; :221 drops
+non-survivors). `transfer` and `transfer-compete` never build that filtered list, which is
+consistent with both passing.
+
+Note the difference is q=1.00 vs q~1e-4, NOT a near-tie - so this is a survivor/winner
+membership difference, not float drift.
+
+### Next step
+
+Instrument the run-level leg: for this one `base_id` in file _22, dump the frozen-model score,
+its paired decoy's score, whether it is in `survivorEntryIds`, and the q it receives - from both
+the straight-through pass 2 and the merge node. That distinguishes "the pair's winner flips"
+from "the entry is a survivor in one path and not the other", which are different bugs.
 
 Then decide: fix here, or re-baseline with mode 3 knowingly red and fix in a follow-up. That is
 Brendan's call, not an implementation detail - it is the difference between shipping a default
