@@ -44,14 +44,46 @@ instance of them shifting when an unrelated change (moving the "Intensity" and
    the move and the click recreates the curve holding that dot, resets its
    position, and the click is discarded silently
    (`GetValidPeakBoundaryTime` returns zero and the handler returns). The move
-   and the click now happen in a single UI action.
+   and the click now happen in a single UI action, and the click is issued only
+   when that move produced the dot.
+4. **Product fix (`GraphChromatogram`)**, added after the code review: nothing
+   cleared `_showingTrackingDot` when a rebuild re-inserts the tracking curve
+   (`CreateScanPoint` is invisible and at the origin), so after any chromatogram
+   refresh the cursor stayed a hand and the user's click on the dot did nothing
+   until they moved the mouse. The flag is now cleared where the curves are
+   recreated, and `FireClickedChromatogram` returns instead of dereferencing a
+   null `_closestCurve`.
 
 ## Files changed
 
+- `pwiz_tools/Skyline/Controls/Graphs/GraphChromatogram.cs` - clear
+  `_showingTrackingDot` on rebuild; null guard in `FireClickedChromatogram`;
+  comment on why `TestMouseDown` truncates.
 - `pwiz_tools/Skyline/TestFunctional/FullScanGraphTest.cs` - `PeaksMatched`
-  assertions; `ExpectedLabelCount` deleted.
-- `pwiz_tools/Skyline/TestUtil/AbstractFunctionalTestEx.cs` - move + click in
-  one `RunUI` in `ClickChromatogram`.
+  assertions in `RunUI` with `AssertEx`; `TestScale(100, 600, 0, 400)`;
+  `ExpectedLabelCount` deleted.
+- `pwiz_tools/Skyline/TestUtil/AbstractFunctionalTestEx.cs` - move, verify and
+  click in one `RunUI` in `ClickChromatogram`, with retry and an assert.
+
+## Code review (max, 2026-08-03) - 10 findings, 7 fixed, 2 skipped, 1 wrong
+
+Two suggested fixes were tried and **reverted after they broke tests**, both
+deterministic across `TestFullScanGraph`, `TestEADIons`, `TestFullScanProperties`
+and `TestIgnoreSimScans`:
+
+- **Rounding `TestMouseDown` to match `TestMouseMove`** (offscreen + onscreen).
+  `TransformCoordinates` returns a point inside the pane named by `paneKey`;
+  truncating keeps it there, rounding up can land on the neighboring pane, where
+  the click reads a tracking dot that was never positioned and is discarded.
+  The truncation now carries a comment so it is not "fixed" again.
+- **`TestMouseMove` calling `HideFullScanTrackingPoint()` first**, mirroring
+  `graphControl_MouseMoveEvent` (onscreen only; offscreen passed). Left out; the
+  null guard plus the same-action `IsOverHighlightPoint` check cover the stale
+  dot and the null dereference the review was worried about.
+
+Skipped: restoring a painted-label check at the `PeaksMatched` call sites (would
+reintroduce the screen dependence), and reworking `GraphFullScan.IonLabels` to
+drop its `Program.SkylineOffscreen` branch (separate change to shipping UI code).
 
 ## Verification
 
@@ -62,10 +94,19 @@ instance of them shifting when an unrelated change (moving the "Intensity" and
 - [x] `TestFullScanGraph` onscreen (ja) - 0 failures. Covers the third constant
   the helper carried.
 - [x] CodeInspection green.
-- [ ] `/code-review max` findings settled (developer-invoked; blocks the PR).
+- [x] `/code-review max` findings settled.
+- [x] Final state re-verified after the review fixes: `TestFullScanGraph`,
+  `TestEADIons`, `TestFullScanProperties`, `TestIgnoreSimScans` all green
+  offscreen and onscreen (en), `TestFullScanGraph` green onscreen (ja),
+  CodeInspection green.
 
 ## Notes
 
 - `ClickChromatogram` is shared test infrastructure, so the race fix affects
   every functional test that clicks a chromatogram to open the Full Scan graph,
-  not only this one. TeamCity coverage on the PR is the check for that.
+  not only this one. The three other local tests that click chromatograms are
+  covered above; the tutorial and perf callers (DiaSwath, DiaUmpire, Ms1
+  filtering, EncyclopeDIA, Waters SONAR, HiRes metabolomics) are left to
+  TeamCity.
+- Onscreen runs are what caught the second reverted attempt - offscreen passed
+  it. Worth running both for any change to the tracking-dot path.
