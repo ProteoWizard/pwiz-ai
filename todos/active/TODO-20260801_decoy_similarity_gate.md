@@ -416,6 +416,41 @@ invert the conclusion and stop a port that the evidence supports.
 7-8mer buckets to come back near 1x and the long bucket well above. They came back at 15-24x. The
 mass-matched control is what makes that trustworthy: 51.4% against 3.3% in the same isobaric
 window, with the tool returning 1.0x on a synthetic set where no relationship exists.
+### 2026-08-03 - CORRECTION to #4522: the broad gate DOES reduce co-assignment, but not the target side
+
+Measured the co-assignment metric on the `-no-iso` arms too, completing the series. **The claim
+that the effect is "invariant to library filtering" - posted in #4522 - is wrong as stated and has
+been corrected in a comment on the issue.**
+
+| arm | entrapment | target bg | enrichment |
+|---|---|---|---|
+| ungated | 23.8% | 4.6% | 5.2x |
+| gated | 18.1% | 4.5% | 4.0x |
+| gated-no-il | 31.6% | 4.8% | **6.6x** |
+| **gated-no-iso** | **19.0%** | 5.1% | **3.7x** |
+| arabidopsis | 20.1% | 4.3% | 4.7x |
+| arabidopsis-no-il | 28.4% | 5.0% | **5.7x** |
+| **arabidopsis-no-iso** | **20.8%** | 5.0% | **4.2x** |
+
+**The set-wise isobaric gate DOES reduce entrapment co-assignment** - 6.6x -> 3.7x (shuffle),
+5.7x -> 4.2x (foreign), the lowest enrichment in each design. Mechanistically expected: it removes
+exactly the isobaric high-overlap population most likely to share a peak. **It does not eliminate
+it** - 19-21% of accepted entrapment still sits on a better-scoring target's peak.
+
+**The target background is untouched by every filter: 4.3-5.1% across all seven variants.** ~1,200
+accepted target IDs per run, and no library-side intervention moved it at all.
+
+**This is a better argument for the diagnostic than the one originally filed.** Not "nothing
+touches it", but: *the library lever exists, it costs ~50,000 quartets, it removes ~40% of the
+entrapment-visible portion, and it reaches none of the target-side effect users care about.*
+
+**It also bears on the revert decision, in both directions - recorded rather than spun.** The
+reverted gate had a benefit on this metric that was not counted when the decision was made
+(6.6x -> 3.7x). Set against that: the target-side number, which is the one that matters for
+users, is identical with and without it (4.8% vs 5.1%). **The gate improves the measuring
+instrument, not the measurement.** That is consistent with reverting it, but the benefit was real
+and should not be written out of the record.
+
 ### 2026-08-03 07:10 - Filed #4522; the effect is INVARIANT to every library filter we built
 
 Ran the co-assignment metric across the whole series, pre- and post-filter. **Brendan predicted
