@@ -519,6 +519,22 @@ whose HPC and straight-through paths agree and one whose paths are known not to.
 
 ## Progress Log
 
+### 2026-08-03 - `-Dataset All` FINISHED: every self-consistency mode green on all four datasets
+
+The run that was in flight at the previous session's end completed. **Mode 3 passes on ASTRAL
+too**, not only Stellar - the mode-3 fix holds at the larger dataset, which is the one that
+matters, since production runs the HPC path at 82-200+ files.
+
+| dataset | mode 1 (golden) | mode 1b (diagnostics) | mode 2 resume | mode 3 HPC chain | mode 4 warm |
+|---|---|---|---|---|---|
+| Stellar | FAIL (78) | - | PASS | **PASS** (03:34) | PASS |
+| StellarLibDecoy | FAIL (78) | FAIL (18) | PASS | **PASS** (07:45) | PASS |
+| StellarGenDecoyEntrap | FAIL (78) | FAIL (18) | PASS | **PASS** (05:14) | PASS |
+| Astral | FAIL (82) | FAIL (8) | PASS | **PASS** (15:31) | PASS |
+
+The mode 1 / 1b failures ARE the pending re-baseline - they are the committed goldens, taken
+before the flips. Nothing else is red. Log: `ai/.tmp/regression-all.log`.
+
 ### 2026-08-02 (late) - mode 3 FIXED both sides; re-baseline now blocked only on SHIP #2
 
 **All code complete and green except the golden re-baseline.** pwiz `8796e7a13`, maccoss/osprey
