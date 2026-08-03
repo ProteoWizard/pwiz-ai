@@ -457,10 +457,40 @@ present, and therefore not a model of a false discovery.
   misses the class it is hunting: `IVLIGDSGVGK`'s C-terminal 8-mer is `IGDSGVGK` against the
   target's `LGDSGVGK`, so a raw index scored it 0.500 when the truth is 0.900.
 
-**SHIP #2 - an ORTHOLOG filter for foreign-organism entrapment. READY.**
+**SHIP #2 - WIDEN THE EXISTING OVERLAP GATE FROM PAIRWISE TO SET-WISE. READY. No new metric.**
 
-Reject any foreign-organism entrapment candidate whose ungapped, I/L-normalised sequence
-identity to **any** target exceeds **~0.80**. **Do not apply to shuffle entrapment.**
+**The 2026-08-01 decision to implement the fragment-overlap gate ONLY, not sequence identity,
+STANDS. Its revisit condition is explicitly NOT met.** Measured on accepted arabidopsis-no-il
+entrapment with a mass-matched candidate:
+
+| | count |
+|---|---|
+| **IDENTITY-ONLY** (identity >= 0.70, overlap <= 0.40) - the revisit condition | **0** |
+| OVERLAP-ONLY (overlap > 0.70, identity < 0.70) | **0** |
+| **BOTH** | **8** |
+
+Identity and overlap flag the identical set. **Identity adds nothing**, the "identity-only case
+that shadows an accepted target and co-elutes" trigger has not fired, and the original
+mechanistic argument survives intact - the orthologs have fragment overlap **0.72-0.87**, so they
+are caught by the causal quantity, not missed by it. The parity argument also survives: no new
+gate in any implementation.
+
+**The defect was the gate's SCOPE, not its metric.** It compares each entrapment candidate to its
+OWN PAIRED target only. `EILHIQGGQCGNQIGAK` was paired with a PATZ1 peptide (low overlap,
+passed) and never compared to beta-tubulin, which it overlaps at 0.750.
+
+**SPEC**: compare each foreign-organism entrapment candidate against **all** targets, not just
+its pair, using the **existing fragment-overlap metric**. For the set-wise comparison use
+**overlap > 0.70 AND precursor mass within ~5 Da** - the 0.40 pairwise threshold is meaningless
+against 1.39M targets (flags 33%), and the mass constraint is what distinguishes a co-isolating
+near-copy from a chance fragment collision. **Do not apply to shuffle entrapment**: after SHIP #1
+they carry 1 marginal case in 95 accepted entrapment, and a set-wise rule would strip ~3.7% of
+valid entrapment for no measured benefit.
+
+*(An earlier draft of this section specified a sequence-IDENTITY filter at 0.80. That was wrong -
+identity was measured as a DESCRIPTOR of the flagged cases and mistakenly promoted to the
+CRITERION. The 0-identity-only result above shows it would flag the same 8 while requiring a new
+algorithm in four implementations across three languages.)*
 
 * After SHIP #1 the shuffle libraries are clean (1 marginal case in 95 accepted entrapment);
   applying an overlap-based all-targets rule to them would remove ~3.7% of valid entrapment for
@@ -524,14 +554,16 @@ collisions that SHIP #1 already removes. **Foreign entrapment retains a distinct
 population** - beta-tubulin, aldolase, the `DLKPSN` protein-kinase catalytic loop, a Rab GTPase
 `STIGVDFK` region.
 
-**Use SEQUENCE IDENTITY, not fragment overlap.** Orthologs cluster at 0.84-0.88; the lone
-shuffle case is 0.75 over visibly unrelated sequences. Identity separates evolutionary homology
-from chance fragment collision, which fragment overlap alone does not.
+**IDENTITY IS NOT NEEDED - overlap flags the same set.** An earlier draft here recommended a
+sequence-identity criterion because the flagged orthologs sit at 0.84-0.88 identity. That was a
+mistake: identity was a DESCRIPTOR of what overlap had already flagged, not an independent
+discriminator. Measured directly, identity-only cases = **0**, overlap-only = **0**, both = **8**.
+The 2026-08-01 decision against an OpenSWATH-style identity gate stands.
 
-**SPEC**: for foreign-organism FASTA entrapment only, reject any candidate whose ungapped
-sequence identity to ANY target exceeds ~0.80 (I/L-normalised). Do NOT apply to shuffle
-entrapment - shuffles cannot be orthologs, and the earlier all-targets overlap rule would have
-removed ~3.7% of valid shuffle entrapment for no measured benefit.
+**SPEC**: for foreign-organism FASTA entrapment only, apply the EXISTING fragment-overlap gate
+**set-wise** (against all targets, not just the paired one) at **overlap > 0.70 with precursor
+mass within ~5 Da**. Do NOT apply to shuffle entrapment - after SHIP #1 they carry 1 marginal
+case in 95, and a set-wise rule would strip ~3.7% of valid shuffle entrapment for no benefit.
 
 **This also dissolves the concern below.** An 84-88% identical plant peptide whose human twin is
 abundant is shadowing a PRESENT peptide, not modelling an absent one, so removing it is a
