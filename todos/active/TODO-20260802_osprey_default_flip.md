@@ -527,6 +527,36 @@ whose HPC and straight-through paths agree and one whose paths are known not to.
 
 ## Progress Log
 
+### 2026-08-03 - STEP 2 DONE: all four goldens CAPTURED, none refused
+
+```
+Stellar               straight-through wall 03:57; blib 25,395,200   golden CAPTURED
+StellarLibDecoy       straight-through wall 04:34; blib 25,681,920   golden CAPTURED
+StellarGenDecoyEntrap straight-through wall 04:02; blib 28,598,272   golden CAPTURED
+Astral                straight-through wall 12:37; blib 97,013,760   golden CAPTURED
+```
+
+**Every blib is byte-size identical to the corresponding straight-through leg of the pre-capture
+`-Dataset All` run**, and Astral additionally matches the C# leg of this morning's cross-impl
+comparison (97,013,760). The code has not moved since `8796e7a13`, so that is the expected result
+and its absence would have been the signal.
+
+**No dataset was REFUSED**, which is worth stating for `StellarGenDecoyEntrap` specifically: it is
+the dataset carrying the entrapment diagnostics and the one whose pass-1 combined FDP rose to
+1.535% from 1.448% in the earlier golden diff. Tier 2 runs BEFORE anything is written, so that
+calibration was judged against `MaxPass1Fdp = 0.02` and accepted rather than blessed by default.
+
+**WORKING TREE STATE**: `pwiz_tools/Osprey/osprey-regression.data/**` now holds the new goldens
+UNCOMMITTED, deliberately. They are not committed until step 3 verifies them - a half-captured or
+unverified baseline in git is indistinguishable from a legitimate one later, which is the failure
+`-CreateGolden`'s own tier-2 ordering exists to prevent one level down. Docs were committed
+separately (`d8aee4ba0`) so the golden commit stays a pure data change.
+
+**Launch gotcha that cost ~86 minutes, recorded so it is not repeated**: `Start-Process` does NOT
+inherit PowerShell's `Set-Location` as the child's working directory, so a RELATIVE script path
+(`./pwiz_tools/Osprey/regression.ps1`) fails instantly with "is not recognized as the name of a
+script file" and the run never starts. Use an absolute script path AND `-WorkingDirectory`.
+
 ### 2026-08-03 - STEP 1 GREEN: Astral cross-impl PASSES at bit-parity
 
 ```
