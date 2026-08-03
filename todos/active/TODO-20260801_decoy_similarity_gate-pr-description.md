@@ -4,8 +4,10 @@ Draft for the maccoss/Carafe PR. Written for **Carafe maintainers**, not Osprey 
 this is a library-generation defect that affects any tool consuming these libraries, and the
 filters proposed are already standard practice elsewhere in the field.
 
-> **Implementation status, 2026-08-02.** All five changes are implemented on
-> `feature/decoy-similarity-gate` in `maccoss/Carafe` (8 commits, not yet pushed). Where the code
+> **Implementation status, 2026-08-03.** All six changes are implemented on
+> `feature/decoy-similarity-gate` in `maccoss/Carafe` (10 commits, not yet pushed). Change 4, the
+> set-wise isobaric shadow gate, landed last and is the one whose measured cost most exceeded its
+> scoping estimate - read its section before quoting a number from an earlier revision. Where the code
 > diverged from this draft, the draft has been corrected to match the code, EXCEPT the items
 > listed here which are code decisions a reviewer may want to revisit:
 >
@@ -309,14 +311,85 @@ pool against 1,043 measured in the built library - the pool is only ~95.7% consu
 filtered**, which is precisely why an exact-string audit read clean while the isobaric ones went
 through.
 
-**4. `-entrapment_ratio` - entrapment:target ratio.**
+**4. Set-wise isobaric shadow rejection - the same defect as change 3, one substitution wider.**
+Change 3 catches a generated sequence that is I/L-identical to a real target. The general form is a
+COMPENSATING substitution: `Q = G+A` exactly (128.05858), `N = G+G` exactly (114.04293), `V+A` and
+`L+G` both 170.10552. A candidate related to a real target that way is precursor-isobaric with it,
+shares most of its ladder, and is invisible to every check that existed - an exact-string audit,
+an I/L-normalised audit, and a pairwise overlap gate that only ever looks at the candidate's own
+source.
+
+Measured on a real library: `EAQALAR`, generated as entrapment for `AAAEQLR`, shadows the
+unrelated real target `EAGAAALR` at fragment overlap **0.833**, dMass **1e-5 Da**. That is the
+Q -> G+A substitution.
+
+Rejects where the candidate is **isobaric within 0.01 Da AND fragment overlap > 0.70** against
+**any** real target. Both halves are needed and the mass half is what makes it affordable: a
+mass-sorted index means each candidate is compared against ~15 targets rather than 1.4M, and the
+whole 1.39M-peptide digest costs **2 minutes**. Isobaric is not a convenience tolerance - it is
+where MS1 discrimination fails, since a non-isobaric near-copy still differs in precursor m/z and
+MS1 chromatogram. Sweeping the window from +-0.5 Da to +-40 Da changes the rejected population not
+at all; only tightening to isobaric does.
+
+The threshold is **0.70** rather than the pairwise gate's 0.40 because the SCOPE changed. 0.40 is
+EncyclopeDIA's number for one pre-selected pair; applied against every target in a library it
+flags a third of all entrapment, because chance matches dominate.
+
+**What it is for, stated precisely, because two different things get called "shadowing".**
+*Within-group* similarity (targets resembling other targets, entrapment resembling other
+entrapment) is a real phenomenon that a null population must REPRODUCE to model the target
+population faithfully - it is deliberately untouched. *Cross-group* similarity, where a generated
+sequence sits on a real and highly detectable peptide, is contamination: the null is detected on
+the real peptide's signal and counted as a false positive it never earned. Only the second is
+rejected. Measured on the human Astral library, 1-in-60 sample:
+
+| | before | after |
+|---|---|---|
+| entrapment -> **target** (cross) | 0.875% | **0.000%** |
+| decoy -> **target** (cross) | ~0.9% | **0.000%** |
+| entrapment -> entrapment (within) | 0.880% | 1.036% |
+| decoy -> decoy (within) | 1.561% | 1.467% |
+| target -> target (within) | 1.496% | unchanged |
+
+**This matters far more for foreign-proteome entrapment, and the reason is evolutionary.** What
+harms an estimate is the cross-group rate weighted by how likely the shadowed target is to be
+detected. A shuffle lands on whatever target happens to be isobaric and ladder-similar, detected
+at the base rate. A conserved ortholog matches a human peptide BECAUSE it is conserved, and
+conservation tracks functional importance, which tracks expression, which tracks detectability -
+so the mechanism that creates the match is the one that makes the shadowed protein abundant. The
+library rates are nearly identical and the detection rates are not:
+
+| arm | flagged in library | flagged among ACCEPTED entrapment | enrichment |
+|---|---|---|---|
+| shuffle | 0.875% | 1 of 95 (1.05%) | ~1.2x |
+| **Arabidopsis** | 0.874% | **8 of 134 (5.97%)** | **~6.8x** |
+
+Those eight are orthologs of beta-tubulin, aldolase, enolase and RAB7A - proteins abundant enough
+to be present in every sample - which is why only the foreign arm produced a spike at low q, where
+calibration matters most.
+
+**Cost is ~60x the estimate this was scoped against, and the reason is peptide length**, which is
+worth stating plainly rather than discovering downstream. Measured library-wide: 0.8% of
+entrapment, 0.9% of decoys and 1.9% of p_decoys are re-generated, and 0.10% of quartets have no
+acceptable alternative. The scoping estimate of ~0.013% was drawn from peptides of length 11-19,
+where the measured rate IS 0.01-0.09%. The rule is far more active on 7- and 8-mers (23% and 18%),
+where a 12-rung ladder makes 0.70 reachable by chance and short tryptic peptides have compositional
+isobars everywhere. Two independent implementations, in Java and Python, agree to within 0.06
+percentage points, so this is the rule's behaviour and not a coding error. Whether the threshold
+should be length-aware is a real open question and deliberately not decided here.
+
+Rejection triggers a RETRY, never a removal - see the ratio argument in "Why the gate must apply to
+both generated populations". Foreign candidates are filtered when the pool is built instead, since
+a peptide that shadows a human target can serve no target at all.
+
+**5. `-entrapment_ratio` - entrapment:target ratio.**
 At r=1 the entrapment pool is half the searched library and demonstrably perturbs the target
 search (targets recovered 27,931 at r=1.0 vs 30,654 at r=0.1). Combined FDP is ratio-invariant at
 ~1.1% across a 10x pool-size change once `r` is factored into the estimate, so a small-r overlay
 measures without distorting. r <= 0.25 is preferable when the goal is measurement rather than a
 1:1 library.
 
-**5. UI support** for the flags. Three controls under the existing "Include entrapment peptides"
+**6. UI support** for the flags. Three controls under the existing "Include entrapment peptides"
 checkbox: source (shuffle or FASTA), the FASTA path with Browse and a Download button wired to
 Carafe's existing UniProt dialog, and the ratio. They are **hidden rather than disabled** when
 they do not apply, so the panel is unchanged for anyone not using entrapment, and the FASTA row
