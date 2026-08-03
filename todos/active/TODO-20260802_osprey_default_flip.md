@@ -127,7 +127,11 @@ test asserted a decoy count and got 0. Both tests now set fragments and assert t
 - [x] Flip `OSPREY_PASS2_QVALUE` to `protein-compact`
 - [x] Flip `OSPREY_PICK_LDA` on
 - [x] I/L-normalised collision rejection, C# and Rust, with independence tests
-- [x] Golden re-baseline (`regression.ps1 -Dataset All -CreateGolden`) - DONE 2026-08-03, pwiz `4a067fa8b`; verified by a full `-Dataset All` at 26/26 PASS
+- [ ] Golden re-baseline - **MUST BE REDONE.** Captured 2026-08-03 as pwiz `4a067fa8b` and
+      verified at 26/26 PASS, but TWO correctness fixes landed after it (`1e90d5453` the
+      changed-peak signal, `03f31954a` the experiment-q carry-through) and both legitimately
+      change output. The committed goldens are STALE BY DESIGN and mode 1 is red until a
+      re-capture. Re-run `-Dataset All -CreateGolden` then `-Dataset All`.
 - [ ] `Test-PerfGate.ps1` + a memory-band check - protein-compact expands the reconciled pool
       (it reported 647,139 rows transfer-compete did not), so this flip has a plausible cost that
       an ordinary default flip would not
