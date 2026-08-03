@@ -303,13 +303,47 @@ anything measured so far, and `CompeteFromIndices` resolves ties by first-seen (
 so a different within-file order can flip a tie. Why that would bite only the stratum-filtered
 competition is the open question.
 
-### Next step
+### ROOT CAUSE (found 2026-08-02 by instrumentation, run `regression-20260802_185015`)
 
-Instrument the competition itself, since everything reachable from the outside is now
-eliminated. For the one `base_id` in file _22, dump from BOTH paths: its index position within
-`perFileEntries`, its frozen-model score and its paired decoy's, whether it is in `allIdx`, and
-the q it receives. That distinguishes a tie-order flip from a membership difference. This is a
-temporary diagnostic, not a shipped change.
+**Stage-6 rescore results are not written back onto the in-memory `FdrEntry` in the
+single-machine (straight-through) path.** Traced state on ENTRY to pass 2, before pass 2 does
+anything:
+
+| entry | straight-through | HPC chain |
+|---|---|---|
+| _22, eid 23645 | `runQ=1 expQ=1 **score=0**` | `runQ=9.672115291614276E-05 expQ=1.03e-04 **score=5.680917117486129**` |
+| _22, eid 23646 | `runQ=1 expQ=1 **score=0**` | `runQ=0.448749033296407 expQ=0.4696 **score=-4.97294527889444**` |
+| _20 / _21, eid 23645 | score 2.4067663392525698 / 4.04961448118585 | IDENTICAL |
+
+`score` is exactly 0 and q exactly 1 - the never-detected sentinel - so those entries reach
+pass 2 UNSCORED in the straight-through path and SCORED in the chain. eid 23646 is unscored in
+all three files straight-through and scored in all three in the chain.
+
+**The HPC path is correct by accident of architecture**: its phase-3 workers persist scores to
+the reconciled parquet and the merge node re-reads them, so the round trip through disk repairs
+what the in-process path drops. The single-machine path therefore UNDER-REPORTS - it loses
+precursors the HPC path keeps.
+
+**Pass 2 is innocent.** The competition itself was proven identical in both paths (same frozen
+scores to full precision, same stratum, same `inAllIdx=False`, same "NOT A WINNER").
+
+**Pre-existing, and masked by every other mode.** `percolator` retrains and recomputes every q;
+`transfer-compete` rewrites every survivor; `transfer` re-maps moved peaks through the score->q
+table. All three overwrite the stale sentinel. `protein-compact` is the only mode that
+PRESERVES pass-1 q for OFF-stratum survivors (the `continue` at `Pass2FdrSidecar.cs:709-713`),
+and base_id 23645 is off-stratum - so it is the first mode honest enough to report the defect.
+
+This is why the earlier default hid it, and it is a real argument that the gate did its job:
+the flip did not break HPC/single-machine comparability, it REVEALED that the single-machine
+path was already wrong.
+
+### Decision needed before fixing
+
+The fix is in the Stage-6 rescore write-back on the in-process path, and it is
+**science-affecting, not plumbing**: repairing it makes single-machine runs retain precursors
+they currently drop, which changes reported output for every mode, not just protein-compact. It
+also almost certainly changes the golden again. Scope it deliberately - on this branch or its
+own issue - rather than folding it into the default flip silently.
 
 **If it proves stubborn, there is a decision rather than a fix**: `transfer` passes mode 3
 today, and was Brendan's own strong lean in TODO-20260727 on validity grounds. Shipping
