@@ -312,6 +312,27 @@ filtered**, which is precisely why an exact-string audit read clean while the is
 through.
 
 **4. Set-wise isobaric shadow rejection - the same defect as change 3, one substitution wider.**
+
+> **VALIDATED END TO END: two independently-built nulls CONVERGE once this gate is applied.**
+> Two Astral libraries were rebuilt with it and searched over a 40-file cohort sharing one
+> prediction basis. Shuffle entrapment and *Arabidopsis* entrapment - an anagram of the human
+> proteome and a foreign plant proteome, built by different mechanisms with no reason to share a
+> bias - disagreed by **3.5 sigma** before the gate and by **0.0** after:
+>
+> | | shuffle | foreign | disagreement |
+> |---|---|---|---|
+> | before | 0.739% | 0.992% | **+34.2% +- 9.7% (3.5 sigma)** |
+> | **after** | **0.895%** | **0.895%** | **0.0** |
+>
+> The matched-discovery control collapses the same way, 71% apart to 4% apart. **The gate moved
+> the two designs in OPPOSITE directions and they met**: shuffle up 21.0%, foreign down 9.8%.
+>
+> That also refutes the strongest objection raised against this change - that it removes valid
+> false-discovery models and silently biases FDP downward. **A correction that flattered the
+> estimator could not raise the shuffle arm.** It additionally identifies which design was wrong
+> in which direction: anagram entrapment reads LOW, conserved orthologs read HIGH, and the gate is
+> what makes the two commensurable.
+
 Change 3 catches a generated sequence that is I/L-identical to a real target. The general form is a
 COMPENSATING substitution: `Q = G+A` exactly (128.05858), `N = G+G` exactly (114.04293), `V+A` and
 `L+G` both 170.10552. A candidate related to a real target that way is precursor-isobaric with it,
@@ -368,15 +389,37 @@ Those eight are orthologs of beta-tubulin, aldolase, enolase and RAB7A - protein
 to be present in every sample - which is why only the foreign arm produced a spike at low q, where
 calibration matters most.
 
+**The gate is NOT free, stated plainly rather than left for review to find.** Union efficiency
+falls on both arms (-2.64 pts shuffle, -5.18 pts foreign); the foreign arm loses 3.0% of
+discoveries while the shuffle arm gains 2.1%; ~50,000 quartets are regenerated and 1,428 (shuffle)
+/ 648 (foreign) are lost outright. A post-hoc simulation over-predicted the benefit by 2.3x and
+was blind to the cost entirely - oracle surgery holds the discovery set fixed by construction, so
+it cannot see what a library change costs.
+
 **Cost is ~60x the estimate this was scoped against, and the reason is peptide length**, which is
 worth stating plainly rather than discovering downstream. Measured library-wide: 0.8% of
 entrapment, 0.9% of decoys and 1.9% of p_decoys are re-generated, and 0.10% of quartets have no
 acceptable alternative. The scoping estimate of ~0.013% was drawn from peptides of length 11-19,
 where the measured rate IS 0.01-0.09%. The rule is far more active on 7- and 8-mers (23% and 18%),
 where a 12-rung ladder makes 0.70 reachable by chance and short tryptic peptides have compositional
-isobars everywhere. Two independent implementations, in Java and Python, agree to within 0.06
-percentage points, so this is the rule's behaviour and not a coding error. Whether the threshold
-should be length-aware is a real open question and deliberately not decided here.
+isobars everywhere. Three independent implementations agree (0.814% Java, 0.875% and 0.835%
+Python), so this is the rule's behaviour and not a coding error.
+
+**A length-aware threshold was proposed, measured, and rejected on evidence** - recorded because
+it is the obvious question a reviewer will ask. Gating only at length >= 9 would cut the
+regeneration ~100x, and the short shadows it would spare looked like shared background: real
+targets carry isobaric high-overlap twins at 1.486% where entrapment carries them at 0.835%. The
+deciding measurement is whether a short shadow's detection is actually DRIVEN by the target it
+shadows. For each accepted shadow entrapment, is that target also accepted, against a mass-matched
+control (same isobaric window, split by overlap, so both halves share abundance priors)?
+
+| length | shadowed target also accepted | mass-matched control | odds |
+|---|---|---|---|
+| 7 | **51.4%** | 3.3% | **15.7x** |
+| 8 | **61.1%** | 2.5% | **24.4x** |
+| all | 58.7% | 3.0% | **19.3x** |
+
+Short shadows are 15-24x detection-driven, not chance, so the gate applies at **all lengths**.
 
 Rejection triggers a RETRY, never a removal - see the ratio argument in "Why the gate must apply to
 both generated populations". Foreign candidates are filtered when the pool is built instead, since
