@@ -527,6 +527,64 @@ whose HPC and straight-through paths agree and one whose paths are known not to.
 
 ## Progress Log
 
+### 2026-08-03 - EXPERIMENT-Q CARRY-THROUGH landed both sides; cross-impl PASS
+
+pwiz `03f31954a`, maccoss/osprey `e64dceb`. Cross-impl Stellar: **rust=29364 cs=29364 delta=0**,
+Stage 7 and blib content both PASS at 1e-9.
+
+**The defect (Brendan's diagnosis, and it is stronger than the review's).** protein-compact folded
+off-stratum changed peaks into the CROSS-FILE experiment accumulator but admitted them only in the
+files that changed them. That is not merely asymmetric - it is **guaranteed to understate**:
+
+> "the changed values cannot by definition be the maximum peak. So, the maximum before they are
+> changed cannot have come from a changed peak." - Brendan
+
+Reconciliation anchors on the best-scoring peak and corrects the others TOWARD it, so a changed
+peak never supplied the experiment maximum. Maxing over changed observations alone can therefore
+only land below the true experiment-wide score, inflating those peptides' q and DROPPING them -
+breaking the "re-scoping only adds, never drops" assertion in the direction that silently loses IDs.
+
+**The fix deletes bookkeeping rather than adding it.** By the same anchor argument the pass-1
+experiment q cannot have been invalidated, so it is CARRIED, not recomputed - the invariant
+`transfer` already applies and #4438 validated. Off-stratum peaks no longer enter the experiment
+accumulator at all; only their RUN-level q is refreshed, from the competition they were admitted to.
+The pass-1 value comes from the sidecar because the post-rescore overlay zeroed the in-memory copy.
+
+**A REJECTED alternative, recorded so it is not revived**: `max(pass1_max, max(changed scores))`.
+I argued pass1_max would be contaminated by the changed peak's own stale score; that was WRONG, for
+the reason above - a changed peak was never the max. But the option is still pointless, because by
+the same argument the max cannot move, so it collapses to "carry the pass-1 value". And taking the
+max over changed peaks ALONE is the worst option available: guaranteed to understate.
+
+| build | Stellar blib | vs golden |
+|---|---|---|
+| golden (old signal, recomputed exp q) | 25,395,200 | - |
+| signal fix only | 25,194,496 | 51 issues |
+| **+ experiment q carried** | **25,407,488** | **60 issues** |
+
+**Output GROWS, which is the confirming direction** - "these were being wrongly dropped" predicts
+exactly that.
+
+**The cross-impl gate caught my half-port.** An intermediate state removed the accumulator entry in
+Rust without supplying the carry, and Rust dropped 619 precursors against C# (rust=28745 cs=29364,
+Stage 7 FAIL). Mirror BOTH halves of a pass-2 change before running the gate.
+
+**SYMMETRY SCOPE (Brendan, 2026-08-03)**: only the RESULTS need to match. C# stashes just the
+off-stratum changed set while Rust reads the file's map and filters at use - a residency difference,
+not a result difference, and not something the gate needs to police. We are not matching C# for
+memory bounding or HPC readiness on the Rust side.
+
+**STILL OPEN, explicitly not settled: how ON-STRATUM changed peaks get their experiment q.** Their
+pass-1 value was zeroed by the same overlay, and the replacement comes from the stratum competition.
+Brendan is willing to review it, with this framing recorded as stated:
+
+> protein-compact is **not claimed to be fully valid**. It is much improved on pass-2 Percolator,
+> and whether it can be made fully valid may take time and considerably more proof.
+
+Do not present the existing FDP measurements as settling that question.
+
+**Next session handoff**: read `ai/.tmp/handoff-20260803_osprey_default_flip.md` before starting.
+
 ### 2026-08-03 - SIGNAL FIX LANDED both sides; goldens now stale BY DESIGN
 
 pwiz `1e90d5453`, maccoss/osprey `fa5af6c`. The admission signal is now a frozen-model score that
