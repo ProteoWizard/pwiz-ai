@@ -266,12 +266,56 @@ only ONE precursor affected.
 amplifies HPC-vs-straight differences that other modes absorb. That matters well beyond this
 PR, because production runs the HPC path at 82-200+ files while every gate here is 3 files.
 
+### 7. REFUTED by measurement: the two paths feed the competition different data
+
+Run `regression-20260802_175634`, comparing the straight leg against
+`chain/phase3_rescore_*_22` for the divergent file:
+
+| artifact | result |
+|---|---|
+| `<stem>.1st-pass.fdr_scores.bin` | **byte-identical** (28,973,852 both) |
+| `<stem>.scores-reconciled.parquet` | **byte-identical** (216,039,569 both) |
+| `<stem>.reconciliation.json` | **byte-identical** (9,869,663 both) |
+| `<stem>.1st-pass.model.json` | **byte-identical** (`2f1f7b60ad05c74140eb...`) |
+| file order into the competition | **identical** (_20, _21, _22 in both logs) |
+
+So the pass-2 competition receives byte-identical scalars, the byte-identical frozen model, an
+identical stratum (165,006), identical survivor counts (994,899 / 984,531), and the files in the
+same order - and still produces a different run-level q for ONE precursor in file _22. The
+"per-file scalars differ" mechanism recorded above is therefore also wrong.
+
+### State of the search space
+
+ELIMINATED by measurement, all of it: the persisted stratum (round-trips exactly), the pick
+model (fails with it off), HashSet enumeration order (never iterated), pass-1 q (transfer
+passes), run-to-run nondeterminism (both paths pass the gate comparator against themselves),
+differing scalars / model / file order (byte-identical), and `DetectedPeptides` (31,018 both).
+
+STILL TRUE: only `protein-compact` fails; `transfer` and `transfer-compete` pass. The single
+code path exclusive to the failing mode remains the stratum-FILTERED `allIdx` in
+`StreamingFdr.cs:207-213` and the off-stratum `continue` in the map-back
+(`Pass2FdrSidecar.cs:709-713`).
+
+The remaining difference between the paths that has NOT been ruled out is the in-memory
+`perFileEntries` survivor buffer - built by in-process compaction on the straight path and
+adopted from the rehydrated bundle on the merge node. Its ORDER WITHIN A FILE is not pinned by
+anything measured so far, and `CompeteFromIndices` resolves ties by first-seen (strict `>`),
+so a different within-file order can flip a tie. Why that would bite only the stratum-filtered
+competition is the open question.
+
 ### Next step
 
-Compare the per-file scalars directly rather than inferring. Both legs' run dirs can be kept
-with `-KeepOutput -KeepRunDirs 5`; diff `<stem>.1st-pass.fdr_scores.bin` and the parquet
-scalars for file `_22` between `straight/` and `chain/phase3_rescore_*/`. If they are identical,
-the mechanism above is wrong and the difference is inside the pass-2 competition itself.
+Instrument the competition itself, since everything reachable from the outside is now
+eliminated. For the one `base_id` in file _22, dump from BOTH paths: its index position within
+`perFileEntries`, its frozen-model score and its paired decoy's, whether it is in `allIdx`, and
+the q it receives. That distinguishes a tie-order flip from a membership difference. This is a
+temporary diagnostic, not a shipped change.
+
+**If it proves stubborn, there is a decision rather than a fix**: `transfer` passes mode 3
+today, and was Brendan's own strong lean in TODO-20260727 on validity grounds. Shipping
+`protein-compact` as the default REQUIRES HPC-vs-single-machine comparability, because
+production runs the HPC path at 82-200+ files while every gate here is 3 files. That is
+Brendan's call with Mike, not an implementation detail.
 
 **GOTCHA that cost a full run**: `-KeepOutput` retains a run dir at the END of its own run, but
 the NEXT run's `Remove-StaleRunDirs` deletes it unless that run also passes `-KeepRunDirs N`.
