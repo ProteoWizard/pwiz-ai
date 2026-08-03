@@ -457,7 +457,27 @@ present, and therefore not a model of a false discovery.
   misses the class it is hunting: `IVLIGDSGVGK`'s C-terminal 8-mer is `IGDSGVGK` against the
   target's `LGDSGVGK`, so a raw index scored it 0.500 when the truth is 0.900.
 
-**SHIP #2 - an all-targets similarity gate. DESIGN QUESTION, NOT YET A SPEC.**
+**SHIP #2 - an ORTHOLOG filter for foreign-organism entrapment. READY.**
+
+Reject any foreign-organism entrapment candidate whose ungapped, I/L-normalised sequence
+identity to **any** target exceeds **~0.80**. **Do not apply to shuffle entrapment.**
+
+* After SHIP #1 the shuffle libraries are clean (1 marginal case in 95 accepted entrapment);
+  applying an overlap-based all-targets rule to them would remove ~3.7% of valid entrapment for
+  no measured benefit.
+* Foreign entrapment retains 8 of 134 accepted entrapment at identity **0.84-0.88** - all
+  conserved-protein orthologs (beta-tubulin, aldolase, the `DLKPSN` kinase catalytic loop, a Rab
+  GTPase region). These are what produce the low-q spike.
+* **Identity, not fragment overlap, is the discriminator**: orthologs sit at 0.84-0.88 while the
+  one shuffle case is 0.75 over unrelated sequences. A fragment-overlap rule cannot tell
+  evolutionary homology from chance collision, which is why the earlier 0.40 all-targets
+  proposal flagged 33% of everything.
+* Justification is a correction, not a bias trade: an 84-88% identical plant peptide whose human
+  twin is abundant is shadowing a PRESENT peptide, not modelling an absent one.
+
+Detail retained below under "the two filters rest on different logic".
+
+**SUPERSEDED - the earlier all-targets overlap proposal, kept to explain why it was rejected.**
 The existing fragment-overlap gate is **pairwise** (each entrapment vs its OWN paired target)
 but the contamination is **set-wise**. Confirmed offenders in `arabidopsis-no-il`, all scoring
 in the top three accepted precursors of the entire run:
@@ -488,8 +508,41 @@ So SHIP #2 needs a design decision before code: gate against a curated high-abun
 adopt mass-matched-high-overlap and measure the resulting library empirically rather than tuning
 a threshold on this one 40-file cohort.
 
-**AND A PRIOR QUESTION THAT MUST BE ANSWERED FIRST - the two filters rest on DIFFERENT logic,
-and only one of them is unambiguous.**
+**RESOLVED 2026-08-02 (Brendan): the diagnostics show NO shuffle problem. The filter is an
+ORTHOLOG filter, scoped to foreign-organism entrapment, and keyed on SEQUENCE IDENTITY.**
+
+Measured on accepted entrapment at q <= 0.01, with p_decoys correctly excluded:
+
+| arm | accepted entrapment | flagged (ov > 0.70, dm <= 5 Da) | what they are |
+|---|---|---|---|
+| gated | 94 | **5** | all identity **1.00** - I/L collisions |
+| **gated-no-il** | 95 | **1** | identity 0.75, unrelated sequences - chance |
+| **arabidopsis-no-il** | 134 | **8** | identity **0.84-0.88** - conserved orthologs |
+
+**After SHIP #1, shuffle entrapment is clean** (1 marginal case in 95); `gated`'s 5 were all I/L
+collisions that SHIP #1 already removes. **Foreign entrapment retains a distinct ortholog
+population** - beta-tubulin, aldolase, the `DLKPSN` protein-kinase catalytic loop, a Rab GTPase
+`STIGVDFK` region.
+
+**Use SEQUENCE IDENTITY, not fragment overlap.** Orthologs cluster at 0.84-0.88; the lone
+shuffle case is 0.75 over visibly unrelated sequences. Identity separates evolutionary homology
+from chance fragment collision, which fragment overlap alone does not.
+
+**SPEC**: for foreign-organism FASTA entrapment only, reject any candidate whose ungapped
+sequence identity to ANY target exceeds ~0.80 (I/L-normalised). Do NOT apply to shuffle
+entrapment - shuffles cannot be orthologs, and the earlier all-targets overlap rule would have
+removed ~3.7% of valid shuffle entrapment for no measured benefit.
+
+**This also dissolves the concern below.** An 84-88% identical plant peptide whose human twin is
+abundant is shadowing a PRESENT peptide, not modelling an absent one, so removing it is a
+correction rather than a bias. The worry that a similarity gate might delete valid
+false-discovery models applies to broad overlap-based gating, not to ortholog removal.
+
+---
+
+*Retained for the record: the reasoning that led to the narrower spec.*
+
+**THE TWO FILTERS REST ON DIFFERENT LOGIC, and only one of them is unambiguous.**
 
 | | what the peptide is | removing it is... |
 |---|---|---|
