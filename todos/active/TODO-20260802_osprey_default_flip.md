@@ -621,10 +621,28 @@ now** on what this branch already contains: the I/L gate (SHIP #1, which is KEPT
 plus the two default flips plus the mode-3 fix. All four datasets are green on every
 self-consistency mode; only mode 1 and 1b are red, which IS the re-baseline.
 
-**Still standing from the earlier entry**: the libdecoy regression dataset's library should be
-replaced in the same step, since it predates the Carafe gate work. That was sequenced AFTER
-SHIP #2 only because SHIP #2 might have changed what "current" meant - it no longer can, so the
-candidate is a current Carafe build with the overlap gate and the I/L filter.
+**DECIDED 2026-08-03 (Brendan): KEEP the existing Stellar library. Do NOT replace it.**
+
+> "We will keep the old Stellar library containing decoys and entrapment peptides from before our
+> Carafe decoy/entrapment filtering work."
+
+**This supersedes the "RE-BASELINE ACTION: replace the libdecoy test library first" entry below** -
+that action is cancelled, not deferred.
+
+Facts established while settling it, since a later reader will otherwise re-open the question:
+* **Two of the four datasets DO consume a full quartet library** - `StellarLibDecoy`
+  (`DecoysInLibrary`) and `StellarGenDecoyEntrap` (same library, `StripDecoys`), both from
+  `stellar-libdecoy/libdecoy-entrapment.zip`. The manifest holds 218,871 each of target,
+  p_target, decoy and p_decoy, and library ProteinIDs carry both `decoy_` and `_p_target`
+  decorations. `Stellar` and `Astral` carry neither, which is the half that is genuinely immune.
+* The library files date from **Jun 30**, so they do predate the Carafe gate work.
+* A swap could not have reused the Astral entrapment libraries built for the SHIP #2 work - those
+  are 1.39M-peptide human builds and this is hela-filtered, so it would have needed a fresh
+  Stellar Carafe run.
+* **Keeping it has a second benefit worth naming**: the per-dataset tier-2 bounds
+  (`MaxPass1Fdp = 0.02` for the gendecoy dataset, justified in-comment by "generated decoys
+  measure ~1.5% on unit-resolution Stellar") stay calibrated against the library they were
+  measured on. A swap would have required re-justifying them, not just re-running.
 
 ### 2026-08-03 - `-Dataset All` FINISHED: every self-consistency mode green on all four datasets
 
@@ -698,7 +716,13 @@ Also relevant to reading this cell at all: **gendecoy is known to inflate FDR re
 libdecoy**, so `StellarGenDecoyEntrap` carries that inflation independently of anything in this
 branch.
 
-### RE-BASELINE ACTION: replace the libdecoy test library first (Brendan, 2026-08-02)
+### ~~RE-BASELINE ACTION: replace the libdecoy test library first~~ - CANCELLED 2026-08-03
+
+**SUPERSEDED. Brendan decided on 2026-08-03 to keep the existing Stellar library** - see the
+"DECIDED 2026-08-03" block above. The 2026-08-02 reasoning is kept below because it is the record
+of why the question was raised, not because it is the current instruction.
+
+*Original entry (Brendan, 2026-08-02):*
 
 The library the libdecoy regression dataset currently uses is **no longer one Carafe would
 generate** - it predates the Carafe gate work (overlap gate, bounded retry, I/L collision
