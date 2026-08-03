@@ -403,6 +403,49 @@ invert the conclusion and stop a port that the evidence supports.
 7-8mer buckets to come back near 1x and the long bucket well above. They came back at 15-24x. The
 mass-matched control is what makes that trustworthy: 51.4% against 3.3% in the same isobaric
 window, with the tool returning 1.0x on a synthetic set where no relationship exists.
+### 2026-08-03 - PROBE (Brendan): are the human twins detected, better-scoring, on the same peak?
+
+Not a gate question - a probe of the multiple-IDs-per-peak concern, using the entrapment-true
+pairs as a naturally-labelled test set. For each confirmed ortholog pair, the accepted entrapment
+and its human twin, from `arm40_arabidopsis-no-il.json`:
+
+| entrapment | human twin | q_ent | q_tgt | shared files | median abs dRT |
+|---|---|---|---|---|---|
+| `EILHIQGGQCGNQIGAK` (tubulin) | `EIVHIQAGQCGNQIGAK` | **1.61e-04** | 1.95e-04 | 2 | 1.03 min |
+| `IVLIGDSGVGK` (RAB7A) | `VIILGDSGVGK` | 1.61e-04 | **NOT ACCEPTED** | - | - |
+| `GILAADESTGTIGK` (aldolase) | `GILAADESTGSIAK` | 2.23e-04 | **1.61e-04** | **37 / 37** | **0.046 min** |
+| `GILAADESTGTIGKR` | `GILAADESTGSIAKR` | 2.04e-04 | 1.61e-04 | **0** | - |
+| `DLKPSNLLLSTQCDLK` (kinase) | `DLKPSNLLLNTTCDLK` | **9.63e-03** | 1.04e-02 | 10 | **0.047 min** |
+| `FSDDSYVESYISTIGVDFK` (Rab) | `FADDTYTESYISTIGVDFK` | 2.24e-03 | **1.61e-04** | 24 | 0.63 min |
+
+**Three behaviours, and the multiple-IDs-per-peak pathology is confirmed in 2 of 6:**
+
+1. **SAME PEAK, BOTH ACCEPTED.** Aldolase shares a peak in **37 of 37 files at dRT 0.046 min
+   (~2.7 s)**; the kinase pair in 10 shared files at 0.047 min. Two isobaric peptides with
+   near-identical fragment ladders assigned to ONE chromatographic feature, with no
+   sequence-specific differentiating evidence. This is the case a reviewer would demand proof
+   for, and the tool assigns both without it.
+2. **THE ENTRAPMENT WON OUTRIGHT.** `VIILGDSGVGK` (human RAB7A) is **not accepted at all** while
+   the Arabidopsis ortholog is. The false peptide displaced the true one - the competition effect
+   observed directly rather than inferred, and the only instance of it seen in this series.
+3. **THE ENTRAPMENT OUTSCORED THE REAL PEPTIDE** in 2 of 6 - tubulin (1.61e-04 vs 1.95e-04) and
+   the kinase pair. An absent plant peptide scoring better than the abundant human protein whose
+   signal it is riding.
+
+**Why this is worth having**: entrapment-true pairs are a **naturally labelled test set** for the
+one-peak-many-IDs problem. Normally there is no ground truth about which of two co-eluting
+isobaric IDs is real; here one is known absent by construction. Any future diagnostic for
+"multiple IDs on a single chromatographic peak without differentiating evidence" can be
+calibrated against these pairs.
+
+**Method caveat**: `peaks` in the pass-1 harvest is POST-RECONCILIATION extraction coverage, so
+file counts are not independent detections (the trap documented in finding 10). The apex RT
+VALUES are real, so "same RT in the same file" does establish a shared chromatographic feature -
+but do not read the file counts as detection counts.
+
+**Not proposed for fixing here.** Recorded because it is a concrete, reproducible instance of a
+known tool-wide concern, with a labelled test set attached.
+
 ### 2026-08-03 06:39 - `gated-no-iso` LANDS AND SETTLES IT: the two entrapment designs CONVERGE. Ship the gate.
 
 The final arm produced the strongest evidence in this series, and it **reverses the "do not ship"
