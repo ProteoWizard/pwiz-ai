@@ -429,6 +429,47 @@ gap rather than closing it.** By finding 12 that biases measured FDP downward.
   of ~49,900 - and leaves entrapment's short-peptide ambiguity matched to the targets', which is
   the population it is supposed to model.
 
+**THE SHUFFLE SIDE SETTLES IT - the length cutoff separates two different phenomena.** Same
+simulation on `gated-no-il`:
+
+| | shuffle (`gated-no-il`) | foreign (`arabidopsis-no-il`) |
+|---|---|---|
+| accepted entrapment | 397 | 456 |
+| accepted shadows | 28 | 63 |
+| shadow lengths | **7-9 only** (15x7, 12x8, 1x9) | 7-19, incl. **8 at >= 11** |
+| shadows at len >= 10 | **0** | **8** |
+| FDP, len >= 9 gate | 0.755% -> **0.755%** (no-op) | 1.037% -> 0.968% (-6.7%) |
+| FDP, full gate | 0.755% -> 0.692% (**-8.3%**) | 1.037% -> 0.798% (**-23.0%**) |
+
+**Long shadows exist ONLY in the foreign library - zero in shuffle.** That is the
+conserved-ortholog population, and its absence from shuffle is exactly what the biology predicts:
+an anagram cannot be an evolutionary homologue of anything. **Short shadows (7-8mers) exist in
+both at similar rates** - the compositional-isobar background that the TARGETS also carry
+(1.486%).
+
+**This makes the design-scoping question moot, which is the cleanest outcome available.** Earlier
+entries here argued about whether to apply the gate to shuffle as well as foreign, and about
+Brendan's uniformity principle. **A length-aware gate needs no scoping at all**: apply the
+identical rule to both designs and it fires only where the problem is, because only the foreign
+pool has long shadows. Uniform processing and targeted correction stop being in tension.
+
+**RECOMMENDATION, and it is now backed on both designs:**
+
+> **Apply the isobaric + overlap > 0.70 gate at peptide length >= 9 (or >= 10), to both
+> entrapment designs and the decoy ladder.**
+
+* removes **all 8** long-shadow ortholog cases in the foreign arm, including 2 of the 3 low-q
+  spike drivers (the third, `WVILGHSER`, is not a shadow at all - see below);
+* is a **measured no-op on shuffle** (0.755% -> 0.755%), so it cannot damage the design that
+  showed no pathology;
+* costs ~489 quartets rather than ~49,900 - a **100x** reduction in regeneration;
+* leaves entrapment's short-peptide ambiguity **matched to the targets'**, which is the property
+  that makes it a valid null in the first place.
+
+The remaining -16.3% (foreign) and -8.3% (shuffle) that the FULL gate buys comes entirely from
+7-8mers, where entrapment already shadows LESS than targets do. **Taking it flatters the
+estimator rather than correcting it.**
+
 **PREDICTION CORRECTED BEFORE THE ARM LANDED - it is 3 -> 1, not 3 -> 0.** The handoff predicted
 the top-q entrapment would go to zero. Checked directly: of the three drivers, only two are
 caught by the gate.
