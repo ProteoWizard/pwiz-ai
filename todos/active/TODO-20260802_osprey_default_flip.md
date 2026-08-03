@@ -533,7 +533,35 @@ whose HPC and straight-through paths agree and one whose paths are known not to.
 | `regression.ps1 -Dataset All` | IN FLIGHT at session end; Stellar + StellarLibDecoy mode 2/3/4 PASS, mode 1 + 1b FAIL (the expected re-baseline) |
 
 Note `mode1b` (diagnostics spot checks vs golden) also needs re-baselining - it is a separate
-golden from the blib one and shows up only on `StellarLibDecoy`.
+golden from the blib one.
+
+**FIRST ENTRAPMENT-ORACLE SIGNAL, and it is mildly UNFAVOURABLE - measure it properly before
+the PR.** `StellarGenDecoyEntrap` mode 1b (the entrapment-validated gendecoy set), branch vs the
+master golden:
+
+| diagnostic | golden (master) | this branch |
+|---|---|---|
+| nTarget | 246,962 | 246,993 (+31) |
+| nDecoy | 247,073 | 247,102 (+29) |
+| pass1 experiment accepted | 28,703 | **28,612 (-91)** |
+| pass1 combinedFdp | 1.448% | **1.535%** |
+| pass1 reportedQ | 0.00972 | 0.00975 |
+
+The +31/+29 is the I/L gate working as designed - the retry rescues peptides the old one-shot
+collision check dropped, matching Carafe's "net target count actually RISES by 753".
+
+**But accepted falls 91 while true FDP rises ~0.09 points - both axes move the wrong way.**
+Retiring percolator was justified on CALIBRATION, so this cell deserves an honest answer rather
+than a hand-wave. Caveats: it is a golden DIFF with FOUR variables moving at once (pass-2
+default, pick model, I/L gate, mode-3 fix) on 3 files, which is exactly the cohort size prior
+work showed to be misleading (3-file protein-compact read 0.90% and calibrated where 82-file
+read 1.51% and anti-conservative). So it is a flag, not a verdict.
+
+**Do a controlled A/B before the PR**, one variable at a time via the env levers that still
+exist: `OSPREY_PICK_LDA=0` isolates the pick, `OSPREY_PASS2_QVALUE=transfer-compete` isolates
+the stratum, and `Run-FdrBench.ps1` gives disc @ matched TRUE FDP rather than a golden diff.
+Quote the matched-TRUE row, not reported q - both arms here are anti-conservative, so a
+reported-q comparison rewards whichever is more miscalibrated.
 
 **The re-baseline is deliberately NOT taken.** It is now blocked on SHIP #2 from
 [TODO-20260801_decoy_similarity_gate.md](TODO-20260801_decoy_similarity_gate.md), which the
