@@ -420,6 +420,20 @@ was also accepted: 54.0% vs 1.6% for dissimilar), applied to CROSS-group shadows
   shadowing-driven, and the full gate is right.
 It needs no new library and no new search - only the accepted sets already on the testing machine.
 
+**IMPLEMENTED AND PUSHED so it does not have to be re-derived**:
+`ai/scripts/Osprey/Entrapment/shadow_detection_driver.py`, taking a pairing manifest and any
+`pass1_entrap.py` arm JSON:
+
+```
+python ai/scripts/Osprey/Entrapment/shadow_detection_driver.py <pairing.tsv> <arm.json>
+```
+
+The control is mass-matched, which is what makes it an odds ratio rather than an anecdote: each
+accepted entrapment's isobaric window is split into the targets it shadows (overlap > 0.70) and
+the targets it does not, so both halves share the same precursor mass, proteome and detectability
+priors and differ only in fragment overlap. Smoke-tested against a synthetic accepted set with no
+real relationship, where it returns **1.0x at every length** - the null case reads as null.
+
 ### 2026-08-03 (night) - the length question is the whole decision, and it is NOT settled by "spike drivers are long"
 
 **Post-hoc simulation on `arabidopsis-no-il`'s own accepted set** (mass-sorted exhaustive,
