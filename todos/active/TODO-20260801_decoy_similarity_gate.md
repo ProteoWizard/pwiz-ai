@@ -520,10 +520,47 @@ anything in this branch. **Fix belongs on the generator** (e.g. drawing entrapme
 the target set's own within-group similarity distribution), not on the cross-group gate. Not
 scoped here.
 
-**Still worth measuring on the delivered libraries**: FDP on `gated-no-iso` vs `gated-no-il`, and
-`arabidopsis-no-iso` vs `arabidopsis-no-il`. The expectation under this framing is that removing
-cross-group contamination REDUCES a false-positive count that was never earned, most visibly on
-the foreign arm where the shadowed proteins are abundant.
+#### Why cross-group shadowing is far worse for foreign entrapment (Brendan, 2026-08-03)
+
+> "The cross-group shadowing is especially problematic for other-species entrapment, because the
+> similar peptides are more likely to be similarly detectable, whereas the shuffled case is more
+> likely to distribute similarity more broadly with no favor to detectability. Evolutionarily, a
+> highly conserved peptide may be more likely to come from an important detectable protein."
+
+The harm is not the cross-group rate itself - it is the rate WEIGHTED by the probability that the
+shadowed target is actually detected. Those weightings differ by construction:
+
+* A **shuffle** lands on whatever target happens to be isobaric and ladder-similar. That target is
+  drawn essentially at random from the library, so it is detected at the library's base rate.
+* A **conserved ortholog** matches a human peptide BECAUSE it is conserved, and conservation
+  tracks functional importance, which tracks expression, which tracks detectability. The
+  selection mechanism that creates the match is the same one that makes the shadowed protein
+  abundant - hence tubulin, aldolase, enolase, RAB7A.
+
+**Already measured, and the contrast is ~6x.** Comparing the night session's accepted-set counts
+against the library-wide cross-group rates measured here:
+
+| arm | flagged in the LIBRARY | flagged among ACCEPTED entrapment | enrichment |
+|---|---|---|---|
+| `gated-no-il` (shuffle) | 0.875% | 1 of 95 = 1.05% | **~1.2x - no detectability bias** |
+| `arabidopsis-no-il` (foreign) | 0.874% | 8 of 134 = 5.97% | **~6.8x** |
+
+Nearly identical library rates, six-fold different detection rates. That is the prediction stated
+above, confirmed, and it explains the low-q spike directly: an ortholog of an abundant protein is
+detected at a HIGH score, so the contamination lands exactly where FDR calibration matters most.
+(Caveat: the accepted-set counts used `ov > 0.70, dm <= 5 Da` where these use isobaric; the mass
+sweep was flat from +-0.5 to +-40 Da, so this shifts counts by tens of percent, not by the 6x.)
+
+**FALSIFIABLE PREDICTION for the validation run on the delivered libraries:**
+* **Foreign arm** (`arabidopsis-no-iso` vs `arabidopsis-no-il`): measured FDP should fall
+  noticeably, concentrated at LOW q, because the removed population was ~7x enriched among
+  detections and scores highly.
+* **Shuffle arm** (`gated-no-iso` vs `gated-no-il`): little change. The removed population is
+  detected at roughly its own share, so removing ~0.9% of entrapment removes ~1% of accepted
+  entrapment and the ratio barely moves.
+
+If the shuffle arm's FDP moves a lot, the framing is wrong somewhere and it should be re-examined
+before the gate is ported into Osprey.
 
 **Foreign-arm manifest diffs are uninformative and should not be quoted.** `arabidopsis-no-il` ->
 `-no-iso` shows 22.3% of `p_target` changed, but that is the 1:1 mass-matched assignment
