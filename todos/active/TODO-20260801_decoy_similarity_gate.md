@@ -487,6 +487,47 @@ near-copy from a chance fragment collision. **Do not apply to shuffle entrapment
 they carry 1 marginal case in 95 accepted entrapment, and a set-wise rule would strip ~3.7% of
 valid entrapment for no measured benefit.
 
+**THE PROBLEM CASES ARE ALL ISOBARIC - use an isobaric constraint, not a wide mass window
+(Brendan, 2026-08-02).** Every accepted arabidopsis-no-il entrapment with overlap > 0.70 against
+any target, no mass filter applied:
+
+| overlap | dMass | entrapment | best target |
+|---|---|---|---|
+| 0.900 | **0.0000** | `IVLIGDSGVGK` | `VIILGDSGVGK` |
+| 0.867 | **0.0000** | `DLKPSNLLLSTQCDLK` | `DLKPSNLLLNTTCDLK` |
+| 0.857 | **0.0000** | `IELISSLK` | `ELLLSSLK` |
+| 0.857 | **0.0000** | `GILAADESTGTIGKR` | `GILAADESTGSIAKR` |
+| 0.846 | **0.0000** | `GILAADESTGTIGK` | `GILAADESTGSIAK` |
+| 0.750 | **0.0000** | `EILHIQGGQCGNQIGAK` | `EIVHLQAGQCGNQIGAK` |
+| 0.722 | **0.0000** | `FSDDSYVESYISTIGVDFK` | `FADDTYTESYISTIGVDFK` |
+| 0.750 | 113.0841 | `ELHYLNK` | `ELHYINLK` | one extra I/L residue - 56 m/z away at +2, cannot co-isolate |
+
+**8 of 9 are EXACTLY isobaric.** Each is a compensating substitution pair: V<->L with A<->G
+(+-14.016 cancelling), S+G <-> A+T (158.069 both), S+S+V <-> A+T+T (273.132 both), and one pure
+I/L anagram. **This is the same phenomenon as the I/L rule with multi-residue compensation
+instead of a single substitution.**
+
+**Mass-tolerance sweep (library-wide, overlap > 0.70):**
+
+| tolerance | gated-no-il | arabidopsis-no-il |
+|---|---|---|
+| **+-0.01 Da (isobaric)** | 0.013% (~**180**) | 0.013% (~**179**) |
+| +-0.5 Da | 0.017% (~240) | 0.021% (~298) |
+| +-2.5 / 5 / 10 / 20 / **40 Da** | 0.017% (~240) | 0.021% (~298) |
+
+**Flat from +-0.5 to +-40 Da.** Widening to match real DIA co-isolation (20 m/z ~ 40 Da at +2)
+adds nothing, because sharing >70% of fragment masses already pins total mass. The mass filter
+was doing far less work than assumed. **Only TIGHTENING matters**: the isobaric constraint cuts
+the discard ~25-40% while catching 100% of observed problem cases.
+
+**REVISED SPEC: isobaric (within a few ppm) AND fragment overlap > 0.70, set-wise against all
+targets.** ~180 entries of 1.39M (**0.013%**).
+
+**This SUPERSETS the I/L rule.** An I/L-identical peptide is isobaric with overlap 1.000, so one
+rule catches both classes - SHIP #1 becomes the special case rather than a separate filter.
+Keeping both is harmless redundancy; implementing only the general rule is simpler and is what a
+fresh implementation should do.
+
 **LIBRARY-WIDE DISCARD, MEASURED (this is the number that decides whether the net is too wide).**
 Sampled 1-in-60 of distinct library entrapment, ~23,200 per library - NOT the accepted subset,
 which is 0.06% of the library and cannot answer this:
