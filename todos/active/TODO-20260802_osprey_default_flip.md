@@ -234,12 +234,48 @@ consistent with both passing.
 Note the difference is q=1.00 vs q~1e-4, NOT a near-tie - so this is a survivor/winner
 membership difference, not float drift.
 
+### 6. FALSE ALARM, recorded so nobody repeats it: "the pipeline is nondeterministic"
+
+Two independent straight-through runs of the SAME config produce blibs with the same byte
+LENGTH but different SHA-256. That is true of the branch AND of unmodified master
+(`pwiz-work1` at the same base commit `9804e9015`), and it is **benign**: run
+`ai/.tmp/compare-determinism.ps1`, which applies the regression comparator
+(`BlibGolden.ps1::Compare-BlibFull`, the same function mode 3 uses) instead of a hash, and both
+pairs report **PASS - identical at gate tolerance**.
+
+The byte differences are SQLite page layout and sub-tolerance float noise the comparator
+deliberately ignores. **Do not use SHA-256 as a determinism oracle for a blib** - it is stricter
+than the gate and reports differences the project has decided are not differences. An earlier
+revision of this file concluded from hashes alone that the pipeline was nondeterministic and
+that the golden was therefore meaningless. That was wrong.
+
+### Leading mechanism (consistent with every measurement so far)
+
+protein-compact is the ONLY mode whose per-file run-level competition runs over a
+stratum-FILTERED subset (`StreamingFdr.cs:207-213` builds `allIdx` by filtering;
+transfer-compete passes all `m` rows, transfer never competes at all). A small difference
+between the straight-through per-file scalars and the ones the phase-1/3 workers wrote - one
+that a full-population competition absorbs below the 1e-9 gate - can cross the q <= 0.01 line
+inside a much smaller population, flipping an entry between passing and failing run-level FDR.
+
+This fits everything measured: stratum identical, survivor counts identical, both neighbouring
+modes passing, the observed delta being q=1.00 vs ~1e-4 (a threshold crossing, not drift), and
+only ONE precursor affected.
+
+**If it holds, it is a property of the chosen default, not a plumbing bug**: protein-compact
+amplifies HPC-vs-straight differences that other modes absorb. That matters well beyond this
+PR, because production runs the HPC path at 82-200+ files while every gate here is 3 files.
+
 ### Next step
 
-Instrument the run-level leg: for this one `base_id` in file _22, dump the frozen-model score,
-its paired decoy's score, whether it is in `survivorEntryIds`, and the q it receives - from both
-the straight-through pass 2 and the merge node. That distinguishes "the pair's winner flips"
-from "the entry is a survivor in one path and not the other", which are different bugs.
+Compare the per-file scalars directly rather than inferring. Both legs' run dirs can be kept
+with `-KeepOutput -KeepRunDirs 5`; diff `<stem>.1st-pass.fdr_scores.bin` and the parquet
+scalars for file `_22` between `straight/` and `chain/phase3_rescore_*/`. If they are identical,
+the mechanism above is wrong and the difference is inside the pass-2 competition itself.
+
+**GOTCHA that cost a full run**: `-KeepOutput` retains a run dir at the END of its own run, but
+the NEXT run's `Remove-StaleRunDirs` deletes it unless that run also passes `-KeepRunDirs N`.
+Pass both, every time, or the artifacts vanish before they can be compared.
 
 Then decide: fix here, or re-baseline with mode 3 knowingly red and fix in a follow-up. That is
 Brendan's call, not an implementation detail - it is the difference between shipping a default
