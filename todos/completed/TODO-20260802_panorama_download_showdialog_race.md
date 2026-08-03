@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260802_panorama_download_showdialog_race`
 - **Base**: `master`
 - **Created**: 2026-08-02
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `skyline`
-- **PR**: [#4517](https://github.com/ProteoWizard/pwiz/pull/4517)
+- **PR**: [#4517](https://github.com/ProteoWizard/pwiz/pull/4517) (merged 2026-08-03)
 
 ## Motivation
 
@@ -89,3 +89,29 @@ one-test fix:
 - `PanoramaFilePicker.ClickOpen` now has no external callers and could be
   private. Deliberately left public - narrowing shared-library surface is out of
   scope here.
+
+## Progress Log
+
+### 2026-08-03 - Merged
+
+PR #4517 merged as commit 5531ab22. Shipped the two-line fix to `TestMissingFile`
+plus the `TestMessageDlgShown` helper adoption - scope stayed at one test method
+in one file, as intended.
+
+Follow-ups from `/code-review max` were filed as issues rather than folded in:
+[#4518](https://github.com/ProteoWizard/pwiz/issues/4518) (`ClickFile` closes the
+modal dialog but is named as a selection helper - the root trap, affecting five
+call sites including a latent `TestVerifyJson` hazard),
+[#4519](https://github.com/ProteoWizard/pwiz/issues/4519)
+(`TestPanoramaDownloadFileWeb` reports PASSED having executed nothing),
+[#4520](https://github.com/ProteoWizard/pwiz/issues/4520) (`GetPanoramaServerUri`
+discards `testFolder`), and
+[#4521](https://github.com/ProteoWizard/pwiz/issues/4521) (`AddFiles` swallows
+most exceptions). `ClickOpen` visibility was deliberately left alone.
+
+Not yet verified against the failure mode. Every gate that ran - local x20,
+CodeInspection, ReSharper, and bt209 build #21720 - executed on hardware that
+never reproduced the race; the unfixed baseline also passed 20/20 locally. The
+first real test is a bt210 master build landing on a `pwiz-windows-i-*` agent,
+where the old code failed 7 of 8 times. Watch the next few of those before
+considering this closed out.
