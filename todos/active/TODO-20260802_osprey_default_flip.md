@@ -519,6 +519,34 @@ whose HPC and straight-through paths agree and one whose paths are known not to.
 
 ## Progress Log
 
+### 2026-08-03 - AGREED GATE ORDER before the re-baseline (Brendan)
+
+> "Cross-tool comparison is a correctness check. So, I would prefer to have to passing before a
+> golden rebaseline. Then a golden rebaseline allows us to make the final check for straight
+> through matching HPC 4-task processing, which was broken before. That should be the final test."
+
+1. **`Compare-EndToEnd-Crossimpl.ps1 -Dataset Astral` must PASS.** Stellar passed twice (before
+   the mode-3 fix at delta=0/29,606, and after it at delta=0/29,329, both bit-parity at 1e-9), but
+   **Astral was never run** - and a golden captured from code not cross-validated at the larger
+   dataset would freeze any divergence into the baseline. Correctness gate, so it comes first.
+   Neither binary may be stale: the script refuses rather than reporting a false divergence, and
+   it has fired for that reason before. Rebuild BOTH (`Build-OspreyRust.ps1`, and Release for C#).
+2. **`regression.ps1 -Dataset All -CreateGolden`.** Refreshes the blib golden AND the mode1b
+   diagnostics golden in one pass. Tier 2 runs BEFORE anything is written and a failure writes
+   NOTHING, so an out-of-bounds calibration cannot be silently blessed. Note it runs only the
+   straight-through leg per dataset - modes 2/3/4 are skipped - which is exactly why step 3 exists.
+   `regression.ps1` has **no `-Exe` parameter**, so it runs from the build tree and locks
+   `Osprey.exe` for the duration; do not try to build during it.
+3. **`regression.ps1 -Dataset All` as the FINAL test.** Mode 1 and 1b should now be green against
+   the new baseline, and **mode 3 (HPC 4-task chain == straight-through) is the critical one**,
+   because that is what was broken before `8796e7a13`.
+
+**Why mode 3 still has to run after the re-baseline even though it passed last night**: it never
+reads the golden - it is a self-consistency check between the HPC chain and the straight-through
+run of the same session, which is precisely why a re-baseline could not have papered over it. What
+the final run buys is the two artifacts agreeing at the same time: the baseline that ships and the
+HPC path that production uses, every mode green simultaneously.
+
 ### 2026-08-03 - RE-BASELINE UNBLOCKED: SHIP #2 was reverted, so nothing else changes sequences
 
 The re-baseline was deferred on the reasoning that SHIP #2 (the set-wise isobaric shadow gate)
