@@ -60,8 +60,13 @@ Both go in the existing File submenus, matching the surrounding items
 
 | Menu | Item | Name | Mnemonic |
 |------|------|------|----------|
-| File > Import | `&Layout...` | `importLayoutMenuItem` | `L` is unused in that dropdown |
-| File > Export | `&Layout...` | `exportLayoutMenuItem` | `L` is unused in that dropdown |
+| File > Import | `&Window Layout...` | `importLayoutMenuItem` | `W` is unused in that dropdown |
+| File > Export | `&Window Layout...` | `exportLayoutMenuItem` | `W` is unused in that dropdown |
+
+"Layout" alone was too vague next to Annotations/Document/Report. The field and
+method names stay `Layout` (unambiguous in code); only the user-visible text and
+the dialog titles ("Import Window Layout" / "Export Window Layout") say "Window
+Layout".
 
 Placement: last in each dropdown, after Annotations. Both are document-state
 independent (a layout can be exported from an empty document), so neither needs
@@ -69,16 +74,43 @@ independent (a layout can be exported from an empty document), so neither needs
 
 ### Behavior
 
-- **Export Layout** - `SaveFileDialog` filtered to `*.view`, default file name
-  derived from the current document name, writes the live `dockPanel` layout to
-  the chosen path. Refactor the existing private `SaveLayout(fileName)` (which
-  appends `.view` via `GetViewFile`) into a `SaveLayoutToFile(viewFilePath)` that
-  writes an exact path; `SaveLayout` becomes a one-line caller. Same `FileSaver`
-  + `dockPanel.SaveAsXml` + UTF-8-without-BOM path as document save, so exported
+- **Export Layout** - `SaveFileDialog` filtered to `*.sky.view` **with no
+  all-files entry** (`FILTER_SKY_VIEW`, built with `TextUtil.FileDialogFilter`,
+  not `FileDialogFiltersAll`). This is a safety requirement, not cosmetics:
+  Windows suggests matching existing file names as the user types, so an
+  unrestricted filter makes it easy to save a layout over the `.sky` document.
+  Default file name derived from the current document name. Refactor the
+  existing private `SaveLayout(fileName)` (which appends `.view` via
+  `GetViewFile`) into a `SaveLayoutToFile(viewFilePath)` that writes an exact
+  path; `SaveLayout` becomes a one-line caller. Same `FileSaver` +
+  `dockPanel.SaveAsXml` + UTF-8-without-BOM path as document save, so exported
   files are byte-identical to the ones save produces.
-- **Import Layout** - `OpenFileDialog` filtered to `*.view`, then
-  `LoadLayout(stream)`. Wrap in the same failure message the implicit load path
-  uses so a corrupt/foreign file reports rather than throws.
+- **Import Layout** - `OpenFileDialog` filtered to `*.view` (`FILTER_VIEW`, also
+  no all-files entry). Wider than the save filter on purpose: `*.view` matches
+  both `Doc.sky.view` and the single-extension `pNN.view` files the tutorial
+  tests ship, which Phase 2 wants to open. Then `LoadLayout(stream)`, wrapped in
+  the same failure message the implicit load path uses so a corrupt file reports
+  rather than throws.
+
+### Reporting windows that could not be restored
+
+Previously a window that failed to restore was silently dropped, and a whole-file
+exception produced only "rename or delete this file". Now `LoadLayout` collects
+the persist string of every window it could not create, and `ShowLayoutProblems`
+reports them in one message. **Both entry points call it**, so opening a document
+and File > Import > Window Layout complain identically:
+
+- `UpdateGraphUI` calls it after the dock panel layout lock is released (the
+  `deserialized` flag had to be hoisted out of the `using` block to reach it).
+- `ImportLayout` calls it after its `CloseInapplicableForms` pass.
+
+`IsExpectedMissingWindow` suppresses the one deliberate decline - chromatogram
+graphs past `MAX_GRAPH_CHROM`, which is a Win32 handle cap rather than a problem
+with the file. Everything else is reported, including windows that are simply
+inapplicable to the current document (a list or group comparison the document
+does not define), which is exactly the cross-document case Import Layout creates.
+The message lists raw persist strings; `CommonAlertDlg` scrolls, so a long list
+is not a problem.
 
 ### Robustness when the layout references windows this document cannot show
 
@@ -220,6 +252,24 @@ layout, no per-shot duplication needed.
   - Localized `.resx` files deliberately untouched - `Skyline.ja.resx` /
     `Skyline.zh-CHS.resx` are updated in bulk translation passes (last: PR #4227).
 - All tests green (see checklist).
+
+### 2026-08-03 - Session 1, follow-up review
+Three changes from the developer's review of the first pass:
+1. **Report windows that could not be restored**, with the same message when
+   opening a document and when importing - see the section above. The old
+   behavior (silently drop the window) hid real problems.
+2. **Menu text is now "Window Layout"**, not "Layout" - too vague beside
+   Annotations / Document / Report. Code names stay `Layout`.
+3. **Save filter is `*.sky.view` only, no all-files entry.** Rationale recorded
+   above; the functional test asserts `FILTER_SKY_VIEW` contains no `*.*` so the
+   guard cannot be silently undone.
+
+Regression risk taken on: documents that open with a `.sky.view` now show a
+warning where they were previously silent. Verified against ListClustering,
+SummaryGraphVisibility, TreeRestoration, FilesTreeForm, DocumentFileLocking,
+MethodRefinement / ExistingQuantitativeExperiments / GroupedStudies tutorials,
+and CodeInspection. **A full nightly is the real gate** - any test data whose
+`.sky.view` names a window that no longer restores will now pop a dialog.
 
 ## References
 
