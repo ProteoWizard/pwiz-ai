@@ -481,13 +481,20 @@ genuinely do have many indistinguishable near-twins - `SAAEAER` was rejected for
 `SAAAEER`, and both are real human tryptic peptides that are anagrams of each other. The rule is
 reading the library correctly; the question is only whether that class should be removed.
 
-**This does NOT transfer to the foreign arm, and the asymmetry is the point.** The Arabidopsis
-population the gate catches is conserved orthologs of tubulin, aldolase, enolase and RAB7A -
-proteins that are abundant and therefore PRESENT, not randomly present at the base rate. That is
-why the foreign arm showed a low-q spike and the shuffle arm did not. So the measurement supports
-the ORIGINAL scoping instinct recorded earlier in this file ("the filter is an ORTHOLOG filter,
-scoped to foreign-organism entrapment... Do NOT apply to shuffle entrapment") over the later
-uniformity decision, at least on this evidence.
+**This does NOT settle the foreign arm, and the reason is worth being precise about.** The rate
+alone does not distinguish the two designs - the Arabidopsis pool's shadowing fraction is
+**0.874%**, also below the 1.496% target baseline. What differs is not how OFTEN a foreign
+entrapment peptide shadows something, but WHAT it shadows: the flagged population is conserved
+orthologs of tubulin, aldolase, enolase and RAB7A, proteins abundant enough to be present in every
+sample, where a random human target that shadows another random human target usually shadows an
+ABSENT one. Shadowing a present peptide is the harmful case; shadowing an absent one is a fair
+model of interference. That is why only the foreign arm produced a low-q spike.
+
+**So the discriminating quantity is "shadows a PRESENT peptide", and it cannot be computed from a
+library** - it needs the accepted set of a real run, which is what the other machine has. The
+measurement above does support the ORIGINAL scoping instinct recorded earlier in this file ("the
+filter is an ORTHOLOG filter, scoped to foreign-organism entrapment... Do NOT apply to shuffle
+entrapment") over the later uniformity decision, but on the shuffle side only.
 
 **Not decided here - it is Brendan's and Mike's call**, and the delivered libraries are what settle
 it: measuring FDP on `gated-no-iso` against `gated-no-il` shows directly whether the shuffle arm's
