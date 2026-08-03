@@ -519,6 +519,29 @@ whose HPC and straight-through paths agree and one whose paths are known not to.
 
 ## Progress Log
 
+### 2026-08-03 - STEP 1 GREEN: Astral cross-impl PASSES at bit-parity
+
+```
+Rust wall: 30:14; precursors: 119088; blib: 96,624,640
+C#   wall: 15:17; precursors: 119088; blib: 97,013,760
+precursors: rust=119088  cs=119088  delta=0
+Stage 7 protein FDR (per-col 1e-9): PASS
+Blib content (SQL row+col 1e-9):    PASS
+OVERALL: PASS -- Rust and C# end-to-end in-memory bit-parity at 1e-9 on Astral 3-file
+```
+
+**The correctness gate is now satisfied at 6x the Stellar scale** (119,088 precursors against
+29,329), which is what the golden is about to be captured from. Both binaries were rebuilt first,
+so the stale-binary refusal - which has produced false divergence reports twice in this series -
+is ruled out.
+
+**The differing blib BYTE counts are not a divergence.** The comparator does a SQL row+column
+comparison at 1e-9, not a byte comparison, and this series already established that two runs of
+the SAME configuration produce blibs differing in bytes but identical at gate tolerance (SQLite
+page layout and sub-tolerance float noise). Do not re-litigate that from a hash.
+
+This clears steps 2 and 3. Golden capture launched immediately after.
+
 ### 2026-08-03 - AGREED GATE ORDER before the re-baseline (Brendan)
 
 > "Cross-tool comparison is a correctness check. So, I would prefer to have to passing before a
