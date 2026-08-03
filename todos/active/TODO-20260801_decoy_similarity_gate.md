@@ -381,6 +381,52 @@ Tool: `ai/scripts/Osprey/Entrapment/contamination_corrected.py`.
 
 ## Progress Log
 
+### 2026-08-03 04:00 - DEFINITIVE: the full gate is right at ALL lengths. My length-aware recommendation is WITHDRAWN.
+
+Ran the Carafe session's `shadow_detection_driver.py` - the measurement they identified as
+decisive and built. For each ACCEPTED shadow entrapment, is the target it shadows also accepted,
+against a **mass-matched control** (the same entrapment's isobaric window, split into targets it
+shadows and targets it does not, so both halves share precursor mass, proteome and detectability
+priors and differ only in fragment overlap).
+
+**`arabidopsis-no-il`:**
+
+| len | shadows | shadowed target also accepted | control | odds |
+|---|---|---|---|---|
+| **7** | 35 | **51.4%** | 3.3% | **15.7x** |
+| **8** | 18 | **61.1%** | 2.5% | **24.4x** |
+| 9 | 2 | 50.0% | 7.1% | 7.0x |
+| 13-19 | 6 | 100% | 1.9-5.0% | 20-53x |
+| **ALL** | 63 | **58.7%** | **3.0%** | **19.3x** |
+
+**`gated-no-il` (shuffle):** len 7 **15.3x**, len 8 **22.8x**, ALL **18.1x**.
+
+**Short shadows are 15-24x, not near 1.** When a 7-mer entrapment shadows a target, that target is
+accepted **51%** of the time against **3.3%** for mass-matched non-shadowed targets in the same
+isobaric window. Their detection IS shadowing-driven. By the criterion stated in the
+cross-reference above, **the full gate is right and the length-aware cut is wrong.**
+
+**WITHDRAWN: everything in the two entries below that recommends gating at length >= 9.** The
+argument rested on comparing TARGETS-vs-other-targets (1.486%) against ENTRAPMENT-vs-targets
+(0.835%) and concluding entrapment under-represents shared ambiguity. Brendan's within-group vs
+cross-group correction identifies the flaw exactly: those are different quantities, and the
+comparison does not license the conclusion. The measurements in those entries are correct and
+reproduce across three implementations; **only the inference from them was wrong.**
+
+**What survives from those entries:**
+* the length DISTRIBUTION (53 of 63 accepted shadows are 7-8mers) - still true, and it is why the
+  full gate is 3.4x larger than the length-aware one;
+* the measured cost of the full gate (below): **-3.0% discoveries, -5.18 pts efficiency** on the
+  foreign arm. That cost is real, but it is now the price of removing genuine shadowing-driven
+  false detections rather than the price of flattering the estimator;
+* the spike result **3 -> 1**, which is unaffected.
+
+**FINAL RECOMMENDATION FOR THE IMPLEMENTATION SESSION - ship the gate AS IMPLEMENTED.**
+Isobaric (0.01 Da) + fragment overlap > 0.70, set-wise against all targets, applied as RETRY, at
+**all lengths**, to shuffle entrapment, the foreign pool, and the decoy ladder. No length cutoff.
+No design scoping. The cost is ~11,300 / ~11,900 / ~26,700 regenerations and 1,428 / 648 quartets
+lost, and it buys removal of a population whose detections are 18-19x shadowing-driven.
+
 ### 2026-08-03 - CROSS-REFERENCE: the two sessions' entries disagree on one step, flagged not adjudicated
 
 The testing-session entries below (both dated 2026-08-03) reach "reading (2) holds, short-peptide
