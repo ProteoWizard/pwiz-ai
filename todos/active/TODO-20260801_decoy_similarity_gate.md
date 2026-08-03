@@ -444,17 +444,57 @@ shadowing `EAGAAALR` at overlap 0.833, dMass 1e-5 Da, which is the Q -> GA subst
   the length/composition matching between targets and entrapment that `entrapment_composition.py`
   exists to check - a re-shuffle of the same peptide has the same length and composition.
 
-**OPEN QUESTION for Brendan and Mike, not settled here.** At length 7-8 the rule rejects 18-23% of
-candidates. Two readings, and the data so far cannot separate them:
-1. Correct. Short peptides genuinely have many indistinguishable twins in a 1.39M-peptide library,
-   and an entrapment peptide that is one of them models nothing.
-2. Over-wide. If a short entrapment peptide has an isobaric high-overlap twin, so do many short
-   TARGETS - of each other. Removing the ambiguity from only the entrapment side could make the
-   entrapment population systematically unlike the target population, which is the bias failure
-   mode this TODO already flags for SHIP #2 generally.
+#### MEASURED: shuffle entrapment UNDER-represents the near-copy class, it does not over-represent it
 
-A length- or rung-count-aware threshold is the obvious lever if (2) holds. **Deliberately NOT
-implemented** - it is a deviation from the approved spec and a science call.
+The open question above - is the rule correct at short lengths, or over-wide? - turned out to be
+measurable directly, by running the SAME rule over real targets against each other. That is the
+control the spec never had, and it is the one number that decides SHIP #2 for the shuffle design,
+because the TODO states the justification in exactly these terms:
+
+> "SHIP #2 is therefore justified only by the argument that **shuffles OVER-REPRESENT the near-copy
+> class** relative to the true absent-peptide population - which they plainly do, being anagrams of
+> something present, where a random absent human peptide is not."
+
+**They do not.** 1-in-60 sample, same index, self-matches excluded, bucketed by the same target so
+the rows are directly comparable:
+
+| target length | REAL targets shadowing another REAL target | shuffle entrapment shadowing a target |
+|---|---|---|
+| 7 | **7.41%** | 5.77% |
+| 8 | **5.92%** | 4.59% |
+| 9 | **2.35%** | 0.39% |
+| 10 | 0.31% | 0 |
+| 11-31 | 0.15-0.66% | 0 |
+| **all lengths** | **1.4961%** | **0.8752%** |
+
+**The real human proteome carries this class at 1.7x the rate the shuffle entrapment does, and at
+every single length.** Most of a 1.39M-peptide library is absent from any given sample, so the
+target population is a fair proxy for "real absent human peptides" - and it shadows present
+peptides MORE often than the entrapment set does. On that comparison the shuffle entrapment is
+already a conservative model of the class, and filtering it further pushes measured FDP BELOW
+truth, which is the bias failure mode this TODO flags as "much harder to detect because the curve
+would simply look conservative".
+
+It also explains the 7/8-mer rejection rate without appealing to a defect: **7.4% of real 7-mer
+targets have an isobaric >=0.70-overlap twin among other real 7-mers.** Short tryptic peptides
+genuinely do have many indistinguishable near-twins - `SAAEAER` was rejected for shadowing
+`SAAAEER`, and both are real human tryptic peptides that are anagrams of each other. The rule is
+reading the library correctly; the question is only whether that class should be removed.
+
+**This does NOT transfer to the foreign arm, and the asymmetry is the point.** The Arabidopsis
+population the gate catches is conserved orthologs of tubulin, aldolase, enolase and RAB7A -
+proteins that are abundant and therefore PRESENT, not randomly present at the base rate. That is
+why the foreign arm showed a low-q spike and the shuffle arm did not. So the measurement supports
+the ORIGINAL scoping instinct recorded earlier in this file ("the filter is an ORTHOLOG filter,
+scoped to foreign-organism entrapment... Do NOT apply to shuffle entrapment") over the later
+uniformity decision, at least on this evidence.
+
+**Not decided here - it is Brendan's and Mike's call**, and the delivered libraries are what settle
+it: measuring FDP on `gated-no-iso` against `gated-no-il` shows directly whether the shuffle arm's
+FDP falls (bias) or its calibration improves. Both were built to the approved spec so that
+experiment is available. Levers if it does fall: scope the rule to foreign entrapment only, or
+make the threshold length-aware. **Deliberately NOT implemented** - either is a deviation from an
+approved spec and a science call, not an implementation one.
 
 **Foreign-arm manifest diffs are uninformative and should not be quoted.** `arabidopsis-no-il` ->
 `-no-iso` shows 22.3% of `p_target` changed, but that is the 1:1 mass-matched assignment
