@@ -403,6 +403,41 @@ invert the conclusion and stop a port that the evidence supports.
 7-8mer buckets to come back near 1x and the long bucket well above. They came back at 15-24x. The
 mass-matched control is what makes that trustworthy: 51.4% against 3.3% in the same isobaric
 window, with the tool returning 1.0x on a synthetic set where no relationship exists.
+### 2026-08-03 07:10 - Filed #4522; the effect is INVARIANT to every library filter we built
+
+Ran the co-assignment metric across the whole series, pre- and post-filter. **Brendan predicted
+the pre-filter arms would score HIGHER, since the I/L filter was motivated by finding this
+effect. The direction is the opposite - and the reason matters more than the prediction.**
+
+| arm | entrapment on a peak with a better-scoring target | target background | enrichment |
+|---|---|---|---|
+| ungated | 23.8% (25/105) | 4.6% | **5.2x** |
+| gated | 18.1% (17/94) | 4.5% | **4.0x** |
+| gated-no-il | 31.6% (30/95) | 4.8% | **6.6x** |
+| arabidopsis | 20.1% (29/144) | 4.3% | **4.7x** |
+| arabidopsis-no-il | 28.4% (38/134) | 5.0% | **5.7x** |
+
+**Why the raw rate rises after filtering**: the metric requires an ACCEPTED target as the
+co-assignment partner, and the filters INCREASE discoveries (arabidopsis +2,700). A cleaner
+library offers more partners, so the raw rate is confounded by target density. **The enrichment
+ratio is the density-controlled quantity** and should be the one reported.
+
+**Three results worth having:**
+1. **The target background is stable at 4.3-5.0% across five different libraries.** ~1 in 22
+   accepted target IDs shares a peak with a better-scoring same-mass precursor - **~1,200 IDs per
+   run** at 26,000 discoveries.
+2. **Entrapment is enriched 4.0-6.6x in EVERY arm.** Absent by construction, so these are
+   demonstrated false co-assignments.
+3. **No library filter touches it.** The similarity gate, the I/L filter and the set-wise isobaric
+   gate all move measured FDP substantially and leave this enrichment where it was. **It is a
+   scoring/peak-assignment property, and no library-side fix will remove it.** That is the
+   strongest argument for making it visible rather than continuing to correct libraries.
+
+**Filed as [#4522](https://github.com/ProteoWizard/pwiz/issues/4522)** - `--model-diagnostics`
+panel only: per-class co-assignment rate, the density-controlled enrichment ratio, a dRT
+histogram (so the tolerance choice is visible rather than baked in), and a worst-offenders
+listing. What to do about it deliberately left open.
+
 ### 2026-08-03 - GENERALISED: ~30% of reported entrapment sits on a peak a better-scoring target already explains
 
 Brendan asked whether the same-peak metric can be produced for ALL reported entrapment, noting
