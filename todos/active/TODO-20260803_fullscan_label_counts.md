@@ -5,8 +5,8 @@
 - **Base**: `master`
 - **Created**: 2026-08-03
 - **Module**: `skyline`
-- **Status**: In Progress
-- **PR**: (pending)
+- **Status**: PR open, awaiting review
+- **PR**: [#4527](https://github.com/ProteoWizard/pwiz/pull/4527)
 
 ## Objective
 
