@@ -403,6 +403,57 @@ invert the conclusion and stop a port that the evidence supports.
 7-8mer buckets to come back near 1x and the long bucket well above. They came back at 15-24x. The
 mass-matched control is what makes that trustworthy: 51.4% against 3.3% in the same isobaric
 window, with the tool returning 1.0x on a synthetic set where no relationship exists.
+### 2026-08-03 - GENERALISED: ~30% of reported entrapment sits on a peak a better-scoring target already explains
+
+Brendan asked whether the same-peak metric can be produced for ALL reported entrapment, noting
+the difficulty that we normally do not know the partner sequence. **It does not need the partner
+sequence.** Sharing a peak is geometry - same run, same apex RT, same precursor mass - and the
+sequence relationship (ortholog, I/L, anything else) is what one DISCOVERS, not what one queries.
+Tool: `ai/scripts/Osprey/Entrapment/peak_coassignment.py`.
+
+**At RT +- 0.05 min, mass +- 0.01 Da, q <= 0.01:**
+
+| arm | class | shares a peak with an accepted target | **of which BETTER-scoring** |
+|---|---|---|---|
+| arabidopsis-no-il | **entrapment (absent)** | 43/134 (32.1%) | **38 (28.4%)** |
+| | target (background) | 2,706/26,116 (10.4%) | 1,311 (**5.0%**) |
+| gated-no-il | **entrapment (absent)** | 33/95 (34.7%) | **30 (31.6%)** |
+| | target (background) | 2,508/25,468 (9.8%) | 1,229 (**4.8%**) |
+
+**About 30% of everything entrapment reports as a false discovery is a second ID on a peak that a
+better-scoring target already explains** - against a ~5% background among targets, a **~6x
+enrichment**. **Both entrapment designs agree** (28.4% foreign, 31.6% shuffle), so this is not an
+ortholog artifact and not specific to foreign entrapment.
+
+**RT sensitivity, reported because the headline magnitude depends on it:**
+
+| RT tol | entrapment better-scoring | target background | ratio |
+|---|---|---|---|
+| 0.01 min | 5.2% | 2.3% | 2.3x |
+| 0.02 | 8.2% | 2.8% | 2.9x |
+| **0.05** | **28.4%** | **5.0%** | **5.7x** |
+| 0.10 | 29.1% | 6.8% | 4.3x |
+| 0.25 | 34.3% | 10.0% | 3.4x |
+
+Enriched at EVERY tolerance, so the direction is robust; the magnitude is not. The jump between
+0.02 and 0.05 is apex-estimate jitter for the same feature - 0.05 min (3 s) matches the aldolase
+pair's measured 0.046 - and above ~0.10 both rates climb as unrelated peptides co-elute by
+chance. **Choosing 0.05 does maximise the ratio, which is a form of tuning; the honest claim is
+"2.3-5.7x depending on tolerance, ~6x at the physically motivated one".**
+
+**Why this matters beyond entrapment.** If ~30% of measured entrapment FDP is co-assignment
+rather than independent false detection, then a rule as simple as *"do not assign a second ID to
+a peak already claimed by a better-scoring precursor of the same mass"* would remove ~30% of
+measured entrapment FDP - and ~5% of target IDs (~1,300 of 26,000 here). The asymmetry is the
+point: such a rule removes false IDs **6x preferentially**. That is a real Osprey-side question
+with a measurable trade, and entrapment provides the labelled data to size it.
+
+**NOT proposed for action here** - it is a scoring/peak-assignment question, not a library one,
+and it belongs with Mike's standing concern rather than this TODO's gate work.
+
+**Method caveat repeated**: `peaks` is post-reconciliation extraction coverage, so presence of a
+peak is not independent detection. The apex RT VALUES are real, which is what the metric uses.
+
 ### 2026-08-03 - PROBE (Brendan): are the human twins detected, better-scoring, on the same peak?
 
 Not a gate question - a probe of the multiple-IDs-per-peak concern, using the entrapment-true
