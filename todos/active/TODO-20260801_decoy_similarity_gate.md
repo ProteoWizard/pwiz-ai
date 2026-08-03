@@ -381,6 +381,61 @@ Tool: `ai/scripts/Osprey/Entrapment/contamination_corrected.py`.
 
 ## Progress Log
 
+### 2026-08-03 (night) - the length question is the whole decision, and it is NOT settled by "spike drivers are long"
+
+**Post-hoc simulation on `arabidopsis-no-il`'s own accepted set** (mass-sorted exhaustive,
+isobaric 0.01 Da, overlap > 0.70 - the corrected method), removing shadow entrapment from the
+oracle at different length cutoffs:
+
+| oracle | disc@1%q | trueFDP% | matched@1% | vs measured |
+|---|---|---|---|---|
+| as measured (no removal) | 26,116 | **1.037** | 25,955 | - |
+| remove shadows len >= 11 | 26,116 | 0.976 | 26,332 | -5.9% |
+| remove shadows len >= 9 | 26,116 | **0.968** | 26,357 | **-6.7%** |
+| **remove ALL shadows** | 26,116 | **0.798** | 27,268 | **-23.0%** |
+
+**Shadow length distribution among the 63 accepted shadows: 35 are 7-mers, 18 are 8-mers, 2 are
+9, and 8 are >= 11.** So **53 of 63 are short**, and they carry ~71% of the FDP effect.
+
+**CORRECTION to my own recommendation earlier tonight.** I recommended a length-aware gate on the
+grounds that "length >= 9 still catches every spike driver". That is true - the three top-q
+drivers are lengths **17, 11 and 9** - but it is misleading as stated, because the SPIKE and the
+FDP MAGNITUDE are carried by different populations. A length >= 9 gate keeps the spike fix and
+only **~29%** of the FDP reduction.
+
+**So the length cutoff is not a tuning detail, it is the decision.** Full gate -23.0%, length-aware
+-6.7%: a 3.4x difference in the headline number, from one threshold.
+
+**Which is right depends on whether short-peptide shadowing is a correction or a bias, and the
+target-side control favours BIAS:**
+
+| | rate of having an isobaric, >0.70-overlap twin |
+|---|---|
+| TARGETS vs other targets | **1.486%** |
+| ENTRAPMENT vs targets | **0.835%** |
+
+Entrapment peptides are **entirely absent** from the sample. If shadowing were simply a
+false-discovery mechanism, the all-false population should shadow MORE than the mostly-true one.
+It shadows **less** - because real tryptic peptides from a real proteome carry paralogs and
+isoforms that a shuffled or foreign pool does not. **Entrapment therefore already
+under-represents shadowing-driven false discovery, and removing its short shadows widens that
+gap rather than closing it.** By finding 12 that biases measured FDP downward.
+
+**What this means for the implementation session** - stated as the trade, not as a verdict:
+* **Gate everything (as implemented)**: largest FDP reduction, but part of the -23% is likely the
+  estimator being flattered rather than corrected, and it costs ~11,300 entrapment / ~11,900
+  decoy / ~26,700 p_decoy regenerations.
+* **Gate length >= 9**: removes the low-q spike in full, keeps -6.7%, costs ~489 quartets instead
+  of ~49,900 - and leaves entrapment's short-peptide ambiguity matched to the targets', which is
+  the population it is supposed to model.
+
+**Still in flight and required before this is definitive**: the directly-measured
+`arabidopsis-no-iso` and `gated-no-iso` arms. The post-hoc numbers above are oracle surgery on an
+unchanged run; the arms remove the peptides from the library so they never compete. Agreement
+validates the simulation, and a gap is the competition effect - the same design that has been
+used at every step of this series.
+
+
 ### 2026-08-02 (later) - the SHIP #2 open question answered: reading (2) holds, gate by length
 
 The Carafe session's 60x cost correction is **confirmed, and my 0.013% estimate was wrong for the
