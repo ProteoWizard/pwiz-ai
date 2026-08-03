@@ -132,11 +132,19 @@ test asserted a decoy count and got 0. Both tests now set fragments and assert t
       (it reported 647,139 rows transfer-compete did not), so this flip has a plausible cost that
       an ordinary default flip would not
 - [ ] `Compare-EndToEnd-Crossimpl.ps1` on Stellar + Astral
-- [ ] Docs: `docs/12-second-pass-fdr.md`, `docs/07-fdr-control.md` (its pass-2 mode table names
-      `percolator` as the default), command-line docs
-- [ ] `ai/docs/osprey-development-guide.md`: record that Osprey environment variables are
-      developer-side controls for diagnostics and trial algorithms - NOT a user-facing interface,
-      so they do not earn the deprecation care a CLI flag would when changed or removed
+- [x] Docs: `docs/12-second-pass-fdr.md` + `docs/07-fdr-control.md` in `5848c69d5`; the remaining
+      four in `d8aee4ba0` - `20-command-line.md` (env-var table listed `percolator` as a valid
+      `OSPREY_PASS2_QVALUE` and described the pick model as opt-in), `06-peak-detection.md`
+      (selection precedence, the env-var table, and the Rust-divergence note all said "off by
+      default"), and `peak-model-training.md`, whose caveat had PREDICTED this exact re-baseline
+      ("flipping it on by default is a separate, coordinated golden re-baseline ... cross-impl
+      parity re-confirmed on Stellar + Astral") and now records that it happened.
+      `README.md` needed no change. Note `--fdr-method percolator` is the pass-1 FDR ENGINE and is
+      untouched - only the pass-2 `OSPREY_PASS2_QVALUE=percolator` MODE was removed, and conflating
+      the two would be an easy and wrong edit.
+- [x] `ai/docs/osprey-development-guide.md` env-var policy - **was already done** in `90e9e87`
+      ("Changing or REMOVING an env var needs no deprecation ceremony"), with the
+      `OSPREY_PASS2_QVALUE=percolator` removal as its worked example. Checkbox was stale.
 - [ ] `/code-review max`, then open the PR; ask before triggering TeamCity Perf/Regression
 
 ## Regression Test
