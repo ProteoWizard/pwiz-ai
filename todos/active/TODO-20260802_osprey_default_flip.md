@@ -519,6 +519,24 @@ whose HPC and straight-through paths agree and one whose paths are known not to.
 
 ## Progress Log
 
+### 2026-08-03 - RE-BASELINE UNBLOCKED: SHIP #2 was reverted, so nothing else changes sequences
+
+The re-baseline was deferred on the reasoning that SHIP #2 (the set-wise isobaric shadow gate)
+"changes generated decoy sequences exactly as the I/L gate did, so re-baselining first would cost
+a second re-baseline". **Brendan decided on 2026-08-03 to REVERT SHIP #2** - it is shelved in
+Carafe, unshipped, and explicitly NOT ported to Osprey C# or Rust. See the DECISION entry in
+[TODO-20260801_decoy_similarity_gate.md](TODO-20260801_decoy_similarity_gate.md).
+
+**So there is no second sequence-changing change coming, and the golden re-baseline can be taken
+now** on what this branch already contains: the I/L gate (SHIP #1, which is KEPT and unaffected)
+plus the two default flips plus the mode-3 fix. All four datasets are green on every
+self-consistency mode; only mode 1 and 1b are red, which IS the re-baseline.
+
+**Still standing from the earlier entry**: the libdecoy regression dataset's library should be
+replaced in the same step, since it predates the Carafe gate work. That was sequenced AFTER
+SHIP #2 only because SHIP #2 might have changed what "current" meant - it no longer can, so the
+candidate is a current Carafe build with the overlap gate and the I/L filter.
+
 ### 2026-08-03 - `-Dataset All` FINISHED: every self-consistency mode green on all four datasets
 
 The run that was in flight at the previous session's end completed. **Mode 3 passes on ASTRAL

@@ -230,7 +230,17 @@ owns the PR. Kept current with this TODO; re-read it after any finding that chan
 
       **Then the real experiment becomes clean**: same sequences, same decoys, and the only
       difference between the two libraries is where each decoy's spectrum and RT came from.
-- [x] **DONE 2026-08-02 - SHIP #2 set-wise isobaric shadow gate in Carafe.** `IsobaricShadowIndex`
+- [x] **REVERTED 2026-08-03 - SHIP #2 is OUT of the Carafe PR and out of Osprey.** Per the DECISION
+      entry, the two commits (`256a8d8`, `95e1f1c`) were moved off the PR branch onto
+      **`feature/setwise-isobaric-gate-shelved`** in `C:\proj\Carafe-mm`, and
+      `feature/decoy-similarity-gate` was reset to its validated 8-commit state (121 tests green,
+      `CandidateGate.java` and `IsobaricShadowIndex.java` gone). Nothing was pushed, so no
+      published history was rewritten. The PR description draft drops change 4 and records why,
+      with a pointer to the shelf branch so a second dataset can reopen it without rebuilding.
+      **Osprey C#/Rust were never touched by SHIP #2**, so there is nothing to revert there - the
+      I/L gate on `Skyline/work/20260802_osprey_default_flip` is SHIP #1 and STAYS.
+      Original implementation note kept below for whoever reopens it.
+- [x] **BUILT, VALIDATED, NOT SHIPPED - SHIP #2 set-wise isobaric shadow gate in Carafe.** `IsobaricShadowIndex`
       (mass-sorted, ~15-target window per candidate) + `CandidateGate`, which bundles the three
       independent checks - I/L-normalised collision, pairwise overlap against the candidate's own
       source, set-wise shadowing of any other target - so both generators apply them in one order
@@ -240,10 +250,13 @@ owns the PR. Kept current with this TODO; re-read it after any finding that chan
       `IVLIGDSGVGK` / `VIILGDSGVGK` passes both existing checks and is caught only by this one.
       **Its measured cost is ~60x the spec's estimate, for a reason worth reading** - see the
       progress entry.
-- [ ] **Port SHIP #2 to Osprey C# and Rust** once the rebuilt libraries validate. Same sequencing
-      as the I/L filter, which turned out not to be sufficient for the foreign-species case: prove
-      it on a real library first, then port. It supersets the I/L gate already shipped in
-      `Skyline/work/20260802_osprey_default_flip`, and will need that branch's golden re-baseline.
+- [x] ~~**Port SHIP #2 to Osprey C# and Rust**~~ - **CANCELLED** by the DECISION entry. Never
+      started, so nothing to unwind. **Consequence worth acting on**: the golden re-baseline on
+      `Skyline/work/20260802_osprey_default_flip` was deliberately deferred to avoid paying for it
+      twice, with SHIP #2 named as the thing to wait for. That wait is now over - no second
+      sequence-changing change is coming - so **the re-baseline is UNBLOCKED and can be taken on
+      the I/L gate plus the two default flips alone.** See
+      [TODO-20260802_osprey_default_flip.md](TODO-20260802_osprey_default_flip.md).
 - [ ] **NEW 2026-08-02 - Osprey I/L gap (C# AND Rust), needs a decision before implementing.**
       Neither has I/L-normalised collision rejection; both check exact strings only. Measured 742
       colliding decoys (0.0534%) in a simulation of Osprey's own gendecoy path over the Astral
