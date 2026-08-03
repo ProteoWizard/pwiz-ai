@@ -337,6 +337,40 @@ This is why the earlier default hid it, and it is a real argument that the gate 
 the flip did not break HPC/single-machine comparability, it REVEALED that the single-machine
 path was already wrong.
 
+### The exact line, and why it is not simply a bug
+
+`PerFileRescoreTask.OverlayRescoredEntries` (`:1285-1309`) DELIBERATELY resets
+`Score = 0.0` and every q-value to `1.0` for every entry Stage 6 rescored (consensus,
+reconciliation and gap-fill targets), on a documented contract:
+
+> "Mirror Rust's to_fdr_entry semantics: post-rescore stubs carry default Score (0.0),
+> q-values (1.0), and Pep (1.0). Percolator (Stage 7, second-pass FDR) recomputes these from
+> the new Features."
+
+That contract is satisfied by `percolator` (retrains), `transfer-compete` (rewrites every
+survivor) and `transfer` (re-maps moved peaks). **It is violated by exactly one case**:
+`protein-compact`'s OFF-stratum survivors, which are deliberately NOT recomputed so they can
+"keep their already-passing 1st-pass q" - a q the overlay has already destroyed.
+
+The measurements fit exactly: eid 23645 kept a real q in _20 and _21 (never rescored) and got
+`1` in _22 (rescored). The HPC chain escapes only because its merge node re-hydrates
+pre-reset values from the parquet.
+
+**So neither path is right by design.** The chain accidentally matches protein-compact's
+intent; the straight path faithfully reports a sentinel that was never meant to be read.
+
+Note the reset exists for Rust parity, so changing it is not free.
+
+### Fix options (unmeasured, in preference order)
+
+1. **Source the off-stratum pass-1 q from the sidecar** rather than the mutated in-memory
+   entry. Surgical, confined to the one mode that reads it, and it is what the HPC path
+   already effectively does - so it should CLOSE the mode-3 gap rather than move it.
+2. Have protein-compact recompute q for off-stratum survivors too. Simple, but defeats the
+   mode's design (report = pass1 U stratum passers).
+3. Preserve pass-1 q through the overlay. Smallest diff, but it changes a contract held for
+   Rust parity and would affect every mode.
+
 ### Decision needed before fixing
 
 The fix is in the Stage-6 rescore write-back on the in-process path, and it is
