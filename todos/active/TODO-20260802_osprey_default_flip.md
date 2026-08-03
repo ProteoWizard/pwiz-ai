@@ -127,11 +127,11 @@ test asserted a decoy count and got 0. Both tests now set fragments and assert t
 - [x] Flip `OSPREY_PASS2_QVALUE` to `protein-compact`
 - [x] Flip `OSPREY_PICK_LDA` on
 - [x] I/L-normalised collision rejection, C# and Rust, with independence tests
-- [ ] Golden re-baseline (`regression.ps1 -Dataset All -CreateGolden`)
+- [x] Golden re-baseline (`regression.ps1 -Dataset All -CreateGolden`) - DONE 2026-08-03, pwiz `4a067fa8b`; verified by a full `-Dataset All` at 26/26 PASS
 - [ ] `Test-PerfGate.ps1` + a memory-band check - protein-compact expands the reconciled pool
       (it reported 647,139 rows transfer-compete did not), so this flip has a plausible cost that
       an ordinary default flip would not
-- [ ] `Compare-EndToEnd-Crossimpl.ps1` on Stellar + Astral
+- [x] `Compare-EndToEnd-Crossimpl.ps1` on Stellar + Astral - DONE 2026-08-03, Astral bit-parity at 1e-9, delta=0 on 119,088 precursors
 - [x] Docs: `docs/12-second-pass-fdr.md` + `docs/07-fdr-control.md` in `5848c69d5`; the remaining
       four in `d8aee4ba0` - `20-command-line.md` (env-var table listed `percolator` as a valid
       `OSPREY_PASS2_QVALUE` and described the pick model as opt-in), `06-peak-detection.md`
@@ -526,6 +526,32 @@ Brendan's call, not an implementation detail - it is the difference between ship
 whose HPC and straight-through paths agree and one whose paths are known not to.
 
 ## Progress Log
+
+### 2026-08-03 - STEP 3 GREEN: `Osprey regression PASSED`, 26/26. RE-BASELINE COMPLETE.
+
+Committed as `4a067fa8b` (47 files, all under `osprey-regression.data`, nothing stray).
+
+```
+Stellar               mode1 PASS  mode3 PASS  mode4 PASS  mode2 x2 PASS
+StellarLibDecoy       mode1 PASS  mode1b PASS (+FDR sanity bounds PASS)  mode3 PASS  mode4 PASS  mode2 x2 PASS
+StellarGenDecoyEntrap mode1 PASS  mode1b PASS (+FDR sanity bounds PASS)  mode3 PASS  mode4 PASS  mode2 x2 PASS
+Astral                mode1 PASS  mode1b PASS (+FDR sanity bounds PASS)  mode3 PASS  mode4 PASS  mode2 x2 PASS
+Osprey regression PASSED
+```
+
+**Mode 3 passes on all four datasets against the newly captured baseline** - the check that was
+broken before `8796e7a13`, now green at Astral scale (chain 14:48) as well as Stellar. That was
+the point of running it last rather than treating the capture as the finish line: the baseline
+that ships and the HPC path that production uses are now proven to describe the same pipeline at
+the same time.
+
+Also worth keeping: **the FDR sanity bounds passed on every entrapment dataset in the VERIFY run,
+not just at capture.** Tier 2 is a fixed bound that a re-baseline cannot move, so this is the
+independent check that the flips did not quietly walk calibration out of range - `MaxPass1Fdp`
+0.02 on the gendecoy set, `MaxAbsTilt` 0.5 on Astral.
+
+The run also reports `data dir unchanged across run` for all three read-only data folders, so
+nothing in the shared test-data drop was mutated.
 
 ### 2026-08-03 - STEP 2 DONE: all four goldens CAPTURED, none refused
 
