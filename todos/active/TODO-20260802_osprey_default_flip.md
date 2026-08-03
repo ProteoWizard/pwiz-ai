@@ -396,8 +396,29 @@ entry on the two paths, making the extension itself path-dependent - precisely t
 fix was supposed to avoid. The gap-fill half was fine (`GapFillTarget.TargetEntryId` is
 path-independent); the reconciliation half poisoned it.
 
-**Any retry must key off ENTRY IDs only, never indices.** Whether an entry-id-keyed source of
-"was rescored" exists on both paths is the open question.
+**Any retry must key off ENTRY IDs only, never indices.** That question is now ANSWERED, and
+the answer blocks option 1 as chosen: `ReconcileAction`
+(`Osprey.FDR/Reconciliation/ReconcileAction.cs:31`) is a discriminated union carrying NO entry
+id - entry identity exists only in the `(FileName, Index)` dictionary key. Only
+`GapFillTarget.TargetEntryId` is entry-id-keyed. So "compete the rescored off-stratum
+survivors" requires FIRST adding entry ids to the reconciliation byproduct (and to
+reconciliation.json, which is byte-compared against Rust) - a bigger and riskier change than
+the fix it enables.
+
+**Option 2 has a clean implementation path, which changes the cost comparison.** Add
+`FdrEntry.Pass1RunPrecursorQvalue`, defaulted to NaN:
+* `OverlayRescoredEntries` stashes the pre-reset run q into it before zeroing.
+* protein-compact's off-stratum branch reads
+  `double.IsNaN(e.Pass1RunPrecursorQvalue) ? e.RunPrecursorQvalue : e.Pass1RunPrecursorQvalue`.
+
+Both paths then yield the same pass-1 q: on the straight path overlaid entries carry the
+stashed value and untouched ones fall back to their intact q; on the merge node nothing is
+overlaid, so everything falls back to the rehydrated q - which IS the pass-1 value. It adds a
+field rather than changing the Rust-parity reset, so no other mode moves.
+
+The trade remains the one in the option list: option 2 reports a q computed from features
+Stage 6 has since replaced. That is a statistics question for Brendan and Mike, not an
+implementation one.
 
 ### Fix options (unmeasured, in preference order)
 
