@@ -104,11 +104,35 @@ and File > Import > Window Layout complain identically:
   `deserialized` flag had to be hoisted out of the `using` block to reach it).
 - `ImportLayout` calls it after its `CloseInapplicableForms` pass.
 
-`IsExpectedMissingWindow` suppresses the one deliberate decline - chromatogram
-graphs past `MAX_GRAPH_CHROM`, which is a Win32 handle cap rather than a problem
-with the file. Everything else is reported, including windows that are simply
-inapplicable to the current document (a list or group comparison the document
-does not define), which is exactly the cross-document case Import Layout creates.
+**The two entry points differ in strictness** (`LayoutProblems`,
+`Controls/LayoutProblems.cs`). Each window that could not be restored is
+classified:
+
+| `LayoutProblemType` | Meaning | Open document | Import Layout |
+|---------------------|---------|---------------|---------------|
+| `error` | Threw while restoring | report | report |
+| `unrecognized` | Persist string matched nothing Skyline knows | report | report |
+| `not_applicable` | Known window kind, does not apply to this document (list, replicate, group comparison missing; `MAX_GRAPH_CHROM` cap) | **silent** | report |
+
+Rationale: the layout beside a document describes *that* document, so an
+inapplicable window there is not worth interrupting for, while an unrecognized
+one means the file is wrong ("clearly not a .sky.view file"). An imported layout
+was just picked by the user and may belong to a different document, so every
+window it did not get is worth saying.
+
+`RestoreDockableForm` grew an `out bool recognized`, set true at the top and
+false only at the single fall-through `return null`, so classification costs two
+assignments rather than one per branch. The `GraphChromatogram` branch had to
+gain an explicit `return null` - it previously fell through to that same
+fall-through and would have been misreported as `unrecognized`.
+
+`FoldChangeForm.CloseInapplicableForms` now returns the persist strings it
+closed, and `ImportLayout` folds them in as `not_applicable`. Those forms are
+restored *before* anyone checks whether their group comparison exists, so they
+are invisible to `DeserializeForm` and would otherwise vanish unreported.
+`ListGridForm.CloseInapplicableForms` needed no such change - `CreateListForm`
+now returns null up front, so the form is never created.
+
 The message lists raw persist strings; `CommonAlertDlg` scrolls, so a long list
 is not a problem.
 
@@ -264,12 +288,25 @@ Three changes from the developer's review of the first pass:
    above; the functional test asserts `FILTER_SKY_VIEW` contains no `*.*` so the
    guard cannot be silently undone.
 
-Regression risk taken on: documents that open with a `.sky.view` now show a
-warning where they were previously silent. Verified against ListClustering,
-SummaryGraphVisibility, TreeRestoration, FilesTreeForm, DocumentFileLocking,
-MethodRefinement / ExistingQuantitativeExperiments / GroupedStudies tutorials,
-and CodeInspection. **A full nightly is the real gate** - any test data whose
-`.sky.view` names a window that no longer restores will now pop a dialog.
+### 2026-08-03 - Session 1, second review round
+Split the warning into two strictness levels (table above), on the developer's
+point that opening a document should only complain about a file that is wrong,
+while Import Layout should complain about anything it could not honor.
+
+`TestOpenDocumentStrictness` pins the difference with one file: a layout naming a
+list window, given to a document without that list. Opening is silent; importing
+the very same file warns. The test was verified to have teeth - flipping
+`severeOnly` to false in `UpdateGraphUI` makes it fail (unclosed `MessageDlg`
+timeout), which is the regression it exists to catch.
+
+Regression risk taken on: documents that open with a `.sky.view` can now show a
+warning where they were previously silent - but only for an exception or an
+unrecognized window, which narrows it a lot compared to the first pass. Verified
+against ListClustering, SummaryGraphVisibility, TreeRestoration, FilesTreeForm,
+DocumentFileLocking, GroupComparison, FoldChangeGrid, MethodRefinement /
+ExistingQuantitativeExperiments / GroupedStudies tutorials, and CodeInspection.
+**A full nightly is still the gate** - any test data whose `.sky.view` names a
+window this Skyline does not recognize will now pop a dialog.
 
 ## References
 
