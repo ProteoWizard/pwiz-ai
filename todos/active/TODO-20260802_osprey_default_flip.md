@@ -527,6 +527,54 @@ whose HPC and straight-through paths agree and one whose paths are known not to.
 
 ## Progress Log
 
+### 2026-08-03 - SIGNAL FIX LANDED both sides; goldens now stale BY DESIGN
+
+pwiz `1e90d5453`, maccoss/osprey `fa5af6c`. The admission signal is now a frozen-model score that
+differs BIT-EXACTLY from the entry's 1st-pass sidecar score, replacing "present in
+survivorScoreOverride".
+
+**Why that discriminator and not another guess**: `Pass2FdrSidecar.AssignPerRunQ` already uses it
+to separate `Moved` from `Unchanged`, and documents why it is reliable - an unchanged survivor's
+reconciled features ARE its Stage-4 features (`ReconciledParquetWriter` streams unchanged rows
+through untouched) and the sidecar score came from those same features under the same averaged
+model, so the recomputation is bit-identical. It also needs NO new plumbing (both values were
+already in that loop) and stays entry-id keyed, which is the property the earlier
+`(FileName, Index)` attempt violated when it made mode 3 worse (12 -> 30 issues).
+
+| gate | result |
+|---|---|
+| C# build + tests + ReSharper inspection | 573/573, 0 warnings / 0 errors |
+| Rust `fmt` + `clippy -D warnings` + tests | clean |
+| Stellar straight-through vs the old-signal golden | **51 issues**, blib 25,395,200 -> 25,194,496 |
+| Cross-impl Stellar WITH the fix | **PASS** - rust=29108 cs=29108 **delta=0**, Stage 7 + blib at 1e-9 |
+
+**The delta=0 is the load-bearing evidence** - two independently written implementations, given the
+same bit-exact discriminator, land on the same 29,108 precursors having both moved -221 from the
+pre-fix 29,329. A half-mirrored port shows up here immediately; it did exactly that once at
+delta=-152.
+
+**Review finding #2 resolved as a side effect, without touching the map-back.** Both defects were
+the same wrong predicate seen from two sides. With the fix:
+
+| population | behaviour |
+|---|---|
+| off-stratum, unchanged | not admitted -> absent from `runQ` -> keeps its pass-1 q, **not dropped** |
+| off-stratum, changed | admitted -> competes -> earns a q, or loses and keeps the overlay's q=1 (a real rejection) |
+| on-stratum | unchanged |
+
+That restores the documented contract that re-scoping "only adds, never drops an already-passing
+peptide".
+
+**THE COMMITTED GOLDENS ARE NOW STALE BY DESIGN.** `4a067fa8b` captured output from the old
+signal; the branch now produces different output, so `regression.ps1` mode 1 is red until a
+re-capture. That is expected, not a regression - but it means the branch must NOT be left in this
+state, and the re-baseline has to be redone (capture + full verify, ~100 min).
+
+**Process note worth keeping**: I verified the mode-3 fix originally by trusting the comment that
+named the signal, rather than reading the producer that fills it. The comment was wrong. When a
+fix turns on "X IS the signal for Y", read the code that POPULATES X, not the code that consumes
+it.
+
 ### 2026-08-03 - `/code-review max`: top finding CONFIRMED in mechanism, REFUTED in severity
 
 The review's #1 finding claims `survivorScoreOverride` is not a "Stage 6 changed" signal, and
