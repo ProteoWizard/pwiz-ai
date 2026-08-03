@@ -433,6 +433,49 @@ accepted entrapment's isobaric window is split into the targets it shadows (over
 the targets it does not, so both halves share the same precursor mass, proteome and detectability
 priors and differ only in fragment overlap. Smoke-tested against a synthetic accepted set with no
 real relationship, where it returns **1.0x at every length** - the null case reads as null.
+### 2026-08-03 03:20 - `arabidopsis-no-iso` MEASURED. Both predictions hit; the gate is not free.
+
+**PREDICTIONS CONFIRMED EXACTLY.**
+
+| arm | first-grid-point FDP | implied entrapment at top q |
+|---|---|---|
+| arabidopsis | 177.80% | **7.0** |
+| arabidopsis-no-il | 152.40% | **3.0** |
+| **arabidopsis-no-iso** | **101.50%** | **1.0** |
+
+Predicted **3 -> 1** with first-point FDP **~101%**; measured **1.0** and **101.50%**. The
+residual is `WVILGHSER`, which is not a shadow (isobaric overlap 0.250) and looks like a genuine
+high-scoring false discovery - **so the spike has reached its irreducible floor, and the residual
+is the null working correctly.**
+
+**THE FULL GATE COSTS DISCOVERIES.**
+
+| arm | disc@1%q | trueFDP% | matched@1% | eff% | matched-disc FDP (N=23,385) |
+|---|---|---|---|---|---|
+| arabidopsis | 23,385 | 1.183 | 22,550 | 69.24 | 1.183% |
+| arabidopsis-no-il | 26,085 | 0.992 | 26,085 | 78.71 | 0.608% |
+| **arabidopsis-no-iso** | 25,304 | **0.895** | 25,464 | **73.53** | **0.495%** |
+| *gated-no-il (shuffle ref)* | 25,454 | 0.739 | 26,348 | 78.27 | 0.356% |
+
+`no-il -> no-iso`: FDP **-9.8%**, disc **-3.0%**, matched **-2.4%**, efficiency **-5.18 pts**.
+
+**The post-hoc simulation over-predicted the benefit by ~2.3x** (-23.0% predicted, -9.8%
+measured) and could not see the cost at all. That is now **three for three** - the gate, the I/L
+fix, and this - and it is a property of the method: oracle surgery holds the discovery set fixed
+by construction, so it systematically overstates benefit and is blind to what a library change
+costs. **Do not size a library intervention from post-hoc surgery alone.**
+
+**THIS STRENGTHENS THE LENGTH-AWARE RECOMMENDATION RATHER THAN WEAKENING IT.** The two spike
+drivers the gate removed are lengths **17 and 11**, so a length >= 9 gate removes exactly the
+same two and delivers the identical **3 -> 1** spike fix - while touching **~100x fewer entries**
+(~489 quartets vs ~49,900) and therefore avoiding essentially all of the -3.0% discovery and
+-5.18 pt efficiency cost measured above.
+
+**Scaling the post-hoc numbers by the observed 2.3x over-prediction**, a length >= 9 gate should
+land near **-3%** FDP rather than -6.7%, against the full gate's measured -9.8%. So the trade is:
+the full gate buys perhaps 6-7 more points of FDP reduction, and pays 3% of discoveries and 5
+points of efficiency for them - **from a population (7-8mers) where entrapment already shadows
+LESS than targets do**, i.e. where the reduction most likely flatters the estimator.
 
 ### 2026-08-03 (night) - the length question is the whole decision, and it is NOT settled by "spike drivers are long"
 
