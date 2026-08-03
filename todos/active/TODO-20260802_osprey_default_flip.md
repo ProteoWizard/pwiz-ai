@@ -519,6 +519,39 @@ whose HPC and straight-through paths agree and one whose paths are known not to.
 
 ## Progress Log
 
+### 2026-08-02 (late) - mode 3 FIXED both sides; re-baseline now blocked only on SHIP #2
+
+**All code complete and green except the golden re-baseline.** pwiz `8796e7a13`, maccoss/osprey
+`753bdea`.
+
+| gate | result |
+|---|---|
+| `regression.ps1` mode 3 (HPC == single-machine), Stellar | **PASS** |
+| Cross-impl C# <-> Rust, Stellar | **PASS** - delta=0 precursors, Stage 7 PASS, blib PASS, 1e-9 |
+| C# unit tests + ReSharper inspection | 573/573, 0 warnings / 0 errors |
+| Rust `fmt` + `clippy -D warnings` + tests | clean |
+| `regression.ps1 -Dataset All` | IN FLIGHT at session end; Stellar + StellarLibDecoy mode 2/3/4 PASS, mode 1 + 1b FAIL (the expected re-baseline) |
+
+Note `mode1b` (diagnostics spot checks vs golden) also needs re-baselining - it is a separate
+golden from the blib one and shows up only on `StellarLibDecoy`.
+
+**The re-baseline is deliberately NOT taken.** It is now blocked on SHIP #2 from
+[TODO-20260801_decoy_similarity_gate.md](TODO-20260801_decoy_similarity_gate.md), which the
+other machine pushed at 21:44 - it changes generated decoy sequences exactly as the I/L gate did,
+so re-baselining first would cost a second re-baseline. Same batching logic that put the I/L gate
+in this branch.
+
+**SHIP #2 in one line**: the overlap gate's defect is its SCOPE, not its metric - it compares a
+candidate only to its OWN paired target. Widen to set-wise against ALL targets, rejecting where
+precursor mass is ISOBARIC (few ppm) AND fragment overlap > 0.70. It SUPERSETS the I/L gate
+already shipped here (an I/L twin is isobaric with overlap 1.000). Three constraints carried from
+that TODO: implement as RETRY not removal or the quartets break and `r` silently rescales; any
+k-mer index must be built on I/L-NORMALISED sequences; and set-wise is a different cost class
+(1.39M x 1.39M) so it needs a real index and will be visible to the perf gate.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260802_osprey_default_flip.md` before starting work.
+
 ### 2026-08-02 - Implemented; gates green except mode 3, which blocks the re-baseline
 
 C# 573/573 unit tests, ReSharper inspection 0 warnings / 0 errors. Rust: all crate tests green,
