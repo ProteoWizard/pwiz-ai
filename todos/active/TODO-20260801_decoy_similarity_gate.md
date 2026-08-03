@@ -487,6 +487,25 @@ near-copy from a chance fragment collision. **Do not apply to shuffle entrapment
 they carry 1 marginal case in 95 accepted entrapment, and a set-wise rule would strip ~3.7% of
 valid entrapment for no measured benefit.
 
+**LIBRARY-WIDE DISCARD, MEASURED (this is the number that decides whether the net is too wide).**
+Sampled 1-in-60 of distinct library entrapment, ~23,200 per library - NOT the accepted subset,
+which is 0.06% of the library and cannot answer this:
+
+| criterion | gated-no-il | arabidopsis-no-il |
+|---|---|---|
+| overlap > 0.40, any mass | **9.40%** (~130,700 entries) | **9.72%** (~135,200) |
+| overlap > 0.70, any mass | 0.07% | 0.11% |
+| **overlap > 0.70 & dm <= 5 Da** | **0.02%** (~**240** entries) | **0.02%** (~**298** entries) |
+
+**The proposed filter discards ~240-300 of 1.39M entries.** The precursor-mass constraint is what
+makes it narrow - it cuts a further 3-5x below the 0.70 threshold alone. The rejected 0.40
+all-targets rule would have discarded ~**130,000** entries, ~450x more, which is exactly the
+"wide net" failure mode.
+
+**Targeting is sharp**: 0.02% of the library accounts for **6.0%** of ACCEPTED entrapment in
+arabidopsis (8 of 134) - a **~300x enrichment**. The filter hits the population that actually
+gets detected, which is what a shadowing filter should do.
+
 *(An earlier draft of this section specified a sequence-IDENTITY filter at 0.80. That was wrong -
 identity was measured as a DESCRIPTOR of the flagged cases and mistakenly promoted to the
 CRITERION. The 0-identity-only result above shows it would flag the same 8 while requiring a new
