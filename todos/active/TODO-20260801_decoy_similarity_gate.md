@@ -230,6 +230,20 @@ owns the PR. Kept current with this TODO; re-read it after any finding that chan
 
       **Then the real experiment becomes clean**: same sequences, same decoys, and the only
       difference between the two libraries is where each decoy's spectrum and RT came from.
+- [x] **DONE 2026-08-02 - SHIP #2 set-wise isobaric shadow gate in Carafe.** `IsobaricShadowIndex`
+      (mass-sorted, ~15-target window per candidate) + `CandidateGate`, which bundles the three
+      independent checks - I/L-normalised collision, pairwise overlap against the candidate's own
+      source, set-wise shadowing of any other target - so both generators apply them in one order
+      and one place counts what each rejected. Applied to shuffle entrapment, the decoy ladder, and
+      the foreign pool (at pool-build time, where a shadowing peptide can serve no target at all).
+      Tests assert the property that justifies a THIRD check: the real Arabidopsis/human RAB7A pair
+      `IVLIGDSGVGK` / `VIILGDSGVGK` passes both existing checks and is caught only by this one.
+      **Its measured cost is ~60x the spec's estimate, for a reason worth reading** - see the
+      progress entry.
+- [ ] **Port SHIP #2 to Osprey C# and Rust** once the rebuilt libraries validate. Same sequencing
+      as the I/L filter, which turned out not to be sufficient for the foreign-species case: prove
+      it on a real library first, then port. It supersets the I/L gate already shipped in
+      `Skyline/work/20260802_osprey_default_flip`, and will need that branch's golden re-baseline.
 - [ ] **NEW 2026-08-02 - Osprey I/L gap (C# AND Rust), needs a decision before implementing.**
       Neither has I/L-normalised collision rejection; both check exact strings only. Measured 742
       colliding decoys (0.0534%) in a simulation of Osprey's own gendecoy path over the Astral
@@ -366,6 +380,88 @@ below 0.695%.
 Tool: `ai/scripts/Osprey/Entrapment/contamination_corrected.py`.
 
 ## Progress Log
+
+### 2026-08-02 (late) - SHIP #2 implemented in Carafe; its cost estimate was wrong by ~60x
+
+Implemented as specified - **isobaric within 0.01 Da AND fragment overlap > 0.70, set-wise against
+all real targets, applied as RETRY** - in `IsobaricShadowIndex` + `CandidateGate`, wired into
+shuffle entrapment, the reverse/cycle decoy ladder, and the foreign-entrapment pool. 126 tests
+green. Digest cost is negligible (2.1 min for 1.39M targets): the isobaric constraint keeps the
+mass-sorted index to a ~15-target window per candidate, so it never approaches the feared 1.39M x
+1.39M.
+
+**MEASURED DISCARD, full population, not a sample** (`gated-no-il` -> `gated-no-iso`, the same
+generator with one rule added, so every difference is this rule):
+
+| class | predicted by the spec | **measured** |
+|---|---|---|
+| `p_target` (entrapment) | 0.013% ~ 180 | **0.814% ~ 11,312** |
+| `decoy` | 0.022% ~ 300 | **0.858% ~ 11,931** |
+| `p_decoy` | 0.056% ~ 777 | **1.920% ~ 26,687** |
+| foreign pool (arabidopsis) | 0.013% ~ 179 | **0.874% ~ 12,590** |
+
+Quartets actually LOST: **1,428** (0.10%) - the rest were re-generated, which is what the retry
+requirement buys.
+
+**The implementation is not what is wrong.** An independent Python implementation (ladder and
+overlap copied from `library_overlap_audit.py`, not from the Java) scanning a 1-in-60 sample of
+the `-no-il` library's entrapment against the FULL target set reports **0.8752%** against the
+Java's 0.814%. Two implementations, two languages, same answer.
+
+**The 60x is real and mechanistic: a fixed overlap FRACTION is not scale-free in peptide length.**
+
+| target length | quartets | changed | rate |
+|---|---|---|---|
+| 7 | 117,457 | 27,300 | **23.2%** |
+| 8 | 109,319 | 19,777 | **18.1%** |
+| 9 | 105,884 | 2,364 | 2.2% |
+| 10 | 95,680 | 326 | 0.34% |
+| 11-17 | 484,645 | 163 | **0.01-0.09%** |
+
+**Every peptide the spec measured is length 11-19** (`IVLIGDSGVGK` 11, `GILAADESTGTIGK` 14,
+`DLKPSNLLLSTQCDLK` 16, `EILHIQGGQCGNQIGAK` 17, `FSDDSYVESYISTIGVDFK` 19) - the regime where the
+measured rate IS ~0.013%. The estimate was right for the population it was drawn from and was
+extrapolated across a library where 16% of the peptides are 7- and 8-mers.
+
+A 7-mer has 12 rungs, so >0.70 means >=9 of 12, and two of those (y1 and b_{n-1}) are invariant
+under any C-terminus-preserving permutation. Combine that with the compositional isobars that are
+everywhere in short tryptic peptides - **Q = G+A exactly (128.05858), N = G+G (114.04293)** - and
+chance agreement dominates. Verified on a real case: entrapment `EAQALAR` was rejected for
+shadowing `EAGAAALR` at overlap 0.833, dMass 1e-5 Da, which is the Q -> GA substitution.
+
+**Consequences for the record, both directions:**
+
+* The "**~300x enrichment**" claim does not survive. It divided 6.0% of accepted arabidopsis
+  entrapment by a library-wide rate of 0.02%. Against the measured 0.87% the enrichment is
+  **~6.9x** - still real, still the population producing the low-q spike, but "surgical" is the
+  wrong word.
+* The mechanism is confirmed on real sequences, including the `p_decoy` class the spec predicted
+  structurally: `AAAAADNLAR` (p_decoy) shadows its own paired target `AAAAADLANR` at 0.778,
+  invisible to every existing check because a p_decoy is only ever compared to the p_target it was
+  reversed from.
+* **The retry requirement is doing more work than anyone expected.** Re-generating rather than
+  dropping is what keeps this at a 0.10% quartet loss instead of a 0.9-1.9% one, and it preserves
+  the length/composition matching between targets and entrapment that `entrapment_composition.py`
+  exists to check - a re-shuffle of the same peptide has the same length and composition.
+
+**OPEN QUESTION for Brendan and Mike, not settled here.** At length 7-8 the rule rejects 18-23% of
+candidates. Two readings, and the data so far cannot separate them:
+1. Correct. Short peptides genuinely have many indistinguishable twins in a 1.39M-peptide library,
+   and an entrapment peptide that is one of them models nothing.
+2. Over-wide. If a short entrapment peptide has an isobaric high-overlap twin, so do many short
+   TARGETS - of each other. Removing the ambiguity from only the entrapment side could make the
+   entrapment population systematically unlike the target population, which is the bias failure
+   mode this TODO already flags for SHIP #2 generally.
+
+A length- or rung-count-aware threshold is the obvious lever if (2) holds. **Deliberately NOT
+implemented** - it is a deviation from the approved spec and a science call.
+
+**Foreign-arm manifest diffs are uninformative and should not be quoted.** `arabidopsis-no-il` ->
+`-no-iso` shows 22.3% of `p_target` changed, but that is the 1:1 mass-matched assignment
+cascading: removing 12,590 peptides from the pool changes what every later target draws. The
+gate's actual effect on that arm is the pool exclusion, 12,590 of 1,441,104 (0.874%). Its `decoy`
+column (0.865%) is a genuine gate effect and matches the shuffle arm's 0.858%, as it should - both
+reverse the same human targets.
 
 ### 2026-08-02 - Carafe half implemented end to end; five Astral libraries delivered
 
