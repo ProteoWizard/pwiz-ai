@@ -444,64 +444,86 @@ shadowing `EAGAAALR` at overlap 0.833, dMass 1e-5 Da, which is the Q -> GA subst
   the length/composition matching between targets and entrapment that `entrapment_composition.py`
   exists to check - a re-shuffle of the same peptide has the same length and composition.
 
-#### MEASURED: shuffle entrapment UNDER-represents the near-copy class, it does not over-represent it
+#### WITHIN-group vs CROSS-group shadowing are different quantities (Brendan, 2026-08-03)
 
-The open question above - is the rule correct at short lengths, or over-wide? - turned out to be
-measurable directly, by running the SAME rule over real targets against each other. That is the
-control the spec never had, and it is the one number that decides SHIP #2 for the shuffle design,
-because the TODO states the justification in exactly these terms:
+**A conclusion recorded earlier in this entry was withdrawn - do not resurrect it.** It compared
+"real targets shadow another target at 1.4961%" against "shuffle entrapment shadows a target at
+0.8752%" and concluded the entrapment under-represents the class, so SHIP #2 would bias FDP
+downward. That is a category error: the two numbers are not the same measurement.
 
-> "SHIP #2 is therefore justified only by the argument that **shuffles OVER-REPRESENT the near-copy
-> class** relative to the true absent-peptide population - which they plainly do, being anagrams of
-> something present, where a random absent human peptide is not."
+> "Resolving it would imply making the separate populations decoys and entrapment model the
+> within-group shadowing to a level similar to targets. It does not imply allowing the separate
+> populations to shadow the targets pool where shadowing may randomly or systematically (in the
+> case of another organism with conserved homologous peptides) cause something counted as a
+> false-positive detection due to the high similarity to a highly detectable real peptide."
+> - Brendan
 
-**They do not.** 1-in-60 sample, same index, self-matches excluded, bucketed by the same target so
-the rows are directly comparable:
+* **WITHIN-group** (target vs other targets, entrapment vs other entrapment, decoy vs other
+  decoys) is the natural phenomenon. A null population must REPRODUCE it to be a faithful model,
+  so it must not be filtered.
+* **CROSS-group** (entrapment or decoy vs a real TARGET) is contamination. The null sits on a
+  real, highly detectable peptide and is counted as a false positive it never earned - whether it
+  landed there at random or systematically via a conserved ortholog. It should be zero regardless
+  of the within-group rate.
 
-| target length | REAL targets shadowing another REAL target | shuffle entrapment shadowing a target |
+Driving the cross rate to zero says nothing about whether the null under-models the phenomenon,
+and the two are easy to conflate here because for entrapment they are almost the same SIZE
+(0.8752% cross vs 0.8795% within). **The uniformity decision therefore STANDS** - random and
+systematic cross-group shadowing are the same contamination, so both entrapment designs need the
+gate. The "ortholog filter, scoped to foreign entrapment only" reading is NOT vindicated.
+
+**The implementation already matched this framing**, which is why nothing had to change: the
+shadow index holds real targets only, so entrapment-vs-entrapment and decoy-vs-decoy shadowing
+are untouched by construction.
+
+#### MEASURED: the gate removes the contamination and leaves the phenomenon intact
+
+1-in-60 sample, same index, self-matches excluded:
+
+| | `-no-il` | `-no-iso` |
 |---|---|---|
-| 7 | **7.41%** | 5.77% |
-| 8 | **5.92%** | 4.59% |
-| 9 | **2.35%** | 0.39% |
-| 10 | 0.31% | 0 |
-| 11-31 | 0.15-0.66% | 0 |
-| **all lengths** | **1.4961%** | **0.8752%** |
+| entrapment -> **target** (CROSS) | 0.8752% | **0.0000%** |
+| decoy -> **target** (CROSS) | ~0.9% | **0.0000%** |
+| entrapment -> entrapment (WITHIN) | 0.8795% | 1.0358% |
+| decoy -> decoy (WITHIN) | 1.5607% | 1.4674% |
+| target -> target (WITHIN) | 1.4961% | unchanged by construction |
 
-**The real human proteome carries this class at 1.7x the rate the shuffle entrapment does, and at
-every single length.** Most of a 1.39M-peptide library is absent from any given sample, so the
-target population is a fair proxy for "real absent human peptides" - and it shadows present
-peptides MORE often than the entrapment set does. On that comparison the shuffle entrapment is
-already a conservative model of the class, and filtering it further pushes measured FDP BELOW
-truth, which is the bias failure mode this TODO flags as "much harder to detect because the curve
-would simply look conservative".
+Entrapment's within-group rate RISES slightly (0.88% -> 1.04%), because a rejected candidate is
+re-drawn without regard to other entrapment - so the gate moves it marginally TOWARD the target
+population's rate rather than away. The decoy within-group rate dips 6% relative (1.56% -> 1.47%),
+the one measurable side effect, and it stays close to the 1.4961% target baseline.
 
-It also explains the 7/8-mer rejection rate without appealing to a defect: **7.4% of real 7-mer
-targets have an isobaric >=0.70-overlap twin among other real 7-mers.** Short tryptic peptides
-genuinely do have many indistinguishable near-twins - `SAAEAER` was rejected for shadowing
-`SAAAEER`, and both are real human tryptic peptides that are anagrams of each other. The rule is
-reading the library correctly; the question is only whether that class should be removed.
+#### NEW, SEPARATE finding: shuffled entrapment under-models WITHIN-group shadowing
 
-**This does NOT settle the foreign arm, and the reason is worth being precise about.** The rate
-alone does not distinguish the two designs - the Arabidopsis pool's shadowing fraction is
-**0.874%**, also below the 1.496% target baseline. What differs is not how OFTEN a foreign
-entrapment peptide shadows something, but WHAT it shadows: the flagged population is conserved
-orthologs of tubulin, aldolase, enolase and RAB7A, proteins abundant enough to be present in every
-sample, where a random human target that shadows another random human target usually shadows an
-ABSENT one. Shadowing a present peptide is the harmful case; shadowing an absent one is a fair
-model of interference. That is why only the foreign arm produced a low-q spike.
+This is the deficiency Brendan's framing points at, and it is real and quantified - but it is a
+property of the entrapment GENERATOR, not of this gate:
 
-**So the discriminating quantity is "shadows a PRESENT peptide", and it cannot be computed from a
-library** - it needs the accepted set of a real run, which is what the other machine has. The
-measurement above does support the ORIGINAL scoping instinct recorded earlier in this file ("the
-filter is an ORTHOLOG filter, scoped to foreign-organism entrapment... Do NOT apply to shuffle
-entrapment") over the later uniformity decision, but on the shuffle side only.
+| target length | targets vs targets | decoys vs decoys | entrapment vs entrapment |
+|---|---|---|---|
+| 7 | 7.41% | 7.72% | 6.49% |
+| 8 | 5.92% | 6.36% | 3.93% |
+| 9 | **2.35%** | 2.30% | **0.34%** |
+| 10 | 0.31% | 0.43% | ~0 |
+| 11-31 | 0.15-0.66% | 0.15-0.66% | ~0 |
+| **all** | **1.4961%** | **1.5607%** | **0.8795%** |
 
-**Not decided here - it is Brendan's and Mike's call**, and the delivered libraries are what settle
-it: measuring FDP on `gated-no-iso` against `gated-no-il` shows directly whether the shuffle arm's
-FDP falls (bias) or its calibration improves. Both were built to the approved spec so that
-experiment is available. Levers if it does fall: scope the rule to foreign entrapment only, or
-make the threshold length-aware. **Deliberately NOT implemented** - either is a deviation from an
-approved spec and a science call, not an implementation one.
+**Decoys model it almost exactly** (1.56% vs 1.50%, matching at every length) because a reversal
+inherits the target population's structure - a family of paralogs reverses into a family of
+near-copies. **Shuffled entrapment does not** (0.88%): independent random permutations keep the
+phenomenon only at length 7-8 where chance supplies it, and collapse ~7x below the targets from
+length 9 up, because a shuffle destroys the biological correlation - paralogy, repeats, conserved
+motifs - that makes real peptides resemble each other.
+
+So the entrapment population is systematically LESS self-similar than the target population it is
+meant to model, which is a candidate explanation for entrapment-based FDP behaviour independent of
+anything in this branch. **Fix belongs on the generator** (e.g. drawing entrapment that reproduces
+the target set's own within-group similarity distribution), not on the cross-group gate. Not
+scoped here.
+
+**Still worth measuring on the delivered libraries**: FDP on `gated-no-iso` vs `gated-no-il`, and
+`arabidopsis-no-iso` vs `arabidopsis-no-il`. The expectation under this framing is that removing
+cross-group contamination REDUCES a false-positive count that was never earned, most visibly on
+the foreign arm where the shadowed proteins are abundant.
 
 **Foreign-arm manifest diffs are uninformative and should not be quoted.** `arabidopsis-no-il` ->
 `-no-iso` shows 22.3% of `p_target` changed, but that is the 1:1 mass-matched assignment
