@@ -77,6 +77,34 @@ thing at `Dialogs/OpenDataSourceDialog.cs:487-499`.
   the type, MSConvertGUI's "Sources of type" dropdown already matches nothing for Bruker or
   Agilent. Pre-existing, orthogonal, and worth its own change.
 
+## Listing cost - measured, accepted
+
+Asking the reader means every folder that the name rules do not recognize pays one
+`ReaderList::identify` sweep. Measured on a local SSD, warm, 3 runs after warm-up:
+
+| Target | Readable subdirs | identify() | Rest of GetSourceType |
+|--------|------------------|------------|-----------------------|
+| `C:\Windows` | 76 | 0.705 ms/folder | 0.959 ms/folder |
+| `pwiz_tools\Skyline` | 41 | 0.377 ms/folder | 0.250 ms/folder |
+
+So it roughly doubles the per-folder cost, on top of the two directory enumerations
+`GetSourceType(DirectoryInfo)` already did. Locally that is +0.4-0.7 ms per folder, so
++0.1 s for 200 folders. Accepted as proportionate - and it is the same call MSConvertGUI
+made on every folder before #4099, so this restores a cost the dialog used to carry.
+
+Not measured: SMB/VPN/OneDrive, where round trips dominate. The ratio above suggests
+doubling rather than a blowup, but that is extrapolation, not measurement.
+
+Considered and rejected: skipping the reader on network drives via the existing
+`DriveMightBeSlow` (`BaseFileDialogNE.cs:1556`), because it would silently stop
+recognizing FID on shares - where instrument data usually lives - trading a performance
+worry for a correctness hole. Worth doing separately if listing ever needs the work:
+memoize per path (the cost is re-paid on filter change, F5 and Details toggle), or move
+the listing onto a cancellable BackgroundWorker as SeeMS does
+(`SeeMS/Dialogs/OpenDataSourceDialog.cs:491`). The loop is at least cooperatively
+interruptible today - `Application.DoEvents()` and an `_abortPopulateList` check run per
+item.
+
 ## Known consequences of restoring reader-based identification
 
 Both follow from the reader's intentional design rather than from this change, and neither
