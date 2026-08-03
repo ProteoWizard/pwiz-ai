@@ -1,0 +1,228 @@
+# TODO-20260803_layout_export_import.md - File > Import/Export > Layout (+ MCP view-layout repro)
+
+## Branch Information
+- **Branch**: `Skyline/work/20260803_layout_export_import`
+- **Module**: `skyline`
+- **Base**: `master`
+- **Created**: 2026-08-03
+- **Status**: In Progress
+- **GitHub Issue**: (none yet)
+- **PR**: (pending)
+
+## Objective
+
+Let a user save and load a window layout (`.view`) without saving the whole
+document, and make loading a layout robust when it references windows the
+current document cannot show.
+
+## Background - two framings of the same problem
+
+This TODO started life as `TODO-mcp_tutorial_view_layout.md`, written from the
+MCP tutorial-testing side. That framing is preserved below as Phase 2, but the
+primary work is now the product feature.
+
+**The product gap.** Skyline has always had `.sky.view` layout files, but there
+is no user-facing way to produce or consume one:
+
+- `SkylineWindow.SaveLayout(fileName)` is **private** (`SkylineFiles.cs`) and is
+  called only from document save and from Share (which copies the layout into
+  the `.sky.zip`).
+- Loading only happens **implicitly**, in `UpdateGraphUI` (`SkylineGraphs.cs`),
+  when a document is opened and a sibling `<doc>.sky.view` exists.
+
+So the only way to capture a hand-arranged dock layout today is to save a
+document and then go find/rename the `.sky.view` artifact next to it. That is
+exactly how the tutorial `.view` assets were authored, and it is why an ordinary
+user cannot move a favorite layout between documents at all.
+
+**The MCP gap.** The tutorial-testing runbook proved the MCP can drive a tutorial
+end-to-end but cannot reproduce screenshots whose layout is a hand-arranged dock
+composite. Concretely MethodRefine **s-21**
+(`TODO-20260609_native_file_dialog_automation-tests/TEST-MethodRefine.md`
+Finding #1): the sub-agent loaded the right data and verified every graph
+individually, but the tutorial docks Peak Areas right and RT-Comparison bottom by
+**mouse drag**, and there is no MCP drag/drag-to-dock verb, so the composite
+window cannot be assembled.
+
+**Why the product feature mostly subsumes the MCP feature.** PR #4313 (native
+file dialog automation + generic form verbs) merged as `a840067e8`. With Import
+Layout reachable from the main menu, the MCP can drive it through the *already
+merged* `skyline_click_main_menu_item` + native-file-dialog automation - no new
+`skyline_load_view_layout` verb is needed. What remains MCP-specific is
+`skyline_set_window_bounds` and the `pNN.view` -> `s-NN.view` renaming.
+
+## Phase 1 - File > Import > Layout and File > Export > Layout (this branch)
+
+### Menu items
+
+Both go in the existing File submenus, matching the surrounding items
+(title case, mnemonic, trailing ellipsis because both open a file dialog):
+
+| Menu | Item | Name | Mnemonic |
+|------|------|------|----------|
+| File > Import | `&Layout...` | `importLayoutMenuItem` | `L` is unused in that dropdown |
+| File > Export | `&Layout...` | `exportLayoutMenuItem` | `L` is unused in that dropdown |
+
+Placement: last in each dropdown, after Annotations. Both are document-state
+independent (a layout can be exported from an empty document), so neither needs
+`fileMenu_DropDownOpening` enable/disable logic.
+
+### Behavior
+
+- **Export Layout** - `SaveFileDialog` filtered to `*.view`, default file name
+  derived from the current document name, writes the live `dockPanel` layout to
+  the chosen path. Refactor the existing private `SaveLayout(fileName)` (which
+  appends `.view` via `GetViewFile`) into a `SaveLayoutToFile(viewFilePath)` that
+  writes an exact path; `SaveLayout` becomes a one-line caller. Same `FileSaver`
+  + `dockPanel.SaveAsXml` + UTF-8-without-BOM path as document save, so exported
+  files are byte-identical to the ones save produces.
+- **Import Layout** - `OpenFileDialog` filtered to `*.view`, then
+  `LoadLayout(stream)`. Wrap in the same failure message the implicit load path
+  uses so a corrupt/foreign file reports rather than throws.
+
+### Robustness when the layout references windows this document cannot show
+
+`LoadLayoutLocked` is a **full replace**: it destroys every dockable form and
+then rebuilds from the XML via `DeserializeForm`. Reading a layout captured
+against a *different* document is now a first-class user action, so the paths
+that were previously only exercised by "open a doc next to its own .view" need
+hardening:
+
+- `DeserializeForm` (`SkylineGraphs.cs`) already returns `null` for panes it
+  cannot build (unknown persist strings, chromatogram graphs for replicates not
+  in the document, `MAX_GRAPH_CHROM` overflow). But a single throwing branch
+  aborts the whole `LoadFromXml` and can leave the dock panel half-torn-down.
+  Make a failure to restore *one* pane skip that pane instead of the layout.
+- `ListGridForm` for a list not in this document: `CreateListForm(listName)`
+  returns `new ListGridForm(this, listName)` without checking
+  `DataSettings.Lists`.
+- The implicit load path relies on `UpdateGraphUI` calling
+  `FoldChangeForm.CloseInapplicableForms` / `ListGridForm.CloseInapplicableForms`
+  *after* the load. A menu-driven import does not go through `UpdateGraphUI`, so
+  it must call them itself.
+
+### Task Checklist
+
+#### Completed
+- [x] `EXT_VIEW` / `FILTER_VIEW` constants next to `GetViewFile` in `SkylineFiles.cs`
+- [x] Refactor `SaveLayout` -> `SaveLayoutToFile(viewFilePath)`
+- [x] `ExportLayout(path)` / `ImportLayout(path)` public methods + menu click handlers
+- [x] `importLayoutMenuItem` / `exportLayoutMenuItem` in `Skyline.Designer.cs` + `Skyline.resx`
+- [x] Resource strings (filter description, error messages) in `SkylineResources.resx` + `.designer.cs`
+- [x] Robustness: per-pane failure isolation in `DeserializeForm`; `CreateListForm` returns null
+      for a list not in the document; `CloseInapplicableForms` after a manual import
+- [x] Functional test `LayoutExportImportTest` - menu wiring, dock-state round trip,
+      unrecognized window skipped, list window absent from the document
+- [x] Build + CodeInspection clean; ListClustering / SummaryGraphVisibility /
+      TreeRestoration / FilesTreeForm still pass
+
+#### Remaining
+- [ ] Drive the menu items in the running app (not just the public methods) to confirm the
+      file dialogs behave - the test calls `ExportLayout`/`ImportLayout` directly
+- [ ] Decide whether Import Layout deserves an entry in the tutorial/help documentation
+- [ ] Localized menu text for `.ja.resx` / `.zh-CHS.resx` (bulk translation pass, not this PR -
+      matches how every other menu item has landed)
+- [ ] Push branch and open PR
+
+## Phase 2 - MCP screenshot-layout reproduction (follow-up, not this branch)
+
+Retained from the original TODO. Re-scoped now that #4313 has merged and Phase 1
+provides a menu path.
+
+### How the existing pieces work
+
+- **View files:** `pwiz_tools/Skyline/TestTutorial/{Tutorial}Views.data/pNN.view`
+  - XML `DockPanel` snapshots (full layout: dock portions, per-pane
+  `PersistString`, floating/hidden). ~11 tutorials ship a `*Views.data` folder.
+- **Load path:** `TestFunctional.RestoreViewOnScreen(int pageNum)` ->
+  `p{N:0#}.view` -> `SkylineWindow.LoadLayout(stream)`. The `int` is a **tutorial
+  page number**, "originally associated with Word docs/PDFs... could be any
+  numbers" (code comment) - **decoupled from the screenshot number.**
+- **Screenshot naming:** a shared `ScreenshotCounter` -> `s-NN.png` via
+  `_shotManager.ScreenshotDestFile(counter)`, advanced by every screenshot method
+  (`PauseForScreenShot`, `PauseForScreenShot<T>`, `PauseForGraphScreenShot`, and
+  the connector path `SaveMcpConnectorScreenShot`).
+- **Window sizing (already exists):** `SetSkylineWindowSize(w,h)` (sets
+  `SkylineWindow.Bounds`, centers it), `MaximizeSkylineWindow()`; cover shots
+  assert 1200x800 @ 100% DPI.
+
+**pNN->sNN is not a bijection.** A view load feeds the *first* screenshot after it
+and is reused by later screenshots until the next load (e.g. `p09` -> the
+regression shot, then the 0.95-threshold and zoomed-out shots reuse it; `p13` ->
+one shot, then two reuse it). Some sections take screenshots with no preceding
+load; cover-shot mode (`IsCoverShotMode`) loads `cover.view` and returns early.
+Because `.view` files are **full** snapshots, the runner rule is simply: **for
+`s-NN`, load the nearest preceding `s-<=NN.view`** - always the correct full
+layout, no per-shot duplication needed.
+
+### A. Derive the mapping + rename (independent of Phase 1, lands on master)
+1. Instrument the shared `ScreenshotCounter` increment and `RestoreViewOnScreen`
+   to emit, per tutorial, `(pageNum -> s-NN of the first screenshot after the
+   load)`. Run all tutorial tests in record mode; collect the tables. The
+   diagnostic is authoritative - it resolves cover-mode early-return, reused-view
+   runs, and any counter-vs-tutorial-HTML drift at optional/skipped sections
+   (e.g. MethodRefine s-03).
+2. Bulk-rename `pNN.view`->`s-NN.view` in every `*Views.data/` (Git-light: content
+   unchanged). Update `RestoreViewOnScreen` call-site args (`pNN`->`s-NN`) and the
+   format string `p{0:0#}`->`s-{0:0#}` (keep `cover.view` as-is). Confirm the
+   tutorial tests still pass (identical layout content, renamed key).
+   - Verify the mapping is **language-independent** (layout, not text; the counter
+     order should match across en/ja/zh) so one rename serves all languages.
+
+### B. Remaining MCP verb
+3. `skyline_set_window_bounds` (size and/or position; option to center /
+   maximize-without-maximized-state) - wraps `SkylineWindow.Bounds` /
+   `SetSkylineWindowSize`. Dual purpose: screenshot fidelity **and** positioning
+   Skyline so nothing overlaps the capture (fixes the cyan-overlap failure).
+   - `skyline_load_view_layout` is **dropped**: Phase 1's Import Layout menu item
+     is drivable via the merged `skyline_click_main_menu_item` + native file
+     dialog automation.
+
+### C. Delivery + integration
+4. Fetch `s-NN.view` from the pwiz GitHub repo pinned to the running version
+   (mirror `skyline_get_tutorial`), so the agent has a local file to point the
+   Import Layout dialog at.
+5. Update the tutorial-testing README section 4: at a screenshot checkpoint, set
+   window bounds, import the nearest-preceding `s-NN.view` if one exists, then
+   capture; note this resolves MethodRefine Finding #1. Re-run MethodRefine s-21
+   to confirm a pixel-faithful composite.
+
+### Open questions
+- Decide whether reused-view screenshots stay file-less (nearest-preceding rule,
+  recommended) or get duplicate `s-NN.view` copies for self-containment.
+
+## Key Files
+
+- `pwiz_tools/Skyline/SkylineFiles.cs` - `GetViewFile`, `SaveLayout`, menu handlers
+- `pwiz_tools/Skyline/SkylineGraphs.cs` - `LoadLayout`, `LoadLayoutLocked`, `DeserializeForm`
+- `pwiz_tools/Skyline/Skyline.Designer.cs`, `Skyline.resx` - File > Import/Export menus
+- `pwiz_tools/Skyline/TestUtil/TestFunctional.cs` - `RestoreViewOnScreen`, `ScreenshotCounter` (Phase 2)
+- `pwiz_tools/Skyline/TestTutorial/*Views.data/` (Phase 2)
+
+## Progress Log
+
+### 2026-08-03 - Session 1
+- Re-read the original backlog TODO with the developer; its MCP framing buried the
+  simpler product gap. Reframed around File > Import/Export > Layout and moved the
+  MCP work to Phase 2.
+- Confirmed PR #4313 merged (`a840067e8`), which makes the original TODO's whole
+  branch-sequencing table obsolete and drops the need for a dedicated
+  `skyline_load_view_layout` verb.
+- Created branch `Skyline/work/20260803_layout_export_import`; starting Phase 1.
+- Implemented Phase 1. Notable decisions:
+  - `ImportLayout` reuses the existing
+    `SkylineWindow_UpdateGraphUI_Failure_attempting_to_load_the_window_layout_file__0__`
+    resource rather than adding a second wording for the same failure.
+  - `DeserializeForm` became a try/catch wrapper around a renamed `RestoreDockableForm`,
+    so one unrestorable window cannot abort the whole `LoadFromXml`.
+  - `CreateListForm` now returns null for a list the document does not define. `ShowList`
+    got a null guard to match.
+  - Localized `.resx` files deliberately untouched - `Skyline.ja.resx` /
+    `Skyline.zh-CHS.resx` are updated in bulk translation passes (last: PR #4227).
+- All tests green (see checklist).
+
+## References
+
+- Original backlog file: `TODO-mcp_tutorial_view_layout.md` (renamed to this file)
+- Need discovered: `ai/todos/active/TODO-20260609_native_file_dialog_automation-tests/TEST-MethodRefine.md` (Finding #1)
+- Connector dependency (merged): `TODO-20260609_native_file_dialog_automation.md`
