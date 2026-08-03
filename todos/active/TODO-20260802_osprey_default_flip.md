@@ -527,6 +527,56 @@ whose HPC and straight-through paths agree and one whose paths are known not to.
 
 ## Progress Log
 
+### 2026-08-03 - `/code-review max`: top finding CONFIRMED in mechanism, REFUTED in severity
+
+The review's #1 finding claims `survivorScoreOverride` is not a "Stage 6 changed" signal, and
+concludes protein-compact's stratum constraint is therefore "silently dissolved" so the mode-3 fix
+made it behave as transfer-compete over the decoy-depleted pool - i.e. the exact population this
+branch deletes `percolator` to avoid. That would invalidate the re-baseline. **Verified both
+halves before acting; they land differently.**
+
+**CONFIRMED by source - the premise in the code comment is false.** `StreamingFdr.cs:205` states
+"the override exists only for peaks re-scored against the reconciled features". The producer does
+no such filtering: `Pass2FdrSidecar.cs:549-577` iterates EVERY entry in `perFileEntries` - which
+the code itself labels "every post-reconciliation entry" - and scores each one whose identity
+resolves. And the path helper falls back to the ORIGINAL parquet when no reconciled one exists:
+
+```csharp
+string reconciled = ReconciledPathFromScoresPath(scoresPath);
+return File.Exists(reconciled) ? reconciled : scoresPath;   // ParquetScoreCache.cs:1399
+```
+
+So a file with no Stage-6 work still contributes all of its survivors. `changedBaseIds` is NOT
+"changed peaks", and the comment asserting it is must be corrected.
+
+**REFUTED by measurement - the constraint is NOT dissolved.** Same build, straight-through only,
+Stellar:
+
+| arm | blib | mode 1 vs the protein-compact golden |
+|---|---|---|
+| default (`protein-compact`) | 25,395,200 | **PASS**, exit 0 |
+| `OSPREY_PASS2_QVALUE=transfer-compete` | **24,670,208** | **FAIL - 55 issues** |
+
+**This is dispositive.** If `Admit()` were effectively always true AND the map-back `continue`
+never fired, protein-compact would be BYTE-IDENTICAL to transfer-compete. It is not - 725 KB and
+55 precursor-level issues apart, against 78 for the whole original percolator->protein-compact
+golden move. At least one of the two constraints is doing real work. The transfer-compete arm also
+reproduces its own 2026-08-02 pre-fix measurement (24,670,208) exactly, which is the control: the
+mode-3 fix left the mode that ignores the stratum untouched, as it must.
+
+**Net position**: a real but BOUNDED defect. The admitted population is wider than the comment
+claims and wider than intended, sitting between "stratum U genuinely-changed" and "everything" -
+magnitude not yet quantified, which needs instrumentation (`allIdx.Length` against `m`) rather
+than an A/B. It needs a precise fix keyed off a genuine changed-set - `combinedTargets`
+(`PerFileRescoreTask.cs:1279-1291`) and `PerRunClass {Unchanged,Moved,GapFill}` both already exist
+- plus the corrected comment. **The golden stands** (arm 1 reproduced it exactly), and the claim
+that mode 3 passed for the wrong reason is not supported, because dissolution was the proposed
+mechanism and dissolution did not happen.
+
+**Method note worth keeping**: the A/B that settled this needed no code change and took 4 minutes,
+because the committed golden IS one arm of the comparison. When a review alleges "mode X secretly
+behaves as mode Y", running Y against X's golden answers it directly.
+
 ### 2026-08-03 - STEP 3 GREEN: `Osprey regression PASSED`, 26/26. RE-BASELINE COMPLETE.
 
 Committed as `4a067fa8b` (47 files, all under `osprey-regression.data`, nothing stray).
