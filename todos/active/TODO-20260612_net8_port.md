@@ -2309,3 +2309,99 @@ Full local pwiz-sharp suite is green on the branch as pushed.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260730_net8_aws_agents_waters_tic.md` before starting work.
+
+---
+
+## 2026-08-03 -- Core Linux .NET green end-to-end; Waters runs on Linux
+
+Branch head `6622504f53`. **Both CI legs green on the same commit: Core Linux .NET 329/329
+and Core Windows .NET 418/418.** Core Linux went from "cannot compile" to running eight test
+suites including two vendor suites. Everything below is pushed to both
+`Skyline/work/20260612_net8_port` and `chambem2/pwiz-sharp`.
+
+**A - Waters TIC closed properly (`331f1b77dd`).** The previous session's root cause was wrong:
+cpp is NOT immune by reading the stat numerically. `GetScanStat<double>` (WatersRawFile.hpp:344)
+calls the string overload then lexical_casts, and `MassLynxParameters::Get` bottoms out in the
+same `getParameterValue` we P/Invoke, so both read the identical formatted string. There is no
+numeric accessor to switch to. The real difference: `Reader_Waters_Test.cpp:71` sets
+`config.diffPrecision = 1e-5` on the base config every variant copies, and the C# port dropped
+it, leaving the default 1e-6. The SDK's own float->string is not reproducible across hardware
+for tie values -- the committed diagnostic showed `GetScanItem(func=1,scan=2,TIC)` returning
+"163408" here and "163409" on CI from the same call on the same file -- and 1/163408 = 6.1e-6
+sits between the two tolerances. Restoring 1e-5 is porting cpp's declared tolerance, not
+loosening ours. As in cpp, that precision also governs binary-array comparison (Diff.cpp:355).
+
+**B - Waters SDK 5.0.0 + Linux .so (`6b905b4039`).** Diffing export tables against our 62
+P/Invoke entry points (honouring the one `EntryPoint` override, `getChannelDesciption` -- the
+vendor's own typo) showed exactly one missing symbol in 5.0.0, `getVersionInfo`, declared but
+never called. The 12 removed exports that would break the cpp build (`centroidRaw`, the status
+API) are irrelevant to P/Invoke. Archive goes in `pwiz-sharp/vendor-archives/` like Thermo, NOT
+over the cpp copy. `createRawReaderFromPath` gained a mandatory `userLicense`; the key ships in
+the encrypted archive (user's call: decrypting it requires the password, which is the act of
+agreeing to the vendor licenses). cdt.dll is gone -- folded into MassLynxRaw.
+
+**C - Linux build fixes.** Checkout dir was literally `.../work/C:/pwiz`; a `C:` directory
+breaks MSBuild's wildcard glob (reproduced with a hello-world project) -- fixed agent-side.
+Then, in order: hardcoded `7za.exe` in Waters/Bruker/Mobilion (`138fdbe772`); backslash 7z
+member patterns that make 7zz match nothing and still exit 0; `pwsh` on the compile path
+replaced by `build/VendorPinsGenerator` + `build/vendor-sdk-pins.json`; `NativeVendorsAvailable`
+gating applied to the six Windows-only vendors; `Reader_Shimadzu` not compiling in no-vendor
+mode (`5c3636e150`, latent -- every Windows build sets the licence flag so that path was never
+compiled); MsConvert's Sciex staging under the wrong gate (`d0d6aed52e`).
+
+**D - `dotnet test` "invalid argument" was a missing assembly (`1e8fe49e78`).** All 8 suites died
+with `The argument .../Util.Tests.dll is invalid`. That is what vstest prints when the source
+does not EXIST -- build.sh only built MsConvert + Thermo, never the test projects, then ran
+`--no-build`. Two commits chased the arguments first (`7199507440`, `afa86a3cbe`); the argv echo
+added there is what settled it, by showing the invocation was identical to one that passes.
+Results now reach TeamCity via `##teamcity[importData type='vstest']` per suite (user's
+suggestion) -- no build-config change needed, and it works where `--logger:teamcity` does not.
+
+**E - mz5 use-after-free (`9b607858c5`).** `Mz5ReferenceRead.Fill` reclaimed the HDF5 vlen CVRef
+strings "now that all param-container fills are done", but the spectrum/chromatogram lists
+constructed three lines earlier resolve CVIDs lazily at GetSpectrum time. Windows passed by
+luck (freed block still held "MS"); glibc reuses it, so every lazily-resolved param came back
+CVID_Unknown, stripping MS_m_z_array/MS_intensity_array and reading every spectrum as empty.
+Resolve the whole table into the memo before reclaiming, then drop the array. Also
+`f89282e5f2`: 14 `H5T.NATIVE_ULONG` declarations backed 4-byte uints -- fine on Windows LLP64,
+8 bytes on LP64.
+
+**F - Waters on Linux, 21/21 (`bc91058a5f`, `6622504f53`).** With the agents on Ubuntu 22.04 the
+SDK loads (it needs GLIBC_2.32 / GLIBCXX_3.4.29; 20.04 fails with "cannot open shared object
+file", which is dlopen reporting an unmet DEPENDENCY -- same trap as Agilent's
+ERROR_MOD_NOT_FOUND). Then 8 failures, three causes: MassLynx writes `_FUNC001.DAT` but
+`_func001.cdt`, so deriving the .cdt name found nothing on a case-sensitive filesystem and IMS/
+SONAR silently switched off (6 tests) -- all .raw lookups now go through `WatersRawDirectory`;
+`PtrToStringAnsi` is UTF-8 off-Windows so the "<degree>C" analog unit became U+FFFD and the
+channel was typed EMR-radiation instead of temperature (1 test) -- explicit CP1252 now; and the
+SDK's own centroid algorithm returns different peak COUNTS on Linux vs Windows (3789 vs 3791),
+which no tolerance can absorb, so that variant is compared on Windows only.
+
+**Also:** `0a1ec40724` test data extracted with system tar off-Windows (`bsdtar.exe` gave "Exec
+format error", swallowed by IgnoreExitCode while the sentinel was touched anyway -- that is why
+one Thermo fixture was missing and its test Inconclusive). `443cb8042c` consolidated
+`Reader_ThermoTests` into `ReaderThermoTests` (Thermo was the only vendor with two reader test
+classes); 15/15 unchanged. `9fb039d4a7` fixed `--` inside XML comments in ExtractTestData.targets
+which broke every importer on BOTH platforms -- a .targets file parses fine until something
+imports it, so always build an importer after editing one.
+
+**Local Linux repro (important for the next session).** WSL Ubuntu 20.04 was replaced with
+22.04 (`wsl --install -d Ubuntu-22.04 --no-launch`, .NET 8.0.423 under /root/.dotnet). Two
+conditions must BOTH hold to reproduce agent behaviour: 22.04 for glibc, and a case-sensitive
+filesystem -- `/mnt/c` is DrvFs and case-INSENSITIVE, so the .cdt bug cannot reproduce through
+it. Build on /mnt/c, then copy the fixtures + bin onto ext4 preserving
+`<root>/pwiz/data/...` beside `<root>/pwiz-sharp/pwiz/test/...` (FindTestDataRoot walks up for
+it). Script: `ai/.tmp/` handoff has the path. This loop is far more reliable than CI right now:
+the Linux agents cancel with "Could not connect to build agent ... didn't respond within 60
+seconds" fairly often, which the user confirms is a known unexplained problem.
+
+**Open / next:** Bruker on Linux is the obvious follow-on -- a `libtimsdata.so` (18 MB) exists at
+`D:\Downloads\FragPipe-22\fragpipe\tools\diann\1.8.2_beta_8\linux`, bundled by DIA-NN. Bruker is
+currently gated Windows-only via `NativeVendorsAvailable`. Provenance/redistribution needs a
+decision before vendoring a third-party bundle's copy rather than one obtained from Bruker.
+Also still inconsistent: `Bruker.Tests` / `Sciex.Tests` / `BiblioSpec` gate on
+`IAgreeToVendorLicenses` where the products they test now gate on `NativeVendorsAvailable` --
+harmless only because build.sh does not build them on Linux.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260803_net8_linux_green_waters.md` before starting work.
