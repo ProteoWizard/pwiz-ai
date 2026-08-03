@@ -381,6 +381,45 @@ Tool: `ai/scripts/Osprey/Entrapment/contamination_corrected.py`.
 
 ## Progress Log
 
+### 2026-08-03 - CROSS-REFERENCE: the two sessions' entries disagree on one step, flagged not adjudicated
+
+The testing-session entries below (both dated 2026-08-03) reach "reading (2) holds, short-peptide
+shadowing is bias" from this comparison:
+
+| TARGETS vs other targets | 1.486% |
+| ENTRAPMENT vs targets | 0.835% |
+
+**That is the same comparison Brendan corrected earlier the same day**, in the "WITHIN-group vs
+CROSS-group" entry above: the first row is within-group (the phenomenon a null must REPRODUCE),
+the second is cross-group (contamination that should be zero either way), and the correction is
+that they are different quantities rather than a control and its subject. The testing session was
+working in parallel and its entries do not reflect that correction - **neither entry is wrong
+about its measurements, and the measurements agree across three implementations.** The
+disagreement is entirely in what the comparison licenses.
+
+**Where it bites**: the two framings give materially different answers, so this is not academic.
+* Cross-group-is-contamination -> remove all of it -> the FULL gate as implemented (-23.0%
+  foreign, -8.3% shuffle).
+* Short-shadowing-is-shared-background -> gate length >= 9 only (-6.7% foreign, no-op shuffle).
+A **3.4x difference in the headline number**, from one threshold.
+
+**A possible synthesis, offered rather than asserted.** Brendan's formulation carries a qualifier
+that both sides can use: the harm is a null detected "due to the high similarity to a **highly
+detectable** real peptide". That is a statement about the SHADOWED target's detectability, not
+about the shadow rate. Read that way, both positions converge on "gate where the shadowed target
+is preferentially detectable", and the length cutoff is a proxy for it - conserved orthologs of
+abundant proteins are long, and the 7-8mer background shadows whatever happens to be isobaric.
+
+**THE MEASUREMENT THAT WOULD SETTLE IT EMPIRICALLY, and the run data already exists.** For each
+ACCEPTED shadow entrapment, was the target it shadows ALSO accepted, bucketed by length? That is
+the same design as this file's original 34.9x odds-ratio result (near-copies whose source target
+was also accepted: 54.0% vs 1.6% for dissimilar), applied to CROSS-group shadows:
+* short shadows whose shadowed target is accepted at the background rate -> their detection is not
+  shadowing-driven, gating them is bias, and the length-aware cut is right;
+* short shadows whose shadowed target is accepted well above background -> their detection IS
+  shadowing-driven, and the full gate is right.
+It needs no new library and no new search - only the accepted sets already on the testing machine.
+
 ### 2026-08-03 (night) - the length question is the whole decision, and it is NOT settled by "spike drivers are long"
 
 **Post-hoc simulation on `arabidopsis-no-il`'s own accepted set** (mass-sorted exhaustive,
