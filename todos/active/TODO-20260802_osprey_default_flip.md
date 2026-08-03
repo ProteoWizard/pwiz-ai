@@ -405,6 +405,27 @@ That is the rule the fix implements. It also explains why this went unnoticed: t
 usually REJECTS a poor peak rather than promoting one, so it removes IDs rather than adding
 them - an invisible loss in single-computer runs, which is all Mike runs.
 
+### Rust mirror + cross-impl re-run: PASS (2026-08-02, AFTER the mode-3 fix)
+
+maccoss/osprey `753bdea` on `feature/decoy-il-gate-and-default-flip`.
+
+```
+precursors: rust=29329  cs=29329  delta=0
+Stage 7 protein FDR (per-col 1e-9): PASS
+Blib content (SQL row+col 1e-9):    PASS
+OVERALL: PASS -- bit-parity at 1e-9 on Stellar 3-file
+```
+
+**A partial mirror FAILED first, and the failure is instructive.** Porting only the admission
+filter gave `rust=29481 cs=29329, delta=-152` - Rust kept 152 precursors C# now rejects, because
+its map-back was still passing stale q through for changed peaks. The fix has TWO halves and
+both must land:
+
+1. admit changed peaks into the competition (`pass2_qvalue.rs`)
+2. write them the q they earned instead of skipping them (`pipeline.rs` map-back)
+
+The cross-impl gate caught the half-port immediately, which is exactly what it is for.
+
 ### Cross-impl gate: PASS (2026-08-02, BEFORE the mode-3 fix)
 
 `Compare-EndToEnd-Crossimpl.ps1 -Dataset Stellar`, both sides rebuilt first:
