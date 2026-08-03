@@ -557,11 +557,36 @@ default, pick model, I/L gate, mode-3 fix) on 3 files, which is exactly the coho
 work showed to be misleading (3-file protein-compact read 0.90% and calibrated where 82-file
 read 1.51% and anti-conservative). So it is a flag, not a verdict.
 
-**Do a controlled A/B before the PR**, one variable at a time via the env levers that still
-exist: `OSPREY_PICK_LDA=0` isolates the pick, `OSPREY_PASS2_QVALUE=transfer-compete` isolates
-the stratum, and `Run-FdrBench.ps1` gives disc @ matched TRUE FDP rather than a golden diff.
-Quote the matched-TRUE row, not reported q - both arms here are anti-conservative, so a
-reported-q comparison rewards whichever is more miscalibrated.
+**CORRECTED (Brendan, 2026-08-02): this cell is NOT an argument against either default, and the
+comparison above is methodologically weak.** It compares at NOMINAL q, not at matched TRUE FDP -
+the exact mistake this TODO warns about elsewhere. The two arms accept different numbers of
+targets, so their FDPs sit at different points on their own curves, and a nominal-q comparison
+rewards whichever arm is more miscalibrated. Against a percolator baseline that is backwards:
+
+> "Percolator was just not valid. Period. It was somewhat gated by Pass 1 Percolator and then a
+> q value < 1% cut-off which failed to hold as data set size increased." - Brendan
+
+So "worse than the master golden" carries no calibration information here, because the golden IS
+percolator. Any real assessment needs disc @ matched TRUE FDP from `Run-FdrBench.ps1`, one
+variable at a time (`OSPREY_PICK_LDA=0` isolates the pick, `OSPREY_PASS2_QVALUE=transfer-compete`
+isolates the stratum) - not a golden diff.
+
+Also relevant to reading this cell at all: **gendecoy is known to inflate FDR relative to
+libdecoy**, so `StellarGenDecoyEntrap` carries that inflation independently of anything in this
+branch.
+
+### RE-BASELINE ACTION: replace the libdecoy test library first (Brendan, 2026-08-02)
+
+The library the libdecoy regression dataset currently uses is **no longer one Carafe would
+generate** - it predates the Carafe gate work (overlap gate, bounded retry, I/L collision
+rejection). Re-baselining against it would freeze a library that no longer represents production
+input.
+
+**Replace it as part of the re-baseline**, so the new golden is taken against a library that
+matches what Carafe now produces. Candidates are the delivered builds at
+`D:\test\AstralTest-TargetDecoyLibraries\` (see the delivered-libraries table in
+TODO-20260801_decoy_similarity_gate.md); note SHIP #2 may change what "current" means again, so
+sequence this AFTER SHIP #2 lands, with the library swap and the golden move in one step.
 
 **The re-baseline is deliberately NOT taken.** It is now blocked on SHIP #2 from
 [TODO-20260801_decoy_similarity_gate.md](TODO-20260801_decoy_similarity_gate.md), which the
