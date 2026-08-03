@@ -429,6 +429,26 @@ gap rather than closing it.** By finding 12 that biases measured FDP downward.
   of ~49,900 - and leaves entrapment's short-peptide ambiguity matched to the targets', which is
   the population it is supposed to model.
 
+**PREDICTION CORRECTED BEFORE THE ARM LANDED - it is 3 -> 1, not 3 -> 0.** The handoff predicted
+the top-q entrapment would go to zero. Checked directly: of the three drivers, only two are
+caught by the gate.
+
+| driver | len | best ISOBARIC overlap | gated? |
+|---|---|---|---|
+| `EILHIQGGQCGNQIGAK` | 17 | 0.750 vs `EIVHIQAGQCGNQIGAK` | **yes** |
+| `IVLIGDSGVGK` | 11 | 0.900 vs `VIILGDSGVGK` | **yes** |
+| **`WVILGHSER`** | 9 | **0.250** | **NO** |
+
+`WVILGHSER` has no isobaric twin (0.250) and no strong shadow at any mass (max 0.438 against
+`ADVLEGTAER`, a different mass). **It is most likely a genuine high-scoring false discovery -
+which is exactly what entrapment exists to catch.** So the expected result is:
+
+* top-q entrapment **3 -> 1**;
+* first-grid-point FDP **152.4% -> ~101%** (one entrapment at one accepted target is
+  1 x 2.031 / 2), so **the spike shrinks by about a third and does NOT disappear**;
+* a residual spike is therefore the CORRECT outcome, not a gate failure. Reading it as failure
+  would be the trap here.
+
 **Still in flight and required before this is definitive**: the directly-measured
 `arabidopsis-no-iso` and `gated-no-iso` arms. The post-hoc numbers above are oracle surgery on an
 unchanged run; the arms remove the peptides from the library so they never compete. Agreement
