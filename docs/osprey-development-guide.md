@@ -747,6 +747,14 @@ Both are DEFAULT ON, and both now require naming their `ResidentPaths` token via
 `OSPREY_ALLOW_UNFIXED_RESIDENT` - a resident path you can reach without asking for it is how
 `OSPREY_PASS2_QVALUE=transfer` regressed unnoticed for ten days.
 
+`OSPREY_ALLOW_UNFIXED_RESIDENT` takes a **list**, comma- or semicolon-separated
+(`mdiag-full-resume,compacted-entries-buffer`). A run can legitimately trip more than one
+known-unfixed path at once, and a single-value variable made such a run impossible to perform:
+`regression.ps1` mode 2 needs `mdiag-full-resume` while a `OSPREY_STAGE6_STREAM_SURVIVORS=0`
+A/B needs `compacted-entries-buffer`, so the gate aborted on its own guard. Mode 2 now ADDS its
+token to whatever you set rather than replacing it. Every admitted path is still named
+individually - that, not the count, is what stops a blanket bypass.
+
 | Name | Purpose |
 |---|---|
 | `OSPREY_FDR_PROJECTION=0` | Force the legacy resident PRE-compaction `FdrEntry` pool for all of Stage 5. Token: `projection-off`. |

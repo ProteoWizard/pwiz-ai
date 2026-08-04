@@ -443,7 +443,46 @@ to START, not finish - kill each arm when the line prints. ~70 min for both arms
 `OSPREY_VERSION_OVERRIDE=26.1.1.211` pin for the `Stages1to4` link source, are in the
 handoff.
 
-**Still to measure** (the actual claim of this TODO):
+### MEASURED 2026-08-04: the Stage 6 plateau is gone at 40 files
+
+`Run-Tdp43.ps1 -NumFiles 40 -PickLda -Pass2Mode protein-compact -Fresh -LinkFrom
+Stages1to4-picklda`, streamed default, `OSPREY_LOG_MEMORY=1`. Same cohort as the
+`tdp43-40files-delivered` baseline - compaction `134,395,432 -> 13,398,508 entries
+(272,526 passing base_ids)` matches it exactly, so the discovery set is unchanged.
+
+| probe | managed heap |
+|---|---|
+| `library-resident` (6.32 M entries) | 4.38 GB |
+| `stage5-start-live` | 4.41 GB |
+| `stage5-handoff-released` (survivors dropped after planning) | **4.53 GB** |
+| `reconciliation-floor` (Stage 6 entry) | **4.57 GB** |
+
+Stage 6 enters the rescore **0.19 GB above the bare library floor**. The resident arm carries
+the whole survivor pool at this point: 13,398,508 x ~208 B = **~2.8 GB**, which is what the
+~7.2 GB prediction was made of. The term is simply absent.
+
+`perfviz.py` over the Stage-6-ONLY slice (log split at `PerFileRescoring:starting`; 8 files,
+14 min) - which is where floor drift has to be judged, per `memory-band-guide.md`:
+
+```
+managed MB : peak 14.5 GB   floor 4.8 -> 4.8 GB   drift -0.00 GB   -0 MB/file   LEVEL
+total MB   : peak 31.7 GB   floor 24.2 -> 14.0 GB  drift -10.29 GB            FALLING
+```
+
+Per-file sawteeth all return to the SAME floor: no step-up, no plateau. Compare the 82-file
+resident run Brendan captured (`ai/.tmp/` image, peak 50.7 GB), where Stage 6 rises to a
+40-50 GB band and stays there for the rest of the run.
+
+**What this is NOT**: a paired A/B. Only the streamed arm was run at 40 files, so the ~7.2 GB
+resident figure remains a prediction rather than a measurement. What is measured is that the
+O(files) term is absent and the Stage 6 floor does not drift. The `=0` arm's byte-identity is
+gated separately by `regression.ps1` on Stellar.
+
+**Still to measure** (deferred or dropped):
+* ~~Stage-5-only re-measure at 163 files~~ - DROPPED by Brendan 2026-08-04: the 40-file run
+  answers whether the plateau is gone, and 163 costs ~75 min to confirm it.
+
+**Superseded plan below** (kept for the baseline numbers it cites):
 * 40-file A/B, default vs `OSPREY_STAGE6_STREAM_SURVIVORS=0`, comparing the
   `reconciliation-floor` lines (and the blib if allowed to finish).
 * Stage-5-only re-measure at 163 files via `-LinkFrom` (~75 min) against the baseline:
@@ -672,6 +711,20 @@ EntryId, files with both CWT and forced gap fill).
       shrink. The justification is in the constant's doc comment - it names a path that was
       previously UNNAMED rather than re-admitting a fixed one, because the old guard's
       invariant stops at the compaction line and this buffer is built after it.
+- [x] **`OSPREY_ALLOW_UNFIXED_RESIDENT` now takes a LIST** (comma/semicolon separated), and
+      `regression.ps1` mode 2 ADDS its token instead of replacing the caller's.
+      **Found by running the oracle**, not by reading: `-Dataset Stellar` with
+      `OSPREY_STAGE6_STREAM_SURVIVORS=0` aborted mode 2 on the guard I had just added, because
+      mode 2 overwrites `OSPREY_ALLOW_UNFIXED_RESIDENT` with `mdiag-full-resume` and only ONE
+      path could ever be named. The A/B that proves this change bounded could not be run.
+      The single-value limit was a pre-existing hole - any run tripping two known-unfixed paths
+      hit it - that the new token merely exposed. A list keeps the property that matters (every
+      admitted path named individually; nothing rides along unnamed), while a single value only
+      ever prevented honest work.
+      **A first attempt at diagnosing this was wrong**: gating the guard on `_didPlan` would
+      NOT have helped, because the resume log shows planning DOES run on the mode-2 resume
+      (`Planning reconciliation across 3 file(s)`, `Wrote reconciliation.json`). The fix came
+      from reading the failure, not from the hypothesis.
 - [x] 5th copy of the canonical comparison and the 8-field reset. **Fix**: `FdrEntry.CANONICAL_ORDER`
       and `FdrEntry.ResetScores()`. Note the repo's `TestNoUnstableSort` guard requires an
       inline `// Array.Sort OK: <reason>` at each call site, and the reason genuinely differs
@@ -680,6 +733,28 @@ EntryId, files with both CWT and forced gap fill).
       preserving parquet row order is gone. It DOES preserve it. The tail replay failed
       because `StreamReconciledScoresParquet` MERGES gap-fill rows into canonical
       (entry_id, charge, scan) position, so there is no tail to replay.
+
+## Gate status 2026-08-04 (end of second session)
+
+| gate | result |
+|---|---|
+| `Build-Osprey.ps1 -RunTests -RunInspection` | 574/574, zero inspections |
+| `regression.ps1 -Dataset Stellar` (streamed default) | all five legs PASS, golden blib 25,407,488 B |
+| `regression.ps1 -Dataset Stellar` with `OSPREY_STAGE6_STREAM_SURVIVORS=0` + token | all five legs PASS, same golden blib - **the oracle is intact** |
+| 40-file Stage 6 memory measurement | floor LEVEL, plateau gone (above) |
+| `regression.ps1 -Dataset All` | (running at handoff) |
+| `/code-review max` | NOT re-run - see below |
+| TeamCity Perf/Regression | not triggered (ASK Brendan first) |
+
+**`/code-review max` cannot be launched by the model** in this harness - the skill is marked
+`disable-model-invocation`, so it must be typed by the developer. The earlier handoff's claim
+that it is "self-launchable" is WRONG and cost a session the assumption. Re-run it before the
+PR; the branch has changed substantially since the last pass.
+
+**One unexplained event, recorded rather than dismissed**: an oracle-leg run aborted with
+`0xC0000005` (access violation) in the straight-through leg, and the identical command passed
+on the next invocation. It happened seconds after a force-kill of the 40-file Osprey process,
+so a stale handle is plausible but UNPROVEN. If it recurs, it is real.
 
 ## Regression Test
 
