@@ -7,16 +7,16 @@
 | `MacCossLabModules` | `26.7_fb_signup-security` | [#667](https://github.com/LabKey/MacCossLabModules/pull/667) | `release26.7-SNAPSHOT` |
 
 - **Created**: 2026-07-23
-- **Last updated**: 2026-07-28
+- **Last updated**: 2026-08-04
 - **Status**: PR #667 merged into `release26.7-SNAPSHOT` on 2026-07-28 (merge commit
-  `0a21a77`). All four in-scope findings are fixed and `SignUpGroupChangeSecurityTest`
-  (SIGNUP-1) passes on 26.7. Four review rounds addressed (`/pw-self-review`, LabKey's
-  own `review-pr.md`, Copilot, and Josh's review). Awaiting the 26.7 installer build and
-  deployment to skyline.ms, then the one deploy-time wiki edit (see Client contract).
+  `0a21a77`). 
+  - All four in-scope findings are fixed and `SignUpGroupChangeSecurityTest`
+  (SIGNUP-1) passes on 26.7. 
+  - Four review rounds addressed (`/pw-self-review`, LabKey's own `review-pr.md`, Copilot, and Josh's review). 
+  - Brian C. deployed the code to a skyline **test** server (not yet skyline.ms) with the `signup-form` wiki edit applied.
+  - Signup enumeration-parity behavior verified 2026-07-31 and the self-service group transition happy path (SIGNUP-1) verified end to end 2026-08-04 on the test server(see Test-server verification / Group-transition verification). 
+  - Live skyline.ms deployment and its `signup-form` edit are still ahead (see Client contract).
 
-### Notes
-- **Working tree**: clean except untracked scratch under `signup/wiki/` (never commit).
-- **Build**: verified on 26.7 - cleanBuild + deployApp succeed and the test passes.
 
 ## Objective
 Remediate the confirmed `signup`-module findings from the MacCoss Lab security audit.
@@ -52,8 +52,7 @@ Implementation notes worth keeping in mind:
   `RuntimeSQLException`, which the signup catch clauses do not include.
 
 ## Client contract - action needed at deploy
-One live skyline.ms wiki page needs an edit at/after deploy. Do NOT touch the live wikis
-without the user. Dev copies are under `signup/wiki/`.
+One live skyline.ms wiki page needs an edit at/after deploy.
 1. `signup-form` (`/home/support`) still keys success off `USER_ADDED`. It must check
    `json.status == 'SUCCESS'` and drop the `USER_EXISTS` branch, or the confirmation
    message won't show.
@@ -91,6 +90,41 @@ Dumbster** -> "Record email messages sent". Group-move path confirmed working
   both returned the same generic `ERROR` ("Could not send email..."). Indistinguishable
   responses; only the generic message is shown to the caller (SIGNUP-4).
 
+## Test-server verification
+Code deployed to a skyline test server (not skyline.ms) with the `signup-form` wiki edit
+applied (success branch keyed on `SUCCESS`, `USER_EXISTS` branch removed). Signup
+enumeration parity confirmed - the on-page response is the same "confirmation email has
+been sent" message in every case, so the web response never reveals whether the address
+is already registered:
+- **Existing real account**: page shows the success message; the account owner receives
+  the informational "You already have an account on MacCoss Lab Software" email pointing
+  to the "Forgot your password?" reset link. Account is never modified.
+- **Address is a pending temp user (signup started, never confirmed)**: page shows the
+  success message; the user receives the standard "new user registration / Welcome" email.
+  This path predates the fix and is unchanged - `getTempUser` reuses the existing pending
+  row and its confirmation key, so it resends the same registration email as the first
+  submission. Email text left as-is (Brian agreed it is fine).
+- **Self-service group transition happy path (SIGNUP-1)**: verified end to end 2026-08-04
+  (see Group-transition verification below).
+
+## Group-transition verification (2026-08-04)
+Self-service group transition happy path (SIGNUP-1) verified end to end on the test
+server:
+1. New account created via the `signup-form` page (`/home/support`). Before confirmation
+   the `signup.temporaryuser` (tempusers) row exists with an empty `labkeyuserid`.
+2. Clicking the emailed confirmation link and setting a password creates the LabKey user
+   account (`labkeyuserid` now populated on the tempusers row) and adds the user to the
+   configured source permissions group ("Signup").
+3. From the Skyline-daily button on the software page, the register-form page loads
+   (`/home/software/Skyline/daily/register-form/`).
+4. "Agree & Register" moves the user from "Signup" to the configured target group
+   "DailyRequests" - a `signup.movedusers` row is inserted, a "Client API Actions" audit
+   entry records the group change, and the user can then download Skyline-daily.
+
+This exercises the `USER_MOVED_SUCCESS` path. Rejection branches were not manually re-tested on the server - they
+are covered by `SignUpGroupChangeSecurityTest` (each returns `NO_PERMISSIONS`, which the
+register-form renders as the "contact the administrator" message).
+
 ## Tasks
 - [x] SIGNUP-1: `validateGroupChangeTarget` read-only enforcement (rejects write or admin targets); refused move returns `NO_PERMISSIONS`.
 - [x] SIGNUP-2: uniform response (both->ERROR), existing-account owner email.
@@ -102,5 +136,7 @@ Dumbster** -> "Record email messages sent". Group-move path confirmed working
 - [x] LabKey reviewer (Josh) approved PR #667.
 - [x] Merge PR #667 (merged 2026-07-28, merge commit `0a21a77`).
 - [x] Manual verification: enumeration parity passed in both mail modes (2026-07-26).
+- [x] Test server (Brian C.): code deployed with the `signup-form` wiki edit; signup enumeration parity verified 2026-07-31.
+- [x] Test server: self-service group transition happy path (SIGNUP-1) verified end to end 2026-08-04 - new account -> email confirm -> added to "Signup" group -> "Agree & Register" moves user to read-only "DailyRequests" (`USER_MOVED_SUCCESS`), `signup.movedusers` row + audit entry created. Rejection branches remain covered by `SignUpGroupChangeSecurityTest`.
 - [ ] Await the 26.7 installer build and deployment to skyline.ms.
 - [ ] At/after deploy: update the remaining live skyline.ms wiki page (`signup-form`; see Client contract).
