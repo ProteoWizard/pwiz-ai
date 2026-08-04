@@ -127,11 +127,14 @@ test asserted a decoy count and got 0. Both tests now set fragments and assert t
 - [x] Flip `OSPREY_PASS2_QVALUE` to `protein-compact`
 - [x] Flip `OSPREY_PICK_LDA` on
 - [x] I/L-normalised collision rejection, C# and Rust, with independence tests
-- [ ] Golden re-baseline - **MUST BE REDONE.** Captured 2026-08-03 as pwiz `4a067fa8b` and
-      verified at 26/26 PASS, but TWO correctness fixes landed after it (`1e90d5453` the
-      changed-peak signal, `03f31954a` the experiment-q carry-through) and both legitimately
-      change output. The committed goldens are STALE BY DESIGN and mode 1 is red until a
-      re-capture. Re-run `-Dataset All -CreateGolden` then `-Dataset All`.
+- [ ] Golden re-baseline - **RE-CAPTURED 2026-08-03 evening, verify IN FLIGHT.** The first
+      capture (`4a067fa8b`) went stale when `1e90d5453` and `03f31954a` landed after it. All four
+      goldens are re-captured and sitting UNCOMMITTED in the working tree; `-Dataset All` is
+      running to verify them. Commit only when it is green, mode 3 included.
+- [x] Review finding #3: key the resume cache on the flipped defaults (`cb9b68c60`). Landed
+      BEFORE the verify so one run covers both, per Brendan.
+- [x] Review findings #5 / #6: pin both levers in every measurement runner (`ai` `4edbe2d`),
+      including `Run-FdrBench.ps1`, which was stamping the wrong mode into `metrics.csv`.
 - [ ] `Test-PerfGate.ps1` + a memory-band check - protein-compact expands the reconciled pool
       (it reported 647,139 rows transfer-compete did not), so this flip has a plausible cost that
       an ordinary default flip would not
@@ -530,6 +533,96 @@ Brendan's call, not an implementation detail - it is the difference between ship
 whose HPC and straight-through paths agree and one whose paths are known not to.
 
 ## Progress Log
+
+### 2026-08-03 (evening) - RE-CAPTURE DONE, and the two fixes CUT MEASURED PASS-2 FDP IN HALF
+
+All four goldens re-captured, none REFUSED, `data dir unchanged across run` on all three
+read-only data folders. Log: `ai/.tmp/regression-creategolden-20260803.log`.
+
+| dataset | wall | blib, stale golden | blib, new |
+|---|---|---|---|
+| Stellar | 03:14 | 25,395,200 | 25,407,488 |
+| StellarLibDecoy | 04:23 | 25,681,920 | 25,178,112 |
+| StellarGenDecoyEntrap | 04:04 | 28,598,272 | **20,328,448 (-29%)** |
+| Astral | 12:23 | 97,013,760 | 95,924,224 |
+
+Stellar reproduces the 25,407,488 this file predicted for "+ experiment q carried" EXACTLY, which
+is the check that the capture came from the intended code.
+
+**The -29% on the gendecoy set is not a loss, it is the defect being removed.** The entrapment
+diagnostics say what happened, and PASS 1 IS BYTE-IDENTICAL on every metric in both entrapment
+datasets - as it must be, since neither fix touches pass 1. Everything below moved in PASS 2 only:
+
+| pass-2 experiment | StellarLibDecoy stale | LibDecoy new | GenDecoyEntrap stale | GenDecoy new |
+|---|---|---|---|---|
+| reportedQ | 0.00998 | 0.00974 | 0.00943 | 0.00996 |
+| **combinedFdp (TRUE)** | **1.52%** | **0.61%** | **2.61%** | **1.33%** |
+| pairedFdp | 1.38% | 0.55% | 2.61% | 1.33% |
+| accepted | 29,921 | 29,445 | 31,779 | 23,116 |
+
+**On the libdecoy set - the healthy comparator - pass 2 moved from ANTI-CONSERVATIVE to
+CONSERVATIVE for a 1.6% cost in IDs.** 1.52% true FDP at a nominal 1% became 0.61%, while accepted
+fell only 29,921 -> 29,445. And it still ADDS over pass 1: 29,445 against pass 1's 26,788 (+9.9%)
+while measuring BELOW the line. That is the calibration claim this branch was justified on, and it
+is now supported on the entrapment oracle rather than argued from mechanism.
+
+The gendecoy set pays more (accepted -27%) and lands at 1.33%, still above nominal. Two things
+about that are already on the record and both apply: gendecoy is known to inflate FDR relative to
+libdecoy independently of anything here, and 3 files is the cohort size prior work showed to be
+misleading. Read it as consistent with the libdecoy result, not as an independent one.
+
+**This also quantifies the signal defect for the first time.** The old predicate admitted most of
+the survivor pool into the stratum competition; the correction removes those admissions, and the
+FDP measurement is what they were costing. Nothing else in the branch could produce a pass-2-only
+move of this size with pass 1 held byte-identical.
+
+**Finding #3 FIXED - `cb9b68c60`.** Brendan's call was to land it BEFORE the verify so one run
+covers both. Neither flipped default reached any validity key, so a run under the new defaults
+computed the SAME key as a directory recorded under the old ones and the resume driver adopted the
+old arm's artifacts as the new arm's result.
+
+* Both suffixes are UNCONDITIONAL, which is the opposite of the `ExperimentAgg` suffix beside them.
+  That one is empty for its default arm because its default arm's output never changed; these two
+  arms' outputs DID, so emitting nothing for the new default is exactly what makes a post-flip key
+  equal a pre-flip one. The one-time cost - every pre-flip directory invalidated, Stage 1-4 re-run
+  on a warm re-run or `-LinkFrom` - is the correct outcome, since those artifacts were picked by a
+  different model.
+* The pick went in the BASE key (it happens in Stage 4 and everything downstream inherits the peak
+  it chose, so a task added later carries it without knowing); the pass-2 mode went only on the
+  three tasks whose output it changes, so a mode switch does NOT discard Stage 1-4 parquets that
+  cannot have moved.
+* Retires the standing "use a FRESH `--output-dir` per mode" LIMITATION in the `Pass2QValue`
+  remarks - this is the sidecar tagging they deferred.
+* **No Rust mirror is needed**: `maccoss/osprey` has no validity-key or resume-sidecar system at
+  all (grep finds nothing), consistent with the HPC chain and resume driver being C#-only.
+* Guarded by `TaskValidityKeyTest`, which states the wiring as a RULE rather than a list - every
+  canonical task must carry the pick, only per-file scoring is exempt from the pass-2 mode - so a
+  task added later is covered. It has to be a unit test: the byte-identity gate always runs in a
+  fresh output directory and structurally cannot see this class of defect.
+
+**Two ReSharper warnings were already red on the branch and are now fixed.** `StreamingFdr.Admit`
+carried two dead null guards (`ConditionIsAlwaysTrueOrFalse`, always-false and always-true) that
+came in with `8796e7a13` on 2026-08-02. They are NOT from this session's work, and the "0 warnings"
+recorded for that commit did not reproduce - worth knowing before trusting a green gate quoted from
+an earlier entry. Gate now: **574/574 tests, 0 warnings / 0 errors.**
+
+**Findings #5 / #6 FIXED** in `ai` `4edbe2d`, plus the same defect found in a third place:
+
+* `OspreyDatasetRun.psm1` exports `OSPREY_PICK_LDA` in both directions and always exports
+  `OSPREY_PASS2_QVALUE`. Leaving a lever unset stopped being neutral when the defaults flipped -
+  it now SELECTS the new default, which is why both arms of a pick A/B had become the same run.
+* `Run-FdrBench.ps1` had the same defect and it was worse there, because that script stamps
+  `metrics.csv`: a cell run after the flip was labelled `pass2_qvalue=percolator` while executing
+  protein-compact. It now sets both levers explicitly and stamps both (`pick_lda` is new).
+* `percolator` is out of every ValidateSet in the runner chain, so a stale caller fails at
+  parameter binding in a second instead of after Stage 1-5. `Run-CohortArms.ps1` no longer bakes
+  the token into run-directory names, and `mbn_surface.py` reads the mode as a token so the
+  existing percolator arms still harvest.
+
+**Verify run IN FLIGHT** (`regression.ps1 -Dataset All`, PID 43888, log
+`ai/.tmp/regression-verify-20260803.log`). Mode 3 is the critical one. The goldens stay
+UNCOMMITTED until it is green, deliberately - an unverified baseline in git is indistinguishable
+from a legitimate one later.
 
 ### 2026-08-03 - EXPERIMENT-Q CARRY-THROUGH landed both sides; cross-impl PASS
 
