@@ -395,7 +395,53 @@ measurement rather than the guess:
 So the residual is NOT in which rows exist. Both arms build the same rows; the streamed arm
 REPORTS 116 (peptide, file) observations the golden does not, on 95 precursors.
 
-### Measured 2026-08-04: the residual is 116 LOST per-run observations
+### GREEN 2026-08-04: `regression.ps1 -Dataset Stellar` passes all five legs
+
+With `OSPREY_STAGE6_STREAM_SURVIVORS` ON by default: mode1 (vs golden), mode3 (HPC chain ==
+straight), mode4 (warm), mode2 (resume cache hits), mode2 (resume == straight) all PASS.
+
+The last defect was the gap-fill append. Three mechanisms were tried; only the third is
+correct, and the two failures are worth keeping because both looked right:
+
+1. **Carry the rows out of the rescore in memory.** Cannot work on HPC - `--task
+   PerFileRescoring` rescores each file in its own process, so nothing held there reaches
+   the merge node. Also an O(files) resident term (~270 MB at 163 files), the shape this
+   change exists to remove.
+2. **Replay the reconciled parquet's appended tail by row index.** Looked exact - the
+   parquet does write gap-fill rows after the originals - but `LoadFullFdrEntries` does NOT
+   preserve parquet row order, so the "tail" is not the gap-fill rows. Measured on Stellar
+   file 20: it appended 36 rows that were not gap fill and dropped all 133 that were
+   (`133 entry_ids only in resident, 36 only in streamed`, no duplicates either side).
+3. **Append from the target list in `reconciliation.json`** - what the resume overlay
+   already did. Same source, works on a merge node, holds nothing. Both paths now share it.
+
+The lesson worth carrying: the buffer's gap-fill rows are recoverable ONLY from the
+persisted target list. Row order in a parquet read-back is not a contract.
+
+### First memory measurement (Stellar, 3 files) - the mechanism removes the right term
+
+```
+resident   [MEM reconciliation-floor] managed_heap=0.84 GB   29,364 spectra
+streamed   [MEM reconciliation-floor] managed_heap=0.64 GB   29,364 spectra
+           [MEM stage5-handoff-released] managed_heap=0.64 GB (after planning)
+```
+
+The floor drops 0.20 GB, and the survivor pool it sheds is 994,509 entries x ~208 B =
+0.207 GB - i.e. the reduction is EXACTLY the term the change targets, with byte-identical
+output. Three files is far too small to project from, so this is a mechanism check, not a
+scale result.
+
+**Still to measure** (the actual claim of this TODO):
+* 20-file A/B, default vs `OSPREY_STAGE6_STREAM_SURVIVORS=0`, diffing blib + reported q.
+* Stage-5-only re-measure at 163 files via `-LinkFrom` (~75 min) against the baseline:
+  `FirstPassFDR` 4535.6 s wall, 90.2 GB private / 75.9 GB managed peak, 28.17 GB floor.
+  Prediction to test: because the churn amplitude is coupled to the live set, the PEAK
+  should fall by roughly 2.4x the reduction in the hold, not 1x. If it falls only ~1x, the
+  coupling model is wrong and the planning loop needs its own allocation fix.
+* `-Dataset All` before merge, and the TeamCity Perf/Regression gate on `pull/<N>` (ASK
+  Brendan first).
+
+### Measured 2026-08-04: the residual was 116 LOST per-run observations (now fixed)
 
 Direct resident-vs-streamed blib comparison (`ai/.tmp/who_extra.py`), which is more
 reliable than reading the harness's run-vs-golden labels - an earlier note in this file
