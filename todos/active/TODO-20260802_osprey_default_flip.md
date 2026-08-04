@@ -9,7 +9,8 @@
 - **GitHub Issue**: [#4484](https://github.com/ProteoWizard/pwiz/issues/4484) (umbrella),
   [#4515](https://github.com/ProteoWizard/pwiz/issues/4515) (the I/L half)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4528](https://github.com/ProteoWizard/pwiz/pull/4528) (pwiz),
+  [maccoss/osprey#60](https://github.com/maccoss/osprey/pull/60) (Rust) - both opened 2026-08-03
 
 Consumes the remaining tasks of `TODO-20260727_osprey_pass2_fdr_default.md` (whose branch was
 spent on PR #4487) and the "Osprey I/L gap" task of `TODO-20260801_decoy_similarity_gate.md`.
@@ -221,7 +222,15 @@ test asserted a decoy count and got 0. Both tests now set fragments and assert t
 - [x] `ai/docs/osprey-development-guide.md` env-var policy - **was already done** in `90e9e87`
       ("Changing or REMOVING an env var needs no deprecation ceremony"), with the
       `OSPREY_PASS2_QVALUE=percolator` removal as its worked example. Checkbox was stale.
-- [ ] `/code-review max`, then open the PR; ask before triggering TeamCity Perf/Regression
+- [x] Opened both PRs 2026-08-03: pwiz [#4528](https://github.com/ProteoWizard/pwiz/pull/4528)
+      (label `osprey`) and [maccoss/osprey#60](https://github.com/maccoss/osprey/pull/60). Both
+      branches pushed; the Rust blobs were verified LF-only before pushing.
+- [ ] **TeamCity Perf/Regression - NOT triggered, ask Brendan first.** When triggered it must be
+      `branch=pull/4528`, never the named branch (a named branch silently builds master).
+- [ ] **Review the delta that post-dates `/code-review max`.** That review covered the branch
+      BEFORE finding #3 was implemented, so `cb9b68c60` (validity-key suffixes, `TaskValidityKeyTest`,
+      the `StreamingFdr.Admit` dead-guard removal) and the two data commits are gated by build,
+      tests, inspection and the full regression run - but not by a review pass.
 
 ## Regression Test
 
