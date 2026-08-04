@@ -431,8 +431,21 @@ The floor drops 0.20 GB, and the survivor pool it sheds is 994,509 entries x ~20
 output. Three files is far too small to project from, so this is a mechanism check, not a
 scale result.
 
+**Use 40 files, not 20 or 163** (established 2026-08-04 by perfviz over the existing runs).
+`tdp43-40files-delivered` is already a `--task FirstPassFDR` run and shows the term:
+`134,395,432 -> 13,398,508` survivors = **~2.8 GB** of resident pool against a ~4.4 GB
+library floor, so the signal is ~40% of the floor. Stage 5 alone is 34 min there. The other
+seven 40-file runs are `PerFileScoring` only and show nothing of Stage 5/6.
+
+Because `reconciliation-floor` fires BEFORE the rescore loop, the measurement needs Stage 6
+to START, not finish - kill each arm when the line prints. ~70 min for both arms against
+~7 h for the 163-file pair. Full command, and the mandatory
+`OSPREY_VERSION_OVERRIDE=26.1.1.211` pin for the `Stages1to4` link source, are in the
+handoff.
+
 **Still to measure** (the actual claim of this TODO):
-* 20-file A/B, default vs `OSPREY_STAGE6_STREAM_SURVIVORS=0`, diffing blib + reported q.
+* 40-file A/B, default vs `OSPREY_STAGE6_STREAM_SURVIVORS=0`, comparing the
+  `reconciliation-floor` lines (and the blib if allowed to finish).
 * Stage-5-only re-measure at 163 files via `-LinkFrom` (~75 min) against the baseline:
   `FirstPassFDR` 4535.6 s wall, 90.2 GB private / 75.9 GB managed peak, 28.17 GB floor.
   Prediction to test: because the churn amplitude is coupled to the live set, the PEAK
