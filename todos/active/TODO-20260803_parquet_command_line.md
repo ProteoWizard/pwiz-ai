@@ -52,15 +52,40 @@ refused. The remaining `LoadFrom` in shipping code is
 never had `loadFromRemoteSources` - not a regression, but `UnsafeLoadFrom` is
 the one-word fix if it ever surfaces.
 
-## Remaining Work
+## The Parquet Export Hang
 
-**Parquet export hangs about 1 run in 5.** Measured back to back on the same
-document: parquet 4 hangs in 20 runs, csv 0 in 20. Hung runs peg every core and
-grow to 460-620 MB; completed runs take 1.3-1.6s. Pre-existing in
-`ParquetReportExporter.Export`, the only place using `QueueWorker` with
-`maxQueueSize: 1` alongside `ParallelEx.For`, but the new
-`--report-format=parquet` makes it easy to reach. Should be fixed before the
-option ships.
+Exporting to parquet hung on roughly one run in six, pegging every core and
+growing to 400-600 MB, while csv never hung in 20 runs.
+
+Root cause: `CalibrationCurveFitter.GetTransitionQuantities` read and then added
+to the plain `Dictionary` field `_replicateQuantities` with no synchronization.
+`ParquetReportExporter.PopulateChunk` is the only report path that evaluates row
+values on more than one thread (`ParallelEx.For`; csv and tsv are serial), so it
+was the only one that could corrupt the dictionary and spin forever in
+`Dictionary.FindEntry`. Fixed by locking, which also covers the `_identityPaths`
+IndexedList that the same method mutates.
+
+How it was found, in case a similar hang turns up:
+
+* Stacks came from ClrMD (the same API `TestUtil/HangDetection.cs` uses) against
+  the hung process. Identical stacks five seconds apart with cores busy means a
+  spin, not a deadlock. ClrMD cannot walk past `RuntimeMethodInfo.Invoke`, so
+  the spinning frame itself was invisible.
+* What localized it was varying the report: Peptide RT Results, Transition
+  Results and Peptide Quantification were 0 hangs in 25 runs each, and only
+  Peptide Ratio Results reproduced. That pointed at the quantification path,
+  which matched `Dictionary+Entry<IdentityPath, PeptideQuantifier+Quantity>[]`
+  in the heap dump.
+
+Verified after the fix: 60 CLI exports of the ratio report with `PopulateChunk`
+still parallel, 0 hangs. `ConsoleParquetReportExportTest` repeats the export 20
+times in a child process, so a regression fails the test instead of leaving
+threads spinning for the rest of the run.
+
+`CalibrationCurveFitter._transitionsToQuantifyOn` is still lazily initialized
+without a lock. It looks benign - the set is built in a local and published by a
+single reference assignment, so a racing caller sees null or a complete set, and
+only duplicates work.
 
 ## Deferred
 
