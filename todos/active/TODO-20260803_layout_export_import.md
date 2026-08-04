@@ -104,6 +104,37 @@ and File > Import > Window Layout complain identically:
   `deserialized` flag had to be hoisted out of the `using` block to reach it).
 - `ImportLayout` calls it after its `CloseInapplicableForms` pass.
 
+### Import asks BEFORE it rearranges anything
+
+Loading a layout is a full replace - every dockable window is destroyed and
+rebuilt - so a warning after the load comes too late to act on: the arrangement
+the user had is already gone. The mistake worth catching is a layout saved for a
+completely different document, and that is visible in the file itself.
+
+So `ImportLayout` reads the file first with `LayoutPreview`
+(`Controls/LayoutPreview.cs`), which parses the `PersistString` attributes and
+says which windows this document cannot show **without creating or closing
+anything**. If any, it asks "...cannot be shown for this document ... import the
+layout anyway?" (Yes/No) and does nothing on No. Only Import does this; opening a
+document keeps the after-the-fact severe-only message.
+
+Windows already named in that confirmation are passed to `ShowLayoutProblems` as
+`alreadyReported`, so a confirmed import does not then repeat itself. What
+survives that filter is whatever the prediction missed, which is the honest thing
+to still say.
+
+**`LayoutPreview` predicts; `DeserializeForm` decides.** They are separate code
+paths and could drift, so where they might disagree the preview errs toward "will
+restore" - a false alarm would put a prompt in front of an import that was going
+to work. `TestUnrestorableWindowPrediction` pins the contract for every window
+kind, and `FoldChangeForm` grew `IsFoldChangeForm` / `GetGroupComparisonName` so
+both paths parse that persist string the same way. The preview also mirrors the
+restore path's invariant-default-replicate-name fallback, which would otherwise
+be a false alarm in a localized run.
+
+Reading the file first has a bonus: a file that is not a layout at all now fails
+before the current layout is touched, rather than half way through the replace.
+
 **The two entry points differ in strictness** (`LayoutProblems`,
 `Controls/LayoutProblems.cs`). Each window that could not be restored is
 classified:
