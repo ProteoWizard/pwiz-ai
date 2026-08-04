@@ -147,10 +147,10 @@ test asserted a decoy count and got 0. Both tests now set fragments and assert t
 - [x] Flip `OSPREY_PASS2_QVALUE` to `protein-compact`
 - [x] Flip `OSPREY_PICK_LDA` on
 - [x] I/L-normalised collision rejection, C# and Rust, with independence tests
-- [ ] Golden re-baseline - **RE-CAPTURED 2026-08-03 evening, verify IN FLIGHT.** The first
-      capture (`4a067fa8b`) went stale when `1e90d5453` and `03f31954a` landed after it. All four
-      goldens are re-captured and sitting UNCOMMITTED in the working tree; `-Dataset All` is
-      running to verify them. Commit only when it is green, mode 3 included.
+- [x] Golden re-baseline - **DONE and VERIFIED 26/26**, committed as `7e91b26e0` (45 files, all
+      under `osprey-regression.data`, nothing stray). The first capture (`4a067fa8b`) went stale
+      when `1e90d5453` and `03f31954a` landed after it; this is the re-capture, verified before
+      committing.
 - [x] Review finding #3: key the resume cache on the flipped defaults (`cb9b68c60`). Landed
       BEFORE the verify so one run covers both, per Brendan.
 - [x] Review findings #5 / #6: pin both levers in every measurement runner (`ai` `4edbe2d`),
@@ -649,10 +649,33 @@ an earlier entry. Gate now: **574/574 tests, 0 warnings / 0 errors.**
   the token into run-directory names, and `mbn_surface.py` reads the mode as a token so the
   existing percolator arms still harvest.
 
-**Verify run IN FLIGHT** (`regression.ps1 -Dataset All`, PID 43888, log
-`ai/.tmp/regression-verify-20260803.log`). Mode 3 is the critical one. The goldens stay
-UNCOMMITTED until it is green, deliberately - an unverified baseline in git is indistinguishable
-from a legitimate one later.
+**VERIFY GREEN: `Osprey regression PASSED`, 26/26.** Goldens committed as `7e91b26e0`.
+
+```
+Stellar               mode1 PASS  mode3 PASS  mode4 PASS  mode2 x2 PASS
+StellarLibDecoy       mode1 PASS  mode1b PASS (+FDR sanity bounds PASS)  mode3 PASS  mode4 PASS  mode2 x2 PASS
+StellarGenDecoyEntrap mode1 PASS  mode1b PASS (+FDR sanity bounds PASS)  mode3 PASS  mode4 PASS  mode2 x2 PASS
+Astral                mode1 PASS  mode1b PASS (+FDR sanity bounds PASS)  mode3 PASS  mode4 PASS  mode2 x2 PASS
+```
+
+Three things this run establishes that the capture alone could not:
+
+* **Mode 3 is green on all four datasets INCLUDING Astral**, so the shipping baseline and the
+  HPC 4-task chain describe the same pipeline at the same time. It never reads the golden - it
+  compares the chain against the straight-through run of the same session - which is exactly why
+  a re-baseline could not have papered over it.
+* **The mode 2 / mode 4 cache expectations still hold under the new validity keys.** `cb9b68c60`
+  changes what invalidates a cached artifact, and `regression.ps1` asserts which tasks were
+  SKIPPED versus RAN; both resume checks and the warm re-run passed on every dataset. The keys
+  are consistent within a session, which is what makes that true - and the run confirms it rather
+  than assuming it. (`regression.ps1` sets neither flipped env var, so every leg and every HPC
+  phase shares one arm.)
+* **The tier-2 FDR sanity bounds passed in the VERIFY run, not only at capture.** Tier 2 is a
+  FIXED bound a re-baseline cannot move, so it is the independent check that the flips did not
+  walk calibration out of range.
+
+`data dir unchanged across run` on all three read-only data folders. Log:
+`ai/.tmp/regression-verify-20260803.log`.
 
 ### 2026-08-03 - EXPERIMENT-Q CARRY-THROUGH landed both sides; cross-impl PASS
 
