@@ -6,9 +6,9 @@
   `ProteowizardWrapper`; the pwiz-side changes (TIC, wrapper forwarding) are in support of it
 - **Base**: `master` @ `55cedad25`
 - **Created**: 2026-07-27
-- **Status**: In Progress - read side only (the writing half was withdrawn in Phase 6). Phases 1-8
-  committed and pushed; Phase 9 (DATA Convert 5.x intensity-ordered peaks) complete and green but
-  **uncommitted**
+- **Status**: BLOCKED on review. Phases 1-9 committed and pushed, all gates green, PR body current -
+  but Matt has an open CHANGES_REQUESTED (2026-08-03) on the Phase 9 m/z sort, mainly its per-spectrum
+  cost. **Start at Phase 10.**
 - **GitHub Issue**: (none)
 - **PR**: https://github.com/ProteoWizard/pwiz/pull/4498
 - **Cherry-pick to release**: no - Brian decided 2026-07-29, do not add the label
@@ -565,6 +565,49 @@ document, so repeated `SkylineCmd --in=X.sky --import-file=...` runs serve stale
 early "still zero" variant results were cache artifacts, not real. Delete `*.skyd` between runs.
 And a `sorted` check that only compares first vs last element proves nothing; it hid this for
 several rounds.
+
+### Phase 10: NEXT SESSION STARTS HERE - review feedback on the m/z sort
+
+Phase 9 is committed (`49f8442bb`) and pushed; PR #4498 body is updated. **But Matt submitted a
+second CHANGES_REQUESTED on 2026-08-03 22:07** (empty body, substance in inline comments), so the
+PR is blocked. Four comments from him, one reply from Brian:
+
+1. **`MsDataFileImpl.cs:2471` - the significant one.** *"I don't imagine Brendan would be ok with a
+   definite slowdown in 99.9% of Skyline data import so that the 0.1% works."* Wants the check done
+   on the first spectrum with the verdict cached per file; or sample every ~1000th spectrum and, if a
+   later one needs sorting, treat the import as compromised and restart it with the flag set.
+2. **`PwizReader.cpp:440`** - same objection on the BiblioSpec side.
+3. **`PwizFileInfoTest.cs:206`** - the fixture-order pin *"seems a bit excessive"*. It exists because
+   `/code-review max` found every other assertion in that test passes on an already-sorted file.
+   Defend it or drop it, but do not silently drop it.
+4. **`SpectrumList_Filter.cpp:321`** - *"Shouldn't this be reverted since it was only needed for
+   multiple spectrum types?"* **Probably a misreading worth answering rather than just complying.**
+   The multi-type change WAS reverted in Phase 6. What is there now is the Phase 8 change: the
+   msLevel predicate reads a declared ms level before consulting the spectrum type, which fixes
+   calibration-spectrum-*only* spectra - the form `SpectrumList_UIMF.cpp:106` writes today. That is
+   independent of multi-type. It only becomes moot if psi-ms #539 lands AND UIMF is updated.
+5. **Brian's reply**: probe the first spectrum with >10 m/z values, since early scans may precede the
+   sample; consider simply throwing on unsorted input and telling the user to reprocess; and
+   *"sortedness only really matters to us in the context of binary search, maybe it's cheap to detect
+   unsortedness during the search?"*
+
+**The perf objection is sound and was under-weighted.** `/code-review max` measured the check at
+~1.25 ns/element, roughly 0.2-2% of import wall time, and that was recorded here without being acted
+on. Matt reached the same conclusion independently. The three candidate designs - first-spectrum
+probe + cached flag, periodic sampling with restart, or detect-during-binary-search - differ
+materially in correctness for a mixed file, so settle the design before coding.
+
+**psi-ms CV issue #539 - agreed, not landed, nothing to bundle.** Matt opened it 2026-07-30 out of
+this very work; edeutsch minuted agreement on 2026-07-31 (*"Joshua will make a PR"*) to move
+`MS:1000928` from `spectrum type` to `spectrum attribute`. **Same CVID, re-parented in place - no new
+accession.** Verified 2026-08-03: issue still open, no PR, `psi-ms.obo` master 4.1.258 still says
+`is_a: MS:1000559`, and the most recent obo commit (2026-07-31, #536) does not touch it. OLS agrees.
+Matt is fine not bundling it.
+
+When it does land, two things here need revisiting: `MSe_Short_tagged.mzML` currently declares
+`calibration spectrum` as the lockspray scan's **sole** type (correct today, wrong once it is an
+attribute - it would then need `MS1 spectrum` plus the attribute), and `SpectrumList_UIMF.cpp:106`
+has the same problem in the writer.
 
 ## Open Questions / Unresolved
 
