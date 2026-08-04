@@ -2973,8 +2973,59 @@ Regression: Common.Tests 49/49, IdentData.Tests 6/6, Analysis.Tests 135/135, MsD
 `dotnet build Pwiz.sln -c Release` 0 errors. No product code consumes `Digestion` yet, so the
 blast radius is limited to the library API its future BiblioSpec/search callers will use.
 
+### Audit: port tests whose expectations came from the port, not from cpp
+
+Follow-up to the digestion find. Swept the 76 test files in the algorithm-bearing projects
+(Analysis, Common, MsData, Util, TraData, IdentData) for the same shape. Filters used: explicit
+"differs from cpp" admissions; decimal literals in the C# test that appear nowhere in its cpp
+counterpart; cpp-vs-C# assertion counts; and whether every ported class has a test at all.
+
+**Main find - `SpectrumList_ChargeStateCalculator`: 27 of cpp's 43 cases were dropped, and the
+whole ETD path with them.** cpp's table carries an `inputActivationTypeArray` column - 29 CID,
+**9 ETD, 5 CID+ETD** - and `PrecursorAndChargeFilterTests.ChargeStatePredictor` has no such column
+at all: it hardcodes `MS_collision_induced_dissociation` on every one of its 16 rows. ETD changes
+charge determination materially, and none of it is exercised. A coverage gap, not a wrong
+expectation.
+
+**No divergence in the 16 that were ported.** Worth stating because the first signal said
+otherwise: tightening the C# assertion to exact-set equality fails cases 06/07, which expect
+`{3,4,5}` while the port emits `{3,4}`. Instrumenting the cpp binary shows **cpp emits `[p3 p4]`
+too** - its expected column is a permissive superset, not a prediction. The port is right and the
+table is loose; do not "fix" the port here.
+
+**Both tests inherit cpp's vacuous assertion shape**, the same one turbocharger case 10 had: the
+checks live inside a loop over the emitted charge params, so a case emitting none passes, and the
+membership test is subset-only, so a case emitting *fewer* charges than expected passes too. That
+is what let the loose `{3,4,5}` sit unnoticed.
+
+**cpp quirks any tightened port would have to encode** (from the instrumented run): cases
+13/26/27/28 emit `[p2 p3 p1]` - charge 1 last, not sorted - and case 31 emits `[p2 p3 p2]`, the
+same possible-charge-state **twice**. Both would fail a naive sorted-set assertion.
+
+**Checked and clean:**
+- `SpectrumList_PeakFilterTest`: every decimal expectation in the C# test also appears in cpp's.
+- `SpectrumList_ScanSummerTest`: 9 assertions each side; the only C# decimals absent from cpp are
+  comparison tolerances.
+- `BinaryDataEncoderTests`: the `"AAAAAAAA8D8="` expectation is IEEE-754 + base64, derivable from
+  the spec rather than from any implementation.
+- `SpectrumList_IonMobility_Test`: all eight C# decimals are absent from cpp, which looked alarming
+  but they are fixture *inputs*; the assertions are unit-classification outcomes that follow from
+  cpp's dispatch logic.
+- **No ported filter is wholly untested.** An early pass suggested `SpectrumList_MZWindow`,
+  `SpectrumList_3D` and `PrecursorRecalculator` had zero coverage; that was a naming artifact - the
+  port renames them (`SpectrumListMzWindow`), and `SpectrumList_3D` / `PrecursorRecalculator` are
+  not ported at all. All 21 ported `SpectrumList*` classes have at least one test file.
+
+**Method note for the next sweep.** Decimal-literal diffing is noisy - it cannot tell a fixture
+input from an expected output, and it flagged IonMobility while missing ChargeStateCalculator
+entirely. What actually found the gap was comparing **cpp's test-case count against the port's**,
+and reading cpp's table *columns* for parameters the port dropped. Do that first next time.
+
 **Open / next:**
-1. Remaining audit items, all much smaller and none clearly a true gap:
+1. Port the 27 missing `ChargeStatePredictor` cases, with the activation-type column and an exact
+   assertion, taking expectations from the instrumented-cpp emissions rather than cpp's permissive
+   table. Encode the `[p2 p3 p1]` ordering and the case-31 duplicate as cpp produces them.
+2. Remaining audit items, all much smaller and none clearly a true gap:
    `DiaUmpire.LinearInterpolation` (47) and `MsConvert.Program` + `ConsoleProgressListener` (27)
    are both reachable but exercised only outside the pwiz-sharp unit suites (Skyline's
    TestPerf/TestTutorial, and out-of-process msconvert respectively) - confirm before spending
