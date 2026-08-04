@@ -395,7 +395,37 @@ measurement rather than the guess:
 So the residual is NOT in which rows exist. Both arms build the same rows; the streamed arm
 REPORTS 116 (peptide, file) observations the golden does not, on 95 precursors.
 
-**Next probe**: take the 116 `RetentionTimes` keys present only in the run and classify
+### Measured 2026-08-04: the residual is 116 LOST per-run observations
+
+Direct resident-vs-streamed blib comparison (`ai/.tmp/who_extra.py`), which is more
+reliable than reading the harness's run-vs-golden labels - an earlier note in this file
+called this "over-reporting", and that was the wrong sign:
+
+```
+resident observations 88,092   streamed 87,976
+only in streamed: 0     only in resident: 116
+by file: _22 47, _20 37, _21 32
+95 distinct precursors affected (74 lose one observation, 21 lose two)
+all 95 still reported elsewhere in streamed
+```
+
+So nothing is invented and no precursor disappears; the streamed arm simply fails to report
+116 (precursor, file) observations. That is a RUN-LEVEL q gate outcome - those entries exist
+in both buffers with identical scores, so their run q must come out worse in the streamed
+arm. It explains every mode1 issue: `RefSpectra` count matches, only `copies` /
+`NRunsDetected` move, on exactly 95 rows.
+
+**Next probe**: for the 116, resolve their entry_id (join the blib peptide back through the
+library or the reconciled parquet's modseq column), then read `run_pep_q` for those ids from
+both arms' `.2nd-pass.fdr_scores.bin` (`ai/.tmp/diff_pass2_join.py` already loads them).
+Two outcomes, two different defects: if the streamed q is worse, the competition population
+for that file differs; if the q is EQUAL, the loss is downstream of the sidecar, in the blib
+write's per-run selection. Do not guess between them - the sidecars are on disk in
+`ai/.tmp/ab4526/d8_res` and `d8_str`, so this costs no run.
+
+### Superseded probe (kept for the reasoning)
+
+Take the 116 `RetentionTimes` keys present only in the run and classify
 them - are they gap-fill targets, moved peaks, or ordinary survivors? Then pull those exact
 entries out of both arms' `.2nd-pass.fdr_scores.bin` (join on entry_id;
 `ai/.tmp/diff_pass2_join.py`) and compare their q against the 1% gate. That says whether
