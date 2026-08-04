@@ -30,9 +30,20 @@ There was also no `parquet` option for `--report-format`, which offered only
   Content item is also what puts the file in the ClickOnce manifest, which is
   built from project items - generating it into the output folder was not enough,
   and would have shipped a config-less SkylineCmd.exe to the usual install.
-  `SkylineCmdConfigTest` verifies the copy, and that `TestData.dll.config` and
-  `TestFunctional.dll.config` cover every version mismatch too, since a Test
-  Explorer run uses those rather than `TestRunner.exe.config`.
+
+  A `SkylineCmdConfigTest` guarded this for a while and was then deleted. Once the
+  config became a linked Content item, its main assertion - that the two files are
+  identical - was checking that MSBuild copies a file. It had also grown
+  over-strict: it demanded a redirect for any mismatched reference among the ~139
+  assemblies in the output, including ones nothing loads, which would have failed
+  the moment somebody dropped a new third-party DLL in. It did earn its keep once,
+  by catching the missing `System.Text.Json` redirect in `TestData.dll.config`.
+
+  Worth knowing: no test loads `SkylineCmd.exe.config` at run time.
+  `ConsoleParquetReportExportTest` calls `RunCommand` in process, so it runs under
+  `TestRunner.exe.config`. Closing that gap needs a test that launches
+  `SkylineCmd.exe` as a child process, which was tried and rejected because a hang
+  in a child process is harder to debug than one in the runner.
 * `app.config` lost 11 bindingRedirects and the `<system.data>` block. Verified
   by stripping them and rebuilding: `AutoGenerateBindingRedirects` regenerates
   exactly the load-bearing set, and never regenerated the four that a reference
