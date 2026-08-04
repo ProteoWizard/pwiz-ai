@@ -381,10 +381,16 @@ measurement rather than the guess:
   zero duplicates**. A fresh rescore never leaves two rows for one precursor in one file,
   so "append gap-fill unconditionally" is wrong and so is "overwrite duplicates"; both were
   tried and neither matched.
-* Gap-fill rows are now captured DURING each streamed file's rescue (`_streamedGapFill`,
-  keyed off the `ParquetIndex == uint.MaxValue` marker the rescore stamps) and replayed
-  verbatim at the end - exact by construction, not reconstructed from disk. Result:
-  identical to the parquet tail replay, still 8 / 3 / 3.
+* Capturing the gap-fill rows in memory during each file's rescore and replaying them
+  verbatim was tried, and measured identical to the persisted tail replay (8 / 3 / 3). It
+  was then REVERTED, and must not be reintroduced: (a) under `--task PerFileRescoring` each
+  file is rescored in its own process, so carried rows are gone by the time the merge node
+  needs them - the mechanism cannot work on HPC, which is the path this whole change exists
+  to adopt; (b) it is itself an O(files) resident term, ~270 MB at 163 files (gap-fill runs
+  2.7k-25.4k targets per file there, against 390 rows TOTAL on the 3-file Stellar set the
+  "cheap to keep" claim was based on). Read the tail from the reconciled parquet instead:
+  the fresh append order survives on disk because those rows are written after the
+  originals.
 
 So the residual is NOT in which rows exist. Both arms build the same rows; the streamed arm
 REPORTS 116 (peptide, file) observations the golden does not, on 95 precursors.
