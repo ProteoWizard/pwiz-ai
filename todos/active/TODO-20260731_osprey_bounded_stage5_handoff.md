@@ -506,6 +506,77 @@ from "different set", which the current evidence cannot. A/B harness:
 `ai/.tmp/ab-stage6.ps1`; comparators `ai/.tmp/diff_pass2_join.py`, `diff_parquet.py`,
 `diff_dump.py`.
 
+## `/code-review max` findings (2026-08-04) - NOT PR-ready
+
+15 findings on `origin/master...HEAD`. Stellar green does NOT clear these: most are on
+paths Stellar never exercises (write failure, resume with Stage-5 invalidated, multi-row
+EntryId, files with both CWT and forced gap fill).
+
+**Fixed:**
+- [x] `RescoreOneFileStreamed`'s `finally` cleared unconditionally, defeating
+      `RescoreOneFile`'s `if (wroteReconciled)` gate. On a failed/no-op reconciled write
+      those arrays are the ONLY copy of the rescore; the rebuild then restored 1st-pass
+      values and the precursors vanished from the report on a warning.
+- [x] `CoelutionSum` was not carried through the overlay - same omission class as the
+      ScanNumber bug. Cold replaces it, it IS persisted and loaded, Stage 7 reads it off
+      the buffer (`PercolatorEntryBuilder` basic-feature fallback, best-per-precursor), and
+      `ReleaseRescoredPayload` then nulls Features, destroying the only fresh copy.
+
+**Open - correctness, must fix before a PR:**
+- [ ] `ResetRescoredTargets` resets EVERY planner index in EVERY file, but the reset it
+      reproduces only ran for files that reached scoring. `TryResumeRescoredFile` (per-file
+      resume skip) and `TryAssembleRescoreTargets` returning false after `combinedTargets`
+      is populated both return earlier. Streamed zeroes those; resident leaves real q. Under
+      protein-compact an off-stratum survivor keeps its q, so they drop out - the mirror of
+      the 31,583-vs-29,364 over-report. Its `idx >= entries.Count` guard also silently
+      swallows the one detectable symptom of a misaligned rebuild.
+- [ ] Both fixes are applied to only ONE of three callers of the shared overlay. `Rehydrate`
+      and `TryResumeRescoredFile` pass `reproducingFreshRescore: false` and never reset, so
+      cold and resume provably differ - which also invalidates the "mode 2 gates this" claim
+      in the code comment. Trigger: Stage-5 outputs invalidate while reconciled parquets stay
+      valid, so MergeNode drives `Rehydrate`.
+- [ ] Gap-fill ORDER still differs: cold appends all CWT-pass rows then all forced rows, each
+      in scoring-emit order; the rebuild appends by ascending `TargetEntryId`. Any file with
+      both produces a different tail, and `canonicalize: false` was justified precisely on
+      order mattering.
+- [ ] The `entry.ScanNumber = r.ScanNumber` carry uses byId's FIRST-wins row, so if a file
+      holds >1 survivor per EntryId (two isolation windows) they collapse onto one scan and
+      become duplicate pass-2 identities. Nothing enforces the "at most one row per EntryId"
+      claim in that method's comment.
+- [ ] `OverlayReconciledIntoAllFiles` overlays any reconciled parquet that merely EXISTS; the
+      rescore's own gate uses `PerFileResumeDriver.IsCurrent` against the validity key. A
+      stale parquet from different reconciliation parameters gets overlaid on a cold run.
+- [ ] The `!didPlan && ...` no-op arm now behaves differently with streaming on vs off, so
+      `OSPREY_STAGE6_STREAM_SURVIVORS=0` is not the byte-identity oracle its doc claims.
+
+**Open - robustness / perf:**
+- [ ] `throw` inside `Parallel.For` loses the actionable message (net472 `AggregateException`
+      does not include inner text; nothing in Osprey unwraps it), never sets ExitCode, never
+      closes the diagnostic writers.
+- [ ] The per-file survivor reload moved into `Parallel.For`, so peak transient is now
+      parallelism x (full pre-compaction stub set + whole sidecar byte array + the
+      TrimExcess/AddRange copies) - ~2 GB new at P=8, in a change whose purpose is lowering
+      peak.
+- [ ] Cold runs now fat-decode every reconciled parquet (21 PIN features + 4 blob columns)
+      only for `ReleaseRescoredPayload` to null them 16 lines later; `.scores.parquet` goes
+      from 1 read per run to 3.
+- [ ] `MaterializeAllSurvivors` and `OverlayReconciledIntoAllFiles` are unreported sequential
+      loops right after the parallel rescore - the silent-phase symptom this codebase has
+      already fixed by name twice (#4513, Pass2FdrSidecar).
+- [ ] The new flag has NO `ResidentPaths` token, no `ResidentPoolGuard` coverage, no test, no
+      `ValidityKey` suffix (so an in-place A/B reuses cached artifacts and compares nothing),
+      and no docs entry. This is design items 2-4, and the review is right that shipping the
+      `=0` arm unguarded re-opens a 28 GB path with no fail-fast.
+- [ ] `FirstPassSurvivorLoader` adds a 5th copy of the parity-critical
+      `(EntryId, Charge, ScanNumber, ParquetIndex)` comparison and a 5th copy of the 8-field
+      reset block. Promote one `Comparison<FdrEntry>` and one `FdrEntry.ResetScores()`.
+
+**Correct a false claim I wrote in the code:** the comment at the gap-fill append says
+`LoadFullFdrEntries` does not preserve parquet row order. The review verified it DOES
+(`for (int g = 0; ...) entries.AddRange(ReadFdrEntryGroup(...))`). The real reason the tail
+replay failed is that `StreamReconciledScoresParquet` MERGES gap-fill rows into canonical
+(entry_id, charge, scan) position rather than appending them, so there is no tail.
+
 ## Regression Test
 
 - **Test name**: (filled in once written)
