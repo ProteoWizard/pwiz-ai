@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260803_osprey_bounded_stage5_handoff`
 - **Base**: `master` (at `9804e90156`, i.e. after #4512)
 - **Created**: 2026-07-31 (branch cut 2026-08-03)
-- **Status**: In Progress
+- **Status**: **PAUSED - do not resume until [#4484](https://github.com/ProteoWizard/pwiz/issues/4484) merges** (Brendan, 2026-08-03)
 - **GitHub Issue**: [#4526](https://github.com/ProteoWizard/pwiz/issues/4526)
 - **Module**: `osprey`
 - **PR**: (pending)
@@ -12,6 +12,30 @@
 > The `Skyline/work/20260731_osprey_bounded_stage5_handoff` branch name on `origin` was
 > reused by the progress-reporting work that became #4513 (merged), so it carries none of
 > this. Work happens on the `20260803_` branch above.
+
+## STOP: paused on purpose, and re-reading the code will mislead you
+
+**Brendan stopped this work on 2026-08-03 because the session running it was finding issues
+that [TODO-20260802_osprey_default_flip.md](TODO-20260802_osprey_default_flip.md) (#4484) had
+ALREADY FIXED on a branch that had not merged yet.** Those fixes live in exactly the Stage
+5/6/pass-2 code this TODO bounds, so reading master here surfaces defects that are already
+resolved, and "fixing" them costs a session and then conflicts.
+
+**Rebase onto #4484 FIRST. Then re-derive.** Do not treat anything below as a live defect
+until you have. Already fixed on that branch, all in this code:
+
+| already fixed in #4484 | commit |
+|---|---|
+| Stage-6 rescored entries reach pass 2 UNSCORED in-process (`OverlayRescoredEntries` resets `Score=0`/q=1; protein-compact's off-stratum branch then read the sentinel). Straight-through UNDER-REPORTED against the HPC chain | `8796e7a13` |
+| `survivorScoreOverride` presence is NOT a "Stage 6 changed" signal - it holds every post-reconciliation survivor whose identity resolves, and the effective-path helper falls back to the ORIGINAL parquet for untouched files. Now keyed on a bit-exact score difference | `1e90d5453` |
+| Off-stratum peaks re-maxed the CROSS-FILE experiment accumulator over only the files that changed them, which is guaranteed to understate and silently DROPPED peptides. Now carries the pass-1 experiment q | `03f31954a` |
+| The protein-compact stratum was never persisted, so a `--task SecondPassFDR` merge node could not run the mode at all | earlier on the same branch |
+| `OSPREY_PICK_LDA` / `OSPREY_PASS2_QVALUE` were absent from every resume validity key, so a run adopted the other arm's cached artifacts | `cb9b68c60` |
+| Two dead null guards in `StreamingFdr.Admit` (`ConditionIsAlwaysTrueOrFalse`) | `cb9b68c60` |
+
+The general trap, worth carrying beyond these two branches: **when two Osprey branches touch
+the same stage, the later one cannot tell an unfixed defect from an unmerged fix by reading
+the code.** Only the merge order can. Sequence, do not parallelize.
 
 ## Problem
 
