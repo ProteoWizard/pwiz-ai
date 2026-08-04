@@ -740,6 +740,27 @@ to use instead.
 `OSPREY_EXIT_AFTER_SCORING` (retired 2026-04-19) was replaced by the
 `--no-join` CLI flag; bench/profile scripts have migrated.
 
+### Memory bounding (A/B oracles)
+
+Both of these turn a bounded path back OFF, to prove the bounded path did not change results.
+Both are DEFAULT ON, and both now require naming their `ResidentPaths` token via
+`OSPREY_ALLOW_UNFIXED_RESIDENT` - a resident path you can reach without asking for it is how
+`OSPREY_PASS2_QVALUE=transfer` regressed unnoticed for ten days.
+
+| Name | Purpose |
+|---|---|
+| `OSPREY_FDR_PROJECTION=0` | Force the legacy resident PRE-compaction `FdrEntry` pool for all of Stage 5. Token: `projection-off`. |
+| `OSPREY_STAGE6_STREAM_SURVIVORS=0` | Force the resident POST-compaction handoff: Stage 5's all-files survivor buffer stays live across the whole Stage 6 rescore instead of being refilled one file at a time from each file's `.scores.parquet` + 1st-pass sidecar. Token: `compacted-entries-buffer` (issue #4526). |
+
+The Stage 6 buffer is 88.9 M entries / **28 GB at 163 files**, held for the 5.5 hours of the
+rescore, and it grows super-linearly in file count because the passing base_id set grows with
+the files too (20 -> 163 files is 8.2x the files but 17.2x the entries). Do not run the `=0`
+arm at large file counts expecting it to finish.
+
+`OSPREY_STAGE6_STREAM_SURVIVORS=0` also adds `;stage6stream=0` to the Stage 6 validity key, so
+an A/B run **in place** re-runs Stage 6 for the second arm instead of adopting the first arm's
+reconciled parquets and reporting a match it never computed.
+
 ### Diagnostic dumps (cross-impl bisection)
 
 Each dump has a `_DUMP` flag (write the file) and often an `_ONLY`

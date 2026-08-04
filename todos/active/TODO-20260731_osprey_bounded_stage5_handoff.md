@@ -532,7 +532,31 @@ below.
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260803_osprey_bounded_stage5_handoff.md` before starting work.
 
-## `/code-review max` findings (2026-08-04) - NOT PR-ready
+## Session log - 2026-08-04 (second session): review findings closed
+
+All 13 open `/code-review max` findings fixed (itemized below). Gate after: **574/574 unit
+tests, zero ReSharper inspections, `regression.ps1 -Dataset Stellar` all five legs PASS** with
+the byte-identical golden blib (25,407,488 bytes on straight-through, HPC chain and resume).
+
+Two of the fixes changed behaviour on paths the golden covers, and both were deliberate
+experiments rather than safe refactors:
+
+* **Gap-fill append order** was unified by changing the COLD path (sort the appended block by
+  EntryId) rather than by teaching the rebuild to reproduce cold's emit order. The emit order
+  is a function of which targets CWT hit, which is persisted nowhere, so the rebuild could
+  never have matched it - the divergence was unfixable from the rebuild side. Golden did not
+  move, so the relative order of gap-fill rows among themselves does not reach the output;
+  what matters is only that they sit at the END, where the planner's positional indices need
+  them.
+* **The rescored `ScanNumber` / `CoelutionSum` carry became unconditional**, removing the
+  `reproducingFreshRescore` flag. mode2 and mode4 stayed green against the exact golden, which
+  says the resume paths had been reconstructing buffers with stale scan numbers and nothing
+  downstream had been sensitive enough to notice. Under protein-compact it would have been.
+
+**Deliberately NOT done**: the 163-file `-LinkFrom` re-measure (Brendan, this session - the
+40-file run answers whether the plateau is gone, and 163 costs ~75 min for a confirmation).
+
+## `/code-review max` findings (2026-08-04) - all closed in the second session
 
 15 findings on `origin/master...HEAD`. Stellar green does NOT clear these: most are on
 paths Stellar never exercises (write failure, resume with Stage-5 invalidated, multi-row
@@ -548,60 +572,89 @@ EntryId, files with both CWT and forced gap fill).
       the buffer (`PercolatorEntryBuilder` basic-feature fallback, best-per-precursor), and
       `ReleaseRescoredPayload` then nulls Features, destroying the only fresh copy.
 
-**Open - correctness, must fix before a PR:**
-- [ ] `ResetRescoredTargets` resets EVERY planner index in EVERY file, but the reset it
+**Correctness - ALL FIXED 2026-08-04 (second session), Stellar green after:**
+- [x] `ResetRescoredTargets` resets EVERY planner index in EVERY file, but the reset it
       reproduces only ran for files that reached scoring. `TryResumeRescoredFile` (per-file
       resume skip) and `TryAssembleRescoreTargets` returning false after `combinedTargets`
       is populated both return earlier. Streamed zeroes those; resident leaves real q. Under
       protein-compact an off-stratum survivor keeps its q, so they drop out - the mirror of
       the 31,583-vs-29,364 over-report. Its `idx >= entries.Count` guard also silently
       swallows the one detectable symptom of a misaligned rebuild.
-- [ ] Both fixes are applied to only ONE of three callers of the shared overlay. `Rehydrate`
+      **Fix**: `RescoreOneFile` now reports whether it reached the scoring engine; the
+      per-file flags come back out of `ExecuteRescore` as a `rescoredFiles` set and the reset
+      applies to exactly those. The out-of-range index now THROWS with the file and the two
+      counts - the fresh rescore would have thrown `IndexOutOfRange` on the same index.
+- [x] Both fixes are applied to only ONE of three callers of the shared overlay. `Rehydrate`
       and `TryResumeRescoredFile` pass `reproducingFreshRescore: false` and never reset, so
-      cold and resume provably differ - which also invalidates the "mode 2 gates this" claim
-      in the code comment. Trigger: Stage-5 outputs invalidate while reconciled parquets stay
-      valid, so MergeNode drives `Rehydrate`.
-- [ ] Gap-fill ORDER still differs: cold appends all CWT-pass rows then all forced rows, each
-      in scoring-emit order; the rebuild appends by ascending `TargetEntryId`. Any file with
-      both produces a different tail, and `canonicalize: false` was justified precisely on
-      order mattering.
-- [ ] The `entry.ScanNumber = r.ScanNumber` carry uses byId's FIRST-wins row, so if a file
+      cold and resume provably differ.
+      **Fix**: the parameter is GONE. Carrying the rescored `ScanNumber` / `CoelutionSum` is
+      what "reproduce the buffer a rescore left" means, and all three callers want that; the
+      flag only encoded which caller had been fixed. Making it unconditional left mode2 and
+      mode4 green with the exact golden blib, so the resume paths were carrying stale values
+      that nothing had yet been sensitive enough to catch.
+- [x] Gap-fill ORDER still differs: cold appends all CWT-pass rows then all forced rows, each
+      in scoring-emit order; the rebuild appends by ascending `TargetEntryId`.
+      **Confirmed real at scale, and Stellar cannot see it**: at 163 files EVERY file emits
+      both kinds (file 1: 10,965 CWT + 2,361 forced), so the two buffers diverge on every
+      file of a real cohort.
+      **Fix**: at the root rather than in the rebuild. The emit order depends on which targets
+      CWT happened to hit, which is recorded NOWHERE on disk, so no rebuild could ever
+      reproduce it. `RunGapFillTwoPass` now collects both passes and appends the block sorted
+      by EntryId - the one order both paths can produce. Still appended at the END, which is
+      the property the planner's positional indices actually need. Golden did not move.
+- [x] The `entry.ScanNumber = r.ScanNumber` carry uses byId's FIRST-wins row, so if a file
       holds >1 survivor per EntryId (two isolation windows) they collapse onto one scan and
-      become duplicate pass-2 identities. Nothing enforces the "at most one row per EntryId"
-      claim in that method's comment.
-- [ ] `OverlayReconciledIntoAllFiles` overlays any reconciled parquet that merely EXISTS; the
-      rescore's own gate uses `PerFileResumeDriver.IsCurrent` against the validity key. A
-      stale parquet from different reconciliation parameters gets overlaid on a cold run.
-- [ ] The `!didPlan && ...` no-op arm now behaves differently with streaming on vs off, so
-      `OSPREY_STAGE6_STREAM_SURVIVORS=0` is not the byte-identity oracle its doc claims.
+      become duplicate pass-2 identities.
+      **Fix**: `byId` keeps ALL rows per EntryId in parquet order and the overlay pairs them
+      POSITIONALLY with the buffer's rows for that id. There is no finer stable key available
+      - Charge does not separate two isolation windows and ScanNumber is the field the rescore
+      moves - so positional pairing is the most specific correspondence the data supports.
+      The old comment claiming "at most one row per EntryId after compaction" was wrong:
+      compaction filters by base_id, it does not collapse rows.
+- [x] `OverlayReconciledIntoAllFiles` overlays any reconciled parquet that merely EXISTS.
+      **Fix**: both it and `ReconciledParquetOnDisk` now ask `PerFileResumeDriver.IsCurrent`
+      against the task validity key - the same question the rescore's own per-file gate asks,
+      so the two cannot disagree about whether a parquet is usable.
+- [x] The `!didPlan && ...` no-op arm now behaves differently with streaming on vs off.
+      **Fix**: on that arm the RESIDENT path does nothing at all - it leaves the buffer at its
+      `CompactedEntries` state. So the streamed path now does exactly one thing, refill what
+      FirstJoin released, and no longer overlays. Overlaying applied Stage-6 boundaries the
+      resident arm never applies, which is precisely what disqualified `=0` as an oracle here.
 
-**Open - robustness / perf:**
-- [ ] `throw` inside `Parallel.For` loses the actionable message (net472 `AggregateException`
-      does not include inner text; nothing in Osprey unwraps it), never sets ExitCode, never
-      closes the diagnostic writers.
-- [ ] The per-file survivor reload moved into `Parallel.For`, so peak transient is now
-      parallelism x (full pre-compaction stub set + whole sidecar byte array + the
-      TrimExcess/AddRange copies) - ~2 GB new at P=8, in a change whose purpose is lowering
-      peak.
-- [ ] Cold runs now fat-decode every reconciled parquet (21 PIN features + 4 blob columns)
-      only for `ReleaseRescoredPayload` to null them 16 lines later; `.scores.parquet` goes
-      from 1 read per run to 3.
-- [ ] `MaterializeAllSurvivors` and `OverlayReconciledIntoAllFiles` are unreported sequential
-      loops right after the parallel rescore - the silent-phase symptom this codebase has
-      already fixed by name twice (#4513, Pass2FdrSidecar).
-- [ ] The new flag has NO `ResidentPaths` token, no `ResidentPoolGuard` coverage, no test, no
-      `ValidityKey` suffix (so an in-place A/B reuses cached artifacts and compares nothing),
-      and no docs entry. This is design items 2-4, and the review is right that shipping the
-      `=0` arm unguarded re-opens a 28 GB path with no fail-fast.
-- [ ] `FirstPassSurvivorLoader` adds a 5th copy of the parity-critical
-      `(EntryId, Charge, ScanNumber, ParquetIndex)` comparison and a 5th copy of the 8-field
-      reset block. Promote one `Comparison<FdrEntry>` and one `FdrEntry.ResetScores()`.
-
-**Correct a false claim I wrote in the code:** the comment at the gap-fill append says
-`LoadFullFdrEntries` does not preserve parquet row order. The review verified it DOES
-(`for (int g = 0; ...) entries.AddRange(ReadFdrEntryGroup(...))`). The real reason the tail
-replay failed is that `StreamReconciledScoresParquet` MERGES gap-fill rows into canonical
-(entry_id, charge, scan) position rather than appending them, so there is no tail.
+**Robustness / perf - ALL FIXED:**
+- [x] `throw` inside `Parallel.For` loses the actionable message. **Fix**: per-file load
+      errors are collected into an array and thrown AFTER the loop, so the message naming the
+      file and the missing artifact survives.
+- [x] Per-file survivor reload multiplied the transient by file parallelism (~700 MB/file at
+      163 files). **Fix**: the refill is serialized behind a lock. The rescore is 2-2.5
+      min/file against seconds for the load, so the wall-clock cost is a rounding error and
+      the transient stays at 1x instead of Px.
+- [x] Cold runs fat-decoded every reconciled parquet only to null the payload 16 lines later.
+      **Fix**: `LoadFullFdrEntries(path, scalarsOnly: true)` skips the 21 PIN feature columns
+      and the four blob columns. Every scalar field is set exactly as the full read sets it,
+      and every caller of the overlay releases the payload immediately, so nothing loses data.
+- [x] `MaterializeAllSurvivors` and `OverlayReconciledIntoAllFiles` were unreported
+      sequential loops. **Fix**: both report per-file progress.
+- [x] No `ResidentPaths` token, guard, test, `ValidityKey` suffix, or docs. **Fix**: all five.
+      `ResidentPaths.COMPACTED_ENTRIES_BUFFER` (`compacted-entries-buffer`);
+      `PerFileScoringTask.Stage6ResidentHandoffGuardError` called from FirstJoin at the
+      release decision, BEFORE the release, so a refused run fails in seconds instead of
+      OOMing hours into Stage 6; `ResidentPoolGuardTest` pins the new token and covers the new
+      guard; `;stage6stream=0` joins the Stage 6 validity key (EMPTY on the streamed default,
+      so no existing output directory is invalidated); env-var reference section in
+      `ai/docs/osprey-development-guide.md`.
+      **Note for review**: this GROWS `KNOWN_UNFIXED`, which the ratchet says must only
+      shrink. The justification is in the constant's doc comment - it names a path that was
+      previously UNNAMED rather than re-admitting a fixed one, because the old guard's
+      invariant stops at the compaction line and this buffer is built after it.
+- [x] 5th copy of the canonical comparison and the 8-field reset. **Fix**: `FdrEntry.CANONICAL_ORDER`
+      and `FdrEntry.ResetScores()`. Note the repo's `TestNoUnstableSort` guard requires an
+      inline `// Array.Sort OK: <reason>` at each call site, and the reason genuinely differs
+      per site (ParquetIndex unique per row vs EntryId unique within the gap-fill block).
+- [x] **False claim corrected in the code**: the comment blaming `LoadFullFdrEntries` for not
+      preserving parquet row order is gone. It DOES preserve it. The tail replay failed
+      because `StreamReconciledScoresParquet` MERGES gap-fill rows into canonical
+      (entry_id, charge, scan) position, so there is no tail to replay.
 
 ## Regression Test
 
