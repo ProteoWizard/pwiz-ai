@@ -312,6 +312,63 @@ blocker"; this run is **173 MB/file**, and rising.
 | `FirstPassFDR` | 1:15:35 | 25.1 -> 28.4 GB, peak 75.9 GB | the handoff is built here |
 | `PerFileRescoring` | 5:31:35 | 28.2 -> 28.9 GB (+4 MB/file) | LEVEL |
 
+## Streaming implementation status (2026-08-04, rebased onto #4528)
+
+`OSPREY_STAGE6_STREAM_SURVIVORS` (default ON) makes Stage 6 refill each file's survivors
+from its `.scores.parquet` + 1st-pass sidecar just before rescoring it, drop them after its
+reconciled parquet is written, and rebuild the buffer once at the end for Stage 7.
+
+**The opt-out is verified inert.** `OSPREY_STAGE6_STREAM_SURVIVORS=0` passes all five
+Stellar legs with the exact golden blib, so every divergence below belongs to the new path
+and the resident path remains the A/B oracle the design calls for.
+
+### Fixed, with evidence
+
+1. **Rehydrate overlaid onto a released buffer.** A resume that re-ran Stage 5 reached
+   `PerFileRescoreTask.Rehydrate` with empty lists and overlaid the reconciled parquets onto
+   nothing, producing a 196 KB blib. Refill first. This is what made `mode2` green.
+2. **The rescore's score/q reset was applied at the wrong point.** A fresh
+   `OverlayRescoredEntries` sets every rescore target to `Score=0, q=1.0` for the 2nd pass to
+   fill in; that reset lives only in memory (the reconciled parquet stores boundaries and
+   features, not scores, and `OverlayReconciledIntoBuffer` documents that it preserves
+   1st-pass Score/q). The rebuild must reapply it - and BEFORE the overlay, because the
+   overlay appends gap-fill rows and re-sorts, which shifts the planner's positional indices.
+   Applying it after shifted the reset onto neighbouring rows (visible as adjacent rows 941 /
+   942 swapping values in the Stage-6 dump).
+3. **The rebuild must not canonicalize.** A fresh rescore appends gap-fill at the END and
+   never re-sorts; sorting moved those rows into EntryId order.
+
+After 2 and 3, the Stage-6 buffers match on every dumped column, the reconciled parquets are
+semantically identical (`pyarrow` column-wise, metadata included), the 1st-pass sidecars are
+byte-identical, and the 2nd-pass `score` and `run_prot_q` columns match exactly.
+
+### Open: the 2nd-pass q still diverges
+
+Stellar straight-through reports **31,583** spectra against the golden **29,364** (chain leg
+= 29,364, i.e. the resident behaviour). Joined on `entry_id`, per file:
+
+* `entry_id` sets identical, `score` identical, `run_prot_q` identical
+* `run_pep_q` differs on 170,677 of 331,623; `exp_pep_q` on 242,672; both directions
+* passing at 1%: run `A=27,057 B=26,687`; experiment `A=30,433 B=32,744`
+
+Identical population and identical scores producing different q means the divergence is
+**order- or selection-dependent inside Stage 7**, not a lost/extra entry. The 2nd-pass
+sidecar still reports `entry_id order identical: False`, so buffer order is the leading
+suspect - but note the Stage-6 dump is written sorted by `entry_id` within file (verified
+monotonic), so it CANNOT witness order. Any further order comparison needs the sidecar, not
+the dump.
+
+Replaying the gap-fill append from the reconciled parquet's appended tail (rather than by
+ascending `TargetEntryId`) is in, and moved the passing count (94,749 -> 94,624) without
+closing the gap.
+
+**Next probe**: instrument `Pass2FdrSidecar.ComputeAndPersist` to log the population it
+actually competes - how many entries it scores, how many are on- vs off-stratum, and in what
+order - for the resident and streamed arms. That distinguishes "same set, different order"
+from "different set", which the current evidence cannot. A/B harness:
+`ai/.tmp/ab-stage6.ps1`; comparators `ai/.tmp/diff_pass2_join.py`, `diff_parquet.py`,
+`diff_dump.py`.
+
 ## Regression Test
 
 - **Test name**: (filled in once written)
