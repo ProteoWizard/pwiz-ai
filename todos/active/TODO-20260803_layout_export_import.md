@@ -172,13 +172,43 @@ hardening:
 - [x] Build + CodeInspection clean; ListClustering / SummaryGraphVisibility /
       TreeRestoration / FilesTreeForm still pass
 
+- [x] Drove both menu items in the running app over the MCP connector - see the
+      dialog-extension finding below
+
 #### Remaining
-- [ ] Drive the menu items in the running app (not just the public methods) to confirm the
-      file dialogs behave - the test calls `ExportLayout`/`ImportLayout` directly
-- [ ] Decide whether Import Layout deserves an entry in the tutorial/help documentation
+- [ ] Decide whether Import Window Layout deserves an entry in the tutorial/help documentation
 - [ ] Localized menu text for `.ja.resx` / `.zh-CHS.resx` (bulk translation pass, not this PR -
       matches how every other menu item has landed)
 - [ ] Push branch and open PR
+
+### File dialogs cannot handle a two-part extension
+
+Found by running the app, not by any test. With `Filter` = `*.sky.view` and
+`DefaultExt` = `.sky.view`, the default file name came up as
+`Bereman_5proteins_spikein.sky.view.sky.view`: a file dialog only understands the
+**last** extension of a name, so it does not recognize that a ".sky.view" name
+already ends in the extension, and appends it again.
+
+Share Document has the same two-part extension (`.sky.zip`) and has always worked
+around it the same way, which is the fix adopted here:
+
+- **Filter uses the single `.view`**, so the dialog sees the name already ends in
+  the filter extension and leaves it alone. It still lists no documents, so the
+  overwrite hazard the filter exists to prevent is still covered.
+- **`DefaultExt` stays `.sky.view`**, so a name typed without an extension gets
+  the full one.
+- **`EnsureViewFileName` normalizes whatever the dialog returns**, which is what
+  actually guarantees the ".sky.view" rule rather than trusting the dialog. It
+  replaces the last extension, so "Doc.view" becomes "Doc.sky.view" and not
+  "Doc.view.sky.view", and "Doc.sky" can never come back unchanged.
+
+Verified live over the MCP connector against a document named like the developer's
+screenshot: default name `Bereman_5proteins_spikein.sky.view` (single), Save wrote
+that file and left the `.sky` untouched, typing `MyLayout.view` produced
+`MyLayout.sky.view`, and importing a layout with an unknown window raised the
+warning naming the file and the window. The unit-testable part of this
+(`EnsureViewFileName`) is pinned in `TestFileDialogFilters`; the dialog's own
+behavior is not reachable from a test, which is why it escaped the first pass.
 
 ## Phase 2 - MCP screenshot-layout reproduction (follow-up, not this branch)
 
