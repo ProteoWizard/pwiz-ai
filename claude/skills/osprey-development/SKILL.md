@@ -183,6 +183,13 @@ does NOT start on PR open or push, but it must run before human review / merge.
 re-trigger. Always `branch="pull/<N>"`, never the named `Skyline/work/...`
 branch (a named branch silently builds master).
 
+**NEVER on an internal commit before the PR candidate is ready.** Commits made
+while iterating - WIP, review fixes, a rebase - are verified LOCALLY
+(`regression.ps1 -Dataset Stellar`, then `-Dataset All`). The gate runs once, when
+the branch is a genuine merge candidate. Firing it per commit is what produced a
+queue Brendan had to hand-cancel and drew complaints from other developers waiting
+on the shared agent.
+
 Full rules - why the gate exists, MCP availability, the trigger call, and what
 the run uniquely buys over the local Stellar gates - are in
 **ai/docs/osprey-development-guide.md** ("TeamCity Perf/Regression gate").

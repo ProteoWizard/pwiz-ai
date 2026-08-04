@@ -1437,6 +1437,25 @@ abuse it guards against.
   standing licence for the branch.
 - Never trigger unprompted, and never as a routine per-commit or per-push step.
 
+### NEVER on internal commits - only on a ready PR candidate
+
+**Commits made while iterating are verified LOCALLY, not on TeamCity.** WIP
+commits, review-feedback fixes, a rebase onto master, a doc tweak: all of them
+gate on `regression.ps1 -Dataset Stellar` and then `-Dataset All` on the
+developer's machine. The TeamCity gate runs **once**, when the branch is a genuine
+merge candidate - findings settled, unit build green, nothing further expected to
+change the diff.
+
+This is the specific failure the rule exists to prevent, and it is worth stating
+plainly because it reads as diligence at the time: multiple night sessions
+triggered the config on **every commit and push through the review process**. That
+built a queue Brendan had to cancel out of, on a shared, contended agent, and
+other developers on the team complained about the wait. One asked-for run on a
+ready candidate is the entire budget.
+
+If you find yourself wanting a second run because the branch moved, the answer is
+almost always another local `-Dataset All`, not another hour of the shared agent.
+
 Judgment about whether the run is warranted at all still applies: a small
 identity-only follow-up to an already-green PR can reasonably merge on local
 gates. Weigh what the CI run uniquely buys (below) against an hour of a shared,
