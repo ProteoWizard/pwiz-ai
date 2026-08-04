@@ -10,7 +10,8 @@
   [#4515](https://github.com/ProteoWizard/pwiz/issues/4515) (the I/L half)
 - **Module**: `osprey`
 - **PR**: [#4528](https://github.com/ProteoWizard/pwiz/pull/4528) (pwiz, **merged 2026-08-04** as
-  `e7b5a917ba`), [maccoss/osprey#60](https://github.com/maccoss/osprey/pull/60) (Rust)
+  `e7b5a917ba`), [maccoss/osprey#60](https://github.com/maccoss/osprey/pull/60) (Rust, **merged
+  2026-08-04** as `fc51d72`)
 
 Consumes the remaining tasks of `TODO-20260727_osprey_pass2_fdr_default.md` (whose branch was
 spent on PR #4487) and the "Osprey I/L gap" task of `TODO-20260801_decoy_similarity_gate.md`.
@@ -620,7 +621,16 @@ unrecognized `OSPREY_PASS2_QVALUE` now aborts at startup), `protein-compact` and
 pick as defaults with both still togglable, I/L-isobaric decoy rejection, the flipped defaults
 keyed into the resume cache, and all four regression goldens re-baselined. Rust companion
 [maccoss/osprey#60](https://github.com/maccoss/osprey/pull/60) carries the four behavioral changes;
-it needs no validity-key mirror because that tree has no resume-sidecar system.
+it needs no validity-key mirror because that tree has no resume-sidecar system, and it merged the
+same day as `fc51d72` so the two trees never described different pass-2 behavior.
+
+[#4515](https://github.com/ProteoWizard/pwiz/issues/4515) (the I/L half) was CLOSED with a summary
+noting two things the closure does NOT cover: the set-wise isobaric shadow gate, deliberately
+reverted and shelved in Carafe rather than deferred, and
+[maccoss/Carafe#9](https://github.com/maccoss/Carafe/pull/9), still OPEN, which carries the
+generator-side gate plus configurable entrapment source and ratio.
+[#4484](https://github.com/ProteoWizard/pwiz/issues/4484) stays OPEN on purpose - it asks which
+pass-2 method to settle on, and this PR chose a default while explicitly not claiming it final.
 
 Final gate set, all on the merged commit's content: `regression.ps1 -Dataset All` 26/26; Stellar
 re-run after the review fix, blib byte-identical; cross-impl Astral `rust=117783 cs=117783
