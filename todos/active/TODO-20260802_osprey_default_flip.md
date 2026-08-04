@@ -43,6 +43,26 @@ standardized terms is the direction Dario Amodei took for Skyline mProphet with
 `LegacyScoringModel`, and a three-way product of three features whose combination in log space was
 never established is unlikely to be the end state.
 
+### A FALLING ID COUNT IS NOT A REASON TO HOLD (Brendan, 2026-08-03)
+
+Raised when the re-baseline showed the gendecoy set accepting 27% fewer precursors. Answered, and
+the answer is standing policy for this branch - do not re-open it each time a count drops:
+
+> "Pass 2 Percolator has to go. It was over optimistic and produced a truly broken FDP v. q value
+> curve. While I am not positive protein-compact will be our final Pass 2 method, but we can't sit
+> on 'percolator' unwilling to change because counts go down."
+
+Two things follow. **The comparison axis is the FDP-vs-q CURVE, not the count** - a mode that
+accepts more at a nominal 1% while measuring 1.5-2.6% true FDP is not winning, it is miscalibrated,
+and counting its acceptances rewards the miscalibration. **And the bar for protein-compact is
+"better than percolator and honest about its limits", not "final"** - it ships togglable, its
+reservations stay on the record above, and the goldens are expected to move again when it is
+refined.
+
+So no 82-file confirmation is required before the PR on the strength of a count drop. The 3-file
+caveat still applies to any POSITIVE claim about magnitude; it does not turn a count decrease into
+a blocker.
+
 ## What changed
 
 ### Osprey C# (pwiz)
