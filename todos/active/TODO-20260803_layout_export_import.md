@@ -192,23 +192,39 @@ already ends in the extension, and appends it again.
 Share Document has the same two-part extension (`.sky.zip`) and has always worked
 around it the same way, which is the fix adopted here:
 
-- **Filter uses the single `.view`**, so the dialog sees the name already ends in
-  the filter extension and leaves it alone. It still lists no documents, so the
-  overwrite hazard the filter exists to prevent is still covered.
-- **`DefaultExt` stays `.sky.view`**, so a name typed without an extension gets
-  the full one.
-- **`EnsureViewFileName` normalizes whatever the dialog returns**, which is what
-  actually guarantees the ".sky.view" rule rather than trusting the dialog. It
-  replaces the last extension, so "Doc.view" becomes "Doc.sky.view" and not
-  "Doc.view.sky.view", and "Doc.sky" can never come back unchanged.
+**Filter uses the single `.view`**, so the dialog sees the name already ends in
+the filter extension and leaves it alone. `DefaultExt` was removed: with a single
+filter that carries an extension, the dialog always uses the filter's and never
+the default, so it was dead config. A name typed without an extension therefore
+gets ".view", which is equally a layout file.
 
-Verified live over the MCP connector against a document named like the developer's
-screenshot: default name `Bereman_5proteins_spikein.sky.view` (single), Save wrote
-that file and left the `.sky` untouched, typing `MyLayout.view` produced
-`MyLayout.sky.view`, and importing a layout with an unknown window raised the
-warning naming the file and the window. The unit-testable part of this
-(`EnsureViewFileName`) is pinned in `TestFileDialogFilters`; the dialog's own
-behavior is not reachable from a test, which is why it escaped the first pass.
+An earlier pass added an `EnsureViewFileName` that forced ".sky.view" onto
+whatever the dialog returned. **Removed at the developer's direction** - keeping
+the all-files entry out of the filter is the point, so the dialog cannot make a
+dangerous name easy; a user who deliberately wants another name may have one.
+
+### What the filter does and does not protect (measured, not assumed)
+
+Driven live over the MCP connector against a document named like the developer's
+screenshot:
+
+| Action | Result |
+|--------|--------|
+| Open Export dialog | default `Bereman_5proteins_spikein.sky.view` - single, bug fixed |
+| Save with the default | wrote that file, `.sky` untouched |
+| Type a bare `BareName` | saved `BareName.view` (filter's extension, not `DefaultExt`) |
+| Type the document's full path `...spikein.sky` | overwrite prompt, then **the document was overwritten with layout XML** |
+| Import a layout naming an unknown window | warning naming the file and the window |
+
+So the filter stops the dialog *listing or suggesting* a document, which closes
+the accidental path the developer raised. It does **not** stop a fully typed
+document name - that is accepted as typed, and Skyline writes the layout over it.
+That is the accepted trade-off, and the doc comment on `FILTER_VIEW` says so
+rather than claiming a guarantee it does not deliver.
+
+None of this is reachable from a functional test - a file dialog only behaves this
+way when really shown - which is why the doubled extension escaped the first pass.
+Drive the dialogs over the connector when changing them.
 
 ## Phase 2 - MCP screenshot-layout reproduction (follow-up, not this branch)
 
