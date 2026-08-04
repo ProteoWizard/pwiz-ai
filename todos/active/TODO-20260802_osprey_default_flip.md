@@ -155,9 +155,19 @@ test asserted a decoy count and got 0. Both tests now set fragments and assert t
       BEFORE the verify so one run covers both, per Brendan.
 - [x] Review findings #5 / #6: pin both levers in every measurement runner (`ai` `4edbe2d`),
       including `Run-FdrBench.ps1`, which was stamping the wrong mode into `metrics.csv`.
-- [ ] `Test-PerfGate.ps1` + a memory-band check - protein-compact expands the reconciled pool
-      (it reported 647,139 rows transfer-compete did not), so this flip has a plausible cost that
-      an ordinary default flip would not
+- [ ] `Test-PerfGate.ps1` - protein-compact expands the reconciled pool (it reported 647,139 rows
+      transfer-compete did not), so this flip has a plausible SPEED cost an ordinary default flip
+      would not. This is the gate.
+- [ ] Memory band (`--timestamp --memstamp` + `ai/scripts/perfviz.py`) - **OBSERVATION, NOT A
+      GATE.** Stage 5/6 memory accumulation is already known, already measured, and tracked in
+      [TODO-20260731_osprey_bounded_stage5_handoff.md](TODO-20260731_osprey_bounded_stage5_handoff.md)
+      ([#4526](https://github.com/ProteoWizard/pwiz/issues/4526)) - the `CompactedEntries` buffer
+      held across all of Stage 6, found from the `--memstamp` and env-var-gated runs, 90.2 GB
+      private at 163 files. **Brendan, 2026-08-03: not expected to be fixed before this change
+      set merges, and it does not affect the golden re-baseline.** That work is SEQUENCED AFTER
+      this merge - it is waiting on percolator's removal, because the only pass-2 mode that
+      plausibly needs the whole pool resident is the one being deleted. So a memory-band trace
+      here is for the record; do NOT re-diagnose it, and do NOT hold the PR on it.
 - [x] `Compare-EndToEnd-Crossimpl.ps1` on Stellar + Astral - DONE 2026-08-03, Astral bit-parity at 1e-9, delta=0 on 119,088 precursors
 - [x] Docs: `docs/12-second-pass-fdr.md` + `docs/07-fdr-control.md` in `5848c69d5`; the remaining
       four in `d8aee4ba0` - `20-command-line.md` (env-var table listed `percolator` as a valid

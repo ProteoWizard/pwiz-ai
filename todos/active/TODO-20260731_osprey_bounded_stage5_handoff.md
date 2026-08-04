@@ -148,6 +148,30 @@ with a frozen-model pass-2 mode as the primary configuration. `percolator` remai
 regression golden's mode today, so byte-identity against the committed golden still has to
 hold - but it is a compatibility check on a doomed path, not a design constraint.
 
+### THAT LAST PARAGRAPH EXPIRES ON MERGE OF #4484 (noted 2026-08-03 from the flip branch)
+
+`Skyline/work/20260802_osprey_default_flip` ([TODO-20260802_osprey_default_flip.md](TODO-20260802_osprey_default_flip.md),
+umbrella [#4484](https://github.com/ProteoWizard/pwiz/issues/4484)) **removes the
+`percolator` pass-2 mode outright** - an unrecognized `OSPREY_PASS2_QVALUE` is now a startup
+error - and **re-baselines all four regression goldens onto `protein-compact`**. Rebase onto
+it before resuming here, and read these three consequences:
+
+* **The "compatibility check on a doomed path" is gone**, not merely deprioritized. The
+  committed golden's mode IS `protein-compact` after the re-baseline, so "run the gate with a
+  frozen-model mode as the primary configuration" stops being a special instruction - it is
+  simply what the default gate does.
+* **Do not re-baseline the goldens again for the memory work.** Bounding the handoff is
+  supposed to be output-neutral, so mode 1 staying green against the NEW baseline is the
+  proof. A golden move would be the signal that the streamed path changed results.
+* **`OSPREY_PICK_LDA` and `OSPREY_PASS2_QVALUE` now participate in the resume validity key**
+  (pwiz `cb9b68c60`), so an output directory written before that commit is invalidated once
+  and re-runs Stage 1-4. Expect one surprising cold run on a `-LinkFrom` adoption of an older
+  directory; it is correct, not a regression.
+
+The memory accumulation this TODO covers is **explicitly NOT in scope for #4484** (Brendan,
+2026-08-03) and does not block its merge - it was already known from the `--memstamp` and
+env-var-gated tests recorded above, and it does not affect the golden re-baseline.
+
 ## Parity requirement
 
 The two paths must produce **byte-identical** output. This is the whole reason the resident
