@@ -3045,8 +3045,43 @@ Fixtures: the ten spectra behind rows 15-41 run 122-1213 peaks, so they live in
 cpp reuses one 141-peak spectrum across rows 25-41. Generator:
 `<scratchpad>/gen_chargestate_cases.py`. Analysis.Tests 162 (135 + 27), Pwiz.sln builds clean.
 
+### SpectrumListFilter: 4 missing cpp scenarios ported, and a renumbering bug (`244da33565`)
+
+Acting on the 0.38x ratio from the audit. cpp's `SpectrumList_FilterTest` has 13 scenario
+functions; the port carried 9. The four missing ones - `testEven`, `testEvenMS2`,
+`testSelectedIndices`, `testHasBinaryData` - are exactly the ones exercising the **Predicate
+interface itself** rather than a built-in filter spec, and porting the first surfaced a product bug
+immediately.
+
+**The bug: filtered spectra were not renumbered.** cpp rewrites the copied identity's index to the
+position in the filtered list (`SpectrumList_Filter.cpp:112`) and stamps the same value onto a copy
+of the spectrum (`:151`). The port returned the inner list's identity and spectrum untouched, so a
+filtered list reported the *original* indices - sparse and non-ascending. That value is what mzML
+writes as `<spectrum index="...">`, which has to be dense. It also made the filter inconsistent with
+its own sibling `SpectrumListSorter`, which already renumbers and explains why in a comment - so the
+fix pattern (`ProxiedSpectrumIdentity`) was already in the tree. The identity is copied rather than
+mutated because `SpectrumIdentity` is a reference type.
+
+**Three existing tests were defending the bug** - the same harvested-from-the-port shape as the
+digestion find, third instance now. `Polarity_KeepsRequestedPolarity` and
+`Wrap_IdentityFilters_IndexScanNumberAndId` read `SpectrumIdentity(i).Index` to mean "which input
+survived", and the shared `KeptIndices` helper did the same for 28 assertions. All now key off the
+native id, which is what cpp's own filter tests assert on; `KeptIndices` recovers the original index
+from the id, so the expected arrays did not change.
+
+**One porting trap worth remembering:** `testHasBinaryData` cannot run against `SpectrumListSimple`.
+It holds fully-populated spectra and ignores `DetailLevel`, so a `SuggestedDetailLevel` gate is
+invisible and the test passes vacuously at 10/10. cpp round-trips its tiny example through mzML for
+precisely this reason. The port needs the file + `MzmlReaderAdapter` route to get a lazy
+`SpectrumList_Mzml` (its constructors are internal). Same answers as cpp then: 0 at FullMetadata,
+4 at FullData.
+
+Analysis.Tests 166, MsData 70, Common 49, MsConvert 16, Thermo 15, `Pwiz.sln` clean.
+
 **Open / next:**
-1. Remaining audit items, all much smaller and none clearly a true gap:
+1. `SpectrumListSorter` is the next-worst ratio - cpp has 66 assert sites against ~15 shared across
+   four filters in `SpectrumListWrapperTests`. Same method applies.
+2. Remaining audit items, all much smaller and none clearly a true gap:
    `DiaUmpire.LinearInterpolation` (47) and `MsConvert.Program` + `ConsoleProgressListener` (27)
    are both reachable but exercised only outside the pwiz-sharp unit suites (Skyline's
    TestPerf/TestTutorial, and out-of-process msconvert respectively) - confirm before spending
