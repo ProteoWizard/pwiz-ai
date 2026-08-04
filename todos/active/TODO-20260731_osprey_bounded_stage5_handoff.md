@@ -479,7 +479,12 @@ resident figure remains a prediction rather than a measurement. What is measured
 O(files) term is absent and the Stage 6 floor does not drift. The `=0` arm's byte-identity is
 gated separately by `regression.ps1` on Stellar.
 
-**Still to measure** (deferred or dropped):
+**Still to measure - OPEN, not superseded:**
+* **The 40-file paired A/B** (default vs `OSPREY_STAGE6_STREAM_SURVIVORS=0`). This is still the
+  actual claim of this TODO and it has NOT been run: only the streamed arm was measured, so the
+  ~7.2 GB resident figure is a prediction. An earlier version of this section filed it under
+  "superseded", which it is not - the single-arm run answers "is the plateau gone" but not "by
+  exactly how much against the resident arm on the same box".
 * ~~Stage-5-only re-measure at 163 files~~ - DROPPED by Brendan 2026-08-04: the 40-file run
   answers whether the plateau is gone, and 163 costs ~75 min to confirm it.
 
@@ -672,7 +677,17 @@ EntryId, files with both CWT and forced gap fill).
       holds >1 survivor per EntryId (two isolation windows) they collapse onto one scan and
       become duplicate pass-2 identities.
       **Fix**: `byId` keeps ALL rows per EntryId in parquet order and the overlay pairs them
-      POSITIONALLY with the buffer's rows for that id. There is no finer stable key available
+      POSITIONALLY with the buffer's rows for that id.
+      **This was initially fixed on the WRONG ARM, and `/code-review max` caught it after the
+      PR was opened.** The survivor rows come from `.scores.parquet`, written after Stage 4's
+      `DeduplicatePairs`, so they cannot duplicate - the arm that got the positional fix is the
+      one that never needed it. The GAP-FILL arm is where duplicates actually arise:
+      `RunGapFillTwoPass` calls `RunCoelutionScoring` with neither `DeduplicatePairs` nor
+      `DeduplicateDoubleCounting` (verified: both are called only from `PerFileScoringTask`),
+      and `ScoreWindow` admits a candidate per isolation window, so one target in two
+      overlapping windows emits two stubs. Cold appended both; the rebuild took `gapRows[0]`
+      and dropped one, silently removing a survivor from the buffer Stage 7 competes over. The
+      gap-fill append now takes every row for the target. There is no finer stable key available
       - Charge does not separate two isolation windows and ScanNumber is the field the rescore
       moves - so positional pairing is the most specific correspondence the data supports.
       The old comment claiming "at most one row per EntryId after compaction" was wrong:
@@ -699,6 +714,14 @@ EntryId, files with both CWT and forced gap fill).
       **Fix**: `LoadFullFdrEntries(path, scalarsOnly: true)` skips the 21 PIN feature columns
       and the four blob columns. Every scalar field is set exactly as the full read sets it,
       and every caller of the overlay releases the payload immediately, so nothing loses data.
+      **Only HALF of that finding is fixed, and an earlier version of this line wrongly claimed
+      both.** `scalarsOnly` narrows COLUMNS within one read, and it applies to
+      `.scores-reconciled.parquet`. The other half - "`.scores.parquet` goes from 1 read per run
+      to 3" - is an OPEN count of distinct opens, still 3 on the cold streamed default
+      (`FirstJoinTask` survivor reload, the per-file refill in `RescoreOneFileStreamed`, and the
+      end-of-loop `MaterializeAllSurvivors`, whose `Count > 0` skip never fires because the
+      loop emptied every file). That is the read amplification the streaming buys the memory
+      with; it is a deliberate trade, not a fixed defect.
 - [x] `MaterializeAllSurvivors` and `OverlayReconciledIntoAllFiles` were unreported
       sequential loops. **Fix**: both report per-file progress.
 - [x] No `ResidentPaths` token, guard, test, `ValidityKey` suffix, or docs. **Fix**: all five.

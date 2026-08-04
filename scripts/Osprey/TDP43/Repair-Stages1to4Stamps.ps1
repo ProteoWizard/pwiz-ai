@@ -1,3 +1,4 @@
+#requires -Version 7
 <#
 .SYNOPSIS
     Re-stamp the TDP-43 Stage 1-4 staging directory so -LinkFrom resumes again.
@@ -39,18 +40,48 @@ $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Source)) {
     throw "Source staging directory not found: $Source"
 }
-if (Test-Path $Destination) {
-    Remove-Item $Destination -Recurse -Force
+
+# REFUSE to write into the source. The next statement deletes $Destination recursively, so
+# -Destination $Source would destroy the very staging directory this script exists to
+# preserve - and then report "hard-linked artifacts : 0 / patched stamps : 0" and exit 0,
+# because the loop below would find an empty directory. That is not hypothetical: the
+# .DESCRIPTION above spends a paragraph on why in-place patching is wrong, which makes
+# passing the source path here a plausible mis-keying rather than an absurd one.
+#
+# Compared by resolved path, not by string: a trailing separator, a case difference, a
+# short (8.3) name, or an NTFS junction all reach the same directory while comparing
+# unequal as text.
+$sourceResolved = (Resolve-Path -LiteralPath $Source).ProviderPath.TrimEnd('\', '/')
+if (Test-Path -LiteralPath $Destination) {
+    $destResolved = (Resolve-Path -LiteralPath $Destination).ProviderPath.TrimEnd('\', '/')
+    if ($sourceResolved -eq $destResolved) {
+        throw ("-Destination resolves to the same directory as -Source ($sourceResolved). " +
+               "This script builds a SEPARATE re-stamped directory; writing into the source " +
+               "would delete the staging artifacts it is meant to preserve.")
+    }
+    Remove-Item -LiteralPath $Destination -Recurse -Force
 }
 New-Item -ItemType Directory -Path $Destination | Out-Null
+
+# The four suffixes -LinkFrom actually adopts (OspreyDatasetRun.psm1). Without an allowlist a
+# stray run.log / out.blib / model-diagnostics sidecar from the source gets linked in too, and
+# a model-diagnostics sidecar is what the arm-completeness checks test for.
+$adoptedSuffixes = @('.scores.parquet', '.calibration.json')
 
 $linked = 0
 $patched = 0
 $already = 0
+$skipped = 0
 foreach ($f in Get-ChildItem -File $Source) {
     $target = Join-Path $Destination $f.Name
     if ($f.Name -like '*.osprey.task') {
         $j = Get-Content $f.FullName -Raw | ConvertFrom-Json
+        # A truncated or empty stamp yields $null here, and $null.validity_key would throw
+        # naming neither the file nor the directory - mid-loop, leaving a half-built
+        # destination that -LinkFrom accepts and then silently re-scores for hours.
+        if ($null -eq $j -or -not $j.PSObject.Properties['validity_key']) {
+            throw "Stamp has no validity_key (empty or truncated?): $($f.FullName)"
+        }
         if ($j.validity_key -like "*$Suffix*") {
             $already++
         } else {
@@ -58,9 +89,11 @@ foreach ($f in Get-ChildItem -File $Source) {
             $patched++
         }
         $j | ConvertTo-Json -Depth 10 | Set-Content -Path $target -Encoding utf8
-    } else {
+    } elseif ($adoptedSuffixes | Where-Object { $f.Name.EndsWith($_) }) {
         New-Item -ItemType HardLink -Path $target -Target $f.FullName | Out-Null
         $linked++
+    } else {
+        $skipped++
     }
 }
 
@@ -69,5 +102,10 @@ Write-Host "Destination : $Destination"
 Write-Host "hard-linked artifacts : $linked"
 Write-Host "patched stamps        : $patched"
 Write-Host "already had suffix    : $already"
+Write-Host "skipped (not adopted) : $skipped"
+if ($linked -eq 0 -or $patched + $already -eq 0) {
+    throw ("Produced $linked artifact(s) and $($patched + $already) stamp(s) - that is not a " +
+           "usable staging directory. Check that -Source really holds the Stage 1-4 outputs.")
+}
 Write-Host ''
 Write-Host "Now pass -LinkFrom '$Destination' to Run-Tdp43.ps1."
