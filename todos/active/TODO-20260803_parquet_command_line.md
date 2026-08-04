@@ -77,10 +77,17 @@ How it was found, in case a similar hang turns up:
   which matched `Dictionary+Entry<IdentityPath, PeptideQuantifier+Quantity>[]`
   in the heap dump.
 
-Verified after the fix: 60 CLI exports of the ratio report with `PopulateChunk`
-still parallel, 0 hangs. `ConsoleParquetReportExportTest` repeats the export 20
-times in a child process, so a regression fails the test instead of leaving
-threads spinning for the rest of the run.
+Rates measured with the lock reverted, 40 CLI exports each: Debug 5 hangs,
+Release 14. Release is the more likely to hang, not the less. Verified after the
+fix: 40 Release and 60 Debug exports of the ratio report with `PopulateChunk`
+still parallel, 0 hangs.
+
+`ConsoleParquetReportExportTest` exports once, in process. If the regression
+returns the test hangs rather than fails, which is deliberate - the threads are
+stuck inside the corrupted Dictionary lookup and never reach a cancellation
+check, so nothing can stop them, and a hang in the runner is easier to debug
+than a killed child process. One export only catches it about one run in six in
+Debug, so a passing run does not prove the bug is absent.
 
 `CalibrationCurveFitter._transitionsToQuantifyOn` is still lazily initialized
 without a lock. It looks benign - the set is built in a local and published by a
