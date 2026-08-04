@@ -155,9 +155,34 @@ test asserted a decoy count and got 0. Both tests now set fragments and assert t
       BEFORE the verify so one run covers both, per Brendan.
 - [x] Review findings #5 / #6: pin both levers in every measurement runner (`ai` `4edbe2d`),
       including `Run-FdrBench.ps1`, which was stamping the wrong mode into `metrics.csv`.
-- [ ] `Test-PerfGate.ps1` - protein-compact expands the reconciled pool (it reported 647,139 rows
-      transfer-compete did not), so this flip has a plausible SPEED cost an ordinary default flip
-      would not. This is the gate.
+- [x] `Test-PerfGate.ps1 -Dataset Stellar` - **PERF GATE PASSED**, no total-wall regression.
+      Verdict: `ai/.tmp/perf-gate/20260804-023223Z/verdict.md`; log
+      `ai/.tmp/perfgate-stellar-20260803.log`. The feared cost did not appear.
+
+      | stage | baseline med | branch med | median delta | per-rep | gate |
+      |---|---|---|---|---|---|
+      | stage1to4 | 1:12 | 1:12 | +3.2% | +0.7, +4.4, +3.2 | ok |
+      | stage5 | 1:14 | 1:02 | -16.2% | -14.9, -16.4, -16.2 | info |
+      | stage6 | 12.1s | 10.2s | -15.7% | -21.5, -12.4, -15.7 | ok |
+      | stage7 | 35.6s | **3.2s** | **-91.0%** | -90.9, -91.0, -91.4 | info |
+      | blib | 3.5s | 2.5s | -35.0% | -35.0, -42.9, -28.6 | info |
+      | **total** | 3:19 | 2:32 | **-23.5%** | -23.5, -17.3, -23.9 | ok |
+
+      **DO NOT quote -23.5% as this PR's speedup.** `pwiz-perfbase` is pinned at `f4de68645`
+      (2026-07-08, #4378) and the branch carries **53 Osprey commits** since that pin, so these
+      deltas are "branch vs a month-old baseline", not the isolated effect of this change set.
+      The gate's job is to detect a REGRESSION introduced by the branch, and it found none;
+      that is the whole claim it supports.
+
+      The stage-7 collapse (35.6s -> 3.2s, consistent across all three reps) is CONSISTENT with
+      deleting the 2nd-pass Percolator retrain - Stage 7 no longer trains an SVM, it runs a
+      frozen-model competition - but this measurement does not isolate it. If a precise number
+      is ever wanted, the clean A/B is `OSPREY_PROTEIN_COMPACT_RETRAIN=1` against the default on
+      the SAME branch binary, which is ~6 minutes on Stellar. Not run; the PR does not need it.
+
+      `stage1to4 +3.2%` is below the 5% heavy-stage WARN line and rep 2 was noisy on BOTH legs
+      (124.7s branch / 119.5s baseline against ~70s elsewhere), which is why the gate uses paired
+      per-rep deltas.
 - [ ] Memory band (`--timestamp --memstamp` + `ai/scripts/perfviz.py`) - **OBSERVATION, NOT A
       GATE, and DELIBERATELY NOT RUN for this PR.** Note `regression.ps1` does pass
       `--timestamp --memstamp` on every leg, but it tees each leg to a log inside that leg's run
