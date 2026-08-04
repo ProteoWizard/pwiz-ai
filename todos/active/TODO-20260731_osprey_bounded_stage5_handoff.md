@@ -506,6 +506,19 @@ from "different set", which the current evidence cannot. A/B harness:
 `ai/.tmp/ab-stage6.ps1`; comparators `ai/.tmp/diff_pass2_join.py`, `diff_parquet.py`,
 `diff_dump.py`.
 
+## Session log - 2026-08-04
+
+Rebased onto `e7b5a917ba` (#4528, protein-compact now the default). Took the streamed path
+from 71/29/24 regression issues to **all five Stellar legs PASS**, by finding four distinct
+divergences from the resident path - the decisive one being the rescored `ScanNumber`, which
+the pass-2 frozen-model override is keyed on. First memory measurement taken (floor
+0.84 -> 0.64 GB, the survivor pool exactly). Then `/code-review max` found 15 findings; two
+correctness defects fixed, six open. **Branch is NOT PR-ready** - see the findings section
+below.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260803_osprey_bounded_stage5_handoff.md` before starting work.
+
 ## `/code-review max` findings (2026-08-04) - NOT PR-ready
 
 15 findings on `origin/master...HEAD`. Stellar green does NOT clear these: most are on
