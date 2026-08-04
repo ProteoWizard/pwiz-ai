@@ -6,9 +6,9 @@
   `ProteowizardWrapper`; the pwiz-side changes (TIC, wrapper forwarding) are in support of it
 - **Base**: `master` @ `55cedad25`
 - **Created**: 2026-07-27
-- **Status**: BLOCKED on review. Phases 1-9 committed and pushed, all gates green, PR body current -
-  but Matt has an open CHANGES_REQUESTED (2026-08-03) on the Phase 9 m/z sort, mainly its per-spectrum
-  cost. **Start at Phase 10.**
+- **Status**: Awaiting re-review. Phases 1-10 committed and pushed, all gates green. Matt's
+  CHANGES_REQUESTED (2026-08-03) answered in 5f88ea972 plus replies on all four threads; his
+  re-review is the only thing outstanding. **Start at Phase 11.**
 - **GitHub Issue**: (none)
 - **PR**: https://github.com/ProteoWizard/pwiz/pull/4498
 - **Cherry-pick to release**: no - Brian decided 2026-07-29, do not add the label
@@ -566,36 +566,101 @@ early "still zero" variant results were cache artifacts, not real. Delete `*.sky
 And a `sorted` check that only compares first vs last element proves nothing; it hid this for
 several rounds.
 
-### Phase 10: NEXT SESSION STARTS HERE - review feedback on the m/z sort
+### Phase 10: Review feedback on the m/z sort (DONE - commit 5f88ea972)
 
-Phase 9 is committed (`49f8442bb`) and pushed; PR #4498 body is updated. **But Matt submitted a
-second CHANGES_REQUESTED on 2026-08-03 22:07** (empty body, substance in inline comments), so the
-PR is blocked. Four comments from him, one reply from Brian:
+**The check is now settled per file instead of run per spectrum.** Design chosen by Brian
+2026-08-03: Matt's first-spectrum-probe-plus-cached-flag, with Brian's >10 m/z refinement, and
+one sharpening Brian added - **any out-of-order spectrum is proof regardless of size, no need to
+look past it**. So the two verdicts are deliberately asymmetric:
 
-1. **`MsDataFileImpl.cs:2471` - the significant one.** *"I don't imagine Brendan would be ok with a
-   definite slowdown in 99.9% of Skyline data import so that the 0.1% works."* Wants the check done
-   on the first spectrum with the verdict cached per file; or sample every ~1000th spectrum and, if a
-   later one needs sorting, treat the import as compromised and restart it with the flag set.
-2. **`PwizReader.cpp:440`** - same objection on the BiblioSpec side.
-3. **`PwizFileInfoTest.cs:206`** - the fixture-order pin *"seems a bit excessive"*. It exists because
-   `/code-review max` found every other assertion in that test passes on an already-sorted file.
-   Defend it or drop it, but do not silently drop it.
+- Out of order -> the writer does not sort, at any peak count. Two peaks in the wrong order is
+  already proof. Every spectrum from then on is sorted, and no later spectrum can talk the
+  verdict back round.
+- In order -> the writer sorts, but only believed from a spectrum with **more than 10** m/z
+  values. Three peaks ascend by chance; early scans can precede the sample. Until such a
+  spectrum arrives the checking continues, so a short leading scan costs a few extra passes
+  rather than the correctness of the file.
+
+Both sides carry the same rule in a small class rather than loose flags: `MzOrderVerdict` in
+`MsDataFileImpl.cs` (held per `MsDataFileImpl`, passed to `SetArrays` by named arg) and
+`BiblioSpec/src/MzOrderVerdict.h` (held by `PwizReader`, `reset()` in `openFile`). Extracting the
+C++ one made the state machine unit-testable without a file - `ensureMzAscending` needs one, the
+rule does not.
+
+**Combined IMS is excluded upstream of the verdict on the Skyline side** (`IonMobilities == null`
+in `SetArrays`), which matters more now than before: those spectra are legitimately only m/z
+ordered *within* each mobility bin, so letting them vote would condemn every IMS file on its first
+spectrum and sort every 2-array spectrum in a mixed file for nothing.
+
+**BiblioSpec is the opposite case, and correctly so.** `PwizReader::openFile` sets
+`combineIonMobilitySpectra = true`, so its spectra *are* combined - but `SpectrumInfo::data` is a
+flat `vector<MZIntensityPair>` (`SpectrumInfo.hpp:68`) with no per-peak mobility axis to shred. A
+combined spectrum fails the check, condemns the file immediately, and every spectrum gets sorted.
+That is what Phase 9 already did; the latch changes nothing there. It is right for that consumer:
+`binPeaks` merges only *adjacent* equal bins, so bin-concatenated input is exactly the shape that
+leaves same-bin peaks unmerged, and flattening to m/z order is what makes the binning correct. For
+IMS input the sort does real work rather than looking for something that is not there.
+
+**Not taken, and why** (both said on the PR so they are not re-raised):
+- *Sample every ~1000th spectrum and restart the import if a later one needs sorting.* Only pays
+  for itself on a file that changes its mind partway through. Order is a property of the writer,
+  not the scan, and none of the eight Waters files we hold mixes the two. Restart plumbing for a
+  case never observed.
+- *Detect unsortedness during the binary search.* Free on the 99.9% path, but a binary search can
+  land in a locally ordered neighbourhood and return a plausible wrong answer without ever
+  stepping on the disorder. Weaker guarantee, not just a cheaper one.
+- *Throw on unsorted input.* The customer files in hand extract correctly today; refusing them
+  until Waters ships is a worse outcome than sorting them.
+
+Fixture and tests:
+- [x] `DataConvert5_unsorted_mz.mzML` gained a **short in-order leading spectrum** (3 peaks,
+      ascending) ahead of the two unsorted 6-peak ones. That is the shape a first-spectrum-only
+      probe gets wrong, and without it nothing would pin the >10 rule. Repacked by
+      `ai/.tmp/repack-unsorted-fixture.ps1`; the three pre-existing entries are byte-identical.
+- [x] The order pin Matt questioned is **kept and now does two jobs** - first array ascending,
+      the two after it not. Defended on the thread rather than dropped: every other assertion in
+      the test passes on an already-sorted file, so without it an msconvert round trip of the
+      fixture would leave the test green covering nothing.
+- [x] Mutation-verified: dropping the peak-count rule (settle on the first ordered spectrum
+      whatever its size) fails at `CollectionAssert.AreEqual ... spectrum 1`, second spectrum
+      back in writer order. Restored and re-run green - note the first re-run after restoring
+      was a false red because `Run-Tests.ps1` does not rebuild.
+- [x] `testMzOrderVerdict` in `SpectrumTest` pins the C++ state machine directly, including that
+      a condemned file stays condemned and that `reset()` clears it. `SpectrumTest.passed`.
+- [x] Gates: Waters suite green (TIC, InstrumentInfo, FileType, Cache, all five `WatersImsMse*`),
+      `TestUnsortedMzArrays`, `TestWatersCalibrationSpectrum`, CodeInspection, and the full
+      ReSharper solution inspection - 0 errors, 0 warnings, verified in
+      `bin/x64/Release/InspectCodeOutput.xml` directly (336 bytes, zero `Issue` elements).
+
+Replies posted on all four threads. The `SpectrumList_Filter.cpp:321` one was answered rather
+than complied with - see Phase 11.
+
+### Phase 11: NEXT SESSION STARTS HERE - awaiting Matt's re-review
+
+All four of Matt's 2026-08-03 comments are answered - three by the Phase 10 commit, one by argument.
+Nothing is outstanding on this branch except his re-review. If he comes back:
+
+1. **`MsDataFileImpl.cs:2471`** and 2. **`PwizReader.cpp:440`** (the perf objection) - fixed in
+   5f88ea972, see Phase 10. He may still want the sampling-with-restart variant; the reply says
+   why it was not taken and offers it.
+3. **`PwizFileInfoTest.cs:206`** - the order pin is kept and defended, and now also pins the
+   in-order leading spectrum. Reply offers to drop it if he still objects; **do not drop it
+   silently**, it is the only thing keeping that test from covering nothing.
 4. **`SpectrumList_Filter.cpp:321`** - *"Shouldn't this be reverted since it was only needed for
-   multiple spectrum types?"* **Probably a misreading worth answering rather than just complying.**
-   The multi-type change WAS reverted in Phase 6. What is there now is the Phase 8 change: the
-   msLevel predicate reads a declared ms level before consulting the spectrum type, which fixes
-   calibration-spectrum-*only* spectra - the form `SpectrumList_UIMF.cpp:106` writes today. That is
-   independent of multi-type. It only becomes moot if psi-ms #539 lands AND UIMF is updated.
-5. **Brian's reply**: probe the first spectrum with >10 m/z values, since early scans may precede the
-   sample; consider simply throwing on unsorted input and telling the user to reprocess; and
-   *"sortedness only really matters to us in the context of binary search, maybe it's cheap to detect
-   unsortedness during the search?"*
+   multiple spectrum types?"* **Answered, not complied with.** The multi-type change WAS reverted
+   in Phase 6. What is there is the Phase 8 change: read a declared ms level before consulting the
+   spectrum type, which fixes calibration-spectrum-*only* spectra - the form
+   `SpectrumList_UIMF.cpp:106` writes today on master. Verified while replying: master's
+   `!cvIsA(param.cvid, MS_mass_spectrum)` returns `contains(0)` and discards a good declared ms
+   level, so `msconvert --filter "msLevel 1-"` drops UIMF calibration frames. **Restoring the
+   reverted hunk would not have fixed it** - it asked `hasCVParamChild(MS_mass_spectrum)`, equally
+   false for a calibration-only spectrum. Moot only once psi-ms #539 lands *and* UIMF is updated.
+   The reply offers to split it into its own PR, which is the likeliest follow-up ask.
 
-**The perf objection is sound and was under-weighted.** `/code-review max` measured the check at
-~1.25 ns/element, roughly 0.2-2% of import wall time, and that was recorded here without being acted
-on. Matt reached the same conclusion independently. The three candidate designs - first-spectrum
-probe + cached flag, periodic sampling with restart, or detect-during-binary-search - differ
-materially in correctness for a mixed file, so settle the design before coding.
+**The perf objection was sound and had been under-weighted.** `/code-review max` measured the check
+at ~1.25 ns/element, roughly 0.2-2% of import wall time, and that was recorded in this TODO without
+being acted on until Matt raised it independently. Worth remembering as a calibration point: a
+measured cost noted and not acted on is a finding, not a footnote.
 
 **psi-ms CV issue #539 - agreed, not landed, nothing to bundle.** Matt opened it 2026-07-30 out of
 this very work; edeutsch minuted agreement on 2026-07-31 (*"Joshua will make a PR"*) to move
