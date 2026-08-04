@@ -556,6 +556,31 @@ experiments rather than safe refactors:
 **Deliberately NOT done**: the 163-file `-LinkFrom` re-measure (Brendan, this session - the
 40-file run answers whether the plateau is gone, and 163 costs ~75 min for a confirmation).
 
+### The 70-minute repro cycle needs a re-stamped Stage 1-4 staging dir
+
+The whole point of `-LinkFrom D:\test\osprey-runs\tdp43-plasma-ev\runs\Stages1to4` is to skip
+Stages 1-4 and get a Stage 5+6 measurement in ~70 min. **That staging dir no longer resumes**,
+and the failure is silent: the run just starts scoring file 1/40 and takes hours.
+
+Cause is the one this TODO already predicted from #4484: `cb9b68c60` made the pick model
+participate in the resume validity key UNCONDITIONALLY (`OspreyTask.ValidityKey` ->
+`PickValidityKeySuffix`), so every `.osprey.task` written before it is missing
+`;pick=lda;pickmodel=none` and is invalidated exactly once.
+
+Fix, and it is a one-liner per stamp rather than a re-run:
+`ai/scripts/Osprey/TDP43/Repair-Stages1to4Stamps.ps1` builds
+`runs\Stages1to4-picklda` - HARD LINKS for the parquet / calibration artifacts (no copy, no
+disk cost) and patched COPIES of the 326 `.osprey.task` stamps with the suffix appended. Link
+from that dir instead. Do NOT patch `Stages1to4` in place: its artifacts are hard links shared
+with the 163-file picklda run, so an in-place edit rewrites that run's provenance too.
+
+Appending the term is recording what is true, not defeating the guard - the staged artifacts
+are byte-identical (same size and mtime) to the `tdp43-163files-...-picklda` run's, so they
+really were picked by the LDA model.
+
+Also note `-NumFiles`, not `-Files` (the older handoff had this wrong), and `-Task` already
+exists on the runner - the "runner support still needed" item further up this file is stale.
+
 ## `/code-review max` findings (2026-08-04) - all closed in the second session
 
 15 findings on `origin/master...HEAD`. Stellar green does NOT clear these: most are on
