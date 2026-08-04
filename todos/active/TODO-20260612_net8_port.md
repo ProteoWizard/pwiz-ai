@@ -2788,10 +2788,210 @@ is exactly the two new Bruker tests, both passing.
    **`SpectrumList_ChargeFromIsotope`: 675 statements, never executed**. It is the user-facing
    `turbocharger` msconvert filter (`SpectrumListFactory.cs:972`), not dead code. Same shape as
    the BAF find, and roughly the same size as everything else on the list combined.
+   **DONE 2026-08-04b - see below.**
 3. Carried over: restore the `NET8-PORT TEMP` blocks in
    `scripts/misc/vcs_trigger_and_paths_config.py` (bt83 / bt17) before merge; drop
    `Bruker.Tests/Reference/` once the archive is regenerated; the `Sciex.Tests` / `BiblioSpec`
    gate inconsistency.
+
+## 2026-08-04b -- turbocharger test ported; the port was right, one CV-param units bug
+
+Acting on the audit's top find (`SpectrumList_ChargeFromIsotope`, 675 statements, zero executed).
+Ported `SpectrumList_ChargeFromIsotopeTest.cpp` to
+`Analysis.Tests/SpectrumProcessing/SpectrumList_ChargeFromIsotopeTests.cs` with all 10 cpp
+fixtures. NOT COMMITTED - stopping before commit for review.
+
+**The port itself was correct, unlike BAF/Thyroglob.** All 10 cases produce the same charge as
+cpp, and the same refined monoisotopic m/z to full precision. The 675 statements were untested,
+not wrong. Worth recording because it is the first item off that audit list that did not turn up
+an algorithm bug - "never executed" is not by itself evidence of "broken".
+
+**The one real bug is in the write-back, and it is a `set()` units default.** cpp does
+`selectedIon.set(MS_selected_ion_m_z, assignedMZ)` (cpp:484) with the units parameter defaulted to
+`CVID_Unknown`. `ParamContainer::set` overwrites units as well as value, so this **clears** the
+`MS_m_z` unit that `SelectedIon(double)` put there, and cpp's mzML carries the refined precursor
+m/z with no `unitAccession`. The C# port passed `CVID.MS_m_z` explicitly and kept the unit. Only
+reachable through `--filter turbocharger`, which is why nothing caught it. Fixed to match cpp; a
+mutation check (put `CVID.MS_m_z` back, watch the test go red) confirms the assertion is a real
+guardrail rather than a passing accident.
+
+**Case 10 asserts nothing in cpp, and that is now pinned rather than inherited.** cpp's assertions
+live *inside* its `BOOST_FOREACH` over the emitted charge CV params, so a case that emits no charge
+passes vacuously. Case 10 is exactly that - it declares `trueCharge = 2` that has never been
+checked. Verified by instrumenting the cpp test binary (added printf, reverted; the objects were
+already built in `C:\dev\pwiz` so it was a one-minute incremental relink): **cpp emits nothing for
+case 10 either**. Mechanism: its survey scan yields only three CWT peaks, the weakest is dropped as
+the running minimum, and the single surviving 2-peak chain - right charge, right m/z - scores a K-L
+p-value of 0.39 against the 0.30 significance gate. The C# test pins "no assignment" as the
+expected result so the parity is asserted instead of silently assumed.
+
+**That dead fixture then bought the default-charge fallback its first test.** The
+`defaultChargeMin > 0` branch only runs when no isotope chain is found, so case 10 is the only
+fixture that can reach it. Re-ran cpp with case 10's `defaultMinCharge/defaultMaxCharge` set to
+2/3: cpp emits `possible charge state` 2 and 3 and leaves the precursor m/z (units included)
+alone. `EmitsDefaultChargesWhenNoIsotopeFound` asserts exactly that.
+
+**Fixture layout.** cpp holds the 10 spectra as ~56 KB of string literals in the test source; here
+they are 20 files (94 KB) under `SpectrumList_ChargeFromIsotopeTest.data/`, found by walking up
+from `AppContext.BaseDirectory` exactly like the neighbouring `SavitzkyGolayTest.data`. Extractor:
+`<scratchpad>/extract_turbocharger_cases.py`.
+
+**Verification approach worth reusing.** The C# internals are private, so the scoring was diagnosed
+from a throwaway console project *outside* the repo (`<scratchpad>/turbodiag/`) referencing
+`Analysis.csproj`, plus a temporary env-gated dump in the product file.
+
+**CA2263: a false alarm, chased down and dropped. No code change.** Mid-session,
+`dotnet build`/`dotnet test` of Analysis.Tests started failing with **error CA2263** ("prefer the
+generic overload") on `Assert.IsInstanceOfType(x, typeof(T))` - an error rather than a warning
+because `TreatWarningsAsErrors=true` and `WarningsNotAsErrors` lists only `CS1591;CA1859`. Four
+sites exist (`Analysis.Tests/DiaUmpire/SpectrumList_DiaUmpireTests.cs:56`,
+`MsData.Tests/MzxmlRoundTripTests.cs:190,240`, `MsData.Tests/MzMlbWriterLazyRoundTripTest.cs:58`).
+I changed all four to `Assert.IsInstanceOfType<T>(x)`, then **reverted them** once the diagnosis
+held up: it is **not reproducible from any clean state**. With the original code restored and the
+tree cleaned, all four of these are green -
+`dotnet build Pwiz.sln`, `dotnet build Analysis.Tests.csproj`, the same with `--no-incremental`,
+and `dotnet test` after deleting that project's `bin`/`obj`. It only ever fired against the
+pre-existing `obj/` that was already in my working tree, so the likely culprit is a stale
+generated analyzer config there (`obj/**/*.GeneratedMSBuildEditorConfig.editorconfig` carries
+`AnalysisLevel` / `EnableNETAnalyzers`), which any clean regenerates.
+
+**Two explanations I asserted before checking, both wrong - worth recording as method, not just
+outcome.** (i) "CI is on an older SDK band": the log says CI runs **8.0.423**, *newer* than the
+local 8.0.420. (ii) "CI builds incrementally on a persistent agent checkout, so it never
+recompiled the project": the checkout *is* persistent (`agent side checkout` into `C:\pwiz`,
+cleaned `NON_IGNORED_ONLY`), but **`tcbuild.bat:78` calls `clean.bat` before every build**, so CI
+compiles everything from scratch every time - visible at log line 127, `pwiz-sharp clean.bat`.
+Both stories were plausible and neither survived a five-minute check against the actual build log.
+The rule that would have caught both: **read tcbuild.bat before theorising about what CI does.**
+
+Regression: Analysis.Tests 135/135 (132 + 3 new), MsData.Tests 70/70, MsConvert.Tests 16/16,
+Thermo.Tests 15/15, and `dotnet build Pwiz.sln -c Release` (CI's own build line) 0 errors, with no
+suppression flags anywhere.
+
+### clean.sh added; clean.bat had three dead branches
+
+Prompted by the CA2263 finding above - the fix for "a green build proves nothing about untouched
+projects" is to be able to force a real full build, and cpp has had `clean.bat` + `clean.sh` at the
+root for years. pwiz-sharp had only `clean.bat`, and parts of it did not work.
+
+**`pwiz-sharp/clean.sh` (new)** mirrors clean.bat exactly - same `--all` / `-a` flag, same
+keep-the-caches default. It is the missing half of the pair now that pwiz-sharp builds on Linux
+(`build.sh` / `tcbuild.sh` already exist). Mode 100755, and `.gitattributes`'s `*.sh text eol=lf`
+gives it LF on checkout like `build.sh`.
+
+**Three things clean.bat was silently not cleaning**, all found by diffing it against
+`pwiz-sharp/.gitignore` - which is the right spec, since everything the build writes is ignored:
+1. `vendor-assemblies/` under `--all` walked `%SCRIPT_DIR%\src\Vendor`, a path that does not exist
+   (the projects are under `pwiz\src\Vendor`), looking for per-project `vendor-assemblies` dirs.
+   There is one such dir and it is top-level, per `$(PwizVendorAssembliesPath)`. So `--all` had
+   never once cleared the vendor cache.
+2. `TestResults/` only at the top level, leaving the ~18 per-project dirs `dotnet test` writes
+   under `pwiz/test/*/`.
+3. `Tools/BiblioSpec/native/**/build/` (MascotShim's cmake tree) and `installer/staging/` were
+   never listed at all.
+
+**The trap that shapes both scripts: two things next to the artifacts are tracked source.**
+`vendor-archives/` sits beside `vendor-assemblies/` and looks equally cache-like, but it is IN GIT
+and is a build *input* - deleting it needs a fresh checkout to recover. And the top-level `build/`
+holds `ExtractTestData.targets`, `PwizVersion.targets` and the VendorPinsGenerator/AgilentPatcher
+projects, so the cmake sweep must stay scoped to named subtrees; a bare "find any dir named build"
+would delete the build system. Both are called out in the header comments of both scripts.
+
+**Verified rather than eyeballed.** Dry-ran the deletion set (143 targets) against `git ls-files`
+first: zero tracked files intersected - and note it correctly removes `build/AgilentPatcher/bin`
+while keeping the tracked sources beside it. Then `clean.sh --all` -> `git status` shows no
+deletions -> full `dotnet build Pwiz.sln -c Release` -> **0 errors**, 56 warnings -> Analysis.Tests
+135/135, MsData.Tests 70/70, Thermo.Tests 15/15 (the last confirms the vendor test-data extraction
+still runs). Then the same round trip through `clean.bat`. The `bsdtar.exe: Error exit delayed from
+previous errors` lines in a clean build are expected, not a regression: `libraries/bsdtar.exe` is
+libarchive 2.7, which exits 1 merely for reporting skipped files, and `ExtractTestData.targets`
+sets `IgnoreExitCode="true"` with a sentinel check for genuine failures.
+
+### Measured: what `--all` actually costs per commit (answer: ~2 s, plus a 56 MB download)
+
+`tcbuild.bat:78` already calls `clean.bat` (default mode) before every CI build, so **bin/obj/
+TestResults are already wiped per-commit** and CI is already a from-scratch compile. The only
+question `--all` raises is whether to also drop the two caches. Timed on this machine, clean tree
+to fully built solution:
+
+| | wall clock |
+| --- | --- |
+| `clean.bat` + `dotnet build Pwiz.sln -c Release` | **14.4 s** |
+| `clean.bat --all` + same build | **16.4 s** |
+
+So re-extracting `vendor-assemblies/` - 171 MB across 7 vendors, out of the checked-in 7z archives
+by the `ExtractVendorAssemblies` targets - costs about **2 seconds**. The header comment in both
+clean scripts claiming `--all` costs "~60s of re-download / re-extract" is wrong about the extract
+half and should be corrected to the measured figure.
+
+The other half is not a re-extract but a **network fetch**: `installer/cache/` holds
+`windowsdesktop-runtime-win-x64.exe`, pulled from `https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe`
+by `installer/build.ps1:131` to embed in Setup.exe. Dropping it re-downloads ~56 MB on the next
+installer build. That is the real per-commit cost of `--all`, and it is a *reliability* cost as
+much as a time one - it puts an external endpoint on the critical path of every build.
+
+**Recommendation: leave tcbuild.bat on the default clean.** Both caches are content-addressed
+(vendor archives by SHA-256 via the pins table; the runtime by a fixed versioned URL), so they
+cannot drift commit-to-commit, and the thing `--all` would protect against - stale build state -
+is already handled by the default clean that runs every build. If a periodic paranoia reset is
+wanted, put `--all` on a nightly config rather than the per-commit one, where the 56 MB fetch is
+amortised and a flaky download does not red a PR.
+
+### Digestion specificity: a real product bug, and a pre-existing test that encoded it
+
+Next item off the audit. `Proteome.EnumerateNonOrSemiSpecific` (32 statements) was a true gap -
+verified, not assumed: **nothing in pwiz-sharp or the Skyline tree ever constructed a `Digestion`
+with anything but `FullySpecific`** (the only other `SemiSpecific` hits are IdentData's *Enzyme*
+metadata enum, a different type). Ported cpp's `testBSADigestion` scenarios into
+`Common.Tests/ProteomeTests.cs::Digestion_SemiAndNonSpecific_BSA`: semi-specific, non-specific,
+and semi-specific-with-Met-clipping, each over both the predefined agent and the equivalent regex,
+as cpp does. BSA sequence extracted from the cpp source rather than retyped.
+
+**The bug: clip-N-terminal-methionine was implemented as a discount instead of a cleavage site.**
+cpp does two things for a leading M (`Digestion.cpp:440-442`): it **inserts offset 0 into the
+sites list**, *and* applies a missed-cleavage decrement. The port had only the decrement. Offset 0
+being a real site is what makes a peptide starting at offset 1 have a **specific N-terminus** and
+makes bare `M` a fully-specific product. Consequences, both silent:
+- semi-specific digests **dropped clipped-Met peptides entirely** - e.g. `KWVTFISLLLLFSSAYSR`,
+  which cpp emits with specificTermini=2;
+- missed-cleavage counts were low across the N-terminal window (`MKWVT`: 0 vs cpp's 1).
+One-line-ish fix in `ComputeSites` (plus threading `DigestionConfig` into it, since the rule is
+config-gated). After it, all three cpp scenarios pass over both agent forms.
+
+**`Digestion_Trypsin_FullySpecific_NoMissedCleavages` was asserting the port's own wrong output.**
+It passed before this change and had to be re-baselined. Ground truth from an instrumented cpp
+`DigestionTest` binary (added printf, reverted): for `MAKMKRGHRPKGG` with trypsin and
+`Config(0,1,50)`, cpp emits **`M, MAK, AK, MK, R, GHRPK, GG`** - all 0 missed cleavages, all
+specificTermini=2. The old expectation was `MAK, MAKMK, MK, R, GHRPK, GG`: missing `M` and `AK`,
+and wrongly including `MAKMK` (which spans sites 0 and 2, so one missed cleavage after the
+discount, over the limit). Exactly the `reference_net8_rebaseline_vs_fix` trap in its other
+direction - a test written from the reimplementation's output instead of the reference's, which
+then defends the bug. Worth checking for elsewhere: **a green port test proves nothing if its
+expectations were harvested from the port.**
+
+Regression: Common.Tests 49/49, IdentData.Tests 6/6, Analysis.Tests 135/135, MsData.Tests 70/70,
+`dotnet build Pwiz.sln -c Release` 0 errors. No product code consumes `Digestion` yet, so the
+blast radius is limited to the library API its future BiblioSpec/search callers will use.
+
+**Open / next:**
+1. Remaining audit items, all much smaller and none clearly a true gap:
+   `DiaUmpire.LinearInterpolation` (47) and `MsConvert.Program` + `ConsoleProgressListener` (27)
+   are both reachable but exercised only outside the pwiz-sharp unit suites (Skyline's
+   TestPerf/TestTutorial, and out-of-process msconvert respectively) - confirm before spending
+   effort. Genuinely cheap: `VendorSupportNotEnabledException` (6, guards a user-visible message),
+   `WatersPusherInterval` (13), `UimfDriftScanInfo` (14), PrmScheduling `CollisionEnergyRamp` (12)
+   + `VisualizationDataPoint` (9).
+2. Re-run the dotCover audit before picking further targets - the snapshot predates the
+   turbocharger test, the CsI/Thyroglob fixtures and this digestion work. The higher-value axis is
+   now the assembly percentages (PrmScheduling 41%, msconvert 57%, UNIFI 62%, Thermo 64%,
+   Bruker 68%), which are far larger in absolute statements than anything left on the
+   never-executed list.
+3. Audit other port tests for expectations harvested from the port rather than from cpp (see the
+   `Digestion_Trypsin_FullySpecific` find above). The cheap filter: any test whose expected values
+   could not have been read off a cpp run or a tracked reference file.
+4. Carried over from 08-04: cold Bruker resolve unmeasured on CI; the `NET8-PORT TEMP` blocks in
+   `scripts/misc/vcs_trigger_and_paths_config.py`; `Bruker.Tests/Reference/`; the `Sciex.Tests` /
+   `BiblioSpec` gate inconsistency.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260804_net8_bruker_linux_native_sdk.md` before starting work.
