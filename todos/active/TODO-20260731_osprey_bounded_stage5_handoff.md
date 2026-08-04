@@ -9,7 +9,8 @@
   record of why the pause happened, not as a live instruction.
 - **GitHub Issue**: [#4526](https://github.com/ProteoWizard/pwiz/issues/4526)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4530](https://github.com/ProteoWizard/pwiz/pull/4530) (opened 2026-08-04)
+- **TeamCity Perf/Regression**: NOT triggered - Brendan's instruction when opening #4530
 
 > The `Skyline/work/20260731_osprey_bounded_stage5_handoff` branch name on `origin` was
 > reused by the progress-reporting work that became #4513 (merged), so it carries none of
@@ -583,10 +584,11 @@ experiments rather than safe refactors:
 * **Gap-fill append order** was unified by changing the COLD path (sort the appended block by
   EntryId) rather than by teaching the rebuild to reproduce cold's emit order. The emit order
   is a function of which targets CWT hit, which is persisted nowhere, so the rebuild could
-  never have matched it - the divergence was unfixable from the rebuild side. Golden did not
-  move, so the relative order of gap-fill rows among themselves does not reach the output;
-  what matters is only that they sit at the END, where the planner's positional indices need
-  them.
+  never have matched it - the divergence was unfixable from the rebuild side. **No golden
+  moved on ANY dataset** (`-Dataset All`: Stellar, StellarLibDecoy, StellarGenDecoyEntrap,
+  Astral, including the mode1b diagnostics comparison), so the relative order of gap-fill rows
+  among themselves does not reach the output; what matters is only that they sit at the END,
+  where the planner's positional indices need them.
 * **The rescored `ScanNumber` / `CoelutionSum` carry became unconditional**, removing the
   `reproducingFreshRescore` flag. mode2 and mode4 stayed green against the exact golden, which
   says the resume paths had been reconstructing buffers with stale scan numbers and nothing
@@ -742,14 +744,16 @@ EntryId, files with both CWT and forced gap fill).
 | `regression.ps1 -Dataset Stellar` (streamed default) | all five legs PASS, golden blib 25,407,488 B |
 | `regression.ps1 -Dataset Stellar` with `OSPREY_STAGE6_STREAM_SURVIVORS=0` + token | all five legs PASS, same golden blib - **the oracle is intact** |
 | 40-file Stage 6 memory measurement | floor LEVEL, plateau gone (above) |
-| `regression.ps1 -Dataset All` | (running at handoff) |
-| `/code-review max` | NOT re-run - see below |
+| `regression.ps1 -Dataset All` | **PASS** - Stellar, StellarLibDecoy, StellarGenDecoyEntrap, Astral; incl. mode1b diagnostics + FDR sanity bounds |
+| `/code-review max` | re-run at end of session - see below |
 | TeamCity Perf/Regression | not triggered (ASK Brendan first) |
 
-**`/code-review max` cannot be launched by the model** in this harness - the skill is marked
-`disable-model-invocation`, so it must be typed by the developer. The earlier handoff's claim
-that it is "self-launchable" is WRONG and cost a session the assumption. Re-run it before the
-PR; the branch has changed substantially since the last pass.
+**`/code-review max` needs the developer to ASK for it, once.** An unprompted model invocation
+is refused (`disable-model-invocation`), but the same call succeeds after the developer asks
+for it in the session - so the earlier handoff's "self-launchable" is half right, and the
+correction in an earlier draft of this file ("cannot be launched by the model") was too strong.
+The practical rule: the model cannot decide to run it on its own, so ASK the developer to
+request it rather than reporting it as unavailable.
 
 **One unexplained event, recorded rather than dismissed**: an oracle-leg run aborted with
 `0xC0000005` (access violation) in the straight-through leg, and the identical command passed
