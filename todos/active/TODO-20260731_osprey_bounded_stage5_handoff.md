@@ -374,18 +374,28 @@ with the exact golden blib, so the oracle is intact.
 streamed arm sees a precursor detected in one MORE run than the golden. Correlated counts:
 the streamed arm emits 994,614 reported survivors where resident emits 994,899 (-285).
 
-Leading suspect is the gap-fill append, which is the one place the two paths still build
-different rows. A fresh rescore appends a gap-fill entry per target UNCONDITIONALLY, so a
-file can carry two rows with the same `EntryId` (a survivor row plus a gap-fill row); the
-tail replay in `OverlayReconciledIntoBuffer` skips any row whose `EntryId` is already
-present (`existingIds.Add`). That difference is real, though it removes rows where the
-symptom shows an EXTRA detection, so it is not yet a complete explanation.
+**Gap-fill has been RULED OUT** - and an earlier guess in this file was wrong, so read the
+measurement rather than the guess:
 
-**Next probe**: count, per file and per arm, the rows appended by gap fill and how many
-share an `EntryId` with an existing survivor; then check whether the 95 differing
-precursors are exactly those. `ai/.tmp/ab2.ps1` is the A/B harness (it logs the pass-2
-override/changed/same counts once the temporary counters in `StreamingFdr` are restored);
-use FRESH output dirs each run or the second arm silently warm-resumes.
+* The resident buffer has **994,899 rows and 994,899 distinct `(file, entry_id)` keys -
+  zero duplicates**. A fresh rescore never leaves two rows for one precursor in one file,
+  so "append gap-fill unconditionally" is wrong and so is "overwrite duplicates"; both were
+  tried and neither matched.
+* Gap-fill rows are now captured DURING each streamed file's rescue (`_streamedGapFill`,
+  keyed off the `ParquetIndex == uint.MaxValue` marker the rescore stamps) and replayed
+  verbatim at the end - exact by construction, not reconstructed from disk. Result:
+  identical to the parquet tail replay, still 8 / 3 / 3.
+
+So the residual is NOT in which rows exist. Both arms build the same rows; the streamed arm
+REPORTS 116 (peptide, file) observations the golden does not, on 95 precursors.
+
+**Next probe**: take the 116 `RetentionTimes` keys present only in the run and classify
+them - are they gap-fill targets, moved peaks, or ordinary survivors? Then pull those exact
+entries out of both arms' `.2nd-pass.fdr_scores.bin` (join on entry_id;
+`ai/.tmp/diff_pass2_join.py`) and compare their q against the 1% gate. That says whether
+the streamed arm gives them a BETTER q or merely fails to suppress them, which are
+different defects. `ai/.tmp/ab2.ps1` is the A/B harness - use FRESH output dirs each run or
+the second arm silently warm-resumes and produces no Stage 6 at all.
 
 ### Superseded: the 2nd-pass q divergence
 
