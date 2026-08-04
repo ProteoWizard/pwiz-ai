@@ -2405,3 +2405,365 @@ harmless only because build.sh does not build them on Linux.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260803_net8_linux_green_waters.md` before starting work.
+
+## 2026-08-03b -- Bruker on Linux; BAF path tested for the first time
+
+Follows straight on from the entry above. **Bruker.Tests 11/11 green on Linux (ext4,
+case-sensitive) and 11/11 on Windows**, up from 10 tests / Windows-only. NOT COMMITTED -- the
+user asked to hold until the vendor-archive layout was settled, and it now is (see A).
+
+**A - Two archives, one per OS (user's call).** The Linux `.so` files go in a NEW
+`pwiz_aux/msrc/utility/vendor_api_Bruker_linux.7z` (6.1 MB) beside the untouched Windows
+`vendor_api_Bruker.7z` (10.7 MB); `Bruker.csproj` selects by `$(OS)`. Both `.so` compress to
+~6.1 MB whichever shape is used, so size did not decide it -- the reason is that nobody should
+download 32 MB of binaries for a platform they are not building for. (I had argued for the split
+on a different ground -- `Jamroot.jam:620` extracts the Windows archive **wholesale**, `x -aoa`
+with no member list, so folding the `.so` in would unpack 32.4 MB into every cpp build -- but the
+user notes the cpp side is being sunset before this branch merges, so that argument does not
+carry.) Internal layout mirrors the Windows one: `vendor_api/Bruker/linux_x64/`.
+
+**B - SDK provenance is clean for timsdata, weaker for baf2sql.** `libtimsdata.so` comes from
+Bruker's own `tdf-sdk-2.21` download, whose `redist.txt` *explicitly* permits redistributing
+`linux64/libtimsdata.so` provided `THIRD-PARTY-LICENSE-README.txt` ships with it (it does, in the
+archive). Decisive check: that download's `win64/timsdata.dll` is **byte-identical (sha256) to
+the timsdata.dll already in our Windows archive**, and its license readme is byte-identical to
+ours -- so the `.so` is the exact Linux sibling of what we already ship, no version skew. This
+supersedes the previous session's FragPipe/DIA-NN `libtimsdata.so` idea, which had no redist
+grant. `libbaf2sql_c.so` came from the third-party `gtluu/pyBaf2Sql` repo (user's call to ship
+it); it exports all 10 baf2sql_c functions, exactly matching the archive's `baf2sql_c.h`, but has
+no equivalent redist grant. Worth replacing with Bruker's own baf2sql SDK if one turns up.
+
+**C - BAF was completely untested, and was broken.** `Baf2SqlData.cs` was a full port but no test
+touched it (`BrukerFormat.cs` even called BAF "Not ported yet"), while an unused BAF fixture
+`CsI_Pos_0_G1_000003.d` + reference mzML sat in the tree. Added
+`Reader_Bruker_CsI_Pos_0_G1_000003`; it failed immediately on Windows with 3 metadata diffs. The
+reader itself was fine -- `Reader_Bruker.cs` hardcoded the **timsTOF** metadata shape: always
+`TIMS_SDK` software and always a 5-component quad/TOF/MCP/PMT chain. cpp switches both on
+sub-format and instrument family. Ported properly: `AddApiSoftware` (BAF2SQL / TIMS_SDK /
+CompassXtract, per `Reader_Bruker.cpp:126-149`), plus `TranslateInstrumentFamily` (raw metadata
+code -> SDK enum; 512 -> FTMS), `TranslateInstrumentSeries` and `AnalyzerAndDetectorComponents`
+(ports of `createInstrumentConfigurations` + `translateAsInstrumentSeries`). CsI is an apex
+FT-ICR: BAF2SQL + apex series + ESI/FT-ICR/inductive-detector, 3 components. **The timsTOF
+fixtures were unregressed because all three report family=9** -- the old hardcoding was right for
+timsTOF and wrong for everything else.
+
+**D - Two genuine Linux product bugs, both in the source-file SHA-1 path.** The single remaining
+Linux diff was `sourceFile[...\Analysis.baf]: cvParam b-only: MS_SHA_1`, on all 4 reader tests:
+1. `Reader_Bruker.AddPairedSourceFiles` built the location as
+   `"file://" + analysisDir.Replace('/', '\\')` -- a Windows-ism that turns a POSIX path into one
+   unusable filename. cpp uses `bfs::path::string()`, i.e. the *native* separator. Now conditional
+   on `Path.DirectorySeparatorChar`.
+2. pwiz records the canonical spelling `Analysis.baf` while Bruker writes `analysis.baf` on disk
+   (cpp hardcodes the capital A at `SpectrumList_Bruker.cpp:631`, and probes *both* spellings when
+   opening -- `Reader_Bruker_Detail.cpp:115`). `File.Exists` matches either on Windows and neither
+   on Linux, so the checksum was **silently skipped** rather than failing loudly.
+This is a product bug, not a harness artifact: `MSDataFile.CalculateSourceFileSha1` has the same
+logic, so msconvert would quietly omit SHA-1 for Bruker on Linux. Fixed with a shared
+`Filesystem.FindFileIgnoringCase` (exact-match fast path, then a case-insensitive scan) used by
+both the product and `VendorReaderTestHarness`. Same bug class as Waters' `_func001.cdt`.
+
+**E - Runtime env: `libgomp1` is REQUIRED on Linux agents.** `libbaf2sql_c.so` links
+`libgomp.so.1` (OpenMP); `libtimsdata.so` does not. Without it the BAF test fails with
+`libgomp.so.1: cannot open shared object file`, which -- exactly as the previous session warned --
+is dlopen reporting an unmet **dependency**, not a missing file. `libtimsdata.so` is otherwise
+far less demanding than the Waters `.so`: GLIBC_2.14 max and no libstdc++ link at all, so it
+would even run on 20.04. **Unverified whether the TeamCity Linux agents have libgomp1** -- if the
+CsI test is the only red one in CI, that is the cause.
+
+**Two false leads worth not repeating.** (i) The `libdl.so: cannot open shared object file` spew
+is **noise, not a failure**: System.Data.SQLite's pre-loader tries the `win-x64` interop first,
+fails via `DllImport("libdl")` (glibc >= 2.34 ships only `libdl.so.2`), then falls back and
+succeeds. `No_PreLoadSQLite=1` changes nothing; I briefly mistook it for the blocker.
+(ii) Verifying the no-vendor gate is booby-trapped twice over: `Directory.Build.user.props` is
+gitignored and sets `IAgreeToVendorLicenses=true` **machine-wide**, so a "no licence" build
+silently has the licence on -- pass `-p:IAgreeToVendorLicenses=false` explicitly. Both gates are
+now verified cold on both OSes (Linux: false -> exit 0, nothing staged; true -> exit 0, exactly
+the two `.so` and none of the Windows DLLs).
+
+**Local repro**: `<scratchpad>/bruker_ext4.sh` (modes: summary / raw / detail / deps) and
+`bruker_novendor.sh`. Work dir is **`/root/b`, not `/tmp`** -- the distro shuts down between `wsl`
+invocations and /tmp is cleared on restart, which silently destroys the staged tree and makes
+diagnostics like `ldd $BIN/foo.so` quietly "succeed" on a path that does not exist. The scripts
+now assert staging, case-sensitivity and unmet `.so` deps before drawing any conclusion.
+msconvert cannot be built from WSL here: Vendor.Common's pins generator shells out to git and
+this checkout is a Windows git **worktree** (`.git` -> `C:/dev/pwiz/.git/worktrees/pwiz-net8`,
+meaningless inside WSL). Local-environment limit only; CI builds from a normal clone.
+
+**Open / next:**
+1. **Native vendor SDKs are unreachable at runtime in the installed MSI (pre-existing, affects
+   Waters today).** `VendorSdkLoader` hooks only `AssemblyLoadContext.Default.Resolving`, which
+   fires for **managed** binds; there is no `SetDllImportResolver` / `ResolvingUnmanagedDll`
+   anywhere in pwiz-sharp. Bruker's `timsdata`/`baf2sql_c` and Waters' `MassLynxRaw` are native,
+   bound by `DllImport`, which goes to the OS loader instead. Meanwhile `vendor-sdk-pins.json`
+   lists those native prefixes and `installer/build.ps1:103-108` **strips** any matching
+   `.dll`/`.exe` from the MSI -- so the installed product should throw `DllNotFoundException` on
+   both. Unseen because `AssertMsconvertSmokes` only exercises Thermo, which is managed.
+   Fix = `NativeLibrary.SetDllImportResolver` routing through the already-`public`
+   `VendorSdkLoader.EnsureExtracted`; **and per the user, add Waters + Bruker smoke tests to the
+   installer so the native DLL-finding path is actually exercised.** That work also needs a pins
+   entry for the new `vendor_api_Bruker_linux.7z` (currently unlisted).
+2. Confirm `libgomp1` on the Linux agents (see E).
+3. Carried over: restore the `NET8-PORT TEMP` blocks in
+   `scripts/misc/vcs_trigger_and_paths_config.py` (bt83 / bt17) before merge; drop
+   `Bruker.Tests/Reference/` once `Reader_Bruker_Test.data.tar.bz2` is regenerated; the
+   `Sciex.Tests` / `BiblioSpec` gate inconsistency (Bruker's is now resolved -- it gates on
+   `IAgreeToVendorLicenses` like the product does).
+
+### Ported-but-untested audit (dotCover over all 18 Windows-runnable suites, 439 tests green)
+
+Prompted by the BAF find: if one whole ported class could sit untested and broken, what else?
+Snapshot merged from every suite incl. the vendor ones. **927 statements in the core port have
+never executed.** Scripts: `<scratchpad>/Run-Coverage.ps1` + `parse_coverage.py` (and
+`coverage_survey.py` for the static fixture/name pass).
+
+Method notes, because two passes produced numbers that were wrong before they were right:
+- A static "type name never appears in a test" pass over-reports badly - `Mz5ReferenceRead` and
+  `TdfData` are reached only through interfaces yet are demonstrably exercised. Only
+  instrumentation separates "reached via a factory" from "never runs". Use dotCover, not grep.
+- That static pass ALSO under-reports: it initially cleared `Baf2SqlData` purely because a
+  *comment* names it. Strip comments from the test side before harvesting identifiers.
+- First dotCover run reported `Pwiz.Vendor.UNIFI` at **1%**; that was an omitted suite
+  (`UNIFI.Tests`, 44 tests), not a coverage gap. Corrected it reads **62%**, and the
+  never-executed total fell 4528 -> 927. Enumerate test projects from disk, do not hand-list.
+
+**Never executed, worth acting on:**
+- **`SpectrumList_ChargeFromIsotope` - 675 statements, zero.** With its helpers in the same file
+  (`ParentSpectrumCache` 24, `CachedParent` 7, `RtimeMap` 5, `MsvcRand` 5) that is ~716
+  statements. NOT dead code: it is the user-facing **`turbocharger`** msconvert filter, wired up
+  at `SpectrumListFactory.ParseTurbocharger` (`SpectrumListFactory.cs:972`). Highest-value gap in
+  the port by a wide margin, and precisely the BAF shape - a large, plausible-looking port that
+  nothing has ever run.
+- `Proteome.EnumerateNonOrSemiSpecific` (32) - non/semi-specific digestion never exercised.
+- `DiaUmpire.LinearInterpolation` (47); `PeakPicking.Peak` (10); `Diff.DiffResult<T>` (12);
+  `Obo.RelationEntry` (6); `IdentData.DatabaseTranslation` (5).
+- `MsConvert.Program` + `ConsoleProgressListener` (27) - the CLI entry point is never run
+  in-process; MsConvert.Tests exercises the library beneath it.
+- `VendorSupportNotEnabledException` (6) - the NO_VENDOR_SUPPORT error path has no test, on any
+  vendor. Cheap to add and it guards a user-visible message.
+- Vendor odds and ends: `WatersPusherInterval` (13), `UimfDriftScanInfo` (14), PrmScheduling
+  `CollisionEnergyRamp` (12) + `VisualizationDataPoint` (9).
+
+**Barely covered (<25%, >=20 statements):** `Util.ModificationList` 20%, `Util.ModificationMap`
+24%, `Common.Diff` 12%.
+
+**Assembly statement coverage, lowest first:** PrmScheduling 41%, msconvert 57%, UNIFI 62%,
+Thermo 64%, Bruker 68%, Sciex 72%, Shimadzu 73%, Analysis 74%, TraData 75%, Util 75%,
+Agilent 77%, Common 78%, UIMF 81%, Mobilion 82%, MsData 83%, Waters 85%, IdentData 92%.
+
+**Unused vendor fixtures already on disk (free tests, same as CsI was):**
+- **`ThyroglobMRM000003.d` - a TDF fixture with 11 reference mzMLs and no test at all.** The
+  direct analogue of the CsI find, and bigger. Do this one next.
+- `100 fmol BSA` (FID) and `Sample_1-A,1_01_985.d` (YEP) are correctly untested - neither format
+  is ported (YEP needs CompassXtract, COM and Windows-only forever).
+- Reference variants present but not exercised by fixtures that DO have tests: Bruker
+  `Hela_QC_PASEF` 6 of 13 and `20percLaser` 1 of 3 (both already noted in code comments);
+  Agilent 11 configs across `ImsSynthAllIons` (4), `ImsSynthCCS` (3), `ImsSynth_Chrom` (3),
+  `GFb_4Scan` (1). Waters is 13/13 complete.
+- False positive to ignore: `diaPASEF.d` reads as 0 configs because `TimsBinaryDataSmokeTests`
+  asserts directly instead of going through the harness's `ctx.Run(`.
+
+### ThyroglobMRM000003 fixture added -- 1 product bug (Bruker.Tests now 12/12 both OSes)
+
+Acting on the audit's top find. `Reader_Bruker_ThyroglobMRM000003` runs the **6** configs C++
+still runs for a TDF, all against git-tracked references. The CsI pattern repeated: a ported
+path nothing had ever executed was wrong.
+
+**Bug - collision energy emitted where C++ emits none.** We put `MS_collision_energy = 33.0 eV`
+on every MS2 precursor. For a plain MS2 frame - neither PASEF nor DIA-PASEF - C++ constructs its
+`IsolationInfo` with the energy **hardcoded to 0** (`TimsData.cpp:1180`) and only emits the
+cvParam when non-zero (`SpectrumList_Bruker.cpp:367`), so nothing reaches the mzML even though
+`FrameMsMsInfo.CollisionEnergy` holds a real value. Looks like a C++ oversight, but the
+references encode it. Evidence is unambiguous and *tracked*: the four tracked Thyroglob
+references carry 550 precursors between them and **zero** collision-energy params. Fixed in
+`TdfData.cs`; the PASEF/DIA paths there already matched C++ and were left alone.
+
+**IMPORTANT - which references are authoritative.** `Reader_Bruker_Test.cpp:131` sets
+`config.peakPicking = true` and **never clears it**, so every narrowed config C++ runs today
+writes a `-centroid` reference. C++ therefore does not generate `-ms1`, `-ms2`, `-combineIMS`,
+`-combineIMS-ms1` or `-combineIMS-ms2` at all - those are leftovers in the `.tar.bz2` from an
+older revision of the test, which is exactly why C++ master is green despite their contents
+disagreeing with their own tracked siblings (chromatogram presence, and in `-ms2` the
+ion-mobility values, shifted one TIMS scan). The cpp data dir is gitignored wholesale
+(`.gitignore:409`) and **the force-added set is precisely the set C++ still produces** - that
+correspondence is the cheapest way to tell an authoritative reference from a stale one.
+
+**Two things this corrected, both mine, both caught by Matt asking "why would these tests pass
+on C++ in current master?":**
+1. I had "fixed" the chromatogram-list suppression rule to also cover `preferOnlyMsLevel`,
+   claiming verification against all 32 references. That verification was worthless: the
+   *suppress* half of the rule came entirely from the stale files, and **no tracked reference
+   distinguishes the old rule from the new one**. It was a product-behaviour change (msconvert
+   output) justified by an artifact C++ no longer emits - the re-baseline-vs-fix trap in
+   `reference_net8_rebaseline_vs_fix`. Reverted, with a comment at the site explaining why not to
+   redo it.
+2. I had generated corrected `-combineIMS` / `-combineIMS-ms2` / `-ms2` overrides. Dropped -
+   testing a hand-corrected copy of a reference nothing generates asserts our own output back at
+   us. The profile-combined path stays covered by Hela's pre-existing overrides, and
+   `-combineIMS-ms1` only "passed" because its spectrum list is empty. `Reference/` is unchanged
+   from master.
+
+**Harness improvement (kept):** the diff failure message now leads with the reference filename
+(`[<file>.mzML] MSData diff: ...`). With many configs per fixture the old message named only the
+`.d` directory; I mis-attributed a failure because of it before adding this.
+
+Regression: Bruker 12/12 Windows AND Linux; MsData 70, Analysis 132, Thermo 15, Waters 21,
+Agilent 11, Sciex 7, MsConvert 16 - all green.
+
+**Follow-up for the audit's section C:** the "unexercised reference variants" it counted for
+Bruker and Agilent are mostly these stale non-centroid files. Before treating any of them as a
+coverage gap, check the vendor's `Reader_*_Test.cpp` for where it sets `peakPicking` - the
+tracked-vs-untracked split in the data dir tells you the same thing faster.
+
+### Native vendor SDKs now resolve at runtime; libgomp bundled; installer smokes widened
+
+Closes the gap found during the Bruker Linux work. Three parts, all verified by experiment
+rather than by inspection.
+
+**1 - `VendorSdkLoader` now hooks native resolution.** It only ever hooked
+`AssemblyLoadContext.Resolving`, which fires for **managed** binds; Bruker's `timsdata` /
+`baf2sql_c` and Waters' `MassLynxRaw` are native, bound by `DllImport`, which goes straight to
+the OS loader. Meanwhile `installer/build.ps1` strips every `.dll`/`.exe` matching a
+`vendor-sdk-pins.json` prefix - including those three - so the installed MSI could not read
+Bruker or Waters at all, while Thermo/Sciex/Agilent worked. Added
+`RegisterNativeResolver(Assembly)` over `NativeLibrary.SetDllImportResolver`, matching the same
+pin table and falling back to `EnsureExtracted`. `RegisterAssemblyResolver` now auto-registers
+it for every `Pwiz.Vendor.*` assembly via the `AssemblyLoad` event plus a sweep of what is
+already loaded, so a new vendor reader is covered the day it is added - deliberately, since this
+bug existed because the native half was overlooked. The resolver returns `IntPtr.Zero` (defer to
+default probing) whenever the library is already staged, so dev/CI builds are unaffected.
+
+**Verified end-to-end without building an MSI:** `<scratchpad>/Verify-NativeResolver.ps1` applies
+the installer's own strip rule to a real msconvert build (86 vendor binaries removed, including
+all three natives) and converts a fixture per vendor. Waters converts with 9 spectra despite
+`MassLynxRaw.dll` being gone, and `%LOCALAPPDATA%\ProteoWizard\vendor\Waters-6b905b4039ce\
+MassLynxRaw.dll` confirms where it came from.
+
+**2 - libgomp bundled + preloaded, so Linux agents no longer need `libgomp1`.**
+`libbaf2sql_c.so` links `libgomp.so.1`; `libtimsdata.so` does not. The 298 KB library (GPLv3
+**with the GCC Runtime Library Exception**, which is what permits shipping it beside a non-GPL
+app - its copyright file travels in the archive) now rides in
+`vendor_api_Bruker_linux.7z`. Bundling alone is NOT enough and this was proven, not assumed:
+the vendor built `libbaf2sql_c.so` with an `RPATH` pointing at their Jenkins workspace and no
+`$ORIGIN`, so the loader never searches the app directory for dependencies. `NativeInit`
+preloads it by absolute path, which puts it in the process under its soname for the later
+`dlopen` to resolve against. Hiding the system copy: bundled+preloaded gives 12/12, removing the
+bundled copy too gives the original `libgomp.so.1: cannot open shared object file`.
+Hooked from `NativeMethods`'s **static constructor**, not `[ModuleInitializer]` - CA2255 rejects
+module initializers in libraries (they run on any use of the assembly), while a static ctor is
+guaranteed to run immediately before the first P/Invoke on that type, which is exactly the right
+moment. Note the bundled build needs GLIBC 2.34 (higher than either Bruker library); on an older
+distro the preload silently fails and the system copy is used, so bundling can only help.
+
+**3 - Installer smoke tests cover the native vendors.** `AssertMsconvertSmokes` ran only a
+Thermo fixture - a **managed** SDK - which is precisely why the native gap survived. It now
+converts one fixture per resolution path: Thermo (managed), Waters `Minimal_DDA.raw`
+(MassLynxRaw), Bruker `20percLaser_100fold_1_0_H6_MS.d` (timsdata/TSF) and
+`CsI_Pos_0_G1_000003.d` (baf2sql_c/BAF); both Bruker fixtures are needed because the two natives
+are stripped independently. A missing fixture skips just that vendor and only an empty run is
+Inconclusive, so one absent checkout can no longer pass the rest off as verified. Fixture lookup
+generalised to `TryFindVendorFixture` with a `PWIZ_<VENDOR>_TEST_DATA` directory override
+(replaces the Thermo-only `PWIZ_THERMO_FIXTURE`, which nothing referenced) and now accepts
+directories, since Waters `.raw` and Bruker `.d` fixtures are directories.
+
+**4 - Deadlock in `VendorSdkLoader.ExtractArchive` (found by the above, fixed).** It set
+`RedirectStandardOutput` + `RedirectStandardError` and then called `WaitForExit()` **before**
+reading either stream - the textbook pipe deadlock. 7za prints a line per extracted file, and
+once that fills the OS pipe buffer (a few KB) 7za blocks writing while we block waiting, and
+neither side moves again. The archives that had ever been extracted at runtime hid it: Thermo and
+Waters hold a handful of files each and fit in the buffer. Bruker's holds **89** and hangs every
+time - the extraction sat at exactly 50,743 KB with msconvert alive but making no progress, which
+is what "slow" turned out to be. It stayed latent because pwiz-sharp's Bruker reader is pure
+P/Invoke with no managed Bruker assemblies, so the managed resolver never triggered a Bruker
+extraction; the new native resolver is the first code to do so. Fixed with event-driven
+`BeginOutputReadLine` / `BeginErrorReadLine` before the wait (no async/await).
+
+Worth remembering as a class: any archive big enough to be worth caching is big enough to
+overflow a pipe buffer, so `Process` + redirect + `WaitForExit`-then-read is always wrong here.
+
+Note the first Bruker resolve on an installed machine costs a 10.7 MB download plus a **63 MB**
+unpack (the archive is mostly the Windows-only CompassXtract/BDal stack; the two libraries
+actually needed are timsdata.dll at 2.9 MB and baf2sql_c.dll at 16.9 MB), so Installer.Tests'
+3-minute per-conversion timeout has less headroom for Bruker than for the others.
+
+### Linux packages, and two more Windows-only assumptions on the same path
+
+Everything below is committed and **pushed to both refs** (branch head `c5486d2a68`).
+
+**Bruker Linux pin + OS-aware lookup (`5be232205b`).** The resolver could not fetch Bruker
+natives on Linux: only `vendor_api_Bruker.7z` was pinned and it holds Windows DLLs, so Linux
+worked solely because build.sh stages the `.so` files at build time. A second pin needs the
+lookup narrowed, since both archives answer to the same prefixes and the old `FirstOrDefault`
+would have downloaded 10.7 MB of Windows DLLs on Linux. `VendorSdkPin` gains an optional `Os`
+and `FindPin` prefers an OS-specific entry over a generic one - which means **no existing entry
+had to be relabelled**: on Windows the linux pin is filtered out and the unlabelled Bruker pin is
+all that remains. Both resolvers share `FindPin`, so managed and native binds cannot disagree
+about which archive a vendor uses. **Waters needed nothing**: its single archive carries both
+platforms, so the existing pin already resolves `libMassLynxRaw.so` through the flatten and the
+`lib<name>.so` probe - which is a further argument for having left that archive combined.
+
+**Linux packages (`fa9ac5d1aa`).** `installer/build-linux.sh` mirrors `installer/build.ps1`:
+
+| Windows | Linux | |
+| --- | --- | --- |
+| `ProteoWizard-Sharp-Setup-<ver>.exe` | `ProteoWizard-Sharp-linux-x64-<ver>.tar.gz` | 37.9 MB self-contained |
+| `...-NoNetRuntime-Setup-<ver>.exe` | `...-NoNetRuntime-linux-x64-<ver>.tar.gz` | 5.7 MB framework-dependent |
+
+`NoNetRuntime` is kept verbatim (it means the same thing on both); `Setup` gives way to the RID
+because a tarball is not an installer. Version derivation, output dir, `installer-version.txt`
+and the size/SHA-256 report all follow build.ps1. build.sh invokes it where build.bat invokes the
+installer - vendor-only, warning-not-fatal. Only msconvert ships; MSConvertGUI and SeeMS are
+`net8.0-windows` + WinForms.
+
+**The counter-intuitive bit, which I got wrong first: build with licences ON, then strip.**
+Publishing with `-p:IAgreeToVendorLicenses=false` bakes in `NO_VENDOR_SUPPORT`, so `Read()`
+throws no matter what the resolver later fetches - the payload looks right and is inert. That is
+why build.bat gates the installer on `IAGREE==1`. The strip is also an assertion now: packaging
+aborts if a vendor binary survives, because the failure mode is redistributing a licensed SDK,
+not an oversized artifact. It matches `lib<name>.so` as well as `<name>.so`, since the DllImport
+name is `timsdata` but the file is `libtimsdata.so`. Related: `$(OS)` in MSBuild is the BUILD
+HOST, not the target RID, so a licences-on `linux-x64` publish from Windows stages Windows DLLs -
+the Linux packages must be built on Linux.
+
+**Platform 7-Zip + failure diagnostics (`c5486d2a68`).** Runtime extraction could never have
+worked off-Windows: `ExtractArchive` hardcoded `7za.exe` (a Windows PE) and Vendor.Common shipped
+it in every payload, so on Linux the download and SHA-256 check succeeded and only the unpack
+failed, leaving a cached `.7z` beside an empty extract dir. Now per-platform (`7za.exe` / `7zz`,
+mirroring `$(SevenZaExe)`), with the exec bit set if missing. Both resolvers also report *why*
+they could not supply a library - vendor, archive URL, cache dir, and an explicit "the load error
+below is a consequence, not the cause" - to stderr as well as Trace, because console apps attach
+no Trace listener. Without it the only visible symptom is `Unable to load shared library
+'timsdata'` plus a probe list, which points at the wrong layer; that cost two diagnosis cycles.
+
+**Pattern worth naming.** Three latent Windows-only assumptions surfaced on this one path - the
+`WaitForExit`-before-read pipe deadlock, the missing Linux pin, and `7za.exe` - all for the same
+reason: **nothing on Linux had ever called `EnsureExtracted`**, because the Linux build stages
+natives at build time. Native SDK resolution is the first code to walk it. Expect any remaining
+runtime-download code to be equally untested off-Windows.
+
+**Verified from the packaged tarballs on Linux:** both Bruker natives convert (TSF via timsdata,
+BAF via baf2sql_c) in both variants, fetching `libtimsdata.so` + `libbaf2sql_c.so` into
+`~/.local/share/ProteoWizard/vendor/Bruker-linux-<sha>/`; BAF still converts with the system
+libgomp hidden. The self-contained package runs under `env -i` with no .NET present; the
+framework-dependent one needs `DOTNET_ROOT` or a standard install - **`PATH` alone is not
+enough**, the apphost never consults it, which is worth documenting for users. Windows
+unaffected: Bruker 12, Waters 21, Thermo 15, Agilent 11, Sciex 7, MsData 70, Analysis 132,
+MsConvert 16.
+
+**Local gotcha:** do not run a Windows `dotnet` build and a WSL build against this tree at the
+same time - they share `obj`/`bin` under `/mnt/c` and produce a payload with mismatched assembly
+versions (symptom: `Could not load file or assembly 'Pwiz.Data.MsData'` from an otherwise fine
+package).
+
+**Open / next:**
+1. Watch the first CI run on `pull/4178`. Two things are new there: `Installer.Tests` now converts
+   four fixtures instead of one, with Bruker's cold resolve costing a 10.7 MB download plus a
+   63 MB unpack against a 3-minute per-conversion timeout (the deadlock fix's first outing under
+   CI conditions); and build.sh's packaging step is warning-not-fatal, so check the log for the
+   warning rather than reading silence as success.
+2. `libgomp1` on the Linux agents is no longer required - the library is bundled and preloaded -
+   but the bundled build wants GLIBC 2.34, so on an older distro the preload fails and the system
+   copy is used instead.
+3. Carried over: restore the `NET8-PORT TEMP` blocks in
+   `scripts/misc/vcs_trigger_and_paths_config.py` (bt83 / bt17) before merge; drop
+   `Bruker.Tests/Reference/` once the archive is regenerated; the `Sciex.Tests` / `BiblioSpec`
+   gate inconsistency.
