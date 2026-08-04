@@ -3021,11 +3021,32 @@ input from an expected output, and it flagged IonMobility while missing ChargeSt
 entirely. What actually found the gap was comparing **cpp's test-case count against the port's**,
 and reading cpp's table *columns* for parameters the port dropped. Do that first next time.
 
+### All 43 charge-state cases ported; the missing-SVM gap is now asserted (`8caca4697b`)
+
+Acting on the audit item above. All 43 cpp rows now run in cpp's order with the activation-type
+column restored, so ETD-activated spectra reach `SpectrumList_ChargeStateCalculator` for the first
+time. Expectations are the instrumented-cpp emissions, and the assertion is an **exact ordered
+sequence** - a set comparison would silently accept both of cpp's oddities (p1 emitted last in the
+no-override rows; case 31 emitting p2 twice).
+
+**33 rows match cpp exactly. The other 10 are cases 15-24**, where cpp resolves the charge with the
+libsvm model the port deliberately does not carry (documented at
+`SpectrumList_ChargeStateCalculator.cs:18`). Those rows carry an `SVM:` prefix holding cpp's answer
+and assert the port's documented fall-through - enumerate `[minCharge, maxCharge]` - so the feature
+gap is asserted rather than invisible, and cpp's values are already in place for whoever ports the
+SVM.
+
+**The gap is narrower than "ETD".** Cases 27, 33, 35 and 40 are ETD too and match cpp exactly, so
+only those 10 ever consult the model - worth knowing before anyone scopes the SVM port as "all ETD
+spectra are wrong".
+
+Fixtures: the ten spectra behind rows 15-41 run 122-1213 peaks, so they live in
+`SpectrumList_ChargeStateCalculatorTest.data/` (172 KB, 22 files), deduplicated by content since
+cpp reuses one 141-peak spectrum across rows 25-41. Generator:
+`<scratchpad>/gen_chargestate_cases.py`. Analysis.Tests 162 (135 + 27), Pwiz.sln builds clean.
+
 **Open / next:**
-1. Port the 27 missing `ChargeStatePredictor` cases, with the activation-type column and an exact
-   assertion, taking expectations from the instrumented-cpp emissions rather than cpp's permissive
-   table. Encode the `[p2 p3 p1]` ordering and the case-31 duplicate as cpp produces them.
-2. Remaining audit items, all much smaller and none clearly a true gap:
+1. Remaining audit items, all much smaller and none clearly a true gap:
    `DiaUmpire.LinearInterpolation` (47) and `MsConvert.Program` + `ConsoleProgressListener` (27)
    are both reachable but exercised only outside the pwiz-sharp unit suites (Skyline's
    TestPerf/TestTutorial, and out-of-process msconvert respectively) - confirm before spending
