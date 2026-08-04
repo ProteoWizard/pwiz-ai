@@ -3078,10 +3078,39 @@ precisely this reason. The port needs the file + `MzmlReaderAdapter` route to ge
 
 Analysis.Tests 166, MsData 70, Common 49, MsConvert 16, Thermo 15, `Pwiz.sln` clean.
 
+### SpectrumListSorter ported, and wrappers no longer renumber the list they wrap (`04fb85fead`)
+
+The last big ratio from the audit (cpp 66 assert sites against one scan-time case). cpp's very
+first assertion - "assert that the original list is unmodified" - found the bug.
+
+**Both `SpectrumListSorter` and `SpectrumListFilter` were renumbering the inner list's spectra.**
+They stamped the new position onto the object the inner list returned, and `SpectrumListSimple`
+hands out its *stored* instance. So enumerating a sorted view rewrote the indices of the list
+underneath it: a three-spectrum list read back as `scan=1#2, scan=2#1, scan=3#0`, and a filtered
+view corrupted its source the same way. cpp copies the Spectrum before renumbering
+(`SpectrumList_Filter.cpp:150-151`) precisely so it cannot. Added `Spectrum.ShallowCopy()` - new
+identity, shared params/scan list/binary arrays, since only the index changes. **Note the filter
+inherited this from the sorter in `244da33565`, one commit earlier**; following an existing
+in-repo convention propagated a latent bug, which is worth remembering as a review reflex.
+
+**`stable` flag added to the sorter**, defaulting to false as cpp does. `Array.Sort` is introsort,
+so the stable path breaks ties on the original position. Only cpp's own test uses it (msconvert's
+`sortByScanTime` takes the default), but it is public API on both sides and cpp's scenario cannot
+be ported without it.
+
+Four scenarios ported: original-list-unmodified, defaultArrayLength ordering with cpp's
+renumbering and monotonicity checks, stable-vs-unstable msLevel sorting, and the nested
+sorter-over-sorter. The stable order matches cpp on all four positions cpp pins.
+
+**Two of cpp's comments in that test are stale** - it calls scan=22 interchangeable with the MS1s
+(scan=22 is MS2), and calls scan=19 and scan=22 interchangeable by array length (15 vs 10). The
+port's tiny example was verified field-for-field against cpp's before pinning any order, so the
+comparison is sound and the comments are simply wrong.
+
+Analysis.Tests 170, MsData 70, Common 49, MsConvert 16, Thermo 15.
+
 **Open / next:**
-1. `SpectrumListSorter` is the next-worst ratio - cpp has 66 assert sites against ~15 shared across
-   four filters in `SpectrumListWrapperTests`. Same method applies.
-2. Remaining audit items, all much smaller and none clearly a true gap:
+1. Remaining audit items, all much smaller and none clearly a true gap:
    `DiaUmpire.LinearInterpolation` (47) and `MsConvert.Program` + `ConsoleProgressListener` (27)
    are both reachable but exercised only outside the pwiz-sharp unit suites (Skyline's
    TestPerf/TestTutorial, and out-of-process msconvert respectively) - confirm before spending
