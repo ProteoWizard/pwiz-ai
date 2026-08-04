@@ -222,9 +222,23 @@ document name - that is accepted as typed, and Skyline writes the layout over it
 That is the accepted trade-off, and the doc comment on `FILTER_VIEW` says so
 rather than claiming a guarantee it does not deliver.
 
-None of this is reachable from a functional test - a file dialog only behaves this
-way when really shown - which is why the doubled extension escaped the first pass.
-Drive the dialogs over the connector when changing them.
+**The doubled extension IS reachable from a test after all.** `RunNativeDlg` /
+`RunLongNativeDlg` in `AbstractFunctionalTest` drive a real native file dialog
+(added with the connector work in #4313, so almost no test uses them yet). The
+test now calls `ShowExportLayoutDlg` / `ShowImportLayoutDlg` - the real menu
+handlers - instead of the `ExportLayout` / `ImportLayout` methods underneath, and
+`TestDefaultExportFileName` reads the dialog's file-name box and asserts it holds
+`Doc.sky.view`. Verified to have teeth: restoring the ".sky.view" filter makes it
+fail with `Expected:<DefaultName.sky.view>. Actual:<DefaultName.sky.view.sky.view>`,
+the developer's screenshot reproduced automatically.
+
+Two things learned about driving these dialogs:
+- The layout warning is raised by `ShowImportLayoutDlg` **after** the file dialog
+  closes but **before** the call returns, so it holds the UI thread. `RunNativeDlg`
+  waits for that call to return and deadlocks; the import has to use
+  `RunLongNativeDlg` and dismiss the `MessageDlg` from the test thread.
+- The export deletes its target first, or a second local run hits the dialog's own
+  overwrite prompt.
 
 ## Phase 2 - MCP screenshot-layout reproduction (follow-up, not this branch)
 
