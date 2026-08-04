@@ -5,12 +5,12 @@
 - **Rust branch**: `feature/decoy-il-gate-and-default-flip` (C:\proj\osprey, off `origin/main`)
 - **Base**: `master`
 - **Created**: 2026-08-02
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4484](https://github.com/ProteoWizard/pwiz/issues/4484) (umbrella),
   [#4515](https://github.com/ProteoWizard/pwiz/issues/4515) (the I/L half)
 - **Module**: `osprey`
-- **PR**: [#4528](https://github.com/ProteoWizard/pwiz/pull/4528) (pwiz),
-  [maccoss/osprey#60](https://github.com/maccoss/osprey/pull/60) (Rust) - both opened 2026-08-03
+- **PR**: [#4528](https://github.com/ProteoWizard/pwiz/pull/4528) (pwiz, **merged 2026-08-04** as
+  `e7b5a917ba`), [maccoss/osprey#60](https://github.com/maccoss/osprey/pull/60) (Rust)
 
 Consumes the remaining tasks of `TODO-20260727_osprey_pass2_fdr_default.md` (whose branch was
 spent on PR #4487) and the "Osprey I/L gap" task of `TODO-20260801_decoy_similarity_gate.md`.
@@ -225,12 +225,13 @@ test asserted a decoy count and got 0. Both tests now set fragments and assert t
 - [x] Opened both PRs 2026-08-03: pwiz [#4528](https://github.com/ProteoWizard/pwiz/pull/4528)
       (label `osprey`) and [maccoss/osprey#60](https://github.com/maccoss/osprey/pull/60). Both
       branches pushed; the Rust blobs were verified LF-only before pushing.
-- [ ] **TeamCity Perf/Regression - NOT triggered, ask Brendan first.** When triggered it must be
-      `branch=pull/4528`, never the named branch (a named branch silently builds master).
-- [ ] **Review the delta that post-dates `/code-review max`.** That review covered the branch
-      BEFORE finding #3 was implemented, so `cb9b68c60` (validity-key suffixes, `TaskValidityKeyTest`,
-      the `StreamingFdr.Admit` dead-guard removal) and the two data commits are gated by build,
-      tests, inspection and the full regression run - but not by a review pass.
+- [x] **TeamCity Perf/Regression - PASSED**, build 4119873 on `branch=pull/4528` (never the named
+      branch, which silently builds master), commit `4d7b2123e`. The `Osprey Windows .NET` unit
+      config also ran green at 574 tests.
+- [x] **Reviewed the delta that post-dates `/code-review max`** - Copilot reviewed the PR
+      including `cb9b68c60`, raising one finding on `StreamingFdr.cs` (the changed-set built via a
+      parallel `bool[m]` plus a second pass). Addressed in `4d7b2123e`, verified output-neutral by
+      a Stellar regression, thread resolved. No `/code-review ultra` pass was run over that delta.
 
 ## Regression Test
 
@@ -611,6 +612,54 @@ Brendan's call, not an implementation detail - it is the difference between ship
 whose HPC and straight-through paths agree and one whose paths are known not to.
 
 ## Progress Log
+
+### 2026-08-04 - Merged
+
+PR #4528 merged as `e7b5a917ba`. Shipped: the pass-2 Percolator retrain removed outright (an
+unrecognized `OSPREY_PASS2_QVALUE` now aborts at startup), `protein-compact` and the learned peak
+pick as defaults with both still togglable, I/L-isobaric decoy rejection, the flipped defaults
+keyed into the resume cache, and all four regression goldens re-baselined. Rust companion
+[maccoss/osprey#60](https://github.com/maccoss/osprey/pull/60) carries the four behavioral changes;
+it needs no validity-key mirror because that tree has no resume-sidecar system.
+
+Final gate set, all on the merged commit's content: `regression.ps1 -Dataset All` 26/26; Stellar
+re-run after the review fix, blib byte-identical; cross-impl Astral `rust=117783 cs=117783
+delta=0`; `Test-PerfGate` passed; TeamCity Perf/Regression build 4119873 SUCCESS on `pull/4528`;
+574 unit tests, 0 inspection warnings. The one Copilot finding was fixed in `4d7b2123e` and
+verified output-neutral before the thread was resolved.
+
+**DEFERRED, and deliberately not represented as done:**
+
+* **The memory band was not measured.** Stage 5/6 accumulation is known, measured at 163 files,
+  and tracked in [#4526](https://github.com/ProteoWizard/pwiz/issues/4526), which is sequenced
+  AFTER this merge because the only pass-2 mode that plausibly needs the whole pool resident is
+  the one this PR deletes. #4526 is marked PAUSED with the list of fixes it must rebase onto.
+* **The pass-2 validity questions are OPEN, and the entrapment numbers here do NOT settle them.**
+  Recorded from the 2026-08-03/04 discussion with Brendan, none of it measured:
+  - The on-stratum experiment q is recomputed against a stratum-RESTRICTED null, for all stratum
+    members, not just changed peaks.
+  - **Self-admission asymmetry**: a target can be admitted because of its own score (it may be one
+    of the >=2 detections that qualified its protein); a decoy never can, since `DetectedPeptides`
+    is gated on `!entry.IsDecoy`. Diluted by the expansion in proportion to (peptides per protein
+    - 2) - at 2 peptides per protein it degenerates to `transfer-compete` - but the self-admitted
+    targets are that protein's best-scoring peptides, so the bias sits at the top of the ranked
+    list where a running (nDecoy+1)/nTarget count is most sensitive. Candidate fix: do not
+    re-scope the peptides that did the qualifying, or require >=2 detections OTHER than the one
+    being admitted (leave-one-out).
+  - **N-scaling hypothesis**: `DetectedPeptides` is the UNION over files of run-level peptide q
+    <= 1%, so the chance of a protein reaching >=2 detections BY CHANCE grows with file count.
+    That scales the way 3-file 0.61% -> 82-file 1.51% does, where decoy-depletion scales the
+    opposite way. Untested. Implementation caveat: do NOT tighten `DetectedPeptides` in place -
+    `BuildProteinParsimony` reads it, so Stage 7 protein FDR would move as a side effect.
+  - **The entrapment oracle is partly blinded here**, which weakens the FDP evidence in this file.
+    Entrapment peptides enter the stratum only when two chance detections land on the same
+    entrapment protein - rare, which is the >=2 gate working - so entrapment representation in
+    the re-scoped population is thin. And the error mode protein-compact preferentially admits (a
+    marginal peptide of a genuinely PRESENT protein, wrong peak/charge/interference) is one
+    entrapment cannot see at all, because that peptide IS in the sample. Cheapest decisive
+    diagnostic: split the qualifying-protein count by decoration (`target` vs `_p_target`) at
+    `FirstJoinTask.cs:1743`, which today logs only totals. That yields the spurious-qualification
+    rate and the effective entrapment ratio inside the stratum in one line, with no new run.
 
 ### 2026-08-03 (evening) - RE-CAPTURE DONE, and the two fixes CUT MEASURED PASS-2 FDP IN HALF
 
