@@ -22,10 +22,17 @@ There was also no `parquet` option for `--report-format`, which offered only
 * `--report-format` is now a `ReportFormat { csv, tsv, parquet }` enum in
   `ReportExporters.cs`, with `ReportExporters.ForFormat()`.
   `CommandArgs.ReportColumnSeparator` became `CommandArgs.ReportFormat`.
-* `SkylineCmd.exe.config` is deleted from the tree. The `CopyConfigToSkylineCmd`
-  target in `Skyline.csproj` copies the config MSBuild generates for Skyline, so
-  the two cannot drift. `SkylineCmdConfigTest` verifies the copy and that the
-  policy covers every version mismatch in the build output.
+* `SkylineCmd.exe.config` is deleted from the tree. `Skyline.csproj` includes the
+  config MSBuild generates for Skyline as a Content item linked to that name, so
+  the two cannot drift. It has to be included from `obj` rather than `bin`: the
+  content copy runs before `_CopyAppConfigFile`, and including from `bin` fails a
+  cold build with MSB3113 while succeeding on every incremental one. A linked
+  Content item is also what puts the file in the ClickOnce manifest, which is
+  built from project items - generating it into the output folder was not enough,
+  and would have shipped a config-less SkylineCmd.exe to the usual install.
+  `SkylineCmdConfigTest` verifies the copy, and that `TestData.dll.config` and
+  `TestFunctional.dll.config` cover every version mismatch too, since a Test
+  Explorer run uses those rather than `TestRunner.exe.config`.
 * `app.config` lost 11 bindingRedirects and the `<system.data>` block. Verified
   by stripping them and rebuilding: `AutoGenerateBindingRedirects` regenerates
   exactly the load-bearing set, and never regenerated the four that a reference
@@ -54,8 +61,9 @@ the one-word fix if it ever surfaces.
 
 ## The Parquet Export Hang
 
-Exporting to parquet hung on roughly one run in six, pegging every core and
-growing to 400-600 MB, while csv never hung in 20 runs.
+Exporting to parquet hung on roughly one run in eight in Debug and one in three
+in Release, pegging every core and growing to 400-600 MB, while csv never hung
+in 20 runs.
 
 Root cause: `CalibrationCurveFitter.GetTransitionQuantities` read and then added
 to the plain `Dictionary` field `_replicateQuantities` with no synchronization.
@@ -86,8 +94,8 @@ still parallel, 0 hangs.
 returns the test hangs rather than fails, which is deliberate - the threads are
 stuck inside the corrupted Dictionary lookup and never reach a cancellation
 check, so nothing can stop them, and a hang in the runner is easier to debug
-than a killed child process. One export only catches it about one run in six in
-Debug, so a passing run does not prove the bug is absent.
+than a killed child process. One export caught it 5 times in 40 in Debug, so a
+passing run is weak evidence that the bug is absent.
 
 `CalibrationCurveFitter._transitionsToQuantifyOn` is still lazily initialized
 without a lock. It looks benign - the set is built in a local and published by a
