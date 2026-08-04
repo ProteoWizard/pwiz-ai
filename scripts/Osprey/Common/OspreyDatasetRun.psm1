@@ -270,10 +270,13 @@ function Invoke-OspreyDatasetRun {
     # binary and is left alone.
     if (-not $NoSnapshotExe -and -not $Exe -and -not $env:OSPREY_EXE) {
         $exeItem = Get-Item $ospreyExe
-        $ver = (Get-Item $ospreyExe).VersionInfo.FileVersion
+        $ver = $exeItem.VersionInfo.FileVersion
         if (-not $ver) { $ver = 'unknown' }
-        $tag = ('{0}-{1}' -f $ver, $exeItem.LastWriteTime.ToString('yyyyMMdd-HHmm'))
-        $snapDir = Join-Path 'D:\test\osprey-runs\_bin' $tag
+        # NOT $tag: PowerShell variable names are case-insensitive, so $tag IS the caller's -Tag
+        # parameter. Naming this $tag silently overwrote it and appended the snapshot stamp to the
+        # run-directory name, which is both wrong and how this was caught.
+        $snapTag = ('{0}-{1}' -f $ver, $exeItem.LastWriteTime.ToString('yyyyMMdd-HHmm'))
+        $snapDir = Join-Path 'D:\test\osprey-runs\_bin' $snapTag
         $snapExe = Join-Path $snapDir (Split-Path -Leaf $ospreyExe)
         try {
             if (-not (Test-Path $snapExe)) {
