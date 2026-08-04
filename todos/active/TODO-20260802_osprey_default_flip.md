@@ -174,7 +174,15 @@ test asserted a decoy count and got 0. Both tests now set fragments and assert t
       this merge - it is waiting on percolator's removal, because the only pass-2 mode that
       plausibly needs the whole pool resident is the one being deleted. So a memory-band trace
       here is for the record; do NOT re-diagnose it, and do NOT hold the PR on it.
-- [x] `Compare-EndToEnd-Crossimpl.ps1` on Stellar + Astral - DONE 2026-08-03, Astral bit-parity at 1e-9, delta=0 on 119,088 precursors
+- [x] `Compare-EndToEnd-Crossimpl.ps1` on Stellar + Astral - **RE-RUN 2026-08-03 evening after
+      both correctness fixes**, since the earlier PASS (119,088) predated them. `OVERALL: PASS`,
+      bit-parity at 1e-9: `rust=117783 cs=117783 delta=0`, Stage 7 protein FDR PASS, blib content
+      PASS. Both implementations moved 119,088 -> 117,783 (-1.1%) INDEPENDENTLY, which is the
+      evidence that the C# and Rust changes are the same change rather than two that resemble
+      each other. Walls: Rust 26:27, C# 13:50. Log `ai/.tmp/crossimpl-astral-20260803.log`.
+      **The stale-binary guard fired on the first launch** (Release exe 31 s older than a CRLF
+      normalisation of the new test file) and refused rather than reporting a false divergence -
+      third time that guard has earned its keep in this series.
 - [x] Docs: `docs/12-second-pass-fdr.md` + `docs/07-fdr-control.md` in `5848c69d5`; the remaining
       four in `d8aee4ba0` - `20-command-line.md` (env-var table listed `percolator` as a valid
       `OSPREY_PASS2_QVALUE` and described the pick model as opt-in), `06-peak-detection.md`
