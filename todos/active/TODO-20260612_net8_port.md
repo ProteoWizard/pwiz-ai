@@ -2754,16 +2754,44 @@ same time - they share `obj`/`bin` under `/mnt/c` and produce a payload with mis
 versions (symptom: `Could not load file or assembly 'Pwiz.Data.MsData'` from an otherwise fine
 package).
 
+### CI verdict on `c5486d2a68` (2026-08-04) - all three configs green
+
+| config | build | result |
+| --- | --- | --- |
+| Core Windows .NET | #280 | SUCCESS, 419 passed / 0 failed |
+| Core Linux .NET | #41 | SUCCESS, **341/341** (up from 329: the 12 Bruker tests now run there) |
+| Skyline Windows .NET | #98 | SUCCESS, **1715/1715**, unchanged from #97 |
+
+Both items flagged for watching came back clean:
+- **`Install_PerUser_DeploysAndConvertsVendorFile` passed in 19 s**, against 5 s at baseline when
+  it converted Thermo alone. So native SDK resolution works in a genuinely installed product on a
+  CI agent, not only in the local strip-simulation, and Bruker's resolve is nowhere near the
+  3-minute per-conversion timeout. Caveat: the log does not say whether that agent's vendor cache
+  was already warm, so the cold path may still be unmeasured on CI - clearing the agent cache is
+  the only way to know.
+- **build-linux.sh ran and produced both artifacts** (37.1 MB / 6.4 MB), stripping 40 files each
+  with no ABORT, and stamped the real version `4.0.26216-c5486d2` rather than the `4.0.0-dev`
+  fallback seen locally (WSL cannot read this Windows worktree's git). Worth checking explicitly
+  every time: that step is warning-not-fatal, so silence is not success.
+
+**Windows shows 419 passed of 420, and that is not a regression.**
+`Install_PerMachine_DeploysAndConvertsVendorFile` skipped with "Per-machine install requires
+elevation". It is agent-dependent: baseline #278 ran on `EC2AMAZ-HH9KVFB` as Administrator and
+passed it in 3 s, while #280 landed on `MacCoss TeamCity Agent 1` unelevated. The +2 on the total
+is exactly the two new Bruker tests, both passing.
+
 **Open / next:**
-1. Watch the first CI run on `pull/4178`. Two things are new there: `Installer.Tests` now converts
-   four fixtures instead of one, with Bruker's cold resolve costing a 10.7 MB download plus a
-   63 MB unpack against a 3-minute per-conversion timeout (the deadlock fix's first outing under
-   CI conditions); and build.sh's packaging step is warning-not-fatal, so check the log for the
-   warning rather than reading silence as success.
-2. `libgomp1` on the Linux agents is no longer required - the library is bundled and preloaded -
+1. `libgomp1` on the Linux agents is no longer required - the library is bundled and preloaded -
    but the bundled build wants GLIBC 2.34, so on an older distro the preload fails and the system
    copy is used instead.
+2. From the ported-but-untested audit, the largest single gap is
+   **`SpectrumList_ChargeFromIsotope`: 675 statements, never executed**. It is the user-facing
+   `turbocharger` msconvert filter (`SpectrumListFactory.cs:972`), not dead code. Same shape as
+   the BAF find, and roughly the same size as everything else on the list combined.
 3. Carried over: restore the `NET8-PORT TEMP` blocks in
    `scripts/misc/vcs_trigger_and_paths_config.py` (bt83 / bt17) before merge; drop
    `Bruker.Tests/Reference/` once the archive is regenerated; the `Sciex.Tests` / `BiblioSpec`
    gate inconsistency.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260804_net8_bruker_linux_native_sdk.md` before starting work.
