@@ -175,8 +175,10 @@ hardening:
 - [x] Drove both menu items in the running app over the MCP connector - see the
       dialog-extension finding below
 
+- [x] Regenerated `Documentation/Help/{en,ja,zh-CHS}/KeyboardShortcuts.html` - see below
+
 #### Remaining
-- [ ] Decide whether Import Window Layout deserves an entry in the tutorial/help documentation
+- [ ] Nothing known; ready for /code-review then a PR
 - [ ] Localized menu text for `.ja.resx` / `.zh-CHS.resx` (bulk translation pass, not this PR -
       matches how every other menu item has landed)
 - [ ] Push branch and open PR
@@ -239,6 +241,27 @@ Two things learned about driving these dialogs:
   `RunLongNativeDlg` and dismiss the `MessageDlg` from the test thread.
 - The export deletes its target first, or a second local run hits the dialog's own
   overwrite prompt.
+
+### Adding a main-menu item requires regenerating the help HTML
+
+`HelpDocumentationContentTest.TestKeyboardShortcutsHelpDocumentation` asserts that
+`Documentation/Help/{en,ja,zh-CHS}/KeyboardShortcuts.html` matches the HTML
+generated from the live menu strip, so **any new item under `menuMain` fails it
+until the file is regenerated**. This is a build gate, not an optional docs
+chore - it was missed for several rounds because the regression sweeps did not
+include that test.
+
+To regenerate: set `IsRecordMode => true` in `HelpDocumentationContentTest`, run
+the test (it rewrites all three languages, then deliberately fails on
+`Assert.IsFalse(IsRecordMode, "Set IsRecordMode to false before commit")`), set it
+back to false, and re-run to confirm green. The ja/zh rows show the English
+"Window Layout" because the localized resx are not translated yet, which is
+correct - the generated file reflects what the menu actually shows.
+
+No other documentation applies. There is no per-menu-item reference page; the
+tutorials document workflows, and none of them arrange windows through these
+menu items. Phase 2 will reference Import Window Layout from the
+tutorial-testing README when it uses it.
 
 ## Phase 2 - MCP screenshot-layout reproduction (follow-up, not this branch)
 
