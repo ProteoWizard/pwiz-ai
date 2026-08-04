@@ -43,6 +43,21 @@
     says which pick model a run used. The module exports OSPREY_PICK_LDA in both directions,
     so leaving this off pins the product form rather than inheriting Osprey's flipped default.
 
+.PARAMETER ExperimentAgg
+    First-pass EXPERIMENT-score aggregation. Empty (the default) means max - the best score
+    over runs. 'mean-best-<N>' scores a precursor as the mean of its best N per-run scores
+    (OSPREY_EXPERIMENT_AGG). This MOVES THE DISCOVERY SET, so it is recorded in the banner,
+    the run.log START line, and the output-directory name.
+
+    It has to be a PARAMETER, not an inherited environment variable: the module clears
+    OSPREY_EXPERIMENT_AGG along with every other experimental lever and re-exports it only
+    from this argument, so a caller that merely sets the env var before invoking this script
+    gets a run silently aggregated as `max` while its directory name claims otherwise.
+
+    Validated against '^mean-best-\d+$' HERE rather than left to Osprey: an unrecognized value
+    only WARNS and falls back to max, which for a measurement flag corrupts the comparison
+    instead of failing it.
+
 .PARAMETER LinkFrom
     Optional. Hard-link the Stage 1-4 per-file caches from a COMPLETED run over the same
     file set so this run resumes from Stage 5 (Pass 1 FDR) without re-parsing or
@@ -87,6 +102,7 @@ param(
     [ValidateSet('SpectraCache','PerFileScoring','FirstPassFDR','PerFileRescoring','SecondPassFDR')]
     [string]$Task,
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
+    [ValidatePattern('^$|^mean-best-\d+$')] [string]$ExperimentAgg = '',
     [string]$Tag = '',
     [string]$DataDir,
     [string]$LibraryDir,
