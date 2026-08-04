@@ -159,7 +159,13 @@ test asserted a decoy count and got 0. Both tests now set fragments and assert t
       transfer-compete did not), so this flip has a plausible SPEED cost an ordinary default flip
       would not. This is the gate.
 - [ ] Memory band (`--timestamp --memstamp` + `ai/scripts/perfviz.py`) - **OBSERVATION, NOT A
-      GATE.** Stage 5/6 memory accumulation is already known, already measured, and tracked in
+      GATE, and DELIBERATELY NOT RUN for this PR.** Note `regression.ps1` does pass
+      `--timestamp --memstamp` on every leg, but it tees each leg to a log inside that leg's run
+      directory, and run dirs self-clean at `KeepRunDirs=0` - so a normal gate run leaves NO
+      memstamp trace behind. Harvesting one needs a dedicated run with BOTH `-KeepOutput` and
+      `-KeepRunDirs N`. Not worth it here: every regression dataset is 3 files, which structurally
+      cannot speak to an O(files) accumulation, so the trace would be decoration rather than
+      evidence. The real measurement already exists at 163 files in #4526. Stage 5/6 memory accumulation is already known, already measured, and tracked in
       [TODO-20260731_osprey_bounded_stage5_handoff.md](TODO-20260731_osprey_bounded_stage5_handoff.md)
       ([#4526](https://github.com/ProteoWizard/pwiz/issues/4526)) - the `CompactedEntries` buffer
       held across all of Stage 6, found from the `--memstamp` and env-var-gated runs, 90.2 GB
