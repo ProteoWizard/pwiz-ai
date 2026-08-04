@@ -239,6 +239,16 @@ foreach ($key in $variants.Keys) {
         $(if ($hasFlag) { 'supported' } else { 'absent (pre-#4326 baseline; perf lines emitted unconditionally)' }))
 }
 
+# The discarded warmup runs the BASELINE binary under its own 'warmup' label, and that
+# label is not a variant - so the SupportsPerfStats lookup below returned $null, the flag
+# was omitted, and a post-#4326 baseline (which gates the markers behind it) logged
+# 'stage1to4=MISS'. Nothing was ever wrong: the warmup's result is discarded, and a MISS on
+# a MEASURED leg warns separately. But it reads exactly like the gate silently degrading to
+# total-wall-only, and it cost a session's attention as an open question. Mirror the
+# baseline's capability so the warmup runs the SAME command line it is warming for.
+# Safe to add here: $variants is enumerated only above this point, and indexed by key below.
+$variants['warmup'] = @{ SupportsPerfStats = $variants['baseline'].SupportsPerfStats }
+
 # --- One full-pipeline run: invoke the binary, parse [STAGE-WALL] walls --------
 # Slim C#-only sibling of Measure-Pipeline.ps1's Invoke-PipelineRun: no Rust, no
 # cross-impl stage5/6 alignment (both variants share C# labeling, so raw walls
