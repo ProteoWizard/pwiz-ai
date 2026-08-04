@@ -2,9 +2,11 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260803_osprey_bounded_stage5_handoff`
-- **Base**: `master` (at `9804e90156`, i.e. after #4512)
+- **Base**: `master` (at `e7b5a917ba`, i.e. after #4528)
 - **Created**: 2026-07-31 (branch cut 2026-08-03)
-- **Status**: **PAUSED - do not resume until [#4484](https://github.com/ProteoWizard/pwiz/issues/4484) merges** (Brendan, 2026-08-03)
+- **Status**: In Progress - **pause LIFTED 2026-08-04** (Brendan): #4528 merged, protein-compact
+  is the default, and this branch is rebased onto it. The STOP section below is kept as the
+  record of why the pause happened, not as a live instruction.
 - **GitHub Issue**: [#4526](https://github.com/ProteoWizard/pwiz/issues/4526)
 - **Module**: `osprey`
 - **PR**: (pending)
@@ -12,6 +14,13 @@
 > The `Skyline/work/20260731_osprey_bounded_stage5_handoff` branch name on `origin` was
 > reused by the progress-reporting work that became #4513 (merged), so it carries none of
 > this. Work happens on the `20260803_` branch above.
+
+## RESOLVED: the pause below is lifted (2026-08-04)
+
+#4528 merged and this branch is rebased onto `e7b5a917ba`, so every fix in the table below
+is now IN the tree. Kept because the general trap it names is worth carrying, and because
+the `survivorScoreOverride` / effective-path row is directly relevant to the open Stage 7
+divergence recorded further down.
 
 ## STOP: paused on purpose, and re-reading the code will mislead you
 
@@ -342,7 +351,43 @@ After 2 and 3, the Stage-6 buffers match on every dumped column, the reconciled 
 semantically identical (`pyarrow` column-wise, metadata included), the 1st-pass sidecars are
 byte-identical, and the 2nd-pass `score` and `run_prot_q` columns match exactly.
 
-### Open: the 2nd-pass q still diverges
+4. **The rebuild dropped the rescored `ScanNumber`.** `OverlayReconciledIntoBuffer` copies
+   boundaries, area and features but NOT `ScanNumber`, and a MOVED peak's scan changes
+   (the fresh rescore replaces the buffer entry with the newly scored one). The pass-2
+   frozen-model override is looked up by `(EntryId, Charge, ScanNumber)` in
+   `Pass2FdrSidecar`, so every moved peak missed it: **110,541 of 994,509 survivors got no
+   override**, the `ov != scores[i]` discriminator in `StreamingFdr` saw `changed=0` instead
+   of `changed=110,646`, `changedBaseIds` stayed empty, those peaks never earned a fresh
+   run q, and they were reported on the stale pass-1 q their moved peak no longer justified.
+   Reported spectra 31,583 against the golden 29,364. Copying the reconciled `ScanNumber`
+   restores `changed=110,646` and the reported count to exactly 29,364.
+
+### Where it stands
+
+Stellar, streaming ON by default: **mode1 8 issues, mode3 3, mode2==straight 3** (from
+71 / 29 / 24). mode4 and mode2 cache-hits green. Streaming OFF still passes all five legs
+with the exact golden blib, so the oracle is intact.
+
+### Open: NRunsDetected off by one on 95 precursors
+
+`OspreyExperimentScores.NRunsDetected: 95/29364 rows differ (golden='2' run='3')` - the
+streamed arm sees a precursor detected in one MORE run than the golden. Correlated counts:
+the streamed arm emits 994,614 reported survivors where resident emits 994,899 (-285).
+
+Leading suspect is the gap-fill append, which is the one place the two paths still build
+different rows. A fresh rescore appends a gap-fill entry per target UNCONDITIONALLY, so a
+file can carry two rows with the same `EntryId` (a survivor row plus a gap-fill row); the
+tail replay in `OverlayReconciledIntoBuffer` skips any row whose `EntryId` is already
+present (`existingIds.Add`). That difference is real, though it removes rows where the
+symptom shows an EXTRA detection, so it is not yet a complete explanation.
+
+**Next probe**: count, per file and per arm, the rows appended by gap fill and how many
+share an `EntryId` with an existing survivor; then check whether the 95 differing
+precursors are exactly those. `ai/.tmp/ab2.ps1` is the A/B harness (it logs the pass-2
+override/changed/same counts once the temporary counters in `StreamingFdr` are restored);
+use FRESH output dirs each run or the second arm silently warm-resumes.
+
+### Superseded: the 2nd-pass q divergence
 
 Stellar straight-through reports **31,583** spectra against the golden **29,364** (chain leg
 = 29,364, i.e. the resident behaviour). Joined on `entry_id`, per file:
