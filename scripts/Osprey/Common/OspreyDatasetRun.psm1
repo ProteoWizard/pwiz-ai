@@ -195,6 +195,14 @@ function Invoke-OspreyDatasetRun {
         # indistinguishable from each other. This lands in the banner, the run.log START line,
         # and the default output-directory name.
         [string]$ExperimentAgg = '',
+        # Which q-value qualifies a peptide as DETECTED for the protein-compact >=2 gate:
+        # 'run' (the shipped default, the union over runs) or 'experiment'. A first-class
+        # parameter for exactly the reason -ExperimentAgg is one: the two arms differ in
+        # NOTHING else - same files, same parquets, same pass-2 mode, same pick - so a value
+        # that reached Osprey only through a caller-exported environment variable would leave
+        # two finished runs indistinguishable. Lands in the banner, the run.log START line and
+        # the default output-directory name. Only meaningful with -Pass2Mode protein-compact.
+        [ValidateSet('run', 'experiment')] [string]$QualifyBy = 'run',
         [string]$Tag = '',
         [string]$DataDir,
         [string]$LibraryDir,
@@ -359,7 +367,9 @@ function Invoke-OspreyDatasetRun {
         # to one directory and the guard below would reject arm 2 (or -Resume would silently
         # overlay it onto arm 1's artifacts).
         $agg = if ($ExperimentAgg) { "-$ExperimentAgg" } else { '' }
-        $name = "$($Dataset.Key)-$($inputs.Count)files-$DecoyMode-r$Ratio-$Pass2Mode$pick$agg$Tag"
+        # Empty on the shipped 'run' default, so this does not rename a single existing arm.
+        $qual = if ($QualifyBy -eq 'experiment') { '-qualifyexp' } else { '' }
+        $name = "$($Dataset.Key)-$($inputs.Count)files-$DecoyMode-r$Ratio-$Pass2Mode$pick$agg$qual$Tag"
         if ($Fresh) { $name += '-' + (Get-Date -Format 'yyyyMMdd_HHmmss') }
         $OutDir = [System.IO.Path]::GetFullPath((Join-Path $runsRootResolved $name))
     }
@@ -466,6 +476,9 @@ function Invoke-OspreyDatasetRun {
     Write-Host ("  exp agg  : {0}" -f $(if ($ExperimentAgg) {
                 "$ExperimentAgg (OSPREY_EXPERIMENT_AGG) - moves the experiment-wide discovery set" }
                 else { 'max (default, best of runs)' }))
+    Write-Host ("  qualify  : {0}" -f $(if ($QualifyBy -eq 'experiment') {
+                'EXPERIMENT-wide q (OSPREY_PROTEIN_COMPACT_QUALIFY) - shrinks the protein-compact stratum' }
+                else { 'per-run q (default, the union over runs)' }))
     if ($FdrBenchPass -eq '1') {
         Write-Host "  WARNING: --fdrbench-pass 1 forces the RESIDENT first-pass pool, which grows" -ForegroundColor Yellow
         Write-Host "           O(files) and does not scale to a large cohort. See the README." -ForegroundColor Yellow
@@ -541,6 +554,7 @@ function Invoke-OspreyDatasetRun {
                    'OSPREY_CAL_MEDIANPOLISH', 'OSPREY_PASS2_QVALUE',
                    'OSPREY_PICK_LDA', 'OSPREY_PICK_LDA_MODEL',
                    'OSPREY_PROTEIN_COMPACT_RETRAIN', 'OSPREY_EXPERIMENT_AGG',
+                   'OSPREY_PROTEIN_COMPACT_QUALIFY',
                    'OSPREY_DECOY_SAME_ION_MAP', 'OSPREY_DECOY_PRECURSOR_SHIFT_UNITS',
                    'OSPREY_DECOY_MAX_FRAG_OVERLAP', 'OSPREY_DECOY_MAX_SEQ_IDENTITY') {
         Remove-Item "Env:\$k" -ErrorAction SilentlyContinue
@@ -553,6 +567,10 @@ function Invoke-OspreyDatasetRun {
     $env:OSPREY_PASS2_QVALUE = $Pass2Mode
     $env:OSPREY_PICK_LDA = if ($PickLda) { '1' } else { '0' }
     if ($ExperimentAgg) { $env:OSPREY_EXPERIMENT_AGG = $ExperimentAgg }
+    # Unconditionally, in both directions, for the reason above: Osprey's own default is 'run',
+    # so an arm that exported only its ON value would leave the OFF arm running on whatever the
+    # shell happened to hold.
+    $env:OSPREY_PROTEIN_COMPACT_QUALIFY = $QualifyBy
 
     $log = Join-Path $OutDir 'run.log'
     # NEVER truncate an existing run.log - rotate it to run-<stamp>.log first. A run.log is the
@@ -578,7 +596,7 @@ function Invoke-OspreyDatasetRun {
     }
     ("[{0}] START dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "picklda=$([bool]$PickLda) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
-     "files=$($inputs.Count) threads=$Threads " +
+     "qualify=$QualifyBy files=$($inputs.Count) threads=$Threads " +
      "parallelfiles=$ParallelFiles task='$Task' mdiag=$mdiag " +
      "fdrbench=$FdrBenchPass linkfrom='$LinkFrom'") -f (Get-Date -Format s) |
         Set-Content -Path $log
@@ -595,7 +613,7 @@ function Invoke-OspreyDatasetRun {
     $sw.Stop()
     ("[{0}] DONE dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
      "picklda=$([bool]$PickLda) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
-     "parallelfiles=$ParallelFiles exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
+     "qualify=$QualifyBy parallelfiles=$ParallelFiles exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
         Add-Content -Path $log
     Write-Host ("Osprey exited {0} after {1:hh\:mm\:ss}" -f $exit, $sw.Elapsed) `
         -ForegroundColor $(if ($exit -eq 0) { 'Green' } else { 'Red' })

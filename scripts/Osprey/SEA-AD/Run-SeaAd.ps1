@@ -58,6 +58,18 @@
     only WARNS and falls back to max, which for a measurement flag corrupts the comparison
     instead of failing it.
 
+.PARAMETER QualifyBy
+    Which q-value qualifies a peptide as DETECTED for protein-compact's >=2-distinct-peptides
+    gate: 'run' (default, the shipped behavior - the UNION of each file's 1% detections over
+    every run) or 'experiment' (experiment-wide peptide q). Only meaningful with
+    -Pass2Mode protein-compact.
+
+    This MOVES THE DISCOVERY SET, so like -PickLda and -ExperimentAgg it is a parameter rather
+    than an inherited environment variable: the module clears OSPREY_PROTEIN_COMPACT_QUALIFY
+    and re-exports it from this argument, and records it in the banner, the run.log START line
+    and the output-directory name. At 82 files the run-level union is 12.95% false where the
+    experiment-wide q is 0.79%, which is the whole point of the arm.
+
 .PARAMETER LinkFrom
     Optional. Hard-link the Stage 1-4 per-file caches from a COMPLETED run over the same
     file set so this run resumes from Stage 5 (Pass 1 FDR) without re-parsing or
@@ -103,6 +115,7 @@ param(
     [string]$Task,
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
     [ValidatePattern('^$|^mean-best-\d+$')] [string]$ExperimentAgg = '',
+    [ValidateSet('run', 'experiment')] [string]$QualifyBy = 'run',
     [string]$Tag = '',
     [string]$DataDir,
     [string]$LibraryDir,
