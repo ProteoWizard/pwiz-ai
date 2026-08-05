@@ -3109,8 +3109,69 @@ comparison is sound and the comments are simply wrong.
 
 Analysis.Tests 170, MsData 70, Common 49, MsConvert 16, Thermo 15.
 
+### dotCover re-run (2026-08-05): never-executed 927 -> 172, and CI is missing four suites
+
+Re-ran via the project's own supported path, `build.bat Release --i-agree-to-the-vendor-licenses
+--coverage` (dotCover 2023.3.3 from `.config/dotnet-tools.json`), rather than reconstructing the
+previous session's ad-hoc scripts. 474 tests, 0 failures. Snapshot at
+`pwiz-sharp/TestResults/coverage.dcvr`, HTML at `TestResults/coverage-report/`; the summary comes
+from re-reporting that snapshot as `--ReportType=DetailedXML` and parsing it
+(`<scratchpad>/parse_coverage.py`, which reproduces the audit's three sections).
+
+**Never-executed statements: 927 -> 172, across 33 types.** The drop is almost entirely this
+session's work: turbocharger (~716 with helpers) plus digestion's `EnumerateNonOrSemiSpecific`
+(32) accounts for 748 of the 755. Overall statement coverage is **78.2% (27,449/35,109)**.
+
+| assembly | now | previous audit |
+| --- | --- | --- |
+| Pwiz.Vendor.Common | 38.4% | (not listed) |
+| Pwiz.Vendor.UNIFI | 61.6% | 62% |
+| Pwiz.Vendor.Thermo | 63.9% | 64% |
+| Pwiz.Vendor.Bruker | 69.3% | 68% |
+| Pwiz.Vendor.Sciex | 71.6% | 72% |
+| Pwiz.Vendor.Shimadzu | 73.2% | 73% |
+| Pwiz.Util | 74.7% | 75% |
+| Pwiz.Vendor.Agilent | 77.2% | 77% |
+| Pwiz.Data.Common | 80.5% | 78% |
+| **Pwiz.Analysis** | **80.8%** | **74%** |
+| Pwiz.Data.MsData | 83.7% | 83% |
+| Pwiz.Vendor.Waters | 85.2% | 85% |
+| Pwiz.Data.IdentData | 92.3% | 92% |
+
+Biggest never-executed remaining: `DiaUmpire.LinearInterpolation` 47, `UimfDriftScanInfo` 14,
+`WatersPusherInterval` 13, `Diff.DiffResult<T>` 12, `PeakPicking.Peak` 10, then a tail of 6-and-under
+including `VendorSupportNotEnabledException`. Barely covered is unchanged: `Common.Diff.Diff` 13%,
+`Util.Proteome.ModificationList` 20.5%, `ModificationMap` 24.4%.
+
+**The bigger find is in the measurement, not the numbers.** `build.bat:159-160` sets `TEST_TARGET`
+as a **hand-maintained list of 17 projects**, and four built test suites are not on it:
+
+| omitted suite | tests | state |
+| --- | --- | --- |
+| `TraData.Tests` | 4 | all pass |
+| `Bruker.PrmScheduling.Tests` | 3 | all pass |
+| `BiblioSpec.Tests` | 142 | 67 pass / **69 fail** / 6 skip |
+| `MsConvertGUI.Tests` | ? | not run (net8.0-windows WinForms) |
+
+`tcbuild.bat` calls `build.bat`, so **CI has never run any of them** - which also explains why
+`Pwiz.Data.TraData`, `Pwiz.Vendor.Bruker.PrmScheduling` and `Pwiz.Tools.BiblioSpec` are absent from
+this report while the previous audit had numbers for them (its own runner enumerated projects from
+disk, which is exactly the lesson that audit recorded: *do not hand-list*). `msconvert` is absent
+for a different and deliberate reason - `COVER_FILTERS` excludes it.
+
+The 69 BiblioSpec failures look environmental rather than product: the ones sampled are
+`Could not find file .../BiblioSpec/tests/inputs/demo.ssl` and `BlibBuild ... exited 1`. That
+inputs directory is gitignored (`.gitignore:392`) and populated by the cpp build; it holds 103
+files here but is missing `demo.ssl` and `OMSSA.pep.xml`, so it is partially extracted. Not
+diagnosed further - it needs its own session.
+
 **Open / next:**
-1. Remaining audit items, all much smaller and none clearly a true gap:
+1. Decide what to do about the four omitted suites. `TraData.Tests` and
+   `Bruker.PrmScheduling.Tests` are 7 passing tests and could join `TEST_TARGET` immediately;
+   `BiblioSpec.Tests` needs its input data sorted out first or it would red CI; `MsConvertGUI.Tests`
+   needs a check that it can run headless. Better still, have `build.bat` discover
+   `**/test/**/*.Tests.csproj` from disk so the list cannot silently drift again.
+2. Remaining audit items, all much smaller and none clearly a true gap:
    `DiaUmpire.LinearInterpolation` (47) and `MsConvert.Program` + `ConsoleProgressListener` (27)
    are both reachable but exercised only outside the pwiz-sharp unit suites (Skyline's
    TestPerf/TestTutorial, and out-of-process msconvert respectively) - confirm before spending
