@@ -204,6 +204,9 @@ function Invoke-OspreyDatasetRun {
         [string]$RunsRoot,
         [string]$SourceRoot,
         [string]$Exe,
+        # Run from the build tree instead of a snapshot. Only reason to pass this is a run short
+        # enough that locking the build tree does not matter; see the snapshot block below.
+        [switch]$NoSnapshotExe,
         [string]$LinkFrom = '',
         [switch]$Fresh,
         [switch]$Resume,
@@ -253,6 +256,43 @@ function Invoke-OspreyDatasetRun {
     $ospreyExe = Resolve-DatasetLocation -Explicit $Exe -EnvName 'OSPREY_EXE' `
         -Fallbacks @($repoExe) -What 'Osprey.exe (build Release/net8.0 first)' `
         -DatasetName $dsName -Readme $readme
+
+    # Windows locks a running .exe, so a multi-hour run out of the BUILD TREE blocks every build
+    # and unit-test cycle until it finishes. The rule was "snapshot the exe first, pass -Exe" and
+    # it kept being forgotten, which costs a whole session's ability to build - so do it here
+    # instead of relying on the caller to remember. The copy is ~200 MB and about a second.
+    #
+    # The snapshot is keyed by the exe's own version + build time, so repeat runs of the same
+    # binary reuse one directory rather than littering. Reading a running exe is permitted on
+    # Windows, so this is safe even when another run already holds the build tree.
+    #
+    # -NoSnapshotExe opts out; an explicit -Exe / OSPREY_EXE is already a deliberate choice of
+    # binary and is left alone.
+    if (-not $NoSnapshotExe -and -not $Exe -and -not $env:OSPREY_EXE) {
+        $exeItem = Get-Item $ospreyExe
+        $ver = $exeItem.VersionInfo.FileVersion
+        if (-not $ver) { $ver = 'unknown' }
+        # NOT $tag: PowerShell variable names are case-insensitive, so $tag IS the caller's -Tag
+        # parameter. Naming this $tag silently overwrote it and appended the snapshot stamp to the
+        # run-directory name, which is both wrong and how this was caught.
+        $snapTag = ('{0}-{1}' -f $ver, $exeItem.LastWriteTime.ToString('yyyyMMdd-HHmm'))
+        $snapDir = Join-Path 'D:\test\osprey-runs\_bin' $snapTag
+        $snapExe = Join-Path $snapDir (Split-Path -Leaf $ospreyExe)
+        try {
+            if (-not (Test-Path $snapExe)) {
+                New-Item -ItemType Directory -Path $snapDir -Force | Out-Null
+                Copy-Item (Join-Path (Split-Path $ospreyExe -Parent) '*') $snapDir -Recurse -Force
+            }
+            $ospreyExe = $snapExe
+            Write-Host ("  exe snap : {0} (build tree left free to rebuild)" -f $snapDir) -ForegroundColor Cyan
+        }
+        catch {
+            # A snapshot failure must not block the science run - fall back to the build tree and
+            # say so, because the caller then knows builds will fail for the duration.
+            Write-Host ("  WARNING: could not snapshot the exe ({0}); running from the BUILD TREE, " +
+                        "which will block builds until this run finishes." -f $_.Exception.Message) -ForegroundColor Yellow
+        }
+    }
 
     $libRoot = Resolve-DatasetLocation -Explicit $LibraryDir -EnvName $Dataset.EnvLibVar `
         -Fallbacks @() -What 'library directory' -DatasetName $dsName -Readme $readme

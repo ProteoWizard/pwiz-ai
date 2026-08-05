@@ -6,9 +6,13 @@
   `ProteowizardWrapper`; the pwiz-side changes (TIC, wrapper forwarding) are in support of it
 - **Base**: `master` @ `55cedad25`
 - **Created**: 2026-07-27
-- **Status**: Awaiting re-review. Phases 1-10 committed and pushed, all gates green. Matt's
-  CHANGES_REQUESTED (2026-08-03) answered in 5f88ea972 plus replies on all four threads; his
-  re-review is the only thing outstanding. **Start at Phase 11.**
+- **Status**: Awaiting re-review, and **now calibration-only**. The m/z sort work was split out on
+  2026-08-04 (Brian's call - it is a separate issue) onto
+  `Skyline/work/20260804_mzml_mz_sort_order`; see `TODO-20260804_mzml_mz_sort_order.md`, which
+  also carries the general pwiz-level solution. `591445b58` reverts the two sort commits here and
+  the PR body is trimmed to match. Matt's CHANGES_REQUESTED (2026-08-03) is answered - three of
+  the four threads discuss code that has moved, and a comment on the PR says so.
+  **Start at Phase 11.**
 - **GitHub Issue**: (none)
 - **PR**: https://github.com/ProteoWizard/pwiz/pull/4498
 - **Cherry-pick to release**: no - Brian decided 2026-07-29, do not add the label
@@ -527,7 +531,8 @@ pwiz fixes would not reach other packages in time to matter. So: Skyline and Bib
       `|200.2 - 500.5| < 1e-09`.
 
 **Checked and found NOT at risk**, so the blast radius is smaller than first feared: `threshold`
-sorts by intensity itself and re-sorts by m/z on output (`ThresholdFilter.cpp:423`); `peakPicking
+sorts by intensity itself and re-sorts by m/z on output (`ThresholdFilter.cpp:423`) - **but only
+when it actually cuts something**, corrected 2026-08-04, see Phase 12; `peakPicking
 cwt` sorts explicitly (`CwtPeakDetector.cpp:82`); the default `LocalMaximumPeakDetector` compares
 array neighbours and *would* be vulnerable, but `SpectrumList_PeakPicker.cpp:252` returns centroided
 spectra as-is and DATA Convert 5.x output is centroided, so it is unreachable. `SpectrumList_MZWindow`
