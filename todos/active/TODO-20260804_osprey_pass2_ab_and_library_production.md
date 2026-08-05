@@ -309,10 +309,105 @@ can afford permissiveness.
 Needs a threshold decoupled from `config.ExperimentFdr` (which also governs the REPORTED set and
 must not move): a new `OSPREY_PROTEIN_COMPACT_QUALIFY_FDR`, defaulting to `ExperimentFdr`.
 
-**Do the cheap thing first**: have the Stage-5 accumulator log the qualifying-peptide count at
-several thresholds (1/2/5/10%) in EVERY run. It already sees each row's experiment q, so this is
-a few lines and no extra run, and it turns the next arm into a free measurement of every
-candidate threshold's pool size. Pick the arms to run from that, rather than guessing 2% and 5%.
+### THE ARM TO RUN NEXT (decided from the sweep)
+
+**protein-compact + PickLda + mean-best-6 + `-QualifyBy experiment`**, at the default 1%
+threshold. Versus arm C it changes exactly ONE thing (the aggregation), so it stays a clean
+single-variable comparison, and it stacks the #4484 reproducibility lever on the qualification
+fix - both are Stage 5 adaptations.
+
+Preferred over the exp-q<=5% arm: it takes most of the permissiveness (35,446 vs 44,171
+qualifying peptides) at ZERO entrapment-protein cost rather than 0.96%, and arm C's 0.426% FDP
+leaves the budget for it.
+
+```
+Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -Pass2Mode protein-compact -PickLda \
+  -QualifyBy experiment -ExperimentAgg mean-best-6 -FdrBenchPass 2 \
+  -DataDir 'D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\mzml' \
+  -LibraryDir 'D:\test\AstralTest-TargetDecoyLibraries\target+decoy+entrapment-gated-no-il' \
+  -LinkFrom 'D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\runs\seaad-82files-libdecoy-r1.0-protein-compact-picklda' \
+  -Exe 'D:\test\osprey-runs\_bin\armc-qualifyexp\Osprey.exe'
+```
+
+~4h45m. Score it with the SAME FDRBench recipe used for arms A and C (below) or the numbers are
+not comparable.
+
+**CAVEAT that must not be lost**: `OSPREY_EXPERIMENT_AGG` governs the REPORTED experiment q as
+well as the qualification q, so this arm changes the reported set too - it is not a pure
+qualification change. Decoupling (qualify on mean-best-N, report on max) would need two
+experiment-q computations. Probably not worth it, since mean-best-6 was already the better arm
+in the original A/B, but do not report this as isolating qualification.
+
+### Scoring recipe (use this, or numbers are not comparable)
+
+```
+java -Xmx8G -jar D:\test\fdrbench\fdrbench-1.1.1\fdrbench-patched.jar \
+  -i <run>\fdrbench.tsv -level precursor -score 'score:1' \
+  -pep D:\test\AstralTest-TargetDecoyLibraries\target+decoy+entrapment-gated-no-il\osprey_library_db_pairing.tsv \
+  -entrapment_label _p_target -o fdp.csv
+```
+
+Metric = `combined_fdp` on the LAST row with `q_value <= 0.01` (that is
+`Get-FdrBenchCalibration` in `ai/scripts/Osprey/Run-FdrBench.ps1`). The jar is chosen by
+`Sort-Object Name -Descending`, which picks `fdrbench-patched.jar` over `fdrbench-1.1.1.jar`.
+
+### THE SWEEP IS DONE - OFFLINE, NO EXTRA RUNS (2026-08-05)
+
+Brendan's point: Stage 5 already wrote everything needed. `ai/.tmp/qualify-sweep.py` rebuilds the
+qualifying peptide set and the >=2-peptide protein set at any threshold from artifacts on disk -
+the 82 `.1st-pass.fdr_scores.bin` sidecars (32-byte header, 60-byte records; run-peptide-q at
+offset 20, experiment-peptide-q at 36) joined by entry_id to the parquets
+(`modified_sequence`, `is_decoy`, `protein_ids`). Entrapment is read straight off the
+`_p_target` accessions, so the 392 MB pairing manifest is not needed. ~7 min for 82 files.
+
+**It validates exactly against both runs' own logs** - run-q<=1% reproduces arm A's
+59,108 / 6,501 and exp-q<=1% reproduces arm C's 30,167 / 3,769. That is what makes the rest
+trustworthy.
+
+**max aggregation (arm A/C Stage 5):**
+
+| arm | qual pep | entrap pep | %ent | >=2 prot | ent >=2 | %ent |
+|---|---|---|---|---|---|---|
+| run q<=1% | 59,108 | 3,853 | 6.52% | 6,501 | **528** | **8.12%** |
+| exp q<=1% | 30,167 | 121 | 0.40% | 3,769 | **0** | 0.00% |
+| exp q<=2% | 35,479 | 329 | 0.93% | 4,222 | 2 | 0.05% |
+| exp q<=5% | 44,171 | 1,055 | 2.39% | 4,919 | 47 | 0.96% |
+| exp q<=10% | 52,965 | 2,591 | 4.89% | 5,760 | 255 | 4.43% |
+
+**mean-best-6 aggregation (arm B Stage 5), same thresholds:**
+
+| arm | qual pep | entrap pep | %ent | >=2 prot | ent >=2 | %ent |
+|---|---|---|---|---|---|---|
+| run q<=1% | 59,108 | 3,853 | 6.52% | 6,501 | 528 | 8.12% |
+| exp q<=1% | **35,446** | 141 | 0.40% | **4,249** | **0** | 0.00% |
+| exp q<=2% | 40,870 | 381 | 0.93% | 4,680 | 7 | 0.15% |
+| exp q<=5% | 48,663 | 1,161 | 2.39% | 5,280 | 53 | 1.00% |
+| exp q<=10% | 57,144 | 2,687 | 4.70% | 6,103 | 255 | 4.18% |
+
+**What it establishes.**
+
+1. **The scaling asymmetry, measured.** 2 files -> 82: run-q<=1% goes 30,325 -> 59,108 (+95%,
+   still climbing at file 82); exp-q<=1% goes 30,056 -> 30,167 (+0.4%, flat from ~file 40).
+2. **The failure mode, quantified.** run-q<=1% qualifies **528 entrapment proteins on >=2
+   peptides - 8.12% of its protein set.** Entrapment is known-absent, so every one is a false
+   qualification feeding the stratum. That is the 1.139% FDP's mechanism, not an inference.
+3. **mean-best-6 shifts the whole curve, it does not trade along it.** At exp-q<=1% it gives
+   +17.5% peptides and +12.7% proteins over max, still with ZERO entrapment proteins. Sharpest
+   form: **mb6@1% ~= max@2% in peptide count (35,446 vs 35,479) but 0 entrapment proteins
+   instead of 2.**
+4. **The identical entrapment PEPTIDE fractions across aggregations** (0.40 / 0.93 / 2.39% at
+   1/2/5%) are not a bug - both q estimates are calibrated, so q<=T admits the same false
+   FRACTION either way. mean-best-6's gain is better RANKING: more true peptides at the same
+   estimated FDR. The protein-level win then follows, because the extra peptides land on
+   proteins that already had one.
+5. **exp-q<=10% is past the knee** - entrapment peptide 4.89% -> protein 4.43%, i.e. the >=2
+   gate has stopped suppressing. 2-5% is the useful band on max; mb6 reaches the same
+   permissiveness lower.
+
+**Correction to an earlier reading in this file**: exp-q<=5% is NOT more permissive than
+run-q<=1% (44,171 vs 59,108 peptides). Brendan's claim was only that it is more permissive than
+exp-q<=1% while staying selective against non-repeating false positives, which is what the
+numbers show.
 
 **Prediction**: if the 1.156% is qualification-driven, C pulls it toward pass-1's 0.777% and the
 Stage 7 peak falls from 63.1 GB as the stratum shrinks. If FDP does NOT move, the over-optimism is
