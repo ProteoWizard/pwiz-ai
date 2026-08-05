@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4505](https://github.com/ProteoWizard/pwiz/issues/4505)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4533](https://github.com/ProteoWizard/pwiz/pull/4533) (opened 2026-08-05)
 
 ## Problem
 
