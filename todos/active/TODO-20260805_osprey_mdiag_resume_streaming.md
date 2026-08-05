@@ -87,14 +87,57 @@ it. That removes the duplicate join, the second I/O pass, the
 
 ## Regression Test
 
-- **Test name**: (filled in once written)
-- **Test project**: Osprey.Test | regression.ps1 mode | other
-- **Fails on master**: (pending)
-- **Passes on fix**: (pending)
+- **Test name**: `regression.ps1` **mode 5** ("Stage-5 rehydrate self-consistency")
+  plus `AssertBatchOverlayRejectsLeanStubs` in
+  `IOTest.TestRescoreHydrationStreamingMatchesResidentCompaction`
+- **Test project**: `pwiz_tools/Osprey/regression.ps1` + Osprey.Test
+- **Fails on master**: YES - verified before any C# change, on `Stellar`:
+  `Osprey exited 1`, `HydrateReconciliationOverlay: failed to overlay
+  .1st-pass.fdr_scores.bin for Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20`.
+  Log: `ai/.tmp/mode5-master-red.log`
+- **Passes on fix**: YES on `Stellar` - `mode5 (rehydrate entered + cache hits): PASS`,
+  `mode5 (rehydrate==straight): PASS`, and every pre-existing leg still green
+  (mode1 / mode2 / mode3 / mode4). Log: `ai/.tmp/mode5-fix-green.log`.
+  `-Dataset All` (which is where the mdiag datasets live - Stellar has
+  `ModelDiagnostics = $false`) pending.
 
-Attempt 1 shipped no test that reached `Rehydrate`, which is why a fully green
-run was a false green. The test is the first deliverable on this branch, not the
-last.
+Mode 5 invalidates ONLY the merge node (`Invoke-MergeOnlyInvalidation`: the blib +
+its `SecondPassFDR` stamp), which is the one state that enters
+`FirstJoinTask.Rehydrate`. It asserts the rehydrate marker line, the blib against
+the pristine straight-through one at 1e-9, and the re-emitted mdiag report against
+the same golden mode 1b uses - with **no** `OSPREY_ALLOW_UNFIXED_RESIDENT` opt-in.
+
+## Findings
+
+### The bug is bigger than the issue describes: this path is broken today, mdiag or not
+
+Running mode 5 on unmodified master fails on **Stellar**, which has
+`ModelDiagnostics = $false`. So `FirstJoin.Rehydrate` is broken for EVERY lean
+resume, not just mdiag ones:
+
+* Stage 5 takes the lean load unless `NeedsResidentPool`, publishing one EMPTY
+  stub list per scored file (`PerFileScoringTask.cs:728`).
+* `LoadOwnReconciliationBundle` handed those to the batch
+  `HydrateReconciliationOverlay`, whose `FdrScoresSidecar.TryRead` superset
+  contract cannot be met by a list of zero entries -> `InvalidDataException`,
+  `ExitCode=1`.
+* `--model-diagnostics` was the only thing that ever made this work, and only by
+  accident: `mdiagFullResume` forced the RESIDENT pool, which happened to give the
+  overlay real stubs. Removing that term without fixing the overlay is exactly why
+  attempt 1 hard-failed (issue comment, finding 2).
+
+No leg of the standing gate reached it: mode 2 deletes the `FirstPassFDR` stamp so
+FirstJoin RUNS, and mode 4 invalidates nothing so nothing demands FirstJoin's
+state. That is the coverage hole mode 5 closes.
+
+### Fix
+
+`LoadOwnReconciliationBundle` now picks the hydrate from what upstream actually
+loaded (zero resident stubs across all files == the lean load's signature) and
+routes the lean case through `HydrateCompactedStreaming`, loading each file's stubs
+from its own parquet and feeding the mdiag accumulator + passing-target tally from
+the per-file hook that already reads every sidecar. No second join, no second I/O
+pass, no `resumeFromSidecars` flag - the design the attempt-1 review recommended.
 
 ## Progress Log
 
@@ -102,3 +145,76 @@ last.
 
 Starting work on this issue. Attempt 2, after PR #4533 was closed unmerged.
 Branch created from master @ `df3e43364c`.
+
+### 2026-08-05 - Test red on master, fix in
+
+1. Added `Invoke-MergeOnlyInvalidation` (Regression/RegressionData.ps1),
+   `Test-LogMarker` + mode 5 (regression.ps1). Ran on master: RED, with the exact
+   `InvalidDataException` above.
+2. `FirstJoinTask.LoadOwnReconciliationBundle` + new
+   `StreamOwnReconciliationBundle`; `TallyPreCompaction` / `FeedModelDiagnostics`
+   moved to `ScoringTaskShared` (both hydrate callers share them now).
+3. Dropped `mdiagFullResume` from the Stage-5 gate, the guard, and
+   `ResidentPoolTrigger`; removed `MDIAG_FULL_RESUME` from
+   `ResidentPaths.KNOWN_UNFIXED` (the ratchet shrinking).
+4. Removed the `OSPREY_ALLOW_UNFIXED_RESIDENT=mdiag-full-resume` opt-in from
+   regression.ps1 mode 2 - the gate now sets it on NO leg.
+5. Skipped the OSPREY_DUMP_PERCOLATOR Stage 5 dump (with a warning naming the
+   reason) when the hydrate streamed, so it cannot emit post-compaction survivors
+   under a name that means pre-compaction.
+6. `Build-Osprey -RunTests -RunInspection`: 575/575, zero inspections.
+
+### 2026-08-05 - Stellar green, then `-Dataset All` found one real discrepancy
+
+`-Dataset Stellar`: every leg PASS, including both new mode-5 assertions.
+
+`-Dataset All` (the mdiag datasets - Stellar has `ModelDiagnostics = $false`):
+mode 5's blib and cache-hit assertions PASS on all four datasets, and the mdiag
+comparison flagged exactly ONE metric on each mdiag dataset:
+
+```
+diagnostics: featureCount golden=21 run=0 diff=2.100e+001 (tol 1e-009)
+```
+
+Everything else the report carries - `nTarget`, `nDecoy`, `fileCount`,
+`densityRatio.*`, `winFraction.*`, and pass-1 AND pass-2 `experiment` FDP /
+accepted / entrapmentRatio at the reported q - matched the straight-through
+golden at 1e-9. That is the streamed accumulator reproducing the resident
+reduction row for row.
+
+`featureCount` is **pre-existing resume behavior, not a property of the streamed
+report**, verified in source rather than assumed:
+
+* `FirstJoin.Rehydrate` passes `contributions: null` to
+  `LogFirstPassResultsAndDump` - unchanged by this branch (it is context, not a
+  `+` line, in the diff).
+* Both `ModelDiagnosticsData.Build` (batch) and
+  `ModelDiagnosticsData.Accumulator.Build` (streaming) build the model table
+  ONLY from `contributions` and leave it empty when it is null. The
+  accumulator's own doc says "null on a non-Percolator / rehydrated run -> no
+  Model tab".
+* So master's resident mdiag full resume produced `featureCount=0` too. A resume
+  adopts q-values from the sidecars and never trains Percolator, so there are no
+  feature contributions to report and none are persisted anywhere.
+
+Encoded rather than excluded: `Compare-DiagnosticsGolden -NoTrainedModel` PINS
+`featureCount` at 0 instead of skipping it, so the comparison stays total - a
+straight-through report that lost its feature view would still fail mode 1b, and
+a rehydrate that somehow claimed one would fail mode 5.
+
+### 2026-08-05 - `-Dataset All` fully green
+
+`Osprey regression PASSED` - all four datasets, every leg, with
+`OSPREY_ALLOW_UNFIXED_RESIDENT` set on NO leg (mode 2's opt-in is gone and
+nothing replaced it). Log: `ai/.tmp/mode5-all-green2.log`.
+
+Both new mode-5 assertions pass on all four datasets, and the mdiag comparison
+passes on the three that have `ModelDiagnostics` (StellarLibDecoy,
+StellarGenDecoyEntrap, Astral). Every pre-existing leg still green.
+
+Gates: `Build-Osprey -RunTests -RunInspection` 575/575 + zero inspections;
+`regression.ps1 -Dataset All` PASSED.
+
+**Next**: `/code-review max` on the branch BEFORE `gh pr create` (it is a
+user-triggered command, so Brendan runs it), fold any findings into the opening
+commits, then open the PR with `--label osprey` and the title prefixed `osprey:`.

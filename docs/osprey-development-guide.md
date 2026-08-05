@@ -748,12 +748,19 @@ Both are DEFAULT ON, and both now require naming their `ResidentPaths` token via
 `OSPREY_PASS2_QVALUE=transfer` regressed unnoticed for ten days.
 
 `OSPREY_ALLOW_UNFIXED_RESIDENT` takes a **list**, comma- or semicolon-separated
-(`mdiag-full-resume,compacted-entries-buffer`). A run can legitimately trip more than one
+(`hpc-merge,compacted-entries-buffer`). A run can legitimately trip more than one
 known-unfixed path at once, and a single-value variable made such a run impossible to perform:
-`regression.ps1` mode 2 needs `mdiag-full-resume` while a `OSPREY_STAGE6_STREAM_SURVIVORS=0`
-A/B needs `compacted-entries-buffer`, so the gate aborted on its own guard. Mode 2 now ADDS its
-token to whatever you set rather than replacing it. Every admitted path is still named
-individually - that, not the count, is what stops a blanket bypass.
+a `OSPREY_STAGE6_STREAM_SURVIVORS=0` A/B on a configuration that is already resident for its
+own reason needs both tokens, so naming one dropped the other and the run aborted on its own
+guard. Every admitted path is still named individually - that, not the count, is what stops a
+blanket bypass.
+
+**`regression.ps1` sets this on NO leg.** It used to name `mdiag-full-resume` on mode 2, which
+is gone with the token (#4505): `--model-diagnostics` on a full resume reported off the
+RESIDENT pool because FirstJoin skipped its score pass, and FirstJoin's rehydrate now streams
+that report from the per-file load it already performs. An ambient allowance on a standing
+gate can only mask the regression the gate exists to catch, so the whole gate now runs with
+nothing suppressed.
 
 | Name | Purpose |
 |---|---|

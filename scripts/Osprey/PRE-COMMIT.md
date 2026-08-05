@@ -68,7 +68,7 @@ checkout required -- it compares against a committed Osprey golden
 PRs.
 
 ```powershell
-# Stellar (mode 1 vs golden + mode 2 resume): the routine per-change gate
+# Stellar (mode 1 vs golden, mode 2 resume, mode 5 Stage-5 rehydrate): the routine per-change gate
 pwsh -File ./pwiz_tools/Osprey/regression.ps1 -Dataset Stellar
 
 # Stellar + Astral: before a behavior/perf-sensitive merge
