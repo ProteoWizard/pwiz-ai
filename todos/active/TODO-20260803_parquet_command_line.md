@@ -70,6 +70,47 @@ refused. The remaining `LoadFrom` in shipping code is
 never had `loadFromRemoteSources` - not a regression, but `UnsafeLoadFrom` is
 the one-word fix if it ever surfaces.
 
+**Parquet.Net and the thread pool.** Nothing outside the library can redirect
+its continuations: it uses `ConfigureAwait(false)` throughout, which opts out of
+both `SynchronizationContext` and `TaskScheduler` capture. What can be removed
+is its *need* for the pool. A `FileStream` not opened with
+`FileOptions.Asynchronous` - which is what `FileSaver` gives - implements
+`WriteAsync` by queueing the synchronous write to the pool, so every row group
+cost a thread hop and bought no asynchrony. Handing Parquet.Net a
+`SynchronousStream` drops that. Measured writing 3 row groups, recording which
+thread ran each stream operation:
+
+- raw `FileStream`: 3 pool operations across 2 pool threads, scaling with row groups
+- `SynchronousStream`: 1 pool operation on 1 pool thread, constant
+
+The remaining hop is inside `ParquetWriter.Dispose`, which writes the footer.
+It is identical with `CompressionMethod.None`, so compression is not the cause,
+and it is not reachable from outside: `ParquetWriter` implements only
+`IDisposable` - no `IAsyncDisposable`, no `Finish`/`Close`/`WriteFooter` - so
+the footer cannot be written before `Dispose`, and `Dispose` returns `void` and
+therefore has to bridge to the pool and block rather than await.
+
+**Asynchronous file I/O would not have helped.** Measured writing 8 row groups
+x 1M rows x 8 int columns (246 MB) four ways - plain `FileStream`, plain +
+`SynchronousStream`, `FileOptions.Asynchronous`, and async + wrapper - all four
+land within 2% of each other, at both `CompressionMethod.None` (~3.35 s) and
+`Zstd` (~4.3 s). Nothing overlaps: Parquet.Net awaits each write and the export
+blocks on each column, so the writer thread has no other work to do while a
+write is in flight. File I/O is also not the cost - dumping 256 MB of bytes
+straight to a `FileStream` takes 64 ms, against 3414 ms to write 246 MB of
+parquet, so encoding is ~98% of the export.
+
+Flipping `FileSaver` to `FileOptions.Asynchronous` would instead be a
+regression for everything else: synchronous `Write` on such a stream is
+emulated through overlapped I/O and measured ~6x slower (64 ms -> 379 ms for
+256 MB), and nearly every other `FileSaver` caller writes synchronously.
+
+No concurrency was lost. The old code passed a raw `FileStream`, which has one
+position and is not thread-safe, so writes were necessarily sequential; only
+the thread they ran on changed. The overlap that matters - the `QueueWorker`
+building the next chunk while the writer thread writes the previous one - is
+untouched.
+
 ## The Parquet Export Hang
 
 Exporting to parquet hung on roughly one run in eight in Debug and one in three
