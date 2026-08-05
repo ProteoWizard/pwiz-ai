@@ -180,20 +180,45 @@ Stellar mode4 (warm re-run all cached): PASS
 That is the condition the design named - it is what keeps arms A and B comparable against this
 newer binary. Log: `ai/.tmp/regression-stellar-armc.log`. NOT yet pushed, no PR.
 
-**To run arm C** once the library run frees the machine:
+**CHAINED 2026-08-05 03:12** - `ai/.tmp/chain-armc.ps1` (PID 6116) polls for `Osprey.exe` to
+exit, logs what the predecessor actually did (a missing `DONE` line is reported, so a failed
+library run does not read as a completed one), then launches arm C. The exe is **PINNED** to
+`D:\test\osprey-runs\_bin\armc-qualifyexp\Osprey.exe` rather than auto-snapshotted at launch:
+the snapshot would otherwise be taken hours from now and any rebuild before then would silently
+change what arm C runs. Verified that binary carries the gate
+(`OSPREY_PROTEIN_COMPACT_QUALIFY` in `Osprey.Core.dll` + `Osprey.dll`, `qualified by` in
+`Osprey.Tasks.dll`) - the strings are UTF-16 in .NET metadata, so a plain `grep`/`strings -el`
+finds NOTHING and reads as a missing feature; check with a control string.
+
+**Two errors `-WhatIf` caught before the 8-hour run**, both from reconstructing arm A's config
+instead of reading its `run.log`:
+* `-LibraryDir D:\test\AstralTest-TargetDecoyLibraries` + `-Ratio 1.0` resolves to
+  `target+decoy+entrapment`, which is MIKE'S library - arm A used `-gated-no-il`. With
+  `-LinkFrom` hard-linking arm A's Stage 1-4 parquets, that pairs one library's parquets with
+  another library for Stage 5+, silently.
+* Omitting `-FdrBenchPass` yields `both`, and `--fdrbench-pass 1` forces the RESIDENT
+  first-pass pool that OOMs at 82 files. Arm A ran `fdrbench=2`.
+
+**To run arm C** manually (what the chain does) once the library run frees the machine:
 
 ```
 Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -Pass2Mode protein-compact -PickLda \
+  -QualifyBy experiment -FdrBenchPass 2 \
   -DataDir 'D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\mzml' \
-  -LibraryDir 'D:\test\AstralTest-TargetDecoyLibraries' -Tag '-qualifyexp' \
-  -LinkFrom 'D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\runs\seaad-82files-libdecoy-r1.0-protein-compact-picklda'
+  -LibraryDir 'D:\test\AstralTest-TargetDecoyLibraries\target+decoy+entrapment-gated-no-il' \
+  -LinkFrom 'D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\runs\seaad-82files-libdecoy-r1.0-protein-compact-picklda' \
+  -Exe 'D:\test\osprey-runs\_bin\armc-qualifyexp\Osprey.exe'
 ```
 
-with `OSPREY_PROTEIN_COMPACT_QUALIFY=experiment` exported. `-LinkFrom` arm A is valid: the
-qualification arm is deliberately absent from `PerFileScoring`'s validity key (Stage 1-4 is
-scoring, upstream of any FDR), so only Stage 5+ re-runs. Confirm the banner prints
-`qualified by experiment q-value` - that line exists precisely so this cannot be run
-unknowingly on the default arm.
+Verified field-by-field against arm A's `run.log` START line - every parameter is arm A's
+except `-QualifyBy`. Do NOT export `OSPREY_PROTEIN_COMPACT_QUALIFY` by hand: `-QualifyBy` is a
+first-class runner parameter now, and the module CLEARS the variable before re-exporting it
+from the argument, so a hand-exported value is wiped. Out dir gets `-qualifyexp` automatically.
+
+`-LinkFrom` arm A is valid: the qualification arm is deliberately absent from
+`PerFileScoring`'s validity key (Stage 1-4 is scoring, upstream of any FDR), so only Stage 5+
+re-runs. Confirm the banner prints `qualify : EXPERIMENT-wide q` - that line exists precisely
+so this cannot be run unknowingly on the default arm.
 
 **Prediction**: if the 1.156% is qualification-driven, C pulls it toward pass-1's 0.777% and the
 Stage 7 peak falls from 63.1 GB as the stratum shrinks. If FDP does NOT move, the over-optimism is
