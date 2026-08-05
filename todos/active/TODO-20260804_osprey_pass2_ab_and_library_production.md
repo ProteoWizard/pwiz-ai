@@ -168,6 +168,33 @@ default / non-empty on experiment. Pre-commit gate green: 575 tests, zero inspec
 multi-hour jobs and arm A's protein-compact peaked at 63.1 GB of 64 GB, with the Stage 7 peak
 NOT covered by #4530. Run them in sequence.
 
+**GATE GREEN (2026-08-05)**: `regression.ps1 -Dataset Stellar` with the flag OFF, on branch
+`Skyline/work/20260805_osprey_protein_compact_qualify` (commit `6c1e3b8656`):
+
+```
+Stellar mode1 (vs golden): PASS      Stellar mode2 (resume cache hits): PASS
+Stellar mode3 (HPC chain==straight): PASS   Stellar mode2 (resume==straight): PASS
+Stellar mode4 (warm re-run all cached): PASS
+```
+
+That is the condition the design named - it is what keeps arms A and B comparable against this
+newer binary. Log: `ai/.tmp/regression-stellar-armc.log`. NOT yet pushed, no PR.
+
+**To run arm C** once the library run frees the machine:
+
+```
+Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -Pass2Mode protein-compact -PickLda \
+  -DataDir 'D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\mzml' \
+  -LibraryDir 'D:\test\AstralTest-TargetDecoyLibraries' -Tag '-qualifyexp' \
+  -LinkFrom 'D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\runs\seaad-82files-libdecoy-r1.0-protein-compact-picklda'
+```
+
+with `OSPREY_PROTEIN_COMPACT_QUALIFY=experiment` exported. `-LinkFrom` arm A is valid: the
+qualification arm is deliberately absent from `PerFileScoring`'s validity key (Stage 1-4 is
+scoring, upstream of any FDR), so only Stage 5+ re-runs. Confirm the banner prints
+`qualified by experiment q-value` - that line exists precisely so this cannot be run
+unknowingly on the default arm.
+
 **Prediction**: if the 1.156% is qualification-driven, C pulls it toward pass-1's 0.777% and the
 Stage 7 peak falls from 63.1 GB as the stratum shrinks. If FDP does NOT move, the over-optimism is
 not qualification-driven and the self-admission asymmetry becomes the prime suspect.
@@ -325,8 +352,9 @@ Build toolchain: IntelliJ's bundled JBR 21.0.9 + Maven 3.9.9 (JDK 17 cannot buil
       build tree
 - [ ] **Settle the library question** - search 82 files against Mike's delivered library, or the
       20-file `-itol` probe
-- [ ] **Arm C** - experiment-wide qualification (design above), gated, Stellar byte-identity
-      first
+- [x] **Arm C implemented + gated** - `OSPREY_PROTEIN_COMPACT_QUALIFY`, Stellar byte-identity
+      PASS on all 5 modes with the flag off
+- [ ] **Run arm C** - blocked on the library run finishing (memory, not correctness)
 - [ ] Merge Carafe #10 (retarget to `main` BEFORE deleting #9's branch, or #10 auto-closes
       unreopenably)
 - [ ] Regenerate the Astral library with the fixed Carafe once `-itol` is settled
