@@ -247,6 +247,73 @@ v26.1.1.215` while the binary is the pinned 26.1.1.217 - that is `-LinkFrom` set
 `OSPREY_VERSION_OVERRIDE` from the source run so the linked artifacts validate. It changes the
 stamp, not the code.
 
+### ARM C COMPLETE 2026-08-05 11:38 - the over-optimism WAS qualification-driven
+
+Exit 0, 285 min. Same library, same files, arm A's Stage 1-4 parquets via `-LinkFrom`, same
+pick, same aggregation. ONE changed variable.
+
+Both arms scored through FDRBench identically (`fdrbench-patched.jar`, `-level precursor
+-score score:1 -entrapment_label _p_target`), metric = `combined_fdp` at the last row with
+q <= 0.01:
+
+| | arm A (run q) | arm C (experiment q) |
+|---|---|---|
+| **true FDP @ 1% reported q** | **1.139%** | **0.426%** |
+| discoveries @ 1% reported q | 37,056 | 38,477 |
+| discoveries @ true 1% FDP | 35,484 | **42,552** (+19.9%) |
+| library spectra written | 37,078 | 38,500 |
+| protein groups @ 1% FDR | 5,022 | 4,545 |
+| reconciled survivors into Stage 7 | 86,581,597 | 43,461,681 |
+
+**Arm A reproduces at 1.139% vs the 1.156% recorded on 2026-08-04** - within 0.02pp, which is
+what anchors the comparison. Not an exact reproduction: this used the patched jar and the
+earlier session's jar choice is not recorded.
+
+The prediction was that C would pull the FDP toward pass-1's 0.777%. It went PAST it to 0.426%,
+and it does not trade discoveries for calibration - MORE reported at 1% nominal (38,477 vs
+37,056) at less than half the true FDP, and ~20% more at a genuine 1% true FDP.
+
+Memory, per `[TASK]` window:
+
+| stage | arm A floor / peak | arm C floor / peak | duration A -> C |
+|---|---|---|---|
+| PerFileScoring | 24.4 / 33.7 GB | (linked) | 254.5 min / - |
+| FirstPassFDR (join) | 26.8 / 48.2 GB | 20.7 / 46.5 GB | 69.1 -> 72.8 min |
+| PerFileRescoring (split) | 37.3 / 52.9 GB | **20.0 / 44.3 GB** | 158.5 -> 188.7 min |
+| SecondPassFDR (join) | 38.3 / **63.1 GB** | 41.5 / **53.7 GB** | 27.6 -> 23.7 min |
+
+Stage 7 peak -9.4 GB, attributable to the stratum since #4530 does not touch Stage 7.
+
+**Three things the simple story does NOT explain** - do not paper over these:
+* The map-back cost 1381s -> 1277s (-7.5%) for HALF the survivors, so it is not
+  O(survivors)-dominated the way its memory is. Relevant to any #4526-style follow-up.
+* Arm C's Stage 7 FLOOR is higher (41.5 vs 38.3 GB) while its peak is lower.
+* Arm C's Stage 6 ran LONGER (188.7 vs 158.5 min) despite half the stratum.
+
+**Arm C is conservative, not calibrated.** 0.426% true at a 1% nominal threshold overshoots in
+the safe direction, and the 42,552-at-true-1% figure says real discoveries are being left on
+the table. That is the opening for the threshold sweep below.
+
+### NEXT: sweep the experiment-wide qualification threshold (Brendan, 2026-08-05)
+
+The two knobs scale differently, which is the whole point:
+* per-run q union: 0.83% false at 1 run -> **12.95% at 82**. Unbounded in N.
+* experiment-wide q: 0.79% and **flat** in N.
+
+So exp-q at 2% or 5% could be MORE permissive than run-q@1% while remaining better controlled,
+because raising a flat threshold is bounded whereas the union's false fraction grows with files.
+Mike has noted DIA-NN uses a 5% first-pass cut-off, possibly for the same reasoning that put
+per-run q at 1% here - but the scaling argument says the experiment-wide axis is the one that
+can afford permissiveness.
+
+Needs a threshold decoupled from `config.ExperimentFdr` (which also governs the REPORTED set and
+must not move): a new `OSPREY_PROTEIN_COMPACT_QUALIFY_FDR`, defaulting to `ExperimentFdr`.
+
+**Do the cheap thing first**: have the Stage-5 accumulator log the qualifying-peptide count at
+several thresholds (1/2/5/10%) in EVERY run. It already sees each row's experiment q, so this is
+a few lines and no extra run, and it turns the next arm into a free measurement of every
+candidate threshold's pool size. Pick the arms to run from that, rather than guessing 2% and 5%.
+
 **Prediction**: if the 1.156% is qualification-driven, C pulls it toward pass-1's 0.777% and the
 Stage 7 peak falls from 63.1 GB as the stratum shrinks. If FDP does NOT move, the over-optimism is
 not qualification-driven and the self-admission asymmetry becomes the prime suspect.
