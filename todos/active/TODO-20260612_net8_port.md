@@ -3230,5 +3230,140 @@ CI too). Previously 17 suites / 474 tests.
    `Pwiz.Data.TraData`, `Pwiz.Vendor.Bruker.PrmScheduling` and `Pwiz.Tools.BiblioSpec` are still
    unmeasured.
 
+## 2026-08-05b - coverage re-run, the perf-test cascade explained, master merge, and a silent build.bat
+
+### CI on `2929103309` is green, and all four new suites really ran
+
+Build #285 of `ProteoWizard_CoreWindowsNet`: **584 reported / 583 passed / 0 failed**. Per-suite counts
+in the agent log are identical to local and sum to **626 in 21 suites**, so `TraData.Tests` (4),
+`Bruker.PrmScheduling.Tests` (3), `BiblioSpec.Tests` (142) and `MsConvertGUI.Tests` (3) all executed on
+the agent, and it did unpack `inputs.tar.bz2` through the newly imported `ExtractTestData.targets`.
+That was the one genuinely uncertain thing from the previous session.
+
+**The 626-vs-584 gap is not a missing suite - it is TeamCity aggregating by test name.**
+`PrecursorAndChargeFilterTests.ChargeStatePredictor` carries 43 `[DataRow]` rows under one name, so 42
+collapse into a single reported test. Verified by parsing the run's `.trx` files: 626 results, 582
+distinct class+method names, and the collapse is entirely inside `Analysis.Tests`. Worth folding those
+43 rows into one table-driven `[TestMethod]` (also the house preference over long `[DataRow]` lists),
+which would make the CI count honest as a side effect.
+
+### Coverage re-run: 77.6% over 20 assemblies, and BiblioSpec is the new frontier
+
+`build.bat Release --i-agree-to-the-vendor-licenses --coverage`, 21 suites, 626 tests, 0 failures.
+Snapshot `pwiz-sharp/TestResults/coverage.dcvr`; parser rewritten at `ai/.tmp/parse_coverage.py` (now
+takes `--baseline` so future runs diff assembly percentages directly).
+
+**Overall 77.6% (36,119/46,553).** Not comparable to the previous 78.2% (27,449/35,109): the measured
+surface grew ~11.4k statements because three assemblies entered the report for the first time.
+
+| assembly | now | prev | note |
+| --- | --- | --- | --- |
+| Pwiz.Tools.BiblioSpec | 75.5% (9064/12006) | - | newly measured, now the largest assembly in the report |
+| Pwiz.Data.TraData | 73.4% (681/928) | - | newly measured |
+| Pwiz.Vendor.Bruker.PrmScheduling | 41.3% (90/218) | - | newly measured, lowest real assembly |
+| Pwiz.Data.MsData | 86.3% | 83.7% | +2.6, the new suites exercise it |
+| Pwiz.Analysis | 81.5% | 80.8% | last session's ports |
+| Pwiz.Vendor.UNIFI | 60.1% | 61.6% | only regression; unexplained, small |
+
+Never-executed: **380 statements over 70 types** (was 172/33 pre-BiblioSpec), of which BiblioSpec is
+194. The new top of the list is all BiblioSpec: `MzTabReader` **1 of 280 statements**,
+`LoadSpecLibFromParquetAsync` 91, `CompositeReadStream` 33, `AlphaPepDeepReader` 6/74, `SqliteRoutine`
+18/102. The parquet loader is notable - it is exactly the DIA-NN path whose faithful-port divergences
+reddened CI #57, covered by Skyline's `DiannSearchTest` but by nothing in the pwiz-sharp suites.
+
+**`MzTabReader` is an upstream gap, not a porting oversight.** cpp has `mzTabReader.cpp` but no mzTab
+fixture anywhere in `pwiz_tools/BiblioSpec/tests/` either, so there is no cpp test to port and no
+reference output to check against. Testing it means authoring an mzTab fixture from the spec.
+
+### The 18 perf-test failures are one leaked stream, and the branch did not cause it
+
+`ProteoWizard_SkylineWindowsNetPerfTutorialTests` #26 (`04fb85fead`): 115 tests, 18 failed, every one
+"Streams left open". **All 18 report the identical stream** - globalIndex 55643469,
+`PerfMinimizeResultsTest\...v1.skyd` - including tests that never touch that file. The end-of-test
+check is process-global, so one leak fails every subsequent test in the process. Only
+`TestMinimizeResultsPerformance` is a real failure; 17 are collateral. (Same shape as the ~27-test
+cascade in `TODO-20260715_open_doc_from_zip.md`.)
+
+**Root cause is a race in Skyline's own code.** The pool's event log:
+
+```
+02:35:54.230  DisconnectWhile   FileSaver.Commit <- ChromatogramCache.OptimizeToPath <- SkylineWindow.OptimizeCache
+02:35:54.234  Connect           ChromatogramCache.CallWithStream <- GraphChromatogram.DisplayPeptides <- timer tick
+```
+
+`SaveDocument(includingCacheFile: true)` runs `OptimizeCache` on the LongWaitDlg worker thread;
+`ChromatogramCache.cs:1533` calls `fs.Commit(ReadStream)` (disconnects the pooled `.skyd`), and `:1535`
+returns a **new** cache via `ChangeCachePath`. `LongWaitDlg.ShowDialog` keeps pumping messages, so a
+`GraphSpectrum.UpdateManager` timer tick reaches `ReadTimeIntensities` -> `CallWithStream` ->
+`GetConnection`. `ConnectionPool` locks on `this`, so that call waits the 4 ms and reconnects the
+instant `DisconnectWhile` releases, reviving the old cache's stream just before the document swaps to
+the new one. Nothing owns the old instance afterwards, so nothing ever disconnects it.
+
+**Not caused by this branch.** The 15 commits between the last test-producing perf build (#24
+`c48d6bd0`, 115/115 green) and #26 touch **zero files** under `pwiz_tools/Skyline` or
+`pwiz_tools/Shared` - a path-filtered `git log` over the range is empty. A pwiz-sharp change can shift
+timing but cannot create this path. Builds #25 and #23 were red with no test data at all
+(infrastructure, before the test step). Caveat: only #21/#22/#24 produced test data recently, so a long
+green history for this specific race cannot be shown.
+
+**Master does not fix it either** (checked at Matt's request): none of the 37 incoming commits touch
+`ChromatogramCache`, `GraphChromatogram`, `UtilIO`/`ConnectionPool` or the leak check, and the one
+race-adjacent file master did change, `SkylineFiles.cs`, only gained a `ShowOpenFileDialog` factoring
+at ~line 188. Perf retriggered on the merged head as build 4122155 to measure how often it reproduces.
+
+### Merged master, 37 commits (`611cd6c465`)
+
+No C++ deltas this cycle, so no cpp->C# porting leg; incoming work is Osprey, the AI Connector
+native-dialog automation, and a batch of intermittent-test fixes. 5 conflicts, all csproj, resolved to
+ours. Two things globbing could not supply, carried over by hand:
+
+- **`SkylineTool` ProjectReference into `TestPerf` and `TestUtil`.** Master added `McpConnectorTest.cs`
+  to TestUtil, which our globs now compile, and it needs SkylineTool. That project already
+  multi-targets, so the reference is unconditional.
+- **The RT-precision fix (`72e0401523`) ported into the sandbox `MsDataFileImpl`.** `GetStartTime`
+  converted a value already recorded in minutes to seconds and back, which is not an identity in
+  floating point. The sandbox is a mechanical port, so it takes every behavioural change the original
+  gets: `param.Units == CVID.UO_minute` -> `param.ValueAs<double>()`.
+
+Verified: all seven net8 projects build with 0 errors; `TestFullScanProperties` and `TestSkylineMcp`
+pass. The latter is what caught the merge - it pins `EXPECTED_ZIP_VERSION` against the installed
+`SkylineAiConnector.zip`, and master bumped both.
+
+### build.bat was skipping its entire build step, silently (`d47eca4cb1`)
+
+The merge verification "passed" against binaries dated **Jul 23**. All six `.bat` entry points were
+stored **LF-only**. cmd.exe tracks its position in a batch file by byte offset and that accounting
+drifts on LF files, so after enough `call :label` returns the label search starts from the wrong place:
+
+```
+The system cannot find the batch label specified - build_one     (x7, one per BUILD_TARGET project)
+```
+
+`build.bat` skipped `dotnet build` for all seven projects, staged whatever was already in
+`bin\Release`, ran the tests against it, and **exited 0**. The earlier labels resolve fine
+(`:build_hardklor` and `:restore_one` both ran), which is what makes it so quiet - the failure needs a
+few calls of accumulated drift. CI was immune because those checkouts have `core.autocrlf=true`; this
+worktree holds the files as originally authored. Fixed with `*.bat text eol=crlf` in `.gitattributes`
+beside the existing `*.sh` rule, so it no longer depends on anyone's git config. The `.bat` blobs
+normalize identically, so the commit is the attribute alone. After the fix `dotnet build` runs per
+project, 0 errors x7.
+
+Also `121edcc4a1`: CA1859 on `SpectrumListWrapperTests.MsLevelOf`, introduced by `04fb85fead` and
+visible on CI; typed to `SpectrumListSorter` (its only call site). Analysis.Tests back to 0 warnings.
+
+**Open / next:**
+1. Perf build 4122155 on the merged head - does the `TestMinimizeResultsPerformance` stream leak
+   reproduce? If it does, the fix is to stop `GraphChromatogram`'s read path reviving a cache that
+   `OptimizeCache` is handing off. Pre-existing Skyline code, outside the port's scope, so it is Matt's
+   call whether to fix here or file it.
+2. `MzTabReader` coverage (1/280) - needs an authored mzTab fixture, since cpp has none.
+3. Re-run coverage after any further suite changes; the 08-05b numbers are the first to include
+   BiblioSpec/TraData/PrmScheduling.
+4. Fold the 43 `ChargeStatePredictor` `[DataRow]` rows into one table-driven test.
+5. Carried over: cold Bruker resolve unmeasured on CI; the `NET8-PORT TEMP` blocks in
+   `scripts/misc/vcs_trigger_and_paths_config.py` before merge; `Bruker.Tests/Reference/`; the
+   `Sciex.Tests` / `BiblioSpec` gate inconsistency (they gate on `IAgreeToVendorLicenses` where the
+   products now gate on `NativeVendorsAvailable`).
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260805_net8_coverage_blib.md` before starting work.
