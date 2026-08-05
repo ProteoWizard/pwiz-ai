@@ -1,13 +1,13 @@
-# TODO-20260805_osprey_mdiag_resume_streaming.md
+﻿# TODO-20260805_osprey_mdiag_resume_streaming.md
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260805_osprey_mdiag_resume_streaming`
 - **Base**: `master` (at `b554ce6f0d`, i.e. after #4530)
 - **Created**: 2026-08-05
-- **Status**: In Progress
+- **Status**: ABANDONED - attempt 1 failed, see below
 - **GitHub Issue**: [#4505](https://github.com/ProteoWizard/pwiz/issues/4505)
 - **Module**: `osprey`
-- **PR**: [#4533](https://github.com/ProteoWizard/pwiz/pull/4533) (opened 2026-08-05)
+- **PR**: [#4533](https://github.com/ProteoWizard/pwiz/pull/4533) (CLOSED UNMERGED 2026-08-05)
 
 ## Problem
 
@@ -83,3 +83,33 @@ golden, which is the direct byte-identity check for this change.
 Ported the streamer, dropped the gate/token/hatch. `regression.ps1 -Dataset Stellar`: all five
 legs PASS with the exact golden blib and NO hatch set - previously mode 2 could not run without
 naming `mdiag-full-resume`.
+
+### 2026-08-05 - ABANDONED, closed unmerged
+
+`/code-review max` found the approach breaks the path it exists to fix. Five independent
+finder angles converged on it; both decisive claims were re-verified against source here.
+
+**It hard-fails the mdiag full resume.** Dropping `mdiagFullResume` from `needsResidentPool`
+routes the run onto the LEAN loader, which publishes EMPTY per-file stub lists
+(`PerFileScoringTask.cs:724`). `FirstJoin.Rehydrate` then hands those to
+`OverlayFirstPassSidecar`, whose superset contract cannot be met against 0 entries;
+`RescoreHydration.cs:562` throws and sets ExitCode 1. The new streaming method sits 15 lines
+after the bundle load and is never reached.
+
+**And the gates never executed the new code**, which is why a fully green run meant nothing.
+`Invoke-ResumeInvalidation` deletes `*.FirstPassFDR.osprey.task` - the VALIDITY STAMP - so
+FirstJoin RUNS rather than rehydrating, which `regression.ps1:1133` asserts outright via
+`-ExpectRan @('FirstPassFDR','SecondPassFDR')`. `resumeFromSidecars` is never true there.
+
+**The lesson worth carrying beyond this branch**: a green `-Dataset All` is evidence only for
+the paths the harness actually enters. This TODO and the PR description both asserted "mode 2
+IS the --model-diagnostics full-resume leg" - that was never checked against
+`Invoke-ResumeInvalidation`, and it was false. Removing the mode-2 opt-in also looked like
+proof, but the opt-in stopped being needed because the guard TRIGGER was deleted, which is
+indistinguishable from the outside.
+
+Findings, the corrected provenance note on the parked #4437 branch (it neither applies nor is
+sufficient), and the recommended design - give `HydrateReconciliationOverlay` the same
+`onStubsHydrated` hook the streaming twin already uses - are recorded on
+[#4505](https://github.com/ProteoWizard/pwiz/issues/4505). Start attempt 2 from the issue, via
+`/pw-startissue 4505`, NOT from this branch.
