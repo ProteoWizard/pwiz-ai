@@ -651,4 +651,7 @@ line - I called Stage 1-4 an O(files) leak on that basis and was wrong.
 measures it, and I still put 38,773 next to 44,581 before checking which library each used.
 
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260804_osprey_pass2_ab.md` before starting work.
+`ai/.tmp/handoff-20260805_osprey_qualification_sweep.md` before starting work. It carries the
+night plan (one arm: protein-compact + mean-best-6 + QualifyBy experiment), the launch and
+verification protocol, and the gotchas. The older
+`ai/.tmp/handoff-20260804_osprey_pass2_ab.md` is superseded.
