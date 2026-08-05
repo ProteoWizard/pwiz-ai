@@ -4,9 +4,10 @@
 - **Branch**: `Skyline/work/20260507_indexer_exclusion_test`
 - **Base**: `master`
 - **Created**: 2026-05-07
-- **Status**: In Progress
-- **GitHub Issue**: [#4190](https://github.com/ProteoWizard/pwiz/issues/4190)
-- **PR**: [#4191](https://github.com/ProteoWizard/pwiz/pull/4191)
+- **Status**: Completed (abandoned — see Resolution)
+- **GitHub Issue**: [#4190](https://github.com/ProteoWizard/pwiz/issues/4190) (still OPEN)
+- **PR**: [#4191](https://github.com/ProteoWizard/pwiz/pull/4191) (**closed 2026-06-23 without
+  merging**)
 
 ## Motivation
 
@@ -75,3 +76,34 @@ Run the test on a clean machine and confirm it passes (no false positives, no wa
 - An *activity*-style probe (vs. config-style) for third-party AV / backup / kernel filter
   drivers — config-querying covers ~90% of realistic culprits; the long tail can be added
   later if needed.
+
+## Resolution
+
+### 2026-06-23 — Abandoned (PR closed unmerged)
+
+PR [#4191](https://github.com/ProteoWizard/pwiz/pull/4191) ("Add more checks for potential
+test-interfering file system tasks (e.g. OneDrive, DropBox, Windows search indexer)") was **closed
+without merging** on 2026-06-23, with no review comments recorded on the PR explaining why. None of
+this work reached master.
+
+GitHub issue [#4190](https://github.com/ProteoWizard/pwiz/issues/4190) **remains open**, so the
+underlying problem is still live: `AntivirusExclusionTest` covers only the Skyline runtime build
+output directory (`.`), not the persistent test-data download cache under
+`{DownloadsPath}\Tutorials` and `{DownloadsPath}\Perftests` where the `.blib` files that actually
+hung `ConsoleSetLibraryTest` live, and nothing checks non-AV culprits at all.
+
+**Worth salvaging if this is picked up again** — the design work here is the valuable part:
+- The three added check types (cloud-storage placeholder attributes covering OneDrive
+  Files-on-Demand / Dropbox Smart Sync / Google Drive File Stream / Box Drive; OneDrive sync-root
+  registry walk; `ISearchCrawlScopeManager::IncludedInCrawlScope` via inline `[ComImport]` with
+  GUIDs and vtable order verified against the Windows SDK IDLs).
+- The **warn-only** staging decision: new checks warn rather than fail until the whole nightly fleet
+  is brought up to spec, with `warnOnly: true` flipping to `false` once it is. The original
+  AV-on-cwd check stays a hard `Assert.Fail`.
+- The deliberate choice **not** to check `{DownloadsPath}` itself — when `SKYLINE_DOWNLOAD_PATH` is
+  unset that is the user's real Downloads folder, which is reasonable to leave un-excluded.
+- The verification harness design in `ai/.tmp/Verify-AntivirusExclusionTest.ps1` (one-shot, never
+  committed, so it is likely gone): each probe sets up a failing condition, asserts the expected
+  `# WARNING` line appears, and tears down.
+
+Closing this TODO reflects the PR's status, not a decision that #4190 is resolved.

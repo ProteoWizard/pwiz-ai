@@ -3,7 +3,9 @@
 - **Branch:** `Skyline/work/20260713_exception_dispatch_info`
 - **Base:** `master`
 - **Created:** 2026-07-13
-- **Status:** Active
+- **Status:** Completed
+- **PR:** [#4416](https://github.com/ProteoWizard/pwiz/pull/4416) (**merged 2026-07-17** as
+  `e02511b36e`)
 
 ## Objective
 
@@ -59,4 +61,21 @@ No new tests. No existing test depended on the `TargetInvocationException` wrapp
 - [x] Implementation complete
 - [x] Build clean
 - [x] Tests pass (UtilTest, ParallelEx tests, TestToolService)
-- [ ] PR created
+- [x] PR created
+
+## Resolution
+
+### 2026-07-17 — Merged
+PR [#4416](https://github.com/ProteoWizard/pwiz/pull/4416) ("Used ExceptionDispatchInfo to rethrow
+stored exceptions") merged to master as `e02511b36e6cb501d14ae2f3b3288fca147fc55b`. Opened and
+merged by Nick, who requested the change.
+
+`ExceptionUtil.WrapAndThrowException` is now `ExceptionDispatchInfo.Capture(x).Throw()`, so every
+exception type and the original throw-site stack trace survive a cross-thread rethrow instead of
+collapsing to `TargetInvocationException` outside the old five-type list. The two other copies of
+that type-list logic (`ParallelEx.LoopWithExceptionHandling`, `SharedBatchTest/Helpers`) and the
+consumers that existed only to undo the wrapping were removed with it.
+
+**Note on this TODO's bookkeeping**: no PR reference was ever recorded here and the checklist still
+read `- [ ] PR created` three weeks after the merge. Found by matching the branch name against the
+PR list, not by any reference in the file — a title/body PR search does not match head refs.

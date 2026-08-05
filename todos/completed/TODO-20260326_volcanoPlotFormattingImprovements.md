@@ -2,7 +2,8 @@
 title: Independent Per-Trait Formatting for Volcano/Abundance Plots
 branch: Skyline/work/20260326_volcanoPlotFormattingImprovements
 repo: pwiz2
-status: in_progress
+status: completed
+pr: https://github.com/ProteoWizard/pwiz/pull/4148
 ---
 
 ## Objective
@@ -127,3 +128,35 @@ REMAINING:
 - Pre-existing inspection noise: QuickInspection flagged 3 ReSharper "ambiguous reference
   textTemplateFile.ToolTip" errors in `FileUI/ExportMethodDlg.cs` — NOT touched by this work (came in
   via an earlier commit/merge on the branch). Out of scope here, but watch for TeamCity CodeInspection.
+
+## Resolution
+
+### 2026-07-21 — Merged
+PR [#4148](https://github.com/ProteoWizard/pwiz/pull/4148) squash-merged to master as
+`5ce0233f1d0bc10c26221d2c13b568306625b982`. Merged from head branch
+`Skyline/work/20260326_volcanoPlotFormattingImprovements_v2` — the `_v2` branch carrying the
+last-match-wins rework, not the original branch named in this file's frontmatter.
+
+Each formatting trait (color, symbol, size, label) is now independently nullable and resolved on
+its own: `DotPlotUtil.ResolvePointFormat` overwrites per matching rule so the **last** match wins
+per trait, giving Brendan the CSS-cascade model (define a general rule, refine with a more specific
+rule below it). `Labeled` stays an order-independent OR. Both panes — `FoldChangeVolcanoPlot` and
+`SummaryRelativeAbundanceGraphPane` — share the resolution path.
+
+Back-compat holds because existing XML carries non-null `symbol_type`/`point_size`, so the first
+match resolves every trait and later matches cannot change it. The feature was unreleased when the
+precedence flipped, so the change cost nothing downstream.
+
+The three `REMAINING` items above were closed out by the merge itself (TeamCity green, review
+obtained). Two items stay open by decision, not oversight:
+- **Selected-point symbol** taken from `selectedPoints[0]` only — dismissed as a sound tradeoff; a
+  single index-0 curve keeps the cutoff-line / `MatchedPointsStartIndex` math valid.
+- **`_symbolDropdownFont` disposed in `OnHandleDestroyed`** — deferred, pre-existing feature code.
+
+Curve draw order is rule-list order (earlier rules drawn on top): `OrderByDescending` was tried and
+reverted because it reverses matched-curve order, which `AssertVolcanoPlotCorrect` deliberately
+pins. Only the misleading comment was fixed (`0bb04bdb11`, comment-only).
+
+**LESSON worth keeping**: `DotPlotUtil.ResolvePointFormat` is shared by the volcano AND
+relative-abundance panes — changing its precedence requires running both `VolcanoPlotFormattingTest`
+and `PeakAreaRelativeAbundanceGraphTest` locally.

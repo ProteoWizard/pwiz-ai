@@ -255,7 +255,7 @@ Accepted sets at 1% q, 82 files, split by which mode accepted them (`fdrbench.ts
   **+40.6% acceptances on identical evidence, reported 1% while true FDP is 5.05%.**
 
 ## Related
-- `ai/todos/active/TODO-20260727_osprey_pass2_fdr_default.md` - the validity argument and the
+- `ai/todos/completed/TODO-20260727_osprey_pass2_fdr_default.md` - the validity argument and the
   82-file 4-way (protein-compact 1.51%, transfer-compete 1.96%, percolator ~9%, transfer/pass-1 0.92%).
 - [[TODO-osprey_reduced_pool_fdr_calibration]] - "culling is a natural boost"; the same failure
   reached from the library side, and the coin/density tripwires.

@@ -4,9 +4,13 @@
 - **Branch**: `Skyline/work/20260727_osprey_pass2_fdr_default` (pwiz-work1)
 - **Base**: `master`
 - **Created**: 2026-07-27
-- **Status**: In Progress
+- **Status**: Completed (superseded — see Resolution)
 - **GitHub Issue**: [#4484](https://github.com/ProteoWizard/pwiz/issues/4484)
-- **PR**: (pending)
+- **PR**: [#4487](https://github.com/ProteoWizard/pwiz/pull/4487) (**merged 2026-07-29** as
+  `ebe24eeb68`) — HPC 1st-pass model persistence; this branch was spent on that, not on the
+  default flip itself
+- **Superseded by**: [TODO-20260802_osprey_default_flip.md](TODO-20260802_osprey_default_flip.md)
+  (PR [#4528](https://github.com/ProteoWizard/pwiz/pull/4528), merged 2026-08-04 as `e7b5a917ba`)
 - **Requester/Reporter**: Mike + Brendan (both Osprey developers) — NO credit line
   (developer planning on their own project, per version-control crediting rules)
 
@@ -898,3 +902,36 @@ Two concrete things that land on this TODO from
 Note the removal targets the pass-2 **q-value** step, not the Stage-6 peak RE-SCORING, which is the
 part that actually adds IDs and is kept in all modes - worth stating explicitly in the PR so it does
 not read as "we deleted the second pass".
+
+## Resolution
+
+### 2026-08-04 — Superseded (decision landed elsewhere)
+
+This TODO's *branch* was spent on PR [#4487](https://github.com/ProteoWizard/pwiz/pull/4487) (HPC
+1st-pass model persistence, merged 2026-07-29 as `ebe24eeb6821e0b159292ee33af7e33ab5570a83`). The
+default-flip decision this file was actually opened to make was carried out by
+[TODO-20260802_osprey_default_flip.md](TODO-20260802_osprey_default_flip.md) — PR
+[#4528](https://github.com/ProteoWizard/pwiz/pull/4528), merged 2026-08-04 as `e7b5a917ba`, with the
+Rust half in [maccoss/osprey#60](https://github.com/maccoss/osprey/pull/60). That TODO states the
+relationship in its own header: it "consumes the remaining tasks of
+`TODO-20260727_osprey_pass2_fdr_default.md` (whose branch was spent on PR #4487)".
+
+**What shipped**: `OSPREY_PASS2_QVALUE=protein-compact` as the pass-2 default plus
+`OSPREY_PICK_LDA=1`, batched with the I/L decoy gate because each alone would have forced a golden
+re-baseline and one re-baseline is cheaper than two. The reservations were **recorded rather than
+resolved** — accepted as undoubtedly better than the `percolator` default and as the thing that
+unblocks removing pass-2 Percolator, not as a settled answer.
+
+The recommendation recorded in this file (default → `protein-compact`, retire `percolator`, keep
+transfer/transfer-compete opt-in) is what shipped. Full analysis and tables remain at
+`ai/.tmp/pass2-fdr-default-validity.md`.
+
+**Read this file for the reasoning, not the status.** The four-mode comparison table, the
+`transfer` vs `transfer-compete` analysis, and the finding that `#4446` re-added
+`|| Pass2TransferQ` to `NeedsResidentPool` (`PerFileScoringTask.cs:1513`, a merge artifact
+contradicting its own docstring) are the durable content here.
+
+**Live caveat**: `protein-compact` was subsequently measured **anti-conservative at 82 files**
+(1.156% true FDP at 1% reported q, vs 0.770% for `transfer`) — see
+[TODO-20260804_osprey_pass2_ab_and_library_production.md](../active/TODO-20260804_osprey_pass2_ab_and_library_production.md),
+which is the active follow-up. The default shipped here is under active re-examination.

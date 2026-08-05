@@ -2,7 +2,8 @@
 
 **Branch**: `Skyline/work/20260724_dda_dependency_errors_lock`
 **Module**: `skyline`
-**PR**: [#4481](https://github.com/ProteoWizard/pwiz/pull/4481) (open, 10 commits)
+**Status**: Completed
+**PR**: [#4481](https://github.com/ProteoWizard/pwiz/pull/4481) (**merged 2026-07-30** as `8ed61ea39c`)
 **Issue**: [#4447](https://github.com/ProteoWizard/pwiz/issues/4447)
 **Related**: [#4482](https://github.com/ProteoWizard/pwiz/issues/4482) closed as premature
 
@@ -213,3 +214,33 @@ not settable, unlike `workertimeout` with `SKYLINE_TESTRUNNER_DOCKER_TIMEOUT_SEC
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260724_dda_dependency_errors_lock.md` before starting work.
+
+## Resolution
+
+### 2026-07-30 — Merged
+PR [#4481](https://github.com/ProteoWizard/pwiz/pull/4481) merged to master as
+`8ed61ea39c297c6cf413036da8d67d0ec1888c55`.
+
+The root cause was never antivirus (the issue's theory) nor the asynchronous `Process.Kill` (this
+work's first theory): the parallel work queue held one entry per (test, language, pass, loop
+iteration), all queued up front, so with `loop=40` forty entries for
+`(TestDdaSearchDependencyErrors, fr-FR)` all mapped to the same tools directory and a fast worker
+could lap a slow one. The fix is queue serialization — one entry per (test, language) carrying its
+remaining passes and iterations, re-queued only once its result returns, so the entry object itself
+is the token and the invariant holds by construction. Checkout is keyed on tools-directory names
+(the directory is the resource, and shortening is lossy — `TestDdaSearch` and `TestDiaSearch` are
+both `DS13`), claiming all of an entry's directories at once or taking none. This replaced an
+earlier `FileShare.None` file lock that blocked the worker and needed a 15-minute give-up path.
+
+Measured: **7 failures / 32 runs** baseline → **0 / 57** after queue serialization, at 5 workers ×
+5 languages × loop 40.
+
+Two `/code-review max` rounds each caught real bugs: `loop=-1` (what nightly passes) collapsing to a
+single pass, culture names canonicalized case-sensitively so `fr-fr` and `fr-FR` were two keys for
+one directory, and a wedged-worker watchdog that would have hung the run outright.
+
+**Carried forward, not done**: the wedged-worker paths, the never-run `!!!` reporting, and the
+big-worker relaunch are still unexercised — all need a worker to wedge or die. Making
+`WEDGED_TEST_TIMEOUT` settable would let one short run drive that whole chain; it is the only knob
+of its kind that is not settable, unlike `workertimeout` with
+`SKYLINE_TESTRUNNER_DOCKER_TIMEOUT_SEC`. Worth a follow-up TODO if these paths ever misbehave.
