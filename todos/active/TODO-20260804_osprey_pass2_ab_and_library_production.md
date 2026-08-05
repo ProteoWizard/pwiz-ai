@@ -105,7 +105,7 @@ protein-compact preferentially admits (a marginal peptide of a genuinely PRESENT
 peak/charge/interference) is one entrapment cannot see at all, because that peptide IS in the
 sample. Do not treat a flat FDP as proof the expansion was earned.
 
-## ARM C - designed, NOT implemented
+## ARM C - IMPLEMENTED 2026-08-05 (gate pending), not yet run
 
 Replace the stratum's qualification with **experiment-wide** peptide q. Expected pool change:
 61,285 detections at 12.95% false -> 32,923 at 0.79% false.
@@ -135,6 +135,38 @@ FirstJoinTask.cs:2086  StreamFirstPassFileScores(... (modseq, isDecoy, record) =
 **Gate before running C**: `regression.ps1 -Dataset Stellar` with the flag OFF must be
 byte-identical - that is what keeps arms A and B valid against a newer binary. Then arm C runs
 Stage 5+ via `-LinkFrom` arm A (the runner version-pins automatically).
+
+### As built (2026-08-05, on master `b554ce6f0d`)
+
+The 5 insertion points above all survived #4530's `FirstJoinTask` rewrite (line numbers moved:
+stratum builder 1713 -> 1727, accumulator 2086 -> 2098). Implemented as designed, plus three
+things the design did not call out:
+
+* **`OSPREY_PROTEIN_COMPACT_QUALIFY` is `run` | `experiment`**, unset = `run`. An unrecognized
+  value ABORTS at startup (mirrors `OSPREY_PASS2_QVALUE`) rather than silently running the
+  default - this flag selects the population a reported FDP is measured against, so a typo
+  would publish the wrong arm's numbers under the arm name the operator chose.
+* **A validity-key suffix**, EMPTY on the default arm so no existing output directory is
+  invalidated, added to `FirstJoinTask` + `PerFileRescoreTask` + `MergeNodeTask`. Without it an
+  in-place A/B is self-confirming: the second arm finds the first's reconciled parquets valid,
+  skips the work, and reports a match it never computed. Same failure #4530 guarded against.
+* **The stratum log line now names the arm** (`qualified by run|experiment q-value`). The two
+  arms otherwise differ only in one count, with nothing in the log to tell them apart.
+
+`FirstPassProteinFdrResult` carries BOTH sets and `ProteinCompactQualifyingPeptides()` is the
+ONE place the flag is read, so the resident and streaming paths cannot pick differently.
+`DetectedPeptides` is untouched, so Stage 7 parsimony does not move. The second set is
+accumulated unconditionally (bounded by the set it mirrors), which keeps the flag a pure
+CONSUMPTION choice - the off arm has no way to diverge.
+
+New test `Osprey.Test/ProteinCompactQualifyTest.cs` (one `[TestMethod]`, four private
+validators): the q source separates the sets, decoys enter neither, the streaming accumulator
+matches the resident path row-for-row, the accessor honours the arm, and the suffix is empty on
+default / non-empty on experiment. Pre-commit gate green: 575 tests, zero inspection warnings.
+
+**Scheduling constraint**: arm C CANNOT run beside the library run below. Both are 30-thread
+multi-hour jobs and arm A's protein-compact peaked at 63.1 GB of 64 GB, with the Stage 7 peak
+NOT covered by #4530. Run them in sequence.
 
 **Prediction**: if the 1.156% is qualification-driven, C pulls it toward pass-1's 0.777% and the
 Stage 7 peak falls from 63.1 GB as the stratum shrinks. If FDP does NOT move, the over-optimism is
@@ -198,6 +230,50 @@ prior measurement puts it near 1% with unstable sign across seven cells.
 **Cheapest tests**, in increasing cost: search the same 82 files against Mike's delivered library
 with the current binary (isolates the library completely, library already on disk); or two 20-file
 arms on our library at different `-itol` (~1 h each).
+
+### Two corrections to the above (2026-08-05), then the run
+
+**1. Arms A and B did NOT search a plain rebuild.** Their `run.log` names
+`D:\test\AstralTest-TargetDecoyLibraries\target+decoy+entrapment-gated-no-il\`, i.e. our rebuild
+PLUS the similarity gate PLUS the I/L gate. So "ours vs Mike's delivered" moves **three** things
+at once, not one, and the 56.3%-fragment-overlap figure measures only the first. The -13/-14% gap
+cannot be attributed to build provenance until the gates are separated - `-ungated` and `-gated`
+rebuilds are both on disk next to it, so that decomposition is a later arm, not a rebuild.
+
+**2. `-itol` is a CARAFE parameter, not an Osprey search flag.** `Run-CarafeOspreyWorkflow.ps1`
+passes it as `-itol/-itolu` to library generation (`CarafeItol='20' ppm`, `Validated=$false` for
+Astral); "stages 2 and 4-5" in that warning are CARAFE stages. So the "two 20-file arms at
+different `-itol`" costs a library rebuild per arm, not just two searches. The good news is that
+is cheaper than it sounds - the generation guide measures Astral stage 4-5 at **15-16 min per
+variant on an RTX 4070** with stages 1a/2/3 shared - but it is GPU work, and it answers the
+DOWNSTREAM question (why our library differs), which only matters once the library is confirmed
+as the cause.
+
+**Launched 2026-08-05 00:46** - the decisive arm, Mike's delivered library, arm B's config
+otherwise byte for byte (`transfer` + `mean-best-6` + `PickLda`, 82 files, 30 threads,
+`--fdrbench-pass 2`, model-diagnostics on):
+
+```
+Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -Pass2Mode transfer -PickLda \
+  -ExperimentAgg mean-best-6 -FdrBenchPass 2 \
+  -DataDir 'D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\mzml' \
+  -LibraryDir 'D:\test\Pilot-MTG-Tissue-May2026\lib\regression' -Tag '-mikelib'
+```
+
+Out dir `...\runs\seaad-82files-libdecoy-r1.0-transfer-picklda-mean-best-6-mikelib`; exe
+snapshot `D:\test\osprey-runs\_bin\26.1.1.217-20260805-0045`. Chose that library path over the
+identical copy under `AstralTest-TargetDecoyLibraries\target+decoy+entrapment\` because only this
+one has the prebuilt 2.4 GB `.libcache` (13 s load vs parsing 13 GB of TSV). Mike's library
+carries 6,324,700 entries against the gated-no-il library's 6,275,151.
+
+**The comparator is arm B's pass-1 frontier, 38,773 @ 0.783% true FDP, against the historical
+44,581.** Frontier is a PASS-1 metric, so the transfer/mean-best-6 config is legitimate here and
+costs far less wall time and memory than protein-compact.
+
+**#4530 does not confound this.** It changed no golden data file and its cache-validity suffix is
+empty on the streamed default, so master is byte-identical to arms A/B's binary against the
+committed golden - checked before launching, since a moved binary would have made the
+cross-library comparison meaningless.
 
 ## CARAFE: root-caused and fixed - [maccoss/Carafe#10](https://github.com/maccoss/Carafe/pull/10)
 
