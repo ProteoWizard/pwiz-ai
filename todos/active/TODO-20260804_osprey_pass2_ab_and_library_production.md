@@ -244,7 +244,41 @@ describes. Note the 163-file run's floor was ~28 GB and 82 files gives 27.0 GB -
 buffer is NOT scaling linearly with file count, so it is dominated by library residency and the
 retained-entry set rather than by N. Worth knowing for #4526's design.
 
-## THE LIBRARY QUESTION - our absolute numbers are not comparable to the historical study
+## THE LIBRARY QUESTION - ANSWERED 2026-08-05: it IS the library
+
+Mike's delivered library, same 82 files, same binary, arm B's config otherwise byte for byte.
+Pass-1 frontier `bestPeak`, extracted from each run's own `out.model-diagnostics.html` by ONE
+script so the method cannot differ between arms (it reproduces arms A and B's recorded numbers
+exactly, which is what validates it):
+
+| arm | library | agg | bestPeak | bestPeakFdp | perRunPeak | expPeak | peakK |
+|---|---|---|---|---|---|---|---|
+| A | gated-no-il | max | 32,923 | 0.787% | 40,725 | 39,939 | 5 |
+| B | gated-no-il | mean-best-6 | 38,773 | 0.783% | 40,725 | 40,004 | 5 |
+| **NEW** | **Mike delivered** | mean-best-6 | **43,754** | **0.745%** | **47,133** | **45,693** | **2** |
+
+**Against the historical mean-best-6 figure of 44,581: our gap closes from -13.0% to -1.9%.**
+The library accounts for ~11 of the 13 percentage points. With Mike's library the current binary
+essentially reproduces the historical study, so the pipeline was never the problem and the
+"~13-14% below" finding was a library artifact throughout - exactly as the level-shift shape
+(-14.0% / -13.0%, near-constant across two aggregations) predicted.
+
+**It is not buying IDs by inflating FDP**: 0.745% true FDP vs arm B's 0.783%, so the bigger
+number is also the better-calibrated one.
+
+**What this does NOT say.** The arms differ in build provenance AND the similarity gate AND the
+I/L gate at once, so this identifies "the library", not which of the three. The `-ungated` and
+`-gated` rebuilds are on disk for that decomposition. The residual -1.9% is unattributed
+(binary drift since the study, PICK_LDA at ~1%, or leftover config). And `peakK` moved 5 -> 2,
+i.e. the reproducibility frontier peaks at a different N on this library - worth a look before
+reading too much into any single mean-best-N choice. The historical 44,581 is the previous
+session's recorded figure, not one re-derived here.
+
+**Consequence for the `-itol` probe**: still worth doing, but it is now a question about OUR
+library-generation parameters, not about a pipeline deficit. The decision to regenerate the
+Astral library (task 4, awaiting Mike) is the one it feeds.
+
+## Original framing - our absolute numbers are not comparable to the historical study
 
 Our arms land ~13-14% below the historical study on both aggregation arms
 (max 32,923 vs 38,300 = -14.0%; mb6 38,773 vs 44,581 = -13.0%). Nearly constant, so it is a level
@@ -375,8 +409,10 @@ Build toolchain: IntelliJ's bundled JBR 21.0.9 + Maven 3.9.9 (JDK 17 cannot buil
       silently aggregated as `max` in a directory named `mean-best-6`)
 - [x] Auto-snapshot the Osprey exe in `Invoke-OspreyDatasetRun` so a long run stops locking the
       build tree
-- [ ] **Settle the library question** - search 82 files against Mike's delivered library, or the
-      20-file `-itol` probe
+- [x] **Settle the library question** - ANSWERED: Mike's delivered library closes the gap from
+      -13.0% to -1.9%, at a slightly BETTER FDP. It is the library, not the pipeline.
+- [ ] Decompose which part of the library (provenance vs similarity gate vs I/L gate) using the
+      `-ungated` / `-gated` rebuilds already on disk
 - [x] **Arm C implemented + gated** - `OSPREY_PROTEIN_COMPACT_QUALIFY`, Stellar byte-identity
       PASS on all 5 modes with the flag off
 - [ ] **Run arm C** - blocked on the library run finishing (memory, not correctness)
