@@ -278,6 +278,27 @@ session's recorded figure, not one re-derived here.
 library-generation parameters, not about a pipeline deficit. The decision to regenerate the
 Astral library (task 4, awaiting Mike) is the one it feeds.
 
+### DECISION (Brendan, 2026-08-05): the A/B/C set stays on OUR gated-no-il rebuild
+
+Absolute IDs ~13% below the historical study are ACCEPTED as the baseline - the pass-2 method
+comparison is a comparison BETWEEN arms on one library, and the library level-shift cancels in
+it. So the set needs nothing new launched: arms A and B are on disk and arm C is chained.
+
+The three arms as they stand:
+
+| arm | pass-2 mode | agg | qualification |
+|---|---|---|---|
+| A | protein-compact | max | run (default) |
+| B | transfer | mean-best-6 | n/a |
+| C | protein-compact | max | **experiment** |
+
+A vs C isolates the qualification arm exactly - one changed variable, same library, same pick,
+same aggregation, same Stage 1-4 parquets via `-LinkFrom`.
+
+**Preserved for later, do not delete**: the Mike-delivered-library run's completed Stage 1-4
+(82 parquets, 4h07m) under `...-mean-best-6-mikelib\`. If the triad is ever wanted on that
+library, `-LinkFrom` that directory makes each extra arm Stage 5+ only (~4h) instead of ~8h.
+
 ## Original framing - our absolute numbers are not comparable to the historical study
 
 Our arms land ~13-14% below the historical study on both aggregation arms
