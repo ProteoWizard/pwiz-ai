@@ -3190,5 +3190,45 @@ diagnosed further - it needs its own session.
    `scripts/misc/vcs_trigger_and_paths_config.py`; `Bruker.Tests/Reference/`; the `Sciex.Tests` /
    `BiblioSpec` gate inconsistency.
 
+### Test discovery globbed; BiblioSpec 69 failures fixed (`2929103309`)
+
+Closes the measurement hole the coverage re-run exposed. `build.bat` now discovers
+`*.Tests.csproj` under `pwiz\test\` and `Tools\` instead of carrying a hand-maintained
+`TEST_TARGET`. Vendor gating stays an explicit list - it is not derivable from the csproj
+(`Analysis.Tests` references a vendor project but runs ungated; `Installer.Tests` references none
+yet needs licences) - but it is now an **exclusion**, so an unregistered new vendor suite fails
+loudly rather than silently never running.
+
+**BiblioSpec.Tests: 69/142 red -> 142/142, all of it missing input data, no product defects.**
+`pwiz_tools/BiblioSpec/tests/inputs.tar.bz2` had never been unpacked. The directory is gitignored
+yet ~100 files in it are force-added to git and are the authoritative modern fixtures; the archive
+is the older cpp-era set and the two overlap in only 3 names, so its 98 unique files (`demo.ssl`,
+`demo.sqt`, `OMSSA.pep.xml`, the Mascot `.dat`s) were absent. `BiblioSpec.Tests.csproj` now imports
+`ExtractTestData.targets` like the vendor suites.
+
+**The extraction must not overwrite, and that is load-bearing.** For the 3 overlapping names the
+tracked copies are newer and the archive's are stale; `ExtractTestData.targets` already uses
+`bsdtar -xkf` / skip-old-files, which is exactly right. Forcing the archive's
+`waters-mobility.final_fragment.csv` over the tracked one turns `Mse_Mobility` red with a genuine
+content diff, and `Filter_Mobility` with it (it calls `Mse_Mobility` directly). If those two ever
+fail, check that file first. Also: `tiny-v2.msf` / `tiny-v2-filtered.pdResult` can linger as 0-byte
+untracked placeholders that the keep-existing flag honours - `git clean -fx` the directory to clear
+them. And XML comments cannot contain a literal double hyphen, so the csproj cannot spell the
+skip-old-files flag out; same MSB4025 that `9fb039d4a7` fixed inside the targets file itself.
+
+Verified from clean: `git clean -fx tests/inputs` leaves 97 tracked files, `dotnet build` extracts
+to 197, suite is 142/142, no tracked file modified. Full `build.bat`: **21 suites, 626 tests, 625
+passed, 0 failed, 1 skipped** (the per-machine installer test, which needs elevation and skips on
+CI too). Previously 17 suites / 474 tests.
+
+**Open / next:**
+1. Watch the next CI run on `2929103309` - it is the first to execute TraData.Tests,
+   Bruker.PrmScheduling.Tests, BiblioSpec.Tests and MsConvertGUI.Tests. BiblioSpec depends on the
+   agent unpacking `inputs.tar.bz2` (tracked, 54 MB) via the new target; `tests/reference/` is
+   tracked (131 files) so that side is fine.
+2. Re-run coverage once CI is green - the 08-05 numbers exclude the four newly-added suites, so
+   `Pwiz.Data.TraData`, `Pwiz.Vendor.Bruker.PrmScheduling` and `Pwiz.Tools.BiblioSpec` are still
+   unmeasured.
+
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260804_net8_bruker_linux_native_sdk.md` before starting work.
+`ai/.tmp/handoff-20260805_net8_coverage_blib.md` before starting work.
