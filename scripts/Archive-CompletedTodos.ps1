@@ -50,16 +50,27 @@ try {
     Write-Host "Archive cutoff: files before $($cutoff.ToString('yyyy-MM-dd')) will be archived"
     Write-Host "Scanning $completedDir ..."
 
-    # Find TODO files at root level (not in subdirectories)
+    # Find TODO files at root level (not in subdirectories).
+    # The optional LK- segment matches LabKey TODOs (TODO-LK-YYYYMMDD_...), which
+    # otherwise never match and accumulate at the root forever.
+    $datePattern = '^TODO-(?:LK-)?(\d{4})(\d{2})(\d{2})_'
     $files = Get-ChildItem -Path $completedDir -File | Where-Object {
-        $_.Name -match '^TODO-(\d{4})(\d{2})(\d{2})_'
+        $_.Name -match $datePattern
     }
 
     $archived = 0
     $skipped = 0
+    $collisions = @()
+
+    # Files whose names carry no date cannot be placed in a YYYY/MM folder. Name them
+    # at the end rather than passing over them silently, so they get a datestamp
+    # instead of accumulating at the root unnoticed.
+    $undated = Get-ChildItem -Path $completedDir -File -Filter '*.md' |
+        Where-Object { $_.Name -notmatch $datePattern } |
+        Select-Object -ExpandProperty Name
 
     foreach ($file in $files) {
-        if ($file.Name -match '^TODO-(\d{4})(\d{2})(\d{2})_') {
+        if ($file.Name -match $datePattern) {
             $year = $Matches[1]
             $month = $Matches[2]
             $day = $Matches[3]
@@ -74,6 +85,14 @@ try {
                 else {
                     if (-not (Test-Path $targetDir)) {
                         New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+                    }
+                    # A same-named file already in the target month means the two copies
+                    # diverged and need a human to pick one. Skip it and keep going -
+                    # one duplicate must not block every other move.
+                    if (Test-Path (Join-Path $targetDir $file.Name)) {
+                        Write-Warning "$($file.Name) already exists in $year/$month/ - skipped. Compare the two copies and remove the stale one."
+                        $collisions += $file.Name
+                        continue
                     }
                     # Use git mv for tracked history
                     $relativeSrc = "todos/completed/$($file.Name)"
@@ -99,9 +118,23 @@ try {
     }
     else {
         Write-Host "Done: $archived archived, $skipped kept at root"
-        if ($archived -gt 0) {
-            Write-Host "Run 'git status' to review, then commit the moves."
-        }
+    }
+
+    if ($undated.Count -gt 0) {
+        Write-Host ""
+        Write-Warning "$($undated.Count) file(s) carry no date in the name and were not considered:"
+        $undated | ForEach-Object { Write-Host "    $_" }
+        Write-Host "  Rename these to TODO-YYYYMMDD_... (the date they were completed) so they archive."
+    }
+
+    if ($collisions.Count -gt 0) {
+        Write-Host ""
+        Write-Warning "$($collisions.Count) file(s) skipped - a copy already exists in the target month:"
+        $collisions | ForEach-Object { Write-Host "    $_" }
+    }
+
+    if (-not $DryRun -and $archived -gt 0) {
+        Write-Host "Run 'git status' to review, then commit the moves."
     }
 }
 finally {

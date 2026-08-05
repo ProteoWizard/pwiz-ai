@@ -1,4 +1,4 @@
-# TODO-osprey_model_diagnostics_cross_run_detection_consistency.md -- Add cross-run detection-consistency plots (reproducibility) to the --model-diagnostics report
+# TODO-20260710_osprey_model_diagnostics_cross_run_detection_consistency.md -- Add cross-run detection-consistency plots (reproducibility) to the --model-diagnostics report
 
 ## Status
 **COMPLETED — shipped in #4408** (merged 2026-07-11, "added cross-run reproducibility graphs").
@@ -8,7 +8,9 @@ The `CrossRunDetection` data class (`CumUnion` / `CumIntersection` / `RunCountHi
 Bug B fixed alongside). The design below is retained for reference.
 
 _Originally: backlog (created 2026-07-09), requested by Brendan for a future self-run sprint._
-Sibling of [[TODO-osprey_model_diagnostics_null_alignment_decoy_qc]] and
+Retired to completed 2026-07-10; renamed 2026-08-05 from the undated slug
+`TODO-osprey_model_diagnostics_cross_run_detection_consistency` to carry that date.
+Sibling of [[TODO-20260710_osprey_model_diagnostics_null_alignment_decoy_qc]] and
 [[TODO-osprey_model_diagnostics_training_pool_distributions]] -- another
 `--model-diagnostics` panel, but this one is **entrapment-free**: it reads FDR quality
 off of cross-run detection reproducibility alone, so it works on the ordinary

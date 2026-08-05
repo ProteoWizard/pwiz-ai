@@ -43,7 +43,7 @@ the entrapment oracle can plot both FDP curves without two separate invocations.
 ## Notes
 - The sibling instrument `OSPREY_BOOST_TARGET_DISCRIMINANT` (target-distribution-drift what-if)
   was **deliberately excluded** from this PR and stashed for later under
-  [[TODO-osprey_model_diagnostics_null_alignment_decoy_qc]] (it is a null-alignment QC test
+  [[TODO-20260710_osprey_model_diagnostics_null_alignment_decoy_qc]] (it is a null-alignment QC test
   mechanism, not FDRBench plumbing).
 
 ### 2026-07-08 - Merged

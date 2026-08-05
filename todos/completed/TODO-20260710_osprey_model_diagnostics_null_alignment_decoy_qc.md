@@ -3,9 +3,14 @@
 ## Status
 **COMPLETED — the concrete "night-ready slice" (the Storey non-parametric density-ratio plot)
 shipped as #4399** (merged 2026-07-09, "Added a non-parametric null-alignment density-ratio plot
-to model diagnostics"). This was already a consolidation stub (below); moved to completed under
-its original slug so the inbound `[[...]]` links keep resolving. Any remaining
+to model diagnostics"). This was already a consolidation stub (below). Any remaining
 assumption-diagnostics scope lives in [[TODO-osprey_assumption_failure_detection]].
+
+Retired to completed on 2026-07-10. Renamed 2026-08-05 from the undated slug
+`TODO-osprey_model_diagnostics_null_alignment_decoy_qc` to
+`TODO-20260710_osprey_model_diagnostics_null_alignment_decoy_qc` (the retirement date) so the
+archive script can file it by month; all inbound `[[...]]` links were repointed in the same
+commit.
 
 **MERGED (2026-07-07) into [[TODO-osprey_assumption_failure_detection]]** — retitled
 "Osprey FDR assumption diagnostics (equal-chance, stability, entrapment)". This idea (fit
@@ -16,9 +21,10 @@ consolidated TODO. It was folded together with the automated assumption-failure 
 because both rest on the *same* non-circular null reference and audit the *same* published
 **equal-chance** assumption (diagFDR, Chion et al. 2026; TargetDecoy, Debrie et al. 2023).
 
-This stub is retained only to keep the `[[TODO-osprey_model_diagnostics_null_alignment_decoy_qc]]`
-link (from the partial-entrapment active TODO) resolving. See the consolidated TODO for the
-full design, gates, and references. Safe to delete once the inbound link is repointed.
+This stub is retained to keep the
+`[[TODO-20260710_osprey_model_diagnostics_null_alignment_decoy_qc]]` links resolving (from the
+partial-entrapment and `--fdrbench-pass both` TODOs). See the consolidated TODO for the full
+design, gates, and references.
 
 ## Night-ready slice (2026-07-08, with Brendan + Mike) — Storey non-parametric ratio plot
 A bounded, TeamCity-green-PR-sized carve-out of §B, teed up for a `/night-session`:

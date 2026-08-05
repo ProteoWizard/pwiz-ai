@@ -21,7 +21,7 @@
     which estimators are valid at that `r`.
   - `Osprey.Test\...ModelDiagnostics...` — tests at r<1.
 **Related**: extends PR [#4377](https://github.com/ProteoWizard/pwiz/pull/4377); sibling to
-  [[TODO-osprey_model_diagnostics_null_alignment_decoy_qc]] and
+  [[TODO-20260710_osprey_model_diagnostics_null_alignment_decoy_qc]] and
   [[TODO-osprey_model_diagnostics_training_pool_distributions]]. Depends conceptually on a
   partial-entrapment *generator* (see "Generation" below). Ties to
   [[project_osprey_natural_entrapment]] (the ratio-sweep that motivated this).

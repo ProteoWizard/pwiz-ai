@@ -4,6 +4,8 @@
 **Priority**: Low-Medium (no defect; structural question raised once the project went past proof-of-concept)
 **Complexity**: Medium to evaluate; Large if a consolidation is chosen (touches every csproj + the layering-enforcement story)
 **Created**: 2026-05-29
+**Retired to completed**: 2026-07-10 (renamed 2026-08-05 from the undated slug
+`TODO-osprey_assembly_consolidation` to carry that date, so the archive script can file it)
 **Scope**: `C:\proj\pwiz\pwiz_tools\Osprey` -- the 8-project solution graph
 
 ## The question (raised by Brendan, 2026-05-29)

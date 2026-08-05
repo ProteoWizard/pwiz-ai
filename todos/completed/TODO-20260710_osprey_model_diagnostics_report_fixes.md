@@ -7,7 +7,7 @@ as squash commit `9128e9635e`). Merged green: Osprey Windows .NET unit build 501
 green; Perf/Regression passed on earlier heads and was not re-run for the small final changes.
 Reporting-only change (off the production FDR path; golden regression unaffected). Implements the
 cross-run graphs specced in the backlog sibling
-[[TODO-osprey_model_diagnostics_cross_run_detection_consistency]], fixes two report bugs found on
+[[TODO-20260710_osprey_model_diagnostics_cross_run_detection_consistency]], fixes two report bugs found on
 the 2026-07-09 SEA-AD run, and is now being extended (Brendan's request) with a global-vs-run FDR
 view. Context: [[project_sead_pilot_mtg_dataset]], [[project_osprey_entrapment_ratio_fdr_collapse]].
 
