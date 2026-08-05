@@ -220,6 +220,33 @@ from the argument, so a hand-exported value is wiped. Out dir gets `-qualifyexp`
 re-runs. Confirm the banner prints `qualify : EXPERIMENT-wide q` - that line exists precisely
 so this cannot be run unknowingly on the default arm.
 
+### Arm C first result (2026-08-05 07:45): the arm engaged, stratum halved
+
+`...runs\seaad-82files-libdecoy-r1.0-protein-compact-picklda-qualifyexp\run.log`:
+
+```
+protein-compact: 3769 proteins with >=2 detected peptides -> stratum of 335948 base_ids
+(from 30167 detected peptides, qualified by experiment q-value).
+```
+
+| | arm A (run q) | arm C (experiment q) | change |
+|---|---|---|---|
+| detected peptides | 59,108 | 30,167 | -49.0% |
+| proteins with >=2 | 6,501 | 3,769 | -42.0% |
+| stratum base_ids | 721,964 | 335,948 | -53.5% |
+| share of the ~1.39 M base_ids | ~52% | ~24% | |
+
+30,167 is close to the ~32,923 the `crossRun` diagnostic predicted for the experiment-wide pool
+at 82 runs. The EXPANSION factor over the detected set barely moved (11.9x -> 11.1x), so the
+stratum shrank because the qualifying POOL shrank, not because the expansion rule changed -
+the single-variable move the arm was built to make.
+
+Arm C shares arm A's Stage 1-4 byte-for-byte: `LinkFrom: hard-linked 328 stage1-4 file(s),
+0 missing`, `PerFileScoring:skipping (outputs valid)`. Note the banner prints `Osprey
+v26.1.1.215` while the binary is the pinned 26.1.1.217 - that is `-LinkFrom` setting
+`OSPREY_VERSION_OVERRIDE` from the source run so the linked artifacts validate. It changes the
+stamp, not the code.
+
 **Prediction**: if the 1.156% is qualification-driven, C pulls it toward pass-1's 0.777% and the
 Stage 7 peak falls from 63.1 GB as the stratum shrinks. If FDP does NOT move, the over-optimism is
 not qualification-driven and the self-admission asymmetry becomes the prime suspect.
