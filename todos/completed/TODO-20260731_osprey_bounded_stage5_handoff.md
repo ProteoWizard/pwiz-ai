@@ -4,13 +4,11 @@
 - **Branch**: `Skyline/work/20260803_osprey_bounded_stage5_handoff`
 - **Base**: `master` (at `e7b5a917ba`, i.e. after #4528)
 - **Created**: 2026-07-31 (branch cut 2026-08-03)
-- **Status**: In Progress - **pause LIFTED 2026-08-04** (Brendan): #4528 merged, protein-compact
-  is the default, and this branch is rebased onto it. The STOP section below is kept as the
-  record of why the pause happened, not as a live instruction.
+- **Status**: Completed
 - **GitHub Issue**: [#4526](https://github.com/ProteoWizard/pwiz/issues/4526)
 - **Module**: `osprey`
-- **PR**: [#4530](https://github.com/ProteoWizard/pwiz/pull/4530) (opened 2026-08-04)
-- **TeamCity Perf/Regression**: NOT triggered - Brendan's instruction when opening #4530
+- **PR**: [#4530](https://github.com/ProteoWizard/pwiz/pull/4530) (merged 2026-08-05 as `b554ce6f0d`)
+- **TeamCity Perf/Regression**: build 4121676 on `pull/4530` - SUCCESS
 
 > The `Skyline/work/20260731_osprey_bounded_stage5_handoff` branch name on `origin` was
 > reused by the progress-reporting work that became #4513 (merged), so it carries none of
@@ -767,9 +765,9 @@ EntryId, files with both CWT and forced gap fill).
 | `regression.ps1 -Dataset Stellar` (streamed default) | all five legs PASS, golden blib 25,407,488 B |
 | `regression.ps1 -Dataset Stellar` with `OSPREY_STAGE6_STREAM_SURVIVORS=0` + token | all five legs PASS, same golden blib - **the oracle is intact** |
 | 40-file Stage 6 memory measurement | floor LEVEL, plateau gone (above) |
-| `regression.ps1 -Dataset All` | **PASS** - Stellar, StellarLibDecoy, StellarGenDecoyEntrap, Astral; incl. mode1b diagnostics + FDR sanity bounds |
-| `/code-review max` | re-run at end of session - see below |
-| TeamCity Perf/Regression | not triggered (ASK Brendan first) |
+| `regression.ps1 -Dataset All` | **PASS** - Stellar, StellarLibDecoy, StellarGenDecoyEntrap, Astral; incl. mode1b diagnostics + FDR sanity bounds. Re-run AFTER the gap-fill duplicate fix and still PASS |
+| `/code-review max` | re-run at end of session - found the gap-fill duplicate defect, fixed in `cdbed2f0ef` |
+| TeamCity Perf/Regression | build 4121676 on `pull/4530` - **SUCCESS** (Stellar + Astral + perf leg) |
 
 **`/code-review max` needs the developer to ASK for it, once.** An unprompted model invocation
 is refused (`disable-model-invocation`), but the same call succeeds after the developer asks
@@ -813,3 +811,45 @@ Two distinct verifiers are needed, because the change has two halves:
    post-compaction structures, or is one message enough?
 4. ~~How much of the survivor set is the `protein-compact` stratum?~~ **Answered above** -
    84% of entries. Follow-up lever, not first-PR scope.
+
+## Progress Log
+
+### 2026-08-05 - Merged
+
+PR #4530 merged as commit `b554ce6f0d`. Stage 6 no longer holds every file's
+post-compaction survivors: it refills one file at a time from that file's `.scores.parquet`
+plus its 1st-pass sidecar, drops them once the reconciled parquet is written, and rebuilds
+the buffer once at the end for Stage 7. The resident handoff survives behind
+`OSPREY_STAGE6_STREAM_SURVIVORS=0` as the byte-identity oracle, and is now the NAMED
+`ResidentPaths` path `compacted-entries-buffer` rather than a silent one, with the guard
+checked at the release decision so a refused run fails in seconds instead of OOMing hours
+into Stage 6.
+
+Measured at 40 files: Stage 6 enters the rescore at a 4.57 GB floor, 0.19 GB above the bare
+library floor, and the Stage-6-only slice shows the managed floor LEVEL (4.8 -> 4.8 GB,
+drift -0.00 GB). The 82-file resident comparison rises to a 40-50 GB band and stays there.
+
+Gates: 574/574 unit tests, zero inspections; `regression.ps1 -Dataset All` PASS on all four
+datasets (re-run after the final fix); the same gate PASS with the resident arm forced, so
+the oracle is intact; TeamCity Perf/Regression build 4121676 SUCCESS on `pull/4530`.
+
+Two defects were found AFTER the PR opened and fixed in `cdbed2f0ef`, both by
+`/code-review max` rather than by the green gates: the duplicate-EntryId fix had been
+applied to the survivor arm, which cannot duplicate, while the gap-fill arm - the only one
+that can, since neither of its scoring passes runs the Stage 4 dedup - still took the first
+row and silently dropped a survivor; and the scalar-only overlay was still assigning payload
+fields that were now always null. A third fix landed in `ai/`: the Stage 1-4 re-stamp script
+committed earlier that day would delete its own source directory if `-Destination` resolved
+to `-Source`, and report success.
+
+**Deferred, deliberately, and still open on #4526:**
+
+* The 40-file PAIRED A/B (default vs `OSPREY_STAGE6_STREAM_SURVIVORS=0`) was never run - only
+  the streamed arm was measured, so the ~7.2 GB resident figure remains a prediction. What is
+  measured is that the O(files) term is absent and the floor does not drift.
+* The `.scores.parquet` read count is 3 per run on the cold streamed default, up from 1. That
+  is the trade streaming buys the memory with, not a defect, but it is real and unaddressed.
+* The `protein-compact` stratum is 84% of the survivor entries and its consumer already
+  streams one file at a time; whether stratum-only survivors need to be Stage-6 entries at
+  all is a ~6x term on the same buffer.
+* The 163-file Stage-5-only re-measure was dropped: the 40-file run answers the question.
