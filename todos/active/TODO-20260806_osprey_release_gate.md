@@ -131,9 +131,36 @@ multi-GB inputs still do not, so the disk-bounding behaviour is unchanged.
       was needed, the release behaves identically across them.
       Log: `ai/.tmp/regression-all-mode5.log`
 - [x] PR [#4539](https://github.com/ProteoWizard/pwiz/pull/4539)
-- [ ] `/code-review max` - NOT run; I cannot invoke it. 224 lines of new harness logic is past
+- [x] Copilot review addressed (`31cf67966d`) + thread resolved
+- [x] **Renumbered to mode 6** after #4537 landed its OWN mode 5 on master, and merged master in
+      (`5fe225cf6c`). Post-merge `-Dataset All`: **44/44 PASS**, mode 5 and mode 6 green together
+      on all four datasets
+- [ ] `/code-review max` - NOT run; I cannot invoke it. 230 lines of new harness logic is past
       the "trivial diff" bar the version-control skill sets for skipping it
-- [ ] TeamCity Perf/Regression on `pull/4539` before merge - ask Brendan first, every time
+- [ ] TeamCity Perf/Regression **4123351** on `pull/4539` - triggered at Brendan's request;
+      VERIFY it bound to `5fe225cf6c` once it leaves the queue
+
+## THE COLLISION - two mode 5s (2026-08-06)
+
+PR [#4537](https://github.com/ProteoWizard/pwiz/pull/4537) merged to master while this branch
+was open and added its own **mode 5** (Stage-5 rehydrate self-consistency). A real numbering
+collision, not a textual conflict. Master's landed first and keeps the number; this became
+**mode 6**.
+
+Resolved by taking master's `regression.ps1` as the new baseline and RE-APPLYING these
+additions on top, rather than hand-resolving three conflict hunks - the change is purely
+additive, so a re-apply cannot silently drop one of master's lines the way a hand merge can.
+Verified after: 0 conflict markers, 0 stale `mode5 (library-fragment` references, master's 12
+mode-5 references intact, parse clean, and still **230 insertions / 0 deletions** against the
+new master.
+
+**The integration risk was real and is now cleared.** #4537 changed `FirstJoinTask`'s rehydrate
+path - the same path mode 6 asserts a release on - so the two had never run together. The
+resume leg passes on all four datasets post-merge.
+
+Also: the `appveyor` FAILURE on the PR was `"AppVeyor was unable to build non-mergeable pull
+request"` - a consequence of the conflict, not of the code. It cleared on pushing the merge.
+Worth recognizing rather than investigating next time.
 
 ## Progress Log
 
