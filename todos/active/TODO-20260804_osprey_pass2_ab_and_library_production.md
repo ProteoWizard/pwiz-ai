@@ -609,6 +609,34 @@ Verified on real 1.4M-quartet builds at **r=0.5 (measured 0.4999)** and **r=0.1 
 0.1000)**, zero `p_target` rows without a target in their pair. Carafe suite 126 tests, 0 failures.
 Build toolchain: IntelliJ's bundled JBR 21.0.9 + Maven 3.9.9 (JDK 17 cannot build this pom).
 
+## Library-fragment release (#4532 / PR #4534) - MEASURED 2026-08-05
+
+Separate branch `Skyline/work/20260805_osprey_library_fragment_release`, PUSHED, PR #4534 open.
+Releases `LibraryEntry.Fragments` at the Stage 5 -> 6 boundary for everything outside
+survivors + gap-fill. Default ON (`IsNotZero` treats unset as on); `OSPREY_RELEASE_LIBRARY_FRAGMENTS=0`
+is the A/B arm.
+
+A/B on 4 SEA-AD files against the full 12.7 GB gated-no-il library, same pinned binary, sequential.
+Released 5,459,501 of 6,275,151 entries (87.0%), 409,235 base_ids retained.
+
+| stage | ON | OFF | delta peak |
+|---|---|---|---|
+| PerFileScoring (pre-release) | 13.9 / 30.5 GB | 15.2 / 30.9 GB | -0.4 (noise) |
+| FirstPassFDR | 27.7 / 35.7 GB | 27.3 / 40.3 GB | -4.6 GB |
+| PerFileRescoring | 14.5 / 34.0 GB | 20.5 / 41.8 GB | -7.8 GB |
+| SecondPassFDR | 15.9 / **17.7** GB | 22.2 / **28.5** GB | **-10.8 GB** |
+
+Stage 7 peak -38%. Slightly faster, not slower. Stage 1-4 unchanged, as it must be.
+
+**FEW FILES IS THE MAXIMUM-SAVING CASE, not a scaled-down one** - the library is fixed while the
+retained set grows with file count. At 82 files expect ~70-75% released rather than 87%, so a
+smaller (still large) saving. Do not quote the 4-file numbers as production.
+
+`regression.ps1 -Dataset All` PASSED with the release ACTIVE - and the committed golden predates
+this change, so mode1 IS the release-on vs release-off correctness proof. Verified it actually
+engages in the golden-compared leg (`Released library fragments for 152830 of 485628 entries`)
+after an earlier revision gated it on `ctx.Diagnostics`, which would have made that gate vacuous.
+
 ## Tasks
 
 - [x] Arm A: protein-compact + pick, 82 files, from scratch
