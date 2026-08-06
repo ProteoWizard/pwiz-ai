@@ -755,6 +755,39 @@ own reason needs both tokens, so naming one dropped the other and the run aborte
 guard. Every admitted path is still named individually - that, not the count, is what stops a
 blanket bypass.
 
+### The rule: token + warning, never warning alone
+
+A resident O(files) path is acceptable ONLY where the operator asked for it.
+
+| Situation | Verdict |
+|---|---|
+| Token required + warning emitted | **Good.** The token is the explicit request; the warning explains what was granted. |
+| Warning alone, on a default path with no token | **Insufficient.** There is no request to explain, so the warning annotates a defect instead of mitigating one - and it reads as normal within a week. |
+| Neither | The failure mode the ratchet exists to prevent. |
+
+A warning on an untokened default path is allowed only as an **interim tripwire with an
+open issue against it**, and the issue is what makes it temporary. Adding a token instead
+is usually the wrong repair: it would make an ordinary user's run fail until they set an
+environment variable. Fix the path.
+
+**Any token required by `regression.ps1` must have an open issue to fix it and remove the
+token from the gate.** The script CLEARS an inherited `OSPREY_ALLOW_UNFIXED_RESIDENT` at
+startup so an ambient value cannot defeat the property, then names what it needs per leg.
+
+Currently required: **one** - `resume-survivor-handoff` on mode 5, tracked by #4536 (a
+resume cannot stream the Stage 6 survivor handoff, because only a computed Stage 5 builds
+the per-file loader). Mode 2's `mdiag-full-resume` was the previous one and #4505 removed
+it. Driving the count back to zero is the goal; the token comes out of the gate when the
+issue lands.
+
+**A token admits exactly ONE path - never borrow one.** `compacted-entries-buffer` names
+the same physical buffer as `resume-survivor-handoff`, so reusing it for #4536 would have
+been the convenient choice, and would have meant any leg admitting the unfixed resume
+simultaneously admitted an `OSPREY_STAGE6_STREAM_SURVIVORS=0` regression on the computed
+path that #4530 already closed. Borrowing a token silently lowers the high-water mark for
+whatever else that token covers, which is exactly the property the named-token system
+replaced the blanket boolean to get.
+
 **`regression.ps1` sets this on NO leg.** It used to name `mdiag-full-resume` on mode 2, which
 is gone with the token (#4505): `--model-diagnostics` on a full resume reported off the
 RESIDENT pool because FirstJoin skipped its score pass, and FirstJoin's rehydrate now streams

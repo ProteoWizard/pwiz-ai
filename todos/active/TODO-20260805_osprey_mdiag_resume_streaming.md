@@ -273,6 +273,46 @@ zero inspections; all three PowerShell files parse; `regression.ps1 -Dataset All
 **PASSED** (log: `ai/.tmp/mode5-postreview.log`), with the summary confirming the
 new mode 2 -> mode 5 ordering.
 
-**Next**: open the PR with `--label osprey`, the title prefixed `osprey:`, and
-`Fixes #4505`. Follow-up filed: #4535 (rename the task classes to their task
-Names).
+### 2026-08-06 - Token required, not just warned; dedicated token, not borrowed
+
+Brendan's rule, now recorded in ai/docs/osprey-development-guide.md:
+
+* **token + warning = good** - the token is the operator's explicit request, the
+  warning explains what was granted
+* **warning alone on a default path = INSUFFICIENT** - there is no request to
+  explain, so it annotates a defect instead of mitigating one
+* **a token admits exactly ONE path - never borrow one**
+* any token `regression.ps1` REQUIRES must have an open issue to remove it
+
+So the Stage 6 resume handoff is now REFUSED unless named, not merely warned
+about: new `PerFileScoringTask.ResumeResidentHandoffGuardError`, called from
+`FirstJoin.Rehydrate` BEFORE the expensive load and only on the own-bundle branch
+(a worker bundle carries one worker's files, not the all-files buffer).
+
+**The borrowing catch.** The first cut reused `compacted-entries-buffer`, which
+names the SAME physical buffer. Brendan caught it: that token also admits
+`OSPREY_STAGE6_STREAM_SURVIVORS=0` on the computed path, which #4530 already
+FIXED - so any leg naming it to admit this unfixed resume would simultaneously
+re-open a closed regression. Now `RESUME_SURVIVOR_HANDOFF` /
+`resume-survivor-handoff`, its own token, with the asymmetry pinned in both
+directions in `ResidentPoolGuardTest`.
+
+Adding to `KNOWN_UNFIXED` is allowed here under the class's own rule: it names a
+path that was previously unnamed AND unguarded, not one that had been fixed -
+the same justification `COMPACTED_ENTRIES_BUFFER` used.
+
+`regression.ps1` also prints its outstanding gaps in every run summary, so the
+one remaining entry is visible on every GREEN run rather than only in source.
+
+Verified: `Build-Osprey -RunTests -RunInspection` 575/575 + zero inspections;
+`regression.ps1 -Dataset All` **PASSED** (log: `ai/.tmp/mode5-token.log`), with
+the inventory printing `#4536  token: resume-survivor-handoff`.
+
+**Next**: re-run `/code-review max` (the diff grew ~250 lines of NEW code since
+the first review - the guard, the token, the gate inventory - and it is all
+failure-path code that green runs never execute), fold findings, then open the PR
+with `--label osprey`, title prefixed `osprey:`, and `Fixes #4505`. Ask before
+triggering the TeamCity Perf/Regression gate on `pull/<N>`.
+
+Follow-ups filed: #4535 (rename task classes to their task Names), #4536 (Stage 6
+resume survivor handoff).
