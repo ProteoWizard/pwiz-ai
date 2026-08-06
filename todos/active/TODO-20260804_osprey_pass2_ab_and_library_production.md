@@ -654,15 +654,58 @@ after an earlier revision gated it on `ctx.Diagnostics`, which would have made t
   rewrites. Cause: `io.open(...,'w',encoding='utf-8-sig')` WRITES a BOM. Read utf-8-sig, write
   utf-8. The arm C branch was checked and is clean (Edit tool throughout).
 
-**11 findings remain OPEN, posted on issue #4532** (comment 5202755992). The three that matter:
-the HPC `--task SecondPassFDR` merge node - the process that actually holds the full library
-through the blib write - realizes ZERO saving; the validity-key guarantee has a hole one gate
-upstream (`OSPREY_FDR_PROJECTION` is in no validity key); and `FragmentMath._top6MzCache`
-(~750 MB, never cleared) survives the release inside the same Stage 6 floor.
-
 **The lesson worth carrying**: all four defects were WIRING, and the only test covered the pure
 helper's set arithmetic. Deleting the production call site still leaves the suite green. An
 integration test is the gap that let them through.
+
+### The other 11 findings - ALL ADDRESSED 2026-08-06 (`a5cb0183a2`)
+
+Posted on issue #4532 as comment 5202755992. The three that mattered:
+
+* **The HPC merge node realized ZERO saving.** `MergeNodeTask` now performs its own release,
+  retaining every base_id in the final reported pool. It had to be its own: `FirstJoinTask` -
+  where the Stage 5 -> 6 release lives - is excluded from a `--task SecondPassFDR` pipeline
+  entirely, and that leg loads fragment-laden (`OmitFragments` is gated on `StopAfterStage5`).
+  The retained set is a superset of what is read, because `BlibOutputWriter.PrecompressSpectra`
+  reads fragments only for `bestByPrecursor.Values`, derived from that pool by filtering, and
+  nothing else after Stage 6 reads a spectrum: pass-2 Percolator reloads FEATURES from the
+  reconciled parquet (`Pass2FdrSidecar` never touches the library) and parsimony reads identity.
+  Placed AFTER `ctx.Get<RescoredEntries>()`, so the merge-mode compaction it materializes is
+  already done.
+* **The validity-key hole is closed at its root.** The suffix moved to
+  `LibraryFragmentRelease.ValidityKeySuffix` and is keyed on whether the release RAN
+  (`RunsOnThisLeg`), not on the flag - the same predicate the call sites gate on, so key and
+  code cannot disagree. It is EMPTY on a leg where a release was impossible
+  (`--task FirstPassFDR`, or the resident pool `--fdrbench-pass 1` forces) as well as where it
+  ran: there the two arms are literally the same run, and a term would force hours of Stage 5
+  re-scoring on an HPC resume to record a difference that cannot exist. **Under default
+  settings every leg's key is byte-identical to master's** - nothing is invalidated.
+* **`FragmentMath._top6MzCache` is cleared** by the release (`ClearTop6MzCache`). Pure memo, so
+  neutral in both directions - and dropping it also stops a released entry's stale cached top-6
+  from satisfying the prefilter that should have tripped the tripwire.
+
+The rest: guards that could not fire removed (the silent `fullLibrary == null -> return 0`
+degraded quietly in a fail-loud design); the misleading `~7.1 GB` replaced with the measured
+28.5 -> 17.7 GB A/B plus the ~3.2 GB fragment-share caveat, since only fragments are freed;
+`IsSpectrumReleased`'s doc now says what it answers ("was it RELEASED", not "does it have a
+spectrum" - `Array.Empty` reports false); the `-DumpProteinFdr` citation corrected to
+`OSPREY_DUMP_STAGE7_PROTEIN_FDR`; `_firstPassBaseIds` documented as deliberately separate from
+`_survivorLoader` (the loader is null on the Rehydrate leg, which is where the release matters
+most); and the tripwire's inability to name the offending entry recorded as the deliberate cost
+of one shared singleton.
+
+**Gates**: 576 tests, zero inspection warnings, and `regression.ps1 -Dataset All` PASSED all 26
+checks across all four datasets - every `mode3 (HPC chain==straight)` included, which is the leg
+the merge-node release runs on. Log: `ai/.tmp/regression-all-libfrag-review.log`. TeamCity 4123106
+(SUCCESS) covered only `8317479fc4`; **4123277 is the one on the real tip `a5cb0183a2`**.
+
+**The test gap is NARROWED, not closed.** New coverage pins the leg truth table (the merge node
+MUST release, `--task FirstPassFDR` must NOT), the merge-node retained-set arithmetic, the suffix
+contract, and the release arm's participation in `TaskValidityKeyTest`'s canonical-pipeline walk -
+asserted against a NON-EMPTY arm, since the default emits nothing and a default-arm assertion
+asserts nothing. But **deleting the production call site still leaves the unit suite green**.
+Only `regression.ps1` mode1/mode3 covers that, and only because the committed golden predates the
+change.
 
 ## Tasks
 
@@ -680,7 +723,11 @@ integration test is the gap that let them through.
       `-ungated` / `-gated` rebuilds already on disk
 - [x] **Arm C implemented + gated** - `OSPREY_PROTEIN_COMPACT_QUALIFY`, Stellar byte-identity
       PASS on all 5 modes with the flag off
-- [ ] **Run arm C** - blocked on the library run finishing (memory, not correctness)
+- [x] **Run arm C** - COMPLETE 2026-08-05 11:38, scored: true FDP 1.139% -> 0.426% at 1%
+      reported q, with MORE discoveries (38,477 vs 37,056)
+- [x] **PR #4534 code review** - all 15 findings addressed (4 in `c601d63cd6`, 11 in
+      `a5cb0183a2`); `-Dataset All` green; TeamCity 4123277 running on the tip
+- [ ] Run the mb6 + `-QualifyBy experiment` arm (~4h45m) - designed, never launched
 - [ ] Merge Carafe #10 (retarget to `main` BEFORE deleting #9's branch, or #10 auto-closes
       unreopenably)
 - [ ] Regenerate the Astral library with the fixed Carafe once `-itol` is settled
