@@ -609,118 +609,20 @@ Verified on real 1.4M-quartet builds at **r=0.5 (measured 0.4999)** and **r=0.1 
 0.1000)**, zero `p_target` rows without a target in their pair. Carafe suite 126 tests, 0 failures.
 Build toolchain: IntelliJ's bundled JBR 21.0.9 + Maven 3.9.9 (JDK 17 cannot build this pom).
 
-## Library-fragment release (#4532 / PR #4534) - MEASURED 2026-08-05
+## Library-fragment release (#4532 / PR #4534) - SPLIT OUT 2026-08-06
 
-Separate branch `Skyline/work/20260805_osprey_library_fragment_release`, PUSHED, PR #4534 open.
-Releases `LibraryEntry.Fragments` at the Stage 5 -> 6 boundary for everything outside
-survivors + gap-fill. Default ON (`IsNotZero` treats unset as on); `OSPREY_RELEASE_LIBRARY_FRAGMENTS=0`
-is the A/B arm.
+Moved to its own dated TODO, matching its own branch:
+**[TODO-20260805_osprey_library_fragment_release.md](TODO-20260805_osprey_library_fragment_release.md)**.
 
-A/B on 4 SEA-AD files against the full 12.7 GB gated-no-il library, same pinned binary, sequential.
-Released 5,459,501 of 6,275,151 entries (87.0%), 409,235 base_ids retained.
+Summary only: releases `LibraryEntry.Fragments` for everything outside survivors + gap-fill at
+the Stage 5 -> 6 boundary, plus the merge node's own release against the reported pool. Stage 7
+peak -38% on 4 SEA-AD files. All 15 code-review findings closed; `regression.ps1 -Dataset All`
+and TeamCity 4123277 green on `a5cb0183a2`. The design, the measurements, the findings and the
+standing integration-test gap are all in that file - do not duplicate them here.
 
-| stage | ON | OFF | delta peak |
-|---|---|---|---|
-| PerFileScoring (pre-release) | 13.9 / 30.5 GB | 15.2 / 30.9 GB | -0.4 (noise) |
-| FirstPassFDR | 27.7 / 35.7 GB | 27.3 / 40.3 GB | -4.6 GB |
-| PerFileRescoring | 14.5 / 34.0 GB | 20.5 / 41.8 GB | -7.8 GB |
-| SecondPassFDR | 15.9 / **17.7** GB | 22.2 / **28.5** GB | **-10.8 GB** |
+Relevant to THIS TODO only as memory headroom: the Stage 7 peak it reduces is the same 63.1 GB
+peak recorded under "MEMORY: the real peak is Stage 7" above.
 
-Stage 7 peak -38%. Slightly faster, not slower. Stage 1-4 unchanged, as it must be.
-
-**FEW FILES IS THE MAXIMUM-SAVING CASE, not a scaled-down one** - the library is fixed while the
-retained set grows with file count. At 82 files expect ~70-75% released rather than 87%, so a
-smaller (still large) saving. Do not quote the 4-file numbers as production.
-
-`regression.ps1 -Dataset All` PASSED with the release ACTIVE - and the committed golden predates
-this change, so mode1 IS the release-on vs release-off correctness proof. Verified it actually
-engages in the golden-compared leg (`Released library fragments for 152830 of 485628 entries`)
-after an earlier revision gated it on `ctx.Diagnostics`, which would have made that gate vacuous.
-
-### Code review outcome (2026-08-06) - 4 real defects, all WIRING
-
-`/code-review max` on the libfrag branch returned 15 findings. Fixed in `c601d63cd6`:
-
-* **The Rehydrate path never released.** That is the RESUME path - what an operator runs after
-  the very OOM this change targets - so the one run that most needs a lean library kept the
-  whole thing resident. Worse, the doc comment justified it with a claim that was FALSE:
-  `RescoreHydration` does surface the surviving set (`GlobalFirstPassBaseIds`).
-* **StopAfterStage5 stripped gap-fill AND fabricated a saving.** `PlanStage6` returns early
-  before assigning the gap-fill plan while `_firstPassBaseIds` IS set, so the retained set was
-  survivors-only; and that path already loads with `OmitFragments`, so `ReleaseSpectrum` (which
-  detects by reference identity, not "has a spectrum") swapped one shared singleton for another
-  and printed millions released having freed ZERO bytes, directly above a [MEM] probe.
-* **Six UTF-8 BOMs** broke the repo BOM gate and turned two 3-line diffs into whole-file
-  rewrites. Cause: `io.open(...,'w',encoding='utf-8-sig')` WRITES a BOM. Read utf-8-sig, write
-  utf-8. The arm C branch was checked and is clean (Edit tool throughout).
-
-**The lesson worth carrying**: all four defects were WIRING, and the only test covered the pure
-helper's set arithmetic. Deleting the production call site still leaves the suite green. An
-integration test is the gap that let them through.
-
-### The other 11 findings - ALL ADDRESSED 2026-08-06 (`a5cb0183a2`)
-
-Posted on issue #4532 as comment 5202755992. The three that mattered:
-
-* **The HPC merge node realized ZERO saving.** `MergeNodeTask` now performs its own release,
-  retaining every base_id in the final reported pool. It had to be its own: `FirstJoinTask` -
-  where the Stage 5 -> 6 release lives - is excluded from a `--task SecondPassFDR` pipeline
-  entirely, and that leg loads fragment-laden (`OmitFragments` is gated on `StopAfterStage5`).
-  The retained set is a superset of what is read, because `BlibOutputWriter.PrecompressSpectra`
-  reads fragments only for `bestByPrecursor.Values`, derived from that pool by filtering, and
-  nothing else after Stage 6 reads a spectrum: pass-2 Percolator reloads FEATURES from the
-  reconciled parquet (`Pass2FdrSidecar` never touches the library) and parsimony reads identity.
-  Placed AFTER `ctx.Get<RescoredEntries>()`, so the merge-mode compaction it materializes is
-  already done.
-
-  **VERIFIED by reading each leg's own log** (`regression.ps1 -Dataset Stellar -KeepOutput`,
-  run dir `pwiz_tools/Osprey/TestResults/regression-20260806_041813`), not inferred from a
-  green gate:
-
-  | leg | released |
-  |---|---|
-  | `chain/phase4_mergenode/phase4.log` | **76,442 of 242,841 (31.5%)** - was zero |
-  | `straight/straight.log` FirstJoin | 152,830 of 485,628 |
-  | `straight/straight.log` merge node | **0** of 485,628 - idempotent, costs nothing |
-
-  Retained base_ids = **166,399 in all three**, an independent cross-check that the
-  reported-pool set and the survivors+gap-fill set agree. 242,841 vs 485,628 entries because
-  `ExpectReconciledInput` skips the decoy rebuild - so that leg was carrying the whole TARGET
-  fragment set through the blib write and freeing none of it.
-* **The validity-key hole is closed at its root.** The suffix moved to
-  `LibraryFragmentRelease.ValidityKeySuffix` and is keyed on whether the release RAN
-  (`RunsOnThisLeg`), not on the flag - the same predicate the call sites gate on, so key and
-  code cannot disagree. It is EMPTY on a leg where a release was impossible
-  (`--task FirstPassFDR`, or the resident pool `--fdrbench-pass 1` forces) as well as where it
-  ran: there the two arms are literally the same run, and a term would force hours of Stage 5
-  re-scoring on an HPC resume to record a difference that cannot exist. **Under default
-  settings every leg's key is byte-identical to master's** - nothing is invalidated.
-* **`FragmentMath._top6MzCache` is cleared** by the release (`ClearTop6MzCache`). Pure memo, so
-  neutral in both directions - and dropping it also stops a released entry's stale cached top-6
-  from satisfying the prefilter that should have tripped the tripwire.
-
-The rest: guards that could not fire removed (the silent `fullLibrary == null -> return 0`
-degraded quietly in a fail-loud design); the misleading `~7.1 GB` replaced with the measured
-28.5 -> 17.7 GB A/B plus the ~3.2 GB fragment-share caveat, since only fragments are freed;
-`IsSpectrumReleased`'s doc now says what it answers ("was it RELEASED", not "does it have a
-spectrum" - `Array.Empty` reports false); the `-DumpProteinFdr` citation corrected to
-`OSPREY_DUMP_STAGE7_PROTEIN_FDR`; `_firstPassBaseIds` documented as deliberately separate from
-`_survivorLoader` (the loader is null on the Rehydrate leg, which is where the release matters
-most); and the tripwire's inability to name the offending entry recorded as the deliberate cost
-of one shared singleton.
-
-**Gates**: 576 tests, zero inspection warnings, and `regression.ps1 -Dataset All` PASSED all 26
-checks across all four datasets - every `mode3 (HPC chain==straight)` included, which is the leg
-the merge-node release runs on. Log: `ai/.tmp/regression-all-libfrag-review.log`. TeamCity 4123106
-(SUCCESS) covered only `8317479fc4`; **4123277 is the one on the real tip `a5cb0183a2`**.
-
-**The test gap is NARROWED, not closed.** New coverage pins the leg truth table (the merge node
-MUST release, `--task FirstPassFDR` must NOT), the merge-node retained-set arithmetic, the suffix
-contract, and the release arm's participation in `TaskValidityKeyTest`'s canonical-pipeline walk -
-asserted against a NON-EMPTY arm, since the default emits nothing and a default-arm assertion
-asserts nothing. But **deleting the production call site still leaves the unit suite green**.
-Only `regression.ps1` mode1/mode3 covers that, and only because the committed golden predates the
-change.
 
 ## Tasks
 
