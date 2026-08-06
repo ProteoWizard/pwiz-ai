@@ -3,10 +3,10 @@
 ## Branch Information
 - **Branch**: `Skyline/work/20260805_osprey_library_fragment_release`
 - **Created**: 2026-08-05
-- **Status**: Complete - merged
+- **Status**: Completed
 - **Module**: `osprey`
 - **GitHub Issue**: [#4532](https://github.com/ProteoWizard/pwiz/issues/4532)
-- **PR**: [#4534](https://github.com/ProteoWizard/pwiz/pull/4534)
+- **PR**: [#4534](https://github.com/ProteoWizard/pwiz/pull/4534) (merged 2026-08-06 as `988c73c294`)
 - **Split from**: [TODO-20260804_osprey_pass2_ab_and_library_production.md](TODO-20260804_osprey_pass2_ab_and_library_production.md),
   which stays ACTIVE for the pass-2 A/B and library-production work this grew out of
 
@@ -160,9 +160,26 @@ change scoped:
 - [x] `/code-review max` - 15 findings, all addressed
 - [x] Merge-node release, verified by log rather than inferred
 - [x] `regression.ps1 -Dataset All` green; TeamCity 4123277 green on the tip
-- [ ] **Integration test over the release wiring** - the standing gap above
+- [ ] **Integration test over the release wiring** - DEFERRED, see the merge entry below
 
 ## Progress Log
+
+### 2026-08-06 - Merged
+
+PR #4534 merged as commit `988c73c294`. Shipped the Stage 5 -> 6 library-fragment release, the
+merge node's own release against the reported pool, the throwing sentinel, and the
+release-ran-keyed cache-validity suffix. All 15 code-review findings were addressed before merge
+(4 in `c601d63cd6`, 11 in `a5cb0183a2`); `regression.ps1 -Dataset All` passed 26/26 and TeamCity
+Perf/Regression 4123277 passed on the merged tip.
+
+**DEFERRED, deliberately, and it needs to be picked up:** the integration test over the release
+wiring. Every one of the four real defects found in review was WIRING, and deleting the
+production call site STILL leaves the unit suite green. The only thing covering it is
+`regression.ps1` mode1/mode3 - and only because the committed golden predates this change, so
+**that coverage expires at the next golden rebaseline.** No issue was filed; this TODO is the
+record. Also deferred by choice, to keep the change scoped: releasing on the
+`--task PerFileRescoring` Stage 6 worker, and bounding `FragmentMath._top6MzCache` during
+Stages 3-4 rather than only clearing it at the release point.
 
 ### 2026-08-06 - review findings closed, gates green on the tip
 
