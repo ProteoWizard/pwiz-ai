@@ -637,6 +637,33 @@ this change, so mode1 IS the release-on vs release-off correctness proof. Verifi
 engages in the golden-compared leg (`Released library fragments for 152830 of 485628 entries`)
 after an earlier revision gated it on `ctx.Diagnostics`, which would have made that gate vacuous.
 
+### Code review outcome (2026-08-06) - 4 real defects, all WIRING
+
+`/code-review max` on the libfrag branch returned 15 findings. Fixed in `c601d63cd6`:
+
+* **The Rehydrate path never released.** That is the RESUME path - what an operator runs after
+  the very OOM this change targets - so the one run that most needs a lean library kept the
+  whole thing resident. Worse, the doc comment justified it with a claim that was FALSE:
+  `RescoreHydration` does surface the surviving set (`GlobalFirstPassBaseIds`).
+* **StopAfterStage5 stripped gap-fill AND fabricated a saving.** `PlanStage6` returns early
+  before assigning the gap-fill plan while `_firstPassBaseIds` IS set, so the retained set was
+  survivors-only; and that path already loads with `OmitFragments`, so `ReleaseSpectrum` (which
+  detects by reference identity, not "has a spectrum") swapped one shared singleton for another
+  and printed millions released having freed ZERO bytes, directly above a [MEM] probe.
+* **Six UTF-8 BOMs** broke the repo BOM gate and turned two 3-line diffs into whole-file
+  rewrites. Cause: `io.open(...,'w',encoding='utf-8-sig')` WRITES a BOM. Read utf-8-sig, write
+  utf-8. The arm C branch was checked and is clean (Edit tool throughout).
+
+**11 findings remain OPEN, posted on issue #4532** (comment 5202755992). The three that matter:
+the HPC `--task SecondPassFDR` merge node - the process that actually holds the full library
+through the blib write - realizes ZERO saving; the validity-key guarantee has a hole one gate
+upstream (`OSPREY_FDR_PROJECTION` is in no validity key); and `FragmentMath._top6MzCache`
+(~750 MB, never cleared) survives the release inside the same Stage 6 floor.
+
+**The lesson worth carrying**: all four defects were WIRING, and the only test covered the pure
+helper's set arithmetic. Deleting the production call site still leaves the suite green. An
+integration test is the gap that let them through.
+
 ## Tasks
 
 - [x] Arm A: protein-compact + pick, 82 files, from scratch
