@@ -75,8 +75,27 @@ incident - a private copy that keyed off the class names and resumed nothing).
       to describe the resolved state
 - [x] `Build-Osprey -RunTests -RunInspection` - build green, 576/576 tests,
       inspection 0 errors / 0 warnings
-- [ ] `regression.ps1 -Dataset Stellar` (modes 4 and 5 read the `[TASK]` log tokens,
-      so they are the legs that would catch an accidental `Name` change)
+- [x] `regression.ps1 -Dataset Stellar` - PASSED, all 7 legs, and the blib is
+      **25,407,488 bytes in every mode** (straight-through, HPC chain, resume,
+      rehydrate): byte-identical, exactly as the issue predicted for a change with
+      no behavior and no `Name` movement.
+
+```
+Stellar mode1 (vs golden): PASS          Stellar mode2 (resume cache hits):  PASS
+Stellar mode3 (HPC chain==straight): PASS Stellar mode2 (resume==straight):   PASS
+Stellar mode4 (warm re-run all cached): PASS
+Stellar mode5 (rehydrate entered + cache hits): PASS
+Stellar mode5 (rehydrate==straight): PASS
+```
+
+Modes 4 and 5 are the legs that read the `[TASK]` log tokens and assert
+`-ExpectRan` / `-ExpectSkipped`, so they are what would have caught an accidental
+`Name` change. Mode 4 completing in 0.1s ("a fully cached run does no work") is
+the positive evidence that every existing `.osprey.task` sidecar still matched -
+a moved stamp would have forced a recompute here instead.
+
+The gate reports 1 required resident token (#4536 resume-survivor-handoff). That
+is pre-existing, has its own open issue, and is untouched by this change.
 
 ## ai/ side: two live defects found and fixed
 
@@ -95,18 +114,28 @@ two harnesses - both fixed here:
 
 ## Regression Test
 
-- **Test name**: (filled in once written)
-- **Test project**: Osprey unit tests / regression.ps1
-- **Fails on master**: (n/a - see note)
-- **Passes on fix**: (pending)
+- **Test name**: none added - see rationale
+- **Test project**: n/a
+- **Fails on master**: n/a
+- **Passes on fix**: `regression.ps1 -Dataset Stellar`, all 7 legs, blib
+  byte-identical at 25,407,488 across all four run modes
 
-Note: this is a pure rename with no behavior change, so there is no red->green test
-to write for the rename itself. The verification is the inverse: `regression.ps1`
-output must be byte-identical green before and after, and any diff means the rename
-moved something it should not have. If a cheap unit assertion can pin each task
-class's `Name` to its expected literal (making a future class/Name divergence a test
-failure rather than a comment), add it - that is the durable guard the issue is
-really asking for. Decide and record the outcome here.
+**Why no new test.** This is a pure rename with no behavior change, so there is no
+red->green test to write for it. The verification is the inverse - identical output
+before and after - which the Stellar gate provides, and modes 4/5 specifically
+assert the `[TASK]` tokens and sidecar cache hits that a botched rename would break.
+
+**A durable guard was considered and deliberately NOT added.** The obvious one is a
+unit assertion pinning each task class's `Name` to its literal, so a future
+class/Name divergence fails a test instead of relying on a comment. It was rejected
+because after this change it would assert almost nothing: the failure the issue
+describes was a SEPARATE consumer (a PowerShell glob) keying off class names, and a
+C# test comparing `FirstPassFdrTask.Name` to `"FirstPassFDR"` cannot see that
+consumer at all. The real protection is that the two strings are now the same word,
+plus the existing hard-failure guards in `Invoke-ResumeInvalidation` /
+`Invoke-SecondPassOnlyInvalidation`, which throw when their patterns match zero
+files - that is the check that actually catches a drifted token, and it already
+exists. Worth revisiting if a third consumer ever grows its own copy.
 
 ## Progress Log
 
