@@ -4,10 +4,15 @@
 - **Branch**: `Skyline/work/20260805_osprey_mdiag_resume_overlay`
 - **Base**: `master`
 - **Created**: 2026-08-05
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4505](https://github.com/ProteoWizard/pwiz/issues/4505)
 - **Module**: `osprey`
-- **PR**: [#4537](https://github.com/ProteoWizard/pwiz/pull/4537)
+- **PR**: [#4537](https://github.com/ProteoWizard/pwiz/pull/4537) (merged 2026-08-06 as `4169f844c2`)
+- **Filename note**: renamed to `..._overlay.md` at completion to match this
+  branch (`Skyline/work/20260805_osprey_mdiag_resume_overlay`). It was created
+  with attempt 1's `_streaming` slug, which collides with the ABANDONED attempt-1
+  record already in `todos/completed/`. The #4537 squash message therefore cites
+  the pre-rename path `todos/active/TODO-20260805_osprey_mdiag_resume_streaming.md`.
 - **Prior attempt**: PR #4533 (closed unmerged) - branch
   `Skyline/work/20260805_osprey_mdiag_resume_streaming` is kept on origin as a
   record of what NOT to do
@@ -62,28 +67,28 @@ it. That removes the duplicate join, the second I/O pass, the
 
 ## Tasks
 
-- [ ] Verify the current `Rehydrate` / `HydrateReconciliationOverlay` /
+- [x] Verify the current `Rehydrate` / `HydrateReconciliationOverlay` /
       `LogFirstPassResultsAndDump` shape on master (post #4484/#4528/#4530)
-- [ ] **Write the failing regression coverage FIRST**: a test that actually
+- [x] **Write the failing regression coverage FIRST**: a test that actually
       reaches `FirstJoin.Rehydrate` with valid 1st-pass sidecars and
       `--model-diagnostics` (overlaps #4473)
 - [ ] Add the `onStubsHydrated`-style hook to `HydrateReconciliationOverlay` and
       feed `ModelDiagnosticsData.Accumulator` from it
-- [ ] Drop the `ModelDiagnostics && FirstPassSidecarsPresent` term from the
+- [x] Drop the `ModelDiagnostics && FirstPassSidecarsPresent` term from the
       Stage-5 resident-pool gate
-- [ ] Join sidecar records to parquet rows by `entry_id` with subset tolerance
+- [x] Join sidecar records to parquet rows by `entry_id` with subset tolerance
       (never by ordinal) - follow `StreamFirstPassFileScores`
       (`FirstJoinTask.cs:2301`)
-- [ ] Do not seed `runNames` slots for skipped files (avoids a plausible-looking
+- [x] Do not seed `runNames` slots for skipped files (avoids a plausible-looking
       0 targets / 0 decoys page instead of a visible failure)
-- [ ] Keep `ReadRecords`' one-record-resident contract - no whole-file
+- [x] Keep `ReadRecords`' one-record-resident contract - no whole-file
       `List<FdrScoreRecord>` materialization (~270 MB LOH/file)
-- [ ] Verify byte-identical mdiag output resident-vs-streaming (`data.json`,
+- [x] Verify byte-identical mdiag output resident-vs-streaming (`data.json`,
       `.html`, `.1st-pass.fdr_scores.bin`)
-- [ ] Remove the `OSPREY_ALLOW_UNBOUNDED_MEMORY=1` scoping from `regression.ps1`
+- [x] Remove the `OSPREY_ALLOW_UNBOUNDED_MEMORY=1` scoping from `regression.ps1`
       mode 2 once the path is fixed and covered
-- [ ] `Build-Osprey -RunTests -RunInspection` + `regression.ps1 -Dataset All`
-- [ ] `/code-review max` before opening the PR
+- [x] `Build-Osprey -RunTests -RunInspection` + `regression.ps1 -Dataset All`
+- [x] `/code-review max` before opening the PR
 
 ## Regression Test
 
@@ -339,3 +344,43 @@ triggering the TeamCity Perf/Regression gate on `pull/<N>`.
 
 Follow-ups filed: #4535 (rename task classes to their task Names), #4536 (Stage 6
 resume survivor handoff).
+
+### 2026-08-06 - Merged
+
+PR #4537 merged as commit `4169f844c2`. What shipped: `FirstPassFDR`'s rehydrate
+arm now picks its hydrate from what Stage 5 actually loaded and streams the lean
+case through `HydrateCompactedStreaming`, feeding the `--model-diagnostics`
+accumulator and the passing-target tally from the per-file hook that already reads
+every sidecar. `mdiag-full-resume` is gone from the resident-pool gate and from
+`ResidentPaths.KNOWN_UNFIXED` - the ratchet shrinking.
+
+The bug was larger than #4505 described: the rehydrate arm threw on EVERY lean
+resume, not only under `--model-diagnostics`, which the mdiag term had been
+accidentally masking by forcing the resident pool. Verified red on master on
+Stellar, which has `ModelDiagnostics = $false`.
+
+Coverage: `regression.ps1` mode 5, the only leg reaching
+`LoadOwnReconciliationBundle` (mode 2 deletes the FirstPassFDR stamp so that task
+RUNS; mode 4 invalidates nothing; mode 3 adopts a worker-supplied bundle). It
+asserts a marker logged from inside that loader, blib equality at 1e-9, and both
+diagnostics tiers. 14 mode-5 assertions green across four datasets, locally and on
+TeamCity build 4123287 (89.5 min, ~+2% vs the config's historical estimate - mode 5
+is essentially the whole delta).
+
+**Deferred, deliberately**: the Stage 6 post-compaction survivor handoff is still
+O(files) on any resume, because only a computed Stage 5 builds the per-file
+survivor loader. This PR does not fix it - it NAMES and REFUSES it
+(`ResumeResidentHandoffGuardError` + the dedicated `resume-survivor-handoff`
+token), so the gate now requires exactly one token and prints its outstanding gaps
+in every run summary. Tracked by **#4536**, which owns removing the token, the
+guard and the warning.
+
+Review: two `/code-review max` rounds (15 + 15 findings, every one reproduced or
+refuted individually) plus Copilot's single inline comment, addressed and resolved.
+One finding was pushed back on - it cited a guide rule that had itself been
+superseded by the token+warning decision - with its real sub-defect fixed (the
+guard had been charging a second token to runs already resident under one).
+
+Follow-ups filed: **#4536** (resume survivor loader), **#4535** (rename the task
+classes to their task Names, so `FirstJoinTask`/`MergeNodeTask` stop diverging from
+`FirstPassFDR`/`SecondPassFDR`).
