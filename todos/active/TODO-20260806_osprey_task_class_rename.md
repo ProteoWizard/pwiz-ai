@@ -97,6 +97,70 @@ a moved stamp would have forced a recompute here instead.
 The gate reports 1 required resident token (#4536 resume-survivor-handoff). That
 is pre-existing, has its own open issue, and is untouched by this change.
 
+Re-run AFTER the code-review fixes (which touched `regression.ps1` itself, so the
+first green no longer covered the tree): all 7 legs PASS again, blib identical at
+25,407,488, and mode 5 still enters its rehydrate arm - confirming the renamed
+`$firstPassFdrRehydrateMarker` still matches the log line it asserts on.
+
+## Code review (`/code-review max`) - findings and what came of them
+
+The review earned its keep. Verified each finding against the code rather than
+auto-applying; all the ones below reproduced.
+
+**Two defects introduced by the sweep:**
+* Dropped `deterministically` from the `--input-scores` help text, and the loss
+  shipped in the generated `Documentation/Help/en/CommandLine.html`. Restored.
+* `$firstJoinRehydrateMarker` became `$FirstPassFDRRehydrateMarker`. Root cause:
+  the first PowerShell pass used `-replace`, which is case-INSENSITIVE in
+  PowerShell, so it matched a camelCase identifier. Swept for other casualties -
+  exactly one, now `$firstPassFdrRehydrateMarker` at both sites.
+
+**Wrong task named.** The systematic error: substituting a task NAME where the
+original word named a MODE, a PATH, or a node ROLE. Fixed by naming the actual
+thing (`reconciled-input path`, `--input-scores validator`), not another task:
+`Pass2FdrSidecar` x4 operator messages, `PipelineContext` (SecondPassFdrTask
+publishes nothing; only PerFileRescoreTask publishes RescoredEntries),
+`PerFileScoringTask` ("the SecondPassFDR lean path" is impossible -
+`NeedsResidentPool` is true whenever `ExpectReconciledInput`).
+
+**Incomplete sweep.** The first pass globbed only `.cs/.ps1/.md`, so it missed
+`Osprey-workflow.html` - the shipped diagram that the renamed classes' XML docs
+and the CLI help both link to - plus the `.csproj`, `1st-join` in
+`regression.ps1`, and a `MergeNode / SecondPassFDR` pair in `docs/13` that
+collapsed to `SecondPassFDR / SecondPassFDR`.
+
+**Two false claims written into the docs**: that the enum values are "the same
+names in PascalCase" (false for `PerFileRescore`), and that the `Fdr`/`FDR` split
+is "what C# PascalCase requires" - `namespace pwiz.Osprey.FDR` exists, so all-caps
+is legal; it is this codebase's TYPE convention (`FdrEntry`, `FdrController`).
+Also fixed `docs/DIVERGENCES.md`, which still asserted "enum/classes by join
+topology" and contradicted the new note in `docs/15`.
+
+**Correctly refuted, recorded so it is not re-raised**: `ResidentPaths.HPC_MERGE
+= "hpc-merge"` must NOT be renamed - it is an `OSPREY_ALLOW_UNFIXED_RESIDENT`
+token value, pinned by `ResidentPoolGuardTest` precisely to stop a silent rename.
+
+## The "flaky" test was not flaky
+
+`TestCommandLineHelpDocumentation` regenerates
+`Documentation/Help/en/CommandLine.html` from the CLI help text, fails when it is
+stale, and WRITES the file - so it passes on the next run. The sweep changed the
+help text, which is why it failed once and never again. It reproduced exactly when
+the help text was edited a second time. Any future change to `OspreyCommandArgs`
+help prose will do the same: run the tests twice and commit the regenerated HTML.
+
+## A self-inflicted corruption, caught and repaired
+
+While applying review fixes, a PowerShell call written as
+`Repl 'file' 'the' + [char]10 + '...'` was parsed as positional arguments, so the
+helper received `$from='the'`, `$to='+'` - replacing every "the" in
+`RegressionData.ps1` and every "unless" in `PerFileScoringTask.cs`, including
+inverting "refused unless named" to "refused + named". **Build, all 576 tests, and
+ReSharper passed with the corruption in place**, because it was confined to
+comments. It was caught by a post-edit diff scan, both files were reverted to the
+committed state, and each edit re-applied individually. Lesson: green gates do not
+cover comment prose - diff-read every scripted bulk edit.
+
 ## ai/ side: two live defects found and fixed
 
 Sweeping `ai/scripts/Osprey/` turned up the issue's own failure mode still live in
