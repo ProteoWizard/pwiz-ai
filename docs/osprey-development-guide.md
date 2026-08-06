@@ -765,10 +765,14 @@ A resident O(files) path is acceptable ONLY where the operator asked for it.
 | Warning alone, on a default path with no token | **Insufficient.** There is no request to explain, so the warning annotates a defect instead of mitigating one - and it reads as normal within a week. |
 | Neither | The failure mode the ratchet exists to prevent. |
 
-A warning on an untokened default path is allowed only as an **interim tripwire with an
-open issue against it**, and the issue is what makes it temporary. Adding a token instead
-is usually the wrong repair: it would make an ordinary user's run fail until they set an
-environment variable. Fix the path.
+A warning on an untokened default path is **not** an acceptable resting state. Require the
+token: omitting it fails loudly with an actionable message, naming it proceeds with the
+warning. That does mean an ordinary run on such a path fails until the operator sets a
+variable - deliberately. A loud, actionable refusal beats an OOM five hours into Stage 6,
+and it puts real pressure on the fix. Exempt only runs that ALREADY had to name a token for
+another reason, so one decision never costs two variables.
+
+Then fix the path, and delete the token together with the issue.
 
 **Any token required by `regression.ps1` must have an open issue to fix it and remove the
 token from the gate.** The script CLEARS an inherited `OSPREY_ALLOW_UNFIXED_RESIDENT` at

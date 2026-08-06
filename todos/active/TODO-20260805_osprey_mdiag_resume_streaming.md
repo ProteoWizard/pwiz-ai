@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4505](https://github.com/ProteoWizard/pwiz/issues/4505)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4537](https://github.com/ProteoWizard/pwiz/pull/4537)
 - **Prior attempt**: PR #4533 (closed unmerged) - branch
   `Skyline/work/20260805_osprey_mdiag_resume_streaming` is kept on origin as a
   record of what NOT to do
@@ -308,7 +308,30 @@ Verified: `Build-Osprey -RunTests -RunInspection` 575/575 + zero inspections;
 `regression.ps1 -Dataset All` **PASSED** (log: `ai/.tmp/mode5-token.log`), with
 the inventory printing `#4536  token: resume-survivor-handoff`.
 
-**Next**: re-run `/code-review max` (the diff grew ~250 lines of NEW code since
+### 2026-08-06 - PR #4537 opened
+
+Branch pushed and PR opened: **#4537**, `--label osprey`, title prefixed `osprey:`,
+`Fixes #4505`. No credit line - origin confirmed internal (issue authored by
+brendanx67, zero support-thread links, no reporter language).
+
+Second `/code-review max` round: 15 findings, all reproduced or refuted
+individually. One pushed back on (the hard-throw guard, which cited a guide rule
+that had itself been superseded by Brendan's token+warning decision - the guide
+was updated to match the code), with its real sub-defect fixed: the guard had
+been charging a SECOND token to runs already resident under one of their own.
+
+Notable self-inflicted bug caught at the end: the `-f` precedence trap
+reintroduced for the FOURTH time, in the very fix for the hardcoded-token-count
+finding. Fixing it by eyeball is what kept failing; a scanner that strips string
+literals, walks back to each enclosing call, and flags any `-f` fed by a `+`
+concatenation that is not double-wrapped found the one real instance and now
+reports zero. **Worth landing that check in the repo** - separate issue, not this
+PR.
+
+**Next**: Copilot auto-reviews #4537 -> `/pw-respond 4537`. ASK Brendan before
+triggering the TeamCity Perf/Regression gate on `branch=pull/4537`.
+
+**Superseded**: re-run `/code-review max` (the diff grew ~250 lines of NEW code since
 the first review - the guard, the token, the gate inventory - and it is all
 failure-path code that green runs never execute), fold findings, then open the PR
 with `--label osprey`, title prefixed `osprey:`, and `Fixes #4505`. Ask before
