@@ -215,6 +215,64 @@ StellarGenDecoyEntrap, Astral). Every pre-existing leg still green.
 Gates: `Build-Osprey -RunTests -RunInspection` 575/575 + zero inspections;
 `regression.ps1 -Dataset All` PASSED.
 
-**Next**: `/code-review max` on the branch BEFORE `gh pr create` (it is a
-user-triggered command, so Brendan runs it), fold any findings into the opening
-commits, then open the PR with `--label osprey` and the title prefixed `osprey:`.
+### 2026-08-06 - `/code-review max`: 15 findings, all verified, all addressed
+
+Every finding was reproduced or refuted against the code before acting. **All 15
+were correct**, including two factual errors in prose written on this branch. Two
+were verified by EXECUTION rather than reading:
+
+1. **`-NoTrainedModel`'s failure branch was broken.**
+   `$issues.Add(("...") -f $name, $f)` parses as a TWO-argument call (`-f` binds
+   tighter than the argument comma), so it threw instead of recording the issue.
+   Under `$ErrorActionPreference='Stop'` that escapes into regression.ps1's outer
+   catch, which is deliberately NOT per-dataset - the WHOLE gate aborts and every
+   remaining dataset is skipped. It fires only when `featureCount != 0`, i.e. the
+   exact regression the pin exists to catch, which is why three green runs never
+   touched it. Fixed with double parens; re-executed to confirm.
+2. **`Invoke-SecondPassOnlyInvalidation`'s guard.** `if (-not $targets)` catches
+   only a TOTAL miss; one match is a truthy scalar. Now `$targets.Count -lt 2`,
+   exercised through all three arms (0 / 1 / 2 files). While fixing it I
+   introduced the SAME format-argument bug in the new message and caught it by
+   executing rather than eyeballing.
+
+Structural fixes:
+
+* **Mode 5 moved AFTER mode 2.** Its merge rewrites the 2nd-pass sidecars and the
+  diagnostics report, not just the blib, and `Invoke-ResumeInvalidation` deletes
+  none of them - so the original placement left mode 2 resuming on mode-5 state
+  and made mode 2's oracle depend on `-SkipRehydrate`.
+* **The marker witnessed the wrong thing.** `Bundle hydration: skipping
+  first-pass Percolator` is logged before the bundle SOURCE is known, so a worker
+  bundle emits it too, and mode 3's PerFileRescoring phase enters the rehydrate
+  arm as well - so "no other leg reaches that arm" was wrong. Mode 5 now asserts
+  a line emitted from INSIDE `LoadOwnReconciliationBundle`, and the docs claim
+  only that it is the sole leg reaching that LOADER.
+* **The documented invariant is now enforced**: regression.ps1 CLEARS an
+  inherited `OSPREY_ALLOW_UNFIXED_RESIDENT` at startup (announcing it) instead of
+  merely not setting it.
+* Parquet faults wrapped to honor the documented error contract; the destructive
+  `Clear()` on the published buffer replaced with hydrate-into-local-then-swap;
+  a per-index key check so accumulator/rescore key divergence cannot be silent;
+  `OSPREY_PERCOLATOR_ONLY` no longer exits 0 having written no dump; the guard
+  test now sweeps every legal token so it tracks re-arming rather than spelling.
+
+Pushed back / deferred, with reasons recorded in the code:
+
+* **Stage 6 resident handoff** - real, but pre-existing for the mdiag resume;
+  this change widens which runs reach it. Refusing would break a configuration
+  that worked before, so it WARNS naming the consumer (matching
+  `WarnPreCompactionPool`'s precedent) and the guard's now-false justification
+  comment is corrected. Belongs to #4526.
+* **Double parquet read on a lean resume** - real. Documented in
+  `StreamOwnReconciliationBundle` with the tradeoff stated: one extra sequential
+  scan per file buys the O(files) -> O(1-file) pool. Removing it means making the
+  Stage 5 lean load lazy about work only `Run` consumes - a separate change.
+
+Re-verified after the fixes: `Build-Osprey -RunTests -RunInspection` 575/575 +
+zero inspections; all three PowerShell files parse; `regression.ps1 -Dataset All`
+**PASSED** (log: `ai/.tmp/mode5-postreview.log`), with the summary confirming the
+new mode 2 -> mode 5 ordering.
+
+**Next**: open the PR with `--label osprey`, the title prefixed `osprey:`, and
+`Fixes #4505`. Follow-up filed: #4535 (rename the task classes to their task
+Names).
