@@ -7,7 +7,7 @@
     The worker-mode strict gate (Compare-Stage7-Rehydration-Strict-CSharp.ps1)
     exercises the per-task (--task) worker rehydration paths, but
     NOT the straight-through-RESUME deferrals: PerFileScoring (InputScores
-    empty), FirstJoin (bundle == null), and PerFileRescore
+    empty), FirstPassFDR (bundle == null), and PerFileRescore
     (!ExpectReconciledInput). Those fire only when the driver skips a task
     because its own outputs are already valid on disk (CanRehydrate) and a
     downstream task is the first to Demand its state. PR-D replaced those three
@@ -19,7 +19,7 @@
                   writes ALL stage outputs + output.blib)  -> output_cold.blib
       Phase WARM: delete output.blib (+ its validity sidecar), re-run the SAME
                   command in the SAME dir. The driver skips PerFileScoring /
-                  FirstJoin / PerFileRescore (outputs valid), MergeNode re-runs
+                  FirstPassFDR / PerFileRescore (outputs valid), SecondPassFDR re-runs
                   and Demands RescoredEntries -> the three pure Rehydrate paths
                   fire down the chain.                       -> output.blib
 
@@ -32,7 +32,7 @@
     pre-existing straight-through-resume RT bug
     (ai/todos/backlog/TODO-ospreysharp_straightthrough_resume_1stpass_rt.md):
     on resume PerFileRescore leaves the buffer at the post-compaction (1st-pass)
-    state, so MergeNode writes 1st-pass RTs to the blib (~11K/59768 entries diverge
+    state, so SecondPassFDR writes 1st-pass RTs to the blib (~11K/59768 entries diverge
     by ~1.3 min; warm blib 52,486,144 vs cold 52,514,816 on Stellar 3-file). PR-D
     (the typed-byproduct resume Rehydrate purification) is deliberately
     behavior-preserving and does NOT fix that bug, so this gate FAILS today. It is
@@ -133,12 +133,12 @@ Copy-Item $blibInWork $coldBlib -Force
 Write-Host ("  COLD wall: {0:mm\:ss}; blib: {1} bytes" -f $rCold.wall, (Get-Item $coldBlib).Length) -ForegroundColor Green
 
 # ----- Phase WARM (resume) -----
-# Delete only the blib + any blib validity sidecar so MergeNode re-runs while
+# Delete only the blib + any blib validity sidecar so SecondPassFDR re-runs while
 # every upstream task's outputs stay valid on disk (driver skips them ->
 # downstream Demand fires the pure Rehydrate paths).
 Remove-Item $blibInWork -Force
 Get-ChildItem -Path $workDir -Filter '*.osprey.task' -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -like 'output.blib*' -or $_.Name -like '*MergeNode*' } |
+    Where-Object { $_.Name -like 'output.blib*' -or $_.Name -like '*SecondPassFDR*' } |
     Remove-Item -Force -ErrorAction SilentlyContinue
 Write-Host "[WARM] resume re-run (upstream outputs valid -> pure Rehydrate paths) ..." -ForegroundColor Cyan
 $rWarm = Invoke-Run -LogName 'warm.log'

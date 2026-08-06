@@ -42,8 +42,8 @@
       stage1to4  --task PerFileScoring                              (exits after Stage 4)
       stage5     --input-scores <frozen.parquet>                    OSPREY_PERCOLATOR_ONLY=1
       stage6     --input-scores <frozen.parquet>                    OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
-      stage7     --task MergeNode --input-scores <frozen.parquet>   OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
-      blib       --task MergeNode --input-scores <frozen.parquet>   (none — Stages 7-8 from reconciled)
+      stage7     --task SecondPassFDR --input-scores <frozen.parquet>   OSPREY_STAGE7_PROTEIN_FDR_ONLY=1
+      blib       --task SecondPassFDR --input-scores <frozen.parquet>   (none — Stages 7-8 from reconciled)
 
     Comparators (tightened relative to Test-Regression.ps1 because
     same-impl removes the documented Rust<->C# xcorr / sg_weighted_xcorr
@@ -619,7 +619,7 @@ $stageConfig = @{
 # Artifacts that downstream stages need to enter at the right pipeline
 # checkpoint. Same patterns as Freeze-PostStage4 in Test-Regression.ps1.
 # .osprey.task validity sidecars are included so the resume-aware
-# gates in PerFileScoring / FirstJoin / PerFileRescore / MergeNode see
+# gates in PerFileScoring / FirstPassFDR / PerFileRescore / SecondPassFDR see
 # their per-task signals at the next stage boundary instead of seeing
 # bare binaries with no metadata to validate.
 $downstreamArtifactPatterns = @(
@@ -732,7 +732,7 @@ function Run-PostStage4 {
     }
     $useJP2 = $stageConfig[$Stage].useJoinAtPass2
     # Osprey: pass-2 entry (Stages 7-8 from reconciled parquets) is
-    # --task MergeNode; pass-1 entry (Stages 5-8 from scores) is the default
+    # --task SecondPassFDR; pass-1 entry (Stages 5-8 from scores) is the default
     # pipeline driven purely by --input-scores (no --task). Rust osprey keeps
     # the retired --join-at-pass flags.
     # Type-constrain to [string[]] so the empty-CSharp-pass-1 case stays an
@@ -743,12 +743,12 @@ function Run-PostStage4 {
     # (`--input-scoresFILE--input-scores...`), which the binary rejects.
     [string[]]$cliArgs = @()
     if ($Tool -eq 'CSharp') {
-        if ($useJP2) { $cliArgs += @('--task', 'MergeNode') }
+        if ($useJP2) { $cliArgs += @('--task', 'SecondPassFDR') }
     } else {
         if ($useJP2) { $cliArgs += '--join-at-pass=2' } else { $cliArgs += '--join-at-pass=1' }
     }
-    # The C# --task MergeNode stages (stage7, blib) consume the Stage-6
-    # reconciled parquets, not the raw Stage-4 scores: MergeNode rejects a
+    # The C# --task SecondPassFDR stages (stage7, blib) consume the Stage-6
+    # reconciled parquets, not the raw Stage-4 scores: SecondPassFDR rejects a
     # parquet whose osprey.reconciled metadata is 'false'. Before #4261 Stage 6
     # overwrote the raw .scores.parquet in place so the same name carried
     # reconciled data; now the reconciled output is a distinct sibling. Rust's

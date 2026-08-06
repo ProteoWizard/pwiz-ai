@@ -35,23 +35,63 @@ Rename the two classes so class name, sidecar stamp, and log token are one strin
 No behavior change and no `Name` change, so `regression.ps1` must be green before
 and after.
 
+## Scope decisions
+
+Two extensions to the issue's scope, both agreed during the session:
+
+1. **The `HpcTask` enum members are renamed too** (`FirstJoin` -> `FirstPassFdr`,
+   `MergeNode` -> `SecondPassFdr`). The enum was a THIRD divergent name set the
+   issue does not list, and `Program.TaskCliName` carried a doc comment
+   apologizing for it. The members are never parsed from user input -
+   `ResolveTask` maps the CLI strings explicitly - so this is internal-only and
+   behavior-free. `PerFileRescore` is left alone: it matches its class, and only
+   its CLI Name (`PerFileRescoring`) differs.
+2. **The terminology goes away completely**, not just the two class names. That
+   means the informal prose too: "the merge node", "the join", "first join",
+   "first-join", "second join", "merge-node". ~330 sites across `pwiz_tools/Osprey`
+   and the `ai/` scripts and docs. Ordinary English uses of "join"/"merge" that
+   describe a data operation rather than naming a task are kept (e.g. "join-wide
+   base_id set", "the merge is order-independent" in `Calibrator`).
+
+Two historical mentions of the old names are kept ON PURPOSE, both because the
+text is about the rename itself and loses its meaning without them:
+`docs/15-hpc-scoring-split.md` (the divergence note explaining why one name per
+task) and `Regression/RegressionData.ps1` (the warning whose justification IS the
+incident - a private copy that keyed off the class names and resumed nothing).
+
 ## Tasks
 
-- [ ] Rename `FirstJoinTask` -> `FirstPassFdrTask` (file, class, all references)
-- [ ] Rename `MergeNodeTask` -> `SecondPassFdrTask` (file, class, all references)
-- [ ] Confirm the `Name` property values are UNCHANGED (`FirstPassFDR`,
-      `SecondPassFDR`) - the stamps and logs must not move, or every existing
-      `.osprey.task` sidecar on disk is invalidated and `regression.ps1`'s cache
-      assertions break
-- [ ] Sweep comments and docs that say "the join" / "the merge node" / "first join"
-      and replace with the task Name, keeping the class name as a parenthetical
-      where it helps. Known sites: `regression.ps1` (modes 3 and 4 blocks),
-      `Regression/RegressionData.ps1`, `Regression/README.md`,
-      `ai/docs/osprey-development-guide.md`
-- [ ] Check the `docs/` numbered design notes for the same terminology
-- [ ] `Build-Osprey -RunTests -RunInspection`
+- [x] Rename `FirstJoinTask` -> `FirstPassFdrTask` (file, class, all references)
+- [x] Rename `MergeNodeTask` -> `SecondPassFdrTask` (file, class, all references)
+- [x] Rename `HpcTask.FirstJoin` -> `FirstPassFdr`, `HpcTask.MergeNode` -> `SecondPassFdr`
+      (see Scope decisions)
+- [x] Confirm the `Name` property values are UNCHANGED (`FirstPassFDR`,
+      `SecondPassFDR`) - verified: the five `override string Name` sites are
+      untouched by the diff
+- [x] Sweep comments and docs for the informal metaphors
+- [x] Check the `docs/` numbered design notes for the same terminology - 07, 09,
+      11, 12, 13, 14, 15, 16, 20 and `README.md` updated; the stale
+      "task names differ from the pipeline stage" divergence note in 15 rewritten
+      to describe the resolved state
+- [x] `Build-Osprey -RunTests -RunInspection` - build green, 576/576 tests,
+      inspection 0 errors / 0 warnings
 - [ ] `regression.ps1 -Dataset Stellar` (modes 4 and 5 read the `[TASK]` log tokens,
       so they are the legs that would catch an accidental `Name` change)
+
+## ai/ side: two live defects found and fixed
+
+Sweeping `ai/scripts/Osprey/` turned up the issue's own failure mode still live in
+two harnesses - both fixed here:
+
+* `Compare-StraightThroughResume-CSharp.ps1:141` matched resume sidecars with
+  `-like '*MergeNode*'`. Sidecars are named `*.SecondPassFDR.osprey.task`, so that
+  clause matched zero files - exactly the bug the issue cites, in a second copy.
+  (The companion `'output.blib*'` clause did catch the stamp, so the harness still
+  worked; the clause was dead rather than damaging.)
+* `Test-Snapshot.ps1` and `Compare-Stage7-Rehydration-Strict-CSharp.ps1` invoked
+  `--task MergeNode` / `--task FirstJoin`. `Program.ResolveTask` accepts only
+  `PerFileScoring | FirstPassFDR | PerFileRescoring | SecondPassFDR | SpectraCache`,
+  so those invocations fail with "unknown task". Broken before this change, not by it.
 
 ## Regression Test
 

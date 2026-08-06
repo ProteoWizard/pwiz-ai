@@ -185,7 +185,7 @@ issue, not a property of your run.
 Osprey gates the pre-compaction pool on `FdrBenchPass == 1` exactly, so the `both` bitmask
 (3) misses the test and only pass 2 is emitted, silently. Verified on three runs including
 one with `--model-diagnostics`, so it is not an mdiag interaction - see
-`PerFileScoringTask.NeedsResidentPool` and `FirstJoinTask.WriteFdrBenchPass1IfRequested`.
+`PerFileScoringTask.NeedsResidentPool` and `FirstPassFdrTask.WriteFdrBenchPass1IfRequested`.
 This is a product bug, reported separately; until it is fixed, keep `--model-diagnostics`
 on if you want pass-1 numbers, and read them from the report's `fdpViews` (which carry an
 explicit `pass` field - select on it) via `fdp_at_count.py` / `runcount_fdp.py`.

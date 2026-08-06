@@ -26,7 +26,7 @@ Now compare against the defects `/code-review max` actually found on #4534:
 * the Rehydrate (RESUME) path never released
 * `--task FirstPassFDR` fabricated a saving - printed millions released having freed ZERO,
   directly above a [MEM] probe an HPC sizing A/B would read as measured
-* the HPC merge node realized zero saving
+* the HPC SecondPassFDR node realized zero saving
 
 **Every one is in the uncovered column.** Not one was an over-release. So the class of defect
 this feature keeps producing is precisely the class with no automated detection, and all three
@@ -41,7 +41,7 @@ files, which is the exact failure #4532 existed to prevent.
 ## Approach - assert the logs the harness already has
 
 NOT a C# integration test. `regression.ps1` already runs every leg and already keeps each
-leg's log; verifying the merge node on 2026-08-06 was a matter of reading them by hand. Turn
+leg's log; verifying SecondPassFDR on 2026-08-06 was a matter of reading them by hand. Turn
 that manual read into an assertion.
 
 Per-leg expectations, **calibrated against an observation run** (`-Dataset Stellar -KeepOutput`,
@@ -55,12 +55,12 @@ original defects got in, and which caught two of my own assumptions wrong:
 | HPC `--task PerFileScoring` | `phase1.log` | 0 | none |
 | HPC `--task FirstPassFDR` | `phase2.log` | **0** | **none** - locks in the fabricated-saving fix |
 | HPC `--task PerFileRescoring` | `phase3.log` x3 | 1 line, 152,830 | present, > 0 |
-| HPC merge node | `phase4.log` | 1 line, 76,442 | present, > 0 |
+| HPC SecondPassFDR node | `phase4.log` | 1 line, 76,442 | present, > 0 |
 | warm re-run | `warm.log` | 0 | none |
 
 **CORRECTION to this file's first draft.** I wrote that `phase3_rescore_*` (the Stage 6 worker)
-"releases nothing today". It DOES - 152,830 entries, via `FirstJoinTask.Rehydrate` reached
-through a lazy `Demand`, even though `FirstJoinTask.IsIncluded` excludes it from that leg's
+"releases nothing today". It DOES - 152,830 entries, via `FirstPassFdrTask.Rehydrate` reached
+through a lazy `Demand`, even though `FirstPassFdrTask.IsIncluded` excludes it from that leg's
 pipeline. So the Stage 6 worker is already covered and IS assertable. I also nearly asserted a
 release on the warm re-run leg, which legitimately does no work at all and logs nothing - that
 would have been a false red on every run.
@@ -76,8 +76,8 @@ failure set `$overallFail = $true` plus `Write-Problem-Tc`.
 
 ```
 chain/phase4_mergenode/phase4.log:  76,442 of 242,841 (166,399 base_ids retained)
-straight/straight.log FirstJoin:   152,830 of 485,628 (166,399 base_ids retained)
-straight/straight.log merge node:        0 of 485,628 (166,399 base_ids retained)
+straight/straight.log FirstPassFDR:   152,830 of 485,628 (166,399 base_ids retained)
+straight/straight.log SecondPassFDR node:        0 of 485,628 (166,399 base_ids retained)
 ```
 
 242,841 vs 485,628 because `ExpectReconciledInput` skips the decoy rebuild. Retained base_ids
@@ -100,7 +100,7 @@ switched off entirely:
 
 Five independent correctness assertions stay green with the feature OFF. Only mode 5 sees it,
 and it names every leg: straight-through (both scopes), resume (both scopes), all three
-`--task PerFileRescoring` workers, and the merge node. `--task FirstPassFDR`'s absence
+`--task PerFileRescoring` workers, and SecondPassFDR. `--task FirstPassFDR`'s absence
 assertion correctly stayed quiet.
 
 **That is the argument for this PR, measured rather than reasoned.** It is also exactly the

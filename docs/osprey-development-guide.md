@@ -543,7 +543,7 @@ The runner clears the FDR-stage caches but KEEPS `*.scores.parquet`, so Osprey
 resumes from the (expensive) per-file scoring checkpoint and only re-runs the
 fast FDR / rescore / merge stages (~2 min Stellar; Astral re-scores under
 `--resolution hram`, ~15-20 min). The report is emitted INSIDE those stages
-(`FirstJoinTask` writes pass 1 + a data sidecar; `MergeNodeTask` appends pass 2
+(`FirstPassFdrTask` writes pass 1 + a data sidecar; `SecondPassFdrTask` appends pass 2
 and re-renders) -- there is **no standalone "render the HTML from disk" path**,
 and FirstPassFDR must actually RETRAIN (the runner clears the 1st-pass sidecars
 to force it) or the model table + per-feature histograms are absent. The runner
@@ -554,7 +554,7 @@ then diffs the HTML pass-2 curve vs a stock-FDRBench run of the same TSV via
 SECOND Percolator retrain on the post-reconciliation reported pool on ANY run
 where Stage 6 rescored entries, independent of `--protein-fdr` (matching Rust,
 whose `protein_fdr` is a plain f64 that always runs; the C# gate is
-`MergeNodeTask.AnyReconciledParquet`). `--protein-fdr` now only sets the
+`SecondPassFdrTask.AnyReconciledParquet`). `--protein-fdr` now only sets the
 protein-q THRESHOLD (default 0.01), NOT whether the machinery runs. So both
 things the retrain does are visible on a plain run with NO `--protein-fdr`:
 1. **The Model tab's "1st pass / 2nd pass" selector is populated** -- you see how
@@ -631,7 +631,7 @@ science explanation, not just a green build:
 
 Since the 2026-04-19 HPC split sprint, both tools expose CLI flags
 that break the pipeline at Stage 4 / Stage 5 so workers can score in
-parallel and a merge node runs FDR + .blib output:
+parallel and a SecondPassFDR node runs FDR + .blib output:
 
 The pipeline alternates per-file fan-out phases (Stages 1-4 scoring,
 Stage 6 per-file rescore) with join phases (Stage 5 first-pass FDR
@@ -794,7 +794,7 @@ replaced the blanket boolean to get.
 
 **`regression.ps1` sets this on NO leg.** It used to name `mdiag-full-resume` on mode 2, which
 is gone with the token (#4505): `--model-diagnostics` on a full resume reported off the
-RESIDENT pool because FirstJoin skipped its score pass, and FirstJoin's rehydrate now streams
+RESIDENT pool because FirstPassFDR skipped its score pass, and FirstPassFDR's rehydrate now streams
 that report from the per-file load it already performs. An ambient allowance on a standing
 gate can only mask the regression the gate exists to catch, so the whole gate now runs with
 nothing suppressed.

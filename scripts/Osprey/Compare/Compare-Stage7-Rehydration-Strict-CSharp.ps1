@@ -24,9 +24,9 @@
 
       Phase 0 (TRUTH, in-memory):     Osprey -i mzML -l lib ...     -> writes ALL stage artifacts in one dir
       Phase 1 (HPC raw workers):      Osprey -i mzML ... --task PerFileScoring -> Stage 1-4 outputs
-      Phase 2 (HPC 1st-join):         Osprey --task FirstJoin ...              -> Stage 5 sidecar pair
+      Phase 2 (HPC FirstPassFDR):         Osprey --task FirstPassFDR ...              -> Stage 5 sidecar pair
       Phase 3 (HPC rescore worker):   Osprey --task PerFileRescore ...         -> Stage 6 reconciled parquet (per file)
-      Phase 4 (HPC 2nd-join):         Osprey --task MergeNode ...              -> Stage 7 + blib
+      Phase 4 (HPC SecondPassFDR):         Osprey --task SecondPassFDR ...              -> Stage 7 + blib
 
     Stage boundaries compared (GATED in order; STOP on first FAIL):
 
@@ -246,7 +246,7 @@ $r1 = Invoke-Osprey -WorkDir $ph1Dir -CliArgs $args1
 Write-Host ("  Phase 1 wall: {0}" -f (Format-Duration $r1.wall)) -ForegroundColor Green
 # Stage 4 boundary not gated -- known deterministic; user-confirmed.
 
-# ----- PHASE 2: HPC 1st-join merge (Stage 5) -----
+# ----- PHASE 2: HPC FirstPassFDR merge (Stage 5) -----
 if (Test-Path $ph2Dir) { Remove-Item $ph2Dir -Recurse -Force }
 New-Item -ItemType Directory -Path $ph2Dir -Force | Out-Null
 foreach ($f in $mzmls) {
@@ -256,8 +256,8 @@ foreach ($f in $mzmls) {
     New-Item -ItemType File -Path (Join-Path $ph2Dir ($stem + '.mzML')) -Force | Out-Null
 }
 Stage-DatasetFiles -Dir $ph2Dir -IncludeMzml:$false
-Write-Host "[Phase 2] HPC 1st-join merge (--task FirstJoin, Stage 5) ..." -ForegroundColor Cyan
-$args2 = @('--task', 'FirstJoin')
+Write-Host "[Phase 2] HPC FirstPassFDR (--task FirstPassFDR, Stage 5) ..." -ForegroundColor Cyan
+$args2 = @('--task', 'FirstPassFDR')
 foreach ($f in $mzmls) {
     $stem = [IO.Path]::GetFileNameWithoutExtension($f)
     $args2 += @('--input-scores', ($stem + '.scores.parquet'))
@@ -349,14 +349,14 @@ if (-not $stage6Ok) {
 }
 Write-Host "Stage 6 boundary: PASS" -ForegroundColor Green
 
-# ----- PHASE 4: 2nd-join merge node (Stage 7) -----
+# ----- PHASE 4: SecondPassFDR (Stage 7) -----
 if (Test-Path $ph4Dir) { Remove-Item $ph4Dir -Recurse -Force }
 New-Item -ItemType Directory -Path $ph4Dir -Force | Out-Null
 foreach ($f in $mzmls) {
     $stem = [IO.Path]::GetFileNameWithoutExtension($f)
     $ph3Dir = Join-Path $rootDir ("phase3_worker_" + $stem)
-    # The merge node consumes the RECONCILED parquet (Stage 6 output),
-    # not the original Stage 4 parquet. --task MergeNode also requires
+    # The SecondPassFDR node consumes the RECONCILED parquet (Stage 6 output),
+    # not the original Stage 4 parquet. --task SecondPassFDR also requires
     # osprey.reconciled="true", which only the reconciled file carries.
     Copy-Item (Join-Path $ph3Dir ($stem + '.scores-reconciled.parquet')) (Join-Path $ph4Dir ($stem + '.scores-reconciled.parquet'))
     Copy-Item (Join-Path $ph3Dir ($stem + '.1st-pass.fdr_scores.bin')) (Join-Path $ph4Dir ($stem + '.1st-pass.fdr_scores.bin'))
@@ -365,8 +365,8 @@ foreach ($f in $mzmls) {
     $pass2 = Join-Path $ph3Dir ($stem + '.2nd-pass.fdr_scores.bin')
     if (Test-Path $pass2) { Copy-Item $pass2 (Join-Path $ph4Dir ($stem + '.2nd-pass.fdr_scores.bin')) }
     # Stub mzML for path derivation only (mirrors the Rust strict-
-    # rehydration script). The merge node MUST NOT read spectra at
-    # --task MergeNode because in production HPC the merge node ships
+    # rehydration script). The SecondPassFDR node MUST NOT read spectra at
+    # --task SecondPassFDR because in production HPC SecondPassFDR ships
     # only sidecars + reconciled parquets, never mzMLs. If the merge
     # binary tries to open this 0-byte file, that's a bug to fix in the
     # binary, not the test.
@@ -374,8 +374,8 @@ foreach ($f in $mzmls) {
 }
 Stage-DatasetFiles -Dir $ph4Dir -IncludeMzml:$false
 Write-Host ""
-Write-Host "[Phase 4] HPC 2nd-join merge (--task MergeNode, Stage 7) ..." -ForegroundColor Cyan
-$args4 = @('--task', 'MergeNode')
+Write-Host "[Phase 4] HPC SecondPassFDR (--task SecondPassFDR, Stage 7) ..." -ForegroundColor Cyan
+$args4 = @('--task', 'SecondPassFDR')
 foreach ($f in $mzmls) {
     $stem = [IO.Path]::GetFileNameWithoutExtension($f)
     $args4 += @('--input-scores', ($stem + '.scores-reconciled.parquet'))
@@ -432,7 +432,7 @@ if ($stage7Ok) {
     Write-Host "Stage 7 boundary: FAIL  -- divergence localized to Stage 7 (Stages 5+6 matched)" -ForegroundColor Red
     Write-Host ""
     Write-Host "Most likely candidate: PerFileScoringTask bundle-hydration nulls Features (line ~710)," -ForegroundColor Yellow
-    Write-Host "MergeNodeTask Bug C reloads them from parquet -- in the in-memory path Features are" -ForegroundColor Yellow
+    Write-Host "SecondPassFdrTask Bug C reloads them from parquet -- in the in-memory path Features are" -ForegroundColor Yellow
     Write-Host "not nulled, the reload overwrites valid in-memory Features with parquet Features, and" -ForegroundColor Yellow
     Write-Host "ParquetIndex may not align cleanly after Stage 6's WriteReconciledParquet." -ForegroundColor Yellow
     exit 1

@@ -9,7 +9,7 @@
       -Task PerFileScoring      stages 1-4 (~2.5 h)
       -Task FirstPassFDR -Resume  stage 5, and writes out.model-diagnostics.data.json
 
-    Stopping at FirstPassFDR is what preserves that sidecar: MergeNode consumes and deletes
+    Stopping at FirstPassFDR is what preserves that sidecar: SecondPassFDR consumes and deletes
     it, and it is where every metric in the analysis comes from. Stages 6-7 cost ~8 h and
     answer nothing in this series.
 

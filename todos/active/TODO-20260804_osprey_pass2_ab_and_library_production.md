@@ -117,7 +117,7 @@ must come from the sidecar stream, which already carries what is needed
 same sidecar):
 
 ```
-FirstJoinTask.cs:2086  StreamFirstPassFileScores(... (modseq, isDecoy, record) =>
+FirstPassFdrTask.cs:2086  StreamFirstPassFileScores(... (modseq, isDecoy, record) =>
     accumulator.Add(modseq, isDecoy, record.Score, record.RunPeptideQvalue))
 ```
 
@@ -126,7 +126,7 @@ FirstJoinTask.cs:2086  StreamFirstPassFileScores(... (modseq, isDecoy, record) =
 2. `FirstPassProteinFdrAccumulator`: accumulate a SECOND detected set on
    `ExperimentPeptideQvalue <= config.ExperimentFdr`.
 3. `FirstPassProteinFdrResult`: carry it.
-4. `BuildProteinCompactStratum` (`FirstJoinTask.cs:1713`): consume it when gated.
+4. `BuildProteinCompactStratum` (`FirstPassFdrTask.cs:1713`): consume it when gated.
    **Do NOT change `DetectedPeptides` in place** - `BuildProteinParsimony` reads it for Stage 7,
    so retargeting it would move protein FDR as a confounding side effect.
 5. Mirror in the resident `RunFirstPassProteinFdr` so both paths agree; unit-test that the two
@@ -138,7 +138,7 @@ Stage 5+ via `-LinkFrom` arm A (the runner version-pins automatically).
 
 ### As built (2026-08-05, on master `b554ce6f0d`)
 
-The 5 insertion points above all survived #4530's `FirstJoinTask` rewrite (line numbers moved:
+The 5 insertion points above all survived #4530's `FirstPassFdrTask` rewrite (line numbers moved:
 stratum builder 1713 -> 1727, accumulator 2086 -> 2098). Implemented as designed, plus three
 things the design did not call out:
 
@@ -147,7 +147,7 @@ things the design did not call out:
   default - this flag selects the population a reported FDP is measured against, so a typo
   would publish the wrong arm's numbers under the arm name the operator chose.
 * **A validity-key suffix**, EMPTY on the default arm so no existing output directory is
-  invalidated, added to `FirstJoinTask` + `PerFileRescoreTask` + `MergeNodeTask`. Without it an
+  invalidated, added to `FirstPassFdrTask` + `PerFileRescoreTask` + `SecondPassFdrTask`. Without it an
   in-place A/B is self-confirming: the second arm finds the first's reconciled parquets valid,
   skips the work, and reports a match it never computed. Same failure #4530 guarded against.
 * **The stratum log line now names the arm** (`qualified by run|experiment q-value`). The two
@@ -615,7 +615,7 @@ Moved to its own dated TODO, matching its own branch:
 **[TODO-20260805_osprey_library_fragment_release.md](TODO-20260805_osprey_library_fragment_release.md)**.
 
 Summary only: releases `LibraryEntry.Fragments` for everything outside survivors + gap-fill at
-the Stage 5 -> 6 boundary, plus the merge node's own release against the reported pool. Stage 7
+the Stage 5 -> 6 boundary, plus SecondPassFDR's own release against the reported pool. Stage 7
 peak -38% on 4 SEA-AD files. All 15 code-review findings closed; `regression.ps1 -Dataset All`
 and TeamCity 4123277 green on `a5cb0183a2`. The design, the measurements, the findings and the
 standing integration-test gap are all in that file - do not duplicate them here.

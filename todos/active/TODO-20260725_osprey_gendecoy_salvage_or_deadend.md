@@ -418,7 +418,7 @@ estimation.
 ### 2026-07-25 - DEFINITIVE Pass 1 table
 
 Parser root cause first: reports from the current binary carry **two** `fdpViews` arrays
-(FirstJoinTask writes one blob, MergeNodeTask appends another) and the passes are split
+(FirstPassFdrTask writes one blob, SecondPassFdrTask appends another) and the passes are split
 across them -- the FIRST blob holds Pass 2, the SECOND holds Pass 1. The extractor used
 `html.find('"fdpViews"')`, took only the first, and therefore reported Pass 2 while
 concluding "Pass 1 is absent" for B/C2/D2. Older reports use a single blob with all four

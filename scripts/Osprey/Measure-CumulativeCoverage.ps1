@@ -164,7 +164,7 @@ if (-not $SkipUnit) {
 # blibs written) at ~85% machine memory before reaching Astral. The mechanism is not
 # fully pinned -- either a transient memory spike crossing the line under parallel
 # load, or a dotCover assembly-resolution race when parallel threads first-load the
-# same framework assembly at once. A sequential MergeNode-resume repro wrote the blib
+# same framework assembly at once. A sequential SecondPassFDR-resume repro wrote the blib
 # fine, confirming serial is RELIABLE but not isolating the cause. =1 takes the
 # strictly-sequential path (reliable, deterministic), a no-op for single-file legs;
 # each file still gets the full --threads inner budget so per-file scoring code is

@@ -319,7 +319,7 @@ function Invoke-PipelineRun {
     # Rust labels:
     #   stage5 = 1st-pass percolator FDR + 1st-pass protein FDR
     #   stage6 = reconciliation planning + per-file rescore + gap-fill
-    # C# labels (default emission from FirstJoinTask + PerFileRescore):
+    # C# labels (default emission from FirstPassFdrTask + PerFileRescore):
     #   stage5 = 1st-pass percolator + protein FDR + reconciliation planning
     #   stage6 = per-file rescore + gap-fill (no reconciliation)
     # The work content of stage5+stage6 is identical cross-impl; the
@@ -341,7 +341,7 @@ function Invoke-PipelineRun {
             # Stage 5 aligned = percolator + protein FDR only.
             $stages['stage5'] = $percolatorSec + $protein
             # Stage 6 aligned += reconciliation portion previously in
-            # stage5. If stage6 wasn't emitted (e.g. --task FirstJoin exit),
+            # stage5. If stage6 wasn't emitted (e.g. --task FirstPassFDR exit),
             # we just publish reconciliation alone under stage6.
             if ($stages.ContainsKey('stage6')) {
                 $stages['stage6'] = $stages['stage6'] + $reconciliationSec
