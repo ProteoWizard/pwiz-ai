@@ -3456,3 +3456,139 @@ commit touches `ChromatogramCache`/`GraphChromatogram`/`ConnectionPool`.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260806_net8_cpp_parity_audits.md` before starting work.
+
+## 2026-08-06b - PrmSchedulerTest.cpp ported: the port is faithful, and one new oracle
+
+The weakest test in the tree is now the strongest test of the Bruker PRM scheduling bindings.
+`PrmSchedulerTests` had 9 assertions, none able to catch a wrong value, in the 41.3%-coverage
+assembly that drives real timsTOF method export. It now runs cpp's whole `test()` over cpp's own
+four reference tables.
+
+### What was ported
+
+`pwiz/utility/bindings/CLI/timstof_prm_scheduler/PrmSchedulerTest.cpp` -> the single
+`EndToEnd_AddTargets_GetScheduling_ProducesExpectedSchedule` test (three shape-only `[TestMethod]`s
+folded into one, per the consolidation rule). Copied row for row:
+
+| table | rows | compared |
+| --- | --- | --- |
+| `testTargets` | 100 | the input, added with cpp's external ids and midpoint 1/K0 + RT |
+| `testSchedulingEntries` | 134 | `time_segment_id`, `frame_id`, `target_id`, in order |
+| `testTimeSegments` | 197 | begin/end, exactly (cpp's epsilon is 0) |
+| `testConcurrentFrames` | 47 | x, y at 1e-8 |
+
+Plus cpp's cancellation case (`ShowProgressCancelAt50`): returning true past 50% must stop the
+scheduler and never call back again, and the managed `GetScheduling` swallows the native "user
+request" error, so the lists come back empty.
+
+**No product bugs.** Every value matched on the first run. cpp's setup has two details that are
+load-bearing and are now commented as such: it sets only `ms1_repetition_time` (leaving
+`default_pasef_collision_energies` false - the old test set it true), and it compares its tables as
+a *prefix* of the results, because the tail was truncated when they were captured.
+
+### The gap cpp's test cannot see, and the oracle for it
+
+Mutation-testing the new tables found four of five mutations detected and one missed: changing a
+target's isolation m/z changed nothing anyone compares. That is not a flaw in the port of the test -
+it is true of cpp's test too. **The schedule is computed from RT and mobility alone**, so isolation
+m/z, isolation width, collision energy, charge, and both apex values could each be marshaled into
+the wrong native field of `PrmInputTarget` with every assertion still passing, while an exported
+instrument method fragmented the wrong ion.
+
+Those fields resurface in the `.prmsqlite` the scheduler writes. The checked-in
+`timstof_prm_scheduler.prmsqlite` turns out to be a *written copy of cpp's own run* - 100 targets,
+197 time segments, 5563 scheduling rows, `MS1RepetitionIntervalSeconds` 10.0, and
+`PrmTargetAdditionalCharacteristics` row 0 holding `OneOverK0` 1.03565 and `TimeInSeconds`
+46.800000000000004, exactly the midpoints cpp computes. So the test now reads the file back after
+`Dispose` and checks all nine persisted fields per target, and pins the four `PrmGlobalMethodInfo`
+values (`MobilityGap` 0.006, `FramesPerSecond` 10, 1/K0 0.7-1.2) that `GetPrmMethodInfo` returns.
+
+Reading it after `Dispose` also means the test fails if the native handle keeps a lock on the file.
+
+### The trap in verifying a round trip
+
+The first mutation run reported the write-back check missing an isolation-m/z mutation, which looked
+like proof the check was a tautology reading stale template rows. It was not: **a round-trip check
+cannot be tested by mutating the data, because the same table is the input and the expectation.**
+The right mutation is to the code under test. Swapping `isolation_mz` and `isolation_width` in
+`NativeStructs.cs` fails with `Expected:<784.8662>. Actual:<3>. target 1: IsolationMz`, from the
+write-back check alone - the schedule assertions pass straight through that swap. Swapping
+`monoisotopic_mz` and `time_in_seconds` is caught too.
+
+This is the second cousin of "mutations that do not mutate" from earlier today. Both come down to
+the same question: *what would have to be broken for this assertion to fail?*
+
+Remaining blind spot, deliberately: cpp sets `monoisotopic_mz` equal to `isolation_mz`, so swapping
+those two is invisible. Sending different values would strengthen it but would no longer be cpp's
+fixture.
+
+### Files
+
+- `pwiz-sharp/pwiz/test/Bruker.PrmScheduling.Tests/PrmSchedulerTests.cs` - the port
+- `pwiz-sharp/pwiz/test/Bruker.PrmScheduling.Tests/Bruker.PrmScheduling.Tests.csproj` - stages the
+  `.prmsqlite` from `$(PwizCppRoot)` beside the test binary (replacing a directory walk that looked
+  for a sibling cpp checkout), and adds `System.Data.SQLite.Core` 1.0.119 for the read-back, the
+  same version Bruker/UIMF/BiblioSpec already use
+
+0 warnings, ASCII-only, CRLF. TeamCity will report 2 fewer tests in this assembly.
+
+## 2026-08-06c - The one red test on CI: net8 silently swapped every folder browser
+
+`ProteoWizard_SkylineWindowsNet` #103-#109 all failed the same way -
+`TestLibraryBuild`, `WaitForLibrary` expecting 3 spectra and getting 12 - and it is not the
+`field` keyword, which #109 (on the fix commit) proved compiles. #102 was 1715/1715 green, so the
+break arrived with the master merge.
+
+### Root cause
+
+`FolderBrowserDialog` is not the same dialog on the two frameworks. .NET Framework only ever shows
+the classic `SHBrowseForFolder` tree. **.NET 8 defaults `AutoUpgradeEnabled` to true and shows the
+newer `IFileDialog` folder picker instead.** Nobody chose that; it came with the runtime, and it
+applies to all 17 folder browsers in the Skyline tree - Import Results, Export Method, Tools, share
+missing files, AutoQC, SkylineBatch, SkylineTester.
+
+Master's `a840067e8d` (AI-connector native-dialog automation) rewrote `LibraryBuildTest` to add its
+input directory by driving the real dialog, through `NativeFolderBrowserDialog` - which steers the
+classic tree with `BFFM_SETSELECTION`. A probe of the actual net8 dialog:
+
+```
+AutoUpgradeEnabled: True
+dialog class      : #32770
+has ctrl id 1148  : False   <- IsOpenFileDialog keys on this
+has SysTreeView32 : True    <- IsFolderBrowserDialog keys on this
+classified as     : NativeFolderBrowserDialog
+OK button (id 1)  : found
+asked for         : ...\Skyline\TestUtil
+dialog returned   : ...\Skyline\TestFunctional
+=> automation was IGNORED; got the default folder
+```
+
+The picker still classifies as a folder browser (no control 1148, and its navigation pane is a
+tree), so the test finds it and clicks OK successfully. But `BFFM_SETSELECTION` means nothing to it,
+so it returned its default folder - `Settings.Default.LibraryResultsDirectory`, the test-files root
+from an earlier step. `FindInputFiles` then recursed over the whole test folder instead of `cpas`,
+and the library was built from every search result under it: 12 peptides, not 3.
+
+`NativeFolderBrowserDialog` is used in exactly one place in the tree, which is why exactly one test
+went red.
+
+### Fix
+
+`FormUtil.CreateFolderBrowserDialog()` (CommonUtil, one `#if !NET472`) returns a browser with
+`AutoUpgradeEnabled = false`, so both frameworks show the classic tree. All 17 sites go through it,
+except `SkylineNightly` and `ImageComparer`, which reference nothing shared and get the same guard
+inline. Each site carries a TODO: the newer picker is the better dialog, and adopting it should be a
+deliberate UI decision plus a rewrite of the folder-browser automation - not something inherited
+silently from a framework upgrade.
+
+Open/Save are unaffected: `FileDialog.AutoUpgradeEnabled` has defaulted to true since .NET 2.0 SP1,
+so those are the same modern dialog on both frameworks. `FolderBrowserDialog` is the one that
+changed, because net472's has no upgrade path at all.
+
+`AddInputDirectoryThroughDialog` now also asserts the files it added live under the directory it
+asked for, so a folder browser that ignores the automation fails there rather than 400 seconds later
+on a spectrum count.
+
+Verified locally on the net8 build: `TestLibraryBuild` **0 failures in 73 sec**, where it had been
+failing at 397 sec. All seven affected projects (Skyline, SkylineTester, SkylineNightly, AutoQC,
+SharedBatch, SkylineBatch, ImageComparer) compile on net8.
