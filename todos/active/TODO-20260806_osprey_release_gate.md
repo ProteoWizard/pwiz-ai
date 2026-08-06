@@ -44,20 +44,30 @@ NOT a C# integration test. `regression.ps1` already runs every leg and already k
 leg's log; verifying the merge node on 2026-08-06 was a matter of reading them by hand. Turn
 that manual read into an assertion.
 
-Per-leg expectations (**to be calibrated against an observation run before being asserted** -
-do not write these from reasoning alone, that is how the original defects got in):
+Per-leg expectations, **calibrated against an observation run** (`-Dataset Stellar -KeepOutput`,
+run dir `regression-20260806_061531`) rather than written from reasoning - which is how the
+original defects got in, and which caught two of my own assumptions wrong:
 
-| leg | log | expectation |
-|---|---|---|
-| straight-through | `straight.log` | FirstJoin release line, released > 0 |
-| straight-through | `straight.log` | merge-node release line present (count may legitimately be 0 - FirstJoin already released in-process) |
-| resume | `resume.log` | release line, released > 0 - this is the Rehydrate path that shipped broken |
-| HPC `--task FirstPassFDR` | `phase2.log` | **NO release line at all** - locks in the fabricated-saving fix |
-| HPC merge node | `phase4.log` | release line, released > 0 |
+| leg | log | observed | assert |
+|---|---|---|---|
+| straight-through | `straight.log` | 2 lines: 152,830 then 0 | both scopes present, rescore line > 0 |
+| resume (Rehydrate) | `resume.log` | 2 lines: 152,830 then 0 | both scopes present, rescore line > 0 |
+| HPC `--task PerFileScoring` | `phase1.log` | 0 | none |
+| HPC `--task FirstPassFDR` | `phase2.log` | **0** | **none** - locks in the fabricated-saving fix |
+| HPC `--task PerFileRescoring` | `phase3.log` x3 | 1 line, 152,830 | present, > 0 |
+| HPC merge node | `phase4.log` | 1 line, 76,442 | present, > 0 |
+| warm re-run | `warm.log` | 0 | none |
 
-Deliberately NOT asserted: `phase3_rescore_*` (the Stage 6 worker). It releases nothing today,
-and that is a known gap rather than intended behavior - asserting its absence would lock in
-something we may want to change.
+**CORRECTION to this file's first draft.** I wrote that `phase3_rescore_*` (the Stage 6 worker)
+"releases nothing today". It DOES - 152,830 entries, via `FirstJoinTask.Rehydrate` reached
+through a lazy `Demand`, even though `FirstJoinTask.IsIncluded` excludes it from that leg's
+pipeline. So the Stage 6 worker is already covered and IS assertable. I also nearly asserted a
+release on the warm re-run leg, which legitimately does no work at all and logs nothing - that
+would have been a false red on every run.
+
+Assert PRESENCE/ABSENCE and `released > 0`, NOT exact counts: counts move with any scoring
+change and a gate that cries wolf gets ignored. The three real defect classes are all caught by
+presence plus non-zero.
 
 Follow the established harness pattern: `$summaryLines.Add("$name modeN (...): PASS")`, and on
 failure set `$overallFail = $true` plus `Write-Problem-Tc`.
@@ -74,14 +84,51 @@ straight/straight.log merge node:        0 of 485,628 (166,399 base_ids retained
 match across all three, which is the cross-check that the reported-pool set and the
 survivors+gap-fill set agree.
 
+## THE BREAK TEST - the gate is a gate (2026-08-06)
+
+`regression.ps1 -Dataset Stellar` with `OSPREY_RELEASE_LIBRARY_FRAGMENTS=0`, i.e. the feature
+switched off entirely:
+
+| mode | result |
+|---|---|
+| mode1 (vs golden) | **PASS** |
+| mode2 (resume cache hits) | **PASS** |
+| mode2 (resume==straight) | **PASS** |
+| mode3 (HPC chain==straight) | **PASS** |
+| mode4 (warm re-run all cached) | **PASS** |
+| **mode5 (release engaged)** | **FAIL - 8 issues** |
+
+Five independent correctness assertions stay green with the feature OFF. Only mode 5 sees it,
+and it names every leg: straight-through (both scopes), resume (both scopes), all three
+`--task PerFileRescoring` workers, and the merge node. `--task FirstPassFDR`'s absence
+assertion correctly stayed quiet.
+
+**That is the argument for this PR, measured rather than reasoned.** It is also exactly the
+blind spot that let three wiring defects through the #4534 review.
+
+## Mode 5 caught a defect in ITSELF first
+
+Its first run went red because the HPC chain frees phases 1, 2 and every phase-3 worker
+mid-run to bound peak disk - so those logs exist only under `-KeepOutput`, and my observation
+run had `-KeepOutput` set, which masked it. Same shape as the bug class this gate targets:
+something that looks verified because the verification ran under conditions the real path does
+not have.
+
+Fix: copy each phase log into `<chain>\logs\` as the phase finishes. A few KB survives; the
+multi-GB inputs still do not, so the disk-bounding behaviour is unchanged.
+
 ## Tasks
 
-- [ ] Observation run (`-Dataset Stellar -KeepOutput`) to read what every leg actually logs,
-      resume included
-- [ ] Assertion helper in `regression.ps1`, calibrated to the observation
-- [ ] Verify it FAILS when the release is disabled (`OSPREY_RELEASE_LIBRARY_FRAGMENTS=0`) -
-      a gate never seen red is not a gate
-- [ ] `regression.ps1 -Dataset Stellar` green with the assertion in place
+- [x] Observation run (`-Dataset Stellar -KeepOutput`) to read what every leg actually logs,
+      resume included - corrected TWO wrong assumptions before they became assertions
+- [x] Assertion helper in `regression.ps1`, calibrated to the observation
+- [x] Preserve chain phase logs so the assertion works in the DEFAULT (CI) mode, not just
+      under `-KeepOutput`
+- [x] Verify it FAILS when the release is disabled - a gate never seen red is not a gate
+- [x] `regression.ps1 -Dataset Stellar` green with the assertion in place
+- [ ] `regression.ps1 -Dataset All` - mode 5 now runs on all four datasets and only Stellar
+      has been exercised; the others differ in decoy mode and could plausibly log different
+      scopes
 - [ ] PR
 
 ## Progress Log
