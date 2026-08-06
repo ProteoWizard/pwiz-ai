@@ -3365,5 +3365,94 @@ visible on CI; typed to `SpectrumListSorter` (its only call site). Analysis.Test
    `Sciex.Tests` / `BiblioSpec` gate inconsistency (they gate on `IAgreeToVendorLicenses` where the
    products now gate on `NativeVendorsAvailable`).
 
+## 2026-08-06 - cpp-parity audits: nine product bugs, and three environment traps
+
+One method all day: **replace expectations the port authored with expectations cpp authored**, then
+run. Nineteen commits, all pushed to `origin` and `chambem2/pwiz-sharp`, head `f84deb7bb8`.
+`ProteoWizard_CoreWindowsNet` #298 green on that head.
+
+### Product bugs found and fixed
+
+| area | what was wrong | commit |
+| --- | --- | --- |
+| `ThresholdFilter` | comparison inclusive where cpp's is strict; cutoff ignored ties and read `LeastIntense` as the complement; `Count` discarded a tie inside the kept set | `6bd98ceeba` |
+| `mzShift` | only named params were shifted, so lowest/highest observed m/z never moved | `aee92ac2bd` |
+| `zeroSamples` | `removeExtra` dropped the flanking zeros peak picking needs on profile data | `4fd002245d` |
+| `TraDataDiff` | counted every list, compared the contents of five; **8 of 17** changes unreported | `126c4c5506` |
+| `MSDataDiff` | contacts, samples and the spectrum's sourceFile/dataProcessing refs never compared | `f3668d4d04` |
+| `Reader_Agilent` | never emitted `sampleList`; cpp reads "Sample Name" from `AcqData/sample_info.xml` | `f3668d4d04` |
+| MSn binary | a file stopping mid-record threw instead of ending at the last complete spectrum | `26df336484` |
+| MSn text | space-delimited EZ lines ignored, silently losing charge + accurate mass | `26df336484` |
+| `SpectrumListBase.Find` | no `scan=`/`index=` translation, so nothing could find a spectrum in an MGF list by scan | `f84deb7bb8` |
+
+### Audits that found nothing, which is also the answer
+
+`identdata` DiffTest (46 mutations), `proteome` DiffTest, the binary encoder against cpp's 14 stored
+base64 regressions, the isotope calculator against cpp's independent multinomial at 1e-10, the
+factory's 34 filter-name parses, and re-serialising the mzML cpp wrote. All faithful. These are worth
+as much as the bugs: they are the parts we no longer have to wonder about.
+
+### The pattern worth carrying forward
+
+A test that round-trips the port through itself cannot see a reader and writer that agree with each
+other and disagree with pwiz. Every bug above was invisible to one. The cheap filter is still: *could
+this expected value have been read off a cpp run or a tracked reference file?* Two refinements from
+today: a **mutation** test is only as good as its mutations actually mutating (three "misses" in
+identdata were no-op mutations of my own), and cpp's **test configuration** matters as much as its
+data (the encoder's numpress regressions set tolerance 0; at the shared 2e-9 default both
+implementations correctly fall back).
+
+Also: cpp's fixtures are not always current. `example_data/tiny.pwiz.1.1.mzML` holds four spectra
+ending `cycle=22` while cpp's `examples::initializeTiny` now builds five ending `scan=22`/`cycle=23`,
+and the port's `Examples.InitializeTiny` matches cpp's *source* exactly. The file is a reader fixture,
+not a reference for the example.
+
+### Three environment traps, none of them product code
+
+1. **`build.bat` was skipping its entire build step** (`d47eca4cb1`). All six `.bat` entry points were
+   stored LF-only; cmd tracks position by byte offset and loses `call :label` after enough calls, so
+   `dotnet build` never ran for any of the seven projects, stale binaries were staged, and it exited
+   0. A merge got "verified" against Jul 23 binaries. Fixed with `*.bat text eol=crlf`. CI was immune
+   (`core.autocrlf=true`), which is why it survived.
+2. **C# 14 `field` keyword** (`839f0eaa6b`) broke `ProteoWizard_SkylineWindowsNet` #108. A loop
+   variable named `field` inside a property accessor binds to the synthesized backing field from C# 14
+   on. Local SDK compiled it at an older language version. `-p:LangVersion=preview` reproduces CI.
+3. **cpp-derived fixtures were being EOL-rewritten on checkout** (`2ef5a4b2c3`); pinned with `-text`.
+
+### Merged master (`611cd6c465`)
+
+37 commits, no C++ deltas. Five csproj conflicts resolved to ours. Carried over by hand: `SkylineTool`
+ProjectReference into TestPerf/TestUtil, and cpp's RT-precision fix (`72e0401523`) ported into the
+sandbox `MsDataFileImpl` - `timeInSeconds()/60` is not an identity in floating point.
+
+### Perf CI
+
+Build 4122155 on the merged head: 37 tests, 36 passed, 1 failed - `TestDiaFragPipeTutorial`
+GC-leak, after a 403 on the `ci.skyline.ms` copy of `Webinar26.zip`. The
+`TestMinimizeResultsPerformance` stream-leak cascade did **not** recur, but that run only reported 37
+tests against the earlier 115, so it did not cover the same set. The race analysis stands: no master
+commit touches `ChromatogramCache`/`GraphChromatogram`/`ConnectionPool`.
+
+**Open / next:**
+1. Watch `ProteoWizard_SkylineWindowsNet` build 4123349 (triggered on `f84deb7bb8`) - the first
+   Skyline run since the `field` fix; #108 failed on it and nothing has rebuilt since.
+2. Vendor file-lock probe flakes intermittently on CI (Thermo `FT_HCD_MSX`, Bruker `CsI_Pos`,
+   "unreleased file locks after Dispose"). Passes standalone; CI auto-enables dotCover, which
+   perturbs finalizer timing. Worth a proper look - it is now the main source of red that is not a
+   real failure.
+3. `PrmSchedulerTests` is the weakest test in the tree - 9 assertions, none able to catch a wrong
+   value, in the 41.3%-coverage assembly, and it drives real instrument method export. There IS a cpp
+   oracle: `pwiz/utility/bindings/CLI/timstof_prm_scheduler/PrmSchedulerTest.cpp`, 690 lines
+   comparing scheduling entries field-by-field. Highest-yield remaining port.
+4. The **CLI bindings test tree** is unexamined and is exactly the layer pwiz-sharp replaces. Includes
+   three more DiffTests (msdata 241, proteome 98, tradata 96) and the unported `IsolationWindowFilter`
+   peak filter (only consumer is SeeMS).
+5. `MzTabReader` coverage (1/280) - needs an authored mzTab fixture, since cpp has none either.
+6. Fold the 43 `ChargeStatePredictor` `[DataRow]` rows into one table-driven test; it is also why
+   TeamCity reports 42 fewer tests than a local run.
+7. Carried over: perf stream-leak race (Skyline-side, Matt's call); re-run coverage; cold Bruker
+   resolve unmeasured on CI; `NET8-PORT TEMP` blocks in `scripts/misc/vcs_trigger_and_paths_config.py`
+   before merge; `Bruker.Tests/Reference/`; the `Sciex.Tests`/`BiblioSpec` gate inconsistency.
+
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260805_net8_coverage_blib.md` before starting work.
+`ai/.tmp/handoff-20260806_net8_cpp_parity_audits.md` before starting work.
