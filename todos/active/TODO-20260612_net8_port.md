@@ -3664,3 +3664,67 @@ swap and the audit-log version string), and `TestListClustering`, `TestExportDia
 
 Warnings remaining in the Skyline tree afterwards: `SYSLIB0014` x13, `CA1859` x15 and `CS1591` x11
 (pwiz-sharp), `SYSLIB0013` x4, plus the two NuGet advisories.
+
+## 2026-08-06e - First AWS-agent run: MS Amanda's percolator was missing one DLL
+
+The queue unpaused and `ProteoWizard_SkylineWindowsNet` #110 came back **1743/1743 green** on
+`0546065373` - the branch's first green Skyline run since #102, confirming the folder-browser fix on
+CI. Then #111 ran the same commit on an **AWS agent** and failed four tests.
+
+### The four failures
+
+`TestDdaSearch`, `TestDiaSearchFixedWindows`, `TestDiaSearchVariableWindows`, and the Pass1
+leak-detection copy of the last - every MS Amanda search in the suite, all with:
+
+```
+ERROR: .mzid file contains an unsupported score type
+```
+
+Skyline writes `RunPercolator` into MS Amanda's settings, and per `39558abff3` only the PSMs
+Percolator scores carry a q-value (`MS:1001491` / `MS:1002354`); the rest carry
+`Amanda:AmandaScore`, which BiblioSpec skips. That error is raised only when **no** item had a
+recognised score - so Percolator contributed nothing.
+
+**`percolator.exe` imports `vcruntime140_1.dll`, and MS Amanda's package does not ship it.** It
+bundles `vcruntime140`, `msvcp140`, `concrt140`, `vcomp140` and `xerces-c_3_1` beside the exe, but
+not that one. Where the VC++ 2015-2022 x64 redistributable is installed the loader finds it in
+System32; on a freshly provisioned agent it does not, percolator never starts, MS Amanda carries on,
+and the only symptom appears two steps later in the reader.
+
+Four legs of evidence: TCA1 green on the commit; this dev box green (and it has the DLL in
+System32); the AWS agent red; and percolator's own import table. Same shape as the Agilent BaseTof
+runtime gap - `Agilent.csproj` already deploys the VC120 runtime app-local for exactly this reason.
+
+### Fix (`5bde3552a9`)
+
+`Skyline.csproj` ships `vcruntime140_1.dll` from the vendored `Shared/Lib/Microsoft.VC140.CRT/x64`,
+and `MSAmandaSearchWrapper.StagePercolatorRuntime()` copies it beside `percolator.exe` after the
+tool is unzipped - the tool lives in a **downloaded** directory, so no build-time copy can reach it.
+Best-effort: a machine that already has the redistributable is unaffected.
+
+The search also now checks its own output for a q-value accession and fails naming Percolator if
+there is none. This matters past CI: a user without the redistributable was getting a DDA search
+that quietly lost its FDR scoring.
+
+Verified: the DLL lands in the unzipped tool directory, both search tests still pass, and a new
+`TestPercolatorQValueDetection` covers what a machine with the redistributable cannot - an mzIdentML
+with only `Amanda:AmandaScore`, one with no scores, and q-values past and straddling the reader's
+64K chunk boundary.
+
+**Not confirmed directly**: nobody has logged into the AWS agent to verify the redistributable is
+absent. That is inference from the failure signature plus the import table. The new check will now
+say so in plain terms on the next AWS run either way.
+
+### Also seen in the wild
+
+That build's own error report reads `Skyline (32-bit : automated build) 26.1.1.218 (0546065)` on a
+64-bit agent - the `Install.Is64Bit` regression, fixed the same day in `c4a59bc8ca`, which was not
+yet in that build.
+
+### CI state at end of session
+
+- #110 `0546065373` SUCCESS 1743/1743 (TCA1)
+- #111 `0546065373` FAILURE 1735/1739 (AWS) - the four above
+- #112 cancelled (redundant third run of the same commit)
+- #113 `bf96de22ed` running on a second AWS agent; expect the same four failures, since the
+  percolator fix landed after it started
