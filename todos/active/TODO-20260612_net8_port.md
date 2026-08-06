@@ -3592,3 +3592,75 @@ on a spectrum count.
 Verified locally on the net8 build: `TestLibraryBuild` **0 failures in 73 sec**, where it had been
 failing at 397 sec. All seven affected projects (Skyline, SkylineTester, SkylineNightly, AutoQC,
 SharedBatch, SkylineBatch, ImageComparer) compile on net8.
+
+## 2026-08-06d - net8 build warnings: a batch of obsoletions, and the one that was a live bug
+
+CRITICAL-RULES asks for a zero-warning build. The net8 leg was not close, and one warning turned out
+to be hiding a product regression.
+
+### Install.Is64Bit was answering "no" on every 64-bit net8 build
+
+`Is64Bit` asked whether *our own assembly* was AnyCPU:
+`ProcessorArchitecture.MSIL == AssemblyName.GetAssemblyName(location).ProcessorArchitecture`. .NET 8
+obsoleted that property and always returns `None`, which a probe confirms: on a 64-bit net8 process
+`Install.Is64Bit` is **false**. Consequences shipping in the port today:
+
+- `SrmDocument._maxTransitionCount` took the 32-bit branch - **1,000,000 transitions instead of
+  5,000,000**
+- audit-log entries lost their `(64-Bit)` version marker (net472 records it)
+- error reports and analytics reported `32bit`
+
+Now `Environment.Is64BitProcess`, which is also the more truthful question: an AnyCPU assembly says
+nothing about how the process was actually launched, so the old test was wrong on net472 too for a
+32-bit run.
+
+### TestDir: the compiler's suggested fix would have broken every test that uses it
+
+`TestContext.TestDir` is deprecated in favour of `TestRunDirectory` (13 call sites). They are not the
+same property - they read different keys - and Skyline's `TestRunnerContext` only ever seeded
+`Properties["TestDir"]`. A probe against MSTest 3.2.0:
+
+```
+Properties["TestDir"] only -> TestDir=C:\seeded-by-TestRunner | TestRunDirectory=<null>
+```
+
+So a mechanical rename would have handed every caller a null under TestRunner. `RunTests.SetTestDir`
+now seeds both keys - under VSTest the adapter fills them in, under TestRunner we are the adapter -
+and the call sites moved.
+
+### The rest
+
+| warning | sites | what was done |
+| --- | --- | --- |
+| `SYSLIB0021` | 7 | `new SHA1/MD5CryptoServiceProvider()` -> `SHA1.Create()` / `MD5.Create()`; same algorithms, so audit-log hashes are unchanged |
+| `SYSLIB0051` | 4 | `#pragma`, not `#if`: removing a serialization constructor changes the type's shape and breaks subclasses that chain to it, which is exactly what `CommonException<TDetail>` did when tried |
+| `SYSLIB0012` | 2 | `Assembly.CodeBase` -> `Location`. AutoQC's copy hand-trimmed a `file://` URL and never percent-decoded it, so an install under "C:\Program Files" came back as "C:/Program%20Files" |
+| `CS0108` | 1 | .NET 8's `ToolStripItem` has its own `Command`; `ToolMenuItem.Command` renamed to `ToolCommand` rather than `new`, which would have traded CS0108 on net8 for CS0109 on net472 |
+| `CS0618` (NHibernate) | 1 | `IStatelessSession.Transaction` is an obsolete *interface member* we implement, and `GetCurrentTransaction()` has different null semantics - suppressed and delegated verbatim |
+| `CA2255` | 1 | module initializer in a library is deliberate here (vendor readers must register before `MsDataFileImpl`'s static `ReaderList` snapshot); suppressed with that reason |
+| `CS0219` | 1 | dead `activationArgs` in the net8 branch of the ClickOnce guard |
+
+### Left, deliberately
+
+- `SYSLIB0013` `Uri.EscapeUriString` (4). **Not** a rename to `EscapeDataString`: two sites build
+  `NormalizationMethod` names that are persisted in .sky documents, and the two functions escape
+  different character sets. Doing this properly means a compat helper reproducing the old escaping,
+  verified by a net472 test comparing it against the framework across the character range.
+- `SYSLIB0014` `WebRequest`/`WebClient` (5 in Skyline + Ardia; more in SkylineBatch/SkylineNightly) -
+  a real migration to HttpClient with proxy/timeout/error-handling risk.
+- `NU1902` log4net 2.0.17, `NU1903` DotNetZip 1.16.0 - vulnerable packages, a dependency decision.
+- `CA1859` / `CS1591` in pwiz-sharp - that tree's own analyzer settings.
+
+Note for whoever picks these up: an incremental build under-reports. The second `Assembly.CodeBase`
+site only appeared once the build was `--no-incremental`.
+
+### Verification
+
+Clean `--no-incremental` build of all 16 net8 projects: 0 errors. Nine tests covering every changed
+path, all passing: `TestConfigureToolsDlg` (the ToolCommand rename), `TestAuditLogSaving` (the hash
+swap and the audit-log version string), and `TestListClustering`, `TestExportDiaList`,
+`TestExplicitVariable`, `TestFindNode`, `TestStartPageImport`, `TestStartPagePeptideSearch`,
+`TestStartPageShowFromSkyline` (the TestRunDirectory move). The rest is compile-only.
+
+Warnings remaining in the Skyline tree afterwards: `SYSLIB0014` x13, `CA1859` x15 and `CS1591` x11
+(pwiz-sharp), `SYSLIB0013` x4, plus the two NuGet advisories.
