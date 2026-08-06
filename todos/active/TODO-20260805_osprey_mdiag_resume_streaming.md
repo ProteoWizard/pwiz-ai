@@ -101,7 +101,7 @@ it. That removes the duplicate join, the second I/O pass, the
   `-Dataset All` (which is where the mdiag datasets live - Stellar has
   `ModelDiagnostics = $false`) pending.
 
-Mode 5 invalidates ONLY the merge node (`Invoke-MergeOnlyInvalidation`: the blib +
+Mode 5 invalidates ONLY the SecondPassFDR task (`Invoke-SecondPassOnlyInvalidation`: the blib +
 its `SecondPassFDR` stamp), which is the one state that enters
 `FirstJoinTask.Rehydrate`. It asserts the rehydrate marker line, the blib against
 the pristine straight-through one at 1e-9, and the re-emitted mdiag report against
@@ -148,7 +148,7 @@ Branch created from master @ `df3e43364c`.
 
 ### 2026-08-05 - Test red on master, fix in
 
-1. Added `Invoke-MergeOnlyInvalidation` (Regression/RegressionData.ps1),
+1. Added `Invoke-SecondPassOnlyInvalidation` (Regression/RegressionData.ps1),
    `Test-LogMarker` + mode 5 (regression.ps1). Ran on master: RED, with the exact
    `InvalidDataException` above.
 2. `FirstJoinTask.LoadOwnReconciliationBundle` + new
