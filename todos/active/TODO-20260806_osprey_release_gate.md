@@ -126,10 +126,14 @@ multi-GB inputs still do not, so the disk-bounding behaviour is unchanged.
       under `-KeepOutput`
 - [x] Verify it FAILS when the release is disabled - a gate never seen red is not a gate
 - [x] `regression.ps1 -Dataset Stellar` green with the assertion in place
-- [ ] `regression.ps1 -Dataset All` - mode 5 now runs on all four datasets and only Stellar
-      has been exercised; the others differ in decoy mode and could plausibly log different
-      scopes
-- [ ] PR
+- [x] `regression.ps1 -Dataset All` - **30/30 PASS**, mode 5 green on all four datasets. The
+      three non-Stellar ones differ in decoy mode and had never exercised it; no calibration
+      was needed, the release behaves identically across them.
+      Log: `ai/.tmp/regression-all-mode5.log`
+- [x] PR [#4539](https://github.com/ProteoWizard/pwiz/pull/4539)
+- [ ] `/code-review max` - NOT run; I cannot invoke it. 224 lines of new harness logic is past
+      the "trivial diff" bar the version-control skill sets for skipping it
+- [ ] TeamCity Perf/Regression on `pull/4539` before merge - ask Brendan first, every time
 
 ## Progress Log
 
