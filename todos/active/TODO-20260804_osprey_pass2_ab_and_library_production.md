@@ -672,6 +672,21 @@ Posted on issue #4532 as comment 5202755992. The three that mattered:
   reconciled parquet (`Pass2FdrSidecar` never touches the library) and parsimony reads identity.
   Placed AFTER `ctx.Get<RescoredEntries>()`, so the merge-mode compaction it materializes is
   already done.
+
+  **VERIFIED by reading each leg's own log** (`regression.ps1 -Dataset Stellar -KeepOutput`,
+  run dir `pwiz_tools/Osprey/TestResults/regression-20260806_041813`), not inferred from a
+  green gate:
+
+  | leg | released |
+  |---|---|
+  | `chain/phase4_mergenode/phase4.log` | **76,442 of 242,841 (31.5%)** - was zero |
+  | `straight/straight.log` FirstJoin | 152,830 of 485,628 |
+  | `straight/straight.log` merge node | **0** of 485,628 - idempotent, costs nothing |
+
+  Retained base_ids = **166,399 in all three**, an independent cross-check that the
+  reported-pool set and the survivors+gap-fill set agree. 242,841 vs 485,628 entries because
+  `ExpectReconciledInput` skips the decoy rebuild - so that leg was carrying the whole TARGET
+  fragment set through the blib write and freeing none of it.
 * **The validity-key hole is closed at its root.** The suffix moved to
   `LibraryFragmentRelease.ValidityKeySuffix` and is keyed on whether the release RAN
   (`RunsOnThisLeg`), not on the flag - the same predicate the call sites gate on, so key and
