@@ -14,7 +14,7 @@
 
 ## Objective
 
-Give `FirstJoinTask.Rehydrate` its own per-file survivor loader so
+Give `FirstPassFdrTask.Rehydrate` its own per-file survivor loader so
 `FirstPassSurvivorSource` is non-null on BOTH arms. Stage 6 then streams on a
 resume exactly as it does on a computed run, `Stage6ResidentHandoffGuardError`
 starts covering that path for free, and the interim
@@ -52,7 +52,7 @@ that needs designing and pinning.
 - [ ] Confirm `Stage6ResidentHandoffGuardError` now fires on that path when
       `OSPREY_STAGE6_STREAM_SURVIVORS=0` (i.e. the token becomes required, as on `Run`)
 - [ ] Delete the interim warning + `resume-survivor-handoff` token in
-      `FirstJoinTask.Rehydrate` / `ResidentPaths`, and the note on
+      `FirstPassFdrTask.Rehydrate` / `ResidentPaths`, and the note on
       `Stage6ResidentHandoffGuardError` explaining why its justification had lapsed
 - [ ] Drop the token from the `regression.ps1` outstanding-gaps list (back to 0 required)
 - [ ] Byte-identity A/B: resume blib streamed vs resident, at 1e-9
@@ -164,7 +164,7 @@ that settles it rather than an argument.
 
 Harness: `ai/scripts/Osprey/SEA-AD/Measure-Stage6Rescore.ps1`. It drives
 `--task PerFileRescoring --input-scores <N parquets>`, which reaches
-`FirstJoinTask.Rehydrate` through a WORKER-supplied bundle - a rehydrate arm
+`FirstPassFdrTask.Rehydrate` through a WORKER-supplied bundle - a rehydrate arm
 #4530 did NOT fix and this change now streams. So it measures the right buffer
 on the right path, and the headline number is the post-GC
 `[MEM reconciliation-resident] managed_heap=` probe rather than `--memstamp`
@@ -222,9 +222,9 @@ now run through `FirstPassSurvivorLoader.Load`, so a wrong sidecar path, wrong
 sort or wrong retained set gives the same wrong answer twice and mode 5 stays
 green. That is a LOSS of oracle strength introduced here, not a neutral change.
 
-**2. The worker rebuilds a buffer for a MergeNode that never runs.** Verified:
-`Program.cs:126` sets `NoJoin = true` for `--task PerFileRescoring`, and
-`MergeNodeTask.IsIncluded` is false on all three clauses when
+**2. The worker rebuilds a buffer for a SecondPassFdrTask that never runs.**
+Verified: `Program.cs:126` sets `NoJoin = true` for `--task PerFileRescoring`, and
+`SecondPassFdrTask.IsIncluded` is false on all three clauses when
 `inputs && NoJoin && !ExpectReconciledInput`. So the
 `if (survivorLoader != null)` block at `PerFileRescoreTask.cs:338` -
 `MaterializeAllSurvivors` + `ResetRescoredTargets` +
@@ -235,7 +235,7 @@ change (null loader) and my change enables it.
 **3. The straight-through resume gets NO peak reduction, and pays an extra read
 pass.** Verified: `PerFileRescoreTask.Rehydrate` (non-`ExpectReconciledInput`
 branch) and `Run`'s `!didPlan && rescoreBundle == null` early return BOTH call
-`MaterializeAllSurvivors` immediately. So FirstJoin releases the buffer and the
+`MaterializeAllSurvivors` immediately. So FirstPassFdrTask releases the buffer and the
 very next task refills it from disk. On that path the change is a full extra
 parquet + sidecar pass over every file for no memory benefit.
 
@@ -362,7 +362,7 @@ at `a40c7ebd08`, which already contains #4537 (`4169f844c2`).
 ### 2026-08-06 - Implementation
 
 * `RescoreInputs.RetainedBaseIds` added; set by `RescoreCompaction.Apply`.
-* `FirstJoinTask.TryBuildResumeSurvivorLoader` builds the loader on the rehydrate
+* `FirstPassFdrTask.TryBuildResumeSurvivorLoader` builds the loader on the rehydrate
   path and `Rehydrate` publishes it into `FirstPassSurvivorSource`, then releases
   the per-file survivor contents exactly as `Run` does after planning (consensus
   targets are computed off the full buffer immediately before, and are its last

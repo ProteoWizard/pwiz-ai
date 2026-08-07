@@ -3,8 +3,9 @@
 ## Branch Information
 - **Branch**: `Skyline/work/20260806_osprey_release_gate`
 - **Created**: 2026-08-06
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `osprey`
+- **PR**: [#4539](https://github.com/ProteoWizard/pwiz/pull/4539) (merged 2026-08-07 as `5d54d0ef0a`)
 - **Follows**: [TODO-20260805_osprey_library_fragment_release.md](../completed/TODO-20260805_osprey_library_fragment_release.md)
   (#4532, merged as `988c73c294`)
 
@@ -143,8 +144,9 @@ multi-GB inputs still do not, so the disk-bounding behaviour is unchanged.
       `dce8841689`). Post-rename `-Dataset All`: **44/44 PASS**, mode 6 green on all four
       datasets. Pushed as `e597a3c27e`.
       Log: `ai/.tmp/regression-all-mode6-postrename.log`
-- [ ] TeamCity Perf/Regression - 4123351 is SUPERSEDED (it targets `5fe225cf6c`, two merges
-      back); re-trigger on `e597a3c27e` only with Brendan's go-ahead, every time
+- [x] TeamCity Perf/Regression **4124701 SUCCESS** on the merged tip `e597a3c27e` (SHA verified
+      against the build, not assumed). 4123351 also passed but on `5fe225cf6c`, two merges back
+- [x] Squash-merged as `5d54d0ef0a`
 
 ## SEQUENCING: #4540 merges first, this rebases onto it
 
@@ -257,6 +259,34 @@ request"` - a consequence of the conflict, not of the code. It cleared on pushin
 Worth recognizing rather than investigating next time.
 
 ## Progress Log
+
+### 2026-08-07 - Merged
+
+PR #4539 merged as commit `5d54d0ef0a`. Shipped regression **mode 6**: a leg-level assertion,
+read from each leg's own log, that the library-fragment release RAN on every leg holding the
+library - straight-through, resume, the own-sidecar rehydrate, each `--task PerFileRescoring`
+worker, and the `SecondPassFDR` node - and did NOT run on `--task FirstPassFDR`. Plus the chain
+phase-log preservation that makes it work in the default (CI) mode, and a run-wide pattern
+liveness check so a reworded C# line fails the gate rather than quietly satisfying the
+must-not-release leg. Test harness only: `regression.ps1` + `Regression/README.md`, 268
+insertions / 0 deletions against master, no product code.
+
+Gates: `-Dataset All` 44/44 twice (pre- and post-rename), 576 unit tests, zero inspection
+warnings, TeamCity 4124701 green on the merged tip, and the break test showing modes 1-5 green
+with the feature disabled while only mode 6 goes red.
+
+**Nothing was deferred from this PR's own scope.** Two things it deliberately did not take on,
+both recorded above: releasing on the `--task PerFileRescoring` Stage 6 worker, and bounding
+`FragmentMath._top6MzCache` during Stages 3-4 rather than only clearing it at the release point.
+
+Follow-up filed: [issue #4542](https://github.com/ProteoWizard/pwiz/issues/4542) - 12
+code-review findings against #4537's already-merged code, surfaced because the review diffed a
+stale local `master`. Three look behavioral. Filed WITHOUT independent verification; they need
+checking before anyone acts on them.
+
+Branches were held after merge at Brendan's instruction while a stacked branch was rebased onto
+master, then deleted.
+
 
 ### 2026-08-06 - opened
 
