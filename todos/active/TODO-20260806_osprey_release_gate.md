@@ -135,10 +135,51 @@ multi-GB inputs still do not, so the disk-bounding behaviour is unchanged.
 - [x] **Renumbered to mode 6** after #4537 landed its OWN mode 5 on master, and merged master in
       (`5fe225cf6c`). Post-merge `-Dataset All`: **44/44 PASS**, mode 5 and mode 6 green together
       on all four datasets
-- [ ] `/code-review max` - NOT run; I cannot invoke it. 230 lines of new harness logic is past
-      the "trivial diff" bar the version-control skill sets for skipping it
-- [ ] TeamCity Perf/Regression **4123351** on `pull/4539` - triggered at Brendan's request;
-      VERIFY it bound to `5fe225cf6c` once it leaves the queue
+- [x] `/code-review max` - 15 findings. **12 were against #4537** (the review diffed a STALE
+      local `master`); filed as [issue #4542](https://github.com/ProteoWizard/pwiz/issues/4542).
+      3 were this PR's, all fixed - see below
+- [ ] Re-gate `-Dataset All` after the review fixes
+- [ ] TeamCity Perf/Regression - 4123351 is SUPERSEDED by the review fixes; re-trigger only
+      with Brendan's go-ahead, every time
+
+## THE REVIEW FOUND A HOLE IN THE GATE - and a claim of mine that was false
+
+**`/code-review max`, finding A: mode 6's resume check does NOT cover `Rehydrate`.** I asserted
+- in the PR body, in this TODO, and in a code comment - that the resume leg exercises
+"`FirstJoinTask.Rehydrate`, the path that shipped broken in #4534". It does not. The evidence
+was in the file I was editing:
+
+* `Invoke-ResumeInvalidation` deletes `*.FirstPassFDR.osprey.task`
+* mode 2 asserts `-ExpectRan @('FirstPassFDR', 'SecondPassFDR')` on that very log
+
+So the resume leg **RUNS** FirstPassFDR. What was actually covered: `Run` (straight-through,
+resume) and `Rehydrate` via a **worker-supplied** bundle (phase 3). What was covered ZERO
+times: the **own-sidecar** rehydrate arm - `LoadOwnReconciliationBundle` /
+`StreamOwnReconciliationBundle` - which is exactly what #4537's new mode 5 exercises via
+`rehydrate.log`, a log mode 6 never read.
+
+Demonstrable: delete the release from that call site, run `-SkipHpcChain`, and mode 6 reports
+PASS having asserted it zero times. **A hole in a gate whose entire purpose is closing holes.**
+
+Fixed by adding a `rehydrate.log` entry inside the `-not $SkipRehydrate` branch. It PASSES,
+so `StreamOwnReconciliationBundle` does populate `GlobalFirstPassBaseIds` and the arm really
+does release - no latent defect, but it was unasserted.
+
+**Finding B: `-ExpectNone` was structurally vacuous.** It returns PASS on an empty result, so
+it could not distinguish "this leg correctly released nothing" from "the C# wording drifted and
+the regex matches nothing anywhere". It only failed closed by accident, because the sibling
+`-ExpectScopes` checks break on the same drift - an accident of which legs are enabled, not a
+design. Closed with a run-wide liveness assertion: if the pattern matches nothing in ANY leg,
+that is itself the failure. **A negative assertion cannot fail closed by itself** - worth
+carrying to any future log-scraping gate.
+
+**Finding C**: mode 6 was undocumented in `Regression/README.md`, and mode 5's "Runs last" was
+left false by the renumber. Both fixed.
+
+**Process note**: the review diffed `master...HEAD` against the LOCAL `master` ref, which was
+stale at `988c73c294` because /pw-complete had synced it before #4537 landed. Three quarters of
+its findings were therefore about someone else's merged code. `git fetch` before a review, or
+diff against `origin/master`.
 
 ## THE COLLISION - two mode 5s (2026-08-06)
 
