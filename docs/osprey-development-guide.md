@@ -778,18 +778,26 @@ Then fix the path, and delete the token together with the issue.
 token from the gate.** The script CLEARS an inherited `OSPREY_ALLOW_UNFIXED_RESIDENT` at
 startup so an ambient value cannot defeat the property, then names what it needs per leg.
 
-Currently required: **one** - `resume-survivor-handoff` on mode 5, tracked by #4536 (a
-resume cannot stream the Stage 6 survivor handoff, because only a computed Stage 5 builds
-the per-file loader). Mode 2's `mdiag-full-resume` was the previous one and #4505 removed
-it. Driving the count back to zero is the goal; the token comes out of the gate when the
-issue lands.
+Currently required: **none**. Mode 2's `mdiag-full-resume` went with #4505 and mode 5's
+`resume-survivor-handoff` went with #4536, which gave the rehydrate its own per-file
+survivor loader. Zero is the invariant now, not a target: a token reappearing in the gate is
+a regression to justify in review, and it must arrive with an open issue to remove it again.
+
+**Zero tokens is not zero O(files) paths.** A token is only required where a guard demands
+one, so a resident path no guard covers is invisible to a token audit. The live example is
+#4486: Stage 6 rebuilds the whole-run survivor buffer at the end of its loop because
+`SecondPassFDR` reads it, so that buffer is resident from there to the end of Stage 7 on
+every path. No guard covers it, because it is Stage 7's input rather than a mode or a
+resume. Read the gate's `Known O(files) resident paths` table as "no leg needs a token", not
+as "no leg is O(files)".
 
 **A token admits exactly ONE path - never borrow one.** `compacted-entries-buffer` names
-the same physical buffer as `resume-survivor-handoff`, so reusing it for #4536 would have
-been the convenient choice, and would have meant any leg admitting the unfixed resume
-simultaneously admitted an `OSPREY_STAGE6_STREAM_SURVIVORS=0` regression on the computed
-path that #4530 already closed. Borrowing a token silently lowers the high-water mark for
-whatever else that token covers, which is exactly the property the named-token system
+the same physical buffer as the now-removed `resume-survivor-handoff`, so reusing it for
+#4536 would have been the convenient choice, and would have meant any leg admitting the
+unfixed resume simultaneously admitted an `OSPREY_STAGE6_STREAM_SURVIVORS=0` regression on
+the computed path that #4530 already closed. Borrowing a token silently lowers the
+high-water mark for whatever else that token covers, which is exactly the property the
+named-token system
 replaced the blanket boolean to get.
 
 **`regression.ps1` sets this on NO leg.** It used to name `mdiag-full-resume` on mode 2, which

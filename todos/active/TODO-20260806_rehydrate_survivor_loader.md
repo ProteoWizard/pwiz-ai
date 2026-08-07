@@ -210,6 +210,41 @@ Library confirmed present:
 `D:\test\Pilot-MTG-Tissue-May2026\lib\regression\target+decoy+entrapment\`
 (`carafe_spectral_library.tsv` 13.1 GB + `osprey_library_db_pairing.tsv`).
 
+## Scope decision after the review (2026-08-07)
+
+Brendan: "It is important to keep each sprint contained and push some of what is
+found into issues if the insights warrant that. This sprint is still about
+PerFileRescoring and not SecondPassFDR."
+
+Taken into this PR (5): the release gated on a rescore actually consuming it;
+the worker's dead end-of-loop rebuild; the library release switched to
+`RetainedBaseIds`; the false "checked BEFORE the release" comment; the
+`regression.ps1` / README / `ai/docs` statements this change invalidated.
+
+Pushed to **#4544** (10, each verified first): the stem-collision keying and the
+unconsumed `AllowUnfixedResidentUnrecognized` (both PRE-existing, #4536 only
+widens their reach); the rebuild-vs-buffer assertion; the un-re-keyed
+`PerFileConsensusTargets` index space; the projection-off A/B asymmetry; the
+unrestricted fault scope. Three were checked and rejected outright.
+
+**One I started and backed out**: the rebuild-vs-buffer assertion. It had grown
+into a new byproduct field, a change to `RescoreCompaction.Apply`, and a wider
+`FirstPassSurvivorLoader` constructor. Backing it out also exposed that its
+justification was overstated - the review said mode 5 had become
+self-confirming, but **mode 1 compares against a COMMITTED golden that predates
+the loader**, so a fault common to both sides fails there and one confined to the
+resume fails mode 5's own compare. The oracle is thinner, not absent. Hardening,
+not a hole-plug.
+
+**#4486 relationship, posted as a comment there.** That issue was rescoped to
+"re-measure Stage 7 after #4536 lands", on the reasoning that the O(files)
+baseline Stage 7 inherits IS the `CompactedEntries` buffer. Right structure,
+wrong lever: `PerFileRescoreTask` rebuilds that buffer at the end of Stage 6
+precisely so `SecondPassFdrTask` can read it, so it is resident from there to the
+end of Stage 7 on every path. Neither #4530 nor #4536 moves that. Re-measuring
+after this lands will show the same peak, and reading it as "#4536 did not work"
+would be the wrong conclusion.
+
 ## Gate on master (2026-08-07)
 
 `regression.ps1 -Dataset All` **PASSED** on the master-rebased tree - 45 PASS
