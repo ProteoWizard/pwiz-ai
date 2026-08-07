@@ -255,3 +255,25 @@ the rebased tree: 576/576 tests, 0 inspection warnings/errors.
 `regression.ps1 -Dataset All` re-launched against the rebased tree - the earlier
 `All` run was stopped, because a gate result on a tree that no longer exists is
 not evidence about the tree that ships.
+
+### 2026-08-07 - Full gate green, memory sweep started
+
+`regression.ps1 -Dataset All` **PASSED** on the rebased tree, all 44 legs across
+Stellar / StellarLibDecoy / StellarGenDecoyEntrap / Astral, including #4539's new
+mode 6 (`C:\proj\ai\.tmp\4536-regression-all.log`). Every dataset's mode 5
+(rehydrate == straight, diagnostics vs golden, FDR sanity bounds) and mode 3 (HPC
+chain == straight) is green - those are the two legs that reach the rehydrate arm
+this change rewires, and they pass with NO token:
+
+```
+=== Known O(files) resident paths this gate still traverses ===
+  none
+```
+
+Exe snapshotted to `D:\test\osprey-runs\_bin\4536-rehydrate-loader\` so the build
+tree stays usable during the sweep. Branch pushed
+(`4a8d660c59`, based on `5fe225cf6c`).
+
+Stage-6 memory sweep started, streamed arm first, into a FRESH phase dir
+`D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\runs\stage6\stage6-16files`
+(log `C:\proj\ai\.tmp\4536-stage6-sweep-streamed.log`).
