@@ -3728,3 +3728,48 @@ yet in that build.
 - #112 cancelled (redundant third run of the same commit)
 - #113 `bf96de22ed` running on a second AWS agent; expect the same four failures, since the
   percolator fix landed after it started
+
+## 2026-08-06f - Correction: the missing DLL was not the cause
+
+The entry above concluded that MS Amanda's percolator failed on AWS agents because its package does
+not ship `vcruntime140_1.dll`. **Build #115, on the commit that stages that DLL app-local, still
+reports no q-values from all three MS Amanda searches.** So the missing DLL was not the cause, or not
+the only one.
+
+What was actually established, and still stands: percolator.exe does import `vcruntime140_1.dll`;
+MS Amanda's package does not ship it; it resolves from System32 on every machine where these tests
+pass. What did *not* follow is that this is why percolator produced nothing on the agent - that was
+inference from a failure signature, and staging the DLL disproved it.
+
+The half that worked is the loud failure. All four tests now stop at the search with a message
+naming Percolator instead of a reader error two steps downstream:
+
+> MS Amanda produced no Percolator q-values in `Rpal_..._02.mzid.gz`, so no library can be built from
+> this search.
+
+`73f1467d8a` replaces the guess in that message with an answer: when there are no q-values, run
+percolator.exe and report what happens. A negative exit code is an NTSTATUS from the Windows loader
+(`0xC0000135` = a DLL it imports cannot be found), which is otherwise indistinguishable from a search
+that matched nothing, because a loader failure writes no output at all. If percolator runs fine, it
+says so, which moves the next person off the dependency theory.
+
+Also confirmed by #115: the `Install.Is64Bit` fix works - its error report reads
+`Skyline (64-bit : automated build) 26.1.1.218 (5bde355)` where the previous commit said `32-bit`.
+
+### The unit test covered nothing, twice
+
+`TestPercolatorQValueDetection` also failed on CI - it wrote fixtures into
+`TestContext.TestRunDirectory`, which does not exist on a fresh agent. Fixed by testing the stream
+(`5bcc598bd4`).
+
+Worse, its "straddles a read boundary" case never straddled anything. The accession landed at ~65600,
+past the 64K seam, so the carry between reads - the only non-trivial code in the method - had no
+coverage. The first repair "swept" offsets around 64K, which moved the same miss by 32 characters.
+A mutation run that deletes the carry entirely passed both times.
+
+The mistake was aiming at a boundary the test cannot see: `StreamReader` decides where a read stops.
+`17ea16111e` makes the buffer size a parameter (64K in production, unchanged) so the test can use 64
+characters and walk the accession through every possible split. Removing the carry now fails it.
+
+Both of today's testing lessons are the same one, and it is the one from the PrmScheduler write-back
+check this morning: **a test that passes proves nothing until something has made it fail.**
