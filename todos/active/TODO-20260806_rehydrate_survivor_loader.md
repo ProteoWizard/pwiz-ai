@@ -199,6 +199,22 @@ files is a floor the buffer never explained anyway.
 
 One-time costs, for anyone repeating this: Stage 1-4 prep 55:12, Stage 5 9:15.
 
+Direct evidence the NEW path is what ran, from the 16-file log (preserved at
+`C:\proj\ai\.tmp\4536-sweep-logs\streamed-16f.log` - the phase dir reuses
+`stage6-<N>f.log` per arm, so the resident sweep overwrites them):
+
+```
+03:05:00  Bundle hydration: skipping first-pass Percolator (sidecar provides q-values).
+03:05:02  First-pass compaction: 68132616 -> 12399532 entries (513529 passing base_ids; 0 action(s) dropped)
+03:33:19  Rebuilding first-pass survivors from 16 file(s)...
+```
+
+Line 1 is the rehydrate arm. Line 3 is `MaterializeAllSurvivors`, which before
+this change could not run on a rehydrate at all - the loader was null, so every
+streamed branch was skipped. The 28 minutes between lines 2 and 3 are the rescore
+itself, and the 12.4 M-entry survivor buffer is NOT resident across them. That
+gap is the fix.
+
 ## Progress Log
 
 ### 2026-08-06 - Session Start
