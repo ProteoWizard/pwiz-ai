@@ -3,7 +3,7 @@
 ## Branch Information
 - **Branch**: `Skyline/work/20260806_rehydrate_survivor_loader`
 - **Worktree**: `C:\proj\pwiz-work1`
-- **Base**: `Skyline/work/20260806_osprey_release_gate` (PR #4539) - **STACKED**
+- **Base**: `master` (was stacked on #4539; both #4539 and #4540 merged 2026-08-07)
 - **Created**: 2026-08-06
 - **Status**: In Progress
 - **GitHub Issue**: [#4536](https://github.com/ProteoWizard/pwiz/issues/4536)
@@ -95,21 +95,24 @@ path, not this one. Worth a follow-up issue rather than pretending otherwise.
 
 ## Coordination
 
-**STACKED ON #4539.** Brendan's call (2026-08-06): rebase onto it rather than
-wait. This branch is based on `origin/Skyline/work/20260806_osprey_release_gate`
-(`5fe225cf6c`), not master, so the PR must target that branch.
+**RESOLVED 2026-08-07 - now based on master.** #4539 (`5d54d0ef0a`) and #4540
+(`dce8841689`) both merged, so the stack was unwound with
+`git rebase --onto origin/master 5fe225cf6c`. No PR was ever opened against the
+lower branch, so the delete-branch hazard never applied. Recovery ref kept at
+`backup/4536-prerebase-onto-master`.
 
-The `regression.ps1` conflict was real and is resolved: #4539 added the mode 6
-help block immediately after the sentence this issue rewrites (mode 5's token
-line). Both kept.
+**#4540 renamed every class this branch edits** (`FirstJoinTask` ->
+`FirstPassFdrTask`, `MergeNodeTask` -> `SecondPassFdrTask`) and touched all ten
+files. Git rename detection carried the edits into `FirstPassFdrTask.cs`; the one
+conflict was the interim warning block this issue deletes, which #4540 had
+reworded in place. Three of my own comments still said `FirstJoinTask` and were
+corrected in a follow-up commit - a rebase reintroduces old names silently,
+because the conflict is in the CONTENT, not the name.
 
-**Merge hazard - do NOT `--delete-branch` #4539 on squash-merge.** Deleting the
-lower branch mid-cascade auto-closes this PR, unreopenably. Order: retarget this
-PR to master, `git rebase --onto master <old-base>`, THEN delete branches.
-
-`C:\proj\pwiz` still holds uncommitted edits to `regression.ps1` and
-`Regression/README.md` on the #4539 branch. Those are not in this rebase (only
-the pushed tip is), so whoever commits them will meet the same conflict again.
+**Trap for next time: do NOT use `sed -i` on tracked C# here.** It rewrote all
+three files LF-only (CRITICAL-RULES requires CRLF), which `git status` shows as a
+whole-file change. Reverted and redone with the Edit tool, which preserves line
+endings. Verified with `tr -cd '\r' | wc -c` == line count on every touched file.
 
 ## Design
 
