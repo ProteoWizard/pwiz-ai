@@ -176,6 +176,29 @@ Library confirmed present:
 `D:\test\Pilot-MTG-Tissue-May2026\lib\regression\target+decoy+entrapment\`
 (`carafe_spectral_library.tsv` 13.1 GB + `osprey_library_db_pairing.tsv`).
 
+## Memory results - streamed arm (2026-08-07)
+
+16 SEA-AD Astral files, 30 threads, r1.0 target+decoy+entrapment library, this
+branch's snapshot exe. Headline is the post-GC
+`[MEM reconciliation-resident] managed_heap=` probe, not `--memstamp`.
+Log: `C:\proj\ai\.tmp\4536-stage6-sweep-streamed.log`.
+
+```
+Files  ResidentGB  Rescored  WallSec
+    4        2.07    231557      444
+    8        2.22    465304      775
+   16        2.31    931582     1947
+
+slope: 0.020 GB/file  ->  500-file projection 12.0 GB
+```
+
+The rescored-entry count scales 4x across the sweep (231 K -> 932 K) while
+resident memory moves 2.07 -> 2.31 GB, i.e. +12%. The residual 0.020 GB/file is
+not the survivor buffer - that is the term this issue removes - and 2 GB at four
+files is a floor the buffer never explained anyway.
+
+One-time costs, for anyone repeating this: Stage 1-4 prep 55:12, Stage 5 9:15.
+
 ## Progress Log
 
 ### 2026-08-06 - Session Start
