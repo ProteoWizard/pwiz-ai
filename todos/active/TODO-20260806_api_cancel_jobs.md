@@ -172,7 +172,36 @@ CRLF and the first commit of this work showed 15,136 changed lines in it. Fixed 
 restoring the file from HEAD~1 and re-applying the edits with an editor that keeps
 the file's endings. Use the Edit tool or a PowerShell rewrite, not `sed -i`.
 
-## Exit guard (fourth commit)
+## Exit guard, second pass (fifth commit)
+
+Reworked so exiting actually gets you out. `CheckBackgroundJobs`:
+
+1. Nothing running -> close.
+2. Some jobs not yet asked to stop -> OK/Cancel prompt. One: "Background jobs must
+   be stopped before exiting. The job '{0}' is still running. Do you want to stop
+   it?" More: "... Do you want to stop the {0} jobs that are still running?" Cancel
+   stays in Skyline; OK calls `CancelAll` and falls through to (3).
+3. `WaitForBackgroundJobs` - a `LongWaitDlg` (500 ms delay, so jobs that stop at
+   once show nothing) polling until `BackgroundJobs.Running` is empty. Giving up on
+   that wait stays in Skyline, with the jobs still stopping. Finishing it closes.
+
+Everything already asked to stop skips straight to (3) - there is nothing left to
+ask. The View Jobs button is gone; Tools > Running Jobs and the status-bar
+double-click are how you look.
+
+The wait is safe on the UI thread because a job leaves the progress list under the
+list's own lock and only reports to the UI asynchronously (`RunUIActionAsync`);
+the blocking `RunUIAction` happens when a job STARTS, not when it ends. If that
+ever changes, this wait would deadlock during LongWaitDlg's pre-dialog delay,
+when the UI thread is blocked and not pumping.
+
+**"Stop", not "terminate"**: settled after trying "terminate" (a dialog with both
+"Cancel Jobs" and "Cancel" is ambiguous, which is what started this). "Stop Job"
+in the Running Jobs dialog, "Stopping" in its progress column, "stop" in the exit
+prompt. Code names stay Cancel* - cancellation is the mechanism, and "stop" reads
+as a promise the mechanism cannot make.
+
+## Exit guard, first pass (fourth commit)
 
 `SkylineWindow.OnClosing` now refuses to close while `BackgroundJobs.Running` is
 non-empty, ahead of the save prompt (asking about saving and only then refusing to
