@@ -140,14 +140,45 @@ anchored, 6px left of Cancel) is by the numbers - nobody has looked at the dialo
 with it showing, and it only appears on an export slow enough to pass the 1500 ms
 delay.
 
+## Running Jobs dialog and StartJob (third commit)
+
+`LongWaitDlg.StartJob(parent, delayMillis, jobDescription, performWork)` replaced
+the `BackgroundJobDescription` property: backgroundable work now calls a DIFFERENT
+method from everything else, which is what carries the contract. `PerformWork`
+keeps `[InstantHandle]` (its delegate is finished with by the time it returns);
+`StartJob` deliberately does not, because its delegate outlives the call. It
+returns `JobOutcome` - `completed` / `canceled` / `backgrounded` - so a caller can
+tell "the user cancelled" from "it is still running".
+
+`RunningJobs` -> `BackgroundJobs`, `RunningJob` -> `BackgroundJob`. "Job" over
+"Task" deliberately: `Task` is the most overloaded identifier in C#, and a
+`BackgroundTasks.Start` returning a `RunningTask` would read as a
+System.Threading.Tasks API in a codebase that bans async/await.
+
+`RunningJobsDlg` (Controls) lists Job / Status / Progress on a 500 ms timer, rows
+matched by job id and updated in place so the selection survives; "Cancel Job"
+cancels the selected one, which then reads "Canceling" until the work stops.
+Reached from **Tools > Running Jobs...** and by **double-clicking the status bar**
+(wired on both `statusGeneral` and `statusProgress` - one visual area, and the
+progress bar is the bigger target).
+
+Two gates came with the menu item, both handled: `RunningJobsDlg` added to
+`TestRunnerFormLookup.csv`, and `KeyboardShortcuts.html` re-recorded in
+en/ja/zh-CHS (`IsRecordMode`, set back to false). Alt+T,R does not clash.
+
+**Line-ending trap hit here**: `sed -i` under Git Bash rewrites a file with LF.
+For .cs files `core.autocrlf` normalizes it away, but `Skyline.csproj` is stored
+CRLF and the first commit of this work showed 15,136 changed lines in it. Fixed by
+restoring the file from HEAD~1 and re-applying the edits with an editor that keeps
+the file's endings. Use the Edit tool or a PowerShell rewrite, not `sed -i`.
+
 ## Follow-ups (design, not yet scoped)
 
-- **A jobs window for the user.** Everything above is reachable only through the
-  tool service; the user sees a job in the status bar but has no way to see the
-  list or stop one. A window listing the running jobs with a Cancel per job would
-  use the same `GetRunningJobs`/`CancelJob` mechanism (the progress list plus the
-  cancellation dictionary), and would be the natural home for the "generic cancel
-  button in the status bar" CONSIDER note in `SkylineWindow.IProgressMonitor.IsCanceled`.
+- **The status-bar cancel button.** `SkylineWindow.IProgressMonitor.IsCanceled`
+  still carries a CONSIDER note about a generic cancel button in the status bar.
+  The Running Jobs dialog answers it for jobs; the note is about progress that is
+  not a job (a results import), which is still only cancellable through whatever
+  UI started it.
 - **More backgroundable operations.** Report export is the only caller that sets
   `BackgroundJobDescription` so far. Candidates are the other operations that
   write a file and touch nothing else - chromatogram / spectral library exports,
