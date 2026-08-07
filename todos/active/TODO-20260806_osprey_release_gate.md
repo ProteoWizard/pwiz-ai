@@ -138,9 +138,62 @@ multi-GB inputs still do not, so the disk-bounding behaviour is unchanged.
 - [x] `/code-review max` - 15 findings. **12 were against #4537** (the review diffed a STALE
       local `master`); filed as [issue #4542](https://github.com/ProteoWizard/pwiz/issues/4542).
       3 were this PR's, all fixed - see below
-- [ ] Re-gate `-Dataset All` after the review fixes
-- [ ] TeamCity Perf/Regression - 4123351 is SUPERSEDED by the review fixes; re-trigger only
-      with Brendan's go-ahead, every time
+- [x] Re-gate `-Dataset All` after the review fixes (`b478aecf88`) - see below
+- [x] **Rebased onto [#4540](https://github.com/ProteoWizard/pwiz/pull/4540)** (merged
+      `dce8841689`). Post-rename `-Dataset All`: **44/44 PASS**, mode 6 green on all four
+      datasets. Pushed as `e597a3c27e`.
+      Log: `ai/.tmp/regression-all-mode6-postrename.log`
+- [ ] TeamCity Perf/Regression - 4123351 is SUPERSEDED (it targets `5fe225cf6c`, two merges
+      back); re-trigger on `e597a3c27e` only with Brendan's go-ahead, every time
+
+## SEQUENCING: #4540 merges first, this rebases onto it
+
+[#4540](https://github.com/ProteoWizard/pwiz/pull/4540) - `osprey: Renamed the join tasks to
+match their user-facing task Names` - touches **72 files including BOTH of this PR's**:
+`regression.ps1` and `Regression/README.md`. It also renames `FirstJoinTask.cs` ->
+`FirstPassFdrTask.cs` and `MergeNodeTask.cs` -> `SecondPassFdrTask.cs`.
+
+Brendan's decision is that #4540 goes first. So after it merges, this branch must:
+
+1. Merge master; expect conflicts in `regression.ps1` and `Regression/README.md`
+2. Update **13 now-stale references in this PR's own added lines**: 4x `FirstJoinTask`,
+   1x `MergeNodeTask`, 7x "merge node" (-> "SecondPassFDR node"), 1x
+   `LoadOwnReconciliationBundle` (verify whether that method name survives the rename)
+3. Re-run `-Dataset All` - the THIRD full gate on this branch
+4. Only then ask about TeamCity
+
+**Keep the pre-merge gate result as a bisection anchor.** If the post-#4540 gate goes red, the
+green run on `b478aecf88` is what separates "my review fixes broke it" from "the merge did".
+That is the whole reason it was not cancelled once #4540 was announced.
+
+**Recorded, not re-argued**: merging this PR first would have let #4540's rename sweep pick up
+those 13 references mechanically along with its other 72 files, saving a full `-Dataset All`
+cycle and the hand-edit. Brendan chose the other order; the cost is ~2.5 h of gating, which is
+wall-clock, not risk.
+
+**Third time master moved under this branch** (#4534, #4537, #4540). The mode-5 numbering
+collision came from the same overlap. A branch touching `regression.ps1` should assume it will
+rebase at least once.
+
+### The rebase, as done (2026-08-07)
+
+Cheaper than feared. `regression.ps1` auto-merged; ONE conflict in `Regression/README.md`, and
+it was precisely the line this PR had corrected ("Runs **last**") colliding with #4540's rename
+of the same sentence ("SecondPassFDR leg"). Kept both: their wording, this PR's correction.
+
+Then 13 stale references in THIS PR's own added lines: `FirstJoinTask` -> `FirstPassFdrTask`,
+`MergeNodeTask` -> `SecondPassFdrTask`, "merge node" -> "SecondPassFDR node" (including the
+user-visible `HPC SecondPassFDR node` failure label).
+
+**Two things checked rather than assumed**, both of which could have silently broken mode 6:
+
+* **The release LOG TEXT survived the rename.** Mode 6 keys on log wording, not class names,
+  so a reworded message would have killed `$releaseLinePattern` outright. Both format strings
+  are intact (`FirstPassFdrTask.cs:2084`, `SecondPassFdrTask.cs:279`). The new run-wide
+  liveness assertion would have caught it, but knowing beforehand beats a red gate.
+* **The chain log copies are transparent to the directory rename.** #4540 renamed
+  `phase4_mergenode` -> `phase4_SecondPassFDR`; the `Copy-Item` calls use the `$ph4` variable,
+  so nothing needed changing.
 
 ## THE REVIEW FOUND A HOLE IN THE GATE - and a claim of mine that was false
 
