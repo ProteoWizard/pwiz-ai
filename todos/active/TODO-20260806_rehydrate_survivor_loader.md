@@ -225,8 +225,19 @@ and compares its blib against straight-through. `Build-Osprey -RunTests
 PR **#4545** opened against master, `c679e7c93f`, five commits. Labels `osprey`
 + `performance`. Copilot auto-reviews on open; address with `/pw-respond 4545`.
 
-Still to do before merge: TeamCity Perf/Regression on `pull/4545` - **ASK
-BRENDAN FIRST**, every time, per the standing rule.
+Copilot reviewed 2026-08-07 17:24 and **generated no comments** - zero inline
+comments, zero review threads, zero issue-level comments. Nothing to address, so
+no round-2 commit and nothing to resolve.
+
+TeamCity Perf/Regression triggered on Brendan's go-ahead: build
+[4125125](https://teamcity.labkey.org/build/4125125), config
+`ProteoWizard_OspreyWindowsNetPerfRegressionTests`, branch `pull/4545` (the PR
+ref - a named branch silently builds master on the Osprey configs). Ask again
+before any re-trigger.
+
+What that run buys over the local gates already green here: **Astral** legs on
+the shared agent plus the perf leg, neither of which the local `-Dataset All`
+covers in the same configuration.
 
 ## Scope decision after the review (2026-08-07)
 
