@@ -156,5 +156,32 @@ at `a40c7ebd08`, which already contains #4537 (`4169f844c2`).
 
 Gate so far: `Build-Osprey -RunTests -RunInspection` green - 576/576 tests, 0
 inspection warnings/errors across net472 + net8.0 (109.5s inspection pass).
-`regression.ps1 -Dataset Stellar` running; log at
-`C:\proj\ai\.tmp\4536-regression-stellar.log`.
+
+`regression.ps1 -Dataset Stellar` PASSED, all seven legs
+(`C:\proj\ai\.tmp\4536-regression-stellar.log`):
+
+```
+  Stellar mode1 (vs golden): PASS
+  Stellar mode3 (HPC chain==straight): PASS
+  Stellar mode4 (warm re-run all cached): PASS
+  Stellar mode2 (resume cache hits): PASS
+  Stellar mode2 (resume==straight): PASS
+  Stellar mode5 (rehydrate entered + cache hits): PASS
+  Stellar mode5 (rehydrate==straight): PASS
+
+=== Known O(files) resident paths this gate still traverses ===
+  none
+```
+
+Every blib 25,407,488 bytes; straight-through, HPC chain, resume and rehydrate
+all compared at 1e-9.
+
+**The ordering risk is settled empirically, not by argument.** Modes 3 and 5 are
+the two legs that reach the rehydrate arm, and both now take the streamed
+per-file refill where they previously kept the resident buffer. If the loader's
+canonical sort had disagreed with the parquet order the hydrate's
+`MapPlannedActions` indexed against, mode 3 would have applied reconciliation
+actions to the wrong entries and its blib would have diverged. It does not.
+
+"Known O(files) resident paths ... none" is the standing rule from #4537 reaching
+its target: the gate now requires zero tokens.
