@@ -9,7 +9,10 @@
 - **GitHub Issue**: [#4536](https://github.com/ProteoWizard/pwiz/issues/4536)
 - **Module**: `osprey`
 - **Other labels**: `performance`
-- **PR**: (pending)
+- **PR**: [#4545](https://github.com/ProteoWizard/pwiz/pull/4545)
+- **Follow-ups**: [#4544](https://github.com/ProteoWizard/pwiz/issues/4544) (deferred
+  review findings), [#4486](https://github.com/ProteoWizard/pwiz/issues/4486)
+  (Stage 7 owns the residual O(files) residency - commented, not fixed here)
 - **Requester/Reporter**: none (filed by Brendan, developer of Osprey — no credit line)
 
 ## Objective
@@ -209,6 +212,21 @@ re-runs prep and rewrites through the link. Fresh dir, let it prepare - roughly
 Library confirmed present:
 `D:\test\Pilot-MTG-Tissue-May2026\lib\regression\target+decoy+entrapment\`
 (`carafe_spectral_library.tsv` 13.1 GB + `osprey_library_db_pairing.tsv`).
+
+## Final gate + PR (2026-08-07)
+
+`regression.ps1 -Dataset All` **PASSED** on the Tier-1 tree - 45 PASS, 0 FAIL,
+`Known O(files) resident paths: none`
+(`C:\proj\ai\.tmp\4536-regression-all-tier1.log`). Mode 3 is the leg that
+validates the worker end-of-loop rebuild skip, since it runs the real HPC chain
+and compares its blib against straight-through. `Build-Osprey -RunTests
+-RunInspection` green: 576/576, zero inspections.
+
+PR **#4545** opened against master, `c679e7c93f`, five commits. Labels `osprey`
++ `performance`. Copilot auto-reviews on open; address with `/pw-respond 4545`.
+
+Still to do before merge: TeamCity Perf/Regression on `pull/4545` - **ASK
+BRENDAN FIRST**, every time, per the standing rule.
 
 ## Scope decision after the review (2026-08-07)
 
