@@ -199,6 +199,75 @@ Library confirmed present:
 `D:\test\Pilot-MTG-Tissue-May2026\lib\regression\target+decoy+entrapment\`
 (`carafe_spectral_library.tsv` 13.1 GB + `osprey_library_db_pairing.tsv`).
 
+## CORRECTIONS after /code-review max (2026-08-07) - DO NOT OPEN THE PR
+
+`/code-review max` returned 15 findings. Three of them attack claims recorded
+above, and I verified those three MYSELF against the code rather than accepting
+them. All three hold. The claims they correct are struck through in place below;
+this section is the authority.
+
+**1. "Reverting the loader makes mode 5 fail on the resident-handoff guard" is
+FALSE.** `Stage6ResidentHandoffGuardError` opens with
+`if (!streamingAvailable || streamingEnabled) return null;` and
+`Stage6StreamSurvivors` defaults ON. So a regression back to a null loader
+returns `streamingAvailable == false` and the guard says nothing. The
+"Regression Test" section's central claim about what would go red is wrong.
+Worse, the review's point stands that **mode 5 is now self-confirming**: before
+this change its cold side came from the projection path and its warm side held
+the resident buffer, which is what made it a loader-vs-buffer oracle. Both sides
+now run through `FirstPassSurvivorLoader.Load`, so a wrong sidecar path, wrong
+sort or wrong retained set gives the same wrong answer twice and mode 5 stays
+green. That is a LOSS of oracle strength introduced here, not a neutral change.
+
+**2. The worker rebuilds a buffer for a MergeNode that never runs.** Verified:
+`Program.cs:126` sets `NoJoin = true` for `--task PerFileRescoring`, and
+`MergeNodeTask.IsIncluded` is false on all three clauses when
+`inputs && NoJoin && !ExpectReconciledInput`. So the
+`if (survivorLoader != null)` block at `PerFileRescoreTask.cs:338` -
+`MaterializeAllSurvivors` + `ResetRescoredTargets` +
+`OverlayReconciledIntoAllFiles`, the last re-reading the reconciled parquet just
+written - is pure waste in the HPC worker. It was unreachable there before this
+change (null loader) and my change enables it.
+
+**3. The straight-through resume gets NO peak reduction, and pays an extra read
+pass.** Verified: `PerFileRescoreTask.Rehydrate` (non-`ExpectReconciledInput`
+branch) and `Run`'s `!didPlan && rescoreBundle == null` early return BOTH call
+`MaterializeAllSurvivors` immediately. So FirstJoin releases the buffer and the
+very next task refills it from disk. On that path the change is a full extra
+parquet + sidecar pass over every file for no memory benefit.
+
+**What this does to the memory table below.** The `reconciliation-resident` probe
+fires at the END of `ExecuteRescore` (`PerFileRescoreTask.cs:647`), BEFORE the
+post-loop rebuild. So 2.31 GB is the honest IN-RESCORE FLOOR - the metric the
+harness and #4472/#4526 track - but it is NOT the process peak, because finding 2
+means the worker rebuilds the whole buffer moments later. And the sweep was taken
+on `--task PerFileRescoring`, i.e. the worker arm, not the straight-through
+resume the issue title names. The 10.7x slope figure is real for what it
+measures; the framing "every resume now streams" is not supported by it.
+
+Part of the +10% wall delta is therefore finding 2's dead work, not the loader's
+per-file reads as recorded below.
+
+### Not yet verified (review's claims, plausible, unchecked by me)
+
+Stem collisions in the `ContainsKey` precondition (`perFileEntries` is a
+positional list that may hold duplicate stems); `ResolveSidecarBasePath`
+resolving a different sidecar than the hydrate used; a projection-off RESUME now
+streaming while its compute twin stays resident, breaking that A/B; the
+un-re-keyed `PerFileConsensusTargets` positional index space; `RetainedBaseIds`
+carrying a bundle-scoped action term on a worker; `AllowUnfixedResidentUnrecognized`
+having no consumer, so a stale `resume-survivor-handoff` value now no-ops
+silently; and a set of comments/README lines this change invalidated, including
+`ai/docs/osprey-development-guide.md:781` (outside this repo) which still names
+the token as required.
+
+The review also REFUTED the ordering risk recorded in the Design section:
+`ParquetScoreCache.WriteScoresParquet` writes rows in exactly
+`(EntryId, Charge, ScanNumber)` with `ParquetIndex = row`, so the canonical sort
+is a stable no-op and could not have misaligned the rebuilt `vec_idx`. The mode 3
+evidence stands, but the mechanism was never at risk the way the Design section
+implies.
+
 ## Memory results - the A/B (2026-08-07)
 
 **The scope item is answered: the rescore floor is flat in file count on a
