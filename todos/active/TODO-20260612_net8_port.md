@@ -3855,3 +3855,74 @@ No run yet on `15640972aa` or `82570c8480`.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260807_net8_percolator_vendordata.md` before starting work.
+
+## 2026-08-07b - The perf suite's one failure: a tool tip timer holding the window
+
+`ProteoWizard_SkylineWindowsNetPerfTutorialTests` #29 (`d11a068320`) had exactly one failure,
+`TestDiaFragPipeTutorial-en`: **"Objects not garbage collected after test: SkylineWindow,
+SrmDocument"**. Same failure in #27; #28 failed with no failed tests. Fixed.
+
+### What roots the window
+
+Reproduced locally (the test needs the 4 GB `Webinar26.zip`; `SKYLINE_DOWNLOAD_PATH` points at
+`C:\test\Skyline\downloads`, and a file already there is not re-downloaded). Then answered by a
+dump rather than by inference - `GarbageCollectionTracker` now writes a full-memory dump at the
+leak moment when `SKYLINE_GC_LEAK_DUMP=<dir>` is set, before it pins the survivors so the only
+roots in it are the real ones. `dotnet-dump analyze ... -c "dumpheap -type
+pwiz.Skyline.SkylineWindow" -c "gcroot <addr>"` returned one path:
+
+```
+(strong handle) -> ToolTip+ToolTipTimer            _interval 5000, _enabled 1
+                -> ToolStripDropDownMenu           (the timer's Host)
+                -> ToolStripMenuItem
+                -> EventHandlerList -> EventHandler
+                -> pwiz.Skyline.Menus.ChromatogramContextMenu
+                -> pwiz.Skyline.SkylineWindow
+```
+
+WinForms shows a tool tip for the drop-down item being selected and arms the owning ToolTip's
+5-second auto-pop timer to take it down again. `Timer.Start()` roots the timer with a GCHandle, and
+`ToolTipTimer.Host` is the drop-down, whose owner item's Click handler holds a Skyline menu class,
+which holds SkylineWindow. A user's mouse leaving the item hides the tool tip and stops the timer.
+**A test drives menus without a mouse, so nothing hides it, and the UI message pump ends with the
+test before the timer could fire on its own** - so the handle is never released. In the app it
+self-heals five seconds later; in a test it cannot.
+
+That is also why it only showed up here: the tool tip has to appear at all, which takes the item
+staying selected past the initial delay. A scratch test that drove the same verbs (native Open
+dialog, Edit > Find, the peak-area graph's right-click *Normalize To > Default (None)* submenu)
+against a small document did **not** leak - everything completed too fast. The 75 MB / 10-replicate
+FragPipe document loses that race: **10 tool tip timers were still armed** when it ended.
+
+### Fix
+
+`AbstractFunctionalTest.EndTest` now calls `ReleaseToolStripToolTips()` beside the existing
+`ReleaseModalMenuFilterWindow()` (same `#if !NET472` block, same reason, same reflection
+constraint - `ToolStripManager`'s ToolStrip list is thread-static, so it runs on the UI thread).
+It walks that list and does what `ToolTip.StopTimer()` does to any armed timer. Where the earlier
+helper returns silently if WinForms moved a field, this one asserts: a GC-leak failure in an
+unrelated test is a long way from the rename that caused it.
+
+Verified by making it fail: with the call commented out the test fails again on the same machine
+with the same cached data; with it, `TestDiaFragPipeTutorial` passes twice in a row (20s, 15s), and
+26 menu/connector/dialog functional tests (all `*McpConnector*`, `TestLiteDropdownList`,
+`TestZedGraphClipboard`, `TestReportErrorDlg`, `TestNativeFileDialog`, `TestNativeMessageBox`,
+`TestAlertWatch`) plus `CodeInspection` still pass.
+
+### Two things seen on the way, neither fixed
+
+- `ci.skyline.ms` returns **403** for `webinars/Webinar26_data/Webinar26.zip`, so every perf run
+  falls back to skyline.ms and re-downloads 4 GB. The file appears never to have been mirrored to
+  S3. A data-hosting fix, not a code one.
+- On CI (not locally) cleanup warns `Could not find a part of the path
+  'c:\skyline-downloads\Webinar26_data\Webinar26'`. `PersistentFilesDirTotalSize` is only set when
+  that directory exists at extraction time, so it existed then and was gone by cleanup - something
+  on the agent removes it mid-run. Harmless to the test, but it means the 4 GB is re-extracted
+  every time.
+
+### Reusable
+
+`SKYLINE_GC_LEAK_DUMP` is kept in `GarbageCollectionTracker` (env-gated; unset costs one
+environment read per detected leak). This is the second time the dump-the-leak-moment probe has
+been needed - the ModalMenuFilter root was found the same way - and last time it had to be
+rebuilt from scratch.
