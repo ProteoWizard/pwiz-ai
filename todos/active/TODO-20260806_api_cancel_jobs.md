@@ -172,6 +172,31 @@ CRLF and the first commit of this work showed 15,136 changed lines in it. Fixed 
 restoring the file from HEAD~1 and re-applying the edits with an editor that keeps
 the file's endings. Use the Edit tool or a PowerShell rewrite, not `sed -i`.
 
+## Exit guard (fourth commit)
+
+`SkylineWindow.OnClosing` now refuses to close while `BackgroundJobs.Running` is
+non-empty, ahead of the save prompt (asking about saving and only then refusing to
+close would be worse). A three-button `MultiButtonMsgDlg` says "Skyline cannot
+exit while background jobs are still running." with:
+
+- **View Jobs** (default) - opens the Running Jobs dialog
+- **Terminate Jobs** - `BackgroundJobs.CancelAll()`
+- **Cancel** - stays
+
+It returns false in EVERY branch, including after terminating: terminating is a
+request, and the jobs stop at their next cancellation check. Exiting again once
+they have gone is what closes the window. The alternative - wait for them and
+then continue closing - needs a pumped wait (a job reports progress by Invoking
+the UI thread, so a plain blocking wait there would deadlock; `LongWaitDlg` pumps,
+which is what makes it safe) and a timeout path. Not worth it for one extra click
+in a rare situation, but that is the upgrade if the extra click annoys.
+
+**"Terminate" over "Cancel"**: a dialog with both "Cancel Jobs" and "Cancel" is
+ambiguous. The Running Jobs dialog's button changed to "Terminate Job" too, so one
+word means stopping a job everywhere and "Cancel" always means cancelling the
+dialog. The code names stay Cancel* - it IS cooperative cancellation, and
+"Terminate" would over-promise if it named the mechanism.
+
 ## Follow-ups (design, not yet scoped)
 
 - **The status-bar cancel button.** `SkylineWindow.IProgressMonitor.IsCanceled`
