@@ -134,6 +134,48 @@ proved that byte-identical against the legacy in-memory compaction. The
 `regression.ps1` mode 5 blib-vs-straight-through comparison at 1e-9 is the oracle
 that settles it rather than an argument.
 
+## Memory-evidence plan (Brendan's call: 16-file Astral slope)
+
+Harness: `ai/scripts/Osprey/SEA-AD/Measure-Stage6Rescore.ps1`. It drives
+`--task PerFileRescoring --input-scores <N parquets>`, which reaches
+`FirstJoinTask.Rehydrate` through a WORKER-supplied bundle - a rehydrate arm
+#4530 did NOT fix and this change now streams. So it measures the right buffer
+on the right path, and the headline number is the post-GC
+`[MEM reconciliation-resident] managed_heap=` probe rather than `--memstamp`
+(which includes uncollected garbage).
+
+**A/B on ONE binary, not two builds.** `OSPREY_STAGE6_STREAM_SURVIVORS=0`
+(plus `OSPREY_ALLOW_UNFIXED_RESIDENT=compacted-entries-buffer`, the documented
+oracle token) makes the same binary take the RESIDENT handoff - i.e. the
+pre-#4536 behavior - while the default streams. Six points: 4/8/16 files x
+resident/streamed. Resident should slope in file count; streamed should be flat.
+This is a cleaner comparison than building the base commit separately, because
+only the one flag differs.
+
+Invocation (after the gate frees the machine, against a SNAPSHOT exe so the
+build tree stays usable):
+
+```
+Measure-Stage6Rescore.ps1 -FileCounts 4,8,16 `
+  -DataDir    'D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\mzml' `
+  -LibraryDir 'D:\test\Pilot-MTG-Tissue-May2026\lib\regression' `
+  -PhaseDir   '<FRESH scratch dir>' -Exe '<snapshot>\Osprey.exe'
+```
+
+**HAZARD, found with `-WhatIf`: never point `-PhaseDir` at a real run
+directory.** Each measurement starts with
+`rm *.2nd-pass.fdr_scores.bin *.scores-reconciled.parquet` in the phase dir, so
+aiming it at
+`runs\seaad-82files-libdecoy-r1.0-protein-compact-picklda` (a complete 301 GB
+experiment) would delete that run's outputs. Reusing its artifacts by hard link
+is equally unsafe: if the version/validity check rejects them the harness
+re-runs prep and rewrites through the link. Fresh dir, let it prepare - roughly
+1.5 h of Stage 1-5 for 16 Astral files, paid once for all six points.
+
+Library confirmed present:
+`D:\test\Pilot-MTG-Tissue-May2026\lib\regression\target+decoy+entrapment\`
+(`carafe_spectral_library.tsv` 13.1 GB + `osprey_library_db_pairing.tsv`).
+
 ## Progress Log
 
 ### 2026-08-06 - Session Start
