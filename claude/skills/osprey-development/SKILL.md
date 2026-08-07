@@ -175,9 +175,31 @@ and `README.md` are the authoritative gate references.
 
 ## TeamCity Perf/Regression gate (manual - ask, then trigger)
 
-The **Osprey Windows .NET Perf/Regression Tests** config runs `regression.ps1`
-mode1/2/3 on **Stellar AND Astral** plus a perf leg (~1 hour). It is manual and
-does NOT start on PR open or push, but it must run before human review / merge.
+The **Osprey Windows .NET Perf/Regression Tests** config runs `tctest.bat`, i.e.
+`regression.ps1 -TeamCity -Dataset All`, plus a perf leg (~1 hour). It is manual
+and does NOT start on PR open or push, but it must run before human review /
+merge.
+
+**It runs EVERY mode on ALL FOUR datasets** - no `-Skip*` switch is passed, so
+whatever `regression.ps1` gains, this config runs. That is modes 1, 1b, 2, 3, 4,
+5 and 6 today. (This paragraph said "mode1/2/3" for months after modes 4-6 were
+added; if you are about to quote a mode list from here, check `tctest.bat`
+instead - the invocation is one line and cannot go stale.)
+
+"Four datasets" is **two acquisitions searched four ways**, not four acquisitions:
+`stellar` (3 mzML, unit) and `astral` (3 mzML, hram), 6 distinct files total. The
+Stellar mzML is searched three times against two library files:
+
+| Dataset | mzML | Library | Decoys |
+|---|---|---|---|
+| `Stellar` | stellar, 3 | default stellar lib | generated, no entrapment |
+| `StellarLibDecoy` | the same 3 | `stellar-libdecoy` as-is | supplied by the library - `DecoyGenerator` never runs |
+| `StellarGenDecoyEntrap` | the same 3 | the SAME file, `StripDecoys` | generated, entrapment retained as a true-FDP oracle |
+| `Astral` | astral, 3 | astral lib | generated, no entrapment |
+
+The third is the only leg that guards `DecoyGenerator` against a true-FDP oracle:
+the library-decoy leg never calls it, and the entrapment-free legs have nothing to
+measure FDP against. All but `Stellar` carry `--model-diagnostics`.
 
 **Claude MAY trigger it - but ASK FIRST, every time**, and ask again before any
 re-trigger. Always `branch="pull/<N>"`, never the named `Skyline/work/...`
