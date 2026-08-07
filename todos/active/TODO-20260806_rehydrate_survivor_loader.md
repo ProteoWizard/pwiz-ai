@@ -64,11 +64,34 @@ that needs designing and pinning.
 
 ## Regression Test
 
-- **Test name**: (filled in once written — expected: extend `ResidentPoolGuardTest`
-  for the now-covered rehydrate path, plus `regression.ps1` mode 5)
-- **Test project**: Osprey.Test + `regression.ps1` mode 5
-- **Fails on master**: (pending)
-- **Passes on fix**: (pending)
+- **Test name**: `IOTest.TestRescoreCompactionUnionsActionsWithLocalFdrPredicate`
+  (extended) + `ResidentPoolGuardTest.TestResidentPoolGuard` (KNOWN_UNFIXED
+  pinning) + `regression.ps1` modes 3 and 5
+- **Test project**: Osprey.Test + `regression.ps1`
+- **Fails on master**: n/a for the unit tests - see the note below
+- **Passes on fix**: yes. `Build-Osprey -RunTests -RunInspection` 576/576, zero
+  inspections (net472 + net8.0). `regression.ps1 -Dataset All` 44/44 legs;
+  final `-Dataset Stellar` after the robustness commit, 8/8 legs
+  (`C:\proj\ai\.tmp\4536-regression-stellar-final.log`).
+
+**Honest accounting of what the tests do and do not cover.** The unit tests pin
+CONTRACTS, not the defect: `RetainedBaseIds` is the union and not an alias of
+`GlobalFirstPassBaseIds`, and `resume-survivor-handoff` is gone from
+`KNOWN_UNFIXED`. Neither would go red on master, because on master the property
+they assert does not exist yet - that is the nature of a "this path was never
+given a loader" defect rather than a wrong-answer one.
+
+What actually would have caught a regression here is `regression.ps1` modes 3
+and 5, which now traverse the streamed rehydrate arm with NO token: reverting the
+loader makes mode 5 fail on the resident-handoff guard, and breaking the survivor
+ORDER makes mode 3's blib diverge. Plus the gate's own
+`Tokens REQUIRED by this gate: 0` line, which turns any future re-addition into a
+visible diff rather than an environment variable nobody re-reads.
+
+The memory property itself has no automatic verifier. The sweep is a manual
+harness (`Measure-Stage6Rescore.ps1`); nothing standing would fail if the slope
+regressed to 0.213 GB/file, and `Test-PerfGate.ps1` covers the straight-through
+path, not this one. Worth a follow-up issue rather than pretending otherwise.
 
 ## Coordination
 
