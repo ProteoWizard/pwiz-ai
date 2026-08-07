@@ -4,11 +4,11 @@
 - **Branch**: `Skyline/work/20260806_osprey_task_class_rename`
 - **Base**: `master`
 - **Created**: 2026-08-06
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4535](https://github.com/ProteoWizard/pwiz/issues/4535)
 - **Module**: `osprey`
 - **Labels**: `osprey`, `tech-debt`
-- **PR**: (pending)
+- **PR**: [#4540](https://github.com/ProteoWizard/pwiz/pull/4540) (merged 2026-08-06 as `dce8841689`)
 - **Checkout**: `C:\proj\pwiz`
 
 ## Objective
@@ -207,3 +207,36 @@ exists. Worth revisiting if a third consumer ever grows its own copy.
 
 Starting work on this issue. Branch created off current master; pwiz checkout
 `C:\proj\pwiz`.
+
+### 2026-08-06 - Merged
+
+PR #4540 merged as commit `dce8841689`, closing #4535. Everything in the issue's
+scope shipped, plus two agreed extensions: the `HpcTask` enum members were renamed
+alongside the classes (they were a third divergent name set), and the informal
+prose - "the join", "the merge node", "first join" - was eliminated rather than
+just the two class names. Nothing was deferred.
+
+Verification, in the order it was run: local build + 576/576 tests + ReSharper
+0/0; `regression.ps1 -Dataset Stellar` green (7/7 legs, blib byte-identical at
+25,407,488 across all four run modes); `/code-review max`; the gate re-run green
+after the review fixes; TeamCity Perf/Regression on `pull/4540` SUCCESS, which is
+what added **Astral** and the perf leg that the local Stellar-only runs could not
+reach; then 17/17 PR checks.
+
+Two mentions of the retired names survive ON PURPOSE, in `docs/15-hpc-scoring-split.md`
+and `Regression/RegressionData.ps1` - both passages are about the rename itself and
+the second's justification IS the original incident, so scrubbing them would leave a
+guard with no stated reason.
+
+Merge friction worth recording: branch protection refused the squash because the
+head was behind master. The branch was updated by MERGE (not rebase - the PR had
+been reviewed), which pulled in exactly one line of #4541 in a Skyline UI file.
+`git diff edf6099cd7 HEAD -- pwiz_tools/Osprey` was empty, so the hour-long
+Perf/Regression gate was deliberately NOT re-run: the tree it validated had not
+changed by a byte. Re-running it per-commit is what previously produced a queue
+that had to be hand-cancelled.
+
+No follow-up issues filed. The one durable idea left on the table is a
+`CanonicalPipeline`-walking round-trip test asserting `Name` <-> `ResolveTask` <->
+`TaskCliName`, argued for by `/code-review` and not adopted here; the reasoning for
+and against is under "Regression Test" above if anyone wants to revisit it.
