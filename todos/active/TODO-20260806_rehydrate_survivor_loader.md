@@ -176,7 +176,49 @@ Library confirmed present:
 `D:\test\Pilot-MTG-Tissue-May2026\lib\regression\target+decoy+entrapment\`
 (`carafe_spectral_library.tsv` 13.1 GB + `osprey_library_db_pairing.tsv`).
 
-## Memory results - streamed arm (2026-08-07)
+## Memory results - the A/B (2026-08-07)
+
+**The scope item is answered: the rescore floor is flat in file count on a
+rehydrate, and was not before.**
+
+Same binary, same phase dir, same 16 SEA-AD Astral files; the only difference is
+`OSPREY_STAGE6_STREAM_SURVIVORS`, which on this branch selects between the new
+per-file refill and the pre-#4536 resident handoff.
+
+```
+Files   streamed GB   resident GB   Rescored
+    4          2.07          2.82     231557
+    8          2.22          3.73     465304
+   16          2.31          5.37     931582
+
+slope   0.020 GB/file   0.213 GB/file        (10.7x)
+500-file projection    12.0 GB     108.2 GB
+```
+
+`Rescored` is identical at every point, so the two arms did the same work - the
+difference is what they held while doing it. Across a 4x increase in files the
+streamed arm grows 12% (2.07 -> 2.31 GB) while the resident arm grows 90%
+(2.82 -> 5.37 GB).
+
+**Wall cost, stated rather than buried.** The streamed arm is slower:
+
+```
+Files   streamed s   resident s   delta
+    4          444          433    +2.5%
+    8          775          697   +11.2%
+   16         1947         1781    +9.3%
+```
+
+That is the documented trade - the loader re-reads each file's
+`.scores.parquet` + sidecar instead of holding the survivors - and ~10% of
+Stage 6 buys a 10x slope reduction against a path that OOMs at 163 files.
+Caveat on strength of evidence: ONE run per point, no repeats, so treat ~10% as
+indicative rather than established; the memory separation (2.31 vs 5.37 GB) is
+far outside any plausible run-to-run variance and does not need that caveat.
+`Test-PerfGate.ps1` covers the straight-through path, not this one, so nothing
+standing would have caught the wall delta either way.
+
+## Memory results - streamed arm detail (2026-08-07)
 
 16 SEA-AD Astral files, 30 threads, r1.0 target+decoy+entrapment library, this
 branch's snapshot exe. Headline is the post-GC
