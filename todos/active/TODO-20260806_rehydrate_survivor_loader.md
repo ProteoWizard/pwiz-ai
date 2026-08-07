@@ -277,3 +277,33 @@ tree stays usable during the sweep. Branch pushed
 Stage-6 memory sweep started, streamed arm first, into a FRESH phase dir
 `D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\runs\stage6\stage6-16files`
 (log `C:\proj\ai\.tmp\4536-stage6-sweep-streamed.log`).
+
+### 2026-08-07 - Self-review pass
+
+`/code-review` is user-invocable only (`disable-model-invocation`), so Brendan
+has to run `/code-review max` before the PR opens. Own pass in the meantime
+produced one fix and one investigated non-issue.
+
+**Fixed (`def9f62bd7`): a null retained set was a silent fallback.**
+`TryBuildResumeSurvivorLoader` returned a null loader whenever
+`bundle.RetainedBaseIds` was null, on the reasoning that `CompactFirstPass`
+skips `RescoreCompaction.Apply` only for an empty join. True today, and
+unverified - and a null loader is invisible downstream, because
+`Stage6ResidentHandoffGuardError` reads it as "this run could not stream" and
+EXEMPTS the run. So any later change that gave `Apply` a second skip would put
+Stage 6 back on the resident buffer with nothing raised: the same
+undetected-regression shape this issue was filed about. Now a null set with
+files joined is a hard error.
+
+**Investigated, not a defect: the library release uses a different base_id set
+than the loader.** `Rehydrate` sets
+`_firstPassBaseIds = bundle.GlobalFirstPassBaseIds` for
+`ReleaseUnscorableLibraryFragments`, while the loader filters on the union with
+the planner's action targets. If an action target sat outside the global set it
+would survive compaction, be rescored, and find its library fragments already
+released. It cannot: on the computed path the planner runs AFTER compaction, so
+its targets are a subset of the base_id set the envelope then records, and the
+resume reads that same envelope. The union is a no-op in practice and is kept
+because it is what compaction actually applies - filtering the rebuild on
+anything else would be right only by coincidence. Pre-existing code either way;
+this change does not alter which entries survive.
