@@ -109,6 +109,14 @@ reworded in place. Three of my own comments still said `FirstJoinTask` and were
 corrected in a follow-up commit - a rebase reintroduces old names silently,
 because the conflict is in the CONTENT, not the name.
 
+The rename sweep needed THREE passes, which is the lesson: `MergeNodeTask` and
+`merge node` came back clean, but a bare `MergeNode` and the plain-English "into
+the merge" - the metaphor #4540 deliberately retired - both slipped past narrower
+patterns. Grep the loose token (`MergeNode`, `merge`, `FirstJoin`) over added
+lines, not the fully-qualified one. Task NAME strings are the exception and must
+NOT move: `--task SecondPassFDR` and the `.osprey.task` stamps keep their
+spelling, since #4540 renamed classes only.
+
 **Trap for next time: do NOT use `sed -i` on tracked C# here.** It rewrote all
 three files LF-only (CRITICAL-RULES requires CRLF), which `git status` shows as a
 whole-file change. Reverted and redone with the Edit tool, which preserves line
@@ -201,6 +209,17 @@ re-runs prep and rewrites through the link. Fresh dir, let it prepare - roughly
 Library confirmed present:
 `D:\test\Pilot-MTG-Tissue-May2026\lib\regression\target+decoy+entrapment\`
 (`carafe_spectral_library.tsv` 13.1 GB + `osprey_library_db_pairing.tsv`).
+
+## Gate on master (2026-08-07)
+
+`regression.ps1 -Dataset All` **PASSED** on the master-rebased tree - 45 PASS
+lines across all four datasets, `Known O(files) resident paths: none`
+(`C:\proj\ai\.tmp\4536-regression-all-onmaster.log`). `Build-Osprey -RunTests
+-RunInspection` green after the two rename follow-up commits: 576/576, zero
+inspections. Branch `e0a9a569b5`, four commits on `5d54d0ef0a`.
+
+This supersedes the earlier `-Dataset All` green, which was taken on the
+#4539-stacked tree that no longer exists.
 
 ## CORRECTIONS after /code-review max (2026-08-07) - DO NOT OPEN THE PR
 
