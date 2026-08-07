@@ -3,7 +3,7 @@
 ## Branch Information
 - **Branch**: `Skyline/work/20260806_rehydrate_survivor_loader`
 - **Worktree**: `C:\proj\pwiz-work1`
-- **Base**: `master`
+- **Base**: `Skyline/work/20260806_osprey_release_gate` (PR #4539) - **STACKED**
 - **Created**: 2026-08-06
 - **Status**: In Progress
 - **GitHub Issue**: [#4536](https://github.com/ProteoWizard/pwiz/issues/4536)
@@ -72,11 +72,21 @@ that needs designing and pinning.
 
 ## Coordination
 
-`C:\proj\pwiz` is on `Skyline/work/20260806_osprey_release_gate` (PR #4539)
-with uncommitted edits to `pwiz_tools/Osprey/regression.ps1` and
-`Regression/README.md` — the same files this issue touches when the token count
-drops to 0. Sequence: let #4539 land first, or rebase this branch onto it before
-editing those two files.
+**STACKED ON #4539.** Brendan's call (2026-08-06): rebase onto it rather than
+wait. This branch is based on `origin/Skyline/work/20260806_osprey_release_gate`
+(`5fe225cf6c`), not master, so the PR must target that branch.
+
+The `regression.ps1` conflict was real and is resolved: #4539 added the mode 6
+help block immediately after the sentence this issue rewrites (mode 5's token
+line). Both kept.
+
+**Merge hazard - do NOT `--delete-branch` #4539 on squash-merge.** Deleting the
+lower branch mid-cascade auto-closes this PR, unreopenably. Order: retarget this
+PR to master, `git rebase --onto master <old-base>`, THEN delete branches.
+
+`C:\proj\pwiz` still holds uncommitted edits to `regression.ps1` and
+`Regression/README.md` on the #4539 branch. Those are not in this rebase (only
+the pushed tip is), so whoever commits them will meet the same conflict again.
 
 ## Design
 
@@ -185,3 +195,21 @@ actions to the wrong entries and its blib would have diverged. It does not.
 
 "Known O(files) resident paths ... none" is the standing rule from #4537 reaching
 its target: the gate now requires zero tokens.
+
+### 2026-08-06 - Resident A/B and the rebase onto #4539
+
+Ran the whole Stellar gate a second time under
+`OSPREY_STAGE6_STREAM_SURVIVORS=0` + `OSPREY_ALLOW_UNFIXED_RESIDENT=compacted-entries-buffer`
+(`C:\proj\ai\.tmp\4536-regression-stellar-resident-ab.log`): all seven legs PASS,
+blib 25,407,488 bytes - the same size the streamed run produced. Since both arms
+compare equal to the straight-through blib at 1e-9, streamed == resident on the
+resume path transitively. That is the "resume blib streamed vs resident" scope
+item, done on Stellar.
+
+Committed as `fadf1951e9`, then rebased onto
+`origin/Skyline/work/20260806_osprey_release_gate` -> `4a8d660c59`. One conflict
+in `regression.ps1` (see Coordination), resolved keeping both sides. Rebuilt on
+the rebased tree: 576/576 tests, 0 inspection warnings/errors.
+`regression.ps1 -Dataset All` re-launched against the rebased tree - the earlier
+`All` run was stopped, because a gate result on a tree that no longer exists is
+not evidence about the tree that ships.
