@@ -99,6 +99,47 @@ into each other's diagnostic log.
   `PackageToolZip` stamps from `AssemblyInfo.cs`.
 - **`/code-review max`** before opening the PR.
 
+## "Run in Background" (second commit)
+
+The job mechanism moved out of `JsonToolServer` into `Util/RunningJobs.cs` so the
+UI can use it too: `RunningJobs.Start(description)` hands out a `RunningJob` that
+owns the job's `CancellationTokenSource` and, when disposed, reports the final
+status that takes the job out of the progress list. `JsonToolServer.RunJob` is now
+`using (var job = RunningJobs.Start(...))` around the work; `GetRunningJobs` /
+`CancelJob` are thin adapters over `RunningJobs.Running` / `.Cancel`.
+`JobProgressStatus` moved to `Util` with it - a job is no longer a tool-service
+concept.
+
+`LongWaitDlg` gained a **"Run in Background"** button, shown only when the caller
+sets `BackgroundJobDescription`. Pressing it starts a job, registers the job's
+token to trip the dialog's own `CancellationTokenSource` (so the work goes on
+watching the one token it always had), reports the current message/percentage to
+the job, and closes the dialog - which returns `PerformWork` to its caller with
+the work still running. From there every `Message` / `ProgressValue` the work sets
+is forwarded to the job, so the status bar and the job list follow it; `RunWork`'s
+finally ends the job, reporting the exception it failed with (nothing else will -
+the caller is gone).
+
+Backgrounding is opt-in because most operations may not be: the work has to be
+self-contained (everything that finishes it must happen inside the delegate),
+must not apply a result to the document when it lands, and must not ask the user
+anything through the broker's ShowDialog. All three are on
+`BackgroundJobDescription`'s doc comment.
+
+`ExportLiveReportDlg.ExportReport` is the first caller: the `FileSaver` and its
+`Commit` moved inside the work delegate, and the export already reads a document
+snapshot, so nothing it does depends on what the user does next.
+
+New `LongWaitDlgBackgroundTest`: the button is absent without a description;
+with one, pressing it closes the dialog, returns PerformWork, leaves the job
+running with the message and percentage the work reported, and
+`RunningJobs.Cancel` stops it.
+
+**Not visually confirmed**: the button's placement (144,102, 115x23, bottom-right
+anchored, 6px left of Cancel) is by the numbers - nobody has looked at the dialog
+with it showing, and it only appears on an export slow enough to pass the 1500 ms
+delay.
+
 ## Follow-ups (design, not yet scoped)
 
 - **A jobs window for the user.** Everything above is reachable only through the
@@ -107,10 +148,8 @@ into each other's diagnostic log.
   use the same `GetRunningJobs`/`CancelJob` mechanism (the progress list plus the
   cancellation dictionary), and would be the natural home for the "generic cancel
   button in the status bar" CONSIDER note in `SkylineWindow.IProgressMonitor.IsCanceled`.
-- **"Run in Background" on `LongWaitDlg`.** File > Export > Report puts up a
-  LongWaitDlg the user has to sit through. For work that does not have to hold the
-  document, a button that closes the dialog and turns the running work into a job -
-  reporting to the SkylineWindow status bar, cancellable the same way - would let
-  the user get on with something else. Needs a rule for WHICH operations may be
-  backgrounded (anything that modifies the document on completion probably may
-  not) and a way for the caller to say so.
+- **More backgroundable operations.** Report export is the only caller that sets
+  `BackgroundJobDescription` so far. Candidates are the other operations that
+  write a file and touch nothing else - chromatogram / spectral library exports,
+  the various File > Export items - each needing the same check: self-contained
+  work, no document change on completion, no mid-operation dialog.
