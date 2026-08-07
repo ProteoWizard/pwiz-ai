@@ -3773,3 +3773,85 @@ characters and walk the accession through every possible split. Removing the car
 
 Both of today's testing lessons are the same one, and it is the one from the PrmScheduler write-back
 check this morning: **a test that passes proves nothing until something has made it fail.**
+
+## 2026-08-07 - Percolator's second missing DLL, and vendor test data the build never unpacked
+
+Both AWS-agent failures are now fixed and the branch is one green run away from clean on that
+fleet. Build #120 on `d11a068320`, on a clean agent: **1744 of 1745 passing**, the only failure
+being the vendor-data one that `82570c8480` then fixed.
+
+### Correction to the entry above
+
+The previous entry concluded "the missing DLL was not the cause". **That was wrong in the other
+direction.** A missing DLL *was* the cause - the set was just incomplete. Reading the import
+directories rather than guessing a second time:
+
+```
+percolator.exe   -> xerces-c_3_1.dll, msvcp140.dll, vcomp140.dll,
+                    vcruntime140.dll, vcruntime140_1.dll, api-ms-win-crt-*
+xerces-c_3_1.dll -> msvcr100.dll          <- VC++ 2010, the one that was still missing
+msvcp140.dll     -> vcruntime140.dll, vcruntime140_1.dll
+```
+
+`vcruntime140_1.dll` was genuinely needed (two binaries import it); it just left
+`msvcr100.dll` unresolved, and the loader reports the same `0xC0000135` either way. MS Amanda's
+package ships xerces but not the 2010 runtime it was built against. `msvcr100.dll` now sits in
+`Shared/Lib/Microsoft.VC100.CRT/x64` beside the VC90/VC110/VC120/VC140 runtimes the repo already
+vendors, and `MSAmandaSearchWrapper.StagePercolatorRuntime` stages both next to `percolator.exe`
+after the tool unzips - the tool lives in a downloaded directory, so no build-time copy reaches it.
+
+What made the second attempt land instead of being another guess: `73f1467d8a` replaced the
+speculation in the error message with a probe that runs percolator and reports its exit status. The
+answer came back as a fact (`0xC0000135`) rather than a hypothesis.
+
+### Vendor test data was never unpacked by this build
+
+`ConstantNeutralLossTest` failed on every AWS agent with `RS080806_NL_448.2_001.d does not exist`.
+That fixture is not in git - the raw `.d`/`.raw` data ships inside `Reader_<Vendor>_Test.data.tar.bz2`
+beside the reference mzMLs. pwiz-sharp's reader test projects unpack it through
+`build/ExtractTestData.targets`; nothing in the Skyline net8 path ever did.
+
+Where the data existed, another configuration sharing that checkout had put it there. That is luck,
+not design, and **`clean.bat` deletes it**: `.gitignore`'s blanket `*.d` rule (meant for C/C++
+dependency files) covers the extracted directories, so its `git clean -X` removes them. TCA1 was one
+`clean.bat` away from the same failure - this was never a fresh-agent quirk.
+
+Fixed in the projects that consume the data, not in `build.bat` (the first attempt, `15640972aa`,
+put it there and was reverted): `build.bat` is only the CI path, so a developer running the test
+from Visual Studio after a clean would still have hit it. `ExtractTestData.targets` now also takes a
+`VendorTestArchives` item group, because Skyline's `TestData` reads Agilent, Bruker and Thermo in one
+assembly and the existing property pair names one archive; the single-property form folds into the
+same list, so the five pwiz-sharp importers are untouched. `TestData` declares Agilent/Bruker/Thermo,
+`TestFunctional` declares Agilent.
+
+Two things ruled out along the way, both of which looked plausible: partial extraction (bsdtar
+unpacks all 10 `.d` dirs even against pre-seeded files; its exit-1 is only skip reporting), and
+`TestTicChromatogram` proving the data present (it runs only in pass0, where `NoVendorReaders`
+returns before touching a file - "Running 1 tests..." in the pass1 subset gave it away).
+
+**Worth remembering**: the extraction is incremental against
+`obj/.../vendor-test-data.extracted`. A machine that loses its fixtures without the archive changing
+gets a green "Build succeeded" and no extraction. Delete that sentinel before concluding anything
+about whether fixtures are being unpacked.
+
+### Also settled today
+
+- `Install.Is64Bit` confirmed fixed in the wild: #115's error report said `32-bit` on a 64-bit
+  agent, #117 onward say `64-bit`.
+- The unit test added for the q-value gate broke CI (wrote into `TestContext.TestRunDirectory`,
+  absent on a fresh agent) and its "boundary" cases covered nothing - twice. Both caught only by
+  mutation runs; see `17ea16111e`, which makes the scan's buffer size injectable so the seam is
+  where the test puts it.
+
+### CI state at end of session
+
+| build | commit | agent | result |
+| --- | --- | --- | --- |
+| #120 | `d11a068320` | AWS | 1744/1745 - only the vendor-data failure, fixed since |
+| #119 | `d11a068320` | TCA1 | 1745/1745 |
+| #118 | `17ea16111e` | AWS | 5 failures (pre-fix) |
+
+No run yet on `15640972aa` or `82570c8480`.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260807_net8_percolator_vendordata.md` before starting work.
