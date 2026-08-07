@@ -189,11 +189,13 @@ Everything already asked to stop skips straight to (3) - there is nothing left t
 ask. The View Jobs button is gone; Tools > Running Jobs and the status-bar
 double-click are how you look.
 
-The wait is safe on the UI thread because a job leaves the progress list under the
-list's own lock and only reports to the UI asynchronously (`RunUIActionAsync`);
-the blocking `RunUIAction` happens when a job STARTS, not when it ends. If that
-ever changes, this wait would deadlock during LongWaitDlg's pre-dialog delay,
-when the UI thread is blocked and not pumping.
+Waiting on the UI thread here is safe because `LongWaitDlg` does not block it:
+`ShowDialog` runs a modal message loop, so messages keep pumping for as long as
+the dialog is up, and anything a job Invokes is serviced. The one stretch that
+does not pump is `PerformWork`'s pre-dialog `completionEvent.WaitOne(delayMillis)`
+- but it is bounded by that timeout, so the worst it can cost is a stall of
+`delayMillis`, never a deadlock. (An earlier note here claimed a deadlock was
+possible: wrong on both counts.)
 
 **"Stop", not "terminate"**: settled after trying "terminate" (a dialog with both
 "Cancel Jobs" and "Cancel" is ambiguous, which is what started this). "Stop Job"
