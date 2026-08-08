@@ -329,6 +329,36 @@ Related: `Run-SeaAd.ps1`'s `-SourceRoot` warning covers the sibling hazard - tak
 from a shared worktree someone else is actively developing in means the run measures THEIR
 in-progress branch and holds THEIR DLLs so their builds fail. Both halves are silent.
 
+### Hard-linking artifacts between runs: safe when you own the validity state
+
+Staging `.scores.parquet` / `.calibration.json` into a new `--output-dir` by HARD LINK is
+the normal, cheap way to chain runs, and it has been used successfully many times. A copy of
+82 Astral parquets is ~135 GB; a link is instant.
+
+The hazard is narrower than "hard links are unsafe", and worth stating precisely because the
+over-broad version costs an hour of pointless copying. A link is only dangerous when the
+validity key might NOT match: Osprey then re-scores and writes the new parquet **through the
+link**, overwriting the source run's artifact. So:
+
+- **Chaining your own runs in one session** - you just produced those artifacts and know the
+  key. Link freely. This is the common case.
+- **Picking a run up COLD from a prior session** - the key is unverified. `pick=`,
+  `pickmodel=`, the library hash and the daily version all participate, and any of them can
+  have moved since. Either copy, or verify first.
+
+**Verifying is cheap, so prefer it to copying.** Seed a scratch `--output-dir` with ONE
+file's `.scores.parquet` + `.calibration.json` and their `.PerFileScoring.osprey.task`
+sidecars, run that single file, and look for:
+
+```
+[TASK] PerFileScoring:skipping (outputs valid)
+```
+
+`SearchParameterHash` covers scoring parameters, NOT the input file list, so a one-file probe
+proves the key for the whole set. Minutes and ~2 GB, after which linking the other 81 is
+safe. If it says `PerFileScoring:starting` instead, the key moved and a link would have
+silently rewritten the source.
+
 ## Test data locations
 
 Not committed; lives on the developer workstation:
