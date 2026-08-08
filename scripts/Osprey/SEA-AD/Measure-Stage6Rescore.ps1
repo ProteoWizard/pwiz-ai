@@ -398,11 +398,14 @@ foreach ($n in $counts) {
         $linesSt = Get-Content (Join-Path $phaseDir $logSt)
         $writtenSt = ($linesSt | Select-String -Pattern 'Wrote (\d+) library spectra' |
                       ForEach-Object { [int]$_.Matches.Groups[1].Value } | Select-Object -Last 1)
-        # Peak working set from the --memstamp trace's second column, i.e. the same
-        # category of number as the "45 GB private" figure #4486 was filed on.
-        $peakWs = ($linesSt | ForEach-Object { ($_ -split "`t")[2] } |
-                   Where-Object { $_ -match '^\d+$' } | ForEach-Object { [int]$_ } |
-                   Measure-Object -Maximum).Maximum
+        # Peak PRIVATE bytes from the --memstamp trace. Column 1 is
+        # GC.GetTotalMemory(false) and column 2 is Process.PrivateMemorySize64
+        # (CommandStatusWriter.cs:138-139) - private, NOT working set, which is exactly the
+        # category of the "45 GB private" figure #4486 was filed on. Naming it working set
+        # would mislabel the one quantity this measurement exists to put in context.
+        $peakPrivate = ($linesSt | ForEach-Object { ($_ -split "`t")[2] } |
+                        Where-Object { $_ -match '^\d+$' } | ForEach-Object { [int]$_ } |
+                        Measure-Object -Maximum).Maximum
         $stage7Results += [pscustomobject]@{
             Files       = $n
             Stage6GB    = Get-ProbeGB -Lines $linesSt -Label 'reconciliation-resident'
@@ -411,13 +414,13 @@ foreach ($n in $counts) {
             Pass2GB     = Get-ProbeGB -Lines $linesSt -Label 'stage7-pass2-scored'
             ProteinGB   = Get-ProbeGB -Lines $linesSt -Label 'stage7-protein-fdr'
             BlibGB      = Get-ProbeGB -Lines $linesSt -Label 'stage7-blib-written'
-            PeakWsGB    = [math]::Round($peakWs / 1024.0, 2)
+            PeakPrivGB  = [math]::Round($peakPrivate / 1024.0, 2)
             Spectra     = $writtenSt
             WallSec     = [int]$wallSt.TotalSeconds
         }
         $lastSt = $stage7Results[-1]
-        Write-Host ("    stage6 {0} GB -> inherited {1} GB -> blib {2} GB   peak_ws {3} GB   spectra {4}   {5:hh\:mm\:ss}" `
-            -f $lastSt.Stage6GB, $lastSt.InheritedGB, $lastSt.BlibGB, $lastSt.PeakWsGB, $writtenSt, $wallSt)
+        Write-Host ("    stage6 {0} GB -> inherited {1} GB -> blib {2} GB   peak_private {3} GB   spectra {4}   {5:hh\:mm\:ss}" `
+            -f $lastSt.Stage6GB, $lastSt.InheritedGB, $lastSt.BlibGB, $lastSt.PeakPrivGB, $writtenSt, $wallSt)
         continue
     }
 
