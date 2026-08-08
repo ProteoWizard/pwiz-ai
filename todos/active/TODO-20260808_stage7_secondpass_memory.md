@@ -95,18 +95,24 @@ Three traps, all documented on the issue and in
 
 ## Regression Test
 
-- **Test name**: (filled in once written — expected shape is a resident-pool guard
-  assertion in `ResidentPoolGuardTest` if Stage 7 gains a streamed path, matching how
-  #4536/#4537 pinned Stage 6)
-- **Test project**: TestOsprey (or the Osprey test assembly the guard lives in)
-- **Fails on master**: (not yet — no code change designed yet)
-- **Passes on fix**: (not yet)
+- **Test name**: `ResidentPoolGuardTest.TestResidentPoolGuardError` — extended with
+  `AssertNeedsResidentPool(false, hpc)` plus a loop asserting no token (including the
+  retired `"hpc-merge"` literal) can readmit `--task SecondPassFDR` if it regresses. The
+  pinned `KNOWN_UNFIXED` set also drops `hpc-merge`, so re-adding the token fails here.
+- **Test project**: `Osprey.Test`
+- **Fails on master**: **yes** — verified by temporarily restoring master's
+  `NeedsResidentPool` predicate (`config.ExpectReconciledInput ||`) on this branch:
+  `Failed TestResidentPoolGuardError [40 ms]` at `ResidentPoolGuardTest.cs:103`
+  (`AssertNeedsResidentPool`, `ResidentPoolGuardTest.cs:203`). Reverted immediately.
+- **Passes on fix**: **yes** — 576/576 with the predicate restored to the fixed form.
 
-This branch may end in a measurement and an issue close rather than a code change. If
-so, that is the explicit answer for this section: no regression test, because no
-behavior changed. It is not acceptable to ship a Stage 7 streaming change without a
-guard test — #4536's precedent is that the guard is what keeps the streamed path from
-silently reverting to resident.
+This is the guard-shaped test #4536/#4537's precedent calls for: the guard is what keeps a
+streamed path from silently reverting to resident, and asserting the WHOLE `KNOWN_UNFIXED`
+set means re-adding the token shows up in review as the ratchet running backwards.
+
+Not covered by a unit test, and covered instead by `regression.ps1` mode 3: that the
+streamed load produces byte-identical output on the HPC chain. No unit test can reach
+that - it needs real parquets and a real 4-task chain.
 
 ## Progress Log
 
