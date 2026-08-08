@@ -748,7 +748,7 @@ Both are DEFAULT ON, and both now require naming their `ResidentPaths` token via
 `OSPREY_PASS2_QVALUE=transfer` regressed unnoticed for ten days.
 
 `OSPREY_ALLOW_UNFIXED_RESIDENT` takes a **list**, comma- or semicolon-separated
-(`hpc-merge,compacted-entries-buffer`). A run can legitimately trip more than one
+(`fdrbench-pass1,compacted-entries-buffer`). A run can legitimately trip more than one
 known-unfixed path at once, and a single-value variable made such a run impossible to perform:
 a `OSPREY_STAGE6_STREAM_SURVIVORS=0` A/B on a configuration that is already resident for its
 own reason needs both tokens, so naming one dropped the other and the run aborted on its own

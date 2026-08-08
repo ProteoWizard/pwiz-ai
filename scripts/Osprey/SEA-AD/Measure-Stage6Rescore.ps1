@@ -52,11 +52,12 @@
        are already valid, so a repeat measurement against a populated dir exits 0 and
        measures nothing. This deletes output.blib and *.2nd-pass.fdr_scores.bin (and their
        .osprey.task sidecars) before every Stage-7 point.
-    4. STAGE 7 IS A REFUSED RESIDENT PATH. --task SecondPassFDR sets ExpectReconciledInput,
-       which ResidentPoolTrigger maps to the 'hpc-merge' token, so the run ABORTS unless
-       OSPREY_ALLOW_UNFIXED_RESIDENT names it. That refusal is the point of the guard - this
-       harness measures the path the token admits, so it sets the token for the Stage-7 leg
-       only, and never for the Stage-6 leg (which must stream).
+    4. STAGE 7 WAS A REFUSED RESIDENT PATH BEFORE #4486. --task SecondPassFDR sets
+       ExpectReconciledInput, which ResidentPoolTrigger used to map to the 'hpc-merge' token,
+       so a pre-#4486 binary ABORTS unless OSPREY_ALLOW_UNFIXED_RESIDENT names it. #4486
+       streamed that load and retired the token, so a current binary needs no allowance at
+       all. The Stage-7 leg still passes the token because the A/B needs BOTH arms; it is
+       set for that leg only, never for the Stage-6 leg (which must stream).
     5. --input-scores TAKES THE RECONCILED PARQUETS. Stage 7 hard-fails on a raw Stage-4
        parquet (osprey.reconciled != "true"), which reads like a harness bug and is not.
 
