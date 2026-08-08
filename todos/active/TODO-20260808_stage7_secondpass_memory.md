@@ -296,3 +296,45 @@ along. Making Stage 7 consume it per file is the real 500-file work and is a gen
 question: protein FDR (parsimony + picked-protein TDC), `ClampExperimentQToBestRun`, and the
 blib's cross-file indexes are all whole-run consumers. Recommend a separate issue for it
 rather than growing this one a fourth time.
+
+### 2026-08-08 - All gates green; PR held for /code-review
+
+`regression.ps1 -Dataset All`: **44/44 PASS**, exit 0. All four `mode3 (HPC chain==straight)`
+legs pass - that is the complete `--task SecondPassFDR` coverage the gate provides - plus
+every mode-1 golden comparison, `StellarGenDecoyEntrap`'s true-FDP entrapment bounds, and the
+mode-5 rehydrate diagnostics.
+
+One mid-run observation worth recording so it is not re-investigated: on `StellarLibDecoy`
+the straight-through blib is 25,174,016 bytes and the HPC chain / resume blibs are
+25,178,112 - a 4,096-byte (one SQLite page) difference. It is NOT a failure. The printed
+size is informational; the gate is `Compare-BlibFull`, which compares CONTENT, and mode 3
+passed. Stellar's four blibs were byte-identical, so it is not a systematic effect of this
+branch.
+
+**PR deliberately NOT opened yet.** The version-control skill orders `/code-review <level>`
+BEFORE `gh pr create` (Copilot auto-reviews on PR open and would spend a billed pass on code
+that review might change; for Osprey nothing long-running triggers on PR open, so there is no
+counter-argument to that ordering). `/code-review` is `disable-model-invocation`, so Claude
+cannot run it - **Brendan needs to run `/code-review max` on this branch**, then the PR goes
+up with the drafted title/body:
+
+* Title: `osprey: Streamed the --task SecondPassFDR reconciled-input load`
+* Labels: `osprey`, `performance`
+* Body drafted at `<scratchpad>/pr-4486-body.md`; issue comment posted as
+  [#4486 comment](https://github.com/ProteoWizard/pwiz/issues/4486#issuecomment-5227109043)
+* `See #4486`, NOT `Fixes` - the whole-run survivor buffer at 0.197 GB/file is still the
+  500-file wall and is what this issue's title names
+
+## Open items (not done, not blocked - flagged rather than silently dropped)
+
+1. **`/code-review max`** - user-invoked only.
+2. **The straight-through arm has no post-GC measurement.** Every 82-file figure on #4486
+   comes from that arm, and it was never the failing case, but the prediction that it follows
+   the same fixed-library + 0.197 GB/file model is a PREDICTION. The harness has a
+   `-StraightThrough` mode ready; one sweep at 4/8/16 would settle it.
+3. **The 500-file survivor-buffer work** - recommend its own issue rather than rescoping
+   #4486 a fourth time.
+4. **`OspreyEnvironment.AllowUnfixedResidentUnrecognized` has no consumers** (pre-existing
+   dead code, found while checking this change could not hard-fail on a retired token). Its
+   doc says it exists so the guard can distinguish a typo'd token from an unset one; that
+   message is never emitted. Left alone as out of scope.
