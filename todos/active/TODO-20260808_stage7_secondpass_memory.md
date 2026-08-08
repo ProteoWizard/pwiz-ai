@@ -156,3 +156,60 @@ Two readings, both bearing directly on the issue:
 
 Slope sweep at 4/8/16 running to separate the fixed library component (4.38 GB at
 6.3 M entries, pre-release) from the per-file pool.
+
+### 2026-08-08 - The real O(files) structure, and the fix
+
+**Correction to the framing above, before it propagates.** The 16-file measurement is of
+the `--task SecondPassFDR` HPC node, NOT the arm the issue's 82-file figures came from.
+Those are all straight-through, where Stage 6 hands Stage 7 the already-compacted buffer in
+memory. The HPC node instead reloads every input's FULL PRE-COMPACTION stub list before
+compacting - the pool `hpc-merge` names. Measured in-run, it grows **2.07 GB/file**
+(7.6 GB after file 1 -> 40.8 GB after file 16, monotonic), projecting to ~186 GB at 82
+files and far worse at the 500-file target. Brendan's call: that is not acceptable either -
+it makes the final join impossible on any HPC node - so this issue's remaining content is
+to fix it, not to document it.
+
+**The bounded loader already existed; this node was excluded from it by two stale gates.**
+`LoadJoinOnlyScores` has twins: `RescoreHydration.HydrateCompactedStreaming` (compacts each
+file as it loads, never more than one file's pool resident) and a resident `for` loop whose
+own comment says it "is O(files) and does not fit at 82".
+`PreCompactionPoolReason` (`PerFileScoringTask.cs`) sent this node to the resident twin via:
+
+1. `if (config.ExpectReconciledInput) return "The reconciled-input merge (#4486)"` - the
+   deferral marker itself, naming no actual consumer.
+2. `if (!config.NoJoin) return "A reconciled-bundle rehydrate outside the streaming gate"`,
+   justified as "FirstPassFDR is IN this pipeline, so it will Run and train first-pass
+   Percolator off ScoredEntries".
+
+**Gate 2's premise is false on this node.** `FirstPassFdrTask.IsIncluded` is
+`(inputs && !NoJoin && !ExpectReconciledInput)`, i.e. FALSE when `ExpectReconciledInput` is
+set. `!NoJoin` was a PROXY for "FirstPassFDR will run", and the proxy is wrong for exactly
+this one task. Nothing on the node trains off the pre-compaction pool.
+
+Verified no other pre-compaction consumer exists there:
+* `Pass2FdrSidecar` frozen modes (`transfer-compete` / `protein-compact`, the current
+  default) run a **streamed** full-population competition off each file's
+  `.1st-pass.fdr_scores.bin` scalars, one file resident at a time.
+* Its resident retrain fallback is O(survivors), and fails fast on this node anyway.
+* Protein FDR, the blib write and FDRBench pass 2 are O(survivors); mdiag has a streaming
+  accumulator; `--fdrbench-pass 1` keeps its own separate token.
+* `AllHaveReconSidecars` is already true on the node (the chain copies both sidecars per
+  stem), so the compaction predicate is present at load time.
+* The resident twin loaded PIN features that `HydrateRescoreBundleIfPresent` then **nulls
+  unread** - the code's own comment prices that at "~800 MB per file ... the dominant term
+  in the O(files) rehydrate peak". Pure waste.
+
+**Change made:**
+* `FirstPassFdrTask.IsIncludedFor(OspreyConfig)` extracted from `IsIncluded`, so the
+  membership rule has one definition and cannot drift from a proxy again.
+* `PreCompactionPoolReason`: dropped the `ExpectReconciledInput` early return; replaced
+  `!config.NoJoin` with `FirstPassFdrTask.IsIncludedFor(config)`.
+* `NeedsResidentPool`: dropped `config.ExpectReconciledInput`.
+* `ResidentPoolTrigger`: dropped the `ExpectReconciledInput -> HPC_MERGE` branch.
+* `ResidentPaths`: `HPC_MERGE` retired with a tombstone comment (the ratchet shrinking a
+  third time, after `mdiag-full-resume` #4505 and `resume-survivor-handoff` #4536).
+* `ResidentPoolGuardTest`: guard properties re-pinned on `fdrbench-pass1`; new assertion
+  that `--task SecondPassFDR` needs no resident pool AND that no token can admit it if it
+  regresses.
+
+576 unit tests green.
