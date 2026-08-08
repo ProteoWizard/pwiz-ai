@@ -5,11 +5,11 @@
 - **Worktree**: `C:\proj\pwiz-work1`
 - **Base**: `master` (was stacked on #4539; both #4539 and #4540 merged 2026-08-07)
 - **Created**: 2026-08-06
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4536](https://github.com/ProteoWizard/pwiz/issues/4536)
 - **Module**: `osprey`
 - **Other labels**: `performance`
-- **PR**: [#4545](https://github.com/ProteoWizard/pwiz/pull/4545)
+- **PR**: [#4545](https://github.com/ProteoWizard/pwiz/pull/4545) (merged 2026-08-08 as `52e5624330`)
 - **Follow-ups**: [#4544](https://github.com/ProteoWizard/pwiz/issues/4544) (deferred
   review findings), [#4486](https://github.com/ProteoWizard/pwiz/issues/4486)
   (Stage 7 owns the residual O(files) residency - commented, not fixed here)
@@ -50,20 +50,28 @@ that needs designing and pinning.
 
 ## Tasks
 
-- [ ] Derive the passing base_id set on the rehydrate path (from the v3 envelopes)
-- [ ] Build a `FirstPassSurvivorLoader` for `Rehydrate` and publish it
-- [ ] Confirm `Stage6ResidentHandoffGuardError` now fires on that path when
-      `OSPREY_STAGE6_STREAM_SURVIVORS=0` (i.e. the token becomes required, as on `Run`)
-- [ ] Delete the interim warning + `resume-survivor-handoff` token in
+- [x] Derive the passing base_id set on the rehydrate path - taken from
+      `RescoreCompaction.Apply`'s retained set (the envelope's set UNION the planner's
+      action targets) rather than the envelope directly; see Design for why
+- [x] Build a `FirstPassSurvivorLoader` for `Rehydrate` and publish it
+- [x] Confirm `Stage6ResidentHandoffGuardError` fires on that path - **with a deliberate
+      deviation**: it is passed "this run will stream", not "a loader exists", so it covers
+      the arms that rescore and deliberately does NOT fire on a straight-through resume,
+      whose behaviour is identical either way. Refusing there would have been a guard
+      inventing work rather than preventing any
+- [x] Delete the interim warning + `resume-survivor-handoff` token in
       `FirstPassFdrTask.Rehydrate` / `ResidentPaths`, and the note on
       `Stage6ResidentHandoffGuardError` explaining why its justification had lapsed
-- [ ] Drop the token from the `regression.ps1` outstanding-gaps list (back to 0 required)
-- [ ] Byte-identity A/B: resume blib streamed vs resident, at 1e-9
-- [ ] Memory evidence at scale: `--timestamp --memstamp` + `ai/scripts/perfviz.py`,
-      showing the rescore floor flat in file count on a RESUME
-- [ ] `regression.ps1 -Dataset All` (mode 5 exercises the rehydrate arm)
-- [ ] `Build-Osprey -RunTests -RunInspection`
-- [ ] `/code-review max` before opening the PR
+- [x] Drop the token from the `regression.ps1` outstanding-gaps list (back to 0 required)
+- [x] Byte-identity A/B: resume blib streamed vs resident, at 1e-9
+- [x] Memory evidence at scale - **on the worker rehydrate arm only**
+      (`--task PerFileRescoring`), 0.213 -> 0.020 GB/file at 4/8/16 SEA-AD Astral files.
+      The straight-through resume is NOT flat and cannot be made flat here: it never
+      rescores, so it refills immediately, and the residual residency is Stage 7's input
+      (#4486). Post-GC probe, not `--memstamp`
+- [x] `regression.ps1 -Dataset All` (mode 5 exercises the rehydrate arm)
+- [x] `Build-Osprey -RunTests -RunInspection`
+- [x] `/code-review max` before opening the PR
 
 ## Regression Test
 
@@ -73,9 +81,10 @@ that needs designing and pinning.
 - **Test project**: Osprey.Test + `regression.ps1`
 - **Fails on master**: n/a for the unit tests - see the note below
 - **Passes on fix**: yes. `Build-Osprey -RunTests -RunInspection` 576/576, zero
-  inspections (net472 + net8.0). `regression.ps1 -Dataset All` 44/44 legs;
-  final `-Dataset Stellar` after the robustness commit, 8/8 legs
-  (`C:\proj\ai\.tmp\4536-regression-stellar-final.log`).
+  inspections (net472 + net8.0). Final `regression.ps1 -Dataset All` on the merged
+  tree: 45 PASS / 0 FAIL
+  (`C:\proj\ai\.tmp\4536-regression-all-tier1.log`), plus TeamCity build 4125125
+  SUCCESS on `pull/4545`.
 
 **Honest accounting of what the tests do and do not cover.** The unit tests pin
 CONTRACTS, not the defect: `RetainedBaseIds` is the union and not an alias of
@@ -85,11 +94,21 @@ they assert does not exist yet - that is the nature of a "this path was never
 given a loader" defect rather than a wrong-answer one.
 
 What actually would have caught a regression here is `regression.ps1` modes 3
-and 5, which now traverse the streamed rehydrate arm with NO token: reverting the
-loader makes mode 5 fail on the resident-handoff guard, and breaking the survivor
-ORDER makes mode 3's blib diverge. Plus the gate's own
-`Tokens REQUIRED by this gate: 0` line, which turns any future re-addition into a
-visible diff rather than an environment variable nobody re-reads.
+and 5, which now traverse the streamed rehydrate arm with NO token, plus mode 1's
+committed golden.
+
+**Corrected 2026-08-07** - an earlier version of this paragraph claimed "reverting
+the loader makes mode 5 fail on the resident-handoff guard". That is FALSE:
+`Stage6ResidentHandoffGuardError` opens with
+`if (!streamingAvailable || streamingEnabled) return null;` and
+`Stage6StreamSurvivors` defaults ON, so a regression back to a null loader is met
+with silence. The real coverage is by COMPARISON, not by a guard: mode 1 compares
+the straight-through blib against a COMMITTED golden that predates the loader, so
+a loader fault affecting both sides fails there; a fault confined to the resume
+fails mode 5's own rehydrate==straight compare; and breaking the survivor ORDER
+makes mode 3's blib diverge. Plus the gate's own outstanding-gap table, which
+turns any future token re-addition into a visible diff rather than an environment
+variable nobody re-reads.
 
 The memory property itself has no automatic verifier. The sweep is a manual
 harness (`Measure-Stage6Rescore.ps1`); nothing standing would fail if the slope
@@ -566,3 +585,40 @@ resume reads that same envelope. The union is a no-op in practice and is kept
 because it is what compaction actually applies - filtering the rebuild on
 anything else would be right only by coincidence. Pre-existing code either way;
 this change does not alter which entries survive.
+
+### 2026-08-08 - Merged
+
+PR #4545 merged as `52e5624330`. What shipped: `FirstPassFdrTask.Rehydrate` builds
+and publishes its own per-file `FirstPassSurvivorLoader`, filtered on the retained
+base_id set `RescoreCompaction.Apply` now hands back on the bundle; the buffer is
+released only where a rescore will consume it; Stage 6's end-of-loop rebuild is
+skipped where `SecondPassFdrTask` is not in the pipeline; and the interim
+`resume-survivor-handoff` token, its guard and its warning are gone, taking
+`regression.ps1` to zero required resident-path tokens.
+
+**What was NOT delivered, stated plainly because the issue title implies it.** The
+issue is titled "every resume hands Stage 6 the O(files) survivor buffer", and the
+straight-through resume gets no memory improvement from this PR. That arm never
+rescores - `didPlan` is false and there is no `RescoreBundle`, so
+`PerFileRescoreTask` self-gates to a no-op - and it refills the whole buffer
+immediately, so releasing there would have cost a full extra parquet + sidecar pass
+to undo a window nothing uses. The measured 10.7x slope reduction
+(0.213 -> 0.020 GB/file) is on the WORKER rehydrate arm. What every resume does get
+is the loader, guard coverage, and the token removal.
+
+The residual O(files) residency is Stage 7's: Stage 6 rebuilds the whole-run buffer
+at the end of its loop precisely so `SecondPassFDR` can read it, on every path.
+Analysis posted to **#4486**, whose "re-measure Stage 7 after #4536 lands" rescope
+rests on a premise that does not hold - re-measuring will show the same peak, and
+that is not evidence this change failed.
+
+Follow-ups filed: **#4544** (ten `/code-review max` findings not taken in this
+sprint, each verified first; two turned out pre-existing rather than introduced
+here, three were checked and rejected outright). **#4486** commented, not fixed.
+
+Gates: `regression.ps1 -Dataset All` 45 PASS / 0 FAIL locally; TeamCity
+Perf/Regression build 4125125 SUCCESS on `pull/4545` - which also empirically
+settled that the config runs EVERY mode (4, 5 and 6 included) on all four datasets,
+correcting a "mode1/2/3" claim that had been stale in the skill, the development
+guide and `tctest.bat`'s own header for months. `Build-Osprey -RunTests
+-RunInspection` 576/576, zero inspections. Copilot reviewed with no comments.
