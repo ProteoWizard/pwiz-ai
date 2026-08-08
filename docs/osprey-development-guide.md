@@ -784,12 +784,31 @@ survivor loader. Zero is the invariant now, not a target: a token reappearing in
 a regression to justify in review, and it must arrive with an open issue to remove it again.
 
 **Zero tokens is not zero O(files) paths.** A token is only required where a guard demands
-one, so a resident path no guard covers is invisible to a token audit. The live example is
-#4486: Stage 6 rebuilds the whole-run survivor buffer at the end of its loop because
+one, so a resident path no guard covers is invisible to a token audit. The standing example
+is #4486: Stage 6 rebuilds the whole-run survivor buffer at the end of its loop because
 `SecondPassFDR` reads it, so that buffer is resident from there to the end of Stage 7 on
 every path. No guard covers it, because it is Stage 7's input rather than a mode or a
 resume. Read the gate's `Known O(files) resident paths` table as "no leg needs a token", not
 as "no leg is O(files)".
+
+That buffer has since been MEASURED, and the measurement moved the target - worth knowing
+before planning against the paragraph above. Post-GC probes in `SecondPassFdrTask` (#4486)
+put Stage 7's live set at a fixed ~4.4 GB library plus **0.196 GB/file** of survivors, flat
+across every substep of the stage: the fragment release FREES 2.5 GB and pass-2 scoring,
+protein FDR and the blib write add nothing. `--memstamp` overstated it 5.3x at 16 files
+(40.17 GB vs 7.53 GB live), and the overstatement GROWS with file count, so every figure
+taken from a memstamp trace reads as a much worse problem than the live one.
+
+What actually did not scale was a different structure with a similar name: the
+`--task SecondPassFDR` node's reload of every input's **pre-compaction** stub list, at
+**2.07 GB/file** (~186 GB projected at 82 files, hopeless at 500). It had a token
+(`hpc-merge`) and a bounded streaming hydrate already existed for every other
+reconciled-bundle path; the node was excluded from it by a `!NoJoin` test standing in for
+"will `FirstPassFdrTask` run here?", which is false on exactly that task. #4486 replaced the
+proxy with `FirstPassFdrTask.IsIncludedFor` and retired the token. The general lesson is the
+one this section already makes, sharpened: **name the consumer, not a proxy for it** - a
+proxy that is right for every case but one is indistinguishable from a correct test until
+someone measures the case it is wrong about.
 
 **A token admits exactly ONE path - never borrow one.** `compacted-entries-buffer` names
 the same physical buffer as the now-removed `resume-survivor-handoff`, so reusing it for
