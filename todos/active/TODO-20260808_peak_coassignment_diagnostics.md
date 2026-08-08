@@ -27,12 +27,76 @@ A precursor pair "shares a peak" when it is in the same run, at the same apex RT
 within +/- 0.01 Da in precursor mass. No knowledge of the sequence relationship is required -- the
 metric is pure geometry, which is why it finds relationships nobody thought to look for.
 
+## Design (settled 2026-08-08 -- read this before re-deriving)
+
+**Both passes are covered, and NEITHER needs the FDR score path touched.**
+
+Pass 2 is what the user actually receives, so it is the one that must be covered; pass 1 is the
+scoring/peak-assignment property the issue is about. Reporting both makes the **delta** the
+interesting quantity -- reconciliation manufactures co-assignment by design (`MultiChargeConsensus`
+pulls disagreeing charge states onto the leader's peak; `ForcedIntegration` gap-fills at a consensus
+RT), so pass2 - pass1 is "how much did reconciliation add on top of scoring".
+
+* **Pass 2**: `SecondPassFdrTask` already hands `WritePass2AndFinalize` the resident
+  `RescoredEntries` pool -- real `FdrEntry` with `ApexRt` populated (`ParquetScoreCache.cs:809`,
+  `:1284` on the survivor reload; `PerFileRescoreTask.cs:1545` on the rescore overlay), and O(survivors),
+  not O(rows). A new builder call inside `BuildPass2`; nothing else.
+* **Pass 1**: apex RT is NOT on the streaming path the report is built from -- `FdrProjection` was
+  shrunk to 32 bytes (#4355) and the counts-only reader pulls only entry_id / charge / is_decoy /
+  coelution_sum / modseq. Do NOT plumb it through the score pass. Instead do what the prototype did:
+  a bounded per-file pass at report time over the two artifacts already on disk.
+
+**The per-file pass-1 join (from `ai/scripts/Osprey/Entrapment/pass1_entrap.py`):**
+
+| prototype | C# equivalent |
+|---|---|
+| `read_sidecar(stem + '.1st-pass.fdr_scores.bin')` | `FdrScoresSidecar.ReadRecords(path, Pass.First, onRecord)` -- already streams |
+| `pq.read_table(stem + '.scores.parquet', ['entry_id','apex_rt'])` | `ParquetScoreCache` already reads `apex_rt` by name (`:790`, `:1226`) |
+| parquet paths | `perFileParquetPaths[fileName]`, in hand in the method that writes the report |
+| `sequence` / `protein_ids` -> mass, class | `libraryById` is resident at report time -- exact `PrecursorMz`, no sequence parsing |
+
+Rows are positionally aligned between the sidecar and the parquet. **Assert it, do not assume it** --
+the prototype checks full `entry_id` array equality per file and raises on mismatch; carry that check
+over. One file resident at a time.
+
+Why this over plumbing: no touch to `ReadFdrStubScalars` / `RowBuffer` / `Accept` /
+`Accumulator.Add`, no 6-arg row callback, no perf-gate exposure, and it works on the
+resident-projection path (`OSPREY_FDR_PROJECTION=0`) which the plumbing approach would have left
+with NaN. Cost to name explicitly: re-reads two columns of every `.scores.parquet` at report time
+(~340M rows on the 82-file Astral run). Opt-in behind `--model-diagnostics`; log the wall time so it
+is visible rather than a silent tax.
+
+**Deliberate deviations from the prototype (note them in the panel so the numbers do not silently
+disagree with the issue):**
+* Gate accepted on `EffectiveRunQvalue` at the configured `FdrLevel`, not the prototype's
+  experiment precursor q, so the panel's denominators match the per-file / cross-run tables on the
+  same page.
+* Rank "better-scoring" by SVM score, not q -- it is the same ordering in practice and it gives the
+  offenders listing a real score gap.
+* At report time the pass-1 sidecar holds PARTIAL records (run_protein_qvalue = 1.0 placeholder;
+  first-pass protein FDR patches [52..60] later). The panel uses precursor/peptide q and score only,
+  so this is fine -- but say so in a comment, because the prototype read a fully-patched sidecar.
+
+**Exclude same-sequence pairs** (the prototype's `s2 == seq` check). Without it, multi-charge
+consensus alone guarantees a large artificial pass-2 rate that means nothing: one peptide, correctly
+on one peak, at two charges.
+
+**No existing gate to integrate with.** Nothing in either tree (C# or Rust) attempts to stop two
+different sequences from claiming one peak; verified 2026-08-08. `MultiChargeConsensus` /
+`select_post_fdr_consensus` group by modified sequence only; the decoy generator's fragment-overlap
+gate (`DecoyGenerator.IsCandidateAcceptable`) is target-vs-its-own-decoy at library build time; all
+"interference" handling in scoring is intra-precursor (does one precursor's own fragments agree).
+The 5% is the absence of a filter, not a broken one.
+
 ## Tasks
 
-- [ ] Locate the Stage 5 `--model-diagnostics` report generation and the per-file apex RT source
-- [ ] Confirm which RT source is the true per-run detection (the prototype used pass-1 harvest apex
-      RT, which is post-reconciliation extraction coverage -- presence of a peak there is not
-      independent detection, though the RT values themselves are real)
+- [x] Locate the Stage 5 `--model-diagnostics` report generation and the per-file apex RT source
+- [x] Confirm which RT source is the true per-run detection -- pass 1 (pre-compaction detection);
+      pass 2 is post-reconciliation and is reported alongside as the delivered-to-user number
+- [ ] Pure builder in Osprey.FDR over per-file (apexRt, mass, score, key, class) rows, shared by
+      both passes
+- [ ] Pass-1 per-file sidecar + parquet join at report time, with the entry_id alignment assert
+- [ ] Pass-2 build from the resident `RescoredEntries` pool
 - [ ] Compute co-assignment: % of accepted precursors sharing a peak with a better-scoring same-mass
       precursor, reported separately for targets, entrapment, and decoys
 - [ ] Report the enrichment ratio entrapment/target (the interpretable, density-controlled quantity)
@@ -40,6 +104,7 @@ metric is pure geometry, which is why it finds relationships nobody thought to l
       co-elution
 - [ ] Add a listing of the worst offenders (co-assigned pairs ranked by score gap) -- this is what
       makes the panel actionable rather than merely informative
+- [ ] Report the pass1 -> pass2 delta (how much co-assignment reconciliation adds)
 - [ ] Decide and document the RT tolerance; make the choice visible in the panel rather than baked in
 - [ ] Regression test (see below)
 
