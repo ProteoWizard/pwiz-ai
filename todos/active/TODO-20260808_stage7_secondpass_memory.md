@@ -66,8 +66,12 @@ Three traps, all documented on the issue and in
    nothing. Clear them between repeats.
 2. **Never point `Measure-Stage6Rescore.ps1 -PhaseDir` at a real run directory** — it
    begins each measurement with `rm *.2nd-pass.fdr_scores.bin
-   *.scores-reconciled.parquet` inside the phase dir. Hard-linking artifacts in is
-   equally unsafe (a rejected version check re-runs prep and writes through the link).
+   *.scores-reconciled.parquet` inside the phase dir.
+   (The #4486 comment adds "hard-linking artifacts in is equally unsafe". That is
+   OVER-BROAD and cost this session ~15 min of needless copying - see
+   ai/docs/osprey-development-guide.md, "Hard-linking artifacts between runs". Linking is
+   normal when chaining your own runs; the risk is only a validity key that might not
+   match, and a one-file probe settles that in minutes.)
 3. **Pass all N files in one invocation.** The HPC chain runs these tasks once per
    stem, so a per-stem drive makes the resident band flat by construction.
 
