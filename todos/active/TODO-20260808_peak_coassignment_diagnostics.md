@@ -77,9 +77,33 @@ disagree with the issue):**
   first-pass protein FDR patches [52..60] later). The panel uses precursor/peptide q and score only,
   so this is fine -- but say so in a comment, because the prototype read a fully-patched sidecar.
 
-**Exclude same-sequence pairs** (the prototype's `s2 == seq` check). Without it, multi-charge
-consensus alone guarantees a large artificial pass-2 rate that means nothing: one peptide, correctly
-on one peak, at two charges.
+**Match on precursor m/z, NOT the prototype's neutral peptide mass.** This is a deliberate change
+from `peak_coassignment.py` and it removes a workaround rather than adding one.
+
+The prototype computes neutral mass from the sequence (`sum(AA) + H2O`) and compares regardless of
+charge. Under neutral mass the 2+ and 3+ of ONE peptide are identical in mass and identical in apex
+RT, so they match trivially - which is the only reason its `if s2 == seq` sequence-exclusion guard
+exists. Match on m/z and that pair is e.g. 800.4 vs 533.9, nowhere near +/-0.01, so the artifact
+cannot arise and the guard is unnecessary.
+
+Better on three counts:
+* Co-isolation is an m/z-window property. Two precursors of equal neutral mass at different charges
+  sit in different isolation windows and are not on one peak in any meaningful sense.
+* The `s2 == seq` guard also discarded REAL co-assignments - same sequence at the same charge is the
+  most co-assignable case there is, and any modified/unmodified pair sharing a base sequence went
+  with it.
+* No mass computation at all: `LibraryEntry.PrecursorMz` is exact and resident. No AA table, no
+  modified-sequence parsing, no residue-mass drift against the library.
+
+The only exclusion that remains is a precursor against ITSELF, which pass 1 needs because the
+pre-compaction pool holds several rows per precursor per file (different scans / candidate peaks):
+reduce to best-row-per-precursor-per-file, then exclude self by `modseq|charge`.
+
+Consequence to state in the panel, not bury: the numbers are then not strictly comparable to the
+issue's table. Neutral-mass matching also paired different sequences at different charges that
+happened to share a mass; m/z matching drops those. The dominant population (isobaric pairs at the
+same charge - the ortholog and I/L cases) matches identically under both, so the headline rates
+should move little.
 
 **No existing gate to integrate with.** Nothing in either tree (C# or Rust) attempts to stop two
 different sequences from claiming one peak; verified 2026-08-08. `MultiChargeConsensus` /
