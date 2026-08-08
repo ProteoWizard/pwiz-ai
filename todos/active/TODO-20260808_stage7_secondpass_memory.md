@@ -116,3 +116,43 @@ Starting work on this issue. Read the full comment history: the issue has been
 rescoped twice and both earlier premises are dead (see "State of the issue" above).
 Actionable next step is the post-GC measurement at the 16-file rig, which is
 ready-to-run and already prepped.
+
+### 2026-08-08 - Root cause of the missing measurement, and the first live number
+
+**Why the measurement was never taken: the probe did not exist.** `SecondPassFdrTask`
+carried exactly one memory probe (`LogMemoryStatsIfEnabled` after the library-fragment
+release) and **zero** `LogManagedHeapAfterGcIfEnabled` calls. Stage 5 has 6 post-GC
+probes and Stage 6 has 5; Stage 7 had none. So "no run in this issue has ever used
+`OSPREY_LOG_MEMORY=1`" understates it - setting that variable would not have produced a
+Stage 7 live number, because nothing in Stage 7 logged one.
+
+Added five post-GC probes decomposing the stage: `stage7-inherited`,
+`stage7-fragments-released`, `stage7-pass2-scored`, `stage7-protein-fdr`,
+`stage7-blib-written`, each paired with a pre-GC line where the transient matters.
+
+**First live number, 16 files** (`--task SecondPassFDR` against the #4536 rig; log
+`D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\runs\stage6\stage6-16files\smoke-stage7-16f.log`):
+
+| probe | managed_heap |
+|---|---|
+| `stage7 start (pre-GC)` | **40.17 GB** (working_set 41.07, gc_committed_last_gc 37.67) |
+| `stage7-inherited` (post-GC) | **7.53 GB** |
+| `stage7-fragments-released` | 5.04 GB (released 5,297,961 of 6,324,700 library entries) |
+| `stage7-pass2-scored` | 5.03 GB (pre-GC transient 10.24 GB) |
+| `stage7-protein-fdr` | 5.03 GB |
+| `stage7-blib-written` | 5.03 GB |
+
+Two readings, both bearing directly on the issue:
+
+1. **The `--memstamp` figure overstates the live set by ~5.3x at this file count**
+   (40.17 vs 7.53 GB). That is the "gray, not live" hypothesis in the issue title,
+   measured rather than inferred, and it is a much larger gap than the 2026-07-31
+   sawtooth-floor proxy suggested.
+2. **Stage 7 adds nothing to the live set.** It goes 7.53 -> 5.04 (the fragment release
+   FREES 2.5 GB) and then stays at 5.03 through pass-2 scoring, protein FDR, and the
+   blib write. Every substep's whole-run aggregation is a transient over a pool that
+   was already there. So a lever inside `SecondPassFdrTask` has nothing to remove -
+   which retires the 2026-08-07 re-rescope's first task as posed.
+
+Slope sweep at 4/8/16 running to separate the fixed library component (4.38 GB at
+6.3 M entries, pre-release) from the per-file pool.
