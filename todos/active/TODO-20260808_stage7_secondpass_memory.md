@@ -213,3 +213,31 @@ Verified no other pre-compaction consumer exists there:
   regresses.
 
 576 unit tests green.
+
+### 2026-08-08 - Gates on the streaming fix
+
+* `regression.ps1 -Dataset Stellar`: **PASS**, all modes, blib byte-identical at
+  25,407,488 bytes across straight-through / mode 1 golden / mode 3 HPC chain / mode 2
+  resume / mode 5 rehydrate. Mode 3 is the leg that runs `--task SecondPassFDR`, so it is
+  the direct oracle for this change. The gate's own summary now reports
+  "Known O(files) resident paths this gate still traverses: none".
+* `Build-Osprey.ps1 -RunTests -RunInspection`: 576 tests pass, 0 errors, 0 warnings.
+  The first inspection run caught a dangling `<see cref="ResidentPaths.HPC_MERGE"/>` in the
+  Stage 6 handoff guard's remarks, fixed in a follow-up commit.
+* Memory A/B pending: baseline (resident) sweep at 4/8/16 finishing, then the identical
+  sweep against the streamed binary. Baseline logs are preserved under the phase dir's
+  `baseline-resident-4486/` before the after-run overwrites them in place.
+
+Baseline to beat (post-GC, `--task SecondPassFDR`, 16-file rig):
+
+| files | Stage 6 resident | Stage 7 inherited | Stage 7 blib |
+|---|---|---|---|
+| 4 | 2.07 GB | 5.19 GB | 2.68 GB |
+| 8 | 2.22 GB | 5.94 GB | 3.44 GB |
+| 16 | 2.22 GB | 7.53 GB | 5.03 GB |
+
+In-run pre-compaction reload at 16 files: 7.6 GB after file 1 -> 40.8 GB after file 16,
+i.e. **2.07 GB/file**, monotonic. That is the number the fix has to flatten.
+
+Binaries pinned for the A/B: `D:\test\osprey-runs\_bin\stage7-probes-4486` (baseline,
+probes only) and `D:\test\osprey-runs\_bin\stage7-streamed-4486` (probes + streaming fix).
