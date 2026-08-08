@@ -475,8 +475,12 @@ foreach ($n in $counts) {
         '--decoys-in-library', '--decoy-pairing-manifest', (Split-Path $manifestPath -Leaf),
         '--protein-fdr', '0.01', '--threads', $Threads.ToString(),
         '--timestamp', '--memstamp', '--perf-stats', '--log-file', $log7)
-    # 'hpc-merge' is the ResidentPaths token for ExpectReconciledInput; without it the run
-    # is refused outright. Granted here and nowhere else - see Invoke-OspreyTask.
+    # 'hpc-merge' was the ResidentPaths token for ExpectReconciledInput. #4486 streamed that
+    # load and RETIRED the token, so against a current binary this is an unrecognized value
+    # that admits nothing and is simply ignored - the run needs no allowance at all. It stays
+    # because the A/B this harness exists to run needs the OTHER arm too: a pre-#4486 binary
+    # refuses --task SecondPassFDR outright without it. Granted on this leg and nowhere else
+    # (see Invoke-OspreyTask), so a Stage-6 leg can never inherit it.
     $wall7 = Invoke-OspreyTask -CliArgs $a7 -LogName $log7 -LogMemory -AllowResident 'hpc-merge'
 
     $lines7 = Get-Content (Join-Path $phaseDir $log7)
