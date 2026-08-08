@@ -3909,11 +3909,19 @@ with the same cached data; with it, `TestDiaFragPipeTutorial` passes twice in a 
 `TestZedGraphClipboard`, `TestReportErrorDlg`, `TestNativeFileDialog`, `TestNativeMessageBox`,
 `TestAlertWatch`) plus `CodeInspection` still pass.
 
-### Two things seen on the way, neither fixed
+### Two things seen on the way
 
-- `ci.skyline.ms` returns **403** for `webinars/Webinar26_data/Webinar26.zip`, so every perf run
-  falls back to skyline.ms and re-downloads 4 GB. The file appears never to have been mirrored to
-  S3. A data-hosting fix, not a code one.
+- ~~`ci.skyline.ms` returns **403** for `webinars/Webinar26_data/Webinar26.zip`~~ **Mirrored the same
+  day.** The whole `webinars/` prefix was empty - no webinar data had ever been mirrored - so the 403
+  was an anonymous "not there". `ci.skyline.ms` is **`s3://mc-tca-01/`**; the bucket is not named for
+  the host, and the mapping was proved by matching `tutorials/MethodEdit.zip` at 44,891,249 bytes on
+  both. Uploaded to `webinars/Webinar26_data/Webinar26.zip` as STANDARD (existing objects are
+  STANDARD_IA, but IA carries per-GB retrieval charges and a lifecycle rule, if any, will transition
+  it anyway). The bucket policy does cover that prefix: an anonymous HEAD returns 200 with the right
+  length and a ranged GET returns `PK\x03\x04`. **Gotcha for next time**: the CI service user
+  (`svc-teamcity-server`) can read objects but is denied `GetObjectAcl`, `GetBucketPolicy` and
+  `GetLifecycleConfiguration`, so public-read and storage-class conventions can only be confirmed
+  empirically from outside.
 - On CI (not locally) cleanup warns `Could not find a part of the path
   'c:\skyline-downloads\Webinar26_data\Webinar26'`. `PersistentFilesDirTotalSize` is only set when
   that directory exists at extraction time, so it existed then and was gone by cleanup - something
