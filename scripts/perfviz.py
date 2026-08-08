@@ -7,6 +7,16 @@ answering the questions a gate actually asks, as NUMBERS:
   * what was the largest gap between log lines, and where
   * did the memory band DRIFT across the run, or return to the same floor
   * what was the peak
+  * what level did the run SUSTAIN - the floor a GC could not reclaim - and when
+  * how each [TASK] phase behaved, since averaging them hides the one that hurts
+
+The last two exist because the first three were not enough, and the gap produced a
+confidently wrong reading. On an 82-file Astral run this tool reported
+"peak 49.4 GB, floor 16.3 -> 3.3 GB, drift -12.95 GB FALLING" - which reads as a run
+with room to spare - while the managed heap held above 29 GB for ten straight minutes
+during reconciliation planning. Every number was correct; none of them described a
+LEVEL THAT PERSISTED, so the summary disagreed with the plot and the plot was right.
+A peak can be one sample of garbage; an endpoint floor says only where the run ended.
 
 perfviz.html renders the same three series interactively. Use it to look; use this
 to decide, to diff two runs, or to check a run from a terminal / an agent that
@@ -115,6 +125,74 @@ def troughs(samples, key, buckets=12):
     return [m for m in mins if m is not None]
 
 
+def sustained(samples, key, window_s):
+    """The highest level the series never dropped BELOW for `window_s` continuous
+    seconds, with the window's start time.
+
+    This is the number the peak and the endpoint drift both miss, and missing it is
+    not academic: on an 82-file Astral run the summary read
+    "peak 49.4 GB, floor 16.3 -> 3.3 GB, drift -12.95 GB FALLING" - which sounds
+    like a run with memory to spare - while the managed heap sat at 29 GB or above
+    for ten straight minutes through reconciliation planning. A reader who saw only
+    the plot spotted it immediately; a reader who saw only this summary could not,
+    because no number here described a LEVEL that persisted.
+
+    Why it is the right proxy for "live". A peak is one sample and may be pure
+    garbage awaiting collection. An endpoint floor says where the run finished. But
+    a level the process never dropped below across many GC cycles is a level the
+    collector could not reclaim - i.e. genuinely reachable data - and that is what
+    decides whether a bigger run fits in RAM. Server GC will not run a full blocking
+    collection until memory pressure forces it, so this is what the OS actually has
+    to supply.
+
+    Returns (value, window_start_time) or (0, None) when the run is shorter than one
+    window."""
+    n = len(samples)
+    best, best_t = 0, None
+    j = 0
+    for i in range(n):
+        if j < i:
+            j = i
+        while j < n and (samples[j].t - samples[i].t).total_seconds() < window_s:
+            j += 1
+        if j >= n:
+            break
+        lo = min(key(s) for s in samples[i:j + 1])
+        if lo > best:
+            best, best_t = lo, samples[i].t
+    return best, best_t
+
+
+# A phase boundary in an Osprey log. Progress / indented detail lines are noise
+# here; the task markers are what segment the run into things a person names.
+TASK_RE = re.compile(r'\[TASK\] (\w+):(starting|done|skipping)')
+
+
+def phases(samples):
+    """Split the run on [TASK] markers into (name, first_index, last_index).
+
+    Reporting one set of statistics for a whole pipeline run averages phases with
+    completely different memory shapes into a single meaningless band - Stage 5's
+    planning plateau and Stage 6's per-file sawtooth are not the same population.
+    Returns [] when the log carries no task markers, in which case the caller just
+    omits the table."""
+    marks = [(i, m.group(1)) for i, s in enumerate(samples)
+             for m in [TASK_RE.search(s.msg)] if m and m.group(2) == 'starting']
+    if not marks:
+        return []
+    out = []
+    for k, (i, name) in enumerate(marks):
+        end = marks[k + 1][0] - 1 if k + 1 < len(marks) else len(samples) - 1
+        if end > i:
+            out.append((name, i, end))
+    return out
+
+
+def pct(vals, q):
+    s = sorted(vals)
+    return s[int((len(s) - 1) * q)]
+
+
 def summarize(path, threshold, force, files=0):
     samples, failed, nlines = parse(path)
     name = os.path.basename(path)
@@ -174,9 +252,36 @@ def summarize(path, threshold, force, files=0):
             # The number the scaling question actually turns on. GB/file times the
             # target file count says whether a bigger run fits in RAM.
             per_file = '   %+.0f MB/file' % (drift / float(files))
+        # Window is a fraction of the run, floored at 60s: a 5-minute window means
+        # nothing on a 4-minute log, and "sustained" has to mean sustained relative
+        # to the run being read.
+        win = max(60.0, min(300.0, dur / 12.0))
+        sus, sus_t = sustained(samples, key, win)
         print('%-13s : peak %7.1f GB   floor %5.1f -> %5.1f GB   drift %+.2f GB%s   %s' % (
             label + ' MB', max(vals) / 1024.0, tr[0] / 1024.0, tr[-1] / 1024.0,
             drift / 1024.0, per_file, verdict))
+        if sus_t is not None:
+            # Printed right under the peak so the two are read together: peak alone
+            # cannot distinguish a transient spike from a plateau, and the ratio is
+            # exactly the "gray vs live" question.
+            share = 100.0 * sus / max(max(vals), 1)
+            print('%-13s   sustained %5.1f GB for %ds from %s  (%.0f%% of peak - %s)' % (
+                '', sus / 1024.0, int(win), sus_t.strftime('%H:%M:%S'), share,
+                'mostly LIVE' if share >= 50 else 'peak is mostly reclaimable'))
+
+    ph = phases(samples)
+    if ph:
+        print('per phase     : managed p10 / p50 / peak, private peak   '
+              '(p10 approximates the floor GC cannot reclaim)')
+        for name, i, j in ph:
+            seg = samples[i:j + 1]
+            mv = [s.managed for s in seg]
+            pv = [s.total for s in seg]
+            secs = (seg[-1].t - seg[0].t).total_seconds()
+            print('  %-18s %5.1f / %5.1f / %5.1f GB   priv %5.1f GB   %2d:%02d  n=%d' % (
+                name[:18], pct(mv, 0.10) / 1024.0, pct(mv, 0.50) / 1024.0,
+                max(mv) / 1024.0, max(pv) / 1024.0,
+                int(secs // 60), int(secs % 60), len(seg)))
     return 0
 
 
