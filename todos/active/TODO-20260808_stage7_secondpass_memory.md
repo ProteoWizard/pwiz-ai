@@ -247,3 +247,52 @@ i.e. **2.07 GB/file**, monotonic. That is the number the fix has to flatten.
 
 Binaries pinned for the A/B: `D:\test\osprey-runs\_bin\stage7-probes-4486` (baseline,
 probes only) and `D:\test\osprey-runs\_bin\stage7-streamed-4486` (probes + streaming fix).
+
+### 2026-08-08 - Memory A/B result: necessary, not sufficient
+
+Same 16-file rig, same Stage 1-5 artifacts, two pinned binaries differing only in this
+branch's streaming change. Baseline logs kept in `stage6-16files\baseline-resident-4486\`.
+
+| files | peak private (baseline -> streamed) | pre-GC managed at S7 entry | live (post-GC) | spectra |
+|---|---|---|---|---|
+| 4 | 18.80 -> 15.96 GB | 15.05 -> 6.90 GB | 5.19 / 5.19 | 52,084 both |
+| 8 | 29.25 -> 19.90 GB | 9.87 -> 8.10 GB | 5.94 / 5.96 | 54,432 both |
+| 16 | 45.73 -> 25.88 GB | 39.64 -> 9.79 GB | 7.53 / 7.56 | 59,102 both |
+
+* **Peak-private slope 2.06 -> 0.75 GB/file** (8->16, the representative range). At 16
+  files the peak drops 43% and the pre-GC managed heap at Stage 7 entry drops 75%.
+* **Stage 7 got 32% faster** (7:19 -> 5:00 at 16 files): it stops reading and discarding
+  ~52x the surviving rows.
+* **Live set and output are unchanged at every point**, which is the correctness argument
+  in the same table as the memory argument.
+* Behavioral confirmation independent of the numbers: the resident `[WARN] ... requires the
+  RESIDENT pre-compaction first-pass pool` line is gone, and the per-file load line changed
+  from `Loaded N FDR stubs + features` to `Loaded N FDR stubs (features not loaded - not
+  read on this path)`. Same stub counts per file, so identical work.
+
+**Two corrections to numbers quoted earlier in this session**, recorded because both were
+stated before the full range was in:
+
+1. An "~8x slope reduction" was inferred from the 4->8 working-set pair. Across the full
+   4->16 range it is 2.8-4x depending on the counter. Direction and mechanism hold; the
+   magnitude came from too short a baseline.
+2. The N=4 headline used `managed_heap`, which is `GC.GetTotalMemory(false)`. The baseline
+   series reads 15.05 / 9.87 / 39.64 GB at 4 / 8 / 16 files - NON-MONOTONIC, because it
+   samples wherever the last collection happened to land. That is the "shape not magnitude"
+   trap this issue has flagged about itself since 2026-07-31, met first-hand. Peak private
+   and the post-GC probes are the honest comparators.
+
+**This does NOT reach the 500-file goal, and the PR must not claim it does.** What remains
+is the LIVE survivor buffer at 0.197 GB/file - unchanged by this fix and unchangeable by
+it, since it is Stage 7's input rather than its load. Projecting the live set:
+
+* 82 files: ~4.4 GB library + ~16 GB survivors = **~20 GB live**, comfortable. The baseline
+  reload projected ~194 GB peak there and could not run at all.
+* 500 files: **~103 GB live**, still over a 64 GB node.
+
+So this converts an impossible 82-file join into a routine one and leaves the whole-run
+`RescoredEntries` buffer as the next wall - which is what this issue's title was about all
+along. Making Stage 7 consume it per file is the real 500-file work and is a genuine design
+question: protein FDR (parsimony + picked-protein TDC), `ClampExperimentQToBestRun`, and the
+blib's cross-file indexes are all whole-run consumers. Recommend a separate issue for it
+rather than growing this one a fourth time.
