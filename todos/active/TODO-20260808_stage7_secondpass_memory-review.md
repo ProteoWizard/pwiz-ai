@@ -27,8 +27,14 @@ change touches). Necessary but NOT sufficient for #1: mode 3 copies the pass-2 s
 into phase 4, so the overlay overwrites exactly the protein q the guard affects. Green
 means nothing observable broke; it does NOT confirm the guard fixed the FDR skew.
 
-**FIRST ACTION NEXT SESSION: read the `-Dataset All` result.** It was launched to run past
-the handoff ->
+**`-Dataset All` PASSED on the fix pass, 44/44** (2026-08-09,
+`regression-all-fixpass.log`) - identical to the pre-fix run, so none of the 12 fixes
+regressed anything the gate can see. The summary also now prints the #4486 gap
+(`#4486  token: NONE`, required tokens still 0), confirming finding #12's fix.
+
+STILL NOT VALIDATED by that green: the #1 guard. Mode 3 copies the pass-2 sidecars into
+phase 4, so the overlay overwrites exactly the protein q the guard changes. The FDRBench
+oracle is owed. Original launch note ->
 `D:	est\Pilot-MTG-Tissue-May2026\Astral-DIAunsegression-all-fixpass.log`.
 READ IT FIRST next session. Note the run was started BEFORE the regression.ps1 gaps-table
 commit, so its summary will still print "none" there; that entry is output-only.
