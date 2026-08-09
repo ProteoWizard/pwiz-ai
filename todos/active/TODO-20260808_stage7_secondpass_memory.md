@@ -572,6 +572,60 @@ absent from runQ and keeps everything" described behavior the code never had - s
 entries were assigned run q 1.0. The refactor REPRODUCES that exactly (byte-parity gate)
 and the comment is corrected to say what actually happens.
 
+#### MEASURED 2026-08-09: the competition now costs nothing in live memory
+
+Complete 82-file `--task SecondPassFDR` run, 24:47, exit 0, against the stage5to7 rig
+(non-destructive: fresh scratch `D:\test\osprey-runs\stage7-4486-seq-after`, hard-linked
+inputs, pinned exe `D:\test\osprey-runs\_bin\stage7-seq-4486`). Log
+`ai/.tmp/`-equivalent scratch: `stage7-after-run.log`; plot `stage7-after-4486.png`.
+
+**Output identical to baseline**: `Wrote 37078 library spectra to out.blib (from 3037028
+passing entries)` - exactly the recorded straight-through figures. 86,581,597 survivor
+observations scored.
+
+| post-GC probe | managed |
+|---|---|
+| `stage7-inherited` | 25.97 GB |
+| `stage7-fragments-released` | 23.74 GB |
+| `stage7-pass2-scored` | **23.73 GB** |
+| `stage7-protein-fdr` | 23.73 GB |
+| `stage7-blib-written` | 23.73 GB |
+
+Baseline step 3 climbed **41.0 -> 56.8 GB (+0.214 GB/file, monotonic every decile)**; this
+run enters and leaves at 23.7 GB.
+
+**Two instruments, deliberately.** Boundary probes ALONE cannot support this claim - that is
+precisely how this issue produced its retracted "stage-7 own slope 0.001 GB/file". The
+in-phase `--memstamp` series across the competition (which is what caught it last time):
+
+`4% 41.6 | 12% 33.0 | 19% 37.1 | 26% 42.2 | 34% 42.7 | 41% 50.6 | 48% 24.1 | 56% 31.8 |
+63% 33.6 | 70% 37.2 | 78% 42.6 | 85% 43.2 | 92% 46.7 | 100% 42.0` GB
+
+Sawtooth with floors 33.0 / 24.1 / 31.8 / 33.6 - FLAT, not rising. Both instruments agree,
+which is what makes the claim safe to publish.
+
+Other numbers: Stage 7 wall 1486.8s (baseline 1588.0s); managed peak 51.8 GB, private peak
+53.7 GB; perfviz `sustained 28.3 GB` (55% of peak). Load phase unchanged at +195 MB/file,
+which is the survivor buffer this issue's title names and is NOT addressed here.
+
+**Caveat to carry into the PR**: this is the `--task SecondPassFDR` arm; the +0.214 GB/file
+baseline came from the straight-through arm. The rig's runbook designates this pairing and
+the entry points nearly match (25.97 vs 24.43 GB), but it is NOT a strict same-arm A/B and
+must not be written up as one.
+
+**Reporting gap NOT closed**: perfviz flags one gap >= 30s in the whole run - **38s** right
+after `[STAGE-WALL] second-pass-fdr: 919.2s`. That is the known 191s silent tail, now 38s
+but still present, so the reporting half of this PR is unfinished (work item 4/5).
+
+#### Process lesson (cost ~25 min)
+
+Two failed launches before this one. (1) `run_in_background` bash wrapper was reaped at
+~15 min, killing osprey at 31% - the Start-Process rule was already in memory and not
+applied. (2) `Start-Process -RedirectStandardOutput` HOLDS native child output: 154 bytes
+after 10 minutes of a live run, so there was nothing to plot. The working pattern is the
+script Tee-ing its own log (`& $exe @args *>&1 | Tee-Object -FilePath $log`), which also
+makes perfviz runnable mid-run.
+
 #### Still owed on this branch
 
 1. **The FDRBench oracle for review finding 1** - unchanged, still the PR blocker. Not
