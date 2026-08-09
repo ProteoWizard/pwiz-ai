@@ -342,3 +342,93 @@ up with the drafted title/body:
    dead code, found while checking this change could not hard-fail on a retired token). Its
    doc says it exists so the guard can distinguish a typo'd token from an unset one; that
    message is never emitted. Left alone as out of scope.
+
+## SCOPE CHANGE 2026-08-08: one PR covering Stage 7 memory AND reporting
+
+Brendan's call: a single PR that fixes Stage 7 memory and reporting, even if it spans
+sessions via `/pw-handoff` + `/pw-continue`. Do NOT open the PR until that is done. The
+branch keeps everything: probes, the `--task SecondPassFDR` streaming fix (already green),
+the pass-2 competition memory, and the reporting gaps.
+
+### Correction that forced the rescope
+
+The published claim `stage-7 own slope: 0.001 GB/file` is WRONG and has been corrected on the
+issue ([comment](https://github.com/ProteoWizard/pwiz/issues/4486#issuecomment-5229971150)).
+It came from post-GC probes that fire at substep BOUNDARIES; the pass-2 competition allocates
+and releases between them, so the phase looked free. At 16 files its state is ~2.5 GB and
+hides; at 82 files it is ~13 GB and dominates. **The PR body draft at
+`<scratchpad>/pr-4486-body.md` still contains the wrong claim - fix it before opening.**
+
+### Measured, 82-file straight-through (4:26:08, exit 0)
+
+Step 3 of `ComputePass2TransferCompeteFull`, by its own per-file progress: managed 41.0 ->
+56.8 GB, private 53.8 -> 63.7 GB, monotonic across every decile = **+0.214 GB/file the GC
+never reclaims**. `peak_paged` 63.92 GB - commit at the 64 GB line at 82 files. Projects to
+~146 GB at 500 files from this phase alone.
+
+Per-file stages are FINE and should not be touched: Stage 6 held a ~4 GB managed floor /
+~17 GB private for 2h47m, `[MEM reconciliation-resident] 2.90 GB (files=82,
+file_parallelism=1)`. The problem is entirely the JOIN stages.
+
+### The work, in the order it should be done
+
+1. **Re-key the two dictionaries that never needed (file, entry).** Provably
+   output-identical, so it lands first and cheaply:
+   * `survivorExpQ[key] = max(baseIdExpQ[bid], minRunQ[eid])` - both inputs keyed by
+     base_id / entry_id, so the value NEVER depends on fileKey. 86.6 M slots holding ~1 M
+     distinct values -> `Dictionary<uint,double>` by eid, ~85x smaller.
+   * `survivorPep[key]` is 1.0 except on the single experiment-winner observation per
+     base_id (~700 K of 86.6 M) -> sparse map + 1.0 default.
+2. **Decide `survivorRunQ`'s shape.** It is the only genuinely per-(file, entry) result, and
+   step 4's map-back consumes it ONE FILE AT A TIME. Options, cheapest first:
+   `Dictionary<string, Dictionary<uint,double>>` (kills 86.6 M filename hashes, fixes most of
+   the 191s, still O(observations)); per-file `double[]` parallel to the sidecar's `uint[]
+   eids` (8 B vs ~40 B, needs a per-file eid->position map, bounded and dropped per file);
+   or do not retain it whole-run at all.
+   NOTE: `eid` = entry_id, base_id in the low 31 bits (`PercolatorEntry.BASE_ID_MASK`) with
+   the decoy flag high. A LIBRARY identifier, not a dense index - a flat array over it is
+   sparse. Density has to come from per-file position.
+3. **Fix the comment above the call in `Pass2FdrSidecar`** claiming the state is "bounded by
+   the number of distinct precursors ... flat in file count". It is false for the outputs and
+   is what made the phase look safe.
+4. **Progress reporters.** The map-back already iterates `perFileEntries` - 82 natural units,
+   trivial. The streaming-FDR tail needs a reporter threaded in; the
+   `foreach (var key in survivorSet)` population loop over 86.6 M is the piece to report. The
+   root defect is that progress counts `readFileScalars` calls, so 100% means "input
+   consumed", not "nearly done".
+5. **The other three gaps (35s / 33s / 32s)** - diagnose before adding anything. The 35s sits
+   between `[STAGE-WALL] second-pass-fdr` and the pre-GC probe, which smells like the 82
+   `.2nd-pass.fdr_scores.bin` writes (4.8 GB), not a missing reporter.
+
+### The iteration rig - this is the big enabler
+
+`D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\runs\stage5to7-82f-4486` (300 GB) now holds all
+82 of: `.scores.parquet`, `.1st-pass.fdr_scores.bin`, `.1st-pass.model.json`,
+`.reconciliation.json`, `.scores-reconciled.parquet`, `.2nd-pass.fdr_scores.bin`, plus
+out.blib. So Stage 7 alone re-runs at 82 files in **~26 min** (`[TASK] SecondPassFDR:done
+(1588.0s)`) instead of 4.5 h:
+
+```
+--task SecondPassFDR --input-scores <82 *.scores-reconciled.parquet>
+  -l D:\test\AstralTest-TargetDecoyLibraries\target+decoy+entrapment-gated-no-il\carafe_spectral_library.tsv
+  --decoys-in-library --decoy-pairing-manifest <same dir>\osprey_library_db_pairing.tsv
+  --resolution hram --fdr-level precursor --threads 30 --output-dir <rig>
+  --timestamp --memstamp --perf-stats --model-diagnostics
+```
+* `OSPREY_VERSION_OVERRIDE=26.1.1.215` (artifacts are stamped that; without it every parquet
+  is refused with a mismatch that reads like a code bug)
+* `OSPREY_LOG_MEMORY=1` for the post-GC probes
+* **Clear `*.2nd-pass.fdr_scores.bin*` and `out.blib*` first** or the task self-gates to a
+  no-op, exits 0 and measures nothing
+* NO resident token needed - this branch retired `hpc-merge`, so this one command exercises
+  BOTH the branch's streaming change and the Stage 7 work
+
+Baseline to beat, from the straight-through run: step 3 climbs 41.0 -> 56.8 GB managed
+(+0.214 GB/file); Stage 7 wall 1588.0s; 191s silent gap after the competition's 100%;
+`stage7-inherited` 24.43 GB; blib 37,078 spectra from 3,037,028 passing entries.
+
+### Gates unchanged
+
+`regression.ps1 -Dataset All` byte-identical (44/44 green on the branch as of 2026-08-08),
+`Build-Osprey.ps1 -RunTests -RunInspection` (576 tests, 0/0), and `/code-review max` -
+USER-INVOKED, Claude cannot run it (`disable-model-invocation`).
