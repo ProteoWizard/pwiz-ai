@@ -448,3 +448,46 @@ sidecars in and the overlay overwrites the affected values.
 
 Settle it with the FDRBench entrapment oracle, not byte-parity. The other 14 findings are
 UNVERIFIED - reproduce or refute each; pushing back with a reason is a legitimate outcome.
+
+### 2026-08-09 - Session end: review fix pass, gates green, PR still held
+
+`/code-review max` on the branch returned 15 findings; **12 addressed**, all gate-green.
+Per-finding status and the open items live in
+`TODO-20260808_stage7_secondpass_memory-review.md`.
+
+Branch is 12 commits, clean tree, nothing uncommitted in either repo:
+
+```
+1503b0013f Corrected two comments that no longer described the code
+3a9927b369 Pinned the first-pass membership truth table across tasks
+957b64f04b Listed the untokened Stage 6 to 7 survivor buffer in the gaps table
+31af2e17f1 Skipped the pre-compaction tally where its only reader is excluded
+72f6ed9c93 Built the mdiag accumulator only where its reader runs
+9b8e51c807 Warned when OSPREY_ALLOW_UNFIXED_RESIDENT names no known path
+3544d7533e Addressed code-review findings on the Stage 7 streaming change
+e2bdf7e41a Kept the reconciled-input merge off the lean counts-only load
+1d255e023b Updated the resident-token doc example off the retired hpc-merge
+334be6f3b6 Fixed a dangling doc reference to the retired hpc-merge token
+6206c09f15 Streamed the --task SecondPassFDR reconciled-input load
+45f811b577 Added post-GC memory probes to Stage 7 SecondPassFDR
+```
+
+**Gates**: `regression.ps1 -Dataset All` **44/44 PASS** after the fix pass (identical to the
+pre-fix run, so nothing regressed); 577 unit tests; inspection 0 errors / 0 warnings. The
+gate summary now names the #4486 gap (`#4486  token: NONE`) with required tokens still 0.
+
+**The PR is still held, on one thing**: review finding #1 is GUARDED but NOT VALIDATED, and
+`regression.ps1` cannot validate it - mode 3 copies the pass-2 sidecars into phase 4, so the
+overlay overwrites exactly the protein q the guard changes. The FDRBench oracle is owed.
+After that: the remaining findings, then the Stage 7 competition memory work (the reason
+this is one PR), then `/code-review max` (user-invoked), then open.
+
+Three measurement lessons from this session, all the same shape - a reassuring number that
+was correct and a conclusion from it that was wrong: `--memstamp` overstates live by 5.3x at
+16 files; post-GC probes at substep BOUNDARIES cannot see a phase that allocates and releases
+between them (this produced a claim retracted on the issue); and a byte-parity gate can
+overwrite the very value it would need to witness. `perfviz.py` gained a `sustained` metric
+and a per-phase table because of the second one.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260808_stage7_secondpass_memory.md` before starting work.
