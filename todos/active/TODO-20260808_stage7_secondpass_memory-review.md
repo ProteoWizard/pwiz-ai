@@ -5,6 +5,26 @@ Run against `Skyline/work/20260808_stage7_secondpass_memory` @ `e2bdf7e41a` (5 c
 UNVERIFIED and must be reproduced or refuted individually.** The version-control skill is
 explicit that this reviewer can be confidently wrong; do not auto-apply.
 
+## STATUS after the 2026-08-09 fix passes
+
+FIXED and gate-green (0 errors, 0 warnings, 576 tests) across pwiz 3544d7533e, 9b8e51c807,
+72f6ed9c93, 31af2e17f1 and ai 7bdedbc: **#1** (guarded), **#2**, **#3**, **#5**, **#6**,
+**#7**, **#10**, **#11** (partly), **#13**, **#15**, and the worst of **#14**.
+
+STILL OPEN: **#4** (duplicate stems), **#8** / **#9** (test coverage), **#12**
+(`$knownResidentGaps`), the rest of **#14** (five more stale comments), and the below-cap
+items.
+
+**No regression run has covered ANY of these fixes** - they are unit-gated only.
+`regression.ps1 -Dataset All` MUST be re-run before the PR: #1 changes what the join node
+COMPUTES, #6 and #7 change what it TOUCHES. The 82-file Stage-7-only rig (~26 min) is the
+fast check; the FDRBench oracle for #1 is still owed.
+
+**Lesson from fixing #13:** the resume rehydrate branched on `needsResidentPool` while its
+builder now came from `CanUseLeanProjection`, so the "latent" case became a live
+NullReferenceException that inspection caught. Both now key off the builder. If another
+finding looks latent, check whether this branch made it reachable.
+
 ## 1. BLOCKER - VERIFIED - GUARDED 2026-08-09 (oracle still owed) - join node runs first-pass protein FDR on a COMPACTED pool
 
 `PerFileRescoreTask.cs:495`, `RescoreHydration.cs:535`
