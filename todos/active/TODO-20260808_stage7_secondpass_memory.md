@@ -434,3 +434,17 @@ Baseline to beat, from the straight-through run: step 3 climbs 41.0 -> 56.8 GB m
 `regression.ps1 -Dataset All` byte-identical (44/44 green on the branch as of 2026-08-08),
 `Build-Osprey.ps1 -RunTests -RunInspection` (576 tests, 0/0), and `/code-review max` -
 USER-INVOKED, Claude cannot run it (`disable-model-invocation`).
+
+## BLOCKER from /code-review max (2026-08-09) - read before resuming
+
+Findings live in `TODO-20260808_stage7_secondpass_memory-review.md` beside this file.
+
+**Finding 1 is a VERIFIED blocker and the PR must not open until it is settled.**
+`HydrateCompactedStreaming` compacts before publishing `PerFileEntries`, so routing
+`--task SecondPassFDR` onto it makes the join node run first-pass protein FDR on an
+already-compacted pool. The batch twin did not. That changes the decoy null, and
+`regression.ps1` mode 3 structurally cannot witness it because phase 4 copies the pass-2
+sidecars in and the overlay overwrites the affected values.
+
+Settle it with the FDRBench entrapment oracle, not byte-parity. The other 14 findings are
+UNVERIFIED - reproduce or refute each; pushing back with a reason is a legitimate outcome.
