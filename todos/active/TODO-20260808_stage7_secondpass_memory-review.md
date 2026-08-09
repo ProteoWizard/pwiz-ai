@@ -15,10 +15,20 @@ STILL OPEN: **#4** (duplicate stems), **#8** / **#9** (test coverage), **#12**
 (`$knownResidentGaps`), the rest of **#14** (five more stale comments), and the below-cap
 items.
 
-**No regression run has covered ANY of these fixes** - they are unit-gated only.
-`regression.ps1 -Dataset All` MUST be re-run before the PR: #1 changes what the join node
-COMPUTES, #6 and #7 change what it TOUCHES. The 82-file Stage-7-only rig (~26 min) is the
-fast check; the FDRBench oracle for #1 is still owed.
+**`regression.ps1 -Dataset Stellar` PASSED on the fix pass (2026-08-09)** - all 8 checks,
+including mode 3 (HPC chain) and mode 5 (rehydrate==straight, which the fat/lean branch
+change touches). Necessary but NOT sufficient for #1: mode 3 copies the pass-2 sidecars
+into phase 4, so the overlay overwrites exactly the protein q the guard affects. Green
+means nothing observable broke; it does NOT confirm the guard fixed the FDR skew.
+
+**`-Dataset All` was launched to run past the handoff** ->
+`D:	est\Pilot-MTG-Tissue-May2026\Astral-DIAunsegression-all-fixpass.log`.
+READ IT FIRST next session. Note the run was started BEFORE the regression.ps1 gaps-table
+commit, so its summary will still print "none" there; that entry is output-only.
+
+**Still owed for #1: the FDRBench oracle.** Delete the pass-2 sidecars from a mode-3 phase-4
+dir (or use the 82-file rig, ~26 min) so the recomputed protein q actually reaches disk,
+then compare against straight-through.
 
 **Lesson from fixing #13:** the resume rehydrate branched on `needsResidentPool` while its
 builder now came from `CanUseLeanProjection`, so the "latent" case became a live
@@ -124,7 +134,7 @@ there was probe-forced (~16 s stop-the-world in a 1588 s stage). Three of five r
 new information. `ai/scripts/Osprey/Get-MemoryReport.ps1:98-111` has no regex for any
 `stage7-*` label, so none of the five reaches the report.
 
-## 12. `$knownResidentGaps` prints "none" while the preamble names an open gap
+## 12. FIXED 2026-08-09 - `$knownResidentGaps` prints "none" while the preamble names an open gap
 
 `regression.ps1:239`. The one gap the rewritten preamble names by issue number is absent
 from the table it says exists to keep gaps legible.
