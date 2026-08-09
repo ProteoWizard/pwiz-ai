@@ -315,7 +315,7 @@ size is informational; the gate is `Compare-BlibFull`, which compares CONTENT, a
 passed. Stellar's four blibs were byte-identical, so it is not a systematic effect of this
 branch.
 
-**PR deliberately NOT opened yet.** The version-control skill orders `/code-review <level>`
+**PR deliberately NOT opened yet.** Description draft lives beside this file as `TODO-20260808_stage7_secondpass_memory-pr-description.md` (committed, so it survives /clear - the scratchpad does not). The version-control skill orders `/code-review <level>`
 BEFORE `gh pr create` (Copilot auto-reviews on PR open and would spend a billed pass on code
 that review might change; for Osprey nothing long-running triggers on PR open, so there is no
 counter-argument to that ordering). `/code-review` is `disable-model-invocation`, so Claude
@@ -324,7 +324,8 @@ up with the drafted title/body:
 
 * Title: `osprey: Streamed the --task SecondPassFDR reconciled-input load`
 * Labels: `osprey`, `performance`
-* Body drafted at `<scratchpad>/pr-4486-body.md`; issue comment posted as
+* Body drafted at `todos/active/TODO-20260808_stage7_secondpass_memory-pr-description.md`
+  (committed); issue comment posted as
   [#4486 comment](https://github.com/ProteoWizard/pwiz/issues/4486#issuecomment-5227109043)
 * `See #4486`, NOT `Fixes` - the whole-run survivor buffer at 0.197 GB/file is still the
   500-file wall and is what this issue's title names
@@ -356,8 +357,9 @@ The published claim `stage-7 own slope: 0.001 GB/file` is WRONG and has been cor
 issue ([comment](https://github.com/ProteoWizard/pwiz/issues/4486#issuecomment-5229971150)).
 It came from post-GC probes that fire at substep BOUNDARIES; the pass-2 competition allocates
 and releases between them, so the phase looked free. At 16 files its state is ~2.5 GB and
-hides; at 82 files it is ~13 GB and dominates. **The PR body draft at
-`<scratchpad>/pr-4486-body.md` still contains the wrong claim - fix it before opening.**
+hides; at 82 files it is ~13 GB and dominates. **FIXED 2026-08-09**: the PR description draft is now committed beside this TODO with the
+wrong claim removed and an explicit "do not reintroduce" note, plus `TODO(stage7-work)`
+markers on the sections the Stage 7 work must fill in.
 
 ### Measured, 82-file straight-through (4:26:08, exit 0)
 
