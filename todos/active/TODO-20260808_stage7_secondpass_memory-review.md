@@ -5,7 +5,7 @@ Run against `Skyline/work/20260808_stage7_secondpass_memory` @ `e2bdf7e41a` (5 c
 UNVERIFIED and must be reproduced or refuted individually.** The version-control skill is
 explicit that this reviewer can be confidently wrong; do not auto-apply.
 
-## 1. BLOCKER - VERIFIED - join node runs first-pass protein FDR on a COMPACTED pool
+## 1. BLOCKER - VERIFIED - GUARDED 2026-08-09 (oracle still owed) - join node runs first-pass protein FDR on a COMPACTED pool
 
 `PerFileRescoreTask.cs:495`, `RescoreHydration.cs:535`
 
@@ -45,7 +45,7 @@ sits in a task excluded on this node - pinning ~1-2 GB through Stage 7, on the v
 this change exists to shrink. Also the build call at `:1269-1272` has no try/catch while the
 identical call at `FirstPassFdrTask.cs:950` deliberately does.
 
-## 3. The resident-pool warning went silent on the case my new term covers
+## 3. FIXED 2026-08-09 - The resident-pool warning went silent on the case my new term covers
 
 `PerFileScoringTask.cs:1251`. Gate is
 `needsResidentPool || (hasReconSidecars && !streamCompaction)`. Partially-copied chain
@@ -61,13 +61,13 @@ merge. `Apply` re-derives retain sets through a name-keyed map (`:186-189`) wher
 stem keeps only the last file's list, while the hydrate unions positionally.
 `RescoreHydration.cs:139-143` says same-stem paths in different directories are a real case.
 
-## 5. Compaction ratio log is now always N -> N
+## 5. FIXED 2026-08-09 - Compaction ratio log is now always N -> N
 
 `PerFileRescoreTask.cs:501`. `RescoreCompaction.cs:76-80` says `EntriesBefore` equals
 `EntriesAfter` on this path and that a caller wanting the real figure must read
 `TotalPreCompactionStubs`; `FirstPassFdrTask.cs:1388-1390` does, this call site does not.
 
-## 6. Dead `Features = null` loop over the whole survivor pool
+## 6. FIXED 2026-08-09 - Dead `Features = null` loop over the whole survivor pool
 
 `PerFileScoringTask.cs:1689`. The shared tail runs on the streaming arm where features were
 never loaded. `FirstPassFdrTask.cs:876-881` guards the identical loop with `if (!leanStubs)`
@@ -91,7 +91,7 @@ test hand-passes a `needsResidentPool: true` that no production caller can produ
 `PreCompactionPoolReason` or `IsIncludedFor`. Removing `AssertNeedsResidentPool(true, hpc)`
 also left the pinned trigger set with no task-flag-driven case.
 
-## 10. `RunProteinFdr` probe has no pre-GC companion
+## 10. FIXED 2026-08-09 - `RunProteinFdr` probe has no pre-GC companion
 
 `SecondPassFdrTask.cs:204`. The forced collection destroys the parsimony/TDC transient the
 probe exists to measure; every other new probe got a pre-GC line.
@@ -109,13 +109,13 @@ new information. `ai/scripts/Osprey/Get-MemoryReport.ps1:98-111` has no regex fo
 `regression.ps1:239`. The one gap the rewritten preamble names by issue number is absent
 from the table it says exists to keep gaps legible.
 
-## 13. `CanUseLeanProjection` applied at only one of two sibling call sites
+## 13. FIXED 2026-08-09 (and it was NOT latent) - `CanUseLeanProjection` applied at only one of two sibling call sites
 
 `PerFileScoringTask.cs:656`. `RehydrateFromOwnOutputs` still gates on bare
 `NeedsResidentPool`. Latent (`:483` routes InputScores away) but it is exactly the drift
 this PR claims to remove.
 
-## 14. Six stale comments, including the XML doc of the inverted predicate
+## 14. PARTLY FIXED 2026-08-09 (the ShouldStreamCompaction XML doc) - Six stale comments, including the XML doc of the inverted predicate
 
 `PerFileScoringTask.cs:1420` still explains term 2 as the deleted NoJoin proxy and says
 "--task SecondPassFDR is NOT among them". Also `:1898`, `:1244-1247`, `:1367`,
