@@ -491,3 +491,97 @@ and a per-phase table because of the second one.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260808_stage7_secondpass_memory.md` before starting work.
+
+### 2026-08-09 - Brendan set the governing rule: no O(files x entries), ever
+
+Session was redirected before any code: **stop treating this as "shrink the big
+dictionaries" and treat it as a sequencing problem.** The rule, in his terms:
+
+1. Per-run q values are calculated file by file, in sequence - no spike, O(one file).
+2. As that happens each entry accumulates an aggregate composite score, which is
+   O(entries): trivially so for `max()`, and still O(entries) for `mean(best-N)`
+   because N is a small constant (`O(N x entries)`).
+3. Experiment-wide q values are then computed from that O(entries) aggregate -
+   `Dictionary<EntryId,double>` for max, `Dictionary<EntryId,double[N]>` for
+   mean-best-N.
+
+The library is O(entries) and the PerFile tasks already handle O(entries) fine. Any
+O(files x entries) structure is the defect, not the baseline.
+
+**The consequence that makes it non-trivial, and that a naive implementation always
+misses**: run q is genuinely per-(file, entry), but the output record ALSO needs
+experiment q, which is unknown until every file has been folded in. So emission must be
+a SECOND streamed per-file pass. Nothing per-observation may outlive its file's scope.
+Any design that "keeps the answers until the end" is O(files x entries) by construction
+however well the roll-up itself is written.
+
+**This algorithm already exists in-tree for the 1st pass**:
+`PercolatorScorer.RunStreamingFirstPass` (three streamed passes, bounded maps only,
+byte-identical to the resident path). Its own doc says "This is 1st-pass-only: the 2nd
+pass keeps its O(survivors) resident projection". Stage 7 never adopted it.
+
+#### What was actually wrong in Stage 7 (verified by reading, not inferred)
+
+The roll-up ACCUMULATORS were already correct and bounded - `bestTarget`/`bestDecoy`
+(`Dictionary<uint base_id, ...>`), `minRunQ` (`Dictionary<uint eid, double>`),
+`baseIdExpQ`, `winnerLoc`. The RETENTION was the whole problem. Six (file, entry)-keyed
+structures, ~200 B/observation x 86.6 M observations at 82 files:
+
+| structure | site | collapses to |
+|---|---|---|
+| `survivorScore` | `Pass2FdrSidecar.cs:537` | per file (it is file i's features scored) |
+| `survivors` + `survivorSet` | `:584`, `StreamingFdr.cs:168` | per-file ids + global `survivorEntryIds` |
+| `survivorExpQ` | `StreamingFdr.cs:173` | NOTHING - `max(baseIdExpQ[bid], minRunQ[eid])`, no fileKey term |
+| `survivorPep` | `:174` | NOTHING - 1.0 unless `winnerLoc[bid]` names this exact (file, eid) |
+| `survivorRunQ` | `:172` | the only genuine per-(file, entry) value |
+
+~18 GB predicted vs **+0.214 GB/file x 82 = ~17.5 GB measured**, so the list accounts
+for the measurement with no unexplained remainder - it is the whole problem, not a sample.
+
+#### Run q: the retention question dissolved
+
+Offered Brendan (1) recompute in the emit pass or (2) spill to the per-file sidecar. He
+chose 2 and asked what 1 really cost; costing it honestly showed 1 collapses INTO 2 (to
+avoid re-reading ~212 GB of parquet you must stash the score, which is the spill). But
+the implementation needed neither: **the per-file `List<FdrEntry>` is already resident
+and already has `RunPrecursorQvalue`**, so run q is written onto the entry as each file
+finishes. No sidecar spill, no partial-file rename hazard, no extra I/O.
+
+#### Implemented (builds, 577 tests, inspection 0/0)
+
+* `StreamingFdr.ComputeFullPopulationPrecursorFdrStreaming` returns a bounded
+  `StreamedCompetitionState` (O(distinct)) instead of three whole-run dictionaries;
+  takes a per-file `readFile` (scalars + THAT file's frozen-model scores) and an
+  `onFileRunQ` callback. `ExperimentQ(eid, runQ)` / `Pep(fileKey, eid)` derive the
+  per-observation values on demand.
+* `ComputePass2TransferCompeteFull`: the separate whole-run feature-scoring pass is
+  FUSED into the streamed loop (kills `survivorScore` AND one full pass over the
+  reconciled parquets); the two progress reporters merge into one that now covers the
+  expensive half.
+* Duplicate-stem invariant asserted (same guard, same reason, as
+  `PercolatorScorer.ScoreProjectionAndComputeFdrInPlace`). Pre-existing hazard
+  (`sidecarByKey` was already last-wins) that the per-file emit would otherwise turn
+  into a silent mixture of refreshed and stale q. Relates to review finding 4.
+
+#### Behavior finding recorded, deliberately NOT changed
+
+Both `continue` guards in the old map-back (`if (!runQ.TryGetValue(key, ...)) continue;`)
+were **dead**: the streamed form default-filled `survivorRunQ[key] = 1.0` for EVERY
+survivor before returning. So the comment claiming an unchanged off-stratum survivor "is
+absent from runQ and keeps everything" described behavior the code never had - such
+entries were assigned run q 1.0. The refactor REPRODUCES that exactly (byte-parity gate)
+and the comment is corrected to say what actually happens.
+
+#### Still owed on this branch
+
+1. **The FDRBench oracle for review finding 1** - unchanged, still the PR blocker. Not
+   started this session; the redirect took priority.
+2. Review findings 8, rest of 9, three stale comments (finding 4 now partly addressed).
+3. `pass1ExpQByKey` is still (file, entry)-keyed. Bounded by CHANGED off-stratum peaks,
+   so believed small, but that is an ASSUMPTION carried from the old comment, not a
+   measurement.
+4. First-pass spike: Brendan's call is Stage 7 first, first pass after. Note the default
+   1st pass already takes the flat path (`RunFirstPassStreaming` when
+   `projections.IsCountsOnly`); the resident sibling
+   `ScoreProjectionAndComputeFdrInPlace` still allocates flat `[n]` score/label/entryId/
+   peptide arrays over all files (~21 B/observation), which is where to look.
