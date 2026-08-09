@@ -27,7 +27,8 @@ change touches). Necessary but NOT sufficient for #1: mode 3 copies the pass-2 s
 into phase 4, so the overlay overwrites exactly the protein q the guard affects. Green
 means nothing observable broke; it does NOT confirm the guard fixed the FDR skew.
 
-**`-Dataset All` was launched to run past the handoff** ->
+**FIRST ACTION NEXT SESSION: read the `-Dataset All` result.** It was launched to run past
+the handoff ->
 `D:	est\Pilot-MTG-Tissue-May2026\Astral-DIAunsegression-all-fixpass.log`.
 READ IT FIRST next session. Note the run was started BEFORE the regression.ps1 gaps-table
 commit, so its summary will still print "none" there; that entry is output-only.
@@ -151,7 +152,9 @@ from the table it says exists to keep gaps legible.
 `NeedsResidentPool`. Latent (`:483` routes InputScores away) but it is exactly the drift
 this PR claims to remove.
 
-## 14. PARTLY FIXED 2026-08-09 (the ShouldStreamCompaction XML doc) - Six stale comments, including the XML doc of the inverted predicate
+## 14. MOSTLY FIXED 2026-08-09 (ShouldStreamCompaction XML doc, the stubs-only
+## rationale, the warn-not-throw list) - remaining: PerFileScoringTask:1898,
+## ScoringTaskShared:278-281, regression.ps1:1310-1313 - Six stale comments, including the XML doc of the inverted predicate
 
 `PerFileScoringTask.cs:1420` still explains term 2 as the deleted NoJoin proxy and says
 "--task SecondPassFDR is NOT among them". Also `:1898`, `:1244-1247`, `:1367`,
