@@ -626,11 +626,49 @@ after 10 minutes of a live run, so there was nothing to plot. The working patter
 script Tee-ing its own log (`& $exe @args *>&1 | Tee-Object -FilePath $log`), which also
 makes perfviz runnable mid-run.
 
-#### Still owed on this branch
+#### Review finding 1 - RESOLVED 2026-08-09, refuted as a defect
 
-1. **The FDRBench oracle for review finding 1** - unchanged, still the PR blocker. Not
-   started this session; the redirect took priority.
-2. Review findings 8, rest of 9, three stale comments (finding 4 now partly addressed).
+The FDRBench oracle was built and run. Finding 1 predicted that recomputing first-pass
+protein FDR over the COMPACTED pool collapses the decoy null and drives protein q
+anti-conservatively low. Measured on `StellarGenDecoyEntrap` with the pass-2 sidecars
+absent (which is the real chain behavior - the `--task PerFileRescoring` workers write
+none, so `regression.ps1`'s conditional copy is a no-op and the join node always
+recomputes):
+
+| arm | vs straight-through | vs master routing |
+|---|---|---|
+| master routing (recompute, UNcompacted pool) | 33,190 differ | - |
+| guard disabled (recompute, COMPACTED pool) | 33,190 differ | **0 - byte-identical** |
+| guard on (recompute skipped) | 32,450 differ | 740 (0.28%), all more conservative |
+
+Master and the unguarded compacted recompute are byte-identical, so the predicted collapse
+does not occur for this statistic. Outputs identical in every arm (26,714 peptides, 21,861
+protein groups, 23,292 blib spectra from 69,876 entries).
+
+**The guard is KEPT anyway, on Brendan's reasoning rather than the review's**: the retained
+set is passing-target-driven, and a target and its paired decoy share a base_id, so
+retaining a base_id retains both - which drops the high-scoring decoys whose targets failed
+and biases any FDR computed on the survivors optimistic. The clean subset would need a
+composite-score cutoff admitting targets AND decoys above it plus pairs. So do not run an
+FDR over that pool, independent of whether this particular statistic is sensitive. The
+comment at `PerFileRescoreTask.cs` now states that, and records both refuted claims so they
+are not restored. See [[reference_fdr_null_bias_from_paired_subsetting]].
+
+**What the oracle DID find became [#4553](https://github.com/ProteoWizard/pwiz/issues/4553)**,
+split to its own branch (`Skyline/work/20260809_fdr_sidecar_parity`) and TODO
+(`TODO-20260809_fdr_sidecar_parity.md`): straight-through and the task-by-task route write
+different `Score` and `RunProteinQvalue` into every `.2nd-pass.fdr_scores.bin`, because
+`OverlayRescoredEntries` calls `ResetScores()` (clearing 8 fields) and `protein-compact`
+restores only 5. Pre-existing, not from this branch, and deliberately kept OFF it: the new
+check turns `-Dataset All` red until the divergence is fixed.
+
+#### Still owed on this branch
+2. Review findings: 8 PUSHED BACK with verification (see the review companion), three stale
+   comments FIXED (commit 20f353f77b), 4 partly addressed by the duplicate-stem assert. The
+   REST OF 9 remains: `ShouldStreamCompaction` / `PreCompactionPoolReason` are private and
+   take a `PipelineContext`, so covering them means making them testable first (the same
+   env-statics-passed-in shape `ResidentPoolGuardError` already uses). That is the one
+   review item deliberately left for `/code-review max` to weigh in on.
 3. `pass1ExpQByKey` is still (file, entry)-keyed. Bounded by CHANGED off-stratum peaks,
    so believed small, but that is an ASSUMPTION carried from the old comment, not a
    measurement.
@@ -639,3 +677,47 @@ makes perfviz runnable mid-run.
    `projections.IsCountsOnly`); the resident sibling
    `ScoreProjectionAndComputeFdrInPlace` still allocates flat `[n]` score/label/entryId/
    peptide arrays over all files (~21 B/observation), which is where to look.
+
+### 2026-08-09 - Branch READY for /code-review max
+
+`regression.ps1 -Dataset All`: **44/44 PASS, 0 FAIL, exit 0**
+(`scratchpad/regression-all-final.log`), with the competition change, the reporters and the
+corrected comments all in. 577 unit tests, inspection 0 errors / 0 warnings.
+
+Branch is 15 commits, clean tree:
+
+```
+58b5444143 Reported progress through the second-pass sidecar write and reload
+20f353f77b Corrected three comments the streaming change had left stale
+70a9cb611c Streamed the pass-2 competition's per-observation results
+1503b0013f Corrected two comments that no longer described the code
+3a9927b369 Pinned the first-pass membership truth table across tasks
+957b64f04b Listed the untokened Stage 6 to 7 survivor buffer in the gaps table
+31af2e17f1 Skipped the pre-compaction tally where its only reader is excluded
+72f6ed9c93 Built the mdiag accumulator only where its reader runs
+9b8e51c807 Warned when OSPREY_ALLOW_UNFIXED_RESIDENT names no known path
+3544d7533e Addressed code-review findings on the Stage 7 streaming change
+e2bdf7e41a Kept the reconciled-input merge off the lean counts-only load
+1d255e023b Updated the resident-token doc example off the retired hpc-merge
+334be6f3b6 Fixed a dangling doc reference to the retired hpc-merge token
+6206c09f15 Streamed the --task SecondPassFDR reconciled-input load
+45f811b577 Added post-GC memory probes to Stage 7 SecondPassFDR
+```
+
+**Next action is BRENDAN's**: `/code-review max` on this branch, then open the PR from
+`...-pr-description.md` (every marker filled). Claude cannot run `/code-review`
+(`disable-model-invocation`).
+
+Process notes worth carrying, all cost real time today:
+
+* A `run_in_background` bash wrapper was reaped at ~15 min, killing an 82-file run at 31%.
+  Then `Start-Process -RedirectStandardOutput` HELD the native child's output (154 bytes
+  after 10 minutes of a live run), so there was nothing to plot. The pattern that works is
+  the script Tee-ing its own log (`& $exe @args *>&1 | Tee-Object -FilePath $log`), which
+  also makes `perfviz.py` runnable mid-run.
+* `-o out.blib` is RELATIVE to the process working directory, not `--output-dir`. Two
+  82-file runs wrote a 211 MB blib into the pwiz repo root before this was noticed.
+* A compound command beginning `cd /c/proj/ai` ran `git checkout -b` in the WRONG repo, so
+  a pwiz commit landed on this branch and an `ai` push silently no-oped (pushing an
+  unchanged local `master` from a non-master branch). Both recovered; verify `git
+  rev-parse --abbrev-ref HEAD` in the repo you mean before committing.
