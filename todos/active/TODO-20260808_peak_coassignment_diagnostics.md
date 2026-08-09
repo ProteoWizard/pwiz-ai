@@ -112,25 +112,66 @@ gate (`DecoyGenerator.IsCandidateAcceptable`) is target-vs-its-own-decoy at libr
 "interference" handling in scoring is intra-precursor (does one precursor's own fragments agree).
 The 5% is the absence of a filter, not a broken one.
 
+## Opt-in tokens on --model-diagnostics (settled 2026-08-09)
+
+Expensive panels are opt-in BY NAME, not by level:
+
+```
+--model-diagnostics                       standard report (unchanged cost)
+--model-diagnostics peak-coassignment     + the named panel
+--model-diagnostics all                   + every expensive panel this build has
+```
+
+**Tokens, not a level, and the reason is already written down.** `ResidentPaths` records why
+`OSPREY_ALLOW_UNFIXED_RESIDENT=<token>` replaced the blanket `OSPREY_ALLOW_UNBOUNDED_MEMORY=1`: a
+single switch "grants amnesty to every trigger at once, so it cannot distinguish the one path we
+know is unfixed from a path that silently regressed" - and it didn't: `OSPREY_PASS2_QVALUE=transfer`
+regressed onto the resident pool for ten days unnoticed. A `--model-diagnostics full` level is that
+same blanket switch one notch up: it would silently start doing more work every time a panel is
+added. A token names what you are paying for and appears verbatim in the run log.
+
+**Same shape, opposite direction, so a separate class.** `ResidentPaths` is amnesty for known
+defects and may only SHRINK; `ModelDiagnosticsFeatures` is a menu of working features and is
+expected to GROW. Keeping them apart stops the ratchet semantics from being muddled.
+
+Details: bare flag stays the default so no existing command line silently gets slower; an unknown
+token is a HARD error listing the legal values (a silently-ignored typo looks exactly like a panel
+with nothing to report); `all` is documented as explicitly NOT stable across versions.
+
+**Gate consequence, handled.** `regression.ps1` passes a bare `--model-diagnostics` on 3 of 4
+datasets, so an opt-in panel would ship untested by `DiagnosticsGolden.ps1`. The spec now takes a
+`DiagnosticsPanels` field and `StellarGenDecoyEntrap` sets it to `peak-coassignment` - the only leg
+with generated decoys AND retained entrapment, so it is the only one where the panel has a
+non-empty entrapment row. One leg is enough for the golden to catch a regression, and it keeps the
+gate's wall clock honest.
+
 ## Tasks
 
 - [x] Locate the Stage 5 `--model-diagnostics` report generation and the per-file apex RT source
 - [x] Confirm which RT source is the true per-run detection -- pass 1 (pre-compaction detection);
       pass 2 is post-reconciliation and is reported alongside as the delivered-to-user number
-- [ ] Pure builder in Osprey.FDR over per-file (apexRt, mass, score, key, class) rows, shared by
-      both passes
-- [ ] Pass-1 per-file sidecar + parquet join at report time, with the entry_id alignment assert
-- [ ] Pass-2 build from the resident `RescoredEntries` pool
-- [ ] Compute co-assignment: % of accepted precursors sharing a peak with a better-scoring same-mass
+- [x] Pure builder in Osprey.FDR over per-file (apexRt, m/z, score, key, class) rows, shared by
+      both passes (`ModelDiagnosticsData.CoAssignment.cs`)
+- [x] Pass-1 per-file sidecar + parquet join at report time, with the entry_id alignment assert
+      (`PeakCoAssignmentSource.cs`)
+- [x] Pass-2 build from the resident `RescoredEntries` pool (`BuildPass2`)
+- [x] Compute co-assignment: % of detected precursors sharing a peak with a better-scoring same-m/z
       precursor, reported separately for targets, entrapment, and decoys
-- [ ] Report the enrichment ratio entrapment/target (the interpretable, density-controlled quantity)
-- [ ] Add a dRT histogram for co-assigned pairs, separating same-feature jitter from chance
-      co-elution
-- [ ] Add a listing of the worst offenders (co-assigned pairs ranked by score gap) -- this is what
-      makes the panel actionable rather than merely informative
-- [ ] Report the pass1 -> pass2 delta (how much co-assignment reconciliation adds)
-- [ ] Decide and document the RT tolerance; make the choice visible in the panel rather than baked in
-- [ ] Regression test (see below)
+- [x] Report at BOTH q scopes (run-level and experiment-wide), matching the rest of the report
+- [x] Report the enrichment ratio entrapment/target and decoy/target
+- [x] Add a dRT histogram for co-assigned pairs, over the full 0.25 min scan window (NOT truncated
+      at the headline tolerance, which would hide the jitter-vs-chance shape)
+- [x] Add a listing of the worst offenders (co-assigned pairs ranked by score gap), bounded
+- [x] Flag PTM positional isomers (`SameBaseSequence` / `NBetterSameBaseSequence`) so the
+      "would go away under best-match-wins" count can be read net of pairs that may BOTH be real
+- [x] Tolerance ladder (0.01 / 0.02 / 0.05 / 0.10 / 0.25) from one scan, so the sensitivity is
+      visible rather than baked in
+- [x] Opt-in token gating (see above)
+- [x] Unit tests: hand-computed co-assignment fixture + token parser (576 tests green, 0 warnings)
+- [ ] HTML panel in the report template
+- [ ] Report the pass1 -> pass2 delta in the panel (how much co-assignment reconciliation adds)
+- [ ] `regression.ps1 -Dataset Stellar`, then `-Dataset All`; capture the real memory/wall numbers
+      with `--memstamp` and replace the estimates below
 
 ## Caveats to carry into the implementation
 
