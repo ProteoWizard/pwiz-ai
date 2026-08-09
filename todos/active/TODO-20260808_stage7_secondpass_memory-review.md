@@ -122,11 +122,33 @@ citing "~88.9 M reference writes at 163 files, each tripping the GC write barrie
 `EffectiveRunQvalue <= RunFdr` for ~344 M stubs at 82 files to fill a field whose only
 reader is in an excluded task.
 
-## 8. New ratchet assertion is vacuous
+## 8. PUSHED BACK 2026-08-09 - New ratchet assertion is vacuous
 
 `ResidentPoolGuardTest.cs:104`. `GuardResidentPool` has no reachable call site on any
 `--input-scores` run (`:385` is the compute path; `:647` requires InputScores EMPTY), so the
 test hand-passes a `needsResidentPool: true` that no production caller can produce.
+
+**Reachability premise CONFIRMED, conclusion REJECTED.** Verified by reading: `:385` is
+inside `PerFileScoringTask.Run`, whose own opening comment says the `--input-scores`
+counterpart "lives in Rehydrate", and `:647` is inside `RehydrateFromOwnOutputs`. So the
+reviewer is right that no `--input-scores` run reaches either site with `true` for THIS
+config.
+
+That is what the line ABOVE the flagged one asserts: `AssertNeedsResidentPool(false, hpc)`
+(`:103`) is the production-reachable claim. `:104-108` then deliberately tests the
+counterfactual - if `NeedsResidentPool` ever regressed to true for the merge, no token,
+including the retired `hpc-merge`, may admit it. That is a regression RATCHET, not a
+reachability claim, and the comment at `:96-101` already says so. It exercises real logic
+in `ResidentPoolGuardError` (a retired token must not be honored), and deleting it would
+delete exactly the guard against the regression the ratchet exists to catch.
+
+Note `GuardResidentPool` IS reachable with `true` in production generally - just via the
+compute path at `:385` (FDRBench pass 1, non-Percolator FdrMethod, OSPREY_FDR_PROJECTION=0),
+not via a reconciled-input merge. "No production caller can produce it" is therefore too
+broad as written.
+
+No code change. The genuine remaining gap here is finding 9's tail (the pinned trigger set
+has no task-flag-driven case left), which is tracked there.
 
 ## 9. PARTLY FIXED 2026-08-09 - Core behavioral change has zero unit coverage
 
