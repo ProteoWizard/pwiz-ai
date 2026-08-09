@@ -11,9 +11,15 @@ FIXED and gate-green (0 errors, 0 warnings, 576 tests) across pwiz 3544d7533e, 9
 72f6ed9c93, 31af2e17f1 and ai 7bdedbc: **#1** (guarded), **#2**, **#3**, **#5**, **#6**,
 **#7**, **#10**, **#11** (partly), **#13**, **#15**, and the worst of **#14**.
 
-STILL OPEN: **#4** (duplicate stems), **#8** / **#9** (test coverage), **#12**
-(`$knownResidentGaps`), the rest of **#14** (five more stale comments), and the below-cap
-items.
+STILL OPEN: **#4** (duplicate stems), **#8** (the vacuous ratchet assertion), the REST of
+**#9**, the rest of **#14** (five more stale comments), and the below-cap items.
+
+**#9 is only partly closed.** `TestFirstPassMembershipAcrossTasks` pins the membership truth
+table across all five task shapes, which is what the replaced `!NoJoin` proxy got wrong - but
+it is NOT red on master, because `IsIncludedFor` was extracted rather than changed.
+`ShouldStreamCompaction` and `PreCompactionPoolReason` remain untested: both are private and
+take a `PipelineContext`, so covering them means making them testable first (the same
+env-statics-passed-in shape `ResidentPoolGuardError` already uses).
 
 **`regression.ps1 -Dataset Stellar` PASSED on the fix pass (2026-08-09)** - all 8 checks,
 including mode 3 (HPC chain) and mode 5 (rehydrate==straight, which the fat/lean branch
@@ -115,7 +121,7 @@ reader is in an excluded task.
 `--input-scores` run (`:385` is the compute path; `:647` requires InputScores EMPTY), so the
 test hand-passes a `needsResidentPool: true` that no production caller can produce.
 
-## 9. Core behavioral change has zero unit coverage
+## 9. PARTLY FIXED 2026-08-09 - Core behavioral change has zero unit coverage
 
 `ResidentPoolGuardTest.cs:96`. No test references `ShouldStreamCompaction`,
 `PreCompactionPoolReason` or `IsIncludedFor`. Removing `AssertNeedsResidentPool(true, hpc)`
