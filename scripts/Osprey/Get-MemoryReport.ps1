@@ -76,6 +76,9 @@ function Read-RunLog {
         AfterCompactHeap  = $null
         ReconFloorHeap    = $null
         ReconResidentHeap = $null
+        Stage7InheritedHeap = $null
+        Stage7Pass2Heap     = $null
+        Stage7BlibHeap      = $null
         OverallPeakWs     = $null
         OverallPeakPaged  = $null
         ScoredEntries     = $null
@@ -109,6 +112,14 @@ function Read-RunLog {
                 '\[MEM after Stage-5 CompactFirstPass'{ $r.AfterCompactHeap = $heap }
                 '\[MEM reconciliation-floor\]'        { $r.ReconFloorHeap = $heap }
                 '\[MEM reconciliation-resident\]'     { $r.ReconResidentHeap = $heap }
+                # Stage 7 (#4486). Until these were added the stage had no post-GC probe at
+                # all, so the report simply ended at Stage 6 and every Stage-7 figure anyone
+                # quoted came from --memstamp. Inherited vs blib-written is the pair that
+                # matters: equal values mean Stage 7 consumed a pool it was handed rather
+                # than building one, which is what its own slope question turns on.
+                '\[MEM stage7-inherited\]'            { $r.Stage7InheritedHeap = $heap }
+                '\[MEM stage7-pass2-scored\]'         { $r.Stage7Pass2Heap = $heap }
+                '\[MEM stage7-blib-written\]'         { $r.Stage7BlibHeap = $heap }
             }
             continue
         }
@@ -175,6 +186,9 @@ $rows = [ordered]@{
     '**1st-pass FDR (LIVE, post-GC)**'    = { param($d) Format-Gb $d.FirstPassLiveHeap }
     '**Reconciliation floor (LIVE)**'     = { param($d) Format-Gb $d.ReconFloorHeap }
     'Reconciliation resident (LIVE)'      = { param($d) Format-Gb $d.ReconResidentHeap }
+    '**Stage 7 inherited (LIVE)**'        = { param($d) Format-Gb $d.Stage7InheritedHeap }
+    'Stage 7 after pass-2 (LIVE)'         = { param($d) Format-Gb $d.Stage7Pass2Heap }
+    'Stage 7 after blib (LIVE)'           = { param($d) Format-Gb $d.Stage7BlibHeap }
     '-- below: not live, read with care --' = { param($d) '' }
     'Scoring plateau (peak WS)'           = { param($d) Format-Gb $d.ScoringPeakWs }
     'Scoring (max managed heap)'          = { param($d) Format-Gb $d.ScoringMaxHeap }
