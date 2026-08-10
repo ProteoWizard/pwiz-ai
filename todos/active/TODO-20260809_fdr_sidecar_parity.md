@@ -82,8 +82,43 @@ values, so the q itself is consistent - only its propagation is not.
   best_peptide_score, group_qvalue, is_target_winner`); its emitter notes it "reads only the
   parsimony / FDR result (not the stubs)". These fields live on the stubs.
 
+## INCOMING from the #4522 branch (peak co-assignment) - 2026-08-10
+
+From the session on `Skyline/work/20260808_peak_coassignment_diagnostics`, after pulling this
+TODO. Full context in `TODO-20260808_peak_coassignment_diagnostics.md`, section
+"FOR THE #4553 SESSION". Two asks, both small if done with your fix and unpleasant at merge.
+
+**Your diagnosis explains that branch's pass-2 numbers.** Its co-assignment panel reports 36,228
+decoys at pass 2 against ~23-25k targets. Its decoy acceptance boundary is the minimum score over
+accepted target/entrapment precursors, so your 67,526 zeroed decoy records collapse it to ~0 and
+admit nearly everything. That row is a symptom of #4553, not a second bug; that branch is not
+touching pass 2 until this lands. Its pass-1 numbers are unaffected.
+
+**Ask 1 - a FOURTH field for your seeding fix.** #4522 adds
+`FdrEntry.ExperimentAggregateScore` and clears it in `ResetScores()` alongside `Score`. It added
+a carry in `AssignPerRunQ` (the mode you correctly identify as already right) but NOT in
+`ComputePass2TransferCompeteFull`, so on the DEFAULT mode it is dropped by exactly your
+five-of-eight defect. It needs seeding from the 1st-pass sidecar with `Score` / `Pep` /
+`RunProteinQvalue`, on both C# and Rust. Since your list already grew from two to three, driving
+the seeding off the record layout rather than an enumerated list would close this class of bug.
+
+**Ask 2 - your sidecar decoder needs the v4 layout.** #4522 bumps the record from **60 bytes /
+seven scalars to 68 bytes / eight** (`experiment_aggregate_score` at `[60..68]`, version byte
+3 -> 4), in C# and Rust. `Regression/FdrSidecars.ps1` and therefore
+`Compare-FdrSidecars-Crossimpl.ps1` need the bump plus a comparison arm for the new field. Your
+script SKIPs cleanly on a missing helper (exit 3) but has no guard for a format mismatch - a v4
+file against a v3 decoder is a silent misparse.
+
+**Ordering agreed with Brendan**: #4553 lands first, #4522 rebases onto it, then ONE joint golden
+rebaseline. #4522's pass-1 numbers do not move under your fix but its pass-2 numbers will, so it
+must not bless goldens first.
+
 ## Tasks
 
+- [ ] **(from #4522)** Seed `ExperimentAggregateScore` too, once that branch is merged/rebased -
+      it is the fourth field the five-of-eight write-back drops
+- [ ] **(from #4522)** Bump `Regression/FdrSidecars.ps1` to the v4 68-byte / eight-scalar record
+      and add a comparison arm for `experiment_aggregate_score`
 - [x] Add `Regression/FdrSidecars.ps1` (`Compare-Pass2Sidecars`) comparing all seven scalar
       fields per entry_id, byte-equality fast path, per-field failure tallies
 - [x] Wire it into the four-task-chain leg as its own summary line

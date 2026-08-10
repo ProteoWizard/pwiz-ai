@@ -205,7 +205,68 @@ metric list, not an enumeration of the payload, so a new card is invisible to it
 `mode1b (diagnostics vs golden): PASS` would have passed identically had the panel emitted garbage.
 Co-assignment n / nBetter / enrichment are now pinned at both passes and both q scopes.
 
-## BLOCKER: the decoy class is not correct yet (2026-08-10)
+## RESOLVED (2026-08-10, later session): pass 1 now reproduces the oracle exactly
+
+**Pass 1 is correct and cross-checked. Pass 2 is NOT - see the #4553 section below; it is
+somebody else's bug and is being fixed on another branch.**
+
+Final pass-1 numbers, StellarGenDecoyEntrap 3-file, C# panel vs the independent Python oracle -
+**all twelve agree**:
+
+| scope | class | detected | outscored | C# == oracle |
+|---|---|---|---|---|
+| run | target | 31,103 | 678 | yes |
+| run | entrapment | 455 | 32 | yes |
+| run | decoy | 675 | 94 | yes |
+| experiment | target | 28,698 | 964 | yes |
+| experiment | entrapment | 228 | 27 | yes |
+| experiment | decoy | 468 | 95 | yes |
+
+Acceptance boundary logged by the panel itself: experiment 0.0120 from 28,926 accepted
+precursors, 468 decoys clearing it, 468 tallied.
+
+**It took FOUR defects, two of them in the oracle and the harness rather than the panel.** The
+attempts table below is preserved because the reason those attempts failed was never the rule -
+it was that the numbers being read came from somewhere else.
+
+1. **The regression harness overwrote the report being measured.** `regression.ps1` runs mode 5
+   (rehydrate) into the SAME output directory as the straight run, so
+   `output.model-diagnostics.html` is replaced by the rehydrate build before anyone reads it.
+   Every number in the attempts table below (96 / 72 / 36,228) is the REHYDRATE page. Use
+   `-SkipRehydrate` when measuring the straight-through panel, or read `straight.log` rather
+   than the HTML.
+2. **Two implementations of the pass-1 panel, and the wrong one won the file.** The streaming
+   path builds it from the pre-compaction sidecars (`PeakCoAssignmentSource`); the rehydrate
+   path built it from the resident `perFileEntries` pool. That pool is POST-compaction - the
+   remarks on `LogFirstPassResultsAndDump` already said so: it "has already lost the ~52x
+   non-survivors - mostly the decoys", so building the report off it "would silently produce a
+   plausible WRONG page". The panel was added after that comment and did exactly that. Both
+   agreed on the boundary (0.0120) and the accepted count (28,926) and still reported 72 decoys
+   against 468, because compaction had already dropped the rest - target denominators intact,
+   decoy class quietly gutted. **Fixed**: the rehydrate path now calls `PeakCoAssignmentSource`
+   too. One implementation, verified identical on both paths in one run.
+3. **The precursor key merged each decoy into its target.** The key is the LIBRARY entry's
+   modified sequence + charge, and a decoy's library entry carries its target's sequence, so an
+   untagged decoy key was byte-identical to its target's. The precursor registry keeps the first
+   arrival and skips the rest, so 396 of 468 admitted decoys were absorbed silently. The
+   `|decoy` tag was only applied on the base-id fallback path. **Fixed** in both builders, keyed
+   on the decoy BIT so the fallback and own-entry cases are covered by one rule.
+4. **The Python oracle's decoy m/z was wrong by ~510 Da.** Decoy modified sequences are
+   `DECOY_<target>`; `mz_of()` stripped bracketed mods then walked the remaining characters as
+   residues, so D + E + C + Y were ADDED to every decoy's mass. No decoy ever fell inside a
+   +/-0.01 m/z window. That is what the "1,470,828 rows had an unparseable modification" warning
+   was - the decoys. **Fixed** (`DECOY_PREFIX` strip). This one matters beyond the tooling: see
+   the corrected finding below.
+
+### Instrumentation kept, deliberately
+
+The panel logs its acceptance boundary, the accepted count behind it, and an
+admitted-vs-tallied check that warns when the decoy row is under-reported. The decoy row is the
+only class gated by score rather than by its own q, so it is the only one with no independent
+check on the page; a boundary that drifts produces a plausible number rather than a visible
+failure. That comparison is the check.
+
+<details><summary>Historical: the three failed attempts and the reasoning at the time</summary>
 
 **Targets and entrapment are fine and unchanged** - gated on their own q, matching the report's own
 per-file table. **Only the decoy row is wrong.** Do not open a PR until it is right; do not "fix" it
@@ -303,8 +364,46 @@ the co-assignment partner the sequence this precursor was derived from (same com
 construction), or an unrelated target? That is a base-id / source-peptide test at the match site,
 and it means the same thing for entrapment and decoys.
 
+</details>
 
-## FIRST BELIEVABLE DECOY ESTIMATE (2026-08-10, offline, StellarGenDecoyEntrap 3-file)
+## CORRECTED FINDING: decoys co-assign ABOVE entrapment, not below (2026-08-10)
+
+**The earlier headline in this file - "decoys do NOT track entrapment; they co-assign at
+0.27-0.45x, BELOW the targets they model" - was an artifact of the oracle's broken decoy m/z
+(defect 4 above) and must not be quoted.** With the `DECOY_` prefix stripped, the oracle and the
+C# panel agree exactly:
+
+| class | run rate | vs target | experiment rate | vs target |
+|---|---|---|---|---|
+| target | 2.18% | 1.00x | 3.36% | 1.00x |
+| entrapment | 7.03% | 3.23x | 11.84% | 3.53x |
+| decoy | 13.93% | **6.39x** | 20.30% | **6.04x** |
+
+**Do not quote these either, yet.** The three classes are not measuring the same thing. A
+reversed decoy is an anagram of its target, so it carries the target's precursor m/z EXACTLY,
+by construction - and both implementations exclude only a precursor matching ITSELF (by entry
+id). A decoy landing on its own target's peak therefore counts as co-assignment, and satisfying
+the m/z half of the test costs it nothing. The same holds for shuffled entrapment against its
+source peptide. The target rate has no such twin: a target can only co-assign by coincidence.
+
+So the decoy and entrapment rates are (coincidence + construction) and the target rate is
+(coincidence), and the enrichment ratios divide one by the other. **The next measurement is the
+symmetric split described just above** - partner-derived-from-me vs partner-unrelated - applied
+to both known-false classes. Agreed with Brendan 2026-08-10. Machinery already exists:
+decoy-to-own-target is `partner.EntryId & BASE_ID_MASK == row.EntryId & BASE_ID_MASK`;
+entrapment-to-source needs `pairByBaseId`, which `BuildClassificationFromLibrary` already
+produces; and `NBetterSameBaseSequence` is the precedent for the extra column.
+
+## SUPERSEDED: the offline estimate below (2026-08-10, StellarGenDecoyEntrap 3-file)
+
+**Its decoy rows are wrong** - this is the run that produced the 0.27x / 0.45x figures from the
+broken decoy m/z. Target and entrapment rows are unaffected and match the final numbers. Kept
+for the record only. The script has since been fixed and additionally gained `--use-persisted`,
+which drives its accounting off the panel's own `experiment_aggregate_score` instead of
+recomputing `max()`; identical output either way is what proved the persisted field is a correct
+and sufficient input to the rule.
+
+<details><summary>Superseded offline estimate</summary>
 
 Computed by `ai/.tmp/coassign_decoy_estimate.py` - deliberately INDEPENDENT of the C# panel, whose
 decoy count is still wrong. Reads the run's own sidecars + parquet, applies the score-cutoff rule,
@@ -339,6 +438,122 @@ entrapment 3.78x / 3.84x and decoy 0.33x / 0.71x. The direction and magnitude ba
   with q <= cut rather than the best-per-precursor q, which widens the set.
 * 3 Stellar files. Needs a real dataset (SEA-AD, 82 files, ~1:1 entrapment) to mean much.
 
+</details>
+
+## SIDECAR v4: the experiment aggregate score is now persisted (2026-08-10)
+
+Brendan's call, after the analysis in this file said the sidecar "persists ONE composite score
+for FIVE q-values": persist the score, one field, in BOTH C# and Rust.
+
+**What was added**: `experiment_aggregate_score`, appended at `[60..68]`. Record 60 -> 68 bytes,
+format version 3 -> 4. Appended at the END specifically so every v3 offset is unchanged and
+`PatchRunProteinQvalues`'s `[52..60]` patch needs no modification.
+
+**Only ONE field, not five.** Re-deriving what each q actually competes on showed the deficit was
+narrower than this file claimed:
+
+| q value | score its competition ranks on | persisted before? |
+|---|---|---|
+| RunPrecursorQvalue | the row's own `Score` | yes - it IS `Score` |
+| RunPeptideQvalue | max over the peptide's rows in that file | no (derivable) |
+| **ExperimentPrecursorQvalue** | **per-entry roll-up across runs** | **no - the gap** |
+| ExperimentPeptideQvalue | max over the peptide's precursors of that roll-up | no |
+| RunProteinQvalue | protein-level score | no |
+
+Run scope needed nothing. Only the experiment aggregate is both non-derivable AND requires
+branching on `OSPREY_EXPERIMENT_AGG` to rebuild - which is the drift hazard. Peptide- and
+protein-level scores have no consumer; adding them would have cost +53% on a file that is ~20 GB
+at 82 files, against +13% for one.
+
+Producer is single-sourced with the q-maps it sits beside:
+`PercolatorQValues.ComputeExperimentAggregateScoreMap` (flat/resident) and
+`StreamingFdr.StreamingFirstPassQ.BuildExperimentAggregateScoreMap` (streaming), both reading the
+same `effScores` selection the experiment competitions use, so the persisted score cannot be one
+the competition did not rank on. `FdrTest.TestStreamingFirstPassQMatchesFlat` pins them against
+each other AND against the definition; the mean-best-N test pins the aggregation branch.
+
+**Not a general q-to-score inverse**, and the doc comments say so: the best-of-runs clamp
+(`ClampExperimentQToBestRunFlat`, #4390) floors an experiment q up to a RUN q, so after clamping
+the experiment q is not a monotone function of this score. It is the score its competition ranked
+on, which is what a score-space acceptance boundary needs.
+
+**Verified end to end**: the Python oracle reads the field and reports
+`persisted experiment_aggregate_score matches computed max() for all 986,663 precursors`.
+Regression mode 1 (results vs golden) PASSES, so v4 moved no search result.
+
+Also fixed while here: `FdrScoresSidecar.ReadScalars` did not validate magic or version. Harmless
+at a fixed record width; at a CHANGED width a stale v3 sidecar would be re-cut at 68 bytes and
+yield plausible garbage. It now rejects.
+
+## Rust side: done, and this machine can now build it
+
+Ported identically (`FdrEntry.experiment_aggregate_score`, producer in
+`compute_experiment_level_qvalues`, sidecar writer + loader, all 16 struct literals). Rust has no
+mean-best-N mode, so the aggregate there is the max - the same value the default C# path writes.
+
+**This machine had no Rust toolchain at all**, which is why the port could not be verified when
+first written. Now installed and green: rustup 1.29 / rustc 1.97.1 (msvc), clippy, rustfmt,
+rust-analyzer; `cargo check --all-targets`, `cargo fmt --check`, `cargo clippy -D warnings`,
+`cargo test --workspace` (578 passed, 0 failed), and the project wrapper
+`Build-OspreyRust.ps1 -Fmt -Clippy`.
+
+Three things that cost time and are now written down so they cost nobody else any:
+
+* **The real blocker is not rustup, it is vcpkg.** `maccoss/osprey` links native OpenBLAS via
+  `openblas-src`; without it `cargo check` dies in a build script with `VcpkgNotFound`. The only
+  place this was recorded was `osprey/.github/workflows/ci.yml` - the GitHub runners ship vcpkg
+  preinstalled, so CI only ever runs the `vcpkg install` line and nothing else wrote it down.
+  Now documented in `ai/docs/new-machine-setup.md` (Phase 7) and cross-referenced from
+  `ai/docs/osprey-development-guide.md` with a symptom -> missing-piece table.
+* **`Build-OspreyRust.ps1` hardcoded `VCPKG_ROOT = "$env:USERPROFILE\vcpkg"`**, unconditionally
+  overwriting a correct value set by the caller - and wrong on CI too, which uses
+  `VCPKG_INSTALLATION_ROOT`. Fixed to respect an existing value, then `VCPKG_INSTALLATION_ROOT`,
+  then `C:\vcpkg`, then the old default.
+* vcpkg installed at `C:\vcpkg`, deliberately NOT under `C:\proj` - `get_project_status` scans
+  the project root for git repos and would report it as one.
+
+**Still not run**: the `OSPREY_CROSS_IMPL_FDR_SIDECAR_OUT` byte-parity harness against the C#.
+Now possible on this machine, and see the #4553 section - that harness is being extended by
+another branch right now.
+
+## FOR THE #4553 SESSION (fdr_sidecar_parity) - please read, two asks
+
+Written 2026-08-10 after pulling `pwiz-ai` and reading
+`TODO-20260809_fdr_sidecar_parity.md`. Our branches collide in three places and one of them is a
+defect I introduced that your fix is the right home for.
+
+**Your diagnosis explains my pass-2 numbers exactly.** My panel reports 36,228 decoys at pass 2
+against ~23-25k targets. Your measurement on the same dataset - 100,733 of 260,419 records
+(39%) zero-score in the straight-through 2nd-pass sidecar, decoys 67,526 at 52% vs targets 25% -
+is the mechanism. My pass-2 acceptance boundary is the minimum score over accepted
+target/entrapment precursors; with zeros in that pool it collapses to ~0 and admits nearly every
+decoy. So my pass-2 decoy row is a SYMPTOM of #4553, not a separate bug, and I am deliberately
+not touching it until your fix lands. My pass-1 numbers are unaffected (pass-1 sidecars are
+written at the Stage 5 boundary, before Stage 6 - your own table uses them as the reference).
+
+**Ask 1: `ExperimentAggregateScore` needs to join your seeding fix.** I added the field to
+`FdrEntry.ResetScores()` (it clears to 0.0 alongside `Score`), and I added a carry for it in
+`AssignPerRunQ` - which your TODO correctly identifies as the mode that already does the right
+thing. I did NOT add one to `ComputePass2TransferCompeteFull`. So on the DEFAULT pass-2 mode my
+field is dropped by exactly your five-of-eight write-back defect, and becomes the FOURTH field
+your fix has to seed from the 1st-pass sidecar, after `Score`, `Pep` and `RunProteinQvalue`.
+Both C# and Rust. Given your list already grew from two fields to three when you re-ran the gate,
+it may be worth driving the seeding off the record layout rather than an enumerated list.
+
+**Ask 2: your sidecar decoder needs the v4 layout.** `Regression/FdrSidecars.ps1` decodes the
+60-byte, seven-scalar record ("Duplicating the 60-byte record layout here is how the two copies
+drift"), and `Compare-FdrSidecars-Crossimpl.ps1` dot-sources it. As of this branch the record is
+**68 bytes with eight scalars** (`experiment_aggregate_score` at `[60..68]`, version byte 4).
+Both need the bump plus a comparison arm for the new field. Note your script degrades gracefully
+on a MISSING helper (exit 3 -> SKIP) but has no guard for a format mismatch - a v4 file against a
+v3 decoder is a silent misparse, which is the same trap I closed in `ReadScalars`.
+
+**Ordering agreed with Brendan: #4553 lands first, this branch rebases onto it, then ONE golden
+rebaseline.** Your rebaseline is already approved and your `-Dataset All` is running; mine is not
+started. My pass-1 numbers do not move under your fix, but my pass-2 numbers will move a lot, so
+blessing them before your fix would bake in numbers produced by the zeroed-score pool. Brendan is
+arranging for your branch to be pushed so I can rebase on it.
+
 ## Tasks
 
 - [x] Locate the Stage 5 `--model-diagnostics` report generation and the per-file apex RT source
@@ -370,9 +585,26 @@ entrapment 3.78x / 3.84x and decoy 0.33x / 0.71x. The direction and magnitude ba
       Contents: scope toggle (run / experiment q), KPI row, per-class table with the
       best-match-wins reading and the PTM-isomer caveat, |dRT| histogram over the full scan window,
       tolerance-ladder chart + table, and the per-pair offender listing with run counts.
+- [x] Persist the experiment aggregate score in the sidecar (v3 -> v4), C# AND Rust - see the
+      sidecar v4 section above
+- [x] Fix the decoy class: pass 1 now reproduces the Python oracle on all twelve numbers
+- [x] Collapse the two pass-1 panel implementations into one (rehydrate path now uses
+      `PeakCoAssignmentSource`); verified identical on both paths in a single run
+- [x] Install and verify the Rust toolchain on this machine; document the vcpkg/OpenBLAS
+      prerequisite that no doc covered
+- [ ] **BLOCKED on #4553**: pass-2 decoy row (36,228) - a symptom of the zeroed-score defect,
+      not a separate bug. Re-measure after rebasing onto that branch.
+- [ ] The symmetric derived-from vs unrelated split for decoys AND entrapment (agreed with
+      Brendan) - without it the 6.39x / 3.23x enrichments are not comparable to the target rate
 - [ ] Report the pass1 -> pass2 delta in the panel (how much co-assignment reconciliation adds)
+- [ ] Rebase onto #4553 once it is pushed, then re-run and re-measure pass 2
+- [ ] Regenerate the diagnostics golden - AFTER the rebase, once, jointly with #4553's
+      rebaseline (co-assignment metrics are new, and pass-1 decoy numbers move 72 -> 468 /
+      96 -> 675)
 - [ ] `regression.ps1 -Dataset Stellar`, then `-Dataset All`; capture the real memory/wall numbers
       with `--memstamp` and replace the estimates below
+- [ ] Run the `OSPREY_CROSS_IMPL_FDR_SIDECAR_OUT` byte-parity harness (now possible on this
+      machine) - coordinate with #4553, which is extending exactly that comparison
 
 ## Caveats to carry into the implementation
 
@@ -416,3 +648,27 @@ warnings. Goldens deliberately not regenerated. NOT PR-ready.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260808_peak_coassignment_diagnostics.md` before starting work.
+
+### 2026-08-10 - Pass 1 correct, sidecar v4 landed both sides, Rust toolchain installed
+
+Pass 1 now reproduces the Python oracle on all twelve numbers. Getting there took four defects,
+only two of which were in the panel - the other two were the regression harness overwriting the
+report being measured (mode 5 rehydrate writes into the straight run's directory) and the oracle
+itself computing decoy m/z ~510 Da wrong from the `DECOY_` prefix. That second one overturns this
+file's earlier headline finding: decoys co-assign ABOVE entrapment (6.39x / 6.04x), not below.
+Both corrected numbers still need the derived-from split before they can be quoted.
+
+Sidecar v4 (`experiment_aggregate_score`) is implemented and green in C# and Rust. Regression
+mode 1 passes, so it moved no search result; the oracle confirms the persisted field matches an
+independently computed `max()` for all 986,663 precursors, and reading the field instead of
+recomputing gives byte-identical output.
+
+The Rust toolchain did not exist on this machine, so the port was written blind earlier in the
+session. It is now installed, documented, and fully verified (578 tests, clippy, fmt).
+
+**Not committed.** `C:\proj\pwiz` has 17 modified files, `C:\proj\osprey` 6. Held deliberately:
+the ordering agreed with Brendan is that #4553 lands first and this branch rebases onto it,
+because pass-2 numbers here are a symptom of that branch's zeroed-score defect and the two
+branches need ONE joint golden rebaseline rather than two. See the "FOR THE #4553 SESSION"
+section above for the two concrete asks (my new field needs adding to their seeding fix; their
+sidecar decoder needs the v4 68-byte layout).
