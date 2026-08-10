@@ -234,6 +234,38 @@ Attempt 2's failure is understood and the fix was right: pass 1 is pre-compactio
 precursor carries many rows including poor candidate peaks, and the min over rows sits far below the
 boundary. Attempts 1 and 3 are NOT understood - that is the problem.
 
+**ROOT CAUSE (Brendan, 2026-08-10): the sidecar persists ONE composite score for FIVE q-values.**
+
+```
+FdrScoreRecord: EntryId, Score, RunPrecursorQvalue, RunPeptideQvalue,
+                ExperimentPrecursorQvalue, ExperimentPeptideQvalue, Pep, RunProteinQvalue
+```
+
+`Score` is the per-row SVM discriminant. The EXPERIMENT-WIDE aggregate that
+`PercolatorQValues.ComputeExperimentPrecursorQMap` actually competes on is never written, and there
+is nothing for the peptide or protein levels either. `FdrEntry` carries the same single `Score`, so
+the resident pass-2 path is no better off. Every attempt above therefore built the experiment-scope
+cutoff from a quantity that is NOT the one its q came from - in both paths. That is why attempts 1
+and 3 were never going to work, and it is the thing to fix.
+
+Note the trap: even reconstructing the aggregate, `max()` across runs is only the DEFAULT roll-up.
+Under `OSPREY_EXPERIMENT_AGG` mean-best-N it is the mean of the best N per-run scores, so a
+max-based cutoff is silently wrong on exactly the arms where the aggregation is under study.
+
+Two ways forward; the second is preferred:
+
+1. Reconstruct the aggregate inside the panel, branching on `OspreyEnvironment.ExperimentAggMeanBest`
+   and mirroring `TargetDecoyCompetition.ComputeBaseIdMeanBestN`. Duplicates pipeline logic in a
+   diagnostic and drifts the moment the aggregation changes.
+2. **Persist the composite score PER Q LEVEL in the sidecar** - the score each q was computed from,
+   beside that q. Then any consumer gates correctly by construction, this panel included, and
+   mean-best-N needs no special case. A record-layout change (format version, writer, readers,
+   golden), so it is its own piece of work and probably its own issue - NOT something to bolt onto
+   this branch.
+
+Until one of those lands, the decoy row cannot be right. Consider shipping the panel with the decoy
+class suppressed and a note, rather than a number nobody can trust.
+
 **Next session: diagnose, do not iterate.** Each attempt costs a ~5 minute regression leg, and three
 have now been spent on hypotheses. Get the root cause first:
 
