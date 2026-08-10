@@ -144,3 +144,30 @@ FDRBench oracle for that branch's review finding 1. Root cause is diagnosed (abo
 failing check is written; the fix and the Rust question remain. Kept off the #4486 branch
 deliberately: the check turns `-Dataset All` red, which would block a PR that has nothing
 to do with this defect.
+
+### 2026-08-10 - Parent PR merged; this branch is where the work resumes
+
+#4554 (the Stage 7 memory/reporting work this was split out of) **merged** as `843f7e553a`,
+so master now carries everything this branch was deliberately kept clear of. Nothing here
+changed as a result - the divergence this issue tracks is in `ResetScores()` +
+`protein-compact`, which #4554 did not touch, so the measured figures below still stand.
+
+**Rebase is CLEAN, verified** (`git merge-tree --write-tree master HEAD`) even though both
+#4554 and this branch edit `pwiz_tools/Osprey/regression.ps1` - the hunks do not overlap
+(#4554 rewrote the mode-3 preamble comment and the `$knownResidentGaps` Legs line; this
+branch adds the `FdrSidecars.ps1` dot-source and a new assertion block just above
+`$m3 = Compare-BlibFull`). Rebase onto the new master before doing anything else, so the
+failing check runs against current code.
+
+**Related issue filed since**: #4555 - same-base-name inputs from different directories
+collide in artifact NAMES (`ArtifactPaths.ResolveOutputDir` flattens everything into
+`--output-dir` while names are stem-based) and in the per-file maps. Different defect from
+this one, but the same "identity is the bare stem" root, and worth reading before designing
+the fix here so the two do not solve it twice in different ways.
+
+**State of this branch**: 1 commit (`6dc9b136fe`), clean tree, pushed. The check is written
+and RED against the real divergence; the FIX is not written. The root cause is fully
+diagnosed in the section above - do not re-derive it.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260809_fdr_sidecar_parity.md` before starting work.
