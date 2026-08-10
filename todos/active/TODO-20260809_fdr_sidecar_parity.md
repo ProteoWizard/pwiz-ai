@@ -153,6 +153,18 @@ past the map-back keeping the reset 1.0. That needs its own `-Dataset All`, not 
 flip. Suggest it lands on your branch, where it can be gated together with the v4 format
 that makes it matter.
 
+**BRANCH IS PUSHED - rebase away.** `Skyline/work/20260809_fdr_sidecar_parity` at
+`a23e246fd0` (force-pushed; it was rebased onto master this morning, so re-fetch rather
+than merging your old copy). Three commits:
+
+* `9b4b292275` the failing sidecar comparison
+* `c056a7f88c` the fix - **this is the one you extend** with `ExperimentAggregateScore`
+* `a23e246fd0` the golden rebaseline, deliberately SEPARATE so it can be dropped without
+  touching the fix
+
+Rust side is `maccoss/osprey` branch `fix/pass2-restore-pass1-scalars` (commit `6548ea9`),
+PR to be opened alongside the pwiz one.
+
 **Golden rebaseline - one or two? OPEN, with Brendan.** Reading "then ONE golden
 rebaseline" as *mine is the one* (this branch lands first, you inherit a correct baseline,
 master is never red). The alternative - neither branch blesses until both are in - means
