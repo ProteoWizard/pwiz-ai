@@ -767,3 +767,37 @@ because pass-2 numbers here are a symptom of that branch's zeroed-score defect a
 branches need ONE joint golden rebaseline rather than two. See the "FOR THE #4553 SESSION"
 section above for the two concrete asks (my new field needs adding to their seeding fix; their
 sidecar decoder needs the v4 68-byte layout).
+
+### 2026-08-10/11 (night session, later) - #4557 moved; rebased and re-captured
+
+**Their branch moved mid-session, exactly as the handoff predicted.** `5679bc2c9d osprey:
+Hardened the sidecar comparison after review` plus `d6d6a6d69b Merged master into ...`. That
+voided the golden already captured, so the verification run was killed rather than spend an
+hour validating a stale base.
+
+Rebased both repos. Two conflicts, **both resolved in their favour**:
+
+* `RestorePass1Scalars` - they restructured it to STAGE records and apply only when
+  `ReadRecords` returns true, which is the fix for the partial-seeding finding written up for
+  them in `ai/.tmp/review-findings-for-4557.md`. Kept their structure; moved the
+  `ExperimentAggregateScore` seed into their apply loop.
+* `FdrSidecars.ps1` - they replaced the parallel offset/name arrays with one
+  `FdrSidecarField[] Fields` table, citing THIS branch's v4 layout by name as the drift risk
+  it prevents, and added a pass-byte check plus checked size arithmetic. Kept all of it; added
+  `experiment_aggregate_score` at offset 60 to their table.
+
+We converged on the same defects from opposite sides, which is a good sign for the stack.
+
+**Golden re-captured on the new base. `blib_summary.tsv` moved and was NOT blessed** - the
+handoff says anything non-coAssign moving is a finding, so it was investigated rather than
+committed: `8287.14162545012` -> `8287.141625450126`, a last-digit float-summation artifact
+(~1e-12 relative) on a sum over 353,298 rows, and that gate compares at relative 1e-6. Their
+own previous commit says "Reverted the blib_summary golden churn (that gate is relative 1e-6)",
+so committing it would have re-introduced churn they had just removed. Reverted; the four
+`protein_fdr.tsv` files were pure line-ending churn with zero content change and were likewise
+reverted.
+
+Final golden diff: `diagnostics.tsv` +28 / -0 on astral, stellar-libdecoy and
+stellar-gendecoy-entrap. Nothing else.
+
+**Rust PR opened**: maccoss/osprey#62, stacked on #61.
