@@ -449,13 +449,17 @@ $sidecarLog = Join-Path $rootDir 'fdr_sidecar_compare.log'
 Write-Host "    Comparing FDR sidecars (Compare-FdrSidecars-Crossimpl.ps1)..." -ForegroundColor DarkGray
 & pwsh -File $sidecarCmp -RustDir $rustDir -CsDir $csDir *>&1 |
     Tee-Object -FilePath $sidecarLog | Out-Null
+# Exit 3 = this pwiz checkout has no FdrSidecars.ps1 (predates issue #4553), so the
+# comparison could not run. That is not a divergence and must not fail the gate; anything
+# else non-zero is.
+$sidecarSkipped = ($LASTEXITCODE -eq 3)
 $sidecarOk = ($LASTEXITCODE -eq 0)
-Write-Host ("    FDR sidecars (per-field 1e-9): {0}  ({1})" -f `
-    $(if ($sidecarOk) { 'PASS' } else { 'FAIL' }), $sidecarLog) `
-    -ForegroundColor $(if ($sidecarOk) { 'Green' } else { 'Red' })
+$sidecarLabel = if ($sidecarOk) { 'PASS' } elseif ($sidecarSkipped) { 'SKIP' } else { 'FAIL' }
+Write-Host ("    FDR sidecars (per-field 1e-9): {0}  ({1})" -f $sidecarLabel, $sidecarLog) `
+    -ForegroundColor $(if ($sidecarOk) { 'Green' } elseif ($sidecarSkipped) { 'Yellow' } else { 'Red' })
 
 Write-Host ""
-if ($precOk -and $stage7Ok -and $blibOk -and $sidecarOk) {
+if ($precOk -and $stage7Ok -and $blibOk -and ($sidecarOk -or $sidecarSkipped)) {
     Write-Host "OVERALL: PASS  -- Rust and C# end-to-end in-memory bit-parity at 1e-9 on $Dataset $($mzmls.Count)-file" -ForegroundColor Green
     Write-Host ("  Walls: Rust {0}, C# {1}" -f (Format-Duration $rustWall), (Format-Duration $csWall))
     exit 0

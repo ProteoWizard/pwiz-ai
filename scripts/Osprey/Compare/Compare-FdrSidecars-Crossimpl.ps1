@@ -71,11 +71,19 @@ foreach ($c in $configCandidates) { if (Test-Path $c) { . $c; break } }
 
 # The decoder lives with the sidecar writer's own regression gate, in pwiz.
 # Duplicating the 60-byte record layout here is how the two copies drift.
+#
+# ai/ and pwiz move independently, so this script CAN be newer than the pwiz checkout it
+# is pointed at -- most obviously while the pwiz side of issue #4553 is still on a branch.
+# A missing helper is therefore "this checkout cannot run this comparison", not "the
+# comparison failed": exit 3, which the end-to-end driver reports as SKIP rather than
+# folding into its overall verdict. Failing here would turn every master checkout red on a
+# gate that has nothing wrong with it.
 $sidecarHelpers = Join-Path (Get-PwizRoot) 'pwiz_tools\Osprey\Regression\FdrSidecars.ps1'
 if (-not (Test-Path $sidecarHelpers)) {
-    Write-Host "FdrSidecars.ps1 not found at $sidecarHelpers" -ForegroundColor Red
+    Write-Host "SKIPPED: FdrSidecars.ps1 not found at $sidecarHelpers" -ForegroundColor Yellow
+    Write-Host "  This pwiz checkout predates the sidecar comparison helper (issue #4553)."
     Write-Host "  (set `$env:PWIZ_ROOT if your pwiz checkout is not a sibling of ai/)"
-    exit 2
+    exit 3
 }
 . $sidecarHelpers
 
