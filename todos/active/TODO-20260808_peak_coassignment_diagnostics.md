@@ -205,6 +205,60 @@ metric list, not an enumeration of the payload, so a new card is invisible to it
 `mode1b (diagnostics vs golden): PASS` would have passed identically had the panel emitted garbage.
 Co-assignment n / nBetter / enrichment are now pinned at both passes and both q scopes.
 
+## BLOCKER: the decoy class is not correct yet (2026-08-10)
+
+**Targets and entrapment are fine and unchanged** - gated on their own q, matching the report's own
+per-file table. **Only the decoy row is wrong.** Do not open a PR until it is right; do not "fix" it
+by another guess.
+
+**What decoy inclusion must be** (Brendan): decoys have no meaningful q - they are the basis on
+which q is computed - so they cannot be gated on their own q. Include a decoy when its score clears
+the acceptance boundary: the lowest score among the included target/entrapment set. And for the
+EXPERIMENT scope that comparison must be in **experiment aggregate score** terms, not per-run
+scores.
+
+**Expected answer** (so the next attempt is falsifiable): at experiment q <= 1% with 23,135 targets
++ 228 entrapment accepted, q ~ decoys/targets means about **233 decoys** above the cutoff. An
+independent count straight from the sidecars (`run_prec_q <= 0.01`) gives **598 unique decoy
+precursors** at run scope and **293** at experiment scope. The panel should land in that region.
+
+**Three attempts, all wrong, all measured:**
+
+| attempt | pass1 run | pass1 exp | pass2 run | pass2 exp |
+|---|---|---|---|---|
+| 1. gate decoys on their own q | 19 | 15 | 415 | 7 |
+| 2. cutoff = min score over accepted ROWS | 96 | 43,528 | 36,228 | 43,475 |
+| 3. cutoff = min over accepted PRECURSORS, per-scope aggregate | 96 | 72 | 36,228 | 36,133 |
+
+Attempt 2's failure is understood and the fix was right: pass 1 is pre-compaction, so an accepted
+precursor carries many rows including poor candidate peaks, and the min over rows sits far below the
+boundary. Attempts 1 and 3 are NOT understood - that is the problem.
+
+**Next session: diagnose, do not iterate.** Each attempt costs a ~5 minute regression leg, and three
+have now been spent on hypotheses. Get the root cause first:
+
+* The two paths disagree by ~400x on the same quantity (pass1 96 vs pass2 36,228), so at least one
+  of `PeakCoAssignmentSource` (streaming, sidecar-driven) and `BuildCoAssignment` (resident pool) is
+  computing a different cutoff from the other. Instrument BOTH cutoffs - log the score value and the
+  count of accepted precursors that produced it - before changing any logic.
+* Suspect for pass 2 being far too permissive: the post-compaction pool contains entries whose
+  `Score` was zeroed by `FdrEntry.ResetScores` (Stage 6 rescore targets, gap-fill stubs). If any of
+  those is "accepted", the cutoff collapses to ~0 and admits nearly every decoy. Check before
+  assuming.
+* Verify against the offline sidecar computation in the transcript (numpy over
+  `.1st-pass.fdr_scores.bin`), which is independent of the C# entirely.
+
+**Then**, once the count is right, the measurement Brendan actually wants: of the decoys above the
+cutoff, how many share a peak and how many with a BETTER-scoring target.
+
+**Carry this caveat into that work.** A generated decoy is its target's sequence reversed, so it has
+the SAME composition, mass and precursor m/z as its own twin. Its twin is therefore a guaranteed
+same-m/z partner, which entrapment never has. The decoy co-assignment rate is structurally inflated
+relative to entrapment and the two are not comparable as they stand. Split the decoy column into
+**co-assigned with its own twin** (how often a decoy rides the real peptide's peak - an FDR
+calibration finding, and the more interesting one) vs **co-assigned with an unrelated target** (the
+figure comparable to entrapment). A base-id equality test at the match site is all it needs.
+
 ## Tasks
 
 - [x] Locate the Stage 5 `--model-diagnostics` report generation and the per-file apex RT source
@@ -228,7 +282,14 @@ Co-assignment n / nBetter / enrichment are now pinned at both passes and both q 
       visible rather than baked in
 - [x] Opt-in token gating (see above)
 - [x] Unit tests: hand-computed co-assignment fixture + token parser (576 tests green, 0 warnings)
-- [ ] HTML panel in the report template
+- [x] HTML panel in the report template - **Competition tab, BELOW the paired decoy-win coinflip
+      card** (Brendan: the coinflip stays on top). Q-driven, so `renderCoAssignment` is called
+      before `renderCompetitionTab`'s `hasStructural` early-returns and still renders under pass-2
+      confidence transfer, where the coin above degrades to an n/a note. Card hides itself entirely
+      when the panel is absent: a zero rate and "could not measure" are different claims.
+      Contents: scope toggle (run / experiment q), KPI row, per-class table with the
+      best-match-wins reading and the PTM-isomer caveat, |dRT| histogram over the full scan window,
+      tolerance-ladder chart + table, and the per-pair offender listing with run counts.
 - [ ] Report the pass1 -> pass2 delta in the panel (how much co-assignment reconciliation adds)
 - [ ] `regression.ps1 -Dataset Stellar`, then `-Dataset All`; capture the real memory/wall numbers
       with `--memstamp` and replace the estimates below
