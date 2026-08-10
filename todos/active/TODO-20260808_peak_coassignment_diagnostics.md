@@ -251,13 +251,25 @@ have now been spent on hypotheses. Get the root cause first:
 **Then**, once the count is right, the measurement Brendan actually wants: of the decoys above the
 cutoff, how many share a peak and how many with a BETTER-scoring target.
 
-**Carry this caveat into that work.** A generated decoy is its target's sequence reversed, so it has
-the SAME composition, mass and precursor m/z as its own twin. Its twin is therefore a guaranteed
-same-m/z partner, which entrapment never has. The decoy co-assignment rate is structurally inflated
-relative to entrapment and the two are not comparable as they stand. Split the decoy column into
-**co-assigned with its own twin** (how often a decoy rides the real peptide's peak - an FDR
-calibration finding, and the more interesting one) vs **co-assigned with an unrelated target** (the
-figure comparable to entrapment). A base-id equality test at the match site is all it needs.
+**Why this measurement matters** (Brendan, and it corrects an earlier note here): decoy and
+entrapment score distributions matching is the assumption the FDR statistics rest on. This panel can
+test whether they also match in CO-ASSIGNMENT behaviour, and whether either matches the false-target
+distribution - which is where false-targets and entrapment appear to deviate, and why the panel is
+interesting. The expectation is that decoys track entrapment; if they do not, that is a more
+interesting result still. Either reading needs the decoy accounting to be correct first.
+
+**A previous version of this file claimed decoys have a same-m/z twin that entrapment lacks, and
+that the decoy rate is therefore inflated and not comparable. That is WRONG - do not act on it.**
+The entrapment peptides are SHUFFLED versions of a source peptide, i.e. anagrams, so they carry the
+same composition, mass and precursor m/z as their source exactly as a reversed decoy does. Decoys
+are reversals of both targets and entrapment. Both classes pass the same spectral-similarity
+filters, and library decoys additionally carry Carafe-predicted spectra and RTs. There is no
+asymmetry here, and the decoy and entrapment co-assignment rates ARE directly comparable.
+
+If a decomposition is still wanted, it is a SYMMETRIC one applied to both known-false classes: was
+the co-assignment partner the sequence this precursor was derived from (same composition by
+construction), or an unrelated target? That is a base-id / source-peptide test at the match site,
+and it means the same thing for entrapment and decoys.
 
 ## Tasks
 
