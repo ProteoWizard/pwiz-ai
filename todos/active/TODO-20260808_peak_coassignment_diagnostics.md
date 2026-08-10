@@ -112,7 +112,29 @@ gate (`DecoyGenerator.IsCandidateAcceptable`) is target-vs-its-own-decoy at libr
 "interference" handling in scoring is intra-precursor (does one precursor's own fragments agree).
 The 5% is the absence of a filter, not a broken one.
 
-## Opt-in tokens on --model-diagnostics (settled 2026-08-09)
+## Opt-in tokens: BUILT, MEASURED, THEN REMOVED (settled 2026-08-10)
+
+**The mechanism below was implemented and then deleted. Do not rebuild it without a measurement.**
+
+Measured on the StellarGenDecoyEntrap gate leg: the pass-1 apex-RT recovery ran
+**0.4 s over 2,937,383 pre-compaction rows = 7.3M rows/s**. Extrapolated to the 82-file Astral run
+(~340M rows) that is **~46 seconds against a 10-hour search - 0.13%**. The perf premise the opt-in
+rested on was wrong by two orders of magnitude; the "second pass over every pre-compaction row"
+framing was pattern-matched from the SCORING path, but this is a 12-byte-per-row sequential read.
+
+Brendan's call, and the better argument: anyone who asks for `--model-diagnostics` wants the
+diagnostics, not a decision about which ones they can afford. A panel behind a token is a panel
+nobody sees - which defeats a diagnostic whose entire purpose is surfacing an effect users do not
+know to look for. `--model-diagnostics` shows everything we know how to show, and there is
+deliberately no `--model-diagnostics all` to have to remember.
+
+What was removed: `ModelDiagnosticsFeatures`, `OspreyConfig.ModelDiagnosticsPanels` /
+`HasModelDiagnosticsPanel`, the optional-value lookahead in `TokenizeAndDispatch`, and the
+`DiagnosticsPanels` field in `regression.ps1` (so all four legs now exercise the panel).
+
+<details><summary>The token design as built, kept for whenever a panel genuinely warrants it</summary>
+
+## Opt-in tokens on --model-diagnostics (superseded)
 
 Expensive panels are opt-in BY NAME, not by level:
 
@@ -144,6 +166,44 @@ datasets, so an opt-in panel would ship untested by `DiagnosticsGolden.ps1`. The
 with generated decoys AND retained entrapment, so it is the only one where the panel has a
 non-empty entrapment row. One leg is enough for the golden to catch a regression, and it keeps the
 gate's wall clock honest.
+
+</details>
+
+## Measured results (first end-to-end run, StellarGenDecoyEntrap, 2026-08-10)
+
+**Stellar independently reproduces the effect** - a different instrument, sample and library from
+the Astral cohort the issue measured:
+
+| scope | target | entrapment | enrichment |
+|---|---|---|---|
+| run-level q <= 1% | 1.18% (301/25,486) | 5.17% (14/271) | **4.4x** |
+| experiment-wide q <= 1% | 2.23% (517/23,135) | 9.55% (15/157) | **4.3x** |
+
+**The pass-1 -> pass-2 direction is the opposite of what was predicted.** An earlier version of the
+code comments asserted pass 2 would be HIGHER because reconciliation manufactures co-assignment.
+Measured: rates FALL (target 2.17% -> 1.18%, entrapment 6.80% -> 5.17%) because compaction drops
+the weaker competitor - while ENRICHMENT RISES, 3.14x -> 4.37x, because the reported pool sheds
+co-assigned targets faster than co-assigned entrapment. Comments corrected; the enrichment delta is
+the quantity to watch, not the rate.
+
+## Defects found only by looking at real output (fixed 2026-08-10)
+
+1. **Offender rows were per-observation, not per pair.** `TTISVAHLLAAR(3) <- VHIGQVIMSIR(3)`
+   printed twice from two files. Now one row per precursor pair carrying a `Runs` count, with the
+   worst single observation's detail. A pair co-assigned in 31 of 40 runs is one finding, and the
+   run count is the more damning number anyway.
+2. **Tiny denominators produced alarming nonsense.** Experiment-scope decoys were n=7, and 1 of 7
+   rendered as **6.4x enrichment** - visually indistinguishable from the 5.7x that took a 40-file
+   cohort to establish. `MIN_N_FOR_ENRICHMENT = 30` now suppresses the ratio (NaN), set below the
+   ~95-144 entrapment precursors real entrapment arms carry.
+3. **Ladder entries at 0.01 and 0.02 min are identical** (0.5%, 0.5%). Not a bug - it is the
+   scan-grid quantization the |dRT| histogram shows - but the panel must say so or it looks broken.
+   TODO for the HTML work.
+
+**The diagnostics golden did not cover the panel at all.** `Get-DiagnosticsMetrics` pins an EXPLICIT
+metric list, not an enumeration of the payload, so a new card is invisible to it - the earlier
+`mode1b (diagnostics vs golden): PASS` would have passed identically had the panel emitted garbage.
+Co-assignment n / nBetter / enrichment are now pinned at both passes and both q scopes.
 
 ## Tasks
 
