@@ -12,11 +12,24 @@ lowest score among the accepted target/entrapment set at that scope.
   run scope        boundary and decoy score are the precursor's best WITHIN a file
   experiment scope boundary and decoy score are max() ACROSS files
 
-max() across runs is the DEFAULT experiment aggregation and is correct for these runs. Under
-OSPREY_EXPERIMENT_AGG mean-best-N it would be wrong - that is the whole reason the sidecar needs to
-persist the score each q was computed from.
+max() across runs is the DEFAULT experiment aggregation. These runs use it, so computing the
+aggregate here with max() is correct for them - and deliberately kept, because recomputing it is
+what makes this an independent check. Under OSPREY_EXPERIMENT_AGG mean-best-N it would be wrong,
+which is why sidecar v4 persists the score each q was computed from
+(`experiment_aggregate_score`, issue #4522).
 
-    python coassign_decoy_estimate.py <run_dir>
+Since v4 the sidecar carries that value, so this script also CROSS-CHECKS it: the persisted
+aggregate must equal the max computed here. That is an end-to-end test of the C# producer against
+an implementation that shares no code with it. A mismatch is reported and is a real defect - do not
+"fix" it by adopting the persisted value here, which would collapse the two into one implementation
+and leave nothing checking either.
+
+    python coassign_decoy_estimate.py <run_dir> [--use-persisted]
+
+--use-persisted feeds the panel's own `experiment_aggregate_score` into this script's accounting
+instead of the max computed here. Identical output either way says the persisted field is a
+correct and sufficient input to the rule, which localizes any remaining disagreement with the C#
+panel to how the C# CONSUMES it rather than to the field or the rule.
 """
 import bisect
 import glob
@@ -28,7 +41,9 @@ import numpy as np
 import pyarrow.parquet as pq
 
 REC = np.dtype([('entry_id', '<u4'), ('svm', '<f8'), ('run_prec_q', '<f8'), ('run_pep_q', '<f8'),
-                ('exp_prec_q', '<f8'), ('exp_pep_q', '<f8'), ('pep', '<f8'), ('run_prot_q', '<f8')])
+                ('exp_prec_q', '<f8'), ('exp_pep_q', '<f8'), ('pep', '<f8'), ('run_prot_q', '<f8'),
+                ('exp_agg', '<f8')])
+SIDECAR_VERSION = 4
 DECOY_BIT = np.uint32(0x80000000)
 QCUT, RT_TOL, MZ_TOL = 0.01, 0.05, 0.01
 PROTON = 1.007276
@@ -42,9 +57,21 @@ MOD = re.compile(r'\[([^\]]*)\]')
 UNIMOD = {4: 57.021464, 35: 15.994915, 1: 42.010565, 21: 79.966331, 7: 0.984016, 6: 58.005479}
 
 
+DECOY_PREFIX = 'DECOY_'
+
+
 def mz_of(modseq, charge):
     """Precursor m/z from the modified sequence. Bracketed numeric mods are added; UniMod tokens
-    fall back to a mass-less residue, which only shifts a modified precursor and is flagged."""
+    fall back to a mass-less residue, which only shifts a modified precursor and is flagged.
+
+    The DECOY_ prefix MUST be stripped first. Without that, the residue walk below reads D, E, C
+    and Y as amino acids and adds ~510 Da to every decoy's precursor mass, so no decoy ever lands
+    in the +/-0.01 m/z window of a target and the decoy co-assignment rate collapses to near zero.
+    That artifact is what produced the earlier "decoys co-assign BELOW targets (0.27-0.45x)"
+    reading; it was measuring a broken mass, not a property of decoys.
+    """
+    if modseq.startswith(DECOY_PREFIX):
+        modseq = modseq[len(DECOY_PREFIX):]
     total, ok = H2O, True
     for tok in MOD.findall(modseq):
         t = tok.replace('+', '').strip()
@@ -68,9 +95,13 @@ def mz_of(modseq, charge):
     return (total + charge * PROTON) / charge, ok
 
 
-run = sys.argv[1]
+args = [a for a in sys.argv[1:] if not a.startswith('--')]
+use_persisted = '--use-persisted' in sys.argv[1:]
+run = args[0]
 stems = sorted(f[:-len('.1st-pass.fdr_scores.bin')]
                for f in os.listdir(run) if f.endswith('.1st-pass.fdr_scores.bin'))
+print('experiment aggregate source: '
+      + ('PERSISTED experiment_aggregate_score' if use_persisted else 'max() computed here'))
 print(f'{len(stems)} file(s) in {run}\n')
 
 # ---- per file: best-scoring row per precursor (entry id) ----
@@ -81,9 +112,15 @@ exp_acc = set()      # entry ids accepted non-decoy at experiment q
 cls_of = {}          # entry_id -> 'target' | 'entrapment' | 'decoy'
 unparsed = 0
 
+persisted_agg = {}   # entry_id -> experiment_aggregate_score as written by Osprey
+
 for stem in stems:
     with open(os.path.join(run, stem + '.1st-pass.fdr_scores.bin'), 'rb') as fh:
         hdr = fh.read(32)
+        if hdr[:8] != b'OSPRYFDR':
+            sys.exit(f'{stem}: not an FDR sidecar (bad magic)')
+        if hdr[8] != SIDECAR_VERSION:
+            sys.exit(f'{stem}: sidecar version {hdr[8]}, this script reads v{SIDECAR_VERSION}')
         a = np.fromfile(fh, dtype=REC, count=int.from_bytes(hdr[16:24], 'little'))
     t = pq.read_table(os.path.join(run, stem + '.scores.parquet'),
                       columns=['entry_id', 'charge', 'modified_sequence', 'protein_ids', 'apex_rt'])
@@ -116,8 +153,25 @@ for stem in stems:
                 exp_acc.add(e)
         if e not in exp_best or s > exp_best[e]:
             exp_best[e] = s
+        persisted_agg[e] = float(a['exp_agg'][i])
     files.append(best)
     run_acc.append(acc)
+
+# Cross-check the persisted aggregate against the one computed above. Same quantity, two
+# implementations sharing no code; under the default aggregation they must agree exactly.
+mismatch = [(e, exp_best[e], persisted_agg[e]) for e in exp_best
+            if persisted_agg.get(e) != exp_best[e]]
+if use_persisted:
+    exp_best = persisted_agg
+if mismatch:
+    print(f'!! {len(mismatch)} entry(s) where the persisted experiment_aggregate_score disagrees '
+          f'with max() computed here - the C# producer is wrong, or these runs are not using the '
+          f'default aggregation:')
+    for e, want, got in mismatch[:10]:
+        print(f'     entry {e}: computed {want:.6f}, persisted {got:.6f}')
+else:
+    print(f'persisted experiment_aggregate_score matches computed max() for all '
+          f'{len(exp_best):,} precursors')
 
 # ---- acceptance boundaries: lowest accepted target/entrapment score at each scope ----
 run_cut = [min((f[e][0] for e in acc if e in f), default=None) for f, acc in zip(files, run_acc)]
