@@ -16,9 +16,9 @@ Labels: `osprey`, `performance`
   `OSPREY_LOG_MEMORY=1` could not produce a Stage 7 live number no matter who set it -
   which is why #4486 went three months on `--memstamp` figures alone
 * Streamed the `--task SecondPassFDR` reconciled-input load. It reloaded every input's
-  full PRE-compaction stub list before compacting - 2.07 GB/file, ~194 GB projected at
-  82 files - while the bounded `HydrateCompactedStreaming` it needed already served
-  every other reconciled-bundle path
+  full PRE-compaction stub list before compacting - a measured 2.21 GB/file (7.6 GB after
+  file 1 to 40.8 GB after file 16), ~186 GB projected at 82 files - while the bounded
+  `HydrateCompactedStreaming` it needed already served every other reconciled-bundle path
 * Root cause was a proxy: `PreCompactionPoolReason` tested `!NoJoin` as a stand-in for
   "will `FirstPassFdrTask` run here", which is false for exactly this task
   (`IsIncluded` requires `!ExpectReconciledInput`). It now asks `IsIncludedFor`, so the
@@ -44,10 +44,11 @@ Labels: `osprey`, `performance`
 * Reported progress through the two silent per-file loops after the competition - the
   2nd-pass sidecar write (~4.8 GB across 82 files) and the reload that follows it. They were
   the only reporting gap over 30 s left in the stage
-* Asserted the distinct-file-key invariant the per-file emit depends on. Two `--input-scores`
-  paths in different directories can share a stem (`RescoreHydration.PreCompactionTallies` is
-  index-keyed for exactly that reason) and every per-file structure here is name-keyed; the
-  same guard already sits at the head of `PercolatorScorer.ScoreProjectionAndComputeFdrInPlace`
+* Merged same-stem entry lists in the per-file emit. Two `--input-scores` paths in different
+  directories can share a stem (`RescoreHydration.PreCompactionTallies` is index-keyed for
+  exactly that reason) and every per-file structure here is name-keyed, so last-wins would
+  have left one list's entries with a mixture of refreshed and stale q-values. Merging
+  reproduces what the whole-run `(file, entry_id)` map did implicitly
 
 ## Measured - HPC join node
 
@@ -130,6 +131,28 @@ See #4486
 - [x] Reporting verified empirically after the change: `gaps >= 30s : 0` via
       `ai/scripts/perfviz.py`, not asserted from the diff
 - [x] `regression.ps1 -Dataset All` re-run after the competition change - 44/44, exit 0
+
+## Review
+
+`/code-review max` returned 15 findings; all were verified against the code rather than
+auto-applied, and 13 produced changes. Two are worth naming here:
+
+* Two gates added mid-branch (`31af2e17f1`, `72f6ed9c93`) were UNSATISFIABLE inside the
+  streaming branch - `streamCompaction` is `PreCompactionPoolReason == null`, which requires
+  `IsIncludedFor` false - so instead of skipping work where the reader is excluded they
+  disabled the pre-compaction tally and the `--model-diagnostics` accumulator on every
+  streaming node, while `PipelineContext.DemandByType` still drove the reader. Both are
+  REVERTED. The root cause is a conflation worth avoiding elsewhere: `IsIncludedFor` answers
+  driver-loop membership, not "will this artifact be consumed in this process".
+* The multi-file coverage added for `StreamedCompetitionState` was mutation-tested. Dropping
+  the `fileKey` term from `Pep` turns it red; deleting the `ExperimentQ` clamp does NOT, so
+  the clamp stays covered by byte-parity only and the test says so rather than implying
+  coverage it does not have.
+
+Two findings were refuted with reasons and left unchanged (a `loadFeatures` predicate that is
+correct for the question it answers, and a mid-stream mutation whose failure path aborts
+before anything is persisted); one more, the pass-2 sidecar divergence the FDRBench oracle
+turned up, is pre-existing and split to #4553 with its own branch and failing check.
 
 One defect found and fixed mid-branch that byte-parity structurally could not catch:
 dropping `ExpectReconciledInput` from `NeedsResidentPool` made the LEAN counts-only load
