@@ -5,8 +5,9 @@
 - **Worktree**: `C:\proj\pwiz`
 - **Base**: `master`
 - **Created**: 2026-08-09
-- **Status**: In Progress - both fixes written and green on Stellar (regression mode 3 +
-  cross-impl all legs); awaiting `-Dataset All`, then the approved golden rebaseline
+- **Status**: READY TO MERGE - both implementations fixed, golden rebaselined, both review
+  rounds closed, TeamCity Perf/Regression green on `pull/4557`. Waiting only on a human
+  review and on #4522's readiness (this branch lands first, #4522 rebases onto it).
 - **GitHub Issue**: [#4553](https://github.com/ProteoWizard/pwiz/issues/4553)
 - **Module**: `osprey`
 - **Other labels**: none yet (candidate: `bug`)
@@ -300,9 +301,10 @@ before the change, 242 after, matching the 5 flips), not a new artifact.
       `/code-review max` (15 findings; 13 applied, 2 pushed back with evidence)
 - [x] Merged master into the branch (`d6d6a6d69b`) - only #4556 and #4551, neither touching
       Osprey, so the gate results above still stand
-- [x] TeamCity Osprey Perf/Regression triggered on `pull/4557` (build 4128246) with
-      Brendan's explicit go-ahead - RUNNING
-- [ ] Confirm TeamCity green, then the PR is merge-ready pending #4522's readiness
+- [x] TeamCity Osprey Perf/Regression on `pull/4557` (build 4128246, commit `d6d6a6d69b`):
+      **SUCCESS** - all four datasets, every mode, plus the perf leg
+- [x] PR is MERGEABLE / CLEAN with master merged in; **merge-ready pending #4522's
+      readiness and a human review**
 - [ ] Follow-up issue: gap-fill entries get `run_protein_qvalue` 0.0 on the batch-hydrate
       arm and 1.0 on straight-through (see below) - pre-existing, newly visible
 
