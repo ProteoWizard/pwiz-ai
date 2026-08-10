@@ -666,7 +666,33 @@ recomputing gives byte-identical output.
 The Rust toolchain did not exist on this machine, so the port was written blind earlier in the
 session. It is now installed, documented, and fully verified (578 tests, clippy, fmt).
 
-**Not committed.** `C:\proj\pwiz` has 17 modified files, `C:\proj\osprey` 6. Held deliberately:
+### 2026-08-10 (evening) - Rebased onto #4553, integrated, and handed off to a night session
+
+#4553 opened PR [#4557](https://github.com/ProteoWizard/pwiz/pull/4557) and maccoss/osprey #61.
+Both of this branch's repos are now **rebased onto their branches, cleanly, and integrated**:
+
+* `ExperimentAggregateScore` seeded in BOTH `Pass2FdrSidecar.RestorePass1Scalars` (C#) and
+  `restore_pass1_scalars` (Rust) - the fourth field of their five-of-eight map-back.
+* `Regression/FdrSidecars.ps1` decodes the v4 8-field record; verified non-vacuous (8 field
+  names, 86,824 records from a 5,904,064-byte file, which only divides at the 68-byte stride).
+* **Pass-2 decoys 36,228 -> 1,049 (run) and 36,133 -> 71 (experiment)**, confirming that row was
+  a symptom of #4553's zeroed scores rather than a second bug.
+* Full `-Dataset StellarGenDecoyEntrap`: every leg PASS - including `mode1 (vs golden)` against
+  their rebaselined golden, and both `mode3` legs - except the two diagnostics-golden legs,
+  whose 28 issues are all `metric not in golden` (the additive rebaseline this branch owes).
+* C# 578 tests / 0 warnings; Rust fmt + clippy + 579 tests green.
+
+Commits (nothing pushed): pwiz `11b238d706`, `1a76f4ee57`, `aa92ab413f` on top of
+`a23e246fd0`; osprey `669480b`, `6e4337d` on top of `6548ea9`.
+
+**Next session handoff**: read `ai/.tmp/handoff-20260808_peak_coassignment_diagnostics.md` -
+it carries the night-session goal (stacked PR merge-ready by EU morning), the ordering with
+#4557, the Rust PATH/VCPKG_ROOT trap, the regression gotchas, and the three open questions
+that must NOT be silently resolved.
+
+### 2026-08-10 - Earlier: pass 1 correct, sidecar v4 landed both sides
+
+**Not committed at the time.** `C:\proj\pwiz` has 17 modified files, `C:\proj\osprey` 6. Held deliberately:
 the ordering agreed with Brendan is that #4553 lands first and this branch rebases onto it,
 because pass-2 numbers here are a symptom of that branch's zeroed-score defect and the two
 branches need ONE joint golden rebaseline rather than two. See the "FOR THE #4553 SESSION"
