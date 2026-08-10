@@ -109,8 +109,18 @@ $initialLocation = Get-Location
 try {
     Set-Location $OspreyRoot
 
-    # Set up environment for vcpkg + OpenBLAS
-    $env:VCPKG_ROOT = "$env:USERPROFILE\vcpkg"
+    # Set up environment for vcpkg + OpenBLAS. Respect an existing VCPKG_ROOT rather than
+    # overwriting it: this used to hardcode "$env:USERPROFILE\vcpkg", so a machine with vcpkg
+    # anywhere else (C:\vcpkg is the common convention, and CI uses VCPKG_INSTALLATION_ROOT)
+    # had its setting silently replaced with a path that does not exist. The failure surfaces
+    # deep in a build script as
+    # `VcpkgNotFound("Could not find Vcpkg root at ...\vcpkg\.vcpkg-root")`, which reads like a
+    # missing install rather than a wrapper overriding a correct one.
+    if (-not $env:VCPKG_ROOT) {
+        $env:VCPKG_ROOT = if ($env:VCPKG_INSTALLATION_ROOT) { $env:VCPKG_INSTALLATION_ROOT }
+                          elseif (Test-Path 'C:\vcpkg\.vcpkg-root') { 'C:\vcpkg' }
+                          else { "$env:USERPROFILE\vcpkg" }
+    }
     $env:CMAKE_GENERATOR = "Ninja"
 
     if ($Fmt) {

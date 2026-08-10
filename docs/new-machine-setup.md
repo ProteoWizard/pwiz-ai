@@ -1309,9 +1309,80 @@ contains `pwiz_tools` directly, so that segment lives inside the `:-` default.
 and fall back to grep until the LSP is needed again. A future iteration could
 narrow `workspaceFolder` to just `Skyline/` or just `Osprey/`.
 
-**Optional: Rust LSP for maccoss/osprey work.** Only if the developer is
-actively working on the Rust `osprey` implementation (a shrinking population
-as the team consolidates on Osprey). The setup:
+**Optional: Rust toolchain + LSP for maccoss/osprey work.** Only if the
+developer is actively working on the Rust `osprey` implementation (a shrinking
+population as the team consolidates on Osprey).
+
+**Install the toolchain first.** `rustup component add` below assumes `rustup`
+already exists; on a machine that has never built Rust it does not, and the
+failure is confusing (`cargo` simply is not a command, and `Build-OspreyRust.ps1`
+reports "The term 'cargo' is not recognized"). Install it with winget:
+
+```powershell
+winget install --id Rustlang.Rustup --accept-source-agreements --accept-package-agreements
+```
+
+That installs `rustup` plus the default stable `x86_64-pc-windows-msvc`
+toolchain, which already includes **clippy** and **rustfmt** - the two
+components the `maccoss/osprey` CI gates on. Nothing else needs adding for
+build/test/lint.
+
+The MSVC toolchain links with the Visual Studio C++ tools, which Phase 2
+already installed; verify with:
+
+```powershell
+& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * `
+    -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+```
+
+`%USERPROFILE%\.cargo\bin` is added to the USER PATH by the installer, so
+**already-open terminals and any running Claude Code session will not see
+`cargo` until they are restarted**. Either restart, or prepend it for the
+current session:
+
+```powershell
+$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+```
+
+Verify:
+
+```powershell
+rustc --version; cargo --version
+rustup component list --installed   # expect clippy-* and rustfmt-*
+```
+
+**The toolchain alone is not enough to build `maccoss/osprey`.** It links
+against native OpenBLAS (via the `openblas-src` crate) and OpenSSL, which on
+Windows come from **vcpkg**. Without them `cargo check` dies in a build script
+with a message that names vcpkg but not what to install:
+
+```
+panicked at openblas-src-0.10.14/build.rs:
+vcpkg failed to find OpenBLAS package ... VcpkgNotFound("No vcpkg installation
+found. Set the VCPKG_ROOT environment variable or run 'vcpkg integrate install'")
+```
+
+The GitHub runners have vcpkg preinstalled, so `.github/workflows/ci.yml` only
+runs the `vcpkg install` line; a dev machine needs vcpkg itself first:
+
+```powershell
+git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+C:\vcpkg\vcpkg.exe install openblas:x64-windows openssl:x64-windows
+[Environment]::SetEnvironmentVariable('VCPKG_ROOT', 'C:\vcpkg', 'User')
+```
+
+Notes:
+
+- **`C:\vcpkg`, not under `C:\proj`.** `mcp__status__get_project_status`
+  auto-discovers git repos by scanning subdirectories of the project root; a
+  vcpkg clone there would show up as a repo in every status call.
+- The package triplet is `x64-windows`, matching CI. These build from source -
+  budget a long, unattended first run.
+- `VCPKG_ROOT` must be set for `openblas-src` to find the packages, and like
+  the Cargo PATH entry it is not visible to already-running processes.
+
+**Then** the LSP component:
 
 ```powershell
 # In a terminal

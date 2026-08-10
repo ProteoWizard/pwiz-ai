@@ -253,6 +253,28 @@ cargo test -p osprey-scoring                   # single crate
 Targets **Rust 1.75+** (see workspace `rust-version`). Check
 `rustup show` if you get toolchain-related compile errors.
 
+**Prerequisites on a fresh Windows machine.** None of the commands above work
+until the toolchain AND its native dependencies are installed - and both
+failures are easy to misread:
+
+| Symptom | Missing |
+|---|---|
+| `Build-OspreyRust.ps1: The term 'cargo' is not recognized` | rustup / the Rust toolchain |
+| build script panic: `vcpkg failed to find OpenBLAS package ... VcpkgNotFound` | vcpkg + `openblas` / `openssl` packages |
+
+The second one is the trap: the toolchain installs cleanly and `rustc --version`
+answers, so the machine looks ready, but `maccoss/osprey` links native OpenBLAS
+through the `openblas-src` crate and cannot build without it. CI hides this -
+the GitHub runners ship vcpkg preinstalled, so `.github/workflows/ci.yml` only
+has to run `vcpkg install openblas:x64-windows openssl:x64-windows`.
+
+Full setup (winget for rustup, then vcpkg) is in
+**ai/docs/new-machine-setup.md**, Phase 7 - "Rust toolchain + LSP for
+maccoss/osprey work". Note that `%USERPROFILE%\.cargo\bin` and `VCPKG_ROOT`
+land in the USER environment, so a Claude Code session that was already running
+when they were installed will keep reporting `cargo` as not found until it is
+restarted.
+
 **If the wrappers don't cover your task** (e.g. full-workspace
 test + clippy for a baseline sanity check, or running the binary from
 a non-default tree): extend the existing script. See "Running against
