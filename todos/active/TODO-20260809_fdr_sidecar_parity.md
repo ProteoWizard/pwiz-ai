@@ -200,6 +200,34 @@ comparer now has a 10-case suite: `ai/.tmp/test_sidecar_comparer.ps1`.
 | secondary | `blib_summary.tsv` 3-ULP rebaseline was unnecessary (that gate is RELATIVE 1e-6) | reverted; golden diff is now protein_fdr only |
 | secondary | mode 3 wired only `-Pass 2` though pass 1 is now an INPUT to pass 2 | both passes compared, prefixed so the stage is unambiguous |
 
+### cr 7 TESTED, not argued - and it points the other way
+
+Ran `regression.ps1 -Dataset Stellar` with `OSPREY_FDR_PROJECTION=0` to exercise the
+batch-hydrate arm directly (log: `ai/.tmp/regression-projoff4.log`). Three assertions fail
+there, none caused by this branch, and `mode1 (vs golden)` PASSES so the output is correct:
+
+* **mode 3** - `run_protein_qvalue` differs on 133/116/141 records. **All 390 are ABSENT from
+  the 1st-pass sidecar** - gap-fill entries created in Stage 6 - so the seed provably cannot
+  touch them (it only reads sidecar records). Every other field agrees on those same records
+  (0 mismatches) and the two 1st-pass sidecars agree exactly (0 of 482,891). What actually
+  differs: the chain's SecondPassFDR node recomputes protein q via
+  `ProteinFdrEngine.RunFirstPass` and assigns **0.0** to gap-fill entries, while
+  straight-through leaves them at **1.0** because nothing assigns one. So the finding's
+  direction is inverted - the chain ASSIGNS a value the seed cannot reach, rather than the
+  seed clobbering a good one. Pre-existing on both sides; the sidecars were never compared
+  before. **Worth a follow-up issue**: should a gap-fill entry carry a run protein q at all?
+* **mode 5** - asserts a log line for the STREAMING rehydrate, which this switch disables.
+* **mode 6** - `Scopes present: (none)`; the library-fragment release does not engage on this
+  arm at all.
+
+5 and 6 are default-arm assertions firing against a switch that turns those paths off. This
+branch adds no streaming, release or logging behavior that could affect either.
+
+Two false starts on this test were mine, not the code's: `OSPREY_ALLOW_UNFIXED_RESIDENT=1`
+(it takes NAMED tokens - `projection-off`), then shell quoting delivering the token with
+literal quotes. Both times the guard named exactly what was wrong. Wrapper that gets it
+right: `ai/.tmp/run-projoff.ps1`.
+
 **Pushed back, left for human review:**
 
 * **cr 7 (batch-hydrate clobber)** - reads the cited evidence backwards, I believe. The
@@ -268,10 +296,15 @@ before the change, 242 after, matching the 5 flips), not a new artifact.
       dataset including `mode1 (vs golden)`. The captured golden reproduces on a fresh run,
       so it encodes behavior rather than a one-off.
 - [x] Commit both repos, push, open both PRs (#4557 and maccoss/osprey#61)
-- [ ] Reviews (deferred by Brendan to unblock the #4522 session): `/code-review max` on the
-      branch, and Copilot's automatic pass on #4557
-- [ ] TeamCity Osprey Perf/Regression - manual, must be triggered on `pull/4557`, NEVER the
-      named branch. ASK Brendan before triggering.
+- [x] Reviews: Copilot (2 findings, both fixed, threads replied to and RESOLVED) and
+      `/code-review max` (15 findings; 13 applied, 2 pushed back with evidence)
+- [x] Merged master into the branch (`d6d6a6d69b`) - only #4556 and #4551, neither touching
+      Osprey, so the gate results above still stand
+- [x] TeamCity Osprey Perf/Regression triggered on `pull/4557` (build 4128246) with
+      Brendan's explicit go-ahead - RUNNING
+- [ ] Confirm TeamCity green, then the PR is merge-ready pending #4522's readiness
+- [ ] Follow-up issue: gap-fill entries get `run_protein_qvalue` 0.0 on the batch-hydrate
+      arm and 1.0 on straight-through (see below) - pre-existing, newly visible
 
 ## Is the bug in Rust too? - ANSWERED 2026-08-10: YES, IDENTICALLY
 
