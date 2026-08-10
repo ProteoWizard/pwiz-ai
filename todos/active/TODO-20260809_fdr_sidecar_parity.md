@@ -142,12 +142,11 @@ must not bless goldens first.
       1,448,698 1st-pass + 994,899 2nd-pass records). Stage 7 returning to green is the
       independent evidence that the Rust fix reproduces the C# one: both sides moved the
       protein-FDR result the same way, from separately written code.
-- [ ] `regression.ps1 -Dataset All` - IN PROGRESS (started 2026-08-10 ~08:45, ~1h20).
-      Pre-rebaseline evidence run: its mode-3 legs do not depend on the golden, so they
-      are valid now, and StellarGenDecoyEntrap exercises the Tier-2 true-FDP ceilings.
+- [x] `regression.ps1 -Dataset All` pre-rebaseline evidence run - **all three gates pass**
+      (table below). Only red is `mode1 (vs golden)` on all four datasets.
 - [ ] Rebaseline the golden - **APPROVED by Brendan 2026-08-10**, conditional on the
-      direction and changes looking correct. Gated on the three checks below before
-      running `-Dataset All -CreateGolden`.
+      direction and changes looking correct; all three gates met, so
+      `-Dataset All -CreateGolden` is RUNNING (started ~09:50).
 - [ ] Verification `-Dataset All` after the rebaseline (a golden captured but never
       re-checked against a fresh run can bake in a one-off)
 - [ ] Commit both repos + force-push the branch (rebased this morning, so the remote ref
@@ -328,12 +327,37 @@ run." So the entrapment oracle survives the refresh and keeps judging this chang
 retires the earlier open question about needing a separate FDRBench run: the oracle is
 already wired into the gate.
 
+### Pre-rebaseline `-Dataset All` - all three gates met (2026-08-10)
+
+Every leg green on all four datasets EXCEPT `mode1 (vs golden)`, which is the rebaseline
+itself. Specifically:
+
+| gate | result |
+|---|---|
+| 1. `mode3 (per-file FDR sidecars==straight)` | **PASS on all four datasets** - the defect is fixed everywhere, not just on Stellar |
+| 2. `mode1b (FDR sanity bounds)` | **PASS** on StellarLibDecoy, StellarGenDecoyEntrap, Astral - AND on their `mode5 (rehydrate FDR sanity bounds)` variants |
+| 3. `mode1 (vs golden)` failures | confined to the SAME three protein-FDR columns on all four; no other column, no new failure mode |
+
+Gate 2 is the important one. Those are `MaxPass1Fdp` / `MaxAbsTilt` / `CoinTolerance`, the
+Tier-2 entrapment ceilings `-CreateGolden` deliberately does NOT regenerate. **Entrapment-
+measured true FDP is still inside a bound that predates this change**, which is independent
+confirmation of the direction rather than an argument from first principles. It also means
+the fix cannot have degraded calibration and then had the rebaseline hide it.
+
+`mode1b (diagnostics vs golden): PASS` everywhere too - the diagnostics golden did not move.
+Only the Stage 7 protein FDR dump did.
+
 ### Per-dataset golden movement - the mechanism corroborated
 
-| dataset | mode 1 golden issues |
-|---|---|
-| Stellar (generated decoys) | 3: `best_peptide_score` 126/4579, `group_qvalue` 914/4579, `is_target_winner` 5/4579 |
-| StellarLibDecoy (library decoys) | **1**: `best_peptide_score` 98/4495 only - **no** q change, **no** winner flip |
+| dataset | decoys | groups | `best_peptide_score` | `group_qvalue` | winner flips |
+|---|---|---|---|---|---|
+| Stellar | generated | 4,579 | 126 | 914 (20%) | 5 |
+| StellarLibDecoy | **library** | 4,495 | 98 | **0** | **0** |
+| StellarGenDecoyEntrap | generated | 26,714 | 665 | 13,657 (51%) | 40 |
+| Astral | generated | 9,470 | 107 | 1,287 (14%) | 2 |
+
+`best_peptide_score` moves UPWARD on every dataset (e.g. Astral 8.056 -> 12.134,
+StellarGenDecoyEntrap 1.200 -> 10.103), and the q movement tracks the DECOY SOURCE:
 
 That difference is a prediction of the decoy-skew mechanism, not a wrinkle in it. A target's
 picked-protein q depends on how many DECOY winners outrank it. On StellarLibDecoy the scores
