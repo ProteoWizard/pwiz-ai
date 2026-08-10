@@ -10,7 +10,9 @@
 - **GitHub Issue**: [#4553](https://github.com/ProteoWizard/pwiz/issues/4553)
 - **Module**: `osprey`
 - **Other labels**: none yet (candidate: `bug`)
-- **PR**: (pending)
+- **PR**: [#4557](https://github.com/ProteoWizard/pwiz/pull/4557) (pwiz, label `osprey`) +
+  [maccoss/osprey#61](https://github.com/maccoss/osprey/pull/61) (Rust, branch
+  `fix/pass2-restore-pass1-scalars`) - both opened 2026-08-10, reviews to follow
 - **Requester/Reporter**: none - found by Brendan and Claude while building the FDRBench
   oracle for #4486. No credit line (Osprey developers on Osprey code).
 
@@ -206,10 +208,14 @@ rebase. If you need the other ordering, say so and it comes back out.
 - [ ] Rebaseline the golden - **APPROVED by Brendan 2026-08-10**, conditional on the
       direction and changes looking correct; all three gates met, so
       `-Dataset All -CreateGolden` is RUNNING (started ~09:50).
-- [ ] Verification `-Dataset All` after the rebaseline (a golden captured but never
-      re-checked against a fresh run can bake in a one-off)
-- [ ] Commit both repos + force-push the branch (rebased this morning, so the remote ref
-      is stale). Nothing is committed yet.
+- [x] Verification `-Dataset All` after the rebaseline - **48/48 PASS**, every leg on every
+      dataset including `mode1 (vs golden)`. The captured golden reproduces on a fresh run,
+      so it encodes behavior rather than a one-off.
+- [x] Commit both repos, push, open both PRs (#4557 and maccoss/osprey#61)
+- [ ] Reviews (deferred by Brendan to unblock the #4522 session): `/code-review max` on the
+      branch, and Copilot's automatic pass on #4557
+- [ ] TeamCity Osprey Perf/Regression - manual, must be triggered on `pull/4557`, NEVER the
+      named branch. ASK Brendan before triggering.
 
 ## Is the bug in Rust too? - ANSWERED 2026-08-10: YES, IDENTICALLY
 
