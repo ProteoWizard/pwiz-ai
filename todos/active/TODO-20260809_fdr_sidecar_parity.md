@@ -174,6 +174,62 @@ this branch merges with `mode1` red on all four datasets. Proceeding on the firs
 but the golden is committed SEPARATELY from the code so dropping it is one commit, not a
 rebase. If you need the other ordering, say so and it comes back out.
 
+## Review round 1 - Copilot (2) + `/code-review max` (15) - 2026-08-10
+
+Every finding verified against the code before acting; two were pushed back on rather than
+applied. Testing the FIRST round of fixes caught a bug in my own fix (`-f` binds tighter
+than `+` in PowerShell, so the new message emitted raw `{0}` braces), which is why the
+comparer now has a 10-case suite: `ai/.tmp/test_sidecar_comparer.ps1`.
+
+**Applied.** The comparer was rewritten rather than patched finding-by-finding:
+
+| finding | what was wrong | fix |
+|---|---|---|
+| Copilot 1 / cr 4 | Only intersecting entry_ids compared; count arithmetic missed set differences and went NEGATIVE on duplicates | TRUE set difference over distinct ids, duplicates counted and reported |
+| Copilot 2 | Short-header / size-mismatch returned null with no reason | Named problem on every path |
+| cr 2 | Header pass byte at [9] never validated - a mis-stamped sidecar every canonical reader REJECTS would compare PASS | `-Pass` now validated against the header |
+| cr 3 | `Offsets[]` / `FieldNames[]` parallel arrays separately bounded the compare and report loops - extending one silently green | ONE `Fields[]` table; it cannot drift against itself |
+| cr 5 | `Compared` computed and never read - zero-record sidecars reported PASS | Liveness assert in the comparer AND in regression.ps1; PASS line now prints the record count |
+| cr 9 | Unchecked `ulong` size arithmetic wraps, then walks off the buffer and kills every remaining dataset | `checked`, matching the canonical reader |
+| cr 10 | `File.ReadAllBytes` unguarded, throwing out of an `Add-Type` static under `$ErrorActionPreference='Stop'` | try/catch to an issue line |
+| cr 11 | Last-wins duplicate map: byte-identical files could report a diff, and drift in a non-last duplicate was invisible | duplicates reported explicitly |
+| cr 14 | `Math.Abs(NaN-NaN)` is NaN, so byte-identical NaN records "differed" | bit-equality fast path first |
+| cr 6 / 13 | Comments factually wrong: `transfer` IS a frozen mode and DOES write Score; "recomputes five" did not reconcile; and Score IS an input to Stage-8 protein FDR | corrected; the warning now states the real consequence |
+| cr 12 | `ReadRecords` may return false AFTER partial callbacks; mutating in the callback left a half-seeded pool | stage into a buffer, apply only on a clean read |
+| cr 15 | The restore's whole-run sidecar read was billed to `[STAGE-WALL] second-pass-fdr` | own stopwatch, own line |
+| secondary | `blib_summary.tsv` 3-ULP rebaseline was unnecessary (that gate is RELATIVE 1e-6) | reverted; golden diff is now protein_fdr only |
+| secondary | mode 3 wired only `-Pass 2` though pass 1 is now an INPUT to pass 2 | both passes compared, prefixed so the stage is unambiguous |
+
+**Pushed back, left for human review:**
+
+* **cr 7 (batch-hydrate clobber)** - reads the cited evidence backwards, I believe. The
+  comment at `PerFileRescoreTask.cs:514-519` says the pre-existing sidecar divergence "is
+  tracked separately in **#4553**, which also covers the regression.ps1 gap that lets it
+  pass green (mode 3 compares the blib, never these sidecars)" - i.e. THIS issue and the
+  very leg added here. Mode 3 is now green on all four datasets, so the seed makes the two
+  routes agree, which is the stated goal. Tested directly with `OSPREY_FDR_PROJECTION=0`
+  to exercise the batch-hydrate arm rather than argue it.
+* **cr 8 (off-stratum mixed provenance)** - real observation, genuine design question: an
+  off-stratum survivor ends with pass-2 Score and pass-1 experiment q / Pep. Which
+  provenance that row SHOULD carry is a decision about the protein-compact contract, not a
+  defect in this fix, and it is not a change to make unreviewed. Worth deciding alongside
+  #4522's `ExperimentAggregateScore` work, which touches the same map-back.
+
+**Golden disclosure corrected.** Commit `a23e246fd0`'s message overclaims and the PR body
+has been fixed to match measurement. Actual per-dataset movement:
+
+| dataset | best_peptide_score | passing at 1% |
+|---|---|---|
+| stellar | 126 up, 0 down | 4342 -> 4337 (**-5**) |
+| stellar-libdecoy | 98 up, 0 down | 4253 -> 4253 (0) |
+| stellar-gendecoy-entrap | 665 up, 0 down | 21861 -> **21821 (-40)** |
+| astral | 104 up, **3 down** | 8909 -> **8912 (+3)** |
+
+So "upward everywhere" was wrong (astral has 3 down), the shift is NOT uniformly
+conservative (astral GAINS 3 proteins), and the largest ID delta (-40) went unmentioned.
+The `NaN` in flipped rows is pre-existing convention for a non-winner group (237 such rows
+before the change, 242 after, matching the 5 flips), not a new artifact.
+
 ## Tasks
 
 - [ ] **(from #4522)** Seed `ExperimentAggregateScore` too, once that branch is merged/rebased -
