@@ -687,6 +687,11 @@ Both of this branch's repos are now **rebased onto their branches, cleanly, and 
 Commits (nothing pushed): pwiz `11b238d706`, `1a76f4ee57`, `aa92ab413f` on top of
 `a23e246fd0`; osprey `669480b`, `6e4337d` on top of `6548ea9`.
 
+**One more commit is expected on #4557** (and maccoss/osprey #61) addressing Copilot and
+`/code-review` feedback, possibly as a force-push. Fetch and rebase onto their tip BEFORE the
+expensive `-Dataset All` run and before blessing any golden - a baseline captured on a stale
+base is silently wrong - and fetch once more immediately before opening the PR.
+
 **Next session handoff**: read `ai/.tmp/handoff-20260808_peak_coassignment_diagnostics.md` -
 it carries the night-session goal (stacked PR merge-ready by EU morning), the ordering with
 #4557, the Rust PATH/VCPKG_ROOT trap, the regression gotchas, and the three open questions
