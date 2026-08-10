@@ -9,7 +9,7 @@
 - **GitHub Issue**: [#4486](https://github.com/ProteoWizard/pwiz/issues/4486)
 - **Module**: `osprey`
 - **Other labels**: `performance`
-- **PR**: (pending)
+- **PR**: [#4554](https://github.com/ProteoWizard/pwiz/pull/4554)
 - **Requester/Reporter**: none (filed by Brendan, developer of Osprey — no credit line)
 
 ## Objective
