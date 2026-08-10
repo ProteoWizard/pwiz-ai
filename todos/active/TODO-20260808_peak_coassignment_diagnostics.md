@@ -405,3 +405,14 @@ entrapment 3.78x / 3.84x and decoy 0.33x / 0.71x. The direction and magnitude ba
 
 Starting work on this issue. Created branch and TODO; next step is locating the
 `--model-diagnostics` report generation and the per-file apex RT source in Osprey.
+
+### 2026-08-10 - Session end, handed off
+
+Panel complete except the decoy class. Targets and entrapment correct and cross-checked; decoy
+count wrong in the C# (96 / 36,228 against an oracle of 675 / 468). Offline estimator committed as
+`ai/scripts/Osprey/Entrapment/coassign_decoy_estimate.py` - the C# is right when it reproduces it.
+Branch `Skyline/work/20260808_peak_coassignment_diagnostics`, 3 commits, clean, 576 tests / 0
+warnings. Goldens deliberately not regenerated. NOT PR-ready.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260808_peak_coassignment_diagnostics.md` before starting work.
