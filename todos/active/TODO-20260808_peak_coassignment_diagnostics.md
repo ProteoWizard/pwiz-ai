@@ -303,6 +303,42 @@ the co-assignment partner the sequence this precursor was derived from (same com
 construction), or an unrelated target? That is a base-id / source-peptide test at the match site,
 and it means the same thing for entrapment and decoys.
 
+
+## FIRST BELIEVABLE DECOY ESTIMATE (2026-08-10, offline, StellarGenDecoyEntrap 3-file)
+
+Computed by `ai/.tmp/coassign_decoy_estimate.py` - deliberately INDEPENDENT of the C# panel, whose
+decoy count is still wrong. Reads the run's own sidecars + parquet, applies the score-cutoff rule,
+and uses max() across runs as the experiment aggregate (correct for the DEFAULT aggregation, which
+these runs use; wrong under OSPREY_EXPERIMENT_AGG mean-best-N).
+
+Acceptance boundary (lowest accepted target/entrapment composite score): run -0.1996 / -0.2047 /
+-0.1532 per file; experiment +0.0120.
+
+| scope | class | detected | shares a peak | outscored | rate | vs target |
+|---|---|---|---|---|---|---|
+| run | target | 31,103 | 1,245 | 678 | 2.18% | 1.00x |
+| run | entrapment | 455 | 36 | 32 | **7.03%** | **3.23x** |
+| run | decoy | 675 | 5 | 4 | **0.59%** | **0.27x** |
+| experiment | target | 28,698 | 1,733 | 964 | 3.36% | 1.00x |
+| experiment | entrapment | 228 | 28 | 27 | **11.84%** | **3.53x** |
+| experiment | decoy | 468 | 8 | 7 | **1.50%** | **0.45x** |
+
+**The finding: decoys do NOT track entrapment.** Entrapment co-assigns at 3.2-3.5x the target base
+rate; decoys co-assign at 0.27-0.45x, i.e. BELOW the targets they are meant to model. If the FDR
+statistics assume the decoy and entrapment distributions match, this is the axis on which they do
+not - and it is the deviation the panel exists to surface.
+
+Robust to the m/z approximation below: an earlier run with more unresolved modification masses gave
+entrapment 3.78x / 3.84x and decoy 0.33x / 0.71x. The direction and magnitude barely moved.
+
+**Caveats - do not quote these as final:**
+* 1,470,828 rows still have an unparseable modification, so their m/z is approximate. The UniMod
+  accession forms now resolve; something else (non-standard residues?) does not. Fix before quoting.
+* Decoys come to 2.14% (run) / 1.62% (experiment) of the target+entrapment set where ~1% is expected
+  by construction, so the acceptance boundary is slightly too permissive. "Accepted" here is ANY row
+  with q <= cut rather than the best-per-precursor q, which widens the set.
+* 3 Stellar files. Needs a real dataset (SEA-AD, 82 files, ~1:1 entrapment) to mean much.
+
 ## Tasks
 
 - [x] Locate the Stage 5 `--model-diagnostics` report generation and the per-file apex RT source
