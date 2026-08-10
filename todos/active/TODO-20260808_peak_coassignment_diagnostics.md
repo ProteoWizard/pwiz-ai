@@ -595,7 +595,17 @@ arranging for your branch to be pushed so I can rebase on it.
 - [ ] **BLOCKED on #4553**: pass-2 decoy row (36,228) - a symptom of the zeroed-score defect,
       not a separate bug. Re-measure after rebasing onto that branch.
 - [ ] The symmetric derived-from vs unrelated split for decoys AND entrapment (agreed with
-      Brendan) - without it the 6.39x / 3.23x enrichments are not comparable to the target rate
+      Brendan) - without it the 6.39x / 3.23x enrichments are not comparable to the target rate.
+      `/code-review max` independently rediscovered this from the code alone, and added a
+      point the earlier analysis missed: the twin pair is ALSO mislabelled as a PTM positional
+      isomer, because `sameBase` compares stripped modified sequences and a decoy's library
+      entry carries its target's sequence, so the two strip to the same string. The
+      "of which PTM isomer" column therefore counts twins. Fix with the split, not separately.
+- [ ] **Pass-2 experiment aggregate is the PASS-1 value on the DEFAULT path** - see the
+      review section below. Prime suspect for open question 1.
+- [ ] `_runBest` is O(files x distinct entry ids) and never released after `SealCutoffs` -
+      projected several GB at 82 files. The panel is now always-on, and the 3-file gate
+      cannot show this. Needs a real measurement before an Astral-scale run.
 - [ ] Report the pass1 -> pass2 delta in the panel (how much co-assignment reconciliation adds)
 - [x] Rebase onto #4553 once it is pushed, then re-run and re-measure pass 2
 - [ ] Regenerate the diagnostics golden **on top of the #4553 branch** - it does NOT wait for
@@ -696,6 +706,58 @@ base is silently wrong - and fetch once more immediately before opening the PR.
 it carries the night-session goal (stacked PR merge-ready by EU morning), the ordering with
 #4557, the Rust PATH/VCPKG_ROOT trap, the regression gotchas, and the three open questions
 that must NOT be silently resolved.
+
+### 2026-08-10/11 (night session) - `-Dataset All` green, golden rebaselined, review applied
+
+**`-Dataset All` on the integrated branch, before any change**: every leg PASS on all four
+datasets except the six diagnostics-golden legs (mode1b + mode5), each exactly 28 issues, all
+`metric not in golden`. **`mode1 (vs golden)` PASSES on all four**, so this branch moves no
+search result. That was the precondition for rebaselining and it is now confirmed on four
+datasets rather than one.
+
+**Golden rebaselined** (`f91bd0d629`, committed separately from code as #4553 did):
+`diagnostics.tsv` +28 / -0 on astral, stellar-libdecoy and stellar-gendecoy-entrap. Stellar
+has no change because it is the one dataset that does not carry `--model-diagnostics`.
+`protein_fdr.tsv` showed dirty in all four but with ZERO content change - pure line-ending
+churn from the capture - and was restored rather than committed.
+
+**`/code-review max` (`02711e0cde`)**. First invocation was mis-targeted at the BASE branch and
+reviewed #4557 instead; that output is written up in `ai/.tmp/review-findings-for-4557.md` for
+Brendan and the #4553 session, and nothing in their code was touched. Re-run against this
+branch's range it returned 15 findings. Eight applied:
+
+* **Resident pass-2 path lacked the decoy base-id m/z fallback** that `PeakCoAssignmentSource`
+  has - and `BuildPrecursorMzLookup`'s own doc comment described the fallback it was not
+  doing. The streaming comment records the cost of omitting it: ~97% of detected decoys
+  dropped, decoy rate 30x too low. This one fed the PASS 2 panel, which has no
+  admitted-vs-tallied check to expose it. The mandatory fix of the set.
+* Gap-fill (`AssignPerRunQ`) and `RunSimpleFdr` never set `ExperimentAggregateScore`, so a real
+  experiment q was persisted beside `ResetScores`' 0.0.
+* A NaN apex RT casts to `int.MinValue` on net472 and threw out of a diagnostics-only panel.
+* `PeakCoAssignmentSource.Build` promised "never throws" with no top-level guard.
+* A missing `apex_rt` column substituted 0.0, which would report ~100% co-assignment from no
+  data at all.
+* The sidecar FORMAT VERSION was not in the first-pass resume validity key - live, since the
+  format just moved 3 to 4.
+* The HTML printed an enrichment ratio the KPI beside it withheld (gated on the row n only,
+  not the target denominator).
+
+**NOT fixed, deliberately - both are decisions, not oversights:**
+
+1. **`ComputePass2TransferCompeteFull` recomputes experiment q but keeps the pass-1
+   aggregate**, and this is the DEFAULT (`protein-compact`) path, not just `transfer-compete`
+   as the reviewer framed it. The comparison stays self-consistent (both sides are pass-1
+   scores) but the ACCEPTANCE SET is pass-2, so the boundary is "the lowest pass-1 aggregate
+   among precursors pass 2 accepted". **This is the prime suspect for open question 1** (pass-2
+   experiment decoys 71 against run 1,049). The obvious fix is wrong: `StreamedCompetitionState`
+   exposes the winner only via `_winnerLoc`, keyed by BASE ID - which a target and its decoy
+   SHARE - so deriving a pass-2 aggregate from it would hand every decoy its target's score.
+   Needs a decision on what the pass-2 experiment aggregate should be.
+2. **`_runBest` memory** - see the task list above.
+
+Also refuted while verifying, so nobody re-derives it: the pass-2 panel does NOT mix rankings
+via `AssignPerRunQ`. That path carries the experiment q from the pass-1 record too, so q and
+aggregate are a consistent pass-1 pair. The mixing is real only on the default path in (1).
 
 ### 2026-08-10 - Earlier: pass 1 correct, sidecar v4 landed both sides
 
