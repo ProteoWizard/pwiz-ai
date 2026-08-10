@@ -5,7 +5,8 @@
 - **Worktree**: `C:\proj\pwiz`
 - **Base**: `master`
 - **Created**: 2026-08-09
-- **Status**: In Progress
+- **Status**: In Progress - both fixes written and green on Stellar (regression mode 3 +
+  cross-impl all legs); awaiting `-Dataset All`, then the approved golden rebaseline
 - **GitHub Issue**: [#4553](https://github.com/ProteoWizard/pwiz/issues/4553)
 - **Module**: `osprey`
 - **Other labels**: none yet (candidate: `bug`)
@@ -87,40 +88,138 @@ values, so the q itself is consistent - only its propagation is not.
       fields per entry_id, byte-equality fast path, per-field failure tallies
 - [x] Wire it into the four-task-chain leg as its own summary line
 - [x] Verify it FAILS on the current divergence (Pass=False, Compared=260419, Issues=9)
-- [ ] Decide whether Rust has the same defect (see below) before choosing the fix
-- [ ] Fix the divergence - two candidates, both narrow:
-      1. have the frozen pass-2 modes write `entry.Score` (the frozen-model score is already
-         in hand) and restore/recompute `RunProteinQvalue` after the reset; or
-      2. make `ResetScores()` stop clearing fields no caller intends to recompute, so it
-         means "this peak moved" rather than "discard everything"
-- [ ] Re-run `regression.ps1 -Dataset All` green with the check in place
-- [ ] Consider whether the golden needs rebaselining (the fix changes sidecar bytes)
+- [x] Decide whether Rust has the same defect (see below) before choosing the fix -
+      **ANSWERED: yes, identically. Shared design defect, not a port error.**
+- [x] Add the cross-impl sidecar comparison FIRST, so a one-sided fix cannot pass:
+      `ai/scripts/Osprey/Compare/Compare-FdrSidecars-Crossimpl.ps1`, wired into
+      `Compare-EndToEnd-Crossimpl.ps1`, sharing the decoder with the regression leg.
+      Verified GREEN on unfixed code (both sides equally wrong), then RED after the
+      C#-only fix - which is the property it exists to have.
+- [x] Fix the C# side (option 1, chosen 2026-08-10): seed `Score` + `Pep` +
+      `RunProteinQvalue` from the 1st-pass sidecar ahead of the mode dispatch, then let
+      the frozen-model score overwrite `Score`. THREE fields, not the two first diagnosed
+      (see below - `pep` was found by fixing two and re-running the gate)
+- [x] Fix the Rust side identically (`fmt` / `clippy` / `cargo test` all green)
+- [x] `regression.ps1 -Dataset Stellar` with both fixes: **mode 3 sidecars PASS**, every
+      other leg PASS; only `mode1 (vs golden)` red, which is the rebaseline below
+- [x] Re-run the cross-impl gate with BOTH sides fixed - **OVERALL: PASS** on Stellar
+      3-file (precursors 29364==29364, Stage 7 PASS, blib PASS, sidecars PASS over
+      1,448,698 1st-pass + 994,899 2nd-pass records). Stage 7 returning to green is the
+      independent evidence that the Rust fix reproduces the C# one: both sides moved the
+      protein-FDR result the same way, from separately written code.
+- [ ] `regression.ps1 -Dataset All` - IN PROGRESS (started 2026-08-10 ~08:45, ~1h20).
+      Pre-rebaseline evidence run: its mode-3 legs do not depend on the golden, so they
+      are valid now, and StellarGenDecoyEntrap exercises the Tier-2 true-FDP ceilings.
+- [ ] Rebaseline the golden - **APPROVED by Brendan 2026-08-10**, conditional on the
+      direction and changes looking correct. Gated on the three checks below before
+      running `-Dataset All -CreateGolden`.
+- [ ] Verification `-Dataset All` after the rebaseline (a golden captured but never
+      re-checked against a fresh run can bake in a one-off)
+- [ ] Commit both repos + force-push the branch (rebased this morning, so the remote ref
+      is stale). Nothing is committed yet.
 
-## Is the bug in Rust too? - OPEN, and likely
+## Is the bug in Rust too? - ANSWERED 2026-08-10: YES, IDENTICALLY
 
-`OverlayRescoredEntries`' own comment at `:1466` says the reset is "to match Rust's
-behavior", so Rust performs the same clear. Whether Rust's pass 2 restores `Score` /
-`run_protein_qvalue` afterwards is unverified. Rust writes the identical sidecar
-(`pipeline.rs`, `run_protein_qvalue` at bytes `[52..60]`), so a Rust straight-through run
-diffs directly against the C# one.
+**This is a shared design defect, not a port error. Both implementations need the same
+fix, and the C#/Rust parity gate has been agreeing on the wrong value.**
 
-If Rust also persists zeros, this is a shared design defect rather than a port error - and
-the C#/Rust parity gate has been agreeing on the wrong value, which is the more important
-finding.
+### Source-level proof (Rust)
 
-**Attempt 2026-08-09 FAILED to launch, not a result**:
-`Compare-EndToEnd-Crossimpl.ps1 -TestBaseDir D:\test\osprey-runs\crossimpl-4553` errored
-immediately - it copies the dataset FROM `<TestBaseDir>\stellar`, so the base dir must
-already hold the mzML. Stage the data there (or use the default base) and re-run.
+Rust reproduces every step of the C# defect:
+
+1. **The reset.** Stage 6 replaces the stub wholesale via `CoelutionScoredEntry::to_fdr_entry()`
+   (`osprey-core/src/types.rs:987`), copying the freshly-searched entry's fields. `run_search`
+   constructs those with `score: 0.0`, all six q-values `1.0`, `pep: 1.0`
+   (`pipeline.rs:8403-8410`). Same eight-field clear as C#'s `ResetScores()`, done by
+   replacement instead of mutation. Rust's own comments confirm the intent - `pipeline.rs:1881`
+   and `:6390` both say the post-rescore overlay "already zeroed" the in-memory copy.
+2. **The five-field map-back.** `compute_pass2_transfer_compete` (`pipeline.rs:6277`) writes
+   back exactly `run_precursor_qvalue`, `run_peptide_qvalue`, `experiment_precursor_qvalue`,
+   `experiment_peptide_qvalue`, `pep` (`:6425-6446`). It never writes `score`, never writes
+   `run_protein_qvalue` - the same five of eight as C# `ComputePass2TransferCompeteFull`.
+   `pass2_qvalue::compute_full_population_fdr_streaming` returns only `(run_q, exp_q, pep)`,
+   so the two missing fields are absent from the contract, not dropped at the call site.
+3. **The sidecar is written from those stubs.** `write_fdr_scores_sidecar`
+   (`pipeline.rs:1828`, called at `:2128`) serializes `per_file_entries` directly, immediately
+   after the pass-2 block (`:5783`). Its comment at `:5776` claims `per_file_entries` "already
+   carry the authoritative final-pass scores" - demonstrably false for the frozen modes.
+4. **The same accidental repair on the distributed route.** `load_fdr_scores_sidecar`
+   (`pipeline.rs:2064-2073`) restores all seven scalars including `score` and
+   `run_protein_qvalue`, and `hydrate_for_rescore` (`rescore.rs:193`) calls it. Identical to
+   C#'s `OverlayFirstPassSidecar`.
+
+### Measured, both implementations, same run (Astral 3-file, 3,458,574 records)
+
+From a preserved cross-impl run at
+`D:\test\osprey-runs\astral\_endtoend_crossimpl\{cs,rust}` (analysis scripts:
+`ai/.tmp/sidecar_defect_check.py`, `ai/.tmp/sidecar_score_magnitude.py`):
+
+| | C# | Rust |
+|---|---|---|
+| `score`: real in 1st -> **0** in 2nd | **227,327** (6.57%) | **227,327** (6.57%) |
+| `run_protein_qvalue`: real -> **1.0** | **60,923** (1.76%) | **60,923** (1.76%) |
+| zero `score` in 2nd (total) | 236,127 (6.83%) | 236,127 (6.83%) |
+| `entry_id` absent from 1st (gap-fill) | 8,800 | 8,800 |
+
+Per-file counts match exactly, not just the totals.
+
+**The zeroed populations are the same records, not merely the same size**: comparing the two
+2nd-pass sidecars entry_id by entry_id gives `zero in C# only = 0`, `zero in Rust only = 0`,
+and `run_protein_qvalue differs = 0` on all three files. Every other field agrees to float
+noise (`score` max abs diff 1.8e-13 on two files; `pep` 4.0e-14). One single entry of
+3.46M exceeds 1e-9 absolute (file `_49`, entry_id 1531881, cs `-8.911570303079918` vs rust
+`-8.911570202905288`, 1.0e-7 abs / 1.1e-8 rel) - noted, unrelated to this defect, not
+investigated.
+
+This also resolves the sub-question the C# `:1466` comment raised: C# resets the "no peak at
+the override boundary" stubs in place, and the measured zeroed sets match Rust's exactly, so
+whatever Rust does there produces the same end state. No divergence hides in that branch.
+
+### Why it matters that BOTH sides are wrong
+
+The corrupted 2nd-pass sidecar has a real consumer: Stage 7 `--join-at-pass=2` reads it
+unconditionally (stated at `pipeline.rs:5779`). A merge node fed a straight-through-written
+sidecar sees `score = 0` for 6.6% of entries and `run_protein_qvalue = 1.0` for 1.8%.
+
+Fixing only C# would introduce a genuine cross-impl divergence that **no gate would catch** -
+`Compare-EndToEnd-Crossimpl.ps1` and the committed golden compare the Stage 7 protein FDR
+dump (per-protein-GROUP columns), never the sidecar. So the fix has to land on both sides, or
+the cross-impl comparison has to gain a sidecar leg first.
+
+**Superseded**: the 2026-08-09 `-TestBaseDir D:\test\osprey-runs\crossimpl-4553` attempt that
+failed to launch. No fresh cross-impl run was needed - a preserved one already had both
+sides' straight-through sidecars.
 
 ## Regression Test
 
-- **Test name**: `regression.ps1` four-task-chain leg, `mode3 (per-file FDR sidecars==straight)`
-- **Test project**: `pwiz_tools/Osprey/regression.ps1` (+ `Regression/FdrSidecars.ps1`)
-- **Fails on master**: **yes** - verified standalone against a preserved
-  `-KeepOutput` run: `Pass=False  Compared=260419  Issues=9`, naming `score`,
-  `pep` and `run_protein_qvalue` per file.
-- **Passes on fix**: not yet - the fix is not written.
+TWO gates, because the defect was symmetric across implementations and needed one guard per
+axis. Neither existed before; each is red on master and green on the fix.
+
+1. **`regression.ps1` four-task-chain leg** - `mode3 (per-file FDR sidecars==straight)`,
+   C#-only, distributed route vs straight-through.
+   - Test project: `pwiz_tools/Osprey/regression.ps1` (+ `Regression/FdrSidecars.ps1`)
+   - Fails on master: **yes** - `Pass=False Compared=260419 Issues=9`, naming `score`,
+     `pep` and `run_protein_qvalue` per file.
+2. **`Compare-FdrSidecars-Crossimpl.ps1`** - C# vs Rust, both passes, wired into
+   `Compare-EndToEnd-Crossimpl.ps1`.
+   - This one is green on master BY DESIGN: both implementations were wrong in the same
+     way, so it can only catch a ONE-SIDED fix. Verified it does: green on unfixed code,
+     red the moment C# alone was fixed, green again once Rust matched. Without it, fixing
+     one side would have shipped a silent cross-impl divergence, since neither the Stage 7
+     comparator nor the golden reads these fields.
+
+- **Passes on fix**: yes, both. Verification sequence actually run, each step measured
+  rather than assumed:
+
+| step | mode 3 sidecars (C#) | cross-impl sidecars | cross-impl Stage 7 |
+|---|---|---|---|
+| neither side fixed | FAIL (9 issues: score, pep, protq x3 files) | PASS (both wrong alike) | PASS |
+| C# `Score` + `RunProteinQvalue` only | FAIL (3 issues: **pep** x3 files) | FAIL | FAIL |
+| C# all three fields | **PASS** | FAIL (Rust unfixed) | FAIL |
+| both sides, all three | **PASS** | **PASS** | **PASS** |
+
+The middle row is why the cross-impl leg had to be built first: with only C# fixed, the
+sidecar leg is the gate that says so.
 
 This is the guard the issue exists to add: the divergence was invisible because the only
 per-file assertion was the blib, which carries neither field.
@@ -170,4 +269,180 @@ and RED against the real divergence; the FIX is not written. The root cause is f
 diagnosed in the section above - do not re-derive it.
 
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260809_fdr_sidecar_parity.md` before starting work.
+`ai/.tmp/handoff-20260809_fdr_sidecar_parity.md` before starting work. NOTE: that file
+predates the 2026-08-10 work and its "next steps" are all done - read this TODO instead;
+the handoff is only still useful for its gotchas list.
+
+### 2026-08-10 (later) - Golden rebaseline approved; what gates it
+
+Brendan approved the rebaseline conditionally: "If the direction and the changes look
+correct, then you can go ahead next with re-baseline." Gated on three checks against the
+in-flight `-Dataset All`, so a rebaseline is not taken on Stellar evidence alone:
+
+1. **mode 3 passes on all four datasets** - the fix itself, independent of any golden.
+2. **Tier-2 entrapment ceilings pass on StellarGenDecoyEntrap** - true FDP under the
+   committed bound.
+3. **mode 1 failures are confined to the three protein-FDR columns** on every dataset.
+
+**The rebaseline cannot launder a calibration regression, by design.** `regression.ps1`
+(the `$datasets` comment block, ~line 327) documents that `MaxPass1Fdp` (Tier-2 ceiling on
+Pass-1 true FDP at a reported 1% q), `MaxAbsTilt` and `CoinTolerance` are committed bounds
+**deliberately NOT regenerated by `-CreateGolden`** - "a rebaseline is exactly how a
+calibration regression gets blessed into the baseline, so this bound must not come from the
+run." So the entrapment oracle survives the refresh and keeps judging this change. That
+retires the earlier open question about needing a separate FDRBench run: the oracle is
+already wired into the gate.
+
+### Per-dataset golden movement - the mechanism corroborated
+
+| dataset | mode 1 golden issues |
+|---|---|
+| Stellar (generated decoys) | 3: `best_peptide_score` 126/4579, `group_qvalue` 914/4579, `is_target_winner` 5/4579 |
+| StellarLibDecoy (library decoys) | **1**: `best_peptide_score` 98/4495 only - **no** q change, **no** winner flip |
+
+That difference is a prediction of the decoy-skew mechanism, not a wrinkle in it. A target's
+picked-protein q depends on how many DECOY winners outrank it. On StellarLibDecoy the scores
+rose (1.277 -> 8.407, same upward direction) yet every q held, which requires that no decoy
+winner moved. On Stellar 914 q's moved, which requires that decoy winners DID move - and
+Stellar is the generated-decoy leg where the zeroed population was measured decoy-skewed
+(52% of decoys vs 25% of targets). Library decoys never run `DecoyGenerator`, and Stage 6
+evidently does not touch them the same way.
+
+So: score restoration is uniform and upward on both datasets; protein-q movement appears
+only where the decoy side was actually being suppressed. That is the signature of a null
+being repaired.
+
+### 2026-08-10 - Rebased; Rust question CLOSED (both implementations, same defect)
+
+Rebased onto master (`9b4b292275` on `843f7e553a`), clean, hunks did not overlap as
+predicted. Branch needs a force-push.
+
+**The open Rust question is answered: Rust has the identical defect** - see the rewritten
+"Is the bug in Rust too?" section above for the source citations and the measured table.
+Confirmed two independent ways: reading the Rust pass-2 map-back (writes the same five of
+eight fields), and measuring a preserved cross-impl run that happened to hold BOTH sides'
+straight-through sidecars. The two implementations zero the same 227,327 scores and the same
+60,923 protein q-values, record for record.
+
+No fresh cross-impl run was needed. The preserved run is
+`D:\test\osprey-runs\astral\_endtoend_crossimpl\{cs,rust}` - if it is still on disk it
+answers sidecar questions in seconds. `D:\test\osprey-runs\crossimpl-4553` remains an empty
+shell from the failed 08-09 launch; nothing was ever staged there.
+
+**Consequence for the fix**: it must land on BOTH sides. Fixing only C# creates a real
+cross-impl divergence that no existing gate would catch, because neither the cross-impl
+comparator nor the golden reads the sidecar. Whether to also add a sidecar leg to
+`Compare-EndToEnd-Crossimpl.ps1` is an open call.
+
+### 2026-08-10 - Comparator added first, then both sides fixed
+
+Deliberate order, at Brendan's direction: add the gate that would catch a one-sided fix,
+prove it green BEFORE the fix, fix C# and watch it go red, then fix Rust and watch it go
+green. Each step verified on Stellar 3-file rather than assumed.
+
+| cross-impl leg | baseline (neither fixed) | C# fixed only |
+|---|---|---|
+| precursors | 29364 == 29364 | 29364 == 29364 |
+| Stage 7 protein FDR | PASS | **FAIL** |
+| blib content | PASS | PASS |
+| **FDR sidecars (new)** | **PASS** | **FAIL** |
+
+The new leg compares BOTH passes. Its 1st-pass half is what distinguishes "pass 2 dropped
+it" from "the runs already diverged upstream", and it earned that keep immediately: on a
+preserved Astral run it flagged ONE record (entry_id 1531881, `score` differing 1.0e-7) in
+the **1st-pass** sidecar, i.e. upstream of anything #4553 touches. The fresh Stellar run is
+clean on both passes, so that record is dataset-specific or an artifact of those older
+binaries. **Open, unchased, unrelated to this fix.**
+
+Implementation note: the comparison had to move into compiled C# (`Add-Type` inside
+`Regression/FdrSidecars.ps1`). The PowerShell per-record loop took over 10 minutes on one
+Astral 3-file pass (6.2M records) and would have been unusable at 82 files; it is 1.9s for
+9.7M records now.
+
+### What the fix moves (Stellar 3-file, C# before vs after)
+
+Peptide level does not move at all - 29364 precursors before and after, blib content still
+bit-parity with Rust. ALL movement is protein-level:
+
+All figures at the 1e-9 the gates use (an exact-equality count also sees 242 sub-1e-9
+`best_peptide_score` wobbles, which are noise and are NOT impact):
+
+| | before | after |
+|---|---|---|
+| protein groups | 4579 | 4579 |
+| `best_peptide_score` changed | - | 126, **all upward** (0 downward) |
+| `group_qvalue` changed | - | 914 (28 better, 886 worse) |
+| `is_target_winner` flipped | - | 5 |
+| **passing at 1% FDR** | **4342** | **4337** (-5, 0.12%) |
+
+Independently confirmed by the golden leg, which flags the same three columns at the same
+counts: `best_peptide_score` 126/4579, `group_qvalue` 914/4579, `is_target_winner` 5/4579.
+
+**Why scores rise but q gets worse - this is the mechanism, and it is the argument that the
+fix is a correction rather than a regression.** Restoring a real discriminant moves a
+suppressed peptide UP (its real score is above the 0 it was parked at; e.g.
+`sp|P17152|TMM11_HUMAN` 1.799 -> 7.454). Both labels rise - but **not equally**: Stage 6
+touches decoys about twice as often as targets (52% vs 25% on Stellar, measured above), so
+the zeroing was suppressing the DECOY null harder than the target signal. Protein FDR was
+therefore reading an artificially weak null and reporting q too low. Restoring the scores
+rebuilds the null, 886 target groups get an honest (worse) q, and 5 lose their pairwise pick
+outright. **The pre-fix protein FDR was anti-conservative; -5 proteins is the cost of
+removing that bias, not lost discovery.**
+
+Brendan's framing is what makes this predictable rather than surprising: the discriminant
+scale is normalized so **zero IS the accept/reject boundary**, so an unknown score parked at
+0 sits exactly at the decision line - which is why mean-best-N deliberately uses the decoy
+mean (a negative value) as its missing-score placeholder instead. An entry whose real score
+is above 0 gets suppressed by the placeholder and one below it gets inflated; because the
+touched population is decoy-skewed, the net was systematically anti-conservative.
+
+Since the discovery set is byte-identical, peptide-level entrapment FDP cannot have moved -
+an FDRBench re-run would be measuring an unchanged quantity. The open question is
+protein-level only.
+
+### THREE fields, not two - found by fixing two and re-running the gate
+
+The root-cause section above named `Score` and `RunProteinQvalue`. Fixing exactly those took
+mode 3 from **9 issues (3 files x 3 fields) to 3 (3 files x 1 field)**, and the survivor was
+`pep` - which the original `Issues=9` had named all along:
+
+```
+Ste-...-900_20: pep differs on 114 record(s); first entry_id=3656  1 -> 0.6118043102892672
+```
+
+Same root cause, third instance: `ResetScores()` clears `Pep`, and the map-back writes it
+**only on the on-stratum path**. The off-stratum branch returns early after carrying
+experiment q, so straight-through keeps 1.0 while the chain keeps its rehydrated pass-1 PEP.
+The chain is the correct side - off-stratum survivors are defined to keep their pass-1
+statistics, which is the rule the code already applies to experiment q two lines above.
+
+So the field-by-field framing was the wrong shape. Exactly three of `ResetScores()`'s eight
+fields are not reliably recomputed by pass 2:
+
+| field | why it is lost |
+|---|---|
+| `Score` | no frozen mode wrote one back at all |
+| `Pep` | written only for on-stratum survivors |
+| `RunProteinQvalue` | written by NO mode; 1st-pass protein FDR is its only producer |
+
+### Where the fix lives
+
+* C# `Pass2FdrSidecar.cs`: `RestorePass1Scalars` (new) seeds all three from the 1st-pass
+  sidecar ahead of the mode dispatch; `ReadFile` then overwrites `Score` with the
+  frozen-model score where the reconciled features resolve.
+* Rust `pipeline.rs`: `restore_pass1_scalars` + `read_fdr_scores_pass1_scalars` (new) at the
+  same point; the `compute_pass2_transfer_compete` map-back overwrites `score` the same way.
+* **Seed, do not override.** Whatever pass 2 genuinely recomputes is written afterwards and
+  wins. What remains is the pass-1 value - which is precisely what the distributed route
+  holds at the same point, because it must rehydrate from that same sidecar. The two routes
+  then agree BY CONSTRUCTION rather than by coincidence, which is the property worth having:
+  a future field added to `ResetScores()` and forgotten by one mode fails the same way, and
+  the seed catches it.
+* Write ordering verified: `SecondPassFdrTask.cs:175` (`ComputeAndPersist`, writes the
+  sidecars) runs BEFORE `:197` (`RunProteinFdr`), so the restored values land in the sidecar
+  AND feed `CollectBestPeptideScores`. The second-pass protein FDR does overwrite
+  `RunProteinQvalue` in memory afterwards (`ProteinFdrEngine.cs:199`), which is harmless -
+  the sidecar is already written.
+* `mode 3` converges rather than shifting: the fix lives in the method BOTH routes execute,
+  so the chain route's overlay-supplied 1st-pass score is overwritten by the same
+  seed-then-override logic. Both routes land on the frozen pass-2 score.

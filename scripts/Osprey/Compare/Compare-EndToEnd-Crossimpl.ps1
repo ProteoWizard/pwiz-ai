@@ -28,6 +28,9 @@
     Comparisons:
       Stage 7 protein FDR dump (Compare-Stage7-Crossimpl.ps1, 1e-9)
       Blib content (Compare-Blib-Crossimpl.ps1, SQL row+col 1e-9)
+      Per-file FDR score sidecars (Compare-FdrSidecars-Crossimpl.ps1,
+        per-field 1e-9, both passes) -- the only leg that reads a
+        per-entry SVM score or run_protein_qvalue; see issue #4553
       Precursor counts from per-side log lines
 
 .PARAMETER Dataset
@@ -436,8 +439,23 @@ Write-Host ("    Blib content (SQL row+col 1e-9): {0}  ({1})" -f `
     $(if ($blibOk) { 'PASS' } else { 'FAIL' }), $blibLog) `
     -ForegroundColor $(if ($blibOk) { 'Green' } else { 'Red' })
 
+# Per-file FDR score sidecars (per-field 1e-9). The two comparisons above read
+# per-protein-GROUP columns and the blib; neither carries a per-entry SVM score
+# or run_protein_qvalue, which is how issue #4553 stayed invisible in BOTH
+# implementations at once. Stage 7 (--join-at-pass=2) reads these files, so a
+# divergence here is not cosmetic.
+$sidecarCmp = Join-Path $scriptDir 'Compare-FdrSidecars-Crossimpl.ps1'
+$sidecarLog = Join-Path $rootDir 'fdr_sidecar_compare.log'
+Write-Host "    Comparing FDR sidecars (Compare-FdrSidecars-Crossimpl.ps1)..." -ForegroundColor DarkGray
+& pwsh -File $sidecarCmp -RustDir $rustDir -CsDir $csDir *>&1 |
+    Tee-Object -FilePath $sidecarLog | Out-Null
+$sidecarOk = ($LASTEXITCODE -eq 0)
+Write-Host ("    FDR sidecars (per-field 1e-9): {0}  ({1})" -f `
+    $(if ($sidecarOk) { 'PASS' } else { 'FAIL' }), $sidecarLog) `
+    -ForegroundColor $(if ($sidecarOk) { 'Green' } else { 'Red' })
+
 Write-Host ""
-if ($precOk -and $stage7Ok -and $blibOk) {
+if ($precOk -and $stage7Ok -and $blibOk -and $sidecarOk) {
     Write-Host "OVERALL: PASS  -- Rust and C# end-to-end in-memory bit-parity at 1e-9 on $Dataset $($mzmls.Count)-file" -ForegroundColor Green
     Write-Host ("  Walls: Rust {0}, C# {1}" -f (Format-Duration $rustWall), (Format-Duration $csWall))
     exit 0
