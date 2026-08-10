@@ -1351,6 +1351,12 @@ rustc --version; cargo --version
 rustup component list --installed   # expect clippy-* and rustfmt-*
 ```
 
+`ai/scripts/Verify-Environment.ps1` reports all of this (rustup, clippy/rustfmt, vcpkg +
+OpenBLAS/OpenSSL, rust-analyzer). The rows stay **INFO** on a machine with no Rust toolchain -
+they never fail the check for a developer who does not touch `maccoss/osprey` - and only become
+warnings once `cargo` is present, i.e. once the machine has declared intent. `-Skip rust`
+silences them on a machine that has Rust for unrelated reasons.
+
 **The toolchain alone is not enough to build `maccoss/osprey`.** It links
 against native OpenBLAS (via the `openblas-src` crate) and OpenSSL, which on
 Windows come from **vcpkg**. Without them `cargo check` dies in a build script

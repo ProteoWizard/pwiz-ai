@@ -14,6 +14,10 @@
     - netrc: Skip .netrc credentials check (LabKey API access)
     - labkey: Skip LabKey MCP Server registration check
     - teamcity: Skip TeamCity MCP Server registration check
+    - rust: Skip the maccoss/osprey Rust build prerequisites (toolchain components,
+      vcpkg + OpenBLAS/OpenSSL). Only Osprey Rust developers need these; the checks
+      already stay silent (INFO) on a machine with no Rust toolchain, so -Skip rust is
+      only needed to quiet a machine that HAS cargo but does not build maccoss/osprey.
 
 .EXAMPLE
     .\Verify-Environment.ps1
@@ -27,6 +31,11 @@
     .\Verify-Environment.ps1 -Skip netrc,labkey,teamcity
     Skip netrc, LabKey, and TeamCity MCP Server checks
 
+.EXAMPLE
+    .\Verify-Environment.ps1 -Skip rust
+    Quiet the maccoss/osprey Rust build prerequisites on a machine that has a Rust
+    toolchain for other reasons
+
 .NOTES
     Author: LLM-assisted development
     See: ai/docs/developer-setup-guide.md
@@ -37,7 +46,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("netrc", "labkey", "teamcity")]
+    [ValidateSet("netrc", "labkey", "teamcity", "rust")]
     [string[]]$Skip = @()
 )
 
@@ -888,15 +897,33 @@ if (Test-Path $csharpLspCache) {
 # in the INFO message tells an LLM assistant not to proactively offer setup.
 
 # rustup toolchain
+# Rust tools install to %USERPROFILE%\.cargo\bin, and the installer adds that to the USER
+# PATH - which processes started BEFORE the install never see. Resolving on disk as well
+# keeps this table a description of the MACHINE rather than of the shell that happens to be
+# running it, which is what the session-configuration analysis needs: a stale shell would
+# otherwise report a fully configured machine as having no Rust at all.
+$cargoBinDir = Join-Path $env:USERPROFILE ".cargo\bin"
+function Resolve-RustTool {
+    param([string]$Name)
+    if (Test-Command $Name) {
+        return [PSCustomObject]@{ Path = $Name; OnPath = $true }
+    }
+    $candidate = Join-Path $cargoBinDir "$Name.exe"
+    if (Test-Path $candidate) {
+        return [PSCustomObject]@{ Path = $candidate; OnPath = $false }
+    }
+    return $null
+}
+$staleShellNote = "restart shells/Claude Code to get .cargo\bin on PATH"
+
 Write-Host "Checking rustup (Rust toolchain)..." -ForegroundColor Gray
-if (Test-Command "rustup") {
+$rustupTool = Resolve-RustTool "rustup"
+if ($rustupTool) {
     try {
-        $rustupVersion = & rustup --version 2>$null | Select-Object -First 1
-        if ($rustupVersion -match 'rustup\s+(\d+\.\d+\.\d+)') {
-            Add-Result "rustup" "OK" $Matches[1] $true
-        } else {
-            Add-Result "rustup" "OK" "installed" $true
-        }
+        $rustupVersion = & $rustupTool.Path --version 2>$null | Select-Object -First 1
+        $rustupText = if ($rustupVersion -match 'rustup\s+(\d+\.\d+\.\d+)') { $Matches[1] } else { "installed" }
+        if (-not $rustupTool.OnPath) { $rustupText = "$rustupText - $staleShellNote" }
+        Add-Result "rustup" "OK" $rustupText $true
     } catch {
         Add-Result "rustup" "ERROR" "rustup found but version check failed" $false
     }
@@ -904,11 +931,95 @@ if (Test-Command "rustup") {
     Add-Result "rustup" "INFO" "skip unless working on maccoss/osprey - Run: winget install Rustlang.Rustup" $true
 }
 
+# Rust BUILD prerequisites (optional - maccoss/osprey developers only).
+#
+# Gated on cargo being present. A machine with no Rust toolchain is not an Osprey-Rust
+# machine, so these report INFO and never affect the verdict. Once cargo IS installed the
+# machine has declared intent, and a missing piece becomes a WARN (non-blocking) - because
+# `rustc --version` answering makes a machine LOOK ready while `cargo check` still dies in a
+# build script. That is the failure this section exists to make visible.
+Write-Host "Checking Rust build components (clippy/rustfmt)..." -ForegroundColor Gray
+$cargoTool = Resolve-RustTool "cargo"
+$hasCargo = $null -ne $cargoTool
+if ($Skip -contains "rust") {
+    Add-Result "Rust build components" "SKIPPED" "Deferred (use -Skip rust to acknowledge)" $true -SkipId "rust"
+} elseif (-not $hasCargo) {
+    Add-Result "Rust build components" "INFO" "skip unless working on maccoss/osprey - clippy + rustfmt ship with stable" $true -SkipId "rust"
+} elseif (-not $rustupTool) {
+    Add-Result "Rust build components" "WARN" "cargo found but rustup is not - cannot verify clippy/rustfmt" $false -SkipId "rust"
+} else {
+    try {
+        $rustComponents = & $rustupTool.Path component list --installed 2>&1 | Out-String
+        $missingComponents = @()
+        if ($rustComponents -notmatch 'clippy') { $missingComponents += 'clippy' }
+        if ($rustComponents -notmatch 'rustfmt') { $missingComponents += 'rustfmt' }
+        if ($missingComponents.Count -eq 0) {
+            Add-Result "Rust build components" "OK" "clippy + rustfmt" $true -SkipId "rust"
+        } else {
+            Add-Result "Rust build components" "WARN" ("missing {0} - maccoss/osprey CI gates on these. Run: rustup component add {1}" -f `
+                ($missingComponents -join ' + '), ($missingComponents -join ' ')) $false -SkipId "rust"
+        }
+    } catch {
+        Add-Result "Rust build components" "WARN" "rustup component list failed: $_" $false -SkipId "rust"
+    }
+}
+
+# vcpkg + OpenBLAS/OpenSSL. maccoss/osprey links native OpenBLAS through the openblas-src
+# crate, so without these `cargo check` panics in a build script with VcpkgNotFound. The
+# GitHub runners ship vcpkg preinstalled, so osprey/.github/workflows/ci.yml only ever runs
+# the `vcpkg install` line - which is why this requirement was recorded nowhere else.
+# Setup: ai/docs/new-machine-setup.md Phase 7.
+Write-Host "Checking vcpkg + OpenBLAS/OpenSSL..." -ForegroundColor Gray
+if ($Skip -contains "rust") {
+    Add-Result "vcpkg (OpenBLAS/OpenSSL)" "SKIPPED" "Deferred (use -Skip rust to acknowledge)" $true -SkipId "rust"
+} elseif (-not $hasCargo) {
+    Add-Result "vcpkg (OpenBLAS/OpenSSL)" "INFO" "skip unless working on maccoss/osprey - needed to BUILD it, not just to lint" $true -SkipId "rust"
+} else {
+    # Read the PERSISTED (User/Machine) value as well as the process one. The installer writes
+    # VCPKG_ROOT to the user environment, which is invisible to processes that were already
+    # running - including this shell and any Claude Code session started before the install.
+    # Reporting the process view alone would WARN that a correctly configured machine is
+    # broken, which is the same stale-environment trap the setup doc calls out.
+    $vcpkgRootPersisted = [Environment]::GetEnvironmentVariable('VCPKG_ROOT', 'User')
+    if (-not $vcpkgRootPersisted) { $vcpkgRootPersisted = [Environment]::GetEnvironmentVariable('VCPKG_ROOT', 'Machine') }
+
+    $vcpkgRoot = $env:VCPKG_ROOT
+    if (-not $vcpkgRoot -and $vcpkgRootPersisted) { $vcpkgRoot = $vcpkgRootPersisted }
+    if (-not $vcpkgRoot -and $env:VCPKG_INSTALLATION_ROOT) { $vcpkgRoot = $env:VCPKG_INSTALLATION_ROOT }
+    if (-not $vcpkgRoot -and (Test-Path 'C:\vcpkg\.vcpkg-root')) { $vcpkgRoot = 'C:\vcpkg' }
+
+    if (-not $vcpkgRoot -or -not (Test-Path (Join-Path $vcpkgRoot '.vcpkg-root'))) {
+        Add-Result "vcpkg (OpenBLAS/OpenSSL)" "WARN" "not found - maccoss/osprey cannot build. See ai/docs/new-machine-setup.md Phase 7" $false -SkipId "rust"
+    } else {
+        # Probe the installed artifacts, not `vcpkg list` - no process launch, and it is what
+        # openblas-src actually resolves. OpenBLAS installs no openblas_config.h under the
+        # x64-windows triplet, so the .lib is the reliable marker.
+        $missingPkgs = @()
+        if (-not (Test-Path (Join-Path $vcpkgRoot 'installed\x64-windows\lib\openblas.lib'))) { $missingPkgs += 'openblas' }
+        if (-not (Test-Path (Join-Path $vcpkgRoot 'installed\x64-windows\include\openssl\ssl.h'))) { $missingPkgs += 'openssl' }
+
+        if ($missingPkgs.Count -gt 0) {
+            Add-Result "vcpkg (OpenBLAS/OpenSSL)" "WARN" ("{0} at {1} missing {2} - Run: {1}\vcpkg.exe install openblas:x64-windows openssl:x64-windows" -f `
+                'vcpkg', $vcpkgRoot, ($missingPkgs -join ' + ')) $false -SkipId "rust"
+        } elseif (-not $env:VCPKG_ROOT -and -not $vcpkgRootPersisted) {
+            # The packages are there but openblas-src reads VCPKG_ROOT; without it the build
+            # fails exactly as if nothing were installed.
+            Add-Result "vcpkg (OpenBLAS/OpenSSL)" "WARN" ("packages present at {0} but VCPKG_ROOT is not set - Run: [Environment]::SetEnvironmentVariable('VCPKG_ROOT','{0}','User')" -f $vcpkgRoot) $false -SkipId "rust"
+        } elseif (-not $env:VCPKG_ROOT) {
+            # Persisted but not in THIS process: the machine is configured, the shell is stale.
+            Add-Result "vcpkg (OpenBLAS/OpenSSL)" "OK" "$vcpkgRoot (openblas + openssl); VCPKG_ROOT set for the user - restart shells/Claude Code to pick it up" $true -SkipId "rust"
+        } else {
+            Add-Result "vcpkg (OpenBLAS/OpenSSL)" "OK" "$vcpkgRoot (openblas + openssl)" $true -SkipId "rust"
+        }
+    }
+}
+
 # rust-analyzer component
 Write-Host "Checking rust-analyzer component..." -ForegroundColor Gray
-if (Test-Command "rustup") {
+$raTool = Resolve-RustTool "rust-analyzer"
+if ($rustupTool -and $raTool) {
     try {
-        $raCheck = & rust-analyzer --version 2>&1 | Out-String
+        $raCheck = & $raTool.Path --version 2>&1 | Out-String
         if ($raCheck -match 'rust-analyzer\s+(\S+)') {
             Add-Result "rust-analyzer (LSP)" "OK" $Matches[1] $true
         } else {
@@ -917,6 +1028,8 @@ if (Test-Command "rustup") {
     } catch {
         Add-Result "rust-analyzer (LSP)" "INFO" "skip unless working on maccoss/osprey - Run: rustup component add rust-analyzer" $true
     }
+} elseif ($rustupTool) {
+    Add-Result "rust-analyzer (LSP)" "INFO" "skip unless working on maccoss/osprey - Run: rustup component add rust-analyzer" $true
 } else {
     Add-Result "rust-analyzer (LSP)" "INFO" "skip unless working on maccoss/osprey - install rustup first" $true
 }
