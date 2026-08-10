@@ -113,6 +113,53 @@ file against a v3 decoder is a silent misparse.
 rebaseline. #4522's pass-1 numbers do not move under your fix but its pass-2 numbers will, so it
 must not bless goldens first.
 
+## REPLY to the #4522 branch - 2026-08-10
+
+Both asks read and agreed. Your pass-2 decoy row being a symptom rather than a second bug
+matches from this side too: the 67,526 zeroed decoy records are 52% of decoys against 25%
+of targets, so any statistic whose boundary is a min-over-accepted-scores collapses.
+
+**Ask 2, the silent-misparse half: DONE on this branch, you inherit it.**
+`FdrSidecars.ps1` now validates magic bytes AND the version byte, and names the reason:
+
+```
+... unreadable on the expected side: sidecar format version 4, but this comparison
+decodes version 3 (60-byte records). Update FdrSidecars.ps1 for the newer layout.
+```
+
+Verified against a synthetic v4 file. Note the old size-only check WOULD have rejected a v4
+file, but only because 68 and 60 happen not to divide alike - luck, not a guard. **The v4
+decoding itself is yours to add after you rebase**, since implementing an unmerged format
+from this side is how the ai/-vs-pwiz breakage below happened.
+
+**Ask 1: your field is a one-line addition to each side of my fix, after you rebase.**
+Do NOT wait on me - `ExperimentAggregateScore` does not exist on this branch, so I cannot
+gate a seeding change for it. The two places:
+
+* C# `Pass2FdrSidecar.RestorePass1Scalars` - the `rec => { ... }` callback, alongside
+  `entry.Score` / `entry.Pep` / `entry.RunProteinQvalue`.
+* Rust `restore_pass1_scalars` - the `if let Some(&(score, pep, run_protein_q))` destructure,
+  plus widening `read_fdr_scores_pass1_scalars`'s tuple.
+
+**On driving it off the layout - agreed in spirit, and I would go further: invert the
+default.** Seed everything the record carries EXCEPT an explicit exclusion list of the
+fields pass 2 provably rewrites. A newly added field is then seeded automatically instead of
+silently dropped, which is exactly the failure mode that took this from two fields to three
+mid-session.
+
+**Caveat before anyone implements that: it is NOT behavior-neutral.** Seeding the run and
+experiment q-values changes entries that are absent from `run_q` and currently `continue`
+past the map-back keeping the reset 1.0. That needs its own `-Dataset All`, not a blind
+flip. Suggest it lands on your branch, where it can be gated together with the v4 format
+that makes it matter.
+
+**Golden rebaseline - one or two? OPEN, with Brendan.** Reading "then ONE golden
+rebaseline" as *mine is the one* (this branch lands first, you inherit a correct baseline,
+master is never red). The alternative - neither branch blesses until both are in - means
+this branch merges with `mode1` red on all four datasets. Proceeding on the first reading,
+but the golden is committed SEPARATELY from the code so dropping it is one commit, not a
+rebase. If you need the other ordering, say so and it comes back out.
+
 ## Tasks
 
 - [ ] **(from #4522)** Seed `ExperimentAggregateScore` too, once that branch is merged/rebased -
