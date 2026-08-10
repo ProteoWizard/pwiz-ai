@@ -5,11 +5,11 @@
 - **Worktree**: `C:\proj\pwiz`
 - **Base**: `master`
 - **Created**: 2026-08-08
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4486](https://github.com/ProteoWizard/pwiz/issues/4486)
 - **Module**: `osprey`
 - **Other labels**: `performance`
-- **PR**: [#4554](https://github.com/ProteoWizard/pwiz/pull/4554)
+- **PR**: [#4554](https://github.com/ProteoWizard/pwiz/pull/4554) (merged 2026-08-10 as 843f7e553a)
 - **Requester/Reporter**: none (filed by Brendan, developer of Osprey — no credit line)
 
 ## Objective
@@ -77,11 +77,11 @@ Three traps, all documented on the issue and in
 
 ## Tasks
 
-- [ ] Measure Stage 7 with `OSPREY_LOG_MEMORY=1` post-GC probes at the 16-file rig —
+- [x] Measure Stage 7 with `OSPREY_LOG_MEMORY=1` post-GC probes at the 16-file rig —
       the measurement this issue has never taken
-- [ ] Establish the per-file SLOPE of the Stage 7 live set (4/8/16 files), not just a
+- [x] Establish the per-file SLOPE of the Stage 7 live set (4/8/16 files), not just a
       single peak — the slope is what decides whether 163/300 files fit
-- [ ] Decide from those numbers whether the peak is live or gray, and record the
+- [x] Decide from those numbers whether the peak is live or gray, and record the
       verdict on the issue either way
 - [ ] Only if live: decide whether `SecondPassFdrTask` can consume its input per file
       instead of as one whole-run buffer (protein FDR + blib write are the whole-run
@@ -721,3 +721,37 @@ Process notes worth carrying, all cost real time today:
   a pwiz commit landed on this branch and an `ai` push silently no-oped (pushing an
   unchanged local `master` from a non-master branch). Both recovered; verify `git
   rev-parse --abbrev-ref HEAD` in the repo you mean before committing.
+
+### 2026-08-10 - Merged
+
+PR #4554 merged as commit 843f7e553a. TeamCity Perf/Regression green on `pull/4554`
+(build #199, all four `mode3 (HPC chain==straight)` legs plus the perf leg), local
+`regression.ps1 -Dataset All` 44/44, 578 unit tests, inspection 0/0.
+
+**What shipped**: the pass-2 competition emits per file, so none of the six whole-run
+`(file, entry_id)` structures survive - the competition enters and leaves Stage 7 at
+23.7 GB where the baseline climbed 41.0 -> 56.8 GB (+0.214 GB/file, monotonic), with
+output identical at 37,078 spectra from 3,037,028 passing entries. Plus the earlier
+`--task SecondPassFDR` streamed load, the five post-GC probes, and the reporters that
+took the last >30 s gap to zero.
+
+**What was DEFERRED, and the three unchecked boxes above say so honestly**: Stage 7 still
+consumes the whole-run survivor buffer. That buffer is what this issue's TITLE names, it
+still grows ~0.196 GB/file, and it is the remaining 500-file wall - so
+`MaterializeAllSurvivors` stays. #4486 is deliberately left OPEN (the PR says `See`, not
+`Fixes`) to carry it. The last box is N/A: the peak was live, not gray.
+
+**Follow-up issues filed from work this branch turned up**:
+* #4553 - straight-through drops `Score` and `RunProteinQvalue` that the task-by-task route
+  keeps (`ResetScores()` clears eight fields, `protein-compact` restores five). Branch
+  `Skyline/work/20260809_fdr_sidecar_parity` pushed with a failing gate check; whether Rust
+  shares the defect is still unmeasured.
+* #4555 - same-base-name inputs from different directories collide in artifact names and
+  per-file maps; wants Skyline's partial-.skyd path hashing.
+
+**Review**: `/code-review max` returned 15 findings, all verified rather than auto-applied;
+13 produced changes, 2 were refuted with reasons. Two of those findings were defects this
+branch had introduced mid-flight (gates that were unsatisfiable inside the streaming branch,
+disabling the pre-compaction tally and the mdiag accumulator) and were reverted. Copilot
+added 2 comments, both addressed and resolved. Per-finding detail is in the companion
+`-review.md`.
