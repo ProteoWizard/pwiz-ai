@@ -597,10 +597,12 @@ arranging for your branch to be pushed so I can rebase on it.
 - [ ] The symmetric derived-from vs unrelated split for decoys AND entrapment (agreed with
       Brendan) - without it the 6.39x / 3.23x enrichments are not comparable to the target rate
 - [ ] Report the pass1 -> pass2 delta in the panel (how much co-assignment reconciliation adds)
-- [ ] Rebase onto #4553 once it is pushed, then re-run and re-measure pass 2
-- [ ] Regenerate the diagnostics golden - AFTER the rebase, once, jointly with #4553's
-      rebaseline (co-assignment metrics are new, and pass-1 decoy numbers move 72 -> 468 /
-      96 -> 675)
+- [x] Rebase onto #4553 once it is pushed, then re-run and re-measure pass 2
+- [ ] Regenerate the diagnostics golden **on top of the #4553 branch** - it does NOT wait for
+      #4557 to merge (Brendan, 2026-08-10). Their branch merges first, so the base already
+      contains their fix and the golden captured here is the one master will have. Purely
+      additive: the new `*.coAssign.*` metrics, and pass-1 decoy numbers 72 -> 468 / 96 -> 675.
+      Anything ELSE moving is a finding, not a rebaseline.
 - [ ] `regression.ps1 -Dataset Stellar`, then `-Dataset All`; capture the real memory/wall numbers
       with `--memstamp` and replace the estimates below
 - [ ] Run the `OSPREY_CROSS_IMPL_FDR_SIDECAR_OUT` byte-parity harness (now possible on this
