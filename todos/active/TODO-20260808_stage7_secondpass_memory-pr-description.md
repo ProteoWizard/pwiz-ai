@@ -1,8 +1,7 @@
 # PR description draft - #4486 Stage 7 memory and reporting
 
-**READY, pending `/code-review max`** (user-invoked; Claude cannot run it). Every
-`TODO(stage7-work)` marker is filled and `regression.ps1 -Dataset All` is 44/44 green on the
-branch as of 2026-08-09.
+**OPENED.** `/code-review max` ran, all 15 findings were verified and 13 produced changes,
+and `regression.ps1 -Dataset All` is 44/44 green on the post-review branch.
 
 Title: `osprey: Bounded and instrumented the Stage 7 join`
 Labels: `osprey`, `performance`
@@ -121,7 +120,7 @@ See #4486
 - [x] `regression.ps1 -Dataset All` - byte-identical on every mode and dataset, 44/44,
       including all four mode 3 (HPC 4-task chain) legs, which run `--task SecondPassFDR`
       and are the direct oracle for the load change
-- [x] `Build-Osprey.ps1 -RunTests -RunInspection` - 577 tests, 0 errors, 0 warnings
+- [x] `Build-Osprey.ps1 -RunTests -RunInspection` - 578 tests, 0 errors, 0 warnings
 - [x] `ResidentPoolGuardTest.TestResidentPoolGuardError` - verified RED against master's
       predicate and GREEN with the fix, not merely asserted
 - [x] Memory A/B on the HPC arm, post-GC probes rather than `--memstamp`
