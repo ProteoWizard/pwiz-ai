@@ -801,3 +801,48 @@ Final golden diff: `diagnostics.tsv` +28 / -0 on astral, stellar-libdecoy and
 stellar-gendecoy-entrap. Nothing else.
 
 **Rust PR opened**: maccoss/osprey#62, stacked on #61.
+
+### 2026-08-10/11 (night session) - OPEN QUESTION 1 RESOLVED: it is compaction, not the boundary
+
+Measured directly off the run's own sidecars, independent of the C# panel. Scripts committed:
+`ai/scripts/Osprey/Entrapment/coassign_pass2_boundary.py` and `coassign_decoy_agg_compare.py`.
+
+**The question**: pass-2 experiment decoys 71 against run decoys 1,049 is a ratio of 0.068,
+where pass 1 gives 468/675 = 0.69. A 10x difference in that ratio between passes.
+
+**Two hypotheses were killed by measurement, including the one this file called the prime
+suspect an hour earlier:**
+
+| hypothesis | prediction | measured |
+|---|---|---|
+| The pass-2 boundary is drawn from pass-1 aggregates against a pass-2 acceptance set, so it sits higher | pass-2 boundary > 0.0120 | **0.012008 at BOTH passes - identical** |
+| Decoy aggregates are lost to `ResetScores` and read back as 0.0 | many 2nd-pass decoys at exactly 0.0 | **0 of 43,574** |
+
+**The actual cause is compaction survivorship.** Distinct decoy precursors: **493,523 in the
+1st-pass sidecars, 43,574 in the 2nd-pass** - an 11.3x cull. Of the 468 decoys that cleared the
+bar at pass 1:
+
+* **396 are absent from the 2nd-pass sidecar entirely**
+* 0 are present with a reset aggregate
+* 0 are present, non-zero, and below the bar
+* **72 are still present and still clear it**
+
+So the pass-2 experiment decoy row is not an artifact at all. It is the honest count of
+"pre-compaction decoys that cleared the bar AND survived compaction". The bar itself does not
+move between passes.
+
+**The ratio in the question was never a meaningful quantity.** The experiment-scope count is
+governed by compaction survivorship; the run-scope count is governed by a per-file boundary
+recomputed over the compacted pool. Two different mechanisms, so their ratio compares nothing.
+That is why run decoys can RISE (675 -> 1,049) while experiment decoys fall.
+
+**Correction to this file and to PR #4558**: the deferred `ComputePass2TransferCompeteFull`
+pairing issue (pass-2 q beside a pass-1 aggregate) is real as a description but is NOT the
+cause here, and calling it the prime suspect was wrong. Measured, it moves the boundary by
+0.000000 on this dataset. It should still be resolved on principle, but it is not urgent and it
+does not taint the pass-2 numbers.
+
+**One genuine discrepancy left, small but real**: the independent computation gets **72** decoys
+clearing the pass-2 experiment bar; the panel reports **71**. Pass 1 agrees exactly (468 vs
+468). One decoy differs at pass 2 - most likely a tie exactly at the boundary or a
+classification edge. Worth a look before the decoy row is quoted.
