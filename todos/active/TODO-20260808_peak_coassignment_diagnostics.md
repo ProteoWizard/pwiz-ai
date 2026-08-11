@@ -1097,3 +1097,58 @@ findings are listed above and in the review output.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260811_seaad_recopy_and_82file.md` before starting work.
+
+### 2026-08-11/12 (night session) - the re-copy never ran; robocopy, not the drive
+
+**`D:` is not failing, and the earlier evidence that it was is an artifact of the repair
+script.** `Repair-CopiedDataset.ps1` detected the damaged files correctly by CONTENT and then
+handed the copy to robocopy, which against the `M:` SMB source classified every one of them
+`modified` - i.e. it had decided to copy - and then reported **Copied 0 / Skipped 1 / FAILED 0
+in 0.04 s and exited 0**. Same with `/IS /IT`, same without them, same with default flags.
+Zero bytes moved behind a success exit code, so the script re-verified the still-damaged file
+and printed "still bad after copy" for all 48, which reads exactly like a dying disk.
+
+Disproved directly: `Copy-Item` moves the same file at **108 MB/s** with a valid `<?xml` head
+and `</indexedmzML>` tail, and a write-and-read-back test on `D:` passes. The script now copies
+via `Copy-Item` (pwiz-ai `9614ed6`), and its "everything failed" summary no longer blames
+hardware - **every file failing identically is the signature of a copy that never ran**, since
+hardware that loses writes loses only some of them. That inference is now in the script.
+
+Root cause of robocopy's refusal is NOT established - it was cheaper to route around it than to
+finish interrogating it. Recorded so nobody reinstates it without re-measuring.
+
+### 2026-08-11/12 (night session) - Copilot reviewed #4558; all four findings resolved
+
+Copilot did fire once the base became master (open item 2 from the handoff). Commit
+`ebcee57636`. The two interesting findings were settled by measurement rather than argument.
+
+**`max()` over `ExperimentAggregateScore` is the wrong reducer, and the code comment defending
+it had the distribution backwards.** The comment argued max() stops a `ResetScores` 0.0 stub
+from pulling a real aggregate DOWN to zero. That only holds if aggregates are mostly positive.
+Measured on this branch's own 34-file SEA-AD sidecars (`ai/.tmp/agg_zero_probe.py`):
+
+| source | rows | exactly 0.0 | negative |
+|---|---|---|---|
+| 1st-pass sidecars (6 files) | 24,704,514 | **0** | 98.8% |
+| 2nd-pass sidecars (6 files) | 4,481,762 | **2,511 (0.056%)** | 93.2% |
+
+and the pass-2 experiment boundary is **negative in 6 of 6 files** (-2.33). So 0.0 is an extreme
+UPPER outlier: under max() a stub wins every time it appears, which is the same
+collapse-toward-zero that produced the 542,368-decoy golden.
+
+**It is not a live defect today, and the reason is worth keeping**: all 2,511 stub rows carry
+experiment q = 1.0, so none is accepted and none can set a boundary that is a min over ACCEPTED
+precursors; and **none of them is a decoy**, so nothing is spuriously admitted. It is one
+classification change away from mattering. Both reducers now prefer a real value over the
+default. Pinned by `TestCoAssignmentAggregateStubDoesNotOutrankRealScore`, built so the two
+rules give OPPOSITE answers - reverting to max() gives **577 passed / 1 failed**, confirmed by
+mutation, not assumed.
+
+Also fixed: `FdrScoresSidecar.ReadScalars` was the only reader not validating the pass byte
+(every other one checks `header[9]`), and it floor-divided the record count so a truncated
+sidecar read as merely short rather than corrupt. Both now rejected; its one caller passes
+`Pass.FirstPass`. And a raw U+0001 byte embedded in the offender pair-key literal became a
+named `PAIR_KEY_SEPARATOR` const - invisible in source and diffs, and any formatter that
+normalized it would have merged unrelated pairs.
+
+578 tests, zero warnings.
