@@ -942,3 +942,90 @@ symptom -> missing-piece table in `ai/docs/osprey-development-guide.md` beside t
 Also note `Compare-EndToEnd-Crossimpl.ps1` defaults `-TestBaseDir` to `D:\test\osprey-runs`,
 which on this machine holds no mzML; the regression data is under
 `D:\Users\brendanx\Downloads\Perftests\osprey-testfiles-mzML-v2`. Pass `-TestBaseDir` explicitly.
+
+### 2026-08-11 - ROOT CAUSE of the broken pass-2 decoy row, and the golden that pinned it
+
+**I blessed a golden containing a catastrophically wrong pass-2 decoy count, and said it was
+safe.** The additive check (+28 / -0) was done and passed; the VALUES were only sanity-checked
+on stellar-gendecoy-entrap, the one dataset that happened to be correct. astral and
+stellar-libdecoy were never looked at. Additive and garbage are not exclusive.
+
+| dataset | pass2 exp decoys, blessed | after fix | pass2 exp targets |
+|---|---|---|---|
+| astral | **542,368** | **3,458** | 117,783 |
+| stellar-libdecoy | **153,958** | **800** | 29,493 |
+| stellar-gendecoy-entrap | 71 | 71 | 23,135 |
+
+astral pinned 4.6x more decoys than targets, and 183x its own pass-1 count, from a rule meant
+to admit about 1%. The gate then PASSED on it - a rebaseline turns a visible defect into a
+certified one, and it would have gone red the day someone fixed it.
+
+**Root cause**: `ComputePass2TransferCompeteFull` - the DEFAULT `protein-compact` path -
+recomputes experiment q from a fresh competition but never wrote `ExperimentAggregateScore`.
+Entries kept the pass-1 seed or `ResetScores`' 0.0, `SealCutoffs`' min-over-accepted collapsed
+the experiment boundary to 0.0, and `Includes` admitted every decoy.
+
+**Fix**: take the aggregate from the competition's own per-entry bests. The obstacle recorded
+in the previous entry - "`_winnerLoc` is keyed by BASE ID, which a target and its decoy share,
+so it would hand every decoy its target's score" - **was wrong**. `ComputeFullPopulationPrecursorFdrStreaming`
+already keeps `bestTarget` and `bestDecoy` in SEPARATE maps, each tuple carrying its own
+`entryId`. Building `aggByEntryId` from both is keyed by full entry_id and is the same
+max-over-observations reduction `ComputeExperimentAggregateScoreMap` performs on pass 1.
+
+`StreamedCompetitionState.ExperimentAggregateScore` returns **`double?`**, not a NaN sentinel
+(Brendan's call, and the right one): null means "never entered the experiment fold", i.e.
+off-stratum under protein-compact, and those keep their pass-1 aggregate because they keep
+their pass-1 experiment q. NaN would have propagated silently into the v4 record, where the
+sidecar comparators' `Math.Abs(a-b) <= tol` is FALSE for NaN vs NaN - a red gate on
+byte-identical files. `double?` makes that caller fail to compile.
+
+**Test gap closed, and verified by mutation.** The fixture never set the field, so every row
+carried 0.0, the experiment boundary was 0.0, and every decoy was admitted regardless of what
+the code did - which is why this shipped green. The decoy now has score 6.0 (clears the run
+boundary of 3.0) and aggregate 1.0 (does not clear the experiment boundary of 2.0), so the two
+scopes MUST disagree, and can only disagree if the experiment path reads the aggregate.
+Reintroducing the defect gives 577 passed / 1 failed - confirmed, not assumed.
+
+`-Dataset All` after the fix: **48 legs, 0 failures**.
+
+### 2026-08-11 - Astral 3-file against the FULL target+decoy+entrapment library
+
+The configuration `regression.ps1` skips to keep its wall clock down (its Astral leg carries no
+entrapment). First run where BOTH known-false classes clear `MIN_N_FOR_ENRICHMENT`, so the
+enrichment ratios render instead of being suppressed. 19m46s, 32 threads, 13 GB library.
+HTML archived at `ai/.tmp/diagnostics-html/20260811-astral-full-entrapment/`.
+
+| | pass1 run | pass2 run | pass1 exp | pass2 exp |
+|---|---|---|---|---|
+| target | 7.34% | 9.17% | 8.52% | 10.48% |
+| entrapment | 15.66% (2.13x) | 16.43% (1.79x) | 26.91% (3.16x) | 32.29% (3.08x) |
+| decoy | 29.53% (4.02x) | 20.72% (2.26x) | 43.29% (5.08x) | 31.11% (2.97x) |
+
+Pass-2 decoys run 2,789 / experiment 2,716 = 0.97, against a target ratio of 0.91 - the fix
+holds at full library scale with library-supplied decoys.
+
+**A code comment is now contradicted and must be corrected.** `CoAssignmentData.PostReconciliation`
+states as settled fact that reconciliation REMOVES co-assignment (2.17% -> 1.18%) while
+enrichment RISES (3.14x -> 4.37x). On this dataset rates RISE (7.34% -> 9.17%) and enrichment
+FALLS (4.02x -> 2.26x) - the opposite on both counts. The comment was written from Stellar and
+reads as general. Fix by stating the direction is dataset-dependent, NOT by swapping one
+dataset's claim for another's.
+
+Also unexplained: target co-assignment is 9-10% here against the 4.3-5.1% the issue measured on
+its 40-file Astral cohort. Different library and 3 files vs 40, but the gap should be understood
+before any headline rate is quoted.
+
+### 2026-08-11 - `_runBest` measured at REAL Astral scale, not extrapolated
+
+| source | distinct entry_ids per file | projected at 82 files |
+|---|---|---|
+| Stellar, small library | 979,128 | 2.84 GB |
+| **Astral, full entrapment library** | **4,184,823** | **12.14 GB** |
+
+4.3x the earlier estimate, and the second row IS the SEA-AD configuration. `_runBest` is the one
+structure that grows with FILE COUNT, so the 82-file run exercises it directly. Recorded before
+that run finishes so the prediction is falsifiable.
+
+perfviz on the 3-file run: managed peak 24.7 GB, total peak 37.3 GB, and the memory floor is
+FALLING per file (-1.3 GB managed, -2.3 GB total) - so per-file work is bounded and `_runBest`
+is the accumulating term, exactly as the review argued.
