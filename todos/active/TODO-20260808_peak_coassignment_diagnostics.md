@@ -869,3 +869,33 @@ commit. Both candidates are cheap to test in the morning:
 self-verifying. Pass 2 has no equivalent - noted independently by `/code-review max`. Adding it
 would have printed "admitted 72, tallied 71" and named the gap immediately. Add it first, then
 the answer falls out of the next gate run instead of needing an offline script.
+
+### 2026-08-10/11 (night session) - `_runBest` memory is now MEASURED, not projected
+
+`ai/scripts/Osprey/Entrapment/coassign_runbest_size.py`, run on the gate's 3-file
+StellarGenDecoyEntrap sidecars:
+
+| | |
+|---|---|
+| distinct entry_ids per file | **979,128** (every sidecar row - entry_id is unique per file) |
+| 3 files, live `_runBest` entries | 2,937,383 -> **106 MB** |
+| **linear scale to 82 files** | 80.3M entries -> **2.84 GB** |
+
+At 38 bytes per `Dictionary<uint,double>` entry (24-byte entry with padding, bucket array, and
+growth slack) - conservative, and the raw count is printed so the assumption can be replaced.
+
+**Context for judging it**: the gate's own resident-path report says Stage 6's survivor buffer
+is already "~4.4 GB library + 0.197 GB/file live post-GC: ~20 GB at 82 files". So this is
+roughly a **14% increase on an already-large footprint**, held from phase 1 through the entire
+panel build, alongside both accumulators. Not obviously fatal, but it is a real cost that the
+3-file gate cannot show, and **the panel is now always-on** because the opt-in tokens were
+removed on a perf argument that only measured WALL TIME (0.4 s / 7.3M rows/s), never memory.
+That argument should be re-read in light of this number.
+
+**It is also mostly waste.** Only two populations are ever read back: per-file bests of
+ACCEPTED target/entrapment precursors (for `SealCutoffs`) and aggregates of DECOY entries (for
+`Includes`). Non-accepted target rows are inserted and never read. Accepted precursors run
+~25-31k per file against 979k inserted, so filtering at insert - or dropping `_runBest` in
+`SealCutoffs` the way `_runAccepted` / `_experimentAccepted` already are - should remove most
+of it. Neither was attempted tonight: it changes panel-adjacent code after TeamCity had gone
+green on the PR commit, and re-triggering needs Brendan's approval.
