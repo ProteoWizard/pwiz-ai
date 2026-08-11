@@ -5,15 +5,16 @@
 - **Worktree**: `C:\proj\pwiz`
 - **Base**: `master`
 - **Created**: 2026-08-09
-- **Status**: READY TO MERGE - both implementations fixed, golden rebaselined, both review
-  rounds closed, TeamCity Perf/Regression green on `pull/4557`. Waiting only on a human
-  review and on #4522's readiness (this branch lands first, #4522 rebases onto it).
+- **Status**: Completed
 - **GitHub Issue**: [#4553](https://github.com/ProteoWizard/pwiz/issues/4553)
 - **Module**: `osprey`
 - **Other labels**: none yet (candidate: `bug`)
-- **PR**: [#4557](https://github.com/ProteoWizard/pwiz/pull/4557) (pwiz, label `osprey`) +
-  [maccoss/osprey#61](https://github.com/maccoss/osprey/pull/61) (Rust, branch
-  `fix/pass2-restore-pass1-scalars`) - both opened 2026-08-10, reviews to follow
+- **PR**: [#4557](https://github.com/ProteoWizard/pwiz/pull/4557) (merged 2026-08-11 as
+  `4706ebdc8c`) + [maccoss/osprey#61](https://github.com/maccoss/osprey/pull/61) (Rust,
+  branch `fix/pass2-restore-pass1-scalars`) - **still OPEN, needs a separate merge**
+- **Follow-ups filed**: [#4559](https://github.com/ProteoWizard/pwiz/issues/4559) (gap-fill
+  run protein q on the batch-hydrate arm),
+  [#4560](https://github.com/ProteoWizard/pwiz/issues/4560) (off-stratum mixed provenance)
 - **Requester/Reporter**: none - found by Brendan and Claude while building the FDRBench
   oracle for #4486. No credit line (Osprey developers on Osprey code).
 
@@ -305,8 +306,11 @@ before the change, 242 after, matching the 5 flips), not a new artifact.
       **SUCCESS** - all four datasets, every mode, plus the perf leg
 - [x] PR is MERGEABLE / CLEAN with master merged in; **merge-ready pending #4522's
       readiness and a human review**
-- [ ] Follow-up issue: gap-fill entries get `run_protein_qvalue` 0.0 on the batch-hydrate
-      arm and 1.0 on straight-through (see below) - pre-existing, newly visible
+- [x] Follow-up issues filed: #4559 (gap-fill `run_protein_qvalue` on the batch-hydrate arm)
+      and #4560 (off-stratum mixed provenance)
+- [ ] **Merge maccoss/osprey#61** - the Rust half is still OPEN. The two implementations are
+      only in agreement once BOTH land; until then master pwiz and master osprey differ on
+      the sidecar, and the cross-impl gate run against them would be red.
 
 ## Is the bug in Rust too? - ANSWERED 2026-08-10: YES, IDENTICALLY
 
@@ -548,6 +552,28 @@ shell from the failed 08-09 launch; nothing was ever staged there.
 cross-impl divergence that no existing gate would catch, because neither the cross-impl
 comparator nor the golden reads the sidecar. Whether to also add a sidecar leg to
 `Compare-EndToEnd-Crossimpl.ps1` is an open call.
+
+### 2026-08-11 - Merged
+
+PR #4557 merged as `4706ebdc8c`. What shipped: `Score`, `Pep` and `RunProteinQvalue` are
+seeded from the 1st-pass sidecar ahead of the pass-2 mode dispatch in BOTH implementations,
+so the straight-through and distributed routes now write identical sidecars by construction;
+`regression.ps1`'s four-task-chain leg and a new cross-impl leg compare both sidecar passes
+field by field; and the protein FDR golden was rebaselined on all four datasets. TeamCity
+Perf/Regression was green on `pull/4557` at the post-merge commit.
+
+The defect turned out to be a SHARED design defect - Rust zeroed the identical records - so
+every cross-impl parity gate was green throughout. That is the durable lesson: parity gates
+answer "do they agree", not "are they right".
+
+**Deferred deliberately, both filed rather than dropped**: #4559 (a gap-fill entry gets
+`run_protein_qvalue` 0.0 on the batch-hydrate arm and 1.0 on straight-through - pre-existing,
+newly visible, and the diverging records provably cannot be reached by the seed) and #4560
+(an off-stratum survivor carries pass-2 `Score` alongside pass-1 experiment q / Pep). Both
+are decisions about the protein-compact contract rather than defects in this fix.
+
+**Still open**: maccoss/osprey#61 carries the Rust half and has NOT been merged. Until it
+does, the two masters disagree on the sidecar.
 
 ### 2026-08-10 - Comparator added first, then both sides fixed
 
