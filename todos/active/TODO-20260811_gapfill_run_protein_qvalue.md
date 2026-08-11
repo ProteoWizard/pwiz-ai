@@ -69,7 +69,65 @@ pass2: ..._20: run_protein_qvalue differs on 133 record(s); first entry_id=1341 
 switch that disables the streaming and library-fragment-release paths. Unrelated; do not
 chase them.
 
-## Mechanism - established from the code 2026-08-11 (measurement pending)
+## MEASURED 2026-08-11 - the chain is right and straight-through is internally inconsistent
+
+Reproduced exactly (133/116/141 = 390 records). Run log
+`ai/.tmp/regression-projoff-4559.log`; run dir preserved at
+`C:\proj\pwiz\pwiz_tools\Osprey\TestResults\regression-20260811_044537` (`-KeepOutput`).
+Analysis scripts: `ai/.tmp/analyze-gapfill-protq-4559.ps1`,
+`ai/.tmp/check-protq-per-run-4559.ps1` (shared decoder `ai/.tmp/gapfill-protq-decoder.ps1`).
+
+**1. The diverging population IS the gap-fill population - exactly, not a subset.**
+
+| | count |
+|---|---|
+| gap-fill records (in 2nd pass, absent from 1st pass) | **390** |
+| diverging records | **390** |
+| ...absent from the 1st-pass sidecar | 390 |
+| ...straight-through value exactly 1.0 | 390 |
+| 1st-pass sidecar `run_protein_qvalue` disagreements | **0** |
+
+**2. The chain assigns the value straight-through ITSELF already uses for that precursor.**
+`entry_id` is library-derived and stable across files, so each diverging precursor can be
+looked up in the OTHER files' STRAIGHT-THROUGH 1st-pass sidecars, where it was an ordinary
+detection:
+
+| | count |
+|---|---|
+| diverging entry_ids found in another file's straight 1st-pass sidecar | **390 / 390** |
+| chain value MATCHES that established value | **390** |
+| chain value DIFFERS from it | **0** |
+
+e.g. `entry_id=1341`: straight-through writes **1.0** in file `_20` (gap-fill there) and
+**0.0** in file `_21` (ordinary detection). The chain writes 0.0 in both.
+
+**3. `run_protein_qvalue` is a per-RUN, per-peptide value - it is NOT per-file.** Over the
+straight-through 1st-pass sidecars alone (no chain, no gap-fill involved):
+
+| | count |
+|---|---|
+| distinct entry_ids | 484,747 |
+| appearing in 2+ files | 483,820 |
+| ...carrying ONE value across those files | **483,820** |
+| ...carrying DIFFERENT values across files | **0** |
+
+### What that means for the question
+
+The issue asks "0.0 or 1.0 for an entry that never competed". Measurement 3 reframes it:
+the first-pass protein FDR is pooled over all files and propagated by `ModifiedSequence`, so
+a precursor has **exactly one** `run_protein_qvalue` per run - confirmed on 483,820 of
+483,820 precursors. Straight-through's 1.0 on a gap-fill row is therefore not "no value for
+this file"; it is a **second, different value for a quantity that has one**, and the same
+precursor carries both 0.0 and 1.0 in the same run's output depending only on how it was
+found.
+
+**This refutes the fail-closed argument for Option A below.** 1.0 would be the honest
+"absent" marker only if the field were per-detection. It is not. The peptide earned its
+protein q from its evidence pooled across files, and a gap-fill row is another observation
+of that same peptide - the same reason every other non-passing observation of it already
+carries the real value.
+
+## Mechanism - established from the code 2026-08-11
 
 **The chain does not invent a value for gap-fill entries. It propagates the ordinary one.**
 
@@ -158,6 +216,33 @@ from Stage 5 into Stage 6 on BOTH arms - it exists on the streaming arm too
 * CHANGES the default arm's persisted sidecar, so it needs the Rust twin landed together or
   the cross-impl sidecar leg goes red, and it moves a shipped artifact for a field with no
   consumer
+
+**Implementation path for B is cheaper than first assumed.** `PlanStage6` runs INSIDE
+`FirstPassFdrTask` (`:503`), i.e. AFTER first-pass protein FDR (`:423`, or the streaming
+reducer at `:2532`) and while `fullLibrary` is still in scope; it produces
+`_perFileGapFillForRescore`, published at `:547`. So the gap-fill target set is known while
+the peptide -> q map still exists. Publish a small `entry_id -> run protein q` byproduct
+covering ONLY the gap-fill targets (hundreds of entries, not O(unique peptides)) alongside
+`PerFileGapFillForRescore`, and consume it at the two `ResetScores()` sites in
+`RunGapFillTwoPass` (`PerFileRescoreTask.cs:2016`, `:2070`). `GapFillTarget` already carries
+`ModifiedSequence`, so the lookup needs no new joins.
+
+Only straight-through needs it: the `--task PerFileRescoring` worker writes no 2nd-pass
+sidecar, and the SecondPassFDR node recomputes. So the `reconciliation.json` wire format
+(`Osprey.IO.GapFillEntry`) does NOT have to change - keep the carrier an in-process
+byproduct rather than a field on `GapFillTarget`.
+
+Expected blast radius: sidecar-only. Gap-fill `RunProteinQvalue` is not an input to the
+Stage 7 protein FDR (which reads `Score` and experiment q), so the committed golden should
+NOT move - to be verified, not assumed.
+
+## RECOMMENDATION (needs Brendan's sign-off)
+
+**Option B.** Measurement 3 is the deciding fact: the field has exactly one value per
+precursor per run, so 1.0 on a gap-fill row is a wrong value rather than a missing one, and
+the chain is already writing the right one. An earlier reading of this TODO favored Option A
+on a fail-closed argument; that argument assumed the field was per-detection and does not
+survive the measurement.
 
 Whatever is decided must land on **both** C# and Rust, or the cross-impl sidecar leg
 (`Compare-FdrSidecars-Crossimpl.ps1`, added by #4557) goes red - it exists precisely to
