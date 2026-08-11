@@ -1029,3 +1029,71 @@ that run finishes so the prediction is falsifiable.
 perfviz on the 3-file run: managed peak 24.7 GB, total peak 37.3 GB, and the memory floor is
 FALLING per file (-1.3 GB managed, -2.3 GB total) - so per-file work is bounded and `_runBest`
 is the accumulating term, exactly as the review argued.
+
+### 2026-08-11 - PR re-targeted to master; two more defects fixed; SEA-AD blocked on corrupt input
+
+**PR [#4558](https://github.com/ProteoWizard/pwiz/pull/4558) is now based on `master`** (#4557
+squash-merged as `4706ebdc8c`). Rebased with `--onto`, replaying only this branch's 8 commits;
+the rebased tree was byte-identical to the pre-rebase tree, so the squash produced the same
+content and the golden carried over unchanged. `Skyline/work/20260809_fdr_sidecar_parity` is
+free to delete.
+
+**Two defects found and fixed today, both mine, both caught by `/code-review max` on the
+rebased branch:**
+
+1. **The blessed golden pinned a broken pass-2 decoy row.** astral
+   `pass2.coAssign.experiment.decoy.n` = 542,368 against 117,783 targets (183x its own pass-1
+   count); stellar-libdecoy 153,958 against 29,493. Root cause:
+   `ComputePass2TransferCompeteFull`, the DEFAULT protein-compact path, recomputed experiment q
+   but never wrote `ExperimentAggregateScore`, so the boundary collapsed onto the `ResetScores`
+   0.0 default and admitted every decoy. Fixed by taking the aggregate from the competition's
+   own per-entry bests (`bestTarget`/`bestDecoy` are already separate maps, each tuple carrying
+   its own entry id - the base-id objection recorded earlier was wrong). Now 3,458 and 800,
+   both tracking the target run/experiment ratio.
+   **How it was missed**: the +28/-0 additive check was done and passed; only
+   stellar-gendecoy-entrap's VALUES were eyeballed, and that is the one dataset that was
+   correct. Additive and wrong are not exclusive - check the values on every dataset.
+2. **`_runBest` was O(files x distinct entry ids)** - `Dictionary<int, Dictionary<uint,double>>`,
+   one map per file, live from phase 1 through the whole panel build, and `_runAccepted` the
+   same. Measured 4.18M entries per file on the full entrapment library: 12 GB at 82 files,
+   **~79 GB at 500** - past the whole budget of the 64 GB machine that target assumes. Run
+   scope is a per-file question, so it now reduces at each `SealRunCutoff(fileIdx)` to the
+   file's cutoff plus the admitted DECOY ids (O(decoys admitted), thousands not millions), and
+   `ObserveCutoff` throws if a caller advances a file without sealing. `-Dataset All` after:
+   48 legs, 0 failures, **golden byte-identical**.
+
+`double?` over a NaN sentinel for `StreamedCompetitionState.ExperimentAggregateScore`
+(Brendan's call): null means "never entered the experiment fold", and NaN would have
+propagated into the v4 record where the sidecar comparators' `Math.Abs(a-b) <= tol` is FALSE
+for NaN vs NaN - a red gate on byte-identical files.
+
+**Test gap closed and verified by mutation**: the fixture never set the field, so every row
+carried 0.0 and the experiment boundary was 0.0 regardless of the code. The decoy now has a
+score that clears the run boundary and an aggregate that does not clear the experiment one, so
+the scopes must disagree. Reintroducing the defect gives 577 passed / 1 failed.
+
+**SEA-AD 82-file run is blocked on corrupt input, not on code.** 48 of the 82 mzML under
+`D:\test\osprey-runs\sea-ad\mzml` are damaged: first 52 bytes overwritten with NTFS metadata,
+and everything past some offset zeroed to the end (one file is ~13% data, another ~75%; all
+lose the trailing index). **Sizes match the source EXACTLY**, so robocopy/xcopy/Explorer all
+consider them current and copy nothing. The source on
+`M:\home\brendanx\data\MacCoss\Osprey\SEA-AD\mzml` is intact (82/82 valid head AND tail), and
+all 82 `.bin` spectra caches are intact on both sides. The damage is one contiguous block:
+files SEA-AD-0015 through 0062 inclusive.
+
+A 34-file run over the verified-good subset completed on the fixed build: 131.6 GB,
+140,085,545 scored entries, 3h54m, memory floor FALLING (-102 MB/file managed, -269 MB/file
+total), FirstPassFDR private peak 54.3 GB. Diagnostics HTML archived under
+`ai/.tmp/diagnostics-html/`.
+
+**Scripts added** (`ai/scripts/`): `Repair-CopiedDataset.ps1` (content-based mismatch detection
+and verified re-copy - size comparison finds nothing here),
+`Archive-DiagnosticsHtml.ps1`, and `Osprey/Entrapment/coassign_runbest_size.py`.
+
+**Still open**: TeamCity 4128458 passed against `1a15f7ed` and is now STALE - four commits
+newer, needs a re-trigger before merge (ask first). Copilot has never reviewed #4558; it did
+not fire on the branch-based PR and may now that the base is master. Remaining `/code-review`
+findings are listed above and in the review output.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260811_seaad_recopy_and_82file.md` before starting work.
