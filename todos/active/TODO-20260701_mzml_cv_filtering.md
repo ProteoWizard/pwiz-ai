@@ -189,6 +189,13 @@ no use outside spectrum filters):
     (C) defer capture; ship definitions + catalog/present split now, present-set lights up only after a
     filter exists.
   - (SeeMS enhancement is a secondary power-user option.)
+- **Flag terms should not offer the value operators.** Now that the catalog carries each term's declared
+  value type, a term with none is a pure flag (zoom scan, profile spectrum): Greater Than / Contains /
+  Equals on it are meaningless, yet the editor offers them (it lists every operation ungated). Reducing a
+  flag to the presence operators would keep users away from the equals-empty corner above. Note this is
+  hiding by ONTOLOGY (a fixed property of the term), not by document context, which Brian rejected for the
+  dropdown - but confirm with him before implementing; a cue may be preferable to a hide. userParams have
+  no ontology entry, so this can only apply to catalog terms.
 - **Autocomplete** of CV filter values (SpectrumFilterAutoComplete): include CV columns. Deferred (nicety).
 - Editing an existing CV filter whose accession isn't in the catalog nor discovered still drops the row
   in the editor (pre-existing unknown-column behavior) - minor.
@@ -200,6 +207,34 @@ no use outside spectrum filters):
   its live-read path would need the capture the extraction path already does.)
 
 ## Progress Log
+
+### 2026-08-11 - Declared operators replaced by absent-means-blank (commit `89548ee77`, pushed)
+
+Nick's ruling (2026-08-10): "It would be bad to say 'Zoom scan is always blank because it does not have a
+value.' It is much better to declare the semantics 'CV params are always blank when they are absent, and
+never blank when they are present.'" Implemented as he asked:
+
+- `OP_IS_DECLARED`/`OP_IS_NOT_DECLARED` deleted outright - registry, resource strings, the `.skyd` proto
+  enum values (13/14, added on this branch by `075215e19` and never released, so no reserve needed) and
+  their `ChromatogramGroupId` map entries. `TestDeclaredOperatorScoping` is gone with them.
+- `CompileCvSpec` now special-cases the blank operators instead: blank == `GetValue() == null`, so a
+  value-less flag term (captured with an empty value) is NOT blank. `TestCvParamDeclaredFilter` became
+  `TestCvParamBlankFilter` and asserts the divergence from `TextFilterHandler.IsBlank`, where "" IS blank.
+- No custom `IFilterHandler` was needed: `EditSpectrumFilterDlg` lists every operation ungated, so
+  `NumericFilterHandler.CanBeBlank == false` does not keep Is Blank off a numeric CV column.
+
+**Known gap, deliberately left (discussed with Brian, to be raised with Nick):** the readable filter-string
+syntax cannot express `Equals ""`. `FilterClauseSerializer` (released in #4115) renders Is Blank as `= ''`
+and maps `= ''` back to Is Blank, documenting that a literal equals-empty "is not separately expressible
+(or needed) in this syntax". That was harmless when blank meant null-or-empty; under the new semantics the
+two are opposites for a flag term, so a UI-authored `Equals ""` routed through a transition list comes back
+as Is Blank. Documents (.sky XML) and the .skyd cache persist the operator itself and are unaffected.
+Not fixed because changing what `= ''` means would reinterpret filter strings already authored against
+released columns; scoping the change to CV columns would need a per-column hook in the shared serializer.
+The ontology value type narrows the exposure: for a term with no declared value type (a pure flag, which
+can only ever be present with an empty value) `Equals ""` says exactly what Is Not Blank says, so the
+escape hatch only matters for a term declared to carry a value that some file wrote out empty anyway.
+`TestCvParamBlankFilter` pins the current (lossy) behavior so a future fix has to update it deliberately.
 
 ### 2026-08-11 - CV columns typed from the ontology (commit `53f93f8c4`, pushed)
 
