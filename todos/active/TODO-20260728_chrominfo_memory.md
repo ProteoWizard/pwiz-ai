@@ -633,6 +633,188 @@ Open questions for the developer:
   `DocumentReader` already discards the stored `user_set` on the grounds that "all values
   are still calculated from the child transitions".
 
+### 2026-08-06 - Session 8: working through the 104 failures in SkylineTester.log
+
+Baseline: the run log at `sky_memory/SkylineTester.log` (1126 tests, 104 failures). Measured
+subsets locally rather than repeating the whole run.
+
+**Verified: the fast suites (Test.dll + TestData.dll subset of the failing list) went 28 -> 20,
+and 8 of 11 converted functional tests now pass.** Nothing that passed regressed.
+
+**The single largest cause was removing `SrmDocument.UpdateResultsSummaries` (`c7239ced8`).**
+Its commit message says "nothing keeps what it worked out", which is true of the *summaries* but
+not of the pass: `OnChangingChildren` ran a full results pass over every molecule whose node
+changed, and that pass is the only thing which reads the .skyd for nodes that have just been
+added. Without it, anything that changes children - `Refine` with auto-pick, adding isotope
+transitions, importing peak boundaries - leaves the new nodes with no peaks for good. Restored,
+with a comment saying what depends on it. The removal was checked against `Test.dll` only, which
+is exactly the suite that has no results in it.
+
+**Three more product defects, each found by instrumenting rather than reading:**
+- `RefinementSettings.Refine` (precursor level) called the one-argument
+  `TransitionGroupDocNode.GetPeakCountRatio`, one of the four accessor families still backed by
+  `LegacyChromInfos`. It answers null for every precursor of a normally loaded document, so
+  `RemoveMissingResults` emptied the whole document. Now calls the columnar overload.
+- The columnar `GetPeakCountRatio(replicateIndex, integrateAll)` had no `-1` case, so the
+  "average over replicates" meaning the accessor it replaced gave it was silently a lookup of
+  replicate -1. Added `GetAveragePeakCountRatio`.
+- It also returned 0 rather than null for a replicate the precursor was not measured in, because
+  the denominator counted transitions with results *anywhere*. A missing chrom info used to mean
+  null and refinement still relies on the difference.
+
+**The document round trip was losing three things.** All found by dumping both sides of
+`AssertEx.DescribeModelDifference`:
+- `IsTruncated` and `IsForcedIntegration` were never written by `WriteTransitionResults`, so a
+  peak came back with truncation "not worked out" where it had been false.
+- `TransitionResults.TryGetPlainArea` let a peak ride the precursor's `transition_areas` while
+  `SharedTransitionAreas.MakeTransitionResults` rebuilt it with different flags. The two now agree
+  through one factory, `TransitionGroupResults.MakePlainPeak`.
+- `chosen_peak_index` was written even when the indexes were not worked out, which read back as
+  "this document knows them" and threw away the transition flags. It is now left out when
+  `NeedsPeakIndexes`, and the "which shape are the transition elements in" question - the second
+  job the writer's comment said had come apart from it - is answered by `peak_count_ratio`, which
+  only a precursor that kept chrom infos ever wrote.
+
+**Still failing, and why - these need decisions rather than fixes:**
+
+1. **Document equality across serialization - SOLVED (Nick's design).** Two documents read from
+   the same file hold different `ChromFileInfoId` objects, and `ChromFileIds.Equals` compares them
+   by reference, so every `ChromFileIdMap` differed and no results document equalled itself across
+   a round trip.
+
+   Weakening `ChromFileIdMap.Equals` is **not** the answer - it hangs
+   `TestCommandLineImportPeakBoundary` (tried it; blocked, 15 s of CPU in 11 minutes), and for a
+   sound reason: results whose values are unchanged but whose file ids are new would be kept as
+   "unchanged", and every `IndexOfFile` lookup on them then fails, so nothing is ever loaded.
+
+   Instead the ids are **cleared before the comparison and nowhere else**. `ClearFileIds` on
+   `ChromFileIds` and `ChromFileIdMap`, `ClearChromFileIds` on `TransitionGroupResults` (both
+   levels), `PeptideResults` and `SrmDocument`; `AssertEx.DocsEqual` clears both sides and compares
+   those. The doc nodes go on telling the ids apart - only a caller which says it means "the same
+   results" gets to look past them. `LegacyChromInfos` is left alone: a `ChromInfo` compares its
+   file id with `Identity` equality, which never told two apart.
+
+   Two things it must keep doing: the document `ClearChromFileIds` returns is left deferring
+   settings changes, or walking it starts a results pass which puts the ids straight back; and
+   only the *comparison* may see it - `DocsEqual` diagnoses with the original documents, because
+   serializing a cleared one works the chrom infos out again from the .skyd and has no file to find.
+2. **The dot products are calculated, not stored** (Nick's direction, and the general rule):
+   *anything needed only once is worked out by constructing a `MoleculeResults` while making one
+   pass through the document.* They cost nothing to keep out of memory - the library intensities
+   come off `TransitionDocNode.LibInfo` and the isotope proportions off `IsotopeDistInfo`, neither
+   of which varies by replicate.
+
+   `RefinementSettings.Refine` does that now. The molecule loop holds one lazily made
+   `MoleculeResults` per molecule and lets it go before the next, and `GetAverageChromInfoValue`
+   reads the dot products off it instead of `GetLibraryDotProduct`/`GetIsotopeDotProduct`, which
+   are two more of the accessor families backed by `LegacyChromInfos` and were answering null for
+   every precursor. Lazy on purpose: most refinements read only the columnar results and never
+   touch a chromatogram.
+
+   Note this was never only a test problem - dot-product refinement was dead for **any** document,
+   loaded or not, because the accessor it went through could not answer.
+
+   **No `MoleculeResults` at all, in the end.** The dot products need only the transitions' areas,
+   which are in the columnar results, and the library intensities / isotope proportions, which are
+   on the transitions. So `TransitionGroupDocNode.GetLibraryDotProduct(replicateIndex, settings)`
+   and `GetIsotopeDotProduct` work them out in memory, reading no chromatogram, over the same
+   transitions the results pass uses (`GetMsMsTransitions` + `ParticipatesInScoring`, and
+   `GetMsTransitions`, with the same minimum counts). Refinement calls those, and the lazy
+   `MoleculeResults` plumbing was removed again - nothing in refinement needs one now.
+
+   **Verified exactly**: on `SRM_mini_single_replicate.sky` the six precursors the dot product
+   filter removes come out at 0.4558922, 0.5302568, 0.6088713, 0.2184553, 0.7010977 and 0.372187,
+   which are the `library_dotp` values stored in that document to every digit it wrote. The
+   calculation reproduces what the results pass produced.
+
+   Asked of the precursor **as it came**, not as refining left it: the stored chrom infos were
+   worked out before any refinement ran, so they were always about the whole transition set.
+
+   **Two of the four legacy accessor families are gone.** `GetLibraryDotProduct(int)`,
+   `GetIsotopeDotProduct(int)`, `AverageLibraryDotProduct` and `AverageIsotopeDotProduct` are
+   deleted rather than left beside the new overloads - an accessor which compiles and always
+   answers null is exactly the trap this branch keeps falling into. Their two remaining callers
+   were converted: the precursor tree label (`GetResultsText`, through
+   `DisplaySettings.NormalizedValueCalculator.Document.Settings`) and `AreaReplicateGraphPane`
+   (through the `_document` its `GraphData` already holds). Both were silently showing no dot
+   product at all, so this fixes the tree label and the dotp line on the peak area graph as well.
+   Still backed by `LegacyChromInfos`: `AveragePeakCountRatio` and `AveragePeakArea`.
+
+   Still one peptide out: `ConsoleRefineResultsTest` now removes 6 pep / 6 prec / 65 tran where it
+   expects 5 / 5 / 57. The marginal one is FLEQQNKVLETK at 0.7010977 against a threshold of
+   0.7128674 - just under, so it goes. Since the computed value matches what the file stores, the
+   question is whether the *areas* should have been refreshed by loading the .skyd rather than left
+   as the document wrote them in 2019: master recalculated results on open, and the expectation was
+   presumably taken from those recalculated areas. That is the thing to settle, and it is the same
+   question as "what refreshes the columnar results when a document is opened with its cache".
+
+   **Nick's direction: the test should load the document rather than the results being stored.**
+   Right in principle, but neither document in Refine.zip can host it, and both attempts were
+   built and measured before being backed out. `RefineTest.cs` is unchanged; what follows is what
+   the next attempt should start from rather than rediscover.
+
+   - **`SRM_mini.sky` can never be loaded.** It names 55 raw files which Refine.zip does not
+     contain, and there is no SRM_mini.skyd.
+   - **The single replicate document is the same targets** - `SRM_mini_single_replicate.sky` is
+     also 4 groups, 36 molecules, 38 precursors, 334 transitions, and it loads by importing
+     worm1.mzML through `AsSmallMoleculeTestUtil.ConvertToSmallMolecules`, which the small
+     molecule modes already use. Three of the four "should not change the document" refinements
+     at the top of `RefineResultsTest` still hold on it. `RTRegressionThreshold = 0.3` does not:
+     it cuts **36 peptides to 2**. Not a legacy accessor - `GetMaxQValue` below is only reached
+     for `PointsTypeRT.targets_fdr` and refinement passes `targets`. It is peak picking: the
+     stored 2010 picks averaged over 55 replicates against what Skyline picks now from one
+     replicate. So the RT thresholds, and every count downstream of them, need re-deriving.
+   - **iPRG and sprg do not fit either.** Both ship with a .skyd, so they load with no import at
+     all (worth knowing on its own), but `iPRG 2015 Study-mini` is 1 protein / 4 peptides and
+     `sprg_all_charges-mini` is 1 protein / 3 peptides, and only iPRG has a .blib. The test's
+     scenario - "remove the protein with only 3 peptides", "first three children unchanged",
+     `MaxPepPeakRank = 5` - needs several proteins. Only iPRG could carry the dot product part.
+   - **The test is one chained scenario, so the results-dependent steps cannot be lifted out.**
+     Each refinement narrows the document the next one measures: cutting the dot product block
+     alone moves `MaxPeakRank` from 28 transitions to 118. Verified by doing it.
+
+   **There is no SRM_mini.skyd to be found.** Every .zip under `pwiz_tools` was searched (366 of
+   them) for anything named `SRM_mini*`. What exists:
+   - `Refine.zip`: `SRM_mini.sky` (no cache, 55 raw files it will never see),
+     `SRM_mini_single_replicate.sky` (format 3.62, 2017, 4/36/38/334, wants worm1.mzML, no cache)
+   - `CommandLineRefine.zip`: `SRM_mini_single_replicate.sky` **with its .skyd** - but a *different*
+     document: format 4.2, 2019, 5 groups / 37 peptides / 40 precursors / 338 transitions, built on
+     `worm_0001.mzML`, and carrying 19 `library_dotp` values against the other's 2. Its cache
+     belongs to it and cannot be lent to Refine.zip's copy.
+
+   So the only loaded multi-target refinement document that exists is CommandLineRefine.zip's, and
+   `ConsoleRefineResultsTest` already uses it - which is why that test is the one showing dot
+   product refinement working. If `RefineResultsTest` is to have loaded results without new test
+   data, that document is the candidate; its shape is close (5/37/40/338 against 4/36/38/334) but
+   the expected numbers would still need re-deriving.
+
+   Noticed on the way: `RetentionTimeRegressionGraphData.GetMaxQValue` still reads
+   `GetSafeChromInfo`, one of the legacy accessor families. The q values are in
+   `TransitionGroupResults.QValues` now, and it currently answers 1.0 for every molecule - which
+   means `PointsTypeRT.targets_fdr` drops every peptide from the regression.
+3. **Per-optimization-step precursor annotations.** `TestAnnotations` sets an annotation on the
+   second row of the results grid for a document with optimization steps and reads it back. The
+   columnar results hold step zero only and give every step the step-zero annotations, so the two
+   rows cannot differ. Either the grid should refuse the edit or the design needs a per-step
+   annotation - not something to decide from the test.
+4. **`IrtFunctionalTest` and `TestSynchronizedIntegration` hang locally** rather than failing.
+   `IrtFunctionalTest` takes ~6 minutes on the reference machine (a `WaitForOpenForm` timeout) but
+   did not finish in 30 here. Worth a look with a debugger attached rather than by timeout.
+
+**Test sites converted off `.EmptyResults[...]`** (the ~130 the earlier session counted; 65
+indexing sites remained, in 24 files). `ResultsUtil` gained the precursor level counterparts of
+the transition helpers it already had: `EnumerateTransitionGroupChromInfos`,
+`GetTransitionGroupChromInfos(document, nodeGroup[, replicateIndex])` and `FindMolecule`, which
+matches on the `TransitionGroup` rather than the node so a node picked up from an earlier revision
+still finds its molecule. `AssertResult.IsDocumentResultsState` now counts from the columnar
+results when the document has no .skyd - a test which deserializes a document to look at it can
+say nothing through a `MoleculeResults` - and counts **per file**, which is what the numbers it is
+asserted against have always been (`--import-append` doubles every one of them).
+
+Files still holding `.EmptyResults[...]` reads, all in tests which were passing vacuously:
+`ShimadzuSrmDuplicateQ1Test`, `ImportDocTest`, `ManageResultsTest`, `WatersCalcurveTest`,
+`RefineTest`, and the three `TestPerf` ones.
+
 ### 2026-07-30 - Session 4
 
 Branch pushed to origin for the first time (`Skyline/work/20260728_chrominfo_memory`).
