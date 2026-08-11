@@ -4,7 +4,7 @@
 - **Branch**: `Skyline/work/20260808_peak_coassignment_diagnostics`
 - **Base**: `master`
 - **Created**: 2026-08-08
-- **Status**: PR open, -Dataset All green, TeamCity triggered
+- **Status**: PR open, -Dataset All green, TeamCity 4128458 SUCCESS
 - **GitHub Issue**: [#4522](https://github.com/ProteoWizard/pwiz/issues/4522)
 - **Module**: `osprey`
 - **PR**: [#4558](https://github.com/ProteoWizard/pwiz/pull/4558) (stacked on #4557); Rust: [maccoss/osprey#62](https://github.com/maccoss/osprey/pull/62) (stacked on #61)
