@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260803_panorama_web_test_skip_note`
 - **Base**: `master`
 - **Created**: 2026-08-03
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `skyline`
 - **GitHub Issue**: [#4519](https://github.com/ProteoWizard/pwiz/issues/4519)
-- **PR**: [#4524](https://github.com/ProteoWizard/pwiz/pull/4524) (opened 2026-08-03, OPEN)
+- **PR**: [#4524](https://github.com/ProteoWizard/pwiz/pull/4524) (merged 2026-08-11)
 
 ## Motivation
 
@@ -67,3 +67,19 @@ either way, since a TeamCity-only decision is what made the earlier
 - `TestPanoramaDownloadFileWeb` - passes, note emitted, 0.8s
 - CodeInspection
 - ReSharper full-solution inspection
+
+## Progress Log
+
+### 2026-08-11 - Merged
+
+PR #4524 merged as commit e39f346, closing issue #4519. What shipped is the
+minimal change from Scope: a 4-line `else` in `PanoramaClientDownloadTest.cs`
+emitting the house stderr skip note when `AllowInternetAccess` is false, so the
+skip is visible in the console and TeamCity build log instead of the test
+silently reporting PASSED in 0 sec. The squash subject landed without the
+`skyline: ` module prefix.
+
+Deferred, per Known limitation: the test still reports PASSED and the note does
+not appear in TestRunner's `log=` file. Making the results summary itself honest
+means excluding the test from the TeamCity configuration - a separate decision,
+not filed as an issue.
