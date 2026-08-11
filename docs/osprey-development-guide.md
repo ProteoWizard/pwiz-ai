@@ -261,12 +261,29 @@ failures are easy to misread:
 |---|---|
 | `Build-OspreyRust.ps1: The term 'cargo' is not recognized` | rustup / the Rust toolchain |
 | build script panic: `vcpkg failed to find OpenBLAS package ... VcpkgNotFound` | vcpkg + `openblas` / `openssl` packages |
+| the built `osprey.exe` exits `-1073741515` (`0xC0000135`) with no message | `C:\vcpkg\installed\x64-windows\bin` (holding `openblas.dll`) not on `PATH` at RUN time |
 
 The second one is the trap: the toolchain installs cleanly and `rustc --version`
 answers, so the machine looks ready, but `maccoss/osprey` links native OpenBLAS
 through the `openblas-src` crate and cannot build without it. CI hides this -
 the GitHub runners ship vcpkg preinstalled, so `.github/workflows/ci.yml` only
 has to run `vcpkg install openblas:x64-windows openssl:x64-windows`.
+
+**The third is the same dependency one step later, and it is easy to miss because
+`VCPKG_ROOT` fixes the BUILD and nothing else.** `0xC0000135` is
+`STATUS_DLL_NOT_FOUND`, but it surfaces as a bare numeric exit code from whatever
+wrapper launched the binary - `Compare-EndToEnd-Crossimpl.ps1` reports only
+`Tool exited -1073741515` - so it reads like a crash inside the run rather than a
+missing prerequisite. Prepend the vcpkg bin directory whenever you RUN the Rust
+binary, not just when you build it:
+
+```powershell
+$env:PATH = "C:\vcpkg\installed\x64-windows\bin;$env:USERPROFILE\.cargo\bin;$env:PATH"
+$env:VCPKG_ROOT = 'C:\vcpkg'
+```
+
+Cost three attempts to diagnose on 2026-08-10 while running the cross-impl sidecar
+parity harness.
 
 Full setup (winget for rustup, then vcpkg) is in
 **ai/docs/new-machine-setup.md**, Phase 7 - "Rust toolchain + LSP for
