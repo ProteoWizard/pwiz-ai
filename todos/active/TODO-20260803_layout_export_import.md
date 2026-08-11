@@ -422,6 +422,60 @@ ExistingQuantitativeExperiments / GroupedStudies tutorials, and CodeInspection.
 **A full nightly is still the gate** - any test data whose `.sky.view` names a
 window this Skyline does not recognize will now pop a dialog.
 
+### 2026-08-11 - Session 2, shared the layout parse with DigitalRune
+
+`LayoutPreview` scraped `//Content` with `XmlDocument`, which is far looser than
+what `DockPanelPersistor` accepts (`FormatVersion` exactly `"1.0"`, elements in
+order, every `ID` equal to its index). A well-formed file that is not a layout
+therefore produced zero persist strings, no warning, and then threw from
+`dockPanel.LoadFromXml` - *after* `LoadLayoutLocked` had already destroyed every
+window. The check that exists to protect the arrangement could not see the one
+class of file that destroys it.
+
+**DigitalRune** (`developers` repo, branch `Skyline/work/20260811_docking_layout_parse`):
+`DockPanelPersistor.LoadFromXml` was already two phases with no overlap - parse
+(no `DockPanel` touched) then apply. Split out as public `DockPanelLayout`:
+
+- `DockPanelLayout.Load(stream)` - the existing parse, verbatim, minus the
+  `DockPanel` that `LoadDockZones` only wanted for a count (now reads until the
+  element name changes).
+- `DockPanelLayout.Validate()` - the index cross-references the apply phase walks
+  unchecked: pane→content RefIDs, nested-pane RefIDs and PrevPanes, ActiveContent
+  / ActiveDocumentPane / ActivePane, 5 dock zones, and **panes with no contents**
+  (which create no `DockPane`, so every later `dockPanel.Panes[i]` is off by one -
+  silent scramble, not an exception). Reports typed problems, not English for
+  display, so Skyline writes its own message.
+- `DockPanel.LoadFromXml(DockPanelLayout, ...)` - apply what was already
+  inspected. The stream overloads now parse *before* resetting `_panes`, so a bad
+  file no longer clears the pane collection on its way out.
+- Rebuilt `DigitalRune.Windows.Docking.dll` (270336 → 274432 bytes) into
+  `BinariesForProteoWizard/` and `pwiz_tools/Shared/Lib/`. Verified the shipped
+  binary tracks master source - the DLL and `Source/` are committed together in
+  every commit that touched either.
+
+**Skyline**: `LayoutPreview.ReadLayout` loads and validates; `ImportLayout` reads
+once and hands the same instance to `LoadLayout`, so nothing can change between
+the check and the act. New `LayoutWindowId` parses persist strings for both
+`LayoutPreview` and `RestoreDockableForm`, which were two copies of one decision
+tree - that removes `ALWAYS_AVAILABLE_FORMS` / `GRAPH_CONTROLLERS` /
+`CLUSTERED_GRAPHS`, the duplicated default-replicate-name translation, and the
+"kept in the same order as" comment that admitted the duplication. Three cases
+where the two copies already disagreed (bare `GraphSummary`, `GraphSummary` with
+an unknown controller, `DetectionsGraphController` in a two-part string) now have
+one answer. `MoveLayoutOffScreen` is 3 lines of setting `Bounds` instead of ~28 of
+`XmlDocument` surgery.
+
+Verified: build clean; TestLayoutExportImport, TestTreeRestoration,
+TestListClustering, TestFilesTreeForm, TestNeutralLossLibrary,
+TestFilesTreeFileSystem, CodeInspection all pass. All 113 `.view` files in the
+repo were run through `DockPanelLayout.Load` + `Validate` - 0 problems, so the
+stricter path rejects nothing that ships today. **Full nightly still the gate**,
+same reason as Session 1.
+
+`LayoutExportImportTest.FindUnrestorableWindows` had to start writing a *valid*
+layout file rather than a `<Contents>` fragment - which is the point: a persist
+string only reaches `LayoutPreview` inside a file the docking library accepts.
+
 ## References
 
 - Original backlog file: `TODO-mcp_tutorial_view_layout.md` (renamed to this file)
