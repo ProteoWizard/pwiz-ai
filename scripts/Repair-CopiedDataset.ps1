@@ -171,7 +171,14 @@ $i = 0
 foreach ($f in $files) {
     $i++
     Write-Progress -Activity 'Checking' -Status $f.Name -PercentComplete (100 * $i / $files.Count)
-    $why = Get-Mismatch $f (Join-Path $Destination $f.Name)
+    # $ErrorActionPreference is 'Stop', so without this one transiently locked file - an
+    # indexer, AV, a -Full Get-FileHash failure - aborts the whole loop and throws away every
+    # result gathered so far, including the CSV. An unreadable file IS a mismatch; record it.
+    try {
+        $why = Get-Mismatch $f (Join-Path $Destination $f.Name)
+    } catch {
+        $why = "check failed: $($_.Exception.Message)"
+    }
     $rows += [pscustomobject]@{ Name = $f.Name; Bytes = $f.Length; Mismatch = $why }
     if ($why) {
         $bad += $f
@@ -184,16 +191,30 @@ Write-Host ''
 Write-Host ("{0} of {1} do not match ({2:N1} GB to re-copy)" -f $bad.Count, $files.Count,
     (($bad | Measure-Object Length -Sum).Sum / 1GB))
 
-if ($ReportCsv) {
-    $rows | Export-Csv $ReportCsv -NoTypeInformation
+# Outcome per file, filled in by the copy loop below. The CSV is written LAST so it records
+# what actually happened: written before the copy it could only ever list the pre-copy
+# mismatches, so a run that repaired 47 of 48 produced a report indistinguishable from one that
+# repaired none - and the CSV is the only machine-readable output.
+$outcome = @{}
+
+function Write-ReportCsv {
+    if (-not $ReportCsv) { return }
+    $rows |
+        Select-Object Name, Bytes, Mismatch,
+            @{ Name = 'Outcome'; Expression = {
+                if ($outcome.ContainsKey($_.Name)) { $outcome[$_.Name] }
+                elseif ($_.Mismatch) { 'not attempted' }
+                else { 'matched' } } } |
+        Export-Csv $ReportCsv -NoTypeInformation
     Write-Host "report: $ReportCsv"
 }
 
 if ($VerifyOnly -or $WhatIfOnly) {
+    Write-ReportCsv
     if ($bad.Count -eq 0) { Write-Host 'Everything matches.' }
     return
 }
-if ($bad.Count -eq 0) { Write-Host 'Nothing to copy.'; return }
+if ($bad.Count -eq 0) { Write-ReportCsv; Write-Host 'Nothing to copy.'; return }
 
 Write-Host ''
 Write-Host 'Copying with robocopy /IM /IS /IT /J (unbuffered; /IM is what copies a file whose'
@@ -221,15 +242,23 @@ foreach ($f in $bad) {
     & robocopy $Source $Destination $f.Name /IM /IS /IT /J /R:2 /W:5 /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) {
         $failed += [pscustomobject]@{ Name = $f.Name; Why = "robocopy exit $LASTEXITCODE" }
+        $outcome[$f.Name] = "copy failed (robocopy exit $LASTEXITCODE)"
         continue
     }
-    $why = Get-Mismatch $f (Join-Path $Destination $f.Name)
+    try {
+        $why = Get-Mismatch $f (Join-Path $Destination $f.Name)
+    } catch {
+        $why = "check failed: $($_.Exception.Message)"
+    }
     if ($why) {
         $failed += [pscustomobject]@{ Name = $f.Name; Why = "still bad after copy: $why" }
+        $outcome[$f.Name] = "still bad after copy: $why"
     } else {
         $copied++
+        $outcome[$f.Name] = 'repaired'
     }
 }
+Write-ReportCsv
 
 Write-Host ''
 Write-Host ("re-copied and verified : {0}" -f $copied)
