@@ -20,9 +20,11 @@
     few MB of reads rather than 670 GB. Use -Full when you want proof rather than a strong
     indication.
 
-    Copies run through robocopy /J (unbuffered I/O), which is the recommended mode for very
-    large files: it bypasses the cache manager, so a copy cannot sit in RAM being counted as
-    written. /R:2 /W:5 retries a transient network blip instead of failing the batch.
+    Copies run through Copy-Item, NOT robocopy. Robocopy was tried first and silently moved
+    zero bytes against this SMB source while exiting 0 - see the comment on the copy call. The
+    cost of Copy-Item is that it goes through the cache manager, so a verification made
+    immediately after writing can be answered from RAM; that is what -VerifyOnly in a later
+    session is for, and why the summary points at it.
 
 .PARAMETER Source
     Source directory (the authoritative copy).
@@ -175,16 +177,23 @@ if ($VerifyOnly -or $WhatIfOnly) {
 if ($bad.Count -eq 0) { Write-Host 'Nothing to copy.'; return }
 
 Write-Host ''
-Write-Host 'Copying with robocopy /J (unbuffered)...'
+Write-Host 'Copying with Copy-Item (robocopy moves zero bytes against this source - see below)...'
 $copied = 0
 $failed = @()
 foreach ($f in $bad) {
     Write-Host ('  {0}' -f $f.Name)
-    # /J unbuffered, /R:2 /W:5 retry, /NFL /NDL /NJH /NJS quiet. robocopy exit codes < 8 are
-    # success variants; >= 8 is a real failure.
-    & robocopy $Source $Destination $f.Name /J /R:2 /W:5 /NFL /NDL /NJH /NJS /NP | Out-Null
-    if ($LASTEXITCODE -ge 8) {
-        $failed += [pscustomobject]@{ Name = $f.Name; Why = "robocopy exit $LASTEXITCODE" }
+    # DO NOT PUT ROBOCOPY BACK without re-measuring it on this exact source. It silently
+    # refused every file here: against the M: SMB share it CLASSIFIED each one "modified"
+    # (so it had decided to copy) and then reported Copied 0 / Skipped 1 / FAILED 0 in 0.04 s
+    # and exited 0 - with /IS /IT, without them, and with plain default flags alike. Zero
+    # bytes moved while the exit code said success, so the script reported "still bad after
+    # copy" for all 48 and the failure read as a dying destination drive. It is not: the same
+    # file copies correctly with Copy-Item, and a write-and-read-back test on the destination
+    # passes. Measured 4.61 GB in 43.7 s = 108 MB/s, head and trailing index both valid.
+    try {
+        Copy-Item -LiteralPath $f.FullName -Destination (Join-Path $Destination $f.Name) -Force -ErrorAction Stop
+    } catch {
+        $failed += [pscustomobject]@{ Name = $f.Name; Why = "copy failed: $($_.Exception.Message)" }
         continue
     }
     $why = Get-Mismatch $f (Join-Path $Destination $f.Name)
@@ -200,8 +209,17 @@ Write-Host ("re-copied and verified : {0}" -f $copied)
 Write-Host ("still failing          : {0}" -f $failed.Count)
 if ($failed.Count) {
     $failed | Format-Table -AutoSize | Out-String | Write-Host
-    Write-Host 'A file that fails verification straight after an unbuffered copy points at the'
-    Write-Host 'destination hardware rather than at the copy.'
+    if ($copied -eq 0) {
+        # Do NOT read a 100% failure as hardware. Hardware that loses writes loses SOME of them;
+        # every file failing identically is the signature of a copy that never ran. That is how
+        # the missing /IS was misread as a failing drive - robocopy skipped all 48 and exited 0.
+        Write-Host 'EVERY file failed and none succeeded. That is the signature of a copy that did'
+        Write-Host 'not run at all, not of failing hardware - check that robocopy actually copied'
+        Write-Host 'bytes (drop /NJS to see Copied vs Skipped) before suspecting the destination.'
+    } else {
+        Write-Host 'Some files copied and these did not. A file that fails verification straight'
+        Write-Host 'after an unbuffered copy points at the destination hardware rather than the copy.'
+    }
 }
 Write-Host ''
 Write-Host 'Re-run later with -VerifyOnly (ideally -Full) in a fresh session: a check made right'
