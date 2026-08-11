@@ -69,6 +69,52 @@ pass2: ..._20: run_protein_qvalue differs on 133 record(s); first entry_id=1341 
 switch that disables the streaming and library-fragment-release paths. Unrelated; do not
 chase them.
 
+## Mechanism - established from the code 2026-08-11 (measurement pending)
+
+**The chain does not invent a value for gap-fill entries. It propagates the ordinary one.**
+
+`ProteinFdr.PropagateProteinQvalues` (`ProteinFdr.cs:893-912`) walks EVERY entry in the pool
+and assigns `PeptideQvalues[ModifiedSequence]`, falling back to 1.0 only when the sequence is
+absent. It does not consult whether the entry passed anything. So a non-gap-fill entry in a
+file where its peptide did NOT pass already carries the real protein q - the "it never
+competed" argument does not single out gap-fill.
+
+The only difference between the routes is **which pool the propagation loop walks**:
+
+* straight-through: first-pass protein FDR runs in Stage 5 (`FirstPassFdrTask.cs:423`, or the
+  streaming reducer at `:2532`), BEFORE Stage 6 creates gap-fill stubs. The stubs are then
+  born at `ResetScores()` defaults (`PerFileRescoreTask.cs:2016` and `:2070`) and nothing
+  assigns one afterwards.
+* chain: `--task SecondPassFDR` rehydrates from the RECONCILED parquet, which already
+  contains the gap-fill rows, then re-runs `ProteinFdrEngine.RunFirstPass`
+  (`PerFileRescoreTask.cs:531`) over that pool - so the propagation loop reaches them.
+
+The issue's own measurement corroborates that this is the whole difference: if the larger
+pool had changed the computed protein FDR, non-gap-fill entries' `run_protein_qvalue` would
+differ too. They do not (0 mismatches).
+
+Rust is the same design, not a divergence: `pipeline.rs:4980` gates the identical block on
+`!can_skip_fdr || config.expect_reconciled_input` and calls `propagate_protein_qvalues` at
+`:5023` over the reconciled pool.
+
+### The divergence has no output consumer
+
+Worth stating plainly before choosing, because it de-risks the decision:
+
+* `RunProteinQvalue` is a GATE at Stage 5/6 only - protein-aware compaction
+  (`FirstPassFdrTask.cs:1420`, `:2742`) and consensus rescue (`ConsensusRts.cs:249`). Both run
+  BEFORE gap-fill entries exist, so a gap-fill entry can never be gated by it.
+* The pass-2 sidecar is written at `SecondPassFdrTask.cs:175`, and
+  `ProteinFdrEngine.RunSecondPass` overwrites `RunProteinQvalue` on every stub at `:199`
+  (via `PropagateProteinQvalues(..., true, true)`) twenty lines later, at `:197`. So the
+  persisted value is transient in memory on every route that loads it.
+* The C# chain never reads a `.2nd-pass.fdr_scores.bin` back (the `--task PerFileRescoring`
+  workers do not write one - see the #4553 gotcha), and Rust's `--join-at-pass=2` reload
+  (`pipeline.rs:5187`) is followed by the same second-pass overwrite.
+
+That is consistent with `mode1 (vs golden)` passing on both routes. This is a question about
+a persisted artifact being self-consistent, not about reported output.
+
 ## Open design question - the actual deliverable
 
 Should a gap-fill entry carry a run protein q at all? If it should, which route is right?
@@ -79,6 +125,39 @@ Should a gap-fill entry carry a run protein q at all? If it should, which route 
 
 Note the related invariant from #4553: all peptides of a protein should share a protein q.
 Whichever value is chosen has to be checked against that.
+
+### The two implementable options, with costs
+
+**Option A - a gap-fill entry carries NO first-pass protein q (1.0), both routes.**
+One place: `Pass2FdrSidecar.RestorePass1Scalars` already streams each file's 1st-pass sidecar
+and knows exactly which entries have no record there - that set IS the gap-fill set. Setting
+`RunProteinQvalue = 1.0` for them makes both routes agree BY CONSTRUCTION at the same seam
+#4557 used for `Score` / `Pep` / `RunProteinQvalue`, rather than by the chain's recompute
+happening to land somewhere. Both routes run it (`ComputeAndPersist`, called from
+`SecondPassFdrTask.cs:175`).
+
+* default arm: no change at all (already 1.0), so the golden cannot move
+* Rust twin: the same rule in `restore_pass1_scalars`
+* argues that 1.0 is the honest representation: the field's purpose is a Stage-5/6 gate, and
+  a gap-fill entry never faced that gate
+* **fails closed.** A future consumer gating on `run_protein_qvalue <= protein_fdr` would
+  auto-pass every gap-fill entry under 0.0 and auto-reject them under 1.0. Same hazard shape
+  as [[project_osprey_zero_is_the_score_boundary]] - a value sitting on the accept side of a
+  gate assigned to something that never competed
+* cost: leaves the "all peptides of a protein share a protein q" invariant violated for
+  gap-fill rows, which has to be stated as deliberate rather than ignored
+
+**Option B - a gap-fill entry carries its peptide's protein q, both routes.**
+Straight-through would have to propagate onto the new stubs in Stage 6, which means carrying
+the first-pass `PeptideQvalues` map (`FirstPassProteinFdrResult.ProteinFdr.PeptideQvalues`)
+from Stage 5 into Stage 6 on BOTH arms - it exists on the streaming arm too
+(`FirstPassFdrTask.cs:2568`), it is just not published past Stage 5.
+
+* satisfies the shared-protein-q invariant
+* costs new O(unique peptides) retention across Stage 6, the memory-critical stage
+* CHANGES the default arm's persisted sidecar, so it needs the Rust twin landed together or
+  the cross-impl sidecar leg goes red, and it moves a shipped artifact for a field with no
+  consumer
 
 Whatever is decided must land on **both** C# and Rust, or the cross-impl sidecar leg
 (`Compare-FdrSidecars-Crossimpl.ps1`, added by #4557) goes red - it exists precisely to
