@@ -846,3 +846,26 @@ does not taint the pass-2 numbers.
 clearing the pass-2 experiment bar; the panel reports **71**. Pass 1 agrees exactly (468 vs
 468). One decoy differs at pass 2 - most likely a tie exactly at the boundary or a
 classification edge. Worth a look before the decoy row is quoted.
+
+#### The 72-vs-71 residual: two candidate mechanisms, neither confirmed
+
+Not chased further tonight because a decisive test needs either the `entry_id` -> modified
+sequence mapping (assigned by Osprey at library load, not present in the DIANN TSV) or new
+panel instrumentation, and no more code could be pushed once TeamCity was running on the PR
+commit. Both candidates are cheap to test in the morning:
+
+1. **Precursor-key collision.** The panel keys precursors on `modseq|charge|decoy` taken from
+   the LIBRARY entry, and the registry keeps the first arrival for a key. In this dataset
+   decoys are reversals of BOTH targets and entrapment, so two distinct decoy entry_ids can
+   carry the same library modified sequence and charge and collapse into one bucket. This is
+   the same class of defect as RESOLVED item 3 above (which cost 396 of 468 decoys), just at a
+   much smaller scale, so it deserves a look rather than a shrug.
+2. **One decoy failing library m/z resolution** at pass 2 and being dropped by the panel's
+   `double.IsNaN(mz)` guard. Less likely now that `BuildPrecursorMzLookup` has the base-id
+   fallback, but not excluded.
+
+**The cheapest discriminator is the one the pass-2 panel is missing**: pass 1 logs
+"decoy precursors admitted N, tallied N" and that check is what makes its decoy row
+self-verifying. Pass 2 has no equivalent - noted independently by `/code-review max`. Adding it
+would have printed "admitted 72, tallied 71" and named the gap immediately. Add it first, then
+the answer falls out of the next gate run instead of needing an offline script.
