@@ -201,6 +201,38 @@ no use outside spectrum filters):
 
 ## Progress Log
 
+### 2026-08-11 - CV columns typed from the ontology (commit `53f93f8c4`, pushed)
+
+Nick's PR review (2026-08-10) on `GetCvColumnCatalog` passing `isNumeric: false`: "I think we really do
+know whether these CV params are numeric ... I am not sure where that information is in the source code."
+He is right about the ontology and it was NOT reachable from C#:
+
+- `psi-ms.obo` carries `relationship: has_value_type xsd:float` on 1342 terms, but `obo.cpp`
+  `parse_relationship` returned early for any `xsd:` target (a relation map holds CVID objects, and an
+  xsd primitive is not a term), so only the 8 `has_value_type` relations naming a CV term survived
+  into the generated `cv.cpp`. The CLI binding never exposed `otherRelations` anyway.
+- Fix threads it through the generators: `Term::valueType` / `CVTermInfo::valueType` (new
+  `valueTypes_` table in generated cv.cpp, +1364 lines), `CVTermInfo.valueType` in the CLI binding.
+  Regenerate with `quickbuild.bat address-model=64 pwiz/data/common//cv.hpp` and the same for
+  `pwiz/utility/bindings/CLI/common//cv.hpp`; both regenerated with NO unrelated churn.
+- **Rebuild the bindings with `--without-compassxtract`** or the output lands in a different variant
+  tree than the one staged into `Shared/ProteowizardWrapper/obj/x64` (staging target:
+  `pwiz_tools/Skyline//install-native-dependencies`).
+- Skyline side: new `SpectrumCvTerm` (accession/name/definition/value type) replaces the abuse of
+  `SpectrumMetadataTerm` (value/unit always null) as the catalog entry type. Catalog, discovered, and
+  saved-path-reconstructed CV columns all type from the ontology; userParams, which the ontology does
+  not know, still type from observed values. `CatalogNameHolder` -> `CatalogHolder` (whole term, not
+  just the name).
+- Green: build, TestSpectrumClassFilter (extended: ontology wins over an unparseable observed value,
+  zoom scan is a valueless flag, reconstruction is typed), CvSpectrumFilterTest, the parser tests,
+  TestResultFileMetaData(OtherParams), CodeInspection.
+
+Still open from that review round: Nick's "Is Blank"/"Is Not Blank" ruling (drop the Declared operators,
+define blank as absent for CV params - see the Declared operator section above), and his suggestion to
+restrict the editor dropdown to CV params found in the document (Brian countered on the PR: hiding by
+document context is the report-types trap; prefer a visual cue for terms known to be present, which the
+capture blocker below still gates).
+
 ### 2026-07-23 - Softened equals/not-equals + resolved stale Copilot review (commit `24552d579`)
 
 - **Second fresh-context self-review** (on the post-fix HEAD `581956c0f`) independently verified the
