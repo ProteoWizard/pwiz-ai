@@ -899,3 +899,46 @@ ACCEPTED target/entrapment precursors (for `SealCutoffs`) and aggregates of DECO
 `SealCutoffs` the way `_runAccepted` / `_experimentAccepted` already are - should remove most
 of it. Neither was attempted tonight: it changes panel-adjacent code after TeamCity had gone
 green on the PR commit, and re-triggering needs Brendan's approval.
+
+### 2026-08-10/11 (night session) - cross-impl parity RUN: C# and Rust agree on the v4 sidecar
+
+The last unfinished task on this branch, and it turns a code-reading claim into a measurement.
+`Compare-EndToEnd-Crossimpl.ps1 -Dataset Stellar -Files All`:
+
+```
+Stage 7 protein FDR (per-col 1e-9): PASS
+Blib content (SQL row+col 1e-9):    PASS
+FDR sidecars (per-field 1e-9):      PASS
+   1st-pass: 1,448,698 record(s) compared
+   2nd-pass:   994,899 record(s) compared
+OVERALL: PASS -- Rust and C# end-to-end in-memory bit-parity at 1e-9 on Stellar 3-file
+precursors: rust=29364  cs=29364  delta=0
+```
+
+**Non-vacuous, and specifically about v4.** The comparator REFUSES a sidecar whose version byte
+differs from its `ExpectedVersion` rather than decoding at the wrong stride, and it is pinned at
+version 4 / 68 bytes with the 8-field table. So decoding 2.44M records at all proves both
+implementations wrote the v4 layout, and PASS proves `experiment_aggregate_score` agrees field
+by field at 1e-9. Previously this branch could only claim the layouts matched from reading the
+Rust source.
+
+### ENVIRONMENT: running the Rust binary needs the vcpkg DLL dir on PATH, not just building it
+
+Three attempts were spent on this, so it is written down. The Rust `osprey.exe` links native
+OpenBLAS, so **running** it fails with exit `-1073741515` (`0xC0000135`, DLL_NOT_FOUND) unless
+`C:\vcpkg\installed\x64-windows\bin` (which holds `openblas.dll`) is on `PATH`. `VCPKG_ROOT`
+alone covers the BUILD and is what the docs describe; the run needs the bin directory too:
+
+```powershell
+$env:PATH = "C:\vcpkg\installed\x64-windows\bin;$env:USERPROFILE\.cargo\bin;$env:PATH"
+$env:VCPKG_ROOT = 'C:\vcpkg'
+```
+
+The failure is opaque - a bare numeric exit code from a tool wrapper, naming no DLL - so it
+reads like a crash in the run rather than a missing prerequisite. Worth adding to the
+symptom -> missing-piece table in `ai/docs/osprey-development-guide.md` beside the existing
+`VcpkgNotFound` build-time row.
+
+Also note `Compare-EndToEnd-Crossimpl.ps1` defaults `-TestBaseDir` to `D:\test\osprey-runs`,
+which on this machine holds no mzML; the regression data is under
+`D:\Users\brendanx\Downloads\Perftests\osprey-testfiles-mzML-v2`. Pass `-TestBaseDir` explicitly.
