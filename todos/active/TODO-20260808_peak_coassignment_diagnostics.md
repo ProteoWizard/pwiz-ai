@@ -1086,9 +1086,11 @@ A 34-file run over the verified-good subset completed on the fixed build: 131.6 
 total), FirstPassFDR private peak 54.3 GB. Diagnostics HTML archived under
 `ai/.tmp/diagnostics-html/`.
 
-**Scripts added** (`ai/scripts/`): `Repair-CopiedDataset.ps1` (content-based mismatch detection
+**Scripts added**: `ai/scripts/Repair-CopiedDataset.ps1` (content-based mismatch detection
 and verified re-copy - size comparison finds nothing here),
-`Archive-DiagnosticsHtml.ps1`, and `Osprey/Entrapment/coassign_runbest_size.py`.
+`ai/scripts/Osprey/Archive-DiagnosticsHtml.ps1` (NOT `ai/scripts/`, as an earlier version of
+this line and the 2026-08-11 handoff both claimed), and
+`ai/scripts/Osprey/Entrapment/coassign_runbest_size.py`.
 
 **Still open**: TeamCity 4128458 passed against `1a15f7ed` and is now STALE - four commits
 newer, needs a re-trigger before merge (ask first). Copilot has never reviewed #4558; it did
@@ -1114,8 +1116,42 @@ via `Copy-Item` (pwiz-ai `9614ed6`), and its "everything failed" summary no long
 hardware - **every file failing identically is the signature of a copy that never ran**, since
 hardware that loses writes loses only some of them. That inference is now in the script.
 
-Root cause of robocopy's refusal is NOT established - it was cheaper to route around it than to
-finish interrogating it. Recorded so nobody reinstates it without re-measuring.
+**CORRECTION, same session, from `/code-review max`: the above diagnosis is WRONG about the
+mechanism, and the Copy-Item swap was the wrong fix.** robocopy was behaving exactly as
+documented.
+
+A file rewritten IN PLACE keeps its length and its LastWriteTime but gets a **new NTFS CHANGE
+time**. That is robocopy's `modified` class, and `modified` is a **SKIP** class - `robocopy /?`
+says verbatim: *"otherwise the same. These files are not copied by default; specify /IM"*. So
+`modified` in the listing never meant "it decided to copy"; it meant the opposite. Reproduced
+on a file damaged that way on purpose:
+
+| flags | Copied | exit | destination |
+|---|---|---|---|
+| `/J` (what the script used) | 0 | 0 | unchanged |
+| `+/IS /IT` | 0 | 0 | unchanged |
+| **`+/IM`** | **1** | **1** | **repaired** |
+
+`/IS` is "Include Same" - the wrong class entirely, which is why adding it changed nothing. SMB
+was incidental; the same happens on local NTFS.
+
+**The swap also disarmed the script's own oracle.** `Copy-Item` is buffered, so the
+verification immediately after it reads back the page cache the copy just filled -
+"re-copied and verified: N" stopped being evidence that anything reached the platter. `/J` is
+unbuffered and is the entire basis of that check. And "re-verify in a later session" does not
+help: the Windows file cache is machine-wide and outlives the process, so a fresh pwsh still
+reads the copy's own bytes. `ai/scripts/Osprey/SEA-AD/Clear-StandbyCache.ps1` already exists
+for this and the script now points at it.
+
+Fixed in pwiz-ai `4d4f46e`: robocopy restored with `/IM /IS /IT /J`, plus four defects the
+review found in the same path - sampling never read the last `len/samples` bytes (73.7 MB of a
+4.61 GB file, and the damage is trailing), `-Samples 0` silently disabled all comparison,
+`-WhatIfOnly` created the destination directory, and every exit path returned 0 even with
+files still broken.
+
+**What the earlier claim got right**: `D:` is not failing. That conclusion stands on the
+write-and-read-back test and on 82/82 verifying after the repair - it just was not robocopy
+misbehaving.
 
 ### 2026-08-11/12 (night session) - Copilot reviewed #4558; all four findings resolved
 
