@@ -31,6 +31,87 @@ computed:
 This makes protein q follow the same rule the precursor and peptide q's already follow:
 **one field, pass encoded by which sidecar it lives in.**
 
+## FOR THE #4558 SESSION (peak co-assignment) - please read
+
+Written 2026-08-12 at Brendan's suggestion, after reading your TODO through
+`4a5f78d` and your Rust PR maccoss/osprey#63. **This branch is based on your C# tip
+`5efdb058b7`**, which is still current as of writing, and rebases onto master when you merge.
+Nothing here needs anything from you - it is a heads-up about where we collide.
+
+### 1. Our Rust branches touch the IDENTICAL file set
+
+maccoss/osprey#63 changes 7 files. My `fix/one-experiment-protein-qvalue` changes those same
+7 plus `rescore.rs`:
+
+```
+types.rs  percolator.rs  protein.rs  fdrbench.rs  diagnostics.rs  pipeline.rs  reconciliation.rs
+```
+
+**Yours lands first and mine rebases onto it** - you are the parent on the C# side and the
+same ordering should hold on Rust. I am holding my Rust PR rather than racing yours; there is
+no point in both of us resolving the same conflicts. My Rust branch is pushed and green
+(`fmt --check`, `clippy -D warnings`, 579 tests) whenever you are ready.
+
+Also worth knowing: **Rust `main` is still v3/60-byte** while your C# branch is v4/68. Until
+#63 merges, the cross-impl sidecar leg cannot be run meaningfully by either of us.
+
+### 2. What I am doing to the sidecar - layout unchanged, meaning changed
+
+I do **not** move any offset. `experiment_protein_qvalue` stays at `[52..60]` and your
+`experiment_aggregate_score` stays at `[60..68]`. Two changes:
+
+* the column is RENAMED `run_protein_qvalue` -> `experiment_protein_qvalue` (it was never
+  per-run: 483,820 of 483,820 multi-file precursors carry one value across files)
+* the **2nd-pass** sidecar now carries the **pass-2** protein q, patched in after the
+  second-pass protein FDR. It used to carry a pass-1 value unconditionally - the only column
+  in that file that did
+
+Whether this warrants a v4 -> v5 bump is open with Brendan. The layout does not change, only
+what the column means, so an old reader parses it fine and misinterprets it. If you have a
+view, say so - it lands right on top of your v3 -> v4.
+
+### 3. Renames you will hit on the rebase
+
+| before | after |
+|---|---|
+| `FdrEntry.RunProteinQvalue` | **gone** - one `ExperimentProteinQvalue` |
+| `run_protein_qvalue` (Rust) | **gone** - one `experiment_protein_qvalue` |
+| `FdrScoresSidecar.PatchRunProteinQvalues` | `PatchProteinQvalues` |
+| `PropagateProteinQvalues(.., setRun, setExperiment)` | `PropagateProteinQvalues(..)` |
+| `propagate_protein_qvalues(.., set_run, set_experiment)` | `propagate_protein_qvalues(..)` |
+
+I also add `Test-Pass2ProteinQvalue` to `Regression/FdrSidecars.ps1` and a `mode1c` leg to
+`regression.ps1` - both files you edit. My additions are a new function and a new block, so
+the conflicts should be positional rather than semantic.
+
+### 4. I did NOT touch the seed your aggregate fix depends on
+
+`RestorePass1Scalars` stops seeding the protein q (its new producer is the pass-2 patch), but
+**keeps seeding `ExperimentAggregateScore`**. Your `StreamedCompetitionState.ExperimentAggregateScore`
+returning `double?` means off-stratum rows get `null` and keep their pass-1 aggregate - which
+is exactly that seed. So the two changes compose; I checked before removing anything.
+
+One thing to look at when you next touch it: the comment above that line still says the
+aggregate is "written by no frozen 2nd-pass mode", which your `7a0c9d02ad` made stale on your
+own branch. It is your file and your call - I left it alone rather than editing your prose
+underneath you.
+
+### 5. My change does NOT move the golden - on any dataset
+
+`-Dataset All`: 53/53 legs, `mode1 (vs golden)` PASS on all four, `mode1b` entrapment FDP
+ceilings PASS. So **if your experiment-q work needs another rebaseline, mine adds nothing to
+it** - you can bless yours without reasoning about this branch. After you merge I rebase, re-run,
+and expect green against whatever golden you leave.
+
+### 6. A latent C#/Rust divergence you may care about, since you run the parity harness
+
+C#'s second-pass `PropagateProteinQvalues` passed `(setRun: true, setExperiment: true)`; Rust's
+passed `set_run: false`. So after Stage 7 the two implementations held **different** values in
+that field - C# the pass-2 value, Rust the pass-1 one - and every parity gate was green
+through it, because `effective_run_qvalue(Protein)` has no caller on either side. The
+one-field collapse makes it unrepresentable rather than merely fixed. Flagging it because your
+cross-impl run (`c18e558`) would not have caught it either.
+
 ## Why - the structural defect underneath #4559
 
 Read `ai/todos/completed/TODO-20260809_fdr_sidecar_parity.md` (#4557) first for the sidecar
