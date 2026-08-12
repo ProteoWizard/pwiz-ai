@@ -105,6 +105,39 @@ the listing onto a cancellable BackgroundWorker as SeeMS does
 interruptible today - `Application.DoEvents()` and an `_abortPopulateList` check run per
 item.
 
+### Follow-up after Matt's review comment (2026-08-12)
+
+Matt asked for profiling on large directories, remembering that Skyline hand-rolled
+recognition because the reader was slow on them. Re-measured through
+`pwiz_data_cli.dll`, local NVMe, warm:
+
+| Shape | identify() | GetSourceType, gated |
+|-------|-----------|----------------------|
+| Ordinary folder, 5 files + 2 subdirs | 0.36 ms | 0.43 ms |
+| Leaf folder, files only | 0.24 ms | 0.08 ms |
+| Directory of 20000 files | 5.5 ms | 16.3 ms |
+| Waters `.raw` / Agilent `.d` | not called | 0.06 ms |
+
+Not recursion: `format()` walks one level and breaks at the first non-matching entry.
+The per-entry term is `Reader_ABI_T2D::identify`, which globs `*.t2d`, `MS/*.t2d` and
+`MSMS/*.t2d` - giving a 20000-entry directory equally large `MS/` and `MSMS/`
+subdirectories took identify from 6.6 to 11.4 ms. `Reader_Waters` globs `_FUNC*.DAT`,
+which seeks on its literal prefix and stays cheap.
+
+Done in response:
+
+- `GetSourceType` asks the reader only about directories that could be one - holding
+  subdirectories, or a Bruker file name, or a `.u2`. Note `Reader_Bruker_Detail.cpp:106`
+  wraps the whole FID block in `is_directory(itr->status())`, so even the
+  `sourcePath/fid` clause needs a subdirectory; a directory holding only `fid`
+  identifies as nothing, confirmed against the reader.
+- `exists_as_file` takes one `status()` rather than `exists()` + `is_directory()`.
+- `expand_pathmask` passes `FIND_FIRST_EX_LARGE_FETCH` and `FindExInfoBasic`. **No local
+  gain measured** (5.4 vs 5.6 ms on 20000 entries, noise); kept for the round trips a
+  share pays, and easy to drop - it is its own commit, 4e458888f.
+
+Still not measured: SMB/VPN/OneDrive. No share is mapped on this machine.
+
 ## Known consequences of restoring reader-based identification
 
 Both follow from the reader's intentional design rather than from this change, and neither
