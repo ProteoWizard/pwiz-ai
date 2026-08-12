@@ -1153,6 +1153,83 @@ files still broken.
 write-and-read-back test and on 82/82 verifying after the repair - it just was not robocopy
 misbehaving.
 
+### 2026-08-12 - ROOT CAUSE: a target inherits its paired DECOY's experiment q (base-id sharing)
+
+**The experiment precursor q is keyed by BASE ID, which a target and its decoy share, so when
+the decoy wins the competition the target inherits the winner's q.** Measured on the 82-file
+SEA-AD 1st-pass sidecars, entirely independent of the C# panel
+(`ai/.tmp/decoy_cutoff_check.py` plus the ad-hoc probes in that session):
+
+| base | side | exp_agg | expPrecQ |
+|---|---|---|---|
+| 2363197 | target | -0.5623 | 0.009726 |
+| 2363197 | **decoy** | **+0.7450** | **0.009726** |
+| 2644981 | target | -0.0829 | 0.006404 |
+| 2644981 | **decoy** | **+1.2159** | **0.006404** |
+| 1205336 | target | -0.0521 | 0.004766 |
+| 1205336 | **decoy** | **+1.5943** | **0.004766** |
+| 3259837 | target | +0.1580 | 0.008911 |
+| 3259837 | **decoy** | **+0.8606** | **0.008911** |
+| 3266646 | target | +0.4942 | 0.009363 |
+| 3266646 | **decoy** | **+0.7865** | **0.009363** |
+
+Identical to 12 decimals in all five, and the decoy outscores the target every time. **The
+codebase already states the principle this violates** - `ClampExperimentQToBestRun`'s doc
+comment, describing the RUN-level floors: *"Both floors key on the target/decoy-specific
+identity (never the shared base_id / bare sequence - a target must not inherit its paired
+decoy's good run)."* The run floors were built to avoid exactly this; the experiment q
+underneath them was not.
+
+**Two consequences, different sizes.**
+
+1. **Delivered results (small, but a real anti-conservative defect)**: 5 of 37,676 accepted
+   precursors are reported at experiment q <= 1% having LOST their TDC pair. 0.013% of the
+   accepted set, so no headline FDP moves - but they are false positives by construction.
+2. **The panel's decoy row (large)**: those 5 carry aggregates from -0.5623 to +0.4942 while
+   the true 1% threshold on the aggregate is **+0.70**. The decoy bar is
+   `min(aggregate over accepted target/entrapment)`, so 5 records drag it 1.26 score units
+   onto the DECOY's scale and admit **5,534 spurious decoys**.
+
+**The decoy row has therefore been wrong on every dataset, and worse with more runs**, because
+more runs give more chances to draw a contaminated pair into the accepted set:
+
+| | accepted (targets+entrapment) | expected at 1% | reported | inflation |
+|---|---|---|---|---|
+| Stellar 3-file, pass 1 exp | 28,926 | 289 | 468 | 1.62x |
+| SEA-AD 82-file, pass 1 exp | 37,676 | 377 | 5,911 | **15.69x** |
+
+Draw the bar anywhere in the bulk instead and the definition is recovered exactly: p0.1 gives
+391 (1.04x), p1.0 gives 381 (1.01x), against an expected 377.
+
+**Why this was not caught before, and it is a methodological point worth keeping**: the
+twelve-number oracle cross-check proved the C# panel reproduces the Python oracle - but the
+oracle implements the SAME min-over-accepted rule, so it validated the IMPLEMENTATION and never
+the DEFINITION. The independent check was arithmetic all along: at q <= FDR, decoys above the
+bar must be `(targets + entrapment) * FDR`. The panel even logs its own accepted count beside
+its tallied decoys, so on Stellar the expected 289 sat next to the reported 468 in the log. A
+1.62x miss reads as rounding; it was the same defect at small scale.
+
+**Hypotheses killed by measurement along the way** (recorded so nobody re-runs them):
+* *The clamp lets low-score entries in.* No - `ClampExperimentQToBestRun` is
+  `max(exp_q, run_floor)`; it only ever makes a q worse, so it cannot promote anything.
+* *The clamp removes high scorers, stranding the bar.* No - 26,367 of the 26,734 rejected
+  non-decoys above the old bar (98.6%) DO have a run passing `runBoth <= 1%`, so the clamp
+  never touched them; they are simply below the true +0.70 threshold and correctly rejected.
+* *The panel counts decoys that lost their pair.* No - 5,677 of the 5,911 admitted decoys BEAT
+  their paired target and are legitimate TDC winners.
+
+**Fix direction** (Brendan, 2026-08-12): fix the q assignment, not the panel's bar. Solving
+the bar from the definition would produce a correct-looking decoy count while leaving the 5
+contaminated targets in the accepted set. The q must key on the target/decoy-specific identity
+the run floors already use.
+
+**Golden impact - this CHANGES the branch's story.** Until now this branch claimed
+`mode1 (vs golden)` PASSES on all four datasets, i.e. it moves no search result, and the
+golden diff was purely additive (+28 diagnostics metrics / -0). Fixing the q assignment MOVES
+THE DISCOVERY SET - contaminated pair-losers drop out of the reported set - so results goldens
+will move on every dataset that has any. Brendan's call is that this favours fixing it here,
+on a branch that already owes a golden rebaseline, rather than opening a second one.
+
 ### 2026-08-11/12 (night session) - the silent spectra-cache write (`126880972f`)
 
 Added to this branch at Brendan's direction (it is not co-assignment work, but he chose to ship
