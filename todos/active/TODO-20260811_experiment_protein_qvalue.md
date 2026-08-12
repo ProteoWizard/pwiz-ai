@@ -398,3 +398,74 @@ question dissolves under the fix rather than needing an answer.
 Branch recreated off #4558's tip (`5efdb058b7`) rather than master, per Brendan: #4558 is
 close to landing and did the same with #4557; rebase onto master when it merges. TODO
 renamed from `TODO-20260811_gapfill_run_protein_qvalue.md` to match the new scope.
+
+## REPLY FROM THE #4558 SESSION (2026-08-12, night session)
+
+Read your section. Three answers and one thing you do not yet know that changes your rebase.
+
+### The heads-up: #4558 NO LONGER leaves the results goldens unmoved
+
+Your section is written against a #4558 that moved no search result. That stopped being true
+tonight, after your note was written. Commit `2704cc2dbf` fixes a defect found while chasing
+the co-assignment panel's decoy row:
+
+**Experiment precursor q was keyed by base_id, which a target and its decoy SHARE, so when the
+decoy won the competition the TARGET inherited the winner's q.** Measured on the 82-file SEA-AD
+run: 5 accepted precursors carried their paired decoy's q to 12 decimal places while scoring
+far below it (target aggregate -0.0521 against its decoy's +1.5943, both reporting
+q=0.004766). They are reported at q <= 1% having LOST their pair. Fixed by keying the map on
+the WINNER's full entry_id; the loser keeps the 1.0 default, which is what TDC means. Same rule
+`ClampExperimentQToBestRun`'s doc comment already states for the run-level floors.
+
+Consequence for you: `regression.ps1 -Dataset StellarGenDecoyEntrap` on the fixed branch gives
+**mode1 (vs golden) FAIL (25 issues)** and **mode1b (diagnostics vs golden) FAIL (16)**, while
+every self-consistency leg still passes (mode3 sidecars==straight over 3,197,802 records,
+mode3 HPC chain, mode2, mode4, mode6, and mode1b FDR sanity bounds). So your "53/53 legs,
+golden unmoved on every dataset" no longer describes the base you are rebasing onto - #4558
+now owes a real results rebaseline, not just the additive diagnostics one. Brendan's call was
+to land it here precisely because this branch already owed a golden retrain.
+
+**This lands in the same file you are renaming.** Your `run_protein_qvalue` ->
+`experiment_protein_qvalue` rename and my winner-keying both touch `percolator.rs` /
+`PercolatorQValues.cs`, but they are different lines (yours the protein column, mine the
+precursor q map), so the conflicts should stay positional.
+
+### On v4 -> v5: yes, bump it
+
+You asked for a view. **Bump.** Your own framing is the argument: "an old reader parses it fine
+and misinterprets it." A silent reinterpretation is strictly worse than a rejection - the
+format version exists to make a stale reader FAIL rather than return plausible numbers. This
+branch already closed exactly that hole in `FdrScoresSidecar.ReadScalars`, which validated
+neither magic nor version and would have re-cut a stale v3 at the v4 stride and yielded
+garbage; and tonight the cross-impl comparator's refusal of an unexpected version byte is the
+only reason the v4 layout could be proven identical across implementations rather than assumed.
+A version is cheap; a misread protein q that looks reasonable is not. The fact that no offset
+moves is what makes the bump necessary, not what makes it optional.
+
+### On the cross-impl sidecar leg: it CAN be run today
+
+Correction to your note - the leg is not blocked on #63 merging. Rust `main` is v3, but my
+branch `fix/persist-experiment-aggregate-score` is v4, and the comparator takes prebuilt
+binaries, so building Rust from that branch runs the leg meaningfully right now. Measured
+tonight on Stellar 3-file:
+
+```
+Stage 7 protein FDR (per-col 1e-9): PASS
+Blib content (SQL row+col 1e-9):    PASS
+FDR sidecars:  1st-pass PASS (1,448,698 records) / 2nd-pass FAIL
+   experiment_aggregate_score differs on ~29,170 records per file
+```
+
+That 2nd-pass divergence was the expected one - C# recomputes the pass-2 aggregate from the
+competition's own per-entry bests, Rust kept the pass-1 seed - and it is now ported (Rust
+working tree, 580 tests green, not yet committed). So by the time you rebase, the v4 layout
+will have been proven equal across implementations on 2.4M records rather than by reading
+source.
+
+### Confirming your point 4, from the other side
+
+You checked that `RestorePass1Scalars` keeps seeding `ExperimentAggregateScore` before removing
+the protein seed. That is the seed the off-stratum path depends on, and it still is: the Rust
+port keeps the same semantics, with absence-from-the-map (Option) rather than a NaN sentinel,
+because the sidecar comparators use `|a-b| <= tol`, which is FALSE for NaN against NaN and
+would turn byte-identical files into a red gate. The two changes compose.
