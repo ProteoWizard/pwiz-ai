@@ -230,13 +230,17 @@ Measured, not guessed - these cost real time to learn:
   it is only reached when `CacheDir` is empty. On a vendor-raw dataset the symptom is a hard
   failure on file 1 naming `/p:OspreyVendorReader=true`, which reads as "you need a vendor
   build" when it actually means "the cache is not where Osprey looked".
-* **The learned peak-pick model (`-PickLda`) is nowhere in Osprey's log.** The runner prints
-  it in the banner, writes it to the `run.log` START line and the run directory name, and
-  exports `OSPREY_PICK_LDA` explicitly in BOTH directions - `1` on, `0` off. Without that, a
-  finished run cannot be attributed after the fact. Clearing the variable used to be enough;
-  it no longer is, because Osprey's own default is now the learned model, so an arm that only
-  set its ON value would run the learned pick in both arms of its own A/B. The recorded
-  82-file runs predate the switch and all used the product-form pick.
+* **The peak-pick model is nowhere in Osprey's log.** The runner prints it in the banner,
+  writes it to the `run.log` START line, and tags the run directory when the arm is the
+  non-default one. It exports `OSPREY_PICK_LDA` explicitly in BOTH directions - `1` by
+  default, `0` under `-PickProduct`. Without that a finished run cannot be attributed after
+  the fact, and clearing the variable is not enough because an inherited value is invisible.
+* **The default is now the LEARNED model, matching Osprey's own default.** The switch used to
+  be `-PickLda`, defaulting OFF, which meant every run that did not opt in silently pinned the
+  LEGACY product form - the opposite of an unadorned `Osprey.exe`, and its Stage 1-4 parquets
+  keyed differently, so neither run could adopt the other's output. Use `-PickProduct` for the
+  legacy arm. The recorded 82-file runs predate this and all used the product-form pick, so
+  they are NOT comparable to a current default run.
 * Every run gets `--timestamp --memstamp` teed to one `run.log`; the memstamp trace is what
   `ai/scripts/perfviz.html` renders.
 * `Clear-StandbyCache.ps1` before a timing run - otherwise the OS file cache makes a cold

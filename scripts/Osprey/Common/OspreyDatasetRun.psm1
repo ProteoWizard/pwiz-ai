@@ -117,22 +117,24 @@ function Resolve-LibraryVariant {
       DefaultFdrBenchPass  'none' | '1' | '2' | 'both' when -FdrBenchPass is not passed
       MissingCacheNote     extra line printed when caches are missing
 
-.PARAMETER PickLda
-    Use the learned resolution-keyed linear peak-pick model (OSPREY_PICK_LDA=1) instead of
-    the product-form pick (coelution * rt_penalty * ln_intensity).
+.PARAMETER PickProduct
+    Use the LEGACY product-form pick (coelution * rt_penalty * ln_intensity,
+    OSPREY_PICK_LDA=0) instead of the learned resolution-keyed linear model.
+
+    **The default is the learned model, matching Osprey's own default.** This replaces the
+    former -PickLda switch, which defaulted OFF and therefore pinned the legacy pick on every
+    run that did not opt in - the opposite of what Osprey does, and a silent one: a caller who
+    simply wanted "a normal run" got the legacy arm, and its parquets keyed differently from
+    an unadorned `Osprey.exe` run, so neither could adopt the other's Stage 1-4 output.
 
     This MOVES THE DISCOVERY SET - it is a different peak choice, not a different report -
     so it is recorded in the banner and the run.log START line. Nothing Osprey logs says
     which pick model a run used, so without that record a finished run is unattributable.
 
-    OSPREY_PICK_LDA is exported EXPLICITLY IN BOTH DIRECTIONS - '1' when this is on, '0'
-    when it is off. Clearing it is no longer enough: Osprey's own default flipped ON, so an
-    UNSET variable now means the learned model, and an A/B that only sets the on arm would
-    run the SAME configuration twice while labelling the arms differently. The runner pins
-    the lever rather than inheriting it, in both directions.
-
-    This switch still defaults OFF, which is deliberately NOT Osprey's default: it keeps
-    every arm measured before the default flip comparable with one measured after.
+    OSPREY_PICK_LDA is still exported EXPLICITLY IN BOTH DIRECTIONS - '0' when this switch is
+    on, '1' when it is off. That property is unchanged and must stay: clearing the variable is
+    not enough, because an inherited value is invisible in the output, and an A/B that only
+    exported its ON value would run the same configuration twice under two labels.
 
 .PARAMETER Pass2Mode
     transfer        : frozen first-pass model, TRIC-style q-value fill-in, no retrain.
@@ -162,7 +164,7 @@ function Invoke-OspreyDatasetRun {
         [string]$Ratio = '1.0',
         [ValidateSet('transfer', 'transfer-compete', 'protein-compact')]
         [string]$Pass2Mode = 'protein-compact',
-        [switch]$PickLda,
+        [switch]$PickProduct,
         [int]$NumFiles,
         # Take the $NumFiles files AFTER skipping this many, so cohorts of the same size can
         # be drawn from disjoint slices of the dataset (replicate cohorts for a size-vs-effect
@@ -361,7 +363,9 @@ function Invoke-OspreyDatasetRun {
         # SEA-AD runner walked two levels up, which contradicted its own README and resolved
         # OUTSIDE the dataset root on a <root>\<dataset>\<data> layout.) -RunsRoot overrides.
         $runsRootResolved = if ($RunsRoot) { $RunsRoot } else { Join-Path (Split-Path $dataDir -Parent) 'runs' }
-        $pick = if ($PickLda) { '-picklda' } else { '' }
+        # Tag the NON-default arm. The learned model is the default now, so a bare run
+        # directory means the learned model and '-pickproduct' marks the legacy arm.
+        $pick = if ($PickProduct) { '-pickproduct' } else { '' }
         # The aggregation is part of the NAME, not just the log: an N-curve runs many arms that
         # are identical in every other naming component, so without this they would all resolve
         # to one directory and the guard below would reject arm 2 (or -Resume would silently
@@ -470,9 +474,9 @@ function Invoke-OspreyDatasetRun {
                 $Pass2Mode, $FdrBenchPass, $(if ($mdiag) { 'on' } else { 'OFF' }))
     # Nothing Osprey logs records the pick model, so this banner line and the run.log START
     # line are the only provenance a finished run carries.
-    Write-Host ("  peak pick: {0}" -f $(if ($PickLda) {
-                'LEARNED linear model (OSPREY_PICK_LDA=1) - moves the discovery set' }
-                else { 'default product form (coelution * rt_penalty * ln_intensity)' }))
+    Write-Host ("  peak pick: {0}" -f $(if ($PickProduct) {
+                'LEGACY product form (OSPREY_PICK_LDA=0) - moves the discovery set' }
+                else { 'default learned linear model (OSPREY_PICK_LDA=1, Osprey default)' }))
     Write-Host ("  exp agg  : {0}" -f $(if ($ExperimentAgg) {
                 "$ExperimentAgg (OSPREY_EXPERIMENT_AGG) - moves the experiment-wide discovery set" }
                 else { 'max (default, best of runs)' }))
@@ -565,7 +569,7 @@ function Invoke-OspreyDatasetRun {
     # exported its ON value would therefore run a DIFFERENT configuration than its banner and
     # run.log claim, and the two arms of an A/B would be the same run under two labels.
     $env:OSPREY_PASS2_QVALUE = $Pass2Mode
-    $env:OSPREY_PICK_LDA = if ($PickLda) { '1' } else { '0' }
+    $env:OSPREY_PICK_LDA = if ($PickProduct) { '0' } else { '1' }
     if ($ExperimentAgg) { $env:OSPREY_EXPERIMENT_AGG = $ExperimentAgg }
     # Unconditionally, in both directions, for the reason above: Osprey's own default is 'run',
     # so an arm that exported only its ON value would leave the OFF arm running on whatever the
@@ -595,7 +599,7 @@ function Invoke-OspreyDatasetRun {
         Write-Host ("  rotated previous run.log -> {0}" -f (Split-Path $rotated -Leaf)) -ForegroundColor Cyan
     }
     ("[{0}] START dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
-     "picklda=$([bool]$PickLda) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
+     "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
      "qualify=$QualifyBy files=$($inputs.Count) threads=$Threads " +
      "parallelfiles=$ParallelFiles task='$Task' mdiag=$mdiag " +
      "fdrbench=$FdrBenchPass linkfrom='$LinkFrom'") -f (Get-Date -Format s) |
@@ -612,7 +616,7 @@ function Invoke-OspreyDatasetRun {
     $exit = $LASTEXITCODE
     $sw.Stop()
     ("[{0}] DONE dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
-     "picklda=$([bool]$PickLda) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
+     "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
      "qualify=$QualifyBy parallelfiles=$ParallelFiles exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
         Add-Content -Path $log
     Write-Host ("Osprey exited {0} after {1:hh\:mm\:ss}" -f $exit, $sw.Elapsed) `

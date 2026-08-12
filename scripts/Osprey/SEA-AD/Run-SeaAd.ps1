@@ -37,11 +37,13 @@
     module's help; `transfer` is the one that forces the resident O(files) first-pass pool.
     `percolator` was removed from Osprey and is no longer accepted here.
 
-.PARAMETER PickLda
-    Use the learned linear peak-pick model instead of the product-form pick. This MOVES THE
-    DISCOVERY SET and is recorded in the banner and run.log, because Osprey logs nothing that
-    says which pick model a run used. The module exports OSPREY_PICK_LDA in both directions,
-    so leaving this off pins the product form rather than inheriting Osprey's flipped default.
+.PARAMETER PickProduct
+    Use the LEGACY product-form pick instead of the learned linear model. The default is the
+    learned model, matching Osprey's own default - this replaces the former -PickLda, which
+    defaulted OFF and so pinned the legacy pick on every run that did not opt in. This MOVES
+    THE DISCOVERY SET and is recorded in the banner and run.log, because Osprey logs nothing
+    that says which pick model a run used. The module still exports OSPREY_PICK_LDA in both
+    directions, so the arm is pinned rather than inherited.
 
 .PARAMETER ExperimentAgg
     First-pass EXPERIMENT-score aggregation. Empty (the default) means max - the best score
@@ -64,7 +66,7 @@
     every run) or 'experiment' (experiment-wide peptide q). Only meaningful with
     -Pass2Mode protein-compact.
 
-    This MOVES THE DISCOVERY SET, so like -PickLda and -ExperimentAgg it is a parameter rather
+    This MOVES THE DISCOVERY SET, so like -PickProduct and -ExperimentAgg it is a parameter rather
     than an inherited environment variable: the module clears OSPREY_PROTEIN_COMPACT_QUALIFY
     and re-exports it from this argument, and records it in the banner, the run.log START line
     and the output-directory name. At 82 files the run-level union is 12.95% false where the
@@ -96,7 +98,7 @@
 
 .EXAMPLE
     # Mike's recommended configuration (see peak-model-training.md and the pass-2 TODO).
-    .\Run-SeaAd.ps1 -PickLda -Pass2Mode protein-compact
+    .\Run-SeaAd.ps1 -Pass2Mode protein-compact
 #>
 #requires -Version 7
 param(
@@ -104,7 +106,7 @@ param(
     [string]$Ratio = '1.0',
     [ValidateSet('transfer', 'transfer-compete', 'protein-compact')]
     [string]$Pass2Mode = 'protein-compact',
-    [switch]$PickLda,
+    [switch]$PickProduct,
     [int]$NumFiles,
     [int]$SkipFirstFiles = 0,
     [int]$EveryNthFile = 1,

@@ -17,8 +17,8 @@ setx OSPREY_TDP43_DIR "D:\test\osprey-runs\tdp43-plasma-ev\raw"
 setx OSPREY_TDP43_LIB "D:\test\osprey-runs\sea-ad\lib"
 # new shell, then prove the wiring before committing to hours
 .\Run-Tdp43.ps1 -NumFiles 10 -WhatIf
-.\Run-Tdp43.ps1 -PickLda -Pass2Mode protein-compact -NumFiles 10   # ~1 h, real run
-.\Run-Tdp43.ps1 -PickLda -Pass2Mode protein-compact                # the full 163
+.\Run-Tdp43.ps1 -Pass2Mode protein-compact -NumFiles 10           # ~1 h, real run
+.\Run-Tdp43.ps1 -Pass2Mode protein-compact                        # the full 163
 ```
 
 `OSPREY_TDP43_LIB` points at the **SEA-AD** library root on purpose: this dataset has no
@@ -156,16 +156,17 @@ a deliberate act rather than a workaround. Read the results with `../SEA-AD/tool
 
 ## The recommended configuration
 
-`-PickLda -Pass2Mode protein-compact` is the pairing Mike MacCoss recommends, recorded in
-`ai/todos/completed/TODO-20260715_osprey_pass2_transfer_compete.md`. Neither is the product
-default, deliberately - flipping them on is a coordinated C#+Rust golden re-baseline.
+The learned pick with `-Pass2Mode protein-compact` is the pairing Mike MacCoss recommends,
+recorded in `ai/todos/completed/TODO-20260715_osprey_pass2_transfer_compete.md`. Both are now
+the DEFAULT here: Osprey's own pick default is the learned model, and this runner no longer
+overrides it (the former `-PickLda` switch is gone; `-PickProduct` selects the legacy arm).
 
 Both were validated on **Stellar**; that TODO lists **"Astral protein-compact validation"**
 as deferred remaining work that never shipped. SEA-AD and TDP-43 are both Astral, so running
 this pairing here **is** that deferred validation - at 2x the largest scale yet run. Treat
 the result accordingly.
 
-`-PickLda` **moves the discovery set**: it replaces the product-form peak pick
+The pick model **moves the discovery set**: the learned model replaces the product-form pick
 (`coelution * rt_penalty * ln_intensity`) with a frozen linear model over four z-normalized
 terms, in which `median_polish` - a term the default ignores entirely - carries the largest
 Astral weight and `ln_intensity` is effectively switched off. See
