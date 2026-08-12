@@ -1473,3 +1473,84 @@ The C# lookup bug was C#-only (Rust was correct), so no Rust change accompanies 
 **Night-session plan**: `ai/.tmp/handoff-20260812_night_pr4558_merge_ready.md` - Astral +
 entrapment, `/code-review max` + Copilot, TeamCity Perf/Regression on `branch="pull/4558"`,
 then the 82-file pass-1 regeneration via `-LinkFrom`.
+
+### 2026-08-12 (night session) - JOB 1 PASSES: astral + full entrapment library, 1.00x
+
+`ai/.tmp/run-astral-entrap-winnerlookup.ps1` (a copy of the handoff's script with `$exe`
+repointed at `20260812-winnerlookup`, the 10:15:30 snapshot that POSTDATES the final lookup fix
+`ccd628e286` at 10:14 - the handoff's own script named `20260812-decoywinner`, built 09:43,
+which would have been another stale-binary run). 20 m 44 s, exit 0, work dir
+`D:\test\osprey-runs\astral-entrap-3file\20260812_winnerlookup`.
+
+This is the only configuration where all three classes clear `MIN_N_FOR_ENRICHMENT`, so it is
+the only run where the decoy row can be read against entrapment at full (13 GB) library scale.
+
+**Pass 1, EXPERIMENT scope** - the check the handoff asked for:
+
+| | pre-fix (08-11) | post-fix | expected |
+|---|---|---|---|
+| target n | 84,092 | 84,082 | - |
+| entrapment n | 353 | 353 | - |
+| **decoy n** | **1,148** (1.36x) | **843** | **844 (1.00x)** |
+
+**Two internal consistency checks fall out of it, and both hold.** Run-scope target n is
+IDENTICAL across the fix (92,164) while experiment-scope target n drops by exactly 10 - the
+q-inheritance fix touches only the experiment q, as designed. And run-scope decoy DOES move
+(1,825 -> 1,733), because the winner-only rule applies at both scopes. Each fix moved exactly
+the cells it should and no others.
+
+**Pass 2, EXPERIMENT scope: 2,716 -> 928 against an expected 1,025 (2.65x -> 0.91x).** That is
+NOT the catastrophic under-count seen on StellarGenDecoyEntrap (10 against 233, 0.04x), so the
+pass-2 deficit is **not intrinsic to the winner-only rule**. It is mild here and severe there.
+The two configurations differ in decoy provenance (library decoys via `--decoys-in-library`
+here, generated decoys there) and in scale.
+
+**Runtime confirmation of two logging commits.** The TODO recorded the `126880972f` line as
+never observed at runtime (the test host redirects `OspreyOutput.Out`, and the 82-file run
+predated the commit). This run shows both it and `891bd584f4` working:
+
+```
+12:23:12  Writing spectra cache...
+12:23:58  Saved spectra cache (204149 MS2 + 1223 MS1, 5.90 GB) to '...49.spectra.bin'
+12:40:47  Collecting pass-2 survivors from 3 file(s)...
+```
+
+46 s for 5.90 GB - the gap that read as a hung run. That caveat can come out of the test plan.
+
+**Note for anyone reusing the script**: Osprey WIPES its work dir at startup. Hard-linking the
+`.spectra.bin` / `.libcache` inputs from a prior run into a fresh work dir does NOT survive -
+it regenerated all of them. `-LinkFrom` on the sanctioned SEA-AD runner is a different
+mechanism and is not affected by this.
+
+#### The pass-2 loser fraction IS score-dependent - hypothesis confirmed and quantified
+
+Ran the next test written down above (`ai/.tmp/pass2_loser_by_score.py`) on this run's own
+sidecars. A "loser" is a decoy whose paired target carries a higher aggregate in the same pass;
+decoys whose target is absent are counted SEPARATELY as unpaired, not folded into either class.
+
+| decoy score bin | pass 1 loser% | pass 2 loser% |
+|---|---|---|
+| top (above the bar) | 5.9% | 24.5% |
+| -1.8 .. -3.3 | 9.5% | 28.9% |
+| -4.2 .. -5.8 | 22.1% | 41.2% |
+| bottom | **61.0%** | **80.7%** |
+
+Monotonic in both passes. Two things the population-wide 52% -> 58% measurement could not show:
+
+1. **Pass 2 is loser-enriched by ~20 points at every MATCHED score level**, not merely overall.
+   Controlling for score is what makes the compaction effect visible; averaging over the whole
+   population hid it. So compaction survivorship is real and larger than the earlier number
+   implied - it was diluted by comparing populations with different score distributions.
+2. **The panel's counts reproduce EXACTLY off the raw binary sidecars.** Pass 1:
+   755 winners + 88 unpaired = **843**, and the panel reports 843. Pass 2:
+   928 winners + 0 unpaired = **928**, and the panel reports 928. This is an independent
+   verification of the implementation - unlike the twelve-number oracle, which shares the
+   panel's definition and so could only ever validate the implementation against itself.
+
+**OPEN, and it is a definitional question rather than a bug** - pass 1's clean 1.00x DEPENDS on
+counting the 88 above-bar decoys whose paired target is absent from the reported pool entirely.
+Winners alone would be 755 against an expected 844, i.e. **0.89x - under, the same direction as
+pass 2**. Pass 2 happens to have zero unpaired decoys above its bar, so the two passes are not
+in fact being counted by the same rule today. Whether a decoy with no competitor present "won
+its competition" needs a decision before either row is quoted. NOT changed here: it moves the
+discovery set again and this PR has already produced three such changes.
