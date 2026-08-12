@@ -1547,6 +1547,50 @@ Monotonic in both passes. Two things the population-wide 52% -> 58% measurement 
    verification of the implementation - unlike the twelve-number oracle, which shares the
    panel's definition and so could only ever validate the implementation against itself.
 
+### 2026-08-12 (night session) - JOB 4: 82-FILE PASS-1 DECOY ROW IS 375 vs an expected 377
+
+`Run-SeaAd.ps1 -Task FirstPassFDR -LinkFrom 20260811_all82`, 52 m 31 s, exit 0, into
+`D:\test\osprey-runs\sea-ad\runs\20260812_pass1regen`. Both traps avoided: the banner reads
+`Osprey v26.1.1.223` (the `OSPREY_VERSION_OVERRIDE`) and `LinkFrom: hard-linked 328 stage1-4
+file(s), 0 missing`, so Stages 1-4 did NOT re-run. 82 reconciliation.json + matching
+fdr_scores.bin sidecar pairs written; exits before the Stage 6 rescore by design.
+
+**Pass 1, EXPERIMENT scope, at 82-file scale:**
+
+| | pre-fix | post-fix | expected |
+|---|---|---|---|
+| accepted (targets + entrapment) | 37,676 | 37,506 + 161 = **37,667** | - |
+| **decoy n** | **5,911** (15.69x) | **375** | **377 (1.00x)** |
+
+**This is the case that mattered most.** The defect got WORSE with more runs - 1.62x on 3-file
+Stellar, 15.69x on 82 files - because more runs give more chances to draw a contaminated pair
+into the accepted set. At 82-file scale the row now lands on its definition exactly. Together
+with astral (843 vs 844) and the three gate datasets, pass 1 is now correct at every scale
+measured.
+
+Run-scope entrapment is now 1.00x against target (8.542% vs 8.555%) where experiment scope
+gives 2.53x - the run/experiment split remains the interesting signal, and the entrapment and
+decoy rows are still not comparable to the target base rate until the derived-from vs unrelated
+split lands.
+
+### 2026-08-12 (night session) - /code-review max: 15 findings
+
+Full disposition in `ai/.tmp/review-disposition-4558.md`. Fixed in `67975e63e7`: the coAssign
+enrichment golden could never fail (`'NaN'` parses and `NaN -gt tol` is `$false`, so the
+numeric branch swallowed NaN-vs-number and the string fallback was unreachable - a quarter of
+the new golden coverage was inert on astral); the only negative test of the run-scope decoy
+boundary was vacuous and is now proved discriminating by mutation; a stale comment claiming
+Rust still carries the base_id defect; four STYLEGUIDE braceless bodies.
+
+Filed: #4562-#4568. **Held for Brendan** (see the handoff): pass-2 sidecar tasks carry no
+`;fdrsidecar=` validity term and self-gate on a bare `File.Exists`, so resuming a pre-branch
+directory finishes GREEN on pass-1 q-values; the pass-2 experiment aggregate column mixes
+pre- and post-rescore score vintages under one minimum (a live lead on the pass-2 question);
+and `ReadScalars` throws mid-stream after entries are mutated.
+
+Refuted: the claim that `docs/14-intermediate-files.md:302` "byte-identical to Rust" is now
+false - cross-impl passes at 1e-9 with 29,300 on both sides.
+
 **OPEN, and it is a definitional question rather than a bug** - pass 1's clean 1.00x DEPENDS on
 counting the 88 above-bar decoys whose paired target is absent from the reported pool entirely.
 Winners alone would be 755 against an expected 844, i.e. **0.89x - under, the same direction as
