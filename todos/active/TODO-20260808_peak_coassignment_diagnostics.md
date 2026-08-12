@@ -1385,3 +1385,19 @@ Cheap test: on the 2nd-pass sidecars, count for each surviving decoy whether its
 also survived, and compare the loser fraction against pass 1. If losers dominate because
 targets survive preferentially, the pass-2 decoy row needs a different definition rather than a
 different threshold.
+
+**Lead TESTED, only partly supported** (82-file run, 20 files sampled):
+
+```
+1st-pass: 2,834,544 surviving decoys | 92% have their paired target present | 52% of those LOST
+2nd-pass:   697,235 surviving decoys | 97% have their paired target present | 58% of those LOST
+```
+
+Compaction does skew the surviving pool toward losers, but only 52% -> 58% population-wide -
+far too small to explain the 60 -> 10 cut (83%). So that is NOT the mechanism.
+
+**What it points at instead**: the loser fraction is SCORE-DEPENDENT. Above the bar, pass 1 is
+20% losers (81/415) while pass 2 is 83% (50/60). That fits a pass-2 boundary sitting low enough
+to reach into a loser-rich region, where pass 1's higher bar admits only the winner-dominated
+top. Next test: bin the loser fraction by aggregate score at both passes and compare against
+where each boundary falls.
