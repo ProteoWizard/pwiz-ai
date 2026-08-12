@@ -1370,3 +1370,18 @@ Gate exits 1 as expected - goldens moved, self-consistency legs pass.
 only one that exercises the decoy row against entrapment; (2) `--task FirstPassFDR` on a COPY
 of the 82-file work dir (~63 min) to regenerate corrected 1st-pass sidecars and a corrected
 pass-1 panel without redoing the 3h53m rescore; (3) full pass-2 diagnostics last.
+
+#### Lead on the pass-2 under-count (10 vs 233), not yet tested
+
+The winner-only rule cut pass-2 experiment decoys from ~60 to 10, i.e. **50 of the 60 were
+pair-losers**. That is a much higher loser fraction than pass 1 (81 of 415, ~20%), and there is
+a plausible mechanism: compaction keeps the SURVIVOR of each contest, so for a pair whose
+target won, the target survives - and any decoy that also survives is disproportionately a
+loser. If so, "count only winners" is correct in principle but is being applied to a pool whose
+composition compaction has already skewed, and the honest pass-2 denominator is not
+`(targets+entrapment) * FDR` at all.
+
+Cheap test: on the 2nd-pass sidecars, count for each surviving decoy whether its paired target
+also survived, and compare the loser fraction against pass 1. If losers dominate because
+targets survive preferentially, the pass-2 decoy row needs a different definition rather than a
+different threshold.
