@@ -454,6 +454,37 @@ the other three 14 each) - quoting what the run printed rather than the expectat
 **The Stellar re-gate is the evidence the hardening commit is output-neutral**: same command,
 same `mode1c` counts to the record (25,006 of 994,509; 390 gap-fill), golden unmoved.
 
+### What the hardening commit does NOT have: an execution of the path it fixes
+
+The `OSPREY_STAGE7_PROTEIN_FDR_ONLY` early-exit path was **not run**. What exists is:
+
+* the defect established by reading (`ExitAfterDump` -> `Environment.Exit(0)` at
+  `SecondPassFdrTask.cs:381`, patch call was at `:221`, so it was unreachable on that path);
+* proof the fix does not disturb production - `-Dataset Stellar` all 10 legs PASS with
+  `mode1c` counts identical to the run before it (25,006 of 994,509; 390 gap-fill);
+* 579 unit tests + inspection.
+
+**`ai/scripts/Osprey/Test-Snapshot.ps1` is what drives that env var** (its `stage6`/`stage7`
+isolation stages), so running it is the direct confirmation. It needs local Osprey runs, and
+the box is committed to the SEA-AD run - **do this after ~21:00 PDT, or first thing in the
+morning.** Until then the claim in #4569 is "reasoned and regression-covered", not "executed",
+and it is written that way in the PR body on purpose.
+
+### The C# branch is FROZEN for the rest of the night, deliberately
+
+TeamCity 4131578 is running the full matrix against `826666204f`. Any further push makes that
+result cover a commit that is no longer the tip, and re-triggering needs Brendan's say-so every
+time ([[feedback_ask_before_teamcity_triggers]] - the handoff pre-authorized *this* run, not a
+re-trigger). So the remaining review nits are NOT being pushed tonight:
+
+* `Test-Pass2ProteinQvalue` asserts `Differing > 0` **per file**, which is stricter than the
+  run-level property it tests and would be a false red on a single-file dataset leg. The strict
+  form is the more sensitive gate and every current dataset is multi-file, so this is a comment
+  worth adding, not a behaviour change.
+
+Both are one-line comments. They belong in the same push as whatever Copilot turns up, so that
+one re-trigger covers everything.
+
 ### TeamCity: this config only works on ONE agent
 
 `ProteoWizard_OspreyWindowsNetPerfRegressionTests` has had **no successful run since
