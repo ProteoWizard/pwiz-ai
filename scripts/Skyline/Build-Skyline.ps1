@@ -117,6 +117,21 @@ if ($SourceRoot) {
 $skylineRoot = Join-Path $pwizRoot 'pwiz_tools/Skyline'
 $initialLocation = Get-Location
 
+# Register this build as in flight. The marker is removed in the finally block
+# below, so one that outlives the process marks a build killed by a restart --
+# which is what the next session start reports. Never fatal.
+$runMarker = $null
+try {
+    $stateScript = Join-Path $aiRoot 'scripts/session/SessionState.ps1'
+    if (Test-Path -LiteralPath $stateScript) {
+        . $stateScript
+        $runMarker = Write-PwizRunMarker -Kind 'build' -Name $Target `
+            -Checkout (Get-PwizCheckoutName $pwizRoot) `
+            -CommandLine "$PSCommandPath $($MyInvocation.BoundParameters.GetEnumerator() | ForEach-Object { "-$($_.Key) $($_.Value)" })"
+    }
+}
+catch { }
+
 try {
     Set-Location $skylineRoot
 
@@ -617,5 +632,6 @@ if (($RunInspection -or $QuickInspection) -and $Target -ne "Clean") {
 }
 finally {
     Set-Location $initialLocation
+    if ($runMarker) { Remove-PwizRunMarker -Path $runMarker }
 }
 

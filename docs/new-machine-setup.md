@@ -1279,6 +1279,17 @@ contains `pwiz_tools` directly, so that segment lives inside the `:-` default.
   derives the project root from its own location, so it needs no per-developer
   path edits.
 
+  After an unexpected restart (a Windows Update reboot, power loss), resume the
+  session that was killed in a given checkout:
+
+  ```powershell
+  skyclaude IMoffset -Resume   # reopen IMoffset's interrupted session
+  ```
+
+  Use this rather than `claude --continue`: all checkouts share one transcript
+  store, so `--continue` reopens whichever session died last across *any*
+  checkout. See [restart-recovery.md](restart-recovery.md).
+
 > **Nested-default caveat — CONFIRMED BROKEN, not hypothetical (2026-07-30).**
 > `${VAR:-default}` is documented for `.mcp.json` and LSP config claims parity, but the
 > *nested* `${CLAUDE_PROJECT_DIR}` inside the default is not separately documented — and on a

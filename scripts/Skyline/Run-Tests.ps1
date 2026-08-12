@@ -550,6 +550,23 @@ $offscreenParam = if ($ShowUI) { "off" } else { "on" }
 # Only use buildcheck for English-only runs (buildcheck forces language=en-US, loop=1, AND offscreen=on)
 $useBuildCheck = ($languageParam -eq "en-US") -and -not $ShowUI
 
+# Register this run as in flight. The marker is removed in the finally block
+# below, so one that outlives the process marks a run killed by a restart --
+# which is what the next session start reports, along with the partial log.
+# Never fatal: bookkeeping must not be able to block a test run.
+$runMarker = $null
+try {
+    $stateScript = Join-Path $aiRoot 'scripts/session/SessionState.ps1'
+    if (Test-Path -LiteralPath $stateScript) {
+        . $stateScript
+        $runMarker = Write-PwizRunMarker -Kind 'test' -Name $testNameForLog `
+            -Checkout (Get-PwizCheckoutName $pwizRoot) `
+            -CommandLine "$PSCommandPath $($MyInvocation.BoundParameters.GetEnumerator() | ForEach-Object { "-$($_.Key) $($_.Value)" })" `
+            -LogPath (Join-Path $skylineRoot "bin\x64\$Configuration\$logFile")
+    }
+}
+catch { }
+
 try {
     Set-Location $skylineRoot
 
@@ -942,5 +959,6 @@ try {
 }
 finally {
     Set-Location $initialLocation
+    if ($runMarker) { Remove-PwizRunMarker -Path $runMarker }
 }
 

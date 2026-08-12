@@ -45,6 +45,18 @@
         skyclaude IMoffset -PinTab              # tab e.g. '4321 IMoffset im-fix'
         skyclaude IMoffset -TabTitle 'IM bug'   # tab shows a custom string instead
 
+    After an unexpected restart (Windows Update, power loss), resume the session
+    that was killed in a given checkout:
+
+        skyclaude IMoffset -Resume     # reopen IMoffset's interrupted session
+
+    A plain 'claude --continue' cannot do this on its own: all checkouts under
+    the project root share ONE transcript store, so --continue reopens whichever
+    session was most recently active anywhere. -Resume (and a --continue passed
+    through this launcher, which is retargeted the same way) picks the newest
+    interrupted session FOR THE NAMED CHECKOUT. A launch that finds interrupted
+    work but is not resuming says so instead of starting silently.
+
     Pinning also suppresses Claude Code's own title updates for the session
     (CLAUDE_CODE_DISABLE_TERMINAL_TITLE); the prior title and env var are
     restored when the session exits.
@@ -81,6 +93,12 @@ function Start-PwizClaude {
         # Implies -PinTab. Overrides the checkout name when both are usable.
         [string] $TabTitle,
 
+        # Resume this checkout's most recently interrupted session instead of
+        # starting a fresh one -- the recovery path after a Windows Update
+        # reboot. Equivalent to passing --continue, which is retargeted the same
+        # way (see the restart-recovery block below).
+        [switch] $Resume,
+
         # Anything after the checkout name is passed through to 'claude'.
         [Parameter(ValueFromRemainingArguments = $true)]
         [string[]] $ClaudeArgs
@@ -111,6 +129,55 @@ function Start-PwizClaude {
     }
 
     Set-Location -LiteralPath $root
+
+    # Restart recovery. Sessions and runs register themselves under ai/.tmp and
+    # remove their record on a clean exit, so anything still registered for this
+    # checkout was interrupted -- by a Windows Update reboot, a power loss, or a
+    # crash. SessionState tells those apart by boot ID.
+    $stateScript = Join-Path $root 'ai\scripts\session\SessionState.ps1'
+    $launchId = [guid]::NewGuid().ToString('n')
+    $resumeId = $null
+    if (Test-Path -LiteralPath $stateScript) {
+        . $stateScript
+        # The SessionStart hook stamps this onto the session record it writes;
+        # it is how we recognize our own record and clear it when we exit.
+        $env:SKYCLAUDE_LAUNCH_ID = $launchId
+
+        $checkoutName = Get-PwizCheckoutName ($env:PWIZ_LSP_DIR ? $env:PWIZ_LSP_DIR : (Join-Path $root 'pwiz'))
+        $interrupted = Get-PwizInterruptedState -Checkout $checkoutName -ExcludeLaunchId $launchId
+        if ($interrupted -and $interrupted.Sessions) { $resumeId = $interrupted.Sessions[0].sessionId }
+
+        # 'claude --continue' resolves against the PROJECT directory, and every
+        # checkout under the project root shares one transcript store -- so with
+        # several skyclaude windows open it reopens whichever session was most
+        # recently active anywhere, not this checkout's. Retarget it to the right
+        # one, out loud rather than silently.
+        $wantsContinue = $Resume -or ($ClaudeArgs | Where-Object { $_ -in @('--continue', '-c') })
+        if ($wantsContinue -and $resumeId) {
+            $ClaudeArgs = @($ClaudeArgs | Where-Object { $_ -notin @('--continue', '-c') }) + @('--resume', $resumeId)
+            $when = Format-PwizLocalTime $interrupted.Sessions[0].lastWrite
+            Write-Host "Resuming $checkoutName session $resumeId (last active $when)" -ForegroundColor Cyan
+        }
+        elseif ($wantsContinue) {
+            Write-Host "No interrupted $checkoutName session on record -- claude will pick the most recent session for the project." -ForegroundColor Yellow
+        }
+        elseif ($interrupted) {
+            # Not resuming: say what was lost, so it is a choice rather than a surprise.
+            $cause = if ($interrupted.RebootDetected) { 'a restart' } else { 'an unclean exit' }
+            if ($interrupted.Sessions) {
+                Write-Host "$checkoutName has $($interrupted.Sessions.Count) session(s) interrupted by $cause -- 'skyclaude $checkoutName -Resume' to pick up the newest." -ForegroundColor Yellow
+            }
+            foreach ($runRecord in $interrupted.Runs) {
+                Write-Host "  interrupted $($runRecord.kind): $($runRecord.name) (started $(Format-PwizLocalTime $runRecord.startedUtc))" -ForegroundColor DarkYellow
+            }
+        }
+
+        # Worth knowing before starting an unattended overnight run.
+        $pending = Get-PwizPendingReboot
+        if ($pending.Confirmed) {
+            Write-Host "Windows has a reboot pending ($($pending.Reasons -join ', ')). Reboot now if you are about to start a long unattended run." -ForegroundColor Yellow
+        }
+    }
 
     # Optional: pin the tab title for this session. The tab is a single string
     # that Claude Code rewrites with its topic summary while running, so to make
@@ -159,16 +226,22 @@ function Start-PwizClaude {
         $priorDisable = $env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE
         $Host.UI.RawUI.WindowTitle = $pinnedTitle
         $env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE = '1'
-        try {
-            claude @ClaudeArgs
+    }
+
+    try {
+        claude @ClaudeArgs
+    }
+    finally {
+        # Clearing the record IS the clean-exit signal: only a session that was
+        # killed leaves one behind for the next launch to report.
+        if (Get-Command Remove-PwizSessionRecord -ErrorAction SilentlyContinue) {
+            Remove-PwizSessionRecord -LaunchId $launchId
         }
-        finally {
+        $env:SKYCLAUDE_LAUNCH_ID = ''
+        if ($pinnedTitle) {
             $Host.UI.RawUI.WindowTitle = $priorTitle
             $env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE = $priorDisable
         }
-    }
-    else {
-        claude @ClaudeArgs
     }
 }
 
