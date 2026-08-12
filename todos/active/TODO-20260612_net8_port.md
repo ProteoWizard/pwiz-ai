@@ -3934,3 +3934,147 @@ with the same cached data; with it, `TestDiaFragPipeTutorial` passes twice in a 
 environment read per detected leak). This is the second time the dump-the-leak-moment probe has
 been needed - the ModalMenuFilter root was found the same way - and last time it had to be
 rebuilt from scratch.
+
+## 2026-08-11/12 - msconvert-sharp cpp parity: 95 -> 298 identical files
+
+Drove the C++-vs-C# `msconvert` corpus parity sweep from 95 identical files to 298, and closed the
+last "format not ported" gap. 14 commits, `a2d02bf31e`..`ec3f617de2`.
+
+### The measurement, and two traps in it
+
+The sweep converts every corpus input under 100 MB (492 files, 7.1 GB) with both binaries using
+identical flags and compares the mzML semantically. Durable notes are in the
+`reference_msconvert_parity_sweep` memory. Results: `G:\parity\results-20260810.jsonl` (baseline)
+and `results-20260811.jsonl` (current).
+
+| status | 10 Aug | 12 Aug |
+| --- | ---: | ---: |
+| identical | 95 | **298** |
+| differs | 320 | 124 |
+| cs-failed | 8 | **1** |
+
+**Trap 1 - the comparator pairs records POSITIONALLY** and labels each pair with the C++ id. When
+the two sides emit different record SETS it reports unrelated records as differing. Most of the
+original "defaultArrayLength" findings were really record-set differences, and the fix belonged in
+index construction. `MS:1000511 ms level` appearing to differ 2.0 vs 1.0 was this artifact in all
+16 cases. Always diff `(id -> value)` keyed by id before trusting a per-record number.
+
+**Trap 2 - per-file diff lists cap at 60**, and 213 of 492 files hit the cap: 40,197 diffs reported,
+13,907 retained. File counts are sound; hit counts are floors. The Thermo work re-measured with a
+key-based comparator and found ion injection time was 15,210 hits, not the 253 the sweep showed.
+
+### Bruker YEP / FID now read, via CompassXtract COM (`465ded2ce7`)
+
+The last unported format. A prior session had proved .NET 8 can drive the COM server
+registration-free; this builds the reader on that. Three things had to be right:
+
+- **Activation context is per-THREAD** and must be entered per operation, not once at open - a
+  reader opened on one thread is read on others, and the manifest's `comInterfaceExternalProxyStub`
+  entries are what let an EDAL pointer marshal across apartments.
+- **CompassXtract's own object factory resolves its plugin DLLs relative to the host EXE's
+  directory.** Neither the activation context's assembly directory nor `PATH` satisfies it - the
+  vendor cache alone yields `TypeNotInFactory` for `BDal.CCO.Transformation`. The payload is
+  therefore copied from the cache next to the host on first use, marker-gated on the pin; where
+  that directory is not writable the user is told to run one conversion elevated. This is the one
+  vendor SDK the download-to-cache model cannot serve on its own.
+- `EDAL.IsolationModes` is named in `GetIsolationData`'s FieldMarshal blob and the CLR resolves that
+  name in the assembly holding the signature. Under `EmbedInteropTypes` the compiler embeds only
+  interop types it SEES USED, and nothing referenced the enum. `GetFragmentationData` survived the
+  identical descriptor only because `SetActivation` happened to switch on its enum.
+
+Two cpp quirks reproduced deliberately (`getChargeState`'s word branches are expression statements
+with no `return`; `getIsolationWidth` truncates through an `int`), and a third that is load-bearing
+in the other direction: `MSSpectrumParameterIterator::equal` terminates on a one-based index, so an
+enumeration never yields the LAST parameter - and `MS(n) Isol Width` is the last one. cpp therefore
+never reads it and emits no isolation offsets; matching that needs the same off-by-one.
+
+VC90 CRT/MFC/OpenMP ship beside the reader and are mirrored into the cache. The vendored
+`Microsoft.VC90.OpenMP.manifest` declared no `<file>`, i.e. it was the WinSxS variant rather than
+the app-local redistributable one, so a private `vcomp90.dll` could never have been found - repaired
+for x86 and x64, which the C++ and Skyline trees share.
+
+### The parity fixes, by shape
+
+**Wrong SOURCE, not wrong arithmetic** - the most common shape:
+
+- Sciex collision energy (`a7659e330b`): cpp reads the experiment's "CE" ramp parameter; we read
+  `MassSpectrumInfo.CollisionEnergy`, the instrument's rolling readback. Method-programmed 10.0 vs
+  measured 35.78. Three unrelated defects on one cvParam plus a fourth in the opposite direction.
+- Sciex BPC time axis (`679c6c79b6`): cpp pairs the TIC's X axis with the BPC's intensities and
+  never reads the BPC's own X. On DMS/SelexION the SDK indexes that chromatogram by COMPENSATION
+  VOLTAGE - our BPC ran -5.0, -4.75, -4.5 where cpp has retention times. Every value wrong.
+- Thermo scan window (`aa2b173c97`): cpp uses ScanStatistics LowMass/HighMass; we used the filter's
+  ranges, which state what was REQUESTED (2000.0 vs an acquired 2000.00005).
+
+**A fix that existed in one place and was never swept to the others:**
+
+- Bruker duplicate `dataProcessing` (`80a6248d85`) - Thermo had already dropped its second entry.
+- Agilent all-ions promotion (`ec3f617de2`) - already ported into the IM path, never into the main
+  one, so `AE_30Apr19_negESI_0001.d` came out as 723 ms-level-1 spectra with no precursorList where
+  cpp emits 723 at ms level 2. cpp's guard `1==msLevel || (2==msLevel && isIonMobilityScan)` has its
+  two halves on the two different code paths.
+
+**Dead CLI wiring** - `--ignoreMissingZeroSamples` and `--acceptZeroLengthSpectra` were parsed and
+never copied to `ReaderConfig`, and the readers that consume them in cpp mostly had no branch to
+reach. Skyline passes `--acceptZeroLengthSpectra` in four DDA/DIA paths and was silently not getting
+it.
+
+**The formatter** (`af894d3f0b`): `PwizFloat` rounded in the DECIMAL domain
+(`Math.Round(v, 12, AwayFromZero)`), which .NET implements by scaling the whole value - losing low
+bits and manufacturing ties that do not exist in binary. karma splits with `modf`, scales only the
+FRACTIONAL part, and takes `floor(x+0.5)` in the number's own type. ~6,400 values. Ported
+`real_inserter::call_n` generic over `IFloatingPointIeee754` so `float` rounds in SINGLE precision -
+cpp instantiates the whole generator on `float` and widening is not equivalent. Validated against a
+C++ generator built on the same boost headers over 433,604 values: zero differences.
+
+### Test blind spots this exposed - the theme worth carrying
+
+Three separate bugs survived because the tests are shaped not to see them:
+
+- `MSDataDiff.DiffChromatogram` never compared `Precursor`/`Product`, unlike cpp `Diff.cpp:584-585`,
+  so chromatogram-level collision energy was invisible to EVERY vendor reference test. Now compared.
+- The vendor harness compares cvParams **numerically with tolerance**, so a last-digit text
+  difference cannot fail a reference test. That is why the formatter bug lived so long.
+- The Bruker combineIMS references are the only ones run for that config and they have NO
+  chromatogram list, so the whole chromatogram path was untested. `Reader_Bruker_Test.cpp:131` sets
+  `peakPicking` before every combineIMS tier and never clears it, so cpp only ever writes the
+  `-centroid` references; the non-centroid ones are leftovers nothing generates or checks. We had
+  been asserting against them, and matching them had forced a reader-level suppression that made
+  ordinary `--combineIonMobilitySpectra` differ from msconvert.
+
+`IsRunningInTestRunner` was `#if`'d to a hardcoded `false` on net8 (`7e58e83d67`), so
+`SkipWiff2TestInTestExplorer` skipped `FileTypeTest` and `Wiff2ResultsTest` everywhere - the wiff2
+path had no Skyline-level coverage at all, which is how a 12-sample `.wiff2` converting only its
+first sample went unnoticed.
+
+### Environment gotchas
+
+- **SDK resolution follows the WORKING DIRECTORY.** `global.json` (pinning 8.0.100) lives in
+  `pwiz-sharp/`, not the repo root. Building from the root silently selects a newer SDK whose
+  analyzers reject existing code - `MsData.Tests` "does not build" is that, not a breakage.
+- **`dotnet build -o <dir>` is NOT equivalent to the normal output layout.** It omits the `wiff2`
+  plugin subdirectory, so every `.wiff2` fails to load its SDK. This produced a phantom 8 -> 44
+  `cs-failed` regression in the sweep. Bit twice.
+- Reproduce the Linux CI configuration on Windows with
+  `-p:IAgreeToVendorLicenses=true -p:NativeVendorsAvailable=false`. Dropping the license flag is NOT
+  equivalent - that also defines `NO_VENDOR_SUPPORT`, so `Read` throws before reaching the
+  CompassXtract stub and the build passes without exercising it.
+- The corpus buckets vendor by top-level directory under `D:\test`, and at least three "Mobilion"
+  `.d` are Agilent MassHunter. Confirm format from the mzML header, not the path.
+
+### Where it stands
+
+492/492 swept. 298 identical, 124 differ, 1 `cs-failed` (a Sciex `no-spectra` file). Sciex 174/188
+and Thermo 89/98 identical. Note the sweep predates the last five commits, so Bruker (18 files),
+`arrayLength` (10), Thermo scan windows and the Agilent all-ions file are not yet reflected in it.
+
+Largest remaining category is **17 Agilent files needing the unported non-MS device chromatograms** -
+cpp's `translateAsChromatogramType` (`Reader_Agilent_Detail.cpp:231`) maps pumps, samplers and
+detectors to flow-rate/pressure/generic chromatograms; our port covers only UV/DAD absorption, and
+its own header says so. That is a feature port, bounded by cpp's switch statement, not a defect.
+
+Unexplained and worth a look: three files moved from `cpp-failed` into `both-failed` between the two
+sweeps.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260612_net8_port.md` before starting work.
