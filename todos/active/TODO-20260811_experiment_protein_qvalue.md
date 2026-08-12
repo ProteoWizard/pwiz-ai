@@ -150,6 +150,13 @@ shared design.
 6. Rebaseline `mode3` and the cross-impl sidecar leg (the pass-2 protein column legitimately
    changes value); confirm the golden does NOT move.
 
+### Sequencing note - review AFTER the rebase, not before
+
+`/code-review` diffs `master...HEAD`. This branch is based on #4558's tip, so running it now
+would review #4558's diff as well as this one - wasted effort and findings that belong to
+another PR. Rebase onto master once #4558 merges, THEN review, then open the PR. Same reason
+the PR itself should not be opened early (Copilot auto-reviews on open).
+
 ### Open implementation questions
 
 * **Version bump?** The layout does not change - same offset, same width - only the pass-2
