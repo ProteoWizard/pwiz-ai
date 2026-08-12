@@ -1289,3 +1289,32 @@ named `PAIR_KEY_SEPARATOR` const - invisible in source and diffs, and any format
 normalized it would have merged unrelated pairs.
 
 578 tests, zero warnings.
+
+### 2026-08-12 - the SECOND decoy-row defect: pair-losers are counted
+
+After `2704cc2dbf` the decoy row went 468 -> 338 against an expected 289 on
+StellarGenDecoyEntrap - better, not right. Measured on the post-fix cross-impl Stellar C#
+sidecars (boundary +0.250013, 31,164 accepted non-decoys, expected 312):
+
+| decoys above the boundary | 415 |
+|---|---|
+| of which WON their target/decoy competition | **334** (expected 312, 1.07x) |
+| of which LOST their pair | **81** |
+
+**The panel admits every decoy whose aggregate clears the bar; TDC counts only competition
+WINNERS.** A decoy that lost to its target is not in the ranking q was computed from, so
+counting it inflates the row. Excluding the 81 leaves 334 against 312 - a 7% gap consistent
+with conservative q being a step function.
+
+So the decoy row had TWO stacked defects: the base_id q inheritance (dominant - 5,534 of the
+5,911 on the 82-file run) and this one (the remainder). Fixing the first alone leaves ~1.17x.
+
+**Hypothesis killed en route** (Brendan's, and worth recording because the arithmetic is the
+lesson): that the clamp discarding target+entrapment entries with raw exp-q < 1% inflates the
+ratio, since decoys cannot be clamped. The mechanism is real - 334 rejected non-decoys do sit
+above the boundary - but its effect is **scaled by the FDR**: adding 334 to the denominator
+adds 1% of 334 = 3 decoys, not 49. Explaining a 103-decoy excess that way would need ~10,300
+clamped-out entries.
+
+**Not yet fixed.** The rule the decoy row needs is: count decoys above the boundary that WON
+their own target/decoy competition. Left for a session that can re-run the gate and rebaseline.
