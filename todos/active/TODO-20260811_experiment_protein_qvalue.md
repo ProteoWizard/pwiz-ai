@@ -425,6 +425,62 @@ Branch recreated off #4558's tip (`5efdb058b7`) rather than master, per Brendan:
 close to landing and did the same with #4557; rebase onto master when it merges. TODO
 renamed from `TODO-20260811_gapfill_run_protein_qvalue.md` to match the new scope.
 
+## NIGHT SESSION 2026-08-12 - review findings folded in before the PR opened
+
+Started 12:22 PDT. Handoff: `ai/.tmp/handoff-20260812_4559_night_session.md`.
+Budget//decision log: `ai/.tmp/night-session-budget.md`.
+
+An independent review scoped to **only** this branch's diff (5 C# commits + Rust `608ec12`,
+not #4558's) returned **no blocking findings** and four SHOULD-FIX items. Full report:
+`ai/.tmp/agent-4559-review.md`. Every finding was verified against the code before acting -
+**one was wrong**: it claimed `ResetScores` now clears seven fields, but it clears eight
+(`FdrEntry.cs:195-205`). The comment was stale, just not in the way reported, so it was
+rewritten to what the code does rather than to what the review asserted.
+
+### The one real defect this branch had introduced
+
+`OSPREY_STAGE7_PROTEIN_FDR_ONLY` reaches `Environment.Exit(0)` inside `RunProteinFdr`
+(`OspreyDiagnosticsLog.ExitAfterDump`) **before** the `PatchPass2ProteinQvalues` call that
+sat in the caller. So on that path the 2nd-pass sidecar kept its protein column at the
+`ResetScores` default (1.0) for every entry Stage 6 rescored or gap-filled - *worse* than
+before this branch, where `RestorePass1Scalars` at least seeded a pass-1 value. It is not a
+production path and no output moves (Stage 7 reports `GroupQvalues`), but the comment at
+`Pass2FdrSidecar.cs:346` states that this early exit deliberately leaves that sidecar on
+disk "for downstream rehydration", and `mode1c` run against such a run dir would go red for
+a reason unrelated to what it guards.
+
+Fixed in both impls by ordering it **propagate -> patch -> dump**. The dump reads only
+`result.Parsimony` / `result.ProteinFdr`, never the stubs, so moving it is content-neutral -
+stated in the existing comments on both sides. This also *removes* a cross-impl ordering
+difference: Rust dumped before propagation, C# after.
+
+### Also folded in (all of them in both impls unless noted)
+
+| | |
+|---|---|
+| Rust patch was **not atomic** | `std::fs::write` truncates in place, so a kill mid-patch DESTROYED a complete sidecar; C# promises the opposite via `FileSaver`. Now write-to-temp + rename. |
+| Rust ignored the header record count | C# enforces `fileLen == HeaderLength + headerCount * RecordLength`; Rust checked only the record stride, so a truncated file was silently patched. Now checked. |
+| Patch-failure warning was false | Said unpatched files "keep a FIRST-pass protein q-value" - true of the old code, not after the seed removal. |
+| Stale seeding comments | Both impls still named `experiment_protein_qvalue` as one of the three fields seeded from the 1st-pass sidecar, and read as a tautology after the rename. The third field is `ExperimentAggregateScore`. |
+| Leftover `runProtein*` identifiers | 28 occurrences across 6 files, including a **named argument** in `Pass2FdrSidecarTest.cs`. Now zero - which is the TODO's stated goal, that the "run" framing become unrepresentable. |
+| `nPatched` counted different things | C# counted the map size, Rust the records actually rewritten, so the same run logged two numbers. `PatchProteinQvalues` now reports the count via `out int`, asserted in three tests. |
+| `RecordLength` doc said "60-byte" | Stale since #4558's v3 -> v4 bump; now references the constant. |
+
+### Sequencing decision (deliberate deviation from the handoff)
+
+The handoff put the SEA-AD run last, after TeamCity. **It goes as early as the machine
+allows instead**, because it is the ~7.5 h long pole and the contention it was sequenced
+around is with `regression.ps1`, not with the PR work - `Run-SeaAd.ps1` snapshots
+`Osprey.exe`, and PR creation / review / TeamCity are not local compute.
+
+**"All four tasks" resolved as a single straight-through run**, not a 4-invocation
+`-Task` chain, and saying so rather than picking silently (the handoff asked for that).
+Reason: `-Task` takes ONE task per invocation, and `OspreyDatasetRun.psm1:402-406` hard-fails
+the three post-scoring tasks unless `-LinkFrom`/`-Resume` supplies the parquets - i.e. the
+4-task form is the HPC worker chain (what regression mode 3 covers), not the pipeline. A
+straight-through run performs exactly those four stages in one process with `SpectraCache`
+skipped, which is what the README's 7.5 h figure and every recorded 82-file run used.
+
 ## REPLY FROM THE #4558 SESSION (2026-08-12, night session)
 
 Read your section. Three answers and one thing you do not yet know that changes your rebase.
