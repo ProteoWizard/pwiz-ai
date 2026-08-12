@@ -1153,6 +1153,30 @@ files still broken.
 write-and-read-back test and on 82/82 verifying after the repair - it just was not robocopy
 misbehaving.
 
+### 2026-08-11/12 (night session) - the silent spectra-cache write (`126880972f`)
+
+Added to this branch at Brendan's direction (it is not co-assignment work, but he chose to ship
+it here rather than open a second PR - **say so in the PR description**, and note Copilot and
+TeamCity have not seen it).
+
+`SpectraCache.SaveSpectraCache` wrote multi-GB with nothing logged. On the 82-file SEA-AD
+cohort that is **~4.1 GB and ~28 s per file**, and it surfaced only as an unexplained gap
+between the reader's `100%` and `Loaded N MS1 and M MS/MS spectra` - measured 23 gaps >= 20 s,
+mean 28.4 s, every one immediately before a `Loaded` line and nowhere else (~149 MB/s, i.e.
+sustained sequential write). Long enough that a run looks hung.
+
+Fixed by mirroring what `LibraryCache` already does for its own write: a `ProgressReporter` on
+`IO_INTERVAL_SECONDS` over the MS2 record loop (its constructor also prints
+`Writing spectra cache...`), plus a caller-side `Saved spectra cache (N MS2 + M MS1, X GB) to
+'<path>'`. The path matters because `--work-dir` redirects it away from the data directory.
+
+**Verification status, stated honestly**: 578 tests, zero warnings, and the mechanism is
+byte-for-byte the pattern whose output is observable in this run's own log
+(`Writing library cache...` / `Saved library cache (6324700 entries) to '...'`). The new line
+has NOT been observed at runtime - the in-flight run uses a pre-change snapshot, and
+`OspreyOutput.Out` is redirected under the test host so neither writer's line appears there.
+Confirm on the next real run.
+
 ### 2026-08-11/12 (night session) - Copilot reviewed #4558; all four findings resolved
 
 Copilot did fire once the base became master (open item 2 from the handoff). Commit
