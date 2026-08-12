@@ -176,6 +176,27 @@ the two ROUTES disagreed; the column was never a pass-2 value for ANY record, on
 route, on the arm TeamCity actually runs. That is the defect the collapse removes, and it is
 why a two-route comparison could not see it - both routes copied the same pass-1 value.
 
+## Red -> green verified on Stellar - 2026-08-12
+
+Same command both times (`regression.ps1 -Dataset Stellar -KeepOutput`, default arm), the
+only difference being the fix commit. Logs `ai/.tmp/regression-4559-redcheck.log` and
+`ai/.tmp/regression-4559-greencheck.log`.
+
+| leg | before the fix | after |
+|---|---|---|
+| `mode1c` (new) | **FAIL** - all 994,509 shared records identical to the 1st-pass column | **PASS - 24,805 of 994,509 moved** |
+| `mode1` (vs golden) | PASS | **PASS - the golden did NOT move** |
+| `mode3` (sidecars ==straight) | PASS - blind to it, both routes copied the same value | PASS (2,443,597 records) |
+| every other leg | PASS | PASS |
+
+Two things this pins down:
+
+1. **The change is sidecar-only.** The golden holding across the fix is the evidence that
+   gap-fill / protein q on the per-entry field feeds no reported output - predicted from the
+   code (Stage 7 reads `ProteinFdrResult.GroupQvalues`, per GROUP), now measured.
+2. **`mode3` was green in BOTH runs.** The two-route comparison cannot see this class of
+   defect, which is the argument for `mode1c` existing at all rather than extending mode 3.
+
 ## State of the branches - 2026-08-12
 
 **C# `Skyline/work/20260811_experiment_protein_qvalue`** (on #4558's tip `5efdb058b7`),
