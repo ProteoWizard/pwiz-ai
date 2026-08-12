@@ -43,6 +43,22 @@ points at:
 4. **`ai/TESTING.md`** - translation-proof tests, consolidated
    `[TestMethod]` structure, `AssertEx` over `Assert`.
 
+**Running a large named dataset (SEA-AD, TDP-43) - DO NOT write your own run script:**
+- Each cohort has ONE sanctioned runner beside its README:
+  `ai/scripts/Osprey/SEA-AD/Run-SeaAd.ps1` and `ai/scripts/Osprey/TDP43/Run-Tdp43.ps1`,
+  sharing `ai/scripts/Osprey/Common/OspreyDatasetRun.psm1`. Decoy arm, entrapment ratio and
+  pass-2 mode are PARAMETERS, not separate scripts. **Read the folder's README first**, and
+  run `-WhatIf` to confirm path resolution before committing to a multi-hour job.
+- **A `ai/.tmp/run-*.ps1` script is a previous session's shortcut, not a template** - even
+  when a handoff points at one. Rolling your own re-acquires traps these folders document:
+  `--work-dir` relocates the `.spectra.bin` cache and rebuilds every file (~70 min / ~340 GB
+  at 82 files - the runners pass `--output-dir`); `--fdrbench-pass` is inert without
+  `--fdrbench <input.tsv>`; and the peak-pick model is nowhere in Osprey's log, so only the
+  runner's banner / START line / directory name record which discovery set produced a number.
+- Choosing a NEW large dataset (what exists, size, access, download budget):
+  **`ai/docs/osprey-large-datasets.md`**.
+- Full detail: "Large named datasets" in `ai/docs/osprey-development-guide.md`.
+
 Memory or scaling work ("does this fit at N files?", a run that looks hung) needs:
 - **`ai/docs/memory-band-guide.md`** - run with `--timestamp --memstamp`, then
   `ai/scripts/perfviz.py <log> --files N` for the numbers (peak, memory-floor drift per

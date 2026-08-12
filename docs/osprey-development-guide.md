@@ -408,6 +408,60 @@ Not committed; lives on the developer workstation:
 Dataset-specific configuration:
 `ai/scripts/Osprey/Dataset-Config.ps1`.
 
+## Large named datasets: USE THE EXISTING RUNNER, do not write a harness
+
+The 3-file gate datasets above are not the only ones. Each large cohort has **one sanctioned
+runner** in its own folder, with a README carrying the measured facts (wall time, disk, the
+traps). Read that README before running anything at that scale.
+
+| Dataset | Folder | Runner |
+|---|---|---|
+| SEA-AD Pilot-MTG, 82 Astral DIA files | `ai/scripts/Osprey/SEA-AD/` | `Run-SeaAd.ps1` |
+| TDP-43 Plasma EV-Quant | `ai/scripts/Osprey/TDP43/` | `Run-Tdp43.ps1` |
+
+Everything dataset-independent lives in `ai/scripts/Osprey/Common/OspreyDatasetRun.psm1`, shared
+by both; each runner contributes only the descriptor (where the data is, what the files are
+called, the defaults). Arms that differ only in decoy mode, entrapment ratio or pass-2 mode are
+**parameters**, not new scripts - running them through one script with identical logging is what
+makes them comparable.
+
+**Do not adapt a one-off script out of `ai/.tmp/` into a new harness, even when a handoff points
+at one.** A `.tmp` runner is a previous session's shortcut. `Run-SeaAd.ps1` says in its own
+synopsis that it "replaces the one-off harnesses" that preceded it. Writing another one
+re-acquires every trap these folders already document. Measured cost of doing exactly that on
+2026-08-11:
+
+* `--work-dir` **relocates the `.spectra.bin` cache**, so a data directory that already holds
+  the caches rebuilds all 82 of them - ~70 min and ~340 GB of pointless writes. The runners pass
+  `--output-dir` for this reason. Mechanism, since the error surfaces somewhere else entirely:
+  `_config.CacheDir = _cacheDir ?? _workDir` (`OspreyCommandArgs.cs`) and an explicit `CacheDir`
+  wins outright in `ArtifactPaths.ResolveCacheDir`, so the "beside the data file" preference is
+  never reached. Use `-CacheDir` only when the input directory is genuinely read-only.
+* `--fdrbench-pass` is **inert without `--fdrbench <input.tsv>`** - it warns and writes nothing.
+  The runners supply the input path automatically.
+* The **peak-pick model appears nowhere in Osprey's log.** The runners export `OSPREY_PICK_LDA`
+  in both directions and record it, the experiment aggregation and the qualify-by mode in the
+  banner, the `run.log` START line and the output directory name. A hand-rolled script produces
+  numbers whose discovery-set configuration cannot be reconstructed afterwards.
+* The runners propagate Osprey's exit code (without it a failed run exits 0 and an overnight
+  harness reads failure as success) and refuse to adopt a populated output directory unless you
+  pass `-Resume`, because Osprey silently adopts per-file caches it finds there.
+
+**Run `-WhatIf` first.** It prints the resolved exe, data dir, library, cache count and the full
+command line without starting anything - the cheap way to confirm a multi-hour run is pointed at
+what you think it is. Paths resolve from parameter, then environment variable
+(`OSPREY_SEAAD_DIR` / `OSPREY_SEAAD_LIB`, `OSPREY_TDP43_DIR` / `OSPREY_TDP43_LIB`), then a known
+fallback, and hard-fail with a README pointer rather than searching an empty directory for hours.
+
+Also in `ai/scripts/Osprey/SEA-AD/`: `Convert-SeaAdRaw.ps1` (raw -> mzML),
+`New-SeaAdLibrary.ps1` (derive a library variant without Carafe or a GPU),
+`Clear-StandbyCache.ps1` (evict the Windows standby list so the next read of a large file is
+genuinely cold - a new *session* does not do this, the cache is machine-wide),
+`Test-SpectraCache.ps1`, and `Measure-Stage6Rescore.ps1`.
+
+**Choosing a NEW large dataset** - what exists, how big, how to get access, and how to budget the
+download: `ai/docs/osprey-large-datasets.md`.
+
 ## Cross-implementation parity testing
 
 ### The parity gate is a STANDING requirement -- mirror every substantive change in Rust
