@@ -246,6 +246,9 @@ continue to agree after the change - the fix landed identically on each.
 | `b642d4a244` | `Test-Pass2ProteinQvalue` + regression.ps1 `mode1c`; RED as added |
 | `032087df19` | `PatchPass2ProteinQvalues` after `RunProteinFdr`; seed drops the protein q |
 
+Both branches are PUSHED. The C# one will need a force-push after the rebase onto master,
+which is expected - #4557 did the same.
+
 **Rust `maccoss/osprey` branch `fix/one-experiment-protein-qvalue`**, 1 commit `6183d12`,
 `cargo fmt --check` / `clippy -D warnings` / 579 tests all green. LF verified with
 `git cat-file blob | tr -cd '\r' | wc -c` = 0.
