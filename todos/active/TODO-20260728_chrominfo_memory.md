@@ -641,14 +641,21 @@ subsets locally rather than repeating the whole run.
 **Verified: the fast suites (Test.dll + TestData.dll subset of the failing list) went 28 -> 20,
 and 8 of 11 converted functional tests now pass.** Nothing that passed regressed.
 
-**The single largest cause was removing `SrmDocument.UpdateResultsSummaries` (`c7239ced8`).**
-Its commit message says "nothing keeps what it worked out", which is true of the *summaries* but
-not of the pass: `OnChangingChildren` ran a full results pass over every molecule whose node
-changed, and that pass is the only thing which reads the .skyd for nodes that have just been
-added. Without it, anything that changes children - `Refine` with auto-pick, adding isotope
-transitions, importing peak boundaries - leaves the new nodes with no peaks for good. Restored,
-with a comment saying what depends on it. The removal was checked against `Test.dll` only, which
-is exactly the suite that has no results in it.
+**`SrmDocument.UpdateResultsSummaries` was restored, then removed again - and the removal is
+right.** Restoring it (`c7239ced8` had taken it out) was what first made the four
+`FullScanFilterTest` variants pass, so it looked load-bearing. It was not: the reason those tests
+failed was `GetPeakCountRatio` not telling "not measured in this replicate" from a ratio of zero,
+and refinement asking the accessors backed by `LegacyChromInfos`. Once both were fixed, taking the
+pass back out costs exactly **one** test on the fast suites - `ConsoleExportTrigger`, at the
+triggered transition list export, which needs the transition ranks. Left failing deliberately,
+with the reason recorded where the pass used to be.
+
+Worth recording how the wrong explanation survived as long as it did: "the new transitions have no
+peaks" was never checked against the diagnostic that was already in hand, which plainly showed
+`tranRes=True,True,True` - they had results, and two of three peaks were merely not *good*. The
+precursor level pass does run when transitions are added (`ChangedResults` is true as soon as the
+child count differs) and it does read the .skyd (`canUseOldResults` is hardcoded false and only
+flips on `FileModifiedException`). Nick caught it by asking when the transitions were added.
 
 **Three more product defects, each found by instrumenting rather than reading:**
 - `RefinementSettings.Refine` (precursor level) called the one-argument
