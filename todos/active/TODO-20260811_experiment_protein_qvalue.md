@@ -11,7 +11,7 @@
 - **Module**: `osprey`
 - **Other labels**: candidate `tech-debt` (this is a naming/structure fix, not a bug fix -
   no reported output moves)
-- **PR**: (pending)
+- **PR**: [#4569](https://github.com/ProteoWizard/pwiz/pull/4569) (C#), [maccoss/osprey#64](https://github.com/maccoss/osprey/pull/64) (Rust)
 - **Requester/Reporter**: none - Osprey developers on Osprey code, no credit line.
 
 ## Objective
@@ -386,8 +386,8 @@ which is expected - #4557 did the same.
 - [ ] Decide the version-bump question
 - [x] `regression.ps1 -Dataset Stellar` red->green, then `-Dataset All` 53/53 PASS; the
       golden did NOT move on any dataset
-- [ ] Cross-impl sidecar leg green with both sides changed
-- [ ] Rebase onto master when #4558 merges
+- [ ] Cross-impl sidecar leg green with both sides changed - Rust binary IS built and green on this branch; the leg needs local Osprey runs and the box is committed to the 82-file SEA-AD run until ~21:00 PDT
+- [ ] Rebase onto master when #4558 merges - RETARGET #4569 to master FIRST, then rebase --onto; never let #4558's branch be deleted while #4569 still targets it (auto-closes, unreopenable)
 - [x] File the `--fdr-level protein` C#/Rust gap as a follow-up issue -
       [#4561](https://github.com/ProteoWizard/pwiz/issues/4561)
 - [x] Update `docs/08-protein-parsimony.md` + `docs/14-intermediate-files.md` (`bd4c289342`)
@@ -424,6 +424,69 @@ question dissolves under the fix rather than needing an answer.
 Branch recreated off #4558's tip (`5efdb058b7`) rather than master, per Brendan: #4558 is
 close to landing and did the same with #4557; rebase onto master when it merges. TODO
 renamed from `TODO-20260811_gapfill_run_protein_qvalue.md` to match the new scope.
+
+## NIGHT SESSION 2026-08-12 - RESULTS
+
+**PRs open, both stacked.** C# **#4569** (base `Skyline/work/20260808_peak_coassignment_diagnostics`,
+labels `osprey` + `tech-debt`); Rust **maccoss/osprey#64** (base
+`fix/persist-experiment-aggregate-score`). Both must be retargeted to their default branch
+when the parent merges - and the parent branch must NOT be deleted first, or the stacked PR
+auto-closes and cannot be reopened.
+
+**Gates, all measured tonight:**
+
+| gate | result | log |
+|---|---|---|
+| `-Dataset All` post-rebase (commit `c406068c67`) | **52 legs, 52 PASS, 0 FAIL** | `ai/.tmp/regression-4559-postrebase-all.log` |
+| `-Dataset Stellar` after the fix commit `826666204f` | **10/10 PASS**; `mode1c` numbers IDENTICAL to the pre-fix run | `ai/.tmp/regression-4559-postfix-stellar.log` |
+| C# build + tests + inspection | 579 tests, zero-warning | - |
+| Rust `fmt --check` / `clippy -D warnings` / tests | 580 tests; LF verified (0 CR) | `ai/.tmp/rustgate-4559.log` |
+| TeamCity Perf/Regression | build **4131578**, `pull/4569` | see the agent note below |
+
+The handoff predicted "53/53". The run actually reports **52 legs** (Stellar contributes 10,
+the other three 14 each) - quoting what the run printed rather than the expectation.
+
+`mode1c` movement, post-rebase: Stellar 25,006/994,509 (390 gap-fill), StellarLibDecoy
+6,486/923,246 (666), StellarGenDecoyEntrap 89,116/259,678 (741), Astral 19,008/3,449,774
+(8,800). These differ slightly from the pre-rebase run, exactly as the handoff predicted -
+#4558's experiment-q fixes change the second-pass detected set.
+
+**The Stellar re-gate is the evidence the hardening commit is output-neutral**: same command,
+same `mode1c` counts to the record (25,006 of 994,509; 390 gap-fill), golden unmoved.
+
+### TeamCity: this config only works on ONE agent
+
+`ProteoWizard_OspreyWindowsNetPerfRegressionTests` has had **no successful run since
+2026-07-09**. The two runs after it (2026-07-10, builds #138 and #140, both on **master**)
+died in ~10 seconds with **exit code 9009** - Windows "command not recognized", i.e. a tool
+missing from the agent's PATH - on AWS `pwiz-windows-i-*` agents. The last green (#121) was on
+`MacCoss TeamCity Agent 1`.
+
+So the config's last recorded state on master is RED for an environmental reason, and an
+unpinned trigger has a good chance of returning a meaningless 10-second red that reads exactly
+like a real regression. **Trigger with `agent_name="MacCoss TeamCity Agent 1"`.** Recorded in
+memory as [[reference_osprey_teamcity_pr_trigger]].
+
+### The 82-file SEA-AD run
+
+Started **13:50:29 PDT**, detached, PID 51572. Log
+`ai/.tmp/seaad-82f-4559-20260812_135028.log`; output
+`D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\runs\seaad-82files-libdecoy-r1.0-protein-compact`.
+
+Build: **Osprey v26.1.1.224 (`826666204f`)** - the branch tip including the hardening fix,
+snapshotted so the build tree stays free.
+
+Pre-flight, all verified rather than assumed:
+
+* **82/82 spectra caches ACCEPT** (`Test-SpectraCache.ps1 -Quiet`). This was the schedule risk
+  worth checking: a rejected cache re-parses every mzML at ~4.5 min/file, silently, which would
+  have added ~6 h.
+* Cold library parse + `.libcache` build measured at **~90 s** (from the 2026-08-04 run.log), so
+  the missing libcache was not worth avoiding.
+* **Library differs from the recorded 82-file runs.** Those (2026-08-04/05) used
+  `target+decoy+entrapment-gated-no-il`; the handoff specifies `target+decoy+entrapment` and I
+  followed it. **This run is therefore NOT ID-comparable to them.** Pick model matches (both the
+  learned/LDA pick); FDRBench pass differs (`both` here, `2` there).
 
 ## NIGHT SESSION 2026-08-12 - review findings folded in before the PR opened
 
