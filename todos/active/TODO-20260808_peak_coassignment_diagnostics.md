@@ -1343,3 +1343,30 @@ and re-indent. Fix when next in the file.
 
 The three gaps at 06:46-06:48 are Stage 7 / blib-write / entrapment matching and were not
 investigated.
+
+### 2026-08-12 - PASS 1 DECOY ROW NOW MATCHES ITS DEFINITION (288 vs 289)
+
+Both defects fixed (`2704cc2dbf` q-inheritance, `37af75b993` winner-only). Measured on
+StellarGenDecoyEntrap, pass 1, experiment scope, accepted = 28,694 targets + 228 entrapment:
+
+| | decoys | vs expected 289 |
+|---|---|---|
+| original | 468 | 1.62x |
+| after q-inheritance fix | 338 | 1.17x |
+| **after winner-only rule** | **288** | **1.00x** |
+
+**PASS 2 IS NOT SOLVED - 10 decoys against an expected 233.** The winner rule cut pass-2
+experiment decoys from ~60 to 10, so that scope is now badly UNDER its definition. Consistent
+with the documented finding that the pass-2 experiment population is governed by compaction
+survivorship rather than by the boundary (396 of 468 pass-1 decoys are absent from the 2nd-pass
+sidecar entirely), but it needs its own analysis before the pass-2 decoy row is quoted. The
+enrichment is correctly suppressed (NaN) below MIN_N_FOR_ENRICHMENT, so the page does not
+publish a ratio built on n=10.
+
+Gate exits 1 as expected - goldens moved, self-consistency legs pass.
+
+**Next, agreed with Brendan**: (1) 3-file Astral with the full target+decoy+entrapment library
+(~20 min) - the only configuration where all three classes clear MIN_N_FOR_ENRICHMENT, so the
+only one that exercises the decoy row against entrapment; (2) `--task FirstPassFDR` on a COPY
+of the 82-file work dir (~63 min) to regenerate corrected 1st-pass sidecars and a corrected
+pass-1 panel without redoing the 3h53m rescore; (3) full pass-2 diagnostics last.
