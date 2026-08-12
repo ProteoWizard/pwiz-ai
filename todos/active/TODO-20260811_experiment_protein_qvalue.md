@@ -218,7 +218,9 @@ why a two-route comparison could not see it - both routes copied the same pass-1
 - [ ] `regression.ps1 -Dataset Stellar`, then `-Dataset All`; golden must NOT move
 - [ ] Cross-impl sidecar leg green with both sides changed
 - [ ] Rebase onto master when #4558 merges
-- [ ] File the `--fdr-level protein` C#/Rust gap as a follow-up issue
+- [x] File the `--fdr-level protein` C#/Rust gap as a follow-up issue -
+      [#4561](https://github.com/ProteoWizard/pwiz/issues/4561)
+- [x] Update `docs/08-protein-parsimony.md` + `docs/14-intermediate-files.md` (`bd4c289342`)
 
 ## Regression Test
 
