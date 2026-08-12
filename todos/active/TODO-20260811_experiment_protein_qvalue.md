@@ -31,6 +31,32 @@ computed:
 This makes protein q follow the same rule the precursor and peptide q's already follow:
 **one field, pass encoded by which sidecar it lives in.**
 
+## REBASED onto #4558's rebaselined tip - 2026-08-12
+
+Both branches now sit on their latest, and both are green.
+
+**C#**: rebased onto `54796e5d5e` (their golden rebaseline for the experiment-q fixes),
+fast-forward - my old base was still an ancestor, so no `--onto` was needed. 5 commits
+replayed clean. Gate after: build + 579 tests + zero-warning inspection.
+
+**Rust**: rebased onto **their PR #63 branch** `fix/persist-experiment-aggregate-score`
+(tip `02d3df0`), NOT onto `main` - so the Rust side is now STACKED the same way the C# side
+is. `fmt --check` / `clippy -D warnings` / 580 tests green, LF verified.
+
+One conflicted file (`pipeline.rs`, six hunks), every one the same shape: their v4
+`experiment_aggregate_score` line against my protein-column rename. Both belong; kept both.
+The one that needed thought was `restore_pass1_scalars`, where their side widened the tuple
+to 4 and mine narrowed it to 3 - resolved to their 4-tuple with the protein element ignored
+(`_protein_q`), so the aggregate seed their off-stratum `double?` case depends on survives
+while the protein q stops being seeded. That is the composition described in section 4 below,
+now actually exercised rather than predicted.
+
+`-Dataset All` re-run against their new golden: `ai/.tmp/regression-4559-postrebase-all.log`.
+
+**Night-session handoff**: `ai/.tmp/handoff-20260812_4559_night_session.md` - the plan to
+drive this to merge-ready (code review, stacked PRs, Copilot, TeamCity) and then start the
+82-file SEA-AD run.
+
 ## FOR THE #4558 SESSION (peak co-assignment) - please read
 
 Written 2026-08-12 at Brendan's suggestion, after reading your TODO through
