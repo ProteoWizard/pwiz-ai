@@ -204,6 +204,37 @@ Two things this pins down:
 2. **`mode3` was green in BOTH runs.** The two-route comparison cannot see this class of
    defect, which is the argument for `mode1c` existing at all rather than extending mode 3.
 
+## `-Dataset All` GREEN - 53/53 legs, 2026-08-12
+
+`ai/.tmp/regression-4559-all.log`. Every leg on every dataset passes.
+
+| dataset | `mode1c` records moved | `mode1` vs golden |
+|---|---|---|
+| Stellar | 24,805 / 994,509 (2.5%) | PASS |
+| StellarLibDecoy | 6,462 / 923,246 (0.7%) | PASS |
+| StellarGenDecoyEntrap | **89,116 / 259,678 (34.3%)** | PASS |
+| Astral | 18,996 / 3,449,774 (0.55%) | PASS |
+
+Three things this establishes beyond the Stellar red/green:
+
+1. **The golden did not move on ANY dataset.** No rebaseline is needed - this change is
+   sidecar-only, which is what the code reading predicted and what the risk section flagged as
+   "verify, do not assume".
+2. **`mode1b` (FDR sanity bounds) passes on all three datasets that carry it.** Those are the
+   entrapment-measured true-FDP ceilings `-CreateGolden` deliberately does NOT regenerate, so
+   calibration is unmoved on evidence independent of the golden.
+3. **The StellarLibDecoy risk was unfounded.** It moved 6,462 records, so the liveness
+   assertion is not dependent on generated decoys. The concern was that #4553 measured zero
+   `group_qvalue` movement there under a larger perturbation; the pass-1/pass-2 difference
+   comes from the different detected-peptide gate, not the decoy source.
+
+StellarGenDecoyEntrap moving 34% against 0.55-2.5% elsewhere is consistent rather than odd:
+it is the entrapment leg, where the second-pass experiment-level gate diverges most from the
+first-pass run-level one, so more peptides change protein group.
+
+`mode3` also stayed green everywhere (up to 9,685,318 records on Astral), so both routes
+continue to agree after the change - the fix landed identically on each.
+
 ## State of the branches - 2026-08-12
 
 **C# `Skyline/work/20260811_experiment_protein_qvalue`** (on #4558's tip `5efdb058b7`),
@@ -239,11 +270,12 @@ Two things this pins down:
 - [x] Confirm the live consumers and that all three precede Stage 7
 - [x] Design agreed with Brendan; 0.0-vs-1.0 framing retired as malformed
 - [x] Branch created off #4558's tip
-- [ ] C# rename + one-field collapse
-- [ ] C# pass-2 sidecar patch after the second-pass protein FDR
-- [ ] Rust twin
+- [x] C# rename + one-field collapse
+- [x] C# pass-2 sidecar patch after the second-pass protein FDR
+- [x] Rust twin (fmt / clippy / 579 tests green)
 - [ ] Decide the version-bump question
-- [ ] `regression.ps1 -Dataset Stellar`, then `-Dataset All`; golden must NOT move
+- [x] `regression.ps1 -Dataset Stellar` red->green, then `-Dataset All` 53/53 PASS; the
+      golden did NOT move on any dataset
 - [ ] Cross-impl sidecar leg green with both sides changed
 - [ ] Rebase onto master when #4558 merges
 - [x] File the `--fdr-level protein` C#/Rust gap as a follow-up issue -
