@@ -1401,3 +1401,39 @@ far too small to explain the 60 -> 10 cut (83%). So that is NOT the mechanism.
 to reach into a loser-rich region, where pass 1's higher bar admits only the winner-dominated
 top. Next test: bin the loser fraction by aggregate score at both passes and compare against
 where each boundary falls.
+
+### 2026-08-12 - CROSS-IMPL PASSES, and the gate caught a C# bug the tests did not
+
+```
+precursors: rust=29300  cs=29300  delta=0
+Stage 7 protein FDR (per-col 1e-9): PASS
+Blib content (SQL row+col 1e-9):    PASS
+FDR sidecars (per-field 1e-9):      PASS
+OVERALL: PASS -- bit-parity at 1e-9 on Stellar 3-file
+```
+
+First green cross-impl on this branch. Both sides now agree field-by-field on the v4 record,
+including `experiment_aggregate_score` and `experiment_precursor_qvalue`.
+
+**The last bug was MINE, in C#, and only cross-impl found it** (`ccd628e286`). Re-keying the
+experiment-q map onto the winner's full entry_id left TWO consumers in `PercolatorScorer`
+(lines 502 and 925) still looking it up by base_id. A key/lookup mismatch fails BOTH ways:
+
+* target wins -> key == base_id -> lookup HITS -> its losing decoy inherits the q anyway
+* decoy wins  -> key carries the decoy bit -> lookup MISSES -> the winner is denied its q
+
+Measured on the 1st-pass sidecars of both implementations:
+
+| | pair-losing decoys | of those with q < 1.0 |
+|---|---|---|
+| C# (before `ccd628e286`) | 156,350 | **61,323 (39%)** |
+| Rust | 156,350 | **0 (0%)** |
+
+Rust was correct throughout. 578 C# tests passed the whole time - no unit test covers the
+map-key/lookup pairing across the two files, which is exactly the seam an end-to-end
+byte-parity gate exists to cover.
+
+**Order lesson worth keeping**: this was found AFTER the goldens would have been rebaselined if
+the rebaseline had been done first. Blessing then would have baked a 39%-wrong decoy q into the
+baseline - the same failure the 542,368-decoy golden already taught once. Run cross-impl BEFORE
+`-CreateGolden`, not after.
