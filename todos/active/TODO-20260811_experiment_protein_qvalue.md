@@ -161,6 +161,47 @@ shared design.
   stash). Same shape one level down, adjacent to #4560. UNMEASURED - offered to Brendan, not
   yet taken up.
 
+## The gate found something bigger than #4559 - 2026-08-12
+
+`mode1c` red on the DEFAULT arm, Stellar 3-file
+(`ai/.tmp/regression-4559-redcheck.log`):
+
+```
+experiment_protein_qvalue is identical to the 1st-pass column on all 331490 shared record(s)
+  ... 331501 ... / ... 331518 ...
+```
+
+**All 994,509 shared records**, not the 390 gap-fill ones. #4559 reported the sliver where
+the two ROUTES disagreed; the column was never a pass-2 value for ANY record, on either
+route, on the arm TeamCity actually runs. That is the defect the collapse removes, and it is
+why a two-route comparison could not see it - both routes copied the same pass-1 value.
+
+## State of the branches - 2026-08-12
+
+**C# `Skyline/work/20260811_experiment_protein_qvalue`** (on #4558's tip `5efdb058b7`),
+3 commits, each gated (build + 579 tests + zero-warning inspection):
+
+| commit | what |
+|---|---|
+| `b869b6e2a6` | the field collapse + rename; no computed value changes |
+| `b642d4a244` | `Test-Pass2ProteinQvalue` + regression.ps1 `mode1c`; RED as added |
+| `032087df19` | `PatchPass2ProteinQvalues` after `RunProteinFdr`; seed drops the protein q |
+
+**Rust `maccoss/osprey` branch `fix/one-experiment-protein-qvalue`**, 1 commit `6183d12`,
+`cargo fmt --check` / `clippy -D warnings` / 579 tests all green. LF verified with
+`git cat-file blob | tr -cd '\r' | wc -c` = 0.
+
+### Two things found while porting
+
+* **A latent C#/Rust divergence, now removed.** C#'s second-pass `PropagateProteinQvalues`
+  passed `(setRun: true, setExperiment: true)`; Rust passed `set_run: false`. So after Stage 7
+  C# held the pass-2 value in the run field and Rust held the pass-1 value. Unobservable
+  today - `effective_run_qvalue(Protein)` has no caller - but it was a real disagreement that
+  every parity gate was green through. The collapse makes it unrepresentable.
+* **Rust's sidecar is still v3/60-byte; the C# branch is v4/68-byte.** #4558's Rust twin has
+  NOT landed. So the cross-impl sidecar leg cannot be run meaningfully until it does - that
+  is a #4522/#4558 dependency, not something this branch should paper over.
+
 ## Tasks
 
 - [x] Reproduce the failure on the projection-off arm with `-KeepOutput`
