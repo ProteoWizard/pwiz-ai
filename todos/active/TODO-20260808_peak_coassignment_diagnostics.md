@@ -1904,3 +1904,61 @@ Still unverifiable from a 3-file gate: the 138 s logging-gap fix, whose acceptan
 `perfviz.py` reporting no gap >= 30 s on a fresh 82-file run. Watch it there alongside the new
 FDR-crossing walk, which adds an O(n log n) pass over the full pre-compaction pool in
 SealCutoffs - diagnostic-only cost, but in exactly that phase.
+
+---
+
+## 2026-08-13 CORRECTION - the pass-2 decoy row is NOT fixed, and the "remapping is harmful" argument above is WITHDRAWN
+
+**Supersedes the section "REMAPPING WOULD BE HARMFUL, and the composite cutoff should be
+EXPOSED (#4570)".** Read this instead; that section's conclusion is wrong.
+
+### What is actually in the branch
+
+Only the DIAGNOSTIC landed. The admission rule was not changed, so the panel now contradicts
+itself on stellar-gendecoy-entrap:
+
+```
+pass2.coAssign.experiment.decoy.n      10        <- class table, admitted on the INHERITED cutoff
+pass2.coAssign.cutoff                   0.2106   <- inherited from pass 1
+pass2.coAssign.fdrCrossing             -1.9960
+pass2.coAssign.fdrCrossingDecoys        325      <- what the row should be
+pass2.coAssign.fdrCrossingNonDecoys  32,549
+```
+
+### Why the earlier argument was wrong (Brendan, 2026-08-13)
+
+The claim was: the remapped threshold scores as a ~7% FDR "judged by the uncompacted pass-1
+null", so adopting it would fill the 1% budget with false positives.
+
+That took a PASS-2 threshold and evaluated it against the **PASS-1 population** - a different
+pool from the one pass 2 reports. It is the same category error already identified in the other
+direction: **the score-to-FDR mapping is a property of the population being counted.** Judging a
+pass-2 threshold by pass-1's composition is not "the honest null", it is the wrong denominator.
+
+The concern it rested on - that a lower bar admits only low-scoring decoys - is CONDITIONAL on
+detections not moving, and they do move. The lower cutoff admits **+3,606 targets and
+entrapment** (32,549 vs 28,943) beside +36 decoys, and 325/32,549 = 1.0%. The earlier
+"0 new acceptances" measurement that suggested otherwise was CIRCULAR: it defined acceptance by
+q, and q is carried over from pass 1, so it could only ever return zero.
+
+The stratum selection bias (of pass-1 above-bar decoys that WON, 10 of 288 survive and 0 of 288
+had an accepted target, against 50 of 50 for losers) remains real, but it is a **caveat on the
+null**, not grounds for keeping a stale cutoff. Pass 1's number is not conservative in any
+principled sense - it is the wrong pool.
+
+### The remaining work
+
+Make the pass-2 panel derive its acceptance boundary from **its own population** rather than
+inheriting `min(aggregate)` over a q-accepted set whose q came from pass 1. The decoy row goes
+10 -> ~325.
+
+**One design question must be settled first**: today target/entrapment are gated on
+`experiment q <= 1%` (23,134 + 157) while decoys are gated on SCORE, with the cutoff bridging
+the two. The crossing counts 32,549 non-decoys score-gated. Those are not the same population
+definition, so decide whether the target/entrapment rows re-gate on the recomputed score too, or
+stay q-gated.
+
+Moves the goldens. Needs a rebaseline, a `-Dataset All` verify, and a TeamCity cycle.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260808_peak_coassignment_diagnostics.md` before starting work.
