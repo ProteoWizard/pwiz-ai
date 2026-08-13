@@ -1578,6 +1578,39 @@ pool 11.3x smaller than the one that supplied pass 1's 288. At the identical bou
 decoys clear at TWICE pass 1's rate (0.138% vs 0.068%) and still yield 5.6x fewer in absolute
 terms.
 
+### 2026-08-12 - REMAPPING WOULD BE HARMFUL, and the composite cutoff should be EXPOSED (#4570)
+
+Brendan: *"the accepted minimum score, if detections do not change at all, serves only to admit
+the lower scoring decoys, essentially filling the 1% FDR with known false positives."*
+Quantified on StellarGenDecoyEntrap (`ai/.tmp/pass2_band_cost.py`):
+
+```
+band inherited 0.210624 -> remapped -0.909231 (1.120 score units wide)
+  admits 3145 more non-decoys and 261 more decoys
+  LOCAL error rate in the band: 8.3%
+  81% of the entire 1% decoy budget is spent in that one band
+judged by the PASS-1 population (uncompacted, honest null):
+  at the remapped threshold: 37,915 non-decoys, 2,641 decoys -> FDR 6.97%
+```
+
+**So the remapped threshold is a ~7% FDR by the honest null, not 1%.** Adopting it would admit
+~3,000 extra precursors at seven times the nominal rate. The standing instruction "do not fix
+pass 2 by moving a threshold" is now measured rather than a judgement call.
+
+**The fix is to EXPOSE the number, not correct it - and it takes TWO values, not one.** Filed
+as #4570. `min(composite) over accepted` alone is blind to the problem: the pass-2 accepted set
+carries pass-1 q, so that number is IDENTICAL at both passes (0.2106) and the panel would look
+healthy. The signal is the second value - the score at which each pass's own pool reaches 1% by
+its own TDC count - and specifically the divergence between them:
+
+| | pass 1 | pass 2 |
+|---|---|---|
+| A: min composite among accepted | 0.2106 | 0.2106 |
+| B: score where this pool reaches 1% | 0.2957 | **-0.9092** |
+
+They agree at pass 1 and diverge by 1.12 score units at pass 2. A-vs-B divergence is
+self-normalizing across datasets and is the thing worth pinning.
+
 ### THE ACTUAL DEFECT (Brendan, 2026-08-12): the q -> min-agg-score map is never remapped for pass 2
 
 The per-entry aggregate score does not change between passes. What changes is the POPULATION
