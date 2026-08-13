@@ -383,7 +383,7 @@ which is expected - #4557 did the same.
 - [x] C# rename + one-field collapse
 - [x] C# pass-2 sidecar patch after the second-pass protein FDR
 - [x] Rust twin (fmt / clippy / 579 tests green)
-- [ ] Decide the version-bump question
+- [x] Decide the version-bump question - **NO BUMP** (Brendan, 2026-08-13); revisit at first public release or when #4561 gives the column a consumer
 - [x] `regression.ps1 -Dataset Stellar` red->green, then `-Dataset All` 53/53 PASS; the
       golden did NOT move on any dataset
 - [ ] Cross-impl sidecar leg green with both sides changed - Rust binary IS built and green on this branch; the leg needs local Osprey runs and the box is committed to the 82-file SEA-AD run until ~21:00 PDT
@@ -453,6 +453,42 @@ the other three 14 each) - quoting what the run printed rather than the expectat
 
 **The Stellar re-gate is the evidence the hardening commit is output-neutral**: same command,
 same `mode1c` counts to the record (25,006 of 994,509; 390 gap-fill), golden unmoved.
+
+### RESOLVED 2026-08-13: no v4 -> v5 sidecar bump
+
+**Brendan's call, and it closes the last open question on this PR.** Both PR bodies now carry
+the decision and the reasoning, so review does not re-open it.
+
+The question was framed as a format change; it is not one. **No byte moves** - same magic,
+32-byte header, 68-byte record, same offsets/widths/types. Only the *meaning* of the 2nd-pass
+sidecar's protein column changes (pass-1 value -> pass-2 value). The 1st-pass sidecar is
+unchanged in meaning as well as layout; the rename is cosmetic. So a bump would buy nothing
+structural - only a guard against a stale value being reinterpreted.
+
+Three findings say that guard is not worth its cost yet:
+
+1. **Already guarded, earlier and harder.** `ParquetScoreCache.cs:1605` hard-fails on ANY
+   osprey version mismatch ("different daily build" / "incompatible release identity"), and
+   `.scores.parquet` is read before any sidecar - so a cross-build resume never reaches this
+   file. The residual window is same-version-stamp-different-code: same-day dev builds, or a
+   run pinned under `OSPREY_VERSION_OVERRIDE`.
+2. **The version byte gates the whole 8-column record; one column changed meaning.** Rejecting
+   a v4 sidecar discards `Score`, `Pep`, run/experiment precursor and peptide q and
+   `ExperimentAggregateScore`, all still correct, to protect the one column Stage 7's
+   `PropagateProteinQvalues` overwrites unconditionally before anything reads it. Worse, the
+   read path (`Pass2FdrSidecar.cs:518-530`) **warns and proceeds** rather than recomputing, so
+   the bump trades seven good columns for a warning.
+3. **Osprey is pre-first-public-release** (Brendan, 2026-08-13). The only consumers of these
+   artifacts are development sessions, and with this much moving those want fresh runs rather
+   than `-LinkFrom` off older ones anyway. The cost of a stale artifact is a re-run, not a
+   wrong answer shipped to a user. See [[project_osprey_prerelease_compat_latitude]].
+
+**Revisit when either lands**: the first public release, or **#4561** (`--fdr-level protein` in
+C#), which is what gives the column a real consumer - at which point a stale pass-1 value
+becomes a wrong *reported* q instead of one that gets overwritten. Pair the bump with making
+the sidecar read hard-fail instead of warn-and-proceed
+([[feedback_hard_fail_over_warn_proceed]]); a version guard that warns and continues is not a
+guard.
 
 ### What the hardening commit does NOT have: an execution of the path it fixes
 
