@@ -1578,7 +1578,42 @@ pool 11.3x smaller than the one that supplied pass 1's 288. At the identical bou
 decoys clear at TWICE pass 1's rate (0.138% vs 0.068%) and still yield 5.6x fewer in absolute
 terms.
 
-**CORRECTION - the pool-size framing above is TRUE but MISLEADING, and Brendan was right to
+### THE ACTUAL DEFECT (Brendan, 2026-08-12): the q -> min-agg-score map is never remapped for pass 2
+
+The per-entry aggregate score does not change between passes. What changes is the POPULATION
+the target-decoy competition is counted over, so the score at which the competition reaches a
+given q is **pass-specific**. The panel inherits pass 1's boundary and applies it to the
+compacted pass-2 pool. Measured (`ai/.tmp/pass2_qmap_remap.py`, StellarGenDecoyEntrap):
+
+| | boundary from the q<=1% set | non-decoys above | decoys above | observed FDR |
+|---|---|---|---|---|
+| pass 1 | 0.210624 | 28,925 | 338 | **1.169%** - self-consistent |
+| pass 2 | 0.210624 (inherited) | 28,923 | **60** | **0.207%** - NOT 1% |
+
+Re-derive the map on the pass-2 population and 1% falls at **-0.909231**, where **321 decoys**
+clear the bar against an expected 289 (1.11x - the same agreement pass 1 shows at 338/289 =
+1.17x). Pass 1's own remap point is 0.295678 / 285 decoys, i.e. the q-derived and
+re-derived boundaries agree there; at pass 2 they do not.
+
+**So the row is 10 because the boundary was never remapped - not because of the denominator,
+the winner-only rule, or the pool being smaller.** Apply the correct map and it lands on its
+definition. The selection bias documented below is WHY the map must move (the compacted pool is
+depleted of winning decoys, shifting its FDR-vs-score curve); the defect is the missing remap.
+
+**And the direction is the protein-compact worry, quantified**: the remapped boundary is LOWER
+(-0.909 vs +0.211) and admits **32,068 non-decoys instead of 28,923** - ~3,145 more, ~11%, at
+nominal 1%. Because compaction strips the winning decoys, the compacted pool's FDR estimate
+UNDERSTATES the true rate, so a threshold honestly derived from it is too permissive. On this
+dataset nothing anti-conservative reaches delivered results (the accepted set carries pass-1 q
+and 0 entries are accepted at pass 2 that were not accepted at pass 1). On a large
+multi-replicate cohort where in-stratum re-competition actually drives acceptance, that
+protection does not hold. Separate line of investigation, per Brendan.
+
+**Also found**: `nMapped++` is incremented in BOTH the off-stratum carry-over branch and the
+on-stratum recompute branch, so the log line `protein-compact: mapped recomputed q onto N
+reported survivors` counts carry-overs as recomputed and overstates what happened.
+
+**CORRECTION - the pool-size framing below is TRUE but MISLEADING, and Brendan was right to
 push on it.** The 1:1 count correspondence IS preserved (43,574 decoys vs 43,610 non-decoys),
 because protein-compact retains BOTH members of each stratum base_id. But that equality masks
 what actually happens: the retained decoys are systematically the LOSERS.
