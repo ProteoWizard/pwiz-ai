@@ -483,6 +483,16 @@ Three findings say that guard is not worth its cost yet:
    than `-LinkFrom` off older ones anyway. The cost of a stale artifact is a re-run, not a
    wrong answer shipped to a user. See [[project_osprey_prerelease_compat_latitude]].
 
+**A bump would NOT have cost a golden re-record** - checked 2026-08-13, so the usual argument
+against format churn does not apply here and was not part of the reasoning above.
+`osprey-regression.data/<dataset>/` holds only `blib_summary.tsv`, `protein_fdr.tsv` and
+`tables/`; no binary sidecar is golden. The goldens capture REPORTED OUTPUT, and the binary
+intermediates are compared same-run (`mode1c`, `mode3` - same binary, versions always agree) or
+cross-impl. A pure bump therefore costs one `ExpectedVersion` line in
+`Regression/FdrSidecars.ps1` plus landing both impls together, because the cross-impl comparator
+refuses a version mismatch **deliberately** - which is what let the v4 layout be *proven*
+identical across implementations rather than assumed. That gate should stay strict.
+
 **Revisit when either lands**: the first public release, or **#4561** (`--fdr-level protein` in
 C#), which is what gives the column a real consumer - at which point a stale pass-1 value
 becomes a wrong *reported* q instead of one that gets overwritten. Pair the bump with making
