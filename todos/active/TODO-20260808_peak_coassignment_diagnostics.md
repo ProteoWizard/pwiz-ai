@@ -1854,3 +1854,42 @@ entrapment configuration (`--decoys-in-library` with a pairing manifest), where 
 in the reported pool with no target beside it. With GENERATED decoys every decoy has a target
 by construction, so the question never arises. That narrows the decision: it is about how the
 pairing manifest's unmatched rows should be treated, not about TDC in general.
+
+### 2026-08-13 - three review rounds, and where it stopped
+
+`/code-review max` was run three times. It reports up to a cap of ~15 and fills it, so it will
+never declare its own findings low value - round 1 explicitly demoted an item "to stay within
+the cap". The convergence signal has to be measured instead:
+
+| round | findings | defects in the PREVIOUS round's fixes | refuted |
+|---|---|---|---|
+| 1 | 15 | - | 1 |
+| 2 | 15 | ~5 | 1 (its own headline) |
+| 3 | 15 (11 new / 4 repeat) | ~4, incl. a regression from 1 h earlier | 1 (its own top rank) |
+
+**It does not terminate by construction**: every fix creates unreviewed code for the next round,
+and each round invalidates the gate and TeamCity run beneath it. Two TeamCity cycles were spent
+on superseded commits. Round 3's "new" behavioural findings were mostly round-2's own code, and
+its genuinely novel items were presentation-tier - that is the stopping signal, not the
+reviewer's ranking.
+
+Round 3's most valuable catch was a regression introduced an hour earlier: the NaN guard used an
+early `return`, which also skipped the experiment aggregate reduction and BOTH acceptance sets,
+so a NaN row would have removed its precursor from the counts that set the experiment boundary.
+
+**Refuted across rounds** (recorded so nobody re-raises them): the docs' "byte-identical to
+Rust" claim (cross-impl passes at 1e-9); `ApplyFileRunQ` clobbering off-stratum run q (the old
+path already wrote 1.0); `PercolatorTrainer` omitting `ExperimentAggregateScore` - real
+structurally, but `trainResults.Entries` is consumed at NO call site, all three pass
+`CloneForTrainOnly()`; and `PerFileScoringTask.Run` being reachable with `ExpectReconciledInput`
+- `Program.cs` rejects that argument combination.
+
+**Deliberately not fixed**: the off-stratum/on-stratum aggregate vintages (tested, not causal -
+moves the boundary 5.5e-4, changes the admitted count by zero); `RunSimpleFdr`'s `Score`
+(reverted - unpinned scoring change in a mode slated for removal); the peptide-scope q defect
+(master's, now **#4572** via the #4569 branch).
+
+**Verification at the stopping point**: cross-impl PASS at 1e-9 (precursors 29300 both sides),
+`-Dataset All` PASS 48/48 with goldens CLEAN on `42f9d12997`, 578 C# tests + ReSharper clean,
+Rust 580 + fmt + clippy. TeamCity #204 SUCCESS on `b53c35b1bd`; 4132246 fired on the tip
+`e740ddf381`.
