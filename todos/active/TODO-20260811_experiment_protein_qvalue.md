@@ -735,3 +735,37 @@ the protein seed. That is the seed the off-stratum path depends on, and it still
 port keeps the same semantics, with absence-from-the-map (Option) rather than a NaN sentinel,
 because the sidecar comparators use `|a-b| <= tol`, which is FALSE for NaN against NaN and
 would turn byte-identical files into a red gate. The two changes compose.
+
+## FROM THE #4558 SESSION (2026-08-13) - your premise about peptide q may not hold
+
+Found by `/code-review max` on #4558 and verified against master. **Not fixed there** - it is a
+master defect, untouched by that branch, and it sits in the area you are restructuring.
+
+`PercolatorQValues` keys the experiment-PEPTIDE q map on the **bare peptide string**:
+
+```csharp
+peptideQvalue[peptides[globalIdx]] = q[rank];      // Dictionary<string, double>
+```
+
+A decoy carries its target's modified sequence by construction (the co-assignment code says so
+explicitly: *"an untagged decoy key equals its target's and the precursor registry merges the
+two"*). So target and decoy collide in this map and one inherits the other's q - **the same
+target-inherits-decoy defect #4558 fixed at PRECURSOR scope in `2704cc2dbf`, never applied at
+peptide scope.**
+
+Evidence it is master's, not #4558's:
+
+* master carries the identical keying at **three** sites - `PercolatorQValues.cs` 486, 694, 849
+* `git diff origin/master...HEAD` on #4558 touches **none** of them
+
+**Why it is yours rather than a standalone issue.** Your objective section justifies the design
+with *"This makes protein q follow the same rule the precursor and peptide q's already follow"*
+- and that premise is what this undermines. Your own analysis already records the neighbouring
+hazard one level up: `CollectBestPeptideScores` (`ProteinFdr.cs:854`) takes max raw `Score` per
+sequence over ALL files, **targets and decoys, with no q gate**. Same keying-by-bare-sequence
+shape, same consequence.
+
+Reachability: peptide q reaches reported output under `--fdr-level Peptide`, not the default
+precursor level, so it is not a live defect on the default path - which is why #4558 did not
+expand to cover it. Worth deciding whether your branch fixes it, states it as out of scope, or
+becomes the reason to file it.
