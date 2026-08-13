@@ -1578,6 +1578,62 @@ pool 11.3x smaller than the one that supplied pass 1's 288. At the identical bou
 decoys clear at TWICE pass 1's rate (0.138% vs 0.068%) and still yield 5.6x fewer in absolute
 terms.
 
+### 2026-08-13 - PANEL NOW REPORTS THE CUTOFF AND THE SCORE EACH PASS NEEDS
+
+Brendan asked for the panel to show **the correct number of decoys AND the cut-off required to
+reach that number**, and pushed back on the earlier "no new acceptances" claim. He was right on
+both counts.
+
+**The "0 new acceptances at pass 2" measurement was CIRCULAR and is retracted.** It defined
+acceptance by q, and q is carried over from pass 1 for the accepted set - so "accepted at pass 2
+but not pass 1" was 0 by construction and tested nothing. The real answer was already in the
+remap output: the lower cutoff admits **more targets and entrapment**, not decoys alone.
+
+Implemented (`02a2db06dd`), and measured on StellarGenDecoyEntrap:
+
+| | cutoff (bar in use) | crossing (this pool's own 1%) | decoys there | target+entrapment there |
+|---|---|---|---|---|
+| pass 1 | 0.2106 | **0.2077** | 290 | **28,943** |
+| pass 2 | 0.2106 | **-1.9961** | 326 | **32,549** |
+
+Pass 1's two numbers agree to 0.003 and give 290/28,943 = 1.002%, so the map is valid there.
+Pass 2 diverges by **2.21 score units**, and at that bar admits **+3,606 targets and entrapment**
+beside +36 decoys (326/32,549 = 1.002%). The counts are reported next to the score precisely
+because they move TOGETHER - a lower crossing buys IDs at the same error rate it buys decoys,
+which is why it is a warning about the pool and not a bar to lower.
+
+Counted **winners-only**, matching the panel's own decoy rule, so the two are comparable. That
+is why these differ from the earlier Python figures (-0.909 counting all decoys). Pinned in the
+diagnostics golden as `passN.coAssign.cutoff` / `.fdrCrossing` / `.fdrCrossingDecoys` /
+`.fdrCrossingNonDecoys`.
+
+### 2026-08-13 - review findings FIXED in the branch, not filed
+
+Brendan's correction: the night session read "post an issue when in doubt" as a routing rule and
+filed seven issues for things that were easy to fix. Issues #4562-#4568 and #4570 are all
+CLOSED; the work is in the branch. **Sessions should not open issues without an interactive
+okay.** Fixed in `0d4dd42ed9`, `02a2db06dd` and the follow-up commit:
+
+* run-scope `_fileBest` was a plain max while experiment scope was hardened (Copilot's finding,
+  half-fixed until now)
+* tie-breaks now go to the DECOY, matching `StreamingFdr`; pinned by
+  `TestCoAssignmentExactTieGoesToTheDecoy`, proved discriminating by mutation
+* `Includes()` and `CountAboveExperimentCutoff` carry `WonItsPair`, so the logged boundary count
+  stops contradicting the admitted count
+* the resident path refuses to report when apex RT is unavailable, and a NaN dRT no longer
+  clamps into bin 0
+* `RunSimpleFdr` assigns `Score` (it never did - the panel saw 0.0 everywhere and rendered a
+  confident empty page)
+* `PerFileRescoreTask` / `SecondPassFdrTask` carry `;fdrsidecar=`, and the pass-2 gate validates
+  the header rather than `File.Exists`
+* transfer-compete validates sidecars up front, restoring its "refuse before mutating" contract
+* the third fat/lean call site moved to `CanUseLeanProjection`
+* the tolerance ladder applies `MIN_N_FOR_ENRICHMENT`
+* SecondPassFDR no longer declares a report it cannot write under `--task SecondPassFDR`
+* dropped `_experimentDecoyKeys` (a per-pass string HashSet with no reader)
+
+All four Copilot threads replied to and resolved.
+
 ### 2026-08-12 - REMAPPING WOULD BE HARMFUL, and the composite cutoff should be EXPOSED (#4570)
 
 Brendan: *"the accepted minimum score, if detections do not change at all, serves only to admit
