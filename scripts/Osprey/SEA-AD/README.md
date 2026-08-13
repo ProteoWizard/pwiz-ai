@@ -16,7 +16,7 @@ setx OSPREY_SEAAD_LIB  "D:\test\Pilot-MTG-Tissue-May2026\lib\regression"
 # new shell, then prove the wiring before committing to a multi-hour run
 .\Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -NumFiles 2 -WhatIf
 .\Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -NumFiles 2          # ~minutes, real run
-.\Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0                      # the real thing, ~7.5 h
+.\Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0                      # the real thing, ~8.5 h
 ```
 
 `-WhatIf` prints the resolved exe, mzML directory, library variant, output directory and
@@ -58,7 +58,7 @@ In precedence order - first one that resolves wins:
 
 A location you NAME must exist. An explicit `-DataDir` or `$env:OSPREY_SEAAD_DIR` that
 does not resolve is an error, not a quiet fall-through to the next candidate - a typo
-there would otherwise spend 7.5 h searching the wrong data and still report success.
+there would otherwise spend 8.5 h searching the wrong data and still report success.
 
 `$env:OSPREY_SEAAD_LIB` points at the directory that HOLDS the library variants, not at
 one library. The runner picks the variant from `-DecoyMode` and `-Ratio`.
@@ -97,7 +97,7 @@ fresh variant has no `.libcache`, so Osprey builds one on its first use.
 .\Invoke-SeaAdChain.ps1 -DecoyModes libdecoy,gendecoy -Ratios 0.1
 .\Invoke-SeaAdChain.ps1 -Pass2Modes protein-compact,transfer
 
-# detached, so a harness reap cannot kill a 7.5 h run
+# detached, so a harness reap cannot kill an 8.5 h run
 Start-Process pwsh -ArgumentList '-NoProfile','-File',"$PWD\Invoke-SeaAdChain.ps1",
   '-DecoyModes','libdecoy,gendecoy','-Ratios','0.1' -WindowStyle Hidden
 ```
@@ -195,8 +195,24 @@ explicit `pass` field - select on it) via `fdp_at_count.py` / `runcount_fdp.py`.
 
 Measured, not guessed - these cost real time to learn:
 
-* **Full 82-file run from scratch: ~7.5 h** at `--threads 30` **with** `.spectra.bin`
+* **Full 82-file run from scratch: ~8.5 h** at `--threads 30` **with** `.spectra.bin`
   present. Without the caches, add the parse time (~4.5 min/file uncached from HDD).
+  This said ~7.5 h and that under-stated it by an hour, which matters when you are
+  deciding whether a run fits before a deadline. Two independent runs, six weeks and two
+  different libraries apart, agree closely - 2026-08-04 finished in **510 min** (8 h 29 m)
+  and 2026-08-12 tracked it to within minutes at every stage:
+
+  | stage | 2026-08-04 (`-gated-no-il` lib) | 2026-08-12 (`target+decoy+entrapment`) |
+  |---|---|---|
+  | PerFileScoring | 4 h 14 m | 4 h 11 m |
+  | FirstPassFDR | 1 h 09 m | 1 h 16 m |
+  | PerFileRescoring | 2 h 39 m | 2 h 42 m |
+  | SecondPassFDR | 28 m | ~28 m |
+
+  Two things follow. **PerFileScoring is half the run**, so that is the only stage worth
+  optimizing for wall time. And **the library variant barely moves it** - the gated and
+  ungated libraries differ by ~30% in IDs but by minutes in wall time, so you cannot buy
+  time by searching a smaller library.
 * **~150 GB of parquets**, peak ~49 GB private working set. Check free space first.
 * **Run at full threads.** The old `--threads 8` cap was a workaround for a memory problem
   fixed 2026-07-25; it is obsolete and just makes runs slower. Results are
