@@ -638,8 +638,39 @@ Open questions for the developer:
 Baseline: the run log at `sky_memory/SkylineTester.log` (1126 tests, 104 failures). Measured
 subsets locally rather than repeating the whole run.
 
-**Verified: the fast suites (Test.dll + TestData.dll subset of the failing list) went 28 -> 20,
-and 8 of 11 converted functional tests now pass.** Nothing that passed regressed.
+**Verified: the fast suites (Test.dll + TestData.dll subset of the failing list) went from 23
+failing to 10, and 8 of 11 converted functional tests now pass.** Nothing that passed regressed.
+`TestCommandLineImportPeakBoundary` is excluded from that count - it hangs under `-UseTestList`
+though it completes when run alone, which is unexplained and worth a look.
+
+Landed after the first pass, each measured on its own:
+
+- **`empty` on `transition_peak`.** `TransitionPeak.IsEmpty` already told an empty peak from one
+  whose area is zero - underivable, and quantification counts the first as missing and the second
+  as measured - but nothing wrote it. The older shape says it by having no end time; the columnar
+  shape uses the end time for boundaries the user set, so it needs an attribute. Every peak
+  `TestCurrentXmlFormat` differed on differed in this and nothing else.
+- **Report rows from the columnar results.** `Transition.MakeResults` built its rows from chrom
+  infos rebuilt through a `MoleculeResults`, so a document with no .skyd - which is how the MSstats
+  and PeptideQuantifier tests hold theirs, as embedded resources - reported no rows at all. Rows
+  now come from the precursor's columnar results, and `Area`, `Truncated`, `UserSetPeak`,
+  `Coeluting` and `OptStep` are answered without a chrom info.
+- **`MeasuredResults.HasOptimizationFunctions`**, worked out in the `Chromatograms` setter beside
+  `HasGlobalStandardArea`. The columnar results hold optimization step zero only, so a row source
+  building one row per peak has to ask before it can trust them. Tried first as stored state on
+  `TransitionGroupResults` - wrong, because nothing wrote it and a document saved in the columnar
+  shape came back saying it had no steps.
+- **`ClearChromFileIds` for converted small molecules.**
+  `ConvertedSmallMoleculeDocumentIsSimilar` compares two documents it has just loaded separately,
+  so the same file identity problem `DocsEqual` already solved applied there and nowhere clears
+  them. Six tests, seven lines.
+- **Molecule chrom infos without a chromatogram.** `GetPeptideChromInfos` gave up as soon as a
+  precursor had no rebuilt chrom infos. Everything a `PeptideChromInfo` holds is in the columnar
+  results too, so it now falls back to them. It still *prefers* the .skyd, and that is not
+  fastidiousness: making it columnar-first broke all four `FullScanFilterTest` variants, because
+  the columnar values of a node which has just been added are not filled in until a results pass
+  runs. Same root cause as `ConsoleExportTrigger`. Fixing that once would let both go
+  columnar-first.
 
 **`SrmDocument.UpdateResultsSummaries` was restored, then removed again - and the removal is
 right.** Restoring it (`c7239ced8` had taken it out) was what first made the four
