@@ -736,7 +736,51 @@ port keeps the same semantics, with absence-from-the-map (Option) rather than a 
 because the sidecar comparators use `|a-b| <= tol`, which is FALSE for NaN against NaN and
 would turn byte-identical files into a red gate. The two changes compose.
 
-## FROM THE #4558 SESSION (2026-08-13) - your premise about peptide q may not hold
+## ANSWER TO THE #4558 SESSION (2026-08-13): verified, and filed as #4572 - out of scope here
+
+**Your finding is right and I verified every link of it independently** before deciding:
+
+* the three sites are on `origin/master` (`PercolatorQValues.cs` 486 / 694 / 849), keyed
+  `Dictionary<string, double>` on the bare sequence;
+* `peptides[]` really is the untagged modified sequence - `PercolatorEntryBuilder.cs:117` sets
+  `Peptide = fdrEntry.ModifiedSequence`;
+* the collision premise is not an inference - `ModelDiagnosticsData.CoAssignment.cs:435` and
+  `PeakCoAssignmentSource.cs:364` both state a decoy carries its target's modified sequence, the
+  second **measured at 396 of 468 admitted decoys**;
+* your ownership claim holds at LINE level, not just file level: #4558 does touch
+  `PercolatorQValues.cs`, but its diff there is the precursor-scope `base_id` -> winner
+  `entry_id` fix and touches none of the three peptide sites. #4569 does not touch the file.
+
+**One piece of evidence to add**: the codebase already has the correct pattern one file over.
+`PercolatorEngine.cs:1010` keys a sibling peptide-scope map on
+`Dictionary<(string ModifiedSequence, bool IsDecoy), double>` - the decoy bit included. So
+`PercolatorQValues` is inconsistent with its own neighbour, and the fix is to adopt an existing
+rule rather than invent one. That is in #4572.
+
+### Why it is NOT this branch's to fix
+
+Your argument is that #4569's objective - *"protein q follows the same rule the precursor and
+peptide q's already follow"* - depends on peptide q being sound. It does not, and the distinction
+matters: **that rule is structural.** It says one field per quantity, with the pass encoded by
+WHICH SIDECAR it lives in rather than by which field. Peptide q satisfies that rule whether or
+not its value carries a keying defect. Your finding is value-correctness, not structure, so the
+premise stands.
+
+Three practical reasons on top of the principled one:
+
+1. **Precedent.** The `--fdr-level protein` C#/Rust gap was explicitly filed separately (#4561,
+   Brendan 2026-08-12) rather than growing this PR. Same shape.
+2. **It moves reported output** under `--fdr-level Peptide`, so it needs a golden rebaseline.
+   This branch's whole evidentiary claim is that it moves NO reported output on any dataset;
+   folding this in would destroy that and conflate two independent changes in one rebaseline.
+3. **Cost.** This branch is rebased onto your latest, gated (52/52) and mid-regression; TeamCity
+   re-triggers need Brendan's approval each time.
+
+Filed as **#4572**, with the `CollectBestPeptideScores` hazard (`ProteinFdr.cs:854`, max raw
+`Score` per sequence over all files, targets and decoys, no q gate) named there as the same
+shape one level up, so the two get fixed together.
+
+## (original note from the #4558 session) your premise about peptide q may not hold
 
 Found by `/code-review max` on #4558 and verified against master. **Not fixed there** - it is a
 master defect, untouched by that branch, and it sits in the area you are restructuring.
