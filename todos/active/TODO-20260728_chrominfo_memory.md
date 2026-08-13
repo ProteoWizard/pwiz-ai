@@ -633,6 +633,21 @@ Open questions for the developer:
   `DocumentReader` already discards the stored `user_set` on the grounds that "all values
   are still calculated from the child transitions".
 
+**The one thing worth doing next (added 2026-08-12).** A node which has just been added -
+by picking, refining or importing - has no columnar values until a results pass runs, and
+nothing fills them in. Two things wait on it, and both would fall out of one fix:
+- `ConsoleExportTrigger`, the single test lost by removing `UpdateResultsSummaries`
+- `MoleculeResults.GetPeptideChromInfos`, which has to prefer the .skyd for that reason
+  rather than working from the columnar results first, which is where it should end up
+
+The precursor level pass *does* run when transitions are added (`ChangedResults` is true as
+soon as the child count differs) and it *does* read the .skyd (`canUseOldResults` is
+hardcoded false). So the peaks are not missing - two of three come back with flags
+`IsGoodPeak` rejects. What moves those flags is the unanswered question; the diagnostic to
+run is printing `Area`, `IsEmpty` and `IsForcedIntegration` for LVNELTEFAK's three
+transitions in `FullScanFilterTest` after the refine, then again after a forced results
+pass.
+
 ### 2026-08-06 - Session 8: working through the 104 failures in SkylineTester.log
 
 Baseline: the run log at `sky_memory/SkylineTester.log` (1126 tests, 104 failures). Measured
@@ -852,6 +867,9 @@ asserted against have always been (`--import-append` doubles every one of them).
 Files still holding `.EmptyResults[...]` reads, all in tests which were passing vacuously:
 `ShimadzuSrmDuplicateQ1Test`, `ImportDocTest`, `ManageResultsTest`, `WatersCalcurveTest`,
 `RefineTest`, and the three `TestPerf` ones.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260728_chrominfo_memory.md` before starting work.
 
 ### 2026-07-30 - Session 4
 
