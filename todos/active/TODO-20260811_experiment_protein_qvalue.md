@@ -441,7 +441,7 @@ auto-closes and cannot be reopened.
 | `-Dataset Stellar` after the fix commit `826666204f` | **10/10 PASS**; `mode1c` numbers IDENTICAL to the pre-fix run | `ai/.tmp/regression-4559-postfix-stellar.log` |
 | C# build + tests + inspection | 579 tests, zero-warning | - |
 | Rust `fmt --check` / `clippy -D warnings` / tests | 580 tests; LF verified (0 CR) | `ai/.tmp/rustgate-4559.log` |
-| TeamCity Perf/Regression | build **4131578**, `pull/4569` | see the agent note below |
+| TeamCity Perf/Regression | **SUCCESS** - 4131578, `pull/4569`, `826666204f` | reproduces every local `mode1c` count EXACTLY; first green on this config since 2026-07-09 |
 
 The handoff predicted "53/53". The run actually reports **52 legs** (Stellar contributes 10,
 the other three 14 each) - quoting what the run printed rather than the expectation.
