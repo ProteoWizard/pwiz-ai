@@ -1640,3 +1640,11 @@ pass 2**. Pass 2 happens to have zero unpaired decoys above its bar, so the two 
 in fact being counted by the same rule today. Whether a decoy with no competitor present "won
 its competition" needs a decision before either row is quoted. NOT changed here: it moves the
 discovery set again and this PR has already produced three such changes.
+
+**Refined by the StellarGenDecoyEntrap measurement: unpaired decoys are CONFIGURATION-SPECIFIC,
+not general.** Above-bar unpaired counts are astral pass 1 = 88, astral pass 2 = 0,
+StellarGenDecoyEntrap pass 1 = 0, pass 2 = 0. So they arise only in the library-decoy +
+entrapment configuration (`--decoys-in-library` with a pairing manifest), where a decoy can be
+in the reported pool with no target beside it. With GENERATED decoys every decoy has a target
+by construction, so the question never arises. That narrows the decision: it is about how the
+pairing manifest's unmatched rows should be treated, not about TDC in general.
