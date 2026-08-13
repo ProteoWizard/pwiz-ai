@@ -191,6 +191,45 @@ on if you want pass-1 numbers, and read them from the report's `fdpViews` (which
 explicit `pass` field - select on it) via `fdp_at_count.py` / `runcount_fdp.py`.
 `--fdrbench-pass 1` alone does emit the pass-1 TSV, but only by forcing the resident pool.
 
+## Harvest every long run - it is too expensive not to
+
+A full 82-file run costs ~8.5 h and a substantial part of a machine, so in practice one
+happens every few days to once a week. **Treat each one as a measurement of the whole
+system, not just of whatever you started it for.** Anything the run reveals that violates
+our goals gets filed the same day, while the log and the output directory are still on disk;
+a finding you notice and do not record is one you will pay for the run again to rediscover.
+
+Run all of these against every completed run:
+
+| check | command | what it must show |
+|---|---|---|
+| memory + reporting cadence | `python ai/scripts/perfviz.py <run>/run.log` | peak fits the box; **no gap >= 30 s**; per-phase floor not growing with file count |
+| entrapment FDP | `tools/fdp_at_count.py <run dir>` | Pass 1 in line with the recorded comparator |
+| FDP at reported q | `tools/compute_pass2_fdp.py <run dir>` | pass-2 inflation no worse than the known figure |
+| reproducibility | `tools/runcount_fdp.py <run dir>` | high-run-count peptides stay clean |
+
+`perfviz.py` prints `gaps >= 30s : N  <-- OVER THRESHOLD` precisely so this is a gate on a
+real run rather than a review judgement. **Use `<run dir>/run.log`, not a redirected console
+log** - a log captured through `Start-Process -RedirectStandardOutput` from a colorized host
+carries ANSI escapes, and `perfviz.py` parses 0 memstamp samples from it and tells you the
+run had none.
+
+Worked example, 2026-08-12: the run met its memory goal (82 files inside 52.1 GB private on a
+64 GB box) but showed five reporting gaps >= 30 s totalling 523 s. They were split by owner
+the same day - the 138 s experiment-level co-assignment gap onto the open PR that introduced
+it, the other four as **#4571**. Neither was what the run was started for.
+
+Two things that recur, worth checking explicitly because a run that meets its headline goal
+can still fail them:
+
+* **A gap is an observability failure, not a throughput one.** 523 s is 1.7% of the run. The
+  cost is that nobody can tell "working" from "hung", and no watchdog can be tuned below the
+  largest gap.
+* **Peak is not the scaling number - the floor is.** A run can peak comfortably and still be
+  unable to scale, because what blocks more files is the level a GC *cannot* reclaim.
+  `perfviz.py`'s per-phase `p10` and its `sustained` line are the ones to read for that
+  (see #4486).
+
 ## Facts worth knowing before you start a run
 
 Measured, not guessed - these cost real time to learn:

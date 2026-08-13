@@ -544,6 +544,25 @@ unpinned trigger has a good chance of returning a meaningless 10-second red that
 like a real regression. **Trigger with `agent_name="MacCoss TeamCity Agent 1"`.** Recorded in
 memory as [[reference_osprey_teamcity_pr_trigger]].
 
+### Harvested from the run beyond what it was started for (2026-08-13)
+
+`perfviz.py` on `<run dir>/run.log`: peak **52.1 GB private / 50.4 GB managed** at 82 files on
+a 64 GB box, cadence median 2 s / p95 6 s - but **five reporting gaps >= 30 s totalling 523 s**.
+Split by owner the same day: the 138 s one is the experiment-level peak co-assignment in
+`--model-diagnostics`, which exists only on #4558's branch, so it is noted on
+`TODO-20260808_peak_coassignment_diagnostics.md`; the other four are pre-existing and are
+**#4571**. Acceptance for both is `perfviz.py` reporting no gap >= 30 s on a later 82-file run.
+
+**Scaling caveat worth not losing**: the peak is fine, but the *floor* is what blocks 500 files.
+SecondPassFDR holds a p10 of **28.8 GB** that GC cannot reclaim (perfviz calls it sustained and
+"mostly LIVE"). Measured slope ~0.30 GB/file over a 4.4 GB library projects ~150 GB at 500 -
+consistent with the #4486 note the regression gate itself prints (~103 GB at 500). Stage 6->7 is
+still the O(files) path.
+
+The practice this came from is now written down in `ai/scripts/Osprey/SEA-AD/README.md`
+("Harvest every long run"): a run costs ~8.5 h and happens every few days, so everything it
+reveals gets filed while the log is still on disk.
+
 ### SEA-AD RESULT - complete, and it validates the change at 82-file scale
 
 **13:50:29 -> 22:28:32, 8 h 38 m, exit 0, zero exceptions.**

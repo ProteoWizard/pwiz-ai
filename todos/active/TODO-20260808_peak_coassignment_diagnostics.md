@@ -554,6 +554,47 @@ started. My pass-1 numbers do not move under your fix, but my pass-2 numbers wil
 blessing them before your fix would bake in numbers produced by the zeroed-score pool. Brendan is
 arranging for your branch to be pushed so I can rebase on it.
 
+## FROM THE #4559 SESSION (2026-08-13) - one 138s logging gap is yours
+
+Found on the 82-file SEA-AD Astral-DIA run of 2026-08-12 (8 h 38 m, exit 0), whose build
+**contains your branch** - #4569 is stacked on your tip `54796e5d5e`, so everything you had
+landed by then was exercised at 82-file scale. Run log
+`D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\runs\seaad-82files-libdecoy-r1.0-protein-compact\run.log`,
+analysed with `ai/scripts/perfviz.py`.
+
+Cadence over the whole run is good - median 2 s, p95 6 s - but there are five gaps >= 30 s.
+Four are pre-existing and are now **#4571**. **The largest is yours:**
+
+```
+138s at 18:37:59 after: Total: 1925612 precursors pass run-level FDR across all files
+              ends at: [MODEL-DIAGNOSTICS] peak co-assignment boundary (pass 1):
+                       experiment 0.6985 from 37669 accepted precursor(s)
+```
+
+Three things establish it is yours rather than pre-existing:
+
+* `"peak co-assignment boundary"` exists **only on your branch** - `git grep` finds it in
+  `PeakCoAssignmentSource.cs` on `Skyline/work/20260808_peak_coassignment_diagnostics` and
+  **not on master**. The gap terminates on output that arrived with the feature.
+* `PeakCoAssignmentSource.cs:168` **does** have a `ProgressReporter`, but it is scoped to the
+  per-FILE loop (`fileNames.Count`). The gap ends at the **experiment**-level boundary line,
+  which is computed *before* that loop - the per-run lines follow it. So the progress block is
+  there, it just does not cover the expensive half.
+* Managed memory falls 23.0 -> 12.5 GB across the gap, so real work (and a large collection) is
+  happening, not a stall.
+
+**The ask**: wrap the experiment-level boundary computation in the same `ProgressReporter`
+idiom the per-file loop already uses. It is cheaper to land in #4558 than as a follow-up, and
+`891bd584f4` shows the pattern.
+
+Not a throughput problem - 138 s is 0.4% of the run. It is that a watcher cannot tell "working"
+from "hung" for over two minutes, and on a run this expensive that is the difference between
+catching a problem early and losing the day.
+
+**Acceptance** (same as #4571): `perfviz.py` on a later 82-file run reports no gap >= 30 s. It
+already prints `gaps >= 30s : N  <-- OVER THRESHOLD`, so this is a measurable gate on a real
+run rather than a review judgement.
+
 ## Tasks
 
 - [x] Locate the Stage 5 `--model-diagnostics` report generation and the per-file apex RT source
