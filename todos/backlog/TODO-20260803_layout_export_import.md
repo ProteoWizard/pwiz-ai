@@ -1,5 +1,21 @@
 # TODO-20260803_layout_export_import.md - File > Import/Export > Layout (+ MCP view-layout repro)
 
+> **SUPERSEDED for Phase 1 (2026-08-13).** Phase 1 grew far past what two menu items
+> justify - a layout-preview parser, typed problem classification with two strictness
+> levels, per-pane failure isolation, and a rebuilt `DigitalRune.Windows.Docking.dll` in
+> the `developers` repo. At the developer's direction it was **restarted from master,
+> small**, on branch `Skyline/work/20260813_export_import_layout` - see
+> `ai/todos/active/TODO-20260813_export_import_layout.md`. Nothing from the
+> `Skyline/work/20260803_layout_export_import` branch is reused, and that branch is not
+> going to be merged.
+>
+> **Phase 2 (MCP screenshot-layout reproduction) is still live** and is why this file is
+> kept here in the backlog. Read it from "Phase 2" down. Note that its premise is now
+> satisfied: Import Window Layout is reachable from the main menu, so the MCP can drive it
+> with the already-merged `skyline_click_main_menu_item` plus native-file-dialog
+> automation. What remains is `skyline_set_window_bounds` and the `pNN.view` -> `s-NN.view`
+> renaming.
+
 ## Branch Information
 - **Branch**: `Skyline/work/20260803_layout_export_import`
 - **Module**: `skyline`
