@@ -138,6 +138,61 @@ Done in response:
 
 Still not measured: SMB/VPN/OneDrive. No share is mapped on this machine.
 
+### A directory could be read as an acquisition it merely resembled (2026-08-13)
+
+Found while browsing a share whose root held loose `_FUNC*.DAT` files, hard linked in
+from a Waters `.raw` parent by a flattening script: `Reader_Waters::identify` claimed the
+whole share, so `IsDataSource` was true, and `OpenFolderFromTextBox`
+(`BaseFileDialogNE.cs:1049`) checks that *before* `Directory.Exists`. The share could not
+be navigated to in either dialog, and Import Results tried to import it as a single
+Waters source. Master was immune only because it never asked the reader.
+
+Fixed in the readers rather than in `DataSourceUtil`, so every consumer benefits:
+`Reader_Waters`, `Reader_Agilent` and the Bruker marker-file branches now require the
+directory to be named `.raw` or `.d`. Bruker FID stays exempt - it is the one Bruker
+format whose directories carry no extension, and pwiz's own corpus agrees: every real
+Bruker acquisition in the tree is `.d`, and the only extension-less one, `100 fmol BSA`,
+is FID. ABI T2D cannot be gated at all (any directory holding `*.t2d`), which is the one
+remaining way an ordinary folder can be claimed.
+
+Vendor tests: `Reader_Waters_Test` and `Reader_Agilent_Test` pass. `Reader_Bruker_Test`
+fails 4 of 52, identically with the changes stashed - YEP and FID reads under
+`--without-compassxtract`, after identification has succeeded.
+
+### Listing cost measured against a real master build (2026-08-13)
+
+Earlier figures compared against a simulation of master and were warm; both were
+misleading. Alternating cold passes, master's own `pwiz.CommonMsData.dll` from
+`C:\Dev\master_clean` against the branch, over a share of 511 directories of real data:
+
+| What is listed | master | branch |
+|---|--------|--------|
+| Directories named `.raw` or `.d` (376) | 5.85, 5.91 ms | 5.83, 5.93 ms |
+| Directories with no such name (135) | 1.67, 1.80 ms | 7.28, 6.79 ms |
+| Files (200 sampled) | 0.10, 0.11 ms | 0.09, 0.11 ms |
+
+So vendor directories and files are untouched; the whole cost is the 135, and the
+listing goes 2.33s to 3.06s. A share root of ordinary parent folders is the bad case at
+~1 vs ~6 ms/dir, since nothing matches by name. Recognition changes by exactly one
+entry: `Bruker 32 -> 33`, `File Folder 138 -> 137`.
+
+Two ideas measured and dropped: a `Reader::canFormatBeDirectory` virtual so a
+`ReaderList` skips file-only readers for a directory (built, verified wired up, 2-3% -
+those readers never touch the filesystem), and a `_FUNC*.DAT` prefix glob in place of
+the Waters listing (72ms across 256 directories - on SMB cost is round trips, not
+entries; a 602-entry `.raw` lists as fast as a 15-entry one). Memoizing per path is
+unsound: a directory's LastWriteTime does not change when a `fid` appears three levels
+below it, verified, so a stale "File Folder" could not be cleared even by F5.
+
+### The dialog now says what it is doing (2026-08-13)
+
+`populateListViewFromDirectory` adds rows only after every entry has been examined
+(`listView.Items.AddRange` at the end), so the list sat empty for the whole scan - seven
+seconds on the share, reading as an empty folder. A message over the list counts entries
+as they are found, appearing only once a scan passes 150ms and repainting at most every
+100ms. Watch the z-order: `Controls.Add` puts a control at the *back*, so it needs
+`BringToFront()` every time it is shown, and a `Label` is `Visible = true` by default.
+
 ## Known consequences of restoring reader-based identification
 
 Both follow from the reader's intentional design rather than from this change, and neither
