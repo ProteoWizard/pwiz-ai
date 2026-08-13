@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Copy every output.model-diagnostics.html under a run root into a flat archive folder,
+    Copy every *.model-diagnostics.html under a run root into a flat archive folder,
     named <dataset>-<leg>.html so the copies stay distinguishable.
 
 .DESCRIPTION
@@ -42,7 +42,11 @@ if (-not (Test-Path $Destination)) {
 Write-Host "Run root:    $RunRoot"
 Write-Host "Destination: $Destination"
 
-$pages = Get-ChildItem $RunRoot -Recurse -Filter 'output.model-diagnostics.html' -ErrorAction SilentlyContinue
+# '*.model-diagnostics.html', not 'output.model-diagnostics.html': the report is named after
+# the -o blib, so a run invoked with '-o out.blib' (which the SEA-AD and TDP43 runners do)
+# writes out.model-diagnostics.html and was silently skipped - "No diagnostics pages found"
+# on a run that had one.
+$pages = Get-ChildItem $RunRoot -Recurse -Filter '*.model-diagnostics.html' -ErrorAction SilentlyContinue
 if (-not $pages) {
     Write-Host 'No diagnostics pages found.'
     return
