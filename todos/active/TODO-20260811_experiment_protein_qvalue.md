@@ -475,9 +475,14 @@ Three findings say that guard is not worth its cost yet:
 2. **The version byte gates the whole 8-column record; one column changed meaning.** Rejecting
    a v4 sidecar discards `Score`, `Pep`, run/experiment precursor and peptide q and
    `ExperimentAggregateScore`, all still correct, to protect the one column Stage 7's
-   `PropagateProteinQvalues` overwrites unconditionally before anything reads it. Worse, the
-   read path (`Pass2FdrSidecar.cs:518-530`) **warns and proceeds** rather than recomputing, so
-   the bump trades seven good columns for a warning.
+   `PropagateProteinQvalues` overwrites unconditionally before anything reads it.
+   **PARTLY OVERTAKEN 2026-08-13** - this bullet also argued that the read path merely *warns
+   and proceeds* rather than recomputing. #4558's `FdrScoresSidecar.IsCurrentFormat` has since
+   replaced the bare `File.Exists` gates at `Pass2FdrSidecar.cs:188`/`:511` and
+   `PerFileRescoreTask.cs:268`, precisely so that "presence is not readability" - a
+   stale-version sidecar now fails the gate, counts as missing and is **regenerated**. So a bump
+   would now behave correctly rather than lose columns. **The decision does not change**, but it
+   rests on reasons 1 and 3; do not cite the warn-and-proceed half again.
 3. **Osprey is pre-first-public-release** (Brendan, 2026-08-13). The only consumers of these
    artifacts are development sessions, and with this much moving those want fresh runs rather
    than `-LinkFrom` off older ones anyway. The cost of a stale artifact is a re-run, not a

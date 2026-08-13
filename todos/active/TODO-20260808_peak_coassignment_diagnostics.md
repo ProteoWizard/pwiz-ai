@@ -554,7 +554,17 @@ started. My pass-1 numbers do not move under your fix, but my pass-2 numbers wil
 blessing them before your fix would bake in numbers produced by the zeroed-score pool. Brendan is
 arranging for your branch to be pushed so I can rebase on it.
 
-## FROM THE #4559 SESSION (2026-08-13) - one 138s logging gap is yours
+## FROM THE #4559 SESSION (2026-08-13) - RESOLVED by bb367e2ac0, kept for the measurement
+
+**Fixed - no action needed.** `bb367e2ac0` ("Reported the co-assignment sidecar scan instead of
+running it silent") wraps the phase-1 sidecar scan in a `ProgressReporter`, which is exactly the
+ask below. Left in place because the measurement is the useful part and the acceptance criterion
+still needs a run to confirm it: **`perfviz.py` on the next 82-file run should report no gap
+>= 30 s.** Until then the fix is reasoned, not measured.
+
+The four remaining gaps on that run are pre-existing and are **#4571**.
+
+## (original note) one 138s logging gap is yours
 
 Found on the 82-file SEA-AD Astral-DIA run of 2026-08-12 (8 h 38 m, exit 0), whose build
 **contains your branch** - #4569 is stacked on your tip `54796e5d5e`, so everything you had
