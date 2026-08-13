@@ -736,6 +736,43 @@ port keeps the same semantics, with absence-from-the-map (Option) rather than a 
 because the sidecar comparators use `|a-b| <= tol`, which is FALSE for NaN against NaN and
 would turn byte-identical files into a red gate. The two changes compose.
 
+## REVIEW ROUND ON MASTER (2026-08-13) - Copilot + /code-review max, triaged and closed
+
+#4558 merged at 14:40Z. #4569 was **retargeted to `master` BEFORE their branch could be
+deleted** (the auto-close trap), then `git rebase --onto master <their-tip>` replayed 7 commits
+with zero conflicts. `-Dataset All` **52/52 PASSED** on master's goldens.
+
+**Copilot reviewed 13 minutes after the retarget**, having posted nothing in the ~24 h the PR
+was stacked - confirming [[feedback_copilot_auto_requested]]: the auto-request fires only on
+master-based PRs. Its one finding (stale "60-byte" record docs) was real; fixed at all four
+sites including one it did not list, thread replied and resolved (`40188334ce`).
+
+**`/code-review max` returned 15 findings, which is its cap** - see
+[[feedback_triage_code_review_findings]]. Triaged into fix-or-drop, nothing filed:
+
+**FIXED** (`782697d449`):
+
+| # | what |
+|---|---|
+| F3 | `ValidityKey` gains `;pass2proteinq=2`. #4559 changed the column's MEANING without moving a byte, which `FormatVersion` cannot express, so a post-#4559 build resuming into an older directory skipped the task and kept the stale column. **This is what a v4 -> v5 bump would have bought, at no cost** - no reader breaks, no golden moves. |
+| F1 | mode 1c could not detect its own subject being reverted: removing the pass-1 seed means an unpatched record reads 1.0, which also differs from pass 1. The comparer now counts records at the reset default and the gate refuses a run where every moved record is one. |
+| F9 | Liveness assertion moved per-file -> per-run (`PropagateProteinQvalues` legitimately writes 1.0 in both passes for sequences absent from the peptide map). |
+| F10 | mode 1c guarded on 2nd-pass sidecars existing, matching mode 1b / mode 3. |
+| F8 | Stale `OspreyFdrSidecarComparer` in a session now fails fast with the cause and cure. **The review's suggested fix was wrong** - a loaded .NET type cannot be replaced, so keying the guard on the member would just make `Add-Type` throw. |
+| F14/F15 | Comments the field collapse left self-contradictory, plus a `run_protein_q` column header still emitted in the diagnostics dump. |
+
+**DROPPED** - F2 (deliberate documented design), F4 (not a defect; Rust twin is #64 and lands
+first), F5 (pre-existing adoption semantics, and F3 closes the reachable case), F6
+(informational counter), F11 (speculative - the null deref needs a gate removed that we are
+keeping), F13 (test-only; the real path ran over 88.5M records at 82 files), and the doc-file
+sweep beyond the code fixes.
+
+**F12 REFUTED, not dropped.** It claimed the patch masks the #4553 route divergence that mode 3
+was the only gate able to see. `PerFileRescoreTask.cs:525-530` places that divergence in the
+**1st-pass** sidecar's protein column; `PatchPass2ProteinQvalues` writes only the 2nd-pass
+sidecar (`Pass2Path` + `Pass.SecondPass`, pass byte validated on write) and cannot touch a
+1st-pass column. Coverage is unchanged.
+
 ## ANSWER TO THE #4558 SESSION (2026-08-13): verified, and filed as #4572 - out of scope here
 
 **Your finding is right and I verified every link of it independently** before deciding:
