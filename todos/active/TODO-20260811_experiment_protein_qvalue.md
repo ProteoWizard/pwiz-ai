@@ -498,6 +498,26 @@ unpinned trigger has a good chance of returning a meaningless 10-second red that
 like a real regression. **Trigger with `agent_name="MacCoss TeamCity Agent 1"`.** Recorded in
 memory as [[reference_osprey_teamcity_pr_trigger]].
 
+### SEA-AD RESULT - complete, and it validates the change at 82-file scale
+
+**13:50:29 -> 22:28:32, 8 h 38 m, exit 0, zero exceptions.**
+
+`Test-Pass2ProteinQvalue` (this branch's `mode1c` gate) against the finished run:
+**PASS - 88,554,423 matched, 1,777,489 moved (2.01%), 513,952 gap-fill.** That is ~26x the
+largest regression dataset. And it sizes the original issue properly: #4559 was filed over
+**390** records on Stellar; the same population at 82 files is **513,952**.
+
+**FDR calibration unmoved**: entrapment FDP at reported q<=0.01 = **1.575% combined / 0.800%
+lower**, r=0.9695, 749,259 reported precursors - the documented ~1.57% pass-2 recalibration
+figure ([[project_osprey_pass2_recalibration_inflates_fdr]]) reproduced to three significant
+figures on a different library. Reproducibility normal: >=41-of-82 runs at 0.18% FDP, the 5,422
+seen in all 82 at 0.00%.
+
+Wall-clock also corrected the README: the run took 8 h 38 m against the 2026-08-04 run's 8 h
+29 m, so the documented "~7.5 h" under-stated it by an hour. Fixed in `fd3455b` with the
+stage-by-stage table; **PerFileScoring is half the run** and the library variant barely moves
+wall time (minutes) even though it moves IDs by ~30%.
+
 ### The 82-file SEA-AD run
 
 Started **13:50:29 PDT**, detached, PID 51572. Log
