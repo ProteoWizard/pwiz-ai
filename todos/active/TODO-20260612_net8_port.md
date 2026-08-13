@@ -4076,5 +4076,211 @@ its own header says so. That is a feature port, bounded by cpp's switch statemen
 Unexplained and worth a look: three files moved from `cpp-failed` into `both-failed` between the two
 sweeps.
 
+## 2026-08-12 - Agilent non-MS device chromatograms; the `both-failed` three explained
+
+Closed the largest remaining parity category and answered the one metric that had moved the wrong
+way. The 17 Agilent files flagged `extra C++ records` are now 16 identical and 1 left with
+pre-existing TIC floating-point noise; the whole Agilent bucket went **8 identical -> 25**. All 20
+pwiz-sharp suites pass (646 tests, 0 failures), in both the normal and the
+`-p:NativeVendorsAvailable=false` (Linux CI) configuration.
+
+### The port was reading the wrong source, not computing the wrong thing
+
+The recurring shape again. `ChromatogramList_Agilent` enumerated signals from
+`INonmsDataReader.GetSignalInfo(device, Chromatograms)` and joined descriptions in from the signal
+table. cpp `MassHunterDataImpl::getSignals` (`MassHunterData.cpp:592`) does the opposite: the
+**signal TABLES are the enumeration**, one `Signal` per row of `GetSignalTable(dev,
+Chromatograms)` *and* one per row of `GetSignalTable(dev, InstrumentCurves)`; `GetSignalInfo` only
+populates a name-keyed map used later to fetch data. Four things followed from that:
+
+- **`InstrumentCurves` was never read at all** - which is where pump traces live. Both of
+  `enolase-02.d`'s LowflowPumps are in it.
+- Pumps and samplers had no classification. cpp keys them off the *description*
+  (`icontains "flow"` -> flow rate, `"pressure"` -> pressure), and its sampler cases fall through
+  into the pump cases with no body of their own.
+- `isInstrumentCurve` was not modelled, so detector instrument curves - which cpp suppresses -
+  would have come through as absorption chromatograms once the table was read.
+- Pressure and flow needed their own intensity units and cpp's scale factors (`1e5`, `1e-6`).
+  Neither factor is dimensionally what its cpp comment claims; both are reproduced verbatim, and
+  the emitted binaries match cpp bit for bit.
+
+Ported as `AgilentRawData.Signals` / `GetSignal(AgilentSignal)` mirroring cpp's own split, so the
+classification table in `ChromatogramList_Agilent` is a line-by-line port of
+`translateAsChromatogramType` (`Reader_Agilent_Detail.cpp:231`). `enolase-02.d`: 106 -> 110
+chromatograms, **zero semantic diffs vs cpp**.
+
+### The guardrail caught what the target file could not
+
+Re-running the full 50-file Agilent bucket (not just the 17) showed one file *gaining* records:
+`Dorrestein_GnPS_*.d` picked up `BinPump1 A: Pressure` / `B: Flow` that cpp does not emit. Reason:
+ion-mobility files go through `MidacDataImpl`, whose `getSignals()` returns a member vector that is
+**declared and never populated** (`MidacData.hpp:81,107`), and whose `getSignal()` returns null. So
+cpp emits no non-MS chromatogram for any IMS file, however many pump curves the `.d` holds.
+`EnsureSignalsLoaded` now returns early on `HasIonMobilityData`.
+
+Worth keeping as a habit: the fix verified perfectly on its target file and regressed a different
+one. Only the whole-bucket re-run showed it.
+
+### Test coverage for the half no fixture reaches
+
+No shipped `.d` fixture has a pump or sampler signal - the reference mzMLs cover exactly one device
+chromatogram, a DAD absorption trace - so the pump/sampler/instrument-curve half of the table
+cannot be covered by the reference tests at all. `TranslateAsChromatogramType` is now `internal`
+(`InternalsVisibleTo`, as Thermo and Waters already do) with one table-driven test over all four
+buckets. Note `Agilent.csproj`'s SDK `<Reference>` items are not transitive, so the test project
+needs its own reference to `BaseCommon` for the `DeviceType` enum - and it must keep
+`<Private>true</Private>`: declaring the reference with `Private=false` takes over how the DLL
+reaches the output and breaks *every* fixture test with "Could not load file or assembly".
+
+### Empty `spectrumList` is now omitted, as cpp does
+
+`MzmlWriter.WriteRun` wrote `<spectrumList count="0"/>` where cpp gates both lists on
+`ptr && size() > 0` (`IO.cpp:3261`). Chromatogram-only files (`enolase-02.d` and every other
+SRM-only `.d`) carried an element cpp never writes. The mzMLb spectrum-index block is already
+guarded on `offsets.Count > 0`, so nothing consumes the end-of-list anchor that is now unset.
+
+### The three `cpp-failed` -> `both-failed` files: an artifact, and a real build bug behind it
+
+There are **four**, not three, all Sciex `.wiff2`, and all four convert fine today - C++ still fails
+on them identically, so the honest 11 Aug tally is `cpp-failed` 34 / `both-failed` 33 and **no
+metric moved the wrong way**.
+
+The cause was a build defect, now fixed. `MsConvert.csproj` staged the wiff2 plugin into
+`$(OutputPath)wiff2` by string concatenation. MSBuild's trailing-slash normalization of
+`OutputPath` cannot touch a *global* property, so `dotnet build -o <dir>` left it slash-less and the
+directory landed at the **sibling** `<dir>wiff2`. `Wiff2LoadContext` then found no plugin directory,
+fell back to the default-ALC SQLite/Unity, and every `.wiff2` failed to open. `G:\parity\`
+still holds both stray sibling directories, timestamped one second after the builds that made them.
+The sweep was resumed mid-run after the directory was hand-created, which is why only the 4 files
+converted before the fix stayed failed - and why `cs-failed` also dropped 8 -> 1. Fixed with
+`$([MSBuild]::EnsureTrailingSlash(...))` in `MsConvert.csproj` and `Sciex.Tests.csproj`, verified by
+rebuilding with `-o` and converting `OnyxTOFMS.wiff2` (no stray sibling, exit 0).
+
+This is the second time `dotnet build -o` has cost this project a day; the handoff had it as a
+"remember to `cp` the wiff2 dir" workaround, which is now unnecessary.
+
+### Two things worth knowing next time
+
+- **`extra C# records` in `mzml_compare.py` is not necessarily about spectra.** The comparator zips
+  two positional streams that carry header elements, spectra *and* chromatograms; a chromatogram
+  count difference reports as `spectra_only_cs` with `where: "run"`. Count records per kind before
+  reading the label. (Companion to the existing positional-pairing trap.)
+- **cpp itself is nondeterministic on some Agilent files.** `QTOF/20fmolBSA-centroid.d` gives
+  different `lowest/highest observed m/z` on consecutive runs (143.083066394823 vs 143.083066479,
+  143 lines of 124,585); C# is byte-identical run to run. That file's ~80 `cvParam value differs`
+  cannot go to zero, and its diff count wobbles between runs for that reason alone.
+
+### Still open in Agilent
+
+`cvParam value differs` (the IM `instrument model` / serial-number header block, several files),
+`child count (precursor)` on `PreCursor Ion Scan Neg C6.d`, and the benign TIC binary noise. Both
+`13APR002.D` and `16026.d` fail on both sides.
+
+## Sweep of 2026-08-12: 334/492 identical
+
+`G:\parity\results-20260812.jsonl`, snapshot built at HEAD + the Agilent chromatogram work.
+**The two Sciex empty-spectra fixes landed after the snapshot**, so the five files they fix are
+still counted as `differs` here; verified separately at 0 diffs each.
+
+| status | 10 Aug | 11 Aug | 12 Aug |
+| --- | ---: | ---: | ---: |
+| identical | 95 | 298 | **334** |
+| differs | 320 | 124 | 87 |
+| cs-failed | 8 | 1 | 1 |
+| cpp-failed | - | 34 | 35 |
+| both-failed | - | 33 | 33 |
+
+Per vendor (identical / differs / failed): Sciex 173/14/39, Thermo 89/9/11, Waters 26/26/4,
+Agilent 25/23/2, Bruker 17/1/2, Shimadzu 0/10/13, Mobilion 3/4/0, PerkinElmer 1/0/0.
+
+37 inputs newly identical. Exactly one moved off `identical`, and it is not ours:
+`wiff vs wiff2 peaks\22_0430_006_SSL2_ND_Inj_29_01-wiff1.wiff` is now `cpp-failed` because the
+C++ binary hit the harness's 420 s cap (the C# side finished the same file in 253.8 s, and the
+machine was running the test suite at the time).
+
+Biggest remaining buckets: **Waters 26 differs** (untouched all session, now the largest),
+**Shimadzu 0 identical of 23** - 13 of which fail on both sides - and Agilent's 23.
+
+## Standing record: where C# emits MORE than cpp
+
+A C#-side **deficit** is usually "not ported yet" and explains itself. A C#-side **surplus** never
+does: either we are inventing data cpp never emits, or cpp deliberately drops something - an
+unreachable branch, an off-by-one that suppresses the last item, a suppression rule - that we
+failed to reproduce. Both are defects, and they are the ones the suite structurally cannot see:
+every vendor reference mzML is generated by cpp, so extra C# output only surfaces in a corpus
+sweep. Two already caught this way: Agilent pump chromatograms emitted for IMS files where cpp's
+MIDAC path emits none (fixed 2026-08-12), and Bruker's duplicate `dataProcessing` (fixed
+`80a6248d85`).
+
+`ai/.tmp/parity-scripts/cs_surplus.py <results.jsonl>` classifies every diff by direction and
+prints the surplus files by vendor and category. **Run it after every sweep and refresh the table
+below** - it is a few seconds of work and it is the only inventory of this class.
+
+Inventory below is from `results-20260812.jsonl`: **16 of 492 inputs**, down from 37 on 11 Aug.
+Resolved since then: Bruker `dataProcessingList` x18 (`80a6248d85`) and the Sciex empty spectra
+x5 (both fixes below; the Sciex one landed after the sweep snapshot, so those five files still
+read `differs` in the raw results).
+
+**A per-record number is only meaningful when the two record streams are aligned.** If a file
+also shows `spectrum/@id` diffs, the comparator is pairing record N against record N+k and every
+length it prints compares unrelated spectra. Reading those literally turned "834 extra empty
+spectra" into a phantom **"45,402 extra peaks"** that does not exist - every shared id had a
+byte-identical array. `cs_surplus.py` now flags such files `[OFFSET STREAMS]` and counts only the
+id-independent categories for them; use `arraylen_by_id.py` to get their real surplus.
+
+| where | files | what C# adds |
+| --- | ---: | --- |
+| Sciex MRM3 `child count (precursor)` + `extra cvParam` | 2 | `220124_095/096_MRM3_*.wiff2`, 12 each. An extra precursor child per spectrum. Largest remaining. |
+| Agilent `child count (precursor)` | 1 | `PreCursor Ion Scan Neg C6.d`, 30. Still open. |
+| Agilent `extra cvParam` | 9 | Mostly the IM header block (`instrument serial number` we emit, cpp does not) plus `20fmolBSA-centroid.d` x11 and `AE_30Apr19_negESI_0001.d` x12. |
+| Bruker tsf `componentList/@count` | 1 | `0.1HCOOH_H20_NoTIMS_Pos.d`, 4 extra components. |
+| Thermo `extra cvParam` | 1 | `MAT95XP-File001.RAW`, 2. |
+| Sciex `extra cvParam` | 2 | `UV/_Sample_Run_004.wiff` x1, plus 2 on files already listed above. |
+
+### Sciex: empty spectra we index and cpp does not (2026-08-12)
+
+cpp `SpectrumList_ABI::createIndex` (`SpectrumList_ABI.cpp:314`) keeps a cycle only when **both**
+the per-cycle BPC (fallback TIC) intensity is `> 0` **and**
+`getSpectrum(...)->getDataSize(false, true) > 0`. The C# port had dropped the second condition on
+the reasoning that the first implies it - and on the real perf grounds that the probe reads the
+file's whole spectral payload at index-build time, which on .NET 8 made a large TripleTOF `.wiff`
+exceed GraphFullScan's scan-load reopen timeout. The reasoning half of that is false. Two distinct
+populations of cycle pass the BPC test with nothing to read:
+
+1. **Sentinel base peak.** `wine yeast sampleA_2.wiff` has 834 MS2 cycles reporting base peak
+   `1.0` at m/z `2.35e-07` with cycle TIC `0.0`. **Fixed**: the index now also requires the cycle
+   TIC `> 0`. That array is `Spectrum::getSumY` (cpp `WiffFile.cpp:740`), a sum over the very
+   points `getDataSize` counts, and it is already materialized by the BPC fetch - so this
+   reproduces cpp's intent at zero I/O. The file went from **87 diffs to 0** (32,583 spectra, id
+   sets and every array length identical). `Sciex.Tests` 8/8.
+2. **Plausible-looking but unreadable.** `20061108_CPTAC_1B468.wiff` has 448 cycles with TIC
+   `7543.0` and base peak `3.0` at a real m/z that still read back zero points;
+   `201208-378803.wiff` has 61, `trap25_9031_A7_A8.wiff` 3. No chromatogram-level value
+   distinguishes these, so only cpp's actual per-spectrum read does. **Fixed behind a flag**:
+   new `ReaderConfig.VerifyNonEmptySpectraAtIndex`, defaulting **off**, which msconvert-sharp
+   turns on unconditionally in `Converter.BuildReaderConfig` and Skyline leaves alone. Not a cpp
+   config field - cpp always probes; it is optional here purely because of the .NET 8
+   GraphFullScan reopen timeout that caused the probe to be removed in the first place. No CLI
+   option: a conversion always wants cpp's spectrum set.
+
+**All five files are now byte-for-byte semantically identical to cpp**, 2,613 diffs -> 0:
+
+| file | diffs before | after | spectra |
+| --- | ---: | ---: | ---: |
+| `wine yeast sampleA_2.wiff` | 87 | 0 | 32,583 |
+| `alan-race/msconvertIndexOutOfBounds.wiff` | 2272 | 0 | 92 |
+| `trap25_9031_A7_A8.wiff` | 87 | 0 | 8,841 |
+| `20061108_CPTAC_1B468.wiff` | 84 | 0 | 3,011 |
+| `201208-378803.wiff` | 83 | 0 | 2,235 |
+
+Note how much rode on the record offset: each file's 80-odd `cvParam value differs`,
+`child count (spectrum)` and `binary values` entries were all the comparator lining up
+neighbouring spectra, and they vanished with the alignment.
+
+**Cost of the probe**, measured while the corpus sweep was running (so an upper bound):
+`20061108_CPTAC_1B468.wiff` 13.1s -> 19.7s, `201208-378803.wiff` 1.7s -> 2.9s. cpp does the same
+probe and converts the first in 13.7s, so we are ~45% slower than cpp at the identical work -
+a pre-existing gap in the read path, not something this flag introduced.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260612_net8_port.md` before starting work.
