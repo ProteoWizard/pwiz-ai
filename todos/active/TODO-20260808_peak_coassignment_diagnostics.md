@@ -1547,6 +1547,48 @@ Monotonic in both passes. Two things the population-wide 52% -> 58% measurement 
    verification of the implementation - unlike the twelve-number oracle, which shares the
    panel's definition and so could only ever validate the implementation against itself.
 
+### 2026-08-12 (night session) - PASS 2 SOLVED: the DENOMINATOR is wrong, not the panel
+
+Measured on StellarGenDecoyEntrap - the severe case (10 vs an expected 233/289) - using the
+gate's own `-KeepOutput` switch to retain `straight` sidecars
+(`TestResults\regression-20260812_171316\StellarGenDecoyEntrap\straight`), not a hand-rolled
+harness. Scripts: `ai/.tmp/pass2_tie_check.py`, `pass2_stratum_split.py`, `pass_pool_sizes.py`.
+
+**Three candidate causes eliminated by measurement:**
+
+| candidate | verdict |
+|---|---|
+| the acceptance BOUNDARY moves between passes | **No** - bit-identical at both passes, 0.210624 |
+| the winner-only rule is too aggressive | **No** - even counting EVERY decoy above the bar, pass 2 gives 60 against an expected 289, still **4.8x under**. The deficit is present before any winner filtering |
+| mixed pre/post-rescore aggregate vintages (the `/code-review` H2) | **No** - **100.0%** of accepted non-decoys are off-stratum here (0 on-stratum), so there is only ONE vintage in the accepted set and the mechanism cannot operate. On astral, where a mix does exist, recomputing the boundary over on-stratum entries alone moves it by 5.5e-4 and changes the admitted count by ZERO (928 either way) |
+| tie-break direction (target vs decoy), `/code-review` finding #4563 | **No** - **zero exact ties** at both passes on both datasets |
+
+**The actual mechanism - compaction shrinks the POOL but not the ACCEPTED set:**
+
+| | pass 1 | pass 2 | change |
+|---|---|---|---|
+| distinct decoys | 493,523 | 43,574 | **11.3x smaller** |
+| distinct non-decoys | 493,140 | 43,610 | **11.3x smaller** |
+| **accepted non-decoys** | 28,922 | **28,908** | **unchanged** |
+
+Compaction removes decoys and non-decoys at the SAME rate, so the 1:1 target/decoy
+correspondence TDC depends on is preserved (43,574 vs 43,610). What changes is that the
+ACCEPTED count does not shrink at all, so `accepted x FDR` still demands 289 decoys - out of a
+pool 11.3x smaller than the one that supplied pass 1's 288. At the identical boundary, pass-2
+decoys clear at TWICE pass 1's rate (0.138% vs 0.068%) and still yield 5.6x fewer in absolute
+terms.
+
+**So `(targets + entrapment) x FDR` is the wrong expected count at pass 2.** It presumes the
+decoys available to clear the bar come from a pool commensurate with the one the accepted
+targets were drawn from; after compaction that premise fails. The pass-1 row is unaffected -
+there the pool is uncompacted and the formula is exactly right (288/289, 843/844, 375/377).
+
+This confirms the standing hypothesis recorded above ("the honest pass-2 denominator is not
+`(targets+entrapment)*FDR` at all") by measurement rather than inference, and it means **the
+pass-2 decoy row should not be "fixed" in the panel at all** - what needs fixing is the
+expected-count formula the row is judged against, or the row should be suppressed at pass 2 the
+way enrichment already is.
+
 ### 2026-08-12 (night session) - JOB 4: 82-FILE PASS-1 DECOY ROW IS 375 vs an expected 377
 
 `Run-SeaAd.ps1 -Task FirstPassFDR -LinkFrom 20260811_all82`, 52 m 31 s, exit 0, into
