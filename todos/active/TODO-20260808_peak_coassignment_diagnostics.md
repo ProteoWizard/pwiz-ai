@@ -1893,3 +1893,14 @@ moves the boundary 5.5e-4, changes the admitted count by zero); `RunSimpleFdr`'s
 `-Dataset All` PASS 48/48 with goldens CLEAN on `42f9d12997`, 578 C# tests + ReSharper clean,
 Rust 580 + fmt + clippy. TeamCity #204 SUCCESS on `b53c35b1bd`; 4132246 fired on the tip
 `e740ddf381`.
+
+**CLOSED OUT 2026-08-13**: TeamCity 4132246 (#205) SUCCESS on the tip `e740ddf381` - the gate
+measured the exact commit proposed for merge, not a superseded one. PR #4558: 18/18 checks
+green, MERGEABLE, ready_to_merge. All review findings resolved in the branch, all four Copilot
+threads resolved, issues #4562-#4568 and #4570 closed as branch-only, and the one master-level
+finding filed as #4572 by the #4569 branch.
+
+Still unverifiable from a 3-file gate: the 138 s logging-gap fix, whose acceptance criterion is
+`perfviz.py` reporting no gap >= 30 s on a fresh 82-file run. Watch it there alongside the new
+FDR-crossing walk, which adds an O(n log n) pass over the full pre-compaction pool in
+SealCutoffs - diagnostic-only cost, but in exactly that phase.
