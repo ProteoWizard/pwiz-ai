@@ -1578,16 +1578,47 @@ pool 11.3x smaller than the one that supplied pass 1's 288. At the identical bou
 decoys clear at TWICE pass 1's rate (0.138% vs 0.068%) and still yield 5.6x fewer in absolute
 terms.
 
-**So `(targets + entrapment) x FDR` is the wrong expected count at pass 2.** It presumes the
-decoys available to clear the bar come from a pool commensurate with the one the accepted
-targets were drawn from; after compaction that premise fails. The pass-1 row is unaffected -
-there the pool is uncompacted and the formula is exactly right (288/289, 843/844, 375/377).
+**CORRECTION - the pool-size framing above is TRUE but MISLEADING, and Brendan was right to
+push on it.** The 1:1 count correspondence IS preserved (43,574 decoys vs 43,610 non-decoys),
+because protein-compact retains BOTH members of each stratum base_id. But that equality masks
+what actually happens: the retained decoys are systematically the LOSERS.
 
-This confirms the standing hypothesis recorded above ("the honest pass-2 denominator is not
-`(targets+entrapment)*FDR` at all") by measurement rather than inference, and it means **the
-pass-2 decoy row should not be "fixed" in the panel at all** - what needs fixing is the
-expected-count formula the row is judged against, or the row should be suppressed at pass 2 the
-way enrichment already is.
+**ROOT CAUSE: the stratum is selected on TARGET strength (per-run q < 1%), and a decoy that
+WINS its competition has by construction a WEAK target.** So the base_id of a countable decoy
+fails the stratum test and both members are dropped, while the base_id of a pair-losing decoy
+passes and the decoy is carried in with its strong target. Measured on the retained
+StellarGenDecoyEntrap sidecars (`ai/.tmp/pass2_stratum_bias.py`), and the split is total:
+
+| pass-1 above-bar decoy | survives into pass 2 | its paired TARGET accepted at pass 1 |
+|---|---|---|
+| **won** its pair (288) | **10 (3.5%)** | **0 of 288 (0.0%)** |
+| **lost** its pair (50) | **50 (100%)** | **50 of 50 (100.0%)** |
+
+Then the two filters compose destructively: compaction removes 278 of the 288 decoys that
+SHOULD count, and the winner-only rule then removes all 50 that remain. 288 -> 10.
+
+So the surviving decoy population is **anti-correlated with the property that makes a decoy
+countable**. This is a selection bias, not a sampling-size effect - which is why 60 above the
+bar is still 4.8x under BEFORE any winner filtering.
+
+**Does it bias the FDR statistics users receive? On this dataset, NO** - 100.0% of accepted
+non-decoys are off-stratum, so every reported q is the pass-1 value computed over the
+uncompacted population. The compacted pool never reaches the delivered q here; the damage is
+confined to the panel's decoy row, which is a diagnostic readout.
+
+**OPEN AND UNTESTED, and it is the important one**: for IN-stratum entries q IS recomputed by a
+competition over the compacted pool, whose decoys are selected by target strength as measured
+above. Competing against a loser-enriched decoy population yields too few decoys and therefore
+q too low - **anti-conservative**. Only 435 entries are refreshed here and none of the accepted
+ones are, so it cannot bite on this dataset. **On SEA-AD (large, multi-replicate) the
+on-stratum population is the one that matters**, and Brendan notes the per-run q<1% stratum
+criterion itself inflates with false positives as run count rises. Next test: on the 82-file
+cohort, split accepted precursors on- vs off-stratum and check whether the on-stratum decoy
+pool is loser-enriched relative to pass 1. That is a separate line of investigation from the
+panel.
+
+The pass-1 row is unaffected throughout - uncompacted pool, formula exact at every scale
+(288/289, 843/844, 375/377).
 
 ### 2026-08-12 (night session) - JOB 4: 82-FILE PASS-1 DECOY ROW IS 375 vs an expected 377
 
