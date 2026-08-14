@@ -293,3 +293,71 @@ Traced the stratum collapse to the library's per-peptide accessions and the mani
 path. Reverted the boundary change, repurposed the test as a detector, and moved the repair into
 `CarafeProteinIdNormalizer` at library load per Brendan's direction, with the harness left
 untouched so the gate exercises the product path. Goldens recaptured; `-Dataset All` verifying.
+
+
+## OPEN AND HANDED BACK: pass-1 decoy row is 15x its definition at 82-file scale
+
+Measured on the SEA-AD 82-file cohort by regenerating the page with `--task ModelDiagnostics`
+(20m41s), current code:
+
+```
+pass1 experimentCutoff        = -0.5622904637   <- composite of the worst q-accepted entry
+pass1 experimentFdrCrossing   = +0.6976485125   <- where this pool reaches 1% by its own count
+pass1 fdrCrossingDecoys       = 376
+pass1 fdrCrossingNonDecoys    = 37,679
+pass1 experiment rows         : target 37,510  entrapment 164  decoy 5,677
+pass1 run rows                : target 67,563  entrapment 4,343  decoy 8,919
+```
+
+Brendan's definitional test: the pass-1 decoy count must be `(targets + entrapment) * 0.01` =
+`(37,510 + 164) * 0.01` = **377**. The panel's own CROSSING gives **376** (376/37,679 = 0.998%),
+i.e. correct to one decoy. The CLASS TABLE gives **5,677**, 15x too many.
+
+### What it is NOT
+
+* **Not losing decoys.** Both the crossing walk and `AddRow` apply `WonItsPair`, so pair-losers
+  are already excluded on both paths - the earlier fix is still in place. If losers were leaking,
+  the crossing would be inflated too, and it is not.
+* **Not `max(experiment-wide, per-run)`.** Per Brendan, that question was already worked through
+  in the #4558 session and shown to only ever REMOVE targets from the accepted list, never add a
+  worse-scoring precursor. Flooring q upward shrinks the accepted set, which would RAISE the
+  minimum, not lower it.
+
+### What it is
+
+`experimentCutoff` IS "the composite score of the worst q-accepted entry" - the `min()` in
+`SealCutoffs` is just how that worst one is found, not a second concept. It and the crossing MUST
+be the same number **iff q is monotone in the composite score**: if `{q <= 0.01}` equals
+`{composite >= s*}`, then the worst accepted composite IS `s*` and the walk stops there too.
+
+They differ by **1.26 score units**, so on this pool **q is not monotone in the composite score
+the panel ranks on** - at PASS 1, where there is supposed to be only one q system. Something is
+accepted at q <= 1% while carrying a composite of -0.562, far below the score where the
+target-decoy count puts 1%. The `min()` then faithfully reports that entry and every decoy above
+it floods the row. A minimum is not a robust estimator; the crossing is rank-based and immune.
+
+This is invisible on the 3-file gate datasets, where pass-1 cutoff and crossing agree closely
+(0.2106 vs 0.2079). That is why the gate reported "perfect pass-1 calibration" honestly and this
+only appears at 82-file scale.
+
+### The measurement that would settle it
+
+Take the pass-1 accepted set, select entries whose experiment aggregate is BELOW the crossing
+(+0.698), and report their count plus where their q came from. A handful => an outlier or a
+score-vintage mismatch between the value the competition ranked on and the
+`ExperimentAggregateScore` the panel reads. Thousands => the accepted set genuinely is not
+score-ordered and "worst accepted precursor" is unsound as a boundary at scale.
+
+**Question for the #4558 session**: it worked through the two-q-space question and settled the
+max(experiment, per-run) branch. What else did it establish about which entries can be accepted
+with a composite below the pool's own 1% point at PASS 1 - and did it ever compare
+`ExperimentAggregateScore` against the score the pass-1 competition actually ranked each entry
+on? That pairing is the remaining suspect.
+
+### Caveat on this page
+
+`FirstPassFDR` was SKIPPED as valid during the regeneration, so the pass-1 half is built from the
+run's existing 1st-pass artifacts. The pass-1 fields ARE current-code (the new
+`cutoffInStratum`/`acceptedInStratum` keys are present, correctly NaN/0 since pass 1 has no
+stratum), but the decoy row moved 5,911 -> 5,677 versus the 8/11 page and that shift is not yet
+explained. Treat pass-1 numbers as current-code reading stale inputs until that is understood.
