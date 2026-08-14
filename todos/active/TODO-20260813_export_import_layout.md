@@ -6,9 +6,9 @@
 - **Module**: `skyline`
 - **Base**: `master`
 - **Created**: 2026-08-13
-- **Status**: In Progress
+- **Status**: In Review
 - **GitHub Issue**: (none)
-- **PR**: (not opened)
+- **PR**: https://github.com/ProteoWizard/pwiz/pull/4575
 
 ## Objective
 
@@ -393,8 +393,9 @@ findings went with that work to `TODO-20260813_grid_report_layout.md`.
       easy to save a layout over the `.sky`. Keep it.
 
 **Then:**
+- [x] Push branch and open PR - #4575
+- [ ] Copilot review (automatic on open) - address with `/pw-respond 4575`
 - [ ] Developer review
-- [ ] Push branch and open PR
 - [ ] Localized menu text for `.ja.resx` / `.zh-CHS.resx` - bulk translation pass, not this
       PR, matching how every other menu item has landed. The ja/zh KeyboardShortcuts rows
       correctly show the English "Window Layout" until then.

@@ -8,7 +8,7 @@
 - **Created**: 2026-08-13
 - **Status**: Paused - implemented and green, but the back-compat design needs redoing (below)
 - **GitHub Issue**: (none)
-- **PR**: (not opened)
+- **PR**: (not opened; branch pushed as `origin/Skyline/work/20260813_grid_report_layout`)
 
 ## Objective
 
