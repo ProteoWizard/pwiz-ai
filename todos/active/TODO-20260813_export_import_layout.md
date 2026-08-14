@@ -171,6 +171,33 @@ cannot support; `ImportLayout` inherited none of it.
 
 That post-work is now one method, `EnsureApplicableForms`, called by both.
 
+### Windows an imported layout could show that the user cannot open
+
+Without results the View menu disables the Results Grid, the RT / peak-area / mass-error /
+detections graphs, candidate peaks and full scan. But `DeserializeForm` builds whatever the
+persist string names, and `ViewMenu.UpdateGraphUi` deliberately does **not** close them after
+a layout load - every branch there is guarded by `if (!deserialized)`, so the file wins. So
+Import could put a window on screen that the user had no way to open.
+
+**Measured, not assumed.** Exporting a layout, rewriting `DocumentGridForm` to
+`LiveResultsGrid` in the file, and importing it into a results-free document showed the
+Results Grid. `EnsureApplicableForms` now closes that set when `!DocumentUI.Settings.HasResults`,
+reusing the existing `UpdateUIGraph*` / `ShowResultsGrid` / `Destroy*` helpers.
+`TestImportLayoutNeedingResults` pins it, and was verified to fail without the gating.
+
+Note these helpers **hide** rather than destroy (`ShowResultsGrid(false)` calls `Hide()`), so
+the test asserts on `Visible`, not on the form's absence - which is the right question anyway,
+since the concern is what the user is shown. A first version of the test asserted absence and
+**passed vacuously**, because the preceding step had closed every window so there was no
+`DocumentGridForm` in the file to rewrite. It now asserts the substitution happened first.
+
+`GraphChromatogram` needs nothing: it is the one form kind already guarded on document
+contents. For a replicate the document does not have, its branch falls through to the final
+`return null`, so no window is created - and `LoadLayoutLocked` destroyed the existing ones
+first, so no orphan survives either. Worth knowing that this relies on a **fall-through**
+rather than an explicit `return null`; anything inserted between that branch and the end of
+`DeserializeForm` that matches the string would capture it.
+
 **It is deliberately NOT inside `LoadLayout`,** which is where the code review said to put it.
 That was **tried and reverted**, at the developer's direction and with measurements:
 
