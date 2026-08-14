@@ -361,3 +361,64 @@ run's existing 1st-pass artifacts. The pass-1 fields ARE current-code (the new
 `cutoffInStratum`/`acceptedInStratum` keys are present, correctly NaN/0 since pass 1 has no
 stratum), but the decoy row moved 5,911 -> 5,677 versus the 8/11 page and that shift is not yet
 explained. Treat pass-1 numbers as current-code reading stale inputs until that is understood.
+
+## FROM THE #4558 SESSION (2026-08-13): the pass-1 5,677 is a STALE-INPUT artifact, already fixed
+
+**Stop investigating the pass-1 decoy row on `20260811_all82`. That directory's sidecars predate
+every FDR fix in #4558, and the defect lives in the DATA, not the renderer.**
+
+| run (same 82 files) | pass-1 experiment | sidecars written |
+|---|---|---|
+| `20260811_all82` | target 37,510, entrap 164, **decoy 5,677** | 08-12 **02:15** |
+| `20260812_pass1regen` | target 37,506, entrap 161, **decoy 375** | 08-12 **15:05** |
+
+Expected `(37,506 + 161) x 1%` = 377. The corrected run gives **375**. Archived page:
+`ai/.tmp/diagnostics-html/20260812-seaad-82file-pass1regen/`.
+
+The 02:15 sidecars were written before `2704cc2dbf` (q-inheritance, 05:01), `37af75b993`
+(winner-only, 09:25) and `ccd628e286` (lookup re-key, 10:14). `2704cc2dbf` changed how experiment
+q is **written**, so re-rendering that directory with a current binary cannot fix it - the panel
+reads `experiment_precursor_qvalue` out of the sidecar, contaminated targets sit at q <= 1%, and
+they drag `min(aggregate)` down onto the decoy scale.
+
+### Your 5,911 -> 5,677 shift is explained, and it is not a mystery
+
+Those are the exact numbers from the 08-12 measurement recorded in
+`todos/completed/TODO-20260808_peak_coassignment_diagnostics.md`:
+
+> *The panel counts decoys that lost their pair.* No - **5,677 of the 5,911** admitted decoys
+> BEAT their paired target and are legitimate TDC winners.
+
+So the shift is the winner-only rule (`37af75b993`) removing the 234 pair-losers on a CURRENT
+renderer, while the stale q keeps the other 5,677. Current code, stale data - which is exactly
+why it moved partway and stopped.
+
+### Your crossing-vs-class-table divergence is the new diagnostic WORKING
+
+You measured crossing 376 (376/37,679 = 0.998%) against a class table of 5,677. That is the
+A-vs-B divergence doing its job, and it detects more than pool selection:
+
+* the **crossing** is computed from the population's own target-decoy competition, so it is
+  immune to a contaminated q;
+* the **class table** boundary is `min(aggregate)` over q-ACCEPTED targets, so it inherits
+  whatever poisoned the q.
+
+**A large A-vs-B gap therefore also fingers a stale or contaminated sidecar set, not only a
+compacted pool.** Worth stating in the panel caption - it is a second, unplanned use for it.
+
+To regenerate corrected pass-1 sidecars for this cohort without redoing the rescore, the recipe
+is in the completed #4558 TODO (`Run-SeaAd.ps1 -Task FirstPassFDR -LinkFrom`, ~52 min, and
+`OSPREY_VERSION_OVERRIDE` is MANDATORY or Stages 1-4 silently re-run for hours).
+
+### On the 20-minute diagnostics refresh
+
+A pass-1-only mode is worth having - pass 2 drags in the whole SecondPassFDR path (rescore,
+compete, blib) and that is the bulk of the 20 min. But note what stays: phase 1 streams every
+1st-pass sidecar (**21.8 GB** across 82 files) and phase 2 re-reads two columns of every
+`.scores.parquet` and joins per file. Both are I/O bound, so expect "much faster", not "instant".
+
+**The more valuable change is provenance, not speed.** A refresh that is fast makes it *easier*
+to re-derive a wrong answer quickly - which is what happened here. Stamp the panel with the
+build that WROTE the sidecars and their mtime, so a reader can tell a stale input from a product
+defect without cross-referencing commit times by hand. That single line would have saved this
+entire investigation.
