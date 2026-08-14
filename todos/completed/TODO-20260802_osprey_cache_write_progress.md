@@ -154,5 +154,21 @@ would be silent.
 adapt the assertion to the shipped implementation's output, and land it separately. Do NOT take
 the `SpectraCache.cs` hunk.
 
-**Working tree left untouched** - the diff is uncommitted and unrecoverable if discarded, so the
-decision to drop or preserve it is Brendan's.
+#### DECIDED 2026-08-13: the test was discarded too, and the reasoning is the durable part
+
+Brendan's call, and it generalizes beyond this TODO: **do not add a bespoke unit test for one
+`ProgressReporter` site.**
+
+* `ProgressReporter` use is now extensive and **none** of the other sites is unit-tested. One
+  test here would pin a single instance while the class of problem stays uncovered - the
+  inconsistency is the tell that it is the wrong mechanism.
+* The real detector already exists and is systemic: `perfviz.py` on a completed long run, with
+  `gaps >= 30s : N  <-- OVER THRESHOLD` as a measurable gate. Harvesting every long run for it
+  is standing practice (`ai/scripts/Osprey/SEA-AD/README.md`).
+* A logging regression of this kind **shows up in large-dataset processing** and will be caught
+  there. Large runs are still early - reaching 500 files on a 64 GB machine needs plenty more
+  testing regardless - so the harvest cadence is the thing to rely on, not a unit test.
+
+Both files were reverted; the branch carried no commits (0 ahead of `origin/master`), so nothing
+else was lost. `Skyline/work/20260802_osprey_cache_write_progress` in `pwiz-work1` is now an
+empty branch and can be deleted whenever convenient.
