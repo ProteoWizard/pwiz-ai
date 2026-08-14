@@ -1987,7 +1987,12 @@ branch. `--fdr-method simple` deliberately keeps `Score` unassigned.
 82-file run showing no gap >= 30 s. Watch it there alongside the new FDR-crossing walk, which
 adds an O(n log n) pass over the full pre-compaction pool in `SealCutoffs`.
 
-**Branch cleanup DEFERRED, deliberately**: `Skyline/work/20260808_peak_coassignment_diagnostics`
+**Branch cleanup RESOLVED 2026-08-13**: #4569 was retargeted onto master and merged, clearing
+the stacked-PR hazard, so the remote branch was deleted after re-checking that no open PR was
+based on it and that `8d0a2aa6cf` is an ancestor of master. The LOCAL branch in `C:\proj\pwiz`
+was still left alone - see below.
+
+**Original deferral, kept for the record**: `Skyline/work/20260808_peak_coassignment_diagnostics`
 is left on the remote because **#4569 is stacked on it** - deleting the base of an open PR
 auto-closes that PR unreopenably. Delete only after #4569 is retargeted onto master. The local
 branch in `C:\proj\pwiz` was also left alone: another session was actively working in that
