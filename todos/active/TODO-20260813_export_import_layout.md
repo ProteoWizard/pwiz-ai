@@ -173,12 +173,24 @@ cannot support; `ImportLayout` inherited none of it.
 That post-work is now one method, `RepairLayoutAfterLoad`, called by both.
 
 **It is deliberately NOT inside `LoadLayout`,** which is where the code review said to put it.
-`LoadLayout` has a caller that legitimately wants nothing left behind: test cleanup
-(`TestFunctional.RestoreMinimalView`) loads the contents-free `minimal.sky.view` precisely to
-close every dock window, and then asserts `OpenForms.Count() == 1`. Making the primitive
-self-contained would hand the Targets window back and fail that assertion in **every**
-functional test. The primitive stays able to leave nothing behind; the two callers that want a
-usable window afterwards ask for it.
+That was **tried and reverted**, at the developer's direction and with measurements:
+
+- `AbstractFunctionalTest.EndTest` uses `LoadLayout` as its teardown primitive.
+  `RestoreMinimalView` loads the contents-free `minimal.sky.view` to close every dock window,
+  and **two** separate gates then require only SkylineWindow to remain: the
+  `OpenForms.Count() == 1` wait, and the "left open at end of test" report in
+  `CloseOpenForms`. A self-contained `LoadLayout` hands the Targets window back and trips both,
+  in every functional test.
+- Loosening them was attempted three ways and none was clean: excluding `SequenceTreeForm` from
+  the count still trips `CloseOpenForms`; `ShowSequenceTreeForm(false)` only **hides** the form,
+  so it stays in `OpenForms`; and excluding the type from both gates means the suite can no
+  longer catch a leaked Targets window at all.
+- One thing the experiment did settle: no product breakage appeared from running the repair
+  under `UpdateGraphUI`'s outer lock. The old "messes up the selected graph" comment did not
+  manifest in any test. So that concern is unproven either way - it is not the reason.
+
+The reason is that `LoadLayout` genuinely has a caller that wants nothing left behind. The
+primitive stays that way; the two callers that want a usable window afterwards ask for it.
 
 `ImportLayout` calls it on all three paths - load succeeded, load failed and was rolled back,
 load failed and the rollback failed too - since all three can leave windows needing repair.
