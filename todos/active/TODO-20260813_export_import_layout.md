@@ -326,10 +326,18 @@ findings went with that work to `TODO-20260813_grid_report_layout.md`.
       2026-08-03 branch found the same gap. It matters more here than on document-open, because
       applying a layout captured against a *different* document is the whole point of Import,
       so the mismatch is the normal case rather than the rare one. **Fixed** with the above.
-- [ ] `SaveLayoutToFile` uses `FileSaver.CanSave()` with no parent, which swallows
-      `UnauthorizedAccessException` / `FileNotFoundException` and returns false silently, so
-      the write is skipped and `ExportLayout`'s catch never runs. Tolerable when this was a
-      side effect of save; a silent no-op for an explicit user command is not.
+- [x] **Export could write nothing and say nothing.** `FileSaver.CanSave(IWin32Window parent = null)`
+      (`Util/UtilIO.cs:1333`) catches `UnauthorizedAccessException` / `FileNotFoundException`
+      and shows a message only `if (parent != null)`, otherwise returning false - so the write
+      was skipped and `ExportLayout`'s catch never ran. Reachable whenever the target exists
+      read-only (`CheckException` throws `UnauthorizedAccessException` for the ReadOnly
+      attribute) or the folder is not writable. A missing *directory* was already reported,
+      because `DirectoryNotFoundException` is not one of the two caught.
+      **Fixed** by `saverUser.CanSave(this)` in `SaveLayout`, at the developer's choice of the
+      two options - which also means document save and Share Document now report a read-only
+      `.sky.view` where they previously did not. `TestExportOntoReadOnlyFile` pins it; verified
+      that without the parent the test hangs waiting for a dialog that never appears, which is
+      the silent no-op itself.
 - [ ] The Export dialog's default file name is byte-for-byte the document's own
       `GetViewFile(DocumentFilePath)` sidecar, in the document's own folder, which the next
       Ctrl+S overwrites. Decide whether to propose a distinct name or refuse that target.
