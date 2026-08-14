@@ -338,9 +338,23 @@ findings went with that work to `TODO-20260813_grid_report_layout.md`.
       `.sky.view` where they previously did not. `TestExportOntoReadOnlyFile` pins it; verified
       that without the parent the test hangs waiting for a dialog that never appears, which is
       the silent no-op itself.
-- [ ] The Export dialog's default file name is byte-for-byte the document's own
-      `GetViewFile(DocumentFilePath)` sidecar, in the document's own folder, which the next
-      Ctrl+S overwrites. Decide whether to propose a distinct name or refuse that target.
+- [x] **Not a bug - by design.** The review flagged that the Export dialog's default name is the
+      document's own `GetViewFile(DocumentFilePath)` sidecar, which the next Ctrl+S overwrites.
+      That is the point: the usual reason to use File > Export > Window Layout is to update the
+      `.sky.view` after rearranging windows *without* saving the whole document. Writing the
+      document's own sidecar is the intended result, not an accident.
+- [x] **The dialogs now open beside the document.** `Settings.Default.ActiveDirectory` is a
+      user-scoped persisted setting meaning "the last folder any file operation used" - written
+      by `SetActiveFile` on open/save, but also by File > Open, opening a shared `.zip`, Import
+      Assay Library / Transition List, and unrelated dialogs (iRT calculator, ion mobility
+      library, optimization library, peak compare, tutorial download) - and read by ~20 dialogs.
+      So after picking an iRT database from another folder, Export would offer a name taken from
+      *this* document in *that* folder. `GetLayoutDirectory` uses
+      `Path.GetDirectoryName(DocumentFilePath)` when there is one and falls back to
+      `ActiveDirectory` only for an unsaved document. `GetShareFileName` sets the precedent -
+      it starts from the document folder for the same reason (though without the fallback).
+      `TestExportStartsBesideDocument` points `ActiveDirectory` at the temp folder and asserts a
+      bare-name export still lands next to the document; verified to fail without the change.
 - [ ] Both new handlers skip `ExceptionUtil.IsProgrammingDefect` -> `Program.ReportException`,
       which `SkylineFiles.cs:1060` and `:1300` both do, so a real defect is reported to the
       user as a bad file and never reaches the exception dashboard.
