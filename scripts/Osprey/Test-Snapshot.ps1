@@ -728,8 +728,12 @@ function Run-PostStage4 {
     $sOut = Get-StageToolDir $Stage
     Reset-StageDir $sOut -KeepInputs:$false
     foreach ($f in (Get-ChildItem $sIn -File)) {
+        # Linked, not copied - see Copy-SpectraCacheForward. Copying it here put a full
+        # ~1 GB in EVERY stage's tool dir, on top of every stage's input dir.
+        if ($f.Name -like '*.spectra.bin') { continue }
         Copy-Item $f.FullName (Join-Path $sOut $f.Name)
     }
+    Copy-SpectraCacheForward -From $sIn -To $sOut
     $useJP2 = $stageConfig[$Stage].useJoinAtPass2
     # Osprey: pass-2 entry (Stages 7-8 from reconciled parquets) is
     # --task SecondPassFDR; pass-1 entry (Stages 5-8 from scores) is the default
@@ -1020,6 +1024,30 @@ function Capture-Snapshot {
 # in capture mode we just wrote it).
 # ----------------------------------------------------------------------
 
+# Stage 6's rescore REFUSES to run without the per-file .spectra.bin written by
+# PerFileScoring -- PerFileRescoreTask.LoadSpectraForRescore hard-fails rather than
+# re-parsing the mzML, deliberately, so a stale or absent cache cannot silently change
+# results. Every post-stage-4 stage that reaches Stage 6 therefore needs it staged
+# alongside the mzML, and without this stage5 dies with
+# "Stage-6 rescore requires the '<stem>.spectra.bin' spectra cache".
+#
+# HARD-LINKED, not copied, and deliberately NOT added to $downstreamArtifactPatterns.
+# The cache is large (~1 GB for a single Stellar file) and is derived from the mzML
+# rather than produced by a stage, so putting it in that list would bloat every stage
+# snapshot AND every stage input dir by that much. It is settings-independent, so one
+# physical copy serves every stage.
+function Copy-SpectraCacheForward {
+    param([string]$From, [string]$To)
+    foreach ($stem in $selectedStems) {
+        $sb = Join-Path $From ($stem + '.spectra.bin')
+        if (-not (Test-Path $sb)) { continue }
+        $dst = Join-Path $To ($stem + '.spectra.bin')
+        if (Test-Path $dst) { continue }
+        try { New-Item -ItemType HardLink -Path $dst -Target $sb -ErrorAction Stop | Out-Null }
+        catch { Copy-Item $sb $dst }   # different volume, or links unavailable
+    }
+}
+
 function Freeze-Stage1to4 {
     $src  = Get-StageSnapshotDir 'stage1to4'
     $next = Get-StageInputDir 'stage5'
@@ -1037,6 +1065,8 @@ function Freeze-Stage1to4 {
     Copy-Item (Join-Path $inputsDir $libraryName) (Join-Path $next $libraryName)
     $cache = Join-Path $inputsDir ($libraryName + '.libcache')
     if (Test-Path $cache) { Copy-Item $cache (Join-Path $next ($libraryName + '.libcache')) }
+    # From the TOOL dir, not the snapshot dir: the cache is not a captured artifact.
+    Copy-SpectraCacheForward -From (Get-StageToolDir 'stage1to4') -To $next
 }
 
 function Freeze-PostStage4 {
@@ -1045,8 +1075,12 @@ function Freeze-PostStage4 {
     Reset-StageDir $next -KeepInputs:$false
     $prev = Get-StageInputDir $FromStage
     foreach ($f in (Get-ChildItem $prev -File)) {
+        # Linked separately below - copying it here would put a fresh ~1 GB on disk
+        # at every stage boundary.
+        if ($f.Name -like '*.spectra.bin') { continue }
         Copy-Item $f.FullName (Join-Path $next $f.Name)
     }
+    Copy-SpectraCacheForward -From $prev -To $next
     # Overlay artifacts written by the prior stage from the snapshot.
     $src = Get-StageSnapshotDir $FromStage
     if (Test-Path $src) {
