@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260802_osprey_cache_write_progress` (pwiz-work1)
 - **Base**: `master` (at `0245ad7a21`, i.e. after #4513)
 - **Created**: 2026-08-02
-- **Status**: In Progress
+- **Status**: **Completed** - shipped inside #4558, not via its own PR
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: none of its own - delivered as `126880972f` in [#4558](https://github.com/ProteoWizard/pwiz/pull/4558), merged 2026-08-13 as `8d0a2aa6cf`
 - **Requester/Reporter**: Brendan (Osprey developer) - NO credit line
 
 ## Problem
@@ -114,3 +114,45 @@ Not implemented - raise it only if the pause starts drawing questions.
 - `ai/docs/osprey-large-datasets.md` - the AHA dataset this surfaced on
 - `ai/.tmp/run-spectracache-aha.ps1` - the staging run driver
 - `D:\test\osprey-runs\aha-plasma-ev\spectracache-197.log` - the log the timings came from
+
+### 2026-08-13 - Closed: the objective shipped in #4558, this branch's draft is superseded
+
+This TODO's problem statement was solved, but by a **different implementation on a different
+branch**. Brendan chose to carry the fix in #4558 rather than open a second PR for it, so no PR
+was ever opened here and the `pwiz-work1` branch never merged.
+
+**What shipped instead** (`126880972f`, now on master): a `ProgressReporter` over the MS2 record
+loop mirroring what `LibraryCache` already does for its own write, plus a caller-side
+`Saved spectra cache (N MS2 + M MS1, X GB) to '<path>'`. Confirmed at runtime 2026-08-12:
+
+```
+12:23:12  Writing spectra cache...
+12:23:58  Saved spectra cache (204149 MS2 + 1223 MS1, 5.90 GB) to '...49.spectra.bin'
+```
+
+46 s for 5.90 GB - the silence this TODO was opened to close. The shipped version names the
+PATH, which this branch's draft did not and which matters because `--work-dir` redirects the
+cache away from the data directory.
+
+**The draft's production diff is therefore superseded - abandon it.**
+
+#### One piece IS worth salvaging: the test
+
+`pwiz-work1` still carries an uncommitted `Osprey.Test/IOTest.cs` change (+16/-1) that master
+has NO equivalent of. It captures the write's output with `OspreyOutput.PushScopedOut` and
+asserts the write announces itself and reaches 100%, deliberately asserting on the file name and
+the percent rather than the English heading so it survives translation.
+
+That closes a gap #4558 recorded against itself and never fixed: *"The new line has NOT been
+observed at runtime - ... `OspreyOutput.Out` is redirected under the test host so neither
+writer's line appears there. Confirm on the next real run."* Because of that, the shipped
+logging is pinned by **nothing** - it was verified by hand-reading a run log, and a regression
+would be silent.
+
+**To salvage**: take only the `IOTest.cs` hunk from
+`C:\proj\pwiz-work1` (branch `Skyline/work/20260802_osprey_cache_write_progress`, uncommitted),
+adapt the assertion to the shipped implementation's output, and land it separately. Do NOT take
+the `SpectraCache.cs` hunk.
+
+**Working tree left untouched** - the diff is uncommitted and unrecoverable if discarded, so the
+decision to drop or preserve it is Brendan's.
