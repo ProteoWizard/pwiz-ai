@@ -162,81 +162,6 @@ Note for whoever runs this: `Program.SkylineOffscreen` is set only in
 Test Explorer or ReSharper never goes through `RunTests`, so it runs **on-screen** and will
 not reproduce anything offscreen-specific.
 
-## Grid forms remember the report they were showing
-
-Folded into this branch on the developer's call: a restored layout recreates the Document
-Grid / Audit Log / Results Grid / list window, but each came back on whatever report a
-*global* setting last held (`Settings.Default.DocumentGridView`, `AuditLogView`,
-`ResultsGridActiveViews`), not the one the layout captured. So the window reappears showing
-different data than it had. `FoldChangeGrid` already did this correctly; these four now
-follow it. (The report is `ViewName` in code, reached through `GetViewName()`.)
-
-**It all lives in `DataboundGridForm`.** A first pass gave each subclass its own
-`GetPersistentString` override plus a static parser with a hardcoded part index - five copies
-of one idea. There was no reason for it: the only thing that actually differs between these
-forms is that `ListGridForm` writes an extra part, and the report has to land after it. That
-is one virtual hook, not five overrides.
-
-- `GetPersistentString` is **sealed** on the base: window type, then
-  `GetPersistentStringParts()`, then the report. Sealing is what guarantees the report is
-  always last and always at the index the parser reads.
-- `GetPersistentStringParts()` is the hook, empty by default. `ListGridForm` is the only
-  override, returning the list name - so it is still `type|listName|viewName` and
-  `GetListName` still reads part 1.
-- `RestoreViewFromPersistentString` reads the report from `1 + GetPersistentStringParts().Parts.Count`,
-  so no subclass needs to know an index. `SkylineGraphs.RestoreView` just hands it the string.
-- `ViewToRestore` is applied once in `OnShown` and cleared, so the user is free to change
-  report afterwards.
-
-Every `DataboundGridForm` therefore gets this for free: `DocumentGridForm`, `AuditLogForm`,
-`LiveResultsGrid`, `ListGridForm`, `CandidatePeakForm` **and** `SpectrumGridForm`.
-
-**One caveat on `SpectrumGridForm`:** it now *writes* its report, but it is still never
-restored - `DeserializeForm` has no branch for it at all, and only
-`ViewMenu.ShowSpectrumGridForm` ever creates one. So the report it writes is currently read
-by nobody. Giving it a restore branch is a separate change, and a behavioral one: that window
-would start reappearing from layouts where today it silently does not.
-
-`FoldChangeGrid` is **not** a `DataboundGridForm` (it derives from `FoldChangeForm`), so it
-keeps its own copy of this and, unlike these, does not suppress the default report.
-
-### The default report is deliberately NOT written
-
-`AppendViewName` leaves the report off when it is the default - the first of
-`viewContext.GetViewSpecList(ViewGroup.BUILT_IN.Id).ViewSpecs`. A grid on its default report
-therefore still persists as the bare window type, which is what Skyline versions **before**
-this change require: they match the window type with an exact comparison, so any appended
-part makes them drop the window silently. Leaving the default off keeps the common case of a
-".sky.view" readable by them.
-
-### The hazard: three of these were matched by exact equality
-
-`DeserializeForm` tested `Equals(persistentString, typeof(X).ToString())` for
-`LiveResultsGrid`/`ResultsGridForm`, `DocumentGridForm` and `AuditLogForm`. Appending
-anything makes that comparison fail, and the window is then **silently not restored at all**
-- no error, it just stops appearing. All three became `StartsWith`, which also keeps layouts
-saved before this change working: they are the bare type name, and
-`ParsePersistedViewName` returns null when the part is not there.
-
-`CandidatePeakForm` was in the same shape and got the same treatment. `SpectrumGridForm` has
-no branch to fix.
-
-### Coverage
-
-`LayoutExportImportTest.TestGridReportRestored` covers both halves:
-
-- **Restore.** Document Grid on Precursors, export, switch to Proteins, import, assert it is
-  back on Precursors. Teeth verified: dropping the `DocumentGridForm.GetPersistentString`
-  override fails it with `Expected:<.Precursors>. Actual:<.Proteins>` - the reported bug.
-- **Default suppressed.** The exported file must contain `PersistString="<type>|` while on
-  Precursors, and `PersistString="<type>"` while on Proteins (the default). Teeth verified:
-  removing the default check from `AppendViewName` fails the second assertion.
-
-**Only the Document Grid path is covered.** Since the logic now lives once in the base class,
-the others run the very same code; what is untested per-form is only `ListGridForm`'s
-`GetPersistentStringParts` override, which is the single place the report's index can move.
-That is the test worth adding if anyone adds one.
-
 #### Still open
 
 Deferred, and less urgent now that a failure is recoverable: **delay destroying the current
@@ -320,6 +245,49 @@ is known:
       TestNativeFileDialog, TestSummaryGraphVisibility all pass
 
 ### Remaining
+
+**Review findings to settle before the PR.** From `/code-review max`; the report-persistence
+findings went with that work to `TODO-20260813_grid_report_layout.md`.
+
+- [ ] **Importing a layout with no Targets window leaves `SkylineWindow.SequenceTree` null,
+      and the next document edit throws.** *Proven*, not inferred: importing the shipped
+      `TestUtil/minimal.sky.view` (`<Contents Count="0" />`) then asserting
+      `SkylineWindow.SequenceTree != null` **fails**. `LoadLayoutLocked` unconditionally calls
+      `DestroySequenceTreeForm()`; `UpdateGraphUI` repairs it right after unlocking
+      (`SkylineGraphs.cs:449-453`, comment "Do this after layout is unlocked") and
+      `ImportLayout` does not. `UndoState`'s `window.SequenceTree.SelectedPaths`
+      (`Skyline.cs:1034`) is unguarded. Also reachable on the failure path if the rollback is
+      unavailable.
+- [ ] **`ImportLayout` also skips `FoldChangeForm.CloseInapplicableForms` /
+      `ListGridForm.CloseInapplicableForms`** (`SkylineGraphs.cs:464-465`). Independently
+      corroborated - the abandoned 2026-08-03 branch found the same gap. It matters more here
+      than on document-open, because applying a layout captured against a *different* document
+      is the whole point of Import, so the mismatch is the normal case rather than the rare one.
+- [ ] The two above plus the rollback's best-effort behaviour are **one defect**: `LoadLayout`
+      is not self-contained. Its only prior caller wrapped it in required post-work. Fix it
+      *inside* `LoadLayout` rather than copying the post-work into a second caller.
+- [ ] `SaveLayoutToFile` uses `FileSaver.CanSave()` with no parent, which swallows
+      `UnauthorizedAccessException` / `FileNotFoundException` and returns false silently, so
+      the write is skipped and `ExportLayout`'s catch never runs. Tolerable when this was a
+      side effect of save; a silent no-op for an explicit user command is not.
+- [ ] The Export dialog's default file name is byte-for-byte the document's own
+      `GetViewFile(DocumentFilePath)` sidecar, in the document's own folder, which the next
+      Ctrl+S overwrites. Decide whether to propose a distinct name or refuse that target.
+- [ ] Both new handlers skip `ExceptionUtil.IsProgrammingDefect` -> `Program.ReportException`,
+      which `SkylineFiles.cs:1060` and `:1300` both do, so a real defect is reported to the
+      user as a bad file and never reaches the exception dashboard.
+- [ ] Neither dialog sets `dlg.Title`, and neither writes `Settings.Default.ActiveDirectory`
+      back; every sibling dialog in this file does both.
+- [ ] The `.sky.view.sky.view` strip uses a case-sensitive `EndsWith`, so a typed
+      `Layout.SKY.VIEW` still produces a doubled name. `PathEx.HasExtension` is the house
+      helper and lower-cases invariantly.
+- [ ] The test never calls `TestContext.EnsureTestResultsDir()`, so stale files survive between
+      runs, and it never covers save-document-then-reopen.
+- [ ] **Pushed back on:** the review calls the missing All Files entry a deviation from house
+      pattern. It is a deliberate, documented safety choice - an unrestricted filter makes it
+      easy to save a layout over the `.sky`. Keep it.
+
+**Then:**
 - [ ] Developer review
 - [ ] Push branch and open PR
 - [ ] Localized menu text for `.ja.resx` / `.zh-CHS.resx` - bulk translation pass, not this
@@ -351,6 +319,13 @@ is known:
   pushed back on the first answer: the filter is `*.sky.view` for both dialogs, and the
   Export dialog is handed a base name.
 - All targeted tests green. **A full nightly is still the gate.**
+
+### 2026-08-13 - Session 1, split
+- Grid windows remembering their report rode along on this branch for a while, then was split
+  off to `Skyline/work/20260813_grid_report_layout` (TODO of the same name) so this PR stays
+  the two menu items. Done with `git branch` at the tip then `git reset --hard`, so every
+  commit is preserved on that branch.
+- `/code-review max` run on the combined branch; findings split between the two TODOs.
 
 ## References
 
