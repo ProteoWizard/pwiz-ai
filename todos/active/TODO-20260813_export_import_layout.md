@@ -358,8 +358,19 @@ findings went with that work to `TODO-20260813_grid_report_layout.md`.
 - [ ] Both new handlers skip `ExceptionUtil.IsProgrammingDefect` -> `Program.ReportException`,
       which `SkylineFiles.cs:1060` and `:1300` both do, so a real defect is reported to the
       user as a bad file and never reaches the exception dashboard.
-- [ ] Neither dialog sets `dlg.Title`, and neither writes `Settings.Default.ActiveDirectory`
-      back; every sibling dialog in this file does both.
+- [x] **Both dialogs now set `dlg.Title`.** The review said "every sibling sets one", which is
+      an overstatement - 9 of the 14 file dialogs in `SkylineFiles.cs` do. But the split is
+      meaningful: the ones that skip it are File > Open and Save As, where the shell's own
+      caption is already right. Every dialog serving a *specifically named* command captions
+      itself with that command. Ours are named commands, so the user was picking
+      File > Export > Window Layout and getting a dialog headed "Save As" - the exact confusion
+      the restrictive filter exists to prevent. (Import Annotations is the one real
+      counterexample, and looks like a miss there rather than a precedent.)
+      Two new resource strings; the test reads the caption off the live dialog, and without the
+      Title it reports `Expected:<Export Window Layout>. Actual:<Save As>`.
+- [ ] Neither dialog writes `Settings.Default.ActiveDirectory` back. Largely moot now that
+      `GetLayoutDirectory` prefers the document folder - it would only affect the unsaved-document
+      case - but the read/write-back pattern is what the rest of the file does.
 - [ ] The `.sky.view.sky.view` strip uses a case-sensitive `EndsWith`, so a typed
       `Layout.SKY.VIEW` still produces a doubled name. `PathEx.HasExtension` is the house
       helper and lower-cases invariantly.
