@@ -120,6 +120,32 @@ and the open question is how that should be expressed statistically without reso
 cutoffs (no single-hit proteins; must appear in N runs). Improve diagnostics, do not change the
 algorithm.
 
+## `--task ModelDiagnostics` - regenerate the report for a COMPLETED run
+
+Built here rather than as a follow-on branch, on Brendan's call: it is the ONLY way to validate
+the pass-2 boundary rework, which is inert on every gate dataset (see above). A separate branch
+would have had to fork from this one and become a second PR to test this one.
+
+Design: runs the CANONICAL pipeline (not a one-task pipeline like SpectraCache), so Stages 1-5
+rehydrate from their valid stamps; `OspreyConfig.DiagnosticsOnly` then suppresses the `.blib`,
+the protein/summary reports and the 2nd-pass sidecar writes. **`Outputs` declares NOTHING** under
+that flag - `PipelineContext.CanRehydrate` returns false on an empty output list, which is what
+makes "regenerate on demand" actually re-run. Declaring the report instead made the task skip
+itself the moment the report existed, which is exactly the case being asked to redo (observed:
+first acceptance run changed 0 of 45 files). The selector implies `--model-diagnostics`.
+
+**Acceptance test** (`ai/.tmp/mdtask-acceptance.ps1`, stellar-libdecoy, 3 files):
+
+* `CHANGED  output.model-diagnostics.html` / **`unchanged: 44 of 45`** - blib, protein report,
+  every FDR sidecar, reconciled parquet and spectra caches byte-identical.
+* The regenerated page is byte-ACCURATE against the golden: target 28,664 / entrap 84 /
+  decoy 279, cutoff -0.05957189983520067, cutoffInStratum identical, cutoffOffStratum
+  0.23524740586743198.
+
+Also updates `Documentation/Help/en/CommandLine.html` - `TestCommandLineHelpDocumentation`
+REGENERATES that file, so the first run after adding a task fails and the second passes. That is
+self-healing, not flaky, and the regenerated file must be committed.
+
 ## Library survey - which libraries carry the suffix
 
 Every `carafe_spectral_library.tsv`; both `SkylineAI_spectral_library.tsv` are clean.
@@ -213,6 +239,12 @@ The detector test has two arms: inherited q MUST diverge and the class table mus
 cutoff; q computed over the pool being counted MUST put cutoff and crossing at the same score.
 
 ## Traps hit this session - read before repeating any of this
+
+* **Do not wait on `Get-Process -Name Osprey` to detect that the gate finished.** The gate has
+  gaps between phases with no Osprey child alive; a build started in one dies on MSB3027 and -
+  worse - a snapshot step then silently copies the STALE exe. Wait on the gate's own pwsh PID.
+* The `.osprey.task` stamp key is `version`, not `osprey_version`; the file is JSON, so
+  `(Get-Content $p -Raw | ConvertFrom-Json).version` beats a regex.
 
 * **`regression.ps1` has NO `-Exe` parameter.** `pwsh -File` silently discards unbound arguments,
   so every `-Exe <snapshot>` run used the BUILD-TREE exe instead. This invalidated an A/B whose
