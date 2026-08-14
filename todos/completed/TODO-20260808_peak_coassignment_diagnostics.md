@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260808_peak_coassignment_diagnostics`
 - **Base**: `master`
 - **Created**: 2026-08-08
-- **Status**: PR open, -Dataset All green, TeamCity 4128458 SUCCESS
+- **Status**: **Completed** - merged 2026-08-13
 - **GitHub Issue**: [#4522](https://github.com/ProteoWizard/pwiz/issues/4522)
 - **Module**: `osprey`
-- **PR**: [#4558](https://github.com/ProteoWizard/pwiz/pull/4558) (stacked on #4557); Rust: [maccoss/osprey#62](https://github.com/maccoss/osprey/pull/62) (stacked on #61)
+- **PR**: [#4558](https://github.com/ProteoWizard/pwiz/pull/4558) (merged 2026-08-13 as `8d0a2aa6cf`; based on master, not #4557 as originally planned); Rust: [maccoss/osprey#63](https://github.com/maccoss/osprey/pull/63) - **still open**
 
 ## Objective
 
@@ -1962,3 +1962,33 @@ Moves the goldens. Needs a rebaseline, a `-Dataset All` verify, and a TeamCity c
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260808_peak_coassignment_diagnostics.md` before starting work.
+
+### 2026-08-13 - Merged
+
+PR #4558 merged as `8d0a2aa6cf`, squashed onto master. What shipped: the peak co-assignment
+panel, the v3 -> v4 sidecar carrying `experiment_aggregate_score` in both implementations, three
+FDR correctness fixes the panel exposed, the golden rebaseline those fixes forced, the composite
+acceptance score plus the score each pass's own pool needs, and progress reporting for five
+previously silent multi-minute steps.
+
+Verified before merge: TeamCity 4132246 (#205) SUCCESS against the merged tip `e740ddf381`,
+18/18 GitHub checks green, cross-impl bit-parity at 1e-9 (precursors 29300 both sides),
+`-Dataset All` 48/48 with goldens clean, 578 C# tests + ReSharper clean, Rust 580 + fmt +
+clippy.
+
+**Deferred, with issues filed**: the pass-2 decoy row still admits on pass 1's inherited cutoff
+and reports 10 beside its own diagnostic's 325 - **[#4573](https://github.com/ProteoWizard/pwiz/issues/4573)**,
+which carries the design question (re-gate target/entrapment on score, or keep them q-gated?)
+and the withdrawn "remapping is harmful" reasoning. A master-level peptide-scope q defect found
+en route is **[#4572](https://github.com/ProteoWizard/pwiz/issues/4572)**, raised via the #4569
+branch. `--fdr-method simple` deliberately keeps `Score` unassigned.
+
+**Not verifiable from a 3-file gate**: the 138 s logging-gap fix needs `perfviz.py` on a fresh
+82-file run showing no gap >= 30 s. Watch it there alongside the new FDR-crossing walk, which
+adds an O(n log n) pass over the full pre-compaction pool in `SealCutoffs`.
+
+**Branch cleanup DEFERRED, deliberately**: `Skyline/work/20260808_peak_coassignment_diagnostics`
+is left on the remote because **#4569 is stacked on it** - deleting the base of an open PR
+auto-closes that PR unreopenably. Delete only after #4569 is retargeted onto master. The local
+branch in `C:\proj\pwiz` was also left alone: another session was actively working in that
+checkout, and checking out master there would have pulled the tree out from under it.
