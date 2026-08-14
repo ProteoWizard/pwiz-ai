@@ -15,14 +15,55 @@ Reporters and Requesters".
 
 ## What this branch actually does
 
-**It does NOT change the pass-2 acceptance boundary.** That was the plan; the investigation
-killed it. What it ships instead:
+1. **`CarafeProteinIdNormalizer`** (new, `Osprey.IO`) - detect Carafe's per-peptide `_pepNNNNN`
+   pseudo-protein accessions at library load, WARN, and strip. Wired into `LibraryLoader` on the
+   fresh-parse path (before dedup) and the cache-load path.
+2. **Per-q-system pass-2 acceptance boundary** (`ModelDiagnosticsData.CoAssignment.cs`) - the
+   actual #4573 fix, see below.
+3. A repurposed regression test locking in the cutoff-vs-crossing divergence as a DETECTOR.
 
-1. `CarafeProteinIdNormalizer` (new, `Osprey.IO`) - detects Carafe's per-peptide `_pepNNNNN`
-   pseudo-protein accessions in a loaded spectral library, **warns**, and strips them. Wired into
-   `LibraryLoader` on BOTH the fresh-parse path (before dedup) and the cache-load path.
-2. A repurposed regression test that locks in the cutoff-vs-crossing **divergence as a detector**
-   rather than asserting it away.
+## The real #4573 fix: a decoy is admitted against ITS OWN q system's boundary
+
+Everything above the "was wrong" section below was about the STRATUM being broken. That was a
+prerequisite, not the fix. The defect Brendan kept pointing at survived it:
+
+`SealCutoffs` took ONE `min(ExperimentAggregateScore)` over the q-accepted set and applied it to
+every decoy. Under protein-compact that set spans two q systems - in-stratum entries had q AND
+aggregate recomputed by the pass-2 stratified competition, off-stratum entries carry both forward
+from pass 1 untouched. Decoys have no q and are admitted on SCORE, so the pooled minimum is a
+pass-1 quantity for in-stratum decoys or a pass-2 quantity for off-stratum ones, depending only
+on which side happened to produce the lower score.
+
+`CoAssignmentPassBuilder` now takes the stratum (threaded `SecondPassFdrTask` -> report ->
+`BuildPass2` -> `BuildCoAssignment`), computes `ExperimentCutoffInStratum` and
+`ExperimentCutoffOffStratum`, and admits each decoy against the boundary matching its own base_id
+membership. A null stratum (pass 1, every non-protein-compact mode) reproduces the single-boundary
+behaviour exactly.
+
+**Measured on stellar-gendecoy-entrap** (all four values now pinned in the golden):
+
+| | value |
+|---|---|
+| accepted in-stratum | **29,387 (97.3%)** |
+| accepted off-stratum | 806 (2.7%) |
+| `cutoffInStratum` | **0.000179** |
+| `cutoffOffStratum` | **0.21067** (pass 1's own bar is 0.21062) |
+| pooled `cutoff` | 0.000179 |
+
+Brendan predicted the in-stratum bar is what most peptides use; it is 97.3%. The pooled minimum
+equalled the IN-stratum bar here, because the depleted null gives in-stratum the lower score - so
+in-stratum decoys were already judged correctly by accident and the error was confined to
+**off-stratum decoys judged on a bar ~1,000x lower than their own**. No off-stratum decoy falls in
+that band on this dataset, so the decoy row is unchanged at 292: the correction is right but
+INERT here. Consistency check: 29,387 + 806 = 30,193 = target 30,020 + entrapment 173.
+
+**So the gate cannot validate this fix.** It bites where off-stratum decoys populate the band
+between the two bars, and the off-stratum population grows with run count - SEA-AD is where it
+would show, which is why the diagnostics-only regeneration matters.
+
+
+**The FIRST attempt at the boundary - adopting the pool's own FDR crossing - was built and
+reverted.** See below for why. What ships is different.
 
 ## The original theory, and why it was wrong
 
@@ -54,7 +95,7 @@ The "pass-1 bar on a pass-2 pool" the issue described was the panel **correctly 
 Fixing the library both increased discoveries (23,115 -> 29,956) and improved calibration
 (1.334% -> 1.110% FDP at nominal 1%).
 
-## Why the boundary change was reverted
+## Why the FIRST boundary attempt (adopt the crossing) was reverted
 
 It is a no-op when the run is sound and harmful when it is not. The `cutoff` vs `fdrCrossing`
 divergence is a **working misconfiguration detector**: the two are the same quantity whenever a
@@ -110,6 +151,37 @@ accessions at all. Observed:
 `PerFileScoringTask.cs:951-961` already documented this exact failure for the HPC-chain path.
 Brendan's call: since Osprey and Carafe are expected to be tightly integrated, Osprey should be
 fault-tolerant here rather than depending on a manifest - hence the load-time normalizer.
+
+## The strip moves manifest-using datasets too - by design
+
+StellarGenDecoyEntrap was the terminal case, but it exposed a GENERAL vulnerability. Normalizing
+at load also changed StellarLibDecoy (78 result + 50 diagnostic differences, pass 1 included),
+which had a pairing manifest and therefore looked healthy.
+
+Why a manifest run was never actually immune: `ApplyToLibrary` overrides only the entries the
+manifest COVERS, so everything else kept its suffix and the library was a mix of clean and
+pseudo accessions. Uniform stripping removes that inconsistency; the manifest still wins where
+it genuinely disagrees, dropping from "nearly every entry" to **1,198 entries replaced**.
+
+The mechanism behind the pass-1 movement is a SECOND dedup pass, easy to miss: the per-file
+`Double-counting deduplication` (9,655 entries removed here). Collapsing the pseudo-proteins
+makes entries that were artificially distinct merge there, which changes the searched pool and
+therefore pass-1 q. Protein grouping alone would not explain a pass-1 change.
+
+Effect is small and benign, and both passes stay under nominal:
+
+| StellarLibDecoy | before | after |
+|---|---|---|
+| pass 1 accepted / combined FDP | 26,781 / 0.961% | 27,260 / 0.974% |
+| pass 2 accepted / combined FDP | 29,415 / 0.609% | 28,662 / 0.590% |
+
+**Rejected alternative**: skip the strip when a manifest is supplied, which would keep
+StellarLibDecoy byte-identical. That preserves exactly the inconsistency being removed and keeps
+Osprey dependent on a manifest for correct protein identity - the opposite of the hardening
+Brendan asked for. Confirmed by Brendan 2026-08-14: worth the extra golden retraining.
+
+`Stellar` and `Astral` use clean `SkylineAI_spectral_library.tsv` files, so the normalizer is a
+no-op there and their goldens do not move.
 
 ## Verification
 
