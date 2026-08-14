@@ -11,7 +11,7 @@
 - **Module**: `osprey`
 - **Other labels**: candidate `tech-debt` (this is a naming/structure fix, not a bug fix -
   no reported output moves)
-- **PR**: [#4569](https://github.com/ProteoWizard/pwiz/pull/4569) (merged 2026-08-13 as `012816cc53`), [maccoss/osprey#64](https://github.com/maccoss/osprey/pull/64) (Rust, green and mergeable)
+- **PR**: [#4569](https://github.com/ProteoWizard/pwiz/pull/4569) (merged 2026-08-13 as `012816cc53`), [maccoss/osprey#64](https://github.com/maccoss/osprey/pull/64) (Rust, merged 2026-08-14 as `f96c1c3`)
 - **Requester/Reporter**: none - Osprey developers on Osprey code, no credit line.
 
 ## Objective
@@ -386,7 +386,7 @@ which is expected - #4557 did the same.
 - [x] Decide the version-bump question - **NO BUMP** (Brendan, 2026-08-13); revisit at first public release or when #4561 gives the column a consumer
 - [x] `regression.ps1 -Dataset Stellar` red->green, then `-Dataset All` 53/53 PASS; the
       golden did NOT move on any dataset
-- [ ] Cross-impl sidecar leg green with both sides changed - DEFERRED to after both merges (Brendan, 2026-08-13). Rust binary built and green; needs maccoss/osprey#64 merged so both sides are on their default branch
+- [ ] Cross-impl sidecar leg green with both sides changed - UNBLOCKED 2026-08-14: both impls now on their default branch (pwiz `012816cc53`, osprey `f96c1c3`). Run Compare-EndToEnd-Crossimpl.ps1 -Dataset Stellar
 - [x] Rebase onto master when #4558 merges - retargeted BEFORE their branch could be deleted, then rebase --onto; 52/52 green on master
 - [x] File the `--fdr-level protein` C#/Rust gap as a follow-up issue -
       [#4561](https://github.com/ProteoWizard/pwiz/issues/4561)
