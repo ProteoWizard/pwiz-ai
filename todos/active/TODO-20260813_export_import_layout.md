@@ -62,10 +62,9 @@ document.
 
 ### Export
 
-`SaveFileDialog` -> `SaveLayoutToFile(viewFilePath)`, which is the existing private
-`SaveLayout` with the `GetViewFile` name-building factored out, so an exported file is
-byte-identical to the one document save produces (same `FileSaver` + `dockPanel.SaveAsXml`
-+ UTF-8-without-BOM). Default file name is `<document>.sky.view`.
+`SaveFileDialog` -> `SaveLayout(viewFilePath)`, the same private method document save uses,
+so an exported file is byte-identical to the one save produces (same `FileSaver` +
+`dockPanel.SaveAsXml` + UTF-8-without-BOM). Default file name is `<document>.sky.view`.
 
 ### Import
 
@@ -131,7 +130,7 @@ at all** - and, offscreen, wedged the test outright, because `WaitForOpenForm` w
 forever for a window nothing was going to create.
 
 `ImportLayout` now captures the current layout to a `MemoryStream` first
-(`SaveLayoutToStream`, a sibling of `SaveLayoutToFile`, using
+(`SaveLayoutToStream`, a sibling of `SaveLayout`, using
 `dockPanel.SaveAsXml(stream, UTF8 no BOM, embedded: true)`), and reloads it in the catch
 before reporting. `RestoreLayout` swallows its own failure: if the layout that was already
 showing will not reload either, there is nothing better to try and the failure that got us
@@ -162,7 +161,7 @@ Note for whoever runs this: `Program.SkylineOffscreen` is set only in
 Test Explorer or ReSharper never goes through `RunTests`, so it runs **on-screen** and will
 not reproduce anything offscreen-specific.
 
-### Putting the windows right after a load: `RepairLayoutAfterLoad`
+### Putting the windows right after a load: `EnsureApplicableForms`
 
 `LoadLayoutLocked` destroys every dockable form before it rebuilds, so a layout that does not
 name the Targets window leaves `SkylineWindow.SequenceTree` null - and `UndoState` dereferences
@@ -170,7 +169,7 @@ it unguarded, so the next document edit throws. `UpdateGraphUI` had always repai
 immediately after releasing the layout lock, and closed list / fold-change windows the document
 cannot support; `ImportLayout` inherited none of it.
 
-That post-work is now one method, `RepairLayoutAfterLoad`, called by both.
+That post-work is now one method, `EnsureApplicableForms`, called by both.
 
 **It is deliberately NOT inside `LoadLayout`,** which is where the code review said to put it.
 That was **tried and reverted**, at the developer's direction and with measurements:
