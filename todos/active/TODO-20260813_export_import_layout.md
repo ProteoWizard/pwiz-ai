@@ -102,14 +102,26 @@ So `ShowExportLayoutDlg` hands the dialog `Path.GetFileNameWithoutExtension(Docu
 and lets the filter supply the extension. `DefaultExt` and `SupportMultiDottedExtensions`
 are **dead config** here and are not set.
 
-**Known and accepted:** a user who types a name that already ends in `.sky.view` gets
-`Name.sky.view.sky.view`. No name ending in a two-part extension can satisfy the shell's
-comparison, so the only fixes are a narrower filter (rejected - it would list bare `.view`
-files) or post-processing `dlg.FileName` to collapse the duplicate (rejected - the
-equivalent `EnsureViewFileName` was removed from the earlier branch at the developer's
-direction). `LayoutExportImportTest` therefore exports by typing a **base name**, and the
-`ExportLayout` helper's doc comment says why, so the next reader does not "fix" the test by
-typing a full path.
+**Two things fix the two halves of this, and they are different fixes.**
+
+The name the dialog **offers** is safe because `ShowExportLayoutDlg` hands over
+`Path.GetFileNameWithoutExtension(DocumentFilePath)` - a base name with no extension at all,
+so there is nothing to double.
+
+A name the user **types** ending in `.sky.view` still gets `.sky.view` appended, and
+`ShowExportLayoutDlg` strips the duplicate back off. `TestExportTypedFullName` covers it.
+
+**A second filter entry was tried and reverted.** Offering `*.view` alongside `*.sky.view`
+also stops the doubling - the shell appends only when the name's last extension is not one the
+filter knows, and every `.sky.view` ends in `.view` - and it let the strip code be deleted.
+But switching the file type back to `.sky.view` then swaps the last extension of
+`Doc.sky.view` and offers **`Doc.sky.sky.view`**, which is worse. Single entry, keep the strip.
+
+Worth knowing how nearly that was missed: the first negative test for the filter change
+(removing the second entry) **passed**, which would have "shown" the entry was unnecessary. It
+was testing the offered name, which the base-name change had already made safe for an
+unrelated reason. `TestExportTypedFullName` was written to close that gap, and it is the only
+test that exercises the strip at all.
 
 This also corrects an assumption worth not repeating: Share Document is **not** an example
 of a working `*.sky.zip` filter. Its filter is `SrmDocumentSharing.EXT` - the single
