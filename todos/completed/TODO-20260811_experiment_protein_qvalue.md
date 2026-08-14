@@ -6,12 +6,12 @@
 - **Base**: `Skyline/work/20260808_peak_coassignment_diagnostics` (PR #4558) - **rebase onto
   `master` once #4558 merges**, the same way #4558 was based on #4557
 - **Created**: 2026-08-11
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4559](https://github.com/ProteoWizard/pwiz/issues/4559)
 - **Module**: `osprey`
 - **Other labels**: candidate `tech-debt` (this is a naming/structure fix, not a bug fix -
   no reported output moves)
-- **PR**: [#4569](https://github.com/ProteoWizard/pwiz/pull/4569) (C#), [maccoss/osprey#64](https://github.com/maccoss/osprey/pull/64) (Rust)
+- **PR**: [#4569](https://github.com/ProteoWizard/pwiz/pull/4569) (merged 2026-08-13 as `012816cc53`), [maccoss/osprey#64](https://github.com/maccoss/osprey/pull/64) (Rust, green and mergeable)
 - **Requester/Reporter**: none - Osprey developers on Osprey code, no credit line.
 
 ## Objective
@@ -386,8 +386,8 @@ which is expected - #4557 did the same.
 - [x] Decide the version-bump question - **NO BUMP** (Brendan, 2026-08-13); revisit at first public release or when #4561 gives the column a consumer
 - [x] `regression.ps1 -Dataset Stellar` red->green, then `-Dataset All` 53/53 PASS; the
       golden did NOT move on any dataset
-- [ ] Cross-impl sidecar leg green with both sides changed - Rust binary IS built and green on this branch; the leg needs local Osprey runs and the box is committed to the 82-file SEA-AD run until ~21:00 PDT
-- [ ] Rebase onto master when #4558 merges - RETARGET #4569 to master FIRST, then rebase --onto; never let #4558's branch be deleted while #4569 still targets it (auto-closes, unreopenable)
+- [ ] Cross-impl sidecar leg green with both sides changed - DEFERRED to after both merges (Brendan, 2026-08-13). Rust binary built and green; needs maccoss/osprey#64 merged so both sides are on their default branch
+- [x] Rebase onto master when #4558 merges - retargeted BEFORE their branch could be deleted, then rebase --onto; 52/52 green on master
 - [x] File the `--fdr-level protein` C#/Rust gap as a follow-up issue -
       [#4561](https://github.com/ProteoWizard/pwiz/issues/4561)
 - [x] Update `docs/08-protein-parsimony.md` + `docs/14-intermediate-files.md` (`bd4c289342`)
@@ -407,6 +407,46 @@ which is expected - #4557 did the same.
 - **Passes on fix**: (pending)
 
 ## Progress Log
+
+### 2026-08-13 - Merged
+
+PR #4569 merged as commit `012816cc53`. What shipped: the two per-entry protein q-value fields
+collapsed into one experiment-wide `ExperimentProteinQvalue`; the 2nd-pass sidecar now carries
+the pass-2 value, patched in after the second-pass protein FDR, where it previously carried a
+pass-1 value unconditionally; a latent C#/Rust divergence removed (C# passed `setRun: true`,
+Rust `set_run: false`, and every parity gate was green through it); and regression `mode1c`
+added, which sees the shared-defect class a two-route comparison structurally cannot.
+
+Evidence at merge: `-Dataset All` **52/52 PASS** on master's goldens, **TeamCity 4132486
+SUCCESS** on `pull/4569` at the final commit reproducing every local `mode1c` count exactly,
+579 unit tests + zero-warning inspection, and **no golden touched by any of the 9 commits**.
+Validated at scale by an 82-file SEA-AD run (8 h 38 m, exit 0) where the `mode1c` gate passed
+over **88,554,423 records** with 1,777,489 moved and 513,952 gap-fill - the population #4559 was
+filed over as 390 records on Stellar. FDP at reported q<=0.01 was 1.575%, the documented pass-2
+recalibration figure to three significant figures, confirming FDR calibration unmoved.
+
+Two review rounds landed before merge: Copilot (one finding, stale 60-byte record docs, fixed at
+all four sites including one it did not list) and `/code-review max` (15 findings - its cap -
+triaged to six fixed, one refuted, eight dropped, **nothing filed**; see
+[[feedback_triage_code_review_findings]]). The most consequential fix was a `;pass2proteinq=2`
+token in `SecondPassFdrTask.ValidityKey`: #4559 changed the column's MEANING without moving a
+byte, which `FormatVersion` cannot express, so a post-#4559 build resuming into an older output
+directory would skip the task and keep the stale column. That token buys what a v4 -> v5 bump
+would have, with no reader broken and no golden moved - which is why the bump was declined.
+
+**Deferred, deliberately** (Brendan, 2026-08-13 - validate after everything lands):
+
+* **Cross-impl sidecar leg with both sides changed.** maccoss/osprey#64 is rebased onto `main`,
+  green (`fmt` / clippy / 580 tests, LF verified) and mergeable, but not yet merged. Run
+  `Compare-EndToEnd-Crossimpl.ps1 -Dataset Stellar` once it is.
+* **`OSPREY_STAGE7_PROTEIN_FDR_ONLY` never executed.** The reordering fix is reasoned and
+  regression-covered, not run. `ai/scripts/Osprey/Test-Snapshot.ps1` drives that env var.
+
+**Follow-ups filed and left open**: #4571 (four pre-existing logging gaps of 37-151 s found by
+harvesting the 82-file run) and #4572 (experiment-peptide q keyed on the bare peptide string, so
+a target can inherit its decoy's q - the peptide-scope twin of the precursor fix #4558 made).
+#4561 (`--fdr-level protein` in C#) remains the change that would give this column a real
+consumer, and the point at which the version-bump question should be revisited.
 
 ### 2026-08-11 - Session start; reproduced and measured
 
