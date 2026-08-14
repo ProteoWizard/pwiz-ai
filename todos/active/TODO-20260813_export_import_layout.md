@@ -162,6 +162,30 @@ Note for whoever runs this: `Program.SkylineOffscreen` is set only in
 Test Explorer or ReSharper never goes through `RunTests`, so it runs **on-screen** and will
 not reproduce anything offscreen-specific.
 
+### Putting the windows right after a load: `RepairLayoutAfterLoad`
+
+`LoadLayoutLocked` destroys every dockable form before it rebuilds, so a layout that does not
+name the Targets window leaves `SkylineWindow.SequenceTree` null - and `UndoState` dereferences
+it unguarded, so the next document edit throws. `UpdateGraphUI` had always repaired this
+immediately after releasing the layout lock, and closed list / fold-change windows the document
+cannot support; `ImportLayout` inherited none of it.
+
+That post-work is now one method, `RepairLayoutAfterLoad`, called by both.
+
+**It is deliberately NOT inside `LoadLayout`,** which is where the code review said to put it.
+`LoadLayout` has a caller that legitimately wants nothing left behind: test cleanup
+(`TestFunctional.RestoreMinimalView`) loads the contents-free `minimal.sky.view` precisely to
+close every dock window, and then asserts `OpenForms.Count() == 1`. Making the primitive
+self-contained would hand the Targets window back and fail that assertion in **every**
+functional test. The primitive stays able to leave nothing behind; the two callers that want a
+usable window afterwards ask for it.
+
+`ImportLayout` calls it on all three paths - load succeeded, load failed and was rolled back,
+load failed and the rollback failed too - since all three can leave windows needing repair.
+
+`TestImportLayoutWithoutTargets` imports the shipped `minimal.sky.view` and then makes a
+document edit. Teeth verified: removing the call fails it on `Assert.IsNotNull(SequenceTree)`.
+
 #### Still open
 
 Deferred, and less urgent now that a failure is recoverable: **delay destroying the current
@@ -249,23 +273,18 @@ is known:
 **Review findings to settle before the PR.** From `/code-review max`; the report-persistence
 findings went with that work to `TODO-20260813_grid_report_layout.md`.
 
-- [ ] **Importing a layout with no Targets window leaves `SkylineWindow.SequenceTree` null,
-      and the next document edit throws.** *Proven*, not inferred: importing the shipped
+- [x] **Importing a layout with no Targets window left `SkylineWindow.SequenceTree` null, and
+      the next document edit threw.** *Proven*, not inferred: importing the shipped
       `TestUtil/minimal.sky.view` (`<Contents Count="0" />`) then asserting
-      `SkylineWindow.SequenceTree != null` **fails**. `LoadLayoutLocked` unconditionally calls
-      `DestroySequenceTreeForm()`; `UpdateGraphUI` repairs it right after unlocking
-      (`SkylineGraphs.cs:449-453`, comment "Do this after layout is unlocked") and
-      `ImportLayout` does not. `UndoState`'s `window.SequenceTree.SelectedPaths`
-      (`Skyline.cs:1034`) is unguarded. Also reachable on the failure path if the rollback is
-      unavailable.
-- [ ] **`ImportLayout` also skips `FoldChangeForm.CloseInapplicableForms` /
-      `ListGridForm.CloseInapplicableForms`** (`SkylineGraphs.cs:464-465`). Independently
-      corroborated - the abandoned 2026-08-03 branch found the same gap. It matters more here
-      than on document-open, because applying a layout captured against a *different* document
-      is the whole point of Import, so the mismatch is the normal case rather than the rare one.
-- [ ] The two above plus the rollback's best-effort behaviour are **one defect**: `LoadLayout`
-      is not self-contained. Its only prior caller wrapped it in required post-work. Fix it
-      *inside* `LoadLayout` rather than copying the post-work into a second caller.
+      `SkylineWindow.SequenceTree != null` failed. `LoadLayoutLocked` unconditionally calls
+      `DestroySequenceTreeForm()`; `UpdateGraphUI` repaired it right after unlocking and
+      `ImportLayout` did not. `UndoState`'s `window.SequenceTree.SelectedPaths`
+      (`Skyline.cs:1034`) is unguarded. **Fixed** - see below.
+- [x] **`ImportLayout` also skipped `FoldChangeForm.CloseInapplicableForms` /
+      `ListGridForm.CloseInapplicableForms`.** Independently corroborated - the abandoned
+      2026-08-03 branch found the same gap. It matters more here than on document-open, because
+      applying a layout captured against a *different* document is the whole point of Import,
+      so the mismatch is the normal case rather than the rare one. **Fixed** with the above.
 - [ ] `SaveLayoutToFile` uses `FileSaver.CanSave()` with no parent, which swallows
       `UnauthorizedAccessException` / `FileNotFoundException` and returns false silently, so
       the write is skipped and `ExportLayout`'s catch never runs. Tolerable when this was a
