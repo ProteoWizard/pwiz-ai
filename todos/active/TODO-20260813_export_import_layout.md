@@ -259,7 +259,10 @@ is known:
 
 ### Completed
 - [x] `EXT_VIEW` / `EXT_SKY_VIEW` / `FILTER_SKY_VIEW` next to `GetViewFile` in `SkylineFiles.cs`
-- [x] `SaveLayout` -> `SaveLayoutToFile(viewFilePath)` refactor
+- [x] `SaveLayout` now takes the **view** file path, not the document path. It used to take a
+      document path and append the extension itself, which read confusingly next to a
+      `SaveLayoutToFile(viewFilePath)` sibling; the wrapper is gone and the two callers that
+      have a document path pass `GetViewFile(fileName)`.
 - [x] `ShowExportLayoutDlg` / `ExportLayout`, `ShowImportLayoutDlg` / `ImportLayout`,
       and the two menu click handlers
 - [x] `ImportLayout` captures the current layout and restores it if the load fails
@@ -328,7 +331,7 @@ findings went with that work to `TODO-20260813_grid_report_layout.md`.
 ## Key Files
 
 - `pwiz_tools/Skyline/SkylineFiles.cs` - `EXT_SKY_VIEW`, `FILTER_SKY_VIEW`, `GetViewFile`,
-  `SaveLayout` / `SaveLayoutToFile` / `SaveLayoutToStream` / `RestoreLayout`, the four public
+  `SaveLayout` / `SaveLayoutToStream` / `RestoreLayout`, the four public
   methods and two click handlers
 - `pwiz_tools/Skyline/SkylineGraphs.cs` - `LoadLayout` (unchanged; `ImportLayout` calls it)
 - `pwiz_tools/Skyline/Skyline.Designer.cs`, `Skyline.resx` - File > Import/Export menus
