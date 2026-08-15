@@ -401,8 +401,8 @@ function Invoke-OspreyDatasetRun {
     $POST_SCORING_TASKS = @('FirstPassFDR', 'PerFileRescoring', 'SecondPassFDR')
     $useScores = $Task -and ($POST_SCORING_TASKS -contains $Task)
     if ($useScores -and -not $LinkFrom -and -not $Resume) {
-        throw ("-Task $Task consumes .scores.parquet, not raw input. Pass -LinkFrom <a completed " +
-               "run over the same files> so the Stage 1-4 parquets are linked into the output " +
+        throw ("-Task $Task consumes per-file artifacts, not raw input. Pass -LinkFrom <a completed " +
+               "run over the same files> so every stage BEFORE $Task is hard-linked into the output " +
                "directory first, or -Resume into a directory that already has them.")
     }
     $cliArgs = if ($useScores) { @('--input-scores', $OutDir) } else { @('-i') + $inputs }
@@ -511,7 +511,8 @@ function Invoke-OspreyDatasetRun {
     New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
     $OutDir = (Resolve-Path $OutDir).Path
 
-    # Optional Stage 1-4 hard-link resume (same-file-set source only).
+    # Optional hard-link resume (same-file-set source only). How MUCH is linked depends on
+    # -Task: enough to reach the task under test, and never the task's own outputs.
     if ($LinkFrom) {
         if (-not (Test-Path $LinkFrom)) { throw "LinkFrom dir not found: $LinkFrom" }
         # Osprey stamps a daily version into every .osprey.task and refuses to consume
@@ -530,23 +531,68 @@ function Invoke-OspreyDatasetRun {
                 }
             }
         }
-        $suffixes = @(
-            '.calibration.json', '.calibration.json.PerFileScoring.osprey.task',
-            '.scores.parquet', '.scores.parquet.PerFileScoring.osprey.task'
-        )
+        # Per-file artifacts by the stage that PRODUCES them. Linking is cumulative up to the
+        # stage before -Task, so the task under test always regenerates its own outputs.
+        #
+        # Stage 1-4 alone is right for the default (no -Task) and for -Task FirstPassFDR, but
+        # it is NOT enough for the later per-task modes: a --task SecondPassFDR node consumes
+        # the Stage 5 sidecars and the Stage 6 reconciled parquets, and with only the Stage 1-4
+        # set linked it finds no reconciled parquet, takes AnyReconciledParquet == false, and a
+        # frozen pass-2 mode (transfer-compete / protein-compact) then FAIL-FASTS with
+        # "could not run the frozen recompute". That reads as a code bug rather than as
+        # "you linked too little", which is why this is a table and not a single list.
+        $STAGE_ARTIFACTS = [ordered]@{
+            'PerFileScoring'   = @('.calibration.json', '.calibration.json.PerFileScoring.osprey.task',
+                                   '.scores.parquet', '.scores.parquet.PerFileScoring.osprey.task')
+            'FirstPassFDR'     = @('.1st-pass.fdr_scores.bin',
+                                   '.1st-pass.fdr_scores.bin.FirstPassFDR.osprey.task',
+                                   '.1st-pass.model.json',
+                                   '.reconciliation.json',
+                                   '.reconciliation.json.FirstPassFDR.osprey.task')
+            'PerFileRescoring' = @('.scores-reconciled.parquet',
+                                   '.scores-reconciled.parquet.PerFileRescoring.osprey.task')
+            'SecondPassFDR'    = @('.2nd-pass.fdr_scores.bin',
+                                   '.2nd-pass.fdr_scores.bin.SecondPassFDR.osprey.task')
+        }
+        # Everything strictly BEFORE the task under test. No -Task keeps the historical
+        # Stage 1-4 behavior, so existing callers are unaffected.
+        $upTo = if ($Task) { $Task } else { 'FirstPassFDR' }
+        $suffixes = @()
+        foreach ($stage in $STAGE_ARTIFACTS.Keys) {
+            if ($stage -eq $upTo) { break }
+            $suffixes += $STAGE_ARTIFACTS[$stage]
+        }
+        if ($suffixes.Count -eq 0) {
+            throw ("-Task $Task is the FIRST pipeline stage, so there is nothing earlier to link. " +
+                   "Drop -LinkFrom and run it against the raw input.")
+        }
         $linked = 0; $missing = 0
+        $missingBySuffix = @{}
         foreach ($f in $inputs) {
             $stem = [IO.Path]::GetFileNameWithoutExtension($f)
             foreach ($suf in $suffixes) {
                 $s = Join-Path $LinkFrom ($stem + $suf)
                 $d = Join-Path $OutDir ($stem + $suf)
-                if (-not (Test-Path $s)) { $missing++; continue }
+                if (-not (Test-Path $s)) {
+                    $missing++
+                    $missingBySuffix[$suf] = [int]$missingBySuffix[$suf] + 1
+                    continue
+                }
                 if (Test-Path $d) { Remove-Item $d -Force }
                 New-Item -ItemType HardLink -Path $d -Target $s | Out-Null
                 $linked++
             }
         }
-        Write-Host ("LinkFrom: hard-linked {0} stage1-4 file(s), {1} missing, from {2}" -f $linked, $missing, $LinkFrom)
+        Write-Host ("LinkFrom: hard-linked {0} file(s) for stages before {1}, {2} missing, from {3}" -f
+                    $linked, $upTo, $missing, $LinkFrom)
+        # A partially-linked stage is the failure that costs an hour and then reports something
+        # that reads like a code bug, so name WHICH artifact is short rather than only a total.
+        # Not fatal: a legitimately absent artifact exists (no reconciliation for a file with no
+        # rescore work), and only Osprey can judge that.
+        foreach ($suf in ($missingBySuffix.Keys | Sort-Object)) {
+            Write-Host ("  LinkFrom WARNING: {0} of {1} input(s) had no '{2}'" -f
+                        $missingBySuffix[$suf], @($inputs).Count, $suf) -ForegroundColor Yellow
+        }
     }
 
     # Strip every experimental lever that must NOT influence this run. A stale env var from an

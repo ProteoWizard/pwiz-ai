@@ -73,10 +73,25 @@
     experiment-wide q is 0.79%, which is the whole point of the arm.
 
 .PARAMETER LinkFrom
-    Optional. Hard-link the Stage 1-4 per-file caches from a COMPLETED run over the same
-    file set so this run resumes from Stage 5 (Pass 1 FDR) without re-parsing or
-    re-scoring. Only stage 1-4 suffixes are linked, never Stage 5/6 outputs, so the part
-    under test is always regenerated.
+    Optional. Hard-link the per-file caches from a COMPLETED run over the same file set so
+    this run resumes without re-parsing or re-scoring. What is linked is scoped by -Task:
+    every stage STRICTLY BEFORE the task under test, never that task's own outputs, so the
+    part under test is always regenerated.
+
+    Without -Task (or with -Task FirstPassFDR) that is the Stage 1-4 set and the run resumes
+    from Stage 5, which is the historical behavior. With -Task SecondPassFDR it also links
+    the Stage 5 sidecars (.1st-pass.fdr_scores.bin, .1st-pass.model.json, .reconciliation.json)
+    and the Stage 6 .scores-reconciled.parquet, because a --task SecondPassFDR node consumes
+    those. Linking only the Stage 1-4 set there leaves no reconciled parquet, so the frozen
+    pass-2 modes fail-fast with "could not run the frozen recompute" - a message that reads
+    like a code bug rather than an under-linked input.
+
+    This is what makes a Stage-7-only re-measurement cost ~25 min instead of the ~8.5 h a
+    full 82-file run takes.
+
+.EXAMPLE
+    # Re-measure Stage 7 alone against a completed run (~25 min, not 8.5 h).
+    .\Run-SeaAd.ps1 -Task SecondPassFDR -LinkFrom D:\test\...\<completed run> -Fresh
 
 .PARAMETER NoModelDiagnostics
     Turn OFF the --model-diagnostics HTML report, which is on by default here. Leave it on
