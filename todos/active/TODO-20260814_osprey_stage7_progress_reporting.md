@@ -80,6 +80,53 @@ review judgement: `perfviz.py` prints `gaps >= 30s : N <-- OVER THRESHOLD` direc
 report the issue fixed on local-dataset evidence alone. If the PR must go up before that
 run completes, say so explicitly in the PR body rather than implying the gate passed.
 
+## RESULT - gate PASSES on the Stage-7 leg (2026-08-15)
+
+Three `--task SecondPassFDR` runs over the same hard-linked inputs, same box, ~31 min each:
+
+| | before | after 1 | after 2 |
+|---|---|---|---|
+| **gaps >= 30s** | **3** | 2 | **0  OK** |
+| max gap | 127 s | 54 s | **23 s** |
+| total gap time | 248 s | 100 s | **0** |
+| duration | 30:58 | 30:38 | 30:39 |
+
+Output identical on all three and to the full run: **47,426 peptides / 6,096 protein groups /
+51,597 spectra**.
+
+Runs: `...-stage7base-20260814_225510`, `...-stage7after-20260815_002622`,
+`...-stage7after2-20260815_010602`.
+perfviz: `ai/.tmp/perfviz-stage7-{before,after,after2}.txt`.
+
+### What each gap turned out to be
+
+| gap | measured | cause | fix |
+|---|---|---|---|
+| **B** 127-141 s | | `RestorePass1Scalars` streams every file's **PRE-compaction** 1st-pass sidecar - 345,024,871 records at 82 files, not the 89 M survivors | progress block over 82 files; heading `LogVerbose` -> `LogInfo` |
+| **A** 90-125 s | split into 54 s + 46 s by the boundary headings | the pass-2 protein-q sidecar patch, then `WriteReports` re-running protein FDR **once per run** | progress block on each |
+| **D** 31-47 s | | blib pre-compress (parallel zlib) + row emission over 51,597 spectra | progress block on each |
+| **C** 71 s | **does not reproduce on this leg** | mdiag finalize | boundary headings added, unvalidated |
+
+### The mechanism worth remembering
+
+Three separate suppression channels hid this work, all documented now:
+
+* `[COUNT]` / `[TIMING]` / `[BENCH]` / `[STAGE-WALL]` - filtered unless `--perf-stats`.
+  `WriteBlibOutput` had **five** such lines; the run emitted none of them.
+* `LogVerbose` - the heading for the single longest step (the second-pass recompute) was
+  `--verbose`-only, so it never appeared on the runs that took the time.
+* A step bracketed by one of each (`RestorePass1Scalars`: `LogVerbose` heading,
+  `[STAGE-WALL]` duration) is invisible from both ends.
+
+**Adding a `[COUNT]` at any of these sites would have looked like a fix and changed nothing.**
+
+### Method note
+
+The boundary-heading-first approach was what made A tractable: heading lines split the 90 s
+into 54 + 46 and named the owners, and only then was inner progress added where it belonged.
+Guessing would have gone wrong - `BuildPrecursorMzLookup` reads like a 6.3 M-entry walk and
+is O(1) (it returns a closure).
+
 ## Progress Log
 
 ### 2026-08-14 - Root cause: two mechanisms, not one
