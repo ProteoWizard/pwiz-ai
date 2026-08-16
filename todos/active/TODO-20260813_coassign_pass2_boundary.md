@@ -570,6 +570,52 @@ is a snapshot, not a pipeline output. It also answers the provenance question st
 file's name records when it was produced, successive regenerations become comparable, and nothing
 has to infer which build wrote what.
 
+### SOME-DAY SPEC: diagnostics report changes worth doing together
+
+Not in this branch. Grouped because they all touch the same header/regeneration surface, so
+doing them in one pass costs one golden check instead of three.
+
+**1. Timestamp-rename on regeneration instead of overwriting** (Brendan, 2026-08-16 - detail in
+the section above). Open question to settle first: which timestamp goes in the name - the existing
+file's creation time (what the run-log scripts do) or the run's own generated-at value already
+embedded in the page. The latter survives a copy between machines; creation time does not.
+
+**2. Local time + zone offset instead of UTC, matching Skyline audit logging.** The project has
+settled on local-time-plus-offset over bare UTC: it is equally universal, it additionally records
+WHERE the processing happened, and it reads correctly in the majority case where files are not
+moved between zones.
+
+The audit log is the reference implementation - `AuditLogEntry.FormatSerializationString`
+(`pwiz_tools/Skyline/Model/AuditLog/AuditLogEntry.cs:1479`):
+
+```csharp
+var localTime = timeUTC + timezoneOffset;
+var tzShift = timezoneOffset.TotalHours;
+return localTime.ToString(@"s", DateTimeFormatInfo.InvariantInfo) +
+       (tzShift == 0 ? @"Z" : (tzShift < 0 ? @"-" : @"+") + timezoneOffset.ToString(@"hh\:mm"));
+```
+
+So `2026-08-16T07:19:44-07:00`. It stores UTC plus `TimeZoneInfo.Local.GetUtcOffset(...)`
+(`:634`, `:653`) and round-trips through `ParseSerializedTimeStamp` (`:1489`).
+
+In the report today: `data.GeneratedUtc = DateTime.UtcNow.ToString(@"yyyy-MM-dd HH:mm:ss 'UTC'")`
+(`ModelDiagnosticsReport.cs`, both render paths) plus the footer in
+`model-diagnostics-template.html`. Changing the value means renaming the field (`GeneratedUtc` ->
+`Generated`) and the camelCase JSON key the template reads, so it is a data-model change, not a
+formatting tweak.
+
+**Osprey cannot call the audit-log helper** - `pwiz_tools/Osprey` does not reference Skyline. Either
+duplicate the four-line formatter or lift it somewhere shared; duplicating a format that is meant
+to be consistent project-wide is the thing worth avoiding, so prefer lifting it.
+
+Note Osprey's own logs are already local time but carry NO offset (`run.log` writes
+`[2026/08/16 07:14:28]`, the dataset runners write `[2026-08-14T12:03:44]`), so the same argument
+applies to them and they would become self-describing under this change.
+
+**3. Which stages were computed vs rehydrated** - deferred from the provenance work; needs
+`PipelineContext` / `AnalysisPipeline` plumbing. It is the line that would have made the #4578 run
+self-evidently wrong.
+
 ### Still to do on this branch
 
 1. **Cross-impl re-run** on the rebased tree.
