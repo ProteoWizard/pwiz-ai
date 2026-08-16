@@ -1,4 +1,4 @@
-﻿# TODO-20260805_osprey_diagnostic_abort_capture.md
+# TODO-20260805_osprey_diagnostic_abort_capture.md
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260805_osprey_diagnostic_abort_capture`

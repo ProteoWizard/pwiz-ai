@@ -7,6 +7,15 @@
 # This script is intended to be used in CI/commit hooks to prevent
 # unwanted BOM introduction.
 
+param(
+    # The pwiz checkout to validate. Defaults to the sibling of this script's repo
+    # (<root>/ai/scripts -> <root>/pwiz); pass it when working in a sibling checkout
+    # such as C:\proj\pwiz-work1.
+    [string]$PwizRoot,
+    # The pwiz-ai checkout. Defaults to this script's own repo.
+    [string]$AiRoot
+)
+
 $ErrorActionPreference = "Stop"
 $utf8Bom = @(0xEF, 0xBB, 0xBF)
 
@@ -28,13 +37,37 @@ $approvedBomFiles = @{
     "pwiz_tools/Bumbershoot/bumberdash/Tests/Data/AgilentTest.d/AcqData/acqmethod.xml" = "Agilent vendor data format"
 }
 
-# Function to get Git-tracked files from a directory
+# Resolve a checkout to validate, failing loudly rather than validating nothing.
+function Resolve-RepoRoot {
+    param([string]$explicit, [string]$fallback, [string]$label)
+
+    $path = if ($explicit) { $explicit } else { $fallback }
+    if (-not (Test-Path $path -PathType Container)) {
+        throw "$label checkout not found at '$path'. Pass -PwizRoot / -AiRoot explicitly."
+    }
+    return (Resolve-Path $path).Path
+}
+
+# Function to get Git-tracked files from a directory.
+#
+# HARD-FAILS when git returns nothing. This script's whole job is to enumerate tracked
+# files, so an empty enumeration means it examined NOTHING - and the original version
+# returned that silently, then reported "Found 0 files with UTF-8 BOM / VALIDATION
+# PASSED". Run from the documented working directory (the project root holding the
+# sibling checkouts, which is itself not a git repo) `git ls-files` failed and the
+# script passed vacuously, missing a BOM that was really there. A validator intended
+# for CI must fail closed.
 function Get-GitTrackedFiles {
-    param([string]$workDir = ".")
+    param([string]$workDir, [string]$label)
 
     Push-Location $workDir
     try {
         $files = @(git ls-files 2>$null)
+        if ($LASTEXITCODE -ne 0 -or $files.Count -eq 0) {
+            throw ("${label}: 'git ls-files' returned no tracked files in '$workDir'. " +
+                   "That is a broken invocation, not a clean repo - refusing to report PASS " +
+                   "on an empty file set.")
+        }
         return $files
     } finally {
         Pop-Location
@@ -73,28 +106,33 @@ function Test-HasBom {
 Write-Host "Validating UTF-8 BOM compliance..." -ForegroundColor Cyan
 Write-Host ""
 
-# Collect files from parent repo and ai/ clone
+# Collect files from the pwiz checkout and the pwiz-ai clone.
+#
+# Both are resolved from THIS SCRIPT's location rather than the caller's working
+# directory: ai/ and pwiz/ are sibling checkouts under the project root, so neither
+# lives inside the other and cwd says nothing about where either one is. The previous
+# version looked for the parent repo at "." and for ai/ at <pwiz>/ai, so in the sibling
+# layout it found the first only when invoked from inside pwiz and the second never.
 $allFiles = @()
 
-# Parent repo files
-$parentFiles = Get-GitTrackedFiles -workDir "."
-foreach ($f in $parentFiles) {
-    $allFiles += @{ RelPath = $f; BaseDir = (Get-Location).Path }
+$aiRootResolved = Resolve-RepoRoot -explicit $AiRoot `
+    -fallback (Join-Path $PSScriptRoot '..') -label 'pwiz-ai'
+$pwizRootResolved = Resolve-RepoRoot -explicit $PwizRoot `
+    -fallback (Join-Path $PSScriptRoot '..\..\pwiz') -label 'pwiz'
+
+Write-Host "pwiz   : $pwizRootResolved" -ForegroundColor Cyan
+Write-Host "pwiz-ai: $aiRootResolved" -ForegroundColor Cyan
+
+$pwizFiles = Get-GitTrackedFiles -workDir $pwizRootResolved -label 'pwiz'
+Write-Host "Including pwiz ($($pwizFiles.Count) files)..." -ForegroundColor Cyan
+foreach ($f in $pwizFiles) {
+    $allFiles += @{ RelPath = $f; BaseDir = $pwizRootResolved }
 }
 
-# ai/ clone files (pwiz-ai)
-$repoRoot = git rev-parse --show-toplevel 2>$null
-if ($repoRoot) {
-    $aiPath = Join-Path $repoRoot "ai"
-    if (Test-Path $aiPath -PathType Container) {
-        $aiFiles = Get-GitTrackedFiles -workDir $aiPath
-        if ($aiFiles) {
-            Write-Host "Including ai/ clone ($($aiFiles.Count) files)..." -ForegroundColor Cyan
-            foreach ($f in $aiFiles) {
-                $allFiles += @{ RelPath = "ai/$f"; BaseDir = $repoRoot }
-            }
-        }
-    }
+$aiFiles = Get-GitTrackedFiles -workDir $aiRootResolved -label 'pwiz-ai'
+Write-Host "Including ai/ clone ($($aiFiles.Count) files)..." -ForegroundColor Cyan
+foreach ($f in $aiFiles) {
+    $allFiles += @{ RelPath = "ai/$f"; BaseDir = (Split-Path $aiRootResolved -Parent) }
 }
 
 $filesWithBom = @()
