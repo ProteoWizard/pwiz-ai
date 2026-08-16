@@ -515,11 +515,69 @@ from the pass-2 sidecars and checking Unknown == 6.
 * **#4580** - proposal: replace the `>=2` stratum with a size-normalised sibling-evidence feature
   in the iterative SVM, which would dissolve #4573 rather than correct it. Needs Mike.
 
+### BOM cleanup - done, and it exposed a dead validator
+
+Nine `.cs` files in this branch had gained a UTF-8 BOM (they were every BOM in the Osprey tree),
+plus `Regression/DiagnosticsGolden.ps1`, which a `.cs`-only sweep missed. All stripped.
+
+`ai/scripts/validate-bom-compliance.ps1` reported **PASS having examined nothing**: it resolved the
+parent repo as `.` (the project root is not a git repo, so `git ls-files` returned empty) and the
+ai clone as `<pwiz>/ai`, a path that stopped existing when `pwiz\ai` became the separate `pwiz-ai`
+repo months ago. Both halves failed OPEN. Fixed in pwiz-ai `82149b2`: roots resolve from
+`$PSScriptRoot`, `-PwizRoot` supports sibling checkouts, and an empty `git ls-files` is now a hard
+failure. The fix immediately caught two pre-existing BOMs in `todos/completed/` that had gone
+unchecked since the split.
+
+### Provenance stamp - BUILT, THEN REVERTED. Do not re-attempt as written.
+
+Commit `ed33b44e87` added a header line naming the build that wrote the 1st-pass sidecars, their
+mtime, and a STALE INPUT flag. `/code-review max` found four defects; two were confirmed against
+the source and are fatal:
+
+* **Reports nothing on any producing run.** `FirstPassFdrTask.Run` deletes its own validity stamps
+  (`FirstPassFdrTask.cs:301-302`) BEFORE rendering the pass-1 report inside the same `Run`
+  (`:1161/:1166`); the driver rewrites them only after `Run` returns
+  (`AnalysisPipeline.cs:249` via `RunTask:232`). So `ReadVersion` returns null and the header
+  renders `1st-pass sidecars: Osprey unknown`.
+* **Falsely stale on every regeneration.** The task stamp records the LOGICAL version, which
+  `OSPREY_VERSION_OVERRIDE` pins. Comparing it against the deliberately un-overridden
+  `BuildVersion` compares an overridden value to a real one, so it flags stale whenever the
+  override differs from the build - i.e. always, under the harness and on resumes.
+
+Plus: the header compared `DisplayVersion` (`26.1.1.182 (b2373f9f9c)`) against the bare stamped
+`Current` (`26.1.1.182`), which can never match textually; and the "mixed set" detection the code
+comment promised was never implemented.
+
+**The empirical check that appeared to validate it was a false positive.** A regeneration reporting
+`sidecarStale=true` was read as confirmation; those sidecars were written by a 26.1.1.226 binary
+and rendered by a 26.1.1.226 binary - the same build. That claim was written into the test's own
+doc comment, which is how the reviewer caught it.
+
+**Root cause is architectural**: the task stamp records an OVERRIDABLE logical version, so it
+cannot carry build identity at all. Any retry needs either a non-overridable build id stamped into
+the sidecar format, or no staleness flag. The half that is always correct and needs no stamp is the
+**mtime**.
+
+### Better idea for the regeneration path (Brendan, 2026-08-16)
+
+Rather than stamping provenance into the page, **stop overwriting the page**. `--task
+ModelDiagnostics` should move an existing `out.model-diagnostics.html` to a name carrying its own
+created time and then write a fresh one - the pattern his run-log collection scripts already use
+(move the existing log to a timestamped name, start a new one).
+
+This differs from how `--task` behaves for the main pipeline, which is fine: a diagnostics artifact
+is a snapshot, not a pipeline output. It also answers the provenance question structurally - each
+file's name records when it was produced, successive regenerations become comparable, and nothing
+has to infer which build wrote what.
+
 ### Still to do on this branch
 
-1. **BOM cleanup** - this commit adds a UTF-8 BOM to line 1 of `Pass2FdrSidecar.cs` that master
-   does not have. Spurious encoding diff, not intended content.
-2. **Provenance stamp** (the handoff's item 2) - now worth more: it should record which stages were
-   **computed vs rehydrated**, which would have made the #4578 run self-evidently wrong.
-3. **Cross-impl re-run** on the rebased tree.
-4. **`/code-review max`**, then fold verified findings.
+1. **Cross-impl re-run** on the rebased tree.
+2. **Fold the remaining verified `/code-review max` findings** (none are in the boundary fix):
+   `--task ModelDiagnostics` logs `Output: <out.blib>` it never writes (`Program.cs:247`);
+   `[STAGE-WALL] blib: 0.0s` is emitted when the write is skipped (`SecondPassFdrTask.cs:281`);
+   `CarafeProteinIdNormalizer:153` drops null accessions on touched entries, changing
+   `ProteinIds.Count` (lower confidence); and the new CLI task has no coverage -
+   `ProgramTests.cs:499-506`'s membership truth table still lists 5 of 6 tasks and nothing asserts
+   `DiagnosticsOnly` or the empty `Outputs()` the regenerate-on-demand design rests on.
+3. **`regression.ps1 -Dataset All`** on the final tree before the PR.
