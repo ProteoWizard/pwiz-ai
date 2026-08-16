@@ -422,3 +422,104 @@ to re-derive a wrong answer quickly - which is what happened here. Stamp the pan
 build that WROTE the sidecars and their mtime, so a reader can tell a stale input from a product
 defect without cross-referencing commit times by hand. That single line would have saved this
 entire investigation.
+
+## 2026-08-15/16: REBASED, and the fix is VALIDATED on clean 82-file data
+
+### Branch is now current with master
+
+Rebased onto `origin/master` (`ebc7e0c4f3` / `012816cc53`); HEAD is **`019346cf41`**. No conflicts,
+though #4569 ("Collapsed the protein q-values into one field written per pass") rewrote
+`Pass2FdrSidecar.cs`, which this branch also edits - our change is a small self-contained
+`DiagnosticsOnly` guard and lands coherently in the rewritten flush path. #4569 moved **no
+goldens** (it touched only `Regression/FdrSidecars.ps1`), so the 26 golden files recaptured here
+stay valid.
+
+`regression.ps1 -Dataset All` **PASSED** on the rebased tree, including `Astral mode1c (2nd-pass
+protein q is pass-2)` - the check most exposed to #4569 - and every StellarGenDecoyEntrap mode.
+Build + 581/581 tests + ReSharper 0 warnings.
+
+### The validation run
+
+`D:\test\osprey-runs\sea-ad\runs\20260815_rebased82` - **from scratch, no `-LinkFrom`**, so it is
+the only run that exercises `CarafeProteinIdNormalizer` through Stage 1-4 per-file dedup.
+8 h 19 m, exit 0, `Osprey v26.1.1.226 (019346cf41)`, `--model-diagnostics` on, 0 errors.
+Stage 6 did full work (82 `Re-scoring file` banners, 82 reconciled parquets, 10,666.8 s) - i.e.
+**not** affected by #4578.
+
+### The A/B - the number this branch was missing
+
+Same sidecars, same command line replayed verbatim with `--task ModelDiagnostics`, only the binary
+differing (`_bin/4573-rebased` vs `_bin/4573-pooledbar`, a throwaway mutant forcing the pooled
+bar). **Exactly one number moves in the entire report:**
+
+| field | pooled bar | per-q-system |
+|---|---|---|
+| pass-2 experiment **decoy** | **518** | **506** |
+| everything else, both passes | identical | identical |
+
+**Delta = 12 decoys.** All 12 are off-stratum, admitted by the pooled bar and rejected by their
+own; positions span the band 0.008-0.999 (not marginal); 7 of 12 score below 0.57 against their
+own bar of 1.336, i.e. admitted on a threshold **4.7x too low**. Of 518 admitted decoys only 17
+are off-stratum, so the fix corrects **12 of 17 (71%) of the population it applies to**.
+
+`experimentCutoffInStratum` equals the pooled cutoff **to all 16 digits** (0.2823263044559781), so
+501 of 518 were already judged correctly by accident - and `experimentCutoffOffStratum`
+(1.3360608205718059) sits 0.0007 from pass 1's own cutoff, confirming the mechanism: off-stratum
+entries carry pass-1 q and aggregate forward.
+
+**Arm B reproduced the run's own report on every field**, so `--task ModelDiagnostics` is faithful
+at 82-file scale, not just on the 3-file acceptance test. (Regenerated HTML is smaller - 462 KB vs
+850 KB - because the Model tab needs a retrain the rehydrated run did not do. Values unaffected.)
+
+### Why the per-system split is right even though the total moves away from nominal
+
+| system | accepted | decoys (pooled) | FDR | decoys (per-system) | FDR |
+|---|---|---|---|---|---|
+| in-stratum | 51,561 | 501 | 0.97% | 501 | 0.97% |
+| off-stratum | 461 | 17 | **3.69%** | 5 | **1.08%** |
+| total | 52,022 | 518 | 0.996% | 506 | 0.973% |
+
+The pooled total sat closer to nominal only because a 3.69% off-stratum population compensated for
+a conservative in-stratum one. Measured per system - the only coherent way, since separate systems
+is the premise - the fix makes **both correct at once**. Do not judge it on the total.
+
+### Definitional checks (clean data, both passes)
+
+| | target + entrap | x 1% | decoy row | crossing |
+|---|---|---|---|---|
+| pass 1 | 42,519 + 194 | 427.1 | **426** | 427 / 42,718 = 0.9996% |
+| pass 2 | 51,605 + 411 | 520.2 | 506 | 534 / 53,418 = 0.9997% |
+
+Pass 1 is within **one decoy** of its definition and cutoff-vs-crossing agree to **7e-5**, against
+a 1.26-unit gap on the contaminated `20260811_all82`. Independently reproduces the shape of the
+#4558 session's corrected `20260812_pass1regen` class row.
+
+### Known small discrepancy, worth a look before the PR
+
+`acceptedInStratum + acceptedOffStratum` = 51,561 + 461 = **52,022** against class-table
+target + entrapment = 51,605 + 411 = **52,016** - off by **6**. The gate dataset's equivalent check
+is exact. Cause is almost certainly the `EntrapmentClass.Unknown` leak already on the review list:
+`SealCutoffs` buckets every accepted id by base_id membership regardless of class
+(`ModelDiagnosticsData.CoAssignment.cs:730-742`), while the class table has rows only for target
+and entrapment. Strongly supported, NOT proven - confirm by tallying accepted entries by class
+from the pass-2 sidecars and checking Unknown == 6.
+
+### Issues filed from this work
+
+* **#4578** - Stage 6 resume skips the rescore entirely and exits 0 (found by a 13-minute "pass 2"
+  that wrote no reconciled parquets; the gate is `PerFileRescoreTask.cs:282`).
+* **#4581** - `protein-compact`'s stratum gate is target-conditioned: the in-stratum decoy null is
+  selected against and the entrapment oracle cannot audit it. Promotes the analysis from
+  `todos/completed/TODO-20260727_osprey_pass2_fdr_default.md` and adds run-level measurements
+  (decoy null grows +18.8% with targets while true falses grow +111.9%).
+* **#4580** - proposal: replace the `>=2` stratum with a size-normalised sibling-evidence feature
+  in the iterative SVM, which would dissolve #4573 rather than correct it. Needs Mike.
+
+### Still to do on this branch
+
+1. **BOM cleanup** - this commit adds a UTF-8 BOM to line 1 of `Pass2FdrSidecar.cs` that master
+   does not have. Spurious encoding diff, not intended content.
+2. **Provenance stamp** (the handoff's item 2) - now worth more: it should record which stages were
+   **computed vs rehydrated**, which would have made the #4578 run self-evidently wrong.
+3. **Cross-impl re-run** on the rebased tree.
+4. **`/code-review max`**, then fold verified findings.
