@@ -608,9 +608,16 @@ formatting tweak.
 duplicate the four-line formatter or lift it somewhere shared; duplicating a format that is meant
 to be consistent project-wide is the thing worth avoiding, so prefer lifting it.
 
-Note Osprey's own logs are already local time but carry NO offset (`run.log` writes
-`[2026/08/16 07:14:28]`, the dataset runners write `[2026-08-14T12:03:44]`), so the same argument
-applies to them and they would become self-describing under this change.
+**Scope note - do NOT extend this to the run logs (Brendan, 2026-08-16).** Osprey's
+`--timestamp` output is already consistent with Skyline: both emit it from the same
+`CommandStatusWriter`, which is why `perfviz.py` parses either. It carries no zone offset
+(`[2026/08/16 07:14:28]`), but that is a shared project convention, not an Osprey gap - changing
+it would widen the scope to Skyline rather than fix a local inconsistency.
+
+The distinction that justifies the two differing: an **audit log travels with the document**, so
+the zone it was written in is genuinely lost without the offset. A **processing log stays beside
+the run directory** it describes, where the ambiguity costs little. Transferability is the test,
+not uniformity.
 
 **3. Which stages were computed vs rehydrated** - deferred from the provenance work; needs
 `PipelineContext` / `AnalysisPipeline` plumbing. It is the line that would have made the #4578 run
