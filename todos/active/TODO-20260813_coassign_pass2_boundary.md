@@ -799,9 +799,38 @@ Why it is not fixed here:
   fixing only Rust would break the 1e-9 cross-impl parity this branch exists to establish. It
   needs a coordinated change on BOTH sides, with its own validation.
 
-**Ask Brendan** whether to fix it as a follow-up pair. It is the one finding that is a genuine
-correctness bug rather than a hardening or hygiene point. (Not filed as an issue per the standing
-"ask before filing" rule.)
+**MEASURED AFTERWARDS - the impact is zero on every library we test, and the reason is
+structural, not luck.** `gene_names` is populated only from a `Genes` column, and **no library
+in the gate has one**:
+
+| library | Genes column | protein column |
+|---|---|---|
+| `stellar-libdecoy` `carafe_spectral_library.tsv` | **none** | `ProteinID` |
+| `stellar` `hela-filtered-SkylineAI_spectral_library.tsv` | **none** | `ProteinID` |
+| `astral` `SkylineAI_spectral_library.tsv` | **none** | `ProteinID` |
+
+The Carafe header is exactly 13 columns - `ModifiedPeptide, StrippedPeptide, PrecursorMz,
+PrecursorCharge, Tr_recalibrated, ProteinID, Decoy, FragmentMz, RelativeIntensity, FragmentType,
+FragmentNumber, FragmentCharge, FragmentLossType` - with no gene field. So `gene_names` is empty
+for every entry, `entry.gene_names.get(i)` is `None` for all `i`, and the attribution loop at
+`protein.rs:615-616` contributes nothing.
+
+That is a real bound, not a sampling artifact: it is the file HEADER, so it holds for every row.
+It also explains why cross-impl passes, and why the pre-existing `deduplicate_library` version of
+the same bug has never been observed here.
+
+**Revised conclusion**: this is fragile code, but it is **unreachable through the path these PRs
+add**, because the only libraries the strip touches are Carafe's, and Carafe emits no genes. It
+is NOT a blocker for #4585 / #65.
+
+The residual exposure is a library that carries BOTH a `Genes` column and multi-accession
+entries - a native DIA-NN library, say. For that library the **pre-existing** `deduplicate_library`
+sort (`mod.rs:190-195`) is already wrong today, independent of this branch. That is the more
+valuable target, and it is a Rust-only fix with no C# parity implication, because the C# side
+would only need to match if the strip were involved.
+
+**Ask Brendan** whether to pursue the pre-existing dedup case as its own change. (Not filed as an
+issue per the standing "ask before filing" rule.)
 
 **Verified, deferred, and why:**
 
