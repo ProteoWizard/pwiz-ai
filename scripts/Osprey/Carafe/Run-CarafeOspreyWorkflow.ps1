@@ -54,6 +54,14 @@
     estimate from. The bound is enforced in Carafe, not duplicated here, so there
     is a single place to widen it if a real case needs one.
 
+.PARAMETER NoSimilarityGate
+    Build the PRE-GATE baseline arm: entrapment rejected only on an exact
+    collision, and no fragment-overlap check on decoys. This is the control for
+    measuring the gate, because it differs from a normal build ONLY by the gate
+    while sharing its prediction basis - which the delivered libraries do not.
+    Not for production use: the library it writes contains entrapment near-copies
+    of their own targets.
+
 .EXAMPLE
     # Full Stellar rebuild with the stock shuffle entrapment.
     pwsh -File ./ai/scripts/Osprey/Carafe/Run-CarafeOspreyWorkflow.ps1 -Dataset Stellar
@@ -84,6 +92,8 @@ param(
     [string]$WorkDir,
 
     [ValidateSet('shuffle', 'natural')] [string]$EntrapmentSource = 'shuffle',
+    # Builds the pre-gate baseline arm. See .PARAMETER NoSimilarityGate.
+    [switch]$NoSimilarityGate,
     [string]$ForeignFasta,
     [double]$EntrapmentRatio = 1.0,
     # Names the per-variant artifacts so several entrapment variants can share one work dir's
@@ -430,7 +440,8 @@ if ($StageList -contains '1a') {
 # --- Stage 1b: digest -> target+decoy+entrapment library FASTA ---
 # Carafe generates the entrapment itself, including the foreign-species variant
 # (-entrapment_db), so there is no post-processing step: the manifest and FASTA it
-# writes are already final. Both paths apply the fragment-overlap similarity gate.
+# writes are already final. Both paths apply the fragment-overlap similarity gate unless
+# -NoSimilarityGate is given.
 if ($StageList -contains '1b') {
     $entrapArgs = @('-entrapment')
     if ($EntrapmentSource -eq 'natural') {
@@ -438,6 +449,9 @@ if ($StageList -contains '1b') {
     }
     if ($EntrapmentRatio -ne 1.0) {
         $entrapArgs += @('-entrapment_ratio', "$EntrapmentRatio")
+    }
+    if ($NoSimilarityGate) {
+        $entrapArgs += '-no_similarity_gate'
     }
     Invoke-Step "Stage 1b: library FASTA ($EntrapmentSource entrapment)" $Java (@(
         '-Xmx48g', '-jar', $CarafeJar, '-build_entrapment_fasta', $libFasta, '-db', $InputFasta,
