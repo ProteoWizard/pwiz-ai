@@ -4,11 +4,11 @@
 - **Branch**: `Skyline/work/20260814_osprey_stage7_progress_reporting`
 - **Base**: `master` (rebased onto `ebc7e0c4f3`)
 - **Created**: 2026-08-14
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4571](https://github.com/ProteoWizard/pwiz/issues/4571)
 - **Module**: `osprey`
 - **Other labels**: `tech-debt`
-- **PR**: (pending)
+- **PR**: [#4582](https://github.com/ProteoWizard/pwiz/pull/4582) (merged 2026-08-16 as `51a8f96f7e`)
 
 ## Objective
 
@@ -128,6 +128,43 @@ Guessing would have gone wrong - `BuildPrecursorMzLookup` reads like a 6.3 M-ent
 is O(1) (it returns a closure).
 
 ## Progress Log
+
+### 2026-08-16 - Merged
+
+PR #4582 merged as `51a8f96f7e`. All four gaps are closed and measured: on the 82-file SEA-AD
+set the gate went from **3 gaps >= 30 s / 248 s / max 127 s to 0 gaps, max 23 s**, with the
+discovery set unchanged throughout (47,426 peptides / 6,096 protein groups / 51,597 spectra).
+The root cause of the longest gap was `RestorePass1Scalars` streaming every file's
+PRE-compaction 1st-pass sidecar - 345,024,871 records at 82 files, not the 89 M survivors -
+hidden because its heading was `LogVerbose` and its duration a filtered `[STAGE-WALL]`.
+
+Scope grew twice beyond the issue, both deliberately. Two duplicate `ReduceToPrecs` calls were
+removed (~16 s each at 82 files, O(survivor observations)), and `ProgressReporter` gained
+`LogWaitTime` / `MinPercentTime` with both clamped to the report interval in the constructor,
+so the display rules hold structurally: the heading always precedes the first percent, and a
+scope that showed a sub-100% percent always closes with 100%. A sub-second scope now leaves no
+trace at all, which removes the content-free heading/100% pairs from the small regression runs.
+
+Gates: local `regression.ps1 -Dataset All` PASSED (output byte-identical, log-parsing modes 3/4
+unaffected), 580 unit tests, zero-warning inspection, and TeamCity Osprey Perf/Regression
+[build 4136384](https://teamcity.labkey.org/build/4136384) PASSED. Note the TeamCity run
+measured `ef4454e34e`; the branch was then updated from master with three Skyline files and
+zero Osprey files, so the result was judged still valid rather than re-run.
+
+Reviews: Copilot (2 comments, both correct - loop bodies not re-indented under their new
+`using`; an audit found a third site it missed) and `/code-review max` (15 findings, 7 applied).
+The most consequential was that this PR's own doc comment claimed `Prec` is a reference type
+when it is a `struct` - the written justification for the central change was inverted. It now
+leads with the read-only property, which holds whatever `Prec` is declared as, and records the
+`best[key] = cur` write-back that struct copy semantics already make load-bearing.
+
+Deferred, with an issue each: [#4577](https://github.com/ProteoWizard/pwiz/issues/4577) (the
+library-fragment retained set never narrows after Stage 5, holding ~749 K paired-decoy spectra
+through the Stage 7 peak) and [#4583](https://github.com/ProteoWizard/pwiz/issues/4583)
+(`ProgressReporter` cannot tell success from failure, so `Dispose` reports completion for a step
+that threw - the non-`using` idiom at the `BuildPass2` site is a workaround, not an answer).
+Also left uninstrumented: `BuildCoAssignment`, ~15 s at 82 files and O(observations), so it is
+the next step expected to cross 30 s at 163 files.
 
 ### 2026-08-14 - Root cause: two mechanisms, not one
 
