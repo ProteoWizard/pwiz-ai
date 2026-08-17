@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260816_alphapeptdeep_xxhash_pin`
 - **Base**: `master`
 - **Created**: 2026-08-16
-- **Status**: In Progress
+- **Status**: Completed - merged 2026-08-17
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: [#4584](https://github.com/ProteoWizard/pwiz/pull/4584)
+- **PR**: [#4584](https://github.com/ProteoWizard/pwiz/pull/4584) (merged)
 
 ## Objective
 
@@ -62,6 +62,22 @@ following entry downgrades it.
   tree can break the nightly on any night. `peptdeep[stable]` would pin the
   whole tree, but it also pins `torch==2.5.1`, which would collide with the
   CUDA-specific torch install in `PythonInstaller.cs`. Separate decision.
+
+## Resolution
+
+### 2026-08-17 — Merged
+PR [#4584](https://github.com/ProteoWizard/pwiz/pull/4584) ("skyline: Fixed nightly failure in
+TestAlphaPeptDeepBuildLibrary") merged to master as
+`e396e5f6c0e4d4946cd6de2bfe91b6c78cf7552a`.
+
+`AlphapeptdeepLibraryBuilder.CreatePythonInstaller` now pins `xxhash` to 3.5.0 after the
+unpinned `peptdeep` install, so the fresh venv the nightly builds each run no longer resolves
+python-xxhash 4.0.0, whose `bytes`-only API breaks `alphabase.hash_mod_seq_df`. Same
+install-then-downgrade pattern as the existing numpy 1.26.4 workaround.
+
+The pin is a workaround for an upstream defect, so it stays until alphabase encodes before
+hashing or caps `xxhash<4`. The follow-ups above (file the upstream issue; decide whether to
+pin the whole `peptdeep` tree) are unclaimed and are not tracked by another TODO.
 
 ## Notes
 

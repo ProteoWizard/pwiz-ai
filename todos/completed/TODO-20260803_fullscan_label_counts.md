@@ -5,8 +5,8 @@
 - **Base**: `master`
 - **Created**: 2026-08-03
 - **Module**: `skyline`
-- **Status**: PR open, awaiting review
-- **PR**: [#4527](https://github.com/ProteoWizard/pwiz/pull/4527)
+- **Status**: Completed - merged 2026-08-07
+- **PR**: [#4527](https://github.com/ProteoWizard/pwiz/pull/4527) (merged)
 
 ## Objective
 
@@ -99,6 +99,22 @@ drop its `Program.SkylineOffscreen` branch (separate change to shipping UI code)
   `TestEADIons`, `TestFullScanProperties`, `TestIgnoreSimScans` all green
   offscreen and onscreen (en), `TestFullScanGraph` green onscreen (ja),
   CodeInspection green.
+
+## Resolution
+
+### 2026-08-07 — Merged
+PR [#4527](https://github.com/ProteoWizard/pwiz/pull/4527) ("skyline: Fixed the dead full-scan
+click and the screen-dependent ion counts in FullScanGraphTest") merged to master as
+`a9862b958731d39d453523dcec7aa575788e518a`.
+
+Both call sites in `FullScanGraphTest` now assert `GraphFullScan.SpectrumInfo.PeaksMatched.Count()`
+(70 and 48) instead of the number of labels actually painted, and `ExpectedLabelCount` with its
+offscreen/en/ja three-way constants is gone. `ClickChromatogram` does the move, the tracking-dot
+check and the click in one `RunUI`, closing the race that silently discarded the click. The
+product fix that came out of the review shipped with it: `GraphChromatogram` clears
+`_showingTrackingDot` when a rebuild re-inserts the tracking curve, so a user's click on the dot
+after a chromatogram refresh is no longer dead, and `FireClickedChromatogram` guards a null
+`_closestCurve`.
 
 ## Notes
 

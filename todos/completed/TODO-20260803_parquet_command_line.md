@@ -4,8 +4,9 @@
 - **Branch**: `Skyline/work/20260803_parquet_command_line`
 - **Base**: `master`
 - **Created**: 2026-08-03
-- **Status**: In Progress
+- **Status**: Completed - merged 2026-08-08
 - **Module**: `skyline`
+- **PR**: [#4529](https://github.com/ProteoWizard/pwiz/pull/4529) (merged)
 
 ## Motivation
 
@@ -153,6 +154,30 @@ passing run is weak evidence that the bug is absent.
 without a lock. It looks benign - the set is built in a local and published by a
 single reference assignment, so a racing caller sees null or a complete set, and
 only duplicates work.
+
+## Resolution
+
+### 2026-08-08 — Merged
+PR [#4529](https://github.com/ProteoWizard/pwiz/pull/4529) ("skyline: Fixed exporting a report to
+.parquet from the command line") merged to master as
+`3009affe3ab5f6797f073bb2149384e7a0daf949`.
+
+`SkylineCmd.exe.config` is no longer a hand-maintained file: it is deleted from the tree, and
+`Skyline.csproj` links the MSBuild-generated config from `obj` as a Content item under that name,
+so it cannot drift and it reaches the ClickOnce manifest. `--report-format` gained `parquet`
+(`ReportFormat` enum + `ReportExporters.ForFormat()`), `app.config` lost 11 dead bindingRedirects
+and the `<system.data>` block, and `SkylineCmd/Program.cs` uses `Assembly.Load`, which removed the
+need for `<loadFromRemoteSources>`.
+
+The parquet export hang shipped fixed in the same PR: `CalibrationCurveFitter.GetTransitionQuantities`
+mutated the plain `Dictionary` field `_replicateQuantities` without synchronization, and
+`ParquetReportExporter.PopulateChunk` is the only report path that evaluates row values on more
+than one thread, so it was the only one that could corrupt the dictionary and spin in
+`Dictionary.FindEntry`. Now locked, which also covers the `_identityPaths` IndexedList.
+
+Two items in **Deferred** below were deliberately not part of this change and are not tracked
+elsewhere: the SkylineCmd `user.config` location (waiting on the .NET 8 port) and making UTF-8
+console output unconditional.
 
 ## Deferred
 

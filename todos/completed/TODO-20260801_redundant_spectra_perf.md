@@ -4,7 +4,8 @@
 - **Base:** `master`
 - **Module:** `skyline`
 - **Created:** 2026-08-01
-- **Status:** Active
+- **Status:** Completed - merged 2026-08-08
+- **PR:** [#4547](https://github.com/ProteoWizard/pwiz/pull/4547) (merged)
 
 ## Objective
 
@@ -137,5 +138,30 @@ TestMinimizeWithEmptyFiles, CodeInspection.
 - [x] Part 2 implementation complete
 - [x] Build clean
 - [x] Tests pass
-- [ ] Measure the memory improvement on imputation_template.blib
-- [ ] PR created
+- [ ] Measure the memory improvement on imputation_template.blib (never done; shipped unmeasured)
+- [x] PR created
+
+## Resolution
+
+### 2026-08-08 — Merged
+PR [#4547](https://github.com/ProteoWizard/pwiz/pull/4547) ("Reduce memory used by library
+\"IndexedRetentionTimes\"") merged to master as `e53398040c5758eacccfc2856aae300609d3239b`.
+Both parts shipped together.
+
+Part 2 is the memory change: `IndexedRetentionTimes` and `IndexedIonMobilities` are replaced by
+`IndexedMultiArray<T>`, a `ReplicatePositions` over one flat `ImmutableList<T>`, so a library
+entry costs two objects instead of two per file. That required keying by index into
+`LibraryFiles` rather than by `SpectrumSourceFiles` id, and the `...ByFileId` ->
+`...ByFileIndex` renames were what forced every read site to be visited. `ExplicitPeakBoundsDict`
+lost its type parameter and shares the same shape. The ChromLib cache format and its
+`CURRENT_VERSION` of 5 are unchanged.
+
+Part 1 is the UI pause: `GetRedundantSpectra` no longer queries the unindexed `RetentionTimes`
+table when `RetentionTimeReader.AnyRedundantSpectra` is false, which is every library whose
+`RedundantRefSpectraID` is a literal zero — those rows were never loadable anyway.
+
+**Bookkeeping**: no PR reference was recorded here and the checklist still read `- [ ] PR created`
+nine days after the merge. Found by matching the branch name against merged PRs.
+
+**Left undone**: the memory improvement was never measured on `imputation_template.blib`, so the
+size of the win is unquantified. Not tracked by another TODO.
