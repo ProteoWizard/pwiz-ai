@@ -4,13 +4,16 @@
 - **Branch**: `Skyline/work/20260813_coassign_pass2_boundary`
 - **Base**: `master` (at `8d0a2aa6cf`, the #4558 merge)
 - **Created**: 2026-08-13
-- **Status**: In Progress - gate verify running
-- **GitHub Issue**: [#4573](https://github.com/ProteoWizard/pwiz/issues/4573) - to be closed as
-  NOT a product defect; the panel was right and the input was wrong
+- **Status**: Completed
+- **GitHub Issue**: [#4573](https://github.com/ProteoWizard/pwiz/issues/4573) - auto-closed by
+  the PR's `Fixes #4573`. The issue's ORIGINAL diagnosis (the panel inherits pass 1's bar) was
+  wrong - the panel was right and the input library was broken - but a real defect sat
+  underneath it and is what shipped here
 - **Module**: `osprey`
-- **PR**: [#4585](https://github.com/ProteoWizard/pwiz/pull/4585) - opened 2026-08-16 22:38
-- **Companion Rust PR**: [maccoss/osprey#65](https://github.com/maccoss/osprey/pull/65) -
-  **must merge together**; they are validated as a pair and neither is correct alone
+- **PR**: [#4585](https://github.com/ProteoWizard/pwiz/pull/4585) (merged 2026-08-17 as
+  `78a214a9db`)
+- **Companion Rust PR**: [maccoss/osprey#65](https://github.com/maccoss/osprey/pull/65)
+  (merged 2026-08-17 as `b9ec678`) - merged together, as required; neither is correct alone
 
 Reporter is Brendan (project developer) - no credit line per version-control-guide "Crediting
 Reporters and Requesters".
@@ -888,3 +891,47 @@ IS the property under test, since `ModelDiagnostics` is the only task with no ca
 file. Rebasing or clicking "Update branch" would move the SHA and invalidate the passing
 91-minute gate for a change that cannot affect it. If strict currency is wanted before merge,
 plan on re-triggering (`branch="pull/4585"`) - and ask first, per the shared-agent rule.
+
+## 2026-08-17 - Merged
+
+PR #4585 merged as `78a214a9db`, with its companion maccoss/osprey#65 merged as `b9ec678`
+immediately after. The pair had to land together: without the Rust `_pep` strip the two
+implementations disagree by 819 precursors on `StellarLibraryDecoy`.
+
+What shipped: the per-q-system pass-2 acceptance boundary (the real #4573 defect - a decoy was
+admitted against a pooled minimum spanning two q systems, so off-stratum decoys were judged on a
+bar up to 4.7x too low); `CarafeProteinIdNormalizer` and its Rust twin, stripping Carafe's
+per-peptide `_pepNNNNN` accessions at library load; and `--task ModelDiagnostics`, which exists
+because the boundary fix is INERT on every gate dataset and could only be validated by
+regenerating the report for a completed 82-file run.
+
+Final gate status: TeamCity Perf/Regression #208 SUCCESS (91 min, all modes, all four datasets,
+including the new mode 7); local `regression.ps1 -Dataset All` PASS; 586/586 Osprey.Test with
+ReSharper 0 warnings on both TFMs; cross-impl `StellarLibraryDecoy` PASS at 1e-9 with 28,748
+precursors on both sides; Rust CI green on macOS, Ubuntu and Windows.
+
+Merged one commit behind master (#4584, Skyline-only) on purpose - rebasing would have moved the
+SHA and invalidated the passing 91-minute TeamCity build for a change that cannot affect Osprey.
+
+Copilot raised one comment, which was **declined with reasons** rather than applied: it flagged
+the English literal `"No input files"` in a new test as violating the translation-proof rule, but
+that message is a plain literal in `Program.cs`, not a `.resx` resource - Osprey CLI diagnostics
+are not localized - and the assertion is deliberately identical to its neighbour, which is the
+property under test.
+
+### Deferred, with the reasoning recorded above
+
+* The `protein_ids` / `gene_names` positional-pairing bug is real but **unreachable through this
+  change**: no library in the gate carries a `Genes` column, measured from the file headers. The
+  live case is the pre-existing `deduplicate_library` sort for a library that has both genes and
+  multi-accession entries - Rust-only, no C# parity implication. Ask before pursuing.
+* `.scores.parquet` caches persist un-stripped accessions and no cache key moves; the cache-load
+  path strips but never re-saves, so the WARN repeats every run and reports a different entry
+  count than the fresh path. Both are behaviour changes needing their own validation.
+* `PEP_TOKEN` hardcodes the default `--pep-suffix-format`; a custom format silently no-ops.
+  Documented in the Rust release note rather than fixed.
+* Pre-existing and outside the diff: `compute_protein_fdr` finds a group's decoy via the
+  `DECOY_` string prefix, which only `DecoyGenerator` applies - so on `--decoys-in-library` runs
+  the lookup never hits and protein q-values are trivially 0.0.
+
+No GitHub issues were filed for any of these, per the standing ask-first rule.
