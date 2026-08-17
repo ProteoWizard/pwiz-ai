@@ -8,9 +8,9 @@
   shared `CommonMsData` code is testable
 - **Base**: `master` @ `5531ab22f`
 - **Created**: 2026-08-03
-- **Status**: In Progress - implemented, green, PR opened
+- **Status**: Completed
 - **GitHub Issue**: https://github.com/ProteoWizard/pwiz/issues/4510
-- **PR**: https://github.com/ProteoWizard/pwiz/pull/4525
+- **PR**: [#4525](https://github.com/ProteoWizard/pwiz/pull/4525) (merged 2026-08-17 as `656bd2b288`)
 - **Cherry-pick to release**: no - post-release patch mode takes critical fixes only
   (crashes, data loss, security); this is a usability defect
 
@@ -225,3 +225,34 @@ is a regression from master:
   `quickbuild.bat ... --without-compassxtract ... pwiz_tools/Skyline//install-native-dependencies`,
   which stages into `ProteowizardWrapper/obj/x64`, and verify by timestamp before trusting a
   green run.
+- bjam keeps two spellings of the same build path, abbreviating when they grow long
+  (`.../rls/adrs-mdl-64/...` beside `.../release/address-model-64/...`). A rebuild can land in
+  one while you are running the binary from the other; check timestamps before believing a
+  native result. Core pwiz tests also need the CI variant - `--without-compassxtract` leaves
+  `Reader_Bruker_FID/YEP/U2` out of `ExtendedReaderList`, so `ReaderTest` fails there on an
+  inventory check that has nothing to do with the change under test.
+
+## Progress Log
+
+### 2026-08-17 - Merged
+
+PR #4525 merged as `656bd2b288`. Shipped: the shared file dialog asks the reader when the
+naming rules cannot decide, so Bruker FID acquisitions are selectable in MSConvertGUI again
+(regression from #4099) and in Skyline for the first time; the reader is asked only about
+directories that could be one and each is settled by a single walk, so the added cost falls
+only where a name says nothing; `DataSourceUtil` takes a reader answer for such a directory
+only when it is Bruker FID; the vendor probes require a file rather than any existing path;
+and the dialogs show a running count while reading a directory instead of an empty list.
+
+Matt's review raised the large-directory cost, answered with measurements (vendor
+directories and files unchanged, ~1 vs ~6 ms per directory whose name says nothing, 2.33s to
+3.06s for a 511-directory share). His second point - not restricting Waters to `.raw` - was
+accepted: a naming requirement briefly added to `Reader_Waters`, `Reader_Agilent` and the
+Bruker marker-file branches was reverted, so msconvert still deduces a renamed acquisition,
+and the naming question is asked only in the picker.
+
+Deferred, not shipped: SeeMS still runs its own picker, which calls `identify()` per file
+(160ms each on a share, ~230s for 1,432 files) and walks each source recursively for its
+size; replacing it with the shared dialog is its own PR, and Matt was asked about it on the
+thread. The squash subject landed without the `pwiz: ` module prefix, so `git log` does not
+carry the module for this one; the PR label does.
