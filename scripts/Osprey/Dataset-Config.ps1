@@ -15,6 +15,10 @@
 
     Each dataset hashtable carries:
       * Name, TestDir, Library, Resolution, SingleFile, AllFiles, FileLabel
+      * MzmlDir          -- optional; where the mzML live when they are NOT in TestDir.
+                            The *LibraryDecoy datasets ship only a library + manifest and
+                            share the base acquisition rather than duplicating it.
+                            Defaults to TestDir.
         (always present)
       * DecoysInLibrary  -- when $true, run-osprey passes --decoys-in-library
                             (default: $false; reverse-decoy mode)
@@ -257,6 +261,9 @@ function Get-DatasetConfig {
             @{
                 Name             = "StellarLibraryDecoy"
                 TestDir          = Join-Path $baseDir "stellar-libdecoy"
+                # Library + manifest only; the acquisition is shared with Stellar rather
+                # than duplicated, so mzML resolve from there (see MzmlDir in the header).
+                MzmlDir          = Join-Path $baseDir "stellar"
                 Library          = "carafe_spectral_library.tsv"
                 Resolution       = "unit"
                 SingleFile       = "Ste-2024-12-02_HeLa_4mz_sDIA_400-900_20.mzML"
@@ -280,6 +287,9 @@ function Get-DatasetConfig {
             @{
                 Name             = "AstralLibraryDecoy"
                 TestDir          = Join-Path $baseDir "astral-libdecoy"
+                # Library + manifest only; the acquisition is shared with Astral rather
+                # than duplicated, so mzML resolve from there (see MzmlDir in the header).
+                MzmlDir          = Join-Path $baseDir "astral"
                 Library          = "carafe_spectral_library.tsv"
                 Resolution       = "hram"
                 SingleFile       = "Ast-2024-12-05_HeLa_3mzDIA_6mIIT_400-900_49.mzML"

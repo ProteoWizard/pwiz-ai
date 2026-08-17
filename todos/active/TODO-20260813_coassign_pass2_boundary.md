@@ -623,9 +623,59 @@ not uniformity.
 `PipelineContext` / `AnalysisPipeline` plumbing. It is the line that would have made the #4578 run
 self-evidently wrong.
 
+### 2026-08-16: cross-impl - this branch REQUIRES a companion Rust PR
+
+Two PRs, per `ai/docs/osprey-development-guide.md` ("every SUBSTANTIVE C# change ships with a
+companion Rust PR"), template pair pwiz#4390 <-> maccoss/osprey#49.
+
+**The default cross-impl pair cannot see this change.** `Stellar` and `Astral` use the clean
+`SkylineAI_spectral_library.tsv`; only `StellarLibraryDecoy` / `AstralLibraryDecoy` use a Carafe
+`carafe_spectral_library.tsv` (199,999 of the first 200,000 rows carry `_pepNNNNN`). The
+normalizer is a **no-op on Stellar and Astral by construction**, so the documented validation
+would have gone green while proving nothing.
+
+**Measured, C# branch vs Rust, on StellarLibraryDecoy 3-file:**
+
+| | master `012816cc53` | this branch |
+|---|---|---|
+| precursors rust vs cs | 29,567 vs 29,567 (**delta 0**) | 29,567 vs 28,748 (**-819**) |
+| Stage 7 protein FDR | PASS | **FAIL** |
+| blib content | PASS | **FAIL** |
+| FDR sidecars | FAIL (see below) | FAIL |
+
+So the -819 precursors, Stage 7 protein FDR and blib content are **ours** - master matched Rust
+exactly. C# accepts FEWER, the direction stripping predicts: collapsing pseudo-proteins changes
+the per-file double-counting dedup and the protein-compact stratum, and both only tighten the
+reported set. **Rust needs `_pep` stripping before either PR merges**; `origin/main` has none
+(its only `_pep` hits are test fixtures in `crates/osprey-io/src/pairing.rs`).
+
+Blib SIZE differs by 57,344 b even on master while blib CONTENT passes - size is benign SQLite
+page allocation, content is the oracle.
+
+**RETRACTED - there is no missing companion PR.** The `experiment_protein_qvalue` divergence
+(2,370 records/file, `1 -> 0`, 2nd-pass only) was measured against a STALE Rust checkout:
+`C:\proj\osprey` sat on `fix/persist-experiment-aggregate-score`, two commits behind
+`origin/main`, missing exactly `f96c1c3` (Collapse the protein q-values ... #64 - the #4569
+companion) and `3ff2995` (#63). Both cross-impl runs above used that stale binary and MUST be
+redone against `origin/main`. Do not file an issue for it. Lesson added to the guide.
+
+### Infrastructure fixed to get here (pwiz-ai)
+
+* `Compare-EndToEnd-Crossimpl.ps1` staged mzML from `TestDir`, but `stellar-libdecoy/` holds only
+  the library + manifest + fasta - the acquisition is SHARED with `stellar/`. Added `MzmlDir`
+  (defaults to `TestDir`, mirrors regression.ps1's `LibraryFolder` split) and a named throw when
+  it is missing. `astral-libdecoy/` does not exist on this machine at all, so
+  `AstralLibraryDecoy` cannot run here without fetching data.
+* Both `*LibraryDecoy` cross-impl legs were therefore unrunnable - a second, independent reason
+  this class of change goes unvalidated.
+
 ### Still to do on this branch
 
-1. **Cross-impl re-run** on the rebased tree.
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260816_coassign_crossimpl.md` before starting work.
+
+1. **Cross-impl** - redo BOTH arms against `origin/main` (today's used a stale Rust binary),
+   then implement `_pep` stripping in Rust and open the companion PR.
 2. **Fold the remaining verified `/code-review max` findings** (none are in the boundary fix):
    `--task ModelDiagnostics` logs `Output: <out.blib>` it never writes (`Program.cs:247`);
    `[STAGE-WALL] blib: 0.0s` is emitted when the write is skipped (`SecondPassFdrTask.cs:281`);

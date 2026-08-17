@@ -484,6 +484,27 @@ Workflow:
   **current parity base** (e.g. `reconciliation-v3-first-pass-base-ids`).
 - Validate the pair with `Compare-EndToEnd-Crossimpl` at 1e-9 on **Stellar AND
   Astral** before merging either side.
+- **Stellar + Astral is NOT sufficient for a change that touches library protein
+  identity.** Both use the clean `SkylineAI_spectral_library.tsv`; only
+  `StellarLibraryDecoy` / `AstralLibraryDecoy` use a Carafe-built
+  `carafe_spectral_library.tsv`, and those are the ONLY cross-impl datasets that
+  carry Carafe's per-peptide `_pepNNNNN` pseudo-accessions (199,999 of the first
+  200,000 rows on stellar-libdecoy). A change to protein identity - stripping,
+  grouping, parsimony, the pairing manifest - moves protein FDR and the blib on
+  those datasets and moves NOTHING on the default two, so the documented pair
+  passes green while the implementations disagree. Add the LibraryDecoy datasets
+  whenever the change can reach a protein accession. Found on #4573, whose
+  `CarafeProteinIdNormalizer` is a no-op on Stellar and Astral by construction.
+- **Confirm `C:\proj\osprey` is actually on `origin/main` before believing ANY
+  cross-impl result.** It is the primary working tree, so it is routinely sitting
+  on a feature branch, and `git fetch` alone does not move it. A stale checkout
+  produces a divergence that looks exactly like a real parity break, and the
+  natural (wrong) reading is "a prior C# PR shipped without its Rust companion".
+  That happened on 2026-08-16: `experiment_protein_qvalue` diverged on 2,370
+  records per file, which was the #4569 companion (maccoss/osprey#64) already
+  merged to main and simply absent from the checkout under test. Check
+  `git rev-list --count HEAD..origin/main` before drawing any conclusion, and
+  rebuild after moving - the binary is what the comparison actually runs.
 - For a **parity-affecting** change (one that deliberately changes the numbers --
   e.g. making Percolator streaming-only, which drops the direct/no-stream path),
   switch BOTH tools together and re-baseline the golden. Parity stays green

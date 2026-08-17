@@ -219,6 +219,13 @@ $mzmls = switch ($Files) {
 $libraryName = $ds.Library
 $resolution = $ds.Resolution
 $datasetRoot = $ds.TestDir
+# The mzML folder and the library folder can differ: the *LibraryDecoy datasets ship only a
+# Carafe library + pairing manifest and REUSE the base acquisition's mzML rather than
+# duplicating gigabytes of it (regression.ps1 models the same split with LibraryFolder).
+# Without this the run dies on the first Copy-Item naming an mzML that was never meant to be
+# there, which reads as missing data rather than as a dataset that shares its acquisition.
+$mzmlRoot = if ($ds.MzmlDir) { $ds.MzmlDir } else { $ds.TestDir }
+if (-not (Test-Path $mzmlRoot)) { throw "mzML folder not found for $Dataset : $mzmlRoot" }
 
 # Library-supplied-decoy datasets forward extra flags to BOTH sides so the
 # comparison exercises the library-decoy path (not generated reverse decoys).
@@ -253,7 +260,7 @@ New-Item -ItemType Directory -Path $rootDir -Force | Out-Null
 function Stage-DatasetFiles {
     param([string]$Dir)
     foreach ($f in $mzmls) {
-        Copy-Item (Join-Path $datasetRoot $f) (Join-Path $Dir $f)
+        Copy-Item (Join-Path $mzmlRoot $f) (Join-Path $Dir $f)
     }
     Copy-Item (Join-Path $datasetRoot $libraryName) (Join-Path $Dir $libraryName)
     $cache = Join-Path $datasetRoot ($libraryName + '.libcache')
