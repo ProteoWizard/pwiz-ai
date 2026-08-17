@@ -107,11 +107,83 @@ fewer, better-placed labels to the annealer.
   unaffected).
 - [x] Repro driven in Skyline UI: volcano went from a wall of
   overlapping labels to ~10 readable labels off the marker cloud.
-- [ ] Pre-push: clean `Build-Skyline.ps1`, `CodeInspection` test,
-  QuickInspection.
+- [x] Pre-push: clean `Build-Skyline.ps1`, `CodeInspection` test,
+  QuickInspection (run for round 2 in commit `2bc19d2`).
+- [x] Review round 2 pushed (`2bc19d2`); Nick's inline thread replied
+  and resolved; snapshot-refactor reply posted as PR comment.
+- [x] Developer confirmed the test passes cleanly in SkylineTester
+  (all languages as one batch).
 - [ ] Interactive confirm from developer that mouse-over cursor now
   changes over visible labels (driver cannot reliably capture cursor
   shape).
+
+## Review feedback round 2 (2026-08-16)
+
+Two comments from Nick Shulman on PR #4495:
+
+1. **LabelLayoutTest fails in fr/zh/ja onscreen** (inline thread on
+   `LabelLayoutTest.cs:35`). Reproduced in ja locally: the run-to-run
+   determinism comparison passed; what failed was the absolute pinned
+   snapshot (`EXPECTED_RANDOM_POINTS` index 7 was `SNSMVTLGCLVK`
+   instead of `MLSGFIPLKPTVK`). Root cause: localized axis titles and
+   fonts change the chart rectangle, which legitimately changes which
+   labels the sampler/pruner keep - the pins encode English-only
+   geometry. Fix: gate `EXPECTED_POINT_COUNT`/`EXPECTED_RANDOM_POINTS`
+   on English (`GetFolderNameForLanguage`); keep the determinism
+   comparison in all languages; add `VerifyLayoutInvariants()` - a
+   culture-independent verifier that no two visible labels overlap and
+   no visible label covers a foreign marker center (mirrors the pruner
+   semantics via `LineItem.GetCoords`).
+
+2. **`catch (InvalidOperationException)` blocks in LabelLayout.cs**
+   (review body, no inline thread). The catches papered over the
+   worker thread iterating `_graph.CurveList` while the UI mutates it.
+   Refactor per Nick's suggestion: the `LabelLayout` constructor (UI
+   thread only) now captures an immutable `MarkerInfo[]` snapshot
+   (marker rect from `GetCoords` + transformed point center); the
+   density grid, `GetPointMarkerRectangle`, and the pruner read only
+   the snapshot. All `InvalidOperationException`/
+   `ArgumentOutOfRangeException` catches and `GetMarkerLinesSnapshot`
+   removed; the worker-thread `new LabelLayout` fallback in
+   `LabelLayoutRunner` removed (the runner always creates the layout
+   in `StartDebounced` on the UI thread). Marker rects and match
+   semantics are byte-identical to before, so layout results are
+   unchanged.
+
+### Batch multi-language follow-up
+
+Running all languages as a SkylineTester batch (one process) failed the
+new invariant check on the second pass ("Label 'IFPENNIK' covers a
+foreign point marker") while single-language runs passed. Root cause
+chain, proven with a temporary prune-decision log:
+`SummaryRelativeAbundanceGraphPane._labelsLayout` is **static** (by
+design - survives pane recreation), so pass 2 restores pass 1's layout
+as fixed placements under different localized geometry; `IFPENNIK` is a
+**selected** label in Rat_Plasma.sky, and the pruner never prunes
+selected labels (it logged `covers=True` and kept it correctly, while
+pruning non-selected `VLIVEPEGIK` on the same run). Product behavior is
+correct on every path; the test invariant was stricter than the
+pruner's actual guarantee. Fix: the invariant check now mirrors the
+pruner exactly - selected labels are exempt as subjects (both-selected
+overlaps allowed, coverage checked only for non-selected labels), and
+non-selected labels must not overlap ANY visible label nor cover a
+foreign marker center. Also note for stack traces: `RunUI` rethrows on
+the test thread with the call-site line, so failures inside the lambda
+report the `RunUI(...)` line, not the assert line.
+
+With the exemption in place the batch then failed one step later, at
+the determinism comparison: run 1 of a pass computes its layout seeded
+by the PREVIOUS pass's static saved layout and then overwrites the
+static, so run 2 starts from different saved state than run 1 - the
+two runs were no longer identical experiments (singles pass because
+run 1 starts empty and restoring under identical geometry is a fixed
+point). Fix: `OpenDocumentAndGraph` now toggles
+`GroupComparisonAvoidLabelOverlap` off/on with the pane alive, which
+clears the static saved layout via `OnLabelOverlapPropertyChange`
+(product path, no reflection), so every capture measures a fresh
+layout. Verified: en/ja/fr/zh batch onscreen (SkylineTester scenario),
+en single onscreen (pins intact), en+ja offscreen batch, volcano +
+rel-abundance tests - all green.
 
 ## Notes
 
