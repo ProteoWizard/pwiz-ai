@@ -190,6 +190,28 @@ Do NOT force behavior into the past tense ("...a prompt that **asked** which fol
 for null") - that reads as a one-time event rather than how the product now works. The rule is about
 the leading action verb, not every verb in the message.
 
+#### The leading verb is what the DEVELOPER did, not what the code does
+
+This is the trap that being past tense does not catch on its own. A *behavior* verb conjugated
+into the past is still grammatically past tense, so it satisfies the rule as written while
+describing the product instead of the work. The result reads like a feature narrating itself and
+never says what changed.
+
+| Behavior verb in past tense | Developer action |
+|---|---|
+| "**Judged** each pass-2 decoy against its own q system's boundary" | "**Fixed** pass-2 decoy acceptance to judge each decoy against its own q system's boundary" |
+| "**Stripped** Carafe's per-peptide accessions at library load" | "**Added** pre-processing to strip Carafe's per-peptide accessions at library load" |
+| "**Reported** the stratum split in the diagnostics panel" | "**Added** a diagnostics row reporting the stratum split" |
+
+Note what happens to the behavior verb in the fixed column: it moves to the **present tense**,
+after the action, exactly as the section above prescribes ("Fixed ... **to judge** ...", "Added
+pre-processing **to strip** ..."). The two rules compose.
+
+The test: ask **"what did I do?"** The answer is always one of a small set - Added, Fixed,
+Removed, Changed, Improved, Refactored, Moved, Renamed, Documented, Enabled, Disabled. If the
+leading verb is not one of those, it is almost certainly the feature describing itself, and the
+release-notes reader learns nothing about what shipped.
+
 ### Example
 
 ```

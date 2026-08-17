@@ -95,6 +95,21 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 **Rules:**
 - Past tense title ("Added feature" not "Add feature")
+- **The leading verb is what the DEVELOPER did — Added, Fixed, Removed,
+  Changed, Refactored — NOT the code's behavior conjugated into the past.**
+  A behavior verb in past tense passes the rule above while still describing
+  the product, so it slips through easily:
+  - "Judged each pass-2 decoy against its own q system's boundary" →
+    "**Fixed** pass-2 decoy acceptance **to judge** each decoy against its
+    own q system's boundary"
+  - "Stripped Carafe's per-peptide accessions at library load" →
+    "**Added** pre-processing **to strip** Carafe's per-peptide accessions
+    at library load"
+
+  The behavior verb survives — in the present tense, after the action. Test
+  by asking "what did I do?"; if the answer is not one of that small set of
+  action verbs, the feature is describing itself. Full table and rationale
+  in ai/docs/version-control-guide.md ("Tense").
 - Bullet points use `* ` prefix (not `-`)
 - `Reported by <First>.` (or `Requested by <First>.`) when the change came from a user report/request — see "Crediting reporters" below
 - TODO reference required for feature branches
