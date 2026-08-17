@@ -8,7 +8,9 @@
 - **GitHub Issue**: [#4573](https://github.com/ProteoWizard/pwiz/issues/4573) - to be closed as
   NOT a product defect; the panel was right and the input was wrong
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4585](https://github.com/ProteoWizard/pwiz/pull/4585) - opened 2026-08-16 22:38
+- **Companion Rust PR**: [maccoss/osprey#65](https://github.com/maccoss/osprey/pull/65) -
+  **must merge together**; they are validated as a pair and neither is correct alone
 
 Reporter is Brendan (project developer) - no credit line per version-control-guide "Crediting
 Reporters and Requesters".
@@ -671,16 +673,161 @@ redone against `origin/main`. Do not file an issue for it. Lesson added to the g
 
 ### Still to do on this branch
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260816_coassign_crossimpl.md` before starting work.
+Superseded by the 2026-08-16/17 night session below.
 
-1. **Cross-impl** - redo BOTH arms against `origin/main` (today's used a stale Rust binary),
-   then implement `_pep` stripping in Rust and open the companion PR.
-2. **Fold the remaining verified `/code-review max` findings** (none are in the boundary fix):
-   `--task ModelDiagnostics` logs `Output: <out.blib>` it never writes (`Program.cs:247`);
-   `[STAGE-WALL] blib: 0.0s` is emitted when the write is skipped (`SecondPassFdrTask.cs:281`);
-   `CarafeProteinIdNormalizer:153` drops null accessions on touched entries, changing
-   `ProteinIds.Count` (lower confidence); and the new CLI task has no coverage -
-   `ProgramTests.cs:499-506`'s membership truth table still lists 5 of 6 tasks and nothing asserts
-   `DiagnosticsOnly` or the empty `Outputs()` the regenerate-on-demand design rests on.
-3. **`regression.ps1 -Dataset All`** on the final tree before the PR.
+## 2026-08-16/17 night session: rebased again, review findings closed, Rust companion built
+
+### Rebased onto `51a8f96f7e`, two conflicts, both mechanical
+
+Master had moved two more commits (#4579, and **#4582** - `ProgressReporter` output for the four
+silent Stage 7 steps). Both conflicts were in files this branch also edits, and neither was
+semantic:
+
+* `ModelDiagnosticsData.cs` - #4571's refactor turned the `Pass2Data` object initializer into
+  sequential locals so a `ProgressReporter` could fire between cards. This branch had added the
+  `stratumBaseIds` argument to `BuildCoAssignment` inside that initializer. Took master's
+  structure, carried the argument onto the new call site. Master's other change in the same hunk
+  (`BuildPass2FdpViews` reusing the already-computed `precs`) was kept as master wrote it.
+* `SecondPassFdrTask.cs` - master's comment explaining the per-callee reporters vs this branch's
+  `!config.DiagnosticsOnly` guard on the sidecar patch. Both comments are orthogonal and both
+  were kept; the condition takes both terms.
+
+Build + **586/586** tests + ReSharper 0 warnings on the rebased tree.
+
+### Three of the four remaining review findings were ALREADY folded in
+
+The "Still to do" list above predated commit `276c160164` (`b1768c4ce3` before the rebase), which
+had already fixed the phantom `Output: <out.blib>` log line (`Program.cs:247`), the bogus
+`[STAGE-WALL] blib: 0.0s` (`SecondPassFdrTask.cs:286`), and the null-accession drop
+(`CarafeProteinIdNormalizer.cs:150-173`, nulls now carried and re-inserted first). Verified each
+at its cited line rather than trusting the list.
+
+**Only the test coverage was genuinely open**, now closed in `b44c3c32a6`:
+* `ModelDiagnostics` row added to the membership truth table, with `DiagnosticsOnly` asserted to
+  single out exactly that row.
+* The empty `Outputs()` pinned, with the flag-off arm as the discriminating case - an empty list
+  there cannot be an artifact of the bare config.
+* The selector implying `--model-diagnostics` pinned, and that `ValidateArgs` deliberately gives
+  the task **no case of its own**: it replays the completed run's own command line, so a
+  task-specific rule would reject the very invocation it exists to serve.
+
+### The Rust companion: `maccoss/osprey` branch `crossimpl/pep-strip`
+
+Branched off current `origin/main` (`f96c1c3`), which the previous session's measurement had
+missed by two commits. Commit `4f71110` mirrors `CarafeProteinIdNormalizer`:
+
+* `crates/osprey-io/src/library/carafe.rs` - `normalize_carafe_protein_ids`, hand-rolled strip
+  rather than a regex (the pattern is a fixed ASCII token plus digits, and `osprey-io` has no
+  regex dependency to add for it). Digits are required, so a bare `_pep` is left alone.
+* Wired on **both** paths in `library/mod.rs`: the fresh parse **before** `deduplicate_library`
+  (that ordering is what reproduces the goldens), and the cache-load path, where a `.libcache`
+  written by a pre-strip binary stays valid on mtime alone.
+* Touched entries are sorted + deduped; **untouched entries keep their loader's accession
+  order**, which a test pins - re-sorting a clean library would stop it reproducing its goldens.
+* The C# null-carrying fix has no Rust analogue: `protein_ids` is `Vec<String>`, which has no
+  nulls to drop.
+
+5 new tests; `cargo fmt`, `clippy -D warnings` (all targets), and the full `cargo test` all pass.
+`.gitattributes` normalizes the new file to LF in the index (verified on the staged blob, not
+just the working tree - `core.autocrlf=true` on this machine makes the working copy CRLF).
+
+### Cross-impl PASSES - the pair is validated, and the earlier retraction is confirmed
+
+`StellarLibraryDecoy`, 3 files, both binaries current (C# `Release` from this branch, Rust from
+`crossimpl/pep-strip`):
+
+```
+precursors:  rust=28748   cs=28748   delta=0
+Stage 7 protein FDR (per-col 1e-9):  PASS
+Blib content (SQL row+col 1e-9):     PASS
+FDR sidecars (per-field 1e-9):       PASS
+OVERALL: PASS      walls: Rust 04:48, C# 04:40
+```
+
+Read against the previous session's numbers, two things are settled:
+
+* The branch used to give **rust 29,567 vs cs 28,748 (delta -819)**. Rust now strips too and
+  lands exactly where C# does - the direction and magnitude the strip predicts, not a
+  coincidence. Independent corroboration inside the run: the Rust log reports
+  `Double-counting deduplication: removed 9655 entries`, the SAME count the C# side reported
+  after stripping, so the two implementations collapse to an identical searched pool.
+* The **FDR sidecar leg now PASSES**, where it failed even on master. That confirms the
+  retraction already recorded above: the `experiment_protein_qvalue` divergence was the stale
+  `C:\proj\osprey` checkout missing `f96c1c3` (the #4569 companion), not a missing PR. No issue
+  to file.
+
+Rust's normalizer on the real library: 759,805 distinct accessions on 988,740 entries collapse to
+42,592 real proteins. blib SIZE still differs by 77,824 b - benign SQLite page allocation, as on
+master; content is the oracle and it passes.
+
+**Do not read a green DEFAULT cross-impl pair as covering this.** `Stellar` and `Astral` use the
+clean `SkylineAI_spectral_library.tsv`, so the normalizer is a no-op there by construction.
+
+### `/code-review max` on the RUST commit - 15 findings, triaged
+
+Run against `crossimpl/pep-strip` (the C# branch had already had a `max` pass in an earlier
+session; the Rust change had had none). Acted on four, verified-and-deferred the rest. Deferrals
+are recorded because each is a real observation, not a dismissal.
+
+**Fixed** (commit `9db1fb2`, all behaviour-neutral, so the cross-impl result above still stands):
+
+* Missing `RELEASE_NOTES_next.md` entry - required by `osprey/CLAUDE.md`, with a precedent in
+  v26.6.0 for the closely analogous manifest accession cleanup.
+* The order-preservation test was **vacuous** and the reviewer was right: an all-clean library
+  returns on the empty map before the rewrite loop, so it cannot detect an unconditional sort.
+  Added a dirty-library arm and **proved it discriminating by mutation** - deleting the
+  touched-only guard now fails it (`left: 2, right: 1`), while the old test still passes under
+  that mutation.
+* Added coverage for the scanner's re-synchronization (multi-token, overlapping `_pep_pep123`,
+  end-of-string), a bare `_pep` at the NORMALIZE level (the C# suite pins
+  `sp|P00761_peptidase|TRYP_PIG`), and N distinct peptides of one protein - the motivating case,
+  which the shared-precursor test helper could not model.
+* `log::warn!` qualified to match the crate's other 24 logging sites; the doc link to the private
+  `deduplicate_library` unlinked (`rustdoc::private_intra_doc_links`).
+
+**CONFIRMED but deliberately NOT fixed tonight - `protein_ids` sort breaks its positional
+pairing with `gene_names`.** Verified at the source: `diann.rs:251-261` fills the two Vecs from
+parallel `split_list` calls, and `protein.rs:615-616` zips them **by index**
+(`for (i, acc) in entry.protein_ids.iter().enumerate() { if let Some(gene) = entry.gene_names.get(i)`).
+Sorting or deduping one without the other mis-attributes gene names in the protein report.
+
+Why it is not fixed here:
+* **Pre-existing, not introduced.** `deduplicate_library` (`mod.rs:190-195`) already sorts and
+  dedups `all_proteins` and `all_genes` independently for every multi-member group. This change
+  widens the exposure to touched single-member entries; it does not create the pattern.
+* **The C# twin sorts the same way** (`SortedSet<string>` in `CarafeProteinIdNormalizer`), so
+  fixing only Rust would break the 1e-9 cross-impl parity this branch exists to establish. It
+  needs a coordinated change on BOTH sides, with its own validation.
+
+**Ask Brendan** whether to fix it as a follow-up pair. It is the one finding that is a genuine
+correctness bug rather than a hardening or hygiene point. (Not filed as an issue per the standing
+"ask before filing" rule.)
+
+**Verified, deferred, and why:**
+
+* *Empty accession*: `"_pep00019"` alone strips to `""`, which downstream treats as a protein
+  identity. Real, but the C# regex produces `""` too - guarding only Rust would diverge. Fix both
+  or neither. Implausible input (accessions are `sp|X_pepN|Y`).
+* *`.scores.parquet` caches persist un-stripped `protein_ids`* and no cache key moves
+  (`library_identity_hash` is name+size+mtime, the workspace version bumps only at release), so a
+  rerun over an existing work dir can mix stripped and un-stripped accessions. Genuine hazard,
+  but invalidating caches is a behaviour change needing its own validation run.
+* *Cache path never re-saves*, so the strip re-runs and re-WARNs forever, and reports a different
+  entry count than the fresh path (post-dedup vs pre-dedup population). Reviewer's fix - bump
+  `cache.rs` `VERSION` to 2 and delete the cache-path call - is clean and worth doing, but it
+  changes the parity story with C# and is not a tonight change.
+* *`PEP_TOKEN` hardcodes the default `--pep-suffix-format`* of
+  `build_entrapment_peptide_fasta.py` (`_pep{:05d}`); a custom format silently no-ops with no
+  "looks per-peptide but nothing matched" diagnostic. Documented in the release note instead.
+* *Composition-based decoy pairing loses the per-peptide discriminator* after stripping. Worth
+  a hard look, but the validated run supplies a manifest, and the claim needs its own experiment.
+* *Allocation churn* (two hash lookups + a full clone per touched entry vs an in-place rewrite)
+  and *`real_accessions` counting stripped strings rather than physical proteins*. Both fair;
+  neither is a defect.
+* *`\d` Unicode-vs-ASCII divergence* between .NET's regex and `is_ascii_digit`. Real in principle,
+  unreachable for ASCII accessions.
+
+Also flagged, **pre-existing and outside the diff**: `compute_protein_fdr` finds a group's decoy
+by `format!("{}{}", DECOY_PREFIX, peptide)`, a prefix only `DecoyGenerator` ever applies - so on a
+`--decoys-in-library` run the lookup never hits and protein q-values are trivially 0.0. Not this
+branch's to fix; worth its own investigation.
