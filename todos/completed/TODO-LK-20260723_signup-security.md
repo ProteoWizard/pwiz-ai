@@ -7,15 +7,14 @@
 | `MacCossLabModules` | `26.7_fb_signup-security` | [#667](https://github.com/LabKey/MacCossLabModules/pull/667) | `release26.7-SNAPSHOT` |
 
 - **Created**: 2026-07-23
-- **Last updated**: 2026-08-04
+- **Last updated**: 2026-08-17
 - **Status**: PR #667 merged into `release26.7-SNAPSHOT` on 2026-07-28 (merge commit
   `0a21a77`). 
   - All four in-scope findings are fixed and `SignUpGroupChangeSecurityTest`
   (SIGNUP-1) passes on 26.7. 
   - Four review rounds addressed (`/pw-self-review`, LabKey's own `review-pr.md`, Copilot, and Josh's review). 
-  - Brian C. deployed the code to a skyline **test** server (not yet skyline.ms) with the `signup-form` wiki edit applied.
-  - Signup enumeration-parity behavior verified 2026-07-31 and the self-service group transition happy path (SIGNUP-1) verified end to end 2026-08-04 on the test server(see Test-server verification / Group-transition verification). 
-  - Live skyline.ms deployment and its `signup-form` edit are still ahead (see Client contract).
+  - Brian C. first deployed the code to a skyline **test** server with the `signup-form` wiki edit applied, where signup enumeration-parity behavior was verified 2026-07-31 and the self-service group transition happy path (SIGNUP-1) verified end to end 2026-08-04 (see Test-server verification / Group-transition verification).
+  - **Now deployed on skyline.ms, and the live `signup-form` wiki page (`/home/support`) has been updated to the new contract** - wiki version 44, modified 2026-08-11, verified 2026-08-17. The `$.post` callback keys the confirmation message off `json.status == 'SUCCESS'` and shows `json.error_message`, with the old `USER_ADDED`/`USER_EXISTS` branches removed. This closes the Client contract, so all work on this TODO is complete.
 
 
 ## Objective
@@ -51,11 +50,12 @@ Implementation notes worth keeping in mind:
   pre-existing account). Left as-is - the DB layer throws an unchecked
   `RuntimeSQLException`, which the signup catch clauses do not include.
 
-## Client contract - action needed at deploy
-One live skyline.ms wiki page needs an edit at/after deploy.
-1. `signup-form` (`/home/support`) still keys success off `USER_ADDED`. It must check
-   `json.status == 'SUCCESS'` and drop the `USER_EXISTS` branch, or the confirmation
-   message won't show.
+## Client contract - DONE at deploy
+One live skyline.ms wiki page needed an edit at/after deploy, and it has been made.
+1. `signup-form` (`/home/support`) - DONE (verified 2026-08-17, wiki version 44 modified
+   2026-08-11). The callback now checks `json.status == 'SUCCESS'` and shows
+   `json.error_message`, and the old `USER_ADDED`/`USER_EXISTS` branches are gone, so the
+   confirmation message shows correctly.
 
 The `register-form` page (`/home/software/Skyline/daily/register-form/`) needs no change.
 It already handles `NO_PERMISSIONS`, which is now the status a refused group change
@@ -138,5 +138,5 @@ register-form renders as the "contact the administrator" message).
 - [x] Manual verification: enumeration parity passed in both mail modes (2026-07-26).
 - [x] Test server (Brian C.): code deployed with the `signup-form` wiki edit; signup enumeration parity verified 2026-07-31.
 - [x] Test server: self-service group transition happy path (SIGNUP-1) verified end to end 2026-08-04 - new account -> email confirm -> added to "Signup" group -> "Agree & Register" moves user to read-only "DailyRequests" (`USER_MOVED_SUCCESS`), `signup.movedusers` row + audit entry created. Rejection branches remain covered by `SignUpGroupChangeSecurityTest`.
-- [ ] Await the 26.7 installer build and deployment to skyline.ms.
-- [ ] At/after deploy: update the remaining live skyline.ms wiki page (`signup-form`; see Client contract).
+- [x] 26.7 installer built and deployed to skyline.ms (confirmed 2026-08-17).
+- [x] Live skyline.ms `signup-form` wiki page (`/home/support`) updated to the new contract - keys success off `SUCCESS`, shows `error_message`, old `USER_ADDED`/`USER_EXISTS` branches removed (verified 2026-08-17, wiki version 44 modified 2026-08-11).
