@@ -194,3 +194,12 @@ rel-abundance tests - all green.
   cleanup on final positions.
 - Marker rectangles are symbol-sized (`pixPt +/- symbolSize*scale`),
   not oversized.
+- Developer notes the layout copying back and forth (UI-thread marker
+  snapshot -> worker -> UI apply) as a possible slowdown; acceptable
+  for now. Measured reasoning: the snapshot is one pass per layout run
+  while the annealer runs max(700, N*75) iterations, and the old code
+  re-derived the same data per lookup (ToArray per call, TransformCoord
+  per candidate, GetCoords string round-trips), so the refactor should
+  be a net win. If profiling ever says otherwise, first cheap fix:
+  compute marker rects directly from symbol size instead of parsing
+  the GetCoords "x1,y1,x2,y2" string at snapshot time.
