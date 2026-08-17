@@ -831,3 +831,31 @@ Also flagged, **pre-existing and outside the diff**: `compute_protein_fdr` finds
 by `format!("{}{}", DECOY_PREFIX, peptide)`, a prefix only `DecoyGenerator` ever applies - so on a
 `--decoys-in-library` run the lookup never hits and protein q-values are trivially 0.0. Not this
 branch's to fix; worth its own investigation.
+
+### BOTH PRs OPEN AND FULLY GREEN - ready for human review and a paired merge
+
+| gate | result |
+|---|---|
+| `regression.ps1 -Dataset All` | **PASS** - modes 1-7, all four datasets (63 min local) |
+| Osprey.Test | **586/586**, ReSharper 0 warnings both TFMs |
+| Cross-impl `StellarLibraryDecoy` vs Rust | **PASS** at 1e-9, precursors 28,748 both sides |
+| Rust CI on #65 | **PASS** - macos 3m11s, ubuntu 2m08s, windows 21m25s |
+| Copilot on #4585 | 1 comment, **declined with reasons**, thread resolved |
+| **TeamCity #208** on `pull/4585` | **SUCCESS** - 91 min, commit `b44c3c32a6`, Agent 1 |
+
+TeamCity: https://teamcity.labkey.org/build/4136470
+
+**Copilot's one comment and why it was declined**: it flagged the English literal
+`"No input files"` in the new `TestValidateModelDiagnosticsTakesTheFullPipelineArgs` as
+violating the translation-proof rule. That rule targets localized text backed by a `.resx`;
+this message is a plain literal in `Program.cs:544` and Osprey CLI validation diagnostics are
+not localized, so there is no resource string to assert against. The assertion is also
+deliberately identical to `TestValidateDefaultRejectsMissingInput` (line 416) - that sameness
+IS the property under test, since `ModelDiagnostics` is the only task with no case in
+`ValidateArgs` and must fall through to the same error.
+
+**The branch is 1 commit behind master and that is intentional.** Master gained `e396e5f6c0`
+(#4584) during the TeamCity run; it touches only `AlphapeptdeepLibraryBuilder.cs`, no Osprey
+file. Rebasing or clicking "Update branch" would move the SHA and invalidate the passing
+91-minute gate for a change that cannot affect it. If strict currency is wanted before merge,
+plan on re-triggering (`branch="pull/4585"`) - and ask first, per the shared-agent rule.
