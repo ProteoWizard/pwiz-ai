@@ -452,3 +452,24 @@ to 1.0.119 to match what pwiz-sharp's Bruker and UIMF readers require (NU1605 ot
 
 This is a prerequisite of the base branch, not of this change. `winget install
 Microsoft.DotNet.SDK.8` needs UAC, which this session cannot answer (exit 1602).
+
+### 2026-08-17 - Linux/WSL verification (the last acceptance criterion)
+
+WSL2 + Ubuntu installed after Brendan's reboot. `package.ps1 -Rid linux-x64 -Configuration
+Release -NoZip` produced a self-contained publish; under WSL it is a real ELF
+(`ELF 64-bit LSB pie executable, x86-64 ... dynamically linked`) and reports
+`Osprey v26.1.1.229 (3a18479f8e)` - the commit on this branch. **No Wine, no container.**
+
+**Finding worth carrying into the PR**: the "self-contained" publish is not free of system
+dependencies. On a bare Ubuntu image it fails at startup with
+
+    Couldn't find a valid ICU package installed on the system.
+
+`package.ps1`'s doc claims "Self-contained means ZERO system-.NET dependency: copy the folder
+to an HPC node and run it." That is true of .NET itself but not of **libicu**, which the
+runtime needs for globalization. Installing `libicu-dev` fixed it immediately. A real HPC
+node almost certainly has it, so this is a documentation gap rather than a defect - but a
+node that does not have it fails with a message about ICU, not about Osprey. Worth either
+amending the claim or setting `InvariantGlobalization` deliberately (note pwiz-sharp sets it
+true for its own libraries and Thermo explicitly opts OUT, because the Thermo SDK constructs
+CultureInfo("en-US") - so that switch is not free and needs care).
