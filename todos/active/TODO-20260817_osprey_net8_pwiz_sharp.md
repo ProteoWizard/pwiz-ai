@@ -498,3 +498,20 @@ across operating systems - 162,620 MS2 and 974 MS1 spectra, every peak, every re
 every isolation window. The acceptance criterion "Runs on Linux/WSL without the Wine
 container" is met in the strongest available form: not merely runs, but produces the same
 bytes.
+
+## Session end 2026-08-18 - branch complete, PR deliberately not opened
+
+`C:\proj\pwiz` is on `Skyline/work/20260817_osprey_net8_pwiz_sharp` @ `3a18479f8e`, clean,
+pushed, nothing unpushed. Every gate is green: 576/576 unit tests, ReSharper 0/0,
+`regression.ps1 -Dataset All` passed twice (before and after the `/code-review max` fixes),
+byte comparisons on SEA-AD and TDP-43, and byte-identical output between Windows and
+Linux/WSL2.
+
+**The PR is NOT opened on purpose.** If the CommonUtil WinForms split
+(`TODO-20260818_commonutil_winforms_split.md`) lands in Matt's branch first,
+`ProteowizardWrapper` becomes plain `net8.0`, Osprey can go back through it, and the six
+`MsDataFileImpl` semantics this branch reproduces BY HAND get inherited from one place again.
+Decide that sequencing before opening. Draft PR body: `ai/.tmp/pr-4497-body.md`.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260818_commonutil_winforms.md` before starting work.

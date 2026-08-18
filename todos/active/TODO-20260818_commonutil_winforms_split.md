@@ -161,3 +161,12 @@ even in the same folder structure, before `Common` and `CommonUtil` became separ
 So the namespace overlap that defeats a namespace-based inspection rule is a deliberate
 compatibility artifact, not an oversight. That is also why moving types between the two
 assemblies costs no call-site changes - the namespace was always the constant.
+
+## Session end 2026-08-18
+
+Analysis complete, execution not started. `C:\proj\pwiz-work1` is checked out on
+`chambem2/pwiz-sharp` @ `5ef89bd228` and clean, ready to work in. Nothing has been built
+there yet - budget for a first full Skyline build.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260818_commonutil_winforms.md` before starting work.
