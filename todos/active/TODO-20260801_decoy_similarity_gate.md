@@ -2456,3 +2456,38 @@ Root cause traced from measured output back to source across four implementation
 gate on fragment overlap only is backed by the marginal-value measurement above rather than by
 the "checkbox coverage" reasoning that produced the original C#/Rust gates - which turned out to
 have picked the right one of the two.
+
+### 2026-08-18 - Library replacement measured; SEA-AD deficit is a SCALE effect
+
+Ran the first head-to-head searches of our rebuilt Astral library against Mike's
+delivered library. Full visual record with every table:
+[`TODO-20260801_decoy_similarity_gate-library-comparison.html`](TODO-20260801_decoy_similarity_gate-library-comparison.html)
+(sections 14-15 carry a RETRACTION - read them before reusing any number).
+
+**We can rebuild the library.** Target space is 99.88% identical (+423 targets
+ours), and predictions match Mike's at cosine 0.9987 / RT delta 0.02 on BOTH the
+target and the decoy/entrapment side. The delivered library's 63,094 extra
+peptides are 100% Met-clip artifacts that Osprey discards either way.
+
+**Per file, all five libraries are equivalent** (30,782-31,563 at 1% pass-1
+run-level FDR on SEA-AD `_0001`). The similarity gate costs nothing per file.
+
+**The real deficit is scale-dependent.** At 82 files ours yields 1,617,830
+precursors at 1% pass-1 run-level FDR against Mike's 1,925,612 (-16.0%); per file
+`_0001` 24,133 vs 28,253 (-14.6%). Both libraries decay with N - Mike's -8.6%,
+ours -21.6%. Bracket: clean at N<=8, -15% at N=82.
+
+**Key tool found**: `-Task FirstPassFDR -LinkFrom <completed run>` re-runs ONLY
+first-pass FDR off already-computed per-file artifacts - minutes, not hours. This
+makes a file-set bisection cheap.
+
+**Next**: bisect the 82-file SET (not just N) with FirstPassFDR-only runs and
+per-file q values to find the smallest reproducing file set; then vary library
+variables across the two libraries, which will need PerFileScoring + FirstPassFDR.
+
+Also opened [maccoss/Carafe#13](https://github.com/maccoss/Carafe/pull/13) pinning
+the `alphapeptdeep_dia` predictor to a commit instead of `refs/heads/main`, and
+added `-NoSimilarityGate` to the Carafe workflow driver.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260818_seaad_library_scale_deficit.md` before starting work.
