@@ -123,3 +123,7 @@ Loopholes and proposals:
 ## Notes
 - The SublistPaths move (Phase 1) reduced Model violations; ReportExporter work will remove the remaining DocumentGridViewContext usages in Model/CLI.
 - Keep Phase 2 changes small and staged to reduce branch complexity.
+
+> **See also**: `ai/todos/active/TODO-20260818_commonutil_winforms_split.md` advances
+> T1 (path-based inspection) and T6 (Common WinForms audit) from a different direction -
+> ProteowizardWrapper needing to be plain net8.0 for Osprey on Linux.

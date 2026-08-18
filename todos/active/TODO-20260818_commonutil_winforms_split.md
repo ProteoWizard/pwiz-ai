@@ -141,3 +141,23 @@ wording."* So the fix must come with a CodeInspection rule.
 
 Sequencing note: land the inspection rule LAST, after the moves, or the test goes red on the
 very changes that fix it.
+
+## This is not a new idea - it advances an existing backlog item
+
+`ai/todos/backlog/TODO-ui_free_model_phase2.md` ("Phase 2: UI-free Model and report export",
+partially complete via PR #3700) already lists the remaining work, and two of its three items
+are what this TODO does:
+
+| Backlog item | Relationship |
+|---|---|
+| **T1** - "Add folder-based Model scan (path-based, not just namespace-based) in CodeInspectionTest" | **Exactly gotcha 1 above.** I derived the need for a directory-scoped rule independently, from the fact that `Common` and `CommonUtil` share the `pwiz.Common.*` root; T1 had already recorded that namespace-based scanning is the loophole. Build the CommonUtil rule as part of T1's path-based mechanism, not as a one-off. |
+| **T6** - "Audit Common for WinForms usage that could be transitively pulled by Model" | **This audit, arrived at from the other end.** T6 framed it as a Model risk; we hit it as `ProteowizardWrapper -> CommonUtil -> WinForms` blocking a plain-net8.0 wrapper for Osprey on Linux. Same dependency, different consumer - which makes the case stronger, not weaker. |
+| **T2** - "Util split guardrails (Model/Util vs Skyline/UtilUI separation)" | The larger vision Brendan described: move `Skyline\Model` to its own DLL, rename `Skyline\Util` to `UtilUI`, and move Model-required classes into `Skyline\Model\Util`, because `Skyline\Util` is still where the separation is unenforced. NOT in scope here, but this work should not make it harder. |
+
+**Historical context (Brendan, 2026-08-18)**, worth recording because it explains the shape:
+`pwiz.Common` was loosely defined by Nick before the UI-vs-Model separation was clarified.
+His fix was to split the classes into TWO DLLs while KEEPING the shared namespace - initially
+even in the same folder structure, before `Common` and `CommonUtil` became separate folders.
+So the namespace overlap that defeats a namespace-based inspection rule is a deliberate
+compatibility artifact, not an oversight. That is also why moving types between the two
+assemblies costs no call-site changes - the namespace was always the constant.
