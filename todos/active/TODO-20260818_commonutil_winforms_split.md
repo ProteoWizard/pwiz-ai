@@ -103,3 +103,41 @@ Measured: file counts, per-namespace WinForms usage, and what the two risky file
 NOT done: checking what depends on the 13 Tier-2 files (a move changes which assemblies need
 a `Common` reference), and nothing has been built. This is a scoped recommendation, not a
 validated plan. Expect a full Skyline build + test cycle to be the bulk of the work.
+
+## Enforce it, do not just fix it (Brendan, 2026-08-18)
+
+`SafeBeginInvoke` is a mistake of naming convenience, not a design choice - someone reached
+for CommonUtil and forgot it is meant to be WinForms-free. A rule with no verifier drifts,
+which is exactly what CRITICAL-RULES says: *"Trust comes from verifiers, not from the LLM...
+When a rule's verifier is weak, the rule will drift; strengthen the verifier rather than the
+wording."* So the fix must come with a CodeInspection rule.
+
+- [ ] Move `SafeBeginInvoke(Control, Action)` to a new `ControlUtil` in
+      **`pwiz.Common.Controls`** - that namespace **already exists in `Common`**
+      (`Common/Controls/AutoScrollTextBox.cs`, `Controls/Clustering/*`), so this needs no new
+      structure.
+- [ ] Add a CodeInspection rule forbidding WinForms in CommonUtil, modelled on the existing
+      one in `pwiz_tools/Skyline/Test/CodeInspectionTest.cs:221`:
+
+      AddForbiddenUIInspection(@"*.cs", @"namespace pwiz.Skyline.Model",
+          @"Skyline model code must not depend on UI code");
+
+      whose regex forbids
+      `(pwiz\.Skyline\.(Alerts|Controls|.*UI)|System\.Windows\.Forms|pwiz\.Common\.GUI)\.`
+
+### Two gotchas found while checking the pattern
+
+1. **The new rule must key on DIRECTORY, not namespace.** `Common` and `CommonUtil` SHARE the
+   `pwiz.Common.*` root - Common owns `pwiz.Common.Colors` / `Controls` / `DataAnalysis`,
+   CommonUtil owns `pwiz.Common.GUI` / `SystemUtil`. A `namespace pwiz.Common` cue would also
+   flag `Common`, where WinForms is legitimate. Scope it to
+   `pwiz_tools/Shared/CommonUtil/**` instead. `AddTextInspection` already takes a directory
+   filter (see the `NonSkylineDirectories()` argument at CodeInspectionTest.cs:226), so the
+   mechanism exists.
+2. **`pwiz.Common.GUI` is ALREADY on the forbidden list** in that same regex - the codebase
+   already classifies it as UI. It is simply in the wrong ASSEMBLY. That is independent
+   corroboration for moving `CommonUtil/GUI/*` into `Common`: everything else already treats
+   that namespace as UI code.
+
+Sequencing note: land the inspection rule LAST, after the moves, or the test goes red on the
+very changes that fix it.
