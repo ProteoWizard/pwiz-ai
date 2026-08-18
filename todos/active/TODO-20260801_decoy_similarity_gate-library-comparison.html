@@ -389,6 +389,51 @@ inside the 1% cutoff. Working hypothesis, unproven: near-copy entrapment compete
 target twin on one peak, so a cosine-0.999 difference decides which wins &mdash; targets are insensitive,
 near-copies maximally sensitive. The gate removes the exposure entirely.</div>
 
+
+<h2>14. SEA-AD bisection: the gate is exonerated, its REPLACEMENTS are not</h2>
+<p class="sub">Cycle time reduced from 8 h (82 files) to <strong>~6 min</strong> (one SEA-AD file,
+warm spectra caches). Run-level FDR @1% on <code>SEA-AD-0001</code>.</p>
+<div class="card scroll">
+<table>
+  <tr><th>library</th><th>Carafe</th><th>overlap gate</th><th>I/L check</th><th>precursors</th></tr>
+  <tr><td>Mike delivered</td><td>pre-fork</td><td>&mdash;</td><td>&mdash;</td><td class="num">30,922</td></tr>
+  <tr><td><code>gated</code></td><td><code>c3f8fc2</code></td><td>yes</td><td>no</td><td class="num">30,857</td></tr>
+  <tr><td><code>gated-no-il</code></td><td><code>fe25b55</code></td><td>yes</td><td>yes</td><td class="num good">31,563</td></tr>
+  <tr><td>ours ungated</td><td><code>14bc81c</code></td><td>no</td><td>no</td><td class="num">30,782</td></tr>
+  <tr class="tot"><td><strong>ours gated</strong></td><td><code>14bc81c</code></td><td>yes</td><td>yes</td><td class="num badc">24,133</td></tr>
+</table>
+</div>
+<div class="note w">Every configuration lands in 30,782&ndash;31,563 <strong>except ours</strong>. The
+similarity gate is not inherently harmful &mdash; the best library of the five (31,563) has both checks
+on. Note the naming trap: <code>-no-il</code> means <em>no I/L colliders remain</em>, i.e. the check IS
+applied.</div>
+<div class="note"><strong>Sequence generation is identical.</strong> Our 08-17 gated pairing manifest is
+<strong>byte-identical</strong> (SHA256 <code>32fe851e&hellip;</code>) to the 08-02 <code>gated-no-il</code>
+manifest. Same gate, same I/L check, same shuffles, same drops. So stage 1b is not the difference.</div>
+
+<h3>The mechanism</h3>
+<p class="sub">Splitting our gated arm's reported entrapment by whether the gate created that sequence
+(gate-changed = in the gated manifest but not the ungated one; 163,088 sequences).</p>
+<div class="card scroll">
+<table>
+  <tr><th></th><th>share of library</th><th>share of reported entrapment</th><th>inside 1% q cutoff</th><th>p10 rank</th></tr>
+  <tr><td><strong>gate-changed</strong></td><td class="num">3.91%</td><td class="num">5.58%</td><td class="num badc">13.93%</td><td class="num">92,558</td></tr>
+  <tr><td>unchanged</td><td class="num">96.09%</td><td class="num">94.42%</td><td class="num">6.09%</td><td class="num">150,321</td></tr>
+</table>
+</div>
+<div class="note w"><strong>The gate's replacement sequences are 2.3&times; more likely to be reported as
+high-confidence false discoveries</strong> than the entrapment it leaves alone, and they rank better
+(p10 92,558 vs 150,321). The retry loop searches until fragment overlap with its <em>own</em> target is
+&le; 0.4; nothing constrains similarity to <em>other</em> real peptides. Optimising away within-group
+similarity pushes replacements toward cross-group contamination &mdash; the kind that actually matters.
+More detectable entrapment high in the ranking inflates the null, tightens the q-cutoff, and costs
+target detections.</div>
+<div class="note"><strong>Caveat.</strong> The same gate-changed sequences in the 08-02 library do not
+break it (31,563), so our fine-tuned model's predictions for them are part of the story too. Sequence
+selection and prediction interact; this measurement pins the sequence half. Prediction divergence is
+<em>not</em> concentrated in gate-changed sequences (cosine &lt; 0.90: 1.56% gate-changed vs 3.02%
+unchanged).</div>
+
 <footer>
 Measured 2026-08-17. Rebuild: <code>D:\test\carafe-repro\astral-20260817</code>, Carafe
 <code>maccoss/Carafe@14bc81c</code> (jar snapshot
