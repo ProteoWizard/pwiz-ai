@@ -2491,3 +2491,93 @@ added `-NoSimilarityGate` to the Carafe workflow driver.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260818_seaad_library_scale_deficit.md` before starting work.
+
+### 2026-08-18 (afternoon) - The 82-file deficit is a POOLING sensitivity, and only OUR library has it
+
+Brendan's plan was to bisect the file SET with cheap `-Task FirstPassFDR -LinkFrom` runs.
+Doing that produced a sharper result than a minimal reproducing set: at a FIXED file set,
+our library loses a quarter of its identifications when those files are pooled with others,
+and Mike's library loses nothing.
+
+**The measurement.** Same 8 files, same metric (pass-1 run-level FDR @1%, summed):
+
+| library | those 8 files at N=8 | the SAME 8 files inside N=82 | change |
+|---|---|---|---|
+| ours (gated rebuild) | 247,971 | 189,186 | **-23.7%** |
+| Mike delivered | 228,577 | 225,400 | **-1.4%** |
+
+So this is not "our library is worse at 82 files". Mike's library is nearly scale-invariant;
+ours is not. The deficit is a property of how many files share the pooled first-pass model.
+
+**The N ladder for our arm is FLAT to 16 and collapses by 82** - `_0001`: 30,802 (N=1),
+31,300 (N=8), 30,993 (N=16), 24,133 (N=82). The collapse is not a smooth degradation.
+
+**Mike's N=8 had never been measured**, and it inverts the previous entry's bracket. The
+"clean at N<=8" claim compared our N=8 against his N=**1**, which is the cross-N comparison
+this file's own method-failure list warns against:
+
+| N | ours `_0001` | Mike `_0001` | delta |
+|---|---|---|---|
+| 1 | 30,802 | 30,922 | -0.4% |
+| 8 | **31,300** | **28,918** | **+8.2%** (8-file totals: +8.5% ours) |
+| 82 | 24,133 | 28,253 | -14.6% |
+
+The libraries CROSS OVER between 8 and 82 files. "Which library is better" has no
+N-independent answer today.
+
+**Why pooling can matter at all: the pass-1 model is GLOBAL and trained on cross-file maxima.**
+
+- All 82 `.1st-pass.model.json` in an 82-file run are byte-identical (one MD5 over 82 files):
+  one model, written per file, not trained per file.
+- `PercolatorSampling.SelectBestPerPrecursor` keys on `base_id` + label over the POOLED entry
+  list with no file dimension, ranked on `Features[0]` = `coelution_sum`. Within one file the
+  dedup is a no-op (file `_0001`: 4,324,599 rows in, 4,324,599 out) - it collapses ONLY across
+  files, so every training row at N=82 is a maximum over up to 82 draws.
+- Training size is CONSTANT in N (capped at 300,000, `PercolatorConfig.MaxTrainSize`, override
+  `OSPREY_MAX_TRAIN_SIZE`). What N changes is WHICH rows, not how many.
+- Consequence, measured: at N=82 the model trains on a pool whose mean `coelution_sum` is
+  **4.9x the mean of the data it scores** (5.75 vs 1.18 for `_0001`).
+
+**Two of my own leads were killed by the same data - recorded so they are not re-derived:**
+
+1. *"The training-pool drift explains the loss"* - NO. The drift is already 2.7x at N=8
+   (`coelution_sum` training mean 1.19 -> 3.24) where yields are FLAT. No dose-response.
+2. *"The C sweep collapses at scale"* - NO. Per-fold C spans 5 orders of magnitude at N=1 too
+   (Mike's N=1: 100 / 1 / 1). Unstable everywhere, not a scale signature.
+   Also NOT a fix: recomputing the standardizer on the application pool. For a linear model
+   the mean only shifts the bias and the scale only rescales weights, so ranking is invariant.
+
+**FDR control is intact throughout** - decoys above the acceptance boundary are 1.01% of
+accepted targets in every arm. What degrades is ranking power, confirmed on a scale-free
+measure (targets above the k-th highest decoy, `_0001`, k=300): ours 30,528 (N=1) -> 24,922
+(N=82); Mike 30,604 -> 28,444.
+
+**Per-file yield falls steadily with injection order in BOTH arms at the same ratio**
+(files 1-8 mean 23,648 ours / 28,175 Mike; files 74-82 15,420 / 18,762). That is sample or
+instrument drift across the plate, not a poisoned subset - and it is why no single-file-set
+bisection was going to isolate anything.
+
+**Two method points that make the above trustworthy:**
+
+- `-Task FirstPassFDR -LinkFrom` is VALIDATED, not assumed: the linked N=8 run reproduces the
+  standalone 8-file run exactly - same 31,300, same acceptance boundary (-0.1220), same 316
+  decoys above it. Stage 1-4 artifacts lifted out of an 82-file run are equivalent to running
+  those files alone, which is what makes the whole cheap ladder legitimate.
+- **A build confound was found and killed by measurement.** Every Mike 82-file run is
+  v26.1.1.224/226 while every other run is v26.1.1.217, so the headline comparison spanned two
+  binaries. Re-scoring one Mike file with 217 and diffing against the 226 artifact gives
+  4,286,356 rows and **zero differing rows across all 21 features** - the builds are
+  feature-identical, and the cross-arm numbers stand.
+
+**Next - the discriminator, and it is cheap in library terms.** We hold an UNGATED rebuild
+(`target+decoy+entrapment-20260817-ungated`) whose FASTA is byte-identical to Mike's but whose
+spectra/RT are ours. Running it at the N where our collapse appears splits the two remaining
+candidates in one experiment:
+
+- ungated-ours turns out scale-invariant -> the **similarity gate** (the sequences) causes the
+  pooling sensitivity;
+- ungated-ours still collapses -> **our predictions** do, and the gate is exonerated.
+
+Tooling for the ladder and the set-swap lives in the session scratchpad (`fp1-ladder.ps1`,
+`fp1-set.ps1`, `boundary_anatomy.py`, `pool_evolution.py`); the readers work off run dirs and
+`run.log`'s own `N precursors at 1.0% run-level FDR` lines.
