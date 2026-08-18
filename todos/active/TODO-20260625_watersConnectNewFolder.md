@@ -109,6 +109,32 @@ fetch (harmless). Deferred (optional): a sample_set->injections refresh test (ne
 handler). Clean build + CodeInspection + TestWatersConnectExportMethodDlg all green; both commits pushed.
 PENDING: TeamCity green on c1814f4f0a; then human review.
 
+### 2026-08-16 - Master merge + refresh-button design merge with Matt's PR #4282
+
+Brought the branch up to date with master: clean auto-merge (GitHub's
+"conflict" was staleness; branch was BEHIND/MERGEABLE), verified with
+build + TestWatersConnectExportMethodDlg + CodeInspection.
+
+Then reconciled the duplicate refresh-button implementations with
+Matt's unmerged PR #4282 (commit 039979bd07) per his email agreement
+(D:\...\Downloads\"[EXT] Re_ Issue list.eml", yellow highlights):
+- Button now ALWAYS visible in BaseFileDialogNE (his) - removed our
+  Visible=false opt-in and the subclass show/icon lines.
+- Icon: his form-local refresh.png embedded in BaseFileDialogNE.resx
+  (+ ApplyResources in Designer); removed our Skyline
+  Resources/Refresh.png + Resources.resx/Designer entry.
+- RefreshCurrentDirectory: public (his signature), plain re-read with
+  _abortPopulateList=true.
+- Base RefreshFromServer: his generic invalidation (RemoteUrl ->
+  RemoteSession=null) as the default; WatersConnect override keeps our
+  surgical RefreshContents (session/auth stay alive).
+- Kept our shared CommonFileDialogResources strings and the
+  VerifyRefresh functional test (still valid: button visible, seam
+  drives the override).
+This converges the branches so whichever PR merges first, the other's
+conflict resolution is mechanical (his BaseFileDialogNE hunks become
+redundant).
+
 ### 2026-06-30 - Fixed code-inspection failure after master merge
 
 TeamCity ReSharper build #18696 failed with 2 LocalizableElement warnings: the 'NewTestFolder'
