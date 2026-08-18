@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Astral library rebuild vs delivered - full accounting</title>
+<style>
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  :root {
+    --ground: #f6f8fa; --card: #ffffff; --ink: #16222c; --muted: #5d6f7c;
+    --rule: #d6dfe6; --accent: #2f86c5; --accent-soft: #e8f2fa;
+    --added: #1f7a4d; --added-soft: #e8f5ee; --warn: #9a5b12; --warn-soft: #fbf1e2;
+    --bad: #a33232;
+    --old: #8a94a0; --new: #2f86c5;
+    --ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #10171d; --card: #171f26; --ink: #e4ecf2; --muted: #93a4b1;
+      --rule: #2a353f; --accent: #62b0e0; --accent-soft: #172530;
+      --added: #59c48d; --added-soft: #14251c; --warn: #d9a05b; --warn-soft: #2a2013;
+      --bad: #e08585; --old: #6d7885; --new: #62b0e0;
+    }
+  }
+  body { margin:0; padding:32px 20px 64px; background:var(--ground); color:var(--ink);
+         font-family:var(--ui); line-height:1.55; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin:0 0 6px; letter-spacing:-0.01em; }
+  h2 { font-size: 1.12rem; margin:34px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--rule); }
+  h3 { font-size: 0.95rem; margin:20px 0 6px; color:var(--muted); text-transform:uppercase;
+       letter-spacing:0.06em; font-weight:600; }
+  .sub { color:var(--muted); margin:0 0 22px; font-size:0.95rem; }
+  .card { background:var(--card); border:1px solid var(--rule); border-radius:10px;
+          padding:18px 20px; margin:14px 0; }
+  table { border-collapse:collapse; width:100%; font-size:0.9rem; }
+  th, td { text-align:right; padding:6px 10px; border-bottom:1px solid var(--rule); }
+  th:first-child, td:first-child { text-align:left; }
+  th { color:var(--muted); font-weight:600; font-size:0.82rem; text-transform:uppercase;
+       letter-spacing:0.04em; }
+  tr:last-child td { border-bottom:none; }
+  .num { font-family:var(--mono); font-variant-numeric: tabular-nums; }
+  .tot td { font-weight:700; border-top:2px solid var(--rule); }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin:18px 0; }
+  .kpi { background:var(--card); border:1px solid var(--rule); border-radius:10px; padding:14px 16px; }
+  .kpi .v { font-size:1.5rem; font-weight:700; font-family:var(--mono); letter-spacing:-0.02em; }
+  .kpi .l { color:var(--muted); font-size:0.8rem; text-transform:uppercase; letter-spacing:0.05em; }
+  .good { color:var(--added); } .warnc { color:var(--warn); }
+  .note { background:var(--accent-soft); border-left:3px solid var(--accent);
+          padding:10px 14px; border-radius:0 6px 6px 0; margin:14px 0; font-size:0.92rem; }
+  .note.w { background:var(--warn-soft); border-left-color:var(--warn); }
+  .note.g { background:var(--added-soft); border-left-color:var(--added); }
+  .scroll { overflow-x:auto; }
+  figure { margin:14px 0; }
+  figcaption { color:var(--muted); font-size:0.84rem; margin-top:6px; }
+  .legend { display:flex; gap:16px; flex-wrap:wrap; font-size:0.84rem; color:var(--muted); margin:4px 0 10px; }
+  .sw { display:inline-block; width:11px; height:11px; border-radius:2px; margin-right:5px;
+        vertical-align:-1px; }
+  code { font-family:var(--mono); font-size:0.88em; background:var(--accent-soft);
+         padding:1px 5px; border-radius:4px; }
+  footer { color:var(--muted); font-size:0.84rem; margin-top:40px; border-top:1px solid var(--rule);
+           padding-top:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Astral library rebuild vs the delivered library</h1>
+<p class="sub">Complete accounting of every difference between
+<code>D:\test\carafe-repro\astral-20260817</code> (rebuilt 2026-08-17 on
+<code>maccoss/Carafe@14bc81c</code>, all gates and fixes) and
+<code>D:\test\AstralTest-TargetDecoyLibraries\target+decoy+entrapment</code> (delivered 2026-06-30).
+Every figure is measured over the full libraries unless marked <em>sampled</em>.</p>
+
+<div class="kpis">
+  <div class="kpi"><div class="l">Target peptides identical</div><div class="v good">99.88%</div></div>
+  <div class="kpi"><div class="l">Met-clip extras (delivered)</div><div class="v">63,094</div></div>
+  <div class="kpi"><div class="l">Unexplained extras</div><div class="v good">0</div></div>
+  <div class="kpi"><div class="l">Library rows</div><div class="v">&minus;5.41%</div></div>
+  <div class="kpi"><div class="l">Median intensity, lost ions</div><div class="v">0.0085</div></div>
+</div>
+
+<div class="note g"><strong>Bottom line.</strong> The rebuilt library is 5.41% smaller, and every part of
+that difference is accounted for: Met-clip artifacts Osprey discards anyway, the entrapment set the
+similarity gate deliberately re-shuffles, and low-intensity fragments a differently fine-tuned MS2 model
+no longer emits. The <em>target</em> peptide space is 99.88% identical and carries 423 <em>more</em>
+targets than the delivered library.</div>
+
+<h2>1. Peptide-level accounting</h2>
+<div class="card scroll">
+<table>
+  <tr><th>Component</th><th>Count</th><th>Cause</th></tr>
+  <tr><td>Met-clip artifact peptides, delivered only</td><td class="num">63,094</td>
+      <td>pre-fix NoCut over-clip; <strong>100%</strong> classified, 0 unexplained</td></tr>
+  <tr><td>Entrapment (<code>p_target</code>) sequences changed</td><td class="num">~51,000</td>
+      <td>similarity gate re-shuffles rejected entrapment &mdash; by design</td></tr>
+  <tr><td>Target peptides differing</td><td class="num">1,321</td>
+      <td>collision-drop vs gate-retry; net <strong>+423 targets</strong> in ours</td></tr>
+</table>
+</div>
+<div class="note">Osprey's <code>EntrapmentPairing</code> asserts in its doc comment that a library peptide
+absent from the manifest is always a Met-clip form. Measured here over the full Astral library:
+<strong>63,094 of 63,094</strong> delivered extras satisfy &quot;<code>M</code>+seq is a manifest
+peptide&quot;. Our rebuild has <strong>zero</strong> extras, and the run logged no
+<code>[ENTRAPMENT] Dropped&hellip;</code> line at all.</div>
+
+<h3>Target peptides</h3>
+<div class="card scroll">
+<table>
+  <tr><th></th><th>delivered</th><th>ours</th></tr>
+  <tr><td>library target peptides</td><td class="num">1,131,248</td><td class="num">1,131,671</td></tr>
+  <tr><td>only in that library</td><td class="num">449</td><td class="num">872</td></tr>
+  <tr class="tot"><td>identical</td><td class="num">99.88%</td><td class="num">99.88%</td></tr>
+</table>
+</div>
+
+<h2>2. Row-level decomposition</h2>
+<p class="sub">95,491,607 &rarr; 90,330,136 rows, a deficit of 5,161,471.</p>
+<figure>
+<div class="legend">
+  <span><span class="sw" style="background:var(--new)"></span>fragments per precursor &mdash; 56.8%</span>
+  <span><span class="sw" style="background:var(--warn)"></span>Met-clip precursors &mdash; 25.1%</span>
+  <span><span class="sw" style="background:var(--old)"></span>entrapment reshuffle / collision drops &mdash; 18.1%</span>
+</div>
+<svg viewBox="0 0 1000 64" width="100%" height="64" role="img"
+     aria-label="Row deficit split: 56.8 percent fragments per precursor, 25.1 percent Met-clip, 18.1 percent other precursors">
+  <rect x="0" y="8" width="568" height="34" fill="var(--new)"/>
+  <rect x="570" y="8" width="251" height="34" fill="var(--warn)"/>
+  <rect x="823" y="8" width="177" height="34" fill="var(--old)"/>
+  <text x="284" y="31" text-anchor="middle" fill="#ffffff" font-size="14" font-family="Consolas, monospace">2,933,036</text>
+  <text x="695" y="31" text-anchor="middle" fill="#ffffff" font-size="14" font-family="Consolas, monospace">1,293,735</text>
+  <text x="911" y="31" text-anchor="middle" fill="#ffffff" font-size="13" font-family="Consolas, monospace">~934,700</text>
+</svg>
+<figcaption>The Met-clip row count is exact, measured by matching the 63,094-peptide set against the full
+delivered library. The other two follow from exact precursor counts and exact fragments-per-precursor.</figcaption>
+</figure>
+
+<h2>3. Fragment depth is uniform across peptide type</h2>
+<div class="card scroll">
+<table>
+  <tr><th>type</th><th>delivered prec.</th><th>frag/prec</th><th>ours prec.</th><th>frag/prec</th><th>&Delta;</th></tr>
+  <tr><td>target</td><td class="num">1,597,942</td><td class="num">15.101</td><td class="num">1,544,824</td><td class="num">14.628</td><td class="num">&minus;3.13%</td></tr>
+  <tr><td>p_target</td><td class="num">1,576,253</td><td class="num">15.097</td><td class="num">1,544,566</td><td class="num">14.622</td><td class="num">&minus;3.15%</td></tr>
+  <tr><td>decoy</td><td class="num">1,575,652</td><td class="num">15.090</td><td class="num">1,544,284</td><td class="num">14.615</td><td class="num">&minus;3.14%</td></tr>
+  <tr><td>p_decoy</td><td class="num">1,575,872</td><td class="num">15.095</td><td class="num">1,544,446</td><td class="num">14.618</td><td class="num">&minus;3.16%</td></tr>
+</table>
+</div>
+<div class="note">Four types, four deficits within 0.03 percentage points of each other. Whatever causes the
+fragment-depth shift is <strong>indifferent to entrapment, decoys and the gate</strong> &mdash; it is a
+property of the prediction, not of library construction.</div>
+
+<h2>4. What happens to the same precursor</h2>
+<p class="sub">6,024,616 precursors present in both libraries.</p>
+<figure>
+<svg viewBox="0 0 1000 210" width="100%" height="210" role="img"
+     aria-label="Distribution of fragment-count change on matched precursors; 64 percent unchanged">
+  <g font-family="Consolas, monospace" font-size="12">
+  <line x1="60" y1="170" x2="980" y2="170" stroke="var(--rule)"/>
+  <rect x="80"  y="20"  width="80" height="150" fill="var(--new)"/>
+  <rect x="190" y="122" width="80" height="48"  fill="var(--old)"/>
+  <rect x="300" y="152" width="80" height="18"  fill="var(--old)"/>
+  <rect x="410" y="164" width="80" height="6"   fill="var(--old)"/>
+  <rect x="520" y="168" width="80" height="2"   fill="var(--old)"/>
+  <rect x="630" y="163" width="80" height="7"   fill="var(--added)"/>
+  <rect x="740" y="169" width="80" height="1"   fill="var(--added)"/>
+  <text x="120" y="14"  text-anchor="middle" fill="currentColor">3,853,864</text>
+  <text x="230" y="116" text-anchor="middle" fill="currentColor">1,241,313</text>
+  <text x="340" y="146" text-anchor="middle" fill="currentColor">470,404</text>
+  <text x="450" y="158" text-anchor="middle" fill="currentColor">167,075</text>
+  <text x="560" y="162" text-anchor="middle" fill="currentColor">58,272</text>
+  <text x="670" y="157" text-anchor="middle" fill="currentColor">190,202</text>
+  <text x="780" y="163" text-anchor="middle" fill="currentColor">11,642</text>
+  <text x="120" y="188" text-anchor="middle" fill="var(--muted)">0</text>
+  <text x="230" y="188" text-anchor="middle" fill="var(--muted)">&minus;1</text>
+  <text x="340" y="188" text-anchor="middle" fill="var(--muted)">&minus;2</text>
+  <text x="450" y="188" text-anchor="middle" fill="var(--muted)">&minus;3</text>
+  <text x="560" y="188" text-anchor="middle" fill="var(--muted)">&minus;4</text>
+  <text x="670" y="188" text-anchor="middle" fill="var(--muted)">+1</text>
+  <text x="780" y="188" text-anchor="middle" fill="var(--muted)">+2</text>
+  <text x="500" y="205" text-anchor="middle" fill="var(--muted)" font-family="inherit">change in fragment count (ours &minus; delivered)</text>
+  </g>
+</svg>
+<figcaption>63.97% unchanged, 32.65% lose fragments, 3.38% gain them. Mean shift &minus;0.4753 fragments
+per precursor. A graded drift, not a truncated subset.</figcaption>
+</figure>
+
+<h2>5. The lost fragments are the weak ones</h2>
+<p class="sub"><em>Sampled</em>: 14,958 matched precursors selected by sequence hash (unbiased by file
+position), yielding 9,221 ions present in the delivered library and absent from ours.</p>
+<figure>
+<div class="legend">
+  <span><span class="sw" style="background:var(--bad)"></span>relative intensity of lost ions, as recorded in the delivered library</span>
+</div>
+<svg viewBox="0 0 1000 190" width="100%" height="190" role="img"
+     aria-label="Intensity distribution of lost fragments: about 90 percent below 0.05">
+  <g font-family="Consolas, monospace" font-size="12">
+  <line x1="40" y1="150" x2="980" y2="150" stroke="var(--rule)"/>
+  <rect x="70"  y="139" width="120" height="11"  fill="var(--bad)"/>
+  <rect x="220" y="72"  width="120" height="78"  fill="var(--bad)"/>
+  <rect x="370" y="93"  width="120" height="57"  fill="var(--bad)"/>
+  <rect x="520" y="139" width="120" height="11"  fill="var(--bad)"/>
+  <rect x="670" y="145" width="120" height="5"   fill="var(--bad)"/>
+  <rect x="820" y="149" width="120" height="1"   fill="var(--bad)"/>
+  <text x="130" y="133" text-anchor="middle" fill="currentColor">7.1%</text>
+  <text x="280" y="66"  text-anchor="middle" fill="currentColor">47.8%</text>
+  <text x="430" y="87"  text-anchor="middle" fill="currentColor">35.0%</text>
+  <text x="580" y="133" text-anchor="middle" fill="currentColor">6.7%</text>
+  <text x="730" y="139" text-anchor="middle" fill="currentColor">3.3%</text>
+  <text x="880" y="143" text-anchor="middle" fill="currentColor">0.0%</text>
+  <text x="130" y="168" text-anchor="middle" fill="var(--muted)">&lt;0.001</text>
+  <text x="280" y="168" text-anchor="middle" fill="var(--muted)">0.001&ndash;0.01</text>
+  <text x="430" y="168" text-anchor="middle" fill="var(--muted)">0.01&ndash;0.05</text>
+  <text x="580" y="168" text-anchor="middle" fill="var(--muted)">0.05&ndash;0.1</text>
+  <text x="730" y="168" text-anchor="middle" fill="var(--muted)">0.1&ndash;0.5</text>
+  <text x="880" y="168" text-anchor="middle" fill="var(--muted)">&ge;0.5</text>
+  <text x="500" y="185" text-anchor="middle" fill="var(--muted)" font-family="inherit">relative intensity in the delivered library</text>
+  </g>
+</svg>
+<figcaption>Median lost-ion intensity <strong>0.0085</strong> against <strong>0.1711</strong> for all
+delivered ions &mdash; 20&times; weaker. 89.9% fall below 0.05; one ion of 9,221 exceeded 0.5. Ion types
+split evenly (b 4,753 / y 4,468), so neither series is systematically lost. 55.7% of matched precursors
+have an identical ion set.</figcaption>
+</figure>
+<div class="note w"><strong>Read the aggregate histogram with care.</strong> Binning <em>all</em> rows by
+intensity shows a near-uniform 0.93&ndash;0.95 ratio in every band, which looks like the loss is
+intensity-indifferent. It is not. That view mixes two populations: roughly 2.3% of the deficit is whole
+precursors being absent, and those remove ions at every intensity, flattening the band ratios. Only the
+matched-precursor join above answers &quot;what do we lose from a spectrum we still have&quot;.</div>
+
+<h2>6. Cap saturation and length</h2>
+<div class="card scroll">
+<table>
+  <tr><th>fragments per precursor</th><th>delivered</th><th>ours</th></tr>
+  <tr><td>at the top-20 cap</td><td class="num">26.96%</td><td class="num">22.84%</td></tr>
+  <tr><td>only 4</td><td class="num">0.09%</td><td class="num">0.20%</td></tr>
+  <tr><td>only 2 (floor)</td><td class="num">0.02%</td><td class="num">0.04%</td></tr>
+  <tr class="tot"><td>mean</td><td class="num">15.096</td><td class="num">14.621</td></tr>
+</table>
+</div>
+<div class="card scroll">
+<table>
+  <tr><th>peptide length</th><th>n (matched)</th><th>delivered</th><th>ours</th><th>&Delta;</th><th>&Delta; %</th></tr>
+  <tr><td>6&ndash;8</td><td class="num">655,026</td><td class="num">9.822</td><td class="num">9.549</td><td class="num">&minus;0.273</td><td class="num">&minus;2.8%</td></tr>
+  <tr><td>9&ndash;11</td><td class="num">1,558,875</td><td class="num">12.992</td><td class="num">12.562</td><td class="num">&minus;0.431</td><td class="num">&minus;3.3%</td></tr>
+  <tr><td>12&ndash;14</td><td class="num">1,758,031</td><td class="num">15.704</td><td class="num">15.147</td><td class="num">&minus;0.558</td><td class="num">&minus;3.6%</td></tr>
+  <tr><td>15&ndash;17</td><td class="num">1,011,589</td><td class="num">17.432</td><td class="num">16.854</td><td class="num">&minus;0.578</td><td class="num">&minus;3.3%</td></tr>
+  <tr><td>18&ndash;20</td><td class="num">549,009</td><td class="num">18.559</td><td class="num">18.079</td><td class="num">&minus;0.480</td><td class="num">&minus;2.6%</td></tr>
+  <tr><td>21&ndash;23</td><td class="num">378,208</td><td class="num">19.129</td><td class="num">18.752</td><td class="num">&minus;0.377</td><td class="num">&minus;2.0%</td></tr>
+  <tr><td>24&ndash;26</td><td class="num">105,233</td><td class="num">19.270</td><td class="num">18.917</td><td class="num">&minus;0.353</td><td class="num">&minus;1.8%</td></tr>
+</table>
+</div>
+<div class="note">The relative deficit peaks at length 12&ndash;14 and fades at both ends. Long peptides sit
+against Carafe's top-20 cap (19.1&ndash;19.5 frag/prec), leaving no room to differ; short ones have few
+theoretical ions to begin with. The effect is only visible where the count is free to move.</div>
+
+<h2>7. What was held constant</h2>
+<div class="card scroll">
+<table>
+  <tr><th>Factor</th><th>Status</th><th>Evidence</th></tr>
+  <tr><td>Carafe version</td><td class="good">identical (2.2.0)</td><td>Mike's <code>carafe_log.txt</code>, 2026-06-30</td></tr>
+  <tr><td>peptdeep pretrained models</td><td class="good">identical file</td><td>same 24.4 MB <code>pretrained_models.zip</code>; unchanged upstream since 2022-10-28</td></tr>
+  <tr><td>Predictor code (<code>alphapeptdeep_dia</code>)</td><td class="good">identical</td><td>no commit on <code>main</code> since 2026-01-22</td></tr>
+  <tr><td>NCE / instrument</td><td class="good">identical (27.0 / auto)</td><td>Mike's log; the driver passes neither</td></tr>
+  <tr><td>Fine-tuning behaviour</td><td class="good">reproduces</td><td>RT R&sup2; 0.9978 vs 0.9971; MS2 COS 0.9777 vs 0.9778</td></tr>
+  <tr><td>Fine-tuned <em>models</em></td><td class="warnc">differ</td><td>trained on our stage-3 blib, not Mike's &mdash; the one free variable</td></tr>
+</table>
+</div>
+
+<h2>8. Rebuild search results</h2>
+<div class="card scroll">
+<table>
+  <tr><th>Run</th><th>Precursors</th><th>Peptides</th><th>Proteins</th></tr>
+  <tr><td>Ast-&hellip;_49</td><td class="num">93,951</td><td class="num">83,505</td><td class="num">7,491</td></tr>
+  <tr><td>Ast-&hellip;_55</td><td class="num">93,190</td><td class="num">83,515</td><td class="num">7,636</td></tr>
+  <tr><td>Ast-&hellip;_60</td><td class="num">92,290</td><td class="num">82,175</td><td class="num">7,517</td></tr>
+  <tr class="tot"><td>Experiment</td><td class="num">109,434</td><td class="num">96,886</td><td class="num">7,934</td></tr>
+</table>
+</div>
+<div class="note w"><strong>Not yet answered.</strong> Whether the similarity gate changes detection counts
+needs the <code>-NoSimilarityGate</code> arm, which differs from this build only by the gate. And no
+Osprey-versus-DIA-NN number should be quoted from this table: this library carries 1.39 M entrapment
+precursors competing with targets by design, while DIA-NN's 130,827 on <code>_55</code> came from a
+target-only library. That comparison needs an entrapment-free <code>target+decoy</code> build.</div>
+
+<footer>
+Measured 2026-08-17. Rebuild: <code>D:\test\carafe-repro\astral-20260817</code>, Carafe
+<code>maccoss/Carafe@14bc81c</code> (jar snapshot
+<code>D:\test\carafe-jars\carafe-2.2.0-main-14bc81c</code>), driver
+<code>ai/scripts/Osprey/Carafe/Run-CarafeOspreyWorkflow.ps1 -Dataset Astral -Threads 32</code>.
+Full-library figures are exact; section 5 is a hash-selected sample of 14,958 matched precursors.
+Companion to <code>TODO-20260801_decoy_similarity_gate.md</code>.
+</footer>
+
+</div>
+</body>
+</html>
