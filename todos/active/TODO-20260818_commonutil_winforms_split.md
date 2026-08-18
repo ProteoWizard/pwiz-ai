@@ -3,10 +3,10 @@
 ## Branch Information
 - **Checkout**: `C:\proj\pwiz-work1` (the team's **Integration** checkout, agreed at the
   2026-08-17 dev meeting; SkylineNightly runs against Matt's PR will start here)
-- **Branch**: work directly toward a PR **into `chambem2/pwiz-sharp`** (Matt's #4178), NOT
-  master. Currently checked out at `5ef89bd228`.
+- **Branch**: `Skyline/work/20260818_commonutil_winforms_split` - branched off **`chambem2/pwiz-sharp`**
+  @ `5ef89bd228`, NOT master. The PR targets that branch too, so Matt reviews it against his own work.
 - **Created**: 2026-08-18
-- **Status**: Implemented and verified on 2026-08-18. Not yet committed.
+- **Status**: Implemented, verified and committed (4 commits) on 2026-08-18. Not pushed; no PR open yet.
 - **Module**: `skyline`
 - **Related**: #4497 (our Osprey PR, `C:\proj\pwiz`, stacked on the same base)
 
