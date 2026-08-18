@@ -261,7 +261,37 @@ Gates at commit: 576/576 tests, inspection 0/0, `regression.ps1 -Dataset All` PA
    and PR #4500 was closed - so interpret, do not just report a verdict.
 3. Open the stacked PR against `chambem2/pwiz-sharp` (base is NOT master).
 
-### Open findings that need Brendan's call
+### Decisions from Brendan, 2026-08-17
+
+1. **`SpectraCache.VERSION` bump - NO.** Few `.spectra.bin` caches exist and they are all
+   our own test data, so a global version bump to protect a scenario only we hit is a poor
+   trade. Residual risk accepted and mitigated by hand: **when running an A/B that must not
+   reuse old-reader output, write to a fresh `--cache-dir`** (which is what every comparison
+   in this TODO did) or delete the cache first. Noting the reading in case it was the
+   opposite - reversing it is a one-line change to `SpectraCache.cs:87`.
+2. **`CreateReaderConfig` flags - ASK MATT CHAMBERS.** Left exactly as-is pending his answer.
+   The question, stated for handing over:
+   > Osprey reads vendor files through pwiz-sharp and pins three `ReaderConfig` flags
+   > OPPOSITE to pwiz cpp's defaults, inherited from Skyline's `MsDataFileImpl`:
+   > `AcceptZeroLengthSpectra=true` (cpp false), `IgnoreCalibrationScans=true` (cpp false),
+   > `AllowMsMsWithoutPrecursor=false` (cpp true). Consumers are Sciex + Agilent
+   > (zero-length), Waters only (calibration scans). Thermo consumes none, which is why the
+   > #4502 parity measurement could not have caught a difference. Should Osprey follow
+   > Skyline's choices or msconvert's defaults? A mismatch changes WHICH spectra exist, and
+   > Osprey writes the spectrum index as its scan number, so every record after the first
+   > difference shifts.
+   > (Also: pwiz-sharp's `AllowMsMsWithoutPrecursor` appears inert - no reader consumes it,
+   > and `IReader.cs:168` calls it "Advisory". Worth confirming.)
+3. **Vendor license in CI / packaging - NOT THIS PR, and NOT via a committed file.**
+   Committing the agreement would invalidate the license. The route is TeamCity with a
+   secret plus code signing, as its own piece of work. **Verified this branch complies**:
+   the only committed line that SETS the property is `Jamfile.jam:96`, gated on
+   `--i-agree-to-the-vendor-licenses` appearing on the command line, so the agreement is
+   the builder's act rather than something the repo asserts - the same pattern
+   `Skyline/Jamfile.jam:22` uses. `Directory.Build.user.props` is gitignored and untracked.
+4. **linux-x64 RID gating - NOT NOW.** Pairs with 3; both belong to the packaging work.
+
+### Open findings NOT yet dispositioned
 
 * **#3 - bump `SpectraCache.VERSION`.** The file's own history sets the precedent (VERSION 2
   was bumped for a reader behaviour change). Correct in principle: caches written by the old
