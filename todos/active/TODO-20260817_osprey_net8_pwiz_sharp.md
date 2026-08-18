@@ -110,6 +110,76 @@ only because #4502 needed a staged bjam x64 build - goes away entirely.
 - [ ] `regression.ps1 -Dataset All` green; characterize any divergence, do not rebaseline
 - [ ] Verify a run on Linux/WSL with no Wine container
 
+### 2026-08-17 - Real-data verification on SEA-AD and TDP-43
+
+Two independent A/Bs on staged acquisitions, both writing to `--cache-dir` scratch so the
+reference caches were never touched.
+
+**A. mzML: the deleted parser vs pwiz-sharp. BYTE-IDENTICAL.**
+
+Reference caches in `D:\test\osprey-runs\sea-ad\mzml\` were written 2026-07-18, i.e. by
+Osprey's hand-written `MzmlReader`, from msconvert mzML. Re-cached the same two Astral files
+through the new reader:
+
+| File | Size | SHA-256 |
+|---|---|---|
+| SEA-AD-0001_7124_A01_005 | 4,368,477,008 bytes | identical |
+| SEA-AD-0002_7297_A02_006 | 4,815,176,236 bytes | identical |
+
+9.18 GB, 328,319 MS2 + 1,967 MS1 spectra, zero differing bytes. **This is the direct answer
+to the issue's central question: deleting `MzmlReader` changes nothing.** It also
+retroactively validates the unit-test fixture change - real msconvert mzML round-trips
+perfectly through the new `GetStartTime`, so the fixture was the only thing that was wrong.
+
+**B. Vendor raw: pwiz C++ (`pwiz_data_cli`) vs pwiz-sharp. RETENTION TIMES ONLY, +-1 ULP,
+and the NEW values are the correct ones.**
+
+References in `D:\test\osprey-runs\tdp43-plasma-ev\raw\` were written 2026-07-29 22:26 by
+`_bin\vendor-pr4502\Osprey.exe` (the #4502 net472 path).
+
+| | A01-365-001 | A02-11035-002 |
+|---|---|---|
+| MS2 / MS1 records | 161,099 / 965 identical | 168,944 / 1,012 identical |
+| Record offsets differing | 0 | 0 |
+| Isolation windows differing | 0 | 0 |
+| Retention times differing | 9,145 (5.7%) | 9,502 (5.6%) |
+| Magnitude | all +-1 ULP, max 3.6e-15 min | same |
+
+A byte census on A01 supports the strong claim: **18,339 differing bytes, every one an
+isolated single byte, none straddling an 8-byte boundary.** That reconciles exactly - 9,145
+MS2 retention times x 2 (each appears in its record AND in the trailing index) = 18,290,
+plus 49 differing MS1 retention times = 18,339. Peak arrays, m/z, intensities and isolation
+windows are bit-identical.
+
+**Characterized, not rebaselined.** The first differing value is `0.5903116999999999`
+(reference) -> `0.5903117` (new) - the exact value named in PR #4501, "Preserved retention
+time precision when reading vendor files", whose defect was `TimeInSeconds()/60` multiplying
+by 60 and dividing again. Dates settle it: the reference caches were built 2026-07-29 22:26,
+and #4501 (`72e0401`) merged 2026-07-30 16:37, eighteen hours later. **The reference carries
+the pre-#4501 error; the new values are correct.** The near-symmetric ULP split (4,580 down
+/ 4,565 up on A01) is rounding noise, not a systematic shift.
+
+This is the post-#4501 `GetStartTime` - one of the six semantics the direct reader had to
+mirror by hand - demonstrated correct on ~330,000 real Thermo spectra.
+
+Note what B compares: pwiz C++ against Matt's managed port, with identical Osprey code
+downstream. A divergence there could have been a pwiz-sharp defect rather than an Osprey
+one. It was neither.
+
+### Follow-up when this merges
+
+`ai/` is one shared master serving every branch, and on master `OspreyVendorReader`,
+`MzmlReader` and `pwiz_data_cli` all still exist - so these describe the world correctly
+today and must NOT be edited until this lands:
+
+* `ai/docs/new-machine-setup.md`
+* `ai/scripts/Osprey/SEA-AD/README.md`, `ai/scripts/Osprey/TDP43/README.md`
+
+`ai/scripts/Osprey/Build-Osprey.ps1` is the exception and was changed now, because it was
+made branch-AGNOSTIC rather than switched over: it reads the declared frameworks from
+`Directory.Build.props` and picks the vendor-enable mechanism from them, so it is correct on
+master and here simultaneously.
+
 ### Deliberately NOT done (noted, out of scope)
 
 * `Jamfile.jam`'s `OspreyTest` target points at
@@ -189,7 +259,44 @@ Starting work on this issue.
     ReSharper inspection discovers its framework passes from the build output. That keeps the
     shared script correct on master (still `net472;net8.0`) and here at the same time.
 
-**Blocked verifying it: this machine has no .NET 8 SDK** (only 9.0.316 and 10.0.302).
+### 2026-08-17 - Verification, and two defects it exposed
+
+.NET 8 SDK installed (8.0.424), which unblocked everything below.
+
+**Gates passed**: Debug build; **575/575 unit tests**; ReSharper inspection **0 warnings /
+0 errors**; `regression.ps1 -Dataset All` **PASSED - all four datasets, every mode**
+(Stellar, StellarLibDecoy, StellarGenDecoyEntrap, Astral; modes 1, 1b, 2, 3, 4 as each
+carries them), including all four `mode1 (vs golden)` and both `mode1b (diagnostics vs
+golden)`. That is the result that matters: real mzML read through pwiz-sharp instead of the
+deleted hand-written parser reproduces every committed golden. No divergence to
+characterize, nothing rebaselined.
+
+**Defect 1 (in the BASE branch, fixed here): Bruker does not compile without vendor
+licenses.** `pwiz-sharp/pwiz/src/Vendor/Bruker/BrukerFormat.cs` had
+`<see cref="CompassXtractData"/>` in two doc comments, but `CompassXtractData.cs` is
+`Compile Remove`d when `$(NativeVendorsAvailable)` is not true. With pwiz-sharp's
+`GenerateDocumentationFile` + `TreatWarningsAsErrors`, the unresolvable cref is CS1574 -
+a build ERROR in exactly the no-licenses configuration. Osprey is the first consumer to
+build the vendor projects that way, which is why it had not surfaced. Fixed by making the
+two references `<c>` instead of `<see cref>` (a doc comment cannot be conditionally
+compiled). Two lines in Matt's branch, forced by a real break rather than preference - the
+"zero edits to it" claim above is now "two doc-comment lines".
+
+**Defect 2 (mine): a Release Osprey was linking the DEBUG pwiz-sharp assemblies.** Building
+a `.sln` unsets Configuration and Platform across a `ProjectReference` to a project that is
+not in that solution (`ShouldUnsetParentConfigurationAndPlatform`, on by default), and none
+of the pwiz-sharp projects are in `Osprey.sln`. So they built Debug regardless, and
+`pwiz-sharp/.../bin/` contained only a `Debug` folder after a Release Osprey build. The only
+visible symptom was the copy source path in the build log - the code is correct either way,
+so no test could have caught it. Fixed with `SetConfiguration` / `SetPlatform` metadata on
+the references.
+
+Found while rebuilding for the raw-file check, not by a gate. Worth remembering: a
+cross-solution `ProjectReference` needs those two metadata items or it silently builds the
+wrong configuration.
+
+**(Resolved 2026-08-17 - kept for the record.) Blocked verifying it: this machine had no
+.NET 8 SDK** (only 9.0.316 and 10.0.302).
 `pwiz-sharp/global.json` pins `8.0.100` with `rollForward: latestFeature`, which 9/10 do not
 satisfy, and `pwiz/src/Vendor/Common/Vendor.Common.csproj` shells out to `dotnet run` for its
 `VendorSdkPins` generator with an explicit comment that the child must resolve its SDK from

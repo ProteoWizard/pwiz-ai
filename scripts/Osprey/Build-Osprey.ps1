@@ -32,16 +32,38 @@
     Path to pwiz root (auto-detected if not specified)
 
 .PARAMETER TargetFramework
-    Which test assembly to RUN: net472 (default) or net8.0. Note this does NOT
-    limit what is COMPILED - Osprey.sln builds every target framework the
-    projects declare, so a solution build always compiles both net472 and
-    net8.0 regardless of this value. (The TeamCity Osprey step is labelled
-    "net8.0" for the same reason and still compiles net472.)
+    Which test assembly to RUN. Note this does NOT limit what is COMPILED -
+    Osprey.sln builds every target framework the projects declare, so a
+    solution build compiles all of them regardless of this value.
+
+    Which frameworks exist depends on the branch: Osprey multi-targeted
+    net472;net8.0 until the ProteoWizard .NET 8 port (issue #4497) made it
+    net8.0 only. Rather than pin a default that is wrong on one side of that,
+    both this parameter and the ReSharper inspection's per-framework passes are
+    reconciled against what pwiz_tools/Osprey/Directory.Build.props DECLARES.
+
+    Declared, not discovered from bin/: switching to a branch that dropped a
+    framework leaves the old bin/<tfm>/ output in place, and a test run against
+    a stale assembly passes while testing code that is no longer in the tree.
+    That is a silent green, which is worse than the error it would replace.
 
 .PARAMETER VendorReader
-    Build the net472 configuration WITH the ProteoWizard vendor-raw reader
-    (/p:OspreyVendorReader=true, issue #4496). Off by default so Osprey builds
-    with no ProteoWizard dependency at all.
+    Build WITH vendor instrument-file reading. What that takes depends on the
+    branch, and the switch resolves it from the frameworks Osprey declares:
+
+      net8.0 only (issue #4497)  -> /p:IAgreeToVendorLicenses=true, which lets
+        pwiz-sharp extract its encrypted vendor SDK archives. Nothing to stage:
+        pwiz-sharp is a managed ProjectReference. Without the switch the vendor
+        readers still compile, and a .raw fails at run time with "Thermo .raw
+        reading requires the vendor SDK".
+
+      still multi-targeting net472 -> the pwiz_data_cli path described below.
+
+    Off by default either way.
+
+    The net472 path (issue #4496): builds the net472 configuration WITH the
+    ProteoWizard vendor-raw reader (/p:OspreyVendorReader=true), so Osprey
+    otherwise builds with no ProteoWizard dependency at all.
 
     Requires pwiz_tools/Shared/ProteowizardWrapper to be built for x64 and its
     obj/x64 staged with pwiz_data_cli, which comes from a bjam build via the
@@ -170,9 +192,30 @@ if ($SourceRoot) {
 $Platform = "x64"
 $ospreyRoot = Join-Path $pwizRoot 'pwiz_tools/Osprey'
 $slnPath = Join-Path $ospreyRoot 'Osprey.sln'
-# Multi-targeted projects (f14cb74b2) place outputs under a TFM subdirectory:
-# bin/x64/Release/net472/ and bin/x64/Release/net8.0/.
-$testDll = Join-Path $ospreyRoot "Osprey.Test/bin/$Platform/$Configuration/$TargetFramework/Osprey.Test.dll"
+# Projects place outputs under a TFM subdirectory: bin/x64/Release/net8.0/
+# (and bin/x64/Release/net472/ on a branch that still multi-targets). Which ones
+# this branch actually builds comes from Directory.Build.props - see the
+# TargetFramework parameter notes for why this is not read off disk.
+$testBinDir = Join-Path $ospreyRoot "Osprey.Test/bin/$Platform/$Configuration"
+$declaredTfms = @()
+$buildPropsPath = Join-Path $ospreyRoot 'Directory.Build.props'
+if (Test-Path $buildPropsPath) {
+    $buildPropsText = Get-Content -Path $buildPropsPath -Raw
+    $tfmMatch = [regex]::Match($buildPropsText, '<TargetFrameworks?>([^<]+)</TargetFrameworks?>')
+    if ($tfmMatch.Success) {
+        $declaredTfms = @($tfmMatch.Groups[1].Value -split ';' |
+            ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    }
+}
+if (-not $declaredTfms) {
+    $declaredTfms = @($TargetFramework)
+}
+if ($TargetFramework -notin $declaredTfms) {
+    # Never silently: a run on the framework you did not ask for is worth a line.
+    Write-Host "Osprey does not target $TargetFramework on this branch; using $($declaredTfms[0])." -ForegroundColor Yellow
+    $TargetFramework = $declaredTfms[0]
+}
+$testDll = Join-Path $testBinDir "$TargetFramework/Osprey.Test.dll"
 $initialLocation = Get-Location
 
 if (-not (Test-Path $slnPath)) {
@@ -236,7 +279,19 @@ try {
         "/verbosity:$Verbosity"
     )
 
-    if ($VendorReader) {
+    if ($VendorReader -and 'net472' -notin $declaredTfms) {
+        # ProteoWizard .NET 8 port (issue #4497): Osprey reads pwiz-sharp directly,
+        # as a managed ProjectReference. There is no wrapper to build and nothing to
+        # stage - the only thing the switch still has to do is agree to the vendor
+        # licenses, which is what unlocks pwiz-sharp's encrypted vendor SDK archives.
+        # Without it the vendor readers compile in NO_VENDOR_SUPPORT mode and a .raw
+        # fails at run time with "Thermo .raw reading requires the vendor SDK".
+        $buildArgs += "/p:IAgreeToVendorLicenses=true"
+        if (-not $Summary) {
+            Write-Host "Vendor SDKs: ENABLED (pwiz-sharp, --i-agree-to-the-vendor-licenses)" -ForegroundColor Cyan
+        }
+    }
+    elseif ($VendorReader) {
         # Vendor raw reading references the x64 ProteowizardWrapper build, which in
         # turn resolves pwiz_data_cli and the vendor assemblies out of its obj\x64.
         # Only a bjam build stages those, so check before handing MSBuild a build
@@ -340,8 +395,7 @@ try {
         Write-Host "Inspecting Osprey.sln, one pass per target framework (typically 2-5 minutes)..." -ForegroundColor Cyan
         $inspectStart = Get-Date
 
-        # Osprey multi-targets net472;net8.0 (pwiz_tools/Osprey/Directory.Build.props),
-        # and inspectcode defaults to --target-framework "all frameworks", analyzing
+        # inspectcode defaults to --target-framework "all frameworks", analyzing
         # every file once per framework in a single parallel pass. When it does that,
         # whether a file's inline "// ReSharper disable" region is honored comes out
         # nondeterministic: this gate reported either 0 or 9 warnings, at random, on an
@@ -352,10 +406,15 @@ try {
         # source fixes this - inline comments, [SuppressMessage], and even a compiler
         # #pragma are all dropped on a racing run. See GitHub issue #4379.
         #
-        # The per-framework results are unioned below, so the second pass costs time but
-        # loses no coverage: each pass reports its own branch of an #if, and together
-        # they report exactly what a single all-frameworks pass reports.
-        $targetFrameworks = @("net472", "net8.0")
+        # The per-framework results are unioned below, so extra passes cost time but
+        # lose no coverage: each pass reports its own branch of an #if, and together
+        # they report exactly what a single all-frameworks pass reports. On a
+        # single-target branch (net8.0 only, issue #4497) that is one pass and the
+        # race cannot arise at all.
+        #
+        # Read from Directory.Build.props rather than hardcoded, because the set
+        # differs by branch - see the TargetFramework parameter notes.
+        $targetFrameworks = $declaredTfms
 
         # Inspection args otherwise match TeamCity configuration:
         # --severity WARNING: report warnings and errors only
