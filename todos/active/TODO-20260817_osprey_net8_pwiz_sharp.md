@@ -515,3 +515,67 @@ Decide that sequencing before opening. Draft PR body: `ai/.tmp/pr-4497-body.md`.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260818_commonutil_winforms.md` before starting work.
+
+## Session 2026-08-18 (evening) - rebased onto the CommonUtil split; design decision REOPENED
+
+`C:\proj\pwiz` is now on `Skyline/work/20260817_osprey_net8_pwiz_sharp` @ `1ed9ed74c3`,
+clean, force-pushed. It no longer sits on `chambem2/pwiz-sharp` directly - it sits on
+**`Skyline/work/20260818_commonutil_winforms_split`** (PR #4587), so development can
+continue before Matt merges. Rebase back onto `chambem2/pwiz-sharp` once he does; the
+shared commits will drop out as duplicates.
+
+Stack, bottom to top:
+
+    9f6fa31949  Fixed two build breaks on the pwiz-sharp branch
+    f5d452fd36  Split the WinForms half of CommonUtil into CommonBaseUI
+    4f3b2c9150  Made CommonUtil and ProteowizardWrapper plain net8.0, retired PortableUtil
+    99e5ef965c  Added a build-only mode to build.bat, dropped Osprey's net472 target
+    3b6755c392  Fixed installer manifests and two weakened verifiers
+    69b331e7f0  osprey: Made ProteoWizard the only spectrum reader on net8.0   <- was 3a18479f8e
+    1ed9ed74c3  osprey: Forwarded the vendor licence flag instead of warning it was inert
+
+Pre-rebase state is tagged `pre-rebase-20260818` locally in `C:\proj\pwiz`.
+
+### THE decision to make first
+
+**`ProteowizardWrapper` is now plain `net8.0`.** The "Design decision" section above chose
+to read pwiz-sharp DIRECTLY, and said so explicitly: *"The wrapper route is closed by a TFM,
+not by taste."* That TFM is gone. So the choice is live again:
+
+* **Through the wrapper** - delete the six hand-reproduced `MsDataFileImpl` semantics (RT in
+  minutes, isolation offsets, vendor centroiding, `CombineIonMobilitySpectra=false`,
+  `AllowMsMsWithoutPrecursor=false`, `IgnoreCalibrationScans=true`) and inherit them from one
+  place. Also makes the `CreateReaderConfig` question below mostly moot.
+* **Stay direct** - smaller surface, no dependency on a Skyline-facing wrapper, but the six
+  semantics stay duplicated and can drift.
+
+Nothing is blocked on this - the branch is green either way. It is a design call, and it is
+the first thing the next session should settle with Brendan.
+
+### Verified after the rebase
+
+* Osprey build + **576/576 tests** green on the new base (`Build-Osprey.ps1 -RunTests`)
+* `BrukerFormat.cs` collapsed automatically - git saw identical content, so the branch now
+  carries that fix once instead of twice. The "drop it on the next rebase" item is DONE.
+* Two rebase conflicts, both resolved deliberately rather than mechanically:
+  * `Directory.Build.props` - kept this branch's fuller net472 rationale, but replaced its
+    now-false closing clause (that the wrapper is `net8.0-windows`) with a note that the
+    constraint is gone and the decision is open.
+  * `build.ps1` - took this branch's full removal of `$Framework` over the other branch's
+    narrowed `ValidateSet`.
+
+### Finding #6 partially addressed
+
+`build.ps1` gained a real `-IAgreeToVendorLicenses` switch that reaches MSBuild, and
+`build.bat` now translates `--i-agree-to-the-vendor-licenses` into it. Verified: builds
+succeed with the flag. **Still unwired: `package.ps1`, `tcbuild.bat`, `regression.ps1`** -
+CI artifacts and the shipped zips still contain readers that throw on vendor files.
+
+### Correction to "Next session picks up here" above
+
+That list is stale. Item 1 (WSL) is DONE and ticked in Tasks - Linux/WSL2 output was verified
+byte-identical to Windows. Only item 3 (open the PR) survives, and it now depends on the
+design decision above.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260817_osprey_net8_pwiz_sharp.md` before starting work.

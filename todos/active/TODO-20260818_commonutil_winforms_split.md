@@ -370,3 +370,60 @@ are real but deferred - they are gaps in the wrapper, not blockers for the PR:
       through it and stop reproducing the six `MsDataFileImpl` semantics by hand.
 - [ ] Drop the `BrukerFormat.cs` fix from the Osprey branch on its next rebase.
 
+## PR #4587 open, reviewed, threads resolved (2026-08-18 evening)
+
+https://github.com/ProteoWizard/pwiz/pull/4587 - base `chambem2/pwiz-sharp`, label
+`skyline`, head `Skyline/work/20260818_commonutil_winforms_split` @ `3b6755c392`. Pushed.
+`ai` master pushed too (rebased onto 8 commits another machine had landed - no merge commit).
+
+### `/code-review max` on the PR found real defects; 4 fixed in 3b6755c392
+
+The earlier review had run with `C:\proj\ai` as cwd, so it only saw the wrapper scripts.
+Re-run against the PR number, it found defects in the product change:
+
+* **Installer manifests** - the only release-breaking one. `Product-template.wxs` and
+  `FileList64-template.txt` still listed the deleted `pwiz.PortableUtil.dll/.pdb` (fails
+  `light.exe`) and never gained `pwiz.CommonBaseUI.dll/.pdb`. Since `CommonFormEx` is the
+  base class of nearly every Skyline dialog, a patched-but-unfixed installer throws
+  `FileNotFoundException` at first form creation. Added the `ja`/`zh-CHS` satellites too.
+  **Nothing in dev builds, TeamCity or SkylineTester catches this** - they copy whole output
+  directories. Copilot found it independently.
+* **P/Invoke allowlist silently narrowed** - `typeof(User32).Assembly` saw only CommonBaseUI
+  after the move, dropping Advapi32/Gdi32/Kernel32/Shell32/Shlwapi. 20 `DllImport`s stopped
+  being checked and the test stayed green. Now scans both assemblies AND asserts every
+  expected type was reached.
+* **Resource test sentinels** - `typeof(CommonFormEx).Assembly` was the stand-in for
+  CommonUtil in `LocalizedResourcesTest` and `ResourcesTest`; it moved, so CommonUtil lost
+  all localized-resource validation, and the self-check used the same broken expression.
+  Restored via `typeof(Assume).Assembly`.
+* **CRLF regression** - `core.autocrlf=true` flattened 5 files whose blobs were CRLF here.
+  Restored the original blobs for the 3 moved `.cs` (back to `R100` renames, so
+  `git blame --follow` survives) and re-stored both `.sln` unfiltered.
+  **`fix-crlf.ps1` cannot catch this**: it is a working-tree tool filtering on `^( M|AM|A )`,
+  the worktree was already correct, and the moved files were staged renames. Blob-level
+  corruption is only visible by comparing blobs across commits.
+
+### Deferred - see the "Deferred findings" section above for the full list
+
+Not fixed, recorded rather than half-done at low context: `Osprey.sln` missing `CommonUtil`
+(Debug DLL into a Release build via `ShouldUnsetParentConfigurationAndPlatform`), six
+projects relying on transitive `CommonBaseUI` flow, the inspection rule banning
+`System.Drawing` wholesale when it is portable on net8, `build.bat`'s `!` corruption under
+delayed expansion, stale Osprey docs, and stale `.resx` designer anchors.
+
+### Copilot review - both threads resolved
+
+1. Installer manifests - already fixed in `3b6755c392` before the review landed.
+2. Osprey net472 removal breaking the bjam vendor build - **deliberate** (Brendan: "we don't
+   need any net472 support in pwiz-sharp"). Resolved with that rationale; #4497 deletes the
+   `OspreyVendorReaderEnabled` machinery entirely and is already rebased on this branch.
+
+### Still open for Matt
+
+The PR body carries an **Open question**: is the net472 leg of `Skyline.sln` still meant to
+build? It does not, for four reasons unrelated to this PR. Invisible from `quickbuild.bat`
+(`make Skyline.exe` is `explicit`) but hit by `bs.bat` -> the bjam Skyline target ->
+`msbuild Skyline.sln`, which is what `new-machine-setup.md` teaches. **Do not update
+`new-machine-setup.md` until that is answered** - and note the Osprey TODO says that file
+must not be edited until #4497 lands either, since `ai/` master serves every branch.
+
