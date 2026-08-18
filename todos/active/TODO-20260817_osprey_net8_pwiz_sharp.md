@@ -166,6 +166,121 @@ Note what B compares: pwiz C++ against Matt's managed port, with identical Ospre
 downstream. A divergence there could have been a pwiz-sharp defect rather than an Osprey
 one. It was neither.
 
+### 2026-08-17 - /code-review max, and the bug it caught
+
+Ran before opening the PR, per the version-control skill. 15 findings; the ones acted on:
+
+**#1 - REAL BUG I INTRODUCED. Vendor centroiding was partly a no-op.** I passed msconvert's
+`"1-"` spelling to `SpectrumList_PeakPicker`'s STRING overload, whose `ParseIntegerSet`
+splits on `,`/space and `int.TryParse`s each token - `int.TryParse("1-")` is false, so the
+MS-level set was EMPTY and `!_msLevels.Contains(msLevel)` returned early for every spectrum.
+
+Verified in the source rather than taken on faith, and one nuance matters:
+`SpectrumList_PeakPicker.cs:114` assigns `_vendorCentroidPath` from
+`preferVendor && inner is IVendorCentroidingSpectrumList` ALONE, independent of `_msLevels`,
+and `GetSpectrum` calls it BEFORE the level check. Thermo implements that interface, so
+vendor-centroided peaks were still delivered - which is exactly why the TDP-43 peak arrays
+came back bit-identical to the `pwiz_data_cli` reference. That result stands and is now
+explained rather than lucky. What was dead: the profile->centroid CV relabeling (metadata
+Osprey never persists) and the `VendorOnlyPeakDetector` fail-fast.
+
+The real exposure is **Agilent**, which does NOT implement the interface: it was silently
+reading PROFILE peaks and scoring them as centroids. Fixed with the in-tree template
+(`pwiz-sharp/Tools/BiblioSpec/.../PwizSharpSpecFileReader.cs:111-118`) -
+`IntegerSet(1, int.MaxValue)`, `algorithm: null` - plus an explicit guard that REFUSES a
+vendor file with no centroiding rather than reading profile data.
+
+**#5 - a regression I introduced.** `Jamfile.jam` passed
+`IAgreeToVendorLicenses=$(OSPREY_VENDOR_LICENSES)` unconditionally, and `/p:` sets a GLOBAL
+MSBuild property that outranks the `Directory.Build.user.props` written by
+`i-agree-to-the-vendor-licenses.bat`. A developer with a standing opt-in running plain
+`bjam Osprey` would silently get a NO_VENDOR_SUPPORT build. Now only the `true` form is
+emitted, matching pwiz-sharp's own `build.bat`.
+
+**#12** `(uint) spectrum.Index` was an unchecked cast of a property pwiz-sharp documents as
+`-1` when unassigned - 4294967295 into every cache and `.blib`. Now uses the read loop's
+index. **#9** `Debug.WriteLine` is `[Conditional("DEBUG")]`, so a failed vendor registration
+left no trace in any shipping build; now goes through `OspreyOutput`.
+
+**Re-verified after the fixes** (the read path AND the index source both changed, so this
+was checked, not assumed): the TDP-43 raw cache is byte-identical to the pre-fix output, and
+the SEA-AD mzML cache is still byte-identical to the Jul-18 reference. 575/575 tests,
+inspection 0/0.
+
+### 2026-08-17 - Committed: 3a18479f8e (pushed, PR not yet opened)
+
+Prompted by Brendan: **read `ai/todos/completed/TODO-20260729_osprey_vendor_raw_reader.md`
+before claiming thoroughness.** Two corrections came out of it.
+
+1. **`ai/scripts/Osprey/Compare/Compare-SpectraCache.ps1` already existed** and implements
+   exactly the right method (mask bytes 12..27 - source size + mtime, the only bytes derived
+   from file identity rather than content - and byte-compare the rest, deliberately NOT
+   masking n_ms2/n_ms1 so a count difference fails first). I hand-rolled comparators instead,
+   against my own standing note to check `ai/scripts` first. Re-ran sea-ad through the
+   sanctioned tool: `PARITY: 4,368,477,008 bytes identical`, matching both my result and the
+   figure recorded in the #4496 TODO.
+2. **The retention-time ULP finding was NOT new.** #4496 already recorded "the original 9,269
+   differences were `GetStartTime`". My 9,145 on a different file is the same mechanism,
+   already characterized and fixed by #4501. The conclusion stands; the discovery framing did
+   not.
+
+**Validation axes, compared against what #4496 did:**
+
+| Axis | #4496 | Here |
+|---|---|---|
+| Same mzML, old reader vs new | PARITY | **done** - 9.18 GB byte-identical, 2 SEA-AD files |
+| raw-sourced vs mzML-sourced, same file | PARITY 2,260,174,556 | **done small** (committed test); full-scale pending |
+| raw via `pwiz_data_cli` vs via pwiz-sharp | n/a | done - RT-only +-1 ULP, explained by #4501 |
+
+**Landed #4496's Tier 2, which it designed and never shipped**: `TestRawVsMzmlSpectraParity`
+reads the tracked `source_cid_test_3scans.raw` and its `-centroid.mzML` and compares scan
+number, RT, precursor m/z, isolation window and every peak, exactly. No off-repo data, no
+msconvert run, so it can gate CI. Both branches assert: with the vendor SDK it checks parity,
+without it checks the error NAMES the file - it never silently passes.
+
+That test earned its place on its first run: it failed, because pwiz-sharp's
+`VendorSupportNotEnabledException` message names no file and tells the user to rebuild
+*pwiz-sharp* with `--i-agree-to-the-vendor-licenses`, which is not how Osprey is built (review
+finding #11). Fixed by restating it in Osprey's terms with the original as InnerException,
+rather than by weakening the assertion.
+
+Gates at commit: 576/576 tests, inspection 0/0, `regression.ps1 -Dataset All` PASSED
+(all four datasets, all goldens) AFTER the review fixes.
+
+### Next session picks up here
+
+1. **WSL** - Brendan installed it 2026-08-17 and a reboot was pending. After reboot:
+   `dotnet publish -r linux-x64` and run the suite plus `--task SpectraCache` on an mzML
+   under WSL. This is the issue's "runs on Linux/WSL without the Wine container" criterion
+   and the last unmet acceptance item.
+2. **Full-scale raw-vs-mzML** - msconvert is at
+   `pwiz/build-nt-x86/msvc-release-x86_64/msconvert.exe`; settings in
+   `ai/scripts/Osprey/SEA-AD/convert-one.cmd`. Convert one TDP-43 raw, cache both ways,
+   compare with `Compare-SpectraCache.ps1`. CAVEAT from the #4496 TODO: a pre-precision-fix
+   msconvert against a full-precision raw read is a KNOWN mismatch (its table, "no A / A"),
+   and PR #4500 was closed - so interpret, do not just report a verdict.
+3. Open the stacked PR against `chambem2/pwiz-sharp` (base is NOT master).
+
+### Open findings that need Brendan's call
+
+* **#3 - bump `SpectraCache.VERSION`.** The file's own history sets the precedent (VERSION 2
+  was bumped for a reader behaviour change). Correct in principle: caches written by the old
+  reader are silently reused, which can turn an A/B meant to validate this change into a
+  false green. Cost: invalidates every existing cache, including the 484 GB SEA-AD set and
+  the 163 TDP-43 caches. Not done unilaterally.
+* **#7 - `CreateReaderConfig` vs msconvert defaults.** `AcceptZeroLengthSpectra`,
+  `IgnoreCalibrationScans` and `AllowMsMsWithoutPrecursor` are pinned OPPOSITE to pwiz cpp's
+  defaults, inherited from `MsDataFileImpl`. Consumers are Sciex/Agilent/Waters - never
+  Thermo - which is why #4502's parity measurement could not have caught it. Deciding
+  whether Osprey wants Skyline's choices or msconvert's is a data question, not a code one.
+* **#6 - no build entry point sets the vendor license.** `build.ps1`, `package.ps1`,
+  `tcbuild.bat` and `regression.ps1` never pass it, so CI artifacts and the shipped
+  win-x64/linux-x64 zips contain readers that throw on every vendor file. Pre-existing in
+  shape (the net472 world had the same opt-in), but #4497 is what makes it user-visible.
+* **#8 - linux-x64 packaging.** pwiz-sharp gates native vendor SDKs on the BUILD HOST OS,
+  not the target RID, so once #6 is wired up a cross-published linux zip would carry Windows
+  PEs. Belongs with #6.
+
 ### Follow-up when this merges
 
 `ai/` is one shared master serving every branch, and on master `OspreyVendorReader`,
