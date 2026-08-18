@@ -127,3 +127,59 @@ Loopholes and proposals:
 > **See also**: `ai/todos/active/TODO-20260818_commonutil_winforms_split.md` advances
 > T1 (path-based inspection) and T6 (Common WinForms audit) from a different direction -
 > ProteowizardWrapper needing to be plain net8.0 for Osprey on Linux.
+
+## Measured 2026-08-18: this is the critical path to a Wine-free SkylineCmd
+
+Context: the CommonUtil/WinForms split
+(`ai/todos/active/TODO-20260818_commonutil_winforms_split.md`) made CommonUtil and
+ProteowizardWrapper plain `net8.0`. That prompted the question of what else stands between
+us and a `SkylineCmd.exe` that runs natively on Linux instead of in the Wine Docker
+container we publish to DockerHub.
+
+**Correcting a natural misconception first: WinForms does NOT pin anything to net472.**
+WinForms has run on modern .NET since .NET Core 3.0 and is actively supported on .NET 8/9/10
+via `net8.0-windows` + the Windows Desktop runtime. Matt's branch already builds the full
+Skyline WinForms UI as `net8.0-windows`. What WinForms forces is the `-windows` suffix -
+Windows-ONLY, not old-framework. There is no cross-platform WinForms and there will not be.
+So the Linux problem is not "get off net472", it is "get the Model out of a `-windows`
+assembly", which is exactly T2.
+
+### The chain, measured
+
+| Assembly | TFM (2026-08-18) | Files touching WinForms/Drawing |
+|---|---|---|
+| `CommonUtil` | **`net472;net8.0`** | 0 of 103 |
+| `ProteowizardWrapper` | **`net472;net8.0`** | 0 |
+| `CommonMsData` | `net472;net8.0-windows` | **0 of 49** |
+| `BiblioSpec` | `net472;net8.0-windows` | **0 of 4** |
+| `ProteomeDb` | `net472;net8.0-windows` | 2 of 21 |
+| `Common` | `net472;net8.0-windows` | 60 of 207 |
+| `CommonBaseUI` | `net472;net8.0-windows` | all (by design) |
+| `Skyline` | `net472;net8.0-windows` | the wall |
+| `SkylineCmd` | `net472;net8.0-windows` | inherits Skyline |
+
+### The immediate free win: CommonMsData
+
+`CommonMsData` has **zero** WinForms/Drawing files and its only ProjectReferences are
+`CommonUtil` and `ProteowizardWrapper` - **both now plain `net8.0`**. Its `-windows` target
+is now nothing but an unjustified `<UseWindowsForms>true</UseWindowsForms>`, the identical
+one-line removal done for CommonUtil. Nothing blocks it.
+
+`BiblioSpec` (0 of 4!) and `ProteomeDb` (2 of 21) are blocked ONLY by their ProjectReference
+to `Common`, which at 60 of 207 is genuinely UI. That is the assembly that should become
+`CommonUI` - see T2's naming discussion.
+
+### T1 and T6 status
+
+- **T1 is DONE** as a mechanism. `CodeInspectionTest.PatternDetails` gained
+  `RequiredPathMasks`, an INCLUSION filter (the existing `ignoredDirectories` only excludes),
+  so a rule can be scoped to a DIRECTORY rather than a namespace. First consumer is the
+  CommonUtil WinForms rule. Applying the same mechanism to `pwiz_tools/Skyline/Model/**` is
+  now a one-line addition.
+- **T6 is NOT done.** The 2026-08-18 work audited `CommonUtil`, not `Common`. `Common` at
+  60 of 207 WinForms files is precisely the transitive-UI risk T6 describes.
+- **T2 is the critical path.** Model cannot be plain `net8.0` while it shares an assembly
+  with the WinForms UI, and `SkylineCmd` must depend on Model rather than on Skyline. The
+  CommonUtil -> CommonBaseUI split is a working template: move types, KEEP namespaces, pay
+  only in project references and zero call-site changes.
+

@@ -84,7 +84,15 @@ param(
     [string]$SourceRoot = $null,  # Path to pwiz root (auto-detected if not specified)
 
     [Parameter(Mandatory=$false)]
-    [switch]$Summary = $false  # Show only errors and final result (suppresses verbose build output)
+    [switch]$Summary = $false,  # Show only errors and final result (suppresses verbose build output)
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("Auto", "Net472", "Net8")]
+    [string]$Framework = "Auto",  # Which build path to use. Auto detects it from Skyline.csproj.
+
+    [Parameter(Mandatory=$false)]
+    [switch]$VendorLicenses = $false  # net8 only: pass -p:IAgreeToVendorLicenses=true so the
+                                     # pwiz-sharp vendor projects link their real readers
 )
 
 # Ensure UTF-8 output for status symbols (must be set before any Write-Host)
@@ -230,6 +238,26 @@ if (-not (Test-Path $msbuild)) {
 
 Write-Host "Using MSBuild: $msbuild" -ForegroundColor Cyan
 
+# ---------------------------------------------------------------------------
+# net472 vs net8 build path.
+#
+# Auto-detection keys on Skyline.csproj declaring a net8 target framework: true on
+# the pwiz-sharp branch, false on master. On net8 we build the same explicit project
+# list pwiz_tools/Skyline/build.bat uses, because Skyline.sln also carries the net472
+# leg, which that branch does not keep green.
+# ---------------------------------------------------------------------------
+$isNet8 = $false
+if ($Framework -eq 'Net8') {
+    $isNet8 = $true
+} elseif ($Framework -eq 'Auto') {
+    $skylineCsprojPath = Join-Path $skylineRoot 'Skyline.csproj'
+    if (Test-Path -LiteralPath $skylineCsprojPath) {
+        if ((Get-Content -LiteralPath $skylineCsprojPath -Raw) -match '<TargetFrameworks?>[^<]*net8\.0') {
+            $isNet8 = $true
+        }
+    }
+}
+
 # Determine MSBuild target
 $Platform = "x64"
 $buildArgs = @(
@@ -261,12 +289,64 @@ $buildArgs += @(
     "/verbosity:$Verbosity"
 )
 
-Write-Host "`nBuilding: $Target ($Configuration|$Platform)" -ForegroundColor Yellow
-Write-Host "Command: & `"$msbuild`" $($buildArgs -join ' ')`n" -ForegroundColor Gray
+if ($isNet8) {
+    Write-Host "`nBuilding: $Target ($Configuration, net8.0-windows) via dotnet build" -ForegroundColor Yellow
+} else {
+    Write-Host "`nBuilding: $Target ($Configuration|$Platform)" -ForegroundColor Yellow
+    Write-Host "Command: & `"$msbuild`" $($buildArgs -join ' ')`n" -ForegroundColor Gray
+}
 
 # Execute build
 $buildStart = Get-Date
-if ($Summary) {
+if ($isNet8) {
+    # Same project list pwiz_tools/Skyline/build.bat builds. Skyline.csproj pulls in every
+    # ProjectReference; the test projects add the suites; TestRunner is the harness.
+    $net8Projects = @(
+        'Skyline.csproj'
+        'CommonTest\CommonTest.csproj'
+        'Test\Test.csproj'
+        'TestData\TestData.csproj'
+        'TestFunctional\TestFunctional.csproj'
+        'TestConnected\TestConnected.csproj'
+        'TestRunner\TestRunner.csproj'
+    )
+    if ($Target -eq 'Skyline') {
+        $net8Projects = @('Skyline.csproj')
+    } elseif ($Target -notin @('Solution', 'Rebuild', 'Clean')) {
+        $net8Projects = @("$Target\$Target.csproj")
+    }
+
+    # The vendor projects gate real reader code on this property. Without it some types
+    # (e.g. the Waters lockmass refiners) are compiled out, so anything referencing them
+    # fails to build. If the developer has already run pwiz-sharp's
+    # i-agree-to-the-vendor-licenses.bat, the gitignored props file sets it for us.
+    $userProps = Join-Path $pwizRoot 'pwiz-sharp\Directory.Build.user.props'
+    $vendorAgreed = $VendorLicenses -or (Test-Path -LiteralPath $userProps)
+    $net8Props = @("/p:Configuration=$Configuration")
+    if ($VendorLicenses) {
+        $net8Props += '/p:IAgreeToVendorLicenses=true'
+    }
+    if (-not $vendorAgreed) {
+        Write-Host "Vendor support DISABLED - vendor readers build in no-vendor mode." -ForegroundColor Yellow
+        Write-Host "Pass -VendorLicenses, or run pwiz-sharp\i-agree-to-the-vendor-licenses.bat once." -ForegroundColor Gray
+    }
+
+    $buildExitCode = 0
+    $buildOutput = @()
+    foreach ($proj in $net8Projects) {
+        Write-Host "dotnet build $proj ($Configuration, net8.0-windows)" -ForegroundColor Cyan
+        $dotnetArgs = @('build', $proj, '-f', 'net8.0-windows', '-nologo') + $net8Props + @("-v:$Verbosity")
+        if ($Summary) {
+            $buildOutput += & dotnet $dotnetArgs 2>&1
+        } else {
+            & dotnet $dotnetArgs
+        }
+        if ($LASTEXITCODE -ne 0) {
+            $buildExitCode = $LASTEXITCODE
+            break
+        }
+    }
+} elseif ($Summary) {
     $buildOutput = & $msbuild $buildArgs 2>&1
     $buildExitCode = $LASTEXITCODE
 } else {
@@ -278,7 +358,7 @@ $buildDuration = (Get-Date) - $buildStart
 if ($buildExitCode -ne 0) {
     if ($Summary) {
         # Show only error lines from captured output
-        $buildOutput | Where-Object { $_ -match 'error\s+(CS|MSB)|Build FAILED' } | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+        $buildOutput | Where-Object { $_ -match '(^|\s)error(\s+[A-Z]+[0-9]+)?\s*:|Build FAILED' } | ForEach-Object { Write-Host $_ -ForegroundColor Red }
     }
     Write-Host "`n❌ Build FAILED (exit code: $buildExitCode) in $($buildDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Red
     exit $buildExitCode
@@ -288,7 +368,23 @@ Write-Host "`n✅ Build succeeded in $($buildDuration.TotalSeconds.ToString('F1'
 
 # Run tests if requested
 if ($RunTests -and $Target -ne "Clean") {
-    $outputDir = "bin\$Platform\$Configuration"
+    # net8 runs from the flat staging directory, which is produced by staging rather
+    # than by the build. Stage-Net8Tests.ps1 is the branch's own script - build.bat
+    # calls it the same way before every test pass.
+    if ($isNet8) {
+        $outputDir = "bin\staging-net8\$Configuration"
+        $stageScript = Join-Path $skylineRoot 'Stage-Net8Tests.ps1'
+        if (Test-Path -LiteralPath $stageScript) {
+            Write-Host "Staging net8 test binaries..." -ForegroundColor Cyan
+            & pwsh -NoProfile -File $stageScript -Configuration $Configuration
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "Stage-Net8Tests.ps1 failed (exit $LASTEXITCODE)" -ForegroundColor Red
+                exit 1
+            }
+        }
+    } else {
+        $outputDir = "bin\$Platform\$Configuration"
+    }
     $testRunner = "$outputDir\TestRunner.exe"
     
     if (-not (Test-Path $testRunner)) {

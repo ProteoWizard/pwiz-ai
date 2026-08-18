@@ -158,7 +158,11 @@ param(
     [switch]$Summary = $false,  # Show only errors and final result (suppresses verbose test output)
 
     [Parameter(Mandatory=$false)]
-    [string]$Pass = ""  # Which passes to run, e.g. "1" or "0,1,2" (default: TestRunner's own default, pass 2 only)
+    [string]$Pass = "",  # Which passes to run, e.g. "1" or "0,1,2" (default: TestRunner's own default, pass 2 only)
+
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("Auto", "Net472", "Net8")]
+    [string]$Framework = "Auto"  # Which build output to test. Auto detects it from Skyline.csproj.
 )
 
 # Script location: ai/scripts/Skyline/
@@ -187,6 +191,37 @@ if ($SourceRoot) {
 }
 $skylineRoot = Join-Path $pwizRoot 'pwiz_tools/Skyline'
 $initialLocation = Get-Location
+
+# ---------------------------------------------------------------------------
+# net472 vs net8 output layout.
+#
+# The legacy build drops everything in bin\x64\<Config>. The net8 port builds
+# per-project into bin\<Config>\net8.0-windows and then STAGES the test binaries
+# into one flat bin\staging-net8\<Config> - the single-bin layout the runner and
+# the Docker workers assume. That staging is what pwiz_tools/Skyline/Stage-Net8Tests.ps1
+# does, and pwiz_tools/Skyline/build.bat calls it before every test pass, so this
+# reuses that script rather than reimplementing the layout here.
+#
+# Auto-detection keys on Skyline.csproj declaring a net8 target framework: true on
+# the pwiz-sharp branch, false on master.
+# ---------------------------------------------------------------------------
+$isNet8 = $false
+if ($Framework -eq 'Net8') {
+    $isNet8 = $true
+} elseif ($Framework -eq 'Auto') {
+    $skylineCsproj = Join-Path $skylineRoot 'Skyline.csproj'
+    if (Test-Path -LiteralPath $skylineCsproj) {
+        if ((Get-Content -LiteralPath $skylineCsproj -Raw) -match '<TargetFrameworks?>[^<]*net8\.0') {
+            $isNet8 = $true
+        }
+    }
+}
+
+if ($isNet8) {
+    $outputDirRelative = "bin\staging-net8\$Configuration"
+} else {
+    $outputDirRelative = "bin\x64\$Configuration"
+}
 
 # Ensure UTF-8 output for status symbols regardless of terminal settings
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -272,8 +307,7 @@ elseif (-not $TestName) {
 }
 
 # Determine output directory
-$Platform = "x64"
-$outputDir = "bin\$Platform\$Configuration"
+$outputDir = $outputDirRelative
 $testRunner = "$outputDir\TestRunner.exe"
 
 # Handle @file references - convert to absolute path if needed
@@ -562,7 +596,7 @@ try {
         $runMarker = Write-PwizRunMarker -Kind 'test' -Name $testNameForLog `
             -Checkout (Get-PwizCheckoutName $pwizRoot) `
             -CommandLine "$PSCommandPath $($MyInvocation.BoundParameters.GetEnumerator() | ForEach-Object { "-$($_.Key) $($_.Value)" })" `
-            -LogPath (Join-Path $skylineRoot "bin\x64\$Configuration\$logFile")
+            -LogPath (Join-Path $skylineRoot "$outputDirRelative\$logFile")
     }
 }
 catch { }
@@ -570,14 +604,29 @@ catch { }
 try {
     Set-Location $skylineRoot
 
-    # Ensure TestRunner build exists
-    $Platform = "x64"
-    $outputDir = "bin\$Platform\$Configuration"
+    # Ensure the runner build exists
+    $outputDir = $outputDirRelative
     $testRunner = Join-Path $skylineRoot "$outputDir\TestRunner.exe"
+
+    # On net8 the flat run directory is produced by staging, not by the build, so a
+    # missing runner here usually just means "not staged yet" rather than "not built".
+    # Stage-Net8Tests.ps1 is the branch's own script (build.bat calls it the same way).
+    if ($isNet8 -and -not (Test-Path $testRunner)) {
+        $stageScript = Join-Path $skylineRoot 'Stage-Net8Tests.ps1'
+        if (Test-Path -LiteralPath $stageScript) {
+            Write-Host "Staging net8 test binaries..." -ForegroundColor Cyan
+            & pwsh -NoProfile -File $stageScript -Configuration $Configuration
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "Stage-Net8Tests.ps1 failed (exit $LASTEXITCODE)" -ForegroundColor Red
+                exit 1
+            }
+        }
+    }
+
     if (-not (Test-Path $testRunner)) {
         Write-Host "❌ TestRunner.exe not found at: $testRunner" -ForegroundColor Red
-        Write-Host "Build first with: .\ai\Build-Skyline.ps1" -ForegroundColor Yellow
-        return
+        Write-Host "Build first with: .\ai\scripts\Skyline\Build-Skyline.ps1" -ForegroundColor Yellow
+        exit 1
     }
 
     Push-Location $outputDir
