@@ -4234,6 +4234,7 @@ id-independent categories for them; use `arraylen_by_id.py` to get their real su
 | Bruker tsf `componentList/@count` | 1 | `0.1HCOOH_H20_NoTIMS_Pos.d`, 4 extra components. |
 | Thermo `extra cvParam` | 1 | `MAT95XP-File001.RAW`, 2. |
 | Sciex `extra cvParam` | 2 | `UV/_Sample_Run_004.wiff` x1, plus 2 on files already listed above. |
+| Agilent `extra cvParam` (instrument class) | all | **Deliberate, 2026-08-18.** The MS:1003761 instrument class term. Ours until the cpp change lands upstream - see the 2026-08-18 entry. |
 
 ### Sciex: empty spectra we index and cpp does not (2026-08-12)
 
@@ -4466,3 +4467,183 @@ would have silently reverted an upstream change.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260612_net8_port.md` before starting work.
+
+## 2026-08-18: Agilent instrument class - the SDK's one reliable answer, finally emitted
+
+The `instrument model` cluster (12 corpus files) turned out to be **one Agilent bug, not two
+vendors**. The four files bucketed as Mobilion are Agilent `.d` directories (they contain
+`AcqData/`) sitting under `D:\test\Mobilion\` - the sweep buckets by parent directory, the same
+trap already recorded for the `-nan` file. C#'s Mobilion reader reads `acq-ms-model` exactly as
+cpp does and was never involved.
+
+### Root cause: a different source, not a different spelling
+
+For ion mobility `.d`, cpp goes through `MidacDataImpl::getDeviceName` (`MidacData.cpp:203`),
+which **ignores its `deviceType` argument entirely** and returns `imsReader_->FileInfo->InstrumentName`
+- the operator-assigned name the file carries (`IM-MS QTOF`, `Instrument 1`, `IMS 11`,
+`Agilent 6545XT`, `<unknown>`). C# called the MassSpec SDK's `FileInformation.GetDeviceName(deviceType)`,
+which answers with the generic device-TYPE name (`QTOF` / `IM-QTOF`). Same call shape, different API.
+
+### The CV grew the terms this reader always needed
+
+`psi-ms.obo` 4.1.232 carries `MS:1003761 instrument class` with 16 children, already generated
+into both `CVID.generated.cs:11842+` and cpp's `cv.hpp:11930+`. Ten are new (`MS:1003762-71`);
+six are pre-existing mass-analyzer terms that gained a second parent. Note `QIT` (`MS:1000082`)
+and `LIT` (`MS:1000291`) are **not** instrument-class terms - both are `is_a MS:1000264 ion trap`
+and nothing else, so `MS:1000264` is the class term covering them.
+
+Until now cpp's `translateAsInstrumentModel` (`Reader_Agilent_Detail.cpp:119`) was a stub: it took
+`deviceType` and returned `MS_Agilent_instrument_model` unconditionally, discarding it. So the SDK's
+one reliable answer was thrown away while the unreliable free-text name was what got emitted.
+
+### Both params now sit alongside each other (user call)
+
+cpp branch `Skyline/work/20260818_agilent_instrument_class` off `upstream/master 012816cc5`
+(NOT off parity-integration - see the build trap below). New
+`translateAsInstrumentClass(DeviceType, bool hasIonMobilityData)`; ion mobility wins over the
+device type and is the only route to `Q-IMS-TOF`, since MIDAC reports `DeviceType_Unknown`.
+C# mirrors it, and `GetDeviceName` now reads `FileInfo.InstrumentName` on the IM path. The
+userParam is also now emitted **unconditionally**, as cpp does - the old non-empty guard was a
+C#-side divergence.
+
+Assignments across the 22 reference fixtures: 13 Q-IMS-TOF, 8 triple quadrupole, 1 time-of-flight.
+`GFb_4Scan_TimeSegs_1530_100ng-combineIMS-*` correctly stays triple quadrupole - `combineIMS` is a
+config, `hasIonMobilityData()` is a property of the file.
+
+### Do NOT regenerate the Agilent references with `--generate-mzML`
+
+It passes, and it silently rewrites far more than the change:
+- every `sourceFile location` from the committed `C:/pwiz.git/pwiz/...` to the local checkout path;
+- `cv` versions MS 4.1.197 -> 4.1.232 and UO `09:04:2014` -> `releases/2026-01-16` (22 files);
+- **135 binary arrays in `RS080806_NL_448.2_001.mzML` flipped 64-bit float -> 32-bit float** -
+  unrelated drift the committed reference predates.
+
+The references are written **unindexed** (`VendorReaderTestHarness.cpp:778` sets
+`writeConfig.indexed = false`) and carry no `fileChecksum`, so a surgical one-line insert is safe.
+That is what landed **in the cpp checkout only**: 22 files, **22 insertions, 0 deletions**,
+`Reader_Agilent_Test` green. The harvested cvParam line per file came from a throwaway
+`--generate-mzML` run that was then reverted. The net8 branch touches **no** `pwiz/` path -
+see the trigger analysis in the 2026-08-18b entry for why that matters, and why the C# tests
+do not need it.
+
+### The harness cannot see userParams at all
+
+Removing the `GetDeviceName` fix and re-running left **all 13 Agilent tests passing**. The
+reference diff ignores userParams entirely, so the reader read the device name from the wrong SDK
+through every green run of the suite. New `AgilentInstrumentMetadataTests` closes it: the mapping
+table, plus the CommonInstrumentParams block for one IM and one non-IM fixture. Negative control
+confirmed - reverting the fix fails with `Expected:<IM-MS QTOF>. Actual:<IM-QTOF>`, exactly the
+corpus diff. Agilent 15/15; Sciex 8, Shimadzu 2, Thermo 15, Mobilion 2, Common 58 all still green.
+
+### Status and the surplus this creates
+
+Until the cpp change ships upstream and `G:\parity\msconvert-cpp-snapshot` is rebuilt, **every
+Agilent file in the corpus carries a C#-side surplus cvParam** - recorded in the standing table
+above. The next default sweep will show it; that is expected, not a regression.
+
+**cpp build trap**: `msconvert.exe` built on a branch off `upstream/master` against a
+`build-nt-x86` tree previously built from `parity-integration` dies at startup with
+`0xC0000139 STATUS_ENTRYPOINT_NOT_FOUND` - stale DLL exports, not a code fault. A cross-binary
+corpus check needs a clean rebuild of that tree first. Verification here instead came from the
+cpp-generated references (which C# is diffed against) plus a direct msconvert-sharp emission
+showing `MS:1003767` + `instrument model = IM-MS QTOF`.
+
+## 2026-08-18b: CI triggers, a second harness blind spot, and four review fixes
+
+### What a changed path actually triggers (measured, not guessed)
+
+`scripts/misc/smartBuildTrigger.py` uses `re.match`, first-match-wins, and has **no catch-all** -
+an unmatched path triggers nothing. Resolving the real config with its own `merge()` and the
+master-branch promotion step:
+
+| path | pattern | fires |
+| --- | --- | --- |
+| `global.json` | *(no match)* | **nothing** |
+| `pwiz/**` (incl. reference mzMLs) | `pwiz/.*` | **bt209** - the old cpp/MSVC Skyline build |
+| `pwiz-sharp/**` | `pwiz-sharp/.*` | CoreWindowsNet + CoreLinuxNet |
+| `pwiz_tools/Skyline/**` | `pwiz_tools/Skyline/.*` | SkylineWindowsNet |
+
+So **moving `global.json` to the repo root does not trigger a cpp build** - but it now matches no
+pattern at all, so a change to the SDK pin triggers **no CI whatsoever** (under `pwiz-sharp/` it
+used to fire CoreNet). Worth a `("global.json", targets['CoreNet'])` entry before the merge.
+
+The cpp Core/Linux/Bumbershoot/Container targets are commented out for the duration of the port,
+but `SkylineWithTestConnected` still carries a live `bt209`, which is what `pwiz/.*` reaches.
+**Anything under `pwiz/` on this branch triggers a C++ build**; keep cpp work in the cpp checkout.
+
+### The C# harness ignores the whole paramGroup, not just userParams
+
+Deleting the 22 reference edits from the net8 checkout and re-running left Agilent **15/15**
+green. `Diff.cs` has no `ParamGroups` handling at all, so the C# vendor harness cannot see the
+instrument class cvParam, the instrument serial number, or the instrument model userParam -
+everything in `CommonInstrumentParams`. cpp's `Diff` *does* compare it, which is why the cpp test
+failed and the C# one never would have. Two consequences:
+
+- the reference-mzML edits belong **only** in the cpp checkout (and would have tripped bt209 here);
+- `AgilentInstrumentMetadataTests` is the only thing covering any of it on the C# side.
+
+### Review fixes (all verified, not just applied)
+
+1. **`ReaderConfig.UnknownInstrumentIsError` defaulted `true`; cpp defaults it FALSE**
+   (`Reader.cpp:47`). Only msconvert tightens it, by negating its own flag
+   (`msconvert.cpp:507-508`, already mirrored in `Converter.cs:471`). Every other consumer -
+   Skyline, the hosted C API - was getting a hard `IOException` on vendor files cpp and net472
+   open with a warning. Now defaults false; `ReaderConfigDefaultsTests` pins both directions.
+2. **`RuntimeClosureFromDeps` skipped `runtimeTargets`**, so BiblioSpec.zip shipped without
+   `SQLite.Interop.dll` - BlibBuild cannot write a `.blib` without it. Now included, filtered to
+   Windows RIDs (the section lists every platform; taking bare names would have asked for
+   `libhdf5.so`). Verified: **106 -> 110 entries, 17.7 -> 22.0 MB**, all four natives present,
+   no `.so`/`.dylib` leakage.
+3. **`--no-restore` on never-restored projects.** SkylineTester is not in `BUILD_TARGET`, so the
+   restore loop skipped it; `_StageDistroZipPrereqs` likewise ran `Targets="Build"` with no
+   restore. Reproduced live as NETSDK1005. Both fixed - and the prereq restore needs
+   `RemoveProperties="TargetFramework"`, because build.bat drives this with `-f net8.0-windows`
+   and that global would otherwise restore the wrong TFM (the first attempt at the fix did
+   exactly that).
+4. **Detached HEAD.** `git rev-parse --abbrev-ref HEAD` prints the literal `HEAD` on the commit
+   checkouts CI uses. Confirmed in a throwaway detached worktree; `git name-rev` returns the real
+   branch there. Fixed with a name-rev fallback plus a build warning if both fail.
+
+Also removed a stale duplicate REM block in `build.bat` that claimed the zip work lived in
+"targets named after the artifacts", which MSB5016 makes impossible.
+
+### Version.cpp retired in favour of assembly metadata (user call)
+
+The net8 build was synthesising a **C++ source file** purely to carry one string for
+SkylineNightly. It now stamps the same git facts into SkylineTester's own assembly:
+
+- `SkylineTester.csproj` gains `GenerateAssemblyInfo=true` (it had none - the assembly stamped
+  `0.0.0.0`; note `pwiz.Common.dll` already stamped `1.0.0+<sha>`, so the SDK machinery was
+  there, this project had just opted out) and a `_StampBuildVersion` target setting
+  `Version`/`FileVersion` to the same `3.0.<yyddd>` revision Jamroot's rule produces, and
+  `InformationalVersion` to `<version>+<sha>.branch.<branch>`.
+- `IncludeSourceRevisionInInformationalVersion=false` so the SDK does not append a second `+sha`.
+- `Nightly.cs` reads it via `FileVersionInfo.ProductVersion` on `SkylineTester Files\SkylineTester.dll`
+  - no assembly load, so the reader does not need to match the build's framework. The delimiter is
+  `.branch.` because a branch name contains `/` and cannot be the last dot-separated token.
+- `pwiz\Version.cpp` is no longer generated and no longer a zip member.
+
+Verified end to end: `SkylineTester.zip` still **313.6 MB / 1927 entries**, contains no
+`Version.cpp`, and SkylineNightly's exact read path recovers
+`Skyline/work/20260612_net8_port` from the assembly inside the zip.
+
+### tcbuild.bat now always builds the distro zips
+
+It never requested any - it forwards `%*` to `build.bat` and passed nothing of its own, so a
+standard `tcbuild.bat Release --automated` produced **zero** zips. The Jamfile rule it replaced
+(`Jamfile.jam:361-381`) produced three unconditionally, so tcbuild now appends
+`SkylineTester.zip SkylineNightly.zip BiblioSpec.zip` (user call: always on, not behind a flag).
+
+Two properties that make this safe: the zips land in `bin/staging-net8/<Config>`, which is
+gitignored, so the `git status --porcelain` hygiene gate stays clean; and the zips block ends at
+`build.bat:212` while `TestRunner.exe` runs at `:283`, so TC gets its artifacts even from a build
+whose tests failed. Verified the forwarded arg string parses by appending a bogus trailing
+argument - only that one was rejected, at parse time, with nothing built.
+
+**Cost**: `SkylineTester.zip` is 313.6 MB and takes minutes to assemble, on every per-commit run.
+**Still to do on the TC side**: artifact paths must point at `bin/staging-net8/<Config>/*.zip`.
+
+### Test state
+
+pwiz-sharp: Agilent 15, Sciex 8, Shimadzu 2, Thermo 15, Mobilion 2, Bruker 14, Common 58,
+MsData 81, Waters 21 - all green. cpp `Reader_Agilent_Test` green in the cpp checkout.
