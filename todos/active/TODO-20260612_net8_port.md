@@ -1439,8 +1439,6 @@ outside the MascotShim-blocked full `TestData` build.
 
 Latest commit: **33a1df75fe**. WIFF-fix CI build was still queued at session end.
 
-**Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260612_net8_port.md` before starting work.
 
 ### 2026-07-08 - Sciex reader fixes landed; TestFunctional parallel run triaged (22 net8-wide + 20 container-only)
 
@@ -4281,6 +4279,190 @@ neighbouring spectra, and they vanished with the alignment.
 `20061108_CPTAC_1B468.wiff` 13.1s -> 19.7s, `201208-378803.wiff` 1.7s -> 2.9s. cpp does the same
 probe and converts the first in 13.7s, so we are ~45% slower than cpp at the identical work -
 a pre-existing gap in the read path, not something this flag introduced.
+
+---
+
+## 2026-08-17/18: peakPicking sweep, four vendor fixes, Skyline distro zips
+
+### Default-path parity fixes (four parallel vendor investigations)
+
+All uncommitted in `pwiz-net8`. Every change is backed by its vendor reader test; 98/98 across
+Sciex/Agilent/Shimadzu/Common/Mobilion/Thermo.
+
+**Shimadzu - msconvert-sharp was FABRICATING 12,884 spectra.** On
+`20200929_QC(100x)_022.lcd`, `ShimadzuRawData.TryGetEventLastScanNumber` returned `0` for both
+"SDK call failed" and "SDK succeeded, no scan near endTime". The caller treated any `0` as
+failure and tripped the net8 `SumScanCountsFromTics` fallback, which estimates a scan count from
+TIC point counts and duplicated SRM chromatogram data as spectra. cpp
+(`ShimadzuReader.cpp:277-279`) treats `S_OK` + scan 0 as normal and ends with `scanCount_ == 0`
+and no `spectrumList`. Fixed with an explicit `out bool callFailed` so the genuine-failure
+fallback (net8 `QtflRawDataMain` binder flakiness, TC 3975296) is preserved. This is wrong
+OUTPUT, not a parity nit. Also fixed: two files missing `precursorList` entirely (C# gated on
+`msLevel > 1` and read only `GetMSSpectrumInfo`; cpp resolves in three tiers and gates purely on
+`precursorMz > 0`, the missing tier being `MassSpectrumObject.AcqModeMz`, the parked Q1 mass of a
+product-ion scan), and 59 empty MS2 scans missing `binaryDataArrayList` from a `totalPoints > 0`
+guard cpp does not have. All 10 Shimadzu corpus files are now `startTimeStamp`-only.
+
+**Agilent - the TIC came from the wrong source.** `FillTic` walked scan records
+(`IMSScanRecord.Tic`); cpp reads the SDK's `GetChromatogram(TotalIon)`. On centroided QTOF runs
+those disagree by up to **84% relative** - `BSA-ms2-centroid.d` had 426/587 values wrong,
+max_abs 2.97e6. Also fixed: `fileContent` representation terms now come from MIDAC's
+`TfsMsDetails.MsStorageMode` on IM files (cpp `MidacData.cpp:244-247`), not the MassSpec SDK's
+`SpectraFormat` - the two disagree in BOTH directions.
+
+**Shared writer bug (`MzmlWriter.cs`)**: `<isolationWindow>` was written unconditionally; cpp
+guards on non-empty at `IO.cpp:1216` / `:1339`. An Agilent precursor-ion scan puts the isolation
+window on the PRODUCT, so C# emitted a bare empty isolationWindow on all 2946 spectra. Verified
+cross-vendor: Thermo 57/57 windows 0 diffs, Sciex 1591/1591.
+
+**Shared formatting bug (`PwizFloat.cs`)**: cpp renders cvParam doubles through
+`boost::spirit::karma`, whose `test_negative` for floating point is specialised on
+**`core::signbit`**, not `n < 0`. The quiet NaN both runtimes circulate
+(`0xFFF8000000000000`, i.e. .NET's `double.NaN`) has the sign bit set, so karma writes `-nan`.
+Our karma port returned bare `"nan"` and dropped the sign, though the `-inf` line below it
+already did the signbit test. 612 occurrences on one file, 82 diffs to 1. NOTE: that file
+(`2020-12-28-...NISTmAbOxidized[1].d`) is **Agilent**, not Mobilion - the sweep buckets by
+parent directory name.
+
+**Sciex** - MRM3 wiff2 MS-level (cpp switches on experiment type alone, not msLevel),
+precursor-ion scans emitting `productList` not `precursorList`, and the UV `scan start time`
+fallback removed.
+
+### Sciex regression the sweep caught, and why divergences are dangerous
+
+The Sciex `chromatogram/@id` work introduced a **deliberate divergence** that regressed 19
+previously-identical files. cpp passes its 1-BASED sample number to the 0-BASED
+`Batch::GetSample` (`WiffFile.cpp:449`), so it reads the NEXT sample's software version and
+throws on the last, leaving `hasHalfSizeRTWindow` false. That off-by-one is **load-bearing for
+single-sample files**: with one sample cpp's read always throws, so it always takes the
+half-width branch. Reading this sample's real version flipped them to full width and renamed
+every scheduled SRM chromatogram (`start=1.01 end=2.01` became `start=0.51 end=2.51`, 60
+ids/file). Restored cpp's behaviour as `SampleNumber < SampleCount` at the call site rather than
+opening a second `Sample` (native-handle leak risk). Result is strictly better than either prior
+state: the 15-sample file now matches cpp on **all 15** samples. Lesson: four agents each
+reported clean local verification; only the full corpus caught it.
+
+### Comparator bug (`mzml_compare.py`) - two halves, one dangerous
+
+`NaN != NaN` is true in IEEE, so every both-NaN slot counted as differing; and `max(0, nan)` is
+`0`, so the magnitude never rose. Two failure modes: identical-but-NaN-containing arrays reported
+as differing with the tell-tale `max_abs=0 max_rel=0` signature, and - the quiet one - **a slot
+where one side is NaN and the other a real number ALSO reported `max_abs=0`**, reading as
+negligible. Fixed: both-NaN is equal, differing sign bit counted separately, NaN-vs-number and
+infinities report `inf`. `test_mzml_compare_nan.py` covers both halves, 11 checks. Two Agilent IM
+files were never really differing on binary data.
+
+### peakPicking sweep - FIRST EVER run (492/492 complete)
+
+The corpus sweep had only ever run one configuration, so **every vendor's centroiding path was
+unexercised** - covered only by the ~31-file-per-vendor reference harness. Added `--peak-picking`
+to `run_parity2.py` (own `work2-pp` scratch dir, stamps `peakPicking: true` into each record).
+Filter is `peakPicking vendor msLevel=1-`, placed AHEAD of the index slice because msconvert
+applies filters in command-line order.
+
+`G:\parity\results-20260817-peakpicking.jsonl`: **identical 274 | differs 108 | cs-failed 29 |
+both-failed 60 | cpp-failed 19 | different-output-files 2**
+
+| vendor | identical | differs | cs-failed |
+| --- | ---: | ---: | ---: |
+| Sciex | 127 | 57 | 1 |
+| Thermo | 95 | 2 | 1 |
+| Waters | 34 | 9 | 1 |
+| Bruker | 17 | 1 | 0 |
+| Agilent | **0** | 29 | 19 |
+| Shimadzu | **0** | 10 | 0 |
+
+**The cs-failed cluster is a filter-semantics divergence, not a missing vendor implementation.**
+Neither implementation can vendor-centroid Agilent - cpp's own warning names it
+(`SpectrumList_PeakPicker.cpp:158`: "not available for this file (non-vendor, UNIFI, **Agilent**
+or Waters IMS format); falling back to ..."). cpp ALWAYS constructs a fallback detector
+(`SpectrumListFactory.cpp:377-392`: `CwtPeakDetector` or `LocalMaximumPeakDetector(3)`) and
+treats `vendor` as a preference. C# made `vendor` mean vendor-or-throw - its own docstring at
+`SpectrumListFactory.cs:324-328` documents the divergence. Fix is small: construct the fallback
+for `vendor` as cpp does. Note `peakPicking true` already falls back on both sides, so the
+sweep's 29 cs-failed partly reflect the chosen filter spelling.
+
+Also new under peakPicking: `processingMethod` says `user:vendor-only peak picker` where cpp says
+`user:Agilent/MassHunter peak picking`.
+
+### Skyline: build, distro zips, and a fatal config bug
+
+**`Skyline-daily.exe` would not start at all** - `Unrecognized configuration section system.data`
+aborting `ClientConfigurationSystem.EnsureInit`. `system.data` is a built-in section on .NET
+Framework (registered by machine.config); .NET 8 ships no machine.config, so an undeclared
+section is a hard parse error that takes down the WHOLE configuration system on first access.
+The block registered a `DbProviderFactories` entry for System.Data.SQLite that nothing reads -
+every call site does `new SQLiteConnection(...)` directly. Fixed with `App.net8.xslt`, applied
+via `_GenerateNet8AppConfig` in `Skyline.csproj`, stripping `system.data`, `startup` and
+`runtime` from the net8 leg only (Skyline multi-targets net472 off the SAME 46 KB App.config, so
+forking a copy would drift). Verified: GUI launches with `MainWindowTitle: 'Start Page'`, from
+both the build output and inside SkylineTester.zip.
+**Why nothing caught it**: the entire functional suite runs through TestRunner, which loads
+Skyline as a LIBRARY. The build was green and the app would not start. Worth a smoke test that
+actually launches the exe.
+
+**Distro zips restored.** `tcbuild.bat`/`build.bat` built none of
+`SkylineTester.zip` / `SkylineNightly.zip` / `BiblioSpec.zip` - the Jamfile's
+`create_skyline_zips` rule (`Jamfile.jam:362-381`) had no net8 equivalent. Now: any bare `*.zip`
+argument to `build.bat` is forwarded to a `DistroZips` target in `SkylineTester.csproj` (a target
+cannot be NAMED for the artifact - MSBuild rejects `.` in target names, MSB5016 - and `-p:` treats
+both `;` and `,` as property separators, so the list is passed escaped as `%3B` and unescaped in
+the target). Artifacts land in `pwiz_tools/Skyline/bin/staging-net8/<Config>/` (gitignored, so
+tcbuild's `git status` hygiene check stays clean; TeamCity artifact paths would need updating).
+
+- `SkylineTester.zip` **313.6 MB** (was >4 GB). Root cause was NOT the missing
+  `UseZip64WhenSaving` first added: on net8 **TestRunner executes FROM the staging dir the zip
+  is built from**, so "add every subdirectory" swept up 564 `Tools_*`/`Toools_*` per-test tool
+  installs (13.9 GB), `CachedDownloadsForTests` (1 GB), 333 per-test `.zip` (1.6 GB) and stale
+  `DotNetZip-*.tmp`. Excluded via `IsTestRunResidue`. DotNetZip writes `<name>.tmp` and renames
+  on success, so every failed attempt leaves a multi-GB file for the NEXT run to sweep in.
+- `SkylineNightly.zip` **661 KB**, verified runnable from the extracted zip. Its member list
+  needed porting: net8 emits `<name>.dll.config` not `.exe.config`, and the `.exe` is an apphost
+  that cannot start without its `.dll` / `.deps.json` / `.runtimeconfig.json`.
+- `BiblioSpec.zip` **18.5 MB**. net472 could name its members; the net8 ports are
+  framework-dependent (**86 assemblies for BlibBuild alone**), so the distro is now assembled
+  from each tool's `.deps.json`. Two things deps.json cannot see and which stay explicit: the
+  native vendor DLLs (`MassLynxRaw`, `timsdata`, `baf2sql_c`, `cdt`, `msparser`) which are
+  P/Invoked by name, and the msparser schemas which moved to a `msparser-config` subdir.
+  `BlibToMs2` is now a declared prerequisite (it was fetched from the C++ `obj\x64` tree).
+- `pwiz/Version.cpp` is generated by the net8 build (`_GenerateVersionCpp`) from the same git
+  facts as Jamroot's rule, including using the COMMIT date so the revision is reproducible.
+  SkylineNightly reads `Version::Branch` out of the zip (`Nightly.cs:500`) to identify the branch.
+
+**`global.json` moved to the repo root.** It lived at `pwiz-sharp/global.json`, and SDK
+resolution walks UP - so Skyline built with **10.0.400** while pwiz-sharp was pinned to 8.0.423.
+All four locations now resolve to 8.0.423.
+
+### cpp side (C:\dev\pwiz-waters) - all verified, NONE pushed
+
+Both branches rebased onto upstream master `012816cc5`; `parity-integration` merges them and is
+what the sweeps measured. `origin` there is the **pete-reay-waters fork**, not ProteoWizard - the
+rebase target came from `upstream`.
+
+- `Skyline/work/20260813_waters_sdk_50` (2 commits) - MassLynx 4.9 to 5.0 + 31 regenerated
+  reference mzMLs. `Reader_Waters_Test` exit 0.
+- `Skyline/work/20260814_cpp_uninit` (3 commits) - Thermo `ScanInfoImpl` uninitialised members,
+  two Agilent out-of-bounds reads. `Reader_Thermo_Test` + `Reader_Agilent_Test` pass.
+
+Rebase conflict worth knowing: master turned `ActivationType activationType_` into
+`vector<ActivationType> precursorActivationTypes_` in the same block the uninit commit rewrote.
+Resolved toward master's declarations with the initialisers re-applied; resolving the other way
+would have silently reverted an upstream change.
+
+### Decisions taken
+
+- **Agilent instrument serial number is KEPT as deliberate C#-side surplus.** cpp omits it only
+  because `MidacDataImpl::getDeviceType()` hard-codes `DeviceType_Unknown`, so its `Devices.xml`
+  search is for type 0 and never matches. The values are real (`SG1812C101`, `SG1928C201`).
+  Recorded at the call site; costs ~6 IM files never comparing byte-identical.
+- **Shimadzu ~15s `startTimeStamp` skew is ACCEPTABLE** (user call). 6 files are timestamp-only.
+- Two residual Sciex diffs are **cpp bugs** deliberately not reproduced: a karma 12-digit
+  rounding carry rendering `99999999.99999972` as `1.0e09`, and the 1-based/0-based `GetSample`
+  off-by-one. Those files can never reach `identical` without replicating the bugs.
+- **`--ignoreUnknownInstrumentError` implemented** (was parsed but never copied into
+  `ReaderConfig` - dead wiring, same failure mode as `--ignoreMissingZeroSamples`). All 5 cpp
+  call sites mirrored. It surfaced that **ZenoTOF 8600 System** is missing from BOTH mapping
+  tables - cpp fails on that file too.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260612_net8_port.md` before starting work.
