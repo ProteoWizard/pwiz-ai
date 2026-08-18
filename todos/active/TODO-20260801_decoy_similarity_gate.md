@@ -2581,3 +2581,44 @@ candidates in one experiment:
 Tooling for the ladder and the set-swap lives in the session scratchpad (`fp1-ladder.ps1`,
 `fp1-set.ps1`, `boundary_anatomy.py`, `pool_evolution.py`); the readers work off run dirs and
 `run.log`'s own `N precursors at 1.0% run-level FDR` lines.
+
+### 2026-08-18 (evening) - CORRECTION: both libraries swing with pool composition; the deficit is not a stable measurement
+
+The entry above concluded "Mike's library is nearly scale-invariant; ours collapses under
+pooling". **That is wrong**, and it was wrong for the reason this file keeps re-learning: it
+rested on TWO points (N=8 and N=82). Filling in N=16 and N=32 breaks it.
+
+**The same 8 files, tracked as the pool around them grows** (pass-1 run-level FDR @1%, summed):
+
+| pool N | ours | Mike | ours vs Mike |
+|---|---|---|---|
+| 8 | 247,971 | 228,577 | +8.5% |
+| 16 | 242,894 | 240,942 | +0.8% |
+| 32 | 235,242 | 195,441 | **+20.4%** |
+| 82 | 189,186 | 225,400 | -16.1% |
+
+Indexed to each arm's own N=8 value: ours 0 / -2.1 / -5.1 / **-23.7%**; Mike 0 / +5.4 /
+**-14.5** / -1.4%. Mike's arm is NOT flat - it drops 14.5% at N=32 and comes back to -1.4% at
+82. Both libraries move erratically with pool composition, by +-15-20%.
+
+**This is deterministic, not noise in the usual sense.** `PercolatorConfig.Seed` is a fixed 42
+with no override, so a given pool always yields the same model. What moves the answer is WHICH
+files share the pool, via the training subsample drawn from them.
+
+**Consequence for everything measured at a single N**, including the -16.0% at 82 files that
+started this investigation: it is one draw from a process whose spread across pool
+compositions is at least as large as the effect being attributed to the library. No library
+conclusion at a single N is safe until that spread is measured. The head-to-head sequence
+-0.4% (N=1), +8.5% (8), +1.2% (16), +20.5% (32), -16.0% (82) is not a curve to interpret; it
+is the estimator moving.
+
+**Deliberately NOT run**: the 5.4 h ungated 82-file discriminator described in the previous
+entry. A single run of it cannot be distinguished from the swing above, so it would have cost
+5.4 h to produce an uninterpretable number. It is worth running only after the spread is
+characterised, and then with enough pools to see past it.
+
+**Running instead**: pools of the SAME size with DIFFERENT members (`-EveryNthFile 2`, so 32
+files spanning 1-63, which still contains `_0001` and is directly comparable to the 32-file
+pool of files 1-32). Same N, same library, different membership - which isolates how much a
+single-N comparison can move for reasons having nothing to do with the library. Driver:
+`fp1-every.ps1` in the session scratchpad.
