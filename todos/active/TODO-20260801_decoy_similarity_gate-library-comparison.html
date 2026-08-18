@@ -361,6 +361,34 @@ paired target also reported</strong>. Both members of a co-assigned pair are nor
 signal is counted twice, not suppressed. There is therefore no optimistic bias from that mechanism, and our
 0.693% vs 0.435% FDP gap must be taken at face value.</div>
 
+
+<h2>13. The similarity gate, measured cleanly</h2>
+<p class="sub">Ungated arm built in the same work dir reusing stages 1a/2/3 &mdash; prediction basis,
+training blib and fine-tuned models byte-identical (pretrained RT R&sup2; 0.8575, tuned 0.9978, MS2 COS
+0.9777 all reproduced exactly). Only the entrapment and decoy sequences differ. Its peptide FASTA is
+<strong>byte-identical to the delivered library's</strong> (SHA256 match).</p>
+<div class="card scroll">
+<table>
+  <tr><th>arm</th><th>run-level</th><th>experiment</th><th>disc @1% q</th><th>true FDP</th><th>calibration</th></tr>
+  <tr><td><strong>ours gated</strong></td><td class="num">228,898</td><td class="num">109,434</td><td class="num">108,562</td><td class="num good">0.693%</td><td class="good">conservative</td></tr>
+  <tr><td>Mike delivered</td><td class="num">229,129</td><td class="num">103,253</td><td class="num">102,494</td><td class="num good">0.435%</td><td class="good">conservative</td></tr>
+  <tr class="tot"><td><strong>ours ungated</strong></td><td class="num">219,907</td><td class="num">94,675</td><td class="num">93,276</td><td class="num badc">1.662%</td><td class="badc">ANTI-conservative</td></tr>
+</table>
+</div>
+<div class="note g"><strong>The gate is worth +16.4% discoveries (93,276 &rarr; 108,562) while moving true
+FDP from 1.662% to 0.693%.</strong> It improves yield and calibration simultaneously and rescues a library
+that is otherwise anti-conservative &mdash; reporting 1.66% true false discovery at a claimed 1%. For the
+ungated arm <code>disc@1%_true_fdp</code> is <strong>0</strong>: its FDP curve starts above 1% and never
+returns, which is the low-q spike in its most extreme form. On this dataset our gated library is at parity
+with the delivered library (228,898 vs 229,129 run-level) and reports more at 1% q, both conservative.</div>
+<div class="note w"><strong>Still open.</strong> The ungated arm has the delivered library's exact
+sequences <em>and</em> matching predictions &mdash; cosine 0.999, RT delta 0.02, on both the target side
+and the decoy/entrapment side &mdash; yet is anti-conservative where the delivered library is not.
+Met-clip extras are not the explanation: only 345 of 620,524 reported peptides are Met-clip forms, and 5
+inside the 1% cutoff. Working hypothesis, unproven: near-copy entrapment compete head-to-head with their
+target twin on one peak, so a cosine-0.999 difference decides which wins &mdash; targets are insensitive,
+near-copies maximally sensitive. The gate removes the exposure entirely.</div>
+
 <footer>
 Measured 2026-08-17. Rebuild: <code>D:\test\carafe-repro\astral-20260817</code>, Carafe
 <code>maccoss/Carafe@14bc81c</code> (jar snapshot
