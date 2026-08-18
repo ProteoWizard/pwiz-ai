@@ -222,6 +222,8 @@ if ($isNet8) {
 } else {
     $outputDirRelative = "bin\x64\$Configuration"
 }
+Write-Host ("Framework: {0} (detected: {1}); test dir: {2}" -f `
+    $(if ($isNet8) { "net8" } else { "net472" }), $Framework, $outputDirRelative) -ForegroundColor Gray
 
 # Ensure UTF-8 output for status symbols regardless of terminal settings
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -608,10 +610,11 @@ try {
     $outputDir = $outputDirRelative
     $testRunner = Join-Path $skylineRoot "$outputDir\TestRunner.exe"
 
-    # On net8 the flat run directory is produced by staging, not by the build, so a
-    # missing runner here usually just means "not staged yet" rather than "not built".
-    # Stage-Net8Tests.ps1 is the branch's own script (build.bat calls it the same way).
-    if ($isNet8 -and -not (Test-Path $testRunner)) {
+    # On net8 the flat run directory is produced by staging, not by the build, so it has
+    # to be refreshed EVERY run - guarding on "runner is missing" would stage once and
+    # then silently test the previous build forever. Stage-Net8Tests.ps1 copies with
+    # robocopy /XO, so re-staging an up-to-date directory is close to free.
+    if ($isNet8) {
         $stageScript = Join-Path $skylineRoot 'Stage-Net8Tests.ps1'
         if (Test-Path -LiteralPath $stageScript) {
             Write-Host "Staging net8 test binaries..." -ForegroundColor Cyan
@@ -625,7 +628,9 @@ try {
 
     if (-not (Test-Path $testRunner)) {
         Write-Host "❌ TestRunner.exe not found at: $testRunner" -ForegroundColor Red
-        Write-Host "Build first with: .\ai\scripts\Skyline\Build-Skyline.ps1" -ForegroundColor Yellow
+        $hint = "pwsh -File './ai/scripts/Skyline/Build-Skyline.ps1' -Configuration $Configuration"
+        if ($Framework -ne 'Auto') { $hint += " -Framework $Framework" }
+        Write-Host "Build first with: $hint" -ForegroundColor Yellow
         exit 1
     }
 

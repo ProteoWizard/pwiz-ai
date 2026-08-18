@@ -174,7 +174,7 @@ there yet - budget for a first full Skyline build.
 ## Session 2026-08-18 (second): implemented, built, and verified
 
 All four tiers are done, `CodeInspection` passes, and the inspection rule is proven to
-fire. Working tree in `C:\proj\pwiz-work1` is dirty and uncommitted.
+fire. Committed as 4 commits on `Skyline/work/20260818_commonutil_winforms_split` (base `5ef89bd228`); working tree clean, nothing pushed.
 
 ### The assembly is called CommonBaseUI, and it is new
 
@@ -323,9 +323,46 @@ So there are two non-exclusive routes, and the choice belongs to Matt and the te
 This is out of scope for our PR but Matt should know. It is NOT a stale-artifact problem -
 `clean.bat` would delete `build-nt-x86` and the staged `obj/x64` deps and fix none of it.
 
+### Deferred findings from /code-review max on the ai/ wrappers (2026-08-18)
+
+The review found 15 issues, ALL in `ai/scripts/Skyline/*.ps1` and NONE in the pwiz
+branch. Eight were fixed (staging every run, dotnet/vswhere guards, Clean/Rebuild verbs,
+inspection refusal, detection banner, build-first hint, TODO contradictions). These six
+are real but deferred - they are gaps in the wrapper, not blockers for the PR:
+
+- [ ] **Hardklor is never built on the net8 path.** `build.bat:129` builds
+      `Executables\Hardklor\Hardklor.vcxproj` with VS MSBuild first, because `dotnet build`
+      cannot build a vcxproj. `Skyline.csproj:323` includes the exe under an `Exists(...)`
+      condition, so a missing one is silently dropped and every Hardklor/Bullseye
+      feature-detection test fails at run time after a green build.
+- [ ] **`-Target Skyline -RunTests` runs a stale `Test.dll`.** The single-project mapping
+      excludes Test.csproj and TestRunner.csproj, but the `$testDll` switch has no
+      `Skyline` arm and falls through to `Test.dll`, so it tests the PREVIOUS build
+      against the new Skyline-daily.dll. `-Target Test` has the same shape.
+- [ ] **`TestTutorial` and `TestPerf` are never staged.** Stage-Net8Tests.ps1 is called
+      with no `-Projects`, so its seven defaults are staged; both targets are still
+      accepted by `-Target` and `-TestName`. The runner then reports "No tests found",
+      which trips the heuristic in Run-Tests.ps1 and prints actively wrong advice.
+- [ ] **A partial stage passes as success.** Stage-Net8Tests.ps1 warns and `continue`s
+      per missing project output and still exits 0, so `$LASTEXITCODE -ne 0` never fires
+      on an incomplete staging directory.
+- [ ] **`-Target Solution` means two different things.** net472 builds all of
+      `Skyline.sln`; net8 builds only build.bat's seven projects, silently dropping
+      SkylineTester, SkylineNightly, SkylineCmd, SkylineTool, TestUtil and TestRunnerLib.
+      This is the DEFAULT target, so a developer can change SkylineCmd, see a green
+      build, and commit code that never compiled.
+- [ ] **Docs still assert `bin\x64\Debug`** as the test output, log and runner location
+      (`debugging/SKILL.md:101`, `skyline-tester/SKILL.md:26`, `docs/skylinetester-guide.md:20`,
+      `docs/build-and-test-guide.md:173`). That directory still EXISTS on a net8 checkout
+      with stale content, so following the docs opens an old log rather than failing.
+- [ ] **DRY**: `$isNet8` detection (11 lines) and the staging invocation are copy-pasted
+      between the two scripts, plus the `bin\staging-net8\$Configuration` literal in three
+      places. If one regex is updated and the other is not, the build stages one place
+      and the test runs another. Both scripts already dot-source `session/SessionState.ps1`.
+
 ### Follow-ups
 
-- [ ] Commit. Nothing is committed yet; `pwiz-work1` and `ai` are both dirty.
+- [x] Commit. 4 commits on `Skyline/work/20260818_commonutil_winforms_split`, 2 in `ai`. Neither pushed.
 - [ ] Report the net472 breakage to Matt.
 - [ ] `ai/scripts/Skyline/Deploy-SkylineMcp.ps1:26` hardcodes `..\..\..\pwiz\...`, so it
       always deploys from the `pwiz` checkout regardless of which one is active.

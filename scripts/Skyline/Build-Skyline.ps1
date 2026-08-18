@@ -217,35 +217,6 @@ if ($blockingProcesses) {
     exit 2  # Special exit code indicating process block (not build failure)
 }
 
-# Find MSBuild using vswhere
-$vswherePath = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-if (-not (Test-Path $vswherePath)) {
-    Write-Error "vswhere.exe not found. Is Visual Studio 2022 installed?"
-    exit 1
-}
-
-$vsPath = & $vswherePath -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
-if (-not $vsPath) {
-    Write-Error "Visual Studio 2022 with MSBuild not found"
-    exit 1
-}
-
-$msbuild = "$vsPath\MSBuild\Current\Bin\amd64\MSBuild.exe"
-if (-not (Test-Path $msbuild)) {
-    Write-Error "MSBuild not found at: $msbuild"
-    exit 1
-}
-
-Write-Host "Using MSBuild: $msbuild" -ForegroundColor Cyan
-
-# ---------------------------------------------------------------------------
-# net472 vs net8 build path.
-#
-# Auto-detection keys on Skyline.csproj declaring a net8 target framework: true on
-# the pwiz-sharp branch, false on master. On net8 we build the same explicit project
-# list pwiz_tools/Skyline/build.bat uses, because Skyline.sln also carries the net472
-# leg, which that branch does not keep green.
-# ---------------------------------------------------------------------------
 $isNet8 = $false
 if ($Framework -eq 'Net8') {
     $isNet8 = $true
@@ -258,6 +229,42 @@ if ($Framework -eq 'Net8') {
     }
 }
 
+# MSBuild discovery is the net472 path only. On net8 we shell out to dotnet, and a
+# machine with the .NET SDK but no Visual Studio is precisely what that path is for -
+# running vswhere there would hard-exit before reaching the build that would have worked.
+if (-not $isNet8) {
+    # Find MSBuild using vswhere
+    $vswherePath = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+    if (-not (Test-Path $vswherePath)) {
+        Write-Error "vswhere.exe not found. Is Visual Studio 2022 installed?"
+        exit 1
+    }
+
+    $vsPath = & $vswherePath -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+    if (-not $vsPath) {
+        Write-Error "Visual Studio 2022 with MSBuild not found"
+        exit 1
+    }
+
+    $msbuild = "$vsPath\MSBuild\Current\Bin\amd64\MSBuild.exe"
+    if (-not (Test-Path $msbuild)) {
+        Write-Error "MSBuild not found at: $msbuild"
+        exit 1
+    }
+
+    Write-Host "Using MSBuild: $msbuild" -ForegroundColor Cyan
+} else {
+    Write-Host "Framework: net8 (detected: $Framework); building with dotnet" -ForegroundColor Cyan
+}
+
+# ---------------------------------------------------------------------------
+# net472 vs net8 build path.
+#
+# Auto-detection keys on Skyline.csproj declaring a net8 target framework: true on
+# the pwiz-sharp branch, false on master. On net8 we build the same explicit project
+# list pwiz_tools/Skyline/build.bat uses, because Skyline.sln also carries the net472
+# leg, which that branch does not keep green.
+# ---------------------------------------------------------------------------
 # Determine MSBuild target
 $Platform = "x64"
 $buildArgs = @(
@@ -290,7 +297,8 @@ $buildArgs += @(
 )
 
 if ($isNet8) {
-    Write-Host "`nBuilding: $Target ($Configuration, net8.0-windows) via dotnet build" -ForegroundColor Yellow
+    $verbLabel = if ($Target -eq 'Clean') { "dotnet clean" } elseif ($Target -eq 'Rebuild') { "dotnet build --no-incremental" } else { "dotnet build" }
+    Write-Host "`n$Target ($Configuration, net8.0-windows) via $verbLabel" -ForegroundColor Yellow
 } else {
     Write-Host "`nBuilding: $Target ($Configuration|$Platform)" -ForegroundColor Yellow
     Write-Host "Command: & `"$msbuild`" $($buildArgs -join ' ')`n" -ForegroundColor Gray
@@ -316,6 +324,13 @@ if ($isNet8) {
         $net8Projects = @("$Target\$Target.csproj")
     }
 
+    # Clean and Rebuild need real dotnet verbs. Without these, -Target Clean ran a
+    # full build and reported success having deleted nothing.
+    $net8Verb = 'build'
+    $net8Extra = @()
+    if ($Target -eq 'Clean') { $net8Verb = 'clean' }
+    elseif ($Target -eq 'Rebuild') { $net8Extra = @('--no-incremental') }
+
     # The vendor projects gate real reader code on this property. Without it some types
     # (e.g. the Waters lockmass refiners) are compiled out, so anything referencing them
     # fails to build. If the developer has already run pwiz-sharp's
@@ -331,11 +346,16 @@ if ($isNet8) {
         Write-Host "Pass -VendorLicenses, or run pwiz-sharp\i-agree-to-the-vendor-licenses.bat once." -ForegroundColor Gray
     }
 
+    if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+        Write-Host "dotnet not found on PATH - the net8 build path needs the .NET SDK." -ForegroundColor Red
+        exit 1
+    }
+
     $buildExitCode = 0
     $buildOutput = @()
     foreach ($proj in $net8Projects) {
-        Write-Host "dotnet build $proj ($Configuration, net8.0-windows)" -ForegroundColor Cyan
-        $dotnetArgs = @('build', $proj, '-f', 'net8.0-windows', '-nologo') + $net8Props + @("-v:$Verbosity")
+        Write-Host "dotnet $net8Verb $proj ($Configuration, net8.0-windows)" -ForegroundColor Cyan
+        $dotnetArgs = @($net8Verb, $proj, '-f', 'net8.0-windows', '-nologo') + $net8Extra + $net8Props + @("-v:$Verbosity")
         if ($Summary) {
             $buildOutput += & dotnet $dotnetArgs 2>&1
         } else {
@@ -552,6 +572,15 @@ function Get-ModifiedProjects {
 }
 
 # Run ReSharper code inspection if requested
+if (($RunInspection -or $QuickInspection) -and $isNet8) {
+    Write-Host ""
+    Write-Host "ReSharper inspection is not wired up for the net8 build path." -ForegroundColor Yellow
+    Write-Host "  It writes to bin\x64\<Config>, which the net8 build never creates, and runs" -ForegroundColor Gray
+    Write-Host "  jb --no-build against Skyline.sln, which the net8 path never builds." -ForegroundColor Gray
+    Write-Host "  Refusing rather than reporting a green gate that inspected nothing." -ForegroundColor Gray
+    exit 2
+}
+
 if (($RunInspection -or $QuickInspection) -and $Target -ne "Clean") {
     $isQuickMode = $QuickInspection -and -not $RunInspection
     $modeLabel = if ($isQuickMode) { "Quick inspection (modified projects only)" } else { "Full solution inspection" }
