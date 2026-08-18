@@ -46,7 +46,7 @@
   .kpi { background:var(--card); border:1px solid var(--rule); border-radius:10px; padding:14px 16px; }
   .kpi .v { font-size:1.5rem; font-weight:700; font-family:var(--mono); letter-spacing:-0.02em; }
   .kpi .l { color:var(--muted); font-size:0.8rem; text-transform:uppercase; letter-spacing:0.05em; }
-  .good { color:var(--added); } .warnc { color:var(--warn); }
+  .good { color:var(--added); } .warnc { color:var(--warn); } .badc { color:var(--bad); }
   .note { background:var(--accent-soft); border-left:3px solid var(--accent);
           padding:10px 14px; border-radius:0 6px 6px 0; margin:14px 0; font-size:0.92rem; }
   .note.w { background:var(--warn-soft); border-left-color:var(--warn); }
@@ -81,11 +81,12 @@ Every figure is measured over the full libraries unless marked <em>sampled</em>.
   <div class="kpi"><div class="l">Median intensity, lost ions</div><div class="v">0.0085</div></div>
 </div>
 
-<div class="note g"><strong>Bottom line.</strong> The rebuilt library is 5.41% smaller, and every part of
-that difference is accounted for: Met-clip artifacts Osprey discards anyway, the entrapment set the
-similarity gate deliberately re-shuffles, and low-intensity fragments a differently fine-tuned MS2 model
-no longer emits. The <em>target</em> peptide space is 99.88% identical and carries 423 <em>more</em>
-targets than the delivered library.</div>
+<div class="note w"><strong>Bottom line (revised 2026-08-18 after head-to-head searches).</strong>
+The rebuilt library is structurally sound &mdash; its target space is 99.88% identical to the delivered
+library and every compositional difference is accounted for. <strong>But it does not yet replace the
+delivered library.</strong> Searched head to head, Mike's library wins on both datasets once true FDP is
+controlled: <strong>+9.2%</strong> on the 3-file Astral HeLa set at matched 1% true FDP, and
+<strong>+12.8%</strong> on SEA-AD. Sections 9&ndash;12 record the measurements and the root defect.</div>
 
 <h2>1. Peptide-level accounting</h2>
 <div class="card scroll">
@@ -282,6 +283,82 @@ needs the <code>-NoSimilarityGate</code> arm, which differs from this build only
 Osprey-versus-DIA-NN number should be quoted from this table: this library carries 1.39 M entrapment
 precursors competing with targets by design, while DIA-NN's 130,827 on <code>_55</code> came from a
 target-only library. That comparison needs an entrapment-free <code>target+decoy</code> build.</div>
+
+
+<h2>9. Head to head: searched, not inferred</h2>
+<p class="sub">Both libraries searched on the same three Astral HeLa files, same Osprey settings, same
+machine (2026-08-17). This is the comparison every earlier conclusion was missing.</p>
+<div class="card scroll">
+<table>
+  <tr><th></th><th>Mike delivered</th><th>ours</th><th>&Delta;</th></tr>
+  <tr><td>run-level total (1% run FDR)</td><td class="num">229,129</td><td class="num">228,898</td><td class="num">&minus;0.10%</td></tr>
+  <tr><td>experiment precursors</td><td class="num">103,253</td><td class="num">109,434</td><td class="num good">+6.0%</td></tr>
+  <tr><td>experiment peptides</td><td class="num">91,340</td><td class="num">96,886</td><td class="num good">+6.1%</td></tr>
+  <tr><td>proteins</td><td class="num">7,825</td><td class="num">7,934</td><td class="num good">+1.4%</td></tr>
+  <tr><td>discoveries @ 1% <em>nominal</em> q</td><td class="num">102,494</td><td class="num">108,562</td><td class="num good">+5.9%</td></tr>
+  <tr><td>combined FDP at that point</td><td class="num">0.435%</td><td class="num">0.693%</td><td class="num badc">+59%</td></tr>
+  <tr class="tot"><td>discoveries @ matched <em>true</em> 1% FDP</td><td class="num">130,912</td><td class="num">119,921</td><td class="num badc">&minus;8.4%</td></tr>
+</table>
+</div>
+<div class="note w">The +6% at nominal q is <strong>bought with 59% more true false discovery</strong>. At the
+operating point that actually equalises correctness &mdash; matched true FDP &mdash; the delivered library
+is 9.2% ahead. Quoting the nominal-q number alone would have been the wrong conclusion.</div>
+
+<h2>10. SEA-AD (82 files): the fixes changed nothing</h2>
+<p class="sub">Pass-1 frontier diagnostics, <code>transfer</code> + PICK_LDA + mean-best-6, fdrbench pass 2,
+<strong>identical binary</strong> to the recorded mikelib arm (26.1.1.217-20260805-0045), so the library is
+the only variable.</p>
+<div class="card scroll">
+<table>
+  <tr><th>library</th><th>bestPeak</th><th>bestPeakFdp</th><th>perRunPeak</th><th>expPeak</th><th>peakK</th></tr>
+  <tr><td>our 08-01 <code>gated-no-il</code> (recorded)</td><td class="num">38,773</td><td class="num">0.783%</td><td class="num">40,725</td><td class="num">40,004</td><td class="num">5</td></tr>
+  <tr><td><strong>our 08-17 rebuild (tonight)</strong></td><td class="num">38,776</td><td class="num">0.761%</td><td class="num">40,380</td><td class="num">40,248</td><td class="num">14</td></tr>
+  <tr class="tot"><td>Mike delivered (recorded)</td><td class="num">43,754</td><td class="num">0.745%</td><td class="num">47,133</td><td class="num">45,693</td><td class="num">2</td></tr>
+</table>
+</div>
+<div class="note w">Two libraries built three weeks apart, differing by four merged PRs and a wholly
+different entrapment set, land <strong>3 discoveries apart</strong> (38,773 vs 38,776, +0.008%). The
+similarity gate, I/L gate, Met-clip fix and N-term registration changed library <em>composition</em>
+measurably and SEA-AD <em>yield</em> not at all. The deficit is also present per-run
+(40,380 vs 47,133, &minus;14.3%), so it is not an aggregation artifact.</div>
+
+<h2>11. The root defect: promoted entrapment</h2>
+<p class="sub">8,922 entrapment sequences are reported in both arms. Comparing each sequence's rank
+between libraries isolates the prediction difference from every compositional difference.</p>
+<div class="card scroll">
+<table>
+  <tr><th>rank change (ours &minus; Mike), negative = ranks higher in ours</th><th>sequences</th></tr>
+  <tr><td>&le; &minus;100,000</td><td class="num badc">659</td></tr>
+  <tr><td>&minus;100,000 .. &minus;10,000</td><td class="num">1,437</td></tr>
+  <tr><td>&minus;10,000 .. 0</td><td class="num">1,075</td></tr>
+  <tr><td>0 .. +10,000</td><td class="num">1,937</td></tr>
+  <tr><td>&ge; +10,000</td><td class="num">3,814</td></tr>
+</table>
+</div>
+<div class="card scroll">
+<table>
+  <tr><th>sequence (known absent from sample)</th><th>our rank</th><th>Mike's rank</th></tr>
+  <tr><td><code>LENFKSMQQR</code></td><td class="num badc">1,405</td><td class="num">535,212</td></tr>
+  <tr><td><code>LEEVQQQLHLNYDKR</code></td><td class="num badc">6,496</td><td class="num">483,430</td></tr>
+  <tr><td><code>DPMLDVITHMLRK</code></td><td class="num badc">8,463</td><td class="num">589,752</td></tr>
+  <tr><td><code>AFMNISVNKQVNLK</code></td><td class="num badc">16,739</td><td class="num">564,240</td></tr>
+</table>
+</div>
+<div class="note w"><strong>659 entrapment sequences move &ge;100,000 ranks into high confidence in our
+library</strong>, on identical sequences, driven purely by their predicted spectra. This is where our FDP
+penalty comes from &mdash; not diffuse noise, a few hundred specific peptides. Ruled out as causes:
+compositional signature (M 21.5% vs 21.1% population, C 16.7% vs 13.3%, length 13.5 vs 13.2) and fragment
+count (movers &minus;0.303 vs population &minus;0.376, indistinguishable). Remaining candidates are
+fragment identity/intensity and predicted RT.</div>
+
+<h2>12. A mechanism that was proposed and refuted</h2>
+<div class="note">It was proposed that Mike's ungated entrapment is <em>suppressed</em> &mdash; that
+near-copies lose their chromatographic peak to the source target and go unreported, biasing his FDP
+optimistic and making our higher FDP an artifact of a fairer null. <strong>Directly measured and
+refuted:</strong> of 12,033 reported entrapment in the delivered arm, <strong>8,741 (72.7%) have their
+paired target also reported</strong>. Both members of a co-assigned pair are normally reported &mdash; the
+signal is counted twice, not suppressed. There is therefore no optimistic bias from that mechanism, and our
+0.693% vs 0.435% FDP gap must be taken at face value.</div>
 
 <footer>
 Measured 2026-08-17. Rebuild: <code>D:\test\carafe-repro\astral-20260817</code>, Carafe
