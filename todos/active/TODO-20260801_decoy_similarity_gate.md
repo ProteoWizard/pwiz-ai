@@ -2707,3 +2707,69 @@ collapse - its rows are per-file observations, so adding runs adds more rows of 
 instead of changing what every row is. DIA-NN shows the per-run alternative, provided cross-run
 comparison happens on q-values. Either precedent would remove Osprey's dependence of a file's
 yield on which other files were batched with it.
+
+### 2026-08-19 (night session) - The library gap is an artifact of cross-run-maximum training; two independent levers remove it
+
+Implemented `OSPREY_TRAIN_PICK_RUN` (each precursor's first-pass training row comes from ONE
+deterministically chosen run instead of its best observation across runs) and exercised the
+existing `OSPREY_MAX_TRAIN_SIZE` at 3,000,000. Both are off by default;
+`regression.ps1 -Dataset Stellar` passes all 10 modes byte-identical with them unset.
+
+**Each lever independently collapses the ours-vs-Mike gap, at both scales** (pass-1 run-level
+FDR @1%, summed, paired within pool):
+
+| pool | baseline gap | `pickrun` | `train3m` |
+|---|---|---|---|
+| 32 files (1-32) | +20.54% | **+1.92%** | **+2.19%** |
+| 82 files | **-15.98%** | **+7.73%** | not run |
+
+At 82 files the gap swings **23.7 pp**. Two levers that change the training sample in completely
+different ways (which row represents a precursor vs how many rows there are) land within 0.3 pp
+of each other at 32 files. That is convergent evidence that the "library difference" was a
+property of the TRAINING SAMPLE, not of the libraries.
+
+**The lever raises yield AND lowers measured FDP - it is not a looser model.** Pass-1 entrapment
+FDP from `--model-diagnostics`, q ~= 1%:
+
+| files | scope | arm | baseline n / FDP | pickrun n / FDP |
+|---|---|---|---|---|
+| 82 | experiment | ours | 38,723 / 0.731% | **44,415 / 0.669%** |
+| 82 | experiment | Mike | 37,448 / 0.870% | **42,689 / 0.749%** |
+| 82 | run | ours | 56,797 / 15.56% | 72,209 / **9.68%** |
+| 82 | run | Mike | 67,453 / 12.14% | 66,324 / **9.44%** |
+| 32 | experiment | ours | 44,378 / 0.777% | 46,944 / 0.679% |
+| 32 | experiment | Mike | 35,845 / 0.841% | 45,354 / 0.727% |
+
+**~14% more experiment-level identifications at 1% q, with LOWER measured FDP, on both
+libraries.** Run-scope FDP falls furthest (15.6% -> 9.7%).
+
+**A reframing that corrects this file's earlier entries.** At 82 files the two libraries were
+already near-equal at EXPERIMENT scope (38,723 vs 37,448, ours +3.4%) while the run-level metric
+said -15.98%. The entire "library deficit" that named this investigation lived in the run-level
+number, which was adopted for cross-run comparability - not because it is what a user reports.
+Every conclusion drawn from run-level counts alone, including several above, should be re-read
+with that in mind.
+
+**Implementation notes.** The lever lives in the streaming first-pass dedup
+(`PercolatorScorer.RunStreamingFirstPass`), which is the path every large join takes. The chosen
+run is a pure function of base_id and the training seed (SplitMix64 finalizer), so no per-precursor
+state is added to millions of resident dedup rows, and a re-run trains on the same rows. It logs a
+`[TRAIN]` line when active, because nothing else in the output would say which population trained
+the model. `PercolatorSampling.SelectBestPerPrecursor` hard-fails if the lever is set AND the
+selection actually collapses rows - the streaming path re-applies that selection to its own
+already-deduped subset, and treating that idempotent no-op as an unhandled path aborted the first
+attempt three minutes in.
+
+Tests: `TestTrainingRunAssignment` (reproducibility, range, even spread over runs, single-run
+no-op, seed participation). 581 tests green, zero-warning inspection green.
+
+**NOT implemented, scoped instead**: the DIA-NN-style per-run TRAINING arm - see
+`ai/.tmp/design-per-run-training.md`. It is not a switch on the existing path (82 per-run
+trainings run ~27 h at the current cap) and it breaks two things that assume one score scale
+across files: pass-2 frozen-model transfer and `mean-best-N` experiment aggregation. Worth
+revisiting only if a shared model still looks like the problem after per-run PICKING, which on
+tonight's evidence it may not be.
+
+**Also measured**: two 64-file pools give ours-vs-Mike +0.45% (files 1-64) and +8.60% (files
+10-73), so the 64-file scatter is ~8 pp wide and a two-point trend line through 32/64/82 cannot
+be read as clean monotone degradation.
