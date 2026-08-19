@@ -2819,3 +2819,74 @@ files, off linked Stage 1-4.
 in this file, so a clean lever-vs-baseline pass-2 comparison needs both arms on ONE pass-2 mode,
 which is a 4-run (~20 h) design rather than a 2-run one unless an existing matched pair can be
 reused.
+
+### 2026-08-19 (afternoon) - CORRECTED: with a clean baseline the deficit reproduces, and the training lever closes it to parity
+
+The morning's experiment-scope numbers were confounded and are withdrawn. The run used as "ours
+baseline" (`seaad-82files-libdecoy-r1.0-transfer-mean-best-6-newlib20260817`) carries
+**mean-best-6**, which is ITSELF one of the levers that removes the effect under study. Comparing
+it against max-aggregation arms turned a library comparison into a library-plus-aggregation
+comparison.
+
+The 2026-08-18 handoff had already fenced this correctly - "pass-1 run-level is comparable between
+runs even when Pass 2 mode differs, **and only this**" - and the fence held while the work stayed
+on run-level counts. It broke the moment the analysis moved to experiment scope without
+re-checking whether the licence still applied.
+
+**A clean baseline was run** (`-cleanbase-n82`: protein-compact + max, no lever, no mean-best-N,
+Stage 1-4 hard-linked, ~70 min) so every row shares a configuration.
+
+**Empirical proof that run-level is configuration-independent**: the clean baseline's run-level
+total is **1,617,830** - bit-identical to the mean-best-6 run's, same library and files. Run-level
+q is computed per file, before pass-2 mode or experiment aggregation exist. So the run-level
+comparisons in the entries above were valid all along.
+
+**The completed table** (82 files, pass-1, experiment scope, all arms protein-compact + max,
+discoveries at MATCHED true FDP):
+
+| arm | n@1% q | @0.650% | @0.750% | @1.000% |
+|---|---|---|---|---|
+| ours baseline | 34,552 | 33,789 | 34,552 | 35,533 |
+| ours `pickrun2` | 44,117 | 42,131 | 42,982 | 45,252 |
+| mike baseline | 37,448 | 34,708 | 36,143 | 39,144 |
+| mike `pickrun2` | 43,436 | 41,204 | 42,989 | 47,154 |
+
+**The deficit reproduces on a clean baseline**: ours vs Mike **-2.65% / -4.40% / -9.22%** at the
+three FDP levels, the same direction as the run-level -15.98%.
+
+**The lever helps our library MORE than Mike's**, which is why the gap closes:
+
+| level | ours gain | Mike gain |
+|---|---|---|
+| @0.650% | **+24.7%** | +18.7% |
+| @0.750% | **+24.4%** | +18.9% |
+| @1.000% | **+27.4%** | +20.5% |
+
+**With the lever the libraries are at parity**: +2.25% / -0.02% / -4.03%. The sign depends on where
+the FDP cut is taken, which is itself the point - they are indistinguishable.
+
+**Why the old baseline looked strong**: mean-best-6 alone is worth **+13.1%** on our library at
+0.650% FDP (33,789 -> 38,228). That lever was carrying the historical 38,776 figure, masking the
+deficit entirely.
+
+**Run-level, for completeness** (valid throughout): baseline ours 1,617,830 vs Mike 1,925,612
+(**-15.98%**); with the lever 1,993,954 vs 2,121,129 (**-6.00%**). Ours +23.2%, Mike's +10.1%.
+
+### A RULE this cost a day to learn
+
+**A baseline must be the plainest configuration available - every optional improvement OFF.**
+Not because the improvements are bad (mean-best-N is worth 13%), but because a baseline carrying
+one of them cannot support a single-variable comparison against anything else, and the
+contamination is invisible in the output. The same trap is waiting with `protein-compact`,
+`qualify=experiment`, and the training levers themselves the moment any becomes tempting to leave
+on by default.
+
+Corollary, also learned the hard way: `-Resume` does NOT auto-pin `OSPREY_VERSION_OVERRIDE` the
+way `-LinkFrom` does, so resuming another day's artifacts fails with "osprey version mismatch"
+until it is pinned by hand. Two flags that both mean "reuse prior work", one guard between them.
+
+**In flight**: ours and Mike's, both with the lever, protein-compact + max, resuming through
+PerFileRescoring + SecondPassFDR (~6.2 h) - the first apples-to-apples PASS-2 comparison, against
+the historical pass-2 baselines (ours 38,776 @ 0.761%, Mike 43,754 @ 0.745%, Mike +12.8%). Those
+historical figures used mean-best-6, so lever-vs-historical mixes two changes; the clean
+single-variable statement will be ours-with-lever vs Mike-with-lever, both from this run.
