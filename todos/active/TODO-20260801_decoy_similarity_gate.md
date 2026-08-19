@@ -2773,3 +2773,49 @@ tonight's evidence it may not be.
 **Also measured**: two 64-file pools give ours-vs-Mike +0.45% (files 1-64) and +8.60% (files
 10-73), so the 64-file scatter is ~8 pp wide and a two-point trend line through 32/64/82 cannot
 be read as clean monotone degradation.
+
+### 2026-08-19 - CORRECTION: the original gap is a PASS-2 experiment-wide number, and the levers were measured on the fast proxy
+
+The entry above claims the deficit "lived entirely in the run-level metric". **That is wrong.**
+Brendan pointed it out immediately: the gap this investigation exists to close is the
+**experiment-wide count at the end of Pass 2**, at matched true FDP - frontier bestPeak on 82
+files, **Mike 43,754 vs ours 38,776, Mike +12.8%**.
+
+Pass-1 run-level FDR was adopted as the **minimum-cycle-time proxy**, deliberately: a Pass-2 run
+costs ~5 h even when Stage 1-4 sidecars are linked, while a linked FirstPassFDR pool costs 19-70
+min. That choice is what made a 20-run night possible; it is not a claim about which number
+matters.
+
+**What the two numbers actually show, side by side (82 files, experiment scope):**
+
+| stage | ours | Mike |
+|---|---|---|
+| pass 1 | 38,723 @ 0.731% | 37,448 @ 0.870% |
+| pass 2 | 38,534 @ 0.729% | **51,116 @ 1.561%** |
+| pass 2, matched FDP | 38,776 | **43,754** |
+
+The libraries are near-equal after pass 1 and **diverge in pass 2**: Mike's gains 37,448 ->
+51,116 while ours goes 38,723 -> 38,534. So the original deficit is substantially a SECOND-PASS
+phenomenon.
+
+**Consequences for last night's result, stated honestly:**
+
+* What the levers DO establish, on the proxy and on pass-1 experiment scope: the cross-run
+  maximum is a real defect that costs identifications and calibration in BOTH libraries, and it
+  dominates the pass-1 comparison between them. That stands on its own as an Osprey finding.
+* What they DO NOT establish: that the levers close the +12.8% pass-2 matched-FDP gap. Pass-1
+  parity plus pass-2 divergence is exactly the pattern that would leave the original gap intact
+  after a pass-1 fix.
+* So "the library gap is an artifact" is too strong as written. The PASS-1 gap is an artifact of
+  the training sample. The PASS-2 gap is untested against the levers.
+
+**What testing it costs.** The lever acts in FirstPassFDR, so a validation cannot skip it:
+FirstPassFDR (~1 h 09) + PerFileRescoring (~2 h 39) + SecondPassFDR (~28 m) ~= 5 h per arm at 82
+files, off linked Stage 1-4.
+
+**And the arms must match on pass-2 mode.** The two existing 82-file baselines do not: ours ran
+`transfer` + mean-best-6, Mike's ran `protein-compact`. That is the same
+"never compare a pair unless library, config, run context and N all match" trap recorded earlier
+in this file, so a clean lever-vs-baseline pass-2 comparison needs both arms on ONE pass-2 mode,
+which is a 4-run (~20 h) design rather than a 2-run one unless an existing matched pair can be
+reused.
