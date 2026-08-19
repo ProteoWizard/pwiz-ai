@@ -1152,3 +1152,92 @@ Still failing at baseline, unchanged by any of this: `TestColumnarResultsRoundTr
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260728_chrominfo_memory.md` before starting work.
+
+### 2026-08-18 - Session 9: the 13 failures in the 2026-08-17 SkylineTester.log
+
+Baseline: `sky_memory/SkylineTester.log`, a run on the other machine which reached test 2.381 of
+1130 before it was stopped, with 13 `!!! ... FAILED` markers. All 13 reproduced locally. **Ten now
+pass**, verified together in a 44 test Release run which also covers what the changes touch.
+
+Every one was a *live* accessor still reading `LegacyChromInfos`, which answers nothing for a
+normally loaded document - the same trap the earlier sessions kept falling into. Found by asking
+each failing test what value it read and following that value back, not by grepping.
+
+**Product defects fixed** - each is a user-facing feature that was dead, not only a test:
+
+- `TransitionGroupDocNode.GetPeakArea`/`AveragePeakArea` went through `GetChromInfoEntry`. Replaced
+  by columnar `GetPeakArea(replicateIndex, settings)`, `GetPeakArea(replicateIndex, fileId,
+  settings)` and `GetAveragePeakArea(settings)`, which sum the quantitative transitions' peaks the
+  way `TransitionGroupChromInfoCalculator.AddChromInfo` does - accumulated in `float`, so a summed
+  area rounds the same either way. Callers converted: `RefinementSettings` (`MaxPepPeakRank`
+  removed every peptide; `MaxPrecursorPeakOnly`), `AreaCVRefinementData`,
+  `PeptideDocNode.GetPrimaryResultsGroup` (which now takes a `SrmSettings`, and so does
+  `CanTrigger`).
+- `SrmSettings.CalcGlobalStandardArea` and `NormalizationMethod.RatioToSurrogate.GetStandardArea`
+  summed `GetSafeChromInfo`, so **global standard and surrogate standard normalization silently did
+  nothing** - `NormalizeToGlobalStandard` leaves the area alone when the standard area is zero.
+- `AreaCVRefinementData` skipped every replicate on `groupChromInfo == null`, so the **CV histogram
+  and CV refinement had no data at all**.
+- `AreaReplicateGraphPane` read `GetChromInfoEntry` for the ratio to label dot product, so the
+  **rdotp line on the peak area graph had no points**. `NormalizedValueCalculator` gained an
+  overload taking the `ChromFileInfoId` - the file is all the chrom info overload ever took from one.
+- `PeakMatcher.GetReferenceData` returned at `GetChromInfo(...) == null`, so **Apply Peak To All /
+  To Subsequent did nothing**.
+- `OnDemandFeatureCalculator.GetChosenPeakGroupDataForAllComparableGroups` read `GetSafeChromInfo`,
+  so the **candidate peak form's chosen peak had `double.MaxValue` boundaries**. Rebuilt through the
+  `MoleculeResults` it already reads chromatograms through.
+- `PeptideDocNode.GetMeasuredRetentionTime(ChromFileInfoId)` - and so `GetSchedulingTime(fileId)` -
+  walked `nodeGroup.ChromInfos`, so **every per-file scheduling / retention time was null**. This is
+  what hung both iRT tests: `EditIrtCalcDlg`'s Add Results found no retention times, so the
+  recalibration prompt never appeared and the test sat in `WaitForOpenForm` with the UI thread free.
+- `DetectionPlotData` (q values) and `SpectralLibraryExporter` (group ion mobility) converted too.
+
+**Transition ranks: derived, but the stored value still wins.** `ConsoleExportTrigger` failed
+because `TransitionDocNode.ResultsRank` is set by the results pass and never serialized, so a
+document read back from disk can no longer be exported as a triggered list.
+`TransitionGroupDocNode.GetTransitionAverageRank` works the same rank out from the columnar areas:
+the mean over every file of each transition's area, a transition which takes no part in scoring
+counting -1, ordered most intense first - what `RankAndCorrelateTransitions` did.
+
+Removing the stored `ResultsRank` outright was **tried and backed out**. A precursor whose
+transition results have not been read back from the .skyd has `HasAnyTransitionResults == false`,
+and then no columnar accessor can rank anything. `IrtDb.GenerateDocumentXml` is exactly that case:
+with the stored rank gone it produced no document XML at all and broke `IrtFunctionalTest` and
+`TestAddIrtStandards` in a new way. The rank is `ResultsRank ?? GetTransitionAverageRank(...)` now,
+and `HasResultRanks` asks both. **This is the node-addition gap in another shape**: the derived
+value is right wherever the columnar transition areas are there, and there is nothing to derive
+from where they are not.
+
+**Test sites converted off the emptied chrom infos**: `AutoTrainModelTest` (z scores and q values
+from `TransitionGroupResults`), `RefineTest` (peak count ratio and library dot product),
+`AutoZoomTest` and `CandidatePeakTest` (peak boundaries), `PeakMatcherTestUtil` (which also gained
+messages naming the precursor and the replicate, and `TestPeakAreaDotpGraph` a message instead of an
+`IndexOutOfRangeException`).
+
+**One recorded expectation re-taken**: `AreaCVHistogramTest` STATS 4/5 and 12/13 `MedianCV`. Only
+that field moved and only in the 9th significant digit; every other statistic matches to 17. The
+median is the one statistic taken from unbinned CVs, so it is the only one a last-float-bit
+difference in a summed area can move.
+
+**Still failing (3 of the 13):**
+
+1. `ConsoleRefineResultsTest` - unchanged from Session 8, and still the same question: what
+   refreshes the columnar results when a document is opened with its cache.
+2. `TestAnnotations` - unchanged from Session 8. Per-optimization-step precursor annotations.
+3. `TestAddIrtStandards` - moved a long way. `CreateCalculatorWithCirtPeptides` and
+   `CreateCalculatorWithDocumentPeptides` both complete now; it fails at line 90 waiting for
+   `AddIrtStandardsToDocumentDlg` on a *new* document, which `Skyline.cs:2185` only shows when the
+   calculator has document XML or `IrtStandard.WhichStandard` matches the standard. The 20 CiRT
+   peptide calculator has neither. `IrtFunctionalTest`, which asserts the document XML directly
+   (`IrtTest.cs:843`), passes.
+
+**No regressions**: `TestExportSmallMolSpectralLibrary`, `TestTriggeredAcquisition`,
+`TestPivotResultsThenIsotopeLabel` and `TestProteinAbundance` also fail in the 44 test run, and were
+checked to fail identically with the changes stashed.
+
+**Still reading the emptied chrom infos** - found by grep, not by a failing test, so each needs its
+own check that it is reached at all: `BookmarkEnumerator` 285/484, `CarafeLibraryBuilder` 124-129,
+`PeakBoundaryImputer` 500/666, `RetentionTimeRegressionGraphData` 388 (`GetMaxQValue`, already noted
+in Session 8), `GraphSummary` 580, `RTPeptideGraphPane` 129, `SummaryPeptideGraphPane` 552/700. The
+last three mean the peptide level summary graphs draw nothing; `SummaryPeptideGraphPane` also wants
+mass error, which is not in the columnar results and needs a `MoleculeResults`.
