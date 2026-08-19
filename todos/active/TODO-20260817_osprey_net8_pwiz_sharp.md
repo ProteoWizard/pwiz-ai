@@ -579,3 +579,738 @@ design decision above.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260817_osprey_net8_pwiz_sharp.md` before starting work.
+
+## Session 2026-08-18 (evening, part 2) - decision made: THROUGH the wrapper
+
+Brendan settled the reopened design decision in favour of `ProteowizardWrapper`, on DRY
+grounds: having to reason about how the shared code behaves for Skyline as well as Osprey
+is the point, not a tax. He also read `IgnoreCalibrationScans = true` as right for Osprey
+on its merits - inappropriate for reading raw data or writing verbatim mzML, but correct
+for a search, which should not be hunting peptides in calibration scans.
+
+### What the wrapper route exposed before a line of Osprey changed
+
+Writing the wrapper version surfaced three defects in shared code, all pre-existing, none
+of them Osprey's. They are fixed in `pwiz-work1` on PR #4587's branch, not here, because
+they are Skyline-shared code:
+
+1. **Vendor centroiding was a no-op through the wrapper** - the same bug `/code-review max`
+   caught in Osprey's direct reader, still live in `MsDataFileImpl`. It passes `"1-"` to
+   `SpectrumList_PeakPicker`'s STRING overload, whose private `ParseIntegerSet` splits on
+   `,`/space and `int.TryParse`s each token - no range syntax at all - so the level set was
+   EMPTY and `GetSpectrum` returned every spectrum unpicked. `IntegerSet.Parse` in the same
+   assembly handles `"1-"` correctly (regex group `b3`, `e = int.MaxValue`); the picker just
+   never called it. Fixed by delegating.
+   * **net472 is unaffected** - C++ `IntegerSet.cpp:96` handles the trailing dash, which is
+     why `msconvert --filter "peakPicking vendor msLevel=1-"` has always worked. A port
+     defect in the managed re-implementation, not a long-standing Skyline bug.
+   * `SpectrumListFactory` is unaffected too - it builds a real `IntegerSet` via `.Parse()`.
+     The blast radius was the string overload's callers: the wrapper and `ReaderTestConfig`.
+   * Thermo/Waters/Sciex still got vendor centroids anyway, because `_vendorCentroidPath` is
+     assigned from `inner is IVendorCentroidingSpectrumList` alone. **Agilent** does not
+     implement it, so it silently returned PROFILE peaks and the `VendorOnlyPeakDetector`
+     fail-fast never fired.
+   * Regression test added at the untested seam: `PeakPickingTests.cs` now asserts the ctor
+     overload agrees with `IntegerSet.Parse` for `1-`, `2-`, `1`, `1,2`, `2-3`.
+2. **`ProteowizardWrapper`'s net8 target did not compile without vendor licenses.**
+   `MsDataFileImpl.cs:798` used `SpectrumList_LockmassRefiner` unguarded, and pwiz-sharp
+   `Compile-Remove`s it (plus defines `NO_VENDOR_SUPPORT`) when the licenses are not agreed.
+   That is the configuration CI and the shipped zips build, and it is Osprey's default.
+   Same family as the `BrukerFormat.cs` CS1574 break: Osprey is the first consumer to build
+   these projects no-vendor. Guarded with `#if NO_VENDOR_SUPPORT`, throwing rather than
+   silently dropping a lockmass correction the caller asked for.
+   * The guard needed the property, and **the two ways of agreeing do not have the same
+     reach**: `-p:IAgreeToVendorLicenses=true` is global and arrives everywhere, but
+     `i-agree-to-the-vendor-licenses.bat` writes `pwiz-sharp/Directory.Build.user.props`,
+     which only `pwiz-sharp/Directory.Build.props` imports - nothing under `pwiz_tools/`
+     ever saw it. `ProteowizardWrapper.csproj` now imports the same file, so both routes
+     agree. Without that, the `.bat` route would have left pwiz-sharp compiling the refiner
+     while the wrapper believed it absent - lockmass silently dropped from a build that
+     fully supports it.
+3. **Vendor registration failures left no trace in any shipping build** - the wrapper's
+   `Debug.WriteLine` is `[Conditional("DEBUG")]`, i.e. Osprey's own review finding #9, again
+   in the shared copy. Now collected into `VendorReaderRegistration.Failures` and surfaced
+   by the host; Osprey prints them through `OspreyOutput`.
+
+### Also found, NOT fixed (out of scope, pre-existing)
+
+* **Skyline net8 cannot build no-vendor at all.** With defect 2 fixed, the build gets past
+  compilation and then fails copying vendor native runtime files that a no-vendor build
+  never produces (`MBI_SDK.dll`, `MIDAC.dll`, `MobilionShim.dll`, `msvcp120.dll`,
+  `msvcr120.dll`, `OFX.Logging.dll`, ...). `Skyline.csproj` copies them unconditionally.
+  Does NOT block Osprey, which does not build `Skyline.csproj`. Matt should know.
+* **CORRECTED - pwiz-sharp DOES have a sanctioned runner, and I missed it.** I first
+  concluded there was no way to run its tests (`Build-Osprey.ps1` runs only `Osprey.Test`,
+  `Build-Skyline.ps1`'s targets are all Skyline projects, and the `Deny-DirectBuildTest`
+  hook blocks the direct SDK test command). Wrong: **`pwiz-sharp/build.bat` is exactly that
+  runner** - TeamCity's `tcbuild.bat` calls it - and it DISCOVERS test projects by globbing
+  `*.Tests.csproj` under `pwiz\test\` and `Tools\` rather than keeping a list.
+  `pwiz-sharp/scripts/Run-Tests-Parallel.ps1 -TestProjects <paths>` is the targeted form,
+  but it passes `--no-build`, so the assemblies must exist first. The test is RUN and green.
+* What IS missing is discoverability from our side: nothing under `ai/` mentions pwiz-sharp,
+  and the `Deny-DirectBuildTest` hook names only the Skyline and Osprey wrappers, which is
+  what made "no way to run these" look like the right conclusion. Brendan is asking Matt for
+  a `/pwiz-development` skill backed by `ai/docs/pwiz-development-guide.md`; draft email
+  written 2026-08-18 (Gmail draft to matt.chambers42@gmail.com, Brendan CC'd).
+* Also found: **`build.bat`'s own no-vendor path cannot run its tests** - without
+  `--i-agree`, `BUILD_TARGET` is just `MsConvert.csproj`, so the test projects are never
+  built and `Run-Tests-Parallel.ps1` runs `--no-build` against nothing. TeamCity always
+  passes `--i-agree`, so CI never walks it. A third under-exercised no-vendor path.
+* Hook false positive worth knowing: `Deny-DirectBuildTest` matched the blocked command
+  name appearing INSIDE a grep pattern, blocking a read-only search.
+
+### The Osprey change
+
+`Osprey.IO.csproj`: twelve pwiz-sharp `ProjectReference`s collapse to one on
+`ProteowizardWrapper`, which pulls the same eight vendor projects transitively.
+`SpectrumFileReader.Vendors.cs` (79 lines) deleted outright - the wrapper registers the
+readers from a `[ModuleInitializer]`. `SpectrumFileReader.cs` drops `CreateReaderConfig`,
+`CreateSpectrumList` and seven private helpers (`GetStartTime`, `GetPrecursor`,
+`GetPrecursorMsLevel`, `GetPrecursorMz`, `GetIsolationWindowValue`, `GetMsLevel`,
+`ToArray`) - 489 lines of reader down to about 250, and the six semantics are now
+inherited rather than reproduced.
+
+**The `ReaderConfig` is equivalent, argument for argument.** Checked rather than assumed:
+`simAsSpectra: true`, `requireVendorCentroidedMS1/MS2` on a vendor path, and
+`combineIonMobilitySpectra: false` are the three that differ from the wrapper's defaults;
+everything else the old `CreateReaderConfig` set explicitly (`SrmAsSpectra`,
+`AcceptZeroLengthSpectra`, `IgnoreZeroIntensityPoints`, `PreferOnlyMsLevel`,
+`ReportSonarBins`, `IncludeIsolationArrays`, `GlobalChromatogramsAreMs1Only`,
+`AllowMsMsWithoutPrecursor`, `IgnoreCalibrationScans`) the wrapper sets to the same value.
+Note `PreferOnlyMsLevel` is computed as `combineIonMobilitySpectra ? 0 : preferOnlyMsLevel`,
+which with combining off is 0 either way.
+
+**One deliberate behaviour change.** Osprey passed `algorithm: null` to the peak picker and
+guarded the LIST (`is IVendorCentroidingSpectrumList`), which let a spectrum the vendor
+declined to centroid pass through as PROFILE. The wrapper passes `VendorOnlyPeakDetector`,
+which throws per SPECTRUM with the message Skyline converts to `NoCentroidedDataException`.
+Stricter and better - Osprey scores centroids - but it is a real difference on data with
+non-vendor-centroidable scans, and it only becomes reachable now that defect 1 is fixed.
+
+Two traps handled in the mapping: `MsPrecursor` is a STRUCT, so an empty precursor list has
+to be tested by `Count` (`FirstOrDefault()` yields a default with null m/z, scoring an MS2
+with precursor 0); and the scan number still comes from the read loop, not
+`MsDataSpectrum.Index`, which the wrapper assigns from pwiz-sharp's `-1`-when-unassigned
+`Spectrum.Index` (review finding #12 does not go away by moving).
+
+### Gates
+
+* Osprey Debug build through the wrapper, **no-vendor** - succeeds. That is the direct
+  verification of defect 2's fix in the configuration that matters.
+* **576/576 unit tests**, unchanged count. Includes the four mzML tests that pinned the
+  deleted `MzmlReader` and now pin the wrapper path, i.e. the direct check on the six
+  inherited semantics, plus `TestRawVsMzmlSpectraParity`.
+* ReSharper inspection **0 warnings / 0 errors**. (The handoff's note that `-RunInspection`
+  refuses on net8 is stale - it ran.)
+* `regression.ps1 -Dataset Stellar` **PASSED** - all five modes, including
+  `mode1 (vs golden)`. Real mzML read through the wrapper reproduces every committed
+  golden; nothing rebaselined.
+* `regression.ps1 -Dataset All` **PASSED** - all four datasets (Stellar, StellarLibDecoy,
+  StellarGenDecoyEntrap, Astral), every mode: mode1 vs golden on all four, mode1b
+  diagnostics + FDR sanity on the three that carry them, mode3 HPC-chain, mode4 warm
+  re-run, mode2 resume. Real mzML read through ProteowizardWrapper reproduces every
+  committed golden. Nothing rebaselined.
+* pwiz-sharp's own suite via Matt's `build.bat Debug --i-agree-to-the-vendor-licenses`:
+  **657 tests across 21 suites, zero failures**, including the new
+  `SpectrumList_PeakPicker_StringOverloadParsesPwizIntervalSyntax`. The "committed unrun"
+  caveat below is resolved - see the corrected tooling note.
+
+### Byte verification, re-run against the wrapper path (2026-08-18)
+
+Brendan accepted redoing this rather than carrying the direct-reader results over. Both runs
+used the vendor-enabled Release snapshot at `D:\test\osprey-runs\_bin\wrapper-4497-vendor`
+and wrote to a fresh `--cache-dir` under `D:\test\osprey-runs\_verify`, so no reference
+cache was touched.
+
+**A. SEA-AD mzML - PARITY, 4,368,477,008 bytes identical.** `Compare-SpectraCache.ps1`
+against the 2026-07-18 reference (written by the deleted `MzmlReader`), n_ms2=162,620,
+n_ms1=974, compared in 28.5s. That makes a FOUR-way identity on one 4 GB acquisition:
+
+| Producer | Reader | Result |
+|---|---|---|
+| Windows, 2026-07-18 | Osprey's hand-written `MzmlReader` | reference |
+| Windows, 2026-08-17 | pwiz-sharp, direct | identical |
+| Linux/WSL2, 2026-08-17 | pwiz-sharp, direct | identical |
+| **Windows, 2026-08-18** | **via `ProteowizardWrapper`** | **identical** |
+
+**B. TDP-43 raw - identical to what the DIRECT reader produced, to the byte.** The
+comparison target here is not "no differences": the 2026-07-29 reference carries the
+pre-#4501 `TimeInSeconds()/60` error, so the direct reader already differed from it by
+18,339 bytes. The question was whether the wrapper reproduces that exact difference.
+
+* file length identical (2,260,174,556), n_ms2=161,099, n_ms1=965 - all matching
+* the run logged the same `156 spectra had unsorted centroids` warning as the reference run
+* byte census: **18,339 differing bytes**, the same number the direct reader produced.
+  Every one an isolated single byte, **0 runs straddling an 8-byte boundary**, 18,339
+  distinct 8-byte slots. Reconciles exactly: 9,145 MS2 retention times x 2 (record AND
+  trailing index) + 49 MS1 = 18,339.
+* first differing double decoded at offset 86,872: reference `0.5903116999999999`,
+  wrapper `0.5903117` - the exact value PR #4501 names. The reference is the wrong one.
+
+**The `VendorOnlyPeakDetector` refusal never fired** across 161,099 real Thermo MS2 spectra,
+so the one deliberate behaviour change (per-spectrum rather than per-list centroiding
+refusal) is inert on this data - stricter without being disruptive. It would fire on a
+vendor whose reader declines to centroid, which is what it is there for.
+
+Census tool: `ai/.tmp` scratch script, not committed - `Compare-SpectraCache.ps1` stops at
+the FIRST mismatch by design, so it answers "identical?" but not "how many, and where?",
+which is the question when a known-wrong reference is the only baseline available.
+
+**C. Linux/WSL2 - PARITY, 4,368,477,008 bytes identical to the Windows wrapper cache.**
+`package.ps1 -Rid linux-x64 -Configuration Release -NoZip` produced a self-contained
+publish; under WSL2 it is a real ELF (`ELF 64-bit LSB pie executable, x86-64 ... dynamically
+linked`) reporting `Osprey v26.1.1.230`. No Wine, no container. The same SEA-AD Astral mzML
+cached on Linux compares byte-identical to the Windows run of the same code, n_ms2=162,620,
+n_ms1=974.
+
+So the acceptance criterion "runs on Linux/WSL without the Wine container" still holds in its
+strongest form after the wrapper swap: not merely runs, but produces the same bytes.
+
+### Committed
+
+`7827f53004` **osprey: Made ProteoWizard reading go through ProteowizardWrapper** - 3 files,
++135 / -368. Stack in `C:\proj\pwiz`:
+
+    3b6755c392  Fixed installer manifests and two verifiers weakened by the CommonBaseUI move
+    ba16d3c884  Fixed vendor centroiding and the no-vendor build of the net8 wrapper   <- #4587
+    b3a3072491  Recorded vendor reader registration failures instead of dropping them  <- #4587
+    a89c957e4d  osprey: Made ProteoWizard the only spectrum reader on net8.0
+    ffce6d97b9  osprey: Forwarded the vendor licence flag instead of warning it was inert
+    7827f53004  osprey: Made ProteoWizard reading go through ProteowizardWrapper
+
+NOTE the two #4587 commits reached this checkout by `git fetch` from the LOCAL
+`C:\proj\pwiz-work1` path, not from origin. This branch is therefore NOT pushable until
+those two are pushed to origin and this branch is rebased onto them from there.
+
+### Still to do
+
+1. `/code-review max` on the branch (before the PR exists - see the version-control skill).
+2. Push #4587's two commits (needs Brendan's okay - they update an open PR Matt reviews),
+   rebase this branch onto origin, then open the PR with `ai/.tmp/pr-4497-body.md`.
+4. Push #4587's two new commits and rebase this branch back onto them from origin (the
+   rebase so far was from the local `pwiz-work1` path, so this branch is NOT pushable yet
+   without that).
+5. `/code-review max`, then the PR, which still stacks on #4587.
+
+## Night session 2026-08-18 - PR opened, gate triggered, raw dataset support
+
+**PR [#4588](https://github.com/ProteoWizard/pwiz/pull/4588)** - base
+`Skyline/work/20260818_commonutil_winforms_split` (#4587), label `osprey`. Copilot may not
+review it, since the base is not master.
+
+**TeamCity**: Osprey Windows .NET Perf/Regression, build
+[4140348](https://teamcity.labkey.org/build/4140348) on `pull/4588`. Brendan cleared both the
+trigger and a later re-trigger once the raw-dataset work lands on the same branch.
+
+### `f583ba9fab` - the `/code-review max` fixes
+
+The review was NOT flawed and did not need re-running against a PR number; it targeted this
+branch's changes accurately. Every finding verified before acting:
+
+* **Real, mine**: `Path.GetExtension` returns EMPTY for a path ending in a separator
+  (verified), so a tab-completed vendor DIRECTORY (`sample.d\`) read with centroiding OFF and
+  scored profile peaks as centroids. Now trims separators first.
+* **Real, newly reachable**: `SpectrumList_Agilent` implements `IIonMobilitySpectrumList,
+  IIonMobilityCcsConversion` but NOT `IVendorCentroidingSpectrumList` (verified), so an
+  Agilent .d reaches `VendorOnlyPeakDetector` and threw past the
+  `VendorSupportNotEnabledException` catch. Now translated the way Skyline translates it in
+  three places. This **corrects my own earlier claim** that the stricter per-spectrum refusal
+  was "inert" - that was true of Thermo and over-generalized from one vendor.
+  `MsDataFileImpl.SupportsVendorPeakPicking` cannot pre-empt it: it answers "is this a vendor
+  reader" (true for Agilent), not "does it centroid".
+* **Real, mine**: the vendor-registration latch was a non-atomic check-then-set; now
+  `Interlocked.Exchange`.
+* **Real**: the parity test's `catch (Exception)` overlapped its own success path, since
+  Osprey's message interpolates the path; narrowed to `NotSupportedException`.
+* **REFUTED**: "TestRawVsMzmlSpectraParity cannot pass with the Thermo SDK." Ran it against a
+  vendor build - passes in 159 ms, and the .raw genuinely reads (confirmed separately by
+  caching the fixture: ms2=3), so the try branch runs and its eight assertions hold.
+* **Known and already dispositioned, not acted on**: SpectraCache VERSION (Brendan decided
+  NO), package.ps1 licence (finding #6), Debug-config-in-Release (documented in the csproj).
+* **Shared code, deferred to #4587**: mzML with no `unitAccession` yields RT 0 silently;
+  `SpectrumList_PeakPicker`'s ParamGroup promotion copies nothing and then deletes the group
+  (and mutates the shared group in place); `scans[0]` unguarded on the `simAsSpectra` path
+  this change now takes for every file.
+
+Gates after those fixes: 576/576 no-vendor, 576/576 vendor, inspection 0/0,
+`regression.ps1 -Dataset Stellar` PASSED.
+
+### `regression.ps1 -Source mzML|raw`
+
+Brendan: the two panorama zips exist to PROVE raw and mzML agree, and `-v2` specifically
+means the mzML carries post-#4501 retention times - without that the two acquisitions could
+not agree (#4496 recorded exactly that mismatch; PR #4500 was closed rather than merged).
+Same goldens for both; a divergence is to be characterized, never rebaselined.
+
+* URL table keyed by `-Source`; the two zips extract to separate roots, so one machine holds
+  both and neither invalidates the other.
+* File discovery, the phase-1 cleanup and the three HPC 0-byte stubs now key off
+  `$sourceExt` instead of a literal `.mzML`.
+* Layout verified identical - `stellar` / `stellar-libdecoy` / `astral`, and the input STEMS
+  match exactly, which is what lets both acquisitions share one set of goldens.
+* **`-IAgreeToVendorLicenses` added, and REQUIRED for `-Source raw`** unless `-NoBuild`.
+  regression.ps1 built through `build.ps1 -Configuration Release -NoTests` with no licence,
+  so a raw run would otherwise link NO_VENDOR_SUPPORT readers and throw on every file -
+  finding #6 turning from theoretical into a real blocker. Deliberately a switch the INVOKER
+  passes: the script does NOT set it merely because `-Source raw` was requested, because
+  agreeing has to be the builder's act (Brendan's decision 3 - a repo file that asserts the
+  agreement would invalidate it).
+
+### Result: .raw reproduces .mzML exactly, on all four datasets
+
+`regression.ps1 -Dataset All -Source raw` **PASSED** - every dataset, every mode, against
+the goldens captured from the mzML acquisition. Nothing rebaselined, nothing tolerated.
+
+| Dataset | vs golden | diagnostics | FDR sanity | HPC chain | warm | resume |
+|---|---|---|---|---|---|---|
+| Stellar | PASS | - | - | PASS | PASS | PASS |
+| StellarLibDecoy | PASS | PASS | PASS | PASS | PASS | PASS |
+| StellarGenDecoyEntrap | PASS | PASS | PASS | PASS | PASS | PASS |
+| Astral | PASS | PASS | PASS | PASS | PASS | PASS |
+
+The run's own no-copy assertion confirms which acquisition it read:
+`data dir unchanged across run: ...\osprey-testfiles-v2\{stellar,stellar-libdecoy,astral}` -
+the RAW roots, not the mzML ones.
+
+**What this proves, beyond "the switch works".** The goldens were captured from msconvert
+mzML. A raw-sourced search reproducing them means Osprey's ProteoWizard read of a Thermo
+.raw agrees with msconvert's conversion of that same .raw through the entire pipeline -
+spectra, scoring, calibration, FDR, protein rollup and blib. `StellarGenDecoyEntrap` carries
+it furthest: it is the leg with a true-FDP entrapment oracle, so the agreement holds through
+decoy generation and measured false-discovery proportion, not merely through peak lists.
+
+It also confirms Brendan's reason for publishing both zips. The comparison is only fair
+because `-v2`'s mzML was converted by an msconvert carrying PR #4501; against a pre-#4501
+conversion the direct raw read differs by an ULP on most retention times (#4496 recorded it;
+PR #4500 was closed). The two acquisitions agreeing to the last bit IS the evidence that
+#4501 closed that gap.
+
+**Cost of the raw leg**: the mzML default was re-verified unchanged in the same session
+(`-Dataset Stellar` PASS with the refactor in place, including mode 3, which is the leg that
+exercises the extension-driven 0-byte stubs).
+
+### Review finding F1 investigated - mechanism real, framing wrong
+
+The claim: an mzML scan start time with no unitAccession yields RT 0 silently, and this PR
+changed its own fixtures to hide it. Verified both halves rather than accepting or
+dismissing it.
+
+* **The mechanism is real.** pwiz-sharp TimeConversion.ToSeconds ends in a 0.0 default
+  (Common/CVParam.cs), so unknown units give RT 0, which is indistinguishable from a
+  measured 0.
+* **But it is FAITHFUL pwiz behaviour, not a port defect.** The C++
+  timeInSecondsHelper (pwiz/data/common/ParamTypes.cpp:53-74) ends in the same
+  bare return 0. So Skyline net472, msconvert and pwiz-sharp all behave identically, and
+  nothing about this was introduced by the port, by #4497, or by the wrapper swap.
+* **The fixture was wrong in a SECOND way the finding did not mention.** It used
+  MS:1000894 (retention time), not MS:1000016 (scan start time) - a term ProteoWizard
+  does not read as a scan start time at all. So the old fixture was not
+  msconvert-shaped mzML, and correcting it was not concealment.
+
+What survives, and is worth carrying upstream rather than patching here: anywhere in pwiz,
+an mzML whose scan start time carries no recognizable unit scores at RT 0 with no
+diagnostic. Not this PR to fix; the reader here would be the wrong layer.
+
+### Review finding F4 verified - real bug, but low practical reachability
+
+`SpectrumList_PeakPicker`'s ParamGroup promotion:
+
+```
+foreach (var p in pg.CVParams)
+    if (!spec.Params.HasCVParam(p.Cvid)) spec.Params.CVParams.Add(p);
+...
+spec.Params.ParamGroups.Remove(pg);
+```
+
+**Confirmed**: `ParamContainer.HasCVParam` (line 91) delegates to `CvParam`, which recurses
+into `ParamGroups` (lines 38-43). While `pg` is still attached, the guard is TRUE for every
+`p`, so nothing is copied - and the group is then removed, discarding those terms. The
+`UserParams` on the following line ARE copied, which is what makes the omission look
+deliberate rather than accidental. The preceding `RemoveCv(pg, MS_profile_spectrum)` also
+mutates the document-level group in place, so every other spectrum referencing it loses that
+term too.
+
+**Reachability, which is why it is NOT being patched tonight**: the branch only executes when
+peak picking is REQUESTED for a source whose spectra carry `referenceableParamGroup`
+references. Osprey requests vendor centroiding for vendor formats ONLY (see
+`IsVendorFormat`), and vendor readers synthesize spectra rather than parsing mzML param
+groups - so Osprey cannot reach it today. It is reachable for a caller that requests
+centroiding on an mzML that uses param groups, which is a Skyline-shaped scenario, not an
+Osprey one.
+
+It was entirely dead before this branch: `ParseIntegerSet` yielded an EMPTY level set, so
+`GetSpectrum` returned at the level check before ever reaching the relabeling code. Fixing
+the parser is what made this code run at all.
+
+**Recommendation**: report to Matt rather than patch here. It is his code, the fix needs a
+test with a param-group mzML fixture, and getting the copy-then-detach order wrong would be
+a worse regression than the latent bug. Not a blocker for #4588.
+
+### Review finding F9 - same disposition
+
+`MsDataFileImpl.GetSpectrum` indexes `scans[0]` unguarded on the `simAsSpectra` path, six
+lines above a `Count > 0` guard on the same list, and #4497 passes `simAsSpectra: true` for
+every file. An MS1 spectrum with an empty scanList would throw `ArgumentOutOfRangeException`,
+which the enclosing `catch (NullReferenceException)` does not catch. Real, one-line fix, but
+it is in the shared wrapper and belongs to #4587 with a fixture that exercises it - none of
+the four regression datasets produce an empty scanList, so a fix tonight would be untested.
+
+### Measured: the Debug-linkage defect costs 30% of vendor read throughput
+
+Review finding F14 argued the new reader is a throughput regression, without a number.
+Measured it on TDP-43 A01 (2.10 GB cache, 161,099 MS2 / 965 MS1), single file, idle machine:
+
+| Reader | Time | vs the old path |
+|---|---|---|
+| net472 `pwiz_data_cli` (native C++/CLI), 2026-07-29 | 59.7s | - |
+| pwiz-sharp **Debug** - what this branch ships today | 78.1s | **+31%** |
+| pwiz-sharp **Release** | **54.8s** | **-8%** |
+
+Release output verified byte-identical to the Debug output
+(`PARITY: 2,260,174,556 bytes identical`), so this is pure code-generation, not a
+behavioural difference.
+
+**Conclusion: the managed reader is FASTER than the native one, and the apparent regression
+is entirely the Debug-linkage defect.** `Osprey.IO.csproj` already documents it - building a
+.sln unsets Configuration across a `ProjectReference` to a project outside that .sln, so
+ProteowizardWrapper and all of pwiz-sharp compile Debug even in a Release Osprey - and
+defers the fix on the grounds that "the code is correct either way ... the cost is an
+unoptimized ProteoWizard doing the spectrum reading, not a wrong answer". That reasoning
+stands, but the cost now has a number: **30% of read time**, on the path that is now 100% of
+how Osprey reads spectra.
+
+That moves "put these projects in Osprey.sln" from housekeeping to a scheduled throughput
+item. It does NOT block #4588: the results are identical either way, and the branch is
+faster than master's native path the moment the linkage is fixed.
+
+**Scope of this measurement**: Thermo .raw, i.e. managed pwiz-sharp reader vs native
+pwiz_data_cli. It does NOT measure F14's other half - the deleted `MzmlReader` overlapped a
+sequential XML parse with a `Parallel.ForEach` base64/zlib decode, and the mzML path is now
+a single-threaded loop. That comparison needs a master build to baseline against.
+
+**Caveat on the 59.7s figure**: taken from the first file of a 164-file sequential run on
+2026-07-29 (`spectracache-164.log`), not a dedicated benchmark. Tonight's numbers are
+single-file runs on an idle machine. An earlier tonight measurement of 146.5s was discarded
+as contended - it ran concurrently with the SEA-AD cache.
+
+### TeamCity gate GREEN
+
+Build [4140348](https://teamcity.labkey.org/build/4140348), config Osprey Windows .NET
+Perf/Regression Tests, branch pull/4588, commit d6fef70e60: **SUCCESS**. That is
+tctest.bat, i.e. regression.ps1 -TeamCity -Dataset All plus the perf leg - every mode on all
+four datasets, on the commit carrying BOTH the wrapper swap and the raw-source support.
+
+Note it resolved the revision at build START, not at queue time: triggered while the branch
+was at f583ba9fab, it checked out d6fef70e60 after the raw work was pushed. So the
+re-trigger Brendan authorised was not needed, and the shared agent was spared a second hour.
+
+### CORRECTION to the perf note above - single-run numbers did not survive repeats
+
+The section above was written from ONE run per configuration and drew a conclusion the data
+did not support ("the managed reader is faster than native; the apparent regression is
+entirely the Debug linkage"). Re-measured with 3 interleaved repeats per configuration,
+same file, idle machine. Medians, with observed ranges:
+
+**mzML (SEA-AD Astral, 4.07 GB cache, 162,620 MS2 / 974 MS1)**
+
+| Build | Median | Range |
+|---|---|---|
+| master `MzmlReader` (parallel decode) | **32.9s** | 28.1 - 33.2 |
+| this branch, Debug pwiz-sharp (ships today) | 38.0s | 37.6 - 54.4 |
+| this branch, Release pwiz-sharp | 43.9s | 42.3 - 44.7 |
+
+**Thermo .raw (TDP-43 A01, 2.10 GB cache, 161,099 MS2 / 965 MS1)**
+
+| Build | Median | Range |
+|---|---|---|
+| this branch, Debug pwiz-sharp (ships today) | 72.4s | 68.8 - 80.1 |
+| this branch, Release pwiz-sharp | **55.0s** | 54.5 - 58.2 |
+| net472 `pwiz_data_cli` (native), 2026-07-29 | 59.7s | single sample, from a 164-file run |
+
+**What actually holds:**
+
+1. **Review finding F14 is REAL but modest.** Replacing `MzmlReader`'s parallel base64/zlib
+   decode with a single-threaded loop costs roughly **15-33%** on mzML (32.9s -> 38.0-43.9s),
+   NOT the "40 seconds versus multi-minute" the finding predicted. Output is byte-identical:
+   master's cache and this branch's compare `PARITY: 4,368,477,008 bytes identical`.
+2. **The Debug-linkage defect is real on the VENDOR path** - 72.4s -> 55.0s, non-overlapping
+   ranges, ~24%. Worth scheduling the "put these projects in Osprey.sln" fix on that basis.
+3. **But it does NOT explain the mzML gap**, where Release measured consistently SLOWER than
+   Debug. That is unexplained and I am not going to invent a reason for it; it is the open
+   question if anyone wants to push further. Candidates worth checking: whether the Release
+   pwiz-sharp assemblies I hand-copied over the snapshot differ in more than optimization
+   (they were produced by `pwiz-sharp/build.bat Release`, a different build entry point than
+   the one Osprey's ProjectReference drives), and tiered-JIT warmup on a ~40s process.
+4. **The earlier claim that the managed reader beats the native one is NOT supported.**
+   55.0s vs a single 59.7s sample taken from the first file of a 164-file sequential run is
+   not a like-for-like benchmark, and one sample cannot carry that conclusion.
+
+**Bearing on #4588**: none of this blocks it. Results are byte-identical on both paths, and
+the regression gate is green including its perf leg. This is a known, now-quantified cost of
+deleting a hand-written parallel reader in favour of the shared one, plus a separate
+build-configuration defect that was already documented and is now measured.
+
+### Perf, settled at n=6 (supersedes both notes above)
+
+Six interleaved repeats per configuration, one file each, idle machine. The two earlier
+sections in this TODO were written at n=1 and n=3 and both got the magnitude wrong; this is
+the number to use.
+
+**mzML - SEA-AD Astral, 4.07 GB cache, 162,620 MS2 / 974 MS1**
+
+| Build | Median | Range | vs master |
+|---|---|---|---|
+| master `MzmlReader` (parallel decode) | 27.0s | 23.9 - 33.2 | - |
+| branch, Debug pwiz-sharp (SHIPS TODAY) | 38.2s | 37.4 - 54.4 | **+41%** |
+| branch, Release pwiz-sharp | 45.4s | 42.3 - 46.8 | +68% |
+
+On the last three repeats alone (fully warmed OS cache, the most comparable set) it is
+master 24.8s vs branch 38.3s, i.e. **+54%**. So the honest range is 40-55% slower on mzML.
+
+**Thermo .raw - TDP-43 A01, 2.10 GB cache, 161,099 MS2 / 965 MS1** (3 repeats)
+
+| Build | Median | Range |
+|---|---|---|
+| branch, Debug pwiz-sharp (SHIPS TODAY) | 72.4s | 68.8 - 80.1 |
+| branch, Release pwiz-sharp | 55.0s | 54.5 - 58.2 |
+
+**Findings that survive repetition:**
+
+1. **mzML is 40-55% slower than master**, output byte-identical
+   (`PARITY: 4,368,477,008 bytes identical` between master's cache and this branch's). This
+   is review finding F14, confirmed and quantified - though far short of the "40 seconds
+   versus multi-minute" the finding predicted.
+2. **The Debug-linkage defect costs ~24% on the VENDOR path** (72.4s -> 55.0s, non-overlapping
+   ranges). Real, and an argument for scheduling the Osprey.sln fix.
+3. **Release pwiz-sharp is reproducibly SLOWER on mzML** (45.4s vs 38.2s, six repeats, tight
+   ranges) - the opposite of the vendor path, and unexplained. The assemblies were verified
+   genuinely different (241,152 vs 259,584 bytes for Pwiz.Data.MsData.dll), so it is not a
+   failed copy. Worth someone's attention before the Osprey.sln fix is done, because that fix
+   would move the mzML path onto the SLOWER configuration measured here.
+4. The recovery path, if throughput matters later, is to reintroduce parallel decode against
+   the shared reader rather than to bring back a second parser - the per-spectrum decode is
+   independent. Blocker: `MsDataFileImpl` holds per-instance spectrum caching
+   (`_lastSpectrum` / `_lastSpectrumInfo`) and is not thread-safe as used, so it would need
+   one instance per worker or a different seam.
+
+**Corrections to my own earlier claims in this TODO**: the n=1 note claimed the managed
+reader beat the native one and that the whole regression was the Debug linkage. Neither
+survived repetition. The n=3 note put the mzML regression at 15-33%; it is 40-55%.
+
+### Isolation: the WRAPPER is not the cost. pwiz-sharp's mzML read is.
+
+Brendan asked to separate two suspects - the extra per-spectrum work `MsDataFileImpl` does
+that Osprey discards, versus the loss of `MzmlReader`'s parallel decode. Built a worktree at
+`ffce6d97b9` (this branch's last commit BEFORE the wrapper swap, i.e. the minimal direct
+pwiz-sharp reader) and timed all three readers on one file. 3 repeats; `r1` for master was a
+cold-cache artifact (73.6s vs 42.4 / 42.7) and is excluded.
+
+**mzML - Astral regression file, 5.99 GB, 204,149 MS2 + 1,223 MS1**
+
+| Reader | Median | vs master |
+|---|---|---|
+| master `MzmlReader` (parallel decode) | **42.5s** | - |
+| direct pwiz-sharp, minimal reader (`ffce6d97b9`) | **80.4s** | +89% |
+| through `ProteowizardWrapper` (ships today) | **82.4s** | +94% |
+
+**The wrapper costs 2.0s of 82.4s - about 2.5%.** All of `SpectrumMetadata`, the scan
+description, instrument-config lookup and the `ImmutableList` precursor grouping together
+amount to that. Reverting to the direct reader would recover ~2.5%, not the regression. The
+regression is pwiz-sharp's mzML read itself against a purpose-built parallel decoder.
+
+That kills the "go back to reading pwiz-sharp directly" option as a performance argument -
+which matters, because that was the design this branch deliberately moved AWAY from, and it
+would be the obvious thing to propose on seeing the regression.
+
+### Raw vs mzML on the SAME acquisition
+
+| Source | Size | Median | Per GB |
+|---|---|---|---|
+| mzML | 5.99 GB | 82.4s | 13.7 s/GB |
+| .raw | 8.19 GB | 165.3s | 20.2 s/GB |
+
+**Reading the .raw is ~2.0x slower end to end, ~1.5x per byte.** Converting to mzML first
+still buys real throughput, which is worth stating plainly now that reading .raw directly is
+possible - "it works" is not "it is the fast path". (Both produce identical search results;
+that is the `-Source raw` regression result recorded above.)
+
+Direct vs wrapper on the .raw path: 165.3s vs 169.5s medians, ranges 164.9-192.3 and
+163.8-170.7 - overlapping, so no measurable wrapper cost there either.
+
+### The magnitude is file-dependent, and NOT explained yet
+
+| File | master | wrapper | regression | per-spectrum delta | per-GB delta |
+|---|---|---|---|---|---|
+| SEA-AD Astral, 4.13 GB, 163,594 spectra | 27.0s | 38.2s | +41% | 69 us | 2.7 s/GB |
+| Regression Astral, 5.99 GB, 205,372 spectra | 42.5s | 82.4s | +94% | 194 us | 6.7 s/GB |
+
+The added cost differs ~3x between the two files under BOTH normalizations, so it is neither
+per-spectrum nor per-byte. A per-spectrum-overhead theory was tested and does not hold. The
+untested candidate is binary-array encoding - 32- vs 64-bit arrays, zlib vs none - which
+changes decode work independently of spectrum count and file size; the SEA-AD conversion and
+the regression conversion were produced by different msconvert invocations. Checking the
+`cvParam` encoding terms in the two mzML headers would settle it in minutes and is the
+obvious next step.
+
+**Honest summary for the PR**: 40-95% slower on mzML depending on the file, byte-identical
+output, wrapper overhead ~2.5% of that.
+
+### Mechanism RESOLVED: the cost tracks DECODE VOLUME
+
+The magnitude difference between the two files above is explained. Read the encoding
+cvParams straight out of both mzML headers:
+
+| File | m/z array | intensity array | regression |
+|---|---|---|---|
+| SEA-AD Astral | 64-bit float, zlib | **32-bit float**, zlib | +41% |
+| Regression Astral | 64-bit float, zlib | **64-bit float**, zlib | +94% |
+
+(SEA-AD: 68 x 32-bit + 68 x 64-bit across 136 zlib arrays = 68 spectra carrying one array of
+each. The regression file is 64-bit throughout - 114 x 64-bit, 113 zlib, no 32-bit at all.)
+
+So the regression scales with the volume of binary data DECODED per spectrum - zlib inflate
+plus the float conversion - which is exactly the work the deleted MzmlReader handed to
+Parallel.ForEach and which pwiz-sharp performs on the read thread. That is why neither
+per-spectrum nor per-byte normalization fit: the right unit is decoded bytes, and these two
+files differ in intensity-array width by 2x.
+
+Predictions this makes, stated so they can be falsified:
+
+* Ordinary msconvert output (64-bit m/z, 32-bit intensity) pays around 40%.
+* An all-64-bit conversion pays around 90%.
+* An UNCOMPRESSED mzML should narrow the gap further, since inflate leaves the serial path.
+* A vendor .raw sits at ~2x the mzML cost regardless, because the vendor SDK does its own
+  decoding and none of that was ever parallel in Osprey.
+
+It also sharpens the recovery option. The expensive work is per-spectrum, independent and
+CPU-bound - the ideal shape for parallelism - so reintroducing it against the SHARED reader
+would recover most of the gap without resurrecting a second parser. The blocker remains that
+MsDataFileImpl keeps per-instance spectrum caching (_lastSpectrum / _lastSpectrumInfo) and is
+not thread-safe as used, so it needs one instance per worker or a different seam.
+
+### Parallel decode inside pwiz-sharp: PROTOTYPED, WORKS, byte-identical
+
+Implemented in `C:\proj\pwiz` (NOT committed - feasibility prototype on Matt's code):
+
+* `MzmlReader` gains an optional `PendingDecodes` collector. When active,
+  `ReadBinaryDataArray` records (array, base64, encoderConfig) instead of decoding inline.
+  Sound because decode was ALREADY separable and pure: `BinaryDataEncoder` holds only a
+  readonly config, its decode helpers are `static`, and a fresh encoder is built per array.
+  Nothing in the decode path touches the reader's reference maps or `_skipBinaryData`.
+* `SpectrumList_Mzml` parses a batch of 64 spectra with decoding deferred, runs those decodes
+  through `Parallel.ForEach`, and serves the batch from a small index-keyed cache. Falls back
+  to the original single-spectrum path for non-sequential access or metadata-only reads.
+* Opt-in: `PWIZ_SHARP_MZML_DECODE_THREADS=<n>`, default off (1).
+
+**XML parsing stays single-threaded on the existing stream.** That is the key design choice:
+it means no reentrancy work on `MzmlReader` (the non-reentrant `_skipBinaryData` field is
+untouched), no second file handle, and it works for mzMLb as well, whose `_openStream` cannot
+be called twice. Only the pure decode goes wide.
+
+| mzML read, Astral 5.99 GB, 205,372 spectra | Time |
+|---|---|
+| serial (today) | 82.6s |
+| parallel decode, 8 threads | **53.8s** |
+| parallel decode, 16 threads | 52.4s |
+| master's deleted `MzmlReader` (target) | 42.5s |
+
+Output **byte-identical**: `PARITY: 6,333,591,188 bytes identical` between the serial and
+8-thread caches.
+
+Recovers ~35% and closes about three-quarters of the gap to master. It plateaus at ~52s
+because master OVERLAPPED parse with decode (producer/consumer), while this batches
+parse-then-decode - so the serial XML parse is now the floor. Closing the rest means a true
+pipeline with a bounded queue, which is the shape the old Osprey reader had. Worth doing only
+if someone wants the last ~10s.
+
+Note for Osprey specifically: it already parallelises across FILES, so turning intra-file
+decode threads on by default would oversubscribe. Leaving the choice to the host is
+deliberate, not laziness.
+
+### Pipeline reality check: converting to mzML first is NOT the fast path
+
+Brendan pushed back on the claim that reading .raw being 2x slower argues for converting
+first, pointing out that `.spectra.bin` is already a duplicate of the spectra, so
+raw -> mzML -> spectra.bin buys a second copy to produce one cache. Measured it:
+
+msconvert on the 8.19 GB Astral .raw (`--mzML --zlib --filter "peakPicking vendor
+msLevel=1-"`) took **341s** and wrote 5.46 GB.
+
+| Path from .raw to .spectra.bin | Total | Extra disk |
+|---|---|---|
+| **direct raw read** | **165.3s** | none |
+| via mzML, serial decode | 423.9s | 5.46 GB |
+| via mzML, parallel decode | 393.4s | 5.46 GB |
+
+**Direct raw is ~2.4x faster end to end.** My earlier "converting first still buys
+throughput" was wrong: the conversion costs roughly four times what the faster read saves.
+The raw-vs-mzML READ ratio only matters to someone who already holds mzML - it is not an
+argument for producing one.
+
+### Correction: the raw-vs-mzML ratio is Astral-specific
+
+Recorded above as "reading .raw is ~2x slower than mzML, ~1.5x per byte". That is stated too
+generally. From Matt, via Brendan: **the Thermo Astral decoder is known to be slow**, and
+Thermo has been asked to improve it. Matt's first question on hearing that mzML read faster
+was "is this Astral data?" - it was.
+
+So the 165.3s vs 82.4s figure describes Astral, not vendor reading in general. It matters
+because Astral is a primary Osprey format for the MacCoss lab, so the slow case is also the
+common case here - but a different Thermo instrument would not necessarily show that ratio,
+and nothing about pwiz-sharp's vendor path is implicated.
+
+Two consequences worth keeping straight:
+
+* **It is still not an argument for converting first.** msconvert takes 341s on that .raw, so
+  the pipeline is 165s direct against 424s via mzML, plus 5.46 GB of intermediate that
+  `.spectra.bin` already duplicates. And msconvert reads the .raw through the same slow
+  decoder, so a Thermo fix speeds BOTH paths and direct stays ahead.
+* **It narrows who benefits from the parallel-decode work (#4590).** Brendan's expectation is
+  that with direct vendor reading available, fewer Osprey users will want the mzML route at
+  all, since for them mzML is just an intermediate on the way to `.spectra.bin`. The
+  parallel decode therefore pays off mainly for Skyline and for existing mzML workflows,
+  rather than for Osprey's future. It is still worth having - it is the shared library, and we
+  were the ones who wrote the parallel decompression in the first place - but it should not be
+  justified by Osprey throughput going forward.
+
+### Stellar timings - and a correction to the correction above
+
+Same acquisition as both zips, one file, 3 repeats, identical counts every run
+(97,500 MS2 + 780 MS1, 1.04 GB cache). Stellar raw is 0.80 GB against 1.38 GB of mzML - the
+normal direction, unlike Astral, whose raw is UNCOMPRESSED (Thermo has been asked for zlib
+and has not delivered), which is why its raw is larger than its own mzML.
+
+| Stellar | 1 thread | 8 threads |
+|---|---|---|
+| mzML | 13.9s | **9.2s** (-34%) |
+| raw | ~26s (cold 30.6, then 20.8) | 20.7s |
+
+**1. Parallel decode pays at this size too** - 34%, matching Astral's 35%. Not a
+large-file-only win, and Stellar is what `regression.ps1 -Dataset Stellar` runs.
+
+**2. Decode threads do not affect the raw path**, exactly as designed - raw lands ~20s either
+way. A useful check that the knob really is mzML-only rather than accidentally global.
+
+**3. The "Astral-specific" note above was an over-correction.** Raw is slower than mzML on
+Stellar too. Per SPECTRUM, which is the fair unit across formats that compress differently:
+
+| | raw | mzML @1 thread | ratio |
+|---|---|---|---|
+| Astral (205,372 spectra) | 805 us | 401 us | 2.0x |
+| Stellar (98,280 spectra) | 211 us | 141 us | 1.5x |
+
+Both things are true and I had conflated them:
+
+* Vendor raw reading costs **1.5-2x more than reading the equivalent mzML**, on both
+  instruments tested. That is general, not an Astral artifact.
+* **Astral's decoder is ~3.8x slower per spectrum than Stellar's** (805 us vs 211 us). That
+  is the Astral-specific problem Matt raised and Thermo has not fixed.
+
+Per-byte figures mislead here - Stellar's raw looks worse per GB (26 vs 20 s/GB) purely
+because it is compressed and Astral's is not.
+
+**None of this changes the pipeline conclusion.** Converting first still loses: msconvert
+pays the same vendor read AND writes the mzML, so direct raw remains the shorter path. What
+it does change is the framing - "vendor reading is slower than mzML" is a real, general
+property worth knowing when choosing an input format, not something peculiar to one
+instrument.

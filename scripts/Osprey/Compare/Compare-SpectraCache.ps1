@@ -41,7 +41,19 @@ param(
     # The cache under test, e.g. the raw-sourced one.
     [Parameter(Mandatory=$true)][string]$Test,
     # Suppress the header table; report only the verdict.
-    [switch]$Quiet
+    [switch]$Quiet,
+    # Do not stop at the first differing byte: scan the whole file and report HOW MANY
+    # bytes differ, in what shape, and where. Slower - it cannot use the whole-chunk
+    # SequenceEqual shortcut once a difference is found - so it is opt-in.
+    #
+    # Needed whenever the only available baseline is known to be WRONG, where "identical?"
+    # is the wrong question and "the same difference as last time?" is the right one. The
+    # case that motivated it: caches written before PR #4501 carry a retention-time error
+    # of one ULP, so every reader change since is measured by reproducing that difference
+    # exactly rather than by eliminating it. A single-ULP change to a little-endian double
+    # touches only its low byte, which is why the run-length and 8-byte-straddle numbers
+    # below are the ones that say "retention times only" rather than "peaks moved".
+    [switch]$Census
 )
 
 $ErrorActionPreference = 'Stop'
@@ -167,11 +179,22 @@ try {
     $bufB = [byte[]]::new($CHUNK)
     [int64]$pos = 0
     $firstDiff = [int64]-1
+    # Census state. Offsets arrive in ascending order, so runs and distinct 8-byte slots
+    # are countable with O(1) memory - no offset list, which matters when the caller points
+    # this at two genuinely unrelated files.
+    [int64]$diffBytes = 0
+    [int64]$runs = 0
+    [int64]$straddling = 0
+    [int64]$slots = 0
+    [int64]$prevDiff = -2
+    [int64]$runStart = -1
+    [int64]$lastSlot = -1
+    $sections = [ordered]@{}
     $common = [math]::Min($a.Length, $b.Length)
 
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $nextReport = 10
-    while ($pos -lt $common -and $firstDiff -lt 0) {
+    while ($pos -lt $common -and ($Census -or $firstDiff -lt 0)) {
         $want = [int][math]::Min([int64]$CHUNK, $common - $pos)
         $gotA = $fsA.Read($bufA, 0, $want)
         $gotB = $fsB.Read($bufB, 0, $want)
@@ -198,8 +221,36 @@ try {
             }
         }
         if (-not $same) {
-            for ($i = 0; $i -lt $gotA; $i++) {
-                if ($bufA[$i] -ne $bufB[$i]) { $firstDiff = $pos + $i; break }
+            if (-not $Census) {
+                for ($i = 0; $i -lt $gotA; $i++) {
+                    if ($bufA[$i] -ne $bufB[$i]) { $firstDiff = $pos + $i; break }
+                }
+            }
+            else {
+                for ($i = 0; $i -lt $gotA; $i++) {
+                    if ($bufA[$i] -eq $bufB[$i]) { continue }
+                    $off = $pos + $i
+                    if ($firstDiff -lt 0) { $firstDiff = $off }
+                    $diffBytes++
+
+                    # A run is a maximal span of consecutive differing bytes. Close the
+                    # previous one before opening a new one, so the straddle test sees a
+                    # complete span.
+                    if ($off -ne $prevDiff + 1) {
+                        if ($runStart -ge 0 -and [math]::Floor($runStart / 8) -ne [math]::Floor($prevDiff / 8)) {
+                            $straddling++
+                        }
+                        $runs++
+                        $runStart = $off
+                        $sec = Get-Section $off $a
+                        if ($sections.Contains($sec)) { $sections[$sec] = $sections[$sec] + 1 }
+                        else { $sections[$sec] = 1 }
+                    }
+                    $prevDiff = $off
+
+                    $slot = [math]::Floor($off / 8)
+                    if ($slot -ne $lastSlot) { $slots++; $lastSlot = $slot }
+                }
             }
         }
 
@@ -211,6 +262,29 @@ try {
     }
     $sw.Stop()
 
+    if ($Census -and $firstDiff -ge 0) {
+        # Close the final run so its straddle is counted like every other.
+        if ($runStart -ge 0 -and [math]::Floor($runStart / 8) -ne [math]::Floor($prevDiff / 8)) {
+            $straddling++
+        }
+        Write-Host ('BYTE CENSUS: {0:N0} differing bytes of {1:N0} compared' -f $diffBytes, $common) -ForegroundColor Yellow
+        Write-Host ('    runs of consecutive differing bytes : {0:N0}' -f $runs)
+        Write-Host ('    runs straddling an 8-byte boundary  : {0:N0}' -f $straddling)
+        Write-Host ('    distinct 8-byte slots affected      : {0:N0}' -f $slots)
+        Write-Host ('    first differing offset              : {0:N0} (0x{0:X}), {1}' -f $firstDiff, (Get-Section $firstDiff $a))
+        Write-Host '    differing runs by section:'
+        foreach ($k in $sections.Keys) {
+            Write-Host ('      {0,-40} {1,10:N0}' -f $k, $sections[$k])
+        }
+        Write-Host ''
+        Write-Host '    Isolated single-byte runs that never straddle an 8-byte boundary mean'
+        Write-Host '    one low byte per double changed, i.e. a one-ULP numeric difference and'
+        Write-Host '    not a structural one. Reconcile the count against the fields you expect'
+        Write-Host '    to differ before concluding anything - a retention time stored in both'
+        Write-Host '    a record and the trailing index counts twice.'
+        Write-Host ('    compared in {0:N1}s' -f $sw.Elapsed.TotalSeconds)
+        exit 1
+    }
     if ($firstDiff -ge 0) {
         Write-Host ('BYTE MISMATCH at offset {0:N0} (0x{0:X})' -f $firstDiff) -ForegroundColor Red
         Write-Host ('    reference: {0}' -f (Get-Section $firstDiff $a))

@@ -427,3 +427,165 @@ build? It does not, for four reasons unrelated to this PR. Invisible from `quick
 `new-machine-setup.md` until that is answered** - and note the Osprey TODO says that file
 must not be edited until #4497 lands either, since `ai/` master serves every branch.
 
+## Session 2026-08-18 (evening) - three shared defects fixed here, found from #4497
+
+Brendan decided Osprey should read through `ProteowizardWrapper` rather than pwiz-sharp
+directly, which this PR is what made possible. Building that reader surfaced three
+pre-existing defects in shared code. They are fixed HERE rather than in #4497 because they
+are Skyline-shared code and #4497 stacks on this branch. Two commits:
+
+**`ba16d3c884` - Fixed vendor centroiding and the no-vendor build of the net8 wrapper**
+
+1. **Vendor centroiding was a no-op.** `MsDataFileImpl` asks for centroiding by passing
+   `"1-"` to `SpectrumList_PeakPicker`'s STRING overload, and that overload's private
+   `ParseIntegerSet` splits on `,`/space and `int.TryParse`s each token - it has no range
+   syntax at all. `"1-"` parsed to NOTHING, leaving an EMPTY level set, and an empty set
+   means `GetSpectrum`'s level check matches no spectrum and returns every one of them
+   unpicked. `IntegerSet.Parse` in the same assembly parses `"1-"` correctly (regex group
+   `b3`, `e = int.MaxValue`) - the picker just never called it. Fixed by delegating.
+   * **net472 is unaffected**: C++ `IntegerSet.cpp:96` handles the trailing dash, which is
+     why `msconvert --filter "peakPicking vendor msLevel=1-"` has always worked. This is a
+     defect in the managed re-implementation, not a long-standing Skyline bug.
+   * `SpectrumListFactory` is unaffected: it builds a real `IntegerSet` via `.Parse()` and
+     calls the `IntegerSet` overload. The blast radius was the string overload's callers -
+     this wrapper and `TestHarness/ReaderTestConfig.cs`.
+   * **Why it went unnoticed**: `_vendorCentroidPath` is assigned from
+     `preferVendor && inner is IVendorCentroidingSpectrumList` ALONE, independent of
+     `_msLevels`, so Thermo/Waters/Sciex still received vendor centroids. What was dead is
+     the profile-to-centroid CV relabeling and the `VendorOnlyPeakDetector` fail-fast. The
+     real exposure is **Agilent**, which does not implement that interface: Skyline asked
+     for vendor centroids on net8 and silently got PROFILE peaks.
+   * `"1"` parses fine either way, so MS1-only centroiding worked; `"1-"` and `"2-"` did
+     not, and `"1-"` is what Skyline asks for whenever it wants both levels.
+   * Regression test added at the seam that had no coverage - `SpectrumListFactoryTests`
+     already covered spec-string parsing, but only through the factory, i.e. the correct
+     path. `PeakPickingTests.SpectrumList_PeakPicker_StringOverloadParsesPwizIntervalSyntax`
+     now pins the ctor overload for `1-`, `2-`, `1`, `1,2`, `2-3` and asserts it agrees
+     with `IntegerSet.Parse`. **Committed UNRUN** - see the tooling gap below.
+
+2. **The net8 wrapper did not compile without vendor licenses.** `MsDataFileImpl.cs:798`
+   used `SpectrumList_LockmassRefiner` unguarded, and `Analysis.csproj` `Compile-Remove`s it
+   (and `ChromatogramListLockmassRefiner`, and defines `NO_VENDOR_SUPPORT`) when
+   `IAgreeToVendorLicenses` is not true. That is the configuration CI and the shipped zips
+   build, and it is Osprey's default - so Skyline net8 was red for every no-vendor build.
+   Same family as the `BrukerFormat.cs` CS1574 break #4497 hit: Osprey is the first consumer
+   to build these projects no-vendor, which is why neither had surfaced. Guarded with
+   `#if NO_VENDOR_SUPPORT`, throwing rather than silently dropping a correction the caller
+   explicitly asked for.
+
+3. **The two ways of agreeing to the licenses do not have the same reach**, which the guard
+   in (2) made critical:
+
+   | Route | Reaches pwiz-sharp | Reaches pwiz_tools |
+   |---|---|---|
+   | `-p:IAgreeToVendorLicenses=true` (`b.bat`, `build.ps1`, `Build-Skyline -VendorLicenses`) | yes | yes |
+   | `i-agree-to-the-vendor-licenses.bat` -> `Directory.Build.user.props` | yes | **no** |
+
+   `pwiz-sharp/Directory.Build.props` imports that `.user.props`, and MSBuild only walks it
+   up from projects under `pwiz-sharp/`. So a guard keyed on the raw property would have
+   been WRONG for anyone using the `.bat` route: pwiz-sharp would compile the refiners while
+   the wrapper believed them absent, silently dropping Waters lockmass correction from a
+   build that fully supports it. `ProteowizardWrapper.csproj` now imports the same file, so
+   both routes agree. No change to anyone's workflow - Brendan's `b.bat` passes the flag on
+   the command line, which is arguably the better route for the licence anyway, since the
+   agreement is an explicit act per build rather than a file on disk asserting it.
+
+**`b3a3072491` - Recorded vendor reader registration failures instead of dropping them**
+
+`MsDataFileImpl.Vendors.cs` swallowed a failed vendor registration into `Debug.WriteLine`,
+which is `[Conditional("DEBUG")]` - so every shipping build had an empty catch. The failure
+then surfaces much later as ProteoWizard's "No registered reader recognized the file", a
+message about the FORMAT when the cause was the BUILD. Now collected into
+`VendorReaderRegistration.Failures` (the class went `internal` -> `public`) and left for the
+host to surface, because this assembly has no opinion about where a host writes diagnostics.
+Osprey prints them through `OspreyOutput`; Skyline has no consumer yet. This is #4497's
+review finding #9, which Osprey had already fixed in its own copy - fixing it here is what
+stops the two from diverging again.
+
+### Gates
+
+* `Build-Skyline.ps1 -Target Skyline -Configuration Debug -VendorLicenses` - **succeeds**,
+  before and after all three changes.
+* No-vendor build gets past the CS0246 that defect 2 caused; verified end to end by the
+  Osprey build in `C:\proj\pwiz`, which is no-vendor by default and now builds
+  `ProteowizardWrapper` on the way through.
+
+### Found here, NOT fixed - for Matt
+
+**Skyline net8 still cannot build no-vendor**, for a reason unrelated to the above. With
+defect 2 fixed the build reaches Skyline's copy stage and fails on vendor native runtime
+files a no-vendor build never produces: `MBI_SDK.dll`, `MIDAC.dll`, `MobilionShim.dll`,
+`msvcp120.dll`, `msvcr120.dll`, `OFX.Logging.dll` and more, copied unconditionally by
+`Skyline.csproj`. It does NOT block Osprey, which never builds `Skyline.csproj`, so it is
+left alone rather than folded into this PR. Worth raising with Matt alongside the net472
+`Skyline.sln` question already in the PR body.
+
+### Tooling gap - no way to run pwiz-sharp's tests
+
+`Build-Osprey.ps1` runs only `Osprey.Test`, `Build-Skyline.ps1`'s targets are all Skyline
+projects, and the `Deny-DirectBuildTest` hook blocks `dotnet test`. So the `PeakPickingTests`
+case above is committed without ever having been run. `IntegerSet.Parse` itself is covered
+(`IntegerSetTests.Parse_AllFormatVariants` pins `"10-"`), and the licensed and no-vendor
+builds both compile, so confidence is high - but that is not the same as a green test. Now
+that Matt's branch is a build dependency of both Skyline and Osprey, a wrapper target for
+pwiz-sharp's suite is worth adding.
+
+## Session 2026-08-19 - rebased onto Matt's moving branch; Skyline tests still unrun
+
+Branch is `9b88fecfb2`, clean, pushed. Rebased THREE times today as
+`chambem2/pwiz-sharp` advanced: `e381040486` -> `b6fcff8754` (a master merge, 30 commits)
+-> `c42140e7df` (adds `fb541bf0c3 Make SkylineCmd able to load Skyline at all on net8` and
+`979660e18c Stop build.bat leaving cross-version MSBuild nodes behind`). Every rebase was
+conflict-free, and `Build-Skyline.ps1 ... -VendorLicenses` is green on the current head.
+
+The stack above it was rebased to match each time: #4588 onto this branch's new head, #4590
+onto `chambem2/pwiz-sharp` directly.
+
+### The vendor-licence import in this PR is what makes a Visual Studio build possible
+
+Worth stating plainly because it is easy to lose in the diff. There are two ways to agree to
+the vendor licences and they do NOT have the same reach:
+
+| Route | Reaches pwiz-sharp | Reaches pwiz_tools |
+|---|---|---|
+| `-p:IAgreeToVendorLicenses=true` (`b.bat`, `build.ps1`, `Build-Skyline -VendorLicenses`) | yes | yes |
+| `i-agree-to-the-vendor-licenses.bat` -> `Directory.Build.user.props` | yes | **no**, before this PR |
+
+Visual Studio cannot pass `-p:`, so the `.bat` route is the ONLY one available to it. Before
+this PR that route left `ProteowizardWrapper` compiling in NO_VENDOR_SUPPORT mode while
+pwiz-sharp compiled with vendors - a split that produces the lockmass guard firing on a build
+that fully supports Waters. `ProteowizardWrapper.csproj` now imports the same user.props.
+
+Consequence for anyone building in VS: run
+`pwiz-sharp\i-agree-to-the-vendor-licenses.bat` ONCE first. Without it the build fails at a
+copy step naming `MBI_SDK.dll` / `MIDAC.dll` / `msvcp120.dll`, which reads as a missing-file
+problem rather than a licence one. (Skyline net8 cannot build no-vendor at all - separate,
+pre-existing, flagged for Matt.)
+
+### smartBuildTrigger: fixed for #4588, still broken for this PR
+
+Matt merged the fix (#4591) and it is now in this branch's ancestry. Confirmed on live PRs:
+
+* **#4588 auto-triggers and passes** - its base is `Skyline/work/...`, which matches
+  `base_branch.startswith("Skyline/work/")`.
+* **#4587 and #4590 still report "no builds triggered"** - their base is
+  `chambem2/pwiz-sharp`, a developer branch, which the condition does not match.
+
+Also confirmed empirically: the script runs from the PR's OWN checkout, not from master.
+Merging to master was necessary but not sufficient - the fix only took effect once Matt
+updated his branch and we rebased onto it.
+
+Suggested broadening for Matt: map any base that is not `master`/`release` to `master`. Every
+PR here is ultimately headed for master, and the change list is still computed against the
+real base, so the stacked-diff behaviour is unaffected.
+
+### Still unrun: Skyline's own tests
+
+Builds, Osprey tests and pwiz-sharp tests are green, but **no Skyline test has been run
+against this branch**. That is the next session's job - SkylineTester with the default
+release set, from `pwiz-work1`. A green build proves references resolve; it does not prove
+runtime type loading, resource lookup, or installer layout survived moving the WinForms half
+of CommonUtil into a new assembly.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260818_commonutil_winforms_split.md` before starting work.
