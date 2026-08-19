@@ -2622,3 +2622,88 @@ files spanning 1-63, which still contains `_0001` and is directly comparable to 
 pool of files 1-32). Same N, same library, different membership - which isolates how much a
 single-N comparison can move for reasons having nothing to do with the library. Driver:
 `fp1-every.ps1` in the session scratchpad.
+
+### 2026-08-18 (night) - Six pools measured; a prediction failed; and how four other tools sample
+
+**The 6-pool distribution at 32 files** (paired: both arms run the identical file set, so the
+pool's own file quality cancels):
+
+| pool | ours | Mike | ours vs Mike |
+|---|---|---|---|
+| files 1-32 | 953,487 | 790,989 | +20.54% |
+| files 33-64 | 730,034 | 598,733 | +21.93% |
+| files 17-48 | 896,516 | 807,529 | +11.02% |
+| files 49-80 | 686,571 | 624,027 | +10.02% |
+| files 19-81 odd | 774,909 | 717,649 | +7.98% |
+| files 1-63 odd | 775,355 | 856,420 | -9.47% |
+
+mean **+10.34%**, median +10.52%, stdev **11.29 pp**, range **31.4 pp**.
+
+**A PREDICTION I MADE AND IT FAILED.** After four pools I predicted the sign was set by whether
+a pool was contiguous or spread across the plate - contiguous pools mixing similar
+injection-order files, spread pools mixing strong and weak ones. Stated in advance: files 19-81
+odd (spread) would be NEGATIVE. It came out **+7.98%**. The two spread pools are -9.47% and
++7.98%, so span does not predict the sign. **Hypothesis dead.**
+
+**Two findings that pull in opposite directions, both worth keeping:**
+
+1. **At 32 files our library is consistently AHEAD** - 5 of 6 pools positive, mean +10.3%. That
+   is the opposite of the -16% this investigation was named after.
+2. **The 82-file result (-15.98%) is OUTSIDE the entire 32-file distribution**, below the
+   minimum of six pools. So it is NOT simply a draw from pool scatter - the previous entry's
+   "inside the noise" framing was wrong in the other direction. Something changes between 32
+   and 82 files beyond pool-to-pool variance.
+
+64-file pools (1-64, 10-73, 19-82, both arms) are running to distinguish a monotone scale
+effect (+10% at 32 -> ~0% at 64 -> -16% at 82) from an 82-file anomaly. That is the pivotal
+measurement and it decides whether the library question is live again.
+
+### How the other tools sample their training sets (Brendan's question)
+
+Verified in source in each checkout under `C:\proj`:
+
+| tool | in-process training | cap | sampling unit | population sampled |
+|---|---|---|---|---|
+| **Osprey** pass-1 | one **global** model | **fixed 300,000 rows** (`OSPREY_MAX_TRAIN_SIZE`) | whole **peptide groups**, Fisher-Yates over groups, xorshift seed 42 | **best per precursor across ALL files** |
+| **Skyline** mProphet | one **global** model | **memory-derived** `512MB/8/(nFeat+1)` ~= **3.2M peaks** | individual peaks, fixed seed, **stratified to preserve target:decoy ratio** | one row per **(precursor x replicate x file)** |
+| **DIA-NN** | **per run** (LDA + bagged NN) | **none** (`maxTraining = tr_t + tr_d`) | no subsample; fixed-seed shuffle only assigns examples across bagged nets | that **run's own** targets/decoys |
+| **EncyclopeDIA** | JavaPot (Java Percolator port) | passes **500000** to `JavaPotOptions` | not verifiable here - `org.searlelab:javapot` is an external dep, absent from this checkout and from the local m2 cache | PIN rows |
+| **OpenSWATH** | **none** - `main_var_xx_lda_prelim_score` uses **fixed weights** | n/a | n/a | discrimination delegated to PyProphet |
+
+Source: `Osprey.FDR/PercolatorSampling.cs:208,249`, `PercolatorConfig.cs:134`;
+`Skyline/Model/Results/Scoring/MProphetScoringModel.cs:384,438,450`,
+`PeakFeatureEnumerator.cs:160`; `DiaNN/src/diann.cpp:9294` inside `class Run` (6521);
+`encyclopedia/.../JavaPotExecutor.java:46`; `OpenMS/.../MRMFeatureFinderScoring.cpp:1035`.
+
+**Osprey's effective training set is smaller than the 300K cap suggests** (Brendan's point).
+Skyline fits ONE LDA on the whole pool; Osprey runs 3-fold CV, so each fold model trains on
+`foldAssignments[i] != fold` = **200,000 rows**, and the inner C sweep splits again - each
+candidate C is fit on 2/3 of that, ~**133,000 rows** (`PercolatorTrainer.cs:528,1194`). So one
+Osprey fit sees ~200K rows against Skyline's up to ~3.2M: roughly 16x.
+
+**How DIA-NN aligns per-run models - it never compares raw scores across runs.** Each run's
+CScore is converted to a per-run q-value by target-decoy competition WITHIN that run, against
+that run's own decoys. All cross-run work is in q-value space (`class Profile`, diann.cpp:6114):
+best run per precursor = **min q-value**; the cross-run statistic is
+`Max(qvalue, lib_qvalue) + lib_qvalue`, min across runs; `gen_decoy_list()` then re-estimates an
+empirical FDR by ranking those pooled q-value-derived statistics for targets against the same
+statistic for decoys. The raw CScore crosses the file boundary ONLY to be printed (`CScore` /
+`Decoy.CScore`, lines 5895/5950) - it never enters a cross-run decision.
+
+That is what licenses per-run training: q=0.01 means the same thing in every run by
+construction, a CScore of 2.5 does not. DIA-NN's small memory footprint and its statistical
+safety come from the same design choice.
+
+**OpenSWATH takes the opposite route**: fixed LDA weights, identical in every run, so scores are
+cross-run comparable by construction with no model to reconcile. Whether the downstream learning
+is per-run or global is not answerable from OpenMS source - OpenMS trains nothing, and that
+lives in how PyProphet is invoked. This checkout does carry a native port of PyProphet's
+STATISTICAL half (`LevelContextInference`, `ErrorEstimationConfig`, `OpenSwathInferenceConfig`),
+not its classifier.
+
+**Where that leaves Osprey**: it is the only one of the four that combines a global model with a
+training population collapsed across files. Skyline shows a global model does NOT require that
+collapse - its rows are per-file observations, so adding runs adds more rows of the same kind
+instead of changing what every row is. DIA-NN shows the per-run alternative, provided cross-run
+comparison happens on q-values. Either precedent would remove Osprey's dependence of a file's
+yield on which other files were batched with it.
