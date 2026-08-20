@@ -183,9 +183,40 @@ Sampled-key loss down roughly two thirds. `mode3 (HPC chain==straight)` PASS aga
 run-level draw is HPC-consistent; `mode2 (resume==straight)` and `mode4 (warm re-run all cached)`
 PASS, so the validity keying is stable and reproducible.
 
-The authoritative full-population number comes from `blib_summary.tsv` in the re-baseline, NOT from
-the sampled key counts - that is the mistake recorded above. Re-baseline running against the final
-binary as of 23:19.
+### AUTHORITATIVE full-population counts (re-baseline, 23:56)
+
+Plain Stellar, `blib_summary.tsv` - the clean training-only attribution, since that dataset uses no
+libdecoy library and nothing else changed:
+
+| selection | RefSpectra | vs old rule |
+|---|---|---|
+| cross-run maximum (old default) | 29,300 | - |
+| peak-level draw (first cut) | 24,214 | **-17.4%** |
+| **run-level draw (shipped)** | **27,321** | **-6.75%** |
+
+The peak-vs-run correction recovered ~61% of the loss. **A -6.75% residual at 3 files remains and
+has to be priced before this ships as an unconditional default.**
+
+### Is the residual a LOSS or a CALIBRATION CORRECTION? - measurement in flight
+
+These are counts at NOMINAL q, not at matched FDP. The whole thesis of the change is that a model
+trained on cross-run maxima has inflated apparent target-decoy separation, so it reports more IDs
+at a given q than it has earned. Fewer IDs at nominal q with a LOWER true FDP is the change
+WORKING.
+
+Plain Stellar carries no entrapment and therefore no FDP oracle, so it cannot settle this. The two
+libdecoy goldens do carry entrapment but now confound the training change with the v2->v3 library
+swap, so they cannot either.
+
+The clean experiment, running as of 00:00: `-Dataset StellarLibDecoy -CreateGolden` with
+`OSPREY_TRAIN_PICK_RUN=0`, same v3 library, same binary - so the training selection is the ONLY
+variable. Compare `diagnostics.tsv` pass-1 true FDP and `blib_summary.tsv` counts against the
+just-committed default-arm golden. Log `ai/.tmp/fdp-ab.log`; the golden it overwrites is restored
+with `git checkout --` afterwards.
+
+* **FDP falls with the count** -> the trade is real and defensible; ship the flip.
+* **FDP flat and 6.75% of IDs simply gone** -> it helps only at large N and hurts at small N, and
+  making it an unconditional default is Brendan's call, not mine. The escape hatch already exists.
 
 ## Tasks
 
