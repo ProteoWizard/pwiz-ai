@@ -328,6 +328,61 @@ weighted runs by candidate count and discarded the best peak, and neither of tho
 This retires the caveat that the headline number was measured on a superseded sampler. The PR body
 now quotes these numbers.
 
+### THE 3-FILE GRID WITH A TRUE-FDP ORACLE (2026-08-20 05:40) - the change is a WASH at 3 runs
+
+Pass-1, experiment scope - the same basis as the 82-file grid. Every row here has an entrapment
+oracle, so these are the only 3-file numbers that can separate a lost true ID from a suppressed
+false one.
+
+| dataset | library | arm | n@1% q | FDP at q | @0.650% | @0.750% | @1.000% |
+|---|---|---|---|---|---|---|---|
+| Astral | SEA-AD (ours) | baseline | 83,571 | 0.7440% | 81,974 | 83,571 | 87,297 |
+| Astral | SEA-AD (ours) | **pickrun3** | 83,836 | 0.7984% | 81,449 | **83,041** | 86,490 |
+| StellarLibDecoy | v3 (ours) | baseline | 27,239 | 0.7753% | 26,554 | 26,982 | 28,181 |
+| StellarLibDecoy | v3 (ours) | **pickrun3** | 27,191 | 0.7985% | 26,428 | **26,937** | 27,784 |
+| StellarGenDecoyEntrap | v3, generated decoys | baseline | 28,629 | 1.2289% | 26,489 | 26,935 | 27,916 |
+| StellarGenDecoyEntrap | v3, generated decoys | **pickrun3** | 28,691 | 1.2401% | 26,367 | **26,725** | 27,797 |
+
+**Change at 0.750% matched FDP: Astral -0.63%, libdecoy -0.17%, gendecoy -0.78%.** Under 1%
+everywhere. Against +33.0% at 82 files. The benefit scales with run count exactly as the mechanism
+predicts, and there is no small-N penalty to design around.
+
+Astral only became measurable because Brendan pointed out the SEA-AD libraries are fine-tuned to
+these exact three regression files, so they can be run against them - the regression Astral spec
+uses an entrapment-free library and has no oracle at all. Both Astral arms link Stage 1-4 from the
+same completed run, so the training selection is the only variable.
+
+**GOTCHA for anyone repeating this**: a full-pipeline run with `--fdrbench-pass 1` aborts in
+`PerFileScoringTask.GuardResidentPool` unless `OSPREY_ALLOW_UNFIXED_RESIDENT=fdrbench-pass1` is
+set. Running BOTH arms as `-Task FirstPassFDR -LinkFrom <a completed run>` sidesteps it entirely
+and is better science anyway - identical upstream artifacts on both sides.
+
+### CORRECTION: the earlier "+6.7% for StellarLibDecoy" was a PASS-2 number
+
+It came from blib `RefSpectra` counts, and the blib is written from second-pass results, so it was
+never comparable to the 82-file pass-1 table. Pass 1 is -0.17%. The movement is real but lives at
+pass 2, where the two entrapment datasets go OPPOSITE ways at near-identical FDP:
+
+| dataset | pass-2 baseline | pass-2 pickrun3 |
+|---|---|---|
+| StellarLibDecoy | 28,998 @ 0.5022% | 30,893 @ 0.5230% |
+| StellarGenDecoyEntrap | 31,146 @ 0.9204% | 29,742 @ 0.9504% |
+
+### The gendecoy disadvantage, measured cleanly
+
+Same v3 library, same entrapment targets, decoy SOURCE the only variable (`StripDecoys` removes the
+library's decoy rows so Osprey generates its own):
+
+| | pass-1 n@1% q | true FDP at that q | pass-1 @0.750% |
+|---|---|---|---|
+| libdecoy | 27,239 | **0.775%** | 26,982 |
+| gendecoy | 28,629 | **1.229%** | 26,935 |
+
+Generated decoys report 5% more identifications at nominal 1% q and pay ~60% more real error for
+them; at matched FDP the two are within 0.2%. **The entire apparent gendecoy advantage is
+miscalibration, not sensitivity** - a direct argument for the libdecoy line as best practice,
+independent of the training change.
+
 ### THE 3-FILE PICTURE: "detections go down" is NOT the pattern (2026-08-20 05:00)
 
 Counts at 1% q (blib `RefSpectra` rows), baseline = `OSPREY_TRAIN_PICK_RUN=0`:
