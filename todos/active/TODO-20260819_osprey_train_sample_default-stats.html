@@ -88,7 +88,7 @@
 <header>
   <h1>Osprey training-selection evidence</h1>
   <div class="sub">Every measurement behind the first-pass training change &mdash; curated to current best, not a running log.</div>
-  <div class="stamp">Updated 2026-08-20 06:10 PDT &middot; PR #4593 &middot; branch <code>Skyline/work/20260819_osprey_train_sample_default</code></div>
+  <div class="stamp">Updated 2026-08-20 06:20 PDT &middot; PR #4593 &middot; branch <code>Skyline/work/20260819_osprey_train_sample_default</code></div>
 </header>
 
 <div class="head-line">
@@ -133,7 +133,8 @@
 </table>
 </div>
 <div class="key"><b>pickrun3 gains our library far more than Mike's:</b> +33.0% against +15.0% at 0.750% matched FDP. It also improves our calibration while it adds identifications &mdash; 45,943 at 0.746% true FDP against the baseline's 34,552 at 0.750% &mdash; so the gain is not bought with error. On Mike's library the FDP moves the wrong way (0.870% &rarr; 0.896%), which is why the two libraries separate here.</div>
-<div class="note"><b>Pass 2 at 82 files has not been measured on the shipped sampler.</b> The only 82-file pass-2 pair that exists was run on the superseded pickrun2 sampler, and it pointed at something worth resolving: at pass 1 the two libraries were level there, while at pass 2 ours came out <b>7.7% behind</b> (48,353 vs 52,381 at 0.750% true FDP). Under pickrun3 pass 1 now puts ours <b>10.5% ahead</b> &mdash; so whether that reversal survives is open. Pass-2 FDP is also inflated in both arms (~1.5% against pass 1's ~0.85%), the known second-pass recalibration issue. Settling it needs one ~5.5 h pass-2 run per library on pickrun3.</div>
+<div class="note"><b>Pass 2 carries the only measured lever effect at 82 files, and it is large.</b> Mike's library goes <b>42,679 &rarr; 52,381 at 0.750% matched true FDP, +22.7%</b> &mdash; bigger than the same library's +18.9% at pass 1, so the gain is not lost downstream. Our library has no pass-2 baseline to difference against, which is the missing piece.
+<br><br><b>And the libraries trade places between passes.</b> At pass 1 under pickrun2 they were level (42,982 vs 42,989); at pass 2 ours came out <b>7.7% behind</b> (48,353 vs 52,381). Under pickrun3, pass 1 now puts ours <b>10.5% ahead</b> &mdash; so whether that reversal survives the shipped sampler is genuinely open. Pass-2 FDP is inflated in every arm (~1.5% against pass 1's ~0.85%), the known second-pass recalibration issue, which is why matched-FDP is the comparator here rather than the count at nominal q.</div>
 
 <h2><span class="n">4</span>3 files &mdash; regression datasets with a true-FDP oracle</h2>
 <p class="lede">Every row carries entrapment, so every row can be matched on real error.</p>
@@ -178,7 +179,8 @@
 <h2><span class="n">7</span>What is not measured</h2>
 <div class="panel">
 <ul>
-  <li><b>82-file pass 2, on any current arm.</b> Nothing exists on the shipped sampler; the only pair was run on the superseded pickrun2. Each arm is a full ~5.5 h run. <b>This is the largest single gap</b> &mdash; it is what decides whether our library's pass-2 deficit survives pickrun3, and pass 1 now points the opposite way.</li>
+  <li><b>82-file pass 2 on pickrun3</b> &mdash; neither library has one. <b>The largest single gap</b>: it decides whether our library's 7.7% pass-2 deficit survives the shipped sampler, and pass 1 now points the opposite way. One ~5.5 h run per library.</li>
+  <li><b>ours baseline pass 2.</b> The <code>cleanbase</code> run stopped at pass 1, so our library has no pass-2 lever delta to set against Mike's +22.7%. Another ~5.5 h run, and the cheapest way to make the pass-2 table a real comparison.</li>
   <li><b>Astral 3-file pass 2.</b> Both Astral arms were run as <code>-Task FirstPassFDR</code>, so they have no pass-2 stage.</li>
   <li><b>Replication.</b> Every 82-file arm is a single run. Batch composition is controlled (identical files on both sides), so the known pool-composition sensitivity is not in play &mdash; but the 3.3% give-back on Mike's library under pickrun3 is the figure most worth repeating before leaning on it.</li>
   <li><b>v2 vs v3 library, isolated.</b> The two Stellar libdecoy goldens confound the training change with the v2&rarr;v3 library swap. Now cheap to run: the additive extraction means a swapped-in library survives.</li>
@@ -224,7 +226,7 @@ const DATA = {
       pass1: 'Pass 1, experiment scope. Higher is better at every matched-FDP column; deltas are vs that library\u2019s own baseline at 0.750%.',
       pass2: 'Pass 2, experiment scope \u2014 nothing measured on the shipped sampler.'
     },
-    ctx: {pass1: 'four arms', pass2: 'not measured'},
+    ctx: {pass1: 'four arms', pass2: 'three arms — no pickrun3'},
     pass1: [
       {lab:'ours',arm:'baseline',n:34552,fdp:0.7497,m650:33789,m750:34552,m1000:35533,d:null},
       {lab:'ours',arm:'pickrun3',n:45943,fdp:0.7460,m650:44609,m750:45943,m1000:48166,d:33.0,cls:'best'},
@@ -232,7 +234,10 @@ const DATA = {
       {lab:'mike',arm:'pickrun3',n:43103,fdp:0.8960,m650:40584,m750:41563,m1000:44082,d:15.0}
     ],
     pass2: [
-      {gap:'No 82-file pass-2 arm exists on the shipped sampler. Each would need a full ~5.5 h run. The only pair measured (ours 48,353 vs mike 52,381 at 0.750% true FDP) ran on the superseded pickrun2 sampler and is kept as a footnote below the table, not as a row here.'}
+      {lab:'mike',arm:'baseline',n:51116,fdp:1.5613,m650:41190,m750:42679,m1000:46815,d:null},
+      {lab:'mike',arm:'pickrun2',n:58644,fdp:1.4715,m650:51242,m750:52381,m1000:55038,d:22.7,cls:'sup'},
+      {lab:'ours',arm:'pickrun2',n:54552,fdp:1.5390,m650:47290,m750:48353,m1000:51187,d:null,cls:'sup'},
+      {gap:'ours baseline has no pass-2 arm — the cleanbase run stopped at pass 1 — so our library has no lever delta here. Neither library has a pickrun3 pass-2 arm. pickrun2 rows are greyed: they are the superseded sampler, kept because removing them would leave a single orphan row.'}
     ]
   },
   f3: {
