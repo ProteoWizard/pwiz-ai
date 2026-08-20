@@ -120,15 +120,51 @@ lucky one.
 
 `Osprey.Test`: 589/589 on net8.0 and net472, 0 warnings.
 
-### Phase 6: Pre-review
+### Phase 6: Code review feedback
 
-- [ ] `/code-review` on the branch (not yet run, see note)
+`/code-review` run over both branches. PR #4594 (the build fix): no findings. PR #4595:
+fifteen findings, twelve fixed in `4c83c8a`, one split out, two partially pushed back on.
+
+- [x] `GbtModelData` records `FeatureCount` and `Objective`; both validated on load, and
+      `ScoreSingle` rejects a short feature vector. Without them a corrupted split feature
+      threw inside `ScoreSingle` (the exact failure the doc claimed to prevent), and a
+      reloaded regression margin was indistinguishable from a log-odds.
+- [x] The continuous-target overload validates the target against the objective and
+      rejects an unknown objective, closing the reverse of the hole fixed last round.
+- [x] Sample weights must be finite and non-negative. A negative weight could cancel
+      `RegLambda` exactly and put a NaN leaf into every later round; `RegLambda` is
+      settable to 0 through `OSPREY_GBT_LAMBDA`, so it was reachable.
+- [x] Fixed a vacuous snapshot-isolation assertion that compared two values both
+      recomputed after the mutation, so it passed even with the clones removed.
+- [x] The golden logistic assertion now also runs at 4 threads. Thread invariance had only
+      ever been asserted under squared error, which is not the path the guarantee protects.
+- [x] The golden test owns its parameters instead of sharing `FastGbt()`.
+- [x] Allocation and sizing work in the parallel path; `MaxBins` clamp documented.
+- [x] `docs/16-determinism.md` Step 7 records the one parallel float accumulation, its
+      across-features invariant, and the two changes that would silently break the 1e-9
+      parity gate.
+
+**Split out**: NaN routes left when binning and right when walking the tree, so rows with
+missing values shape a leaf they can never reach. Real and pre-existing, but fixing it
+changes trained models for NaN-containing input and would break this PR's bit-identity
+premise. Filed as [#4596](https://github.com/ProteoWizard/pwiz/issues/4596).
+
+**Pushed back**: the recommendation to call `OspreyParallel.For` instead of `Parallel.For`
+is right about ThreadPool contention but wrong about the mechanism - `OspreyParallel`
+allocates dedicated Threads per call, fine at fold granularity but ruinous at ~63 nodes x
+200 trees. Hoisted the options and delegate, gated dispatch on total work, and documented
+the caveat at the call site instead.
+
+Verification after the fixes: golden logistic still `242558FF...` at 1, 4 and 16 threads,
+regression fixture unchanged, `Osprey.Test` 589/589 on net8.0 and net472.
+
+MARS knock-on: the vendored copy was re-synced and `MarsModelIo` now writes and reads the
+two new fields, deriving them for files written before they existed. MARS 60/60 green.
+
+### Phase 7: Pre-merge
+
 - [ ] TeamCity
 - [ ] Human review
-
-**Note**: `ai/WORKFLOW.md` asks for `/code-review <level>` on the branch before the PR is
-opened. That step was missed; both PRs were opened without it. Still worth running before
-requesting human review.
 
 ## Status
 
