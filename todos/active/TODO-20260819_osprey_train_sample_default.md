@@ -138,6 +138,13 @@ The reservoir picks the k-th arrival, so which RUN survives follows the arrival 
 ordinal is fixed and thread scheduling cannot move it (the draw is a hash of base_id, k and the
 seed, not a shared RNG), but file ORDER now feeds the trained model.
 
+**MEASURED 2026-08-19 22:01, and it holds: `Stellar mode3 (HPC chain==straight): PASS`.** The
+4-task HPC chain reproduces the straight-through run exactly under the reservoir, as do
+`mode3 (per-file FDR sidecars==straight)` over 2,445,841 records. So the order-dependence is real
+in principle but does not bite the chain, because the chain pins its input order. The risk is that
+it is now pinned for TWO reasons rather than one, and only one of them is documented where an HPC
+operator would look.
+
 This compounds a known latent risk: multi-file FirstJoin reconciliation is already
 `--input-scores`-order sensitive, and regression mode 3 pins that order, which masks it. Training
 is now sensitive to the same thing. Mode 3 is therefore the test that matters for this change, not
