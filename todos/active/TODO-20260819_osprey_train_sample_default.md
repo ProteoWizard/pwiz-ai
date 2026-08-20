@@ -117,6 +117,42 @@ Bundle acquisition is UNCHANGED (skip-if-present on the extracted root; nobody r
 * ordered so `LibraryUrl` wins and the `NestedZip` branch is skipped outright when it fired, rather
   than relying on the no-overwrite semantics to protect it by accident.
 
+## Mike's pass-2 lever arm COMPLETED 02:26 - the deficit closes at pass 1, NOT at pass 2
+
+Run `seaad-82files-libdecoy-r1.0-protein-compact-p2lever-mike-n82`, 328.8 min (started 20:57).
+Validity confirmed in the log: `competition CONSTRAINED to the 698146-base_id protein stratum`, and
+PerFileRescoring took 11,977.5 s (3h20m) - the resume defect's signature is 19 minutes, so this is
+a real run. It ran longer than the README's 2h39m purely because my regression and re-measure jobs
+were sharing the 32 cores; that is NOT a regression and must not be used to "update" the README.
+
+**Both arms protein-compact + max, lever ON, at matched true FDP, experiment scope:**
+
+| arm | pass-1 @0.650% | @0.750% | @1.000% | **pass-2 @0.750%** |
+|---|---|---|---|---|
+| ours + lever | 42,131 | 42,982 | 45,252 | 48,353 |
+| **mike + lever** | 41,204 | **42,989** | 47,154 | **52,381** |
+
+At nominal q, Mike's pass-2 experiment arm is 58,644 @ 1.4715% combined FDP.
+
+**The pass-1 table is confirmed exactly** - Mike's pass-1 row reproduces the handoff's numbers to
+the digit, so the earlier measurement stands.
+
+**But the pass-2 conclusion has to be withdrawn.** The reading recorded on 2026-08-19 evening was
+"ours + lever (48,353) exceeds Mike's HISTORICAL 43,754 by +10.5%". That is still arithmetically
+true, and it is the wrong comparison - it mixes three changes. The clean single-variable
+comparison, now in hand, is **ours 48,353 vs mike 52,381 at the same 0.750% true FDP: our library
+is 7.7% BEHIND at pass 2** while at parity at pass 1.
+
+So: **the training-selection change closes the library deficit at pass 1 and does NOT close it at
+pass 2.** The handoff's stated expectation was parity; the honest outcome is worse than parity for
+our library downstream. Whatever remains is a pass-2 effect - reconciliation, the stratum, or the
+second-pass recalibration already known to be anti-conservative - and it is a separate
+investigation from this PR.
+
+**Caveat that must travel with these two numbers**: both arms were run with the PEAK-level sampler,
+which is what existed when they were launched. They are internally consistent with each other, but
+neither is the shipped run-level sampler's number.
+
 ## `/code-review max` triage (2026-08-19 22:30)
 
 15 findings. Verified before acting, per the review-chain rule. Acted on:
