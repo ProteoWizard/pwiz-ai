@@ -117,6 +117,57 @@ Bundle acquisition is UNCHANGED (skip-if-present on the extracted root; nobody r
 * ordered so `LibraryUrl` wins and the `NestedZip` branch is skipped outright when it fired, rather
   than relying on the no-overwrite semantics to protect it by accident.
 
+## `/code-review max` triage (2026-08-19 22:30)
+
+15 findings. Verified before acting, per the review-chain rule. Acted on:
+
+| # | finding | disposition |
+|---|---|---|
+| 1 | reservoir samples PEAKS not RUNS | **CONFIRMED against two in-repo comments; FIXED** - the root cause above |
+| 4 | `ReservoirTakesSlot(baseId, ...)` masks off the decoy bit, so a target and its paired decoy draw identically at every k | **CONFIRMED from the code; FIXED** - the draw now takes `seenKey` in both files |
+| 8 | `AssertEveryTaskCarriesTheSuffixesItNeeds` never built the new suffix, so any of the 3 hand-wired call sites could be deleted green | **FIXED** - walk extended with the same exemption shape |
+| below-cut | braceless `if` with a two-line body (STYLEGUIDE) | **FIXED** |
+| below-cut | duplicated k=1 assertion under a comment claiming a property finding 1 falsified | **FIXED** - duplicate removed, comment corrected |
+
+Still open, in rough priority order:
+
+* **(2) `RunStreamingFirstPass` hand-builds `trainConfig`** and drops `UseGradientBoostedTrees`,
+  `GbtParams` and `NThreads` instead of calling `PercolatorConfig.CloneForTrainOnly()`, so
+  `--fdr-method gbdt` on the lean counts-only path silently trains AND scores a linear SVM while
+  the same run on a smaller join gets real trees. **Pre-existing, not from this branch**, but it is
+  a wrong-answer defect and deserves its own issue.
+* **(3) the selection is read from a process-wide static with no pass parameter**, so it governs
+  SECOND-pass and per-file-rescore training too, where gap-fill rows are target-only and resolve to
+  a synthetic zero-feature vector (`ParquetIndex = uint.MaxValue` -> `(int)` -> -1 ->
+  `BuildBasicFeatures`). Under the maximum those rows never won; under a reservoir each wins with
+  probability 1/k, contaminating the pass-2 discriminant asymmetrically. Needs either a pass-scoped
+  parameter or an explicit exclusion of synthetic rows from training.
+* **(5) `--input-scores` multi-path form is NOT sorted** (`Program.cs:616` sorts only the
+  single-directory branch), so the doc claim "the input file list is ordered, which it is" is false
+  for that form, and file order is not in the validity key.
+* **(7) the `StripDecoys` derived-library cache is keyed on mtime**, and `ExtractToFile` restores
+  the ZIP ENTRY's timestamp, so a machine that derived from v2 AFTER the v3 zip's build stamp
+  reuses the stale v2 library. Verified the mechanism on this machine (extracted v3 tsv carries a
+  2026-08-19 23:58 UTC stamp, not "now"); tonight's run re-derived correctly so no golden was
+  poisoned, but the hazard is real. Fix: key the derived name on the acquisition marker.
+* **(10) `TrainPickRun` is a `static readonly` field**, breaking this file's own documented
+  settable-property convention for A/B arms, so the `=0` arm has no test coverage and
+  `TestEveryPathSamplesARun` fails on any machine with the variable exported.
+* **(11)** the LibraryUrl marker is renamed into place before the payload is proven to be a zip,
+  and nothing asserts the extraction yielded `$Spec.Library`; also the extraction sits outside the
+  marker check so 2.53 GB is re-extracted on every invocation (twice under `-Dataset All`).
+* **(12)/(13)** `IsNotZero` is an exact `!= "0"` test, and the maxtrain half keys on PRESENCE
+  rather than resolved behaviour.
+* **(14)** `bestScores` is allocated and filled full-N but never read on the default path
+  (~656 MB dead at 82 files, ~4 GB at 500).
+* **(15)** `docs/07-fdr-control.md`, `docs/16-determinism.md` and `docs/20-command-line.md` still
+  describe the retired maximum, including a C#/Rust parity claim this change breaks.
+
+**Refuted and recorded so nobody re-litigates it**: the mixer itself is sound. The reviewer
+reproduced `ReservoirTakesSlot` at 64-bit width - P(take at k) matches 1/k, the winner is uniform
+for K in {2,3,4,5,82}, decisions decorrelate across k including k<->2k, modulo bias ~k/2^64. Every
+defect is in how the sampler is WIRED IN, not in the sampler.
+
 ## Tasks
 
 - [x] Separate the work onto its own branch (it was sharing another topic's branch)
