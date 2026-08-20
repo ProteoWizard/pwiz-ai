@@ -2890,3 +2890,93 @@ PerFileRescoring + SecondPassFDR (~6.2 h) - the first apples-to-apples PASS-2 co
 the historical pass-2 baselines (ours 38,776 @ 0.761%, Mike 43,754 @ 0.745%, Mike +12.8%). Those
 historical figures used mean-best-6, so lever-vs-historical mixes two changes; the clean
 single-variable statement will be ours-with-lever vs Mike-with-lever, both from this run.
+
+### 2026-08-19 (evening) - PASS 2, valid at last: our library with the lever exceeds Mike's historical figure
+
+**A resume trap that invalidates pass-2 measurements, found the hard way.** The protein-compact
+stratum is built in FirstPassFDR and published IN MEMORY
+(`ctx.Publish(new ProteinCompactStratum(...))`, FirstPassFdrTask) - never written to disk. A
+`-Resume` that skips FirstPassFDR ("outputs valid") therefore leaves SecondPassFDR with no
+stratum, the stratified competition silently does not run, and **pass-2 output comes out
+numerically identical to pass-1**. No error, no warning.
+
+Three independent symptoms, all present in the discarded attempt:
+* no `competition CONSTRAINED to the ...-base_id protein stratum` line in the log;
+* pass-2 experiment == pass-1 experiment to the precursor (44,117 both);
+* PerFileRescoring 19 min instead of 2h39m - it skipped the stratified work.
+
+That third one also **retracts a claim made earlier today**: the 19-minute rescoring was NOT
+evidence that the mid-August streaming work gave an 8x speedup. A valid run measured
+**9568 s = 2h39m**, matching the README's 2h39m/2h42m exactly. The README timings are correct and
+must NOT be "updated".
+
+**Worth filing as a product defect**: either persist the stratum beside the other FirstPassFDR
+artifacts, or hard-fail when protein-compact reaches SecondPassFDR without one. Resuming a long
+run to save time is the obvious thing to do, and it silently produces wrong pass-2 numbers.
+
+**The valid result** (82 files, ours, uniform reservoir, protein-compact + max, full pipeline in
+one process, stratum 7,201 proteins / 809,256 base_ids over 96,791,097 reconciled survivors):
+
+| arm | config | discoveries at matched true FDP |
+|---|---|---|
+| ours, historical | mean-best-6 + transfer | 38,776 @ 0.761% |
+| Mike delivered, historical | mean-best-6 | 43,754 @ 0.745% |
+| **ours + lever** | protein-compact + max | **48,353 @ 0.750%** |
+
+**+24.7% over our own historical number, and +10.5% over Mike's** at matched FDP. At nominal 1% q:
+ours 54,552 @ 1.539% vs Mike's protein-compact baseline 51,116 @ 1.561% - **+6.7% at essentially
+identical FDP**.
+
+**Caveat that must travel with these numbers**: ours-with-lever vs Mike-HISTORICAL mixes three
+changes (lever, pass-2 mode, aggregation). The clean single-variable comparison is ours-with-lever
+vs Mike-with-lever, which is running. The lever gave Mike's library +18.7% at pass-1 experiment
+scope, so his pass-2 arm should rise too and the gap may not stay in our favour. Parity is the
+honest expectation; an advantage would be a bonus.
+
+Pass-2 FDP is inflated in both arms (1.54% vs pass-1's 0.85%) - the known pass-2 recalibration
+issue - which is exactly why matched-FDP is the comparator rather than the count at nominal q.
+
+### Code: the projection path now honors the lever
+
+`OSPREY_TRAIN_PICK_RUN` previously worked only on `RunStreamingFirstPass` and HARD-FAILED on
+`RunStreamingIntoProjection`, so its behaviour depended on whether the output directory already
+held projections - the same command could work or abort. Now implemented on both.
+
+Notes on the implementation, since the obvious version is wrong:
+* the run each row came from is read off a cursor over the existing `fileStart[]` (rows arrive in
+  (file, row) order, so it is O(1) amortized) rather than an `int[] fileOfRow`, which would be
+  **552 MB** at an 82-file join;
+* the reservoir's seen-counts live in their own dictionary, allocated only when the lever is on,
+  so the default path keeps the value types and memory it always had;
+* the count is keyed on `base_id | decoy-bit` so target and decoy draws stay independent;
+* the guard survives but narrowed - it fires only with the lever on, `fileStart` absent, AND a
+  real collapse, and its message now says this is an Osprey defect rather than a user error,
+  because a user can no longer cause it.
+
+581 tests green, zero-warning inspection. `regression.ps1 -Dataset Stellar` against THIS build is
+still owed - the last green gate predates the projection-path change.
+
+### stellar-libdecoy-v3.zip built, validated and published
+
+New Stellar libdecoy library generated with current Carafe (similarity gate ON, I/L collision
+rejection), `-OspreyExe` pinned to the snapshot. Build took **15 min**, not the guide's ~1 h.
+
+The validation that matters, since an exact-string audit cannot see this class of defect:
+
+| library | exact entrapment-target collisions | I/L-normalised collisions |
+|---|---|---|
+| v2 (shipping) | 0 | **21** (0.0096%) - DLIDLLK, EILLEER, ELAELLR, ... |
+| **v3 (new)** | 0 | **0** |
+
+Both look clean on an exact audit; only the I/L-normalised check separates them. Library validated
+end to end by its own Stage 6 search (7,314 / 10,515 / 8,901 precursors per run, 8,419 experiment).
+
+Zip is 257.9 MB, three flat entries with the v2 names, so it is a drop-in. Uploaded by Brendan and
+verified server-side: 270,441,262 bytes (byte-identical length to local), zip magic `50 4B 03 04`,
+range requests supported.
+
+**Still to wire**: `regression.ps1` acquires the library as a `NestedZip` INSIDE the mzML bundle,
+and acquisition is skip-if-present on the extracted root - so a machine with the v2 tree will not
+pick up the new library. Needs a `LibraryUrl` key on the dataset spec that downloads into
+`LibraryFolder` when the expected file is absent. Then a golden re-baseline for StellarLibDecoy,
+since the new library changes decoy/entrapment sequences.
