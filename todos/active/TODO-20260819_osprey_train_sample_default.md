@@ -328,6 +328,44 @@ weighted runs by candidate count and discarded the best peak, and neither of tho
 This retires the caveat that the headline number was measured on a superseded sampler. The PR body
 now quotes these numbers.
 
+### THE FULL 82-FILE PASS-1 GRID (all six arms re-read from disk 2026-08-20 03:45)
+
+Brendan's naming: `pickrun2` = the peak-level draw, `pickrun3` = the shipped run-level draw.
+Pass-1, experiment scope, agg=max. `n@1% q` is the count at nominal 1% q; the FDP column is what
+that q actually bought, and it is what makes the count readable.
+
+| arm | agg | n@1% q | FDP at that q | @0.650% | @0.750% | @1.000% |
+|---|---|---|---|---|---|---|
+| ours baseline | max | 34,552 | 0.7497% | 33,789 | 34,552 | 35,533 |
+| ours pickrun2 | max | 44,117 | 0.8532% | 42,131 | 42,982 | 45,252 |
+| **ours pickrun3** | max | **45,943** | **0.7460%** | **44,609** | **45,943** | **48,166** |
+| mike baseline | max | 37,448 | 0.8695% | 34,708 | 36,143 | 39,144 |
+| mike pickrun2 | max | 43,436 | 0.7547% | 41,204 | 42,989 | 47,154 |
+| **mike pickrun3** | max | **43,103** | **0.8960%** | 40,584 | 41,563 | 44,082 |
+
+Source run dirs: `...-cleanbase-n82` (ours baseline), `...-20260814_121043` (mike baseline),
+`...-lever-pickrun2-{ours,mike}-n82`, `...-runlevel-corrected-{ours,mike}-n82`. The four pre-existing
+rows reproduce the prior session's table to the digit.
+
+**The nominal-q column adds something the matched-FDP columns do not**: it shows the two libraries
+move in opposite DIRECTIONS on both axes at once.
+
+* **ours: pickrun3 strictly dominates pickrun2** - more IDs (45,943 vs 44,117) at LOWER true FDP
+  (0.7460% vs 0.8532%). No trade to argue about.
+* **mike: pickrun3 is strictly dominated by pickrun2** - fewer IDs (43,103 vs 43,436) at HIGHER FDP
+  (0.8960% vs 0.7547%). The curve itself is worse, not just the operating point.
+
+Gain over each library's own baseline at 0.750%:
+
+| | pickrun2 | pickrun3 |
+|---|---|---|
+| ours | +24.4% | **+33.0%** |
+| mike | +18.9% | **+15.0%** |
+
+pickrun2 helped both libraries similarly and left them at parity (within 7 precursors). pickrun3
+splits them. **The size of the give-back on Mike's side is the part worth replicating before
+leaning on it** - one run per arm, though batch composition is controlled (identical 82 files).
+
 ### Like-for-like library comparison on the SHIPPED sampler (03:38, 64.5 min, exit 0)
 
 `seaad-82files-libdecoy-r1.0-protein-compact-runlevel-corrected-mike-n82`. Same 82 files, same
