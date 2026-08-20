@@ -4210,6 +4210,10 @@ sweep. Two already caught this way: Agilent pump chromatograms emitted for IMS f
 MIDAC path emits none (fixed 2026-08-12), and Bruker's duplicate `dataProcessing` (fixed
 `80a6248d85`).
 
+The mirror case - where **cpp** emits more and we have decided not to reproduce it - is recorded
+in "Standing record: cpp-side defects we deliberately do not reproduce" at the end of this file.
+Check both before treating any `differs` file as unexplained.
+
 `ai/.tmp/parity-scripts/cs_surplus.py <results.jsonl>` classifies every diff by direction and
 prints the surplus files by vendor and category. **Run it after every sweep and refresh the table
 below** - it is a few seconds of work and it is the only inventory of this class.
@@ -4647,3 +4651,407 @@ argument - only that one was rejected, at parse time, with nothing built.
 
 pwiz-sharp: Agilent 15, Sciex 8, Shimadzu 2, Thermo 15, Mobilion 2, Bruker 14, Common 58,
 MsData 81, Waters 21 - all green. cpp `Reader_Agilent_Test` green in the cpp checkout.
+
+## 2026-08-19/20: both sweeps re-run, and three fixes the sweeps could not see
+
+### Sweep results
+
+Both sweeps from the 08-17/18 entry were re-run against refreshed snapshots
+(`G:\parity\msconvert-snapshot` 08-19, `msconvert-cpp-snapshot` 08-18).
+
+| sweep | identical | differs | cs-failed | cpp-failed | both-failed |
+| --- | --- | --- | --- | --- | --- |
+| default, 08-14 (baseline) | 383 | 39 | 1 | 33 | 34 |
+| default, 08-18 | **399** | 23 | 1 | 19 | 48 |
+| peakPicking, 08-17 | 274 | 108 | 29 | 19 | 60 |
+| peakPicking, 08-19 | **379** | 28 | 3 | 19 | 61 |
+
+`G:\parity\results-20260818-default.jsonl`, `G:\parity\results-20260819-peakpicking.jsonl`.
+
+**Default: +16 identical, every one of them `differs -> identical`** - Agilent 6, Sciex 6,
+Mobilion 4. That is the four vendor parity fixes plus the Sciex `hasHalfSizeRTWindow`
+regression fix, measured for the first time; the 08-17 default run was stopped at 246/492
+and never saw them.
+
+**The other 14-file move is parity gained, not lost.** `cpp-failed` fell 33 -> 19 while
+`both-failed` rose 34 -> 48, and all 14 are C# now refusing a file cpp already refused.
+Before, C# silently converted `OnyxTOFMS.wiff2`, `250814_ZTScan_100spd_A_3_G1.wiff2` and
+nine Shimadzu `.lcd` files that cpp aborts on with "unable to determine instrument model"
+/ "unable to parse instrument model". That is `UnknownInstrumentIsError` reaching the
+readers, so `both-failed` is the correct destination and the bucket name reads worse than
+the result is.
+
+**peakPicking: +105 identical**, from the vendor-fallback fix (`6634981b45`). 91 moved
+`differs -> identical` and 14 `cs-failed -> identical`: Sciex 55, Agilent 39, Waters 8,
+Mobilion 3. `cs-failed` 29 -> 3. A further 12 moved `cs-failed -> differs` - files that
+now convert but do not yet match - which is why `differs` did not fall as far as
+`cs-failed` did.
+
+Remaining default `differs` (23): Shimadzu 10, Agilent 9, Thermo 2, Bruker 1, Sciex 1;
+164 `cvParam value differs`, 17 `cvParam extra in C#`, 12 binary values, 10
+`run/@startTimeStamp`. Remaining peakPicking `differs` (28) add Mobilion 4 and Waters 1
+and are a different family: 577 `spectrum/@defaultArrayLength` and 56
+`child count (spectrum)` dominate, so the peakPicking remainder is a spectrum-count and
+array-length problem, not the metadata problem the default remainder is.
+
+The three peakPicking `cs-failed` that remain:
+
+- `ABI\no-spectra\2020-06-09 BAK 270 optimization.wiff` - `Idx - could not be found`
+  (`STG_E_FILENOTFOUND`). Also the default sweep's only `cs-failed`, where C# writes 4 of
+  the 10 runs cpp writes and then aborts.
+- `Thermo\20May24_P3_LHS_line_003.raw` - NullReferenceException, with msconvert
+  suggesting `--continueOnError`.
+- `Waters\T0016P01_Gly_11122019_1.raw` - throws inside `Converter.WriteOutput`.
+
+### build.bat was parking MSBuild nodes that later builds mis-evaluated (`979660e18c`)
+
+The native Hardklor step runs Visual Studio's `MSBuild.exe`; every .NET project after it
+is built by the SDK's own MSBuild. With node reuse on, the first step parks worker
+processes the later `dotnet` builds connect to, and a node from one MSBuild version
+evaluating a project for another mis-evaluates items: the SDK's default `**/*.resx` glob
+reaches `GenerateResource` unexpanded and `Skyline.csproj` dies with MSB3552, **but only
+when built as a project reference**.
+
+The symptom is worth recording because every obvious isolation test says the opposite.
+It failed inside the script every time, at TestRunner - the last project, and the one
+whose reference to Skyline triggers the rebuild - while building that same project
+standalone passed, and building all seven by hand in the same order with the same
+arguments also passed, because that sequence has no Hardklor step. Standalone runs fail
+only when a stale node happens to be alive. **The nodes outlive the build**: one on this
+machine was 6.9 days old, so a CI agent accumulates them across runs and sees
+intermittent MSB3552. Verified by running the full suite with `MSBUILDDISABLENODEREUSE`
+unset, so the flag alone was doing the work.
+
+### SkylineCmd could not load Skyline at all on net8 (`fb541bf0c3`)
+
+`SkylineCmd.exe` failed on **every** invocation, not just under test: even `--version`
+died with "Could not load file or assembly 'Skyline-daily'" while `Skyline-daily.dll` sat
+in the same directory. `TestCmdLineAssociateProteins` and the four `Console*`
+command-line tests were reporting a broken CLI, not a broken feature.
+
+The port had corrected the file NAME - the `.exe` is an apphost, so it loads
+`Skyline-daily.dll` - but kept `Assembly.Load(AssemblyName)`, whose own comment states
+the assumption it inherited: "probing finds the .exe next to this one". .NET does not
+probe the application directory. It resolves through the RUNNING app's `deps.json`, and
+Skyline is deliberately not a dependency of SkylineCmd; it is discovered at run time. So
+the name-based load could never have succeeded.
+
+Fixing that exposed the same problem one level down: `Skyline-daily` loaded and then
+failed on `pwiz.PortableUtil`, because loading an assembly by path does not bring its
+dependency graph with it. `AssemblyDependencyResolver` reads `Skyline-daily.deps.json`,
+the only thing that knows that graph, and feeds `AssemblyLoadContext.Default.Resolving`.
+Loading into the DEFAULT context keeps everything in one context - what net472 got from
+probing, without the mark-of-the-web refusal that ruled out `LoadFrom` there. net472 is
+untouched. `TestCmdLineAssociateProteins`, `ConsoleBadRawFileImportTest`,
+`ConsoleImportNonSRMFile`, `ConsoleMultiReplicateImportTest` and `TestCommandLineNoJoin`
+now pass in English and French.
+
+### The net8 output directory was not self-contained: no VC++ runtime (`843bb777ec`)
+
+The vendor readers are native and P/Invoked by name, and they import the VC++
+redistributable: `MassLynxRaw`, `hdf5` and `MascotShim` all need `msvcp140`,
+`vcruntime140` and `vcruntime140_1`. `Jamroot.jam` has always handed the C++ build the
+same set as `.msvcrt-x64` `<assembly-dependency>` entries; the net8 build had no
+equivalent, so its output was only self-contained on a machine that happened to have the
+redistributable installed.
+
+The parallel test workers are exactly such a machine: they run Skyline straight out of
+the bind-mounted host tree inside a Windows container with no redistributable, which is
+why every Waters, mzMLb and Mascot test failed there while passing on the host - **23 of
+the 24 failures in the last full-suite run**. The error is `ERROR_MOD_NOT_FOUND` (126),
+which names neither the missing dependency nor the DLL that wanted it, so it reads as the
+vendor DLL being absent when it is present and its dependency is not. Same class as the
+Agilent `BaseTof.dll` finding, now generalised.
+
+`VendorNativeCrt.targets` carries the same 50 files as Jamroot's `.msvcrt-x64` and is
+imported by Skyline and by msconvert, which needs them for the same reason. It lives next
+to the DLLs it copies so it self-locates and importers need no root property. **Keep it in
+sync with `Jamroot.jam`.** Verified by loading all three DLLs inside a container with the
+same bind mount: `ERROR_MOD_NOT_FOUND` before, `err=0` after. The check must use
+`LOAD_WITH_ALTERED_SEARCH_PATH` - a plain `LoadLibrary` resolves dependencies against the
+CALLING process's directory, not the DLL's, so it fails even when the CRT is staged
+correctly.
+
+### Still open
+
+- **`TestAiFolderIsSubmodule` is the one red test in the local pass0 run** (08-20,
+  `ai/.tmp/pass0-repro.log`, one failure across 623 tests). `C:\dev\pwiz-net8\ai` exists
+  but holds only `.tmp\`, and `AiFolderTest` fails any `ai` folder without a `.git` inside
+  it. `ai` is not in `.gitmodules` - it is a nested clone - so this is worktree setup, not
+  product. Clone `ai` into the net8 worktree or move the scratch folder.
+- **`global.json` still triggers no CI.** It matches no pattern in
+  `scripts/misc/vcs_trigger_and_paths_config.py`, so a change to the SDK pin builds
+  nothing. Add `("global.json", targets['CoreNet'])` before the `pwiz-sharp/.*` entry
+  (line 131).
+- **`MsData.Tests` cannot build** - pre-existing CA2022/CA2263 analyzer errors in three
+  untouched test files. Still blocking the natural regression suite for shared-writer
+  changes.
+- **Instrument-model translation**: Agilent landed in the 08-18 entry; Mobilion
+  (`Agilent 6545` -> `QTOF`) is still unowned.
+- **TeamCity artifact paths** must point at `bin/staging-net8/<Config>/*.zip`.
+- **The cpp branches in `C:\dev\pwiz-waters`** still have no decision on how they go up.
+
+## 2026-08-20b: the container-only graph/UI cluster root-caused - the DockPanel never fills
+
+### The cluster is 11 tests, container-only, and it is not new
+
+The full-suite run at `843bb777ec` had 11 English failures, all of them on parallel
+clients 0/1/2 - **none on the host worker**. TeamCity `ProteoWizard_SkylineWindowsNet`
+build #143 on that same commit is **1755/1755 green**, because CI runs sequentially and
+never enters a container. The same 11 were already listed on 2026-07-08 as "Graph/UI that
+differ in container" and never root-caused; today's list is that list, minus
+`TestCommandLineNoJoin` (fixed by the SkylineCmd loader change `fb541bf0c3`) plus
+`TestSmallMolMethodDevCEOptTutorial`.
+
+**They are not a parallel-contention artifact.** `TestSplitGraph` and `TestArrangeGraphs`
+fail identically in a **standalone** container with no other workers running:
+
+```
+docker run --rm -m 4g -v "%USERPROFILE%\Downloads":c:\downloads -v "C:\dev\pwiz-net8":c:\pwiz ^
+  chambm/always_up_runner ^
+  "c:\pwiz\...\staging-net8\Release\dotnet\dotnet.exe c:\pwiz\...\staging-net8\Release\TestRunner.dll ^
+   test=TestSplitGraph parallelmode=off loop=1 language=en offscreen=on log=c:\pwiz\TestRunner-probe.log"
+```
+
+Note the harness passes the command as a single quoted argument to the image's entrypoint,
+which hands it to AlwaysUp's `InstallService`; **the executable needs a full path**
+(a bare `powershell` gives "Unable to access executable/application").
+
+### What actually differs, measured
+
+Instrumenting `SplitGraphTest` to dump geometry at the failing assert:
+
+| | container | host |
+| --- | --- | --- |
+| screen | 1024x768 | 2560x1440 |
+| SkylineWindow bounds | 742x541 | 872x632 |
+| **ClientSize** | 856x593 | 856x593 |
+| **DockPanel size** | **233x123** | **859x520** |
+| DockLeft / DockRight pane | 54x123 | 210x520 |
+| Document pane (GraphChromatogram) | 115x100 | 429x494 |
+| ZedGraph chart rect | **-5.3 x -145.5** | 325.7 x 271.5 |
+| XAxis Scale.Max / MajorStep | **50 / 50** | 35 / 5 |
+
+The assertion `Assert.AreEqual(...XAxis.Scale.Max, 35.0, 1.0)` fails as "expected 50, actual
+35" because the chart rect is degenerate, so ZedGraph picks a single 50-unit step.
+
+**Two independent differences, and only the second one matters.**
+
+1. **No theme in the container session.** `SystemFonts.MessageBoxFont` is
+   `Microsoft Sans Serif 8.25` there vs `Segoe UI 9` on the host (`SystemFonts.DefaultFont`,
+   installed fonts, `Graphics.MeasureString` and DPI are all identical - fonts are NOT
+   missing). `SkylineWindow` is `AutoScaleMode.Font` with `AutoScaleDimensions = 7,15`, so
+   the container scales the whole form down: 742x541 instead of 872x632.
+   Pinning `Application.SetDefaultFont(new Font("Segoe UI", 9f))` in `Program.Init()` makes
+   the container's window 864x620 and its **ClientSize exactly equal to the host's**.
+   It does **not** fix any of the tests.
+
+2. **The DockPanel never gets sized to fill its parent.** `panel1` is `Dock=Fill` and is
+   correctly 856x519 in both. The `dockPanel` inside it is anchored
+   `Top, Bottom, Left, Right` at `Location (-1,0)` with `Size 736x444` **from
+   `Skyline.resx`** (`resources.ApplyResources(this.dockPanel, "dockPanel")`,
+   `Skyline.Designer.cs:183`). On the host it ends up 859x520. In the container it sits at
+   **233x123 = `Control`'s default 200x100, font-scaled** - i.e. `ApplyResources` set
+   `Anchor` and `Location` (both verified correct at runtime) but the control never took the
+   736x444 `Size`, so its anchor deltas are computed from 200x100 and it can never grow.
+
+**Nothing re-triggers the layout.** `SkylineWindow.PerformLayout()`, `panel1.PerformLayout()`,
+`dockPanel.ResumeLayout(true)` and a +1px/-1px form resize nudge all leave it at 233x123.
+
+**Forcing the size fixes the test outright.** In the container:
+
+```
+SkylineWindow.DockPanel.Size = SkylineWindow.DockPanel.Parent.ClientSize;
+SkylineWindow.DockPanel.PerformLayout();
+```
+gives `graphFormBounds 426x496`, `chartRect 322x273`, **`xMax = 35`** - matching the host's
+429x494 / 326x271 / 35. That is the whole cluster in one line.
+
+### The one open link
+
+Why `ApplyResources` applies `Anchor` and `Location` but not `Size`, **deterministically per
+environment** (container fails 100%, host passes 100%), is not yet explained. It is not a
+resource-loading failure: a direct
+`new ComponentResourceManager(typeof(SkylineWindow)).GetObject("dockPanel.Size")` returns
+`736x444` **inside the container**, with `uiCulture=en-US`, `culture=en-US`,
+`invariantMode=False`. So the value is present and readable; it just does not reach the
+control. Next probe: log `dockPanel.Size` immediately after `InitializeComponent()` in both
+environments to find whether it is never set or set and then reset.
+
+### Fix options (not yet chosen)
+
+- **Size the dock panel explicitly** at startup (`dockPanel.Size = panel1.ClientSize`, or
+  switch it from `Anchor` to `Dock=Fill`). Verified to fix the symptom; `Dock=Fill` is what
+  the anchor is emulating anyway and would remove the dependency on `ApplyResources` order.
+- **Pin the WinForms default font** for determinism (`Application.SetDefaultFont`). Makes
+  host and container agree on window/client size; on the host it is a no-op (already
+  Segoe UI 9). Not sufficient alone. net8-only API - needs `#if !NET472`.
+- **Exclude the 11 with `[NoParallelTesting]`.** Lowest effort, loses container coverage,
+  and leaves a real layout bug in the product.
+
+### Also settled today
+
+- **`TestAiFolderIsSubmodule` was already fixed and the handoff was stale.**
+  `C:\dev\pwiz-net8\ai` is a **junction to `C:\dev\pwiz-ai`** created at **10:29:34 on
+  08-20** - one minute after the handoff that describes it as broken was written. The
+  junction target has a `.git`, so the test passes now. It is not a stub holding only `.tmp`.
+- **The junction is invisible inside the containers.** `-v "C:\dev\pwiz-net8":c:\pwiz` cannot
+  follow a junction whose target is outside the mount, so `c:\pwiz\ai` does not resolve.
+  Anything staged under `ai/` is unreachable from a worker - put container-visible scratch
+  files elsewhere in the tree.
+
+## Standing record: cpp-side defects we deliberately do not reproduce
+
+The mirror of the C#-surplus record above. When cpp emits something C# does not, the default
+reading is a porting gap - and it usually is. The exception is a cpp output that is demonstrably
+wrong AND that cpp itself contradicts depending on how it is invoked. Reproducing those would
+mean porting a defect to turn a corpus cell green, which is the wrong trade: the sweep exists to
+find real differences, not to make the numbers agree.
+
+**Do not chase anything in this list.** These inputs will read `differs` until the cpp fix ships,
+and that is the expected state, not a regression. Anything added here needs the same standard of
+evidence as the entry below: the full extent measured with the diff budget lifted, and a
+demonstration that cpp disagrees with itself.
+
+### IMS vendor-fallback emits a fabricated leading zero sample (2026-08-20)
+
+Under `--filter "peakPicking vendor ..."`, Agilent and Mobilion ion-mobility data make cpp emit
+one extra **zero-intensity** point at the FRONT of every spectrum that has a leading zero to pad.
+It is the entire remaining difference on those files.
+
+| input | reader | spectra | cpp has 1 extra leading zero | identical |
+| --- | --- | ---: | ---: | ---: |
+| `ImsSynthCCS.d` | Agilent | 701 | **701** | 0 |
+| `...NISTmAbOxidized[DC5].d` | Mobilion | 237,206 | **237,202** | 4 |
+
+Nothing else differs in the binary data - not one value, not one m/z. The only other diff on the
+Agilent file is the `MS:1000529 instrument serial number` cvParam already recorded above as a
+deliberate C# surplus.
+
+**Why this is cpp's defect and not our gap.** The extra sample is synthesized by
+`ZeroSampleFiller`'s left-padding: on `ImsSynthCCS.d` it lands at m/z 174.0201, one sample step
+BELOW the file's own observed minimum of 174.02766, carrying intensity 0. cpp is reporting a data
+point that does not exist in the acquisition and that falls outside the m/z range cpp itself
+declares. Decisively, **cpp only does this on one of its two peak-picking paths**:
+
+| filter | cpp | C# |
+| --- | ---: | ---: |
+| `peakPicking false 1-` | 66 | 66 - byte-identical |
+| `peakPicking vendor msLevel=1-` | **67** | 66 |
+
+Same file, same spectrum, same detector. cpp agrees with us exactly when the vendor attempt is
+skipped, and gains a fabricated point when it is attempted and declined (Agilent and Mobilion IMS
+cannot vendor-centroid; cpp prints its own "falling back to local maximum peak picker" warning).
+A tool that contradicts itself between two spellings of the same request is not stating a
+convention.
+
+**Everything shared was cleared by measurement first**, so this is not a shortcut around an
+unfound bug:
+
+| suspect | verdict | how |
+| --- | --- | --- |
+| `ZeroSampleFiller` | exonerated | cpp's own 7 oracle vectors ported to `ZeroSampleFiller_FillsInteriorGapsAndTermini`; all pass |
+| backward-pass `oob` (`y.size()` vs grown `yFilled.Count`) | irrelevant | a faithful transcription of cpp's source, run on the real spectrum under BOTH semantics, gives 66 either way |
+| `LocalMaximumPeakDetector` | exonerated | same window (`LocalMaximumPeakDetector(3)`); sources byte-identical between checkouts |
+| `TrimProfileZeros` | exonerated | raw unpicked arrays identical - n=71, same leading zero, same m/z |
+
+Note the transcription of cpp's source produces **66**, matching C#. The C# port implements the
+documented algorithm correctly; it is the cpp binary that departs from it.
+
+**Decision (user, 2026-08-20): keep C# as-is and fix cpp.** The cpp branches are in
+`C:\dev\pwiz-waters` (`origin` there is the pete-reay-waters fork - use `upstream`). Until that
+ships, ~10 corpus inputs stay in `differs` on the peakPicking sweep for this reason alone: 7
+Agilent (`ImsSynthCCS/AllIons/Chrom.d`, `mulATM4.d`, `mulATM4.d.DeMP.d`, `Test_BsaFromUimf.d`,
+`Dorrestein_...Min20_1.d`) and 3 Mobilion. The two Agilent files WITHOUT the +1
+(`20fmolBSA-centroid.d`, `Neg_MS_002.d`) are the non-IMS ones and are unrelated.
+
+**The sweep understates this by two orders of magnitude.** `mzml_compare.compare()` takes
+`budget=80` and `break`s out of the comparison loop on reaching it, and `run_parity2.py:153`
+stores only `diffs[:60]` - so the `diff list truncated` marker, which lands at index 80, is never
+written to the jsonl and a truncated file is indistinguishable from a fully compared one. For
+`ImsSynthCCS.d` the sweep recorded `spectra=75` against an actual 701; for the Mobilion file, ~76
+against 237,206. **15 of 28** peakPicking `differs` files hit the budget (all 8 Agilent, all 4
+Mobilion, plus Bruker, Shimadzu and Waters), as do 3 of 23 on the default sweep. Every
+"remaining differs" count for those vendors is a floor from a partial comparison, and the
+per-category totals in earlier entries are sums over truncated lists.
+
+**Fixed 2026-08-20 in `mzml_compare.py` + `run_parity2.py`.** The cap conflated "how much to
+compare" with "how much to record". `compare()` now always scans the whole file and separates the
+two: `stats["categories"]` carries the TRUE count per category, and the returned list keeps only
+the first `examples_per_category` (3) of each. `budget` is still accepted, because several scripts
+pass it, but now caps only the retained examples and never the scan. Also added
+`records_compared`, `records_truncated` and `diff_total`, and removed `MAX_BINARY_REPORT`, whose
+stripping is what made `binary_diffs: 1402` print alongside 4 reported binary diffs.
+`run_parity2.py` stores the example list whole and takes `diff_count` from `diff_total`.
+
+Measured on the same pair: `ImsSynthCCS.d` now reports `spectra=701` (was 75) and
+`diff_total=2104` (was 81) from **7** retained examples; the Mobilion `[DC5].d` reports 237,206
+spectra and 711,606 diffs from **6** examples. Self-comparison is clean (0 diffs, 710 records) and
+`test_mzml_compare_nan.py` still passes 11/11. **Cost**: a full scan of that 1.6 GB pair takes
+90 s. Only `differs` files pay it - an identical file never reached the old budget, so it was
+always scanned in full.
+
+Numbers in entries ABOVE this line predate the fix and remain floors; do not compare them
+directly against post-fix sweeps.
+
+### The fix: dockPanel.Dock = Fill (uncommitted, under review)
+
+`Dock=Fill`, set **in code** in `Skyline.Designer.cs` after `ApplyResources`, with
+`dockPanel.Anchor` / `.Location` / `.Size` removed from all three `Skyline[.<lang>].resx`.
+
+**The conservative variant does not work, and that corrects the 08-20b diagnosis.** Keeping the
+four-sided anchor and setting `Anchor`/`Location`/`Size` explicitly in code (so nothing depends
+on `ApplyResources`) put every container failure straight back. So the size is **not** "never
+applied" - it is applied and then reset by something later. `Dock=Fill` survives that because it
+re-establishes the size on every layout pass; an explicit size does not. What resets it is still
+unidentified, and is now the only open thread here.
+
+**`Dock=Fill` caused exactly one regression, on the HOST.** `ArrangeGraphsTest` normalizes the
+graph area to 736x443 (`ArrangeGraphsTest.cs:56-57`, *"so dimensions get set the same each run"*)
+by assigning `Parent.Parent.Parent.Width/Height` - a no-op on a `Dock=Fill` control. It kept
+passing in the container only by coincidence: the unthemed container font happens to make the
+filled panel ~736x444 there. Replaced with a `SetGraphAreaSize` helper that resizes
+`SkylineWindow` by the difference, which is deterministic in both environments.
+
+**Two real product/test bugs fell out, both pre-existing:**
+
+- `ComparePeakPickingDlg.zedGraphFiles_Resize` dereferenced `_axisLabelScaler`, which is
+  constructed on the line *after* `InitializeComponent()` - and Resize fires from inside it.
+  Identical NRE stack before and after the layout change; it only became reachable in passing
+  once the panes actually resized. Null-guarded. Took `TestPeakBoundaryCompare` 385s -> 13s.
+- `UnifiFunctionalTest` shares one `DoTest` between `TestUnifi` (a `UnifiAccount`, line 67) and
+  `TestWatersConnect` (line 84), but lines 127-131 did `(_testAccount as WatersConnectAccount)!`
+  unconditionally - the `!` silences the compiler, `as` yields null, NRE. The client
+  id/secret/scope checks are waters_connect-only; guarded with `is WatersConnectAccount`.
+
+### Verification
+
+| run | result |
+| --- | --- |
+| the 11, standalone container | **11/11 pass** |
+| the 11, host | **11/11 pass** |
+| full suite via `build.bat --parallel` (4 workers) | **1 failure: `TestUnifi`** |
+| pass0 build check (French) | **0 failures** (was 8) |
+| import ja/zh, pass1 subset | 0 failures |
+
+All 11 also pass inside the full parallel run, i.e. on the Docker workers. **pass0's 8 failures
+are gone too** - both the `TestAiFolderIsSubmodule` environmental and the 7-test
+`Site20_Study9p.skyd` pooled-stream cascade the previous handoff attributed to unproven
+cross-phase state.
+
+**Watch the exit code, not the notification.** `build.bat` correctly exited **1**; a trailing
+`; echo $?` in the wrapper masked it as 0. The script does print
+`##teamcity[message ... 'TestRunner reported failures in: full-suite' status='ERROR']`, and each
+phase logs its own `if N NEQ 0 (set TESTS_FAILED=1 ...)` line - that per-phase flag is the
+reliable way to attribute a failure to a phase.
+
+`TestUnifi` is **not** a regression: it was **skipped** in the pre-fix run (0 sec, no FAILED
+marker) and actually ran this time (9 sec), which is how the latent cast NRE surfaced. With the
+guard it gets much further and then times out after 360s in `WaitForConditionUI` on
+`OpenDataSourceDialog`, waiting for a remote directory listing - it needs a live, populated UNIFI
+server, so it cannot be driven green here. It is a `TestConnected` test and runs in its own CI
+configuration (`ProteoWizard_SkylineMasterAndPRsTestConnectedTests`), not the net8 per-commit gate.
+
+Changed files (uncommitted): `Skyline.Designer.cs`, `Skyline{,.ja,.zh-Hans}.resx`,
+`TestFunctional/ArrangeGraphsTest.cs`, `EditUI/ComparePeakPickingDlg.cs`,
+`TestConnected/UnifiFunctionalTest.cs`.
