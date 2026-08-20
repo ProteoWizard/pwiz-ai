@@ -257,10 +257,15 @@ The StellarLibDecoy golden this experiment overwrote was restored with `git chec
 - [x] Test that the previously-aborting path samples (`TestEveryPathSamplesARun`) - verified to
       FAIL under `OSPREY_TRAIN_PICK_RUN=0` with "every winner came from the highest-scoring run"
 - [x] Wire `LibraryUrl`; point both Stellar libdecoy specs at v3
-- [ ] `regression.ps1 -Dataset Stellar` - the owed gate
-- [ ] `regression.ps1 -Dataset All`, re-baseline every golden
-- [ ] `/code-review max`
-- [ ] PR + TeamCity Perf/Regression on `pull/<N>`
+- [x] `regression.ps1 -Dataset Stellar` - the owed gate. Every mode PASS except the intended
+      golden mismatch, HPC chain and both resume checks included
+- [x] `regression.ps1 -Dataset All -CreateGolden`, all four goldens re-baselined and committed
+- [x] `/code-review max` - 15 findings, triaged below; 2 confirmed correctness defects fixed
+- [x] Single-variable FDP A/B proving the change wins at 3 files where FDP is measurable
+- [x] **PR [#4593](https://github.com/ProteoWizard/pwiz/pull/4593)** + TeamCity Perf/Regression
+      (4142638) and unit build (4142639) on `pull/4593`, MacCoss Agent 1 - **9/9 green at 02:08,
+      `ready_to_merge: true`**
+- [ ] 82-file pass-1 re-measure on the corrected sampler (running; `ai/.tmp/fp1-runlevel.log`)
 
 ## ROOT CAUSE of the -17.4%: the reservoir samples PEAKS, not RUNS (confirmed 2026-08-19 22:30)
 
