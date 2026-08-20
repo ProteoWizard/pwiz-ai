@@ -90,11 +90,45 @@ models in memory only. `FrozenModelScorer` looks like it wants this too.
       rejection path
 - [x] Logistic golden still bit-identical after the addition
 
-### Phase 5: Pre-review
+### Phase 5: Copilot review feedback (PR #4595)
 
-- [ ] `/pw-self-review`
+All four findings were valid. Fixed in `00d11d7`.
+
+- [x] The binary-label `Train` overload rejects a `GbtParams` whose `Objective` is not
+      `LogisticBinary`. It promises a log-odds margin that callers rank by, and a params
+      instance carried over from a regression call would have fitted squared error to 0/1
+      labels and returned something q-value and PEP estimation cannot consume. The
+      scenario is one this PR itself creates: before it there was no reason to have a
+      non-logistic `GbtParams` in existence.
+- [x] Null checks for `x` and `p`, and a length check for `sampleWeight`, on both
+      overloads. These would have surfaced as an NRE or an index-out-of-range partway
+      through boosting, pointing at boosting internals rather than at the bad argument.
+- [x] `FromModelData` rejects cycles. Range checks alone let `Left[i] = i` through, and
+      `ScoreSingle` would then spin forever rather than fail. The invariant is safe to
+      enforce because `BuildTree` appends a node before recursing into its children, so a
+      child index always exceeds its parent's and the two differ. Leaves must also carry
+      `-1` in both child slots.
+- [x] `MLTest.TestGbtTrainArgumentValidation` covers every rejection path plus the case
+      that must still succeed; `TestGbtModelDataRoundTrip` gains the cycle and stale-leaf
+      cases.
+
+Bit-identity re-verified afterwards, since that is the guarantee the PR turns on: all
+1,925 golden logistic scores still hash to `242558FF...`, identical at 1, 4 and 16
+threads, and the regression fixture's 90 output lines are unchanged as well. Every fix is
+validation that runs before training starts, so this is the expected result rather than a
+lucky one.
+
+`Osprey.Test`: 589/589 on net8.0 and net472, 0 warnings.
+
+### Phase 6: Pre-review
+
+- [ ] `/code-review` on the branch (not yet run, see note)
 - [ ] TeamCity
 - [ ] Human review
+
+**Note**: `ai/WORKFLOW.md` asks for `/code-review <level>` on the branch before the PR is
+opened. That step was missed; both PRs were opened without it. Still worth running before
+requesting human review.
 
 ## Status
 
