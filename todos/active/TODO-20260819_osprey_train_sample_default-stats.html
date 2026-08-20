@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Osprey training-selection evidence</title>
+<style>
+  :root{
+    --bg:#fbfbfa; --panel:#ffffff; --ink:#1a1a19; --muted:#6b6b68; --line:#e3e3df;
+    --accent:#2f5d50; --accent-soft:#eef4f1;
+    --good:#1f6b45; --good-bg:#eaf4ee; --bad:#8c3222; --bad-bg:#fbeeeb; --flat:#6b6b68; --flat-bg:#f2f2f0;
+    --warn:#7a5a12; --warn-bg:#fdf6e3;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#16171a; --panel:#1d1f23; --ink:#e8e8e6; --muted:#9a9a96; --line:#2e3137;
+      --accent:#7fbfa8; --accent-soft:#1f2a27;
+      --good:#7fc9a0; --good-bg:#1a2b22; --bad:#e39684; --bad-bg:#2e1f1c; --flat:#9a9a96; --flat-bg:#232529;
+      --warn:#d9b45f; --warn-bg:#2a2418;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#16171a; --panel:#1d1f23; --ink:#e8e8e6; --muted:#9a9a96; --line:#2e3137;
+    --accent:#7fbfa8; --accent-soft:#1f2a27;
+    --good:#7fc9a0; --good-bg:#1a2b22; --bad:#e39684; --bad-bg:#2e1f1c; --flat:#9a9a96; --flat-bg:#232529;
+    --warn:#d9b45f; --warn-bg:#2a2418;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 24px 96px}
+  header{border-bottom:2px solid var(--accent);padding-bottom:18px}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:14px}
+  .stamp{color:var(--muted);font-size:12.5px;margin-top:10px;font-family:var(--mono)}
+  h2{font-size:19px;margin:38px 0 4px;letter-spacing:-.01em}
+  h2 .n{color:var(--accent);font-family:var(--mono);font-size:14px;margin-right:8px}
+  h3{font-size:15px;margin:22px 0 6px}
+  p{margin:8px 0}
+  .lede{color:var(--muted);margin:2px 0 14px;font-size:14px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:16px 18px;margin:14px 0}
+  .head-line{display:flex;flex-wrap:wrap;gap:14px;margin:18px 0 6px}
+  .kpi{flex:1 1 220px;background:var(--panel);border:1px solid var(--line);
+       border-left:3px solid var(--accent);border-radius:8px;padding:13px 15px}
+  .kpi .v{font-family:var(--mono);font-size:25px;font-weight:600;letter-spacing:-.02em}
+  .kpi .l{color:var(--muted);font-size:12.5px;margin-top:3px}
+  .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:10px 0}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:640px}
+  caption{text-align:left;color:var(--muted);font-size:12.5px;padding:0 0 7px;font-style:italic}
+  th,td{padding:7px 11px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+  th:first-child,td:first-child{text-align:left;white-space:normal}
+  th{background:var(--accent-soft);color:var(--ink);font-weight:600;font-size:12.5px;text-align:right}
+  th:first-child{text-align:left}
+  td.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  td.txt{text-align:left;white-space:normal}
+  tr.best td{background:var(--accent-soft);font-weight:600}
+  tr.sup td{color:var(--muted)}
+  tr.gap td{background:transparent;color:var(--muted);font-style:italic;font-size:12.5px}
+  .d{font-family:var(--mono);font-size:12.5px;padding:1px 7px;border-radius:11px;display:inline-block}
+  .up{color:var(--good);background:var(--good-bg)}
+  .dn{color:var(--bad);background:var(--bad-bg)}
+  .fl{color:var(--flat);background:var(--flat-bg)}
+  .note{border-left:3px solid var(--warn);background:var(--warn-bg);padding:11px 14px;border-radius:0 7px 7px 0;margin:13px 0;font-size:13.5px}
+  .note b{color:var(--warn)}
+  .key{border-left:3px solid var(--accent);background:var(--accent-soft);padding:11px 14px;border-radius:0 7px 7px 0;margin:13px 0;font-size:13.5px}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--flat-bg);padding:1px 5px;border-radius:4px}
+  ul{margin:8px 0;padding-left:20px} li{margin:5px 0}
+  .arm{display:inline-block;font-family:var(--mono);font-size:12px;padding:1px 7px;border-radius:4px;
+       background:var(--flat-bg);color:var(--muted)}
+  .toggle{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;margin:4px 0 2px}
+  .toggle button{appearance:none;border:0;background:var(--panel);color:var(--muted);
+    font:600 12.5px/1 var(--mono);padding:8px 15px;cursor:pointer}
+  .toggle button+button{border-left:1px solid var(--line)}
+  .toggle button[aria-pressed="true"]{background:var(--accent);color:#fff}
+  :root[data-theme="dark"] .toggle button[aria-pressed="true"],
+  :root:not([data-theme="light"]) .toggle button[aria-pressed="true"]{color:#12211c}
+  @media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .toggle button[aria-pressed="true"]{color:#fff}}
+  .toggle button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  .ctx{color:var(--muted);font-size:12.5px;margin-left:12px;font-style:italic}
+  .foot{color:var(--muted);font-size:12.5px;margin-top:40px;border-top:1px solid var(--line);padding-top:14px}
+  @media print{body{background:#fff}.panel,.kpi{break-inside:avoid}.toggle{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Osprey training-selection evidence</h1>
+  <div class="sub">Every measurement behind the first-pass training change &mdash; curated to current best, not a running log.</div>
+  <div class="stamp">Updated 2026-08-20 06:00 PDT &middot; PR #4593 &middot; branch <code>Skyline/work/20260819_osprey_train_sample_default</code></div>
+</header>
+
+<div class="head-line">
+  <div class="kpi"><div class="v">+33.0%</div><div class="l">82 files, pass 1, matched 0.750% true FDP</div></div>
+  <div class="kpi"><div class="v">&minus;0.6%</div><div class="l">worst case at 3 files, same basis</div></div>
+  <div class="kpi"><div class="v">+10.5%</div><div class="l">our library vs Mike's, 82 files, pass 1</div></div>
+</div>
+
+<h2><span class="n">1</span>The three arms</h2>
+<p class="lede">Which single observation represents each precursor in the first-pass Percolator training subset.</p>
+<div class="panel">
+<table>
+  <tr><th>arm</th><th style="text-align:left">rule</th><th style="text-align:left">status</th></tr>
+  <tr><td><span class="arm">baseline</span></td><td class="txt">Best observation across all runs &mdash; the cross-run <b>maximum</b>.</td><td class="txt">pre-26.1 default; still reachable via <code>OSPREY_TRAIN_PICK_RUN=0</code></td></tr>
+  <tr class="sup"><td><span class="arm">pickrun2</span></td><td class="txt">Uniform draw over <b>rows</b>. Pass 1 is pre-compaction, so this weighted each run by how many candidate peaks it produced <em>and</em> left a random candidate as the training row.</td><td class="txt">never shipped &mdash; a mistake, retained only because earlier numbers were measured on it</td></tr>
+  <tr class="best"><td><span class="arm">pickrun3</span></td><td class="txt">Uniform draw over <b>runs</b>, contributing that run's <b>best</b> candidate peak.</td><td class="txt"><b>shipped default</b></td></tr>
+</table>
+</div>
+<div class="key"><b>Why it matters:</b> the maximum makes every training row an extreme value over however many files were batched together, while the model then scores ordinary per-run rows. Mean <code>coelution_sum</code> is 1.19 at one file and 5.75 at 82, against 1.18 in the population being scored &mdash; so the distortion grows with batch size, and so does the benefit of removing it.</div>
+
+<h2><span class="n">2</span>How to read these tables</h2>
+<div class="panel">
+<h3>Pass 1 vs pass 2 &mdash; use the toggle</h3>
+<p>Pass&nbsp;1 is the training change's own scope. Pass&nbsp;2 re-scores against a frozen model with protein-compact stratified competition, and the <code>.blib</code> is written from <em>pass&nbsp;2</em>. A count taken off the blib is therefore <b>not</b> comparable to a pass-1 table &mdash; that mismatch produced one wrong figure in this investigation, corrected in section&nbsp;4.</p>
+<h3>Nominal q vs matched true FDP</h3>
+<p><b><code>n@1% q</code></b> is the count at the reported 1% q cutoff &mdash; what a user actually gets. <b><code>FDP at that q</code></b> is what that cutoff really cost, measured against entrapment. The <code>@0.650% / @0.750% / @1.000%</code> columns re-cut both arms at the <em>same true error</em>, which is the only fair comparison: an arm can always report more identifications by spending more error.</p>
+</div>
+<div class="note"><b>Only entrapment datasets can do this.</b> Plain <code>Stellar</code> and the stock <code>Astral</code> regression spec carry no entrapment, so they have no true-FDP oracle and can only produce raw counts (section&nbsp;5).</div>
+
+<h2><span class="n">3</span>82 files &mdash; SEA-AD Pilot-MTG</h2>
+<p class="lede"><code>protein-compact</code>, agg <code>max</code>, experiment scope. All rows re-read from their run directories.</p>
+<div class="toggle" role="group" aria-label="Select pass for the 82-file table">
+  <button type="button" data-t="f82" data-p="pass1" aria-pressed="true">Pass 1</button>
+  <button type="button" data-t="f82" data-p="pass2" aria-pressed="false">Pass 2</button>
+</div>
+<span class="ctx" id="ctx-f82"></span>
+<div class="scroll">
+<table id="tbl-f82">
+  <caption id="cap-f82"></caption>
+  <thead><tr><th>library / arm</th><th>n@1% q</th><th>FDP at that q</th><th>@0.650%</th><th>@0.750%</th><th>@1.000%</th><th>vs baseline</th></tr></thead>
+  <tbody></tbody>
+</table>
+</div>
+<div class="key"><b>pickrun3 strictly dominates pickrun2 for our library:</b> more identifications (45,943 vs 44,117) at <em>lower</em> true FDP (0.746% vs 0.853%). Both axes move the right way at once, so there is no trade to argue about. For Mike's library the reverse holds &mdash; fewer IDs at higher FDP &mdash; which is why the two libraries separate under pickrun3 and were at parity under pickrun2.</div>
+<div class="note"><b>The libraries swap places between passes.</b> At pass 1 under pickrun2 they are at parity (42,982 vs 42,989). At pass 2 our library is <b>7.7% behind</b> (48,353 vs 52,381) at the same 0.750% true FDP. Pass-2 FDP is inflated in both arms (~1.5% against pass 1's ~0.85%) &mdash; the known second-pass recalibration issue, and why matched-FDP is the comparator rather than the count at nominal q. This swap is a pass-2 effect and is a separate investigation from the training change.</div>
+
+<h2><span class="n">4</span>3 files &mdash; regression datasets with a true-FDP oracle</h2>
+<p class="lede">Every row carries entrapment, so every row can be matched on real error.</p>
+<div class="toggle" role="group" aria-label="Select pass for the 3-file table">
+  <button type="button" data-t="f3" data-p="pass1" aria-pressed="true">Pass 1</button>
+  <button type="button" data-t="f3" data-p="pass2" aria-pressed="false">Pass 2</button>
+</div>
+<span class="ctx" id="ctx-f3"></span>
+<div class="scroll">
+<table id="tbl-f3">
+  <caption id="cap-f3"></caption>
+  <thead><tr><th>dataset</th><th>library</th><th>arm</th><th>n@1% q</th><th>FDP at that q</th><th>@0.650%</th><th>@0.750%</th><th>@1.000%</th><th>&Delta;</th></tr></thead>
+  <tbody></tbody>
+</table>
+</div>
+<div class="key" id="key-f3"><b>At 3 runs the change is a wash</b> &mdash; under 1% on every dataset that can measure error &mdash; against <b>+33.0% at 82</b>. That is exactly what the mechanism predicts: with three draws per precursor there is almost nothing for a cross-run maximum to distort. <b>There is no small-N penalty to design around.</b></div>
+<div class="note"><b>Correction.</b> An earlier report of &ldquo;+6.7% for StellarLibDecoy&rdquo; was presented alongside the 82-file pass-1 table. It came from blib <code>RefSpectra</code> counts, which are written from pass 2 &mdash; the +6.5% row on the Pass&nbsp;2 view. On the pass-1 basis the same dataset is <b>&minus;0.17%</b>. The movement is real but it lives at pass 2, where the two decoy sources move in <em>opposite</em> directions at near-identical FDP.</div>
+
+<h2><span class="n">5</span>Datasets with no oracle</h2>
+<p class="lede">Counts only &mdash; these cannot separate a lost true identification from a suppressed false one.</p>
+<div class="scroll">
+<table>
+  <caption>blib <code>RefSpectra</code> rows, i.e. pass-2 output. Neither dataset uses a Carafe target/decoy/entrapment library, so the delta is purely the training selection.</caption>
+  <tr><th>dataset</th><th>library</th><th>baseline</th><th>pickrun3</th><th>&Delta;</th></tr>
+  <tr><td>Astral (stock regression spec)</td><td class="txt"><code>SkylineAI_spectral_library.tsv</code></td><td class="num">117,719</td><td class="num">117,265</td><td><span class="d fl">&minus;0.39%</span></td></tr>
+  <tr><td>Stellar</td><td class="txt"><code>hela-filtered-SkylineAI&hellip;tsv</code></td><td class="num">29,300</td><td class="num">27,321</td><td><span class="d dn">&minus;6.75%</span></td></tr>
+</table>
+</div>
+<div class="note">The <b>&minus;6.75%</b> on plain Stellar is the number that raised the small-N concern. It is a pass-2 blib count on the one dataset with no entrapment, so it cannot be interpreted on its own &mdash; and every dataset that <em>can</em> measure error puts the pass-1 effect inside &plusmn;1%. Astral, the larger no-oracle dataset at 117k precursors, is flat.</div>
+
+<h2><span class="n">6</span>Decoy source: library decoys vs generated decoys</h2>
+<p class="lede">Same v3 library, same entrapment targets, decoy source the only variable &mdash; <code>StripDecoys</code> removes the library's decoy rows so Osprey generates its own. Baseline arm, pass 1.</p>
+<div class="scroll">
+<table>
+  <tr><th>decoy source</th><th>n@1% q</th><th>true FDP at that q</th><th>@0.750% matched</th></tr>
+  <tr class="best"><td>library decoys</td><td class="num">27,239</td><td class="num">0.775%</td><td class="num">26,982</td></tr>
+  <tr><td>generated decoys</td><td class="num">28,629</td><td class="num">1.229%</td><td class="num">26,935</td></tr>
+</table>
+</div>
+<div class="key"><b>The apparent gendecoy advantage is miscalibration, not sensitivity.</b> Generated decoys report 5% more identifications at nominal 1% q and pay roughly 60% more real error for them. Matched on true FDP the two are within 0.2%. Independent of the training change, and a direct argument for the libdecoy line as best practice.</div>
+
+<h2><span class="n">7</span>What is not measured</h2>
+<div class="panel">
+<ul>
+  <li><b>82-file pass 2 for baseline and pickrun3.</b> Only the pickrun2 pair exists; each additional arm is a full ~5.5 h run. The pass-1/pass-2 library swap is therefore established only under pickrun2.</li>
+  <li><b>Astral 3-file pass 2.</b> Both Astral arms were run as <code>-Task FirstPassFDR</code>, so they have no pass-2 stage.</li>
+  <li><b>Replication.</b> Every 82-file arm is a single run. Batch composition is controlled (identical files on both sides), so the known pool-composition sensitivity is not in play &mdash; but the 3.3% give-back on Mike's library under pickrun3 is the figure most worth repeating before leaning on it.</li>
+  <li><b>v2 vs v3 library, isolated.</b> The two Stellar libdecoy goldens confound the training change with the v2&rarr;v3 library swap. Now cheap to run: the additive extraction means a swapped-in library survives.</li>
+  <li><b>Second-pass training.</b> The selection is read from a process-wide static with no pass parameter, so it also governs second-pass and per-file-rescore training, where gap-fill rows are target-only and resolve to synthetic zero-feature vectors. Under the maximum those rows essentially never won a slot; under a reservoir each wins with probability 1/k. A plausible contributor to the opposite-direction pass-2 movement in section&nbsp;4.</li>
+  <li><b>C#/Rust parity.</b> This default is C#-only; Rust still takes the cross-run maximum, so the two agree only under <code>OSPREY_TRAIN_PICK_RUN=0</code>.</li>
+</ul>
+</div>
+
+<h2><span class="n">8</span>Provenance</h2>
+<div class="scroll">
+<table>
+  <caption>Run directories, for anyone re-reading these numbers with <code>ai/.tmp/pass1_fdp.py</code>.</caption>
+  <tr><th>arm</th><th>run directory / source</th></tr>
+  <tr><td>ours baseline (82f)</td><td class="txt"><code>&hellip;-protein-compact-cleanbase-n82</code></td></tr>
+  <tr><td>ours pickrun2 (82f)</td><td class="txt"><code>&hellip;-lever-pickrun2-ours-n82</code>; pass 2 from <code>&hellip;-p2lever-ours-n82</code></td></tr>
+  <tr><td>ours pickrun3 (82f)</td><td class="txt"><code>&hellip;-runlevel-corrected-ours-n82</code></td></tr>
+  <tr><td>mike baseline (82f)</td><td class="txt"><code>&hellip;-protein-compact-20260814_121043</code></td></tr>
+  <tr><td>mike pickrun2 (82f)</td><td class="txt"><code>&hellip;-lever-pickrun2-mike-n82</code>; pass 2 from <code>&hellip;-p2lever-mike-n82</code></td></tr>
+  <tr><td>mike pickrun3 (82f)</td><td class="txt"><code>&hellip;-runlevel-corrected-mike-n82</code></td></tr>
+  <tr><td>Astral 3-file</td><td class="txt"><code>D:\test\astral-reg3-runs\&hellip;-astral3-baseline</code> / <code>&hellip;-astral3-pickrun3b</code></td></tr>
+  <tr><td>Stellar 3-file</td><td class="txt"><code>ai/.tmp/mdiag/*.html</code> (captured model-diagnostics reports)</td></tr>
+</table>
+</div>
+<div class="note"><b>Gotcha when repeating the Astral run:</b> a full-pipeline run with <code>--fdrbench-pass 1</code> aborts in <code>PerFileScoringTask.GuardResidentPool</code> unless <code>OSPREY_ALLOW_UNFIXED_RESIDENT=fdrbench-pass1</code> is set. Running both arms as <code>-Task FirstPassFDR -LinkFrom &lt;completed run&gt;</code> avoids it and is better science &mdash; identical upstream artifacts on both sides.</div>
+
+<div class="foot">
+  Companion to <code>TODO-20260819_osprey_train_sample_default.md</code>, which keeps the chronological progress log.
+  Curated to current best values; superseded numbers appear greyed only where they explain a correction.
+</div>
+
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Every number on the toggled tables lives here and nowhere else, so updating a
+// measurement is a one-line edit. n = count at nominal 1% q; fdp = the true FDP
+// that cutoff actually cost; m650/m750/m1000 = counts re-cut at matched true FDP
+// (null where the pass-2 FDP curve is non-monotonic and the cut is meaningless).
+// ---------------------------------------------------------------------------
+const DATA = {
+  f82: {
+    cap: {
+      pass1: 'Pass 1, experiment scope. Higher is better at every matched-FDP column; deltas are vs that library\u2019s own baseline at 0.750%.',
+      pass2: 'Pass 2, experiment scope \u2014 same runs as the pickrun2 rows, read at pass-2 scope.'
+    },
+    ctx: {pass1: 'six arms', pass2: 'pickrun2 pair only'},
+    pass1: [
+      {lab:'ours',arm:'baseline',n:34552,fdp:0.7497,m650:33789,m750:34552,m1000:35533,d:null},
+      {lab:'ours',arm:'pickrun2',n:44117,fdp:0.8532,m650:42131,m750:42982,m1000:45252,d:24.4,cls:'sup'},
+      {lab:'ours',arm:'pickrun3',n:45943,fdp:0.7460,m650:44609,m750:45943,m1000:48166,d:33.0,cls:'best'},
+      {lab:'mike',arm:'baseline',n:37448,fdp:0.8695,m650:34708,m750:36143,m1000:39144,d:null},
+      {lab:'mike',arm:'pickrun2',n:43436,fdp:0.7547,m650:41204,m750:42989,m1000:47154,d:18.9,cls:'sup'},
+      {lab:'mike',arm:'pickrun3',n:43103,fdp:0.8960,m650:40584,m750:41563,m1000:44082,d:15.0}
+    ],
+    pass2: [
+      {lab:'ours',arm:'pickrun2',n:54552,fdp:1.5390,m650:47290,m750:48353,m1000:51187,d:null},
+      {lab:'mike',arm:'pickrun2',n:58644,fdp:1.4715,m650:51242,m750:52381,m1000:55038,d:null},
+      {gap:'baseline and pickrun3 have no pass-2 arm \u2014 each would need a full ~5.5 h run.'}
+    ]
+  },
+  f3: {
+    cap: {
+      pass1: 'Pass 1, experiment scope. Both Astral arms link Stages 1\u20134 from the same completed run, so the training selection is the only variable.',
+      pass2: 'Pass 2, experiment scope. Counts at nominal 1% q only \u2014 see the note below the table.'
+    },
+    ctx: {pass1: 'three datasets', pass2: 'Stellar datasets only'},
+    pass1: [
+      {ds:'Astral',lib:'SEA-AD (ours)',arm:'baseline',n:83571,fdp:0.7440,m650:81974,m750:83571,m1000:87297,d:null},
+      {ds:'Astral',lib:'SEA-AD (ours)',arm:'pickrun3',n:83836,fdp:0.7984,m650:81449,m750:83041,m1000:86490,d:-0.63},
+      {ds:'StellarLibDecoy',lib:'v3 (ours)',arm:'baseline',n:27239,fdp:0.7753,m650:26554,m750:26982,m1000:28181,d:null},
+      {ds:'StellarLibDecoy',lib:'v3 (ours)',arm:'pickrun3',n:27191,fdp:0.7985,m650:26428,m750:26937,m1000:27784,d:-0.17},
+      {ds:'StellarGenDecoyEntrap',lib:'v3, generated decoys',arm:'baseline',n:28629,fdp:1.2289,m650:26489,m750:26935,m1000:27916,d:null},
+      {ds:'StellarGenDecoyEntrap',lib:'v3, generated decoys',arm:'pickrun3',n:28691,fdp:1.2401,m650:26367,m750:26725,m1000:27797,d:-0.78}
+    ],
+    pass2: [
+      {ds:'StellarLibDecoy',lib:'v3 (ours)',arm:'baseline',n:28998,fdp:0.5022,m650:null,m750:null,m1000:null,d:null},
+      {ds:'StellarLibDecoy',lib:'v3 (ours)',arm:'pickrun3',n:30893,fdp:0.5230,m650:null,m750:null,m1000:null,d:6.5},
+      {ds:'StellarGenDecoyEntrap',lib:'v3, generated decoys',arm:'baseline',n:31146,fdp:0.9204,m650:null,m750:null,m1000:null,d:null},
+      {ds:'StellarGenDecoyEntrap',lib:'v3, generated decoys',arm:'pickrun3',n:29742,fdp:0.9504,m650:null,m750:null,m1000:null,d:-4.5},
+      {gap:'Matched-FDP columns are omitted: the 3-file pass-2 FDP curve is non-monotonic, so a \u201clast point at or below X\u201d cut walks far out and returns artifacts (e.g. 101,079 at 0.750%). Only the nominal-q operating point is trustworthy here. Astral has no pass-2 arm.'}
+    ]
+  }
+};
+
+const fmtN = v => v == null ? '\u2014' : v.toLocaleString('en-US');
+const fmtP = v => v == null ? '\u2014' : v.toFixed(4) + '%';
+function delta(d){
+  if (d == null) return '\u2014';
+  const cls = Math.abs(d) < 1 ? 'fl' : (d > 0 ? 'up' : 'dn');
+  const sign = d > 0 ? '+' : '\u2212';
+  return '<span class="d ' + cls + '">' + sign + Math.abs(d).toFixed(Math.abs(d) < 10 ? 2 : 1) + '%</span>';
+}
+function cell(v, cls){ return '<td class="' + (cls || 'num') + '">' + v + '</td>'; }
+
+function render(which, pass){
+  const spec = DATA[which], rows = spec[pass];
+  const tb = document.querySelector('#tbl-' + which + ' tbody');
+  const cols = document.querySelectorAll('#tbl-' + which + ' thead th').length;
+  tb.innerHTML = rows.map(r => {
+    if (r.gap) return '<tr class="gap"><td colspan="' + cols + '">' + r.gap + '</td></tr>';
+    const lead = which === 'f82'
+      ? '<td>' + r.lab + ' <span class="arm">' + r.arm + '</span></td>'
+      : '<td>' + r.ds + '</td><td class="txt">' + r.lib + '</td><td><span class="arm">' + r.arm + '</span></td>';
+    return '<tr' + (r.cls ? ' class="' + r.cls + '"' : '') + '>' + lead +
+      cell(fmtN(r.n)) + cell(fmtP(r.fdp)) +
+      cell(fmtN(r.m650)) + cell(fmtN(r.m750)) + cell(fmtN(r.m1000)) +
+      cell(delta(r.d), 'num') + '</tr>';
+  }).join('');
+  document.getElementById('cap-' + which).textContent = spec.cap[pass];
+  document.getElementById('ctx-' + which).textContent = spec.ctx[pass];
+}
+
+document.querySelectorAll('.toggle button').forEach(b => {
+  b.addEventListener('click', () => {
+    const which = b.dataset.t;
+    document.querySelectorAll('.toggle button[data-t="' + which + '"]')
+      .forEach(o => o.setAttribute('aria-pressed', String(o === b)));
+    render(which, b.dataset.p);
+  });
+});
+
+render('f82', 'pass1');
+render('f3', 'pass1');
+</script>
+</body>
+</html>
