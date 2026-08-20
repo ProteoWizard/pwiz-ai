@@ -181,11 +181,15 @@ Still open, in rough priority order:
 * **(5) `--input-scores` multi-path form is NOT sorted** (`Program.cs:616` sorts only the
   single-directory branch), so the doc claim "the input file list is ordered, which it is" is false
   for that form, and file order is not in the validity key.
-* **(7) the `StripDecoys` derived-library cache is keyed on mtime**, and `ExtractToFile` restores
-  the ZIP ENTRY's timestamp, so a machine that derived from v2 AFTER the v3 zip's build stamp
-  reuses the stale v2 library. Verified the mechanism on this machine (extracted v3 tsv carries a
-  2026-08-19 23:58 UTC stamp, not "now"); tonight's run re-derived correctly so no golden was
-  poisoned, but the hazard is real. Fix: key the derived name on the acquisition marker.
+* ~~**(7) the `StripDecoys` derived-library cache is keyed on mtime**~~ - **FIXED in `404104823b`,
+  committed locally but NOT PUSHED.** `ExtractToFile` restores the ZIP ENTRY's timestamp, so a
+  machine that derived from v2 AFTER the v3 zip's build stamp reuses the stale v2 library.
+  Mechanism verified on this machine (the extracted v3 tsv carries a 2026-08-19 23:58 UTC stamp,
+  not "now"); tonight's run re-derived correctly so no golden was poisoned. The derived name now
+  carries the acquisition marker, so two library versions can never share a derived file; specs
+  without `LibraryUrl` keep their existing name. Held back from the push because a new commit has
+  no Perf/Regression status (manual-trigger config, status keyed to a SHA) and #4593 would stop
+  reading `ready_to_merge` until re-triggered.
 * **(10) `TrainPickRun` is a `static readonly` field**, breaking this file's own documented
   settable-property convention for A/B arms, so the `=0` arm has no test coverage and
   `TestEveryPathSamplesARun` fails on any machine with the variable exported.
