@@ -168,6 +168,25 @@ reproduced `ReservoirTakesSlot` at 64-bit width - P(take at k) matches 1/k, the 
 for K in {2,3,4,5,82}, decisions decorrelate across k including k<->2k, modulo bias ~k/2^64. Every
 defect is in how the sampler is WIRED IN, not in the sampler.
 
+## The corrected sampler, measured (2026-08-19 23:19)
+
+`regression.ps1 -Dataset Stellar` on the run-level sampler, against the same committed golden:
+
+| signal | peak-level draw | **run-level draw** |
+|---|---|---|
+| RefSpectra keys only in golden (sampled) | 54 | **19** |
+| RefSpectra keys only in run (sampled) | 2 | 2 |
+| total mode-1 issues | 77 | **71** |
+| mode 1c / 2 / 3 / 4 / 5 / 6 | all PASS | all PASS |
+
+Sampled-key loss down roughly two thirds. `mode3 (HPC chain==straight)` PASS again, so the
+run-level draw is HPC-consistent; `mode2 (resume==straight)` and `mode4 (warm re-run all cached)`
+PASS, so the validity keying is stable and reproducible.
+
+The authoritative full-population number comes from `blib_summary.tsv` in the re-baseline, NOT from
+the sampled key counts - that is the mistake recorded above. Re-baseline running against the final
+binary as of 23:19.
+
 ## Tasks
 
 - [x] Separate the work onto its own branch (it was sharing another topic's branch)
