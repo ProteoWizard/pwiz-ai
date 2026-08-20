@@ -218,6 +218,36 @@ with `git checkout --` afterwards.
 * **FDP flat and 6.75% of IDs simply gone** -> it helps only at large N and hurts at small N, and
   making it an unconditional default is Brendan's call, not mine. The escape hatch already exists.
 
+### ANSWERED 2026-08-20 00:04 - the change WINS at 3 files where FDP can be measured
+
+`-Dataset StellarLibDecoy`, v3 library, same binary, selection as the ONLY variable:
+
+| metric | old rule (cross-run maximum) | **new default (run-level draw)** |
+|---|---|---|
+| RefSpectra | 29,107 | **31,046 (+6.7%)** |
+| RetentionTimes | 87,320 | 93,097 |
+| pass-1 experiment combined FDP | 0.7753% | 0.7985% |
+| pass-1 experiment paired FDP | 0.6985% | 0.7143% |
+| pass-2 experiment combined FDP | 0.5022% | 0.5230% |
+| pass-2 experiment paired FDP | 0.4506% | 0.4552% |
+
+**+6.7% identifications for +0.023 percentage points of true FDP.** Both axes move the right way at
+once; at matched FDP the gain is smaller but still clearly positive. This is at THREE files, where
+the run-de-biasing has almost nothing to work with - the mechanism says the advantage grows with
+batch size, and the 82-file numbers say the same.
+
+**So the -6.75% on plain Stellar is not evidence against the change.** That dataset carries no
+entrapment, so its count at nominal q cannot separate lost true IDs from suppressed false ones -
+and on the dataset where that separation IS measurable, the change adds IDs and holds FDP. The two
+datasets also differ in decoy source (generated decoys from the hela library vs library decoys +
+entrapment), which is the more likely reason the raw counts move in opposite directions.
+
+**Recommendation: the default flip is supported.** The remaining evidence worth having is the
+82-file pass-1 re-measure, confirming the +24.7% survives the peak-vs-run correction - that number
+was measured on the peak-level sampler and is not automatically the corrected sampler's.
+
+The StellarLibDecoy golden this experiment overwrote was restored with `git checkout --`.
+
 ## Tasks
 
 - [x] Separate the work onto its own branch (it was sharing another topic's branch)
