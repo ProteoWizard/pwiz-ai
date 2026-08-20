@@ -86,7 +86,12 @@ The rebuilt library is structurally sound &mdash; its target space is 99.88% ide
 library and every compositional difference is accounted for. <strong>But it does not yet replace the
 delivered library.</strong> Searched head to head, Mike's library wins on both datasets once true FDP is
 controlled: <strong>+9.2%</strong> on the 3-file Astral HeLa set at matched 1% true FDP, and
-<strong>+12.8%</strong> on SEA-AD. Sections 9&ndash;12 record the measurements and the root defect.</div>
+<strong>+12.8%</strong> on SEA-AD. Sections 9&ndash;12 record the measurements and the root defect.
+<br><br><strong>Sections 14&ndash;15 were corrected on 2026-08-20</strong> &mdash; read
+<a href="#retraction">the retraction</a> before reusing anything from section 14. The similarity gate
+does <em>not</em> collapse our library on SEA-AD; the number that appeared to show it was measured at a
+different N. What does move at 82 files is the pooled training selection, fixed in
+<a href="https://github.com/ProteoWizard/pwiz/pull/4593">pwiz#4593</a>.</div>
 
 <h2>1. Peptide-level accounting</h2>
 <div class="card scroll">
@@ -390,28 +395,57 @@ target twin on one peak, so a cosine-0.999 difference decides which wins &mdash;
 near-copies maximally sensitive. The gate removes the exposure entirely.</div>
 
 
-<h2>14. SEA-AD bisection: the gate is exonerated, its REPLACEMENTS are not</h2>
+<h2>14. SEA-AD bisection: every library is equivalent per file</h2>
+<div class="note w"><strong>This section was rewritten 2026-08-20.</strong> As first published it
+compared a per-file number taken from an 82-file run against four 1-file runs and concluded the gate
+collapses our library. It does not. See <a href="#retraction">section 15</a> for what was withdrawn
+and why; the corrected table is below.</div>
 <p class="sub">Cycle time reduced from 8 h (82 files) to <strong>~6 min</strong> (one SEA-AD file,
-warm spectra caches). Run-level FDR @1% on <code>SEA-AD-0001</code>.</p>
+warm spectra caches). Run-level FDR @1% on <code>SEA-AD-0001</code>. <strong>N is part of the
+measurement</strong> &mdash; the same library on the same file reports a different number depending on
+how many files shared the pooled first-pass model, so the column is stated explicitly.</p>
 <div class="card scroll">
 <table>
-  <tr><th>library</th><th>Carafe</th><th>overlap gate</th><th>I/L check</th><th>precursors</th></tr>
-  <tr><td>Mike delivered</td><td>pre-fork</td><td>&mdash;</td><td>&mdash;</td><td class="num">30,922</td></tr>
-  <tr><td><code>gated</code></td><td><code>c3f8fc2</code></td><td>yes</td><td>no</td><td class="num">30,857</td></tr>
-  <tr><td><code>gated-no-il</code></td><td><code>fe25b55</code></td><td>yes</td><td>yes</td><td class="num good">31,563</td></tr>
-  <tr><td>ours ungated</td><td><code>14bc81c</code></td><td>no</td><td>no</td><td class="num">30,782</td></tr>
-  <tr class="tot"><td><strong>ours gated</strong></td><td><code>14bc81c</code></td><td>yes</td><td>yes</td><td class="num badc">24,133</td></tr>
+  <tr><th>library</th><th>Carafe</th><th>overlap gate</th><th>I/L check</th><th>N</th><th>precursors</th></tr>
+  <tr><td>Mike delivered</td><td>pre-fork</td><td>&mdash;</td><td>&mdash;</td><td class="num">1</td><td class="num">30,922</td></tr>
+  <tr><td><code>gated</code> (08-01)</td><td><code>c3f8fc2</code></td><td>yes</td><td>no</td><td class="num">1</td><td class="num">30,857</td></tr>
+  <tr><td><code>gated-no-il</code> (08-02)</td><td><code>fe25b55</code></td><td>yes</td><td>yes</td><td class="num">1</td><td class="num good">31,563</td></tr>
+  <tr><td>ours ungated (08-17)</td><td><code>14bc81c</code></td><td>no</td><td>no</td><td class="num">1</td><td class="num">30,782</td></tr>
+  <tr><td><strong>ours gated</strong> (08-17)</td><td><code>14bc81c</code></td><td>yes</td><td>yes</td><td class="num">1</td><td class="num">30,802</td></tr>
+  <tr class="tot"><td><em>ours gated, same file inside the 82-file run</em></td><td><code>14bc81c</code></td><td>yes</td><td>yes</td><td class="num badc">82</td><td class="num badc">24,133</td></tr>
 </table>
 </div>
-<div class="note w">Every configuration lands in 30,782&ndash;31,563 <strong>except ours</strong>. The
-similarity gate is not inherently harmful &mdash; the best library of the five (31,563) has both checks
-on. Note the naming trap: <code>-no-il</code> means <em>no I/L colliders remain</em>, i.e. the check IS
-applied.</div>
+<div class="note g">At N=1 <strong>all five libraries land in 30,782&ndash;30,922</strong>, plus
+<code>gated-no-il</code> at 31,563. Ours gated is 30,802 &mdash; inside the band, not outside it. The
+single-variable pair on a shared prediction basis is ours gated vs ours ungated:
+<strong>30,802 vs 30,782, a difference of 20 precursors (&minus;0.06%)</strong>. On SEA-AD the gate
+neither helps nor hurts per file. Note the naming trap: <code>-no-il</code> means <em>no I/L colliders
+remain</em>, i.e. the check IS applied.</div>
+<div class="note w"><strong>The last row is a different experiment, not a different library.</strong>
+24,133 is <code>SEA-AD-0001</code>'s per-file count inside the 82-file run
+(<code>seaad-82files-libdecoy-r1.0-transfer-mean-best-6-newlib20260817</code>) &mdash; same library, same
+file, same binary as the 30,802 above it. The 6,669-precursor gap is the pooling sensitivity measured in
+<code>TODO-20260801_decoy_similarity_gate.md</code> (2026-08-18 afternoon), where a fixed 8-file set loses
+23.7% when pooled into 82 with our library and 1.4% with Mike's. It is not attributable to the gate.</div>
 <div class="note"><strong>Sequence generation is identical.</strong> Our 08-17 gated pairing manifest is
 <strong>byte-identical</strong> (SHA256 <code>32fe851e&hellip;</code>) to the 08-02 <code>gated-no-il</code>
 manifest. Same gate, same I/L check, same shuffles, same drops. So stage 1b is not the difference.</div>
 
-<h3>The mechanism</h3>
+<h3>The mechanism &mdash; measured on HeLa, and too small on SEA-AD to matter</h3>
+<div class="note w"><strong>Retained as a HeLa measurement; withdrawn as the SEA-AD explanation.</strong>
+The enrichment below is real on the 3-file Astral HeLa set. It cannot carry the SEA-AD deficit, because
+of the <strong>30,448</strong> precursors accepted at q&nbsp;&le;&nbsp;1% in the 1-file SEA-AD gated arm,
+only <strong>92</strong> are entrapment and only <strong>18</strong> of those are gate-changed. Eighteen
+peptides cannot move a 4,000-precursor gap in either direction. Counted directly from
+<code>seaad-1files-libdecoy-r1.0-transfer-ourgated1f\fdrbench.tsv</code> (pass-2 scope, 40,103 rows)
+against the gated and ungated pairing manifests.
+<br><br><strong>Definitions differ between the two counts, deliberately.</strong> Here gate-changed
+means a <code>p_target</code> sequence present in the 08-17 gated manifest and absent from the ungated
+one: <strong>59,689</strong>, or 4.29% of the 1,391,232 gated entrapment sequences. That is the only
+population that can be <em>reported as entrapment</em>. The 163,088 quoted below counts sequences of all
+peptide types (the full gated-only set across <code>target</code>, <code>decoy</code>,
+<code>p_decoy</code> and <code>p_target</code> is 166,227), so the two denominators are not
+interchangeable.</div>
 <p class="sub">Splitting our gated arm's reported entrapment by whether the gate created that sequence
 (gate-changed = in the gated manifest but not the ungated one; 163,088 sequences).</p>
 <div class="card scroll">
@@ -434,8 +468,70 @@ selection and prediction interact; this measurement pins the sequence half. Pred
 <em>not</em> concentrated in gate-changed sequences (cosine &lt; 0.90: 1.56% gate-changed vs 3.02%
 unchanged).</div>
 
+<h2 id="retraction">15. Retraction (2026-08-20)</h2>
+<p class="sub">The 2026-08-18 entry in <code>TODO-20260801_decoy_similarity_gate.md</code> recorded that
+sections 14&ndash;15 carry a retraction. Section 15 was never written and section 14 was never corrected,
+so this file continued to assert a conclusion its own source TODO had withdrawn. Written now, with every
+figure re-verified against the run logs rather than against the earlier write-ups.</p>
+
+<h3>Withdrawn</h3>
+<div class="card scroll">
+<table>
+  <tr><th>claim, as published</th><th>status</th></tr>
+  <tr><td>&quot;Every configuration lands in 30,782&ndash;31,563 except ours&quot; (&sect;14)</td>
+      <td class="badc">WITHDRAWN &mdash; N confound</td></tr>
+  <tr><td>&quot;the gate is exonerated, its REPLACEMENTS are not&quot; (&sect;14 title)</td>
+      <td class="badc">WITHDRAWN &mdash; rests on the above</td></tr>
+  <tr><td>Gate-replacement enrichment explains the SEA-AD deficit (&sect;14 mechanism)</td>
+      <td class="warnc">HeLa measurement stands; SEA-AD explanation withdrawn</td></tr>
+</table>
+</div>
+
+<h3>Why</h3>
+<div class="note w"><strong>The table mixed two values of N.</strong> Four rows were 1-file runs; the
+&quot;ours gated&quot; row was <code>SEA-AD-0001</code>'s per-file count taken from an <strong>82-file</strong>
+run. Verified in the logs: <code>seaad-1files-&hellip;-ourgated1f\run.log</code> reports
+<strong>30,802</strong> and <code>seaad-82files-&hellip;-newlib20260817\run.log</code> reports
+<strong>24,133</strong> for that same file with that same library. Placing them in one column made a
+scale effect look like a library effect. This is method-failure&nbsp;#1 in the 2026-08-18 handoff's own
+list, committed in the document that list was written to accompany.</div>
+<div class="note w"><strong>Eighteen peptides cannot carry the deficit.</strong> In the 1-file SEA-AD
+gated arm, 92 of 30,448 accepted precursors are entrapment and 18 are gate-changed. The 2.3&times;
+enrichment measured on HeLa is a real property of the replacement sequences, but on SEA-AD the
+population it acts on is three orders of magnitude too small to explain a 4,000-precursor gap.</div>
+
+<h3>What stands</h3>
+<div class="note g"><strong>The per-file result, correctly stated.</strong> At N=1 on
+<code>SEA-AD-0001</code>, all five libraries land in 30,782&ndash;31,563. The single-variable pair on a
+shared prediction basis &mdash; ours gated vs ours ungated, same Carafe work dir, stages 1a/2/3 shared
+rather than reproduced &mdash; differs by <strong>20 precursors, &minus;0.06%</strong>. The similarity
+gate costs nothing per file on SEA-AD, and it is worth +16.4% discoveries at a third the true FDP on the
+3-file Astral HeLa set (&sect;13). Both statements are unaffected by the retraction.</div>
+<div class="note g"><strong>Sections 1&ndash;13 are unaffected.</strong> The compositional accounting,
+the head-to-head at matched true FDP (&sect;9, Mike ahead by 9.2% on HeLa), the 82-file comparison
+(&sect;10, all three arms measured at the same N), the promoted-entrapment ranking analysis (&sect;11) and
+the clean gate measurement (&sect;13) all compare arms at a single, stated N.</div>
+
+<h3>Two caveats this file did not previously state</h3>
+<div class="note"><strong>The ungated arm is not a single-variable control on the generation side.</strong>
+<code>-no_similarity_gate</code> was deliberately defined to mean &quot;reproduce the pre-FIX
+generator&quot;, so it disables the I/L-normalised collision rejection (<code>fe25b55</code>) as well as
+the fragment-overlap gate. Making I/L unconditional would have broken the byte-for-byte reproduction
+oracle against the delivered library, which was judged the more valuable property. So ours-ungated
+differs from ours-gated by <em>two</em> generation changes, and only by the prediction basis being
+identical is it a controlled arm at all. Isolating the overlap gate alone would need a third Carafe
+build.</div>
+<div class="note"><strong>The gate has never been tested at 82 files.</strong> The ungated 82-file
+discriminator was deliberately not run on 2026-08-18, on the grounds that a single run could not be
+distinguished from the &plusmn;15&ndash;20% pool-composition swing then in play. That swing was a symptom
+of the training-selection defect fixed in
+<a href="https://github.com/ProteoWizard/pwiz/pull/4593">pwiz#4593</a>, so the objection no longer
+applies &mdash; but the experiment still has not been done, and no gate conclusion at scale should be
+drawn until it is.</div>
+
 <footer>
-Measured 2026-08-17. Rebuild: <code>D:\test\carafe-repro\astral-20260817</code>, Carafe
+Measured 2026-08-17; sections 14&ndash;15 corrected 2026-08-20. Rebuild:
+<code>D:\test\carafe-repro\astral-20260817</code>, Carafe
 <code>maccoss/Carafe@14bc81c</code> (jar snapshot
 <code>D:\test\carafe-jars\carafe-2.2.0-main-14bc81c</code>), driver
 <code>ai/scripts/Osprey/Carafe/Run-CarafeOspreyWorkflow.ps1 -Dataset Astral -Threads 32</code>.

@@ -2980,3 +2980,57 @@ and acquisition is skip-if-present on the extracted root - so a machine with the
 pick up the new library. Needs a `LibraryUrl` key on the dataset spec that downloads into
 `LibraryFolder` when the expected file is absent. Then a golden re-baseline for StellarLibDecoy,
 since the new library changes decoy/entrapment sequences.
+
+### 2026-08-20 - The section 14/15 retraction was finally written; the gate does NOT collapse SEA-AD
+
+The 2026-08-18 entry above told readers that
+[`TODO-20260801_decoy_similarity_gate-library-comparison.html`](TODO-20260801_decoy_similarity_gate-library-comparison.html)
+carried a retraction in "sections 14-15". **It never did** - section 15 did not exist and section 14
+was never corrected, so for two days the companion document asserted a conclusion this file had
+already withdrawn. Written now, with every figure re-verified against `run.log` rather than against
+the earlier write-ups.
+
+**The defect in section 14: one row was measured at a different N.** Four rows were 1-file runs; the
+"ours gated" row was `SEA-AD-0001`'s per-file count lifted out of an **82-file** run. Same library,
+same file, same binary:
+
+| run | N | `_0001` precursors @1% run-level FDR |
+|---|---|---|
+| `seaad-1files-libdecoy-r1.0-transfer-ourgated1f` | 1 | **30,802** |
+| `seaad-82files-libdecoy-r1.0-transfer-mean-best-6-newlib20260817` | 82 | **24,133** |
+
+So "every configuration lands in 30,782-31,563 except ours" is an artifact of the mix. Ours gated is
+30,802 - **inside** the band. The single-variable pair on a shared prediction basis is ours gated vs
+ours ungated: **30,802 vs 30,782, a difference of 20 precursors (-0.06%)**. The gate costs nothing
+per file on SEA-AD, which is what the 2026-08-18 entry said in prose and the HTML contradicted in a
+table.
+
+This is method-failure #1 from the same session's own handoff, committed in the document that
+handoff was written to accompany. The N confound is not a rare trap here; it is the recurring one.
+
+**The gate-replacement mechanism is HeLa-only, and the magnitude argument is the clean way to say
+so.** In the 1-file SEA-AD gated arm, 92 of 30,448 accepted precursors are entrapment and **18** are
+gate-changed. Whatever the enrichment ratio, 18 peptides cannot move a 4,000-precursor gap. Counted
+from `seaad-1files-...-ourgated1f\fdrbench.tsv` (pass-2 scope, 40,103 rows) against the two pairing
+manifests.
+
+**Definition trap recorded, because two "gate-changed" counts are in circulation.** Entrapment-only
+(`p_target` in the gated manifest, absent from the ungated) is **59,689** = 4.29% of gated
+entrapment - the only population that can be REPORTED as entrapment. The HTML's 163,088 counts all
+peptide types; the full gated-only set across `target`/`decoy`/`p_decoy`/`p_target` is 166,227. The
+denominators are not interchangeable.
+
+**Caveat that belongs with every future use of the ungated arm.** `-no_similarity_gate` was
+deliberately defined to mean "reproduce the pre-FIX generator", so it disables the I/L-normalised
+collision rejection (`fe25b55`) as well as the fragment-overlap gate - the byte-for-byte reproduction
+oracle against the delivered library was judged worth more than single-variable isolation. See the
+`fe25b55` task entry above, which says so explicitly. **Ours-ungated therefore differs from
+ours-gated by TWO generation changes**; only the prediction basis is controlled. Isolating the
+overlap gate alone needs a third Carafe build.
+
+**The gate has still never been tested at 82 files.** The ungated 82-file discriminator was
+deliberately skipped on 2026-08-18 because a single run could not be told apart from the +-15-20%
+pool-composition swing. That swing was a symptom of the training-selection defect fixed in
+[pwiz#4593](https://github.com/ProteoWizard/pwiz/pull/4593), so the objection has expired - but the
+experiment has not been done, and no gate conclusion at scale should rest on anything else until it
+is.
