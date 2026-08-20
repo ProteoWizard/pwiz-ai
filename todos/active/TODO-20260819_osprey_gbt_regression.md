@@ -2,7 +2,7 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260819_osprey_gbt_regression`
-- **Base**: `Skyline/work/20260820_osprey_scoring_linq_build_fix` (stacked; retarget to `master` once that merges)
+- **Base**: `master`
 - **Created**: 2026-08-19
 - **Status**: In Progress
 - **GitHub Issue**: [#4592](https://github.com/ProteoWizard/pwiz/issues/4592)
@@ -122,7 +122,7 @@ lucky one.
 
 ### Phase 6: Code review feedback
 
-`/code-review` run over both branches. PR #4594 (the build fix): no findings. PR #4595:
+`/code-review` run over both branches. PR #4594 (since withdrawn): no findings. PR #4595:
 fifteen findings, twelve fixed in `4c83c8a`, one split out, two partially pushed back on.
 
 - [x] `GbtModelData` records `FeatureCount` and `Objective`; both validated on load, and
@@ -182,15 +182,24 @@ implementation on a five-file Stellar cohort:
 | Post-correction MAD | 0.0435 Th | 0.0449 Th |
 | Post-correction RMS | 0.0858 Th | 0.0854 Th |
 
-## Prerequisite Build Fix (split out)
+## Build environment
 
-Nothing in Osprey compiled while this work started: `Osprey.Scoring/PickLdaModel.cs` was
-missing `using System.Linq;` for its `dto.Features.SequenceEqual(...)` call, broken since
-`dd9e84581`.
+This work started on the .NET 9 SDK, where nothing in Osprey compiled:
+`Osprey.Scoring/PickLdaModel.cs` calls `dto.Features.SequenceEqual(ExpectedFeatures)` on
+`string[]` with only `using System;` imported. That binds to
+`System.MemoryExtensions.SequenceEqual` through the C# 14 first-class-spans conversion in
+extension receiver position; under C# 13 the only candidate is
+`System.Linq.Enumerable.SequenceEqual`, which the file does not import, so it fails with
+CS1061.
 
-That one-line fix is now its own branch and PR, and this branch is stacked on it so it
-builds. See `ai/todos/active/TODO-20260820_osprey_scoring_linq_build_fix.md`. Retarget
-this PR to `master` once the fix merges.
+Master is not broken. Osprey requires the .NET 10 SDK (VS 2026), which is what TeamCity
+and the Skyline developers build with. The fix was to upgrade this machine, done: SDK
+10.0.400. Everything below was re-verified on it.
+
+A branch and PR that pinned `<LangVersion>14</LangVersion>` to make that requirement
+explicit was withdrawn as unnecessary given the stated toolchain requirement. This branch
+was rebased off it and targets `master` directly. See
+`ai/todos/completed/TODO-20260820_osprey_scoring_linq_build_fix.md`.
 
 ## Verification
 

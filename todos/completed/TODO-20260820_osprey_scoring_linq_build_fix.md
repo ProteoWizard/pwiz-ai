@@ -4,10 +4,24 @@
 - **Branch**: `Skyline/work/20260820_osprey_scoring_linq_build_fix`
 - **Base**: `master`
 - **Created**: 2026-08-20
-- **Status**: Completed
+- **Status**: Withdrawn (not merged)
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
 - **PR**: [#4594](https://github.com/ProteoWizard/pwiz/pull/4594)
+
+## Outcome
+
+**Withdrawn. Not merged; branch to be deleted.**
+
+The Skyline team's stated build requirement is already VS 2026 and the .NET 10 SDK, so
+declaring `<LangVersion>14</LangVersion>` adds nothing they do not already guarantee, and
+`latest` resolves correctly on the supported toolchain. PR #4595 was rebased off this
+branch and now targets `master` directly.
+
+Kept for the diagnosis below, which is the part worth remembering: an SDK older than 10
+fails Osprey with `CS1061` on a line of source that looks correct, and says nothing about
+language versions. That is a misleading signal for anyone -- or any agent -- who arrives
+with an older SDK and concludes master is broken.
 
 > The branch name records the symptom this started from, not the fix. The original
 > premise -- that `PickLdaModel.cs` was missing a `using System.Linq;` and master was
