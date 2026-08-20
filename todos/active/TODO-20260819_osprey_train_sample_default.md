@@ -131,10 +131,54 @@ Bundle acquisition is UNCHANGED (skip-if-present on the extracted root; nobody r
 - [ ] `/code-review max`
 - [ ] PR + TeamCity Perf/Regression on `pull/<N>`
 
-## Open question the Stellar gate answers
+## Consequence: the selection was order-INVARIANT and now is not
 
-Whether a 3-file dataset can SEE a cross-run-maximum change at all. If the goldens do not move, the
-regression suite cannot protect this behaviour and the PR needs a multi-file dataset that can.
+A maximum is commutative, so the old rule picked the same row whatever order the runs arrived in.
+The reservoir picks the k-th arrival, so which RUN survives follows the arrival sequence. The
+ordinal is fixed and thread scheduling cannot move it (the draw is a hash of base_id, k and the
+seed, not a shared RNG), but file ORDER now feeds the trained model.
+
+This compounds a known latent risk: multi-file FirstJoin reconciliation is already
+`--input-scores`-order sensitive, and regression mode 3 pins that order, which masks it. Training
+is now sensitive to the same thing. Mode 3 is therefore the test that matters for this change, not
+just for reconciliation.
+
+**There is an order-independent alternative and it was NOT taken tonight**: choose the run whose
+(base_id, run identity) hash is minimal. That is uniform over runs, order-invariant, and correct
+even when a precursor has several observations in one run - but it needs run IDENTITY, which is
+what `fileStart`/`PercolatorEntry.FileName` supply and what the arrival-count reservoir does not.
+
+It was not taken because the +24.7% at 82 files was measured on the arrival-order reservoir;
+switching the rule selects different rows and invalidates that measurement, at ~4.5 h to re-measure.
+Worth doing as a follow-up if order-independence is wanted - the reproducibility argument for it is
+real.
+
+## ANSWERED 2026-08-19 21:50: 3 files DO see it, and the effect there is a wash
+
+The open question was whether a 3-file dataset can see a cross-run-maximum change at all, and
+therefore whether the suite can protect this behaviour or the PR must add a multi-file dataset.
+
+`regression.ps1 -Dataset Stellar` mode 1 against the committed golden:
+
+| signal | result |
+|---|---|
+| RefSpectra keys only in golden | 54 |
+| RefSpectra keys only in run | 2 |
+| RefSpectra total in golden | 29,300 |
+| RefSpectra.score rows differing | 200 / 200 sampled |
+| RetentionTimes.score rows differing | 595 / 600 sampled |
+| RetentionTimes.bestSpectrum rows differing | 100 / 600 sampled |
+
+**The suite sees it clearly - no multi-file dataset is needed.** Scores move on essentially every
+row, which is what a retrained model does.
+
+**And the ID effect at 3 files is a wash: -52 of 29,300, or -0.18%.** That is the expected shape.
+With at most three draws per precursor there is almost nothing for the cross-run maximum to
+distort; the distortion is what grows with batch size, which is why the same change is worth
++24.7% at 82. Small-N users lose nothing measurable.
+
+Note this is a count at nominal q, not an FDP-matched comparison, so it bounds the ID effect rather
+than pricing it exactly. At 0.18% that distinction does not change the conclusion.
 
 ## C#/Rust parity
 
