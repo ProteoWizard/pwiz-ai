@@ -7,7 +7,7 @@
 - **Status**: Completed
 - **GitHub Issue**: (none)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4594](https://github.com/ProteoWizard/pwiz/pull/4594)
 
 ## Objective
 
