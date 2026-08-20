@@ -328,6 +328,32 @@ weighted runs by candidate count and discarded the best peak, and neither of tho
 This retires the caveat that the headline number was measured on a superseded sampler. The PR body
 now quotes these numbers.
 
+### THE 3-FILE PICTURE: "detections go down" is NOT the pattern (2026-08-20 05:00)
+
+Counts at 1% q (blib `RefSpectra` rows), baseline = `OSPREY_TRAIN_PICK_RUN=0`:
+
+| dataset | res | entrapment | baseline | pickrun3 | delta |
+|---|---|---|---|---|---|
+| Astral | hram | no | 117,719 | 117,265 | **-0.39%** |
+| Stellar | unit | no | 29,300 | 27,321 | **-6.75%** |
+| StellarLibDecoy | unit | **yes** | 29,107 | 31,046 | **+6.7%** |
+| StellarGenDecoyEntrap | unit | **yes** | *pending* | *pending* | |
+
+**Astral - the other no-entrapment dataset, and 4x larger at 117k precursors - is flat to within
+0.4%.** Plain Stellar is the only clear drop. So the -6.75% is a property of that one dataset, not
+of 3-run inputs generally, and the one entrapment dataset measured so far goes UP 6.7% while
+holding FDP (0.7753% -> 0.7985%).
+
+Astral and plain Stellar are clean single-variable comparisons read straight from git: neither uses
+the libdecoy library, so the golden delta is purely the training selection. The two entrapment
+datasets need real runs for both arms because the golden retains only scalar diagnostics, not the
+FDP curve the matched-FDP columns need - `ai/.tmp/run-3file-grid.ps1`, capturing each arm's
+model-diagnostics HTML to `ai/.tmp/mdiag/`.
+
+**Only the two entrapment datasets can fill the matched-FDP columns at all.** Plain Stellar and
+Astral carry no entrapment and therefore no true-FDP oracle, which is exactly why the -6.75% was
+uninterpretable on its own.
+
 ### THE FULL 82-FILE PASS-1 GRID (all six arms re-read from disk 2026-08-20 03:45)
 
 Brendan's naming: `pickrun2` = the peak-level draw, `pickrun3` = the shipped run-level draw.
