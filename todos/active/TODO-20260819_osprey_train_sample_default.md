@@ -328,8 +328,36 @@ weighted runs by candidate count and discarded the best peak, and neither of tho
 This retires the caveat that the headline number was measured on a superseded sampler. The PR body
 now quotes these numbers.
 
-**Not directly comparable to Mike's 42,989**: that arm ran the peak-level sampler. A like-for-like
-library comparison on the shipped sampler needs `fp1-runlevel.ps1 -Arm mike`, ~2.5 h, not run.
+### Like-for-like library comparison on the SHIPPED sampler (03:38, 64.5 min, exit 0)
+
+`seaad-82files-libdecoy-r1.0-protein-compact-runlevel-corrected-mike-n82`. Same 82 files, same
+config, same binary - the LIBRARY is the only variable. Pass-1 experiment scope, matched true FDP:
+
+| library | @0.650% | @0.750% | @1.000% |
+|---|---|---|---|
+| **ours** | **44,609** | **45,943** | **48,166** |
+| mike | 40,584 | 41,563 | 44,082 |
+
+**Our library is +10.5% AHEAD at 0.750% true FDP.** At nominal q Mike's arm sits at higher FDP
+(0.8960% vs ours 0.7460%), which is why matched-FDP is the comparator.
+
+**The peak-vs-run correction is ASYMMETRIC across the two libraries:**
+
+| library | peak-level draw | run-level draw (shipped) | delta |
+|---|---|---|---|
+| ours | 42,982 | 45,943 | **+6.9%** |
+| mike | 42,989 | 41,563 | **-3.3%** |
+
+So on the peak-level sampler the libraries were at parity (42,982 vs 42,989, +0.02%); on the
+shipped sampler ours leads by 10.5%. **The deficit that opened this entire investigation is not
+merely closed - on the shipped code it is reversed.**
+
+**Caveats that must travel with this.** One run per arm, no replicate. The comparison IS controlled
+for batch composition - identical 82 files both sides - so the known pool-composition sensitivity
+is not in play here, but a single measurement is still a single measurement. And this is pass 1;
+the pass-2 picture is the opposite (see Mike's pass-2 arm above, where ours is 7.7% behind), which
+is now the more interesting open question: **the two libraries swap places between pass 1 and pass
+2, and that gap is a pass-2 effect worth its own investigation.**
 
 ## ROOT CAUSE of the -17.4%: the reservoir samples PEAKS, not RUNS (confirmed 2026-08-19 22:30)
 
