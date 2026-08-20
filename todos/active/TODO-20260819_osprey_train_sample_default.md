@@ -131,6 +131,62 @@ Bundle acquisition is UNCHANGED (skip-if-present on the extracted root; nobody r
 - [ ] `/code-review max`
 - [ ] PR + TeamCity Perf/Regression on `pull/<N>`
 
+## ROOT CAUSE of the -17.4%: the reservoir samples PEAKS, not RUNS (confirmed 2026-08-19 22:30)
+
+`/code-review max` found it and the code confirms it. **Pass 1 is pre-compaction**, so a precursor
+does NOT have one row per run:
+
+* `PercolatorScorer.cs:444` - "a precursor carries several pre-compaction rows per file"
+* `ModelDiagnosticsData.CoAssignment.cs:1179` - "Pass 1 is pre-compaction, so one precursor has
+  several rows per run (one per candidate peak / scan). The reported peak is the best-scoring one."
+
+The parquet is (entry_id, charge, scan)-sorted for exactly that reason. So `seen` counts CANDIDATE
+PEAKS across all files. The doc claim "one row per precursor per run, so uniform over observations
+is uniform over runs" - which I wrote into `SelectBestPerPrecursor` and `FirstPassDedupRow.Seen`
+tonight - **is false**.
+
+Two consequences, and the second is the expensive one:
+
+1. **Run-yield weighting.** A run contributing 5 candidate peaks takes the slot with probability
+   5/6 against a run contributing 1. That is a yield-weighted bias - the same FAMILY of bias the
+   change exists to remove, just on a different axis.
+2. **Within the winning run the survivor is a RANDOM candidate peak, not that run's best.** The old
+   rule took the best peak (of the best run); the new rule takes a random peak (of a
+   yield-weighted run). Many candidate peaks are interference or non-apex.
+
+### This explains both numbers
+
+The change conflates two axes:
+
+| axis | at 3 files | at 82 files |
+|---|---|---|
+| (A) remove the cross-RUN maximum - intended | almost nothing to fix, 3 runs | large, dominates: +24.7% |
+| (B) remove the within-run BEST-PEAK choice - unintended | nearly pure harm | swamped by (A) |
+
+At 82 files (A) swamps (B) and the result looks like a triumph. At 3 files (A) is nearly absent and
+(B) shows through as **-17.4%**. Corroborating signal already in hand: the Stellar mode-1 comparison
+reported `RetentionTimes.bestSpectrum: 100/600 rows differ` - the change is moving WHICH PEAK is
+reported, which is exactly (B) and has nothing to do with run selection.
+
+### The correct algorithm
+
+Reservoir over **runs**, best peak **within** the chosen run:
+
+* rows from the same run as the current holder: keep the better-scoring one (within-run best);
+* the first row of a NEW run: k += 1, take the new run with probability 1/k;
+* rows from a rejected run: ignore.
+
+This keeps axis (A) - the measured +24.7% - and removes axis (B) entirely.
+
+**Consequence for the shipping decision**: the +24.7% at 82 files was measured with the PEAK-level
+sampler, so it is not automatically the number the corrected sampler gives. It should be at least
+as good - it keeps the run de-biasing and stops discarding the best peak - but that has to be
+MEASURED, not assumed. A pass-1 re-measure is `-Task FirstPassFDR -LinkFrom <run>`, ~70-80 min at
+82 files, not the full 4.5 h.
+
+**Recommendation: do NOT ship the default flip on the peak-level sampler.** See the status section
+at the end of this file for where that stands.
+
 ## Consequence: the selection was order-INVARIANT and now is not
 
 A maximum is commutative, so the old rule picked the same row whatever order the runs arrived in.
@@ -179,13 +235,35 @@ therefore whether the suite can protect this behaviour or the PR must add a mult
 **The suite sees it clearly - no multi-file dataset is needed.** Scores move on essentially every
 row, which is what a retrained model does.
 
-**And the ID effect at 3 files is a wash: -52 of 29,300, or -0.18%.** That is the expected shape.
-With at most three draws per precursor there is almost nothing for the cross-run maximum to
-distort; the distortion is what grows with batch size, which is why the same change is worth
-+24.7% at 82. Small-N users lose nothing measurable.
+### CORRECTION - the ID effect at 3 files is -17.4%, not the -0.18% first recorded here
 
-Note this is a count at nominal q, not an FDP-matched comparison, so it bounds the ID effect rather
-than pricing it exactly. At 0.18% that distinction does not change the conclusion.
+The table above counts SAMPLED rows. `osprey-regression.data/*/tables/*.tsv` are sampled dumps
+(254 RefSpectra rows before, 202 after), and the "54 only in golden / 2 only in run" figures are
+over that sample: 254 - 54 + 2 = 202 reconciles exactly. Dividing a sample-space delta by the full
+population gave -0.18%, which was wrong.
+
+The authoritative counts are in `blib_summary.tsv`, which sums the whole table:
+
+| table | golden (before) | re-baselined | delta |
+|---|---|---|---|
+| RefSpectra | 29,300 | 24,214 | **-17.4%** |
+| RetentionTimes | 87,900 | 72,642 | -17.4% |
+| OspreyRunScores | 29,300 | 24,214 | -17.4% |
+
+**So the change costs 17.4% of identifications at 3 files while gaining 24.7% at 82.** That is a
+much bigger small-N cost than "a wash" and it has to be priced before this ships as a default.
+
+**It is NOT yet established whether that is a loss or a calibration correction.** The 3-file number
+is a count at nominal q, and the whole thesis of this change is that the cross-run maximum inflates
+apparent target-decoy separation - a model trained on maxima reports more IDs at a given q than it
+has earned. Fewer IDs at nominal q with a LOWER true FDP is the change working, not failing.
+
+Plain Stellar carries no entrapment, so it has no FDP oracle and cannot settle this. **The
+discriminating measurement is StellarLibDecoy / StellarGenDecoyEntrap**, which do carry entrapment
+and a true-FDP bound, and whose diagnostics goldens are being captured now. Compare pass-1 true FDP
+before and after: if FDP falls with the ID count, the trade is real and defensible at small N; if
+FDP is flat and 17% of IDs are simply gone, that is a genuine small-N regression and the default
+flip needs Brendan's explicit call.
 
 ## C#/Rust parity
 
