@@ -2,10 +2,11 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260819_osprey_gbt_regression`
-- **Base**: `master`
+- **Base**: `Skyline/work/20260820_osprey_scoring_linq_build_fix` (stacked; retarget to `master` once that merges)
 - **Created**: 2026-08-19
 - **Status**: In Progress
 - **GitHub Issue**: [#4592](https://github.com/ProteoWizard/pwiz/issues/4592)
+- **Module**: `osprey`
 - **PR**: (pending)
 
 ## Objective
@@ -111,14 +112,15 @@ implementation on a five-file Stellar cohort:
 | Post-correction MAD | 0.0435 Th | 0.0449 Th |
 | Post-correction RMS | 0.0858 Th | 0.0854 Th |
 
-## Unrelated Build Fix Included
+## Prerequisite Build Fix (split out)
 
-`Osprey.Scoring/PickLdaModel.cs` was missing `using System.Linq;` for its
-`dto.Features.SequenceEqual(...)` call, so `Osprey.Scoring` did not compile on either
-target framework. The break arrived with `dd9e84581` (the same commit that added the
-GBDT). One line added here because nothing in Osprey builds or tests without it.
+Nothing in Osprey compiled while this work started: `Osprey.Scoring/PickLdaModel.cs` was
+missing `using System.Linq;` for its `dto.Features.SequenceEqual(...)` call, broken since
+`dd9e84581`.
 
-**Reviewer note**: happy to split this into its own PR if preferred.
+That one-line fix is now its own branch and PR, and this branch is stacked on it so it
+builds. See `ai/todos/active/TODO-20260820_osprey_scoring_linq_build_fix.md`. Retarget
+this PR to `master` once the fix merges.
 
 ## Verification
 
@@ -140,7 +142,6 @@ content and independently reproduced by the modified file.
 
 - `pwiz_tools/Osprey/Osprey.ML/GradientBoostedTrees.cs`
 - `pwiz_tools/Osprey/Osprey.Test/MLTest.cs`
-- `pwiz_tools/Osprey/Osprey.Scoring/PickLdaModel.cs` (unrelated build fix, see above)
 
 ## Follow-up Work
 
