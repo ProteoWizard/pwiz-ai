@@ -301,7 +301,31 @@ The StellarLibDecoy golden this experiment overwrote was restored with `git chec
 - [x] **PR [#4593](https://github.com/ProteoWizard/pwiz/pull/4593)** + TeamCity Perf/Regression
       (4142638) and unit build (4142639) on `pull/4593`, MacCoss Agent 1 - **9/9 green at 02:08,
       `ready_to_merge: true`**
-- [ ] 82-file pass-1 re-measure on the corrected sampler (running; `ai/.tmp/fp1-runlevel.log`)
+- [x] 82-file pass-1 re-measure on the corrected sampler - see below
+
+## 82-file re-measure on the SHIPPED sampler (02:30, 145.5 min, exit 0)
+
+Run `seaad-82files-libdecoy-r1.0-protein-compact-runlevel-corrected-ours-n82`, ours library,
+`-Task FirstPassFDR -LinkFrom` the completed 82-file run, pass-1 experiment scope, matched true FDP:
+
+| arm | @0.650% | @0.750% | @1.000% |
+|---|---|---|---|
+| ours baseline (cross-run maximum) | 33,789 | 34,552 | 35,533 |
+| ours + peak-level draw (first cut) | 42,131 | 42,982 | 45,252 |
+| **ours + run-level draw (SHIPPED)** | **44,609** | **45,943** | **48,166** |
+
+At nominal q=0.0100: 45,943 with combined FDP 0.7460% / paired 0.7221%.
+
+**+33.0% over baseline at 0.750% true FDP**, against +24.7% for the peak-level cut. So the
+peak-vs-run correction is worth **+6.9% at 82 files on top of removing the -17.4% at 3 files** - it
+pays at BOTH ends of the scale, which is what the mechanism predicts: drawing per row both
+weighted runs by candidate count and discarded the best peak, and neither of those helps at any N.
+
+This retires the caveat that the headline number was measured on a superseded sampler. The PR body
+now quotes these numbers.
+
+**Not directly comparable to Mike's 42,989**: that arm ran the peak-level sampler. A like-for-like
+library comparison on the shipped sampler needs `fp1-runlevel.ps1 -Arm mike`, ~2.5 h, not run.
 
 ## ROOT CAUSE of the -17.4%: the reservoir samples PEAKS, not RUNS (confirmed 2026-08-19 22:30)
 
