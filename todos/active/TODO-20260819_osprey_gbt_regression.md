@@ -76,11 +76,40 @@ point result, so it cannot coexist with the bit-identity requirement.
   - `AssertRegressionThreadInvariant` -- identical scores at 1 and 4 histogram threads
 - [x] Full `Osprey.Test` suite green on net472 and net8.0 (587/587 both)
 
-### Phase 4: Pre-review
+### Phase 4: Model persistence
+
+Added in a second commit, because MARS needs `mars apply --model` and Osprey holds GBT
+models in memory only. `FrozenModelScorer` looks like it wants this too.
+
+- [x] `GbtModelData`, a plain-array snapshot, plus `ToModelData` / `FromModelData`
+- [x] `FromModelData` validates the node graph rather than trusting it, so a truncated or
+      hand-edited model file fails at load instead of scoring silently wrong
+- [x] Snapshots are copies, so mutating one cannot reach back into the model
+- [x] `MLTest.TestGbtModelDataRoundTrip` covers the exact score round-trip and each
+      rejection path
+- [x] Logistic golden still bit-identical after the addition
+
+### Phase 5: Pre-review
 
 - [ ] `/pw-self-review`
 - [ ] TeamCity
 - [ ] Human review
+
+## Status
+
+Both commits are on the branch locally and NOT pushed. Osprey.Test is green on both
+target frameworks: 588/588 on net472 and 588/588 on net8.0.
+
+The consumer is the MARS .NET port in the `mars` repository, which vendors these files
+with a SHA-256 drift guard and has been validated end to end against the Python
+implementation on a five-file Stellar cohort:
+
+| Metric | Python | C# |
+|---|---|---|
+| Fragments matched | 352,349 | 352,349 |
+| Pre-correction std | 0.1180 Th | 0.1180 Th |
+| Post-correction MAD | 0.0435 Th | 0.0449 Th |
+| Post-correction RMS | 0.0858 Th | 0.0854 Th |
 
 ## Unrelated Build Fix Included
 
