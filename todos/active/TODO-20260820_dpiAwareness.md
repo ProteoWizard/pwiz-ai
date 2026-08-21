@@ -7,7 +7,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4599](https://github.com/ProteoWizard/pwiz/issues/4599)
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4602](https://github.com/ProteoWizard/pwiz/pull/4602) (draft)
 
 ## Objective
 
@@ -123,10 +123,10 @@ MeasureText args), NodeTip metrics, EnsureWidthCustom DPI cache key
 
 ## Branch state
 
-Scouting commit `cf3bdf6f9c` (manifest+config flip, DpiUtil, Start Page
-pilot) is LOCAL ONLY on pwiz1 - developer chose not to push yet; the
-findings on issue #4599 are the public record for now. Push when the
-team weighs in on the estimate / next packages.
+Pushed 2026-08-21: `cf3bdf6f9c` (flip + Start Page pilot) and
+`259a9f3d70` (tree cluster). Draft PR #4602 opened as the team
+progress venue - mark ready for review (triggers Copilot) when the
+package set feels complete.
 
 ## Inventory summary (2026-08-20)
 
