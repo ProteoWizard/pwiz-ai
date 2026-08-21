@@ -46,11 +46,15 @@ on a branch and inventories the breakage to size the real fix.
 
 ## Tasks
 
-- [ ] Flip `Properties/app.manifest` to system-DPI-aware +
-      `EnableWindowsFormsHighDpiAutoResizing` in app.config
-- [ ] Build; launch at developer's scale factor; first-pass inventory
-      (main window, key dialogs)
-- [ ] Broader dialog sweep at 125%/150%; record findings here
+- [x] Flip `Properties/app.manifest` to system-DPI-aware +
+      `DpiAwareness=SystemAware` config section in app.config
+- [x] Build; launch at developer's scale factor; first-pass inventory
+      (main window, key dialogs) - no breakage found at 125%
+- [x] Verify functional tests unaffected (TestRunner has its own
+      manifest; LabelLayoutTest en pins pass onscreen at 125%)
+- [ ] Broader dialog sweep at 150% (needs a 150% display or a session
+      with scaling changed); export/import wizards, Document Grid,
+      Immunity/tools dialogs
 - [ ] Effort estimate for the system-aware pass; report on issue #4599
 
 ## Progress Log
@@ -59,3 +63,44 @@ on a branch and inventories the breakage to size the real fix.
 
 Issue #4599 created; branch pushed; developer approved the staged strategy
 after reviewing the Skyline-vs-Excel blur comparison screenshot.
+
+### 2026-08-20 - Scouting flip + first launch
+
+Flipped `Properties/app.manifest` (`dpiAware=true`) and added
+`System.Windows.Forms.ApplicationConfigurationSection` with
+`DpiAwareness=SystemAware` to app.config (4.7.2 mechanism; the old
+`EnableWindowsFormsHighDpiAutoResizing` appSetting is the 4.6 one).
+Build green. Dev machine runs 125% scaling (AppliedDPI=120), two
+2560x1440 monitors - native scouting environment. First launch:
+**Start Page renders crisp at 125%, layout intact.** Inventory of the
+main window and key dialogs in progress.
+
+### 2026-08-20 - First-pass inventory at 125% (UI driver sweep)
+
+Process verified system-DPI-aware via GetProcessDpiAwareness (=1).
+Everything inspected renders CRISP with intact layout at 125%:
+
+- Start Page (recents list, tiles).
+- Main window with loaded document (ABSciex4000 cal curves): menus,
+  toolbar, Targets tree + icons, DigitalRune docking panes, ZedGraph
+  chromatogram pane (axis labels, peak annotations, legend), Peak
+  Areas pane, Results Grid (DataGridView), status bar.
+- Dropdown menus (View, Settings) incl. checkmarks.
+- Peptide Settings: Digestion + Modifications tabs (lists, combos,
+  tooltips, Edit list buttons).
+- Transition Settings: Library + Full-Scan tabs (group boxes, nested
+  enable/disable controls, inline labels).
+
+No clipping, truncation, or misalignment found in this pass. Likely
+because Skyline forms use AutoScaleMode.Font and layouts have been
+exercised for years by localized (wider) strings. 16x16 toolbar/tree
+icons are sharp-but-small as predicted; higher-res assets remain a
+follow-up for the real release.
+
+Key test-impact finding: functional tests are hosted by TestRunner.exe,
+which has ITS OWN manifest - Skyline's flip does not change test
+geometry. Keeping TestRunner DPI-unaware preserves 96-DPI test
+determinism (LabelLayoutTest pins, tutorial screenshots) even on
+scaled dev machines. VERIFIED: TestLabelLayoutDeterminism passes
+onscreen (en) at 125% with the flipped manifest - the English
+geometry pins hold because TestRunner stays DPI-unaware.
