@@ -626,3 +626,72 @@ first-pass training until Rust takes the same change or parity is retired.
    pass-2 output equals pass-1 - with no error. Fix: persist the stratum, or hard-fail without one.
 2. **Batch-composition sensitivity** - a file's identifications depend on which other files were
    batched with it (~+-20% at baseline). Draft at `ai/.tmp/issue-draft-pool-sensitivity.md`.
+
+## 2026-08-21 - The pass-2 table completed; the acquisition bug found in production
+
+### The 82-file pass-2 table, finished
+
+Three `-LinkFrom` arms plus a full-pipeline ungated arm, all on one pinned snapshot
+(`_bin\26.1.1.232-20260820-0534`), all protein-compact + max, experiment scope, matched true
+FDP @0.750%. Every arm logged the protein stratum line; every arm reproduced its pass-1 count
+to the digit against an independent earlier run.
+
+| library / arm | pass 1 | pass 2 | pass-2 lever delta |
+|---|---|---|---|
+| ours baseline | 34,552 | 35,327 | - |
+| **ours pickrun3** | **45,943** | **52,911** | **+49.8%** |
+| mike baseline | 36,143 | 42,679 | - |
+| mike pickrun3 | 41,563 | 47,855 | +12.1% |
+| ours ungated (pickrun3) | 43,620 | 51,325 | - |
+
+**The pass-2 reversal was a sampler artifact.** Under pickrun2 ours was 7.7% behind at pass 2;
+under the shipped sampler ours is **10.6% ahead** (52,911 vs 47,855), against +10.5% at pass 1 -
+the pass-1 lead carries through unchanged. Both libraries now gain the SAME from pass 2 (+15.2%
+ours, +15.1% mike); the +22.7%/+12.5% asymmetry that drove the investigation belonged to the
+superseded peak-level sampler.
+
+**The mechanism**: ours-baseline gains only **+2.2%** from pass 2 against +15.1-18.1% for every
+other arm. Under the cross-run maximum our first-pass model is poor enough that the second pass
+recovers little from it - the damage compounds downstream rather than washing out.
+
+**The similarity gate at 82 files, run at last** (`...-p2-pickrun3-oursungated-n82`, full
+pipeline, 8h03m): worth **+5.3% at pass 1 and +3.1% at pass 2**, while spending LESS true error
+in both passes. It was elusive because at N=1 it measures -0.06%, the 82-file test was blocked
+by the pooling defect, and the one table that seemed to show a gate effect was an N confound
+with the wrong sign. Caveat: `-no_similarity_gate` also disables I/L collision rejection, so
+this is two generation changes. Full record in the companion HTML, section 15.
+
+### The LibraryUrl overwrite bug was real, and it was on the build agent
+
+Confirmed in production. TeamCity build 4145031's log:
+
+    extracting stellar-libdecoy-v3.zip into stellar-libdecoy-v3 (one time)...
+    repairing 3 bundled library file(s) overwritten by a separately-shipped library...
+      restoring carafe_spectral_library.tsv
+      restoring osprey_library_db_pairing.tsv
+
+MacCoss Agent 1 had been holding v3 content under the bundled v2 names since the pre-fix
+acquisition ran there, which cost a parallel session a night proving its golden was fine while
+the library beneath it had been silently replaced.
+
+**Why the repair ships even though the bug was created and fixed inside this branch**: the
+damaged machines are real and cannot be reached conveniently - the agent's data lives under the
+build user's profile. `Get-ZipEntryMismatches` compares the bundle tree against the bundle's OWN
+nested zip on entry length and last-write time (both free from the central directory, so no
+multi-GB hashing), and re-extracts only what differs. Costs no download and no hand cleanup. It
+runs regardless of which library the run uses, because only a URL run can damage the tree and
+the tree it damages is the one that run is NOT using. This is deliberately NOT in the squash
+message - it repairs a problem this branch created - so this paragraph is its durable record.
+
+### One golden re-baseline, not two
+
+`404104823b` keyed the derived decoy-free library on the acquisition marker at 02:34; the
+goldens had been captured at 23:57, so `StellarGenDecoyEntrap` mode 1 found
+`SpectrumSourceFiles.idFileName` differing on 3/3 rows
+(`carafe_spectral_library.nodecoy.tsv` -> `carafe_spectral_library.stellar-libdecoy-v3.nodecoy.tsv`).
+Re-captured in `cc137a07e0`: three rows, one column, `cutoffScore` and `workflowType` untouched,
+no other golden file moved. The branch lands one net golden state.
+
+**Process note worth keeping**: the 9/9 green was on `8e554b9978`, and two commits were then held
+back from the gate deliberately. This was the first time they ran through it, and one of them had
+moved a value a golden records. Holding commits back from a manual gate defers exactly this.
