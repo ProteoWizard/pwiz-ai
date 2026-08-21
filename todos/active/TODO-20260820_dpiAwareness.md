@@ -121,6 +121,38 @@ StatementCompletion sizes, FilesTree edit-box (incl. the transposed
 MeasureText args), NodeTip metrics, EnsureWidthCustom DPI cache key
 (safe while system DPI cannot change mid-session).
 
+## Toolbar glyphs + two framework gotchas (2026-08-21)
+
+Added `DpiUtil.ScaleToolStripImages` (ImageScalingSize + bicubic
+pre-scale, per-item ImageTransparentColor applied before resampling)
+and called it for `mainToolStrip` in the SkylineWindow ctor. Developer
+confirmed the toolbar at 150%.
+
+Debugging it surfaced two framework gotchas that reshaped DpiUtil:
+
+1. **`Control.DeviceDpi` is ALWAYS 96 on .NET Framework 4.7.2 in
+   system-DPI-aware mode** - before AND after handle creation (it is
+   only maintained under per-monitor-V2). Proven with a file-log diag:
+   ctor DeviceDpi=96, OnHandleCreated DeviceDpi=96 at session DPI 144.
+   Consequence: `GetFactor` now reads the screen DC once
+   (`Graphics.FromHwnd(IntPtr.Zero).DpiX`) and caches it statically
+   (system DPI is fixed per process; the property is on per-node paint
+   paths). HONEST CORRECTION: the committed Start Page pilot
+   (`cf3bdf6`) was inert - its factor always computed 1; the cached
+   screen-DC rewrite is what actually activated DpiUtil scaling.
+2. **`DrawImageUnscaled` honors DPI metadata**: bitmaps created inside
+   a 144-DPI process carry 144-DPI tags and got re-inflated 1.5x at
+   draw (24px icons drawn at 36px - developer-reported icon overlap on
+   multi-icon rows). Fixed with explicit destination-rect `DrawImage`
+   in `DrawNodeCustom` + `SetResolution(96,96)` on all pre-scaled
+   bitmaps.
+
+Verified at 150% with developer's real settings (TextZoom=1.5!):
+rows 36px, font 29px, icons 24px = exactly the old bitmap-stretched
+proportions, now crisp. Developer sign-off ("very good now").
+Follow-up noted: FilesTree never applies TextZoom to its FONT (only
+row height) - pre-existing inconsistency, left alone in this slice.
+
 ## Branch state
 
 Pushed 2026-08-21: `cf3bdf6f9c` (flip + Start Page pilot) and
