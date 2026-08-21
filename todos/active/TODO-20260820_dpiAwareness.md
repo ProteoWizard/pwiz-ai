@@ -55,8 +55,20 @@ on a branch and inventories the breakage to size the real fix.
 - [x] Grep-hunt inventory (sweep agent): ~132 hazard sites, ~40 high;
       full annotated list in
       `TODO-20260820_dpiAwareness-inventory.md` (auxiliary file)
-- [ ] Pilot fix: Start Page (anchored labels, font-derived row height,
-      DPI-rescaled persisted size)
+- [x] Pilot fix: Start Page. New `Util/DpiUtil.cs` (first DPI
+      compensation code in the codebase): GetFactor/Scale via
+      Control.DeviceDpi + ScaleFromLogical/ScaleToLogical establishing
+      the "persist 96-DPI logical units, scale on restore" convention
+      (backward compatible: DPI-unaware builds saved logical-96 values
+      by definition). StartPage restores/saves size through it and
+      scales its layout literals (18/40/20/3); RecentFileControl rows
+      laid out from font metrics with width-tracking anchored labels.
+      Verified at 125%: window size restored correctly, rows use full
+      panel width, name/path lines have proper separation. All 12
+      StartPage functional tests pass (offscreen).
+- [ ] ActionBoxControl wizard tile captions clip at 125%
+      ("Import DIA Peptide Se...") - fixed-size tiles, add to the
+      dialog-layout package
 - [ ] Broader dialog sweep at 150% (needs a 150% display or a session
       with scaling changed); export/import wizards, Document Grid
 - [ ] Effort estimate for the system-aware pass; report on issue #4599
