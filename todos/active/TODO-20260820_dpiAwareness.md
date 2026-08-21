@@ -77,6 +77,13 @@ on a branch and inventories the breakage to size the real fix.
       32px source at load - per-icon hand-authoring only if a glyph
       looks bad in practice (developer decision 2026-08-20)
 
+## Branch state
+
+Scouting commit `cf3bdf6f9c` (manifest+config flip, DpiUtil, Start Page
+pilot) is LOCAL ONLY on pwiz1 - developer chose not to push yet; the
+findings on issue #4599 are the public record for now. Push when the
+team weighs in on the estimate / next packages.
+
 ## Inventory summary (2026-08-20)
 
 ~132 hazard sites, ~40 high-risk. No existing DPI-compensation code
