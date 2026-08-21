@@ -300,6 +300,31 @@ PR as issue comment 5365899988. The case, in the order it was established:
 **Do not**: merge on the current red, and do not run anything CPU-heavy while the 82-file run
 owns the box.
 
+### 2026-08-21 - Merged master (#4593), all gates green locally, TC re-triggered
+
+#4593 merged, carrying the self-healing data fix, the new libraries and rebaselined goldens.
+
+* **Merge was CLEAN, no conflicts.** #4593's touch on the three files this branch also edits is
+  one line each (`+ OspreyEnvironment.TrainSampleValidityKeySuffix()` in ValidityKey); its
+  substance is in `PercolatorSampling.cs` / `PercolatorEngine.cs`, untouched here. Useful
+  interaction: `CurrentReconciledPaths` derives its staleness test from `ValidityKey(ctx)`, so
+  it picks up the new train-sample suffix automatically.
+* Build + **592 tests** (589 + 3 from #4593) + zero inspection warnings.
+* **`regression.ps1 -Dataset All`: PASSED on the merged branch** - 56 checks, all four
+  datasets, INCLUDING the two legs that were red on TeamCity
+  (`StellarLibDecoy mode1: PASS`, `StellarGenDecoyEntrap mode1: PASS`). Astral figures moved
+  with #4593's discovery set (19,620 of 3,461,283 vs 19,008 of 3,449,774 pre-merge), and this
+  change stayed output-neutral against the new base. Log: `ai\.tmp\regr-4597-all-merged.log`.
+* **`Test-PerfGate.ps1 -Dataset Stellar`: PASSED** - but read it with care, and do not quote
+  its deltas as evidence about this change. `pwiz-perfbase` is pinned at `f4de686450`, **106
+  commits behind master**, so the A/B measures everything since then: stage7 -93.0%, total
+  -27.3%. Those are other people's work. This change moves work INTO stage7, so if it were
+  visible it would show stage6 down and stage7 UP; both fell. AND at Stellar's 3 files the pool
+  build is milliseconds, so the gate is near-blind to this change either way. It is a valid
+  no-total-regression check and nothing more. The perf evidence that means something is the
+  82-file `[STAGE-WALL] survivor-pool` line.
+* TeamCity **4145649** triggered on `pull/4600` (authorized), MacCoss Agent 1.
+
 ### 2026-08-20 - Filed #4601 for the artifact contract
 
 The stamp defect I handed back turned out to be the smaller half. Brendan reframed it from the
