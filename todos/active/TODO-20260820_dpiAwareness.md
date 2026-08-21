@@ -149,7 +149,9 @@ Debugging it surfaced two framework gotchas that reshaped DpiUtil:
 
 Verified at 150% with developer's real settings (TextZoom=1.5!):
 rows 36px, font 29px, icons 24px = exactly the old bitmap-stretched
-proportions, now crisp. Developer sign-off ("very good now").
+proportions, now crisp. Developer sign-off ("very good now"), and
+re-checked at 125% next day - good there too. Committed `e6a5a5f6ea`
+and pushed to draft PR #4602.
 Follow-up noted: FilesTree never applies TextZoom to its FONT (only
 row height) - pre-existing inconsistency, left alone in this slice.
 
