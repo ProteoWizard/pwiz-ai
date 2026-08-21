@@ -104,3 +104,25 @@ determinism (LabelLayoutTest pins, tutorial screenshots) even on
 scaled dev machines. VERIFIED: TestLabelLayoutDeterminism passes
 onscreen (en) at 125% with the flipped manifest - the English
 geometry pins hold because TestRunner stays DPI-unaware.
+
+### 2026-08-20 - First real breakage: Start Page (developer report)
+
+Developer-marked screenshot shows three Start Page issues at 125%:
+1. Whole form physically smaller: `StartPage.cs:71/81` restores
+   `Settings.Default.StartPageSize` - raw pixels persisted from
+   DPI-unaware sessions. GENERAL MIGRATION CLASS: all persisted window
+   sizes/locations are in pre-flip pixel units; need a one-time DPI
+   rescale on restore (or store DPI alongside).
+2. Recents truncate with dead space: `RecentFileControl` labels fixed
+   at 225px wide (`Designer.cs:42/55`), not anchored; StartPage widens
+   the control (`StartPage.cs:155`) but not the labels.
+3. Cramped rows/small text: labels hard-pinned y=5/y=25, control
+   height fixed 45px, hardcoded Arial 9pt; `StartPage.cs:424-444`
+   manual pixel arithmetic in resize handler fights auto-scaling.
+
+Pattern insight: designer-laid-out dialogs (AutoScaleMode.Font)
+survive untouched; PROGRAMMATIC pixel layout (StartPage, and anything
+like it) is where the system-aware pass will spend its effort. The
+inventory should grep-hunt this pattern (runtime `new Font(`, manual
+`Width/Height =` arithmetic, persisted pixel Sizes) rather than only
+eyeballing dialogs.
