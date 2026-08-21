@@ -41,7 +41,7 @@ on a branch and inventories the breakage to size the real fix.
 - 16x16 icons: sharp but small after the flip; higher-res assets are a
   follow-up.
 - Tests/tooling: nightly agents run at 100% (unaffected); developers onscreen
-  at 125%+ would newly see scaled geometry - affects LabelLayoutTest English
+  at 150%+ would newly see scaled geometry - affects LabelLayoutTest English
   pins and tutorial screenshot capture (96 DPI assumption).
 
 ## Tasks
@@ -49,9 +49,9 @@ on a branch and inventories the breakage to size the real fix.
 - [x] Flip `Properties/app.manifest` to system-DPI-aware +
       `DpiAwareness=SystemAware` config section in app.config
 - [x] Build; launch at developer's scale factor; first-pass inventory
-      (main window, key dialogs) - no breakage found at 125%
+      (main window, key dialogs) - no breakage found at 150%
 - [x] Verify functional tests unaffected (TestRunner has its own
-      manifest; LabelLayoutTest en pins pass onscreen at 125%)
+      manifest; LabelLayoutTest en pins pass onscreen at 150%)
 - [x] Grep-hunt inventory (sweep agent): ~132 hazard sites, ~40 high;
       full annotated list in
       `TODO-20260820_dpiAwareness-inventory.md` (auxiliary file)
@@ -63,10 +63,10 @@ on a branch and inventories the breakage to size the real fix.
       by definition). StartPage restores/saves size through it and
       scales its layout literals (18/40/20/3); RecentFileControl rows
       laid out from font metrics with width-tracking anchored labels.
-      Verified at 125%: window size restored correctly, rows use full
+      Verified at 150%: window size restored correctly, rows use full
       panel width, name/path lines have proper separation. All 12
       StartPage functional tests pass (offscreen).
-- [ ] ActionBoxControl wizard tile captions clip at 125%
+- [ ] ActionBoxControl wizard tile captions clip at 150%
       ("Import DIA Peptide Se...") - fixed-size tiles, add to the
       dialog-layout package
 - [ ] Broader dialog sweep at 150% (needs a 150% display or a session
@@ -106,15 +106,16 @@ Flipped `Properties/app.manifest` (`dpiAware=true`) and added
 `System.Windows.Forms.ApplicationConfigurationSection` with
 `DpiAwareness=SystemAware` to app.config (4.7.2 mechanism; the old
 `EnableWindowsFormsHighDpiAutoResizing` appSetting is the 4.6 one).
-Build green. Dev machine runs 125% scaling (AppliedDPI=120), two
+Build green. Dev machine runs 150% scaling (live GetDpiForSystem=144; the registry
+AppliedDPI=120 is a stale pre-sign-in value - do not trust it), two
 2560x1440 monitors - native scouting environment. First launch:
-**Start Page renders crisp at 125%, layout intact.** Inventory of the
+**Start Page renders crisp at 150%, layout intact.** Inventory of the
 main window and key dialogs in progress.
 
-### 2026-08-20 - First-pass inventory at 125% (UI driver sweep)
+### 2026-08-20 - First-pass inventory at 150% (UI driver sweep)
 
 Process verified system-DPI-aware via GetProcessDpiAwareness (=1).
-Everything inspected renders CRISP with intact layout at 125%:
+Everything inspected renders CRISP with intact layout at 150%:
 
 - Start Page (recents list, tiles).
 - Main window with loaded document (ABSciex4000 cal curves): menus,
@@ -138,12 +139,12 @@ which has ITS OWN manifest - Skyline's flip does not change test
 geometry. Keeping TestRunner DPI-unaware preserves 96-DPI test
 determinism (LabelLayoutTest pins, tutorial screenshots) even on
 scaled dev machines. VERIFIED: TestLabelLayoutDeterminism passes
-onscreen (en) at 125% with the flipped manifest - the English
+onscreen (en) at 150% with the flipped manifest - the English
 geometry pins hold because TestRunner stays DPI-unaware.
 
 ### 2026-08-20 - First real breakage: Start Page (developer report)
 
-Developer-marked screenshot shows three Start Page issues at 125%:
+Developer-marked screenshot shows three Start Page issues at 150%:
 1. Whole form physically smaller: `StartPage.cs:71/81` restores
    `Settings.Default.StartPageSize` - raw pixels persisted from
    DPI-unaware sessions. GENERAL MIGRATION CLASS: all persisted window
@@ -156,7 +157,7 @@ Developer-marked screenshot shows three Start Page issues at 125%:
    height fixed 45px, hardcoded Arial 9pt; `StartPage.cs:424-444`
    manual pixel arithmetic in resize handler fights auto-scaling.
 
-Also developer-reported: **Targets/sequence tree crowded** at 125% -
+Also developer-reported: **Targets/sequence tree crowded** at 150% -
 `TreeViewMS.cs:52` hardcodes `DEFAULT_ITEM_HEIGHT = 16` px (set at
 ctor and in the TextZoom handler line 325), so scaled tree text fills
 the whole row; `SequenceTree.cs` ImageLists use default 16x16
