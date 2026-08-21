@@ -264,13 +264,37 @@ PR as issue comment 5365899988. The case, in the order it was established:
 
 **Morning checklist, in order:**
 
-1. **Trigger this config on `master` as a change-immune anchor** - the one test that settles
-   it. Red the same way => confirmed pre-existing, PR clear on this axis, and the stale-data
-   problem gets its own issue. NOT triggered overnight: re-triggering the shared agent is
-   Brendan's call every time, and it is the agent other developers queue on.
-2. Once Brendan's 82-file SEA-AD run has released the machine, run the local perf A/B:
+1. ~~Trigger this config on `master` as a change-immune anchor.~~ **RETRACTED - cause is known.**
+   Brendan identified it directly: a script on PR #4593 overlaid a v3 stellar-libdecoy library
+   onto the v2 tree by OVERWRITING the v2 library IN PLACE. That session has since rewritten
+   the script (which is why this machine passes - here the resolved
+   `stellar-libdecoy/carafe_spectral_library.tsv` is still the Jun 30 v2, with v3 quarantined
+   in a `stellar-libdecoy-v3/` subfolder), but MacCoss Agent 1 still holds the overwritten
+   tree. An older branch cannot detect this: its script just runs the wrong library and reds
+   against goldens it never disagreed with. #4593 is now adding self-healing, and its TC run
+   is what repairs the agent's disk. A master baseline run would burn an hour of the shared
+   agent to confirm what is already known.
+
+   **Open question for that session before treating their run as the unblock**: #4593
+   rebaselines 47 golden files, including BOTH `stellar-libdecoy/` and
+   `stellar-gendecoy-entrap/`, but does NOT touch `regression.ps1` - so the dataset table still
+   resolves the same path. Both PRs therefore need the SAME content at
+   `stellar-libdecoy/carafe_spectral_library.tsv`: #4600 needs v2, and #4593's new goldens need
+   whatever they were generated against. If v2 (likely - that is what resolves on this
+   machine), the healing satisfies both. If v3, no single file satisfies both and #4600 stays
+   red until #4593 merges and this branch rebases.
+
+   Residual: this branch's `Regression/RegressionData.ps1` predates the fix (last touched by
+   #4540), so it has neither the healing nor any staleness DETECTION. Until that reaches
+   master, every older branch stays defenseless against a re-corruption.
+
+2. After #4593's run repairs the agent, **re-trigger 4600's Perf/Regression** - ASK FIRST.
+3. Once Brendan's 82-file SEA-AD run has released the machine, run the local perf A/B:
    `pwsh -File ./ai/scripts/Osprey/Test-PerfGate.ps1 -Dataset Stellar` from `C:\proj\pwiz-work1`.
-3. `/pw-complete` on #4600 - ONLY after 1 settles the red. Squash subject keeps the prefix:
+4. `/pw-complete` on #4600 - ONLY after the agent is repaired and 4600 is green there. If
+   #4593 merges first, rebase #4600 onto master and re-run: this PR's claim is byte-identical
+   output, so it is golden-agnostic and needs no golden work of its own, but its green should
+   be against the goldens it actually merges with. Squash subject keeps the prefix:
    `osprey: Moved the PerFileRescoring whole-run join to the consumer that needs it (#4600)`.
 
 **Do not**: merge on the current red, and do not run anything CPU-heavy while the 82-file run
