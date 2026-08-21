@@ -6,9 +6,9 @@
 - **Module**: `skyline`
 - **Base**: `master`
 - **Created**: 2026-08-13
-- **Status**: In Review
+- **Status**: Completed
 - **GitHub Issue**: (none)
-- **PR**: https://github.com/ProteoWizard/pwiz/pull/4575
+- **PR**: [#4575](https://github.com/ProteoWizard/pwiz/pull/4575) (merged 2026-08-21)
 
 ## Objective
 
@@ -387,15 +387,21 @@ findings went with that work to `TODO-20260813_grid_report_layout.md`.
       `Layout.SKY.VIEW` still produces a doubled name. `PathEx.HasExtension` is the house
       helper and lower-cases invariantly.
 - [ ] The test never calls `TestContext.EnsureTestResultsDir()`, so stale files survive between
-      runs, and it never covers save-document-then-reopen.
+      runs, and it never covers save-document-then-reopen. It writes through
+      `TestContext.GetTestResultsPath` rather than `TestFilesZip` + `TestFilesDir.GetTestPath`,
+      which is what gives a file-writing test its own cleaned-up directory.
+- [ ] `ImportLayout`'s `previousLayout` `MemoryStream` is never disposed (Copilot). Harmless as
+      written - a `MemoryStream` holds no unmanaged handle - but it keeps the whole serialized
+      layout alive until GC.
 - [ ] **Pushed back on:** the review calls the missing All Files entry a deviation from house
       pattern. It is a deliberate, documented safety choice - an unrestricted filter makes it
       easy to save a layout over the `.sky`. Keep it.
 
 **Then:**
 - [x] Push branch and open PR - #4575
-- [ ] Copilot review (automatic on open) - address with `/pw-respond 4575`
-- [ ] Developer review
+- [x] Copilot review - reviewed 2026-08-14. Two threads were left **unresolved** at merge: the
+      case-sensitive `EndsWith` and the undisposed `previousLayout`, both listed above.
+- [x] Developer review - merged by the author with admin override, see the merge log entry
 - [ ] Localized menu text for `.ja.resx` / `.zh-CHS.resx` - bulk translation pass, not this
       PR, matching how every other menu item has landed. The ja/zh KeyboardShortcuts rows
       correctly show the English "Window Layout" until then.
@@ -432,6 +438,37 @@ findings went with that work to `TODO-20260813_grid_report_layout.md`.
   the two menu items. Done with `git branch` at the tip then `git reset --hard`, so every
   commit is preserved on that branch.
 - `/code-review max` run on the combined branch; findings split between the two TODOs.
+
+### 2026-08-21 - Merged
+
+PR #4575 merged as commit `5acc2dd24c`. What shipped is the two menu items and the work that
+turned out to be required to make Import safe: the roll-back of the previous layout when a load
+fails, `EnsureApplicableForms` to put the windows right afterwards, the `.sky.view`-only filter
+with the typed-name strip, dialog captions, the document-folder start directory, and
+`saverUser.CanSave(this)` so an export onto a read-only file reports instead of silently doing
+nothing.
+
+**Merged with admin override while TeamCity was still running**, deliberately. The previous head
+`d9aeb9d9` had a fully green run earlier the same evening - Skyline master and PRs "Tests passed:
+1735" at 19:40, Skyline Code Inspection at 19:52, Core Windows x86_64 308 tests at 22:36. The only
+thing after it was a master merge (`531b9732`, 22:56) that brought in exactly one commit,
+`d5108d7eaf osprey: Moved the PerFileRescoring whole-run join...` (#4600), entirely under
+`pwiz_tools/Osprey`. This PR touches only `pwiz_tools/Skyline`, so the untested delta had no file
+overlap with it. The rerun that was in flight could only have re-proven the 19:40 result.
+
+**Carried forward, not shipped** - the five unchecked items under Remaining. Two of them are
+unresolved Copilot threads (case-sensitive `EndsWith` on the doubled-extension strip; the
+undisposed `previousLayout`), and the other three are the missing
+`ExceptionUtil.IsProgrammingDefect` -> `Program.ReportException` on both new handlers, the absent
+`ActiveDirectory` write-back, and the test's use of `GetTestResultsPath` instead of `TestFilesZip`.
+The `IsProgrammingDefect` one is the only one with real consequences: a genuine defect thrown out
+of Import is currently reported to the user as a bad file and never reaches the exception
+dashboard. Also still deferred: delaying the destroy in `LoadLayoutLocked` until the first
+callback that creates a window, and the ja/zh-CHS menu strings, which go with the bulk
+translation pass.
+
+**Watch in nightly** for the one unexplained GC-LEAK described above. It was seen once, on the
+first run of the new test, and never reproduced; if it returns, profile it rather than theorizing.
 
 ## References
 
