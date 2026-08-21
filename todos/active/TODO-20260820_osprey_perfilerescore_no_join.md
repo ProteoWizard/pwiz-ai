@@ -215,20 +215,49 @@ the fix in `0bb06c9023`, one by refutation with evidence. Follow-up #4601 is fil
 `branch=pull/4600`, pinned to MacCoss TeamCity Agent 1.
 https://teamcity.labkey.org/build/4144779
 
+**TeamCity 4144779 came back RED - and the evidence says it is NOT this branch.** Posted to the
+PR as issue comment 5365899988. The case, in the order it was established:
+
+* **What failed**: `StellarLibDecoy` and `StellarGenDecoyEntrap`, modes 1 / 1b / 5 / 7. Not
+  tolerance drift - a different discovery set (`RefSpectra: 12 key(s) only in golden`,
+  `11 only in run`; `nTarget golden=247012 run=241551`).
+* **What passed**: `Stellar`, straight-through blib **25,358,336 bytes** - byte-for-byte the
+  size produced locally. Same agent, same commit, same mzMLs, identical result.
+* **Local `-Dataset All` passes those exact legs on this code** (`regr-4597-all.log:110` and
+  `:125`), 56 checks green.
+* **Master has not moved**: `43b5aaf064` IS current master, so the branch carries master's
+  exact goldens. Same code + same goldens + different result => the variable is input data.
+* **The two failing datasets are exactly the two sharing**
+  `stellar-libdecoy/carafe_spectral_library.tsv` (`regression.ps1:355-383`). Stellar uses a
+  different library. That file is not in git.
+* **THE ANCHOR: the last green run of this config was build #121 on 2026-07-08** (commit
+  `9f87c5c5d1`). The goldens have been rebaselined four times since - most recently
+  `78a214a9db` (#4585) on 2026-08-17. So this config has never run against the current
+  goldens on this agent, and there is no green baseline for this PR to have broken.
+* **Most likely cause**: `regression.ps1:314-318` documents the trap - acquisition is
+  skip-if-present ON THE EXTRACTED ROOT, so re-publishing `osprey-testfiles-mzML-v2.zip` under
+  the same name "would never reach a machine that already has the tree". Locally the resolved
+  libdecoy library is dated Jun 30 (2,535,647,081 bytes) and matches the goldens; a newer
+  `stellar-libdecoy-v3/carafe_spectral_library.tsv` (Aug 19, 2,487,665,003 bytes) sits beside
+  it, staged but NOT wired into the dataset table. The agent's copy is unknown and unreadable
+  from here - the TC log is only the 316-line console stream, and run dirs are deleted.
+
 **Morning checklist, in order:**
 
-1. Confirm TeamCity 4144779 is green (`mcp__teamcity__get_build_status 4144779`; on a red,
-   `get_failed_tests` / `get_build_log` before assuming it is ours - a 10s exit-9009 red is an
-   AWS-agent artifact, but this one is agent-pinned so a red should be real).
-2. Once Brendan's 82-file SEA-AD run has released the machine, run the local perf A/B:
+1. **Trigger this config on `master` as a change-immune anchor** - the one test that settles
+   it. Red the same way => confirmed pre-existing, PR clear on this axis, and the stale-data
+   problem gets its own issue. NOT triggered overnight: re-triggering the shared agent is
+   Brendan's call every time, and it is the agent other developers queue on.
+2. Check whether the Astral leg passed in 4144779 (it was still running at 66%). Astral uses
+   its own library, so an Astral pass further isolates this to the libdecoy tree; an Astral
+   FAIL would break the hypothesis and the whole thing needs rethinking.
+3. Once Brendan's 82-file SEA-AD run has released the machine, run the local perf A/B:
    `pwsh -File ./ai/scripts/Osprey/Test-PerfGate.ps1 -Dataset Stellar` from `C:\proj\pwiz-work1`.
-   This is the LAST gate; it could not run tonight because a 3-rep median cannot share a box.
-3. `/pw-complete` on #4600 - squash-merge subject keeps the module prefix:
+4. `/pw-complete` on #4600 - ONLY after 1 settles the red. Squash subject keeps the prefix:
    `osprey: Moved the PerFileRescoring whole-run join to the consumer that needs it (#4600)`.
-4. Do NOT delete the branch while #4601 is unstarted if it ends up stacked on this work; #4601
-   is independent, so a normal delete is fine.
 
-**Do not, overnight**: run anything CPU-heavy (the 82-file run owns the box), and do not merge.
+**Do not**: merge on the current red, and do not run anything CPU-heavy while the 82-file run
+owns the box.
 
 ### 2026-08-20 - Filed #4601 for the artifact contract
 
