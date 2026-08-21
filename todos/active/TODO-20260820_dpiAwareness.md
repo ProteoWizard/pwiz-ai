@@ -101,8 +101,17 @@ verified):
 - `PeptideTreeNode`: padding via instance property / Graphics overload
   in static `DrawPeptideText` (also used by ViewLibraryDlg's list).
 
-PENDING: build + tree tests; **onscreen visual check at 150% deferred -
-developer locked the workstation; do this when they are back.**
+Build + tree tests + CodeInspection/QuickInspection all green; 96-DPI
+behavior verified unchanged (factor-1 short circuits). Developer
+visually confirmed the tree at **125%** (2026-08-21, via RDP - the
+session DPI comes from the CLIENT's scaling, 3440x1440 at 125%;
+Windows Settings does not show scaling inside RDP, use the DPI probe
+from [[dpi-query-live-not-registry]]). **Re-check at 150% on the
+physical console still pending** - that is where the crowding was
+reported and rounding is least forgiving. Note: system-DPI-aware apps
+pick up session DPI at launch; after an RDP reconnect with different
+client scaling, previously launched instances are bitmap-stretched
+until restarted (the PMv2 gap).
 Not in this slice (still in package): PopupPickList, ImageListBox,
 StatementCompletion sizes, FilesTree edit-box (incl. the transposed
 MeasureText args), NodeTip metrics, EnsureWidthCustom DPI cache key
