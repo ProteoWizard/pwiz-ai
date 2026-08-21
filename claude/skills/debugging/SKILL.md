@@ -39,7 +39,20 @@ Always start by answering these:
 | < 1 min | Printf debugging, rapid bisection, **be self-sufficient** |
 | 1-60 min | Batch diagnostics, careful hypothesis |
 | Hours+ | Statistical bisection or strategic instrumentation |
-| Intermittent only | DocChangeLogger pattern, deploy and wait |
+| Intermittent only | Fix the message, measure per-execution rate, soak (see below) |
+
+## Critical Principle: Fix the Message Before the Bug
+
+> **If the failure message cannot say what happened, improving it is the first fix, not a detour.**
+
+See **ai/docs/debugging-principles.md** → "Intermittent Test Failures" for the full method,
+the soak recipe, and worked numbers. Key points:
+
+- **A mute assertion is itself the bug to fix first** - distinct from the printf instrumentation
+  below, which targets a code path you already suspect
+- **Count executions, not suite runs** - the denominator decides whether a flake looks hopeless
+  or trivially soakable
+- **Run a control before blaming your own change** - suites have a baseline flake rate
 
 ## Critical Principle: Self-Sufficiency
 

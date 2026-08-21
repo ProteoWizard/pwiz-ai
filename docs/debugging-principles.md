@@ -296,6 +296,56 @@ So **4 weeks becomes your "3 runs" equivalent** for presence/absence determinati
 
 **The math:** If bug occurs with probability p per test, after n tests without occurrence, probability it's still present ≈ (1-p)^n. Choose n so this is negligibly small.
 
+### Intermittent Test Failures: Fix the Message, Then Measure the Rate
+
+An intermittent test failure is usually not as rare as it looks, and usually not as
+undiagnosable as it looks. Two rules, in this order.
+
+**1. If the failure message carries no information, fixing the message IS the first fix.**
+
+This is different from the printf instrumentation above. That adds diagnostics to a code path
+you suspect. This is about the assertion itself being unable to say what happened:
+
+```
+Assert.AreEqual failed. Expected:<pwiz.Skyline.Model.DocSettings.PeptideLibraries>.
+                        Actual:<pwiz.Skyline.Model.DocSettings.PeptideLibraries>.
+```
+
+Neither side overrides `ToString`, so both render as the bare type name. Every occurrence of
+such a failure gets discarded as undiagnosable, however many years it recurs. Implement
+`IExplainDiff` on the type (see `Shared/CommonUtil/SystemUtil/IExplainDiff.cs`) so it names the
+member that differs, and the next occurrence explains itself:
+
+```
+Libraries [Worm/loaded=True] vs [Worm/loaded=False] (unloadedSpecs 0 vs 1)
+```
+
+That one line was the whole root cause. **Do this before hunting the bug** - a hunt that
+succeeds still leaves you holding a message that will fail to explain the next occurrence.
+
+**2. Count executions, not runs.**
+
+The denominator must be executions of the failing test, not full suite runs. A test that runs
+once per suite and fails "1 time in 6 runs" sounds hopeless; the same data as ~6% *per
+execution* is trivially soakable. Getting this backwards makes a tractable bug look impossible
+and sends you to statistical bisection when a ten-minute soak would do.
+
+**Compress period-to-failure by soaking one test.** `parallelmode=server`, `loop=0`, and one
+test across several languages puts an instance on each worker:
+
+```
+TestRunner.exe test=TheOneTest loop=0 parallelmode=server workercount=5 \
+    language=en-US,fr-FR,ja,zh-Hans,tr-TR offscreen=True
+```
+
+That produces ~500 executions in a few minutes. A 6%-per-execution flake then fails within the
+first minute or two, repeatedly, with the diagnostic from rule 1 attached.
+
+**Run a control before blaming your own change.** If failures appear after your change, stash it,
+run the suite the same number of times, and compare counts. Suites have a baseline flake rate
+that small samples hide, and "no plausible mechanism" is not evidence. A control has twice
+disproved an attribution that felt obvious.
+
 ### Strategic Instrumentation: Moving Up the Causal Chain
 
 When you can't iterate quickly, you must **move up the causal chain** with instrumentation.
