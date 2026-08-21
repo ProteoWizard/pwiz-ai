@@ -120,6 +120,16 @@ Developer-marked screenshot shows three Start Page issues at 125%:
    height fixed 45px, hardcoded Arial 9pt; `StartPage.cs:424-444`
    manual pixel arithmetic in resize handler fights auto-scaling.
 
+Also developer-reported: **Targets/sequence tree crowded** at 125% -
+`TreeViewMS.cs:52` hardcodes `DEFAULT_ITEM_HEIGHT = 16` px (set at
+ctor and in the TextZoom handler line 325), so scaled tree text fills
+the whole row; `SequenceTree.cs` ImageLists use default 16x16
+ImageSize, so node icons, Peak/Keep state icons, and +/- expanders
+stay small vs the grown text. Fix path: multiply ItemHeight by
+DeviceDpi/96 alongside TextZoom; DPI-scale ImageList.ImageSize as a
+stopgap; re-author PNG assets at higher sizes for crispness
+(developer notes the PNGs are updatable).
+
 Pattern insight: designer-laid-out dialogs (AutoScaleMode.Font)
 survive untouched; PROGRAMMATIC pixel layout (StartPage, and anything
 like it) is where the system-aware pass will spend its effort. The
