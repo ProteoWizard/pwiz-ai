@@ -135,7 +135,9 @@
 <div class="key"><b>pickrun3 gains our library far more than Mike's:</b> +33.0% against +15.0% at 0.750% matched FDP. It also improves our calibration while it adds identifications &mdash; 45,943 at 0.746% true FDP against the baseline's 34,552 at 0.750% &mdash; so the gain is not bought with error. On Mike's library the FDP moves the wrong way (0.870% &rarr; 0.896%), which is why the two libraries separate here.</div>
 <div class="note"><b>Measured on the shipped sampler 2026-08-20: the pass-2 reversal does not survive it.</b> Under pickrun2 ours came out <b>7.7% behind</b> at pass 2 (48,353 vs 52,381) while level at pass 1. Under pickrun3 ours is <b>10.6% ahead</b> (52,911 vs 47,855), against +10.5% at pass 1 &mdash; the pass-1 lead carries through essentially unchanged.
 <br><br><b>Both libraries now gain the same from pass 2:</b> +15.2% for ours (45,943 &rarr; 52,911) against +15.1% for Mike's (41,563 &rarr; 47,855). The asymmetry that drove this investigation &mdash; Mike +22.7% against our +12.5% &mdash; was a property of the superseded peak-level sampler, not of the libraries. The samplers swap the libraries' pass-2 outcomes outright: ours 48,353 &rarr; 52,911 (<b>+9.4%</b>), Mike's 52,381 &rarr; 47,855 (<b>&minus;8.6%</b>), the same directions as their pass-1 movement (+33.0% / &minus;3.3%) and larger.
-<br><br>Both arms logged the protein stratum line, so both are valid pass-2 runs, and both reproduce their pass-1 counts to the digit against independent earlier runs. Pass-2 FDP is inflated in every arm (1.37&ndash;1.78% against pass 1's ~0.85%), the known second-pass recalibration issue, which is why matched-FDP is the comparator here rather than the count at nominal q.</div>
+<br><br><b>The pass-2 lever delta, completed 2026-08-20:</b> our library <b>35,327 &rarr; 52,911, +49.8%</b>, against Mike's <b>42,679 &rarr; 47,855, +12.1%</b>. The sampler's advantage on our library is <em>larger</em> at pass 2 than at pass 1 (+49.8% against +33.0%) while Mike's shrinks (+12.1% against +15.0%). This is what the earlier +22.7%-for-Mike figure obscured: it was the only pass-2 lever delta that existed, and it was measured on the superseded sampler.
+<br><br><b>One arm barely gains from pass 2 at all.</b> Pass 1 &rarr; pass 2 is +15.2% (ours pickrun3), +15.1% (mike pickrun3) and +18.1% (mike baseline) &mdash; but only <b>+2.2%</b> for ours baseline (34,552 &rarr; 35,327). Under the cross-run maximum our library's first-pass model is poor enough that the second pass recovers little from it, so the damage compounds rather than washing out downstream. That is the mechanism behind the +49.8%.
+<br><br>All three arms logged the protein stratum line; the baseline arm additionally logged <code>[TRAIN] OSPREY_TRAIN_PICK_RUN=0</code>, confirming the sampler was in force rather than merely intended; and every arm reproduces its pass-1 count to the digit against an independent earlier run. Pass-2 FDP is inflated in every arm (1.05&ndash;1.78% against pass 1's ~0.85%), the known second-pass recalibration issue, which is why matched-FDP is the comparator here rather than the count at nominal q.</div>
 
 <h2><span class="n">4</span>3 files &mdash; regression datasets with a true-FDP oracle</h2>
 <p class="lede">Every row carries entrapment, so every row can be matched on real error.</p>
@@ -180,7 +182,7 @@
 <h2><span class="n">7</span>What is not measured</h2>
 <div class="panel">
 <ul>
-  <li><b>ours baseline pass 2.</b> The one remaining gap in the pass-2 table. The <code>cleanbase</code> run stopped at pass 1, and the arm queued to fill it was stopped after the mike-pickrun3 arm finished, so our library still has no pass-2 lever delta to set against Mike's. One ~4.2 h <code>-LinkFrom</code> run.</li>
+  <li><b>Wall clock from these arms is not a performance measurement.</b> The baseline pass-2 arm ran 8&ndash;11% slower per stage than the two pickrun3 arms while re-scoring <b>25% fewer</b> entries (5.06 M against 6.73 M), so the extra time is not extra work. Another session was running <code>/code-review max</code> and building in a second checkout across that window &mdash; the same CPU-contention confound already recorded for the 2026-08-19 Mike arm.</li>
   <li><b>Astral 3-file pass 2.</b> Both Astral arms were run as <code>-Task FirstPassFDR</code>, so they have no pass-2 stage.</li>
   <li><b>Replication.</b> Every 82-file arm is a single run. Batch composition is controlled (identical files on both sides), so the known pool-composition sensitivity is not in play &mdash; but the 3.3% give-back on Mike's library under pickrun3 is the figure most worth repeating before leaning on it.</li>
   <li><b>v2 vs v3 library, isolated.</b> The two Stellar libdecoy goldens confound the training change with the v2&rarr;v3 library swap. Now cheap to run: the additive extraction means a swapped-in library survives.</li>
@@ -202,6 +204,7 @@
   <tr><td>mike pickrun3 (82f)</td><td class="txt"><code>&hellip;-runlevel-corrected-mike-n82</code></td></tr>
   <tr><td>ours pickrun3 pass 2 (82f)</td><td class="txt"><code>&hellip;-protein-compact-p2-pickrun3-ours-n82</code> &mdash; 252.5 min; reproduces the pass-1 arm at 45,943</td></tr>
   <tr><td>mike pickrun3 pass 2 (82f)</td><td class="txt"><code>&hellip;-protein-compact-p2-pickrun3-mike-n82</code> &mdash; 254.3 min; reproduces the pass-1 arm at 41,563</td></tr>
+  <tr><td>ours baseline pass 2 (82f)</td><td class="txt"><code>&hellip;-protein-compact-p2-baseline-ours-n82</code> &mdash; 275.2 min; reproduces the pass-1 baseline at 34,552; <code>[TRAIN] OSPREY_TRAIN_PICK_RUN=0</code> logged</td></tr>
   <tr><td>Astral 3-file</td><td class="txt"><code>D:\test\astral-reg3-runs\&hellip;-astral3-baseline</code> / <code>&hellip;-astral3-pickrun3b</code></td></tr>
   <tr><td>Stellar 3-file</td><td class="txt"><code>ai/.tmp/mdiag/*.html</code> (captured model-diagnostics reports)</td></tr>
 </table>
@@ -228,7 +231,7 @@ const DATA = {
       pass1: 'Pass 1, experiment scope. Higher is better at every matched-FDP column; deltas are vs that library\u2019s own baseline at 0.750%.',
       pass2: 'Pass 2, experiment scope. Both shipped-sampler arms measured 2026-08-20; deltas are vs that library\u2019s own baseline at 0.750%.'
     },
-    ctx: {pass1: 'four arms', pass2: 'five arms'},
+    ctx: {pass1: 'four arms', pass2: 'six arms'},
     pass1: [
       {lab:'ours',arm:'baseline',n:34552,fdp:0.7497,m650:33789,m750:34552,m1000:35533,d:null},
       {lab:'ours',arm:'pickrun3',n:45943,fdp:0.7460,m650:44609,m750:45943,m1000:48166,d:33.0,cls:'best'},
@@ -236,12 +239,13 @@ const DATA = {
       {lab:'mike',arm:'pickrun3',n:43103,fdp:0.8960,m650:40584,m750:41563,m1000:44082,d:15.0}
     ],
     pass2: [
-      {lab:'ours',arm:'pickrun3',n:57995,fdp:1.3701,m650:51405,m750:52911,m1000:55548,d:null,cls:'best'},
+      {lab:'ours',arm:'baseline',n:36981,fdp:1.0545,m650:34736,m750:35327,m1000:36745,d:null},
+      {lab:'ours',arm:'pickrun3',n:57995,fdp:1.3701,m650:51405,m750:52911,m1000:55548,d:49.8,cls:'best'},
       {lab:'mike',arm:'baseline',n:51116,fdp:1.5613,m650:41190,m750:42679,m1000:46815,d:null},
       {lab:'mike',arm:'pickrun3',n:54341,fdp:1.7783,m650:46628,m750:47855,m1000:49959,d:12.1},
-      {lab:'ours',arm:'pickrun2',n:54552,fdp:1.5390,m650:47290,m750:48353,m1000:51187,d:null,cls:'sup'},
+      {lab:'ours',arm:'pickrun2',n:54552,fdp:1.5390,m650:47290,m750:48353,m1000:51187,d:36.9,cls:'sup'},
       {lab:'mike',arm:'pickrun2',n:58644,fdp:1.4715,m650:51242,m750:52381,m1000:55038,d:22.7,cls:'sup'},
-      {gap:'ours still has no pass-2 BASELINE arm — the cleanbase run stopped at pass 1, and the arm queued to fill it was stopped after the mike-pickrun3 arm finished — so our library has no pass-2 lever delta. pickrun2 rows are greyed as the superseded sampler, kept because the two libraries swap places between the samplers, which is the point of the table.'}
+      {gap:'Table complete as of 2026-08-20. pickrun2 rows are greyed as the superseded sampler, kept because the two libraries swap places between the samplers, which is the point of the table.'}
     ]
   },
   f3: {
