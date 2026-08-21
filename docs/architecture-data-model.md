@@ -166,6 +166,16 @@ A fundamental concept in Skyline's immutable architecture:
 
 In an immutable system, reference equality is extremely powerful because unchanged subtrees keep their original object references. If `ReferenceEquals(nodeNew, nodeOld)` returns true, you know the entire subtree is unchanged without examining any content.
 
+### `Equals()` is content equality only - never mix in reference identity
+
+**An `Equals()` override must compare content and nothing else.** Do not be tempted to "strengthen" a weak-looking `Equals()` by adding a reference comparison, even where content equality feels too loose to distinguish two instances.
+
+The reason is a critical test guarantee: an `SrmDocument`, including one with results, must serialize to disk, deserialize, and come back `Equals()` to the original. Every object in that tree is a different instance after a round trip, so any `ReferenceEquals` inside an `Equals()` override makes that unsatisfiable, and a large body of serialization tests depends on it.
+
+`ChromInfo.Equals()` is the case that most often prompts the question: all `ChromFileInfoId`s compare equal, so the base contributes nothing and the derived members do the real work. That is deliberate, not a defect. It relies on it being very unlikely that two peaks from different files match in every other member.
+
+Reference equality remains the right tool for *change detection* between document snapshots (see above). The distinction is that it belongs at the call site, not inside an `Equals()` override.
+
 ## Identity vs DocNode: A Critical Distinction
 
 Every `DocNode` contains an `Identity` object:
