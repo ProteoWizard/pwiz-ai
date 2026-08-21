@@ -8,7 +8,7 @@
 - **GitHub Issue**: [#4597](https://github.com/ProteoWizard/pwiz/issues/4597)
 - **Module**: `osprey`
 - **Worktree**: `C:\proj\pwiz-work1`
-- **PR**: (pending)
+- **PR**: [#4600](https://github.com/ProteoWizard/pwiz/pull/4600)
 - **Requester/Reporter**: none — raised by Brendan (project developer), no credit line
 
 ## Objective
@@ -187,3 +187,18 @@ Stellar` PASSED again (all ten checks, identical blibs) - `C:\proj\ai\.tmp\regr-
 Exe snapshots for the SEA-AD 82-file run: `D:\test\osprey-runs\_bin\4597-deferred-pool`
 (pre-review, 26.1.1.231) and `D:\test\osprey-runs\_bin\4597-deferred-pool-r2` (post-review,
 26.1.1.232 - the one to use).
+
+### 2026-08-20 - PR #4600 open, -Dataset All green, Copilot addressed
+
+* **`regression.ps1 -Dataset All`: PASSED** - 56 checks across all four datasets, including
+  the Astral leg (mode3 per-file sidecars == straight over 9,685,318 records, HPC chain ==
+  straight) and every mode 1/1b/1c/2/3/4/5/6/7. Log: `C:\proj\ai\.tmp\regr-4597-all.log`.
+* Copilot review: two comments. Its `InternalsVisibleTo` claim was WRONG (declared at
+  `Osprey.Tasks.csproj:8-11`, which is how the pre-existing tests in that same file already
+  reach `PipelineContext`) - refuted with evidence rather than acted on. Its second was right:
+  the `!_materialize.Value` branch was unreachable, since the `Lazy` factory returns true or
+  throws; simplified to `_ = _materialize?.Value;` (commit `0bb06c9023`, 589 tests + zero
+  inspection warnings after). Provably equivalent, so the `-Dataset All` result stands.
+* Perf gate deliberately NOT run: Brendan's 82-file SEA-AD run has the machine, and a 3-rep
+  median cannot share a box. Outstanding before merge: `Test-PerfGate.ps1 -Dataset Stellar`
+  and the TeamCity Perf/Regression config (ask first, `branch=pull/4600`).
