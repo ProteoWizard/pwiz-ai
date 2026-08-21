@@ -77,6 +77,37 @@ on a branch and inventories the breakage to size the real fix.
       32px source at load - per-icon hand-authoring only if a glyph
       looks bad in practice (developer decision 2026-08-20)
 
+## Tree cluster (started 2026-08-20, in progress)
+
+Implemented the first slice on the same branch (uncommitted until
+verified):
+- `TreeViewMS`: instance properties `DashLength`/`TextPadding`/
+  `ImgWidth` (DPI-scaled versions of the 96-DPI consts); ItemHeight
+  DPI-scaled in ctor, `OnTextZoomChanged`, and a new `OnHandleCreated`
+  override (designer files re-set 16px after the ctor); expander
+  glyphs drawn DPI-scaled; `DrawNodeCustom`/`XIndent`/`HorizScrollDiff`
+  use the scaled values. Font left in points (scales naturally).
+- `DpiUtil`: added `Scale(Graphics,int)` for static draw code,
+  `ScaleSize`, and `ScaleImageForList` (32bpp ARGB, color key applied
+  BEFORE bicubic resampling so magenta cannot bleed into glyph edges;
+  returns original image untouched at 100% so 96-DPI behavior is
+  byte-identical).
+- `SequenceTree`: both ImageLists get DPI-scaled ImageSize +
+  Depth32Bit only when factor > 1 (96-DPI config unchanged); all 34
+  Add calls routed through `AddNodeImage`/`AddStateImage`; edit box
+  MinimumWidth scaled.
+- `FilesTree`: same ImageList treatment (17 icons).
+- `SrmTreeNode`: color swatch + annotation triangle scaled.
+- `PeptideTreeNode`: padding via instance property / Graphics overload
+  in static `DrawPeptideText` (also used by ViewLibraryDlg's list).
+
+PENDING: build + tree tests; **onscreen visual check at 150% deferred -
+developer locked the workstation; do this when they are back.**
+Not in this slice (still in package): PopupPickList, ImageListBox,
+StatementCompletion sizes, FilesTree edit-box (incl. the transposed
+MeasureText args), NodeTip metrics, EnsureWidthCustom DPI cache key
+(safe while system DPI cannot change mid-session).
+
 ## Branch state
 
 Scouting commit `cf3bdf6f9c` (manifest+config flip, DpiUtil, Start Page
