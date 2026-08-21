@@ -521,13 +521,37 @@ oracle against the delivered library, which was judged the more valuable propert
 differs from ours-gated by <em>two</em> generation changes, and only by the prediction basis being
 identical is it a controlled arm at all. Isolating the overlap gate alone would need a third Carafe
 build.</div>
-<div class="note"><strong>The gate has never been tested at 82 files.</strong> The ungated 82-file
-discriminator was deliberately not run on 2026-08-18, on the grounds that a single run could not be
-distinguished from the &plusmn;15&ndash;20% pool-composition swing then in play. That swing was a symptom
-of the training-selection defect fixed in
-<a href="https://github.com/ProteoWizard/pwiz/pull/4593">pwiz#4593</a>, so the objection no longer
-applies &mdash; but the experiment still has not been done, and no gate conclusion at scale should be
-drawn until it is.</div>
+<div class="note g"><strong>The gate at 82 files &mdash; RUN 2026-08-21, and it is not the per-file
+null.</strong> The ungated 82-file discriminator was deliberately skipped on 2026-08-18 because a single
+run could not be told apart from the &plusmn;15&ndash;20% pool-composition swing then in play. That swing
+was a symptom of the training-selection defect fixed in
+<a href="https://github.com/ProteoWizard/pwiz/pull/4593">pwiz#4593</a>, so the objection expired and the
+run was made: <code>&hellip;-p2-pickrun3-oursungated-n82</code>, full pipeline, 8h03m, stratum line
+logged, against <code>&hellip;-p2-pickrun3-ours-n82</code> from the day before. Same binary, same shipped
+sampler, same file set.</div>
+<div class="card scroll">
+<table>
+  <tr><th>arm (82f, experiment scope, matched true FDP @0.750%)</th><th>pass 1</th><th>pass 2</th><th>true FDP at nominal 1% q, p1 / p2</th></tr>
+  <tr><td><strong>ours gated</strong></td><td class="num good">45,943</td><td class="num good">52,911</td><td class="num">0.746% / 1.370%</td></tr>
+  <tr><td>ours ungated</td><td class="num">43,620</td><td class="num">51,325</td><td class="num">0.905% / 1.723%</td></tr>
+  <tr class="tot"><td>gate is worth</td><td class="num good">+5.3%</td><td class="num good">+3.1%</td><td class="num">less error in both passes</td></tr>
+</table>
+</div>
+<div class="note g"><strong>The gate adds identifications AND spends less true error, in both
+passes.</strong> That is the claim the whole investigation was after, and it had been elusive for a
+specific reason: <strong>the cheap test returns null</strong>. At N=1 on SEA-AD the gate is worth
+&minus;0.06% (30,802 vs 30,782), so the per-file experiment &mdash; the obvious one to run &mdash; says
+"nothing here". The 82-file experiment that would have shown it was blocked by the pooling defect, and
+the one table that appeared to show a large gate effect (&sect;14 as first published) was an N confound
+pointing the <em>wrong way</em>. Cheap test null, expensive test blocked, apparent signal inverted.</div>
+<div class="note w"><strong>Three qualifications.</strong> (1) <code>-no_similarity_gate</code> disables
+the I/L-normalised collision rejection as well as the fragment-overlap gate, so +5.3% / +3.1% is
+<em>two</em> generation changes; isolating the overlap gate alone still needs a third Carafe build.
+(2) The calibration benefit on SEA-AD is "spends less error", not "rescues an anti-conservative
+library" &mdash; ungated measures 0.905% at a reported 1%, which is conservative. The
+anti-conservatism that makes the gate look essential is the 3-file HeLa result (&sect;13, 1.662%), and it
+does not reproduce here. (3) The effect is far smaller than HeLa's +16.4%, on the dataset that matters
+most. The gate is worth keeping on this evidence; it is not essential on SEA-AD.</div>
 
 <footer>
 Measured 2026-08-17; sections 14&ndash;15 corrected 2026-08-20. Rebuild:
