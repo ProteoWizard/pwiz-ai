@@ -202,3 +202,33 @@ Exe snapshots for the SEA-AD 82-file run: `D:\test\osprey-runs\_bin\4597-deferre
 * Perf gate deliberately NOT run: Brendan's 82-file SEA-AD run has the machine, and a 3-rep
   median cannot share a box. Outstanding before merge: `Test-PerfGate.ps1 -Dataset Stellar`
   and the TeamCity Perf/Regression config (ask first, `branch=pull/4600`).
+
+### 2026-08-20 - Filed #4601 for the artifact contract
+
+The stamp defect I handed back turned out to be the smaller half. Brendan reframed it from the
+HPC workflow-engine side: the artifact layout IS the engine's API, and encoding "nothing to do"
+as a missing file means the engine cannot tell "not done" from "done, nothing to do" - so it
+must allocate a node and stage that file's inputs just to let a planner discover there was no
+work. Filed as [#4601](https://github.com/ProteoWizard/pwiz/issues/4601), cross-linked from
+#4600.
+
+The shape of it, for whoever picks it up:
+
+* **The input side already does this right.** `FirstPassFdrTask.cs:1802-1815` writes a
+  `reconciliation.json` for EVERY file, empty lists and all. Only the output side encodes
+  nothing-to-do as absence. The marker is the missing half of an existing convention.
+* **Two artifacts missing, not one.** A work manifest from the join (Stage 5 computes the work
+  set and discards it; `reconciliation.json` cannot substitute because it carries actions +
+  gap-fill but NOT the multi-charge consensus targets, so an empty one does not mean no work),
+  and a per-unit completion marker carrying the validity key and a recorded `rescored` fact.
+* **Marker always beats the stamp fix** because it closes the channel the stamp cannot:
+  `AnyReconciledParquet` and `EffectiveScoresPathFromScoresPath` are bare `File.Exists`, so a
+  stale parquet is read for features with no sidecar involved. Writing every declared output
+  means there is no leftover to find.
+* **Watch on landing**: the `total_rescored > 0` C#/Rust parity (#4395) is currently ENCODED as
+  presence, so it must move to a recorded fact rather than be dropped; the strict
+  `--task SecondPassFDR` gate must stay an attestation, not a bypass; `regression.ps1:1179/1199`
+  copies a reconciled parquet per stem unconditionally and only works because every file in all
+  four datasets has work; and an honest `Outputs()` makes the coarse `CanRehydrate` skip start
+  firing (modes 4/5). The verification leg does not exist yet and needs a dataset with a
+  no-work file.
