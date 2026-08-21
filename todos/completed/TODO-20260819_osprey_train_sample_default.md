@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260819_osprey_train_sample_default`
 - **Base**: `master`
 - **Created**: 2026-08-19
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4593](https://github.com/ProteoWizard/pwiz/pull/4593) (merged 2026-08-21)
 
 Spun out of the investigation in `TODO-20260801_decoy_similarity_gate.md`, which carries all the
 measurement history. This file is the SHIPPING half: the training-selection change, the separately
@@ -695,3 +695,33 @@ no other golden file moved. The branch lands one net golden state.
 **Process note worth keeping**: the 9/9 green was on `8e554b9978`, and two commits were then held
 back from the gate deliberately. This was the first time they ran through it, and one of them had
 moved a value a golden records. Holding commits back from a manual gate defers exactly this.
+
+### 2026-08-21 - Merged
+
+PR #4593 merged as commit 1b5591a572, 18/18 checks green including Osprey
+Perf/Regression (build 4145044) on all four datasets and every mode. What shipped:
+the first-pass training selection now draws ONE run per precursor via a size-1
+reservoir instead of taking a cross-run maximum, worth +33.0% at pass 1 and +49.8%
+at pass 2 on 82 SEA-AD files at matched true entrapment FDP and a wash at 3 files;
+plus the Stellar libdecoy v3 library shipping separately from the mzML bundle.
+
+The merge took two Perf/Regression runs. The first (4145031) failed on a single
+issue - `StellarGenDecoyEntrap` mode 1 found `SpectrumSourceFiles.idFileName`
+differing on 3/3 rows, because the derived decoy-free library was renamed to carry
+the acquisition marker 2.5 h AFTER the goldens were captured. Re-captured in
+cc137a07e0: three rows, one column, nothing numeric. Root cause was procedural -
+the 9/9 green was on 8e554b9978 and two later commits were deliberately held back
+from the manual gate, so this was the first time they ran through it.
+
+That same first run confirmed the LibraryUrl overwrite bug in production: MacCoss
+Agent 1 logged `repairing 3 bundled library file(s) overwritten by a
+separately-shipped library`, restoring carafe_spectral_library.tsv and
+osprey_library_db_pairing.tsv. Build 4145031's log is the only record that the
+agent was ever damaged - it is clean now and future builds extract silently.
+
+**Follow-up filed**: [pwiz#4597](https://github.com/ProteoWizard/pwiz/issues/4597),
+PerFileRescoring's whole-run join. **Follow-up in flight**: the Rust port of this
+training selection, which brings cross-impl parity without OSPREY_TRAIN_PICK_RUN=0
+- Stellar now a full PASS at 1e-9, Astral down from 2,096,935 differing scores and
+454 differing precursors to a single record at 8.6e-8 (~48M ULPs, so not rounding;
+likely catastrophic cancellation, being diagnosed separately).
