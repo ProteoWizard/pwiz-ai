@@ -52,10 +52,34 @@ on a branch and inventories the breakage to size the real fix.
       (main window, key dialogs) - no breakage found at 125%
 - [x] Verify functional tests unaffected (TestRunner has its own
       manifest; LabelLayoutTest en pins pass onscreen at 125%)
+- [x] Grep-hunt inventory (sweep agent): ~132 hazard sites, ~40 high;
+      full annotated list in
+      `TODO-20260820_dpiAwareness-inventory.md` (auxiliary file)
+- [ ] Pilot fix: Start Page (anchored labels, font-derived row height,
+      DPI-rescaled persisted size)
 - [ ] Broader dialog sweep at 150% (needs a 150% display or a session
-      with scaling changed); export/import wizards, Document Grid,
-      Immunity/tools dialogs
+      with scaling changed); export/import wizards, Document Grid
 - [ ] Effort estimate for the system-aware pass; report on issue #4599
+- [ ] Icon assets follow-up issue: one 32px variant per icon (16px kept
+      for 100%); 20/24px produced by HighQualityBicubic downscale of the
+      32px source at load - per-icon hand-authoring only if a glyph
+      looks bad in practice (developer decision 2026-08-20)
+
+## Inventory summary (2026-08-20)
+
+~132 hazard sites, ~40 high-risk. No existing DPI-compensation code
+anywhere in product code - the fix introduces the first DeviceDpi
+usage. Highlights: the TreeViewMS cluster (ItemHeight=16, 8.25pt
+TextZoom font override, owner-draw constants 11/3/16,
+DrawImageUnscaled, 3 ImageLists without ImageSize) is the biggest
+coherent package and fixes both Targets and Files trees; the
+DigitalRune dockPanel XML persistence (user layout + every .sky.view
+stores pane sizes in device px) has the highest blast radius; ~10
+persisted Size/Point settings restore raw pixels
+(MsGraphExtension's splitter-as-fraction is the model idiom); 42
+resize/layout handlers do manual pixel arithmetic, 14 high. Also
+found a latent bug: FilesTree.cs:602 MeasureText proposed-size args
+appear transposed. Full annotated inventory in the auxiliary file.
 
 ## Progress Log
 
