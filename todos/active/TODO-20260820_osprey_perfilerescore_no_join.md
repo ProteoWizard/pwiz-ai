@@ -140,4 +140,50 @@ position in the run moved.
   a phase that runs none of the changed code, and the identical rerun passed it. Treated as
   environmental; `-Dataset All` is the re-confirmation.
 * Pending: `Test-PerfGate.ps1 -Dataset Stellar`, `regression.ps1 -Dataset All`,
-  `/code-review max`, TeamCity Perf/Regression (ask first).
+  TeamCity Perf/Regression (ask first).
+
+### 2026-08-20 - /code-review max: one real regression in the move, fixed
+
+15 findings; 12 fixed, 2 dropped, 1 handed back as pre-existing. The one that mattered:
+
+**The overlay's validity gate must not move past `WriteTaskSidecars`.** `AnalysisPipeline`
+stamps this run's validity key onto EVERY declared output that merely `File.Exists` once
+`Run` returns, with no check that this run produced it (`AnalysisPipeline.cs:238-249`), and
+`PerFileRescoreTask.Outputs` declares a reconciled parquet per input file. Deferring the
+overlay to the Stage-7 pull put its `PerFileResumeDriver.IsCurrent` test AFTER that stamp,
+so a `.scores-reconciled.parquet` from a run under a different validity key - one this run
+rejected as stale, `ClearStale` deleting the sidecar but not the parquet, and never rewrote -
+came back as "current" and its boundaries were overlaid into this run's blib. Silent, exit 0.
+No `regression.ps1` mode covers it: modes 1-6 all run within a single validity key, while
+`OspreyEnvironment.cs:449-454` promises switching modes within one output directory is safe.
+
+Fix: `RescoredPoolPlan`. `Run` DECIDES (which parquets are current, which files were
+rescored, the planner byproducts) while the answers are still true, and only the answers
+travel to the pull. Deferring the decision as well as the work was the actual mistake.
+
+Also fixed: `Lazy<bool>` (ExecutionAndPublication) so a failed build stays failed instead of
+leaving a half-filled pool flagged built, and two threads cannot both run a non-idempotent
+overlay; `MaterializeAllSurvivors` logs the file and sets `ExitCode` before throwing; a
+`[STAGE-WALL] survivor-pool` line (the ~16 min had landed in NO bucket, so a perf A/B would
+have read a fabricated Stage 6 win); the `stage7-inherited` probe taken BEFORE the pull with
+a new `stage7-pool` probe after it (#4486 comparability); `BackingBuffer` narrowed to an
+opaque `BufferIdentity`; the self-referential `ctx.Get` inside `Run` replaced by the token;
+`PipelineContext.Tasks` deleted (its only reader was the deleted predicate); six stale
+comments including a live justification at `FirstPassFdrTask.cs:672` and
+`Regression/README.md`; three added tests (non-forcing identity read on a DEFERRED milestone,
+the two-milestones-over-one-buffer shape, and a throwing build that must not retry).
+
+Dropped: a `--task PerFileRescoring` worker under `OSPREY_DUMP_RESCORED` now pays the join
+and dumps the full buffer rather than the drained one (a `-d`-only path, and the fuller dump
+is the correct one), and a speculative DEBUG assert on the milestone-consumed bit.
+
+**Handed back, NOT fixed here**: the stamp itself. `WriteTaskSidecars` stamping outputs the
+run never produced is a pre-existing defect that still exposes the resume `Rehydrate` path
+exactly as before this branch. This change no longer widens it; closing it is its own issue.
+
+Gates after the fixes: 589 unit tests, 0 inspection warnings, `regression.ps1 -Dataset
+Stellar` PASSED again (all ten checks, identical blibs) - `C:\proj\ai\.tmp\regr-4597-stellar-3.log`.
+
+Exe snapshots for the SEA-AD 82-file run: `D:\test\osprey-runs\_bin\4597-deferred-pool`
+(pre-review, 26.1.1.231) and `D:\test\osprey-runs\_bin\4597-deferred-pool-r2` (post-review,
+26.1.1.232 - the one to use).
