@@ -4,11 +4,11 @@
 - **Branch**: `Skyline/work/20260820_osprey_perfilerescore_no_join`
 - **Base**: `master`
 - **Created**: 2026-08-20
-- **Status**: In Progress
+- **Status**: Completed
 - **GitHub Issue**: [#4597](https://github.com/ProteoWizard/pwiz/issues/4597)
 - **Module**: `osprey`
 - **Worktree**: `C:\proj\pwiz-work1`
-- **PR**: [#4600](https://github.com/ProteoWizard/pwiz/pull/4600)
+- **PR**: [#4600](https://github.com/ProteoWizard/pwiz/pull/4600) (merged 2026-08-21 as d5108d7eaf)
 - **Requester/Reporter**: none — raised by Brendan (project developer), no credit line
 
 ## Objective
@@ -30,13 +30,13 @@ transient touch; total process 18.8 GB → 41.6 GB entering Stage 7.
 
 ## Tasks
 
-- [ ] `PerFileRescoring` ends with no join work, so its shape matches the HPC exit point
+- [x] `PerFileRescoring` ends with no join work, so its shape matches the HPC exit point
       it already is
-- [ ] `SecondPassFDR` builds its own global survivor pool — which it already does on the
+- [x] `SecondPassFDR` builds its own global survivor pool — which it already does on the
       `--task SecondPassFDR` path (`Rehydrate`, `ExpectReconciledInput`)
-- [ ] `SecondPassFdrWillRun` predicate removed rather than maintained: a worker skips the
+- [x] `SecondPassFdrWillRun` predicate removed rather than maintained: a worker skips the
       work because nothing pulls it, not because a predicate said so
-- [ ] Check (not necessarily fix) the two recorded latent HPC risks while in here:
+- [x] Check (not necessarily fix) the two recorded latent HPC risks while in here:
       `--input-scores` order sensitivity in multi-file FirstJoin, and straight-path global
       compaction vs HPC worker per-file compaction
 
@@ -299,6 +299,30 @@ PR as issue comment 5365899988. The case, in the order it was established:
 
 **Do not**: merge on the current red, and do not run anything CPU-heavy while the 82-file run
 owns the box.
+
+### 2026-08-21 - Merged
+
+PR #4600 merged as commit `d5108d7eaf`. All four scope items shipped: `PerFileRescoring` ends
+at its per-file HPC exit point, `SecondPassFDR`'s pull builds the global survivor pool through
+a DEFERRED `RescoredEntries` milestone, and both `SecondPassFdrWillRun` and the
+`PipelineContext.Tasks` hook it read are gone. The `/code-review max` round caught the one real
+regression in the first cut - deferring the DECISION along with the work would have let the
+driver's stamp certify a stale reconciled parquet - fixed by `RescoredPoolPlan`, which settles
+in `Run` what the pull later executes. Both `ResetRescoredTargets` scoping and
+`canonicalize: false` survived intact, verified by the golden gates.
+
+Nothing in scope was deferred. Deliberately NOT fixed here and handed to
+[#4601](https://github.com/ProteoWizard/pwiz/issues/4601): Stage 6 encodes per-file completion
+as a MISSING file, so an HPC engine cannot tell "not done" from "done, nothing to do", and two
+existence-only reads (`AnyReconciledParquet`, `EffectiveScoresPathFromScoresPath`) pick up a
+stale parquet with no sidecar involved. This PR stopped widening that; it does not close it.
+
+Final gates: 592 unit tests, zero inspection warnings, `regression.ps1 -Dataset All` green on
+the merged branch (56 checks, all four datasets), `Test-PerfGate.ps1 -Dataset Stellar` green
+(no total regression; see the caveat below - it cannot isolate this change), and TeamCity
+Perf/Regression **4145649 SUCCESS**. The earlier TC red (4144779) was never this branch: a
+sibling session's script had overwritten the v2 libdecoy library in place on the agent, which
+#4593's self-healing repaired.
 
 ### 2026-08-21 - Merged master (#4593), all gates green locally, TC re-triggered
 
