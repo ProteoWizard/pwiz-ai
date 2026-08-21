@@ -153,6 +153,18 @@ proportions, now crisp. Developer sign-off ("very good now").
 Follow-up noted: FilesTree never applies TextZoom to its FONT (only
 row height) - pre-existing inconsistency, left alone in this slice.
 
+## DigitalRune refinement (2026-08-21)
+
+Dissected a real .sky.view: the docked layout is stored as FRACTIONS
+(DockLeftPortion/AutoHidePortion etc.) - inherently DPI-proof. The
+pixel exposure is only `FloatingWindow Bounds="x, y, w, h"` (absolute
+device px; the 600x440 sample matches FormGroup's px floor). DLL is
+binary-only (Shared/Lib) so the fix is an XML transform around
+SaveAsXml/LoadFromXml: normalize floating SIZES to 96-logical on save,
+scale + clamp on-screen on load; legacy files are 96-logical by
+definition; no DPI stamp needed (old readers unaffected). Revised
+estimate: 1-2 days (down from +2-3), mostly compatibility matrix.
+
 ## Branch state
 
 Pushed 2026-08-21: `cf3bdf6f9c` (flip + Start Page pilot) and
