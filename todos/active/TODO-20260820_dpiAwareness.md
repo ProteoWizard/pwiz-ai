@@ -106,9 +106,13 @@ behavior verified unchanged (factor-1 short circuits). Developer
 visually confirmed the tree at **125%** (2026-08-21, via RDP - the
 session DPI comes from the CLIENT's scaling, 3440x1440 at 125%;
 Windows Settings does not show scaling inside RDP, use the DPI probe
-from [[dpi-query-live-not-registry]]). **Re-check at 150% on the
-physical console still pending** - that is where the crowding was
-reported and rounding is least forgiving. Note: system-DPI-aware apps
+from [[dpi-query-live-not-registry]]). Re-checked at **150%**
+2026-08-21 via RDP reconnect with client scaling raised to 150%
+(probe confirmed session DPI 144): developer confirms icons and
+expander glyphs look much better; row spacing good; font size correct
+(same physical size as the pre-flip stretched rendering, now crisp;
+TextZoom remains available as a preference). Tree slice fully
+verified at 125% and 150%. Note: system-DPI-aware apps
 pick up session DPI at launch; after an RDP reconnect with different
 client scaling, previously launched instances are bitmap-stretched
 until restarted (the PMv2 gap).
