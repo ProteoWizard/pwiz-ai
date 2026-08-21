@@ -589,3 +589,52 @@ of CommonUtil into a new assembly.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260818_commonutil_winforms_split.md` before starting work.
+
+## 2026-08-20/21 night session: parallel Docker run
+
+Skyline's own suite HAS now been run against this branch, in parallel (Docker) mode - the
+mode TeamCity uses. Two commits, not pushed:
+
+* `c92b1c1540` checkpoints the branch work that was sitting uncommitted (net472 removal,
+  font pin, app-local VC140 CRT, STA marshalling, staging defaults).
+* `b763d46701` fixes the container-only graph failures.
+
+### Root cause of the container-only graph failures
+
+`InitializeComponent` adds `dockPanel` to `panel1` - laying it out at the 200x100
+`UserControl` default - BEFORE `ApplyResources` applies the 736x444 from `Skyline.resx`.
+`panel1`'s layout is suspended across that and its `ResumeLayout(false)` performs no
+layout, so the anchor deltas cached from the 200x100 default are never refreshed. The next
+layout pass on `panel1` - raised by `CoverControl`'s construction in
+`DockPanelLayoutLock.EnsureLocked`, which passes `cover.Parent` to the
+`Control(Control parent, string text)` base ctor - runs `DefaultLayout.ApplyCachedBounds`
+and snaps `dockPanel` back to 200x100 permanently. Every docked graph pane collapses with
+it: `GraphChromatogram` ends up 98x77 with a **negative-width chart rect**, so every
+data-to-pixel conversion off it is garbage.
+
+Ruled out by measurement, not argument: screen size (client area is 734x514 in BOTH), the
+font pin, DPI value (96 both), resource resolution (`ApplyResources` replayed on a fresh
+`Panel` inside the container returns 736x444 correctly), and launch mode (host via
+`dotnet.exe TestRunner.dll` also passes). The host never fires `dockPanel.SizeChanged` at
+all; the container fires it once, from `ApplyCachedBounds`.
+
+Fix: re-assert `dockPanel.Anchor` after `InitializeComponent`, with layout live, so the
+deltas are recaptured from the real bounds. Exact geometry preserved - `Dock = Fill` was
+rejected because the resx deliberately overhangs `panel1` by 1px to hide the DockPanel
+border.
+
+Second, separate bug found once the layout was correct: `ComparePeakPickingDlg`'s
+designer-wired `zedGraphFiles_Resize` runs before the constructor creates
+`_axisLabelScaler`, so a resize message in between null-derefs. That was
+`TestPeakBoundaryCompare`'s `ThreadExceptionDialog` and its 384-second stall.
+
+Result: the 13 target tests went from 10 failures in 416s to **13 green in 53s**.
+
+### Tooling gap worth a decision (NOT changed)
+
+`build.bat` intentionally excludes `TestPerf` and `TestTutorial` from the standard build,
+and `Build-Skyline.ps1 -Target Solution` faithfully mirrors that. But
+`Stage-Net8Tests.ps1`'s default `-Projects` now DOES include both, so build-then-stage
+silently stages whatever stale `TestTutorial.dll`/`TestPerf.dll` happen to be on disk.
+Three of the 13 target tests live in `TestTutorial`. Suggest either staging only what was
+built, or warning when a staged project's output is older than its sources.
