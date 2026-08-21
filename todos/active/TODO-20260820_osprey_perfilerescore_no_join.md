@@ -203,6 +203,33 @@ Exe snapshots for the SEA-AD 82-file run: `D:\test\osprey-runs\_bin\4597-deferre
   median cannot share a box. Outstanding before merge: `Test-PerfGate.ps1 -Dataset Stellar`
   and the TeamCity Perf/Regression config (ask first, `branch=pull/4600`).
 
+### 2026-08-20 - End of evening: state and the morning checklist
+
+**Where it stands.** PR [#4600](https://github.com/ProteoWizard/pwiz/pull/4600) is open and
+green on every gate run so far: 589 unit tests, zero inspection warnings,
+`regression.ps1 -Dataset Stellar` twice (before and after the review fixes) and
+`-Dataset All` once (56 checks, all four datasets). Both Copilot threads are resolved - one by
+the fix in `0bb06c9023`, one by refutation with evidence. Follow-up #4601 is filed.
+
+**Running overnight**: TeamCity build 4144779, Osprey Windows .NET Perf/Regression Tests,
+`branch=pull/4600`, pinned to MacCoss TeamCity Agent 1.
+https://teamcity.labkey.org/build/4144779
+
+**Morning checklist, in order:**
+
+1. Confirm TeamCity 4144779 is green (`mcp__teamcity__get_build_status 4144779`; on a red,
+   `get_failed_tests` / `get_build_log` before assuming it is ours - a 10s exit-9009 red is an
+   AWS-agent artifact, but this one is agent-pinned so a red should be real).
+2. Once Brendan's 82-file SEA-AD run has released the machine, run the local perf A/B:
+   `pwsh -File ./ai/scripts/Osprey/Test-PerfGate.ps1 -Dataset Stellar` from `C:\proj\pwiz-work1`.
+   This is the LAST gate; it could not run tonight because a 3-rep median cannot share a box.
+3. `/pw-complete` on #4600 - squash-merge subject keeps the module prefix:
+   `osprey: Moved the PerFileRescoring whole-run join to the consumer that needs it (#4600)`.
+4. Do NOT delete the branch while #4601 is unstarted if it ends up stacked on this work; #4601
+   is independent, so a normal delete is fine.
+
+**Do not, overnight**: run anything CPU-heavy (the 82-file run owns the box), and do not merge.
+
 ### 2026-08-20 - Filed #4601 for the artifact contract
 
 The stamp defect I handed back turned out to be the smaller half. Brendan reframed it from the
