@@ -242,18 +242,35 @@ PR as issue comment 5365899988. The case, in the order it was established:
   it, staged but NOT wired into the dataset table. The agent's copy is unknown and unreadable
   from here - the TC log is only the 316-line console stream, and run dirs are deleted.
 
+**FINAL TALLY (build finished 23:46), and it sharpens the case decisively:**
+
+* **Astral: EVERY check PASS** - and to the record, `mode3 (per-file FDR sidecars==straight):
+  PASS (9,685,318 records)` and `mode1c: 19,008 of 3,449,774 shared records moved; 8,800
+  gap-fill`. Identical figures to the local `-Dataset All`. **Stellar: PASS.** Three of four
+  datasets reproduced on the agent exactly; the two that differ are the two sharing the
+  libdecoy library.
+* **On the failing datasets, ONLY the vs-golden comparisons fail.** Every self-consistency mode
+  passes: `mode3 (per-file FDR sidecars==straight): PASS (3,809,205 records)`,
+  `mode3 (HPC chain==straight): PASS`, `mode2 (resume==straight): PASS`,
+  `mode2 (resume cache hits): PASS`, `mode4 (warm re-run all cached): PASS`,
+  `mode1b (FDR sanity bounds): PASS`. Modes 2 and 3 are EXACTLY the paths this PR changes - the
+  resume rehydrate and the `--task` worker chain, both exercising the deferred pool build - and
+  they agree with straight-through across 3.8 M records. A defect in the change reds those
+  first. "Agrees with itself everywhere, disagrees only with a stored baseline" is a
+  baseline/input mismatch, not a code defect.
+* **The perf leg never ran.** Step 3/5 aborted at the regression failure; steps 4/5 and 5/5 are
+  disabled. This build produced NO perf verdict, so the local A/B is the only perf gate and is
+  now more important, not less.
+
 **Morning checklist, in order:**
 
 1. **Trigger this config on `master` as a change-immune anchor** - the one test that settles
    it. Red the same way => confirmed pre-existing, PR clear on this axis, and the stale-data
    problem gets its own issue. NOT triggered overnight: re-triggering the shared agent is
    Brendan's call every time, and it is the agent other developers queue on.
-2. Check whether the Astral leg passed in 4144779 (it was still running at 66%). Astral uses
-   its own library, so an Astral pass further isolates this to the libdecoy tree; an Astral
-   FAIL would break the hypothesis and the whole thing needs rethinking.
-3. Once Brendan's 82-file SEA-AD run has released the machine, run the local perf A/B:
+2. Once Brendan's 82-file SEA-AD run has released the machine, run the local perf A/B:
    `pwsh -File ./ai/scripts/Osprey/Test-PerfGate.ps1 -Dataset Stellar` from `C:\proj\pwiz-work1`.
-4. `/pw-complete` on #4600 - ONLY after 1 settles the red. Squash subject keeps the prefix:
+3. `/pw-complete` on #4600 - ONLY after 1 settles the red. Squash subject keeps the prefix:
    `osprey: Moved the PerFileRescoring whole-run join to the consumer that needs it (#4600)`.
 
 **Do not**: merge on the current red, and do not run anything CPU-heavy while the 82-file run
