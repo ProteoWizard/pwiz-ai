@@ -123,6 +123,11 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
   other ad-hoc location
 - If a tool needs a scratch directory, create a subfolder under
   `ai/.tmp/` (e.g. `ai/.tmp/memtest/`, `ai/.tmp/diag-before/`)
+- **Your own working files go in `ai/.tmp/sessions/<YYYYMMDD>-<short-session-id>/`**
+  - patch scripts, commit message drafts, captured build logs. The ROOT of
+  `ai/.tmp/` is for files exchanged with the developer (handoffs, pasted
+  context, downloads); dozens of session `.py` and `.txt` files there bury it
+- Test and run output goes to the machine's test data area, NEVER to `ai/.tmp/`
 - Keeping everything under `ai/.tmp/` keeps the paths consistent
   between Git Bash and PowerShell, and between sessions
 

@@ -182,6 +182,14 @@ Many MCP tools and skills automatically write output here. When you need to save
 working files (e.g., a downloaded page, a generated report, a diagnostic dump),
 always use `ai/.tmp/`.
 
+**Put your own working files in a session subfolder**:
+`ai/.tmp/sessions/<YYYYMMDD>-<short-session-id>/` for patch scripts, commit message
+drafts and captured logs - anything written to do the job rather than to hand to the
+developer. The root is the shared surface listed above, and it stops being usable when
+a session leaves scores of files in it. Test and run output goes to the machine's test
+data area, never here. Run `/pw-cleanup` when it has grown untidy; see
+`ai/docs/cleanup-guide.md`.
+
 ## Essential Documentation
 
 Before writing code, read these files:
