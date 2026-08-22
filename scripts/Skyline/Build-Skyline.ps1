@@ -7,7 +7,7 @@
     iterative builds and tests without requiring manual Visual Studio interaction.
 
 .PARAMETER Target
-    What to build: Solution, Skyline, Test, TestData, TestFunctional, TestConnected, TestTutorial, TestPerf, Clean, Rebuild
+    What to build: Solution, Skyline, SkylineTester, Test, TestData, TestFunctional, TestConnected, TestTutorial, TestPerf, Clean, Rebuild
 
 .PARAMETER Configuration
     Debug or Release (default: Debug)
@@ -57,7 +57,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Solution", "Skyline", "Test", "TestData", "TestFunctional", "TestConnected", "TestTutorial", "TestPerf", "Clean", "Rebuild")]
+    [ValidateSet("Solution", "Skyline", "SkylineTester", "Test", "TestData", "TestFunctional", "TestConnected", "TestTutorial", "TestPerf", "Clean", "Rebuild")]
     [string]$Target = "Solution",
 
     [Parameter(Mandatory=$false)]
@@ -276,6 +276,7 @@ $buildArgs = @(
 if ($Target -ne "Solution") {
     $msbuildTarget = switch ($Target) {
         "Skyline" { "Skyline" }
+        "SkylineTester" { "SkylineTester" }
         "Test" { "Test" }
         "TestData" { "TestData" }
         "TestFunctional" { "TestFunctional" }
