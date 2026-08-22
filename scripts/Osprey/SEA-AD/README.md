@@ -167,6 +167,7 @@ caches so Stage 5 onward - the part usually under test - always regenerates.
 
 | script | answers |
 |---|---|
+| `pass1_fdp.py <run_dir|mdiag.html>...` | every view (pass 1/2 x run/experiment) from `--model-diagnostics`: count at 1% nominal q, the true FDP there, and counts at MATCHED true FDP |
 | `compute_pass2_fdp.py <run_dir>...` | entrapment FDP at reported q, from the pass-2 `fdrbench.tsv` |
 | `fdp_at_count.py <run_dir>...` | FDP against accepted target COUNT, overlaying pass 1 and pass 2 |
 | `runcount_fdp.py <run_dir>` | FDP by number-of-runs-identified (needs `--model-diagnostics`) |
@@ -204,7 +205,8 @@ Run all of these against every completed run:
 | check | command | what it must show |
 |---|---|---|
 | memory + reporting cadence | `python ai/scripts/perfviz.py <run>/run.log` | peak fits the box; **no gap >= 30 s**; per-phase floor not growing with file count |
-| entrapment FDP | `tools/fdp_at_count.py <run dir>` | Pass 1 in line with the recorded comparator |
+| entrapment FDP | `tools/pass1_fdp.py <run dir>` | Pass 1 in line with the recorded comparator. **Quote the matched-true-FDP count, not the count at 1% nominal q** - an arm can always report more by spending more error |
+| FDP vs count | `tools/fdp_at_count.py <run dir>` | pass 1 and pass 2 overlaid on the same count axis |
 | FDP at reported q | `tools/compute_pass2_fdp.py <run dir>` | pass-2 inflation no worse than the known figure |
 | reproducibility | `tools/runcount_fdp.py <run dir>` | high-run-count peptides stay clean |
 
