@@ -165,6 +165,14 @@ function Invoke-OspreyDatasetRun {
         [ValidateSet('transfer', 'transfer-compete', 'protein-compact')]
         [string]$Pass2Mode = 'protein-compact',
         [switch]$PickProduct,
+        # Emit Osprey's post-GC [MEM ...] probes (OSPREY_LOG_MEMORY=1). Those probes are what
+        # answer "will it fit" - --memstamp includes uncollected garbage and shows shape, not
+        # magnitude - but each one forces a GC.Collect() pair, so a large run pays real wall
+        # time for them (999 probes on the 163-file TDP-43 baseline). OFF by default so timings
+        # are clean; turn it on when the question is memory rather than speed. Exported in BOTH
+        # directions and recorded, because two arms that differ in it are NOT comparable on
+        # either axis and nothing in Osprey's output says which one a finished run had.
+        [switch]$LogMemory,
         [int]$NumFiles,
         # Take the $NumFiles files AFTER skipping this many, so cohorts of the same size can
         # be drawn from disjoint slices of the dataset (replicate cohorts for a size-vs-effect
@@ -480,6 +488,9 @@ function Invoke-OspreyDatasetRun {
     # Same reasoning as the pick model: which runs trained the peak model is not in Osprey's
     # log either, so the banner states it. The runner clears OSPREY_TRAIN_PICK_RUN, so this
     # is a guarantee about the run, not a report of a variable.
+    Write-Host ("  memprobe : {0}" -f $(if ($LogMemory) {
+                'post-GC [MEM] probes ON (OSPREY_LOG_MEMORY=1) - forces GCs, do NOT compare wall time to an arm without it' }
+                else { 'off (default) - --memstamp shape only, no forced GCs' }))
     Write-Host "  train set: one run per precursor (pickrun3 default; OSPREY_TRAIN_PICK_RUN cleared)"
     Write-Host ("  exp agg  : {0}" -f $(if ($ExperimentAgg) {
                 "$ExperimentAgg (OSPREY_EXPERIMENT_AGG) - moves the experiment-wide discovery set" }
@@ -628,6 +639,7 @@ function Invoke-OspreyDatasetRun {
     # run.log claim, and the two arms of an A/B would be the same run under two labels.
     $env:OSPREY_PASS2_QVALUE = $Pass2Mode
     $env:OSPREY_PICK_LDA = if ($PickProduct) { '0' } else { '1' }
+    $env:OSPREY_LOG_MEMORY = if ($LogMemory) { '1' } else { '0' }
     if ($ExperimentAgg) { $env:OSPREY_EXPERIMENT_AGG = $ExperimentAgg }
     # Unconditionally, in both directions, for the reason above: Osprey's own default is 'run',
     # so an arm that exported only its ON value would leave the OFF arm running on whatever the
@@ -657,7 +669,7 @@ function Invoke-OspreyDatasetRun {
         Write-Host ("  rotated previous run.log -> {0}" -f (Split-Path $rotated -Leaf)) -ForegroundColor Cyan
     }
     ("[{0}] START dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
-     "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
+     "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
      "qualify=$QualifyBy files=$($inputs.Count) threads=$Threads " +
      "parallelfiles=$ParallelFiles task='$Task' mdiag=$mdiag " +
      "fdrbench=$FdrBenchPass linkfrom='$LinkFrom'") -f (Get-Date -Format s) |
@@ -674,7 +686,7 @@ function Invoke-OspreyDatasetRun {
     $exit = $LASTEXITCODE
     $sw.Stop()
     ("[{0}] DONE dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
-     "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
+     "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
      "qualify=$QualifyBy parallelfiles=$ParallelFiles exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
         Add-Content -Path $log
     Write-Host ("Osprey exited {0} after {1:hh\:mm\:ss}" -f $exit, $sw.Elapsed) `
