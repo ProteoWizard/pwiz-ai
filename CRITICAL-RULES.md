@@ -10,11 +10,14 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 **Trust comes from verifiers, not from the LLM.** Every rule below is intended to be enforced by a build, a test, or an inspection — not by the model reading and remembering. When a rule's verifier is weak, the rule will drift; strengthen the verifier rather than the wording. See [ai/docs/validation-cycle-principles.md](docs/validation-cycle-principles.md).
 
 ## File Format Requirements
-- Line endings in **pwiz**: CRLF. `.cs` is stored CRLF, so an LF-only rewrite
-  lands as a whole-file diff. `CodeInspectionTest` catches MIXED endings only
-  (`crlfCount != 0 && crlfCount < lines.Length-1`) - an all-LF file passes it,
-  so a `sed -i` that rewrites a whole file is NOT caught. Fix with
-  `pwsh -File ./ai/scripts/fix-crlf.ps1` before committing
+- Line endings in **pwiz**: always write CRLF. Blob storage is NOT uniform and the
+  extension does not predict it - a 25-file sample of `.cs` was 15 CRLF / 10 LF, and
+  some `.txt` blobs are mixed. Writing CRLF is safe against both: `core.autocrlf=true`
+  normalises it away where the blob is LF, and preserves it where the blob is CRLF.
+  Writing LF into a CRLF-stored blob churns the WHOLE file (measured: a 3-line file
+  diffs as 3 changed). `CodeInspectionTest` catches MIXED endings only
+  (`crlfCount != 0 && crlfCount < lines.Length-1`), so an all-LF `sed -i` rewrite
+  passes it. Fix with `pwsh -File ./ai/scripts/fix-crlf.ps1` before committing
 - Line endings in **pwiz-ai**: not a rule, do not check or convert them. The repo
   stores LF, `core.autocrlf=true` yields CRLF on checkout, and a file written
   either way commits identically. Flagging an `ai/` file for line endings, or

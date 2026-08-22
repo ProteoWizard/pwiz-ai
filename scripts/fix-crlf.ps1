@@ -1,8 +1,10 @@
 # Convert only files currently added/modified in Git to CRLF and verify
 #
 # Usage: .\fix-crlf.ps1
-# Scope: Only processes files in 'git status' (modified/added)
-#        Also processes the ai/ submodule (pwiz-ai) explicitly
+# Scope: Only processes files in 'git status' (modified/added) in the PWIZ tree.
+#        pwiz-ai is deliberately NOT processed: it stores LF, core.autocrlf
+#        yields CRLF on checkout, and either form commits identically, so
+#        converting it is churn. See CRITICAL-RULES.md, File Format Requirements.
 #
 # This script was created during the webclient_replacement work (Oct 2025)
 # when LLM tools (which prefer Linux-style LF) inadvertently changed
@@ -123,14 +125,12 @@ if (-not $gitRoot) {
 $isSiblingMode = (Split-Path $gitRoot -Leaf) -eq 'ai'
 
 if ($isSiblingMode) {
-  # Sibling mode: we're in the ai/ repo (pwiz-ai), process it directly
-  $aiFiles = Get-ModifiedFiles -workDir $gitRoot
-  if ($aiFiles) {
-    $anyFiles = $true
-    Write-Host "Processing ai/ repository (sibling mode)..." -ForegroundColor Cyan
-    Convert-ToCRLF -files $aiFiles -baseDir $gitRoot | Out-Null
-    $allBad += Test-NoLFOnly -files $aiFiles -baseDir $gitRoot
-  }
+  # We are inside pwiz-ai. Line endings are not a rule there: the repo stores LF,
+  # core.autocrlf produces CRLF on checkout, and a file written either way commits
+  # identically. Converting would create diff churn for nothing.
+  Write-Host 'pwiz-ai does not use the CRLF rule - nothing to do.' -ForegroundColor Yellow
+  Write-Host 'Run this from a pwiz checkout to fix pwiz source files.' -ForegroundColor Yellow
+  exit 0
 } else {
   # Child mode: process parent repo and ai/ clone separately
   $parentFiles = Get-ModifiedFiles -workDir "."
@@ -140,17 +140,7 @@ if ($isSiblingMode) {
     $allBad += Test-NoLFOnly -files $parentFiles -baseDir "."
   }
 
-  # Process ai/ clone explicitly (pwiz-ai)
-  $aiPath = Join-Path $gitRoot "ai"
-  if (Test-Path $aiPath -PathType Container) {
-    $aiFiles = Get-ModifiedFiles -workDir $aiPath
-    if ($aiFiles) {
-      $anyFiles = $true
-      Write-Host "`nProcessing ai/ clone..." -ForegroundColor Cyan
-      Convert-ToCRLF -files $aiFiles -baseDir $aiPath | Out-Null
-      $allBad += Test-NoLFOnly -files $aiFiles -baseDir $aiPath
-    }
-  }
+  # The ai/ clone (pwiz-ai) is skipped on purpose - see the note above.
 }
 
 if (-not $anyFiles) {
