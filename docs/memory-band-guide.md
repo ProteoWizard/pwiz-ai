@@ -41,11 +41,32 @@ Two readers over the same log. Use both; they answer different questions.
 |---|---|---|
 | `ai/scripts/perfviz.html` | a human, visually | interactive plot of the three series |
 | `ai/scripts/perfviz.py` | terminal / CI / an agent | numbers: peak, floor drift, gap list |
+| `ai/scripts/phase_mem_shape.py` | either | memory shape WITHIN each phase, by decile, with a fan-out-vs-join verdict |
 
 ```
 python ai/scripts/perfviz.py run.log --files 20 --png run.png
 python ai/scripts/perfviz.py before.log after.log       # A/B two runs
+python ai/scripts/phase_mem_shape.py run.log            # per-phase shape + verdict
 ```
+
+`phase_mem_shape.py` answers a question the whole-run summary cannot: **is this phase
+flat iteration, or does it ramp into a join at the end?** A fan-out phase (one file at a
+time) must stay flat; only a join phase should ramp, and a join is where an
+O(files x entries) structure can appear. It prints each phase in deciles and compares the
+last decile's peak against the median of the first eight.
+
+Worked example - pwiz #4600 moved PerFileRescoring's whole-run join into SecondPassFDR's
+pull. On the 163-file TDP-43 cohort the signature is unmistakable:
+
+| PerFileRescoring | before #4600 | after |
+|---|---|---|
+| flat body | ~15.5 GB | ~17.5 GB |
+| final decile max | **44.3 GB** | **20.2 GB** |
+| verdict | 2.34x RAMPS INTO A JOIN | 1.04x flat iteration |
+
+It **refuses a verdict on a phase that is still running**, because a phase that ramps only
+at its end looks flat for its first 90%. A partial log cannot answer the question, and a
+'flat iteration' verdict read off one would be worse than no answer.
 
 The **numeric summary is stdlib-only**, so it runs on a fresh machine with nothing
 installed. `--png` additionally needs matplotlib (`pip install matplotlib`); the import is
