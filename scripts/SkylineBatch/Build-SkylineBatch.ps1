@@ -134,7 +134,9 @@ Write-Host ""
 # Build solution
 Write-Host "Building: SkylineBatch.sln ($Configuration|$Platform)" -ForegroundColor Cyan
 $buildStart = Get-Date
-$buildCmd = "& `"$msbuildPath`" SkylineBatch.sln /p:Configuration=$Configuration /p:Platform=`"$Platform`" /nologo /verbosity:$Verbosity"
+# -restore first: VS MSBuild does not restore implicitly the way `dotnet build` does, so in a
+# checkout that has never built this solution every project fails NETSDK1004 (no assets file).
+$buildCmd = "& `"$msbuildPath`" SkylineBatch.sln -restore /p:Configuration=$Configuration /p:Platform=`"$Platform`" /nologo /verbosity:$Verbosity"
 Write-Host "Command: $buildCmd" -ForegroundColor Gray
 Write-Host ""
 
@@ -293,7 +295,22 @@ if ($RunTests) {
         exit 1
     }
     
+    # SDK-style projects put output under bin\<config>\<tfm>\, and which frameworks exist
+    # depends on the branch - net472 was dropped from these projects during the .NET 8 port.
+    # Resolve the framework from what the csproj DECLARES rather than from what is sitting in
+    # bin\: output from a framework the branch no longer targets survives a branch switch, and
+    # running that stale assembly passes while testing code that is no longer in the tree.
+    # Where several are declared, take the last, which is the one the Jamfile's flat OutDir
+    # leaves in place. The flat path is still tried first, for AppendTargetFrameworkToOutputPath.
     $testDll = "SkylineBatchTest\bin\$Configuration\SkylineBatchTest.dll"
+    if (-not (Test-Path $testDll)) {
+        $declared = Select-String -Path "SkylineBatchTest\SkylineBatchTest.csproj" -Pattern '<TargetFrameworks?>([^<]+)<' |
+            Select-Object -First 1
+        if ($declared) {
+            $tfm = ($declared.Matches[0].Groups[1].Value -split ';' | Where-Object { $_.Trim() } | Select-Object -Last 1).Trim()
+            if ($tfm) { $testDll = "SkylineBatchTest\bin\$Configuration\$tfm\SkylineBatchTest.dll" }
+        }
+    }
     if (-not (Test-Path $testDll)) {
         Write-Host "❌ Test assembly not found: $testDll" -ForegroundColor Red
         exit 1
