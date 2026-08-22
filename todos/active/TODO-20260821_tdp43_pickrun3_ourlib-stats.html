@@ -1,0 +1,275 @@
+<title>TDP-43 pickrun3 + our library</title>
+<style>
+  :root{
+    --bg:#fbfbfa; --panel:#ffffff; --ink:#1a1a19; --muted:#6b6b68; --line:#e3e3df;
+    --accent:#2f5d50; --accent-soft:#eef4f1;
+    --good:#1f6b45; --good-bg:#eaf4ee; --bad:#8c3222; --bad-bg:#fbeeeb; --flat:#6b6b68; --flat-bg:#f2f2f0;
+    --warn:#7a5a12; --warn-bg:#fdf6e3;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#16171a; --panel:#1d1f23; --ink:#e8e8e6; --muted:#9a9a96; --line:#2e3137;
+      --accent:#7fbfa8; --accent-soft:#1f2a27;
+      --good:#7fc9a0; --good-bg:#1a2b22; --bad:#e39684; --bad-bg:#2e1f1c; --flat:#9a9a96; --flat-bg:#232529;
+      --warn:#d9b45f; --warn-bg:#2a2418;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#16171a; --panel:#1d1f23; --ink:#e8e8e6; --muted:#9a9a96; --line:#2e3137;
+    --accent:#7fbfa8; --accent-soft:#1f2a27;
+    --good:#7fc9a0; --good-bg:#1a2b22; --bad:#e39684; --bad-bg:#2e1f1c; --flat:#9a9a96; --flat-bg:#232529;
+    --warn:#d9b45f; --warn-bg:#2a2418;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 24px 96px}
+  header{border-bottom:2px solid var(--accent);padding-bottom:18px}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:-.01em;text-wrap:balance}
+  .sub{color:var(--muted);font-size:14px}
+  .stamp{color:var(--muted);font-size:12.5px;margin-top:10px;font-family:var(--mono)}
+  h2{font-size:19px;margin:38px 0 4px;letter-spacing:-.01em;text-wrap:balance}
+  h2 .n{color:var(--accent);font-family:var(--mono);font-size:14px;margin-right:8px}
+  h3{font-size:15px;margin:22px 0 6px}
+  p{margin:8px 0}
+  .lede{color:var(--muted);margin:2px 0 14px;font-size:14px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:16px 18px;margin:14px 0}
+  .head-line{display:flex;flex-wrap:wrap;gap:14px;margin:18px 0 6px}
+  .kpi{flex:1 1 220px;background:var(--panel);border:1px solid var(--line);
+       border-left:3px solid var(--accent);border-radius:8px;padding:13px 15px}
+  .kpi.warnk{border-left-color:var(--warn)}
+  .kpi .v{font-family:var(--mono);font-size:25px;font-weight:600;letter-spacing:-.02em}
+  .kpi .l{color:var(--muted);font-size:12.5px;margin-top:3px}
+  .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:10px 0}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:640px}
+  caption{text-align:left;color:var(--muted);font-size:12.5px;padding:0 0 7px;font-style:italic}
+  th,td{padding:7px 11px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+  th:first-child,td:first-child{text-align:left;white-space:normal}
+  th{background:var(--accent-soft);color:var(--ink);font-weight:600;font-size:12.5px;text-align:right}
+  th:first-child{text-align:left}
+  td.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  td.txt{text-align:left;white-space:normal}
+  tr.best td{background:var(--accent-soft);font-weight:600}
+  .d{font-family:var(--mono);font-size:12.5px;padding:1px 6px;border-radius:4px}
+  .up{color:var(--good);background:var(--good-bg)}
+  .dn{color:var(--bad);background:var(--bad-bg)}
+  .fl{color:var(--flat);background:var(--flat-bg)}
+  .note{background:var(--warn-bg);border-left:3px solid var(--warn);border-radius:0 7px 7px 0;
+        padding:11px 15px;margin:14px 0;font-size:13.5px}
+  .key{border-left:3px solid var(--accent);background:var(--accent-soft);
+       border-radius:0 7px 7px 0;padding:11px 15px;margin:14px 0;font-size:13.5px}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--flat-bg);padding:1px 5px;border-radius:4px}
+  ul{margin:8px 0;padding-left:20px} li{margin:4px 0}
+  footer{margin-top:54px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>TDP-43 Plasma EV &mdash; pickrun3 + our library, 163 files</h1>
+  <div class="sub">First test of the pickrun3 training selection on TDP-43, and the first run of
+    this dataset with our own library. Two variables move at once against the 2026-08-16
+    baseline, deliberately: this is &ldquo;our best current configuration vs. what we had&rdquo;,
+    not an ablation.</div>
+  <div class="stamp">run 2026-08-21 17:59:56 &rarr; 2026-08-22 13:00:32 &middot; exit 0 &middot; 1141 min
+    &middot; Osprey 26.1.1.233 (5acc2dd24c) &middot; libdecoy r=1.0 &middot; protein-compact &middot; threads 30</div>
+</header>
+
+<div class="head-line">
+  <div class="kpi"><div class="v">+4.58%</div><div class="l">pass 1, matched true FDP @0.750%</div></div>
+  <div class="kpi"><div class="v">+8.94%</div><div class="l">pass 2, matched true FDP @0.750%</div></div>
+  <div class="kpi"><div class="v">+10.68%</div><div class="l">peptides seen in &ge;half the runs</div></div>
+  <div class="kpi warnk"><div class="v">8</div><div class="l">reporting gaps &ge;30 s (gate: 0)</div></div>
+</div>
+
+<h2><span class="n">1</span>The two arms</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>arm</th><th class="txt">library</th><th class="txt">training selection</th></tr></thead>
+  <tbody>
+    <tr><td>baseline (2026-08-16)</td><td class="txt">Mike delivered, <code>target+decoy+entrapment</code></td>
+        <td class="txt">best observation across all runs &mdash; the cross-run maximum</td></tr>
+    <tr class="best"><td>this run</td><td class="txt">ours, <code>target+decoy+entrapment-20260817</code></td>
+        <td class="txt">pickrun3 &mdash; uniform draw over runs (shipped default)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note"><b>Nominal q is not the result.</b> <code>n@1% q</code> is what a user gets at the
+reported cutoff; <code>FDP at that q</code> is what that cutoff actually cost, measured against
+entrapment. The <code>@0.650 / 0.750 / 1.000%</code> columns re-cut both arms at the <i>same true
+error</i>. On this run the pass-1 Percolator target count was <b>+11.06%</b> and the matched-FDP
+gain was <b>+4.58%</b> &mdash; the nominal figure overstates the result by ~2.4&times;, because this
+arm also spends more error at the cutoff (0.9560% vs 0.9128%).</div>
+
+<h2><span class="n">2</span>Pass 1 &mdash; experiment scope</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>library / arm</th><th>n@1% q</th><th>FDP at that q</th><th>@0.650%</th><th>@0.750%</th><th>@1.000%</th><th>vs baseline</th></tr></thead>
+  <tbody>
+    <tr><td>Mike delivered / old sampler</td><td class="num">29,903</td><td class="num">0.9128%</td>
+        <td class="num">27,247</td><td class="num">28,231</td><td class="num">30,592</td><td class="num">&mdash;</td></tr>
+    <tr class="best"><td>ours 08-17 / pickrun3</td><td class="num">31,649</td><td class="num">0.9560%</td>
+        <td class="num">28,251</td><td class="num">29,525</td><td class="num">32,074</td>
+        <td class="num"><span class="d up">+4.58%</span></td></tr>
+  </tbody>
+</table>
+</div>
+<p class="lede">Deltas &mdash; n@1% q +5.84%, @0.650% +3.68%, @0.750% +4.58%, @1.000% +4.84%.</p>
+
+<h2><span class="n">3</span>Pass 2 &mdash; experiment scope</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>library / arm</th><th>n@1% q</th><th>FDP at that q</th><th>@0.650%</th><th>@0.750%</th><th>@1.000%</th><th>vs baseline</th></tr></thead>
+  <tbody>
+    <tr><td>Mike delivered / old sampler</td><td class="num">39,504</td><td class="num">1.6118%</td>
+        <td class="num">34,659</td><td class="num">35,156</td><td class="num">36,895</td><td class="num">&mdash;</td></tr>
+    <tr class="best"><td>ours 08-17 / pickrun3</td><td class="num">44,753</td><td class="num">1.8465%</td>
+        <td class="num">37,738</td><td class="num">38,300</td><td class="num">40,264</td>
+        <td class="num"><span class="d up">+8.94%</span></td></tr>
+  </tbody>
+</table>
+</div>
+<p class="lede">Deltas &mdash; n@1% q +13.29%, @0.650% +8.88%, @0.750% +8.94%, @1.000% +9.13%.
+  Pass 2 roughly doubles the pass-1 gain, the same direction SEA-AD showed.</p>
+
+<div class="note"><b>Pass-2 FDP inflation is worse in this arm.</b> Against its own pass 1,
+the baseline inflates 0.9128% &rarr; 1.6118% (<b>1.77&times;</b>) and this run 0.9560% &rarr;
+1.8465% (<b>1.93&times;</b>). The harvest gate asks for &ldquo;no worse than known&rdquo;; this is
+worse. It does not change the sign of the result &mdash; the matched-FDP columns already correct
+for it &mdash; but it is the one FDR-quality regression in this run.</div>
+
+<h2><span class="n">4</span>The anomaly worth a decision</h2>
+<div class="key">
+On SEA-AD (82 files), the sampler <i>alone</i> gave <b>+24.7%</b> at matched FDP and our library
+<i>alone</i> gave <b>+10.5%</b>. Here the two together give <b>+4.58%</b> at pass 1 and
+<b>+8.94%</b> at pass 2. Two independently positive changes composing to less than either is the
+finding. Candidates: the gains do not compose on this matrix; plasma EV sits nearer a ceiling than
+brain tissue; or one of the two is negative on <i>this</i> dataset while positive on SEA-AD.
+Only the deferred A/B &mdash; the baseline&rsquo;s delivered library on pickrun3, another ~19 h &mdash;
+separates them.
+</div>
+<p>A prediction made mid-run and <b>falsified</b>: because the training max-bias grows with batch
+size (mean <code>coelution_sum</code> 1.19 at one file &rarr; 5.75 at 82) and TDP-43 is double
+SEA-AD&rsquo;s batch, the gain here was predicted at <b>&ge;+24.7%</b>. It came in at
+<b>+4.58%</b>, about one fifth. The mechanism is real; the extrapolation was not.</p>
+
+<h2><span class="n">5</span>What the training trajectory shows</h2>
+<p class="lede">Percolator&rsquo;s iterative training, &ldquo;% of training targets at 1% FDR&rdquo;.</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>iteration</th><th>baseline</th><th>ours</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td class="num">0.6%</td><td class="num">0.3%</td></tr>
+    <tr><td>2</td><td class="num">0.8%</td><td class="num">0.4%</td></tr>
+    <tr><td>3</td><td class="num">0.8%</td><td class="num">0.4%</td></tr>
+    <tr><td>4</td><td class="num">0.9%</td><td class="num">0.4%</td></tr>
+    <tr><td>5</td><td class="num">0.9%</td><td class="num">0.4%</td></tr>
+    <tr><td>6</td><td class="num">&mdash;</td><td class="num">0.4%</td></tr>
+  </tbody>
+</table>
+</div>
+<p>Separation more than halves &mdash; and that is the change working, not a regression. The old
+sampler&rsquo;s training rows are cross-run <i>maxima</i>: inflated, easy, and unlike the per-run rows
+the model then scores. pickrun3&rsquo;s rows match the scored population, so training-set separation
+must fall. SVM <code>C</code> = 1 on all three folds in both arms, so model complexity is identical
+and only the training distribution changed.</p>
+<div class="note">The <code>3-fold cross-validation on N training entries</code> line is <b>not</b> a
+pickrun3 signal: both arms hit the 300,000-row cap (<code>OspreyEnvironment.cs:350</code>), 299,998
+vs 299,997. pickrun3 changes <i>which</i> run represents each precursor, not how many rows are drawn.</div>
+
+<h2><span class="n">6</span>How the gain propagates</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>stage</th><th>baseline</th><th>ours</th><th>delta</th></tr></thead>
+  <tbody>
+    <tr><td>library entries</td><td class="num">6,324,700</td><td class="num">6,175,389</td><td class="num"><span class="d dn">-2.36%</span></td></tr>
+    <tr><td>scored entries ingested</td><td class="num">577,565,922</td><td class="num">597,225,191</td><td class="num"><span class="d up">+3.40%</span></td></tr>
+    <tr><td>pass-1 targets @1% FDR</td><td class="num">1,706,169</td><td class="num">1,894,866</td><td class="num"><span class="d up">+11.06%</span></td></tr>
+    <tr><td>pass-1 decoy fraction</td><td class="num">0.9862%</td><td class="num">0.9876%</td><td class="num"><span class="d fl">+0.001 pp</span></td></tr>
+    <tr><td>base_ids retained &rarr; rescore</td><td class="num">379,775</td><td class="num">430,977</td><td class="num"><span class="d up">+13.48%</span></td></tr>
+    <tr><td>reconciliation actions</td><td class="num">8,123,375</td><td class="num">9,764,481</td><td class="num"><span class="d up">+20.20%</span></td></tr>
+    <tr><td>pass-2 survivor observations</td><td class="num">77,343,608</td><td class="num">92,182,644</td><td class="num"><span class="d up">+19.19%</span></td></tr>
+    <tr><td>protein-compact stratum (base_ids)</td><td class="num">390,627</td><td class="num">442,598</td><td class="num"><span class="d up">+13.30%</span></td></tr>
+    <tr><td>blib spectra written</td><td class="num">39,937</td><td class="num">45,174</td><td class="num"><span class="d up">+13.11%</span></td></tr>
+    <tr><td>protein groups @1% protein FDR</td><td class="num">3,951</td><td class="num">4,310</td><td class="num"><span class="d up">+9.09%</span></td></tr>
+    <tr class="best"><td>peptides in &ge;half the runs</td><td class="num">9,121</td><td class="num">10,095</td><td class="num"><span class="d up">+10.68%</span></td></tr>
+  </tbody>
+</table>
+</div>
+<p>The decoy fraction holding at ~0.987% in both arms is the honesty check: this run is not buying
+identifications at a looser operating point.</p>
+
+<h2><span class="n">7</span>pwiz #4600 confirmed at 163 files</h2>
+<p class="lede">The whole-run join moved out of PerFileRescoring into SecondPassFDR&rsquo;s pull.
+Memory shape by decile, from <code>ai/scripts/phase_mem_shape.py</code>.</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>PerFileRescoring</th><th>baseline (pre-#4600)</th><th>ours (post-#4600)</th></tr></thead>
+  <tbody>
+    <tr><td>flat body, deciles 10&ndash;90%</td><td class="num">~15.5 GB</td><td class="num">~17.5 GB</td></tr>
+    <tr><td>final decile, mean</td><td class="num">27.1 GB</td><td class="num">18.0 GB</td></tr>
+    <tr class="best"><td>final decile, max</td><td class="num">44.3 GB</td><td class="num">20.2 GB</td></tr>
+    <tr><td>verdict</td><td class="num">2.34&times; RAMPS INTO A JOIN</td><td class="num">1.04&times; flat iteration</td></tr>
+    <tr><td>wall</td><td class="num">17,496.7 s</td><td class="num">17,316.8 s <span class="d up">-1.03%</span></td></tr>
+  </tbody>
+</table>
+</div>
+<div class="key">The fan-out task is now genuinely flat &mdash; its end-of-stage peak drops
+<b>44.3 &rarr; 20.2 GB</b> &mdash; and it is the only stage that beat the baseline on wall time,
+while carrying +11% more survivors and +20% more reconciliation actions. SecondPassFDR now owns the
+load, ramping from <b>20.3 GB</b> in its first decile where the baseline <i>opened</i> at 40.4 GB
+mean / 47.9 GB max. <b>The global peak did not fall &mdash; it moved</b>, 52.2 GB in FirstPassFDR
+&rarr; <b>54.2 GB in SecondPassFDR</b>, 85% of the 63.7 GB box. That is the intent: the pressure now
+sits in the one task that is legitimately a join and can be tuned as one.</div>
+
+<h2><span class="n">8</span>Harvest gates</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>check</th><th class="txt">result</th><th>verdict</th></tr></thead>
+  <tbody>
+    <tr><td>memory fits 63.7 GB</td><td class="txt">peak 54.2 GB (SecondPassFDR), 85% of box</td><td>PASS</td></tr>
+    <tr><td>total floor drift</td><td class="txt">+12 MB/file, +1.95 GB over 163 files &mdash; bounded</td><td>PASS</td></tr>
+    <tr><td>pass-1 FDP in line</td><td class="txt">0.9560% vs baseline 0.9128%</td><td>PASS</td></tr>
+    <tr><td>pass-2 inflation no worse</td><td class="txt">1.93&times; vs baseline 1.77&times;</td><td><span class="d dn">FAIL</span></td></tr>
+    <tr><td>reproducibility clean at high run count</td><td class="txt">FDP falls to ~0.6% by k&ge;14, both arms</td><td>PASS</td></tr>
+    <tr><td>no reporting gap &ge;30 s</td><td class="txt">8 gaps, max 39 s &mdash; 7 of 8 in SecondPassFDR</td><td><span class="d dn">FAIL</span></td></tr>
+  </tbody>
+</table>
+</div>
+<div class="note"><b>The cadence failure is #4600&rsquo;s shadow.</b> The baseline had zero gaps
+&ge;30 s (max 29 s, itself one second under). Seven of this run&rsquo;s eight are in SecondPassFDR,
+the stage that just absorbed the join. Consolidating the join into its consumer was right; the
+consumer now needs progress reporting inside the work it inherited.</div>
+
+<h2><span class="n">9</span>Cost</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>stage</th><th>baseline</th><th>ours</th><th>delta</th></tr></thead>
+  <tbody>
+    <tr><td>PerFileScoring</td><td class="num">35,012.3 s</td><td class="num">38,510.0 s</td><td class="num"><span class="d dn">+10.0%</span></td></tr>
+    <tr><td>FirstPassFDR</td><td class="num">7,750.9 s</td><td class="num">8,211.4 s</td><td class="num"><span class="d dn">+5.9%</span></td></tr>
+    <tr><td>PerFileRescoring</td><td class="num">17,496.7 s</td><td class="num">17,316.8 s</td><td class="num"><span class="d up">-1.0%</span></td></tr>
+    <tr><td>SecondPassFDR</td><td class="num">1,624 s <span class="d fl">crashed</span></td><td class="num">4,395.1 s</td><td class="num">n/a</td></tr>
+    <tr><td>total</td><td class="num">1,031 min <span class="d dn">exit 1</span></td><td class="num">1,141 min <span class="d up">exit 0</span></td><td class="num">&mdash;</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="note"><b>Wall-clock deltas are an upper bound, and the two arms are not
+configuration-identical.</b> The baseline ran with <code>OSPREY_LOG_MEMORY=1</code> (999
+<code>[MEM]</code> probe lines, each forcing a <code>GC.Collect()</code> pair) and this run ran
+without it (0 lines) &mdash; an unrecorded shell difference. The baseline therefore paid forced-GC
+overhead and was still faster, so our overhead is understated; and its memory peaks were measured
+under repeated forced collection, so our memory advantage is understated too. Fixed for future runs:
+the runner now owns this as <code>-LogMemory</code>, exported in both directions and recorded.
+The baseline&rsquo;s SecondPassFDR figure is also not comparable &mdash; that run
+<b>crashed in <code>BlibWriter..ctor</code></b> after 1,031 min and needed a separate 29-minute
+recovery node; this run completed in one pass.</div>
+
+<footer>
+Read with <code>python ai/scripts/Osprey/SEA-AD/tools/pass1_fdp.py &lt;run dir&gt;</code>,
+<code>ai/scripts/perfviz.py</code> and <code>ai/scripts/phase_mem_shape.py</code>.<br>
+Run directory: <code>D:\test\osprey-runs\tdp43-plasma-ev\runs\tdp43-163files-libdecoy-r1.0-protein-compact-pickrun3-ourlib</code><br>
+Baseline: <code>&hellip;-protein-compact-20260816_203716</code>
+</footer>
+</div>
