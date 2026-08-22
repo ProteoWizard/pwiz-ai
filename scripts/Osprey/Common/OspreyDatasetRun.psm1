@@ -477,6 +477,10 @@ function Invoke-OspreyDatasetRun {
     Write-Host ("  peak pick: {0}" -f $(if ($PickProduct) {
                 'LEGACY product form (OSPREY_PICK_LDA=0) - moves the discovery set' }
                 else { 'default learned linear model (OSPREY_PICK_LDA=1, Osprey default)' }))
+    # Same reasoning as the pick model: which runs trained the peak model is not in Osprey's
+    # log either, so the banner states it. The runner clears OSPREY_TRAIN_PICK_RUN, so this
+    # is a guarantee about the run, not a report of a variable.
+    Write-Host "  train set: one run per precursor (pickrun3 default; OSPREY_TRAIN_PICK_RUN cleared)"
     Write-Host ("  exp agg  : {0}" -f $(if ($ExperimentAgg) {
                 "$ExperimentAgg (OSPREY_EXPERIMENT_AGG) - moves the experiment-wide discovery set" }
                 else { 'max (default, best of runs)' }))
@@ -600,8 +604,16 @@ function Invoke-OspreyDatasetRun {
     # result, so the arms set exactly what they mean and clear the rest. OSPREY_PICK_LDA and
     # OSPREY_PICK_LDA_MODEL are in this list because the pick model is nowhere in Osprey's log:
     # an inherited one would be both silent AND unrecoverable after the fact.
+    # OSPREY_TRAIN_PICK_RUN is cleared but has no switch, unlike OSPREY_PICK_LDA below it.
+    # The one-run-per-precursor sampler (pickrun3, pwiz #4593) is the settled default, and
+    # '0' exists only as an emergency revert - there is no arm here that wants it. It still
+    # has to be STRIPPED rather than merely left alone, because which runs trained the model
+    # is nowhere in Osprey's log: an inherited '0' would silently train the old way and be
+    # unrecoverable after the fact, exactly the pick-model failure described below. If a
+    # sampler A/B is ever wanted, add a switch and set this in both directions.
     foreach ($k in 'OSPREY_EXIT_AFTER_CALIBRATION', 'OSPREY_CAL_SAMPLE_SIZE',
                    'OSPREY_CAL_MEDIANPOLISH', 'OSPREY_PASS2_QVALUE',
+                   'OSPREY_TRAIN_PICK_RUN',
                    'OSPREY_PICK_LDA', 'OSPREY_PICK_LDA_MODEL',
                    'OSPREY_PROTEIN_COMPACT_RETRAIN', 'OSPREY_EXPERIMENT_AGG',
                    'OSPREY_PROTEIN_COMPACT_QUALIFY',
@@ -645,7 +657,7 @@ function Invoke-OspreyDatasetRun {
         Write-Host ("  rotated previous run.log -> {0}" -f (Split-Path $rotated -Leaf)) -ForegroundColor Cyan
     }
     ("[{0}] START dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
-     "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
+     "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
      "qualify=$QualifyBy files=$($inputs.Count) threads=$Threads " +
      "parallelfiles=$ParallelFiles task='$Task' mdiag=$mdiag " +
      "fdrbench=$FdrBenchPass linkfrom='$LinkFrom'") -f (Get-Date -Format s) |
@@ -662,7 +674,7 @@ function Invoke-OspreyDatasetRun {
     $exit = $LASTEXITCODE
     $sw.Stop()
     ("[{0}] DONE dataset=$($Dataset.Key) arm=$DecoyMode r=$Ratio pass2=$Pass2Mode " +
-     "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
+     "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
      "qualify=$QualifyBy parallelfiles=$ParallelFiles exit=$exit elapsed=$([int]$sw.Elapsed.TotalMinutes)min") -f (Get-Date -Format s) |
         Add-Content -Path $log
     Write-Host ("Osprey exited {0} after {1:hh\:mm\:ss}" -f $exit, $sw.Elapsed) `
