@@ -470,6 +470,45 @@ translation pass.
 **Watch in nightly** for the one unexplained GC-LEAK described above. It was seen once, on the
 first run of the new test, and never reproduced; if it returns, profile it rather than theorizing.
 
+## Bug Fixes
+
+### 2026-08-22 - Intermittent TestLayoutExportImport failure in nightly
+
+- **Branch**: `Skyline/work/20260822_export_import_layout-fix`
+- **Checkout**: `I:\git_i\sky_layouts`
+- **PR**: [#4606](https://github.com/ProteoWizard/pwiz/pull/4606)
+
+One nightly machine hit `InvalidOperationException: The file dialog is still opening.`
+out of `ExportLayout` -> `EnterPath` -> `FileNameTextBox`.
+
+Not a layout bug - a race in the native-dialog automation this test is the heaviest user
+of (three `RunLongNativeDlg<NativeSaveFileDialog>` calls). A native dialog was reported the
+instant its window was classifiable, which is a moment before the shell has SHOWN the
+controls that classified it: `NativeSaveFileDialog` is recognized by its file-name Edit
+EXISTING, while `EnterPath` needs it VISIBLE. `WaitForNativeDlg` returned in that gap and
+the test's first gesture failed.
+
+Fixed at the source rather than in the driver: `NativeDialog.Create` now gates on a new
+`IsOpenComplete`, so a still-opening dialog is reported by nothing - not `GetOpenDialogs`,
+not `GetOpenForms`, not the modal watch. There is nothing useful a driver (the MCP
+included) could do with a dialog it cannot act on. That deleted the test-side readiness
+waits `WaitForNativeFileDialogReady` and `ResolveNativeFileDialog`.
+
+`/code-review max` then caught that `NativeFolderBrowserDialog` had the identical gap -
+`IsFolderBrowserDialog` matches its tree by class alone - and that it fails SILENTLY,
+since `BFFM_SETSELECTION` has no read-back and `SetValue` returns Completed=true anyway.
+Gated it too, so the invariant is uniform across the dialog kinds.
+
+**Known, accepted**: `DialogWatcher`'s no-progress watchdog (10 x 30 ms) now waits out the
+created-to-shown step for an accept verb that raises a file dialog (`ExportMethodDlg`).
+Not new exposure - `GetOpenModals` already required the window to be visible, so the whole
+pre-visible bring-up ran against that same budget - but slightly longer.
+
+**Not taken from the review** (pre-existing, unrelated to this change): `NativeDialog.SetValue`
+does its Win32 sends on the pipe thread with no `DialogWatcher` marshal, so a native set_value
+is uncounted and uncancellable; `NativeDialog.GetFormInfo` omits `ModalNestingCount`, which
+`StandaloneForm` sets; `JsonUiService.GetOpenForms` calls `BeginInvoke` without `EndInvoke`.
+
 ## References
 
 - Superseded attempt: `ai/todos/backlog/TODO-20260803_layout_export_import.md` (retained
