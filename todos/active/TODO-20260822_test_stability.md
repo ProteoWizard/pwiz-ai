@@ -2,11 +2,28 @@
 
 ## Branch Information
 - **Checkout**: `C:\proj\pwiz-work1` (the team's Integration checkout)
-- **Branch**: not created yet - branch from `Skyline/work/20260821_net8_test_reliability`
-  (PR #4605) while that is open, or from master once it and #4587 have merged
-- **Created**: 2026-08-22
 - **Module**: `skyline`
 - **Intended for**: autonomous sessions, long soaks, minimal supervision
+
+### Which branch - read this before starting
+
+The work splits in two, because one item is a regression in an open PR and the rest is a
+program:
+
+1. **`RunOnStaThread` exception routing belongs in PR #4605**, on
+   `Skyline/work/20260821_net8_test_reliability`. That branch INTRODUCED `RunOnStaThread`
+   (zero occurrences in its base, two in the branch), the failure signature is exactly what
+   the review predicted from it, and `TestDdaSearchDependencyErrors` has **no failure history
+   at all** in the LabKey nightly database yet failed 27 of 45 times overnight. It is a
+   regression that PR would ship, so fix it there and push into the PR. Do not defer it into
+   this program: shipping it puts a modal-dialog hang in every functional test after the first
+   in a process.
+2. **Everything else starts on a new branch off master**, after #4605 and #4587 merge. The
+   clearance ledger and the suite walk are multi-day work and must not gate that PR.
+
+`TestWatersConnectExportMethodDlg` is NOT in category 1 - it predates this stack (PR #3386)
+and exists in the base - so it belongs to the program unless investigation shows the STA
+change causes it.
 
 ## Why
 
