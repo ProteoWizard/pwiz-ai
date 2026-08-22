@@ -108,26 +108,49 @@ period-to-failure measurement. Two rules made it pay:
 - **`Deny-DirectBuildTest` false-positives** on blocked exe names inside heredocs and grep
   patterns.
 
-## Remaining tasks
+## Review findings: status
 
-`/code-review max` ran 2026-08-21 over the pre-rebase branch: 51 files, ~60 candidates cut
-to 15 after verification. Three are fixed (the last three commits above). Remaining, in the
-order they are worth taking:
+`/code-review max` ran 2026-08-21 over the pre-rebase branch: 51 files, ~60 candidates cut to
+15 after verification.
 
-- [ ] WiX `Product-template.wxs` still installs `BullseyeSharp.exe`, which nothing builds
-- [ ] `Process.Start(url)` left in shipping Skyline code - net8 defaults
-      `UseShellExecute` to false, so every Help menu link throws `Win32Exception`
-- [ ] GC tracker cluster: heap walk inflates working set ~6x and does not release it;
-      unlocked read of the `SystemEvents` handler table; `TargetException` on a
-      non-Control survivor; leak dump written after the roots it should capture are gone
-- [ ] `RunOnStaThread` creates a thread per functional test but `Application.ThreadException`
-      is subscribed once, so the 2nd+ test in a process loses UI-thread exception routing
-- [ ] `EqualityExplainer` swallows exceptions into "found no difference"; `ExplainDiff`
-      disagrees with `Equals` on a NaN `PeakCountRatio`
+**Fixed on this branch (5)**
+
+- [x] `.gitignore` anchored the test-run logs to locations net8 no longer writes
+- [x] Staging kept a stale shared dependency (`robocopy /XO`, plus stale projects staged last)
+- [x] `NU1201` - seven tool projects still multi-targeting net472 against net8-only libraries
+- [x] `Process.Start(url)` throwing on net8 - nine sites now via `ProcessEx.OpenInShell`
+- [x] Two exceptions aborting the SystemEvents classification (`TargetException` on a
+      non-Control survivor; unsynchronized read of the handler table)
+
+**Dropped**
+
+- Installer/WiX component for `BullseyeSharp.exe`: a known issue Matt is handling, out of
+  scope for this branch (developer decision, 2026-08-22).
+
+**Pushed back on, not applied (2)** - recorded so the next session does not re-apply them
+blindly:
+
+- Leak dump written after `ReleaseFrameworkSystemEventsHook`. Dumping after the unhook looks
+  deliberate: if the unhook releases everything there is no leak to dump, and for a genuine
+  leak the SystemEvents root is gone precisely because it was benign.
+- GC root heap walk inflating working set ~6x. Real, but the report has to run BEFORE the
+  unhook to see the roots at all, so the cost cannot simply be deferred. Defaulting it off is
+  a judgement call for the developer, not a code fix.
+
+**Still open (7)** - carried to the stability TODO
+
+- [ ] `RunOnStaThread` creates a thread per functional test while `Application.ThreadException`
+      is subscribed once, so the 2nd+ functional test in a process loses UI-thread exception
+      routing. **Now backed by evidence**: the 2026-08-21 overnight run failed
+      `TestDdaSearchDependencyErrors` 27 times in 45 with "ThreadExceptionDialog appeared while
+      waiting for UI action"
+- [ ] `GcRootReporter.DescribeDelegate` reads `_methodPtr`, wrong for static and multicast
+      delegates - exactly the cases the reporter exists to name
+- [ ] `EqualityExplainer` swallows exceptions into "found no difference"
+- [ ] `DocNodeChromInfo.ExplainDiff` disagrees with `Equals` on a NaN `PeakCountRatio`
 - [ ] `AssertEx` `WaitForProcessing` timeout swallowed by a bare `catch`
 - [ ] SkylineTester staging discovery prefers Release over a fresher Debug
 - [ ] `IExplainDiff` on `ScoredPeakBounds`, then chase the `LibraryDotProduct` null race
-- [ ] Open the PR against `Skyline/work/20260818_commonutil_winforms_split`, label `skyline`
 
 ## Progress Log
 
@@ -154,4 +177,19 @@ projects; both tool solutions build clean afterwards).
 Not runnable here: the AutoQC and SkylineBatch suites. AutoQC Loader blocks on a modal asking
 for an administrative or web-based Skyline installation, which a source-build machine has not
 got. CI runs them with `/TestCaseFilter:"TestCategory!=Connected"`.
+
+### 2026-08-22 (later) - PR opened
+
+PR #4605, targeting `Skyline/work/20260818_commonutil_winforms_split` (#4587), 12 commits.
+
+Five review findings fixed (above), each built and verified; `CodeInspection` green. Two more
+things worth carrying forward:
+
+* `SKYLINE_FORCE_SYSEVENTS_LEAK` produced no output through `Run-Tests.ps1` in either `hook` or
+  `real` mode, though the variable reaches pwsh correctly. The GC-LEAK truth table in the PR
+  test plan is the previous session's verification, not this one's. Worth repairing before
+  anyone trusts that area again.
+* `Run-Tests.ps1` runs from `bin\staging-net8\Debug`, so a test executes STAGED binaries. A
+  `CodeInspection` run here silently tested pre-change code until the tree was re-staged.
+  Build then stage then test, or the result is about the wrong bits.
 
