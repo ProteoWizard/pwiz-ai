@@ -273,7 +273,7 @@ Reference the issue in commits: `See #$ARGUMENTS` or `Fixes #$ARGUMENTS`
 1. Update TODO Progress Log with completion summary
 2. Move TODO: `git mv todos/active/TODO-*.md todos/completed/`
 3. Commit to pwiz-ai master (format per `/version-control`)
-4. Close issue: `gh issue close $ARGUMENTS --comment "Completed. See ai/todos/completed/TODO-*.md"`
+4. Close issue: `gh issue close $ARGUMENTS --comment "Completed. See TODO-*.md in pwiz-ai/todos"`
 
 ## Related
 

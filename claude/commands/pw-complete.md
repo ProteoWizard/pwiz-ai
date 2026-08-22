@@ -124,7 +124,7 @@ standard from `ai/docs/version-control-guide.md`:
 * <bullet point 2>
 * <bullet point 3>
 
-See ai/todos/active/TODO-YYYYMMDD_feature_name.md
+See TODO-YYYYMMDD_feature_name.md in pwiz-ai/todos
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
@@ -144,7 +144,7 @@ Format rules (also in `version-control-guide.md`):
   and fold the sub-area into the prose:
   `osprey: Made the OspreySharp protein razor rollup deterministic`
 - Bullets: 1-5, each `* `-prefixed; what shipped, not how
-- TODO reference: a `See ai/todos/active/TODO-...md` line, even
+- TODO reference: a `See TODO-...md in pwiz-ai/todos` line, even
   though Step 3 moves the file to `completed/` — the commit lands
   before the move, so the path in the message is the pre-move path
 - Co-authorship: exactly `Co-Authored-By: Claude <noreply@anthropic.com>`
@@ -388,7 +388,7 @@ gh issue close <issue-N> --comment "## Completion Summary
 - <bullet 1>
 - <bullet 2>
 
-See ai/todos/completed/TODO-YYYYMMDD_<slug>.md for full engineering context."
+See TODO-YYYYMMDD_<slug>.md in pwiz-ai/todos for full engineering context."
 ```
 
 ## Final report

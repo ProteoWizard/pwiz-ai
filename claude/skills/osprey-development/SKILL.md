@@ -37,7 +37,7 @@ points at:
    (braceless bodies are single-line ONLY - this applies to `using`,
    `foreach`, `for`, `while`, `lock`, `fixed`, not just `if`/`else`).
 3. **`ai/WORKFLOW.md`** - git workflow, TODO system, commit message
-   format (past-tense title, `* ` bullets, `See ai/todos/...`,
+   format (past-tense title, `* ` bullets, `See TODO-... in pwiz-ai/todos`,
    `Co-Authored-By: Claude` line). Osprey commits go through the
    pwiz repo workflow (feature branches under `Skyline/work/...`).
 4. **`ai/TESTING.md`** - translation-proof tests, consolidated

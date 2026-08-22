@@ -13,7 +13,7 @@ Read ai\docs\version-control-guide.md for the exact commit message format, then 
 
 Reported by <First>.
 
-See ai/todos/active/TODO-YYYYMMDD_feature.md
+See TODO-YYYYMMDD_feature.md in pwiz-ai/todos
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
@@ -26,7 +26,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
       harmless but noisy. See ai/docs/version-control-guide.md, "Module Tagging".
 - [ ] **Bullet points** (1-5 points, each starting with `* `)
 - [ ] **Reporter credit** (`Reported by <First>.`) if the change came from a user report/request — see ai/docs/version-control-guide.md, "Crediting Reporters and Requesters"
-- [ ] **TODO reference** (`See ai/todos/active/TODO-YYYYMMDD_feature.md`)
+- [ ] **TODO reference** (`See TODO-YYYYMMDD_feature.md in pwiz-ai/todos`)
 - [ ] **Co-Authored-By** at the end
 - [ ] **No emojis or markdown links**
 - [ ] **≤10 lines total** (the reporter-credit line is exempt)

@@ -187,7 +187,7 @@ gh issue comment NNNN --body "## Completion Summary
 ### Key Files Modified
 - path/to/file.cs
 
-See ai/todos/completed/TODO-YYYYMMDD_feature.md for full engineering context."
+See TODO-YYYYMMDD_feature.md in pwiz-ai/todos for full engineering context."
 
 gh issue close NNNN
 ```
@@ -272,7 +272,7 @@ When switching LLM tools/sessions:
 * bullet point 1
 * bullet point 2
 
-See ai/todos/active/TODO-YYYYMMDD_feature.md
+See TODO-YYYYMMDD_feature.md in pwiz-ai/todos
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
@@ -280,7 +280,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 **Rules:**
 - Past tense title - "Added feature" not "Add feature"
 - 1-5 bullet points, each starting with `* `
-- TODO reference - always include `See ai/todos/active/TODO-...`
+- TODO reference - always include `See TODO-....md in pwiz-ai/todos`
 - Co-Authored-By - always include when LLM contributed
 - No emojis or markdown links
 

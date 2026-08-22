@@ -392,7 +392,7 @@ gh issue comment NNNN --body "## Completion Summary
 ### Key Files Modified
 - path/to/file.cs
 
-See ai/todos/completed/TODO-YYYYMMDD_feature.md for full engineering context."
+See TODO-YYYYMMDD_feature.md in pwiz-ai/todos for full engineering context."
 
 gh issue close NNNN
 ```
@@ -504,7 +504,7 @@ git submodule update --init --recursive
 * bullet point 1
 * bullet point 2
 
-See ai/todos/active/TODO-YYYYMMDD_feature.md
+See TODO-YYYYMMDD_feature.md in pwiz-ai/todos
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```

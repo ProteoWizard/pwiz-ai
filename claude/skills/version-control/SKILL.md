@@ -88,7 +88,7 @@ TeamCity keys off, not a module marker. Osprey and pwiz work use it too.
 
 Reported by <First>.
 
-See ai/todos/active/TODO-YYYYMMDD_feature.md
+See TODO-YYYYMMDD_feature.md in pwiz-ai/todos
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```

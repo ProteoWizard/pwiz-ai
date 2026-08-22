@@ -249,7 +249,7 @@ Place private helpers after the public methods that use them; keep helpers close
 - Update TODO file with every commit
 - **Move** the TODO to `ai/todos/completed/` when the PR merges (`git mv`) — never
   delete it. The TODO is the durable engineering record, and the squash commit on
-  `master` references its path (`See ai/todos/active/TODO-...md`). `/pw-complete`
+  `master` references its path (`See TODO-...md in pwiz-ai/todos`). `/pw-complete`
   Step 3 does this move.
 - Follow branch naming conventions: `Skyline/work/YYYYMMDD_description`
 

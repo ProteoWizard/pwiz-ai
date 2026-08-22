@@ -147,7 +147,7 @@ All commits MUST follow this exact format:
 
 Reported by <First>.
 
-See ai/todos/active/TODO-YYYYMMDD_feature_name.md
+See TODO-YYYYMMDD_feature_name.md in pwiz-ai/todos
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
@@ -163,11 +163,22 @@ Requesters" below.
 |---------|------|
 | Title | Single line. The **action verb leads in past tense** ("Added", "Fixed", "Moved", "Improved" - NOT "Add", "Fix"). See "Tense" below - past tense is for the *action*, not for describing how the product behaves. |
 | Bullets | 1-5 points, each starting with `* ` (asterisk + space) |
-| TODO reference | `See ai/todos/active/TODO-YYYYMMDD_feature_name.md` |
+| TODO reference | `See TODO-YYYYMMDD_feature_name.md in pwiz-ai/todos` |
 | Co-authorship | Exactly `Co-Authored-By: Claude <noreply@anthropic.com>` |
 | Reporter credit | `Reported by <First>.` on its own line when the change came from an outside-the-dev-team report/request; omit for the author's own work or a project developer's request (see below) |
 | Total lines | Maximum 10 lines including blank lines (the reporter-credit line does not count against this) |
 | Prohibited | Emojis, markdown links |
+
+**The TODO reference carries no path, on purpose.** A TODO moves through
+`todos/active/` -> `todos/completed/` -> `todos/completed/YYYY/MM/` by design: `/pw-uptodos-complete`
+makes the first move when the PR merges, and `/pw-archivetodos` makes the second, keeping only
+the most recent two months at the root. So an `active/` path is wrong from the merge onward and
+a `completed/` path expires about two months later - either way the message is wrong shortly
+after it is written and stays wrong forever in a public log. Measured on 2026-08-22: of 204 TODOs referenced by recent pwiz
+master commits, 3 were still where the message said and 197 were not. The filename is
+the durable identifier and `todos` is the deepest folder that is true at every stage;
+GitHub's file finder locates the file by name in one step. This applies to the
+squash-merge body too, which is the only message that reaches master.
 
 **Do not infer the format from `git log`.** These rules are the format; the history is
 not. Messages in the log were written under earlier versions of this guide, or by
@@ -179,10 +190,13 @@ not a licence to follow the majority.
 **Strip trailers the tooling appends on its own.** Claude Code ends commit messages with a
 `Claude-Session: https://claude.ai/code/session_...` line. Remove it. The URL resolves only
 for the developer whose session it was - opening a colleague's gives "This session could not
-be found ... you may not have access" - so in a public repository it is a permanent link that
-looks like a citation and is not one. The `See ai/todos/active/TODO-*.md` reference already
-carries that context, in a repository the whole team can read. It is absent from master and
-appears on 147 of the last 200 commits of the net8 branch, which is drift, not precedent.
+be found ... you may not have access". **Both pwiz and pwiz-ai are public**, so that is a
+permanent link in an open source log which reads as a citation, resolves for one person, and
+is dead for every other reader on the internet. The `See TODO-*.md in pwiz-ai/todos` reference
+is the supported way to point at the reasoning: pwiz-ai is public too, so it resolves for
+anyone. As of 2026-08-22, 45 commits on pwiz-ai master already carry the trailer, exposing 12
+session ids; squash-merge has kept it off pwiz master. Existing ones stay - rewriting pushed
+public history is not worth it - but do not add more.
 
 ### Tense
 
@@ -236,7 +250,7 @@ Fixed alert dialog timeout in functional tests
 * Timer closes dialog after 10 seconds in test mode
 * Throws TimeoutException with dialog message for debugging
 
-See ai/todos/active/TODO-20251217_alert_timeout.md
+See TODO-20251217_alert_timeout.md in pwiz-ai/todos
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
@@ -256,7 +270,7 @@ Fixed alert dialog timeout in functional tests
 * Timer closes dialog after 10 seconds in test mode
 * Throws TimeoutException with dialog message for debugging
 
-See ai/todos/active/TODO-20251217_alert_timeout.md
+See TODO-20251217_alert_timeout.md in pwiz-ai/todos
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 EOF
@@ -294,7 +308,7 @@ Fixes #XXXX
 - [x] Test that was run
 - [x] Another test that was run
 
-See ai/todos/active/TODO-YYYYMMDD_feature_name.md
+See TODO-YYYYMMDD_feature_name.md in pwiz-ai/todos
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
@@ -328,7 +342,7 @@ time is the only reliable way to get it there.
   names feel exposing in public history; first names match how the team refers to
   users and match the release-notes style (`(reported by Lillian)`).
 - **Placement.** A line on its own — `Reported by <First>.` (a feature request is
-  `Requested by <First>.`) — above the `See ai/todos/...` / `Co-Authored-By:`
+  `Requested by <First>.`) — above the `See TODO-...` / `Co-Authored-By:`
   lines, separated by a blank line. Not inside a bullet, not woven into prose.
 - **Both records.** Put it in the commit message *and* the PR description (the
   squash-merge uses the PR description, so it carries into git history either way;
