@@ -141,9 +141,10 @@ blindly:
 
 - [ ] `RunOnStaThread` creates a thread per functional test while `Application.ThreadException`
       is subscribed once, so the 2nd+ functional test in a process loses UI-thread exception
-      routing. **Now backed by evidence**: the 2026-08-21 overnight run failed
-      `TestDdaSearchDependencyErrors` 27 times in 45 with "ThreadExceptionDialog appeared while
-      waiting for UI action"
+      routing. **Fixed 2026-08-22** in `5aa3ae4052`. Note the correction: this does NOT
+      explain the overnight `TestDdaSearchDependencyErrors` failures, which ran under the
+      console harness - STA already, so `RunOnStaThread` never fires there. See the
+      stability TODO for the corrected hypothesis
 - [ ] `GcRootReporter.DescribeDelegate` reads `_methodPtr`, wrong for static and multicast
       delegates - exactly the cases the reporter exists to name
 - [ ] `EqualityExplainer` swallows exceptions into "found no difference"

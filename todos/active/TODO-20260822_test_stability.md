@@ -7,23 +7,10 @@
 
 ### Which branch - read this before starting
 
-The work splits in two, because one item is a regression in an open PR and the rest is a
-program:
-
-1. **`RunOnStaThread` exception routing belongs in PR #4605**, on
-   `Skyline/work/20260821_net8_test_reliability`. That branch INTRODUCED `RunOnStaThread`
-   (zero occurrences in its base, two in the branch), the failure signature is exactly what
-   the review predicted from it, and `TestDdaSearchDependencyErrors` has **no failure history
-   at all** in the LabKey nightly database yet failed 27 of 45 times overnight. It is a
-   regression that PR would ship, so fix it there and push into the PR. Do not defer it into
-   this program: shipping it puts a modal-dialog hang in every functional test after the first
-   in a process.
-2. **Everything else starts on a new branch off master**, after #4605 and #4587 merge. The
-   clearance ledger and the suite walk are multi-day work and must not gate that PR.
-
-`TestWatersConnectExportMethodDlg` is NOT in category 1 - it predates this stack (PR #3386)
-and exists in the base - so it belongs to the program unless investigation shows the STA
-change causes it.
+`RunOnStaThread` exception routing was fixed in PR #4605 on 2026-08-22 (commit `5aa3ae4052`).
+It is a real defect in code that branch introduced, but note the correction below: it does
+NOT explain the overnight failures. Everything in this TODO starts on a **new branch off
+master** once #4605 and #4587 merge; nothing here should gate that PR.
 
 ## Why
 
@@ -48,15 +35,29 @@ Start here. Rates, not counts, from `SkylineTester.log`:
 
 All three fail evenly across en/fr/ja/tr, so none is a localization bug.
 
-**Hypothesis for the first, and it is a whole-class fix, not a single-test fix.** The
-`/code-review max` on PR #4605 found that `RunOnStaThread` creates a fresh STA thread per
-functional test while `Application.ThreadException` - a PER-THREAD WinForms event - is
-subscribed once in `Program.Init()`. The 2nd and later functional tests in a process
-therefore have no handler, so an unhandled UI-thread exception reaches WinForms' own modal
-`ThreadExceptionDialog` instead of `Program.TestExceptions`. A test that deliberately
-provokes dependency errors is the likeliest in the suite to hit it, which fits a 60% rate.
-Fixing it should take this to zero and remove a hang mode from every other functional test.
-Verify by rate, before and after.
+**Hypothesis for the first - CORRECTED 2026-08-22.** An earlier draft of this TODO blamed
+`RunOnStaThread`. That was wrong and the reasoning is worth keeping so nobody repeats it:
+`RunOnStaThread` only runs when the current thread is MTA, which is Visual Studio and
+ReSharper. The console harness is STA already and never enters it, and `RunTests.cs` creates
+no thread per test, so `Program.Init`'s once-per-process `Application.ThreadException`
+subscription stays valid for every test in a harness process. The overnight run used the
+harness. The `RunOnStaThread` gap was still real and is fixed in #4605, but it is not this.
+
+The live hypothesis instead, from Brendan: **a `ThreadExceptionDialog` means some thread ran
+unprotected by the handling `CommonActionUtil` confers.** `CommonActionUtil.RunAsync` runs the
+action through `RunNow`, which try/catches and routes to `ExceptionReporter` (set by
+`Program.Init` to `ReportException`, which feeds `TestExceptions` under a harness). A raw
+`new Thread(...)`, a `Task.Run`, or a `BeginInvoke`d callback that throws has no such cover.
+
+First place to look: `BuildLibraryGridView.cs:154` starts a tracked raw thread whose body is
+carefully guarded, but which ends by `BeginInvoke`ing `GridUpdateScoreInfo(scoreTypes,
+getScoreTypesException)` onto the UI thread. An exception thrown inside that callback surfaces
+in the message loop rather than in the guarded body. `TestDdaSearchDependencyErrors` exists to
+provoke dependency errors, so it is the test most likely to drive that callback down its error
+path - which fits a 60% rate under load and a clean pass when run serially.
+
+Confirm by soak before fixing, and get a before rate: it passed first try serially here, which
+at 60% means nothing.
 
 **Hypothesis for the second.** A fixed 2-second `WaitForConditionUI` budget is marginal at
 8-way parallelism. Check whether the timeout scales with parallel width anywhere; if not,
