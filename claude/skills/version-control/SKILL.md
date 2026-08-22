@@ -23,6 +23,8 @@ Before staging and committing, verify:
 
 If the LLM has not built/tested the code itself, ask the developer: "Has this been built and tested since the last change?" Do not skip this step even for small fixes - even a small change can introduce a build error or break a test.
 
+**Uncommitted files you did not touch are most likely the same developer's, from another session on this machine - not "someone else's".** List them and ask whether to commit them or leave them in progress; never sweep them in, and stage by path rather than `git add -A`. See "Uncommitted Files You Did Not Touch" in the guide.
+
 ## Module Tagging — every pwiz PR
 
 `ProteoWizard/pwiz` carries three streams of work. Every PR belongs to exactly

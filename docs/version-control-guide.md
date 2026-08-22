@@ -134,6 +134,31 @@ prose, where it reads better and does not compete with the title for length:
 - **History is not retroactively fixed.** Commits already on `master` keep
   their untagged titles; this convention only improves the log going forward.
 
+## Uncommitted Files You Did Not Touch
+
+`git status` shows changes you did not make. **The likely author is the developer you are
+talking to, working through another Claude session on this same machine - not a third
+party.** Saying "someone else's work" is almost always wrong, and it strands the
+developer's own change: they get told a file is off limits when they simply wanted it
+committed.
+
+It is still worth asking, because concurrent sessions on one machine do happen and they
+must not commit each other's files mid-edit. Ask about the files, not about who owns them:
+
+> I see these uncommitted files: `<list>`. Should I commit them now with an appropriate
+> message, or are they actively being worked on?
+
+Rules:
+
+- **Never** silently sweep them into your commit. Stage by path, never `git add -A`, so a
+  stray file cannot ride along with work it has nothing to do with.
+- **Never** describe them as belonging to "someone else" or "another developer" unless you
+  have actual evidence, such as a different author on a commit that touched them.
+- List them explicitly. The developer can recognise their own work instantly from the
+  paths; they cannot from "there are some uncommitted changes".
+- If told to commit them, write the message for what the change does, and say in it that
+  it came from an earlier session, so the log does not imply it was part of your work.
+
 ## Commit Message Format
 
 All commits MUST follow this exact format:
