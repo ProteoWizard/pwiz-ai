@@ -169,6 +169,21 @@ Requesters" below.
 | Total lines | Maximum 10 lines including blank lines (the reporter-credit line does not count against this) |
 | Prohibited | Emojis, markdown links |
 
+**Do not infer the format from `git log`.** These rules are the format; the history is
+not. Messages in the log were written under earlier versions of this guide, or by
+sessions that drifted from it, and a single long-lived branch can make one person's
+style look like a team norm - in August 2026 a feature branch accumulated 147 commits
+with 20-34 line bodies while this cap said 10. Treat a mismatch as a question to raise,
+not a licence to follow the majority.
+
+**Strip trailers the tooling appends on its own.** Claude Code ends commit messages with a
+`Claude-Session: https://claude.ai/code/session_...` line. Remove it. The URL resolves only
+for the developer whose session it was - opening a colleague's gives "This session could not
+be found ... you may not have access" - so in a public repository it is a permanent link that
+looks like a citation and is not one. The `See ai/todos/active/TODO-*.md` reference already
+carries that context, in a repository the whole team can read. It is absent from master and
+appears on 147 of the last 200 commits of the net8 branch, which is drift, not precedent.
+
 ### Tense
 
 Past tense applies to **the action the commit performs** - what was Fixed, Added, Changed,
