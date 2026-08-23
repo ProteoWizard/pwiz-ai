@@ -153,11 +153,11 @@ then `TestPerf` once the method is cheap enough.
 
 ## Task checklist
 
-- [ ] **Start here.** Stop the unattended-dialog watchdog's `TimeoutException` being
+- [x] **Start here.** Stop the unattended-dialog watchdog's `TimeoutException` being
       reported through UI that can itself time out (see "Root cause of the first").
       Confirm which handler shows the second dialog, then make `TestMode` fail the test
       directly. Expect this to fix a whole family of hangs, not one test
-- [ ] Re-measure `TestDdaSearchDependencyErrors` by soak afterwards - before rate was
+- [x] Re-measure `TestDdaSearchDependencyErrors` by soak afterwards - before rate was
       27 failures in 45 (60%); a serial pass proves nothing at that rate
 - [ ] Then, separately, the locked `msvcp140.dll` contention during crux extraction:
       measure how often it happens and whether the parallel queue's
@@ -180,3 +180,91 @@ Seeded from the 2026-08-21 overnight run and from the `/code-review max` finding
 that were not fixed there. The seven outstanding review findings are listed in
 TODO-20260821_net8_test_reliability.md; the `RunOnStaThread` one is Phase 1 here because the
 overnight run supplies its evidence.
+
+### 2026-08-22 - Phase 1 item 1 fixed, and the soak method has a blind spot
+
+Landed on `Skyline/work/20260821_net8_test_reliability` (PR #4605) at the developer's
+direction, rather than a new branch off master.
+
+**The fix.** Two files:
+
+* `CommonBaseUI/GUI/CommonAlertDlg.cs` - adds `DialogTimeoutException`, a `TimeoutException`
+  subclass meaning "a functional test left this dialog unattended". The distinct type is the
+  whole mechanism: it is what lets the display path recognise the failure and refuse to
+  re-display it. The watchdog throws it, and `ShowWithTimeout` rethrows it (via
+  `ExceptionDispatchInfo`, preserving the original stack) instead of showing a dialog when the
+  alert it is asked to display carries one. `Exception` gained a getter; it was set-only,
+  discarding the object into `DetailMessage`. The type lives at the end of this file rather
+  than in one of its own: it is test-only support code with a single use, sitting next to the
+  throw site and the guard that reads it.
+* `TestFunctional/UnattendedDialogTimeoutTest.cs` (new) - the permanent verifier.
+
+**Verifier, both directions.** Time a dialog out, then hand the failure back to the UI the way
+a catch handler does, and assert the same exception instance comes straight back:
+
+| tree | result | wall clock |
+|---|---|---|
+| fix shelved (`git stash`) | FAIL on `Assert.AreSame` | **21.1 sec** - two stacked 10-sec timeouts |
+| fix applied | PASS | **11.2 sec** - one timeout, immediate rethrow |
+
+The 10-second gap between the two runs is the cascade, measured.
+
+**Two corrections to the root cause above.**
+
+*Step 4 named the wrong handler.* `ReportExceptionUI` cannot be it. Both `ReportException` and
+`ThreadExceptionEventHandler` short-circuit to `AddTestException` when `TestExceptions != null`
+(`Program.cs:887` and `910`), so under the harness neither ever reaches a dialog. The second
+dialog came from an ordinary catch-and-display handler -
+`SearchSettingsControl.cs:221`, `MessageDlg.ShowWithException(this, exception.Message, exception)` -
+catching the timeout thrown out of the first dialog, which `SimpleFileDownloaderDlg.cs:74`
+had shown. So the answer to "is `Program.AddTestException` reached at all on this path": no,
+not on the first hop. The cascade runs entirely through catch handlers that display what they
+caught, which is why the fix had to go at the display choke point and not in `Program`.
+
+*Step 5 was right about the symptom, vague about the mechanism.* It is not that "WinForms
+cannot route a throw while the error-reporting path is on the stack". It is specifically a
+**reentrant WndProc**: the second dialog's nested modal loop is inside one, and WinForms
+catching an exception there bypasses the `Application.ThreadException` subscription and pops
+its own dialog. This is already documented in `HangDetection.cs:131-139`, and `HangDetection`
+is also what detects the stray dialog and produces the
+"ThreadExceptionDialog appeared while waiting for UI action" text (`HangDetection.cs:192`).
+
+**Coverage.** The guard keys off the exception object, so it covers the 208 call sites that
+pass one (`ShowWithException` / `ShowException` / `DisplayOrReportException`). Twelve sites
+display `e.Message` without the object; only 3 of those are a broad `catch (Exception)`. Those
+3 could still add one dialog layer - bounded, not a cascade. Worth closing later, not now.
+
+**The soak did not measure what it looks like it measured.** `TestDdaSearchDependencyErrors`
+after the fix: **0 failures in 100 executions**, 20 per language, 4 workers (1 host + 3 Docker),
+git `5aa3ae4052` plus the working tree above.
+
+That number does **not** clear the test, and the reason matters for Phase 3. TestRunner's
+parallel queue reserves tools directories: `QueuedTestInfo.RequiredToolsDirectories`
+(`TestRunner/Program.cs:1216`) and `TryCheckOutTest` (`:1412`) claim every required directory
+all-at-once, so no two workers ever hold `Tools_DSDE29_<culture>` at the same time. The crux
+extraction collision therefore **cannot occur** in a soak run this way. A soak of one test
+through `parallelmode=server` is structurally blind to tool-directory contention, and 0/100
+here is a measurement of a configuration in which the flake is impossible - not evidence about
+the flake.
+
+Consequences:
+
+* **Phase 3's ledger needs a harness-configuration column.** "1,000 executions across 5
+  languages at production parallel width" is not sufficient to describe a clearance, because
+  two harnesses at the same width exercise different contention. Record the runner and mode.
+* **The locked-DLL item now has a sharper question.** The queue guard should have prevented
+  the overnight collision too. The most likely explanation left is a crux child process
+  outliving the test that spawned it, still holding `msvcp140.dll` when the directory is
+  released and the next entry extracts over it. That would also explain the clustering
+  (`pass pass FAIL FAIL FAIL FAIL pass ...`) better than random contention does. Verify by
+  watching for surviving crux processes at test teardown before changing the guard.
+
+**Regression checks.** Solution builds clean (net8, Debug). `CodeInspection` green.
+`TestAlertDlg, TestAlertDlgIcons, TestAlertWatch, TestReportErrorDlg, TestDocumentSizeError,
+TestLiveReportsError, UpgradeErrorsFunctionalTest, TestDdaSearchDependencyErrors,
+TestUnattendedDialogTimeout` across en + ja: 18/18 passed. The guard cannot affect a passing
+test - its precondition is that a dialog timeout already happened, which already meant failure -
+and no code checks `TimeoutException` by exact type, so the subclass is safe at the 5 existing
+`catch (TimeoutException)` sites.
+
+**Not committed.** Working tree only, awaiting review.
