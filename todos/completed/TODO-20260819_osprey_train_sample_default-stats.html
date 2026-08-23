@@ -112,11 +112,11 @@
 <h2><span class="n">2</span>How to read these tables</h2>
 <div class="panel">
 <h3>Pass 1 vs pass 2 &mdash; use the toggle</h3>
-<p>Pass&nbsp;1 is the training change's own scope. Pass&nbsp;2 re-scores against a frozen model with protein-compact stratified competition, and the <code>.blib</code> is written from <em>pass&nbsp;2</em>. A count taken off the blib is therefore <b>not</b> comparable to a pass-1 table &mdash; that mismatch produced one wrong figure in this investigation, corrected in section&nbsp;4.</p>
+<p>Pass&nbsp;1 is the training change's own scope. Pass&nbsp;2 re-scores against a frozen model with protein-compact stratified competition, and the <code>.blib</code> is written from <em>pass&nbsp;2</em>. A count taken off the blib is therefore <b>not</b> comparable to a pass-1 table &mdash; that mismatch produced one wrong figure in this investigation, corrected in section&nbsp;5.</p>
 <h3>Nominal q vs matched true FDP</h3>
 <p><b><code>n@1% q</code></b> is the count at the reported 1% q cutoff &mdash; what a user actually gets. <b><code>FDP at that q</code></b> is what that cutoff really cost, measured against entrapment. The <code>@0.650% / @0.750% / @1.000%</code> columns re-cut both arms at the <em>same true error</em>, which is the only fair comparison: an arm can always report more identifications by spending more error.</p>
 </div>
-<div class="note"><b>Only entrapment datasets can do this.</b> Plain <code>Stellar</code> and the stock <code>Astral</code> regression spec carry no entrapment, so they have no true-FDP oracle and can only produce raw counts (section&nbsp;5).</div>
+<div class="note"><b>Only entrapment datasets can do this.</b> Plain <code>Stellar</code> and the stock <code>Astral</code> regression spec carry no entrapment, so they have no true-FDP oracle and can only produce raw counts (section&nbsp;6).</div>
 
 <h2><span class="n">3</span>82 files &mdash; SEA-AD Pilot-MTG</h2>
 <p class="lede"><code>protein-compact</code>, agg <code>max</code>, experiment scope. All rows re-read from their run directories.</p>
@@ -139,7 +139,40 @@
 <br><br><b>One arm barely gains from pass 2 at all.</b> Pass 1 &rarr; pass 2 is +15.2% (ours pickrun3), +15.1% (mike pickrun3) and +18.1% (mike baseline) &mdash; but only <b>+2.2%</b> for ours baseline (34,552 &rarr; 35,327). Under the cross-run maximum our library's first-pass model is poor enough that the second pass recovers little from it, so the damage compounds rather than washing out downstream. That is the mechanism behind the +49.8%.
 <br><br>All three arms logged the protein stratum line; the baseline arm additionally logged <code>[TRAIN] OSPREY_TRAIN_PICK_RUN=0</code>, confirming the sampler was in force rather than merely intended; and every arm reproduces its pass-1 count to the digit against an independent earlier run. Pass-2 FDP is inflated in every arm (1.05&ndash;1.78% against pass 1's ~0.85%), the known second-pass recalibration issue, which is why matched-FDP is the comparator here rather than the count at nominal q.</div>
 
-<h2><span class="n">4</span>3 files &mdash; regression datasets with a true-FDP oracle</h2>
+<h2><span class="n">4</span>163 files &mdash; TDP-43 Plasma EV</h2>
+<p class="lede"><code>protein-compact</code>, agg <code>max</code>, experiment scope. Run
+2026-08-21/22, <code>exit 0</code> in 1141 min, Osprey 26.1.1.233.</p>
+<div class="note"><b>Not an ablation.</b> Unlike the 82-file table above, these two arms differ in
+<i>both</i> the library and the sampler: the baseline is Mike's delivered library under the
+cross-run maximum, this run is our 2026-08-17 library under pickrun3. It answers &ldquo;our best
+current configuration vs. what we had&rdquo;, not &ldquo;what did the sampler do&rdquo;.</div>
+<div class="toggle" role="group" aria-label="Select pass for the 163-file table">
+  <button type="button" data-t="f163" data-p="pass1" aria-pressed="true">Pass 1</button>
+  <button type="button" data-t="f163" data-p="pass2" aria-pressed="false">Pass 2</button>
+</div>
+<span class="ctx" id="ctx-f163"></span>
+<div class="scroll">
+<table id="tbl-f163">
+  <caption id="cap-f163"></caption>
+  <thead><tr><th>library / arm</th><th>n@1% q</th><th>FDP at that q</th><th>@0.650%</th><th>@0.750%</th><th>@1.000%</th><th>vs baseline</th></tr></thead>
+  <tbody></tbody>
+</table>
+</div>
+<div class="key"><b>The gain is far smaller than the 82-file table predicts.</b> Pass 1
+<b>+4.58%</b> and pass 2 <b>+8.94%</b>, against a sampler that alone gave <b>+33.0% / +49.8%</b>
+on SEA-AD and a library that alone gave <b>+10.5% / +10.6%</b>. Two independently positive
+changes composing to less than either is the finding here; only a further ~19 h A/B &mdash; the
+delivered library under pickrun3 &mdash; separates them.
+<br><br>Pass 2 still roughly doubles the pass-1 gain, the same direction SEA-AD showed, and
+reproducibility moves with it: peptides detected in at least half the runs go
+<b>9,121 &rarr; 10,095, +10.7%</b>. The pass-1 decoy fraction is unchanged at ~0.987% in both
+arms, so nothing is bought at a looser operating point.
+<br><br><b>Read the matched-FDP columns, not <code>n@1% q</code>.</b> The pass-1 Percolator
+target count moved +11.06% and the matched-FDP gain is +4.58%: this arm spends more error at the
+cutoff (0.9560% against 0.9128%), and at pass 2 it inflates 1.93&times; over its own pass 1
+against the baseline's 1.77&times;.</div>
+
+<h2><span class="n">5</span>3 files &mdash; regression datasets with a true-FDP oracle</h2>
 <p class="lede">Every row carries entrapment, so every row can be matched on real error.</p>
 <div class="toggle" role="group" aria-label="Select pass for the 3-file table">
   <button type="button" data-t="f3" data-p="pass1" aria-pressed="true">Pass 1</button>
@@ -156,7 +189,7 @@
 <div class="key" id="key-f3"><b>At 3 runs the change is a wash</b> &mdash; under 1% on every dataset that can measure error &mdash; against <b>+33.0% at 82</b>. That is exactly what the mechanism predicts: with three draws per precursor there is almost nothing for a cross-run maximum to distort. <b>There is no small-N penalty to design around.</b></div>
 <div class="note"><b>Correction.</b> An earlier report of &ldquo;+6.7% for StellarLibDecoy&rdquo; was presented alongside the 82-file pass-1 table. It came from blib <code>RefSpectra</code> counts, which are written from pass 2 &mdash; the +6.5% row on the Pass&nbsp;2 view. On the pass-1 basis the same dataset is <b>&minus;0.17%</b>. The movement is real but it lives at pass 2, where the two decoy sources move in <em>opposite</em> directions at near-identical FDP.</div>
 
-<h2><span class="n">5</span>Datasets with no oracle</h2>
+<h2><span class="n">6</span>Datasets with no oracle</h2>
 <p class="lede">Counts only &mdash; these cannot separate a lost true identification from a suppressed false one.</p>
 <div class="scroll">
 <table>
@@ -168,7 +201,7 @@
 </div>
 <div class="note">The <b>&minus;6.75%</b> on plain Stellar is the number that raised the small-N concern. It is a pass-2 blib count on the one dataset with no entrapment, so it cannot be interpreted on its own &mdash; and every dataset that <em>can</em> measure error puts the pass-1 effect inside &plusmn;1%. Astral, the larger no-oracle dataset at 117k precursors, is flat.</div>
 
-<h2><span class="n">6</span>Decoy source: library decoys vs generated decoys</h2>
+<h2><span class="n">7</span>Decoy source: library decoys vs generated decoys</h2>
 <p class="lede">Same v3 library, same entrapment targets, decoy source the only variable &mdash; <code>StripDecoys</code> removes the library's decoy rows so Osprey generates its own. Baseline arm, pass 1.</p>
 <div class="scroll">
 <table>
@@ -179,19 +212,19 @@
 </div>
 <div class="key"><b>The apparent gendecoy advantage is miscalibration, not sensitivity.</b> Generated decoys report 5% more identifications at nominal 1% q and pay roughly 60% more real error for them. Matched on true FDP the two are within 0.2%. Independent of the training change, and a direct argument for the libdecoy line as best practice.</div>
 
-<h2><span class="n">7</span>What is not measured</h2>
+<h2><span class="n">8</span>What is not measured</h2>
 <div class="panel">
 <ul>
   <li><b>Wall clock from these arms is not a performance measurement.</b> The baseline pass-2 arm ran 8&ndash;11% slower per stage than the two pickrun3 arms while re-scoring <b>25% fewer</b> entries (5.06 M against 6.73 M), so the extra time is not extra work. Another session was running <code>/code-review max</code> and building in a second checkout across that window &mdash; the same CPU-contention confound already recorded for the 2026-08-19 Mike arm.</li>
   <li><b>Astral 3-file pass 2.</b> Both Astral arms were run as <code>-Task FirstPassFDR</code>, so they have no pass-2 stage.</li>
   <li><b>Replication &mdash; answered, not outstanding.</b> These runs are deterministic: <code>PercolatorConfig.Seed</code> is a fixed 42, and the reservoir is keyed by a SplitMix64 mix of <code>(base_id, k, seed)</code> so thread scheduling cannot move it. The three 2026-08-20 arms reproduced 45,943 / 41,563 / 34,552 exactly against independent earlier runs, and <code>regression.ps1</code> gates byte-identical output against a committed golden on every commit. Re-running an identical config returns an identical number.</li>
   <li><b>v2 vs v3 library, isolated.</b> The two Stellar libdecoy goldens confound the training change with the v2&rarr;v3 library swap. Now cheap to run: the additive extraction means a swapped-in library survives.</li>
-  <li><b>Second-pass training.</b> The selection is read from a process-wide static with no pass parameter, so it also governs second-pass and per-file-rescore training, where gap-fill rows are target-only and resolve to synthetic zero-feature vectors. Under the maximum those rows essentially never won a slot; under a reservoir each wins with probability 1/k. A plausible contributor to the opposite-direction pass-2 movement in section&nbsp;4.</li>
+  <li><b>Second-pass training.</b> The selection is read from a process-wide static with no pass parameter, so it also governs second-pass and per-file-rescore training, where gap-fill rows are target-only and resolve to synthetic zero-feature vectors. Under the maximum those rows essentially never won a slot; under a reservoir each wins with probability 1/k. A plausible contributor to the opposite-direction pass-2 movement in section&nbsp;5.</li>
   <li><b>C#/Rust parity.</b> This default is C#-only; Rust still takes the cross-run maximum, so the two agree only under <code>OSPREY_TRAIN_PICK_RUN=0</code>.</li>
 </ul>
 </div>
 
-<h2><span class="n">8</span>Provenance</h2>
+<h2><span class="n">9</span>Provenance</h2>
 <div class="scroll">
 <table>
   <caption>Run directories, for anyone re-reading these numbers with <code>ai/.tmp/pass1_fdp.py</code>.</caption>
@@ -248,6 +281,21 @@ const DATA = {
       {gap:'Table complete as of 2026-08-20. pickrun2 rows are greyed as the superseded sampler, kept because the two libraries swap places between the samplers, which is the point of the table.'}
     ]
   },
+  f163: {
+    cap: {
+      pass1: 'Pass 1, experiment scope. BOTH variables move together — our library and pickrun3 — so this is a configuration comparison, not an ablation. Delta is vs the baseline at 0.750%.',
+      pass2: 'Pass 2, experiment scope. Same two-variable comparison, same run. Delta is vs the baseline at 0.750%.'
+    },
+    ctx: {pass1: 'two arms', pass2: 'two arms'},
+    pass1: [
+      {lab:'mike',arm:'baseline',n:29903,fdp:0.9128,m650:27247,m750:28231,m1000:30592,d:null},
+      {lab:'ours',arm:'pickrun3',n:31649,fdp:0.9560,m650:28251,m750:29525,m1000:32074,d:4.58,cls:'best'}
+    ],
+    pass2: [
+      {lab:'mike',arm:'baseline',n:39504,fdp:1.6118,m650:34659,m750:35156,m1000:36895,d:null},
+      {lab:'ours',arm:'pickrun3',n:44753,fdp:1.8465,m650:37738,m750:38300,m1000:40264,d:8.94,cls:'best'}
+    ]
+  },
   f3: {
     cap: {
       pass1: 'Pass 1, experiment scope. Both Astral arms link Stages 1\u20134 from the same completed run, so the training selection is the only variable.',
@@ -288,7 +336,7 @@ function render(which, pass){
   const cols = document.querySelectorAll('#tbl-' + which + ' thead th').length;
   tb.innerHTML = rows.map(r => {
     if (r.gap) return '<tr class="gap"><td colspan="' + cols + '">' + r.gap + '</td></tr>';
-    const lead = which === 'f82'
+    const lead = which !== 'f3'
       ? '<td>' + r.lab + ' <span class="arm">' + r.arm + '</span></td>'
       : '<td>' + r.ds + '</td><td class="txt">' + r.lib + '</td><td><span class="arm">' + r.arm + '</span></td>';
     return '<tr' + (r.cls ? ' class="' + r.cls + '"' : '') + '>' + lead +
@@ -310,6 +358,7 @@ document.querySelectorAll('.toggle button').forEach(b => {
 });
 
 render('f82', 'pass1');
+render('f163', 'pass1');
 render('f3', 'pass1');
 </script>
 </body>
