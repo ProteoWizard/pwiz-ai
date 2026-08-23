@@ -167,6 +167,11 @@ rate, let alone at 2%.
 * **Do not assert runtime behaviour from reading code.** The Waters cause was settled by
   logging an object identity hash and seeing a stale one, after code reading had produced
   three plausible and wrong explanations.
+* **A truncated search cannot establish absence.** Piping a search through `head` and getting
+  exactly the limit back is not a result, it is a warning. Twice in one day a capped list read as
+  "that is everywhere it appears": once producing a duplicate of a helper that already existed,
+  once missing the third of three copies of a build conditional and costing three build cycles.
+  When a search is proving something is NOT there, run it uncapped and check the count.
 * **Search for the concept, not the API.** A duplicate Restart Manager wrapper got written
   because the search was for `RmGetList` and `RestartManager`;
   `FileLockingProcessFinder.GetProcessesUsingFile` had existed all along, in the same
