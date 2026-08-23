@@ -204,7 +204,24 @@ if ($RunInspection) {
         
         $inspectExitCode = $LASTEXITCODE
         $inspectDuration = (Get-Date) - $inspectStart
-        
+
+        # A crashed inspector leaves an empty report, and an empty report parses as "no issues".
+        # jb has been seen to die inside CSharpErrorStageProcess and write a zero-byte file, after
+        # which this script printed "All operations completed successfully" - a green gate that
+        # inspected nothing, which is worse than no gate at all. Fail on it instead.
+        $inspectionSize = if (Test-Path $inspectionOutput) { (Get-Item $inspectionOutput).Length } else { -1 }
+        if ($inspectExitCode -ne 0 -or $inspectionSize -le 0) {
+            Write-Host ""
+            Write-Host "❌ Code inspection did not produce a usable report" -ForegroundColor Red
+            if ($inspectionSize -lt 0) {
+                Write-Host "   $inspectionOutput was never written" -ForegroundColor Gray
+            } elseif ($inspectionSize -eq 0) {
+                Write-Host "   $inspectionOutput is empty - the inspector exited before writing results" -ForegroundColor Gray
+            }
+            Write-Host "   jb exit code: $inspectExitCode" -ForegroundColor Gray
+            exit 1
+        }
+
         # Parse results
         if (Test-Path $inspectionOutput) {
             try {
@@ -260,7 +277,10 @@ if ($RunInspection) {
                     Write-Host "✅ Code inspection passed - zero warnings/errors in $($inspectDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
                 }
             } catch {
-                Write-Host "⚠ Failed to parse inspection results: $_" -ForegroundColor Yellow
+                # Not a warning: an unparseable report means the gate has no result, and
+                # continuing would report success on the strength of nothing.
+                Write-Host "❌ Failed to parse inspection results: $_" -ForegroundColor Red
+                exit 1
             }
         } else {
             Write-Host "⚠ Inspection output file not found" -ForegroundColor Yellow

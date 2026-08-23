@@ -720,6 +720,23 @@ if (($RunInspection -or $QuickInspection) -and $Target -ne "Clean") {
             
             $inspectExitCode = $LASTEXITCODE
             $inspectDuration = (Get-Date) - $inspectStart
+
+            # A crashed inspector leaves an empty report, and an empty report parses as "no
+            # issues". jb has been seen to die inside CSharpErrorStageProcess and write a
+            # zero-byte file; the batch-tool scripts then printed "All operations completed
+            # successfully". That is the same green-gate-that-inspected-nothing this block used to
+            # refuse to run on net8 for - so refuse here too, rather than only there.
+            $inspectionSize = if (Test-Path $inspectionOutput) { (Get-Item $inspectionOutput).Length } else { -1 }
+            if ($inspectExitCode -ne 0 -or $inspectionSize -le 0) {
+                Write-Host "`n❌ Code inspection did not produce a usable report" -ForegroundColor Red
+                if ($inspectionSize -lt 0) {
+                    Write-Host "   $inspectionOutput was never written" -ForegroundColor Gray
+                } elseif ($inspectionSize -eq 0) {
+                    Write-Host "   $inspectionOutput is empty - the inspector exited before writing results" -ForegroundColor Gray
+                }
+                Write-Host "   jb exit code: $inspectExitCode" -ForegroundColor Gray
+                exit 1
+            }
         }
     }
     
@@ -775,7 +792,10 @@ if (($RunInspection -or $QuickInspection) -and $Target -ne "Clean") {
                     Write-Host "`n✅ Code inspection passed - zero warnings/errors in $($inspectDuration.TotalSeconds.ToString('F1'))s" -ForegroundColor Green
                 }
             } catch {
-                Write-Warning "Failed to parse inspection output: $_"
+                # Not a warning: an unparseable report means the gate has no result, and
+                # continuing would report success on the strength of nothing.
+                Write-Host "❌ Failed to parse inspection output: $_" -ForegroundColor Red
+                exit 1
             }
         }
     }
