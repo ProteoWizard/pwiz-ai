@@ -383,6 +383,23 @@ automate it) and Skyline was rebuilt; `Pwiz.Vendor.Thermo.dll` recompiled and bo
 pass. Note the rebuild took only 45s, so it is worth confirming the vendor assembly
 timestamp actually moved - a stale no-vendor DLL produces the identical failure.
 
+### `DataDownloadTest` is network-flaky by construction, not a regression
+
+It imports a config that pulls **12.4 MB from `ftp.ebi.ac.uk`** (the public EBI PRIDE
+archive) and gives the whole config run **60 seconds** to finish
+(`FunctionalTestUtil.WaitForCondition(..., oneMinute, ...)`, "Config ran past timeout").
+
+Measured four times on the same code in one afternoon: **passed, passed, failed, failed**.
+The two failures were not a timeout with nothing to show for it - the partially downloaded
+`.wiff` was **0 bytes** on one run and **1,245,184 of 12,427,264** on the next. The
+transfer is progressing, just nowhere near fast enough. It needs sustained throughput from
+a public FTP server that neither the test nor the developer controls.
+
+Do not chase this as a code defect, and do not "fix" it by lengthening the timeout until
+it stops failing - that just makes the flake rarer and slower to diagnose. Either host the
+fixture data somewhere the project controls, or mark it as requiring network throughput so
+a failure reads as an environment result rather than a regression.
+
 ### The three machine prerequisites, and how badly each announced itself
 
 None was caused by the port, and none was documented. What differs is how they failed:
@@ -624,6 +641,20 @@ net8 may be describing code that net472 cannot compile without. Confirmed cases:
 | `NaturalComparer.cs` `REGEX.Matches(s).Cast<Match>()` | `MatchCollection` is `IEnumerable<Match>` on net8, non-generic on net472, where `.Reverse()` then will not compile |
 | `HttpClientWithProgress.cs` `cookies.Cast<Cookie>()` | `CookieCollection` became `ICollection<Cookie>` on net8 only |
 | `ConcurrencyVisualizer.cs` redundant `return` | everything after it is `#if NET472`; the `return` only looks redundant on net8 |
+| `Server.cs` `using System.Linq` | `AllKeys.Contains(...)` binds to `Enumerable.Contains` on net472 and to a BCL member on net8. Deleting the using **broke the net472 build** - caught only because the build runs both legs |
+| `CommonException.cs` `ToString() ?? base.Message` | the legs **contradict**: `object.ToString()` is `string?` on net8 and non-null under ReSharper's net472 annotations, so removing the coalesce trips `AssignNullToNotNullAttribute` and keeping it trips `ConstantNullCoalescingCondition`. No code satisfies both |
+
+The `Server.cs` case is the cautionary one: grepping for Linq usage missed it, because the
+call was `.Contains(`, not the `.Select(`/`.Where(` the search looked for. **Build both
+TFMs after every batch** - that is what catches these, not reading.
+
+The `CommonException` case is worse than "a fix might break the other leg": some findings
+are **mutually exclusive between legs**, so a suppression is the only honest resolution.
+Expect more of these in Skyline, which has far more multi-target surface.
+
+Note also that fixing net8 problems in multi-target code tends to **generate** net472
+warnings: the DNS fix below needed `using System.Net.Sockets`, which then reported as
+redundant on net472 and had to be made conditional.
 
 These take a documented `// ReSharper disable once <Inspection>`, which is already the
 codebase's idiom (`MappedList.cs`, `PrimitiveArrays.cs`, `Assume.cs` all use it). **Check
@@ -646,8 +677,19 @@ re-verified at 36/38 after each batch):
 | Solution | Baseline | Now |
 |---|---|---|
 | AutoQC | 83 | **40** |
-| SkylineBatch | 106 | **83** |
+| SkylineBatch | 106 | **77** |
 | Skyline | 1,238 warnings + 3,014 artefact errors | untouched |
+
+Still open in the batch tools, and deliberately not touched:
+
+- **`Server.cs` uses `new WebClient()`**, obsolete on net8 (`SYSLIB0014`). Clearing it
+  properly means migrating `DownloadAsync` to `HttpClient` with progress reporting - the
+  same migration `PanoramaClient` already went through in #3658. That is real work, not a
+  warning suppression, so it needs a decision rather than a `#pragma`.
+- The bulk of what remains is `PossibleNullReferenceException` and
+  `AssignNullToNotNullAttribute` in form and test code, each needing caller-level
+  reasoning. Resist `?? string.Empty` unless the invariant that makes it safe is real and
+  written down next to it.
 
 52 raw warnings cleared, concentrated in the shared assemblies so each fix counts against
 both batch solutions and against Skyline. What is left in the batch tools is mostly
