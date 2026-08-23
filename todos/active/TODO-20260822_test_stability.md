@@ -470,3 +470,50 @@ has been applied. Next step is to wait on the selection actually reaching the gr
 graph idleness, then re-soak. Not yet fixed.
 
 Note this failure appeared under `tr`, but with n=1 that says nothing about localization.
+
+### 2026-08-23 (night session) - worker leak fixed; method written up
+
+**Docker worker leak - FIXED.** `RunTests.KillParallelWorkers` already existed and worked,
+but had exactly one caller: `SetConsoleCtrlHandler`, which fires only on termination from
+OUTSIDE. Nothing tore workers down when a run simply finished, so every successful parallel
+run leaked its containers, and they then held the mounted checkout open - which is what
+wedged a later run's staging step in silence for three hours earlier that day.
+
+Fixed with `RunTests.ParallelWorkerTeardown`, an IDisposable in the socket `using` of
+`PushToTestQueue`, so teardown happens on every exit path. It reads the worker names through
+a closure because workers are still being launched when the scope opens. Made quiet on the
+normal path too: the host worker is killed only if it has not exited, and `docker kill` goes
+only to containers still running, so a clean run prints nothing instead of spurious errors.
+
+Verified against the configuration that leaked: 100 executions at 8 workers previously left
+4 containers up after exit 0; now `containers after: 0`, 100/100 passing.
+
+**PeakAreaDotpGraphTest - test fixed, PRODUCT DEFECT LEFT ALONE DELIBERATELY.** The chain is
+now known exactly: `IsGraphUpdatePending` derives from `_timerGraphs.Enabled`
+(`SkylineGraphs.cs:896-909`); the timer tick pops a pane and removes it from the pending list
+unconditionally (`:879-880`); but `GraphSummary.UpdateGraph` returns early when
+`DocumentUIContainer.Document` and `StateProvider.SelectionDocument` are momentarily out of
+sync (`GraphSummary.cs:359-361`). So a pane can leave the queue WITHOUT updating, the timer
+stops, and the pending flag goes false while the pane still draws the previous precursor.
+A user can see a stale graph this way too.
+
+I did not change graph-update scheduling overnight without review: that guard exists to avoid
+drawing inconsistent state, and a naive retry could spin. Recommended direction is to have
+the sync-mismatch path re-request an update rather than be dropped. The test now waits on
+`pane.ParentGroupNode.TransitionGroup` matching the selection instead of on graph idleness,
+at all three FindNode sites. Precedent for distrusting `WaitForGraphs` this way already
+exists at `TestFunctional/AreaNormalizeOptionTest.cs:81-86`.
+
+**TestDdaSearchDependencyErrors - mitigated.** Ruled out tonight: the duplicate crux entries
+in `CometSearchEngine.FilesToDownload` do NOT double-extract, because `DownloadRequiredFiles`
+groups by `Filename` and takes `.First()`. Why only this test hits it: it calls
+`CleanupDownloadedFiles`, forcing a real re-extraction every run, over archives carrying the
+MSVC runtime DLLs that comet/crux load. Added a bounded retry (4 x 1s) around the extraction
+since the lock is transient by construction, falling through to the holder-naming exception.
+The holder itself is still unproven; the diagnostic will name it on the next real occurrence.
+
+**Method written up** at `ai/docs/test-flakiness-method.md`: three classes of flake, each
+needing a different instrument, and a clearance claim that records the configuration that
+produced it or it means nothing. The recommended first sweep is the whole suite at `loop=2`,
+serial, one language - it makes every class-1 state leak deterministic for about the cost of
+two suite runs, and would have caught the Waters failure with no soak and no statistics.
