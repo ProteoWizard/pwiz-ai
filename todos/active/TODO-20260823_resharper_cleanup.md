@@ -354,8 +354,11 @@ them by weakening what they assert.
 
 | Suite | Result | What remains |
 |---|---|---|
-| **SkylineBatch** | **38 / 38** | nothing - green after R was installed |
-| **AutoQC** | **16 / 18** | 2 blocked on vendor SDK support, below |
+| **SkylineBatch** | **38 / 38** | nothing |
+| **AutoQC** | **18 / 18** | nothing |
+
+**Both suites are green.** Neither could complete at the start of the day: SkylineBatch
+hung indefinitely on a modal dialog, AutoQC stopped dead after 8 tests.
 
 Getting there needed three machine prerequisites, none of them documented and none
 caused by the port: **R** (installed 4.6.1), **PanoramaWeb credentials**
@@ -373,11 +376,28 @@ ERROR: SkylineCmd.exe exited with code 2. Skyline document import failed.
 ERROR: No results were imported. Skipping upload to Panorama.
 ```
 
-The import fails, so nothing is published, so the second test also sees one pipeline job
-instead of two. To clear them, either run `pwiz-sharp\i-agree-to-the-vendor-licenses.bat`
-once and rebuild Skyline with vendor support, or install a real Skyline (which ships the
-vendor readers) so the test seam stops falling back to the local no-vendor build. **That
-is a vendor EULA decision for a developer to make, not something to automate.**
+The import fails, so nothing is published, so the second test also saw one pipeline job
+instead of two. **Resolved 2026-08-23**: the developer ran
+`pwiz-sharp\i-agree-to-the-vendor-licenses.bat` (a vendor EULA acceptance - do not
+automate it) and Skyline was rebuilt; `Pwiz.Vendor.Thermo.dll` recompiled and both tests
+pass. Note the rebuild took only 45s, so it is worth confirming the vendor assembly
+timestamp actually moved - a stale no-vendor DLL produces the identical failure.
+
+### The three machine prerequisites, and how badly each announced itself
+
+None was caused by the port, and none was documented. What differs is how they failed:
+
+| Prerequisite | How it presented |
+|---|---|
+| **R** | the suite **hung** on a modal dialog - no message at all |
+| **PanoramaWeb credentials** | clean `Assert.Fail` naming the variable and giving the commands |
+| **Vendor SDK licences** | "File was not uploaded to panorama" - true cause only in the config runner log |
+
+Two of the three cost a full debugging cycle to trace back to a missing prerequisite
+rather than a code defect. The PanoramaWeb one cost nothing, because the test said what
+was wrong and how to fix it. **That is the standard the other two should be held to** -
+and it is the strongest argument for bounding `AppInvoke` (below), which is what turns a
+missing prerequisite into a hang instead of a failure.
 
 ### A real net8 bug found on the way: DNS failures misreported
 
@@ -625,8 +645,8 @@ re-verified at 36/38 after each batch):
 
 | Solution | Baseline | Now |
 |---|---|---|
-| AutoQC | 83 | **51** |
-| SkylineBatch | 106 | **86** |
+| AutoQC | 83 | **40** |
+| SkylineBatch | 106 | **83** |
 | Skyline | 1,238 warnings + 3,014 artefact errors | untouched |
 
 52 raw warnings cleared, concentrated in the shared assemblies so each fix counts against
