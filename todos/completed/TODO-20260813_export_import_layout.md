@@ -476,7 +476,7 @@ first run of the new test, and never reproduced; if it returns, profile it rathe
 
 - **Branch**: `Skyline/work/20260822_export_import_layout-fix`
 - **Checkout**: `I:\git_i\sky_layouts`
-- **PR**: [#4606](https://github.com/ProteoWizard/pwiz/pull/4606)
+- **PR**: [#4606](https://github.com/ProteoWizard/pwiz/pull/4606) (merged 2026-08-22)
 
 One nightly machine hit `InvalidOperationException: The file dialog is still opening.`
 out of `ExportLayout` -> `EnterPath` -> `FileNameTextBox`.
@@ -508,6 +508,33 @@ pre-visible bring-up ran against that same budget - but slightly longer.
 does its Win32 sends on the pipe thread with no `DialogWatcher` marshal, so a native set_value
 is uncounted and uncancellable; `NativeDialog.GetFormInfo` omits `ModalNestingCount`, which
 `StandaloneForm` sets; `JsonUiService.GetOpenForms` calls `BeginInvoke` without `EndInvoke`.
+
+### 2026-08-22 - Merged
+
+PR #4606 merged as commit `176539ecce`, full green gate (TeamCity Skyline master and PRs,
+Skyline code inspection, Core Windows/Linux, the Wine Docker container, TestConnected, and
+all seven CodeQL analyses, all against the final commit `1cc6bcc655`).
+
+What shipped is the `IsOpenComplete` gate in `NativeDialog.Create` plus the two overrides
+(file dialog by its file-name field, folder browser by its tree), and the test-side cleanup
+that gate made possible. That cleanup grew past the original readiness waits: with the gate
+in place the remaining `GetOpenForms`-based resolvers had no reason to exist, so
+`WaitForNativeFileDialog`, `WaitForNativeFolderDialog`, `GetNativeFileDialog`,
+`GetNativeFolderDialog` and `WaitForMcpConnectorGraph` are gone, `ResolveWhenOpen` and
+`ResolveNow` are inlined into their remaining callers, and the four live call sites now use
+`WaitForNativeDlg<NativeFileDialog>().FormId` - matching the wrapper TYPE instead of the
+bare `IsNative` flag that a message box and a folder browser also wear. Unused
+`WaitForControl` was deleted in the same pass.
+
+Copilot's single review comment was exactly that `IsNative` weakness, raised against the
+earlier commit `34f60c46` and already fixed by `1cc6bcc655`; replied on the thread rather
+than left dangling. The same finding had come out of `/code-review max` before the PR opened.
+
+**Not covered by testing**: `TestDiaToSrmTutorial` and `TestDiaFragPipeTutorial` are
+compile-verified only - they carry two of the four converted call sites plus comment edits,
+and are `TestPerf` tests needing data not on this machine. Everything else ran 2-3 loops
+green (`TestLayoutExportImport`, `TestNativeFileDialog`, `TestNativeMessageBox`,
+`TestPrmMcpConnector`, `TestMcpConnectorFormThreading`, `TestLibraryBuild`, `CodeInspection`).
 
 ## References
 
