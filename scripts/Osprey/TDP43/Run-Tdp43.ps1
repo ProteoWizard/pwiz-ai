@@ -95,7 +95,7 @@ param(
     [string]$RunsRoot,
     [string]$SourceRoot,
     [string]$Exe,
-    [string]$LinkFrom = '',
+    [string[]]$LinkFrom = @(),
     [switch]$Fresh,
     [switch]$Resume,
     [switch]$NoModelDiagnostics,

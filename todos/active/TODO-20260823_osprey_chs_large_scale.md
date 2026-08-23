@@ -90,6 +90,41 @@ mind.
    patching, in case other files were dropped the same way. Cache it with the vendor build
    (`_bin\26.1.1.233-vendor-20260822`, ~2 min); the net8.0 exe cannot read `.raw`.
 
+## The plan: per-plate legs, then one join (Brendan, 2026-08-23)
+
+Do not search 256 straight through. Score each plate separately, then run the full cohort
+with `-LinkFrom` over the three legs so only the FDR stages re-run.
+
+This works because **`PerFileScoring` is cohort-independent**: the peak-pick model is a
+hardcoded resolution-keyed model, not trained on the cohort
+(`OspreyEnvironment.PickLda`, `Osprey.Core/OspreyEnvironment.cs:277-295`), so a file's
+`.scores.parquet` does not depend on what else was in the run. `OSPREY_TRAIN_PICK_RUN`
+samples the *Percolator* training set and lives in FirstPassFDR, which leg 4 re-runs anyway.
+Everything cohort-dependent - Percolator training, Stage 6 reconciliation, consensus RT, the
+pass-2 join - runs fresh across all 256.
+
+Costed from TDP-43's actual per-task log (163 files / 779 GB / 19.0 h: PerFileScoring 10.7 h,
+FirstPassFDR 2.3 h, PerFileRescoring 4.8 h, SecondPassFDR 1.2 h):
+
+| leg | files / GB | estimate |
+|---|---|---|
+| 1 - plate 0059 | 86 / 352 | ~7.8 h (measured rate, see log) |
+| 2 - plate 0060 | 85 / 330 | ~8.0 h |
+| 3 - plate 0061 | 86 / 341 | ~8.3 h |
+| 4 - all three, linked | 257 / 1,023 | ~11 h (FP 3.0 + PFR 6.3 + SP 1.6) |
+
+**~36 h total vs ~25 h for one straight run.** The ~11 h premium buys: the per-file half
+becomes a durable asset (a join fix costs ~11 h to re-measure, not ~25 h); three independent
+per-plate survivor measurements; and the first real number in ~8 h instead of ~25 h.
+
+**The join retry is the payoff.** `-LinkFrom` links every stage strictly before `-Task`, so a
+SecondPassFDR death retries as `-Task SecondPassFDR -LinkFrom <leg-4 dir>` at ~1.6 h per
+attempt instead of 9.3 h. That is what makes "does the join fit" an iterable experiment.
+
+**Open decision at check-in 1**: legs 2 and 3 could run `-Task PerFileScoring` only, saving
+~3.5 h each (~7 h). That forfeits the per-plate FDP / reconciliation / survivor numbers.
+Decide with plate 0059's numbers in hand, not now.
+
 ## Next steps
 
 1. Fix both bugs above; re-run `Run-Chs.ps1 -Plates 0059 ... -WhatIf` until it resolves 86
@@ -141,5 +176,42 @@ freed (1,786 -> 4,895 GB), `osprey-runs` now matches the other test machine. Run
 and layout doc committed. First run not launched - two bugs found in the dry run, recorded
 above.
 
+**2026-08-23 (afternoon)** - Both bugs fixed and committed; leg 1 launched 14:15.
+
+* **Bug 1 fixed**: `OspreyDatasetRun.psm1` now treats `NumFiles = 0` as the whole candidate
+  set (`Select-Object -First 0` returned nothing). Also added the plate list to the CHS run
+  directory name - plates 0059 and 0061 are BOTH 86 files, so two single-plate runs would
+  have resolved to one directory.
+* **Bug 2 fixed**: `EXP25033_2025us0059aX10_A.raw` cached with the vendor build in 130.8 s
+  (2.84 GB bin) - squarely in the documented 121-150 s band, which also proves the `.raw` was
+  complete rather than truncated. Plate 0059 is now **86 files**, not 85.
+* **The manifest omission is explained.** `chs-sizes.json` holds 256 of the 257 `.raw` on
+  disk, and the one missing file is the **lexicographic first of the whole sorted set**
+  (`us0059aX10` sorts before `us0059aX11` because `0` < `_`; 0059 is the lowest plate). Every
+  other plate's first file is present. That is a dropped head element - a `Skip 1` meant to
+  discard the WebDAV collection's self-entry, applied after the plate filter had already
+  removed it. Only one file can be lost this way, and a both-directions diff of manifest vs
+  disk confirms exactly one asymmetry. The manifest is otherwise trustworthy.
+* **Library comparability proven, not assumed.** TDP-43 ran against
+  `AstralTest-TargetDecoyLibraries\target+decoy+entrapment-20260817`, which the D: cleanup
+  moved; the CHS run uses `sea-ad\lib\target+decoy+entrapment-20260817`. Both load
+  **6,175,389 library entries** - identical. (The surviving
+  `AstralTest-TargetDecoyLibraries\target+decoy+entrapment` is a *different*, older library:
+  13.09 GB / Jun 30 vs 12.39 GB / Aug 17. The TODO's "every file has a same-size peer" claim
+  below is wrong for the entrapment library.)
+* **`-LinkFrom` now takes several sources**, for leg 4. Probed in order, first hit wins; all
+  sources must carry the same Osprey version stamp or it refuses to start (a mixed-build join
+  would otherwise fail hours in as an "osprey version mismatch" naming one file); the banner
+  tallies each source so a leg contributing nothing is visible up front. `-WhatIf` now walks
+  the link block in probe mode - it used to `return` before it, leaving the most
+  expensive-to-get-wrong step as the one the dry run never exercised. Verified on synthetic
+  sources: 2-source link, version-mismatch refusal, dead-source tally, single-source
+  backward compatibility.
+* **Separator is `;` in one quoted argument** - `pwsh -File` cannot bind an array at all.
+* **Early signal**: CHS is scoring **3.66 M entries/file** against TDP-43's mean of
+  3,663,958 - effectively identical, so the per-file load is not deeper despite the bead
+  enrichment. This is NOT the survivor count and does not settle the join question.
+
 **Next session handoff**: For detailed startup protocol, read
-`ai/.tmp/handoff-20260823_chs_first_run.md` before starting work.
+`ai/.tmp/handoff-20260823_chs_first_run.md` before starting work. Note its "85 files" and
+"257 .raw" figures are now stale: plate 0059 is 86 files and all 257 are cached.

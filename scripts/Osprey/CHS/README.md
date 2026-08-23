@@ -83,6 +83,47 @@ can plausibly land well past the box.
 join into SecondPassFDR deliberately, which is why that stage is now the one to watch; see
 `ai/scripts/phase_mem_shape.py` for the fan-out-vs-join shape check.
 
+### Run it in per-plate legs, then join once
+
+Do NOT search 256 files straight through. Score each plate on its own, then join the three
+legs with `-LinkFrom`:
+
+```powershell
+# Legs 1-3: one plate each, ~8 h apiece. Each is also a complete 85-86 file result.
+.\Run-Chs.ps1 -Plates 0059 -DecoyMode libdecoy -Ratio 1.0 -Pass2Mode protein-compact -Threads 30
+.\Run-Chs.ps1 -Plates 0060 ...
+.\Run-Chs.ps1 -Plates 0061 ...
+
+# Leg 4: the whole cohort, per-file stages linked from the legs. Note the ';' - see below.
+.\Run-Chs.ps1 -Plates 0059,0060,0061 -DecoyMode libdecoy -Ratio 1.0 -Pass2Mode protein-compact `
+  -Threads 30 -LinkFrom '<runs>\chs-86files-...-p0059;<runs>\chs-85files-...-p0060;<runs>\chs-86files-...-p0061'
+```
+
+**Why this and not one straight run.** `PerFileScoring` is over half the wall time and it is
+cohort-INDEPENDENT - the peak-pick model is a hardcoded resolution-keyed model, not trained
+on the cohort (`OspreyEnvironment.PickLda`), so a file's `.scores.parquet` is the same
+whichever cohort it was scored in. Everything that IS cohort-dependent - Percolator training,
+Stage 6 reconciliation, consensus RT, the pass-2 join - still runs fresh across all 256 in
+leg 4. The legs cost ~10 h more machine time in total, and buy:
+
+* the per-file half becomes a durable asset - if the join needs bounding in code, re-running
+  costs only the FDR stages (~11 h), not the ~15 h of scoring again;
+* three independent per-plate measurements of survivor observations, which is the
+  richness-not-file-count question the whole exercise is about;
+* the first real number in ~8 h instead of ~25 h.
+
+**Retrying the join is cheap.** `-LinkFrom` links every stage strictly before `-Task`, so if
+SecondPassFDR is what dies, the next attempt is `-Task SecondPassFDR -LinkFrom <leg-4 dir>`
+at ~1.6 h, not another 9 h through PerFileRescoring.
+
+**Separate sources with ';' in ONE quoted argument.** `pwsh -File` passes arguments literally
+and cannot bind an array: `-LinkFrom a,b` arrives as the single string `a,b`, and
+`-LinkFrom a b` binds `b` to the next parameter - which surfaces as a ValidateSet error
+naming a parameter you did not touch. Comma syntax works only when dot-invoking from a pwsh
+prompt. All sources must carry the same Osprey version stamp or the run refuses to start, and
+the banner tallies each source's contribution so a leg that linked nothing is visible up
+front. `-WhatIf` walks the link block in probe mode, so check the tally before committing.
+
 ## Related
 
 * `ai/docs/osprey-large-datasets.md` - the catalog entry, access, and download budgeting

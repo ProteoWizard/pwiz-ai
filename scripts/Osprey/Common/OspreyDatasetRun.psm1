@@ -233,7 +233,12 @@ function Invoke-OspreyDatasetRun {
         # Run from the build tree instead of a snapshot. Only reason to pass this is a run short
         # enough that locking the build tree does not matter; see the snapshot block below.
         [switch]$NoSnapshotExe,
-        [string]$LinkFrom = '',
+        # More than one source is allowed, probed in order with the first hit winning. A cohort
+        # can be scored in per-plate legs and then joined once: the per-file stages are the
+        # expensive half and are cohort-INDEPENDENT (the peak-pick model is hardcoded and
+        # resolution-keyed, not trained on the cohort), so linking their output from several
+        # legs gives the join exactly what one big run would have produced.
+        [string[]]$LinkFrom = @(),
         [switch]$Fresh,
         [switch]$Resume,
         [switch]$NoModelDiagnostics,
@@ -539,34 +544,57 @@ function Invoke-OspreyDatasetRun {
     Write-Host ("  out dir  : {0}" -f $OutDir)
     Write-Host ""
 
-    if ($WhatIf) {
-        Write-Host "-WhatIf: not running. Command would be:" -ForegroundColor Yellow
-        Write-Host ("  {0} {1}" -f $ospreyExe, ($cliArgs -join ' '))
-        return
+    # -WhatIf still walks the -LinkFrom block below, in probe mode: it reports what WOULD link
+    # without creating anything. Returning here instead would leave the one step whose failure
+    # is most expensive - a source that contributes nothing, so the join quietly runs short of
+    # the cohort its directory name claims - as the only step the dry run never exercises.
+    if (-not $WhatIf) {
+        New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+        $OutDir = (Resolve-Path $OutDir).Path
     }
-
-    New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-    $OutDir = (Resolve-Path $OutDir).Path
 
     # Optional hard-link resume (same-file-set source only). How MUCH is linked depends on
     # -Task: enough to reach the task under test, and never the task's own outputs.
     if ($LinkFrom) {
-        if (-not (Test-Path $LinkFrom)) { throw "LinkFrom dir not found: $LinkFrom" }
+        # ';' is also accepted as a separator INSIDE one element, because `pwsh -File` cannot
+        # pass an array at all: it hands arguments over literally, so -LinkFrom a,b arrives as
+        # the single string "a,b" and -LinkFrom a b binds b to whatever parameter comes next
+        # (a ValidateSet error naming an unrelated parameter, which is a puzzle to read). Both
+        # detached launches and Start-Process use -File, so one quoted 'a;b;c' is the form that
+        # works everywhere; -LinkFrom a,b still works when dot-invoking from a pwsh prompt.
+        $LinkFrom = @($LinkFrom | ForEach-Object { $_ -split ';' } |
+                      Where-Object { $_ -and $_.Trim() } | ForEach-Object { $_.Trim() })
+        foreach ($src in $LinkFrom) {
+            if (-not (Test-Path $src)) { throw "LinkFrom dir not found: $src" }
+        }
         # Osprey stamps a daily version into every .osprey.task and refuses to consume
         # artifacts from a different build ("osprey version mismatch"). A -LinkFrom re-run on a
         # newer binary is EXACTLY that case, so pin the source's version unless the caller
         # already chose one. Without this the failure reads like a code bug.
-        if (-not $env:OSPREY_VERSION_OVERRIDE) {
-            $srcTask = Get-ChildItem (Join-Path $LinkFrom '*.osprey.task') -ErrorAction SilentlyContinue |
-                       Select-Object -First 1
-            if ($srcTask) {
-                $srcVer = (Get-Content $srcTask.FullName -Raw | Select-String -Pattern '\d+\.\d+\.\d+\.\d+' |
-                           Select-Object -First 1).Matches[0].Value
-                if ($srcVer) {
-                    $env:OSPREY_VERSION_OVERRIDE = $srcVer
-                    Write-Host ("  LinkFrom: pinned OSPREY_VERSION_OVERRIDE={0} from the source run" -f $srcVer)
-                }
-            }
+        #
+        # With SEVERAL sources the version has to AGREE across them. Pinning whichever one was
+        # read first would let legs built on different days into one join, and only the odd
+        # ones out would fail - as an "osprey version mismatch" naming a file, hours in, with
+        # nothing pointing at the real cause. Refuse up front instead.
+        $srcVers = [ordered]@{}
+        foreach ($src in $LinkFrom) {
+            $t = Get-ChildItem (Join-Path $src '*.osprey.task') -ErrorAction SilentlyContinue |
+                 Select-Object -First 1
+            if (-not $t) { continue }
+            $m = Get-Content $t.FullName -Raw | Select-String -Pattern '\d+\.\d+\.\d+\.\d+' |
+                 Select-Object -First 1
+            if ($m) { $srcVers[$src] = $m.Matches[0].Value }
+        }
+        $distinct = @($srcVers.Values | Sort-Object -Unique)
+        if ($distinct.Count -gt 1) {
+            throw ("-LinkFrom sources were produced by different Osprey builds, so they cannot be " +
+                   "joined: " + (($srcVers.Keys | ForEach-Object { "$($srcVers[$_]) $_" }) -join '; ') +
+                   ". Re-run the odd legs on one build, or pin OSPREY_VERSION_OVERRIDE yourself if " +
+                   "you are certain the artifacts are compatible.")
+        }
+        if (-not $env:OSPREY_VERSION_OVERRIDE -and $distinct.Count -eq 1) {
+            $env:OSPREY_VERSION_OVERRIDE = $distinct[0]
+            Write-Host ("  LinkFrom: pinned OSPREY_VERSION_OVERRIDE={0} from the source run(s)" -f $distinct[0])
         }
         # Per-file artifacts by the stage that PRODUCES them. Linking is cumulative up to the
         # stage before -Task, so the task under test always regenerates its own outputs.
@@ -605,23 +633,42 @@ function Invoke-OspreyDatasetRun {
         }
         $linked = 0; $missing = 0
         $missingBySuffix = @{}
+        # Per-source tally, so a leg that contributed NOTHING is visible. Silence there is the
+        # expensive mistake: the join would just run short by that leg's files and report a
+        # smaller cohort than the directory name claims.
+        $linkedBySource = [ordered]@{}
+        foreach ($src in $LinkFrom) { $linkedBySource[$src] = 0 }
         foreach ($f in $inputs) {
             $stem = [IO.Path]::GetFileNameWithoutExtension($f)
             foreach ($suf in $suffixes) {
-                $s = Join-Path $LinkFrom ($stem + $suf)
+                # First source holding this artifact wins; the legs are disjoint by construction
+                # (each scored a different plate), so order only matters if they overlap.
+                $s = $null
+                foreach ($src in $LinkFrom) {
+                    $cand = Join-Path $src ($stem + $suf)
+                    if (Test-Path $cand) { $s = $cand; $linkedBySource[$src]++; break }
+                }
                 $d = Join-Path $OutDir ($stem + $suf)
-                if (-not (Test-Path $s)) {
+                if (-not $s) {
                     $missing++
                     $missingBySuffix[$suf] = [int]$missingBySuffix[$suf] + 1
                     continue
                 }
-                if (Test-Path $d) { Remove-Item $d -Force }
-                New-Item -ItemType HardLink -Path $d -Target $s | Out-Null
+                if (-not $WhatIf) {
+                    if (Test-Path $d) { Remove-Item $d -Force }
+                    New-Item -ItemType HardLink -Path $d -Target $s | Out-Null
+                }
                 $linked++
             }
         }
-        Write-Host ("LinkFrom: hard-linked {0} file(s) for stages before {1}, {2} missing, from {3}" -f
-                    $linked, $upTo, $missing, $LinkFrom)
+        $verb = if ($WhatIf) { 'WOULD hard-link' } else { 'hard-linked' }
+        Write-Host ("LinkFrom: {0} {1} file(s) for stages before {2}, {3} missing, from {4} source(s)" -f
+                    $verb, $linked, $upTo, $missing, @($LinkFrom).Count)
+        foreach ($src in $LinkFrom) {
+            $n = $linkedBySource[$src]
+            $color = if ($n -eq 0) { 'Yellow' } else { 'Gray' }
+            Write-Host ("  {0,7} from {1}" -f $n, $src) -ForegroundColor $color
+        }
         # A partially-linked stage is the failure that costs an hour and then reports something
         # that reads like a code bug, so name WHICH artifact is short rather than only a total.
         # Not fatal: a legitimately absent artifact exists (no reconciliation for a file with no
@@ -630,6 +677,13 @@ function Invoke-OspreyDatasetRun {
             Write-Host ("  LinkFrom WARNING: {0} of {1} input(s) had no '{2}'" -f
                         $missingBySuffix[$suf], @($inputs).Count, $suf) -ForegroundColor Yellow
         }
+    }
+
+    if ($WhatIf) {
+        Write-Host ""
+        Write-Host "-WhatIf: not running. Command would be:" -ForegroundColor Yellow
+        Write-Host ("  {0} {1}" -f $ospreyExe, ($cliArgs -join ' '))
+        return
     }
 
     # Strip every experimental lever that must NOT influence this run. A stale env var from an
@@ -694,7 +748,7 @@ function Invoke-OspreyDatasetRun {
      "pick=$(if ($PickProduct) { 'product' } else { 'lda' }) trainpick=run logmem=$(if ($LogMemory) { 'on' } else { 'off' }) expagg='$(if ($ExperimentAgg) { $ExperimentAgg } else { 'max' })' " +
      "qualify=$QualifyBy files=$($inputs.Count) threads=$Threads " +
      "parallelfiles=$ParallelFiles task='$Task' mdiag=$mdiag " +
-     "fdrbench=$FdrBenchPass linkfrom='$LinkFrom'") -f (Get-Date -Format s) |
+     "fdrbench=$FdrBenchPass linkfrom='$($LinkFrom -join ';')'") -f (Get-Date -Format s) |
         Set-Content -Path $log
     "Exe: $ospreyExe" | Add-Content -Path $log
     "Library: $libraryPath" | Add-Content -Path $log

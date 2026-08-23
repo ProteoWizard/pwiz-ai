@@ -89,6 +89,14 @@
     This is what makes a Stage-7-only re-measurement cost ~25 min instead of the ~8.5 h a
     full 82-file run takes.
 
+    SEVERAL sources may be given, probed in order with the first hit winning, so a cohort too
+    big to score in one sitting can be scored in legs and joined once. Separate them with ';'
+    in a single quoted argument - `pwsh -File` hands arguments over literally and cannot bind
+    an array, so -LinkFrom a,b arrives as one string and -LinkFrom a b binds b to the NEXT
+    parameter. All sources must carry the same Osprey version stamp or the run refuses to
+    start, and the banner tallies what each source contributed so a leg that gave nothing is
+    visible before the hours are spent rather than after.
+
 .EXAMPLE
     # Re-measure Stage 7 alone against a completed run (~25 min, not 8.5 h).
     .\Run-SeaAd.ps1 -Task SecondPassFDR -LinkFrom D:\test\...\<completed run> -Fresh
@@ -142,7 +150,7 @@ param(
     [string]$RunsRoot,
     [string]$SourceRoot,
     [string]$Exe,
-    [string]$LinkFrom = '',
+    [string[]]$LinkFrom = @(),
     [switch]$Fresh,
     [switch]$Resume,
     [switch]$NoModelDiagnostics,
