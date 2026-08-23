@@ -573,15 +573,6 @@ function Get-ModifiedProjects {
 }
 
 # Run ReSharper code inspection if requested
-if (($RunInspection -or $QuickInspection) -and $isNet8) {
-    Write-Host ""
-    Write-Host "ReSharper inspection is not wired up for the net8 build path." -ForegroundColor Yellow
-    Write-Host "  It writes to bin\x64\<Config>, which the net8 build never creates, and runs" -ForegroundColor Gray
-    Write-Host "  jb --no-build against Skyline.sln, which the net8 path never builds." -ForegroundColor Gray
-    Write-Host "  Refusing rather than reporting a green gate that inspected nothing." -ForegroundColor Gray
-    exit 2
-}
-
 if (($RunInspection -or $QuickInspection) -and $Target -ne "Clean") {
     $isQuickMode = $QuickInspection -and -not $RunInspection
     $modeLabel = if ($isQuickMode) { "Quick inspection (modified projects only)" } else { "Full solution inspection" }
@@ -607,8 +598,41 @@ if (($RunInspection -or $QuickInspection) -and $Target -ne "Clean") {
     
     if ($jbPath) {
         
-        $inspectionOutput = "bin\$Platform\$Configuration\InspectCodeOutput.xml"
+        # The net472 path builds into bin\<Platform>\<Config>; the net8 path stages into
+        # bin\staging-net8\<Config> and never creates the former. Writing the report into a
+        # directory the build did not create was half of why this block used to refuse to run on
+        # net8 at all.
+        $inspectionOutput = if ($isNet8) {
+            "bin\staging-net8\$Configuration\InspectCodeOutput.xml"
+        } else {
+            "bin\$Platform\$Configuration\InspectCodeOutput.xml"
+        }
+        $inspectionOutputDir = Split-Path -Parent $inspectionOutput
+        if (-not (Test-Path $inspectionOutputDir)) {
+            New-Item -ItemType Directory -Path $inspectionOutputDir -Force | Out-Null
+        }
         $dotSettings = "Skyline.sln.DotSettings"
+
+        # The other half of the old refusal was "jb --no-build against Skyline.sln, which the net8
+        # path never builds". That one is real, and worse than it sounds: inspectcode reports the
+        # UNION of every TargetFramework a project declares, so it analyses the net472 leg too -
+        # and on this branch the net472 leg does not resolve, because the pwiz-sharp vendor
+        # projects (Thermo, Waters, Sciex, Agilent, Bruker, Shimadzu, UIMF, UNIFI, ...) are only
+        # built for net8. Measured without the pin below: 161,478 issues, of which 149,436 were
+        # CSharpErrors - "Cannot resolve symbol", "type is defined in an assembly that is not
+        # referenced" - i.e. 92% of the report was one broken leg, and the 4,585
+        # RedundantUsingDirective hits were the same cascade wearing a different hat (a using
+        # looks unused when the types behind it will not resolve).
+        #
+        # So pin the analysis to the framework this build path actually produced. That is the
+        # only leg this branch keeps green, and an unpinned run is not a baseline, it is noise.
+        $net8InspectionTfm = 'net8.0-windows'
+        if ($isNet8) {
+            $inspectArgsTfm = "--properties=TargetFramework=$net8InspectionTfm"
+            Write-Host "Pinning inspection to TargetFramework=$net8InspectionTfm" -ForegroundColor Gray
+            Write-Host "  (inspectcode analyses every declared TFM; the net472 leg of this branch" -ForegroundColor Gray
+            Write-Host "   does not resolve, and swamps the report with unresolved-symbol errors.)" -ForegroundColor Gray
+        }
         
         # Set up persistent cache directory for faster subsequent runs
         # Located in bin/ so it's automatically ignored by git and cleaned by clean.bat
@@ -670,7 +694,11 @@ if (($RunInspection -or $QuickInspection) -and $Target -ne "Clean") {
                 "--properties=Configuration=$Configuration",
                 "--verbosity=WARN"
             )
-            
+
+            if ($inspectArgsTfm) {
+                $inspectArgs += $inspectArgsTfm
+            }
+
             # Add project filters for quick mode
             if ($projectFilter.Count -gt 0) {
                 foreach ($project in $projectFilter) {

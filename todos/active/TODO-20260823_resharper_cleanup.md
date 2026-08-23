@@ -193,7 +193,29 @@ hand-edited downstream `.DotSettings`.
 
 This is the prerequisite for every later phase. Nothing here is optional.
 
-- [ ] **0.1 Fix net472 MSTest resolution in the SDK-style test projects.**
+- [x] **0.1 Fix net472 MSTest resolution in the batch-tool test projects.** DONE
+      2026-08-23. Option (a) as planned: `MSTest.TestFramework` (and, for the two runnable
+      suites, `MSTest.TestAdapter`) moved out of the net8-only `ItemGroup` into an
+      unconditional one in `SharedBatchTest`, `SkylineBatchTest` and `AutoQCTest`, and the
+      path-less `Microsoft.VisualStudio.QualityTools.UnitTestFramework` reference deleted.
+      Both solutions now build both TFMs.
+
+      Two things the plan did not anticipate, both now handled and commented in the csprojs:
+
+      - **`Microsoft.NET.Test.Sdk` had to stay net8-only.** On net472 it pulls
+        `Microsoft.TestPlatform.ObjectModel 17.5.0` -> `System.Reflection.Metadata 1.6.0` ->
+        `System.Collections.Immutable 1.5.0` (assembly `1.2.3.0`). net472 only needs the
+        framework and adapter to compile and be discovered.
+      - **`MSTest.TestAdapter` drags the same `Immutable 1.5.0` in**, and a package asset
+        beats a `HintPath`, so `SkylineBatchTest`'s existing
+        `Shared\Lib\System.Collections.Immutable.dll` (assembly `5.0.0.0`) silently lost and
+        the result was `CS1705` against `SharedBatch`/`SkylineBatch`/`AutoQC`. Fixed by
+        asking NuGet for `System.Collections.Immutable 5.0.0` on net472 in the two test
+        projects - the same version `Shared\Lib` ships - so the whole graph agrees. This is
+        a compile error, not a warning; `NoWarn` on `NU1605` had been hiding the downgrade
+        signal that would have pointed at it.
+
+- [ ] **0.1b Fix net472 MSTest resolution in the Skyline test projects.**
       Confirm first whether Skyline's own test projects share the failure (build
       `Test.csproj` and `TestFunctional.csproj` for the net472 target), then pick one
       strategy and apply it to every project in the list above:
@@ -230,7 +252,283 @@ This is the prerequisite for every later phase. Nothing here is optional.
       Success criterion is an `InspectCodeOutput.xml` per solution with a parsed issue
       count - green or red, but real.
 
+### Phase 0 findings - the batch-tool tests hang, and it is not a net8 regression
+
+`Build-SkylineBatch.ps1 -RunTests` (which runs the **net8** assembly - the script takes
+the last declared TFM) does not fail, it **hangs**. Measured: 14 minutes wall clock for
+1.7 seconds of CPU, flat, with a `Skyline Batch` window open. Enumerating that window's
+controls named it exactly:
+
+```
+'Skyline Batch requires Skyline to run, but did not find an administrative or
+ web-based installation.'
+'&Please specify Skyline installation folder:'  [ C:\Program Files\Skyline ]  [OK] [...]
+```
+
+`Program.Main` calls `InitSkylineSettings()`, which calls
+`SkylineInstallations.FindSkyline()` and, when that fails, runs the modal
+`FindSkylineForm`. Under a functional test nothing can answer it, so the run never ends.
+This machine has no Skyline installation at all - no `C:\Program Files\Skyline`, no
+`Skyline-daily`, no ClickOnce `.appref-ms`, no `SkylineCmd.exe` beside the test binaries -
+so `FindSkyline()` correctly returns false.
+
+**`master` has the identical code** (same two lines, same `InitSkylineSettings`), so this
+is not something the net8 port broke. It is a latent test-robustness defect that only
+shows on a machine without Skyline installed, which is presumably why the port's
+"SkylineBatchTest 38/38" was recorded on a machine that had one. It is in scope here
+because the goal is passing tests, and a suite that hangs cannot pass.
+
+Behind that first hang were three more, each hidden by the one in front of it. The full
+chain, in the order it had to be peeled:
+
+1. **Modal `FindSkylineForm` at startup** (above) - hung the run outright.
+2. **`No R installation found`** - `TestUtils` builds nearly every fixture through
+   `RInstallations.GetMostRecentInstalledRVersion()`, which throws when no R is
+   installed. 26 of 38 tests failed in fixture construction, before testing anything.
+   `TestUtils.SetupMockRInstallations()` exists for exactly this ("Use this to run tests
+   on TeamCity clients or machines without R installed") and **nothing had ever called
+   it** - on `master` either. These tests validate that a version is recorded; they never
+   execute R.
+3. **Modal `Could not find a Skyline installation at this location`** - saving a
+   configuration validates its Skyline settings and pops an error box. Same root cause as
+   (1): no Skyline on the machine.
+4. **`GetSkylineDir()` only probed Release output directories** - `bin\Release\net8.0-windows`,
+   `bin\x64\Release\net8.0-windows`, `bin\staging-net8\Release`, and it fell back to the
+   first of those even when it did not exist. The batch-tool build scripts default to
+   **Debug**, so every test that needed a real `SkylineCmd.exe` failed against a directory
+   that had never been built. `master`'s net472 branch has the same Release-only
+   assumption (`bin\x64\Release`).
+
+5. **`SkylineSettings`'s two XML readers disagree about where Skyline is.** `ReadXml`
+   (current format) opens with *"always use local Skyline if it exists"* and retypes the
+   configuration to `SkylineType.Local`. `ReadXmlVersion_20_2` (old format) does not. So
+   the same configuration, saved in the two formats and read on the same machine, can end
+   up with different Skyline settings - and on a machine whose only Skyline is a local
+   build, every old-format configuration keeps its saved type (`Skyline`), resolves
+   `CmdPath` to null, and fails validation with *"Could not find a Skyline installation on
+   this computer"*. That is what was invalidating the imported configurations, which in
+   turn is what left `ImportTest` waiting four minutes for an `InvalidConfigSetupForm`
+   that `HandleEditEvent` had already skipped past, with the config editor sitting open.
+
+   **Left alone deliberately.** Making the two readers agree is a one-line change, and it
+   makes the failing tests pass - but `Test\BcfgTestFiles\*` baselines encode the current
+   behaviour (an old-format import/export round trip is expected to write back
+   `type="Skyline"`), so eight `BcfgFileTest` cases fail the moment the readers agree.
+   Fixing it properly means regenerating those baselines and deciding what an old-format
+   round trip should preserve. That is a call for whoever owns SkylineBatch, not a
+   drive-by inside a ReSharper cleanup. A comment at the asymmetry now says so.
+
+**Fixes applied** (all in the batch-tool tree, none of them net8-specific):
+
+- `SkylineBatchTest/SkylineBatchTestSetup.cs` (new): an `[AssemblyInitialize]` that falls
+  back to mock R *only when real detection finds none*, and points
+  `SkylineInstallations.TestLocalSkylineCmdPath` at a Skyline built in this checkout *only
+  when no installation is found*. A machine that has R and Skyline behaves exactly as
+  before.
+- `SharedBatch/SkylineInstallations.cs`: `TestLocalSkylineCmdPath` test seam, mirroring
+  the existing `RInstallations.TestRVersions`. It has to be consulted inside
+  `FindLocalSkyline()` rather than assigned once by the test, because the app's own
+  startup calls `FindSkyline()` again and would overwrite it.
+- `SkylineBatchTest/TestUtils.cs`: `GetSkylineDir()` now probes Debug as well as Release,
+  on both TFM branches, and returns the first that actually holds `SkylineCmd.exe`.
+
+**Result**: 38 tests, **35 passed / 3 failed**, from a starting point where the suite
+never finished at all.
+
+The three that remain all **execute** a configuration rather than just validating one,
+and this machine has no R installation:
+
+| Test | What it needs |
+|---|---|
+| `TestRunFromRScripts` | runs the R scripts; mock versions point at paths that do not exist |
+| `TestMultipleLogs` | starts a batch run with `RunBatchOptions.R_SCRIPTS` |
+| `DataDownloadTest` | downloads data, then runs the configuration |
+
+Mock R versions cannot help these - the seam exists to let configurations *validate*
+without R, not to execute it. They need R installed on the machine, and that is a
+prerequisite on `master` too, not something the net8 port introduced. **Decide whether
+to install R on the test machines or mark these three as requiring it**; do not "fix"
+them by weakening what they assert.
+
+### AutoQC's suite hangs in `RunUI` - the harness's one un-timeout-able wait
+
+`Build-AutoQC.ps1 -RunTests` got through 8 tests (7 passed, `TestConfigEquals` failed)
+and then stopped dead for 18 minutes at 0.02 CPU-seconds per 15s. Managed stacks
+(`dotnet-stack report`) name it exactly:
+
+```
+test thread : AbstractBaseFunctionalTest.RunUI -> AppInvoke -> [blocked]
+UI thread   : AutoQcConfigForm.Save() <- ClickSave() <- AutoQcFunctionalTest.BasicTest
+```
+
+`AppInvoke` is `MainWindow?.Invoke(act)` - a **synchronous** `Control.Invoke` with no
+timeout, and it is the only wait in the whole harness that has none. Every other one
+(`WaitForOpenForm`, `WaitForClosedForm`, `WaitForCondition`) fails after
+`GetWaitCycles()`. So when a `RunUI` action blocks - `Save()` here, presumably on a modal
+or a synchronous server check - the run does not fail, it stops forever, and on a
+developer's machine it parks a window on the screen.
+
+Two separate things to fix, both in `SharedBatchTest`:
+
+- `RunUI` must not be used for an action that can open a modal dialog; `ShowDialog<T>`
+  exists for that and correctly uses `AppBeginInvoke`. `AutoQcFunctionalTest.BasicTest`
+  calls `RunUI(() => configForm.ClickSave())`.
+- `AppInvoke` should not be able to hang a run indefinitely. Bounding it turns "hangs
+  forever" into a test failure with a stack, which is the difference between a suite that
+  can run unattended and one that cannot.
+
+Note this is the same shape as the two modal hangs already fixed in SkylineBatch: the
+harness has no defence against a blocking UI action, so every such bug presents as a hang
+rather than a failure. Worth fixing once, in the base class.
+
+### Test byproducts are written into the source tree
+
+Two places write into the checkout rather than `TestResults`, and leave the files behind
+when the test fails:
+
+- `ConfigManagerTest.TestImportExport` exports to `TestUtils.GetTestFilePath("configs.xml")`,
+  i.e. `SkylineBatchTest\Test\configs.xml`.
+- `BcfgFileTest` writes `*_replaced.bcfg` beside the baselines in
+  `SkylineBatchTest\Test\BcfgTestFiles\` and only deletes them on the success path.
+
+A failing run therefore leaves ~20 untracked files in the source tree. `96a86b7507
+"Fix test infrastructure to use TestResults instead of source tree"` did this work for
+other cases; these two were missed. Cleaned up by hand for now.
+
+**Fix applied**: an early `if (FunctionalTest) return true;` in `InitSkylineSettings()`
+in **both** `SkylineBatch/Program.cs` and `AutoQC/Program.cs`, immediately after the
+`FindSkyline()` attempt and before the modal form. This mirrors the `FunctionalTest`
+guards already sitting around `SendAnalyticsHit()` and `AddFileTypesToRegistry()` in the
+same files. `FindSkyline()` still runs, so `Settings.Default` is still populated when an
+installation does exist; only the interactive fallback is skipped. A test that genuinely
+needs a Skyline path now fails with a message instead of hanging forever -
+`AutoQCTest.TestUtils.GetTestSkylineSettings()` already returns `null` in that case, so
+the null-installation path is one the tests were written to tolerate.
+
+### Phase 0 findings - ReSharper analyses EVERY target framework, not one
+
+This is the single most important thing learned so far, and it reframes the rest of the
+plan.
+
+`jb inspectcode` on a multi-target project reports the **union** of the issues from all
+declared TFMs. Proof, from the two AutoQC runs on the same tree:
+
+- Before 0.1: 324 errors, all `Cannot resolve symbol` for MSTest types. Those can only
+  come from the **net472** leg - net8 already had the MSTest NuGet packages.
+- Both runs: 4 x `CA1416` in `CommonUtil`. `CA1416` is a net5+ platform-compatibility
+  analyzer that cannot fire on net472, and `Directory.Build.targets` suppresses it only
+  when `TargetPlatformIdentifier == 'Windows'`, which `CommonUtil`'s plain `net8.0` leg
+  is not. So those can only come from the **net8** leg.
+
+Both in one report means both legs are analysed. **A solution is only ReSharper-clean
+when every TFM it declares compiles cleanly** - there is no "inspect just the net8 leg"
+without changing what the projects declare. This is why 0.1 was a prerequisite rather
+than a detour, and it is the crux of the open question about Skyline below.
+
+### Skyline baseline - and why the first number was worthless
+
+Two measured runs, same tree, same commit:
+
+| Run | Total | Errors | Warnings |
+|---|---|---|---|
+| Unpinned (all declared TFMs) | **161,478** | 149,436 | 12,042 |
+| Pinned `TargetFramework=net8.0-windows` | **4,252** | 3,014 | 1,238 |
+
+The first run is 97% artefact. `inspectcode` analyses every TFM a project declares, and
+on this branch the **net472 leg of `Skyline.sln` does not resolve** - the pwiz-sharp
+vendor projects (Thermo, Waters, Sciex, Agilent, Bruker, Shimadzu, UIMF, UNIFI) are built
+for net8 only, and the build log warns about each one before the inspection starts.
+Sampling the 149,436 `CSharpErrors` confirms it: *"Cannot resolve symbol"* and *"The type
+is defined in an assembly that is not referenced"*. The 4,585 `RedundantUsingDirective`
+hits were the same cascade in disguise - a `using` looks unused once the types behind it
+stop resolving - which is how you can tell the non-error counts were contaminated too.
+`master`'s gate is clean at zero, so none of that could have been real.
+
+**Correction to Phase 0.2 as originally written.** It claimed the "jb --no-build against
+Skyline.sln" half of the old refusal "does not survive contact with how inspectcode
+actually works". That was wrong, and the measurement says so. The refusal was pointing at
+something real. `Build-Skyline.ps1` now pins the TFM on the net8 path and carries these
+numbers as the reason.
+
+#### The pin is not the whole answer either - 3,014 errors survive it
+
+| Project | Errors | Why |
+|---|---|---|
+| `TestTutorial` | 1,367 | **not in the net8 build list** - `build.bat` builds Skyline + CommonTest + Test + TestData + TestFunctional + TestConnected + TestRunner, and nothing else |
+| `TestPerf` | 1,213 | same |
+| `SkylineTester` | 20 | same |
+| `ProteowizardWrapper` | 321 | targets **`net472;net8.0`**, not `net8.0-windows` - the pin gives it a TFM it does not declare |
+| `CommonUtil` | 24 | same |
+| `SkylineNightlyShim` | 4 | same |
+| `Skyline` | 65 | knock-on from the above |
+
+2,584 of the 3,014 are the single message *"The type is defined in an assembly that is
+not referenced"*. So the residue is two clean, separable causes, neither of which is a
+code defect:
+
+1. **Projects the net8 path never builds.** Either add them to the net8 project list or
+   exclude them from the report with `--project=`; do not leave them half-analysed.
+2. **Projects on plain `net8.0`.** `inspectcode` has no per-project TFM switch, so one
+   pinned pass cannot cover both `net8.0-windows` and `net8.0`. The fix is **two passes** -
+   one pinned to each - with the second `--project=`-limited to
+   `ProteowizardWrapper`, `CommonUtil`, `SkylineNightlyShim`. Recommended shape for 0.2b.
+
+#### The real signal underneath: ~1,238 warnings on the net8 leg
+
+| Project | Count | | Inspection | Count |
+|---|---|---|---|---|
+| `Skyline` | 595 | | `PossibleNullReferenceException` | 614 |
+| `TestFunctional` | 159 | | `RedundantCast` | 168 |
+| `TestUtil` | 68 | | `AssignNullToNotNullAttribute` | 155 |
+| `TestTutorial` | 66 | | `RedundantDelegateCreation` | 80 |
+| `Test` | 53 | | `RedundantUsingDirective` | 61 |
+| `TestPerf` | 44 | | `RedundantNameQualifier` | 26 |
+| `SkylineTester` | 43 | | `LocalizableElement` | 25 |
+| `CommonUtil` | 38 | | `ConditionIsAlwaysTrueOrFalse` | 23 |
+| `TestData` | 33 | | `CSharpWarnings::CS0618` | 17 |
+| `Common` | 31 | | everything else | 69 |
+
+Treat this as **approximate until the two-pass fix lands** - warnings from a project whose
+references did not resolve are not trustworthy, so `TestTutorial`/`TestPerf`/
+`ProteowizardWrapper` counts in particular will move.
+
+**This is the headline for the port.** `master`'s TeamCity gate reports zero for the
+net472 leg. The net8 leg has never been inspected by anything, and carries on the order of
+**1,200 warnings that no gate has ever seen**. That is the actual size of "clean of
+warnings and errors for Skyline", and it is a different order of magnitude from the batch
+tools (70 unique each). Half of it is nullability
+(`PossibleNullReferenceException` + `AssignNullToNotNullAttribute` = 769), which is
+expected: net8's annotated BCL tells ReSharper about nulls that net472's did not.
+
 ### Phase 1 - baseline
+
+**AutoQC baseline captured 2026-08-23** via `Build-AutoQC.ps1 -RunInspection`:
+**0 errors, 83 warnings** (was 0 errors reachable at all - the solution did not build).
+
+| Project | Count |
+|---|---|
+| `CommonUtil` | 37 |
+| `SharedBatch` | 12 |
+| `CommonBaseUI` | 10 |
+| `AutoQC` | 9 |
+| `SharedBatchTest` | 8 |
+| `PanoramaClient` | 5 |
+| `AutoQCStarter` | 2 |
+
+| Inspection | Count |
+|---|---|
+| `AssignNullToNotNullAttribute` | 22 |
+| `RedundantCast` | 21 |
+| `PossibleNullReferenceException` | 19 |
+| `CA1416` | 4 |
+| `CSharpWarnings::CS0618` | 3 |
+| `RedundantUsingDirective` | 3 |
+| everything else (7 kinds) | 11 |
+
+Two thirds of it is in shared assemblies (`CommonUtil` 37, `CommonBaseUI` 10,
+`PanoramaClient` 5 = 52 of 83), which Skyline also consumes - so fixing those pays for
+both solutions and should be done first. `SpectrumMetadata.cs` alone carries 12 and
+`CommonTextUtil.cs` 6 (all 4 `CA1416` plus 2 more).
 
 - [ ] **1.1 Capture the WARNING+ baseline for all three solutions** and record the
       counts in this file (total, and grouped by inspection `TypeId`). Save the raw XML
