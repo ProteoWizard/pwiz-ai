@@ -350,6 +350,54 @@ prerequisite on `master` too, not something the net8 port introduced. **Decide w
 to install R on the test machines or mark these three as requiring it**; do not "fix"
 them by weakening what they assert.
 
+### Batch-tool test state, 2026-08-23
+
+| Suite | Result | What remains |
+|---|---|---|
+| **SkylineBatch** | **38 / 38** | nothing - green after R was installed |
+| **AutoQC** | **16 / 18** | 2 blocked on vendor SDK support, below |
+
+Getting there needed three machine prerequisites, none of them documented and none
+caused by the port: **R** (installed 4.6.1), **PanoramaWeb credentials**
+(`PANORAMAWEB_PASSWORD`; the username falls back to a default), and **vendor SDK
+support**, which is still missing.
+
+**The last two AutoQC failures are one cause.** `TestPublishToPanorama` and
+`TestPanoramaWebInteraction` both run a real AutoQC configuration that imports a Thermo
+`.raw` through SkylineCmd and publishes the result. The config runner log is explicit:
+
+```
+Thermo .raw reading requires the vendor SDK. Rebuild pwiz-sharp with
+  --i-agree-to-the-vendor-licenses to enable.
+ERROR: SkylineCmd.exe exited with code 2. Skyline document import failed.
+ERROR: No results were imported. Skipping upload to Panorama.
+```
+
+The import fails, so nothing is published, so the second test also sees one pipeline job
+instead of two. To clear them, either run `pwiz-sharp\i-agree-to-the-vendor-licenses.bat`
+once and rebuild Skyline with vendor support, or install a real Skyline (which ships the
+vendor readers) so the test seam stops falling back to the local no-vendor build. **That
+is a vendor EULA decision for a developer to make, not something to automate.**
+
+### A real net8 bug found on the way: DNS failures misreported
+
+`TestValidatePanoramaSettings` expected *"Failed to resolve host"* and got *"Failed to
+connect"*. `HttpClientWithProgress.MapHttpException` detected DNS failure as:
+
+```csharp
+if (httpEx.InnerException is WebException { Status: WebExceptionStatus.NameResolutionFailure })
+```
+
+with a comment explaining that HttpClient wraps `HttpWebRequest`. True on net472 only. On
+net8, `HttpClient` runs on `SocketsHttpHandler`, which never raises a `WebException` - an
+unresolvable name arrives as `HttpRequestError.NameResolutionError` with an inner
+`SocketException` of `HostNotFound`. So on net8 every DNS failure fell through to the
+generic connection-failure branch, and **a server that does not exist was reported as
+existing but unreachable**. That is user-visible misdiagnosis, not just a failing
+assertion, and it is exactly the kind of defect that survives a port because the comment
+still reads as though it were current. Fixed by extracting `IsDnsResolutionFailure`,
+keeping the net472 arm and adding the net8 signals under `#if !NET472`.
+
 ### AutoQC's suite hangs in `RunUI` - the harness's one un-timeout-able wait
 
 `Build-AutoQC.ps1 -RunTests` got through 8 tests (7 passed, `TestConfigEquals` failed)
