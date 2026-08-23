@@ -517,3 +517,24 @@ needing a different instrument, and a clearance claim that records the configura
 produced it or it means nothing. The recommended first sweep is the whole suite at `loop=2`,
 serial, one language - it makes every class-1 state leak deterministic for about the cost of
 two suite runs, and would have caught the Waters failure with no soak and no statistics.
+
+### 2026-08-23 - candidate list, and a course correction
+
+Static risk ranking checked in at `ai/docs/test-flake-candidates.md`: 7 class-1 files (static
+mutable state or `Settings.Default` writes with no restore), 4 class-2 files, and 19 files with
+explicit timeouts <= 5s. Standouts: `UpgradeTest` waits 100 ms for a condition and 200 ms for a
+dialog; `ChromGraphTransformTest` repeats the selection-then-WaitForGraphs-then-assert shape six
+times, which is exactly what made PeakAreaDotpGraphTest flake.
+
+**Course correction from the developer, mid-session**: parallel testing is the focus, and the
+serial class-1 sweep was competing for the same machine. It is a complement to the overnight
+parallel run, not a substitute, and it costs minutes on 7 named tests - it does not deserve a
+night of hardware. Machine handed back.
+
+**Observation worth checking**: two long single-test soaks stalled mid-run (frozen log, workers
+still alive) at ~461 and ~385 executions. The first predates tonight's changes, so it is not
+something introduced here, and the 2026-08-21 full-suite run plainly did not stall (48,272
+executions). May be specific to `loop=N` single-test soaks.
+
+**Note on scale**: the 2026-08-21 overnight run's 46 failures were ENTIRELY these three tests -
+27 + 18 + 1 = 46. All three now have fixes on this branch.
