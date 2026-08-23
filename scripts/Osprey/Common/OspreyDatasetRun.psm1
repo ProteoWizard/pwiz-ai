@@ -183,6 +183,12 @@ function Invoke-OspreyDatasetRun {
         # cohort is also the EARLIEST (best) F files -- size and quality are confounded.
         [int]$EveryNthFile = 1,
         [string]$ExcludePattern,
+        # Keep ONLY files matching this regex, applied before -ExcludePattern. For a
+        # dataset whose cohort structure lives in the FILENAME rather than in subfolders -
+        # CHS-SeerData is a flat directory of 446 files whose plate is a digit run in the
+        # stem - selecting a plate any other way means hand-listing inputs, which is how a
+        # run stops being reproducible from its own directory name.
+        [string]$IncludePattern,
         [int]$Threads = 30,
         # OUTER parallelism: how many input files are scored at once. 0 leaves it off
         # (Osprey's default, one file at a time). NOTE that --threads is a PER-FILE budget
@@ -342,6 +348,14 @@ function Invoke-OspreyDatasetRun {
     }
 
     $allInputs = @(Get-ChildItem -Path $dataDir -Filter "*.$ext" -File | Sort-Object Name)
+    if ($IncludePattern) {
+        $before = $allInputs.Count
+        $allInputs = @($allInputs | Where-Object { $_.Name -match $IncludePattern })
+        Write-Host ("  included : $($allInputs.Count) of $before file(s) matching '$IncludePattern'")
+        if ($allInputs.Count -eq 0) {
+            throw "-IncludePattern '$IncludePattern' matched none of the $before .$ext file(s) in '$dataDir'."
+        }
+    }
     if ($ExcludePattern) {
         $before = $allInputs.Count
         $allInputs = @($allInputs | Where-Object { $_.Name -notmatch $ExcludePattern })
