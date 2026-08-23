@@ -80,40 +80,49 @@ if (-not (Test-Path $LogPath)) {
 
 # Test result lines look like:
 #   [21:29] 2.14   SomeTestName    (en)   0 failures, 3.07/11.40/67.6 MB, 54/609 handles, 1 sec.
-# The leading number before the dot is the PASS. The "N failures" field is a per-worker
-# RUNNING TOTAL, not this execution's result, so it cannot be used to decide pass/fail -
-# a rising total is what marks the execution where a failure occurred.
+# The leading number before the dot is the PASS.
+#
+# Failure is attributed from the "!!! <TestName> FAILED" marker that follows the failing
+# execution's line, NOT from the "N failures" column. That column is a per-WORKER running
+# total shared by every test the worker runs, so it rises when some OTHER test fails in
+# between - which flags innocent tests as leaking. (A synthetic-log test caught exactly that
+# bug in an earlier version of this script.)
 $linePattern = '^\s*\[[^\]]+\]\s+(?<pass>\d+)\.(?<idx>\d+)\s+(?<test>\S+)\s+\((?<lang>[^)]+)\)\s+(?<total>\d+) failures,'
+$failPattern = '^!!!\s+(?<test>\S+)\s+FAILED'
 
 $byTest = @{}
+$lastKey = $null
 foreach ($line in Get-Content -LiteralPath $LogPath) {
     if ($line -match $linePattern) {
         $test = $Matches['test']
         $pass = [int]$Matches['pass']
-        $total = [int]$Matches['total']
         if (-not $byTest.ContainsKey($test)) { $byTest[$test] = New-Object System.Collections.ArrayList }
-        [void]$byTest[$test].Add([pscustomobject]@{ Pass = $pass; RunningTotal = $total })
+        $rec = [pscustomobject]@{ Pass = $pass; Failed = $false }
+        [void]$byTest[$test].Add($rec)
+        $lastKey = @{ Test = $test; Rec = $rec }
+    }
+    elseif ($line -match $failPattern) {
+        $failed = $Matches['test']
+        # Mark the most recent execution of THAT test
+        if ($lastKey -ne $null -and $lastKey.Test -eq $failed) {
+            $lastKey.Rec.Failed = $true
+        }
+        elseif ($byTest.ContainsKey($failed) -and $byTest[$failed].Count -gt 0) {
+            $byTest[$failed][$byTest[$failed].Count - 1].Failed = $true
+        }
     }
 }
 
 $leaks = New-Object System.Collections.ArrayList
 $everFailed = New-Object System.Collections.ArrayList
 foreach ($test in $byTest.Keys) {
-    $execs = $byTest[$test] | Sort-Object Pass
+    $execs = @($byTest[$test] | Sort-Object Pass)
     if ($execs.Count -lt 2) { continue }
-    $first = $execs[0]
-    $later = $execs[1..($execs.Count - 1)]
-    # A rise in the running total on a later execution means that execution failed
-    $laterFailed = $false
-    $prev = $first.RunningTotal
-    foreach ($e in $later) {
-        if ($e.RunningTotal -gt $prev) { $laterFailed = $true }
-        $prev = $e.RunningTotal
-    }
+    $laterFailed = ($execs[1..($execs.Count - 1)] | Where-Object { $_.Failed }).Count -gt 0
     if ($laterFailed) {
         [void]$everFailed.Add($test)
         # First execution clean, a later one not: the state-leak signature
-        if ($first.RunningTotal -eq 0) { [void]$leaks.Add($test) }
+        if (-not $execs[0].Failed) { [void]$leaks.Add($test) }
     }
 }
 
