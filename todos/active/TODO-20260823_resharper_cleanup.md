@@ -420,6 +420,31 @@ Survivors in `pwiz_tools` today, which are precisely the Phase 2 list still inta
 
 (`Bumbershoot/idpicker` also has three, outside the Skyline scope.)
 
+#### It is not untouched - `WebDownloadClient` is half migrated
+
+The deferral said "AutoQC, SkylineBatch". Measured, the truth is more specific:
+
+- **AutoQC has nothing to migrate.** No `HttpClientWithProgress`, but also no `WebClient`,
+  `HttpClient` or `WebRequest` anywhere in it. It does no direct HTTP - Panorama work goes
+  through `PanoramaClient` (migrated in #3658) and `SharedBatch`. Listing it in the
+  deferral was over-cautious.
+- **SkylineBatch is partly migrated, inside one class.** `Server.cs`'s
+  `WebDownloadClient` uses `HttpClientWithProgress` for `GetSize()` (line 74) and
+  `WebClient` for `DownloadAsync()` (line 37). `PanoramaServerConnector.cs:113` is
+  migrated too. So someone was in that exact file and converted the size probe but not the
+  download - a stall mid-file, which is far easier to miss than an untouched file, and
+  probably why the migration reads as finished.
+
+`DownloadAsync` is also the worst-shaped of the survivors: `DownloadFileAsync` plus a
+`while (!completed) { Thread.Sleep(100); }` spin, with progress derived by stat-ing the
+partial file rather than from the transfer itself. `HttpClientWithProgress` exists to
+replace exactly that, and `GetSize` immediately above it already shows the idiom.
+
+**This is the same work as the `DataDownloadTest` flake below** - that test exercises
+`WebDownloadClient.DownloadAsync`, so the FTP timeout and this migration are one item, not
+two. Whoever picks it up should fix the progress/timeout behaviour and the test's
+dependence on public FTP throughput together.
+
 **Recommended**: recreate the backlog item, and add the CodeInspectionTest prohibition
 with an explicit exemption list, so the remaining files are visible rather than merely
 uncommitted-to. `SYSLIB0014` makes this newly urgent - on net8 these are compiler
