@@ -383,6 +383,48 @@ automate it) and Skyline was rebuilt; `Pwiz.Vendor.Thermo.dll` recompiled and bo
 pass. Note the rebuild took only 45s, so it is worth confirming the vendor assembly
 timestamp actually moved - a stale no-vendor DLL produces the identical failure.
 
+### The WebClient migration: deferred on purpose, then dropped
+
+`SkylineBatch` still uses `WebClient`, which looks like an oversight given the 2025
+migration effort. It was not. `completed/2025/10/TODO-20251010_webclient_replacement.md`
+has a section **"Deferred to Future Branches (Out of Scope for Phase 1)"**:
+
+> **Tools Migration** - See `todos/backlog/TODO-tools_webclient_replacement.md`:
+> - Executables (**AutoQC, SkylineBatch**, Installer)
+> - Nightly build tools (SkylineNightly, SkylineNightlyShim)
+> - Lower priority - separate build processes, less frequent usage
+> - Phase 2 work after core Skyline.exe migration is stable
+
+Two things then went wrong:
+
+1. **`todos/backlog/TODO-tools_webclient_replacement.md` does not exist.** The other two
+   deferrals from that same list both got real follow-up branches and completed
+   (`TODO-20251019_skyp_webclient_replacement.md`,
+   `TODO-20251023_panorama_webclient_replacement.md`). The tools one is the only deferral
+   with no successor - the pointer was written but the item never was.
+2. **The planned enforcement was never added.** The same TODO says *"Will add
+   CodeInspectionTest for WebClient/WebBrowser prohibition"*, and there is no `WebClient`
+   rule in `CodeInspectionTest.cs` today. So nothing flags the survivors and nothing stops
+   a new one appearing - which is exactly why the migration reads as finished when it is
+   not. This is the pattern `ai/CRITICAL-RULES.md` warns about: *"Trust comes from
+   verifiers, not from the LLM ... when a rule's verifier is weak, the rule will drift."*
+
+Survivors in `pwiz_tools` today, which are precisely the Phase 2 list still intact:
+
+| File | Phase 2 category |
+|---|---|
+| `SkylineBatch/Server.cs`, `SkylineBatch/DownloadDlg.cs` | Executables |
+| `Executables/Installer/SetupDeployProject.cs` | Executables |
+| `SkylineNightly/Nightly.cs`, `SkylineNightlyShim/Program.cs` | Nightly build tools |
+| `TestFunctional/PanoramaClientPublishTest.cs`, `TestPerf/DiannSearchLFQbenchTest.cs` | test code |
+
+(`Bumbershoot/idpicker` also has three, outside the Skyline scope.)
+
+**Recommended**: recreate the backlog item, and add the CodeInspectionTest prohibition
+with an explicit exemption list, so the remaining files are visible rather than merely
+uncommitted-to. `SYSLIB0014` makes this newly urgent - on net8 these are compiler
+warnings, so they block "zero warnings" whether or not anyone wanted the migration now.
+
 ### `DataDownloadTest` is network-flaky by construction, not a regression
 
 It imports a config that pulls **12.4 MB from `ftp.ebi.ac.uk`** (the public EBI PRIDE
@@ -627,6 +669,26 @@ both solutions and should be done first. `SpectrumMetadata.cs` alone carries 12 
       Bucket (iii) goes in the Skyline baseline `.DotSettings` plus the
       `Sync-DotSettings.ps1` `$overrides` map, per section 4.
 
+### Direction: net8 REPLACES net472, it is not being preserved
+
+Stated 2026-08-23 by Brendan: *"We are not trying to preserve net472 in this Skyline area.
+We are trying to get to consistent net8.0 builds to replace net472 on master."*
+
+This reverses the instinct behind several fixes made earlier in the day, and anyone
+continuing should read the next section with it in mind. The net472 leg has to keep
+compiling only for as long as it is still declared - it is not a thing to protect.
+Concretely:
+
+- Where the legs **contradict** (`CommonException`, below), resolve in net8's favour. The
+  suppression there is a stopgap, not a decision.
+- The `#if NET472` scaffolding added today (`Server.cs`'s `using System.Linq`,
+  `HttpClientWithProgress`'s `using System.Net.Sockets`, `AutoQCStarter`'s
+  `Assembly.CodeBase` branch) and the `Cast<Match>`/`Cast<Cookie>` suppressions are all
+  **removable** the moment `net472` leaves the `TargetFrameworks` list. Grep for
+  `NET472` to find them; each carries a comment saying why it exists.
+- Pinning the Skyline inspection to `net8.0-windows` is therefore not a workaround. It
+  measures the leg that is going to become master, which is the number that matters.
+
 ### Two things that change how this backlog must be worked
 
 Both were learned by measurement, and both mean "apply ReSharper's suggested fix" is the
@@ -682,10 +744,8 @@ re-verified at 36/38 after each batch):
 
 Still open in the batch tools, and deliberately not touched:
 
-- **`Server.cs` uses `new WebClient()`**, obsolete on net8 (`SYSLIB0014`). Clearing it
-  properly means migrating `DownloadAsync` to `HttpClient` with progress reporting - the
-  same migration `PanoramaClient` already went through in #3658. That is real work, not a
-  warning suppression, so it needs a decision rather than a `#pragma`.
+- **`WebClient` in `Server.cs` and `DownloadDlg.cs`**, obsolete on net8 (`SYSLIB0014`).
+  This was **deliberately deferred, and then lost track of** - see the section below.
 - The bulk of what remains is `PossibleNullReferenceException` and
   `AssignNullToNotNullAttribute` in form and test code, each needing caller-level
   reasoning. Resist `?? string.Empty` unless the invariant that makes it safe is real and
