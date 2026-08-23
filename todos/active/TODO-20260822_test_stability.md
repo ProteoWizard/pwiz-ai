@@ -268,3 +268,153 @@ and no code checks `TimeoutException` by exact type, so the subclass is safe at 
 `catch (TimeoutException)` sites.
 
 **Not committed.** Working tree only, awaiting review.
+
+### 2026-08-22 - TestWatersConnectExportMethodDlg solved; it was never a timeout
+
+Branch `Skyline/work/20260822_test_stability`, cut from the #4605 branch tip rather than master.
+Master is 539 commits behind it and has no `Stage-Net8Tests.ps1`, so the overnight failures are
+not reproducible from master at all. The "branch off master" plan in this file assumed #4605 and
+#4587 had already merged; rebase when they do.
+
+**The hypothesis in this file was wrong.** "A fixed 2-second `WaitForConditionUI` budget is
+marginal at 8-way parallelism" is not what happens. The failure is deterministic, not timing:
+
+| pass in the same process | result |
+|---|---|
+| first | passes |
+| second and after | **always** fails |
+
+No timeout would ever help - the awaited condition cannot become true. The overnight 45% is
+simply the share of executions that were not first in their worker process.
+
+**Root cause, proven by instrumenting instance identity.** The improved message (below) said
+`Expected 11 items, found 13`, and named the two extra: `NewTestFolder` and `RefreshedFolder` -
+folders the test itself creates later in its own run. Logging the test-instance hash at `DoTest`
+and inside the mock's folder-listing handler showed why:
+
+| pass | DoTest instance | instance serving folder requests | createdFolders |
+|---|---|---|---|
+| 2 | 44307394 | 44307394 | 0 -> 1 -> 2 |
+| 3 | **50107580** (fresh) | **44307394** (previous test's) | **2** |
+
+`WatersConnectAccount`'s static constructor builds an `IHttpClientFactory` once per process and
+calls `HttpMessageHandlerFactory.getMessageHandler` inside
+`ConfigurePrimaryHttpMessageHandler`. That resolves the mock **once**, and the factory then pools
+the primary handler (two-minute default lifetime, far longer than a test). So
+`CreateReplaceHandler` swapped the dictionary entry and changed nothing: every later pass in the
+process was still served by the first test instance's mock, carrying the folders that instance
+had accumulated.
+
+**Fix** - `CommonUtil/Mock/HttpMessageHandlerFactory.cs`: `getMessageHandler` now returns a proxy
+that resolves the registration on every request instead of binding once. A pooled primary handler
+can no longer pin one test's state. When nothing is registered the proxy creates the real handler
+once and reuses it, so production traffic still goes through a single handler.
+
+| | rate |
+|---|---|
+| overnight, before | 18 / 40 = 45% |
+| local repro, before | ~50% (deterministic from the 2nd pass per process) |
+| after | **0 / 100**, 20 per language, 8 workers |
+
+Plus 5/5 consecutive passes in a single process, which is the exact condition that failed.
+
+**Kept:** both `WaitForConditionUI` calls in the test now report the actual count and the item
+names. That change alone produced the root cause on the first failing run, after this flake had
+gone undiagnosed through a whole overnight suite. It is the clearest case yet for the
+"fix the message first" rule.
+
+**Separate systemic finding: the parallel-width wait scaling is dead code.**
+`GetWaitCycles` multiplies every timed wait by `Program.UnitTestTimeoutMultiplier`
+(`TestFunctional.cs:896`), which is only ever set from TestRunner's `multi` argument - whose
+default is `multi=1` (`TestRunner/Program.cs:261`). Nothing passes it: the observed host- and
+Docker-worker command lines carry no `multi=`, and SkylineTester never adds one. So every test
+runs single-process wait budgets no matter how many processes compete. That answers the
+"should UI wait timeouts scale with parallel width" checklist item - the mechanism exists and is
+simply unfed - though it is NOT what broke this test.
+
+### 2026-08-22 - TestDdaSearchDependencyErrors narrowed, not yet solved
+
+Hard evidence from the overnight log, replacing guesswork:
+
+* **27 distinct `.PendingOverwrite` artifacts = exactly the 27 failures.** Each has a fresh
+  random suffix, so this file confirms the existing note: transient contention, not a poisoned
+  directory. The 420 raw matches are one event repeated 16 times by the nested message quoting.
+* **Only `Tools_DSDE29_*` appears** - no other test's tools directory is involved, in any culture.
+* **`DSDE29` is unique to this test** across all 1,116 tests, so the queue's directory reservation
+  fully serialises access and no second test can be in there.
+* **The "files it has open may still be locked" warning never fired** (0 occurrences), which rules
+  out `ProcessRunner.KillAndWaitForExit` leaving a killed-but-not-exited child holding the DLLs.
+* The locked files are the MSVC runtime DLLs - `msvcp140`, `vcruntime140`, `vcruntime140_1`,
+  `vcomp140` - which is what any process built against that runtime loads out of `crux-4.3\...\bin`.
+
+**Next step is a diagnostic, not a fix:** when the extraction fails with
+`UnauthorizedAccessException`, report **which process holds the file** (Restart Manager,
+`RmGetList`) before anything else. Every remaining theory is about the identity of that holder,
+and one occurrence with the holder named settles it. This is the same "fix the message first"
+move that solved the Waters test in minutes.
+
+Note the soak instrument cannot reach this one: 0 failures in 100 executions locally, because the
+queue guard removes exactly the contention being hunted (see the previous entry).
+
+**Side finding - 11 tools-directory name collisions.** `PathEx.GetTestDirectoryName` shortens to
+capitals plus length, and these groups share one directory and therefore serialise against each
+other in the parallel queue: `TestAddSubfolder`/`TestAccessServer`,
+`ConsoleRefineResultsTest`/`ConsoleRemoveResultsTest`, `TestDdaSearch`/`TestDiaSearch`,
+`IrtFunctionalTest`/`TestImportFailure`, `TestManageResults`/`TestMetadataRules`,
+`TestPeptides`/`TestPanorama`, `TestPeakIntegrator`/`TestPeakImputation`,
+`RefineDocumentTest`/`TestReintegrateDlg`, `TestReportSharing`/`TestReportSummary`,
+`SpecialFragmentTest`/`TestSubstringFinder`/`ShimadzuFormatsTest`,
+`TestShareSettings`/`TestSynchSiblings`. The DS13 case is called out in the code as intended;
+the rest are incidental throughput cost.
+
+### 2026-08-22 - PeakAreaDotpGraphTest: message fixed, characterisation pending
+
+Overnight signature is `Assert.AreEqual failed. Expected:<0.93>. Actual:<0.99>.` at
+`TestPeakAreaDotpGraph.VerifyDotpLine` line 232 - a dotp value, not a timing failure, and the
+assertion carried no message at all: not the replicate, the label, the pane, or the unrounded
+value. Added all of those plus the point/label counts, so the next occurrence is diagnosable.
+At 2.2% a characterising soak needs ~500 executions; not yet run.
+
+### 2026-08-22 - The parallel harness leaks Docker workers, and that is a lead for item 3
+
+Observed directly, not inferred: a soak reported success and exited 0, and **four
+`docker_worker_*` containers were still running three hours later**. They wedged the next run -
+its staging step blocked for three hours on files the leaked containers held open through the
+`C:\proj\pwiz-work1` -> `c:\pwiz` mount, with no error, just silence.
+
+Confirmed in the code: `TestRunner` has no `docker stop`, `docker kill` or `docker rm` anywhere.
+Workers are started with `--rm`, so a container only disappears when its client process exits,
+and `waitforworkers` defaults to `off` (`TestRunner/Program.cs:262`) - the server can finish and
+report success while clients are still alive.
+
+**Why this matters for `TestDdaSearchDependencyErrors`.** A leaked worker is a live process with
+the checkout mounted, and any DLL it loaded out of
+`Tools_DSDE29_<culture>\crux-4.3\...\bin` stays locked for as long as it runs. That matches every
+piece of evidence at once: a live process holding `msvcp140.dll`; no
+`KillAndWaitForExit` warning, because nobody killed it; the clustering
+(`pass pass FAIL FAIL FAIL FAIL pass ...`), because one leaked worker spans many later runs; and
+the overnight paths being `c:\pwiz\...`, which is the container's view. It is a hypothesis, not a
+proven cause - the diagnostic below is what will settle it.
+
+Two things worth doing regardless of whether it turns out to be the cause: stop the workers when
+a run ends, and treat a wedged staging step as a symptom of leftovers rather than a hang.
+
+### 2026-08-22 - Diagnostic added so a locked file names its holder
+
+Committed on `Skyline/work/20260822_test_stability`:
+
+* `CommonUtil/SystemUtil/PInvoke/RstrtMgr.cs` - Restart Manager (`RmGetList`) wrapper. Windows
+  reports a locked file as nothing but "access to the path is denied"; this answers the question
+  that message refuses to.
+* `UtilInstall.cs` - the tool unzip path catches `UnauthorizedAccessException`/`IOException` and
+  appends the holders, keyed off the `.PendingOverwrite` files the zip library leaves behind,
+  which are exactly the files it could not replace. Falls back to rethrowing untouched if the
+  diagnostic cannot add anything, so it can never replace the failure it exists to explain.
+* `CommonTest/RstrtMgrTest.cs` - verifier. This one earns a test because wrong P/Invoke struct
+  marshaling still compiles, still runs, and quietly reports **no holder** for a plainly locked
+  file, which is indistinguishable from the good case. Test locks a real file and requires its
+  own process to be named.
+* `CodeInspectionTest.cs` - registered `RstrtMgr` in the P/Invoke allowlist (4 imports).
+
+The next occurrence in a nightly will name the process. If it is a `docker_worker_*` container or
+a stray `crux.exe`, item 3 is settled without another guessing round.
