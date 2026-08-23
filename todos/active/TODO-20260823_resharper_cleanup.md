@@ -440,32 +440,43 @@ The deferral said "AutoQC, SkylineBatch". Measured, the truth is more specific:
 partial file rather than from the transfer itself. `HttpClientWithProgress` exists to
 replace exactly that, and `GetSize` immediately above it already shows the idiom.
 
-**This is the same work as the `DataDownloadTest` flake below** - that test exercises
-`WebDownloadClient.DownloadAsync`, so the FTP timeout and this migration are one item, not
-two. Whoever picks it up should fix the progress/timeout behaviour and the test's
-dependence on public FTP throughput together.
+**`DownloadAsync` was migrated 2026-08-23** and, as predicted, it was the same work as the
+`DataDownloadTest` failure below - though not for the reason predicted. The test now
+passes in 10s where it had been timing out at 60s. `DownloadDlg.cs` still uses
+`WebClient` and is the obvious next one, in the same solution.
 
 **Recommended**: recreate the backlog item, and add the CodeInspectionTest prohibition
 with an explicit exemption list, so the remaining files are visible rather than merely
 uncommitted-to. `SYSLIB0014` makes this newly urgent - on net8 these are compiler
 warnings, so they block "zero warnings" whether or not anyone wanted the migration now.
 
-### `DataDownloadTest` is network-flaky by construction, not a regression
+### `DataDownloadTest` - diagnosed wrong first, then fixed by the migration
 
-It imports a config that pulls **12.4 MB from `ftp.ebi.ac.uk`** (the public EBI PRIDE
-archive) and gives the whole config run **60 seconds** to finish
-(`FunctionalTestUtil.WaitForCondition(..., oneMinute, ...)`, "Config ran past timeout").
+**Corrected.** This was written up as "network-flaky by construction, do not chase it as a
+code defect". That was wrong. The bottleneck was `WebClient`, not EBI's FTP throughput,
+and migrating `WebDownloadClient.DownloadAsync` to `HttpClientWithProgress` fixed it
+outright.
 
-Measured four times on the same code in one afternoon: **passed, passed, failed, failed**.
-The two failures were not a timeout with nothing to show for it - the partially downloaded
-`.wiff` was **0 bytes** on one run and **1,245,184 of 12,427,264** on the next. The
-transfer is progressing, just nowhere near fast enough. It needs sustained throughput from
-a public FTP server that neither the test nor the developer controls.
+Same server, same 12.4 MB file, same afternoon:
 
-Do not chase this as a code defect, and do not "fix" it by lengthening the timeout until
-it stops failing - that just makes the flake rarer and slower to diagnose. Either host the
-fixture data somewhere the project controls, or mark it as requiring network throughput so
-a failure reads as an environment result rather than a regression.
+| Implementation | Result |
+|---|---|
+| `WebClient` | timed out at 60s, **0 bytes** transferred |
+| `WebClient` | timed out at 60s, **1,245,184 of 12,427,264** |
+| `HttpClientWithProgress` | **passed, full 12.4 MB, 10-12s** |
+
+The likely culprit is the old progress handler, which called
+`new FileInfo(downloadPath).Length` on **every** `DownloadProgressChanged` event -
+stat-ing the file being written, repeatedly, mid-transfer - inside a
+`while (!completed) { Thread.Sleep(100); }` spin. The migrated code takes progress from
+the transfer itself.
+
+**The reasoning error worth remembering**: two passes and two failures looked like external
+variance, and the partial-transfer byte counts were read as evidence of a slow server. They
+were evidence of a slow *client*. Intermittency is not by itself evidence of an external
+cause - the same slow code fails only when it happens to fall the wrong side of a timeout.
+Before calling a timing test flaky, check whether the code under it is doing something
+expensive per progress event.
 
 ### The three machine prerequisites, and how badly each announced itself
 
