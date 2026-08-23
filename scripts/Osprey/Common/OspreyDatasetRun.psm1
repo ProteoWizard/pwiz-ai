@@ -112,7 +112,8 @@ function Resolve-LibraryVariant {
     Optional keys:
       InputLabel           banner label for the data dir (default '<Extension> dir')
       DataFallbacks        string[] of last-resort data directories (e.g. a lab share)
-      DefaultNumFiles      cohort size when -NumFiles is not passed
+      DefaultNumFiles      cohort size when -NumFiles is not passed; 0 (or omitted) means
+                           every candidate file, for cohorts defined by a filter not a count
       DefaultExcludePattern  regex applied when -ExcludePattern is not passed
       DefaultFdrBenchPass  'none' | '1' | '2' | 'both' when -FdrBenchPass is not passed
       MissingCacheNote     extra line printed when caches are missing
@@ -173,6 +174,7 @@ function Invoke-OspreyDatasetRun {
         # directions and recorded, because two arms that differ in it are NOT comparable on
         # either axis and nothing in Osprey's output says which one a finished run had.
         [switch]$LogMemory,
+        # 0 means every candidate file that survived the include/exclude filters, not none.
         [int]$NumFiles,
         # Take the $NumFiles files AFTER skipping this many, so cohorts of the same size can
         # be drawn from disjoint slices of the dataset (replicate cohorts for a size-vs-effect
@@ -366,8 +368,14 @@ function Invoke-OspreyDatasetRun {
         $allInputs = @($keep | ForEach-Object { $allInputs[$_] })
         Write-Host ("  every    : $EveryNthFile-th file -> $($allInputs.Count) candidate(s)")
     }
-    $inputs = @($allInputs | Select-Object -Skip $SkipFirstFiles -First $NumFiles |
-                ForEach-Object { $_.FullName })
+    # NumFiles 0 means the WHOLE candidate set, not none. A dataset whose cohort is defined by
+    # a filter rather than a count (CHS: -Plates composes an -IncludePattern) has no number to
+    # state, and a descriptor default above the cohort size would only be a guess that breaks
+    # when the cohort grows. Select-Object -First 0 returns nothing, so unlimited has to skip
+    # -First entirely rather than pass it a sentinel.
+    $selected = $allInputs | Select-Object -Skip $SkipFirstFiles
+    if ($NumFiles -gt 0) { $selected = $selected | Select-Object -First $NumFiles }
+    $inputs = @($selected | ForEach-Object { $_.FullName })
     if ($inputs.Count -eq 0) { throw "No .$ext files found in '$dataDir'." }
     if ($inputs.Count -lt $NumFiles) {
         throw ("Only $($inputs.Count) .$ext available in '$dataDir' after skipping " +

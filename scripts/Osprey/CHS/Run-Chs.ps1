@@ -70,6 +70,14 @@ if ($Plates -and -not $IncludePattern) {
     $IncludePattern = 'us(' + ($Plates -join '|') + ')'
     $null = $PSBoundParameters.Remove('Plates')
     $PSBoundParameters['IncludePattern'] = $IncludePattern
+    # The run directory name carries the file COUNT but not the arm that selected them, and
+    # the plates are near-identical in size (0059/0061 are both 86 files). Two single-plate
+    # runs would resolve to ONE directory, where the guard rejects the second - or -Resume
+    # silently overlays it on the first. Name the plates unless the caller named something.
+    if (-not $Tag) {
+        $Tag = '-p' + ($Plates -join '_')
+        $PSBoundParameters['Tag'] = $Tag
+    }
 } elseif ($Plates) {
     $null = $PSBoundParameters.Remove('Plates')
 }
