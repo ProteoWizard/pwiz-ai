@@ -567,3 +567,82 @@ Consequences:
 Worth deciding: either add TestTutorial and TestPerf to `Build-Skyline.ps1`, or make
 `Stage-Net8Tests.ps1` fail rather than warn when a project's output is older than its csproj.
 The second is the stronger gate, since it cannot be defeated by adding yet another project.
+
+### 2026-08-23 - the 10,945-execution run, and four fixes from it
+
+**The measurement that matters.** A 105-minute parallel run produced 10,945 executions and
+24 failures across just 3 tests. `TestWatersConnectExportMethodDlg` (45% overnight) and
+`PeakAreaDotpGraphTest` (2.2%) did not appear at all. Both fixes hold at scale.
+
+| test | rate | status |
+|---|---|---|
+| TestLibraryBuild | 15/15 = 100% | Debug-only, MascotShim; fixed below |
+| TestDdaSearchDependencyErrors | 7/19 = 37% | root cause found; fixed below |
+| TestMidas | 2/15 = 13% | diagnosed, not fixed |
+
+Excluding the Debug-only breakage that is ~0.08% against 0.095% on 08-21, with the two worst
+offenders eliminated.
+
+**Every failure now reports a legible cause.** The watchdog change earned itself on a test
+nobody touched: TestMidas surfaced as
+`DialogTimeoutException: MessageDlg not closed ... FileModifiedException` instead of a
+ThreadExceptionDialog. That is the whole point of fixing the message first.
+
+**TestDdaSearchDependencyErrors - actual root cause, after two wrong theories.**
+Wrong theory 1: a lingering killed process. Ruled out - the "may still be locked" warning
+never fired. Wrong theory 2: the queue reserving a differently-named directory. Ruled out by
+the data - the four cultures that FAILED (en-US, fr-FR, ja, tr-TR) are the ones whose names
+match, and zh, the only one that diverges, did not fail.
+
+What actually happens: overwriting renames the existing file aside and deletes it, and Windows
+lets a DLL some process has LOADED be renamed but never deleted. A tool process launched out of
+that directory - crux or comet, which load their neighbours - makes the delete fail. Restart
+Manager reported no holder because it reports processes holding HANDLES, not DLLs mapped as
+images, and cannot see into another worker's container at all.
+
+The archive is version-pinned, so those DLLs are byte-identical every run and never needed
+replacing. Extraction now skips any entry whose destination already matches the archive's size,
+which removes the collision instead of racing it.
+
+**Separate real bug found on the way:** .NET silently normalizes deprecated culture names, so a
+queued `zh-CHS` becomes `zh-Hans`. The queue reserved `Tools_DSDE29_zh-CHS` while the test wrote
+`Tools_DSDE29_zh-Hans` - both spellings were sitting in the staging directory. Chinese runs of
+any tool-using test had no protection at all. The reservation now uses the resolved name, still
+falling back to the raw string for a name CultureInfo rejects.
+
+**TestLibraryBuild - Debug-only, and pre-existing.** `MascotShim.dll` is built per configuration
+but imports msparser by name, while Debug shipped only `msparserD.dll`, so the import could not
+resolve: `Unable to load DLL 'MascotShim' or one of its dependencies (0x8007007E)`, 100% of the
+time. Never seen before because the harness always ran Release staging - a bug the
+configuration-preference fix exposed rather than caused.
+
+Per the developer, msparserD is dropped. NOT by pointing a Debug shim at release msparser, which
+is the mirror of the mismatch the CMakeLists records as having "silently corrupted std::string".
+Instead MascotShim is pinned to the release CRT and release msparser in EVERY configuration.
+That is safe only because `MascotShim.h` is a pure `extern "C"` surface - const char*,
+caller-supplied buffers, callbacks - so nothing STL or heap-owned crosses to the caller and a
+/MDd BiblioSpec can call a /MD shim. The Jam rules are deliberately left alone: pwiz's own C++
+calls msparser's C++ API directly, with no such boundary, and there the pairing is real.
+
+**TestMidas - diagnosed only.** `FileModifiedException` in `PooledFileStream.Connect()`: a .skyd
+chromatogram cache changed while a pooled stream held it open. 2 in 15. Good candidate for the
+targeted soak now that it fails legibly.
+
+### 2026-08-23 - the day's real lesson: the build/test handoff
+
+Four separate defects, all with the same symptom - code that was fixed appeared to keep failing:
+
+1. SkylineTester preferred Release staging whenever it existed, so a Debug build ran stale
+   Release binaries. Fixed; it now prefers its own configuration.
+2. A Visual Studio build never reached the tests at all, because only the staging script copies
+   into the staged directory. Fixed; staging now runs at test launch.
+3. `Build-Skyline.ps1 -Target Solution` builds 7 projects while staging stages 9, so TestTutorial
+   and TestPerf were permanently stale. Not yet fixed - the two lists should be one list.
+4. Staging itself shelled out to PowerShell, which brought ANSI escape codes into the log,
+   robocopy retrying a locked file a million times at 30-second intervals, and a pipe-read
+   deadlock that froze the UI. Rewritten in C# in TestRunnerLib: one implementation,about 1 second,
+   fails immediately naming the process holding a file, and serialized on a machine-wide lock
+   because two concurrent stagings block each other.
+
+The through-line: nothing told anyone which binaries were actually running. Every one of these
+was invisible until someone compared timestamps by hand.
