@@ -418,3 +418,55 @@ Committed on `Skyline/work/20260822_test_stability`:
 
 The next occurrence in a nightly will name the process. If it is a `docker_worker_*` container or
 a stray `crux.exe`, item 3 is settled without another guessing round.
+
+### 2026-08-22 - Correction: the lock-holder helper already existed
+
+The previous entry described a new `RstrtMgr` P/Invoke class. **That was a duplicate and has been
+removed.** `CommonUtil/SystemUtil/FileLockingProcessFinder.cs` already wraps the Restart Manager
+and is already used by `TestFunctional`, `TestFilesDir` and `RunTests`. It is also better than
+what was written to replace it: it pulls the path out of the exception message, resolves it,
+distinguishes "locked but since deleted", and never throws.
+
+The real gap was narrower than a missing helper. `ToFileLockingException` only acted on
+`IOException` with `ERROR_SHARING_VIOLATION`, which is how a lock surfaces when a file is
+**opened**. A lock surfaces as `UnauthorizedAccessException` when the file is **deleted or
+replaced** - which is what an overwriting unzip does, and exactly how the crux extraction fails.
+So the helper was returning the tool-extraction failure unchanged. It now accepts both.
+Access-denied has innocent causes too, but those name no locking process and fall through with the
+original exception intact.
+
+Method note worth keeping: the duplicate came from searching for API names (`RmGetList`,
+`RestartManager`) and for one guessed helper name, rather than for the CONCEPT. A search for
+"GetProcessesUsingFile" or "FileLocking" would have found it immediately. Search the vocabulary a
+teammate would have used, not just the vocabulary of the implementation.
+
+### 2026-08-22 - PeakAreaDotpGraphTest characterised
+
+Soak on the new message: **1 failure in 460 executions** (en/fr/ja/tr/zh, 8 workers). Too few for
+a rate - the 95% interval spans roughly 0.006% to 1.2%, so this neither confirms nor contradicts
+the overnight 1/45. The one failure carries everything needed anyway:
+
+```
+idotp line value for replicate '1-A' (label index 1) in pane 0.
+Unrounded 0.9881126880645752. Line has 7 points, x axis 7 labels.  Expected 0.93
+```
+
+What that rules out: 7 points against 7 labels, index 1 valid, so this is **not** a
+label/index misalignment. The value itself is wrong, and 0.988 is a plausible idotp for a
+different precursor - not a corrupt number.
+
+Where it comes from (`TestPeakAreaDotpGraph.cs:156-159`):
+
+```csharp
+FindNode((873.9438).ToString(LocalizationHelper.CurrentCulture) + "++");
+WaitForGraphs();
+RunUI(() => VerifyDotpLine(replicates, expectedIDotp, @"idotp"));
+```
+
+`FindNode` changes the selected precursor and the graph is expected to follow. Reading a value
+that belongs to a different precursor means the graph still held the previous selection when
+`WaitForGraphs` returned - so `WaitForGraphs` is not sufficient to know a selection-driven update
+has been applied. Next step is to wait on the selection actually reaching the graph rather than on
+graph idleness, then re-soak. Not yet fixed.
+
+Note this failure appeared under `tr`, but with n=1 that says nothing about localization.
