@@ -542,7 +542,52 @@ both solutions and should be done first. `SpectrumMetadata.cs` alone carries 12 
       Bucket (iii) goes in the Skyline baseline `.DotSettings` plus the
       `Sync-DotSettings.ps1` `$overrides` map, per section 4.
 
+### Two things that change how this backlog must be worked
+
+Both were learned by measurement, and both mean "apply ReSharper's suggested fix" is the
+wrong default here.
+
+**1. A finding can be valid on one target framework and breaking on the other.**
+`inspectcode` reports the union of every declared TFM, so a warning that is correct for
+net8 may be describing code that net472 cannot compile without. Confirmed cases:
+
+| Site | Why it cannot be "fixed" |
+|---|---|
+| `NaturalComparer.cs` `REGEX.Matches(s).Cast<Match>()` | `MatchCollection` is `IEnumerable<Match>` on net8, non-generic on net472, where `.Reverse()` then will not compile |
+| `HttpClientWithProgress.cs` `cookies.Cast<Cookie>()` | `CookieCollection` became `ICollection<Cookie>` on net8 only |
+| `ConcurrencyVisualizer.cs` redundant `return` | everything after it is `#if NET472`; the `return` only looks redundant on net8 |
+
+These take a documented `// ReSharper disable once <Inspection>`, which is already the
+codebase's idiom (`MappedList.cs`, `PrimitiveArrays.cs`, `Assume.cs` all use it). **Check
+both legs before deleting anything a redundancy inspection points at.**
+
+**2. `LangVersion` is not uniform, so the same warning has opposite correct answers.**
+`pwiz_tools/Directory.Build.props` sets `8.0`; `CommonUtil`, `CommonBaseUI`,
+`PanoramaClient`, `SharedBatch` and the batch test projects override to `latest`. The
+`(double?)null` casts in a ternary are genuinely redundant under C# 9+ target-typed
+conditionals - and **required** under 8.0. `Skyline.csproj` inherits 8.0, which is where
+most of the 1,200-warning backlog lives, so the `RedundantCast` hits there will mostly
+NOT be removable the way they were in `SpectrumMetadata` and `ImmutableList`. Check the
+project's effective `LangVersion` first.
+
 ### Phase 2 - fix
+
+**Progress 2026-08-23** (all through the standard scripts, both TFMs building, tests
+re-verified at 36/38 after each batch):
+
+| Solution | Baseline | Now |
+|---|---|---|
+| AutoQC | 83 | **51** |
+| SkylineBatch | 106 | **86** |
+| Skyline | 1,238 warnings + 3,014 artefact errors | untouched |
+
+52 raw warnings cleared, concentrated in the shared assemblies so each fix counts against
+both batch solutions and against Skyline. What is left in the batch tools is mostly
+`PossibleNullReferenceException` and `AssignNullToNotNullAttribute`, which need
+caller-level reasoning rather than a mechanical edit - resist `?? string.Empty` unless the
+invariant that makes it safe is real and gets written down.
+
+
 
 - [ ] **2.1 Skyline** - clear WARNING+ to zero.
 - [ ] **2.2 SkylineBatch** - clear WARNING+ to zero.
