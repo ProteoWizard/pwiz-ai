@@ -15,7 +15,7 @@ here is specific to mean(best-N) except the default arm-name patterns.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `OSPREY_RUNS_DIR` | `D:/test/Pilot-MTG-Tissue-May2026/runs` | where the run directories live |
+| `OSPREY_RUNS_DIR` | `D:/test/osprey-runs/sea-ad/runs` | where the run directories live |
 | `OSPREY_ANALYSIS_OUT` | `ai/.tmp` | where CSV / PNG / HTML products are written |
 
 Products never land in the repo. An arm is read from its

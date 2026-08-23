@@ -23,7 +23,7 @@ import csv
 import os
 import sys
 
-RUNS = os.environ.get('OSPREY_RUNS_DIR', 'D:/test/Pilot-MTG-Tissue-May2026/runs')
+RUNS = os.environ.get('OSPREY_RUNS_DIR', 'D:/test/osprey-runs/sea-ad/runs')
 ENTRAP_TAG = '_p_target'          # entrapment accessions carry this suffix
 RATIO = 0.97                      # entrapment : target library ratio for this dataset
 

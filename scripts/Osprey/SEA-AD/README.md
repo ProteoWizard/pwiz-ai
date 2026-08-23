@@ -12,7 +12,7 @@ that says where the data actually lives, and scripts that resolve it rather than
 
 ```powershell
 setx OSPREY_SEAAD_DIR  "M:\home\brendanx\data\MacCoss\SEA-AD\Astral-DIA\mzml"
-setx OSPREY_SEAAD_LIB  "D:\test\Pilot-MTG-Tissue-May2026\lib\regression"
+setx OSPREY_SEAAD_LIB  "D:\test\osprey-runs\sea-ad\lib"
 # new shell, then prove the wiring before committing to a multi-hour run
 .\Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -NumFiles 2 -WhatIf
 .\Run-SeaAd.ps1 -DecoyMode libdecoy -Ratio 1.0 -NumFiles 2          # ~minutes, real run
@@ -353,7 +353,7 @@ without re-transferring a byte.
 ### Provenance
 
 These replace the one-off harnesses that produced the runs under
-`D:\test\Pilot-MTG-Tissue-May2026\runs` on the original machine, which lived in the
+`D:\test\osprey-runs\sea-ad\runs` on the original machine, which lived in the
 gitignored `ai/.tmp/` and so did not travel: `run-82file-decoyarm.ps1`,
 `run-82file-gendecoy.ps1`, `run-pass2ab-82.ps1` and `chain-82file-libdecoy-r01.ps1`. They
 differed only in which arm, ratio and pass-2 mode they selected, so those are parameters

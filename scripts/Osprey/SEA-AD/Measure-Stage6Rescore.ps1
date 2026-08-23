@@ -105,8 +105,8 @@
 .EXAMPLE
     # #4486: the live Stage-7 decomposition and its slope, against the rig #4536 left behind.
     .\Measure-Stage6Rescore.ps1 -Stage7 -FileCounts 4,8,16 `
-        -PhaseDir 'D:\test\Pilot-MTG-Tissue-May2026\Astral-DIA\runs\stage6\stage6-16files' `
-        -LibraryDir 'D:\test\Pilot-MTG-Tissue-May2026\lib\regression'
+        -PhaseDir 'D:\test\osprey-runs\sea-ad\runs\stage6\stage6-16files' `
+        -LibraryDir 'D:\test\osprey-runs\sea-ad\lib'
 #>
 #requires -Version 7
 param(

@@ -225,7 +225,7 @@ small cohorts and 6+-run precursors in large ones.</p>
 Permanent record accompanying <code>ai/todos/active/TODO-20260728_osprey_mean_best2.md</code>
 (read its 2026-07-30 night-session entry for the written analysis, including the hypotheses that
 were tested and rejected). Data embedded in this file, read directly from the run directories under
-<code>D:\test\Pilot-MTG-Tissue-May2026\runs</code>; regenerate with
+<code>D:\test\osprey-runs\sea-ad\runs</code>; regenerate with
 <code>python ai/.tmp/make_report.py</code>. Branch
 <code>Skyline/work/20260728_osprey_mean_best2</code>.</p>
 </div>

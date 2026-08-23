@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     The single runner for this dataset. It replaces the one-off harnesses that produced
-    every run under D:\test\Pilot-MTG-Tissue-May2026\runs on the original machine
+    every run under D:\test\osprey-runs\sea-ad\runs on the original machine
     (run-82file-decoyarm.ps1, run-82file-gendecoy.ps1, run-pass2ab-82.ps1): they differed
     only in which decoy arm, entrapment ratio and pass-2 mode they selected, so they are
     parameters here rather than separate scripts. Running the arms through ONE script with
