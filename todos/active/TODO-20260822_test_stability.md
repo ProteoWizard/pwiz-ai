@@ -538,3 +538,32 @@ executions). May be specific to `loop=N` single-test soaks.
 
 **Note on scale**: the 2026-08-21 overnight run's 46 failures were ENTIRELY these three tests -
 27 + 18 + 1 = 46. All three now have fixes on this branch.
+
+### 2026-08-23 - stale staging dependencies: the warning was real signal
+
+The developer hit failures that a Visual Studio Clean + Build Solution fixed. Root cause is
+structural, and the evidence was printed on every staging run tonight and ignored:
+
+```
+WARNING: TestTutorial output looks stale: TestTutorial.csproj changed 08-21 18:02 but the
+newest built assembly is 08-20 12:18. Staging it first so freshly built projects win any
+shared file - rebuild TestTutorial if that is not intended.
+WARNING: TestPerf output looks stale: ...
+```
+
+`Build-Skyline.ps1` builds Skyline, CommonTest, Test, TestData, TestFunctional, TestConnected
+and TestRunner. It does NOT build TestTutorial or TestPerf. So whenever those two projects
+change, their assemblies rot while everything else is rebuilt, and `Stage-Net8Tests.ps1` then
+mixes versions into one staging directory. Staging the stale projects FIRST so fresher output
+overwrites shared files is a mitigation that only holds when a fresher copy of every shared
+file actually exists.
+
+Consequences:
+* a wrapper-script build can produce a staging directory that Visual Studio's Clean + Build
+  would not, which is a nasty class of "works in the IDE" difference
+* the warning is not noise - it names the exact projects and dates. Treat it as a build error
+  in an autonomous session, not a log line to scroll past
+
+Worth deciding: either add TestTutorial and TestPerf to `Build-Skyline.ps1`, or make
+`Stage-Net8Tests.ps1` fail rather than warn when a project's output is older than its csproj.
+The second is the stronger gate, since it cannot be defeated by adding yet another project.
