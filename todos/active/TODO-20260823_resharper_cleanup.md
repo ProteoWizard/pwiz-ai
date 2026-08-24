@@ -445,10 +445,36 @@ replace exactly that, and `GetSize` immediately above it already shows the idiom
 passes in 10s where it had been timing out at 60s. `DownloadDlg.cs` still uses
 `WebClient` and is the obvious next one, in the same solution.
 
-**Recommended**: recreate the backlog item, and add the CodeInspectionTest prohibition
-with an explicit exemption list, so the remaining files are visible rather than merely
-uncommitted-to. `SYSLIB0014` makes this newly urgent - on net8 these are compiler
-warnings, so they block "zero warnings" whether or not anyone wanted the migration now.
+**Done 2026-08-23.** `WebClient` is gone from AutoQC, SkylineBatch and SharedBatch -
+`WebDownloadClient.DownloadAsync` and `DownloadDlg` both migrated, sharing a
+`DownloadProgressMonitor` that adapts `HttpClientWithProgress` to a percent callback. And
+the prohibition the 2025 TODO promised is now in `CodeInspectionTest`:
+
+- Forbids `new\s+WebClient\s*\(` - **construction, not the identifier**. A `\bWebClient\b`
+  rule looked obvious and produced ~30 false positives, because a good deal of code holds
+  `WebPanoramaClient` or `MultiFileAsynchronousDownloadClient` in a variable named
+  `webClient`. The narrow pattern finds exactly the 4 real remaining uses.
+- **No inline opt-out.** Several inspections here can be waived with a magic comment. This
+  one cannot: a comment-based waiver is a silent route back, and silent is how the
+  original migration lost track of what it left behind. An exception requires editing the
+  test, which puts it in front of a reviewer.
+- Passes `null` for ignored directories rather than `NonSkylineDirectories()`. **That
+  helper excludes `Executables`** - so the obvious, consistent-with-its-neighbours choice
+  would have silently skipped AutoQC, SkylineBatch and SharedBatch, the exact code the
+  rule exists to protect.
+- Tolerates the 4 known uses as warnings, named in a code comment, so the remaining debt
+  is visible and cannot grow.
+
+**Both halves were verified by making them fail**, not by observing a green test:
+tightening the tolerance to 3 produced a failure, and planting a marker in AutoQC,
+SkylineBatch and SharedBatch produced three failures naming those exact paths. Given this
+whole thread began with a rule that was promised and never existed, a verifier nobody had
+watched fail would have been worth very little.
+
+Still to migrate (the tolerated 4): `Executables\Installer\SetupDeployProject.cs`,
+`SkylineNightly\Nightly.cs`, `SkylineNightlyShim\Program.cs`,
+`TestPerf\DiannSearchLFQbenchTest.cs`. Recreating the lost backlog item for these is still
+worth doing.
 
 ### `DataDownloadTest` - diagnosed wrong first, then fixed by the migration
 
