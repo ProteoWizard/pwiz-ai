@@ -123,6 +123,22 @@ unrecognized value passes through as empty and fails validation with a message.
    `obj` directories under `pwiz_tools\Skyline` and `pwiz_tools\Shared` fixes it (39 of
    them the first time). Expect this on every switch.
 
+### OPEN DEFECT on the net8 branch: CommonUtil's net472 leg cannot compile
+
+Found 2026-08-24 while porting to master, NOT yet fixed on
+`Skyline/work/20260823_resharper_cleanup`.
+
+`CommonUtil/SystemUtil/FileEx.cs` there calls `data1.SequenceEqual(data2)` (line 77) with
+the `using System.Linq` deleted. `CommonUtil.csproj` on that branch is
+`<TargetFrameworks>net472;net8.0</TargetFrameworks>` with `<ImplicitUsings>disable</ImplicitUsings>`
+and no global-usings file, so the net472 leg has no `Enumerable.SequenceEqual` in scope.
+Proven on master, where the identical removal failed the build with CS1061 before it was
+pulled back out.
+
+This is the same trap the `Server.cs` `AllKeys.Contains` note documents, missed one file
+over. Fix on the port branch by restoring the using (guarded with `#if NET472` if the net8
+leg flags it as redundant), then build BOTH TFMs.
+
 ### Measured test baselines on master (2026-08-24, `C:\proj\pwiz`)
 
 This checkout has NO built Skyline and the machine has no Skyline installation, so the
