@@ -680,3 +680,92 @@ for review rather than changed unattended.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260822_test_stability.md` before starting work.
+
+### 2026-08-24 - TestMidas fixed by scheduling, not by touching cache lifetime
+
+The last remaining failure, and the developer's question drove it: *why does TestMidas hit this
+when so much other results-loading code does not?* Answer: because MIDAS makes the library loader
+a results listener, and no other loader is one.
+
+**The chain, verified end to end in the code.**
+
+1. `LibraryManager.StateChanged` (`Library.cs:75-76`) is the ONLY `BackgroundLoader` whose state
+   check includes `MeasuredResults`. All seven others - `IrtDbManager`, `OptimizationDbManager`,
+   `IonMobilityLibraryManager`, `BackgroundProteomeManager`, `ProteinMetadataManager`,
+   `AutoTrainManager`, `RetentionTimeManager` - key on their own settings object. That clause
+   exists only because MIDAS libraries are built from results
+   (`MidasLibrary.GetMissingFiles` reads `MSDataFileInfos.Where(f => f.HasMidasSpectra)`).
+2. So during import the library loader wakes on every partial-cache join.
+3. `MidasLibrary.UnflagFiles` clears `HasMidasSpectra`. `ChromFileInfo.Equals` compares that field
+   (`Chromatogram.cs:1248`) and `SrmSettingsDiff.EqualExceptAnnotations` does NOT normalise it away,
+   so `DiffResults` goes true.
+4. The `ChangeSettings` at `Library.cs:241` therefore recalculates ALL results, reading
+   chromatogram caches - `UpdateResultsSummaries` (ParallelEx) -> `CalcResultsForReplicate` ->
+   `GetTransitionPeak` -> `CallWithStream` -> `PooledFileStream.Connect`.
+5. `MeasuredResults.FinishCacheJoin` (`:1925`) deletes each partial `.skyd` BEFORE `Complete()`
+   publishes the document that stops referencing them. That window cannot be closed by ordering -
+   delete and publish are not atomic.
+6. A read landing in the window throws `FileModifiedException`. `CalcResultsForReplicate` already
+   catches it (`TransitionGroupDocNode.cs:1405`) but its only recovery is "reuse old results",
+   which does not exist for a replicate mid-import (`iResultOld == -1`), so it rethrows into
+   `CallWithSettingsChangeMonitor`'s generic handler and is reported to the user.
+
+An ordinary library load never reaches step 4: it leaves `MeasuredResults` untouched, `DiffResults`
+stays false, and no cache is read. That is why this is MIDAS-only. The multi-sample WIFF is an
+amplifier, not the cause - three samples out of one file give three partials, hence three
+join/delete events. All three appear in the control log (`_0`, `_1`, `_2`), with `_1` dominant.
+
+**The fix - scheduling, per the developer.** A background loader gets to decide when its work is
+appropriate, and this one was firing too early and too often. Two changes, both in `Library.cs`,
+37 lines added:
+
+* `LoadBackground` treats the missing-file list as empty until `MeasuredResults.IsLoaded`. MIDAS
+  spectra are read from the RAW files (`MidasLibrary.cs:644`), never from the `.skyd`, so waiting
+  costs nothing functionally - and what it did before was repeated and thrown away once per join.
+  `IsJoiningDisabled` documents keep today's behaviour for free, which is correct because nothing
+  joins or deletes partials in that mode.
+* `StateChanged` only consults `MeasuredResults` for documents that actually have MIDAS spectra.
+  Provably cannot lose work: with no flagged file, `GetMissingFiles` is empty and the MIDAS block
+  is already a no-op. This takes the fringe case's cost off every ordinary import - including the
+  annotation-only changes that `MeasuredResults.RequiresCacheUpdate` and
+  `SrmSettingsDiff.EqualExceptAnnotations` both work to keep cheap (pasting replicate names into
+  the Document Grid was waking this loader and walking the library specs).
+
+**Verified in both directions**, same configuration, `parallelmode=server`, 8 workers
+(1 host + 7 Docker), 5 languages, `loop=40`, Debug/net8:
+
+| tree | executions | TestMidas failures | rate |
+|---|---|---|---|
+| fix stashed (control) | 400 (200 + 200) | **14** | **7.0%** |
+| fix applied | 400 (200 + 200) | **0** | - |
+
+All 14 control failures carry the identical signature - `DialogTimeoutException` wrapping
+`FileModifiedException` on `...MIDAS testing 2_N.wiff.skyd`. `TestMidasModifications` never failed
+in either tree. `CodeInspection` green, solution builds clean, no Docker workers leaked after
+either run.
+
+Note the 7% here versus 2/15 and ~1/8,000 recorded earlier: a MIDAS-only soak concentrates the
+contention, so this rate describes THIS configuration and is not comparable to a suite rate. It is
+strong evidence the mechanism is gone, not a clearance claim - 0/200 clears only a rate above
+~1.5% by the rule of three.
+
+**Deliberately NOT changed.** `CallWithStream`, `PooledFileStream` and `FinishCacheJoin` are
+untouched. The delete-before-publish window is real and structural, but no loader other than this
+one is exposed to it, and cache-lifetime surgery is not worth the risk for a vendor-funded fringe
+case that we are committed to keeping working rather than to optimising. Recorded here as a known
+hazard for any future code that reads results off the document during import.
+
+Two asymmetries found on the way, worth knowing but not acted on:
+* `ChromatogramCache` has two read paths. `ReadPeaksAndScores` (`:1966`) takes
+  `ReadStream.ReaderWriterLock.GetReadLock()` and honours the cancellation token, so
+  `DisconnectWhile`'s `CancelAndGetWriteLock()` cancels it and it surfaces as
+  `OperationCanceledException` - which `CallWithSettingsChangeMonitor` already handles correctly.
+  `CallWithStream` (`:1852`) takes only `lock (ReadStream)` and ignores the QueryLock entirely.
+* `CallWithSettingsChangeMonitor` builds `new LoadMonitor(this, container, null)` - a null tag - so
+  `LibraryManager.IsCanceled`'s MIDAS-aware check (`Library.cs:106-113`) never runs on that path.
+  The only live check is the document-reference comparison polled in
+  `SrmSettingsChangeMonitor.UpdateProgress`, which by construction cannot see a delete that
+  precedes its own publication.
+
+**Not committed.** Working tree only, awaiting review. Soak logs kept at
+`ai/.tmp/sessions/20260823-929f7187/`.
