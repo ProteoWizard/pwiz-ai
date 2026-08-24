@@ -32,14 +32,16 @@ measured against. Merging `pwiz-sharp` directly would pull #4590 into the #4587 
 if that commit is wanted down here, fast-forward `net8_port` to `pwiz-sharp` first so
 the PR base moves with it.
 
-## Two branches, both LOCAL ONLY (2026-08-24)
+## Two branches, both PUSHED (2026-08-24)
 
-Neither has been pushed. Push both before doing anything that could lose them.
+Both are on origin. `20260824_webclient_prohibition` now carries two commits, not one:
+`fa5d929f2f` (WebClient migration + prohibition) and `bd1b00aed6` (the framework-neutral
+tranche described below).
 
 | Branch | Base | Commits | Purpose |
 |---|---|---|---|
 | `Skyline/work/20260823_resharper_cleanup` | `20260818_commonutil_winforms_split` | 12 | the net8-port work: build fixes, test fixes, ReSharper cleanup |
-| `Skyline/work/20260824_webclient_prohibition` | `origin/master` @ `ecf53f8859` | 1 | the master-applicable split, for its own PR |
+| `Skyline/work/20260824_webclient_prohibition` | `origin/master` @ `ecf53f8859` | 2 | everything framework-neutral, for its own PR |
 
 The plan Brendan set: land the master branch as its own PR, then pull it into
 PR #4178, and from there into PR #4587.
@@ -52,9 +54,14 @@ WebClient completion plus the prohibition that enforces it.
 
 Two adaptations master needed that the port branch did not:
 
-- **Master is C# 7.3.** Its batch csprojs are legacy with no `LangVersion`, so
-  target-typed conditionals are unavailable: `size > 0 ? size : null` had to become
-  `size > 0 ? size : (long?)null` again.
+- **Master is C# 8.0, NOT 7.3** (corrected 2026-08-24). `pwiz_tools/Directory.Build.props`
+  sets `<LangVersion>8.0</LangVersion>` and the legacy batch csprojs inherit it - verified by
+  `??=` already in use in `SkylineBatch/RemoteFileForm.cs` and the C# 8 property pattern
+  `is WebException { Status: ... }` in master's `HttpClientWithProgress.cs`. The exclusions
+  below still hold, because the fixes in question need C# 9 target-typed conditionals and
+  C# 10 natural-type lambdas, both still out of reach at 8.0: `size > 0 ? size : null` had
+  to become `size > 0 ? size : (long?)null` again. But do NOT use "7.3" to exclude a C# 8
+  construct - that reasoning was wrong.
 - **Legacy csproj lists sources explicitly.** `DownloadProgressMonitor.cs` needed a
   `<Compile Include>` entry. SDK-style globbing on the port branch hid that.
 
@@ -63,18 +70,47 @@ Two adaptations master needed that the port branch did not:
 | Category | Why it cannot go to master |
 |---|---|
 | `CommonBaseUI/*` | **the project does not exist on master** - the WinForms split creates it |
-| redundant cast / delegate fixes (`SpectrumMetadata`, `ImmutableList`, `FilePathControl`, `FileUtil`, `LongWaitDlg`, `Helpers`) | need C# 9 target-typed conditionals / C# 10 natural-type lambdas. **Master is C# 7.3 - these would break the build** |
+| redundant cast / delegate fixes (`SpectrumMetadata`, `ImmutableList`, `FilePathControl`, `FileUtil`, `LongWaitDlg`, `Helpers`) | need C# 9 target-typed conditionals / C# 10 natural-type lambdas. **Master is C# 8.0 - these would still break the build** |
 | `*.csproj` MSTest NuGet changes | master's test projects are legacy csproj where the VS QualityTools reference resolves; the fix only exists because the port made them SDK-style |
 | `#if NET472` scaffolding, `Cast<T>` suppressions, `AutoQCStarter` CodeBase change | multi-targeting artefacts; master is net472-only so they are meaningless or wrong there |
 | DNS classification fix | its net8 arm is dead code on master |
 
-**Master-applicable but NOT yet ported** - the obvious next tranche, all real fixes to
-code master shares: the modal-dialog `FunctionalTest` guards in both `Program.cs` files,
-the `RInstallations` null-`RDirs` NRE fix, the `SkylineInstallations` test seam, both
-`*TestSetup.cs` files, `GetSkylineDir` Debug probing, and the `CheckConfigs` diagnostic.
-Roughly 10 files, each needing the same C#-level and legacy-csproj check applied above.
+**Master-applicable, PORTED 2026-08-24** in `bd1b00aed6` (22 files). Brendan's direction:
+one PR against master, one for the net8 port, and broaden master to everything whose code
+flow applies equally to net472 and net8 - anything held back stays invisible to master
+until the whole port merges.
 
-### Two hazards for whoever continues
+Test enablement/stability: the modal-dialog `FunctionalTest` guards in both `Program.cs`,
+the `RInstallations` `RDirs` NRE plus demoting `TestRVersions` to a fallback, the
+`SkylineInstallations.TestAdminSkylineCmdPath` seam, both `*TestSetup.cs`, `GetSkylineDir`
+Debug probing (net472 arm hand-written - master had only the one-line Release form), the
+`CheckConfigs` diagnostics and `MainForm.ConfigValidationReport()`, and
+`AbstractSkylineBatchFunctionalTest.ResetSettings` re-running `FindSkyline()` - which the
+earlier list had missed entirely.
+
+Framework-neutral null-dereference fixes the earlier classification wrongly filed as
+ReSharper appeasement: `AutoQCConfigForm` (two `SelectedItem.ToString()` NREs plus two
+`.Equals` operand flips), `AutoQC/MainForm.GetSelectedLogName`, `NameValueParameters`
+(`EscapeDataString` throws on the null key/value a `NameValueCollection` can hold),
+`HttpClientWithProgress` (`GetCookies(null)` throws - the ONLY master-applicable hunk in
+that file), `AutoQcConfigManager`, `AnnotationsFileWatcher`, `ProcessEx`,
+`SkylineTypeControl`, the `SkylineSettings` comment, and the `PathEx` cref.
+
+**The one reachable user-facing bug in the set**: `AutoQCConfigForm.cs` line 133 sets
+`SelectedIndex = FindStringExact(mainSettings.InstrumentType)`, which returns -1 when the
+saved instrument type is not in the list, leaving `SelectedItem` null - so opening such a
+configuration and saving it threw. Same shape at 128/142 for the file filter. Now the
+unrecognized value passes through as empty and fails validation with a message.
+
+### Three hazards for whoever continues
+
+0. **A deleted `using` can be net8-only.** Removing `using System.Linq` from
+   `CommonUtil/SystemUtil/FileEx.cs` compiles on net8 and FAILS on net472: `byte[]`
+   `SequenceEqual` binds to `MemoryExtensions.SequenceEqual` (namespace `System`, via the
+   implicit span conversion) on net8, and to `Enumerable.SequenceEqual` on net472. Exactly
+   the trap the `Server.cs` `AllKeys.Contains` note describes. That removal was pulled back
+   out of the master tranche after the build caught it - reading did not. Build BOTH legs
+   before believing any using-directive cleanup is portable.
 
 1. **`CodeInspection` is unverified against master.** It was verified thoroughly on the
    port branch - proven to fire, and proven to reach AutoQC, SkylineBatch and SharedBatch
@@ -86,6 +122,21 @@ Roughly 10 files, each needing the same C#-level and legacy-csproj check applied
    `CommonUtil`'s `project.assets.json` still described the multi-target project. Deleting
    `obj` directories under `pwiz_tools\Skyline` and `pwiz_tools\Shared` fixes it (39 of
    them the first time). Expect this on every switch.
+
+### Measured test baselines on master (2026-08-24, `C:\proj\pwiz`)
+
+This checkout has NO built Skyline and the machine has no Skyline installation, so the
+tests that need a real `SkylineCmd.exe` cannot pass here. Measured, not assumed:
+
+| Suite | With the tranche | Clean master |
+|---|---|---|
+| SkylineBatch | 36/38; `TestSkylineVersionComparison`, `TestExecuteSkylineCmd` fail | same two fail identically |
+| AutoQC | 15/18; 3 fail "config status: Error" in ~2s | `TestAutoQcInterface` **HANGS** - killed at 240s, no timeout ever fires |
+
+That last row is the point of the `FunctionalTest` guards: the tranche converts an
+un-timeout-able hang into a 2-second failure with a diagnostic. The remaining failures are
+the missing Skyline build, not regressions - re-measure on a machine with Skyline installed
+or a checkout that has built it before reading anything into them.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260824_webclient_prohibition.md` before starting work.
