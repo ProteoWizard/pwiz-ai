@@ -84,9 +84,19 @@ well past the box". That was wrong: bead enrichment targets a subset, and plasma
 complexity than brain tissue. SecondPassFDR peaked at 42.1 GB and is FLAT, so the join
 streams as intended.
 
-Fitting on observations rather than files projects **257 files to ~59 GB (fits, 93% of the
-box)** and **500 files to ~83 GB (does not)**. The ceiling on this matrix with current code is
-roughly 250-300 files.
+Plate 0060 (85 files) then measured 31.0 M observations and a **34.1 GB** peak. Within CHS the
+peak tracks observations almost proportionally - 42.1/38.1 = 1.105 and 34.1/31.0 = 1.100, a
+slope of ~1.13 GB per M obs, five times the 0.224 that a single-plate fit against TDP-43
+suggested. **257 files (~104 M obs) therefore projects to ~87-114 GB and will probably NOT
+fit.** Do not repeat that single-plate fit: two points 7 M obs apart in ONE cohort beat a long
+lever arm drawn to a different matrix.
+
+TDP-43 does not obey this scaling (it would predict 79 GB where 54.2 GB was measured), so CHS
+costs ~1.9x more memory per observation for reasons not yet identified. Treat the cohort limit
+as measured, not explained.
+
+Plate-to-plate survivor variation is **18%** (0.443 vs 0.365 M/file) - the composition
+heterogeneity this dataset was chosen for, showing up directly in the memory bill.
 
 **Bound the SecondPassFDR join before searching the full cohort**, or start with one plate
 (~85 files) and measure the survivor count before scaling. pwiz #4600 moved the whole-run

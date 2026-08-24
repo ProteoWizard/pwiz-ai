@@ -125,7 +125,35 @@ attempt instead of 9.3 h. That is what makes "does the join fit" an iterable exp
 ~3.5 h each (~7 h). That forfeits the per-plate FDP / reconciliation / survivor numbers.
 Decide with plate 0059's numbers in hand, not now.
 
-## LEG 1 RESULT: 257 files should fit; 500 will not (2026-08-23, plate 0059)
+## LEGS 1-2 RESULT: 257 files will probably NOT fit (2026-08-24)
+
+**Supersedes the "~59 GB, fits" projection in the subsection below**, which was fitted from a
+single CHS plate against TDP-43. Plate 0060 gives a second CHS point and refutes it.
+
+| run | survivor obs | SecondPassFDR peak |
+|---|---|---|
+| CHS p0060, 85 files | 31.0 M (0.365 M/file) | 34.1 GB |
+| CHS p0059, 86 files | 38.1 M (0.443 M/file) | 42.1 GB |
+| TDP-43, 163 files | 92.2 M | 54.2 GB |
+
+**Within CHS the peak tracks observations almost proportionally** - 42.1/38.1 = 1.105 and
+34.1/31.0 = 1.100, a slope of **1.13 GB per M obs** against the 0.224 fitted cross-dataset.
+With the ~13 GB base observed at `SecondPassFDR:starting`, the within-CHS fit is ~0.72 GB/M obs.
+
+257 files ~= **104 M obs** -> **~87 GB** (13 GB base + 0.72/M) or **~114 GB** (through origin).
+Both far over the 63.7 GB box.
+
+**Unresolved**: TDP-43 does not fit the CHS scaling (it would predict 79 GB where 54.2 GB was
+measured), so CHS costs ~1.9x more memory per observation for reasons not yet identified.
+Worth understanding - it is the difference between a cohort-specific limit and a general one.
+
+**Plate-to-plate survivor variation is 18%** (0.443 vs 0.365 M/file), the composition
+heterogeneity this cohort was picked for. Fold plate 0061 in before trusting any 257 number.
+
+FirstPassFDR is unaffected and well-constrained by two plates (46.3 and 46.6 GB) -> ~56 GB
+at 257 files.
+
+## LEG 1 RESULT (2026-08-23, plate 0059)
 
 Plate 0059, 86 files, **exit=0 in 501 min (8.35 h)**.
 Run: `D:\test\osprey-runs\chs-seer\runs\chs-86files-libdecoy-r1.0-protein-compact-p0059`
