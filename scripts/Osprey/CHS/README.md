@@ -75,8 +75,18 @@ ran alongside, with Osprey at 6% CPU, I/O-starved rather than hung.
 
 TDP-43 peaked at **54.2 GB of a 63.7 GB box** in SecondPassFDR, holding 92.2 M pass-2
 survivor observations. Survivor count tracks sample richness, not file count - SEA-AD reached
-89.1 M from only 82 files. CHS is bead-enriched plasma, deeper than neat plasma, so 256 files
-can plausibly land well past the box.
+89.1 M from only 82 files.
+
+**Measured for CHS, 2026-08-23 (plate 0059, 86 files): 38.1 M survivor observations =
+0.443 M/file, the LEANEST of the three cohorts.** This README previously predicted the
+opposite - "bead-enriched plasma, deeper than neat plasma, so 256 files can plausibly land
+well past the box". That was wrong: bead enrichment targets a subset, and plasma is lower
+complexity than brain tissue. SecondPassFDR peaked at 42.1 GB and is FLAT, so the join
+streams as intended.
+
+Fitting on observations rather than files projects **257 files to ~59 GB (fits, 93% of the
+box)** and **500 files to ~83 GB (does not)**. The ceiling on this matrix with current code is
+roughly 250-300 files.
 
 **Bound the SecondPassFDR join before searching the full cohort**, or start with one plate
 (~85 files) and measure the survivor count before scaling. pwiz #4600 moved the whole-run
