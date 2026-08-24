@@ -125,6 +125,33 @@ attempt instead of 9.3 h. That is what makes "does the join fit" an iterable exp
 ~3.5 h each (~7 h). That forfeits the per-plate FDP / reconciliation / survivor numbers.
 Decide with plate 0059's numbers in hand, not now.
 
+## FirstPassFDR memory is library-dominated, not file-count-dominated (2026-08-23)
+
+`phase_mem_shape.py` on leg 1 (86 files) against the TDP-43 163-file run:
+
+| phase | CHS 86 files | TDP-43 163 files |
+|---|---|---|
+| PerFileScoring | 21.5 -> 20.6 GB, flat | flat |
+| **FirstPassFDR** | 23.9 -> 42.8 GB, max **46.3** | 24.3 -> 44.2 GB, max **50.8** |
+| PerFileRescoring | **13.6 GB steady, flat** | flat |
+
+**1.9x the files buys 4.5 GB.** Both runs start at ~24 GB and end at ~43-44 GB. The dominant
+term is fixed - the shared 6,175,389-entry library - with a per-file slope of ~0.058 GB/file.
+Fit: **257 files -> ~56 GB in FirstPassFDR**, under the 63.7 GB box.
+
+Beware the ratio trap this corrects: CHS reaching 91% of TDP-43's working set with 53% of the
+files reads as "CHS is much heavier per file" and is not - that is the signature of a large
+FIXED cost. Compare the SHAPE across deciles, not the endpoint ratio.
+
+**PerFileRescoring is confirmed flat at 13.6 GB**, so pwiz #4600 did what it claimed.
+
+**`--fdrbench-pass 2` already takes the bounded path.** `FirstPassFdrTask.cs:376` forces the
+resident first-pass pool only for `--fdrbench` WITH `--fdrbench-pass 1`; these runs are on the
+streaming projection path already, so 46.3 GB is what streaming costs and there is no lean-path
+lever left to pull at this stage.
+
+Still open: SecondPassFDR for CHS. TDP-43's was the global peak (54.2 GB at 163 files).
+
 ## Next steps
 
 1. Fix both bugs above; re-run `Run-Chs.ps1 -Plates 0059 ... -WhatIf` until it resolves 86
