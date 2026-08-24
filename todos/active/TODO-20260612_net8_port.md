@@ -5195,3 +5195,187 @@ without vendor archives.
 - A Waters lockmass test failed once with `MassLynx open SCAN reader failed (code 6)` and did
   NOT reproduce on rerun; transient file contention, recorded so the next sighting is a
   second data point rather than a first.
+
+## 2026-08-20/24: Sciex ZT Scan, and the nightly finally runs on this branch
+
+Two unrelated threads. The Sciex work is a new acquisition mode; the SkylineNightly work
+is why nothing on this branch had ever produced a nightly result.
+
+### ZT Scan is a scanning quadrupole - structurally Waters SONAR, not SWATH
+
+`D:\test\ABI\ZTscan` is a **ZenoTOF 8600** run (SCIEX OS 4.0.0.4907, method
+`EvoSep-100SPD_588DaS-5_9Da-10msAccTime-Cycle0_969sec_40C`). Both containers present it as
+**430 experiments x 699 cycles = 300,570 spectra**: experiment 0 is `TOF MS (400-900)`, and
+1..429 are `TOF PI` with `IsSwath=True`, each a quad bin.
+
+The bins **exactly tile** `[392.760634, 899.778995]` - `upper[k] == lower[k+1]` bit for bit -
+in steps of 1.181866 Da, widths alternating 1.18000/1.18373 (Q1 DAC quantization). The window
+for a given experiment index is identical in every cycle, i.e. a fixed bin <-> quad-position
+map, exactly like a SONAR bin.
+
+The reported 1.18 Da bin is NOT the physical isolation width. Profiling fragment and
+surviving-precursor intensities across consecutive bins (cycle 350) gives a smooth,
+near-Gaussian curve of **FWHM ~10 bins ~= 11.8 Da**, >10% across ~15 bins. Method says
+`Q1 width = 5.9 Da`, so the effective transmission is ~2x the nominal setting - reported, not
+explained. Either way each precursor spans ~10-15 bins, which is the extra dimension SONAR
+gives you.
+
+One thing better than SONAR: the profile apex lands on the bin whose *reported* centre is
+nearest the precursor (9 of 10 measured, within +/-1 bin). **No lag calibration needed** -
+SONAR requires `_sonar.inf` for exactly this.
+
+Method parameters, and where they live:
+
+| | `.wiff` (Clearcore2) | `.wiff2` (SCIEX.Apis.Data.v1) |
+|---|---|---|
+| mode flag | sample custom field `Is ZT Scan` | `IMsMethod.Experiments[].GroupName == "ZTScan"` |
+| quad window | `FragmentBasedScanMassRange.FixedMasses[0]` + `IsolationWindow` | `IExperiment.MassRanges[0].IsolationWindow` (absolute edges) |
+| CE ramp | only `CE ∓ CES` -> 18..42 | `CERampStart`/`CERampStop` -> 18..43 |
+
+`IExperiment.ScanType` is just `'TOFMSMS'` - nothing ZT-specific. **Neither API says the 429
+bins belong to one sweep**; that only follows from the method (`Total MSMS scan time 0.86015`
+= one experiment spanning the whole sweep) or from the tiling geometry.
+
+### Is the 4-array (SONAR) representation suitable? Yes structurally, but it is not needed
+
+Populating `MS:1003157`/`MS:1003158` is *easier* than for SONAR - both SDKs hand over the quad
+bounds per spectrum, and bin<->m/z is arithmetic (`bin = floor((mz - 392.760634) / 1.181866)`)
+with no calibration file. But:
+
+- **Nothing is lost today.** Sciex already gives one spectrum per bin with a proper
+  `precursor/isolationWindow`. The 4-array form exists because Waters/Bruker bundle many quad
+  positions into one frame that pwiz must split or merge.
+- **Cost.** A combined frame is ~1.4 M centroided points (~3 M profile) per cycle vs ~200 k for
+  a SONAR frame - ~10x - and there are 699 of them.
+- **It discards the per-bin scan start time** (2.010 ms apart across the sweep), which is real.
+- **The payoff is Skyline**, not mzML: `eIonMobilityUnits.waters_sonar`, `SonarMzToBinRange`,
+  `SonarBinToPrecursorMz`, the SONAR heatmap. If we want that, generalize
+  `IonMobilityEquipment::WatersSonar` to a vendor-neutral scanning-quadrupole type rather than
+  reusing the Waters names.
+
+**Implementation trap if that happens:** `mzToBinRange(mz, tol)` must widen by the
+*transmission* width (~11.8 Da measured), NOT the *encoded* bin width (1.18 Da). Otherwise you
+extract 1 of the ~10 bins that actually carry the precursor's fragments.
+
+### What was actually fixed: per-bin collision energy, and the ZenoTOF 8600 model
+
+Neither SDK records a per-bin CE - both report the ramp MIDPOINT (30 eV) on **all 429 bins**,
+off by up to 12 eV at either end. `ZtScanBin` carries the endpoints and interpolates on the
+bin's **ordinal** (the quadrupole scans at constant Da/s, so ordinal and quad m/z are
+equivalent, and the ordinal needs no method parameter that only one API exposes).
+
+Contrast with ordinary SWATH, which is where the diagnosis came from
+(`Hoofnagle_10xDil_SWATH_01.wiff`): there `CE` really is rolled per window
+(`0.0625*mz - 3.48`, the Sciex 2+ equation) and `CES=5` is a genuine within-window spread. ZT
+reuses the same CES hardware ramp but scoped to the whole sweep, so CE/CES = 30/12 is a lossy
+projection of `CERampStart/Stop` = 18/43 (note 42 != 43 - that asymmetry is what proves which
+pair is authoritative).
+
+- cpp: **PR #4598** -> master. C# mirror: `5b2f51111c` on this branch.
+- ZenoTOF 8600 (`MS:1003443`, already in the CV): cpp needs the enum+name match in **two**
+  places - `WiffFileImpl` AND `WiffFile2Impl` each carry their own copy of the model-name
+  ladder. C# maps it once in `Reader_Sciex_Detail`. Patching only the first passed
+  `Reader_ABI_Test` (it validates enum->CV, never name matching against a real string) and was
+  caught only by running msconvert on the file.
+- Verified cpp vs C# **digit-identical, 0 of 14 spectra differing on both containers**;
+  `.wiff2` 18.0->43.0, `.wiff` 18.0->42.0 (the 1 eV gap is the legacy container's limit, not an
+  implementation divergence). `Sciex.Tests` 8/8, `Reader_ABI_Test` passed.
+
+**Open:** the ramp being LINEAR is an assumption - the files state only endpoints. Documented
+in the `ZtScanBin` doc comment pointing at the single accessor that would change. No ZT fixture
+exists (source file is 8.6 GB), so nothing regression-guards this.
+
+### The nightly could not build this branch at all - five defects
+
+Commits `73eea63fed`, `588c9359e5`, `0f2cd65f35`, `9950ebe589`.
+
+1. **Built via bjam, not the net8 entry point.** `TabBuild.CreateBuildCommands` hardcoded
+   `pwiz_tools\build-apps.bat` + bjam target `pwiz_tools/Skyline//Skyline.exe`, which still
+   declares `pwiz_data_cli` and `install-native-dependencies` - so every run rebuilt the whole
+   native tree (HDF5 etc.) and never produced a usable Skyline. Now calls
+   `pwiz_tools\Skyline\build.bat`. Added `--no-tests` to build.bat (it runs the suite itself;
+   SkylineTester runs the tests afterwards under its own budget).
+2. **`GetPossibleBuildDirs` left the Nightly slot null on net8.** Only a slot resolved by
+   walking up from `ExeDir` to an ancestor named `Skyline` - but under the nightly SkylineTester
+   runs from a `SkylineTester Files` folder that is a **sibling** of the checkout.
+   `TabNightly.Stop` explicitly selects `BuildDirs.nightly64`, so this produced "No Skyline build
+   containing TestRunner.exe was found" and **zero tests even when the build succeeded**.
+3. **`git pull` had no `--progress`**, so a long fetch logged nothing and looked like a hang.
+   The clone alongside it already passed it for this reason.
+4. **`--reuse-checkout`** - the checkout lives INSIDE the SkylineTester folder that is wiped
+   each run. Guarded by `IsUsableCheckout` (`.git/index` + a tracked file): an interrupted clone
+   leaves a large `.git` with an EMPTY working tree, and reusing that makes `git pull` backfill
+   the whole object store.
+5. **`--local`** - installs a locally built `SkylineTester.zip` instead of downloading from
+   TeamCity. **Covers only the SkylineTester artifact**; the source tree always comes from git,
+   so a `build.bat` change still has to be pushed before a nightly sees it.
+
+**Result: 9,480 tests, 13 failures, 13 leaks, 540 minutes** - the first successful nightly on
+this branch.
+
+### Triage of the 13
+
+- **7 are credentialed/remote**: 5x `TestArdia*`, `TestUnifi`, `TestWatersConnectExportMethodDlg`
+  (the last is already fixed on master by `ecf53f8859`).
+- **`AaantivirusTestExclusion`** passed on rerun - flaky/environmental.
+- **`TestAssayLibraryImportAsSmallMolecules`** reports itself skipped
+  (`RunSmallMoleculeTestVersions=False`) yet still increments the failure count - looks like
+  harness accounting, and means 13 may overstate the real number.
+- **The remaining 4** (`RefineConvertToSmallMoleculeMassesAndNamesTest`,
+  `RefineConvertToSmallMoleculesTest`, `TestCommandLineWarnings`, `TestImmediateWindowWarnings`)
+  **pass on the current branch head and fail on the Aug 21 build** - same machine, minutes
+  apart, so it tracks the build, not the environment. Which commit fixed them is NOT
+  established: the only product delta is the pwiz-sharp mzML reader (cherry-picked #4590) and
+  pwiz-sharp Sciex, neither of which touches small-molecule conversion or warning text. The
+  failure shape was the MSTest v3 `IEquatable` signature (identical `ToString()` on both sides
+  of `Assert.AreEqual`).
+
+### Open: the nightly staging lacks the Bruker native stack
+
+The nightly's staging has no `BDal.*`, `CompassXtractMS.dll`, `hdf5.dll` etc., while a fresh
+local staging does. **Both checkouts have `pwiz-sharp/vendor-assemblies/Bruker` populated
+identically**, so the source is present in both and something in the nightly's build is not
+propagating them. That means the 9,480-test run had no Bruker natives. Not yet chased.
+
+### clean.bat now keeps the C++ build (`9950ebe589`)
+
+The C++ sections (`build-nt-x86*`, extracted boost/libraries, `Version.cpp`, vendor dlls,
+vendor test data) dominate rebuild cost and are almost never what you want cleaned. Skipped by
+default, gated behind `-cpp` (alias `-all`). Arg parsing became a loop, which also fixes
+`-quiet`/`-q` only having worked as the first argument. Uses `goto` rather than a parenthesized
+`if` block - several of those lines carry redirections and embedded parens that do not survive
+nesting. The C++ pieces are gated together on purpose: deleting vendor dlls while keeping
+`build-nt-x86` leaves a tree linked against dlls that no longer exist.
+
+**Measured on this machine:** `clean.bat` (C#-only) **19.2 s**; full `build.bat` rebuild after
+it **3.09 min**. (`clean-apps.bat` only walks `pwiz_tools/*`, so `pwiz-sharp` bins survive and
+that 3 min excludes them.)
+
+### Two measurement traps that cost time today
+
+- **Staging is never cleaned.** `Stage-Net8Tests.ps1` copies *into* the directory without
+  clearing it, so a long-lived checkout accumulates: 1502 files before the clean, 766 after.
+  A stale assembly there can make a test pass locally that fails in CI.
+- **Copied files keep their ORIGINAL mtime.** `BDal.BCO.dll` is dated `Nov 26 2018` in a staging
+  built minutes ago. Reading a preserved timestamp as staleness led to a wrong conclusion that
+  the nightly staging was fine - it is not (see above). Use file *size*/content, not dates.
+- **.NET builds are not byte-reproducible** - all 54 managed assemblies differ between any two
+  builds, so hashing them isolates nothing. Size is the usable signal.
+- **Swapping a single assembly between staging dirs does not isolate a regression** - it
+  produced a *different* assertion failure, because the rest of the tree was compiled against
+  the other build.
+
+### Also open
+
+- **Nightly results never reach skyline.ms**: the POST fails with
+  `NumberFormatException: For input string: "unknownDate.5e6dff72a"`. `Nightly.GetRevision`
+  builds `"unknownDate." + <short sha>` and the LabKey server does `Integer.parseInt` on it.
+  Pre-existing, unrelated to any of the above. The run's XML survives locally in `Summary.log`.
+- **The 4 cpp ZT Scan files are deliberately uncommitted on this branch** pending #4598's merge;
+  committing them here would collide with the same change arriving via a master merge.
+- **Master is 10+ commits ahead**, including `ecf53f8859`.
+- `chambem2/pwiz-sharp` and this branch are mirrored again (both at the same commit) after
+  cherry-picking #4590 and one force-with-lease push.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260612_net8_port.md` before starting work.
