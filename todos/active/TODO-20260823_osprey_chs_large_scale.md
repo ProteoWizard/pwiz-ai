@@ -125,6 +125,58 @@ attempt instead of 9.3 h. That is what makes "does the join fit" an iterable exp
 ~3.5 h each (~7 h). That forfeits the per-plate FDP / reconciliation / survivor numbers.
 Decide with plate 0059's numbers in hand, not now.
 
+## LEG 1 RESULT: 257 files should fit; 500 will not (2026-08-23, plate 0059)
+
+Plate 0059, 86 files, **exit=0 in 501 min (8.35 h)**.
+Run: `D:\test\osprey-runs\chs-seer\runs\chs-86files-libdecoy-r1.0-protein-compact-p0059`
+
+**The number: 38,135,138 pass-2 reconciled survivor observations = 0.443 M/file.**
+
+| cohort | files | survivor obs | per file |
+|---|---|---|---|
+| SEA-AD | 82 | 89.1 M | 1.09 M |
+| TDP-43 | 163 | 92.2 M | 0.57 M |
+| **CHS** | **86** | **38.1 M** | **0.443 M** |
+
+**CHS is the LEANEST of the three, not the deepest.** The standing expectation in this TODO
+and in CHS/README.md - "bead-enriched plasma is deeper than plasma EV, so 256 files can
+plausibly land well past the box" - is WRONG and should not be carried forward. Bead
+enrichment targets a subset; plasma is lower complexity than brain tissue.
+
+Per-phase peaks at 86 files: FirstPassFDR **46.3 GB** (ramps, 1.51x, but library-dominated -
+see below), SecondPassFDR **42.1 GB** and **FLAT (1.03x)**. The protein-compact pass-2 really
+does stream ("one file resident at a time" in the log), so the join is not accumulating.
+
+### Projection to 257 and 500
+
+Two-point fit on SURVIVOR OBSERVATIONS, not file count - memory holds observations, and this
+TODO's own thesis is that survivor count tracks richness rather than files:
+
+* (38.1 M obs, 42.1 GB) and (92.2 M obs, 54.2 GB) -> **0.224 GB per M obs + 33.6 GB fixed**
+
+| cohort size | obs at 0.443 M/file | projected SecondPassFDR |
+|---|---|---|
+| 257 files | 113.9 M | **~59 GB** - fits, 93% of the 63.7 GB box |
+| 500 files | 221.5 M | **~83 GB** - does NOT fit |
+
+Ceiling on this matrix with current code is roughly **250-300 files**. 257 sits right at it.
+FirstPassFDR projects to ~56 GB by the separate file-count fit below, so both stages land in
+the mid-to-high 50s - feasible, with little headroom.
+
+Caveat: these are WORKING SET numbers, which include Server-GC retained-but-free pages (see
+[[project_osprey_pipeline_peak_is_servergc_retained_committed]]), so true live demand is lower
+and 93% is less alarming than it reads. TDP-43 ran successfully at 85%.
+
+**500 files still needs the join bounded.** That is now a properly-scoped target: not "make
+the join fit" but "cut ~20 GB out of a 0.224 GB/M-obs slope, or reduce the 33.6 GB fixed term".
+
+### Stage 6 on heterogeneous samples: holds
+
+4,074,680 reconciliation actions over 5,193,257 re-scored entries = 47.4 K actions/file,
+against TDP-43's 59.9 K/file (2,810,216 use_cwt + 5,500,844 forced + 1,453,421 gap-fill over
+163). Completed clean. The composition worry that motivated picking this cohort does not
+show up as a reconciliation failure.
+
 ## FirstPassFDR memory is library-dominated, not file-count-dominated (2026-08-23)
 
 `phase_mem_shape.py` on leg 1 (86 files) against the TDP-43 163-file run:
