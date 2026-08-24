@@ -5055,3 +5055,143 @@ configuration (`ProteoWizard_SkylineMasterAndPRsTestConnectedTests`), not the ne
 Changed files (uncommitted): `Skyline.Designer.cs`, `Skyline{,.ja,.zh-Hans}.resx`,
 `TestFunctional/ArrangeGraphsTest.cs`, `EditUI/ComparePeakPickingDlg.cs`,
 `TestConnected/UnifiFunctionalTest.cs`.
+
+## 2026-08-21/24: the centroid msLevel gate, and the last two cs-failed
+
+Six msconvert-sharp fixes, all measured against the cpp corpus. Four came out of the
+first sweep run with the fixed comparator; two came out of chasing the remaining
+`cs-failed` into the vendor SDKs.
+
+### One root cause, three symptoms: the vendor centroid path had no MS-level gate
+
+cpp gates centroiding INSIDE each reader - `doCentroid = msLevelsToCentroid.contains(msLevel)`
+(`SpectrumList_Waters.cpp:219`, `_Agilent.cpp:313`, `_ABI.cpp:157`, `_Shimadzu.cpp:123`,
+`_Thermo.cpp:365`, `_Bruker.cpp:426`). C# centroided FIRST and checked the level after:
+
+```csharp
+var spec = _vendorCentroidPath(index, getBinaryData);   // centroids
+int msLevel = spec.Params.CvParamValueOrDefault(CVID.MS_ms_level, 0);
+if (!_msLevels.Contains(msLevel)) return spec;          // gate - too late
+```
+
+The gate cannot live at that call site: a spectrum's MS level is only known by reading it,
+and by then the vendor centroid has been applied. Three consequences, all live:
+
+| symptom | file | effect |
+| --- | --- | --- |
+| non-MS spectra centroided to nothing | Waters `QCsynapt_#021_040319_A1Dnp_01.raw` | 834/1000 spectra emitted with `defaultArrayLength=0`, labelled `centroid spectrum`, where cpp emits 311 profile points |
+| conversion aborted outright | Waters `T0016P01_Gly_11122019_1.raw` | `cs-failed` - listed as an unexplained crash "inside `Converter.WriteOutput`" |
+| contradictory spectrum type | Shimadzu `MIDAZOLAM STANDARD_009.lcd` | every spectrum tagged BOTH `profile spectrum` and `centroid spectrum` |
+
+The Waters spectra are DiodeArray/UV traces (`electromagnetic radiation spectrum`, no MS
+level): MassLynx cannot centroid an absorbance-vs-wavelength trace and returns nothing.
+The Shimadzu spectra report `ms level = 0` on both sides - it is what the file says.
+
+**The Shimadzu case is a mislabel, not a surplus.** The data is unambiguously centroid: zero
+zero-intensity points in 1995, irregular m/z gaps, arrays byte-identical to cpp's. Readers
+set both terms ON PURPOSE (`SpectrumList_Shimadzu`, mirroring cpp `:217`+`:244`) to tell the
+picker the source was profile; the picker owns stripping the contradiction, and its cleanup
+sat after the early return. `cvParam extra in C#` disguised it, because the comparator
+matches by accession and `MS:1000128` simply has no cpp counterpart - do not read that
+category as "additive" without checking whether the OTHER term is also present.
+
+**Fix**: `IVendorCentroidingSpectrumList.GetCentroidSpectrum` now takes an `IntegerSet
+msLevelsToCentroid` and every reader gates internally where cpp does. Placement is
+load-bearing in two of them: Waters promotes MSe survey scans to level 2 and Agilent
+promotes on collision energy, both BEFORE cpp's gate, so gating at the entry point would
+test the pre-promotion level and diverge on exactly the affected files. Also closes an
+unreported case: `msLevel=2-` would have vendor-centroided MS1 spectra before gating.
+
+### Zero-length binaryDataArrayList: the shape the 08-17/18 handoff said to look for
+
+Three readers guarded `SetMZIntensityArrays` on a non-zero peak count, so a zero-point
+spectrum lost its `<binaryDataArrayList>` entirely: `SpectrumList_Agilent.cs` (non-IM path),
+`Baf2SqlData.cs`, `TsfData.cs`. cpp calls it unconditionally inside `DetailLevel_FullData`
+and then fills the vectors (`_Agilent.cpp:416`, `_Bruker.cpp:428`). All three trace to the
+bulk port commit `5369889358`, not to any later deliberate fix. Bruker
+`0.1HCOOH_H20_NoTIMS_Pos.d` was 1,160 `child count (spectrum)` diffs - one per spectrum.
+
+### The last two cs-failed were NOT SDK-boundary problems
+
+Both looked like ".NET 8 vs the Framework SDK" and neither was. `ilspycmd` and
+`dotnet-script` settled both in minutes after reasoning from the outside had stalled;
+reach for them first on this class of problem.
+
+**Sciex `2020-06-09 BAK 270 optimization.wiff`** - `Idx -  could not be found
+(STG_E_FILENOTFOUND)`, 4 of 11 runs written. The message is `name + " - " + ex.Message`
+with an empty COM message; the stream wanted is plain `"Idx"`. A probe showed
+`GetNumberOfSamples`, `GetBasicSampleInfos` AND cpp's `batch.GetSampleNames()` all report the
+same **11** samples, index 4 being `isocratic wash` (first of a duplicate pair), which has no
+`Idx` stream. Both sides fail on it. cpp survives because `Reader_ABI.cpp:244-269` wraps
+EACH sample in try/catch, logs, and keeps the other ten. We aborted the file.
+Fixed in `Converter.ConvertOne` with a read-only tolerance on the convert-every-run path.
+**Scoped deliberately**: `WriteOutput` still aborts, because the Thermo failure below
+surfaces while the writer pulls spectra and swallowing it would turn a loud failure into a
+silently truncated file. Note cpp's skip COMPACTS its run list, so cpp's run 4 is our run 5;
+output filenames match (same ten) but `--runIndexSet N` still means different runs.
+
+**Thermo `20May24_P3_LHS_line_003.raw`** - NullReferenceException on spectrum 2 of 188. It is
+an SDK bug: `Scan.ToCentroid` builds one `Fragment(i)` per segment, `Fragment` returns NULL
+for any segment with fewer than 2 points, and `MergeSegments` dereferences that null
+unguarded. Scan 2 is an ITMS MS3 with `SegmentSizes [0]` - an empty scan. cpp never meets it
+because XRawfile's `GetMassListFromScanNum` does its own centroiding and returns zero peaks;
+cpp emits that spectrum with `defaultArrayLength=0`. Fixed by guarding the PRECONDITION
+(`CanFragmentEverySegment`) rather than catching the exception, so an unexpected NRE still
+surfaces; the empty scan falls through to the segmented stream and emits the same
+`defaultArrayLength=0` cpp writes.
+
+### Verification
+
+| input | before | after |
+| --- | --- | --- |
+| Waters `QCsynapt_#021...raw` | 7,506 diffs | **0 diffs / 28,804 spectra** |
+| Waters `T0016P01_Gly_11122019_1.raw` | `cs-failed` | **identical** |
+| Sciex `BAK 270 optimization.wiff` | `cs-failed`, 4 of 11 runs | **10 runs, 0 diffs**, same file set as cpp |
+| Thermo `20May24_P3_LHS_line_003.raw` | `cs-failed` | **0 diffs / 188 spectra** |
+| Shimadzu `MIDAZOLAM STANDARD_009.lcd` | 1,507 diffs | **1** (`run/@startTimeStamp`) |
+| Bruker `0.1HCOOH_H20_NoTIMS_Pos.d` | 1,164 diffs | **4** (instrument model + componentList) |
+
+Sweep `results-20260821-peakpicking.jsonl` (first run with BOTH a current binary and the
+fixed comparator): identical 379 -> **381**, differs 28 -> 27, cs-failed 3 -> 2. It predates
+the last two fixes, so a rerun should now show **cs-failed 0**. Three Sciex status moves in
+that run are 420 s-timeout noise, not regressions - two moved AWAY from `identical` because
+cpp timed out that run and had not the run before.
+
+### Tests, and why the probe is the one that matters
+
+`VendorReaderTestHarness.ProbeCentroidMsLevelGate` - a sibling of `ProbeFinalizers`, run from
+`FixtureRunContext.Check` for every vendor on whatever fixtures it already has. The property
+is deliberately data-agnostic: **with an EMPTY msLevel set, `GetCentroidSpectrum` must return
+exactly what `GetSpectrum` returns.** No knowledge of any fixture's contents, and it is the
+whole gate in one assertion. Comparison goes through the regular diff code via a new
+`MSDataDiff.DescribeSpectrum`, so cvParams, array lengths and binary values all come free.
+
+**Mutation-verified**: reverting Shimadzu to the pre-fix behaviour fails
+`Reader_Shimadzu_10nmol_Negative_MS_ID_ON_055` on spectrum 0 of the first fixture with
+`defaultArrayLength: 339 vs 56` + `cvParam b-only: MS_centroid_spectrum`. A probe that
+returns silently when no fixture matches looks exactly like a passing one - mutate it or do
+not trust it. Sampling is head AND tail (25 each) because Waters interleaves its DAD spectra
+from index 0 while Agilent appends them after the whole MS run.
+
+It deliberately does NOT assert "an included msLevel must change the spectrum" (Thermo only
+has a centroid stream for FTMS, Agilent will not centroid quadrupoles - declining is legal),
+nor "never both profile and centroid" (readers set both on purpose). The second belongs to
+the picker, and lives in `VendorCentroidGateTests.PeakPicker_OnlyVendorCentroidsSelectedMsLevels`
+- a stub-based test needing no SDK or data, so it guards the ordering on a CI leg built
+without vendor archives.
+
+### Four things noticed in passing
+
+- **`--continueOnError` does not do what its message says.** It only decides whether the
+  INPUT-FILES loop breaks (`Converter.Run`), so with a single input it does nothing at all -
+  while the failure path still prints "re-run with --continueOnError".
+- **`Reader_UNIFI_HarnessAgainstReferenceUrls` makes LIVE calls** to
+  `democonnect.waters.com` and went red on a `500 Internal Server Error` mid-session. That
+  suite cannot distinguish our bug from Waters being down.
+- **31 stale MSBuild worker nodes** (`/nodemode:1`) survived a build that exited through the
+  test-failure path - the accumulation `979660e18c` added `MSBUILDDISABLENODEREUSE` to stop.
+- **`Deny-DirectBuildTest.ps1` false-positives on `dotnet build-server shutdown`** - its
+  `dotnet\s+(build|test|...)\b` pattern matches `build-server`, which is daemon cleanup.
+- A Waters lockmass test failed once with `MassLynx open SCAN reader failed (code 6)` and did
+  NOT reproduce on rerun; transient file contention, recorded so the next sighting is a
+  second data point rather than a first.
