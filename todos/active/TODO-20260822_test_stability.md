@@ -769,3 +769,63 @@ Two asymmetries found on the way, worth knowing but not acted on:
 
 **Not committed.** Working tree only, awaiting review. Soak logs kept at
 `ai/.tmp/sessions/20260823-929f7187/`.
+
+### 2026-08-24 - TestMultiInjectRescore: a finished file dragged back to 99%
+
+The last failing test on the master branch, and the only one failing in a 6,576-execution run.
+Root cause is in the progress DISPLAY, not in results loading - which is why nine other theories
+died on contact with the evidence.
+
+**What actually happens**, logged directly on the UI thread:
+
+```
+50.700  009  pct=100  final=True   ->  control = 100    correct, import complete
+50.809  009  pct=99   final=False  ->  control = 99     stale snapshot, 109 ms late
+        (nothing further, ever)
+```
+
+Progress statuses are immutable snapshots handed to the UI through the message queue, so an older
+one can be delivered after a newer one. `FileProgressControl.SetStatus` accepted it and moved a
+finished file backwards. `AllChromatogramsGraph.Finished` requires every file to be complete,
+cancelled or in error, so one file pinned at 99% held it false permanently. The import, the caches
+and the join had all succeeded; only the display disagreed.
+
+**Fix** - `FileProgressControl.SetStatus` ignores a status that would move the file out of a final
+state, comparing `Status.Id` so a Retry (a NEW progress chain) can still restart a finished file.
+Without the Id comparison the obvious guard silently breaks the Retry button, and nothing else in
+the suite covers that.
+
+| | rate |
+|---|---|
+| before | 24 / 149 = 16% (also 10/85 and 6/50 in other runs) |
+| after | **0 / 200**, 5 languages, 5 workers |
+
+Run time for 50 executions went 160-320s -> 61s, because the 120-second stalls are gone.
+`FileProgressStaleStatusTest` is the permanent verifier: it FAILS without the guard
+(`Expected:<100>. Actual:<99>`) and pins the Retry direction too.
+
+**Nine refuted hypotheses**, kept so nobody repeats them: shared `_chromDataSets` race (one builder
+per file); un-reset accumulator counters (fresh accumulator per round); "009 stalls at 99%" (it
+completes - the 99% was the SYMPTOM, and dismissing it cost hours); queue-generation mixing (all
+`gen=1`); success-with-null-cache (`resultNull=False statusComplete=True`); `EnsurePathsMatch`
+(`pathsMatch=True`, `CACHESTOADD count=1`); publish ordering resurrecting the failed file (a
+control run showed passing imports do exactly the same); lost completion (buffer truncation, not
+loss); the `OperationCanceledException` retry (named from ONE failing trace; the next failure had
+no retry at all).
+
+**Two of those came from defects in the DIAGNOSTIC, not the product**, and both times an absence
+looked like a finding:
+
+* **`Console.WriteLine` from Skyline product code never reaches the test log** - not even serially.
+  The harness discards it. Printf debugging has to ride out on the failure message instead.
+* **A capped diagnostic buffer truncated exactly the lines being reasoned from.** Raising the cap
+  turned "the completion was lost" into "everything worked". Verify a diagnostic fires before
+  trusting a run that used it.
+
+**Method note**: the control - forcing PASSING runs to print their trace for comparison - is what
+killed the publish-ordering theory one step before a wrong fix was written. Compare pass against
+fail; do not reason about what a passing run "must" do.
+
+**Also changed**: the wait in this test was 12 minutes in Debug (`WAIT_TIME` 180s x4 from
+`GetWaitCycles`) for an operation that takes 2-5 seconds when it works. Now 30s base - 2 min Debug,
+30s Release - and it names each file and its percent instead of relying on the graph's form text.
