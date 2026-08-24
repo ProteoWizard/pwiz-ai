@@ -829,3 +829,61 @@ fail; do not reason about what a passing run "must" do.
 **Also changed**: the wait in this test was 12 minutes in Debug (`WAIT_TIME` 180s x4 from
 `GetWaitCycles`) for an operation that takes 2-5 seconds when it works. Now 30s base - 2 min Debug,
 30s Release - and it names each file and its percent instead of relying on the graph's form text.
+
+### 2026-08-24 - session end: the master PR, and the next failure in line
+
+**PR [#4610](https://github.com/ProteoWizard/pwiz/pull/4610)** is open against master with the
+test-stability work that is not net8-specific, in checkout `C:\proj\daily` on branch
+`Skyline/work/20260824_test_stability_master`. It was fully green on TeamCity (1,736 Skyline tests)
+before the last two pushes; CI on the final push had not reported when the session ended.
+
+**What is on it**: the MIDAS loader gate, the Docker worker teardown fixes, tool-extraction
+lock-holder naming and CRC skipping, PooledFileStream diagnostics, two stale-state test waits, the
+re-authored unattended-dialog watchdog with its verifier, the wait-timeout thread dump with its
+verifier, and the stale-progress fix below. The Waters mock fix was deliberately left out in favour
+of rita-gwen's [#4603](https://github.com/ProteoWizard/pwiz/pull/4603), which is now merged.
+
+**Checkout note that cost time**: this work is in `C:\proj\daily`, NOT `pwiz-work1`. Master's
+`ProteowizardWrapper` needs the native `pwiz_data_cli.dll`, and `daily` was the only checkout that
+was both master-based and already had it. `pwiz-work1` stays on the net8 branch.
+
+**Issue [#4609](https://github.com/ProteoWizard/pwiz/issues/4609)** filed and assigned to
+rita-gwen: replace the waters_connect HttpClient wrappers with `HttpClientWithProgress`. It lists
+what gets deleted when that lands, so the #4603 workaround does not outlive its reason.
+
+## The next failure in line: TestMultiInjectionReplicates
+
+Found by Brendan in a 5,868-execution run of 4 tests x 5 languages: **1 failure**, a different test
+and a different subsystem from the one fixed today.
+
+```
+Total complete: 100%   <- all four files, so the progress display is now correct
+Settings.MeasuredResults Not all chromatogram sets are loaded -
+  No ChromFileInfo.FileWriteTime for ...Std_6\SP_Std6_01.mzML, ...SP_Std6_02.mzML
+```
+
+The import COMPLETES, but two of four `ChromFileInfo` entries never receive a `FileWriteTime`, so
+`ChromatogramSet.IsLoaded` (`Chromatogram.cs:529`) stays false forever and `WaitForDocumentLoaded`
+times out. The two are both injections of the SAME replicate, which points at the multi-injection
+path rather than random file loss.
+
+**Not caused by this branch, established rather than assumed:**
+
+* the progress fix is display-only and cannot set `FileWriteTime`
+* the `FileWriteTime` path is `ChromCacheBuilder.cs` / `ChromHeaderInfo.cs` / `Chromatogram.cs`,
+  none of which this branch changes
+* the one plausible link - the `LibraryManager.StateChanged` narrowing - is a no-op for this
+  document: it has NO libraries and NO MIDAS, so `LoadBackground` hits
+  `!changed && !newMidasLibSpec && !failedMidasFiles.Any()` and returns without touching the
+  document. The removed wake-up only ever started a thread that did nothing
+
+Nor is it "unmasked" by the fix - unmasking would need the same test or code path. Rate is 1 in
+5,868 against the 12-16% fixed today, a different order of magnitude.
+
+**Recommended approach, NOT the one used today.** At ~15 minutes per occurrence (default 720s
+wait) and 1 in 5,868, do not soak-and-instrument this the way TestMultiInjectRescore was chased.
+Cut the wait first, then run a control on `origin/master` at equal scale to settle causation by
+measurement instead of by argument.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260824_test_stability_master.md` before starting work.
