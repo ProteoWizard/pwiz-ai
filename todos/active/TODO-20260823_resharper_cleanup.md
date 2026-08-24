@@ -32,6 +32,64 @@ measured against. Merging `pwiz-sharp` directly would pull #4590 into the #4587 
 if that commit is wanted down here, fast-forward `net8_port` to `pwiz-sharp` first so
 the PR base moves with it.
 
+## Two branches, both LOCAL ONLY (2026-08-24)
+
+Neither has been pushed. Push both before doing anything that could lose them.
+
+| Branch | Base | Commits | Purpose |
+|---|---|---|---|
+| `Skyline/work/20260823_resharper_cleanup` | `20260818_commonutil_winforms_split` | 12 | the net8-port work: build fixes, test fixes, ReSharper cleanup |
+| `Skyline/work/20260824_webclient_prohibition` | `origin/master` @ `ecf53f8859` | 1 | the master-applicable split, for its own PR |
+
+The plan Brendan set: land the master branch as its own PR, then pull it into
+PR #4178, and from there into PR #4587.
+
+### What went into the master branch, and what deliberately did not
+
+**Included** (6 files): `Server.cs`, `DownloadDlg.cs`, `DownloadProgressMonitor.cs` (new),
+`DiannSearchLFQbenchTest.cs`, `CodeInspectionTest.cs`, `SkylineBatch.csproj` - the
+WebClient completion plus the prohibition that enforces it.
+
+Two adaptations master needed that the port branch did not:
+
+- **Master is C# 7.3.** Its batch csprojs are legacy with no `LangVersion`, so
+  target-typed conditionals are unavailable: `size > 0 ? size : null` had to become
+  `size > 0 ? size : (long?)null` again.
+- **Legacy csproj lists sources explicitly.** `DownloadProgressMonitor.cs` needed a
+  `<Compile Include>` entry. SDK-style globbing on the port branch hid that.
+
+**Excluded, by category** - this is most of the other 36 files:
+
+| Category | Why it cannot go to master |
+|---|---|
+| `CommonBaseUI/*` | **the project does not exist on master** - the WinForms split creates it |
+| redundant cast / delegate fixes (`SpectrumMetadata`, `ImmutableList`, `FilePathControl`, `FileUtil`, `LongWaitDlg`, `Helpers`) | need C# 9 target-typed conditionals / C# 10 natural-type lambdas. **Master is C# 7.3 - these would break the build** |
+| `*.csproj` MSTest NuGet changes | master's test projects are legacy csproj where the VS QualityTools reference resolves; the fix only exists because the port made them SDK-style |
+| `#if NET472` scaffolding, `Cast<T>` suppressions, `AutoQCStarter` CodeBase change | multi-targeting artefacts; master is net472-only so they are meaningless or wrong there |
+| DNS classification fix | its net8 arm is dead code on master |
+
+**Master-applicable but NOT yet ported** - the obvious next tranche, all real fixes to
+code master shares: the modal-dialog `FunctionalTest` guards in both `Program.cs` files,
+the `RInstallations` null-`RDirs` NRE fix, the `SkylineInstallations` test seam, both
+`*TestSetup.cs` files, `GetSkylineDir` Debug probing, and the `CheckConfigs` diagnostic.
+Roughly 10 files, each needing the same C#-level and legacy-csproj check applied above.
+
+### Two hazards for whoever continues
+
+1. **`CodeInspection` is unverified against master.** It was verified thoroughly on the
+   port branch - proven to fire, and proven to reach AutoQC, SkylineBatch and SharedBatch
+   by planting markers - but on master `ProteowizardWrapper` needs the native
+   `pwiz_bindings_cli`, which `C:\proj\pwiz` has never built (it builds the net8
+   `pwiz-sharp` path instead). Verify in a checkout with the native build, or in CI.
+2. **Stale `obj/` when switching between these branches.** The first master build failed
+   with *"Your project does not reference .NETFramework,Version=v4.7.2"* because
+   `CommonUtil`'s `project.assets.json` still described the multi-target project. Deleting
+   `obj` directories under `pwiz_tools\Skyline` and `pwiz_tools\Shared` fixes it (39 of
+   them the first time). Expect this on every switch.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260824_webclient_prohibition.md` before starting work.
+
 ## Goal
 
 Stated 2026-08-23 by Brendan, as a **prerequisite for merging the .NET 8.0 repo port**:
