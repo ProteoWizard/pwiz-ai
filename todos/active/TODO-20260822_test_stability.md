@@ -646,3 +646,37 @@ Four separate defects, all with the same symptom - code that was fixed appeared 
 
 The through-line: nothing told anyone which binaries were actually running. Every one of these
 was invisible until someone compared timestamps by hand.
+
+### 2026-08-24 - session end: one failure left, and the question to answer next
+
+Last measured run: 8,000 executions in 80 minutes, ONE failure (TestMidas). For comparison the
+2026-08-21 baseline was 46 failures in 48,272. TestAuditLogTutorial is gone after the ordering
+fix; Waters, dotp, DDA extraction and the Debug library build all stayed clean.
+
+**The goal to hold the next session to**: parallel testing that survives a full night. The bar is
+what SkylineNightly already achieves SERIALLY - about 20 sessions of 9-12 hours with nothing
+failing. Nobody has held parallel testing to 9 hours. 80 minutes is the current high-water mark.
+
+**TestMidas is a product defect, not a test bug**, traced to the line:
+`SrmDocument.ChangeSettings` -> `UpdateResultsSummaries` (parallel) -> `CalcResultsForReplicate`
+-> `ChromatogramGroupInfo.GetTransitionPeak` -> `ReadPeaks` -> `ChromatogramCache.CallWithStream`
+-> `PooledFileStream.Connect`, where the per-file partial cache `...testing 2_1.wiff.skyd` no
+longer exists. A `ChromatogramCache` reachable from the document still points at a partial that
+was joined and deleted. It needs the pooled stream to have been EVICTED (otherwise it uses its
+open handle and never revalidates) AND a settings change to recalculate at that moment, which is
+why only parallel load surfaces it.
+
+**The question that should drive the next session, from the developer:** why does TestMidas hit
+this when so much other results-loading test code does not? Lead: MIDAS imports three samples
+(MIDAS1/2/3) out of ONE multi-sample WIFF, so several per-file partial caches come from a single
+source file, where most tests import one file per replicate. Establish whether partial-cache
+lifetime differs for multi-sample sources BEFORE editing cache code. This is load-bearing code
+where a mistake loses data rather than failing a test. Rejected approaches: making the cache fail
+soft (hides real corruption) and pinning the stream in the pool (treats the symptom).
+
+Both remaining product defects - this one and the graph update queue dropping a pane without
+updating it (`SkylineGraphs.cs:879-880` with `GraphSummary.cs:359-361`) - were deliberately left
+for review rather than changed unattended.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260822_test_stability.md` before starting work.
