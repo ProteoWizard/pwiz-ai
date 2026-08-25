@@ -135,6 +135,71 @@ This converges the branches so whichever PR merges first, the other's
 conflict resolution is mechanical (his BaseFileDialogNE hunks become
 redundant).
 
+### 2026-08-21 - Nightly failure: second-run state leak via pooled HttpClient handler
+
+PR #4331 merged 2026-08-19 (43b5aaf06); first nightlies (8/20-8/21) failed
+TestWatersConnectExportMethodDlg 4x, always "Pass 1 (fr)": WaitForConditionUI timeout
+"Template selection dialog is not populated" at WatersConnectMethodExportTest.cs:218.
+(LabKey MCP was 401 - server security tightening - so failure data came via browser
+session on skyline.ms.)
+
+Root cause (reproduced locally, en-only loop=2 fails identically - fr is irrelevant,
+it is just the nightly's second pass): WatersConnectAccount's static IHttpClientFactory
+pools the primary handler pipeline for its default 2-minute lifetime, so the second
+in-process run's CreateClient serves the FIRST run's MockHttpMessageHandler, whose
+closures still hold that run's created-folder state. Diagnostic dump proved it:
+FolderA listed 13 items (NewTestFolder + RefreshedFolder + 11 methods) instead of 11.
+
+Fix: HttpMessageHandlerFactory.GetRegisteredHandler + GetAuthenticatedHttpClient
+builds the client directly on a registered mock (bypassing the pool); production
+path (no registered handler) unchanged. Regression guard VerifyHandlerReplacement
+runs in a single pass (red on old code even in en), so TeamCity's en-only run
+guards it too. Also NavigateIntoFolderA's timeout message now dumps the actual
+listing.
+
+Red->green verified locally (Debug, pwiz1):
+- old code, en,fr: fr (pass 2) fails - reproduces the nightly failure
+- old code, en loop=2: second en pass fails identically - language irrelevant
+- old code + new guard, single en pass: guard FAILS ("previously installed
+  handler is still being served") - red confirmed
+- fixed code, en,fr: both pass - green confirmed
+Committed as `1be6389d00` on `Skyline/work/20260821_watersConnectMockHandler`
+(pwiz2, off origin/master 51ec80a968; module: skyline): HttpMessageHandlerFactory.cs,
+WatersConnectAccount.cs, WatersConnectMethodExportTest.cs. Re-verified in pwiz2
+before commit: build green, en+fr passes green. pwiz1's copy of the changes
+reverted (DPI work untouched). Pending before push: /code-review, QuickInspection
++ CodeInspection test; then PR.
+
+/code-review max (2026-08-21): 10 findings. Applied 5: removed unnecessary
+_createdFolders.Clear() (ordering trap for VerifyRefresh), ConcurrentDictionary
+in HttpMessageHandlerFactory (session-creation reads race test-thread writes),
+corrected "last-used folder" comment (dialog opens in the TEMPLATE's folder,
+ExportMethodDlg.cs:1274), install-time build of the augmented mock listing
+(fail fast instead of HTTP 400 + misleading timeout), restore standard handler
+at end of VerifyHandlerReplacement. Documented 1: the guard's 2-minute pool
+lifetime premise (intrinsic to the bug; guard runs well inside it). Deferred 4
+as follow-ups for team consideration (pre-existing conditions, out of scope
+for a nightly fix):
+- Production CreateClient path now never exercised by offline tests; no null
+  guard on _httpClientFactory.
+- Handler registry is process-lifetime; no RemoveHandler/teardown scoping.
+- Authenticate() consults the static token cache before the mock factory, so a
+  replaced AUTH handler can be masked (tests work around via
+  _authenticationTokens.Clear()).
+- Deeper design: one per-name proxy handler resolving the current registration
+  per request would remove the dual mock-injection paths entirely.
+
+Pre-push gate green (2026-08-21): build + TestWatersConnectExportMethodDlg
+en,fr + QuickInspection (0/0 after adding a null guard for the fixture's
+readOnlyProperties, flagged as possible NRE) + CodeInspection test. Review
+fixes amended into `1057dcaa57` (was 827562bcd9). Branch commits:
+`1be6389d00` (fix), `1057dcaa57` (review + inspection fixes). Pushed; PR
+https://github.com/ProteoWizard/pwiz/pull/4603 (module: skyline). Pending:
+TeamCity green, Copilot/human review.
+(Correction: the Skyline-daily processes that blocked builds were the
+developer's own instances from another task, not test leftovers - always ask
+before stopping Skyline* processes.)
+
 ### 2026-06-30 - Fixed code-inspection failure after master merge
 
 TeamCity ReSharper build #18696 failed with 2 LocalizableElement warnings: the 'NewTestFolder'
