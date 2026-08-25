@@ -46,6 +46,20 @@
             ]
           }
         ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/Deny-CodeReviewInAiRepo.ps1"
+            ]
+          }
+        ]
       }
     ],
     "SessionStart": [
