@@ -155,6 +155,35 @@ and pushed to draft PR #4602.
 Follow-up noted: FilesTree never applies TextZoom to its FONT (only
 row height) - pre-existing inconsistency, left alone in this slice.
 
+## Persisted geometry package (2026-08-25)
+
+Implemented on the branch:
+- Main window (`Skyline.cs`) and Library Explorer (`ViewLibraryDlg`)
+  Size + ViewLibrary SplitterDistance now persist in 96-DPI logical
+  units via DpiUtil (locations stay physical screen coords, clamped
+  by ForceOnScreen). New int overload `ScaleToLogical(Control,int)`.
+- Floating-window px floors scaled: FormGroup 600x440, audit log 800.
+- DigitalRune .view transform: `NormalizeDockLayoutFile` (post
+  SaveAsXml, pre Commit) divides FloatingWindow Bounds w/h by the
+  factor; `DenormalizeDockLayoutStream` (pre LoadFromXml) multiplies.
+  Positions untouched (physical; EnsureFloatingWindowsVisible clamps).
+  Failure-safe: transform errors fall back to untransformed data.
+  UTF8Encoding(false) used per CodeInspection rule.
+
+Verified live at 150% (driver-scripted): Audit Log floating window
+opened at 1200x660 (both scaled floors), saved as "800, 440" logical
+in the .view, reopened at exactly 1200x660; legacy FloatingWindow
+entries round-trip byte-identical (no drift); main window size stable
+across launches. Layout-path tests green at 96 DPI
+(TestTreeRestoration, TestSummaryGraphVisibility,
+TestDocumentFileLocking, TestFilesTreeForm - transforms inert at
+factor 1).
+
+Transition note: sizes saved in DEVICE px by post-flip/pre-package
+builds (branch users only, Aug 20-25 window) get a one-time x1.5
+inflation on first restore, then stabilize. Release-build users come
+from DPI-unaware (=logical) values and are unaffected.
+
 ## DigitalRune refinement (2026-08-21)
 
 Dissected a real .sky.view: the docked layout is stored as FRACTIONS
