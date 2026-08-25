@@ -5377,5 +5377,337 @@ that 3 min excludes them.)
 - `chambem2/pwiz-sharp` and this branch are mirrored again (both at the same commit) after
   cherry-picking #4590 and one force-with-lease push.
 
+## 2026-08-24: Merged master, and ported the disordered-m/z fix to pwiz-sharp
+
+Merge of `origin/master` (9 commits, merge-base `43b5aaf064`) into the branch, plus the C#
+mirror of the one incoming C++ product change.
+
+### The merge itself was cheap; the C++ delta was not
+
+Three conflicts, all csproj (`Skyline`, `TestData`, `TestFunctional`), all whole-file - the net8
+SDK csprojs share no context with master's enumerated ones. Master's change to each was a single
+`<Compile>`/`<None>` item addition (`ToolsUI\GraphElement.cs`, `UnsortedMzArraysMzml.zip`,
+`LayoutExportImportTest.cs`), every one of which the net8 csprojs glob. Resolved to **ours** per
+the standing playbook, with the three files confirmed present in the tree.
+
+The four uncommitted ZT Scan cpp files were verified **byte-identical to `origin/master`** before
+being discarded - PR #4598 landed as `66b7be6d1e`, so the merge brings them back unchanged.
+
+### `641602c20d` (disordered m/z arrays on read) needed a real port
+
+cpp added `SpectrumListBase::ensureMzAscending` + the free `hasNonMzOrderingAxis`, called from the
+mzML/mzXML/mz5/MGF/MSn/BTDX lists. Mirrored into `SpectrumListBase` (`ISpectrumList.cs`) with the
+same two-verdict asymmetry (one out-of-order spectrum condemns a file; only a spectrum with more
+than 10 peaks may vouch for one), the same exemption list, and a stable sort that carries every
+per-peak array - double and integer - along with the m/z axis. `boost::atomic` became
+`Interlocked` over an int; `sort_together` became a tie-broken-on-index `Array.Sort` permutation.
+
+**Three places the port is not a transcription:**
+
+- **The mzML parallel-decode batch path.** cpp calls `ensureMzAscending` once at the end of
+  `spectrum()`; the port's `ReadOne` returns spectra whose binary arrays are still empty, because
+  `FillBatch` defers every decode to `DecodeInParallel`. A call there would read no peaks, learn
+  nothing and reorder nothing, so it goes at each of `GetSpectrum`'s three exits instead.
+- **The eager fallbacks.** cpp's mzML/mzXML lists build their own index when a file has none, so
+  one lazy list covers both cases. The port instead parses the whole file into a
+  `SpectrumListSimple` when there is no index footer - and **the Skyline fixture
+  `DataConvert5_unsorted_mz.mzML` is not indexed**, which is exactly the shape a third-party
+  writer emits. Added `EnsureMzAscendingThroughout` and called it from the mzML, mzXML and mzMLb
+  eager paths. Without it the fix would have missed the very files it exists for.
+- **MGF/MSn/BTDX are materialised up front** rather than served lazily, so the repair happens as
+  each spectrum is added (MSn, BTDX) or on access (MGF, where re-checking is bounded because a
+  repaired array now ascends and stops at the first test).
+
+**One deliberate cpp divergence, verified harmless.** cpp's `Spectrum::getMZArray()` matches
+`MS_wavelength_array` as well as `MS_m_z_array`, which is why `hasNonMzOrderingAxis` needs a
+wavelength arm. The port's `GetMZArray()` matches only `MS_m_z_array`, so a diode-array trace
+stops one step earlier - at having no m/z array at all. **Same outcome** (left alone, settles
+nothing), so the arm is kept for the day `GetMZArray` is brought in line, and both the method's
+doc comment and the test say so. This surfaced as the single red case on the first test run.
+
+**`DiffConfig::ignorePeakOrder` was NOT ported.** It exists in cpp to keep its own mz5/MGF
+round-trip tests green once reads are reordered - mz5's delta encoding and MGF's ten-significant-
+digit m/z each destroy ties that existed on the other side. All 85 `MsData.Tests` pass without it,
+so nothing in the port needs it yet; noted here rather than ported speculatively.
+
+### The exclusion hid one real product bug, and three genuine gaps
+
+`TestData.csproj` excluded `PwizFileInfoTest.cs` wholesale on net8 for a `GetScanDescription`
+gap. That reason is **stale** - the sandbox wrapper has since grown it (`MsDataFileImpl.cs:1919`)
+and `TestScanDescription` passes. But the exclusion was doing more than its comment claimed: it
+was also swallowing master's brand-new `TestUnsortedMzArrays`, which is why the first attempt to
+run that test reported "No tests found" rather than a failure - a much more confusing signal.
+
+Compiling the file back in and running all seven: **4 pass, 3 fail**, and the three name three
+distinct gaps.
+
+**Fixed - Mobilion was never registered at all.** `TestInstrumentInfo` first died on *No
+registered reader recognized the file: ...mbi*. `MsDataFileImpl.Vendors.cs` registers vendor
+readers into `ReaderList.AdditionalReaders` from a `[ModuleInitializer]`, and its list had Thermo,
+Waters, Sciex, Shimadzu, Agilent, Bruker, UIMF and UNIFI - **but not Mobilion**, which
+`ProteowizardWrapper.csproj` also never referenced. Nothing marked the omission deliberate; the
+reader exists and builds. **Skyline on net8 could not open a `.mbi` file at all**, and the only
+test that would have said so was excluded from the build. Fixed with the missing
+`ProjectReference` plus one `TryAdd`; `TestInstrumentInfo` now gets past the `.mbi` file.
+
+**Still open - three gaps, left excluded rather than left red:**
+
+1. **Reader type-name parity** (`TestAgilentSourceType`). pwiz-sharp reports `"Agilent"` where cpp
+   reports `"Agilent MassHunter"`, and `MsDataFileImpl.IdentifyReaderType` hands that string
+   straight to `DataSourceUtil`. Not a one-word rename - a systematic divergence:
+
+   | pwiz-sharp | cpp |
+   |---|---|
+   | `Agilent` | `Agilent MassHunter` |
+   | `Sciex` | `Sciex WIFF`, `Sciex WIFF2` |
+   | `Bruker` | `Bruker Analysis/BAF/TDF/TSF/YEP/FID/U2` |
+   | `Waters` | `Waters RAW` |
+   | `Mobilion` | `Mobilion MBI` |
+   | `MGF` | `Mascot Generic` |
+   | `MSn` | `MS1`, `MS2` |
+   | `mz5` | `MZ5` |
+
+   pwiz-sharp folds cpp's per-format readers into one reader per vendor, so there is no 1:1
+   mapping: the format-specific name has to be derived from the file that was identified. This is
+   the same class of bug as issue #4510 (Bruker FID source type), so it is user-visible in the
+   import dialogs, not just in a test.
+2. **mzXML instrument model comes back empty** (`TestInstrumentInfo`) for the MzWiff-generated
+   `051309_digestion-s3.mzXML`; expected `4000 Q Trap`.
+3. **TIC chromatogram count** (`TestTicChromatogram`): a vendor file reports 15 chromatograms
+   where 1 is expected.
+
+The exclusion was restored with all of the above written into the csproj comment, so the next
+person to look does not have to rediscover it. The cost is that master's `TestUnsortedMzArrays`
+does not run on net8; the behavior it covers is covered instead by pwiz-sharp's own
+`MzOrderingTests`, which is the layer the repair actually lives at.
+
+Worth generalising: an exclusion added to get a suite green stops being a to-do the moment nobody
+re-checks it. This one outlived its stated reason, and in the meantime absorbed both a new
+upstream test and a shipped-product gap.
+
+### Verification
+
+- `MsData.Tests`: **85/85**, including the new `MzOrderingTests` mirroring all eleven cpp cases
+  from `SpectrumListBaseTest.cpp` (consolidated into one `[TestMethod]` per the testing rules).
+- Skyline net8 build: clean, 0 errors.
+- Skyline **pass0 build check (CommonTest + Test + TestData): 624 tests, 0 failures** - the real
+  regression surface for a reader change, and it includes `CodeInspection` (green, so no line
+  ending / BOM / style violations in any of the edits).
+- `TestUnsortedMzArrays` passes when compiled in, with the warning firing at
+  `channel=2 process=0 spectrum=2 scan=2` - i.e. the short ordered first spectrum correctly failed
+  to settle the file and the disorder was caught on the next one.
+
+### Two harness traps worth recording
+
+- **`cmd /d /c "cd /d <dir> && call foo.bat"` through the Bash tool silently ran nothing** - it
+  returned exit 0 having printed only the CLINK banner. Writing a `.bat` in the session temp dir
+  and invoking it via the PowerShell tool works. The handoff's `/d` advice is necessary but not
+  sufficient when the command crosses Git Bash quoting.
+- **cmd here does not search the current directory for executables.** `TestRunner.exe ...` after a
+  `cd /d` gives "not recognized"; `.\TestRunner.exe` works. That failure mode reads exactly like
+  the sandbox blocking `.bat` files, which is what sent the first diagnosis the wrong way.
+- **`ai/scripts/fix-crlf.ps1 -Path <file in a sibling checkout>` reported "All converted to CRLF"
+  and converted nothing.** Verify with a byte count, not the script's own summary.
+
+## 2026-08-25: A stale test exclusion was hiding eight bugs
+
+Continuation of the merge session above. Re-enabling one excluded test file turned into eight
+pwiz-sharp fixes, and the way each stayed hidden is more instructive than the fixes themselves.
+
+### `Spectrum.GetMZArray` now matches cpp
+
+cpp's `getMZArray()` returns a `MS_wavelength_array` as well as an `MS_m_z_array`
+(MSData.cpp:757-766); the port matched only m/z. Brought in line, which turned the
+`MS_wavelength_array` arm of `HasNonMzOrderingAxis` from unreachable code into a live guard -
+a diode-array trace now reaches the test that exempts it instead of stopping earlier at
+"no m/z array". Same observable outcome either way, which is why it was invisible; the arm is
+only correct *because* GetMZArray now behaves like cpp's.
+
+### `PwizFileInfoTest`: one stale exclusion, six gaps under it
+
+`TestData.csproj` excluded the file for a `GetScanDescription` gap that the sandbox wrapper had
+since closed. Compiling it back in exposed, in order of discovery:
+
+1. **Mobilion was never registered as a vendor reader.** `MsDataFileImpl.Vendors.cs` lists eight
+   vendors from a `[ModuleInitializer]` and omitted it; `ProteowizardWrapper.csproj` never
+   referenced the project either. **Skyline on net8 could not open a `.mbi` file at all.**
+2. **Reader type names did not match cpp.** `Agilent`->`Agilent MassHunter`, `Waters`->`Waters
+   RAW`, `Mobilion`->`Mobilion MBI`, `mz5`->`MZ5`, `MGF`->`Mascot Generic`, plus `IdentifyType`
+   overrides for the two readers that fold several cpp readers into one (`Sciex WIFF`/`WIFF2`,
+   `MS1`/`MS2`), following the pattern `Reader_Bruker` already used. `IdentifyReaderType` hands
+   these straight to `DataSourceUtil`, so this is user-visible in the import dialogs - the same
+   class as issue #4510.
+3. **Bruker global TIC ignored `GlobalChromatogramsAreMs1Only`.** cpp builds its CompassData
+   handle with `preferOnlyMsLevel` and passes only the MS1-only flag to `getTIC`/`getBPC`, so the
+   two compose. The port used the spectrum filter alone: a 6-frame PASEF run reported 15 TIC
+   points where Skyline expects 1.
+4. **mzXML instrument model was stored where no consumer looks** - on a `ParamGroup`, but
+   `UserParam(name)` is non-recursive in both cpp and C#, so Skyline's fallback found nothing.
+   Now mirrors `LegacyAdapter_Instrument::manufacturerAndModel`.
+5. **mzXML instrument categories were left as vendor shorthand** - ionization read `ESI` where
+   every other format reports `electrospray ionization`. Ported `LegacyAdapter_Instrument::Impl::set`.
+6. **`GetNonUnicodePath` never shortened a Unicode file name** - it gated on `Directory.Exists`
+   where cpp gates on `bfs::exists` and PathEx checks both. The one case the conversion exists for.
+
+`DataFileMemoryLeakTest` was excluded beside it for a `ConfigInfo` gap that was *also* closed.
+Both tests pass. **`TestData.csproj` now has zero `Compile Remove` entries.**
+
+### Two more found only by running in parallel
+
+7. **Thermo had the same TIC bug as Bruker.** No source file under `src/Vendor/Thermo/`
+   referenced `GlobalChromatogramsAreMs1Only`. cpp expresses it as a scan filter - `"Full ms"`
+   vs `""` (ChromatogramList_Thermo.cpp:400-401) - so the port sets
+   `ChromatogramTraceSettings.Filter` the same way. A 99-scan file reported 99 TIC points where
+   30 MS1 scans are expected.
+8. **The VC++ runtime did not reach a plugin subfolder.** Sciex's `wiff2/SQLite.Interop.dll`
+   failed with `0x8007007E` in the containers. `VendorNativeCrt.targets` already stages the CRT,
+   and it *was* in the output root - but .NET loads a native library given a full path with
+   `LOAD_WITH_ALTERED_SEARCH_PATH`, which substitutes the DLL's own directory for the application
+   directory in the search order, so the root copy is never searched from `wiff2/`. Both wiff2
+   staging targets now copy `@(VendorNativeCrtFile)` in beside it (3 -> 53 files); the rule is
+   documented in `VendorNativeCrt.targets` for the next plugin folder.
+
+### `ignorePeakOrder` did need porting after all
+
+Judged unnecessary on the evidence of 85/85 `MsData.Tests` - too narrow a basis. The Bruker
+combined-IMS **MGF round trip** is its motivating case: MGF drops the mobility array, so the
+re-read copy is repaired into m/z order while the vendor-read original is deliberately left
+alone. Ported the config flag and cpp's value-based peak pairing; Bruker went 11/14 -> 14/14. It
+also covers a case cpp's flag does not: Sciex `simAsSpectra` through the port-only mzMLb round
+trip, since SIM-as-spectra is transition-ordered and pwiz deliberately does NOT exempt it.
+
+### The lesson worth keeping: green is not the same as run
+
+**Four of `PwizFileInfoTest`'s eight tests early-return under `Program.NoVendorReaders`, and
+pass0 sets it.** In every `pass0=on` run they reported "0 failures" while executing nothing -
+which is how a claim that all eight passed got made on the strength of runs where half of them
+no-opped. `TestTicChromatogram`'s Thermo bug survived two layers of this: excluded from the
+build, then a no-op once compiled. It surfaced only in the pass1 leg of a parallel run, which
+runs those tests with vendor readers live.
+
+A test-disabling survey of the whole Skyline tree found the net8 port had disabled remarkably
+little - the perf skiplist, the ~18 commented-out `[TestMethod]`s and every `NoNightlyTesting`
+attribute are byte-identical to master, and there are no `[Ignore]` attributes anywhere. The
+compile-time exclusions were the small part. **The runtime skip guards are the ones that hide
+things**, because a no-op reports as a pass:
+`SkipSmallMoleculeTestVersions()` (16 sites), `NoVendorReaders` (4), `EnableArdiaTests` (7),
+`HasKoinaServer()` (4), `IsRunningOnWine` (2) - all upstream, none net8-added.
+
+Also worth knowing: `TestPerf` and `TestTutorial` build and target net8 but are **not** in
+`build.bat`'s `BUILD_TARGET`, so per-commit CI never runs them.
+
+### Code review triage (9 applied, 2 rejected)
+
+A `/code-review` over the working tree surfaced 11 findings. Nine were applied; two were wrong
+and are recorded here so they are not "re-found" next time.
+
+**Two real correctness bugs.**
+
+1. *mzXML `LTQ Orbitrap XL` was being given the wrong analyzer term.* The CV lists `FTMS` as an
+   exact synonym of `MS_FT_ICR`, so translating the raw `msMassAnalyzer` string stamped FT-ICR on
+   an orbitrap. cpp guards this with an explicit rewrite of `FTMS` -> `orbitrap` for that model,
+   applied *after* the model is set - which is why `ReadInstrument`'s ordering had to change too
+   (components appended, then manufacturer/model, then the legacy category translations). This
+   turned a missing term into a *wrong* term, which is worse than the gap it replaced.
+2. *`WarnOnce` was not thread-safe.* `HashSet<int>.Add` from the mzML parallel decode threads can
+   tear. Now under `lock (_warned)` with the add's return value read inside the lock.
+
+**One structural fix.** The eager peak-order repair was living in the three reader *adapters*, so
+anything calling `MzmlReader.Read` / `MzxmlReader.Read` directly bypassed it - including the
+vendor test harness. cpp puts its single call inside `SpectrumList_mzML::spectrum`, serving
+indexed and non-indexed alike; moved into the readers to match. A comment of mine asserting the
+adapters were the only entry point was simply false.
+
+**~45 lines of dead code removed.** `DiffConfig.IgnorePeakOrder` (the property, not the feature)
+was never set by anything, and had it been wired it would have compared *unpermuted* charge/SNR
+arrays against *permuted* m/z. Deleted along with `PairPeaksForComparison` / `Reordered`. The
+live path is `TryPairPeaks`, reached through `DescribeSpectraDataOnly(..., ignorePeakOrder)`.
+
+**Rejected, with evidence:**
+
+- *"Only Bruker and Thermo honour `GlobalChromatogramsAreMs1Only`."* False - Agilent
+  (`Reader_Agilent.cs:258`), Sciex (`Reader_Sciex.cs:248`), Shimadzu (`Reader_Shimadzu.cs:63`)
+  and Waters (`Reader_Waters.cs:61`) all read it.
+- *"Bruker's msLevel array desyncs from the chromatogram when the MS1-only flag is set."* That is
+  cpp's own behaviour: it keys `msLevelArray->data[i-1]` positionally off `getMSSpectrum(i)` too,
+  and explicitly suppresses its own count-match assertion when the flag is set. Changing it would
+  diverge from the reference mzMLs the vendor tests compare against.
+
+The Bruker flag is *composed*, not substituted: `_globalChromatogramsAreMs1Only && _preferOnlyMsLevel != 2 ? 1 : _preferOnlyMsLevel`.
+An earlier version had it replace `preferOnlyMsLevel` outright, which broke the `-ms1-centroid`
+tiers (50 chromatograms where 20 were expected).
+
+### Two defects the post-review test run found
+
+**1. The review's own reader fix regressed `Reader_Sciex_..._simAsSpectra` (7/8).** Moving the peak
+repair out of the adapters and into `MzmlReader` also caught the harness reading its *golden
+reference*, so the reference was sorted on read while the vendor side under test kept the vendor's
+order. Decoding the reference settles what happened:
+
+    on disk:        m/z [127, 249, 195, 131, 153]   <- SIM transition order, 5 peaks
+    after repair:       [127, 131, 153, 195, 249]   -> data[1] = 131
+    vendor read:                                       data[1] = 249
+
+The reader change is right - cpp's `hasNonMzOrderingAxis` exempts SRM and CRM and *deliberately not
+SIM*, so cpp sorts this file too. The fix is on the harness side: `MzmlReader.RepairPeakOrder`,
+default true, set false only for reading golden references. A reference is compared **as stored**;
+normalizing it both breaks legitimately transition-ordered fixtures and costs the test the ability
+to notice a vendor reader that *started* sorting output the reference says is unsorted.
+`DiffConfig.IgnorePeakOrder` was deliberately NOT reinstated - ignoring order accepts any
+permutation and loses more than it buys.
+
+It took **two** sites. Fixing the reference read moved the failure to the mzXML round-trip leg,
+which repairs the round-tripped copy the same way; `ignorePeakOrder` there was keyed on
+`CombineIonMobilitySpectra` only. The mzMLb leg already had `|| config.SimAsSpectra` - the mzXML
+leg was missed when that was first added. MGF needs no entry (MS2+ only, and SIM is MS1).
+
+**2. `TestImportFullScanNarrowScanWindows` fails on the Docker workers, and predates this work.**
+`Unable to load DLL 'hdf5' or one of its dependencies (0x8007007E)`. `ERROR_MOD_NOT_FOUND` is a
+missing *dependency*: hdf5.dll's import table (dumped from the staged binary, not assumed) lists
+`VCRUNTIME140.dll` plus the UCRT apisets, and the container has no redistributable. HDF.PInvoke
+ships it as a NuGet native asset under `runtimes\win-x64\native\`, and `LOAD_WITH_ALTERED_SEARCH_PATH`
+searches *that* folder rather than the output root where the CRT lives - the same subfolder rule
+`VendorNativeCrt.targets` already documents for Sciex's `wiff2\`. That targets file now copies
+`@(VendorNativeCrtFile)` into `runtimes\win-x64\native\` too.
+
+Note the targets file's comment claims the root-level CRT copy fixed mzMLb in containers. It cannot
+have: there is no `hdf5.dll` in the output root at all, only under `runtimes\`. The comment
+overstates what was fixed, and this test has most likely been red on the workers ever since. CI is
+sequential, so it never showed there - the same blind spot that hid the Thermo TIC bug.
+
+### Verification
+
+Re-run end to end after the code review and the two defects above (2026-08-25):
+
+- Skyline full suite (parallel, 8 Docker workers): **1100 tests, 0 failures**, 11m42s.
+- Skyline pass0 build check (French, small-molecule versions on): **634/634**.
+- Skyline localized ja/zh import: **36 runs, 0 failures**. pass1 functional subset: **59 runs,
+  0 failures** - including `TestTicChromatogram` and `TestInstrumentInfo`, the leg that originally
+  exposed the Thermo `GlobalChromatograms` and SQLite CRT bugs, so those hold with vendor readers
+  live. `build.bat` exited 0 on all four legs.
+- pwiz-sharp: Sciex **8/8**, MsData 85, Analysis 173, Waters 67, Bruker 43, Agilent 36, Thermo 21,
+  MsConvert 17, Common 58, and the rest green.
+- The hdf5/mzMLb fix was confirmed **inside a worker container** rather than inferred from the
+  suite: `docker run ... chambm/always_up_runner ... test=TestImportFullScanNarrowScanWindows`
+  passes (fr + en) where it previously threw `DllNotFoundException: hdf5`. The suite passing is
+  not sufficient evidence on its own - the test can land on the host worker, which has the
+  redistributable installed and passes either way.
+- Environmental, not product: 69 BiblioSpec tests whose inputs are absent and untracked here, and
+  the UNIFI harness against Waters' live demo server.
+- One `!!! TestInstrumentInfo LEAKED 36192 Managed bytes` in pass1 leak detection, which did not
+  fail the leg (TestRunner responded by running it 28 times instead of 21). Not seen in the
+  previous run; 36 KB, and every iteration reported 0 failures.
+
+### Open
+
+- **`RefineConvertToSmallMoleculesTest` is flaky** - 2 of 5 runs, always `AssertEx.SettingsCloned`
+  comparing two `PeptideLibraries` with identical `ToString()` (the net8 MSTest v3 `IEquatable`
+  shape). Predates this work, undiagnosed.
+- **`BullseySharpTest.cs` should be deleted from master** - a typo-named stale duplicate of
+  `BullseyeSharpTest.cs` declaring the same class with a different base. Master's enumerated
+  csproj never compiled it, so it is dead code that trips every SDK-style conversion; an edit to
+  it today is silently a no-op.
+- The cpp `VendorReaderTestHarness::assertMzAscending` companion is not ported.
+
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260612_net8_port.md` before starting work.
