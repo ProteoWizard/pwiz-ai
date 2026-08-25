@@ -102,22 +102,13 @@ Bare constraints only - no explanations. See ai/MEMORY.md, ai/STYLEGUIDE.md, and
 - All tests must pass before commit
 - ReSharper must show green (no inspections)
 
-## CRITICAL: `cd` to the PR's checkout BEFORE `/code-review`
+## Code Review Runs Where You Are Standing
 
-- **`cd <the pwiz checkout holding the PR branch>` first.** Not `C:\proj`, not
-  `C:\proj\ai` - the checkout whose branch the PR is on. Use
-  `mcp__status__get_project_status()` to find it; sibling checkouts differ and it is
-  often NOT `C:\proj\pwiz`
-- **A review started in the wrong repo does not fail - it reviews the wrong code.**
-  Finding no diff, it falls back to whatever is UNTRACKED there and returns confident,
-  well-verified findings about files nobody asked about. Measured 2026-08-25: 27 minutes
-  and 157k tokens spent reviewing another session's work-in-progress script while the
-  pwiz PR it was aimed at went unreviewed. Only one line at the very end of the output
-  hinted at the mismatch
-- Passing a PR number (`/code-review max 4610`) is the safest form, since it names the
-  target instead of inferring it from the working directory
-- `.claude/hooks/Deny-CodeReviewInAiRepo.ps1` blocks the `ai/` case. To review `ai/`
-  changes deliberately, put `pwiz-ai` in the arguments: `/code-review max pwiz-ai`
+- **`cd` to the checkout holding the PR branch BEFORE `/code-review`** - started in the
+  wrong repo it does not fail, it reviews the wrong code. Enforced by
+  `.claude/hooks/Deny-CodeReviewInAiRepo.ps1` for the `ai/` case; the reason and the
+  measured cost are in ai/docs/version-control-guide.md, at the step that tells you to
+  run it
 
 ## Bash Tool: Avoid Compound Commands
 - **NEVER** use `cd /path && command` — the shell working directory persists between Bash tool calls

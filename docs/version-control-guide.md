@@ -432,6 +432,24 @@ auto-start something slow, weigh that overlap against the wasted Copilot pass.
 
 1. **`/code-review <level>`** on the branch, before the PR exists. Fold the
    resulting fixes into the commits that will open the PR.
+   - **CRITICAL: `cd` to the checkout that holds the PR branch before starting.**
+     The review infers its target from the working directory, and **starting in
+     the wrong repo does not fail - it reviews the wrong code.** Finding no diff
+     where it landed, it falls back to whatever is UNTRACKED there and returns
+     confident, well-verified findings about files nobody asked about.
+
+     Measured 2026-08-25: `/code-review max` was aimed at pwiz PR #4610, whose
+     branch lives in `C:\proj\daily`. The working directory happened to be
+     `C:\proj\ai` from an earlier TODO commit. The review spent 27 minutes and
+     157k tokens producing 15 detailed findings about another session's
+     work-in-progress script, none of them about the PR, and said so only in the
+     last line of its output.
+
+     Find the right checkout with `mcp__status__get_project_status()` - sibling
+     checkouts differ and the branch under review is often NOT in `C:\proj\pwiz`.
+     Naming the target (`/code-review max 4610`) is safer than relying on the
+     working directory. `.claude/hooks/Deny-CodeReviewInAiRepo.ps1` blocks the
+     `ai/` case; pass `pwiz-ai` in the arguments to review `ai/` deliberately.
    - **Verify every finding before acting on it.** The reviewer can be
      confidently wrong. On #4460, 1 of 9 findings asserted that swapping two
      codec fields would leave every test green - but

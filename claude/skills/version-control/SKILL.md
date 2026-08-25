@@ -237,6 +237,19 @@ weigh that overlap against the wasted Copilot pass.)
 
 1. **`/code-review <level>`** on the branch, before the PR exists. Fold the
    fixes into the commits that will open the PR.
+   - **CRITICAL: `cd` to the checkout holding the PR branch FIRST.** Not
+     `C:\proj`, not `C:\proj\ai` - the checkout whose branch the PR is on. Find it
+     with `mcp__status__get_project_status()`; sibling checkouts differ and it is
+     often NOT `C:\proj\pwiz`. **A review started in the wrong repo does not fail -
+     it reviews the wrong code.** Finding no diff, it falls back to whatever is
+     UNTRACKED there and returns confident, well-verified findings about files
+     nobody asked about. Measured 2026-08-25: 27 minutes and 157k tokens spent
+     reviewing another session's work-in-progress script while the pwiz PR it was
+     aimed at went unreviewed, with only one line at the very end of the output
+     hinting at the mismatch. Naming the target (`/code-review max 4610`) is the
+     safest form, since it does not infer the target from the working directory.
+     `.claude/hooks/Deny-CodeReviewInAiRepo.ps1` blocks the `ai/` case; to review
+     `ai/` changes on purpose, pass `pwiz-ai` in the arguments.
    - **VERIFY every finding before acting.** It can be confidently wrong:
      on #4460, 1 of 9 findings claimed a codec field swap would leave every
      test green, but `TestEncodeMatchesRustByteLayout` pins each field to a
