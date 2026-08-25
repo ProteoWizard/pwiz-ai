@@ -184,6 +184,25 @@ builds (branch users only, Aug 20-25 window) get a one-time x1.5
 inflation on first restore, then stabilize. Release-build users come
 from DPI-unaware (=logical) values and are unaffected.
 
+## Dialog tail started + SkylineMcp workflow proven (2026-08-25)
+
+ActionBoxControl (Start Page wizard tiles) fixed - designer geometry
+and caller image sizes DPI-scaled in the ctor; captions no longer
+clip at 150% (verified visually: all "Import ..." captions full).
+UNCOMMITTED on the branch pending the next commit round.
+
+Verification workflow for the remaining tail proven end-to-end with
+the official SkylineMcp: open dialog by menu path
+(skyline_click_main_menu_item "Settings > Peptide Settings"), capture
+by form id (skyline_get_form_image "PeptideSettingsUI:Peptide
+Settings"), dismiss (skyline_dismiss_with_cancel_button). Captures
+are logical-resolution - good for clip/alignment checks. Setup facts
+and gotchas (connector-managed registration, dev-build version gate,
+formId/menu syntax, permission handshake) recorded in memory
+[[skylineuidrivermcp]]. Dev-build AssemblyInfo version gate is worth
+an upstream fix (gitignored file stamps 25.1.1.430 < required
+26.1.1.070).
+
 ## DigitalRune refinement (2026-08-21)
 
 Dissected a real .sky.view: the docked layout is stored as FRACTIONS
