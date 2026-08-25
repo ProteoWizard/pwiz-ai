@@ -203,6 +203,21 @@ formId/menu syntax, permission handshake) recorded in memory
 an upstream fix (gitignored file stamps 25.1.1.430 < required
 26.1.1.070).
 
+## Known issue: dock-pane tab descender clip (2026-08-25)
+
+Developer-reported: the Targets/Files tab strip under the tree clips
+text descenders (~2px) at 150%. Root cause is inside the BINARY
+`DigitalRune.Windows.Docking.dll`: `DockPaneStrip.MeasureHeight_ToolWindow`
+computes strip height ~ Max(FontHeight, 16px-era image constants +
+gaps) + gap; at 150% the grown font ties the unscaled image term and
+descenders clip. No source in the repo or GitHub org; no public knob
+on DockPanel (only Font, which is the input that grew); constants are
+compiler-inlined so runtime reflection cannot help. FIX REQUIRES THE
+DigitalRune FORK SOURCE (team built the DLL - PDB alongside; ask
+Brendan). One-line fix once found. The same source access also gates
+the PMv2/WM_DPICHANGED work, so it pays twice. Until then: known
+cosmetic limitation, listed for the PR description.
+
 ## DigitalRune refinement (2026-08-21)
 
 Dissected a real .sky.view: the docked layout is stored as FRACTIONS
