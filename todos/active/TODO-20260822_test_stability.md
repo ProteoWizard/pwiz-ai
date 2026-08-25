@@ -995,7 +995,13 @@ what the exit code was derived from.
   the failure list at all, and the dumps that DID fire (above) came back complete with frames -
   so on this machine the full-dump path works, which is what the bound and the explicit
   `CreateRuntime(localMatchingDac)` were meant to preserve.
-* **Docker worker teardown held** across 8.5 hours - no leaked-worker failures in the run.
+* **A Docker worker still leaked** - `docker_worker_20260825045845_5` was found up afterwards and
+  wedged the next build exactly as this TODO predicts, MSBuild naming `vmwp.exe` as the holder of
+  `System.Threading.Tasks.Extensions.dll`. (An earlier draft of this entry claimed teardown held;
+  that was read off the absence of leak FAILURES in the log, which is not the same thing.) It fits
+  the third teardown defect still open above: the nightly was terminated externally at the
+  8.5-hour mark, and that path bypasses the teardown scope. Killing the container cleared the
+  build immediately.
 
 ## The next failure in line: TestMultiInjectionReplicates
 
