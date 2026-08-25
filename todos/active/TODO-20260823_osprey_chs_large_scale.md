@@ -125,7 +125,56 @@ attempt instead of 9.3 h. That is what makes "does the join fit" an iterable exp
 ~3.5 h each (~7 h). That forfeits the per-plate FDP / reconciliation / survivor numbers.
 Decide with plate 0059's numbers in hand, not now.
 
-## LEGS 1-2 RESULT: 257 files will probably NOT fit (2026-08-24)
+## MEASURED: 257 files FIT on 64 GB (2026-08-24, leg 4)
+
+**257 files, `exit=0`, 615 min (10.25 h).** Run:
+`D:\test\osprey-runs\chs-seer\runs\chs-257files-libdecoy-r1.0-protein-compact-p0059_0060_0061`
+Per-file stages hard-linked from the three plate runs (1028 links, 0 missing, 344/340/344).
+
+| stage | peak WS | shape |
+|---|---|---|
+| FirstPassFDR | **53.7 GB** | ramps; predicted 56 GB, hit within 4% |
+| PerFileRescoring | **16.5 GB** | FLAT, ratio 1.04x - #4600 holds at 257 files |
+| SecondPassFDR | **69.0 GB** | exceeded the 63.7 GB box, PAGED, completed anyway |
+
+Throughput held: 40.0 s per M obs, inside the plates' 34-39 range and faster than TDP-43's
+47.7. Paging past physical RAM cost essentially nothing.
+
+### Two prediction errors, both instructive
+
+**1. Survivor observations are NOT additive across plates.** Measured **137,034,004** against
+the plates' summed 105.2 M - **30% more**. Cross-run reconciliation and gap-fill transfer
+detections into files where they were not independently found, so **observations per file RISE
+with cohort size**: 0.410 M/file at ~86 files -> **0.533 M/file at 257**. Any projection that
+sums per-plate survivor counts under-estimates.
+
+**2. The near-proportional law fitted from the plates does not extrapolate.** The three plates
+gave 1.099-1.104 GB per M obs with a 0.5% spread, which looked authoritative but spanned only
+31-38 M observations. Over 31 -> 137 M the growth is clearly SUBLINEAR. A tight fit over a
+narrow range constrains nothing about a slope - the same mistake as the cross-dataset fit it
+replaced, in mirror image.
+
+### The model that actually fits both cohorts
+
+> **peak ~= 23.9 GB + 0.330 GB per M observations**
+
+* TDP-43 92.2 M -> 54.2 GB (predicts 54.2)
+* CHS leg 4 137.0 M -> 69.0 GB (predicts 69.1)
+* CHS p0060 31.0 M -> 34.1 GB (predicts 34.1)
+
+p0059 and p0061 sit 4-6 GB ABOVE the line. That is Server GC being lazy when there is
+headroom - their working set overstates demand; under pressure the GC compacts. This also
+dissolves the "CHS costs 1.87x TDP-43 per observation" anomaly recorded below: it was an
+artifact of comparing a low-utilization run against a near-ceiling one, not a cohort property.
+**Do not compare working-set peaks across runs at different memory utilization.**
+
+### 500 files
+
+At 0.533 M obs/file, 500 files is ~266 M obs -> **~112 GB**, and obs/file itself rises with
+cohort size, so likely more. **500 still needs the join bounded**, but the target is concrete:
+the 0.330 GB/M-obs slope, against a survivor count growing super-linearly in cohort size.
+
+## SUPERSEDED - legs 1-2 projection said 257 would not fit (2026-08-24)
 
 **Supersedes the "~59 GB, fits" projection in the subsection below**, which was fitted from a
 single CHS plate against TDP-43. Plate 0060 gives a second CHS point and refutes it.

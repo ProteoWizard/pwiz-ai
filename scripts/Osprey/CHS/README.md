@@ -84,19 +84,31 @@ well past the box". That was wrong: bead enrichment targets a subset, and plasma
 complexity than brain tissue. SecondPassFDR peaked at 42.1 GB and is FLAT, so the join
 streams as intended.
 
-Plate 0060 (85 files) then measured 31.0 M observations and a **34.1 GB** peak. Within CHS the
-peak tracks observations almost proportionally - 42.1/38.1 = 1.105 and 34.1/31.0 = 1.100, a
-slope of ~1.13 GB per M obs, five times the 0.224 that a single-plate fit against TDP-43
-suggested. **257 files (~104 M obs) therefore projects to ~87-114 GB and will probably NOT
-fit.** Do not repeat that single-plate fit: two points 7 M obs apart in ONE cohort beat a long
-lever arm drawn to a different matrix.
+**MEASURED 2026-08-24: all 257 files ran end to end on this 64 GB box, `exit=0` in 615 min.**
+FirstPassFDR peaked at 53.7 GB, PerFileRescoring stayed FLAT at 16.5 GB, and SecondPassFDR
+peaked at **69.0 GB** - past physical RAM, so it paged, and completed anyway at 40.0 s per M
+observations, inside the single-plate range. Paging past the box cost essentially nothing.
 
-TDP-43 does not obey this scaling (it would predict 79 GB where 54.2 GB was measured), so CHS
-costs ~1.9x more memory per observation for reasons not yet identified. Treat the cohort limit
-as measured, not explained.
+Two things that projection got wrong, both worth not repeating:
 
-Plate-to-plate survivor variation is **18%** (0.443 vs 0.365 M/file) - the composition
-heterogeneity this dataset was chosen for, showing up directly in the memory bill.
+* **Survivor observations are NOT additive across plates.** 257 files produced **137.0 M**
+  against the three plates' summed 105.2 M - 30% more. Cross-run reconciliation and gap-fill
+  transfer detections into files where they were not independently found, so observations per
+  file RISE with cohort size: 0.410 M/file at ~86 files -> **0.533 M/file at 257**.
+* **A tight fit over a narrow range constrains nothing.** The three plates agreed to 0.5% on
+  ~1.10 GB per M obs, but spanned only 31-38 M observations. Over 31 -> 137 M the growth is
+  clearly sublinear.
+
+The model that fits BOTH cohorts across the full range:
+
+> **peak ~= 23.9 GB + 0.330 GB per M observations**
+
+(TDP-43 92.2 M -> 54.2; CHS 137.0 M -> 69.0; CHS plate 31.0 M -> 34.1.) The other two plates
+sit 4-6 GB above it because Server GC is lazy when there is headroom. **Do not compare
+working-set peaks across runs at different memory utilization** - that artifact is what made
+CHS look like it cost 1.9x TDP-43 per observation.
+
+At 0.533 M obs/file, **500 files is ~266 M obs -> ~112 GB and still needs the join bounded**.
 
 **Bound the SecondPassFDR join before searching the full cohort**, or start with one plate
 (~85 files) and measure the survivor count before scaling. pwiz #4600 moved the whole-run
