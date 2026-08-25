@@ -911,6 +911,92 @@ knowingly not well tested on TeamCity - if it malfunctions, it malfunctions for 
 already debugging. That is why the full dump is aspirational rather than gating. It does NOT
 excuse the cost: a test may not add 17 minutes to a run whether it passes or fails.
 
+### 2026-08-25 - the 26,012-execution nightly: three failures, all far more common than the one being chased
+
+Brendan ran the full suite for 8.5 hours on `Skyline/work/20260824_test_stability_master`.
+**26,012 executions, 7 failures across 3 tests.** The run was cut off mid-test at the 8.5-hour
+mark, so the last entry is truncated rather than failed.
+
+**Logs rolled out of the way of the next run** (both were about to be overwritten by it):
+`D:\test\nightly-logs\TestRunner-20260825-0620.log` and
+`D:\test\nightly-logs\SkylineTester-20260825-0620.log`.
+
+| Test | Executions | Failures | Rate |
+|---|---|---|---|
+| `PeakAreaDotpGraphTest` | 32 | 3 | **9.4%** |
+| `ConsoleMethodTest` | 30 | 3 | **10%** |
+| `ConsoleImportNonSRMFile` | 30 | 1 | 3.3% |
+
+**The rates are the headline.** These are one-in-ten failures, not the 1-in-5,868 of
+`TestMultiInjectionReplicates`. Each needs tens of executions to reproduce, not thousands - so
+all three are cheap to chase, and none should be worked with the soak-and-wait method that
+`TestMultiInjectRescore` needed. Reproducing any of them is minutes of machine time.
+
+#### 1. `PeakAreaDotpGraphTest` - 3/32, and NOT new to this branch
+
+Already characterised on 2026-08-22, so this is a recurrence rather than a discovery.
+
+```
+Timeout 720 seconds exceeded in WaitForConditionUI (Peak area pane 0 did not catch up to the
+selected precursor.). Open forms: SkylineWindow (Skyline - DIA-QE-tutorial.sky), ...
+```
+
+**The thread dump added on this branch fired, and it is informative on the first occurrence.**
+The UI thread is parked in `WaitMessage` inside `Application.RunMessageLoop` - *idle, waiting for
+messages*, not stuck doing work. No other thread is in Skyline code either; the rest are the test
+harness and NetMQ plumbing. So the pane update was never triggered or never posted, rather than
+being slow or deadlocked. That narrows this from "the graph is slow" to "the notification that
+should have updated pane 0 did not arrive", which is a different search entirely.
+
+Note the cost: 791 seconds per failing occurrence, because this test still has the default
+720-second wait. Cutting it, the way `TestMultiInjectionReplicates` was cut, is worth doing
+before chasing it - at 3 failures in 32 executions the wait dominates the cycle time.
+
+#### 2. `ConsoleMethodTest` - 3/30, a file lock in teardown
+
+```
+CleanupFiles failed:
+Directory.Move("c:\AlwaysUpCLT\TestResults_2\CommandLineTest", "...\135a8e7c-...") failed,
+attempt to delete instead resulted in "The process cannot access the file '~SKD0BE.tmp' because
+it is being used by another process."
+(c:\AlwaysUpCLT\TestResults_2\CommandLineTest\~SKD0BE.tmp is locked by <the test host process>)
+```
+
+**The lock-holder naming added on this branch is what identified the holder**, and the answer is
+pointed: the holder is **the test host process itself** - the same process running the test - not
+an external scanner and not a leftover Skyline. So this is a handle the test or the code under
+test left open on its own temp file, not outside interference. `~SKD*.tmp` is a Skyline
+save-temp name, which puts the suspect on the document-save path rather than on the results cache.
+
+On parallel client 2, under `c:\AlwaysUpCLT\TestResults_2` - the AlwaysUp CLT worker area.
+
+#### 3. `ConsoleImportNonSRMFile` - 1/30, a status code with nothing to explain it
+
+```
+No error reported but exit status was 2.
+```
+
+The command's output ends with **warnings only** - no `Error:` line - yet the command-line
+Skyline exited 2. The warnings themselves are all EXPECTED by this test: `bad_file.raw` is
+deliberately corrupt (`[RawFileImpl::ctor()] Corrupt RAW file`), and
+`FullScan_folder\FullScan.RAW` deliberately has no SRM/MRM chromatograms
+(`NoFullScanFilteringException`), both reported as `Warning: Failed importing ... Ignoring...`.
+The run reached `100% - Updating peak statistics`.
+
+So the question is why the exit status disagreed with the output on 1 run in 30, when the same
+warnings are produced every run. Either a warning is intermittently escalated to an error exit
+code, or an error occurred after the last printed line and never reached the output. The
+assertion cannot say which, which makes **the message the first thing to fix**: it should report
+what the exit code was derived from.
+
+#### What this run also settled
+
+* **The 17-minute thread dump is gone.** `TestThreadDumpNamesRunningFrames` does not appear in
+  the failure list at all, and the dumps that DID fire (above) came back complete with frames -
+  so on this machine the full-dump path works, which is what the bound and the explicit
+  `CreateRuntime(localMatchingDac)` were meant to preserve.
+* **Docker worker teardown held** across 8.5 hours - no leaked-worker failures in the run.
+
 ## The next failure in line: TestMultiInjectionReplicates
 
 Found by Brendan in a 5,868-execution run of 4 tests x 5 languages: **1 failure**, a different test
