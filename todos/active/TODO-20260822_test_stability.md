@@ -851,6 +851,66 @@ was both master-based and already had it. `pwiz-work1` stays on the net8 branch.
 rita-gwen: replace the waters_connect HttpClient wrappers with `HttpClientWithProgress`. It lists
 what gets deleted when that lands, so the #4603 workaround does not outlive its reason.
 
+### 2026-08-24 - the thread dump cost 17 minutes on every agent, now 5 seconds
+
+PR #4610 went red on its own new verifier, `TestThreadDumpNamesRunningFrames` - the only failure
+in the run, and it ended the pass at 599 tests where the green run reported 1,736.
+
+```
+*** Thread dump unavailable: Array dimensions exceeded supported range.
+```
+
+**The duration was the real finding, not the assert.** That one test took **1,035s of the pass's
+1,186s** - 87% of the entire unit-test pass. `TryGetThreadDump()` is called from both wait-timeout
+sites in `TestFunctional.cs`, so the same cost was waiting for every functional timeout on CI.
+
+| Where | Result |
+|---|---|
+| AWS agent `i-0a48914a6d4a636c1` | fail, 1029.7s |
+| AWS agent `i-03b2e3f486a9f7987` | fail, 1035.9s |
+| MacCoss TeamCity Agent 1 | fail, 744.6s |
+| This developer machine | **pass, 1.0s** |
+
+**Four theories refuted by measurement**, kept so nobody repeats them:
+
+* **AWS agents are not provisioned for it.** The control on the physical MacCoss agent failed
+  identically. Not an AWS problem, and nothing to raise with Matt on that basis.
+* **Large heap on CI.** The log records **181 MB** at the moment of failure - no bigger than local.
+* **Busy process / test position.** Running the full `Test.dll` locally put it at position **157,
+  the same slot CI reports**, where it passed in 0 sec.
+* **Release vs Debug.** CI's exact invocation (`test=Test.dll`) passes locally in BOTH
+  configurations, no failures.
+
+What is left is the agent runtime environment. A ClrMD probe on this machine
+(`ai/.tmp/sessions/20260824-cbc60582/DacProbe.cs`) shows why it works here: CLR v4.8.9337.00 with
+`LocalMatchingDac` resolving in-box to `Framework64\v4.0.30319\mscordacwks.dll`, `CreateRuntime`
+in 11 ms, `_NT_SYMBOL_PATH` unset - so no symbol server is contacted at all. Where that DAC does
+NOT resolve, ClrMD downloads one instead, which is slow when the server is unreachable and reads
+garbage when the version does not match. That is the shape of both the stall and the exception.
+
+**Changes** (`HangDetection.cs`, `HangDetectionThreadDumpTest.cs`):
+
+1. **Bounded** - the dump runs on a background thread with `Join(5s)`, the same idiom
+   `JsonToolServerTest.GetCallStacks` already uses. ClrMD has no cancellation, so the thread is
+   abandoned rather than waited on; it is `IsBackground`, so it cannot hold up process exit.
+   Measured: healthy path **49 ms** (93-line dump); a simulated 60s hang returns in **5,011 ms**.
+2. **Cheap precondition** - `GetAllThreadsCallstacks` now refuses when `LocalMatchingDac` is null,
+   naming the exact `mscordacwks` build the machine lacks, and calls `CreateRuntime(localDac)`
+   explicitly so a symbol server can never become the fallback.
+3. **Graceful degradation** - `TryGetThreadDump` falls back to the calling thread's own stack,
+   which needs no attach, plus a line naming the agent's CLR and DAC. **The next CI run therefore
+   reports what the agents actually have** rather than leaving it to be guessed.
+4. **The test pins the degraded form and the DURATION** - nothing measured the cost of an
+   unavailable dump, which is exactly how 17 minutes reached CI looking like an ordinary failure.
+   The full dump is asserted only where the machine can take one, under a `TODO(chambm)` recording
+   what an agent needs.
+
+**Brendan's framing**, worth keeping: diagnostics and profiling support (thread dumps, memory and
+performance profiling) is expected to work on a properly set up developer machine, and is
+knowingly not well tested on TeamCity - if it malfunctions, it malfunctions for a developer who is
+already debugging. That is why the full dump is aspirational rather than gating. It does NOT
+excuse the cost: a test may not add 17 minutes to a run whether it passes or fails.
+
 ## The next failure in line: TestMultiInjectionReplicates
 
 Found by Brendan in a 5,868-execution run of 4 tests x 5 languages: **1 failure**, a different test
