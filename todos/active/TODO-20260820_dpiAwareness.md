@@ -157,7 +157,7 @@ row height) - pre-existing inconsistency, left alone in this slice.
 
 ## Persisted geometry package (2026-08-25)
 
-Implemented on the branch:
+Committed `d6ac7b74cb`, pushed to draft PR #4602. Implemented:
 - Main window (`Skyline.cs`) and Library Explorer (`ViewLibraryDlg`)
   Size + ViewLibrary SplitterDistance now persist in 96-DPI logical
   units via DpiUtil (locations stay physical screen coords, clamped
