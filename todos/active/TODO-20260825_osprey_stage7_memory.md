@@ -85,7 +85,18 @@ pwsh -File ai\scripts\Osprey\CHS\Run-Chs.ps1 -IncludePattern 'us(0059|0060|0061)
   -Exe <snapshot>\Osprey.exe
 ```
 
-## Defect 3 (FOUND, NOT FIXED): the --task reload pool is O(files x pre-compaction entries)
+## Defect 3 is issue #4486, already open - NOT a new finding
+
+**Corrected**: this was first written up here as a discovery. It is not. It is
+[#4486](https://github.com/ProteoWizard/pwiz/issues/4486), "Stage-7 SecondPassFDR ~45 GB
+peak", split out of TODO-20260727_osprey_stage6_rescore_streaming, referenced from
+`Program.cs`, `ResidentPaths.cs`, `StreamingFdr.cs` and `FirstPassFdrTask.cs`, and printed by
+`regression.ps1` on every run under "Known O(files) resident paths this gate still traverses"
+with its own 500-file projection (~103 GB at 0.197 GB/file). The measurements below are a
+re-measurement of a tracked issue at a new scale and on a new cohort, which is worth having -
+but check for an open issue before calling something new.
+
+### What the re-measurement adds
 
 `Osprey.Tasks/PerFileScoringTask.cs:1447` -
 `perFileEntries.Add(new KeyValuePair<string, List<FdrEntry>>(fileName, stubs))` accumulates
@@ -113,11 +124,41 @@ distributed/HPC route, which is the whole reason `--task` exists.
 requested scope. It does mean the 257-file hard-link harness cannot reproduce the in-process
 Stage 7 peak, so the A/B below runs on a 100-file subset that fits inside the reload's limits.
 
-- [ ] Baseline reproduction (unfixed exe) reaches the ~65 GB peak
-- [ ] Fixed build re-run shows a bounded seeding phase
-- [ ] perfviz plot shows no unbounded spike and no gaps >= 30 s
-- [ ] `regression.ps1 -Dataset Stellar` green (deferred: needs the machine idle)
+### Results
+
+**100-file A/B** - same linked artifacts, two pinned binaries, serial, both `exit=0`, entering
+the seeding phase within 0.2 GB of each other:
+
+| | unfixed | fixed |
+|---|---|---|
+| seeding accumulation | **131 MB/file** | **1 MB/file** |
+| seeding climb | +12.77 GB | +0.08 GB |
+| working-set peak | 52.7 GB | **45.7 GB** |
+
+**257 files, fixed build**: `exit=0` in 70 min, seeding climb **+0.08 GB total (0 MB/file)**,
+peak 53.6 GB managed / 55.5 GB ws. The unfixed build could not finish this run at all - its
+reload pool plus 257 x 131 MB of seeding went past the box.
+
+**Reporting gaps at 257 files** (leg 4 unfixed vs fixed):
+
+| | unfixed | fixed |
+|---|---|---|
+| gaps >= 30 s | **34** | **2** |
+| mean gap | 11.9 s | **4.4 s** |
+| samples | 461 | **948** |
+
+The two survivors are single bulk steps that never call `Report`, so no heartbeat value can
+cover them - the `--task SecondPassFDR` compaction (40 s) and the blib write (42 s). Giving
+those two their own reporting is a separate small change, not heartbeat tuning.
+
+- [x] Baseline reproduction reproduces the defect (131 MB/file at 100 files, matching the
+      257-file run's ~125 and perfviz's independent +138)
+- [x] Fixed build shows a bounded seeding phase
+- [x] perfviz plots: `ai/.tmp/s7-100-unfixed.png`, `s7-100-fixed.png`, `s7-257-fixed.png`
+- [x] `regression.ps1 -Dataset Stellar` **PASSED** - all 10 modes, including mode1 vs golden,
+      so both fixes are byte-identical in output
 - [ ] `regression.ps1 -Dataset All` before merge
+- [ ] Consider progress reporting for the compaction and blib-write steps
 
 ## Related
 
