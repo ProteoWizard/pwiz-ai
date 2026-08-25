@@ -12,6 +12,13 @@ item: OK (no fix needed) / FIXED (code changed, re-captured) / DEFER
 Legend: [ ] not swept - [x] done. Order: known-visible first, then
 high-risk programmatic layouts, then cosmetics.
 
+Session setup state (2026-08-25): DPIUNAWARE compat layer SET on the
+Debug exe (HKCU AppCompatFlags\Layers) = the "before" instance; Debug
+rebuild kicked off; AI Connector installed in BOTH Debug and Release
+settings; SkylineMcp registered (connector-managed) - next session has
+native skyline_* tools. ActionBoxControl fix is UNCOMMITTED in the
+working tree. Remove the compat layer when the sweep ends.
+
 ## Known visible / high priority
 
 - [x] ActionBoxControl tiles (Start Page, Start tab) - FIXED 2026-08-25,
