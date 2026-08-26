@@ -119,11 +119,22 @@ default the rest).
 * **Pass 2, streamed per file** — reload one file, apply `ExperimentProteinQvalue`, write its
   `.2nd-pass.fdr_scores.bin`, write its RetentionTimes rows against the refIds from the middle.
 
-**The cost to weigh**: a second read of the reconciled parquets. Against it, #4615's review
-found the blib phase already makes SIX full passes over the 137 M-row pool in memory
-(`ComputePassingPeptides`, `ComputePassingPrecursors`, `CollectPassingEntries`,
-`BuildBestExpPrecursorQ`, `BuildSharedBoundaries`, `BuildCrossFileObservations`), so the
-in-memory passes being replaced are not one.
+**The front end is already per-file, which makes pass 1 a restructuring rather than a
+rewrite.** `PerFileRescoreTask.MaterializeAllSurvivors` is a clean loop —
+`loader.Load(fileKey)` returns ONE file's survivor stubs and the only thing making it
+accumulate is `kv.Value.AddRange(stubs)` into the shared buffer. Hand each loaded list to a
+fold and drop it and the ramp is gone; the loader needs no change. `ResetRescoredTargets`
+is likewise per-file and positional within a file, so it applies inside the same loop.
+
+**The cost, measured rather than guessed**: that rebuild took **19 min 10 s for 257 files**
+(22:21:57 -> 22:41:07, ~4.5 s/file) out of Stage 7's 91 min. So a second streamed pass costs
+~19 min at 257 files — **+21% on Stage 7, +3% on the 10.25 h run** — to remove ~35 GB. And
+some of it comes back: the 257-file run went past the 63.7 GB box in Stage 7 and paged.
+
+Against it, #4615's review found the blib phase already makes SIX full passes over the
+137 M-row pool in memory (`ComputePassingPeptides`, `ComputePassingPrecursors`,
+`CollectPassingEntries`, `BuildBestExpPrecursorQ`, `BuildSharedBoundaries`,
+`BuildCrossFileObservations`), so the in-memory work being replaced is not one pass either.
 
 ## Tasks
 
