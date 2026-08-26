@@ -287,6 +287,33 @@ the whole remaining issue.
 digit GB), the run's high point becomes FirstPassFDR, and the whole-run floor drift
 (+138 MB/file) should collapse — 134 of those 138 MB are this pool.
 
+## #4615 did NOT lower the live pool — proven by its own A/B
+
+Worth pinning, because the plot invites the opposite reading: the pre-#4615 in-process run
+tops 70 GB in Stage 7, #4615 removed that, and it is tempting to conclude the whole elevated
+Stage 7 band was the defect. It was not. #4615's own 100-file A/B, same cohort, one binary
+difference:
+
+| post-GC probe | `s7ab-base` | `s7ab-fix` |
+|---|---|---|
+| `stage7-inherited` / `stage7-pool` | 20.27 GB | **20.25 GB** |
+| `stage7-fragments-released` .. `-blib-written` | 17.89 GB | **17.89 GB** |
+
+Identical. What moved is the transient half — `peak_paged` 52.98 -> 46.29 GB,
+pass-2-scored working set 46.62 -> 43.53 GB, `gc_fragmented_last_gc` 10.31 -> 2.94 GB. That
+is the signature of removing dead LOH buffers: the working set falls, the live set does not.
+
+After #4615 the pool is still 17.89 GB live at 100 files (20.25 at build, of which 4.19 is
+the library -> ~160 MB/file) and 39.62 GB at 257, and `s7fix257` still plateaus at 43-52 GB
+managed / ~50 GB private for its whole 70 minutes. **The 70 GB top was the defect; the ~50 GB
+plateau under it is the pool, and it stayed.**
+
+**Caveat**: every probe series above is the `--task` / reload path. There is no post-#4615
+IN-PROCESS run yet — the full 5-7 log predates the fix. Since the A/B shows #4615 does not
+touch the live pool, the in-process pool should still be ~38.75 GB live at 257 files, but
+that is inference, not measurement. Settling it needs a straight-through Stage 5-7 run with
+`OSPREY_LOG_MEMORY=1`.
+
 ## Nothing is INHERITED — it is all Stage 7's own load (corrected 2026-08-26)
 
 An earlier version of this file said `--task` "enters Stage 7 at 41.97 GB" against 4.26 GB
