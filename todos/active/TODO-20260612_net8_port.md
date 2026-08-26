@@ -5711,3 +5711,88 @@ Re-run end to end after the code review and the two defects above (2026-08-25):
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260612_net8_port.md` before starting work.
+
+## 2026-08-26: peakPicking sweep reaches cs-failed 0, and an installer finding
+
+Addendum to the 2026-08-21/24 entry. The six fixes recorded there are now measured
+together, and the msconvert-sharp branch state is captured for whoever picks it up.
+
+### The sweep the six fixes were aiming at
+
+`results-20260824-peakpicking.jsonl` - first run carrying ALL six fixes plus the eight
+commits that arrived from the parallel session. cpp snapshot unchanged (Aug 18), so it is
+directly comparable to `results-20260821-peakpicking.jsonl` on status.
+
+| status | 08-21 | 08-24 |
+| --- | ---: | ---: |
+| identical | 381 | **382** |
+| **cs-failed** | 2 | **0** |
+| differs | 27 | 27 |
+| cpp-failed | 18 | 19 |
+| both-failed | 62 | 62 |
+
+**Every input the C# converter could not handle now converts.** Both `cs-failed ->
+identical` moves are the two files fixed: `2020-06-09 BAK 270 optimization.wiff` (per-run
+read tolerance) and `20May24_P3_LHS_line_003.raw` (Thermo empty-scan guard).
+
+Of the three other transitions, two are the known Sciex 420 s timeout files
+(`221111_Ullrich_220697_1/_2`) that flip buckets run to run. The third is worth not
+mis-crediting: `250814_ZTScan_100spd_A_3_G1.wiff2` moved `both-failed -> cpp-failed`, i.e.
+**C# now succeeds where it previously failed** - that is `5b2f51111c` (ZT Scan collision
+energy), not anything in this thread.
+
+No sign of regression from `a8bf6e85d9`'s opt-in parallel mzML decoding: `differs` held at
+exactly 27 and nothing moved away from `identical` except the one timeout flip.
+
+The remaining 27 `differs` are unchanged and still dominated by the cpp-side IMS defect in
+the standing record above. Net of those: 10 Shimadzu (timestamp only), 2 Thermo, 1 Bruker,
+1 Sciex, 1 Waters.
+
+### Installer: an install-time side-by-side/updating choice is cheaper than it looks
+
+Asked whether the installer could offer side-by-side vs auto-updating at install time. Two
+findings, both verified rather than assumed:
+
+- **`AppId={code:GetAppId}` compiles.** Inno evaluates it at run time; it only demands
+  `UsePreviousLanguage=no` alongside, and says so at compile time. Verified by compiling a
+  probe .iss with the local ISCC. That was the one thing that could have made this
+  impossible, since `AppId` is what Inno keys every install on and today it is a
+  compile-time `{#MyAppVersion}` substitution. `DefaultDirName` and `DefaultGroupName`
+  already accept `{code:...}`, so all three switch together.
+- **No elevation or signing is required for the per-user path.** `Setup.iss` already sets
+  `PrivilegesRequired=lowest` with `Root: HKA`, so the default install is per-user under
+  `%LOCALAPPDATA%\Programs` with HKCU verbs. An update rewriting that directory needs no
+  UAC, and SmartScreen keys off Mark-of-the-Web, which a self-updater downloading via
+  HttpClient does not set. The unsigned-installer warning in `installer/NOTES.md` is about
+  the browser-download path and exists with or without auto-update.
+
+What actually costs: **replacing files that are running** (Windows locks loaded images), and
+the fact that `IsKnownLeakySdkPath` documents vendor SDKs holding native handles until ALC
+unload - i.e. until the process exits. So the swap belongs in a helper AFTER exit, not in a
+shutdown handler. Do it as two directory renames on one volume (`install -> install.old`,
+`staged -> install`), which fails cleanly before touching anything rather than halfway
+through a file copy. `VendorReaderTestHarness.AssertFilesUnlocked` is the same rename probe
+inverted and carries the retry tuning (5 x 100 ms, after GC + WaitForPendingFinalizers) that
+such a swap will need in PRODUCT code, not just in tests.
+
+Nothing decided or built here - recorded so the feasibility work is not repeated.
+
+### Branch state
+
+Five commits on `chambem2/pwiz-sharp` in `C:\dev\pwiz-msconvert-pr`, **rebased onto
+`0f2cd65f35` and still UNPUSHED**:
+
+```
+318d6e29fd  Fixed an empty scan crashing the Thermo vendor centroider
+f6f73b9759  Fixed one unreadable run aborting a whole multi-run file
+52e5e47ddf  Fixed vendor centroiding to honour the caller's MS levels
+05a0feda45  Fixed zero-point spectra losing their binaryDataArrayList
+5c0a1e116e  Added ZeroSampleFiller coverage from the reference implementation's vectors
+```
+
+origin has since taken a master merge, so the branch is **17 behind**. The five are
+unpushed and touch no file the incoming commits touch (checked before the last rebase), so
+re-syncing should be routine.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-parity.md` before starting work.
