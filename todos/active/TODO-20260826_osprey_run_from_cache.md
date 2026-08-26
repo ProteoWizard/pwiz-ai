@@ -176,3 +176,20 @@ The idea is sound and the measurement stands - Stage 1 is the only stage that re
 a full pipeline did run from cache alone. But the implementation promises more than it delivers,
 and the test does not cover the promise. **Do not open a PR on this branch as-is.** Next session:
 fix blockers 1 and 2 first, then re-triage the rest.
+
+## 2026-08-26 - PR opened, handoff written
+
+PR [#4616](https://github.com/ProteoWizard/pwiz/pull/4616) is OPEN. The blocker framing recorded
+above was **wrong and is withdrawn**: the regression builds its caches fresh every run, so a test
+cache cannot go stale against the build testing it, and the version-bump case is operational - the
+remedy is a clear message, which is now in `ScoringTaskShared`. What the review got right was that
+the test did not cover the claim.
+
+**Fixed since:** HPC phase 1 is now seeded from the straight-through leg's caches rather than the
+mzML, so `PerFileScoring` genuinely RUNS cache-only and mode 3's chain==straight comparison proves
+the results identical. That also removed the only place real mzMLs were copied (multi-GB per file),
+and covers the UNREDIRECTED cache lookup no other leg touched. Gate green.
+
+**Next session**: `ai/.tmp/handoff-20260826_chs_cacheonly_plates.md` - run plate 0062 and plates
+0063+0064 with the `.raw` moved aside, then delete the CHS `.raw` (1,774 GB) to make room for a
+450-file Stage 5-7 run. Binary staged at `_bin\26.1.1.233-cacheonly-20260826`.
