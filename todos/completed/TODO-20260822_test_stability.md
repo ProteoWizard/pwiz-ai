@@ -3,6 +3,8 @@
 ## Branch Information
 - **Checkout**: `C:\proj\pwiz-work1` (the team's Integration checkout)
 - **Module**: `skyline`
+- **Status**: Completed
+- **PR**: [#4610](https://github.com/ProteoWizard/pwiz/pull/4610) (merged 2026-08-26 as `79e50e83a6`)
 - **Intended for**: autonomous sessions, long soaks, minimal supervision
 
 ### Which branch - read this before starting
@@ -1002,6 +1004,56 @@ what the exit code was derived from.
   the third teardown defect still open above: the nightly was terminated externally at the
   8.5-hour mark, and that path bypasses the teardown scope. Killing the container cleared the
   build immediately.
+
+### 2026-08-26 - Merged
+
+PR #4610 merged as commit `79e50e83a6`, approved by bspratt and nickshulman, 19/19 checks green.
+
+**What shipped**: the MIDAS loader gate; the unattended-dialog watchdog with its verifier; the
+stale-progress fix that pinned a finished file below 100 (`FileProgressStaleStatusTest`); parallel
+worker teardown on every exit path plus the SkylineTester prompt that surfaces leftover containers;
+tool-extraction lock-holder naming and CRC skipping; `PooledFileStream` size/missing-file detail;
+`IExplainDiff` / `EqualityExplainer`; the bounded thread dump; and two waits cut from minutes to
+seconds (`TestMultiInjectionReplicates`, `TestMultiInjectRescore`).
+
+**The thread dump question is closed.** `TestThreadDumpNamesRunningFrames` failed at 745-1035
+seconds on three agents, which looked like missing debugging support on the TeamCity boxes and was
+written up as a `TODO(chambm)`. It was not: ClrMD resolving its own DAC was the slow, failing path,
+and calling `CreateRuntime(localMatchingDac)` explicitly fixed it. Measured afterwards at **0 sec on
+this developer box, MacCoss TeamCity Agent 1, and an AWS agent** - all three - so the TODO was
+removed rather than softened, and there is nothing to raise with Matt.
+
+**Three rounds of `/code-review max` ran, and the third is the useful lesson.** Round 1 fixed the
+teardown cluster and introduced four defects (a modal dialog on the nightly's unattended path,
+unbounded `docker ps`, a ProcessExit handler over .NET Framework's ~2s budget, a kill call with no
+run tag). Round 2 fixed those and introduced one more: switching to a bounded read returned raw
+stdout where the old path normalised through `ReadLine`, so `Split(Environment.NewLine)` on docker
+output - which is LF - collapsed every container name into one string and **teardown would have
+silently killed nothing**. Round 3 caught it. Verified by probe against live containers
+(`RUNNING_COUNT=3`, three distinct names), not by "0 containers afterwards", which is true either
+way because workers self-exit on heartbeat loss.
+
+That is the shape to remember: three consecutive rounds each left this area worse in a new way, and
+two of the verifications proved the change did what was intended rather than that nothing else
+broke. See [[rising-triage-bar-near-ship]].
+
+**Deferred, deliberately**: `AllChromatogramsGraph:469` (a stale retry snapshot can `RemoveFailedFile`
+mid-import), `FileProgressControl.Reset()` leaving `IsCanceled`/`Status` stale, and the
+`PauseSeconds = -1` leak that can disable the dialog watchdog process-wide. All pre-existing, none
+made worse here, and no issues filed - per Brendan, a pre-existing finding without a near-term path
+to being fixed becomes noise rather than signal.
+
+**One issue filed**: [#4614](https://github.com/ProteoWizard/pwiz/issues/4614) -
+`TransitionGroupChromInfo.Equals` compares `Annotations` twice and never compares `MassError`.
+Probably benign in this type, filed because it is an instance of a class Brendan wants zero examples
+of: a property missing from `Equals` means Skyline cannot tell the change was made, discards the new
+object, and creates no Undo record.
+
+**Still open in this TODO**: `TestMultiInjectionReplicates` (1 in 5,868; ~8,159 executions on this
+branch produced no reproduction, which excludes the higher-frequency reading), and the three
+failures from the 26,012-execution nightly - `PeakAreaDotpGraphTest` 3/32, `ConsoleMethodTest` 3/30,
+`ConsoleImportNonSRMFile` 1/30. Those rates are one-in-ten, so each is minutes of machine time to
+reproduce rather than hours. The nightly logs are preserved at `D:\test\nightly-logs\`.
 
 ## The next failure in line: TestMultiInjectionReplicates
 
