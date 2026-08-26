@@ -353,6 +353,24 @@ instead of what Stage 7 needs, and Stage 7 got slower for it.
 5. **Point the Stage 7 rebuild at the reconciled parquet** and delete the second read
    (`OverlayReconciledIntoFiles`) from the pool build.
 
+**Why 4 is required, established 2026-08-26 rather than assumed.** `PickBestPassing` skips
+entries with `RunPrecursorQvalue > fdrThreshold`, so a gap-fill row (q = 1.0, because it gets
+no 1st-pass sidecar record) can never WIN a consensus. But `SelectRescoreTargets` groups every
+entry by `ModifiedSequence` first and skips a group only when `indices.Count <= 1`, so a
+peptide with one real survivor plus one gap-fill row now clears that skip - and the gap-fill
+row is then treated as a TARGET to reconcile to the consensus boundaries. That is a behavior
+change, and today's code avoids it only by ORDERING: `MaterializeAllSurvivors` builds a
+pre-gap-fill list from the Stage 4 parquet, consensus and `ResetRescoredTargets` run against
+it, and gap-fill is appended afterwards by the overlay. Reading the reconciled parquet
+collapses that ordering, so the rows have to be distinguishable in the artifact.
+
+**Compatibility hazard to handle in 4/5**: an OLD reconciled parquet has no marker column and
+is full-shaped, so its gap-fill rows would be misread as originals. `ReadColumnByName` returns
+null for a missing column, which makes "no marker column" detectable - so the loader should
+fall back to the Stage 4 path when the marker is absent. That keeps the existing 257-file CHS
+run dir usable as the memory rig instead of forcing a ~15 h re-score before anything can be
+measured.
+
 **A fall-out worth naming**: subsetting the artifact also removes the `--task SecondPassFDR`
 pre-compaction pool - the 311 MB/file structure #4615 measured and deferred as "a
 restructuring job, not a buffer fix". That path reads the reconciled parquets and compacts
