@@ -126,10 +126,37 @@ accumulate is `kv.Value.AddRange(stubs)` into the shared buffer. Hand each loade
 fold and drop it and the ramp is gone; the loader needs no change. `ResetRescoredTargets`
 is likewise per-file and positional within a file, so it applies inside the same loop.
 
-**The cost, measured rather than guessed**: that rebuild took **19 min 10 s for 257 files**
-(22:21:57 -> 22:41:07, ~4.5 s/file) out of Stage 7's 91 min. So a second streamed pass costs
-~19 min at 257 files — **+21% on Stage 7, +3% on the 10.25 h run** — to remove ~35 GB. And
-some of it comes back: the 257-file run went past the 63.7 GB box in Stage 7 and paged.
+**The cost — an earlier version of this file said "a second pass costs another 19 min,
++21% on Stage 7". That was wrong**: it assumed pass 2 re-reads what pass 1 read. It does not.
+
+What the 19 min 10 s (22:21:57 -> 22:41:07, 257 files) actually buys, per
+`FirstPassSurvivorLoader.Load`:
+
+1. `LoadFdrStubsFromParquet` on the **`.scores.parquet`** — the FULL pre-compaction stub set,
+   ~2.99 M stubs/file, 768.5 M across the cohort, from **1,060 MB/file / 266 GB total**
+2. overlay the 1st-pass sidecar (113.7 MB/file, 29 GB) onto that full set — superset contract
+3. `RemoveAll` down to survivors: ~533 K/file, 137 M total — a **5.6x overshoot**
+4. `TrimExcess` + `Sort`
+
+Pass 2 needs none of it. Per surviving observation it needs `file`, `modseq`, `charge`,
+`runQ`, `apex/start/end` — ~36 B — plus the protein-q write into the sidecar. Spilled by
+pass 1 as it goes, that is **~4.9 GB total (~19 MB/file)** against 266 GB of parquet:
+**~55x less I/O than pass 1**. No measured number for it yet, and none should be quoted until
+there is one.
+
+Artifact sizes measured in the 257-file run dir, for whoever costs this next:
+
+| artifact | count | total | per file |
+|---|---|---|---|
+| `scores.parquet` (what the loader reads) | 257 | 266.04 GB | 1,060 MB |
+| `scores-reconciled.parquet` | 257 | 266.23 GB | 1,061 MB |
+| `fdr_scores.bin` (1st + 2nd pass) | 514 | 57.09 GB | 113.7 MB |
+| `reconciliation.json` | 257 | 4.68 GB | 18.6 MB |
+
+**Separate finding, not the memory problem but most of the front end's TIME**: the load
+overshoots 5.6x per file — decoding 2.99 M stubs to keep 533 K. Bounded rather than
+accumulating, so it does not affect the peak, but pushing the survivor filter into the
+parquet read (a base_id predicate) would make pass 1 cheaper independent of this work.
 
 Against it, #4615's review found the blib phase already makes SIX full passes over the
 137 M-row pool in memory (`ComputePassingPeptides`, `ComputePassingPrecursors`,
