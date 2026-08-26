@@ -193,3 +193,25 @@ and covers the UNREDIRECTED cache lookup no other leg touched. Gate green.
 **Next session**: `ai/.tmp/handoff-20260826_chs_cacheonly_plates.md` - run plate 0062 and plates
 0063+0064 with the `.raw` moved aside, then delete the CHS `.raw` (1,774 GB) to make room for a
 450-file Stage 5-7 run. Binary staged at `_bin\26.1.1.233-cacheonly-20260826`.
+
+## 2026-08-26 - Cache-only proven at plate scale (86 files)
+
+`D:\test\osprey-runs\chs-seer\runs\chs-86files-libdecoy-r1.0-protein-compact-p0062\run.log`
+
+Plate 0062's 86 `.raw` were moved to `D:\test\_rawhold` before the run; only the
+`.spectra.bin` remained. Osprey logged `86 of 86 input(s) are absent but have a spectra
+cache; reading those from the cache.` and **PerFileScoring completed all 86 files in
+19,180 s (5 h 20 m)**, writing 86 `.scores.parquet`. FirstPassFDR entered at 16:47.
+
+**The negative result is the important one**: 56 warnings, every one an ordinary calibration
+retry, and ZERO occurrences of `Spectra cache stale or invalid; re-parsing the input` - the
+line that would mean a cache was rejected and the loader reached for a source that is not
+there. That was the failure mode the code review worried about, and at 86 files it did not
+occur once.
+
+Pre-flight for the whole cohort was `ai/scripts/Osprey/Test-SpectraCaches.ps1`: 446 of 446
+caches verified against their sources (magic, VERSION 4, size+mtime fingerprint, index
+geometry) BEFORE any source was moved - the comparison that is impossible afterwards.
+
+Caveat on timing: a Stellar regression ran concurrently for part of this, so the wall time is
+not cleanly comparable with plates 0059-0061.
