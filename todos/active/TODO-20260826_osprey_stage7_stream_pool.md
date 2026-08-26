@@ -74,13 +74,64 @@ read only `observations.Count`, `obs.Key`, `EffectiveRunQvalue` and `ApexRt/Star
 (~40 B). Converting it to a value struct unpins the pool but, while the pool is held anyway,
 makes memory WORSE (16 → 40 B per observation). Step two, not step one.
 
+## What each consumer actually needs (read 2026-08-26)
+
+**Protein FDR is the EASY half — which inverts the issue's assumption.**
+`ProteinFdrEngine.RunSecondPass` already decomposes into the target shape:
+
+| step | over | keyspace |
+|---|---|---|
+| `ProteinFdr.CollectBestPeptideScores` | pool | O(distinct peptides) |
+| `detectedPeptides` (experiment-q gate at `config.FdrLevel`) | pool | O(distinct peptides) |
+| `BuildProteinParsimony(fullLibrary, sharedPeptides, detectedPeptides)` | **no pool** | — |
+| `ComputeProteinFdr(parsimony, bestScores, RunFdr)` | **no pool** | — |
+| `ProteinFdr.PropagateProteinQvalues` | pool | per-entry WRITE-BACK |
+
+Two streamed folds, a pool-free middle, and a write-back. Nothing here needs a global view
+of observations — only of peptides. The issue's "protein FDR (parsimony + picked-protein
+TDC) ... are all whole-run consumers" is true of the PEPTIDE aggregate, not of the pool.
+
+**The blib is the hard half, and the difficulty is emission ORDER, not data volume.**
+`WriteRetentionTimes` reads only `obs.Key` (file), `EffectiveRunQvalue(Both)`,
+`ModifiedSequence`, and `ApexRt/StartRt/EndRt` — ~36 B as a value record against a pinned
+`FdrEntry`. But it writes **one RetentionTimes row per observation**, and it writes them
+PRECURSOR-major: a RefSpectra row, then that precursor's rows across all files. Streaming
+per file means inverting that to FILE-major, which needs the refIds assigned first — i.e.
+exactly the "emission is a SECOND streamed pass" rule.
+
+**`sharedBounds` is a second accumulator, keyed `(modseq, fileName)` -> `double[5]`** — one
+entry per passing (peptide, file) observed, so O(observations), not O(distinct). At 257 files
+that is tens of millions of entries and several GB, and it is built in the aggregate phase and
+read in the emit phase, so it cannot simply be dropped between them. **It can be made sparse**:
+it only matters where a peptide has more than one charge in that run AND the winning charge's
+boundaries differ from the entry's own. Every other key is the entry's own boundaries, i.e.
+recoverable in the emit pass. Same trick #4554 used for `survivorPep` (store non-defaults,
+default the rest).
+
+### Proposed shape — to be reviewed before writing
+
+* **Pass 1, streamed per file** — fold into: `bestScores`, `detectedPeptides`,
+  `passingPeptides` / `passingPrecursors`, `bestByPrecursor` (a COPY, not a reference),
+  `bestExpPrecursorQ`, per-precursor observation COUNT, sparse `sharedBounds`, and the
+  already-bounded `StreamedCompetitionState`. Drop each file's entries as it goes.
+* **Middle, pool-free** — parsimony + picked-protein FDR; assign blib refIds from
+  `bestByPrecursor`.
+* **Pass 2, streamed per file** — reload one file, apply `ExperimentProteinQvalue`, write its
+  `.2nd-pass.fdr_scores.bin`, write its RetentionTimes rows against the refIds from the middle.
+
+**The cost to weigh**: a second read of the reconciled parquets. Against it, #4615's review
+found the blib phase already makes SIX full passes over the 137 M-row pool in memory
+(`ComputePassingPeptides`, `ComputePassingPrecursors`, `CollectPassingEntries`,
+`BuildBestExpPrecursorQ`, `BuildSharedBoundaries`, `BuildCrossFileObservations`), so the
+in-memory passes being replaced are not one.
+
 ## Tasks
 
 - [x] **Split inherited-vs-built on the straight-through path** — DONE 2026-08-26, no run
       needed: the full 5-7 run's log already carries the probes. Stage 7 **builds** the pool
       itself in-process (see the progress log). The work is inside Stage 7, not upstream.
-- [ ] Establish, per consumer, exactly which `FdrEntry` fields are read and whether that is
-      expressible as an O(distinct) aggregate — protein FDR is the one that decides feasibility
+- [x] Establish, per consumer, exactly which `FdrEntry` fields are read and whether that is
+      expressible as an O(distinct) aggregate — DONE, see "What each consumer actually needs"
 - [ ] Record the two-pass design here BEFORE writing it
 - [ ] Implement, gated on byte-identical output
 - [ ] Post-GC memory A/B at ≥100 files, plus an in-phase sample so a transient cannot hide
