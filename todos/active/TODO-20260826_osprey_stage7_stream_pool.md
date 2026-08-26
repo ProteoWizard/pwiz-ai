@@ -236,23 +236,51 @@ the whole remaining issue.
 digit GB), the run's high point becomes FirstPassFDR, and the whole-run floor drift
 (+138 MB/file) should collapse — 134 of those 138 MB are this pool.
 
-## There are TWO accumulating structures, one per path
+## Nothing is INHERITED — it is all Stage 7's own load (corrected 2026-08-26)
 
-Not one. A fix that removes either alone leaves the other path unchanged, and the two are
-measured by different harnesses:
+An earlier version of this file said `--task` "enters Stage 7 at 41.97 GB" against 4.26 GB
+in-process, and read that as an upstream cost on one path. **Wrong, and Brendan caught it:
+Stage 6 ends low on both paths; the 41.97 GB is what the `--task` process loaded moments
+before the probe fired.** From the logs:
 
-| | path | structure | slope |
-|---|---|---|---|
-| **A** | in-process (straight-through) | `RescoredEntries` survivor pool, built on the `.Value` read (#4597) inside Stage 7 | **134 MB/file** (4.26 -> 38.75 GB at 257) |
-| **B** | `--task SecondPassFDR` | the reload's **pre-compaction** stub pool — `PerFileScoringTask.cs:1447` accumulates every file's full pre-compaction stub list | **311 MB/file** (#4615 TODO, measured to file 81 of 257) |
+In-process, the Stage 6 -> 7 boundary (managed / private per memstamp column):
 
-B is why `--task` ENTERS Stage 7 at 41.97 GB where in-process enters at 4.26 GB. #4615
-stripped features out of that reload (~800 MB/file) but deliberately left the stubs: "a
-restructuring job, not a buffer fix, and it was not in the requested scope."
+```
+22:21:48  mgd=4360MB priv=20102MB  [MEM reconciliation-resident] managed_heap=4.26 GB
+22:21:51  mgd=5427MB priv=19686MB  [TASK] PerFileRescoring:done (21747.6s)
+22:21:52  mgd=4360MB priv=19582MB  [MEM stage7-inherited] managed_heap=4.26 GB
+22:21:57  mgd=6174MB priv=19330MB  Rebuilding first-pass survivors from 257 file(s)...
+22:22:24  mgd=12105MB priv=18444MB    3%
+```
 
-**Consequence for measurement**: an A/B on the `-LinkFrom` / `--task` harness exercises B and
-only the tail of A; the in-process peak needs a straight-through run. #4615 hit this and fell
-back to a 100-file subset for exactly this reason.
+Stage 6 hands over the LIBRARY and process overhead - 4.26 GB managed, ~19.6 GB private -
+and the next line is Stage 7 beginning its own rebuild.
+
+On `--task`, the same load happens one minute earlier in the same process:
+
+```
+12:18:29  mgd=46549MB priv=54615MB  Coelution analysis complete. 768549137 total scored entries across 257 files
+12:19:08  mgd=47439MB priv=55529MB  --task SecondPassFDR compaction: 768549137 -> 137034004 entries
+12:19:15  mgd=42982MB priv=53558MB  [MEM stage7-inherited] managed_heap=41.97 GB
+```
+
+So there is **one** target, not one per path: the ~137 M-entry survivor pool - 137,034,004
+entries, ~34.5 GB, **~252 B/entry** - reached by two different loaders:
+
+| path | loader | note |
+|---|---|---|
+| in-process | `RescoredEntries` rebuild from the reconciled parquets (#4597 defers it to the `.Value` read) | climbs 4.26 -> 38.75 GB inside Stage 7 |
+| `--task SecondPassFDR` | `LoadJoinOnlyScores` | materializes all **768.5 M** pre-compaction entries, THEN compacts 5.6x to 137.0 M |
+
+The `--task` side therefore carries a strictly ADDITIONAL defect: the pre-compaction
+materialization (#4615's TODO measured 311 MB/file to file 81), where
+`RescoreHydration.HydrateCompactedStreaming` already compacts each file as it loads and
+serves every other reconciled-bundle path. #4615 stripped features out of that reload
+(~800 MB/file) and deliberately left the stubs - "a restructuring job, not a buffer fix".
+
+**Consequence for measurement**: the `-LinkFrom` / `--task` harness measures the pool PLUS
+the pre-compaction read; a straight-through run measures the pool alone. Both must end up
+bounded, and neither number substitutes for the other.
 
 ## Deferred findings from #4615 that belong to this branch
 
