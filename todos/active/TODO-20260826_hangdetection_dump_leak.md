@@ -6,7 +6,7 @@
 - **Created**: 2026-08-26
 - **Status**: In Progress
 - **Module**: `skyline`
-- **PR**: (pending)
+- **PR**: [#4618](https://github.com/ProteoWizard/pwiz/pull/4618)
 
 ## Why
 
@@ -22,11 +22,14 @@ cannot trust?" - turned up an unrelated and worse defect: the walk can hang fore
 
 ### 1. Every ClrMD attach is permanent
 
-In the checked-in ClrMD (0.9, `pwiz_tools/Shared/Lib/Microsoft.Diagnostics.Runtime`),
+In the checked-in ClrMD (0.8.31.0, `pwiz_tools/Shared/Lib/Microsoft.Diagnostics.Runtime`),
 `ClrInfo.CreateRuntime` hands the DAC a COM reference back to `DacDataTarget` that nothing
 ever releases. Confirmed against the assembly metadata: `ClrRuntime` has **no** `Dispose`,
 and `DacLibrary` has only a finalizer that `FreeLibrary`s the module - which does not drop
-that COM ref. So `using var dataTarget = DataTarget.AttachToProcess(...)` releases nothing.
+that COM ref. So once the DAC is loaded, `using var dataTarget = ...` cannot release it.
+
+(It does NOT follow that `Dispose` is a no-op - see the review section below, which corrects
+exactly that overreach. An attach that never reaches `CreateRuntime` is fully releasable.)
 
 Measured with a standalone harness against the checked-in DLL, per fresh attach:
 
@@ -47,9 +50,14 @@ always walks on a background thread and **abandons** it at the 5-second deadline
 hang would strand a thread holding the DAC (and, after the fix in 1, the shared lock) for
 the life of the process, silently degrading every later dump.
 
-Skipping the walking thread: 5/5 clean in the harness that wedged 100% before. It costs
+Not walking the walking thread: 5/5 clean in the harness that wedged 100% before. It costs
 nothing - that stack is the blind spot already documented on `TryGetThreadDump`, and the
-thread whose stack a caller actually wants is a different one, still listed.
+thread whose stack a caller actually wants is a different one, still listed. The thread is
+still named in the dump, with a line saying its stack could not be read.
+
+The hang is not exotic: ClrMD's own doc for `EnumerateStackTrace` says it "may loop
+infinitely in the case of stack corruption or other stack unwind issues which can happen in
+practice" and tells callers to cap the loop. This code did not, hence `MAX_FRAMES_PER_THREAD`.
 
 The real test does not hit this today (30/30 full dumps, 0 degraded), but the exposure is
 in the helper, which `JsonToolServerTest` and the `TestFunctional` wait timeouts also call.
@@ -70,14 +78,17 @@ Worth recording, because the question "is a debugger attached?" was the reason t
 
 `pwiz_tools/Skyline/TestUtil/HangDetection.cs`:
 
-* `GetSelfRuntime()`/`AttachToSelf()` hold one `DataTarget` and one `ClrRuntime` for the
-  process, with `ClrRuntime.Flush()` before each walk. Flush is what makes reuse *correct*,
-  not merely cheap - without it a live-process runtime answers from its snapshot.
-* `GetAllThreadsCallstacks()` skips the walking thread and lost its `processId` parameter
-  (no caller passed anything but the current process, and a cached self-attach makes any
-  other value a trap). It is materialized rather than a `yield return` iterator, so it
-  cannot hold the lock across a caller's enumeration.
-* `DescribeAttachEnvironment()` reuses the same attach instead of making a second one.
+* `GetSelfRuntime()` holds one `DataTarget` and one `ClrRuntime` for the process, with
+  `ClrRuntime.Flush()` before each walk. Flush is what makes reuse *correct*, not merely
+  cheap - without it a live-process runtime answers from its snapshot. The attach stays
+  local until a runtime is built through it, and both are dropped as a pair if `Flush` throws.
+* `GetAllThreadsCallstacks()` lists the walking thread with a placeholder instead of walking
+  it, caps frames at `MAX_FRAMES_PER_THREAD`, takes the lock only with a timeout, and lost
+  its `processId` parameter (no caller passed anything but the current process, and a cached
+  self-attach makes any other value a trap). It is materialized rather than a `yield return`
+  iterator, so it cannot hold the lock across a caller's enumeration.
+* `DescribeAttachEnvironment()` keeps its own attach, disposed - it must read the machine at
+  the moment of failure, and without `CreateRuntime` there is nothing unreleasable to keep.
 
 ## Verification
 
@@ -91,7 +102,7 @@ TestRunner pass-1 leak deltas for `TestThreadDumpNamesRunningFrames`:
 |---|---|---|---|---|
 | thresholds | 8 KB | 20 KB | 150 KB | 2 |
 | before | **15.5 KB** | **193.1 KB** | **7632.6 KB** | 0 |
-| after | 1.6 KB | 2 KB | 4 KB | 0.4 |
+| after | 1.6 KB | 1.6 KB | 22.9 KB | 0.4 |
 
 Negative test: with the fix reverted and rebuilt, the check fails as
 `LEAKED 15848 Managed bytes / 197732 Heap bytes / 7815753 bytes`, total memory climbing
