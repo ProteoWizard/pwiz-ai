@@ -375,6 +375,36 @@ the reconciled parquet has the gap-fill rows already interleaved.
 
 ### 2026-08-26 - Session start
 
+### 2026-08-26 - Increments 2 and 3 written
+
+**Increment 2 - always write the reconciled parquet.** `TryAssembleRescoreTargets` bails on
+`combinedTargets.Count == 0 && gapFillTargets.Count == 0`, and that bail was the ONLY reason a
+file could lack the artifact. It now writes one anyway (`WriteUnchangedReconciled`), which is
+faithful by construction: `BuildOverlay` selects gap-fill by `ParquetIndex == uint.MaxValue`
+and re-scored rows by non-null `Features`, and a no-work file has neither. Also updates the
+`Outputs()` comment, which documented the gap as deliberate, and re-enables the task-level
+`IsTaskAlreadyDone` short-circuit that a single no-work file used to block.
+
+**Increment 3 - subset the write.** `StreamReconciledScoresParquet` takes the survivor id set
+and skips original rows outside it. The set is built in `ReconciledParquetWriter.Write` from
+the in-memory buffer's own entry ids, so the artifact cannot disagree with what the run
+computed. Gap-fill rows are always emitted. Two details worth keeping:
+
+* the gap-fill interleave stays correct across drops - skipping a row only defers the
+  `KeyLess` test to the next emitted row, whose key is >= the skipped one's;
+* progress now reports rows CONSUMED, not written, or the bar would stall at ~18% of its
+  total for the whole write.
+
+Checked, not assumed, before relying on it: `OverlayReconciledIntoBuffer` already matches by
+`EntryId` and already skips "non-passing reconciled rows (compacted out of the buffer)", so a
+subsetted artifact is strictly easier for it. `Pass2FdrSidecar` keys features by identity for
+the same reason. Neither needed changing.
+
+Gates so far: build + 593/593 tests + zero inspection warnings (593 includes the new
+`TestReconciledTransferKeepsOnlySurvivors`, which asserts survivors-plus-gap-fill in canonical
+order and that the reported original-row count still describes the INPUT). Stellar regression
+for increments 2 and 3 still to run - increment 2's is in flight.
+
 ### 2026-08-26 - Increment 1 committed: survivors selected during the read
 
 `a3e20dfbd1` in `C:\proj\pwiz-work1`. The front end built every file's full stub list and
