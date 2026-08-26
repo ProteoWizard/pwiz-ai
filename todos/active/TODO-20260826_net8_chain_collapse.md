@@ -41,6 +41,28 @@ master
 - [ ] Squash-merge #4587 into `chambem2/pwiz-sharp`
 - [ ] Then #4178 into master
 
+## The real gate is nightly, not one machine
+
+Brendan's plan: make the .NET 8.0 port the **Integration** branch, assign **one standard
+9-hour nightly runner** to it, and when that is passing add a second runner for the **Perf**
+tests. Master is nightly-tested every night, which is how #4618's leak was found at all -
+`TestThreadDumpNamesRunningFrames` failed TestRunner's **pass-1 leak check**, not a code
+review.
+
+That makes the ClrMD 3.1 question below self-answering: once Integration has a nightly,
+pass-1 leak detection runs against the 3.x attach automatically. Nothing needs designing.
+
+**Two things from this work bear directly on standing that runner up:**
+
+* **SkylineNightly starts a pass by launching a `.skytr`**, which reaches
+  `SkylineTesterWindow.Run(TabBase)` UNATTENDED - as do the run-again timer and the
+  restart-after-failure path. Any modal dialog on that path hangs the pass with nobody to
+  answer it. The leftover-worker prompt added here is gated to `RunOrStopByUser` for exactly
+  that reason; a `catch` does not help, because a dialog is not an exception.
+* **SkylineNightly drives SkylineTester, which now stages before running.** If a runner's
+  build and the stager disagree about the output path, staging silently uses stale binaries -
+  see the platform fix below.
+
 ## Verified locally on #4587 (`295ad8c92d`)
 
 Full solution builds Debug (~83 s) and Release (~85 s). `TestThreadDumpNamesRunningFrames`,
