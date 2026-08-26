@@ -261,9 +261,101 @@ disk and threads; reading and design do not.
 - #4526 / #4530 / #4536 / #4545 — the O(files) work upstream; this is the O(survivors) residue
 - `ai/docs/memory-band-guide.md` — post-GC probes vs `--memstamp`
 
+## Why Stage 7 reads the Stage 4 parquet at all - it is residue (2026-08-26)
+
+Brendan's question: Stage 6 originally OVERWROTE the Stage 4 parquet, and he asked for the
+two to exist separately. It was never intended that Stage 4's output become a Stage 7
+requirement. Answered from the code rather than the history:
+
+**Columns: nothing is missing from the Stage 6 parquet.** `StreamReconciledScoresParquet`
+streams the original group-by-group, replaces re-scored rows and merges gap-fill into
+canonical position, so the reconciled file holds EVERY original row plus the gap-fill rows in
+the same schema. Every column the front end loads is there - with better values, the
+reconciled boundaries, which is exactly what the second read currently overlays back on.
+
+**`ParquetIndex` is the one real difference, and Stage 7 already treats it as unusable.**
+From `Pass2FdrSidecar.LoadReconciledFeaturesByIdentity`'s own doc: a stub's `ParquetIndex`
+"(assigned against the ORIGINAL Stage 4 parquet ...) no longer addresses that stub's own row
+in the reconciled parquet. Identity is invariant across the reindex, so
+`MapFeaturesByIdentity` keys on it." So Stage 7's feature reload is already by
+(entry_id, charge, scan_number); within Stage 7 `ParquetIndex` survives only as the terminal
+tie-break of `CANONICAL_ORDER`, which the same doc notes essentially never fires because
+`DeduplicatePairs` makes entry_id unique per file.
+
+**The one genuine dependence is per-file**: a file with no reconciliation work has NO
+`.scores-reconciled.parquet` ("no-work files (none on disk) keep their 1st-pass boundaries"),
+so Stage 4's is its only copy. That is a fallback for a minority of files, not a reason to
+read 266 GB of Stage 4 data for all of them. On the 257-file CHS run all 257 files have a
+reconciled parquet, so the fallback would never fire there.
+
+**Conclusion**: the read was never re-pointed when the two files were separated. The
+resulting index mismatch was worked around by keying on identity, and a second read
+(`OverlayReconciledIntoFiles`) was added to restore what the in-place rewrite gave for free.
+
+### The reconciled parquet is NOT a subset - measured, against expectation
+
+Brendan expected the Stage 6 parquet to hold only the Stage 5 survivors (per-run q < 1%,
+plus every peptide of a protein with >= 2 peptides detected) and to show the 5.6x reduction.
+**It does not.** Three independent confirmations:
+
+* Writer's own log: `3533417 rows (59660 replaced + 7441 appended; original 3525976 rows)` -
+  written = every original row plus gap-fill, nothing dropped.
+* Disk: 266.23 GB of `.scores-reconciled.parquet` against 266.04 GB of `.scores.parquet`
+  over the same 257 files.
+* Code: `StreamReconciledScoresParquet(originalPath, ...)` streams the ORIGINAL group by
+  group; there is no filter in that path.
+
+The 5.6x is real and lives in exactly two places: the in-memory compacted buffer, and the
+**2nd-pass sidecar** (622,414 records against the 1st-pass sidecar's 3,525,976 for the same
+file). The parquet never had it applied. That also resolves where the ID-not-position design
+landed - `FdrScoresSidecar` records carry `entry_id` at [0..4] and `TryRead` matches on it,
+with a comment recording the correction from the older strict positional check.
+
+**Consequence**: because the reconciled parquet is a row-superset with an identical schema,
+nothing forced a choice between the two files, and the second read was added to recover the
+reconciled values rather than the first read being re-pointed.
+
+### Next increment
+
+Load survivors from `.scores-reconciled.parquet` when present, Stage 4's only as the per-file
+fallback. That deletes the entire second read - ~266 GB at 257 files - and
+`OverlayReconciledIntoFiles` with it. The work is `ResetRescoredTargets`, which addresses the
+survivor list POSITIONALLY in pre-gap-fill order; it has to key on EntryId instead, because
+the reconciled parquet has the gap-fill rows already interleaved.
+
 ## Progress Log
 
 ### 2026-08-26 - Session start
+
+### 2026-08-26 - Increment 1 committed: survivors selected during the read
+
+`a3e20dfbd1` in `C:\proj\pwiz-work1`. The front end built every file's full stub list and
+then dropped 81% of it; the gate now runs per row as the parquet decodes.
+
+Two invariants had to hold, both checked rather than assumed:
+
+* **`ParquetIndex` stays the FILE row ordinal.** It was `stubs.Count`, which only
+  coincidentally equalled the row index. It indexes that file's feature rows
+  (`PercolatorScorer.ResolveFeatureRow` does `rows[idx]`) and is `CANONICAL_ORDER`'s terminal
+  tie-break, so a dense renumber would mis-resolve features AND reorder the sort. Now an
+  explicit counter that advances whether or not the row is kept.
+* **The sidecar overlay had to be told about the filter.** `FdrScoresSidecar.TryRead` rejects
+  the whole read when a record's entry_id is missing - the superset contract. Measured: one
+  CHS file's 1st-pass sidecar holds **3,525,976 records** against ~533 K survivors, so
+  filtering first would have hard-failed. It now takes the same predicate inverted, so an
+  absence the caller asked for is skipped and any other missing entry_id still fails.
+
+Gates: `Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection` clean (592/592, zero
+warnings, after qualifying ten `<see cref>` references the new overloads made ambiguous), and
+**`regression.ps1 -Dataset Stellar` PASSED all 10 modes** including `mode1 (vs golden)` and
+`mode3 (HPC chain==straight)` - so the change is byte-identical in output.
+
+Not yet done: this does NOT remove the resident pool. The gate still prints the #4486 token
+notice ("~4.4 GB library + 0.197 GB/file live post-GC"), as expected.
+
+Ran concurrently with the CHS plate-0062 search, so that run's wall time is not cleanly
+comparable with plates 0059-0061. Its purpose is the cache-only proof and the disk reclaim,
+not timing.
 
 ### 2026-08-26 - The memory landscape, Stages 5-7 at 257 files
 
