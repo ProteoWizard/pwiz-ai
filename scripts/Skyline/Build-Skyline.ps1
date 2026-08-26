@@ -338,7 +338,13 @@ if ($isNet8) {
     # i-agree-to-the-vendor-licenses.bat, the gitignored props file sets it for us.
     $userProps = Join-Path $pwizRoot 'pwiz-sharp\Directory.Build.user.props'
     $vendorAgreed = $VendorLicenses -or (Test-Path -LiteralPath $userProps)
-    $net8Props = @("/p:Configuration=$Configuration")
+    # Platform matters as much as Configuration. Without it dotnet builds AnyCPU into
+    # bin\<Config>\<TFM>, while Visual Studio builds x64 into bin\x64\<Config>\<TFM> - two output
+    # trees for the same source, and code that resolves a sibling project's binary by path then
+    # finds whichever one happens to be there. That is how a stale AnyCPU TestRunner satisfied
+    # SkylineTester's staging check on 2026-08-26 after an x64 rebuild, so the run used a binary
+    # four hours older than the source and failed on an argument it had never heard of.
+    $net8Props = @("/p:Configuration=$Configuration", "/p:Platform=$Platform")
     if ($VendorLicenses) {
         $net8Props += '/p:IAgreeToVendorLicenses=true'
     }
