@@ -4,9 +4,9 @@
 - **Branch**: `Skyline/work/20260826_hangdetection_dump_leak`
 - **Base**: `master`
 - **Created**: 2026-08-26
-- **Status**: In Progress
+- **Status**: Completed
 - **Module**: `skyline`
-- **PR**: [#4618](https://github.com/ProteoWizard/pwiz/pull/4618)
+- **PR**: [#4618](https://github.com/ProteoWizard/pwiz/pull/4618) (merged 2026-08-26)
 
 ## Why
 
@@ -156,6 +156,7 @@ passive path - it is the DbgEng handshake timeout, used only for Invasive/NonInv
 **Noted, not done**: `SkylineNightly/LogFileMonitor.cs:275` already walks threads
 cross-process by pid and has no `LocalMatchingDac` guard, so it is still exposed to the
 745-1035 s symbol-server path. Out of scope here; it wants the out-of-process work below.
+**Carried forward** - this did not ship with #4618 and is worth its own item.
 
 ### Test coverage the review was right about
 
@@ -167,6 +168,24 @@ up, take a second dump, assert it names that thread's managed id.
 
 **Negative test**: with `Flush()` commented out and rebuilt, the run fails at
 `HangDetectionThreadDumpTest.cs:141` in `AssertSecondDumpIsNotTheFirstOne`. Restored and green.
+
+## Progress Log
+
+### 2026-08-26 - Merged
+
+PR #4618 merged as commit `bf8a9dd2d` with the admin override - all checks were green
+(TeamCity Skyline 1740 tests, Core Windows 308, Docker/Wine 44, code inspection, six CodeQL
+analyses) but the branch was `BEHIND` master, which the up-to-date-branch protection blocks.
+
+What shipped: the attach is made once and reused with `Flush`, the dump no longer walks its
+own thread, the walk is bounded by `MAX_FRAMES_PER_THREAD` and a lock timeout, and the reuse
+now has a test. Copilot's review added two more: the frame name is built rather than formatted
+(an unresolved type used to render as a bare leading dot, `.[Unknown]`), and per-thread notes
+carry `THREAD_NOTE_PREFIX` which the test's frame count excludes - without that, the notes this
+work introduced counted as frames, so a dump that walked nothing could have satisfied "named no
+frames on any thread". Every one of those was negative-tested.
+
+Nothing was deferred from the stated scope. The out-of-process dumper below was never in it.
 
 ## Open question
 
