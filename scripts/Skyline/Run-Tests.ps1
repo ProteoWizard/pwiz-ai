@@ -689,10 +689,16 @@ try {
         # quality=on is NOT enough on its own: TestRunner defaults pass0 and pass1 OFF, so it runs
         # pass 2 only and reports a clean result having skipped the leak detection entirely. The
         # passes have to be asked for by name, which is what the Quality tab does.
+        # Exactly what SkylineTester's Quality tab runs, taken from its own logged command line:
+        #   quality=on qualityonly=on pass0=True pass1=True
+        # Every part earns its place. Without qualityonly the pass-1 header still prints and pass 1
+        # runs NOTHING - a leak switch that reports "All tests PASSED" having skipped the leak
+        # detection. And pass 2 is not part of it: quality is passes 0 and 1, the edge-case pass
+        # and the repeat-for-leaks pass.
         if ($Quality) {
-            $runnerArgs += "quality=on"
+            $runnerArgs += @("quality=on", "qualityonly=on")
             if (-not $Pass) {
-                $runnerArgs += @("pass0=on", "pass1=on", "pass2=on")
+                $runnerArgs += @("pass0=on", "pass1=on")
             }
         }
 
