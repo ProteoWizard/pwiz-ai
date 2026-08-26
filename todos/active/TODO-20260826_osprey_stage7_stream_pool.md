@@ -364,6 +364,40 @@ pre-gap-fill list from the Stage 4 parquet, consensus and `ResetRescoredTargets`
 it, and gap-fill is appended afterwards by the overlay. Reading the reconciled parquet
 collapses that ordering, so the rows have to be distinguishable in the artifact.
 
+### Increment 6: upgrade in place on the rehydrate path (Brendan's design, 2026-08-26)
+
+Not a standalone converter - fold it into rehydrate, so any workflow holding old-format
+artifacts self-heals instead of needing a migration tool run against it:
+
+1. if the reconciled parquet is old-format (`osprey.reconciled = "true"`), load it the old
+   way - which this build already does, since the loader filters to survivors either way;
+2. write the new format beside it;
+3. restart against the new format.
+
+**The keep set falls out for free.** It is the entry ids of the POST-compaction stub list -
+by definition what Stage 7 consumes today - so gap-fill rows are kept or dropped exactly as
+the current code already decides them. That removes the one thing worth verifying about a
+standalone converter (whether gap-fill survives a `first_pass_base_ids` filter): the question
+never arises, because the filter is not re-derived.
+
+**Cost**: one sequential read plus a ~15% write per file, which is the I/O Stage 7's load was
+already paying - roughly 20-30 min for 257 files against ~5 h of re-running Stage 6.
+
+**Isolating a clean profile** (Brendan): run it twice, or kill the run once the new format is
+on disk, or an env var that exits after the conversion completes. The env var is the tidiest
+for an A/B and costs nothing when unset.
+
+**Testing sequence this unlocks**
+
+1. single plate `chs-86files-...-p0059`: convert, `--task SecondPassFDR`, diff the blib
+   against that run's existing one. Byte-identical proves the conversion AND the new Stage 7
+   path together - a real oracle, not a smoke test.
+2. 257 files `chs-257files-...-p0059_0060_0061`: convert, run with `OSPREY_LOG_MEMORY=1`,
+   compare live memory against the `s7mem257` baseline (4.19 GB library + 39.62 GB pool).
+
+What this does NOT measure is Stage 6's write cost under the new format; that needs one real
+end-to-end run before the PR.
+
 **Compatibility hazard to handle in 4/5**: an OLD reconciled parquet has no marker column and
 is full-shaped, so its gap-fill rows would be misread as originals. `ReadColumnByName` returns
 null for a missing column, which makes "no marker column" detectable - so the loader should
