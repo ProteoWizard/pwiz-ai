@@ -5703,11 +5703,16 @@ Re-run end to end after the code review and the two defects above (2026-08-25):
 - **`RefineConvertToSmallMoleculesTest` is flaky** - 2 of 5 runs, always `AssertEx.SettingsCloned`
   comparing two `PeptideLibraries` with identical `ToString()` (the net8 MSTest v3 `IEquatable`
   shape). Predates this work, undiagnosed.
-- **`BullseySharpTest.cs` should be deleted from master** - a typo-named stale duplicate of
-  `BullseyeSharpTest.cs` declaring the same class with a different base. Master's enumerated
-  csproj never compiled it, so it is dead code that trips every SDK-style conversion; an edit to
-  it today is silently a no-op.
+- ~~**`BullseySharpTest.cs` should be deleted from master**~~ - DONE upstream, deleted in the
+  commits that landed on `chambem2/pwiz-sharp` on 2026-08-26. It was a typo-named stale
+  duplicate of `BullseyeSharpTest.cs` declaring the same class with a different base; master's
+  enumerated csproj never compiled it, so an edit to it was silently a no-op.
 - The cpp `VendorReaderTestHarness::assertMzAscending` companion is not ported.
+- **`Skyline/work/20260612_net8_port` no longer exists on origin** (noticed 2026-08-26 when
+  pushing). The surviving branch is `chambem2/pwiz-sharp`, PR #4178's head and what
+  `ProteoWizard_CoreWindowsNet` builds; it contains the merge commit `232b2a440e`. The
+  standing "push to both" directive now has one live target - confirm whether the deletion
+  was intentional before recreating it.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260612_net8_port.md` before starting work.
@@ -5796,3 +5801,160 @@ re-syncing should be routine.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-parity.md` before starting work.
+
+## 2026-08-26b: The five landed on origin, and both sweeps re-run together
+
+Continuation of the entry above. That entry's "Branch state" section is now superseded:
+the five commits are **pushed**, not unpushed.
+
+### Re-sync and push
+
+Rebased the five onto the new origin tip (`06f55b4b72`, which carries a master merge) and
+pushed: `06f55b4b72..5f30a9d5cd`. Fast-forward, no force.
+
+The previous entry claimed the five "touch no file the incoming commits touch". **That was
+stale.** Two files are touched by both sides:
+
+| file | incoming | mine |
+| --- | ---: | ---: |
+| `MsData/Diff/MSDataDiff.cs` | +119 / -7 | +18 |
+| `TestHarness/VendorReaderTestHarness.cs` | +33 / -4 | +102 |
+
+Git merged both without conflict and my delta is purely additive, so the prediction's
+conclusion held while its reasoning had gone stale. Verified after the rebase that
+`DiffSpectrum(Spectrum, Spectrum, Context)` still has the signature `DescribeSpectrum` calls
+and that `FixtureRunContext`'s `_reader`/`_root`/`_predicate` fields the gate probe uses are
+intact. The full build+test run is what actually settled it. **Re-derive that overlap with
+`git diff --name-only` each time rather than trusting a previous session's claim.**
+
+`Skyline/work/20260612_net8_port` **no longer exists on origin** - `git ls-remote` shows only
+`chambem2/pwiz-sharp` (and `chambem2/pwiz-sharp-mzpeak`). The standing "push both" directive
+is therefore half-stale; there is nothing to push it to, and resurrecting a deleted branch is
+not something to do incidentally. Pushed `chambem2/pwiz-sharp` only.
+
+### Build gate
+
+`build.bat Release --i-agree-to-the-vendor-licenses`: **Build succeeded**, and every test
+project green except one:
+
+- `UNIFI.Tests` 43/44. `Reader_UNIFI_HarnessAgainstReferenceUrls` failed on a LIVE call to
+  `democonnect.waters.com` - HTTP 500 whose body is `ORA-04031: unable to allocate 62536
+  bytes of shared memory ("large pool", ...)`. Waters' demo server's Oracle backend is out
+  of shared pool. Server-side, unrelated to these commits, and the same test the previous
+  entry already flagged as externally flaky.
+- `Installer.Tests` 1 passed / 1 skipped - `Install_PerMachine_...` needs elevation.
+  Pre-existing skip, `Test Run Successful`.
+
+Totals across the other 18 projects: Analysis 175, BiblioSpec 142, MsData 85, Common 58,
+Util 36, Waters 21, MsConvert 17, Agilent 15, Thermo 15, Bruker 14, NativeAot 10, Sciex 8,
+IdentData 7, TraData 6, MsConvertGUI 3, Shimadzu 2, Mobilion 2, UIMF 2, Bruker.PrmScheduling 1.
+
+**The UNIFI client mislabels that failure.** A 500 with an Oracle OOM body surfaces as
+`authentication error: incorrect hostname, username, or password?`. Nobody reading that
+message would look for a server-side memory problem. Small separate defect, unfixed.
+
+### `cmd /c build.bat` silently does nothing - exit 0
+
+Running `cmd /c "build.bat Release ..."` from the Bash tool produced a **three-line log**
+(Windows banner + a clink prompt) and **exit 0**. Clink intercepted it and opened an
+interactive shell; no compilation happened. Trusting the exit code here would have "verified"
+a build that never ran - and, worse, a subsequent snapshot refresh would have copied stale
+binaries into the sweep.
+
+This is the same class as the CRLF `call :label` bug already recorded (`build.bat` exited 0
+having skipped `dotnet build` x7). **Run `build.bat` through the PowerShell tool**
+(`Set-Location <dir>; .\build.bat ...`), and always confirm the log contains
+`Build succeeded` and per-project test blocks before believing a green exit.
+
+### Snapshot refresh: overwrite, do not `rm -rf`
+
+`run_parity2.py`'s header comment says to refresh the C# snapshot with `rm -rf` + `cp -r`.
+That is wrong for this directory. `G:\parity\msconvert-snapshot` is a **superset** of the
+build output: 263 files vs 230, the extra 33 being the Bruker CompassXtract SDK
+(`BDal.*.dll`, `CompassXtractMS.dll`, the `Compressor_*.dll` set, the vc90 boost DLLs and the
+`BrukerCompassXtract-*.installed` marker) which is extracted at runtime, not produced by the
+build. `comm` confirms build-output ⊂ snapshot. Copied over it with `-Force` instead.
+
+Smoke-tested per the previous entry's warning: `20May24_P3_LHS_line_003.raw` with the
+peakPicking filter converts, exit 0, 2,087,193-byte mzML. The empty-scan guard is live in the
+snapshot, so it is genuinely fresh.
+
+### Both sweeps running concurrently
+
+`run_parity2.py` puts a peakPicking run in `work2-pp` and a default run in `work2` precisely
+so the two can run together, so both were started at once rather than serially:
+
+- `G:/parity/results-20260826-peakpicking.jsonl` - the regression check on the master merge
+- `G:/parity/results-20260826-default.jsonl` - **the first default sweep since 08-18**, which
+  is what finally measures the zero-length `binaryDataArrayList` fixes
+
+**Read the Sciex 420 s timeout files with extra suspicion in this pair.** They already flip
+`identical`/`cpp-failed`/`both-failed` run to run, and running two sweeps concurrently
+contends for CPU and for D:/G: I/O, which can only push borderline conversions further toward
+the timeout. A timeout transition in either file is not evidence of a regression.
+
+Early confirmation that the standing record's cpp-side IMS defect is peakPicking-specific:
+`ImsSynthCCS.d` reports `binary values x1402, spectrum/@defaultArrayLength x701` under
+peakPicking but only the one deliberate instrument-class `cvParam` under default.
+
+### The Core Windows .NET timeout: quadratic peak pairing (2026-08-26)
+
+`ProteoWizard_CoreWindowsNet` #337 and #338 both failed with **`Execution timeout`** after 60
+minutes. The headline error - *"number of tests 0 is 620 less than 620 in build #336"* - is a
+**consequence, not a cause**: the step was killed before any results were reported. #336, the build
+immediately before the merge, did all 620 tests in **15 minutes**, so this was a hang, not a budget
+that finally ran out.
+
+The thread dump TeamCity prints on termination named the culprit in both builds: the still-running
+process was `dotnet test Waters.Tests`.
+
+**Root cause.** `MSDataDiff.TryPairPeaks` matched greedily on nearest intensity across a sliding m/z
+window. That is near-linear only while m/z values are distinct. A **combined ion mobility spectrum
+repeats the same m/z once per mobility bin**, so `windowStart` could not advance past a long
+within-precision run and the inner loop rescanned it - already-`bTaken` entries included - for every
+peak. Quadratic on precisely the data the path exists to compare.
+
+It had been latent. The merge is what reached it: passing
+`ignorePeakOrder: config.CombineIonMobilitySpectra` into the round-trip diffs put Waters' **ten**
+combined-IMS configs through the pairing for the first time. Under dotCover, where every statement
+is instrumented, ~3x on top of that blew the hour.
+
+**Fix.** Both sides hold the same peaks in a different order, so canonicalize each by
+`(m/z, intensity)` and read them in lockstep - position k names the same peak on both. O(n log n),
+30 lines replacing 49. The intensity tie-break is what pairs peaks sharing an m/z, which is exactly
+the quadratic case. Where the multisets genuinely differ the values do not line up and the
+comparison reports it, unchanged.
+
+`Reader_Waters_HDMSe_Short_noLM`: **4m26s -> 2s**, same assertions. Verified with 397 tests across
+Waters, Bruker, Sciex, MsData, Agilent, Thermo, Mobilion, Shimadzu, UIMF, Common and Analysis.
+Commit `14e8820ac5`.
+
+#### How it was found, including the wrong turn
+
+The first hypothesis was wrong and cost the most time: that the *peak-order repair* was the cost,
+because the review had just moved `EnsureMzAscendingThroughout` into the eager readers and the
+mzXML/MGF round-trips - unlike mzMLb - are not behind `skipRoundTripForProfiler`. A fix gating them
+was written and then **reverted**: disabling the repair outright moved the fixture from 4m26s to
+4m20s. No effect. Suppressing those legs would have hidden the problem rather than fixed it, and CI
+had run them fine in 15 minutes before.
+
+What settled it was **`dotnet-stack report` against a live run** - the single CPU-bound thread was
+parked in `TryPairPeaks` under `RunMzmlbRoundTrip`. The same tool is already cited in the harness's
+own profiler comment. For a hang or an unexplained slowdown, sample the stack before theorizing;
+three hypotheses cost more than one stack dump.
+
+**A measurement that lied.** An attempt to neuter the repair with `if (true) return;` failed to
+compile - CS0162 unreachable code, warnings-as-errors - so `dotnet test --no-build` re-ran the
+**previous** binary and produced a perfectly plausible 4m28s. It was discarded and redone with an
+env-var gate that compiles. Same family as [[reference_batch_crlf_label_skip]] and the
+staging-staleness traps: **a number that looks like evidence but came from code that never ran.**
+When an experiment yields "no change", check the build succeeded before believing it.
+
+**Reading the failure.** "0 tests" against a test-count anchor means the run died, not that tests
+vanished; go to the termination thread dump for the process that was still alive.
+
+### Open
+
+- Both sweeps in flight; results and a `cs_surplus.py` refresh still to come.
+- The 27 `differs` net of the IMS defect (10 Shimadzu timestamp-only, 2 Thermo, 1 Bruker,
+  1 Sciex, 1 Waters) remain unexamined.
