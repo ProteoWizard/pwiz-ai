@@ -143,12 +143,58 @@ Applied to the candidates (5,880 GB free on D: as of 2026-07-28):
 | CHS by plate (~74) | 294 | 215 | 230 | ~150 | **889 GB** - easy |
 
 Deleting raw after a verified conversion drops the CHS whole-set peak to ~3,571 GB, which
-fits - but staging plate by plate is safer and matches how these are imported into Skyline
-anyway (one document per plate).
+fits - but the mzML detour is avoidable entirely, and the staging recipe in the next section
+is what these numbers should be budgeted against now.
 
-Osprey reads mzML only (`Osprey.IO` has no `.raw` reader), so **every raw dataset needs an
-msconvert pass**. See `ai/scripts/Osprey/SEA-AD/Convert-SeaAdRaw.ps1` and `convert-one.cmd`
-for the exact command line already in use.
+**A vendor-enabled build reads `.raw` directly.** The net8.0 exe cannot, but the net472 build
+with `pwiz_data_cli` can (`_bin\26.1.1.233-vendor-20260822` or later on BRENDANX-UW8), so a
+Thermo dataset needs no msconvert pass and no mzML copy at all - cheaper on disk and on time
+than converting. `ai/scripts/Osprey/SEA-AD/Convert-SeaAdRaw.ps1` and `convert-one.cmd` stay the
+recipe for the cases that still need mzML (a non-vendor build, or a format the vendor reader
+does not cover).
+
+## Staging a cohort: download -> cache -> DELETE the sources -> search
+
+Since pwiz #4616 a search runs with its source files **gone**, provided each `.spectra.bin` is
+present. Stage 1 is the only stage that reads a source; everything after it reads the cache. So
+the sources become dead weight the moment the cohort is cached - which matters because disk,
+not time, is what limits cohort size on a single workstation.
+
+1. **Download** with `ai/scripts/Osprey/Get-PanoramaFiles.ps1`, **one stream**. Measured on
+   BRENDANX-UW8 (single spindle): 375 GB/h at 1 stream against 138 GB/h at 4 - and the 4-stream
+   case simultaneously starved caching from ~100 s/file to ~1,900 s/file.
+2. **Cache as files land**, gated on a size match against the server manifest rather than on the
+   file existing: a `.raw` still being written opens fine and fails with
+   `[RawFileImpl::ctor()] Corrupt RAW file`, which reads like a bad acquisition rather than a
+   race. `--task SpectraCache` on a vendor build, ~120-150 s per 4 GB file uncontended.
+3. **Validate before deleting anything.** `ai/scripts/Osprey/Test-SpectraCaches.ps1 -Path <dir>`
+   checks magic, format version, the recorded source fingerprint (size + mtime) and the index
+   geometry of every cache, and exits non-zero if one fails or a source has no cache. **That
+   comparison is only possible while the sources are still there** - see below.
+4. **Delete the sources**, then run the search as usual. Both the dataset runner's banner and
+   Osprey's log announce the cache-only inputs ("N of N input(s) are absent but have a spectra
+   cache"), and the two counts must agree.
+
+Disk arithmetic, measured on CHS (446 Thermo Astral files):
+
+| | size | ratio to raw |
+|---|---|---|
+| `.raw` sources | 1,774 GB | 1.00 |
+| `.spectra.bin` caches | 1,168 GB | **0.66** |
+| run output, all stages | - | **0.615 GB per GB of raw searched** |
+
+A cohort therefore costs ~0.66x its raw size to hold once staged, plus ~0.62x for each search
+kept. The 446 CHS files that need 5,345 GB on the download-convert-search budget above need
+about 2,260 GB staged this way - the difference between not fitting on this box and fitting
+with room for a second search.
+
+**The trade is one-way, and it disables Osprey's own staleness check.** A cache header carries
+the source's size and mtime; while the source exists Osprey compares them and re-parses on a
+mismatch. Once it is gone there is nothing to compare against, so a stale or mismatched cache is
+trusted silently. A cache-format bump has the same shape: old caches are rejected and
+"re-populate on first use", which is precisely what a deleted source makes impossible. Hence
+step 3 - and hence the caches are **data** from then on, not intermediates. Nothing in the run
+directory rebuilds them; recovery means re-downloading (375 GB/h, so ~5 h for CHS).
 
 ## How to get these numbers for a new dataset
 

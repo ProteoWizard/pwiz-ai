@@ -354,7 +354,27 @@ function Invoke-OspreyDatasetRun {
                "target+decoy+entrapment libraries; see $readme.")
     }
 
-    $allInputs = @(Get-ChildItem -Path $dataDir -Filter "*.$ext" -File | Sort-Object Name)
+    # A source that is GONE but cached is still an input. Osprey searches from .spectra.bin
+    # alone (pwiz #4616), which is what lets a staged cohort delete its sources and roughly
+    # halve the disk it needs - but then nothing is left in the data directory to enumerate,
+    # so the cohort the feature exists to serve would resolve to zero files right here. The
+    # synthesized path is the one the source WOULD have had, not the cache's own: Osprey never
+    # stats it, and SpectraCache resolves the cache from its input's DIRECTORY.
+    $cacheProbeDir = if ($CacheDir) { $CacheDir } else { $dataDir }
+    $allCaches = @(Get-ChildItem -Path $cacheProbeDir -Filter '*.spectra.bin' -File -ErrorAction SilentlyContinue)
+    $cached = $allCaches.Count
+    $sourcesOnDisk = @(Get-ChildItem -Path $dataDir -Filter "*.$ext" -File)
+    $sourceStems = [System.Collections.Generic.HashSet[string]]::new(
+        [string[]]@($sourcesOnDisk | ForEach-Object { [IO.Path]::GetFileNameWithoutExtension($_.Name) }),
+        [StringComparer]::OrdinalIgnoreCase)
+    # "{stem}.spectra.bin" - strip the whole compound suffix, not one extension.
+    $cacheOnlyInputs = @($allCaches |
+        ForEach-Object { $_.Name.Substring(0, $_.Name.Length - '.spectra.bin'.Length) } |
+        Where-Object { -not $sourceStems.Contains($_) } |
+        ForEach-Object {
+            [pscustomobject]@{ Name = "$_.$ext"; FullName = (Join-Path $dataDir "$_.$ext") }
+        })
+    $allInputs = @(@($sourcesOnDisk) + $cacheOnlyInputs | Sort-Object Name)
     if ($IncludePattern) {
         $before = $allInputs.Count
         $allInputs = @($allInputs | Where-Object { $_.Name -match $IncludePattern })
@@ -381,16 +401,21 @@ function Invoke-OspreyDatasetRun {
     $selected = $allInputs | Select-Object -Skip $SkipFirstFiles
     if ($NumFiles -gt 0) { $selected = $selected | Select-Object -First $NumFiles }
     $inputs = @($selected | ForEach-Object { $_.FullName })
-    if ($inputs.Count -eq 0) { throw "No .$ext files found in '$dataDir'." }
+    if ($inputs.Count -eq 0) {
+        throw "No .$ext files, and no .spectra.bin without one, found in '$dataDir'."
+    }
+    # Counted from the selection, not the directory: which files were kept is what decides
+    # whether THIS run reads a source at all.
+    $cacheOnlySelected = @($inputs | Where-Object { -not (Test-Path -LiteralPath $_) }).Count
     if ($inputs.Count -lt $NumFiles) {
         throw ("Only $($inputs.Count) .$ext available in '$dataDir' after skipping " +
                "$SkipFirstFiles, need $NumFiles. See $readme.")
     }
 
     # .spectra.bin beside the data is the difference between a run that streams and one that
-    # also pays the parse. Worth saying out loud rather than discovering at hour six.
-    $cacheProbeDir = if ($CacheDir) { $CacheDir } else { $dataDir }
-    $cached = @(Get-ChildItem -Path $cacheProbeDir -Filter '*.spectra.bin' -File -ErrorAction SilentlyContinue).Count
+    # also pays the parse ($cached / $cacheProbeDir are counted with the inputs above, since
+    # the cache list is now part of resolving what the inputs even are). Worth saying out loud
+    # rather than discovering at hour six.
 
     if (-not $OutDir) {
         # The dataset root is the data directory's PARENT and every run goes under its runs\,
@@ -492,6 +517,16 @@ function Invoke-OspreyDatasetRun {
         Write-Host "           data + .spectra.bin locally and set the env var to it; see the README." -ForegroundColor Yellow
     }
     Write-Host ("  files    : {0}; {1} .spectra.bin cache(s) in {2}" -f $inputs.Count, $cached, $cacheProbeDir)
+    if ($cacheOnlySelected -gt 0) {
+        # Provenance, not decoration: a run whose sources are gone cannot rebuild a cache that
+        # later turns out to be wrong, and the fingerprint check that would have caught a
+        # mismatched one is skipped precisely because there is nothing left to compare to.
+        Write-Host ("  CACHE-ONLY: {0} of {1} input(s) have no .$ext on disk and will be read from" -f
+                    $cacheOnlySelected, $inputs.Count) -ForegroundColor Cyan
+        Write-Host "             their .spectra.bin. Osprey logs the same count; the two must agree." -ForegroundColor Cyan
+        Write-Host "             Validate caches with ..\Test-SpectraCaches.ps1 BEFORE deleting sources -" -ForegroundColor Cyan
+        Write-Host "             once they are gone a stale cache is trusted silently." -ForegroundColor Cyan
+    }
     if ($cached -lt $inputs.Count) {
         Write-Host "  NOTE: not every file has a spectra cache; expect a per-file parse cost." -ForegroundColor Yellow
         if ($Dataset.ContainsKey('MissingCacheNote')) {
