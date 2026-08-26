@@ -106,6 +106,9 @@ param(
     [int]$Loop = 0,  # Number of iterations (0 = run forever, 1 = run once, 20 = run 20 times)
 
     [Parameter(Mandatory=$false)]
+    [switch]$Quality = $false,  # SkylineTester's Quality tab: passes 0, 1 and 2, with the pass-1 leak check
+
+    [Parameter(Mandatory=$false)]
     [switch]$ReportHandles = $false,  # Enable handle count diagnostics
 
     [Parameter(Mandatory=$false)]
@@ -641,8 +644,10 @@ try {
         # runsmallmoleculeversions=on ensures small molecule test variants run (skipped by default)
         $commonArgs = @("test=$testParam", "language=$languageParam", "offscreen=$offscreenParam", "perftests=on", "runsmallmoleculeversions=on", "log=$logFile")
 
-        # buildcheck forces loop=1, so don't use it when we want to loop multiple times or memory profiling
-        if ($useBuildCheck -and ($Loop -eq 0 -or $Loop -eq 1) -and -not $MemoryProfile) {
+        # buildcheck forces loop=1 and en-US, so don't use it when we want to loop multiple times,
+        # profile memory, or run the quality passes - pass 0 is French by design and pass 1 repeats
+        # each test, neither of which survives buildcheck.
+        if ($useBuildCheck -and ($Loop -eq 0 -or $Loop -eq 1) -and -not $MemoryProfile -and -not $Quality) {
             $runnerArgs = @("buildcheck=1") + $commonArgs
         } else {
             # Use loop parameter if specified, otherwise default to 1 (run once)
@@ -674,6 +679,20 @@ try {
             $requestedPasses = $Pass -split '[,\s]+' | Where-Object { $_ -ne '' }
             foreach ($p in 0, 1, 2) {
                 $runnerArgs += "pass$p=$(if ($requestedPasses -contains "$p") { 'on' } else { 'off' })"
+            }
+        }
+
+        # The leak check that found the ClrMD attach leak in PR #4618 lives in pass 1, and until
+        # this switch existed the only way to reach it was SkylineTester's Quality tab - so no
+        # session could run the check that catches leaks.
+        #
+        # quality=on is NOT enough on its own: TestRunner defaults pass0 and pass1 OFF, so it runs
+        # pass 2 only and reports a clean result having skipped the leak detection entirely. The
+        # passes have to be asked for by name, which is what the Quality tab does.
+        if ($Quality) {
+            $runnerArgs += "quality=on"
+            if (-not $Pass) {
+                $runnerArgs += @("pass0=on", "pass1=on", "pass2=on")
             }
         }
 
