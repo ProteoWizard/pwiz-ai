@@ -4,7 +4,8 @@
 - **Branch**: `Skyline/work/20260825_osprey_stage7_memory`
 - **Base**: `master`
 - **Created**: 2026-08-25
-- **Status**: Active - fixes written, verification in progress
+- **Status**: Completed
+- **PR**: [#4615](https://github.com/ProteoWizard/pwiz/pull/4615) (merged 2026-08-26)
 - **Module**: `osprey`
 - **Machine**: BRENDANX-UW8, 63.7 GB RAM
 
@@ -157,10 +158,60 @@ those two their own reporting is a separate small change, not heartbeat tuning.
 - [x] perfviz plots: `ai/.tmp/s7-100-unfixed.png`, `s7-100-fixed.png`, `s7-257-fixed.png`
 - [x] `regression.ps1 -Dataset Stellar` **PASSED** - all 10 modes, including mode1 vs golden,
       so both fixes are byte-identical in output
-- [ ] `regression.ps1 -Dataset All` before merge
-- [ ] Consider progress reporting for the compaction and blib-write steps
+- [x] `regression.ps1 -Dataset All` - TeamCity Perf/Regression build #218 SUCCESS on the
+      PR merge ref
+- [x] Progress reporting for the compaction and blib-prep steps
+
+## Deferred, carried forward
+
+Four `/code-review max` findings verified but deliberately left out, each needing its own
+verification rather than being folded into a branch scoped to the visible perfviz defects:
+
+1. **`BuildBestExpPrecursorQ` / `BuildSharedBoundaries` re-walk the whole pool** to re-derive
+   what `CollectPassingEntries` already materialized 22 lines earlier. Result-identical per the
+   reviewer's tie-break analysis, but `BuildSharedBoundaries` is `internal` and bound by
+   `MultiChargeConsensusTest.cs:118`, so the signature change needs its own test pass. Removes
+   two of six full passes over the 137 M-row pool.
+2. **`BuildCrossFileObservations` has no `passingPrecursors` gate** - it filters on `IsDecoy`
+   alone, while its only consumer looks the map up exclusively with passing keys. Every
+   non-passing precursor's list is built and never read.
+3. **Three more whole-pool walks at the head of the blib phase** (`ComputePassingPeptides`,
+   `ComputePassingPrecursors`, `CollectPassingEntries`) still run silent, ~70 s at 257 files.
+4. **`FdrScoresSidecar` has a bare `catch { return false; }`** around the record read, so an
+   OutOfMemoryException in the callback is reported as a missing sidecar. Under
+   transfer-compete or protein-compact those entries reach the picked-protein FDR at
+   `Score == 0.0`, and the decoy side is deliberately not q-gated, so zeros compete in the
+   null - and `LogWarning` sets no exit code, so the run returns 0 with corrupted protein
+   numbers. **Worth its own issue**; the cheap durable fix is
+   `catch (Exception ex) when (!(ex is OutOfMemoryException))`.
+
+Also carried: three Copilot threads on PR #4615 left **unresolved** by choice. Copilot asked
+for `++idx` over the 0-based `Report(idx++)`; its premise is right (`_lastPercent` starts at
+-1, so `Report(0)` can emit "0%") but `++idx` prints 100% before the last file's work runs.
+0/33/67/100 is the honest sequence. Left open for a human rather than resolved.
 
 ## Related
 
 - `ai/todos/active/TODO-20260823_osprey_chs_large_scale.md` - the 257-file run these came from
 - `ai/docs/memory-band-guide.md` - the fan-out vs join shape method
+
+## Progress log
+
+### 2026-08-26 - Merged
+
+PR #4615 merged as commit `2a0b006`. Shipped both fixes the branch was scoped to: the
+`RestorePass1Scalars` buffer reuse (131 MB/file -> 1 MB/file at 100 files, working-set peak
+52.7 -> 45.7 GB) and the reporting-gap work (`HEARTBEAT_SECONDS` 30 -> 15 plus five newly
+instrumented whole-pool spans, gaps >= 30 s going 34 -> 2 at 257 files). A 257-file
+`--task SecondPassFDR` leg now completes in 70 min where it previously could not finish.
+`regression.ps1 -Dataset Stellar` green locally and TeamCity Perf/Regression #218 green on
+the merge ref, both including mode1 vs golden, so every change is byte-identical in output.
+
+Deliberately NOT closing #4486: the post-GC characterization it had been blocked on since July
+is now posted there (Stage 7's peak is a LIVE pool - 4.19 GB library + ~147 MB/file, flat
+across the stage - not Server-GC gray), which reduces that issue to one sentence: the survivor
+pool is resident, stream it. Removing it means restructuring what pass-2 scoring and protein
+FDR consume, not tuning allocations, so it stays open for its own branch.
+
+Four review findings deferred (see above), one of which - the bare `catch` masking an OOM as a
+missing sidecar - deserves its own issue.
