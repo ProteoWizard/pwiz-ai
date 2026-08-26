@@ -315,7 +315,55 @@ with a comment recording the correction from the older strict positional check.
 nothing forced a choice between the two files, and the second read was added to recover the
 reconciled values rather than the first read being re-pointed.
 
-### Next increment
+## THE PLAN: rearchitect Stage 7 onto a subsetted Stage 6 parquet (Brendan, 2026-08-26)
+
+Sanctioned explicitly: "Now is the time to rearchitect for optimal Stage 7 performance and
+leave prior implementation baggage behind."
+
+**The history that explains the shape.** Stage 6 originally OVERWROTE the Stage 4 parquet.
+Brendan rejected that - space is a workflow-engine or flag decision, not a reason to destroy
+an input - and asked for two files. What was not noticed at the time is that the overwrite
+had never been purely additive: it changed values, and it preserved the ORIGINAL ROW SHAPE.
+Splitting the file carried that row shape over to the sibling, where it had no reason to
+exist. So the reconciled parquet became "a complete artifact covering pass 1 and pass 2"
+instead of what Stage 7 needs, and Stage 7 got slower for it.
+
+**Target state**
+
+* `.scores-reconciled.parquet` holds the Stage 5 SURVIVOR set for its file - per-run
+  q < 1%, plus every peptide of a protein with >= 2 peptides detected - carrying Stage 6's
+  re-scored values, with gap-fill rows merged in. ~533 K rows/file, not 3.53 M.
+* It is written for EVERY file, including no-work files.
+* Stage 7 reads ONLY it, plus the 1st-pass sidecar for scores / q-values.
+* `.scores.parquet` is never read after Stage 5.
+
+**Increments, each gated byte-identical on Stellar**
+
+1. **DONE `a3e20dfbd1`** - select survivors during the parquet read, not after.
+2. **DONE, gate pending** - always write the reconciled parquet (no-work files included).
+3. **Subset the write.** `ParquetScoreCache.StreamReconciledScoresParquet` already walks the
+   original row group by row group and decides per row; give it the survivor base_id set and
+   emit only those rows (plus gap-fill). File drops to ~15-19% of its size: 266 GB -> ~45 GB
+   at 257 files.
+4. **Mark gap-fill rows explicitly** rather than inferring them from absence in the 1st-pass
+   sidecar. This is Brendan's point (1) in its useful form: the consumer that must exclude
+   them is `MultiChargeConsensus.SelectRescoreTargets`, which is computed on demand from the
+   list, and a gap-fill row carrying default q=1 can otherwise join the per-peptide charge
+   competition and change which charge wins.
+5. **Point the Stage 7 rebuild at the reconciled parquet** and delete the second read
+   (`OverlayReconciledIntoFiles`) from the pool build.
+
+**A fall-out worth naming**: subsetting the artifact also removes the `--task SecondPassFDR`
+pre-compaction pool - the 311 MB/file structure #4615 measured and deferred as "a
+restructuring job, not a buffer fix". That path reads the reconciled parquets and compacts
+768.5 M entries down to 137.0 M; against a subsetted artifact there is nothing to compact.
+
+**Compatibility**: keep the survivor filter on the LOAD path even after the write is
+subsetted, so an old full-shaped reconciled parquet still yields the same list. That keeps
+the existing 257-file CHS run dir usable as the test rig instead of forcing a 15 h re-score
+before anything can be measured.
+
+### Superseded next-increment note
 
 Load survivors from `.scores-reconciled.parquet` when present, Stage 4's only as the per-file
 fallback. That deletes the entire second read - ~266 GB at 257 files - and
