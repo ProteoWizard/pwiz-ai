@@ -175,6 +175,47 @@ Against it, #4615's review found the blib phase already makes SIX full passes ov
 - [ ] Post-GC memory A/B at ≥100 files, plus an in-phase sample so a transient cannot hide
       between two boundary probes (the 2026-08-08 error)
 
+## WHERE THIS STANDS (2026-08-26, end of session)
+
+Branch `Skyline/work/20260826_osprey_stage7_stream_pool` in **`C:\proj\pwiz-work1`**.
+
+| # | change | state |
+|---|---|---|
+| 1 | select survivors during the parquet read | **committed `a3e20dfbd1`**, Stellar 10/10 incl. golden |
+| 2 | always write the reconciled parquet | written; Stellar 10/10 (regression #2) |
+| 3 | subset the write to survivors | written; **first attempt was INERT**, see below |
+| 6 | in-place upgrade of old-format parquets + `OSPREY_UPGRADE_RECONCILED_ONLY` | written, unit-gated |
+| 4 | gap-fill marker column | NOT started - needed only for increment 5 |
+| 5 | point the Stage 7 rebuild at the reconciled parquet | NOT started - the increment that actually removes Stage 4 |
+
+**The inert-subset bug, kept because the lesson generalizes.** Increment 3 first keyed the
+keep set on `entry_id`, and regression #4 passed all 10 modes while dropping **zero** rows.
+The write log said `483022 rows ... original 482891 rows` against Stellar's own
+`First-pass compaction: 482891 -> 332138 entries`. Compaction removes an entry_id's extra
+SCANS, not whole entry_ids - 332,138 is about 166,724 passing base_ids x 2 for target and
+decoy, i.e. roughly one surviving row per entry_id - so an entry_id-keyed set matches every
+row by construction. Now keyed on `(entry_id, charge, scan_number)`, the identity
+`MapFeaturesByIdentity` already uses, and tested AFTER the overlay because a rescore can move
+a row's apex scan.
+
+Two things added so it cannot hide again: `StreamReconciledScoresParquet` returns `NWritten`,
+and the Stage 6 log reports rows WRITTEN against rows READ rather than `original + appended`;
+and `TestReconciledTransferKeepsOnlySurvivors` asserts the emitted count.
+
+**Next actions, in order**
+
+1. Confirm regression #5 is green AND that the write log now shows a real drop
+   (~482,891 -> ~332,138 + gap-fill on Stellar). A PASS alone does not prove the subset works.
+2. Commit increments 2, 3 and 6.
+3. Increment 5 (+4): point the Stage 7 rebuild at the reconciled parquet, which is what
+   removes the Stage 4 read. Needs the gap-fill discriminator - see the section above for why.
+4. Trials: single plate `chs-86files-...-p0059`, then the 257-file set, using the in-place
+   upgrade rather than re-running Stage 6.
+
+**Coverage caveat to carry**: Stellar compacts only 1.45x (482,891 -> 332,138), so it exercises
+the subset but is a weak proxy for the ~5.6x seen on CHS. The 257-file trial is where the
+size claim gets tested.
+
 ## Regression Test
 
 - **Test name**: (filled in once written)
