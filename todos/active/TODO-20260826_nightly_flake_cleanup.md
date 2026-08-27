@@ -141,3 +141,49 @@ which `CommandStatusWriter`/error-count path set it - before chasing the cause.
   intend to change still works, not only that the change did what you meant. Two verifications
   there passed while proving nothing - one against a stale binary, one against a condition that
   was true either way.
+
+---
+
+## Postscript 2026-08-27: the net8 line changes two of these three
+
+Pooled across all three net8 runs of 2026-08-26/27 (same machine, same suite, 8 workers),
+against the net472 9-hour baseline:
+
+| Test | net8 | net472 |
+|---|---|---|
+| `ConsoleMethodTest` | **0 / 90 (0%)** | 7 / 70 (10.0%) |
+| `PeakAreaDotpGraphTest` | **1 / 90 (1.1%)** | 6 / 67 (9.0%) |
+| `ConsoleImportNonSRMFile` | 0 / 90 | 0 / 70 |
+| `TestAuditLogTutorial` | **2 / 75 (2.7%)** | 0 / 65 |
+
+`ConsoleMethodTest` at 0/90 against a 10% baseline has probability 0.9^90 = 0.008%. That is
+not luck - something in the port fixed it. `PeakAreaDotpGraphTest` is reduced roughly
+eight-fold rather than eliminated.
+
+Two consequences for this TODO:
+
+1. **Fix these on master anyway.** The net8 port is not the delivery vehicle for master's
+   nightly, and master will be the release branch until #4619 merges.
+2. **Find out WHAT fixed them before assuming it holds.** A flake that vanishes without a
+   named cause can come back. Whatever the port changed - the WinForms SystemEvents hook
+   rework, the unattended-dialog timeout handling, or the STA thread exception routing, all
+   touched during the port - is worth identifying and considering for master directly. That
+   is likely cheaper than debugging the flakes from scratch.
+
+New on the net8 line, not present on master:
+
+- `TestAuditLogTutorial` - an audit-log entry ORDERING difference, not a text mismatch,
+  and **Japanese only**: 3 failures in ~17 Japanese executions (~18%), 0 in ~68 executions
+  of the other four languages. Every failure is byte-identical - line 128, position 16,
+  the same two entries swapped:
+
+      expected  Reason Changed: <excluded replicate Standard_8 from the calibration curve>
+      actual    Reason Changed: <peak boundary changed for GST-tag>IEAIPQIDK>517.8022++>
+
+  A ~18% single-language failure with an identical diff every time is not a race in the
+  usual sense - it is two audit entries whose relative order depends on something that
+  differs under ja-JP. Sorting by a localized string is the obvious candidate, since ja-JP
+  collation would order these two differently from the other four locales. Cheap to test:
+  run the test in ja repeatedly and look at what orders the audit entries.
+
+  Worth a look alongside `TODO-20260827_net8_managed_memory_leak.md`.
