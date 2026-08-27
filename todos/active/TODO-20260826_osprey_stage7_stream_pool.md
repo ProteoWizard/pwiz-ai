@@ -9,7 +9,7 @@
 - **Status**: In Progress
 - **GitHub Issue**: [#4486](https://github.com/ProteoWizard/pwiz/issues/4486)
 - **Module**: `osprey`
-- **PR**: (pending)
+- **PR**: [#4621](https://github.com/ProteoWizard/pwiz/pull/4621) - opened 2026-08-27 02:40
 
 ## Objective
 
@@ -1421,3 +1421,26 @@ a 6.2x reduction on that structure - slightly better than the ~5x estimated when
 written. It does not show in the post-GC probes because `entriesByPrecursor` is dead by the
 time `stage7-blib-written` fires; it shows in the transient, and the peak is dominated by the
 pool.
+
+## PR #4621 open - TeamCity trigger BLOCKED, needs Brendan
+
+Branch pushed and [#4621](https://github.com/ProteoWizard/pwiz/pull/4621) opened 2026-08-27
+02:40, module prefix `osprey:`, label `osprey`.
+
+**The TeamCity Perf/Regression trigger was refused by the Claude Code permission classifier**,
+not by policy - the handoff's standing approval covers it. It still needs firing on
+`pull/4621` (config `ProteoWizard_OspreyWindowsNetPerfRegressionTests`, agent
+`MacCoss TeamCity Agent 1`, never a named branch).
+
+Local gates standing in for it meanwhile:
+
+| gate | result |
+|---|---|
+| build + 594 tests + zero inspection warnings | green |
+| `regression.ps1 -Dataset All` | **PASSED**, all four datasets, every mode - at `e3015a4aa4` |
+| `regression.ps1 -Dataset Stellar` | **PASSED** at HEAD (`e5e6d15fa3`, the review fixes incl. the pass-2 gate change) |
+| 257-file `--task SecondPassFDR` | exit 0, outputs identical to `s7mem257`, blib 65 bytes apart in `LibInfo` |
+
+The one gap a morning session should close: `-Dataset All` has not run on HEAD, only on the
+commit before the review fixes. TeamCity's config runs exactly that (`regression.ps1
+-TeamCity -Dataset All`), so firing it closes the gap.
