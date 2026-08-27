@@ -1361,3 +1361,63 @@ but only for that flag) or to relabel the views as post-compaction.
   is never skipped.
 * `HashSet<T>(int)`, the null-`using` ternary and `string.Format` with a ternary format string
   all behave correctly on net472 and net8.0.
+
+## 257-FILE MEASUREMENT: outputs identical, Stage 7 2.25x faster, memory essentially unchanged
+
+`chs-257files-libdecoy-r1.0-protein-compact-s7red257`, `--task SecondPassFDR -LinkFrom`
+the converted `s7conv257` dir, exe `_bin\26.1.1.238-s7final-20260827`,
+`OSPREY_VERSION_OVERRIDE=26.1.1.233`, `OSPREY_LOG_MEMORY=1`, mdiag on, fdrbench pass 2 -
+flags matched to the `s7mem257` baseline deliberately, so the only differences are the
+build and the artifact format. **exit=0 in 36 min.**
+
+| | baseline `s7mem257` | `s7red257` |
+|---|---|---|
+| library-resident | 4.19 GB | 4.19 GB |
+| pre-compaction read | 768,549,137 -> 137,034,004 | **137,034,004 -> 137,034,004 (no-op)** |
+| `stage7-inherited` / `stage7-pool` | 41.97 GB | **40.23 GB** |
+| `stage7-fragments-released` | 39.62 GB (released 5,173,196) | **37.87 GB** (released 5,173,196) |
+| `stage7-pass2-scored` / `-protein-fdr` / `-blib-written` | 39.62 GB | **37.87 GB** |
+| peak working set / peak_paged | 53.6 / 55.5 GB (`s7fix257`) | 54.18 / **55.55 GB** |
+| protein groups passing | 5,079 | **5,079** |
+| library spectra / passing entries | 45,724 / 11,745,026 | **45,724 / 11,745,026** |
+| blib | 725,467,136 bytes | **725,467,136 bytes** |
+| **Stage 7 wall** | **81 min** | **36 min** |
+
+**The blib is content-identical**: same size, and a full byte comparison finds **65 differing
+bytes out of 725,467,136, the first at offset 8,137** - the SQLite header / `LibInfo` region
+where BiblioSpec stores the library LSID and creation time. Every spectral and FDR body byte
+matches. (The 86-file control found 62 bytes in the same region; a blib SHA is not an
+equality test, size + counts + a located byte-diff is.)
+
+### What this does and does not buy - state it plainly
+
+**It buys**: the artifact drops 266.23 -> 47.07 GB (5.7x), Stage 7's wall drops 81 -> 36 min
+(2.25x), and the `--task` pre-compaction materialization is GONE - 768.5 M entries were read
+and compacted before, and now the read IS the survivor set, so the compaction is a no-op.
+That is the 311 MB/file structure #4615 measured and deferred as "a restructuring job, not a
+buffer fix"; it disappeared without that code being touched.
+
+**It does NOT buy the memory bar.** Brendan's bar was "take Stage 7 entirely out of contention
+for peak memory", i.e. FirstPassFDR becomes the run's high point. Measured:
+
+* live floor 39.62 -> 37.87 GB, a **4.4%** reduction;
+* peak_paged 55.5 -> 55.55 GB, i.e. **unchanged**;
+* FirstPassFDR in-process peaks at 53.7 GB private.
+
+So Stage 7 is still the run's high point and still holds a ~38 GB resident pool. **The pool is
+untouched, exactly as designed** - this branch changes what Stage 7 READS, not what it HOLDS.
+Removing the pool is the streaming work, and nothing here should be quoted as progress toward
+the memory bar.
+
+**Still unattributed**: the pool is 1.74 GB smaller on the reduced read (40.23 vs 41.97 at
+build; 37.87 vs 39.62 after the fragment release) despite an identical 137,034,004-entry pool
+and an identical 5,173,196 fragment release. The 86-file trial saw the same shape (1.45 GB).
+Something the old path retained on its way through 768.5 M rows. Worth understanding before
+it is quoted as a benefit of the format - it is currently a number, not an explanation.
+
+**Also measured**: 11,745,026 passing entries against the 72.9 M non-decoy observations
+`BuildCrossFileObservations` used to index, so the blib-phase narrowing committed tonight is
+a 6.2x reduction on that structure - slightly better than the ~5x estimated when it was
+written. It does not show in the post-GC probes because `entriesByPrecursor` is dead by the
+time `stage7-blib-written` fires; it shows in the transient, and the peak is dominated by the
+pool.
