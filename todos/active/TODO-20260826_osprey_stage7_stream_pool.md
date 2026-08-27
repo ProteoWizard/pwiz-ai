@@ -800,3 +800,34 @@ it is quoted as a benefit of the format.
 
 **Next**: 257-file conversion started 20:01 with `OSPREY_UPGRADE_RECONCILED_ONLY=1`
 (`-s7conv257`), so the measurement run afterwards profiles the new format alone.
+
+## 257-file conversion CRASHED - memory exhaustion, not a code defect (2026-08-26)
+
+`-s7conv257` died at 20:42 after 42 min, at file 176/257 of the pool load, with
+`System.AccessViolationException` (exit 0xC0000005) in
+`ParquetScoreCache.LoadFdrStubsFromParquet(String, Func<UInt32,Boolean>)`.
+
+**Evidence it is exhaustion**: the conversion was at **priv 38,991 MB** and still climbing,
+while plate 0062's SecondPassFDR was at **priv 36,253-37,623 MB** in the same minute -
+**~76 GB combined on a 63.7 GB box**. An AccessViolation is what a native allocation failure
+looks like under exhaustion; the stack frame is the hot allocation site during the load, not
+evidence the filtering logic is wrong. Retry on a quiet machine is the test.
+
+**No data lost.** Source and conversion dirs both still hold 257 reconciled parquets at
+266.2 GB, and there were zero `.upgraded` leftovers - the crash came before any file was
+replaced. (The `File.Delete` -> `File.Move` window in `UpgradeReconciledParquets` is still
+worth hardening: these were hard links into a linked run dir, so the source kept the data,
+but that is luck of the harness rather than a property of the code.)
+
+**The design finding, which matters more than the crash.** Folding the upgrade into the Stage 7
+rehydrate means it inherits the FULL old-format pool build before it converts anything - 261 M
+entries at 257 files. So the upgrade is **memory-heavy**, and "convert while other work runs"
+does not hold. A standalone converter would not need the pool at all: the survivor identities
+per file are derivable from `reconciliation.json`'s `first_pass_base_ids` plus each file's own
+rows, with no whole-run buffer. That is the cheaper shape for a one-time migration, and the
+in-rehydrate version is the right shape only for a cohort that was going to build the pool
+anyway.
+
+**Operational rule earned**: do not run two memory-heavy Osprey jobs on this box. The earlier
+concurrency (regressions alongside plate 0062) was survivable because Stellar is tiny; a
+257-file pool build is not.
