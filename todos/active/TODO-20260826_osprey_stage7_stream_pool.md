@@ -926,9 +926,16 @@ and `:808` the help/doc strings - all four need the new value):
    swap with Move -> Move -> Delete. All of this already exists in the uncommitted
    `UpgradeReconciledParquets`; only its ENTRY POINT was ever wrong.
 
-**Naming**: Brendan suggested `CompactSecondPassParquet`. Worth a moment's thought - the
-artifact is the Stage 6 / reconciled parquet (`.scores-reconciled.parquet`) that SecondPassFDR
-CONSUMES, so `CompactReconciled` may read truer. Brendan's call.
+**Naming: `CompactPerFileRescore`** (Brendan, settled). It names the task whose results are
+being compacted, which is the reference an outside reader already has - `PerFileRescoring` is
+a word users type on the command line, where "reconciled" appears only inside a filename.
+Rejected: `CompactSecondPassParquet` (names the consumer, not the producer) and
+`CompactReconciled` (clear only from inside the code).
+
+One alignment detail left to the implementer: the CLI value for the producing task is
+`PerFileRescoring`, while the class is `PerFileRescoreTask`. `CompactPerFileRescoring` matches
+the token users actually type; `CompactPerFileRescore` matches the class. Either is
+unambiguous - prefer the CLI token if the tie needs breaking.
 
 **And then**: the converter gets its first real measurement. It has never executed - all three
 attempts died in the pool build before reaching it, so its per-file behavior has unit tests and
