@@ -1930,3 +1930,64 @@ per file, which is exactly the two-pass shape the design predicted.
 **This was the piece most likely to make the plan infeasible, and it is not.** The remaining
 work is mechanical rather than uncertain - the one genuinely unproven consumer left is
 `OspreyReportWriter`'s per-replicate protein FDR.
+
+## SESSION END 2026-08-27 12:40 - where the work stands
+
+**Branches.** PR [#4621](https://github.com/ProteoWizard/pwiz/pull/4621) is OPEN but HELD at
+`2978de7b37` on `Skyline/work/20260826_osprey_stage7_stream_pool`. Brendan chose to hold it
+rather than merge: it delivered the storage win without the design win, and would have needed
+immediate rework. All later work is on `Skyline/work/20260827_osprey_stage7_stream_increment`
+(10 commits ahead, NOT pushed), to be folded into one PR that delivers memory reduction AND
+streaming.
+
+**Every commit below is gated Stellar 10/10 including `mode1 (vs golden)`.**
+
+| commit | what |
+|---|---|
+| `2cb80febc1` | score reset keyed on identity, not position |
+| `1096cb3d23` | shared-boundary map stops storing its own fallback |
+| `29145a2d60` | blib retention times FILE-major; `BuildCrossFileObservations` deleted |
+| `70934377a3` | Stage 7 stopped reading `.scores.parquet` |
+| `f7cae59c9a` | `score_index` - the reconciled parquet gets a written row identity |
+| `608e2dbd63` | both compound-key maps replaced by it |
+| `3579d64d2a` | `RescoredEntries.FileNames` / `LoadFile` / `Files()` - the streaming seam |
+| `d8b2ec5537` | experiment-q clamp split into fold + apply |
+| `f41ece819c` | first three consumers moved onto the per-file walk |
+
+**Validated at 257 files** (`s7si257`): every logical output reproduces exactly, artifact
+266.2 -> 47.4 GB, Stage 7 81 -> 34 min. See the validation section above.
+
+**NOT delivered: the memory bar.** `stage7-pool` is still 40.23 GB. Everything so far changes
+what Stage 7 READS, not what it HOLDS.
+
+### Next session: the remaining path, in order
+
+1. **`Pass2FdrSidecar.ComputePass2TransferCompeteFull`** (lines 841-1257) - materialize per
+   file in `ReadFile`; make step 4 + the sidecar write a second per-file pass. **De-risked**:
+   the competition is already streamed and bounded (see the section above), so only
+   `entriesByFile` is resident.
+2. **`CollectPassingEntries`** - 11.7 M `FdrEntry` REFERENCES become compact records
+   (file, peptideId, charge, runQ, expQ, apex/start/end ~56 B = ~650 MB). The first consumer
+   that genuinely retains, and what pins the pool through the blib phase.
+3. **`RunProteinFdr`** - reads fold to O(distinct peptide); the write-back is already the
+   sidecar patch.
+4. **`OspreyReportWriter`** - re-runs protein FDR per replicate, default-on, **the one
+   genuinely unproven consumer**. If it needs a whole-run view it forces an extra pass or a
+   reduced resident structure.
+5. **The flip** - stop reading `.Value`, so the pool is never built. Then the 257-file run,
+   which is the acceptance test.
+
+Then two independently valuable follow-ons: **fuse the per-consumer folds** (each converted
+consumer calls `Files()` separately, which is free while the buffer exists and becomes a
+separate pass after the flip), and **drop the five blob columns** - measured at **54% of the
+reconciled artifact** (`cwt_candidates` 88 B/row, `fragment_mzs` 47, `fragment_intensities`
+36, the two XIC blobs 33) and never read back out of a reconciled parquet. That is 47 -> ~22 GB.
+
+**Also still open**: `--task CompactPerFileRescoring`'s interim-format refusal now guards a
+shape that exists nowhere (those rigs were deleted); the `--task SecondPassFDR
+--model-diagnostics` pre-compaction views still report a decoy-depleted subset as
+pre-compaction; and issue [#4622](https://github.com/ProteoWizard/pwiz/issues/4622) was filed
+for the `Osprey*` blib tables and the missing protein-group q-value.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260827_osprey_stage7_streaming.md` before starting work.
