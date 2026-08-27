@@ -766,3 +766,37 @@ the blib delta attributable; the logical counts are what make the result meaning
 
 **Timing is contended, not clean** - the upgrade took ~40 min for 86 files while CHS
 PerFileRescoring had the machine. Do not quote it as the conversion cost.
+
+## RUN 2: Stage 7 ON the reduced parquet - PASS (2026-08-26, plate 0059)
+
+`chs-86files-...-s7red59`, `--task SecondPassFDR -LinkFrom` the s7subset59 dir (whose
+parquets run 1 had upgraded). **exit=0 in 20 min against run 1's 70.**
+
+| | run 1 (old format) | run 2 (reduced) |
+|---|---|---|
+| load phase | ~17 min | **~5 min** |
+| pre-compaction read | 261,062,311 entries | **38,135,138** |
+| compaction | 261.1 M -> 38,135,138 | 38,135,138 -> 38,135,138 (**no-op**) |
+| pool live (post-GC) | 16.06 GB | **14.61 GB** |
+| peptides / proteins | 40,280 / 4,633 | 40,280 / 4,633 |
+| Stage 7 wall | 70 min | **20 min** |
+
+**The `--task` pre-compaction pool is gone as a side effect.** #4615 measured it at 311
+MB/file and deferred it as "a restructuring job, not a buffer fix". Reading a subsetted
+artifact leaves nothing to compact - 6.8x fewer entries materialized - without touching that
+code.
+
+**Outputs are content-identical.** Both `--task` blibs are 248,377,344 bytes with identical
+peptide (40,280) and protein (4,633) counts. Their SHA-256 differs, so a byte comparison was
+run: **62 differing bytes out of 248,377,344, first at offset 8,137** - the SQLite header /
+`LibInfo` region, where BiblioSpec stores the library LSID and creation time. Every spectral
+and FDR body byte matches. A blib hash is therefore NOT a valid equality test across runs;
+size plus counts plus a located byte-diff is.
+
+**Unexplained (favorable)**: the post-GC pool is 1.45 GB lower on the reduced read despite an
+identical 38,135,138-entry pool. Not missing rows - the entry counts and base_id counts match
+exactly. Something run 1 retained on its way through 261 M rows. Worth understanding before
+it is quoted as a benefit of the format.
+
+**Next**: 257-file conversion started 20:01 with `OSPREY_UPGRADE_RECONCILED_ONLY=1`
+(`-s7conv257`), so the measurement run afterwards profiles the new format alone.
