@@ -371,3 +371,27 @@ above.
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260823_chs_first_run.md` before starting work. Note its "85 files" and
 "257 .raw" figures are now stale: plate 0059 is 86 files and all 257 are cached.
+
+## 2026-08-26 - CHS .raw deleted, 1,774 GB reclaimed
+
+All 446 CHS `.raw` deleted (360 from `chs-seer\raw`, 86 from the `_rawhold` staging dir used
+for the plate-0062 cache-only trial). **D: 844 GB -> 2,618 GB free.** The 446 `.spectra.bin`
+(1,168.5 GB) are intact and are now the ONLY local copy of these spectra.
+
+Justified by, in order:
+
+1. `ai/scripts/Osprey/Test-SpectraCaches.ps1` verified 446/446 caches against their sources
+   BEFORE anything moved - magic, VERSION 4, size+mtime fingerprint, index geometry. That
+   comparison is impossible once a source is gone, which is the whole reason it ran first.
+2. Re-verified immediately before deleting: 360 still fingerprint-matched, 86 structurally
+   checked, 84,323,746 MS2 records - identical to the morning count, so nothing drifted.
+3. Plate 0062 searched all 86 files cache-only (PR #4616, merged as `bd94e8a375`) with zero
+   `re-parsing the input` lines. Stage 1 is the only stage that reads a source, and it
+   completed 86/86 from cache, so the remaining SecondPassFDR could not bear on the decision.
+
+**Recovery** is re-download from PanoramaWeb via `ai/scripts/Osprey/Get-PanoramaFiles.ps1`,
+measured at 375 GB/h single-stream on this box - about 5 h for the cohort. Do NOT parallelize
+(4 streams measured 138 GB/h and starved caching).
+
+**The caches are data now, not intermediates.** `docs/14-intermediate-files.md` and
+`15-hpc-scoring-split.md` were corrected on the same PR because both said the opposite.
