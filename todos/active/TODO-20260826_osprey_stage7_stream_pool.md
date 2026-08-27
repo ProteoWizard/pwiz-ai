@@ -1648,3 +1648,43 @@ logical output is identical, so `osprey-regression.data` needs a deliberate refr
 reconciled parquets, not Stage 4 ones. It therefore inherits the generation rules above and
 needs no separate handling - which is the answer to "would we need a converter for all the
 Stage 4 parquet we have on disk?": no, none.
+
+### CORRECTIONS to the ScoreIndex design above (Brendan, 2026-08-27)
+
+Two things in the section above are wrong. Both were mine.
+
+**1. No golden regeneration is needed.** I claimed a new parquet column changes artifact bytes
+and so requires refreshing `osprey-regression.data`, and asked for (and got) approval on that
+basis. The golden set is **59 `.tsv` files and one `.md`** - the blib table dumps,
+`blib_summary.tsv` and `protein_fdr.tsv`. No parquet is stored as a golden, and a
+`score_index` column reaches neither the blib nor the protein-FDR dump. Nothing to regenerate.
+Checkable in one `ls`, which I should have run before asserting it - the filenames were even
+listed earlier in the same session while checking whether the golden pinned row order.
+
+**2. Do not rename `ParquetIndex`.** I renamed it to `ScoreIndex` across 24 files and 244
+identifiers to make the field "say what it identifies". Brendan: *"The code can just keep the
+ParquetIndex naming, it just needs to populate it differently when reading a
+reconciled-scores.parquet."* Correct - the semantics live in the population, not the name, and
+the rename is review churn for no behavioural gain. Reverted.
+
+### The change, in its actual (much smaller) form
+
+1. Write **`score_index`** into the reconciled parquet: the Stage 4 row ordinal, which
+   `StreamReconciledScoresParquet` already tracks as `origRead` while it streams the original
+   group by group. Gap-fill rows take the `uint.MaxValue` sentinel they already carry in
+   memory, so the column IS the `is_gap_fill` discriminator - increment 4, for free.
+2. Populate `FdrEntry.ParquetIndex` **from that column** when reading a reconciled parquet
+   rather than from the row position.
+3. When the column is ABSENT, keep using the row position - which is exactly right for every
+   pre-#4486 file, because those are row-parallel with `scores.parquet` by construction.
+4. **Refuse** a parquet marked `osprey.reconciled = survivors` that has no `score_index`
+   column: subset shape plus no written identity is the one combination where position lies.
+   The same test makes `--task CompactPerFileRescoring` re-convert those rather than skip them.
+5. Backfill in the converter by counting NON-gap-fill rows (classified from
+   `reconciliation.json`'s `gap_fill_targets`) to recover the Stage 4 ordinal - the old
+   reconciled file's own ordinals shift past each interleaved gap-fill row.
+
+No rename, no sidecar format bump, no golden refresh. `ParquetIndex` keeps its name and becomes
+TRUE on every path - so feature resolution, the `CANONICAL_ORDER` tie-break and the gap-fill
+sentinel all start being correct without being touched, and `entry_id` stops having to stand in
+as a row key it was never meant to be.
