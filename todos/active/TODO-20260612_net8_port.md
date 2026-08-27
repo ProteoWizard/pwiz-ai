@@ -6339,6 +6339,88 @@ processes then held `TestResults\test-stdout\Waters.Tests.log` open, which
 `Run-Tests-Parallel.ps1` reports as a bare file-lock error. Never overlap two builds; kill stray
 `dotnet`/`testhost` and delete `TestResults\` before re-running.
 
+### An `Installer.Tests` flake, four dead hypotheses, and one real defect found beside it
+
+`Install_PerUser_DeploysAndConvertsVendorFile` failed once with
+`Thermo RAW file reports IsError: ...FT-HCD-MSX.raw` (`ThermoRawFile.cs:74-75`, the Thermo SDK's
+own flag after `CreateThreadAccessor()`), then passed on the next two runs. Recorded because the
+investigation is more useful than the outcome: **every mechanism proposed for it was wrong**, and
+the ruled-out list is what stops the next session re-deriving them.
+
+| hypothesis | how it died |
+| --- | --- |
+| Two processes opening the same `.raw` conflict (`Installer.Tests` and `Thermo.Tests` both use `FT-HCD-MSX.raw`) | **516 conversions, 0 failures** - see the matrix below. Read-only vendor SDK opens coexist fine; the shared fixture is a coincidence |
+| A race extracting the vendor SDK into the shared cache | Nothing extracted: the Thermo cache entries carry `.ok` markers dated Aug 3 and May 12 |
+| A per-machine cache root pointing at an incomplete shared cache | No `%PROGRAMDATA%\ProteoWizard\vendor-cache-root.txt`; the populated per-user cache is in use |
+| The fixture is damaged | Converts standalone, exit 0, 28 KB mzML |
+| A regression from this session's changes | No Thermo code touched; `Thermo.Tests` 15/15 green in the very run that failed |
+
+**Reproduction matrix - 516 conversions of the same fixture, zero failures:**
+
+| shape | exe | result |
+| --- | --- | --- |
+| 8 concurrent | build output (SDK app-local) | 0 failures |
+| 8 concurrent | staged install (SDK from cache) | 0 failures |
+| 100 concurrent | staged install | 0 failures, peak 67 live |
+| **100 iterations x 4 concurrent** | staged install | **0 failures**, 49 s |
+
+The two exe shapes matter and were nearly missed: the staged install has vendor SDKs **stripped**
+(only `Pwiz.Vendor.Thermo.dll` ships; `ThermoFisher.CommonCore.*` load from the cache via
+`VendorSdkLoader`), while the build output carries them app-local. The first reproduction used the
+build output and therefore never exercised the failing configuration at all.
+
+**The sample size settles more than "no failures".** The installer test failed 1 run in 3. If the
+trigger were present in the standalone reproduction, 400 conversions should have produced well
+over a hundred failures. Zero means the trigger is not concurrency and not repetition - it is
+something about the installer test's own context. The one difference never reproduced: the test
+runs the real Inno Setup installer `/VERYSILENT`, executes an `msconvert.exe` written to disk
+seconds earlier, then uninstalls; every reproduction reused the long-lived
+`installer/build/stage/` copy instead. Getting a real failure rate means looping
+install -> convert -> uninstall, not run because it repeatedly installs software on the machine.
+
+**Determinism, measured on the way past:** with fixed-width output slots reused across all 100
+iterations, each slot produced a byte-identical mzML every time (4 distinct hashes, one per slot,
+x100 each). msconvert-sharp's Thermo path is deterministic. Note the 4 hashes are the `-o` path
+again - equal LENGTH is not enough, the path text itself is embedded.
+
+**Status: unexplained.** Not a regression - 516 clean conversions plus a passing re-run - but the
+mechanism is unknown, and both mechanisms asserted earlier are withdrawn.
+
+**The defect found while looking, unrelated to the flake:**
+`VendorSdkLoader.EnsureExtracted` is not safe across processes. It guards on a `.ok` marker
+*inside* the destination, extracts **in place** into that final directory, and writes the marker
+only afterwards - with no cross-process lock:
+
+```csharp
+string marker = Path.Combine(dest, ".ok");
+if (!File.Exists(marker))
+{
+    Directory.CreateDirectory(dest);
+    DownloadIfMissing(entry, archivePath);   // shared archive path in the same root
+    ExtractArchive(archivePath, dest);       // in place
+    File.WriteAllText(marker, ...);          // completion recorded last
+}
+```
+
+Two processes that both miss the marker extract into the same directory simultaneously, and a
+killed extraction leaves a partial directory that still reads as "not done". Harmless on this
+machine because every SDK was cached weeks ago; on a **cold cache with a parallel test run** it is
+a real hazard. The fix shape is the one already used for the download a few lines below - extract
+to a temp sibling and `Directory.Move` it into place, which is atomic on one volume.
+
+**Two measurement traps re-confirmed here**, both of which produced a wrong conclusion before
+being caught:
+
+- **Never diff msconvert-sharp outputs written to different `-o` directories.** C# embeds the full
+  command line, including `-o`, in its `command-line parameters` cvParam, so byte sizes and hashes
+  differ by path length alone. The 100-run produced three distinct mzML sizes - 28057 x9, 28058
+  x90, 28059 x1 - matching `o1`-`o9`, `o10`-`o99`, `o100` exactly. It looks like nondeterminism
+  and is not. (cpp does NOT embed the path, so this asymmetry only bites the C# side; the
+  comparator ignores the param, so sweeps never show it.)
+- **Read a log's freshness before reading its contents.** A "it failed again" conclusion came from
+  grepping `TestResults\test-stdout\Installer.Tests.log` before the new run had overwritten the
+  previous run's copy.
+
 ### Still open
 
 1. Sciex TIC 10x - unchanged, still the cleanest unexplained diff.
