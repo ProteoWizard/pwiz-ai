@@ -1226,3 +1226,31 @@ the source run's banner and pass its library explicitly.
 reference - is invisible to every gate we have, because the output is well-formed and the
 run exits 0. The footer hash existed the whole time; nothing compared it. Worth asking, for
 each artifact-rewriting path, what identity it is silently trusting.
+
+### Design update: the experiment-aggregation question is settled (2026-08-27)
+
+The design section above listed "the experiment-aggregation write-back" as unsolved, with
+`mean-best-N` named as the specific worry - whether keeping the best N observations per
+precursor could be expressed as an O(distinct precursor) reduction.
+
+**It does not arise.** `PercolatorQValues.ComputeExperimentPrecursorQMap` takes
+`applyExperimentAgg`, and every Stage 7 caller passes `passLabel == FIRST_PASS_LABEL`, i.e.
+**false on the second pass**. The reason is in its own doc comment and is not incidental: two
+of `OSPREY_EXPERIMENT_AGG`'s premises break on the post-reconciliation survivor pool - gap-fill
+rows inflate a group's observation count with fabricated detections, inverting the
+reproducibility metric the feature rests on, and the decoy floor would be estimated from the
+small, compaction-enriched survivor decoy set instead of the full null.
+
+So Stage 7's experiment aggregation is always the plain target-decoy max competition, which
+IS a pure O(distinct precursor) reduction.
+
+**And the primitive is already the right shape.** `ComputeExperimentPrecursorQMap` returns a
+`Dictionary<uint, double>` keyed by entry_id - O(distinct), not an O(n) per-row array - with
+the full-length wrapper expanding it (#4355 Part B, bounded q-value reconstruction). The
+streamed pass-2 would call the map form directly and never expand it.
+
+That leaves ONE genuinely open item on the streaming design:
+`OspreyReportWriter.WriteReports` re-running protein FDR per replicate. It is default-on, so
+it is on the byte-parity path, and it needs one run's entries plus the whole-run parsimony
+result - which fits the pass-2 emit visit, but has to be shown to give the same numbers from
+a streamed visit rather than assumed to.
