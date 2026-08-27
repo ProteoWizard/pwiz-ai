@@ -1004,3 +1004,11 @@ Two things worth carrying forward:
 `$STAGE_ARTIFACTS` entry): not convenience, but that the sanctioned path produces a named run
 directory, a banner recording exe / library / arm, and START and DONE lines - none of which a
 direct invocation leaves behind.
+
+### Next session handoff
+
+**Next session**: read `ai/.tmp/handoff-20260826_night_stage7_streaming.md` before starting.
+It carries the night-session protocol, the standing approvals (open the PR; trigger TeamCity
+Perf/Regression on `pull/<N>` without asking again), the test rig and the numbers to beat,
+the gate order, and the traps this session earned - `ctx.Get<T>()` running Rehydrate, a green
+regression proving nothing about a filter, and the 63.7 GB concurrency limit.
