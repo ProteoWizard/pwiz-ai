@@ -1688,3 +1688,62 @@ No rename, no sidecar format bump, no golden refresh. `ParquetIndex` keeps its n
 TRUE on every path - so feature resolution, the `CANONICAL_ORDER` tie-break and the gap-fill
 sentinel all start being correct without being touched, and `entry_id` stops having to stand in
 as a row key it was never meant to be.
+
+## ScoreIndex landed, and the rigs were reset (2026-08-27 morning)
+
+Brendan held PR #4621 rather than merging it: the increment delivered the storage win without
+the design win, and *"I can't tell if the Parquet format supports what we are targeting if you
+haven't even delivered not reading scores.parquet."* Right on both counts.
+
+### What landed on the stacked branch, each gated Stellar 10/10 incl. mode1 vs golden
+
+| commit | what |
+|---|---|
+| `2cb80febc1` | score reset keyed on identity, not position |
+| `1096cb3d23` | shared-boundary map stops storing its own fallback |
+| `29145a2d60` | blib retention times written FILE-major; `BuildCrossFileObservations` deleted |
+| `70934377a3` | **Stage 7 stopped reading `.scores.parquet`** |
+| `f7cae59c9a` | `score_index`: the reconciled parquet gets a written row identity |
+| `608e2dbd63` | both compound-key maps replaced by it |
+
+### Two things the gate caught that argument would not have
+
+**A sentinel is not an identity.** Gap-fill rows first got `score_index = uint.MaxValue`, so
+every one of them collapsed to a single entry in the feature map and they all received the
+SAME feature vector. On Stellar that moved 361 of 4,481 group q-values and two proteins'
+best-peptide score. `mode1 (vs golden)` caught it while every self-consistency mode passed -
+the run agreed with itself and disagreed with the truth. Gap-fill rows now number PAST the
+source row count, which makes `score_index` a genuine per-file row id for every row.
+
+**The `<= 1 group` skip stole ordinals.** The converter's first cut advanced the source cursor
+while merely SEARCHING for a matching group, so a gap-fill group consumed the ordinals
+belonging to the next real group. Caught by the new unit test, not by a run.
+
+Both are the same lesson: this is a refactor whose invariants live in comments that contradict
+each other, so every step wants an experiment rather than a reading.
+
+### Corrections to my own earlier claims, recorded because they misled
+
+* **No golden regeneration was ever needed.** The golden set is 59 `.tsv` files; no parquet is
+  stored. I asserted otherwise and got approval on that basis. `score_index` landed
+  byte-identical against the existing golden.
+* **`ParquetIndex` should not be renamed.** I renamed it across 24 files and 244 identifiers;
+  Brendan: the semantics are in the population, not the name. Reverted.
+* **The converter is not unsafe.** I claimed converting a pre-#4486 file needs a gap-fill
+  classification that cannot be made safely, and recommended deleting the task. Brendan:
+  *"pairing the two parquet files ... doesn't require all 257 in memory."* Pairing
+  `scores.parquet` with its reconciled sibling by `(entry_id, charge)` GROUPS resolves every
+  row exactly - groups are invariant under a rescore where `scan_number` is not, and a
+  gap-fill group has no rows on the Stage 4 side by definition. I had anchored on the
+  `entry_id`-alone classification and never considered the obvious pairing.
+
+### Rigs reset
+
+The five interim-format directories (subset, no `score_index` - a shape that never merged and
+is now refused by design) were deleted: `s7conv257`, `s7inc257`, `s7red257`, `s7red59`,
+`s7subset59`. **85.3 GB reclaimed, not the 167 GB their sizes suggested** - hard links again.
+
+Baseline verified intact (257 files, 266.2 GB). Reconversion running in `...-s7conv257b`,
+whose parquets are 8-way hard links to the baseline, so `File.Replace` breaks the link rather
+than the source. Correct library confirmed twice from its log (6,175,389 entries, 16,062
+manifest replacements - both matching the baseline).
