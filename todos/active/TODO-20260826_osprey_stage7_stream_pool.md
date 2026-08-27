@@ -1558,3 +1558,93 @@ that key stores the entry's own boundaries - identical to the fallback. Exact ei
 
 Gates: build + 594 tests + zero inspection warnings, `regression.ps1 -Dataset Stellar` PASSED
 all 10 modes including `mode1 (vs golden)`.
+
+## THE REAL DESIGN: ScoreIndex, a written row identity (Brendan, 2026-08-27)
+
+Everything hard in this refactor traces to one absence: **the parquet has no row identity.**
+It has a foreign key to the library (`entry_id` - low 31 bits are the base_id shared by a
+target and its paired decoy, high bit is the decoy flag), a positional address
+(`FdrEntry.ParquetIndex`, the row ordinal), and a compound disambiguator
+(`entry_id, charge, scan_number`). None of those is a row id, and the symptoms all follow:
+
+| symptom | root |
+|---|---|
+| the reconciled parquet had to be row-for-row identical to `scores.parquet` | features are addressed by ordinal - `PercolatorScorer.ResolveFeatureRow` does `rows[idx]` |
+| `Pass2FdrSidecar.LoadReconciledFeaturesByIdentity` exists at all | the ordinal stopped addressing the right row once the two files diverged |
+| `CANONICAL_ORDER` needs `ParquetIndex` as its terminal tie-break | no unique row key to sort on |
+| gap-fill is identified by `ParquetIndex == uint.MaxValue` | a sentinel stuffed into an address field |
+| the identity-keyed reset matched **0 of 37,098** targets on Stellar | the compound key is not invariant across a rescore |
+| the `/code-review max` `ParquetIndex` finding | the ordinal means a different thing in each file |
+
+Brendan's framing, and it is the point: *"we shouldn't need a complex compound key to match
+things. We own the Parquet format and we should introduce a real RowID as in a database
+schema. It feels like we are failing to use basic principles from relational databases."*
+
+### The decision: persist the Stage 4 ordinal as `ScoreIndex`, in the RECONCILED parquet only
+
+The Stage 4 row ordinal already IS a unique per-file row id. It does not need replacing with a
+surrogate - it needs **writing down** instead of being inferred from row position. So the
+reconciled parquet gains a `ScoreIndex` column carrying the ordinal of the `scores.parquet`
+row it derives from, and every match keys on it.
+
+**`scores.parquet` is NOT changed.** Brendan, explicitly: *"do not write ScoreIndex in
+scores.parquet. It is redundant, and if we did that we would make it a true RowId for clarity.
+We are using a trick to avoid having to change scores.parquet at all."* The trick is what keeps
+the blast radius small - every Stage 4 parquet on disk stays valid, and there is no converter
+for them, ever. The asymmetry is deliberate: the column states a correspondence, and the
+correspondence only needs stating in the file that is no longer parallel.
+
+Writing it is free going forward: `StreamReconciledScoresParquet` already tracks `origRead`,
+the original row ordinal, as it streams the Stage 4 file group by group.
+
+### What it retires
+
+* `ParquetIndex` as an address - 100 non-doc uses across the tree, roughly half in tests.
+* The `(entry_id, charge, scan_number)` compound key, and with it the distinction between
+  "the key that survives a rescore" and "the key that disambiguates within one artifact".
+* The gap-fill sentinel: a gap-fill row has no Stage 4 row, so its `ScoreIndex` sentinel IS
+  the `is_gap_fill` discriminator - which was increment 4 of the original plan, reasoned away
+  in "Increment 4 reconsidered: no parquet column needed".
+* `LoadReconciledFeaturesByIdentity`'s workaround.
+
+### THE HAZARD: three generations of reconciled parquet, and the middle one is dangerous
+
+| generation | shape | `ScoreIndex` | readable by a new binary? |
+|---|---|---|---|
+| pre-#4486 | full, row-parallel with `scores.parquet` | absent | **YES** - row position IS the Stage 4 ordinal, so falling back to it is exactly correct |
+| **this branch so far** | subset, `osprey.reconciled = survivors` | absent | **NO** - row position is no longer the ordinal and nothing records what is |
+| with `ScoreIndex` | subset | present | yes, by construction |
+
+The middle generation looks readable and would map rows to the WRONG Stage 4 features in
+silence. It exists only on the test rigs (`...-s7conv257` at 47 GB, and the two 86-file sets)
+because the branch is unmerged, so the practical blast radius is ours - but the detection
+matters more than the conversion:
+
+1. the loader must **REFUSE** a `survivors`-marked parquet with no `ScoreIndex` column, not
+   fall back to row position - that fallback is correct only for the full-shape generation;
+2. `--task CompactPerFileRescoring`'s "already survivors, skip" test must also require the
+   column, so it RE-converts the middle generation instead of skipping it.
+
+### Backfilling: exact, and it needs the gap-fill classification
+
+The converter cannot use the old reconciled parquet's own row ordinal: that file is every
+original row PLUS gap-fill merged into canonical position, so its ordinals shift past each
+gap-fill row. It has to count only NON-gap-fill rows to recover the Stage 4 ordinal - and the
+gap-fill rows are exactly `reconciliation.json`'s `gap_fill_targets`, keyed by `entry_id`.
+
+That is precisely the classification "Increment 4 reconsidered" established was available, so
+the two halves fit: the reasoning that killed the column is what makes backfilling it possible.
+
+### Goldens
+
+Approved to move (Brendan, 2026-08-27). A new column changes artifact bytes even where every
+logical output is identical, so `osprey-regression.data` needs a deliberate refresh with
+`-CreateGolden`.
+
+### Where `--task ModelDiagnostics` lands
+
+`Program.ResolveInputScores` treats the reconciled parquet as AUTHORITATIVE when present
+(`// reconciled: authoritative`), so a diagnostics regeneration over a completed run reads
+reconciled parquets, not Stage 4 ones. It therefore inherits the generation rules above and
+needs no separate handling - which is the answer to "would we need a converter for all the
+Stage 4 parquet we have on disk?": no, none.
