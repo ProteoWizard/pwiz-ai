@@ -940,3 +940,45 @@ unambiguous - prefer the CLI token if the tie needs breaking.
 **And then**: the converter gets its first real measurement. It has never executed - all three
 attempts died in the pool build before reaching it, so its per-file behavior has unit tests and
 zero runtime evidence.
+
+## IMPLEMENTED: --task CompactPerFileRescoring (`55600ddbc0`, 2026-08-26)
+
+`Osprey.Tasks/CompactPerFileRescoreTask.cs`, wired through `HpcTask.CompactPerFileRescoring`,
+`OspreyConfig.CompactReconciledOnly`, the `Program.cs` parse branch + display name, and the
+`OspreyCommandArgs` ValidateSet + both error strings. Runs a one-task pipeline beside
+`SpectraCachePipeline()`.
+
+Gates: build clean, 593/593, zero inspection warnings, **`regression.ps1 -Dataset Stellar`
+PASSED**. (One transient test failure appeared in an earlier invocation and did not reproduce
+across two subsequent runs; its name was not captured. Treated as a flake from overlapping
+builds, not a result.)
+
+Design points worth keeping:
+
+* It loads the library ITSELF (`new PerFileScoringTask().LoadLibraryAndDecoys`, made
+  `internal`) - a one-task pipeline has no producer to `ctx.Get<LibraryById>()` from, and the
+  write re-derives sequence / precursor m/z / protein_ids from the library, so a null one
+  would write those columns empty. Decoys included: the reconciled parquet carries decoy rows.
+* `LoadLibraryAndDecoys` was briefly made `static` and reverted - it uses `_fullLibrary` and
+  instance helpers past the point I first scanned. Reused rather than reimplemented because
+  decoy generation and supplied-decoy pairing must match the run that wrote the parquets.
+
+### NOT YET RUN - the converter still has zero runtime evidence
+
+All three earlier attempts died in the pool build before reaching the conversion, so its
+per-file behavior has unit tests and nothing else.
+
+**The runner cannot drive it yet.** `OspreyDatasetRun.psm1`'s `-Task` ValidateSet and its
+`$STAGE_ARTIFACTS` link table (which decides what `-LinkFrom` hard-links) have no entry for
+`CompactPerFileRescoring`. First execution therefore needs either:
+
+1. a direct `Osprey.exe --task CompactPerFileRescoring --input-scores <paths> -l <library>`
+   invocation, or
+2. adding the value to the runner: ValidateSet, plus a `$STAGE_ARTIFACTS` entry that links
+   everything through `PerFileRescoring` (the same set `-Task SecondPassFDR` links).
+
+**Do NOT point the first run at `chs-257files-...-p0059_0060_0061`** - that directory is the
+old-format baseline every comparison so far depends on. Use a hard-linked copy (e.g. the
+`-s7conv257` dir left by the failed attempt, which still holds 257 full-shape parquets sharing
+inodes with the baseline); converting there breaks the link and leaves the baseline intact,
+the same property that protected it three times today.
