@@ -1012,3 +1012,217 @@ It carries the night-session protocol, the standing approvals (open the PR; trig
 Perf/Regression on `pull/<N>` without asking again), the test rig and the numbers to beat,
 the gate order, and the traps this session earned - `ctx.Get<T>()` running Rehydrate, a green
 regression proving nothing about a filter, and the 63.7 GB concurrency limit.
+
+## THE STREAMING DESIGN, from the code (2026-08-27, night session)
+
+The TODO task "Record the two-pass design here BEFORE writing it" - done here, by reading
+every consumer rather than the three the earlier plan named. **The consumer list is larger
+than "protein FDR + blib", and that is the finding**: the extra consumers set the ORDER in
+which the passes must run, and one of them (`OspreyReportWriter`) re-runs protein FDR per
+replicate, so it needs a per-file visit no matter how the rest is arranged.
+
+### Every reader of `perFileEntries` inside Stage 7, in execution order
+
+| # | consumer | reads | O(distinct) expressible? |
+|---|---|---|---|
+| 1 | `UpgradeReconciledParquets` | EntryId/Charge/ScanNumber per file | per file already; **obsolete** now that `--task CompactPerFileRescoring` is the migration path |
+| 2 | `LibraryFragmentRelease.BuildRetainedBaseIds` | EntryId | YES - O(distinct base_id) |
+| 3 | `Pass2FdrSidecar.ComputeAndPersist` | per file: the entries to overlay 2nd-pass q onto; writes `.2nd-pass.fdr_scores.bin` | per file + an O(distinct precursor) experiment reduction |
+| 4 | `ProteinFdrEngine.RunSecondPass` | best score per peptide, detected peptides; **writes** `ExperimentProteinQvalue` back | YES for the read (O(distinct peptide)); the write-back is per entry |
+| 5 | `Pass2FdrSidecar.PatchPass2ProteinQvalues` | per file: patches the protein column into the sidecar written at 3 | per file |
+| 6 | `OspreyReportWriter.WriteReports` | **re-runs protein FDR per replicate** over that run's entries | per file, but needs the whole-run parsimony result |
+| 7 | `PercolatorEngine.ClampExperimentQToBestRun` | min run-q by EntryId and by (ModifiedSequence, IsDecoy); **writes** experiment q back | YES for the read (two O(distinct) maps); the write-back is per entry |
+| 8 | `WriteBlibOutput` - seven walks | `ComputePassingPeptides`, `ComputePassingPrecursors`, `CollectPassingEntries`, `BuildBestByPrecursor`, `BuildBestExpPrecursorQ`, `BuildSharedBoundaries`, `BuildCrossFileObservations` | five are O(distinct); `CollectPassingEntries` and `BuildCrossFileObservations` are O(observations) |
+| 9 | `FdrBenchInputWriter.WritePeptideInput` (`--fdrbench-pass 2`) | every reported entry | streamable per file |
+| 10 | `ModelDiagnosticsReport.WritePass2AndFinalize` (`--model-diagnostics`) | every entry's final q + score | streamable per file |
+
+`BlibOutputWriter.Write` itself is already aggregate-driven: it touches `perFileEntries`
+only for `CreateSourceFiles` (the file list) and `.Count`. Everything it writes comes from
+`bestByPrecursor` / `bestExpPrecursorQ` / `sharedBounds` / `entriesByPrecursor`.
+
+### The ordering chain, which is what forces two passes
+
+```
+per-file frozen pass-2 score  ->  run q per entry
+        |                         (this ALREADY streams: ComputePass2TransferCompeteFull
+        |                          scores one file at a time - see the routing comment at
+        |                          Pass2FdrSidecar.cs:239-252. The resident thing is the
+        |                          FdrEntry pool it overlays onto, not the features.)
+        v
+EXPERIMENT aggregation over ALL files       <- global reduction, O(distinct precursor)
+        v
+experiment q written back onto EVERY entry  <- needs a second visit to every file
+        v
+protein FDR (parsimony + picked-protein)    <- global, O(distinct peptide)
+        v
+ExperimentProteinQvalue written back        <- second visit again
+        v
+ClampExperimentQToBestRun                   <- reduce, then write back: a third dependency
+        v
+blib aggregates + emission                  <- emission per file, refIds from the middle
+```
+
+So the shape is not "compute then emit" but **fold -> reduce -> write-back -> reduce ->
+emit**, and the write-backs are what make the second per-file visit unavoidable. That still
+satisfies the standing FDR-memory rule (per-file compute -> O(entries) aggregate -> per-file
+emit, emission a SECOND streamed pass); there are simply more reductions in the middle than
+the rule's statement implies.
+
+### What pass 1 must carry forward, and what it costs
+
+Pass 2 needs, per surviving observation: `file`, `EntryId`, `ModifiedSequence`, `Charge`,
+`IsDecoy`, run q (both levels), `ApexRt/StartRt/EndRt`, and the pass-2 `Score`. As a packed
+value record that is ~56 B against the ~200 B an `FdrEntry` object costs (16 B header, three
+uint, a bool, a byte, fourteen double, six reference fields; the 252 B/entry measured at 257
+files is that plus list slots and per-file overhead). At 38.1 M survivors on the 257-file
+cohort a spill is **~2.1 GB on disk**.
+
+The alternative is re-reading the reconciled parquets in pass 2, which after this branch's
+subsetting is ~38 GB rather than the 266 GB pass 1 used to read. A spill is still the better
+trade - one sequential write and one sequential read against re-decoding parquet - and it is
+what removes the last reason Stage 7 must hold anything whole-run.
+
+### The three hard problems, and what the tree already gives us
+
+1. **Blib emission ORDER - the real difficulty, and it is not data volume.**
+   `WriteRetentionTimes` emits precursor-major: a RefSpectra row, then that precursor's rows
+   across every file. Streaming per file inverts that to file-major, so the RefSpectra
+   refIds must be assigned in the pool-free middle, from `bestByPrecursor` (501,247 distinct
+   non-decoy precursor keys at 257 files - small). Pass 2 then writes RetentionTimes rows
+   against those refIds as each file is visited, and `entriesByPrecursor` - the
+   O(observations) map that pins the pool today - disappears entirely. It exists only to give
+   the precursor-major writer an O(1) lookup.
+
+2. **`ResetRescoredTargets` is positional.** `plan.ConsensusTargets` and
+   `plan.ReconciliationTargets` carry indices into the survivor list as loaded. Re-key by
+   `EntryId`. Precedent, not new design: `ReconciliationActions` are ALREADY entry_id-keyed
+   on disk and only turned into positions at load (`RescoreHydration` builds
+   `idToIdx[stubs[idx].EntryId] = idx`). `ConsensusTargets` are the genuinely positional
+   half. Required for streaming, and independently required to load Stage 7 from the
+   reconciled parquet, where the gap-fill rows are already interleaved in canonical position
+   and so shift every index after them.
+
+3. **`sharedBounds` is a second accumulator**, keyed `(modseq, file)` -> `double[5]`, so
+   O(observations) - tens of millions of entries and several GB at 257 files, built in the
+   aggregate phase and read in the emit phase. Make it sparse: an entry is only needed where
+   a peptide has more than one charge in that run AND the winning charge's boundaries differ
+   from the entry's own. Every other key is the entry's own boundaries, recoverable in the
+   emit pass. The same trick #4554 used for `survivorPep`.
+
+### What is NOT solved, and should not be guessed at
+
+* **`OspreyReportWriter.WriteReports` re-runs protein FDR per replicate.** Its own comment
+  says "this is the one place with the full per-file pool + library in hand". It is
+  default-on (`WriteProteinReport` / `WriteSummaryReport`), so it is on the byte-parity path,
+  and it needs one run's entries plus the whole-run parsimony result. That fits the pass-2
+  emit visit, but the per-replicate FDR has to be SHOWN to give the same numbers from a
+  streamed visit before it is moved, not assumed to.
+* **The experiment-aggregation write-back** is the step with no existing streamed analogue.
+  Pass 1 does the same thing in `PercolatorEngine`, so the shape exists; whether it is a pure
+  O(distinct precursor) reduction under every `--experiment-agg` mode needs checking against
+  `mean-best-N` specifically, which keeps the best N observations per precursor rather than
+  the max.
+
+### Scope honesty
+
+This touches `Pass2FdrSidecar` (2,217 lines), `SecondPassFdrTask` (913),
+`PerFileRescoreTask` (2,436), `ProteinFdrEngine`, `BlibOutputWriter`, `OspreyReportWriter`,
+`ModelDiagnosticsReport` and `FdrBenchInputWriter`. It is not a one-session change, and
+attempting it as one would produce something no gate could vouch for.
+
+**The enabling seam is separable and is where the next session should start**: a per-file
+"bring ONE file to its post-rescore state" function. Today `BuildRescoredPool` runs three
+whole-run loops - `MaterializeAllSurvivors`, `ResetRescoredTargets`,
+`OverlayReconciledIntoFiles` - and **every one of them is already per-file inside its loop
+body**. Fusing them into one function that takes a file key and returns that file's list is
+a pure refactor, byte-identical by construction, and it is the call Stage 7 needs in order
+to fold-and-drop rather than accumulate.
+
+## NIGHT SESSION 2026-08-26/27 - what landed
+
+Session start 23:05 PDT, opening context 90% free, box quiet (50.6 / 63.7 GB).
+
+| commit | what | gate |
+|---|---|---|
+| `b67e7168e6` | reconciled-parquet write takes a progress indent, or null to write silently | Stellar 10/10 |
+| `9e228f420a` | Stage 7 pool built in ONE per-file pass instead of three whole-run loops | Stellar 10/10 |
+| `7ff0382ba4` | three blib aggregate builders walk `passingEntries`, not the pool | Stellar 10/10 |
+| `c3b93f6e52` | `FdrScoresSidecar` no longer swallows `OutOfMemoryException` | unit + `-Dataset All` pending |
+| `131715da44` | `--task CompactPerFileRescoring` refuses a foreign library; progress indent fixes | unit + runtime negative test + `-Dataset All` pending |
+| ai `3543944` | `CompactPerFileRescoring` in the three dataset runners | n/a |
+
+### The per-file seam (the reason the streaming work is now tractable)
+
+`BuildRescoredPool` ran `MaterializeAllSurvivors` -> `ResetRescoredTargets` ->
+`OverlayReconciledIntoFiles`, three whole-run loops. Every one was already per-file inside
+its own body and none reads another file's entries, so fusing them is the same work in the
+same order per file. Byte-identical, confirmed by Stellar 10/10 including mode 1 vs golden
+and mode 3 (HPC chain == straight).
+
+What that buys: `MaterializeFileSurvivors(fileName, entries, loader, ctx)` and
+`OverlayReconciledIntoFile(fileName, entries, ...)` now exist as per-file primitives, which
+is what a fold-and-drop Stage 7 has to call.
+
+### The blib phase was re-deriving what it had already materialized
+
+`BuildBestExpPrecursorQ` and `BuildSharedBoundaries` each walked the whole pool applying
+`!IsDecoy && passingPrecursors.Contains((modseq, charge))` - character for character the
+filter `CollectPassingEntries` applied 20 lines earlier. `BuildCrossFileObservations` had no
+passing gate at all, though its sole consumer (`EmitSpectrumRows`) looks up
+`(ModifiedSequence, Charge)` taken from `bestByPrecursor`, whose keys are passing by
+construction.
+
+At 257 files: three passes over 137 M rows become three over ~14 M, and `entriesByPrecursor`
+stops allocating ~1.4 GB of observation lists that nothing ever reads. The three whole-pool
+gates that genuinely must stay (`ComputePassingPeptides`, `ComputePassingPrecursors`,
+`CollectPassingEntries` - each needs the previous one's set complete) now report progress;
+they were the ~70 s of silence #4615's review named.
+
+## THE LIBRARY MISMATCH - my error, and the guard it produced
+
+**What happened.** The 257-file compaction was launched through `Run-Chs.ps1` letting the
+runner resolve the CHS default library. That is `sea-ad\lib\target+decoy+entrapment`. The
+`p0059_0060_0061` run these artifacts came from was searched with
+`target+decoy+entrapment-20260817`. Same file name, different build:
+
+| | entries | manifest protein_ids replaced | size |
+|---|---|---|---|
+| `target+decoy+entrapment` (Jun 30) | 6,324,700 | 15,841 | 13.09 GB |
+| `target+decoy+entrapment-20260817` | **6,175,389** | **16,062** | 12.39 GB |
+
+The compaction re-derives `sequence` / `precursor_mz` / `protein_ids` from the library BY
+ENTRY ID, and entry ids are assigned at library load, so 72 files were rewritten with
+another peptide's identity on every row. **Nothing detected it** - the run was healthy,
+memory flat, exit path normal. It was caught by hand, comparing the `Loaded N library
+entries` line against the baseline's while checking flags for the measurement A/B.
+
+**Bounded and repaired.** Yesterday's 147-file conversion (22:17-23:02, direct invocation)
+used the CORRECT library - its log is in the session temp folder Brendan objected to, which
+is the second time that folder cost something. A clean mtime split isolated exactly the 72
+files written 23:16-23:43, cross-checked three ways: 257 - 157 already-compacted = 100 stale
+at start; 72 completed before the kill; 185 + 72 = 257. The baseline was verified intact
+FIRST (257 files, 266.23 GB, all 72 present at full shape), then the 72 were deleted and
+re-linked from it. `s7conv257` returned to 131.92 GB / 100 full-shape files - the exact
+state the handoff described.
+
+**The guard** (`131715da44`). The reconciled parquet's footer already carries
+`osprey.library_hash`, and `SearchIdentity.LibraryIdentityHash()` is SHA-256 over file name
++ size + mtime, so it is computable from config without loading the library. The footer scan
+now compares them and hard-fails - before the library load, before the first write. A footer
+carrying NO hash is refused too: "cannot verify" and "verified" are not the same answer when
+the operation is a destructive in-place rewrite.
+
+Proven at runtime, not just by unit test: pointed at the wrong library deliberately, it
+refuses at the first stale file in 5.4 s with exit 1 and a message naming both hashes. Then
+the real run confirmed all 100 stale files carry the hash, so the strict policy does not
+block real artifacts.
+
+**The rule worth carrying**: `-LibraryDir` is not optional when `-LinkFrom`/`-Resume` points
+at another run's artifacts. The runner's default library is an ARM default, not the arm the
+source run used, and the two only coincide when nobody has built a newer library since. Read
+the source run's banner and pass its library explicitly.
+
+**And the deeper one**: this class of defect - an artifact rewritten against the wrong
+reference - is invisible to every gate we have, because the output is well-formed and the
+run exits 0. The footer hash existed the whole time; nothing compared it. Worth asking, for
+each artifact-rewriting path, what identity it is silently trusting.
