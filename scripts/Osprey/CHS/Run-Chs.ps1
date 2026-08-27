@@ -45,7 +45,7 @@ param(
     [int]$ParallelFiles = 0,
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
     [ValidateSet('SpectraCache', 'PerFileScoring', 'FirstPassFDR', 'PerFileRescoring',
-                 'SecondPassFDR')]
+                 'CompactPerFileRescoring', 'SecondPassFDR')]
     [string]$Task,
     [string]$Tag = '',
     [string]$DataDir,

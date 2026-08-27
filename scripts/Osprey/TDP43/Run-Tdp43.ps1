@@ -82,7 +82,8 @@ param(
     [string]$ExcludePattern,
     [int]$Threads = 30,
     [int]$ParallelFiles = 0,
-    [ValidateSet('SpectraCache','PerFileScoring','FirstPassFDR','PerFileRescoring','SecondPassFDR')]
+    [ValidateSet('SpectraCache','PerFileScoring','FirstPassFDR','PerFileRescoring',
+                 'CompactPerFileRescoring','SecondPassFDR')]
     [string]$Task,
     [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
     [ValidatePattern('^$|^mean-best-\d+$')] [string]$ExperimentAgg = '',

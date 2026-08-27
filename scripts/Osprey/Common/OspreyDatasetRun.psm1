@@ -202,8 +202,13 @@ function Invoke-OspreyDatasetRun {
         # HPC split: run exactly ONE pipeline task instead of the whole run. Combined with
         # -LinkFrom this makes a single-phase re-measurement cost only that phase - e.g. Stage 5
         # at 163 files is ~75 min instead of the 18 h a full run takes.
+        # 'CompactPerFileRescoring' is NOT a pipeline stage: it rewrites a completed run's
+        # .scores-reconciled.parquet files from the old full-row shape into the Stage 5
+        # survivor subset, in place, and writes nothing else. It sits between PerFileRescoring
+        # and SecondPassFDR here because that is what it needs LINKED, not because it runs
+        # there.
         [ValidateSet('SpectraCache', 'PerFileScoring', 'FirstPassFDR', 'PerFileRescoring',
-                     'SecondPassFDR')]
+                     'CompactPerFileRescoring', 'SecondPassFDR')]
         [string]$Task,
         [ValidateSet('none', '1', '2', 'both')] [string]$FdrBenchPass,
         # First-pass EXPERIMENT-score aggregation: '' (the max default) or 'mean-best-<N>'.
@@ -458,7 +463,8 @@ function Invoke-OspreyDatasetRun {
     # "--task FirstPassFDR cannot be combined with --input. Use --input-scores instead."
     # With -LinkFrom the parquets are already hard-linked into $OutDir, so that directory IS
     # the score input. Mutually exclusive with -i, hence the branch rather than an extra flag.
-    $POST_SCORING_TASKS = @('FirstPassFDR', 'PerFileRescoring', 'SecondPassFDR')
+    $POST_SCORING_TASKS = @('FirstPassFDR', 'PerFileRescoring', 'CompactPerFileRescoring',
+                            'SecondPassFDR')
     $useScores = $Task -and ($POST_SCORING_TASKS -contains $Task)
     if ($useScores -and -not $LinkFrom -and -not $Resume) {
         throw ("-Task $Task consumes per-file artifacts, not raw input. Pass -LinkFrom <a completed " +
@@ -651,6 +657,13 @@ function Invoke-OspreyDatasetRun {
                                    '.reconciliation.json.FirstPassFDR.osprey.task')
             'PerFileRescoring' = @('.scores-reconciled.parquet',
                                    '.scores-reconciled.parquet.PerFileRescoring.osprey.task')
+            # Rewrites PerFileRescoring's parquet in place and produces no artifact of its
+            # own, so it contributes nothing to a LATER task's link set - but its POSITION
+            # matters: everything above it is what -Task CompactPerFileRescoring links, and
+            # that is the same set -Task SecondPassFDR takes. Linking is also what protects
+            # the source: the run directory's parquets are hard links, and the compaction's
+            # Move -> Move -> Delete swap breaks the link rather than the source file.
+            'CompactPerFileRescoring' = @()
             'SecondPassFDR'    = @('.2nd-pass.fdr_scores.bin',
                                    '.2nd-pass.fdr_scores.bin.SecondPassFDR.osprey.task')
         }
