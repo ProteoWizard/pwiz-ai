@@ -6156,3 +6156,163 @@ suspect until reproduced serially.**
    accepted, as was done for the Shimadzu timestamp skew.
 4. Bruker `componentList` surplus on `0.1HCOOH_H20_NoTIMS_Pos.d`.
 5. The UNIFI client reporting an Oracle-OOM 500 as an authentication error.
+
+## 2026-08-27: Two parity gaps closed - one ours, one cpp's
+
+Both were on the previous entry's Open list. They turned out to be opposite kinds of defect, which
+is the point worth carrying: "C# differs from cpp" is not a synonym for "C# is wrong".
+
+### Agilent `Neg_MS_002.d`: a null argument that meant the opposite of what the comment said
+
+**2151 diffs -> `diff_total: 0`.** Byte-identical to cpp, 247 records compared, 0 truncated,
+0 binary diffs.
+
+`AgilentRawData.GetSpectrumByRow` passed `null, null` for MHDAC's two peak-filter arguments,
+under a comment asserting that "passing null for the peak filters means no filtering". It does
+not. **Null means "do not centroid"** - handed null, MHDAC ignores
+`DesiredMSStorageType.PeakElseProfile` and returns whatever the file stores. cpp always
+constructs a default-valued `MsdrPeakFilter` for that call (`MassHunterData.cpp:712-724`, via
+`msdrPeakFilter()` at `:54-64`) and passes null only for the quadrupole devices MHDAC cannot
+centroid at all. The C# now does the same, with the device gate repeated in the reader exactly
+as cpp repeats it.
+
+**Why it hid for months, and why no test could have caught it.** The missing filter is invisible
+on any file that stores centroided data alongside profile: there `PeakElseProfile` returns the
+STORED peaks and no on-the-fly centroiding is needed, so a null filter changes nothing. It only
+bites a file that stores profile ONLY. Exactly one corpus input qualifies:
+
+| file | `mspeak.bin` | outcome before the fix |
+| --- | --- | --- |
+| `Neg_MS_002.d` | **absent** | profile returned; picker re-picked 3629 -> 2336 pts vs cpp's 233 |
+| `BSA050-r001.d` | present | stored peaks returned; already identical |
+| `20fmolBSA-centroid.d` | present | stored peaks returned; already identical |
+
+The vendor reference harness could not catch it either - there is no profile-only Agilent
+fixture, and `ProbeCentroidMsLevelGate` deliberately does not assert that a selected MS level
+must CHANGE a spectrum, because declining is legitimate for quadrupole data. So the guard is a
+unit test on the decision itself (`AgilentPeakFilterTests`), needing neither SDK nor data file.
+
+**One root cause, four symptoms.** The single fix closed `defaultArrayLength`,
+`spectrum/@dataProcessingRef`, the `cvParam` values, and the missing `user:centroided min/max`
+userParam together. The `dataProcessingRef` one is worth understanding: cpp's peak picker returns
+early for an already-centroided spectrum WITHOUT setting `dataProcessingPtr`
+(`SpectrumList_PeakPicker.cpp:252-268`), and the C# has the identical early return. Once the
+reader genuinely centroided, C# stopped writing the attribute by itself. A related suspicion -
+that the picker mislabels its dataProcessing as vendor when it falls back - was **checked and
+withdrawn**: cpp sets that userParam per-file at construction the same way, so C# matches.
+
+**Measured, not assumed.** Agilent + Mobilion sweep, all 57 inputs, peakPicking:
+
+| file | before | after |
+| --- | ---: | ---: |
+| `Neg_MS_002.d` | differs 2151 | **identical 0** |
+| Mobilion `...NISTmAbOxidized[1].d` | differs 54055 | differs **278** (-99.5%) |
+| other 55 | - | unchanged |
+
+The Mobilion file shares the Agilent reader path. Its residual 278 is now `binary_diffs: 0` and
+entirely `MS:1000527 highest observed m/z` emitted where cpp emits none - a **new C#-side
+surplus** for the standing record, not a leftover of this bug. The IMS files
+(`[DC5].d` 711606, the two `.d` at 3000) are untouched, as expected: IMS returns from its own
+branches before reaching this code.
+
+### Bruker `0.1HCOOH_H20_NoTIMS_Pos.d`: the C# was already right
+
+The previous entry filed this as a C#-side surplus (5 components vs cpp's 1, plus
+`MS:1003123 timsTOF series` where cpp writes `MS:1000122 instrument model`). **It is a cpp
+defect.** The file is a `timsTOF fleX MALDI 2` whose BAF `Properties` table stores
+`InstrumentFamily = 9`; C# maps 9 -> timsTOF and emits precisely what cpp's own timsTOF case
+would produce.
+
+cpp's `translateInstrumentFamily` lives in an **anonymous namespace**, so each Bruker reader
+compiles its own copy - and the BAF copy never got `case 9`:
+
+| copy | `case 9` |
+| --- | --- |
+| `TimsData.cpp:42` | timsTOF |
+| `TsfData.cpp` (calls the same-named local) | timsTOF |
+| `Baf2Sql.cpp:41` | **missing -> `Unknown`** |
+
+So the same instrument resolves to timsTOF through TDF/TSF and to Unknown through BAF. cpp
+contradicting itself across its own readers for one instrument is the standing record's bar for
+a cpp-side defect, and it is not close.
+
+Fixed at source: `case 9: return InstrumentFamily_timsTOF;` added to `Baf2Sql.cpp`. That closes
+all four diffs on the file at once - the series cvParam and the componentList come off the same
+switch. **Not compile-verified**: the C++ msconvert build is separate and long and was not run.
+
+Also corrected a false comment in `BrukerInstrumentFamily.cs`, which had rationalised the
+divergence as "no timsTOF instrument writes BAF". This file is the counterexample. The unified
+C# table is right; only its stated reason was wrong. `BrukerInstrumentFamilyTests` now pins the
+whole code->family table so nobody "fixes" C# to match cpp's omission.
+
+### Correction to the 08-26 entry: the Agilent precision gap is partly cpp instability
+
+The previous entry recorded three Agilent files whose diffs are m/z agreeing to 9 significant
+figures (`max_rel ~1.9e-10`) and guessed at "a different order of operations in the m/z axis
+computation" on our side. The re-measured default sweep moved `BSA050-r001.d` from 2740 to 2713
+diffs, which the fix cannot explain - under the default config `preferProfile` is true, so
+`NeedsPeakFilter` returns false and the call is byte-for-byte the old one.
+
+Running each binary repeatedly against the same input settled it:
+
+| binary | 3 runs, same `-o` | verdict |
+| --- | --- | --- |
+| C# | 3 identical SHA-256 | **deterministic** |
+| cpp | 2 distinct outputs (and a 3rd hash seen in another trial) | **NOT deterministic** |
+
+Two cpp runs of the same file differ from each other by 6 diffs with exactly the signature
+attributed to our port: `lowest observed m/z=300.290854986054` vs `...966788`, `max_rel=2.03e-10`.
+
+**But this does not dissolve the gap.** C# compared against BOTH cpp variants gives 2713 either
+way, so we are not simply matching one of cpp's two answers - on individual spectra we sometimes
+agree with one variant, but the file-level disagreement stands. The honest statement is: the
+Agilent profile precision difference is real and still unexplained, cpp's own output wobbles by a
+few counts run to run, and **any measured diff count for these files carries that noise band**.
+Do not read a ±30 movement on them as a regression.
+
+**Two methodology traps this cost.** First, an initial determinism test compared outputs written
+to DIFFERENT `-o` directories and read the hash mismatch as nondeterminism - C# embeds the full
+command line, including `-o`, in its `command-line parameters` cvParam, so the hashes must differ.
+(cpp does not embed it, which is itself an unrecorded difference the comparator ignores.) Use the
+SAME output directory, or compare semantically. Second, this whole class is invisible to status
+columns: `Neg_MS_002.d` was `differs` before and after, so the transition analysis showed nothing.
+It surfaced only by following `cs_surplus.py`'s largest category back to a file.
+
+### Verification
+
+`pwiz-sharp/build.bat Release --i-agree-to-the-vendor-licenses`: build succeeded, **every test
+project green except the two known externals** - `UNIFI.Tests` 43/44 on a LIVE
+`democonnect.waters.com` call (this time a 400 whose body is again
+`ORA-04031: unable to allocate ... shared memory`; it fails identically on builds predating these
+changes) and `Installer.Tests` 1 pass / 1 skip (`Install_PerMachine_...` needs elevation).
+
+Agilent 16/16 and Bruker 15/15, each one higher than before - the two new tests:
+
+- `AgilentPeakFilterTests.PeakFilter_SuppliedExactlyWhenAskingTheSdkToCentroid`
+- `BrukerInstrumentFamilyTests.InstrumentFamilyCode_MapsIdenticallyForEveryContainerFormat`
+
+Both run without a vendor SDK or a data file, which is the point: neither bug was reachable by
+the reference-mzML harness. Also green: Analysis 175, BiblioSpec 142, MsData 85, Common 58, Util
+36, **Waters 21**, MsConvert 17, Thermo 15, NativeAot 10, Sciex 8, IdentData 7, TraData 6,
+MsConvertGUI 3, Mobilion 2, Shimadzu 2, UIMF 2, Bruker.PrmScheduling 1.
+
+Corpus: Agilent + Mobilion, all 57 inputs, **both** configurations - peakPicking 2 improvements
+/ 0 regressions, default 1 movement (the cpp-noise one above) / 0 regressions.
+
+**Two builds failed spuriously before this one, both self-inflicted:** a second `build.bat` was
+started while the first was still in its test phase, so the new compile overwrote the bin
+directories under test (`Analysis.Tests` reported 175/175 passed AND exit 1), and the leftover
+processes then held `TestResults\test-stdout\Waters.Tests.log` open, which
+`Run-Tests-Parallel.ps1` reports as a bare file-lock error. Never overlap two builds; kill stray
+`dotnet`/`testhost` and delete `TestResults\` before re-running.
+
+### Still open
+
+1. Sciex TIC 10x - unchanged, still the cleanest unexplained diff.
+2. Agilent profile m/z precision (~1.9e-10) on 3 files, now known to sit on top of cpp-side
+   run-to-run instability.
+3. **New**: Mobilion `...NISTmAbOxidized[1].d` emits `MS:1000527 highest observed m/z` on 278 of
+   6141 spectra where cpp emits none. C#-side surplus; inventory it per the standing directive.
+4. cpp `Baf2Sql.cpp` `case 9` needs a C++ build to verify, and the cpp-side IMS zero-sample fix
+   is still outstanding from 2026-08-20.
+5. The UNIFI client reporting an Oracle-OOM 500 as an authentication error.
