@@ -181,10 +181,10 @@ Branch `Skyline/work/20260826_osprey_stage7_stream_pool` in **`C:\proj\pwiz-work
 
 | # | change | state |
 |---|---|---|
-| 1 | select survivors during the parquet read | **committed `a3e20dfbd1`**, Stellar 10/10 incl. golden |
-| 2 | always write the reconciled parquet | written; Stellar 10/10 (regression #2) |
-| 3 | subset the write to survivors | written; **first attempt was INERT**, see below |
-| 6 | in-place upgrade of old-format parquets + `OSPREY_UPGRADE_RECONCILED_ONLY` | written, unit-gated |
+| 1 | select survivors during the parquet read | **committed `457d56eb55`**, Stellar 10/10 incl. golden |
+| 2 | always write the reconciled parquet | **committed `1e282f8a29`**, Stellar 10/10 |
+| 3 | subset the write to survivors | **committed `1e282f8a29`**; first attempt was INERT, see below |
+| 6 | in-place upgrade + `OSPREY_UPGRADE_RECONCILED_ONLY` | **committed `1e282f8a29`**, unit-gated only |
 | 4 | gap-fill marker column | NOT started - needed only for increment 5 |
 | 5 | point the Stage 7 rebuild at the reconciled parquet | NOT started - the increment that actually removes Stage 4 |
 
