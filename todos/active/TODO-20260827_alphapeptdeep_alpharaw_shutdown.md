@@ -189,6 +189,42 @@ The test sets `IsCleanPythonMode => true`, so it deletes the tools Python
 directory and rebuilds the venv from scratch each run — it resolves alpharaw to
 0.7.0, so these runs exercise the real broken version.
 
+## Code review
+
+`/code-review max` before opening the PR. Findings acted on, all introduced by
+this diff:
+
+- **Warning spam.** The env var makes alpharaw print `.NET dependencies could
+  not be loaded` plus a raw `RuntimeError` repr, and `ExecutePeptdeep` pipes
+  process output through `FilteredUserMessageWriter` to the user — so every
+  successful build would have shown it. Verified by A/B against the installed
+  venv (absent without the variable, three lines with it) and confirmed
+  `export-settings` is unaffected because it never imports alpharaw. Fixed by
+  two filter strings. Deliberately not filtering on `warnings.warn(`, which
+  would also swallow the pre-existing `mask_modloss` continuation line.
+- **Chose a token that can never be a runtime name** (`skyline-no-dotnet`
+  rather than `none`), so the fix cannot silently revert if upstream gives
+  `none` a meaning.
+- **Helper moved below its callers**, per CRITICAL-RULES.md ("Helpers go LAST").
+- **Comment corrections.** It claimed the readers are simply unavailable; in
+  fact Thermo reports itself unavailable cleanly while Sciex still advertises
+  itself and fails partway through a read, so the comment now warns against
+  reusing the helper for a peptdeep command that reads raw files. Also fixed an
+  imprecise claim about which alpharaw module pulls in `clr_utils`.
+- **Added the AI assistance header line** required by ai/docs/style-guide.md,
+  and noted in the TODO comment that no upstream issue exists to link.
+
+Not taken, filed as separate work rather than widened into a release-branch
+cherry-pick: `forceTempfilesCleanup` is a no-op for a Python child (ProcessRunner
+redirects `TMP`, CPython resolves `TEMP` first), and this launcher alone among
+Tide/DIA-NN/AlphaPeptDeep omits `ChangeTmpDirEnvironmentVariableToNonUnicodePath`.
+Both are real, both unrelated to the shutdown crash.
+
+The reviewer argued one pre-existing item belongs in scope: `DoTest` wrapping
+`OpenDocument` in `RunUI`, which blocks the message pump and is the only untried
+lead on the blib flake. Deferred on Nick's call (2026-08-27) to look at the flake
+only if it appears in a nightly run.
+
 ## Alternatives not taken
 
 - **Pin `alpharaw` to 0.6.1** in `CreatePythonInstaller`, matching the existing
