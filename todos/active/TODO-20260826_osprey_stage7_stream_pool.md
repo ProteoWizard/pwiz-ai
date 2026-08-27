@@ -1838,3 +1838,69 @@ file BEFORE the blib phase, carries Score and every q-value keyed by entry_id, a
 Two passes rather than one because of the CLAMP: `ClampExperimentQToBestRun` runs after
 protein FDR, only in memory, and its result decides which precursors pass - so it has to
 become a fold in pass 1 and an application in pass 2.
+
+## THE ANSWER: Stage 7 should use Stage 5's machinery (Brendan, 2026-08-27)
+
+*"FirstPassFDR calculates FDR for the entire population. It must hold information on how to do
+that in limited memory. It makes no sense that SecondPassFDR would be as large or larger on
+1/6 the population."*
+
+That is the whole diagnosis, and the numbers are damning:
+
+| stage | population | live floor (post-GC) | bytes/entry |
+|---|---|---|---|
+| FirstPassFDR | 768,549,137 | **7.0 GB** (p10) | ~9 B |
+| SecondPassFDR | 137,034,004 | **40.2 GB** | ~293 B |
+
+Stage 5 does FDR over 5.6x the population in a fifth of the memory - **32x better per entry** -
+because #4355 / #4397 moved it onto `FdrProjection`, a lean readonly struct streamed straight
+out of the parquet, with q-values routed through `IFdrOutputSink` rather than stored on the
+row. Its own commit note: *"rematerializing every file's FdrEntry stubs cost ~53 GB on an
+82-file Astral run (191 M x ~280 B) purely so FirstPassFDR could convert them into 32 B
+FdrProjection rows and drop them."*
+
+Stage 7 holds `FdrEntry` at ~263 B/row where Stage 5 holds ~40 B. **That difference IS the
+40 GB.** There is no new streaming design to invent; there is a machinery Stage 7 is not using.
+
+| | today | on projections |
+|---|---|---|
+| survivor pool | 137 M x ~263 B = **40.2 GB** | 137 M x ~40 B = **5.5 GB** |
+| + library | 4.19 GB | 4.19 GB |
+| Stage 7 live | **~40 GB** | **~9.7 GB** |
+
+which clears the bar: FirstPassFDR's 53.7 GB private becomes the run's peak.
+
+### The single blocker, precisely located
+
+A projection path for pass 2 ALREADY EXISTS - `ComputePass2Projection` - and the default arm
+does not take it. `Pass2FdrSidecar.cs:239-252` says why:
+
+> *The frozen-model modes (transfer, transfer-compete, protein-compact) also take the resident
+> path ... transfer-compete / protein-compact re-score with the frozen 1st-pass model over the
+> full pre-compaction population / protein stratum - a competition the projection engine does
+> not do (it trains + competes over the survivor set only).*
+
+So `protein-compact`, the DEFAULT, falls back to resident purely because the projection engine
+cannot express its frozen-model competition over the protein stratum.
+`ComputePass2TransferCompeteFull` (lines 841-1257) already STREAMS its scoring one file at a
+time; what is resident is the `FdrEntry` pool it scores INTO.
+
+### A dependency that was satisfied this morning
+
+`FdrProjection.ParquetIndex` is documented as *"Row index in the source file's
+`.scores.parquet`"*. Until `score_index` landed, a projection built from reconciled-parquet
+stubs would have carried the row's position in the WRONG file. So today's identity work was a
+prerequisite for putting Stage 7 on projections at all - which is why this could not have been
+done first.
+
+### How to do it, following this codebase's own convention
+
+Add the projection-backed pass-2 path behind a flag defaulting OFF, A/B it against the
+resident path for byte-identity, then flip the default - exactly how `OSPREY_FDR_PROJECTION`
+and `OSPREY_STAGE6_STREAM_SURVIVORS` were introduced, each leaving a working oracle on the
+other side of the switch.
+
+**Stellar is a weak oracle here** - 1.45x compaction, 391 gap-fill rows - where the behaviour
+that matters is a frozen competition over a protein stratum at 5.6x. The 257-file run is the
+real proof, and it is a 34-minute loop, so this wants fewer and better-reasoned iterations
+rather than fast ones.
