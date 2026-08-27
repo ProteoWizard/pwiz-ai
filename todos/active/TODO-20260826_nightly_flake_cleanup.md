@@ -172,18 +172,48 @@ Two consequences for this TODO:
 
 New on the net8 line, not present on master:
 
-- `TestAuditLogTutorial` - an audit-log entry ORDERING difference, not a text mismatch,
-  and **Japanese only**: 3 failures in ~17 Japanese executions (~18%), 0 in ~68 executions
-  of the other four languages. Every failure is byte-identical - line 128, position 16,
-  the same two entries swapped:
+- `TestAuditLogTutorial` - **root cause found and fixed 2026-08-27.** A stale databound
+  grid row, not audit-log ordering and not a document race. Rate 7 / 1,695 executions
+  (0.41%), in en/fr/tr/zh/ja - the earlier "Japanese only, ~18%" reading here was wrong,
+  drawn from 3 failures that happened to land in `ja` out of 17 (a 4% coincidence).
 
-      expected  Reason Changed: <excluded replicate Standard_8 from the calibration curve>
-      actual    Reason Changed: <peak boundary changed for GST-tag>IEAIPQIDK>517.8022++>
+  The test sets the Reason on audit log grid rows 0-3 to mark the four excluded standards.
+  The grid is filled by a background query, so after the four exclusions its rows can still
+  describe the document as it was before them. A row holds the `AuditLogEntry` it was built
+  from (`AuditLogRow._entry`) and writes the Reason back to that entry **by `LogIndex`**
+  (`AuditLogRow.ChangeEntry`), so a stale row 0 puts the reason on the peak-bounds entry
+  instead of the `Standard_8` exclusion. That predicts the signature exactly: line 128 is the
+  *first* of the four "Reason Changed" entries, and the actual text is precisely the entry
+  that sat at row 0 before the exclusions. Nothing sorts by localized text, hence all
+  languages.
 
-  A ~18% single-language failure with an identical diff every time is not a race in the
-  usual sense - it is two audit entries whose relative order depends on something that
-  differs under ja-JP. Sorting by a localized string is the obvious candidate, since ja-JP
-  collation would order these two differently from the other four locales. Cheap to test:
-  run the test in ja repeatedly and look at what orders the audit entries.
+  Two earlier attempts missed it because both waited on the *document*, never the grid:
+  PR #4610 wrapped the peak-bounds change in `WaitDocumentChange`; the follow-up split the
+  four-row loop so each row was its own waited document change. The failure happens on
+  iteration 0, before either wait exists. The follow-up's stated premise - that setting a
+  Reason "re-sorts the grid" - is also false; instrumented runs show rows 0-3 hold the same
+  `LogIndex` before and after each reason edit.
 
-  Worth a look alongside `TODO-20260827_net8_managed_memory_leak.md`.
+  Fix: wait for each row to actually hold the entry it is meant to edit, and name the entry
+  found there if it never does, so a recurrence fails immediately instead of surfacing as an
+  opaque audit-log text diff 100 lines later. `AuditLogTutorialTest` was the only audit-log
+  test touching the grid without such a wait - `AuditLogTest.cs` and `AuditLogSavingTest.cs`
+  call `AuditLogUtil.WaitForAuditLogForm` before every grid access, 12 call sites.
+
+  Verified: 2,500 executions (8 workers, all 5 languages, 94 min), 0 failures. At the
+  pre-fix rate that predicts ~10.3 failures; P(0 | unfixed) = 0.003%.
+
+### Two traps found while verifying this
+
+Both would have produced a false "verified" and are worth knowing before the next soak:
+
+- **`Run-Tests.ps1 -Loop 0` runs ONCE, it does not run forever.** Line 570 prints
+  `Loop: Forever`, line 655 does `$loopValue = if ($Loop -gt 0) { $Loop } else { 1 }` and
+  passes `loop=1`. A soak invoked that way exits in 46 s reporting `All tests PASSED`. Pass
+  an explicit count.
+- **Test console output is discarded in parallel mode** - in the aggregate log *and* in
+  SkylineTester's log. `found audit log`, printed by every tutorial execution, appears 0
+  times in both. Any `Console.WriteLine` diagnostic is invisible under `-ParallelWorkers`;
+  route it to a file beside the test assembly (the Docker workers mount the checkout, so the
+  writes land on the host).
+
