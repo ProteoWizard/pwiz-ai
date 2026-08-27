@@ -255,6 +255,85 @@ appear transposed. Full annotated inventory in the auxiliary file.
 
 ## Progress Log
 
+### 2026-08-26 - Overnight sweep session (home RDS, 150% verified)
+
+### 2026-08-26 - Overnight session part 2: checklist fully dispositioned
+
+Every dialog-sweep checklist item is now [x] or formally deferred
+(gallery: 17 sections). Since the part-1 entry:
+- OK verdicts: Export Method vendor panels (3 states/side), PeptideSettings
+  internal-standard growth, EditMeasuredIonDlg (2 modes), ImmediateWindow
+  (9pt Consolas is point-based - measured 1.5x), FindResultsForm (owner
+  draw font-relative), NodeTip (hover capture via color-mask crop of a
+  physical screenshot), iRT chain incl. GraphRegression (measured 780 =
+  designer 521 x1.5; inventory's "800x600" claim wrong), CreateMatch-
+  ExpressionDlg (reachable branch), Import Peptide Search page 1.
+- Code fixes without visual re-verify (identity at 96): KeyValueGridDlg
+  (400px width + paddings scaled; only reachable via search wizards),
+  CreateMatchExpressionDlg latent no-results branch, FilesTree AND
+  StatementCompletionTextBox transposed MeasureText args (same idiom,
+  latent at 96).
+- Deferred with reasons: wizard deep pages + feature-detection branch
+  (need DDA search files), EditCustomMoleculeDlg/EditFragmentLossDlg
+  (same designer+FormulaBox class), Document Grid dendrogram.
+- Functional-test battery first run PASSED in 106.4s BUT on STALE Debug
+  binaries (buildcheck did not recompile; caught via a KeyValueGridDlg
+  compile error - IWin32Window vs Control - that the battery should
+  have hit). Fixed the cast; full Debug rebuild green, QuickInspection
+  0 errors / 0 warnings (490s), battery RE-RUN ALL PASSED in 105.4s on
+  binaries stamped AFTER every change: TestVolcanoPlotFormatting,
+  TestPeakAreaRelativeAbundanceGraph, TestImportHighPrecTransitionList,
+  TestBackgroundProteome, TestEditCustomTheme, TestAssayLibraryImport.
+  Commit proposal drafted:
+  ai/.tmp/sessions/20260826-dpi-sweep/commit-message-proposal.txt -
+  awaiting developer approval (no commit made). CodeInspection test
+  PASSED (18.6s). /code-review max: 10 findings, dispositions:
+  APPLIED (verified real): MinimumHeight=0 crash guard when all columns
+  ignored+hidden; EditCustomThemeDlg got the same OnShown ColorGrid
+  container scaling (was regressed by the internals scaling); volcano
+  OnShown margins replaced with locale-proof ScaleSize (ja resx sizes the
+  grid 638 vs 606 - reviewer right, hard margins were wrong); DpiUtil
+  disposes replaced bitmaps (bounded GDI+ orphaning); shared
+  DpiUtil.DrawImageCentered replaces 4 duplicated centered-draw sites;
+  AddImage helper moved after public methods.
+  REFUTED: ActionBoxControl double-scaling claim - contradicted by direct
+  visual verification at 150% on 2026-08-25 (tiles correct); the child
+  self-autoscale the theory requires was empirically absent in ColorGrid.
+  DEFERRED (recorded): LiteDropDownList arrow scaling in the control
+  itself (covers EditPepModsDlg); shared nested-UserControl autoscale
+  mechanism (14+ candidates); EditListDlg rename via PresetNameDlg-style
+  designer dialog; AI-attribution header lines (follows branch precedent
+  - developer to decide).
+  POST-REVIEW GATES (final state, 15 files +174/-36): Debug solution
+  build green; guard battery ALL PASSED (128.3s) on review-fixed
+  binaries; QuickInspection 0/0 (606.5s); CodeInspection test PASSED.
+  Commit proposal refreshed at
+  ai/.tmp/sessions/20260826-dpi-sweep/commit-message-proposal.txt;
+  Developer approved commit and push. Committed 12f0f16b07 (15 files,
+  DpiUtil.cs working tree normalized to CRLF - blob stays LF under
+  autocrlf) and pushed to draft PR #4602.
+
+Dialog sweep continued; gallery ai/.tmp/dpi-sweep/index.html (9 sections).
+- ImportTransitionListColumnSelectDlg: 3 review rounds with the developer -
+  final: AllCells rows kept, initial column widths scaled, '...' placeholder
+  row MinimumHeight = combo overlay height. Verified.
+- EditListDlg rename popup: runtime Form literals + button heights scaled.
+- VolcanoPlotFormattingDlg (developer-reported): FOUR stacked causes fixed -
+  ColorGrid fixed columns/rows/glyphs; nested ColorGrid container size
+  skipped by form autoscale (sized in OnShown from live client + scaled
+  margins; ctor-time sizing corrupts anchors); container's anchored
+  children also ignore its resize (explicit child layout on SizeChanged).
+  Verified at 150%. ColorGrid fixes benefit EditCustomThemeDlg too.
+- CreateMatchExpressionDlg: OK (reachable branch); latent no-results
+  branch literals proactively scaled.
+- AllChromatogramsGraph: OK (16px corner glyphs cosmetic).
+- Full-Scan tab, Filter tab: OK (relative re-layouts).
+UNCOMMITTED on branch: StatementCompletionForm/TextBox, PopupPickList,
+SequenceTree, ImportTransitionListColumnSelectDlg, EditListDlg, ColorGrid,
+VolcanoPlotFormattingDlg, CreateMatchExpressionDlg, ActionBoxControl.
+Functional-test battery still pending before any commit. Lead list found:
+grep of AutoScaleMode.Font UserControls (nested-container class of bug).
+
 ### 2026-08-20 - Session start
 
 Issue #4599 created; branch pushed; developer approved the staged strategy
