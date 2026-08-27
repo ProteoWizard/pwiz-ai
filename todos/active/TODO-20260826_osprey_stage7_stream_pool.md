@@ -831,3 +831,48 @@ anyway.
 **Operational rule earned**: do not run two memory-heavy Osprey jobs on this box. The earlier
 concurrency (regressions alongside plate 0062) was survivable because Stellar is tiny; a
 257-file pool build is not.
+
+## The converter CANNOT live in SecondPassFdrTask - root cause (2026-08-26)
+
+Three attempts at a low-memory 257-file conversion, all with the same shape: private memory
+climbing monotonically with file count to 47-51 GB. The root cause is positional and there is
+no fix inside Stage 7.
+
+**`HydrateCompactedStreaming` runs inside `PerFileScoringTask.Rehydrate`.** The very first
+crash stack said so and I misread it twice:
+
+```
+Task 'pwiz.Osprey.Tasks.PerFileScoringTask' failed to rehydrate its state
+  PerFileRescoreTask.Rehydrate
+    SecondPassFdrTask.Run : line 192
+```
+
+So the pool is materialized by the task graph's REHYDRATE, not by `RescoredEntries.Value` and
+not by any single call Stage 7 makes. Demanding **any** byproduct that `PerFileScoringTask`
+publishes - `PerFileParquetPaths` and `LibraryById` included, which the upgrade needs - pulls
+the whole hydration in behind it. Attempt 2 moved the call after `ctx.Get<RescoredEntries>()`;
+attempt 3 moved it above that line into a wrapper; both still paid, because the wrapper's own
+`ctx.Get<PerFileParquetPaths>()` is enough to trigger it.
+
+**"Token vs Value" is the wrong mental model** and cost two runs. `ctx.Get<T>()` is not a cheap
+handle: it runs the producing task's `Rehydrate`.
+
+**What this means for the design.** The upgrade needs an entry point that does NOT go through
+the task graph - its inputs are only a list of parquet paths (available from
+`config.InputScores`) and a library. Options, in rough order of preference:
+
+1. A dedicated `--task` (e.g. `UpgradeReconciled`) whose `IsIncluded` excludes every per-file
+   task, so nothing rehydrates.
+2. A standalone entry point in `Program.cs` that loads the library, calls
+   `RescoreHydration.BuildRetainBaseIds` over the `--input-scores` paths, and converts.
+
+`BuildRetainBaseIds` (committed) is already the pool-free half and is correct - it reads only
+the planner envelopes. The remaining problem is purely how to reach it without waking the task
+graph.
+
+**No artifacts were damaged** by any of the three attempts: source still 257 files / 266.2 GB,
+zero stray `.upgraded` / `.retired` files. The move-then-move-then-delete swap held.
+
+**Stopping here rather than attempting a fourth variant** - three failed attempts without a
+verified root cause is the point to stop guessing, and the root cause above was only confirmed
+on the third. The next attempt should be the standalone entry point, written deliberately.
