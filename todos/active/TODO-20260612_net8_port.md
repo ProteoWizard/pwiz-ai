@@ -5953,8 +5953,206 @@ When an experiment yields "no change", check the build succeeded before believin
 **Reading the failure.** "0 tests" against a test-count anchor means the run died, not that tests
 vanished; go to the termination thread dump for the process that was still alive.
 
+### Triage of the 27 `differs`: 25 already accounted for, 2 genuinely open
+
+The previous entry called these "all small and unexamined" and broke them down as 10 Shimadzu,
+2 Thermo, 1 Bruker, 1 Sciex, 1 Waters. **That breakdown was wrong** - there is no Waters file in
+`differs`, and it omitted the 13 IMS files entirely. Actual vendors on the 08-24 baseline:
+Agilent 9, Shimadzu 10, Mobilion 4, Thermo 2, Bruker 1, Sciex 1. (Note also a 6th status the
+tables above never mention: `different-output-files`, 2 files. 382+27+62+19+2 = 492.)
+
+Cross-referencing each against the two standing records leaves only two open:
+
+| group | n | status |
+| --- | ---: | --- |
+| Agilent + Mobilion IMS | 13 | cpp-side fabricated leading zero sample; standing record; decision is to fix cpp |
+| Shimadzu `run/@startTimeStamp` | 10 | ~15 s skew, **accepted user call** (see the 2026-08-1x entry, line ~4463) |
+| Thermo filter string | 2 | **not ours** - see below |
+| Bruker `componentList` | 1 | already in the C#-surplus record, still open |
+| **Sciex TIC 10x on one spectrum** | **1** | **recorded nowhere; genuinely unexplained** |
+
+**Thermo: a rounding pattern that is not our rounding.** All four diffs across the two Thermo
+files are precursor m/z in the filter string, and every one is an exact `.XX5` midpoint where cpp
+rounds half-away-from-zero and C# rounds half-to-even: 678.125 -> `678.13` vs `678.12`, likewise
+1245.625, 995.625, 598.125. That looks exactly like a banker's-rounding defect in our formatter,
+and it is not. `SpectrumList_Thermo.cs:592-597` already records the investigation: **both sides
+call `IScanFilter.ToString()`**, and cpp ships RawFileReader 5.0.0.93 against our 8.0.6.0, with
+v8's `GetScanEventStringForScanNumber` agreeing with its own `ToString()`. The difference is
+inside the SDK and cannot be closed from this side while the trees ship different versions.
+Worth flagging because the midpoint pattern is a persuasive false lead - check the code comment
+before re-deriving it.
+
+**Sciex `QTRAP_010_0133_T_11102006_A074_DJ_120min_IDA.wiff` is the one real lead.** One spectrum
+(`sample=1 period=1 cycle=2470 experiment=2`) reports `MS:1000285 total ion current=1.0e09` in
+cpp and `1.0e08` in C# - exactly 10x. The isolation is what makes it interesting:
+
+- `records_truncated: 0` - the comparison was complete, not budget-limited, so this is the whole
+  story for the file and not a truncated view.
+- `binary_diffs: 0` over 6,148 spectra / 6,156 records - **every binary array is byte-identical**.
+  The peak data agrees; only the summary cvParam disagrees, and only on one spectrum.
+- Stable in **every** sweep since 08-11, default and peakPicking alike, always `n=1` with this
+  same value pair. Not a regression from the six fixes; it is the last surviving diff on a file
+  that had 81 on 08-10 before the collision-energy fix.
+- `mzml_compare` does not reformat numbers, so `1.0e09`/`1.0e08` are the literal strings in the
+  two mzMLs.
+
+Not investigated further this session: root-causing it means converting the file with both
+binaries, and starting a third concurrent msconvert while two sweeps are running is exactly the
+CPU/IO contention that pushes the borderline Sciex files into their 420 s timeout. Deferred until
+the sweeps finish rather than risk corrupting their comparability.
+
+### FINAL sweep results - both configurations, 492/492, cs-failed 0
+
+Both sweeps completed. cpp snapshot unchanged (Aug 18) in both, so they are directly comparable
+to their predecessors on status.
+
+| | identical | differs | cpp-failed | both-failed | diff-output-files | **cs-failed** |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| peakPicking | 382 | 28 | 19 | 61 | 2 | **0** |
+| default | **397** | 23 | 22 | 48 | 2 | **0** |
+
+**`cs-failed` is 0 in the default configuration for the first time** - the previous entry had only
+ever demonstrated it under peakPicking. `2020-06-09 BAK 270 optimization.wiff` moved
+`cs-failed -> identical` here too, confirming the per-run read tolerance fix outside peakPicking.
+
+**Nine status transitions across both sweeps, none a regression.** Five are pure timeout-boundary
+artifacts of running the two sweeps concurrently, which inflated runtimes ~15% and tipped files
+that already sat within ~10% of the 420 s cap:
+
+| file | cpp 08-18 -> 08-26 | C# 08-18 -> 08-26 |
+| --- | --- | --- |
+| `Ellis_033_2700_261_07.wiff` | 426.8 -> 424.3 | 366.4 -> **421.7** (crossed) |
+| `22_0430_006_SSL2_ND_Inj_29_01.wiff` | 395.4 -> **420.8** (crossed) | 289.7 -> 329.6 |
+| `221111_Ullrich_220697_1.wiff` | 406.7 -> **424.0** (crossed) | 317.2 -> 377.2 |
+
+Note C# is FASTER than cpp on all three. The rest: `092612Sample16.wiff` and
+`250814_ZTScan_100spd_A_3_G1.wiff2` improved (C# now completes), `221111_Ullrich_220697_2.wiff` is
+the known flipper, and `210319_004_MRMoptim13.wiff2` is the non-reproducible timestamp below.
+
+**Concurrency cost, for the record:** the concurrent run bought ~2x wall-clock and produced 5 of
+the 9 transitions as noise. A serial pair would have been cleaner to read. Worth weighing next
+time rather than defaulting to concurrent.
+
+### A real C#-side gap the status columns could not see: C# is not vendor-centroiding two files
+
+`cs_surplus.py` on the peakPicking results reports `spectrum/@defaultArrayLength` **6570** - by far
+the largest surplus category - and following it back found something the transition analysis
+structurally cannot surface, because these files were `differs` before AND after.
+
+**`Neg_MS_002.d` (Agilent QTOF, non-IMS) and
+`2020-12-28-18-21-56-20201228_PeptideMap-NISTmAbOxidized[1].d` (Mobilion) share one signature:**
+
+```
+spectrum/@dataProcessingRef   cpp=None   cs=pwiz_Reader_Agilent_conversion
+spectrum/@defaultArrayLength  cpp=233    cs=2336      (Neg_MS_002.d)
+spectrum/@defaultArrayLength  cpp=3      cs=8         (Mobilion)
+cvParam missing in C#         cpp emits "user:centroided min/max"; C# does not
+```
+
+cpp centroids; C# emits the raw profile. The decisive tell is the third line: `user:centroided
+min/max` is the userParam cpp writes *when it has centroided*, and it is absent on our side. Both
+files go through the Agilent reader.
+
+**This is not caused by this thread's centroid msLevel gate.** `cpp=233 / cs=2336` is stable in
+every peakPicking sweep back to **08-19**, before the gate landed (08-24). It is long-standing and
+was never characterised - the standing record noted `Neg_MS_002.d` as "non-IMS and unrelated" to
+the IMS defect and stopped there.
+
+The likely shape: the C# Agilent reader declines to vendor-centroid more aggressively than cpp
+does. `VendorReaderTestHarness` deliberately does NOT assert that an included MS level must change
+the spectrum (declining is legitimate for quadrupole data), so the harness cannot catch an
+over-eager decline either. **That is a test blind spot in the same family as the ones recorded
+above, and it is why a corpus sweep is not optional.**
+
+### Corrected triage of the 28 peakPicking `differs`
+
+The earlier triage in this entry lumped all 9 Agilent files into the IMS bucket. Wrong - two of
+them are not IMS. Accurate breakdown:
+
+| group | n | status |
+| --- | ---: | --- |
+| IMS cpp-side fabricated zero sample (7 Agilent + 3 Mobilion) | 10 | standing record; fix cpp |
+| **C# not vendor-centroiding** (`Neg_MS_002.d`, Mobilion `[1].d`) | **2** | **NEW - real gap, above** |
+| `20fmolBSA-centroid.d` extra cvParam x23 + 3 binary | 1 | recorded C# surplus |
+| Shimadzu `run/@startTimeStamp` | 10 | accepted user call |
+| Thermo filter string | 2 | Thermo SDK 5.0.0.93 vs 8.0.6.0; not closable |
+| Bruker `componentList` | 1 | recorded C# surplus, open |
+| Sciex TIC 10x | 1 | **unexplained** |
+| Sciex `210319_004_MRMoptim13.wiff2` 1 s timestamp | 1 | non-reproducible, below |
+
+### The default sweep's other find: the comparator was hiding an Agilent precision gap
+
+Three Agilent files show huge `diff_count` jumps vs 08-18 - 81 -> 2740, 81 -> 3783, 83 -> 485.
+**Not new breakage.** Every sweep before 08-26 reported them at exactly `n=81`, pinned at the old
+comparator's 80-diff budget, with the spectra actually compared varying by where it tripped:
+
+| sweep | n | spectra compared (of 1196) |
+| --- | ---: | ---: |
+| 08-10 | 81 | 43 |
+| 08-11 | 81 | 56 |
+| 08-12/13 | 81 | 58 |
+| 08-14 | 81 | 72 |
+| 08-18 | 81 | 47 |
+| **08-26** | **2740** | **1196** |
+
+`BSA050-r001.d` was judged on 47 of its 1196 spectra and never reached its chromatograms. The old
+records have no `records_compared` / `records_truncated` / `categories` keys at all. This is the
+"understates by two orders of magnitude" failure the standing record predicted, now closed.
+
+**The content is Agilent profile m/z precision, agreeing to 9 significant figures:**
+
+```
+cpp: MS:1000528 lowest observed m/z=300.271912178283
+cs : MS:1000528 lowest observed m/z=300.271912163348
+     binary: 206/212 values differ, max_abs=2.89e-07 max_rel=1.9e-10
+```
+
+0.19 ppb, ~3e-7 Da at m/z 300 - orders of magnitude below any instrument's accuracy. Large in
+COUNT, negligible in MAGNITUDE. **Confined to profile data**: under peakPicking
+`AE_30Apr19_negESI_0001.d` and `BSA050-r001.d` are `identical` and `20fmolBSA-centroid.d` falls
+3783 -> 26. Peak picking collapses both onto the same centroids and hides it, which is why eight
+default sweeps never characterised it and no peakPicking sweep could. Not root-caused; likely a
+different order of operations in the m/z axis computation.
+
+### C#-surplus inventory refreshed (the standing directive)
+
+| sweep | files with surplus | categories |
+| --- | ---: | --- |
+| default | **8 of 492** (was 16 on 08-12) | extra cvParam 10, componentList 4+4 |
+| peakPicking | 10 of 492 | defaultArrayLength 6570, extra cvParam 13, componentList 4+4 |
+
+Sciex MRM3 (2 files x12) and Thermo `MAT95XP-File001.RAW` surpluses are **gone**;
+`20fmolBSA-centroid.d` fell from x11 to x3; `AE_30Apr19_negESI_0001.d` cleared entirely. The
+peakPicking `defaultArrayLength` 6570 is not a surplus in the "we invent data" sense - it is the
+not-centroiding gap above (6556 from `Neg_MS_002.d`, 14 Mobilion).
+
+### `210319_004_MRMoptim13.wiff2`: a transition that does not reproduce
+
+`identical` in **13 consecutive sweeps** - including the 08-26 DEFAULT sweep, same binaries, same
+day - and `differs` only in the 08-26 peakPicking run, on a 1-second `run/@startTimeStamp`
+(cpp `22:49:45Z` vs C# `22:49:46Z`). That pattern points straight at this thread's centroid-gate
+change. **It is not that.** Converted in isolation 6x per binary under peakPicking: `22:49:46Z`
+12 times out of 12, *including cpp*, whose snapshot has not changed since Aug 18 and which the
+sweep recorded as `:45Z`.
+
+**Most likely the concurrent sweeps themselves.** Both drive the SAME manifest, so both can open
+the same vendor input simultaneously, and vendor SDKs in this codebase are known to write state
+into the input directory (the Waters `lmgt.inf` precedent). Concurrency costs same-input
+contention, not merely CPU and timeouts. **Treat isolated single-file transitions in this pair as
+suspect until reproduced serially.**
+
 ### Open
 
-- Both sweeps in flight; results and a `cs_surplus.py` refresh still to come.
-- The 27 `differs` net of the IMS defect (10 Shimadzu timestamp-only, 2 Thermo, 1 Bruker,
-  1 Sciex, 1 Waters) remain unexamined.
+1. **C# not vendor-centroiding `Neg_MS_002.d` and the Mobilion `[1].d` file** - the highest-value
+   item here. Real, long-standing (>= 08-19), 2 corpus files, and invisible to both the vendor
+   harness and the status columns. Start at the Agilent reader's decline condition and compare it
+   to cpp's.
+2. **Sciex TIC 10x** - `QTRAP_010_0133_T_11102006_A074_DJ_120min_IDA.wiff`, spectrum
+   `sample=1 period=1 cycle=2470 experiment=2`, cpp `1.0e09` vs C# `1.0e08`. `records_truncated: 0`,
+   `binary_diffs: 0` over 6,148 spectra - every array byte-identical, one summary cvParam wrong.
+   Stable since 08-11 in both configurations. Convert with both binaries and trace where C#
+   sources it.
+3. **Agilent profile m/z precision** (~1.9e-10 relative) - decide whether to chase or record as
+   accepted, as was done for the Shimadzu timestamp skew.
+4. Bruker `componentList` surplus on `0.1HCOOH_H20_NoTIMS_Pos.d`.
+5. The UNIFI client reporting an Oracle-OOM 500 as an authentication error.
