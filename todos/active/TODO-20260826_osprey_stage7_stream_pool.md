@@ -1504,3 +1504,29 @@ is byte-identical.
 **Next on this branch**, in the order the design gives: sparse `sharedBounds` (design item 3,
 O(observations) today), then the blib emission-order inversion (item 1, the genuinely hard
 one - refIds must be assigned in the pool-free middle so pass 2 can emit file-major).
+
+### Correction to the "13 bytes per entry" framing above
+
+Cross-checked against the 86-file trial, and the per-entry framing does not hold. Pool bytes
+are (probe - 4.19 GB library) over the pool's own entry count:
+
+| cohort | old format | new format | delta | old B/entry | new B/entry |
+|---|---|---|---|---|---|
+| 86 files, 38,135,138 entries | 11.87 GB | 10.42 GB | 1.45 GB | 311 | 273 |
+| 257 files, 137,034,004 entries | 37.78 GB | 36.04 GB | 1.74 GB | 276 | 263 |
+
+The delta is **38 B/entry at 86 files and 13 B/entry at 257** - not a constant, so it is not a
+per-entry overhead, and the paragraph above was over-reach from a single cohort. Note the
+per-entry cost is not constant within either arm either (311 vs 276 old, 273 vs 263 new).
+
+Do not fit a line through these two points: they are different cohorts, not a size series -
+86 files is plate 0059 alone and 257 is three plates with different peptide content, so
+entries-per-file, charge distribution and modified-sequence sharing all differ. A two-point
+fit across them produces a ~94 MB/file term that would imply an O(files) structure nobody has
+seen in any other probe, which is a good sign the fit is meaningless rather than a discovery.
+
+**What is actually established**: the reduced read ends with a smaller live pool than the
+full read, by 1.45-1.74 GB, at two cohort sizes, with identical entry counts and identical
+fragment-release counts in both. **Why remains unknown**, and it needs a heap profile
+(dotMemory, comparing the two arms' retained-object graphs) rather than more arithmetic on
+two summary numbers. Until then it is an observation, not a benefit of the format.
