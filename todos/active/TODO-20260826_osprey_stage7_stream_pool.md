@@ -724,3 +724,45 @@ disk and only turned into positions at load (`RescoreHydration` builds
 
 Not attempted this session - it wants a clear head and its own regression cycle, not the
 tail of one.
+
+## SINGLE-PLATE TRIAL: PASS (2026-08-26, plate 0059, 86 files)
+
+`chs-86files-libdecoy-r1.0-protein-compact-s7subset59`, `--task SecondPassFDR -LinkFrom` the
+p0059 run, Release snapshot `_bin\26.1.1.238-s7subset-20260826`,
+`OSPREY_VERSION_OVERRIDE=26.1.1.233`. **exit=0 in 70 min.**
+
+**The artifact shrank 6.9x**: 86 reconciled parquets 90.76 GB -> **13.16 GB**, per file
+`544,281 rows kept of 3,801,989` (7.0x by row, 14.5% by size - the two agree). Better than the
+~5.6x expected. Extrapolates to ~38 GB for the 257-file set against ~266 GB today.
+
+**Every logical output is identical to the baseline:**
+
+| | p0059 baseline | trial |
+|---|---|---|
+| survivor observations | 38,135,138 | 38,135,138 |
+| protein stratum | 418,271 base_ids | 418,271 |
+| peptides at 1% experiment FDR | 40,280 | 40,280 |
+| parsimony groups | 4,702 | 4,702 |
+| protein groups passing | 4,633 | 4,633 |
+| library spectra / passing entries | 44,510 / 3,783,092 | 44,510 / 3,783,092 |
+
+**The blib differs by 4,096 bytes - one SQLite page - and that is PRE-EXISTING.** Control from
+artifacts written before this branch: the 257-file `--task` run `s7mem257` (build
+233-stage7fix) differs from its own full-run baseline by 8,192 bytes (725,467,136 vs
+725,458,944). Two pages at 257 files, one at 86: it scales with cohort size, as page
+allocation does and a content difference would not.
+
+**Also confirmed**: the in-place upgrade ran on all 86 files (the path no regression mode
+covers), and the p0059 baseline directory is still 90.76 GB - deleting a hard-linked entry
+dropped only that name, so the comparison target survived the run that consumed it.
+
+**Post-GC memory, unchanged as expected** (increment 5 is what removes the pool):
+`stage7-inherited` = `stage7-pool` = 16.06 GB at 86 files, i.e. 4.19 GB library +
+0.138 GB/file, against 0.147 GB/file measured at 257. Model holds.
+
+**Caveat on the design of this comparison**: baseline and trial differ by build (233 vs 238)
+AND by path (full run vs --task), not only by this branch. The control above is what makes
+the blib delta attributable; the logical counts are what make the result meaningful.
+
+**Timing is contended, not clean** - the upgrade took ~40 min for 86 files while CHS
+PerFileRescoring had the machine. Do not quote it as the conversion cost.
