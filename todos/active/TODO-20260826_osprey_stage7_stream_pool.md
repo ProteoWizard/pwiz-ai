@@ -2084,3 +2084,99 @@ straight-through and fail distributed.
 
 Third time this branch has seen the same shape: a change that agrees with itself on the
 in-process path and disagrees on the distributed one. `mode3` is the leg that catches it.
+
+## Step 2 DONE in the tree: the blib phase stopped holding the pool (2026-08-27)
+
+`CollectPassingEntries` returned `List<KeyValuePair<string, FdrEntry>>` - 16 B a row, but every
+row PINNING a ~263 B `FdrEntry` and through it that file's whole survivor list. 11.7 M rows held
+the 40 GB pool alive from the FDR gates through the last RefSpectra row.
+
+**The whole phase now works on values.** New `PassingObservation` (internal readonly struct,
+~64 B): file, modified sequence, charge, run q, experiment precursor q, apex/start/end. Those
+eight fields are the ENTIRE set the four consumers read - checked one by one, not assumed.
+
+* `CollectPassingEntries` walks `rescored.Files()` and builds the compact list AND
+  `bestByPrecursor` in ONE pass. The best-per-precursor map could no longer be a second pass
+  over the passing list, because RefSpectra needs the winner's `FdrEntry` itself. It is
+  O(distinct precursor) - 45,724 entries, ~12 MB - so the entries it keeps pin themselves and
+  nothing else.
+* `ModifiedSequence` is INTERNED as the records are built. The parquet reader hands out a fresh
+  string per row, so keeping each row's own instance would have retained 11.7 M strings - more
+  than the records - against ~40,000 distinct sequences. **This is the trap a naive value-struct
+  conversion walks into**: it looks like a pure win in the struct layout and is not.
+* `BlibOutputWriter.Write` no longer takes the pool at all. `CreateSourceFiles` and the
+  `perFileEntriesCount` argument needed only the run's file NAMES, so they take
+  `rescored.FileNames`.
+
+Net memory at 257 files: **~750 MB of records replacing 187 MB of references** - a straight
+loss until the last pool consumer goes, which is exactly what the objective's "documented trap"
+predicted, and why this lands with the conversions rather than before them.
+
+Build + 596 tests + zero-warning inspection green; Stellar regression running
+(`regression-stellar-3.log`).
+
+### What still reads `rescored.Value` after step 2
+
+| line | consumer | disposition |
+|---|---|---|
+| `UpgradeReconciledParquets` | the format converter | upgrade-mode only, not on the hot path |
+| `ComputeAndPersist` | projection / resident arms + the 2nd-pass reload loop | the reload loop is what re-hydrates the pool for the consumers below |
+| `RunProteinFdr` | step 3 - folds to O(distinct peptide); the write-back is the sidecar patch |
+| `ClampExperimentQToBestRun` | already split fold/apply in `d8b2ec5537`, still takes the pool |
+| `FdrBenchInputWriter` | `--fdrbench` only |
+| `ModelDiagnosticsReport` | `--model-diagnostics` only |
+| `OspreyReportWriter.WriteReports` | step 4, default-on, **still the one unproven consumer** |
+
+## Steps 3 and 4 DONE in the tree (2026-08-27), each gated Stellar 10/10
+
+**Step 3 - `RunProteinFdr`.** `RunSecondPass` folded its two whole-pool passes (per-peptide
+bests, detected-peptide set) into ONE walk over `rescored.Files()` - a streamed caller would
+otherwise materialize every file twice. New `ProteinFdr.SecondPassProteinFdrAccumulator`, a
+separate type from `FirstPassProteinFdrAccumulator` because the gates genuinely differ (RUN
+level at the run FDR there, EXPERIMENT level at the experiment FDR here).
+
+**`PropagateProteinQvalues` is gone**, which is the part that mattered. Checked every reader of
+`FdrEntry.ExperimentProteinQvalue` past that point: the only one is the 2nd-pass sidecar
+(`WriteStage5PercolatorDump` and its Stage-6 twin run earlier; FDRBench, ModelDiagnostics and
+OspreyReportWriter never touch the field). So the write-back is now a per-file patch off
+`ProteinFdr.PeptideQvalues`, keyed by reading each entry's peptide from the RECONCILED parquet's
+own `modified_sequence` column - the column the entry's `ModifiedSequence` came from, so the
+lookup matches by construction. A whole-pool write followed by a whole-pool read became one
+streamed pass. **This is the shape `RunFirstPassProteinFdrStreaming` has used since the first
+pass moved onto projections** - the same "machinery Stage 7 is not using" theme.
+
+**Step 4 - `OspreyReportWriter`, and it was NEVER the risk the issue thought.** Its per-replicate
+loop already passes `new[] { kvp }` - one file - to both `CountPrecursorsPeptides` and
+`CountPassingProteinGroups`. The only whole-run part was the experiment row, and
+`CountPrecursorsPeptides` is a pure O(distinct) fold over an `IEnumerable`, so it now accumulates
+inside the per-replicate walk instead of taking a second pass. **Retract the standing note that
+this is "the one genuinely unproven consumer"; nothing about it forced an extra pass.**
+
+## Step 5 - THE FLIP: what it actually needs (2026-08-27)
+
+`MaterializeOneFile` loads a file from its reconciled parquet plus the **1st-pass** sidecar, so a
+re-materialized file carries pass-1 q-values. Today the pool gets its pass-2 values from
+`ComputeAndPersist`'s reload loop, which works only because the pool exists. **The flip has to
+move that overlay into the materialization itself** - a file's post-rescore state must mean
+"parquet + 2nd-pass sidecar when one is current, else 1st-pass". That is the last design
+question in the chain, not a mechanical change, and it is the thing to get right first.
+
+Still reading `rescored.Value` in `Run` after steps 1-4:
+
+| line | consumer | note |
+|---|---|---|
+| `UpgradeReconciledParquets` | format converter | only when an old-format parquet is found |
+| `ComputeAndPersist` | projection / resident arms + the 2nd-pass reload loop | the reload loop IS the thing the flip replaces |
+| `ClampExperimentQToBestRun` | already split fold/apply in `d8b2ec5537` | needs the same fold-then-apply-per-file treatment |
+| `FdrBenchInputWriter` | `--fdrbench` only | |
+| `ModelDiagnosticsReport` | `--model-diagnostics` only | |
+
+### Do not promise 1000 files on 64 GB from this work
+
+Stage 7 stops being the wall - projected ~4.2 GB library + ~3.5 GB emit records = **~8 GB at
+1000 files** against ~152 GB today. But the run peak then belongs to FirstPassFDR, whose live
+floor is 7.0 GB at 257 files over a population that grows with file count (~27 GB at 1000 if
+linear), and whose measured `peak_paged` is ~53 GB **at 257 files**. Most of that gap is
+Server-GC committed-but-free rather than retained, so it is tunable - but tunable is a
+hypothesis. Whether 1000 files fits in 64 GB is UNANSWERED and needs the 257-file run plus a
+Stage-5 projection before anyone plans around it.
