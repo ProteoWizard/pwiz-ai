@@ -876,3 +876,24 @@ zero stray `.upgraded` / `.retired` files. The move-then-move-then-delete swap h
 **Stopping here rather than attempting a fourth variant** - three failed attempts without a
 verified root cause is the point to stop guessing, and the root cause above was only confirmed
 on the third. The next attempt should be the standalone entry point, written deliberately.
+
+## UNCOMMITTED WORK in C:\proj\pwiz-work1 (2026-08-26, end of session)
+
+Two files modified and NOT committed - deliberately, because they are unit-gated (build,
+593/593, zero inspection warnings) but NOT regression-gated, and they change Stage 7's
+ordering:
+
+* `Osprey.Tasks/RescoreHydration.cs` - adds `BuildRetainBaseIds`, the pool-free retain-set
+  builder (planner envelopes only). **Correct and worth keeping** - any standalone converter
+  will call it.
+* `Osprey.Tasks/SecondPassFdrTask.cs` - reworks `UpgradeReconciledParquets` to convert one
+  file at a time, pre-checks footers so the already-upgraded case is cheap, and hardens the
+  swap to `Move` -> `Move` -> `Delete` (a crash then leaves BOTH copies, not neither).
+  **The swap hardening is worth keeping regardless.** The `UpgradeOldFormatReconciledParquetsOrExit`
+  wrapper's POSITION is the part known not to work - see the root-cause section above.
+
+To resume: either finish the standalone entry point and gate the whole thing together, or
+keep `BuildRetainBaseIds` + the swap hardening and drop the wrapper. Do not commit the
+current state as-is without `regression.ps1 -Dataset Stellar`.
+
+The committed branch (`1e282f8a29`) is unaffected by any of this and remains fully gated.
