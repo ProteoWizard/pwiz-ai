@@ -1747,3 +1747,50 @@ Baseline verified intact (257 files, 266.2 GB). Reconversion running in `...-s7c
 whose parquets are 8-way hard links to the baseline, so `File.Replace` breaks the link rather
 than the source. Correct library confirmed twice from its log (6,175,389 entries, 16,062
 manifest replacements - both matching the baseline).
+
+## 257-file validation of the score_index design - PASS (2026-08-27)
+
+`...-s7si257`, `--task SecondPassFDR -LinkFrom` the reconverted `s7conv257b`, exe
+`_bin\26.1.1.238-scoreindex-20260827`. **exit=0 in 34 min.**
+
+Reconversion first: 257 files, 266.2 -> **47.4 GB**, `137,034,004 rows kept of 768,549,137`,
+74 min, zero stray temps, baseline verified intact at 266.2 GB. The 0.3 GB over the previous
+conversion is the `score_index` column, ~4 bytes x 137 M rows.
+
+| | `s7mem257` baseline | `s7si257` |
+|---|---|---|
+| pre-compaction read | 768,549,137 -> 137,034,004 | **137,034,004 -> 137,034,004 (no-op)** |
+| planner actions dropped | - | **0** |
+| protein groups passing | 5,079 | **5,079** |
+| library spectra / passing entries | 45,724 / 11,745,026 | **45,724 / 11,745,026** |
+| Proteins / RefSpectraProteins | 5,757 / 50,566 | **5,757 / 50,566** |
+| `SUM(bestSpectrum)` | 45,724 | **45,724** (one best per spectrum) |
+| Stage 7 wall | 81 min | **34 min** |
+| `stage7-pool` | 41.97 GB | 40.23 GB |
+| peak_paged | 55.5 GB | 53.15 GB |
+
+**The blib is content-identical but NOT byte-identical, and that is expected.** Size differs by
+208,896 bytes (51 SQLite pages) because the file-major RetentionTimes emission changes physical
+row order, so SQLite packs pages differently. A byte comparison is the wrong test - which is
+why the gate compares tables by key.
+
+Verified by content instead. Every count matches exactly. Two floating SUMs differed in their
+last digits (`endTime` 1e-4, `score` 7e-6, on sums over 11.7 M rows, ~1e-10 relative) - the
+signature of accumulation ORDER, not of different values. Confirmed by re-summing as scaled
+INTEGERS, which is order-independent:
+
+```
+baseline    141265093448307|5615089607870263|35845665555838|138943034250552
+score_index 141265093448307|5615089607870263|35845665555838|138943034250552
+```
+
+Identical to the last representable digit.
+
+**`0 action(s) dropped` is the sharpest signal.** Every planner reconciliation action resolved
+against rows loaded from the reconciled parquet through `score_index`. A wrong identity
+mapping anywhere shows up here first - it is what moved the protein counts when the gap-fill
+sentinel collided on Stellar.
+
+**Two caveats to carry.** The peak improvement (55.5 -> 53.15 GB) is ONE run and peak working
+set varies; it is not a result until repeated. And `stage7-pool` is still 40.23 GB - none of
+this work touches the resident pool, which remains the whole of #4486.
