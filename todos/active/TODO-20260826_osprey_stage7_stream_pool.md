@@ -1254,3 +1254,110 @@ That leaves ONE genuinely open item on the streaming design:
 it is on the byte-parity path, and it needs one run's entries plus the whole-run parsimony
 result - which fits the pass-2 emit visit, but has to be shown to give the same numbers from
 a streamed visit rather than assumed to.
+
+## Code review (`/code-review max`, 2026-08-27 ~00:30) - triage
+
+Fifteen findings, which is the tool's cap, so the count says nothing about severity. Each was
+verified against the source before acting; three were refuted by the reviewer itself and are
+recorded here so they are not re-raised.
+
+### Fixed (commit `e5e6d15fa3`)
+
+| # | finding | verdict |
+|---|---|---|
+| 1 | `AnyReconciledParquet` is `File.Exists`, but this branch writes a reconciled parquet for EVERY file | **real, and the most consequential** - see below |
+| 2 | the `HydrateCompactedStreaming` drift predicate is tautological | **real** - see below |
+| 3 | `UpgradeReconciledParquets` early exit returns `true`, so `AnalysisPipeline` stamps validity sidecars onto stale outputs | real; now returns false via `StopAfterUpgrade` |
+| 4 | that same upgrade rewrites rows from the library with no `osprey.library_hash` check | real, and the exact defect the night's own accident proved; now calls the shared `VerifyLibraryMatches` |
+| 5 | it uses `Delete -> Move`, the ordering its sibling explicitly rejects | real; now `Move -> Move -> Delete` |
+| 12 | `ValidateArgs` has no case for the new task, so it inherits another mode's requirements and error text | real; own case + banner branch, and no longer demands a `--output` it never writes |
+| 15 | UTF-8 BOM added to five files, a Unicode em dash, `PlanActions`' doc comment orphaned | real, all three CRITICAL-RULES violations; verified by byte inspection against master |
+
+**Finding 1 in full, because it is the one that would have shipped a wrong answer.**
+`SecondPassFdrTask.AnyReconciledParquet` gates the second Percolator pass, and its own comment
+states the invariant it rests on: "A reconciled parquet exists for a file iff that file had
+rescore work, so 'any reconciled parquet on disk' == total_rescored > 0". Increment 2 broke
+that invariant by design - every file now gets one, a faithful copy where there was no work.
+On a cohort with no rescore work anywhere, Rust skips the second pass and C# would have run
+it: retraining, rewriting q-values, and feeding them to protein FDR and the blib. That is the
+anti-conservative direction (pass-2 recalibration measured 1.57% FDP against 0.92%), and it
+re-opens the divergence #4395 closed.
+
+The fix records the answer where the question is asked: `ReconciledParquetWriter.Write`
+computes `rescored = overlayByIndex.Count > 0 || gapFill.Count > 0` - exactly BuildOverlay's
+two outputs being empty - and stamps `osprey.rescored` into the footer. `AnyReconciledParquet`
+reads it. **A parquet written before the key existed is treated as WORK**, because back then it
+was only written when there was some; that is what made existence a sound test in the first
+place, and it means no existing run directory needs re-converting.
+
+**Finding 2 in full, because it is the same failure mode as the night's library accident.**
+`id => !loadedIds.Contains(id)`, where `loadedIds` is built from the same `stubs` that
+`FdrScoresSidecar.TryRead` builds `byEntryId` from. The predicate is only consulted after that
+lookup has already missed, so it is true for every record and `return false` is unreachable.
+The superset-contract check was disabled outright, not narrowed. A 1st-pass sidecar written
+from a different parquet, a different library build (different entry_id assignment) or a
+different binary would be accepted record for record; every survivor would keep `Score = 0.0`,
+and since the decoy side is not q-gated those zeros compete in the picked-protein null. Now
+`id => !retainBaseIds.Contains(id & BASE_ID_MASK)` - the survivor test, the same shape
+`FirstPassSurvivorLoader` uses. **The predicate must state the FILTER, never what happened to
+load.**
+
+### Verified real, deliberately NOT fixed - these need a clear head and their own gate cycle
+
+**`ParquetIndex` now carries two index spaces in one buffer** (finding 10).
+`ParquetScoreCache.BuildFdrEntryColumns` mutates `entry.ParquetIndex = startIndex + j` on the
+CALLER'S live `FdrEntry` objects, and `FlushGroup` passes the OUTPUT row position. Before the
+subset write that position was the original row-for-row ordinal, so the assignment was
+value-preserving; now a rescored row is renumbered into the compacted space (~5.6x smaller)
+while the un-rescored survivors in the same Stage 6 buffer keep Stage-4 ordinals.
+
+Nothing observed depends on it: `CANONICAL_ORDER`'s terminal tie-break only fires when
+(EntryId, Charge, ScanNumber) also ties, which `DeduplicatePairs` makes essentially
+impossible, and every other consumer keys on identity. Regression modes 1, 2, 3 and 5 - which
+include the direct WARM-vs-COLD comparison - are green. But the surrounding comments assert
+`ParquetIndex` is unique per reloaded stub and that WARM and COLD share an index space, and
+those assertions are now weaker than they read. Either the mutation should be suppressed on
+the reconciled write or the comments should stop claiming it.
+
+**`--task SecondPassFDR --model-diagnostics` now reports a post-compaction population as
+pre-compaction** (finding 11). `HydrateCompactedStreaming`'s `onStubsHydrated` callback is
+documented as "the caller's one look at this file's full pre-compaction pool", and it feeds
+`ScoringTaskShared.TallyPreCompaction` and `FeedModelDiagnostics`, whose whole point is the
+rows compaction discards - "mostly the decoys and entrapment its FDP and calibration views are
+built from". Those stubs used to come from a row-for-row twin of the Stage 4 parquet. They now
+come from the survivor subset.
+
+So on the `--task` path the FDP curves, score histograms and calibration anchors cover a
+decoy-depleted fifth of the intended rows, with no error and no marker in the report, and
+`PreCompactionTally.Stubs` is no longer a pre-compaction number. This is diagnostics only -
+off the default output path, and the blib and FDR are unaffected - but it is silently wrong
+rather than absent, which is the worse kind. The honest options are to read the Stage 4
+parquet explicitly when `--model-diagnostics` is on (giving back the read this branch removed,
+but only for that flag) or to relabel the views as post-compaction.
+
+### Dropped, with reasons
+
+* **`byEntryId` last-write-wins** (finding 9): real, but pre-existing and not touched by this
+  branch. An entry_id spanning several rows has only one of them overlaid. Worth its own
+  issue; not this PR's to carry.
+* **Decode-then-discard in `StreamReconciledScoresParquet`** (finding 13) and **the compaction
+  task's library / double-read overheads** (finding 14): both real efficiency findings, ~216 GB
+  of throwaway decode across the cohort in the first case. Neither is a correctness problem and
+  both are contained; they belong with the streaming work, which will restructure this code
+  anyway.
+* **Crash-recovery gaps in the new task** (findings 6, 7, 8): an orphaned `.retired` aborts the
+  next run, "nothing to do" cannot be distinguished from "nothing was there", and
+  `BuildRetainBaseIds` skips the envelope-consistency check a partial-cohort invocation would
+  need. Real, and worth a follow-up; the task is a one-time recovery path that has now been run
+  successfully end to end on 257 files.
+
+### Refuted by the reviewer's own verification - do not re-raise
+
+* The `passingEntries` narrowing in the three blib builders is **provably equivalent**: for any
+  key in `passingPrecursors`, `!IsDecoy` and `!IsDecoy && contains(key)` select identical rows,
+  and `CollectPassingEntries` preserves file-major order, so `nRunsDetected` and every
+  tie-break are unchanged.
+* `CanRehydrate` returns false on an empty `Outputs` list, so the one-task compaction pipeline
+  is never skipped.
+* `HashSet<T>(int)`, the null-`using` ternary and `string.Format` with a ternary format string
+  all behave correctly on net472 and net8.0.
