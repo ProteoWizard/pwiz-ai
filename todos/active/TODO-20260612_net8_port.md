@@ -6229,19 +6229,52 @@ compiles its own copy - and the BAF copy never got `case 9`:
 | copy | `case 9` |
 | --- | --- |
 | `TimsData.cpp:42` | timsTOF |
-| `TsfData.cpp` (calls the same-named local) | timsTOF |
-| `Baf2Sql.cpp:41` | **missing -> `Unknown`** |
+| `TsfData.cpp:43` | timsTOF |
+| `Baf2Sql.cpp:41` | **absent -> falls to `default: Unknown`** |
 
-So the same instrument resolves to timsTOF through TDF/TSF and to Unknown through BAF. cpp
-contradicting itself across its own readers for one instrument is the standing record's bar for
-a cpp-side defect, and it is not close.
+So the same instrument resolves to timsTOF through TDF/TSF and to Unknown through BAF.
+
+**The obvious objection - that `9` might simply MEAN something different in BAF, which would make
+three separate tables deliberate - was tested and does not hold.** Three independent lines of
+evidence:
+
+1. **9 is not remapped in the BAF copy, it is missing.** A container-specific meaning would show
+   up as `case 9` returning some other family. All three tables are otherwise character-identical:
+   same seven codes, same families, same order. A strict subset differing by one line is the
+   signature of an un-mirrored edit, not a different encoding.
+2. **The data says 9 means timsTOF in BAF too.** Every BAF file in the corpus pairs its family
+   code with the instrument name the shared table predicts - 1 micrOTOF, 2 micrOTOF-Q II,
+   7 impact II / maXis impact, 8 compact, 512 apex-Qe, 513 solariX XR - and **both** BAF files
+   carrying family 9 name a timsTOF: `timsTOF Pro` (`Dunn_016_4380_3172_03_...`) and
+   `timsTOF fleX MALDI 2` (`0.1HCOOH_H20_NoTIMS_Pos.d`). Those names are Bruker's own metadata,
+   independent of pwiz. TDF files with family 9 name timsTOF Pro / HT / SCP / Ultra - identical
+   meaning.
+3. **The history shows the mechanism.** `34f38e1eb0` (2018-08-17, "fixed instrument
+   configurations for timsTOF") applied the same `InstrumentRevision` plumbing to `Baf2Sql.cpp`
+   and `TimsData.cpp` **in one commit, side by side**, and added `case 9` to `TimsData.cpp`
+   only. It was harmless then - timsTOF was TDF-only in 2018; TSF did not exist until
+   `04a0e8c215` (2022), and `TsfData.cpp` was written by copying `TimsData.cpp`, inheriting the
+   case. Nothing deliberate distinguishes the BAF copy.
+
+The three copies exist because the function sits in an anonymous namespace and was duplicated per
+translation unit, not because the formats disagree.
+
+**A second corpus file confirms it is not a one-file quirk.**
+`D:\test\Bruker\Dunn_016_4380_3172_03_Slot1-16_1_661.d`, a timsTOF Pro writing BAF, shows the
+identical signature - cpp `MS:1000122` + `componentList count="1"` against C# `MS:1003123` +
+`count="5"`. It never appeared in a sweep because at 1330 MB it is excluded by
+`manifest_lt100.json`'s 100 MB cutoff.
+
+**Method note for next time:** the first pass at this check read the three tables out of the
+WORKING TREE, which already contained the `case 9` fix, and so showed all three agreeing. Read
+comparison baselines with `git show HEAD:<path>` when your own edit is in the file.
 
 Fixed at source: `case 9: return InstrumentFamily_timsTOF;` added to `Baf2Sql.cpp`. That closes
 all four diffs on the file at once - the series cvParam and the componentList come off the same
 switch. **Not compile-verified**: the C++ msconvert build is separate and long and was not run.
 
 Also corrected a false comment in `BrukerInstrumentFamily.cs`, which had rationalised the
-divergence as "no timsTOF instrument writes BAF". This file is the counterexample. The unified
+divergence as "no timsTOF instrument writes BAF". Two corpus files are counterexamples. The unified
 C# table is right; only its stated reason was wrong. `BrukerInstrumentFamilyTests` now pins the
 whole code->family table so nobody "fixes" C# to match cpp's omission.
 
