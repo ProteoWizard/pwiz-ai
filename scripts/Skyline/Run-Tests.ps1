@@ -199,9 +199,9 @@ $initialLocation = Get-Location
 # net472 vs net8 output layout.
 #
 # The legacy build drops everything in bin\x64\<Config>. The net8 port builds
-# per-project into bin\<Config>\net8.0-windows and then STAGES the test binaries
-# into one flat bin\staging-net8\<Config> - the single-bin layout the runner and
-# the Docker workers assume. That staging is what pwiz_tools/Skyline/Stage-Net8Tests.ps1
+# per-project into bin\<Config>\<tfm> and then STAGES the test binaries
+# into one flat bin\staging\<Config> - the single-bin layout the runner and
+# the Docker workers assume. That staging is what pwiz_tools/Skyline/Stage-Tests.ps1
 # does, and pwiz_tools/Skyline/build.bat calls it before every test pass, so this
 # reuses that script rather than reimplementing the layout here.
 #
@@ -214,19 +214,23 @@ if ($Framework -eq 'Net8') {
 } elseif ($Framework -eq 'Auto') {
     $skylineCsproj = Join-Path $skylineRoot 'Skyline.csproj'
     if (Test-Path -LiteralPath $skylineCsproj) {
-        if ((Get-Content -LiteralPath $skylineCsproj -Raw) -match '<TargetFrameworks?>[^<]*net8\.0') {
+        # Match any modern (SDK-style) TFM, not a hard-coded net8.0: the tree has already
+        # moved net8 -> net10 once and a literal broke this silently (it fell back to net472).
+        # net(5-9).0 or net(10+).0, deliberately excluding net4xx.
+        if ((Get-Content -LiteralPath $skylineCsproj -Raw) -match '<TargetFrameworks?>[^<]*(net(?:[5-9]|\d{2,})\.0[^;<]*)') {
             $isNet8 = $true
+            $detectedTfm = $Matches[1]
         }
     }
 }
 
 if ($isNet8) {
-    $outputDirRelative = "bin\staging-net8\$Configuration"
+    $outputDirRelative = "bin\staging\$Configuration"
 } else {
     $outputDirRelative = "bin\x64\$Configuration"
 }
 Write-Host ("Framework: {0} (detected: {1}); test dir: {2}" -f `
-    $(if ($isNet8) { "net8" } else { "net472" }), $Framework, $outputDirRelative) -ForegroundColor Gray
+    $(if ($isNet8) { if ($detectedTfm) { $detectedTfm } else { "sdk-style" } } else { "net472" }), $Framework, $outputDirRelative) -ForegroundColor Gray
 
 # Ensure UTF-8 output for status symbols regardless of terminal settings
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -615,17 +619,23 @@ try {
 
     # On net8 the flat run directory is produced by staging, not by the build, so it has
     # to be refreshed EVERY run - guarding on "runner is missing" would stage once and
-    # then silently test the previous build forever. Stage-Net8Tests.ps1 copies with
+    # then silently test the previous build forever. Stage-Tests.ps1 copies with
     # robocopy /XO, so re-staging an up-to-date directory is close to free.
     if ($isNet8) {
-        $stageScript = Join-Path $skylineRoot 'Stage-Net8Tests.ps1'
-        if (Test-Path -LiteralPath $stageScript) {
-            Write-Host "Staging net8 test binaries..." -ForegroundColor Cyan
-            & pwsh -NoProfile -File $stageScript -Configuration $Configuration
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "Stage-Net8Tests.ps1 failed (exit $LASTEXITCODE)" -ForegroundColor Red
-                exit 1
-            }
+        $stageScript = Join-Path $skylineRoot 'Stage-Tests.ps1'
+        if (-not (Test-Path -LiteralPath $stageScript)) {
+            # Do NOT fall through: skipping staging silently tests whatever is already in the
+            # output dir, i.e. the previous build forever - the exact failure the note above
+            # says the unconditional re-stage exists to prevent. A missing script means the
+            # branch renamed or moved it, which the caller has to know about.
+            Write-Host "Staging script not found: $stageScript" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "Staging test binaries..." -ForegroundColor Cyan
+        & pwsh -NoProfile -File $stageScript -Configuration $Configuration
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Stage-Tests.ps1 failed (exit $LASTEXITCODE)" -ForegroundColor Red
+            exit 1
         }
     }
 

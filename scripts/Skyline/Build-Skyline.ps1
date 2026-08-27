@@ -223,8 +223,11 @@ if ($Framework -eq 'Net8') {
 } elseif ($Framework -eq 'Auto') {
     $skylineCsprojPath = Join-Path $skylineRoot 'Skyline.csproj'
     if (Test-Path -LiteralPath $skylineCsprojPath) {
-        if ((Get-Content -LiteralPath $skylineCsprojPath -Raw) -match '<TargetFrameworks?>[^<]*net8\.0') {
+        # Any modern (SDK-style) TFM, not a literal net8.0 - the tree already moved
+        # net8 -> net10 once and a hard-coded match silently fell back to net472.
+        if ((Get-Content -LiteralPath $skylineCsprojPath -Raw) -match '<TargetFrameworks?>[^<]*(net(?:[5-9]|\d{2,})\.0[^;<]*)') {
             $isNet8 = $true
+            $script:SdkTfm = $Matches[1]
         }
     }
 }
@@ -299,7 +302,7 @@ $buildArgs += @(
 
 if ($isNet8) {
     $verbLabel = if ($Target -eq 'Clean') { "dotnet clean" } elseif ($Target -eq 'Rebuild') { "dotnet build --no-incremental" } else { "dotnet build" }
-    Write-Host "`n$Target ($Configuration, net8.0-windows) via $verbLabel" -ForegroundColor Yellow
+    Write-Host "`n$Target ($Configuration, $SdkTfm) via $verbLabel" -ForegroundColor Yellow
 } else {
     Write-Host "`nBuilding: $Target ($Configuration|$Platform)" -ForegroundColor Yellow
     Write-Host "Command: & `"$msbuild`" $($buildArgs -join ' ')`n" -ForegroundColor Gray
@@ -361,8 +364,8 @@ if ($isNet8) {
     $buildExitCode = 0
     $buildOutput = @()
     foreach ($proj in $net8Projects) {
-        Write-Host "dotnet $net8Verb $proj ($Configuration, net8.0-windows)" -ForegroundColor Cyan
-        $dotnetArgs = @($net8Verb, $proj, '-f', 'net8.0-windows', '-nologo') + $net8Extra + $net8Props + @("-v:$Verbosity")
+        Write-Host "dotnet $net8Verb $proj ($Configuration, $SdkTfm)" -ForegroundColor Cyan
+        $dotnetArgs = @($net8Verb, $proj, '-f', $SdkTfm, '-nologo') + $net8Extra + $net8Props + @("-v:$Verbosity")
         if ($Summary) {
             $buildOutput += & dotnet $dotnetArgs 2>&1
         } else {
@@ -395,19 +398,23 @@ Write-Host "`n✅ Build succeeded in $($buildDuration.TotalSeconds.ToString('F1'
 
 # Run tests if requested
 if ($RunTests -and $Target -ne "Clean") {
-    # net8 runs from the flat staging directory, which is produced by staging rather
-    # than by the build. Stage-Net8Tests.ps1 is the branch's own script - build.bat
+    # The SDK-style leg runs from the flat staging directory, produced by staging rather
+    # than by the build. Stage-Tests.ps1 is the branch's own script - build.bat
     # calls it the same way before every test pass.
     if ($isNet8) {
-        $outputDir = "bin\staging-net8\$Configuration"
-        $stageScript = Join-Path $skylineRoot 'Stage-Net8Tests.ps1'
-        if (Test-Path -LiteralPath $stageScript) {
-            Write-Host "Staging net8 test binaries..." -ForegroundColor Cyan
-            & pwsh -NoProfile -File $stageScript -Configuration $Configuration
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "Stage-Net8Tests.ps1 failed (exit $LASTEXITCODE)" -ForegroundColor Red
-                exit 1
-            }
+        $outputDir = "bin\staging\$Configuration"
+        $stageScript = Join-Path $skylineRoot 'Stage-Tests.ps1'
+        if (-not (Test-Path -LiteralPath $stageScript)) {
+            # Fail rather than fall through: without staging the run silently uses whatever
+            # is already in the output dir, i.e. the previous build.
+            Write-Host "Staging script not found: $stageScript" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "Staging test binaries..." -ForegroundColor Cyan
+        & pwsh -NoProfile -File $stageScript -Configuration $Configuration
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Stage-Tests.ps1 failed (exit $LASTEXITCODE)" -ForegroundColor Red
+            exit 1
         }
     } else {
         $outputDir = "bin\$Platform\$Configuration"
@@ -605,11 +612,11 @@ if (($RunInspection -or $QuickInspection) -and $Target -ne "Clean") {
     if ($jbPath) {
         
         # The net472 path builds into bin\<Platform>\<Config>; the net8 path stages into
-        # bin\staging-net8\<Config> and never creates the former. Writing the report into a
+        # bin\staging\<Config> and never creates the former. Writing the report into a
         # directory the build did not create was half of why this block used to refuse to run on
         # net8 at all.
         $inspectionOutput = if ($isNet8) {
-            "bin\staging-net8\$Configuration\InspectCodeOutput.xml"
+            "bin\staging\$Configuration\InspectCodeOutput.xml"
         } else {
             "bin\$Platform\$Configuration\InspectCodeOutput.xml"
         }
@@ -632,7 +639,7 @@ if (($RunInspection -or $QuickInspection) -and $Target -ne "Clean") {
         #
         # So pin the analysis to the framework this build path actually produced. That is the
         # only leg this branch keeps green, and an unpinned run is not a baseline, it is noise.
-        $net8InspectionTfm = 'net8.0-windows'
+        $net8InspectionTfm = $SdkTfm
         if ($isNet8) {
             $inspectArgsTfm = "--properties=TargetFramework=$net8InspectionTfm"
             Write-Host "Pinning inspection to TargetFramework=$net8InspectionTfm" -ForegroundColor Gray

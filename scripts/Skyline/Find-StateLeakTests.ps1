@@ -49,7 +49,7 @@ $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 if (-not $LogPath) {
-    $stagingDir = Join-Path $SourceRoot "pwiz_tools/Skyline/bin/staging-net8/Debug"
+    $stagingDir = Join-Path $SourceRoot "pwiz_tools/Skyline/bin/staging/Debug"
     $LogPath = Join-Path $stagingDir "StateLeakSweep.log"
 }
 
