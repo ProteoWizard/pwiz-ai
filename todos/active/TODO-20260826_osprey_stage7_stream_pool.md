@@ -1991,3 +1991,96 @@ for the `Osprey*` blib tables and the missing protein-group q-value.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260827_osprey_stage7_streaming.md` before starting work.
+
+## Step 1 DONE in the tree: the frozen second pass streams (2026-08-27 afternoon)
+
+`Pass2FdrSidecar.ComputePass2TransferCompeteFull` - the DEFAULT arm, `protein-compact` - no
+longer takes the pool. It takes the `RescoredEntries` seam and runs one file end to end:
+materialize, seed its pass-1 scalars, load features, score with the frozen model, compete,
+stamp run q, **write that file's `.2nd-pass.fdr_scores.bin`**, drop it.
+
+### The correction to the handoff's plan, and why it matters
+
+The handoff said "materialize per file in `ReadFile`; make step 4 + the sidecar write a second
+per-file pass. **Two materializations per file**". That plan has a hole: step 4 needs each
+entry's `Score` (frozen-model) and `RunPrecursorQvalue`, and BOTH are produced inside pass 1
+and lost when the file is dropped. Re-materializing the entries does not bring them back - a
+second pass would have to re-load the file's features AND re-run its run-level competition, or
+carry an O(files x survivors) map, which is the thing being removed.
+
+**The sidecar closes it.** The per-file write already happens in this stage; moving it into the
+competition loop makes the sidecar the carrier of the run-scope columns, and the four
+experiment-scope columns (`experiment_precursor_qvalue`, `experiment_peptide_qvalue`, `pep`,
+`experiment_aggregate_score`) are patched into those same files afterwards, per file, from the
+bounded competition state. **Step 4 needs no entries at all** - every field it reads
+(`entry_id`, run q) and every field it writes is a sidecar column. So the second pass is a
+streamed rewrite of ~68 B/record, not a second materialization.
+
+New primitive: `FdrScoresSidecar.PatchExperimentValues`, the exact twin of the existing
+`PatchProteinQvalues` - one record resident, atomic via `FileSaver`, only those four columns
+overwritten. Its test asserts the contract that makes two phases substitutable for one: the
+patched file is **byte-identical** to a single-phase write whose records already carried the
+final values.
+
+### What else landed with it
+
+* **`Pass2SidecarWriter`** - the per-file write body (resume skip, validity sidecar, tallies)
+  existed twice, which is how the projection path acquired the `--task ModelDiagnostics` skip
+  and the resident one did not. One body now, so a path cannot quietly differ in what it writes
+  or counts. **Behavior change**: the resident write block gains that diagnostics skip.
+* **`Pass1ScalarSeeder`** - `RestorePass1Scalars`'s per-file body, so the streamed path can seed
+  a file inside its own materialization. The whole-pool loop is skipped entirely for the frozen
+  modes; running both would read every 1st-pass sidecar twice, and it can only walk a pool that
+  is resident.
+* **`ComputePass2FrozenCompetition`** - the frozen modes got their own entry point. They used to
+  enter `ComputePass2Resident` and return early; nothing about them is resident any more.
+* **Two behavior changes, both deliberate, both on already-broken inputs.** A duplicate
+  `--input-scores` stem is now last-wins rather than merged (a streamed reader is handed one
+  file's rows at a time; both dispositions apply ONE file's scalars to a name denoting two -
+  #4555 is still the real fix). And a per-file key with no `config.InputFiles` entry now
+  REFUSES rather than continuing: the sidecar is where this pass puts its results, so such a
+  file would take a fresh run q with nowhere to record its experiment q, and protein FDR would
+  gate it on a pass-1 value while every other file used a pass-2 one.
+* Six pre-existing inspection warnings introduced by the `score_index` commits, fixed
+  (`ParquetScoreCache` had a doc comment orphaned from `ReadFdrStubScalars` by an inserted
+  method; `ReconciledParquetWriterTest` had redundant `(byte)` casts).
+
+### The transition, and what it costs today
+
+`Files()` yields from the resident buffer while anything still builds it, so with the pool still
+resident this pass costs nothing extra and the entries it stamps ARE the pool's - the existing
+reload loop then puts the sidecar back on the pool either way, so the two agree by construction.
+Once nothing builds the buffer, this pass materializes each file **twice**: once for the
+survivor-entry_id fold (needed before file 0, because the best-of-runs floor is global) and once
+for the competition. That is the "fuse the per-consumer folds" follow-on, now with a concrete
+second caller.
+
+### Gate
+
+Build + 596 tests + zero-warning inspection green, and `regression.ps1 -Dataset Stellar`
+**10/10 including `mode1 (vs golden)` and `mode3`** on the second run (the first found the
+`FileNames` hole below). Logs in `ai/.tmp/sessions/20260827-stage7-stream-pass2/`.
+**Stellar remains a weak oracle for this** - 1.45x compaction, 391 gap-fill rows, 3 files -
+where the behavior that matters is a frozen competition over a protein stratum at 5.6x. The
+257-file run is the real proof.
+
+### The seam had a null hole, and only the distributed leg found it
+
+First Stellar gate: `mode1 (vs golden)` PASS, `mode1c` PASS, **`mode3` (HPC 4-task chain)
+ABORTED** - `--task SecondPassFDR` exited 1.
+
+`RescoredEntries.FileNames` was set ONLY by `WithStreaming`, and `WithStreaming` is called on
+exactly one of the three construction sites (`3579d64d2a`). The straight-through rescore takes
+it; the resident rescore and the `--task SecondPassFDR` **rehydrate** both publish
+`new RescoredEntries(_perFileEntries)` with no streaming attached, so `FileNames` was null
+there and the first consumer to read it died.
+
+Nothing had read it yet, which is why the seam looked finished. `Files()` already had the
+right fallback - yield from the buffer when nothing is deferred - and `FileNames` now makes the
+same one (`_fileNames ?? Value.ConvertAll(...)`), which is free on those paths because they
+defer nothing. **A streamed consumer must be able to pair `FileNames` with `Files()` without
+knowing which side of the transition it is on**; returning null on one side made this pass work
+straight-through and fail distributed.
+
+Third time this branch has seen the same shape: a change that agrees with itself on the
+in-process path and disagrees on the distributed one. `mode3` is the leg that catches it.
