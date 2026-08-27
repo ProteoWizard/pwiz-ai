@@ -1904,3 +1904,29 @@ other side of the switch.
 that matters is a frozen competition over a protein stratum at 5.6x. The 257-file run is the
 real proof, and it is a 34-minute loop, so this wants fewer and better-reasoned iterations
 rather than fast ones.
+
+### De-risked: pass 2's frozen competition is ALREADY bounded (2026-08-27)
+
+The routing comment at `Pass2FdrSidecar.cs:239-252` reads as though `protein-compact` needs a
+resident pool - *"a competition the projection engine does not do"*. Read against the code,
+that describes where the ENTRIES live, not an algorithmic requirement.
+`ComputePass2TransferCompeteFull` decomposes as:
+
+| step | state it needs | bounded today? |
+|---|---|---|
+| `ReadFile` - frozen score for one file | that file's entry ids + scores; PIN features loaded AND RELEASED per file | **yes** |
+| the competition | `StreamingFdr.StreamedCompetitionState`, O(distinct base_id) - #4554 | **yes** |
+| step 4 - apply experiment q + PEP | O(distinct) maps plus `pass1ExpQByKey`, which holds only OFF-STRATUM changed peaks | **yes** |
+| the `.2nd-pass` sidecar write | per file | **yes** |
+
+Its own comments say so: *"no (file, entry_id)-keyed result map is ever built"* and *"Finish
+each reported survivor from the bounded competition state, ONE FILE AT A TIME."*
+
+So the only resident thing is `entriesByFile[fileKey]` - the `FdrEntry` list the scoring reads
+from and the write-back writes to. Converting pass 2 means materializing per file in
+`ReadFile` and making step 4 + the sidecar write a second per-file pass. Two materializations
+per file, which is exactly the two-pass shape the design predicted.
+
+**This was the piece most likely to make the plan infeasible, and it is not.** The remaining
+work is mechanical rather than uncertain - the one genuinely unproven consumer left is
+`OspreyReportWriter`'s per-replicate protein FDR.
