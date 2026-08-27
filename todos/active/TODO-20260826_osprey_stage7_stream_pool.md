@@ -1530,3 +1530,31 @@ full read, by 1.45-1.74 GB, at two cohort sizes, with identical entry counts and
 fragment-release counts in both. **Why remains unknown**, and it needs a heap profile
 (dotMemory, comparing the two arms' retained-object graphs) rather than more arithmetic on
 two summary numbers. Until then it is an observation, not a benefit of the format.
+
+**`1096cb3d23` - the shared-boundary map stops storing its own fallback.** Design item 3, and
+it turned out both easier and better-founded than the design assumed.
+
+The design called `sharedBounds` "O(observations), several GB", which was written when it
+walked the whole pool; it now walks `passingEntries`, so the real size is O(distinct
+(modseq, file)) among passing entries. Measured shape at 257 CHS files: 11,745,026 passing
+entries over 45,724 passing precursors is **256.9 observations per precursor**, i.e. nearly
+every (precursor, file) pair exists, so the map is ~10 M keys, on the order of 1 GB.
+
+The sparsity rule is simpler than "the winning charge's boundaries differ from the entry's
+own", which is a per-entry test against a per-key map. All charge states of a peptide in a run
+share the boundaries of the lowest-run-q charge - so a peptide with only ONE passing charge is
+its own winner, and the value stored for it IS the entry's own boundaries. Both readers
+(`EmitSpectrumRows`, `WriteRetentionTimes`) already initialize from the entry and overwrite
+only on a hit, so those keys can simply be absent.
+
+Multi-charge is a property of the PEPTIDE, so the gate is derivable from `passingPrecursors`
+alone - 45,724 keys, nothing - and applies BEFORE insertion rather than pruning afterwards,
+which is the difference between a smaller map and a smaller peak. At 45,724 precursors over
+roughly 40,000 peptides, about six keys in seven are never built.
+
+Using the GLOBAL multi-charge set rather than a per-run one is deliberate and conservative: it
+is a superset, so it may keep a key that turns out single-charge in that particular run, and
+that key stores the entry's own boundaries - identical to the fallback. Exact either way.
+
+Gates: build + 594 tests + zero inspection warnings, `regression.ps1 -Dataset Stellar` PASSED
+all 10 modes including `mode1 (vs golden)`.
