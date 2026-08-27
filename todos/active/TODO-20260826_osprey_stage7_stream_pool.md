@@ -1469,3 +1469,38 @@ list would show exactly this shape), or `ModifiedSequence` string instances deco
 **This needs a heap profile (dotMemory), not more log reading.** Recorded here rather than
 guessed at, and it must not be quoted as a benefit of the new format until it is understood -
 it is currently a number with a plausible cause, which is not the same as an explanation.
+
+## Stacked branch: the first streaming increment is done and gated
+
+`Skyline/work/20260827_osprey_stage7_stream_increment`, off `e5e6d15fa3` (PR #4621's HEAD).
+NOT pushed - a second PR to open once #4621 merges, or to fold in if #4621 has to be
+re-gated anyway.
+
+**`2cb80febc1` - Stage 7's score reset keys on identity, not position.**
+`ResetRescoredTargets` rebuilt its target set from `plan.ConsensusTargets` /
+`plan.ReconciliationTargets`, whose indices address the survivor list as the RESCORE saw it.
+That is correct only while the deferred rebuild reproduces that order exactly - and it will
+NOT, once Stage 7 loads from the reconciled parquet, because the gap-fill rows are already
+interleaved in canonical position there and shift every index after them. Design item 2 of
+the streaming plan, and a prerequisite for both streaming and the "point Stage 7 at the
+reconciled parquet" increment.
+
+It now captures what `OverlayRescoredEntries` actually reset, as it resets it, keyed
+**(entry_id, charge, scan_number)**. Not entry_id alone: compaction removes an entry_id's
+extra SCANS rather than the entry_id itself, so a bare id could select a row the planner
+never targeted - the same reason `MapFeaturesByIdentity` keys on all three, and the same
+trap the inert-subset bug came from.
+
+Two side benefits worth keeping: the target set is now what was RESET rather than what was
+PROPOSED (planner targets include files that never reached the scoring engine), and the
+completeness check says something meaningful - a count mismatch means the rebuilt list is not
+the one the rescore produced, where the old range check could only catch an index off the end.
+The deferred plan also stops carrying two index-keyed maps.
+
+Gates: build + 594 tests + zero inspection warnings, and **`regression.ps1 -Dataset Stellar`
+PASSED all 10 modes** including `mode1 (vs golden)` and `mode3 (HPC chain==straight)`, so it
+is byte-identical.
+
+**Next on this branch**, in the order the design gives: sparse `sharedBounds` (design item 3,
+O(observations) today), then the blib emission-order inversion (item 1, the genuinely hard
+one - refIds must be assigned in the pool-free middle so pass 2 can emit file-major).
