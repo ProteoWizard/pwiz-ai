@@ -1794,3 +1794,47 @@ sentinel collided on Stellar.
 **Two caveats to carry.** The peak improvement (55.5 -> 53.15 GB) is ONE run and peak working
 set varies; it is not a result until repeated. And `stage7-pool` is still 40.23 GB - none of
 this work touches the resident pool, which remains the whole of #4486.
+
+## THE BAR FOR THE PR (Brendan, 2026-08-27)
+
+*"Let's target one PR that delivers memory reduction and streaming, the ultimate proof that
+the redesign has delivered and won't need immediate change as it would have if we had merged
+earlier."* And: *"We also need to run the 257 file Stage 7 to prove the memory reduction."*
+
+So the PR does not land on gates alone. **It lands on a 257-file `--task SecondPassFDR` run
+showing the pool gone**, against the `s7mem257` baseline:
+
+| probe | baseline | today (score_index) | REQUIRED |
+|---|---|---|---|
+| `stage7-inherited` / `stage7-pool` | 41.97 GB | 40.23 GB | **library + aggregates, single-digit GB** |
+| `stage7-blib-written` | 39.62 GB | 37.87 GB | same |
+| peak_paged | 55.5 GB | 53.15 GB | **below FirstPassFDR's 53.7 GB private** |
+
+and with every logical output still reproducing exactly - 5,079 protein groups, 45,724
+spectra, 11,745,026 passing entries, RetentionTimes values matching by integer sum.
+
+Everything landed so far changes what Stage 7 READS. None of it touches what it HOLDS, so
+`stage7-pool` has moved 41.97 -> 40.23 GB and that is all. The remaining work is the whole
+point of #4486.
+
+### The streamed design, now that the groundwork exists
+
+The spill already exists and needs no new artifact: `.2nd-pass.fdr_scores.bin` is written per
+file BEFORE the blib phase, carries Score and every q-value keyed by entry_id, and
+`PatchPass2ProteinQvalues` fills its protein column after protein FDR. So a re-loaded file is
+`reconciled parquet + 2nd-pass sidecar`.
+
+1. **Pass 1**, per file, dropped after: fold the clamp maps (min run q by entry_id and by
+   (peptide, isDecoy)), the experiment-q aggregate, and the peptide-level bests - all
+   O(distinct). From those compute `passingPeptides` / `passingPrecursors`.
+2. **Pass 2**, per file, dropped after: keep a compact record for PASSING observations only -
+   file, score_index, charge, run q, apex/start/end. 11,745,026 x ~40 B = **~470 MB**, which
+   is Brendan's O(files x precursors) and the only thing that stays resident.
+3. **Middle**, pool-free: parsimony, picked-protein FDR, RefSpectra refIds from
+   `bestByPrecursor`.
+4. **Emit** from the compact records. Already file-major since `29145a2d60`, so no third pass
+   over the artifacts.
+
+Two passes rather than one because of the CLAMP: `ClampExperimentQToBestRun` runs after
+protein FDR, only in memory, and its result decides which precursors pass - so it has to
+become a fold in pass 1 and an application in pass 2.
