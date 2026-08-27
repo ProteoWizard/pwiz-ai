@@ -982,3 +982,25 @@ old-format baseline every comparison so far depends on. Use a hard-linked copy (
 `-s7conv257` dir left by the failed attempt, which still holds 257 full-shape parquets sharing
 inodes with the baseline); converting there breaks the link and leaves the baseline intact,
 the same property that protected it three times today.
+
+## Run logs belong in run.log, not session-temp (Brendan, 2026-08-26)
+
+Invoking `Osprey.exe` directly - which the new task currently requires, since the runner
+does not know `CompactPerFileRescoring` - put this conversion's only log in Claude Code's
+session-temp folder, split across two streams, with a stale `run.log` still sitting in the
+run directory from the crashed 20:01 attempt. Brendan found the changed files and had to ask
+where the log was, which is the whole problem: **a log nobody can find is not a record.**
+
+Two things worth carrying forward:
+
+* **Osprey writes its timestamped log to STDERR.** Redirecting only stdout captures nothing -
+  `compact257.log` was 0 bytes while `compact257.err` held all 18 KB. The runner hides this by
+  merging with `*>&1`, so it only bites a direct invocation.
+* **Always land the log as `run.log` in the run directory**, rotating any existing one to
+  `run-<stamp>-<reason>.log` rather than truncating - the rule
+  `OspreyDatasetRun.psm1` already applies, and the reason it applies it.
+
+**This is the strongest argument for finishing the runner support** (ValidateSet +
+`$STAGE_ARTIFACTS` entry): not convenience, but that the sanctioned path produces a named run
+directory, a banner recording exe / library / arm, and START and DONE lines - none of which a
+direct invocation leaves behind.
