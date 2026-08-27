@@ -4,7 +4,8 @@
 - **Branch**: `Skyline/work/20260826_osprey_run_from_cache`
 - **Base**: `master`
 - **Created**: 2026-08-26
-- **Status**: Active - change written, local Stellar gate in flight
+- **Status**: Completed
+- **PR**: [#4616](https://github.com/ProteoWizard/pwiz/pull/4616) (merged 2026-08-26)
 - **Module**: `osprey`
 - **Machine**: BRENDANX-UW8, 63.7 GB RAM
 
@@ -78,10 +79,10 @@ revert to testing the ordinary path and this coverage would lapse with nothing g
 
 ## Gates
 
-- [ ] `regression.ps1 -Dataset Stellar` (in flight)
-- [ ] `Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection`
-- [ ] `/code-review max`
-- [ ] `regression.ps1 -Dataset All` / TeamCity Perf/Regression before merge
+- [x] `regression.ps1 -Dataset Stellar`
+- [x] `Build-Osprey.ps1 -Configuration Debug -RunTests -RunInspection`
+- [x] `/code-review max`
+- [x] `regression.ps1 -Dataset All` / TeamCity Perf/Regression - 18/18 checks SUCCESS
 
 ## Follow-ups this enables
 
@@ -215,3 +216,31 @@ geometry) BEFORE any source was moved - the comparison that is impossible afterw
 
 Caveat on timing: a Stellar regression ran concurrently for part of this, so the wall time is
 not cleanly comparable with plates 0059-0061.
+
+### 2026-08-26 - Merged
+
+PR #4616 merged as commit `bd94e8a375`. Osprey now runs a search whose source `.raw`/`.mzML`
+is gone as long as the `.spectra.bin` is present, which makes download -> `--task SpectraCache`
+-> delete the sources -> search a supported staging workflow. TeamCity was green across all 18
+checks including Perf/Regression, and Copilot raised nothing.
+
+**Field-validated beyond CI**: plate 0062 of the CHS cohort was searched with all 86 `.raw`
+moved to `D:	est\_rawhold`, so only caches remained. Osprey logged
+`86 of 86 input(s) are absent but have a spectra cache`, PerFileScoring completed all 86 files
+in 5 h 20 m, and there were **zero** `Spectra cache stale or invalid; re-parsing the input`
+lines - the failure mode the code review predicted. The run's 56 warnings were all ordinary
+calibration retries.
+
+**Shipped beyond the original scope**: `ai/scripts/Osprey/Test-SpectraCaches.ps1`, which
+validates every cache the way Osprey does (magic, VERSION 4, source fingerprint, index
+geometry) and exits non-zero unless every cache is readable AND every cache that still has a
+source matches it. That comparison is impossible once the sources are gone, so it is the gate
+a delete decision needs; it verified 446/446 CHS caches before anything was moved. The
+sanctioned dataset runner also learned to resolve an input from its cache when the source is
+absent - it enumerated `*.raw` and would otherwise have refused the very cohort the feature
+exists to serve.
+
+**Deferred, not shipped** (recorded in the review section above): positional (non-`-i`) inputs
+still gate on existence; `--task SpectraCache` can report success having staged nothing; vendor
+DIRECTORY formats never reach the new branch; and `FileParallelism.SafeFileLength` returns 0
+for an absent input, so auto `--parallel-files` silently loses its RAM budget.
