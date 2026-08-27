@@ -697,3 +697,30 @@ the "Stage 7 costs nothing per file" finding was retracted, and the concrete lev
 retraction named (the per-observation dictionaries in `ComputeFullPopulationPrecursorFdrStreaming`)
 has since been fixed by #4554 — confirmed in the tree, `StreamedCompetitionState` is O(distinct).
 What remains is the live survivor pool itself.
+
+## Increment 4 reconsidered: no parquet column needed (2026-08-26)
+
+`GapFillTarget` already carries `TargetEntryId`, `DecoyEntryId`, `ModifiedSequence` and
+`Charge`, and the planner persists the list in `reconciliation.json`'s `gap_fill_targets`.
+So which rows are gap-fill is recoverable from an artifact Stage 7 already reads - no
+`is_gap_fill` column, no schema change, no format bump beyond the one already made.
+
+**But the better fix may skip classification entirely.** The reason to identify gap-fill rows
+was that `ResetRescoredTargets` addresses the survivor list POSITIONALLY, using indices from
+`plan.ConsensusTargets` / `plan.ReconciliationTargets` that were computed against the
+pre-gap-fill list. Two ways out:
+
+* (a) load without gap-fill, reset, then append - needs the discriminator, and classifying by
+  entry_id alone is unsafe if a gap-fill target's entry_id also has a surviving row in that
+  file (gap-fill is for precursors not detected in that run, so it should not, but "not
+  detected" and "not passing" are not obviously the same thing);
+* (b) re-key the reset by entry_id instead of position, which needs no discriminator at all
+  and removes a positional dependency that has already been a source of subtlety.
+
+**(b) is the one to try first.** Note `ReconciliationActions` are ALREADY entry_id-keyed on
+disk and only turned into positions at load (`RescoreHydration` builds
+`idToIdx[stubs[idx].EntryId] = idx`), so half of this is precedent rather than new design.
+`ConsensusTargets` are the half that is genuinely positional.
+
+Not attempted this session - it wants a clear head and its own regression cycle, not the
+tail of one.
