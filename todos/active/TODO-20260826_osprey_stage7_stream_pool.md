@@ -897,3 +897,39 @@ keep `BuildRetainBaseIds` + the swap hardening and drop the wrapper. Do not comm
 current state as-is without `regression.ps1 -Dataset Stellar`.
 
 The committed branch (`1e282f8a29`) is unaffected by any of this and remains fully gated.
+
+## THE FIX: a non-standard --task mode (Brendan, 2026-08-26)
+
+Osprey already has two `--task` values that are not pipeline stages, and the converter should
+be the third:
+
+| mode | what it does |
+|---|---|
+| `SpectraCache` | stages the `.spectra.bin` caches |
+| `ModelDiagnostics` | "regenerates only the --model-diagnostics report for a COMPLETED run, writing no other artifact" |
+| **(new)** | compacts old full-shape reconciled parquets to the survivor subset |
+
+`ModelDiagnostics` is the precedent to copy: it works over a finished run's artifacts, writes
+one kind of output, and therefore already avoids waking the per-file task graph - the exact
+property three attempts inside `SecondPassFdrTask` could not achieve, because
+`HydrateCompactedStreaming` runs in `PerFileScoringTask.Rehydrate` and any byproduct demand
+pulls it in.
+
+**Wiring** (`OspreyCommandArgs.cs:211` holds the ValidateSet, `:409` the error text, `:693`
+and `:808` the help/doc strings - all four need the new value):
+
+1. Accept the new task name.
+2. Its `IsIncluded` excludes every per-file task, so nothing rehydrates.
+3. Body: load the library, call `RescoreHydration.BuildRetainBaseIds` over the
+   `--input-scores` paths (already committed, pool-free), then per file - load that file's
+   survivors with the base_id predicate, build identities, `StreamReconciledScoresParquet`,
+   swap with Move -> Move -> Delete. All of this already exists in the uncommitted
+   `UpgradeReconciledParquets`; only its ENTRY POINT was ever wrong.
+
+**Naming**: Brendan suggested `CompactSecondPassParquet`. Worth a moment's thought - the
+artifact is the Stage 6 / reconciled parquet (`.scores-reconciled.parquet`) that SecondPassFDR
+CONSUMES, so `CompactReconciled` may read truer. Brendan's call.
+
+**And then**: the converter gets its first real measurement. It has never executed - all three
+attempts died in the pool build before reaching it, so its per-file behavior has unit tests and
+zero runtime evidence.
