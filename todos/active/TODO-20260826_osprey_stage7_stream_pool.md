@@ -1444,3 +1444,28 @@ Local gates standing in for it meanwhile:
 The one gap a morning session should close: `-Dataset All` has not run on HEAD, only on the
 commit before the review fixes. TeamCity's config runs exactly that (`regression.ps1
 -TeamCity -Dataset All`), so firing it closes the gap.
+
+### The unexplained 1.74 GB, stated more sharply: 13 bytes per entry
+
+Both runs report `[MEM library-resident] managed_heap=4.19 GB (6175389 entries)`, so the
+library is identical, and both build a pool of exactly 137,034,004 entries. The pool alone is
+therefore:
+
+| | pool bytes | per entry |
+|---|---|---|
+| `s7mem257` (read 768.5 M rows, compacted 5.6x) | 41.97 - 4.19 = 37.78 GB | **276 B** |
+| `s7red257` (read the survivor subset directly) | 40.23 - 4.19 = 36.04 GB | **263 B** |
+
+13 B/entry x 137,034,004 = 1.78 GB, which is the whole difference. So it is a per-entry
+overhead, not a separate retained structure - which rules out most of the obvious guesses
+(a retained side map, an accumulator, the model-diagnostics state) and points at something
+attached to each surviving `FdrEntry` or to the lists holding them.
+
+Candidates worth testing, none of them confirmed: list capacity slack (8 B per unused slot -
+the old path grows each file's list to ~2.99 M and removes down to ~533 K, so an untrimmed
+list would show exactly this shape), or `ModifiedSequence` string instances decoded from a
+5.6x larger row set sharing differently.
+
+**This needs a heap profile (dotMemory), not more log reading.** Recorded here rather than
+guessed at, and it must not be quoted as a benefit of the new format until it is understood -
+it is currently a number with a plausible cause, which is not the same as an explanation.
