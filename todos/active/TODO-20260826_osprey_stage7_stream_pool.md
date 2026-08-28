@@ -3436,3 +3436,12 @@ HOLDS.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260828_osprey_stage7_architecture.md` before starting work.
+
+### Interning confirmed output-correct at 257 files (06:45)
+
+The `s7intern` run (`--task SecondPassFDR`, first interning snapshot) reproduced all three oracle
+counts exactly: **5,079** protein groups, **45,724** library spectra, **11,745,026** passing
+entries. So `21434cb1c9` is output-correct at cohort scale as well as on Stellar.
+
+Its MEMORY number remains uninformative - that snapshot predates the rehydrate half, so it shows
+the same 40.23 GB pool. The saving is still unmeasured; re-measure on a fresh snapshot.
