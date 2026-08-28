@@ -2429,3 +2429,66 @@ pattern exists - the 1st-pass model sidecar is already relayed to every phase-3 
   the largest artifact in the run.
 * Drop the five blob columns: 54% of the reconciled artifact, never read back out of a
   reconciled parquet. 47 -> ~22 GB.
+
+## SESSION END 2026-08-27 evening - where the work stands
+
+**Branch** `Skyline/work/20260827_osprey_stage7_stream_increment` in `C:\proj\pwiz-work1`,
+**14 commits ahead of the PR branch, NOT pushed.** PR [#4621](https://github.com/ProteoWizard/pwiz/pull/4621)
+still OPEN and HELD at `2978de7b37`; the target is still ONE PR delivering memory reduction and
+streaming. Working tree clean.
+
+| commit | what | gate |
+|---|---|---|
+| `680bff65ac` | frozen second pass streams one file at a time | Stellar 10/10 |
+| `782a92211f` | blib phase stopped holding the survivor pool | Stellar 10/10 |
+| `f84dc1d458` | protein FDR and reports off the pool | Stellar 10/10 |
+| `b9075eb99a` | stopped writing the second-pass files conditionally | **`-Dataset All` 56/56** |
+
+**THE MEMORY BAR IS NOT MET AND NOTHING HAS MOVED IT.** `stage7-pool` is still 40.23 GB,
+because the pool is still built until the flip. Every projected figure in this file is
+arithmetic from the code, NOT a measurement. The 257-file run has not been re-run this session.
+
+### Steps 1-4 of the plan are done; step 5 is the whole remainder
+
+Step 4 (`OspreyReportWriter`) was **never the risk this file claimed** - its per-replicate loop
+already worked one file at a time and the experiment row is an O(distinct) fold. That standing
+note is retracted above.
+
+### Read these before touching the flip
+
+1. **"Step 5 - THE FLIP: what it actually needs"** - `MaterializeOneFile` overlays the
+   **1st-pass** sidecar, so a re-materialized file carries pass-1 q-values. That overlay has to
+   move into the materialization, and it has a PHASE problem: before pass 2 a file should look
+   pass-1 (that is what the resident pool holds there), and on a resume the sidecar is already
+   current from an earlier run, so "current" is not "this run wrote it".
+2. **The two wrong turns recorded as wrong**, because both are the natural-seeming answer and a
+   fresh session will reach for them: parquet cannot compress replication that lives ACROSS
+   separate per-run files, and "patch the experiment columns back into every run file" is the
+   wrong shape.
+3. **`PatchExperimentValues` (added this session) is TRANSITIONAL, not the design.** It is
+   correct while the per-run file is the only place those values can go, and it disappears with
+   the scope split. Do not preserve it as intent.
+
+### Sequence for the next sessions
+
+1. **The flip**, folding in the 1st-pass sidecar read fusion (3x -> 1x per file) - same method,
+   so gating them together avoids re-gating `ComputePass2TransferCompeteFull` twice.
+2. **The 257-file run** - the acceptance test, ~34 min, and the number this PR exists to
+   produce. Relaunch via `ai/.tmp/sessions/20260826-night-stage7/launch-measure-scoreindex.ps1`.
+3. Then the architecture, in the order it was worked out: move run-scope work into
+   `PerFileRescoring` (start with `transfer`, every input already staged), then the scope split.
+
+### A judgement call left open for Brendan
+
+The PR is now four commits including a bug fix and three gate hardenings, and still shows no
+memory reduction. **`b9075eb99a` stands alone and is fully gated** - if the flip runs long,
+splitting it into its own PR is reasonable.
+
+### Gate lesson worth keeping
+
+`-Dataset Stellar` does NOT cover `DiagnosticsOnly`: `mode7` is guarded on the dataset spec's
+`ModelDiagnostics` flag, which Stellar does not carry. Seven Stellar gates this session
+exercised zero of those paths. Use `-Dataset All` for anything touching that mode.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260827_osprey_stage7_stream_increment.md` before starting work.
