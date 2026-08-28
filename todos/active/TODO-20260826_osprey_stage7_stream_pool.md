@@ -2720,3 +2720,119 @@ most are Stages 1-6 and stay. The Stage 7 set is `LibraryFragmentRelease`, `Prot
 `ProteinFdr`'s second-pass accumulator, `OspreyReportWriter`, `SecondPassFdrTask`'s blib gates,
 `PercolatorEngine`'s clamp fold/apply, `FdrBenchInputWriter` and `ModelDiagnosticsData`'s
 pass-2 cards.
+
+## DECIDED: go straight at the architecture, drop the lean-row pool (Brendan, 2026-08-27)
+
+Brendan, mid-session: *"are you still planning on moving per-run FDR calculation for Pass 2 into
+the PerFileRescoring task? So that SecondPassFDR becomes only about calculating the
+experiment-wide q values and writing the BLIB?"*
+
+That question retires the lean-row pool decided earlier the same evening, and it is right to.
+Follow the architecture through and Stage 7 needs no per-observation pool at all:
+
+* **experiment q and protein FDR** are folds over `entry_id` - O(distinct), not O(observations).
+* **the blib gates** do walk all 137 M observations, but everything they read is either in the
+  68-byte sidecar record (both q's) or reachable from `libraryById` by `entry_id`
+  (`ModifiedSequence`, `IsDecoy`). No parquet read, no `FdrEntry`.
+* **only the ~11.7 M PASSING observations** need RTs and area, from a narrow second pass over
+  the reconciled parquet.
+
+| | Stage 7 live |
+|---|---|
+| today | 37.87 + 4.19 library = **42 GB** |
+| lean 88 B row (retired) | 12.1 + 4.19 = 16.3 GB |
+| architecture | ~0.6 GB passing records + folds + 4.19 library = **~5-6 GB** |
+
+Building a 12.1 GB resident pool of 137 M rows was an intermediate whose entire purpose the next
+PR deletes. **Retract the lean-row conversion**; keep only `IFdrRow` and the gate
+genericization, which the architecture needs anyway because the gates end up running over
+sidecar-derived rows.
+
+## The run-level half IS per-file work - established from the code, not asserted
+
+`StreamingFdr.ComputeFullPopulationPrecursorFdrStreaming` (`:191-290`) computes the run-level q
+from ONE file's arrays:
+
+```
+TargetDecoyCompetition.CompeteFromIndices(scores, labels, entryIds, allIdx, out wi, out ws, out wd);
+PercolatorQValues.ComputeConservativeQvalues(ws, wd, q);
+```
+
+`scores`, `labels`, `entryIds` and `allIdx` are all that file's. Exactly three inputs are global,
+and each is already a relayable artifact:
+
+| global input | what it is | staged today? |
+|---|---|---|
+| the frozen 1st-pass model | Stage 5 product | YES - rides the phase2 -> phase3 -> phase4 relay |
+| `stratumBaseIds` | whole-run, and exists BEFORE Stage 6 | YES - in the model sidecar |
+| `survivorEntryIds` | union of per-file survivors, ~12.4 M x 4 B = ~50 MB | derivable from Stage 5 compaction |
+
+What is genuinely JOIN work is `minRunQ` (the best-of-runs floor) and the per-`base_id`
+`bestTarget` / `bestDecoy` folds - all O(distinct).
+
+**The trap, named before it bites**: a file can WIN a competition for an `entry_id` that is not
+one of ITS survivors but is a survivor in another file, and that win still has to reach
+`minRunQ`. So a worker cannot substitute its own survivor list for the global one - it needs the
+50 MB relay. Filtering locally would silently drop cross-file floor contributions and lower
+experiment q for exactly the precursors that appear in many runs.
+
+## Artifact layout confirmed, with one correction (Brendan, 2026-08-27)
+
+*"immutable 2nd pass side-car files per run, and then an experiment-wide FDR side-car file
+(maybe the same base name as the BLIB?)"* - yes, and the same shape for the 1st pass, which is
+where most of the win is.
+
+**CORRECTION to the table earlier in this file**: the experiment-scope artifact takes the
+**BLIB's base name**, not a literal `experiment.` prefix. A fixed prefix collides the moment two
+analyses share an output directory, which is what the run layout does; `<blib-stem>.<pass>.fdr_scores.bin`
+beside the blib names the file for the analysis that produced it. `config.OutputBlib` is a run
+parameter every node already has, so a `--task SecondPassFDR` worker locates it with no new
+plumbing.
+
+| | today | split | |
+|---|---|---|---|
+| 1st-pass | 52.3 GB | 27.7 + 0.44 | **-46%** |
+| 2nd-pass | 9.3 GB | 4.9 + 0.44 | -43% |
+| total | 61.6 GB | **33.5 GB** | |
+
+Both records are 36 B (entry_id + four doubles) against the fused 68 B, so per FILE it is not
+quite half - the halving comes from the experiment-scope columns being written once per
+EXPERIMENT instead of once per run.
+
+**Immutability is what pays twice.** Both patch passes exist only to push experiment-scope
+values into per-run files: `PatchProteinQvalues` rewrites all 52.3 GB of 1st-pass sidecars in
+FirstPassFDR's join, `PatchPass2ProteinQvalues` another 18.6 GB in SecondPassFDR - ~123 GB of
+serial, un-parallelizable rewrite in the two stages that ARE the bottleneck. Both disappear, and
+a per-run file becomes write-once, which removes the written-but-not-finished ambiguity one
+level down from the one `b9075eb99a` removed.
+
+## `IFdrRow` landed - the one piece that survives the pivot
+
+`Osprey.Core/IFdrRow.cs`: the thirteen members Stage 7 reads off a survivor after the second
+pass, plus `FdrRowExtensions.EffectiveRunQvalue<T>` / `EffectiveExperimentQvalue<T>`.
+`FdrEntry` implements it and its two instance selectors were REMOVED in favour of the generic
+extensions - one implementation of the rule, and every call site compiles unchanged because an
+extension method is called with the same syntax.
+
+* **Generic, not `IFdrRow`-typed parameters.** A constraint compiles to a constrained call that
+  neither boxes nor allocates; taking the interface directly would box every one of 137 M rows.
+* **Extension methods, not default interface members** - net472 has no runtime support for those
+  (`Directory.Build.props:4` targets `net472;net8.0`).
+* The two experiment q-values are settable because the pre-blib re-clamp raises them in place.
+  For a struct that means the caller must hold an ADDRESSABLE element - an array element or a
+  `ref` local - since an `IReadOnlyList` indexer hands back a copy and the write is discarded.
+
+Five inspection warnings came from `<see cref="FdrEntry.EffectiveRunQvalue"/>` doc references in
+`FdrProjectionOutput`, `ModelDiagnosticsData` and `PeakCoAssignmentSource` that no longer
+resolved; retargeted to `FdrRowExtensions`. Gate: build clean, 596/596, zero inspection
+warnings.
+
+### Sequence from here
+
+1. Split the competition into a per-file half and a join fold **in place** in Stage 7 - the
+   three global inputs above passed in explicitly, byte-identical, gateable. This is what makes
+   the move mechanical rather than a rewrite.
+2. Move the per-file half into `PerFileRescoreTask`, relaying model + stratum + survivor ids.
+3. Split the sidecars by scope (1st pass first - it is 85% of the bytes), retiring both patch
+   passes.
+4. Stage 7's remaining consumers stream from the sidecars + library; the pool never exists.
