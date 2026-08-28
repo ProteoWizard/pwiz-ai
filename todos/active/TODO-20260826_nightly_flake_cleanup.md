@@ -122,7 +122,7 @@ which `CommandStatusWriter`/error-count path set it - before chasing the cause.
       executions, not thousands. Do NOT soak these.
 - [ ] **3. `ConsoleImportNonSRMFile`: make the exit-status failure self-explaining**, then get one
       occurrence with the better message.
-- [ ] **4. `ConsoleMethodTest`: find the unclosed handle** on the save-temp, on the
+- [x] **4. `ConsoleMethodTest`: find the unclosed handle** on the save-temp, on the
       `CommandLineTest` path.
 - [ ] **5. `PeakAreaDotpGraphTest`: find why the pane update never arrives**, starting from the
       idle-UI-thread evidence above rather than from graph timing.
@@ -217,3 +217,36 @@ Both would have produced a false "verified" and are worth knowing before the nex
   route it to a file beside the test assembly (the Docker workers mount the checkout, so the
   writes land on the host).
 
+## Progress Log
+
+### 2026-08-27 - PR #4623 merged; ConsoleMethodTest root cause found
+
+PR [#4623](https://github.com/ProteoWizard/pwiz/pull/4623) merged as `baac9d4a07`. It carried the
+worker-loss reporting work and the `TestAuditLogTutorial` fix. **This TODO is not complete** - it
+covers three tests and only one is closed.
+
+- **`TestAuditLogTutorial` - fixed and shipped.** A stale databound grid row, not audit-log
+  ordering and not a document race, in all languages rather than Japanese only. See the corrected
+  postscript above. Verified over 3,650 executions with 0 failures against ~15 predicted, plus 9
+  recorded activations of the new wait, every one on row 0 and exactly 4 LogIndex behind.
+
+- **`ConsoleMethodTest` - root cause found, fix verified, NOT yet merged.** `CommandLine.Dispose()`
+  closes the `CommandStatusWriter` and nulls its `_writer`, while `MultiFileLoader` threads can
+  still be importing. The next progress line throws `NullReferenceException`, which escapes
+  `BuildCache`; `ChromatogramCache.Build`'s catch calls the `complete` *callback* rather than the
+  builder's `Complete()`, so the builder's four `FileSaver`s - three holding open `FileStream`s -
+  are never disposed and the `~SK*.tmp` stays locked for the life of the process. Three fixes
+  (dispose the builder on any throw; make the writer null-safe; make `ChromCacheWriter`'s
+  constructor exception-safe), plus `FileSaver` undisposed-tracking folded into the existing
+  `FileStreamManager.StartTrackingHistory` switch so `CleanupFiles` names the leaker instead of
+  only reporting a locked file. 300 executions, 0 failures. **Stashed** in `C:\proj\daily` as
+  `stash@{0}`, headed for its own PR - three of the five files are product code.
+
+- **`ConsoleImportNonSRMFile` - narrowed, not fixed.** Only 1 failure in ~215 local executions, so
+  the 3.3% here is one event. The full output shows the fourth warning arriving *after*
+  `100% - Updating peak statistics`, so it is an out-of-order completion, not an escalated warning.
+  `ImportDataFiles` waits ~2 s for a final status and then falls through with a non-final one, and
+  two `return false` paths (`CommandLine.cs:2051`, `CommandLine.cs:2094`) write nothing to `_out`,
+  which is why the exit status disagrees with the output. Item 3 above is still the right next step.
+
+- `PeakAreaDotpGraphTest` untouched.
