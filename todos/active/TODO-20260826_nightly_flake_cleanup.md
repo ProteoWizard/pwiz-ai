@@ -265,7 +265,7 @@ TODO's three tests are now closed.
   the existing `FileStreamManager.StartTrackingHistory` switch. Verified 300 executions / 0
   failures locally, then **0 / 55 in the 2026-08-28 net472 nightly against a 7 / 70 baseline**.
 
-- **`PeakAreaDotpGraphTest` - fixed, awaiting merge in [#4628](https://github.com/ProteoWizard/pwiz/pull/4628).**
+- **`PeakAreaDotpGraphTest` - fixed, merged as `99609d5bc0` ([#4628](https://github.com/ProteoWizard/pwiz/pull/4628)).**
   Not a graph-timing problem at all: `ShowSplitChromatogramGraph` was called straight from the test
   thread, so the WinForms graph timer was started off the UI thread where its `WM_TIMER` is never
   dispatched - `Enabled` true forever, queue never drained, UI idle. One missing `RunUI`. 213
