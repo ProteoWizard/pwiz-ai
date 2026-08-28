@@ -2492,3 +2492,135 @@ exercised zero of those paths. Use `-Dataset All` for anything touching that mod
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260827_osprey_stage7_stream_increment.md` before starting work.
+
+## THE FLIP IS THE WRONG STEP 5 - it costs ~10 whole-run walks (2026-08-27 evening)
+
+`RescoredEntries.Files()` re-materializes on EVERY call - it yields from the resident buffer
+only while `IsMaterialized` is true (`PipelineByproducts.cs:363`). Today exactly one consumer
+builds the pool, so all seven `Files()` walks are free. **Remove that build and each one
+becomes a full re-read.** The step-5 plan, and the handoff that carried it, treat the flip as
+the last mechanical piece; it is not.
+
+Walks left on the default protein-compact path after the flip:
+
+| # | walk | site |
+|---|---|---|
+| 1 | `BuildRetainedBaseIds` (fragment release) | `SecondPassFdrTask.cs:449` |
+| 2 | survivor entry_id fold | `Pass2FdrSidecar.cs:1060` |
+| 3-4 | the competition's `ReadFile` + its step-4 finish | `Pass2FdrSidecar.cs:1256` |
+| 5 | `ProteinFdrEngine.RunSecondPass` | `SecondPassFdrTask.cs:482` |
+| 6 | `OspreyReportWriter` per-replicate | `OspreyReportWriter.cs:266` |
+| 7 | experiment-q clamp fold | `SecondPassFdrTask.cs:327` |
+| 8-10 | `ComputePassingPeptides` -> `ComputePassingPrecursors` -> `CollectPassingEntries` | `SecondPassFdrTask.cs:752/755/768` |
+
+One materialization is `FirstPassSurvivorLoader.Load` per file: read the reconciled parquet
+(47.07 GB across 257 files) + overlay the WHOLE 1st-pass sidecar (52.3 GB) + allocate 137 M
+`FdrEntry` + sort. **~100 GB of reads per walk**, against a Stage 7 that runs 36 min end to end
+today. Ten walks is not a memory win, it is a wall-time catastrophe.
+
+Fusion cannot rescue it either: the dependency chain (clamp -> passing peptides -> passing
+precursors -> passing entries) forces 3-4 passes at minimum, each still ~100 GB.
+
+The seed of this was already in the file, at `Pass2FdrSidecar.cs:1013` - *"Fusing this fold
+with the other converted consumers' walks is a separate, run-wide question - it is free until
+nothing builds the buffer."* It is now the whole question.
+
+## DECIDED: shrink the pool, do not remove it (Brendan, 2026-08-27)
+
+Back to the 2026-08-27 morning call - *"Stage 7 should use Stage 5's machinery"* - with the
+numbers this time. ONE materialization walk converts each file's `FdrEntry` list into lean rows
+and drops the fat objects; the other nine folds then walk a resident lean set instead of
+re-reading 100 GB apiece. I/O stays at one walk. Steps 1-4 are not wasted: the streamed
+consumers are exactly what lets the conversion pass consume the fat pool one file at a time.
+
+### The lean row, from an audit of all ten consumers
+
+The TODO's earlier ~40 B / 5.5 GB projection was `FdrProjection`'s 32 B shape. **That struct
+cannot do Stage 7's job** - it carries no q-values, no RTs and no area. Audited against
+`FdrEntry`'s 24 fields, what Stage 7 actually reads after the competition is:
+
+| field | B | read by |
+|---|---|---|
+| `EntryId` | 4 | fragment release, blib RefSpectra, fdrbench |
+| `PeptideId` (int into a ~40 K intern table) | 4 | replaces `ModifiedSequence` - every gate |
+| `Charge`, `IsDecoy` | 2 | every gate |
+| `Score` | 8 | protein-FDR best-per-peptide, fdrbench, model-diagnostics |
+| `RunPrecursorQvalue`, `RunPeptideQvalue` | 16 | `EffectiveRunQvalue(Both)`, protein-FDR gate |
+| `ExperimentPrecursorQvalue`, `ExperimentPeptideQvalue` | 16 | peptide/precursor gates, clamp, blib |
+| `ApexRt` / `StartRt` / `EndRt` | 24 | `PassingObservation` + RefSpectra |
+| `BoundsArea` | 8 | RefSpectra |
+| | **82 -> 88 padded** | |
+
+137,034,004 x 88 B = **12.1 GB**; + the 4.19 GB library = Stage 7 live **~16.3 GB**, against
+37.87 GB today. FirstPassFDR's 53.7 GB private becomes the run's peak, which is the bar.
+
+**NOT the 5.5 GB this file projected.** Every figure here is arithmetic from the code, like
+every other projection in this file; the only measurement remains `stage7-pool` = 40.23 GB.
+
+**Rejected variant** (offered, and Brendan chose against it): defer the four spectral doubles -
+`ApexRt`/`StartRt`/`EndRt`/`BoundsArea` - to a targeted 4-column re-read over the 11.7 M
+PASSING observations only. That gives a 56 B row and a 7.7 GB pool, but buys the extra headroom
+with a second read path that then has to be kept working and tested forever. Keeping RT/area
+resident is the simplest correct shape and already clears the bar.
+
+**Not in the row**, dropped with each file inside the competition: `ParquetIndex`/score_index,
+`ScanNumber`, `Pep`, `ExperimentAggregateScore`, `ExperimentProteinQvalue`, `Features[21]`, and
+the five blob arrays. Those are exactly what the 2nd-pass sidecar already carries to disk - the
+conclusion of `Pass2FdrSidecar.cs:1319`'s *"the sidecar, not the entry, is what carries this
+pass's results forward"*.
+
+### Two things to settle in the build, not asserted here
+
+1. The experiment-q clamp MUTATES two q-values in place, so the row must be a mutable struct
+   written back by index (`CollectionsMarshal.AsSpan`), not a readonly one like `FdrProjection`.
+2. `--model-diagnostics` pass-2 feature histograms may still want `FdrEntry.Features`. That
+   mode already forces the resident 2nd pass, so it can keep a fat path - but confirm before
+   assuming it.
+
+## 1st-pass sidecar read fusion: 3 traversals -> 1 (2026-08-27 evening)
+
+Landed first, because it is worth doing under any direction. The frozen competition read each
+file's `.1st-pass.fdr_scores.bin` three times, all over the same 68-byte records:
+
+| was | now |
+|---|---|
+| `seeder.Seed` -> `ReadRecords` (whole file) | one `ReadScalars` at the top of `ReadFile` |
+| `FdrScoresSidecar.ReadScalars` (whole file) | same call - it is the one that produces `eids`/`scs` |
+| `StashOffStratumPass1ExperimentQ` -> `ReadRecords` (whole file) | reads the records already in hand |
+
+* **`FdrScoresSidecar.ReadScalars` gained an overload** that also decodes the FULL record for a
+  caller-selected subset, into a caller-owned list. The subset is the file's survivors (~533 K
+  of ~2.99 M records on a CHS file), so the other ~82% still cost only their entry_id and score
+  - decoding seven trailing doubles to discard them was what the separate passes paid for.
+* **`Pass1ScalarSeeder` gained `Apply`**, the seed with no I/O, for a caller that has already
+  read the records. It needs none of `Seed`'s stage-then-apply discard contract, because a
+  caller holding decoded records has already had a clean read. `Seed` stays for
+  `RestorePass1Scalars`; both funnel through one `ApplyRecord`.
+* **The stash walks the survivor records** instead of scanning the full-population arrays to
+  build a `wanted` set and then re-reading the file to fetch its two q-values. The apparent
+  ordering dependency was not one: the test is against `fileScores`, which is built from the
+  parquet features, not from the sidecar.
+
+**One deliberate behaviour change, in a configuration that is broken today.** The fused read
+uses `sidecarByKey[fileKey]` - the path the validation loop already checked with
+`IsCurrentFormat` - where `Seed` used `FdrScoresSidecar.Pass1Path(writer.InputFor(fileKey))`.
+Both resolve through `ArtifactPaths.ResolveOutputDir`, so they name the same file in every
+configuration this method accepts. Where they could ever diverge, the old code warned
+(`_unreadable`) and proceeded with reset defaults - which `LogSummary` itself calls "treat this
+run's protein-level numbers as unreliable" - and the new code reads the validated file instead.
+The refusal stays where the contract puts it: before any survivor is mutated.
+
+Gate: build clean, **596/596**, zero inspection warnings; `regression.ps1 -Dataset Stellar`.
+
+### Sequence from here
+
+1. The lean-row conversion, behind a flag defaulting OFF, A/B'd against the resident path for
+   byte-identity, then flip the default - the way `OSPREY_FDR_PROJECTION` and
+   `OSPREY_STAGE6_STREAM_SURVIVORS` were introduced.
+2. The 257-file run, the acceptance test, ~36 min.
+3. Then the architecture, in the order already worked out: move run-scope work into
+   `PerFileRescoring` (start with `transfer`), then the scope split.
+
+**Retract "Step 5 - THE FLIP" as the plan.** Its q-value overlay analysis still stands and the
+lean-row conversion needs it - a converted file's rows must carry pass-2 values - but "stop
+reading `rescored.Value`" is not the shape.
