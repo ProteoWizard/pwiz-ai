@@ -3641,3 +3641,101 @@ steps over the Osprey-touching subset, not a slog.
 
 **This does not block #4621** (Brendan, 2026-08-28): a defect in master is a separate
 track, and this PR's gate is the branch-attributable A/B, which is clean.
+
+## OPEN: intermittent AccessViolation in the StellarLibDecoy phase3 rescue worker (2026-08-28)
+
+**Do not merge #4621 without resolving or consciously accepting this.** An AV in the HPC
+per-file rescore worker is a production-path crash on the distributed workflow, not a test
+artifact.
+
+### What happened
+
+`regression.ps1 -Dataset All` at 09:32 aborted: `Osprey --task exited -1073741819`
+(`0xC0000005`) in `StellarLibDecoy` mode 3, phase3 rescore of stem `..._22`. Everything
+before it passed (Stellar 10/10, StellarLibDecoy modes 1, 1c, 1b).
+
+Windows Application event log, `.NET Runtime`, 09:51:23:
+
+```
+Application: Osprey.exe
+Exception Info: System.AccessViolationException: Attempted to read or write
+protected memory. This is often an indication that other memory is corrupt.
+Stack:
+```
+
+Empty stack - the damage surfaces at a dereference unrelated to the corruption site, which
+is the signature of a corrupted managed collection rather than a bad pointer at the throw.
+
+### It is INTERMITTENT - roughly 1 in 26
+
+| evidence | phase3 executions | crashes |
+|---|---|---|
+| `-Dataset All` (aborted) | 3 | 1 |
+| `-Dataset StellarLibDecoy` re-run, 15/15 PASS | 3 | 0 |
+| sequential soak at HEAD (`08fbed8cfe`) | 20 | 0 |
+
+**Consequence, and it invalidates an earlier claim in this file**: the `-Dataset All` PASS at
+04:40 does NOT exonerate the pre-interning commits. At a ~4% rate a clean 20-run soak happens
+44% of the time and a clean 3-execution gate run happens 88% of the time. No single green run
+proves anything here, including that one.
+
+### The repro rig - 29 s per execution
+
+The isolated phase3 command, lifted from the retained chain log. Cycle time 29.2 s, so a soak
+is cheap:
+
+```
+Osprey --task PerFileRescoring --input-scores <stem>.scores.parquet
+  -l carafe_spectral_library.tsv -o output.blib --resolution unit --protein-fdr 0.01
+  --threads 16 --decoys-in-library --decoy-pairing-manifest osprey_library_db_pairing.tsv
+  --model-diagnostics --timestamp --memstamp
+```
+
+**`OSPREY_VERSION_OVERRIDE=26.1.1.0` is MANDATORY** (regression.ps1 pins it at its line 212).
+Without it every run dies at 4 s with "osprey version mismatch" - exit 1, not the AV - and the
+soak measures nothing. Cost me 20 wasted runs.
+
+Reset between iterations: delete `<stem>.scores-reconciled.parquet`, its
+`.PerFileRescoring.osprey.task` marker (this is what stops per-file resume skipping the work),
+and `output.model-diagnostics.*`.
+
+Harnesses: `ai/.tmp/sessions/20260828-interner/soak-phase3.ps1` (sequential) and
+`soak-parallel.ps1` (3 stems concurrent, for amplification).
+
+### Leading suspect - NOT proven, and not code this branch touched
+
+`ModelDiagnosticsData.Accumulator` holds `Dictionary<string, Prec>`,
+`Dictionary<string, FrontierPrec>` and `Dictionary<string, double>`, all keyed
+`StringComparer.Ordinal` on modified sequence, with **no lock and no concurrent collection**.
+It is fed from two independent sites: `ScoringTaskShared.FeedModelDiagnostics` and
+`FdrProjectionSinks.cs:116`.
+
+The arm asymmetry fits: `ModelDiagnostics = $true` for StellarLibDecoy, and plain `Stellar` -
+the ONLY dataset without it - is the only one that passed.
+
+If that is the site, the interning is a **timing trigger, not the cause**: interned keys make
+`StringComparer.Ordinal` short-circuit on the reference check instead of walking ~30 chars,
+which shifts the interleaving window. A latent race can start firing when the hot path gets
+faster.
+
+### Ruled out
+
+* `DecoyGenerator`'s separate interner - never runs in the libdecoy arm (decoys come from the
+  library as-is).
+* `DecoyPairingManifest`'s separate interner - sequential, load-time, and mutates `ProteinIds`,
+  a field disjoint from the `ModifiedSequence` the shared pool seeds.
+* Cross-process phase3 contention - `regression.ps1:1290-1313` runs the three stems
+  SEQUENTIALLY, so the isolated repro is faithful in that respect.
+
+### What is needed next
+
+A **positive control**. Until the crash can be produced at a measurable rate, a bisect compares
+zeros and proves nothing. Options, in cost order:
+
+1. Amplify (concurrent stems, more threads, memory pressure) to raise the rate.
+2. Buy power - 100+ runs per arm, hours of machine time.
+3. Fix the accumulator's synchronization on its own merits - it is wrong regardless - while
+   being explicit that causation was never proven.
+
+Brendan, 2026-08-28: re-run the gate once; if it does not reproduce, move on for now, there is
+a lot left to validate.
