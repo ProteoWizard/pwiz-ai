@@ -2610,7 +2610,9 @@ configuration this method accepts. Where they could ever diverge, the old code w
 run's protein-level numbers as unreliable" - and the new code reads the validated file instead.
 The refusal stays where the contract puts it: before any survivor is mutated.
 
-Gate: build clean, **596/596**, zero inspection warnings; `regression.ps1 -Dataset Stellar`.
+Gate: build clean, **596/596**, zero inspection warnings, and **`regression.ps1 -Dataset
+Stellar` 10/10** - modes 1, 1b, 1c, 2, 3, 4, 5, 6 all green with an identical 23,662,592-byte
+blib. Committed `a700c1226a`.
 
 ### Sequence from here
 
@@ -2624,3 +2626,97 @@ Gate: build clean, **596/596**, zero inspection warnings; `regression.ps1 -Datas
 **Retract "Step 5 - THE FLIP" as the plan.** Its q-value overlay analysis still stands and the
 lean-row conversion needs it - a converted file's rows must carry pass-2 values - but "stop
 reading `rescored.Value`" is not the shape.
+
+## The lean-row audit closed cleanly - and where the rows get filled (2026-08-27 evening)
+
+Two things the decision left open are now answered from the code, not assumed.
+
+### `--model-diagnostics` does NOT need `FdrEntry.Features`
+
+Its six pass-2 cards walk the pool, but every `.Features` reference in
+`ModelDiagnosticsData` is `contributions.Features` - the trained model's feature LIST - not a
+per-entry vector (`ModelDiagnosticsData.cs:575,830`,
+`ModelDiagnosticsData.Accumulator.cs:324`). So the mode runs on lean rows like everything else,
+and there is no fat path to keep for it. `--fdrbench` likewise: `Score`, `ModifiedSequence`,
+`Charge`, `EntryId`, `IsDecoy` and the two `Effective*Qvalue` accessors, all in the row.
+
+Swept every `.Features` / `.CwtCandidates` / `.FragmentMzs` / `.FragmentIntensities` /
+`.ReferenceXicRts` / `.ReferenceXicIntensities` / `.BoundsSnr` / `.CoelutionSum` /
+`.ScanNumber` / `.ParquetIndex` read in `Osprey.Tasks` and `Osprey.FDR`. Everything that
+survives the filter is either pre-Stage-7, inside the competition's own per-file cycle
+(`Pass2FdrSidecar.cs:1352,1840,1910-1965`), or in `ComputePass2Resident` /
+`ScoreWithFrozenModel` - all of which run BEFORE a lean row exists and drop the file after.
+
+**Exactly one post-competition consumer reads a field outside the row**:
+`UpgradeReconciledParquets` builds `keepIdentities` from `(EntryId, Charge, ScanNumber)`
+(`SecondPassFdrTask.cs:665`). That is the in-Stage-7 legacy converter, which
+`--task CompactPerFileRescoring` (`55600ddbc0`) now supersedes. Two ways out, and it is a
+capability question rather than a technical one:
+
+* add `ScanNumber` to the row (+4 B, ~0.55 GB at 257 files), or
+* **remove the in-Stage-7 upgrade** and have Stage 7 REFUSE a stale-format directory in every
+  mode, naming `--task CompactPerFileRescoring` - which is exactly what `--task
+  ModelDiagnostics` was already changed to do on this branch, for the same reason.
+
+The second is the shape this branch already chose once ("BLOCK, not work around"), and it
+deletes a read path rather than paying to keep one working. It needs Brendan's sign-off because
+it removes a capability, not because it is unclear.
+
+### Interning `ModifiedSequence` is a large part of the win on its own
+
+`SecondPassFdrTask.cs:925` already records that *"the parquet reader hands out a fresh instance
+per row"*, which is why `CollectPassingEntries` canonicalizes. The resident pool does NOT
+canonicalize: it holds **137 M separate string objects** where there are on the order of
+thousands to millions of distinct sequences. At a .NET string's `26 + 2 x len` bytes, a 20-30
+character modified sequence is ~66-86 B, so the pool carries roughly **9-12 GB of strings
+alone** out of its 37.87 GB. Replacing the reference with a `PeptideId` int removes that before
+the struct packing is counted. Arithmetic from the code, like everything else here.
+
+### Where the two halves of a row get filled - no extra materialization
+
+The competition already makes exactly ONE materialization per file, and its step 4 works over
+the SIDECARS, not the entries (`"the file's entries have been dropped by now"`). So:
+
+| phase | fills | why there |
+|---|---|---|
+| `ApplyFileRunQ` (per file, during the stream) | `EntryId`, `PeptideId`, `Charge`, `IsDecoy`, RTs, `BoundsArea`, `Score`, both RUN q | the file is materialized and its score / run q are final at that point |
+| step 4's per-file sidecar patch | both EXPERIMENT q | the competition producing them is not complete until every file has been read |
+
+The step-4 fill needs a per-file entry_id -> row index map, built transiently for the file being
+patched (~533 K entries) and dropped - NOT a run-wide (file, entry_id) map, which is the 3.8 GB
+structure `ReadFile` already removed once.
+
+**Scope**: this covers the DEFAULT frozen-competition arm. `ComputePass2Resident` stays on the
+fat pool deliberately - it is the byte-identity oracle, and the convention this codebase uses
+for a change like this is to leave a working oracle on the other side of the switch. The
+`!recomputed` resume path runs no competition, so it builds its lean pool from one plain
+per-file materialization plus the 2nd-pass sidecar overlay - one walk, the same as today's pool
+build.
+
+### net472 rules out `CollectionsMarshal` - the rows are ARRAYS, not lists
+
+Correcting a design detail stated earlier in this session: the clamp mutates two q-values in
+place, and `CollectionsMarshal.AsSpan` is .NET 5+ while Osprey multi-targets `net472;net8.0`
+(`pwiz_tools/Osprey/Directory.Build.props:4`). Store each file's rows as a `LeanRow[]`, not a
+`List<LeanRow>` - array element access yields a direct ref for a struct, so
+`rows[i].ExperimentPrecursorQvalue = floor;` mutates in place on both frameworks with no
+interop helper. The per-file survivor count is known at materialization, so an array is the
+natural shape anyway.
+
+### The gates must be GENERIC, not duplicated
+
+`ComputePass2Resident` stays on the fat pool as the byte-identity oracle, so the SAME gate code
+has to run over both row types - two implementations would leave the oracle comparing two
+different pieces of code, which is the failure mode
+[[feedback_shared_defect_hides_from_parity]] describes from the other direction. Write the
+Stage 7 gates as `where T : IFdrRow`: the JIT specializes the struct instantiation with no
+boxing, and the class instantiation shares the reference-type body. Default interface members
+are NOT available (net472 has no runtime support), so `EffectiveRunQvalue` /
+`EffectiveExperimentQvalue` become generic extension methods on the interface - one
+implementation, both row types, both frameworks.
+
+Scope of the churn: 102 `KeyValuePair<string, List<FdrEntry>>` occurrences across 20 files, but
+most are Stages 1-6 and stay. The Stage 7 set is `LibraryFragmentRelease`, `ProteinFdrEngine` /
+`ProteinFdr`'s second-pass accumulator, `OspreyReportWriter`, `SecondPassFdrTask`'s blib gates,
+`PercolatorEngine`'s clamp fold/apply, `FdrBenchInputWriter` and `ModelDiagnosticsData`'s
+pass-2 cards.
