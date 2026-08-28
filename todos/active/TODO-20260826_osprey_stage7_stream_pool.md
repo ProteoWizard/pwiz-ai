@@ -3032,3 +3032,32 @@ A second, cheaper half: the run directory is nearly empty until Stage 5 finishes
 the 1,028 hard links plus run.log - against 3,350 in a completed run), because every stage writes
 its artifacts at the END. That is also what made the run look idle. Worth knowing when watching
 one, and worth a line in the run-layout doc.
+
+## MEASURED: Stage 6 can absorb the pass-2 work for free (night session, 00:24)
+
+The open question behind the whole move was whether `PerFileRescoring` has room for the run-scope
+pass-2 work. First `perfile-rescore-peak` probe from the 257-file Stage 5-7 run:
+
+| probe | value |
+|---|---|
+| `reconciliation-floor` (post-GC, entering rescore) | 4.12 GB |
+| `perfile-rescore-loaded` (post-GC, streaming index resident) | 4.34 GB |
+| `perfile-rescore-peak` (PRE-GC, per-file transient) | **15.43 GB** managed, 34.24 GB WS |
+
+So a Stage 6 file already churns ~11 GB of collectable garbage above a ~4.3 GB floor - the
+rescored entries carrying `Features` / `CwtCandidates` / `Fragment*` / `ReferenceXic*`.
+
+What the move would add to that worker:
+
+| addition | size |
+|---|---|
+| frozen-score accumulator, 12 B x ~533 K survivors/file | ~6 MB |
+| the file's own 1st-pass sidecar scalars, ~2.99 M x 12 B | ~36 MB |
+| **total** | **~40 MB, under 0.3% of the existing per-file transient** |
+
+**The stage has room by three orders of magnitude.** That was the one measurement that could have
+argued against moving the work into Stage 6, and it does not.
+
+Stage 5 for context, same run: 9,578.3 s (2h 39m), peak_paged 53.59 GB, but handing off only
+**5.97 GB** live - so Stage 5's cost is transient too, and the run's real problem was never it.
+The baseline's run peak was ~69 GB at STAGE 7's pass-2 start, on a 64 GB box.
