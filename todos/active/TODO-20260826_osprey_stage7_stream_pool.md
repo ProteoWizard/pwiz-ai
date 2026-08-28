@@ -3739,3 +3739,94 @@ zeros and proves nothing. Options, in cost order:
 
 Brendan, 2026-08-28: re-run the gate once; if it does not reproduce, move on for now, there is
 a lot left to validate.
+
+## Review response: six findings DELETED, ParquetIndex made nullable (2026-08-28)
+
+Brendan: *"We will work on the PR until there are no issues to post... We favor larger,
+higher-quality steps forward over smaller steps with issues."* No findings are being filed;
+each is fixed or dropped.
+
+### Removal retired six findings (commit `870c3f4404`)
+
+Deleting the reconciled-parquet upgrade path took #2, #3, #10, #11, #12 and #13 with it - they
+were all defects inside the removed code. 835 lines deleted, 43 added. Gated: build clean,
+599/599, ReSharper 0/0, `regression.ps1 -Dataset Stellar` 10/10.
+
+### #1 FIXED - unsynchronized Dictionary in Parallel.For
+
+`_resetEntryIdsByFile` took a `TryGetValue`-then-insert from inside `ExecuteRescore`'s
+`Parallel.For`. Added `_resetEntryIdsLock` around the dictionary (not the inner sets - one
+worker owns a file). The hand-off at line 401 now passes a SNAPSHOT taken under the lock:
+ReSharper flagged `InconsistentlySynchronizedField`, and it was right - "the loop has joined"
+protects the read but still lets shared mutable state escape by reference.
+
+### #4 + #5 + a determinism bug: ONE root cause
+
+`FdrEntry.ParquetIndex` carried two meanings: an in-memory `uint.MaxValue` sentinel for
+"gap-fill, no Stage 4 row", and the on-disk `score_index` ordinal. That overload produced all
+three findings, plus one nobody had reported:
+
+**Both sort sites in `PerFileRescoreTask` justify an UNSTABLE sort by claiming
+`ParquetIndex` is unique per row.** The resume overlay stamped every gap-fill row with the
+same `uint.MaxValue`, so that invariant was false exactly there.
+
+**Resolution (Brendan's design):** `uint? ParquetIndex`, null = "no Stage 4 row".
+
+* `FdrEntry.CompareParquetIndex` states the rule ONCE: unresolved sorts **LAST**, matching the
+  old sentinel. `Nullable<uint>`'s default puts null FIRST, so taking the default would have
+  silently reversed exactly the rows being changed. Four comparators route through it, which is
+  what keeps the conversion output-neutral by construction.
+* `ReadFdrEntryGroup` now reads `score_index` like `LoadFdrStubsFromParquet` already did - the
+  two readers of one file no longer disagree about what the field means.
+* The resume overlay no longer re-stamps; rows keep the numbering they arrived with, so the
+  sorts' uniqueness claim becomes TRUE.
+* The reconciled-parquet writer HARD-FAILS on an unresolved row. Writing a stand-in would
+  persist a `score_index` pointing at another row's features: well-formed, undetectable, wrong.
+* `ReconciledParquetWriter.BuildOverlay` routes on `HasValue` instead of `== uint.MaxValue`.
+
+**Deliberately NOT converted:** `FdrProjection` (32-byte struct, 768 M live) and
+`PercolatorEntry` keep a local `uint` sentinel. The goal was to stop the ambiguity travelling
+between subsystems on shared state, not to eliminate the value.
+`PercolatorEntryBuilder` is the single documented boundary where the nullable becomes it.
+
+**Size:** computed +8 B/`FdrEntry` (the small-field group goes 16 -> 24; `Nullable<uint>` is an
+8-byte struct field that cannot pack into the 2 spare bytes). ~1.1 GB at 137 M, +3.3% of the
+33.06 GB pool, and temporary - the lean row does not carry the field. NOT measured; confirm on
+the `stage7-pool` probe before quoting it.
+
+### New convention (Brendan, 2026-08-28)
+
+**Use LINQ `OrderBy` where ties are expected; `Array.Sort`/`List.Sort` only where they are
+provably absent.** An audit of every `// Array.Sort OK:` annotation found the codebase
+disciplined - all but one either claim uniqueness or argue ties are byte-identical primitives.
+The exception was `PerFileRescoreTask` gap-fill append, which applied the primitive argument to
+`FdrEntry` OBJECTS carrying distinct features and blobs. Now `OrderBy` with the new
+`FdrEntry.CANONICAL_COMPARER`.
+
+### #8 CONFIRMED - our own streaming path is dead AND wrong
+
+`SecondPassFdrTask.cs:218` (`rescored.Value`) sets `IsMaterialized`, and `Files()`
+short-circuits on it, so `MaterializeOneFile` / the `LoadFile` branch **never execute in
+production** - the streaming half of this PR ships unexercised. Worse,
+`MaterializeFileSurvivors` -> `FirstPassSurvivorLoader` overlays only the **1st-pass** sidecar
+(`FirstPassSurvivorLoader.cs:190-191`), so if it did run, five second-pass gates would silently
+read first-pass q-values. Removing line 218 is the LEAN ROW's objective, so this is armed to
+fire in the next sprint. **Unresolved - needs a decision:** make the streaming path apply the
+2nd-pass sidecar plus a test that exercises `LoadFile`, or delete it and rebuild it with the
+lean row.
+
+### Still unverified
+
+#6, #7, #9, #14, #15. Not examined; do not characterize them from the review summary.
+
+### Gate infrastructure is broken (NOT ours)
+
+* `Compare-EndToEnd-Crossimpl.ps1` defaults to `C:\proj\pwiz` (master) - only its staleness
+  guard stopped it validating the wrong tree. Pass `PWIZ_ROOT`.
+* Cross-impl AND `Test-PerfGate` both look for mzML at `<base>/<dataset>/` while the
+  2026-08-22 run-layout migration moved them to `<base>/<dataset>/raw/`. `Dataset-Config.ps1`
+  has ZERO references to `raw`. Astral is not staged under `OSPREY_TEST_BASE_DIR` at all.
+  Worked around with a hard-linked base at `D:\test\osprey-runs\_crossimpl-base`; the durable
+  fix touches shared ai/ tooling and was not taken.
+* Cross-impl Stellar PASSED 4/4 legs at 1e-9 once pointed correctly, including the sidecar leg
+  (1,448,698 + 996,830 records). **Parity is NOT broken by this PR.**
