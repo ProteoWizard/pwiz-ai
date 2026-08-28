@@ -8,7 +8,7 @@
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
 - **PR**: [#4624](https://github.com/ProteoWizard/pwiz/pull/4624) (merged 2026-08-27)
-- **Cherry-pick**: Yes — `Cherry pick to release` label (Nick's call, 2026-08-27).
+- **Cherry-pick**: Done, merged as [#4625](https://github.com/ProteoWizard/pwiz/pull/4625) on 2026-08-28 (`cb370ebf0`) — `Cherry pick to release` label (Nick's call, 2026-08-27).
   We are in post-release patch mode, where the default is no cherry-pick, but all
   three criteria hold: released 26.1 users installing AlphaPeptDeep today get
   alpharaw 0.7.0 and a library build that always fails; the fixed code exists on
@@ -290,6 +290,23 @@ child (ProcessRunner redirects `TMP`, CPython resolves `TEMP` first), and this
 launcher alone among Tide/DIA-NN/AlphaPeptDeep omits
 `ChangeTmpDirEnvironmentVariableToNonUnicodePath`, which would break library
 builds for users with non-ASCII profile names. Nothing tracks these yet.
+
+### 2026-08-28 — Cherry-picked to the release branch
+
+The automated backport PR
+[#4625](https://github.com/ProteoWizard/pwiz/pull/4625) squash-merged to
+`Skyline/skyline_26_1` as `cb370ebf07ee9016fed6e0552a567b6982b87ce4`, carrying
+both commits from #4624 (the fix and the code-review round that suppressed the
+alpharaw warning and `RuntimeError`). No conflicts, so no manual cherry-pick was
+needed; every check was green at merge, including `Skyline Release Perf and
+Tutorial tests` (113 passed) and `Skyline Release Branch x86_64` (1547 passed).
+
+Released 26.1 users who install AlphaPeptDeep now get a working library build
+against alpharaw 0.7.0. Scope on the release branch is exactly what shipped to
+master — the two unfiled follow-ups above (`forceTempfilesCleanup` and the
+missing `ChangeTmpDirEnvironmentVariableToNonUnicodePath`) were deliberately
+kept out, and the intermittent `.blib` load failure remains deferred on both
+branches.
 
 ## Notes
 
