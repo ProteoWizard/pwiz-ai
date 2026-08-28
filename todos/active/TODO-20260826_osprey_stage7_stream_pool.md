@@ -3535,3 +3535,83 @@ Gates: build clean, 601/601 tests, ReSharper 0 warnings / 0 errors,
 * `-Dataset All` before the PR (the 04:40 green predates both `21434cb1c9` and `79f63471bc`).
 * Open question for Brendan: `HydrateForRescore` is dead production code that already misled one
   session. Delete it with its two tests, or keep it?
+
+## MEASURED: the shared library-seeded pool takes 7.17 GB off Stage 7 (2026-08-28 08:37)
+
+`chs-257files-libdecoy-r1.0-protein-compact-s7sharedpool`, `--task SecondPassFDR -LinkFrom
+s57base257`, exit=0. The same 30-minute rig as the `s7intern` baseline, so this is like-for-like.
+
+| | baseline `s7intern` | shared pool | delta |
+|---|---|---|---|
+| `stage7-inherited` | 40.23 GB | **33.06 GB** | **-7.17 GB** |
+| `stage7-pool` | 40.23 GB | **33.06 GB** | **-7.17 GB** |
+| protein groups | 5,079 | **5,079** | - |
+| library spectra | 45,724 | **45,724** | - |
+| passing entries | 11,745,026 | **11,745,026** | - |
+| `SecondPassFDR` wall | 2,172.6 s | 2,290.5 s | +117.9 s |
+
+`Sequence pool: 4525056 distinct seeded from the library, 0 sidecar lookup(s) missed it`
+
+**-17.8% off the pool with output unchanged**, and zero misses over ~137 M lookups - so the
+seeding assumption (every sidecar sequence was written from a `LibraryEntry`) holds at cohort
+scale, not just on Stellar. Run log:
+`D:\test\osprey-runs\chs-seer\runs\chs-257files-libdecoy-r1.0-protein-compact-s7sharedpool\run.log`
+
+**The wall number is NOT yet a regression, and must not be quoted as one.** +5.4% on single runs
+two hours apart, on a machine that had just finished a 7-hour job. Worked through from first
+principles the change's own mechanism accounts for under a tenth of it: ~137 M frozen-pool
+lookups at ~50-80 ns is ~9 s, plus ~0.5 s of seeding. The rest is unexplained. Repeat both arms
+before calling it anything.
+
+## DECIDED: `ModifiedSequence` becomes a type (Brendan, 2026-08-28)
+
+*"Seems like ModifiedSequence should become its own class with guarantees around how it works and
+that it is unique process-wide. Time to stop using just bare strings for these."* ... *"Then we
+have a typed marker enforcing correctness, not just a convention."*
+
+Bare strings are what let three separate interning mechanisms coexist unnoticed, and what makes
+the pool's guarantee a convention the next caller has to remember.
+
+**Shape**: a `sealed class ModifiedSequence` in `Osprey.Core`, private constructor, a factory
+that guarantees one instance per distinct value. Equality is **built into the type** -
+`ReferenceEquals` + `RuntimeHelpers.GetHashCode`, per Brendan: *"We should just build this into
+the ModifiedSequence class in this case to make it unnecessary to remember to wrap in the
+template class."* So no call site has to wrap a key in `ReferenceValue<T>`.
+
+**It must implement `IComparable`, not just equality.** `LibraryDeduplicator.cs:139` sorts with
+`string.Compare(..., StringComparison.Ordinal)` and that sort is output-affecting. Delegating
+`CompareTo` to `string.CompareOrdinal` on the text keeps it. (This is also why an int-id form was
+NOT chosen lightly: ids only reproduce ordinal ordering if assigned in ordinal order of the
+distinct set - the trap `FdrProjection.PeptideId` already documents as "risk #1".)
+
+**Dependency-free, deliberately.** `pwiz.Common.Collections.ReferenceValue<T>`
+(`pwiz_tools/Shared/CommonUtil/Collections/ReferenceValue.cs`) is the precedent for the pattern
+and should be cited in the doc comment, but is not referenced:
+
+* `Osprey.Core` has NO project references at all (one `System.Memory` package reference).
+* `CommonUtil` is net472-only; Osprey multi-targets net472 + net8.0.
+* Copying `ReferenceValue` into `PortableUtil` would COLLIDE - `CommonUtil.csproj` references
+  PortableUtil, and both would then declare `pwiz.Common.Collections.ReferenceValue<T>`.
+* `ReferenceValue<T>` is for types that cannot self-guarantee uniqueness. This one can.
+
+PortableUtil's `RootNamespace` is already `pwiz.Common`, the same as CommonUtil's, so the
+PortableUtil -> CommonUtil swap under the full .NET 8 port is transparent for anything that DOES
+use the shared utilities. `ModifiedSequence` is unaffected either way (Brendan: *"It has
+PortableUtil which goes away under the full .NET 8.0 port when it will get CommonUtil"*).
+
+**Sequencing**: folded into the LEAN ROW PR, not its own. The type's payoff is realized in the
+row, and doing them separately churns the same 48 files twice. Footprint: 167 production
+references across 48 files, plus 110 in tests.
+
+**Left open**: the class form keeps an 8-byte reference, so `FdrRow[]` stays GC-traced at 137 M
+rows. An int id was the only form that made the row reference-free. That was a HYPOTHESIS about
+why Stage 5's 32 B/row behaves better, never measured. The class form does not foreclose it - an
+id can be added INSIDE `ModifiedSequence` later without changing the public type. First place to
+look if the lean row's numbers come in short.
+
+**Also open**: resolving the sequence from `libraryById` by `entry_id` instead of reading the
+parquet's `modified_sequence` text at all. That removes the per-row string hash entirely (the
+suspected part of the wall-time cost) and the typed `ModifiedSequence` is what makes the
+resolution safe to rely on. `ParquetScoreCache.cs` already says the apex-RT panel does exactly
+this: *"the modified sequence and charge behind the precursor identity are resolved from the
+library by entry id instead."*
