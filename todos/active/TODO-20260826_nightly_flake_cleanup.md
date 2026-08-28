@@ -249,4 +249,36 @@ covers three tests and only one is closed.
   two `return false` paths (`CommandLine.cs:2051`, `CommandLine.cs:2094`) write nothing to `_out`,
   which is why the exit status disagrees with the output. Item 3 above is still the right next step.
 
-- `PeakAreaDotpGraphTest` untouched.
+- `PeakAreaDotpGraphTest` untouched at that point; fixed the next day, see below.
+
+### 2026-08-28 - ConsoleMethodTest fixed and merged (#4626)
+
+PR [#4626](https://github.com/ProteoWizard/pwiz/pull/4626) merged as `0e99111bfa`. Two of this
+TODO's three tests are now closed.
+
+- **`ConsoleMethodTest` - fixed.** `CommandLine.Dispose()` closes the `CommandStatusWriter` and
+  nulls `_writer` while `MultiFileLoader` threads may still be importing. The next progress line
+  threw `NullReferenceException`, which escaped `BuildCache`; `ChromatogramCache.Build`'s catch
+  calls the `complete` *callback*, not the builder's `Complete()`, so the builder's four
+  `FileSaver`s - three with open `FileStream`s - were never disposed and their `~SK*.tmp` stayed
+  locked for the life of the process. Three fixes plus `FileSaver` undisposed-tracking folded into
+  the existing `FileStreamManager.StartTrackingHistory` switch. Verified 300 executions / 0
+  failures locally, then **0 / 55 in the 2026-08-28 net472 nightly against a 7 / 70 baseline**.
+
+- **`PeakAreaDotpGraphTest` - fixed, awaiting merge in [#4628](https://github.com/ProteoWizard/pwiz/pull/4628).**
+  Not a graph-timing problem at all: `ShowSplitChromatogramGraph` was called straight from the test
+  thread, so the WinForms graph timer was started off the UI thread where its `WM_TIMER` is never
+  dispatched - `Enabled` true forever, queue never drained, UI idle. One missing `RunUI`. 213
+  executions / 0 failures against 13 / 305 (4.3%) on the same configuration.
+
+- **`ConsoleImportNonSRMFile` - still open.** See the 2026-08-27 entry; item 3 remains the next step.
+
+### Two notes for whoever picks this up
+
+- **`TestRunner` throttles workers to tests x languages.** A single test reaches only 5 workers, not
+  8, so "reproduce in isolation" (item 2 above) silently changes the load as well as the neighbours.
+  Always run at least two tests to get nightly-like load.
+- **CodeQL on this repo cannot be read as a merge gate.** #4626 was failed by two alerts on a line
+  it merely moved; one is present on master already, and the other traces `PanoramaUserEmail` from
+  AutoQC, a separate executable with no reference path to the flagged code. Analysis runs with
+  `build-mode: none`, so cross-application flows get over-approximated. Merged with `--admin`.
