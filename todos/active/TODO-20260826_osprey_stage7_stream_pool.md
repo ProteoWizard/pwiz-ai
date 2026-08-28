@@ -3011,3 +3011,24 @@ go - which is the artifact question, and the one thing still genuinely open.
 **Still not implemented tonight**: the 257-file run holds the machine, so nothing here could be
 regression-gated, and this is core artifact-writing code. But it is now a specified callback
 rather than a direction.
+
+## Follow-on candidate: the progress lines lose their phase (observed live, 2026-08-27)
+
+Brendan checked the running 257-file job and read it as "only running SecondPassFDR". It was in
+FirstPassFDR - the denominator gave it away (764,427,887 is the PRE-compaction population;
+Stage 7 only ever sees the ~137 M survivors). But the log itself could not say so: `[TASK]` lines
+are emitted only at task START, and `ProgressReporter` prints its heading once and then bare
+percentages, so anything that tails the log loses which phase it is in.
+
+This is the same trap as the standing note to read `file NN/NN:` lines rather than a tailed `%`.
+It has now cost a real reader a wrong conclusion about a live 10-hour run.
+
+**Fix candidate**: put a short phase tag on each percent line, or emit a periodic `[TASK]`
+heartbeat. **Not folded into this PR**: it changes every progress line in every log, and
+`ai/scripts/perfviz.py` parses those - so it wants its own change with the parser updated in the
+same commit, not a drive-by at the end of a memory PR.
+
+A second, cheaper half: the run directory is nearly empty until Stage 5 finishes (1,029 entries -
+the 1,028 hard links plus run.log - against 3,350 in a completed run), because every stage writes
+its artifacts at the END. That is also what made the run look idle. Worth knowing when watching
+one, and worth a line in the run-layout doc.
