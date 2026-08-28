@@ -2942,3 +2942,43 @@ default; transfer-compete would want measuring before it is promised anything.
 file's arrays are the frozen-model survivor scores, the survivor id set and the stratum - and
 per the correction above, two of those are already relayed and the third moves to the join.
 Relocating it is now a relocation, not a rewrite.
+
+## CORRECTION (night session, 22:05): the frozen scoring is NOT free in the worker
+
+Earlier tonight this file recorded that `PerFileRescoreTask` can score with the frozen model
+straight from memory at `WriteReconciledAndStamp`, because `fdrEntries` still carries
+`Features`. **That is true only for the RESCORED subset.**
+
+`ReconciledParquetWriter.cs:147-150` states the rule: re-scored rows are detected by
+`FdrEntry.Features != null`, and *"hydration's LoadFdrStubsFromParquet does NOT populate
+Features, so an unchanged post-compaction stub (Features == null) is skipped, leaving its
+original parquet row (Features + CwtCandidates + the binary blob columns) to stream through"*.
+
+So an UNCHANGED survivor has no features in the worker's memory. Stage 7 scores every survivor
+present in the reconciled parquet, and the rescored fraction is small - Stellar mode 1c reports
+70,614 of 996,439 shared records moved, about 7%. The worker would be missing ~93% of what
+Stage 7 needs.
+
+### What this does to phase 1
+
+The "publish flat per-file frozen-score arrays, no new artifact" plan does NOT work as written.
+Three options, and the first is the real one:
+
+1. **Score inside the parquet STREAM** the worker already makes in `WriteReconciledAndStamp`.
+   Every row - rescored or streamed-through - passes through `StreamReconciledScoresParquet`
+   with its features in hand, so this is genuinely one pass and no extra I/O. It reaches into
+   `ReconciledParquetWriter` rather than sitting beside it, so it is more invasive than the
+   sketch it replaces.
+2. Worker re-reads its own reconciled parquet after writing it. Correct but pointless: it is the
+   same read Stage 7 makes, so nothing is saved, only relocated.
+3. Leave the scoring in Stage 7. Then the move carries only the competition, and Stage 7 keeps
+   the per-file feature read - which is the read the move exists to delete.
+
+**Not implemented tonight, deliberately**: the premise was falsified while scoping it, and
+writing the invasive version against a freshly-corrected design at 22:00, with no ability to
+regression-gate while the 257-file run holds the machine, is how a plausible-but-wrong change
+lands. Option 1 is the design; it wants a fresh session.
+
+**The rest of the decomposition is unaffected** - the competition split (`f7a6e6d103`), the
+no-new-relay finding, the stratum-bounded contribution sizing and the artifact layout all stand.
+Only the "scoring is free from `fdrEntries`" step was wrong.
