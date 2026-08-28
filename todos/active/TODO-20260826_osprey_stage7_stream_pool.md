@@ -3830,3 +3830,35 @@ lean row.
   fix touches shared ai/ tooling and was not taken.
 * Cross-impl Stellar PASSED 4/4 legs at 1e-9 once pointed correctly, including the sidecar leg
   (1,448,698 + 996,830 records). **Parity is NOT broken by this PR.**
+
+## SEQUENCING: stabilize this PR, THEN the lean row as the final piece (Brendan, 2026-08-28)
+
+*"Stay focused on the objective of landing a fully stable PR that would otherwise be mergeable
+if it contained the lean row and could prove it stays below 20 GB in Stage 7 for the 257 file
+dataset. And then implement the lean row to do just that as the final piece to land before
+actually merging the PR."*
+
+Two phases, in this order:
+
+1. **Make THIS PR stable** - every review finding fixed or dropped, nothing filed, all gates
+   green. The bar is "mergeable except that it does not yet contain the lean row."
+2. **Then the lean row**, as the last commit before merge, with a MEASURED acceptance
+   criterion: **Stage 7 below 20 GB on the 257-file CHS dataset**.
+
+The criterion is what makes the lean row done rather than written. Today's measured baseline on
+the same rig is `stage7-pool` **33.06 GB** (down from 40.23 GB), so the lean row has to take
+roughly another 13 GB off. The spec's 88-byte row projects a 12.1 GB pool against today's
+37.5 GB fat-row equivalent, which clears 20 GB with margin - but the number to report is the
+probe, not the projection.
+
+Do NOT start the lean row on low context: it is a 48-file refactor that carries the
+`ModifiedSequence` type with it, and a half-applied one leaves the tree neither shape.
+
+**Remaining before phase 1 is done:**
+* #8 - the streaming half is dead AND would read first-pass q-values (see above). Decide: make
+  it correct with a test that exercises `LoadFile`, or remove it and rebuild it with the lean
+  row, which is the only consumer that will make it live.
+* #6, #7, #9, #14, #15 - unverified.
+* Assertions at the two post-resolution sorts, now that the reader fix makes them hold.
+* `Test-PerfGate` (needs `-TestBaseDir D:\test\osprey-runs\_crossimpl-base`), and cross-impl on
+  Astral.
