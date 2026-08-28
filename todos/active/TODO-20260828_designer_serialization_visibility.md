@@ -80,14 +80,33 @@ Classified individually against the actual `.Designer.cs` assignment:
       `IonMobilityFilteringUserControl` (3), `AvailableFieldsTree.CheckedColumns`,
       `BindingListSource.NewRowHandler`, `SequenceTree.LockDefaultExpansion`,
       `WindowThumbnail.ProcessId`
-- [x] **14 given `[DefaultValue]`** - genuine design-time settings, default verified
-      against the actual field initializer / child-control default:
-      `ChooseViewsControl` (6), `DendrogramControl` (2), `NavBar` (2),
-      `CustomTextProgressBar` (2), `MsGraphExtension` (1),
-      `ZedGraphControl.ScrollGrace` (1)
-- [x] **1 given `[DesignerSerializationVisibility(Visible)]`** -
+- [x] **14 given `[DefaultValue]`** - later re-triaged, see "Attribute choice
+      policy" below. Final split is **10 `Visible`** (`ChooseViewsControl` (6),
+      `DendrogramControl` (2), `CustomTextProgressBar.DisplayStyle`,
+      `NavBar.ShowViewsButton`) and **4 kept as `[DefaultValue]`**
+      (`NavBar.BindingListSource` = null, `CustomTextProgressBar.CustomText` = null,
+      `MsGraphExtension.PropertySheetVisibilityPropName` = null,
+      `ZedGraphControl.ScrollGrace` = 0.0)
+- [x] **`[DesignerSerializationVisibility(Visible)]`** -
       `AlphaColorPickerButton.SelectedColor`, whose default
-      (`Color.FromArgb(0, Color.Empty)`) is not expressible as a constant
+      (`Color.FromArgb(0, Color.Empty)`) is not expressible as a constant, plus
+      `TreeViewMS.AutoExpandSingleNodes` (see reversal below)
+
+### Attribute choice policy
+
+Established by Nick during review; applies to any future WFO1000 fix:
+
+- **`Hidden`** - transient runtime state that must never reach `.designer.cs`.
+- **`Visible`** - a legitimate design-time property. This is the right answer
+  whenever the point is merely to suppress the warning on a real designer
+  property: it pins the value into `.designer.cs` on every host form, so
+  **changing the default later cannot silently change existing forms**.
+- **`[DefaultValue(x)]`** - only when the default is so obvious it would never
+  change *and* serializing it would be pure noise (e.g. `null` for a
+  reference-typed property always wired up in code).
+
+An existing explicit `[Browsable(true)]` is a deliberate signal that someone
+wanted the property in the designer - evidence for `Visible`, not dead code.
 
 ### Phase 3: stale designer assignments ✅
 
@@ -124,6 +143,36 @@ Classified individually against the actual `.Designer.cs` assignment:
       `TestVolcanoPlotFormatting`, `TestFilesTreeForm`,
       `TestSequenceTreeExpansion`, `TestDocumentGrid`
 
+### Phase 5: hide them from the Properties window ✅
+
+`DesignerSerializationVisibility.Hidden` stops code generation but does **not**
+remove a property from the VS Properties window - `PropertyDescriptor.IsBrowsable`
+stays `true` (verified with a `TypeDescriptor` probe). Only `[Browsable(false)]`
+does that, which is why `FormEx`, `TreeViewMS`, `LiteDropDownList` and 43 other
+sites already pair the two. None of the 792 new attributes did.
+
+Scoped per Nick to types that actually show up in the Forms Designer, classified
+by resolving each type's real base chain (`wfoclassify`):
+
+- [x] **133 UserControl** + **22 Control** + **14 Form-that-is-a-base-class**
+      (`BaseFileDialogNE`, `DataboundGraph`, `DocumentGridForm`, `LongWaitDlg`,
+      `PublishDocumentDlgBase`) - `[Browsable(false)]` added, house order
+      (`Browsable` first)
+- [x] **619 leaf Forms - deliberately skipped.** Not worth the churn.
+- [x] 3 beyond the literal rule but genuinely grid-visible:
+      `BindingListSource.NewRowHandler` (component tray),
+      `BoundComboBoxColumn.ColumnPropertyDescriptor` and
+      `ColumnLimitExceededColumn.ColumnsNotShownCount` (the DataGridView column
+      collection editor is a property grid)
+- [x] Checked the runtime risk first: `[Browsable(false)]` is honoured by
+      `TypeDescriptor`, and `SortableBindingList<T>.GetShape()` really does filter
+      on `BrowsableAttribute(true)` - but every `T` in the tree is a data/row type,
+      never a control. Unfiltered `TypeDescriptor.GetProperties` returns
+      non-browsable properties anyway.
+- [x] Moved the `// ReSharper disable once ConvertToConstant.Global` directive in
+      `CommandShell.cs` back adjacent to its property; the new attributes had
+      pushed it two lines away.
+
 ## Reversed on review
 
 - **`IonMobilityFilteringUserControl` (6 designer lines) - now deleted.** These
@@ -144,6 +193,20 @@ Classified individually against the actual `.Designer.cs` assignment:
   The original note also contradicted itself: it justified keeping designer
   output while marking the very properties `Hidden`, which is the instruction
   that stops the designer regenerating that output.
+
+- **`TreeViewMS.AutoExpandSingleNodes` - now `Visible`, designer lines restored.**
+  First marked `Hidden`, and its pre-existing explicit `[Browsable(true)]` was
+  misread as dead code. It was the opposite: someone had deliberately opted the
+  property into the designer. Per the policy above it is a real designer property,
+  so it is now `[Browsable(true)]` + `[DesignerSerializationVisibility(Visible)]`,
+  and the two `AutoExpandSingleNodes = true` lines deleted from
+  `SequenceTreeForm.Designer.cs` and `FilesTreeForm.Designer.cs` were put back -
+  `Visible` means the designer writes them, and pinning the value is the whole
+  point. It was the only one of the 792 carrying an explicit `[Browsable(true)]`.
+
+  The nearest thematic sibling, `SequenceTree.LockDefaultExpansion`, was
+  re-checked and correctly stays `Hidden`: `SequenceTreeForm.cs:37` sets it to
+  `restoringState` and clears it two lines later, so it is a transient guard flag.
 
 ## Deliberately NOT done
 
