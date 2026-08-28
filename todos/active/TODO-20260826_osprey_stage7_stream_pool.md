@@ -2180,3 +2180,252 @@ linear), and whose measured `peak_paged` is ~53 GB **at 257 files**. Most of tha
 Server-GC committed-but-free rather than retained, so it is tunable - but tunable is a
 hypothesis. Whether 1000 files fits in 64 GB is UNANSWERED and needs the 257-file run plus a
 Stage-5 projection before anyone plans around it.
+
+## Pass-2 files are now written unconditionally - COMMITTED `b9075eb99a`, `-Dataset All` 56/56
+
+Gated on the FULL four-dataset set, not Stellar: the three `mode7` diagnostics-regeneration
+legs are the only coverage the `--task ModelDiagnostics` work has, and they do not run on
+Stellar. Every `-Dataset Stellar` gate in this session exercised ZERO `DiagnosticsOnly` paths.
+
+## Pass-2 files are now written unconditionally (Brendan, 2026-08-27)
+
+*"We need to stop conditionally writing second-pass files. Just write the same values again,
+if need be... It is always an ambiguous signal. Is the file not there because it was
+'unnecessary' or did processing fail during writing and the FileSaver just never got
+committed?"* - and this had been said repeatedly before.
+
+Rule written up team-wide in **ai/docs/osprey-development-guide.md**, "Never conditionally
+write an output artifact" (loaded by `/osprey-development`). Precedents it now cites so the
+argument is not had again: `.scores-reconciled.parquet` (`WriteUnchangedReconciled`), the
+Stage 6 reconciliation dump, the 1st-pass `.fdr_scores.bin` (`FdrProjectionSinks.OnFinish`
+writes a 0-record file), and now the 2nd-pass one.
+
+### Producers - the file is written or the run failed
+
+* `SecondPassFdrTask.Outputs()` declares the 2nd-pass sidecars **unconditionally**. Gating the
+  declaration on `AnyReconciledParquet` had made absence a supported RESUME state.
+* `ComputeAndPersist` always runs. `AnyReconciledParquet` (Rust's `total_rescored > 0`) moved
+  inside it and now gates only the RECOMPUTE - what values go in the file, never whether the
+  file exists. A cohort with no rescore work writes the standing values, which are its
+  second-pass answer.
+* `Pass2SidecarWriter` lost its "already on disk, skip" branch. Pass 2 is deterministic, so
+  rewriting is writing the same bytes again.
+* The frozen competition's experiment-q patch no longer skips files the writer skipped, and a
+  write failure now lands in the same reported list as a patch failure.
+* `PatchPass2ProteinQvalues` lost `if (!File.Exists) continue` ("legitimately has no 2nd-pass
+  sidecar"). Absent and unusable are one reported fault.
+
+**ORDERING TRAP, found before it bit.** On a resume the entries hold pass-1 values while the
+on-disk sidecar holds a previous run's pass-2 ones, and the write block runs BEFORE the reload.
+An unconditional rewrite there would have downgraded good output. Fixed by ordering, not by a
+condition: `ReloadPass2Sidecars(..., "pre-write")` runs when this run did not recompute, so the
+rewrite puts the same bytes back. mode2 + mode4 are the legs that prove it.
+
+The ONE surviving skip is `--task ModelDiagnostics`, which creates no absence (it runs over a
+completed run) and whose mtime side-effect mode 7 exists to catch. It now LOGS its count rather
+than leaving an unexplained gap between the file count and the write count.
+
+### Gates - the harness half of the same ambiguity
+
+The producers were only half of it. Three gates had been taught to accept absence, which is how
+the design survived review:
+
+* **regression mode 1c** skipped when it found no 2nd-pass sidecars ("Stage 6 rescored
+  nothing"), so a run that wrote NOTHING reported SKIPPED rather than red. Now asserts the real
+  invariant: `$pass2Sidecars.Count -ne $inputs.Mzmls.Count` is a hard failure.
+* **regression HPC phase 4 staging** had `if (Test-Path $pass2) { Copy-Item ... }`. Dead code -
+  `--task PerFileRescoring` sets `NoJoin`, which excludes `SecondPassFdrTask`, so phase 3 never
+  writes one; two comments claimed it did. Worse than dead: had it fired it would have handed
+  phase 4 a current sidecar, phase 4 would have skipped computing its own, and mode 3 would have
+  become a test of a file copy.
+* **`Test-Snapshot.ps1` had FOUR `symmetric absence -> PASS` branches**, including one over
+  `.2nd-pass.fdr_scores.bin` itself. All removed. That rule and the C# consensus-dump elision
+  propped each other up: the writer skipped because the comparator complained, and the
+  comparator accepted because the writer skipped.
+
+### The consensus dump, and the decision that started this
+
+`Stage6Planner` fired `cs_stage6_consensus.tsv` only on `consensus.Count > 0`, from
+`TODO-20260508_osprey_sharp_audit.md` item 3. Now unconditional (header-only when empty), like
+the reconciliation dump beside it. Checked before changing it: **no live cross-impl gate
+compares this dump** - `Compare-EndToEnd-Crossimpl.ps1` does not, only the archived
+`Compare/archive/Test-Regression*.ps1` did - and its one live consumer, `Test-Snapshot`, is
+same-impl. The Rust-elision justification no longer applies.
+
+That completed TODO now carries a SUPERSEDED note at item 3, because the wrong decision was
+recorded as a fix and every later session reading it found the ambiguity endorsed.
+
+### `--task ModelDiagnostics` was NOT read-only (found 2026-08-27 by Brendan's question)
+
+Brendan asked whether that mode "may or may not write files that impact the 4-task
+processing pipeline". It may. `SecondPassFdrTask.Run` calls `UpgradeReconciledParquets`
+BEFORE every `DiagnosticsOnly` check in the method, and the upgrader had no guard of its own:
+
+```csharp
+if (UpgradeReconciledParquets(perFileEntries, perFileParquetPaths, libraryById, ctx))
+    return StopAfterUpgrade(ctx);
+```
+
+On any directory whose reconciled parquets predate the survivors-subset format
+(`osprey.reconciled != RECONCILED_SURVIVORS`), a diagnostics regeneration **rewrote every one
+of them in place** via `File.Replace` - the 266 -> 47 GB conversion. And because the upgrade
+returns true, `Run` then took `StopAfterUpgrade` and exited, so the run **also never produced
+the report it was asked for**. The mode wrote what it promised not to and skipped what it
+promised to.
+
+Every other writer in that method was already guarded (blib, sidecars, protein-q patch, the
+two report writers) and `Outputs()` returns nothing, so no validity sidecars are stamped. **The
+upgrader is THIS PR's own bug** - introduced by `1e282f8a29` (2026-08-26, branch-only), so it
+never shipped. `StopAfterUpgrade`'s message also stopped naming `--task SecondPassFDR`
+specifically and now mentions the report.
+
+**Resolution: BLOCK, not work around** (Brendan). `--task ModelDiagnostics` now REFUSES a
+directory holding pre-survivor-subset reconciled parquets, naming the stale files and telling
+the operator to re-run the analysis. `StaleReconciledParquets` is shared with the upgrader so
+the refusal and the rewrite cannot drift on what "stale" means.
+
+The tempting alternative was to skip the upgrade and produce the report anyway, because a
+pre-#4486 parquet is full-shape and row-parallel - row position IS the Stage 4 ordinal - so the
+report would have been correct. **That is the trap**: *"the true danger of the 'well, it works,
+so might as well leave it enabled' call. If you want it to be guaranteed to stay working, then
+you need to include it in your tests. So, while it seems free at that moment, it actually has a
+non-zero cost for something that isn't important."* Reading old parquets is deliberately NOT
+part of this mode's contract, so there is no second read path to test and keep working. The
+code comment states the decision rather than explaining that the old path would have worked -
+such a comment is an invitation to re-enable it.
+
+**Why no gate caught it - worth keeping.** regression **mode 7** is exactly the right gate:
+it fingerprints the run dir, re-enters with `--task ModelDiagnostics`, and fails on
+*"regeneration touched an artifact other than the report"*. Two reasons it stayed green:
+
+1. it cannot reach the condition - the harness's straight-through run always writes
+   CURRENT-format reconciled parquets, so the upgrade is a no-op there; and
+2. **mode 7 does not run on Stellar at all.** It is guarded on the dataset spec's
+   `ModelDiagnostics` flag, which `Stellar` does not carry. Every `-Dataset Stellar` gate in
+   this session - seven of them - exercised ZERO `DiagnosticsOnly` paths.
+
+So a Stellar-only gate is not sufficient for a change that touches `DiagnosticsOnly`. Use
+`-Dataset All` for those.
+
+## ARTIFACT-LAYOUT FOLLOW-ONS, from Brendan's questions (2026-08-27)
+
+Not for this PR - each changes what an earlier stage writes and wants its own byte-identity
+gate - but bigger than anything left in it.
+
+### The scalar sidecars are now the LARGEST artifact class
+
+The 82% reconciled-parquet reduction inverted the ratio:
+
+| artifact, 257-file CHS | size |
+|---|---|
+| 1st-pass `fdr_scores.bin` (all runs) | **52.3 GB** (768.5 M x 68 B) |
+| reconciled parquet | **47.4 GB** (was 266.2) |
+| 2nd-pass `fdr_scores.bin` (all runs) | 9.3 GB (137.0 M x 68 B) |
+
+They were 20% of the parquet before the subset change and are 110% after it.
+
+### `fdr_scores.bin` is uncompressed fixed-width, and the reason for that is expiring
+
+32-byte header + N x 68-byte little-endian records, written with `BinaryWriter.Write(double)`.
+No compression, and it CANNOT be compressed without a format change: readers validate
+`fileLen == HeaderLength + count * RecordLength` as the integrity check. The format exists as a
+**byte-parity mirror of Rust's** `write_fdr_scores_sidecar` (`OSPREY_CROSS_IMPL_FDR_SIDECAR_OUT`
+hook). With Rust discontinued and the parity gate heading for removal, that constraint goes.
+Checked and NOT an objection: the two-phase column patches stream source -> temp and promote
+via `FileSaver`, so they never seek to fixed offsets and lose nothing to a different format.
+
+### Split the sidecar BY SCOPE - the real win (Brendan)
+
+Four of the eight doubles are per-entry constants, not per-run values: experiment precursor q,
+experiment peptide q, protein q, and the experiment aggregate. `entry_id` is unique per file
+(`DeduplicatePairs`), so they are stored once per run, in every run the precursor appears in -
+O(files x entries) for data that is O(distinct entries).
+
+**Parquet compression does NOT fix this** (a wrong claim I made and Brendan corrected): parquet
+encodes WITHIN a file, and the replication is ACROSS the 257 per-run files. Within one file
+experiment precursor q and the aggregate appear exactly once each - nothing to encode. Only the
+peptide- and protein-level columns repeat intra-file, from multi-charge peptides and
+multi-precursor proteins.
+
+| file | contents | 257 files |
+|---|---|---|
+| per-run `fdr_scores.bin` | entry_id, score, run precursor q, run peptide q, PEP | 36 B x 768.5 M = **27.7 GB** |
+| ONE experiment-wide `fdr_scores.bin` | entry_id, experiment precursor/peptide q, protein q, aggregate | 36 B x <=12.4 M = **~0.44 GB** |
+
+~46% off the total, and the experiment-scope half stops scaling with file count.
+
+### Consequence: move the run-scope work back into PerFileRescoring
+
+With the split, `transfer` reads the RUN-level file in PerFileRescoring and only the
+EXPERIMENT-wide file in SecondPassFDR. Checked: everything `TransferPerRunQ` needs is already
+in a phase-3 worker - the frozen 1st-pass model rides the phase2 -> phase3 -> phase4 relay, the
+reconciled features are computed there, and the file's own 1st-pass sidecar is staged. It sits
+in Stage 7 by history, not structure. Then Stage 7 reads ~0.44 GB + the reconciled parquet and
+nothing per-run.
+
+Generalizes, though this part needs real thought rather than assertion: the run-level half of
+`protein-compact`'s competition is also per-file work, and its stratum is a whole-run product
+that already exists BEFORE Stage 6. If that moved too, Stage 7 would keep only what genuinely
+needs every run at once - the experiment-scope roll-up, protein FDR, and the blib.
+
+### The scope split retires BOTH patch passes - do not "patch back per file" (Brendan)
+
+An earlier sketch in this file had `PerFileRescoring` write the run-scope columns and the join
+PATCH the experiment-scope ones back into every per-run file. **Wrong shape**, for three
+reasons, and the third is the one that decides it:
+
+1. A placeholder column is a **written-but-not-finished** artifact - a record whose experiment
+   columns are placeholders cannot be told from one whose patch failed. That is the same
+   ambiguity we removed from these files' EXISTENCE, one level down, inside them.
+2. It gives one artifact **two writers in two tasks**, which the resume model does not want -
+   each task owns its outputs. It is why the patch has to re-validate the header at all.
+3. It keeps the ~47% duplication permanently AND pays to rewrite it. The rewrite is expensive
+   BECAUSE of the duplication: streaming 68 B records to update 32 B of per-entry constants
+   that should not be in a per-run file.
+
+**Both existing patch passes are full rewrites (`FileSaver` source -> temp -> replace) running
+in JOIN stages**, and exist only because experiment-scope values live in per-run files:
+
+| join-stage I/O to back-fill experiment-scope values | 257 files |
+|---|---|
+| `FirstPassFDR` rewrites every 1st-pass sidecar (`PatchProteinQvalues`) | 52.3 GB read + 52.3 GB written |
+| `SecondPassFDR` rewrites every 2nd-pass sidecar (`PatchPass2ProteinQvalues`) | 9.3 + 9.3 GB |
+| **total, serial, in the bottleneck** | **~123 GB** |
+
+Storage, for comparison: 61.6 GB today vs **33.5 GB** split (1st-pass 27.7 + 0.44,
+2nd-pass 4.9 + 0.44). So the split saves ~28 GB stored and ~123 GB of un-parallelizable I/O.
+
+**The rule: experiment-scope values never live inside per-run files.** Four artifacts, each
+with exactly ONE writer:
+
+| file | scope | writer |
+|---|---|---|
+| `<stem>.1st-pass.fdr_scores.bin` | entry_id, score, run precursor q, run peptide q, PEP | `PerFileScoring` |
+| `experiment.1st-pass.fdr_scores.bin` | entry_id, exp precursor/peptide q, protein q, aggregate | `FirstPassFDR` |
+| `<stem>.2nd-pass.fdr_scores.bin` | same run-scope set | `PerFileRescoring` |
+| `experiment.2nd-pass.fdr_scores.bin` | same experiment-scope set | `SecondPassFDR` |
+
+`PatchProteinQvalues` and the `PatchExperimentValues` added on this branch both DISAPPEAR - the
+join writes its own file instead of editing everyone else's. **`PatchExperimentValues` is
+therefore transitional, not the intended end state**: it is the right shape while the per-run
+file is the only place those values can go, and the wrong one after the split.
+
+To check, not assume: the compaction protein-rescue gate reads `experiment_protein_qvalue`
+during per-file hydration, so an HPC worker needs the experiment-wide file staged to it. The
+pattern exists - the 1st-pass model sidecar is already relayed to every phase-3 worker.
+
+### Also still open from the same thread
+
+* Brendan's earlier idea: write the run-scope scalars as COLUMNS in the reconciled parquet
+  during PerFileRescoring, so Stage 7 opens one file instead of two. Qualifications: serves
+  `protein-compact` only (`transfer`/`transfer-compete` need pre-compaction rows); removes a
+  READ, not a write (the compaction protein-rescue gate reads the 1st-pass sidecar
+  pre-compaction, and HPC workers rehydrate from it); and the writer must emit PASS-1
+  (pre-`ResetScores`) values.
+* The frozen path streams the 1st-pass sidecar **2-3 times per file** (seeder, `ReadScalars`,
+  `StashOffStratumPass1ExperimentQ`). All three want fields off the same records and the
+  apparent ordering dependency is not real - `wanted` tests `ov != scs[i]` where `ov` comes
+  from `fileScores`, which is built BEFORE the read - so one pass can do all three. 3x -> 1x on
+  the largest artifact in the run.
+* Drop the five blob columns: 54% of the reconciled artifact, never read back out of a
+  reconciled parquet. 47 -> ~22 GB.

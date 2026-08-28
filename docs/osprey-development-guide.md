@@ -771,6 +771,42 @@ science explanation, not just a green build:
   -- promote that too if plotting becomes routine; the numeric gate does
   not need it.
 
+## Do the work in the PerFile* tasks, not the JOIN tasks
+
+The pipeline alternates: `PerFileScoring` (per file) -> `FirstPassFDR` (join) ->
+`PerFileRescoring` (per file) -> `SecondPassFDR` (join). **Push every step into the per-file
+tasks that can go there, and leave the join tasks doing only what genuinely needs every run at
+once.**
+
+**Why, wall clock**: a per-file task fans out across HPC workers, so its cost is divided by the
+worker count. A join task does not fan out at all - it is the bottleneck. The same minute is
+nearly free in `PerFileRescoring` and fully on the critical path in `SecondPassFDR`.
+
+**Why, memory - and this is the one that bites**: work placed in a join NATURALLY acquires
+O(files) structures, because the whole run is sitting there to be indexed. Work placed in a
+per-file task cannot: one file is all it has. Issue #4486's 40 GB survivor pool is not a memory
+bug that grew inside Stage 7 - it is a work-placement bug that could only ever have shown up as
+memory. Frozen-model scoring and a WITHIN-FILE target-decoy competition were being done in the
+join stage, and the pool is what that costs.
+
+**The test for where a step belongs**: does it need more than one file at a time?
+
+* **No** -> it belongs in the per-file task. Say so even if it is currently elsewhere.
+* **Yes, but it is a fold over per-file results** (best-per-key, a distinct set, a max) -> the
+  per-file task emits its contribution, the join merges. The join's resident cost is then
+  O(distinct), not O(files x entries).
+* **Yes, genuinely** -> the join. Experiment-scope competition, parsimony, the blib.
+
+Measured cost of getting this wrong, Stage 7 at 257 CHS files: it re-read **47.4 GB** of
+reconciled features that `PerFileRescoring` had just held in memory and dropped; it streamed
+the 1st-pass scalar sidecars (**52.3 GB**) two to three times; and it held **40 GB** resident.
+None of that was FDR being expensive. No SVM training happens in Stage 7 at all.
+
+Before adding a step to a join task, check whether its inputs are already staged in a per-file
+worker. `regression.ps1`'s HPC-chain staging is the authoritative list of what a phase-3 worker
+already holds - the 1st-pass sidecar, calibration, reconciliation JSON, and the 1st-pass model
+sidecar (which the protein-compact stratum rides inside).
+
 ## HPC split CLI flags
 
 Since the 2026-04-19 HPC split sprint, both tools expose CLI flags
@@ -1618,11 +1654,42 @@ EOF
   hundreds of ULPs apart in the high-precision range, or bit-identical
   yet drift to 1 ULP if a downstream `min` or `max` chooses differently.
 
+## Never conditionally write an output artifact
+
+**A file is written or the run failed. There is no third state.** Never skip a write
+because it would be "unnecessary" - no rows, no work done, or the same values as last
+time. Write the same values again, or a header-only TSV / 0-record binary.
+
+**Why**: a missing file is an ambiguous signal. Nothing downstream can tell "this run had
+nothing to write" from "the write failed and the `FileSaver` never committed". The
+skipped files are usually the small ones, so the saving never pays for the ambiguity.
+
+- Keep any gate on the **computation** (e.g. Rust's `total_rescored > 0`) and let it
+  decide what values go in the file, **never whether the file exists**.
+- Declare the artifact **unconditionally** in `Outputs()`. Gating the declaration makes
+  absence a supported resume state, and every consumer then grows a silent skip for it.
+- In consumers, an absent artifact is a reported fault, not a `continue`.
+- **Ordering trap**: on a resume the in-memory values can be staler than the file, so
+  reload before an unconditional rewrite - otherwise "write it again" downgrades good
+  output. The rewrite is safe-by-determinism only once both sides hold the same values.
+
+Precedents, so this does not get re-argued: `.scores-reconciled.parquet`
+(`WriteUnchangedReconciled`), the Stage 6 reconciliation dump (`Stage6Planner` - "fires
+unconditionally ... so the skipped / empty paths still produce a header-only TSV"), the
+1st-pass `.fdr_scores.bin` (`FdrProjectionSinks.OnFinish` writes a 0-record file for a
+file with no scored rows), and the 2nd-pass `.fdr_scores.bin` (2026-08-27).
+
+The counter-example to learn from is `TODO-20260508_osprey_sharp_audit.md` item 3: the
+cross-impl comparator flagged an "asymmetric absence", and that session deleted the FILE
+instead of fixing the COMPARATOR - then taught `Compare-DumpSha` to accept symmetric
+absence, which entrenched it and is why the instruction had to be given again.
+
 ## Critical rules
 
 - **Byte-identical dump preservation** when touching diagnostic
   code. Cross-impl bisection depends on it. `diff` before/after
   every dump extraction.
+- **Never conditionally write an output artifact** - see the section above.
 - **`cargo clippy -- -D warnings`** must pass before pushing.
 - **Parity gate after any scoring/calibration change**: Stellar +
   Astral `Test-Features.ps1` at ULP.

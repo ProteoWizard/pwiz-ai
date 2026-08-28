@@ -624,6 +624,16 @@ config.InputFiles (which is empty in --input-scores mode).
    this, single-file C# emitted a header-only consensus.tsv and
    Test-Regression flagged it as asymmetric absence.
 
+   > **SUPERSEDED 2026-08-27 - this was the wrong fix, recorded here so it is not
+   > repeated.** The comparator flagged an asymmetry and this session deleted the FILE
+   > instead of fixing the COMPARATOR, then hardened `Compare-DumpSha` to accept
+   > symmetric absence, which entrenched it. A missing file cannot be told apart from a
+   > write that failed and never committed. `Stage6Planner` now fires the dump
+   > unconditionally so skipped / empty paths still produce a header-only TSV, and the
+   > same rule has since been applied to `.scores-reconciled.parquet` and both
+   > `.fdr_scores.bin` passes. See "Never Conditionally Write an Output Artifact" in
+   > ai/CRITICAL-RULES.md.
+
 **Result on Stellar 1-file**:
 - stage1to4 PASS, stage5 PASS, **stage6 PASS** (all 3 dumps
   byte-identical: multicharge / reconciliation / rescored).
