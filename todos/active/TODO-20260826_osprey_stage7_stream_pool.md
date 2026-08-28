@@ -3273,3 +3273,107 @@ percentile table got wrong. The text summary is a supplement to the picture, not
 * Stage 6 has room to absorb the pass-2 move (~40 MB against a per-file transient).
 * **Stage 7 still holds a 37.50 GB pool and still dominates the run's sustained memory.** The
   flip is exactly the work that has NOT been done yet.
+
+## WHY Stage 7 costs as much as Stage 5 for 1/6 the rows (Brendan's question, 2026-08-28)
+
+*"It is still not clear to me why Stage 7 requires the same amount of memory to perform an FDR
+calculation for 1/6th as many rows as Stage 5."*
+
+It is not holding more information. It is holding the same information in a representation built
+for Stages 1-6.
+
+| | rows | per row | total |
+|---|---|---|---|
+| Stage 5 on `FdrProjection` (readonly struct, q routed through `IFdrOutputSink`) | 768,549,137 | **32 B** | ~24.6 GB |
+| Stage 7 on `FdrEntry` (class) | 137,034,004 | **274 B** measured | **37.5 GB** |
+
+5.6x fewer rows, 8.6x more bytes each. The 274 B comes from 37.5 GB / 137,034,004 and decomposes:
+
+| | bytes | needed in Stage 7? |
+|---|---|---|
+| object header + `List<>` slot | 24 | no - the cost of being a class |
+| `EntryId`, `ParquetIndex`, `IsDecoy`, `Charge`, `ScanNumber` | 16 | partly |
+| 14 doubles | 112 | ~9; `Pep`, `ExperimentAggregateScore`, `ExperimentProteinQvalue`, `BoundsSnr`, `CoelutionSum` go to the sidecar and are never read back |
+| 7 reference fields | 56 | **6 are ALWAYS null** - the stub loader logs "features not loaded - not read on this path" |
+| `ModifiedSequence` string | ~72 | value yes, per-row instance no |
+
+**~144 B of the 274 B is dead weight in this stage - about 19.7 GB of the 37.5 GB.** 48 B of null
+blob pointers that exist because Stage 6 needs them, ~72 B of duplicated strings, 24 B of class
+overhead.
+
+So the lean row is not an invention: it is what Stage 5 already did, and what Brendan called for
+on 2026-08-27 ("Stage 7 should use Stage 5's machinery").
+
+## The pool is NOT FDR-counting memory (Brendan's merge-sort question)
+
+*"FDR calculation is done by counting from the best scoring entry to the worst. Why does it all
+need to be in memory at the same time? ... you could be streaming them in a 257 element
+merge-sort."*
+
+For **Stage 7 the counting is already bounded.**
+`StreamingFdr.ComputeFullPopulationPrecursorFdrStreaming` reads one file at a time and keeps only
+O(distinct base_id) state - `bestTarget`/`bestDecoy` (~508 K under protein-compact) and `minRunQ`
+per survivor - and its own comment says *"no (file, entry_id)-keyed result map is ever built"*.
+The frozen path also avoids per-record q storage already: `BuildScoreToQTable` bins score->q into
+1,000 bins and `LookupQForScore` assigns from that.
+
+**The 37.5 GB is held for the CONSUMERS after the competition** - the blib peptide gate, the
+precursor gate, `CollectPassingEntries`, the second-pass protein FDR, and the per-replicate
+report. Five or six independent folds, each walking all 137 M survivors. That is why naively
+removing the pool costs ~10 whole-run walks.
+
+**So sortedness is not Stage 7's blocker.** Those folds need IDENTITY, not score order:
+`ModifiedSequence`, `IsDecoy`, charge, RTs, area. `libraryById` has sequence and decoy status by
+entry_id, and RTs/area are needed only for the ~11.7 M PASSING rows - so the sidecars can be
+streamed in stored order, joined against the library, and the pool never exists. No sort needed.
+
+**Where the merge-sort idea DOES bite is Stage 5**, which genuinely holds 768 M rows for a global
+score-ordered walk (24.6 GB). A 257-way heap merge over score-sorted sidecars would make that
+O(k) instead of O(N). Costs: the sidecars are currently in canonical entry order, not score
+order, and the q write-back would have to use the score->q table rather than per-record storage.
+Worth its own investigation - it is the larger population.
+
+## Brendan on the shape of the debt
+
+*"We have created code that depends on whole set iteration 10 times in separate classes without
+designing a way that the whole set doesn't need to be in memory for every consumer. I guess we
+should consider ourselves lucky they rely on so little that we can construct a lean row that
+works for all of them."*
+
+Exactly the finding of the consumer audit: ten independent whole-set iterations, no seam for
+feeding a consumer rows instead of handing it a collection. The genuinely maintainable fix is a
+single-pass listener architecture; the lean row is the pragmatic path, and it only works because
+the audit showed those ten consumers read thirteen fields between them.
+
+## The lean row spec (designed, NOT implemented - no consumer yet)
+
+A mutable `struct FdrRow : IFdrRow`, 88 B: `EntryId` (4) + `ModifiedSequence` ref (8) + `Charge`
+(1) + `IsDecoy` (1) + 2 pad + 9 doubles (`Score`, both run q, both experiment q, `ApexRt`,
+`StartRt`, `EndRt`, `BoundsArea`). 137 M x 88 B = **12.1 GB** against 37.5.
+
+* **Mutable, and held as `FdrRow[]` per file, not `List<FdrRow>`** - the pre-blib re-clamp raises
+  the two experiment q-values in place, an `IReadOnlyList` indexer returns a COPY and the write
+  is silently discarded, and `CollectionsMarshal.AsSpan` is .NET 5+ while this assembly also
+  targets net472.
+* **`ModifiedSequence` must be a canonical instance**, or the 72 B/row goes straight back.
+
+Not committed: a public type with no consumer is speculative API. Implement it with its
+consumers in one change.
+
+## Interning landed - and a RIG finding that matters more
+
+Interning `ModifiedSequence` at the stub loaders should take ~9.9 GB off the pool (137 M x ~72 B
+collapsed to a few million distinct). `ParquetScoreCache.LoadFdrStubsFromParquet` gained an
+optional caller-owned `sequencePool`; `FirstPassSurvivorLoader` and
+`RescoreHydration.HydrateForRescore` each own one spanning all their files. Caller-owned rather
+than `string.Intern`, which never releases.
+
+**The rig finding**: the first measurement showed `stage7-pool` = **40.23 GB, unchanged**, because
+the change was on `FirstPassSurvivorLoader` and the `--task SecondPassFDR` path does not use it -
+`stage7-inherited` was ALSO 40.23 GB, i.e. the pool was already built before Stage 7 started, by
+`PerFileScoringTask.Rehydrate` -> `HydrateCompactedStreaming`.
+
+**So the 30-minute `--task SecondPassFDR` loop only measures pool changes that cover the REHYDRATE
+path.** The full in-process run builds its pool in `BuildRescoredPool` via
+`FirstPassSurvivorLoader` instead. Any future pool work has to touch both, or be measured on the
+matching rig. That is worth more than the interning itself.
