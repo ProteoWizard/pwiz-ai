@@ -2836,3 +2836,109 @@ warnings.
 3. Split the sidecars by scope (1st pass first - it is 85% of the bytes), retiring both patch
    passes.
 4. Stage 7's remaining consumers stream from the sidecars + library; the pool never exists.
+
+## NIGHT SESSION 2026-08-27/28 - the move is fully decomposed, and needs NO new global relay
+
+### The 257-file Stage 5-7 run is the night's headline
+
+Launched 21:42:44, pid 25996, exe `_bin\26.1.1.239-stage57-20260827`, out dir
+`chs-257files-libdecoy-r1.0-protein-compact-s57base257`, launcher
+`ai/.tmp/sessions/20260827-stage7-leanrow/launch-stage57-257.ps1`.
+
+**This is the first Stage 5-7 measurement at 257 files on this branch.** Every prior 257-file
+number came from `--task SecondPassFDR` and is therefore blind to Stage 6 - which is precisely
+the stage the architecture moves work INTO. The baseline `p0059_0060_0061` ran this exact shape
+in 10h14m.
+
+The rig, for the record, because it answers "how do we test this" durably:
+
+* **`-LinkFrom` with NO `-Task`.** `$STAGE_ARTIFACTS`' `$upTo` defaults to `FirstPassFDR`, so it
+  hard-links only the Stage 1-4 artifacts (`.scores.parquet`, `.calibration.json` + their task
+  sidecars - 1028 files, 0 missing), then the pipeline runs normally with `-i` and per-file
+  resume skips Stages 1-4 because their outputs are present and valid. Confirmed by
+  `[TASK] FirstPassFDR:starting` as the first task line.
+* **`-Task FirstPassFDR` would be WRONG** - it is a single-stage HPC exit point, not "start here
+  and continue".
+* **No conversion step is needed**, and none should be invented.
+* The source `.raw` are GONE; only the 446 `.spectra.bin` remain. That is supported and
+  deliberate: `OspreyDatasetRun` synthesizes the path the source WOULD have had, because Osprey
+  never stats it and `SpectraCache` resolves from the input's DIRECTORY. Brendan: *"Keeping the
+  .raw files is no longer necessary once you have spectra.bin"*. Stage 6 REQUIRES the cache and
+  has no mzML fallback (`PerFileRescoreTask.cs:934-937`).
+* `OSPREY_VERSION_OVERRIDE=26.1.1.233` and `-LibraryDir target+decoy+entrapment-20260817` are
+  both mandatory - the first or the resume silently re-runs Stages 1-4 for hours, the second or
+  the run uses a different build of the same library file name (6,324,700 vs 6,175,389 entries).
+  Verified in the log: library loaded 6,175,389.
+
+**Oracle**: 5,079 protein groups | 45,724 library spectra | 11,745,026 passing entries |
+blib **725,458,944** bytes. NOTE the Stage-7-only reruns gave **725,467,136** - an 8,192-byte
+SQLite page difference between the two RIGS that predates this branch. Compare like with like,
+and treat the three counts as the robust oracle.
+
+### The move needs NO new global relay - correcting this file's own earlier claim
+
+The section above says a `PerFileRescoring` worker needs the global survivor entry-id set
+relayed to it (~50 MB), because a file can win a competition for an `entry_id` that is not one
+of ITS survivors but is a survivor elsewhere, and that win must still reach `minRunQ`.
+
+**The premise is right and the conclusion is wrong.** The filter exists only to decide what goes
+into `minRunQ`, which is a JOIN fold. So:
+
+* the worker emits run q for **every winner**, filtering nothing;
+* the join rebuilds the survivor id set by unioning `entry_id` over the run-scope 2nd-pass
+  sidecars **it already has to read**, and filters there.
+
+That leaves the worker's global inputs as the frozen 1st-pass model and `stratumBaseIds` - and
+**both already ride the phase2 -> phase3 -> phase4 relay** (they share the model sidecar;
+`Pass2FdrSidecar.ComputeAndPersist` reloads them together via `FirstPassModelIO.LoadFromAny`).
+Nothing new has to be staged.
+
+### The frozen scoring is FREE in the worker
+
+`PerFileRescoreTask.cs:1058`, at `WriteReconciledAndStamp`, `fdrEntries` still holds this file's
+post-rescore entries with `Features` populated - that is the writer's own "this row was
+rescored" sentinel, and `ReleaseRescoredPayload` runs only AFTER the write. So the worker scores
+with the frozen model straight from memory.
+
+Stage 7 today re-reads the reconciled parquet for exactly those features
+(`LoadReconciledFeaturesByScoreIndex`). The move deletes that read, per file, across the cohort.
+
+### The contribution artifact, bounded by the STRATUM not the population
+
+Measured, not estimated: the 257-file CHS run logs
+`competition CONSTRAINED to the 508769-base_id protein stratum`.
+
+| field | B |
+|---|---|
+| `base_id` | 4 |
+| best TARGET score | 8 |
+| best DECOY score | 8 |
+| winner run q | 8 |
+| presence flags | 4 |
+| | **32** |
+
+508,769 x 32 B = **16.3 MB/file**, **<=4.2 GB at 257 files**, and that is the hard ceiling - a
+real file observes only a fraction of the stratum. Against ~28 GB of storage and ~123 GB of
+join-stage rewrite that the scope split removes, this is not an argument against the move.
+
+`entry_id` need NOT be stored: a target's `entry_id` IS its `base_id`
+(`labels[i] = (eid & ~BASE_ID_MASK) != 0u`, so a target has no bits outside the mask) and a
+decoy's is `base_id | ~BASE_ID_MASK` - which is exactly how the join already reconstructs winner
+ids at `StreamingFdr.cs:392`.
+
+**It only gets expensive under `transfer-compete`**, which is unstratified, so its contribution
+is bounded by the file's whole pre-compaction population instead. protein-compact is the
+default; transfer-compete would want measuring before it is promised anything.
+
+### Enabling commits landed tonight, each gated Stellar 10/10
+
+| commit | what |
+|---|---|
+| `a700c1226a` | frozen 2nd pass reads each 1st-pass sidecar ONCE, not three times |
+| `f08059f824` | `IFdrRow` + generic q-value selectors - the contract Stage 7 reads a row through |
+| `f7a6e6d103` | `StreamingFdr` competition split into `CompeteOneFile` + `FoldFileContribution` |
+
+`f7a6e6d103` is the one that matters for the move: `CompeteOneFile`'s only inputs beyond one
+file's arrays are the frozen-model survivor scores, the survivor id set and the stratum - and
+per the correction above, two of those are already relayed and the third moves to the join.
+Relocating it is now a relocation, not a rewrite.
