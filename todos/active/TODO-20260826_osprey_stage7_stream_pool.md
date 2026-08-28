@@ -3615,3 +3615,29 @@ suspected part of the wall-time cost) and the typed `ModifiedSequence` is what m
 resolution safe to rely on. `ParquetScoreCache.cs` already says the apex-RT panel does exactly
 this: *"the modified sequence and charge behind the precursor identity are resolved from the
 library by entry id instead."*
+
+## Backlog: the perf A/B cannot see a regression that lives in master (2026-08-28)
+
+`pwiz-perfbase` was pinned at `f4de686450` (#4378) and has been moved to master
+`bd94e8a375` (#4616) - roughly two months of drift, closed so the gate measures this
+branch rather than the interval.
+
+The branch is **0 commits behind master**, so `Test-PerfGate` branch-vs-master now
+attributes its delta to exactly these 37 commits. That is what we want, and it also
+means the gate is BLIND by construction to a regression in master itself: both arms
+carry it and it cancels.
+
+Catching that needs an absolute reference, not an A/B. Two are available:
+
+* **Rust osprey as a change-immune anchor** - same pipeline, untouched by C# commits,
+  so a Stellar wall time that is up on BOTH sides indicts the machine or the
+  environment while one-sided movement indicts C#. The cross-impl gate produces Rust
+  wall times for free; record them rather than discarding them.
+* Historical Stellar timings from prior `Test-PerfGate` runs and the TeamCity perf leg.
+
+If a master-level regression is ever confirmed, the bisect range is **121 master
+commits between #4378 and #4616, 60 of which touch `pwiz_tools/Osprey`** - about six
+steps over the Osprey-touching subset, not a slog.
+
+**This does not block #4621** (Brendan, 2026-08-28): a defect in master is a separate
+track, and this PR's gate is the branch-attributable A/B, which is clean.
