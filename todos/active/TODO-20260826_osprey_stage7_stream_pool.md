@@ -3445,3 +3445,93 @@ entries. So `21434cb1c9` is output-correct at cohort scale as well as on Stellar
 
 Its MEMORY number remains uninformative - that snapshot predates the rehydrate half, so it shows
 the same 40.23 GB pool. The saving is still unmeasured; re-measure on a fresh snapshot.
+
+## The interning did not reach production, and a pool of its own would have doubled the strings (2026-08-28)
+
+Brendan's question - *"Is the new interning using the same interning mechanism at the library?
+Can you review the entire codebase to make sure that modified sequence and protein names/ids are
+always interned when they are read from any side-car file?"* - and then the point that settles
+the design: *"You want to use the same interner as the library. If they use separate pools, you
+will duplicate all of the strings."*
+
+Both answers were no, and the review found a third problem neither question was asking about.
+
+### `21434cb1c9`'s "rehydrate half" patched a method production never calls
+
+`RescoreHydration.HydrateForRescore` has **no production caller** - only `Osprey.Test/IOTest.cs`
+lines 4064 and 4180. The pool the `--task SecondPassFDR` rig builds comes from
+`HydrateCompactedStreaming`, which takes `loadStubs` as an INJECTED DELEGATE, and both
+production delegates were unpooled:
+
+* `PerFileScoringTask.LoadJoinOnlyScoresForFile`
+* `FirstPassFdrTask.LoadResumeStubs`
+
+So the owed 30-minute re-measurement would have come back "no effect" a SECOND time, and this
+time the rig would not have been the reason. The previous session's own rig-trap finding was
+correct and it still missed this, because it identified the right rig and then patched the wrong
+method inside it.
+
+### Separate pools would have made it worse, not better
+
+A pool of its own elects the FIRST PARQUET instance as canonical. The library already holds an
+instance of every one of those sequences, so the run would end up holding two sets - the
+library's and the sidecars' - which costs more than interning saves. The fix is to seed the pool
+FROM the library and share it; then a sidecar value equal to a library sequence is answered with
+the library's own instance and the rows cost no strings at all.
+
+Verified rather than assumed: the parquet's `modified_sequence` is written from
+`FdrEntry.ModifiedSequence`, which `CoelutionScorer.cs:179,464` copies off the `LibraryEntry` it
+scored. Measured on Stellar: **360,376 sequences seeded from the library, 0 sidecar lookups
+missed the pool.**
+
+### A latent data race, introduced by the same commit
+
+`21434cb1c9` gave `FirstPassSurvivorLoader` a `Dictionary<string, string>` field and documented
+it "not synchronized - the survivor rebuild walks files sequentially". It does not:
+`PerFileRescoreTask.cs:718` drives `RescoreOneFileStreamed` - and through it `loader.Load` -
+from inside a `Parallel.For` over files. Concurrent writers on a plain dictionary.
+
+Fixed by FREEZING rather than locking. `LibraryStringInterner.Freeze()` makes the pool
+lookup-only, and a `Dictionary` tolerates any number of concurrent readers; it is a writer among
+them that corrupts it. Locking was not an option - interning is called once per observation,
+over 137 M times, and the class doc already records that a concurrent interner on the FDR path
+was measured as a net loss. The cost of freezing is that a value absent from the library is not
+pooled, which `FrozenMisses` counts: zero on Stellar.
+
+### What the sweep found, and what needed nothing
+
+**Protein names/ids need no sidecar interning at all.** `protein_ids`, `sequence` and
+`file_name` are WRITTEN to the scores parquet and never read back - `modified_sequence` is the
+only string column with a reader. Protein identity comes from `libraryById`, interned at library
+load. The binary `.fdr` sidecar (`FdrScoreRecord`) is all-numeric, no strings.
+
+Three ad-hoc mechanisms existed where there should have been one: `LibraryStringInterner`, the
+`IDictionary<string,string>` + `Canonicalize` added by `21434cb1c9`, and an inline
+TryGetValue/assign in `SecondPassFdrTask.CollectPassingEntries`. The last two are gone.
+
+Pooled (retained across files): `PerFileScoringTask` 430/1415/1447/1611, its resume
+`TryLoadStubsAndCalibration`, `FirstPassSurvivorLoader`, `FirstPassFdrTask.LoadResumeStubs`,
+`CollectPassingEntries`, and the reconciliation-JSON gap-fill read in `RescoreHydration` (~2 M
+targets at 257 files, retained for every file at once).
+
+Left alone deliberately, because their strings are not retained: `CompactPerFileRescoreTask.cs:287`
+(clears the survivors immediately), `Pass2FdrSidecar.cs:1909/1943` (build uint-keyed maps), and
+`ScoreOrLoadForFile` (one file's own output on its way to its parquet).
+
+Also fixed: `21434cb1c9` inserted `Canonicalize` BETWEEN `TryReadEntryIdsAndApexRts`' doc comment
+and its signature, so the apex-RT reader's documentation had silently become the helper's.
+
+### Commit
+
+`79f63471bc` - "Shared one library-seeded sequence pool with the sidecar readers".
+Gates: build clean, 601/601 tests, ReSharper 0 warnings / 0 errors,
+`regression.ps1 -Dataset Stellar` **10/10 PASS** (output byte-identical).
+
+### Still owed
+
+* The 257-file memory re-measure, now genuinely measuring something -
+  `chs-257files-libdecoy-r1.0-protein-compact-s7sharedpool`, launched 07:59 against the
+  `s7intern` baseline of **40.23 GB / 36 min** on the identical rig.
+* `-Dataset All` before the PR (the 04:40 green predates both `21434cb1c9` and `79f63471bc`).
+* Open question for Brendan: `HydrateForRescore` is dead production code that already misled one
+  session. Delete it with its two tests, or keep it?
