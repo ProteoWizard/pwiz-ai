@@ -3062,7 +3062,7 @@ Stage 5 for context, same run: 9,578.3 s (2h 39m), peak_paged 53.59 GB, but hand
 **5.97 GB** live - so Stage 5's cost is transient too, and the run's real problem was never it.
 The baseline's run peak was ~69 GB at STAGE 7's pass-2 start, on a 64 GB box.
 
-## 257-FILE STAGE 5-7 RUN: COMPLETE, exit=0, and the memory bar is MET (2026-08-28 04:37)
+## 257-FILE STAGE 5-7 RUN: COMPLETE, exit=0, output identical (memory bar NOT met - see retraction) (2026-08-28 04:37)
 
 `chs-257files-libdecoy-r1.0-protein-compact-s57base257`, exe `_bin\26.1.1.239-stage57-20260827`,
 `-LinkFrom` the p0059_0060_0061 Stage 1-4 artifacts, no `-Task`, 30 threads,
@@ -3113,7 +3113,7 @@ is not an equality test - row counts plus content rollups are.
 
 Baseline: **615 min (10 h 14 m)**. Stage 7 is the big mover - 30.5 min in a full run.
 
-### THE MEMORY BAR IS MET - Stage 7 is no longer the run's peak
+### [RETRACTED - see the 05:50 retraction] Claimed the memory bar was met
 
 | | this run | baseline |
 |---|---|---|
@@ -3213,3 +3213,63 @@ pooled floor. The per-phase p10s are the honest view, and Stage 6's is flat.
 
 One reporting gap over threshold: 36 s at 04:36:32, in the closing diagnostics phase. Minor, but
 it is the kind of silence #4571 exists to remove.
+
+## RETRACTION: the memory bar is NOT met, and no flip has happened (Brendan, 2026-08-28 05:50)
+
+Earlier this session I wrote "THE MEMORY BAR IS MET (narrowly)". **That is wrong and is
+retracted.** Brendan looked at the perfviz PNG and said so directly: *"We have not yet achieved
+the 'flip' where I see a Stage 7 with radically reduced memory - the Stage 7 stable memory is
+still as high or higher than Stage 5."*
+
+He is right, and the plot shows it in one look. Stage 7 sits on a **flat ~48-53 GB plateau for
+its entire 30 minutes**. Stage 5's 55 GB is a **spike near its end**. I compared Stage 7's
+sustained level against Stage 5's transient peak, found a 1.5 GB margin on the max, and called
+that the bar. It is not the comparison that matters.
+
+### The honest numbers - total (private) MB, boundary contamination removed
+
+| stage | all samples med / p90 / max | settled (first 5 min dropped) med / p90 / max |
+|---|---|---|
+| FirstPassFDR | 28,859 / 50,002 / 54,878 | 29,763 / 50,173 / 54,878 |
+| PerFileRescoring | 15,194 / 17,660 / **45,298** | 15,171 / 17,491 / **21,133** |
+| SecondPassFDR | 47,762 / 51,373 / 53,816 | **48,300** / 51,984 / 53,816 |
+
+**Stage 7's sustained median is 48.3 GB against Stage 5's 29.8 GB.** Stage 7 is MORE
+memory-dominant than Stage 5, not less. `stage7-pool` was **37.50 GB** in the same run - the pool
+is untouched, exactly as this file already said of the earlier measurement: *"this branch changes
+what Stage 7 READS, not what it HOLDS ... nothing here should be quoted as progress toward the
+memory bar."* I wrote that, then quoted a max margin as the bar being met.
+
+### PerFileRescoring is NOT broken - the 44 GB figure was boundary contamination
+
+The per-phase table I posted showed `PerFileRescoring priv peak 44.2 GB`, which reasonably
+worried Brendan that Stage 6 had regressed. It had not. Dropping the first 5 minutes after the
+stage boundary takes Stage 6's max from **45,298 MB to 21,133 MB**, with a settled median of
+**15.2 GB**. The high samples are Stage 5's memory still being released while Stage 6 had already
+started - Brendan's own hypothesis, confirmed.
+
+**Per-stage statistics computed over a window that includes the previous stage's teardown are
+misleading.** Any future per-stage table must drop the boundary or it will keep producing this
+false alarm.
+
+### Instrumentation lesson
+
+*"the memory instrumentation in the log (that you implemented) seems to often lead you into
+feeling you have useful numbers that aren't really that useful or meaningful to me."*
+
+Correct. Post-GC `[MEM]` probes measure what the GC could reclaim at an instant chosen by the
+probe's author - not what an operator watching private bytes sees, and not the sustained level
+that decides whether a cohort fits. Percentiles layered on top of that manufacture precision.
+
+**Look at the PNG `perfviz.py` generates.** The plot answered in one glance what six probes and a
+percentile table got wrong. The text summary is a supplement to the picture, not a substitute.
+
+### What is actually true about this run
+
+* Output is identical - all three counts exact, blib content verified equal (row counts across
+  every table plus eight rollups over 11.7 M rows).
+* Wall time 6h54m vs the baseline's 10h14m, with Stage 7 at 30.5 min.
+* Stage 6 is genuinely bounded - settled median 15.2 GB, flat across 257 files.
+* Stage 6 has room to absorb the pass-2 move (~40 MB against a per-file transient).
+* **Stage 7 still holds a 37.50 GB pool and still dominates the run's sustained memory.** The
+  flip is exactly the work that has NOT been done yet.
