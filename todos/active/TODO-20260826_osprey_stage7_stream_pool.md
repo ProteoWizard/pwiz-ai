@@ -2982,3 +2982,32 @@ lands. Option 1 is the design; it wants a fresh session.
 **The rest of the decomposition is unaffected** - the competition split (`f7a6e6d103`), the
 no-new-relay finding, the stratum-bounded contribution sizing and the artifact layout all stand.
 Only the "scoring is free from `fdrEntries`" step was wrong.
+
+## Phase 1 reworked, and it IS bounded - the hook point is the row-group flush (22:20)
+
+The 22:05 correction said scoring must move inside the parquet stream and called that "more
+invasive". Checked, and it is a callback, not a restructuring.
+
+`ParquetScoreCache.StreamReconciledScoresParquet` (`:1426`) does not copy columns through in
+bulk. It buffers **`FdrEntry` objects** per row group - `var buffer = new List<FdrEntry>(rowsPerGroup)` -
+and emits with `BuildFdrEntryColumns(buffer, written, libraryById, fileName, featureFields, ...)`.
+That is the only write path, so EVERY emitted row is materialized as an `FdrEntry` with its
+features at flush time, including the unchanged rows that "stream through" from the original
+parquet.
+
+So the hook is: at each row-group flush, score the buffered entries with the frozen model and
+accumulate `(entry_id, score)`.
+
+* **No extra I/O** - the stream is one the worker already makes.
+* **No extra materialization** - the entries already exist to be written.
+* **Bounded** - the buffer is `rowsPerGroup`; the accumulated scores are 12 B x this file's
+  survivors, and they are the file's own output, not a whole-run structure.
+
+That removes the last objection to phase 1. What it needs: the frozen model reachable in the
+worker (it is - `FirstPassFdrTask` publishes `FirstPassPercolatorModel` at `:122`, and a
+distributed worker reloads it from `.1st-pass.model.json`), plus a decision on where the scores
+go - which is the artifact question, and the one thing still genuinely open.
+
+**Still not implemented tonight**: the 257-file run holds the machine, so nothing here could be
+regression-gated, and this is core artifact-writing code. But it is now a specified callback
+rather than a direction.
