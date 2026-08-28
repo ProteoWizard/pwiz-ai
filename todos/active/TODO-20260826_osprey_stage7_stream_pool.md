@@ -3190,3 +3190,26 @@ That was the one measurement that could have argued against moving run-scope pas
 
 The reconciled set at 47.5 GB confirms the survivor-subset format in a FULL run - the old
 full-shape format was 266 GB for the same cohort.
+
+### perfviz per-phase breakdown - independent confirmation
+
+`ai/scripts/perfviz.py run.log --files 257` (11,405 memstamp samples, duration 6:54:25):
+
+| phase | managed p10 (floor) | p50 | peak | private peak | wall |
+|---|---|---|---|---|---|
+| FirstPassFDR | **7.1 GB** | 13.5 | 49.6 | **53.6 GB** | 159:38 |
+| PerFileRescoring | **5.0 GB** | 7.0 | 18.4 | 44.2 GB | 224:15 |
+| SecondPassFDR | 18.2 GB | 40.4 | 51.1 | **52.6 GB** | 30:29 |
+
+* FirstPassFDR's p10 floor of **7.1 GB** independently confirms the 7.0 GB this file had been
+  quoting for it - now from the sanctioned tooling rather than inherited.
+* PerFileRescoring's p10 of **5.0 GB** confirms Stage 6 bounded, from a second measurement path.
+* Stage 7's private peak (52.6 GB) sits just UNDER Stage 5's (53.6 GB) - the same narrow margin
+  the `[MEM]` probes showed.
+
+**Do not read the tool's whole-run "floor 17.8 -> 35.3 GB, +69 MB/file RISING" as an O(files)
+leak.** It conflates stages: the run legitimately climbs from Stage 5's low floor to Stage 7's
+pooled floor. The per-phase p10s are the honest view, and Stage 6's is flat.
+
+One reporting gap over threshold: 36 s at 04:36:32, in the closing diagnostics phase. Minor, but
+it is the kind of silence #4571 exists to remove.
