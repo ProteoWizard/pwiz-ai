@@ -3377,3 +3377,62 @@ the change was on `FirstPassSurvivorLoader` and the `--task SecondPassFDR` path 
 path.** The full in-process run builds its pool in `BuildRescoredPool` via
 `FirstPassSurvivorLoader` instead. Any future pool work has to touch both, or be measured on the
 matching rig. That is worth more than the interning itself.
+
+## SESSION END 2026-08-28 06:45 - seven gated commits, and the architecture is settled
+
+Night session 21:40 -> 06:45 (**9 h 05 m**), context 55% -> ~28%.
+
+### Commits on `Skyline/work/20260827_osprey_stage7_stream_increment` (none pushed)
+
+| commit | what | gate |
+|---|---|---|
+| `a700c1226a` | frozen 2nd pass reads each 1st-pass sidecar ONCE, not three times | Stellar 10/10 |
+| `f08059f824` | `IFdrRow` + generic q-value selectors | Stellar 10/10 |
+| `f7a6e6d103` | `StreamingFdr` split into `CompeteOneFile` + `FoldFileContribution` | Stellar 10/10 |
+| `e5daaaf9a2` | tests pinning the two-stage reduction against a global pass | 601/601 |
+| `fc5c3c7b40` | code-review fixes: lazy staging buffer, reverse arg guard, stratified tests | Stellar 10/10 |
+| `21434cb1c9` | interned `ModifiedSequence` at BOTH stub-loading paths | Stellar 10/10 |
+
+Plus `b9075eb99a` from the prior session. `-Dataset All` was green at 04:40 (55 assertions, 0
+skipped, 0 failed) but PREDATES `21434cb1c9` - re-run before the PR.
+
+### The acceptance run
+
+`s57base257`, full Stage 5-7 at 257 files: **exit=0, 6 h 54 m** against the baseline's 10 h 14 m.
+Output identical - 5,079 protein groups, 45,724 library spectra, 11,745,026 passing entries, and
+the blib verified equal table-by-table plus eight content rollups. Stage 7 wall 30.5 min.
+
+### What is NOT achieved, stated plainly
+
+**The memory bar is not met.** `stage7-pool` is 37.50 GB; Stage 7's sustained private median is
+48.3 GB against Stage 5's 29.8 GB. An earlier claim in this session that the bar WAS met compared
+Stage 7's sustained plateau to Stage 5's transient spike and is retracted. The branch changed what
+Stage 7 READS - 5.7x smaller reconciled parquets, wall 81 -> 30.5 min - and nothing about what it
+HOLDS.
+
+### The three findings the next session needs
+
+1. **Why Stage 7 costs as much as Stage 5 for 1/6 the rows**: `FdrEntry` is 274 B/row measured
+   against `FdrProjection`'s 32 B, and ~144 B of it is dead weight in this stage - 48 B of
+   always-null blob refs, ~72 B of duplicated string, 24 B of class overhead.
+2. **The pool is NOT FDR-counting memory.** The competition is already bounded
+   (O(distinct base_id), no (file, entry_id) map). The pool is held for the five or six
+   downstream folds. So sortedness is not Stage 7's blocker - identity is, and it is reachable
+   from `libraryById` by entry_id.
+3. **The rig trap.** `stage7-inherited` and `stage7-pool` were BOTH 40.23 GB on the
+   `--task SecondPassFDR` loop: that rig builds the pool in `PerFileScoringTask.Rehydrate`,
+   before Stage 7 starts, while the in-process run builds it in `BuildRescoredPool`. A pool
+   change covering one path reads as "no effect" - which is exactly what the first interning
+   attempt did.
+
+### Claims retracted this session
+
+* "The memory bar is met" - no.
+* "The frozen scoring is free in the worker" - only for the ~7% of survivors it rescored;
+  unchanged stubs are `Features == null` and stream through from the original parquet.
+* "The worker needs the global survivor set relayed" - it does not; the join can filter.
+* "The architecture deletes the lean row" - too firm; the lean row is plausibly the destination
+  representation either way.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260828_osprey_stage7_architecture.md` before starting work.
