@@ -4,10 +4,10 @@
 - **Branch**: `Skyline/work/20260827_alphapeptdeep_alpharaw_shutdown`
 - **Base**: `master` (bd94e8a37)
 - **Created**: 2026-08-27
-- **Status**: In progress
+- **Status**: Completed - merged 2026-08-27
 - **GitHub Issue**: (none)
 - **Module**: `skyline`
-- **PR**: (not opened)
+- **PR**: [#4624](https://github.com/ProteoWizard/pwiz/pull/4624) (merged 2026-08-27)
 - **Cherry-pick**: Yes — `Cherry pick to release` label (Nick's call, 2026-08-27).
   We are in post-release patch mode, where the default is no cherry-pick, but all
   three criteria hold: released 26.1 users installing AlphaPeptDeep today get
@@ -256,6 +256,40 @@ only if it appears in a nightly run.
   night. The xxhash TODO already raised `peptdeep[stable]` as an option (blocked
   because it pins `torch==2.5.1`, colliding with the CUDA-specific torch
   install). Still unclaimed, and now has one more data point behind it.
+
+## Resolution
+
+### 2026-08-27 — Merged
+
+PR [#4624](https://github.com/ProteoWizard/pwiz/pull/4624) ("skyline: Fixed
+TestAlphaPeptDeepBuildLibrary failing after the alpharaw 0.7.0 release") merged
+to master as `ad310ff4d8e4b9697eda2395a5f3605f20ce8f15`.
+
+`CreatePeptdeepStartInfo` now sets `ALPHARAW_DOTNET_RUNTIME` to a token that can
+never name a runtime on both peptdeep child processes, so alpharaw's runtime
+lookup raises before it can unregister Python.NET's shutdown hook and the
+process exits cleanly again. Two filter strings suppress the alpharaw warning
+and `RuntimeError` that the variable causes, which code review caught reaching
+the user on every successful build. No dependency was pinned.
+
+Merged with `teamcity - Skyline PR Perf and Tutorial tests` still running, on
+Nick's call: that suite had already passed `TestAlphaPeptDeepBuildLibrary`, the
+test this PR exists to fix, and every other check was green. Carries the
+`Cherry pick to release` label for `Skyline/skyline_26_1`.
+
+**Deferred, not shipped.** The intermittent `rat_consensus_final_true_lib.blib`
+load failure documented above is unfixed — roughly 50% of runs on this machine,
+never seen in the nightly performance-test history. Nick's call was to look at
+it only if it appears in a nightly run, so the nightly may still go red
+intermittently on this test. The one untried lead is the `RunUI(() =>
+OpenDocument(...))` wrapper in `DoTest`, which blocks the message pump.
+
+**Unfiled follow-ups**, both pre-existing and both deliberately kept out of a
+release-branch cherry-pick: `forceTempfilesCleanup` is a no-op for a Python
+child (ProcessRunner redirects `TMP`, CPython resolves `TEMP` first), and this
+launcher alone among Tide/DIA-NN/AlphaPeptDeep omits
+`ChangeTmpDirEnvironmentVariableToNonUnicodePath`, which would break library
+builds for users with non-ASCII profile names. Nothing tracks these yet.
 
 ## Notes
 
