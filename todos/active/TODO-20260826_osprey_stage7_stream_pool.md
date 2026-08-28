@@ -3061,3 +3061,132 @@ argued against moving the work into Stage 6, and it does not.
 Stage 5 for context, same run: 9,578.3 s (2h 39m), peak_paged 53.59 GB, but handing off only
 **5.97 GB** live - so Stage 5's cost is transient too, and the run's real problem was never it.
 The baseline's run peak was ~69 GB at STAGE 7's pass-2 start, on a 64 GB box.
+
+## 257-FILE STAGE 5-7 RUN: COMPLETE, exit=0, and the memory bar is MET (2026-08-28 04:37)
+
+`chs-257files-libdecoy-r1.0-protein-compact-s57base257`, exe `_bin\26.1.1.239-stage57-20260827`,
+`-LinkFrom` the p0059_0060_0061 Stage 1-4 artifacts, no `-Task`, 30 threads,
+`OSPREY_LOG_MEMORY=1`, mdiag on, fdrbench pass 2.
+
+**The first full Stage 5-7 measurement at 257 files on this branch.** Every prior 257-file number
+came from `--task SecondPassFDR` and was blind to Stage 6.
+
+### Output: EXACT match on every count
+
+| | oracle (baseline) | this run |
+|---|---|---|
+| protein groups at 1% | 5,079 | **5,079** |
+| library spectra | 45,724 | **45,724** |
+| passing entries | 11,745,026 | **11,745,026** |
+
+Six commits of refactoring - the sidecar read fusion, `IFdrRow`, the competition split and the
+review fixes - and the cohort-scale output is unchanged.
+
+### The blib size difference is SQLite packing, verified not inferred
+
+725,258,240 bytes against the baseline's 725,458,944 - **200,704 bytes = 49 x 4096-byte pages**.
+
+| | baseline | s57base257 |
+|---|---|---|
+| `page_size` | 4096 | 4096 |
+| `page_count` | 177,114 | **177,065** |
+| `freelist_count` | 0 | 0 |
+
+**Every table row count is identical** - RefSpectra 45,724, RetentionTimes 11,745,026, Proteins
+5,757, RefSpectraProteins 50,566, Modifications 12,738, SpectrumSourceFiles 257, and the rest.
+Eight content rollups also match exactly, including sums over all 11.7 M `RetentionTimes` rows
+and the q-value sums in `OspreyExperimentScores` / `OspreyRunScores`. So the difference is
+B-tree page fill, not content.
+
+This is a THIRD blib size for the same content: 725,467,136 (`--task SecondPassFDR` rigs),
+725,458,944 (baseline full run, build 26.1.1.233), 725,258,240 (this full run). A blib byte size
+is not an equality test - row counts plus content rollups are.
+
+### Wall time: 1.49x faster than the baseline
+
+| stage | this run | |
+|---|---|---|
+| FirstPassFDR | 9,578.3 s | 2 h 39 m |
+| PerFileRescoring | 13,455.6 s | 3 h 44 m |
+| **SecondPassFDR** | **1,828.8 s** | **30.5 m** |
+| **total** | **414 min** | **6 h 54 m** |
+
+Baseline: **615 min (10 h 14 m)**. Stage 7 is the big mover - 30.5 min in a full run.
+
+### THE MEMORY BAR IS MET - Stage 7 is no longer the run's peak
+
+| | this run | baseline |
+|---|---|---|
+| run peak_paged | **53.59 GB** | - |
+| process peak working set | 52.99 GB, **set in Stage 5** | **70,666 MB (~69 GB)** |
+| Stage 7 pass-2 working set | 51.11 GB | - |
+
+Brendan's bar was *"take Stage 7 entirely out of contention for peak memory, i.e. FirstPassFDR
+becomes the run's high point."* **Met.** The peak is Stage 5's, Stage 7 came in under it, and the
+run peak fell from ~69 GB - which PAGED on this 64 GB box - to ~53.6 GB, which fits in RAM.
+
+**Two caveats, plainly.** It is met NARROWLY (51.11 vs 52.99 GB), and it is met by the
+survivor-subset format rather than by removing the pool: `stage7-pool` is still **37.50 GB**. A
+larger cohort or a survivor-richer arm puts Stage 7 back on top. The architecture work is what
+turns a narrow pass into a comfortable one.
+
+### Stage 7 probe sequence
+
+| probe | managed heap (post-GC) |
+|---|---|
+| `stage7-inherited` | 3.96 GB |
+| `stage7-pool` (after ~7.8 min rebuild) | **37.50 GB** |
+| `stage7-fragments-released` | 37.51 GB (**released=0**) |
+| `stage7-pass2-scored` | 37.50 GB |
+| `stage7-protein-fdr` | 37.50 GB |
+| `stage7-blib-written` | 37.50 GB |
+
+`released=0` is a RIG difference, not a regression: the full run already released library
+fragments at the end of Stage 5, where the `--task SecondPassFDR` rig reloads the library fresh
+and releases 5,173,196 there. It may account for part of the gap below.
+
+`stage7-pool` across the three 257-file measurements:
+
+| run | rig | stage7-pool |
+|---|---|---|
+| `s7mem257` | `--task SecondPassFDR`, old full-shape parquets | 41.97 GB |
+| `s7red257` | `--task SecondPassFDR`, survivor-subset | 40.23 GB |
+| **`s57base257`** | **full Stage 5-7, in-process** | **37.50 GB** |
+
+The in-process path builds the pool 2.73 GB leaner than the rehydrate path. Currently a number,
+not an explanation - do not quote it as a benefit until it is understood.
+
+### Stage 5 and Stage 6 characterized for the first time at 257 files
+
+**Stage 5**: peak_paged 53.59 GB, but hands off only **5.97 GB** live
+(`stage5-handoff-released`) - close to the 7.0 GB the TODO had estimated, now measured. Its cost
+is transient.
+
+**Stage 6 is BOUNDED**, and this is the finding that matters for the move. Post-GC floor across
+all 257 files: 4.34, 4.52, 4.50, 4.53, 4.49, 4.50, 4.62, 4.60 GB - a flat sawtooth that never
+drifts. O(1) in file count. Pace settled at ~50 s/file.
+
+### Stage 6 has room for the pass-2 work by three orders of magnitude
+
+`perfile-rescore-peak (pre-GC)` is **15.43 GB** managed against a 4.3 GB floor, i.e. ~11 GB of
+collectable churn per file. What the move adds:
+
+| addition | size |
+|---|---|
+| frozen-score accumulator, 12 B x ~533 K survivors/file | ~6 MB |
+| the file's own 1st-pass sidecar scalars, ~2.99 M x 12 B | ~36 MB |
+| **total** | **~40 MB, under 0.3% of the existing per-file transient** |
+
+That was the one measurement that could have argued against moving run-scope pass-2 work into
+`PerFileRescoring`. It does not.
+
+### Artifacts written
+
+| artifact | size |
+|---|---|
+| 1st-pass sidecars (257) | 48.4 GB |
+| reconciled parquets (257) | **47.5 GB** |
+| 2nd-pass sidecars (257) | 8.7 GB |
+
+The reconciled set at 47.5 GB confirms the survivor-subset format in a FULL run - the old
+full-shape format was 266 GB for the same cohort.
