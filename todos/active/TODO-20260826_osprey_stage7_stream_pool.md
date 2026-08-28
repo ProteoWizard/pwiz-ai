@@ -3862,3 +3862,13 @@ Do NOT start the lean row on low context: it is a 48-file refactor that carries 
 * Assertions at the two post-resolution sorts, now that the reader fix makes them hold.
 * `Test-PerfGate` (needs `-TestBaseDir D:\test\osprey-runs\_crossimpl-base`), and cross-impl on
   Astral.
+
+### Session end 2026-08-28 - four commits, all golden-gated
+
+`79f63471bc` shared sequence pool | `08fbed8cfe` dead-code removal |
+`870c3f4404` upgrade-path removal (-835 lines) | `9d74b79456` nullable ParquetIndex.
+Each gated `regression.ps1 -Dataset Stellar` 10/10, output byte-identical. Plus
+`-Dataset All` 56 assertions and cross-impl 4/4 legs at 1e-9.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260827_osprey_stage7_stream_increment.md` before starting work.
