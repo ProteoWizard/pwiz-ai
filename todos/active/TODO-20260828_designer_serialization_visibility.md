@@ -2,6 +2,7 @@
 
 ## Branch Information
 - **Branch**: `Skyline/work/20260828_designer_serialization_visibility`
+- **Module**: `skyline`
 - **Base**: `master` (baac9d4a0)
 - **Created**: 2026-08-28
 - **Status**: In Progress
@@ -45,6 +46,15 @@ Built under `ai/.tmp/sessions/20260828-f7d6f7f0/` (not committed):
   a property (correct indentation, after doc comments, above existing attribute
   lists) and adds `using System.ComponentModel;` where needed. Textual rather than
   Roslyn-formatted so file encoding and line endings are preserved exactly.
+- **`wfoorphan`** - finds designer assignments that were orphaned by this change.
+  Builds the same compilations, then walks every `*.Designer.cs` and resolves each
+  assignment's left side through the semantic model, reporting any whose target
+  property carries `DesignerSerializationVisibility` or `DefaultValue`. Resolving
+  symbols rather than matching text is what catches inherited-form root writes and
+  properties declared in a sibling repo assembly. Two gotchas it cost to learn:
+  `DesignerSerializationVisibility` is `Hidden=0, Visible=1, Content=2` (not the
+  order the names suggest), and the `--libdir` must point at a build *newer* than
+  the edits or cross-assembly attributes silently read as absent.
 
 Validation of the harness:
 1. A 19-case synthetic probe built with `dotnet build` emits 16 WFO1000; `wfoscan`
@@ -83,30 +93,79 @@ Classified individually against the actual `.Designer.cs` assignment:
 
 - [x] Removed 25 assignments that are provable no-ops (auto-property or guarded
       setter being handed its own default). Each setter was read to confirm.
+- [x] **Second sweep, semantic** - the first sweep was textual and matched only
+      `this.<field>.<Prop> =` with the field's *declared* type, so it missed
+      root-level `this.<Prop> =` writes on visually-inherited forms and every
+      cross-assembly property (e.g. `BoundDataGridView` lives in `pwiz.Common`,
+      which Skyline consumes as a DLL). Built `wfoorphan` (below) to resolve
+      assignment targets through the Roslyn semantic model instead. It found
+      **18** more orphaned writes; all 18 verified as no-ops and removed:
+      - `TreeViewMS` x6 (`SequenceTreeForm`, `FilesTreeForm`) - ctor sets
+        `AutoExpandSingleNodes = true` and `UseKeysOverride = false`;
+        `RestoredFromPersistentString` is a plain `bool` auto-property
+      - `ColorGrid` x4 (`EditCustomThemeDlg`, `VolcanoPlotFormattingDlg`) -
+        forwards to an inner `DataGridView` that the control's own designer
+        never touches, so `AllowUserToAddRows = true` /
+        `AllowUserToOrderColumns = false` are the framework defaults
+      - `IonMobilityFilteringUserControl` x6 - see reversal note below
+      - `BoundDataGridView.ReportColorScheme = null` - reference-type auto-property
+      - `DocumentGridForm.ShowViewsMenu = true` (`AuditLogForm`) - the one
+        root-level write on an inherited form; default is already `true`
 
-### Phase 4: verification
+### Phase 4: verification ✅
 
 - [x] `wfoscan` re-run: **0** WFO1000 remaining across all 25 projects
+- [x] `wfoorphan` re-run: **0** designer writes to `Hidden` properties remain
 - [x] No mixed line endings introduced (202 changed files checked)
-- [x] `Build-Skyline.ps1` - solution builds clean
-- [ ] `CodeInspectionTest`
-- [ ] Spot functional tests for the forms whose designer files changed
+- [x] `Build-Skyline.ps1` - solution builds clean (Debug)
+- [x] `CodeInspectionTest` - passed
+- [x] Functional tests for every form whose designer file changed - 7 tests,
+      0 failures: `TestIonMobility`, `TestAuditLog`, `TestEditCustomTheme`,
+      `TestVolcanoPlotFormatting`, `TestFilesTreeForm`,
+      `TestSequenceTreeExpansion`, `TestDocumentGrid`
+
+## Reversed on review
+
+- **`IonMobilityFilteringUserControl` (6 designer lines) - now deleted.** These
+  were originally kept on the theory that `WindowWidthType`'s setter has real
+  side effects (`comboBoxWindowType.SelectedIndex = (int)value` plus
+  `UpdateIonMobilityFilterWindowWidthControls()`) and so the host designer lines
+  were load-bearing at construction. Reading the control end to end shows they
+  are not. The control's own ctor already calls
+  `UpdateIonMobilityFilterWindowWidthControls()`, and that method opens with
+  `if (comboBoxWindowType.SelectedIndex < 0) SelectedIndex = (int)none;`. The
+  control's designer never assigns `SelectedIndex`, so it starts at `-1` and the
+  ctor sets it to `none` - exactly what the host designer line then re-assigned.
+  Likewise `cbUseSpectralLibraryIonMobilities.Checked` and
+  `textIonMobilityFilterResolvingPower.Text` are never set in the control's
+  designer, so `= false` / `= null` are the framework defaults. All six are
+  no-ops. `TestIonMobility` passes with them gone.
+
+  The original note also contradicted itself: it justified keeping designer
+  output while marking the very properties `Hidden`, which is the instruction
+  that stops the designer regenerating that output.
 
 ## Deliberately NOT done
-
-- **`IonMobilityFilteringUserControl` (6 designer lines kept).** The three properties
-  are hidden, but `WindowWidthType`'s setter has real side effects - it sets
-  `comboBoxWindowType.SelectedIndex` and calls
-  `UpdateIonMobilityFilterWindowWidthControls()`. Those lines in
-  `FullScanSettingsControl.Designer.cs` and `TransitionSettingsUI.Designer.cs` are
-  load-bearing at construction time, not stale. They will disappear the next time
-  either form is opened in the designer, so the control should be made to
-  initialize itself (call `UpdateIonMobilityFilterWindowWidthControls()` from its
-  own constructor) before that happens. Worth a follow-up item.
 
 - **Designer lines for the 14 `[DefaultValue]` properties.** Left in place. Those
   properties are legitimately designer-managed; the designer will drop the ones
   that now equal the declared default on its next regeneration.
+
+## Open - not yet fixed
+
+- **`ImageListBoxItem.Text` must not be `Hidden` (`Controls/ImageListBox.cs`).**
+  This is the one property in the change that the designer serializes into
+  **`.resx`** rather than into `InitializeComponent`, and the Phase 3 sweeps only
+  ever looked at `.Designer.cs`. `ImageListBox.Items` carries
+  `[DesignerSerializationVisibility(Content)]` + `[Localizable(true)]`, so the
+  designer walks each item and routes `Text` into resources;
+  `NoModeUIDlg.Designer.cs` calls `resources.ApplyResources` on all three items and
+  the captions live at `NoModeUIDlg.resx:175/181/187` with matching entries in
+  `.ja.resx` and `.zh-CHS.resx`. `Hidden` suppresses the resource serializer too,
+  so the next designer save of that form drops all nine entries and the UI-mode
+  chooser renders three blank rows in every language. Fix is `[DefaultValue("")]`
+  (the parameterless ctor is `ImageListBoxItem() : this("")`), matching the
+  treatment already given to the sibling `ImageIndex` (`[DefaultValue(-1)]`).
 
 ## Follow-up worth considering
 
