@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-    Cross-implementation per-file FDR score sidecar comparison.
+    Cross-implementation FDR score comparison, reconstructing Rust's
+    fused per-file record from the C# scope-split pair.
 
 .DESCRIPTION
-    Compares every <stem>.1st-pass.fdr_scores.bin and
-    <stem>.2nd-pass.fdr_scores.bin written by a Rust run against the
-    ones written by a C# run of the same dataset, field by field at
-    1e-9, matched by file stem and then by entry_id.
+    Compares the nine per-observation FDR values written by a Rust run
+    against the ones written by a C# run of the same dataset, field by
+    field at 1e-9, matched by file stem and then by entry_id.
 
     This closes a real blind spot rather than adding redundancy. The
     other cross-impl comparisons read the Stage 7 protein FDR dump
@@ -21,9 +21,29 @@
     (--join-at-pass=2) reads it unconditionally, so a value that is
     wrong here is wrong for any distributed or resumed run.
 
+    FUSED COMPARISON (issue #4486). The two sides no longer write the
+    same artifact. Rust fuses both scopes into one 68-byte per-file
+    record; the C# v5 layout splits them into a 36-byte per-file
+    run-scope file plus ONE analysis-wide experiment-scope file per
+    pass. So there is no byte-level comparison left to make, and the
+    comparison rebuilds Rust's per-observation view from the C# pair
+    instead - run scope from the matched per-file record, experiment
+    scope joined by entry_id from the analysis-wide file.
+
+    That join carries the actual behavioural difference. A fused record
+    answers "this entry's experiment-wide q" once per OBSERVATION and
+    can therefore give one entry different answers in different runs of
+    the same analysis; the C# side answers it once per ANALYSIS and
+    made the disagreement unrepresentable. Until the Rust side reads
+    its pass-1 experiment values per ENTRY rather than per file (the
+    protein-compact map-back in osprey/crates/osprey/src/pipeline.rs),
+    expect this to name experiment-scope fields on exactly the rows
+    Stage 6 synthesized or moved. That is the gate reporting a known
+    Rust-side defect, not drift introduced by the C# split.
+
     Decoding is delegated to the pwiz-side Regression/FdrSidecars.ps1
-    so the byte layout is described in exactly one place, shared with
-    regression.ps1's four-task-chain leg.
+    so both byte layouts are described in exactly one place, shared
+    with regression.ps1's four-task-chain leg.
 
 .PARAMETER RustDir
     Directory holding the Rust run's sidecars.
@@ -87,6 +107,19 @@ if (-not (Test-Path $sidecarHelpers)) {
 }
 . $sidecarHelpers
 
+# The file existing is no longer enough: the fused comparison arrived with the v5 scope split
+# (issue #4486), so a pwiz checkout that predates it has FdrSidecars.ps1 but not this function.
+# Same reasoning as the file check above - "this checkout cannot run this comparison" is a SKIP,
+# not a failure, and calling a missing function would instead abort with a CommandNotFound that
+# names nothing useful.
+if (-not (Get-Command Compare-FdrSidecarsFused -ErrorAction SilentlyContinue)) {
+    Write-Host "SKIPPED: this pwiz checkout's FdrSidecars.ps1 has no Compare-FdrSidecarsFused" `
+        -ForegroundColor Yellow
+    Write-Host "  It predates the v5 FDR sidecar scope split (issue #4486), so its C# side"
+    Write-Host "  still writes the fused 68-byte record and there is nothing to reconstruct."
+    exit 3
+}
+
 foreach ($d in @($RustDir, $CsDir)) {
     if (-not (Test-Path $d)) {
         Write-Host "Directory not found: $d" -ForegroundColor Red
@@ -101,10 +134,11 @@ Write-Host "  Tolerance: $Tolerance"
 Write-Host ""
 
 # Rust is the EXPECTED side purely so the issue text reads "rust -> cs".
-# The comparison itself is symmetric.
+# The comparison itself is symmetric, but the two sides' ARTIFACTS are not: only the C# side
+# has an analysis-wide experiment file, so the reconstruction runs in one direction.
 $anyFail = $false
 foreach ($pass in @(1, 2)) {
-    $result = Compare-FdrSidecars -ExpectedDir $RustDir -ActualDir $CsDir `
+    $result = Compare-FdrSidecarsFused -RustDir $RustDir -CsDir $CsDir `
         -Pass $pass -Tolerance $Tolerance
     $label = "{0}-pass sidecars" -f $(if ($pass -eq 1) { '1st' } else { '2nd' })
     if ($result.Pass) {
@@ -125,12 +159,17 @@ foreach ($pass in @(1, 2)) {
 
 Write-Host ""
 if ($anyFail) {
-    Write-Host "OVERALL: FAIL -- the two implementations write different FDR sidecars" `
+    Write-Host "OVERALL: FAIL -- the two implementations record different FDR values" `
         -ForegroundColor Red
     Write-Host "  A 1st-pass failure means the runs already diverged before reconciliation;"
     Write-Host "  fix that first, since it makes any 2nd-pass reading meaningless."
     Write-Host "  A 2nd-pass-only failure is a divergence in what pass 2 persists."
+    Write-Host "  An experiment_* field differing on a SMALL number of 2nd-pass records is the"
+    Write-Host "  known Rust-side per-file experiment-q lookup (issue #4486): Rust reads the"
+    Write-Host "  entry's pass-1 experiment q from THIS file's sidecar, so a row Stage 6"
+    Write-Host "  synthesized or moved misses and keeps its reset default. Confirm by reading"
+    Write-Host "  the same entry_id across the run's sibling files before treating it as new."
     exit 1
 }
-Write-Host "OVERALL: PASS -- FDR sidecars agree at $Tolerance" -ForegroundColor Green
+Write-Host "OVERALL: PASS -- FDR values agree at $Tolerance" -ForegroundColor Green
 exit 0
