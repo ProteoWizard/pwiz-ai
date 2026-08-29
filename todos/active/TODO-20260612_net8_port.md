@@ -6668,3 +6668,114 @@ GDI+ errors, same 12 failures.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260612_net8_port.md` before starting work.
+
+## 2026-08-29: The GDI+ failures root-caused and fixed - a .NET 9 regression, not .NET 10
+
+`40fd787ff5` on `Skyline/work/20260612_net8_port` (mirrored to `chambem2/pwiz-sharp`).
+Diagnosed on TCA1, where it reproduces; it does not reproduce on any dev box or AWS agent.
+
+**Two corrections to the 2026-08-28 entry and to commit `3651dd669b`:**
+
+1. **The regression is .NET 9, not .NET 10.** A minimal repro fails identically on
+   net9 and net10 and passes on net8. Every statement in the previous entry framing
+   this as "net10-only" is wrong about the framework boundary, though right that net8
+   passed.
+2. **The display layout is not the cause.** It reproduces at (100,100), fully on the
+   primary screen, and at every coordinate swept. `3651dd669b`'s own logging is what
+   disproved the hypothesis it was added to test - which is the outcome that diagnostic
+   was for, so it did its job.
+
+### Root cause: one defect behind all twelve failures and the crash
+
+`SplitContainer.ResizeSplitContainer` -> `RepaintSplitterRect` calls
+`Graphics.FillRectangle` from `OnLayout`, which `Form.Show()` reaches via
+`OnVisibleChanged` while the window is still handling `WM_SHOWWINDOW`. There
+`IsWindowVisible` is false and the window DC's clip region is NULLREGION, so the fill
+genuinely fails at the GDI level. **.NET 8 ignored that GDI+ status; .NET 9 began
+throwing `ExternalException`.**
+
+The cascade explains the crash and the truncation together: exception ->
+`ThreadExceptionDialog` per test -> the dialog storm force-closes forms mid-teardown ->
+a `TreeView` handle destroyed inside its own `WndProc` -> `0xC0000005` -> TestRunner
+dies at test 2.288. **That is the answer to the "980 of 1796" loose thread from the
+previous entry** - the run was not being truncated by a separate defect, it was being
+killed by this one.
+
+Fixed upstream by dotnet/winforms#14565, milestone .NET 11 preview7. No net9/net10
+backport, so Skyline works around it.
+
+### The three changes
+
+| file | change |
+| --- | --- |
+| `Program.cs` | `ThreadExceptionEventHandler` ignores this exception via new `IsBenignSplitterRepaintFailure()` - `ExternalException` whose stack contains `RepaintSplitterRect` |
+| `Program.cs` | `Init()` re-attaches the `ThreadException` handler on **every** call, not once under the `_initialized` guard |
+| `AvailableFieldsTree.cs` | `OnDrawNode` catches `ExternalException` - the same empty-clip failure in Skyline's own TreeView custom draw, which surfaced only once the process stopped crashing |
+
+**Why the handler re-attach matters, and why it is broader than the GDI+ filter.**
+WinForms drops the `ThreadException` subscription when a message loop ends, and a
+functional run calls `Application.Run` once per test. Subscribing once meant only the
+**first** test in a run routed UI-thread exceptions to the handler; every later test got
+WinForms' default dialog. Verified in isolation: three successive `Application.Run`
+calls on one thread fire the handler only on the first; with the re-subscribe, all
+three. Without it, the GDI+ filter fixed only the first test.
+
+This also fixes the escape already documented at `TestFunctional.cs:3113`. Reviewed
+for blast radius before landing, and it **cannot turn a passing test into a failing
+one**: both paths that can observe such a dialog (`HangDetection.cs:244` and the
+teardown at `TestFunctional.cs:3113`) already call `AddTestException`, and the dialog is
+modal on the UI thread, so no test could ever run to completion past one. What changes
+is *which* exception is recorded - the real one instead of a wrapper saying a dialog
+appeared - and that the storm and its timeout cost are gone.
+
+Also confirmed while reviewing: `Init()` and `Main()` both run on the **main** thread
+(`TestFunctional.cs:2421`/`2431`; the test logic runs on a separate `WaitForSkyline`
+thread), so the re-subscribe binds to the thread that actually runs `Application.Run`.
+`Program.Main` calls `Init()` a second time (`Program.cs:242`), which is why the `-=`
+before the `+=` is load-bearing rather than decorative. The two tests that touch this
+machinery are unaffected: `ReportErrorDlgTest` calls `Program.ReportException` directly
+with `TestExceptions` nulled, and `UnattendedDialogTimeoutTest` removes an exception
+recorded through the watchdog path - whose own comment independently describes this
+same defect.
+
+### Three deliberate differences from what was verified on TCA1
+
+- The benign path **logs** (`Messages.WriteAsyncDebugMessage`) rather than returning
+  silently, so a future real regression in this area is not invisible. It is
+  `Trace.TraceInformation` underneath; 37 lines a run costs nothing.
+- A `StackTrace != null` guard, and the literal is verbatim `@"RepaintSplitterRect"`
+  per the non-localized-string convention, so `CodeInspectionTest` stays quiet.
+- Both sites cite dotnet/winforms#14565 and cross-reference each other, with a note to
+  remove the pair once Skyline targets a runtime carrying the fix.
+
+**Matching on the stack rather than per-dialog is what makes it complete**: 25 forms in
+the tree contain a `SplitContainer`, not the 3 the failing set happened to expose.
+
+### Verification
+
+- On TCA1: all 13 affected tests pass, exit code 0 (the 12 from build #182 plus
+  `TestAlphabeticalReportEditor`, the crasher).
+- Here: `Skyline.sln` builds with **0 errors**; a full parallel run put **1164 tests**
+  through with **all 13 passing**, no truncation and no access violation. Its only
+  failures are the eight `TestArdia*` / `TestUnifi*` / `TestWatersConnectListContents`
+  tests that need live credentials and already fail on this box.
+
+### Still open
+
+- **Why TCA1 and not the AWS agents or dev boxes.** Untouched by the fix - the
+  workaround is unconditional. The leading suspect is that TCA1 has two heterogeneous
+  display adapters (a Virtual Display Driver as primary 1920x1080 plus a Matrox G200eW3
+  BMC adapter at 1280x1024). A standalone 40-line reproducer (bare Form +
+  SplitContainer, no Skyline code, builds for net8/net9/net10, exit 0 = OK) is on TCA1
+  under `gdirepro/` with a RUNME.md. Running it on a dev box and an AWS agent settles it
+  in a minute: if net9/net10 pass there, the variable is the display environment, not
+  the framework.
+- **The full suite has not run on TCA1 since the fix.** Build #182 died at 2.288, so 816
+  tests never ran there and may hide further instances of the same pattern - any
+  `FillRectangle` reachable from a paint or layout path on a not-yet-visible control.
+  Those will now fail loudly rather than crash the run. Candidate sites, from a sweep of
+  custom-draw paths: `TreeViewMS.cs:354` `OnPaint` (base of `SequenceTree`, and used by
+  `ViewLibraryDlg` - highest traffic), `SrmTreeNode.cs:214,216`,
+  `ViewLibraryDlg.cs:1431`, `FindResultsForm.cs:172`,
+  `StatementCompletionForm.cs:124,134`, and lower-traffic `CustomTip.cs`,
+  `EditNoteDlg.cs`, `StripePainter.cs`, `Dendrogram{Control,Scale}.cs`.
