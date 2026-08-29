@@ -689,3 +689,26 @@ Matt about regardless of who lands it. Until then the nightly runs net472.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260818_commonutil_winforms_split.md` before starting work.
+
+### 2026-08-29 - net472 baseline set; next goal is a net10 comparison run
+
+The net472 nightly on master ran **23:46 -> 09:11 with 43,471 tests at the 9-hour mark, 0
+failures and 0 worker losses, all 8 workers alive** (log rolled to
+`D:\test\nightly-logs\SkylineTester-20260829-net472-9hr-COMPLETE.log`). It went on to 45,171
+tests by 09:25, ~4,830 tests/hour. That is the number a .NET 10 run gets compared against.
+
+Every test that dominated earlier runs came through clean: `ConsoleMethodTest` 0/70 (was 7/70),
+`PeakAreaDotpGraphTest` 0/70 (was 6/67), `TestInstrumentSerialNumbers` 0/70 with no worker loss,
+`ConsoleImportNonSRMFile` 0/70, `TestAuditLogTutorial` 0/70. At their measured rates the first
+two are ~0.06% and ~0.14% events, so those are the fixes showing, not a quiet night. The zero
+worker losses is a real measurement rather than an absence of reporting - which is the
+difference from the runs that shed workers and still said "No failures".
+
+**Next goal**: fix the pwiz-sharp Debug/Release defect (still blocking), resync to Matt's latest
+(he HAS committed since our merge), rebuild and stage, then start a net10 run for comparison.
+When comparing, note that a difference will not isolate to the framework - it also carries the
+retarget and this branch's split - and confirm whether the net472 baseline was Debug or Release
+before treating tests/hour as comparable.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260818_commonutil_winforms_split.md` before starting work.

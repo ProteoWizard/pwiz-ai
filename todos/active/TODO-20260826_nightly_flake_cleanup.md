@@ -282,3 +282,24 @@ TODO's three tests are now closed.
   it merely moved; one is present on master already, and the other traces `PanoramaUserEmail` from
   AutoQC, a separate executable with no reference path to the flagged code. Analysis runs with
   `build-mode: none`, so cross-application flows get over-approximated. Merged with `--admin`.
+
+### 2026-08-29 - new: TestAutoZoom, the only failure of an otherwise clean 9-hour run
+
+`TestAutoZoom` **1 / 70**, at 09:11 - PAST the nine-hour mark, so the 9-hour result was clean.
+A `ThreadExceptionDialog`, which is how the harness caught it, over a product exception:
+
+    System.IndexOutOfRangeException: Index was outside the bounds of the array.
+      at ImmutableList`1.Impl.get_Item(Int32 index)              ImmutableList.cs:307
+      at GraphSpectrum.FireSelectedSpectrumChanged(Boolean)      GraphSpectrum.cs:369
+      at GraphSpectrum.UpdateManager.DoUpdate(Object, EventArgs) GraphSpectrum.cs:1251
+      at System.Windows.Forms.Timer.OnTick
+
+An unhandled exception on the **graph update timer** - the same `GraphSpectrum` update path
+`IsGraphUpdatePending` watches - indexing an `ImmutableList` out of bounds. A timer tick reading
+an index the document no longer has is the shape of the update racing a selection change, which
+rhymes with the `PeakAreaDotpGraphTest` root cause (#4628) but is a distinct site. Not
+investigated. Log:
+`D:\test\nightly-logs\SkylineTester-20260829-net472-9hr-COMPLETE.log`.
+
+With `ConsoleMethodTest` and `PeakAreaDotpGraphTest` both fixed and merged, this is the natural
+first target of this TODO now, alongside the still-open `ConsoleImportNonSRMFile`.
