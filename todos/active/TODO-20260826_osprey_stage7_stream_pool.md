@@ -4146,3 +4146,963 @@ comparing 351,756 rows for the first time (the blib-path fix un-vacuumed a 0-row
 
 **Next session handoff**: read `ai/.tmp/handoff-20260829_osprey_pass2_scope_split.md` before
 starting work.
+
+## NIGHT SESSION 2026-08-29 - the sidecars are split by scope (format v5)
+
+Commit 1 of the two the handoff asked for. Both passes now write two artifacts instead of one
+mutable one, and the three patch passes are down to one. Commit 2 (the relocation) was NOT
+attempted - see "What was not attempted" below.
+
+### The layout as built
+
+| artifact | scope | record | one per |
+|---|---|---|---|
+| `<input>.<pass>.fdr_scores.bin` (v5, magic `OSPRYFDR`) | RUN | 36 B: entry_id, svm_score, run_precursor_q, run_peptide_q, pep | OBSERVATION, per input file |
+| `<blib-stem>.<pass>.fdr_experiment.bin` (v1, magic `OSPRYEXP`) | EXPERIMENT | 36 B: entry_id, experiment_precursor_q, experiment_peptide_q, experiment_protein_q, experiment_aggregate_score | DISTINCT entry_id, one file per pass per analysis |
+
+New files: `Osprey.IO/FdrExperimentRecord.cs`, `FdrExperimentSidecar.cs`,
+`FdrExperimentAccumulator.cs`.
+
+**Two deviations from the handoff, both deliberate:**
+
+1. **`fdr_experiment.bin`, not `fdr_scores.bin`.** The handoff named the experiment file
+   `<blib-stem>.1st-pass.fdr_scores.bin` and flagged "blib-stem vs input-stem collision -
+   check and guard". A distinct filename token IS that guard, and it is structural: the
+   collision cannot happen, so there is no runtime check that can be wrong and no failure mode
+   for a legitimate configuration (a blib named after an input file is real). Different magic
+   backs it up - each reader rejects the other's file rather than decoding it.
+2. **`FdrScoreRecord` lost its four experiment fields rather than only the byte layout
+   changing.** The handoff warns "the compiler will not catch a byte-offset reader". Splitting
+   the STRUCT makes every such reader a compile error, which is how the consumer list below was
+   found rather than guessed.
+
+### THE ONE PLACE THE SPEC DOES NOT WORK: `pep` - needs Brendan's ruling
+
+The handoff's table puts `pep` in the per-file RUN-scope record for both passes and says all
+three patch passes die. **`pep` cannot satisfy both.**
+
+* Its VALUE is per-observation: `PercolatorQValues.ComputePepWinnerMap` fits the estimator over
+  the target/decoy competition WINNERS and keys the result by the winner's flat row index, so
+  exactly ONE observation per base_id carries a real PEP and every other observation of that
+  precursor carries 1.0. `StreamingFdr.Pep(fileKey, entryId)` is the pass-2 twin and is
+  explicit about it. An entry_id-keyed experiment record cannot express WHICH observation won,
+  so `pep` genuinely does not belong in the experiment file.
+* Its TIMING is experiment-wide: on pass 2 the frozen competition writes each file's sidecar
+  mid-stream, before the competition that decides the winner has finished. So it also cannot be
+  final in the per-file record at write time.
+
+Per-observation value, experiment-scope timing: it fits neither artifact.
+
+**What I did**: kept `pep` in the per-file record exactly as the handoff's table says, and kept
+ONE streamed patch for that column alone - `FdrScoresSidecar.PatchPep`, replacing
+`PatchExperimentValues`. `PatchProteinQvalues` and `PatchPass2ProteinQvalues` are DELETED, and
+so is `ReloadPass2Sidecars`. Pass 1 never patches at all: its sidecars are written after the
+whole first-pass competition, so they are write-once already.
+
+**Why I did not improvise past it**: the alternative is to move pass-2 `pep` into the experiment
+record, which is safe *today* only because pass-2 PEP has no consumer - the blib writes a 0.0
+placeholder (`BlibOutputWriter.cs:313`), and the only reader was `ReloadPass2Sidecars`, which
+this commit deletes. That is an argument for deleting the column, not for storing it wrong, and
+it is a semantics change the handoff says to report rather than guess at.
+
+**Options for Brendan**, cheapest first:
+
+* **(a) keep `PatchPep`** (what is in the tree). One 4.9 GB rewrite survives at 257 files, down
+  from ~123 GB. The per-file pass-2 artifact stays mutable, so review finding R1's kill window
+  survives for that one column.
+* **(b) drop `pep` from the pass-2 per-file record entirely.** It has no consumer. The two
+  passes then have different run-scope record shapes, and the cross-impl comparator loses a
+  column Rust writes.
+* **(c) move pass-2 `pep` to the experiment record**, keyed by entry_id (the winner's value,
+  1.0 elsewhere - representable exactly, since at most one entry_id per base_id wins). Loses
+  which FILE the winner was in; nothing reads that today.
+
+Pass-1 `pep` must stay per-observation whichever is chosen: it reaches the `--model-diagnostics`
+report through the hydrate paths, and that report is golden-compared.
+
+### The trap the handoff flagged DID fire, and the design absorbs it
+
+*"Do not assume which q the Stage 6 survivor re-derivation reads."* It reads
+`experiment_protein_qvalue` - an EXPERIMENT-scope column - in both compaction predicates (the
+resident branch in `FirstPassFdrTask`, and the streamed `ComputeFirstPassBaseIds`). The v2->v3
+sidecar note says so explicitly; the handoff's "that threshold is a RUN-scope q" is wrong.
+
+This does NOT need a rethink. The 1st-pass experiment file is written by FirstPassFDR *after*
+first-pass protein FDR and *before* compaction, so the gate reads it from there - two Stage 5
+outputs consumed by Stage 6, which is ordinary producer-to-consumer adjacency, not the Stage 7
+reach-back #4486 is about. `LoadFirstPassExperimentRecords` fails the run rather than defaulting
+to 1.0 when the file is missing: a silently absent protein q turns the protein-rescue clause off
+and reports a smaller result that still looks like a successful run.
+
+### Two things got SIMPLER than expected
+
+* **The off-stratum stash is gone.** `pass1ExpQByKey` + `StashOffStratumPass1ExperimentQ` existed
+  to recover the pass-1 experiment q of off-stratum peaks Stage 6 had CHANGED, because
+  `ResetScores` had zeroed the in-memory value - and `ResetScores` only touches peaks Stage 6
+  touched, which is why unchanged ones needed no stash. With one analysis-wide record per
+  entry_id both dispositions read the same place and the conditional disappears.
+* **The cross-file experiment scan collapsed to one read.** `ComputePass2TransferCompeteFull`
+  reduced `globalExpPrecQ` / `globalExpPepQ` / `globalExpAgg` by MIN/MAX across EVERY file's
+  1st-pass sidecar. That reduction was over copies of one value, so it now reads the experiment
+  file once. `AssignPerRunQ` lost three parameters as a result, and gap-fill stopped being a
+  special case - every disposition takes the same record.
+
+### Consumers found by the compiler (the reason the struct was split, not just the bytes)
+
+`FdrProjectionSinks` (both sinks), `FirstPassFdrTask` (resident write, projection write, protein
+FDR, compaction gate, both hydrate call sites), `FirstPassSurvivorLoader`, `RescoreHydration`
+(both hydrate entry points), `PerFileScoringTask` (both hydrate call sites),
+`PeakCoAssignmentSource` (both readers + `EffectiveQvalue`), `Pass2FdrSidecar`
+(`Pass1ScalarSeeder`, the frozen competition, `AssignPerRunQ`, the streaming sink,
+`WritePass2ExperimentSidecar`).
+
+**The hydrate paths matter more than they look.** `FirstPassSurvivorLoader` and
+`RescoreHydration` overlay experiment values onto stubs because those stubs feed
+`ScoringTaskShared.FeedModelDiagnostics`, and the `--model-diagnostics` report is compared
+against a committed golden (mode 1b, and mode 5 re-emits it from its own sidecars). A hydrated
+stub that lost its experiment q would not fail at the read - it would fail as a wrong number in
+a report two stages later. The loader reads the experiment map ONCE in its constructor because
+`PerFileRescoreTask` drives it from inside a `Parallel.For`.
+
+### The collapse is asserted, not trusted
+
+`FdrExperimentAccumulator.Add` throws if two observations of one entry_id carry different
+experiment values. The whole split rests on those four columns being a property of the
+precursor; a first-wins collapse over values that had quietly diverged would report q-values no
+run computed, and BOTH routes would collapse the same way, so no self-consistency gate could see
+it. Bitwise equality, no tolerance - a tolerance would only decide how much of a wrong answer to
+accept.
+
+### Harness
+
+`Regression/FdrSidecars.ps1`: per-file decoder moved to v5 / 36 B (4 fields); new
+`ReadExperimentIfValid` + `ExperimentFields` for the `OSPRYEXP` file; `CheckPass2ProteinQ`
+(`Test-Pass2ProteinQvalue`, issue #4559) now compares the two EXPERIMENT files, which is where
+that column lives. `regression.ps1` mode 3 additionally byte-compares the two experiment
+sidecars between routes - exact, because both routes write ascending entry_id order - and treats
+absence as a FAILURE rather than a skip.
+
+Test surface: `TestFdrScoresSidecarRoundTrip` trimmed to the run-scope columns and now asserts
+the experiment fields come back UNTOUCHED (a reader still writing them would be decoding another
+field). The three tests for the deleted patch methods were replaced by one consolidated
+`TestFdrScopeSplitV5` covering the experiment round trip + canonical ordering, the collapse
+assertion, mutual magic rejection, and `PatchPep` byte-identity against a single-phase write.
+
+### Stellar 10/10 green — and the three defects the gate caught (2026-08-29 01:58)
+
+```
+mode1  (vs golden)                         PASS
+mode1c (2nd-pass protein q is pass-2)      PASS  (23,618 of 333,404 shared records moved;
+                                                  0 gap-fill records absent from pass 1)
+mode3  (per-file FDR sidecars==straight)   PASS  (3,263,679 records)
+mode3  (HPC chain==straight)               PASS
+mode4  (warm re-run all cached)            PASS
+mode2  (resume cache hits / ==straight)    PASS
+mode5  (rehydrate entered / ==straight)    PASS
+mode6  (library-fragment release engaged)  PASS
+```
+
+The golden did NOT move. Mode 1c is worth noting: it now runs against the two EXPERIMENT files
+rather than the per-file ones and still detects that the pass-2 protein q is a genuine pass-2
+value, so the #4559 guard survived the move instead of being quietly defeated by it.
+
+The first three attempts were red. Every defect was in the new plumbing, none in the layout, and
+each was found by the gate rather than by argument:
+
+**Defect B - the golden moved** (mode 1: 32 precursors gained, 3 lost, experiment q
+0.0099 -> 0.0053). The pass-2 experiment values reached the FILE but never got back onto the
+resident entries the blib is written from. That round trip used to be implicit:
+`PatchExperimentValues` wrote the finished values into the per-file sidecar and
+`ReloadPass2Sidecars` pulled them back onto the entries. Deleting the patch and leaving the
+reload standing broke it silently. Fixed by `ApplyPass2ExperimentValues`, stamping from the
+in-memory accumulator - which is what "Stage 7 computes them and can hold them" actually
+requires.
+
+**Defect A - the HPC chain** (mode 3). `FdrExperimentSidecar.PathFor` took the file's DIRECTORY
+from the output blib. Every chain phase runs in its own working directory with the same relative
+`-o output.blib`, so phase 2 wrote the 1st-pass experiment file into its own phase directory and
+phase 3 looked beside ITS blib and found nothing. The per-file sidecars are immune because they
+route through `ArtifactPaths.ResolveOutputDir`. Fixed both halves: the blib now supplies the
+STEM only (which is what answers the collision concern) with the directory resolved the way
+`Pass1Path` resolves it, AND `regression.ps1` relays the run-level file phase2 -> phase3 ->
+phase4 alongside `.1st-pass.model.json`, because the chain harness stages each Stage-5 artifact
+explicitly and a new one is not carried forward for free.
+
+**Defect B' - resume** (mode 2). A resume that adopts standing 2nd-pass sidecars recomputes
+nothing, so there is no accumulator to stamp from. Before the split both cases were served by
+the same mechanism because the values rode in the per-file sidecar the reload overlays. Fixed:
+`ApplyPass2ExperimentValues` falls back to reading the 2nd-pass experiment sidecar from disk.
+
+### The lesson worth keeping: the compiler-enforced split has a hole
+
+Splitting `FdrScoreRecord` rather than only the byte layout made every CONSUMER of an experiment
+column a compile error, and that is how the consumer list was found rather than guessed. It
+worked exactly as intended - everywhere the compiler could see.
+
+`FdrScoresSidecar.TryReadOverlay` is where it could not. That method WRITES fields onto a mutable
+`FdrEntry`; dropping four assignments from it compiles cleanly and silently, and that is precisely
+where defect B lived. **Anything that mutates `FdrEntry` rather than consuming `FdrScoreRecord`
+is outside the net.** If this pattern is used again - and it should be, it earned its keep - the
+mutating writers have to be enumerated by hand.
+
+### Owed before merge
+
+* **Tighten the tolerant readers.** `FirstPassSurvivorLoader` and
+  `Pass2FdrSidecar.LoadExperimentRecords` treat a missing experiment sidecar as "no records" and
+  proceed on defaults. That tolerance is what let defect A run the whole chain to completion on
+  wrong inputs instead of stopping, and it is against this repo's hard-fail-over-warn-and-proceed
+  rule. `FirstPassFdrTask.LoadFirstPassExperimentRecords` already fails hard and is the model.
+* **The `pep` ruling** (three options above).
+* **Cross-impl**: expected to break structurally - Rust still fuses both scopes into one 68-byte
+  per-file record. Not run, not adjusted.
+
+### Three more defects, all the same shape (2026-08-29 03:00-04:10)
+
+Stellar green was not the end. `-Dataset All` and the diagnostics datasets found three more, and
+they belong with the first three: **every one is absence being turned into a plausible value
+instead of a stop.**
+
+**C - the co-assignment panel's acceptance boundary collapsed to zero.**
+`StellarLibDecoy mode1b`, 11 metrics. `pass1.coAssign.cutoff` 0.669 -> 0, decoys 272 ->
+483,220. `experimentRecords.TryGetValue(id, out var exp)` leaves `exp` as
+`default(FdrExperimentRecord)` on a miss, i.e. `ExperimentAggregateScore = 0.0`. The cutoff is a
+MINIMUM over accepted precursors' aggregates, so fabricated zeros drag it to 0 and admit
+everything. `StreamingFdr.ExperimentAggregateScore` chose `double?` over an in-band sentinel to
+prevent exactly this, and its remarks name the same 542,368-decoy failure on astral. A struct
+default walked straight back into it.
+
+**C' - and the panel could never have read the file anyway.** `PeakCoAssignmentSource.Build` is
+called from the score-pass path BEFORE first-pass protein FDR, and the experiment sidecar is not
+written until after it. Reading the file there returned an empty map every time. Fixed by having
+the CALLER supply the records: the score-pass path passes the in-memory accumulator (the three
+columns the panel reads - experiment precursor q, peptide q, aggregate - are all final there;
+only the protein q it does not use is still pending), and the rehydrate path passes a map read
+off the sidecar an earlier run left. A missing/empty map now SKIPS the panel with a named
+reason instead of silently zeroing it.
+
+**D - over-application across files.** `Astral mode1b`, one metric:
+`pass2.coAssign.experiment.target.nBetter` 13,270 -> 13,279. Nine records. My
+`ApplyPass2ExperimentValues` stamped every resident entry whose entry_id appeared in the
+analysis-wide map. The mechanism it replaced did not: `ReloadPass2Sidecars` overlays each file's
+own 2nd-pass sidecar, so an entry got experiment values only where THAT FILE's second pass
+actually covered it. An entry_id that survived in file A but not in file B was picking up A's
+values on B's entry.
+
+Fixed by restoring the original scoping rather than reproducing it: `TryReadOverlay` takes the
+experiment map and applies it to the records it matches, which is by construction the file's own
+set. `ApplyPass2ExperimentValues` is gone, replaced by `ResolvePass2ExperimentRecords` feeding
+the overlay. That also re-unifies the recomputed and resume cases, which had needed separate
+handling.
+
+### The through-line, and what it means for review
+
+Six defects tonight. Zero in the layout, the per-entry_id collapse, the collapse assertion or
+the compaction gate. **All six were absence handling**:
+
+| | absence of | became |
+|---|---|---|
+| B | values on entries (patch+reload pair broken) | stale experiment q |
+| A | experiment file in a per-phase directory | empty map; chain ran on defaults |
+| B' | accumulator on the resume path | pre-competition values |
+| C | one entry's record | 0.0 aggregate -> cutoff 0 |
+| C' | the file, read before it was written | empty map |
+| D | the file-scoping the old mechanism had | values applied too widely |
+
+Not one was found by reading the code; every one was found by a gate. That is the argument for
+the two remaining tolerant readers being tightened before merge rather than after
+(`FirstPassSurvivorLoader`, `Pass2FdrSidecar.LoadExperimentRecords`): they are on the
+distributed path, they return an empty map on failure, and an empty map is the exact input that
+produced A and C'.
+
+`FdrExperimentAccumulator.Add`'s hard throw is the one place this was designed in from the
+start, and it is the only invariant that never needed a fix.
+
+# FINAL RESULT — `-Dataset All`: one assertion short
+
+`regression.ps1 -Dataset All`, run 04:12-05:2x with every fix in:
+
+**Everything passes except ONE metric.** Stellar, StellarLibDecoy and StellarGenDecoyEntrap are
+clean across all modes. Astral is clean on mode 1 (the blib), mode 1b's FDR sanity bounds, and
+modes 2/3/4/5/6. The single failure is:
+
+```
+ERROR: Astral mode1b (diagnostics vs golden): FAIL -- 1 issue(s)
+    diagnostics: pass2.coAssign.experiment.target.nBetter golden=13270 run=13279 diff=9
+```
+
+Nine records out of 13,270 — 0.07% — on one panel of the model-diagnostics report. **Nothing
+reported to a user moved**: not the blib, not the protein FDR, not the entrapment FDP bounds.
+But the golden moved, so per the handoff's guardrail this is NOT committed.
+
+## What I ruled out
+
+* **Not defect D.** I fixed the over-application (experiment values applied to every entry
+  sharing an entry_id rather than only where that file's pass-2 sidecar covered it) and this
+  metric did not move by a single record — 13,279 before and after. That fix is still correct
+  and stays in, but it is not this.
+* **Not flaky.** Identical numbers on two independent `-Dataset All` runs.
+* **Not the pass-1 panel.** `pass1.coAssign.*` all pass now, on all datasets.
+
+## Where the 9 records come from — the panel reads entries, not artifacts
+
+`ModelDiagnosticsData.BuildCoAssignment` drives its builder straight off the resident
+`perFileEntries`, reading `e.ExperimentAggregateScore` and `e.EffectiveExperimentQvalue(...)`.
+So the difference is nine entries whose experiment aggregate or experiment q differs from the
+golden run's after pass 2 — not a difference in any file on disk.
+
+## The best-supported remaining hypothesis (UNPROVEN)
+
+**`ComputePass2Resident` never publishes a `Pass2ExperimentScope`.** Only
+`ComputePass2TransferCompeteFull` (line ~1553) and `ComputePass2Projection` (line ~1935) do.
+Consequences on the resident path:
+
+* `ResolvePass2ExperimentRecords` finds no scope and falls back to reading the 2nd-pass
+  experiment sidecar from disk, which on a fresh run does not exist yet at reload time — so the
+  overlay applies no experiment values and entries keep whatever they hold.
+* `WritePass2ExperimentSidecar` takes its early return, so **no 2nd-pass experiment file is
+  written at all on that path.**
+
+The second consequence is a definite defect regardless of whether it explains the 9. Whether the
+first one changes numbers depends on whether the resident path's entries already hold correct
+pass-2 values from `RunPercolatorFdr` scoring them in place — I believe they do, which is why I
+could not close the argument.
+
+**First thing to check**: does Astral's straight-through run directory contain
+`output.2nd-pass.fdr_experiment.bin`? Stellar's does (333,404 ids), which means Stellar took the
+projection path. If Astral's is missing, Astral is on the resident path and this hypothesis is
+live; if it is present, the hypothesis is dead and the 9 are elsewhere.
+
+## Suggested approach for whoever picks this up
+
+The panel is deterministic and the delta is nine records, so the fast route is a dump rather
+than more reasoning — I burned an hour of reasoning on this and got nowhere, having already been
+wrong twice tonight about causes that looked obvious.
+
+1. Answer the artifact question above (one `Get-ChildItem`).
+2. If resident: publish the accumulator from `ComputePass2Resident` too, built from the entries
+   after `RunPercolatorFdr` has scored them, and re-run `-Dataset Astral`.
+3. If that is not it, dump the nine: the panel's `nBetter` inputs are `e.EntryId`,
+   `e.ExperimentAggregateScore` and the effective experiment q, all off resident entries, so an
+   env-gated dump of those three at the panel's entry compared between this branch and
+   `3e4d94ed58` names the records directly.
+
+## UPDATE on the 9 records — resident-path hypothesis is DEAD, and there is a better one
+
+**Measured**: `Astral\straight\output.2nd-pass.fdr_experiment.bin` exists, 48,974,360 B =
+1,360,398 records. So Astral takes the PROJECTION path, which does publish a
+`Pass2ExperimentScope`. The "`ComputePass2Resident` never publishes" hypothesis cannot explain
+the 9 and is eliminated.
+
+(It is still a real defect on its own: a run that takes the resident pass-2 path writes no
+2nd-pass experiment sidecar at all. Worth fixing regardless — just not this.)
+
+### New leading hypothesis: the seeder leaves the aggregate at 0.0, and 0.0 ranks high
+
+`Pass1ScalarSeeder.ApplyRecord` used to be unconditional:
+
+```csharp
+entry.ExperimentAggregateScore = rec.ExperimentAggregateScore;   // BEFORE - always set
+```
+
+The per-file record ALWAYS carried an aggregate, so every seeded entry got one. It is now
+conditional on the analysis-wide map having the entry:
+
+```csharp
+if (_experimentRecords != null && _experimentRecords.TryGetValue(rec.EntryId, out var exp))
+    entry.ExperimentAggregateScore = exp.ExperimentAggregateScore;   // AFTER - may not fire
+```
+
+An entry the map misses keeps `ResetScores`' **0.0**. And 0.0 is not a neutral value here — this
+codebase has measured it twice: *"0.0 sits above 93-99% of measured aggregates"*
+(`CoAssignmentAccumulator.ObserveCutoff`) and it is why
+`StreamingFdr.ExperimentAggregateScore` returns `double?` rather than 0.0. A handful of entries
+sitting at 0.0 instead of their real negative score would rank ABOVE almost everything and
+inflate exactly the counter that moved.
+
+**Direction, magnitude and metric all fit**: `nBetter` went UP by 9, on the EXPERIMENT scope
+(the only scope that reads the aggregate), on the one dataset large enough for a 9-record tail
+to exist.
+
+What it needs is the answer to: *which 9 entry_ids are in a file's 1st-pass sidecar but not in
+the 1st-pass experiment file, and why?* Both are written from the same score pass
+(`FdrStoringSink.AcceptOutput` adds to the accumulator and buffers the record together), so in
+principle the sets are identical — which is why this needs measuring rather than arguing. Prime
+suspects: rows that reach the per-file buffer through a path other than `AcceptOutput`, and the
+0-record sidecars `OnFinish` flushes for empty files.
+
+### Concrete next step
+
+Instrument `Pass1ScalarSeeder.ApplyRecord`'s else-branch — count and log the entry_ids the map
+misses, run `-Dataset Astral`. If the count is 9, this is closed and the fix is to make the miss
+impossible (or fatal) rather than silent. If it is 0, the hypothesis is dead too and the dump
+described above is the route.
+
+**Note the shape.** If this is right, it is the SEVENTH defect of the night and the seventh of
+the same kind: an absence quietly becoming a plausible number. The recurring fix is not more
+care at each site — it is refusing to let a lookup miss produce a value at all.
+
+## UPDATE 2 — the seeder hypothesis is dead too, and the split itself is independently validated
+
+Tested directly against the failing run's own artifacts (no rebuild, no re-run) by decoding
+`Astral/straight/output.1st-pass.fdr_experiment.bin` and every per-file
+`*.1st-pass.fdr_scores.bin` beside it and comparing entry_id sets
+(`ai/.tmp/sessions/20260829-scope-split/checkids.py`):
+
+```
+experiment records: 2,498,773   distinct: 2,498,773
+per-file rows:      6,226,744
+rows whose entry_id is NOT in the experiment file: 0     distinct missing: 0
+```
+
+**Zero misses.** `Pass1ScalarSeeder.ApplyRecord`'s map lookup never fails, so no entry is left at
+the 0.0 reset default and that hypothesis is eliminated.
+
+Two things worth keeping from this measurement, independent of the open failure:
+
+* **The per-entry_id collapse is lossless and duplicate-free on real data** - 2,498,773 records
+  for 2,498,773 distinct entry_ids, covering all 6,226,744 per-file rows. That is the split's
+  central premise, measured on Astral rather than argued.
+* **6,226,744 rows collapse to 2,498,773 experiment records** - a 2.5x reduction on a 3-file
+  analysis, and the ratio grows linearly with file count. This is the saving the whole change
+  exists for, confirmed end to end.
+
+### Where that leaves the 9 records
+
+Both concrete hypotheses are now eliminated by measurement:
+
+1. ~~`ComputePass2Resident` never publishes the accumulator~~ - Astral takes the projection path
+   (its 2nd-pass experiment file exists, 1,360,398 records).
+2. ~~The seeder leaves aggregates at 0.0 on a map miss~~ - there are no map misses.
+
+What remains unexamined is the pass-2 side of the panel's inputs on the projection path. The
+overlay applies experiment values only to records the file's own 2nd-pass sidecar carries, which
+is what the pre-split code did, and the accumulator's hard equality check proves every
+observation of an entry_id agreed - so by construction the values written back should be the
+ones the old sidecar column held. I could not find the gap by reading, and I have been wrong
+twice tonight about causes that looked obvious, so the next step should be a dump, not another
+argument:
+
+**Dump `(EntryId, ExperimentAggregateScore, EffectiveExperimentQvalue)` for every entry at the
+point `BuildCoAssignment` runs, on this branch and on `3e4d94ed58`, and diff.** Nine rows will
+name themselves, and the panel is deterministic so one run of each suffices. `-Dataset Astral`
+is the only dataset that reproduces it.
+
+Worth remembering that `ComputePass2Resident` not publishing is still a genuine defect - a run
+on that path writes no 2nd-pass experiment sidecar at all. It just is not this one.
+
+## `-Dataset All` FINAL TALLY (run 04:12-06:02)
+
+**52 assertions PASS, 3 FAIL — and the 3 are ONE metric surfacing in three legs:**
+
+```
+Astral mode1b (diagnostics vs golden)            FAIL (1)
+Astral mode5 (rehydrate diagnostics vs golden)   FAIL (1)
+Astral mode7 (diagnostics regeneration)          FAIL (1)
+
+  all three: pass2.coAssign.experiment.target.nBetter  golden=13270 run=13279 diff=9
+```
+
+Everything else is green: Stellar, StellarLibDecoy and StellarGenDecoyEntrap complete across
+every mode, and on Astral itself mode 1 (the blib), mode 1b's FDR sanity bounds, mode 5's
+`rehydrate==straight` and its sanity bounds, and modes 2/3/4/6.
+
+Three facts that narrow it, all from this run:
+
+* **One defect, not three.** Identical metric and identical numbers in all three legs. Mode 5
+  re-emits the report from persisted sidecars and mode 7 regenerates it, and both reproduce the
+  value exactly — so whatever causes the 9 is captured in the artifacts, not transient in-memory
+  state.
+* **The populations are identical.** `target.n`, `decoy.n`, `entrapment.n` and every other
+  coAssign counter pass. Only `nBetter` moved. So no entry was added, dropped or reclassified —
+  exactly 9 comparisons flipped, which is a small value difference near a comparison boundary.
+* **Pass 1 is clean.** `pass1.coAssign.*` passes on every dataset including Astral. Only the
+  PASS-2 panel moved.
+
+Nothing a user reads has changed: not the blib, not the protein FDR, not the entrapment FDP
+bounds. But the golden moved, so this is **NOT COMMITTED** per the handoff's guardrail. HEAD is
+still `3e4d94ed58` and the work is in the working tree.
+
+## THE 9 RECORDS, ROOT-CAUSED: the pass-2 experiment columns encode PARTICIPATION, not just value
+
+Found by branch-vs-baseline dumping of the pass-2 co-assignment panel's own inputs
+(`OSPREY_DIAG_COASSIGN_INPUT`, temporary instrumentation in
+`ModelDiagnosticsData.BuildCoAssignment`, NOT committed).
+
+### The measurement
+
+360 target entries diverge at the panel's input, all in the same direction - baseline holds the
+`ResetScores` DEFAULT, branch holds a real value:
+
+```
+agg[target]     360 differing    branch=-6.5414846737289745   base=0
+exp_q[target]   153 differing    branch=0.12920411566147463   base=1
+```
+
+Tracing where the branch value came from, against the branch run's own artifacts:
+
+```
+branch agg matches the 2nd-pass EXPERIMENT sidecar value:  360 of 360
+branch agg matches the 1st-pass experiment value:            0
+has a record in its OWN file's 2nd-pass sidecar:           360 of 360
+```
+
+So the overlay is correctly scoped - every one of these entries IS in the file's own sidecar.
+Reading the BASELINE's fused v4 record for the same entries settles it:
+
+```
+entry 11989   record_agg=0.0   record_exp_prec_q=1.0   score=-6.943183522208876
+entry 45972   record_agg=0.0   record_exp_prec_q=1.0   score=-10.805635380008322
+```
+
+**The pre-split per-file record held 0.0 / 1.0 for an entry whose analysis-wide experiment value
+is a real number.**
+
+### What that means
+
+The four experiment-scope columns are per-entry_id in their VALUE but per-(file, entry_id) in
+their DEFAULTEDNESS. An observation that took no part in the experiment fold carries the
+defaults; the same entry_id carries a real value elsewhere. The per-file record was therefore
+encoding TWO things - the value, and whether this observation participated - and the v5 collapse
+keeps the first and loses the second.
+
+**Why the collapse assertion did not catch it.** `FdrExperimentAccumulator.Add` compares
+observations and throws on disagreement, and it never fired. It is fed from the SCORE PASS, where
+every observation supplies the computed value; the 0.0 does not exist at that point. It appears
+later, when a record is written from an ENTRY still holding its reset defaults. The assertion is
+still correct about what it checks - it just cannot see this, because the divergence is
+introduced after the accumulator is done.
+
+**Why scoping cannot fix it.** The overlay is genuinely required for participants: removing it is
+what produced the original golden move (defect B), because on the projection path the entries do
+not otherwise receive pass-2 experiment values. It must fire for participants and not for
+non-participants - and post-split nothing on disk distinguishes them.
+
+### This is the same class as the `pep` finding
+
+Both are cases where a column that looks experiment-scope is not purely a function of entry_id:
+
+* `pep` - real on ONE observation per base_id, 1.0 on the rest. Per-observation by construction.
+* `experiment_aggregate_score` / experiment q - real on participating observations, defaulted on
+  the rest. Per-observation in its defaultedness.
+
+The scope split's premise holds for the 1st pass (Stage 6 is byte-identical after the gap-fill
+fix, over 3,470,075 rows) and for the VALUES in the 2nd pass. It does not hold for 2nd-pass
+participation.
+
+### Options - this needs a ruling, it should not be improvised
+
+* **(a) Restore participation to the per-file 2nd-pass record.** A 1-byte flag, or keep
+  `experiment_aggregate_score` there as well. Cost: the pass-2 per-file record grows from 36 B to
+  37 B (flag) or 44 B (aggregate), against 68 B before the split - so most of the saving survives.
+  A flag is the smaller change and covers both agg and q; keeping the aggregate covers only agg
+  and would still leave the 153 q rows wrong.
+* **(b) Do not overlay experiment values onto non-participants**, deriving participation some
+  other way (e.g. the entry's own run q still being 1.0). Cheap, but it INFERS a state that used
+  to be recorded, and this session has already shown what inference costs here.
+* **(c) Accept the change and rebaseline.** Forbidden by the session guardrail, and it should be:
+  the branch value is arguably more informative, but it changes a reported diagnostic without a
+  decision behind it.
+
+**Recommendation: (a) with a flag.** It records the thing that is actually per-observation
+instead of re-deriving it, it is one byte, and it keeps the collapse honest for the values -
+which is the part of the design that measured out well.
+
+### Note on the numbers
+
+360 entries diverge at the panel input; only 9 change the reported `nBetter`. The other 351 shift
+values that do not cross a comparison boundary. So the reported metric understates the divergence
+by 40x - worth remembering when judging "how bad is a 9-record diff".
+
+### The 360 are a SENTINEL READING, and v5 made it unreadable (Brendan, 2026-08-29)
+
+Brendan's framing, and it is the right one: *"run_q = 1 and agg = 0 is a sentinel reading,
+because agg = 0 should mean run_q = 0.01."* A genuine aggregate of 0.0 sits AT the acceptance
+boundary - `project_osprey_zero_is_the_score_boundary` - so it should be accompanied by a run q
+around the FDR threshold, not by 1.0. The pair is self-contradictory for real data, which is
+exactly what makes it recognizable as "this observation carries no experiment result".
+
+**Measured on the baseline Astral run, 3,470,075 rows:**
+
+| predicate | count |
+|---|---|
+| `run_q == 1` | 1,374,571 |
+| `run_q == 1` AND `agg == 0` | **360** |
+| divergent rows (branch vs baseline) | **360** |
+| divergent rows absent from their file's 1st-pass sidecar (gap-fill) | **360 of 360** |
+
+So there are two equivalent characterizations of the same set:
+
+* **Why they are defaulted**: they are GAP-FILL entries - appended by Stage 6, no 1st-pass record
+  for that (file, entry_id), so `Pass1ScalarSeeder` never restored their Score/Pep/aggregate and
+  they kept `ResetScores` defaults.
+* **How you would detect it**: the contradictory pair `run_q == 1 && agg == 0`.
+
+Note `run_q == 1` ALONE is nowhere near sufficient - 1,374,571 rows have it and 1,374,211 of them
+carry a real aggregate. Any fix keyed on run q by itself would corrupt 1.37 M rows to repair 360.
+
+### The decisive consequence: v5 removed the field the sentinel lives in
+
+The sentinel reading needs the AGGREGATE, and the v5 per-file record is
+`entry_id, score, run_precursor_q, run_peptide_q, pep` - the aggregate moved to the experiment
+sidecar. **So the reading is unevaluable from the new record**, and "derive participation from
+run-level information" cannot be implemented as a predicate over what v5 persists.
+
+That collapses the options to one: the pass-2 per-file record has to carry per-observation state
+again - the aggregate itself, or a flag standing in for it.
+
+### And the sentinel itself should be fixed while the field comes back
+
+`agg = 0.0` meaning "did not participate" is a LATENT HAZARD that predates the scope split. This
+codebase has already paid for it twice and documented both:
+
+* `CoAssignmentAccumulator.ObserveCutoff`: *"0.0 sits above 93-99% of measured aggregates, so a
+  max would let a single default row outrank every real (negative) one."*
+* `StreamingFdr.ExperimentAggregateScore` returns `double?` rather than 0.0 precisely so a
+  consumer cannot mistake "not competed" for a mid-distribution score - and names the 542,368
+  decoys vs 117,783 targets astral failure that resulted.
+
+The in-memory API got this right; the PERSISTED form fell back to 0.0 anyway. If the column is
+returning to the record, it should return with an unambiguous sentinel.
+
+**`double.NegativeInfinity` is the natural choice**: `ExperimentBest` already uses it for
+"missing", it can never win a max, and it round-trips through G17. NaN is not - this codebase
+rejected it because the sidecar comparators test `Math.Abs(a - b) <= tolerance`, which is false
+for NaN against NaN, turning byte-identical files into a red gate.
+
+### Recommended shape
+
+* Pass-2 per-file record: `entry_id, score, run_precursor_q, run_peptide_q, pep,
+  experiment_aggregate_score` = 44 B (against 36 B now and 68 B before the split).
+* `experiment_aggregate_score` = `NegativeInfinity` for an observation that took no part in the
+  experiment fold, never 0.0.
+* The experiment sidecar keeps the three q-values, which ARE per-entry_id.
+* `TryReadOverlay` applies the experiment q only where the record shows participation, and takes
+  the aggregate from the record.
+
+This keeps the collapse where it measured out well (1st pass byte-identical over 3,470,075 rows;
+2nd-pass VALUES agree), stops fabricating participation, and closes a hazard that was already
+there. It also means the 2nd-pass experiment sidecar no longer needs the aggregate column at all -
+worth deciding whether to drop it there rather than store it twice.
+
+### The measurement chain for the 360, so nobody repeats it
+
+Astral, straight-through, branch vs baseline `3e4d94ed58`. Every line below is measured, not
+argued. Four candidate discriminators were eliminated; only the conjunction is exact.
+
+| predicate | selects | verdict |
+|---|---|---|
+| `run_q == 1` | 1,374,571 of 3,470,075 | 3,800x over-selects |
+| gap-fill (`ParquetIndex == null` / absent from the file's own 1st-pass sidecar) | 8,792 | 24x over-selects |
+| entry has NO 1st-pass record in ANY file | 0 of 360 | eliminated outright |
+| 2nd-pass sidecar coverage gap | 0 missing of 3,470,075 | eliminated outright |
+| `run_q == 1 AND agg == 0` | **360** | **exact** |
+
+Supporting counts:
+
+* Gap-fill rows total **8,792** - matches mode 1c's "8,792 gap-fill record(s) absent from pass 1"
+  independently.
+* Of those, **360** carry the sentinel and **8,432** carry real experiment values.
+* Both groups are entirely made of entries that DO have a 1st-pass record in another file
+  (360 / 360 and 8,432 / 8,432). So the entry genuinely has an aggregate, and the `max()` over
+  its rows is well defined - the 0.0 is NOT "this entry never competed".
+
+**What that leaves.** The difference between the 360 and the 8,432 is at the OBSERVATION level
+and is not reconstructible from any artifact tried so far. Both are gap-fill; both belong to
+entries with real observations elsewhere; both are present in the file's 2nd-pass sidecar.
+Something inside the pass-2 computation admitted 8,432 of them to the experiment fold and not the
+other 360.
+
+**Why this argues for stamping at computation time (option b).** Four attempts to reconstruct
+participation downstream each over-selected by 24x-3800x, and a fix keyed on any of them would
+have corrupted between 8,432 and 1.37 M rows to repair 360. The information is exact and free at
+the moment the pass-2 competition runs; every attempt to recover it afterwards has been lossy.
+That is the same shape as the other six defects in this phase - the difference between having the
+information and having to infer it.
+
+**What the 360 need, concretely.** They must reach `ModelDiagnosticsData.BuildCoAssignment` still
+carrying their `ResetScores` defaults (`ExperimentAggregateScore = 0.0`,
+`EffectiveExperimentQvalue = 1.0`), which is what the baseline overlay delivered by writing the
+record's own values back. The v5 overlay hands them the entry's analysis-wide value instead, the
+panel then counts them as detected at experiment scope, and 9 of them flip a `nBetter`
+comparison. 360 diverge at the panel input; 9 reach the reported metric - so the gauge
+understates the divergence by 40x.
+
+**Reproduction, ~25 minutes**: the recipe is in the phase-2 handoff under "The technique that
+actually worked". `OSPREY_DIAG_COASSIGN_INPUT` (temporary instrumentation in
+`ModelDiagnosticsData.BuildCoAssignment`, NOT committed) dumps the panel's own inputs; the
+comparison scripts are `diffco.py`, `trace360.py` and `diffdump.py` in
+`ai/.tmp/sessions/20260829-scope-split/`.
+
+## DECISIVE: the pass-2 "experiment-scope" columns are WINNER MARKERS, not per-entry values
+
+Brendan's question - *"if you group the sidecar rows for these values in all 3 baseline sidecars
+do the exp values match?"* - settles the whole investigation. They do NOT match.
+
+Baseline (`3e4d94ed58`) Astral, one entry_id read from all three per-file 2nd-pass sidecars:
+
+```
+entry 11989   _49: score=-6.9432  agg=0.0      exp_pept_q=1
+              _55: score=-6.5415  agg=-6.5415  exp_pept_q=0.003261
+              _60: score=-4.4710  agg=0.0      exp_pept_q=1
+
+entry 16350   _49: score=-1.4048  agg=0.0      exp_prec_q=1
+              _55: score=-3.4112  agg=0.3602   exp_prec_q=0.01943
+              _60: score= 0.3602  agg=0.3602   exp_prec_q=0.01943
+
+entry 36228   _49: score=-1.1247  agg=0.0      exp_prec_q=1
+              _55: score=-5.7408  agg=0.0      exp_prec_q=1
+              _60: score= 1.2089  agg=1.2089   exp_prec_q=0.005957
+```
+
+**Read entry 36228**: `agg = 1.2089` is the entry's MAX score across the three runs, and it is
+stamped only on the row that achieved it (`_60`). The other two rows carry `agg = 0.0,
+exp_q = 1`. The columns do not hold "the entry's value, copied to every row" - they MARK WHICH
+OBSERVATION REPRESENTS THE ENTRY at experiment scope.
+
+That is deliberate, not accidental. `CoAssignmentPassBuilder.AddRow` admits a target when
+`experimentQvalue <= runFdr`; under marker semantics exactly ONE row per entry is admitted, so an
+entry cannot be counted once per run at experiment scope. Broadcasting the value admits all of
+its rows.
+
+### Consequences
+
+1. **The v5 collapse premise is FALSE for the second pass.** None of the four columns
+   (`experiment_precursor_qvalue`, `experiment_peptide_qvalue`, `experiment_protein_qvalue`,
+   `experiment_aggregate_score`) is a function of entry_id alone in pass 2. The 1st pass is
+   unaffected - Stage 6 is byte-identical over 3,470,075 rows after the gap-fill fix.
+2. **The baseline is CORRECT and the branch is WRONG.** An earlier note in this file argued the
+   opposite - that the 360 were a latent master bug and the branch had accidentally fixed it.
+   That was wrong, and this measurement retracts it. The 360 are gap-fill rows correctly NOT
+   marked as their entry's representative; the branch promotes all three rows of an entry to
+   representatives, and 9 of the extra admissions flip a `nBetter` comparison.
+3. **`pep` is the same phenomenon, already documented.** It is real on the single
+   experiment-winner observation of each base_id and 1.0 elsewhere. So `pep`, the aggregate and
+   both experiment q-values are ALL winner-marked per-observation columns. The `pep` finding was
+   not a special case - it was the general rule, and it should have generalised the moment it
+   was found.
+4. **`FdrExperimentAccumulator.Add` could never have caught this.** It is fed from the score
+   pass, where every observation supplies a computed value; the 0.0 / 1.0 marker state is applied
+   later, when records are written. The assertion is sound about what it sees - it simply never
+   sees the marker.
+
+### What this means for the design
+
+The 2nd-pass experiment sidecar as built stores one record per distinct entry_id, which cannot
+represent "which observation is the representative". Options, for Brendan:
+
+* **Keep the 2nd-pass experiment sidecar for genuinely per-entry data only** - if any of the four
+  columns IS per-entry (protein q is assigned per PEPTIDE across all files by
+  `ProteinFdr.PropagateProteinQvalues`, so it plausibly is) - and leave the winner-marked columns
+  in the per-file record. That likely means the pass-2 per-file record keeps
+  `experiment_precursor_qvalue`, `experiment_peptide_qvalue`, `pep` and the aggregate, and the
+  2nd-pass experiment file carries only `experiment_protein_qvalue` - a much smaller saving than
+  the design assumed, but an honest one.
+* **Drop the 2nd-pass experiment sidecar entirely** and split only the 1st pass, where the
+  premise is measured to hold. The 1st pass is 85% of the bytes (52.3 GB of 61.6 GB), so most of
+  the win survives.
+
+**The 1st-pass half of the split is unaffected by all of this** and remains verified: Stage 6
+byte-identical over 3,470,075 rows, 2,498,773 experiment records for 2,498,773 distinct
+entry_ids covering all 6,226,744 per-file rows.
+
+### Method note
+
+Four hypotheses were killed by measurement before this one landed, each having over-selected by
+24x-3800x. The measurement that settled it was not more instrumentation - it was reading the SAME
+entry across all three baseline sidecars, which took one script and no run. When a value looks
+wrong on one row, read that row's siblings before theorising about the code that wrote it.
+
+### CORRECTION to the marker-semantics note above (same session, measured after it)
+
+The note above says the pass-2 experiment columns are "winner markers" where non-representative
+rows carry 0.0 / 1.0. **That generalised from three sampled entries and is wrong about the
+population.** The joint distribution over all 3,470,075 baseline pass-2 panel rows:
+
+```
+agg==0   run_q==1  exp_q==1        count
+False    False     False        1,740,927
+False    True      True         1,122,179
+False    False     True           354,577
+False    True      False          252,032
+True     True      True                360      <- the ENTIRE agg==0 population
+
+rows with agg == 0: 360   of which GAP-FILL: 360 (100.0%)
+```
+
+`agg == 0` is not common - it is exactly 360 rows, and every one is gap-fill. Most rows carry a
+real aggregate, so "0.0 marks a non-representative row" is false.
+
+**What still stands** (and is what actually breaks the split): the exp values DIFFER PER
+OBSERVATION for the same entry_id. Entry 11989 carries `exp_pept_q = 1` in `_49` and `_60` but
+`0.003261` in `_55`. One record per entry_id cannot represent that, so the v5 pass-2 collapse is
+lossy regardless of how the 0.0 is interpreted.
+
+**What the 0.0 actually means**: a gap-filled row that received NO experiment value at all -
+360 of the 8,792 gap-fill rows, i.e. ~4% of them. Not "all gap-fill" and not "all
+non-representative rows".
+
+**Still unknown, and it is the remaining mechanism question**: what separates those 360 gap-fill
+rows from the 8,432 gap-fill rows that DID receive experiment values. Nothing measured so far
+separates them - same run_q (all 1), same decoy status (all targets), overlapping score ranges,
+and all belong to entries with real observations in other files. Answering it needs instrumenting
+master's pass-2 WRITE path (dump `(file, entry_id, ExperimentPrecursorQvalue,
+ExperimentAggregateScore)` where the 2nd-pass record is written, on `3e4d94ed58`) and finding
+where the two groups diverge. `pwiz-work2` is already at that commit with the diagnostic
+scaffolding in place.
+
+**Method note, again**: this correction exists because a three-entry sample was extrapolated to a
+3.47 M-row population without counting the population. The count took one pass and would have
+prevented the overreach.
+
+**The predicate is the PAIR, `agg == 0 AND exp_q == 1`** (Brendan). In this dataset `agg == 0`
+alone already selects exactly the same 360 rows, but that is luck, not safety: 0.0 is the score
+cutoff, so a genuine aggregate of exactly 0.0 is possible, and such a row would carry a REAL
+exp_q rather than 1. Meanwhile `exp_q == 1` alone selects 1,477,116 rows - it is common. Neither
+column identifies the state by itself; only the conjunction does, and only the conjunction stays
+correct if an entry ever lands exactly on the boundary.
+
+### THE COLLAPSE INVARIANT, MEASURED ACROSS EVERY ENTRY (supersedes the two notes above)
+
+Brendan asked whether any OTHER entries violate the invariant. Measured over all 3,470,075
+baseline pass-2 panel rows, grouped by entry_id:
+
+```
+distinct entry_ids:                            1,360,398
+with more than one row:                        1,176,712
+entries whose agg   differs across their rows:       278
+entries whose exp_q differs across their rows:       133
+entries where EITHER differs:                        278   (0.024% of multi-row entries)
+```
+
+**The v5 collapse premise HOLDS for 99.976% of multi-row entries.** One record per entry_id is
+lossless for 1,176,434 of 1,176,712. This RETRACTS the earlier claim in this file that "the
+collapse premise is FALSE for the second pass" - that was extrapolated from three sampled
+entries and is wrong, in the same way the "winner marker" claim was wrong.
+
+The 278 violating entries account for exactly the 360 anomalous rows, and those rows are 100%
+gap-fill, carrying `agg == 0 AND exp_q == 1` while their sibling rows carry the entry's real
+values.
+
+**Balance of evidence: this is a latent defect in master, not a designed marker.** A deliberate
+rule would not fire on 0.024% of entries; a skipped assignment would. And it went unnoticed
+because `exp_q = 1` excluded those rows from experiment scope, which made the bogus `agg = 0`
+inert - it never reached `ObserveCutoff`'s minimum. The v5 collapse gives them the entry's value,
+which is what the other 99.976% already receive, and 9 of the newly-admitted rows flip a
+`nBetter` comparison.
+
+**What is still missing** is the mechanism: why those 360 of 8,792 gap-fill rows were skipped
+while 8,432 were not. Nothing measured separates the two groups - same run_q (all 1), same decoy
+status (all targets), overlapping score ranges, all belonging to entries with real observations
+in other files. Until that is known, "master bug" is the strongly-favoured reading rather than a
+settled one, and the golden should NOT be regenerated on the strength of a strong reading alone.
+
+**Next step, one instrument-and-run cycle**: dump `(file, entry_id, ExperimentPrecursorQvalue,
+ExperimentAggregateScore)` at the point the 2nd-pass record is WRITTEN, on `3e4d94ed58`, and find
+where the 360 diverge from the 8,432. `pwiz-work2` is already at that commit with the diagnostic
+scaffolding in place.
+
+**Method note.** Three claims in this investigation were overstated from small samples and then
+retracted by a counting pass that took seconds: "winner markers", "premise is false for pass 2",
+and "master is buggy, rebaseline". Count the population before characterising it.
+
+## RESOLVED: "experiment-wide" must be per-entry, and master violates it (2026-08-29)
+
+This supersedes every earlier note in this file about the 360 rows, the participation flag, the
+1-byte marker, the `ParquetIndex` guard and the "restore parity" plan. Those were successive
+wrong turns; this is the settled understanding, and Brendan's framing is what produced it.
+
+### The definitional argument
+
+*"Experiment-wide really is supposed to mean that. It is not supposed to be possible for runs for
+the same entry to have different experiment-wide values. That is a violation of the definition,
+and especially for Pass 2 where the values feed directly into a user-facing BLIB, which itself is
+a relational database that should not allow this relationship violation."* (Brendan)
+
+Master's own rule agrees: *"Off-stratum survivors keep their 1st-pass EXPERIMENT q. That q is a
+pass-1 property anchored on the best-scoring peak."* A pass-1 experiment q is ONE value per
+entry across the whole experiment, so the rule as stated is coherent.
+
+### The implementation does not match the rule
+
+Master implements "keep the 1st-pass experiment q" as **"keep whatever is in this observation's
+record"** (`FinishRecord`'s off-stratum branch: `if (!pass1ExpQByKey.TryGetValue(...)) return
+rec;`). For a row Stage 6 RESET - gap-fill rows, and moved peaks - the in-memory value at
+mid-stream write time is the `ResetScores` default, not the pass-1 value. So the default is
+silently substituted for "the entry's pass-1 experiment q" on exactly those rows.
+
+Entry 11989, Astral, read from all three baseline per-file 2nd-pass sidecars:
+
+| | `_49` | `_55` | `_60` |
+|---|---|---|---|
+| master | `exp_pept_q=1, agg=0` | `exp_pept_q=0.003261, agg=-6.5415` | `exp_pept_q=1, agg=0` |
+| entry's true pass-1 value | -6.5415 | -6.5415 | -6.5415 |
+
+One entry, three different "experiment-wide" values. `_55` carries the correct one.
+
+### The v5 lookup implements the rule CORRECTLY
+
+Reading the value from the analysis-wide 1st-pass experiment sidecar by entry_id gives all three
+rows -6.5415. That is why `FdrExperimentAccumulator.Add` PASSED across all 1,360,398 entries with
+the v5 code in place: with the lookup, every entry's observations agree.
+
+**And it is why the accumulator REJECTED the "parity fix"**: reproducing master's per-observation
+defaults immediately produced disagreeing values for entry 11989 and threw. The assertion encodes
+the definition, so it accepts the correct implementation and rejects the incorrect one - working
+in both directions, which is the strongest evidence available that the v5 behaviour is right.
+
+### Scope of the correction - MEASURED, `-Dataset All`
+
+```
+Astral mode1  (vs golden)                    PASS   <- the BLIB does NOT move
+Astral mode1b (FDR sanity bounds)            PASS   <- independent check, not regenerated
+Astral mode3  (per-file sidecars==straight)  PASS   (13,555,990 records)
+Astral mode3  (HPC chain==straight)          PASS
+Astral mode2 / mode4 / mode5(==straight) / mode6   PASS
+Astral mode1b / mode5 / mode7 (diagnostics)  FAIL   <- one metric, 9 rows
+```
+
+`pass2.coAssign.experiment.target.nBetter` 13,270 -> 13,279. Confined to the co-assignment
+diagnostics panel: the blib is byte-identical, protein FDR unchanged, entrapment FDP bounds hold.
+The relational violation never reached the BLIB in practice because the blib takes one row per
+precursor and never picked a defaulted one - but it was expressible, which is the point.
+
+360 rows diverge at the panel input and 9 reach the reported metric, so the gauge understates the
+divergence by 40x.
+
+### Consequence
+
+The v5 pass-2 split is CORRECT and fixes a latent master defect. The golden move is the fix
+becoming visible. `-CreateGolden` for the diagnostics golden is justified, with this reasoning
+recorded - and it is narrower than it sounds, because the fixed FDR sanity bounds are
+deliberately NOT regenerated by `-CreateGolden` and would still catch a bad blessing.
+
+**The parity fix currently in the working tree must be REVERTED.** It faithfully reproduces the
+master bug, which is exactly why the invariant rejected it.
+
+### Why only the diagnostics datasets ever failed
+
+`OSPREY_PASS2_QVALUE=protein-compact` is the DEFAULT, but the projection pass-2 path is gated on
+`!config.ModelDiagnostics`. So a `--model-diagnostics` dataset takes the frozen-competition path
+(`ComputePass2TransferCompeteFull`, where `FinishRecord` lives) and a plain one does not. Stellar
+carries no `--model-diagnostics`, which is why it was 10/10 green throughout while
+StellarLibDecoy and Astral failed. **Stellar green is not sufficient for any change touching
+experiment-scope values.**
+
+### Method notes worth keeping
+
+* The mechanism came from the RUN LOG (`OSPREY_PASS2_QVALUE=protein-compact` in one line) after
+  two code paths had been instrumented on the strength of reading source. The log knew which
+  branch ran the whole time.
+* An empty filtered dump is indistinguishable from an unexercised code path unless the diagnostic
+  also emits a COUNT. `ea_zero=0` looked like "no zeros exist"; the accompanying
+  `emitted=6226744` revealed it was the wrong population entirely (that is the pass-1 row count).
+* Reading the SAME entry across its sibling rows in all three files is what settled the question,
+  and it needed one script and no run. When a value looks wrong on one row, read its siblings
+  before theorising about the code that wrote it.
+* Four discriminators were eliminated by counting: `run_q == 1` (1,374,571 - 3,800x over),
+  gap-fill (8,792 - 24x over), "entry never participated" (0 of 360), pass-2 coverage (0 missing).
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260829_osprey_stage7_stream_increment.md` before starting work.
+It covers the parity-fix revert, instrumentation cleanup, the cross-impl parity run and how to
+reproduce the impact in maccoss/osprey if its blib or protein-FDR legs fail.
