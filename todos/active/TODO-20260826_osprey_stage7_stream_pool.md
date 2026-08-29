@@ -5106,3 +5106,77 @@ experiment-scope values.**
 `ai/.tmp/handoff-20260829_osprey_stage7_stream_increment.md` before starting work.
 It covers the parity-fix revert, instrumentation cleanup, the cross-impl parity run and how to
 reproduce the impact in maccoss/osprey if its blib or protein-FDR legs fail.
+
+## Phase 1 LANDED: reverted, gated, and committed in three trees (2026-08-29 afternoon)
+
+The parity fix is gone, the temporary instrumentation is gone from both trees, `pwiz-work2` is
+back at `5acc2dd24c`, and phase 1 is committed. `FinishRecord`'s `fileKey` parameter survives
+the revert - it is still used by `competition.Pep(fileKey, ...)` on the on-stratum path.
+
+| Repo | Commit | Branch |
+|---|---|---|
+| `pwiz-work1` | `9d75d01580` | `Skyline/work/20260827_osprey_stage7_stream_increment` (PR #4621) |
+| `maccoss/osprey` | `90c8968` | `fix/experiment-q-per-entry-not-per-file` off `main` (`7343ffd`) |
+| `pwiz-ai` | `f324b3e` | `master`, not pushed |
+
+Local gate on the C# side before committing: build clean, ReSharper 0/0, **597/597** tests (599
+before - `TestFdrScopeSplitV5` replaces three deleted patch tests).
+
+### The cross-impl comparison had to be rebuilt, not loosened
+
+The v5 split left the two sides with no like-for-like artifact: nine values, one 68-byte
+per-file record on the Rust side, two files on ours. `Compare-FdrSidecarsFused` (in
+`Regression/FdrSidecars.ps1`, where the layouts already live) reconstructs Rust's
+per-observation view from the C# pair - run scope from the matched per-file record, experiment
+scope joined by `entry_id` from the analysis-wide file.
+
+* `FusedFields` carries name + Rust offset + C# offset + which artifact holds it in ONE row, for
+  the same reason `Fields` is one array. Verified against `write_fdr_scores_sidecar`:
+  `score@4, run_prec@12, run_pept@20, exp_prec@28, exp_pept@36, pep@44, exp_protein@52,
+  exp_agg@60`.
+* An `entry_id` the per-file sidecar carries but the analysis-wide file lacks is COUNTED
+  (`MissingExperiment`), never skipped - skipping would hide a C#-side incompleteness behind a
+  PASS. Distinct ids are tracked separately from the observation tally so the set arithmetic
+  cannot go negative on a repeated miss.
+* Both layouts share the OSPRYFDR magic, so the version byte is the only discriminator and a
+  36-byte file read at a 68-byte stride yields plausible garbage. v5 is refused by name, saying
+  which side of the comparison it belongs on.
+* `Compare-FdrSidecars-Crossimpl.ps1`'s SKIP guard now tests for the FUNCTION, not just the
+  file: a pre-v5 pwiz checkout has `FdrSidecars.ps1` without the fused comparison.
+
+Smoke-tested against a live run dir: the pass-1 experiment map indexed **484,747 distinct
+entry_ids**, and C#-on-both-sides produced the intended named version refusal.
+
+### The same defect existed in Rust, and is now fixed there
+
+`crates/osprey/src/pipeline.rs`, the protein-compact pass-2 map-back, read the entry's pass-1
+experiment q from `sidecar_paths[file_idx]` - the file being mapped. An entry with no pass-1
+record in THAT file missed and kept its `ResetScores` default, which is master-C#'s bug in
+Rust's spelling.
+
+`read_analysis_wide_experiment_q` unions every file's pass-1 values into one `entry_id`-keyed
+map, built once ahead of the loop; residency stays O(distinct entries). Two departures from a
+literal mirror, both deliberate:
+
+* It carries `experiment_aggregate_score` with the two q-values. Rust left the aggregate at
+  whatever the seed put there, so a record's q and the score that q was ranked on could come
+  from different competitions.
+* Two files disagreeing about one entry is REFUSED, not first-wins, and the caller falls back to
+  the 2nd-pass retrain - its existing documented response to inputs it cannot trust. Bitwise
+  comparison, same reasoning as `FdrExperimentAccumulator`.
+
+Rust gate: `cargo fmt --check`, clippy `-D warnings`, **148 tests** (145 before). The three new
+ones pin the resolve-across-files case (worked example entry 11989), the disagreement refusal
+and the unreadable-sidecar refusal. Release-notes entry added to `RELEASE_NOTES_v26.7.0.md`.
+
+### Two traps worth keeping
+
+* **`Get-PwizRoot` defaults to `C:\proj\pwiz`** - master. Run bare, `Compare-EndToEnd-Crossimpl`
+  would execute the MASTER C# binary against fixed Rust and report a divergence that is pure
+  mis-targeting. Set `PWIZ_ROOT=C:\proj\pwiz-work1`. The new SKIP guard happens to catch this
+  too, since master's `FdrSidecars.ps1` has no fused comparison.
+* **`Start-Process` with `-RedirectStandardOutput`/`-RedirectStandardError` is NOT detached.**
+  The redirects force `UseShellExecute=false`, so it calls `CreateProcess` directly and the
+  child inherits the harness job object. The first `-Dataset All` was killed at ~18 minutes,
+  mid-Percolator iteration 7, with an empty stderr and no crash event. Relaunched via
+  `Invoke-CimMethod Win32_Process Create` with a launcher that writes its own log.
