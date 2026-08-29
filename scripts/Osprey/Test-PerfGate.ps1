@@ -83,7 +83,12 @@
     Osprey-workflow.html conditions: 3 (parallel) for Stellar, 1 (sequential) for Astral.
 
 .PARAMETER TestBaseDir
-    Where the datasets live. Default: Dataset-Config.ps1 default.
+    Override the read-only data root. Default: the SAME Perftests tree
+    regression.ps1 acquires (<Downloads>\Perftests\osprey-testfiles-mzML-v2,
+    downloaded + extracted on demand, skip-if-present), so no staging and no
+    environment variable is needed. Inputs are referenced in place; each run's
+    --work-dir keeps its caches + derived artifacts in per-run scratch that is
+    deleted when the run's walls have been parsed.
 
 .PARAMETER OutputDir
     Per-run logs + the markdown verdict. Default ai\.tmp\perf-gate\<UTC stamp>\.
@@ -153,6 +158,29 @@ if (-not $BranchRoot) {
         throw "Cannot auto-detect the branch pwiz root; pass -BranchRoot."
     }
 }
+
+# --- Resolve the read-only data tree (regression.ps1's own) -------------------
+# The data lives where regression.ps1 puts it: <Downloads>\Perftests\
+# osprey-testfiles-mzML-v2, acquired by Get-RegressionData (download + extract,
+# skip-if-present). Inputs are referenced in place and NOTHING is written into
+# this tree; each run's --work-dir sends caches + derived artifacts to per-run
+# scratch, so the cold-run shape (spectra + library caches built inside the
+# measured run) is unchanged from the historical copy-based staging.
+. (Join-Path $BranchRoot 'pwiz_tools/Osprey/Regression/RegressionData.ps1')
+if ([string]::IsNullOrEmpty($TestBaseDir)) {
+    # Mirrors regression.ps1's $dataUrl; the URL's second-to-last segment
+    # ("perftests") maps to <Downloads>\Perftests.
+    $dataUrl = 'https://panoramaweb.org/_webdav/MacCoss/software/%40files/perftests/osprey-testfiles-mzML-v2.zip'
+    $TestBaseDir = Get-RegressionData -Url $dataUrl
+}
+
+# Per-run scratch root for the multi-GB workdir caches: off the read-only data
+# tree, on the same disk the historical numbers were measured on. A leading
+# underscore marks "not a dataset" (run-layout convention, like _bin).
+$scratchBase = if ($env:OSPREY_TEST_BASE_DIR) { $env:OSPREY_TEST_BASE_DIR }
+               elseif ($IsLinux) { '/mnt/d/test/osprey-runs' }
+               else { 'D:\test\osprey-runs' }
+$perfScratchRoot = Join-Path $scratchBase '_perfgate'
 
 # Stages emitted by both impls, in pipeline order. The heavy stages are the ones
 # a scoring/per-file refactor can plausibly move; they get the per-stage gate.
@@ -265,26 +293,22 @@ function Invoke-PerfRun {
     $files = @($ds.AllFiles)
 
     $tag = "perfgate-$($DatasetName.ToLower())-$VariantKey-run$RunIdx"
-    $workdir = Join-Path $datasetRoot "_$tag"
+    $workdir = Join-Path $perfScratchRoot $tag
     if (Test-Path $workdir) { Remove-Item $workdir -Recurse -Force }
     New-Item -ItemType Directory -Path $workdir -Force | Out-Null
 
-    # Copy inputs into the workdir, preserving mtime (the library identity hash
+    # Inputs by absolute path from the read-only tree - nothing is copied, and
+    # the in-place library keeps its stable mtime (the library identity hash
     # includes mtime; a fresh copy time could spuriously invalidate caches).
-    foreach ($f in $files) {
-        Copy-Item (Join-Path $datasetRoot $f) (Join-Path $workdir $f)
-    }
-    Copy-Item (Join-Path $datasetRoot $ds.Library) (Join-Path $workdir $ds.Library)
-    $libcache = Join-Path $datasetRoot ($ds.Library + '.libcache')
-    if (Test-Path $libcache) {
-        Copy-Item $libcache (Join-Path $workdir ($ds.Library + '.libcache'))
-    }
-
+    # --work-dir sends the spectra + library caches and every derived artifact
+    # to the workdir, so each measured run still builds its caches cold, exactly
+    # as the copy-based staging measured.
     $cliArgs = @()
-    foreach ($f in $files) { $cliArgs += @('-i', $f) }
-    $cliArgs += @('-l', $ds.Library, '-o', 'output.blib',
+    foreach ($f in $files) { $cliArgs += @('-i', (Join-Path $datasetRoot $f)) }
+    $cliArgs += @('-l', (Join-Path $datasetRoot $ds.Library), '-o', 'output.blib',
                   '--resolution', $ds.Resolution, '--protein-fdr', '0.01',
-                  '--threads', $Threads.ToString())
+                  '--threads', $Threads.ToString(),
+                  '--work-dir', $workdir)
     # --perf-stats emits the [STAGE-WALL]/[TIMING] lines this gate parses, but it
     # only exists on post-#4326 binaries; pre-#4326 baselines emit those lines
     # unconditionally and reject the unknown flag. Add it only where supported

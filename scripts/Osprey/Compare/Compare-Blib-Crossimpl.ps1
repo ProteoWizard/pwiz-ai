@@ -120,6 +120,15 @@ function Invoke-Sqlite {
             for ($i = 0; $i -lt $reader.FieldCount; $i++) {
                 $v = $reader.GetValue($i)
                 if ($v -is [System.DBNull]) { $v = $null }
+                if ($v -is [string] -and $cols[$i] -match 'ileName$') {
+                    # Basename-normalize the path-bearing name columns: C# records
+                    # the absolute acquisition path (BlibBuild convention) while
+                    # Rust records the -i path relative to the blib directory, so
+                    # the raw strings never match byte-for-byte; file IDENTITY is
+                    # what the join key needs. The stem-keyed FileName columns
+                    # carry no separators, so the split is a no-op there.
+                    $v = ($v -split '[\\/]')[-1]
+                }
                 $row[$cols[$i]] = $v
             }
             $rows.Add($row)

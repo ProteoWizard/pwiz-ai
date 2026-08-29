@@ -42,8 +42,12 @@
     generating reverse decoys).
 
 .PARAMETER TestBaseDir
-    Override dataset root (defaults to OSPREY_TEST_BASE_DIR or
-    D:\test\osprey-runs).
+    Override the read-only data root. Default: the SAME Perftests tree
+    regression.ps1 acquires (<Downloads>\Perftests\osprey-testfiles-mzML-v2,
+    downloaded + extracted on demand, skip-if-present), so a fresh machine
+    needs no staging and no environment variable. Inputs are referenced in
+    place; nothing is copied into the workdirs and nothing is written back
+    to this tree (--work-dir points every derived artifact at the workdir).
 
 .PARAMETER Force
     Wipe any existing workdirs before running.
@@ -195,6 +199,21 @@ if ($AllowStaleBinaries) {
     }
 }
 
+# --- Resolve the read-only data tree (regression.ps1's own) -------------------
+# The data lives where regression.ps1 puts it: <Downloads>\Perftests\
+# osprey-testfiles-mzML-v2, acquired by Get-RegressionData (download + extract,
+# skip-if-present). Reusing that acquisition is what makes this script need no
+# staging: the flat <root>\<dataset>\ layout it yields is exactly what
+# Get-DatasetConfig expects, and the tree is treated as READ-ONLY - inputs are
+# referenced in place and --work-dir keeps every derived artifact out of it.
+. (Join-Path (Get-PwizRoot) 'pwiz_tools/Osprey/Regression/RegressionData.ps1')
+if ([string]::IsNullOrEmpty($TestBaseDir)) {
+    # Mirrors regression.ps1's $dataUrl; the URL's second-to-last segment
+    # ("perftests") maps to <Downloads>\Perftests.
+    $dataUrl = 'https://panoramaweb.org/_webdav/MacCoss/software/%40files/perftests/osprey-testfiles-mzML-v2.zip'
+    $TestBaseDir = Get-RegressionData -Url $dataUrl
+}
+
 $ds = Get-DatasetConfig $Dataset -TestBaseDir $TestBaseDir
 $allFiles = @($ds.AllFiles)
 $mzmls = switch ($Files) {
@@ -227,27 +246,42 @@ $datasetRoot = $ds.TestDir
 $mzmlRoot = if ($ds.MzmlDir) { $ds.MzmlDir } else { $ds.TestDir }
 if (-not (Test-Path $mzmlRoot)) { throw "mzML folder not found for $Dataset : $mzmlRoot" }
 
+# The library, in place. A fresh extraction can still hold the libdecoy library
+# inside the bundle's nested zip (regression.ps1's NestedZip mechanism extracts
+# it on demand there too), so expand it once when the .tsv is absent.
+$libraryPath = Join-Path $datasetRoot $libraryName
+if (-not (Test-Path $libraryPath)) {
+    $nestedZip = Join-Path $datasetRoot 'libdecoy-entrapment.zip'
+    if (Test-Path $nestedZip) {
+        Write-Host ("[Data] extracting {0} (one time)..." -f (Split-Path -Leaf $nestedZip)) -ForegroundColor DarkGray
+        Expand-ZipNoOverwrite -ZipPath $nestedZip -DestFolder $datasetRoot
+    }
+}
+if (-not (Test-Path $libraryPath)) { throw "Library not found for $Dataset : $libraryPath" }
+
 # Library-supplied-decoy datasets forward extra flags to BOTH sides so the
 # comparison exercises the library-decoy path (not generated reverse decoys).
-# The manifest (when named) is staged alongside the library into each workdir
-# and referenced by bare filename since both tools run with the workdir as cwd.
+# The manifest is referenced in place by absolute path, like every other input.
 $libDecoyArgs = @()
-$manifestName = $null
 if ($ds.DecoysInLibrary) {
     $libDecoyArgs += '--decoys-in-library'
     if (-not [string]::IsNullOrEmpty($ds.Manifest)) {
-        $manifestName = $ds.Manifest
-        $manifestSrc = Join-Path $datasetRoot $manifestName
+        $manifestSrc = Join-Path $datasetRoot $ds.Manifest
         if (-not (Test-Path $manifestSrc)) {
             Write-Host "Pairing manifest not found: $manifestSrc" -ForegroundColor Red
             exit 2
         }
-        $libDecoyArgs += @('--decoy-pairing-manifest', $manifestName)
+        $libDecoyArgs += @('--decoy-pairing-manifest', $manifestSrc)
     }
     Write-Host ("[LibraryDecoy] extra flags: {0}" -f ($libDecoyArgs -join ' ')) -ForegroundColor DarkCyan
 }
 
-$rootDir  = Join-Path $datasetRoot "_endtoend_crossimpl"
+# Workdirs live under the C# checkout's gitignored TestResults, like
+# regression.ps1's run dirs (whose pruning matches only 'regression-*', so
+# these are safe from it). A stable name rather than a timestamp because the
+# -SkipRust/-SkipCs reuse of a cached side keys on finding the prior output
+# here. The read-only data tree gets NOTHING written into it.
+$rootDir  = Join-Path (Get-PwizRoot) ("pwiz_tools/Osprey/TestResults/crossimpl-" + $Dataset.ToLowerInvariant())
 $rustDir  = Join-Path $rootDir "rust"
 $csDir    = Join-Path $rootDir "cs"
 
@@ -256,21 +290,6 @@ if ($Force -and (Test-Path $rootDir)) {
     Remove-Item $rootDir -Recurse -Force
 }
 New-Item -ItemType Directory -Path $rootDir -Force | Out-Null
-
-function Stage-DatasetFiles {
-    param([string]$Dir)
-    foreach ($f in $mzmls) {
-        Copy-Item (Join-Path $mzmlRoot $f) (Join-Path $Dir $f)
-    }
-    Copy-Item (Join-Path $datasetRoot $libraryName) (Join-Path $Dir $libraryName)
-    $cache = Join-Path $datasetRoot ($libraryName + '.libcache')
-    if (Test-Path $cache) {
-        Copy-Item $cache (Join-Path $Dir ($libraryName + '.libcache'))
-    }
-    if ($manifestName) {
-        Copy-Item (Join-Path $datasetRoot $manifestName) (Join-Path $Dir $manifestName)
-    }
-}
 
 function Invoke-Tool {
     param([string]$Exe, [string]$WorkDir, [string[]]$CliArgs, [string]$LogName)
@@ -355,13 +374,19 @@ if ($SkipRust -and (Test-Path $rustBlib) -and (Test-Path $rustDump)) {
 } else {
     if (Test-Path $rustDir) { Remove-Item $rustDir -Recurse -Force }
     New-Item -ItemType Directory -Path $rustDir -Force | Out-Null
-    Stage-DatasetFiles -Dir $rustDir
     Write-Host "[Rust] osprey -i mzMLs ... (in-memory straight-through) ..." -ForegroundColor Cyan
+    # Inputs by absolute path from the read-only tree; --work-dir sends every
+    # derived artifact + cache to the workdir. The -o blib is ABSOLUTE, not
+    # CWD-relative, because Rust routes its calibration debug CSV to the blib's
+    # parent and falls back to the FIRST INPUT'S directory when -o has none -
+    # with in-place inputs that would write into the read-only tree. The Stage 7
+    # dump is CWD-relative (Invoke-Tool runs with CWD = workdir).
     $args1 = @()
-    foreach ($f in $mzmls) { $args1 += @('-i', $f) }
-    $args1 += @('-l', $libraryName, '-o', 'output.blib',
+    foreach ($f in $mzmls) { $args1 += @('-i', (Join-Path $mzmlRoot $f)) }
+    $args1 += @('-l', $libraryPath, '-o', $rustBlib,
                 '--resolution', $resolution,
-                '--protein-fdr', '0.01', '--threads', $Threads.ToString())
+                '--protein-fdr', '0.01', '--threads', $Threads.ToString(),
+                '--work-dir', $rustDir)
     $args1 += $libDecoyArgs
     $env:OSPREY_DUMP_STAGE7_PROTEIN_FDR = '1'
     try {
@@ -387,13 +412,13 @@ if ($SkipCs -and (Test-Path $csBlib) -and (Test-Path $csDump)) {
 } else {
     if (Test-Path $csDir) { Remove-Item $csDir -Recurse -Force }
     New-Item -ItemType Directory -Path $csDir -Force | Out-Null
-    Stage-DatasetFiles -Dir $csDir
     Write-Host "[C#] Osprey -i mzMLs ... (in-memory straight-through) ..." -ForegroundColor Cyan
     $args2 = @()
-    foreach ($f in $mzmls) { $args2 += @('-i', $f) }
-    $args2 += @('-l', $libraryName, '-o', 'output.blib',
+    foreach ($f in $mzmls) { $args2 += @('-i', (Join-Path $mzmlRoot $f)) }
+    $args2 += @('-l', $libraryPath, '-o', $csBlib,
                 '--resolution', $resolution,
-                '--protein-fdr', '0.01', '--threads', $Threads.ToString())
+                '--protein-fdr', '0.01', '--threads', $Threads.ToString(),
+                '--work-dir', $csDir)
     $args2 += $libDecoyArgs
     $env:OSPREY_DUMP_STAGE7_PROTEIN_FDR = '1'
     try {
