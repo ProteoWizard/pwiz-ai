@@ -712,3 +712,61 @@ before treating tests/hour as comparable.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260818_commonutil_winforms_split.md` before starting work.
+
+### 2026-08-29 (second session) - Merged Matt's latest; the Debug/Release blocker does not reproduce
+
+**Branch is up to date with its base and mergeable.** `15de5ce126`, 43 commits, **0 behind**
+`origin/Skyline/work/20260612_net8_port`, pushed. PR #4587 reports **MERGEABLE / CLEAN**.
+
+**The BLOCKING "Release links Debug pwiz-sharp assemblies" defect does not reproduce.**
+Measured, not assumed. A fresh Release build followed by a re-stage puts **zero** Debug
+assemblies in the staged tree:
+
+| Staged `Pwiz.*.dll` | Config it came from |
+|---|---|
+| 16 of 18 | `bin/x64/Release/net10.0` - correct |
+| `Pwiz.Tools.BiblioSpec`, `Pwiz.Vendor.Sciex.Wiff2` | `bin/Release/net10.0` - AnyCPU, still **Release** |
+| none | any Debug output |
+
+The `76a3f78e` Debug DLL the previous session found was **stale staging**, not a live fallback:
+the staged copy is timestamped 22:28:48 and the correct `x64/Release` output is 22:31:57 - the
+tree was staged three minutes before the compile that corrected it. Deleting the 18 `Pwiz.*.dll`
+from `pwiz_tools/Skyline/bin/x64/Release/net10.0-windows` and rebuilding reproduces the 16/2/0
+split above from scratch, so it is not leftover state either.
+
+Brendan independently confirmed the practical symptom is gone: a Clean Solution followed by a
+full Solution compile now completes in Visual Studio, which was the original motivating failure.
+Clearing the stale x64/Release outputs is the likely reason - a Debug-configuration
+`Pwiz.Analysis.dll` was sitting in an x64/Release output path and was being treated as current.
+
+Still true and still worth telling Matt: **no pwiz-sharp csproj declares `<Platforms>`** (checked
+all 59), while every `pwiz_tools/Shared` project does. That is what lets the two stragglers fall
+back to AnyCPU. `Pwiz.Vendor.Sciex.Wiff2` is referenced `ReferenceOutputAssembly=false` +
+`OutputItemType=Content` as a deliberate side-by-side ALC plugin, so it may need more than the
+`<Platforms>` line. **Not fixed here** - both are Release, both are managed-only, and an AnyCPU
+managed DLL loads fine in an x64 process, so neither blocks a comparison run.
+
+**Merged `df188772e9..cc94d3b45b`** - two commits: `cc94d3b45b` (small molecule accessions on
+.NET 10.0.3, `NistLibSpec.cs`) and `40fd787ff5` (GDI+ splitter repaint failures,
+`AvailableFieldsTree.cs` + `Program.cs`). Two files auto-merged; **one conflict, in
+`Program.Init()`, and it was not a pick-a-side**:
+
+- The incoming commit moves `ThreadException += handler` out of the run-once block to the top of
+  `Init()` as a `-=`/`+=` pair, so it re-attaches after every message loop.
+- This branch had replaced that same line with `InitUiThreadExceptionHandling()`, which also sets
+  the exception mode and is guarded by a `[ThreadStatic]` flag.
+- Taking THIS branch's side unchanged would have left the handler **subscribed twice** on the
+  first thread - the incoming block subscribes, then the helper subscribes again - so every
+  UI-thread exception would report twice and `AddTestException` would fire twice per failure.
+- Taking the INCOMING side would have dropped the per-thread setup that a message loop started
+  on a NEW thread depends on.
+- Resolution keeps both: the call site stays `InitUiThreadExceptionHandling()`, and the helper
+  now removes before adding. Steady state is one subscription on the first thread; a new
+  message-loop thread still gets its own mode and subscription.
+
+**Verified**: Release solution compiles (100 s). `TestThreadDumpNamesRunningFrames` passes.
+`PeakAreaDotpGraphTest`, `TestAutoZoom` and `TestMultiInjectRescore` pass in one process - three
+`Application.Run` cycles, which is the path the resolution governs.
+
+**Next**: re-stage and start the net10 nightly for comparison against the net472 baseline above.
+The Debug/Release concern that was holding it back is measured away.
