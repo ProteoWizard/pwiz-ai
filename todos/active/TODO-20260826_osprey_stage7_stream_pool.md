@@ -3872,3 +3872,36 @@ Each gated `regression.ps1 -Dataset Stellar` 10/10, output byte-identical. Plus
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260827_osprey_stage7_stream_increment.md` before starting work.
+
+## #8 DELETED per Brendan's ruling; resolved-sort assertions added (2026-08-28 evening)
+
+Brendan ruled on #8: **delete the dead streaming half**, rebuild it with the lean row
+(its only future consumer). Commit `c7e44d67d0`, -118/+65 across 5 files.
+
+**What went**: `RescoredEntries.WithStreaming` / `LoadFile` / `IsMaterialized`, the
+streaming branch of `Files()`, and `PerFileRescoreTask.MaterializeOneFile`.
+`Pass2FdrSidecar.residentByFile` simplified to the always-resident case. Verified before
+cutting: the surface's only consumers (`Pass2FdrSidecar`, `OspreyReportWriter`) all run
+after `SecondPassFdrTask.cs` reads `rescored.Value` at the top of Stage 7, and the
+`--task PerFileRescoring` worker attaches but never consumes it - dead on every path.
+
+**What stayed, deliberately**: the `Files()` / `FileNames` fold seam. Every Stage 7
+consumer folds to an O(distinct) aggregate through it rather than indexing the pool,
+which is the shape the lean row's streamed source re-enters through. Its doc now records
+why the old source was wrong (1st-pass-only overlay) so phase 2 does not reacquire it.
+
+**Assertions (handoff item 3)**: new `FdrEntry.SortCanonicalResolved(entries, fileName)`
+verifies every row's `ParquetIndex.HasValue` before the unstable canonical sort and
+throws `InvalidOperationException` on a null. Both post-resolution sort sites route
+through it (`FirstPassSurvivorLoader` reload, `SortFileEntriesCanonical` - which had a
+THIRD caller at the per-file resume skip arm, missed by the handoff's list of two).
+`TestNoUnstableSort` enforces the `// Array.Sort OK:` annotation on the same line as any
+`List.Sort` and caught the moved sort until the annotation moved with it.
+
+**Gates**: build clean, ReSharper 0/0 both TFMs, 599/599, `regression.ps1 -Dataset
+Stellar` 10/10 (log: `ai/.tmp/sessions/20260828-stage7-findings/regression-stellar.out`).
+
+**#6/#7/#9/#14/#15 verification method**: the 2026-08-28 review's finding text was never
+persisted - only the numbers in this file survive (Brendan confirmed). So verification is
+a fresh `/code-review max` against the post-deletion tree: anything real among them
+resurfaces, anything attached to deleted code cannot. Running now.
