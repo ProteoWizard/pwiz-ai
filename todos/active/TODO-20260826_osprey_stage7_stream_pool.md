@@ -4132,3 +4132,17 @@ without the code to support it resolved."* The rig is staged and ready - launche
 `ai/.tmp/sessions/20260827-stage7-leanrow/launch-stage57-257.ps1`, base run dir
 `chs-257files-libdecoy-r1.0-protein-compact-p0059_0060_0061`, exe snapshot
 `D:\test\osprey-runs\_bin\26.1.1.240-splitbase-20260828`, oracle 5,079 / 45,724 / 11,745,026.
+
+### Session end 2026-08-28 night - four gated commits, split specified, extraction landed
+
+`c7e44d67d0` dead streaming path + sort assertions | `c2669870c6` blib absolute source path
+(BlibBuild convention) | `88240243a0` verified review findings + nullable adoption completed |
+`3e4d94ed58` extracted `ReadOneFilePass2Inputs` (the per-file half, explicitly parameterized).
+Each gated build + 599/599 + ReSharper 0/0 + `regression.ps1 -Dataset Stellar` 10/10.
+
+**TeamCity `pull/4621` build 4157122: SUCCESS** - all four datasets, every mode, plus the perf
+leg. **Cross-impl Astral: PASS on all four legs at 1e-9**, with the RetentionTimes leg genuinely
+comparing 351,756 rows for the first time (the blib-path fix un-vacuumed a 0-row join).
+
+**Next session handoff**: read `ai/.tmp/handoff-20260829_osprey_pass2_scope_split.md` before
+starting work.
