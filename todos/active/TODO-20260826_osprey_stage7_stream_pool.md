@@ -3905,3 +3905,111 @@ Stellar` 10/10 (log: `ai/.tmp/sessions/20260828-stage7-findings/regression-stell
 persisted - only the numbers in this file survive (Brendan confirmed). So verification is
 a fresh `/code-review max` against the post-deletion tree: anything real among them
 resurfaces, anything attached to deleted code cannot. Running now.
+
+## The pass-2 sidecar is written THREE times per run - the designed split is not implemented (2026-08-28 night)
+
+Brendan, on reading the write-then-patch trace: *"Sigh. Let's not do the lean row until we land
+the parts I thought were done, but are not."* The lean row is DEFERRED behind the sidecar work.
+
+### What the pipeline actually does today
+
+`.2nd-pass.fdr_scores.bin` is a declared **output of SecondPassFDR**, not of PerFileRescoring
+(`SecondPassFdrTask.Outputs()` yields `Pass2Path(input)` per input). Stage 6's only contact is a
+PROBE (`PerFileRescoreTask.cs:319`) - a current 2nd-pass sidecar means a previous run finished
+Stage 7, so don't re-rescore. What PerFileRescoring writes once and never revisits is the
+reconciled parquet.
+
+On the default frozen-competition path each file's sidecar is written **three times**:
+
+1. `ApplyFileRunQ` writes it mid-stream (Score + run q final; experiment columns still seeds),
+   then drops the file's entries - the early write is what avoids O(files x entries) retention.
+2. `PatchExperimentValues` rewrites the four experiment columns after the stream, because the
+   competition is not complete until every file has been read.
+3. `PatchPass2ProteinQvalues` rewrites `ExperimentProteinQvalue` after protein FDR.
+
+Each write is FileSaver-atomic; the ARTIFACT is mutable across its lifetime. That is the source
+of the review's R1 (kill window between writes 1 and 3 leaves format-current files with
+unfinished columns a rerun adopts), R4 (unconditional rewrite on resume degrades
+duplicate-EntryId records) and R12 (double reload).
+
+### The designed split, recorded at line ~2781 of this file, is ON PAPER ONLY
+
+Brendan's own words: *"immutable 2nd pass side-car files per run, and then an experiment-wide FDR
+side-car file (maybe the same base name as the BLIB?)"*. None of it is implemented. The night of
+2026-08-27/28 landed the ENABLING work only (competition split `f7a6e6d103`, `IFdrRow`, read
+fusion, interning) - which is why the 257-file run reproduced the oracle exactly.
+
+### Division of labor, ruled 2026-08-28
+
+**PerFileRescoring** owns what one file can do alone: composite scores + per-run q for that
+file's survivors (blib candidates), by competition (`protein-compact`, `transfer-compete`) or
+table interpolation (`transfer`). **SecondPassFDR** owns what needs all files: aggregating those
+composite scores into experiment-wide precursor / peptide / protein scores and their q values,
+by competition or table + interpolation.
+
+**A join task cannot live in a per-file HPC worker** (Brendan). This killed a proposed per-file
+"contribution" artifact of precomputed per-base_id bests: it is a partial join in the wrong
+stage, and it would freeze the aggregation METHOD into Stage 6 - so switching to mean-best-N
+(#4484) would require re-running every worker instead of changing one stage.
+
+**Pipeline invariant** (Brendan): *"Candidate reduction between Pass 1 and Pass 2 is not
+reversible."* Pass 2 never reaches back to rescue an entry that exists only in pass-1 parquet /
+sidecars. This holds regardless of how the survivor set is computed - and Brendan expects the
+survivor set itself to change to stem FDP inflation between passes.
+
+### MEASURED: today's experiment fold DOES read pass-1 values, and it is a decoy-only residue
+
+Today's experiment-level fold in `StreamingFdr.CompeteOneFile` ranges over the whole
+PRE-COMPACTION population read from the 1st-pass sidecar (stratum-filtered), with frozen scores
+swapped in by entry_id for reconciled survivors. So the architecture (Stage 7 reads only per-run
+survivor-scoped artifacts) and the semantics (aggregate over survivors) are ONE decision, not
+two - there is no version that keeps today's numbers and also stops reading 1st-pass files.
+
+Temporary diagnostic (`OSPREY_DIAG_SURVIVOR_FOLD=1`, output-neutral, NOT committed) comparing the
+population-scoped fold against a survivor-scoped one, Stellar 3-file straight-through:
+
+```
+[DIAG-FOLD] stratum bests=986450 | target: differs=0 population-only=0 | decoy: differs=0 population-only=305
+```
+
+* **Targets: perfectly clean.** 0 differ, 0 population-only. Brendan's prediction confirmed:
+  gap-fill fills every missing run for a surviving precursor, so no target maximum needs a
+  pass-1 value.
+* **Decoys: 305 base_ids** (~0.06% of ~493K decoy bests) whose best decoy observation lives in a
+  row that is not a survivor anywhere.
+
+**The cause is documented design, not an accident.** `PerFileRescoreTask.cs:2243`: decoys are
+deliberately excluded from gap-fill because *"the 1st-pass parquet already has a score for every
+decoy at its own natural-but-best peak"* - forcing a decoy to be scored at the target's
+consensus RT has no biological basis, and doing so previously produced duplicate reconciled rows
+and a 1.1e-4 cross-impl group_qvalue drift on Astral. So the decoy side of the null is the one
+place the pipeline leans on a pass-1 artifact.
+
+Retention itself is symmetric: `RescoreCompaction` filters by BASE_ID with the decoy bit
+stripped (`RemoveAll(e => !firstPassBaseIds.Contains(e.EntryId & BASE_ID_MASK))`), keeping a
+target and its paired decoy alive together. The 305 are the residue where that does not hold.
+
+**Direction**: survivor-scoping the fold as-is drops those decoy maxima, thinning the decoy side
+of the null, which pushes experiment q OPTIMISTIC - the same direction as the FDP inflation
+Brendan suspects. Small at 3 files; unmeasured at 257.
+
+### The open decision this leaves
+
+* **(a)** Worker writes, for every retained base_id, that file's best decoy score into the
+  per-run sidecar (including decoy rows that are not blib candidates). Byte-identical numbers,
+  nothing reaches back to pass 1, and it does not violate the invariant - decoys are never blib
+  candidates, so the artifact is "what the join needs" and blib candidacy stays separate.
+* **(b)** Change the survivor set so those decoys ARE survivors - the survivor-set change
+  Brendan anticipated. Principled; needs FDRBench to establish its sign.
+* **(c)** Accept the loss and judge it on entrapment FDP rather than the golden.
+
+### Consequences of the split, whichever is chosen
+
+* Both patch passes disappear (~123 GB of serial join-stage rewrite at 257 files), and with them
+  the reload machinery that exists only to put experiment values back onto entries - so R1, R4
+  and R12 are resolved by DELETION rather than by fixing them.
+* Cross-impl parity breaks STRUCTURALLY: Rust fuses run-scope and experiment-scope columns into
+  one per-run sidecar, so the FDR-sidecar leg either needs the comparator to reconstruct Rust's
+  fused view from our two files, or it goes to SKIP. The blib and Stage-7 protein-FDR legs still
+  compare.
+* Storage 61.6 -> ~33.5 GB, per the layout table earlier in this file.
