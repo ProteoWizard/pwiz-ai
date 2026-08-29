@@ -193,9 +193,37 @@ $variants = [ordered]@{
     branch   = @{ Label = 'branch';   Root = $BranchRoot }
 }
 
+# The TFM is read per ROOT, not taken as a parameter: the whole point of this harness
+# is an A/B across two worktrees, and once the .NET 10 port is in flight the pinned
+# baseline and the branch legitimately target DIFFERENT frameworks (net8.0 vs net10.0),
+# so one switch could not describe both. Same rule Build-Osprey.ps1 uses - the branch's
+# own Directory.Build.props is the authority - so neither side needs updating here when
+# Osprey retargets again.
+function Get-OspreyTfm {
+    param([string]$Root)
+    $props = Join-Path $Root 'pwiz_tools\Osprey\Directory.Build.props'
+    if (Test-Path -LiteralPath $props) {
+        $m = [regex]::Match((Get-Content -LiteralPath $props -Raw),
+                            '<TargetFrameworks?>([^<]+)</TargetFrameworks?>')
+        if ($m.Success) {
+            # NOT the first entry: the pinned baseline still declares net472;net8.0 and
+            # net472 is listed first, but this harness has always measured the modern
+            # runtime. Take the highest net<N>.0 and ignore .NET Framework entirely.
+            # @() so a single match stays an array - indexing [-1] into a bare string
+            # returns its last CHARACTER ('0'), which silently yields a bogus exe path.
+            $modern = @($m.Groups[1].Value -split ';' |
+                        ForEach-Object { $_.Trim() } |
+                        Where-Object { $_ -match '^net(\d+)\.0' } |
+                        Sort-Object { [int]([regex]::Match($_, '^net(\d+)\.0').Groups[1].Value) })
+            if ($modern.Count -gt 0) { return $modern[-1] }
+        }
+    }
+    return 'net8.0'
+}
+
 function Get-OspreyBin {
     param([string]$Root)
-    return Join-Path $Root 'pwiz_tools\Osprey\Osprey\bin\x64\Release\net8.0\Osprey.exe'
+    return Join-Path $Root ("pwiz_tools\Osprey\Osprey\bin\x64\Release\{0}\Osprey.exe" -f (Get-OspreyTfm $Root))
 }
 
 if (-not $OutputDir) {
@@ -221,7 +249,9 @@ if (-not $SkipBuild) {
     $buildScript = Join-Path $scriptDir 'Build-Osprey.ps1'
     foreach ($key in $variants.Keys) {
         $root = $variants[$key].Root
-        Write-Host ("Building {0} (Release/net8.0): {1}" -f $key, $root) -ForegroundColor Cyan
+        # Build-Osprey.ps1 reads the branch's declared TFM off disk and corrects a
+        # request the branch does not target, so net8.0 here is a floor, not a pin.
+        Write-Host ("Building {0} (Release/{1}): {2}" -f $key, (Get-OspreyTfm $root), $root) -ForegroundColor Cyan
         & $buildScript -SourceRoot $root -Configuration Release -TargetFramework net8.0 -Summary
         if ($LASTEXITCODE -ne 0) { throw "Build failed for ${key} at $root (exit $LASTEXITCODE)" }
     }
