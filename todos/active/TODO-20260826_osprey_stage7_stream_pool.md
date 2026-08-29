@@ -1991,3 +1991,1917 @@ for the `Osprey*` blib tables and the missing protein-group q-value.
 
 **Next session handoff**: For detailed startup protocol, read
 `ai/.tmp/handoff-20260827_osprey_stage7_streaming.md` before starting work.
+
+## Step 1 DONE in the tree: the frozen second pass streams (2026-08-27 afternoon)
+
+`Pass2FdrSidecar.ComputePass2TransferCompeteFull` - the DEFAULT arm, `protein-compact` - no
+longer takes the pool. It takes the `RescoredEntries` seam and runs one file end to end:
+materialize, seed its pass-1 scalars, load features, score with the frozen model, compete,
+stamp run q, **write that file's `.2nd-pass.fdr_scores.bin`**, drop it.
+
+### The correction to the handoff's plan, and why it matters
+
+The handoff said "materialize per file in `ReadFile`; make step 4 + the sidecar write a second
+per-file pass. **Two materializations per file**". That plan has a hole: step 4 needs each
+entry's `Score` (frozen-model) and `RunPrecursorQvalue`, and BOTH are produced inside pass 1
+and lost when the file is dropped. Re-materializing the entries does not bring them back - a
+second pass would have to re-load the file's features AND re-run its run-level competition, or
+carry an O(files x survivors) map, which is the thing being removed.
+
+**The sidecar closes it.** The per-file write already happens in this stage; moving it into the
+competition loop makes the sidecar the carrier of the run-scope columns, and the four
+experiment-scope columns (`experiment_precursor_qvalue`, `experiment_peptide_qvalue`, `pep`,
+`experiment_aggregate_score`) are patched into those same files afterwards, per file, from the
+bounded competition state. **Step 4 needs no entries at all** - every field it reads
+(`entry_id`, run q) and every field it writes is a sidecar column. So the second pass is a
+streamed rewrite of ~68 B/record, not a second materialization.
+
+New primitive: `FdrScoresSidecar.PatchExperimentValues`, the exact twin of the existing
+`PatchProteinQvalues` - one record resident, atomic via `FileSaver`, only those four columns
+overwritten. Its test asserts the contract that makes two phases substitutable for one: the
+patched file is **byte-identical** to a single-phase write whose records already carried the
+final values.
+
+### What else landed with it
+
+* **`Pass2SidecarWriter`** - the per-file write body (resume skip, validity sidecar, tallies)
+  existed twice, which is how the projection path acquired the `--task ModelDiagnostics` skip
+  and the resident one did not. One body now, so a path cannot quietly differ in what it writes
+  or counts. **Behavior change**: the resident write block gains that diagnostics skip.
+* **`Pass1ScalarSeeder`** - `RestorePass1Scalars`'s per-file body, so the streamed path can seed
+  a file inside its own materialization. The whole-pool loop is skipped entirely for the frozen
+  modes; running both would read every 1st-pass sidecar twice, and it can only walk a pool that
+  is resident.
+* **`ComputePass2FrozenCompetition`** - the frozen modes got their own entry point. They used to
+  enter `ComputePass2Resident` and return early; nothing about them is resident any more.
+* **Two behavior changes, both deliberate, both on already-broken inputs.** A duplicate
+  `--input-scores` stem is now last-wins rather than merged (a streamed reader is handed one
+  file's rows at a time; both dispositions apply ONE file's scalars to a name denoting two -
+  #4555 is still the real fix). And a per-file key with no `config.InputFiles` entry now
+  REFUSES rather than continuing: the sidecar is where this pass puts its results, so such a
+  file would take a fresh run q with nowhere to record its experiment q, and protein FDR would
+  gate it on a pass-1 value while every other file used a pass-2 one.
+* Six pre-existing inspection warnings introduced by the `score_index` commits, fixed
+  (`ParquetScoreCache` had a doc comment orphaned from `ReadFdrStubScalars` by an inserted
+  method; `ReconciledParquetWriterTest` had redundant `(byte)` casts).
+
+### The transition, and what it costs today
+
+`Files()` yields from the resident buffer while anything still builds it, so with the pool still
+resident this pass costs nothing extra and the entries it stamps ARE the pool's - the existing
+reload loop then puts the sidecar back on the pool either way, so the two agree by construction.
+Once nothing builds the buffer, this pass materializes each file **twice**: once for the
+survivor-entry_id fold (needed before file 0, because the best-of-runs floor is global) and once
+for the competition. That is the "fuse the per-consumer folds" follow-on, now with a concrete
+second caller.
+
+### Gate
+
+Build + 596 tests + zero-warning inspection green, and `regression.ps1 -Dataset Stellar`
+**10/10 including `mode1 (vs golden)` and `mode3`** on the second run (the first found the
+`FileNames` hole below). Logs in `ai/.tmp/sessions/20260827-stage7-stream-pass2/`.
+**Stellar remains a weak oracle for this** - 1.45x compaction, 391 gap-fill rows, 3 files -
+where the behavior that matters is a frozen competition over a protein stratum at 5.6x. The
+257-file run is the real proof.
+
+### The seam had a null hole, and only the distributed leg found it
+
+First Stellar gate: `mode1 (vs golden)` PASS, `mode1c` PASS, **`mode3` (HPC 4-task chain)
+ABORTED** - `--task SecondPassFDR` exited 1.
+
+`RescoredEntries.FileNames` was set ONLY by `WithStreaming`, and `WithStreaming` is called on
+exactly one of the three construction sites (`3579d64d2a`). The straight-through rescore takes
+it; the resident rescore and the `--task SecondPassFDR` **rehydrate** both publish
+`new RescoredEntries(_perFileEntries)` with no streaming attached, so `FileNames` was null
+there and the first consumer to read it died.
+
+Nothing had read it yet, which is why the seam looked finished. `Files()` already had the
+right fallback - yield from the buffer when nothing is deferred - and `FileNames` now makes the
+same one (`_fileNames ?? Value.ConvertAll(...)`), which is free on those paths because they
+defer nothing. **A streamed consumer must be able to pair `FileNames` with `Files()` without
+knowing which side of the transition it is on**; returning null on one side made this pass work
+straight-through and fail distributed.
+
+Third time this branch has seen the same shape: a change that agrees with itself on the
+in-process path and disagrees on the distributed one. `mode3` is the leg that catches it.
+
+## Step 2 DONE in the tree: the blib phase stopped holding the pool (2026-08-27)
+
+`CollectPassingEntries` returned `List<KeyValuePair<string, FdrEntry>>` - 16 B a row, but every
+row PINNING a ~263 B `FdrEntry` and through it that file's whole survivor list. 11.7 M rows held
+the 40 GB pool alive from the FDR gates through the last RefSpectra row.
+
+**The whole phase now works on values.** New `PassingObservation` (internal readonly struct,
+~64 B): file, modified sequence, charge, run q, experiment precursor q, apex/start/end. Those
+eight fields are the ENTIRE set the four consumers read - checked one by one, not assumed.
+
+* `CollectPassingEntries` walks `rescored.Files()` and builds the compact list AND
+  `bestByPrecursor` in ONE pass. The best-per-precursor map could no longer be a second pass
+  over the passing list, because RefSpectra needs the winner's `FdrEntry` itself. It is
+  O(distinct precursor) - 45,724 entries, ~12 MB - so the entries it keeps pin themselves and
+  nothing else.
+* `ModifiedSequence` is INTERNED as the records are built. The parquet reader hands out a fresh
+  string per row, so keeping each row's own instance would have retained 11.7 M strings - more
+  than the records - against ~40,000 distinct sequences. **This is the trap a naive value-struct
+  conversion walks into**: it looks like a pure win in the struct layout and is not.
+* `BlibOutputWriter.Write` no longer takes the pool at all. `CreateSourceFiles` and the
+  `perFileEntriesCount` argument needed only the run's file NAMES, so they take
+  `rescored.FileNames`.
+
+Net memory at 257 files: **~750 MB of records replacing 187 MB of references** - a straight
+loss until the last pool consumer goes, which is exactly what the objective's "documented trap"
+predicted, and why this lands with the conversions rather than before them.
+
+Build + 596 tests + zero-warning inspection green; Stellar regression running
+(`regression-stellar-3.log`).
+
+### What still reads `rescored.Value` after step 2
+
+| line | consumer | disposition |
+|---|---|---|
+| `UpgradeReconciledParquets` | the format converter | upgrade-mode only, not on the hot path |
+| `ComputeAndPersist` | projection / resident arms + the 2nd-pass reload loop | the reload loop is what re-hydrates the pool for the consumers below |
+| `RunProteinFdr` | step 3 - folds to O(distinct peptide); the write-back is the sidecar patch |
+| `ClampExperimentQToBestRun` | already split fold/apply in `d8b2ec5537`, still takes the pool |
+| `FdrBenchInputWriter` | `--fdrbench` only |
+| `ModelDiagnosticsReport` | `--model-diagnostics` only |
+| `OspreyReportWriter.WriteReports` | step 4, default-on, **still the one unproven consumer** |
+
+## Steps 3 and 4 DONE in the tree (2026-08-27), each gated Stellar 10/10
+
+**Step 3 - `RunProteinFdr`.** `RunSecondPass` folded its two whole-pool passes (per-peptide
+bests, detected-peptide set) into ONE walk over `rescored.Files()` - a streamed caller would
+otherwise materialize every file twice. New `ProteinFdr.SecondPassProteinFdrAccumulator`, a
+separate type from `FirstPassProteinFdrAccumulator` because the gates genuinely differ (RUN
+level at the run FDR there, EXPERIMENT level at the experiment FDR here).
+
+**`PropagateProteinQvalues` is gone**, which is the part that mattered. Checked every reader of
+`FdrEntry.ExperimentProteinQvalue` past that point: the only one is the 2nd-pass sidecar
+(`WriteStage5PercolatorDump` and its Stage-6 twin run earlier; FDRBench, ModelDiagnostics and
+OspreyReportWriter never touch the field). So the write-back is now a per-file patch off
+`ProteinFdr.PeptideQvalues`, keyed by reading each entry's peptide from the RECONCILED parquet's
+own `modified_sequence` column - the column the entry's `ModifiedSequence` came from, so the
+lookup matches by construction. A whole-pool write followed by a whole-pool read became one
+streamed pass. **This is the shape `RunFirstPassProteinFdrStreaming` has used since the first
+pass moved onto projections** - the same "machinery Stage 7 is not using" theme.
+
+**Step 4 - `OspreyReportWriter`, and it was NEVER the risk the issue thought.** Its per-replicate
+loop already passes `new[] { kvp }` - one file - to both `CountPrecursorsPeptides` and
+`CountPassingProteinGroups`. The only whole-run part was the experiment row, and
+`CountPrecursorsPeptides` is a pure O(distinct) fold over an `IEnumerable`, so it now accumulates
+inside the per-replicate walk instead of taking a second pass. **Retract the standing note that
+this is "the one genuinely unproven consumer"; nothing about it forced an extra pass.**
+
+## Step 5 - THE FLIP: what it actually needs (2026-08-27)
+
+`MaterializeOneFile` loads a file from its reconciled parquet plus the **1st-pass** sidecar, so a
+re-materialized file carries pass-1 q-values. Today the pool gets its pass-2 values from
+`ComputeAndPersist`'s reload loop, which works only because the pool exists. **The flip has to
+move that overlay into the materialization itself** - a file's post-rescore state must mean
+"parquet + 2nd-pass sidecar when one is current, else 1st-pass". That is the last design
+question in the chain, not a mechanical change, and it is the thing to get right first.
+
+Still reading `rescored.Value` in `Run` after steps 1-4:
+
+| line | consumer | note |
+|---|---|---|
+| `UpgradeReconciledParquets` | format converter | only when an old-format parquet is found |
+| `ComputeAndPersist` | projection / resident arms + the 2nd-pass reload loop | the reload loop IS the thing the flip replaces |
+| `ClampExperimentQToBestRun` | already split fold/apply in `d8b2ec5537` | needs the same fold-then-apply-per-file treatment |
+| `FdrBenchInputWriter` | `--fdrbench` only | |
+| `ModelDiagnosticsReport` | `--model-diagnostics` only | |
+
+### Do not promise 1000 files on 64 GB from this work
+
+Stage 7 stops being the wall - projected ~4.2 GB library + ~3.5 GB emit records = **~8 GB at
+1000 files** against ~152 GB today. But the run peak then belongs to FirstPassFDR, whose live
+floor is 7.0 GB at 257 files over a population that grows with file count (~27 GB at 1000 if
+linear), and whose measured `peak_paged` is ~53 GB **at 257 files**. Most of that gap is
+Server-GC committed-but-free rather than retained, so it is tunable - but tunable is a
+hypothesis. Whether 1000 files fits in 64 GB is UNANSWERED and needs the 257-file run plus a
+Stage-5 projection before anyone plans around it.
+
+## Pass-2 files are now written unconditionally - COMMITTED `b9075eb99a`, `-Dataset All` 56/56
+
+Gated on the FULL four-dataset set, not Stellar: the three `mode7` diagnostics-regeneration
+legs are the only coverage the `--task ModelDiagnostics` work has, and they do not run on
+Stellar. Every `-Dataset Stellar` gate in this session exercised ZERO `DiagnosticsOnly` paths.
+
+## Pass-2 files are now written unconditionally (Brendan, 2026-08-27)
+
+*"We need to stop conditionally writing second-pass files. Just write the same values again,
+if need be... It is always an ambiguous signal. Is the file not there because it was
+'unnecessary' or did processing fail during writing and the FileSaver just never got
+committed?"* - and this had been said repeatedly before.
+
+Rule written up team-wide in **ai/docs/osprey-development-guide.md**, "Never conditionally
+write an output artifact" (loaded by `/osprey-development`). Precedents it now cites so the
+argument is not had again: `.scores-reconciled.parquet` (`WriteUnchangedReconciled`), the
+Stage 6 reconciliation dump, the 1st-pass `.fdr_scores.bin` (`FdrProjectionSinks.OnFinish`
+writes a 0-record file), and now the 2nd-pass one.
+
+### Producers - the file is written or the run failed
+
+* `SecondPassFdrTask.Outputs()` declares the 2nd-pass sidecars **unconditionally**. Gating the
+  declaration on `AnyReconciledParquet` had made absence a supported RESUME state.
+* `ComputeAndPersist` always runs. `AnyReconciledParquet` (Rust's `total_rescored > 0`) moved
+  inside it and now gates only the RECOMPUTE - what values go in the file, never whether the
+  file exists. A cohort with no rescore work writes the standing values, which are its
+  second-pass answer.
+* `Pass2SidecarWriter` lost its "already on disk, skip" branch. Pass 2 is deterministic, so
+  rewriting is writing the same bytes again.
+* The frozen competition's experiment-q patch no longer skips files the writer skipped, and a
+  write failure now lands in the same reported list as a patch failure.
+* `PatchPass2ProteinQvalues` lost `if (!File.Exists) continue` ("legitimately has no 2nd-pass
+  sidecar"). Absent and unusable are one reported fault.
+
+**ORDERING TRAP, found before it bit.** On a resume the entries hold pass-1 values while the
+on-disk sidecar holds a previous run's pass-2 ones, and the write block runs BEFORE the reload.
+An unconditional rewrite there would have downgraded good output. Fixed by ordering, not by a
+condition: `ReloadPass2Sidecars(..., "pre-write")` runs when this run did not recompute, so the
+rewrite puts the same bytes back. mode2 + mode4 are the legs that prove it.
+
+The ONE surviving skip is `--task ModelDiagnostics`, which creates no absence (it runs over a
+completed run) and whose mtime side-effect mode 7 exists to catch. It now LOGS its count rather
+than leaving an unexplained gap between the file count and the write count.
+
+### Gates - the harness half of the same ambiguity
+
+The producers were only half of it. Three gates had been taught to accept absence, which is how
+the design survived review:
+
+* **regression mode 1c** skipped when it found no 2nd-pass sidecars ("Stage 6 rescored
+  nothing"), so a run that wrote NOTHING reported SKIPPED rather than red. Now asserts the real
+  invariant: `$pass2Sidecars.Count -ne $inputs.Mzmls.Count` is a hard failure.
+* **regression HPC phase 4 staging** had `if (Test-Path $pass2) { Copy-Item ... }`. Dead code -
+  `--task PerFileRescoring` sets `NoJoin`, which excludes `SecondPassFdrTask`, so phase 3 never
+  writes one; two comments claimed it did. Worse than dead: had it fired it would have handed
+  phase 4 a current sidecar, phase 4 would have skipped computing its own, and mode 3 would have
+  become a test of a file copy.
+* **`Test-Snapshot.ps1` had FOUR `symmetric absence -> PASS` branches**, including one over
+  `.2nd-pass.fdr_scores.bin` itself. All removed. That rule and the C# consensus-dump elision
+  propped each other up: the writer skipped because the comparator complained, and the
+  comparator accepted because the writer skipped.
+
+### The consensus dump, and the decision that started this
+
+`Stage6Planner` fired `cs_stage6_consensus.tsv` only on `consensus.Count > 0`, from
+`TODO-20260508_osprey_sharp_audit.md` item 3. Now unconditional (header-only when empty), like
+the reconciliation dump beside it. Checked before changing it: **no live cross-impl gate
+compares this dump** - `Compare-EndToEnd-Crossimpl.ps1` does not, only the archived
+`Compare/archive/Test-Regression*.ps1` did - and its one live consumer, `Test-Snapshot`, is
+same-impl. The Rust-elision justification no longer applies.
+
+That completed TODO now carries a SUPERSEDED note at item 3, because the wrong decision was
+recorded as a fix and every later session reading it found the ambiguity endorsed.
+
+### `--task ModelDiagnostics` was NOT read-only (found 2026-08-27 by Brendan's question)
+
+Brendan asked whether that mode "may or may not write files that impact the 4-task
+processing pipeline". It may. `SecondPassFdrTask.Run` calls `UpgradeReconciledParquets`
+BEFORE every `DiagnosticsOnly` check in the method, and the upgrader had no guard of its own:
+
+```csharp
+if (UpgradeReconciledParquets(perFileEntries, perFileParquetPaths, libraryById, ctx))
+    return StopAfterUpgrade(ctx);
+```
+
+On any directory whose reconciled parquets predate the survivors-subset format
+(`osprey.reconciled != RECONCILED_SURVIVORS`), a diagnostics regeneration **rewrote every one
+of them in place** via `File.Replace` - the 266 -> 47 GB conversion. And because the upgrade
+returns true, `Run` then took `StopAfterUpgrade` and exited, so the run **also never produced
+the report it was asked for**. The mode wrote what it promised not to and skipped what it
+promised to.
+
+Every other writer in that method was already guarded (blib, sidecars, protein-q patch, the
+two report writers) and `Outputs()` returns nothing, so no validity sidecars are stamped. **The
+upgrader is THIS PR's own bug** - introduced by `1e282f8a29` (2026-08-26, branch-only), so it
+never shipped. `StopAfterUpgrade`'s message also stopped naming `--task SecondPassFDR`
+specifically and now mentions the report.
+
+**Resolution: BLOCK, not work around** (Brendan). `--task ModelDiagnostics` now REFUSES a
+directory holding pre-survivor-subset reconciled parquets, naming the stale files and telling
+the operator to re-run the analysis. `StaleReconciledParquets` is shared with the upgrader so
+the refusal and the rewrite cannot drift on what "stale" means.
+
+The tempting alternative was to skip the upgrade and produce the report anyway, because a
+pre-#4486 parquet is full-shape and row-parallel - row position IS the Stage 4 ordinal - so the
+report would have been correct. **That is the trap**: *"the true danger of the 'well, it works,
+so might as well leave it enabled' call. If you want it to be guaranteed to stay working, then
+you need to include it in your tests. So, while it seems free at that moment, it actually has a
+non-zero cost for something that isn't important."* Reading old parquets is deliberately NOT
+part of this mode's contract, so there is no second read path to test and keep working. The
+code comment states the decision rather than explaining that the old path would have worked -
+such a comment is an invitation to re-enable it.
+
+**Why no gate caught it - worth keeping.** regression **mode 7** is exactly the right gate:
+it fingerprints the run dir, re-enters with `--task ModelDiagnostics`, and fails on
+*"regeneration touched an artifact other than the report"*. Two reasons it stayed green:
+
+1. it cannot reach the condition - the harness's straight-through run always writes
+   CURRENT-format reconciled parquets, so the upgrade is a no-op there; and
+2. **mode 7 does not run on Stellar at all.** It is guarded on the dataset spec's
+   `ModelDiagnostics` flag, which `Stellar` does not carry. Every `-Dataset Stellar` gate in
+   this session - seven of them - exercised ZERO `DiagnosticsOnly` paths.
+
+So a Stellar-only gate is not sufficient for a change that touches `DiagnosticsOnly`. Use
+`-Dataset All` for those.
+
+## ARTIFACT-LAYOUT FOLLOW-ONS, from Brendan's questions (2026-08-27)
+
+Not for this PR - each changes what an earlier stage writes and wants its own byte-identity
+gate - but bigger than anything left in it.
+
+### The scalar sidecars are now the LARGEST artifact class
+
+The 82% reconciled-parquet reduction inverted the ratio:
+
+| artifact, 257-file CHS | size |
+|---|---|
+| 1st-pass `fdr_scores.bin` (all runs) | **52.3 GB** (768.5 M x 68 B) |
+| reconciled parquet | **47.4 GB** (was 266.2) |
+| 2nd-pass `fdr_scores.bin` (all runs) | 9.3 GB (137.0 M x 68 B) |
+
+They were 20% of the parquet before the subset change and are 110% after it.
+
+### `fdr_scores.bin` is uncompressed fixed-width, and the reason for that is expiring
+
+32-byte header + N x 68-byte little-endian records, written with `BinaryWriter.Write(double)`.
+No compression, and it CANNOT be compressed without a format change: readers validate
+`fileLen == HeaderLength + count * RecordLength` as the integrity check. The format exists as a
+**byte-parity mirror of Rust's** `write_fdr_scores_sidecar` (`OSPREY_CROSS_IMPL_FDR_SIDECAR_OUT`
+hook). With Rust discontinued and the parity gate heading for removal, that constraint goes.
+Checked and NOT an objection: the two-phase column patches stream source -> temp and promote
+via `FileSaver`, so they never seek to fixed offsets and lose nothing to a different format.
+
+### Split the sidecar BY SCOPE - the real win (Brendan)
+
+Four of the eight doubles are per-entry constants, not per-run values: experiment precursor q,
+experiment peptide q, protein q, and the experiment aggregate. `entry_id` is unique per file
+(`DeduplicatePairs`), so they are stored once per run, in every run the precursor appears in -
+O(files x entries) for data that is O(distinct entries).
+
+**Parquet compression does NOT fix this** (a wrong claim I made and Brendan corrected): parquet
+encodes WITHIN a file, and the replication is ACROSS the 257 per-run files. Within one file
+experiment precursor q and the aggregate appear exactly once each - nothing to encode. Only the
+peptide- and protein-level columns repeat intra-file, from multi-charge peptides and
+multi-precursor proteins.
+
+| file | contents | 257 files |
+|---|---|---|
+| per-run `fdr_scores.bin` | entry_id, score, run precursor q, run peptide q, PEP | 36 B x 768.5 M = **27.7 GB** |
+| ONE experiment-wide `fdr_scores.bin` | entry_id, experiment precursor/peptide q, protein q, aggregate | 36 B x <=12.4 M = **~0.44 GB** |
+
+~46% off the total, and the experiment-scope half stops scaling with file count.
+
+### Consequence: move the run-scope work back into PerFileRescoring
+
+With the split, `transfer` reads the RUN-level file in PerFileRescoring and only the
+EXPERIMENT-wide file in SecondPassFDR. Checked: everything `TransferPerRunQ` needs is already
+in a phase-3 worker - the frozen 1st-pass model rides the phase2 -> phase3 -> phase4 relay, the
+reconciled features are computed there, and the file's own 1st-pass sidecar is staged. It sits
+in Stage 7 by history, not structure. Then Stage 7 reads ~0.44 GB + the reconciled parquet and
+nothing per-run.
+
+Generalizes, though this part needs real thought rather than assertion: the run-level half of
+`protein-compact`'s competition is also per-file work, and its stratum is a whole-run product
+that already exists BEFORE Stage 6. If that moved too, Stage 7 would keep only what genuinely
+needs every run at once - the experiment-scope roll-up, protein FDR, and the blib.
+
+### The scope split retires BOTH patch passes - do not "patch back per file" (Brendan)
+
+An earlier sketch in this file had `PerFileRescoring` write the run-scope columns and the join
+PATCH the experiment-scope ones back into every per-run file. **Wrong shape**, for three
+reasons, and the third is the one that decides it:
+
+1. A placeholder column is a **written-but-not-finished** artifact - a record whose experiment
+   columns are placeholders cannot be told from one whose patch failed. That is the same
+   ambiguity we removed from these files' EXISTENCE, one level down, inside them.
+2. It gives one artifact **two writers in two tasks**, which the resume model does not want -
+   each task owns its outputs. It is why the patch has to re-validate the header at all.
+3. It keeps the ~47% duplication permanently AND pays to rewrite it. The rewrite is expensive
+   BECAUSE of the duplication: streaming 68 B records to update 32 B of per-entry constants
+   that should not be in a per-run file.
+
+**Both existing patch passes are full rewrites (`FileSaver` source -> temp -> replace) running
+in JOIN stages**, and exist only because experiment-scope values live in per-run files:
+
+| join-stage I/O to back-fill experiment-scope values | 257 files |
+|---|---|
+| `FirstPassFDR` rewrites every 1st-pass sidecar (`PatchProteinQvalues`) | 52.3 GB read + 52.3 GB written |
+| `SecondPassFDR` rewrites every 2nd-pass sidecar (`PatchPass2ProteinQvalues`) | 9.3 + 9.3 GB |
+| **total, serial, in the bottleneck** | **~123 GB** |
+
+Storage, for comparison: 61.6 GB today vs **33.5 GB** split (1st-pass 27.7 + 0.44,
+2nd-pass 4.9 + 0.44). So the split saves ~28 GB stored and ~123 GB of un-parallelizable I/O.
+
+**The rule: experiment-scope values never live inside per-run files.** Four artifacts, each
+with exactly ONE writer:
+
+| file | scope | writer |
+|---|---|---|
+| `<stem>.1st-pass.fdr_scores.bin` | entry_id, score, run precursor q, run peptide q, PEP | `PerFileScoring` |
+| `experiment.1st-pass.fdr_scores.bin` | entry_id, exp precursor/peptide q, protein q, aggregate | `FirstPassFDR` |
+| `<stem>.2nd-pass.fdr_scores.bin` | same run-scope set | `PerFileRescoring` |
+| `experiment.2nd-pass.fdr_scores.bin` | same experiment-scope set | `SecondPassFDR` |
+
+`PatchProteinQvalues` and the `PatchExperimentValues` added on this branch both DISAPPEAR - the
+join writes its own file instead of editing everyone else's. **`PatchExperimentValues` is
+therefore transitional, not the intended end state**: it is the right shape while the per-run
+file is the only place those values can go, and the wrong one after the split.
+
+To check, not assume: the compaction protein-rescue gate reads `experiment_protein_qvalue`
+during per-file hydration, so an HPC worker needs the experiment-wide file staged to it. The
+pattern exists - the 1st-pass model sidecar is already relayed to every phase-3 worker.
+
+### Also still open from the same thread
+
+* Brendan's earlier idea: write the run-scope scalars as COLUMNS in the reconciled parquet
+  during PerFileRescoring, so Stage 7 opens one file instead of two. Qualifications: serves
+  `protein-compact` only (`transfer`/`transfer-compete` need pre-compaction rows); removes a
+  READ, not a write (the compaction protein-rescue gate reads the 1st-pass sidecar
+  pre-compaction, and HPC workers rehydrate from it); and the writer must emit PASS-1
+  (pre-`ResetScores`) values.
+* The frozen path streams the 1st-pass sidecar **2-3 times per file** (seeder, `ReadScalars`,
+  `StashOffStratumPass1ExperimentQ`). All three want fields off the same records and the
+  apparent ordering dependency is not real - `wanted` tests `ov != scs[i]` where `ov` comes
+  from `fileScores`, which is built BEFORE the read - so one pass can do all three. 3x -> 1x on
+  the largest artifact in the run.
+* Drop the five blob columns: 54% of the reconciled artifact, never read back out of a
+  reconciled parquet. 47 -> ~22 GB.
+
+## SESSION END 2026-08-27 evening - where the work stands
+
+**Branch** `Skyline/work/20260827_osprey_stage7_stream_increment` in `C:\proj\pwiz-work1`,
+**14 commits ahead of the PR branch, NOT pushed.** PR [#4621](https://github.com/ProteoWizard/pwiz/pull/4621)
+still OPEN and HELD at `2978de7b37`; the target is still ONE PR delivering memory reduction and
+streaming. Working tree clean.
+
+| commit | what | gate |
+|---|---|---|
+| `680bff65ac` | frozen second pass streams one file at a time | Stellar 10/10 |
+| `782a92211f` | blib phase stopped holding the survivor pool | Stellar 10/10 |
+| `f84dc1d458` | protein FDR and reports off the pool | Stellar 10/10 |
+| `b9075eb99a` | stopped writing the second-pass files conditionally | **`-Dataset All` 56/56** |
+
+**THE MEMORY BAR IS NOT MET AND NOTHING HAS MOVED IT.** `stage7-pool` is still 40.23 GB,
+because the pool is still built until the flip. Every projected figure in this file is
+arithmetic from the code, NOT a measurement. The 257-file run has not been re-run this session.
+
+### Steps 1-4 of the plan are done; step 5 is the whole remainder
+
+Step 4 (`OspreyReportWriter`) was **never the risk this file claimed** - its per-replicate loop
+already worked one file at a time and the experiment row is an O(distinct) fold. That standing
+note is retracted above.
+
+### Read these before touching the flip
+
+1. **"Step 5 - THE FLIP: what it actually needs"** - `MaterializeOneFile` overlays the
+   **1st-pass** sidecar, so a re-materialized file carries pass-1 q-values. That overlay has to
+   move into the materialization, and it has a PHASE problem: before pass 2 a file should look
+   pass-1 (that is what the resident pool holds there), and on a resume the sidecar is already
+   current from an earlier run, so "current" is not "this run wrote it".
+2. **The two wrong turns recorded as wrong**, because both are the natural-seeming answer and a
+   fresh session will reach for them: parquet cannot compress replication that lives ACROSS
+   separate per-run files, and "patch the experiment columns back into every run file" is the
+   wrong shape.
+3. **`PatchExperimentValues` (added this session) is TRANSITIONAL, not the design.** It is
+   correct while the per-run file is the only place those values can go, and it disappears with
+   the scope split. Do not preserve it as intent.
+
+### Sequence for the next sessions
+
+1. **The flip**, folding in the 1st-pass sidecar read fusion (3x -> 1x per file) - same method,
+   so gating them together avoids re-gating `ComputePass2TransferCompeteFull` twice.
+2. **The 257-file run** - the acceptance test, ~34 min, and the number this PR exists to
+   produce. Relaunch via `ai/.tmp/sessions/20260826-night-stage7/launch-measure-scoreindex.ps1`.
+3. Then the architecture, in the order it was worked out: move run-scope work into
+   `PerFileRescoring` (start with `transfer`, every input already staged), then the scope split.
+
+### A judgement call left open for Brendan
+
+The PR is now four commits including a bug fix and three gate hardenings, and still shows no
+memory reduction. **`b9075eb99a` stands alone and is fully gated** - if the flip runs long,
+splitting it into its own PR is reasonable.
+
+### Gate lesson worth keeping
+
+`-Dataset Stellar` does NOT cover `DiagnosticsOnly`: `mode7` is guarded on the dataset spec's
+`ModelDiagnostics` flag, which Stellar does not carry. Seven Stellar gates this session
+exercised zero of those paths. Use `-Dataset All` for anything touching that mode.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260827_osprey_stage7_stream_increment.md` before starting work.
+
+## THE FLIP IS THE WRONG STEP 5 - it costs ~10 whole-run walks (2026-08-27 evening)
+
+`RescoredEntries.Files()` re-materializes on EVERY call - it yields from the resident buffer
+only while `IsMaterialized` is true (`PipelineByproducts.cs:363`). Today exactly one consumer
+builds the pool, so all seven `Files()` walks are free. **Remove that build and each one
+becomes a full re-read.** The step-5 plan, and the handoff that carried it, treat the flip as
+the last mechanical piece; it is not.
+
+Walks left on the default protein-compact path after the flip:
+
+| # | walk | site |
+|---|---|---|
+| 1 | `BuildRetainedBaseIds` (fragment release) | `SecondPassFdrTask.cs:449` |
+| 2 | survivor entry_id fold | `Pass2FdrSidecar.cs:1060` |
+| 3-4 | the competition's `ReadFile` + its step-4 finish | `Pass2FdrSidecar.cs:1256` |
+| 5 | `ProteinFdrEngine.RunSecondPass` | `SecondPassFdrTask.cs:482` |
+| 6 | `OspreyReportWriter` per-replicate | `OspreyReportWriter.cs:266` |
+| 7 | experiment-q clamp fold | `SecondPassFdrTask.cs:327` |
+| 8-10 | `ComputePassingPeptides` -> `ComputePassingPrecursors` -> `CollectPassingEntries` | `SecondPassFdrTask.cs:752/755/768` |
+
+One materialization is `FirstPassSurvivorLoader.Load` per file: read the reconciled parquet
+(47.07 GB across 257 files) + overlay the WHOLE 1st-pass sidecar (52.3 GB) + allocate 137 M
+`FdrEntry` + sort. **~100 GB of reads per walk**, against a Stage 7 that runs 36 min end to end
+today. Ten walks is not a memory win, it is a wall-time catastrophe.
+
+Fusion cannot rescue it either: the dependency chain (clamp -> passing peptides -> passing
+precursors -> passing entries) forces 3-4 passes at minimum, each still ~100 GB.
+
+The seed of this was already in the file, at `Pass2FdrSidecar.cs:1013` - *"Fusing this fold
+with the other converted consumers' walks is a separate, run-wide question - it is free until
+nothing builds the buffer."* It is now the whole question.
+
+## DECIDED: shrink the pool, do not remove it (Brendan, 2026-08-27)
+
+Back to the 2026-08-27 morning call - *"Stage 7 should use Stage 5's machinery"* - with the
+numbers this time. ONE materialization walk converts each file's `FdrEntry` list into lean rows
+and drops the fat objects; the other nine folds then walk a resident lean set instead of
+re-reading 100 GB apiece. I/O stays at one walk. Steps 1-4 are not wasted: the streamed
+consumers are exactly what lets the conversion pass consume the fat pool one file at a time.
+
+### The lean row, from an audit of all ten consumers
+
+The TODO's earlier ~40 B / 5.5 GB projection was `FdrProjection`'s 32 B shape. **That struct
+cannot do Stage 7's job** - it carries no q-values, no RTs and no area. Audited against
+`FdrEntry`'s 24 fields, what Stage 7 actually reads after the competition is:
+
+| field | B | read by |
+|---|---|---|
+| `EntryId` | 4 | fragment release, blib RefSpectra, fdrbench |
+| `PeptideId` (int into a ~40 K intern table) | 4 | replaces `ModifiedSequence` - every gate |
+| `Charge`, `IsDecoy` | 2 | every gate |
+| `Score` | 8 | protein-FDR best-per-peptide, fdrbench, model-diagnostics |
+| `RunPrecursorQvalue`, `RunPeptideQvalue` | 16 | `EffectiveRunQvalue(Both)`, protein-FDR gate |
+| `ExperimentPrecursorQvalue`, `ExperimentPeptideQvalue` | 16 | peptide/precursor gates, clamp, blib |
+| `ApexRt` / `StartRt` / `EndRt` | 24 | `PassingObservation` + RefSpectra |
+| `BoundsArea` | 8 | RefSpectra |
+| | **82 -> 88 padded** | |
+
+137,034,004 x 88 B = **12.1 GB**; + the 4.19 GB library = Stage 7 live **~16.3 GB**, against
+37.87 GB today. FirstPassFDR's 53.7 GB private becomes the run's peak, which is the bar.
+
+**NOT the 5.5 GB this file projected.** Every figure here is arithmetic from the code, like
+every other projection in this file; the only measurement remains `stage7-pool` = 40.23 GB.
+
+**Rejected variant** (offered, and Brendan chose against it): defer the four spectral doubles -
+`ApexRt`/`StartRt`/`EndRt`/`BoundsArea` - to a targeted 4-column re-read over the 11.7 M
+PASSING observations only. That gives a 56 B row and a 7.7 GB pool, but buys the extra headroom
+with a second read path that then has to be kept working and tested forever. Keeping RT/area
+resident is the simplest correct shape and already clears the bar.
+
+**Not in the row**, dropped with each file inside the competition: `ParquetIndex`/score_index,
+`ScanNumber`, `Pep`, `ExperimentAggregateScore`, `ExperimentProteinQvalue`, `Features[21]`, and
+the five blob arrays. Those are exactly what the 2nd-pass sidecar already carries to disk - the
+conclusion of `Pass2FdrSidecar.cs:1319`'s *"the sidecar, not the entry, is what carries this
+pass's results forward"*.
+
+### Two things to settle in the build, not asserted here
+
+1. The experiment-q clamp MUTATES two q-values in place, so the row must be a mutable struct
+   written back by index (`CollectionsMarshal.AsSpan`), not a readonly one like `FdrProjection`.
+2. `--model-diagnostics` pass-2 feature histograms may still want `FdrEntry.Features`. That
+   mode already forces the resident 2nd pass, so it can keep a fat path - but confirm before
+   assuming it.
+
+## 1st-pass sidecar read fusion: 3 traversals -> 1 (2026-08-27 evening)
+
+Landed first, because it is worth doing under any direction. The frozen competition read each
+file's `.1st-pass.fdr_scores.bin` three times, all over the same 68-byte records:
+
+| was | now |
+|---|---|
+| `seeder.Seed` -> `ReadRecords` (whole file) | one `ReadScalars` at the top of `ReadFile` |
+| `FdrScoresSidecar.ReadScalars` (whole file) | same call - it is the one that produces `eids`/`scs` |
+| `StashOffStratumPass1ExperimentQ` -> `ReadRecords` (whole file) | reads the records already in hand |
+
+* **`FdrScoresSidecar.ReadScalars` gained an overload** that also decodes the FULL record for a
+  caller-selected subset, into a caller-owned list. The subset is the file's survivors (~533 K
+  of ~2.99 M records on a CHS file), so the other ~82% still cost only their entry_id and score
+  - decoding seven trailing doubles to discard them was what the separate passes paid for.
+* **`Pass1ScalarSeeder` gained `Apply`**, the seed with no I/O, for a caller that has already
+  read the records. It needs none of `Seed`'s stage-then-apply discard contract, because a
+  caller holding decoded records has already had a clean read. `Seed` stays for
+  `RestorePass1Scalars`; both funnel through one `ApplyRecord`.
+* **The stash walks the survivor records** instead of scanning the full-population arrays to
+  build a `wanted` set and then re-reading the file to fetch its two q-values. The apparent
+  ordering dependency was not one: the test is against `fileScores`, which is built from the
+  parquet features, not from the sidecar.
+
+**One deliberate behaviour change, in a configuration that is broken today.** The fused read
+uses `sidecarByKey[fileKey]` - the path the validation loop already checked with
+`IsCurrentFormat` - where `Seed` used `FdrScoresSidecar.Pass1Path(writer.InputFor(fileKey))`.
+Both resolve through `ArtifactPaths.ResolveOutputDir`, so they name the same file in every
+configuration this method accepts. Where they could ever diverge, the old code warned
+(`_unreadable`) and proceeded with reset defaults - which `LogSummary` itself calls "treat this
+run's protein-level numbers as unreliable" - and the new code reads the validated file instead.
+The refusal stays where the contract puts it: before any survivor is mutated.
+
+Gate: build clean, **596/596**, zero inspection warnings, and **`regression.ps1 -Dataset
+Stellar` 10/10** - modes 1, 1b, 1c, 2, 3, 4, 5, 6 all green with an identical 23,662,592-byte
+blib. Committed `a700c1226a`.
+
+### Sequence from here
+
+1. The lean-row conversion, behind a flag defaulting OFF, A/B'd against the resident path for
+   byte-identity, then flip the default - the way `OSPREY_FDR_PROJECTION` and
+   `OSPREY_STAGE6_STREAM_SURVIVORS` were introduced.
+2. The 257-file run, the acceptance test, ~36 min.
+3. Then the architecture, in the order already worked out: move run-scope work into
+   `PerFileRescoring` (start with `transfer`), then the scope split.
+
+**Retract "Step 5 - THE FLIP" as the plan.** Its q-value overlay analysis still stands and the
+lean-row conversion needs it - a converted file's rows must carry pass-2 values - but "stop
+reading `rescored.Value`" is not the shape.
+
+## The lean-row audit closed cleanly - and where the rows get filled (2026-08-27 evening)
+
+Two things the decision left open are now answered from the code, not assumed.
+
+### `--model-diagnostics` does NOT need `FdrEntry.Features`
+
+Its six pass-2 cards walk the pool, but every `.Features` reference in
+`ModelDiagnosticsData` is `contributions.Features` - the trained model's feature LIST - not a
+per-entry vector (`ModelDiagnosticsData.cs:575,830`,
+`ModelDiagnosticsData.Accumulator.cs:324`). So the mode runs on lean rows like everything else,
+and there is no fat path to keep for it. `--fdrbench` likewise: `Score`, `ModifiedSequence`,
+`Charge`, `EntryId`, `IsDecoy` and the two `Effective*Qvalue` accessors, all in the row.
+
+Swept every `.Features` / `.CwtCandidates` / `.FragmentMzs` / `.FragmentIntensities` /
+`.ReferenceXicRts` / `.ReferenceXicIntensities` / `.BoundsSnr` / `.CoelutionSum` /
+`.ScanNumber` / `.ParquetIndex` read in `Osprey.Tasks` and `Osprey.FDR`. Everything that
+survives the filter is either pre-Stage-7, inside the competition's own per-file cycle
+(`Pass2FdrSidecar.cs:1352,1840,1910-1965`), or in `ComputePass2Resident` /
+`ScoreWithFrozenModel` - all of which run BEFORE a lean row exists and drop the file after.
+
+**Exactly one post-competition consumer reads a field outside the row**:
+`UpgradeReconciledParquets` builds `keepIdentities` from `(EntryId, Charge, ScanNumber)`
+(`SecondPassFdrTask.cs:665`). That is the in-Stage-7 legacy converter, which
+`--task CompactPerFileRescoring` (`55600ddbc0`) now supersedes. Two ways out, and it is a
+capability question rather than a technical one:
+
+* add `ScanNumber` to the row (+4 B, ~0.55 GB at 257 files), or
+* **remove the in-Stage-7 upgrade** and have Stage 7 REFUSE a stale-format directory in every
+  mode, naming `--task CompactPerFileRescoring` - which is exactly what `--task
+  ModelDiagnostics` was already changed to do on this branch, for the same reason.
+
+The second is the shape this branch already chose once ("BLOCK, not work around"), and it
+deletes a read path rather than paying to keep one working. It needs Brendan's sign-off because
+it removes a capability, not because it is unclear.
+
+### Interning `ModifiedSequence` is a large part of the win on its own
+
+`SecondPassFdrTask.cs:925` already records that *"the parquet reader hands out a fresh instance
+per row"*, which is why `CollectPassingEntries` canonicalizes. The resident pool does NOT
+canonicalize: it holds **137 M separate string objects** where there are on the order of
+thousands to millions of distinct sequences. At a .NET string's `26 + 2 x len` bytes, a 20-30
+character modified sequence is ~66-86 B, so the pool carries roughly **9-12 GB of strings
+alone** out of its 37.87 GB. Replacing the reference with a `PeptideId` int removes that before
+the struct packing is counted. Arithmetic from the code, like everything else here.
+
+### Where the two halves of a row get filled - no extra materialization
+
+The competition already makes exactly ONE materialization per file, and its step 4 works over
+the SIDECARS, not the entries (`"the file's entries have been dropped by now"`). So:
+
+| phase | fills | why there |
+|---|---|---|
+| `ApplyFileRunQ` (per file, during the stream) | `EntryId`, `PeptideId`, `Charge`, `IsDecoy`, RTs, `BoundsArea`, `Score`, both RUN q | the file is materialized and its score / run q are final at that point |
+| step 4's per-file sidecar patch | both EXPERIMENT q | the competition producing them is not complete until every file has been read |
+
+The step-4 fill needs a per-file entry_id -> row index map, built transiently for the file being
+patched (~533 K entries) and dropped - NOT a run-wide (file, entry_id) map, which is the 3.8 GB
+structure `ReadFile` already removed once.
+
+**Scope**: this covers the DEFAULT frozen-competition arm. `ComputePass2Resident` stays on the
+fat pool deliberately - it is the byte-identity oracle, and the convention this codebase uses
+for a change like this is to leave a working oracle on the other side of the switch. The
+`!recomputed` resume path runs no competition, so it builds its lean pool from one plain
+per-file materialization plus the 2nd-pass sidecar overlay - one walk, the same as today's pool
+build.
+
+### net472 rules out `CollectionsMarshal` - the rows are ARRAYS, not lists
+
+Correcting a design detail stated earlier in this session: the clamp mutates two q-values in
+place, and `CollectionsMarshal.AsSpan` is .NET 5+ while Osprey multi-targets `net472;net8.0`
+(`pwiz_tools/Osprey/Directory.Build.props:4`). Store each file's rows as a `LeanRow[]`, not a
+`List<LeanRow>` - array element access yields a direct ref for a struct, so
+`rows[i].ExperimentPrecursorQvalue = floor;` mutates in place on both frameworks with no
+interop helper. The per-file survivor count is known at materialization, so an array is the
+natural shape anyway.
+
+### The gates must be GENERIC, not duplicated
+
+`ComputePass2Resident` stays on the fat pool as the byte-identity oracle, so the SAME gate code
+has to run over both row types - two implementations would leave the oracle comparing two
+different pieces of code, which is the failure mode
+[[feedback_shared_defect_hides_from_parity]] describes from the other direction. Write the
+Stage 7 gates as `where T : IFdrRow`: the JIT specializes the struct instantiation with no
+boxing, and the class instantiation shares the reference-type body. Default interface members
+are NOT available (net472 has no runtime support), so `EffectiveRunQvalue` /
+`EffectiveExperimentQvalue` become generic extension methods on the interface - one
+implementation, both row types, both frameworks.
+
+Scope of the churn: 102 `KeyValuePair<string, List<FdrEntry>>` occurrences across 20 files, but
+most are Stages 1-6 and stay. The Stage 7 set is `LibraryFragmentRelease`, `ProteinFdrEngine` /
+`ProteinFdr`'s second-pass accumulator, `OspreyReportWriter`, `SecondPassFdrTask`'s blib gates,
+`PercolatorEngine`'s clamp fold/apply, `FdrBenchInputWriter` and `ModelDiagnosticsData`'s
+pass-2 cards.
+
+## DECIDED: go straight at the architecture, drop the lean-row pool (Brendan, 2026-08-27)
+
+Brendan, mid-session: *"are you still planning on moving per-run FDR calculation for Pass 2 into
+the PerFileRescoring task? So that SecondPassFDR becomes only about calculating the
+experiment-wide q values and writing the BLIB?"*
+
+That question retires the lean-row pool decided earlier the same evening, and it is right to.
+Follow the architecture through and Stage 7 needs no per-observation pool at all:
+
+* **experiment q and protein FDR** are folds over `entry_id` - O(distinct), not O(observations).
+* **the blib gates** do walk all 137 M observations, but everything they read is either in the
+  68-byte sidecar record (both q's) or reachable from `libraryById` by `entry_id`
+  (`ModifiedSequence`, `IsDecoy`). No parquet read, no `FdrEntry`.
+* **only the ~11.7 M PASSING observations** need RTs and area, from a narrow second pass over
+  the reconciled parquet.
+
+| | Stage 7 live |
+|---|---|
+| today | 37.87 + 4.19 library = **42 GB** |
+| lean 88 B row (retired) | 12.1 + 4.19 = 16.3 GB |
+| architecture | ~0.6 GB passing records + folds + 4.19 library = **~5-6 GB** |
+
+Building a 12.1 GB resident pool of 137 M rows was an intermediate whose entire purpose the next
+PR deletes. **Retract the lean-row conversion**; keep only `IFdrRow` and the gate
+genericization, which the architecture needs anyway because the gates end up running over
+sidecar-derived rows.
+
+## The run-level half IS per-file work - established from the code, not asserted
+
+`StreamingFdr.ComputeFullPopulationPrecursorFdrStreaming` (`:191-290`) computes the run-level q
+from ONE file's arrays:
+
+```
+TargetDecoyCompetition.CompeteFromIndices(scores, labels, entryIds, allIdx, out wi, out ws, out wd);
+PercolatorQValues.ComputeConservativeQvalues(ws, wd, q);
+```
+
+`scores`, `labels`, `entryIds` and `allIdx` are all that file's. Exactly three inputs are global,
+and each is already a relayable artifact:
+
+| global input | what it is | staged today? |
+|---|---|---|
+| the frozen 1st-pass model | Stage 5 product | YES - rides the phase2 -> phase3 -> phase4 relay |
+| `stratumBaseIds` | whole-run, and exists BEFORE Stage 6 | YES - in the model sidecar |
+| `survivorEntryIds` | union of per-file survivors, ~12.4 M x 4 B = ~50 MB | derivable from Stage 5 compaction |
+
+What is genuinely JOIN work is `minRunQ` (the best-of-runs floor) and the per-`base_id`
+`bestTarget` / `bestDecoy` folds - all O(distinct).
+
+**The trap, named before it bites**: a file can WIN a competition for an `entry_id` that is not
+one of ITS survivors but is a survivor in another file, and that win still has to reach
+`minRunQ`. So a worker cannot substitute its own survivor list for the global one - it needs the
+50 MB relay. Filtering locally would silently drop cross-file floor contributions and lower
+experiment q for exactly the precursors that appear in many runs.
+
+## Artifact layout confirmed, with one correction (Brendan, 2026-08-27)
+
+*"immutable 2nd pass side-car files per run, and then an experiment-wide FDR side-car file
+(maybe the same base name as the BLIB?)"* - yes, and the same shape for the 1st pass, which is
+where most of the win is.
+
+**CORRECTION to the table earlier in this file**: the experiment-scope artifact takes the
+**BLIB's base name**, not a literal `experiment.` prefix. A fixed prefix collides the moment two
+analyses share an output directory, which is what the run layout does; `<blib-stem>.<pass>.fdr_scores.bin`
+beside the blib names the file for the analysis that produced it. `config.OutputBlib` is a run
+parameter every node already has, so a `--task SecondPassFDR` worker locates it with no new
+plumbing.
+
+| | today | split | |
+|---|---|---|---|
+| 1st-pass | 52.3 GB | 27.7 + 0.44 | **-46%** |
+| 2nd-pass | 9.3 GB | 4.9 + 0.44 | -43% |
+| total | 61.6 GB | **33.5 GB** | |
+
+Both records are 36 B (entry_id + four doubles) against the fused 68 B, so per FILE it is not
+quite half - the halving comes from the experiment-scope columns being written once per
+EXPERIMENT instead of once per run.
+
+**Immutability is what pays twice.** Both patch passes exist only to push experiment-scope
+values into per-run files: `PatchProteinQvalues` rewrites all 52.3 GB of 1st-pass sidecars in
+FirstPassFDR's join, `PatchPass2ProteinQvalues` another 18.6 GB in SecondPassFDR - ~123 GB of
+serial, un-parallelizable rewrite in the two stages that ARE the bottleneck. Both disappear, and
+a per-run file becomes write-once, which removes the written-but-not-finished ambiguity one
+level down from the one `b9075eb99a` removed.
+
+## `IFdrRow` landed - the one piece that survives the pivot
+
+`Osprey.Core/IFdrRow.cs`: the thirteen members Stage 7 reads off a survivor after the second
+pass, plus `FdrRowExtensions.EffectiveRunQvalue<T>` / `EffectiveExperimentQvalue<T>`.
+`FdrEntry` implements it and its two instance selectors were REMOVED in favour of the generic
+extensions - one implementation of the rule, and every call site compiles unchanged because an
+extension method is called with the same syntax.
+
+* **Generic, not `IFdrRow`-typed parameters.** A constraint compiles to a constrained call that
+  neither boxes nor allocates; taking the interface directly would box every one of 137 M rows.
+* **Extension methods, not default interface members** - net472 has no runtime support for those
+  (`Directory.Build.props:4` targets `net472;net8.0`).
+* The two experiment q-values are settable because the pre-blib re-clamp raises them in place.
+  For a struct that means the caller must hold an ADDRESSABLE element - an array element or a
+  `ref` local - since an `IReadOnlyList` indexer hands back a copy and the write is discarded.
+
+Five inspection warnings came from `<see cref="FdrEntry.EffectiveRunQvalue"/>` doc references in
+`FdrProjectionOutput`, `ModelDiagnosticsData` and `PeakCoAssignmentSource` that no longer
+resolved; retargeted to `FdrRowExtensions`. Gate: build clean, 596/596, zero inspection
+warnings.
+
+### Sequence from here
+
+1. Split the competition into a per-file half and a join fold **in place** in Stage 7 - the
+   three global inputs above passed in explicitly, byte-identical, gateable. This is what makes
+   the move mechanical rather than a rewrite.
+2. Move the per-file half into `PerFileRescoreTask`, relaying model + stratum + survivor ids.
+3. Split the sidecars by scope (1st pass first - it is 85% of the bytes), retiring both patch
+   passes.
+4. Stage 7's remaining consumers stream from the sidecars + library; the pool never exists.
+
+## NIGHT SESSION 2026-08-27/28 - the move is fully decomposed, and needs NO new global relay
+
+### The 257-file Stage 5-7 run is the night's headline
+
+Launched 21:42:44, pid 25996, exe `_bin\26.1.1.239-stage57-20260827`, out dir
+`chs-257files-libdecoy-r1.0-protein-compact-s57base257`, launcher
+`ai/.tmp/sessions/20260827-stage7-leanrow/launch-stage57-257.ps1`.
+
+**This is the first Stage 5-7 measurement at 257 files on this branch.** Every prior 257-file
+number came from `--task SecondPassFDR` and is therefore blind to Stage 6 - which is precisely
+the stage the architecture moves work INTO. The baseline `p0059_0060_0061` ran this exact shape
+in 10h14m.
+
+The rig, for the record, because it answers "how do we test this" durably:
+
+* **`-LinkFrom` with NO `-Task`.** `$STAGE_ARTIFACTS`' `$upTo` defaults to `FirstPassFDR`, so it
+  hard-links only the Stage 1-4 artifacts (`.scores.parquet`, `.calibration.json` + their task
+  sidecars - 1028 files, 0 missing), then the pipeline runs normally with `-i` and per-file
+  resume skips Stages 1-4 because their outputs are present and valid. Confirmed by
+  `[TASK] FirstPassFDR:starting` as the first task line.
+* **`-Task FirstPassFDR` would be WRONG** - it is a single-stage HPC exit point, not "start here
+  and continue".
+* **No conversion step is needed**, and none should be invented.
+* The source `.raw` are GONE; only the 446 `.spectra.bin` remain. That is supported and
+  deliberate: `OspreyDatasetRun` synthesizes the path the source WOULD have had, because Osprey
+  never stats it and `SpectraCache` resolves from the input's DIRECTORY. Brendan: *"Keeping the
+  .raw files is no longer necessary once you have spectra.bin"*. Stage 6 REQUIRES the cache and
+  has no mzML fallback (`PerFileRescoreTask.cs:934-937`).
+* `OSPREY_VERSION_OVERRIDE=26.1.1.233` and `-LibraryDir target+decoy+entrapment-20260817` are
+  both mandatory - the first or the resume silently re-runs Stages 1-4 for hours, the second or
+  the run uses a different build of the same library file name (6,324,700 vs 6,175,389 entries).
+  Verified in the log: library loaded 6,175,389.
+
+**Oracle**: 5,079 protein groups | 45,724 library spectra | 11,745,026 passing entries |
+blib **725,458,944** bytes. NOTE the Stage-7-only reruns gave **725,467,136** - an 8,192-byte
+SQLite page difference between the two RIGS that predates this branch. Compare like with like,
+and treat the three counts as the robust oracle.
+
+### The move needs NO new global relay - correcting this file's own earlier claim
+
+The section above says a `PerFileRescoring` worker needs the global survivor entry-id set
+relayed to it (~50 MB), because a file can win a competition for an `entry_id` that is not one
+of ITS survivors but is a survivor elsewhere, and that win must still reach `minRunQ`.
+
+**The premise is right and the conclusion is wrong.** The filter exists only to decide what goes
+into `minRunQ`, which is a JOIN fold. So:
+
+* the worker emits run q for **every winner**, filtering nothing;
+* the join rebuilds the survivor id set by unioning `entry_id` over the run-scope 2nd-pass
+  sidecars **it already has to read**, and filters there.
+
+That leaves the worker's global inputs as the frozen 1st-pass model and `stratumBaseIds` - and
+**both already ride the phase2 -> phase3 -> phase4 relay** (they share the model sidecar;
+`Pass2FdrSidecar.ComputeAndPersist` reloads them together via `FirstPassModelIO.LoadFromAny`).
+Nothing new has to be staged.
+
+### The frozen scoring is FREE in the worker
+
+`PerFileRescoreTask.cs:1058`, at `WriteReconciledAndStamp`, `fdrEntries` still holds this file's
+post-rescore entries with `Features` populated - that is the writer's own "this row was
+rescored" sentinel, and `ReleaseRescoredPayload` runs only AFTER the write. So the worker scores
+with the frozen model straight from memory.
+
+Stage 7 today re-reads the reconciled parquet for exactly those features
+(`LoadReconciledFeaturesByScoreIndex`). The move deletes that read, per file, across the cohort.
+
+### The contribution artifact, bounded by the STRATUM not the population
+
+Measured, not estimated: the 257-file CHS run logs
+`competition CONSTRAINED to the 508769-base_id protein stratum`.
+
+| field | B |
+|---|---|
+| `base_id` | 4 |
+| best TARGET score | 8 |
+| best DECOY score | 8 |
+| winner run q | 8 |
+| presence flags | 4 |
+| | **32** |
+
+508,769 x 32 B = **16.3 MB/file**, **<=4.2 GB at 257 files**, and that is the hard ceiling - a
+real file observes only a fraction of the stratum. Against ~28 GB of storage and ~123 GB of
+join-stage rewrite that the scope split removes, this is not an argument against the move.
+
+`entry_id` need NOT be stored: a target's `entry_id` IS its `base_id`
+(`labels[i] = (eid & ~BASE_ID_MASK) != 0u`, so a target has no bits outside the mask) and a
+decoy's is `base_id | ~BASE_ID_MASK` - which is exactly how the join already reconstructs winner
+ids at `StreamingFdr.cs:392`.
+
+**It only gets expensive under `transfer-compete`**, which is unstratified, so its contribution
+is bounded by the file's whole pre-compaction population instead. protein-compact is the
+default; transfer-compete would want measuring before it is promised anything.
+
+### Enabling commits landed tonight, each gated Stellar 10/10
+
+| commit | what |
+|---|---|
+| `a700c1226a` | frozen 2nd pass reads each 1st-pass sidecar ONCE, not three times |
+| `f08059f824` | `IFdrRow` + generic q-value selectors - the contract Stage 7 reads a row through |
+| `f7a6e6d103` | `StreamingFdr` competition split into `CompeteOneFile` + `FoldFileContribution` |
+
+`f7a6e6d103` is the one that matters for the move: `CompeteOneFile`'s only inputs beyond one
+file's arrays are the frozen-model survivor scores, the survivor id set and the stratum - and
+per the correction above, two of those are already relayed and the third moves to the join.
+Relocating it is now a relocation, not a rewrite.
+
+## CORRECTION (night session, 22:05): the frozen scoring is NOT free in the worker
+
+Earlier tonight this file recorded that `PerFileRescoreTask` can score with the frozen model
+straight from memory at `WriteReconciledAndStamp`, because `fdrEntries` still carries
+`Features`. **That is true only for the RESCORED subset.**
+
+`ReconciledParquetWriter.cs:147-150` states the rule: re-scored rows are detected by
+`FdrEntry.Features != null`, and *"hydration's LoadFdrStubsFromParquet does NOT populate
+Features, so an unchanged post-compaction stub (Features == null) is skipped, leaving its
+original parquet row (Features + CwtCandidates + the binary blob columns) to stream through"*.
+
+So an UNCHANGED survivor has no features in the worker's memory. Stage 7 scores every survivor
+present in the reconciled parquet, and the rescored fraction is small - Stellar mode 1c reports
+70,614 of 996,439 shared records moved, about 7%. The worker would be missing ~93% of what
+Stage 7 needs.
+
+### What this does to phase 1
+
+The "publish flat per-file frozen-score arrays, no new artifact" plan does NOT work as written.
+Three options, and the first is the real one:
+
+1. **Score inside the parquet STREAM** the worker already makes in `WriteReconciledAndStamp`.
+   Every row - rescored or streamed-through - passes through `StreamReconciledScoresParquet`
+   with its features in hand, so this is genuinely one pass and no extra I/O. It reaches into
+   `ReconciledParquetWriter` rather than sitting beside it, so it is more invasive than the
+   sketch it replaces.
+2. Worker re-reads its own reconciled parquet after writing it. Correct but pointless: it is the
+   same read Stage 7 makes, so nothing is saved, only relocated.
+3. Leave the scoring in Stage 7. Then the move carries only the competition, and Stage 7 keeps
+   the per-file feature read - which is the read the move exists to delete.
+
+**Not implemented tonight, deliberately**: the premise was falsified while scoping it, and
+writing the invasive version against a freshly-corrected design at 22:00, with no ability to
+regression-gate while the 257-file run holds the machine, is how a plausible-but-wrong change
+lands. Option 1 is the design; it wants a fresh session.
+
+**The rest of the decomposition is unaffected** - the competition split (`f7a6e6d103`), the
+no-new-relay finding, the stratum-bounded contribution sizing and the artifact layout all stand.
+Only the "scoring is free from `fdrEntries`" step was wrong.
+
+## Phase 1 reworked, and it IS bounded - the hook point is the row-group flush (22:20)
+
+The 22:05 correction said scoring must move inside the parquet stream and called that "more
+invasive". Checked, and it is a callback, not a restructuring.
+
+`ParquetScoreCache.StreamReconciledScoresParquet` (`:1426`) does not copy columns through in
+bulk. It buffers **`FdrEntry` objects** per row group - `var buffer = new List<FdrEntry>(rowsPerGroup)` -
+and emits with `BuildFdrEntryColumns(buffer, written, libraryById, fileName, featureFields, ...)`.
+That is the only write path, so EVERY emitted row is materialized as an `FdrEntry` with its
+features at flush time, including the unchanged rows that "stream through" from the original
+parquet.
+
+So the hook is: at each row-group flush, score the buffered entries with the frozen model and
+accumulate `(entry_id, score)`.
+
+* **No extra I/O** - the stream is one the worker already makes.
+* **No extra materialization** - the entries already exist to be written.
+* **Bounded** - the buffer is `rowsPerGroup`; the accumulated scores are 12 B x this file's
+  survivors, and they are the file's own output, not a whole-run structure.
+
+That removes the last objection to phase 1. What it needs: the frozen model reachable in the
+worker (it is - `FirstPassFdrTask` publishes `FirstPassPercolatorModel` at `:122`, and a
+distributed worker reloads it from `.1st-pass.model.json`), plus a decision on where the scores
+go - which is the artifact question, and the one thing still genuinely open.
+
+**Still not implemented tonight**: the 257-file run holds the machine, so nothing here could be
+regression-gated, and this is core artifact-writing code. But it is now a specified callback
+rather than a direction.
+
+## Follow-on candidate: the progress lines lose their phase (observed live, 2026-08-27)
+
+Brendan checked the running 257-file job and read it as "only running SecondPassFDR". It was in
+FirstPassFDR - the denominator gave it away (764,427,887 is the PRE-compaction population;
+Stage 7 only ever sees the ~137 M survivors). But the log itself could not say so: `[TASK]` lines
+are emitted only at task START, and `ProgressReporter` prints its heading once and then bare
+percentages, so anything that tails the log loses which phase it is in.
+
+This is the same trap as the standing note to read `file NN/NN:` lines rather than a tailed `%`.
+It has now cost a real reader a wrong conclusion about a live 10-hour run.
+
+**Fix candidate**: put a short phase tag on each percent line, or emit a periodic `[TASK]`
+heartbeat. **Not folded into this PR**: it changes every progress line in every log, and
+`ai/scripts/perfviz.py` parses those - so it wants its own change with the parser updated in the
+same commit, not a drive-by at the end of a memory PR.
+
+A second, cheaper half: the run directory is nearly empty until Stage 5 finishes (1,029 entries -
+the 1,028 hard links plus run.log - against 3,350 in a completed run), because every stage writes
+its artifacts at the END. That is also what made the run look idle. Worth knowing when watching
+one, and worth a line in the run-layout doc.
+
+## MEASURED: Stage 6 can absorb the pass-2 work for free (night session, 00:24)
+
+The open question behind the whole move was whether `PerFileRescoring` has room for the run-scope
+pass-2 work. First `perfile-rescore-peak` probe from the 257-file Stage 5-7 run:
+
+| probe | value |
+|---|---|
+| `reconciliation-floor` (post-GC, entering rescore) | 4.12 GB |
+| `perfile-rescore-loaded` (post-GC, streaming index resident) | 4.34 GB |
+| `perfile-rescore-peak` (PRE-GC, per-file transient) | **15.43 GB** managed, 34.24 GB WS |
+
+So a Stage 6 file already churns ~11 GB of collectable garbage above a ~4.3 GB floor - the
+rescored entries carrying `Features` / `CwtCandidates` / `Fragment*` / `ReferenceXic*`.
+
+What the move would add to that worker:
+
+| addition | size |
+|---|---|
+| frozen-score accumulator, 12 B x ~533 K survivors/file | ~6 MB |
+| the file's own 1st-pass sidecar scalars, ~2.99 M x 12 B | ~36 MB |
+| **total** | **~40 MB, under 0.3% of the existing per-file transient** |
+
+**The stage has room by three orders of magnitude.** That was the one measurement that could have
+argued against moving the work into Stage 6, and it does not.
+
+Stage 5 for context, same run: 9,578.3 s (2h 39m), peak_paged 53.59 GB, but handing off only
+**5.97 GB** live - so Stage 5's cost is transient too, and the run's real problem was never it.
+The baseline's run peak was ~69 GB at STAGE 7's pass-2 start, on a 64 GB box.
+
+## 257-FILE STAGE 5-7 RUN: COMPLETE, exit=0, output identical (memory bar NOT met - see retraction) (2026-08-28 04:37)
+
+`chs-257files-libdecoy-r1.0-protein-compact-s57base257`, exe `_bin\26.1.1.239-stage57-20260827`,
+`-LinkFrom` the p0059_0060_0061 Stage 1-4 artifacts, no `-Task`, 30 threads,
+`OSPREY_LOG_MEMORY=1`, mdiag on, fdrbench pass 2.
+
+**The first full Stage 5-7 measurement at 257 files on this branch.** Every prior 257-file number
+came from `--task SecondPassFDR` and was blind to Stage 6.
+
+### Output: EXACT match on every count
+
+| | oracle (baseline) | this run |
+|---|---|---|
+| protein groups at 1% | 5,079 | **5,079** |
+| library spectra | 45,724 | **45,724** |
+| passing entries | 11,745,026 | **11,745,026** |
+
+Six commits of refactoring - the sidecar read fusion, `IFdrRow`, the competition split and the
+review fixes - and the cohort-scale output is unchanged.
+
+### The blib size difference is SQLite packing, verified not inferred
+
+725,258,240 bytes against the baseline's 725,458,944 - **200,704 bytes = 49 x 4096-byte pages**.
+
+| | baseline | s57base257 |
+|---|---|---|
+| `page_size` | 4096 | 4096 |
+| `page_count` | 177,114 | **177,065** |
+| `freelist_count` | 0 | 0 |
+
+**Every table row count is identical** - RefSpectra 45,724, RetentionTimes 11,745,026, Proteins
+5,757, RefSpectraProteins 50,566, Modifications 12,738, SpectrumSourceFiles 257, and the rest.
+Eight content rollups also match exactly, including sums over all 11.7 M `RetentionTimes` rows
+and the q-value sums in `OspreyExperimentScores` / `OspreyRunScores`. So the difference is
+B-tree page fill, not content.
+
+This is a THIRD blib size for the same content: 725,467,136 (`--task SecondPassFDR` rigs),
+725,458,944 (baseline full run, build 26.1.1.233), 725,258,240 (this full run). A blib byte size
+is not an equality test - row counts plus content rollups are.
+
+### Wall time: 1.49x faster than the baseline
+
+| stage | this run | |
+|---|---|---|
+| FirstPassFDR | 9,578.3 s | 2 h 39 m |
+| PerFileRescoring | 13,455.6 s | 3 h 44 m |
+| **SecondPassFDR** | **1,828.8 s** | **30.5 m** |
+| **total** | **414 min** | **6 h 54 m** |
+
+Baseline: **615 min (10 h 14 m)**. Stage 7 is the big mover - 30.5 min in a full run.
+
+### [RETRACTED - see the 05:50 retraction] Claimed the memory bar was met
+
+| | this run | baseline |
+|---|---|---|
+| run peak_paged | **53.59 GB** | - |
+| process peak working set | 52.99 GB, **set in Stage 5** | **70,666 MB (~69 GB)** |
+| Stage 7 pass-2 working set | 51.11 GB | - |
+
+Brendan's bar was *"take Stage 7 entirely out of contention for peak memory, i.e. FirstPassFDR
+becomes the run's high point."* **Met.** The peak is Stage 5's, Stage 7 came in under it, and the
+run peak fell from ~69 GB - which PAGED on this 64 GB box - to ~53.6 GB, which fits in RAM.
+
+**Two caveats, plainly.** It is met NARROWLY (51.11 vs 52.99 GB), and it is met by the
+survivor-subset format rather than by removing the pool: `stage7-pool` is still **37.50 GB**. A
+larger cohort or a survivor-richer arm puts Stage 7 back on top. The architecture work is what
+turns a narrow pass into a comfortable one.
+
+### Stage 7 probe sequence
+
+| probe | managed heap (post-GC) |
+|---|---|
+| `stage7-inherited` | 3.96 GB |
+| `stage7-pool` (after ~7.8 min rebuild) | **37.50 GB** |
+| `stage7-fragments-released` | 37.51 GB (**released=0**) |
+| `stage7-pass2-scored` | 37.50 GB |
+| `stage7-protein-fdr` | 37.50 GB |
+| `stage7-blib-written` | 37.50 GB |
+
+`released=0` is a RIG difference, not a regression: the full run already released library
+fragments at the end of Stage 5, where the `--task SecondPassFDR` rig reloads the library fresh
+and releases 5,173,196 there. It may account for part of the gap below.
+
+`stage7-pool` across the three 257-file measurements:
+
+| run | rig | stage7-pool |
+|---|---|---|
+| `s7mem257` | `--task SecondPassFDR`, old full-shape parquets | 41.97 GB |
+| `s7red257` | `--task SecondPassFDR`, survivor-subset | 40.23 GB |
+| **`s57base257`** | **full Stage 5-7, in-process** | **37.50 GB** |
+
+The in-process path builds the pool 2.73 GB leaner than the rehydrate path. Currently a number,
+not an explanation - do not quote it as a benefit until it is understood.
+
+### Stage 5 and Stage 6 characterized for the first time at 257 files
+
+**Stage 5**: peak_paged 53.59 GB, but hands off only **5.97 GB** live
+(`stage5-handoff-released`) - close to the 7.0 GB the TODO had estimated, now measured. Its cost
+is transient.
+
+**Stage 6 is BOUNDED**, and this is the finding that matters for the move. Post-GC floor across
+all 257 files: 4.34, 4.52, 4.50, 4.53, 4.49, 4.50, 4.62, 4.60 GB - a flat sawtooth that never
+drifts. O(1) in file count. Pace settled at ~50 s/file.
+
+### Stage 6 has room for the pass-2 work by three orders of magnitude
+
+`perfile-rescore-peak (pre-GC)` is **15.43 GB** managed against a 4.3 GB floor, i.e. ~11 GB of
+collectable churn per file. What the move adds:
+
+| addition | size |
+|---|---|
+| frozen-score accumulator, 12 B x ~533 K survivors/file | ~6 MB |
+| the file's own 1st-pass sidecar scalars, ~2.99 M x 12 B | ~36 MB |
+| **total** | **~40 MB, under 0.3% of the existing per-file transient** |
+
+That was the one measurement that could have argued against moving run-scope pass-2 work into
+`PerFileRescoring`. It does not.
+
+### Artifacts written
+
+| artifact | size |
+|---|---|
+| 1st-pass sidecars (257) | 48.4 GB |
+| reconciled parquets (257) | **47.5 GB** |
+| 2nd-pass sidecars (257) | 8.7 GB |
+
+The reconciled set at 47.5 GB confirms the survivor-subset format in a FULL run - the old
+full-shape format was 266 GB for the same cohort.
+
+### perfviz per-phase breakdown - independent confirmation
+
+`ai/scripts/perfviz.py run.log --files 257` (11,405 memstamp samples, duration 6:54:25):
+
+| phase | managed p10 (floor) | p50 | peak | private peak | wall |
+|---|---|---|---|---|---|
+| FirstPassFDR | **7.1 GB** | 13.5 | 49.6 | **53.6 GB** | 159:38 |
+| PerFileRescoring | **5.0 GB** | 7.0 | 18.4 | 44.2 GB | 224:15 |
+| SecondPassFDR | 18.2 GB | 40.4 | 51.1 | **52.6 GB** | 30:29 |
+
+* FirstPassFDR's p10 floor of **7.1 GB** independently confirms the 7.0 GB this file had been
+  quoting for it - now from the sanctioned tooling rather than inherited.
+* PerFileRescoring's p10 of **5.0 GB** confirms Stage 6 bounded, from a second measurement path.
+* Stage 7's private peak (52.6 GB) sits just UNDER Stage 5's (53.6 GB) - the same narrow margin
+  the `[MEM]` probes showed.
+
+**Do not read the tool's whole-run "floor 17.8 -> 35.3 GB, +69 MB/file RISING" as an O(files)
+leak.** It conflates stages: the run legitimately climbs from Stage 5's low floor to Stage 7's
+pooled floor. The per-phase p10s are the honest view, and Stage 6's is flat.
+
+One reporting gap over threshold: 36 s at 04:36:32, in the closing diagnostics phase. Minor, but
+it is the kind of silence #4571 exists to remove.
+
+## RETRACTION: the memory bar is NOT met, and no flip has happened (Brendan, 2026-08-28 05:50)
+
+Earlier this session I wrote "THE MEMORY BAR IS MET (narrowly)". **That is wrong and is
+retracted.** Brendan looked at the perfviz PNG and said so directly: *"We have not yet achieved
+the 'flip' where I see a Stage 7 with radically reduced memory - the Stage 7 stable memory is
+still as high or higher than Stage 5."*
+
+He is right, and the plot shows it in one look. Stage 7 sits on a **flat ~48-53 GB plateau for
+its entire 30 minutes**. Stage 5's 55 GB is a **spike near its end**. I compared Stage 7's
+sustained level against Stage 5's transient peak, found a 1.5 GB margin on the max, and called
+that the bar. It is not the comparison that matters.
+
+### The honest numbers - total (private) MB, boundary contamination removed
+
+| stage | all samples med / p90 / max | settled (first 5 min dropped) med / p90 / max |
+|---|---|---|
+| FirstPassFDR | 28,859 / 50,002 / 54,878 | 29,763 / 50,173 / 54,878 |
+| PerFileRescoring | 15,194 / 17,660 / **45,298** | 15,171 / 17,491 / **21,133** |
+| SecondPassFDR | 47,762 / 51,373 / 53,816 | **48,300** / 51,984 / 53,816 |
+
+**Stage 7's sustained median is 48.3 GB against Stage 5's 29.8 GB.** Stage 7 is MORE
+memory-dominant than Stage 5, not less. `stage7-pool` was **37.50 GB** in the same run - the pool
+is untouched, exactly as this file already said of the earlier measurement: *"this branch changes
+what Stage 7 READS, not what it HOLDS ... nothing here should be quoted as progress toward the
+memory bar."* I wrote that, then quoted a max margin as the bar being met.
+
+### PerFileRescoring is NOT broken - the 44 GB figure was boundary contamination
+
+The per-phase table I posted showed `PerFileRescoring priv peak 44.2 GB`, which reasonably
+worried Brendan that Stage 6 had regressed. It had not. Dropping the first 5 minutes after the
+stage boundary takes Stage 6's max from **45,298 MB to 21,133 MB**, with a settled median of
+**15.2 GB**. The high samples are Stage 5's memory still being released while Stage 6 had already
+started - Brendan's own hypothesis, confirmed.
+
+**Per-stage statistics computed over a window that includes the previous stage's teardown are
+misleading.** Any future per-stage table must drop the boundary or it will keep producing this
+false alarm.
+
+### Instrumentation lesson
+
+*"the memory instrumentation in the log (that you implemented) seems to often lead you into
+feeling you have useful numbers that aren't really that useful or meaningful to me."*
+
+Correct. Post-GC `[MEM]` probes measure what the GC could reclaim at an instant chosen by the
+probe's author - not what an operator watching private bytes sees, and not the sustained level
+that decides whether a cohort fits. Percentiles layered on top of that manufacture precision.
+
+**Look at the PNG `perfviz.py` generates.** The plot answered in one glance what six probes and a
+percentile table got wrong. The text summary is a supplement to the picture, not a substitute.
+
+### What is actually true about this run
+
+* Output is identical - all three counts exact, blib content verified equal (row counts across
+  every table plus eight rollups over 11.7 M rows).
+* Wall time 6h54m vs the baseline's 10h14m, with Stage 7 at 30.5 min.
+* Stage 6 is genuinely bounded - settled median 15.2 GB, flat across 257 files.
+* Stage 6 has room to absorb the pass-2 move (~40 MB against a per-file transient).
+* **Stage 7 still holds a 37.50 GB pool and still dominates the run's sustained memory.** The
+  flip is exactly the work that has NOT been done yet.
+
+## WHY Stage 7 costs as much as Stage 5 for 1/6 the rows (Brendan's question, 2026-08-28)
+
+*"It is still not clear to me why Stage 7 requires the same amount of memory to perform an FDR
+calculation for 1/6th as many rows as Stage 5."*
+
+It is not holding more information. It is holding the same information in a representation built
+for Stages 1-6.
+
+| | rows | per row | total |
+|---|---|---|---|
+| Stage 5 on `FdrProjection` (readonly struct, q routed through `IFdrOutputSink`) | 768,549,137 | **32 B** | ~24.6 GB |
+| Stage 7 on `FdrEntry` (class) | 137,034,004 | **274 B** measured | **37.5 GB** |
+
+5.6x fewer rows, 8.6x more bytes each. The 274 B comes from 37.5 GB / 137,034,004 and decomposes:
+
+| | bytes | needed in Stage 7? |
+|---|---|---|
+| object header + `List<>` slot | 24 | no - the cost of being a class |
+| `EntryId`, `ParquetIndex`, `IsDecoy`, `Charge`, `ScanNumber` | 16 | partly |
+| 14 doubles | 112 | ~9; `Pep`, `ExperimentAggregateScore`, `ExperimentProteinQvalue`, `BoundsSnr`, `CoelutionSum` go to the sidecar and are never read back |
+| 7 reference fields | 56 | **6 are ALWAYS null** - the stub loader logs "features not loaded - not read on this path" |
+| `ModifiedSequence` string | ~72 | value yes, per-row instance no |
+
+**~144 B of the 274 B is dead weight in this stage - about 19.7 GB of the 37.5 GB.** 48 B of null
+blob pointers that exist because Stage 6 needs them, ~72 B of duplicated strings, 24 B of class
+overhead.
+
+So the lean row is not an invention: it is what Stage 5 already did, and what Brendan called for
+on 2026-08-27 ("Stage 7 should use Stage 5's machinery").
+
+## The pool is NOT FDR-counting memory (Brendan's merge-sort question)
+
+*"FDR calculation is done by counting from the best scoring entry to the worst. Why does it all
+need to be in memory at the same time? ... you could be streaming them in a 257 element
+merge-sort."*
+
+For **Stage 7 the counting is already bounded.**
+`StreamingFdr.ComputeFullPopulationPrecursorFdrStreaming` reads one file at a time and keeps only
+O(distinct base_id) state - `bestTarget`/`bestDecoy` (~508 K under protein-compact) and `minRunQ`
+per survivor - and its own comment says *"no (file, entry_id)-keyed result map is ever built"*.
+The frozen path also avoids per-record q storage already: `BuildScoreToQTable` bins score->q into
+1,000 bins and `LookupQForScore` assigns from that.
+
+**The 37.5 GB is held for the CONSUMERS after the competition** - the blib peptide gate, the
+precursor gate, `CollectPassingEntries`, the second-pass protein FDR, and the per-replicate
+report. Five or six independent folds, each walking all 137 M survivors. That is why naively
+removing the pool costs ~10 whole-run walks.
+
+**So sortedness is not Stage 7's blocker.** Those folds need IDENTITY, not score order:
+`ModifiedSequence`, `IsDecoy`, charge, RTs, area. `libraryById` has sequence and decoy status by
+entry_id, and RTs/area are needed only for the ~11.7 M PASSING rows - so the sidecars can be
+streamed in stored order, joined against the library, and the pool never exists. No sort needed.
+
+**Where the merge-sort idea DOES bite is Stage 5**, which genuinely holds 768 M rows for a global
+score-ordered walk (24.6 GB). A 257-way heap merge over score-sorted sidecars would make that
+O(k) instead of O(N). Costs: the sidecars are currently in canonical entry order, not score
+order, and the q write-back would have to use the score->q table rather than per-record storage.
+Worth its own investigation - it is the larger population.
+
+## Brendan on the shape of the debt
+
+*"We have created code that depends on whole set iteration 10 times in separate classes without
+designing a way that the whole set doesn't need to be in memory for every consumer. I guess we
+should consider ourselves lucky they rely on so little that we can construct a lean row that
+works for all of them."*
+
+Exactly the finding of the consumer audit: ten independent whole-set iterations, no seam for
+feeding a consumer rows instead of handing it a collection. The genuinely maintainable fix is a
+single-pass listener architecture; the lean row is the pragmatic path, and it only works because
+the audit showed those ten consumers read thirteen fields between them.
+
+## The lean row spec (designed, NOT implemented - no consumer yet)
+
+A mutable `struct FdrRow : IFdrRow`, 88 B: `EntryId` (4) + `ModifiedSequence` ref (8) + `Charge`
+(1) + `IsDecoy` (1) + 2 pad + 9 doubles (`Score`, both run q, both experiment q, `ApexRt`,
+`StartRt`, `EndRt`, `BoundsArea`). 137 M x 88 B = **12.1 GB** against 37.5.
+
+* **Mutable, and held as `FdrRow[]` per file, not `List<FdrRow>`** - the pre-blib re-clamp raises
+  the two experiment q-values in place, an `IReadOnlyList` indexer returns a COPY and the write
+  is silently discarded, and `CollectionsMarshal.AsSpan` is .NET 5+ while this assembly also
+  targets net472.
+* **`ModifiedSequence` must be a canonical instance**, or the 72 B/row goes straight back.
+
+Not committed: a public type with no consumer is speculative API. Implement it with its
+consumers in one change.
+
+## Interning landed - and a RIG finding that matters more
+
+Interning `ModifiedSequence` at the stub loaders should take ~9.9 GB off the pool (137 M x ~72 B
+collapsed to a few million distinct). `ParquetScoreCache.LoadFdrStubsFromParquet` gained an
+optional caller-owned `sequencePool`; `FirstPassSurvivorLoader` and
+`RescoreHydration.HydrateForRescore` each own one spanning all their files. Caller-owned rather
+than `string.Intern`, which never releases.
+
+**The rig finding**: the first measurement showed `stage7-pool` = **40.23 GB, unchanged**, because
+the change was on `FirstPassSurvivorLoader` and the `--task SecondPassFDR` path does not use it -
+`stage7-inherited` was ALSO 40.23 GB, i.e. the pool was already built before Stage 7 started, by
+`PerFileScoringTask.Rehydrate` -> `HydrateCompactedStreaming`.
+
+**So the 30-minute `--task SecondPassFDR` loop only measures pool changes that cover the REHYDRATE
+path.** The full in-process run builds its pool in `BuildRescoredPool` via
+`FirstPassSurvivorLoader` instead. Any future pool work has to touch both, or be measured on the
+matching rig. That is worth more than the interning itself.
+
+## SESSION END 2026-08-28 06:45 - seven gated commits, and the architecture is settled
+
+Night session 21:40 -> 06:45 (**9 h 05 m**), context 55% -> ~28%.
+
+### Commits on `Skyline/work/20260827_osprey_stage7_stream_increment` (none pushed)
+
+| commit | what | gate |
+|---|---|---|
+| `a700c1226a` | frozen 2nd pass reads each 1st-pass sidecar ONCE, not three times | Stellar 10/10 |
+| `f08059f824` | `IFdrRow` + generic q-value selectors | Stellar 10/10 |
+| `f7a6e6d103` | `StreamingFdr` split into `CompeteOneFile` + `FoldFileContribution` | Stellar 10/10 |
+| `e5daaaf9a2` | tests pinning the two-stage reduction against a global pass | 601/601 |
+| `fc5c3c7b40` | code-review fixes: lazy staging buffer, reverse arg guard, stratified tests | Stellar 10/10 |
+| `21434cb1c9` | interned `ModifiedSequence` at BOTH stub-loading paths | Stellar 10/10 |
+
+Plus `b9075eb99a` from the prior session. `-Dataset All` was green at 04:40 (55 assertions, 0
+skipped, 0 failed) but PREDATES `21434cb1c9` - re-run before the PR.
+
+### The acceptance run
+
+`s57base257`, full Stage 5-7 at 257 files: **exit=0, 6 h 54 m** against the baseline's 10 h 14 m.
+Output identical - 5,079 protein groups, 45,724 library spectra, 11,745,026 passing entries, and
+the blib verified equal table-by-table plus eight content rollups. Stage 7 wall 30.5 min.
+
+### What is NOT achieved, stated plainly
+
+**The memory bar is not met.** `stage7-pool` is 37.50 GB; Stage 7's sustained private median is
+48.3 GB against Stage 5's 29.8 GB. An earlier claim in this session that the bar WAS met compared
+Stage 7's sustained plateau to Stage 5's transient spike and is retracted. The branch changed what
+Stage 7 READS - 5.7x smaller reconciled parquets, wall 81 -> 30.5 min - and nothing about what it
+HOLDS.
+
+### The three findings the next session needs
+
+1. **Why Stage 7 costs as much as Stage 5 for 1/6 the rows**: `FdrEntry` is 274 B/row measured
+   against `FdrProjection`'s 32 B, and ~144 B of it is dead weight in this stage - 48 B of
+   always-null blob refs, ~72 B of duplicated string, 24 B of class overhead.
+2. **The pool is NOT FDR-counting memory.** The competition is already bounded
+   (O(distinct base_id), no (file, entry_id) map). The pool is held for the five or six
+   downstream folds. So sortedness is not Stage 7's blocker - identity is, and it is reachable
+   from `libraryById` by entry_id.
+3. **The rig trap.** `stage7-inherited` and `stage7-pool` were BOTH 40.23 GB on the
+   `--task SecondPassFDR` loop: that rig builds the pool in `PerFileScoringTask.Rehydrate`,
+   before Stage 7 starts, while the in-process run builds it in `BuildRescoredPool`. A pool
+   change covering one path reads as "no effect" - which is exactly what the first interning
+   attempt did.
+
+### Claims retracted this session
+
+* "The memory bar is met" - no.
+* "The frozen scoring is free in the worker" - only for the ~7% of survivors it rescored;
+  unchanged stubs are `Features == null` and stream through from the original parquet.
+* "The worker needs the global survivor set relayed" - it does not; the join can filter.
+* "The architecture deletes the lean row" - too firm; the lean row is plausibly the destination
+  representation either way.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260828_osprey_stage7_architecture.md` before starting work.
+
+### Interning confirmed output-correct at 257 files (06:45)
+
+The `s7intern` run (`--task SecondPassFDR`, first interning snapshot) reproduced all three oracle
+counts exactly: **5,079** protein groups, **45,724** library spectra, **11,745,026** passing
+entries. So `21434cb1c9` is output-correct at cohort scale as well as on Stellar.
+
+Its MEMORY number remains uninformative - that snapshot predates the rehydrate half, so it shows
+the same 40.23 GB pool. The saving is still unmeasured; re-measure on a fresh snapshot.
+
+## The interning did not reach production, and a pool of its own would have doubled the strings (2026-08-28)
+
+Brendan's question - *"Is the new interning using the same interning mechanism at the library?
+Can you review the entire codebase to make sure that modified sequence and protein names/ids are
+always interned when they are read from any side-car file?"* - and then the point that settles
+the design: *"You want to use the same interner as the library. If they use separate pools, you
+will duplicate all of the strings."*
+
+Both answers were no, and the review found a third problem neither question was asking about.
+
+### `21434cb1c9`'s "rehydrate half" patched a method production never calls
+
+`RescoreHydration.HydrateForRescore` has **no production caller** - only `Osprey.Test/IOTest.cs`
+lines 4064 and 4180. The pool the `--task SecondPassFDR` rig builds comes from
+`HydrateCompactedStreaming`, which takes `loadStubs` as an INJECTED DELEGATE, and both
+production delegates were unpooled:
+
+* `PerFileScoringTask.LoadJoinOnlyScoresForFile`
+* `FirstPassFdrTask.LoadResumeStubs`
+
+So the owed 30-minute re-measurement would have come back "no effect" a SECOND time, and this
+time the rig would not have been the reason. The previous session's own rig-trap finding was
+correct and it still missed this, because it identified the right rig and then patched the wrong
+method inside it.
+
+### Separate pools would have made it worse, not better
+
+A pool of its own elects the FIRST PARQUET instance as canonical. The library already holds an
+instance of every one of those sequences, so the run would end up holding two sets - the
+library's and the sidecars' - which costs more than interning saves. The fix is to seed the pool
+FROM the library and share it; then a sidecar value equal to a library sequence is answered with
+the library's own instance and the rows cost no strings at all.
+
+Verified rather than assumed: the parquet's `modified_sequence` is written from
+`FdrEntry.ModifiedSequence`, which `CoelutionScorer.cs:179,464` copies off the `LibraryEntry` it
+scored. Measured on Stellar: **360,376 sequences seeded from the library, 0 sidecar lookups
+missed the pool.**
+
+### A latent data race, introduced by the same commit
+
+`21434cb1c9` gave `FirstPassSurvivorLoader` a `Dictionary<string, string>` field and documented
+it "not synchronized - the survivor rebuild walks files sequentially". It does not:
+`PerFileRescoreTask.cs:718` drives `RescoreOneFileStreamed` - and through it `loader.Load` -
+from inside a `Parallel.For` over files. Concurrent writers on a plain dictionary.
+
+Fixed by FREEZING rather than locking. `LibraryStringInterner.Freeze()` makes the pool
+lookup-only, and a `Dictionary` tolerates any number of concurrent readers; it is a writer among
+them that corrupts it. Locking was not an option - interning is called once per observation,
+over 137 M times, and the class doc already records that a concurrent interner on the FDR path
+was measured as a net loss. The cost of freezing is that a value absent from the library is not
+pooled, which `FrozenMisses` counts: zero on Stellar.
+
+### What the sweep found, and what needed nothing
+
+**Protein names/ids need no sidecar interning at all.** `protein_ids`, `sequence` and
+`file_name` are WRITTEN to the scores parquet and never read back - `modified_sequence` is the
+only string column with a reader. Protein identity comes from `libraryById`, interned at library
+load. The binary `.fdr` sidecar (`FdrScoreRecord`) is all-numeric, no strings.
+
+Three ad-hoc mechanisms existed where there should have been one: `LibraryStringInterner`, the
+`IDictionary<string,string>` + `Canonicalize` added by `21434cb1c9`, and an inline
+TryGetValue/assign in `SecondPassFdrTask.CollectPassingEntries`. The last two are gone.
+
+Pooled (retained across files): `PerFileScoringTask` 430/1415/1447/1611, its resume
+`TryLoadStubsAndCalibration`, `FirstPassSurvivorLoader`, `FirstPassFdrTask.LoadResumeStubs`,
+`CollectPassingEntries`, and the reconciliation-JSON gap-fill read in `RescoreHydration` (~2 M
+targets at 257 files, retained for every file at once).
+
+Left alone deliberately, because their strings are not retained: `CompactPerFileRescoreTask.cs:287`
+(clears the survivors immediately), `Pass2FdrSidecar.cs:1909/1943` (build uint-keyed maps), and
+`ScoreOrLoadForFile` (one file's own output on its way to its parquet).
+
+Also fixed: `21434cb1c9` inserted `Canonicalize` BETWEEN `TryReadEntryIdsAndApexRts`' doc comment
+and its signature, so the apex-RT reader's documentation had silently become the helper's.
+
+### Commit
+
+`79f63471bc` - "Shared one library-seeded sequence pool with the sidecar readers".
+Gates: build clean, 601/601 tests, ReSharper 0 warnings / 0 errors,
+`regression.ps1 -Dataset Stellar` **10/10 PASS** (output byte-identical).
+
+### Still owed
+
+* The 257-file memory re-measure, now genuinely measuring something -
+  `chs-257files-libdecoy-r1.0-protein-compact-s7sharedpool`, launched 07:59 against the
+  `s7intern` baseline of **40.23 GB / 36 min** on the identical rig.
+* `-Dataset All` before the PR (the 04:40 green predates both `21434cb1c9` and `79f63471bc`).
+* Open question for Brendan: `HydrateForRescore` is dead production code that already misled one
+  session. Delete it with its two tests, or keep it?
+
+## MEASURED: the shared library-seeded pool takes 7.17 GB off Stage 7 (2026-08-28 08:37)
+
+`chs-257files-libdecoy-r1.0-protein-compact-s7sharedpool`, `--task SecondPassFDR -LinkFrom
+s57base257`, exit=0. The same 30-minute rig as the `s7intern` baseline, so this is like-for-like.
+
+| | baseline `s7intern` | shared pool | delta |
+|---|---|---|---|
+| `stage7-inherited` | 40.23 GB | **33.06 GB** | **-7.17 GB** |
+| `stage7-pool` | 40.23 GB | **33.06 GB** | **-7.17 GB** |
+| protein groups | 5,079 | **5,079** | - |
+| library spectra | 45,724 | **45,724** | - |
+| passing entries | 11,745,026 | **11,745,026** | - |
+| `SecondPassFDR` wall | 2,172.6 s | 2,290.5 s | +117.9 s |
+
+`Sequence pool: 4525056 distinct seeded from the library, 0 sidecar lookup(s) missed it`
+
+**-17.8% off the pool with output unchanged**, and zero misses over ~137 M lookups - so the
+seeding assumption (every sidecar sequence was written from a `LibraryEntry`) holds at cohort
+scale, not just on Stellar. Run log:
+`D:\test\osprey-runs\chs-seer\runs\chs-257files-libdecoy-r1.0-protein-compact-s7sharedpool\run.log`
+
+**The wall number is NOT yet a regression, and must not be quoted as one.** +5.4% on single runs
+two hours apart, on a machine that had just finished a 7-hour job. Worked through from first
+principles the change's own mechanism accounts for under a tenth of it: ~137 M frozen-pool
+lookups at ~50-80 ns is ~9 s, plus ~0.5 s of seeding. The rest is unexplained. Repeat both arms
+before calling it anything.
+
+## DECIDED: `ModifiedSequence` becomes a type (Brendan, 2026-08-28)
+
+*"Seems like ModifiedSequence should become its own class with guarantees around how it works and
+that it is unique process-wide. Time to stop using just bare strings for these."* ... *"Then we
+have a typed marker enforcing correctness, not just a convention."*
+
+Bare strings are what let three separate interning mechanisms coexist unnoticed, and what makes
+the pool's guarantee a convention the next caller has to remember.
+
+**Shape**: a `sealed class ModifiedSequence` in `Osprey.Core`, private constructor, a factory
+that guarantees one instance per distinct value. Equality is **built into the type** -
+`ReferenceEquals` + `RuntimeHelpers.GetHashCode`, per Brendan: *"We should just build this into
+the ModifiedSequence class in this case to make it unnecessary to remember to wrap in the
+template class."* So no call site has to wrap a key in `ReferenceValue<T>`.
+
+**It must implement `IComparable`, not just equality.** `LibraryDeduplicator.cs:139` sorts with
+`string.Compare(..., StringComparison.Ordinal)` and that sort is output-affecting. Delegating
+`CompareTo` to `string.CompareOrdinal` on the text keeps it. (This is also why an int-id form was
+NOT chosen lightly: ids only reproduce ordinal ordering if assigned in ordinal order of the
+distinct set - the trap `FdrProjection.PeptideId` already documents as "risk #1".)
+
+**Dependency-free, deliberately.** `pwiz.Common.Collections.ReferenceValue<T>`
+(`pwiz_tools/Shared/CommonUtil/Collections/ReferenceValue.cs`) is the precedent for the pattern
+and should be cited in the doc comment, but is not referenced:
+
+* `Osprey.Core` has NO project references at all (one `System.Memory` package reference).
+* `CommonUtil` is net472-only; Osprey multi-targets net472 + net8.0.
+* Copying `ReferenceValue` into `PortableUtil` would COLLIDE - `CommonUtil.csproj` references
+  PortableUtil, and both would then declare `pwiz.Common.Collections.ReferenceValue<T>`.
+* `ReferenceValue<T>` is for types that cannot self-guarantee uniqueness. This one can.
+
+PortableUtil's `RootNamespace` is already `pwiz.Common`, the same as CommonUtil's, so the
+PortableUtil -> CommonUtil swap under the full .NET 8 port is transparent for anything that DOES
+use the shared utilities. `ModifiedSequence` is unaffected either way (Brendan: *"It has
+PortableUtil which goes away under the full .NET 8.0 port when it will get CommonUtil"*).
+
+**Sequencing**: folded into the LEAN ROW PR, not its own. The type's payoff is realized in the
+row, and doing them separately churns the same 48 files twice. Footprint: 167 production
+references across 48 files, plus 110 in tests.
+
+**Left open**: the class form keeps an 8-byte reference, so `FdrRow[]` stays GC-traced at 137 M
+rows. An int id was the only form that made the row reference-free. That was a HYPOTHESIS about
+why Stage 5's 32 B/row behaves better, never measured. The class form does not foreclose it - an
+id can be added INSIDE `ModifiedSequence` later without changing the public type. First place to
+look if the lean row's numbers come in short.
+
+**Also open**: resolving the sequence from `libraryById` by `entry_id` instead of reading the
+parquet's `modified_sequence` text at all. That removes the per-row string hash entirely (the
+suspected part of the wall-time cost) and the typed `ModifiedSequence` is what makes the
+resolution safe to rely on. `ParquetScoreCache.cs` already says the apex-RT panel does exactly
+this: *"the modified sequence and charge behind the precursor identity are resolved from the
+library by entry id instead."*
+
+## Backlog: the perf A/B cannot see a regression that lives in master (2026-08-28)
+
+`pwiz-perfbase` was pinned at `f4de686450` (#4378) and has been moved to master
+`bd94e8a375` (#4616) - roughly two months of drift, closed so the gate measures this
+branch rather than the interval.
+
+The branch is **0 commits behind master**, so `Test-PerfGate` branch-vs-master now
+attributes its delta to exactly these 37 commits. That is what we want, and it also
+means the gate is BLIND by construction to a regression in master itself: both arms
+carry it and it cancels.
+
+Catching that needs an absolute reference, not an A/B. Two are available:
+
+* **Rust osprey as a change-immune anchor** - same pipeline, untouched by C# commits,
+  so a Stellar wall time that is up on BOTH sides indicts the machine or the
+  environment while one-sided movement indicts C#. The cross-impl gate produces Rust
+  wall times for free; record them rather than discarding them.
+* Historical Stellar timings from prior `Test-PerfGate` runs and the TeamCity perf leg.
+
+If a master-level regression is ever confirmed, the bisect range is **121 master
+commits between #4378 and #4616, 60 of which touch `pwiz_tools/Osprey`** - about six
+steps over the Osprey-touching subset, not a slog.
+
+**This does not block #4621** (Brendan, 2026-08-28): a defect in master is a separate
+track, and this PR's gate is the branch-attributable A/B, which is clean.
+
+## OPEN: intermittent AccessViolation in the StellarLibDecoy phase3 rescue worker (2026-08-28)
+
+**Do not merge #4621 without resolving or consciously accepting this.** An AV in the HPC
+per-file rescore worker is a production-path crash on the distributed workflow, not a test
+artifact.
+
+### What happened
+
+`regression.ps1 -Dataset All` at 09:32 aborted: `Osprey --task exited -1073741819`
+(`0xC0000005`) in `StellarLibDecoy` mode 3, phase3 rescore of stem `..._22`. Everything
+before it passed (Stellar 10/10, StellarLibDecoy modes 1, 1c, 1b).
+
+Windows Application event log, `.NET Runtime`, 09:51:23:
+
+```
+Application: Osprey.exe
+Exception Info: System.AccessViolationException: Attempted to read or write
+protected memory. This is often an indication that other memory is corrupt.
+Stack:
+```
+
+Empty stack - the damage surfaces at a dereference unrelated to the corruption site, which
+is the signature of a corrupted managed collection rather than a bad pointer at the throw.
+
+### It is INTERMITTENT - roughly 1 in 26
+
+| evidence | phase3 executions | crashes |
+|---|---|---|
+| `-Dataset All` (aborted) | 3 | 1 |
+| `-Dataset StellarLibDecoy` re-run, 15/15 PASS | 3 | 0 |
+| sequential soak at HEAD (`08fbed8cfe`) | 20 | 0 |
+
+**Consequence, and it invalidates an earlier claim in this file**: the `-Dataset All` PASS at
+04:40 does NOT exonerate the pre-interning commits. At a ~4% rate a clean 20-run soak happens
+44% of the time and a clean 3-execution gate run happens 88% of the time. No single green run
+proves anything here, including that one.
+
+### The repro rig - 29 s per execution
+
+The isolated phase3 command, lifted from the retained chain log. Cycle time 29.2 s, so a soak
+is cheap:
+
+```
+Osprey --task PerFileRescoring --input-scores <stem>.scores.parquet
+  -l carafe_spectral_library.tsv -o output.blib --resolution unit --protein-fdr 0.01
+  --threads 16 --decoys-in-library --decoy-pairing-manifest osprey_library_db_pairing.tsv
+  --model-diagnostics --timestamp --memstamp
+```
+
+**`OSPREY_VERSION_OVERRIDE=26.1.1.0` is MANDATORY** (regression.ps1 pins it at its line 212).
+Without it every run dies at 4 s with "osprey version mismatch" - exit 1, not the AV - and the
+soak measures nothing. Cost me 20 wasted runs.
+
+Reset between iterations: delete `<stem>.scores-reconciled.parquet`, its
+`.PerFileRescoring.osprey.task` marker (this is what stops per-file resume skipping the work),
+and `output.model-diagnostics.*`.
+
+Harnesses: `ai/.tmp/sessions/20260828-interner/soak-phase3.ps1` (sequential) and
+`soak-parallel.ps1` (3 stems concurrent, for amplification).
+
+### Leading suspect - NOT proven, and not code this branch touched
+
+`ModelDiagnosticsData.Accumulator` holds `Dictionary<string, Prec>`,
+`Dictionary<string, FrontierPrec>` and `Dictionary<string, double>`, all keyed
+`StringComparer.Ordinal` on modified sequence, with **no lock and no concurrent collection**.
+It is fed from two independent sites: `ScoringTaskShared.FeedModelDiagnostics` and
+`FdrProjectionSinks.cs:116`.
+
+The arm asymmetry fits: `ModelDiagnostics = $true` for StellarLibDecoy, and plain `Stellar` -
+the ONLY dataset without it - is the only one that passed.
+
+If that is the site, the interning is a **timing trigger, not the cause**: interned keys make
+`StringComparer.Ordinal` short-circuit on the reference check instead of walking ~30 chars,
+which shifts the interleaving window. A latent race can start firing when the hot path gets
+faster.
+
+### Ruled out
+
+* `DecoyGenerator`'s separate interner - never runs in the libdecoy arm (decoys come from the
+  library as-is).
+* `DecoyPairingManifest`'s separate interner - sequential, load-time, and mutates `ProteinIds`,
+  a field disjoint from the `ModifiedSequence` the shared pool seeds.
+* Cross-process phase3 contention - `regression.ps1:1290-1313` runs the three stems
+  SEQUENTIALLY, so the isolated repro is faithful in that respect.
+
+### What is needed next
+
+A **positive control**. Until the crash can be produced at a measurable rate, a bisect compares
+zeros and proves nothing. Options, in cost order:
+
+1. Amplify (concurrent stems, more threads, memory pressure) to raise the rate.
+2. Buy power - 100+ runs per arm, hours of machine time.
+3. Fix the accumulator's synchronization on its own merits - it is wrong regardless - while
+   being explicit that causation was never proven.
+
+Brendan, 2026-08-28: re-run the gate once; if it does not reproduce, move on for now, there is
+a lot left to validate.
+
+## Review response: six findings DELETED, ParquetIndex made nullable (2026-08-28)
+
+Brendan: *"We will work on the PR until there are no issues to post... We favor larger,
+higher-quality steps forward over smaller steps with issues."* No findings are being filed;
+each is fixed or dropped.
+
+### Removal retired six findings (commit `870c3f4404`)
+
+Deleting the reconciled-parquet upgrade path took #2, #3, #10, #11, #12 and #13 with it - they
+were all defects inside the removed code. 835 lines deleted, 43 added. Gated: build clean,
+599/599, ReSharper 0/0, `regression.ps1 -Dataset Stellar` 10/10.
+
+### #1 FIXED - unsynchronized Dictionary in Parallel.For
+
+`_resetEntryIdsByFile` took a `TryGetValue`-then-insert from inside `ExecuteRescore`'s
+`Parallel.For`. Added `_resetEntryIdsLock` around the dictionary (not the inner sets - one
+worker owns a file). The hand-off at line 401 now passes a SNAPSHOT taken under the lock:
+ReSharper flagged `InconsistentlySynchronizedField`, and it was right - "the loop has joined"
+protects the read but still lets shared mutable state escape by reference.
+
+### #4 + #5 + a determinism bug: ONE root cause
+
+`FdrEntry.ParquetIndex` carried two meanings: an in-memory `uint.MaxValue` sentinel for
+"gap-fill, no Stage 4 row", and the on-disk `score_index` ordinal. That overload produced all
+three findings, plus one nobody had reported:
+
+**Both sort sites in `PerFileRescoreTask` justify an UNSTABLE sort by claiming
+`ParquetIndex` is unique per row.** The resume overlay stamped every gap-fill row with the
+same `uint.MaxValue`, so that invariant was false exactly there.
+
+**Resolution (Brendan's design):** `uint? ParquetIndex`, null = "no Stage 4 row".
+
+* `FdrEntry.CompareParquetIndex` states the rule ONCE: unresolved sorts **LAST**, matching the
+  old sentinel. `Nullable<uint>`'s default puts null FIRST, so taking the default would have
+  silently reversed exactly the rows being changed. Four comparators route through it, which is
+  what keeps the conversion output-neutral by construction.
+* `ReadFdrEntryGroup` now reads `score_index` like `LoadFdrStubsFromParquet` already did - the
+  two readers of one file no longer disagree about what the field means.
+* The resume overlay no longer re-stamps; rows keep the numbering they arrived with, so the
+  sorts' uniqueness claim becomes TRUE.
+* The reconciled-parquet writer HARD-FAILS on an unresolved row. Writing a stand-in would
+  persist a `score_index` pointing at another row's features: well-formed, undetectable, wrong.
+* `ReconciledParquetWriter.BuildOverlay` routes on `HasValue` instead of `== uint.MaxValue`.
+
+**Deliberately NOT converted:** `FdrProjection` (32-byte struct, 768 M live) and
+`PercolatorEntry` keep a local `uint` sentinel. The goal was to stop the ambiguity travelling
+between subsystems on shared state, not to eliminate the value.
+`PercolatorEntryBuilder` is the single documented boundary where the nullable becomes it.
+
+**Size:** computed +8 B/`FdrEntry` (the small-field group goes 16 -> 24; `Nullable<uint>` is an
+8-byte struct field that cannot pack into the 2 spare bytes). ~1.1 GB at 137 M, +3.3% of the
+33.06 GB pool, and temporary - the lean row does not carry the field. NOT measured; confirm on
+the `stage7-pool` probe before quoting it.
+
+### New convention (Brendan, 2026-08-28)
+
+**Use LINQ `OrderBy` where ties are expected; `Array.Sort`/`List.Sort` only where they are
+provably absent.** An audit of every `// Array.Sort OK:` annotation found the codebase
+disciplined - all but one either claim uniqueness or argue ties are byte-identical primitives.
+The exception was `PerFileRescoreTask` gap-fill append, which applied the primitive argument to
+`FdrEntry` OBJECTS carrying distinct features and blobs. Now `OrderBy` with the new
+`FdrEntry.CANONICAL_COMPARER`.
+
+### #8 CONFIRMED - our own streaming path is dead AND wrong
+
+`SecondPassFdrTask.cs:218` (`rescored.Value`) sets `IsMaterialized`, and `Files()`
+short-circuits on it, so `MaterializeOneFile` / the `LoadFile` branch **never execute in
+production** - the streaming half of this PR ships unexercised. Worse,
+`MaterializeFileSurvivors` -> `FirstPassSurvivorLoader` overlays only the **1st-pass** sidecar
+(`FirstPassSurvivorLoader.cs:190-191`), so if it did run, five second-pass gates would silently
+read first-pass q-values. Removing line 218 is the LEAN ROW's objective, so this is armed to
+fire in the next sprint. **Unresolved - needs a decision:** make the streaming path apply the
+2nd-pass sidecar plus a test that exercises `LoadFile`, or delete it and rebuild it with the
+lean row.
+
+### Still unverified
+
+#6, #7, #9, #14, #15. Not examined; do not characterize them from the review summary.
+
+### Gate infrastructure is broken (NOT ours)
+
+* `Compare-EndToEnd-Crossimpl.ps1` defaults to `C:\proj\pwiz` (master) - only its staleness
+  guard stopped it validating the wrong tree. Pass `PWIZ_ROOT`.
+* Cross-impl AND `Test-PerfGate` both look for mzML at `<base>/<dataset>/` while the
+  2026-08-22 run-layout migration moved them to `<base>/<dataset>/raw/`. `Dataset-Config.ps1`
+  has ZERO references to `raw`. Astral is not staged under `OSPREY_TEST_BASE_DIR` at all.
+  Worked around with a hard-linked base at `D:\test\osprey-runs\_crossimpl-base`; the durable
+  fix touches shared ai/ tooling and was not taken.
+* Cross-impl Stellar PASSED 4/4 legs at 1e-9 once pointed correctly, including the sidecar leg
+  (1,448,698 + 996,830 records). **Parity is NOT broken by this PR.**
+
+## SEQUENCING: stabilize this PR, THEN the lean row as the final piece (Brendan, 2026-08-28)
+
+*"Stay focused on the objective of landing a fully stable PR that would otherwise be mergeable
+if it contained the lean row and could prove it stays below 20 GB in Stage 7 for the 257 file
+dataset. And then implement the lean row to do just that as the final piece to land before
+actually merging the PR."*
+
+Two phases, in this order:
+
+1. **Make THIS PR stable** - every review finding fixed or dropped, nothing filed, all gates
+   green. The bar is "mergeable except that it does not yet contain the lean row."
+2. **Then the lean row**, as the last commit before merge, with a MEASURED acceptance
+   criterion: **Stage 7 below 20 GB on the 257-file CHS dataset**.
+
+The criterion is what makes the lean row done rather than written. Today's measured baseline on
+the same rig is `stage7-pool` **33.06 GB** (down from 40.23 GB), so the lean row has to take
+roughly another 13 GB off. The spec's 88-byte row projects a 12.1 GB pool against today's
+37.5 GB fat-row equivalent, which clears 20 GB with margin - but the number to report is the
+probe, not the projection.
+
+Do NOT start the lean row on low context: it is a 48-file refactor that carries the
+`ModifiedSequence` type with it, and a half-applied one leaves the tree neither shape.
+
+**Remaining before phase 1 is done:**
+* #8 - the streaming half is dead AND would read first-pass q-values (see above). Decide: make
+  it correct with a test that exercises `LoadFile`, or remove it and rebuild it with the lean
+  row, which is the only consumer that will make it live.
+* #6, #7, #9, #14, #15 - unverified.
+* Assertions at the two post-resolution sorts, now that the reader fix makes them hold.
+* `Test-PerfGate` (needs `-TestBaseDir D:\test\osprey-runs\_crossimpl-base`), and cross-impl on
+  Astral.
+
+### Session end 2026-08-28 - four commits, all golden-gated
+
+`79f63471bc` shared sequence pool | `08fbed8cfe` dead-code removal |
+`870c3f4404` upgrade-path removal (-835 lines) | `9d74b79456` nullable ParquetIndex.
+Each gated `regression.ps1 -Dataset Stellar` 10/10, output byte-identical. Plus
+`-Dataset All` 56 assertions and cross-impl 4/4 legs at 1e-9.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260827_osprey_stage7_stream_increment.md` before starting work.
+
+## #8 DELETED per Brendan's ruling; resolved-sort assertions added (2026-08-28 evening)
+
+Brendan ruled on #8: **delete the dead streaming half**, rebuild it with the lean row
+(its only future consumer). Commit `c7e44d67d0`, -118/+65 across 5 files.
+
+**What went**: `RescoredEntries.WithStreaming` / `LoadFile` / `IsMaterialized`, the
+streaming branch of `Files()`, and `PerFileRescoreTask.MaterializeOneFile`.
+`Pass2FdrSidecar.residentByFile` simplified to the always-resident case. Verified before
+cutting: the surface's only consumers (`Pass2FdrSidecar`, `OspreyReportWriter`) all run
+after `SecondPassFdrTask.cs` reads `rescored.Value` at the top of Stage 7, and the
+`--task PerFileRescoring` worker attaches but never consumes it - dead on every path.
+
+**What stayed, deliberately**: the `Files()` / `FileNames` fold seam. Every Stage 7
+consumer folds to an O(distinct) aggregate through it rather than indexing the pool,
+which is the shape the lean row's streamed source re-enters through. Its doc now records
+why the old source was wrong (1st-pass-only overlay) so phase 2 does not reacquire it.
+
+**Assertions (handoff item 3)**: new `FdrEntry.SortCanonicalResolved(entries, fileName)`
+verifies every row's `ParquetIndex.HasValue` before the unstable canonical sort and
+throws `InvalidOperationException` on a null. Both post-resolution sort sites route
+through it (`FirstPassSurvivorLoader` reload, `SortFileEntriesCanonical` - which had a
+THIRD caller at the per-file resume skip arm, missed by the handoff's list of two).
+`TestNoUnstableSort` enforces the `// Array.Sort OK:` annotation on the same line as any
+`List.Sort` and caught the moved sort until the annotation moved with it.
+
+**Gates**: build clean, ReSharper 0/0 both TFMs, 599/599, `regression.ps1 -Dataset
+Stellar` 10/10 (log: `ai/.tmp/sessions/20260828-stage7-findings/regression-stellar.out`).
+
+**#6/#7/#9/#14/#15 verification method**: the 2026-08-28 review's finding text was never
+persisted - only the numbers in this file survive (Brendan confirmed). So verification is
+a fresh `/code-review max` against the post-deletion tree: anything real among them
+resurfaces, anything attached to deleted code cannot. Running now.

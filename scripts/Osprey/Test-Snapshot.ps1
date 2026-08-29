@@ -786,14 +786,15 @@ function Compare-DumpSha-Snapshot {
     foreach ($tag in $stageConfig[$Stage].compareDumps) {
         $toolFiles   = Get-ChildItem $toolDir   -Filter ("$($toolPrefix)*_{0}.tsv" -f $tag) -File -ErrorAction SilentlyContinue
         $snapFiles = Get-ChildItem $snapDir -Filter ("$($toolPrefix)*_{0}.tsv" -f $tag) -File -ErrorAction SilentlyContinue
-        # Symmetric absence (both sides skipped writing this dump) is
-        # equivalent agreement. Single-file Stage 6 may legitimately
-        # produce no consensus dump; if neither side wrote one, that's
-        # not a regression.
-        if (-not $toolFiles -and -not $snapFiles) {
-            $details += @{ tag=$tag; status='PASS'; note='symmetric absence' }
-            continue
-        }
+        # No symmetric-absence escape. This used to call "neither side wrote this dump"
+        # equivalent agreement, on the grounds that single-file Stage 6 legitimately produced
+        # no consensus dump - and that was true only because the producer had been changed to
+        # elide the file rather than emit a header-only one. The two halves propped each other
+        # up: the writer skipped because the comparator complained, and the comparator accepted
+        # because the writer skipped. Every Stage 6 dump now fires unconditionally, so absence
+        # on BOTH sides is a dump that stopped being produced at all - which is exactly the
+        # regression this gate exists to catch, and it is indistinguishable from a write that
+        # failed. Absent is MISSING, on either side or both.
         if (-not $toolFiles -or -not $snapFiles) {
             $details += @{ tag=$tag; status='MISSING';
                 tool_present=([bool]$toolFiles); snap_present=([bool]$snapFiles) }
@@ -836,10 +837,8 @@ function Compare-Percolator-Snapshot {
     $sTsv = Join-Path $snapDir $name
     $cExists = Test-Path $cTsv
     $sExists = Test-Path $sTsv
-    if (-not $cExists -and -not $sExists) {
-        return [pscustomobject]@{ ok = $true;
-            details = @(@{ tag='percolator'; status='PASS'; note='symmetric absence' }) }
-    }
+    # No symmetric-absence escape: a dump absent on BOTH sides is one that stopped being
+    # produced, which is indistinguishable from a write that failed. Absent is MISSING.
     if (-not $cExists -or -not $sExists) {
         return [pscustomobject]@{ ok = $false;
             details = @(@{ tag='percolator'; status='MISSING';
@@ -893,15 +892,12 @@ function Compare-Stage6-Artifacts {
         }
         else
         {
-            $cExists = Test-Path $cPath
-            $sExists = Test-Path $sPath
-            if (-not $cExists -and -not $sExists) {
-                $details += @{ file=$name; status='PASS'; note='symmetric absence' }
-            } else {
-                $details += @{ file=$name; status='MISSING';
-                    tool_present=$cExists; snap_present=$sExists }
-                $allOk = $false
-            }
+            # Absent on either side, or both, is MISSING. Stage 6 writes a reconciled
+            # parquet for every file including one with no rescore work, so there is no
+            # legitimate absence left to excuse.
+            $details += @{ file=$name; status='MISSING';
+                tool_present=(Test-Path $cPath); snap_present=(Test-Path $sPath) }
+            $allOk = $false
         }
 
         # FDR sidecars + reconciliation.json: SHA-256 byte equality
@@ -911,12 +907,12 @@ function Compare-Stage6-Artifacts {
             $name = $stem + $suffix
             $cPath = Join-Path $toolDir   $name
             $sPath = Join-Path $snapDir $name
+            # No symmetric-absence escape here of all places: the 2nd-pass sidecar in this
+            # very list used to be written only when Stage 6 rescored something, so "neither
+            # side has one" was routine - and that is precisely the state this gate should
+            # have been red about. Every input file gets one now.
             $cExists = Test-Path $cPath
             $sExists = Test-Path $sPath
-            if (-not $cExists -and -not $sExists) {
-                $details += @{ file=$name; status='PASS'; note='symmetric absence' }
-                continue
-            }
             if (-not $cExists -or -not $sExists) {
                 $details += @{ file=$name; status='MISSING';
                     tool_present=$cExists; snap_present=$sExists }
