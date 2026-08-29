@@ -225,7 +225,18 @@ if ($Framework -eq 'Net8') {
 }
 
 if ($isNet8) {
-    $outputDirRelative = "bin\staging\$Configuration"
+    # A placeholder for the banner below only. The staging directory name is NOT fixed - it has
+    # been "staging" and "staging-net8" on different branches - so the value that gets USED is the
+    # one the stager reports after it runs (see below). This reads the same constant the stager
+    # compiles in, purely so the banner is not blank before staging happens.
+    $stagingRoot = 'staging'
+    $stagerSource = Join-Path $skylineRoot 'TestRunnerLib\TestStager.cs'
+    if (Test-Path -LiteralPath $stagerSource) {
+        if ((Get-Content -LiteralPath $stagerSource -Raw) -match 'STAGING_ROOT\s*=\s*"([^"]+)"') {
+            $stagingRoot = $Matches[1]
+        }
+    }
+    $outputDirRelative = "bin\$stagingRoot\$Configuration"
 } else {
     $outputDirRelative = "bin\x64\$Configuration"
 }
@@ -622,20 +633,63 @@ try {
     # then silently test the previous build forever. Stage-Tests.ps1 copies with
     # robocopy /XO, so re-staging an up-to-date directory is close to free.
     if ($isNet8) {
+        # Staging moved from a script into the runner itself partway through the port, so try
+        # both. Do NOT fall through when neither is found: skipping staging silently tests
+        # whatever is already in the output dir, i.e. the previous build forever - the exact
+        # failure the note above says the unconditional re-stage exists to prevent.
         $stageScript = Join-Path $skylineRoot 'Stage-Tests.ps1'
-        if (-not (Test-Path -LiteralPath $stageScript)) {
-            # Do NOT fall through: skipping staging silently tests whatever is already in the
-            # output dir, i.e. the previous build forever - the exact failure the note above
-            # says the unconditional re-stage exists to prevent. A missing script means the
-            # branch renamed or moved it, which the caller has to know about.
-            Write-Host "Staging script not found: $stageScript" -ForegroundColor Red
-            exit 1
-        }
-        Write-Host "Staging test binaries..." -ForegroundColor Cyan
-        & pwsh -NoProfile -File $stageScript -Configuration $Configuration
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "Stage-Tests.ps1 failed (exit $LASTEXITCODE)" -ForegroundColor Red
-            exit 1
+        if (Test-Path -LiteralPath $stageScript) {
+            Write-Host "Staging test binaries..." -ForegroundColor Cyan
+            & pwsh -NoProfile -File $stageScript -Configuration $Configuration
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "Staging failed (exit $LASTEXITCODE)" -ForegroundColor Red
+                exit 1
+            }
+        } else {
+            # Newer branches stage with the runner built by the SAME build, out of its own
+            # per-project output - never the staged copy, which would stage with whatever
+            # stager was staged last.
+            $stagerGlobs = @(
+                (Join-Path $skylineRoot "TestRunner\bin\x64\$Configuration\*\TestRunner.exe"),
+                (Join-Path $skylineRoot "TestRunner\bin\$Configuration\*\TestRunner.exe")
+            )
+            $stager = $stagerGlobs |
+                ForEach-Object { Get-ChildItem -Path $_ -ErrorAction SilentlyContinue } |
+                Sort-Object LastWriteTimeUtc -Descending |
+                Select-Object -First 1
+            if (-not $stager) {
+                Write-Host "No way to stage tests was found." -ForegroundColor Red
+                Write-Host "Looked for: $stageScript" -ForegroundColor Yellow
+                foreach ($g in $stagerGlobs) { Write-Host "        and: $g" -ForegroundColor Yellow }
+                exit 1
+            }
+            Write-Host "Staging test binaries with $($stager.FullName)..." -ForegroundColor Cyan
+            & $stager.FullName "stage=1" "configuration=$Configuration" | Tee-Object -Variable stageOutput
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "Staging failed (exit $LASTEXITCODE)" -ForegroundColor Red
+                exit 1
+            }
+
+            # WHERE it staged comes from the stager, not from this script. TestStager owns that
+            # decision (it has already been "staging" and "staging-net8"), and a second copy of
+            # the rule here is what silently pointed this script at an empty directory. Parsing
+            # the one line it prints keeps a single authority; guessing again would recreate the
+            # divergence this replaced.
+            $stagedLine = $stageOutput | Select-String -Pattern 'tests to:\s*(.+?)\s*$' | Select-Object -Last 1
+            if (-not $stagedLine) {
+                Write-Host "Staging did not report where it staged, so the run directory is unknown." -ForegroundColor Red
+                Write-Host "Expected a line like: Staged net8 tests to: <path>" -ForegroundColor Yellow
+                exit 1
+            }
+            $stagedDir = $stagedLine.Matches[0].Groups[1].Value
+            if (-not (Test-Path -LiteralPath $stagedDir)) {
+                Write-Host "Staging reported a directory that does not exist: $stagedDir" -ForegroundColor Red
+                exit 1
+            }
+            # Downstream paths (log file, Push-Location) are relative to the Skyline root
+            $outputDirRelative = [System.IO.Path]::GetRelativePath($skylineRoot, $stagedDir)
+            $outputDir = $outputDirRelative
+            $testRunner = Join-Path $skylineRoot "$outputDir\TestRunner.exe"
         }
     }
 
