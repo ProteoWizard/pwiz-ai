@@ -6431,3 +6431,240 @@ being caught:
 4. cpp `Baf2Sql.cpp` `case 9` needs a C++ build to verify, and the cpp-side IMS zero-sample fix
    is still outstanding from 2026-08-20.
 5. The UNIFI client reporting an Oracle-OOM 500 as an authentication error.
+
+## 2026-08-28: Retargeted the whole tree to .NET 10, dropped net472, cleared every CVE
+
+Seven commits landed on `Skyline/work/20260612_net8_port` (also mirrored to
+`chambem2/pwiz-sharp` per the standing directive):
+
+| commit | what |
+| --- | --- |
+| `b882847f21` | net8 -> net10 across Skyline + pwiz-sharp (147 files) |
+| `5c5bed5fd4` | Linux agents install the pinned SDK when the image lacks it |
+| `4cd1e0b21d` | third-party C++ warnings silenced in Release, kept in Debug |
+| `b53aa3bd63` | .NET Framework leg removed entirely (124 files, -1437 lines) |
+| `5e8919f2a4` | Native AOT publish fixed (IL2091) |
+| `bb07b808da` | DotNetZip -> PROdotnetzip |
+| `e7288cc495` | remaining package advisories cleared |
+| `81955b29b3` | merge of master into the branch (someone else's merge, integrated) |
+| `df188772e9` | removed a UTF-8 BOM this work introduced |
+
+### The retarget was much larger than the 2026-08-20 handoff estimated
+
+That handoff said "14 files, mostly SDK policy noise". It had scoped pwiz-sharp
+only. Skyline takes ProjectReferences on pwiz-sharp and a net8 consumer cannot
+reference a net10 assembly (CS1705, no downgrade path), so both legs had to move
+together: **122 files / 307 occurrences** mechanical, plus 18 files of deliberate
+edits. Four blockers it never found, none of which a TFM sweep can reach:
+
+1. **Skyline has the same BinaryFormatter problem as Shimadzu.**
+   `EnableUnsafeBinaryFormatterSerialization` is inert on net9+; `RemoteBase.cs`
+   still calls `new BinaryFormatter()` for the legacy tool IPC. Compiles fine,
+   throws only at runtime. The switch is a `RuntimeHostConfigurationOption`, so
+   setting it on a *library* does nothing - it now lives in
+   `pwiz-sharp/Directory.Build.targets` conditioned on `OutputType`, because
+   transitive collection proved unreliable (msconvert picked it up, BlibBuild did
+   not, despite a direct ProjectReference).
+2. **`Stage-Tests.ps1` bundled a private runtime chosen by `$RuntimeMajorMinor = '8.0'`** -
+   a bare version string with no `net8.0` token. The Docker workers have no .NET
+   at all and reach it via `DOTNET_ROOT`, so every shell-out test died with
+   "You must install or update .NET".
+3. **WFO1000 is 785 sites, not 3, and ships at Error severity** - so
+   `WarningsNotAsErrors` cannot demote it. Needs an `.editorconfig` override in
+   *both* configs, since `pwiz-sharp/.editorconfig` is `root = true` and does not
+   govern the ZedGraph sources under `pwiz_tools/`. **Deferred to master** by
+   decision; the demotion currently in the branch is load-bearing (without it
+   neither solution builds) and its comment is factually wrong about where the
+   rule fires - fix the comment when the real work happens.
+4. **`SkylineAiConnector.zip` is a checked-in binary** whose runtime a source
+   retarget cannot touch. Regenerating it exposed that the tool could not stamp
+   its own version at all: `Generate*VersionAttribute` were `false`, so no
+   `-p:Version=` could take effect (verified), and `BuildMcpServer` never
+   forwarded the computed version. Both now fixed; `EXPECTED_ZIP_VERSION` must be
+   bumped in lockstep with any future ZIP rebuild.
+
+### net472 is gone
+
+67 projects, 93 `#if NET472` blocks across 47 files, 47 conditioned project
+elements. Nothing built it: `build.bat` builds an explicit list with
+`-f net10.0-windows`, and two of its projects could not compile at all
+(BiblioSpec calls `OperatingSystem.IsWindows`, absent from .NET Framework;
+ProteowizardWrapper needs `pwiz_data_cli.dll`, a bjam product not in the
+checkout). `dotnet build Skyline.sln` went from **178 errors to 0**, so the
+solution now opens cleanly in Visual Studio.
+
+Two things that changed meaning rather than vanishing:
+
+- Osprey's vendor-reader capability is now unconditionally off. It required
+  `pwiz_data_cli`, which only ever existed for net472, so the property could
+  never have been true on net10 - the code now says so plainly.
+- `AdvancedEditingCommands` and `ToolServiceTestHarness` were still net7.0-windows
+  and ProjectReference SkylineTool; with SkylineTool net10-only they would fail
+  restore (NU1201), so both were bumped.
+
+The legacy `BullseyeSharp.csproj` was removed from `Skyline.sln`. It is a
+**non-SDK project using `<TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>`**,
+which is why a `TargetFrameworks` search never saw it. Nothing ProjectReferences
+it and Skyline shells out to pwiz-sharp's managed `bullseye-sharp.exe` instead.
+The directory is still on disk - deleting it is a separate call.
+
+### Both solutions are now CVE-clean
+
+| package | severity | resolution |
+| --- | --- | --- |
+| `System.Drawing.Common` 4.7.0 | Critical | fell out with DotNetZip |
+| `DotNetZip` 1.16.0 | High | -> PROdotnetzip 1.20.0 |
+| `Snappier` 1.1.6 | High | pinned 1.3.1 |
+| `Cryptography.Pkcs` 6.0.1 | High | ServiceModel -> 8.1.2 |
+| `Cryptography.Xml` 8.0.2 | High | pinned 8.0.4 |
+| `log4net` 2.0.17 | Moderate | -> 3.4.0 |
+
+Three traps worth keeping:
+
+- **DotNetZip is deprecated with no fixed version** - 1.16.0 is both the
+  vulnerable release and the last one. PROdotnetzip is a maintained fork with the
+  same `Ionic.*` namespaces (verified by reflection), so **no C# changed**. Its
+  deflate output was compared byte-for-byte against DotNetZip across 4 payloads x
+  3 levels because Osprey's `.blib` blobs must stay byte-identical to Skyline's
+  BlibData writer and Rust osprey's `flate2`. Identical. The assembly *filename*
+  changes, so the hand-maintained manifests in `SkylineNightlyShim` and
+  `CreateZipInstallerWindow` had to move with it.
+- **Only Snappier 1.3.1 is clean** - 1.2.0 and 1.3.0 still carry the advisory,
+  and NuGet resolves a range to its LOWEST match, so bumping IronCompress alone
+  would have looked right and fixed nothing.
+- **The first ServiceModel fix traded one High for another.** 8.1.2 fixes Pkcs but
+  pulls `Cryptography.Xml 8.0.2`, itself vulnerable (8.0.0-8.0.3 all are). Only
+  caught by re-scanning after each change rather than at the end.
+
+`NuGetAuditMode=direct` is required (the .NET 9+ `all` default fails RESTORE under
+`TreatWarningsAsErrors`) but hides transitive advisories - `--include-transitive`
+is mandatory when auditing this tree.
+
+### Native AOT: IL2091 (`5e8919f2a4`)
+
+`ProteoWizard_CoreWindowsNet` failed with all tests passing and exit 1. .NET 10
+annotates `Marshal.PtrToStructure<T>` with `DynamicallyAccessedMembers`;
+`Mz5SpectrumList.ReadHvlArray<T>` forwarded its own `T` without the same
+annotation, so ILC refused it. Only the AOT leg catches this - the managed build
+and the whole suite are unaffected. Confirmed deterministic before fixing:
+identical failure on two agents with two ILCompiler versions (10.0.8 and 10.0.3).
+
+### Still open: the net10 GDI+ failures on the MacCoss agent
+
+**This is the one unresolved item and the most important thing to hand over.**
+
+Twelve tests fail on `MacCoss TeamCity Agent 1` only. They look unrelated but are
+**one defect** - unwrapping the `ThreadExceptionDialog` messages, all of them
+carry an identical inner stack:
+
+```
+ExternalException (0x80004005): A generic error occurred in GDI+.
+  Graphics.FillRectangle(Brush, Rectangle)
+  SplitContainer.RepaintSplitterRect()
+  SplitContainer.ResizeSplitContainer()
+  SplitContainer.OnLayout(...)      <- Form.WmShowWindow -> OnVisibleChanged
+```
+
+The failing tests map onto the four Skyline dialogs that contain a
+`SplitContainer`: `EditIrtCalcDlg` (the six `Irt*` plus `TestAddIrtStandards`),
+`ViewLibraryDlg` (`TestAddLibrary`, `TestAddMixedLibrary`),
+`AddModificationsDlg` (`TestAddAllPeptidesWithModifications`).
+
+**It is a real net10 regression, not a bad agent**: the same machine PASSED this
+configuration on net8 (build #165, whose `Skyline.csproj` reads
+`net8.0-windows` - verified). The AWS agents never produce a GDI+ error on either
+framework, which is why the failing set looked like it was moving around.
+
+**Twelve hypotheses tested and eliminated, each by measurement, not argument:**
+
+| tested | result |
+| --- | --- |
+| offscreen coordinates, to (-100000,-100000) | no failure |
+| degenerate splitter rects (0x0, negative w/h) | GDI+ accepts them |
+| disposed brush | raises `ArgumentException`, not `ExternalException` |
+| runtime 10.0.8 (the agent's) vs 10.0.11 | byte-identical |
+| SDK 10.0.204 vs 10.0.400 | identical |
+| monitor count (1 vs 2) | no failure |
+| per-process GDI/USER exhaustion | peaks at 164 against a 10000 limit |
+| test ordering (full sequential 1168-test run) | no failure |
+| console vs remote session | no failure |
+| **agent display layout** (via the new diagnostic) | **structurally identical to a dev box** |
+| **WinForms default DPI awareness, net8 vs net10** | **both `UNAWARE`, identical** |
+| session/desktop-heap exhaustion | disproved: failures are deterministic |
+
+The display-layout diagnostic added in `3651dd669b` (log-only, beside the
+existing session diagnostic) reported from the agent:
+
+```
+# Screen: \\.\DISPLAY2 bounds={X=0,Y=0,Width=1920,Height=1080} PRIMARY
+# Screen: \\.\DISPLAY1 bounds={X=1920,Y=0,Width=1280,Height=1024}
+# Offscreen point: {X=-1920,Y=-1080}
+```
+
+Nothing pathological: secondary to the right, `min origin = (0,0)`, offscreen
+point exactly `-primarySize` - the same shape as a dev box that passes. That
+killed the `GetOffscreenPoint()` theory, which had been the leading one.
+
+**A correction worth recording**: an earlier read claimed Skyline declares system
+DPI awareness via `<dpiAware>true</dpiAware>`. It does **not** - that line is
+inside a `<!-- -->` block in all three manifests (Skyline, TestRunner,
+SkylineTester) and has been commented since it was added in 2020. Skyline sets no
+`HighDpiMode`, calls no `ApplicationConfiguration.Initialize()`, and emits no DPI
+switch into its runtimeconfig; awareness is purely the framework default, which a
+probe showed is `UNAWARE` on **both** net8 and net10.
+
+**Failure counts are deterministic**, which rules out resource drift:
+
+| build | commit | failures |
+| --- | --- | --- |
+| #174 | `e7288cc495` pre-merge | 7 |
+| #178 | `81955b29b3` post-merge | 12 |
+| #182 | `df188772e9` post-merge | 12, identical set |
+
+The 7 -> 12 jump tracks the **master merge**, not session state - it widened
+exposure to the same bug (the merge carried test-infrastructure changes #4617,
+#4618, #4623). #178 and #182 are byte-identical in outcome: 980 tests run, 37
+GDI+ errors, same 12 failures.
+
+**Two loose threads for whoever picks this up:**
+
+1. Every post-merge build runs **980 of 1796 tests** - a third of the suite does
+   not execute, stably. Nobody has explained that yet; it may be the same defect
+   truncating the run.
+2. The next diagnostic would be to log the splitter rect and control state at the
+   moment `RepaintSplitterRect` throws, since the trigger is not reproducible off
+   that agent. That is a real change to shared test infrastructure and was left
+   for a decision rather than pushed.
+
+### Other pre-existing failures, confirmed NOT ours
+
+- `GMDLoadLibrary` / `TestInvalidPeptidesInLibrary` fail on the **AWS** agents
+  only. Not reproducible locally in six configurations (isolation, full
+  `Test.dll`, parallel 1168, sequential 1168, and both on runtime 10.0.8).
+  `TestInvalidPeptidesInLibrary` expects a library with 3 entries and sees 2 -
+  the signature of stale externally-provisioned test data, the same class as the
+  0-byte BiblioSpec inputs found on this dev box.
+- `ThermoCancelImportTest-fr` fails on other people's PRs too.
+- BiblioSpec `Tiny_V2_Msf` / `Tiny_V2_Filtered_PdResult` fail locally because
+  `pwiz_tools/BiblioSpec/tests/inputs/tiny-v2.msf` and `tiny-v2-filtered.pdResult`
+  are **0 bytes** on this machine. That directory is gitignored - externally
+  provisioned data that arrived as empty stubs. Cannot pass on any framework.
+- `TestAlphaPeptDeepBuildLibrary` was a pip-install hang; fixed upstream by #4624.
+
+### Deliberately not done
+
+- **WFO1000** (785 sites) - deferred to master by decision.
+- **The staging rename's prose**: ~48 `net8` mentions remain in comments in
+  `build.bat`, `tc-perftests.bat`, `SkylineTesterWindow.cs`, `TestRunner/Program.cs`
+  and `SkylineTester.csproj`, plus the version-stamping identifiers
+  `StampNet8InformationalVersion` and `Net8Version.g.cs`. Different concept from
+  staging, left alone.
+- **~26 `net8`-vs-net472 prose comments** in `.cs` files describe behavior
+  *measured* on those frameworks; rewriting them to "net10" would assert
+  something nobody has measured.
+- The `pwiz-ai` scripts needed a companion commit (`47847c0` on that repo) -
+  their TFM detection is now regex-based rather than a literal `net8.0`, and both
+  staging blocks were changed from fail-open to fail-loud.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260612_net8_port.md` before starting work.
