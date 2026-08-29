@@ -147,7 +147,7 @@ param(
     [string]$SourceRoot = $null,
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("net472", "net8.0")]
+    [ValidateSet("net472", "net8.0", "net10.0")]
     [string]$TargetFramework = "net472",
 
     [Parameter(Mandatory=$false)]
@@ -210,12 +210,22 @@ if (Test-Path $buildPropsPath) {
 if (-not $declaredTfms) {
     $declaredTfms = @($TargetFramework)
 }
+# Resolve into a SEPARATE variable, never back into $TargetFramework: a parameter keeps
+# its [ValidateSet] on assignment, so writing a value the set does not list throws right
+# here - which is exactly how this fell over on the .NET 10 branch, after correctly
+# detecting net10.0. A local has no attribute and cannot be outgrown by a retarget.
+$resolvedTfm = $TargetFramework
 if ($TargetFramework -notin $declaredTfms) {
+    # Prefer the highest net<N>.0 over the first entry: a branch that still multi-targets
+    # lists net472 first, and falling back to .NET Framework is never what was wanted.
+    $modernTfms = @($declaredTfms |
+        Where-Object { $_ -match '^net(\d+)\.0' } |
+        Sort-Object { [int]([regex]::Match($_, '^net(\d+)\.0').Groups[1].Value) })
+    $resolvedTfm = if ($modernTfms.Count -gt 0) { $modernTfms[-1] } else { $declaredTfms[0] }
     # Never silently: a run on the framework you did not ask for is worth a line.
-    Write-Host "Osprey does not target $TargetFramework on this branch; using $($declaredTfms[0])." -ForegroundColor Yellow
-    $TargetFramework = $declaredTfms[0]
+    Write-Host "Osprey does not target $TargetFramework on this branch; using $resolvedTfm." -ForegroundColor Yellow
 }
-$testDll = Join-Path $testBinDir "$TargetFramework/Osprey.Test.dll"
+$testDll = Join-Path $testBinDir "$resolvedTfm/Osprey.Test.dll"
 $initialLocation = Get-Location
 
 if (-not (Test-Path $slnPath)) {
