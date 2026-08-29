@@ -638,3 +638,54 @@ and `Build-Skyline.ps1 -Target Solution` faithfully mirrors that. But
 silently stages whatever stale `TestTutorial.dll`/`TestPerf.dll` happen to be on disk.
 Three of the 13 target tests live in `TestTutorial`. Suggest either staging only what was
 built, or warning when a staged project's output is older than its sources.
+
+## Progress Log
+
+### 2026-08-28/29 - Merged the net10 base; found Release linking Debug pwiz-sharp
+
+Branch at `d529c36129`, clean and pushed. Solution builds Release, CodeInspection passes,
+`TestThreadDumpNamesRunningFrames` passes pass-1 leak detection at 0 KB.
+
+**Landed on this branch:**
+
+- **Thread-dump runtime leak fixed.** ClrMD 3.x makes `ClrRuntime` disposable and it owns the
+  loaded DAC; building one per dump and dropping it leaked 3.3 MB / 37 KB managed per run.
+  Now `using var runtime`. Same defect #4618 fixed against ClrMD 0.8.31, where there was no
+  `Dispose` to call and the answer had to be attach-once-and-reuse - which is why that fix did
+  not carry across. Also removed the test's unconditional console dump, which landed mid
+  result-line and broke the log format `Report()` parses.
+- **SkylineTester usable after a clean build.** The test tree now lists from the per-project
+  build output (what the stager copies FROM) instead of the staged directory, so a test just
+  added and built appears immediately. Running no longer demands a staged directory in order to
+  create one. One resolver for the run directory - three callers read the UI selection, which
+  keeps its "nothing found" sentinel for the session because `FindBuilds` runs at startup and
+  staging happens later; one of them crashed on `Path.Combine(null)`.
+- **Merged #4619 (now .NET 10), 44 conflicts.** 31 were target-framework only and took net10
+  (a net8 consumer cannot reference a net10 assembly, CS1705). Project files kept THIS branch's
+  structure with `net8.0` rewritten to `net10.0` - `ProteowizardWrapper` and `CommonUtil` stay
+  PLAIN (no `-windows`), which is the whole point of the split. `HangDetection` kept the ClrMD
+  3.x implementation; auto-merge had blended #4618's 0.8.31 code into it and it could not
+  compile. `CommonBaseUI` and `TestStager.TFM` still said net8 and were never in conflict,
+  because only this branch has them.
+- **Restored the staging script the merge deleted.** #4619 renamed `Stage-Net8Tests.ps1` to
+  `Stage-Tests.ps1`; git raised the conflict at the new path, it read as "their file", and it
+  was deleted as superseded. It was not - it is a thin wrapper over `TestStager`, and
+  `build.bat` calls it twice, so `bs.bat` could not stage at all. Also `TestStager` bundled the
+  portable runtime for Docker workers by hardcoded `"8.0"`; workers would have got a .NET 8
+  runtime for net10 apps. Now 10.0.
+
+**In `pwiz-ai`:** `Run-Tests.ps1` now stages by invoking the runner when the old script is
+absent, and takes the staged directory from the line the stager prints, so `TestStager` stays
+the single authority. It previously hardcoded `bin\staging\<Config>` and could not run this
+branch at all.
+
+**BLOCKING for a net10 nightly:** Release builds link **Debug** pwiz-sharp assemblies. Proven by
+hash - the staged `Pwiz.Analysis.dll` matched `bin/Debug/net10.0` exactly. pwiz-sharp declares no
+`<Platforms>`, so an x64 build triggers dynamic platform resolution, which falls back and takes
+`Configuration` with it. Predates the retarget; it was hidden because `obj\Debug\net8.0` existed
+on disk and silently satisfied the fallback. Fix belongs in pwiz-sharp
+(`<Platforms>AnyCPU;x64</Platforms>`, ideally in its `Directory.Build.props`) and is worth telling
+Matt about regardless of who lands it. Until then the nightly runs net472.
+
+**Next session handoff**: For detailed startup protocol, read
+`ai/.tmp/handoff-20260818_commonutil_winforms_split.md` before starting work.
