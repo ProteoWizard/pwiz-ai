@@ -4013,3 +4013,122 @@ Brendan suspects. Small at 3 files; unmeasured at 257.
   fused view from our two files, or it goes to SKIP. The blib and Stage-7 protein-FDR legs still
   compare.
 * Storage 61.6 -> ~33.5 GB, per the layout table earlier in this file.
+
+## The split, fully specified (2026-08-28 night) - ruling (a), ready to implement
+
+Brendan ruled **(a)**: *"Make the invariant true, if it is not already. Simply write the very few
+entries that are needed but get left behind into the Pass 2 files. The code is written assuming
+it is okay to reach back to pass 1 files, and we want to make that not the case (at a very low
+cost). Just because you can doesn't mean it is a good design! ... Allowing any stage to access
+any sidecar left behind by any task is as bad as making everything in your class public."*
+
+So this is an ENCAPSULATION fix, not a numbers fix: the pass-2 artifacts become self-sufficient,
+Stage 7 stops reaching into Stage 5's, and the reported values do not move.
+
+### Why the relocation is REQUIRED, not optional
+
+Stage 7 cannot stop reading 1st-pass sidecars while it still runs the per-file competition,
+because that competition needs the file's whole PRE-COMPACTION population (targets and decoys at
+their scores) to compute a calibrated run q. The pass-2 sidecar is survivor-scoped and always
+will be. So "Stage 7 reads no 1st-pass file" and "the per-file competition lives in the worker"
+are the same statement. There is no smaller coherent step.
+
+Stage 6 reading Stage 5's per-file sidecar is NOT a violation - that is ordinary
+producer-to-consumer adjacency. The violation is Stage 7 reaching back past Stage 6.
+
+### All three global inputs the worker needs are already on disk, per file
+
+Verified, not assumed - `FirstPassFdrTask.cs:1560-1575` writes the frozen model, the experiment
+agg arm AND the protein stratum into each file's `.1st-pass.model.json`, with the comment
+*"protein-compact needs the stratum as well as the model, and SecondPassFDR cannot rebuild it
+... It rides in the same sidecar, so it reaches SecondPassFDR by the relay that already carries
+the model."* A distributed `--task PerFileRescoring` worker loads the same file the same way.
+No new relay, exactly as the 2026-08-27/28 night session concluded.
+
+The survivor-id set does not need relaying either: the worker's own `fdrEntries` ARE that file's
+survivors at the hook point below.
+
+### The hook point in the worker
+
+`PerFileRescoreTask.RescoreOneFile`, between `WriteReconciledAndStamp` (line ~1082) and
+`ReleaseRescoredPayload` (line ~1122). At that instant the worker holds this file's survivors,
+its reconciled parquet is on disk, and the heavy per-entry payload has not yet been dropped.
+The release is already gated on `wroteReconciled`, so the new step slots in ahead of it.
+
+### What the worker does per file (a faithful relocation of today's inner loop)
+
+1. Load `.1st-pass.model.json` -> frozen model + experiment-agg arm + `stratumBaseIds`.
+2. ONE traversal of this file's `.1st-pass.fdr_scores.bin` for the three things it yields:
+   the whole-population `(entry_id, score)` arrays, the survivor records to seed from, and the
+   off-stratum pass-1 experiment q that must be carried forward.
+3. `Pass1ScalarSeeder.Apply` - Score / Pep / ExperimentAggregateScore that `ResetScores` cleared.
+4. `LoadReconciledFeaturesByScoreIndex` on the reconciled parquet + `FrozenModelScorer` ->
+   frozen-model score per survivor.
+5. `StreamingFdr.CompeteOneFile` -> this file's run q. (Already extracted by `f7a6e6d103`; this
+   is the whole reason that split was done.)
+6. Stamp run q + score onto the survivors.
+7. Write the immutable per-run `.2nd-pass.fdr_scores.bin`.
+
+### What "the few entries left behind" means, concretely
+
+The sidecar must carry every observation the JOIN's fold ranges over, which is
+`population INTERSECT stratum`. Targets are covered already: gap-fill gives a surviving
+precursor an observation in every run, and the measurement showed 0 target bests missing.
+The residue is decoys - 305 base_ids on Stellar 3-file - because decoys are deliberately never
+gap-filled. For those, the worker writes the pass-1 record FORWARD into the pass-2 file: the
+decoy's own natural-best-peak score, which is exactly the value `PerFileRescoreTask.cs:2243`
+says the 1st-pass parquet is being relied on for.
+
+Those carried records are NOT blib candidates and must never re-enter the survivor pool - they
+exist so the null can be computed without opening a pass-1 file. Decoys are never blib
+candidates, so this does not weaken Brendan's irreversibility invariant.
+
+### What SecondPassFDR does after the move
+
+Streams the per-run `.2nd-pass` sidecars and computes, itself:
+per-base_id bests over the stratum -> experiment competition -> experiment precursor / peptide q
+-> protein FDR -> the experiment-wide sidecar (`<blib-stem>.2nd-pass.fdr_scores.bin`) and the
+blib. The aggregation METHOD lives here and only here, which is what makes mean-best-N (#4484) a
+Stage 7 change rather than a re-run of every worker.
+
+`FoldFileContribution` is replaced by a fold over sidecar records. The worker emits NO
+precomputed bests: a per-file partial reduction is a join task in the wrong stage, and it would
+freeze the aggregation method into Stage 6.
+
+### What gets DELETED
+
+* `PatchExperimentValues` and `PatchPass2ProteinQvalues` - experiment-scope values are computed
+  in Stage 7 and written once to the experiment file, never patched back into per-run files.
+  ~123 GB of serial join-stage rewrite at 257 files.
+* `ReloadPass2Sidecars` in both directions - it exists only to put experiment values back onto
+  entries; Stage 7 now holds them in memory where it computed them.
+* With them go review findings R1 (kill window between write and patch), R4 (duplicate-EntryId
+  degradation on resume) and R12 (redundant post-write reload) - resolved by deletion.
+
+### Gates, and what is EXPECTED to move
+
+* `regression.ps1 -Dataset Stellar` - the golden must NOT move. Mode 1c (2nd-pass protein q
+  really is pass-2) and mode 3 (per-file FDR sidecars == straight) are the two that would catch
+  a botched carry-forward.
+* Cross-impl parity WILL break structurally on the FDR-sidecar leg: Rust fuses run-scope and
+  experiment-scope columns into one per-run file, so there is no like-for-like comparison once
+  ours are split. Either the comparator reconstructs Rust's fused view from our two files, or
+  that leg goes to SKIP. The blib and Stage-7 protein-FDR legs still compare and must stay green.
+* The 2nd-pass sidecar record set grows by the carried decoys (305 on Stellar). Any comparator
+  that asserts record-count equality with Rust needs that allowance.
+
+### Sequence
+
+1. Worker-side per-file pass-2 (steps 1-7 above), still with Stage 7 unchanged behind an
+   env-gated switch or a straight cutover - gate on Stellar, expect byte-identical.
+2. Carried-forward decoy records into the per-run sidecar.
+3. Stage 7 folds from the sidecars; delete both patch passes and the reload machinery.
+4. Comparator/`regression.ps1` adjustments for the split artifact shape.
+5. THEN the lean row (deferred by Brendan tonight: *"Let's not do the lean row until we land the
+   parts I thought were done, but are not."*), and only then a 257-file validation run.
+
+**No 257-file run until this lands** (Brendan, 2026-08-28): *"I don't want to launch a night run
+without the code to support it resolved."* The rig is staged and ready - launcher at
+`ai/.tmp/sessions/20260827-stage7-leanrow/launch-stage57-257.ps1`, base run dir
+`chs-257files-libdecoy-r1.0-protein-compact-p0059_0060_0061`, exe snapshot
+`D:\test\osprey-runs\_bin\26.1.1.240-splitbase-20260828`, oracle 5,079 / 45,724 / 11,745,026.
