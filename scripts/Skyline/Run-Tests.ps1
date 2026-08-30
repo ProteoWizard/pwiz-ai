@@ -103,7 +103,9 @@ param(
     [switch]$TeamCityCleanup = $false,  # Use TeamCity-style cleanup (DesiredCleanupLevel=all) for local testing/debugging
 
     [Parameter(Mandatory=$false)]
-    [int]$Loop = 0,  # Number of iterations (0 = run forever, 1 = run once, 20 = run 20 times)
+    [int]$Loop = 0,  # Number of iterations: 0 (default) and 1 both run once, 20 runs 20 times.
+                     # There is no "run forever" here - to soak, pass a count large enough to
+                     # outlast the run and stop it when done.
 
     [Parameter(Mandatory=$false)]
     [switch]$Quality = $false,  # SkylineTester's Quality tab: passes 0, 1 and 2, with the pass-1 leak check
@@ -582,7 +584,7 @@ Write-Host "  Language(s): $languageParam" -ForegroundColor Gray
 Write-Host "  UI Mode: $(if ($ShowUI) { 'On-screen (visible)' } else { 'Offscreen (hidden)' })" -ForegroundColor Gray
 Write-Host "  Screenshots: $(if ($TakeScreenshots) { 'Auto-capture (pause=-3)' } else { 'Off' })" -ForegroundColor Gray
 Write-Host "  Internet: $(if ($EnableInternet) { 'Enabled' } else { 'Disabled' })" -ForegroundColor Gray
-Write-Host "  Loop: $(if ($Loop -eq 0) { 'Forever' } else { "$Loop iterations" })" -ForegroundColor Gray
+Write-Host "  Loop: $(if ($Loop -le 1) { 'Once' } else { "$Loop iterations" })" -ForegroundColor Gray
 Write-Host "  Diagnostics: Handles=$(if ($ReportHandles) { 'on' } else { 'off' }), Heaps=$(if ($ReportHeaps) { 'on' } else { 'off' })" -ForegroundColor Gray
 Write-Host "  Coverage: $(if ($Coverage) { 'Enabled' } else { 'Disabled' })" -ForegroundColor Gray
 Write-Host "  Memory Profile: $(if ($MemoryProfile) { if ($explicitMemoryProfileMode) { "Explicit (warmup=$MemoryProfileWarmup, wait=$MemoryProfileWaitRuns)" } else { 'Snapshot-on-leak' } } else { 'Disabled' })" -ForegroundColor Gray
