@@ -1211,3 +1211,41 @@ established.
 Also fixed: the `daily` working copy had a UTF-8 BOM added to all three files by the script that
 applied the fix there. Removed. Verified the branch and master fixes are otherwise identical
 ignoring comments and whitespace.
+
+### After the fix: 9 of 11 leakers clear; the 2 survivors are SCIEX/WIFF2
+
+Pass-1 managed leak on the branch with `b867cf2664`:
+
+| Test | Before | After |
+|---|---|---|
+| `TestFilesTreeForm` | 2,072.8 KB | 0 |
+| `TestCrosslinkIms` | ~1,180 KB | -0.1 KB |
+| `TestMeasuredDriftValues` | 589.2 KB | 5.8 KB |
+| `TestMeasuredDriftValuesAsSmallMolecules` | ~596 KB | 6.6 KB |
+| `TestNewDocumentLoadLibraries` | ~303 KB | 7.1 KB |
+| `TestSelectSpectrum` | ~273 KB | -0.3 KB |
+| `Wiff2ResultsTest` | ~30 KB | -97.4 KB |
+| `IrtDocumentFunctionalTest` | ~11 KB | -130.4 KB |
+| `TestTreeRestoration` | ~40 KB heap | 0.9 KB |
+| **`TestInstrumentSerialNumbers`** | 36.0 KB | **35 KB - unchanged** |
+| **`FileTypeTest`** | 31.1 KB | **30.9 KB - unchanged** |
+
+All nine fixed tests now CONVERGE (8-14 iterations) instead of exhausting the 25-iteration retry.
+
+**The two survivors are port regressions, and they are SCIEX.** On pristine master they are clean:
+`TestInstrumentSerialNumbers` 6.4 KB converging at 9, `FileTypeTest` 0 KB converging at 8. Both
+carry `[TestMethod, NoParallelTesting(TestExclusionReason.VENDOR_FILE_LOCKING)]` -
+`TestData/PwizFileInfoTest.cs:40` (which also calls `SkipWiff2TestInTestExplorer` and reads ABI
+`.wiff` and Sciex `.wiff2`) and `TestData/Results/SmallWiffTest.cs:46`. The net8 port TODO's
+earlier sighting, `TestInstrumentInfo LEAKED 36192 Managed bytes`, is from the SAME file at the
+same magnitude - three independent points on the SCIEX reader.
+
+Brendan's reading: this likely fingers .NET 8+ support for WIFF2/SCIEX, where there is no true
+.NET 8+ vendor binary and the net472 one has been adapted. Not investigated further here.
+
+**Still untested**: `TestGroupedStudies1Tutorial` (886 KB HEAP, the one that aborted a pass-1 run
+outright). A run was started and killed for machine time; nothing in this fix targets heap, so it
+remains the most likely blocker for a clean long run.
+
+`C:\proj\daily` changes are on the stash (`nh552-swap-and-fix`), tree pristine; `git stash pop`
+to restore. Throwaway worktree `C:\proj\pwiz-net8` still on disk.
