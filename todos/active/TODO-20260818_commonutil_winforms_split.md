@@ -1185,3 +1185,28 @@ Already compatible, no change needed: `IrtDb` (`using var` per operation), `Mida
 
 Not adopted here - `daily` still carries the swap and fix as UNCOMMITTED working changes for
 inspection; revert with `git checkout` if not wanted.
+
+### Controlled check that the fix introduces no functional regression
+
+The two `TestDragSimulation` failures seen while developing the fix were called a flake on one
+passing retry, which was too quick. Re-run properly, isolating functional behaviour from leak
+checking, one thing at a time on an otherwise idle machine:
+
+| Step | Configuration | Functional | Leak |
+|---|---|---|---|
+| 1 | pre-fix, pass 2, 20 iterations | **20/20 pass** | - |
+| 2 | pre-fix, pass 1, 25 iterations | 25/25 pass | **2,069.8 KB LEAKED** |
+| 3 | post-fix, pass 2, 20 iterations | **20/20 pass** | - |
+| - | post-fix, pass 1, 24 iterations (earlier build, same commit) | passed | **0 KB** (`managed = -1.1 KB`) |
+
+Pre-fix the test is reliable across 45 iterations; post-fix across 44. **No measurable functional
+regression from the fix**, and the leak is gone.
+
+Best explanation for the two original failures: both occurred while the machine was running
+CONCURRENT builds and test runs (branch pass-1 retry alongside `daily` builds), and
+`TestDragSimulation` depends on UI timing. Consistent with the data, not proven - but 44 clean
+iterations on an idle machine argue against an intrinsic flake.
+
+Also fixed: the `daily` working copy had a UTF-8 BOM added to all three files by the script that
+applied the fix there. Removed. Verified the branch and master fixes are otherwise identical
+ignoring comments and whitespace.
