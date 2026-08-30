@@ -838,3 +838,10 @@ actually separates the framework's completion signal from a callback failure.
 **Draft comment for dotnet/winforms#14996** (the repro of the framework-owned path they say they
 could not reproduce) is in `ai/.tmp/draft-comment-winforms-14996.md`. **Not posted - needs
 Brendan's okay**, it is outward-facing.
+
+**AFTER results (2026-08-30, ~23:40).** Targeted soak: 0 failures / 367 instances. Full nightly
+list, the same 657 tests / 5 languages / 8 workers that produced the eight failures:
+**0 failures / 7,501 instances in 69 minutes**, still running. That is 3.7x the exposure at
+which the original run had accumulated all eight, so open question 4 from the predecessor
+handoff ("how many more would there have been?") is answered: there is no second failure mode
+behind the first.
