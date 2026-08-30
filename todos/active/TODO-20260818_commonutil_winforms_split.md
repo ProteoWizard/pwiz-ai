@@ -862,7 +862,10 @@ been run on this branch under .NET 10. Three full pass-0/1 runs, ~7,100 instance
 No ObjectDisposedException in any of the three runs. Details in
 `ai/.tmp/handoff-20260830_net10_invoke_disposed_fixed.md`.
 
-**Pass 1 reports 11 reproducible leaks on net10 - needs a master baseline, NOT a fix.** The leak
+**Pass 1 reports 11 reproducible leaks on net10 that do NOT fail the run - needs a master
+baseline, not a fix.** The failure count stayed at 2 (the two FAILED tests) in all three runs
+with 11-14 LEAKED lines present, matching the precedent in TODO-20260612_net8_port.md where a
+LEAKED line "did not fail the leg". The leak
 detector prints `!!! <Test> LEAKED <n> <kind>`, not `FAILED`, so failure greps miss it. Across
 three pass-0/1 runs the same eleven tests leaked with byte counts reproducible to a fraction of a
 percent - `TestFilesTreeForm` 2.12 MB managed all three times, `TestCrosslinkIms` ~1.2 MB,
