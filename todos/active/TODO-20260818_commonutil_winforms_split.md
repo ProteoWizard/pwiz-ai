@@ -954,8 +954,28 @@ reclaim the dynamic methods NHibernate emitted for it.
 
 This is a throughput problem as much as a memory one - 33 full NHibernate configurations per test.
 
-**Not fixed here.** The fix is to give `IrtDb` (and `IonMobilityDb`, `OptimizationDb`) the
-caching `ProteomeDb` already has, which is a real change to shared data-access code and does not
-belong on a port branch heading for merge. It is also almost certainly **pre-existing, not a net10
-regression** - nothing about this depends on the runtime - so the master/net472 baseline should
-confirm that before anyone treats it as port fallout.
+**RETRACTED: "almost certainly pre-existing, not a net10 regression" was wrong.** It was written
+with no baseline, immediately after noting no baseline existed. Brendan confirms these tests pass
+without leaking on master, so the leak IS a regression and the branch cannot merge until it is
+gone.
+
+**And caching IrtDb does NOT fix the leak - measured.** With a per-path SessionFactory cache in
+IrtDb (experiment, reverted), pass 1 still reported
+`TestFilesTreeForm LEAKED 2352934.9 Managed bytes` / `managed = 2297.8 KB`, slightly WORSE than
+the ~2,072 KB baseline. Factory count is constant across iterations under the cache, yet
+per-iteration growth is unchanged, so **the growth is not proportional to factory construction**.
+IrtDb consistency remains worth doing for throughput (33 configurations per test), but it is not
+the leak fix.
+
+Two variables changed together in the port, which is the live lead:
+
+| | master | branch |
+|---|---|---|
+| Runtime | net472 | net10.0-windows |
+| NHibernate | 5.1.3 (vendored `Shared/Lib/NHibernate/NHibernate.dll`) | 5.5.2 (PackageReference) |
+
+NHibernate changed its default proxy factory to a built-in Reflection.Emit one across that
+range, which fits the snapshot's `DynamicMethod` / `DynamicILGenerator` / `SignatureHelper` /
+`ScopeTree` all showing **0 dead**. Not yet confirmed - and note the two variables can be
+separated, since the NHibernate version is a package reference that can be moved independently
+of the runtime.
