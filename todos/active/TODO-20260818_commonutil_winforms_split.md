@@ -1256,3 +1256,29 @@ memory accumulates whether or not anything is checking, but it will not fail the
 
 `C:\proj\daily` changes are on the stash (`nh552-swap-and-fix`), tree pristine; `git stash pop`
 to restore. Throwaway worktree `C:\proj\pwiz-net8` still on disk.
+
+### `TestGroupedStudies1Tutorial`: heap leak confirmed on the branch, UNCLASSIFIED
+
+Branch, pass 1, with the fix applied:
+
+```
+!!! TestGroupedStudies1Tutorial LEAKED 1129718.6 Heap bytes
+# deltas (25): managed = -3.9 KB, heap = 1103.2 KB
+```
+
+The session-factory fix DID help it - managed is now clean at -3.9 KB. What remains is purely
+the **heap** (unmanaged) metric, growing ~1.1 MB over 25 iterations and never converging.
+Nothing in this fix targets heap.
+
+**No master baseline obtained.** The comparison run on `C:\proj\daily` failed before reaching
+the measurement: `Timeout 1200 seconds exceeded in WaitForConditionUI (Expecting loaded document
+but still not loaded after 600 seconds)` at `GroupedStudies1TutorialTest.OpenImportArrange()`
+line 289, after 1463 s. Possibly the tutorial's data is not staged in that rarely-used checkout -
+NOT verified. So whether this heap leak is a port regression or pre-existing is still unknown.
+
+**It also did NOT abort the run this time** - reported `All tests PASSED`. Last night run C
+exited with code 1 immediately after this same leak report. So `deltas (25)` alone is not the
+abort trigger and the actual rule remains unidentified.
+
+Bearing on the overnight cycle: those runs are pass 2, so this cannot fail the leg. It only
+matters as accumulating memory over 9 hours, and ~1.1 MB per 25 iterations is a slow drip.
