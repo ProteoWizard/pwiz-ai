@@ -845,3 +845,19 @@ list, the same 657 tests / 5 languages / 8 workers that produced the eight failu
 which the original run had accumulated all eight, so open question 4 from the predecessor
 handoff ("how many more would there have been?") is answered: there is no second failure mode
 behind the first.
+
+**Two pass-0/1 findings, neither blocking (2026-08-30, 02:00-03:40).** Passes 0 and 1 had never
+been run on this branch under .NET 10. Three full pass-0/1 runs, ~7,100 instances each:
+
+* `TestLayoutExportImport` - failed 3 of 3, always as a 360 s `WaitForCondition` timeout at
+  USER+GDI of 18,157 / 18,154 / 18,153. Measured with `GetGuiResources` inside the container:
+  `user=9852` against the Windows default `USERProcessHandleQuota` of 10,000. A process at that
+  quota cannot create windows, so the floating Document Grid never appears. **The container, not
+  Skyline**: the host worker never exceeded USER=581 in the same run, and the test holds
+  USER+GDI flat at ~170 in a single host process. Infrastructure issue, would hit any branch.
+* `ThermoCancelImportTest` - failed 2 of 3, at line 144's mute `Assert.IsTrue` (the cancel
+  compare-and-swap, which the test's own 2022 retry does not cover). Pre-existing since
+  `5100494e2f`, 2022-10-26.
+
+No ObjectDisposedException in any of the three runs. Details in
+`ai/.tmp/handoff-20260830_net10_invoke_disposed_fixed.md`.
