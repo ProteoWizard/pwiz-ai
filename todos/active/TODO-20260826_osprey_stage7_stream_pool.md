@@ -5930,3 +5930,53 @@ restricted to shared ids, branch and baseline record order are identical on all 
 byte-identity needs the gap-fill records reinserted at their baseline positions and the carried
 decoys removed. Keeping the carried decoys requires first naming an experiment-wide quantity the
 baseline per-run sidecars cannot supply - and the mode 3 test above is what would show one.
+
+### THE FIX, fully specified: the worker reads its universe from the WRONG artifact
+
+Brendan's constraint: PerFileRescoring must understand the global set WITHOUT re-reading the
+entire population the way SecondPassFDR is allowed to. Measured answer: it already can, from
+bounded per-file inputs it is already handed, and doing so reads FEWER rows than today.
+
+| source | file 20 | is it the pool? | bounded |
+|---|---|---|---|
+| 1st-pass sidecar (**used today**) | 958,241 ids | no - pre-compaction, no gap-fills | per-file |
+| **reconciled parquet** (already a parameter) | 311,278 rows | **YES - identical ids AND order** | per-file |
+| `.reconciliation.json` `gap_fill_targets` | 208 entries | declares exactly the dropped set | per-file |
+
+**Measured, all three files:**
+
+* reconciled-parquet entry_id sequence == baseline 2nd-pass sidecar record sequence,
+  **same ids and same order** (311,278 / 311,284 / 311,351). The parquet IS the per-run
+  2nd-pass sidecar's population, in order.
+* `gap_fill_targets` (keyed by `target_entry_id`) is SET-EQUAL to the dropped observations on
+  every file: 208 / 185 / 201. First element of file 20 is `target_entry_id: 3602` - the entry
+  traced at the start of this investigation.
+* the dropped ids appear in the reconciled parquet 208/208, and in the 1st-pass sidecar 0/208.
+
+**So the answers are:** the old code did NOT need the whole population in memory; there is NO
+flaw in the per-file parquet - it carries exactly the right rows; and the defect is a wrong
+choice of source in `ReadOneFilePass2Inputs` (Pass2FdrSidecar.cs:2327), which derives the
+universe from `pass1SidecarPath` when `effectiveParquetPath` - the artifact that DEFINES the
+pool - is a parameter of the same call.
+
+#### One change resolves both deltas
+
+Source the observation universe from the reconciled parquet and:
+
+* the 594 gap-fills are **restored** (they are parquet rows), and
+* the 397 carried decoys are **removed** (they are not parquet rows),
+
+landing byte-identical to the baseline, in the right order, with no global traversal and no new
+relay. The carried-decoy question then needs no separate ruling: the correct source excludes them
+by construction. If the fold truly needs `bestDecoy`, it surfaces as a real failure with a real
+diagnosis rather than as a pre-emptive redefinition of the artifact.
+
+#### Gate for the fix
+
+Byte-identity of all three `.2nd-pass.fdr_scores.bin` and `output.2nd-pass.fdr_experiment.bin`
+against the baseline run dir, then mode1b / mode5 / mode7 green. The
+`OSPREY_DUMP_COASSIGN_ROWS` gate should land with it as the permanent verifier: it is what turns
+"the panel moved" into "these 594 observations lost these fields".
+
+**Do NOT reason from the metric.** `nBetter` and `enrichment` moved in opposite directions on the
+two Stellar arms and that told us nothing; the artifacts told us everything.
