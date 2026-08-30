@@ -1202,10 +1202,11 @@ checking, one thing at a time on an otherwise idle machine:
 Pre-fix the test is reliable across 45 iterations; post-fix across 44. **No measurable functional
 regression from the fix**, and the leak is gone.
 
-Best explanation for the two original failures: both occurred while the machine was running
-CONCURRENT builds and test runs (branch pass-1 retry alongside `daily` builds), and
-`TestDragSimulation` depends on UI timing. Consistent with the data, not proven - but 44 clean
-iterations on an idle machine argue against an intrinsic flake.
+The two original failures remain UNEXPLAINED. An earlier draft of this entry attributed them to
+UI timing under concurrent machine load; that was a guess about a test whose mechanism had not
+been read, and it is withdrawn. What is measured: 2 failures at `FilesTreeFormTest.cs:1666`
+during development, then 44 clean iterations across pre- and post-fix runs. No mechanism
+established.
 
 Also fixed: the `daily` working copy had a UTF-8 BOM added to all three files by the script that
 applied the fix there. Removed. Verified the branch and master fixes are otherwise identical
