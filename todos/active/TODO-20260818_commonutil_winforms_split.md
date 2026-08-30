@@ -877,3 +877,13 @@ only tests leaking on net10 and not master are regressions. `TestFilesTreeForm` 
 `TestTreeRestoration` are tree/docking UI, the same family as the net8 WinForms holds this branch
 already works around, so check for a shared cause first. Full table in
 `ai/.tmp/handoff-20260830_net10_invoke_disposed_fixed.md`.
+
+**Correction: a pass-1 run does not currently complete.** Of the three pass-0/1 runs, two exited
+-1 because they were killed manually; the one left alone (run C) self-terminated with exit code 1
+after `TestGroupedStudies1Tutorial LEAKED 886391.6 Heap bytes` at `deltas (25)`, the max retry
+count, with heap climbing 75 -> 117 MB across those iterations. Leaks that converge in a few
+retries do not fail; that one does not converge and ends the run. This is a stronger item than
+the eleven-leak table and still needs the master/net472 baseline to classify. Separately, the
+"it is the container, not Skyline" wording for the USER-quota finding overstates the evidence -
+what was measured is an asymmetry (containers reach the 10,000 USER quota, host worker never
+passed 581), not an identified cause.
